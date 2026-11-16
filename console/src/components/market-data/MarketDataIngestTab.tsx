@@ -59,7 +59,7 @@ import {
   slotSchedulerLabel,
 } from '@/lib/market-data/slotScheduler'
 import { dagsterRunsUrl } from '@/lib/architecture/opsToolRackCatalog'
-import { useOrchestrationStatus } from '@/hooks/useOrchestrationStatus'
+import { useOrchestrationStatus } from '@/domains/tenant/orchestration/useOrchestrationStatus'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { describeCronSchedule } from '@/lib/patrol/cronSchedule'
 

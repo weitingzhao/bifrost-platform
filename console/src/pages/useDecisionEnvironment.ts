@@ -1,4 +1,4 @@
-import { shellSelfHealthQuery } from '@/hooks/useShellStatusLine'
+import { shellSelfHealthQuery } from '@/domains/foundation/shell/useShellStatusLine'
 import { useQuery } from '@tanstack/react-query'
 
 /** Observe the shell's existing self-health read without starting another request. */

@@ -883,7 +883,7 @@
         "console/src/components/layout",
         "console/src/components/shell",
         "console/src/components/ui",
-        "console/src/hooks",
+        "console/src/domains/delivery/policy",
         "console/src/hooks/usePlatformAuth.ts",
         "console/src/lib",
         "console/src/lib/agent",
@@ -1000,7 +1000,7 @@
         "console/src/components/layout",
         "console/src/components/market-data",
         "console/src/components/shell",
-        "console/src/hooks",
+        "console/src/domains/foundation/mission",
         "console/src/hooks/useIbGatewayLiveProbe.ts",
         "console/src/hooks/usePlatformAuth.ts",
         "console/src/lib/architecture",
@@ -1022,34 +1022,6 @@
       "unresolved_imports": []
     },
     {
-      "path": "console/src/components/control-room",
-      "files": [
-        "console/src/components/control-room/ControlRoomAttentionStrip.tsx",
-        "console/src/components/control-room/ControlRoomBay.tsx",
-        "console/src/components/control-room/ControlRoomBayCards.tsx",
-        "console/src/components/control-room/ControlRoomVerdictStrip.tsx",
-        "console/src/components/control-room/NetworkHealthPanel.tsx",
-        "console/src/components/control-room/__tests__/ControlRoomVerdictStrip.test.tsx"
-      ],
-      "imports": [
-        "console/src/api/opsContextTypes.ts",
-        "console/src/components/layout",
-        "console/src/hooks/useNetworkLiveProbe.ts",
-        "console/src/lib/architecture",
-        "console/src/lib/control-room"
-      ],
-      "test_imports": [],
-      "external_imports": [
-        "@bifrost/ui",
-        "@testing-library/react",
-        "react",
-        "vitest"
-      ],
-      "source_inputs": [],
-      "test_inputs": [],
-      "unresolved_imports": []
-    },
-    {
       "path": "console/src/components/delivery",
       "files": [
         "console/src/components/delivery/HusbandryStrip.tsx",
@@ -1060,7 +1032,7 @@
         "console/src/api/deliveryTypes.ts",
         "console/src/components",
         "console/src/components/layout",
-        "console/src/hooks",
+        "console/src/domains/tenant/orchestration",
         "console/src/lib/architecture",
         "console/src/lib/research"
       ],
@@ -1253,7 +1225,7 @@
         "console/src/api/satelliteBusTypes.ts",
         "console/src/components/delivery",
         "console/src/components/layout",
-        "console/src/hooks",
+        "console/src/domains/tenant/orchestration",
         "console/src/hooks/useMarketDataLiveProbe.ts",
         "console/src/hooks/usePlatformAuth.ts",
         "console/src/lib",
@@ -1294,23 +1266,6 @@
       "external_imports": [
         "@bifrost/ui",
         "react"
-      ],
-      "source_inputs": [],
-      "test_inputs": [],
-      "unresolved_imports": []
-    },
-    {
-      "path": "console/src/components/observability",
-      "files": [
-        "console/src/components/observability/MonitoringCoverageStrip.tsx"
-      ],
-      "imports": [
-        "console/src/api/clusterTypes.ts",
-        "console/src/components/layout"
-      ],
-      "test_imports": [],
-      "external_imports": [
-        "@bifrost/ui"
       ],
       "source_inputs": [],
       "test_inputs": [],
@@ -1403,7 +1358,7 @@
         "console/src/components",
         "console/src/components/agent",
         "console/src/components/ui",
-        "console/src/hooks",
+        "console/src/domains/foundation/shell",
         "console/src/lib/control-room",
         "console/src/lib/shell",
         "console/src/lib/tradeFrontendUrls.ts"
@@ -1478,6 +1433,22 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/delivery/policy",
+      "files": [
+        "console/src/domains/delivery/policy/useReleasePolicy.ts"
+      ],
+      "imports": [
+        "console/src/api"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/foundation/backup",
       "files": [
         "console/src/domains/foundation/backup/BackupStatusPanel.test.tsx",
@@ -1495,6 +1466,121 @@
         "@tanstack/react-query",
         "@testing-library/react",
         "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/foundation/control-room",
+      "files": [
+        "console/src/domains/foundation/control-room/ControlRoomAttentionStrip.tsx",
+        "console/src/domains/foundation/control-room/ControlRoomBay.tsx",
+        "console/src/domains/foundation/control-room/ControlRoomBayCards.tsx",
+        "console/src/domains/foundation/control-room/ControlRoomVerdictStrip.tsx",
+        "console/src/domains/foundation/control-room/__tests__/ControlRoomBay.test.tsx",
+        "console/src/domains/foundation/control-room/__tests__/ControlRoomVerdictStrip.test.tsx"
+      ],
+      "imports": [
+        "console/src/components/layout",
+        "console/src/lib/control-room"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@testing-library/react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/foundation/mission",
+      "files": [
+        "console/src/domains/foundation/mission/__tests__/useMissionSnapshot.test.tsx",
+        "console/src/domains/foundation/mission/useMissionSnapshot.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/cluster.ts",
+        "console/src/api/core.ts",
+        "console/src/api/delivery.ts",
+        "console/src/api/promote.ts",
+        "console/src/hooks/useNowMs.ts",
+        "console/src/lib/control-room"
+      ],
+      "test_imports": [
+        "console/src/api"
+      ],
+      "external_imports": [
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/foundation/monitoring",
+      "files": [
+        "console/src/domains/foundation/monitoring/MonitoringCoverageStrip.test.tsx",
+        "console/src/domains/foundation/monitoring/MonitoringCoverageStrip.tsx"
+      ],
+      "imports": [
+        "console/src/api/clusterTypes.ts",
+        "console/src/components/layout"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/foundation/network",
+      "files": [
+        "console/src/domains/foundation/network/NetworkHealthPanel.test.tsx",
+        "console/src/domains/foundation/network/NetworkHealthPanel.tsx"
+      ],
+      "imports": [
+        "console/src/api/opsContextTypes.ts",
+        "console/src/components/layout",
+        "console/src/hooks/useNetworkLiveProbe.ts",
+        "console/src/lib/architecture"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/foundation/shell",
+      "files": [
+        "console/src/domains/foundation/shell/useShellStatusLine.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/core.ts",
+        "console/src/api/telemetry.ts",
+        "console/src/lib/control-room",
+        "console/src/lib/shell"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query"
       ],
       "source_inputs": [],
       "test_inputs": [],
@@ -1526,37 +1612,34 @@
       "unresolved_imports": []
     },
     {
-      "path": "console/src/hooks",
+      "path": "console/src/domains/tenant/orchestration",
       "files": [
-        "console/src/hooks/__tests__/useFleetSnapshot.test.ts",
-        "console/src/hooks/__tests__/useMissionSnapshot.test.tsx",
-        "console/src/hooks/useMissionSnapshot.ts",
-        "console/src/hooks/useOrchestrationStatus.ts",
-        "console/src/hooks/useReleasePolicy.ts",
-        "console/src/hooks/useShellStatusLine.ts"
+        "console/src/domains/tenant/orchestration/useOrchestrationStatus.ts"
       ],
       "imports": [
-        "console/src/api",
-        "console/src/api/cluster.ts",
-        "console/src/api/core.ts",
-        "console/src/api/delivery.ts",
-        "console/src/api/promote.ts",
         "console/src/api/researchEngine.ts",
-        "console/src/api/telemetry.ts",
-        "console/src/hooks/useNowMs.ts",
-        "console/src/lib/control-room",
-        "console/src/lib/market-data",
-        "console/src/lib/shell"
+        "console/src/lib/market-data"
       ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/hooks/__tests__/useFleetSnapshot.test.ts",
+      "files": [
+        "console/src/hooks/__tests__/useFleetSnapshot.test.ts"
+      ],
+      "imports": [],
       "test_imports": [
-        "console/src/api",
         "console/src/api/satelliteBusTypes.ts",
         "console/src/hooks/useFleetSnapshot.ts"
       ],
       "external_imports": [
-        "@tanstack/react-query",
-        "@testing-library/react",
-        "react",
         "vitest"
       ],
       "source_inputs": [],
@@ -2749,7 +2832,7 @@
       "imports": [
         "console/src/components",
         "console/src/components/shell",
-        "console/src/hooks",
+        "console/src/domains/foundation/shell",
         "console/src/lib/shell",
         "console/src/pages/ApprovalsPage.tsx",
         "console/src/pages/DevSessionsPage.tsx",
@@ -2774,8 +2857,9 @@
       ],
       "imports": [
         "console/src/api/opsContextTypes.ts",
-        "console/src/components/control-room",
-        "console/src/hooks",
+        "console/src/domains/foundation/control-room",
+        "console/src/domains/foundation/mission",
+        "console/src/domains/foundation/network",
         "console/src/hooks/useNetworkLiveProbe.ts",
         "console/src/lib/control-room"
       ],
@@ -2919,9 +3003,9 @@
       "imports": [
         "console/src/api/network.ts",
         "console/src/api/opsContextTypes.ts",
-        "console/src/components/control-room",
         "console/src/components/layout",
         "console/src/components/network",
+        "console/src/domains/foundation/network",
         "console/src/hooks/useNetworkLiveProbe.ts",
         "console/src/lib/architecture"
       ],
@@ -3255,7 +3339,7 @@
         "console/src/api/clusterTypes.ts",
         "console/src/api/telemetry.ts",
         "console/src/components/layout",
-        "console/src/components/observability",
+        "console/src/domains/foundation/monitoring",
         "console/src/lib/architecture",
         "console/src/lib/observability"
       ],
@@ -3756,7 +3840,7 @@
         "console/src/components/market-data",
         "console/src/components/shell",
         "console/src/domains/foundation/backup",
-        "console/src/hooks",
+        "console/src/domains/foundation/shell",
         "console/src/hooks/useFlexQueryLiveProbe.ts",
         "console/src/hooks/useIbGatewayLiveProbe.ts",
         "console/src/hooks/useMarketDataLiveProbe.ts",
@@ -3909,7 +3993,7 @@
         "console/src/components/delivery",
         "console/src/components/layout",
         "console/src/components/shell",
-        "console/src/hooks",
+        "console/src/domains/delivery/policy",
         "console/src/lib/delivery",
         "console/src/lib/shell"
       ],
@@ -3999,7 +4083,7 @@
         "console/src/pages/useDecisionEnvironment.ts"
       ],
       "imports": [
-        "console/src/hooks"
+        "console/src/domains/foundation/shell"
       ],
       "test_imports": [],
       "external_imports": [

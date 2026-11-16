@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ExternalLink } from 'lucide-react'
 import { fetchDataHusbandry, type HusbandryLaneView } from '@/api/dataHusbandry'
 import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
-import { useOrchestrationStatus } from '@/hooks/useOrchestrationStatus'
+import { useOrchestrationStatus } from '@/domains/tenant/orchestration/useOrchestrationStatus'
 import { formatSchedulesSummary } from '@/lib/research/researchHealthCopy'
 import { massiveReadinessHref } from '@/lib/research/massiveNav'
 

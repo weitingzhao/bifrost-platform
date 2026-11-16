@@ -20,7 +20,7 @@ import {
 import { fetchClusterObservability } from '@/api/cluster'
 import { fetchTelemetryOverview } from '@/api/telemetry'
 import type { TelemetryMetricResult } from '@/api/clusterTypes'
-import { MonitoringCoverageStrip } from '@/components/observability/MonitoringCoverageStrip'
+import { MonitoringCoverageStrip } from '@/domains/foundation/monitoring/MonitoringCoverageStrip'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   OpsVerdictStrip,

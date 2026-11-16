@@ -6,7 +6,7 @@ import { EntryRail, EntryTabBar, type EntryNavProps } from '@/components/shell/E
 import { LocalDevSessionsDock } from '@/components/shell/LocalDevSessionsDock'
 import { DomainNav } from '@/components/shell/DomainNav'
 import { MorePage } from '@/components/shell/MorePage'
-import { useShellStatusLine } from '@/hooks/useShellStatusLine'
+import { useShellStatusLine } from '@/domains/foundation/shell/useShellStatusLine'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { QuestionPage } from '@/pages/QuestionPage'
 import { DevSessionsPage } from '@/pages/DevSessionsPage'

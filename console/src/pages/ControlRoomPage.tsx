@@ -1,10 +1,10 @@
 import type { OpsContextResponse } from '@/api/opsContextTypes'
-import { ControlRoomBay } from '@/components/control-room/ControlRoomBay'
-import { ControlRoomBayCards } from '@/components/control-room/ControlRoomBayCards'
-import { ControlRoomAttentionStrip } from '@/components/control-room/ControlRoomAttentionStrip'
-import { ControlRoomVerdictStrip } from '@/components/control-room/ControlRoomVerdictStrip'
-import { NetworkHealthPanel } from '@/components/control-room/NetworkHealthPanel'
-import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
+import { ControlRoomBay } from '@/domains/foundation/control-room/ControlRoomBay'
+import { ControlRoomBayCards } from '@/domains/foundation/control-room/ControlRoomBayCards'
+import { ControlRoomAttentionStrip } from '@/domains/foundation/control-room/ControlRoomAttentionStrip'
+import { ControlRoomVerdictStrip } from '@/domains/foundation/control-room/ControlRoomVerdictStrip'
+import { NetworkHealthPanel } from '@/domains/foundation/network/NetworkHealthPanel'
+import { useMissionSnapshot } from '@/domains/foundation/mission/useMissionSnapshot'
 import { useNetworkLiveProbe } from '@/hooks/useNetworkLiveProbe'
 import {
   buildControlRoomAttentionItems,

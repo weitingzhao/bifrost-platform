@@ -7,7 +7,7 @@ import {
   fetchNetworkDevices,
   fetchNetworkSla,
 } from '@/api/network'
-import { NetworkHealthPanel } from '@/components/control-room/NetworkHealthPanel'
+import { NetworkHealthPanel } from '@/domains/foundation/network/NetworkHealthPanel'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import type { OpsVerdictLamp, OpsVerdictTagVariant } from '@/components/layout/OpsVerdictStrip'
 import { NetworkClientsPanel } from '@/components/network/NetworkClientsPanel'

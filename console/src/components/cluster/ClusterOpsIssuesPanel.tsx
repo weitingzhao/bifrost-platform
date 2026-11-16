@@ -31,7 +31,7 @@ import {
   collectClusterIssues,
   clusterIssuesReachability,
 } from '@/lib/cluster/collectClusterIssues'
-import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
+import { useMissionSnapshot } from '@/domains/foundation/mission/useMissionSnapshot'
 import type { Reachability } from '@/api/matrixTypes'
 
 const REFETCH_MS = 25_000

@@ -1,5 +1,5 @@
 import { releasePolicyBannerState } from '@/api/releasePolicy'
-import { useReleasePolicy } from '@/hooks/useReleasePolicy'
+import { useReleasePolicy } from '@/domains/delivery/policy/useReleasePolicy'
 
 /**
  * Yellow inside the policy's reminder windows (14, 3 and 1 days by default),

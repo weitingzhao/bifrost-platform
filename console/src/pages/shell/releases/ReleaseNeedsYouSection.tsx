@@ -3,7 +3,7 @@ import { formatTimeRemaining, type ApprovalItem } from '@/api/approvals'
 import { releasePolicyBannerState } from '@/api/releasePolicy'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { ReleasePolicyBanner } from '@/components/ReleasePolicyBanner'
-import { useReleasePolicy } from '@/hooks/useReleasePolicy'
+import { useReleasePolicy } from '@/domains/delivery/policy/useReleasePolicy'
 import {
   NO_VIEWER_TOKEN,
   approvalHref,

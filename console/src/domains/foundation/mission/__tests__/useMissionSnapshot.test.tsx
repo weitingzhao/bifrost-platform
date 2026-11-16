@@ -8,7 +8,7 @@ import {
   MISSION_STALE_AFTER_MS,
   missionFreshness,
   useMissionSnapshot,
-} from '@/hooks/useMissionSnapshot'
+} from '@/domains/foundation/mission/useMissionSnapshot'
 
 const prodMatrix: MatrixResponse = {
   environment: 'prod',

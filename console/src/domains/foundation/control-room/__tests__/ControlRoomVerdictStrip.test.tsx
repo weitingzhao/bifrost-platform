@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { ControlRoomVerdictStrip } from '@/components/control-room/ControlRoomVerdictStrip'
+import { ControlRoomVerdictStrip } from '@/domains/foundation/control-room/ControlRoomVerdictStrip'
 
 describe('ControlRoomVerdictStrip stale sources (TD-249)', () => {
   it('names the stale probes beside freshness', () => {

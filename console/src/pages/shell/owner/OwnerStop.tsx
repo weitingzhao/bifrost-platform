@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@bifrost/ui'
 import { text, type RuntimeRecord } from '@/api/agentRuntime'
 import { liftControl, setGlobalStop } from '@/api/agentRuntimeBus'
-import { shellSelfHealthQuery } from '@/hooks/useShellStatusLine'
+import { shellSelfHealthQuery } from '@/domains/foundation/shell/useShellStatusLine'
 import { Card } from './OwnerParts'
 
 // What the Owner pressed: stop all, or lift the stop that was in force then.

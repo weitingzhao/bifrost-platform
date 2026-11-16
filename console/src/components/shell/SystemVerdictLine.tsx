@@ -1,4 +1,4 @@
-import { useSystemVerdict } from '@/hooks/useShellStatusLine'
+import { useSystemVerdict } from '@/domains/foundation/shell/useShellStatusLine'
 import { VERDICT_DOT_COLOR, type SystemVerdict } from '@/lib/shell/shellStatusLine'
 
 /** The header's sentence, in page body. `showCauses` lists every red and yellow item under it. */

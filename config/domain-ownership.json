@@ -837,21 +837,6 @@
         "status": "mixed",
         "basis": "2026-11-16 source/caller audit: shared cross-domain composition; narrower declarations override this group"
       },
-      "console/src/hooks": {
-        "domains": [
-          "foundation",
-          "plan",
-          "lineage",
-          "verification",
-          "delivery",
-          "owner",
-          "compute",
-          "tenant",
-          "coordination"
-        ],
-        "status": "mixed",
-        "basis": "2026-11-16 source/caller audit: shared cross-domain composition; narrower declarations override this group"
-      },
       "console/src/lib": {
         "domains": [
           "foundation",
@@ -1868,15 +1853,6 @@
         "status": "mixed",
         "basis": "2026-11-16 source/caller audit: cross-domain health observations; no artificial isolation"
       },
-      "console/src/components/observability": {
-        "domains": [
-          "foundation",
-          "compute",
-          "tenant"
-        ],
-        "status": "mixed",
-        "basis": "2026-11-16 source/caller audit: cross-domain health observations; no artificial isolation"
-      },
       "console/src/lib/observability": {
         "domains": [
           "foundation",
@@ -1934,15 +1910,6 @@
         "status": "mixed",
         "basis": "2026-11-16 source/caller audit: fixed data-lane UI and infrastructure backups remain mixed"
       },
-      "console/src/components/control-room": {
-        "domains": [
-          "plan",
-          "coordination",
-          "compute"
-        ],
-        "status": "mixed",
-        "basis": "2026-11-16 source/caller audit: cross-domain activity and control-room composition"
-      },
       "console/src/lib/control-room": {
         "domains": [
           "plan",
@@ -1999,6 +1966,62 @@
         ],
         "status": "assigned",
         "basis": "2026-11-16 Owner confirmed read-only backup status display belongs to Foundation (compute charter excludes storage). Owns panel, response type and GET client; no backup execution, database or permission changes."
+      },
+      "console/src/domains/foundation/control-room": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
+      },
+      "console/src/domains/foundation/network": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
+      },
+      "console/src/domains/foundation/monitoring": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
+      },
+      "console/src/domains/foundation/mission": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
+      },
+      "console/src/domains/foundation/shell": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
+      },
+      "console/src/domains/delivery/policy": {
+        "domains": [
+          "delivery"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
+      },
+      "console/src/domains/tenant/orchestration": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
+      },
+      "console/src/hooks/__tests__/useFleetSnapshot.test.ts": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 audit: existing tests solely exercise hooks/useFleetSnapshot.ts (already assigned compute). Test bytes and implementation unchanged; no new claim of physical isolation."
       }
     }
   }
