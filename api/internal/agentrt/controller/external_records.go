@@ -282,7 +282,7 @@ func EvidenceRun(p store.PipelineRun) evidence.Run {
 		inputs = append(inputs, evidence.RepoAt(in))
 	}
 	return evidence.Run{Kind: p.Kind, Repo: p.Repo, Run: p.Run, UID: p.UID, Pipeline: p.Pipeline,
-		Result: p.Result, Reason: p.Reason, Scope: p.Scope, TestedBy: p.TestedBy, CompletedAt: p.CompletedAt,
+		Result: p.Result, Reason: p.Reason, Scope: p.Scope, Base: p.Base, TestedBy: p.TestedBy, CompletedAt: p.CompletedAt,
 		Inputs: inputs, Audit: p.Audit, FailedTasks: p.FailedTasks, FailedTests: p.FailedTests, FailClass: p.FailClass}
 }
 

@@ -391,3 +391,45 @@ func TestAPipelineRunWithABadScopeIsNotAFullRun(t *testing.T) {
 		}
 	}
 }
+
+// Origin: 2026-11-16. The base an incremental CI run was judged against
+// (base-commit, written by test-api since infra 002bb598) is what its pass
+// rests on; the ledger's verdict follows it (ledgerCIScoped). The word none,
+// an empty value and a result of another kind of run name no base.
+func TestPipelineRunFactReadsTheBaseOfAnIncrementalRun(t *testing.T) {
+	t.Parallel()
+	base := strings.Repeat("b", 40)
+	fact := func(pipeline, value string) store.PipelineRun {
+		u := unstructured.Unstructured{Object: map[string]any{
+			"spec": map[string]any{"pipelineRef": map[string]any{"name": pipeline}},
+			"status": map[string]any{"conditions": []any{map[string]any{"type": "Succeeded", "status": "True", "reason": "Succeeded"}},
+				"results": []any{map[string]any{"name": "api-scope", "value": "incremental"}, map[string]any{"name": "base-commit", "value": value}}},
+		}}
+		u.SetName("r")
+		u.SetLabels(map[string]string{"bifrost.io/repo": "bifrost-platform"})
+		f, ok := pipelineRunFact(u)
+		if !ok {
+			t.Fatalf("%s %q: not a fact", pipeline, value)
+		}
+		return f
+	}
+	if got := fact("bifrost-ci-platform", base).Base; got != base {
+		t.Fatalf("base = %q", got)
+	}
+	for _, value := range []string{"none", "", "main", base[:12]} {
+		if got := fact("bifrost-ci-platform", value).Base; got != "" {
+			t.Errorf("base-commit %q read as %q", value, got)
+		}
+	}
+	if got := fact("bifrost-deliver-platform", base).Base; got != "" {
+		t.Errorf("a delivery run's base-commit read as %q", got)
+	}
+	// It reaches the row: the statement of a passed incremental row names it.
+	p := fact("bifrost-ci-platform", base)
+	p.UID, p.CompletedAt = "uid", time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
+	p.Inputs = []store.RepoAt{{Repo: "bifrost-platform", Commit: strings.Repeat("a", 40), Tree: strings.Repeat("c", 40)}}
+	row, is, err := evidence.RunEvidence(controller.EvidenceRun(p))
+	if err != nil || !is || evidence.IncrementalBase(row) != base {
+		t.Fatalf("row base = %q (is %v, %v)", evidence.IncrementalBase(row), is, err)
+	}
+}

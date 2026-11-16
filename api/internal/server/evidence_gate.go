@@ -65,7 +65,9 @@ func ledgerCI(db func() store.DB, tree func(context.Context, string, string) (st
 // (an incremental or a console run) counts as well when no full run failed
 // after it, as the push to main reads CI (ci_gate.py without --require-full).
 func ledgerCIScoped(db func() store.DB, tree func(context.Context, string, string) (string, error), anyScope bool) delivery.CIReader {
-	verdict := func(ctx context.Context, d store.DB, rows []evidence.EvidenceRow) (string, string, error) {
+	// verdict also returns chained: the base of the newest passed incremental
+	// row that no newer failure follows, when no full run decided.
+	verdict := func(ctx context.Context, d store.DB, rows []evidence.EvidenceRow) (status, run, chained, chainedRun string, err error) {
 		failed, part := "", ""
 		for _, row := range rows { // newest first
 			switch {
@@ -73,13 +75,16 @@ func ledgerCIScoped(db func() store.DB, tree func(context.Context, string, strin
 				if part == "" && failed == "" {
 					part = row.RunName
 				}
+				if base := evidence.IncrementalBase(row); base != "" && chained == "" && failed == "" {
+					chained, chainedRun = base, row.RunName
+				}
 			case row.Result == evidence.EvidencePassed && row.Scope == evidence.EvidenceScopeFull:
 				same, err := evidence.EvidenceByKey(ctx, d, row.Repo, row.Unit, row.Task, row.InputKey)
 				if err != nil {
-					return "", "", err
+					return "", "", "", "", err
 				}
 				if evidence.EvidenceVerdict(same) == evidence.EvidenceGreen {
-					return delivery.CISucceeded, row.RunName, nil
+					return delivery.CISucceeded, row.RunName, "", "", nil
 				}
 			case row.Result == evidence.EvidenceFailed && failed == "":
 				failed = row.RunName
@@ -88,36 +93,67 @@ func ledgerCIScoped(db func() store.DB, tree func(context.Context, string, strin
 		// A full run decides (above, and a full failure here); a pass of part
 		// counts only with anyScope, and not once a newer run failed.
 		if anyScope && part != "" {
-			return delivery.CISucceeded, part, nil
+			return delivery.CISucceeded, part, "", "", nil
 		}
 		if failed != "" {
-			return delivery.CIFailed, failed, nil
+			return delivery.CIFailed, failed, "", "", nil
 		}
-		return "", "", nil
+		return "", "", chained, chainedRun, nil
+	}
+	// read is one commit's verdict. With no verdict of its own (by commit, then
+	// by tree) and a passed incremental row, it is the verdict of the commit
+	// that row was judged against, as far back as maxVerdictChain commits: the
+	// incremental run vouches for what changed, the base for the rest (Owner
+	// 2026-11-16; before this a landing whose CI was incremental left main's
+	// head without a verdict and STG undelivered, 2026-11-15 12:44-14:30). A
+	// base that failed, or has no verdict, or a chain longer than the bound,
+	// leaves the commit with none: the answer is never a pass on less.
+	var read func(ctx context.Context, d store.DB, repo, sha string, depth int) (string, string, error)
+	read = func(ctx context.Context, d store.DB, repo, sha string, depth int) (string, string, error) {
+		rows, err := evidence.EvidenceCIByCommit(ctx, d, repo, sha, 50)
+		if err != nil {
+			return "", "", err
+		}
+		status, run, chained, chainedRun, err := verdict(ctx, d, rows)
+		if err != nil || status != "" {
+			return status, run, err
+		}
+		if tree != nil {
+			if t, terr := tree(ctx, repo, sha); terr == nil {
+				if rows, err = evidence.EvidenceByTree(ctx, d, repo, t, 50); err != nil {
+					return "", "", err
+				}
+				var c, cr string
+				if status, run, c, cr, err = verdict(ctx, d, rows); err != nil || status != "" {
+					return status, run, err
+				}
+				if chained == "" {
+					chained, chainedRun = c, cr
+				}
+			}
+		}
+		if chained == "" || chained == sha || depth >= maxVerdictChain {
+			return "", "", nil
+		}
+		baseStatus, _, err := read(ctx, d, repo, chained, depth+1)
+		if err != nil || baseStatus != delivery.CISucceeded {
+			// A failed base is not this commit's failure: it has no verdict.
+			return "", "", err
+		}
+		return delivery.CISucceeded, chainedRun, nil
 	}
 	return func(ctx context.Context, repo, sha string) (string, string, error) {
 		d := db()
 		if d == nil {
 			return "", "", errors.New("the evidence ledger is not connected")
 		}
-		rows, err := evidence.EvidenceCIByCommit(ctx, d, repo, sha, 50)
-		if err != nil {
-			return "", "", err
-		}
-		status, run, err := verdict(ctx, d, rows)
-		if err != nil || status != "" || tree == nil {
-			return status, run, err
-		}
-		t, err := tree(ctx, repo, sha)
-		if err != nil {
-			return "", "", nil
-		}
-		if rows, err = evidence.EvidenceByTree(ctx, d, repo, t, 50); err != nil {
-			return "", "", err
-		}
-		return verdict(ctx, d, rows)
+		return read(ctx, d, repo, sha, 0)
 	}
 }
+
+// maxVerdictChain bounds how many incremental landings in a row a verdict may
+// rest on before a full pass is needed (the daily full CI is one every day).
+const maxVerdictChain = 20
 
 // wireEvidenceGate turns the switch for this process and says so once.
 func (s *Server) wireEvidenceGate(env string) delivery.CIReader {

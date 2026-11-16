@@ -34,6 +34,9 @@ const (
 	EvidenceFailed      = "failed"
 	EvidenceInvalidated = "invalidated"
 	EvidenceScopeFull   = "full"
+	// EvidenceScopeIncremental: the run tested what the commit changes
+	// from a base commit it names (base_commit in the statement).
+	EvidenceScopeIncremental = "incremental"
 	// EvidenceScopeUnknown marks a run whose scope result was there and
 	// said no scope; such a run gives no evidence.
 	EvidenceScopeUnknown = "unknown"
@@ -53,12 +56,14 @@ type RepoAt struct {
 type Run struct {
 	Kind, Repo, Run, UID, Pipeline string
 	Result, Reason, Scope          string
-	TestedBy                       string
-	CompletedAt                    time.Time
-	Inputs                         []RepoAt
-	Audit                          bool
-	FailedTasks, FailedTests       []string
-	FailClass                      string
+	// Base: the commit an incremental run was judged against (store.PipelineRun.Base).
+	Base                     string
+	TestedBy                 string
+	CompletedAt              time.Time
+	Inputs                   []RepoAt
+	Audit                    bool
+	FailedTasks, FailedTests []string
+	FailClass                string
 }
 
 // EvidenceRow is one row of the ledger.
@@ -178,6 +183,12 @@ func RunEvidence(p Run) (EvidenceRow, bool, error) {
 		"scope":         scope,
 		"run_uid":       p.UID,
 		"completed_at":  p.CompletedAt.UTC().Format(time.RFC3339),
+	}
+	if scope == EvidenceScopeIncremental && gitObject.MatchString(p.Base) {
+		// What the rest of the commit rests on: a pass of this scope says
+		// "what changed from base_commit passes", and is a verdict on the
+		// commit only together with base_commit's own (IncrementalBase).
+		predicate["base_commit"] = p.Base
 	}
 	if result == EvidenceFailed {
 		// What it failed on, when the run's tasks said (the statement is not
@@ -409,4 +420,23 @@ func evidenceNames(in []string, limit int) []any {
 		out = append(out, s)
 	}
 	return out
+}
+
+// IncrementalBase is the commit a passed incremental row was judged against,
+// "" when the row is not a passed incremental row or names none. Such a row
+// vouches for what the commit changes from that base; the base's own verdict
+// vouches for the rest.
+func IncrementalBase(r EvidenceRow) string {
+	if r.Result != EvidencePassed || r.Scope != EvidenceScopeIncremental {
+		return ""
+	}
+	var st struct {
+		Predicate struct {
+			Base string `json:"base_commit"`
+		} `json:"predicate"`
+	}
+	if json.Unmarshal(r.Statement, &st) != nil || !gitObject.MatchString(st.Predicate.Base) {
+		return ""
+	}
+	return st.Predicate.Base
 }

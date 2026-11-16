@@ -233,6 +233,12 @@ func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
 			}
 		case "tested-by":
 			f.TestedBy = v
+		case "base-commit":
+			// The word none (no base) and anything that is not a commit id
+			// name no base.
+			if f.Kind == "ci" && commitID.MatchString(v) && len(v) == 40 {
+				f.Base = v
+			}
 		case "api-scope":
 			// A pipeline that has no such result tests everything (the
 			// scope stays ""). One that has it must say a scope: an empty

@@ -27,7 +27,11 @@ type PipelineRun struct {
 	Run, UID, Pipeline, Kind, Result, Repo, Revision, Reason, Tree, TestedBy string
 	CreatedAt, StartedAt, CompletedAt                                        time.Time
 	Scope                                                                    string
-	Inputs                                                                   []RepoAt
+	// Base is the commit an incremental CI run was judged against (its
+	// base-commit result, a ready/ run that took main's head): the run tested
+	// what the commit changes from it. "" when the run names none.
+	Base   string
+	Inputs []RepoAt
 	// Audit: the run is the daily full CI (it reuses nothing), whose failure
 	// contradicts a pass the ledger has for the same inputs.
 	Audit bool

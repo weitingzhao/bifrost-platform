@@ -236,3 +236,125 @@ func TestLedgerCIBookkeeping(t *testing.T) {
 	write(run("a2b-pass", h("4"), h("d"), "Succeeded", false, t1), run("a2b-audit", h("4"), h("d"), "Failed", true, t3))
 	ask("A2, the same in order", h("4"), delivery.CIFailed)
 }
+
+// Origin: 2026-11-15. The landing gate was made to accept an incremental CI
+// run judged against main's head (infra 002bb598, applied 13:31 Chicago). The
+// release side took only a full pass as a commit's verdict, so after two such
+// landings (platform 1999f61b, 3c40a33f) main's head had none: head-release
+// waited, STG was not delivered from 12:44 to 14:30, and the console skip was
+// lost with it (units/scope: "no passing full CI of the base"). It was turned
+// off again. An incremental pass now is a verdict together with its base's.
+func TestLedgerCIFollowsAnIncrementalPassToItsBase(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := agentrttest.Migrated(t)
+	pool := db.Pool(t, db.Runtime)
+	seq := 0
+	commit := func() string { seq++; return fmt.Sprintf("%040x", 0xc0000+seq) }
+	treeOf := map[string]string{}
+	record := func(name, c, result, scope, base string) {
+		t.Helper()
+		if treeOf[c] == "" {
+			treeOf[c] = fmt.Sprintf("%040x", 0x7000000+len(treeOf))
+		}
+		reason := "Succeeded"
+		if result == "Failed" {
+			reason = "Failed"
+		}
+		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: reason, Repo: "bifrost-platform",
+			Scope: scope, Base: base, CompletedAt: time.Date(2026, 11, 16, 0, 0, seq, 0, time.UTC),
+			Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: c, Tree: treeOf[c]}, {Repo: "bifrost-ui", Commit: strings.Repeat("2", 40), Tree: strings.Repeat("f", 40)}}}
+		e, is, err := evidence.RunEvidence(controller.EvidenceRun(p))
+		if err != nil || !is {
+			t.Fatalf("run %s: %v", name, err)
+		}
+		if _, err = evidence.RecordEvidence(ctx, pool, []evidence.EvidenceRow{e}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read := ledgerCI(func() store.DB { return pool }, func(_ context.Context, _, c string) (string, error) {
+		if tr, ok := treeOf[c]; ok {
+			return tr, nil
+		}
+		return "", errors.New("no such commit")
+	})
+	ask := func(what, c, status, run string) {
+		t.Helper()
+		gotStatus, gotRun, err := read(ctx, "bifrost-platform", c)
+		if err != nil || gotStatus != status || gotRun != run {
+			t.Fatalf("%s: %q %q %v, want %q %q", what, gotStatus, gotRun, err, status, run)
+		}
+	}
+
+	// A full pass, then two incremental landings on top of it.
+	a, b, c := commit(), commit(), commit()
+	record("full-a", a, "Succeeded", "full", "")
+	record("incr-b", b, "Succeeded", "incremental", a)
+	record("incr-c", c, "Succeeded", "incremental", b)
+	ask("the base", a, delivery.CISucceeded, "full-a")
+	ask("one step", b, delivery.CISucceeded, "incr-b")
+	ask("two steps", c, delivery.CISucceeded, "incr-c")
+
+	// Controls: each is an incremental pass that must not be a verdict.
+	// Its base has no verdict at all.
+	orphanBase, orphan := commit(), commit()
+	record("incr-orphan", orphan, "Succeeded", "incremental", orphanBase)
+	ask("a base nothing was recorded for", orphan, "", "")
+	// Its base failed: the commit has no verdict (and is not called failed).
+	red, onRed := commit(), commit()
+	record("full-red", red, "Failed", "full", "")
+	record("incr-on-red", onRed, "Succeeded", "incremental", red)
+	ask("the failed base itself", red, delivery.CIFailed, "full-red")
+	ask("a base that failed", onRed, "", "")
+	// It names no base (a run from before the result existed, or the word none).
+	noBase := commit()
+	record("incr-no-base", noBase, "Succeeded", "incremental", "")
+	ask("an incremental pass that names no base", noBase, "", "")
+	// A console-scope pass is a pass of part with no base: as before.
+	consoleOnly := commit()
+	record("console-part", consoleOnly, "Succeeded", "console", a)
+	ask("a console-scope pass", consoleOnly, "", "")
+	// A later failure of the commit itself outranks the chain.
+	later := commit()
+	record("incr-later", later, "Succeeded", "incremental", a)
+	record("full-later-red", later, "Failed", "full", "")
+	ask("a failure recorded after the incremental pass", later, delivery.CIFailed, "full-later-red")
+	// The chain is bounded: maxVerdictChain steps reach the full pass, one more does not.
+	prev, name := a, ""
+	for i := 1; i <= maxVerdictChain+1; i++ {
+		next := commit()
+		name = fmt.Sprintf("incr-chain-%d", i)
+		record(name, next, "Succeeded", "incremental", prev)
+		if i == maxVerdictChain {
+			ask("a chain of the bound", next, delivery.CISucceeded, name)
+		}
+		prev = next
+	}
+	ask("a chain one longer than the bound", prev, "", "")
+	// A base that names itself goes nowhere.
+	self := commit()
+	record("incr-self", self, "Succeeded", "incremental", self)
+	ask("a row whose base is the commit", self, "", "")
+}
+
+func TestIncrementalBaseReadsOnlyAPassedIncrementalRow(t *testing.T) {
+	base := strings.Repeat("b", 40)
+	row := func(result, scope, b string) evidence.EvidenceRow {
+		st, _ := json.Marshal(map[string]any{"predicate": map[string]any{"base_commit": b}})
+		return evidence.EvidenceRow{Result: result, Scope: scope, Statement: st}
+	}
+	if got := evidence.IncrementalBase(row(evidence.EvidencePassed, evidence.EvidenceScopeIncremental, base)); got != base {
+		t.Fatalf("got %q", got)
+	}
+	for name, r := range map[string]evidence.EvidenceRow{
+		"failed":       row(evidence.EvidenceFailed, evidence.EvidenceScopeIncremental, base),
+		"full":         row(evidence.EvidencePassed, evidence.EvidenceScopeFull, base),
+		"console":      row(evidence.EvidencePassed, "console", base),
+		"not a commit": row(evidence.EvidencePassed, evidence.EvidenceScopeIncremental, "none"),
+		"no statement": {Result: evidence.EvidencePassed, Scope: evidence.EvidenceScopeIncremental},
+	} {
+		if got := evidence.IncrementalBase(r); got != "" {
+			t.Errorf("%s: %q, want none", name, got)
+		}
+	}
+}
