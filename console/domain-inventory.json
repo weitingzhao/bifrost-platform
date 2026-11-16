@@ -1562,6 +1562,70 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/foundation/observability",
+      "files": [
+        "console/src/domains/foundation/observability/__tests__/attentionMuteBatch.test.ts",
+        "console/src/domains/foundation/observability/__tests__/attentionRemediationCatalog.test.ts",
+        "console/src/domains/foundation/observability/__tests__/codeHealthSignals.test.ts",
+        "console/src/domains/foundation/observability/__tests__/observabilityViewModel.test.ts",
+        "console/src/domains/foundation/observability/__tests__/observationBoundaries.test.tsx",
+        "console/src/domains/foundation/observability/alertMapping.ts",
+        "console/src/domains/foundation/observability/attentionMute.ts",
+        "console/src/domains/foundation/observability/attentionRemediationCatalog.ts",
+        "console/src/domains/foundation/observability/components/DomainCard.tsx",
+        "console/src/domains/foundation/observability/components/GrafanaSoloEmbed.tsx",
+        "console/src/domains/foundation/observability/components/ObservabilityAttentionPanel.tsx",
+        "console/src/domains/foundation/observability/components/ObservabilitySelectedDomain.tsx",
+        "console/src/domains/foundation/observability/components/ObservationDomainCard.tsx",
+        "console/src/domains/foundation/observability/components/ReferenceDomainChip.tsx",
+        "console/src/domains/foundation/observability/components/SystemGapMeta.tsx",
+        "console/src/domains/foundation/observability/components/observabilityFormat.ts",
+        "console/src/domains/foundation/observability/dashboardCatalog.ts",
+        "console/src/domains/foundation/observability/grafanaUrlBuilder.ts",
+        "console/src/domains/foundation/observability/index.ts",
+        "console/src/domains/foundation/observability/observabilityViewModel.ts",
+        "console/src/domains/foundation/observability/routeLabel.ts",
+        "console/src/domains/foundation/observability/signalRegistry.ts",
+        "console/src/domains/foundation/observability/types.ts",
+        "console/src/domains/foundation/observability/useObservabilitySnapshot.ts",
+        "console/src/domains/foundation/observability/verdictAggregation.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/cluster.ts",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/codeHealth.ts",
+        "console/src/api/core.ts",
+        "console/src/api/network.ts",
+        "console/src/api/networkTypes.ts",
+        "console/src/api/satelliteBusTypes.ts",
+        "console/src/api/telemetry.ts",
+        "console/src/components",
+        "console/src/components/layout",
+        "console/src/domains/tenant/observability",
+        "console/src/lib/agent",
+        "console/src/lib/architecture",
+        "console/src/lib/cluster",
+        "console/src/lib/control-room",
+        "console/src/lib/observability"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/api/codeHealth.ts",
+        "console/src/domains/tenant/observability"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/foundation/runtime-map",
       "files": [
         "console/src/domains/foundation/runtime-map/RuntimeMapPage.tsx",
@@ -1678,6 +1742,47 @@
       "imports": [],
       "test_imports": [],
       "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/tenant/observability",
+      "files": [
+        "console/src/domains/tenant/observability/DomainCard.tsx",
+        "console/src/domains/tenant/observability/__tests__/busObservation.test.ts",
+        "console/src/domains/tenant/observability/alertProfile.ts",
+        "console/src/domains/tenant/observability/attentionProfile.ts",
+        "console/src/domains/tenant/observability/busObservation.ts",
+        "console/src/domains/tenant/observability/dashboardCatalog.ts",
+        "console/src/domains/tenant/observability/displayProfile.ts",
+        "console/src/domains/tenant/observability/evaluateTenantSignals.ts",
+        "console/src/domains/tenant/observability/metricProfile.ts",
+        "console/src/domains/tenant/observability/metricThreshold.ts",
+        "console/src/domains/tenant/observability/namespace.ts",
+        "console/src/domains/tenant/observability/probeInterpretation.ts",
+        "console/src/domains/tenant/observability/routeProfile.ts",
+        "console/src/domains/tenant/observability/signalRegistry.ts",
+        "console/src/domains/tenant/observability/targetProfile.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/core.ts",
+        "console/src/api/network.ts",
+        "console/src/api/satelliteBusTypes.ts",
+        "console/src/components/TradeNsSegmentControl.tsx",
+        "console/src/domains/foundation/observability",
+        "console/src/lib",
+        "console/src/lib/architecture",
+        "console/src/lib/satellite",
+        "console/src/lib/satellite-bus"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "react",
+        "vitest"
+      ],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []
@@ -1926,23 +2031,10 @@
         "console/src/hooks/useObservabilitySnapshot.ts"
       ],
       "imports": [
-        "console/src/api",
-        "console/src/api/cluster.ts",
-        "console/src/api/codeHealth.ts",
-        "console/src/api/core.ts",
-        "console/src/api/network.ts",
-        "console/src/api/telemetry.ts",
-        "console/src/lib/architecture",
-        "console/src/lib/control-room",
-        "console/src/lib/observability",
-        "console/src/lib/satellite",
-        "console/src/lib/satellite-bus"
+        "console/src/domains/foundation/observability"
       ],
       "test_imports": [],
-      "external_imports": [
-        "@tanstack/react-query",
-        "react"
-      ],
+      "external_imports": [],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []
@@ -2357,10 +2449,6 @@
     {
       "path": "console/src/lib/observability",
       "files": [
-        "console/src/lib/observability/__tests__/attentionMuteBatch.test.ts",
-        "console/src/lib/observability/__tests__/attentionRemediationCatalog.test.ts",
-        "console/src/lib/observability/__tests__/codeHealthSignals.test.ts",
-        "console/src/lib/observability/__tests__/observabilityViewModel.test.ts",
         "console/src/lib/observability/alertMapping.ts",
         "console/src/lib/observability/attentionMute.ts",
         "console/src/lib/observability/attentionRemediationCatalog.ts",
@@ -2373,22 +2461,10 @@
         "console/src/lib/observability/verdictAggregation.ts"
       ],
       "imports": [
-        "console/src/api",
-        "console/src/api/clusterTypes.ts",
-        "console/src/api/codeHealth.ts",
-        "console/src/api/networkTypes.ts",
-        "console/src/api/satelliteBusTypes.ts",
-        "console/src/lib/agent",
-        "console/src/lib/architecture",
-        "console/src/lib/cluster"
+        "console/src/domains/foundation/observability"
       ],
-      "test_imports": [
-        "console/src/api",
-        "console/src/api/codeHealth.ts"
-      ],
-      "external_imports": [
-        "vitest"
-      ],
+      "test_imports": [],
+      "external_imports": [],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []
@@ -3097,18 +3173,10 @@
         "console/src/pages/observability/observabilityFormat.ts"
       ],
       "imports": [
-        "console/src/components",
-        "console/src/components/TradeNsSegmentControl.tsx",
-        "console/src/components/layout",
-        "console/src/lib",
-        "console/src/lib/architecture",
-        "console/src/lib/observability"
+        "console/src/domains/foundation/observability"
       ],
       "test_imports": [],
-      "external_imports": [
-        "@bifrost/ui",
-        "react"
-      ],
+      "external_imports": [],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []

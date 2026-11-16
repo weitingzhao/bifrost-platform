@@ -5,7 +5,7 @@ import {
   listActiveAttentionMutes,
   muteAttentionIds,
   unmuteAttentionId,
-} from '@/lib/observability/attentionMute'
+} from '@/domains/foundation/observability/attentionMute'
 
 const STORAGE_KEY = 'bifrost.observability.attentionMute.v1'
 

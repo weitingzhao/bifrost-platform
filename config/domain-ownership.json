@@ -1837,12 +1837,10 @@
       },
       "console/src/pages/observability": {
         "domains": [
-          "foundation",
-          "compute",
-          "tenant"
+          "foundation"
         ],
-        "status": "mixed",
-        "basis": "2026-11-16 source/caller audit: cross-domain health observations; no artificial isolation"
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-confirmed observation composition: generic read-only aggregation/display separated from explicit Tenant signal, namespace, alert and probe interpretation adapters; legacy exports preserve consumers; mutation and permission page unchanged"
       },
       "console/src/pages/ObservabilityPage.tsx": {
         "domains": [
@@ -1855,21 +1853,17 @@
       },
       "console/src/lib/observability": {
         "domains": [
-          "foundation",
-          "compute",
-          "tenant"
+          "foundation"
         ],
-        "status": "mixed",
-        "basis": "2026-11-16 source/caller audit: cross-domain health observations; no artificial isolation"
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-confirmed observation composition: generic read-only aggregation/display separated from explicit Tenant signal, namespace, alert and probe interpretation adapters; legacy exports preserve consumers; mutation and permission page unchanged"
       },
       "console/src/hooks/useObservabilitySnapshot.ts": {
         "domains": [
-          "foundation",
-          "compute",
-          "tenant"
+          "foundation"
         ],
-        "status": "mixed",
-        "basis": "2026-11-16 source/caller audit: cross-domain health observations; no artificial isolation"
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-confirmed observation composition: generic read-only aggregation/display separated from explicit Tenant signal, namespace, alert and probe interpretation adapters; legacy exports preserve consumers; mutation and permission page unchanged"
       },
       "console/src/pages/shell/data": {
         "domains": [
@@ -2031,6 +2025,20 @@
         ],
         "status": "assigned",
         "basis": "Read-only runtime display contracts shared by Foundation projection and Tenant adapters; separate dependency node avoids a coarse source-group cycle."
+      },
+      "console/src/domains/foundation/observability": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-confirmed observation composition: generic read-only aggregation/display separated from explicit Tenant signal, namespace, alert and probe interpretation adapters; legacy exports preserve consumers; mutation and permission page unchanged"
+      },
+      "console/src/domains/tenant/observability": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-confirmed Tenant integration: namespace/signal/dashboard/alert mappings, bus and IB observation adapters and tenant environment selector; no execution or permission changes"
       }
     }
   }

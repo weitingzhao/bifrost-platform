@@ -7,9 +7,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { CodeHealthMetricDto, CodeHealthResponse } from '@/api/codeHealth'
-import { buildObservabilityViewModel } from '@/lib/observability/observabilityViewModel'
-import { SIGNAL_REGISTRY } from '@/lib/observability/signalRegistry'
-import type { EvaluatedSignal } from '@/lib/observability/types'
+import { buildObservabilityViewModel } from '@/domains/foundation/observability/observabilityViewModel'
+import { SIGNAL_REGISTRY } from '@/domains/foundation/observability/signalRegistry'
+import type { EvaluatedSignal } from '@/domains/foundation/observability/types'
 
 function metric(over: Partial<CodeHealthMetricDto> & { domain: string }): CodeHealthMetricDto {
   return {

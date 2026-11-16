@@ -1,0 +1,96 @@
+// Foundation composition: Tenant adapters remain explicit dependencies; this is not an isolated deployment.
+import { TENANT_GRAFANA_DASHBOARD_CATALOG } from '@/domains/tenant/observability/dashboardCatalog'
+const FOUNDATION_GRAFANA_DASHBOARD_CATALOG: GrafanaDashboardEntry[] = [
+  {
+    id: 'cluster-compute',
+    title: 'Kubernetes / Compute Resources / Cluster',
+    domain: 'rocket',
+    env: 'all',
+    purpose: 'Cluster pod/node compute (kube-prometheus-stack stock)',
+    uid: 'efa86fd1d0c121a26444b636a3f509a8',
+    slug: 'kubernetes-compute-resources-cluster',
+    suppressNamespace: true,
+    suppressEnv: true,
+    // Rocket stock panelId not pinned — no Selected Domain embed
+  },
+  {
+    id: 'cluster-nodes',
+    title: 'Node Exporter / Nodes',
+    domain: 'rocket',
+    env: 'all',
+    purpose: 'Node CPU/memory evidence (kube-prometheus-stack stock)',
+    uid: '7d57716318ee0dddbac5a7f451fb7753',
+    slug: 'node-exporter-nodes',
+    suppressNamespace: true,
+    suppressEnv: true,
+  },
+  {
+    id: 'platform-overview',
+    title: 'Prometheus / Overview',
+    domain: 'rocket',
+    env: 'all',
+    purpose: 'Layer B Prometheus stack (kube-prometheus-stack stock)',
+    uid: '9fa0d141-d019-4ad7-8bc5-42196ee308bd',
+    slug: 'prometheus-overview',
+    suppressNamespace: true,
+    suppressEnv: true,
+  },
+  {
+    id: 'data-layer',
+    title: 'Data Layer',
+    domain: 'ground-systems',
+    env: 'shared',
+    purpose: 'Shared Redis + CNPG golden signals (data NS)',
+    uid: 'bifrost-data-layer',
+    slug: 'bifrost-data-layer',
+    defaultNamespace: 'data',
+    soloPanel: { panelId: 3, title: 'Redis memory (sum)', height: 180 },
+  },
+  {
+    id: 'agent-operations',
+    title: 'Platform Control Plane',
+    domain: 'engineer',
+    env: 'all',
+    purpose:
+      'platform-api/console Deployment K8s health; Agent job status → Operator Dock / Agent Desk',
+    uid: 'bifrost-agent-operations',
+    slug: 'bifrost-agent-operations',
+    defaultNamespace: 'bifrost-platform-stg',
+    soloPanel: { panelId: 1, title: 'platform-api ready (sum)', height: 180 },
+  }
+]
+/**
+ * Grafana dashboard catalog for Observability hub.
+ *
+ * Only UIDs that exist in the live Grafana (kube-prometheus-stack + Bifrost
+ * ConfigMaps) may be non-null. Unavailable entries keep uid:null — never emit
+ * broken deep links.
+ *
+ * Live inventory (2026-08): Bifrost-authored boards — Trade Overview, Data
+ * Layer, IB Gateway (K8s MVP), Platform Control Plane (platform K8s surface).
+ * Rocket links reuse kube-prometheus-stack stock dashboards.
+ *
+ * `defaultNamespace` drives deep-link `var-namespace` so Ground/IB/Agent boards
+ * are not polluted with Trade NS (bifrost-dev/stg/prod).
+ */
+
+import type { GrafanaDashboardEntry } from './types'
+
+export const GRAFANA_DASHBOARD_CATALOG: GrafanaDashboardEntry[] = [
+  FOUNDATION_GRAFANA_DASHBOARD_CATALOG[0]!,
+  FOUNDATION_GRAFANA_DASHBOARD_CATALOG[1]!,
+  FOUNDATION_GRAFANA_DASHBOARD_CATALOG[2]!,
+  FOUNDATION_GRAFANA_DASHBOARD_CATALOG[3]!,
+  TENANT_GRAFANA_DASHBOARD_CATALOG[0]!,
+  TENANT_GRAFANA_DASHBOARD_CATALOG[1]!,
+  FOUNDATION_GRAFANA_DASHBOARD_CATALOG[4]!
+]
+
+const BY_ID = Object.fromEntries(GRAFANA_DASHBOARD_CATALOG.map(d => [d.id, d])) as Record<
+  string,
+  GrafanaDashboardEntry
+>
+
+export function getDashboard(id: string): GrafanaDashboardEntry | undefined {
+  return BY_ID[id]
+}

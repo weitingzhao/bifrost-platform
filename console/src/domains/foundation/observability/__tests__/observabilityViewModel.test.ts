@@ -11,16 +11,16 @@ import {
   mapAlert,
   mapAlerts,
   verdictAffectingAlerts,
-} from '@/lib/observability/alertMapping'
+} from '@/domains/foundation/observability/alertMapping'
 import {
   buildGrafanaDashboardUrl,
   buildGrafanaSoloPanelUrl,
   isDashboardCatalogAvailable,
   normalizeGrafanaBase,
-} from '@/lib/observability/grafanaUrlBuilder'
-import { buildObservabilityViewModel } from '@/lib/observability/observabilityViewModel'
-import { getSignalDef, SIGNAL_REGISTRY } from '@/lib/observability/signalRegistry'
-import type { EvaluatedSignal } from '@/lib/observability/types'
+} from '@/domains/foundation/observability/grafanaUrlBuilder'
+import { buildObservabilityViewModel } from '@/domains/foundation/observability/observabilityViewModel'
+import { getSignalDef, SIGNAL_REGISTRY } from '@/domains/foundation/observability/signalRegistry'
+import type { EvaluatedSignal } from '@/domains/foundation/observability/types'
 import {
   buildAttentionItems,
   buildDomainHealth,
@@ -31,7 +31,7 @@ import {
   maxVerdict,
   signalToGap,
   sumGapSummaries,
-} from '@/lib/observability/verdictAggregation'
+} from '@/domains/foundation/observability/verdictAggregation'
 
 function sig(id: string, state: EvaluatedSignal['state'], summary = state): EvaluatedSignal {
   const def = getSignalDef(id)
