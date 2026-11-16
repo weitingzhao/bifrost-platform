@@ -7,6 +7,7 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { formatInstant, shortSha } from '@/pages/shell/releases/releaseView'
 import { PlatformTimings } from './PlatformTimings'
 import { ModuleExplorer } from './ModuleExplorer'
+import { TimingBudget } from './TimingBudget'
 import { ApprovalReadingsBlock } from './ApprovalReadingsBlock'
 import { NO_FULL_RUN_TEXT, NO_RUNS_TEXT, fullCiView, runRow, matchesModule } from './ciViewModel'
 
@@ -127,8 +128,12 @@ function FullRunBlock() {
   )
 }
 
+const CHIP = 'min-h-11 max-w-full rounded-full border px-4 py-2 text-sm [overflow-wrap:anywhere] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2'
+function ScopeChip({ name, selected, onClick }: { name: string; selected: boolean; onClick: () => void }) {
+  return <button type="button" aria-pressed={selected} onClick={onClick} className={`${CHIP} ${selected ? 'border-[var(--primary)] bg-[var(--accent)] font-semibold' : 'border-[var(--table-rule)] bg-[var(--field-fill)] hover:bg-[var(--accent)]'}`}>{name}</button>
+}
+
 export function CiSection() {
-  // The projects the platform tracks: the same read the cockpit keeps.
   const projects = useQuery({ queryKey: ['cockpit', 'supply-chain'], queryFn: fetchSupplyChain })
   const repos = projects.data?.tracked_repos
   const [pickedRepo, setPickedRepo] = useState('')
@@ -138,34 +143,45 @@ export function CiSection() {
   const selectedModule = config.data?.modules.some(m => m.name === module) ? module : ''
   const error = errorText(projects.error)
   return (
-    <section aria-label="CI" className="flex min-w-0 flex-col gap-3">
-      {repos && repo && <label className="flex flex-wrap items-center gap-3 px-3 text-sm">Project
-        <select aria-label="Project" className="min-h-11 max-w-full rounded bg-[var(--field-fill)] px-3" value={repo} onChange={e => { setPickedRepo(e.target.value); setModule('') }}>{repos.map(name => <option key={name}>{name}</option>)}</select>
-        <span className="text-xs text-muted-foreground">Repository → module → task. Configuration and runs follow this selection.</span>
-      </label>}
-      {repo && <label className="flex flex-wrap items-center gap-3 px-3 text-sm">Module
-        <select aria-label="Module" className="min-h-11 max-w-full rounded bg-[var(--field-fill)] px-3" value={selectedModule} onChange={e => setModule(e.target.value)}>
-          <option value="">All modules</option>{config.data?.modules.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
-        </select><span className="text-xs text-muted-foreground">One selection for dependencies, pipeline and runs. Unknown scope remains visible.</span>
-      </label>}
-      {repo && <ModuleExplorer key={repo} repo={repo} module={selectedModule} />}
-      {repo === 'bifrost-platform' && <PlatformTimings key={`${repo}:${selectedModule}`} module={selectedModule} />}
-      {repos == null ? (
-        <OpsSection title="Configuration and runs" description="What each project declares for CI, and the CI runs retained for it." bodyPadding="compact">
-          {error != null
-            ? <Unread what="The list of projects" error={error} unknown="Which projects have a CI configuration and runs is not known." />
-            : <p className={`m-0 ${MUTED}`}>Loading…</p>}
-        </OpsSection>
-      ) : repos.length === 0 ? (
-        <OpsSection title="Configuration and runs" description="What each project declares for CI, and the CI runs retained for it." bodyPadding="compact">
-          <p className={`m-0 ${MUTED}`}>The platform tracks no project</p>
-        </OpsSection>
-      ) : <>
-        {repo && <RunsBlock key={repo} repos={[repo]} module={selectedModule} />}
-      </>}
-      {selectedModule && <p className="px-3 text-sm">Daily full run is a whole-repository check, not an independently released module. The global notes below do not carry repository/module attribution and are not filtered.</p>}
-      <details><summary className="min-h-11 cursor-pointer px-3 py-3">Global daily full-run notes · outside selected scope</summary><FullRunBlock /></details>
-      <details><summary className="min-h-11 cursor-pointer px-3 py-3">Global approval history · outside selected scope</summary><ApprovalReadingsBlock /></details>
+    <section aria-label="CI" className="flex min-w-0 flex-col gap-6">
+      <OpsSection title="Projects" description="Choose once. Configuration, dependencies, pipeline and runs below share this selection." bodyPadding="compact">
+        {repos && repo && <div role="group" aria-label="Project" className="flex flex-wrap gap-2">{repos.map(name => <ScopeChip key={name} name={name} selected={repo === name} onClick={() => { setPickedRepo(name); setModule('') }} />)}</div>}
+        {repos == null && (error != null
+          ? <Unread what="The list of projects" error={error} unknown="Which projects have a CI configuration and runs is not known." />
+          : <p className={`m-0 ${MUTED}`}>Loading…</p>)}
+        {repos?.length === 0 && <p className={`m-0 ${MUTED}`}>The platform tracks no project</p>}
+      </OpsSection>
+      {repo && <section aria-label={`Project workspace: ${repo}`} className="flex min-w-0 flex-col gap-3 rounded-xl border border-[var(--table-rule)] p-3 sm:p-4">
+        <header className="min-w-0">
+          <p className="m-0 text-xs uppercase tracking-wide text-muted-foreground">Selected project</p>
+          <h2 className="my-1 break-all text-lg font-semibold">{repo}{selectedModule ? ` / ${selectedModule}` : ''}</h2>
+          <p className="m-0 text-sm text-muted-foreground">Configuration → dependencies → pipeline → runs. Unknown or reused run scope stays visible.</p>
+        </header>
+        <div role="group" aria-label="Module" className="space-y-3 rounded-lg bg-[var(--card-fill)] p-3">
+          <ScopeChip name="All modules" selected={!selectedModule} onClick={() => setModule('')} />
+          {config.data?.declared && [true, false].map(hasDependencies => {
+            const modules = config.data.modules.filter(m => (m.needs.length > 0) === hasDependencies)
+            if (!modules.length) return null
+            const label = hasDependencies ? 'Declared additional inputs' : 'No additional inputs declared'
+            return <div key={label} role="group" aria-label={label}>
+              <p className="mb-2 mt-0 text-xs font-medium text-muted-foreground">{label}</p>
+              <div className="flex flex-wrap gap-2">{modules.map(m => <ScopeChip key={m.name} name={m.name} selected={selectedModule === m.name} onClick={() => setModule(m.name)} />)}</div>
+            </div>
+          })}
+          {(!config.data || !config.data.declared || config.error) && <p className="m-0 text-sm">Dependency grouping unknown — {config.error ? 'configuration could not be read.' : config.data ? 'this project has no module declaration.' : 'reading configuration…'}</p>}
+          <p className="m-0 text-xs text-muted-foreground">Groups describe declared CI inputs beyond each module’s own tree, including shared files and pinned repositories. No additional inputs does not mean independent runtime or delivery.</p>
+        </div>
+        <ModuleExplorer key={`config:${repo}`} repo={repo} module={selectedModule} />
+        {repo === 'bifrost-platform' ? <PlatformTimings key={`${repo}:${selectedModule}`} module={selectedModule} /> : <p className="m-0 px-3 text-sm text-muted-foreground">Detailed delivery timing is currently available for bifrost-platform. This project’s retained CI runs are below.</p>}
+        <RunsBlock key={`runs:${repo}`} repos={[repo]} module={selectedModule} />
+        {selectedModule && <p className="m-0 px-3 text-sm">Daily full run is a whole-repository check, not an independently released module. Global notes have no project/module attribution and are not filtered.</p>}
+        {repo === 'bifrost-platform' && <details><summary className="min-h-11 cursor-pointer px-3 py-3">Platform historical benchmark · designed vs actual</summary><TimingBudget /></details>}
+      </section>}
+      <section aria-label="CI-wide information" className="flex min-w-0 flex-col gap-3 border-t border-[var(--table-rule)] pt-4">
+        <header className="px-3"><h2 className="m-0 text-base font-semibold">CI-wide information</h2><p className="mb-0 mt-1 text-sm text-muted-foreground">Shared records without project or module attribution. These do not change with the project selection.</p></header>
+        <details><summary className="min-h-11 cursor-pointer px-3 py-3">Global daily full-run notes · outside selected scope</summary><FullRunBlock /></details>
+        <details><summary className="min-h-11 cursor-pointer px-3 py-3">Global approval history · outside selected scope</summary><ApprovalReadingsBlock /></details>
+      </section>
     </section>
   )
 }

@@ -22,9 +22,9 @@ vi.mock('@/api/delivery', () => ({ fetchSupplyChain: vi.fn() }))
 afterEach(() => { cleanup(); vi.resetAllMocks() })
 
 /** Two projects the mocked platform tracks: `r` (the contract's) declares, `plain` (invented) does not. */
-function setup(over: { runs?: 'fail' | 'none'; fullCi?: 'none'; projects?: 'fail' } = {}) {
+function setup(over: { runs?: 'fail' | 'none'; fullCi?: 'none'; projects?: 'fail'; repos?: string[] } = {}) {
   if (over.projects === 'fail') vi.mocked(fetchSupplyChain).mockRejectedValue(new Error('supply chain: HTTP 503'))
-  else vi.mocked(fetchSupplyChain).mockResolvedValue({ tracked_repos: ['r', 'plain'] } as SupplyChainResponse)
+  else vi.mocked(fetchSupplyChain).mockResolvedValue({ tracked_repos: over.repos ?? ['r', 'plain'] } as SupplyChainResponse)
   vi.mocked(fetchUnitsConfig).mockImplementation(async repo => repo === 'r' ? contract.configDeclared() : { ...contract.configUndeclared(), repo })
   vi.mocked(fetchUnitsRuns).mockImplementation(async repo => {
     if (over.runs === 'fail') throw new Error('CI runs: HTTP 502')
@@ -40,7 +40,7 @@ function setup(over: { runs?: 'fail' | 'none'; fullCi?: 'none'; projects?: 'fail
 it('an undeclared project shows "Not declared: everything runs" and its note', async () => {
   setup()
   await screen.findByTestId('ci-config-project-r')
-  fireEvent.change(screen.getByRole('combobox', { name: 'Project' }), { target: { value: 'plain' } })
+  fireEvent.click(within(screen.getByRole('group', { name: 'Project' })).getByRole('button', { name: 'plain' }))
   const project = await screen.findByTestId('ci-config-project-plain')
   expect(await within(project).findByText('Not declared: everything runs')).toBeInTheDocument()
   expect(screen.getByText(contract.configUndeclared().note!)).toBeInTheDocument()
@@ -87,7 +87,7 @@ it('a failed read of the runs shows an alert, not an empty table', async () => {
 it('a project with no retained run says so, after it is picked', async () => {
   setup()
   await screen.findByTestId('ci-run-ci-2')
-  fireEvent.change(screen.getByRole('combobox', { name: 'Project' }), { target: { value: 'plain' } })
+  fireEvent.click(within(screen.getByRole('group', { name: 'Project' })).getByRole('button', { name: 'plain' }))
   expect(await screen.findByText('No CI run of this project is retained')).toBeInTheDocument()
   expect(vi.mocked(fetchUnitsRuns).mock.calls.map(call => call[0])).toContain('plain')
 })
@@ -128,7 +128,7 @@ it('explores units on demand and clears the context when selecting another repo'
   fireEvent.click(screen.getByRole('button', { name:'Explore unit inputs' }))
   expect(await screen.findByText('svc/a · test')).toBeInTheDocument()
   expect(vi.mocked(fetchUnitsPlan).mock.calls[0].slice(0,2)).toEqual(['r', contract.configDeclared().commit])
-  fireEvent.change(screen.getByRole('combobox', { name:'Project' }), {target:{value:'plain'}})
+  fireEvent.click(within(screen.getByRole('group', { name: 'Project' })).getByRole('button', { name: 'plain' }))
   expect(await screen.findByTestId('ci-config-project-plain')).toBeInTheDocument()
   expect(screen.queryByText('svc/a · test')).toBeNull()
   expect(screen.queryByTestId('ci-config-project-r')).toBeNull()
@@ -140,14 +140,41 @@ it('links module cards and runs, preserves unknown evidence, and resets on proje
   setup()
   await screen.findByTestId('ci-config-module-r-web')
   await screen.findByTestId('ci-run-ci-2')
-  fireEvent.change(screen.getByRole('combobox', { name: 'Module' }), { target: { value: 'web' } })
+  fireEvent.click(within(screen.getByRole('group', { name: 'Module' })).getByRole('button', { name: 'web' }))
   expect(screen.queryByTestId('ci-config-module-r-svc')).toBeNull()
   expect(screen.getByTestId('ci-config-module-r-web')).toBeInTheDocument()
   expect(screen.queryByTestId('ci-run-ci-2')).toBeNull()
   expect(screen.getByTestId('ci-run-ci-3')).toHaveTextContent('reused ci-2')
   expect(screen.getByTestId('ci-run-ci-1')).toHaveTextContent('not reported')
   expect(screen.getByText(/Daily full run is a whole-repository check/)).toBeInTheDocument()
-  fireEvent.change(screen.getByRole('combobox', { name: 'Project' }), { target: { value: 'plain' } })
+  fireEvent.click(within(screen.getByRole('group', { name: 'Project' })).getByRole('button', { name: 'plain' }))
   await screen.findByTestId('ci-config-project-plain')
-  expect(screen.getByRole('combobox', { name: 'Module' })).toHaveValue('')
+  expect(screen.getByRole('button', { name: 'All modules' })).toHaveAttribute('aria-pressed', 'true')
+})
+
+// Owner 2026-11-15: visible project chips and dependency groups share one workspace.
+it('separates project-scoped information from global records and never calls unknown independent', async () => {
+  setup()
+  await screen.findByTestId('ci-config-module-r-web')
+  const project = screen.getByRole('region', { name: 'Project workspace: r' })
+  expect(within(project).getByTestId('ci-config-module-r-web')).toBeInTheDocument()
+  expect(within(project).queryByRole('heading', { name: 'CI-wide information' })).toBeNull()
+  const inputs = within(project).getByRole('group', { name: 'Declared additional inputs' })
+  expect(within(inputs).getByRole('button', { name: 'web' })).toBeInTheDocument()
+  expect(within(within(project).getByRole('group', { name: 'No additional inputs declared' })).getByRole('button', { name: 'svc' })).toBeInTheDocument()
+  expect(within(project).getByText(/No additional inputs does not mean independent/)).toBeInTheDocument()
+  fireEvent.click(within(screen.getByRole('group', { name: 'Project' })).getByRole('button', { name: 'plain' }))
+  await screen.findByTestId('ci-config-project-plain')
+  expect(screen.getByText(/Dependency grouping unknown/)).toBeInTheDocument()
+  expect(screen.queryByRole('group', { name: 'Declared additional inputs' })).toBeNull()
+  expect(screen.getByRole('region', { name: 'CI-wide information' })).toBeInTheDocument()
+})
+
+it('keeps the platform benchmark inside its project and removes it on project switch', async () => {
+  setup({ repos: ['bifrost-platform', 'plain'] })
+  const project = await screen.findByRole('region', { name: 'Project workspace: bifrost-platform' })
+  expect(within(project).getByText('Designed vs actual')).toBeInTheDocument()
+  fireEvent.click(within(screen.getByRole('group', { name: 'Project' })).getByRole('button', { name: 'plain' }))
+  await screen.findByTestId('ci-config-project-plain')
+  expect(screen.queryByText('Designed vs actual')).toBeNull()
 })

@@ -21,7 +21,6 @@ it('shows source scope and timing and reads logs only on request',async()=>{
   expect((await screen.findAllByText('internal/server internal/mcp'))[0]).toBeInTheDocument()
   expect(screen.getByText('Skipped by scope')).toBeInTheDocument()
   expect(screen.getByText('35s')).toBeInTheDocument()
-  expect(screen.getByText('Designed vs actual')).toBeInTheDocument()
   expect(fetchPipelineRunLogs).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button',{name:'Read scope logs and slow tests'}))
   expect(await screen.findByText('p/store')).toBeInTheDocument()

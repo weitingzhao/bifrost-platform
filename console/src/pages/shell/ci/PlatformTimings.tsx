@@ -6,7 +6,6 @@ import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { RunTimingDetail, READ_BUTTON } from './RunTimingDetail'
 import { TimingTrends } from './TimingTrends'
 import { matchesModule } from './ciViewModel'
-import { TimingBudget } from './TimingBudget'
 import { elapsed, reusedBy, runCommit, runStatus, secondsText, result } from './timingModel'
 
 const pipelines = [
@@ -59,6 +58,5 @@ export function PlatformTimings({ module = '' }: { module?: string }) {
     {selected && pipeline !== 'bifrost-ci-platform' && runCommit(selected) && <button className={READ_BUTTON} onClick={()=>{setFocusCommit(runCommit(selected));setPicked('');setLookup('');setPipeline('bifrost-ci-platform')}}>Inspect CI for this commit</button>}
     {selected && <RunTimingDetail key={selected.name} run={selected} />}
     {pipeline === 'bifrost-ci-platform' && query.data && <TimingTrends runs={runs} onPick={pick} />}
-    <TimingBudget />
   </>
 }
