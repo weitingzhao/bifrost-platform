@@ -8,52 +8,51 @@ import (
 )
 
 type SummaryResponse struct {
-	ClusterID        string             `json:"cluster_id"`
-	Label            string             `json:"label"`
-	Distribution     string             `json:"distribution"`
-	APIServer        string             `json:"api_server"`
-	KubeconfigPath    string             `json:"kubeconfig_path"`
-	APIReachability   probe.Reachability `json:"api_reachability"`
-	Reachability      probe.Reachability `json:"reachability"`
-	Detail           string             `json:"detail"`
-	ServerVersion    string             `json:"server_version,omitempty"`
-	NodesReady        int `json:"nodes_ready"`
-	NodesTotal        int `json:"nodes_total"`
-	ElasticStandby    int `json:"elastic_standby,omitempty"`
-	ElasticDegraded   int `json:"elastic_degraded,omitempty"`
-	NodesRegistered      int `json:"nodes_registered,omitempty"`
-	NodesRegisteredReady int `json:"nodes_registered_ready,omitempty"`
-	FailingPods       int                `json:"failing_pods"`
-	FailingPodDetails []FailingPodView  `json:"failing_pod_details,omitempty"`
-	RunningPods       int               `json:"running_pods"`
-	PendingPods       int               `json:"pending_pods"`
-	CPUAllocatable   string             `json:"cpu_allocatable,omitempty"`
-	MemoryAllocatable string            `json:"memory_allocatable,omitempty"`
-	GeneratedAt      time.Time          `json:"generated_at"`
+	ClusterID            string             `json:"cluster_id"`
+	Label                string             `json:"label"`
+	Distribution         string             `json:"distribution"`
+	APIServer            string             `json:"api_server"`
+	KubeconfigPath       string             `json:"kubeconfig_path"`
+	APIReachability      probe.Reachability `json:"api_reachability"`
+	Reachability         probe.Reachability `json:"reachability"`
+	Detail               string             `json:"detail"`
+	ServerVersion        string             `json:"server_version,omitempty"`
+	NodesReady           int                `json:"nodes_ready"`
+	NodesTotal           int                `json:"nodes_total"`
+	ElasticStandby       int                `json:"elastic_standby,omitempty"`
+	ElasticDegraded      int                `json:"elastic_degraded,omitempty"`
+	NodesRegistered      int                `json:"nodes_registered,omitempty"`
+	NodesRegisteredReady int                `json:"nodes_registered_ready,omitempty"`
+	FailingPods          int                `json:"failing_pods"`
+	FailingPodDetails    []FailingPodView   `json:"failing_pod_details,omitempty"`
+	RunningPods          int                `json:"running_pods"`
+	PendingPods          int                `json:"pending_pods"`
+	CPUAllocatable       string             `json:"cpu_allocatable,omitempty"`
+	MemoryAllocatable    string             `json:"memory_allocatable,omitempty"`
+	GeneratedAt          time.Time          `json:"generated_at"`
 }
 
-
 type NodeView struct {
-	Name               string             `json:"name"`
-	Status             string             `json:"status"`
-	Roles              string             `json:"roles"`
-	Architecture       string             `json:"architecture,omitempty"`
-	OSImage            string             `json:"os_image,omitempty"`
-	WorkloadLabel      string             `json:"workload_label,omitempty"`
+	Name               string               `json:"name"`
+	Status             string               `json:"status"`
+	Roles              string               `json:"roles"`
+	Architecture       string               `json:"architecture,omitempty"`
+	OSImage            string               `json:"os_image,omitempty"`
+	WorkloadLabel      string               `json:"workload_label,omitempty"`
 	Capabilities       []NodeCapabilityView `json:"capabilities,omitempty"`
-	Version            string             `json:"version"`
-	InternalIP         string             `json:"internal_ip"`
-	Reachability       probe.Reachability `json:"reachability"`
-	CPUAllocatable     string             `json:"cpu_allocatable,omitempty"`
-	MemoryAllocatable  string             `json:"memory_allocatable,omitempty"`
-	StorageAllocatable string             `json:"storage_allocatable,omitempty"`
-	ComputeManaged     bool               `json:"compute_managed,omitempty"`
-	ElasticMode        string             `json:"elastic_mode,omitempty"`
-	Unschedulable      bool               `json:"unschedulable,omitempty"`
-	CPUUsagePercent    *float64           `json:"cpu_usage_percent,omitempty"`
-	MemoryUsagePercent *float64           `json:"memory_usage_percent,omitempty"`
-	CPUReachability    probe.Reachability `json:"cpu_reachability,omitempty"`
-	MemoryReachability probe.Reachability `json:"memory_reachability,omitempty"`
+	Version            string               `json:"version"`
+	InternalIP         string               `json:"internal_ip"`
+	Reachability       probe.Reachability   `json:"reachability"`
+	CPUAllocatable     string               `json:"cpu_allocatable,omitempty"`
+	MemoryAllocatable  string               `json:"memory_allocatable,omitempty"`
+	StorageAllocatable string               `json:"storage_allocatable,omitempty"`
+	ComputeManaged     bool                 `json:"compute_managed,omitempty"`
+	ElasticMode        string               `json:"elastic_mode,omitempty"`
+	Unschedulable      bool                 `json:"unschedulable,omitempty"`
+	CPUUsagePercent    *float64             `json:"cpu_usage_percent,omitempty"`
+	MemoryUsagePercent *float64             `json:"memory_usage_percent,omitempty"`
+	CPUReachability    probe.Reachability   `json:"cpu_reachability,omitempty"`
+	MemoryReachability probe.Reachability   `json:"memory_reachability,omitempty"`
 }
 
 type NodesResponse struct {
@@ -65,11 +64,11 @@ type NodesResponse struct {
 }
 
 type NamespaceView struct {
-	Name         string `json:"name"`
-	Status       string `json:"status"`
-	PodCount     int    `json:"pod_count"`
-	RunningPods  int    `json:"running_pods"`
-	FailingPods  int    `json:"failing_pods"`
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+	PodCount    int    `json:"pod_count"`
+	RunningPods int    `json:"running_pods"`
+	FailingPods int    `json:"failing_pods"`
 }
 
 type NamespacesResponse struct {
@@ -91,10 +90,10 @@ type WorkloadView struct {
 	Age          string             `json:"age"`
 	Reachability probe.Reachability `json:"reachability"`
 	// Deployment rollout counters (0 for Pods / non-Deployments).
-	DesiredReplicas   int32 `json:"desired_replicas,omitempty"`
-	ReadyReplicas     int32 `json:"ready_replicas,omitempty"`
-	UpdatedReplicas   int32 `json:"updated_replicas,omitempty"`
-	AvailableReplicas int32 `json:"available_replicas,omitempty"`
+	DesiredReplicas    int32 `json:"desired_replicas,omitempty"`
+	ReadyReplicas      int32 `json:"ready_replicas,omitempty"`
+	UpdatedReplicas    int32 `json:"updated_replicas,omitempty"`
+	AvailableReplicas  int32 `json:"available_replicas,omitempty"`
 	Generation         int64 `json:"generation,omitempty"`
 	ObservedGeneration int64 `json:"observed_generation,omitempty"`
 }
