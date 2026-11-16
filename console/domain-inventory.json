@@ -1902,11 +1902,15 @@
       "path": "console/src/domains/foundation/patrol-view",
       "files": [
         "console/src/domains/foundation/patrol-view/PatrolDispatchLog.tsx",
+        "console/src/domains/foundation/patrol-view/RunHistoryPanel.tsx",
+        "console/src/domains/foundation/patrol-view/SkillObservationCells.tsx",
         "console/src/domains/foundation/patrol-view/__tests__/cronSchedule.test.ts",
         "console/src/domains/foundation/patrol-view/__tests__/logLanguage.test.ts",
+        "console/src/domains/foundation/patrol-view/__tests__/panels.test.tsx",
         "console/src/domains/foundation/patrol-view/__tests__/runLog.test.ts",
         "console/src/domains/foundation/patrol-view/cronSchedule.ts",
         "console/src/domains/foundation/patrol-view/logLanguage.ts",
+        "console/src/domains/foundation/patrol-view/presentation.tsx",
         "console/src/domains/foundation/patrol-view/runLog.ts",
         "console/src/domains/foundation/patrol-view/usePatrolOutputLanguage.ts"
       ],
@@ -1921,6 +1925,7 @@
       ],
       "external_imports": [
         "@bifrost/ui",
+        "@testing-library/react",
         "lucide-react",
         "react",
         "vitest"
@@ -3075,8 +3080,8 @@
       ],
       "imports": [
         "console/src/api",
-        "console/src/components",
         "console/src/components/layout",
+        "console/src/domains/foundation/patrol-view",
         "console/src/hooks/usePlatformAuth.ts",
         "console/src/lib",
         "console/src/lib/agent"

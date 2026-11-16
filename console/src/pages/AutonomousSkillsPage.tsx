@@ -1,3 +1,5 @@
+import { RunHistoryPanel } from '@/domains/foundation/patrol-view/RunHistoryPanel'
+import { SkillObservationCells } from '@/domains/foundation/patrol-view/SkillObservationCells'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -13,61 +15,15 @@ import {
   StatusLamp,
   Button,
   SegmentControl,
-  denseTableNumCell,
 } from '@bifrost/ui'
 import { Languages } from 'lucide-react'
-import { PatrolDispatchLog } from '@/components/patrol/PatrolDispatchLog'
 import { AGENT_DIALOGUE_LANGUAGE_OPTIONS } from '@/lib/agent/agentDialogueLanguage'
-import { localizePatrolLog, type PatrolOutputLanguage } from '@/lib/patrol/logLanguage'
+import { type PatrolOutputLanguage } from '@/lib/patrol/logLanguage'
 import { usePatrolOutputLanguage } from '@/lib/patrol/usePatrolOutputLanguage'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { enablePatrolSkill, fetchPatrolRuns, fetchPatrolSkills, triggerPatrolSkill } from '@/api/patrol'
-import type { PatrolRun, PatrolRunResult, PatrolSkill, PatrolTrustLevel } from '@/api/patrol'
+import type { PatrolRun, PatrolSkill } from '@/api/patrol'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
-import {
-  describeCronSchedule,
-  formatCountdownTo,
-  formatNextRunAt,
-} from '@/lib/patrol/cronSchedule'
-import { patrolRunLogText } from '@/lib/patrol/runLog'
-
-function levelTag(level: PatrolTrustLevel) {
-  switch (level) {
-    case 'L0':
-      return <DenseTag variant="success">L0 read</DenseTag>
-    case 'L1':
-      return <DenseTag variant="warning">L1 confirm</DenseTag>
-    case 'L2':
-      return <DenseTag variant="danger">L2 escalate</DenseTag>
-  }
-}
-
-function statusLamp(enabled: boolean): 'ok' | 'unknown' {
-  return enabled ? 'ok' : 'unknown'
-}
-
-function resultTag(result?: PatrolRunResult) {
-  if (result == null) return <span className="text-[var(--muted-foreground)]">—</span>
-  switch (result) {
-    case 'success':
-      return <DenseTag variant="success">success</DenseTag>
-    case 'failure':
-      return <DenseTag variant="danger">failure</DenseTag>
-    case 'skipped':
-      return <DenseTag variant="neutral">skipped</DenseTag>
-    case 'escalated':
-      return <DenseTag variant="warning">escalated</DenseTag>
-    case 'running':
-      return <DenseTag variant="warning">running</DenseTag>
-  }
-}
-
-function formatDuration(ms?: number): string {
-  if (ms == null) return '—'
-  if (ms < 1000) return `${ms}ms`
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
-  return `${(ms / 60_000).toFixed(1)}m`
-}
 
 function useNow(intervalMs = 1000): number {
   const [now, setNow] = useState(() => Date.now())
@@ -225,72 +181,14 @@ export function AutonomousSkillsPage() {
           {skills.map((skill: PatrolSkill) => {
             const expanded = expandedId === skill.id
             const history = runsBySkill.get(skill.id) ?? []
-            const scheduleLabel = describeCronSchedule(skill.schedule)
             const skillRunning =
               skill.last_result === 'running' ||
               (triggerMut.isPending && triggerMut.variables === skill.id)
             return (
               <Fragment key={skill.id}>
                 <DenseTableRow>
-                  <DenseTableCell>
-                    <div className="flex flex-col gap-0.5">
-                      <button
-                        type="button"
-                        className="w-fit text-left font-medium text-primary hover:underline"
-                        aria-expanded={expanded}
-                        onClick={() => toggleSkill(skill.id)}
-                        title="Show run history"
-                      >
-                        {skill.name}
-                      </button>
-                      <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                        {skill.description}
-                      </span>
-                    </div>
-                  </DenseTableCell>
-                  <DenseTableCell>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[var(--text-dense-meta)]">{scheduleLabel}</span>
-                      <code
-                        className="text-[var(--text-dense-caption)] font-mono text-[var(--muted-foreground)]"
-                        title={skill.schedule}
-                      >
-                        {skill.schedule}
-                      </code>
-                    </div>
-                  </DenseTableCell>
-                  <DenseTableCell>{levelTag(skill.trust_level)}</DenseTableCell>
-                  <DenseTableCell>
-                    <span className="inline-flex items-center gap-1">
-                      <StatusLamp value={statusLamp(skill.enabled)} kind="reach" />
-                      <span className="text-[var(--text-dense-caption)]">
-                        {skill.enabled ? 'enabled' : 'disabled'}
-                      </span>
-                    </span>
-                  </DenseTableCell>
-                  <DenseTableCell>
-                    <span className="inline-flex items-center gap-1">
-                      {skillRunning && <StatusLamp value="degraded" kind="reach" />}
-                      {resultTag(skill.last_result === 'running' || skillRunning ? 'running' : skill.last_result)}
-                    </span>
-                  </DenseTableCell>
-                  <DenseTableCell>
-                    <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                      {skill.last_run_at ? new Date(skill.last_run_at).toLocaleString() : '—'}
-                    </span>
-                  </DenseTableCell>
-                  <DenseTableCell>
-                    {skill.enabled && skill.next_run_at ? (
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[var(--text-dense-meta)]">{formatNextRunAt(skill.next_run_at)}</span>
-                        <span className="font-mono-tabular text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                          {formatCountdownTo(skill.next_run_at, now)}
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">—</span>
-                    )}
-                  </DenseTableCell>
+                  <SkillObservationCells skill={skill} expanded={expanded} skillRunning={skillRunning}
+                    now={now} toggleSkill={toggleSkill} />
                   <DenseTableCell>
                     <div className="flex items-center gap-1">
                       <Button
@@ -314,83 +212,9 @@ export function AutonomousSkillsPage() {
                 {expanded && (
                   <DenseTableDetailRow>
                     <DenseTableCell colSpan={8}>
-                      <div className="flex flex-col gap-1.5 py-1">
-                        <span className="text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-muted-foreground">
-                          Run history · {skill.name}
-                        </span>
-                        {runsQuery.isLoading ? (
-                          <p className="text-[var(--text-dense-meta)] text-muted-foreground">Loading runs…</p>
-                        ) : history.length === 0 ? (
-                          <p className="text-[var(--text-dense-meta)] text-muted-foreground">No runs recorded yet.</p>
-                        ) : (
-                          <>
-                          <DenseDataTable>
-                            <DenseTableHeader>
-                              <DenseTableHeadRow>
-                                <DenseTableHead>Started</DenseTableHead>
-                                <DenseTableHead>Trigger</DenseTableHead>
-                                <DenseTableHead>Result</DenseTableHead>
-                                <DenseTableHead className={denseTableNumCell}>Duration</DenseTableHead>
-                                <DenseTableHead>Log</DenseTableHead>
-                              </DenseTableHeadRow>
-                            </DenseTableHeader>
-                            <DenseTableBody>
-                              {history.map(run => {
-                                const preview = localizePatrolLog(patrolRunLogText(run), lang)
-                                const selected = logRunId === run.id
-                                return (
-                                  <DenseTableRow key={run.id}>
-                                    <DenseTableCell className="font-mono-tabular text-[var(--text-dense-caption)]">
-                                      {new Date(run.started_at).toLocaleString()}
-                                    </DenseTableCell>
-                                    <DenseTableCell>
-                                      <DenseTag variant={run.trigger === 'cron' ? 'info' : 'neutral'}>
-                                        {run.trigger}
-                                      </DenseTag>
-                                    </DenseTableCell>
-                                    <DenseTableCell>{resultTag(run.result)}</DenseTableCell>
-                                    <DenseTableCell className={denseTableNumCell}>
-                                      {run.result === 'running'
-                                        ? formatDuration(Math.max(0, now - Date.parse(run.started_at)))
-                                        : formatDuration(run.duration_ms)}
-                                    </DenseTableCell>
-                                    <DenseTableCell>
-                                      <button
-                                        type="button"
-                                        className="max-w-[28rem] truncate text-left text-[var(--text-dense-caption)] text-primary hover:underline"
-                                        title={preview || 'No log'}
-                                        onClick={() => setLogRunId(selected ? null : run.id)}
-                                      >
-                                        {preview !== '' ? preview : '—'}
-                                      </button>
-                                    </DenseTableCell>
-                                  </DenseTableRow>
-                                )
-                              })}
-                            </DenseTableBody>
-                          </DenseDataTable>
-                          {(() => {
-                            const selected = history.find(r => r.id === logRunId) ?? history[0]
-                            if (selected == null) {
-                              return (
-                                <p className="text-[var(--text-dense-meta)] text-muted-foreground">
-                                  No dispatch log yet. L0 local probes write steps here while running; Cursor Cloud runs usually only store the final report.
-                                </p>
-                              )
-                            }
-                            return (
-                              <PatrolDispatchLog
-                                run={selected}
-                                skill={skill}
-                                lang={lang}
-                                onLangChange={setOutputLanguage}
-                                emptyHint="No dispatch log yet. L0 local probes write steps here while running; Cursor Cloud runs usually only store the final report."
-                              />
-                            )
-                          })()}
-                          </>
-                        )}
-                      </div>
+                      <RunHistoryPanel skill={skill} history={history} isLoading={runsQuery.isLoading}
+                        logRunId={logRunId} setLogRunId={setLogRunId} lang={lang}
+                        setOutputLanguage={setOutputLanguage} now={now} />
                     </DenseTableCell>
                   </DenseTableDetailRow>
                 )}
