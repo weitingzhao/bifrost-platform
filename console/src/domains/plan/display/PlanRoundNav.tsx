@@ -2,7 +2,7 @@ import { ChevronDown } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { AGENT_RUNTIME_POLL_MS } from '@/api/agentRuntime'
 import { useNow } from '@/pages/shell/progress/progressClock'
-import { workRoundHref } from '@/domains/plan/display/planRoundModel'
+import { workRoundHref } from '@/pages/shell/agents/planRoundModel'
 import { roundLabel } from '@/domains/plan/readings/rounds'
 import type { PlanAddress } from '@/domains/plan/display/usePlanSnapshot'
 

@@ -1995,7 +1995,6 @@
         "console/src/domains/plan/display/PlanRoundNav.tsx",
         "console/src/domains/plan/display/PlanTree.tsx",
         "console/src/domains/plan/display/WorkTabs.tsx",
-        "console/src/domains/plan/display/planRoundModel.ts",
         "console/src/domains/plan/display/planSnapshotModel.ts",
         "console/src/domains/plan/display/usePlanSnapshot.ts"
       ],
