@@ -2092,6 +2092,7 @@
         "console/src/domains/plan/observations/needsCleanupModel.ts",
         "console/src/domains/plan/observations/ownerAsksCache.test.tsx",
         "console/src/domains/plan/observations/ownerAsksModel.ts",
+        "console/src/domains/plan/observations/progressNarrative.ts",
         "console/src/domains/plan/observations/unlinkedSessionsModel.ts",
         "console/src/domains/plan/observations/useNeedsCleanup.ts"
       ],

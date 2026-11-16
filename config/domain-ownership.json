@@ -2297,7 +2297,7 @@
           "plan"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 complete cleanup/live observation projections extracted unchanged. Signoff uses raw step state and original readAge freshness; readAge, stepStateModel, planModuleModel, workViewModel and signoff controls remain untouched. Complete module recent-activity projection uses unchanged caller-supplied evidence readers; shared needsNow/read freshness/signoff logic retained byte-for-byte and no reverse runtime dependency."
+        "basis": "2026-11-16 complete cleanup/live observation projections extracted unchanged. Signoff uses raw step state and original readAge freshness; readAge, stepStateModel, planModuleModel, workViewModel and signoff controls remain untouched. Complete module recent-activity projection uses unchanged caller-supplied evidence readers; shared needsNow/read freshness/signoff logic retained byte-for-byte and no reverse runtime dependency. Complete mainline/module/dependency/progress narrative extracted unchanged from workSummaryModel; signoff readiness, lastRead and freshness declarations remain original."
       }
     }
   }
