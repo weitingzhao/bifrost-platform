@@ -1,0 +1,556 @@
+asyncapi: 3.0.0
+info:
+  title: Bifrost rocket tenant event registry
+  version: '1'
+  description: >-
+    The closed list of event types of the rocket tenant (the platform itself).
+    Rules: agent-config (step0 spec) §1-§5. Generated from one table; edit here, CI validates.
+x-bifrost-tenant: rocket
+channels:
+  git.main.advanced:
+    address: ev.rocket.{env}.git.main.advanced
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: ordered
+      key: repo
+      subject: "<repo>@<sha40>"
+      publisher: gate-git
+      ref: "/api/v1/delivery/context?repo={repo}"
+      reconcile: "gate-git compares Gitea branches/main every 5 min"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L04, L06, X-A28]
+  git.ready.pushed:
+    address: ev.rocket.{env}.git.ready.pushed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<repo>:ready/<name>@<sha40>"
+      publisher: gate-git
+      ref: "/api/v1/delivery/context?repo={repo}"
+      reconcile: "gate-git lists ready/* branches every 5 min"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: []
+  git.tag.changed:
+    address: ev.rocket.{env}.git.tag.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<repo>:<tag>"
+      publisher: gate-git
+      ref: "/api/v1/delivery/revisions?repos={repo}"
+      reconcile: "gate-git lists tags every 30 min"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: []
+  git.mirror.settled:
+    address: ev.rocket.{env}.git.mirror.settled
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<repo>@<sha40>"
+      publisher: gate-cluster
+      ref: "/api/v1/delivery/context?repo={repo}"
+      reconcile: "mirror sync TaskRuns listed by gate-cluster"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [X-A13]
+  git.pr.changed:
+    address: ev.rocket.{env}.git.pr.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<repo>#<pr>"
+      publisher: gate-git
+      ref: "/api/v1/delivery/context?repo={repo}"
+      reconcile: "gate-git lists open PRs every 5 min"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [X-A4]
+  ci.run.started:
+    address: ev.rocket.{env}.ci.run.started
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<pipelinerun>@<sha40>"
+      publisher: gate-cluster
+      ref: "/api/v1/delivery/runs/{run}"
+      reconcile: "gate-cluster relist of PipelineRuns"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L02]
+  ci.run.finished:
+    address: ev.rocket.{env}.ci.run.finished
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "<pipelinerun>@<sha40>"
+      publisher: gate-cluster
+      ref: "/api/v1/delivery/runs/{run}"
+      reconcile: "gate-cluster relist of PipelineRuns"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L02, L28, N21, W04, C01, X-A15, X-B16]
+  ci.verdict.changed:
+    address: ev.rocket.{env}.ci.verdict.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: ordered
+      key: tree
+      subject: "<tree>@<sha40>:<kind>"
+      publisher: gate-db
+      ref: "/api/v1/units/plan?repo={repo}&commit={sha}"
+      reconcile: "evidence ledger is the truth; readers re-read R05"
+      on_unread: closed
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L03, X-A3, X-A5, X-A6, X-A7]
+  release.deploy.finished:
+    address: ev.rocket.{env}.release.deploy.finished
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "<env>/<app>@<sha40>"
+      publisher: gate-cluster
+      ref: "/api/v1/delivery/context?repo={repo}"
+      reconcile: "release records (releases package) recorder tick"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L05, L09, S08, C02]
+  release.gitops.changed:
+    address: ev.rocket.{env}.release.gitops.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<argo-app>"
+      publisher: gate-cluster
+      ref: "/api/v1/gitops/apps"
+      reconcile: "Argo Application list"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L28]
+  release.window.changed:
+    address: ev.rocket.{env}.release.window.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: ordered
+      key: window
+      subject: "window"
+      publisher: gate-cluster
+      ref: "/api/v1/delivery/release-window"
+      reconcile: "window ConfigMap is the truth"
+      on_unread: closed
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L24, N11, X-A9, X-C2, X-C10]
+  release.freeze.changed:
+    address: ev.rocket.{env}.release.freeze.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "<scope>"
+      publisher: gate-cluster
+      ref: "/api/v1/release-policy"
+      reconcile: "freeze ConfigMap is the truth"
+      on_unread: closed
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [X-A10]
+  release.policy.expiring:
+    address: ev.rocket.{env}.release.policy.expiring
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<policy-id>"
+      publisher: gate-db
+      ref: "/api/v1/release-policy"
+      reconcile: "policy reader on each check"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L17, N04]
+  approval.card.created:
+    address: ev.rocket.{env}.approval.card.created
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "#<number>"
+      publisher: gate-db
+      ref: "/api/v1/approvals/{id}"
+      reconcile: "approval store is the truth"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L01, C01]
+  approval.card.decided:
+    address: ev.rocket.{env}.approval.card.decided
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: ordered
+      key: card
+      subject: "#<number>"
+      publisher: gate-db
+      ref: "/api/v1/approvals/{id}"
+      reconcile: "approval store is the truth"
+      on_unread: closed
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L01, N10, W02, X-A14, X-B16]
+  approval.card.executed:
+    address: ev.rocket.{env}.approval.card.executed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "#<number>"
+      publisher: gate-db
+      ref: "/api/v1/approvals/{id}"
+      reconcile: "approval store is the truth"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L28, W02]
+  owner.question.asked:
+    address: ev.rocket.{env}.owner.question.asked
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "<question-id>"
+      publisher: gate-db
+      ref: "/api/v1/questions/{id}"
+      reconcile: "question store is the truth"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L01, N02]
+  owner.question.answered:
+    address: ev.rocket.{env}.owner.question.answered
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "<question-id>"
+      publisher: gate-db
+      ref: "/api/v1/questions/{id}"
+      reconcile: "question store is the truth"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L01, N10, W03, X-B16]
+  seat.mail.arrived:
+    address: ev.rocket.{env}.seat.mail.arrived
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: ordered
+      key: seat
+      subject: "<seat>"
+      publisher: gate-db
+      ref: "/api/v1/agentrt/messages?to={seat}"
+      reconcile: "none: the inbox is the truth (self-declared)"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [N11, W01, X-B16, X-C2, X-C10, X-C12, X-C14]
+  seat.status.changed:
+    address: ev.rocket.{env}.seat.status.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: ordered
+      key: seat
+      subject: "<seat>"
+      publisher: gate-db
+      ref: "/api/v1/seats/{seat}"
+      reconcile: "none: the seat record is the truth (self-declared)"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L19, L21, N14, N16, S10, C01, X-B1, X-B2, X-B6, X-C1, X-C5, X-C6, X-C17]
+  seat.liveness.changed:
+    address: ev.rocket.{env}.seat.liveness.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "<seat-or-host>"
+      publisher: gate-db
+      ref: "/api/v1/seats/{seat}"
+      reconcile: "liveness judge rescans last_seen every 30 s"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L18, N03, N14]
+  seat.work.changed:
+    address: ev.rocket.{env}.seat.work.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<external-work-id>"
+      publisher: gate-db
+      ref: "/api/v1/agentrt/external-work/{id}"
+      reconcile: "external work records"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [N18, X-B4]
+  seat.session.changed:
+    address: ev.rocket.{env}.seat.session.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<seat>/<session>"
+      publisher: gate-db
+      ref: "/api/v1/seats/{seat}"
+      reconcile: "seat record bindings"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [X-B3]
+  alert.rule.fired:
+    address: ev.rocket.{env}.alert.rule.fired
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "<alertname>"
+      publisher: gate-db
+      ref: "/api/v1/telemetry/alerts"
+      reconcile: "Alertmanager re-sends while firing"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: []
+  alert.channel.changed:
+    address: ev.rocket.{env}.alert.channel.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<channel>"
+      publisher: gate-db
+      ref: "/api/v1/telemetry/alerts"
+      reconcile: "Watchdog alert"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: []
+  loop.health.changed:
+    address: ev.rocket.{env}.loop.health.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<loop>"
+      publisher: gate-db
+      ref: "/api/v1/agentrt/progress"
+      reconcile: "loop registry heartbeat"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: []
+  env.health.changed:
+    address: ev.rocket.{env}.env.health.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<env>/<service>"
+      publisher: gate-db
+      ref: "/api/v1/environments"
+      reconcile: "health probes"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [R12, C01]
+  plugin.status.changed:
+    address: ev.rocket.{env}.plugin.status.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<plugin>"
+      publisher: gate-db
+      ref: "/api/v1/plugins"
+      reconcile: "plugin health probes"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [C01]
+  cluster.workload.changed:
+    address: ev.rocket.{env}.cluster.workload.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<kind>/<ns>/<name>"
+      publisher: gate-cluster
+      ref: "/api/v1/cluster/summary"
+      reconcile: "cluster relist"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: []
+  schema.migration.applied:
+    address: ev.rocket.{env}.schema.migration.applied
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "<db>:<migration>"
+      publisher: gate-db
+      ref: "/health"
+      reconcile: "schema_migrations table"
+      on_unread: closed
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L28]
+  data.job.finished:
+    address: ev.rocket.{env}.data.job.finished
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<job>"
+      publisher: gate-cluster
+      ref: "/api/v1/data/clone"
+      reconcile: "Job list"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: []
+  audit.action.recorded:
+    address: ev.rocket.{env}.audit.action.recorded
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "<actor>:<action>"
+      publisher: gate-db
+      ref: "/api/v1/audit"
+      reconcile: "audit store"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [S02]
+  plan.fact.changed:
+    address: ev.rocket.{env}.plan.fact.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: ordered
+      key: node
+      subject: "<plan-node>"
+      publisher: gate-db
+      ref: "/api/v1/agentrt/plan/view"
+      reconcile: "plan facts snapshot"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [L06]
+  codehealth.report.published:
+    address: ev.rocket.{env}.codehealth.report.published
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<repo>@<sha40>"
+      publisher: gate-db
+      ref: "/api/v1/code-health"
+      reconcile: "code-health report store"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: []
+  dev.session.changed:
+    address: ev.rocket.{env}.dev.session.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<service>"
+      publisher: gate-db
+      ref: "/api/v1/dev-sessions"
+      reconcile: "bdev sessions.yaml (dev only, not on the bus)"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: [C03]
+  reconcile.drift.found:
+    address: ev.rocket.{env}.reconcile.drift.found
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "<object>"
+      publisher: gate-db
+      ref: "/api/v1/bus/events"
+      reconcile: "none: it is itself the reconciliation report"
+      on_unread: stale
+      retention: 30d
+      consumers: [platform-workers, platform-api, seat:*]
+      exports: []
+      replaces: []

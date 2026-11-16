@@ -63,6 +63,13 @@
       "status": "assigned",
       "basis": "foundation charter and verified extraction"
     },
+    "api/internal/bus/registry": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 placement answer: the bus is sub-domain 0.2 of foundation, built by seat 8.2"
+    },
     "api/internal/agentrt/actor": {
       "domains": [
         "foundation"
