@@ -1659,7 +1659,8 @@
         "console/src/domains/foundation/control-room/ControlRoomVerdictStrip.tsx",
         "console/src/domains/foundation/control-room/__tests__/ControlRoomBay.test.tsx",
         "console/src/domains/foundation/control-room/__tests__/ControlRoomPage.test.tsx",
-        "console/src/domains/foundation/control-room/__tests__/ControlRoomVerdictStrip.test.tsx"
+        "console/src/domains/foundation/control-room/__tests__/ControlRoomVerdictStrip.test.tsx",
+        "console/src/domains/foundation/control-room/controlRoomBays.ts"
       ],
       "imports": [
         "console/src/api/opsContextTypes.ts",
@@ -2768,6 +2769,7 @@
         "console/src/api/deliveryTypes.ts",
         "console/src/api/satelliteBusTypes.ts",
         "console/src/domains/delivery/runtime-observation",
+        "console/src/domains/foundation/control-room",
         "console/src/domains/foundation/observation-display",
         "console/src/domains/tenant/readiness",
         "console/src/lib",

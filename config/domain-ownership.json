@@ -2038,7 +2038,7 @@
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
+        "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged.; 2026-11-16 complete bay observation, attention, display formatting and local accordion/hash navigation model moved unchanged; compatibility entry preserves existing readers."
       },
       "console/src/domains/foundation/network": {
         "domains": [
