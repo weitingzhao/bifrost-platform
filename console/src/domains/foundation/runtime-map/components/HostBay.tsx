@@ -1,16 +1,17 @@
+import { isTenantCustomIcon } from '@/domains/tenant/runtime-map/visualAdapter'
 import { useMemo } from 'react'
 import type { CSSProperties } from 'react'
 import { DenseTag } from '@bifrost/ui'
 import type { TopologyEdge, TopologyNode } from '@/api/matrixTypes'
-import { ComponentIcon } from '@/components/runtime-map/ComponentIcon'
-import { GapProgressBar } from '@/components/runtime-map/GapProgressBar'
+import { ComponentIcon } from '@/domains/foundation/runtime-map/components/ComponentIcon'
+import { GapProgressBar } from '@/domains/foundation/runtime-map/components/GapProgressBar'
 import { StatusLamp } from '@/components/StatusLamp'
-import type { NodeGapSummary } from '@/lib/runtime-map/gapAnalysis'
-import type { NodeRect } from '@/lib/runtime-map/infraMapLayout'
-import { nodeRectStyle } from '@/lib/runtime-map/infraMapLayout'
-import type { InfraMapViewBox } from '@/lib/runtime-map/infraMapLayout'
-import { chipsForNode, type RoleView, type StackChipModel } from '@/lib/runtime-map/roleComponentRegistry'
-import { countServiceStats, hostRoleSummary } from '@/lib/runtime-map/runtimeMapRegistry'
+import type { NodeGapSummary } from '@/domains/foundation/runtime-map/lib/gapAnalysis'
+import type { NodeRect } from '@/domains/foundation/runtime-map/lib/infraMapLayout'
+import { nodeRectStyle } from '@/domains/foundation/runtime-map/lib/infraMapLayout'
+import type { InfraMapViewBox } from '@/domains/foundation/runtime-map/lib/infraMapLayout'
+import { chipsForNode, type RoleView, type StackChipModel } from '@/domains/foundation/runtime-map/lib/roleComponentRegistry'
+import { countServiceStats, hostRoleSummary } from '@/domains/foundation/runtime-map/lib/runtimeMapRegistry'
 import { StackChip } from './StackChip'
 
 function pctClass(pct: number): string {
@@ -213,7 +214,7 @@ export function HostBay({
                 <ComponentIcon
                   componentId={chip.componentId}
                   variant="tile"
-                  showWell={chip.componentId !== 'ib'}
+                  showWell={!isTenantCustomIcon(chip.componentId)}
                 />
               </button>
             ))}

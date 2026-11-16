@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react'
 import { Button } from '@bifrost/ui'
 import type { MatrixResponse, TopologyResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
-import type { GapOverview } from '@/lib/runtime-map/gapAnalysis'
-import { buildRuntimeLlmPack } from '@/lib/runtime-map/buildRuntimeLlmPack'
-import type { RuntimeMapSelection } from '@/lib/runtime-map/runtimeMapRegistry'
+import type { GapOverview } from '@/domains/foundation/runtime-map/lib/gapAnalysis'
+import { buildRuntimeLlmPack } from '@/domains/foundation/runtime-map/lib/buildRuntimeLlmPack'
+import type { RuntimeMapSelection } from '@/domains/foundation/runtime-map/lib/runtimeMapRegistry'
 
 interface RuntimeAgentStripProps {
   topology: TopologyResponse | undefined

@@ -1,0 +1,1714 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`runtime map extraction parity > preserves exact agent pack text including tenant target guidance 1`] = `
+[
+  "Mode: Ops
+
+## Runtime Map context
+- environment: stg (Fixture)
+- deployment_phase: compose
+- generated_at: 2026-11-16T00:00:00Z
+- matrix: ok=0 fail=6 degraded=0 worst=fail
+- failing_targets: ops-capabilities, api-monitor, api-ops, postgres, redis, nginx-spa
+
+## Gap Analysis (compose view)
+
+Overall completion: 0% (0 live / 16 total)
+- Live: 0
+- Planned (not yet live): 11
+- Failing: 5
+- Degraded: 0
+
+### Per-server gap
+- **Fixture** (example.invalid): 0/16 live (0%)
+  - Planned: Docker Compose, K3s, Gitea, ArgoCD, Tekton, Prometheus, IB TWS, Ollama, IB Socket, Frontend, Service
+  - Failing: PostgreSQL, Redis, nginx, Trade APIs, Platform API
+
+### Priority gap nodes (most planned components)
+- Fixture: 11 planned, 5 failing, completion 0%
+
+### Scope layer status
+- **PLATFORM** Bifrost Ops Platform (control plane): PARTIAL
+  - Probes: 0/1 live
+- **TRADE-FE** bifrost-trade-frontend: PLANNED
+- **TRADE-API** bifrost-trade-api (path domains; massive retired): PARTIAL
+  - Probes: 0/2 live
+- **WORKER** bifrost-trade-worker: PLANNED
+- **SOCKET** bifrost-trade-socket (RETIRED / reference-only): PLANNED
+- **CORE** bifrost-trade-core: PLANNED
+- **INFRA** bifrost-trade-infra: PARTIAL
+  - Probes: 0/1 live
+- **PG** PostgreSQL: PARTIAL
+  - Probes: 0/1 live
+- **REDIS** Redis: PARTIAL
+  - Probes: 0/1 live
+- **TWS** Interactive Brokers TWS / Gateway: PLANNED
+- **GITHUB** Source control & CI (target): PLANNED
+- **K3S** K3s cluster (target): PLANNED
+- **OBSERVE** Observability (target): PLANNED
+- **AI** Inference & MCP (target): PLANNED
+- **AGENT** Out-of-Band Operator Plane (L-1): PLANNED
+
+## Selection
+(none — full environment view)
+
+## Suggested Agent question
+Runtime completion is 0%. The biggest gap is on Fixture (11 planned). What should be deployed next, considering the current milestone track?
+
+## Session discipline
+- Reply in Chinese for dialogue; English for UI strings and code identifiers.
+- L0 read-only: diagnose probes before proposing infra writes.
+- Use the Gap Analysis section above to identify which servers and components need attention.",
+  "Mode: Ops
+
+## Runtime Map context
+- environment: stg (Fixture)
+- deployment_phase: compose
+- generated_at: 2026-11-16T00:00:00Z
+- matrix: ok=0 fail=6 degraded=0 worst=fail
+- failing_targets: ops-capabilities, api-monitor, api-ops, postgres, redis, nginx-spa
+
+## Gap Analysis (compose view)
+
+Overall completion: 0% (0 live / 16 total)
+- Live: 0
+- Planned (not yet live): 11
+- Failing: 5
+- Degraded: 0
+
+### Per-server gap
+- **Fixture** (example.invalid): 0/16 live (0%)
+  - Planned: Docker Compose, K3s, Gitea, ArgoCD, Tekton, Prometheus, IB TWS, Ollama, IB Socket, Frontend, Service
+  - Failing: PostgreSQL, Redis, nginx, Trade APIs, Platform API
+
+### Priority gap nodes (most planned components)
+- Fixture: 11 planned, 5 failing, completion 0%
+
+### Scope layer status
+- **PLATFORM** Bifrost Ops Platform (control plane): PARTIAL
+  - Probes: 0/1 live
+- **TRADE-FE** bifrost-trade-frontend: PLANNED
+- **TRADE-API** bifrost-trade-api (path domains; massive retired): PARTIAL
+  - Probes: 0/2 live
+- **WORKER** bifrost-trade-worker: PLANNED
+- **SOCKET** bifrost-trade-socket (RETIRED / reference-only): PLANNED
+- **CORE** bifrost-trade-core: PLANNED
+- **INFRA** bifrost-trade-infra: PARTIAL
+  - Probes: 0/1 live
+- **PG** PostgreSQL: PARTIAL
+  - Probes: 0/1 live
+- **REDIS** Redis: PARTIAL
+  - Probes: 0/1 live
+- **TWS** Interactive Brokers TWS / Gateway: PLANNED
+- **GITHUB** Source control & CI (target): PLANNED
+- **K3S** K3s cluster (target): PLANNED
+- **OBSERVE** Observability (target): PLANNED
+- **AI** Inference & MCP (target): PLANNED
+- **AGENT** Out-of-Band Operator Plane (L-1): PLANNED
+
+## Selected matrix target: api-ops
+- reachability: fail
+- detail: fixture
+- category: undefined
+- scope_tag: TRADE-API
+
+## Suggested Agent question
+Matrix target api-ops is failing in stg. List likely root causes (compose/nginx/container) and a read-only verification checklist.
+
+## Session discipline
+- Reply in Chinese for dialogue; English for UI strings and code identifiers.
+- L0 read-only: diagnose probes before proposing infra writes.
+- Use the Gap Analysis section above to identify which servers and components need attention.",
+  "Mode: Ops
+
+## Runtime Map context
+- environment: stg (Fixture)
+- deployment_phase: compose
+- generated_at: 2026-11-16T00:00:00Z
+- matrix: ok=0 fail=6 degraded=0 worst=fail
+- failing_targets: ops-capabilities, api-monitor, api-ops, postgres, redis, nginx-spa
+
+## Gap Analysis (compose view)
+
+Overall completion: 0% (0 live / 16 total)
+- Live: 0
+- Planned (not yet live): 11
+- Failing: 5
+- Degraded: 0
+
+### Per-server gap
+- **Fixture** (example.invalid): 0/16 live (0%)
+  - Planned: Docker Compose, K3s, Gitea, ArgoCD, Tekton, Prometheus, IB TWS, Ollama, IB Socket, Frontend, Service
+  - Failing: PostgreSQL, Redis, nginx, Trade APIs, Platform API
+
+### Priority gap nodes (most planned components)
+- Fixture: 11 planned, 5 failing, completion 0%
+
+### Scope layer status
+- **PLATFORM** Bifrost Ops Platform (control plane): PARTIAL
+  - Probes: 0/1 live
+- **TRADE-FE** bifrost-trade-frontend: PLANNED
+- **TRADE-API** bifrost-trade-api (path domains; massive retired): PARTIAL
+  - Probes: 0/2 live
+- **WORKER** bifrost-trade-worker: PLANNED
+- **SOCKET** bifrost-trade-socket (RETIRED / reference-only): PLANNED
+- **CORE** bifrost-trade-core: PLANNED
+- **INFRA** bifrost-trade-infra: PARTIAL
+  - Probes: 0/1 live
+- **PG** PostgreSQL: PARTIAL
+  - Probes: 0/1 live
+- **REDIS** Redis: PARTIAL
+  - Probes: 0/1 live
+- **TWS** Interactive Brokers TWS / Gateway: PLANNED
+- **GITHUB** Source control & CI (target): PLANNED
+- **K3S** K3s cluster (target): PLANNED
+- **OBSERVE** Observability (target): PLANNED
+- **AI** Inference & MCP (target): PLANNED
+- **AGENT** Out-of-Band Operator Plane (L-1): PLANNED
+
+## Selected hardware node: fixture
+- label: Fixture
+- host: example.invalid
+- status: fail
+- detail: fixture
+- compose_roles: postgres, cnpg, redis, ingress, prod_compose, k3s, api, gitea, argocd, tekton, monitoring, tws, ib_host, ollama, celery, socket, frontend, platform_console, kubectl, mcp_client, ci, planned_staging, dev_workstation, postgres_ib, compose_socket, tws_socket, unknown
+- k3s_roles: api, tws, platform_console, planned_staging
+
+### Matrix services on node
+- ops-capabilities: fail — fixture
+- api-monitor: fail — fixture
+- api-ops: fail — fixture
+- postgres: fail — fixture
+- redis: fail — fixture
+- nginx-spa: fail — fixture
+
+## Suggested Agent question
+Node fixture has 11 planned components (Docker Compose, K3s, Gitea, ArgoCD, Tekton, Prometheus, IB TWS, Ollama, IB Socket, Frontend, Service). What is the recommended order to bring them live, considering dependencies and current cluster state?
+
+## Session discipline
+- Reply in Chinese for dialogue; English for UI strings and code identifiers.
+- L0 read-only: diagnose probes before proposing infra writes.
+- Use the Gap Analysis section above to identify which servers and components need attention.",
+  "Mode: Ops
+
+## Runtime Map context
+- environment: stg (Fixture)
+- deployment_phase: compose
+- generated_at: 2026-11-16T00:00:00Z
+- matrix: ok=0 fail=6 degraded=0 worst=fail
+- failing_targets: ops-capabilities, api-monitor, api-ops, postgres, redis, nginx-spa
+
+## Gap Analysis (compose view)
+
+Overall completion: 0% (0 live / 16 total)
+- Live: 0
+- Planned (not yet live): 11
+- Failing: 5
+- Degraded: 0
+
+### Per-server gap
+- **Fixture** (example.invalid): 0/16 live (0%)
+  - Planned: Docker Compose, K3s, Gitea, ArgoCD, Tekton, Prometheus, IB TWS, Ollama, IB Socket, Frontend, Service
+  - Failing: PostgreSQL, Redis, nginx, Trade APIs, Platform API
+
+### Priority gap nodes (most planned components)
+- Fixture: 11 planned, 5 failing, completion 0%
+
+### Scope layer status
+- **PLATFORM** Bifrost Ops Platform (control plane): PARTIAL
+  - Probes: 0/1 live
+- **TRADE-FE** bifrost-trade-frontend: PLANNED
+- **TRADE-API** bifrost-trade-api (path domains; massive retired): PARTIAL
+  - Probes: 0/2 live
+- **WORKER** bifrost-trade-worker: PLANNED
+- **SOCKET** bifrost-trade-socket (RETIRED / reference-only): PLANNED
+- **CORE** bifrost-trade-core: PLANNED
+- **INFRA** bifrost-trade-infra: PARTIAL
+  - Probes: 0/1 live
+- **PG** PostgreSQL: PARTIAL
+  - Probes: 0/1 live
+- **REDIS** Redis: PARTIAL
+  - Probes: 0/1 live
+- **TWS** Interactive Brokers TWS / Gateway: PLANNED
+- **GITHUB** Source control & CI (target): PLANNED
+- **K3S** K3s cluster (target): PLANNED
+- **OBSERVE** Observability (target): PLANNED
+- **AI** Inference & MCP (target): PLANNED
+- **AGENT** Out-of-Band Operator Plane (L-1): PLANNED
+
+## Selected scope layer: TWS
+- component: Interactive Brokers TWS / Gateway
+- technology: Win11 ×2 (Host + Secondary) — cluster-external forever
+- notes: R-DV3: Dev/Prod distinct client_id; one auto-trading Engine per IB account. D4: auto-order switch deferred.
+- targets: (planned only)
+
+## Suggested Agent question
+Runtime completion is 0%. The biggest gap is on Fixture (11 planned). What should be deployed next, considering the current milestone track?
+
+## Session discipline
+- Reply in Chinese for dialogue; English for UI strings and code identifiers.
+- L0 read-only: diagnose probes before proposing infra writes.
+- Use the Gap Analysis section above to identify which servers and components need attention.",
+]
+`;
+
+exports[`runtime map extraction parity > preserves ordered chip matches, ghosts and all reach states 1`] = `
+[
+  {
+    "compose": [
+      [
+        "postgres-postgres",
+        "ok",
+        "postgres",
+        false,
+      ],
+      [
+        "redis-redis",
+        "ok",
+        "redis",
+        false,
+      ],
+      [
+        "ingress-nginx",
+        "ok",
+        "nginx-spa",
+        false,
+      ],
+      [
+        "prod_compose-docker",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "k3s-k3s",
+        "unknown",
+        undefined,
+        true,
+      ],
+      [
+        "api-fastapi",
+        "ok",
+        "api-monitor",
+        false,
+      ],
+      [
+        "gitea-gitea",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "argocd-argocd",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "tekton-tekton",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "monitoring-prometheus",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "tws-ib",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "ollama-ollama",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "celery-socket",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "frontend-frontend",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "platform_console-platform",
+        "ok",
+        "ops-capabilities",
+        false,
+      ],
+      [
+        "unknown-generic",
+        "unknown",
+        undefined,
+        false,
+      ],
+    ],
+    "highlights": [
+      "api-fastapi",
+    ],
+    "k3s": [
+      [
+        "api-fastapi",
+        "ok",
+        "api-monitor",
+        false,
+        false,
+      ],
+      [
+        "tws-ib",
+        "unknown",
+        undefined,
+        false,
+        false,
+      ],
+      [
+        "platform_console-platform",
+        "ok",
+        "ops-capabilities",
+        false,
+        false,
+      ],
+      [
+        "planned_staging-k3s",
+        "unknown",
+        undefined,
+        true,
+        false,
+      ],
+      [
+        "postgres-postgres-ghost",
+        "ok",
+        "postgres",
+        true,
+        true,
+      ],
+      [
+        "redis-redis-ghost",
+        "ok",
+        "redis",
+        true,
+        true,
+      ],
+      [
+        "ingress-nginx-ghost",
+        "ok",
+        "nginx-spa",
+        true,
+        true,
+      ],
+      [
+        "prod_compose-docker-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "gitea-gitea-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "argocd-argocd-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "tekton-tekton-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "monitoring-prometheus-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "ollama-ollama-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "celery-socket-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "frontend-frontend-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "unknown-generic-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+    ],
+    "reach": "ok",
+  },
+  {
+    "compose": [
+      [
+        "postgres-postgres",
+        "degraded",
+        "postgres",
+        false,
+      ],
+      [
+        "redis-redis",
+        "degraded",
+        "redis",
+        false,
+      ],
+      [
+        "ingress-nginx",
+        "degraded",
+        "nginx-spa",
+        false,
+      ],
+      [
+        "prod_compose-docker",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "k3s-k3s",
+        "unknown",
+        undefined,
+        true,
+      ],
+      [
+        "api-fastapi",
+        "degraded",
+        "api-monitor",
+        false,
+      ],
+      [
+        "gitea-gitea",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "argocd-argocd",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "tekton-tekton",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "monitoring-prometheus",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "tws-ib",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "ollama-ollama",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "celery-socket",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "frontend-frontend",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "platform_console-platform",
+        "degraded",
+        "ops-capabilities",
+        false,
+      ],
+      [
+        "unknown-generic",
+        "unknown",
+        undefined,
+        false,
+      ],
+    ],
+    "highlights": [
+      "api-fastapi",
+    ],
+    "k3s": [
+      [
+        "api-fastapi",
+        "degraded",
+        "api-monitor",
+        false,
+        false,
+      ],
+      [
+        "tws-ib",
+        "unknown",
+        undefined,
+        false,
+        false,
+      ],
+      [
+        "platform_console-platform",
+        "degraded",
+        "ops-capabilities",
+        false,
+        false,
+      ],
+      [
+        "planned_staging-k3s",
+        "unknown",
+        undefined,
+        true,
+        false,
+      ],
+      [
+        "postgres-postgres-ghost",
+        "degraded",
+        "postgres",
+        true,
+        true,
+      ],
+      [
+        "redis-redis-ghost",
+        "degraded",
+        "redis",
+        true,
+        true,
+      ],
+      [
+        "ingress-nginx-ghost",
+        "degraded",
+        "nginx-spa",
+        true,
+        true,
+      ],
+      [
+        "prod_compose-docker-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "gitea-gitea-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "argocd-argocd-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "tekton-tekton-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "monitoring-prometheus-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "ollama-ollama-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "celery-socket-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "frontend-frontend-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "unknown-generic-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+    ],
+    "reach": "degraded",
+  },
+  {
+    "compose": [
+      [
+        "postgres-postgres",
+        "fail",
+        "postgres",
+        false,
+      ],
+      [
+        "redis-redis",
+        "fail",
+        "redis",
+        false,
+      ],
+      [
+        "ingress-nginx",
+        "fail",
+        "nginx-spa",
+        false,
+      ],
+      [
+        "prod_compose-docker",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "k3s-k3s",
+        "unknown",
+        undefined,
+        true,
+      ],
+      [
+        "api-fastapi",
+        "fail",
+        "api-monitor",
+        false,
+      ],
+      [
+        "gitea-gitea",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "argocd-argocd",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "tekton-tekton",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "monitoring-prometheus",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "tws-ib",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "ollama-ollama",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "celery-socket",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "frontend-frontend",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "platform_console-platform",
+        "fail",
+        "ops-capabilities",
+        false,
+      ],
+      [
+        "unknown-generic",
+        "unknown",
+        undefined,
+        false,
+      ],
+    ],
+    "highlights": [
+      "api-fastapi",
+    ],
+    "k3s": [
+      [
+        "api-fastapi",
+        "fail",
+        "api-monitor",
+        false,
+        false,
+      ],
+      [
+        "tws-ib",
+        "unknown",
+        undefined,
+        false,
+        false,
+      ],
+      [
+        "platform_console-platform",
+        "fail",
+        "ops-capabilities",
+        false,
+        false,
+      ],
+      [
+        "planned_staging-k3s",
+        "unknown",
+        undefined,
+        true,
+        false,
+      ],
+      [
+        "postgres-postgres-ghost",
+        "fail",
+        "postgres",
+        true,
+        true,
+      ],
+      [
+        "redis-redis-ghost",
+        "fail",
+        "redis",
+        true,
+        true,
+      ],
+      [
+        "ingress-nginx-ghost",
+        "fail",
+        "nginx-spa",
+        true,
+        true,
+      ],
+      [
+        "prod_compose-docker-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "gitea-gitea-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "argocd-argocd-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "tekton-tekton-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "monitoring-prometheus-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "ollama-ollama-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "celery-socket-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "frontend-frontend-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "unknown-generic-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+    ],
+    "reach": "fail",
+  },
+  {
+    "compose": [
+      [
+        "postgres-postgres",
+        "unknown",
+        "postgres",
+        false,
+      ],
+      [
+        "redis-redis",
+        "unknown",
+        "redis",
+        false,
+      ],
+      [
+        "ingress-nginx",
+        "unknown",
+        "nginx-spa",
+        false,
+      ],
+      [
+        "prod_compose-docker",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "k3s-k3s",
+        "unknown",
+        undefined,
+        true,
+      ],
+      [
+        "api-fastapi",
+        "unknown",
+        "api-monitor",
+        false,
+      ],
+      [
+        "gitea-gitea",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "argocd-argocd",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "tekton-tekton",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "monitoring-prometheus",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "tws-ib",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "ollama-ollama",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "celery-socket",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "frontend-frontend",
+        "unknown",
+        undefined,
+        false,
+      ],
+      [
+        "platform_console-platform",
+        "unknown",
+        "ops-capabilities",
+        false,
+      ],
+      [
+        "unknown-generic",
+        "unknown",
+        undefined,
+        false,
+      ],
+    ],
+    "highlights": [
+      "api-fastapi",
+    ],
+    "k3s": [
+      [
+        "api-fastapi",
+        "unknown",
+        "api-monitor",
+        false,
+        false,
+      ],
+      [
+        "tws-ib",
+        "unknown",
+        undefined,
+        false,
+        false,
+      ],
+      [
+        "platform_console-platform",
+        "unknown",
+        "ops-capabilities",
+        false,
+        false,
+      ],
+      [
+        "planned_staging-k3s",
+        "unknown",
+        undefined,
+        true,
+        false,
+      ],
+      [
+        "postgres-postgres-ghost",
+        "unknown",
+        "postgres",
+        true,
+        true,
+      ],
+      [
+        "redis-redis-ghost",
+        "unknown",
+        "redis",
+        true,
+        true,
+      ],
+      [
+        "ingress-nginx-ghost",
+        "unknown",
+        "nginx-spa",
+        true,
+        true,
+      ],
+      [
+        "prod_compose-docker-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "gitea-gitea-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "argocd-argocd-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "tekton-tekton-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "monitoring-prometheus-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "ollama-ollama-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "celery-socket-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "frontend-frontend-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+      [
+        "unknown-generic-ghost",
+        "unknown",
+        undefined,
+        true,
+        true,
+      ],
+    ],
+    "reach": "unknown",
+  },
+]
+`;
+
+exports[`runtime map extraction parity > preserves scope ordering and planned/unknown projections 1`] = `
+{
+  "gap": {
+    "degradedComponents": 0,
+    "failComponents": 0,
+    "liveComponents": 0,
+    "nodeGaps": [
+      {
+        "completionPct": 0,
+        "degradedCount": 0,
+        "failCount": 0,
+        "group": "linux",
+        "host": "example.invalid",
+        "inCluster": false,
+        "liveCount": 0,
+        "nodeId": "fixture",
+        "nodeLabel": "Fixture",
+        "plannedCount": 16,
+        "roleCompose": "",
+        "roleK3s": "",
+        "services": [
+          {
+            "brandColor": "#336791",
+            "chipId": "postgres-postgres",
+            "componentId": "postgres",
+            "label": "PostgreSQL",
+            "scopeTag": "PG",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#DC382D",
+            "chipId": "redis-redis",
+            "componentId": "redis",
+            "label": "Redis",
+            "scopeTag": "REDIS",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#009639",
+            "chipId": "ingress-nginx",
+            "componentId": "nginx",
+            "label": "nginx",
+            "scopeTag": "INFRA",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#2496ED",
+            "chipId": "prod_compose-docker",
+            "componentId": "docker",
+            "label": "Docker Compose",
+            "scopeTag": "INFRA",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#FFC117",
+            "chipId": "k3s-k3s",
+            "componentId": "k3s",
+            "label": "K3s",
+            "scopeTag": "K3S",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#009688",
+            "chipId": "api-fastapi",
+            "componentId": "fastapi",
+            "label": "Trade APIs",
+            "scopeTag": "TRADE-API",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#609926",
+            "chipId": "gitea-gitea",
+            "componentId": "gitea",
+            "label": "Gitea",
+            "scopeTag": "GITHUB",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#EF7B4D",
+            "chipId": "argocd-argocd",
+            "componentId": "argocd",
+            "label": "ArgoCD",
+            "scopeTag": "GITHUB",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#FD495C",
+            "chipId": "tekton-tekton",
+            "componentId": "tekton",
+            "label": "Tekton",
+            "scopeTag": "GITHUB",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#E6522C",
+            "chipId": "monitoring-prometheus",
+            "componentId": "prometheus",
+            "label": "Prometheus",
+            "scopeTag": "OBSERVE",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#DB1222",
+            "chipId": "tws-ib",
+            "componentId": "ib",
+            "label": "IB TWS",
+            "scopeTag": "TWS",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#1a1a1a",
+            "chipId": "ollama-ollama",
+            "componentId": "ollama",
+            "label": "Ollama",
+            "scopeTag": "AI",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#0ea5e9",
+            "chipId": "celery-socket",
+            "componentId": "socket",
+            "label": "IB Socket",
+            "scopeTag": "SOCKET",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#646cff",
+            "chipId": "frontend-frontend",
+            "componentId": "frontend",
+            "label": "Frontend",
+            "scopeTag": "TRADE-FE",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#00ADD8",
+            "chipId": "platform_console-platform",
+            "componentId": "platform",
+            "label": "Platform API",
+            "scopeTag": "PLATFORM",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#6b7280",
+            "chipId": "unknown-generic",
+            "componentId": "generic",
+            "label": "Service",
+            "scopeTag": undefined,
+            "status": "planned",
+          },
+        ],
+        "totalCount": 16,
+      },
+    ],
+    "overallCompletionPct": 0,
+    "plannedComponents": 16,
+    "scopeGaps": [
+      {
+        "component": "Bifrost Ops Platform (control plane)",
+        "liveTargets": 0,
+        "plannedOnly": false,
+        "status": "partial",
+        "tag": "PLATFORM",
+        "technology": "Go API :8780 · React Ops Console :5180 · Dense UI tokens",
+        "totalTargets": 1,
+      },
+      {
+        "component": "bifrost-trade-frontend",
+        "liveTargets": 0,
+        "plannedOnly": false,
+        "status": "planned",
+        "tag": "TRADE-FE",
+        "technology": "React 18 · Vite · TanStack Query · shadcn/ui",
+        "totalTargets": 0,
+      },
+      {
+        "component": "bifrost-trade-api (path domains; massive retired)",
+        "liveTargets": 0,
+        "plannedOnly": false,
+        "status": "partial",
+        "tag": "TRADE-API",
+        "technology": "FastAPI · ports 8765–8773 via nginx /api/{domain}/",
+        "totalTargets": 2,
+      },
+      {
+        "component": "bifrost-trade-worker",
+        "liveTargets": 0,
+        "plannedOnly": false,
+        "status": "planned",
+        "tag": "WORKER",
+        "technology": "Python · daemon (GsTrading FSM) · account-sync",
+        "totalTargets": 0,
+      },
+      {
+        "component": "bifrost-trade-socket (RETIRED / reference-only)",
+        "liveTargets": 0,
+        "plannedOnly": false,
+        "status": "planned",
+        "tag": "SOCKET",
+        "technology": "Python · legacy IB ingestor / account / operator (reference)",
+        "totalTargets": 0,
+      },
+      {
+        "component": "bifrost-trade-core",
+        "liveTargets": 0,
+        "plannedOnly": false,
+        "status": "planned",
+        "tag": "CORE",
+        "technology": "Python package bifrost_core — config, persistence, portfolio, monitor",
+        "totalTargets": 0,
+      },
+      {
+        "component": "bifrost-trade-infra",
+        "liveTargets": 0,
+        "plannedOnly": false,
+        "status": "partial",
+        "tag": "INFRA",
+        "technology": "Docker Compose · nginx · Makefile · config/*.yaml",
+        "totalTargets": 1,
+      },
+      {
+        "component": "PostgreSQL",
+        "liveTargets": 0,
+        "plannedOnly": false,
+        "status": "partial",
+        "tag": "PG",
+        "technology": "CloudNativePG bifrost-postgres @ data NS · bifrost_dev / bifrost_stg / bifrost_prod",
+        "totalTargets": 1,
+      },
+      {
+        "component": "Redis",
+        "liveTargets": 0,
+        "plannedOnly": false,
+        "status": "partial",
+        "tag": "REDIS",
+        "technology": "Prod on mini-pc-a :6379 · Dev local or co-located",
+        "totalTargets": 1,
+      },
+      {
+        "component": "Interactive Brokers TWS / Gateway",
+        "liveTargets": 0,
+        "plannedOnly": false,
+        "status": "planned",
+        "tag": "TWS",
+        "technology": "Win11 ×2 (Host + Secondary) — cluster-external forever",
+        "totalTargets": 0,
+      },
+      {
+        "component": "Source control & CI (target)",
+        "liveTargets": 0,
+        "plannedOnly": true,
+        "status": "planned",
+        "tag": "GITHUB",
+        "technology": "Git · Gitea on K3s (internal) · Mac Mini #2 runner (near-term)",
+        "totalTargets": 0,
+      },
+      {
+        "component": "K3s cluster (target)",
+        "liveTargets": 0,
+        "plannedOnly": true,
+        "status": "planned",
+        "tag": "K3S",
+        "technology": "K3s HA · Traefik Ingress · CloudNativePG · local-path PVC",
+        "totalTargets": 0,
+      },
+      {
+        "component": "Observability (target)",
+        "liveTargets": 0,
+        "plannedOnly": true,
+        "status": "planned",
+        "tag": "OBSERVE",
+        "technology": "Prometheus · Loki · Grafana · AlertManager · AIOps webhook",
+        "totalTargets": 0,
+      },
+      {
+        "component": "Inference & MCP (target)",
+        "liveTargets": 0,
+        "plannedOnly": true,
+        "status": "planned",
+        "tag": "AI",
+        "technology": "Ollama on gpu-server (4090) · mcp-server-kubernetes · bifrost-ops-mcp",
+        "totalTargets": 0,
+      },
+      {
+        "component": "Out-of-Band Operator Plane (L-1)",
+        "liveTargets": 0,
+        "plannedOnly": false,
+        "status": "planned",
+        "tag": "AGENT",
+        "technology": "Mac minis run the operator plane out of band and peer-watchdog; .50 relays alerts · Git Bridge (Mac Pro, Dev-only)",
+        "totalTargets": 0,
+      },
+    ],
+    "topGapNodes": [
+      {
+        "completionPct": 0,
+        "degradedCount": 0,
+        "failCount": 0,
+        "group": "linux",
+        "host": "example.invalid",
+        "inCluster": false,
+        "liveCount": 0,
+        "nodeId": "fixture",
+        "nodeLabel": "Fixture",
+        "plannedCount": 16,
+        "roleCompose": "",
+        "roleK3s": "",
+        "services": [
+          {
+            "brandColor": "#336791",
+            "chipId": "postgres-postgres",
+            "componentId": "postgres",
+            "label": "PostgreSQL",
+            "scopeTag": "PG",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#DC382D",
+            "chipId": "redis-redis",
+            "componentId": "redis",
+            "label": "Redis",
+            "scopeTag": "REDIS",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#009639",
+            "chipId": "ingress-nginx",
+            "componentId": "nginx",
+            "label": "nginx",
+            "scopeTag": "INFRA",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#2496ED",
+            "chipId": "prod_compose-docker",
+            "componentId": "docker",
+            "label": "Docker Compose",
+            "scopeTag": "INFRA",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#FFC117",
+            "chipId": "k3s-k3s",
+            "componentId": "k3s",
+            "label": "K3s",
+            "scopeTag": "K3S",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#009688",
+            "chipId": "api-fastapi",
+            "componentId": "fastapi",
+            "label": "Trade APIs",
+            "scopeTag": "TRADE-API",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#609926",
+            "chipId": "gitea-gitea",
+            "componentId": "gitea",
+            "label": "Gitea",
+            "scopeTag": "GITHUB",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#EF7B4D",
+            "chipId": "argocd-argocd",
+            "componentId": "argocd",
+            "label": "ArgoCD",
+            "scopeTag": "GITHUB",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#FD495C",
+            "chipId": "tekton-tekton",
+            "componentId": "tekton",
+            "label": "Tekton",
+            "scopeTag": "GITHUB",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#E6522C",
+            "chipId": "monitoring-prometheus",
+            "componentId": "prometheus",
+            "label": "Prometheus",
+            "scopeTag": "OBSERVE",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#DB1222",
+            "chipId": "tws-ib",
+            "componentId": "ib",
+            "label": "IB TWS",
+            "scopeTag": "TWS",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#1a1a1a",
+            "chipId": "ollama-ollama",
+            "componentId": "ollama",
+            "label": "Ollama",
+            "scopeTag": "AI",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#0ea5e9",
+            "chipId": "celery-socket",
+            "componentId": "socket",
+            "label": "IB Socket",
+            "scopeTag": "SOCKET",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#646cff",
+            "chipId": "frontend-frontend",
+            "componentId": "frontend",
+            "label": "Frontend",
+            "scopeTag": "TRADE-FE",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#00ADD8",
+            "chipId": "platform_console-platform",
+            "componentId": "platform",
+            "label": "Platform API",
+            "scopeTag": "PLATFORM",
+            "status": "planned",
+          },
+          {
+            "brandColor": "#6b7280",
+            "chipId": "unknown-generic",
+            "componentId": "generic",
+            "label": "Service",
+            "scopeTag": undefined,
+            "status": "planned",
+          },
+        ],
+        "totalCount": 16,
+      },
+    ],
+    "totalComponents": 16,
+  },
+  "icons": [
+    "platform",
+    "fastapi",
+    "socket",
+    "ib",
+    "frontend",
+  ],
+  "scopes": [
+    {
+      "component": "Bifrost Ops Platform (control plane)",
+      "notes": "Control plane — Go API :8780, React Ops Console :5180, MCP tools. Probes matrix/topology/spine; no Monitor POST /control/* or ib:operator:cmd.",
+      "plannedOnly": false,
+      "tag": "PLATFORM",
+      "targetIds": [
+        "ops-capabilities",
+      ],
+      "technology": "Go API :8780 · React Ops Console :5180 · Dense UI tokens",
+    },
+    {
+      "component": "bifrost-trade-frontend",
+      "notes": "Trade monitoring SPA :5173. Separate from Platform Console. Phase 1: New FE + Legacy API equivalence.",
+      "plannedOnly": false,
+      "tag": "TRADE-FE",
+      "targetIds": [],
+      "technology": "React 18 · Vite · TanStack Query · shadcn/ui",
+    },
+    {
+      "component": "bifrost-trade-api (path domains; massive retired)",
+      "notes": "monitor · docs · ops · trading · strategy · portfolio · market · research (massive REST retired → Market Data Plugin). Platform probes health endpoints only.",
+      "plannedOnly": false,
+      "tag": "TRADE-API",
+      "targetIds": [
+        "api-monitor",
+        "api-ops",
+      ],
+      "technology": "FastAPI · ports 8765–8773 via nginx /api/{domain}/",
+    },
+    {
+      "component": "bifrost-trade-worker",
+      "notes": "Daemon reads Redis quotes/account; orders via ib_operator RPC. Does not connect to TWS directly.",
+      "plannedOnly": false,
+      "tag": "WORKER",
+      "targetIds": [],
+      "technology": "Python · daemon (GsTrading FSM) · account-sync",
+    },
+    {
+      "component": "bifrost-trade-socket (RETIRED / reference-only)",
+      "notes": "Wave 14G-F: production IB edge is Platform IB Gateway Plugin → redis-ib (IBGP). Do not start trade-socket for Inner Loop or K3s. Repo kept as reference until Phase 3 archive. Compose default path still pending Phase 1 profile cutover.",
+      "plannedOnly": false,
+      "tag": "SOCKET",
+      "targetIds": [],
+      "technology": "Python · legacy IB ingestor / account / operator (reference)",
+    },
+    {
+      "component": "bifrost-trade-core",
+      "notes": "Shared library pip-installed by api/worker/socket. Version via BIFROST_CORE_REF tag in Docker builds.",
+      "plannedOnly": false,
+      "tag": "CORE",
+      "targetIds": [],
+      "technology": "Python package bifrost_core — config, persistence, portfolio, monitor",
+    },
+    {
+      "component": "bifrost-trade-infra",
+      "notes": "Prod: docker-compose.yml on mini-pc-a. Dev: docker-compose.dev.yml. make prod-health · prod-preflight · release_gate (planned).",
+      "plannedOnly": false,
+      "tag": "INFRA",
+      "targetIds": [
+        "nginx-spa",
+      ],
+      "technology": "Docker Compose · nginx · Makefile · config/*.yaml",
+    },
+    {
+      "component": "PostgreSQL",
+      "notes": "D2-prime: CNPG is truth. Legacy bare .80 / options_db decommissioned 2026-06-29 (box → ubt-k3s-06 @ .79). LAN DBeaver: NodePort 30432.",
+      "plannedOnly": false,
+      "tag": "PG",
+      "targetIds": [
+        "postgres",
+      ],
+      "technology": "CloudNativePG bifrost-postgres @ data NS · bifrost_dev / bifrost_stg / bifrost_prod",
+    },
+    {
+      "component": "Redis",
+      "notes": "Streams: ib:ingester:tick:* · RPC: ib:operator:cmd · Health keys bifrost:health:ws_*",
+      "plannedOnly": false,
+      "tag": "REDIS",
+      "targetIds": [
+        "redis",
+      ],
+      "technology": "Prod on mini-pc-a :6379 · Dev local or co-located",
+    },
+    {
+      "component": "Interactive Brokers TWS / Gateway",
+      "notes": "R-DV3: Dev/Prod distinct client_id; one auto-trading Engine per IB account. D4: auto-order switch deferred.",
+      "plannedOnly": false,
+      "tag": "TWS",
+      "targetIds": [],
+      "technology": "Win11 ×2 (Host + Secondary) — cluster-external forever",
+    },
+    {
+      "component": "Source control & CI (target)",
+      "notes": "Near-term: pytest · npm run build · check:legacy-css on PR. Target: Tekton Pipeline in K3s cicd namespace.",
+      "plannedOnly": true,
+      "tag": "GITHUB",
+      "targetIds": [],
+      "technology": "Git · Gitea on K3s (internal) · Mac Mini #2 runner (near-term)",
+    },
+    {
+      "component": "K3s cluster (target)",
+      "notes": "Phase B GitOps: Gitea · ArgoCD · Tekton. Namespaces: data · cicd · monitoring · ai · bifrost. deployment_phase in topology.yaml.",
+      "plannedOnly": true,
+      "tag": "K3S",
+      "targetIds": [],
+      "technology": "K3s HA · Traefik Ingress · CloudNativePG · local-path PVC",
+    },
+    {
+      "component": "Observability (target)",
+      "notes": "Phase C on mini-pc-c. External watchdog cron on Mac Mini #2 (monitor the monitors).",
+      "plannedOnly": true,
+      "tag": "OBSERVE",
+      "targetIds": [],
+      "technology": "Prometheus · Loki · Grafana · AlertManager · AIOps webhook",
+    },
+    {
+      "component": "Inference & MCP (target)",
+      "notes": "L0/L1 ops only; research RAG CronJob read-only. Forbidden: trade write paths for platform AI.",
+      "plannedOnly": true,
+      "tag": "AI",
+      "targetIds": [],
+      "technology": "Ollama on gpu-server (4090) · mcp-server-kubernetes · bifrost-ops-mcp",
+    },
+    {
+      "component": "Out-of-Band Operator Plane (L-1)",
+      "notes": "The engineer on the ground — recovers Ops Platform (rocket) + Trade (payload) from OUTSIDE K8s; never an in-cluster Pod. Mutual watchdog + platform-api failover. See cicdBootstrapCatalog.ts L-1 · k3sBootstrapCatalog.ts · Flywheel Vision.",
+      "plannedOnly": false,
+      "tag": "AGENT",
+      "targetIds": [],
+      "technology": "Mac minis run the operator plane out of band and peer-watchdog; .50 relays alerts · Git Bridge (Mac Pro, Dev-only)",
+    },
+  ],
+}
+`;

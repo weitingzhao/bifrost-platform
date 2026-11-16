@@ -10,9 +10,9 @@ import {
   chipsForNode,
   type RoleView,
   type StackChipModel,
-} from '@/lib/runtime-map/infraVisualRegistry'
+} from '@/domains/foundation/runtime-map/lib/infraVisualRegistry'
 import { HARDWARE_ROWS } from '@/lib/environments-catalog'
-import { buildScopeLayers, type ScopeLayer } from '@/lib/runtime-map/runtimeMapRegistry'
+import { buildScopeLayers, type ScopeLayer } from '@/domains/foundation/runtime-map/lib/runtimeMapRegistry'
 
 export type ServiceGapStatus = 'live' | 'planned' | 'degraded' | 'fail'
 

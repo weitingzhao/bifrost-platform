@@ -2,11 +2,11 @@ import { Button } from '@bifrost/ui'
 import type { MatrixResponse, TopologyResponse } from '@/api/matrixTypes'
 import { StatusLamp } from '@/components/StatusLamp'
 import { summarizeMatrix } from '@/lib/control-room/matrixSummary'
-import type { GapOverview } from '@/lib/runtime-map/gapAnalysis'
+import type { GapOverview } from '@/domains/foundation/runtime-map/lib/gapAnalysis'
 import {
   getAffectedNodeIds,
   getPrimaryFailure,
-} from '@/lib/runtime-map/runtimeMapHealth'
+} from '@/domains/foundation/runtime-map/lib/runtimeMapHealth'
 
 function gapPctClass(pct: number): string {
   if (pct >= 80) return 'gap-pct--high'

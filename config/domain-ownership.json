@@ -1871,30 +1871,6 @@
         "status": "mixed",
         "basis": "2026-11-16 source/caller audit: cross-domain health observations; no artificial isolation"
       },
-      "console/src/pages/RuntimeMapPage.tsx": {
-        "domains": [
-          "compute",
-          "tenant"
-        ],
-        "status": "mixed",
-        "basis": "2026-11-16 source/caller audit: runtime topology combines infrastructure and tenant endpoints"
-      },
-      "console/src/components/runtime-map": {
-        "domains": [
-          "compute",
-          "tenant"
-        ],
-        "status": "mixed",
-        "basis": "2026-11-16 source/caller audit: runtime topology combines infrastructure and tenant endpoints"
-      },
-      "console/src/lib/runtime-map": {
-        "domains": [
-          "compute",
-          "tenant"
-        ],
-        "status": "mixed",
-        "basis": "2026-11-16 source/caller audit: runtime topology combines infrastructure and tenant endpoints"
-      },
       "console/src/pages/shell/data": {
         "domains": [
           "tenant"
@@ -2034,6 +2010,27 @@
         ],
         "status": "assigned",
         "basis": "2026-11-16 Owner-confirmed activity split: generic feed, target parsing and read-only rollout observation belong to Foundation; tenant namespace/workload display mapping belongs to Tenant. Existing behavior retained."
+      },
+      "console/src/domains/foundation/runtime-map": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-confirmed split: generic read-only runtime projection and page composition in Foundation explicitly consume Tenant display adapters. Tenant role, scope, icon, navigation and question mappings physically extracted; no execution or gate changes. Baseline output parity verified."
+      },
+      "console/src/domains/tenant/runtime-map": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-confirmed split: generic read-only runtime projection and page composition in Foundation explicitly consume Tenant display adapters. Tenant role, scope, icon, navigation and question mappings physically extracted; no execution or gate changes. Baseline output parity verified."
+      },
+      "console/src/domains/foundation/runtime-map/contracts.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "Read-only runtime display contracts shared by Foundation projection and Tenant adapters; separate dependency node avoids a coarse source-group cycle."
       }
     }
   }

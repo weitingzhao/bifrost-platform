@@ -3,22 +3,22 @@ import type { ClusterSummary } from '@/api/clusterTypes'
 import type { MatrixResponse, TopologyResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { RuntimeAgentStrip } from '@/components/runtime-map/RuntimeAgentStrip'
-import { RuntimeHardwarePanel } from '@/components/runtime-map/RuntimeHardwarePanel'
-import { RuntimeHealthStrip } from '@/components/runtime-map/RuntimeHealthStrip'
-import { RuntimeMapDrawer } from '@/components/runtime-map/RuntimeMapDrawer'
-import { RuntimeSoftwarePanel } from '@/components/runtime-map/RuntimeSoftwarePanel'
-import { buildGapOverview } from '@/lib/runtime-map/gapAnalysis'
-import { chipIdsMatchingTarget } from '@/lib/runtime-map/infraVisualRegistry'
-import type { RuntimeMapNavigateOptions } from '@/lib/runtime-map/runtimeMapNavigation'
-import type { StackChipModel } from '@/lib/runtime-map/roleComponentRegistry'
+import { RuntimeAgentStrip } from '@/domains/foundation/runtime-map/components/RuntimeAgentStrip'
+import { RuntimeHardwarePanel } from '@/domains/foundation/runtime-map/components/RuntimeHardwarePanel'
+import { RuntimeHealthStrip } from '@/domains/foundation/runtime-map/components/RuntimeHealthStrip'
+import { RuntimeMapDrawer } from '@/domains/foundation/runtime-map/components/RuntimeMapDrawer'
+import { RuntimeSoftwarePanel } from '@/domains/foundation/runtime-map/components/RuntimeSoftwarePanel'
+import { buildGapOverview } from '@/domains/foundation/runtime-map/lib/gapAnalysis'
+import { chipIdsMatchingTarget } from '@/domains/foundation/runtime-map/lib/infraVisualRegistry'
+import type { RuntimeMapNavigateOptions } from '@/domains/foundation/runtime-map/lib/runtimeMapNavigation'
+import type { StackChipModel } from '@/domains/foundation/runtime-map/lib/roleComponentRegistry'
 import {
   filterEdgesByTarget,
   filterNodesByTarget,
   getEdge,
   type RuntimeMapSelection,
   type ScopeTag,
-} from '@/lib/runtime-map/runtimeMapRegistry'
+} from '@/domains/foundation/runtime-map/lib/runtimeMapRegistry'
 
 interface RuntimeMapPageProps {
   topology: TopologyResponse | undefined

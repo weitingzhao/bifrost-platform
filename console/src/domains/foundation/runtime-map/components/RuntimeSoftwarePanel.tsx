@@ -2,16 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, DenseTag } from '@bifrost/ui'
 import type { MatrixResponse, TopologyResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
-import { ComponentIcon } from '@/components/runtime-map/ComponentIcon'
+import { ComponentIcon } from '@/domains/foundation/runtime-map/components/ComponentIcon'
 import { StatusLamp } from '@/components/StatusLamp'
 import { summarizeMatrix } from '@/lib/control-room/matrixSummary'
-import type { GapOverview, ScopeGapSummary } from '@/lib/runtime-map/gapAnalysis'
-import { componentIdForScopeTag } from '@/lib/runtime-map/infraVisualRegistry'
+import type { GapOverview, ScopeGapSummary } from '@/domains/foundation/runtime-map/lib/gapAnalysis'
+import { componentIdForScopeTag } from '@/domains/foundation/runtime-map/lib/infraVisualRegistry'
 import {
   getFailingTargets,
   layerHasFailingTarget,
   sortTargetsByReachability,
-} from '@/lib/runtime-map/runtimeMapHealth'
+} from '@/domains/foundation/runtime-map/lib/runtimeMapHealth'
 import {
   buildScopeLayers,
   filterScopeLayersForNode,
@@ -19,7 +19,7 @@ import {
   type RuntimeMapSelection,
   type ScopeLayer,
   type ScopeTag,
-} from '@/lib/runtime-map/runtimeMapRegistry'
+} from '@/domains/foundation/runtime-map/lib/runtimeMapRegistry'
 
 interface RuntimeSoftwarePanelProps {
   matrix: MatrixResponse | undefined

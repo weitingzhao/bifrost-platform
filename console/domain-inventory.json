@@ -1300,37 +1300,6 @@
       "unresolved_imports": []
     },
     {
-      "path": "console/src/components/runtime-map",
-      "files": [
-        "console/src/components/runtime-map/ComponentIcon.tsx",
-        "console/src/components/runtime-map/GapProgressBar.tsx",
-        "console/src/components/runtime-map/HostBay.tsx",
-        "console/src/components/runtime-map/IbBrandIcon.tsx",
-        "console/src/components/runtime-map/InfraMapCanvas.tsx",
-        "console/src/components/runtime-map/RuntimeAgentStrip.tsx",
-        "console/src/components/runtime-map/RuntimeHardwarePanel.tsx",
-        "console/src/components/runtime-map/RuntimeHealthStrip.tsx",
-        "console/src/components/runtime-map/RuntimeMapDrawer.tsx",
-        "console/src/components/runtime-map/RuntimeSoftwarePanel.tsx",
-        "console/src/components/runtime-map/StackChip.tsx"
-      ],
-      "imports": [
-        "console/src/api",
-        "console/src/api/opsContextTypes.ts",
-        "console/src/components",
-        "console/src/lib/control-room",
-        "console/src/lib/runtime-map"
-      ],
-      "test_imports": [],
-      "external_imports": [
-        "@bifrost/ui",
-        "react"
-      ],
-      "source_inputs": [],
-      "test_inputs": [],
-      "unresolved_imports": []
-    },
-    {
       "path": "console/src/components/shell",
       "files": [
         "console/src/components/shell/AgentThreadRow.tsx",
@@ -1593,6 +1562,70 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/foundation/runtime-map",
+      "files": [
+        "console/src/domains/foundation/runtime-map/RuntimeMapPage.tsx",
+        "console/src/domains/foundation/runtime-map/components/ComponentIcon.tsx",
+        "console/src/domains/foundation/runtime-map/components/GapProgressBar.tsx",
+        "console/src/domains/foundation/runtime-map/components/HostBay.tsx",
+        "console/src/domains/foundation/runtime-map/components/InfraMapCanvas.tsx",
+        "console/src/domains/foundation/runtime-map/components/RuntimeAgentStrip.tsx",
+        "console/src/domains/foundation/runtime-map/components/RuntimeHardwarePanel.tsx",
+        "console/src/domains/foundation/runtime-map/components/RuntimeHealthStrip.tsx",
+        "console/src/domains/foundation/runtime-map/components/RuntimeMapDrawer.tsx",
+        "console/src/domains/foundation/runtime-map/components/RuntimeSoftwarePanel.tsx",
+        "console/src/domains/foundation/runtime-map/components/StackChip.tsx",
+        "console/src/domains/foundation/runtime-map/lib/__tests__/__snapshots__/runtimeMapParity.test.ts.snap",
+        "console/src/domains/foundation/runtime-map/lib/__tests__/runtimeMapParity.test.ts",
+        "console/src/domains/foundation/runtime-map/lib/buildRuntimeLlmPack.ts",
+        "console/src/domains/foundation/runtime-map/lib/gapAnalysis.ts",
+        "console/src/domains/foundation/runtime-map/lib/infraMapLayout.ts",
+        "console/src/domains/foundation/runtime-map/lib/infraVisualRegistry.ts",
+        "console/src/domains/foundation/runtime-map/lib/roleComponentRegistry.ts",
+        "console/src/domains/foundation/runtime-map/lib/runtimeMapHealth.ts",
+        "console/src/domains/foundation/runtime-map/lib/runtimeMapNavigation.ts",
+        "console/src/domains/foundation/runtime-map/lib/runtimeMapRegistry.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/opsContextTypes.ts",
+        "console/src/components",
+        "console/src/components/layout",
+        "console/src/domains/foundation/runtime-map/contracts.ts",
+        "console/src/domains/tenant/runtime-map",
+        "console/src/lib",
+        "console/src/lib/control-room"
+      ],
+      "test_imports": [
+        "console/src/api"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "react",
+        "simple-icons",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/foundation/runtime-map/contracts.ts",
+      "files": [
+        "console/src/domains/foundation/runtime-map/contracts.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/lib"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/foundation/shell",
       "files": [
         "console/src/domains/foundation/shell/useShellStatusLine.ts"
@@ -1662,6 +1695,32 @@
       "external_imports": [
         "@tanstack/react-query",
         "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/tenant/runtime-map",
+      "files": [
+        "console/src/domains/tenant/runtime-map/EdgeLegend.tsx",
+        "console/src/domains/tenant/runtime-map/IbBrandIcon.tsx",
+        "console/src/domains/tenant/runtime-map/RuntimeDetails.tsx",
+        "console/src/domains/tenant/runtime-map/componentIconAdapter.tsx",
+        "console/src/domains/tenant/runtime-map/questionAdapter.ts",
+        "console/src/domains/tenant/runtime-map/scopeAdapter.ts",
+        "console/src/domains/tenant/runtime-map/visualAdapter.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/opsContextTypes.ts",
+        "console/src/domains/foundation/runtime-map/contracts.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "react",
+        "simple-icons"
       ],
       "source_inputs": [],
       "test_inputs": [],
@@ -2378,33 +2437,6 @@
       ],
       "external_imports": [
         "vitest"
-      ],
-      "source_inputs": [],
-      "test_inputs": [],
-      "unresolved_imports": []
-    },
-    {
-      "path": "console/src/lib/runtime-map",
-      "files": [
-        "console/src/lib/runtime-map/buildRuntimeLlmPack.ts",
-        "console/src/lib/runtime-map/gapAnalysis.ts",
-        "console/src/lib/runtime-map/infraMapLayout.ts",
-        "console/src/lib/runtime-map/infraVisualRegistry.ts",
-        "console/src/lib/runtime-map/roleComponentRegistry.ts",
-        "console/src/lib/runtime-map/runtimeMapHealth.ts",
-        "console/src/lib/runtime-map/runtimeMapNavigation.ts",
-        "console/src/lib/runtime-map/runtimeMapRegistry.ts"
-      ],
-      "imports": [
-        "console/src/api",
-        "console/src/api/opsContextTypes.ts",
-        "console/src/lib",
-        "console/src/lib/control-room"
-      ],
-      "test_imports": [],
-      "external_imports": [
-        "react",
-        "simple-icons"
       ],
       "source_inputs": [],
       "test_inputs": [],
@@ -3268,27 +3300,6 @@
       "unresolved_imports": []
     },
     {
-      "path": "console/src/pages/RuntimeMapPage.tsx",
-      "files": [
-        "console/src/pages/RuntimeMapPage.tsx"
-      ],
-      "imports": [
-        "console/src/api",
-        "console/src/api/clusterTypes.ts",
-        "console/src/api/opsContextTypes.ts",
-        "console/src/components/layout",
-        "console/src/components/runtime-map",
-        "console/src/lib/runtime-map"
-      ],
-      "test_imports": [],
-      "external_imports": [
-        "react"
-      ],
-      "source_inputs": [],
-      "test_inputs": [],
-      "unresolved_imports": []
-    },
-    {
       "path": "console/src/pages/satellite-bus",
       "files": [
         "console/src/pages/satellite-bus/TradeDaemonOperatePanel.tsx",
@@ -3741,11 +3752,11 @@
         "console/src/components/layout",
         "console/src/components/shell",
         "console/src/domains/foundation/backup",
+        "console/src/domains/foundation/runtime-map",
         "console/src/lib/agent",
         "console/src/lib/shell",
         "console/src/pages/ClusterPage.tsx",
-        "console/src/pages/NetworkPage.tsx",
-        "console/src/pages/RuntimeMapPage.tsx"
+        "console/src/pages/NetworkPage.tsx"
       ],
       "test_imports": [
         "console/src/api/clusterTypes.ts"

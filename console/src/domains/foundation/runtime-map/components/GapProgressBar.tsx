@@ -1,4 +1,4 @@
-import type { NodeGapSummary } from '@/lib/runtime-map/gapAnalysis'
+import type { NodeGapSummary } from '@/domains/foundation/runtime-map/lib/gapAnalysis'
 
 interface GapProgressBarProps {
   gap: NodeGapSummary

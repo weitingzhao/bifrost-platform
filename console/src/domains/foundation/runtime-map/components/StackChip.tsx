@@ -1,6 +1,7 @@
+import { isTenantCustomIcon } from '@/domains/tenant/runtime-map/visualAdapter'
 import type { CSSProperties } from 'react'
-import { ComponentIcon } from '@/components/runtime-map/ComponentIcon'
-import type { StackChipModel } from '@/lib/runtime-map/roleComponentRegistry'
+import { ComponentIcon } from '@/domains/foundation/runtime-map/components/ComponentIcon'
+import type { StackChipModel } from '@/domains/foundation/runtime-map/lib/roleComponentRegistry'
 
 interface StackChipProps {
   chip: StackChipModel
@@ -42,7 +43,7 @@ export function StackChip({
       <ComponentIcon
         componentId={chip.componentId}
         variant="chip"
-        showWell={chip.componentId !== 'ib'}
+        showWell={!isTenantCustomIcon(chip.componentId)}
         className="infra-stack-chip__icon"
       />
       <span className="infra-stack-chip__label">{chip.label}</span>

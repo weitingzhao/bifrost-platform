@@ -1,3 +1,4 @@
+import { TenantRuntimeLink, TenantProbeHint } from '@/domains/tenant/runtime-map/RuntimeDetails'
 import type { MatrixResponse, TopologyResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { MatrixTable } from '@/components/MatrixTable'
@@ -10,9 +11,8 @@ import {
   getTarget,
   nodeToHardwareMeta,
   type RuntimeMapSelection,
-} from '@/lib/runtime-map/runtimeMapRegistry'
+} from '@/domains/foundation/runtime-map/lib/runtimeMapRegistry'
 
-const TRADE_APP_URL = import.meta.env.VITE_TRADE_FRONTEND_URL ?? 'http://127.0.0.1:5173'
 
 interface RuntimeMapDrawerProps {
   selection: RuntimeMapSelection
@@ -47,10 +47,6 @@ export function RuntimeMapDrawer({
             ? (getEdge(topology!, selection.id)?.label ?? selection.id)
             : 'Detail'
 
-  const showTradeReactor =
-    selection?.kind === 'target' &&
-    (selection.id.startsWith('api-') || selection.id.includes('socket'))
-
   return (
     <aside className="bay-detail-drawer panel-elevated runtime-map-drawer" role="dialog" aria-label="Runtime detail">
       <header className="bay-detail-drawer-header">
@@ -84,17 +80,7 @@ export function RuntimeMapDrawer({
         <Button variant="ghost" size="sm" onClick={onToggleFullMatrix}>
           {showFullMatrix ? 'Back to selection' : 'Open full probe table'}
         </Button>
-        {showTradeReactor && (
-          <Button size="sm" asChild>
-            <a
-              href={TRADE_APP_URL}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open Trade Reactor
-            </a>
-          </Button>
-        )}
+        <TenantRuntimeLink selection={selection} />
       </footer>
     </aside>
   )
@@ -214,11 +200,7 @@ function TargetDetail({
           <strong>{layer.tag}</strong> — {layer.technology}
         </p>
       )}
-      {hint != null && (
-        <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Trade route: <code className="font-mono-tabular">{hint.trade_route}</code> — {hint.hint}
-        </p>
-      )}
+      <TenantProbeHint hint={hint} />
     </>
   )
 }

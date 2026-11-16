@@ -1,9 +1,8 @@
+import { tenantIcons, isTenantCustomIcon, tenantComponents, tenantScopeComponents, tenantRoleRules, isTenantApiTarget, tenantMatrixTarget } from '@/domains/tenant/runtime-map/visualAdapter'
 import type { SimpleIcon } from 'simple-icons'
 import {
   siArgo,
-  siCelery,
   siDocker,
-  siFastapi,
   siGitea,
   siGo,
   siGrafana,
@@ -18,36 +17,13 @@ import {
 } from 'simple-icons'
 
 import type { Reachability, TopologyMatrixService, TopologyNode, TopologyResponse } from '@/api/matrixTypes'
-import type { ScopeTag } from '@/lib/runtime-map/runtimeMapRegistry'
+import type { ScopeTag } from '@/domains/foundation/runtime-map/lib/runtimeMapRegistry'
 
-export type RoleView = 'compose' | 'k3s'
-
-export type InfraComponentVisual = {
-  id: string
-  label: string
-  lettermark: string
-  brandColor: string
-  simpleIconSlug?: string
-  scopeTag?: ScopeTag
-  matrixTargets?: string[]
-  plannedInK3s?: boolean
-  plannedInCompose?: boolean
-}
-
-export type StackChipModel = {
-  chipId: string
-  componentId: string
-  label: string
-  lettermark: string
-  brandColor: string
-  planned: boolean
-  ghost?: boolean
-  reachability: Reachability
-  matrixTargetId?: string
-  scopeTag?: ScopeTag
-}
+import type { RoleView, InfraComponentVisual, StackChipModel } from '../contracts'
+export type { RoleView, InfraComponentVisual, StackChipModel } from '../contracts'
 
 const ICON_BY_COMPONENT: Record<string, SimpleIcon | undefined> = {
+  ...tenantIcons,
   postgres: siPostgresql,
   redis: siRedis,
   nginx: siNginx,
@@ -60,13 +36,12 @@ const ICON_BY_COMPONENT: Record<string, SimpleIcon | undefined> = {
   registry: siDocker,
   prometheus: siPrometheus,
   grafana: siGrafana,
-  fastapi: siFastapi,
   platform: siGo,
   ollama: siOllama,
-  celery: siCelery,
 }
 
 const INFRA_COMPONENTS: Record<string, InfraComponentVisual> = {
+  ...tenantComponents,
   postgres: {
     id: 'postgres',
     label: 'PostgreSQL',
@@ -174,14 +149,6 @@ const INFRA_COMPONENTS: Record<string, InfraComponentVisual> = {
     scopeTag: 'OBSERVE',
     plannedInCompose: true,
   },
-  fastapi: {
-    id: 'fastapi',
-    label: 'Trade APIs',
-    lettermark: 'API',
-    brandColor: '#009688',
-    simpleIconSlug: 'fastapi',
-    scopeTag: 'TRADE-API',
-  },
   platform: {
     id: 'platform',
     label: 'Platform API',
@@ -193,13 +160,6 @@ const INFRA_COMPONENTS: Record<string, InfraComponentVisual> = {
     // answered by the api-monitor process, so it belongs to Trade APIs (TD-55).
     matrixTargets: ['ops-capabilities'],
   },
-  ib: {
-    id: 'ib',
-    label: 'IB TWS',
-    lettermark: 'IB',
-    brandColor: '#DB1222',
-    scopeTag: 'TWS',
-  },
   ollama: {
     id: 'ollama',
     label: 'Ollama',
@@ -207,31 +167,6 @@ const INFRA_COMPONENTS: Record<string, InfraComponentVisual> = {
     brandColor: '#1a1a1a',
     simpleIconSlug: 'ollama',
     scopeTag: 'AI',
-    plannedInCompose: true,
-  },
-  celery: {
-    id: 'celery',
-    label: 'Celery',
-    lettermark: 'CE',
-    brandColor: '#37814a',
-    simpleIconSlug: 'celery',
-    scopeTag: 'WORKER',
-    plannedInCompose: true,
-  },
-  socket: {
-    id: 'socket',
-    label: 'IB Socket',
-    lettermark: 'SK',
-    brandColor: '#0ea5e9',
-    scopeTag: 'SOCKET',
-    plannedInCompose: true,
-  },
-  frontend: {
-    id: 'frontend',
-    label: 'Frontend',
-    lettermark: 'FE',
-    brandColor: '#646cff',
-    scopeTag: 'TRADE-FE',
     plannedInCompose: true,
   },
   generic: {
@@ -244,8 +179,8 @@ const INFRA_COMPONENTS: Record<string, InfraComponentVisual> = {
 
 /** Default infra component icon per SCOPE tag (right panel group headers). */
 const SCOPE_DEFAULT_COMPONENT: Partial<Record<ScopeTag, string>> = {
+  ...tenantScopeComponents,
   PLATFORM: 'platform',
-  'TRADE-API': 'fastapi',
   INFRA: 'nginx',
   PG: 'postgres',
   REDIS: 'redis',
@@ -253,10 +188,6 @@ const SCOPE_DEFAULT_COMPONENT: Partial<Record<ScopeTag, string>> = {
   GITHUB: 'gitea',
   OBSERVE: 'prometheus',
   AI: 'ollama',
-  WORKER: 'celery',
-  SOCKET: 'socket',
-  'TRADE-FE': 'frontend',
-  TWS: 'ib',
 }
 
 const ROLE_MAP: Array<{ match: (role: string) => boolean; componentId: string }> = [
@@ -265,15 +196,15 @@ const ROLE_MAP: Array<{ match: (role: string) => boolean; componentId: string }>
   { match: r => r === 'nginx' || r === 'ingress', componentId: 'nginx' },
   { match: r => r.includes('compose') || r === 'prod_compose' || r === 'dev_compose', componentId: 'docker' },
   { match: r => r.startsWith('k3s'), componentId: 'k3s' },
-  { match: r => r === 'api', componentId: 'fastapi' },
+  tenantRoleRules.api,
   { match: r => r === 'gitea', componentId: 'gitea' },
   { match: r => r === 'argocd', componentId: 'argocd' },
   { match: r => r === 'tekton', componentId: 'tekton' },
   { match: r => r === 'monitoring', componentId: 'prometheus' },
-  { match: r => r.includes('tws') || r.includes('ib'), componentId: 'ib' },
+  tenantRoleRules.ib,
   { match: r => r === 'ollama', componentId: 'ollama' },
-  { match: r => r === 'celery' || r.includes('socket'), componentId: 'socket' },
-  { match: r => r === 'frontend', componentId: 'frontend' },
+  tenantRoleRules.socket,
+  tenantRoleRules.frontend,
   { match: r => r === 'platform_console' || r === 'kubectl' || r === 'mcp_client', componentId: 'platform' },
   { match: r => r === 'ci' || r === 'ci_runner' || r === 'watchdog', componentId: 'tekton' },
   { match: r => r === 'planned_staging', componentId: 'k3s' },
@@ -292,7 +223,7 @@ export function getComponentVisual(componentId: string): InfraComponentVisual {
 }
 
 export function getIconPath(componentId: string): string | undefined {
-  if (componentId === 'ib') return undefined
+  if (isTenantCustomIcon(componentId)) return undefined
   return ICON_BY_COMPONENT[componentId]?.path
 }
 
@@ -308,7 +239,7 @@ function reachForComponent(
   if (targets.length === 0) {
     const prefixMatch = services.filter(
       s =>
-        (component.id === 'fastapi' && s.id.startsWith('api-')) ||
+        isTenantApiTarget(component.id, s.id) ||
         (component.id === 'platform' && s.id === 'ops-capabilities'),
     )
     if (prefixMatch.length === 0) return 'unknown'
@@ -333,11 +264,8 @@ function matrixTargetForChip(
 ): string | undefined {
   if (explicitTarget) return explicitTarget
   if (component.matrixTargets?.length === 1) return component.matrixTargets[0]
-  if (component.id === 'fastapi') {
-    const fail = services.find(s => s.id.startsWith('api-') && s.reachability === 'fail')
-    if (fail) return fail.id
-    return services.find(s => s.id.startsWith('api-'))?.id
-  }
+  const tenantTarget = tenantMatrixTarget(component.id, services)
+  if (tenantTarget != null) return tenantTarget
   if (component.id === 'platform') return 'ops-capabilities'
   return undefined
 }
@@ -452,8 +380,7 @@ export function chipIdsMatchingTarget(
       for (const chip of chipsForNode(node, view)) {
         const match =
           chip.matrixTargetId === targetId ||
-          (targetId.startsWith('api-') &&
-            chip.componentId === 'fastapi' &&
+          (isTenantApiTarget(chip.componentId, targetId) &&
             node.matrix_services?.some(s => s.id === targetId))
         if (match && !seen.has(chip.chipId)) {
           seen.add(chip.chipId)

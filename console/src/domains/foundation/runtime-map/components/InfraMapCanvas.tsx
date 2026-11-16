@@ -1,7 +1,8 @@
+import { TenantEdgeLegend } from '@/domains/tenant/runtime-map/EdgeLegend'
 import { useMemo, useState } from 'react'
 import { Button, DenseTag, SegmentControl } from '@bifrost/ui'
 import type { TopologyResponse } from '@/api/matrixTypes'
-import { buildGapOverview, type GapOverview } from '@/lib/runtime-map/gapAnalysis'
+import { buildGapOverview, type GapOverview } from '@/domains/foundation/runtime-map/lib/gapAnalysis'
 import {
   buildInfraMapLayout,
   edgeDash,
@@ -11,8 +12,8 @@ import {
   localEdgesForNode,
   pipePath,
   type LayoutMode,
-} from '@/lib/runtime-map/infraMapLayout'
-import { type RoleView, type StackChipModel } from '@/lib/runtime-map/roleComponentRegistry'
+} from '@/domains/foundation/runtime-map/lib/infraMapLayout'
+import { type RoleView, type StackChipModel } from '@/domains/foundation/runtime-map/lib/roleComponentRegistry'
 import { HostBay } from './HostBay'
 
 interface InfraMapCanvasProps {
@@ -131,9 +132,7 @@ export function InfraMapCanvas({
         <span className="infra-map-legend__item">
           <span className="infra-map-legend__swatch infra-edge--kind-http" /> HTTP
         </span>
-        <span className="infra-map-legend__item">
-          <span className="infra-map-legend__swatch infra-edge--kind-ib" /> IB
-        </span>
+        <TenantEdgeLegend />
         <span className="infra-map-legend__item">
           <span className="infra-stack-chip infra-stack-chip--planned infra-map-legend__chip-demo">
             planned

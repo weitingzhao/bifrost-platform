@@ -3,7 +3,7 @@ import { fetchCluster } from '@/api/cluster'
 import { fetchContext, fetchMatrix, fetchSelfHealth, fetchTopology, isAllMatrices } from '@/api/core'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { RuntimeMapPage } from '@/pages/RuntimeMapPage'
+import { RuntimeMapPage } from '@/domains/foundation/runtime-map/RuntimeMapPage'
 
 function matrixForViewer(
   data: MatrixResponse | { matrices: MatrixResponse[] } | undefined,

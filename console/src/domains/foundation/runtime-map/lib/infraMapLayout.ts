@@ -1,3 +1,4 @@
+import { tenantEdgeDash } from '@/domains/tenant/runtime-map/visualAdapter'
 import type { CSSProperties } from 'react'
 import type { TopologyEdge, TopologyNode, TopologyResponse } from '@/api/matrixTypes'
 
@@ -139,8 +140,7 @@ export function edgeStrokeClass(status: TopologyEdge['status']): string {
 export function edgeDash(kind: string, sameNode: boolean): string | undefined {
   if (sameNode) return '6 4'
   if (kind === 'http' || kind === 'control') return '8 5'
-  if (kind === 'ib') return '2 4'
-  return undefined
+  return tenantEdgeDash(kind)
 }
 
 export function isSelfLoopEdge(edge: TopologyEdge): boolean {

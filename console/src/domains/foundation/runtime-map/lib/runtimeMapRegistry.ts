@@ -1,7 +1,9 @@
+import { tenantTargetScopeRule } from '@/domains/tenant/runtime-map/scopeAdapter'
 import type { MatrixResponse, Target, TopologyNode, TopologyResponse } from '@/api/matrixTypes'
-import { HARDWARE_ROWS, SCOPE_ROWS, type ScopeRow } from '@/lib/environments-catalog'
+import { HARDWARE_ROWS, SCOPE_ROWS } from '@/lib/environments-catalog'
 
-export type ScopeTag = ScopeRow['tag']
+import type { ScopeTag } from '../contracts'
+export type { ScopeTag, RuntimeMapSelection } from '../contracts'
 
 export type ScopeLayer = {
   tag: ScopeTag
@@ -19,7 +21,7 @@ const PLANNED_ONLY_TAGS = new Set<ScopeTag>(['K3S', 'OBSERVE', 'AI', 'GITHUB'])
 const TARGET_SCOPE_RULES: Array<{ match: (id: string) => boolean; tag: ScopeTag }> = [
   // ops-capabilities is the platform's token probe; api-ops is a Trade prefix on api-monitor (TD-55).
   { match: id => id === 'ops-capabilities', tag: 'PLATFORM' },
-  { match: id => id.startsWith('api-'), tag: 'TRADE-API' },
+  tenantTargetScopeRule,
   { match: id => id === 'nginx-spa', tag: 'INFRA' },
   { match: id => id === 'postgres', tag: 'PG' },
   { match: id => id === 'redis', tag: 'REDIS' },
@@ -116,13 +118,6 @@ export function countServiceStats(services: TopologyNode['matrix_services'] | un
   }
   return { total: list.length, fail, ok }
 }
-
-export type RuntimeMapSelection =
-  | { kind: 'node'; id: string }
-  | { kind: 'target'; id: string }
-  | { kind: 'scope'; tag: ScopeTag }
-  | { kind: 'edge'; id: string }
-  | null
 
 export function getEdge(topology: TopologyResponse, edgeId: string) {
   return topology.edges.find(e => e.id === edgeId)

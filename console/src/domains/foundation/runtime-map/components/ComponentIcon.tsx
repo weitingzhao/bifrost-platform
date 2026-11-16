@@ -1,6 +1,7 @@
+import { isTenantCustomIcon } from '@/domains/tenant/runtime-map/visualAdapter'
 import type { CSSProperties } from 'react'
-import { IbBrandIcon } from '@/components/runtime-map/IbBrandIcon'
-import { getComponentVisual, getIconPath } from '@/lib/runtime-map/infraVisualRegistry'
+import { tenantComponentIcon } from '@/domains/tenant/runtime-map/componentIconAdapter'
+import { getComponentVisual, getIconPath } from '@/domains/foundation/runtime-map/lib/infraVisualRegistry'
 
 export type ComponentIconVariant = 'chip' | 'scope' | 'tile'
 
@@ -36,20 +37,15 @@ export function ComponentIcon({
   const rootClass = [
     'infra-component-icon',
     VARIANT_CLASS[variant],
-    showWell && componentId !== 'ib' ? 'infra-component-icon--well' : '',
-    componentId === 'ib' ? 'infra-component-icon--ib' : '',
+    showWell && !isTenantCustomIcon(componentId) ? 'infra-component-icon--well' : '',
+    isTenantCustomIcon(componentId) ? 'infra-component-icon--ib' : '',
     className,
   ]
     .filter(Boolean)
     .join(' ')
 
-  if (componentId === 'ib') {
-    return (
-      <span className={rootClass} style={style}>
-        <IbBrandIcon className="infra-component-icon__svg infra-component-icon__svg--ib" />
-      </span>
-    )
-  }
+  const tenantIcon = tenantComponentIcon(componentId, rootClass, style)
+  if (tenantIcon != null) return tenantIcon
 
   const inner = path ? (
     <svg

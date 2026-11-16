@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import type { TopologyResponse } from '@/api/matrixTypes'
-import { InfraMapCanvas } from '@/components/runtime-map/InfraMapCanvas'
-import type { LayoutMode } from '@/lib/runtime-map/infraMapLayout'
-import type { RoleView, StackChipModel } from '@/lib/runtime-map/roleComponentRegistry'
+import { InfraMapCanvas } from '@/domains/foundation/runtime-map/components/InfraMapCanvas'
+import type { LayoutMode } from '@/domains/foundation/runtime-map/lib/infraMapLayout'
+import type { RoleView, StackChipModel } from '@/domains/foundation/runtime-map/lib/roleComponentRegistry'
 
 interface RuntimeHardwarePanelProps {
   data: TopologyResponse

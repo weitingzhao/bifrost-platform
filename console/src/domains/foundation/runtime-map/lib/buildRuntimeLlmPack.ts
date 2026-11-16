@@ -1,7 +1,8 @@
+import { tenantSuggestedQuestion, tenantFailureQuestion } from '@/domains/tenant/runtime-map/questionAdapter'
 import type { MatrixResponse, TopologyResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { summarizeMatrix } from '@/lib/control-room/matrixSummary'
-import { formatGapForLlm, type GapOverview } from '@/lib/runtime-map/gapAnalysis'
+import { formatGapForLlm, type GapOverview } from '@/domains/foundation/runtime-map/lib/gapAnalysis'
 import {
   filterTargetsForNode,
   getEdge,
@@ -12,7 +13,7 @@ import {
   buildScopeLayers,
   type RuntimeMapSelection,
   type ScopeTag,
-} from '@/lib/runtime-map/runtimeMapRegistry'
+} from '@/domains/foundation/runtime-map/lib/runtimeMapRegistry'
 
 export function buildRuntimeLlmPack(
   topology: TopologyResponse | undefined,
@@ -161,9 +162,8 @@ function suggestedQuestion(
     return `Topology edge ${selection.id} shows ${topology?.environment ?? 'env'} link status. What does the matrix probe imply and which host should we inspect first?`
   }
 
-  if (selection?.kind === 'target' && selection.id.startsWith('api-')) {
-    return `Matrix target ${selection.id} is failing in ${topology?.environment ?? 'env'}. List likely root causes (compose/nginx/container) and a read-only verification checklist.`
-  }
+  const tenantQuestion = tenantSuggestedQuestion(topology, selection)
+  if (tenantQuestion != null) return tenantQuestion
 
   if (selection?.kind === 'node') {
     const nodeGap = gapOverview?.nodeGaps.find(n => n.nodeId === selection.id)
@@ -177,9 +177,8 @@ function suggestedQuestion(
     return `Analyze hardware node ${selection.id} in ${topology?.environment ?? 'env'}: which matrix services are failing and what is the smallest L0 diagnostic step?`
   }
 
-  if (fails.length > 0 && fails.every(t => t.id.startsWith('api-'))) {
-    return 'All or most Trade API matrix targets are failing on prod. Propose ordered root-cause checks (nginx, docker compose, LAN) without write actions.'
-  }
+  const failureQuestion = tenantFailureQuestion(fails)
+  if (failureQuestion != null) return failureQuestion
 
   if (gapOverview != null && gapOverview.topGapNodes.length > 0) {
     const topNode = gapOverview.topGapNodes[0]
