@@ -868,7 +868,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 generic read-only resource formatting, usage, readiness and phase projection extracted whole; only metrics/probe callers, unchanged thresholds, no execution or permission decisions."
+      "basis": "2026-11-16 generic read-only resource formatting, usage, readiness and phase projection extracted whole; includes complete Deployment and node-capability coverage projections. Governance and service-readiness callers retain all queries and decision wiring; unchanged thresholds, no execution or permission decisions."
     },
     "api/internal/netobservations": {
       "domains": [

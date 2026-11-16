@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -34,7 +35,7 @@ func TestBuildNodeCoverageNFSSClient(t *testing.T) {
 }
 
 func TestCoverageReachNoNFSNodes(t *testing.T) {
-	reach, reason := coverageReach("nfs-client", 0, 0)
+	reach, reason := resourceview.CoverageReach("nfs-client", 0, 0)
 	if reach != probe.ReachFail {
 		t.Fatalf("reach: %s", reach)
 	}

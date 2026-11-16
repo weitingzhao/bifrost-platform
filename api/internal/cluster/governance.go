@@ -3,13 +3,13 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"sort"
+	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
@@ -81,56 +81,25 @@ func (s *Service) Governance(ctx context.Context) GovernanceResponse {
 }
 
 func buildNodeCoverage(nodes []NodeView, catalog []CapabilityCatalogEntry) []CapabilityCoverageView {
-	nodeCapsByID := make(map[string][]NodeView)
+	ns := make([]resourceview.CoverageNode, 0, len(nodes))
 	for _, n := range nodes {
+		in := resourceview.CoverageNode{Name: n.Name, Status: n.Status, Reachability: n.Reachability}
 		for _, c := range n.Capabilities {
-			nodeCapsByID[c.ID] = append(nodeCapsByID[c.ID], n)
+			in.Capabilities = append(in.Capabilities, resourceview.CoverageCapability{ID: c.ID})
 		}
+		ns = append(ns, in)
 	}
-
-	out := make([]CapabilityCoverageView, 0)
-	for _, entry := range catalog {
-		if entry.Scope != "node" {
-			continue
-		}
-		matched := nodeCapsByID[entry.ID]
-		cv := CapabilityCoverageView{
-			ID:          entry.ID,
-			Label:       entry.Label,
-			Category:    entry.Category,
-			Scope:       entry.Scope,
-			LabelHint:   entry.LabelHint,
-			RequiredFor: entry.RequiredFor,
-			NodeNames:   []string{},
-		}
-		for _, n := range matched {
-			cv.NodesTotal++
-			cv.NodeNames = append(cv.NodeNames, n.Name)
-			if n.Reachability == probe.ReachOK && n.Status == "Ready" {
-				cv.NodesReady++
-			}
-		}
-		sort.Strings(cv.NodeNames)
-		cv.Reachability, cv.GapReason = coverageReach(entry.ID, cv.NodesReady, cv.NodesTotal)
-		out = append(out, cv)
+	cs := make([]resourceview.CoverageCatalogEntry, 0, len(catalog))
+	for _, c := range catalog {
+		cs = append(cs, resourceview.CoverageCatalogEntry{ID: c.ID, Label: c.Label, Category: c.Category, Scope: c.Scope, LabelHint: c.LabelHint, RequiredFor: c.RequiredFor})
+	}
+	projected := resourceview.NodeCoverage(ns, cs)
+	out := make([]CapabilityCoverageView, 0, len(projected))
+	for _, c := range projected {
+		out = append(out, CapabilityCoverageView(c))
 	}
 	return out
 }
-
-func coverageReach(id string, ready, total int) (probe.Reachability, string) {
-	switch {
-	case ready > 0:
-		return probe.ReachOK, ""
-	case total > 0:
-		return probe.ReachDegraded, fmt.Sprintf("%s: %d node(s) labeled but none Ready", id, total)
-	default:
-		if id == "nfs-client" {
-			return probe.ReachFail, "No node labeled storage.nfs/client=true — NFS PVCs will fail to mount"
-		}
-		return probe.ReachDegraded, "No nodes declare this capability yet"
-	}
-}
-
 func (s *Service) probeClusterCapabilities(ctx context.Context) ([]ClusterCapabilityView, probe.Reachability, string) {
 	clientset, _, err := s.buildClient()
 	if err != nil {
