@@ -451,7 +451,9 @@
       "basis": "2026-11-15 source and caller audit: localpath.go and workspace.go shared path masking and workspace reference parsing; protections unchanged"
     },
     "api/internal/assessmentreadings": {
-      "domains": ["owner"],
+      "domains": [
+        "owner"
+      ],
       "status": "assigned",
       "basis": "2026-11-16 Owner charter card and approval read scope: complete recorded advice stream query; no assessment execution, validity judgment, authorization or writes."
     },
@@ -2295,7 +2297,7 @@
           "plan"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 complete cleanup/live observation projections extracted unchanged. Signoff uses raw step state and original readAge freshness; readAge, stepStateModel, planModuleModel, workViewModel and signoff controls remain untouched."
+        "basis": "2026-11-16 complete cleanup/live observation projections extracted unchanged. Signoff uses raw step state and original readAge freshness; readAge, stepStateModel, planModuleModel, workViewModel and signoff controls remain untouched. Complete module recent-activity projection uses unchanged caller-supplied evidence readers; shared needsNow/read freshness/signoff logic retained byte-for-byte and no reverse runtime dependency."
       }
     }
   }

@@ -2088,14 +2088,20 @@
       "path": "console/src/domains/plan/observations",
       "files": [
         "console/src/domains/plan/observations/liveStepModel.ts",
+        "console/src/domains/plan/observations/moduleActivity.ts",
         "console/src/domains/plan/observations/needsCleanupModel.ts",
         "console/src/domains/plan/observations/unlinkedSessionsModel.ts",
         "console/src/domains/plan/observations/useNeedsCleanup.ts"
       ],
       "imports": [
+        "console/src/api/agentRuntimePlan.ts",
         "console/src/api/agentThreads.ts",
+        "console/src/api/approvals.ts",
         "console/src/api/planSnapshot.ts",
+        "console/src/api/questions.ts",
+        "console/src/domains/plan/display",
         "console/src/domains/plan/readings",
+        "console/src/lib/shell",
         "console/src/pages/shell/agents"
       ],
       "test_imports": [],
