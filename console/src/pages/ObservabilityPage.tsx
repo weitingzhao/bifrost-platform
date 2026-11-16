@@ -107,7 +107,25 @@ export function ObservabilityPage({
     },
   })
 
-  const { runtimeDomainCards, referenceDomains, tradeEnvRollup, sharedRollup, filteredAttention, activeMuteCount, domainCountsLabel, systemGapSummary, selectedRequiredSignals, selectedDomainHealthy, checkpointsQuiet, dependencyQuiet, goldenQuiet, scrapeQuiet, systemHealthy, selectedPrimaryGrafana, attentionQuiet } = useObservabilityPageProjection(viewModel, selectedDomain, attentionScope, muteRevision, isLoading)
+  const {
+    runtimeDomainCards,
+    referenceDomains,
+    tradeEnvRollup,
+    sharedRollup,
+    filteredAttention,
+    activeMuteCount,
+    domainCountsLabel,
+    systemGapSummary,
+    selectedRequiredSignals,
+    selectedDomainHealthy,
+    checkpointsQuiet,
+    dependencyQuiet,
+    goldenQuiet,
+    scrapeQuiet,
+    systemHealthy,
+    selectedPrimaryGrafana,
+    attentionQuiet,
+  } = useObservabilityPageProjection(viewModel, selectedDomain, attentionScope, muteRevision, isLoading)
 
   const scrollToAttention = () => {
     document.getElementById('obs-attention')?.scrollIntoView({ behavior: 'smooth', block: 'start' })

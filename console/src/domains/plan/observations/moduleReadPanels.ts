@@ -1,7 +1,7 @@
 import { plainTitle } from '@/api/agentRuntimePlan'
 import type { PlanNode, PlanSnapshot } from '@/api/planSnapshot'
 import { noViewReason } from '@/pages/shell/agents/planModuleModel'
-import { planNodeHref } from '@/pages/shell/agents/usePlanSnapshot'
+import { planNodeHref } from '@/domains/plan/display/usePlanSnapshot'
 import type { ModuleScope } from '@/pages/shell/agents/moduleDetailModel'
 
 /*
