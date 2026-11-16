@@ -54,4 +54,3 @@ export async function fetchPatrolRuns(limit = 50): Promise<PatrolRunsResponse> {
   if (!r.ok) throw new Error(`patrol runs: HTTP ${r.status}`)
   return r.json() as Promise<PatrolRunsResponse>
 }
-
