@@ -36,6 +36,27 @@ var budget = map[string]int{
 	"telemetry/queries.go":         4,
 }
 
+// ceiling is the sum of budget. A file that moves takes its number to its new
+// path, and the row of its old path goes; the sum may not rise. Origin:
+// 2026-11-16, satellite's two auto_status lines could not follow their files
+// into another package, because the per-file numbers alone cannot tell a move
+// from new vocabulary. With the sum held here, a move is a change of keys and
+// new vocabulary is still refused.
+const ceiling = 29
+
+func TestTradeVocabularyBudgetMovesButNeverGrows(t *testing.T) {
+	sum := 0
+	for _, n := range budget {
+		sum += n
+	}
+	switch {
+	case sum > ceiling:
+		t.Errorf("budget sums to %d, ceiling %d — a move keeps the sum; new Trade vocabulary is read from configuration instead", sum, ceiling)
+	case sum < ceiling:
+		t.Errorf("budget sums to %d, ceiling %d — lower the ceiling (it only shrinks)", sum, ceiling)
+	}
+}
+
 func TestTradeVocabularyOnlyShrinks(t *testing.T) {
 	root, err := filepath.Abs("..")
 	if err != nil {
