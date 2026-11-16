@@ -94,7 +94,8 @@
       "imports": [
         "console/src/api/client.ts",
         "console/src/domains/foundation/agent-observation/api",
-        "console/src/domains/foundation/runtime-health"
+        "console/src/domains/foundation/runtime-health",
+        "console/src/domains/plan/readings"
       ],
       "test_imports": [
         "console/src/api/agentProgress.ts",
@@ -2300,12 +2301,15 @@
         "console/src/domains/plan/readings/readings.test.ts",
         "console/src/domains/plan/readings/recentChanges.ts",
         "console/src/domains/plan/readings/rounds.ts",
+        "console/src/domains/plan/readings/runtimeWork.test.ts",
+        "console/src/domains/plan/readings/runtimeWork.ts",
         "console/src/domains/plan/readings/usePlanSnapshot.ts"
       ],
       "imports": [
         "console/src/api",
         "console/src/api/agentRuntimePlan.ts",
-        "console/src/api/planSnapshot.ts"
+        "console/src/api/planSnapshot.ts",
+        "console/src/domains/foundation/runtime-health"
       ],
       "test_imports": [
         "console/src/api",
