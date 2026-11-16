@@ -1836,7 +1836,9 @@
       "files": [
         "console/src/domains/foundation/observation-display/__tests__/__snapshots__/extractionParity.test.ts.snap",
         "console/src/domains/foundation/observation-display/__tests__/extractionParity.test.ts",
+        "console/src/domains/foundation/observation-display/__tests__/fleetNavigationParity.test.ts",
         "console/src/domains/foundation/observation-display/failingTargets.ts",
+        "console/src/domains/foundation/observation-display/fleetNavigation.ts",
         "console/src/domains/foundation/observation-display/matrixSummary.ts",
         "console/src/domains/foundation/observation-display/signals.ts"
       ],

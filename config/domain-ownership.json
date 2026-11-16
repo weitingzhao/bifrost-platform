@@ -2248,7 +2248,7 @@
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-authorized extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
+        "basis": "2026-11-16 Owner-authorized extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction. 2026-11-16 fleet navigation/viewer environment helpers extracted whole, unchanged; original paths preserve all consumers and protected fleet builders remain untouched."
       },
       "console/src/domains/tenant/readiness": {
         "domains": [
