@@ -104,9 +104,12 @@ NATS 权限只从登记表生成一份（中继和身份服务读同一份，解
 - R3 门禁依赖的（CI 绿没绿、窗口、冻结）新旧并排对账后再切。
 
 ## §11 NATS 落地（第 1 步照此装）
-单节点 R1，`nats:2.15.3`；数据放 `local-path`（节点本地盘，不放 NFS）；`sync_interval: always`；JetStream 限额显式写（内存 256Mi、文件 10Gi）；容器内存上限 1Gi；每个租户一个账户（现在只 `ROCKET`，结构按多个写；系统账户单列）。
+单节点 R1，`nats:2.15.3`，放在已有的 `data` 命名空间（`nats.data.svc:4222`；执行卡按准入规则不能建命名空间，2026-11-16 卡 #581；清单在 infra `k8s/bus/`，只对两个平台命名空间和 monitoring 开端口）；数据放 `local-path`（节点本地盘，不放 NFS）；`sync_interval: always`；JetStream 限额显式写（内存 256Mi、文件 10Gi）；容器内存上限 1Gi；每个租户一个账户（现在只 `ROCKET`，结构按多个写；系统账户单列）。
 流：每个租户每个环境一个流 `EV_<TENANT>_<ENV>`，主题 `ev.<tenant>.<env>.>`，文件存储，`max_age` 30 天，`max_bytes` 5Gi，`discard: old`，`duplicate_window` 2 分钟（解第 42 条）。
-身份：第 1 步先用两组静态用户（中继：只发 `ev.rocket.>`；订阅方：只订、不发），密码放 Secret（Owner 那份不读）；第 2 步起换 auth callout 按席位身份签（解第 30、31 条的顺序）。
+身份：第 1 步先用两组静态用户（`relay`，workers 用：发 `ev.rocket.>` 和回执、建流、建并消费 headrelease；`reader`，api 用：只订 `ev.rocket.>`、发回执、有序读两条流；`cmd.>` 对两者都拒——2026-11-16 在本机同版本服务器上逐条验过），密码放 Secret（Owner 那份不读）；第 2 步起换 auth callout 按席位身份签（解第 30、31 条的顺序）。
+
+## §11.1 谁在哪个环境订
+- 测试环境的发布由**生产**平台 workers 里的 head-release 起（`HEAD_RELEASE=stg` 只在生产）。所以叫醒发布的 `git.main.advanced` 订阅在生产：Gitea 钩子要指生产平台，生产开总线。测试环境的账也收 git 事件，给测试环境自己的读口和验证用。
 
 ## §12 读数
 每个主题的发布数、订阅数、落后量；中继落后量（账的最新游标 − 已推游标，按条数）；对账发现的偏差数；NATS 内存和盘；主干动了到测试环境开始发布的秒数；对 Gitea 的请求次数。
