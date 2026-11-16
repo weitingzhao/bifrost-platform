@@ -194,3 +194,10 @@ export type FullCiView = { state: 'none' } | { state: 'notes'; rows: FullCiRow[]
 export function fullCiView(notes: FullCiNotes): FullCiView {
   return notes.runs.length === 0 ? { state: 'none' } : { state: 'notes', rows: notes.runs.map(fullCiRow) }
 }
+
+/** Keep unknown and reused records visible; neither proves this module ran. */
+export function matchesModule(run: Pick<UnitsRun, 'asked' | 'run_modules' | 'tested_by'>, module: string): boolean {
+  if (!module || run.tested_by) return true
+  const scope = modulesRun(run)
+  return scope.kind !== 'some' || scope.names.includes(module)
+}

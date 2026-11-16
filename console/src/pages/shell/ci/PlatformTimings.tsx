@@ -5,8 +5,9 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { RunTimingDetail, READ_BUTTON } from './RunTimingDetail'
 import { TimingTrends } from './TimingTrends'
+import { matchesModule } from './ciViewModel'
 import { TimingBudget } from './TimingBudget'
-import { elapsed, reusedBy, runCommit, runStatus, secondsText } from './timingModel'
+import { elapsed, reusedBy, runCommit, runStatus, secondsText, result } from './timingModel'
 
 const pipelines = [
   ['bifrost-ci-platform','CI'], ['bifrost-land','Merge'],
@@ -14,7 +15,7 @@ const pipelines = [
 ] as const
 const control = 'min-h-11 max-w-full rounded border border-transparent bg-[var(--field-fill)] px-2 text-sm'
 
-export function PlatformTimings() {
+export function PlatformTimings({ module = '' }: { module?: string }) {
   const [pipeline,setPipeline] = useState<string>(pipelines[0][0])
   const [hours,setHours] = useState(72)
   const [picked,setPicked] = useState('')
@@ -24,13 +25,14 @@ export function PlatformTimings() {
   const query = useQuery({ queryKey:['ci-timings',pipeline], queryFn:({signal})=>fetchCITimings(pipeline,undefined,signal), staleTime:30_000, refetchInterval:30_000 })
   const direct = useQuery({ queryKey:['ci-timing-run',pipeline,lookup], queryFn:({signal})=>fetchCITimings(pipeline,lookup,signal), enabled:!!lookup, retry:false, staleTime:30_000, refetchInterval:30_000 })
   const cutoff = Date.parse(query.data?.as_of ?? '') - hours*3600_000
-  const runs = (query.data?.runs ?? []).filter(r=>Date.parse(r.created_at)>=cutoff)
+  const runs = (query.data?.runs ?? []).filter(r=>Date.parse(r.created_at)>=cutoff).filter(r => pipeline !== 'bifrost-ci-platform' || matchesModule({ asked: true, run_modules: result(r.tasks.find(t => t.task === 'changes')?.results ?? [], 'run-modules'), tested_by: reusedBy(r) }, module))
   const matching = focusCommit ? runs.filter(r=>runCommit(r)===focusCommit) : runs
   const selected = lookup ? direct.data?.runs[0] : matching.find(r=>r.name===picked) ?? matching.find(r=>!reusedBy(r)) ?? matching[0]
   const pick = (name:string) => { setLookup(''); setFocusCommit(''); setPicked(name) }
   return <>
     <OpsVerdictStrip title="Platform CI & delivery" lamp={query.error ? 'degraded' : 'unknown'} tagLabel="Read only" tagVariant="neutral" summary="See where each run spends its time, what it tested, and what it reused." />
     <OpsSection title="Run explorer" description="Cluster records are retained for a few days; outside retention there is no history here. At most the newest 60 runs per pipeline are loaded. No missing duration is treated as zero." bodyPadding="compact">
+      <p className="text-sm">bifrost-platform{module ? ` / ${module}` : ''} · CI → Merge → STG → PROD. {module ? 'CI history follows the selected module; reused and unreported scope stay visible. Merge and delivery still operate on the whole repository; independent module delivery is not declared.' : 'Select a pipeline stage below. Stages show retained runs, not a release action.'}</p>
       <div className="flex min-w-0 flex-wrap gap-2" role="group" aria-label="Pipeline">
         {pipelines.map(([id,label])=><button key={id} className={`${READ_BUTTON} ${pipeline===id?'bg-[var(--accent)]':''}`} aria-pressed={pipeline===id} onClick={()=>{setPipeline(id);setPicked('');setLookup('');setFocusCommit('')}}>{label}</button>)}
         <label className="flex items-center gap-2 text-xs">Window<select className={control} value={hours} onChange={e=>setHours(Number(e.target.value))}><option value={24}>24 hours</option><option value={72}>72 hours</option></select></label>
@@ -48,6 +50,7 @@ export function PlatformTimings() {
         <label className="grid min-w-0 flex-1 gap-1 text-xs">Find retained run by name<input className={control} value={typed} onChange={e=>setTyped(e.target.value)} placeholder="PipelineRun name" /></label>
         <button className={READ_BUTTON} type="submit" disabled={!typed.trim()}>Find run</button>
       </form>
+      {lookup && module && <p className="text-xs">Named-run lookup is explicit and may be outside the selected module; inspect its reported scope.</p>}
       {lookup && direct.isPending && <p className="text-sm">Reading named run…</p>}
       {direct.error && lookup && <p role="alert" className="text-sm text-destructive">Named run could not be read: {direct.error.message}. A deleted run is unavailable outside retention.</p>}
       {lookup && direct.data?.runs.length === 0 && <p className="text-sm">This name is not a retained platform run of the selected pipeline.</p>}

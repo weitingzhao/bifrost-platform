@@ -6,7 +6,7 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { configView } from './ciViewModel'
 import { READ_BUTTON } from './RunTimingDetail'
 
-export function ModuleExplorer({ repo }: { repo: string }) {
+export function ModuleExplorer({ repo, module = '' }: { repo: string; module?: string }) {
   const [readUnits, setReadUnits] = useState(false)
   const config = useQuery({ queryKey: ['units', 'config', repo], queryFn: ({ signal }) => fetchUnitsConfig(repo, signal), staleTime: 60_000 })
   const commit = config.data?.commit ?? ''
@@ -23,9 +23,10 @@ export function ModuleExplorer({ repo }: { repo: string }) {
       </div>
       {view.note && <p className="text-sm">{view.note}</p>}
       <div className="mt-3 grid min-w-0 gap-3 lg:grid-cols-2">
-        {view.modules.map(mod => <article key={mod.name} data-testid={`ci-config-module-${repo}-${mod.name}`} className="min-w-0 rounded border border-[var(--table-rule)] p-3">
+        {view.modules.filter(mod => !module || mod.name === module).map(mod => <article key={mod.name} data-testid={`ci-config-module-${repo}-${mod.name}`} className="min-w-0 rounded border border-[var(--table-rule)] p-3">
           <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="m-0 font-medium">{repo} / {mod.name}</h4><DenseTag variant="neutral">{mod.kind}</DenseTag></div>
           <p className="break-all font-mono text-xs text-muted-foreground">Root: {mod.root}</p>
+          <p className="text-xs">Declared input direction: {mod.name} ← {config.data?.modules.filter(other => other.name !== mod.name && other.root !== '.' && config.data?.modules.find(m => m.name === mod.name)?.needs.some(path => path === other.root || path.startsWith(`${other.root}/`))).map(other => other.name).join(', ') || 'No other module root matched'}. Paths below remain authoritative; this is not a complete runtime dependency graph.</p>
           <p className="text-sm">{mod.tasks} · {mod.units} units</p>
           <p className="text-xs text-muted-foreground">Runs on every change: {mod.everyChange}</p>
           <details><summary className="min-h-11 cursor-pointer py-3 text-sm">Inputs & cross-repository dependencies</summary>

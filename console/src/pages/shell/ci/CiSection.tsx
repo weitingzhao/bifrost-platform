@@ -2,13 +2,13 @@ import { Fragment, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag } from '@bifrost/ui'
 import { fetchSupplyChain } from '@/api/delivery'
-import { fetchFullCi, fetchUnitsRuns } from '@/api/units'
+import { fetchFullCi, fetchUnitsRuns, fetchUnitsConfig } from '@/api/units'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { formatInstant, shortSha } from '@/pages/shell/releases/releaseView'
 import { PlatformTimings } from './PlatformTimings'
 import { ModuleExplorer } from './ModuleExplorer'
 import { ApprovalReadingsBlock } from './ApprovalReadingsBlock'
-import { NO_FULL_RUN_TEXT, NO_RUNS_TEXT, fullCiView, runRow } from './ciViewModel'
+import { NO_FULL_RUN_TEXT, NO_RUNS_TEXT, fullCiView, runRow, matchesModule } from './ciViewModel'
 
 /*
  * Work > CI (read-only): what each project declares for CI, the CI runs retained for one project, and what the daily
@@ -22,7 +22,7 @@ function Unread({ what, error, unknown }: { what: string; error: string; unknown
   return <p role="alert" className="m-0 text-[var(--destructive)]">{`${what} could not be read: ${error}. ${unknown}`}</p>
 }
 
-function RunsBlock({ repos }: { repos: string[] }) {
+function RunsBlock({ repos, module }: { repos: string[]; module: string }) {
   const repo = repos[0]
   const runs = useQuery({
     queryKey: ['units', 'runs', repo],
@@ -30,8 +30,8 @@ function RunsBlock({ repos }: { repos: string[] }) {
     refetchInterval: 30_000,
   })
   const error = errorText(runs.error)
-  const rows = runs.data?.runs.map(runRow)
-  const description = `The CI runs the cluster still retains for one project, newest first: what each ran, why, and how long each task took.${
+  const rows = runs.data?.runs.filter(r => matchesModule(r, module)).map(runRow)
+  const description = `${repo}${module ? ` / ${module}` : ""}. Matching own runs plus reused or unreported scope (not proof this module ran). The CI runs the cluster still retains for one project, newest first: what each ran, why, and how long each task took.${
     runs.data != null ? ` Read ${formatInstant(runs.data.as_of)}; kept up to 30 s.` : ''}`
   if (error != null || rows == null) {
     return (
@@ -133,15 +133,23 @@ export function CiSection() {
   const repos = projects.data?.tracked_repos
   const [pickedRepo, setPickedRepo] = useState('')
   const repo = repos?.includes(pickedRepo) ? pickedRepo : repos?.includes('bifrost-platform') ? 'bifrost-platform' : repos?.[0]
+  const [module, setModule] = useState('')
+  const config = useQuery({ queryKey: ['units', 'config', repo], queryFn: ({signal}) => fetchUnitsConfig(repo!, signal), enabled: !!repo, staleTime: 60_000 })
+  const selectedModule = config.data?.modules.some(m => m.name === module) ? module : ''
   const error = errorText(projects.error)
   return (
     <section aria-label="CI" className="flex min-w-0 flex-col gap-3">
       {repos && repo && <label className="flex flex-wrap items-center gap-3 px-3 text-sm">Project
-        <select aria-label="Project" className="min-h-11 max-w-full rounded bg-[var(--field-fill)] px-3" value={repo} onChange={e => setPickedRepo(e.target.value)}>{repos.map(name => <option key={name}>{name}</option>)}</select>
+        <select aria-label="Project" className="min-h-11 max-w-full rounded bg-[var(--field-fill)] px-3" value={repo} onChange={e => { setPickedRepo(e.target.value); setModule('') }}>{repos.map(name => <option key={name}>{name}</option>)}</select>
         <span className="text-xs text-muted-foreground">Repository → module → task. Configuration and runs follow this selection.</span>
       </label>}
-      {repo && <ModuleExplorer key={repo} repo={repo} />}
-      {repo === 'bifrost-platform' && <PlatformTimings />}
+      {repo && <label className="flex flex-wrap items-center gap-3 px-3 text-sm">Module
+        <select aria-label="Module" className="min-h-11 max-w-full rounded bg-[var(--field-fill)] px-3" value={selectedModule} onChange={e => setModule(e.target.value)}>
+          <option value="">All modules</option>{config.data?.modules.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+        </select><span className="text-xs text-muted-foreground">One selection for dependencies, pipeline and runs. Unknown scope remains visible.</span>
+      </label>}
+      {repo && <ModuleExplorer key={repo} repo={repo} module={selectedModule} />}
+      {repo === 'bifrost-platform' && <PlatformTimings key={`${repo}:${selectedModule}`} module={selectedModule} />}
       {repos == null ? (
         <OpsSection title="Configuration and runs" description="What each project declares for CI, and the CI runs retained for it." bodyPadding="compact">
           {error != null
@@ -153,10 +161,11 @@ export function CiSection() {
           <p className={`m-0 ${MUTED}`}>The platform tracks no project</p>
         </OpsSection>
       ) : <>
-        {repo && <RunsBlock key={repo} repos={[repo]} />}
+        {repo && <RunsBlock key={repo} repos={[repo]} module={selectedModule} />}
       </>}
-      <FullRunBlock />
-      <ApprovalReadingsBlock />
+      {selectedModule && <p className="px-3 text-sm">Daily full run is a whole-repository check, not an independently released module. The global notes below do not carry repository/module attribution and are not filtered.</p>}
+      <details><summary className="min-h-11 cursor-pointer px-3 py-3">Global daily full-run notes · outside selected scope</summary><FullRunBlock /></details>
+      <details><summary className="min-h-11 cursor-pointer px-3 py-3">Global approval history · outside selected scope</summary><ApprovalReadingsBlock /></details>
     </section>
   )
 }

@@ -133,3 +133,21 @@ it('explores units on demand and clears the context when selecting another repo'
   expect(screen.queryByText('svc/a · test')).toBeNull()
   expect(screen.queryByTestId('ci-config-project-r')).toBeNull()
 })
+
+// Origin: Owner 2026-11-15: a single module choice must drive the whole CI page.
+// Reused/unknown scope cannot be silently treated as a module test or dropped as unrelated.
+it('links module cards and runs, preserves unknown evidence, and resets on project change', async () => {
+  setup()
+  await screen.findByTestId('ci-config-module-r-web')
+  await screen.findByTestId('ci-run-ci-2')
+  fireEvent.change(screen.getByRole('combobox', { name: 'Module' }), { target: { value: 'web' } })
+  expect(screen.queryByTestId('ci-config-module-r-svc')).toBeNull()
+  expect(screen.getByTestId('ci-config-module-r-web')).toBeInTheDocument()
+  expect(screen.queryByTestId('ci-run-ci-2')).toBeNull()
+  expect(screen.getByTestId('ci-run-ci-3')).toHaveTextContent('reused ci-2')
+  expect(screen.getByTestId('ci-run-ci-1')).toHaveTextContent('not reported')
+  expect(screen.getByText(/Daily full run is a whole-repository check/)).toBeInTheDocument()
+  fireEvent.change(screen.getByRole('combobox', { name: 'Project' }), { target: { value: 'plain' } })
+  await screen.findByTestId('ci-config-project-plain')
+  expect(screen.getByRole('combobox', { name: 'Module' })).toHaveValue('')
+})
