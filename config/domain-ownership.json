@@ -812,7 +812,7 @@
         "delivery"
       ],
       "status": "assigned",
-      "basis": "delivery charter; recorded run reads extracted from store; no prefix admission, evidence or deployment decisions; 2026-11-16 recorded configuration-request query and malformed-record filtering extracted without installing policy"
+      "basis": "delivery charter; recorded run reads extracted from store; no prefix admission, evidence or deployment decisions; 2026-11-16 recorded configuration-request query and malformed-record filtering extracted without installing policy Full registered configuration row/request-value observation projection extracted; selector registry, strict reads/validation/equality and preview goal assembly remain with delivery caller."
     },
     "api/internal/agentrt/loopreadings": {
       "domains": [
@@ -910,7 +910,7 @@
         "tenant"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 complete read-only application readiness projection: tenant namespace/gateway/frontend/four-API display, observed generic infrastructure dependencies injected. No actions, D10 workers or authorization moved; original health/finalization callbacks are injected, never reimplemented."
+      "basis": "2026-11-16 complete read-only application readiness projection: tenant namespace/gateway/frontend/four-API display, observed generic infrastructure dependencies injected. No actions, D10 workers or authorization moved; original health/finalization callbacks are injected, never reimplemented. Full application database activity/lag observation projection is isolated here; clone selection, validation and execution remain in cluster."
     }
   },
   "frontend": {

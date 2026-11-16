@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/appreadings"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,21 +21,7 @@ const (
 	dataCloneConfirmTok = "CLONE-FROM-PROD"
 )
 
-type DataFreshnessDB struct {
-	Name           string  `json:"name"`
-	Environment    string  `json:"environment"`
-	LastActivityTS *string `json:"last_activity_ts,omitempty"`
-	// AgeDays is wall-clock age (now − last_activity). Informational only — do not drive Sync decisions.
-	AgeDays *float64 `json:"age_days,omitempty"`
-	// LagVsProdDays is max(0, prod_activity − target_activity) in days. Nil for bifrost_prod (reference).
-	LagVsProdDays *float64 `json:"lag_vs_prod_days,omitempty"`
-	// StaleDays mirrors LagVsProdDays for non-prod (backward-compatible Sync signal). Nil for prod reference.
-	StaleDays   *float64 `json:"stale_days,omitempty"`
-	Verdict     string   `json:"verdict"` // fresh | aging | stale | reference | unknown
-	Detail      string   `json:"detail,omitempty"`
-	Sources     []string `json:"sources,omitempty"`
-	LastCloneAt *string  `json:"last_clone_at,omitempty"`
-}
+type DataFreshnessDB = appreadings.DataFreshnessDB
 
 type DataFreshnessResponse struct {
 	ClusterID      string            `json:"cluster_id"`
@@ -141,77 +128,18 @@ func (s *Service) probeDataFreshness(ctx context.Context) DataFreshnessResponse 
 		}
 	}
 
-	var prodTS *time.Time
-	var prodErr error
-	for i, db := range resp.Databases {
-		if db.Name == resp.ReferenceDB {
-			prodTS, prodErr = probes[i].ts, probes[i].err
-		}
+	observed := make([]appreadings.ActivityObservation, len(probes))
+	for i, p := range probes {
+		observed[i] = appreadings.ActivityObservation{At: p.ts, Sources: p.sources, Err: p.err}
 	}
-	for i := range resp.Databases {
-		db := &resp.Databases[i]
-		if resp.LastCloneAt != nil && db.Name != resp.ReferenceDB {
-			db.LastCloneAt = resp.LastCloneAt
-		}
-		ts, sources, qErr := probes[i].ts, probes[i].sources, probes[i].err
-		if qErr != nil {
-			db.Verdict = "unknown"
-			db.Detail = qErr.Error()
-			continue
-		}
-		db.Sources = sources
-		if ts == nil {
-			db.Verdict = "unknown"
-			db.Detail = "no activity timestamps reported"
-			continue
-		}
-		iso := ts.UTC().Format(time.RFC3339)
-		db.LastActivityTS = &iso
-		age := now.Sub(ts.UTC()).Hours() / 24.0
-		if age < 0 {
-			age = 0
-		}
-		db.AgeDays = &age
-
-		if db.Name == resp.ReferenceDB {
-			db.Verdict = "reference"
-			db.Detail = "reference · wall_age=" + fmt.Sprintf("%.1fd", age)
-			continue
-		}
-
-		if prodTS == nil || prodErr != nil {
-			db.Verdict = "unknown"
-			if prodErr != nil {
-				db.Detail = "prod activity unavailable: " + prodErr.Error()
-			} else {
-				db.Detail = "prod activity unavailable"
-			}
-			continue
-		}
-
-		lag := prodTS.Sub(ts.UTC()).Hours() / 24.0
-		if lag < 0 {
-			lag = 0
-		}
-		db.LagVsProdDays = &lag
-		db.StaleDays = &lag // Sync signal = lag (not wall-clock age)
-		db.Verdict = freshnessVerdictFromLag(lag)
-		db.Detail = fmt.Sprintf("lag_vs_prod=%.1fd · wall_age=%.1fd", lag, age)
-	}
+	resp.Databases = appreadings.FreshnessDatabases(resp.Databases, observed, resp.ReferenceDB, resp.LastCloneAt, now)
 	return resp
 }
 
 // freshnessVerdictFromLag maps lag_vs_prod_days → verdict for non-prod DBs.
 // Aligns with Console badge: <3 fresh/green · 3–7 aging/yellow · ≥7 stale/red.
 func freshnessVerdictFromLag(lagDays float64) string {
-	switch {
-	case lagDays < freshnessFreshDays:
-		return "fresh"
-	case lagDays < freshnessStaleDays:
-		return "aging"
-	default:
-		return "stale"
-	}
+	return appreadings.FreshnessVerdictFromLag(lagDays)
 }
 
 func (s *Service) resolveCNPGPrimary(ctx context.Context) (string, error) {
