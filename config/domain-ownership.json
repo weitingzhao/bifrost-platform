@@ -442,6 +442,41 @@
       ],
       "status": "assigned",
       "basis": "2026-11-15 source and caller audit: main.go CLI adapter for existing testscope selection; selection and fallbacks unchanged"
+    },
+    "api/internal/codeguard": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: foundation charter explicitly owns package dependency walls; tests read Go imports and enforce boundaries"
+    },
+    "api/internal/repoguard": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: foundation charter explicitly owns repository guards; repository-wide tests check removed SQL helper remains absent"
+    },
+    "api/internal/agentrt/migrate": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: foundation charter explicitly owns migration runner; source applies embedded files with existing transaction and checksum checks, unchanged"
+    },
+    "api/internal/agentrt/migrations": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: foundation charter explicitly owns embedded schema history; embed.go supplies SQL files to migrate, no SQL changes or new migration"
+    },
+    "api/internal/agentrt/planreadings": {
+      "domains": [
+        "plan"
+      ],
+      "status": "assigned",
+      "basis": "planning charter; plan pace observation reads extracted from store without changing transaction, SQL or error contract"
     }
   }
 }
