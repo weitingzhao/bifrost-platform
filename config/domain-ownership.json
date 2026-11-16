@@ -2184,6 +2184,20 @@
         ],
         "status": "assigned",
         "basis": "2026-11-16 complete read-only display implementations moved with compatibility entries; callbacks, request polling and local display settings preserved. No authentication, execution or refusal callers changed."
+      },
+      "console/src/domains/delivery/display": {
+        "domains": [
+          "delivery"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 complete read-only display slice extraction; original query, navigation and stale/unknown semantics retained. Compatibility paths preserve execution callers; signoff, rule submission and strict parsers remain untouched. Cross-domain imports remain explicit."
+      },
+      "console/src/domains/plan/display": {
+        "domains": [
+          "plan"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 complete read-only display slice extraction; original query, navigation and stale/unknown semantics retained. Compatibility paths preserve execution callers; signoff, rule submission and strict parsers remain untouched. Cross-domain imports remain explicit."
       }
     }
   }

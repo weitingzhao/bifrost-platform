@@ -1480,6 +1480,25 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/delivery/display",
+      "files": [
+        "console/src/domains/delivery/display/DeliveryConfiguration.tsx",
+        "console/src/domains/delivery/display/DeliveryStrip.tsx",
+        "console/src/domains/delivery/display/deliveryStripModel.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/deliveryStages.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/delivery/policy",
       "files": [
         "console/src/domains/delivery/policy/ReleasePolicyBanner.tsx",
@@ -1906,6 +1925,40 @@
       "test_imports": [],
       "external_imports": [
         "@tanstack/react-query"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/plan/display",
+      "files": [
+        "console/src/domains/plan/display/ExternalRecord.tsx",
+        "console/src/domains/plan/display/PlanPaceLine.tsx",
+        "console/src/domains/plan/display/PlanRecentChanges.tsx",
+        "console/src/domains/plan/display/PlanRoundNav.tsx",
+        "console/src/domains/plan/display/PlanTree.tsx",
+        "console/src/domains/plan/display/WorkTabs.tsx",
+        "console/src/domains/plan/display/planRoundModel.ts",
+        "console/src/domains/plan/display/planSnapshotModel.ts",
+        "console/src/domains/plan/display/usePlanSnapshot.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/planPace.ts",
+        "console/src/api/planSnapshot.ts",
+        "console/src/components/ui",
+        "console/src/domains/delivery/display",
+        "console/src/domains/plan/readings",
+        "console/src/lib/shell",
+        "console/src/pages/shell/agents",
+        "console/src/pages/shell/progress"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query",
+        "lucide-react",
+        "react"
       ],
       "source_inputs": [],
       "test_inputs": [],
@@ -3810,14 +3863,13 @@
         "console/src/api/client.ts",
         "console/src/api/core.ts",
         "console/src/api/deliveryBoundaries.ts",
-        "console/src/api/deliveryStages.ts",
         "console/src/api/landingActions.ts",
-        "console/src/api/planPace.ts",
         "console/src/api/planSnapshot.ts",
         "console/src/api/planSnapshotSchema.ts",
         "console/src/api/questions.ts",
         "console/src/components/layout",
-        "console/src/components/ui",
+        "console/src/domains/delivery/display",
+        "console/src/domains/plan/display",
         "console/src/domains/plan/readings",
         "console/src/hooks/useAgentThreads.ts",
         "console/src/hooks/usePlatformAuth.ts",
@@ -3856,7 +3908,6 @@
         "@tanstack/react-query",
         "@testing-library/jest-dom/vitest",
         "@testing-library/react",
-        "lucide-react",
         "node:fs",
         "node:path",
         "node:url",

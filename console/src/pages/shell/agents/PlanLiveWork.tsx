@@ -1,3 +1,4 @@
+import { ExternalRecord } from '@/domains/plan/display/ExternalRecord'
 import { useState } from 'react'
 import type { ExternalWork, PlanSnapshot, PlanWork } from '@/api/planSnapshot'
 import { useNow } from '../progress/progressClock'
@@ -46,13 +47,8 @@ export function WorkRow({ work, view, stale }: { work: PlanWork; view: PlanSnaps
     {work.commit_shas?.length ? <span className="basis-full"><WorkDeliveryStrips commits={work.commit_shas} /></span> : null}
   </li>
 }
-export function ExternalRecord({ work }: { work: ExternalWork }) {
-  return <li className="[overflow-wrap:anywhere]">{work.description.task} · {work.description.executor} · {work.status}{work.backfilled && ' · Backfilled'}{work.verification && ` · ${work.verification}`}
-    {work.report_digest && <span className="block">Report · {work.report_digest}</span>}
-    {work.commit_shas?.map(sha => <span className="block" key={sha}>Commit · {sha}</span>)}
-    <WorkDeliveryStrips commits={work.commit_shas} />
-  </li>
-}
+export { ExternalRecord } from '@/domains/plan/display/ExternalRecord'
+
 const endedAt = (w: ExternalWork) => w.ended_at ?? w.heartbeat_at
 
 /**
