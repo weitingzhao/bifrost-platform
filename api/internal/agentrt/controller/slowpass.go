@@ -1,6 +1,9 @@
 package controller
 
-import "time"
+import (
+	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
+	"time"
+)
 
 // Where a loop's minutes go (R5:5.7-5): a loop pass, or one landing
 // operation within the landing drill, that takes at least this long is logged
@@ -15,10 +18,5 @@ var (
 // slow logs "<what> took <d>" when at least min passed since start, and says
 // whether it did.
 func (c *Controller) slow(min time.Duration, start time.Time, format string, args ...any) bool {
-	d := time.Since(start)
-	if d < min {
-		return false
-	}
-	c.logf(format+" took %s", append(args, d.Round(time.Millisecond))...)
-	return true
+	return telemetry.LogSlow(time.Since(start), min, c.logf, format, args...)
 }

@@ -476,7 +476,7 @@
         "plan"
       ],
       "status": "assigned",
-      "basis": "planning charter; snapshot, architecture stored-rule text and latest-note observations extracted from store; all rule evaluation, refusal, transaction and evidence decisions remain with existing callers; mission card display projection consumes reader-selected status/count/task data without importing store (2026-11-16)"
+      "basis": "planning charter; snapshot, architecture stored-rule text and latest-note observations extracted from store; all rule evaluation, refusal, transaction and evidence decisions remain with existing callers; mission card display projection consumes reader-selected status/count/task data without importing store (2026-11-16); 2026-11-16 session coverage read-only enrichment, with unavailable/Unknown behavior preserved"
     },
     "api/internal/cirunview": {
       "domains": [
@@ -714,7 +714,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: shared Prometheus observation client used across compute and system views; implementation, authorization, refusal and dispatch behavior unchanged"
+      "basis": "2026-11-16 source and caller audit: shared Prometheus observation client used across compute and system views; implementation, authorization, refusal and dispatch behavior unchanged; 2026-11-16 generic log timestamp projection and elapsed-log formatting extracted with original output and threshold behavior"
     },
     "api/cmd/agentrt-baseline-import": {
       "domains": [

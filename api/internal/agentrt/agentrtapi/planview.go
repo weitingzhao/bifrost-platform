@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -45,19 +46,7 @@ func (a *API) getPlanView(w http.ResponseWriter, r *http.Request) {
 // platform without the thread list, or one that cannot read it, leaves it out
 // and says so in the warnings; the rest of the view is as it was.
 func (a *API) sessionCoverage(ctx context.Context, out map[string]any) {
-	coverage, ok := out["coverage"].(map[string]any)
-	if a.Sessions == nil || !ok {
-		return
-	}
-	sessions, err := a.Sessions(ctx)
-	if err != nil {
-		a.logf("plan view: session coverage: %v", err)
-		if warnings, ok := out["warnings"].([]string); ok {
-			out["warnings"] = append(warnings, "Session coverage is Unknown: the agent thread state could not be read")
-		}
-		return
-	}
-	coverage["sessions"] = sessions
+	planreadings.AppendSessionCoverage(ctx, out, a.Sessions, a.logf)
 }
 
 func (a *API) registerExternalWork(w http.ResponseWriter, r *http.Request) {
