@@ -476,14 +476,14 @@
         "plan"
       ],
       "status": "assigned",
-      "basis": "planning charter; pace, event, pending mission, progress tree and adopted-view observations extracted from store; transactions, SQL, decoding and error ordering preserved"
+      "basis": "planning charter; snapshot, architecture stored-rule text and latest-note observations extracted from store; all rule evaluation, refusal, transaction and evidence decisions remain with existing callers"
     },
     "api/internal/cirunview": {
       "domains": [
         "verification"
       ],
       "status": "assigned",
-      "basis": "CI charter; run-view cache and daily-full-note presentation extracted from server; no CI or release decisions"
+      "basis": "CI charter; cached run, daily-full-note, metric and failure-list projection extracted from server; no CI or release decisions"
     },
     "api/internal/modtidy": {
       "domains": [

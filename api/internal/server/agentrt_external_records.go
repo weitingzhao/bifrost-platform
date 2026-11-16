@@ -23,6 +23,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
+	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -369,29 +370,11 @@ func gitTreeID(entries []commitTreeEntry) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// runFailure is what a run's failed tasks say it failed on: their names, the
-// tests they name, and the class: test with a test named; build when a task
-// that names its failed tests failed and named none; "" when no failed task
-// names tests at all (the console's, a check) or none is kept.
+// runFailure adapts delivery observations to the CI failure projection.
 func runFailure(failed []delivery.FailedTask) (tasks, tests []string, class string) {
-	names := false
-	seen := map[string]bool{}
+	var observations []cirunview.FailedTask
 	for _, f := range failed {
-		tasks = append(tasks, f.Task)
-		names = names || f.NamesTests
-		for _, t := range f.Tests {
-			if !seen[t] {
-				seen[t] = true
-				tests = append(tests, t)
-			}
-		}
+		observations = append(observations, cirunview.FailedTask{Task: f.Task, Tests: f.Tests, NamesTests: f.NamesTests})
 	}
-	sort.Strings(tests)
-	switch {
-	case len(tests) > 0:
-		class = evidence.FailClassTest
-	case names:
-		class = evidence.FailClassBuild
-	}
-	return tasks, tests, class
+	return cirunview.Failure(observations)
 }

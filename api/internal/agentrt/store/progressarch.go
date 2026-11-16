@@ -11,6 +11,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 )
 
 // The architecture table on GET /progress (W-31 2.5 G2 A; design v5 §5.1.2
@@ -49,40 +50,12 @@ func archRowsDoc(ctx context.Context, tx pgx.Tx, rows []archRow, deploys *record
 	for _, r := range rows {
 		ids = append(ids, r.id)
 	}
-	rules := map[string]string{}
-	rrows, err := tx.Query(ctx, `SELECT plan_node_id, done_rule_json::text FROM agentrt.plan_node WHERE plan_node_id = ANY($1)`, ids)
+	rules, err := planreadings.ArchitectureRules(ctx, tx, ids)
 	if err != nil {
 		return nil, err
 	}
-	for rrows.Next() {
-		var id, doc string
-		if err = rrows.Scan(&id, &doc); err != nil {
-			rrows.Close()
-			return nil, err
-		}
-		rules[id] = doc
-	}
-	rrows.Close()
-	if err = rrows.Err(); err != nil {
-		return nil, err
-	}
-	notes := map[string]map[string]any{}
-	nrows, err := tx.Query(ctx, `SELECT DISTINCT ON (plan_node_id) plan_node_id, body_json->>'text', at, actor_id FROM agentrt.event
-	  WHERE event_type = 'note' AND plan_node_id = ANY($1) ORDER BY plan_node_id, event_id DESC`, ids)
+	notes, err := planreadings.ArchitectureNotes(ctx, tx, ids)
 	if err != nil {
-		return nil, err
-	}
-	for nrows.Next() {
-		var id, text, by string
-		var at time.Time
-		if err = nrows.Scan(&id, &text, &at, &by); err != nil {
-			nrows.Close()
-			return nil, err
-		}
-		notes[id] = map[string]any{"text": text, "at": at.UTC().Format(time.RFC3339Nano), "by": by}
-	}
-	nrows.Close()
-	if err = nrows.Err(); err != nil {
 		return nil, err
 	}
 	// gates is the projection's: one reading of a gate whichever rows name it,
