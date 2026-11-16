@@ -2044,6 +2044,7 @@
         "console/src/domains/plan/display/CapabilityEvidence.tsx",
         "console/src/domains/plan/display/ExternalRecord.tsx",
         "console/src/domains/plan/display/HowRead.tsx",
+        "console/src/domains/plan/display/ModuleHead.tsx",
         "console/src/domains/plan/display/ModuleReadPanels.tsx",
         "console/src/domains/plan/display/PlanLiveWork.tsx",
         "console/src/domains/plan/display/PlanModuleRows.tsx",
