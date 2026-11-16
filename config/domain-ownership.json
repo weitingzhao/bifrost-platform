@@ -820,6 +820,13 @@
       ],
       "status": "assigned",
       "basis": "2026-11-16 Owner-confirmed split: Compatibility aliases and construction only; Tenant owns husbandry semantics and Foundation owns generic proxy JSON transport. Existing server/checklist callers unchanged."
+    },
+    "api/internal/resourceview": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 generic read-only resource formatting, usage, readiness and phase projection extracted whole; only metrics/probe callers, unchanged thresholds, no execution or permission decisions."
     }
   },
   "frontend": {
