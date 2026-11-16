@@ -849,18 +849,10 @@
     "groups": {
       "console/src": {
         "domains": [
-          "foundation",
-          "plan",
-          "lineage",
-          "verification",
-          "delivery",
-          "owner",
-          "compute",
-          "tenant",
-          "coordination"
+          "foundation"
         ],
-        "status": "mixed",
-        "basis": "2026-11-16 source/caller audit: shared application entry, navigation, styles, test support and remaining cross-domain glue; not isolated"
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-confirmed generic composition ownership, audited source and consumers: application bootstrap, shell exports or activity side-effect bridge only. Original authentication initialization and cross-domain imports preserved. Attribution correction, not an actual business implementation split."
       },
       "console/src/api": {
         "domains": [
@@ -924,18 +916,10 @@
       },
       "console/src/pages/shell": {
         "domains": [
-          "foundation",
-          "plan",
-          "lineage",
-          "verification",
-          "delivery",
-          "owner",
-          "compute",
-          "tenant",
-          "coordination"
+          "foundation"
         ],
-        "status": "mixed",
-        "basis": "2026-11-16 source/caller audit: shell composes domain pages; shared routing is retained"
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-confirmed generic composition ownership, audited source and consumers: application bootstrap, shell exports or activity side-effect bridge only. Original authentication initialization and cross-domain imports preserved. Attribution correction, not an actual business implementation split."
       },
       "console/src/pages/shell/ci": {
         "domains": [
@@ -1944,11 +1928,10 @@
       },
       "console/src/api/dataHusbandry.ts": {
         "domains": [
-          "compute",
           "tenant"
         ],
-        "status": "mixed",
-        "basis": "2026-11-16 source/caller audit: fixed data-lane UI and infrastructure backups remain mixed"
+        "status": "assigned",
+        "basis": "2026-11-16 verified against api/internal/tenant/husbandry: complete GET/DTO contract contains market_batch, flex_batch and research_olap only; no backup lane. Pure Tenant client moved with unchanged HTTP/error/JSON behavior. Corrected prior mixed attribution; not a mixed-business closure."
       },
       "console/src/lib/control-room": {
         "domains": [
@@ -1968,12 +1951,10 @@
       },
       "console/src/components/activity": {
         "domains": [
-          "plan",
-          "coordination",
-          "compute"
+          "foundation"
         ],
-        "status": "mixed",
-        "basis": "2026-11-16 source/caller audit: cross-domain activity and control-room composition"
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-confirmed generic composition ownership, audited source and consumers: application bootstrap, shell exports or activity side-effect bridge only. Original authentication initialization and cross-domain imports preserved. Attribution correction, not an actual business implementation split."
       },
       "console/src/lib/activity": {
         "domains": [
@@ -2198,6 +2179,13 @@
         ],
         "status": "assigned",
         "basis": "2026-11-16 complete read-only display slice extraction; original query, navigation and stale/unknown semantics retained. Compatibility paths preserve execution callers; signoff, rule submission and strict parsers remain untouched. Cross-domain imports remain explicit."
+      },
+      "console/src/domains/tenant/husbandry/api": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 verified against api/internal/tenant/husbandry: complete GET/DTO contract contains market_batch, flex_batch and research_olap only; no backup lane. Pure Tenant client moved with unchanged HTTP/error/JSON behavior. Corrected prior mixed attribution; not a mixed-business closure."
       }
     }
   }

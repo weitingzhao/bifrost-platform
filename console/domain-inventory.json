@@ -437,7 +437,7 @@
         "console/src/api/dataHusbandry.ts"
       ],
       "imports": [
-        "console/src/api/serverContact.ts"
+        "console/src/domains/tenant/husbandry/api"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -1995,6 +1995,20 @@
         "console/src/domains/tenant/activity/activityPageFocus.ts"
       ],
       "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/tenant/husbandry/api",
+      "files": [
+        "console/src/domains/tenant/husbandry/api/dataHusbandry.ts"
+      ],
+      "imports": [
+        "console/src/api/serverContact.ts"
+      ],
       "test_imports": [],
       "external_imports": [],
       "source_inputs": [],
