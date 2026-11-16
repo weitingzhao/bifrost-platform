@@ -358,6 +358,90 @@
       ],
       "status": "mixed",
       "basis": "CI charter plus window_queue/window_notify ownership ruling"
+    },
+    "api/internal/agentrt/canon": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: canon.go canonical JSON encoding shared by event and plan readers"
+    },
+    "api/internal/agentrt/agentrttest": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: db.go disposable PostgreSQL/Redis test infrastructure, no business state machine"
+    },
+    "api/internal/statefile": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: statefile.go shared JSON persistence backend and context propagation"
+    },
+    "api/internal/statefile/k8sstate": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: k8sstate.go implements the generic statefile backend with ConfigMaps"
+    },
+    "api/internal/statefile/k8sstate/k8sstatetest": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: transport.go reusable in-memory transport for statefile backend tests"
+    },
+    "api/internal/safego": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: safego.go common goroutine panic containment, no domain decision"
+    },
+    "api/internal/localpath": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: localpath.go and workspace.go shared path masking and workspace reference parsing; protections unchanged"
+    },
+    "api/internal/assessmentview": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: list.go bounded generic optional-advice read scheduling via injected reader"
+    },
+    "api/internal/threadtitles": {
+      "domains": [
+        "lineage"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: threadtitles.go manual/transcript title storage and scanning for lineage views"
+    },
+    "api/cmd/agentrt-plan-import": {
+      "domains": [
+        "plan"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: planning charter explicitly names this command; main.go generates and compares plan import requests"
+    },
+    "api/cmd/unitplan": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: main.go local Git tree adapter for unitplan.Build and package input inspection"
+    },
+    "api/cmd/testscope": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: main.go CLI adapter for existing testscope selection; selection and fallbacks unchanged"
     }
   }
 }
