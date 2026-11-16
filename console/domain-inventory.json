@@ -1621,8 +1621,7 @@
       "imports": [
         "console/src/api/client.ts",
         "console/src/api/serverContact.ts",
-        "console/src/components/layout",
-        "console/src/lib/signInError.ts"
+        "console/src/components/layout"
       ],
       "test_imports": [],
       "external_imports": [
