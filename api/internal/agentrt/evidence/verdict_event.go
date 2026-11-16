@@ -36,8 +36,20 @@ func VerdictRef(repo, commit string) string {
 	return "/api/v1/units/plan?repo=" + repo + "&commit=" + commit
 }
 
-// VerdictSubject is "<tree>@<commit>:<kind>", the register's subject.
-func VerdictSubject(tree, commit, kind string) string { return tree + "@" + commit + ":" + kind }
+// VerdictSubject is "<tree>@<commit>:<kind>", the register's subject; a CI
+// key adds its scope, "<tree>@<commit>:ci/full" or ":ci/incremental". The
+// envelope carries no data, so a subscriber that cares about full against
+// incremental filters on the subject (CI line 2026-11-16: one kind, the
+// scope beside it). An incremental key is not the commit's verdict on its
+// own: it counts only together with its base's, so a subscriber that gets
+// ci/incremental reads the commit-level route back instead of taking it as
+// green.
+func VerdictSubject(tree, commit, kind, scope string) string {
+	if kind == VerdictKindCI && scope != "" {
+		kind += "/" + scope
+	}
+	return tree + "@" + commit + ":" + kind
+}
 
 // VerdictStream is the ledger stream of a tree's verdict events: one per
 // repository and tree, the register's key (RULES.md §7).
@@ -49,18 +61,19 @@ var verdictRepoRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 // change; RULES.md §7) and the facts they are made of. unit, task and
 // input_key name the ledger key whose verdict changed (one tree has a key
 // per task and per what was beside it).
-func VerdictBody(repo, commit, tree, kind, unit, task, inputKey, verdict, previous string) map[string]any {
+func VerdictBody(repo, commit, tree, kind, scope, unit, task, inputKey, verdict, previous string) map[string]any {
 	return map[string]any{
 		"repo":      repo,
 		"commit":    commit,
 		"tree":      tree,
 		"kind":      kind,
+		"scope":     scope,
 		"unit":      unit,
 		"task":      task,
 		"input_key": inputKey,
 		"verdict":   verdict,
 		"previous":  previous,
-		"subject":   VerdictSubject(tree, commit, kind),
+		"subject":   VerdictSubject(tree, commit, kind, scope),
 		"ref":       VerdictRef(repo, commit),
 		"key":       tree,
 		"change":    verdict,
@@ -76,6 +89,7 @@ func init() {
 				{Name: "commit", Kind: eventlog.ID},
 				{Name: "tree", Kind: eventlog.ID},
 				{Name: "kind", Kind: eventlog.Str},
+				{Name: "scope", Kind: eventlog.Str},
 				{Name: "unit", Kind: eventlog.Str},
 				{Name: "task", Kind: eventlog.Str},
 				{Name: "input_key", Kind: eventlog.ID},
@@ -103,8 +117,8 @@ func init() {
 			VerdictChangedType: func(body map[string]any) error {
 				s := func(k string) string { v, _ := body[k].(string); return v }
 				switch {
-				case body["subject"] != VerdictSubject(s("tree"), s("commit"), s("kind")) || body["ref"] != VerdictRef(s("repo"), s("commit")) || body["key"] != s("tree"):
-					return eventlog.Invalid("%s: subject, ref and key are made of tree, commit, kind and repo", VerdictChangedType)
+				case body["subject"] != VerdictSubject(s("tree"), s("commit"), s("kind"), s("scope")) || body["ref"] != VerdictRef(s("repo"), s("commit")) || body["key"] != s("tree"):
+					return eventlog.Invalid("%s: subject, ref and key are made of tree, commit, kind, scope and repo", VerdictChangedType)
 				case body["change"] != s("verdict"):
 					return eventlog.Invalid("%s: change is the new verdict", VerdictChangedType)
 				case s("verdict") == s("previous"):
@@ -184,6 +198,6 @@ func announceVerdict(ctx context.Context, tx pgx.Tx, e EvidenceRow, previous str
 	}
 	tree := verdictTree(e)
 	_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: VerdictStream(e.Repo, tree), Type: VerdictChangedType, Actor: verdictActor,
-		Body: VerdictBody(e.Repo, e.CommitSHA, tree, verdictKind(e), e.Unit, e.Task, e.InputKey, now, previous)})
+		Body: VerdictBody(e.Repo, e.CommitSHA, tree, verdictKind(e), e.Scope, e.Unit, e.Task, e.InputKey, now, previous)})
 	return err
 }

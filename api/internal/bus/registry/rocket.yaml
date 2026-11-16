@@ -120,7 +120,7 @@ channels:
       lane: event
       guarantee: ordered
       key: tree
-      subject: "<tree>@<sha40>:<kind>"
+      subject: "<tree>@<sha40>:<kind>[/<scope>]"
       publisher: gate-db
       ref: "/api/v1/units/plan?repo={repo}&commit={sha}"
       reconcile: "evidence ledger is the truth; readers re-read R05"

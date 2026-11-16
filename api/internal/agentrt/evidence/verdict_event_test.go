@@ -212,15 +212,23 @@ func TestVerdictChangedAgreesWithTheRegister(t *testing.T) {
 		t.Errorf("ref %q is not the register's %q", ref, ch.Ref)
 	}
 	key := strings.Repeat("e", 64)
-	good := VerdictBody("bifrost-platform", h("a"), h("c"), VerdictKindCI, EvidenceUnitRepo, "bifrost-ci-platform", key, EvidenceGreen, EvidenceNone)
+	good := VerdictBody("bifrost-platform", h("a"), h("c"), VerdictKindCI, EvidenceScopeFull, EvidenceUnitRepo, "bifrost-ci-platform", key, EvidenceGreen, EvidenceNone)
 	if err := eventlog.CheckBody(VerdictChangedType, good); err != nil {
 		t.Fatalf("positive control: %v", err)
 	}
-	same := VerdictBody("bifrost-platform", h("a"), h("c"), VerdictKindCI, EvidenceUnitRepo, "bifrost-ci-platform", key, EvidenceGreen, EvidenceGreen)
+	// 2026-11-16, CI line: one kind ci, full against incremental in the
+	// subject, because the envelope carries no data.
+	if got, want := good["subject"], h("c")+"@"+h("a")+":ci/full"; got != want {
+		t.Errorf("subject = %v, want %v", got, want)
+	}
+	if got := VerdictSubject(h("c"), h("a"), VerdictKindUnit, EvidenceScopeFull); got != h("c")+"@"+h("a")+":unit" {
+		t.Errorf("a unit key's subject carries no scope: %v", got)
+	}
+	same := VerdictBody("bifrost-platform", h("a"), h("c"), VerdictKindCI, EvidenceScopeFull, EvidenceUnitRepo, "bifrost-ci-platform", key, EvidenceGreen, EvidenceGreen)
 	if eventlog.CheckBody(VerdictChangedType, same) == nil {
 		t.Error("a body whose verdict did not change is taken")
 	}
-	bad := VerdictBody("bifrost-platform", h("a"), h("c"), VerdictKindCI, EvidenceUnitRepo, "bifrost-ci-platform", key, EvidenceGreen, EvidenceNone)
+	bad := VerdictBody("bifrost-platform", h("a"), h("c"), VerdictKindCI, EvidenceScopeFull, EvidenceUnitRepo, "bifrost-ci-platform", key, EvidenceGreen, EvidenceNone)
 	bad["subject"] = h("c") + "@" + h("b") + ":ci"
 	if eventlog.CheckBody(VerdictChangedType, bad) == nil {
 		t.Error("a subject not made of its facts is taken")
