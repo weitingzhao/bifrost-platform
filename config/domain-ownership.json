@@ -391,7 +391,7 @@
         "coordination"
       ],
       "status": "mixed",
-      "basis": "2026-11-16 Complete file/reader audit: retain lifecycle composition, existing evidence/acknowledgment/automatic-CI decisions and communication-lane run-event wiring. Observation text is delegated and five unused historical constants were removed. Shared scope remains explicit."
+      "basis": "2026-11-16 Complete file/reader audit: retain lifecycle composition, existing evidence/acknowledgment/automatic-CI decisions and communication-lane run-event wiring. Observation text is delegated and three unused historical presence constants were removed. The assessment source file is retained for the existing safety ratchet. Shared scope remains explicit."
     },
     "api/internal/delivery": {
       "domains": [
