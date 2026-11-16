@@ -87,29 +87,20 @@
         "console/src/api/__tests__/questions.test.tsx",
         "console/src/api/__tests__/recoveryConfirmation.test.ts",
         "console/src/api/__tests__/serverContactCoverage.test.ts",
-        "console/src/api/actions.ts",
         "console/src/api/agentRuntime.ts",
-        "console/src/api/agentRuntimeBus.ts",
-        "console/src/api/agentRuntimeEvents.ts",
         "console/src/api/agentTypes.ts",
-        "console/src/api/assessment.ts",
-        "console/src/api/governanceMcp.ts",
-        "console/src/api/matrixTypes.ts",
-        "console/src/api/patrol.ts",
-        "console/src/api/readings.ts"
+        "console/src/api/matrixTypes.ts"
       ],
       "imports": [
         "console/src/api/client.ts",
-        "console/src/api/serverContact.ts",
         "console/src/domains/foundation/agent-observation/api",
-        "console/src/domains/foundation/runtime-health",
-        "console/src/lib/architecture",
-        "console/src/lib/shell",
-        "console/src/lib/signInError.ts"
+        "console/src/domains/foundation/runtime-health"
       ],
       "test_imports": [
         "console/src/api/agentProgress.ts",
         "console/src/api/agentProgressBoard.ts",
+        "console/src/api/agentRuntimeBus.ts",
+        "console/src/api/agentRuntimeEvents.ts",
         "console/src/api/agentRuntimePlan.ts",
         "console/src/api/agentRuntimePlanView.ts",
         "console/src/api/agentThreads.ts",
@@ -132,6 +123,20 @@
         "node:url",
         "vitest"
       ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/actions.ts",
+      "files": [
+        "console/src/api/actions.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []
@@ -188,6 +193,37 @@
         "console/src/api/agentProgressExtra.ts"
       ],
       "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/agentRuntimeBus.ts",
+      "files": [
+        "console/src/api/agentRuntimeBus.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/client.ts",
+        "console/src/lib/signInError.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/agentRuntimeEvents.ts",
+      "files": [
+        "console/src/api/agentRuntimeEvents.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/client.ts"
+      ],
       "test_imports": [],
       "external_imports": [],
       "source_inputs": [],
@@ -286,7 +322,23 @@
         "console/src/api/approvalsServerContract.ts"
       ],
       "imports": [
-        "console/src/api"
+        "console/src/api/assessment.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/assessment.ts",
+      "files": [
+        "console/src/api/assessment.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/lib/architecture",
+        "console/src/lib/shell"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -548,6 +600,20 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/api/governanceMcp.ts",
+      "files": [
+        "console/src/api/governanceMcp.ts"
+      ],
+      "imports": [
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/api/landingActions.ts",
       "files": [
         "console/src/api/landingActions.ts"
@@ -718,6 +784,21 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/api/patrol.ts",
+      "files": [
+        "console/src/api/patrol.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/domains/foundation/patrol-view"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/api/planPace.ts",
       "files": [
         "console/src/api/planPace.ts"
@@ -778,11 +859,25 @@
         "console/src/api/questions.ts"
       ],
       "imports": [
-        "console/src/api",
         "console/src/api/agentProgress.ts",
+        "console/src/api/assessment.ts",
         "console/src/api/client.ts",
         "console/src/api/serverContact.ts",
         "console/src/lib/signInError.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/readings.ts",
+      "files": [
+        "console/src/api/readings.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -907,15 +1002,11 @@
       "files": [
         "console/src/components/AuditRecordsPanel.tsx",
         "console/src/components/ConfirmDialog.tsx",
-        "console/src/components/ConsoleHeader.tsx",
         "console/src/components/ConsoleHostIpLabel.tsx",
-        "console/src/components/ConsoleSidebar.tsx",
         "console/src/components/DevSessionsIndicator.tsx",
         "console/src/components/MatrixTable.tsx",
         "console/src/components/ReleasePolicyBanner.tsx",
         "console/src/components/StatusLamp.tsx",
-        "console/src/components/ToolsMenu.tsx",
-        "console/src/components/UserMenu.tsx",
         "console/src/components/architecture/SelfHealthPanel.tsx",
         "console/src/components/feedback/OpsFeedback.tsx",
         "console/src/components/log/StaticLogConsole.tsx",
@@ -923,26 +1014,14 @@
         "console/src/components/patrol/PatrolDispatchLog.tsx"
       ],
       "imports": [
-        "console/src/api/cluster.ts",
-        "console/src/components/TradeMonitoringPeerLinks.tsx",
-        "console/src/components/shell",
-        "console/src/components/ui",
         "console/src/domains/compute/dev-sessions",
         "console/src/domains/delivery/policy",
         "console/src/domains/foundation/observation-ui",
-        "console/src/domains/foundation/patrol-view",
-        "console/src/hooks/usePlatformAuth.ts",
-        "console/src/lib/architecture",
-        "console/src/lib/control-room",
-        "console/src/lib/platformAuthUi.ts",
-        "console/src/lib/shell"
+        "console/src/domains/foundation/patrol-view"
       ],
       "test_imports": [],
       "external_imports": [
-        "@bifrost/ui",
-        "@tanstack/react-query",
-        "lucide-react",
-        "react"
+        "@bifrost/ui"
       ],
       "source_inputs": [],
       "test_inputs": [],
@@ -1056,6 +1135,48 @@
         "lucide-react",
         "react",
         "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/ConsoleHeader.tsx",
+      "files": [
+        "console/src/components/ConsoleHeader.tsx"
+      ],
+      "imports": [
+        "console/src/components",
+        "console/src/components/ToolsMenu.tsx",
+        "console/src/components/UserMenu.tsx",
+        "console/src/components/shell",
+        "console/src/lib/control-room/fleetSnapshot.ts",
+        "console/src/lib/shell"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "lucide-react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/ConsoleSidebar.tsx",
+      "files": [
+        "console/src/components/ConsoleSidebar.tsx"
+      ],
+      "imports": [
+        "console/src/components/TradeMonitoringPeerLinks.tsx",
+        "console/src/components/shell",
+        "console/src/lib/control-room/fleetSnapshot.ts",
+        "console/src/lib/shell"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "react"
       ],
       "source_inputs": [],
       "test_inputs": [],
@@ -1360,15 +1481,15 @@
         "console/src/components/shell/clusterActionRequests.tsx"
       ],
       "imports": [
-        "console/src/api",
+        "console/src/api/actions.ts",
         "console/src/api/agentThreads.ts",
         "console/src/api/approvals.ts",
         "console/src/api/client.ts",
-        "console/src/components",
+        "console/src/components/ToolsMenu.tsx",
         "console/src/components/agent",
         "console/src/components/ui",
         "console/src/domains/foundation/shell",
-        "console/src/lib/control-room",
+        "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/shell",
         "console/src/lib/tradeFrontendUrls.ts"
       ],
@@ -1391,12 +1512,32 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/components/ToolsMenu.tsx",
+      "files": [
+        "console/src/components/ToolsMenu.tsx"
+      ],
+      "imports": [
+        "console/src/api/cluster.ts",
+        "console/src/lib/architecture"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "lucide-react",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/components/TradeMonitoringPeerLinks.tsx",
       "files": [
         "console/src/components/TradeMonitoringPeerLinks.tsx"
       ],
       "imports": [
-        "console/src/lib/control-room",
+        "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/tradeFrontendUrls.ts"
       ],
       "test_imports": [],
@@ -1435,6 +1576,26 @@
       "external_imports": [
         "@bifrost/ui",
         "radix-ui",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/UserMenu.tsx",
+      "files": [
+        "console/src/components/UserMenu.tsx"
+      ],
+      "imports": [
+        "console/src/components/ui",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib/platformAuthUi.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "lucide-react",
         "react"
       ],
       "source_inputs": [],
@@ -1794,6 +1955,7 @@
         "console/src/domains/foundation/observability/routeLabel.ts",
         "console/src/domains/foundation/observability/signalRegistry.ts",
         "console/src/domains/foundation/observability/types.ts",
+        "console/src/domains/foundation/observability/useObservabilityPageProjection.ts",
         "console/src/domains/foundation/observability/useObservabilitySnapshot.ts",
         "console/src/domains/foundation/observability/verdictAggregation.ts"
       ],
@@ -1814,7 +1976,7 @@
         "console/src/lib/agent",
         "console/src/lib/architecture",
         "console/src/lib/cluster",
-        "console/src/lib/control-room",
+        "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/observability"
       ],
       "test_imports": [
@@ -1848,12 +2010,16 @@
         "console/src/api",
         "console/src/api/clusterTypes.ts",
         "console/src/lib/agent",
-        "console/src/lib/control-room"
+        "console/src/lib/control-room",
+        "console/src/lib/control-room/agentContextPacks.ts"
       ],
       "test_imports": [
         "console/src/api",
         "console/src/lib",
-        "console/src/lib/control-room"
+        "console/src/lib/control-room",
+        "console/src/lib/control-room/fleetSnapshot.ts",
+        "console/src/lib/environments-catalog.ts",
+        "console/src/lib/task-mode/readinessChipActions.ts"
       ],
       "external_imports": [
         "vitest"
@@ -1909,21 +2075,24 @@
         "console/src/domains/foundation/patrol-view/__tests__/cronSchedule.test.ts",
         "console/src/domains/foundation/patrol-view/__tests__/logLanguage.test.ts",
         "console/src/domains/foundation/patrol-view/__tests__/panels.test.tsx",
+        "console/src/domains/foundation/patrol-view/__tests__/readings.test.ts",
         "console/src/domains/foundation/patrol-view/__tests__/runLog.test.ts",
         "console/src/domains/foundation/patrol-view/cronSchedule.ts",
         "console/src/domains/foundation/patrol-view/logLanguage.ts",
         "console/src/domains/foundation/patrol-view/presentation.tsx",
+        "console/src/domains/foundation/patrol-view/readings.ts",
         "console/src/domains/foundation/patrol-view/runLog.ts",
         "console/src/domains/foundation/patrol-view/usePatrolOutputLanguage.ts"
       ],
       "imports": [
-        "console/src/api",
-        "console/src/lib",
-        "console/src/lib/agent"
+        "console/src/api/patrol.ts",
+        "console/src/api/serverContact.ts",
+        "console/src/lib/agent",
+        "console/src/lib/patrol/askAiPack.ts"
       ],
       "test_imports": [
-        "console/src/api",
-        "console/src/lib"
+        "console/src/api/patrol.ts",
+        "console/src/lib/patrol/askAiPack.ts"
       ],
       "external_imports": [
         "@bifrost/ui",
@@ -1987,8 +2156,8 @@
         "console/src/components/layout",
         "console/src/domains/foundation/runtime-map/contracts.ts",
         "console/src/domains/tenant/runtime-map",
-        "console/src/lib",
-        "console/src/lib/control-room"
+        "console/src/lib/control-room",
+        "console/src/lib/environments-catalog.ts"
       ],
       "test_imports": [
         "console/src/api"
@@ -2010,7 +2179,7 @@
       ],
       "imports": [
         "console/src/api",
-        "console/src/lib"
+        "console/src/lib/environments-catalog.ts"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -2027,7 +2196,7 @@
         "console/src/api/checklist.ts",
         "console/src/api/core.ts",
         "console/src/api/telemetry.ts",
-        "console/src/lib/control-room",
+        "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/shell"
       ],
       "test_imports": [],
@@ -2071,6 +2240,9 @@
         "console/src/domains/plan/readings",
         "console/src/lib/shell",
         "console/src/pages/shell/agents",
+        "console/src/pages/shell/agents/moduleDetailModel.tsx",
+        "console/src/pages/shell/agents/planModuleModel.tsx",
+        "console/src/pages/shell/agents/stepStateModel.ts",
         "console/src/pages/shell/owner",
         "console/src/pages/shell/progress"
       ],
@@ -2089,6 +2261,7 @@
       "files": [
         "console/src/domains/plan/observations/liveStepModel.ts",
         "console/src/domains/plan/observations/moduleActivity.ts",
+        "console/src/domains/plan/observations/moduleReadPanels.ts",
         "console/src/domains/plan/observations/needsCleanupModel.ts",
         "console/src/domains/plan/observations/ownerAsksCache.test.tsx",
         "console/src/domains/plan/observations/ownerAsksModel.ts",
@@ -2106,7 +2279,9 @@
         "console/src/domains/plan/display",
         "console/src/domains/plan/readings",
         "console/src/lib/shell",
-        "console/src/pages/shell/agents"
+        "console/src/pages/shell/agents",
+        "console/src/pages/shell/agents/moduleDetailModel.tsx",
+        "console/src/pages/shell/agents/planModuleModel.tsx"
       ],
       "test_imports": [],
       "external_imports": [
@@ -2271,7 +2446,8 @@
         "console/src/domains/tenant/readiness/payloadVerification.ts"
       ],
       "imports": [
-        "console/src/lib/control-room"
+        "console/src/lib/control-room",
+        "console/src/lib/control-room/fleetSnapshot.ts"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -2405,6 +2581,8 @@
         "console/src/api/promote.ts",
         "console/src/api/satelliteBusTypes.ts",
         "console/src/lib/control-room",
+        "console/src/lib/control-room/buildFleetSnapshot.ts",
+        "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/satellite-bus"
       ],
       "test_imports": [],
@@ -2541,17 +2719,12 @@
         "console/src/lib/__tests__/signInError.test.ts",
         "console/src/lib/__tests__/tradeFrontendUrls.test.ts",
         "console/src/lib/envVisual.ts",
-        "console/src/lib/environments-catalog.ts",
-        "console/src/lib/patrol/askAiPack.ts",
         "console/src/lib/patrol/cronSchedule.ts",
         "console/src/lib/patrol/logLanguage.ts",
         "console/src/lib/patrol/runLog.ts",
-        "console/src/lib/patrol/usePatrolOutputLanguage.ts",
-        "console/src/lib/task-mode/readinessChipActions.ts"
+        "console/src/lib/patrol/usePatrolOutputLanguage.ts"
       ],
       "imports": [
-        "console/src/api",
-        "console/src/domains/foundation/environment-catalog",
         "console/src/domains/foundation/patrol-view",
         "console/src/domains/tenant/environment"
       ],
@@ -2582,7 +2755,7 @@
       "imports": [
         "console/src/domains/foundation/activity",
         "console/src/domains/tenant/activity",
-        "console/src/lib"
+        "console/src/lib/task-mode/readinessChipActions.ts"
       ],
       "test_imports": [],
       "external_imports": [
@@ -2796,14 +2969,10 @@
         "console/src/lib/control-room/__tests__/fleetSnapshot.test.ts",
         "console/src/lib/control-room/__tests__/missionSignals.test.ts",
         "console/src/lib/control-room/__tests__/payloadReadiness.test.ts",
-        "console/src/lib/control-room/agentContextPacks.ts",
-        "console/src/lib/control-room/bayRegistry.ts",
-        "console/src/lib/control-room/buildFleetSnapshot.ts",
         "console/src/lib/control-room/controlRoomBays.ts",
         "console/src/lib/control-room/controlRoomOperatePack.ts",
         "console/src/lib/control-room/dailyOpsChecklistCatalog.ts",
         "console/src/lib/control-room/dailyOpsChecklistInject.ts",
-        "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/control-room/fleetSnapshot.type-test.ts",
         "console/src/lib/control-room/fleetSnapshot/buildEngineerCell.ts",
         "console/src/lib/control-room/fleetSnapshot/buildGroundCell.ts",
@@ -2830,18 +2999,78 @@
         "console/src/domains/foundation/control-room",
         "console/src/domains/foundation/observation-display",
         "console/src/domains/tenant/readiness",
-        "console/src/lib",
-        "console/src/lib/agent"
+        "console/src/lib/agent",
+        "console/src/lib/control-room/bayRegistry.ts",
+        "console/src/lib/control-room/buildFleetSnapshot.ts",
+        "console/src/lib/control-room/fleetSnapshot.ts"
       ],
       "test_imports": [
         "console/src/api",
         "console/src/api/clusterTypes.ts",
         "console/src/api/deliveryTypes.ts",
-        "console/src/lib/agent"
+        "console/src/lib/agent",
+        "console/src/lib/control-room/buildFleetSnapshot.ts",
+        "console/src/lib/control-room/fleetSnapshot.ts"
       ],
       "external_imports": [
         "vitest"
       ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/control-room/agentContextPacks.ts",
+      "files": [
+        "console/src/lib/control-room/agentContextPacks.ts"
+      ],
+      "imports": [
+        "console/src/lib/control-room",
+        "console/src/lib/environments-catalog.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/control-room/bayRegistry.ts",
+      "files": [
+        "console/src/lib/control-room/bayRegistry.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/control-room/buildFleetSnapshot.ts",
+      "files": [
+        "console/src/lib/control-room/buildFleetSnapshot.ts"
+      ],
+      "imports": [
+        "console/src/lib/control-room",
+        "console/src/lib/control-room/fleetSnapshot.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/control-room/fleetSnapshot.ts",
+      "files": [
+        "console/src/lib/control-room/fleetSnapshot.ts"
+      ],
+      "imports": [
+        "console/src/lib/control-room"
+      ],
+      "test_imports": [],
+      "external_imports": [],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []
@@ -2863,6 +3092,21 @@
       "external_imports": [
         "vitest"
       ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/environments-catalog.ts",
+      "files": [
+        "console/src/lib/environments-catalog.ts"
+      ],
+      "imports": [
+        "console/src/domains/foundation/environment-catalog",
+        "console/src/domains/tenant/environment"
+      ],
+      "test_imports": [],
+      "external_imports": [],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []
@@ -2936,6 +3180,21 @@
       ],
       "imports": [
         "console/src/domains/foundation/observability"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/patrol/askAiPack.ts",
+      "files": [
+        "console/src/lib/patrol/askAiPack.ts"
+      ],
+      "imports": [
+        "console/src/api/patrol.ts",
+        "console/src/lib"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -3064,7 +3323,8 @@
         "console/src/api",
         "console/src/api/checklist.ts",
         "console/src/api/clusterTypes.ts",
-        "console/src/lib/control-room"
+        "console/src/lib/control-room",
+        "console/src/lib/control-room/fleetSnapshot.ts"
       ],
       "test_imports": [
         "console/src/api",
@@ -3103,12 +3363,26 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/lib/task-mode/readinessChipActions.ts",
+      "files": [
+        "console/src/lib/task-mode/readinessChipActions.ts"
+      ],
+      "imports": [
+        "console/src/domains/tenant/environment"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/lib/tradeFrontendUrls.ts",
       "files": [
         "console/src/lib/tradeFrontendUrls.ts"
       ],
       "imports": [
-        "console/src/lib/control-room",
+        "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/delivery"
       ],
       "test_imports": [],
@@ -3120,7 +3394,6 @@
     {
       "path": "console/src/pages",
       "files": [
-        "console/src/pages/AutonomousSkillsPage.tsx",
         "console/src/pages/__tests__/ApprovalReviewButton.test.tsx",
         "console/src/pages/__tests__/ApprovalsPage.test.tsx",
         "console/src/pages/__tests__/ApprovalsPageDecision.test.tsx",
@@ -3143,14 +3416,7 @@
         "console/src/pages/__tests__/ownerButtons.test.tsx",
         "console/src/pages/__tests__/signInRecovery.test.tsx"
       ],
-      "imports": [
-        "console/src/api",
-        "console/src/components/layout",
-        "console/src/domains/foundation/patrol-view",
-        "console/src/hooks/usePlatformAuth.ts",
-        "console/src/lib",
-        "console/src/lib/agent"
-      ],
+      "imports": [],
       "test_imports": [
         "console/src/api",
         "console/src/api/approvals.ts",
@@ -3161,7 +3427,7 @@
         "console/src/api/lineage.ts",
         "console/src/api/questions.ts",
         "console/src/api/serverContact.ts",
-        "console/src/components",
+        "console/src/components/UserMenu.tsx",
         "console/src/hooks/PlatformAuthProvider.tsx",
         "console/src/hooks/usePlatformAuth.ts",
         "console/src/lib/platformAuth.ts",
@@ -3181,11 +3447,9 @@
         "console/src/pwa"
       ],
       "external_imports": [
-        "@bifrost/ui",
         "@tanstack/react-query",
         "@testing-library/jest-dom/vitest",
         "@testing-library/react",
-        "lucide-react",
         "node:fs",
         "node:path",
         "node:url",
@@ -3325,6 +3589,30 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/pages/AutonomousSkillsPage.tsx",
+      "files": [
+        "console/src/pages/AutonomousSkillsPage.tsx"
+      ],
+      "imports": [
+        "console/src/api/patrol.ts",
+        "console/src/components/layout",
+        "console/src/domains/foundation/patrol-view",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib",
+        "console/src/lib/agent"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "lucide-react",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/pages/CloseUnknownForm.tsx",
       "files": [
         "console/src/pages/CloseUnknownForm.tsx"
@@ -3449,7 +3737,8 @@
         "console/src/pages/ConsolePage.tsx"
       ],
       "imports": [
-        "console/src/components",
+        "console/src/components/ConsoleHeader.tsx",
+        "console/src/components/ConsoleSidebar.tsx",
         "console/src/components/shell",
         "console/src/domains/foundation/bus",
         "console/src/domains/foundation/shell",
@@ -3660,6 +3949,7 @@
         "console/src/api/telemetry.ts",
         "console/src/components",
         "console/src/components/layout",
+        "console/src/domains/foundation/observability",
         "console/src/hooks/useObservabilitySnapshot.ts",
         "console/src/hooks/usePlatformAuth.ts",
         "console/src/lib/architecture",
@@ -3824,7 +4114,7 @@
         "console/src/api/core.ts",
         "console/src/components",
         "console/src/components/layout",
-        "console/src/lib/control-room",
+        "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/shell"
       ],
       "test_imports": [],
@@ -3878,7 +4168,7 @@
         "console/src/api",
         "console/src/api/core.ts",
         "console/src/components/layout",
-        "console/src/lib"
+        "console/src/lib/task-mode/readinessChipActions.ts"
       ],
       "test_imports": [],
       "external_imports": [
@@ -3899,7 +4189,7 @@
         "console/src/api/core.ts",
         "console/src/components/layout",
         "console/src/hooks/useObservabilitySnapshot.ts",
-        "console/src/lib",
+        "console/src/lib/task-mode/readinessChipActions.ts",
         "console/src/pages/SatelliteApiHealthPage.tsx",
         "console/src/pages/SatelliteTelemetryPage.tsx"
       ],
@@ -3991,7 +4281,6 @@
     {
       "path": "console/src/pages/shell/agents",
       "files": [
-        "console/src/pages/shell/agents/AgentsPlan.tsx",
         "console/src/pages/shell/agents/CapabilityEvidence.tsx",
         "console/src/pages/shell/agents/DeliveryBoundaries.tsx",
         "console/src/pages/shell/agents/DeliveryConfiguration.tsx",
@@ -3999,7 +4288,6 @@
         "console/src/pages/shell/agents/HowRead.tsx",
         "console/src/pages/shell/agents/NeedsCleanup.tsx",
         "console/src/pages/shell/agents/PlanLiveWork.tsx",
-        "console/src/pages/shell/agents/PlanModuleDetail.tsx",
         "console/src/pages/shell/agents/PlanModuleRows.tsx",
         "console/src/pages/shell/agents/PlanPaceLine.tsx",
         "console/src/pages/shell/agents/PlanRecentChanges.tsx",
@@ -4009,7 +4297,6 @@
         "console/src/pages/shell/agents/StepSignoffHere.tsx",
         "console/src/pages/shell/agents/StepSignoffs.tsx",
         "console/src/pages/shell/agents/StepText.tsx",
-        "console/src/pages/shell/agents/WorkPlanView.tsx",
         "console/src/pages/shell/agents/WorkSignoffs.tsx",
         "console/src/pages/shell/agents/WorkSummaryCard.tsx",
         "console/src/pages/shell/agents/WorkTabs.tsx",
@@ -4043,16 +4330,13 @@
         "console/src/pages/shell/agents/__tests__/workSummaryModel.test.ts",
         "console/src/pages/shell/agents/deliveryStripModel.ts",
         "console/src/pages/shell/agents/liveStepModel.ts",
-        "console/src/pages/shell/agents/moduleDetailModel.tsx",
         "console/src/pages/shell/agents/moduleRowReturn.ts",
         "console/src/pages/shell/agents/needsCleanupModel.ts",
         "console/src/pages/shell/agents/ownerAsksModel.ts",
-        "console/src/pages/shell/agents/planModuleModel.tsx",
         "console/src/pages/shell/agents/planRoundModel.ts",
         "console/src/pages/shell/agents/planSnapshotModel.ts",
         "console/src/pages/shell/agents/readAge.ts",
         "console/src/pages/shell/agents/stepSignoffText.ts",
-        "console/src/pages/shell/agents/stepStateModel.ts",
         "console/src/pages/shell/agents/unlinkedSessionsModel.ts",
         "console/src/pages/shell/agents/useNeedsCleanup.ts",
         "console/src/pages/shell/agents/usePlanSnapshot.ts",
@@ -4069,21 +4353,19 @@
         "console/src/api/client.ts",
         "console/src/api/core.ts",
         "console/src/api/deliveryBoundaries.ts",
-        "console/src/api/landingActions.ts",
         "console/src/api/planSnapshot.ts",
         "console/src/api/planSnapshotSchema.ts",
-        "console/src/api/questions.ts",
         "console/src/components/layout",
         "console/src/domains/delivery/display",
         "console/src/domains/plan/display",
         "console/src/domains/plan/observations",
         "console/src/domains/plan/readings",
-        "console/src/hooks/useAgentThreads.ts",
         "console/src/hooks/usePlatformAuth.ts",
         "console/src/lib/shell",
         "console/src/pages/DecisionEnvironment.tsx",
         "console/src/pages/decisionSignIn.ts",
-        "console/src/pages/shell/needs-you",
+        "console/src/pages/shell/agents/moduleDetailModel.tsx",
+        "console/src/pages/shell/agents/planModuleModel.tsx",
         "console/src/pages/shell/owner",
         "console/src/pages/shell/progress",
         "console/src/pages/useDecisionEnvironment.ts"
@@ -4107,6 +4389,12 @@
         "console/src/lib/platformAuth.ts",
         "console/src/lib/shell",
         "console/src/pages/decisionSignIn.ts",
+        "console/src/pages/shell/agents/AgentsPlan.tsx",
+        "console/src/pages/shell/agents/PlanModuleDetail.tsx",
+        "console/src/pages/shell/agents/WorkPlanView.tsx",
+        "console/src/pages/shell/agents/moduleDetailModel.tsx",
+        "console/src/pages/shell/agents/planModuleModel.tsx",
+        "console/src/pages/shell/agents/stepStateModel.ts",
         "console/src/pages/shell/owner",
         "console/src/pages/shell/progress",
         "console/src/test"
@@ -4120,6 +4408,142 @@
         "node:url",
         "react",
         "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/agents/AgentsPlan.tsx",
+      "files": [
+        "console/src/pages/shell/agents/AgentsPlan.tsx"
+      ],
+      "imports": [
+        "console/src/api/agentRuntimePlan.ts",
+        "console/src/components/layout",
+        "console/src/lib/shell",
+        "console/src/pages/shell/agents",
+        "console/src/pages/shell/owner"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/agents/moduleDetailModel.tsx",
+      "files": [
+        "console/src/pages/shell/agents/moduleDetailModel.tsx"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/agentRuntimePlan.ts",
+        "console/src/api/approvals.ts",
+        "console/src/api/landingActions.ts",
+        "console/src/api/planSnapshot.ts",
+        "console/src/api/questions.ts",
+        "console/src/domains/plan/observations",
+        "console/src/lib/shell",
+        "console/src/pages/shell/agents/planModuleModel.tsx",
+        "console/src/pages/shell/needs-you",
+        "console/src/pages/shell/progress"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/agents/PlanModuleDetail.tsx",
+      "files": [
+        "console/src/pages/shell/agents/PlanModuleDetail.tsx"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/approvals.ts",
+        "console/src/api/planSnapshot.ts",
+        "console/src/api/questions.ts",
+        "console/src/domains/plan/display",
+        "console/src/domains/plan/readings",
+        "console/src/lib/shell",
+        "console/src/pages/shell/agents",
+        "console/src/pages/shell/agents/moduleDetailModel.tsx",
+        "console/src/pages/shell/agents/planModuleModel.tsx",
+        "console/src/pages/shell/agents/stepStateModel.ts",
+        "console/src/pages/shell/progress"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/agents/planModuleModel.tsx",
+      "files": [
+        "console/src/pages/shell/agents/planModuleModel.tsx"
+      ],
+      "imports": [
+        "console/src/api/agentRuntimePlan.ts",
+        "console/src/api/planSnapshot.ts",
+        "console/src/lib/shell",
+        "console/src/pages/shell/agents"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/agents/stepStateModel.ts",
+      "files": [
+        "console/src/pages/shell/agents/stepStateModel.ts"
+      ],
+      "imports": [
+        "console/src/api/agentRuntimePlan.ts",
+        "console/src/api/planSnapshot.ts",
+        "console/src/pages/shell/agents",
+        "console/src/pages/shell/agents/planModuleModel.tsx"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/agents/WorkPlanView.tsx",
+      "files": [
+        "console/src/pages/shell/agents/WorkPlanView.tsx"
+      ],
+      "imports": [
+        "console/src/api/planSnapshot.ts",
+        "console/src/components/layout",
+        "console/src/domains/plan/readings",
+        "console/src/hooks/useAgentThreads.ts",
+        "console/src/lib/shell",
+        "console/src/pages/shell/agents",
+        "console/src/pages/shell/agents/PlanModuleDetail.tsx",
+        "console/src/pages/shell/agents/moduleDetailModel.tsx",
+        "console/src/pages/shell/agents/planModuleModel.tsx",
+        "console/src/pages/shell/agents/stepStateModel.ts",
+        "console/src/pages/shell/progress"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "react"
       ],
       "source_inputs": [],
       "test_inputs": [],
@@ -4156,19 +4580,19 @@
         "console/src/pages/shell/ci/timingModel.ts"
       ],
       "imports": [
-        "console/src/api",
         "console/src/api/ciTimings.ts",
         "console/src/api/delivery.ts",
+        "console/src/api/readings.ts",
         "console/src/api/units.ts",
         "console/src/components/layout",
         "console/src/lib/shell",
         "console/src/pages/shell/releases"
       ],
       "test_imports": [
-        "console/src/api",
         "console/src/api/ciTimings.ts",
         "console/src/api/delivery.ts",
         "console/src/api/deliveryTypes.ts",
+        "console/src/api/readings.ts",
         "console/src/api/units.ts",
         "console/src/lib/shell"
       ],
@@ -4411,6 +4835,7 @@
       ],
       "imports": [
         "console/src/api",
+        "console/src/api/agentRuntimeBus.ts",
         "console/src/api/client.ts",
         "console/src/api/cluster.ts",
         "console/src/api/clusterTypes.ts",
@@ -4431,6 +4856,7 @@
         "console/src/lib/shell",
         "console/src/pages/SatelliteHealthPage.tsx",
         "console/src/pages/shell/agents",
+        "console/src/pages/shell/agents/WorkPlanView.tsx",
         "console/src/pages/shell/ci",
         "console/src/pages/shell/crew",
         "console/src/pages/shell/needs-you",
@@ -4483,8 +4909,10 @@
       ],
       "imports": [
         "console/src/api",
+        "console/src/api/agentRuntimeEvents.ts",
         "console/src/api/agentRuntimePlan.ts",
         "console/src/api/approvals.ts",
+        "console/src/api/governanceMcp.ts",
         "console/src/api/releases.ts",
         "console/src/components/agent",
         "console/src/components/layout",
@@ -4498,7 +4926,9 @@
       ],
       "test_imports": [
         "console/src/api",
+        "console/src/api/agentRuntimeEvents.ts",
         "console/src/api/approvalsApiFixture.ts",
+        "console/src/api/governanceMcp.ts",
         "console/src/api/releases.ts",
         "console/src/components/market-data",
         "console/src/lib/shell",
@@ -4527,8 +4957,8 @@
         "console/src/api/approvals.ts",
         "console/src/api/cluster.ts",
         "console/src/lib/shell",
-        "console/src/pages",
         "console/src/pages/AuditPage.tsx",
+        "console/src/pages/AutonomousSkillsPage.tsx",
         "console/src/pages/shell/needs-you",
         "console/src/pages/shell/progress"
       ],

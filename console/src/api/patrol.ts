@@ -1,67 +1,14 @@
-import { serverFetch } from '@/api/serverContact'
 import { authedFetch } from './client'
+import type { PatrolSkill, PatrolRunResult } from '@/domains/foundation/patrol-view/readings'
+export * from '@/domains/foundation/patrol-view/readings'
 
-export type PatrolTrustLevel = 'L0' | 'L1' | 'L2'
-export type PatrolRunResult = 'success' | 'failure' | 'skipped' | 'escalated' | 'running'
-export type PatrolTrigger = 'cron' | 'manual' | 'webhook'
 export type PatrolTriggerStatus = 'started' | 'completed' | 'blocked'
-
-export type PatrolSkill = {
-  id: string
-  name: string
-  description: string
-  schedule: string
-  prompt_template: string
-  mcp_tools: string[]
-  trust_level: PatrolTrustLevel
-  scope: string
-  timeout_seconds: number
-  enabled: boolean
-  last_run_at?: string
-  last_result?: PatrolRunResult
-  next_run_at?: string
-  cron_actuation?: string
-}
-
-export type PatrolRun = {
-  id: string
-  skill_id: string
-  skill_name: string
-  trigger: PatrolTrigger
-  started_at: string
-  finished_at?: string
-  duration_ms?: number
-  result: PatrolRunResult
-  evidence?: string
-  error?: string
-}
-
-export type PatrolSkillsResponse = {
-  skills: PatrolSkill[]
-}
-
-export type PatrolRunsResponse = {
-  runs: PatrolRun[]
-  total: number
-}
 
 export type PatrolTriggerResponse = {
   run_id: string
   status: PatrolTriggerStatus
   result?: PatrolRunResult
   error?: string
-}
-
-export async function fetchPatrolSkills(): Promise<PatrolSkillsResponse> {
-  const r = await serverFetch('/api/v1/patrol/skills')
-  if (!r.ok) throw new Error(`patrol skills: HTTP ${r.status}`)
-  return r.json() as Promise<PatrolSkillsResponse>
-}
-
-export async function fetchPatrolRuns(limit = 50): Promise<PatrolRunsResponse> {
-  const r = await serverFetch(`/api/v1/patrol/runs?limit=${limit}`)
-  if (!r.ok) throw new Error(`patrol runs: HTTP ${r.status}`)
-  return r.json() as Promise<PatrolRunsResponse>
 }
 
 export async function enablePatrolSkill(id: string, enabled: boolean): Promise<PatrolSkill> {
