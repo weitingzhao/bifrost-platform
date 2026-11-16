@@ -108,3 +108,35 @@ func TestHeadReleaseKickRunsTheSamePass(t *testing.T) {
 		t.Fatalf("%d passes", runs.Load())
 	}
 }
+
+// 2026-11-16: with the bus waking head-release (51 s → 11 s), its 30-second
+// loop became a 5-minute reconciliation; without the bus it keeps every tick.
+func TestHeadReleaseLoopReconcilesWhileTheBusWakesIt(t *testing.T) {
+	now := time.Date(2026, 11, 16, 20, 0, 0, 0, time.UTC)
+	runs := 0
+	var live bool
+	p := &serialPass{pass: func(context.Context) error { runs++; return nil },
+		live: func() bool { return live }, now: func() time.Time { return now }}
+	ctx := context.Background()
+	_ = p.tick(ctx)
+	now = now.Add(30 * time.Second)
+	_ = p.tick(ctx)
+	if runs != 2 {
+		t.Fatalf("bus off: %d passes in two ticks, want 2", runs)
+	}
+	live = true
+	now = now.Add(30 * time.Second)
+	_ = p.tick(ctx)
+	if runs != 2 {
+		t.Fatalf("bus on: a tick 30 s after a pass ran one (%d)", runs)
+	}
+	now = now.Add(headReleaseReconcileEvery)
+	_ = p.tick(ctx)
+	if runs != 3 {
+		t.Fatalf("bus on: no reconciliation after %s (%d)", headReleaseReconcileEvery, runs)
+	}
+	_ = p.run(ctx) // a bus kick always runs
+	if runs != 4 {
+		t.Fatalf("a kick did not run the pass (%d)", runs)
+	}
+}
