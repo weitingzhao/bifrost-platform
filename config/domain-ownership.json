@@ -1971,7 +1971,7 @@
           "foundation"
         ],
         "status": "mixed",
-        "basis": "2026-11-16 exhaustive file audit: 本批完整派生观察模型迁Foundation；剩页面装配，muteMutation/canOperate原正文保留。"
+        "basis": "2026-11-16 exhaustive file audit: Complete derived observation model moved to Foundation. The page retains composition and unchanged muteMutation/canOperate behavior."
       },
       "console/src/lib/observability": {
         "domains": [
@@ -2316,154 +2316,154 @@
           "owner"
         ],
         "status": "mixed",
-        "basis": "2026-11-16 exhaustive file audit: 保护：fetchActionCatalog形状拒绝及动作目录边界，原字节；没有另藏业务。"
+        "basis": "2026-11-16 exhaustive file audit: Action catalog shape validation and rejection remain unchanged; no unrelated business implementation remains."
       },
       "console/src/api/agentRuntimeBus.ts": {
         "domains": [
           "coordination"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 exhaustive file audit: Bus原线，停止/读取契约均不改，逐路径保留。"
+        "basis": "2026-11-16 exhaustive file audit: Bus-owned stop and read contracts remain with the communication lane, unchanged."
       },
       "console/src/api/agentRuntimeEvents.ts": {
         "domains": [
           "coordination"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 exhaustive file audit: Bus事件读取与严格解析原线，原位。"
+        "basis": "2026-11-16 exhaustive file audit: Bus event reads and strict parsing remain with the communication lane, unchanged."
       },
       "console/src/api/assessment.ts": {
         "domains": [
           "owner"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 exhaustive file audit: 纯契约+副作用进口，暂无执行算法；保留原出口，非新物理拆分。"
+        "basis": "2026-11-16 exhaustive file audit: Existing assessment contract and mutation adapter retained; this is not a new extraction."
       },
       "console/src/api/governanceMcp.ts": {
         "domains": [
           "foundation"
         ],
         "status": "mixed",
-        "basis": "2026-11-16 exhaustive file audit: 保护：parseMcpDirectory strict形状/唯一性拒绝、fetchMcpDirectory401/403拒绝原位。"
+        "basis": "2026-11-16 exhaustive file audit: Strict MCP directory shape, uniqueness and 401/403 rejection remain unchanged."
       },
       "console/src/api/patrol.ts": {
         "domains": [
           "foundation"
         ],
         "status": "mixed",
-        "basis": "2026-11-16 exhaustive file audit: 本批两个GET与只读DTO完整迁Foundation；enablePatrolSkill/triggerPatrolSkill PUT/POST原正文保留。"
+        "basis": "2026-11-16 exhaustive file audit: Both GET readers and observation DTOs moved to Foundation; enablePatrolSkill and triggerPatrolSkill mutation bodies remain unchanged."
       },
       "console/src/api/readings.ts": {
         "domains": [
           "owner"
         ],
         "status": "mixed",
-        "basis": "2026-11-16 exhaustive file audit: 保护：fetchApprovalReadings完整形状拒绝原位；纯DTO不另拆计数。"
+        "basis": "2026-11-16 exhaustive file audit: Approval reading shape validation remains unchanged; shared DTOs are not counted as an extraction."
       },
       "console/src/components/ConsoleHeader.tsx": {
         "domains": [
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 exhaustive file audit: 必要组合：顶栏/身份入口/导航，ViewerEnvChip仅呈现，不读凭据。保留。"
+        "basis": "2026-11-16 exhaustive file audit: Retained shell composition for navigation and identity entry points. ViewerEnvChip only presents the environment and does not read credentials."
       },
       "console/src/components/ConsoleSidebar.tsx": {
         "domains": [
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 exhaustive file audit: 必要组合：shell导航及Tenant peer link插槽，已有领域实现外置。保留。"
+        "basis": "2026-11-16 exhaustive file audit: Retained shell navigation and Tenant peer-link composition; domain implementations are already external."
       },
       "console/src/components/ToolsMenu.tsx": {
         "domains": [
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 exhaustive file audit: 完整外部工具导航组合；open时GET Grafana URL，非领域业务。保留。"
+        "basis": "2026-11-16 exhaustive file audit: Retained external-tool navigation composition, including the Grafana URL read when opened."
       },
       "console/src/components/UserMenu.tsx": {
         "domains": [
           "foundation"
         ],
         "status": "mixed",
-        "basis": "2026-11-16 exhaustive file audit: 保护：凭据/身份菜单，整实现原字节；不以此阻挡其他组件收尾。"
+        "basis": "2026-11-16 exhaustive file audit: Credential and identity implementation remains unchanged; this does not block unrelated component extraction."
       },
       "console/src/lib/environments-catalog.ts": {
         "domains": [
           "foundation"
         ],
         "status": "mixed",
-        "basis": "2026-11-16 exhaustive file audit: 组合foundation/tenant记录；原内联SOCKET/TWS/AI含D10边界文字原字节保留，禁止重写；非运行算法。"
+        "basis": "2026-11-16 exhaustive file audit: Foundation and Tenant catalog composition retained. Existing SOCKET/TWS/AI and D10 boundary descriptions remain unchanged."
       },
       "console/src/lib/patrol/askAiPack.ts": {
         "domains": [
           "foundation"
         ],
         "status": "mixed",
-        "basis": "2026-11-16 exhaustive file audit: 巡检提示组合，具体D10/禁止写提示原字节；非整lib停工理由。"
+        "basis": "2026-11-16 exhaustive file audit: Patrol prompt composition retained, including unchanged D10 and prohibited-write instructions."
       },
       "console/src/lib/task-mode/readinessChipActions.ts": {
         "domains": [
           "tenant"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 exhaustive file audit: 动作/权限DTO与Tenant导航兼容出口，ReadinessActuation/requiresOperate保留原字节，无可独立剩余算法。"
+        "basis": "2026-11-16 exhaustive file audit: Existing Tenant navigation export and action/permission DTOs retained. ReadinessActuation and requiresOperate remain unchanged."
       },
       "console/src/lib/control-room/agentContextPacks.ts": {
         "domains": [
           "foundation"
         ],
         "status": "mixed",
-        "basis": "2026-11-16 exhaustive file audit: 公共契约/组合出口；实际cell与保护判断依赖仍显式，保留。"
+        "basis": "2026-11-16 exhaustive file audit: Shared contract and composition export retained. Actual cell dependencies and protected decision paths remain visible."
       },
       "console/src/lib/control-room/bayRegistry.ts": {
         "domains": [
           "foundation"
         ],
         "status": "mixed",
-        "basis": "2026-11-16 exhaustive file audit: 公共契约/组合出口；实际cell与保护判断依赖仍显式，保留。"
+        "basis": "2026-11-16 exhaustive file audit: Shared contract and composition export retained. Actual cell dependencies and protected decision paths remain visible."
       },
       "console/src/lib/control-room/buildFleetSnapshot.ts": {
         "domains": [
           "foundation"
         ],
         "status": "mixed",
-        "basis": "2026-11-16 exhaustive file audit: 公共契约/组合出口；实际cell与保护判断依赖仍显式，保留。"
+        "basis": "2026-11-16 exhaustive file audit: Shared contract and composition export retained. Actual cell dependencies and protected decision paths remain visible."
       },
       "console/src/lib/control-room/fleetSnapshot.ts": {
         "domains": [
           "foundation"
         ],
         "status": "mixed",
-        "basis": "2026-11-16 exhaustive file audit: 公共契约/组合出口；实际cell与保护判断依赖仍显式，保留。"
+        "basis": "2026-11-16 exhaustive file audit: Shared contract and composition export retained. Actual cell dependencies and protected decision paths remain visible."
       },
       "console/src/pages/AutonomousSkillsPage.tsx": {
         "domains": [
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 exhaustive file audit: 观察显示已迁，保留轮询+页面状态+动作装配；enableMut/triggerMut及disabled原字节。"
+        "basis": "2026-11-16 exhaustive file audit: Observation display has moved to its domain. Polling, page state and action composition remain; enableMut, triggerMut and disabled conditions are unchanged."
       },
       "console/src/pages/shell/agents/AgentsPlan.tsx": {
         "domains": [
           "foundation"
         ],
         "status": "mixed",
-        "basis": "2026-11-16 exhaustive file audit: 页面组合；Plan显示/读取在领域模块，签收插槽原位原字节。"
+        "basis": "2026-11-16 exhaustive file audit: Retained page composition. Plan display and readers live in domain modules; signoff integration remains unchanged."
       },
       "console/src/pages/shell/agents/PlanModuleDetail.tsx": {
         "domains": [
           "foundation"
         ],
         "status": "mixed",
-        "basis": "2026-11-16 exhaustive file audit: 页面组合；Plan显示/读取在领域模块，签收插槽原位原字节。"
+        "basis": "2026-11-16 exhaustive file audit: Retained page composition. Plan display and readers live in domain modules; signoff integration remains unchanged."
       },
       "console/src/pages/shell/agents/WorkPlanView.tsx": {
         "domains": [
           "foundation"
         ],
         "status": "mixed",
-        "basis": "2026-11-16 exhaustive file audit: 页面组合；Plan显示/读取在领域模块，签收插槽原位原字节。"
+        "basis": "2026-11-16 exhaustive file audit: Retained page composition. Plan display and readers live in domain modules; signoff integration remains unchanged."
       },
       "console/src/pages/shell/agents/planModuleModel.tsx": {
         "domains": [
