@@ -887,7 +887,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 safe extraction from probe, which remains mixed. HTTP response draining/status classification and TCP dial-close only; caller retains request/identity/Host/timeout configuration."
+      "basis": "2026-11-16 safe extraction from probe and checklist, which remain mixed. HTTP drain/status, TCP dial-close, streaming JSON observation and non-draining close transport; callers retain identity, signal classification, request targets, client/timeout and retry policy."
     },
     "api/internal/datastoreobservations": {
       "domains": [
