@@ -81,14 +81,3 @@ type SignalsResponse struct {
 	LastAllOkAt        string           `json:"last_all_ok_at,omitempty"`
 	NewFailures        []string         `json:"new_failures,omitempty"`
 }
-
-type KPIResponse struct {
-	QuietSuccessStreak int          `json:"quiet_success_streak"`
-	LastRunID          string       `json:"last_run_id,omitempty"`
-	UpdatedAt          string       `json:"updated_at,omitempty"`
-	LastFailAt         string       `json:"last_fail_at,omitempty"`
-	LastAllOkAt        string       `json:"last_all_ok_at,omitempty"`
-	LastCounts         *RunSummary  `json:"last_counts,omitempty"`
-	RecentHistory      []RunSummary `json:"recent_history,omitempty"`
-	NewFailHint        string       `json:"new_fail_hint,omitempty"`
-}

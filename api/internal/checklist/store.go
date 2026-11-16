@@ -88,38 +88,6 @@ func (s *Store) Get() (SignalsResponse, error) {
 	return toResponse(rec, nil), nil
 }
 
-func (s *Store) KPIs() (KPIResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	rec, err := s.loadLocked()
-	if err != nil {
-		return KPIResponse{}, err
-	}
-	var last *RunSummary
-	if len(rec.History) > 0 {
-		h := rec.History[len(rec.History)-1]
-		last = &h
-	}
-	hint := ""
-	if rec.QuietSuccessStreak == 0 && rec.LastFailAt != "" {
-		hint = "New or ongoing checklist failures since last quiet streak — review Checklist Action column."
-	}
-	hist := rec.History
-	if len(hist) > 10 {
-		hist = hist[len(hist)-10:]
-	}
-	return KPIResponse{
-		QuietSuccessStreak: rec.QuietSuccessStreak,
-		LastRunID:          rec.LastRunID,
-		UpdatedAt:          rec.UpdatedAt,
-		LastFailAt:         rec.LastFailAt,
-		LastAllOkAt:        rec.LastAllOkAt,
-		LastCounts:         last,
-		RecentHistory:      hist,
-		NewFailHint:        hint,
-	}, nil
-}
-
 // Merge replaces/merges signals by item_id and updates streak KPIs.
 func (s *Store) Merge(req MergeRequest) (SignalsResponse, error) {
 	s.mu.Lock()
