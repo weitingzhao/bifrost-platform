@@ -145,7 +145,7 @@
         "plan"
       ],
       "status": "assigned",
-      "basis": "planning charter and verified extraction"
+      "basis": "planning charter and verified extraction; 2026-11-16 import/architecture proposal card text extracted, validation and import writes unchanged"
     },
     "api/internal/lineage": {
       "domains": [
@@ -525,14 +525,14 @@
         "plan"
       ],
       "status": "assigned",
-      "basis": "planning charter; snapshot, architecture stored-rule text and latest-note observations extracted from store; all rule evaluation, refusal, transaction and evidence decisions remain with existing callers; mission card display projection consumes reader-selected status/count/task data without importing store (2026-11-16); 2026-11-16 session coverage read-only enrichment, with unavailable/Unknown behavior preserved"
+      "basis": "planning charter; snapshot, architecture stored-rule text and latest-note observations extracted from store; all rule evaluation, refusal, transaction and evidence decisions remain with existing callers; mission card display projection consumes reader-selected status/count/task data without importing store (2026-11-16); 2026-11-16 session coverage read-only enrichment, with unavailable/Unknown behavior preserved; 2026-11-16 complete pending-card and progress-tree projections plus mission/step observation queries extracted; evidence/authority callbacks and transactions remain in store"
     },
     "api/internal/cirunview": {
       "domains": [
         "verification"
       ],
       "status": "assigned",
-      "basis": "CI charter; cached run, daily-full-note, metric and failure-list projection extracted from server; no CI or release decisions Complete task timing and shared Tekton observation decoders extracted from delivery; parameter exposure allowlist retained verbatim in delivery; phase priority and result serialization unchanged; no evidence/release decisions. Whole PipelineRun observation decoding and chronological key extracted with unchanged status/revision fields; all success predicates and release consumers unchanged. Complete pipeline phase catalogs and observed-task phase aggregation extracted; preflight task names are display labels only, no release decisions."
+      "basis": "CI charter; cached run, daily-full-note, metric and failure-list projection extracted from server; no CI or release decisions Complete task timing and shared Tekton observation decoders extracted from delivery; parameter exposure allowlist retained verbatim in delivery; phase priority and result serialization unchanged; no evidence/release decisions. Whole PipelineRun observation decoding and chronological key extracted with unchanged status/revision fields; all success predicates and release consumers unchanged. Complete pipeline phase catalogs and observed-task phase aggregation extracted; preflight task names are display labels only, no release decisions. 2026-11-16 scope-shadow log/audit projection consumes minimal recorded fields; switches, scope/evidence reads, queues and all decisions remain in server."
     },
     "api/internal/modtidy": {
       "domains": [
@@ -581,7 +581,7 @@
         "lineage"
       ],
       "status": "assigned",
-      "basis": "2026-11-15 source and caller audit: pure legacy recorder-log import representation and history-chain parsing; used by registration import consumers, parsing and masking unchanged"
+      "basis": "2026-11-15 source and caller audit: pure legacy recorder-log import representation and history-chain parsing; used by registration import consumers, parsing and masking unchanged; 2026-11-16 recorder import proposal card text extracted, hash-chain validation and writes unchanged"
     },
     "api/internal/opscontext": {
       "domains": [
@@ -812,14 +812,14 @@
         "delivery"
       ],
       "status": "assigned",
-      "basis": "delivery charter; recorded run reads extracted from store; no prefix admission, evidence or deployment decisions"
+      "basis": "delivery charter; recorded run reads extracted from store; no prefix admission, evidence or deployment decisions; 2026-11-16 recorded configuration-request query and malformed-record filtering extracted without installing policy"
     },
     "api/internal/agentrt/loopreadings": {
       "domains": [
         "foundation"
       ],
       "status": "assigned",
-      "basis": "foundation charter; recorded controller-loop observations and error display, not alert writers or loop policy"
+      "basis": "foundation charter; recorded controller-loop observations and error display, not alert writers or loop policy; 2026-11-16 complete failure/recovery text projection extracted with caller-owned size bound and write transaction"
     },
     "api/internal/topology": {
       "domains": [

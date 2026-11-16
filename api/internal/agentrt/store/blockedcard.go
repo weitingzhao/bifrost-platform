@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 )
 
@@ -93,13 +92,6 @@ const (
 	OutcomeNone    = "none"
 	OutcomeMoot    = "moot" // answered after the task moved on, its mission ended or a stop held it: nothing moves
 )
-
-// blockedPage is how many blocked tasks or open cards a pass reads at a time.
-// The passes page through all of them, so any size gives the same result; a
-// test lowers it while others run.
-var blockedPage atomic.Int64
-
-func init() { blockedPage.Store(50) }
 
 // AnsweredCard is one of the runtime's cards the Owner answered that the
 // runtime has not acknowledged: an unacknowledged answer counts against the

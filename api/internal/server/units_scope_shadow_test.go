@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"log/slog"
 	"strings"
 	"testing"
@@ -219,8 +220,8 @@ func TestShadowTestOfUnit(t *testing.T) {
 		{"example.com/m/a.ExampleX", "example.com/m/a"},
 		{"build failed", ""},
 	} {
-		if got := testPackage(tc.test); got != tc.pkg {
-			t.Errorf("testPackage(%q) = %q, want %q", tc.test, got, tc.pkg)
+		if got := cirunview.TestPackage(tc.test); got != tc.pkg {
+			t.Errorf("cirunview.TestPackage(%q) = %q, want %q", tc.test, got, tc.pkg)
 		}
 	}
 	for _, tc := range []struct {
@@ -233,8 +234,8 @@ func TestShadowTestOfUnit(t *testing.T) {
 		{"a", "root/a", 1},
 		{"", "root/a", 0},
 	} {
-		if got := unitMatch(tc.pkg, tc.unit); got != tc.want {
-			t.Errorf("unitMatch(%q, %q) = %d, want %d", tc.pkg, tc.unit, got, tc.want)
+		if got := cirunview.UnitMatch(tc.pkg, tc.unit); got != tc.want {
+			t.Errorf("cirunview.UnitMatch(%q, %q) = %d, want %d", tc.pkg, tc.unit, got, tc.want)
 		}
 	}
 }

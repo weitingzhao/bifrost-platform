@@ -2,9 +2,7 @@ package store
 
 import (
 	"context"
-	"fmt"
 	"time"
-	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopreadings"
@@ -41,14 +39,7 @@ const errorKept = 4096
 
 // AlertFailingLoop records that loop failed n times in a row with errText.
 func AlertFailingLoop(ctx context.Context, db DB, loop string, n int, errText string) error {
-	text := fmt.Sprintf("%s failed %d times in a row:\n%s", loop, n, errText)
-	if len(text) > errorKept {
-		cut := errorKept
-		for cut > 0 && !utf8.RuneStart(text[cut]) {
-			cut--
-		}
-		text = text[:cut] + "…"
-	}
+	text := loopreadings.FailureText(loop, n, errText, errorKept)
 	return InTx(ctx, db, func(tx pgx.Tx) error {
 		art, err := PutArtifact(ctx, tx, "controller", "log_tail", "text/plain; charset=utf-8", []byte(text))
 		if err != nil {
@@ -64,10 +55,7 @@ func AlertFailingLoop(ctx context.Context, db DB, loop string, n int, errText st
 // NoteLoopPasses records that loop passed again after n failures in a row
 // (n 0: the count is not known, as after a restart).
 func NoteLoopPasses(ctx context.Context, db DB, loop string, n int) error {
-	text := loop + passesAgain
-	if n > 0 {
-		text += fmt.Sprintf(" after %d failures in a row", n)
-	}
+	text := loopreadings.RecoveryText(loop, n, passesAgain)
 	return InTx(ctx, db, func(tx pgx.Tx) error {
 		_, err := Append(ctx, tx, Event{Stream: ControllerStream, Type: "note", Actor: "controller", Body: map[string]any{"text": text}})
 		return err

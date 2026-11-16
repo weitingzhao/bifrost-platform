@@ -9,17 +9,6 @@ import (
 // Historical host and executor shapes remain for event validation and
 // compatibility. The dispatch presence view and controller are retired.
 
-// headSQL is the SQL of the last event of the stream the SQL expression
-// stream names, as one jsonb value {"type", "at", "body"}, NULL while the
-// stream has none. It is a scalar subquery, so it is read by the stream's
-// head and the event's key for each row it is asked for, never joined
-// against the events at large (review 526 B2: a LATERAL join of the same
-// was planned as a hash join over every event).
-func headSQL(stream string) string {
-	return `(SELECT jsonb_build_object('type', e.event_type, 'at', e.at, 'body', e.body_json) FROM agentrt.event e
-	    WHERE e.event_stream_id = ` + stream + ` AND e.seq = (SELECT s.last_seq FROM agentrt.event_stream s WHERE s.event_stream_id = ` + stream + `))`
-}
-
 // Offer is a tool a host offers, as its claim named it and its stream records
 // it.
 type Offer struct {

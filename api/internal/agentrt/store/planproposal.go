@@ -2,9 +2,9 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"strings"
 	"time"
 
@@ -219,12 +219,9 @@ func firstLine(s string) string {
 }
 
 func cardBody(root, reason string, changes []PlanChange) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "A thread proposes to change plan %s.\n\nWhy: %s\n\nChanges:\n", root, reason)
+	items := make([]any, 0, len(changes))
 	for _, c := range changes {
-		raw, _ := json.Marshal(c)
-		fmt.Fprintf(&b, "- %s\n", raw)
+		items = append(items, c)
 	}
-	b.WriteString("\nApplying it writes the change under your decision; not applying it leaves the plan as it is.")
-	return b.String()
+	return planreadings.ChangeCardBody(root, reason, items)
 }

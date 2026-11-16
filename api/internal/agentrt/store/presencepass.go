@@ -31,7 +31,4 @@ import ()
 const (
 	hostOfflinePhrase         = "a host stopped polling"
 	executorUnavailablePhrase = "an executor cannot take work now"
-	hostBackOnline            = " is back online"
-	executorAvailableAgain    = " is available again"
-	hostSetAside              = " was taken out of work"
 )

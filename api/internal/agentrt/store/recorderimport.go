@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -229,27 +228,7 @@ func tryRecorderImport(ctx context.Context, tx pgx.Tx, log recorderimport.Log, d
 // recorderCardBody is the import card's text: who proposes, which log, what
 // it holds, and what each answer does.
 func recorderCardBody(w Writer, cardKey, reason string, log recorderimport.Log, logID string) string {
-	types := log.Types()
-	names := make([]string, 0, len(types))
-	for t := range types {
-		names = append(names, t)
-	}
-	slices.Sort(names)
-	var counts []string
-	for _, t := range names {
-		counts = append(counts, fmt.Sprintf("%d %s", types[t], t))
-	}
-	s := log.Source
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s proposes to import the recorder log of %s, proposal %s.\n\nWhy: %s\n\n", w.Actor, s.WorkID, cardKey[:12], reason)
-	fmt.Fprintf(&b, "%d events: %s. The hash chain holds from the first line to the last.", len(log.Records), strings.Join(counts, ", "))
-	if n := log.Masked(); n > 0 {
-		fmt.Fprintf(&b, " %d of them had a path into one machine, masked before they are kept; each keeps the digest of its original line.", n)
-	}
-	fmt.Fprintf(&b, "\n\nFrom %s, sha256 %s; kept log %s.\n\n", s.File, s.SHA256, logID)
-	b.WriteString("Importing writes the log as the stream " + RecorderStream(s.WorkID) + ", one event per line, under your decision; " +
-		"it is then fixed. Not importing writes nothing; the recorder keeps its log as it is.")
-	return b.String()
+	return recorderimport.CardBody(w.Actor, cardKey, reason, log, logID, RecorderStream(log.Source.WorkID))
 }
 
 // decideRecorderImport lands a recorder import proposal's log in tx under

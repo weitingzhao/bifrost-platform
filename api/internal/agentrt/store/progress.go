@@ -268,70 +268,13 @@ func stamp(t *time.Time) string {
 // missionsInWork is the open missions, and when the Owner is next needed
 // after what waits for him now (progressnext.go), from the same etas.
 func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[string]*ProgressAttempt, usual map[string]usualTime) (map[string]any, map[string]any, error) {
-	rows, err := tx.Query(ctx, `SELECT m.mission_id, m.title, m.goal, m.state, m.deadline_at, COALESCE(m.work_id, ''),
-	    s.at, COALESCE(s.body_json->>'reason', ''), COALESCE(s.actor_id, ''), COALESCE(s.body_json->>'question_id', ''), l.at
-	  FROM agentrt.mission m
-	  LEFT JOIN LATERAL (SELECT e.at, e.body_json, e.actor_id FROM agentrt.event e WHERE e.mission_id = m.mission_id
-	    AND e.event_type IN ('mission_proposed','mission_state_changed') ORDER BY e.event_id DESC LIMIT 1) s ON true
-	  LEFT JOIN LATERAL (SELECT e.at FROM agentrt.event e WHERE e.mission_id = m.mission_id ORDER BY e.event_id DESC LIMIT 1) l ON true
-	  WHERE m.state IN ('proposed','awaiting_owner','active','paused') ORDER BY substr(m.mission_id, 3)::int LIMIT $1`, progressMissions+1)
+	observed, truncated, err := planreadings.WorkMissions(ctx, tx, progressMissions)
 	if err != nil {
 		return nil, nil, err
 	}
-	var missions []*progressMission
-	byID := map[string]*progressMission{}
-	for rows.Next() {
-		m := &progressMission{}
-		var deadline time.Time
-		var stateAt, lastAt *time.Time
-		if err = rows.Scan(&m.id, &m.title, &m.goal, &m.state, &deadline, &m.work, &stateAt, &m.stateReason, &m.stateBy,
-			&m.stateQuestion, &lastAt); err != nil {
-			rows.Close()
-			return nil, nil, err
-		}
-		m.deadline = deadline.UTC().Format(time.RFC3339)
-		m.stateAt, m.lastAt = stamp(stateAt), stamp(lastAt)
-		missions = append(missions, m)
-	}
-	rows.Close()
-	if err = rows.Err(); err != nil {
-		return nil, nil, err
-	}
-	truncated := len(missions) > progressMissions
-	if truncated {
-		missions = missions[:progressMissions]
-	}
-	ids := make([]string, 0, len(missions))
-	for _, m := range missions {
-		byID[m.id] = m
-		ids = append(ids, m.id)
-	}
-	// The slices: the steps of each mission, by the counting rule, and the
-	// next steps not started, in plan order.
-	srows, err := tx.Query(ctx, `SELECT s.mission_id, s.plan_node_id, s.title, s.state, COALESCE(e.body_json->>'cause', ''), s.owner_step
-	  FROM agentrt.plan_node s JOIN agentrt.plan_node i ON i.plan_node_id = s.parent_plan_node_id
-	  LEFT JOIN agentrt.event e ON e.event_id = s.state_event_id
-	  WHERE s.node_kind = 'step' AND s.mission_id = ANY($1)
-	  ORDER BY i.ordinal, s.ordinal, s.plan_node_id`, ids)
-	if err != nil {
-		return nil, nil, err
-	}
-	for srows.Next() {
-		var mission, id, title, state, cause string
-		var owner bool
-		if err = srows.Scan(&mission, &id, &title, &state, &cause, &owner); err != nil {
-			srows.Close()
-			return nil, nil, err
-		}
-		m := byID[mission]
-		m.steps = append(m.steps, plan.Step{ID: id, State: state, Manual: state == plan.StateDone && cause == "done_rule_manual"})
-		if state == plan.StatePlanned && len(m.next) < 2 {
-			m.next = append(m.next, map[string]any{"plan_node_id": id, "title": title, "owner_step": owner})
-		}
-	}
-	srows.Close()
-	if err = srows.Err(); err != nil {
-		return nil, nil, err
+	missions := make([]*progressMission, 0, len(observed))
+	for _, m := range observed {
+		missions = append(missions, &progressMission{id: m.ID, title: m.Title, goal: m.Goal, state: m.State, deadline: m.Deadline, work: m.Work, stateAt: m.StateAt, stateReason: m.StateReason, stateBy: m.StateBy, stateQuestion: m.StateQuestion, lastAt: m.LastAt, steps: m.Steps, next: m.Next})
 	}
 	// A mission's tasks are not read any more: it has none in work.
 	list := make([]any, 0, len(missions))
@@ -383,29 +326,11 @@ func planView(ctx context.Context, tx pgx.Tx) ([]any, error) {
 	deploys := newRecordedDeploys(ctx, tx)
 	// One reading of each gate for the whole projection, every root's rows (review 427 B2, 429 C).
 	gates := map[string]plan.Tri{}
-	out := make([]any, 0, len(roots))
-	for _, r := range roots {
-		doc := map[string]any{"plan_node_id": r.ID, "kind": r.Kind, "title": r.Title}
-		if r.Kind == "arch_root" {
-			arch := make([]archRow, 0, len(r.Items))
-			for _, it := range r.Items {
-				arch = append(arch, archRow{id: it.ID, title: it.Title})
-			}
-			if doc["rows"], err = archRowsDoc(ctx, tx, arch, deploys, gates); err != nil {
-				return nil, err
-			}
-			out = append(out, doc)
-			continue
+	return planreadings.ProjectTree(roots, func(items []*planreadings.TreeItem) (any, error) {
+		arch := make([]archRow, 0, len(items))
+		for _, it := range items {
+			arch = append(arch, archRow{id: it.ID, title: it.Title})
 		}
-		var all []plan.Step
-		items := make([]any, 0, len(r.Items))
-		for _, it := range r.Items {
-			all = append(all, it.Steps...)
-			items = append(items, map[string]any{"plan_node_id": it.ID, "label": it.Label, "title": it.Title,
-				"count": countDoc(plan.CountSteps(it.Steps)), "active_steps": nonNil(it.Active)})
-		}
-		doc["count"], doc["items"] = countDoc(plan.CountSteps(all)), items
-		out = append(out, doc)
-	}
-	return out, nil
+		return archRowsDoc(ctx, tx, arch, deploys, gates)
+	})
 }

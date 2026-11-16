@@ -3,8 +3,6 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -41,77 +39,25 @@ func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, er
 	if err != nil {
 		return nil, err
 	}
-	truncated := len(list) > pendingChangeLimit
-	if truncated {
-		list = list[:pendingChangeLimit]
-	}
-	// One card is one item: a second proposal naming a card already listed
-	// adds its event to that item. Plan changes and missions share one
-	// bound, oldest first (review 190 B4).
-	type entry struct {
-		at time.Time
-		id string
-		it map[string]any
-	}
-	var entries []entry
-	byQuestion := map[string]map[string]any{}
+
+	inputs := make([]planreadings.PendingNeed, 0, len(list))
 	for _, p := range list {
-		if it, seen := byQuestion[p.question]; seen {
-			it["also_refs"] = append(it["also_refs"].([]string), fmt.Sprint(p.event))
-			continue
+		kind := "change"
+		if _, ok := recorderImportOf(p.changes); ok {
+			kind = "recorder"
+		} else if _, ok := importOf(p.changes); ok {
+			kind = "import"
 		}
-		root := streamRoot(p.stream)
-		title, options := "Plan change to "+root+": "+firstLine(p.reason), []string{CardApply, CardRefuse}
-		after := "Apply: the controller lands the change on its next pass (about 15 seconds). Do not apply: the plan stays as it is."
-		var blocks any
-		if _, isRecorder := recorderImportOf(p.changes); isRecorder {
-			// A recorder log is history: no plan or mission waits on it.
-			work := strings.TrimPrefix(p.stream, RecorderStream(""))
-			title, options = "Import recorder log "+work+": "+firstLine(p.reason), []string{RecorderApply, RecorderRefuse}
-			after = "Import: the controller imports the log on its next pass (about 15 seconds). Do not import: nothing is written."
-			blocks = map[string]any{"unknown": "a recorder log is history; no plan or mission waits on it"}
-		} else if _, isImport := importOf(p.changes); isImport {
-			// An import adds a plan no mission's work sits on yet.
-			title, options = "Import plan "+root+": "+firstLine(p.reason), []string{ImportApply, ImportRefuse}
-			after = "Import: the controller imports the plan on its next pass (about 15 seconds). Do not import: nothing is written."
-			blocks = map[string]any{"unknown": "an import adds a plan; no mission's work sits on it yet"}
-		} else {
-			var berr error
-			if blocks, berr = changeBlocks(ctx, tx, p.changes); berr != nil {
-				return nil, berr
-			}
+		inputs = append(inputs, planreadings.PendingNeed{Event: p.event, Stream: p.stream, Root: streamRoot(p.stream), Work: strings.TrimPrefix(p.stream, RecorderStream("")), Reason: p.reason, Question: p.question, At: p.at, Kind: kind, Payload: p.changes})
+	}
+	return planreadings.ProjectPendingNeeds(inputs, pendingChangeLimit, now, planreadings.NeedLabels{Apply: CardApply, Refuse: CardRefuse, RecorderApply: RecorderApply, RecorderRefuse: RecorderRefuse, ImportApply: ImportApply, ImportRefuse: ImportRefuse}, func(raw any) (any, error) { return changeBlocks(ctx, tx, raw.([]PlanChange)) }, func(listed map[string]map[string]any) ([]planreadings.WaitingCard, bool, error) {
+		cards, more, err := missionCards(ctx, tx, now, listed)
+		var out []planreadings.WaitingCard
+		for _, c := range cards {
+			out = append(out, planreadings.WaitingCard{At: c.at, Question: c.question, Item: c.it})
 		}
-		it := map[string]any{"id": "question:" + p.question, "kind": "plan_change", "ref": fmt.Sprint(p.event), "also_refs": []string{},
-			"title": title, "since": p.at.UTC().Format(time.RFC3339Nano),
-			"waiting_min": int64(now.Sub(p.at) / time.Minute),
-			"action":      map[string]any{"where": "console", "question_id": p.question, "options": options},
-			"can_act_now": nil, "can_act_now_reason": "the card's state is the question store's: open there, it can be answered now",
-			"deadline": nil, "blocks": blocks, "after": after}
-		byQuestion[p.question] = it
-		entries = append(entries, entry{p.at, p.question, it})
-	}
-	cards, more, err := missionCards(ctx, tx, now, byQuestion)
-	if err != nil {
-		return nil, err
-	}
-	for _, c := range cards {
-		entries = append(entries, entry{c.at, c.question, c.it})
-	}
-	slices.SortFunc(entries, func(a, b entry) int {
-		if c := a.at.Compare(b.at); c != 0 {
-			return c
-		}
-		return strings.Compare(a.id, b.id)
+		return out, more, err
 	})
-	truncated = truncated || more
-	if len(entries) > pendingChangeLimit {
-		entries, truncated = entries[:pendingChangeLimit], true
-	}
-	items := make([]any, 0, len(entries))
-	for _, e := range entries {
-		items = append(items, e.it)
-	}
-	return map[string]any{"count": len(items), "items": items, "truncated": truncated}, nil
 }
 
 // Historical mission cards retain their original option labels.

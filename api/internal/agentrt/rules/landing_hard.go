@@ -80,7 +80,6 @@ const landingStore = "api/internal/agentrt/store/"
 
 var landingStorePermission = map[string]string{
 	"pin*":                 "pinned checks and their reviews: what a task's commit must pass",
-	"nomerge*":             "no-merge marks that hold a commit back from landing",
 	"rules.go":             "stores and reads the Owner's signed rules",
 	"envelope.go":          "a task's envelope: what its attempt may touch",
 	"propose.go":           "agents' proposals of missions and tasks",
@@ -95,7 +94,6 @@ var landingStorePermission = map[string]string{
 	"write.go":             "writer identity and idempotent writes",
 	"vocab.go":             "the event types each writer may append",
 	"keyed.go":             "idempotency keys of requests",
-	"accept.go":            "starts verification and concludes a task: its acceptance",
 	"alerts.go":            "records policy alerts and tells the Owner of them",
 	"artifactsearch.go":    "artifact search; hides exam artifacts from Agent hosts",
 	"assess.go":            "assessments, including whether a signed rule already answers an item",
@@ -105,7 +103,6 @@ var landingStorePermission = map[string]string{
 	"blockedcard.go":       "asks and decides blocked-task cards",
 	"blockedclose.go":      "closes a mission and cancels its work on a card's answer",
 	"blockedrecommend.go":  "the option a blocked card recommends, which cardauto.go may take",
-	"brief.go":             "turns mail into brief tasks, or refuses it",
 	"briefdue.go":          "schedules briefs and the Owner's nudges",
 	"claimfailed.go":       "the failed checks a retried implementation is told of",
 	"claims.go":            "detects claims of the Owner's approval in messages",
