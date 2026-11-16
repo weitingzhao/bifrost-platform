@@ -15,11 +15,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go/jetstream"
+	"k8s.io/client-go/dynamic"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gate"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gatecluster"
 	bushook "github.com/weitingzhao/bifrost-platform/api/internal/bus/hook"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
@@ -34,7 +36,8 @@ import (
 // api process the gate serves the ledger's events to long polls and SSE,
 // woken by NATS. Everything is off unless BUS_NATS_URL (relay, wake,
 // consumer) or BUS_GITEA_HOOK_SECRET (hook, reconciliation) is set; nothing
-// old changes behaviour.
+// old changes behaviour. Step 2a: with BUS_NATS_URL the workers also run
+// gate-cluster (ci.run.started, ci.run.finished, release.window.changed).
 
 // busWiring is what the bus is in this process.
 type busWiring struct {
@@ -228,6 +231,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 	if !natsOn {
 		return
 	}
+	s.startGateCluster(ctx)
 	nc, err := relay.Connect(cfg.URL, relay.RelayUser, cfg.RelayPassword, "platform-workers bus relay")
 	if err != nil {
 		slog.Error("bus relay: NATS connection; the relay is off", "error", err)
@@ -261,6 +265,30 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 			Tenant: rocket, Env: env, Logf: busLogf}
 		r.Run(ctx, relay.Listen(ctx, pool, busLogf))
 	})
+}
+
+// startGateCluster runs gate-cluster (bus step 2a): it watches the pipelines
+// namespace's runs and the release window and writes ci.run.started,
+// ci.run.finished and release.window.changed into the ledger. Workers only,
+// with the relay's switch (BUS_NATS_URL); without a cluster it stays off.
+func (s *Server) startGateCluster(ctx context.Context) {
+	if s.cluster == nil {
+		return
+	}
+	ns := "cicd"
+	if s.delivery != nil {
+		ns = s.delivery.PipelinesNamespace()
+	}
+	g := &gatecluster.Gate{Ledger: &gatecluster.PGLedger{DB: s.bus.db}, Namespace: ns, Logf: busLogf,
+		Dynamic: func() (dynamic.Interface, error) {
+			cfg, _, err := s.cluster.Service().RestConfig()
+			if err != nil {
+				return nil, err
+			}
+			return dynamic.NewForConfig(cfg)
+		}}
+	safego.Go("bus-gate-cluster", func() { g.Run(ctx) })
+	slog.Info("bus gate-cluster: watching PipelineRuns and the release window", "namespace", ns)
 }
 
 // consumeHeadRelease is head-release's durable consumer: each

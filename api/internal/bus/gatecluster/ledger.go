@@ -1,0 +1,111 @@
+package gatecluster
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+)
+
+// Actor is who writes gate-cluster's events: the gate, a service of the platform.
+const Actor = "service:gate-cluster"
+
+// RunStream is the ledger stream of one PipelineRun (RULES.md §7: a stream
+// per key; runs are not ordered, so each run is its own stream).
+func RunStream(run string) string { return "ci:" + run }
+
+// WindowStream is the ledger stream of the release window.
+const WindowStream = "window:" + WindowKey
+
+// Decide is asked, under the stream's lock, with the type and body of the
+// stream's last event ("" and nil when the stream is empty): the body to
+// append, or false to write nothing (the ledger already says it).
+type Decide func(lastType string, lastBody map[string]any) (map[string]any, bool)
+
+// Ledger is where the gate writes. PGLedger is the event log; the tests hand
+// in a memory one.
+type Ledger interface {
+	Append(ctx context.Context, stream, typ string, decide Decide) (bool, error)
+}
+
+// PGLedger appends to agentrt's event log. DB is nil while the ledger is not
+// connected.
+type PGLedger struct {
+	DB func() eventlog.DB
+}
+
+var errNoLedger = errors.New("bus gate-cluster: the ledger is not connected")
+
+// Append locks the stream's head, reads its last event, and appends what
+// decide returns, in one transaction: two writers of one stream take turns,
+// and a fact the stream already holds is not written again.
+func (l *PGLedger) Append(ctx context.Context, stream, typ string, decide Decide) (bool, error) {
+	var db eventlog.DB
+	if l.DB != nil {
+		db = l.DB()
+	}
+	if db == nil {
+		return false, errNoLedger
+	}
+	if err := ensureActor(ctx, db); err != nil {
+		return false, err
+	}
+	appended := false
+	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+		appended = false
+		if err := eventlog.LockStream(ctx, tx, stream); err != nil {
+			return err
+		}
+		var lastType string
+		var raw []byte
+		err := tx.QueryRow(ctx, `SELECT event_type, body_json FROM agentrt.event
+		  WHERE event_stream_id = $1 ORDER BY seq DESC LIMIT 1`, stream).Scan(&lastType, &raw)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		var lastBody map[string]any
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &lastBody); err != nil {
+				return err
+			}
+		}
+		body, ok := decide(lastType, lastBody)
+		if !ok {
+			return nil
+		}
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: stream, Type: typ, Actor: Actor, Body: body}); err != nil {
+			return err
+		}
+		appended = true
+		return nil
+	})
+	return appended, err
+}
+
+// ensureActor registers service:gate-cluster once, as gate-git registers
+// its own (bus/hook): under the registration lock, with an actor_registered
+// event written by the controller.
+func ensureActor(ctx context.Context, db eventlog.DB) error {
+	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+		var have bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.actor WHERE actor_id = $1)`, Actor).Scan(&have); err != nil || have {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742109)`); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.actor WHERE actor_id = $1)`, Actor).Scan(&have); err != nil || have {
+			return err
+		}
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "actor_registered", Actor: "controller",
+			Body: map[string]any{"actors": []string{Actor}, "note": "the bus's gate for the cluster, registered at its first write"}}); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name) VALUES ($1, 'controller', $2)`,
+			Actor, "Bus gate-cluster")
+		return err
+	})
+}
