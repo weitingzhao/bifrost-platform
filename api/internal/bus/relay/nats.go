@@ -198,15 +198,22 @@ func (r *Receipts) Publish(ctx context.Context, id, consumer string) error {
 // consumer of the events stream (RULES.md §8 item 1: only resident services
 // hold one). A new consumer starts at new events, not the stream's history.
 // handle's nil acknowledges; an error asks for the event again later.
-func ConsumeDurable(ctx context.Context, js jetstream.JetStream, tenant, env, durable, typ string,
+func ConsumeDurable(ctx context.Context, js jetstream.JetStream, tenant, env, durable string, types []string,
 	handle func(Envelope) error) (jetstream.ConsumeContext, error) {
+	if len(types) == 0 {
+		return nil, fmt.Errorf("durable %s: no event types", durable)
+	}
+	subjects := make([]string, 0, len(types))
+	for _, typ := range types {
+		subjects = append(subjects, EventSubject(tenant, env, typ))
+	}
 	cons, err := js.CreateOrUpdateConsumer(ctx, EventStreamName(tenant, env), jetstream.ConsumerConfig{
-		Durable:       durable,
-		FilterSubject: EventSubject(tenant, env, typ),
-		AckPolicy:     jetstream.AckExplicitPolicy,
-		DeliverPolicy: jetstream.DeliverNewPolicy,
-		AckWait:       time.Minute,
-		MaxDeliver:    20,
+		Durable:        durable,
+		FilterSubjects: subjects,
+		AckPolicy:      jetstream.AckExplicitPolicy,
+		DeliverPolicy:  jetstream.DeliverNewPolicy,
+		AckWait:        time.Minute,
+		MaxDeliver:     20,
 	})
 	if err != nil {
 		return nil, err

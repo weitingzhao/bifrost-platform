@@ -310,7 +310,9 @@ func (s *Server) startGateCluster(ctx context.Context) {
 func (s *Server) consumeHeadRelease(ctx context.Context, js jetstream.JetStream, env string) {
 	receipts := &relay.Receipts{JS: js, Tenant: relay.Tenant, Env: env}
 	safego.Go("bus-head-release-kicks", func() { s.bus.runKicks(ctx) })
-	cc, err := relay.ConsumeDurable(ctx, js, relay.Tenant, env, "headrelease", bushook.Type, func(e relay.Envelope) error {
+	// git.main.advanced, and ci.run.finished: main's CI verdict often comes after
+	// the push that woke it (2026-11-16 21:06: the verdict 40 s after the wake).
+	cc, err := relay.ConsumeDurable(ctx, js, relay.Tenant, env, "headrelease", []string{bushook.Type, gatecluster.TypeRunFinished}, func(e relay.Envelope) error {
 		s.bus.kickHeadRelease()
 		rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
