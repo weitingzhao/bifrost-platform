@@ -343,76 +343,26 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 	return map[string]any{"missions": list, "truncated": truncated}, ownerNext(missions, etas, truncated, now), nil
 }
 
-// missionDoc is one mission with its status (SPEC §3.2) and when it should
-// be done (progresseta.go).
+// missionDoc retains the progress reader contract; the Plan projection receives
+// data only. Ranking, counting and evidence decisions remain in their existing callers.
 func missionDoc(m *progressMission, eta map[string]any) map[string]any {
 	statuses := make([]string, 0, len(m.tasks))
-	tasks := make([]any, 0, len(m.tasks)+len(m.onMain))
+	tasks := make([]planreadings.MissionTaskProjection, 0, len(m.tasks))
 	for _, t := range m.tasks {
 		statuses = append(statuses, t.Status)
-		tasks = append(tasks, t)
+		tasks = append(tasks, planreadings.MissionTaskProjection{
+			Status: t.Status, Reason: t.Reason, Since: t.Since, WaitingRoles: t.WaitingRoles, Document: t,
+		})
 	}
+	onMain := make([]any, 0, len(m.onMain))
 	for _, t := range m.onMain {
-		tasks = append(tasks, t)
+		onMain = append(onMain, t)
 	}
-	count := plan.CountSteps(m.steps)
-	status, reason, since, waiting := worst(statuses), "", "", "none"
-	var roles []string
-	if status != "" {
-		for _, t := range m.tasks {
-			if t.Status == status {
-				reason, since, roles = t.Reason, t.Since, t.WaitingRoles
-				break
-			}
-		}
-		// A mission on the Owner's card says so, with or without tasks
-		// (review 190 B4).
-		if status == StatusWaitingOwner && m.state == "awaiting_owner" && m.stateQuestion != "" {
-			reason = missionCardReason(m)
-		}
-		switch status {
-		case StatusWaitingOwner, StatusStopped:
-			waiting = "owner"
-		case StatusWaitingRole:
-			waiting = "role"
-			if len(roles) == 0 {
-				waiting = "coordinator"
-			}
-		case StatusHostLost, StatusMaybeStuck, StatusUnknown, StatusBlocked, StatusQueued:
-			waiting = "coordinator"
-		}
-	} else {
-		switch {
-		case m.state == "proposed" || m.state == "awaiting_owner":
-			status, waiting, since = StatusWaitingOwner, "owner", m.stateAt
-			reason = "the mission is " + m.state + ": it waits for a signed standing-envelope rule, which nothing the Owner can click gives yet"
-			if m.stateQuestion != "" {
-				reason = missionCardReason(m)
-			}
-		case m.state == "paused":
-			status, waiting, since = StatusBlocked, "coordinator", m.stateAt
-			reason = "the mission is paused"
-			if m.stateBy != "" {
-				reason += " by " + m.stateBy
-			}
-			if m.stateReason != "" {
-				reason += ": " + m.stateReason
-			}
-		case count.Total > count.Done:
-			status, waiting, reason, since = "idle", "coordinator", "no task proposed for the next step", m.lastAt
-		default:
-			status, reason, since = "done", "every step is done", m.lastAt
-		}
-	}
-	return map[string]any{"mission_id": m.id, "title": m.title, "goal": m.goal, "state": m.state, "deadline_at": m.deadline,
-		"work_id": m.work, "slices": countDoc(count), "status": status, "reason": reason, "since": since, "waiting_on": waiting,
-		"waiting_roles": nonNil(roles), "tasks": tasks, "next_steps": nonNilAny(m.next),
-		"eta": eta}
-}
-
-// missionCardReason is why a mission on the Owner's card waits.
-func missionCardReason(m *progressMission) string {
-	return "the mission waits for the Owner's answer on question " + m.stateQuestion + ": " + m.stateReason
+	return planreadings.MissionDocument(planreadings.MissionProjection{
+		ID: m.id, Title: m.title, Goal: m.goal, State: m.state, Deadline: m.deadline, Work: m.work,
+		StateAt: m.stateAt, StateReason: m.stateReason, StateBy: m.stateBy, StateQuestion: m.stateQuestion, LastAt: m.lastAt,
+		Count: plan.CountSteps(m.steps), SelectedStatus: worst(statuses), Tasks: tasks, OnMain: onMain, Next: m.next,
+	}, eta)
 }
 
 func nonNilAny(s []any) []any {

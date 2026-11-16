@@ -476,7 +476,7 @@
         "plan"
       ],
       "status": "assigned",
-      "basis": "planning charter; snapshot, architecture stored-rule text and latest-note observations extracted from store; all rule evaluation, refusal, transaction and evidence decisions remain with existing callers"
+      "basis": "planning charter; snapshot, architecture stored-rule text and latest-note observations extracted from store; all rule evaluation, refusal, transaction and evidence decisions remain with existing callers; mission card display projection consumes reader-selected status/count/task data without importing store (2026-11-16)"
     },
     "api/internal/cirunview": {
       "domains": [
