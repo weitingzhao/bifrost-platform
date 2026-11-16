@@ -71,3 +71,17 @@ it('surfaces all parallel active steps without inventing a progress percentage',
   expect(status).toHaveTextContent('prepare: waiting')
   expect(status).toHaveTextContent('no completion percentage is inferred')
 })
+
+// Owner 2026-11-15: the upper attempt selector controls details and later stages.
+it('follows the selected CI attempt and limits delivery stages to its commit', async () => {
+  const chosen = {...timingRun(), name:'chosen-ci'}
+  const other = {...timingRun(), name:'other-ci', revision:'f'.repeat(40)}
+  vi.mocked(fetchCITimings).mockImplementation(async pipeline => ({as_of:'2026-11-15T20:04:00Z',retained:2,limit:60,runs: pipeline === 'bifrost-ci-platform' ? [other,chosen] : [{...other,name:'other-delivery',pipeline},{...chosen,name:'chosen-delivery',pipeline}]}))
+  render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><PlatformTimings ciRun="chosen-ci" ciCommit={chosen.revision} onPickCI={vi.fn()} /></QueryClientProvider>)
+  expect(await screen.findByText('Following selected CI run: chosen-ci')).toBeInTheDocument()
+  expect(screen.queryByRole('combobox',{name:'Run'})).toBeNull()
+  expect(screen.getByText('chosen-ci',{exact:true})).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button',{name:'STG delivery'}))
+  expect(await screen.findByRole('option',{name:/chosen-delivery/})).toBeInTheDocument()
+  expect(screen.queryByRole('option',{name:/other-delivery/})).toBeNull()
+})

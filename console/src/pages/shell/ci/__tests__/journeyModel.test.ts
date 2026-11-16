@@ -21,3 +21,14 @@ it('does not invent completion from running or other-commit deliveries', () => {
  expect(commitJourney(base.revision!,[base],[],[{...base,revision:'b'.repeat(40)}]).total).toBeNull()
  expect(commitJourney(base.revision!,[],[],[base]).total).toBeNull()
 })
+
+// A later selected attempt must not be timed from an earlier CI or earlier delivery.
+it('anchors the journey to the selected attempt and excludes earlier completed releases', () => {
+ const base=timingRun(), commit=base.revision!
+ const retry={...base,name:'retry',start_time:'2026-11-15T20:05:00Z',completion_time:'2026-11-15T20:06:00Z'}
+ const earlier={...base,name:'old-ship',completion_time:'2026-11-15T20:04:00Z'}
+ const later={...base,name:'new-ship',start_time:'2026-11-15T20:07:00Z',completion_time:'2026-11-15T20:10:00Z'}
+ const out=commitJourney(commit,[base,retry],[base],[earlier,later],'retry')
+ expect(out.first?.name).toBe('retry');expect(out.total).toBe(300);expect(out.delivered?.name).toBe('new-ship');expect(out.toMain).toBeNull()
+ expect(commitJourney(commit,[base],[],[earlier],'missing').total).toBeNull()
+})

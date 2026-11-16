@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, expect, it, vi } from 'vitest'
 import { fetchSupplyChain } from '@/api/delivery'
@@ -34,6 +34,7 @@ function setup(over: { runs?: 'fail' | 'none'; fullCi?: 'none'; projects?: 'fail
   vi.mocked(fetchApprovalReadings).mockResolvedValue(contract.approvalsNone())
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(<QueryClientProvider client={client}><CiSection /></QueryClientProvider>)
+  return client
 }
 
 // Origin: as above — a project with no declaration says that all of it runs, and shows no module row.
@@ -149,7 +150,8 @@ it('links module cards and runs, preserves unknown evidence, and resets on proje
   expect(screen.getByText(/Daily full run is a whole-repository check/)).toBeInTheDocument()
   fireEvent.click(within(screen.getByRole('group', { name: 'Project' })).getByRole('button', { name: 'plain' }))
   await screen.findByTestId('ci-config-project-plain')
-  expect(screen.getByRole('button', { name: 'All modules' })).toHaveAttribute('aria-pressed', 'true')
+  expect(screen.queryByRole('button', { name: 'All modules' })).toBeNull()
+  expect(screen.getByText('Module split not configured. CI tests this project as one block.')).toBeInTheDocument()
 })
 
 // Owner 2026-11-15: visible project chips and dependency groups share one workspace.
@@ -159,14 +161,14 @@ it('separates project-scoped information from global records and never calls unk
   const project = screen.getByRole('region', { name: 'Project workspace: r' })
   expect(within(project).getByTestId('ci-config-module-r-web')).toBeInTheDocument()
   expect(within(project).queryByRole('heading', { name: 'CI-wide information' })).toBeNull()
-  const inputs = within(project).getByRole('group', { name: 'Declared additional inputs' })
+  const inputs = within(project).getByRole('group', { name: 'Uses shared files or other projects' })
   expect(within(inputs).getByRole('button', { name: 'web' })).toBeInTheDocument()
-  expect(within(within(project).getByRole('group', { name: 'No additional inputs declared' })).getByRole('button', { name: 'svc' })).toBeInTheDocument()
+  expect(within(within(project).getByRole('group', { name: 'No extra module-wide dependencies' })).getByRole('button', { name: 'svc' })).toBeInTheDocument()
   expect(within(project).getByText(/No additional inputs does not mean independent/)).toBeInTheDocument()
   fireEvent.click(within(screen.getByRole('group', { name: 'Project' })).getByRole('button', { name: 'plain' }))
   await screen.findByTestId('ci-config-project-plain')
-  expect(screen.getByText(/Dependency grouping unknown/)).toBeInTheDocument()
-  expect(screen.queryByRole('group', { name: 'Declared additional inputs' })).toBeNull()
+  expect(screen.getByText(/Module split not configured/)).toBeInTheDocument()
+  expect(screen.queryByRole('group', { name: 'Uses shared files or other projects' })).toBeNull()
   expect(screen.getByRole('region', { name: 'CI-wide information' })).toBeInTheDocument()
 })
 
@@ -177,4 +179,30 @@ it('keeps the platform benchmark inside its project and removes it on project sw
   fireEvent.click(within(screen.getByRole('group', { name: 'Project' })).getByRole('button', { name: 'plain' }))
   await screen.findByTestId('ci-config-project-plain')
   expect(screen.queryByText('Designed vs actual')).toBeNull()
+})
+
+// Owner 2026-11-15: project + module + one attempt must drive the timeline and details.
+it('selects an attempt from history and resets it with the module/project scope', async () => {
+  setup()
+  const select = await screen.findByRole('combobox', { name: 'CI run' })
+  await screen.findByTestId('ci-run-ci-5')
+  expect(select).toHaveValue('ci-5')
+  fireEvent.click(within(screen.getByTestId('ci-run-ci-2')).getByRole('button'))
+  expect(select).toHaveValue('ci-2')
+  fireEvent.change(select, { target: { value: 'ci-3' } })
+  expect(within(screen.getByRole('region', { name: 'Selected CI attempt' })).getByText(/this is not a new test sample/)).toBeInTheDocument()
+  fireEvent.click(within(screen.getByRole('group', { name: 'Module' })).getByRole('button', { name: 'web' }))
+  expect(select).toHaveValue('ci-5')
+  expect(within(select).queryByRole('option', { name: /ci-2/ })).toBeNull()
+  fireEvent.click(within(screen.getByRole('group', { name: 'Project' })).getByRole('button', { name: 'plain' }))
+  await screen.findByTestId('ci-config-project-plain')
+  expect(screen.getByRole('combobox', { name: 'CI run' })).toHaveValue('')
+})
+it('does not move an inspected attempt when polling discovers a newer run', async () => {
+  const client = setup()
+  await screen.findByTestId('ci-run-ci-5')
+  const original = contract.runs()
+  await act(async () => { client.setQueryData(['units', 'runs', 'r'], { ...original, runs: [{ ...original.runs[0], name: 'ci-new' }, ...original.runs] }) })
+  expect(screen.getByRole('combobox', { name: 'CI run' })).toHaveValue('ci-5')
+  expect(screen.getByRole('option', { name: /ci-new/ })).toBeInTheDocument()
 })

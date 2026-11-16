@@ -38,7 +38,7 @@ function TaskTiming({ task, start, total }: { task: TimingTask; start?: string; 
   </details>
 }
 
-export function RunTimingDetail({ run }: { run: TimingRun }) {
+export function RunTimingDetail({ run, showJourney = true }: { run: TimingRun; showJourney?: boolean }) {
   const [readLogs, setReadLogs] = useState(false)
   const logs = useQuery({ queryKey:['ci-timing-logs',run.name], queryFn:() => fetchPipelineRunLogs(run.name,'cicd'), enabled:readLogs, staleTime:60_000, retry:false })
   const text = logs.data?.logs ?? '', slow = slowTimings(text,run.name).slice(0,10)
@@ -74,7 +74,7 @@ export function RunTimingDetail({ run }: { run: TimingRun }) {
     <div className="px-3 py-2"><DenseTag variant={runStatus(run) === 'Succeeded' ? 'success' : runStatus(run) === 'Failed' ? 'danger' : 'neutral'}>{runStatus(run)}</DenseTag></div>
     <dl className="grid min-w-0 gap-x-6 gap-y-3 px-3 pb-3 text-xs sm:grid-cols-2">{facts.map(([label,value]) => <div key={label} className="min-w-0"><dt className="font-medium">{label}</dt><dd className="m-0 mt-1 whitespace-pre-wrap [overflow-wrap:anywhere] text-muted-foreground">{value}</dd></div>)}</dl>
     {!isCI && <p className="m-0 px-3 py-2 text-xs text-muted-foreground">This pipeline does not select test scope. Inspect the CI of the same commit for package selection and test reuse.</p>}
-    {runCommit(run) && <CommitJourney key={runCommit(run)} commit={runCommit(run)} />}
+    {showJourney && runCommit(run) && <CommitJourney key={runCommit(run)} commit={runCommit(run)} />}
     {run.results.length > 0 && <details className="px-3 py-2 text-xs"><summary className="cursor-pointer py-2">Pipeline results</summary><dl className="space-y-2">{run.results.map(r => <div key={r.name}><dt className="font-medium">{r.name}</dt><dd className="m-0 whitespace-pre-wrap break-all text-muted-foreground">{r.value || '(empty)'}</dd></div>)}</dl></details>}
     <p className="m-0 px-3 py-2 text-xs text-muted-foreground">Task time is creation to completion; step time is script start to finish. Parallel tasks overlap: their seconds must not be added. “Before test tasks” ends when the first test TaskRun is created, matching the CI benchmark. Task startup and script setup are additional costs.</p>
     {run.tasks.length === 0 && <p className="px-3 text-sm">No TaskRuns retained for this run. Outside retention there is no history to display.</p>}
