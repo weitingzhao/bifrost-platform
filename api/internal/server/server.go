@@ -655,7 +655,7 @@ func (s *Server) Router() http.Handler {
 				r.Use(s.auth.Require(actuation.RoleOperator))
 				// runs the ssh sync script and overwrites the host kubeconfig (TD-220)
 				r.Post("/sync-kubeconfig", s.guard("sync_kubeconfig", s.cluster.HandleSyncKubeconfig))
-				r.Post("/namespaces/ensure-bifrost", s.cluster.HandleEnsureBifrost)
+				r.Post("/namespaces/ensure-bifrost", s.guard("ensure_bifrost_namespaces", s.cluster.HandleEnsureBifrost))
 				r.Post("/postgres/backup", s.guard("trigger_cnpg_backup", s.cluster.HandleTriggerPostgresBackup))
 				r.Post("/postgres/wal-store/repair", s.guard("repair_cnpg_wal_store", s.cluster.HandleRepairPostgresWalStore))
 				r.Post("/postgres/backups/sweep-failed", s.guard("sweep_failed_backups", s.cluster.HandleSweepExpiredFailedBackups))

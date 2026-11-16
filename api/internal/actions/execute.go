@@ -20,6 +20,13 @@ func RegisterExecutor(id string, fn Executor) {
 	execMu.Unlock()
 }
 
+// HasExecutor reports whether approve can run id on the platform.
+func HasExecutor(id string) bool {
+	execMu.RLock()
+	defer execMu.RUnlock()
+	return executors[id] != nil
+}
+
 // Execute runs the registered executor. A missing executor is an error.
 func Execute(ctx context.Context, id string, params map[string]any) (any, error) {
 	execMu.RLock()
