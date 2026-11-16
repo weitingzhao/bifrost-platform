@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
+	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 )
 
 // GET /api/v1/units/full-ci is what the daily full CI recorded
@@ -35,9 +36,5 @@ func (s *Server) handleUnitFullCI(w http.ResponseWriter, r *http.Request) {
 
 // unitFullCIAnswer is the route's body for the notes read.
 func unitFullCIAnswer(notes []evidence.FullCINote) map[string]any {
-	runs := make([]map[string]any, len(notes))
-	for i, n := range notes {
-		runs[i] = map[string]any{"at": n.At.UTC().Format(time.RFC3339), "text": n.Text, "full_ci": n.Body}
-	}
-	return map[string]any{"runs": runs}
+	return cirunview.FullCIAnswer(notes)
 }

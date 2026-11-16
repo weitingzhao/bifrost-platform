@@ -476,14 +476,42 @@
         "plan"
       ],
       "status": "assigned",
-      "basis": "planning charter; plan pace observation reads extracted from store without changing transaction, SQL or error contract"
+      "basis": "planning charter; pace and recent-event observation reads extracted from store, preserving transactions, SQL and cursor validation"
     },
     "api/internal/cirunview": {
       "domains": [
         "verification"
       ],
       "status": "assigned",
-      "basis": "CI charter; existing run-view cache extracted from server with unchanged response, key, TTL and failure semantics"
+      "basis": "CI charter; run-view cache and daily-full-note presentation extracted from server; no CI or release decisions"
+    },
+    "api/internal/modtidy": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: module dependency hygiene guard; tests run go mod tidy -diff, no runtime policy; implementation unchanged"
+    },
+    "api/internal/storedurability": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: platform persistence-location guard; source scans platform store paths, no business decisions; implementation unchanged"
+    },
+    "api/internal/tradevocab": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: platform/application separation guard; source checks vocabulary budgets, no trading execution; implementation unchanged"
+    },
+    "api/internal/notice": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: shared notification text cleaning and relay transport; actual readers span domains, package deliberately imports neither actions nor approvals; implementation unchanged"
     }
   }
 }

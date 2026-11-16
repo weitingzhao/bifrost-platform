@@ -7,13 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 )
-
-// recentScope picks the events Recent changes lists for root $2 (plan stream $1):
-// the plan's own events, its external work except heartbeats (a dispatch run
-// sends one every 30 seconds; they only say it is alive, which the run's own
-// row already shows), and plan observations that changed a value.
-const recentScope = `event_stream_id=$1 OR (body_json->'external_work'->>'root'=$2 AND body_json->'external_work'->>'type'<>'heartbeat') OR (body_json->'plan_observation'->>'root'=$2 AND body_json->'plan_observation'->>'changed'='true')`
 
 type viewRecentCursor struct {
 	Root    string           `json:"root"`
@@ -44,45 +39,24 @@ func planViewRecent(ctx context.Context, tx pgx.Tx, root, cursor string, now tim
 			return nil, "", "", invalid("invalid cursor time")
 		}
 	} else {
-		rows, err := tx.Query(ctx, `SELECT event_stream_id,max(seq) FROM agentrt.event WHERE `+recentScope+` GROUP BY event_stream_id`, PlanStream(root), root)
+		streams, err := planreadings.RecentStreams(ctx, tx, PlanStream(root), root)
 		if err != nil {
 			return nil, "", "", err
 		}
-		for rows.Next() {
-			var stream string
-			var seq int64
-			if err = rows.Scan(&stream, &seq); err != nil {
-				rows.Close()
-				return nil, "", "", err
-			}
-			c.Streams[stream] = seq
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return nil, "", "", err
-		}
+		c.Streams = streams
 	}
 	bounds, err := json.Marshal(c.Streams)
 	if err != nil {
 		return nil, "", "", err
 	}
-	rows, err := tx.Query(ctx, `SELECT to_jsonb(e),e.event_id FROM (SELECT event_id,event_stream_id,seq,event_type,actor_id,at,body_json FROM agentrt.event WHERE (`+recentScope+`) AND seq<=COALESCE(($3::jsonb->>event_stream_id)::bigint,0) AND ($4::bigint=0 OR event_id<$4) ORDER BY event_id DESC LIMIT 21) e`, PlanStream(root), root, bounds, c.Before)
-	if err != nil {
-		return nil, "", "", err
-	}
-	type event struct {
-		raw json.RawMessage
-		id  int64
-	}
-	events, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (event, error) { var e event; err := r.Scan(&e.raw, &e.id); return e, err })
+	events, err := planreadings.RecentEvents(ctx, tx, PlanStream(root), root, bounds, c.Before)
 	if err != nil {
 		return nil, "", "", err
 	}
 	next := ""
 	if len(events) > 20 {
 		events = events[:20]
-		c.Before = events[19].id
+		c.Before = events[19].ID
 		raw, err := json.Marshal(c)
 		if err != nil {
 			return nil, "", "", err
@@ -91,7 +65,7 @@ func planViewRecent(ctx context.Context, tx pgx.Tx, root, cursor string, now tim
 	}
 	out := []json.RawMessage{}
 	for _, e := range events {
-		out = append(out, e.raw)
+		out = append(out, e.Raw)
 	}
 	raw, err := json.Marshal(out)
 	return raw, next, c.AsOf, err
