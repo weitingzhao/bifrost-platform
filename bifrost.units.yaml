@@ -44,6 +44,7 @@ modules:
     # it run less often; a package missing from this list that does read
     # outside is the dangerous mistake.
     inputs:
+      api/internal/topology: ["api/internal/topology"]
       # Narrowed 2026-11-14 (biz-align, two batches): each entry that is not
       # "." was run with scripts/ci/unit-go-test holding the package's reads
       # to exactly what the entry lists beyond its own directory, and passed.
