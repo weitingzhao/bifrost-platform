@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 )
 
 // The progress projection (GET /progress; the interface is fixed in
@@ -435,74 +436,20 @@ func nonNilAny(s []any) []any {
 // architecture root with its rows, each ticked by its done rule evaluated
 // now and with its latest note (SPEC §2.4; progressarch.go).
 func planView(ctx context.Context, tx pgx.Tx) ([]any, error) {
-	rows, err := tx.Query(ctx, `SELECT r.plan_node_id, r.node_kind, r.title, i.plan_node_id, i.label, i.title,
-	    s.plan_node_id, s.state, COALESCE(e.body_json->>'cause', '')
-	  FROM agentrt.plan_node r
-	  LEFT JOIN agentrt.plan_node i ON i.parent_plan_node_id = r.plan_node_id AND i.node_kind IN ('item','arch_row')
-	  LEFT JOIN agentrt.plan_node s ON s.parent_plan_node_id = i.plan_node_id AND s.node_kind = 'step'
-	  LEFT JOIN agentrt.event e ON e.event_id = s.state_event_id
-	  WHERE r.parent_plan_node_id IS NULL
-	  ORDER BY r.node_kind, r.ordinal, r.plan_node_id, i.ordinal, s.ordinal`)
+	roots, err := planreadings.ProgressTree(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	type item struct {
-		id, label, title string
-		steps            []plan.Step
-		active           []string
-	}
-	type root struct {
-		id, kind, title string
-		items           []*item
-	}
-	var roots []*root
-	byRoot := map[string]*root{}
-	byItem := map[string]*item{}
-	for rows.Next() {
-		var rid, rkind, rtitle string
-		var iid, ilabel, ititle, sid, sstate *string
-		var cause string
-		if err = rows.Scan(&rid, &rkind, &rtitle, &iid, &ilabel, &ititle, &sid, &sstate, &cause); err != nil {
-			return nil, err
-		}
-		r := byRoot[rid]
-		if r == nil {
-			r = &root{id: rid, kind: rkind, title: rtitle}
-			byRoot[rid] = r
-			roots = append(roots, r)
-		}
-		if iid == nil {
-			continue
-		}
-		it := byItem[*iid]
-		if it == nil {
-			it = &item{id: *iid, label: *ilabel, title: *ititle}
-			byItem[*iid] = it
-			r.items = append(r.items, it)
-		}
-		if sid == nil || sstate == nil {
-			continue
-		}
-		it.steps = append(it.steps, plan.Step{ID: *sid, State: *sstate, Manual: *sstate == plan.StateDone && cause == "done_rule_manual"})
-		if *sstate == plan.StateActive {
-			it.active = append(it.active, *sid)
-		}
-	}
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-	rows.Close()
 	deploys := newRecordedDeploys(ctx, tx)
 	// One reading of each gate for the whole projection, every root's rows (review 427 B2, 429 C).
 	gates := map[string]plan.Tri{}
 	out := make([]any, 0, len(roots))
 	for _, r := range roots {
-		doc := map[string]any{"plan_node_id": r.id, "kind": r.kind, "title": r.title}
-		if r.kind == "arch_root" {
-			arch := make([]archRow, 0, len(r.items))
-			for _, it := range r.items {
-				arch = append(arch, archRow{id: it.id, title: it.title})
+		doc := map[string]any{"plan_node_id": r.ID, "kind": r.Kind, "title": r.Title}
+		if r.Kind == "arch_root" {
+			arch := make([]archRow, 0, len(r.Items))
+			for _, it := range r.Items {
+				arch = append(arch, archRow{id: it.ID, title: it.Title})
 			}
 			if doc["rows"], err = archRowsDoc(ctx, tx, arch, deploys, gates); err != nil {
 				return nil, err
@@ -511,11 +458,11 @@ func planView(ctx context.Context, tx pgx.Tx) ([]any, error) {
 			continue
 		}
 		var all []plan.Step
-		items := make([]any, 0, len(r.items))
-		for _, it := range r.items {
-			all = append(all, it.steps...)
-			items = append(items, map[string]any{"plan_node_id": it.id, "label": it.label, "title": it.title,
-				"count": countDoc(plan.CountSteps(it.steps)), "active_steps": nonNil(it.active)})
+		items := make([]any, 0, len(r.Items))
+		for _, it := range r.Items {
+			all = append(all, it.Steps...)
+			items = append(items, map[string]any{"plan_node_id": it.ID, "label": it.Label, "title": it.Title,
+				"count": countDoc(plan.CountSteps(it.Steps)), "active_steps": nonNil(it.Active)})
 		}
 		doc["count"], doc["items"] = countDoc(plan.CountSteps(all)), items
 		out = append(out, doc)
