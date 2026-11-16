@@ -10,11 +10,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -31,14 +29,6 @@ import (
 // maxCommitDiff bounds the diff read (a pinned result is one reviewed
 // commit).
 const maxCommitDiff = 32 << 20
-
-func (s *Server) agentRuntimeCommits() store.CommitReader {
-	org := strings.TrimSpace(os.Getenv("AGENTRT_GIT_ORG"))
-	if org == "" || s.delivery == nil {
-		return nil
-	}
-	return giteaCommits(s.delivery.GiteaAccess, org, &http.Client{Timeout: 20 * time.Second})
-}
 
 func giteaCommits(access func(context.Context) (delivery.GiteaAccess, error), org string, client *http.Client) store.CommitReader {
 	c := *client

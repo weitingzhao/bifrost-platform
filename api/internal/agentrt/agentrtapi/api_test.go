@@ -97,10 +97,7 @@ var tokens = map[string]string{"agentd:h1": "fixture-agentd-h1", "agentd:h2": "f
 	// The collectors of two hosts (R5:5.5-12 §1.2).
 	"collector:h1": "fixture-collector-h1", "collector:h2": "fixture-collector-h2"}
 
-// heads records the branch heads the API asked for, as repo|ref.
-var heads []string
-
-// recordMu orders the appends to heads and cards: tests that run in parallel
+// recordMu orders the appends to cards: tests that run in parallel
 // serve beside each other (those that read either run alone).
 var recordMu sync.Mutex
 
@@ -175,12 +172,6 @@ intake_tokens:
 	// A claim reads and parses the rules it acts on; under a whole suite's
 	// load one pass can take longer than a few hundred milliseconds.
 	api := &agentrtapi.API{DB: db, ClaimWait: time.Second, ClaimPoll: 50 * time.Millisecond,
-		Head: func(_ context.Context, repo, ref string) (string, error) {
-			recordMu.Lock()
-			defer recordMu.Unlock()
-			heads = append(heads, repo+"|"+ref)
-			return pushedAt, nil
-		},
 		Ask: func(_ context.Context, c store.Card) (string, error) {
 			if askFails {
 				return "", fmt.Errorf("store full")

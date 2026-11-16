@@ -27,13 +27,7 @@ import (
 // before the database is wired.
 type API struct {
 	ConfigurationBoundaries func(context.Context, string, string, []map[string]any) (map[string]any, error)
-	// CheckAssessment verifies a canonical card id or approval number is still open.
-	CheckAssessment func(context.Context, string, string) error
-	DB              store.DB
-	Head            store.BranchHead
-	// Commits reads a pushed commit, for a pinned task's result
-	// (store.CommitFacts); without it such a result answers 503.
-	Commits store.CommitReader
+	DB                      store.DB
 	// ClaimWait and ClaimPoll retain legacy configuration fields. No dispatch
 	// claim route runs a long poll now.
 	ClaimWait, ClaimPoll time.Duration

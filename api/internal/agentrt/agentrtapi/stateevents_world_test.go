@@ -126,7 +126,6 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 	asked := 0
 	s := server(t, f.pool, func(a *agentrtapi.API) {
 		a.Anchor = key.Fingerprint
-		a.Head = func(context.Context, string, string) (string, error) { return pushedAt, nil }
 		a.Ask = func(context.Context, store.Card) (string, error) {
 			askMu.Lock()
 			defer askMu.Unlock()
@@ -134,12 +133,6 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 			return fmt.Sprintf("q_%d", asked), nil
 		}
 		a.Now = time.Now
-		a.CheckAssessment = func(_ context.Context, kind, id string) error {
-			if (kind != store.AssessCard && kind != store.AssessApproval) || id != "463" {
-				return fmt.Errorf("%w: assessment item is missing or closed", store.ErrState)
-			}
-			return nil
-		}
 	})
 	ok := func(key, caller, method, path string, body any, header ...string) map[string]any {
 		t.Helper()
