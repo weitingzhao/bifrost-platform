@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
-import { authedFetch, authHeaders, operatorToken } from '@/api/client'
+import { authedFetch, authHeaders } from '@/api/client'
 import { serverFetch } from '@/api/serverContact'
-import { signInSafeError } from '@/lib/signInError'
 import type { BusEnvelope, BusTraceResponse } from './busTrace'
 import { SseParser } from './sseParser'
 
@@ -35,7 +34,8 @@ export function mergeEvents(list: BusEnvelope[], arrived: BusEnvelope[]): BusEnv
 async function errorText(r: Response): Promise<string> {
   try {
     const body = (await r.json()) as { error?: string }
-    return signInSafeError(body.error ?? `HTTP ${r.status}`, operatorToken(), r.status)
+    // The gate's own error text; it never echoes the bearer.
+    return body.error ?? `HTTP ${r.status}`
   } catch {
     return `HTTP ${r.status}`
   }
@@ -113,7 +113,8 @@ export function useBusStream(): BusStreamState {
           }
         } catch (error) {
           if (signal.aborted) return
-          const detail = error instanceof Error ? signInSafeError(error.message, operatorToken()) : 'stream failed'
+          // A fetch failure names the URL, never the request's headers.
+          const detail = error instanceof Error ? error.message : 'stream failed'
           setState(s => ({ ...s, connection: 'reconnecting', detail }))
         }
         await sleep(wait, signal)
