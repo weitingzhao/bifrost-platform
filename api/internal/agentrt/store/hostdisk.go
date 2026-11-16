@@ -1,9 +1,5 @@
 package store
 
-import (
-	"time"
-)
-
 // Historical dispatch disk values retained for event and boundary readers.
 // Claims no longer allocate work or page the Owner on disk changes.
 
@@ -18,13 +14,4 @@ const diskLowPhrase = "a host's free disk is below the floor"
 // host's root is on, and of the one agentd's root (AGENTD_ROOT) is on.
 type HostDisk struct {
 	Host, Root int64
-}
-
-// DiskPage is a record of a host's disk to page the Owner with: the event,
-// its host, whether the host went below or back above, the text and when.
-type DiskPage struct {
-	EventID     int64
-	Host, Turn  string // Turn: "below" or "above"
-	Title, Text string
-	At          time.Time
 }

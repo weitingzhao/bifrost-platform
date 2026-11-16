@@ -2,13 +2,12 @@ package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"sort"
 	"time"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopreadings"
 )
 
 // A controller loop that keeps failing the same way (TD-411: STG's facts
@@ -78,33 +77,17 @@ func NoteLoopPasses(ctx context.Context, db DB, loop string, n int) error {
 // passesAgain follows the loop's name in the note that it passes again.
 const passesAgain = " passes again"
 
-// loopRecord is a loop's latest record on the controller stream: an alert
-// (when, and the artifact of its error) or the note that it passes again.
 type loopRecord struct {
 	found, alert bool
 	at           time.Time
 	artifact     string
 }
 
-// latestLoopRecord reads loop's latest record: the controller's
-// controller_failing alert naming it, or its note that it passes again
-// (review 466 B-1: by loop, not out of a window of the whole stream, which
-// another loop's alerts and notes could fill).
 func latestLoopRecord(ctx context.Context, q interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }, loop string) (loopRecord, error) {
-	var r loopRecord
-	var kind string
-	err := q.QueryRow(ctx, `SELECT event_type, at, COALESCE(body_json->>'artifact_id', '') FROM agentrt.event
-	  WHERE event_stream_id = $1 AND actor_id = 'controller' AND (
-	    (event_type = 'policy_alert' AND body_json->>'rule' = 'controller_failing' AND body_json->>'line_digest' = $2)
-	    OR (event_type = 'note' AND starts_with(body_json->>'text', $3)))
-	  ORDER BY seq DESC LIMIT 1`, ControllerStream, lineDigest(loop), loop+passesAgain).Scan(&kind, &r.at, &r.artifact)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return r, nil
-	}
-	r.found, r.alert = err == nil, kind == "policy_alert"
-	return r, err
+	r, err := loopreadings.Latest(ctx, q, ControllerStream, lineDigest(loop), loop+passesAgain)
+	return loopRecord{found: r.Found, alert: r.Alert, at: r.At, artifact: r.Artifact}, err
 }
 
 // LoopAlertOpen says whether loop's latest record is an alert no note has
@@ -120,32 +103,8 @@ func LoopAlertOpen(ctx context.Context, db DB, loop string) (bool, error) {
 	return open, err
 }
 
-// failingLoops are the loops whose latest record on the controller stream is
-// an alert: the loop, when it was alerted and its error as kept, oldest
-// alert first.
 func failingLoops(ctx context.Context, tx pgx.Tx) ([]map[string]any, error) {
-	type alert struct {
-		loop string
-		rec  loopRecord
-	}
-	var failing []alert
-	for _, l := range ControllerLoops {
-		r, err := latestLoopRecord(ctx, tx, l)
-		if err != nil {
-			return nil, err
-		}
-		if r.alert {
-			failing = append(failing, alert{l, r})
-		}
-	}
-	sort.SliceStable(failing, func(i, j int) bool { return failing[i].rec.at.Before(failing[j].rec.at) })
-	out := make([]map[string]any, 0, len(failing))
-	for _, a := range failing {
-		var body []byte
-		if err := tx.QueryRow(ctx, `SELECT body FROM agentrt.artifact_blob WHERE artifact_id = $1`, a.rec.artifact).Scan(&body); err != nil {
-			return nil, err
-		}
-		out = append(out, map[string]any{"loop": a.loop, "since": a.rec.at.UTC().Format(time.RFC3339Nano), "error": string(body)})
-	}
-	return out, nil
+	return loopreadings.Failing(ctx, tx, ControllerLoops, func(ctx context.Context, tx pgx.Tx, loop string) (loopreadings.Record, error) {
+		return loopreadings.Latest(ctx, tx, ControllerStream, lineDigest(loop), loop+passesAgain)
+	})
 }

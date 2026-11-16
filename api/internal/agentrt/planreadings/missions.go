@@ -15,7 +15,7 @@ type WaitingMission struct {
 }
 
 // WaitingMissions reads in database order with one extra row for truncation.
-// Card deduplication, choices and permissions remain with the caller.
+// Projection handles card deduplication; choices and permissions remain with the caller.
 func WaitingMissions(ctx context.Context, tx pgx.Tx, limit int) ([]WaitingMission, error) {
 	rows, err := tx.Query(ctx, `SELECT m.mission_id, m.title, s.at, s.body_json->>'question_id', COALESCE(s.body_json->>'reason', ''),
 	    0

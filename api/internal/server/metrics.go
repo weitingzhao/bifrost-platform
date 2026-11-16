@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"net/http"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
+	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
 )
 
 // Prometheus exposition for the plugins Trade runs on.
@@ -132,42 +132,15 @@ func (s *Server) writePluginMetrics(b *strings.Builder, r *http.Request) {
 	writePluginGauges(b, healths)
 }
 
-// writePluginGauges emits the plugin-specific numbers, grouped so each metric
-// carries its HELP and TYPE once, as the exposition format requires.
+// writePluginGauges adapts existing probe observations to generic telemetry exposition.
 func writePluginGauges(b *strings.Builder, healths []probe.PluginHealth) {
-	type keyed struct {
-		help  string
-		lines []string
-	}
-	byKey := map[string]*keyed{}
+	var gauges []telemetry.MetricGauge
 	for _, h := range healths {
 		for _, g := range h.Gauges {
-			name := "bifrost_" + g.Key
-			e, ok := byKey[name]
-			if !ok {
-				e = &keyed{help: g.Help}
-				byKey[name] = e
-			}
-			labels := []string{fmt.Sprintf("plugin=%q", h.Name)}
-			for _, lk := range sortedKeys(g.Labels) {
-				labels = append(labels, fmt.Sprintf("%s=%q", lk, g.Labels[lk]))
-			}
-			e.lines = append(e.lines,
-				fmt.Sprintf("%s{%s} %g", name, strings.Join(labels, ","), g.Value))
+			gauges = append(gauges, telemetry.MetricGauge{Plugin: h.Name, Key: g.Key, Help: g.Help, Labels: g.Labels, Value: g.Value})
 		}
 	}
-	for _, name := range sortedMapKeys(byKey) {
-		e := byKey[name]
-		if e.help != "" {
-			fmt.Fprintf(b, "# HELP %s %s\n", name, e.help)
-		}
-		fmt.Fprintf(b, "# TYPE %s gauge\n", name)
-		sort.Strings(e.lines)
-		for _, l := range e.lines {
-			b.WriteString(l)
-			b.WriteString("\n")
-		}
-	}
+	telemetry.WriteGauges(b, gauges)
 }
 
 func boolValue(v bool) int {
@@ -175,22 +148,4 @@ func boolValue(v bool) int {
 		return 1
 	}
 	return 0
-}
-
-func sortedKeys(m map[string]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func sortedMapKeys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }

@@ -134,24 +134,10 @@ func missionCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[stri
 	if err != nil {
 		return nil, false, err
 	}
-	more := len(list) > pendingChangeLimit
-	if more {
-		list = list[:pendingChangeLimit]
-	}
+	projected, more := planreadings.ProjectWaitingCards(list, pendingChangeLimit, now, listed, MissionStart, MissionNotStart)
 	var cards []missionCard
-	for _, c := range list {
-		if _, seen := listed[c.Question]; seen {
-			continue
-		}
-		it := map[string]any{"id": "question:" + c.Question, "kind": "mission", "ref": c.Mission, "also_refs": []string{},
-			"title": "Mission " + c.Mission + ": " + firstLine(c.Title), "since": c.At.UTC().Format(time.RFC3339Nano),
-			"waiting_min": int64(now.Sub(c.At) / time.Minute),
-			"action":      map[string]any{"where": "console", "question_id": c.Question, "options": []string{MissionStart, MissionNotStart}},
-			"can_act_now": nil, "can_act_now_reason": "the card's state is the question store's: open there, it can be answered now",
-			"deadline": nil, "blocks": map[string]any{"missions": []string{c.Mission}, "unfinished_tasks": c.Open, "why": c.Why},
-			"after": "Start: the controller makes it active on its next pass (about 15 seconds). Do not start: it stops."}
-		listed[c.Question] = it
-		cards = append(cards, missionCard{c.At, c.Question, it})
+	for _, c := range projected {
+		cards = append(cards, missionCard{at: c.At, question: c.Question, it: c.Item})
 	}
 	return cards, more, nil
 }

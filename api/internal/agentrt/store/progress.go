@@ -123,16 +123,6 @@ type ProgressTask struct {
 	checkers    []string
 }
 
-// StatusInput is what a task's status is decided from.
-type StatusInput struct {
-	TaskState, MissionState, StateReason, MissionReason string
-	Attempt                                             *ProgressAttempt
-	Stop                                                *ProgressStop // the stop control holding the task, its mission or its subject
-	Usual                                               *time.Duration
-	WaitingDeps                                         int
-	Now                                                 time.Time
-}
-
 // worst is the status most worth seeing among statuses.
 func worst(statuses []string) string {
 	best := len(statusRank)

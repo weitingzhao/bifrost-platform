@@ -270,36 +270,36 @@
       "domains": [
         "tenant"
       ],
-      "status": "provisional",
-      "basis": "tenant charter explicitly marks package ownership as proposed"
+      "status": "assigned",
+      "basis": "Owner confirmed Tenant integration ownership in direct conversation on 2026-11-16; package implementation, trading, permission and gate behavior unchanged; ownership confirmation does not claim physical isolation"
     },
     "api/internal/flexquery": {
       "domains": [
         "tenant"
       ],
-      "status": "provisional",
-      "basis": "tenant charter explicitly marks package ownership as proposed"
+      "status": "assigned",
+      "basis": "Owner confirmed Tenant integration ownership in direct conversation on 2026-11-16; package implementation, trading, permission and gate behavior unchanged; ownership confirmation does not claim physical isolation"
     },
     "api/internal/research": {
       "domains": [
         "tenant"
       ],
-      "status": "provisional",
-      "basis": "tenant charter explicitly marks package ownership as proposed"
+      "status": "assigned",
+      "basis": "Owner confirmed Tenant integration ownership in direct conversation on 2026-11-16; package implementation, trading, permission and gate behavior unchanged; ownership confirmation does not claim physical isolation"
     },
     "api/internal/tradeagent": {
       "domains": [
         "tenant"
       ],
-      "status": "provisional",
-      "basis": "tenant charter explicitly marks package ownership as proposed"
+      "status": "assigned",
+      "basis": "Owner confirmed Tenant integration ownership in direct conversation on 2026-11-16; package implementation, trading, permission and gate behavior unchanged; ownership confirmation does not claim physical isolation"
     },
     "api/internal/ibgateway": {
       "domains": [
         "tenant"
       ],
-      "status": "provisional",
-      "basis": "tenant charter explicitly marks package ownership as proposed"
+      "status": "assigned",
+      "basis": "Owner confirmed Tenant integration ownership in direct conversation on 2026-11-16; package implementation, trading, permission and gate behavior unchanged; ownership confirmation does not claim physical isolation"
     },
     "api/internal/agentrt/store": {
       "domains": [
@@ -757,6 +757,20 @@
       ],
       "status": "assigned",
       "basis": "2026-11-16 source and caller audit: Git history and provenance fact readers for merge verification; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/agentrt/deliveryreadings": {
+      "domains": [
+        "delivery"
+      ],
+      "status": "assigned",
+      "basis": "delivery charter; recorded run reads extracted from store; no prefix admission, evidence or deployment decisions"
+    },
+    "api/internal/agentrt/loopreadings": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "foundation charter; recorded controller-loop observations and error display, not alert writers or loop policy"
     }
   }
 }

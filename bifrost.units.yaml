@@ -93,6 +93,8 @@ modules:
         - "api/internal/agentrt/store"
         - "console/src/api/agentRuntime.ts"
       # Domain 4: delivery-stage read projection; no release authority.
+      api/internal/agentrt/deliveryreadings: ["api/internal/agentrt/deliveryreadings"]
+      api/internal/agentrt/loopreadings: ["api/internal/agentrt/loopreadings"]
       api/internal/agentrt/deliveryview: ["api/internal/agentrt/deliveryview"]
       api/internal/agentrt/canon: ["api/internal/agentrt/canon"]
       api/internal/agentrt/infracheck: ["api/internal/agentrt/infracheck"]
