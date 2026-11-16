@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryreadings"
 	"regexp"
 	"sort"
 	"strings"
@@ -377,29 +378,7 @@ func (s *Service) deploymentReadyInNS(ctx context.Context, ns, name string) (pro
 }
 
 func dockerfileCMFrom(cm *corev1.ConfigMap) DockerfileConfigMapView {
-	keys := make([]string, 0, len(cm.Data))
-	for k := range cm.Data {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	size := 0
-	for _, k := range keys {
-		size += len(cm.Data[k])
-	}
-	updated := cm.CreationTimestamp.UTC().Format(time.RFC3339)
-	if len(cm.ManagedFields) > 0 {
-		// resourceVersion changes on update; use it as a change indicator
-		_ = cm.ResourceVersion
-	}
-	return DockerfileConfigMapView{
-		Name:            cm.Name,
-		Namespace:       cm.Namespace,
-		Present:         true,
-		ResourceVersion: cm.ResourceVersion,
-		UpdatedAt:       updated,
-		FileKeys:        keys,
-		ApproxBytes:     size,
-	}
+	return deliveryreadings.DockerfileCMFrom(cm)
 }
 
 func isPipelineRunSucceededView(v PipelineRunView) bool {
@@ -409,36 +388,7 @@ func isPipelineRunSucceededView(v PipelineRunView) bool {
 }
 
 func taskRunSummaryFrom(obj unstructured.Unstructured) SupplyChainTaskRunView {
-	view := SupplyChainTaskRunView{
-		Name:      obj.GetName(),
-		Namespace: obj.GetNamespace(),
-		Task:      "",
-		Status:    "Unknown",
-	}
-	if ref, ok, _ := unstructured.NestedString(obj.Object, "spec", "taskRef", "name"); ok {
-		view.Task = ref
-	}
-	if act, ok := obj.GetLabels()["bifrost.io/supply-chain"]; ok {
-		view.Actuation = act
-	}
-	cond, found, _ := unstructured.NestedSlice(obj.Object, "status", "conditions")
-	if found && len(cond) > 0 {
-		if m, ok := cond[0].(map[string]any); ok {
-			if st, ok := m["status"].(string); ok {
-				view.Status = st
-			}
-			if reason, ok := m["reason"].(string); ok {
-				view.Reason = reason
-			}
-		}
-	}
-	if t, ok, _ := unstructured.NestedString(obj.Object, "status", "startTime"); ok {
-		view.StartTime = t
-	}
-	if t, ok, _ := unstructured.NestedString(obj.Object, "status", "completionTime"); ok {
-		view.CompletionTime = t
-	}
-	return view
+	return deliveryreadings.TaskRunSummaryFrom(obj)
 }
 
 func (s *Service) TriggerMirrorSync(ctx context.Context) (cluster.ActuationResponse, SupplyChainTaskRunView, error) {

@@ -1,6 +1,7 @@
 package delivery
 
 import (
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"time"
 
@@ -79,16 +80,7 @@ type StgSmokeResponse struct {
 	GeneratedAt  time.Time            `json:"generated_at"`
 }
 
-type DockerfileConfigMapView struct {
-	Name            string   `json:"name"`
-	Namespace       string   `json:"namespace"`
-	Present         bool     `json:"present"`
-	ResourceVersion string   `json:"resource_version,omitempty"`
-	UpdatedAt       string   `json:"updated_at,omitempty"`
-	FileKeys        []string `json:"file_keys,omitempty"`
-	ApproxBytes     int      `json:"approx_bytes,omitempty"`
-	Detail          string   `json:"detail,omitempty"`
-}
+type DockerfileConfigMapView = deliveryreadings.DockerfileConfigMapView
 
 type StgWorkloadImageView struct {
 	Deployment string `json:"deployment"`
@@ -96,16 +88,7 @@ type StgWorkloadImageView struct {
 	Image      string `json:"image"`
 }
 
-type SupplyChainTaskRunView struct {
-	Name           string `json:"name"`
-	Namespace      string `json:"namespace"`
-	Task           string `json:"task"`
-	Actuation      string `json:"actuation,omitempty"`
-	Status         string `json:"status"`
-	Reason         string `json:"reason,omitempty"`
-	StartTime      string `json:"start_time,omitempty"`
-	CompletionTime string `json:"completion_time,omitempty"`
-}
+type SupplyChainTaskRunView = deliveryreadings.SupplyChainTaskRunView
 
 type SupplyChainResponse struct {
 	ClusterID                   string                    `json:"cluster_id"`
