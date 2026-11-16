@@ -1,0 +1,190 @@
+{
+  "environment": "dev",
+  "label": "",
+  "deployment_phase": "compose",
+  "generated_at": "0001-01-01T00:00:00Z",
+  "nodes": [
+    {
+      "id": "macbook",
+      "label": "",
+      "host": "127.0.0.1",
+      "group": "",
+      "compose_roles": null,
+      "k3s_roles": null,
+      "in_k3s_cluster": false,
+      "grid": {
+        "row": 0,
+        "col": 0
+      },
+      "status": "fail",
+      "detail": "api-account: api fail; api-ops: api ok; nginx-spa: nginx degraded; ops-capabilities: capability unknown; postgres: pg ok; redis: redis fail",
+      "matrix_services": [
+        {
+          "id": "api-account",
+          "reachability": "fail",
+          "detail": "api fail",
+          "category": ""
+        },
+        {
+          "id": "api-ops",
+          "reachability": "ok",
+          "detail": "api ok",
+          "category": ""
+        },
+        {
+          "id": "nginx-spa",
+          "reachability": "degraded",
+          "detail": "nginx degraded",
+          "category": ""
+        },
+        {
+          "id": "ops-capabilities",
+          "reachability": "unknown",
+          "detail": "capability unknown",
+          "category": ""
+        },
+        {
+          "id": "postgres",
+          "reachability": "ok",
+          "detail": "pg ok",
+          "category": ""
+        },
+        {
+          "id": "redis",
+          "reachability": "fail",
+          "detail": "redis fail",
+          "category": ""
+        }
+      ]
+    },
+    {
+      "id": "mac-mini-1",
+      "label": "",
+      "host": "10.0.0.1",
+      "group": "",
+      "compose_roles": null,
+      "k3s_roles": null,
+      "in_k3s_cluster": false,
+      "grid": {
+        "row": 0,
+        "col": 0
+      },
+      "status": "fail",
+      "detail": "api-account: api fail; api-ops: api ok; nginx-spa: nginx degraded; ops-capabilities: capability unknown; redis: redis fail",
+      "matrix_services": [
+        {
+          "id": "api-account",
+          "reachability": "fail",
+          "detail": "api fail",
+          "category": ""
+        },
+        {
+          "id": "api-ops",
+          "reachability": "ok",
+          "detail": "api ok",
+          "category": ""
+        },
+        {
+          "id": "nginx-spa",
+          "reachability": "degraded",
+          "detail": "nginx degraded",
+          "category": ""
+        },
+        {
+          "id": "ops-capabilities",
+          "reachability": "unknown",
+          "detail": "capability unknown",
+          "category": ""
+        },
+        {
+          "id": "redis",
+          "reachability": "fail",
+          "detail": "redis fail",
+          "category": ""
+        }
+      ]
+    },
+    {
+      "id": "mini-pc-a",
+      "label": "",
+      "host": "10.0.0.2",
+      "group": "",
+      "compose_roles": null,
+      "k3s_roles": null,
+      "in_k3s_cluster": false,
+      "grid": {
+        "row": 0,
+        "col": 0
+      },
+      "status": "fail",
+      "detail": "api-ops: api ok; postgres: pg ok; redis: redis fail",
+      "matrix_services": [
+        {
+          "id": "absent",
+          "reachability": "unknown",
+          "detail": "no probe data",
+          "category": ""
+        },
+        {
+          "id": "api-ops",
+          "reachability": "ok",
+          "detail": "api ok",
+          "category": ""
+        },
+        {
+          "id": "postgres",
+          "reachability": "ok",
+          "detail": "pg ok",
+          "category": ""
+        },
+        {
+          "id": "redis",
+          "reachability": "fail",
+          "detail": "redis fail",
+          "category": ""
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "ordered-first",
+      "from": "mini-pc-a",
+      "to": "macbook",
+      "label": "",
+      "kind": "",
+      "matrix_target": "api-ops",
+      "status": "ok",
+      "detail": "api ok"
+    },
+    {
+      "id": "ordered-second",
+      "from": "mini-pc-a",
+      "to": "macbook",
+      "label": "",
+      "kind": "",
+      "matrix_target": "postgres",
+      "status": "ok",
+      "detail": "pg ok"
+    },
+    {
+      "id": "ib-bound",
+      "from": "mini-pc-a",
+      "to": "mac-mini-1",
+      "label": "",
+      "kind": "ib",
+      "matrix_target": "redis",
+      "status": "fail",
+      "detail": "redis fail"
+    },
+    {
+      "id": "ib-plain",
+      "from": "mini-pc-a",
+      "to": "mac-mini-1",
+      "label": "",
+      "kind": "ib",
+      "status": "unknown",
+      "detail": "IB/TWS external — not probed by platform (by design)"
+    }
+  ]
+}

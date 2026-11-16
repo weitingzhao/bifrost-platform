@@ -1,4 +1,4 @@
-package topology
+package topologyview
 
 import (
 	"net"

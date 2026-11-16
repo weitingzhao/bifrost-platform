@@ -1,0 +1,235 @@
+{
+  "environment": "prod",
+  "label": "prod",
+  "deployment_phase": "compose",
+  "generated_at": "0001-01-01T00:00:00Z",
+  "nodes": [
+    {
+      "id": "macbook",
+      "label": "",
+      "host": "127.0.0.1",
+      "group": "mac",
+      "compose_roles": null,
+      "k3s_roles": null,
+      "in_k3s_cluster": false,
+      "grid": {
+        "row": 2,
+        "col": 0
+      },
+      "status": "unknown",
+      "detail": "no linked probes",
+      "matrix_services": []
+    },
+    {
+      "id": "mac-mini-1",
+      "label": "",
+      "host": "10.0.0.1",
+      "group": "mac",
+      "compose_roles": null,
+      "k3s_roles": null,
+      "in_k3s_cluster": false,
+      "grid": {
+        "row": 0,
+        "col": 0
+      },
+      "status": "unknown",
+      "detail": "no linked probes",
+      "matrix_services": []
+    },
+    {
+      "id": "mini-pc-a",
+      "label": "",
+      "host": "10.0.0.2",
+      "group": "linux",
+      "compose_roles": null,
+      "k3s_roles": null,
+      "in_k3s_cluster": true,
+      "grid": {
+        "row": 0,
+        "col": 0
+      },
+      "status": "unknown",
+      "detail": "nginx-spa: fixture",
+      "matrix_services": [
+        {
+          "id": "nginx-spa",
+          "reachability": "unknown",
+          "detail": "fixture",
+          "category": "fixture"
+        },
+        {
+          "id": "absent",
+          "reachability": "unknown",
+          "detail": "no probe data",
+          "category": ""
+        }
+      ]
+    },
+    {
+      "id": "mini-pc-c",
+      "label": "",
+      "host": "10.0.0.3",
+      "group": "linux",
+      "compose_roles": null,
+      "k3s_roles": null,
+      "in_k3s_cluster": false,
+      "grid": {
+        "row": 0,
+        "col": 0
+      },
+      "status": "unknown",
+      "detail": "not deployed / host not configured",
+      "matrix_services": []
+    },
+    {
+      "id": "external",
+      "label": "",
+      "group": "external",
+      "compose_roles": null,
+      "k3s_roles": null,
+      "in_k3s_cluster": false,
+      "grid": {
+        "row": 0,
+        "col": 0
+      },
+      "status": "unknown",
+      "detail": "external — configure host in topology.yaml",
+      "matrix_services": []
+    },
+    {
+      "id": "empty",
+      "label": "",
+      "group": "",
+      "compose_roles": null,
+      "k3s_roles": null,
+      "in_k3s_cluster": false,
+      "grid": {
+        "row": 0,
+        "col": 0
+      },
+      "status": "unknown",
+      "detail": "not deployed / host not configured",
+      "matrix_services": []
+    },
+    {
+      "id": "explicit",
+      "label": "",
+      "host": "10.0.0.4",
+      "group": "",
+      "compose_roles": null,
+      "k3s_roles": null,
+      "in_k3s_cluster": false,
+      "grid": {
+        "row": 0,
+        "col": 0
+      },
+      "status": "unknown",
+      "detail": "nginx-spa: fixture",
+      "matrix_services": [
+        {
+          "id": "nginx-spa",
+          "reachability": "unknown",
+          "detail": "fixture",
+          "category": "fixture"
+        },
+        {
+          "id": "absent",
+          "reachability": "unknown",
+          "detail": "no probe data",
+          "category": ""
+        }
+      ]
+    },
+    {
+      "id": "new-a",
+      "label": "new-a",
+      "host": "10.0.0.7",
+      "group": "linux",
+      "compose_roles": [],
+      "k3s_roles": [],
+      "in_k3s_cluster": true,
+      "discovered": true,
+      "grid": {
+        "row": 3,
+        "col": 0
+      },
+      "status": "unknown",
+      "detail": "cluster node, read from the cluster; not drawn in topology.yaml",
+      "matrix_services": []
+    },
+    {
+      "id": "new-b",
+      "label": "new-b",
+      "host": "10.0.0.8",
+      "group": "linux",
+      "compose_roles": [],
+      "k3s_roles": [],
+      "in_k3s_cluster": true,
+      "discovered": true,
+      "grid": {
+        "row": 3,
+        "col": 1
+      },
+      "status": "unknown",
+      "detail": "cluster node, read from the cluster; not drawn in topology.yaml",
+      "matrix_services": []
+    },
+    {
+      "id": "scraped",
+      "label": "scraped",
+      "host": "10.0.0.9",
+      "group": "linux",
+      "compose_roles": [],
+      "k3s_roles": [],
+      "in_k3s_cluster": false,
+      "discovered": true,
+      "grid": {
+        "row": 3,
+        "col": 2
+      },
+      "status": "unknown",
+      "detail": "host scraped by Prometheus; not drawn in topology.yaml",
+      "matrix_services": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "ib",
+      "from": "external",
+      "to": "mini-pc-a",
+      "label": "",
+      "kind": "ib",
+      "status": "unknown",
+      "detail": "IB/TWS external — not probed by platform (by design)"
+    },
+    {
+      "id": "static",
+      "from": "external",
+      "to": "mini-pc-a",
+      "label": "",
+      "kind": "http",
+      "status": "unknown",
+      "detail": "static link"
+    },
+    {
+      "id": "bound",
+      "from": "explicit",
+      "to": "mini-pc-a",
+      "label": "",
+      "kind": "ib",
+      "matrix_target": "nginx-spa",
+      "status": "unknown",
+      "detail": "fixture"
+    },
+    {
+      "id": "missing",
+      "from": "explicit",
+      "to": "mini-pc-a",
+      "label": "",
+      "kind": "data",
+      "matrix_target": "absent",
+      "status": "unknown",
+      "detail": "no probe data"
+    }
+  ]
+}

@@ -771,6 +771,27 @@
       ],
       "status": "assigned",
       "basis": "foundation charter; recorded controller-loop observations and error display, not alert writers or loop policy"
+    },
+    "api/internal/topology": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 Owner-approved domain split. Thin observation composition: generic projection explicitly consumes the tenant adapter; no observation or execution implementation remains here."
+    },
+    "api/internal/topologyview": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 Owner-approved domain split. Complete Build/Live projection extracted: generic node/edge aggregation, datastore host matching and discovered-machine ordering; tenant display rules supplied through an adapter."
+    },
+    "api/internal/tenanttopology": {
+      "domains": [
+        "tenant"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 Owner-approved domain split. Read-only tenant/deployment target-to-node and IB edge-display mapping physically extracted from topology, with pre-extraction JSON parity evidence. No probes or execution."
     }
   },
   "frontend": {
