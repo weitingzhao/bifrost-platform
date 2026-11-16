@@ -3,6 +3,7 @@ package gatecluster
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -363,4 +364,39 @@ func TestTheBodiesAreChecked(t *testing.T) {
 	if err := eventlog.CheckBody(TypeWindowChanged, b); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// 2026-11-16: bus step 2 — pipeline records woken by ci.run.finished: the
+// workers' records hear of a finished run in process, through OnFinished,
+// once per run and only once the ledger holds its ci.run.finished; a ledger
+// that refuses the write tells no one (the reconciliation records the run).
+func TestOnFinishedOncePerRunAfterTheLedger(t *testing.T) {
+	var mu sync.Mutex
+	told := map[string]int{}
+	l := &memLedger{}
+	g := &Gate{Ledger: l, OnFinished: func(run, pipeline string) {
+		mu.Lock()
+		defer mu.Unlock()
+		if pipeline != "bifrost-ci-platform" || len(l.events(RunStream(run))) == 0 {
+			t.Errorf("told of %s (%s) before the ledger held it", run, pipeline)
+		}
+		told[run]++
+	}}
+	g.init()
+	bg := context.Background()
+	g.observeRun(bg, Slim(run("r1", "bifrost-ci-platform", shaA, "Unknown", "Running")), false)
+	for i := 0; i < 3; i++ {
+		g.observeRun(bg, Slim(run("r1", "bifrost-ci-platform", shaA, "False", "Failed")), false)
+	}
+	if told["r1"] != 1 {
+		t.Fatalf("told %d times", told["r1"])
+	}
+	g2 := &Gate{Ledger: failingLedger{}, OnFinished: func(string, string) { t.Error("told although the ledger refused") }}
+	g2.finished(bg, "r2", runFacts{pipeline: "bifrost-ci-platform", status: "True"})
+}
+
+type failingLedger struct{}
+
+func (failingLedger) Append(context.Context, string, string, Decide) (bool, error) {
+	return false, errors.New("ledger away")
 }

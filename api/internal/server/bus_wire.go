@@ -49,6 +49,28 @@ type busWiring struct {
 	// consumerLive: head-release's durable consumer is subscribed, so the
 	// bus wakes it and its own loop is only the reconciliation.
 	consumerLive atomic.Bool
+	// finished names the runs gate-cluster said finished, for the pipeline
+	// records (bus step 2); recordsLive: gate-cluster watches the runs, so
+	// the records' loop is only the reconciliation.
+	finished     chan string
+	finishedOnce sync.Once
+	recordsLive  atomic.Bool
+}
+
+// finishedRuns is the queue of runs gate-cluster said finished.
+func (b *busWiring) finishedRuns() chan string {
+	b.finishedOnce.Do(func() { b.finished = make(chan string, 256) })
+	return b.finished
+}
+
+// runFinished is gate-cluster's OnFinished: it queues the run and returns at
+// once; a run that finds the queue full is left to the reconciliation, which
+// counts it as missed.
+func (b *busWiring) runFinished(run, _ string) {
+	select {
+	case b.finishedRuns() <- run:
+	default:
+	}
 }
 
 // serialPass runs a pass one at a time, whoever asks: the controller's
@@ -292,7 +314,7 @@ func (s *Server) startGateCluster(ctx context.Context) {
 	if s.delivery != nil {
 		ns = s.delivery.PipelinesNamespace()
 	}
-	g := &gatecluster.Gate{Ledger: &gatecluster.PGLedger{DB: s.bus.db}, Namespace: ns, Logf: busLogf,
+	g := &gatecluster.Gate{Ledger: &gatecluster.PGLedger{DB: s.bus.db}, Namespace: ns, Logf: busLogf, OnFinished: s.bus.runFinished,
 		Dynamic: func() (dynamic.Interface, error) {
 			cfg, _, err := s.cluster.Service().RestConfig()
 			if err != nil {
@@ -301,6 +323,16 @@ func (s *Server) startGateCluster(ctx context.Context) {
 			return dynamic.NewForConfig(cfg)
 		}}
 	safego.Go("bus-gate-cluster", func() { g.Run(ctx) })
+	safego.Go("bus-gate-cluster-records-live", func() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-g.Watching():
+		}
+		s.bus.recordsLive.Store(true)
+		context.AfterFunc(ctx, func() { s.bus.recordsLive.Store(false) })
+		slog.Info("bus: pipeline records woken by ci.run.finished; their 30-second loop now reconciles every 5 minutes")
+	})
 	slog.Info("bus gate-cluster: watching PipelineRuns and the release window", "namespace", ns)
 }
 

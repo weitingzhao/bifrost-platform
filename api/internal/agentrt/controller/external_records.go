@@ -60,6 +60,14 @@ type pipelineMemo struct {
 	// a completed run and a commit's tree do not change.
 	evidenced map[string]bool
 	trees     map[string]string
+	// known is the completed runs, by run and uid, the last pass listed or
+	// the event path recorded since (RecordPipelineRun); listed says a pass
+	// has listed once in this process; last is when the last pass began
+	// (pipelineTick). A reconciliation pass counts a run it records that
+	// known lacks as missed by the events.
+	known  map[string]bool
+	listed bool
+	last   time.Time
 }
 
 // PipelineRecords records completed runs; the source omits unfinished runs.
@@ -68,18 +76,26 @@ type pipelineMemo struct {
 // memo is emptied first. A run whose fields the vocabulary refuses is
 // reported at every pass and never sent.
 func (c *Controller) PipelineRecords(ctx context.Context) (int, error) {
+	return c.pipelineRecords(ctx, false)
+}
+
+// pipelineRecords is a pass; a reconciliation pass (the bus wakes the
+// records) is always a full one and counts what the events missed.
+func (c *Controller) pipelineRecords(ctx context.Context, reconcile bool) (int, error) {
 	if c.Sources.PipelineRuns == nil {
 		return 0, nil
 	}
-	// The startup backfill and the loop do not list or record at once.
+	// The startup backfill, the loop and the event path do not list or
+	// record at once.
 	m := &c.pipelines
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.last = c.clock()
 	full := c.PipelineFullEvery
 	if full <= 0 {
 		full = DefaultPipelineFullEvery
 	}
-	if now := time.Now(); now.Sub(m.full) >= full {
+	if now := time.Now(); reconcile || now.Sub(m.full) >= full {
 		m.docs, m.full = nil, now
 	}
 	type result struct {
@@ -131,9 +147,16 @@ func (c *Controller) PipelineRecords(ctx context.Context) (int, error) {
 			for key, doc := range sent {
 				held[key] = doc
 			}
+			if reconcile && m.listed {
+				c.countMissedByEvents(m, sent)
+			}
 		}
 	}
 	m.docs = held
+	m.known, m.listed = make(map[string]bool, len(byKey)), true
+	for key := range byKey {
+		m.known[key] = true
+	}
 	if n > 0 && c.PipelineRecorded != nil {
 		c.PipelineRecorded()
 	}
@@ -142,21 +165,33 @@ func (c *Controller) PipelineRecords(ctx context.Context) (int, error) {
 	// is tried again within PipelineFullEvery. It is written beside the
 	// pipeline_seen records and changes nothing about them.
 	evidenced := make(map[string]bool, len(byKey))
-	var rows []evidence.EvidenceRow
-	var rowKeys []string
 	for key := range byKey {
 		if m.evidenced[key] {
 			evidenced[key] = true
 		}
 	}
+	todo := map[string]store.PipelineRun{}
 	for key, p := range byKey {
-		if evidenced[key] || sent[key] == "" || held[key] == "" {
-			continue
+		if !evidenced[key] && sent[key] != "" && held[key] != "" {
+			todo[key] = p
 		}
+	}
+	errs = append(errs, c.recordEvidence(ctx, m, todo, evidenced)...)
+	m.evidenced = evidenced
+	return n, errors.Join(errs...)
+}
+
+// recordEvidence writes the evidence of the runs in todo (by run and uid)
+// beside their pipeline_seen records and marks each settled in evidenced. A
+// tree that cannot be read stops it: the rest wait for the next full pass
+// rather than each wait out a read of its own.
+func (c *Controller) recordEvidence(ctx context.Context, m *pipelineMemo, todo map[string]store.PipelineRun, evidenced map[string]bool) []error {
+	var errs []error
+	var rows []evidence.EvidenceRow
+	var rowKeys []string
+	for key, p := range todo {
 		e, is, err := c.runEvidence(ctx, m, &p)
 		if err != nil {
-			// A tree could not be read: the rest wait for the next full pass
-			// rather than each wait out a read of its own.
 			errs = append(errs, fmt.Errorf("evidence of run %s: %w", p.Run, err))
 			break
 		}
@@ -180,8 +215,7 @@ func (c *Controller) PipelineRecords(ctx context.Context) (int, error) {
 			}
 		}
 	}
-	m.evidenced = evidenced
-	return n, errors.Join(errs...)
+	return errs
 }
 
 // runEvidence is the evidence a completed run is (evidence.RunEvidence), after

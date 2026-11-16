@@ -29,6 +29,10 @@ type Sources struct {
 	Approvals    func(context.Context) ([]store.ApprovalFact, error)
 	Questions    func(context.Context) ([]store.Question, error)
 	PipelineRuns func(context.Context) ([]store.PipelineRun, error)
+	// PipelineRun reads one run by name, as PipelineRuns reads each (ok is
+	// false when it is not kept or not completed): the run a ci.run.finished
+	// names (RecordPipelineRun). nil: no event path.
+	PipelineRun func(ctx context.Context, name string) (p store.PipelineRun, ok bool, err error)
 	// CommitTree reads the git tree of a commit of a repository, for a CI
 	// run that reports a commit it used without its tree (evidence.go);
 	// nil: such a run gives no evidence.
@@ -104,6 +108,14 @@ type Controller struct {
 	PipelineEvery     time.Duration
 	PipelineFullEvery time.Duration
 	PipelineRecorded  func()
+	// PipelineFinished, when set, names the runs the bus says finished
+	// (ci.run.finished, gate-cluster in this process): each is recorded at
+	// once (RecordPipelineRun). PipelineLive says whether those names come;
+	// while they do, the loop's pass over every run is the reconciliation
+	// and runs once per PipelineReconcileEvery (bus/RULES.md §8). nil: the
+	// loop passes every PipelineEvery as before.
+	PipelineFinished <-chan string
+	PipelineLive     func() bool
 	// pipelines remembers the completed runs this process knows are
 	// recorded (external_records.go); memory only.
 	pipelines pipelineMemo
@@ -355,9 +367,10 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 			pipelines = DefaultPipelineEvery
 		}
 		c.every(ctx, &wg, "agentrt-pipeline-records", pipelines, func() error {
-			_, err := c.PipelineRecords(ctx)
+			_, err := c.pipelineTick(ctx)
 			return err
 		})
+		c.startPipelineEvents(ctx, &wg)
 	}
 	if c.Sources.UnitRuns != nil {
 		every := c.PipelineEvery

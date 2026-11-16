@@ -26,3 +26,13 @@ func SetTaskWaitForTest(f func(ctx context.Context, db store.DB, task string) (s
 
 // ReadTuningForTest reads the tuning rule as a pass does.
 func (c *Controller) ReadTuningForTest(ctx context.Context) { c.readTuning(ctx) }
+
+// PipelineTickForTest is the pipeline records loop's call.
+func (c *Controller) PipelineTickForTest(ctx context.Context) (int, error) {
+	return c.pipelineTick(ctx)
+}
+
+// PipelineEventCountsForTest reads the two side-by-side counters.
+func PipelineEventCountsForTest() (byEvent, missed int64) {
+	return metricRecordsByEvent.Load(), metricRecordsMissedByEvents.Load()
+}

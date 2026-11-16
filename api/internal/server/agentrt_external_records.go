@@ -68,6 +68,14 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 			tasks, tests, class := runFailure(failed)
 			return tasks, tests, class, nil
 		}
+		src.PipelineRun = func(ctx context.Context, name string) (store.PipelineRun, bool, error) {
+			item, ok, err := s.delivery.PipelineRunObservation(ctx, name)
+			if err != nil || !ok {
+				return store.PipelineRun{}, false, err
+			}
+			f, ok := pipelineRunFact(item)
+			return f, ok, nil
+		}
 		src.PipelineRuns = func(ctx context.Context) ([]store.PipelineRun, error) {
 			items, err := s.delivery.PipelineRunObservations(ctx)
 			if err != nil {
@@ -117,6 +125,8 @@ func pipelineRecordsDuration(name string) time.Duration {
 func (s *Server) wirePipelineRecords(c *controller.Controller) {
 	c.PipelineEvery = pipelineRecordsDuration(pipelineRecordsEveryEnv)
 	c.PipelineFullEvery = pipelineRecordsDuration(pipelineRecordsFullEveryEnv)
+	// Bus step 2: gate-cluster names each finished run (startGateCluster).
+	c.PipelineFinished, c.PipelineLive = s.bus.finishedRuns(), s.bus.recordsLive.Load
 	if s.releases != nil && s.releases.Service() != nil {
 		c.PipelineRecorded = s.releases.Service().Kick
 	}

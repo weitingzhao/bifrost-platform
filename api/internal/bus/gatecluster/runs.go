@@ -127,9 +127,10 @@ func (g *Gate) started(ctx context.Context, run string, f runFacts) {
 }
 
 // finished appends ci.run.finished once per run: not when the run's
-// stream's last event already is one.
+// stream's last event already is one. Once the ledger holds it, OnFinished
+// is told.
 func (g *Gate) finished(ctx context.Context, run string, f runFacts) {
-	g.append(ctx, RunStream(run), TypeRunFinished, func(lastType string, _ map[string]any) (map[string]any, bool) {
+	agrees := g.append(ctx, RunStream(run), TypeRunFinished, func(lastType string, _ map[string]any) (map[string]any, bool) {
 		b := runBody(run, f, finishedChange(f))
 		b["status"] = f.status
 		if r := f.reason; r != "" {
@@ -140,6 +141,9 @@ func (g *Gate) finished(ctx context.Context, run string, f runFacts) {
 		}
 		return b, lastType != TypeRunFinished
 	})
+	if agrees && g.OnFinished != nil {
+		g.OnFinished(run, f.pipeline)
+	}
 }
 
 // observeRun takes a run the gate sees, from a list (listed) or a watch

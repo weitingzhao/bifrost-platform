@@ -136,3 +136,40 @@ func TestListedRunsComeWithoutTheCopiedPipeline(t *testing.T) {
 		}
 	}
 }
+
+// 2026-11-16: bus step 2 — pipeline records woken by ci.run.finished read the
+// one run the event names, slimmed like the list (the copy of the Pipeline in
+// status.pipelineSpec is 77% of a run); a run the cluster no longer keeps is
+// not an error, and what is not a resource name never reaches the cluster.
+func TestPipelineRunObservationGetsOneSlimRun(t *testing.T) {
+	t.Parallel()
+	run := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "tekton.dev/v1", "kind": "PipelineRun",
+		"metadata": map[string]any{"name": "ci-platform-x", "namespace": "cicd", "managedFields": []any{map[string]any{"manager": "m"}}},
+		"status":   map[string]any{"pipelineSpec": map[string]any{"tasks": []any{}}, "startTime": "2026-11-16T12:00:00Z"},
+	}}
+	dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{pipelineRunGVR: "PipelineRunList"}, run)
+	s := NewService(&config.ClusterEntry{ID: "test"})
+	s.SetDynamicFactoryForTest(func() (dynamic.Interface, error) { return dyn, nil })
+	got, ok, err := s.PipelineRunObservation(context.Background(), "ci-platform-x")
+	if err != nil || !ok || got.GetName() != "ci-platform-x" {
+		t.Fatalf("got %v ok=%v err=%v", got.GetName(), ok, err)
+	}
+	if _, has, _ := unstructured.NestedFieldNoCopy(got.Object, "status", "pipelineSpec"); has {
+		t.Error("status.pipelineSpec kept")
+	}
+	if _, has, _ := unstructured.NestedFieldNoCopy(got.Object, "metadata", "managedFields"); has {
+		t.Error("metadata.managedFields kept")
+	}
+	if v, _, _ := unstructured.NestedString(got.Object, "status", "startTime"); v == "" {
+		t.Error("status.startTime dropped")
+	}
+	if _, ok, err := s.PipelineRunObservation(context.Background(), "gone"); ok || err != nil {
+		t.Fatalf("a run the cluster no longer keeps: ok=%v err=%v", ok, err)
+	}
+	for _, bad := range []string{"", "a/b", "A_B"} {
+		if _, _, err := s.PipelineRunObservation(context.Background(), bad); err == nil {
+			t.Fatalf("run %q was read", bad)
+		}
+	}
+}

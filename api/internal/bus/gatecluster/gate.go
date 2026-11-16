@@ -43,6 +43,12 @@ type Gate struct {
 	// often the window is looked at without a write (30 s): a window's TTL
 	// passes without one. Backoff is the wait after a failed list or watch.
 	ResyncEvery, WindowEvery, Backoff time.Duration
+	// OnFinished, when set, is told each run whose ci.run.finished the ledger
+	// now holds (written by this call, or already there), in this process
+	// and at once: the workers' pipeline records are woken by it (bus step
+	// 2). It is called from the runs loop and must return at once; nil tells
+	// no one.
+	OnFinished func(run, pipeline string)
 
 	// runs is what the runs loop knows of each run; only that loop touches it.
 	runs map[string]runFacts

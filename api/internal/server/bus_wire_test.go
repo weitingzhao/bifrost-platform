@@ -2,12 +2,14 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	bushook "github.com/weitingzhao/bifrost-platform/api/internal/bus/hook"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
@@ -162,5 +164,40 @@ func TestHeadReleaseLoopStaysHotAfterAKick(t *testing.T) {
 	_ = p.tick(context.Background())
 	if runs != 3 {
 		t.Fatalf("after the hot window a 30-second tick still passed (%d)", runs)
+	}
+}
+
+// 2026-11-16: bus step 2 — pipeline records woken by ci.run.finished:
+// gate-cluster's OnFinished queues the run for the controller and returns at
+// once, also when the queue is full (that run is left to the reconciliation,
+// which counts it missed); the controller is wired to the queue and to
+// whether gate-cluster watches.
+func TestRunFinishedQueuesWithoutBlocking(t *testing.T) {
+	var b busWiring
+	q := b.finishedRuns()
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < cap(q)+10; i++ {
+			b.runFinished(fmt.Sprintf("run-%d", i), "bifrost-ci-platform")
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("OnFinished blocked on a full queue")
+	}
+	if len(q) != cap(q) || <-q != "run-0" {
+		t.Fatalf("queue %d of %d", len(q), cap(q))
+	}
+	s := &Server{}
+	c := &controller.Controller{}
+	s.wirePipelineRecords(c)
+	if c.PipelineFinished == nil || c.PipelineLive == nil || c.PipelineLive() {
+		t.Fatal("the controller is not wired to gate-cluster's queue, or is live without it")
+	}
+	s.bus.recordsLive.Store(true)
+	if !c.PipelineLive() {
+		t.Fatal("live is not read from the bus wiring")
 	}
 }

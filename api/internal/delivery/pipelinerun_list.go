@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -23,6 +24,31 @@ import (
 // Pipeline (the STG release evidence) gets the run itself, not this list.
 func (s *Service) PipelineRunObservations(ctx context.Context) ([]unstructured.Unstructured, error) {
 	return s.pipelineRuns(ctx, "")
+}
+
+// PipelineRunObservation reads one cicd run by name, slimmed as the list
+// slims each (PipelineRunObservations): the bus's ci.run.finished names one
+// run, and the pipeline records record just that one rather than list all.
+// ok is false when the cluster no longer keeps it.
+func (s *Service) PipelineRunObservation(ctx context.Context, name string) (unstructured.Unstructured, bool, error) {
+	if errs := validation.IsDNS1123Subdomain(name); len(errs) > 0 {
+		return unstructured.Unstructured{}, false, fmt.Errorf("run %q is not a resource name", name)
+	}
+	ctx, cancel := stgContext(ctx)
+	defer cancel()
+	dyn, err := s.buildDynamicClient()
+	if err != nil {
+		return unstructured.Unstructured{}, false, err
+	}
+	run, err := dyn.Resource(pipelineRunGVR).Namespace("cicd").Get(ctx, name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return unstructured.Unstructured{}, false, nil
+	}
+	if err != nil {
+		return unstructured.Unstructured{}, false, err
+	}
+	slimObservation(run)
+	return *run, true, nil
 }
 
 // PipelineRunsOf lists the retained runs of one pipeline, by the label
@@ -78,6 +104,11 @@ func slimObservation(run *unstructured.Unstructured) {
 // PipelineRunObservations exposes the service's retained runs to runtime wiring.
 func (h *Handler) PipelineRunObservations(ctx context.Context) ([]unstructured.Unstructured, error) {
 	return h.svc.PipelineRunObservations(ctx)
+}
+
+// PipelineRunObservation exposes the service's read of one run to wiring.
+func (h *Handler) PipelineRunObservation(ctx context.Context, name string) (unstructured.Unstructured, bool, error) {
+	return h.svc.PipelineRunObservation(ctx, name)
 }
 
 // PipelineRunsOf exposes the service's read of one pipeline's runs to wiring.
