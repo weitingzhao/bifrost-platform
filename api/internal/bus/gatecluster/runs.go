@@ -22,48 +22,6 @@ const (
 	labelRevision = "bifrost.io/revision"
 )
 
-// Slim is the run as the gate keeps it while it reads a page or a watch
-// event: name, namespace, uid, resourceVersion, creationTimestamp, the two
-// labels it reads, the revision param, and the Succeeded condition without
-// its message. Everything else is left behind: status.pipelineSpec (77% of a
-// listed run, measured 2026-11-15 on 1182 runs; the workers were OOMKilled
-// at 512Mi listing them), status.childReferences, metadata.managedFields,
-// annotations, the other params and conditions.
-func Slim(run *unstructured.Unstructured) *unstructured.Unstructured {
-	meta := map[string]any{}
-	for _, k := range []string{"name", "namespace", "uid", "resourceVersion", "creationTimestamp"} {
-		if v, ok, _ := unstructured.NestedFieldNoCopy(run.Object, "metadata", k); ok && v != nil {
-			meta[k] = v
-		}
-	}
-	labels := map[string]any{}
-	for _, k := range []string{labelPipeline, labelRevision} {
-		if v := run.GetLabels()[k]; v != "" {
-			labels[k] = v
-		}
-	}
-	if len(labels) > 0 {
-		meta["labels"] = labels
-	}
-	out := map[string]any{"apiVersion": run.GetAPIVersion(), "kind": run.GetKind(), "metadata": meta}
-	params, _, _ := unstructured.NestedSlice(run.Object, "spec", "params")
-	for _, p := range params {
-		if m, ok := p.(map[string]any); ok && m["name"] == "revision" {
-			if v, ok := m["value"].(string); ok {
-				out["spec"] = map[string]any{"params": []any{map[string]any{"name": "revision", "value": v}}}
-			}
-		}
-	}
-	conds, _, _ := unstructured.NestedSlice(run.Object, "status", "conditions")
-	for _, c := range conds {
-		if m, ok := c.(map[string]any); ok && m["type"] == "Succeeded" {
-			out["status"] = map[string]any{"conditions": []any{map[string]any{
-				"type": "Succeeded", "status": m["status"], "reason": m["reason"]}}}
-		}
-	}
-	return &unstructured.Unstructured{Object: out}
-}
-
 // runFacts is what the gate remembers of a run between events: a few
 // strings, so 1600 retained runs cost the workers kilobytes, not the
 // megabytes an informer's cache of whole runs would.
@@ -72,24 +30,23 @@ type runFacts struct {
 	// status is the Succeeded condition's: "" or Unknown while it runs,
 	// True or False once it finished.
 	status, reason string
+	// run is what the read cache answers of it (cache.go).
+	run Run
 }
 
 func (f runFacts) finished() bool { return f.status == "True" || f.status == "False" }
 
-func factsOf(run *unstructured.Unstructured) runFacts {
-	s := Slim(run)
-	f := runFacts{pipeline: s.GetLabels()[labelPipeline]}
-	if c := s.GetLabels()[labelRevision]; sha40.MatchString(c) {
+func factsOf(run *unstructured.Unstructured) runFacts { return factsFrom(RunOf(run)) }
+
+// factsFrom is what the gate reads of a run: the pipeline label, the commit
+// (the revision label, else the revision param, when either is a full SHA),
+// and the Succeeded condition.
+func factsFrom(r Run) runFacts {
+	f := runFacts{pipeline: r.Labels[labelPipeline], status: r.Status, reason: r.Reason, run: r}
+	if c := r.Labels[labelRevision]; sha40.MatchString(c) {
 		f.commit = c
-	} else if params, _, _ := unstructured.NestedSlice(s.Object, "spec", "params"); len(params) == 1 {
-		if v, _ := params[0].(map[string]any)["value"].(string); sha40.MatchString(v) {
-			f.commit = v
-		}
-	}
-	if conds, _, _ := unstructured.NestedSlice(s.Object, "status", "conditions"); len(conds) == 1 {
-		m, _ := conds[0].(map[string]any)
-		f.status, _ = m["status"].(string)
-		f.reason, _ = m["reason"].(string)
+	} else if v := r.Params["revision"]; sha40.MatchString(v) {
+		f.commit = v
 	}
 	return f
 }
@@ -149,16 +106,19 @@ func (g *Gate) finished(ctx context.Context, run string, f runFacts) {
 // observeRun takes a run the gate sees, from a list (listed) or a watch
 // event, and says what changed against what it knew. A run it did not know
 // is new, unless this is the first list (history is not replayed at
-// startup); a run it knew unfinished that is finished now finished.
-func (g *Gate) observeRun(ctx context.Context, obj *unstructured.Unstructured, first bool) {
-	name := obj.GetName()
+// startup); a run it knew unfinished that is finished now finished. A
+// cache-only gate (CacheOnly) only remembers it.
+func (g *Gate) observeRun(ctx context.Context, r Run, first bool) {
+	name := r.Name
 	if !nameRE.MatchString(name) {
 		return
 	}
-	f := factsOf(obj)
+	f := factsFrom(r)
+	g.mu.Lock()
 	prev, known := g.runs[name]
 	g.runs[name] = f
-	if first {
+	g.mu.Unlock()
+	if first || g.CacheOnly {
 		return
 	}
 	if !known {
@@ -188,10 +148,10 @@ func (g *Gate) listRuns(ctx context.Context, first bool) (string, error) {
 			return "", err
 		}
 		for i := range page.Items {
-			s := Slim(&page.Items[i])
+			r := RunOf(&page.Items[i])
 			page.Items[i] = unstructured.Unstructured{}
-			seen[s.GetName()] = true
-			g.observeRun(ctx, s, first)
+			seen[r.Name] = true
+			g.observeRun(ctx, r, first)
 		}
 		rv = page.GetResourceVersion()
 		options.Continue = page.GetContinue()
@@ -203,11 +163,13 @@ func (g *Gate) listRuns(ctx context.Context, first bool) (string, error) {
 		}
 		cursors[options.Continue] = true
 	}
+	g.mu.Lock()
 	for name := range g.runs {
 		if !seen[name] {
 			delete(g.runs, name)
 		}
 	}
+	g.mu.Unlock()
 	return rv, nil
 }
 
@@ -251,9 +213,11 @@ func consume(ctx context.Context, w watch.Interface, rv string, observe func(wat
 func (g *Gate) observeRunEvent(ctx context.Context) func(watch.EventType, *unstructured.Unstructured) {
 	return func(t watch.EventType, obj *unstructured.Unstructured) {
 		if t == watch.Deleted {
+			g.mu.Lock()
 			delete(g.runs, obj.GetName())
+			g.mu.Unlock()
 			return
 		}
-		g.observeRun(ctx, Slim(obj), false)
+		g.observeRun(ctx, RunOf(obj), false)
 	}
 }

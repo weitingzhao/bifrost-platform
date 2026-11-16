@@ -253,6 +253,9 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 		}
 		s.bus.gate.Store(g)
 		slog.Info("bus gate: on", "env", env, "nats", natsOn)
+		if natsOn && !role.RunsWorkers() {
+			s.startRunCache(ctx)
+		}
 	}
 
 	if !role.RunsWorkers() {
@@ -315,13 +318,10 @@ func (s *Server) startGateCluster(ctx context.Context) {
 		ns = s.delivery.PipelinesNamespace()
 	}
 	g := &gatecluster.Gate{Ledger: &gatecluster.PGLedger{DB: s.bus.db}, Namespace: ns, Logf: busLogf, OnFinished: s.bus.runFinished,
-		Dynamic: func() (dynamic.Interface, error) {
-			cfg, _, err := s.cluster.Service().RestConfig()
-			if err != nil {
-				return nil, err
-			}
-			return dynamic.NewForConfig(cfg)
-		}}
+		Dynamic: s.clusterDynamic}
+	if s.delivery != nil {
+		s.delivery.SetRunCache(g)
+	}
 	safego.Go("bus-gate-cluster", func() { g.Run(ctx) })
 	safego.Go("bus-gate-cluster-records-live", func() {
 		select {
@@ -334,6 +334,30 @@ func (s *Server) startGateCluster(ctx context.Context) {
 		slog.Info("bus: pipeline records woken by ci.run.finished; their 30-second loop now reconciles every 5 minutes")
 	})
 	slog.Info("bus gate-cluster: watching PipelineRuns and the release window", "namespace", ns)
+}
+
+func (s *Server) clusterDynamic() (dynamic.Interface, error) {
+	cfg, _, err := s.cluster.Service().RestConfig()
+	if err != nil {
+		return nil, err
+	}
+	return dynamic.NewForConfig(cfg)
+}
+
+// startRunCache runs, in an api process without workers, a cache-only
+// gate-cluster (bus step 2 batch 2): one watch of the runs whose map the
+// display reads of runs read (delivery/run_cache.go). It writes nothing to
+// the ledger; appending stays in the workers' gate, which is the cache where
+// both roles share a process. Same switch as the gate (BUS_NATS_URL).
+func (s *Server) startRunCache(ctx context.Context) {
+	if s.cluster == nil || s.delivery == nil {
+		return
+	}
+	ns := s.delivery.PipelinesNamespace()
+	g := &gatecluster.Gate{CacheOnly: true, Namespace: ns, Logf: busLogf, Dynamic: s.clusterDynamic}
+	s.delivery.SetRunCache(g)
+	safego.Go("bus-run-cache", func() { g.Run(ctx) })
+	slog.Info("bus run cache: watching PipelineRuns for the display reads", "namespace", ns)
 }
 
 // consumeHeadRelease is head-release's durable consumer: each

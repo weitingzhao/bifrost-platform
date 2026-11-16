@@ -157,32 +157,15 @@ func (s *Service) SupplyChain(ctx context.Context) SupplyChainResponse {
 		})
 	}
 
+	if last, err := readThrough(s, routeSupplyChain,
+		func(c RunCache) deliverRuns { return deliverRunsOf(c.Objects(supplyChainPipeline)) },
+		func() (deliverRuns, error) { return s.listDeliverRuns(ctx, out.CicdNamespace) },
+		deliverRuns.keys); err == nil {
+		out.LastDeliverRun, out.LastDeliverSuccess = last.run, last.success
+	}
+
 	dyn, err := s.buildDynamicClient()
 	if err == nil {
-		runs, listErr := dyn.Resource(pipelineRunGVR).Namespace(out.CicdNamespace).List(ctx, metav1.ListOptions{
-			LabelSelector: "tekton.dev/pipeline=bifrost-deliver-stg",
-		})
-		if listErr == nil {
-			var views []PipelineRunView
-			for _, item := range runs.Items {
-				views = append(views, pipelineRunFromUnstructured(item, "bifrost-deliver-stg"))
-			}
-			sort.Slice(views, func(i, j int) bool {
-				return pipelineRunStartedAt(views[i]) > pipelineRunStartedAt(views[j])
-			})
-			if len(views) > 0 {
-				last := views[0]
-				out.LastDeliverRun = &last
-				for _, v := range views {
-					if isPipelineRunSucceededView(v) {
-						succ := v
-						out.LastDeliverSuccess = &succ
-						break
-					}
-				}
-			}
-		}
-
 		taskRuns, trErr := dyn.Resource(taskRunGVR).Namespace(out.CicdNamespace).List(ctx, metav1.ListOptions{
 			LabelSelector: "bifrost.io/supply-chain",
 		})
@@ -201,6 +184,58 @@ func (s *Service) SupplyChain(ctx context.Context) SupplyChainResponse {
 		len(out.DockerfileCMs), len(out.StgWorkloads), out.MirrorCredentialsConfigured,
 	)
 	return out
+}
+
+// supplyChainPipeline is the pipeline whose runs the supply chain shows.
+const supplyChainPipeline = "bifrost-deliver-stg"
+
+// deliverRuns is the supply chain's newest deliver-stg run and newest
+// succeeded one.
+type deliverRuns struct{ run, success *PipelineRunView }
+
+func (d deliverRuns) keys() []string {
+	var out []string
+	for i, v := range []*PipelineRunView{d.run, d.success} {
+		which := []string{"last:", "success:"}[i]
+		if v != nil {
+			out = append(out, which+viewKey(*v))
+		} else {
+			out = append(out, which+"\x00none")
+		}
+	}
+	return out
+}
+
+func deliverRunsOf(items []unstructured.Unstructured) deliverRuns {
+	var d deliverRuns
+	views := pipelineRunViews(items, supplyChainPipeline)
+	if len(views) == 0 {
+		return d
+	}
+	last := views[0]
+	d.run = &last
+	for _, v := range views {
+		if isPipelineRunSucceededView(v) {
+			succ := v
+			d.success = &succ
+			break
+		}
+	}
+	return d
+}
+
+func (s *Service) listDeliverRuns(ctx context.Context, ns string) (deliverRuns, error) {
+	dyn, err := s.buildDynamicClient()
+	if err != nil {
+		return deliverRuns{}, err
+	}
+	runs, err := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{
+		LabelSelector: "tekton.dev/pipeline=" + supplyChainPipeline,
+	})
+	if err != nil {
+		return deliverRuns{}, err
+	}
+	return deliverRunsOf(runs.Items), nil
 }
 
 // LastDeliverStgSuccess returns the most recent succeeded bifrost-deliver-stg PipelineRun, if any.

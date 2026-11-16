@@ -5,7 +5,9 @@
 // ci.run.finished once when its Succeeded condition turns True or False,
 // release.window.changed when the window's holder, end or queue changes. The
 // relay takes the events to the bus from there. It only publishes: no reader
-// of runs or of the window reads it yet.
+// of the window reads it yet. Its run map is also a read cache for the
+// display reads of runs (cache.go); the api process runs a cache-only gate
+// for them (CacheOnly), which writes nothing.
 //
 // It imports no domain package: the ledger, the dynamic client and the
 // namespace are handed in by the server's wiring.
@@ -49,9 +51,19 @@ type Gate struct {
 	// 2). It is called from the runs loop and must return at once; nil tells
 	// no one.
 	OnFinished func(run, pipeline string)
+	// CacheOnly makes the gate a read cache and nothing else (the api
+	// process, bus step 2 batch 2): it lists and watches the runs as the
+	// workers' gate does, writes nothing to the ledger, tells no one, and
+	// does not watch the window. Appending stays in the workers.
+	CacheOnly bool
 
-	// runs is what the runs loop knows of each run; only that loop touches it.
+	// runs is what the runs loop knows of each run; only that loop writes
+	// it, under mu; the cache's readers read it under mu (cache.go).
+	mu   sync.RWMutex
 	runs map[string]runFacts
+	// synced: the runs were listed in full and the last list or watch did
+	// not fail (Synced).
+	synced atomic.Bool
 	// winDigest is the window's digest the ledger last agreed with; only the
 	// window loop touches it.
 	winDigest string
@@ -89,7 +101,8 @@ func (g *Gate) init() {
 	})
 }
 
-// Watching is closed once the runs and the window are first watched.
+// Watching is closed once the runs and the window (the runs alone in a
+// cache-only gate) are first watched.
 func (g *Gate) Watching() <-chan struct{} {
 	g.init()
 	return g.watching
@@ -97,7 +110,7 @@ func (g *Gate) Watching() <-chan struct{} {
 
 func (g *Gate) up(which *atomic.Bool) {
 	which.Store(true)
-	if g.runsUp.Load() && g.winUp.Load() {
+	if g.runsUp.Load() && (g.winUp.Load() || g.CacheOnly) {
 		g.upOnce.Do(func() { close(g.watching) })
 	}
 }
@@ -120,9 +133,13 @@ func (g *Gate) append(ctx context.Context, stream, typ string, decide Decide) bo
 }
 
 // Run watches until ctx ends: the runs and the window, each in its own
-// goroutine.
+// goroutine; a cache-only gate the runs alone.
 func (g *Gate) Run(ctx context.Context) {
 	g.init()
+	if g.CacheOnly {
+		g.runRuns(ctx)
+		return
+	}
 	var wg sync.WaitGroup
 	wg.Add(2)
 	safego.Go("bus-gate-cluster-runs", func() { defer wg.Done(); g.runRuns(ctx) })
@@ -159,6 +176,7 @@ func (g *Gate) runRuns(ctx context.Context) {
 		if list {
 			v, err := g.listRuns(ctx, first)
 			if err != nil {
+				g.synced.Store(false)
 				metricErrors.Add(1)
 				g.logf("bus gate-cluster: list runs: %v", err)
 				if !g.sleep(ctx) {
@@ -167,6 +185,7 @@ func (g *Gate) runRuns(ctx context.Context) {
 				continue
 			}
 			rv, list, first, listed = v, false, false, g.now()
+			g.synced.Store(true)
 		}
 		dyn, err := g.Dynamic()
 		var w watch.Interface
@@ -175,6 +194,7 @@ func (g *Gate) runRuns(ctx context.Context) {
 				ResourceVersion: rv, AllowWatchBookmarks: true, TimeoutSeconds: watchTimeout()})
 		}
 		if err != nil {
+			g.synced.Store(false)
 			metricRestarts.Add(1)
 			g.logf("bus gate-cluster: watch runs: %v", err)
 			list = true

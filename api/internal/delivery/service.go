@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -69,6 +71,9 @@ type Service struct {
 	// readerCreds is the platform's read-only Gitea credential (gitea_reader.go):
 	// nil reads anonymously; NewHandler sets giteaReaderFromEnv.
 	readerCreds func(ctx context.Context) (string, string, error)
+	// readers is the cluster gate's run cache and the side-by-side state of
+	// the display reads that use it (run_cache.go); nil lists.
+	readers atomic.Pointer[cacheReaders]
 }
 
 func NewService(entry *config.ClusterEntry) *Service {
@@ -157,45 +162,27 @@ func (s *Service) PipelineRuns(ctx context.Context, pipelineName string) Pipelin
 		GeneratedAt:  now,
 	}
 
-	dyn, err := s.buildDynamicClient()
+	views, err := readThrough(s, routePipelineRuns,
+		func(c RunCache) []PipelineRunView {
+			return pipelineRunViews(cachedRunsOf(c, pipelineName), pipelineName)
+		},
+		func() ([]PipelineRunView, error) { return s.listPipelineRunViews(ctx, ns, pipelineName) },
+		viewKeys)
 	if err != nil {
-		base.Detail = err.Error()
-		if ce, ok := err.(*cluster.ClientError); ok {
+		var listErr runsListError
+		var ce *cluster.ClientError
+		switch {
+		case errors.As(err, &listErr):
+			base.Reachability = probe.ReachDegraded
+			base.Detail = err.Error()
+		case errors.As(err, &ce):
 			base.Reachability = ce.Reachability
 			base.Detail = ce.Detail
+		default:
+			base.Detail = err.Error()
 		}
 		return base
 	}
-
-	list, err := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("tekton.dev/pipeline=%s", pipelineName),
-	})
-	if err != nil {
-		base.Reachability = probe.ReachDegraded
-		base.Detail = fmt.Sprintf("list pipeline runs: %v", err)
-		return base
-	}
-
-	// Fallback: filter by spec.pipelineRef.name when label missing (older runs).
-	if len(list.Items) == 0 {
-		all, listErr := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
-		if listErr == nil {
-			for _, item := range all.Items {
-				refName, _, _ := unstructured.NestedString(item.Object, "spec", "pipelineRef", "name")
-				if refName == pipelineName {
-					list.Items = append(list.Items, item)
-				}
-			}
-		}
-	}
-
-	views := make([]PipelineRunView, 0, len(list.Items))
-	for _, item := range list.Items {
-		views = append(views, pipelineRunFromUnstructured(item, pipelineName))
-	}
-	sort.Slice(views, func(i, j int) bool {
-		return pipelineRunStartedAt(views[i]) > pipelineRunStartedAt(views[j])
-	})
 	return PipelineRunsResponse{
 		ClusterID:    s.clusterID(),
 		Namespace:    ns,
@@ -205,6 +192,66 @@ func (s *Service) PipelineRuns(ctx context.Context, pipelineName string) Pipelin
 		Runs:         views,
 		GeneratedAt:  now,
 	}
+}
+
+// runsListError is a failed list of runs (the route reads as degraded).
+type runsListError struct{ err error }
+
+func (e runsListError) Error() string { return fmt.Sprintf("list pipeline runs: %v", e.err) }
+
+// listPipelineRunViews lists a pipeline's runs by its label, else (older
+// runs without it) every run whose pipelineRef names it, newest first.
+func (s *Service) listPipelineRunViews(ctx context.Context, ns, pipelineName string) ([]PipelineRunView, error) {
+	dyn, err := s.buildDynamicClient()
+	if err != nil {
+		return nil, err
+	}
+	list, err := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("tekton.dev/pipeline=%s", pipelineName),
+	})
+	if err != nil {
+		return nil, runsListError{err}
+	}
+	items := list.Items
+	// Fallback: filter by spec.pipelineRef.name when label missing (older runs).
+	if len(items) == 0 {
+		all, listErr := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
+		if listErr == nil {
+			items = runsByRef(all.Items, pipelineName)
+		}
+	}
+	return pipelineRunViews(items, pipelineName), nil
+}
+
+// cachedRunsOf is listPipelineRunViews's selection from the run cache.
+func cachedRunsOf(c RunCache, pipelineName string) []unstructured.Unstructured {
+	if items := c.Objects(pipelineName); len(items) > 0 {
+		return items
+	}
+	return runsByRef(c.Objects(""), pipelineName)
+}
+
+func runsByRef(items []unstructured.Unstructured, pipelineName string) []unstructured.Unstructured {
+	var out []unstructured.Unstructured
+	for _, item := range items {
+		refName, _, _ := unstructured.NestedString(item.Object, "spec", "pipelineRef", "name")
+		if refName == pipelineName {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+// pipelineRunViews are the runs' views, newest first.
+func pipelineRunViews(items []unstructured.Unstructured, pipelineName string) []PipelineRunView {
+	views := make([]PipelineRunView, 0, len(items))
+	for _, item := range items {
+		views = append(views, pipelineRunFromUnstructured(item, pipelineName))
+	}
+	sort.Slice(views, func(i, j int) bool {
+		return pipelineRunStartedAt(views[i]) > pipelineRunStartedAt(views[j])
+	})
+	return views
 }
 
 func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, tag, who string, extra map[string]string) (cluster.ActuationResponse, PipelineRunView, error) {

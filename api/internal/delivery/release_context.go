@@ -206,7 +206,7 @@ func (h *Handler) HandleReleaseContext(src ReleaseContextSources) http.HandlerFu
 		src.MainHead = h.svc.PolicyFacts().MainHead
 	}
 	if src.Runs == nil {
-		src.Runs = h.svc.pipelineRunPage
+		src.Runs = h.svc.cachedRunPage
 	}
 	if src.Window == nil {
 		src.Window = h.svc.storedReleaseWindow
@@ -242,6 +242,46 @@ func (s *Service) pipelineRunPage(ctx context.Context, cont string) ([]unstructu
 		slimObservation(&page.Items[i])
 	}
 	return page.Items, page.GetContinue(), nil
+}
+
+// cachedRunPage is pipelineRunPage through the bus run cache (run_cache.go):
+// while the cache is synced the first page is every run, from the cache once
+// the route is trusted, else from a full list compared with it; without the
+// cache it is pipelineRunPage.
+func (s *Service) cachedRunPage(ctx context.Context, cont string) ([]unstructured.Unstructured, string, error) {
+	if cont != "" || s.syncedCache() == nil {
+		return s.pipelineRunPage(ctx, cont)
+	}
+	items, err := readThrough(s, routeReleaseContext,
+		func(c RunCache) []unstructured.Unstructured { return c.Objects("") },
+		func() ([]unstructured.Unstructured, error) { return s.allRunPages(ctx) },
+		objectKeys)
+	return items, "", err
+}
+
+// allRunPages is every page of pipelineRunPage, bounded as runsInFlight is.
+func (s *Service) allRunPages(ctx context.Context) ([]unstructured.Unstructured, error) {
+	var out []unstructured.Unstructured
+	seen := map[string]bool{}
+	cont := ""
+	for page := 0; ; page++ {
+		if page == releaseContextMaxPages {
+			return nil, fmt.Errorf("more than %d pages of runs; not all were read", releaseContextMaxPages)
+		}
+		items, next, err := s.pipelineRunPage(ctx, cont)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, items...)
+		if next == "" {
+			return out, nil
+		}
+		if seen[next] {
+			return nil, errors.New("pipeline run pagination repeated a cursor")
+		}
+		seen[next] = true
+		cont = next
+	}
 }
 
 // storedReleaseWindow reads the window record as stored. Unlike
@@ -299,7 +339,7 @@ func AssembleReleaseContext(ctx context.Context, src ReleaseContextSources, repo
 		})
 	})
 	start("runs", func() {
-		f.RunsInFlight = readFact(ctx, now, timeout, "Tekton PipelineRuns not finished whose repo, repo-url or pipeline names "+repo+" (listed 100 a page)", func(ctx context.Context) ([]RunInFlight, error) {
+		f.RunsInFlight = readFact(ctx, now, timeout, "Tekton PipelineRuns not finished whose repo, repo-url or pipeline names "+repo+" (listed 100 a page, or from the platform's watch of the runs once it matched the list; see bifrost_bus_readers_*)", func(ctx context.Context) ([]RunInFlight, error) {
 			return runsInFlight(ctx, src, repo)
 		})
 	})

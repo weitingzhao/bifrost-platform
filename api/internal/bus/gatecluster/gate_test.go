@@ -312,11 +312,11 @@ func TestWindowChangeOncePerDataChange(t *testing.T) {
 // 2026-11-15): what the gate keeps of a run leaves status.pipelineSpec,
 // status.childReferences, managedFields and the condition's message behind,
 // and keeps what it reads.
-func TestSlimDropsTheHeavyFields(t *testing.T) {
+func TestTheKeptRunDropsTheHeavyFields(t *testing.T) {
 	full := run("ci-platform-x", "bifrost-ci-platform", shaA, "True", "Succeeded")
 	full.SetLabels(map[string]string{"tekton.dev/pipeline": "bifrost-ci-platform", "bifrost.io/revision": shaB, "other": "y"})
 	full.SetAnnotations(map[string]string{"big": strings.Repeat("z", 4096)})
-	s := Slim(full)
+	s := RunOf(full).Object()
 	for _, path := range [][]string{{"status", "pipelineSpec"}, {"status", "childReferences"}, {"metadata", "managedFields"}, {"metadata", "annotations"}} {
 		if _, ok, _ := unstructured.NestedFieldNoCopy(s.Object, path...); ok {
 			t.Errorf("%s kept", strings.Join(path, "."))
@@ -384,9 +384,9 @@ func TestOnFinishedOncePerRunAfterTheLedger(t *testing.T) {
 	}}
 	g.init()
 	bg := context.Background()
-	g.observeRun(bg, Slim(run("r1", "bifrost-ci-platform", shaA, "Unknown", "Running")), false)
+	g.observeRun(bg, RunOf(run("r1", "bifrost-ci-platform", shaA, "Unknown", "Running")), false)
 	for i := 0; i < 3; i++ {
-		g.observeRun(bg, Slim(run("r1", "bifrost-ci-platform", shaA, "False", "Failed")), false)
+		g.observeRun(bg, RunOf(run("r1", "bifrost-ci-platform", shaA, "False", "Failed")), false)
 	}
 	if told["r1"] != 1 {
 		t.Fatalf("told %d times", told["r1"])

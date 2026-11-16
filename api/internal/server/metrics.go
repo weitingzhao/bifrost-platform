@@ -13,6 +13,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gatecluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/maintainer"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
@@ -62,6 +63,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	relay.WriteMetrics(&b)
 	gatecluster.WriteMetrics(&b)
 	controller.WritePipelineEventMetrics(&b)
+	delivery.WriteBusReaderMetrics(&b)
 	s.httpMetrics.Write(&b)
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
