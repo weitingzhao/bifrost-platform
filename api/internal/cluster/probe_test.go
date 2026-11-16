@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"errors"
 	"os"
 	"testing"
 
@@ -82,7 +83,7 @@ func TestEnsureBifrostNamespacesCreatesMissing(t *testing.T) {
 		return clientset, "fake", nil
 	}
 
-	resp, err := svc.EnsureBifrostNamespaces(t.Context())
+	resp, err := svc.EnsureBifrostNamespaces(t.Context(), entry.BifrostNamespaces)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,12 +96,41 @@ func TestEnsureBifrostNamespacesCreatesMissing(t *testing.T) {
 		}
 	}
 
-	resp, err = svc.EnsureBifrostNamespaces(t.Context())
+	resp, err = svc.EnsureBifrostNamespaces(t.Context(), entry.BifrostNamespaces)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if resp.Changed {
 		t.Fatalf("second ensure should be idempotent: %+v", resp)
+	}
+}
+
+// 2026-11-16: PROD's bifrost_namespaces lists bifrost and data-warehouse, which
+// do not exist and nobody uses; card #585 would have created them along with
+// bifrost-bus. Only the named ones are created, and a name outside the config,
+// or no name at all, is refused before the cluster is touched.
+func TestEnsureBifrostNamespacesCreatesOnlyTheNamedOnes(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	entry := &config.ClusterEntry{ID: "test", BifrostNamespaces: []string{"bifrost", "bifrost-bus", "data-warehouse"}}
+	svc := NewService(entry)
+	svc.clientFactory = func() (kubernetes.Interface, string, error) { return clientset, "fake", nil }
+
+	for _, bad := range [][]string{nil, {""}, {"kube-system"}, {"bifrost-bus", "default"}} {
+		if _, err := svc.EnsureBifrostNamespaces(t.Context(), bad); !errors.Is(err, ErrNamespaceSelection) {
+			t.Fatalf("names %q: err = %v, want ErrNamespaceSelection", bad, err)
+		}
+	}
+	if list, _ := clientset.CoreV1().Namespaces().List(t.Context(), metav1.ListOptions{}); len(list.Items) != 0 {
+		t.Fatalf("refused calls created %d namespaces", len(list.Items))
+	}
+
+	resp, err := svc.EnsureBifrostNamespaces(t.Context(), []string{"bifrost-bus"})
+	if err != nil || !resp.Changed {
+		t.Fatalf("resp=%+v err=%v", resp, err)
+	}
+	list, _ := clientset.CoreV1().Namespaces().List(t.Context(), metav1.ListOptions{})
+	if len(list.Items) != 1 || list.Items[0].Name != "bifrost-bus" {
+		t.Fatalf("namespaces = %+v, want only bifrost-bus", list.Items)
 	}
 }
 

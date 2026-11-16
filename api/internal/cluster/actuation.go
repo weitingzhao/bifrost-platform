@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 	"io"
@@ -45,11 +46,16 @@ type LogsResponse struct {
 	Logs      string `json:"logs"`
 }
 
-func (s *Service) EnsureBifrostNamespaces(ctx context.Context) (ActuationResponse, error) {
+// EnsureBifrostNamespaces creates the named namespaces that do not exist yet.
+// Every name must be listed under bifrost_namespaces in this platform's config,
+// and at least one name is required: the list carries legacy names nobody uses
+// (2026-11-16, card #585 would have created bifrost and data-warehouse along
+// with bifrost-bus), so the caller says exactly which ones it wants.
+func (s *Service) EnsureBifrostNamespaces(ctx context.Context, names []string) (ActuationResponse, error) {
 	now := time.Now().UTC()
-	namespaces := []string{"bifrost"}
-	if s.entry != nil && len(s.entry.BifrostNamespaces) > 0 {
-		namespaces = s.entry.BifrostNamespaces
+	namespaces, err := s.selectBifrostNamespaces(names)
+	if err != nil {
+		return ActuationResponse{OK: false, Action: "ensure-bifrost-namespaces", Target: strings.Join(names, ","), Message: err.Error(), GeneratedAt: now}, err
 	}
 	clientset, _, err := s.buildClient()
 	if err != nil {
@@ -99,6 +105,35 @@ func (s *Service) EnsureBifrostNamespaces(ctx context.Context) (ActuationRespons
 		Namespaces:  namespaces,
 		GeneratedAt: now,
 	}, nil
+}
+
+// ErrNamespaceSelection marks a names list the config does not allow.
+var ErrNamespaceSelection = errors.New("namespace selection")
+
+func (s *Service) selectBifrostNamespaces(names []string) ([]string, error) {
+	allowed := map[string]bool{}
+	if s.entry != nil {
+		for _, ns := range s.entry.BifrostNamespaces {
+			allowed[strings.TrimSpace(ns)] = true
+		}
+	}
+	out := make([]string, 0, len(names))
+	seen := map[string]bool{}
+	for _, n := range names {
+		n = strings.TrimSpace(n)
+		if n == "" || seen[n] {
+			continue
+		}
+		if !allowed[n] {
+			return nil, fmt.Errorf("%w: %q is not under bifrost_namespaces in this platform's config", ErrNamespaceSelection, n)
+		}
+		seen[n] = true
+		out = append(out, n)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("%w: name at least one namespace", ErrNamespaceSelection)
+	}
+	return out, nil
 }
 
 func (s *Service) RolloutRestart(ctx context.Context, req RolloutRestartRequest) (ActuationResponse, error) {

@@ -421,7 +421,7 @@ func (s *Server) bindActionExecutors() {
 		nil, nil, s.cluster.HandleSweepExpiredFailedBackups)
 	reg("ensure_bifrost_namespaces", http.MethodPost,
 		func(map[string]any) string { return "/api/v1/cluster/namespaces/ensure-bifrost" },
-		nil, nil, s.cluster.HandleEnsureBifrost)
+		nil, fields("names"), s.cluster.HandleEnsureBifrost)
 	reg("ensure_metrics_server", http.MethodPost,
 		func(map[string]any) string { return "/api/v1/cluster/addons/metrics-server/ensure" },
 		nil, nil, s.cluster.HandleEnsureMetricsServer)

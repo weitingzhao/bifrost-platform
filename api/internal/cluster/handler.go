@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -196,8 +197,19 @@ func (h *Handler) HandleEnsureKubePrometheusStack(w http.ResponseWriter, r *http
 }
 
 func (h *Handler) HandleEnsureBifrost(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.svc.EnsureBifrostNamespaces(r.Context())
+	var req struct {
+		Names []string `json:"names"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body must be {\"names\": [...]}"})
+		return
+	}
+	resp, err := h.svc.EnsureBifrostNamespaces(r.Context(), req.Names)
 	h.recordAudit(r, resp.Action, resp.Target, auditStatus(err), resp.Message)
+	if errors.Is(err, ErrNamespaceSelection) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
 	writeActuationResponse(w, resp, err)
 }
 

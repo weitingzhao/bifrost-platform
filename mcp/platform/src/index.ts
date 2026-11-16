@@ -360,8 +360,11 @@ reg(
     ),
 )
 
-reg('ensure_bifrost_namespaces', 'Create Bifrost namespaces (operator)', {}, async () =>
-  jsonResult(await platformPost('/api/v1/cluster/namespaces/ensure-bifrost')),
+reg(
+  'ensure_bifrost_namespaces',
+  'Create the named Bifrost namespaces that do not exist yet (tier C). Each name must be under bifrost_namespaces in the platform config.',
+  { names: z.array(z.string()).min(1) },
+  async ({ names }) => jsonResult(await platformPost('/api/v1/cluster/namespaces/ensure-bifrost', { names })),
 )
 
 reg(

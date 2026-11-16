@@ -27,7 +27,7 @@ func TestApprovedEnsureBifrostNamespacesCreatesTheNamespace(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{Clusters: &config.ClustersFile{Clusters: []config.ClusterEntry{
-		{ID: "test", BifrostNamespaces: []string{"data", "bifrost-bus"}},
+		{ID: "test", BifrostNamespaces: []string{"data", "bifrost", "bifrost-bus"}},
 	}}}
 	ch := cluster.NewHandler(cfg, nil)
 	ch.Service().SetClientFactoryForTest(func() (kubernetes.Interface, string, error) { return clientset, "fake", nil })
@@ -35,7 +35,7 @@ func TestApprovedEnsureBifrostNamespacesCreatesTheNamespace(t *testing.T) {
 	s.bindActionExecutors()
 
 	h := serveApprovals(approvals.New(filepath.Join(t.TempDir(), "approvals"), nil))
-	created := doApproval(h, http.MethodPost, "/approvals", `{"action":"ensure_bifrost_namespaces","reason":"bus namespace","params":{}}`)
+	created := doApproval(h, http.MethodPost, "/approvals", `{"action":"ensure_bifrost_namespaces","reason":"bus namespace","params":{"names":["bifrost-bus"]}}`)
 	if created.Code != http.StatusCreated {
 		t.Fatalf("create = %d %s", created.Code, created.Body.String())
 	}
@@ -61,6 +61,9 @@ func TestApprovedEnsureBifrostNamespacesCreatesTheNamespace(t *testing.T) {
 	}
 	if _, err := clientset.CoreV1().Namespaces().Get(t.Context(), "bifrost-bus", metav1.GetOptions{}); err != nil {
 		t.Fatalf("bifrost-bus not created after approval: %v", err)
+	}
+	if _, err := clientset.CoreV1().Namespaces().Get(t.Context(), "bifrost", metav1.GetOptions{}); err == nil {
+		t.Fatal("bifrost was created although the card named only bifrost-bus")
 	}
 }
 

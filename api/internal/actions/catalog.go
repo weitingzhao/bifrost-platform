@@ -367,9 +367,9 @@ var catalog = []Action{
 	},
 	{
 		ID: "ensure_bifrost_namespaces", Tier: TierC,
-		Description: "Create the namespaces listed under bifrost_namespaces in this platform's config (bifrost-trade-infra k8s/overlays/platform-*/config/clusters.yaml) that do not exist yet; existing ones are left as they are. Tier C: the Owner approves the card on the Console and the platform runs it, because the execution card may not create a Namespace (2026-11-16, the bus's own namespace).",
+		Description: "Create the named namespaces that do not exist yet; existing ones are left as they are. names is required and every name must be listed under bifrost_namespaces in this platform's config (bifrost-trade-infra k8s/overlays/platform-*/config/clusters.yaml), which also carries legacy names nobody uses. Tier C: the Owner approves the card on the Console and the platform runs it, because the execution card may not create a Namespace (2026-11-16, the bus's own namespace).",
 		Method:      "POST", Pattern: "/api/v1/cluster/namespaces/ensure-bifrost",
-		Params: []Param{},
+		Params: []Param{{Name: "names", Type: "string[]", Required: true, In: "body"}},
 	},
 	{
 		ID: "ensure_metrics_server", Tier: TierD,
