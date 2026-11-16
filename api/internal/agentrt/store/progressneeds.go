@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 )
 
 // The progress projection's needs_you (progress.go has the rest): the plan
@@ -22,16 +23,6 @@ import (
 // a candidate, and the Console keeps it only while that question is open.
 // Waits he cannot act on are the missions' statuses.
 func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, error) {
-	rows, err := tx.Query(ctx, `SELECT p.event_id, p.event_stream_id, p.body_json->>'reason', p.at,
-	    p.body_json->>'question_id', (p.body_json->'changes')::text
-	  FROM agentrt.event p
-	  WHERE p.event_type = 'plan_change_proposed' AND p.at > $1::timestamptz - make_interval(secs => $2) AND p.body_json ? 'question_id'
-	    AND NOT EXISTS (SELECT 1 FROM agentrt.event d WHERE d.event_type = 'plan_change_decided' AND d.at >= p.at
-	      AND d.event_stream_id = p.event_stream_id AND (d.body_json->>'proposal_event_id')::bigint = p.event_id)
-	  ORDER BY p.at, p.event_id LIMIT $3`, now, pendingChangeWindow.Seconds(), pendingChangeLimit+1)
-	if err != nil {
-		return nil, err
-	}
 	type pending struct {
 		event                    int64
 		stream, reason, question string
@@ -39,21 +30,15 @@ func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, er
 		changes                  []PlanChange
 	}
 	var list []pending
-	for rows.Next() {
-		var p pending
-		var doc string
-		if err = rows.Scan(&p.event, &p.stream, &p.reason, &p.at, &p.question, &doc); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		if err = json.Unmarshal([]byte(doc), &p.changes); err != nil {
-			rows.Close()
-			return nil, err
+	err := planreadings.PendingChanges(ctx, tx, now, pendingChangeWindow, pendingChangeLimit, func(observed planreadings.PendingChange) error {
+		p := pending{event: observed.Event, stream: observed.Stream, reason: observed.Reason, question: observed.Question, at: observed.At}
+		if err := json.Unmarshal([]byte(observed.Changes), &p.changes); err != nil {
+			return err
 		}
 		list = append(list, p)
-	}
-	rows.Close()
-	if err = rows.Err(); err != nil {
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	truncated := len(list) > pendingChangeLimit
@@ -213,13 +198,8 @@ func changeBlocks(ctx context.Context, tx pgx.Tx, changes []PlanChange) (any, er
 			bound = append(bound, c.MissionID)
 		}
 	}
-	var missions []string
 	open := 0 // no task is in work any more (store cut 4, 2026-11-14)
-	err := tx.QueryRow(ctx, `WITH steps AS (SELECT plan_node_id, mission_id FROM agentrt.plan_node WHERE node_kind = 'step'
-	      AND (plan_node_id = ANY($1) OR parent_plan_node_id = ANY($1)))
-	  SELECT ARRAY(SELECT DISTINCT m FROM (SELECT mission_id FROM steps
-	      UNION ALL SELECT unnest($2::text[])) x(m)
-	      WHERE m IS NOT NULL ORDER BY 1)`, nodes, bound).Scan(&missions)
+	missions, err := planreadings.AffectedMissions(ctx, tx, nodes, bound)
 	if err != nil {
 		return nil, err
 	}

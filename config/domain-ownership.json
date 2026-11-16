@@ -512,6 +512,34 @@
       ],
       "status": "assigned",
       "basis": "2026-11-15 source and caller audit: shared notification text cleaning and relay transport; actual readers span domains, package deliberately imports neither actions nor approvals; implementation unchanged"
+    },
+    "api/internal/agentrt/infracheck": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: shared infra quick-check and pinned test setup generator, consumed by CI/check adapters; generator and refusal behavior unchanged"
+    },
+    "api/cmd/infracheck": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: command adapter prints infracheck check/setup scripts; source does not execute them"
+    },
+    "api/internal/agentrt/recorderimport": {
+      "domains": [
+        "lineage"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: pure legacy recorder-log import representation and history-chain parsing; used by registration import consumers, parsing and masking unchanged"
+    },
+    "api/internal/opscontext": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-15 source and caller audit: shared YAML context model and loader; supplies platform configuration rather than applying decisions"
     }
   }
 }

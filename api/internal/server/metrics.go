@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"net/http"
 	"sort"
 	"strings"
@@ -73,9 +74,7 @@ func (s *Server) writeFullCIMetric(b *strings.Builder) {
 	if !ok {
 		return
 	}
-	b.WriteString("# HELP bifrost_full_ci_red Whether the newest finished daily full CI run is red (1) or green (0)\n")
-	b.WriteString("# TYPE bifrost_full_ci_red gauge\n")
-	fmt.Fprintf(b, "bifrost_full_ci_red{run=%q} %d\n", name, boolValue(status == "Failed"))
+	cirunview.WriteFullCIMetric(b, name, status)
 }
 
 func (s *Server) pluginProbeFns() []func(context.Context) probe.PluginHealth {
