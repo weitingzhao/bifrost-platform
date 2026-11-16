@@ -26,4 +26,4 @@ api/internal/approvals/handler.go
 # mcpFocusBridges.test.ts reads each tool's level from the Go catalog.
 api/internal/mcp/catalog.go
 # consoleRoutes.test.tsx reads the link a push notification opens.
-api/internal/server/agent_threads_wire.go
+api/internal/server/console_notification_contract.go

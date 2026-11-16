@@ -624,6 +624,139 @@
       ],
       "status": "assigned",
       "basis": "2026-11-16 source and caller audit: node-capability pools and workload placement observations consumed by cluster/delivery; compute charter owns placement, preflight decisions unchanged"
+    },
+    "api/cmd/platform-api": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: platform process composition root and startup; domain handlers remain separately owned; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/cmd/operator-plane": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: out-of-band operator-plane process entry point; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/operatorplane": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: cluster-free out-of-band platform repair composition; mounted domain services retain their own ownership; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/maintainer": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: shared worker-loop health timestamps and liveness counters; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/actuation": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: shared authentication, action audit and job observations across domain handlers; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/alertrelay": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: out-of-cluster alert and notification transport shared by monitoring and approval callers, not approval decisions; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/mcp": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: Go cross-domain discovery catalog and HTTP transport; distinct from communication-owned TypeScript message tools; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/agentrt/actionrecord": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: shared append-only action audit storage and normalization across action domains; no authority granted by records; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/network": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: infrastructure network monitoring and configuration adapters; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/network/unifi": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: infrastructure network provider HTTP client; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/opsagent": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: generic infrastructure alert diagnosis and suggestions, not domain execution; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/opsfacts": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: shared authoritative observation envelope and system projections without a second ledger; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/telemetry": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: shared Prometheus observation client used across compute and system views; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/cmd/agentrt-baseline-import": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: one-time sealed runtime observation import command; not executed in this audit; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/agentbridge": {
+      "domains": [
+        "compute"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: host and bridge service inventory; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/agentdeploy": {
+      "domains": [
+        "compute"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: agent host deployment inventory and HTTP adapter; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/agentprogress": {
+      "domains": [
+        "coordination"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: latest coordinating-thread progress document bridge; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/agentrt/landing": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: merge-history and CI failure observation types; implementation, authorization, refusal and dispatch behavior unchanged"
+    },
+    "api/internal/agentrt/landinggit": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: Git history and provenance fact readers for merge verification; implementation, authorization, refusal and dispatch behavior unchanged"
     }
   }
 }

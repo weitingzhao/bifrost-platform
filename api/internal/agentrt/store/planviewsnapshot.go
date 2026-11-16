@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 )
@@ -27,19 +28,7 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 	if err = tx.QueryRow(ctx, `SELECT transaction_timestamp()`).Scan(&now); err != nil {
 		return nil, err
 	}
-	rows, err := tx.Query(ctx, viewTree+`SELECT to_jsonb(n) FROM tree JOIN agentrt.plan_node n USING(plan_node_id) ORDER BY n.ordinal,n.plan_node_id LIMIT 501`, root)
-	if err != nil {
-		return nil, err
-	}
-	nodes, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (map[string]any, error) {
-		var b []byte
-		var n map[string]any
-		err := r.Scan(&b)
-		if err == nil {
-			err = json.Unmarshal(b, &n)
-		}
-		return n, err
-	})
+	nodes, err := planreadings.SnapshotNodes(ctx, tx, root)
 	if err != nil {
 		return nil, err
 	}
@@ -105,22 +94,7 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 	if err != nil {
 		return nil, err
 	}
-	watermarks := map[string]int64{}
-	rows, err = tx.Query(ctx, `SELECT event_stream_id,last_seq FROM agentrt.event_stream ORDER BY event_stream_id`)
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		var s string
-		var seq int64
-		if err = rows.Scan(&s, &seq); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		watermarks[s] = seq
-	}
-	err = rows.Err()
-	rows.Close()
+	watermarks, err := planreadings.SourceWatermarks(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
