@@ -154,6 +154,8 @@ modules:
       api/internal/repoguard: ["."]
       api/internal/safego: ["api"]
       api/internal/selfhealth: ["api/internal/selfhealth", "config/clusters.yaml"]
+      # Read-only Owner statistics share the exact Console contract, not the server tree.
+      api/internal/approvalreadings: ["api/internal/approvalreadings", "api/internal/server/testdata/contract/readings"]
       api/internal/server: ["api", "config/agent-tasks.yaml"]
       api/internal/statefile: ["api/internal/statefile"]
       api/internal/storedurability: ["api"]

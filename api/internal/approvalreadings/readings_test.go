@@ -1,6 +1,10 @@
-package server
+package approvalreadings
 
 import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -56,7 +60,7 @@ func TestApprovalReadings(t *testing.T) {
 		rec(10, "line-b", approvals.StatusExecuted, "2026-11-15T04:30:00Z", 40*time.Second, nil),
 		rec(11, "line-b", approvals.StatusExecuted, "2026-11-13T23:00:00Z", 5*time.Second, nil),
 	}
-	got := readApprovals(items, loc, at("2026-11-15T05:00:00Z"))
+	got := Compute(items, loc, at("2026-11-15T05:00:00Z"))
 	if got.Retained != 11 || got.Oldest != "2026-11-13T23:00:00Z" || got.Zone != "America/Chicago" || len(got.Days) != 2 || got.Days[0].Day != "2026-11-14" || got.Days[1].Day != "2026-11-13" {
 		t.Fatalf("days: %+v", got)
 	}
@@ -82,11 +86,27 @@ func TestApprovalReadings(t *testing.T) {
 	if ints(b.Requests) != "9,0," || ints(b.Approved) != "9,0," || ints(b.Expired) != "9," || ints(b.Executed) != "0," || *b.ApproveSecondsMedian != 30 {
 		t.Errorf("line-b: %+v", b)
 	}
-	unitsContract(t, "../readings/approvals.json", got)
+	readingsContract(t, "approvals.json", got)
 	// No record: no day, and nothing is called zero that was not counted.
-	none := readApprovals(nil, loc, at("2026-11-15T05:00:00Z"))
+	none := Compute(nil, loc, at("2026-11-15T05:00:00Z"))
 	if none.Retained != 0 || none.Oldest != "" || len(none.Days) != 0 || none.Days == nil {
 		t.Errorf("no records: %+v", none)
 	}
-	unitsContract(t, "../readings/approvals-none.json", none)
+	readingsContract(t, "approvals-none.json", none)
+}
+
+// The same JSON contract is consumed by Console tests. No fixture is regenerated here.
+func readingsContract(t *testing.T, name string, value any) {
+	t.Helper()
+	got, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := os.ReadFile(filepath.Join("..", "server", "testdata", "contract", "readings", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(append(got, '\n'), want) {
+		t.Fatalf("readings contract %s changed: %s", name, got)
+	}
 }
