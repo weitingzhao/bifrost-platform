@@ -49,6 +49,3 @@ type Withdraw func(ctx context.Context, questionID, reason string) error
 // The Owner has been asked; a plan goes on with its default and does not
 // count the card as its own (review 217 B2).
 var ErrAsked = errors.New("store: the Owner was already asked this question")
-
-// ReadMain reads the head commit of a repository's main.
-type ReadMain func(ctx context.Context, repo string) (string, error)

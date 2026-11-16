@@ -36,9 +36,3 @@ type CommitReader func(ctx context.Context, repo, sha string) (CommitFacts, erro
 // ErrCoreMismatch: a pinned result changes core work its task does not say
 // it is; nothing was recorded.
 var ErrCoreMismatch = fmt.Errorf("%w: core_mismatch", ErrState)
-
-// PinnedReviewer is who reviews a pinned task (§2.8): Codex, of openai, in
-// the first version; the coordinator's own provider is anthropic, and a
-// candidate whose provider label cannot show it is not (cursor-mix) is not
-// one.
-var PinnedReviewer = Tool{Executor: "exec:codex", Provider: "openai"}
