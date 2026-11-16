@@ -111,23 +111,12 @@ func (s *Server) writePluginMetrics(b *strings.Builder, r *http.Request) {
 	}
 	wg.Wait()
 
-	b.WriteString("# HELP bifrost_plugin_reachable Whether platform-api could reach the plugin (1) or not (0)\n")
-	b.WriteString("# TYPE bifrost_plugin_reachable gauge\n")
+	observations := make([]telemetry.ReachabilityObservation, 0, len(healths))
 	for _, h := range healths {
-		fmt.Fprintf(b, "bifrost_plugin_reachable{plugin=%q} %d\n", h.Name, boolValue(h.Reachable))
+		observations = append(observations, telemetry.ReachabilityObservation{Name: h.Name, Reachable: h.Reachable, State: string(h.Reachability)})
 	}
-
-	// One series per state so an alert can say `state="ok"` without string
-	// comparison, and a plugin flipping state leaves no stale series behind.
-	b.WriteString("# HELP bifrost_plugin_reachability Plugin reachability, one series per state, 1 on the current one\n")
-	b.WriteString("# TYPE bifrost_plugin_reachability gauge\n")
-	states := []probe.Reachability{probe.ReachOK, probe.ReachDegraded, probe.ReachFail, probe.ReachUnknown}
-	for _, h := range healths {
-		for _, st := range states {
-			fmt.Fprintf(b, "bifrost_plugin_reachability{plugin=%q,state=%q} %d\n",
-				h.Name, st, boolValue(h.Reachability == st))
-		}
-	}
+	states := []string{string(probe.ReachOK), string(probe.ReachDegraded), string(probe.ReachFail), string(probe.ReachUnknown)}
+	telemetry.WriteReachability(b, observations, states)
 
 	writePluginGauges(b, healths)
 }

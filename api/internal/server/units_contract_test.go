@@ -83,6 +83,14 @@ modules:
 	}
 	unitsContract(t, "config-declared.json", declared)
 	files["config/domain-ownership.json"] = `{"version":1,"source":"contract fixture","domains":[{"id":"plan","name":"Planning","source":"planning charter"},{"id":"foundation","name":"Foundation","source":"default ruling"}],"default":{"domains":["foundation"],"status":"default-maintainer","basis":"default ruling"},"packages":{"svc/a":{"domains":["plan"],"status":"assigned","basis":"planning charter"}}}`
+	var domainDoc map[string]any
+	if err := json.Unmarshal([]byte(files["config/domain-ownership.json"]), &domainDoc); err != nil {
+		t.Fatal(err)
+	}
+	domainDoc["frontend"] = map[string]any{"root": "web", "inventory": "frontend-inventory.json", "groups": map[string]any{"web": map[string]any{"domains": []string{"plan"}, "status": "assigned", "basis": "frontend plan view source audit"}}}
+	domainRaw, _ := json.Marshal(domainDoc)
+	files["config/domain-ownership.json"] = string(domainRaw)
+	files["frontend-inventory.json"] = `{"version":1,"root":"web","groups":[{"path":"web","files":["web/index.ts"],"imports":[],"test_imports":[],"external_imports":["react"],"source_inputs":[],"test_inputs":[],"unresolved_imports":[]}]}`
 	mapped, err := unitConfig(context.Background(), func(ctx context.Context, _, commit string) (*unitplan.Tree, error) { return trees(ctx, "r", commit) }, "r", c)
 	if err != nil || mapped.Domains == nil || mapped.DomainNote != "" {
 		t.Fatalf("mapping: %+v %v", mapped, err)

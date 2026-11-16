@@ -1,4 +1,5 @@
 import type { UnitsConfig } from '@/api/units'
+import { FrontendDomainMapView } from './FrontendDomainMapView'
 
 /** Source-owned business attribution, separate from execution modules and run evidence. */
 export function DomainMapView({ config, module, error }: { config?: UnitsConfig; module: string; error?: string }) {
@@ -12,11 +13,12 @@ export function DomainMapView({ config, module, error }: { config?: UnitsConfig;
     <h3 className="m-0 text-sm font-semibold">Business domains & CI units</h3>
     <p className="text-xs text-muted-foreground">Source: {config!.repo}@{config!.commit.slice(0, 8)} · {packages.length} Go packages in this module selection. {map.unresolved} packages across the project remain mixed, provisional or under a default maintainer. Inventory coverage is not proof of isolation.</p>
     <p className="text-xs text-muted-foreground">These are current ownership and code dependencies. Runs below report technical modules; they do not report domain-level execution or independent deployment.</p>
-    {module && packages.length === 0 && <p className="text-sm">No Go packages in this execution module. Frontend and repository tasks remain shared execution units; no business ownership is inferred.</p>}
+    {module && packages.length === 0 && <p className="text-sm">No Go packages in this execution module. Frontend ownership, when declared, is shown below; its CI tasks remain shared execution units.</p>}
     <details><summary className="min-h-11 cursor-pointer py-3 text-sm">Shared CI tasks · module and repository coverage</summary>
       <ul className="list-none p-0 text-xs">{map.shared_tasks.filter(t => !module || t.module === module).map(t => <li key={`${t.unit}:${t.task}`} className="break-all py-1">{t.module} / {t.unit} · {t.task}</li>)}</ul>
       <p className="text-xs text-muted-foreground">Shared tasks are not attributed to one business domain. They can cover multiple packages or the frontend.</p>
     </details>
+    <FrontendDomainMapView map={map} module={module} />
     <div className="grid min-w-0 gap-2 lg:grid-cols-2">
       {map.domains.map(d => {
         const rows = packages.filter(p => p.domains.includes(d.id))

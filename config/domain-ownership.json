@@ -772,5 +772,1221 @@
       "status": "assigned",
       "basis": "foundation charter; recorded controller-loop observations and error display, not alert writers or loop policy"
     }
+  },
+  "frontend": {
+    "root": "console/src",
+    "inventory": "console/domain-inventory.json",
+    "groups": {
+      "console/src": {
+        "domains": [
+          "foundation",
+          "plan",
+          "lineage",
+          "verification",
+          "delivery",
+          "owner",
+          "compute",
+          "tenant",
+          "coordination"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: shared application entry, navigation, styles, test support and remaining cross-domain glue; not isolated"
+      },
+      "console/src/api": {
+        "domains": [
+          "foundation",
+          "plan",
+          "lineage",
+          "verification",
+          "delivery",
+          "owner",
+          "compute",
+          "tenant",
+          "coordination"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: shared API clients and contract fixtures spanning domains; individual clients below override this group"
+      },
+      "console/src/pages": {
+        "domains": [
+          "foundation",
+          "plan",
+          "lineage",
+          "verification",
+          "delivery",
+          "owner",
+          "compute",
+          "tenant",
+          "coordination"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: shared cross-domain composition; narrower declarations override this group"
+      },
+      "console/src/components": {
+        "domains": [
+          "foundation",
+          "plan",
+          "lineage",
+          "verification",
+          "delivery",
+          "owner",
+          "compute",
+          "tenant",
+          "coordination"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: shared cross-domain composition; narrower declarations override this group"
+      },
+      "console/src/hooks": {
+        "domains": [
+          "foundation",
+          "plan",
+          "lineage",
+          "verification",
+          "delivery",
+          "owner",
+          "compute",
+          "tenant",
+          "coordination"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: shared cross-domain composition; narrower declarations override this group"
+      },
+      "console/src/lib": {
+        "domains": [
+          "foundation",
+          "plan",
+          "lineage",
+          "verification",
+          "delivery",
+          "owner",
+          "compute",
+          "tenant",
+          "coordination"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: shared cross-domain composition; narrower declarations override this group"
+      },
+      "console/src/pages/shell": {
+        "domains": [
+          "foundation",
+          "plan",
+          "lineage",
+          "verification",
+          "delivery",
+          "owner",
+          "compute",
+          "tenant",
+          "coordination"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: shell composes domain pages; shared routing is retained"
+      },
+      "console/src/pages/shell/ci": {
+        "domains": [
+          "verification"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: CI configuration/runs and code health observations"
+      },
+      "console/src/lib/code-health": {
+        "domains": [
+          "verification"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: CI configuration/runs and code health observations"
+      },
+      "console/src/pages/CodeHealthPage.tsx": {
+        "domains": [
+          "verification"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: CI configuration/runs and code health observations"
+      },
+      "console/src/api/units.ts": {
+        "domains": [
+          "verification"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: CI configuration/runs and code health observations"
+      },
+      "console/src/api/ciTimings.ts": {
+        "domains": [
+          "verification"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: CI configuration/runs and code health observations"
+      },
+      "console/src/api/codeHealth.ts": {
+        "domains": [
+          "verification"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: CI configuration/runs and code health observations"
+      },
+      "console/src/api/landingActions.ts": {
+        "domains": [
+          "verification"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: CI configuration/runs and code health observations"
+      },
+      "console/src/pages/shell/progress": {
+        "domains": [
+          "plan"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: versioned plan and progress observations"
+      },
+      "console/src/api/agentRuntimePlan.ts": {
+        "domains": [
+          "plan"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: versioned plan and progress observations"
+      },
+      "console/src/api/agentRuntimePlanView.ts": {
+        "domains": [
+          "plan"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: versioned plan and progress observations"
+      },
+      "console/src/api/planPace.ts": {
+        "domains": [
+          "plan"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: versioned plan and progress observations"
+      },
+      "console/src/api/planSnapshot.ts": {
+        "domains": [
+          "plan"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: versioned plan and progress observations"
+      },
+      "console/src/api/planSnapshotSchema.ts": {
+        "domains": [
+          "plan"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: versioned plan and progress observations"
+      },
+      "console/src/components/lineage": {
+        "domains": [
+          "lineage"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: work-to-commit registration and lineage display"
+      },
+      "console/src/pages/CommitLineagePage.tsx": {
+        "domains": [
+          "lineage"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: work-to-commit registration and lineage display"
+      },
+      "console/src/api/lineage.ts": {
+        "domains": [
+          "lineage"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: work-to-commit registration and lineage display"
+      },
+      "console/src/pages/shell/releases": {
+        "domains": [
+          "delivery"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: delivery records and progress; includes existing policy display, not policy implementation"
+      },
+      "console/src/components/delivery": {
+        "domains": [
+          "delivery"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: delivery records and progress; includes existing policy display, not policy implementation"
+      },
+      "console/src/lib/delivery": {
+        "domains": [
+          "delivery"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: delivery records and progress; includes existing policy display, not policy implementation"
+      },
+      "console/src/api/delivery.ts": {
+        "domains": [
+          "delivery"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: delivery records and progress; includes existing policy display, not policy implementation"
+      },
+      "console/src/api/deliveryBoundaries.ts": {
+        "domains": [
+          "delivery"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: delivery records and progress; includes existing policy display, not policy implementation"
+      },
+      "console/src/api/deliveryStages.ts": {
+        "domains": [
+          "delivery"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: delivery records and progress; includes existing policy display, not policy implementation"
+      },
+      "console/src/api/deliveryTypes.ts": {
+        "domains": [
+          "delivery"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: delivery records and progress; includes existing policy display, not policy implementation"
+      },
+      "console/src/api/releases.ts": {
+        "domains": [
+          "delivery"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: delivery records and progress; includes existing policy display, not policy implementation"
+      },
+      "console/src/api/promote.ts": {
+        "domains": [
+          "delivery"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: delivery records and progress; includes existing policy display, not policy implementation"
+      },
+      "console/src/pages/shell/needs-you": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/shell/owner": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/question": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/QuestionPage.tsx": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/ApprovalsPage.tsx": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/ApprovalReviewButton.tsx": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/CloseUnknownForm.tsx": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/OwnerExecRun.tsx": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/DecisionEnvironment.tsx": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/approvalDecision.ts": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/approvalSiblings.ts": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/approvalWaitingNotice.ts": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/approvalsReadNotice.ts": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/decisionContact.ts": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/decisionSignIn.ts": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/useDecisionEnvironment.ts": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/useDecisionPageResume.ts": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/api/approvals.ts": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/api/questions.ts": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/api/ownerExec.ts": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/api/approvalGoStructParse.ts": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/api/approvalsApiFixture.ts": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/api/approvalsServerContract.ts": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
+      },
+      "console/src/pages/shell/infrastructure": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/pages/cluster": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/pages/ClusterPage.tsx": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/pages/NetworkPage.tsx": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/pages/DevSessionsPage.tsx": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/components/cluster": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/components/network": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/lib/cluster": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/api/cluster.ts": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/api/clusterActuation.ts": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/api/clusterTypes.ts": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/api/devSession.ts": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/api/network.ts": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/api/networkTypes.ts": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/hooks/useClusterCategory.ts": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/hooks/useFleetSnapshot.ts": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/hooks/useNetworkLiveProbe.ts": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
+      },
+      "console/src/components/market-data": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/components/flex-query": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/components/research": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/lib/market-data": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/lib/flex-query": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/lib/research": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/pages/MarketDataManagePage.tsx": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/pages/FlexQueryManagePage.tsx": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/pages/IbGatewayManagePage.tsx": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/pages/ResearchEnginePage.tsx": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/pages/PluginGalleryPage.tsx": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/pages/satellite-bus": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/pages/shell/ib": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/pages/SatelliteApiHealthPage.tsx": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/pages/SatelliteHealthPage.tsx": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/pages/SatelliteTelemetryPage.tsx": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/lib/satellite": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/lib/satellite-bus": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/api/flexQueryPlugin.ts": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/api/marketDataCapabilities.ts": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/api/marketDataDimensions.ts": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/api/marketDataDocs.ts": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/api/marketDataDoctor.ts": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/api/marketDataPlugin.ts": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/api/marketDataQueueHistory.ts": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/api/researchEngine.ts": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/api/satelliteBusTypes.ts": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/hooks/useFlexQueryLiveProbe.ts": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/hooks/useIbGatewayLiveProbe.ts": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/hooks/useMarketDataLiveProbe.ts": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/components/TradeMonitoringPeerLinks.tsx": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/lib/tradeFrontendUrls.ts": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/pages/shell/crew": {
+        "domains": [
+          "coordination"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: seat/session communication and progress display"
+      },
+      "console/src/components/agent": {
+        "domains": [
+          "coordination"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: seat/session communication and progress display"
+      },
+      "console/src/lib/agent": {
+        "domains": [
+          "coordination"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: seat/session communication and progress display"
+      },
+      "console/src/api/agentThreads.ts": {
+        "domains": [
+          "coordination"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: seat/session communication and progress display"
+      },
+      "console/src/api/agentProgress.ts": {
+        "domains": [
+          "coordination"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: seat/session communication and progress display"
+      },
+      "console/src/api/agentProgressBoard.ts": {
+        "domains": [
+          "coordination"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: seat/session communication and progress display"
+      },
+      "console/src/api/agentProgressExtra.ts": {
+        "domains": [
+          "coordination"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: seat/session communication and progress display"
+      },
+      "console/src/hooks/useAgentThreads.ts": {
+        "domains": [
+          "coordination"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: seat/session communication and progress display"
+      },
+      "console/src/components/ui": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/components/layout": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/components/shell": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/lib/shell": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/lib/architecture": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/lib/audit": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/lib/cn.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/pwa": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/styles": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/assets": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/test": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/pages/shell/status": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/pages/shell/records": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/pages/shell/services": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/pages/AuditPage.tsx": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/pages/ConsolePage.tsx": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/pages/RocketHealthPage.tsx": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/pages/ServerContactStatus.tsx": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/pages/serverContactNotice.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/api/client.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/api/core.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/api/serverContact.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/api/telemetry.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/api/auditTypes.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/api/opsContextTypes.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/hooks/useNowMs.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/hooks/PlatformAuthProvider.tsx": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/hooks/platformAuthContext.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/hooks/usePlatformAuth.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/lib/platformAuth.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/lib/platformAuthUi.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/lib/signInError.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: shared platform UI infrastructure and observations; authentication and refusals unchanged"
+      },
+      "console/src/pages/shell/agents": {
+        "domains": [
+          "plan",
+          "lineage",
+          "coordination"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: work page combines plan, registrations and sessions; exact imports recorded"
+      },
+      "console/src/pages/observability": {
+        "domains": [
+          "foundation",
+          "compute",
+          "tenant"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: cross-domain health observations; no artificial isolation"
+      },
+      "console/src/pages/ObservabilityPage.tsx": {
+        "domains": [
+          "foundation",
+          "compute",
+          "tenant"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: cross-domain health observations; no artificial isolation"
+      },
+      "console/src/components/observability": {
+        "domains": [
+          "foundation",
+          "compute",
+          "tenant"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: cross-domain health observations; no artificial isolation"
+      },
+      "console/src/lib/observability": {
+        "domains": [
+          "foundation",
+          "compute",
+          "tenant"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: cross-domain health observations; no artificial isolation"
+      },
+      "console/src/hooks/useObservabilitySnapshot.ts": {
+        "domains": [
+          "foundation",
+          "compute",
+          "tenant"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: cross-domain health observations; no artificial isolation"
+      },
+      "console/src/pages/RuntimeMapPage.tsx": {
+        "domains": [
+          "compute",
+          "tenant"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: runtime topology combines infrastructure and tenant endpoints"
+      },
+      "console/src/components/runtime-map": {
+        "domains": [
+          "compute",
+          "tenant"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: runtime topology combines infrastructure and tenant endpoints"
+      },
+      "console/src/lib/runtime-map": {
+        "domains": [
+          "compute",
+          "tenant"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: runtime topology combines infrastructure and tenant endpoints"
+      },
+      "console/src/pages/shell/data": {
+        "domains": [
+          "compute",
+          "tenant"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: fixed data-lane UI and infrastructure backups remain mixed"
+      },
+      "console/src/api/dataHusbandry.ts": {
+        "domains": [
+          "compute",
+          "tenant"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: fixed data-lane UI and infrastructure backups remain mixed"
+      },
+      "console/src/components/control-room": {
+        "domains": [
+          "plan",
+          "coordination",
+          "compute"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: cross-domain activity and control-room composition"
+      },
+      "console/src/lib/control-room": {
+        "domains": [
+          "plan",
+          "coordination",
+          "compute"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: cross-domain activity and control-room composition"
+      },
+      "console/src/pages/ControlRoomPage.tsx": {
+        "domains": [
+          "plan",
+          "coordination",
+          "compute"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: cross-domain activity and control-room composition"
+      },
+      "console/src/components/activity": {
+        "domains": [
+          "plan",
+          "coordination",
+          "compute"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: cross-domain activity and control-room composition"
+      },
+      "console/src/lib/activity": {
+        "domains": [
+          "plan",
+          "coordination",
+          "compute"
+        ],
+        "status": "mixed",
+        "basis": "2026-11-16 source/caller audit: cross-domain activity and control-room composition"
+      },
+      "console/src/components/TradeNsSegmentControl.tsx": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      }
+    }
   }
 }

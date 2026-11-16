@@ -1,0 +1,4049 @@
+{
+  "version": 1,
+  "root": "console/src",
+  "groups": [
+    {
+      "path": "console/src",
+      "files": [
+        "console/src/App.tsx",
+        "console/src/index.css",
+        "console/src/main.tsx",
+        "console/src/vite-env.d.ts"
+      ],
+      "imports": [
+        "console/src/hooks/PlatformAuthProvider.tsx",
+        "console/src/pages/ConsolePage.tsx",
+        "console/src/pwa",
+        "console/src/styles"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query",
+        "react",
+        "react-dom/client"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api",
+      "files": [
+        "console/src/api/__fixtures__/agent-threads-identity-fields.json",
+        "console/src/api/__fixtures__/agent-threads-sessions.generated.json",
+        "console/src/api/__fixtures__/agent-threads.generated.json",
+        "console/src/api/__fixtures__/agentrt-capabilities.testdb.json",
+        "console/src/api/__fixtures__/agentrt-delivery.go.json",
+        "console/src/api/__fixtures__/agentrt-events-M-2.stg.json",
+        "console/src/api/__fixtures__/agentrt-events-across.testdb.json",
+        "console/src/api/__fixtures__/agentrt-events-after-page.testdb.json",
+        "console/src/api/__fixtures__/agentrt-events-after.testdb.json",
+        "console/src/api/__fixtures__/agentrt-events-mission-M-2.prod.json",
+        "console/src/api/__fixtures__/agentrt-events-waits.testdb.json",
+        "console/src/api/__fixtures__/agentrt-mission-M-2.prod.json",
+        "console/src/api/__fixtures__/agentrt-mission.stg.json",
+        "console/src/api/__fixtures__/agentrt-plan-approvals.testdb.json",
+        "console/src/api/__fixtures__/agentrt-plan-imported.testdb.json",
+        "console/src/api/__fixtures__/agentrt-plan-moved.testdb.json",
+        "console/src/api/__fixtures__/agentrt-plan-r2.prod.json",
+        "console/src/api/__fixtures__/agentrt-plan-root-only.testdb.json",
+        "console/src/api/__fixtures__/agentrt-plan-signoffs.testdb.json",
+        "console/src/api/__fixtures__/agentrt-plan-view.go.json",
+        "console/src/api/__fixtures__/agentrt-progress-arch.testdb.json",
+        "console/src/api/__fixtures__/agentrt-progress-eta.testdb.json",
+        "console/src/api/__fixtures__/agentrt-progress-marks.testdb.json",
+        "console/src/api/__fixtures__/agentrt-progress-owner-next.testdb.json",
+        "console/src/api/__fixtures__/agentrt-progress-persist.testdb.json",
+        "console/src/api/__fixtures__/agentrt-progress-presence.testdb.json",
+        "console/src/api/__fixtures__/agentrt-progress-schema.testdb.json",
+        "console/src/api/__fixtures__/agentrt-progress.stg.json",
+        "console/src/api/__fixtures__/agentrt-task.stg.json",
+        "console/src/api/__fixtures__/agentrt-tasks-M-2.prod.json",
+        "console/src/api/__fixtures__/assessment-streams.testdb.json",
+        "console/src/api/__fixtures__/board-roadmap-round-arch.json",
+        "console/src/api/__fixtures__/plan-view-collector.generated.json",
+        "console/src/api/__fixtures__/plan-view-handler-empty.json",
+        "console/src/api/__fixtures__/plan-view-handler-legacy.json",
+        "console/src/api/__fixtures__/plan-view-handler-page2.json",
+        "console/src/api/__fixtures__/plan-view-handler.json",
+        "console/src/api/__fixtures__/plan-view-pv2-prod-r4.json",
+        "console/src/api/__fixtures__/plan-view-signoff.generated.json",
+        "console/src/api/__fixtures__/question-blocked-card.testdb.json",
+        "console/src/api/__fixtures__/question-cards.testdb.json",
+        "console/src/api/__fixtures__/question-rule-answered.testdb.json",
+        "console/src/api/__tests__/agentProgress.test.ts",
+        "console/src/api/__tests__/agentRuntime.test.ts",
+        "console/src/api/__tests__/agentRuntimeBus.test.ts",
+        "console/src/api/__tests__/agentRuntimeEvents.test.ts",
+        "console/src/api/__tests__/agentRuntimePlanView.test.ts",
+        "console/src/api/__tests__/agentThreads.test.ts",
+        "console/src/api/__tests__/agentThreadsMixedVersions.test.ts",
+        "console/src/api/__tests__/approvalGoStructParse.test.ts",
+        "console/src/api/__tests__/approvals.test.ts",
+        "console/src/api/__tests__/deliveryStages.test.ts",
+        "console/src/api/__tests__/pc2MixedVersions.test.ts",
+        "console/src/api/__tests__/planSnapshot.test.ts",
+        "console/src/api/__tests__/planSnapshotMixedVersions.test.ts",
+        "console/src/api/__tests__/questions.test.tsx",
+        "console/src/api/__tests__/recoveryConfirmation.test.ts",
+        "console/src/api/__tests__/serverContactCoverage.test.ts",
+        "console/src/api/actions.ts",
+        "console/src/api/agentOps.ts",
+        "console/src/api/agentRuntime.ts",
+        "console/src/api/agentRuntimeBus.ts",
+        "console/src/api/agentRuntimeEvents.ts",
+        "console/src/api/agentTypes.ts",
+        "console/src/api/assessment.ts",
+        "console/src/api/checklist.ts",
+        "console/src/api/gitOps.ts",
+        "console/src/api/governanceMcp.ts",
+        "console/src/api/matrixTypes.ts",
+        "console/src/api/patrol.ts",
+        "console/src/api/readings.ts",
+        "console/src/api/releasePolicy.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/deliveryTypes.ts",
+        "console/src/api/serverContact.ts",
+        "console/src/lib/architecture",
+        "console/src/lib/shell",
+        "console/src/lib/signInError.ts"
+      ],
+      "test_imports": [
+        "console/src/api/agentProgress.ts",
+        "console/src/api/agentProgressBoard.ts",
+        "console/src/api/agentRuntimePlan.ts",
+        "console/src/api/agentRuntimePlanView.ts",
+        "console/src/api/agentThreads.ts",
+        "console/src/api/approvalGoStructParse.ts",
+        "console/src/api/approvals.ts",
+        "console/src/api/approvalsApiFixture.ts",
+        "console/src/api/approvalsServerContract.ts",
+        "console/src/api/client.ts",
+        "console/src/api/deliveryStages.ts",
+        "console/src/api/planSnapshot.ts",
+        "console/src/api/questions.ts",
+        "console/src/pages/question",
+        "console/src/pages/shell/needs-you",
+        "console/src/test"
+      ],
+      "external_imports": [
+        "@testing-library/react",
+        "node:fs",
+        "node:path",
+        "node:url",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/agentProgress.ts",
+      "files": [
+        "console/src/api/agentProgress.ts"
+      ],
+      "imports": [
+        "console/src/api/agentProgressBoard.ts",
+        "console/src/api/agentProgressExtra.ts",
+        "console/src/api/client.ts",
+        "console/src/pages/shell/progress"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/agentProgressBoard.ts",
+      "files": [
+        "console/src/api/agentProgressBoard.ts"
+      ],
+      "imports": [
+        "console/src/api/agentProgressExtra.ts",
+        "console/src/api/agentRuntimePlan.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/agentProgressExtra.ts",
+      "files": [
+        "console/src/api/agentProgressExtra.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/agentRuntimePlan.ts",
+      "files": [
+        "console/src/api/agentRuntimePlan.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/agentRuntimePlanView.ts",
+        "console/src/api/client.ts",
+        "console/src/api/serverContact.ts",
+        "console/src/lib/signInError.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/agentRuntimePlanView.ts",
+      "files": [
+        "console/src/api/agentRuntimePlanView.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/agentThreads.ts",
+      "files": [
+        "console/src/api/agentThreads.ts"
+      ],
+      "imports": [
+        "console/src/api/approvals.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/approvalGoStructParse.ts",
+      "files": [
+        "console/src/api/approvalGoStructParse.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/approvals.ts",
+      "files": [
+        "console/src/api/approvals.ts"
+      ],
+      "imports": [
+        "console/src/api/approvalsServerContract.ts",
+        "console/src/api/client.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/approvalsApiFixture.ts",
+      "files": [
+        "console/src/api/approvalsApiFixture.ts"
+      ],
+      "imports": [
+        "console/src/api/approvalsServerContract.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/approvalsServerContract.ts",
+      "files": [
+        "console/src/api/approvalsServerContract.ts"
+      ],
+      "imports": [
+        "console/src/api"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/auditTypes.ts",
+      "files": [
+        "console/src/api/auditTypes.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/ciTimings.ts",
+      "files": [
+        "console/src/api/ciTimings.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/client.ts",
+      "files": [
+        "console/src/api/client.ts"
+      ],
+      "imports": [
+        "console/src/api/serverContact.ts",
+        "console/src/lib/platformAuth.ts",
+        "console/src/lib/signInError.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/cluster.ts",
+      "files": [
+        "console/src/api/cluster.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/auditTypes.ts",
+        "console/src/api/client.ts",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/clusterActuation.ts",
+      "files": [
+        "console/src/api/clusterActuation.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/client.ts",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/clusterTypes.ts",
+      "files": [
+        "console/src/api/clusterTypes.ts"
+      ],
+      "imports": [
+        "console/src/api"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/codeHealth.ts",
+      "files": [
+        "console/src/api/codeHealth.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/core.ts",
+      "files": [
+        "console/src/api/core.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/opsContextTypes.ts",
+        "console/src/api/satelliteBusTypes.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/dataHusbandry.ts",
+      "files": [
+        "console/src/api/dataHusbandry.ts"
+      ],
+      "imports": [
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/delivery.ts",
+      "files": [
+        "console/src/api/delivery.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/deliveryTypes.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/deliveryBoundaries.ts",
+      "files": [
+        "console/src/api/deliveryBoundaries.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/deliveryStages.ts",
+      "files": [
+        "console/src/api/deliveryStages.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/deliveryTypes.ts",
+      "files": [
+        "console/src/api/deliveryTypes.ts"
+      ],
+      "imports": [
+        "console/src/api"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/devSession.ts",
+      "files": [
+        "console/src/api/devSession.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/flexQueryPlugin.ts",
+      "files": [
+        "console/src/api/flexQueryPlugin.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/landingActions.ts",
+      "files": [
+        "console/src/api/landingActions.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/lineage.ts",
+      "files": [
+        "console/src/api/lineage.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/marketDataCapabilities.ts",
+      "files": [
+        "console/src/api/marketDataCapabilities.ts"
+      ],
+      "imports": [
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/marketDataDimensions.ts",
+      "files": [
+        "console/src/api/marketDataDimensions.ts"
+      ],
+      "imports": [
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/marketDataDocs.ts",
+      "files": [
+        "console/src/api/marketDataDocs.ts"
+      ],
+      "imports": [
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/marketDataDoctor.ts",
+      "files": [
+        "console/src/api/marketDataDoctor.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/marketDataPlugin.ts",
+      "files": [
+        "console/src/api/marketDataPlugin.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/marketDataQueueHistory.ts",
+      "files": [
+        "console/src/api/marketDataQueueHistory.ts"
+      ],
+      "imports": [
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/network.ts",
+      "files": [
+        "console/src/api/network.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/networkTypes.ts",
+        "console/src/api/satelliteBusTypes.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/networkTypes.ts",
+      "files": [
+        "console/src/api/networkTypes.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/opsContextTypes.ts",
+      "files": [
+        "console/src/api/opsContextTypes.ts"
+      ],
+      "imports": [
+        "console/src/api"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/ownerExec.ts",
+      "files": [
+        "console/src/api/ownerExec.ts"
+      ],
+      "imports": [
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/planPace.ts",
+      "files": [
+        "console/src/api/planPace.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/planSnapshot.ts",
+      "files": [
+        "console/src/api/planSnapshot.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/planSnapshotSchema.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/planSnapshotSchema.ts",
+      "files": [
+        "console/src/api/planSnapshotSchema.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/promote.ts",
+      "files": [
+        "console/src/api/promote.ts"
+      ],
+      "imports": [
+        "console/src/api/deliveryTypes.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/questions.ts",
+      "files": [
+        "console/src/api/questions.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/agentProgress.ts",
+        "console/src/api/client.ts",
+        "console/src/api/serverContact.ts",
+        "console/src/lib/signInError.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/releases.ts",
+      "files": [
+        "console/src/api/releases.ts"
+      ],
+      "imports": [
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/researchEngine.ts",
+      "files": [
+        "console/src/api/researchEngine.ts"
+      ],
+      "imports": [
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/satelliteBusTypes.ts",
+      "files": [
+        "console/src/api/satelliteBusTypes.ts"
+      ],
+      "imports": [
+        "console/src/api"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/serverContact.ts",
+      "files": [
+        "console/src/api/serverContact.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/telemetry.ts",
+      "files": [
+        "console/src/api/telemetry.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/units.ts",
+      "files": [
+        "console/src/api/units.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/assets",
+      "files": [
+        "console/src/assets/icons/interactive-brokers.svg"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components",
+      "files": [
+        "console/src/components/AuditRecordsPanel.tsx",
+        "console/src/components/ConfirmDialog.tsx",
+        "console/src/components/ConsoleHeader.tsx",
+        "console/src/components/ConsoleHostIpLabel.tsx",
+        "console/src/components/ConsoleSidebar.tsx",
+        "console/src/components/DevSessionsIndicator.tsx",
+        "console/src/components/MatrixTable.tsx",
+        "console/src/components/ReleasePolicyBanner.tsx",
+        "console/src/components/StatusLamp.tsx",
+        "console/src/components/ToolsMenu.tsx",
+        "console/src/components/UserMenu.tsx",
+        "console/src/components/__tests__/ReleasePolicyBanner.test.tsx",
+        "console/src/components/architecture/SelfHealthPanel.tsx",
+        "console/src/components/feedback/OpsFeedback.tsx",
+        "console/src/components/log/StaticLogConsole.tsx",
+        "console/src/components/log/staticLogView.ts",
+        "console/src/components/patrol/PatrolDispatchLog.tsx"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/auditTypes.ts",
+        "console/src/api/cluster.ts",
+        "console/src/api/core.ts",
+        "console/src/api/devSession.ts",
+        "console/src/components/TradeMonitoringPeerLinks.tsx",
+        "console/src/components/agent",
+        "console/src/components/layout",
+        "console/src/components/shell",
+        "console/src/components/ui",
+        "console/src/hooks",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib",
+        "console/src/lib/agent",
+        "console/src/lib/architecture",
+        "console/src/lib/audit",
+        "console/src/lib/control-room",
+        "console/src/lib/platformAuthUi.ts",
+        "console/src/lib/shell"
+      ],
+      "test_imports": [
+        "console/src/api"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "lucide-react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/activity",
+      "files": [
+        "console/src/components/activity/useInFlightBusWorkload.ts"
+      ],
+      "imports": [
+        "console/src/lib/activity"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/agent",
+      "files": [
+        "console/src/components/agent/DenseMarkdown.tsx",
+        "console/src/components/agent/DockDevSessionsPanel.tsx",
+        "console/src/components/agent/denseMarkdownUtils.ts",
+        "console/src/components/agent/sessionLogColor.tsx",
+        "console/src/components/agent/sessionLogTone.ts"
+      ],
+      "imports": [
+        "console/src/api/devSession.ts",
+        "console/src/api/serverContact.ts",
+        "console/src/hooks/usePlatformAuth.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "lucide-react",
+        "react",
+        "react-dom"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/cluster",
+      "files": [
+        "console/src/components/cluster/ClusterApplicationsDetailPanel.tsx",
+        "console/src/components/cluster/ClusterCategoryCard.tsx",
+        "console/src/components/cluster/ClusterCategoryDetail.tsx",
+        "console/src/components/cluster/ClusterCategoryGrid.tsx",
+        "console/src/components/cluster/ClusterDrawer.tsx",
+        "console/src/components/cluster/ClusterFacilityPanels.tsx",
+        "console/src/components/cluster/ClusterGovernancePanel.tsx",
+        "console/src/components/cluster/ClusterKpiGauges.tsx",
+        "console/src/components/cluster/ClusterNodeDrawer.tsx",
+        "console/src/components/cluster/ClusterNodeWizardPanel.tsx",
+        "console/src/components/cluster/ClusterNodesTable.tsx",
+        "console/src/components/cluster/ClusterObservabilityPanel.tsx",
+        "console/src/components/cluster/ClusterOpsIssuesPanel.tsx",
+        "console/src/components/cluster/ClusterOverviewKpi.tsx",
+        "console/src/components/cluster/ClusterPostgresDetailPanel.tsx",
+        "console/src/components/cluster/ClusterRedisDetailPanel.tsx",
+        "console/src/components/cluster/ClusterServiceReadinessPanel.tsx",
+        "console/src/components/cluster/ClusterTopPodsTable.tsx",
+        "console/src/components/cluster/ClusterWorkloadsExplorer.tsx",
+        "console/src/components/cluster/CopyChip.tsx",
+        "console/src/components/cluster/DataFreshnessPanel.tsx",
+        "console/src/components/cluster/IbGatewayCutoverStatusPanel.tsx",
+        "console/src/components/cluster/IbGatewayLiveStatusPanel.tsx",
+        "console/src/components/cluster/NodeArchLabel.tsx",
+        "console/src/components/cluster/NodeCapabilitiesCell.tsx",
+        "console/src/components/cluster/NodeObservedStatePanel.tsx",
+        "console/src/components/cluster/NodeResourceCell.tsx",
+        "console/src/components/cluster/NodeVersionInfo.tsx",
+        "console/src/components/cluster/WizardProcedureSteps.tsx",
+        "console/src/components/cluster/WorkloadExpandToggle.tsx",
+        "console/src/components/cluster/__tests__/ibGatewaySummaryModel.test.ts",
+        "console/src/components/cluster/__tests__/rebootPending.test.ts",
+        "console/src/components/cluster/ibGatewaySummaryModel.ts",
+        "console/src/components/cluster/rebootPending.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/cluster.ts",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/core.ts",
+        "console/src/api/delivery.ts",
+        "console/src/api/network.ts",
+        "console/src/api/promote.ts",
+        "console/src/api/satelliteBusTypes.ts",
+        "console/src/api/telemetry.ts",
+        "console/src/components",
+        "console/src/components/layout",
+        "console/src/components/market-data",
+        "console/src/components/shell",
+        "console/src/hooks",
+        "console/src/hooks/useIbGatewayLiveProbe.ts",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib/architecture",
+        "console/src/lib/cluster",
+        "console/src/lib/cn.ts"
+      ],
+      "test_imports": [
+        "console/src/api/satelliteBusTypes.ts"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "lucide-react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/control-room",
+      "files": [
+        "console/src/components/control-room/ControlRoomAttentionStrip.tsx",
+        "console/src/components/control-room/ControlRoomBay.tsx",
+        "console/src/components/control-room/ControlRoomBayCards.tsx",
+        "console/src/components/control-room/ControlRoomVerdictStrip.tsx",
+        "console/src/components/control-room/NetworkHealthPanel.tsx",
+        "console/src/components/control-room/__tests__/ControlRoomVerdictStrip.test.tsx"
+      ],
+      "imports": [
+        "console/src/api/opsContextTypes.ts",
+        "console/src/components/layout",
+        "console/src/hooks/useNetworkLiveProbe.ts",
+        "console/src/lib/architecture",
+        "console/src/lib/control-room"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@testing-library/react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/delivery",
+      "files": [
+        "console/src/components/delivery/HusbandryStrip.tsx",
+        "console/src/components/delivery/StgSmokePanel.tsx"
+      ],
+      "imports": [
+        "console/src/api/dataHusbandry.ts",
+        "console/src/api/deliveryTypes.ts",
+        "console/src/components",
+        "console/src/components/layout",
+        "console/src/hooks",
+        "console/src/lib/architecture",
+        "console/src/lib/research"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "lucide-react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/flex-query",
+      "files": [
+        "console/src/components/flex-query/FlexCheckPanel.tsx",
+        "console/src/components/flex-query/FlexConfigTab.tsx",
+        "console/src/components/flex-query/FlexCoverageTab.tsx",
+        "console/src/components/flex-query/FlexIngestTab.tsx",
+        "console/src/components/flex-query/FlexManualOpsPanel.tsx",
+        "console/src/components/flex-query/FlexOverviewTab.tsx",
+        "console/src/components/flex-query/FlexQueueDashboardPanel.tsx",
+        "console/src/components/flex-query/FlexRemediationPanel.tsx",
+        "console/src/components/flex-query/__tests__/flexCheckVerdict.test.ts",
+        "console/src/components/flex-query/__tests__/flexQueryStatusUtils.test.ts",
+        "console/src/components/flex-query/flexQueryStatusUtils.ts"
+      ],
+      "imports": [
+        "console/src/api/flexQueryPlugin.ts",
+        "console/src/api/satelliteBusTypes.ts",
+        "console/src/components/layout",
+        "console/src/components/market-data",
+        "console/src/hooks/useFlexQueryLiveProbe.ts",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib",
+        "console/src/lib/flex-query"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/layout",
+      "files": [
+        "console/src/components/layout/CollapseExpandIcon.tsx",
+        "console/src/components/layout/OpsSection.tsx",
+        "console/src/components/layout/OpsVerdictStrip.tsx",
+        "console/src/components/layout/PageToolbar.tsx",
+        "console/src/components/layout/SectionRefreshButton.tsx",
+        "console/src/components/layout/collapseExpandAria.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "lucide-react",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/lineage",
+      "files": [
+        "console/src/components/lineage/BranchesPanel.tsx",
+        "console/src/components/lineage/LineageGraph.tsx",
+        "console/src/components/lineage/__tests__/threadFilter.test.ts",
+        "console/src/components/lineage/threadFilter.ts"
+      ],
+      "imports": [
+        "console/src/api/lineage.ts"
+      ],
+      "test_imports": [
+        "console/src/api/lineage.ts"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/market-data",
+      "files": [
+        "console/src/components/market-data/AnalyticsDemandPanel.tsx",
+        "console/src/components/market-data/ApiReachabilityPanel.tsx",
+        "console/src/components/market-data/BlueprintPanel.tsx",
+        "console/src/components/market-data/CoverageDimensionsPanel.tsx",
+        "console/src/components/market-data/CoverageMatrixPanel.tsx",
+        "console/src/components/market-data/DataInventoryStrip.tsx",
+        "console/src/components/market-data/DataVitalsStrip.tsx",
+        "console/src/components/market-data/DoctorPanel.tsx",
+        "console/src/components/market-data/IngestDailyVolume.tsx",
+        "console/src/components/market-data/JobQueuePressure.tsx",
+        "console/src/components/market-data/MarketDataCoverageTab.tsx",
+        "console/src/components/market-data/MarketDataIngestTab.tsx",
+        "console/src/components/market-data/MarketDataJsonProbeCard.tsx",
+        "console/src/components/market-data/MarketDataOverviewTab.tsx",
+        "console/src/components/market-data/MarketDataProbeTables.tsx",
+        "console/src/components/market-data/OptionCoverageSection.tsx",
+        "console/src/components/market-data/QualityScoreSection.tsx",
+        "console/src/components/market-data/QueueDashboardPanel.tsx",
+        "console/src/components/market-data/QueueHistoryPanel.tsx",
+        "console/src/components/market-data/ScheduleSwimlane.tsx",
+        "console/src/components/market-data/StockDepthSection.tsx",
+        "console/src/components/market-data/SubscriptionCoveragePanel.tsx",
+        "console/src/components/market-data/WorkersFreshnessPanel.tsx",
+        "console/src/components/market-data/__tests__/DoctorPanel.computing.test.ts",
+        "console/src/components/market-data/__tests__/accrualPace.test.ts",
+        "console/src/components/market-data/__tests__/analyticsDemandModel.test.ts",
+        "console/src/components/market-data/__tests__/capabilitiesModel.test.ts",
+        "console/src/components/market-data/__tests__/coverageMatrixMemory.test.ts",
+        "console/src/components/market-data/__tests__/coverageMatrixModel.test.ts",
+        "console/src/components/market-data/__tests__/dataVitalsModel.test.ts",
+        "console/src/components/market-data/__tests__/dimensionsContinuity.test.ts",
+        "console/src/components/market-data/__tests__/dimensionsModel.test.ts",
+        "console/src/components/market-data/__tests__/doctorModel.test.ts",
+        "console/src/components/market-data/__tests__/ingestKindLabel.test.ts",
+        "console/src/components/market-data/__tests__/jobQueuePressureModel.test.ts",
+        "console/src/components/market-data/__tests__/lowCoverageDatesAreSessions.test.ts",
+        "console/src/components/market-data/__tests__/overviewDashModel.test.ts",
+        "console/src/components/market-data/__tests__/overviewLoadingIsNotAVerdict.test.ts",
+        "console/src/components/market-data/__tests__/overviewSessionConvergence.test.ts",
+        "console/src/components/market-data/__tests__/qualityScoreModel.test.ts",
+        "console/src/components/market-data/__tests__/queueEta.test.ts",
+        "console/src/components/market-data/__tests__/queueReadyCheck.test.ts",
+        "console/src/components/market-data/__tests__/queueRunningJobs.test.ts",
+        "console/src/components/market-data/__tests__/refillModel.test.ts",
+        "console/src/components/market-data/__tests__/scheduleSwimlaneModel.test.ts",
+        "console/src/components/market-data/__tests__/sourceVoidModel.test.ts",
+        "console/src/components/market-data/analyticsDemandModel.ts",
+        "console/src/components/market-data/capabilitiesModel.ts",
+        "console/src/components/market-data/coverageMatrixModel.ts",
+        "console/src/components/market-data/dataVitalsModel.ts",
+        "console/src/components/market-data/dimensionsModel.ts",
+        "console/src/components/market-data/doctorModel.ts",
+        "console/src/components/market-data/ingestDailyVolumeModel.ts",
+        "console/src/components/market-data/ingestKindLabel.ts",
+        "console/src/components/market-data/jobQueuePressureModel.ts",
+        "console/src/components/market-data/marketDataProbeUtils.ts",
+        "console/src/components/market-data/overviewDash.tsx",
+        "console/src/components/market-data/overviewDashModel.ts",
+        "console/src/components/market-data/quality/DailyChecklistSection.tsx",
+        "console/src/components/market-data/quality/DateCoverageSection.tsx",
+        "console/src/components/market-data/quality/FieldFillRateTable.tsx",
+        "console/src/components/market-data/quality/FinancialsOverviewStrip.tsx",
+        "console/src/components/market-data/quality/FinancialsPanel.tsx",
+        "console/src/components/market-data/quality/ReadinessKpiStrip.tsx",
+        "console/src/components/market-data/quality/ReadinessPanel.tsx",
+        "console/src/components/market-data/quality/ReadinessVerdictSection.tsx",
+        "console/src/components/market-data/quality/ReferenceQualitySection.tsx",
+        "console/src/components/market-data/quality/RefillAction.tsx",
+        "console/src/components/market-data/quality/SepaGapsSection.tsx",
+        "console/src/components/market-data/quality/SnapshotByTypeTable.tsx",
+        "console/src/components/market-data/quality/SnapshotQualityTrend.tsx",
+        "console/src/components/market-data/quality/VendorGapDetailTable.tsx",
+        "console/src/components/market-data/quality/__tests__/mdNavParams.test.ts",
+        "console/src/components/market-data/quality/mdNavParams.ts",
+        "console/src/components/market-data/quality/readinessChecks.ts",
+        "console/src/components/market-data/quality/refillModel.ts",
+        "console/src/components/market-data/quality/sourceVoidModel.ts",
+        "console/src/components/market-data/qualityScoreModel.ts",
+        "console/src/components/market-data/queueEta.ts",
+        "console/src/components/market-data/queueReadyCheck.ts",
+        "console/src/components/market-data/queueRunningJobs.ts",
+        "console/src/components/market-data/scheduleSwimlaneModel.ts",
+        "console/src/components/market-data/useTickFlash.ts"
+      ],
+      "imports": [
+        "console/src/api/marketDataCapabilities.ts",
+        "console/src/api/marketDataDimensions.ts",
+        "console/src/api/marketDataDocs.ts",
+        "console/src/api/marketDataDoctor.ts",
+        "console/src/api/marketDataPlugin.ts",
+        "console/src/api/marketDataQueueHistory.ts",
+        "console/src/api/network.ts",
+        "console/src/api/researchEngine.ts",
+        "console/src/api/satelliteBusTypes.ts",
+        "console/src/components/delivery",
+        "console/src/components/layout",
+        "console/src/hooks",
+        "console/src/hooks/useMarketDataLiveProbe.ts",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib",
+        "console/src/lib/architecture",
+        "console/src/lib/market-data"
+      ],
+      "test_imports": [
+        "console/src/api/marketDataDimensions.ts",
+        "console/src/api/marketDataDoctor.ts",
+        "console/src/api/marketDataPlugin.ts"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/network",
+      "files": [
+        "console/src/components/network/NetworkClientsPanel.tsx",
+        "console/src/components/network/NetworkDevicesPanel.tsx",
+        "console/src/components/network/NetworkFirewallPanel.tsx",
+        "console/src/components/network/NetworkSlaPanel.tsx"
+      ],
+      "imports": [
+        "console/src/api/networkTypes.ts",
+        "console/src/components/layout",
+        "console/src/components/shell",
+        "console/src/hooks/useNetworkLiveProbe.ts",
+        "console/src/hooks/usePlatformAuth.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/observability",
+      "files": [
+        "console/src/components/observability/MonitoringCoverageStrip.tsx"
+      ],
+      "imports": [
+        "console/src/api/clusterTypes.ts",
+        "console/src/components/layout"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/research",
+      "files": [
+        "console/src/components/research/ResearchDbtCatalogTab.tsx",
+        "console/src/components/research/ResearchHealthLayersStrip.tsx",
+        "console/src/components/research/SignalHealthAgeMeters.tsx",
+        "console/src/components/research/__tests__/researchEngineAgentPack.test.ts",
+        "console/src/components/research/researchEngineAgentPack.ts"
+      ],
+      "imports": [
+        "console/src/api/dataHusbandry.ts",
+        "console/src/api/researchEngine.ts",
+        "console/src/components/layout",
+        "console/src/components/market-data",
+        "console/src/lib/architecture",
+        "console/src/lib/research"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "lucide-react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/runtime-map",
+      "files": [
+        "console/src/components/runtime-map/ComponentIcon.tsx",
+        "console/src/components/runtime-map/GapProgressBar.tsx",
+        "console/src/components/runtime-map/HostBay.tsx",
+        "console/src/components/runtime-map/IbBrandIcon.tsx",
+        "console/src/components/runtime-map/InfraMapCanvas.tsx",
+        "console/src/components/runtime-map/RuntimeAgentStrip.tsx",
+        "console/src/components/runtime-map/RuntimeHardwarePanel.tsx",
+        "console/src/components/runtime-map/RuntimeHealthStrip.tsx",
+        "console/src/components/runtime-map/RuntimeMapDrawer.tsx",
+        "console/src/components/runtime-map/RuntimeSoftwarePanel.tsx",
+        "console/src/components/runtime-map/StackChip.tsx"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/opsContextTypes.ts",
+        "console/src/components",
+        "console/src/lib/control-room",
+        "console/src/lib/runtime-map"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/shell",
+      "files": [
+        "console/src/components/shell/AgentThreadRow.tsx",
+        "console/src/components/shell/AppearanceMenu.tsx",
+        "console/src/components/shell/ConsoleNavSlotItem.tsx",
+        "console/src/components/shell/DetailPageLinks.tsx",
+        "console/src/components/shell/DomainNav.tsx",
+        "console/src/components/shell/DomainSection.tsx",
+        "console/src/components/shell/EntryNav.tsx",
+        "console/src/components/shell/HostHeartbeatRow.tsx",
+        "console/src/components/shell/LocalDevSessionsDock.tsx",
+        "console/src/components/shell/MorePage.tsx",
+        "console/src/components/shell/RequestActionButton.tsx",
+        "console/src/components/shell/SystemVerdictLine.tsx",
+        "console/src/components/shell/__tests__/EntryNav.test.tsx",
+        "console/src/components/shell/__tests__/MorePage.test.tsx",
+        "console/src/components/shell/__tests__/RequestActionButton.test.tsx",
+        "console/src/components/shell/clusterActionRequests.tsx"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/agentThreads.ts",
+        "console/src/api/approvals.ts",
+        "console/src/api/client.ts",
+        "console/src/components",
+        "console/src/components/agent",
+        "console/src/components/ui",
+        "console/src/hooks",
+        "console/src/lib/control-room",
+        "console/src/lib/shell",
+        "console/src/lib/tradeFrontendUrls.ts"
+      ],
+      "test_imports": [
+        "console/src/api/approvals.ts",
+        "console/src/lib/tradeFrontendUrls.ts"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "lucide-react",
+        "radix-ui",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/TradeMonitoringPeerLinks.tsx",
+      "files": [
+        "console/src/components/TradeMonitoringPeerLinks.tsx"
+      ],
+      "imports": [
+        "console/src/lib/control-room",
+        "console/src/lib/tradeFrontendUrls.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "lucide-react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/TradeNsSegmentControl.tsx",
+      "files": [
+        "console/src/components/TradeNsSegmentControl.tsx"
+      ],
+      "imports": [
+        "console/src/lib"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/components/ui",
+      "files": [
+        "console/src/components/ui/dropdown-menu.tsx"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "radix-ui",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/hooks",
+      "files": [
+        "console/src/hooks/__tests__/useFleetSnapshot.test.ts",
+        "console/src/hooks/__tests__/useMissionSnapshot.test.tsx",
+        "console/src/hooks/useMissionSnapshot.ts",
+        "console/src/hooks/useOrchestrationStatus.ts",
+        "console/src/hooks/useReleasePolicy.ts",
+        "console/src/hooks/useShellStatusLine.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/cluster.ts",
+        "console/src/api/core.ts",
+        "console/src/api/delivery.ts",
+        "console/src/api/promote.ts",
+        "console/src/api/researchEngine.ts",
+        "console/src/api/telemetry.ts",
+        "console/src/hooks/useNowMs.ts",
+        "console/src/lib/control-room",
+        "console/src/lib/market-data",
+        "console/src/lib/shell"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/api/satelliteBusTypes.ts",
+        "console/src/hooks/useFleetSnapshot.ts"
+      ],
+      "external_imports": [
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/hooks/platformAuthContext.ts",
+      "files": [
+        "console/src/hooks/platformAuthContext.ts"
+      ],
+      "imports": [
+        "console/src/api"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/hooks/PlatformAuthProvider.tsx",
+      "files": [
+        "console/src/hooks/PlatformAuthProvider.tsx"
+      ],
+      "imports": [
+        "console/src/api/approvals.ts",
+        "console/src/api/cluster.ts",
+        "console/src/hooks/platformAuthContext.ts",
+        "console/src/lib/platformAuth.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/hooks/useAgentThreads.ts",
+      "files": [
+        "console/src/hooks/useAgentThreads.ts"
+      ],
+      "imports": [
+        "console/src/api/agentThreads.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/hooks/useClusterCategory.ts",
+      "files": [
+        "console/src/hooks/useClusterCategory.ts"
+      ],
+      "imports": [
+        "console/src/lib/cluster"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/hooks/useFleetSnapshot.ts",
+      "files": [
+        "console/src/hooks/useFleetSnapshot.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/cluster.ts",
+        "console/src/api/core.ts",
+        "console/src/api/delivery.ts",
+        "console/src/api/network.ts",
+        "console/src/api/promote.ts",
+        "console/src/api/satelliteBusTypes.ts",
+        "console/src/lib/control-room",
+        "console/src/lib/satellite-bus"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/hooks/useFlexQueryLiveProbe.ts",
+      "files": [
+        "console/src/hooks/useFlexQueryLiveProbe.ts"
+      ],
+      "imports": [
+        "console/src/api/dataHusbandry.ts",
+        "console/src/api/network.ts",
+        "console/src/api/satelliteBusTypes.ts",
+        "console/src/lib/research"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/hooks/useIbGatewayLiveProbe.ts",
+      "files": [
+        "console/src/hooks/useIbGatewayLiveProbe.ts"
+      ],
+      "imports": [
+        "console/src/api/network.ts",
+        "console/src/api/satelliteBusTypes.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/hooks/useMarketDataLiveProbe.ts",
+      "files": [
+        "console/src/hooks/useMarketDataLiveProbe.ts"
+      ],
+      "imports": [
+        "console/src/api/network.ts",
+        "console/src/api/satelliteBusTypes.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/hooks/useNetworkLiveProbe.ts",
+      "files": [
+        "console/src/hooks/useNetworkLiveProbe.ts"
+      ],
+      "imports": [
+        "console/src/api/network.ts",
+        "console/src/api/networkTypes.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/hooks/useNowMs.ts",
+      "files": [
+        "console/src/hooks/useNowMs.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/hooks/useObservabilitySnapshot.ts",
+      "files": [
+        "console/src/hooks/useObservabilitySnapshot.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/cluster.ts",
+        "console/src/api/codeHealth.ts",
+        "console/src/api/core.ts",
+        "console/src/api/network.ts",
+        "console/src/api/telemetry.ts",
+        "console/src/lib/architecture",
+        "console/src/lib/control-room",
+        "console/src/lib/observability",
+        "console/src/lib/satellite",
+        "console/src/lib/satellite-bus"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/hooks/usePlatformAuth.ts",
+      "files": [
+        "console/src/hooks/usePlatformAuth.ts"
+      ],
+      "imports": [
+        "console/src/hooks/platformAuthContext.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib",
+      "files": [
+        "console/src/lib/__tests__/cssTokens.test.ts",
+        "console/src/lib/__tests__/envVisual.test.ts",
+        "console/src/lib/__tests__/materialFrames.test.ts",
+        "console/src/lib/__tests__/noMutationInEffect.test.ts",
+        "console/src/lib/__tests__/releaseGateAgentCopy.test.ts",
+        "console/src/lib/__tests__/signInError.test.ts",
+        "console/src/lib/__tests__/tradeFrontendUrls.test.ts",
+        "console/src/lib/envVisual.ts",
+        "console/src/lib/environments-catalog.ts",
+        "console/src/lib/patrol/__tests__/cronSchedule.test.ts",
+        "console/src/lib/patrol/__tests__/logLanguage.test.ts",
+        "console/src/lib/patrol/__tests__/runLog.test.ts",
+        "console/src/lib/patrol/askAiPack.ts",
+        "console/src/lib/patrol/cronSchedule.ts",
+        "console/src/lib/patrol/logLanguage.ts",
+        "console/src/lib/patrol/runLog.ts",
+        "console/src/lib/patrol/usePatrolOutputLanguage.ts",
+        "console/src/lib/task-mode/readinessChipActions.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/lib/agent"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/lib/signInError.ts",
+        "console/src/lib/tradeFrontendUrls.ts"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "node:fs",
+        "node:path",
+        "node:url",
+        "react",
+        "typescript",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/activity",
+      "files": [
+        "console/src/lib/activity/__tests__/activityPageFocus.test.ts",
+        "console/src/lib/activity/__tests__/activityStore.test.ts",
+        "console/src/lib/activity/activityPageFocus.ts",
+        "console/src/lib/activity/activityStore.ts",
+        "console/src/lib/activity/activityTypes.ts",
+        "console/src/lib/activity/restartActuationSettle.ts"
+      ],
+      "imports": [
+        "console/src/api/clusterTypes.ts",
+        "console/src/lib",
+        "console/src/lib/cluster"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/agent",
+      "files": [
+        "console/src/lib/agent/__tests__/macHostRole.test.ts",
+        "console/src/lib/agent/agentDialogueLanguage.ts",
+        "console/src/lib/agent/agentScopes.ts",
+        "console/src/lib/agent/macHostRole.ts",
+        "console/src/lib/agent/operatorPlaneFixPrompt.ts",
+        "console/src/lib/agent/prodEnvironmentFixPrompt.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/lib/control-room"
+      ],
+      "test_imports": [
+        "console/src/api"
+      ],
+      "external_imports": [
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/architecture",
+      "files": [
+        "console/src/lib/architecture/__tests__/consoleReadsApi.test.ts",
+        "console/src/lib/architecture/__tests__/dataHusbandryCatalog.test.ts",
+        "console/src/lib/architecture/__tests__/mcpFocusBridges.test.ts",
+        "console/src/lib/architecture/__tests__/mcpStdioParity.test.ts",
+        "console/src/lib/architecture/__tests__/opsToolRackCatalog.test.ts",
+        "console/src/lib/architecture/__tests__/tradeGatewayRoutesParity.test.ts",
+        "console/src/lib/architecture/blueprintCatalog.ts",
+        "console/src/lib/architecture/cicdBootstrapCatalog.ts",
+        "console/src/lib/architecture/dataHusbandryCatalog.ts",
+        "console/src/lib/architecture/dataLayerCatalog.ts",
+        "console/src/lib/architecture/dataLayerCatalogTypes.ts",
+        "console/src/lib/architecture/deliveryMainlineCatalog.ts",
+        "console/src/lib/architecture/deployMainlineCatalog.ts",
+        "console/src/lib/architecture/dualFlywheelVisionCatalog.ts",
+        "console/src/lib/architecture/ibGatewayPluginCatalog.ts",
+        "console/src/lib/architecture/k3sArchitectureCatalog.ts",
+        "console/src/lib/architecture/k3sBootstrapCatalog.ts",
+        "console/src/lib/architecture/marketDataSubcontractorCatalog.ts",
+        "console/src/lib/architecture/migrateWaves.generated.ts",
+        "console/src/lib/architecture/networkApiContractCatalog.ts",
+        "console/src/lib/architecture/networkConsoleProjection.ts",
+        "console/src/lib/architecture/networkUpgradeCatalog.ts",
+        "console/src/lib/architecture/opsToolRackCatalog.ts",
+        "console/src/lib/architecture/opsUiActuationSignoffChecklist.ts",
+        "console/src/lib/architecture/postQaOwnerGatePack.ts",
+        "console/src/lib/architecture/researchEngineCatalog.ts",
+        "console/src/lib/architecture/spineProjection.ts",
+        "console/src/lib/architecture/spineSemantics.ts",
+        "console/src/lib/architecture/standardsCatalog.ts",
+        "console/src/lib/architecture/systemDomainCatalog.ts",
+        "console/src/lib/architecture/tradeIbClientMigrationCatalog.ts",
+        "console/src/lib/architecture/tradeIbClientMigrationRolloutCatalog.ts",
+        "console/src/lib/architecture/tradeK8sNativeCatalog.ts",
+        "console/src/lib/architecture/tradeK8sNativeCatalogTypes.ts",
+        "console/src/lib/architecture/unifiMcpServerCatalog.ts",
+        "console/src/lib/architecture/waveProjection.ts",
+        "console/src/lib/architecture/workloadPlacementCatalog.ts"
+      ],
+      "imports": [
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/opsContextTypes.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "lucide-react",
+        "node:fs",
+        "node:path",
+        "node:url",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [
+        "mcp/platform/src/focusBridges.ts",
+        "mcp/platform/src/tokenResolve.ts"
+      ],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/audit",
+      "files": [
+        "console/src/lib/audit/actuationCatalog.ts",
+        "console/src/lib/audit/downloadAuditJson.ts"
+      ],
+      "imports": [
+        "console/src/api/auditTypes.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/cluster",
+      "files": [
+        "console/src/lib/cluster/__tests__/clusterBootstrap.test.ts",
+        "console/src/lib/cluster/__tests__/clusterHealth.test.ts",
+        "console/src/lib/cluster/__tests__/nodeWizard.test.ts",
+        "console/src/lib/cluster/__tests__/workloadRollout.test.ts",
+        "console/src/lib/cluster/buildClusterCategoryLlmContext.ts",
+        "console/src/lib/cluster/buildClusterLlmContext.ts",
+        "console/src/lib/cluster/clusterBootstrap.ts",
+        "console/src/lib/cluster/clusterCategories.ts",
+        "console/src/lib/cluster/clusterCategoryIcons.ts",
+        "console/src/lib/cluster/clusterFailureTriage.ts",
+        "console/src/lib/cluster/clusterHealth.ts",
+        "console/src/lib/cluster/clusterHealthHint.ts",
+        "console/src/lib/cluster/clusterLlmContextHelpers.ts",
+        "console/src/lib/cluster/collectClusterIssues.ts",
+        "console/src/lib/cluster/namespaceCatalog.ts",
+        "console/src/lib/cluster/namespaceIcons.ts",
+        "console/src/lib/cluster/namespacePlacement.ts",
+        "console/src/lib/cluster/nodeCapabilitiesCatalog.ts",
+        "console/src/lib/cluster/nodeObservedState.ts",
+        "console/src/lib/cluster/nodeWizard.ts",
+        "console/src/lib/cluster/storageServiceCatalog.ts",
+        "console/src/lib/cluster/useComputeOffCycleHint.ts",
+        "console/src/lib/cluster/workloadPodInventory.ts",
+        "console/src/lib/cluster/workloadReadyStats.ts",
+        "console/src/lib/cluster/workloadRollout.ts",
+        "console/src/lib/cluster/workloadTree.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/deliveryTypes.ts",
+        "console/src/api/opsContextTypes.ts",
+        "console/src/lib/architecture",
+        "console/src/lib/control-room",
+        "console/src/lib/delivery"
+      ],
+      "test_imports": [
+        "console/src/api/clusterTypes.ts"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "lucide-react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/cn.ts",
+      "files": [
+        "console/src/lib/cn.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [
+        "clsx",
+        "tailwind-merge"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/code-health",
+      "files": [
+        "console/src/lib/code-health/__tests__/codeHealthCoverage.test.ts",
+        "console/src/lib/code-health/__tests__/codeHealthLens.test.ts",
+        "console/src/lib/code-health/__tests__/codeHealthLowerBaseline.test.ts",
+        "console/src/lib/code-health/codeHealthCoverage.ts",
+        "console/src/lib/code-health/codeHealthLens.ts",
+        "console/src/lib/code-health/codeHealthLowerBaseline.ts",
+        "console/src/lib/code-health/codeHealthPageHelpers.tsx"
+      ],
+      "imports": [
+        "console/src/api/codeHealth.ts",
+        "console/src/components/layout",
+        "console/src/lib/architecture",
+        "console/src/lib/control-room"
+      ],
+      "test_imports": [
+        "console/src/api/codeHealth.ts"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/control-room",
+      "files": [
+        "console/src/lib/control-room/__tests__/controlRoomBays.test.ts",
+        "console/src/lib/control-room/__tests__/fleetSnapshot.test.ts",
+        "console/src/lib/control-room/__tests__/missionSignals.test.ts",
+        "console/src/lib/control-room/__tests__/payloadReadiness.test.ts",
+        "console/src/lib/control-room/agentContextPacks.ts",
+        "console/src/lib/control-room/bayRegistry.ts",
+        "console/src/lib/control-room/buildFleetSnapshot.ts",
+        "console/src/lib/control-room/controlRoomBays.ts",
+        "console/src/lib/control-room/controlRoomOperatePack.ts",
+        "console/src/lib/control-room/dailyOpsChecklistCatalog.ts",
+        "console/src/lib/control-room/dailyOpsChecklistInject.ts",
+        "console/src/lib/control-room/fleetSnapshot.ts",
+        "console/src/lib/control-room/fleetSnapshot.type-test.ts",
+        "console/src/lib/control-room/fleetSnapshot/buildEngineerCell.ts",
+        "console/src/lib/control-room/fleetSnapshot/buildGroundCell.ts",
+        "console/src/lib/control-room/fleetSnapshot/buildRocketCell.ts",
+        "console/src/lib/control-room/fleetSnapshot/buildSatelliteCell.ts",
+        "console/src/lib/control-room/fleetSnapshot/buildVendorCell.ts",
+        "console/src/lib/control-room/fleetSnapshot/cellHelpers.ts",
+        "console/src/lib/control-room/fleetSnapshot/nav.ts",
+        "console/src/lib/control-room/fleetSnapshot/snapshot.ts",
+        "console/src/lib/control-room/fleetSnapshot/standards.ts",
+        "console/src/lib/control-room/fleetSnapshot/types.ts",
+        "console/src/lib/control-room/fleetSnapshot/verdict.ts",
+        "console/src/lib/control-room/matrixSummary.ts",
+        "console/src/lib/control-room/missionSignals.ts",
+        "console/src/lib/control-room/payloadReadiness.ts",
+        "console/src/lib/control-room/payloadVerification.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/deliveryTypes.ts",
+        "console/src/api/satelliteBusTypes.ts",
+        "console/src/lib",
+        "console/src/lib/agent",
+        "console/src/lib/delivery"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/deliveryTypes.ts",
+        "console/src/lib/agent"
+      ],
+      "external_imports": [
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/delivery",
+      "files": [
+        "console/src/lib/delivery/__tests__/researchRunLogHint.test.ts",
+        "console/src/lib/delivery/deliverPlatformPhases.ts",
+        "console/src/lib/delivery/deliverStgPhases.ts",
+        "console/src/lib/delivery/deliveryTargets.ts",
+        "console/src/lib/delivery/pipelineRunAskPack.ts",
+        "console/src/lib/delivery/tradeEnvAccess.ts"
+      ],
+      "imports": [
+        "console/src/api/deliveryTypes.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/flex-query",
+      "files": [
+        "console/src/lib/flex-query/__tests__/flexEnqueueGuards.test.ts",
+        "console/src/lib/flex-query/__tests__/flexQueryRemediation.test.ts",
+        "console/src/lib/flex-query/flexEnqueueGuards.ts",
+        "console/src/lib/flex-query/flexQueryRemediation.ts"
+      ],
+      "imports": [
+        "console/src/api/flexQueryPlugin.ts",
+        "console/src/api/satelliteBusTypes.ts"
+      ],
+      "test_imports": [
+        "console/src/api/satelliteBusTypes.ts"
+      ],
+      "external_imports": [
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/market-data",
+      "files": [
+        "console/src/lib/market-data/__tests__/fixtures/research-orchestration-status.json",
+        "console/src/lib/market-data/__tests__/queueHistoryModel.test.ts",
+        "console/src/lib/market-data/__tests__/slotScheduler.test.ts",
+        "console/src/lib/market-data/backgroundAnswer.ts",
+        "console/src/lib/market-data/checklist/displayHelpers.ts",
+        "console/src/lib/market-data/checklist/index.ts",
+        "console/src/lib/market-data/checklist/optionChecklistRows.ts",
+        "console/src/lib/market-data/checklist/optionStatus.ts",
+        "console/src/lib/market-data/checklist/stockChecklistRows.ts",
+        "console/src/lib/market-data/checklist/stockStatus.ts",
+        "console/src/lib/market-data/checklist/types.ts",
+        "console/src/lib/market-data/queueHistoryModel.ts",
+        "console/src/lib/market-data/slotScheduler.ts"
+      ],
+      "imports": [
+        "console/src/api/marketDataQueueHistory.ts",
+        "console/src/api/researchEngine.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "node:fs",
+        "node:path",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/observability",
+      "files": [
+        "console/src/lib/observability/__tests__/attentionMuteBatch.test.ts",
+        "console/src/lib/observability/__tests__/attentionRemediationCatalog.test.ts",
+        "console/src/lib/observability/__tests__/codeHealthSignals.test.ts",
+        "console/src/lib/observability/__tests__/observabilityViewModel.test.ts",
+        "console/src/lib/observability/alertMapping.ts",
+        "console/src/lib/observability/attentionMute.ts",
+        "console/src/lib/observability/attentionRemediationCatalog.ts",
+        "console/src/lib/observability/dashboardCatalog.ts",
+        "console/src/lib/observability/grafanaUrlBuilder.ts",
+        "console/src/lib/observability/index.ts",
+        "console/src/lib/observability/observabilityViewModel.ts",
+        "console/src/lib/observability/signalRegistry.ts",
+        "console/src/lib/observability/types.ts",
+        "console/src/lib/observability/verdictAggregation.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/codeHealth.ts",
+        "console/src/api/networkTypes.ts",
+        "console/src/api/satelliteBusTypes.ts",
+        "console/src/lib/agent",
+        "console/src/lib/architecture",
+        "console/src/lib/cluster"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/api/codeHealth.ts"
+      ],
+      "external_imports": [
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/platformAuth.ts",
+      "files": [
+        "console/src/lib/platformAuth.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/platformAuthUi.ts",
+      "files": [
+        "console/src/lib/platformAuthUi.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/research",
+      "files": [
+        "console/src/lib/research/__tests__/researchEngineLanding.test.ts",
+        "console/src/lib/research/__tests__/researchHealthCopy.test.ts",
+        "console/src/lib/research/__tests__/signalHealthAgeMeters.test.ts",
+        "console/src/lib/research/massiveNav.ts",
+        "console/src/lib/research/researchEngineLanding.ts",
+        "console/src/lib/research/researchHealthCopy.ts",
+        "console/src/lib/research/signalHealthAgeMeters.ts"
+      ],
+      "imports": [
+        "console/src/api/satelliteBusTypes.ts",
+        "console/src/components/market-data"
+      ],
+      "test_imports": [
+        "console/src/lib/architecture"
+      ],
+      "external_imports": [
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/runtime-map",
+      "files": [
+        "console/src/lib/runtime-map/buildRuntimeLlmPack.ts",
+        "console/src/lib/runtime-map/gapAnalysis.ts",
+        "console/src/lib/runtime-map/infraMapLayout.ts",
+        "console/src/lib/runtime-map/infraVisualRegistry.ts",
+        "console/src/lib/runtime-map/roleComponentRegistry.ts",
+        "console/src/lib/runtime-map/runtimeMapHealth.ts",
+        "console/src/lib/runtime-map/runtimeMapNavigation.ts",
+        "console/src/lib/runtime-map/runtimeMapRegistry.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/opsContextTypes.ts",
+        "console/src/lib",
+        "console/src/lib/control-room"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "react",
+        "simple-icons"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/satellite",
+      "files": [
+        "console/src/lib/satellite/__tests__/socketHealthDiverge.test.ts",
+        "console/src/lib/satellite/socketHealthSemantics.ts",
+        "console/src/lib/satellite/tradeApiTargets.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/satelliteBusTypes.ts",
+        "console/src/lib/control-room"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/satellite-bus",
+      "files": [
+        "console/src/lib/satellite-bus/__tests__/criticalProcesses.test.ts",
+        "console/src/lib/satellite-bus/__tests__/satelliteBusViewModel.test.ts",
+        "console/src/lib/satellite-bus/criticalProcesses.ts",
+        "console/src/lib/satellite-bus/satelliteBusNavSignal.ts",
+        "console/src/lib/satellite-bus/satelliteBusViewModel.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/core.ts",
+        "console/src/api/satelliteBusTypes.ts",
+        "console/src/lib/control-room",
+        "console/src/lib/satellite"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/satelliteBusTypes.ts"
+      ],
+      "external_imports": [
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/shell",
+      "files": [
+        "console/src/lib/shell/__tests__/consoleRoutes.test.tsx",
+        "console/src/lib/shell/__tests__/domainMigration.test.tsx",
+        "console/src/lib/shell/__tests__/fiveDomains.test.tsx",
+        "console/src/lib/shell/__tests__/shellStatusLine.test.ts",
+        "console/src/lib/shell/__tests__/useConsoleAppearance.test.tsx",
+        "console/src/lib/shell/__tests__/useHashSection.test.tsx",
+        "console/src/lib/shell/__tests__/useShellLayout.test.ts",
+        "console/src/lib/shell/consoleRoutes.ts",
+        "console/src/lib/shell/governanceReferences.ts",
+        "console/src/lib/shell/localConsole.ts",
+        "console/src/lib/shell/shellNavItems.ts",
+        "console/src/lib/shell/shellStatusLine.ts",
+        "console/src/lib/shell/useConsoleAppearance.ts",
+        "console/src/lib/shell/useHashSection.ts",
+        "console/src/lib/shell/useShellLayout.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/clusterTypes.ts",
+        "console/src/lib/control-room"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/api/clusterTypes.ts",
+        "console/src/components/shell",
+        "console/src/pages/shell/data",
+        "console/src/pages/shell/infrastructure"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "lucide-react",
+        "node:fs",
+        "node:path",
+        "node:url",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/signInError.ts",
+      "files": [
+        "console/src/lib/signInError.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/lib/tradeFrontendUrls.ts",
+      "files": [
+        "console/src/lib/tradeFrontendUrls.ts"
+      ],
+      "imports": [
+        "console/src/lib/control-room",
+        "console/src/lib/delivery"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages",
+      "files": [
+        "console/src/pages/AutonomousSkillsPage.tsx",
+        "console/src/pages/__tests__/ApprovalReviewButton.test.tsx",
+        "console/src/pages/__tests__/ApprovalsPage.test.tsx",
+        "console/src/pages/__tests__/ApprovalsPageDecision.test.tsx",
+        "console/src/pages/__tests__/CommitLineagePage.test.tsx",
+        "console/src/pages/__tests__/OwnerExecRun.test.tsx",
+        "console/src/pages/__tests__/QuestionPage.test.tsx",
+        "console/src/pages/__tests__/QuestionSendLifecycle.test.tsx",
+        "console/src/pages/__tests__/approvalDecision.test.ts",
+        "console/src/pages/__tests__/approvalKnown.test.tsx",
+        "console/src/pages/__tests__/approvalWaitingNotice.test.ts",
+        "console/src/pages/__tests__/approvalsPageTestKit.tsx",
+        "console/src/pages/__tests__/approvalsRecord.test.tsx",
+        "console/src/pages/__tests__/approvalsRecovery.test.tsx",
+        "console/src/pages/__tests__/approvalsStaleBuild.test.tsx",
+        "console/src/pages/__tests__/clickDecisionControl.ts",
+        "console/src/pages/__tests__/decisionContact.test.tsx",
+        "console/src/pages/__tests__/decisionContactPages.test.tsx",
+        "console/src/pages/__tests__/decisionContactReview.test.tsx",
+        "console/src/pages/__tests__/decisionSignIn.test.tsx",
+        "console/src/pages/__tests__/ownerButtons.test.tsx",
+        "console/src/pages/__tests__/signInRecovery.test.tsx"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/components",
+        "console/src/components/layout",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib",
+        "console/src/lib/agent"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/api/approvals.ts",
+        "console/src/api/approvalsApiFixture.ts",
+        "console/src/api/approvalsServerContract.ts",
+        "console/src/api/client.ts",
+        "console/src/api/cluster.ts",
+        "console/src/api/lineage.ts",
+        "console/src/api/questions.ts",
+        "console/src/api/serverContact.ts",
+        "console/src/components",
+        "console/src/hooks/PlatformAuthProvider.tsx",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib/platformAuth.ts",
+        "console/src/pages/ApprovalReviewButton.tsx",
+        "console/src/pages/ApprovalsPage.tsx",
+        "console/src/pages/CommitLineagePage.tsx",
+        "console/src/pages/OwnerExecRun.tsx",
+        "console/src/pages/QuestionPage.tsx",
+        "console/src/pages/ServerContactStatus.tsx",
+        "console/src/pages/approvalDecision.ts",
+        "console/src/pages/approvalWaitingNotice.ts",
+        "console/src/pages/decisionContact.ts",
+        "console/src/pages/decisionSignIn.ts",
+        "console/src/pages/question",
+        "console/src/pages/serverContactNotice.ts",
+        "console/src/pages/shell/needs-you",
+        "console/src/pwa"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "lucide-react",
+        "node:fs",
+        "node:path",
+        "node:url",
+        "react",
+        "react-dom",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/approvalDecision.ts",
+      "files": [
+        "console/src/pages/approvalDecision.ts"
+      ],
+      "imports": [
+        "console/src/api/approvals.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/ApprovalReviewButton.tsx",
+      "files": [
+        "console/src/pages/ApprovalReviewButton.tsx"
+      ],
+      "imports": [
+        "console/src/api/approvals.ts",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/pages/approvalDecision.ts",
+        "console/src/pages/useDecisionEnvironment.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/approvalSiblings.ts",
+      "files": [
+        "console/src/pages/approvalSiblings.ts"
+      ],
+      "imports": [
+        "console/src/api/approvals.ts",
+        "console/src/pages/approvalDecision.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/ApprovalsPage.tsx",
+      "files": [
+        "console/src/pages/ApprovalsPage.tsx"
+      ],
+      "imports": [
+        "console/src/api/approvals.ts",
+        "console/src/api/client.ts",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib/shell",
+        "console/src/pages/ApprovalReviewButton.tsx",
+        "console/src/pages/CloseUnknownForm.tsx",
+        "console/src/pages/OwnerExecRun.tsx",
+        "console/src/pages/ServerContactStatus.tsx",
+        "console/src/pages/approvalDecision.ts",
+        "console/src/pages/approvalSiblings.ts",
+        "console/src/pages/approvalsReadNotice.ts",
+        "console/src/pages/decisionContact.ts",
+        "console/src/pages/decisionSignIn.ts",
+        "console/src/pages/serverContactNotice.ts",
+        "console/src/pages/shell/needs-you",
+        "console/src/pages/useDecisionPageResume.ts",
+        "console/src/pwa"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/approvalsReadNotice.ts",
+      "files": [
+        "console/src/pages/approvalsReadNotice.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/approvalWaitingNotice.ts",
+      "files": [
+        "console/src/pages/approvalWaitingNotice.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/AuditPage.tsx",
+      "files": [
+        "console/src/pages/AuditPage.tsx"
+      ],
+      "imports": [
+        "console/src/api/auditTypes.ts",
+        "console/src/components",
+        "console/src/components/layout",
+        "console/src/lib/audit"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/CloseUnknownForm.tsx",
+      "files": [
+        "console/src/pages/CloseUnknownForm.tsx"
+      ],
+      "imports": [
+        "console/src/api/approvals.ts",
+        "console/src/pages/ServerContactStatus.tsx"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/cluster",
+      "files": [
+        "console/src/pages/cluster/ClusterPageChrome.tsx",
+        "console/src/pages/cluster/ClusterPageDialogs.tsx",
+        "console/src/pages/cluster/ClusterPageMain.tsx",
+        "console/src/pages/cluster/clusterMutationTypes.ts",
+        "console/src/pages/cluster/useClusterBootstrapMutations.ts",
+        "console/src/pages/cluster/useClusterNodeMutations.ts",
+        "console/src/pages/cluster/useClusterPageMutations.ts",
+        "console/src/pages/cluster/useClusterPageQueries.ts",
+        "console/src/pages/cluster/useClusterWorkloadMutations.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/cluster.ts",
+        "console/src/api/clusterActuation.ts",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/core.ts",
+        "console/src/components",
+        "console/src/components/cluster",
+        "console/src/components/layout",
+        "console/src/components/shell",
+        "console/src/lib/activity",
+        "console/src/lib/cluster"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/ClusterPage.tsx",
+      "files": [
+        "console/src/pages/ClusterPage.tsx"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/clusterTypes.ts",
+        "console/src/components/cluster",
+        "console/src/components/layout",
+        "console/src/hooks/useClusterCategory.ts",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib/cluster",
+        "console/src/pages/cluster"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/CodeHealthPage.tsx",
+      "files": [
+        "console/src/pages/CodeHealthPage.tsx"
+      ],
+      "imports": [
+        "console/src/api/codeHealth.ts",
+        "console/src/components/layout",
+        "console/src/lib/architecture",
+        "console/src/lib/code-health"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/CommitLineagePage.tsx",
+      "files": [
+        "console/src/pages/CommitLineagePage.tsx"
+      ],
+      "imports": [
+        "console/src/api/lineage.ts",
+        "console/src/components/layout",
+        "console/src/components/lineage",
+        "console/src/hooks/usePlatformAuth.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/ConsolePage.tsx",
+      "files": [
+        "console/src/pages/ConsolePage.tsx"
+      ],
+      "imports": [
+        "console/src/components",
+        "console/src/components/shell",
+        "console/src/hooks",
+        "console/src/lib/shell",
+        "console/src/pages/ApprovalsPage.tsx",
+        "console/src/pages/DevSessionsPage.tsx",
+        "console/src/pages/QuestionPage.tsx",
+        "console/src/pages/shell",
+        "console/src/pages/shell/owner",
+        "console/src/pwa"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/ControlRoomPage.tsx",
+      "files": [
+        "console/src/pages/ControlRoomPage.tsx"
+      ],
+      "imports": [
+        "console/src/api/opsContextTypes.ts",
+        "console/src/components/control-room",
+        "console/src/hooks",
+        "console/src/hooks/useNetworkLiveProbe.ts",
+        "console/src/lib/control-room"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/decisionContact.ts",
+      "files": [
+        "console/src/pages/decisionContact.ts"
+      ],
+      "imports": [
+        "console/src/api/serverContact.ts",
+        "console/src/pages/approvalWaitingNotice.ts",
+        "console/src/pages/serverContactNotice.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/DecisionEnvironment.tsx",
+      "files": [
+        "console/src/pages/DecisionEnvironment.tsx"
+      ],
+      "imports": [
+        "console/src/pages/useDecisionEnvironment.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/decisionSignIn.ts",
+      "files": [
+        "console/src/pages/decisionSignIn.ts"
+      ],
+      "imports": [
+        "console/src/hooks/platformAuthContext.ts",
+        "console/src/lib/signInError.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/DevSessionsPage.tsx",
+      "files": [
+        "console/src/pages/DevSessionsPage.tsx"
+      ],
+      "imports": [
+        "console/src/api/devSession.ts",
+        "console/src/components/layout",
+        "console/src/hooks/usePlatformAuth.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "lucide-react",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/FlexQueryManagePage.tsx",
+      "files": [
+        "console/src/pages/FlexQueryManagePage.tsx"
+      ],
+      "imports": [
+        "console/src/components/delivery",
+        "console/src/components/flex-query"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/IbGatewayManagePage.tsx",
+      "files": [
+        "console/src/pages/IbGatewayManagePage.tsx"
+      ],
+      "imports": [
+        "console/src/api/network.ts",
+        "console/src/components",
+        "console/src/components/cluster",
+        "console/src/components/layout",
+        "console/src/hooks/useIbGatewayLiveProbe.ts",
+        "console/src/hooks/usePlatformAuth.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/MarketDataManagePage.tsx",
+      "files": [
+        "console/src/pages/MarketDataManagePage.tsx"
+      ],
+      "imports": [
+        "console/src/components/market-data",
+        "console/src/hooks/useMarketDataLiveProbe.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/NetworkPage.tsx",
+      "files": [
+        "console/src/pages/NetworkPage.tsx"
+      ],
+      "imports": [
+        "console/src/api/network.ts",
+        "console/src/api/opsContextTypes.ts",
+        "console/src/components/control-room",
+        "console/src/components/layout",
+        "console/src/components/network",
+        "console/src/hooks/useNetworkLiveProbe.ts",
+        "console/src/lib/architecture"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/observability",
+      "files": [
+        "console/src/pages/observability/DomainCard.tsx",
+        "console/src/pages/observability/GrafanaSoloEmbed.tsx",
+        "console/src/pages/observability/ObservabilityAttentionPanel.tsx",
+        "console/src/pages/observability/ObservabilitySelectedDomain.tsx",
+        "console/src/pages/observability/ReferenceDomainChip.tsx",
+        "console/src/pages/observability/SystemGapMeta.tsx",
+        "console/src/pages/observability/observabilityFormat.ts"
+      ],
+      "imports": [
+        "console/src/components",
+        "console/src/components/TradeNsSegmentControl.tsx",
+        "console/src/components/layout",
+        "console/src/lib",
+        "console/src/lib/architecture",
+        "console/src/lib/observability"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/ObservabilityPage.tsx",
+      "files": [
+        "console/src/pages/ObservabilityPage.tsx"
+      ],
+      "imports": [
+        "console/src/api/telemetry.ts",
+        "console/src/components",
+        "console/src/components/layout",
+        "console/src/hooks/useObservabilitySnapshot.ts",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib/architecture",
+        "console/src/lib/observability",
+        "console/src/pages/observability"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/OwnerExecRun.tsx",
+      "files": [
+        "console/src/pages/OwnerExecRun.tsx"
+      ],
+      "imports": [
+        "console/src/api/approvals.ts",
+        "console/src/api/ownerExec.ts",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/pages/approvalDecision.ts",
+        "console/src/pages/decisionSignIn.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/PluginGalleryPage.tsx",
+      "files": [
+        "console/src/pages/PluginGalleryPage.tsx"
+      ],
+      "imports": [
+        "console/src/components/layout",
+        "console/src/hooks/useFlexQueryLiveProbe.ts",
+        "console/src/hooks/useIbGatewayLiveProbe.ts",
+        "console/src/hooks/useMarketDataLiveProbe.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/question",
+      "files": [
+        "console/src/pages/question/QuestionAnswerForm.tsx",
+        "console/src/pages/question/QuestionRecord.tsx",
+        "console/src/pages/question/__tests__/answerSend.test.ts",
+        "console/src/pages/question/__tests__/blockedCard.test.tsx",
+        "console/src/pages/question/__tests__/questionReviewContext.test.tsx",
+        "console/src/pages/question/__tests__/ruleAnswer.test.tsx",
+        "console/src/pages/question/answerSend.ts",
+        "console/src/pages/question/answerSendStore.ts",
+        "console/src/pages/question/questionContactStore.ts",
+        "console/src/pages/question/useAnswerSend.ts"
+      ],
+      "imports": [
+        "console/src/api/agentProgress.ts",
+        "console/src/api/questions.ts",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/pages/DecisionEnvironment.tsx",
+        "console/src/pages/ServerContactStatus.tsx",
+        "console/src/pages/decisionContact.ts",
+        "console/src/pages/decisionSignIn.ts",
+        "console/src/pages/serverContactNotice.ts",
+        "console/src/pages/shell/progress"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/api/questions.ts",
+        "console/src/pages/shell/needs-you",
+        "console/src/pages/shell/owner"
+      ],
+      "external_imports": [
+        "@tanstack/react-query",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "node:fs",
+        "node:path",
+        "node:url",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/QuestionPage.tsx",
+      "files": [
+        "console/src/pages/QuestionPage.tsx"
+      ],
+      "imports": [
+        "console/src/api/approvals.ts",
+        "console/src/api/questions.ts",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib/shell",
+        "console/src/pages/decisionSignIn.ts",
+        "console/src/pages/question",
+        "console/src/pages/shell/needs-you",
+        "console/src/pages/shell/progress",
+        "console/src/pages/useDecisionEnvironment.ts",
+        "console/src/pages/useDecisionPageResume.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/ResearchEnginePage.tsx",
+      "files": [
+        "console/src/pages/ResearchEnginePage.tsx"
+      ],
+      "imports": [
+        "console/src/api/dataHusbandry.ts",
+        "console/src/api/researchEngine.ts",
+        "console/src/components/delivery",
+        "console/src/components/layout",
+        "console/src/components/research",
+        "console/src/hooks/useMarketDataLiveProbe.ts",
+        "console/src/lib/architecture",
+        "console/src/lib/research"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "lucide-react",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/RocketHealthPage.tsx",
+      "files": [
+        "console/src/pages/RocketHealthPage.tsx"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/core.ts",
+        "console/src/components",
+        "console/src/components/layout",
+        "console/src/lib/control-room",
+        "console/src/lib/shell"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/RuntimeMapPage.tsx",
+      "files": [
+        "console/src/pages/RuntimeMapPage.tsx"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/opsContextTypes.ts",
+        "console/src/components/layout",
+        "console/src/components/runtime-map",
+        "console/src/lib/runtime-map"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/satellite-bus",
+      "files": [
+        "console/src/pages/satellite-bus/TradeDaemonOperatePanel.tsx",
+        "console/src/pages/satellite-bus/useSatelliteBusQueries.tsx"
+      ],
+      "imports": [
+        "console/src/api/cluster.ts",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/core.ts",
+        "console/src/components",
+        "console/src/components/activity",
+        "console/src/components/layout",
+        "console/src/components/shell",
+        "console/src/hooks/useFleetSnapshot.ts",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib/activity",
+        "console/src/lib/cluster",
+        "console/src/lib/control-room",
+        "console/src/lib/satellite",
+        "console/src/lib/satellite-bus"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/SatelliteApiHealthPage.tsx",
+      "files": [
+        "console/src/pages/SatelliteApiHealthPage.tsx"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/core.ts",
+        "console/src/components/layout",
+        "console/src/lib"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/SatelliteHealthPage.tsx",
+      "files": [
+        "console/src/pages/SatelliteHealthPage.tsx"
+      ],
+      "imports": [
+        "console/src/api/core.ts",
+        "console/src/components/layout",
+        "console/src/hooks/useObservabilitySnapshot.ts",
+        "console/src/lib",
+        "console/src/pages/SatelliteApiHealthPage.tsx",
+        "console/src/pages/SatelliteTelemetryPage.tsx"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/SatelliteTelemetryPage.tsx",
+      "files": [
+        "console/src/pages/SatelliteTelemetryPage.tsx"
+      ],
+      "imports": [
+        "console/src/api/cluster.ts",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/telemetry.ts",
+        "console/src/components/layout",
+        "console/src/components/observability",
+        "console/src/lib/architecture",
+        "console/src/lib/observability"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/serverContactNotice.ts",
+      "files": [
+        "console/src/pages/serverContactNotice.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/ServerContactStatus.tsx",
+      "files": [
+        "console/src/pages/ServerContactStatus.tsx"
+      ],
+      "imports": [
+        "console/src/api/serverContact.ts",
+        "console/src/pages/serverContactNotice.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell",
+      "files": [
+        "console/src/pages/shell/shellPages.tsx"
+      ],
+      "imports": [
+        "console/src/pages/shell/data",
+        "console/src/pages/shell/ib",
+        "console/src/pages/shell/infrastructure",
+        "console/src/pages/shell/needs-you",
+        "console/src/pages/shell/owner",
+        "console/src/pages/shell/progress",
+        "console/src/pages/shell/records",
+        "console/src/pages/shell/releases",
+        "console/src/pages/shell/status"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/agents",
+      "files": [
+        "console/src/pages/shell/agents/AgentsPlan.tsx",
+        "console/src/pages/shell/agents/CapabilityEvidence.tsx",
+        "console/src/pages/shell/agents/DeliveryBoundaries.tsx",
+        "console/src/pages/shell/agents/DeliveryConfiguration.tsx",
+        "console/src/pages/shell/agents/DeliveryStrip.tsx",
+        "console/src/pages/shell/agents/HowRead.tsx",
+        "console/src/pages/shell/agents/NeedsCleanup.tsx",
+        "console/src/pages/shell/agents/PlanLiveWork.tsx",
+        "console/src/pages/shell/agents/PlanModuleDetail.tsx",
+        "console/src/pages/shell/agents/PlanModuleRows.tsx",
+        "console/src/pages/shell/agents/PlanPaceLine.tsx",
+        "console/src/pages/shell/agents/PlanRecentChanges.tsx",
+        "console/src/pages/shell/agents/PlanRoundNav.tsx",
+        "console/src/pages/shell/agents/PlanTree.tsx",
+        "console/src/pages/shell/agents/SignoffWaiting.tsx",
+        "console/src/pages/shell/agents/StepSignoffHere.tsx",
+        "console/src/pages/shell/agents/StepSignoffs.tsx",
+        "console/src/pages/shell/agents/StepText.tsx",
+        "console/src/pages/shell/agents/WorkPlanView.tsx",
+        "console/src/pages/shell/agents/WorkSignoffs.tsx",
+        "console/src/pages/shell/agents/WorkSummaryCard.tsx",
+        "console/src/pages/shell/agents/WorkTabs.tsx",
+        "console/src/pages/shell/agents/__tests__/DeliveryBoundaries.test.tsx",
+        "console/src/pages/shell/agents/__tests__/PlanTree.review629.test.tsx",
+        "console/src/pages/shell/agents/__tests__/WorkPlanView.pv2.test.tsx",
+        "console/src/pages/shell/agents/__tests__/WorkPlanView.test.tsx",
+        "console/src/pages/shell/agents/__tests__/acceptanceSignoff.test.tsx",
+        "console/src/pages/shell/agents/__tests__/externalDeliveryStrip.test.tsx",
+        "console/src/pages/shell/agents/__tests__/liveStep.test.tsx",
+        "console/src/pages/shell/agents/__tests__/moduleDetailFixture.ts",
+        "console/src/pages/shell/agents/__tests__/needsCleanupModel.test.ts",
+        "console/src/pages/shell/agents/__tests__/planModuleDetail.test.tsx",
+        "console/src/pages/shell/agents/__tests__/planModuleDetailLayout.test.tsx",
+        "console/src/pages/shell/agents/__tests__/planModuleRows.test.tsx",
+        "console/src/pages/shell/agents/__tests__/planPaceLine.test.tsx",
+        "console/src/pages/shell/agents/__tests__/planRounds.test.tsx",
+        "console/src/pages/shell/agents/__tests__/runtimePlanPanes.test.tsx",
+        "console/src/pages/shell/agents/__tests__/signoffUsable.test.tsx",
+        "console/src/pages/shell/agents/__tests__/staleStepSignoff.test.tsx",
+        "console/src/pages/shell/agents/__tests__/stepCard.test.tsx",
+        "console/src/pages/shell/agents/__tests__/stepSignoffHere.test.tsx",
+        "console/src/pages/shell/agents/__tests__/stepSignoffs.test.tsx",
+        "console/src/pages/shell/agents/__tests__/stepState.test.tsx",
+        "console/src/pages/shell/agents/__tests__/stepWaiting.test.tsx",
+        "console/src/pages/shell/agents/__tests__/unlinkedSessions.test.tsx",
+        "console/src/pages/shell/agents/__tests__/workNeedsCleanup.test.tsx",
+        "console/src/pages/shell/agents/__tests__/workPage.test.tsx",
+        "console/src/pages/shell/agents/__tests__/workPlanReach.test.tsx",
+        "console/src/pages/shell/agents/__tests__/workSignoffsOutsideOps.test.tsx",
+        "console/src/pages/shell/agents/__tests__/workSummaryModel.test.ts",
+        "console/src/pages/shell/agents/deliveryStripModel.ts",
+        "console/src/pages/shell/agents/liveStepModel.ts",
+        "console/src/pages/shell/agents/moduleDetailModel.tsx",
+        "console/src/pages/shell/agents/moduleRowReturn.ts",
+        "console/src/pages/shell/agents/needsCleanupModel.ts",
+        "console/src/pages/shell/agents/ownerAsksModel.ts",
+        "console/src/pages/shell/agents/planModuleModel.tsx",
+        "console/src/pages/shell/agents/planRoundModel.ts",
+        "console/src/pages/shell/agents/planSnapshotModel.ts",
+        "console/src/pages/shell/agents/readAge.ts",
+        "console/src/pages/shell/agents/stepSignoffText.ts",
+        "console/src/pages/shell/agents/stepStateModel.ts",
+        "console/src/pages/shell/agents/unlinkedSessionsModel.ts",
+        "console/src/pages/shell/agents/useNeedsCleanup.ts",
+        "console/src/pages/shell/agents/usePlanSnapshot.ts",
+        "console/src/pages/shell/agents/useRuntimePlan.ts",
+        "console/src/pages/shell/agents/workSummaryModel.ts",
+        "console/src/pages/shell/agents/workViewModel.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/agentProgress.ts",
+        "console/src/api/agentRuntimePlan.ts",
+        "console/src/api/agentRuntimePlanView.ts",
+        "console/src/api/agentThreads.ts",
+        "console/src/api/approvals.ts",
+        "console/src/api/client.ts",
+        "console/src/api/core.ts",
+        "console/src/api/deliveryBoundaries.ts",
+        "console/src/api/deliveryStages.ts",
+        "console/src/api/landingActions.ts",
+        "console/src/api/planPace.ts",
+        "console/src/api/planSnapshot.ts",
+        "console/src/api/planSnapshotSchema.ts",
+        "console/src/api/questions.ts",
+        "console/src/components/layout",
+        "console/src/components/ui",
+        "console/src/hooks/useAgentThreads.ts",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib/shell",
+        "console/src/pages/DecisionEnvironment.tsx",
+        "console/src/pages/decisionSignIn.ts",
+        "console/src/pages/shell/needs-you",
+        "console/src/pages/shell/owner",
+        "console/src/pages/shell/progress",
+        "console/src/pages/useDecisionEnvironment.ts"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/api/agentRuntimePlan.ts",
+        "console/src/api/agentRuntimePlanView.ts",
+        "console/src/api/agentThreads.ts",
+        "console/src/api/approvals.ts",
+        "console/src/api/approvalsApiFixture.ts",
+        "console/src/api/core.ts",
+        "console/src/api/deliveryBoundaries.ts",
+        "console/src/api/deliveryStages.ts",
+        "console/src/api/planPace.ts",
+        "console/src/api/planSnapshot.ts",
+        "console/src/api/questions.ts",
+        "console/src/hooks/PlatformAuthProvider.tsx",
+        "console/src/hooks/platformAuthContext.ts",
+        "console/src/lib/platformAuth.ts",
+        "console/src/lib/shell",
+        "console/src/pages/decisionSignIn.ts",
+        "console/src/pages/shell/owner",
+        "console/src/pages/shell/progress",
+        "console/src/test"
+      ],
+      "external_imports": [
+        "@tanstack/react-query",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "lucide-react",
+        "node:fs",
+        "node:path",
+        "node:url",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/ci",
+      "files": [
+        "console/src/pages/shell/ci/ApprovalReadingsBlock.tsx",
+        "console/src/pages/shell/ci/CiSection.tsx",
+        "console/src/pages/shell/ci/CommitJourney.tsx",
+        "console/src/pages/shell/ci/DomainMapView.tsx",
+        "console/src/pages/shell/ci/FrontendDomainMapView.tsx",
+        "console/src/pages/shell/ci/ModuleExplorer.tsx",
+        "console/src/pages/shell/ci/PlatformTimings.tsx",
+        "console/src/pages/shell/ci/RunTimingDetail.tsx",
+        "console/src/pages/shell/ci/TimingBudget.tsx",
+        "console/src/pages/shell/ci/TimingTrends.tsx",
+        "console/src/pages/shell/ci/__tests__/ApprovalReadingsBlock.test.tsx",
+        "console/src/pages/shell/ci/__tests__/CiSection.test.tsx",
+        "console/src/pages/shell/ci/__tests__/CommitJourney.test.tsx",
+        "console/src/pages/shell/ci/__tests__/DomainMapView.test.tsx",
+        "console/src/pages/shell/ci/__tests__/PlatformTimings.test.tsx",
+        "console/src/pages/shell/ci/__tests__/approvalReadingsModel.test.ts",
+        "console/src/pages/shell/ci/__tests__/ciViewModel.test.ts",
+        "console/src/pages/shell/ci/__tests__/contract.ts",
+        "console/src/pages/shell/ci/__tests__/frontendDomainInventory.test.ts",
+        "console/src/pages/shell/ci/__tests__/journeyModel.test.ts",
+        "console/src/pages/shell/ci/__tests__/timingFixture.ts",
+        "console/src/pages/shell/ci/__tests__/timingModel.test.ts",
+        "console/src/pages/shell/ci/approvalReadingsModel.ts",
+        "console/src/pages/shell/ci/ciViewModel.ts",
+        "console/src/pages/shell/ci/journeyModel.ts",
+        "console/src/pages/shell/ci/timingModel.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/ciTimings.ts",
+        "console/src/api/delivery.ts",
+        "console/src/api/units.ts",
+        "console/src/components/layout",
+        "console/src/lib/shell",
+        "console/src/pages/shell/releases"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/api/ciTimings.ts",
+        "console/src/api/delivery.ts",
+        "console/src/api/deliveryTypes.ts",
+        "console/src/api/units.ts",
+        "console/src/lib/shell"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:url",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [
+        "console/scripts/frontend-domain-map.mjs"
+      ],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/crew",
+      "files": [
+        "console/src/pages/shell/crew/CrewOverview.tsx",
+        "console/src/pages/shell/crew/__tests__/CrewOverview.test.tsx",
+        "console/src/pages/shell/crew/developmentModel.ts",
+        "console/src/pages/shell/crew/useDevelopment.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/agentRuntimePlan.ts",
+        "console/src/components/layout",
+        "console/src/lib/shell",
+        "console/src/pages/shell/agents"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/api/agentRuntimePlan.ts",
+        "console/src/pages/shell/agents"
+      ],
+      "external_imports": [
+        "@tanstack/react-query",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/data",
+      "files": [
+        "console/src/pages/shell/data/BackupStatusPanel.tsx",
+        "console/src/pages/shell/data/DataPage.tsx"
+      ],
+      "imports": [
+        "console/src/api/cluster.ts",
+        "console/src/components/layout",
+        "console/src/components/shell",
+        "console/src/lib/shell",
+        "console/src/pages/FlexQueryManagePage.tsx",
+        "console/src/pages/MarketDataManagePage.tsx",
+        "console/src/pages/PluginGalleryPage.tsx",
+        "console/src/pages/ResearchEnginePage.tsx"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/ib",
+      "files": [
+        "console/src/pages/shell/ib/IbBusStatus.tsx",
+        "console/src/pages/shell/ib/IbPage.tsx",
+        "console/src/pages/shell/ib/__tests__/ibHealthRequests.test.ts",
+        "console/src/pages/shell/ib/ibHealthRequests.ts"
+      ],
+      "imports": [
+        "console/src/api/cluster.ts",
+        "console/src/api/core.ts",
+        "console/src/api/satelliteBusTypes.ts",
+        "console/src/components/layout",
+        "console/src/components/shell",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib/satellite",
+        "console/src/pages/IbGatewayManagePage.tsx",
+        "console/src/pages/satellite-bus"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/infrastructure",
+      "files": [
+        "console/src/pages/shell/infrastructure/ComputeReadings.tsx",
+        "console/src/pages/shell/infrastructure/InfrastructurePage.tsx",
+        "console/src/pages/shell/infrastructure/MiniCards.tsx",
+        "console/src/pages/shell/infrastructure/RuntimeMapSection.tsx",
+        "console/src/pages/shell/infrastructure/__tests__/ComputeReadings.test.tsx",
+        "console/src/pages/shell/infrastructure/computeReadingsModel.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/cluster.ts",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/core.ts",
+        "console/src/api/serverContact.ts",
+        "console/src/api/telemetry.ts",
+        "console/src/components/layout",
+        "console/src/components/shell",
+        "console/src/lib/agent",
+        "console/src/lib/shell",
+        "console/src/pages/ClusterPage.tsx",
+        "console/src/pages/NetworkPage.tsx",
+        "console/src/pages/RuntimeMapPage.tsx",
+        "console/src/pages/shell/data"
+      ],
+      "test_imports": [
+        "console/src/api/clusterTypes.ts"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/needs-you",
+      "files": [
+        "console/src/pages/shell/needs-you/AnswerGroup.tsx",
+        "console/src/pages/shell/needs-you/ApprovalPlanSteps.tsx",
+        "console/src/pages/shell/needs-you/ApprovalRow.tsx",
+        "console/src/pages/shell/needs-you/NeedsYouPage.tsx",
+        "console/src/pages/shell/needs-you/QuestionRow.tsx",
+        "console/src/pages/shell/needs-you/SilentThreadRow.tsx",
+        "console/src/pages/shell/needs-you/__tests__/ApprovalRow.test.tsx",
+        "console/src/pages/shell/needs-you/__tests__/NeedsYouPage.test.tsx",
+        "console/src/pages/shell/needs-you/__tests__/approvalPlanSteps.test.tsx",
+        "console/src/pages/shell/needs-you/__tests__/needsYouGroups.test.ts",
+        "console/src/pages/shell/needs-you/__tests__/needsYouModel.test.ts",
+        "console/src/pages/shell/needs-you/__tests__/pausedSources.test.tsx",
+        "console/src/pages/shell/needs-you/__tests__/questionsNeedsYou.test.tsx",
+        "console/src/pages/shell/needs-you/__tests__/silentThread.test.ts",
+        "console/src/pages/shell/needs-you/mergedNeedsYou.ts",
+        "console/src/pages/shell/needs-you/needsYouGroups.ts",
+        "console/src/pages/shell/needs-you/needsYouModel.ts",
+        "console/src/pages/shell/needs-you/silentThread.ts",
+        "console/src/pages/shell/needs-you/useNeedsYou.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/agentRuntimePlan.ts",
+        "console/src/api/agentThreads.ts",
+        "console/src/api/approvals.ts",
+        "console/src/api/lineage.ts",
+        "console/src/api/questions.ts",
+        "console/src/components/layout",
+        "console/src/components/shell",
+        "console/src/hooks/useAgentThreads.ts",
+        "console/src/lib/shell",
+        "console/src/pages/approvalDecision.ts",
+        "console/src/pages/approvalsReadNotice.ts",
+        "console/src/pages/shell/agents",
+        "console/src/pages/shell/owner",
+        "console/src/pages/shell/progress"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/api/agentRuntimePlan.ts",
+        "console/src/api/agentThreads.ts",
+        "console/src/api/approvals.ts",
+        "console/src/api/approvalsApiFixture.ts",
+        "console/src/api/approvalsServerContract.ts",
+        "console/src/api/lineage.ts",
+        "console/src/components/shell",
+        "console/src/hooks/PlatformAuthProvider.tsx",
+        "console/src/lib/platformAuth.ts",
+        "console/src/pages/QuestionPage.tsx",
+        "console/src/pages/approvalDecision.ts",
+        "console/src/pages/shell/progress"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "node:fs",
+        "node:path",
+        "node:url",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/owner",
+      "files": [
+        "console/src/pages/shell/owner/LastRead.tsx",
+        "console/src/pages/shell/owner/OwnerConsolePage.tsx",
+        "console/src/pages/shell/owner/OwnerData.tsx",
+        "console/src/pages/shell/owner/OwnerParts.tsx",
+        "console/src/pages/shell/owner/OwnerReleaseLane.tsx",
+        "console/src/pages/shell/owner/OwnerStop.tsx",
+        "console/src/pages/shell/owner/OwnerSystem.tsx",
+        "console/src/pages/shell/owner/OwnerWaiting.tsx",
+        "console/src/pages/shell/owner/OwnerWork.tsx",
+        "console/src/pages/shell/owner/OwnerYou.tsx",
+        "console/src/pages/shell/owner/RuntimeHealthNotice.tsx",
+        "console/src/pages/shell/owner/__tests__/OwnerConsolePage.test.tsx",
+        "console/src/pages/shell/owner/__tests__/fixtures/pools-utc.json",
+        "console/src/pages/shell/owner/__tests__/fixtures/standby-evidence.prod.json",
+        "console/src/pages/shell/owner/__tests__/fixtures/telemetry-alerts.prod.json",
+        "console/src/pages/shell/owner/__tests__/ownerModel.test.ts",
+        "console/src/pages/shell/owner/__tests__/probeReadFailed.test.tsx",
+        "console/src/pages/shell/owner/__tests__/runtimeBusUI.test.tsx",
+        "console/src/pages/shell/owner/__tests__/runtimeHealthNotice.test.tsx",
+        "console/src/pages/shell/owner/__tests__/useOwnerConsole.test.tsx",
+        "console/src/pages/shell/owner/__tests__/yoursFromSources.test.tsx",
+        "console/src/pages/shell/owner/dataTiles.ts",
+        "console/src/pages/shell/owner/ownerModel.ts",
+        "console/src/pages/shell/owner/standbyEvidence.ts",
+        "console/src/pages/shell/owner/useOwnerConsole.ts",
+        "console/src/pages/shell/owner/useOwnerYours.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/client.ts",
+        "console/src/api/cluster.ts",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/delivery.ts",
+        "console/src/api/marketDataDimensions.ts",
+        "console/src/api/marketDataPlugin.ts",
+        "console/src/api/releases.ts",
+        "console/src/api/researchEngine.ts",
+        "console/src/api/telemetry.ts",
+        "console/src/components/market-data",
+        "console/src/components/shell",
+        "console/src/hooks",
+        "console/src/hooks/useFlexQueryLiveProbe.ts",
+        "console/src/hooks/useIbGatewayLiveProbe.ts",
+        "console/src/hooks/useMarketDataLiveProbe.ts",
+        "console/src/lib/observability",
+        "console/src/lib/shell",
+        "console/src/pages/SatelliteHealthPage.tsx",
+        "console/src/pages/shell/agents",
+        "console/src/pages/shell/ci",
+        "console/src/pages/shell/crew",
+        "console/src/pages/shell/needs-you",
+        "console/src/pages/shell/progress",
+        "console/src/pages/shell/releases",
+        "console/src/pages/shell/services"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/api/approvalsApiFixture.ts",
+        "console/src/api/clusterTypes.ts",
+        "console/src/api/questions.ts",
+        "console/src/hooks/platformAuthContext.ts",
+        "console/src/hooks/useFlexQueryLiveProbe.ts",
+        "console/src/hooks/useIbGatewayLiveProbe.ts",
+        "console/src/hooks/useMarketDataLiveProbe.ts",
+        "console/src/lib/shell",
+        "console/src/pages/shell/agents"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [
+        "api/internal/questions/testdata/contract/question-open.json"
+      ],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/progress",
+      "files": [
+        "console/src/pages/shell/progress/GovernanceReferences.tsx",
+        "console/src/pages/shell/progress/ProgressHistory.tsx",
+        "console/src/pages/shell/progress/ProgressPage.tsx",
+        "console/src/pages/shell/progress/ProgressTimeline.tsx",
+        "console/src/pages/shell/progress/__tests__/failedReads488.test.tsx",
+        "console/src/pages/shell/progress/__tests__/governanceReferences.test.tsx",
+        "console/src/pages/shell/progress/__tests__/progressPart.test.ts",
+        "console/src/pages/shell/progress/__tests__/timeline.test.tsx",
+        "console/src/pages/shell/progress/__tests__/timelineBound.test.tsx",
+        "console/src/pages/shell/progress/attemptActionWords.tsx",
+        "console/src/pages/shell/progress/progressClock.tsx",
+        "console/src/pages/shell/progress/progressPart.ts",
+        "console/src/pages/shell/progress/timelineModel.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/agentRuntimePlan.ts",
+        "console/src/api/approvals.ts",
+        "console/src/api/releases.ts",
+        "console/src/components/agent",
+        "console/src/components/layout",
+        "console/src/lib/architecture",
+        "console/src/lib/shell",
+        "console/src/pages/CodeHealthPage.tsx",
+        "console/src/pages/CommitLineagePage.tsx",
+        "console/src/pages/shell/owner",
+        "console/src/pages/shell/releases",
+        "console/src/pages/shell/status"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/api/approvalsApiFixture.ts",
+        "console/src/api/releases.ts",
+        "console/src/components/market-data",
+        "console/src/lib/shell",
+        "console/src/pages/shell/needs-you",
+        "console/src/pages/shell/owner"
+      ],
+      "external_imports": [
+        "@tanstack/react-query",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/records",
+      "files": [
+        "console/src/pages/shell/records/RecordsPage.tsx",
+        "console/src/pages/shell/records/__tests__/RecordsPage.test.tsx",
+        "console/src/pages/shell/records/recordsTabs.ts"
+      ],
+      "imports": [
+        "console/src/api/approvals.ts",
+        "console/src/api/cluster.ts",
+        "console/src/lib/shell",
+        "console/src/pages",
+        "console/src/pages/AuditPage.tsx",
+        "console/src/pages/shell/needs-you",
+        "console/src/pages/shell/progress"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/api/approvalsApiFixture.ts",
+        "console/src/hooks/platformAuthContext.ts"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/releases",
+      "files": [
+        "console/src/pages/shell/releases/ReleaseHistorySection.tsx",
+        "console/src/pages/shell/releases/ReleaseInProgressSection.tsx",
+        "console/src/pages/shell/releases/ReleaseLanesSection.tsx",
+        "console/src/pages/shell/releases/ReleaseNeedsYouSection.tsx",
+        "console/src/pages/shell/releases/ReleasePolicyDecisionsSection.tsx",
+        "console/src/pages/shell/releases/ReleasesPage.tsx",
+        "console/src/pages/shell/releases/__tests__/ReleaseLanesSection.test.tsx",
+        "console/src/pages/shell/releases/__tests__/ReleasesPage.test.tsx",
+        "console/src/pages/shell/releases/__tests__/policyDecisions.test.tsx",
+        "console/src/pages/shell/releases/__tests__/releaseView.test.ts",
+        "console/src/pages/shell/releases/policyDecisions.ts",
+        "console/src/pages/shell/releases/releaseView.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/approvals.ts",
+        "console/src/api/auditTypes.ts",
+        "console/src/api/client.ts",
+        "console/src/api/deliveryTypes.ts",
+        "console/src/api/releases.ts",
+        "console/src/api/serverContact.ts",
+        "console/src/components",
+        "console/src/components/delivery",
+        "console/src/components/layout",
+        "console/src/components/shell",
+        "console/src/hooks",
+        "console/src/lib/delivery",
+        "console/src/lib/shell"
+      ],
+      "test_imports": [
+        "console/src/api/approvals.ts",
+        "console/src/api/auditTypes.ts",
+        "console/src/api/deliveryTypes.ts",
+        "console/src/api/releases.ts",
+        "console/src/components/shell",
+        "console/src/lib/delivery",
+        "console/src/lib/platformAuth.ts",
+        "console/src/pages/shell/services"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/services",
+      "files": [
+        "console/src/pages/shell/services/ServiceVersions.tsx"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/releases.ts",
+        "console/src/components/layout",
+        "console/src/pages/shell/releases"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/shell/status",
+      "files": [
+        "console/src/pages/shell/status/AgentThreadsInProgress.tsx",
+        "console/src/pages/shell/status/ChecklistSignalsSummary.tsx",
+        "console/src/pages/shell/status/StatusPage.tsx",
+        "console/src/pages/shell/status/__tests__/AgentThreadsInProgress.test.tsx",
+        "console/src/pages/shell/status/__tests__/StatusPage.test.tsx"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/agentThreads.ts",
+        "console/src/api/core.ts",
+        "console/src/components/layout",
+        "console/src/components/shell",
+        "console/src/hooks/useAgentThreads.ts",
+        "console/src/lib/shell",
+        "console/src/pages/ControlRoomPage.tsx",
+        "console/src/pages/ObservabilityPage.tsx",
+        "console/src/pages/RocketHealthPage.tsx"
+      ],
+      "test_imports": [
+        "console/src/api/agentThreads.ts",
+        "console/src/hooks/platformAuthContext.ts",
+        "console/src/hooks/useObservabilitySnapshot.ts",
+        "console/src/lib/observability",
+        "console/src/lib/platformAuth.ts",
+        "console/src/pages/SatelliteHealthPage.tsx"
+      ],
+      "external_imports": [
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/useDecisionEnvironment.ts",
+      "files": [
+        "console/src/pages/useDecisionEnvironment.ts"
+      ],
+      "imports": [
+        "console/src/hooks"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pages/useDecisionPageResume.ts",
+      "files": [
+        "console/src/pages/useDecisionPageResume.ts"
+      ],
+      "imports": [
+        "console/src/pages/decisionContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query",
+        "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/pwa",
+      "files": [
+        "console/src/pwa/ConsoleBuildBanner.tsx",
+        "console/src/pwa/__tests__/consoleBuildDrift.test.tsx",
+        "console/src/pwa/__tests__/nginxConf.test.ts",
+        "console/src/pwa/__tests__/pwa.test.ts",
+        "console/src/pwa/appBadge.ts",
+        "console/src/pwa/consoleBuild.ts",
+        "console/src/pwa/serviceWorker.ts",
+        "console/src/pwa/useConsoleBuildDrift.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@testing-library/react",
+        "node:fs",
+        "node:path",
+        "node:url",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/styles",
+      "files": [
+        "console/src/styles/opsAppearance.css",
+        "console/src/styles/opsDecisions.css",
+        "console/src/styles/opsForYou.css",
+        "console/src/styles/opsShell.css",
+        "console/src/styles/opsWorkspace.css",
+        "console/src/styles/taskModeChrome.css"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/test",
+      "files": [
+        "console/src/test/__tests__/clockShift.test.ts",
+        "console/src/test/__tests__/clockShiftEveryTest.test.ts",
+        "console/src/test/agentrtPlanStream.ts",
+        "console/src/test/clockShift.ts",
+        "console/src/test/lastRead.ts",
+        "console/src/test/webStorage.ts"
+      ],
+      "imports": [
+        "console/src/api"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    }
+  ]
+}

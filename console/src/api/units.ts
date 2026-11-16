@@ -27,7 +27,16 @@ export type DomainPackage = {
   path: string; module: string; domains: string[]; status: string; basis: string
   imports: string[]; test_imports: string[]; tasks: string[]; inputs: string[]
 }
+export type FrontendDomainGroup = {
+ path: string; files: string[]; domains: string[]; status: string; basis: string
+ imports: string[]; test_imports: string[]; source_inputs: string[]; test_inputs: string[]; external_imports: string[]; unresolved_imports: string[]
+}
+export type FrontendDomainMap = {
+ root: string; module: string; source: string; groups: FrontendDomainGroup[]
+ tasks: string[]; inputs: string[]; files: number; unresolved: number; inventory_complete: boolean
+}
 export type DomainMap = {
+ frontend?: FrontendDomainMap; frontend_note?: string
   source: string; domains: { id: string; name: string; source: string }[]
   shared_tasks: { unit: string; task: string; module: string }[]
   packages: DomainPackage[]; inventory_complete: boolean; unresolved: number

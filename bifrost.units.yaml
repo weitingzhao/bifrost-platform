@@ -207,6 +207,8 @@ modules:
       - mcp/trade/src
       - agent/remediation/src
       - config/trade-api-domains.yaml
+      # Frontend ownership inventory tests read the source-owned attribution.
+      - config/domain-ownership.json
       - scripts/ci/console_reads_api.txt
     image: docker.io/library/node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0
     template: bifrost-unit-run

@@ -24,3 +24,19 @@ it('keeps missing and unreadable ownership distinct', () => {
   rerender(<DomainMapView config={{ ...contract.configDeclared(), domain_note: 'invalid directory' }} module="" />)
   expect(screen.getByRole('alert')).toHaveTextContent('invalid directory')
 })
+
+it('shows provider-owned frontend domains with shared CI tasks and follows module selection', () => {
+ const { rerender } = render(<DomainMapView config={contract.configDomains()} module="web" />)
+ expect(screen.getByRole('region', { name: 'Frontend domain map' })).toHaveTextContent('Planning · 1 frontend groups')
+ expect(screen.getByText(/web · assigned · 1 files/)).toBeInTheDocument()
+ expect(screen.getByText(/Shared CI tasks: check/)).toBeInTheDocument()
+ expect(screen.getByText(/not independently tested or deployed/)).toBeInTheDocument()
+ rerender(<DomainMapView config={contract.configDomains()} module="svc" />)
+ expect(screen.queryByRole('region', { name: 'Frontend domain map' })).not.toBeInTheDocument()
+})
+it('keeps unreadable frontend inventory separate from Go attribution', () => {
+ const config=contract.configDomains()
+ render(<DomainMapView config={{...config, domains:{...config.domains!, frontend:undefined, frontend_note:'stale source inventory'}}} module="" />)
+ expect(screen.getByRole('alert')).toHaveTextContent('stale source inventory')
+ expect(screen.getByText(/svc\/a · assigned/)).toBeInTheDocument()
+})

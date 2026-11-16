@@ -21,6 +21,7 @@ type Ownership struct {
 	Basis   string   `json:"basis"`
 }
 type ownershipFile struct {
+	Frontend *frontendDeclaration `json:"frontend,omitempty"`
 	Version  int                  `json:"version"`
 	Source   string               `json:"source"`
 	Domains  []Domain             `json:"domains"`
@@ -43,10 +44,12 @@ type SharedTask struct {
 }
 
 type DomainView struct {
-	SharedTasks []SharedTask `json:"shared_tasks"`
-	Source      string       `json:"source"`
-	Domains     []Domain     `json:"domains"`
-	Packages    []Package    `json:"packages"`
+	Frontend     *FrontendView `json:"frontend,omitempty"`
+	FrontendNote string        `json:"frontend_note,omitempty"`
+	SharedTasks  []SharedTask  `json:"shared_tasks"`
+	Source       string        `json:"source"`
+	Domains      []Domain      `json:"domains"`
+	Packages     []Package     `json:"packages"`
 	// InventoryComplete means every Go package of the declared modules was
 	// enumerated, not that business ownership or isolation is complete.
 	InventoryComplete bool `json:"inventory_complete"`
@@ -153,6 +156,12 @@ func readDomains(t *unitplan.Tree, manifest *unitplan.Manifest, plan *unitplan.P
 	for p := range doc.Packages {
 		if !seen[p] {
 			return nil, fmt.Errorf("domain ownership names missing Go package %s", p)
+		}
+	}
+	if doc.Frontend != nil {
+		out.Frontend, err = readFrontend(t, manifest, plan, doc.Frontend, check)
+		if err != nil {
+			out.FrontendNote = err.Error()
 		}
 	}
 	sort.Slice(out.Packages, func(i, j int) bool { return out.Packages[i].Path < out.Packages[j].Path })

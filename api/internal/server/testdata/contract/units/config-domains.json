@@ -1,5 +1,41 @@
 {
   "domains": {
+    "frontend": {
+      "root": "web",
+      "module": "web",
+      "source": "frontend-inventory.json",
+      "groups": [
+        {
+          "source_inputs": [],
+          "test_inputs": [],
+          "path": "web",
+          "files": [
+            "web/index.ts"
+          ],
+          "imports": [],
+          "test_imports": [],
+          "external_imports": [
+            "react"
+          ],
+          "unresolved_imports": [],
+          "domains": [
+            "plan"
+          ],
+          "status": "assigned",
+          "basis": "frontend plan view source audit"
+        }
+      ],
+      "tasks": [
+        "check"
+      ],
+      "inputs": [
+        "svc/a/a.go",
+        "lib:."
+      ],
+      "files": 1,
+      "unresolved": 0,
+      "inventory_complete": true
+    },
     "shared_tasks": [
       {
         "unit": "svc",
