@@ -73,7 +73,7 @@ describe('write plan', () => {
   })
 
   it('refuses an unmapped write and does not invent unlisted_write', () => {
-    const plan = planWrite('POST', '/api/v1/cluster/namespaces/ensure-bifrost', {})
+    const plan = planWrite('POST', '/api/v1/cluster/namespaces/not-a-route', {})
     assert.equal(plan.kind, 'unmapped')
     if (plan.kind !== 'unmapped') return
     assert.equal(plan.body.error, 'unmapped write')

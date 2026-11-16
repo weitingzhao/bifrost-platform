@@ -197,6 +197,12 @@ export const WRITE_SPECS: readonly WriteMapping[] = [
     paramsFrom: (_m, body) => asRecord(body),
   },
   {
+    action: 'ensure_bifrost_namespaces',
+    method: 'POST',
+    pattern: /^\/api\/v1\/cluster\/namespaces\/ensure-bifrost$/,
+    paramsFrom: (_m, body) => asRecord(body),
+  },
+  {
     action: 'sync_mirrors',
     method: 'POST',
     pattern: /^\/api\/v1\/delivery\/mirrors\/sync$/,

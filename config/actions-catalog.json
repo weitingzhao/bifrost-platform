@@ -8,6 +8,7 @@
     "delete_pipeline_run",
     "delete_pod",
     "drain_node",
+    "ensure_bifrost_namespaces",
     "ensure_kube_prometheus_stack",
     "ensure_kubeconfig_secret",
     "ensure_metrics_server",

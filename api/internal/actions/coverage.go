@@ -111,9 +111,6 @@ func init() {
 		"POST /api/v1/plugins/market-data/api/*",
 		"POST /api/v1/plugins/flex-query/api/*",
 	)
-	exempt("unclassified by LANE-B1: namespace ensure stays outside the catalog until phase 3",
-		"POST /api/v1/cluster/namespaces/ensure-bifrost",
-	)
 	exempt("unclassified by LANE-B1: dev-session control. D10 still refuses daemon scale-up inside that handler",
 		"POST /api/v1/dev-sessions/{name}/control",
 	)

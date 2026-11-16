@@ -366,6 +366,12 @@ var catalog = []Action{
 		Params: []Param{},
 	},
 	{
+		ID: "ensure_bifrost_namespaces", Tier: TierC,
+		Description: "Create the namespaces listed under bifrost_namespaces in this platform's config (bifrost-trade-infra k8s/overlays/platform-*/config/clusters.yaml) that do not exist yet; existing ones are left as they are. Tier C: the Owner approves the card on the Console and the platform runs it, because the execution card may not create a Namespace (2026-11-16, the bus's own namespace).",
+		Method:      "POST", Pattern: "/api/v1/cluster/namespaces/ensure-bifrost",
+		Params: []Param{},
+	},
+	{
 		ID: "ensure_metrics_server", Tier: TierD,
 		Description: "Install the metrics-server add-on. Tier D.",
 		Method:      "POST", Pattern: "/api/v1/cluster/addons/metrics-server/ensure",
