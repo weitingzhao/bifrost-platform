@@ -6,7 +6,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
@@ -14,8 +13,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/maintainer"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
-	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
+	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry/probecollect"
 )
 
 // Prometheus exposition for the plugins Trade runs on.
@@ -90,26 +89,7 @@ func (s *Server) pluginProbeFns() []func(context.Context) probe.PluginHealth {
 }
 
 func (s *Server) writePluginMetrics(b *strings.Builder, r *http.Request) {
-	probes := s.pluginProbeFns()
-
-	// Concurrent as well as independently bounded, so the scrape costs the
-	// slowest plugin rather than the sum of all four.
-	healths := make([]probe.PluginHealth, len(probes))
-	var wg sync.WaitGroup
-	for i, fn := range probes {
-		wg.Add(1)
-		go func(i int, fn func(context.Context) probe.PluginHealth) {
-			// Outside the request stack chi's Recoverer cannot reach these, so
-			// one bad probe would take platform-api down and blind the Console
-			// with it — the fan-out case safego's package doc names.
-			defer safego.Recover("server.metrics.pluginProbe")
-			defer wg.Done()
-			ctx, cancel := context.WithTimeout(r.Context(), pluginProbeTimeout)
-			defer cancel()
-			healths[i] = fn(ctx)
-		}(i, fn)
-	}
-	wg.Wait()
+	healths := probecollect.Collect(r.Context(), pluginProbeTimeout, "server.metrics.pluginProbe", s.pluginProbeFns())
 
 	observations := make([]telemetry.ReachabilityObservation, 0, len(healths))
 	for _, h := range healths {

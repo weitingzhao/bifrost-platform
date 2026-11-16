@@ -11,6 +11,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/maintainer"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
 )
 
 func TestWritePluginGaugesGroupsHelpOncePerMetric(t *testing.T) {
@@ -123,5 +124,27 @@ func TestWorkersMetricsDoesNotProbePlugins(t *testing.T) {
 	}
 	if !strings.Contains(body, `bifrost_plugin_reachable{plugin="fake"} 1`) {
 		t.Fatalf("api /metrics dropped plugin reachability:\n%s", body)
+	}
+}
+
+func TestCollectedPluginMetricsMatchOrderedObservations(t *testing.T) {
+	healths := []probe.PluginHealth{
+		{Name: "first", Reachable: true, Reachability: probe.ReachOK, Gauges: []probe.Gauge{{Key: "sample", Value: 3}}},
+		{Name: "second", Reachability: probe.ReachFail},
+	}
+	srv := &Server{pluginProbes: []func(context.Context) probe.PluginHealth{
+		func(context.Context) probe.PluginHealth { return healths[0] },
+		func(context.Context) probe.PluginHealth { return healths[1] },
+	}}
+	var got, want strings.Builder
+	srv.writePluginMetrics(&got, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	observations := []telemetry.ReachabilityObservation{
+		{Name: "first", Reachable: true, State: string(probe.ReachOK)},
+		{Name: "second", State: string(probe.ReachFail)},
+	}
+	telemetry.WriteReachability(&want, observations, []string{string(probe.ReachOK), string(probe.ReachDegraded), string(probe.ReachFail), string(probe.ReachUnknown)})
+	writePluginGauges(&want, healths)
+	if got.String() != want.String() {
+		t.Fatalf("output changed:\n%s\nwant:\n%s", got.String(), want.String())
 	}
 }
