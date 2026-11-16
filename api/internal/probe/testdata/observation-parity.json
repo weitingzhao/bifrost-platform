@@ -1,0 +1,434 @@
+{
+  "http-200": {
+    "Target": {
+      "id": "fixture",
+      "category": "observation",
+      "reachability": "ok",
+      "auth": "skipped",
+      "authorization_level": "L0",
+      "detail": "HTTP 200",
+      "url": "\u003chttp\u003e/status"
+    },
+    "Request": "GET /status host=fixture.invalid bearer=true"
+  },
+  "http-201": {
+    "Target": {
+      "id": "fixture",
+      "category": "observation",
+      "reachability": "unknown",
+      "auth": "skipped",
+      "authorization_level": "L0",
+      "detail": "HTTP 201",
+      "url": "\u003chttp\u003e/status"
+    },
+    "Request": "GET /status host=fixture.invalid bearer=true"
+  },
+  "http-302": {
+    "Target": {
+      "id": "fixture",
+      "category": "observation",
+      "reachability": "unknown",
+      "auth": "skipped",
+      "authorization_level": "L0",
+      "detail": "HTTP 302",
+      "url": "\u003chttp\u003e/status"
+    },
+    "Request": "GET /status host=fixture.invalid bearer=true"
+  },
+  "http-401": {
+    "Target": {
+      "id": "fixture",
+      "category": "observation",
+      "reachability": "fail",
+      "auth": "skipped",
+      "authorization_level": "L0",
+      "detail": "HTTP 401",
+      "url": "\u003chttp\u003e/status"
+    },
+    "Request": "GET /status host=fixture.invalid bearer=true"
+  },
+  "http-404": {
+    "Target": {
+      "id": "fixture",
+      "category": "observation",
+      "reachability": "fail",
+      "auth": "skipped",
+      "authorization_level": "L0",
+      "detail": "HTTP 404",
+      "url": "\u003chttp\u003e/status"
+    },
+    "Request": "GET /status host=fixture.invalid bearer=true"
+  },
+  "http-503": {
+    "Target": {
+      "id": "fixture",
+      "category": "observation",
+      "reachability": "degraded",
+      "auth": "skipped",
+      "authorization_level": "L0",
+      "detail": "HTTP 503 (service starting or degraded)",
+      "url": "\u003chttp\u003e/status"
+    },
+    "Request": "GET /status host=fixture.invalid bearer=true"
+  },
+  "postgres--lanfalse-cancelfalse": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP open",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "postgres--lanfalse-canceltrue": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "fail",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP dial failed: dial tcp \u003ctcp\u003e: operation was canceled",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "postgres--lantrue-cancelfalse": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_lan: TCP open",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "postgres--lantrue-canceltrue": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "fail",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP dial failed: dial tcp \u003ctcp\u003e: operation was canceled",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "postgres-degraded-lanfalse-cancelfalse": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "degraded",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture",
+    "url": "cluster://data/postgres/fixture"
+  },
+  "postgres-degraded-lanfalse-canceltrue": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "degraded",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture",
+    "url": "cluster://data/postgres/fixture"
+  },
+  "postgres-degraded-lantrue-cancelfalse": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture · tcp_lan verified",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "postgres-degraded-lantrue-canceltrue": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "degraded",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture · tcp_lan: TCP dial failed: dial tcp \u003ctcp\u003e: operation was canceled",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "postgres-fail-lanfalse-cancelfalse": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP open",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "postgres-fail-lanfalse-canceltrue": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "fail",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP dial failed: dial tcp \u003ctcp\u003e: operation was canceled",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "postgres-fail-lantrue-cancelfalse": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture · tcp_lan verified",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "postgres-fail-lantrue-canceltrue": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "fail",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP dial failed: dial tcp \u003ctcp\u003e: operation was canceled",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "postgres-ok-lanfalse-cancelfalse": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture",
+    "url": "cluster://data/postgres/fixture"
+  },
+  "postgres-ok-lanfalse-canceltrue": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture",
+    "url": "cluster://data/postgres/fixture"
+  },
+  "postgres-ok-lantrue-cancelfalse": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "postgres-ok-lantrue-canceltrue": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "postgres-unknown-lanfalse-cancelfalse": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP open",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "postgres-unknown-lanfalse-canceltrue": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "fail",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP dial failed: dial tcp \u003ctcp\u003e: operation was canceled",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "postgres-unknown-lantrue-cancelfalse": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture · tcp_lan verified",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "postgres-unknown-lantrue-canceltrue": {
+    "id": "postgres",
+    "category": "datastore",
+    "reachability": "fail",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP dial failed: dial tcp \u003ctcp\u003e: operation was canceled",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "redis--lanfalse-cancelfalse": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP open",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "redis--lanfalse-canceltrue": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "fail",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP dial failed: dial tcp \u003ctcp\u003e: operation was canceled",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "redis--lantrue-cancelfalse": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_lan: TCP open",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "redis--lantrue-canceltrue": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "fail",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP dial failed: dial tcp \u003ctcp\u003e: operation was canceled",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "redis-degraded-lanfalse-cancelfalse": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "degraded",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture",
+    "url": "cluster://data/redis/fixture"
+  },
+  "redis-degraded-lanfalse-canceltrue": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "degraded",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture",
+    "url": "cluster://data/redis/fixture"
+  },
+  "redis-degraded-lantrue-cancelfalse": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture · tcp_lan verified",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "redis-degraded-lantrue-canceltrue": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "degraded",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture · tcp_lan: TCP dial failed: dial tcp \u003ctcp\u003e: operation was canceled",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "redis-fail-lanfalse-cancelfalse": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP open",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "redis-fail-lanfalse-canceltrue": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "fail",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP dial failed: dial tcp \u003ctcp\u003e: operation was canceled",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "redis-fail-lantrue-cancelfalse": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture · tcp_lan verified",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "redis-fail-lantrue-canceltrue": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "fail",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP dial failed: dial tcp \u003ctcp\u003e: operation was canceled",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "redis-ok-lanfalse-cancelfalse": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture",
+    "url": "cluster://data/redis/fixture"
+  },
+  "redis-ok-lanfalse-canceltrue": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture",
+    "url": "cluster://data/redis/fixture"
+  },
+  "redis-ok-lantrue-cancelfalse": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "redis-ok-lantrue-canceltrue": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "redis-unknown-lanfalse-cancelfalse": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP open",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "redis-unknown-lanfalse-canceltrue": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "fail",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP dial failed: dial tcp \u003ctcp\u003e: operation was canceled",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "redis-unknown-lantrue-cancelfalse": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "ok",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "cluster_api: cluster fixture · tcp_lan verified",
+    "url": "tcp://\u003ctcp\u003e"
+  },
+  "redis-unknown-lantrue-canceltrue": {
+    "id": "redis",
+    "category": "datastore",
+    "reachability": "fail",
+    "auth": "skipped",
+    "authorization_level": "L0",
+    "detail": "tcp_config: TCP dial failed: dial tcp \u003ctcp\u003e: operation was canceled",
+    "url": "tcp://\u003ctcp\u003e"
+  }
+}

@@ -827,6 +827,20 @@
       ],
       "status": "assigned",
       "basis": "2026-11-16 generic read-only resource formatting, usage, readiness and phase projection extracted whole; only metrics/probe callers, unchanged thresholds, no execution or permission decisions."
+    },
+    "api/internal/netobservations": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 safe extraction from probe, which remains mixed. HTTP response draining/status classification and TCP dial-close only; caller retains request/identity/Host/timeout configuration."
+    },
+    "api/internal/datastoreobservations": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 safe extraction from probe, which remains mixed. Read-only cluster-health projection and original ordered LAN/config TCP fallbacks, through observation callbacks without identity/database access."
     }
   },
   "frontend": {

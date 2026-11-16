@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/netobservations"
 )
 
 const (
@@ -117,7 +117,7 @@ func (p *Prober) probeHTTP(ctx context.Context, id, category, url, bearer string
 	}
 	env.ApplyIngressHost(req)
 
-	resp, err := p.Client.Do(req)
+	status, err := netobservations.DrainHTTP(p.Client, req)
 	if err != nil {
 		return Target{
 			ID: id, Category: category, Reachability: ReachFail,
@@ -125,10 +125,8 @@ func (p *Prober) probeHTTP(ctx context.Context, id, category, url, bearer string
 			Detail: err.Error(), URL: url,
 		}
 	}
-	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, resp.Body)
 
-	reach, detail := classifyHTTP(resp.StatusCode)
+	reach, detail := classifyHTTP(status)
 	return Target{
 		ID: id, Category: category, Reachability: reach,
 		Auth: AuthSkipped, AuthorizationLevel: "L0",
@@ -170,21 +168,12 @@ func (p *Prober) probeTradeRoute(ctx context.Context, r TradeGatewayRoute, base 
 }
 
 func classifyHTTP(code int) (Reachability, string) {
-	switch {
-	case code == 200:
-		return ReachOK, fmt.Sprintf("HTTP %d", code)
-	case code == 503:
-		return ReachDegraded, fmt.Sprintf("HTTP %d (service starting or degraded)", code)
-	case code >= 400:
-		return ReachFail, fmt.Sprintf("HTTP %d", code)
-	default:
-		return ReachUnknown, fmt.Sprintf("HTTP %d", code)
-	}
+	reach, detail := netobservations.ClassifyHTTP(code)
+	return Reachability(reach), detail
 }
 
 func (p *Prober) probeTCP(ctx context.Context, id, category, addr string) Target {
-	dialer := net.Dialer{Timeout: tcpTimeout}
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	err := netobservations.DialTCP(ctx, addr, tcpTimeout)
 	if err != nil {
 		return Target{
 			ID: id, Category: category, Reachability: ReachFail,
@@ -192,7 +181,6 @@ func (p *Prober) probeTCP(ctx context.Context, id, category, addr string) Target
 			Detail: "TCP dial failed: " + err.Error(), URL: "tcp://" + addr,
 		}
 	}
-	_ = conn.Close()
 	return Target{
 		ID: id, Category: category, Reachability: ReachOK,
 		Auth: AuthSkipped, AuthorizationLevel: "L0",
