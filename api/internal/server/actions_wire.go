@@ -46,19 +46,27 @@ func (s *Server) guard(id string, next http.HandlerFunc) http.HandlerFunc {
 
 func (s *Server) guardUntraced(id string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Fail closed (2026-11-16, found by the decoupling line): a body that
+		// cannot be read, an id the catalog does not know, or params that do not
+		// parse or miss a required one used to reach the handler unjudged, so a
+		// C or D route could run without an approval.
 		raw, err := readAndRestore(r)
 		if err != nil {
-			next(w, r)
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "request body could not be read", "action": id})
 			return
 		}
 		act, ok := actions.ByID(id)
 		if !ok {
-			next(w, r)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "action is not in the catalog", "action": id})
 			return
 		}
 		params, err := act.Extract(r, raw)
-		if err != nil || act.Missing(params) != "" {
-			next(w, r)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error(), "action": id})
+			return
+		}
+		if miss := act.Missing(params); miss != "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing param: " + miss, "action": id})
 			return
 		}
 		tier := act.TierOf(r.Context(), params)
@@ -111,7 +119,8 @@ func (s *Server) guardIB(next http.HandlerFunc) http.HandlerFunc {
 		case "self-heal":
 			s.guard("ib_self_heal", next)(w, r)
 		default:
-			next(w, r)
+			// Not a catalogued action: refused, not handed on unjudged.
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown IB control action"})
 		}
 	}
 }
