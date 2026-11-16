@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -36,26 +35,18 @@ const (
 	StatusFinished = "finished"
 )
 
-var statusRank = []string{StatusHostLost, StatusMaybeStuck, StatusUnknown, StatusWaitingOwner, StatusStopped, StatusBlocked,
-	StatusSlow, StatusWorking, StatusWaitingRole, StatusQueued}
-
 // HostLostAfter retains the historical display threshold. The progress
 // projection now returns no dispatch hosts or live attempts.
 const HostLostAfter = 30 * time.Second
 
-// SlowFactor: a working attempt is slow past this many times the usual.
-const SlowFactor = 1.5
-
 // The history a usual time is read from: fewer samples give none.
 const (
 	UsualMinSamples = 3
-	usualWindow     = 30 * 24 * time.Hour
 )
 
 // Bounds of the projection's lists.
 const (
 	progressMissions = 100
-	progressRecent   = 20
 	// A plan change can wait for the Owner no longer than its card lives
 	// (at most 7 days) and a decision pass after it.
 	pendingChangeWindow = 8 * 24 * time.Hour
@@ -124,18 +115,7 @@ type ProgressTask struct {
 }
 
 // worst is the status most worth seeing among statuses.
-func worst(statuses []string) string {
-	best := len(statusRank)
-	for _, s := range statuses {
-		if i := slices.Index(statusRank, s); i >= 0 && i < best {
-			best = i
-		}
-	}
-	if best == len(statusRank) {
-		return ""
-	}
-	return statusRank[best]
-}
+func worst(statuses []string) string { return planreadings.MostRelevantStatus(statuses) }
 
 // ProgressSince retains the progress reader signature; dispatch host
 // presence is no longer computed in this projection.
@@ -212,26 +192,7 @@ func (r rawJSON) MarshalJSON() ([]byte, error) { return r, nil }
 // sortedLive orders live attempts by start time (an attempt not started yet
 // last), then id.
 func sortedLive(live map[string]*ProgressAttempt) []*ProgressAttempt {
-	list := make([]*ProgressAttempt, 0, len(live))
-	for _, a := range live {
-		list = append(list, a)
-	}
-	slices.SortFunc(list, func(x, y *ProgressAttempt) int {
-		switch {
-		case x.started.IsZero() != y.started.IsZero():
-			if x.started.IsZero() {
-				return 1
-			}
-			return -1
-		case !x.started.Equal(y.started):
-			return x.started.Compare(y.started)
-		}
-		if x.AttemptID < y.AttemptID {
-			return -1
-		}
-		return 1
-	})
-	return list
+	return planreadings.OrderLiveAttempts(live, func(a *ProgressAttempt) (time.Time, string) { return a.started, a.AttemptID })
 }
 
 // usualTime is a role and task class's usual time and how many accepted
@@ -239,11 +200,6 @@ func sortedLive(live map[string]*ProgressAttempt) []*ProgressAttempt {
 type usualTime struct {
 	d time.Duration
 	n int
-}
-
-// countDoc is a count by the counting rule, as JSON.
-func countDoc(c plan.Count) map[string]any {
-	return map[string]any{"done": c.Done, "total": c.Total, "manual": c.Manual, "stopped": c.Stopped, "state": c.State}
 }
 
 type progressMission struct {
@@ -256,13 +212,6 @@ type progressMission struct {
 	tasks                                                []*ProgressTask
 	// Its tasks whose change is on main: listed, finished, never open work.
 	onMain []*ProgressTask
-}
-
-func stamp(t *time.Time) string {
-	if t == nil {
-		return ""
-	}
-	return t.UTC().Format(time.RFC3339Nano)
 }
 
 // missionsInWork is the open missions, and when the Owner is next needed
@@ -306,13 +255,6 @@ func missionDoc(m *progressMission, eta map[string]any) map[string]any {
 		StateAt: m.stateAt, StateReason: m.stateReason, StateBy: m.stateBy, StateQuestion: m.stateQuestion, LastAt: m.lastAt,
 		Count: plan.CountSteps(m.steps), SelectedStatus: worst(statuses), Tasks: tasks, OnMain: onMain, Next: m.next,
 	}, eta)
-}
-
-func nonNilAny(s []any) []any {
-	if s == nil {
-		return []any{}
-	}
-	return s
 }
 
 // planView is each round with its count and its items' counts, and each

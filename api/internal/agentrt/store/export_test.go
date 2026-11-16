@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
@@ -63,9 +62,6 @@ func ChangeBlocksForTest(ctx context.Context, db DB, changes []PlanChange) (any,
 
 // EventTypesForTest is the closed vocabulary and the types with a body.
 func EventTypesForTest() (vocabulary, written []string) { return eventlog.EventTypes() }
-
-// BlockedCardWhyForTest is the longest why a card's recommendation has.
-var BlockedCardWhyForTest = strings.Repeat("w", RecommendWhyMax)
 
 // QuestionSeenBodyForTest is the question_seen body of q as read, checked
 // against the event's vocabulary.

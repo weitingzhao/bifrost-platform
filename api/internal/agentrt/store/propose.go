@@ -81,10 +81,6 @@ type TaskProposal struct {
 	HardLimit                        time.Duration
 }
 
-// MaxBatch is the most tasks one withdrawal or one superseding names. A
-// proposal has no such bound since cleanup wave 1 (2026-11-11).
-const MaxBatch = 50
-
 // ErrBusy: a write found the rows it needs locked, every time it tried.
 var ErrBusy = errors.New("store: busy, try again")
 

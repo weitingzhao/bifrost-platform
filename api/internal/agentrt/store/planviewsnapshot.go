@@ -43,28 +43,7 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 		return nil, err
 	}
 	adoption := snap.Views[root]
-	graph := planview.Graph{Mainline: []planview.NodeRef{}, Edges: []planview.Dependency{}}
-	items := []planview.Item{}
-	warnings := []string{}
-	if warning := snap.Warnings[root]; warning != "" {
-		warnings = append(warnings, warning)
-	} else if doc := snap.Docs[root]; doc != nil {
-		graph = adoptedViewGraph(doc)
-		items = doc.Items
-	} else {
-		warnings = append(warnings, "Legacy evidence: plan has no adopted view; nodes are Unclassified")
-	}
-	byID := map[string]map[string]any{}
-	for _, n := range nodes {
-		n["lane_kind"] = "Unclassified"
-		byID[n["plan_node_id"].(string)] = n
-	}
-	for _, item := range items {
-		if n := byID[adoption.Nodes[item.Node]]; n != nil {
-			n["lane_kind"] = item.Lane
-			n["view"] = item
-		}
-	}
+	graph, items, warnings := planview.ProjectSnapshotNodes(nodes, snap.Docs[root], snap.Warnings[root], adoption.Nodes)
 	candidates, err := planEvidenceCandidates(ctx, tx, snap, root)
 	if err != nil {
 		return nil, err
@@ -74,18 +53,8 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 		return nil, err
 	}
 	mainline, next, waiting, acceptanceReady, ownerLater, verificationFreshness := verificationView(snap, root, nodes, graph, adoption, candidates)
-	working := []any{}
+	working, finished := workregistration.ActivityBuckets(ext, now, func(id string) any { return snapshotExternalVerification(snap, id) })
 	ownerWaiting := acceptanceReady
-	finished := []any{}
-	for _, e := range ext {
-		e["verification"] = snapshotExternalVerification(snap, e["external_work_id"].(string))
-		if e["state"] == "Running" || e["state"] == "Registered" {
-			working = append(working, e)
-		}
-		if end, _ := e["ended_at"].(string); len(end) >= 10 && end[:10] == now.UTC().Format("2006-01-02") {
-			finished = append(finished, e)
-		}
-	}
 	// Threads only: a host's collector (thread:collector@<host>, R5:5.5-12
 	// §1.1, §3.1) is a thread by its actor's kind, not a session, and is
 	// never unregistered work.
@@ -109,8 +78,7 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 }
 
 // Adapt the persisted view to the domain projection without changing snapshot reads.
-func adoptedViewGraph(d *planview.Document) planview.Graph { return planview.AdoptedGraph(d) }
-func itemIndex(d *planview.Document, node string) int      { return planview.ItemIndex(d, node) }
+func itemIndex(d *planview.Document, node string) int { return planview.ItemIndex(d, node) }
 
 func snapshotExternal(ctx context.Context, tx pgx.Tx, root string, now time.Time) ([]map[string]any, error) {
 	return workregistration.Snapshot(ctx, tx, root, now, func(ctx context.Context, tx pgx.Tx, id string) (any, error) {

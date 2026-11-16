@@ -24,7 +24,6 @@ import (
 //   - mission, a mission outside the standing envelope: b, "Do not start
 //     it" (missiondecide.go).
 const (
-	CardMission        = "mission"
 	CardPlanChange     = "plan_change"
 	CardPlanImport     = "plan_import"
 	CardRecorderImport = "recorder_import"

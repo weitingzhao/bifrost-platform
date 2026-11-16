@@ -7,73 +7,30 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 )
 
-// BoundaryRule keeps the effective version separate from the latest version:
-// a scheduled or expired rule must never be presented as current authority.
-type BoundaryRule struct {
-	ID      string         `json:"rule_id"`
-	Current map[string]any `json:"in_force"`
-	Latest  map[string]any `json:"latest"`
-	Draft   map[string]any `json:"draft"`
-	Status  string         `json:"status"`
-	Notes   []string       `json:"notes"`
-}
-
-type BoundaryValue struct {
-	Key      string `json:"key"`
-	Value    int    `json:"value"`
-	Default  int    `json:"default"`
-	Min      int    `json:"min"`
-	Max      int    `json:"max"`
-	Unit     string `json:"unit"`
-	Source   string `json:"source"`
-	Consumer string `json:"consumer"`
-}
-
-type DeliveryBoundaries struct {
-	AsOf       time.Time        `json:"as_of"`
-	Rules      []BoundaryRule   `json:"rules"`
-	Tuning     []BoundaryValue  `json:"tuning"`
-	Landing    []map[string]any `json:"landing"`
-	Hosts      json.RawMessage  `json:"hosts"`
-	Pools      []map[string]any `json:"pools"`
-	DiskFloor  int64            `json:"disk_floor_bytes"`
-	Unknown    []string         `json:"unknown"`
-	CodeLimits []map[string]any `json:"code_limits"`
-}
+// Compatibility contracts; the pure policy snapshot presentation belongs to Delivery.
+type BoundaryRule = deliveryview.BoundaryRule
+type BoundaryValue = deliveryview.BoundaryValue
+type DeliveryBoundaries = deliveryview.DeliveryBoundaries
 
 func boundaryRule(id string, current, latest *StoredRule, now time.Time) BoundaryRule {
-	v := BoundaryRule{ID: id, Status: "not_in_force", Notes: []string{}}
+	var c, l *deliveryview.BoundaryVersion
 	if current != nil {
-		v.Current = current.Doc()
-		v.Status = "in_force"
+		c = &deliveryview.BoundaryVersion{Document: current.Doc(), Version: current.Version, Effective: current.Effective, Expires: current.Expires}
 	}
 	if latest != nil {
-		v.Latest = latest.Doc()
-		v.Draft = latest.Doc()
-		v.Draft["rule_version"] = latest.Version + 1
-		v.Draft["direction"] = rules.Loosen
-		if latest.Effective.After(now) {
-			v.Notes = append(v.Notes, "The latest version is scheduled; the effective version is shown separately.")
-		}
-		if !latest.Expires.After(now) {
-			v.Notes = append(v.Notes, "The latest version has expired. Review its expiry before proposing a replacement.")
-		}
+		l = &deliveryview.BoundaryVersion{Document: latest.Doc(), DraftDocument: latest.Doc(), Version: latest.Version, Effective: latest.Effective, Expires: latest.Expires}
 	}
-	if id == rules.KindTuning && latest == nil {
-		v.Status = "code_defaults"
-		values := map[string]int{}
-		for _, key := range rules.TuningKeys() {
-			values[key.Name] = key.Default
-		}
-		v.Draft = map[string]any{"rule_id": id, "rule_version": 1, "direction": rules.Initial, "effective_at": now.UTC().Format(time.RFC3339), "expires_at": "", "values": values}
-		v.Notes = append(v.Notes, "No tuning rule is installed. Defaults below are read from the runtime registry. The first version requires a signature and an explicit expiry.")
+	defaults := map[string]int{}
+	for _, key := range rules.TuningKeys() {
+		defaults[key.Name] = key.Default
 	}
-	return v
+	return deliveryview.ProjectBoundaryRule(id, c, l, now, rules.KindTuning, rules.Loosen, rules.Initial, defaults)
 }
 
 // ReadDeliveryBoundaries is a read-only projection, not a release preflight.
@@ -153,7 +110,7 @@ func ReadDeliveryBoundaries(ctx context.Context, db DB, diskFloor int64, availab
 				source = "tuning_rule"
 			}
 		}
-		out.Tuning = append(out.Tuning, BoundaryValue{k.Name, tuning.Int(k.Name), k.Default, k.Min, k.Ceiling, k.Unit, source, k.ReadBy})
+		out.Tuning = append(out.Tuning, BoundaryValue{Key: k.Name, Value: tuning.Int(k.Name), Default: k.Default, Min: k.Min, Max: k.Ceiling, Unit: k.Unit, Source: source, Consumer: k.ReadBy})
 	}
 	return out, nil
 }

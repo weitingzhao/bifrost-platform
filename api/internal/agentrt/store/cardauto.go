@@ -61,23 +61,6 @@ type RuntimeCard struct {
 	By, Option string // a rule's answer: the rule and the option it took
 }
 
-// CardRule is what answering cards by rule reads and writes beyond the
-// database: the runtime's cards, an answer given as a rule while the rule
-// holds (until) with why when the option is not the one the card
-// recommends, and the acknowledgement of an answer.
-type CardRule struct {
-	Cards  func(ctx context.Context) ([]RuntimeCard, error)
-	Answer func(ctx context.Context, id, option, rule string, until time.Time, why string) error
-	Ack    func(ctx context.Context, id string) error
-}
-
-// The kinds of card a card-auto-answer rule may list; the others are in
-// cardkinds.go.
-const (
-	CardBlocked      = "blocked"
-	CardPlanQuestion = "plan_question"
-)
-
 // noteRuleAnswer is the one way a rule's answer is noted: where the card is
 // (the mission it was asked in, or its proposal's stream), that stream held
 // from the look for a note to its writing, and only when there is none

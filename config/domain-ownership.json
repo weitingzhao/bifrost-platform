@@ -131,7 +131,7 @@
         "plan"
       ],
       "status": "assigned",
-      "basis": "planning charter and verified extraction"
+      "basis": "planning charter and verified extraction; 2026-11-16 adopted-view node display classification extracted; adoption/verification validation stays at the original boundary"
     },
     "api/internal/agentrt/planpace": {
       "domains": [
@@ -166,7 +166,7 @@
         "lineage"
       ],
       "status": "assigned",
-      "basis": "lineage charter and verified extraction"
+      "basis": "lineage charter and verified extraction; 2026-11-16 external observation working/finished buckets extracted with unchanged per-record verification callback order"
     },
     "api/internal/unitplan": {
       "domains": [
@@ -250,7 +250,7 @@
         "delivery"
       ],
       "status": "assigned",
-      "basis": "CI charter and delivery read-model extraction"
+      "basis": "CI charter and delivery read-model extraction; 2026-11-16 complete selected-rule version/default draft display projected here; Retired/CurrentRule/signature and snapshot transaction remain in store"
     },
     "api/internal/approvals": {
       "domains": [
@@ -525,7 +525,7 @@
         "plan"
       ],
       "status": "assigned",
-      "basis": "planning charter; snapshot, architecture stored-rule text and latest-note observations extracted from store; all rule evaluation, refusal, transaction and evidence decisions remain with existing callers; mission card display projection consumes reader-selected status/count/task data without importing store (2026-11-16); 2026-11-16 session coverage read-only enrichment, with unavailable/Unknown behavior preserved; 2026-11-16 complete pending-card and progress-tree projections plus mission/step observation queries extracted; evidence/authority callbacks and transactions remain in store"
+      "basis": "planning charter; snapshot, architecture stored-rule text and latest-note observations extracted from store; all rule evaluation, refusal, transaction and evidence decisions remain with existing callers; mission card display projection consumes reader-selected status/count/task data without importing store (2026-11-16); 2026-11-16 session coverage read-only enrichment, with unavailable/Unknown behavior preserved; 2026-11-16 complete pending-card, progress-tree and display-ordering projections plus mission/step observation queries extracted; evidence/authority callbacks and transactions remain in store"
     },
     "api/internal/cirunview": {
       "domains": [

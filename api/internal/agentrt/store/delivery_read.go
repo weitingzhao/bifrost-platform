@@ -26,9 +26,6 @@ type DeliveryQuery struct {
 
 var deliveryCommitPrefix = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 
-// deliveryTaskID is a task id as the boundary precheck accepts it.
-var deliveryTaskID = regexp.MustCompile(`^t_[0-9A-HJKMNP-TV-Z]{26}$`)
-
 // ReadDelivery reads the delivery stages of q's commit. pgx.ErrNoRows: no
 // external work names it.
 func ReadDelivery(ctx context.Context, db DB, q DeliveryQuery) (map[string]any, error) {

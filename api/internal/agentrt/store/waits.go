@@ -1,9 +1,5 @@
 package store
 
-import (
-	"time"
-)
-
 // Waits past their limit (W-31 2.3; RULE-waits-2026-10-12 总则 1–4, design
 // v5 §5.3 「等待计时、看护 → 控制器的 wait_limit_passed」): the platform keeps the
 // clock of the waits the runtime itself knows, not a thread or an Agent host,
@@ -33,30 +29,11 @@ import (
 // ready past its limit is told to the Owner by the platform, for the seat
 // that would tell him is what does not run (briefwait.go; review 487 A1).
 
-// WaitsStream is the stream the records are on, apart from the missions':
-// a record's references (its mission, task, attempt) are checked at its
-// commit, which waits for a transaction holding one of those rows, and
-// such a transaction (a start, a checkpoint, a submit: the attempt's row,
-// then its mission's stream) never waits for this stream, so the two never
-// deadlock.
-const WaitsStream = "waits"
-
 // The waits.
 const (
 	WaitAttemptRunning = "attempt_running"
 	WaitTaskReady      = "task_ready"
 	WaitMessageUnread  = "message_unread"
-)
-
-// The limits (RULE-waits §2): a limit is WaitFactor times the usual time,
-// and never below its floor.
-const (
-	WaitFactor         = 2
-	WaitWorkFloor      = 30 * time.Minute // a plan, an implementation, other work; a ready task
-	WaitCheckFloor     = 20 * time.Minute // a verification, a review, a brief
-	WaitMessageLimit   = 10 * time.Minute
-	WaitMessageHorizon = 7 * 24 * time.Hour // older unread mail is no longer a wait anyone is in
-	waitsPerPass       = 20                 // of each wait, the oldest first; the rest on the next pass
 )
 
 // What a wait's limit came from.

@@ -42,7 +42,6 @@ const (
 	kIDs  = eventlog.IDs
 	kAny  = eventlog.Any
 	kBool = eventlog.Bool
-	kInts = eventlog.Ints
 )
 
 // eventTypes is the closed vocabulary, as the database's event_type_closed

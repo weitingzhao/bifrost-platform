@@ -1,7 +1,6 @@
 package store
 
 import (
-	"time"
 	_ "time/tzdata" // the Owner's zone, whatever the image carries
 )
 
@@ -16,8 +15,3 @@ import (
 
 // BriefZone is the Owner's time zone; the briefs are at 8:00 and 21:00 there.
 const BriefZone = "America/Chicago"
-
-// NudgeAfter is how long a decision waits on the Owner before the chief of
-// staff tells him; a blocked task is told at once. It and nudgesPerPass are
-// the tuning rule's nudge_after_s and nudges_per_pass when one is in force.
-const NudgeAfter = 2 * time.Hour

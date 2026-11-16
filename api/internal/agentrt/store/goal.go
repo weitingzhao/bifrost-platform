@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"errors"
 )
 
@@ -18,17 +17,6 @@ import (
 // same key gets the first answer, whatever changed since (review 213 A1's
 // concern, a mission no retry can finish, cannot arise: mission, spec and
 // task are written together or not at all).
-
-// Goal is a goal to propose: its first line as the title, its text, the
-// repositories it is about (the Owner 10-19, T26: a goal may name several),
-// and how to read the commit of a repository's main its tasks start from.
-type Goal struct {
-	Title, Text string
-	Repos       []string
-	NoMerge     string // why its accepted results stay off main, "" for none (MissionProposal.NoMerge)
-	NeedsOwner  string // why its cards wait for the Owner himself, "" for none (MissionProposal.NeedsOwner)
-	Main        func(ctx context.Context, repo string) (string, error)
-}
 
 // ErrNoMain: a repository's main could not be read for a new goal.
 var ErrNoMain = errors.New("store: the repository's main branch cannot be read")
