@@ -130,24 +130,7 @@ type missionCard struct {
 // their card, oldest first, at most the bound (more says there were more),
 // leaving out a card already listed.
 func missionCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[string]map[string]any) ([]missionCard, bool, error) {
-	rows, err := tx.Query(ctx, `SELECT m.mission_id, m.title, s.at, s.body_json->>'question_id', COALESCE(s.body_json->>'reason', ''),
-	    0
-	  FROM agentrt.mission m
-	  JOIN LATERAL (SELECT e.at, e.body_json FROM agentrt.event e WHERE e.mission_id = m.mission_id
-	    AND e.event_type = 'mission_state_changed' ORDER BY e.event_id DESC LIMIT 1) s ON true
-	  WHERE m.state = 'awaiting_owner' AND s.body_json ? 'question_id' ORDER BY s.at, m.mission_id LIMIT $1`, pendingChangeLimit+1)
-	if err != nil {
-		return nil, false, err
-	}
-	type row struct {
-		mission, title, question, why string
-		at                            time.Time
-		open                          int
-	}
-	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (row, error) {
-		var c row
-		return c, r.Scan(&c.mission, &c.title, &c.at, &c.question, &c.why, &c.open)
-	})
+	list, err := planreadings.WaitingMissions(ctx, tx, pendingChangeLimit)
 	if err != nil {
 		return nil, false, err
 	}
@@ -157,18 +140,18 @@ func missionCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[stri
 	}
 	var cards []missionCard
 	for _, c := range list {
-		if _, seen := listed[c.question]; seen {
+		if _, seen := listed[c.Question]; seen {
 			continue
 		}
-		it := map[string]any{"id": "question:" + c.question, "kind": "mission", "ref": c.mission, "also_refs": []string{},
-			"title": "Mission " + c.mission + ": " + firstLine(c.title), "since": c.at.UTC().Format(time.RFC3339Nano),
-			"waiting_min": int64(now.Sub(c.at) / time.Minute),
-			"action":      map[string]any{"where": "console", "question_id": c.question, "options": []string{MissionStart, MissionNotStart}},
+		it := map[string]any{"id": "question:" + c.Question, "kind": "mission", "ref": c.Mission, "also_refs": []string{},
+			"title": "Mission " + c.Mission + ": " + firstLine(c.Title), "since": c.At.UTC().Format(time.RFC3339Nano),
+			"waiting_min": int64(now.Sub(c.At) / time.Minute),
+			"action":      map[string]any{"where": "console", "question_id": c.Question, "options": []string{MissionStart, MissionNotStart}},
 			"can_act_now": nil, "can_act_now_reason": "the card's state is the question store's: open there, it can be answered now",
-			"deadline": nil, "blocks": map[string]any{"missions": []string{c.mission}, "unfinished_tasks": c.open, "why": c.why},
+			"deadline": nil, "blocks": map[string]any{"missions": []string{c.Mission}, "unfinished_tasks": c.Open, "why": c.Why},
 			"after": "Start: the controller makes it active on its next pass (about 15 seconds). Do not start: it stops."}
-		listed[c.question] = it
-		cards = append(cards, missionCard{c.at, c.question, it})
+		listed[c.Question] = it
+		cards = append(cards, missionCard{c.At, c.Question, it})
 	}
 	return cards, more, nil
 }

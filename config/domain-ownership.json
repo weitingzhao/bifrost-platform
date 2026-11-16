@@ -540,6 +540,13 @@
       ],
       "status": "assigned",
       "basis": "2026-11-15 source and caller audit: shared YAML context model and loader; supplies platform configuration rather than applying decisions"
+    },
+    "api/internal/config": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: shared environment, topology, cluster and maintenance configuration types/loaders used across probe, telemetry, server and development adapters; authentication and role defaults unchanged"
     }
   }
 }
