@@ -2270,6 +2270,13 @@
         ],
         "status": "assigned",
         "basis": "2026-11-16 Owner-authorized extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
+      },
+      "console/src/domains/foundation/runtime-health": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 complete schema and controller-loop health observation parsing; original unknown/unread and value shape handling retained. Cross-domain progress, host and Owner timing judgments stay at original API entry."
       }
     }
   }

@@ -1,12 +1,10 @@
 import { authedFetch } from '@/api/client'
 
 export const AGENT_RUNTIME_POLL_MS = 5_000
-export type RuntimeRecord = Record<string, unknown>
-export const record = (v: unknown): RuntimeRecord => v !== null && typeof v === 'object' && !Array.isArray(v) ? v as RuntimeRecord : {}
-export const records = (v: unknown): RuntimeRecord[] => Array.isArray(v) ? v.filter(x => x !== null && typeof x === 'object' && !Array.isArray(x)) as RuntimeRecord[] : []
-export const text = (v: unknown): string => typeof v === 'string' ? v : ''
-const number = (v: unknown): number | undefined => typeof v === 'number' && Number.isFinite(v) ? v : undefined
-const strings = (v: unknown): string[] => Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+import { record, records, text, number, strings } from '@/domains/foundation/runtime-health/readValues'
+export { record, records, text } from '@/domains/foundation/runtime-health/readValues'
+export type { RuntimeRecord } from '@/domains/foundation/runtime-health/readValues'
+import type { RuntimeRecord } from '@/domains/foundation/runtime-health/readValues'
 
 export type RuntimeTask = {
   task_id: string; title: string; role: string; state: string; status: string; reason: string
@@ -78,11 +76,9 @@ export type RuntimeAttempt = {
  * The database's agentrt schema against the migrations this platform carries (TD-411; migrate.Check):
  * missing, edited and unknown name the migrations. Unread is a platform before TD-411.
  */
-export type RuntimeSchema = {
-  state: 'current' | 'behind' | 'ahead' | 'edited' | 'unknown' | 'unread'; missing: string[]; edited: string[]; unknown: number[]; reason: string
-}
-/** A controller loop that failed the same way several times in a row and has not passed since (TD-411). */
-export type RuntimeLoopAlert = { loop: string; since: string; error: string }
+import { parseRuntimeSchema, parseRuntimeLoopAlerts } from '@/domains/foundation/runtime-health/health'
+import type { RuntimeSchema, RuntimeLoopAlert } from '@/domains/foundation/runtime-health/health'
+export type { RuntimeSchema, RuntimeLoopAlert } from '@/domains/foundation/runtime-health/health'
 /**
  * When the Owner is next needed after what waits for him now (W-31 2.5 gap 1; store/progressnext.go; v4 §20.2's top line,
  * §20.5 scenario 8): the open goal whose next step is his and is due first, its step and when; unknown while any such
@@ -112,10 +108,6 @@ export type RuntimeProgress = {
   /** The answer had a plan list: an empty plan is only one that was read empty (review 431 B1). */
   planRead?: boolean
 }
-export type RuntimeEvent = {
-  seq?: number; event_type: string; at: string; actor_id: string; task_id: string; attempt_id: string; body_json: RuntimeRecord
-}
-
 export function parseRuntimeTask(v: unknown): RuntimeTask {
   const r = record(v)
   const task: RuntimeTask = { task_id: text(r.task_id), title: text(r.title), role: text(r.role), state: text(r.state),
@@ -204,7 +196,7 @@ export function parseRuntimeProgress(v: unknown): RuntimeProgress {
     recent: { tasks: records(recent.tasks), failed_attempts: records(recent.failed_attempts) },
     controls: records(r.controls), plan: Array.isArray(r.plan) ? r.plan : [], planRead: Array.isArray(r.plan),
     schema: parseRuntimeSchema(r.schema),
-    controller_alerts: records(r.controller_alerts).map(a => ({ loop: text(a.loop), since: text(a.since), error: text(a.error) })),
+    controller_alerts: parseRuntimeLoopAlerts(r.controller_alerts),
   }
 }
 /** A presence switch of /progress: on with since and why, null while off, absent from a platform before it. */
@@ -233,19 +225,6 @@ function parseRuntimeHost(v: unknown): RuntimeHost {
       new: number(m.new) ?? 0, reason: text(m.reason) }))
   }
   return host
-}
-const SCHEMA_STATES = ['current', 'behind', 'ahead', 'edited', 'unknown'] as const
-function parseRuntimeSchema(v: unknown): RuntimeSchema {
-  const r = record(v)
-  const known = (SCHEMA_STATES as readonly string[]).includes(text(r.state))
-  return { state: v === undefined ? 'unread' : known ? text(r.state) as RuntimeSchema['state'] : 'unknown',
-    missing: strings(r.missing), edited: strings(r.edited),
-    unknown: Array.isArray(r.unknown) ? r.unknown.filter((n): n is number => typeof n === 'number') : [],
-    reason: text(r.reason) }
-}
-export function parseRuntimeEvents(v: unknown): RuntimeEvent[] {
-  return records(v).map(e => ({ seq: number(e.seq), event_type: text(e.event_type), at: text(e.at), actor_id: text(e.actor_id),
-    task_id: text(e.task_id), attempt_id: text(e.attempt_id), body_json: record(e.body_json) }))
 }
 export async function fetchRuntimeProgress(signal?: AbortSignal): Promise<RuntimeProgress> {
   const r = await authedFetch('Agent runtime', '/api/v1/agentrt/progress', { signal })

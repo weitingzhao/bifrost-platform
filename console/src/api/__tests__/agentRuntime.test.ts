@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import progress from '../__fixtures__/agentrt-progress.stg.json'
-import events from '../__fixtures__/agentrt-events-M-2.stg.json'
 import roadmap from '../__fixtures__/board-roadmap-round-arch.json'
 import task from '../__fixtures__/agentrt-task.stg.json'
 import mission from '../__fixtures__/agentrt-mission.stg.json'
-import { parseRuntimeEvents, parseRuntimeProgress, parseRuntimeTask } from '../agentRuntime'
+import { parseRuntimeProgress, parseRuntimeTask } from '../agentRuntime'
 import { parseRoadmap } from '../agentProgressBoard'
 import { parseAgentProgress } from '../agentProgress'
 
@@ -27,13 +26,6 @@ describe('agent runtime fixtures', () => {
     expect(parseRuntimeTask(task)).toMatchObject({ task_id: 't_01M50M1CZSDN8PNHRH8C2241RS', role: 'implement', state: 'accepted', round_no: 1, max_rounds: 2 })
     expect(parseRuntimeProgress({ work: { missions: [mission] } }).work.missions[0]).toMatchObject({ mission_id: 'M-2', state: 'active', tasks: [] })
   })
-  it('retains the event order and artifact ids', () => {
-    const parsed = parseRuntimeEvents(events)
-    expect(parsed).toHaveLength(events.length)
-    expect(parsed.map(e => e.at)).toEqual(events.map(e => e.at))
-    const persisted = parsed.find(e => e.event_type === 'attempt_persisted')!
-    expect(persisted.body_json.artifacts).toEqual(events.find(e => e.event_type === 'attempt_persisted')!.body_json.artifacts)
-  })
   it('keeps the typed round and architecture on the board document', () => {
     const parsed = parseRoadmap(roadmap)!
     expect(parsed.round?.n).toBe(2)
@@ -48,7 +40,6 @@ describe('agent runtime fixtures', () => {
   })
   it.each([null, undefined, false, 7, 'new', [], {}, { hosts: [null, 2], work: { missions: [{ tasks: [null, {}], eta: false }] }, live: [{}] }])('handles missing or unfamiliar JSON: %j', value => {
     expect(() => parseRuntimeProgress(value)).not.toThrow()
-    expect(() => parseRuntimeEvents(value)).not.toThrow()
     expect(() => parseRoadmap(value)).not.toThrow()
   })
   it('does not accept invalid nested plan arrays or numeric strings', () => {

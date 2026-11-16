@@ -102,6 +102,7 @@
         "console/src/api/client.ts",
         "console/src/api/serverContact.ts",
         "console/src/domains/foundation/agent-observation/api",
+        "console/src/domains/foundation/runtime-health",
         "console/src/lib/architecture",
         "console/src/lib/shell",
         "console/src/lib/signInError.ts"
@@ -1929,6 +1930,24 @@
         "@testing-library/react",
         "lucide-react",
         "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/foundation/runtime-health",
+      "files": [
+        "console/src/domains/foundation/runtime-health/__tests__/healthParity.test.ts",
+        "console/src/domains/foundation/runtime-health/health.ts",
+        "console/src/domains/foundation/runtime-health/readValues.ts"
+      ],
+      "imports": [],
+      "test_imports": [
+        "console/src/api"
+      ],
+      "external_imports": [
         "vitest"
       ],
       "source_inputs": [],
