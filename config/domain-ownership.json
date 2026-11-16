@@ -2178,7 +2178,7 @@
           "plan"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 complete read-only display slice extraction; original query, navigation and stale/unknown semantics retained. Compatibility paths preserve execution callers; signoff, rule submission and strict parsers remain untouched. Cross-domain imports remain explicit."
+        "basis": "2026-11-16 complete read-only display slice extraction; original query, navigation and stale/unknown semantics retained. Compatibility paths preserve execution callers; signoff, rule submission and strict parsers remain untouched. Cross-domain imports remain explicit. Complete module-row presentation, read-detail disclosure, step text and return-focus navigation extracted 2026-11-16 with unchanged props; evidence/state/signoff models remain at original paths."
       },
       "console/src/domains/tenant/husbandry/api": {
         "domains": [

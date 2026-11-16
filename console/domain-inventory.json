@@ -1990,11 +1990,15 @@
       "path": "console/src/domains/plan/display",
       "files": [
         "console/src/domains/plan/display/ExternalRecord.tsx",
+        "console/src/domains/plan/display/HowRead.tsx",
+        "console/src/domains/plan/display/PlanModuleRows.tsx",
         "console/src/domains/plan/display/PlanPaceLine.tsx",
         "console/src/domains/plan/display/PlanRecentChanges.tsx",
         "console/src/domains/plan/display/PlanRoundNav.tsx",
         "console/src/domains/plan/display/PlanTree.tsx",
+        "console/src/domains/plan/display/StepText.tsx",
         "console/src/domains/plan/display/WorkTabs.tsx",
+        "console/src/domains/plan/display/moduleRowReturn.ts",
         "console/src/domains/plan/display/planSnapshotModel.ts",
         "console/src/domains/plan/display/usePlanSnapshot.ts"
       ],
