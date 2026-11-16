@@ -62,12 +62,21 @@ type serialPass struct {
 	// as registered reconciliation).
 	live func() bool
 	now  func() time.Time
+	// hotUntil: after a bus kick the loop keeps its 30-second cadence for a
+	// while, because the kick often comes before main's CI has its verdict
+	// (2026-11-16 21:06: woken 2 s after the landing, "no verdict yet", the
+	// verdict at 21:06:53, the next pass only at 21:11:21).
+	hotUntil time.Time
 }
 
 // headReleaseReconcileEvery is the loop's pass interval while the bus wakes
 // head-release (2026-11-16: main to STG release went from 51 s to 11 s on the
 // bus; the 30-second poll is kept only as the reconciliation).
 const headReleaseReconcileEvery = 5 * time.Minute
+
+// headReleaseHotAfterKick is how long the loop keeps its 30-second cadence
+// after a bus kick.
+const headReleaseHotAfterKick = 10 * time.Minute
 
 func (p *serialPass) clock() time.Time {
 	if p.now != nil {
@@ -88,7 +97,8 @@ func (p *serialPass) run(ctx context.Context) error {
 func (p *serialPass) tick(ctx context.Context) error {
 	if p.live != nil && p.live() {
 		p.mu.Lock()
-		recent := !p.last.IsZero() && p.clock().Sub(p.last) < headReleaseReconcileEvery
+		now := p.clock()
+		recent := !p.last.IsZero() && now.Sub(p.last) < headReleaseReconcileEvery && !now.Before(p.hotUntil)
 		p.mu.Unlock()
 		if recent {
 			return nil
@@ -130,6 +140,9 @@ func (b *busWiring) runKicks(ctx context.Context) {
 		case <-b.kicks():
 		}
 		if p := b.head.Load(); p != nil {
+			p.mu.Lock()
+			p.hotUntil = p.clock().Add(headReleaseHotAfterKick)
+			p.mu.Unlock()
 			if err := p.run(ctx); err != nil && ctx.Err() == nil {
 				slog.Warn("bus: head-release pass started by git.main.advanced", "error", err)
 			}

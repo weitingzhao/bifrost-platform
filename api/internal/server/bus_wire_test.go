@@ -140,3 +140,27 @@ func TestHeadReleaseLoopReconcilesWhileTheBusWakesIt(t *testing.T) {
 		t.Fatalf("a kick did not run the pass (%d)", runs)
 	}
 }
+
+// 2026-11-16 21:06: a kick came before main's CI verdict; with the loop at
+// 5 minutes the STG release waited 5 minutes. After a kick the loop keeps
+// 30-second ticks for headReleaseHotAfterKick.
+func TestHeadReleaseLoopStaysHotAfterAKick(t *testing.T) {
+	now := time.Date(2026, 11, 16, 21, 6, 13, 0, time.UTC)
+	runs := 0
+	p := &serialPass{pass: func(context.Context) error { runs++; return nil },
+		live: func() bool { return true }, now: func() time.Time { return now }}
+	p.hotUntil = now.Add(headReleaseHotAfterKick) // what runKicks sets
+	_ = p.run(context.Background())               // the kick's pass
+	now = now.Add(30 * time.Second)
+	_ = p.tick(context.Background())
+	if runs != 2 {
+		t.Fatalf("30 s after a kick the loop did not pass (%d)", runs)
+	}
+	now = now.Add(headReleaseHotAfterKick)
+	_ = p.tick(context.Background()) // last pass 10 min ago: reconcile anyway
+	now = now.Add(30 * time.Second)
+	_ = p.tick(context.Background())
+	if runs != 3 {
+		t.Fatalf("after the hot window a 30-second tick still passed (%d)", runs)
+	}
+}
