@@ -117,7 +117,7 @@
         "lineage"
       ],
       "status": "assigned",
-      "basis": "lineage charter and verified extraction"
+      "basis": "lineage charter; thread presence and registered-work display projection; identity readiness, permissions and notification wiring unchanged"
     },
     "api/internal/agentrt/workregistration": {
       "domains": [
@@ -420,7 +420,7 @@
         "lineage"
       ],
       "status": "assigned",
-      "basis": "2026-11-15 source and caller audit: threadtitles.go manual/transcript title storage and scanning for lineage views"
+      "basis": "2026-11-16 source and caller audit: transcript/manual title storage and lineage title projection; key spaces remain separate and loading errors remain visible"
     },
     "api/cmd/agentrt-plan-import": {
       "domains": [
@@ -476,7 +476,7 @@
         "plan"
       ],
       "status": "assigned",
-      "basis": "planning charter; pace and recent-event observation reads extracted from store, preserving transactions, SQL and cursor validation"
+      "basis": "planning charter; pace, event, pending mission, progress tree and adopted-view observations extracted from store; transactions, SQL, decoding and error ordering preserved"
     },
     "api/internal/cirunview": {
       "domains": [
@@ -554,6 +554,76 @@
       ],
       "status": "assigned",
       "basis": "2026-11-16 source and caller audit: code-quality scan report ingestion, history and read projection for verification; scanner execution, report validation and freshness behavior unchanged"
+    },
+    "api/cmd/owner-exec": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: Owner charter explicitly owns the command adapter for ownerexec; startup, credentials and admission unchanged"
+    },
+    "api/internal/agentrt/questioncards": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: question-service to runtime answer adapter, consumed by server and controller tests; question validity and answer protections unchanged"
+    },
+    "api/internal/headrelease": {
+      "domains": [
+        "delivery"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: automatic main-head delivery orchestration consumed by server/head_release; all evidence and release decisions unchanged"
+    },
+    "api/internal/gitops": {
+      "domains": [
+        "delivery"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: Argo application observations, sync and rollback adapters consumed by server and platform health; execution unchanged"
+    },
+    "api/internal/promote": {
+      "domains": [
+        "delivery"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: environment promotion observations, release cycles and gate history consumed by server; all gate checks and signoff behavior unchanged"
+    },
+    "api/internal/releasefreeze": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: release-freeze parsing, decision model and infra-script equivalence tests; guard implementation and all tests unchanged"
+    },
+    "api/internal/devsession": {
+      "domains": [
+        "compute"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: managed local and cluster service lifecycle, logs and deployment provider; compute charter owns host-resident services, lifecycle and allowlists unchanged"
+    },
+    "api/internal/launchd": {
+      "domains": [
+        "compute"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: Mac host-resident service inventory consumed by operatorplane and maintainer; compute charter owns host-resident services, no process operation changed"
+    },
+    "api/internal/selfhealth": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: shared platform API/Console/Argo health observations and viewer-environment resolution; no tenant business logic or runtime behavior changed"
+    },
+    "api/internal/placement": {
+      "domains": [
+        "compute"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 source and caller audit: node-capability pools and workload placement observations consumed by cluster/delivery; compute charter owns placement, preflight decisions unchanged"
     }
   }
 }

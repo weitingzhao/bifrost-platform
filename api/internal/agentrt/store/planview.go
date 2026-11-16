@@ -9,39 +9,14 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 )
 
-type viewAdoption struct {
-	V        int               `json:"v"`
-	Kind     string            `json:"kind"`
-	Root     string            `json:"root"`
-	Tenant   string            `json:"tenant"`
-	Version  int               `json:"plan_version"`
-	Artifact string            `json:"artifact_id"`
-	Nodes    map[string]string `json:"nodes"`
-	Decision int64             `json:"decided_event_id"`
-}
+type viewAdoption = planreadings.Adoption
 
 func adoptedViews(ctx context.Context, tx pgx.Tx) (map[string]viewAdoption, error) {
-	rows, err := tx.Query(ctx, `SELECT DISTINCT ON (event_stream_id) body_json->'plan_view' FROM agentrt.event WHERE event_type='note' AND body_json ? 'plan_view' ORDER BY event_stream_id, seq DESC`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := map[string]viewAdoption{}
-	for rows.Next() {
-		var b []byte
-		if err = rows.Scan(&b); err != nil {
-			return nil, err
-		}
-		var a viewAdoption
-		if err = json.Unmarshal(b, &a); err != nil {
-			return nil, err
-		}
-		out[a.Root] = a
-	}
-	return out, rows.Err()
+	return planreadings.AdoptedViews(ctx, tx)
 }
 
 func viewArtifact(ctx context.Context, tx pgx.Tx, id string) (*planview.Document, error) {
@@ -219,7 +194,7 @@ func adoptPlanView(ctx context.Context, tx pgx.Tx, actor, root string, decision 
 	if err = installPlanBindings(ctx, tx, doc, mapping, actor, decision); err != nil {
 		return err
 	}
-	a := viewAdoption{1, "agentrt.plan_view/v1", root, "dev", doc.Version, c.Artifact, mapping, decision}
+	a := viewAdoption{V: 1, Kind: "agentrt.plan_view/v1", Root: root, Tenant: "dev", Version: doc.Version, Artifact: c.Artifact, Nodes: mapping, Decision: decision}
 	body, err := jsonObject(a)
 	if err != nil {
 		return err
