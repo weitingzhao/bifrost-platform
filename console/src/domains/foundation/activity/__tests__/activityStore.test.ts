@@ -7,8 +7,8 @@ import {
   pruneActivityFeed,
   updateActivityPhase,
   upsertActivity,
-} from '@/lib/activity/activityStore'
-import { ACTIVITY_INFLIGHT_STALE_MS } from '@/lib/activity/activityTypes'
+} from '@/domains/foundation/activity/activityStore'
+import { ACTIVITY_INFLIGHT_STALE_MS } from '@/domains/foundation/activity/activityTypes'
 
 describe('activityStore', () => {
   beforeEach(() => {

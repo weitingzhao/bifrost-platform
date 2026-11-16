@@ -1939,12 +1939,10 @@
       },
       "console/src/lib/activity": {
         "domains": [
-          "plan",
-          "coordination",
-          "compute"
+          "foundation"
         ],
-        "status": "mixed",
-        "basis": "2026-11-16 source/caller audit: cross-domain activity and control-room composition"
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-confirmed Foundation UI composition: compatibility exports only, preserving readiness registration; implementation split into Foundation activity and Tenant namespace/workload mapping. No execution caller changed."
       },
       "console/src/components/TradeNsSegmentControl.tsx": {
         "domains": [
@@ -2022,6 +2020,20 @@
         ],
         "status": "assigned",
         "basis": "2026-11-16 audit: existing tests solely exercise hooks/useFleetSnapshot.ts (already assigned compute). Test bytes and implementation unchanged; no new claim of physical isolation."
+      },
+      "console/src/domains/foundation/activity": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-confirmed activity split: generic feed, target parsing and read-only rollout observation belong to Foundation; tenant namespace/workload display mapping belongs to Tenant. Existing behavior retained."
+      },
+      "console/src/domains/tenant/activity": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-confirmed activity split: generic feed, target parsing and read-only rollout observation belong to Foundation; tenant namespace/workload display mapping belongs to Tenant. Existing behavior retained."
       }
     }
   }

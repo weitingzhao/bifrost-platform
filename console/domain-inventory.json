@@ -1449,6 +1449,32 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/foundation/activity",
+      "files": [
+        "console/src/domains/foundation/activity/__tests__/activityStore.test.ts",
+        "console/src/domains/foundation/activity/__tests__/restartActuationSettle.test.ts",
+        "console/src/domains/foundation/activity/activityPageFocus.ts",
+        "console/src/domains/foundation/activity/activityStore.ts",
+        "console/src/domains/foundation/activity/activityTypes.ts",
+        "console/src/domains/foundation/activity/restartActuationSettle.ts"
+      ],
+      "imports": [
+        "console/src/api/clusterTypes.ts",
+        "console/src/lib/cluster"
+      ],
+      "test_imports": [
+        "console/src/lib/activity"
+      ],
+      "external_imports": [
+        "@tanstack/react-query",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/foundation/backup",
       "files": [
         "console/src/domains/foundation/backup/BackupStatusPanel.test.tsx",
@@ -1607,6 +1633,18 @@
         "@tanstack/react-query",
         "vitest"
       ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/tenant/activity",
+      "files": [
+        "console/src/domains/tenant/activity/activityPageFocus.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []
@@ -1914,21 +1952,18 @@
       "path": "console/src/lib/activity",
       "files": [
         "console/src/lib/activity/__tests__/activityPageFocus.test.ts",
-        "console/src/lib/activity/__tests__/activityStore.test.ts",
         "console/src/lib/activity/activityPageFocus.ts",
         "console/src/lib/activity/activityStore.ts",
         "console/src/lib/activity/activityTypes.ts",
         "console/src/lib/activity/restartActuationSettle.ts"
       ],
       "imports": [
-        "console/src/api/clusterTypes.ts",
-        "console/src/lib",
-        "console/src/lib/cluster"
+        "console/src/domains/foundation/activity",
+        "console/src/domains/tenant/activity",
+        "console/src/lib"
       ],
       "test_imports": [],
       "external_imports": [
-        "@tanstack/react-query",
-        "react",
         "vitest"
       ],
       "source_inputs": [],
