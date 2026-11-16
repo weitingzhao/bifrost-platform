@@ -12,6 +12,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 // PageSize is how many events the relay reads at once.
@@ -194,7 +195,7 @@ func Listen(ctx context.Context, pool *pgxpool.Pool, logf func(string, ...any)) 
 		default:
 		}
 	}
-	go func() {
+	safego.Go("bus-relay-listen", func() {
 		for ctx.Err() == nil {
 			err := listenOnce(ctx, pool, wake)
 			if ctx.Err() != nil {
@@ -210,7 +211,7 @@ func Listen(ctx context.Context, pool *pgxpool.Pool, logf func(string, ...any)) 
 			case <-time.After(5 * time.Second):
 			}
 		}
-	}()
+	})
 	return out
 }
 

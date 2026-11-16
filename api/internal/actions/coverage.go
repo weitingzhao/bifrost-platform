@@ -88,6 +88,9 @@ func init() {
 	exempt("agent runtime sign-off (W-31 2.5, the Owner 2026-10-21): only the Owner (admin) records his sign-off on a plan step whose done rule waits on it; the store writes the event in one transaction, a second press answers the first, and at most the step moves on the controller's next rules pass; not a cluster write",
 		"POST /api/v1/agentrt/plan/{id}/signoff",
 	)
+	exempt("event bus gate-git (bus/RULES.md §8, step 1, 2026-11-16): Gitea's push webhook, authenticated by the HMAC-SHA256 of the raw body under BUS_GITEA_HOOK_SECRET (503 without it, 401 on a bad signature); it can only append git.main.advanced for a watched repository's main to the event log, once per commit, and starts nothing by itself; not a cluster write",
+		"POST /api/v1/bus/hooks/gitea",
+	)
 	exempt("unclassified by LANE-B1: evidence, queue, or checklist — not a cluster write",
 		"POST /api/v1/audit/append",
 		"POST /api/v1/code-health/report",

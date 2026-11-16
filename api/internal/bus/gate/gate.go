@@ -21,6 +21,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 // Limits of a read.
@@ -247,7 +248,7 @@ func (g *Gate) receipt(events []relay.Envelope, route, client string) {
 		return
 	}
 	consumer := "gate:" + route + ":" + client
-	go func() {
+	safego.Go("bus-gate-receipts", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		for _, e := range events {
@@ -256,7 +257,7 @@ func (g *Gate) receipt(events []relay.Envelope, route, client string) {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // HandleEvents is GET /api/v1/bus/events?types=a,b&match=&after=&wait=&limit=&client=.
