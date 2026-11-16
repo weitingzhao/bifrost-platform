@@ -82,6 +82,7 @@ modules:
         - "config/trust-overrides.yaml"
       # CI configuration read model, independent of HTTP wiring.
       api/internal/ciconfig: ["api/internal/ciconfig"]
+      api/internal/cirunview: ["api/internal/cirunview"]
       api/internal/agentprogress: ["api/internal/agentprogress"]
       # Foundation: HTTP observations, moved out of server; no domain inputs.
       api/internal/httpmetrics: ["api/internal/httpmetrics"]

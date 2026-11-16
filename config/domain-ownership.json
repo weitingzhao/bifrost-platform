@@ -477,6 +477,13 @@
       ],
       "status": "assigned",
       "basis": "planning charter; plan pace observation reads extracted from store without changing transaction, SQL or error contract"
+    },
+    "api/internal/cirunview": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "CI charter; existing run-view cache extracted from server with unchanged response, key, TTL and failure semantics"
     }
   }
 }

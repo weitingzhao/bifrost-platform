@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
+	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 )
 
 // GET /api/v1/units/runs?repo=…[&limit=…] is the data of the Ops run view:
@@ -19,7 +19,7 @@ import (
 // the cluster; the project is the value of their bifrost.io/repo label.
 // Read-only; viewer and above, as /units/config.
 //
-// The answer of one project is kept for unitRunsKeep: the page asks again on
+// The answer of one project is kept for cirunview.Keep: the page asks again on
 // every visit, and a list of a project's runs with their tasks is two large
 // reads of the cluster (incident #63, 2026-11-11: a page's reads starved the
 // platform).
@@ -27,48 +27,14 @@ import (
 const (
 	unitRunsDefault = 30
 	unitRunsMax     = 100
-	unitRunsKeep    = 30 * time.Second
 )
 
-type unitRunsAnswer struct {
-	Repo string              `json:"repo"`
-	AsOf string              `json:"as_of"`
-	Runs []landingci.RunView `json:"runs"`
-}
+type unitRunsAnswer = cirunview.Answer
 
-type unitRunsCache struct {
-	mu   sync.Mutex
-	kept map[string]unitRunsKept
-}
+type unitRunsCache struct{ cache cirunview.Cache }
 
-type unitRunsKept struct {
-	at     time.Time
-	answer unitRunsAnswer
-}
-
-// unitRuns answers from what was kept when that is recent enough, and reads
-// otherwise. A failed read is not kept.
-func (c *unitRunsCache) unitRuns(ctx context.Context, read func(ctx context.Context, repo string, limit int) ([]landingci.RunView, error),
-	now time.Time, repo string, limit int) (unitRunsAnswer, error) {
-	key := repo + "\x00" + strconv.Itoa(limit)
-	c.mu.Lock()
-	if k, ok := c.kept[key]; ok && now.Sub(k.at) < unitRunsKeep {
-		c.mu.Unlock()
-		return k.answer, nil
-	}
-	c.mu.Unlock()
-	runs, err := read(ctx, repo, limit)
-	if err != nil {
-		return unitRunsAnswer{}, err
-	}
-	answer := unitRunsAnswer{Repo: repo, AsOf: now.UTC().Format(time.RFC3339), Runs: runs}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.kept == nil || len(c.kept) > 64 {
-		c.kept = map[string]unitRunsKept{}
-	}
-	c.kept[key] = unitRunsKept{at: now, answer: answer}
-	return answer, nil
+func (c *unitRunsCache) unitRuns(ctx context.Context, read func(context.Context, string, int) ([]landingci.RunView, error), now time.Time, repo string, limit int) (unitRunsAnswer, error) {
+	return c.cache.Read(ctx, read, now, repo, limit)
 }
 
 func (s *Server) handleUnitRuns(w http.ResponseWriter, r *http.Request) {
