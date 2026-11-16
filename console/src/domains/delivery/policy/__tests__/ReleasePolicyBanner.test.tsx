@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { releasePolicyBannerState, reminderHours, type ReleasePolicyStatus } from '@/api/releasePolicy'
-import { ReleasePolicyBanner } from '@/components/ReleasePolicyBanner'
+import { ReleasePolicyBanner } from '@/domains/delivery/policy/ReleasePolicyBanner'
 
 const SIGN = 'bifrost-trade-infra/scripts/release/release.sh policy sign'
 

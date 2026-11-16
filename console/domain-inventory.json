@@ -915,7 +915,6 @@
         "console/src/components/StatusLamp.tsx",
         "console/src/components/ToolsMenu.tsx",
         "console/src/components/UserMenu.tsx",
-        "console/src/components/__tests__/ReleasePolicyBanner.test.tsx",
         "console/src/components/architecture/SelfHealthPanel.tsx",
         "console/src/components/feedback/OpsFeedback.tsx",
         "console/src/components/log/StaticLogConsole.tsx",
@@ -923,37 +922,26 @@
         "console/src/components/patrol/PatrolDispatchLog.tsx"
       ],
       "imports": [
-        "console/src/api",
-        "console/src/api/auditTypes.ts",
         "console/src/api/cluster.ts",
-        "console/src/api/core.ts",
-        "console/src/api/devSession.ts",
-        "console/src/api/releasePolicy.ts",
         "console/src/components/TradeMonitoringPeerLinks.tsx",
-        "console/src/components/agent",
-        "console/src/components/layout",
         "console/src/components/shell",
         "console/src/components/ui",
+        "console/src/domains/compute/dev-sessions",
         "console/src/domains/delivery/policy",
+        "console/src/domains/foundation/observation-ui",
+        "console/src/domains/foundation/patrol-view",
         "console/src/hooks/usePlatformAuth.ts",
-        "console/src/lib",
-        "console/src/lib/agent",
         "console/src/lib/architecture",
-        "console/src/lib/audit",
         "console/src/lib/control-room",
         "console/src/lib/platformAuthUi.ts",
         "console/src/lib/shell"
       ],
-      "test_imports": [
-        "console/src/api/releasePolicy.ts"
-      ],
+      "test_imports": [],
       "external_imports": [
         "@bifrost/ui",
         "@tanstack/react-query",
-        "@testing-library/react",
         "lucide-react",
-        "react",
-        "vitest"
+        "react"
       ],
       "source_inputs": [],
       "test_inputs": [],
@@ -1453,6 +1441,24 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/compute/dev-sessions",
+      "files": [
+        "console/src/domains/compute/dev-sessions/DevSessionsIndicator.tsx"
+      ],
+      "imports": [
+        "console/src/api/devSession.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "lucide-react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/delivery/api",
       "files": [
         "console/src/domains/delivery/api/delivery.ts",
@@ -1476,14 +1482,21 @@
     {
       "path": "console/src/domains/delivery/policy",
       "files": [
+        "console/src/domains/delivery/policy/ReleasePolicyBanner.tsx",
+        "console/src/domains/delivery/policy/__tests__/ReleasePolicyBanner.test.tsx",
         "console/src/domains/delivery/policy/useReleasePolicy.ts"
       ],
       "imports": [
         "console/src/api/releasePolicy.ts"
       ],
-      "test_imports": [],
+      "test_imports": [
+        "console/src/api/releasePolicy.ts"
+      ],
       "external_imports": [
-        "@tanstack/react-query"
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "react",
+        "vitest"
       ],
       "source_inputs": [],
       "test_inputs": [],
@@ -1738,6 +1751,75 @@
         "@bifrost/ui",
         "@tanstack/react-query",
         "@testing-library/react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/foundation/observation-ui",
+      "files": [
+        "console/src/domains/foundation/observation-ui/AuditRecordsPanel.tsx",
+        "console/src/domains/foundation/observation-ui/ConsoleHostIpLabel.tsx",
+        "console/src/domains/foundation/observation-ui/MatrixTable.tsx",
+        "console/src/domains/foundation/observation-ui/__tests__/observation.test.tsx",
+        "console/src/domains/foundation/observation-ui/architecture/SelfHealthPanel.tsx",
+        "console/src/domains/foundation/observation-ui/feedback/OpsFeedback.tsx",
+        "console/src/domains/foundation/observation-ui/log/StaticLogConsole.tsx",
+        "console/src/domains/foundation/observation-ui/log/staticLogView.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/auditTypes.ts",
+        "console/src/api/core.ts",
+        "console/src/components",
+        "console/src/components/agent",
+        "console/src/components/layout",
+        "console/src/lib/audit",
+        "console/src/lib/shell"
+      ],
+      "test_imports": [
+        "console/src/domains/compute/dev-sessions",
+        "console/src/domains/foundation/patrol-view"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "lucide-react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/foundation/patrol-view",
+      "files": [
+        "console/src/domains/foundation/patrol-view/PatrolDispatchLog.tsx",
+        "console/src/domains/foundation/patrol-view/__tests__/cronSchedule.test.ts",
+        "console/src/domains/foundation/patrol-view/__tests__/logLanguage.test.ts",
+        "console/src/domains/foundation/patrol-view/__tests__/runLog.test.ts",
+        "console/src/domains/foundation/patrol-view/cronSchedule.ts",
+        "console/src/domains/foundation/patrol-view/logLanguage.ts",
+        "console/src/domains/foundation/patrol-view/runLog.ts",
+        "console/src/domains/foundation/patrol-view/usePatrolOutputLanguage.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/lib",
+        "console/src/lib/agent"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/lib"
+      ],
+      "external_imports": [
+        "@bifrost/ui",
+        "lucide-react",
         "react",
         "vitest"
       ],
@@ -2205,9 +2287,6 @@
         "console/src/lib/__tests__/tradeFrontendUrls.test.ts",
         "console/src/lib/envVisual.ts",
         "console/src/lib/environments-catalog.ts",
-        "console/src/lib/patrol/__tests__/cronSchedule.test.ts",
-        "console/src/lib/patrol/__tests__/logLanguage.test.ts",
-        "console/src/lib/patrol/__tests__/runLog.test.ts",
         "console/src/lib/patrol/askAiPack.ts",
         "console/src/lib/patrol/cronSchedule.ts",
         "console/src/lib/patrol/logLanguage.ts",
@@ -2217,10 +2296,9 @@
       ],
       "imports": [
         "console/src/api",
-        "console/src/lib/agent"
+        "console/src/domains/foundation/patrol-view"
       ],
       "test_imports": [
-        "console/src/api",
         "console/src/lib/signInError.ts",
         "console/src/lib/tradeFrontendUrls.ts"
       ],
@@ -2229,7 +2307,6 @@
         "node:fs",
         "node:path",
         "node:url",
-        "react",
         "typescript",
         "vitest"
       ],

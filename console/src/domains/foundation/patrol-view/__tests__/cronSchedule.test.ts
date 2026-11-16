@@ -5,7 +5,7 @@ import {
   formatDurationParts,
   formatNextRunAt,
   iterCronFiresUtc,
-} from '@/lib/patrol/cronSchedule'
+} from '@/domains/foundation/patrol-view/cronSchedule'
 
 describe('describeCronSchedule', () => {
   it('describes the three stock patrol crons', () => {

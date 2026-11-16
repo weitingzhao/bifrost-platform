@@ -2043,7 +2043,7 @@
           "delivery"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
+        "basis": "2026-11-16 complete read-only display implementations moved with compatibility entries; callbacks, request polling and local display settings preserved. No authentication, execution or refusal callers changed."
       },
       "console/src/domains/tenant/orchestration": {
         "domains": [
@@ -2163,6 +2163,27 @@
         ],
         "status": "assigned",
         "basis": "2026-11-16 compatibility export only; complete read client implementation moved to owning domain"
+      },
+      "console/src/domains/foundation/observation-ui": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 complete read-only display implementations moved with compatibility entries; callbacks, request polling and local display settings preserved. No authentication, execution or refusal callers changed."
+      },
+      "console/src/domains/foundation/patrol-view": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 complete read-only display implementations moved with compatibility entries; callbacks, request polling and local display settings preserved. No authentication, execution or refusal callers changed."
+      },
+      "console/src/domains/compute/dev-sessions": {
+        "domains": [
+          "compute"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 complete read-only display implementations moved with compatibility entries; callbacks, request polling and local display settings preserved. No authentication, execution or refusal callers changed."
       }
     }
   }

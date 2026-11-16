@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PatrolRun, PatrolSkill } from '@/api/patrol'
 import { buildPatrolAskAiPack } from '@/lib/patrol/askAiPack'
-import { detectPatrolLogLanguage, localizePatrolLog } from '@/lib/patrol/logLanguage'
+import { detectPatrolLogLanguage, localizePatrolLog } from '@/domains/foundation/patrol-view/logLanguage'
 
 const EN_LOG = `## Bifrost Patrol — Fleet Drift Scan
 runtime: platform-api local probe (same GET routes as Platform MCP)

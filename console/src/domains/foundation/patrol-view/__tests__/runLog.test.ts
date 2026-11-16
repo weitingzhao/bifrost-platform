@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PatrolRun } from '@/api/patrol'
-import { patrolRunLogText } from '@/lib/patrol/runLog'
+import { patrolRunLogText } from '@/domains/foundation/patrol-view/runLog'
 
 function run(partial: Partial<PatrolRun>): PatrolRun {
   return {
