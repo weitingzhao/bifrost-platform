@@ -856,6 +856,11 @@
       "status": "assigned",
       "basis": "2026-11-16 complete Tenant husbandry-to-checklist observation projection extracted. Old overlay, dispatch catalog, persistence and execution remain unchanged; no whole-checklist closure claimed."
     },
+    "api/internal/tenant/ingestview": {
+      "domains": ["tenant"],
+      "status": "assigned",
+      "basis": "2026-11-16 complete Tenant ingest observation interpretation and DTOs extracted. Satellite retains original request, identity, shared aggregate and all monitor/auto fields; no execution or whole-satellite closure."
+    },
     "api/internal/tenant/husbandry": {
       "domains": [
         "tenant"

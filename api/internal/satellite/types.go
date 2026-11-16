@@ -1,6 +1,7 @@
 package satellite
 
 import (
+	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/ingestview"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -76,21 +77,6 @@ type OpsDeep struct {
 	Raw          map[string]any     `json:"raw,omitempty"`
 }
 
-type IngestDeep struct {
-	Services     []IngestServiceDeep `json:"services"`
-	Reachability probe.Reachability  `json:"reachability"`
-	Detail       string              `json:"detail"`
-}
-
-type IngestServiceDeep struct {
-	ID                       string             `json:"id"`
-	ProcessActive            string             `json:"process_active,omitempty"`
-	RuntimeStatus            string             `json:"runtime_status,omitempty"`
-	DisplayActive            string             `json:"display_active,omitempty"`
-	RuntimeKind              string             `json:"runtime_kind,omitempty"`
-	RedisControlEnv          string             `json:"redis_control_env,omitempty"`
-	RuntimeExternallyManaged bool               `json:"runtime_externally_managed,omitempty"`
-	PlatformGatewayManaged   bool               `json:"platform_gateway_managed,omitempty"`
-	Reachability             probe.Reachability `json:"reachability"`
-	Detail                   string             `json:"detail"`
-}
+// Compatibility names preserve the satellite observation response.
+type IngestDeep = ingestview.IngestDeep
+type IngestServiceDeep = ingestview.IngestServiceDeep
