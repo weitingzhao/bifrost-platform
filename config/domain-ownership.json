@@ -2086,6 +2086,62 @@
         ],
         "status": "assigned",
         "basis": "2026-11-16 Owner-confirmed Tenant integration: namespace/signal/dashboard/alert mappings, bus and IB observation adapters and tenant environment selector; no execution or permission changes"
+      },
+      "console/src/domains/delivery/api": {
+        "domains": [
+          "delivery"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 complete read-only HTTP client and response DTO slice relocated; compatibility exports preserve protected callers; auth, mutation, strict contract parsers and gate/preflight DTOs unchanged"
+      },
+      "console/src/domains/foundation/agent-observation/api": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 complete read-only HTTP client and response DTO slice relocated; compatibility exports preserve protected callers; auth, mutation, strict contract parsers and gate/preflight DTOs unchanged"
+      },
+      "console/src/domains/foundation/checklist/api": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 complete read-only HTTP client and response DTO slice relocated; compatibility exports preserve protected callers; auth, mutation, strict contract parsers and gate/preflight DTOs unchanged"
+      },
+      "console/src/domains/tenant/market-observation/api": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 complete read-only HTTP client and response DTO slice relocated; compatibility exports preserve protected callers; auth, mutation, strict contract parsers and gate/preflight DTOs unchanged"
+      },
+      "console/src/api/agentOps.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 compatibility export only; complete read client implementation moved to owning domain"
+      },
+      "console/src/api/checklist.ts": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 compatibility export only; complete read client implementation moved to owning domain"
+      },
+      "console/src/api/releasePolicy.ts": {
+        "domains": [
+          "delivery"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 compatibility export only; complete read client implementation moved to owning domain"
+      },
+      "console/src/api/gitOps.ts": {
+        "domains": [
+          "delivery"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 compatibility export only; complete read client implementation moved to owning domain"
       }
     }
   }

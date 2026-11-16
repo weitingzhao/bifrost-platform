@@ -88,24 +88,20 @@
         "console/src/api/__tests__/recoveryConfirmation.test.ts",
         "console/src/api/__tests__/serverContactCoverage.test.ts",
         "console/src/api/actions.ts",
-        "console/src/api/agentOps.ts",
         "console/src/api/agentRuntime.ts",
         "console/src/api/agentRuntimeBus.ts",
         "console/src/api/agentRuntimeEvents.ts",
         "console/src/api/agentTypes.ts",
         "console/src/api/assessment.ts",
-        "console/src/api/checklist.ts",
-        "console/src/api/gitOps.ts",
         "console/src/api/governanceMcp.ts",
         "console/src/api/matrixTypes.ts",
         "console/src/api/patrol.ts",
-        "console/src/api/readings.ts",
-        "console/src/api/releasePolicy.ts"
+        "console/src/api/readings.ts"
       ],
       "imports": [
         "console/src/api/client.ts",
-        "console/src/api/deliveryTypes.ts",
         "console/src/api/serverContact.ts",
+        "console/src/domains/foundation/agent-observation/api",
         "console/src/lib/architecture",
         "console/src/lib/shell",
         "console/src/lib/signInError.ts"
@@ -135,6 +131,20 @@
         "node:url",
         "vitest"
       ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/agentOps.ts",
+      "files": [
+        "console/src/api/agentOps.ts"
+      ],
+      "imports": [
+        "console/src/domains/foundation/agent-observation/api"
+      ],
+      "test_imports": [],
+      "external_imports": [],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []
@@ -296,6 +306,20 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/api/checklist.ts",
+      "files": [
+        "console/src/api/checklist.ts"
+      ],
+      "imports": [
+        "console/src/domains/foundation/checklist/api"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/api/ciTimings.ts",
       "files": [
         "console/src/api/ciTimings.ts"
@@ -427,9 +451,7 @@
         "console/src/api/delivery.ts"
       ],
       "imports": [
-        "console/src/api/client.ts",
-        "console/src/api/deliveryTypes.ts",
-        "console/src/api/serverContact.ts"
+        "console/src/domains/delivery/api"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -471,7 +493,8 @@
         "console/src/api/deliveryTypes.ts"
       ],
       "imports": [
-        "console/src/api"
+        "console/src/api",
+        "console/src/domains/delivery/api"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -502,6 +525,20 @@
       "imports": [
         "console/src/api/client.ts",
         "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/api/gitOps.ts",
+      "files": [
+        "console/src/api/gitOps.ts"
+      ],
+      "imports": [
+        "console/src/domains/delivery/api"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -542,7 +579,7 @@
         "console/src/api/marketDataCapabilities.ts"
       ],
       "imports": [
-        "console/src/api/serverContact.ts"
+        "console/src/domains/tenant/market-observation/api"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -556,7 +593,7 @@
         "console/src/api/marketDataDimensions.ts"
       ],
       "imports": [
-        "console/src/api/serverContact.ts"
+        "console/src/domains/tenant/market-observation/api"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -570,7 +607,7 @@
         "console/src/api/marketDataDocs.ts"
       ],
       "imports": [
-        "console/src/api/serverContact.ts"
+        "console/src/domains/tenant/market-observation/api"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -614,7 +651,7 @@
         "console/src/api/marketDataQueueHistory.ts"
       ],
       "imports": [
-        "console/src/api/serverContact.ts"
+        "console/src/domains/tenant/market-observation/api"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -726,8 +763,7 @@
         "console/src/api/promote.ts"
       ],
       "imports": [
-        "console/src/api/deliveryTypes.ts",
-        "console/src/api/serverContact.ts"
+        "console/src/domains/delivery/api"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -754,12 +790,26 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/api/releasePolicy.ts",
+      "files": [
+        "console/src/api/releasePolicy.ts"
+      ],
+      "imports": [
+        "console/src/domains/delivery/api"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/api/releases.ts",
       "files": [
         "console/src/api/releases.ts"
       ],
       "imports": [
-        "console/src/api/serverContact.ts"
+        "console/src/domains/delivery/api"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -878,6 +928,7 @@
         "console/src/api/cluster.ts",
         "console/src/api/core.ts",
         "console/src/api/devSession.ts",
+        "console/src/api/releasePolicy.ts",
         "console/src/components/TradeMonitoringPeerLinks.tsx",
         "console/src/components/agent",
         "console/src/components/layout",
@@ -894,7 +945,7 @@
         "console/src/lib/shell"
       ],
       "test_imports": [
-        "console/src/api"
+        "console/src/api/releasePolicy.ts"
       ],
       "external_imports": [
         "@bifrost/ui",
@@ -1402,12 +1453,33 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/delivery/api",
+      "files": [
+        "console/src/domains/delivery/api/delivery.ts",
+        "console/src/domains/delivery/api/deliveryTypes.ts",
+        "console/src/domains/delivery/api/gitOps.ts",
+        "console/src/domains/delivery/api/promote.ts",
+        "console/src/domains/delivery/api/releasePolicy.ts",
+        "console/src/domains/delivery/api/releases.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/client.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/delivery/policy",
       "files": [
         "console/src/domains/delivery/policy/useReleasePolicy.ts"
       ],
       "imports": [
-        "console/src/api"
+        "console/src/api/releasePolicy.ts"
       ],
       "test_imports": [],
       "external_imports": [
@@ -1444,6 +1516,29 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/foundation/agent-observation/api",
+      "files": [
+        "console/src/domains/foundation/agent-observation/api/__tests__/readClientParity.test.ts",
+        "console/src/domains/foundation/agent-observation/api/agentOps.ts",
+        "console/src/domains/foundation/agent-observation/api/agentTypes.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [
+        "console/src/domains/delivery/api",
+        "console/src/domains/foundation/checklist/api",
+        "console/src/domains/tenant/market-observation/api"
+      ],
+      "external_imports": [
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/foundation/backup",
       "files": [
         "console/src/domains/foundation/backup/BackupStatusPanel.test.tsx",
@@ -1462,6 +1557,21 @@
         "@testing-library/react",
         "vitest"
       ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/foundation/checklist/api",
+      "files": [
+        "console/src/domains/foundation/checklist/api/checklist.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/serverContact.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []
@@ -1507,6 +1617,7 @@
       ],
       "imports": [
         "console/src/api",
+        "console/src/api/agentOps.ts",
         "console/src/api/cluster.ts",
         "console/src/api/core.ts",
         "console/src/api/delivery.ts",
@@ -1600,6 +1711,7 @@
       ],
       "imports": [
         "console/src/api",
+        "console/src/api/agentOps.ts",
         "console/src/api/cluster.ts",
         "console/src/api/clusterTypes.ts",
         "console/src/api/codeHealth.ts",
@@ -1703,7 +1815,7 @@
         "console/src/domains/foundation/shell/useShellStatusLine.ts"
       ],
       "imports": [
-        "console/src/api",
+        "console/src/api/checklist.ts",
         "console/src/api/core.ts",
         "console/src/api/telemetry.ts",
         "console/src/lib/control-room",
@@ -1748,6 +1860,23 @@
         "console/src/domains/tenant/activity/activityPageFocus.ts"
       ],
       "imports": [],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/tenant/market-observation/api",
+      "files": [
+        "console/src/domains/tenant/market-observation/api/marketDataCapabilities.ts",
+        "console/src/domains/tenant/market-observation/api/marketDataDimensions.ts",
+        "console/src/domains/tenant/market-observation/api/marketDataDocs.ts",
+        "console/src/domains/tenant/market-observation/api/marketDataQueueHistory.ts"
+      ],
+      "imports": [
+        "console/src/api/serverContact.ts"
+      ],
       "test_imports": [],
       "external_imports": [],
       "source_inputs": [],
@@ -1930,7 +2059,8 @@
         "console/src/hooks/useFleetSnapshot.ts"
       ],
       "imports": [
-        "console/src/api",
+        "console/src/api/agentOps.ts",
+        "console/src/api/checklist.ts",
         "console/src/api/cluster.ts",
         "console/src/api/core.ts",
         "console/src/api/delivery.ts",
@@ -2596,11 +2726,13 @@
       ],
       "imports": [
         "console/src/api",
+        "console/src/api/checklist.ts",
         "console/src/api/clusterTypes.ts",
         "console/src/lib/control-room"
       ],
       "test_imports": [
         "console/src/api",
+        "console/src/api/checklist.ts",
         "console/src/api/clusterTypes.ts",
         "console/src/components/shell",
         "console/src/pages/shell/data",
@@ -3813,6 +3945,7 @@
       ],
       "imports": [
         "console/src/api",
+        "console/src/api/agentOps.ts",
         "console/src/api/cluster.ts",
         "console/src/api/clusterTypes.ts",
         "console/src/api/core.ts",
@@ -4097,11 +4230,11 @@
         "console/src/pages/shell/releases/releaseView.ts"
       ],
       "imports": [
-        "console/src/api",
         "console/src/api/approvals.ts",
         "console/src/api/auditTypes.ts",
         "console/src/api/client.ts",
         "console/src/api/deliveryTypes.ts",
+        "console/src/api/releasePolicy.ts",
         "console/src/api/releases.ts",
         "console/src/api/serverContact.ts",
         "console/src/components",
@@ -4139,7 +4272,7 @@
         "console/src/pages/shell/services/ServiceVersions.tsx"
       ],
       "imports": [
-        "console/src/api",
+        "console/src/api/gitOps.ts",
         "console/src/api/releases.ts",
         "console/src/components/layout",
         "console/src/pages/shell/releases"
@@ -4163,8 +4296,8 @@
         "console/src/pages/shell/status/__tests__/StatusPage.test.tsx"
       ],
       "imports": [
-        "console/src/api",
         "console/src/api/agentThreads.ts",
+        "console/src/api/checklist.ts",
         "console/src/api/core.ts",
         "console/src/components/layout",
         "console/src/components/shell",

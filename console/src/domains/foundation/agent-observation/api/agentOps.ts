@@ -1,0 +1,15 @@
+import { serverFetch } from '@/api/serverContact'
+import type { AgentBridgeResponse, AgentDeployStatusResponse } from './agentTypes'
+import { parseError } from '@/api/client'
+
+export async function fetchAgentDeployStatus(): Promise<AgentDeployStatusResponse> {
+  const r = await serverFetch('/api/v1/agent/deploy')
+  if (!r.ok) throw await parseError('agent deploy status', r)
+  return r.json() as Promise<AgentDeployStatusResponse>
+}
+
+export async function fetchAgentBridge(): Promise<AgentBridgeResponse> {
+  const r = await serverFetch('/api/v1/agent/bridge')
+  if (!r.ok) throw await parseError('agent bridge', r)
+  return r.json() as Promise<AgentBridgeResponse>
+}
