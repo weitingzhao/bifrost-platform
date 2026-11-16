@@ -16,24 +16,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/validation"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 )
 
-type timingStep struct {
-	Name     string `json:"name"`
-	Status   string `json:"status"`
-	Started  string `json:"started_at,omitempty"`
-	Finished string `json:"finished_at,omitempty"`
-	ExitCode *int64 `json:"exit_code,omitempty"`
-}
-type timingTask struct {
-	Name     string              `json:"name"`
-	Task     string              `json:"task"`
-	Status   string              `json:"status"`
-	Created  string              `json:"created_at,omitempty"`
-	Finished string              `json:"finished_at,omitempty"`
-	Results  []PipelineRunResult `json:"results"`
-	Steps    []timingStep        `json:"steps"`
-}
+type timingStep = cirunview.TimingStep
+type timingTask = cirunview.TimingTask
 type timingRun struct {
 	PipelineRunView
 	Created string              `json:"created_at"`
@@ -99,8 +87,7 @@ func (h *Handler) HandlePipelineTimings(w http.ResponseWriter, r *http.Request) 
 }
 
 func timingString(obj unstructured.Unstructured, path ...string) string {
-	value, _, _ := unstructured.NestedString(obj.Object, path...)
-	return value
+	return cirunview.TimingString(obj, path...)
 }
 func timingParams(obj unstructured.Unstructured) map[string]string {
 	out := map[string]string{}
@@ -119,33 +106,7 @@ func timingParams(obj unstructured.Unstructured) map[string]string {
 	return out
 }
 func taskTiming(obj unstructured.Unstructured, run string) timingTask {
-	out := timingTask{Name: obj.GetName(), Task: pipelineTaskFromTaskRun(obj, run), Status: tektonTaskRunState(obj),
-		Created: obj.GetCreationTimestamp().UTC().Format(time.RFC3339), Finished: timingString(obj, "status", "completionTime"),
-		Results: pipelineRunResults(&obj), Steps: []timingStep{}}
-	items, _, _ := unstructured.NestedSlice(obj.Object, "status", "steps")
-	for _, item := range items {
-		m, _ := item.(map[string]any)
-		name, _ := m["name"].(string)
-		step := timingStep{Name: name, Status: "waiting"}
-		if state, ok := m["terminated"].(map[string]any); ok {
-			step.Status = "terminated"
-			step.Started, _ = state["startedAt"].(string)
-			step.Finished, _ = state["finishedAt"].(string)
-			if code, ok := state["exitCode"].(int64); ok {
-				step.ExitCode = &code
-				if code == 0 {
-					step.Status = "succeeded"
-				} else {
-					step.Status = "failed"
-				}
-			}
-		} else if state, ok := m["running"].(map[string]any); ok {
-			step.Status = "running"
-			step.Started, _ = state["startedAt"].(string)
-		}
-		out.Steps = append(out.Steps, step)
-	}
-	return out
+	return cirunview.TaskTiming(obj, run)
 }
 
 func (s *Service) readPipelineTimings(ctx context.Context, pipeline, repo, run string, limit int) (pipelineTimings, error) {

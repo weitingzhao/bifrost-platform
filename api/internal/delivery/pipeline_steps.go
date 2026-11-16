@@ -2,7 +2,6 @@ package delivery
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -12,6 +11,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 )
 
 // Phase tables group a pipeline's tasks into user-facing stages. Every task
@@ -224,41 +225,10 @@ func pipelineRunSkippedTasks(run *unstructured.Unstructured) []string {
 	return out
 }
 
-func tektonTaskRunState(obj unstructured.Unstructured) string {
-	cond, found, _ := unstructured.NestedSlice(obj.Object, "status", "conditions")
-	if !found || len(cond) == 0 {
-		return "running"
-	}
-	m, ok := cond[0].(map[string]any)
-	if !ok {
-		return "running"
-	}
-	st := strings.ToLower(fmt.Sprint(m["status"]))
-	reason := strings.ToLower(fmt.Sprint(m["reason"]))
-	if st == "true" || reason == "succeeded" || reason == "completed" {
-		return "succeeded"
-	}
-	if st == "false" || reason == "failed" || reason == "pipelinerunfailed" || reason == "taskrunfailed" {
-		return "failed"
-	}
-	if reason == "running" || reason == "pending" || st == "unknown" {
-		return "running"
-	}
-	return "running"
-}
+func tektonTaskRunState(obj unstructured.Unstructured) string { return cirunview.TaskRunState(obj) }
 
 func pipelineTaskFromTaskRun(obj unstructured.Unstructured, runName string) string {
-	if labels := obj.GetLabels(); labels != nil {
-		if t := labels["tekton.dev/pipelineTask"]; t != "" {
-			return t
-		}
-	}
-	name := obj.GetName()
-	prefix := runName + "-"
-	if strings.HasPrefix(name, prefix) {
-		return strings.TrimPrefix(name, prefix)
-	}
-	return name
+	return cirunview.PipelineTask(obj, runName)
 }
 
 func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName string) PipelineRunStepsResponse {
@@ -364,23 +334,10 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 // pipelineRunResults keeps string values verbatim and encodes typed Tekton
 // results as JSON text. An absent result list is always an empty JSON array.
 func pipelineRunResults(run *unstructured.Unstructured) []PipelineRunResult {
-	items, _, _ := unstructured.NestedSlice(run.Object, "status", "results")
-	out := make([]PipelineRunResult, 0, len(items))
-	for _, item := range items {
-		result, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		name, _ := result["name"].(string)
-		value, ok := result["value"].(string)
-		if !ok {
-			raw, err := json.Marshal(result["value"])
-			if err != nil {
-				continue
-			}
-			value = string(raw)
-		}
-		out = append(out, PipelineRunResult{Name: name, Value: value})
+	rows := cirunview.Results(run)
+	out := make([]PipelineRunResult, len(rows))
+	for i, row := range rows {
+		out[i] = PipelineRunResult(row)
 	}
 	return out
 }

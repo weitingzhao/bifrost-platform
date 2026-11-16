@@ -12,6 +12,8 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 )
 
 func (s *Service) Summary(ctx context.Context) SummaryResponse {
@@ -634,27 +636,7 @@ func podReachability(phase string) probe.Reachability {
 	}
 }
 
-func eventView(e corev1.Event) EventView {
-	obj := e.InvolvedObject.Kind + "/" + e.InvolvedObject.Name
-	first := e.FirstTimestamp.Time
-	last := e.LastTimestamp.Time
-	if first.IsZero() && !e.EventTime.IsZero() {
-		first = e.EventTime.Time
-	}
-	if last.IsZero() && !e.EventTime.IsZero() {
-		last = e.EventTime.Time
-	}
-	return EventView{
-		Namespace: e.Namespace,
-		Type:      e.Type,
-		Reason:    e.Reason,
-		Object:    obj,
-		Message:   e.Message,
-		Count:     e.Count,
-		FirstSeen: first,
-		LastSeen:  last,
-	}
-}
+func eventView(e corev1.Event) EventView { return EventView(resourceview.Event(e)) }
 
 func formatAge(t time.Time) string {
 	if t.IsZero() {

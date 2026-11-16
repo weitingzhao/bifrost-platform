@@ -530,7 +530,7 @@
         "verification"
       ],
       "status": "assigned",
-      "basis": "CI charter; cached run, daily-full-note, metric and failure-list projection extracted from server; no CI or release decisions"
+      "basis": "CI charter; cached run, daily-full-note, metric and failure-list projection extracted from server; no CI or release decisions Complete task timing and shared Tekton observation decoders extracted from delivery; parameter exposure allowlist retained verbatim in delivery; phase priority and result serialization unchanged; no evidence/release decisions."
     },
     "api/internal/modtidy": {
       "domains": [
@@ -880,7 +880,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 generic read-only resource formatting, usage, readiness and phase projection extracted whole; includes complete Deployment and node-capability coverage projections. Governance and service-readiness callers retain all queries and decision wiring; unchanged thresholds, no execution or permission decisions."
+      "basis": "2026-11-16 generic read-only resource formatting, usage, readiness and phase projection extracted whole; includes complete Deployment and node-capability coverage projections. Governance and service-readiness callers retain all queries and decision wiring; unchanged thresholds, no execution or permission decisions. Complete pod CPU rank/limit and Kubernetes Event timestamp projection extracted unchanged; filter/auth/execution remain callers."
     },
     "api/internal/netobservations": {
       "domains": [
