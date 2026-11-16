@@ -2085,6 +2085,26 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/plan/observations",
+      "files": [
+        "console/src/domains/plan/observations/liveStepModel.ts",
+        "console/src/domains/plan/observations/needsCleanupModel.ts",
+        "console/src/domains/plan/observations/useNeedsCleanup.ts"
+      ],
+      "imports": [
+        "console/src/api/planSnapshot.ts",
+        "console/src/domains/plan/readings",
+        "console/src/pages/shell/agents"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@tanstack/react-query"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/plan/readings",
       "files": [
         "console/src/domains/plan/readings/readings.test.ts",
@@ -4042,6 +4062,7 @@
         "console/src/components/layout",
         "console/src/domains/delivery/display",
         "console/src/domains/plan/display",
+        "console/src/domains/plan/observations",
         "console/src/domains/plan/readings",
         "console/src/hooks/useAgentThreads.ts",
         "console/src/hooks/usePlatformAuth.ts",

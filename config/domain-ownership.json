@@ -2289,6 +2289,13 @@
         ],
         "status": "assigned",
         "basis": "2026-11-16 complete schema and controller-loop health observation parsing; original unknown/unread and value shape handling retained. Cross-domain progress, host and Owner timing judgments stay at original API entry."
+      },
+      "console/src/domains/plan/observations": {
+        "domains": [
+          "plan"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 complete cleanup/live observation projections extracted unchanged. Signoff uses raw step state and original readAge freshness; readAge, stepStateModel, planModuleModel, workViewModel and signoff controls remain untouched."
       }
     }
   }
