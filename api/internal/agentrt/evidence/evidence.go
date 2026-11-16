@@ -239,7 +239,16 @@ func RecordEvidence(ctx context.Context, db eventlog.DB, rows []EvidenceRow) (in
 	})
 	// One transaction a row: a row the table refuses does not hold back the others.
 	for _, e := range rows {
+		var announceErr error
 		err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+			announceErr = nil
+			// The key's verdict before the row, for ci.verdict.changed
+			// (verdict_event.go); read in this transaction, so the event
+			// says what this write changed.
+			previous, err := keyVerdict(ctx, tx, e)
+			if err != nil {
+				return err
+			}
 			const insert = `INSERT INTO agentrt.evidence (repo, unit, task, input_key, result, scope, inputs, statement, commit_sha, run_name, run_uid)
 			  VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11) ON CONFLICT (run_uid, repo, unit, task, input_key, result) DO NOTHING`
 			// The row itself first: a run already in the ledger writes nothing
@@ -282,10 +291,23 @@ func RecordEvidence(ctx context.Context, db eventlog.DB, rows []EvidenceRow) (in
 					}
 				}
 			}
-			return nil
+			// After the state, in the same transaction: the announcement
+			// that the key's verdict changed. A savepoint holds it, so an
+			// announcement that cannot be written never takes the row with it
+			// (the ledger is the truth; the event is a hint, bus RULES.md E2).
+			sp, err := tx.Begin(ctx)
+			if err != nil {
+				return err
+			}
+			if announceErr = announceVerdict(ctx, sp, e, previous); announceErr != nil {
+				return sp.Rollback(ctx)
+			}
+			return sp.Commit(ctx)
 		})
 		if err != nil {
 			errs = append(errs, fmt.Errorf("evidence of run %s: %w", e.RunName, err))
+		} else if announceErr != nil {
+			errs = append(errs, fmt.Errorf("evidence of run %s was written; its %s was not: %w", e.RunName, VerdictChangedType, announceErr))
 		}
 	}
 	return n, errors.Join(errs...)
