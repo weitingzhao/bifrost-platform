@@ -81,6 +81,8 @@ modules:
         - "config/agent-tasks.yaml"
         - "config/trust-overrides.yaml"
       api/internal/agentprogress: ["api/internal/agentprogress"]
+      # Foundation: HTTP observations, moved out of server; no domain inputs.
+      api/internal/httpmetrics: ["api/internal/httpmetrics"]
       api/internal/agentrt/agentrtapi:
         - "api/internal/agentrt/agentrtapi"
         - "api/internal/agentrt/planimport/testdata"
@@ -96,6 +98,7 @@ modules:
         - "console/src/api/__fixtures__/agentrt-plan-imported.testdb.json"
         - "console/src/api/__fixtures__/agentrt-plan-moved.testdb.json"
         - "console/src/api/__fixtures__/agentrt-plan-view.go.json"
+      # Domain 1: pace, ETA and Owner-time projections; storage is an adapter.
       api/internal/agentrt/planpace: ["api/internal/agentrt/planpace"]
       api/internal/agentrt/workregistration: ["api/internal/agentrt/workregistration"]
       api/internal/agentrt/planview: ["api/internal/agentrt/planview"]

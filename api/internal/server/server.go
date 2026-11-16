@@ -398,7 +398,7 @@ func (s *Server) Router() http.Handler {
 	r.Use(middleware.RealIP)
 	// Outside Logger and Recoverer, so a recovered panic is counted as the 500 it
 	// answers (TD-195).
-	r.Use(s.httpMetrics.middleware(r))
+	r.Use(s.httpMetrics.Middleware(r))
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	// A request for an action the signed policy covers is run, not answered

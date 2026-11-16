@@ -56,7 +56,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	s.writeFullCIMetric(&b)
 	releasepolicy.WriteMetrics(&b)
 	agentthreads.WriteMetrics(&b)
-	s.httpMetrics.write(&b)
+	s.httpMetrics.Write(&b)
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(b.String()))
