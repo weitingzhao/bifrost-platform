@@ -3,7 +3,7 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"strings"
+	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -11,31 +11,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
-
-type layerBComponentSpec struct {
-	ID      string
-	Label   string
-	Match   string
-	Exclude string
-	Phase   string // required | planned
-}
-
-var layerBRequired = []layerBComponentSpec{
-	{ID: "prometheus", Label: "Prometheus", Match: "prometheus", Exclude: "grafana", Phase: "required"},
-	{ID: "grafana", Label: "Grafana", Match: "grafana", Phase: "required"},
-	{ID: "alertmanager", Label: "Alertmanager", Match: "alertmanager", Phase: "required"},
-}
-
-var layerBPlanned = []layerBComponentSpec{
-	{ID: "loki", Label: "Loki", Match: "loki", Phase: "planned"},
-}
-
-func allLayerBComponents() []layerBComponentSpec {
-	out := make([]layerBComponentSpec, 0, len(layerBRequired)+len(layerBPlanned))
-	out = append(out, layerBRequired...)
-	out = append(out, layerBPlanned...)
-	return out
-}
 
 func (s *Service) Observability(ctx context.Context) ObservabilityResponse {
 	now := time.Now().UTC()
@@ -69,8 +44,8 @@ func (s *Service) Observability(ctx context.Context) ObservabilityResponse {
 	statefulSets, _ := clientset.AppsV1().StatefulSets(ns).List(ctx, metav1.ListOptions{})
 
 	components := matchLayerBComponents(deployments.Items, statefulSets.Items)
-	okCount := countReadyRequiredComponents(components)
-	layerStatus, reach, detail := aggregateLayerBStatus(okCount, len(layerBRequired))
+	okCount := resourceview.CountReadyRequiredComponents(components)
+	layerStatus, reach, detail := aggregateLayerBStatus(okCount, resourceview.RequiredLayerBCount())
 
 	resp := ObservabilityResponse{
 		ClusterID:            base.ClusterID,
@@ -85,182 +60,15 @@ func (s *Service) Observability(ctx context.Context) ObservabilityResponse {
 	}
 
 	if s.entry != nil {
-		if grafanaURL := s.entry.GrafanaURL(); grafanaURL != "" && componentReach(components, "grafana") == probe.ReachOK {
+		if grafanaURL := s.entry.GrafanaURL(); grafanaURL != "" && resourceview.ComponentReach(components, "grafana") == probe.ReachOK {
 			resp.GrafanaURL = grafanaURL
 		}
-		if promURL := s.entry.PrometheusURL(); promURL != "" && componentReach(components, "prometheus") == probe.ReachOK {
+		if promURL := s.entry.PrometheusURL(); promURL != "" && resourceview.ComponentReach(components, "prometheus") == probe.ReachOK {
 			resp.PrometheusURL = promURL
 		}
 	}
 
 	return resp
-}
-
-func matchLayerBComponents(deployments []appsv1.Deployment, statefulSets []appsv1.StatefulSet) []ObservabilityComponentView {
-	specs := allLayerBComponents()
-	views := make([]ObservabilityComponentView, 0, len(specs))
-	for _, spec := range specs {
-		if view, ok := findLayerBWorkload(spec, deployments, statefulSets); ok {
-			views = append(views, view)
-			continue
-		}
-		if spec.Phase == "planned" {
-			views = append(views, plannedLayerBComponent(spec))
-			continue
-		}
-		views = append(views, missingLayerBComponent(spec))
-	}
-	return views
-}
-
-func nameMatchesLayerB(spec layerBComponentSpec, name string) bool {
-	lower := strings.ToLower(name)
-	if !strings.Contains(lower, spec.Match) {
-		return false
-	}
-	if spec.Exclude != "" && strings.Contains(lower, spec.Exclude) {
-		return false
-	}
-	return true
-}
-
-func findLayerBWorkload(
-	spec layerBComponentSpec,
-	deployments []appsv1.Deployment,
-	statefulSets []appsv1.StatefulSet,
-) (ObservabilityComponentView, bool) {
-	for _, d := range deployments {
-		if nameMatchesLayerB(spec, d.Name) {
-			w := deploymentWorkload(d)
-			return observabilityFromWorkload(spec, w), true
-		}
-	}
-	for _, ss := range statefulSets {
-		if nameMatchesLayerB(spec, ss.Name) {
-			w := statefulSetWorkload(ss)
-			return observabilityFromWorkload(spec, w), true
-		}
-	}
-	return ObservabilityComponentView{}, false
-}
-
-func observabilityFromWorkload(spec layerBComponentSpec, w WorkloadView) ObservabilityComponentView {
-	detail := w.Status
-	if w.Reachability != probe.ReachOK {
-		detail = fmt.Sprintf("%s (%s)", w.Status, w.Ready)
-	}
-	return ObservabilityComponentView{
-		ID:           spec.ID,
-		Label:        spec.Label,
-		Kind:         w.Kind,
-		Name:         w.Name,
-		Ready:        w.Ready,
-		Status:       w.Status,
-		Reachability: w.Reachability,
-		Detail:       detail,
-		Phase:        spec.Phase,
-	}
-}
-
-func missingLayerBComponent(spec layerBComponentSpec) ObservabilityComponentView {
-	return ObservabilityComponentView{
-		ID:           spec.ID,
-		Label:        spec.Label,
-		Kind:         "—",
-		Name:         "—",
-		Ready:        "—",
-		Status:       "missing",
-		Reachability: probe.ReachUnknown,
-		Detail:       "not detected in monitoring namespace",
-		Phase:        spec.Phase,
-	}
-}
-
-func plannedLayerBComponent(spec layerBComponentSpec) ObservabilityComponentView {
-	return ObservabilityComponentView{
-		ID:           spec.ID,
-		Label:        spec.Label,
-		Kind:         "—",
-		Name:         "—",
-		Ready:        "—",
-		Status:       "planned",
-		Reachability: probe.ReachUnknown,
-		Detail:       "planned for Phase 5",
-		Phase:        "planned",
-	}
-}
-
-func missingLayerBComponents() []ObservabilityComponentView {
-	specs := allLayerBComponents()
-	out := make([]ObservabilityComponentView, len(specs))
-	for i, spec := range specs {
-		if spec.Phase == "planned" {
-			out[i] = plannedLayerBComponent(spec)
-		} else {
-			out[i] = missingLayerBComponent(spec)
-		}
-	}
-	return out
-}
-
-func statefulSetWorkload(ss appsv1.StatefulSet) WorkloadView {
-	replicas := int32(0)
-	if ss.Spec.Replicas != nil {
-		replicas = *ss.Spec.Replicas
-	}
-	reach := podReachability("Running")
-	status := "Ready"
-	if ss.Status.ReadyReplicas < replicas {
-		reach = podReachability("Pending")
-		status = "Progressing"
-	}
-	if replicas > 0 && ss.Status.ReadyReplicas == 0 {
-		reach = podReachability("Failed")
-		status = "Unavailable"
-	}
-	return WorkloadView{
-		Namespace:    ss.Namespace,
-		Kind:         "StatefulSet",
-		Name:         ss.Name,
-		Ready:        fmt.Sprintf("%d/%d", ss.Status.ReadyReplicas, replicas),
-		Status:       status,
-		Restarts:     0,
-		Age:          formatAge(ss.CreationTimestamp.Time),
-		Reachability: reach,
-	}
-}
-
-func countReadyRequiredComponents(components []ObservabilityComponentView) int {
-	n := 0
-	for _, c := range components {
-		if c.Phase != "required" {
-			continue
-		}
-		if c.Reachability == probe.ReachOK {
-			n++
-		}
-	}
-	return n
-}
-
-func componentReach(components []ObservabilityComponentView, id string) probe.Reachability {
-	for _, c := range components {
-		if c.ID == id {
-			return c.Reachability
-		}
-	}
-	return probe.ReachUnknown
-}
-
-func aggregateLayerBStatus(okCount, totalRequired int) (status string, reach probe.Reachability, detail string) {
-	switch {
-	case okCount == 0:
-		return "not_installed", probe.ReachDegraded, "kube-prometheus-stack not detected (Layer B planned)"
-	case okCount < totalRequired:
-		return "partial", probe.ReachDegraded, fmt.Sprintf("%d/%d observability components ready", okCount, totalRequired)
-	default:
-		return "ready", probe.ReachOK, fmt.Sprintf("all %d observability components ready", totalRequired)
-	}
 }
 
 func (s *Service) entryObservabilityDocsURL() string {
@@ -287,4 +95,22 @@ func failObservability(base baseMeta, ns string, err error, now time.Time) Obser
 		Components:           missingLayerBComponents(),
 		GeneratedAt:          now,
 	}
+}
+
+func matchLayerBComponents(deployments []appsv1.Deployment, statefulSets []appsv1.StatefulSet) []ObservabilityComponentView {
+	ds := make([]resourceview.DeploymentView, len(deployments))
+	for i, d := range deployments {
+		ds[i] = resourceview.DeploymentView(deploymentWorkload(d))
+	}
+	ss := make([]resourceview.DeploymentView, len(statefulSets))
+	for i, s := range statefulSets {
+		ss[i] = resourceview.StatefulSet(s, formatAge(s.CreationTimestamp.Time), podReachability)
+	}
+	return resourceview.MatchLayerBComponents(ds, ss)
+}
+func missingLayerBComponents() []ObservabilityComponentView {
+	return resourceview.MissingLayerBComponents()
+}
+func aggregateLayerBStatus(okCount, totalRequired int) (string, probe.Reachability, string) {
+	return resourceview.AggregateLayerBStatus(okCount, totalRequired)
 }

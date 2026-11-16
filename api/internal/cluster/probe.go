@@ -602,27 +602,7 @@ func isFailingPod(p corev1.Pod) bool {
 }
 
 func podWorkload(p corev1.Pod) WorkloadView {
-	ready := 0
-	total := len(p.Status.ContainerStatuses)
-	restarts := int32(0)
-	for _, cs := range p.Status.ContainerStatuses {
-		if cs.Ready {
-			ready++
-		}
-		restarts += cs.RestartCount
-	}
-	phase := string(p.Status.Phase)
-	reach := podReachability(phase)
-	return WorkloadView{
-		Namespace:    p.Namespace,
-		Kind:         "Pod",
-		Name:         p.Name,
-		Ready:        fmt.Sprintf("%d/%d", ready, maxInt(total, len(p.Spec.Containers))),
-		Status:       phase,
-		Restarts:     restarts,
-		Age:          formatAge(p.CreationTimestamp.Time),
-		Reachability: reach,
-	}
+	return WorkloadView(resourceview.Pod(p, formatAge(p.CreationTimestamp.Time), podReachability))
 }
 
 func podReachability(phase string) probe.Reachability {

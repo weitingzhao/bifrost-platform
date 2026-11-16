@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -154,17 +155,7 @@ type MetricsResponse struct {
 	GeneratedAt            time.Time          `json:"generated_at"`
 }
 
-type ObservabilityComponentView struct {
-	ID           string             `json:"id"`
-	Label        string             `json:"label"`
-	Kind         string             `json:"kind"`
-	Name         string             `json:"name"`
-	Ready        string             `json:"ready"`
-	Status       string             `json:"status"`
-	Reachability probe.Reachability `json:"reachability"`
-	Detail       string             `json:"detail"`
-	Phase        string             `json:"phase,omitempty"` // required | planned
-}
+type ObservabilityComponentView = resourceview.ObservabilityComponentView
 
 type ObservabilityResponse struct {
 	ClusterID            string                       `json:"cluster_id"`
