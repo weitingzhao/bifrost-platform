@@ -56,7 +56,3 @@ var Repos = map[string]Repo{
 		Setup:  infracheck.Setup(""),
 	},
 }
-
-// SpecTimeoutS is how long an implementation task's check may run, all of
-// its commands.
-const SpecTimeoutS = 1500
