@@ -2090,6 +2090,8 @@
         "console/src/domains/plan/observations/liveStepModel.ts",
         "console/src/domains/plan/observations/moduleActivity.ts",
         "console/src/domains/plan/observations/needsCleanupModel.ts",
+        "console/src/domains/plan/observations/ownerAsksCache.test.tsx",
+        "console/src/domains/plan/observations/ownerAsksModel.ts",
         "console/src/domains/plan/observations/unlinkedSessionsModel.ts",
         "console/src/domains/plan/observations/useNeedsCleanup.ts"
       ],
@@ -2097,6 +2099,7 @@
         "console/src/api/agentRuntimePlan.ts",
         "console/src/api/agentThreads.ts",
         "console/src/api/approvals.ts",
+        "console/src/api/landingActions.ts",
         "console/src/api/planSnapshot.ts",
         "console/src/api/questions.ts",
         "console/src/domains/plan/display",
@@ -2106,7 +2109,10 @@
       ],
       "test_imports": [],
       "external_imports": [
-        "@tanstack/react-query"
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "react",
+        "vitest"
       ],
       "source_inputs": [],
       "test_inputs": [],
