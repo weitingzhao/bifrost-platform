@@ -151,14 +151,6 @@ func baselineAggregateDeliverPhases(defs []struct {
 	return out
 }
 
-func baselineAggregateDeliverStgPhases(taskStatus map[string]string) []PipelinePhaseView {
-	return baselineAggregateDeliverPhases(baselineDeliverStgPhaseDefs, taskStatus, nil)
-}
-
-func baselineAggregateDeliverPlatformProdPhases(taskStatus map[string]string) []PipelinePhaseView {
-	return baselineAggregateDeliverPhases(baselineDeliverPlatformProdPhaseDefs, taskStatus, nil)
-}
-
 func baselineAggregatePhaseStatus(tasks []string, taskStatus map[string]string) (status, detail string) {
 	if len(tasks) == 0 {
 		return "pending", ""

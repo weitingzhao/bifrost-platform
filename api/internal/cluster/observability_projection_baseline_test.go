@@ -169,28 +169,6 @@ func baselineStatefulSetWorkload(ss appsv1.StatefulSet) WorkloadView {
 	}
 }
 
-func baselineCountReadyRequiredComponents(components []ObservabilityComponentView) int {
-	n := 0
-	for _, c := range components {
-		if c.Phase != "required" {
-			continue
-		}
-		if c.Reachability == probe.ReachOK {
-			n++
-		}
-	}
-	return n
-}
-
-func baselineComponentReach(components []ObservabilityComponentView, id string) probe.Reachability {
-	for _, c := range components {
-		if c.ID == id {
-			return c.Reachability
-		}
-	}
-	return probe.ReachUnknown
-}
-
 func baselineAggregateLayerBStatus(okCount, totalRequired int) (status string, reach probe.Reachability, detail string) {
 	switch {
 	case okCount == 0:

@@ -378,10 +378,6 @@ func evalApplicationsDomain(snap readinessSnapshot) ServiceDomainView {
 	return appreadings.EvalApplicationsDomain(tenantReadinessInput(snap))
 }
 
-func ingressRouteDep(snap readinessSnapshot, ns, name, label string) ServiceDependencyView {
-	return appreadings.IngressRouteDep(tenantReadinessInput(snap), ns, name, label)
-}
-
 func evalCICDDomain(snap readinessSnapshot) ServiceDomainView {
 	deps := []ServiceDependencyView{
 		poolDep(snap, "amd64_ci", "amd64 CI pool (Kaniko)"),
@@ -784,12 +780,6 @@ func findDeploymentByPrefix(snap readinessSnapshot, namespace, prefix string) *a
 	}
 	return best
 }
-
-func countReadyDeployments(snap readinessSnapshot, namespace, namePrefix string) (int, string) {
-	return appreadings.CountReadyDeployments(tenantReadinessInput(snap), namespace, namePrefix)
-}
-
-func apiReadyReach(ready int) probe.Reachability { return appreadings.ApiReadyReach(ready) }
 
 func hasCapabilityID(n NodeView, id string) bool {
 	for _, c := range n.Capabilities {

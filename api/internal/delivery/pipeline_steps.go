@@ -26,13 +26,6 @@ func aggregatePhasesForPipeline(pipelineName string, taskStatus map[string]strin
 func pipelineRunTaskNames(run *unstructured.Unstructured) map[string]bool {
 	return cirunview.PipelineRunTaskNames(run)
 }
-func aggregateDeliverPhases(defs []struct {
-	ID    string
-	Label string
-	Tasks []string
-}, taskStatus map[string]string, runTasks map[string]bool) []PipelinePhaseView {
-	return cirunview.AggregateDeliverPhases(defs, taskStatus, runTasks)
-}
 func aggregateDeliverStgPhases(taskStatus map[string]string) []PipelinePhaseView {
 	return cirunview.AggregateDeliverStgPhases(taskStatus)
 }
