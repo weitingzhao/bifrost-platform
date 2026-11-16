@@ -354,7 +354,7 @@
         "coordination"
       ],
       "status": "mixed",
-      "basis": "remaining mixed responsibilities; extraction incomplete"
+      "basis": "2026-11-16 Complete file/reader audit: ordinary Plan, Lineage, Delivery and observation projections/queries are in their domains. Retain transaction/snapshot and persistence adapters plus original identity, evidence, signoff and rejection contracts. Five exported legacy declarations were refused for removal by approval review and remain unchanged; shared protected scope is not counted as extracted."
     },
     "api/internal/server": {
       "domains": [
@@ -369,7 +369,7 @@
         "coordination"
       ],
       "status": "mixed",
-      "basis": "HTTP wiring and remaining mixed read logic"
+      "basis": "2026-11-16 Complete file/reader audit: ordinary observations and scope-shadow report projection are in owning domains. Retain HTTP/lifecycle wiring, original identity/evidence/integrity/refusal and release decisions, plus communication-lane Bus wiring. Source dependencies remain explicit; shared protected scope is not claimed as isolated."
     },
     "api/internal/agentrt/agentrtapi": {
       "domains": [
@@ -381,7 +381,7 @@
         "coordination"
       ],
       "status": "mixed",
-      "basis": "shared HTTP surface"
+      "basis": "2026-11-16 Complete file/reader audit: retained shared HTTP adapters and domain service calls; identity, exam visibility, strict parsing, signed-rule and stop-control boundaries remain unchanged. Shared scope is explicit, not an unreviewed implementation backlog."
     },
     "api/internal/agentrt/controller": {
       "domains": [
@@ -391,7 +391,7 @@
         "coordination"
       ],
       "status": "mixed",
-      "basis": "shared controller wiring"
+      "basis": "2026-11-16 Complete file/reader audit: retain lifecycle composition, existing evidence/acknowledgment/automatic-CI decisions and communication-lane run-event wiring. Observation text is delegated and five unused historical constants were removed. Shared scope remains explicit."
     },
     "api/internal/delivery": {
       "domains": [
@@ -399,7 +399,7 @@
         "coordination"
       ],
       "status": "mixed",
-      "basis": "CI charter plus window_queue/window_notify ownership ruling"
+      "basis": "2026-11-16 Complete file/reader audit: CI phases/run observations and Delivery configuration/supply projections are in their domains. Retain Delivery resource/context composition, strict policy/health/ref/success checks, execution, window queue transitions and communication contracts. Existing CI and coordination ownership ruling is unchanged."
     },
     "api/internal/agentrt/canon": {
       "domains": [
@@ -911,6 +911,34 @@
       ],
       "status": "assigned",
       "basis": "2026-11-16 complete read-only application readiness projection: tenant namespace/gateway/frontend/four-API display, observed generic infrastructure dependencies injected. No actions, D10 workers or authorization moved; original health/finalization callbacks are injected, never reimplemented. Full application database activity/lag observation projection is isolated here; clone selection, validation and execution remain in cluster."
+    },
+    "api/internal/checklist": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "default-maintainer",
+      "basis": "2026-11-16 Complete file/reader audit: HTTP observation transport and Tenant husbandry projection are separate domain implementations. Retain HTTP/source composition, the signal contract and existing auto-dispatch, staleness and persistence decisions. Foundation maintenance follows the existing overlap ruling; this is not exclusive business ownership."
+    },
+    "api/internal/cluster": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "default-maintainer",
+      "basis": "2026-11-16 Complete file/reader audit: resource, monitoring, Pod, Tenant application and freshness projections are separate domain implementations. Retain K8s adapters, data/identity/action paths, shared health predicates and D10 Workers behavior. Elastic GPU/warehouse predicate extraction was refused by approval review; its capability inputs stay unchanged. Foundation maintenance is not a claim of single-domain isolation."
+    },
+    "api/internal/probe": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "default-maintainer",
+      "basis": "2026-11-16 Complete file/reader audit: transport and datastore observation projections are separate domain implementations. Retain environment/client composition, authenticated probes, capability restrictions and post-fix verification predicates. Foundation maintenance follows the existing overlap ruling, not exclusive ownership of protected contracts."
+    },
+    "api/internal/satellite": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "default-maintainer",
+      "basis": "2026-11-16 Complete file/reader audit: Tenant ingest observation projection is separate. Retain HTTP/source composition, original Monitor and auto-status contracts, and communication-lane Bus implementation. Foundation maintenance follows the existing overlap ruling; protected or communication contracts are not claimed as extracted."
     }
   },
   "frontend": {
