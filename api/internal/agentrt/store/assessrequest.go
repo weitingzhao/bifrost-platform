@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -28,9 +29,9 @@ func badAssessmentRequest(v any) string {
 func ReadAssessment(ctx context.Context, db DB, kind, id string) (json.RawMessage, error) {
 	var raw json.RawMessage
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT COALESCE(jsonb_agg(jsonb_build_object(
-		  'event_type', event_type, 'body_json', body_json, 'at', at) ORDER BY seq), '[]')
-		  FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'`, AssessStream(kind, id)).Scan(&raw)
+		var err error
+		raw, err = assessmentreadings.Events(ctx, tx, AssessStream(kind, id))
+		return err
 	})
 	return raw, err
 }

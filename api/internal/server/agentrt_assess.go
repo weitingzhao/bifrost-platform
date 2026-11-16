@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentview"
 	"strconv"
 	"time"
 
@@ -54,12 +56,8 @@ func (s *Server) assessmentReader(kind string) func(context.Context, string) map
 		if s.agentRuntime == nil || s.agentRuntime.api.DB == nil {
 			return map[string]any{"error": "assessment runtime is unavailable"}
 		}
-		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-		defer cancel()
-		events, err := store.ReadAssessment(ctx, s.agentRuntime.api.DB, kind, id)
-		if err != nil {
-			return map[string]any{"error": "could not read the assessment record"}
-		}
-		return map[string]any{"events": events}
+		return assessmentview.Read(ctx, func(ctx context.Context) (json.RawMessage, error) {
+			return store.ReadAssessment(ctx, s.agentRuntime.api.DB, kind, id)
+		})
 	}
 }
