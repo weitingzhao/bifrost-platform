@@ -20,6 +20,7 @@ func originalExternalReply(n externalNote, event int64) map[string]any {
 }
 
 func TestExternalReplyMatchesOriginal(t *testing.T) {
+	t.Parallel()
 	for _, root := range []string{"", "round-1", "a b&x=1/中文?"} {
 		for _, node := range []string{"", "step", "a+b/#?"} {
 			for _, state := range []string{"Registered", "Running", "Submitted", "Cancelled", "Unknown", ""} {

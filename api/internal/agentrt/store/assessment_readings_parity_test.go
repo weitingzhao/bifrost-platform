@@ -11,6 +11,7 @@ import (
 )
 
 func TestAssessmentRecordedQueryParityPG(t *testing.T) {
+	t.Parallel()
 	db := seededDB(t)
 	pool := db.Pool(t, db.Runtime)
 	ctx := context.Background()
