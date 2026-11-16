@@ -6,10 +6,10 @@ func TestRollupResearchOLAP(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name            string
-		product, pDet   string
-		batch, bDet     string
-		wantVerdict     string
+		name             string
+		product, pDet    string
+		batch, bDet      string
+		wantVerdict      string
 		wantDetailSubstr string
 	}{
 		{

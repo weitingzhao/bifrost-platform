@@ -799,6 +799,27 @@
       ],
       "status": "assigned",
       "basis": "2026-11-16 extracted generic concurrent observation collection from server metrics; independent deadlines, input order and panic containment preserved. Server retains plugin selection and all role/auth/release policy wiring."
+    },
+    "api/internal/tenant/husbandry": {
+      "domains": [
+        "tenant"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 Owner-confirmed split: Complete Market/Flex/Research read-only husbandry interpretation; original thresholds, paths, failure explanations and ordering preserved."
+    },
+    "api/internal/proxyjson": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 Owner-confirmed split: Generic GET proxy transport, bounded response reading and JSON decoding; caller owns status-error representation and proxy policy."
+    },
+    "api/internal/datahusbandry": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 Owner-confirmed split: Compatibility aliases and construction only; Tenant owns husbandry semantics and Foundation owns generic proxy JSON transport. Existing server/checklist callers unchanged."
     }
   },
   "frontend": {
