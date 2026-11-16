@@ -16,7 +16,7 @@ vi.mock('@/pages/NetworkPage', () => ({ NetworkPage: () => <p>Network panels</p>
 vi.mock('@/pages/shell/infrastructure/RuntimeMapSection', () => ({ RuntimeMapSection: () => <p>Runtime topology</p> }))
 vi.mock('@/pages/shell/infrastructure/ComputeReadings', () => ({ ComputeReadings: () => <p>Compute readings</p> }))
 vi.mock('@/pages/shell/infrastructure/MiniCards', () => ({ MiniCards: () => <p>Mini host controls</p> }))
-vi.mock('@/pages/shell/data/BackupStatusPanel', () => ({ BackupStatusPanel: () => <p>Backup freshness</p> }))
+vi.mock('@/domains/foundation/backup/BackupStatusPanel', () => ({ BackupStatusPanel: () => <p>Backup freshness</p> }))
 afterEach(() => { cleanup(); vi.useRealTimers(); window.location.hash = '' })
 
 describe('P3 domain destinations', () => {

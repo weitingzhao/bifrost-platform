@@ -366,7 +366,8 @@
         "console/src/api/clusterTypes.ts"
       ],
       "imports": [
-        "console/src/api"
+        "console/src/api",
+        "console/src/domains/foundation/backup"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -1471,6 +1472,29 @@
         "@bifrost/ui",
         "radix-ui",
         "react"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/foundation/backup",
+      "files": [
+        "console/src/domains/foundation/backup/BackupStatusPanel.test.tsx",
+        "console/src/domains/foundation/backup/BackupStatusPanel.tsx",
+        "console/src/domains/foundation/backup/api.ts",
+        "console/src/domains/foundation/backup/types.ts"
+      ],
+      "imports": [
+        "console/src/api/serverContact.ts",
+        "console/src/components/layout"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "vitest"
       ],
       "source_inputs": [],
       "test_inputs": [],
@@ -3533,12 +3557,9 @@
     {
       "path": "console/src/pages/shell/data",
       "files": [
-        "console/src/pages/shell/data/BackupStatusPanel.tsx",
         "console/src/pages/shell/data/DataPage.tsx"
       ],
       "imports": [
-        "console/src/api/cluster.ts",
-        "console/src/components/layout",
         "console/src/components/shell",
         "console/src/lib/shell",
         "console/src/pages/FlexQueryManagePage.tsx",
@@ -3547,10 +3568,7 @@
         "console/src/pages/ResearchEnginePage.tsx"
       ],
       "test_imports": [],
-      "external_imports": [
-        "@bifrost/ui",
-        "@tanstack/react-query"
-      ],
+      "external_imports": [],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []
@@ -3603,12 +3621,12 @@
         "console/src/api/telemetry.ts",
         "console/src/components/layout",
         "console/src/components/shell",
+        "console/src/domains/foundation/backup",
         "console/src/lib/agent",
         "console/src/lib/shell",
         "console/src/pages/ClusterPage.tsx",
         "console/src/pages/NetworkPage.tsx",
-        "console/src/pages/RuntimeMapPage.tsx",
-        "console/src/pages/shell/data"
+        "console/src/pages/RuntimeMapPage.tsx"
       ],
       "test_imports": [
         "console/src/api/clusterTypes.ts"
@@ -3737,6 +3755,7 @@
         "console/src/api/telemetry.ts",
         "console/src/components/market-data",
         "console/src/components/shell",
+        "console/src/domains/foundation/backup",
         "console/src/hooks",
         "console/src/hooks/useFlexQueryLiveProbe.ts",
         "console/src/hooks/useIbGatewayLiveProbe.ts",

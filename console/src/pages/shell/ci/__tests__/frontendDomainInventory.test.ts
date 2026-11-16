@@ -13,6 +13,14 @@ it('keeps source files and static imports in the published frontend inventory cu
   const ci = actual.groups.find(g => g.path === 'console/src/pages/shell/ci')!
   expect(ci.imports).toContain('console/src/api/units.ts')
   expect(actual.groups.find(g => g.path === 'console/src/pages/shell/agents')?.imports.length).toBeGreaterThan(0)
+  const data = actual.groups.find(g => g.path === 'console/src/pages/shell/data')!
+  expect(data.files).toEqual(['console/src/pages/shell/data/DataPage.tsx'])
+  expect(declaration.groups[data.path].domains).toEqual(['tenant'])
+  const backup = actual.groups.find(g => g.path === 'console/src/domains/foundation/backup')!
+  expect(declaration.groups[backup.path].domains).toEqual(['foundation'])
+  expect(backup.imports).not.toContain('console/src/api/cluster.ts')
+  expect(backup.imports.some(p => p.includes('/pages/') || p.includes('/tenant/'))).toBe(false)
+  expect(backup.unresolved_imports).toEqual([])
 })
 
 it('resolves aliases, re-exports and literal dynamic imports, keeping unknown imports visible', () => {

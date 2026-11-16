@@ -1,6 +1,6 @@
 import { useDomainSection } from '@/lib/shell/useHashSection'
 import { DomainSection } from '@/components/shell/DomainSection'
-import { BackupStatusPanel } from '../data/BackupStatusPanel'
+import { BackupStatusPanel } from '@/domains/foundation/backup/BackupStatusPanel'
 import { ComputeReadings } from './ComputeReadings'
 import { useQuery } from '@tanstack/react-query'
 import { fetchContext } from '@/api/core'

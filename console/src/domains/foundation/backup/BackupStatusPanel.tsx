@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { DenseTag } from '@bifrost/ui'
-import { fetchClusterPostgresBackupStatus } from '@/api/cluster'
+import { fetchClusterPostgresBackupStatus } from './api'
 import { OpsSection } from '@/components/layout/OpsSection'
 
 function when(iso: string | undefined): string {

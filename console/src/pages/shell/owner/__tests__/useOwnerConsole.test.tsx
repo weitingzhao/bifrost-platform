@@ -15,7 +15,8 @@ const api = vi.hoisted(() => ({
   probeEnabled: [] as boolean[],
 }))
 vi.mock('@/api/telemetry', () => ({ fetchTelemetryAlerts: api.alerts, fetchTelemetryTargets: api.targets, fetchPromQL: api.promql }))
-vi.mock('@/api/cluster', () => ({ fetchClusterNodes: api.nodes, fetchClusterPostgresBackupStatus: api.backup,
+vi.mock('@/domains/foundation/backup/api', () => ({ fetchClusterPostgresBackupStatus: api.backup }))
+vi.mock('@/api/cluster', () => ({ fetchClusterNodes: api.nodes,
   fetchDataFreshness: vi.fn(async () => ({ databases: [], fresh_threshold_days: 3, stale_threshold_days: 7 })) }))
 vi.mock('@/api/delivery', () => ({ fetchDeliveryPipelines: api.pipelines, fetchPipelineRuns: api.runs, fetchReleaseWindow: api.window }))
 vi.mock('@/api/releases', () => ({ fetchReleaseRecords: api.records }))

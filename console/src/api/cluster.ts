@@ -1,7 +1,7 @@
 import { serverFetch } from '@/api/serverContact'
 import type { AuditResponse } from './auditTypes'
 import type { AuthCapabilities } from './matrixTypes'
-import type { ClusterEventsResponse, ClusterGovernanceResponse, ClusterMetricsResponse, ClusterNamespacesResponse, ClusterNodesResponse, ClusterObservabilityResponse, ClusterPlacementResponse, ClusterPostgresBackupStatusResponse, ClusterPostgresStatusResponse, ClusterRedisStatusResponse, ClusterServiceReadinessResponse, ClusterSummary, ClusterWorkloadsResponse, DataCloneSchedule, DataFreshnessResponse, NodePowerResponse } from './clusterTypes'
+import type { ClusterEventsResponse, ClusterGovernanceResponse, ClusterMetricsResponse, ClusterNamespacesResponse, ClusterNodesResponse, ClusterObservabilityResponse, ClusterPlacementResponse, ClusterPostgresStatusResponse, ClusterRedisStatusResponse, ClusterServiceReadinessResponse, ClusterSummary, ClusterWorkloadsResponse, DataCloneSchedule, DataFreshnessResponse, NodePowerResponse } from './clusterTypes'
 import { operatorToken } from './client'
 
 export async function fetchCluster(): Promise<ClusterSummary> {
@@ -32,12 +32,6 @@ export async function fetchClusterPostgresStatus(): Promise<ClusterPostgresStatu
   const r = await serverFetch('/api/v1/cluster/postgres')
   if (!r.ok) throw new Error(`cluster postgres: HTTP ${r.status}`)
   return r.json() as Promise<ClusterPostgresStatusResponse>
-}
-
-export async function fetchClusterPostgresBackupStatus(): Promise<ClusterPostgresBackupStatusResponse> {
-  const r = await serverFetch('/api/v1/cluster/postgres/backup-status')
-  if (!r.ok) throw new Error(`cluster postgres backup-status: HTTP ${r.status}`)
-  return r.json() as Promise<ClusterPostgresBackupStatusResponse>
 }
 
 export async function fetchDataFreshness(): Promise<DataFreshnessResponse> {

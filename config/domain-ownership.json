@@ -1921,11 +1921,10 @@
       },
       "console/src/pages/shell/data": {
         "domains": [
-          "compute",
           "tenant"
         ],
-        "status": "mixed",
-        "basis": "2026-11-16 source/caller audit: fixed data-lane UI and infrastructure backups remain mixed"
+        "status": "assigned",
+        "basis": "2026-11-16 Owner confirmed Tenant integration: DataPage only composes plugin, market-data, flex and research application views. Backup implementation and client physically moved to Foundation; storage navigation link remains an explicit cross-domain link."
       },
       "console/src/api/dataHusbandry.ts": {
         "domains": [
@@ -1993,6 +1992,13 @@
         ],
         "status": "assigned",
         "basis": "2026-11-16 actual extraction from mixed Work composition: round read projection, snapshot query hook and recent-change presentation; shell navigation and signoff gates remain in their original owners"
+      },
+      "console/src/domains/foundation/backup": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner confirmed read-only backup status display belongs to Foundation (compute charter excludes storage). Owns panel, response type and GET client; no backup execution, database or permission changes."
       }
     }
   }
