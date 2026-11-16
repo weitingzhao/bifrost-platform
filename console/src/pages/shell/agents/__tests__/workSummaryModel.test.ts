@@ -11,7 +11,7 @@ import {
   planCountdown, dependencyWaits, dependencyWords, lastReadRows, mainlineLabels, mainlineSentence, moduleClass, othersSentence, roundHeader, signoffBreakdown, signoffCount,
   signoffGaps, signoffWords, summaryLamp,
 } from '../workSummaryModel'
-import type { RoundsRead } from '../planRoundModel'
+import type { RoundsRead } from '@/domains/plan/readings/rounds'
 
 /*
  * R5:5.5-2: Work's one sentence and its counts are computed from plan-view and GET /plan, never written by hand (the

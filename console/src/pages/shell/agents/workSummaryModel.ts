@@ -3,7 +3,7 @@ import type { PlanSnapshot } from '@/api/planSnapshot'
 import type { AcceptanceSignoff } from '@/api/planSnapshotSchema'
 import type { Tone } from '../owner/ownerModel'
 import { activeCounts, noViewReason, type ModuleRow } from './planModuleModel'
-import { roundLabel, type RoundsRead } from './planRoundModel'
+import { roundLabel, type RoundsRead } from '@/domains/plan/readings/rounds'
 import { answeredWords, planTreeOld, progressOld, viewOldReason } from './readAge'
 import type { SignoffWaitsRead } from './useRuntimePlan'
 

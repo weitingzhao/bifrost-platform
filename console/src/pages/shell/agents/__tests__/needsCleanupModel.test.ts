@@ -3,7 +3,7 @@ import prod from '@/api/__fixtures__/plan-view-pv2-prod-r4.json'
 import presenceFixture from '@/api/__fixtures__/agentrt-progress-presence.testdb.json'
 import { parseRuntimeProgress } from '@/api/agentRuntime'
 import { parsePlanSnapshot, type PlanSnapshot } from '@/api/planSnapshot'
-import type { RoundsRead } from '../planRoundModel'
+import type { RoundsRead } from '@/domains/plan/readings/rounds'
 import { cleanupBreakdown, cleanupGaps, cleanupWork, cleanupWords, groupCount, heartbeatUnconfirmed, needsCleanup, type NeedsCleanup } from '../needsCleanupModel'
 
 /*

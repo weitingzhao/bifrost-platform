@@ -1,9 +1,10 @@
 import { NowClock, useNow } from '../progress/progressClock'
 import { WORK_GROUP, cleanupBreakdown, cleanupWords, groupCount, type CleanupGroup, type NeedsCleanup } from './needsCleanupModel'
 import { WorkRow } from './PlanLiveWork'
-import { roundLabel } from './planRoundModel'
+import { roundLabel } from '@/domains/plan/readings/rounds'
 import { needsCleanupHref, useNeedsCleanup } from './useNeedsCleanup'
-import { usePlanAddress, usePlanSnapshot, type PlanAddress } from './usePlanSnapshot'
+import { usePlanSnapshot } from '@/domains/plan/readings/usePlanSnapshot'
+import { usePlanAddress, type PlanAddress } from './usePlanSnapshot'
 
 /**
  * The summary's one way to the list (R5:5.5-4): each group's count with its reach, the list's own words (the same

@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchRuntimeProgress } from '@/api/agentRuntime'
-import { fetchPlanSnapshot } from '@/api/planSnapshot'
 import { canonicalQuery } from '@/lib/shell/useHashSection'
-import { roundsRead, type RoundsRead } from './planRoundModel'
+import { roundsRead, type RoundsRead } from '@/domains/plan/readings/rounds'
 
 function address() {
   const query = new URLSearchParams(canonicalQuery(window.location.hash))
@@ -33,12 +32,6 @@ export function usePlanAddress(): PlanAddress {
   const retry = useCallback(() => { void refetch() }, [refetch])
   const root = value.named || (rounds.state === 'ok' ? rounds.newest : null)
   return { root, node: value.node, from: value.named ? 'address' : 'newest', rounds, retry }
-}
-
-/** One round's plan view; nothing is read while the round is not known. */
-export function usePlanSnapshot(root: string | null, enabled = true) {
-  return useQuery({ enabled: enabled && root !== null, queryKey: ['agent-runtime-plan-view', root ?? ''], queryFn: ({ signal }) => fetchPlanSnapshot(root ?? '', signal),
-    refetchInterval: 15_000, retry: false })
 }
 
 export function planNodeHref(root: string, node = '') {

@@ -1,5 +1,5 @@
 import type { CandidateEvidence } from '@/api/planSnapshotSchema'
-import { usePlanSnapshot } from './usePlanSnapshot'
+import { usePlanSnapshot } from '@/domains/plan/readings/usePlanSnapshot'
 import { DecisionEnvironment } from '@/pages/DecisionEnvironment'
 import { useDecisionEnvironment } from '@/pages/useDecisionEnvironment'
 import { useQueryClient } from '@tanstack/react-query'

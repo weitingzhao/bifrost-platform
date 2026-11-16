@@ -1477,6 +1477,31 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/plan/readings",
+      "files": [
+        "console/src/domains/plan/readings/readings.test.ts",
+        "console/src/domains/plan/readings/recentChanges.ts",
+        "console/src/domains/plan/readings/rounds.ts",
+        "console/src/domains/plan/readings/usePlanSnapshot.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/agentRuntimePlan.ts",
+        "console/src/api/planSnapshot.ts"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/api/planSnapshot.ts"
+      ],
+      "external_imports": [
+        "@tanstack/react-query",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/hooks",
       "files": [
         "console/src/hooks/__tests__/useFleetSnapshot.test.ts",
@@ -3361,6 +3386,7 @@
         "console/src/api/questions.ts",
         "console/src/components/layout",
         "console/src/components/ui",
+        "console/src/domains/plan/readings",
         "console/src/hooks/useAgentThreads.ts",
         "console/src/hooks/usePlatformAuth.ts",
         "console/src/lib/shell",
@@ -3384,6 +3410,7 @@
         "console/src/api/planPace.ts",
         "console/src/api/planSnapshot.ts",
         "console/src/api/questions.ts",
+        "console/src/domains/plan/readings",
         "console/src/hooks/PlatformAuthProvider.tsx",
         "console/src/hooks/platformAuthContext.ts",
         "console/src/lib/platformAuth.ts",

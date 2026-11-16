@@ -1,7 +1,7 @@
 import { AGENT_PROGRESS_POLL_MS } from '@/api/agentProgress'
 import type { PlanSnapshot } from '@/api/planSnapshot'
 import { isStale, SHELL_POLL_MS } from './moduleDetailModel'
-import { roundLabel } from './planRoundModel'
+import { roundLabel } from '@/domains/plan/readings/rounds'
 
 /*
  * How old each read behind Work's counts may be before what it says is no longer said as now (R5:5.5-4: a refresh that

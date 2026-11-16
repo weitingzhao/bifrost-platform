@@ -14,7 +14,8 @@ import { acceptanceOf, actionsLeft, approvalActivity, dependentsOf, estimateOf, 
   type ModuleScope, type ShellRead, type ShellReads } from './moduleDetailModel'
 import { activeCounts, cellLabels, cellStyle, judgeRow, NO_RULE_PILL, noRuleMarked, noRuleText, noViewReason, nowLines, spokenState, toGoText, unverifiedNote, type CellState, type ModuleRow,
   type RuleLine, type StepCell } from './planModuleModel'
-import { roundLabel, workRoundHref } from './planRoundModel'
+import { workRoundHref } from './planRoundModel'
+import { roundLabel } from '@/domains/plan/readings/rounds'
 import { responsibility, validity } from './planSnapshotModel'
 import { StepSignoffHere } from './StepSignoffHere'
 import { HowRead } from './HowRead'

@@ -1,5 +1,5 @@
 import type { ExternalWork, PlanSnapshot } from '@/api/planSnapshot'
-import { roundLabel, type RoundsRead } from './planRoundModel'
+import { roundLabel, type RoundsRead } from '@/domains/plan/readings/rounds'
 import { answeredWords, progressOld, viewOldReason } from './readAge'
 
 /*

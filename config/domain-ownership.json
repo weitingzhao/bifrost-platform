@@ -1986,6 +1986,13 @@
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+      },
+      "console/src/domains/plan/readings": {
+        "domains": [
+          "plan"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 actual extraction from mixed Work composition: round read projection, snapshot query hook and recent-change presentation; shell navigation and signoff gates remain in their original owners"
       }
     }
   }

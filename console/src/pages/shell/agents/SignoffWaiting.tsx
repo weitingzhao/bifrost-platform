@@ -1,4 +1,4 @@
-import { usePlanSnapshot } from './usePlanSnapshot'
+import { usePlanSnapshot } from '@/domains/plan/readings/usePlanSnapshot'
 import { useEffect, useRef } from 'react'
 import type { SignoffWait } from '@/api/agentRuntimePlan'
 import { hashNamesSection } from '@/lib/shell/useHashSection'
