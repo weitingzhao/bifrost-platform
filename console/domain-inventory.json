@@ -2089,9 +2089,11 @@
       "files": [
         "console/src/domains/plan/observations/liveStepModel.ts",
         "console/src/domains/plan/observations/needsCleanupModel.ts",
+        "console/src/domains/plan/observations/unlinkedSessionsModel.ts",
         "console/src/domains/plan/observations/useNeedsCleanup.ts"
       ],
       "imports": [
+        "console/src/api/agentThreads.ts",
         "console/src/api/planSnapshot.ts",
         "console/src/domains/plan/readings",
         "console/src/pages/shell/agents"
@@ -4050,7 +4052,6 @@
         "console/src/api/agentProgress.ts",
         "console/src/api/agentRuntimePlan.ts",
         "console/src/api/agentRuntimePlanView.ts",
-        "console/src/api/agentThreads.ts",
         "console/src/api/approvals.ts",
         "console/src/api/client.ts",
         "console/src/api/core.ts",
