@@ -111,6 +111,13 @@ var intendedRouteAdditions = map[string][]string{
 	"POST /api/v1/agentrt/external-work/{id}/events": {"reporter", "operator", "admin", "trade-satellite"},
 	// A proposer withdraws its unstarted tasks: whoever may propose them
 	// (POST /missions/{id}/tasks); the store holds it to their proposer.
+	// 2026-11-16: bus step 1 (api/internal/bus/RULES.md §8): the gate's three
+	// reads of the ledger, viewer and above (read-only). Gitea's push hook
+	// holds no bearer: the body is signed with the hook's secret (bus/hook).
+	"GET /api/v1/bus/events":                {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"GET /api/v1/bus/stream":                {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"GET /api/v1/bus/trace":                 {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"POST /api/v1/bus/hooks/gitea":          {"", "viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1", "executor"},
 	"GET /api/v1/network/clients/{mac}":     {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/network/clients/fixed-ip": {"operator", "admin", "trade-satellite"},
 }

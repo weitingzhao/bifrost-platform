@@ -55,7 +55,7 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 		}
 	}
 	src.UnitRuns = s.unitRunsSource()
-	src.HeadRelease = s.headReleaseSource()
+	src.HeadRelease = s.bus.serialHeadRelease(s.headReleaseSource())
 	src.PostRelease = s.postReleaseSource()
 	if s.delivery != nil {
 		src.RunEvidenced = s.unitScopeShadowSource()

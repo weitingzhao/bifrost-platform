@@ -112,6 +112,7 @@ type Server struct {
 	agentThreads    *agentthreads.Handler
 	agentProgress   *agentprogress.Handler
 	agentRuntime    *agentRuntime
+	bus             busWiring // the event bus, step 1 (bus_wire.go)
 	// landingHealth is what the workers wired for landing (S3): each reach
 	// of the landing cards into the question store and why live is off.
 	landingHealth atomic.Value // map[string]any
@@ -428,6 +429,7 @@ func (s *Server) Router() http.Handler {
 		approvals.Mount(r, s.auth, s.approvals)
 		s.mountQuestions(r)
 		s.mountAgentRuntime(r)
+		s.mountBus(r)
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/release-policy", s.handleReleasePolicy)
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/ops/facts/system", s.handleOpsSystemFacts)
 		r.Get("/environments", s.handleEnvironments)

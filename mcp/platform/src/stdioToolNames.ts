@@ -55,6 +55,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_unit_scope',
   'get_unit_config',
   'get_unit_runs',
+  'wait_for_event',
   'list_records',
   'get_full_ci',
   'check_full_ci_landings',

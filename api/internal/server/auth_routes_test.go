@@ -12,7 +12,14 @@ import (
 // anonymousWrites lists the mutating routes allowed to skip auth.Require, each
 // with the reason it is safe. Adding a route here is a review decision, not a
 // way to turn the test green.
-var anonymousWrites = map[string]string{}
+var anonymousWrites = map[string]string{
+	// 2026-11-16: bus step 1 (api/internal/bus/RULES.md §7, the step-1 brief):
+	// Gitea's push hook sends no bearer. The handler refuses (401) every body
+	// whose X-Gitea-Signature is not the HMAC-SHA256 of BUS_GITEA_HOOK_SECRET,
+	// answers 503 without the secret, and can only append git.main.advanced
+	// for a watched repository's main (bus/hook TestHookRefusesABadSignature).
+	"POST /api/v1/bus/hooks/gitea": "HMAC only, like the Tekton listener but with a secret: 503 without BUS_GITEA_HOOK_SECRET; 401 unless X-Gitea-Signature is the HMAC-SHA256 of the raw body under it, checked before the body is parsed; it can only append git.main.advanced for a watched repository's main, once per commit",
+}
 
 // ticketAuthenticated are reads that open a privileged session and therefore
 // authenticate in the handler instead of through auth.Require.

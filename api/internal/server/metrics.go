@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/maintainer"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -56,6 +57,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	s.writeFullCIMetric(&b)
 	releasepolicy.WriteMetrics(&b)
 	agentthreads.WriteMetrics(&b)
+	relay.WriteMetrics(&b)
 	s.httpMetrics.Write(&b)
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

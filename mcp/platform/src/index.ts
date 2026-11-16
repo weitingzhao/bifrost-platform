@@ -45,6 +45,7 @@ import { getReleaseWindow, holdReleaseWindow, releaseReleaseWindow } from './win
 import { presenceSkip, registerPresence } from './presence.js'
 import { registerPlanImportTools } from './registerPlanImport.js'
 import { FULL_CI_PATH, fullCICheckPath, unitConfigPath, unitRunsPath, unitScopePath } from './unitsTools.js'
+import { BUS_WAIT_MAX_SECONDS, WAIT_FOR_EVENT_DESCRIPTION, busEventsPath } from './busTools.js'
 
 const SERVER_NAME = 'mcp-server-platform'
 const SERVER_VERSION = '0.1.0'
@@ -583,6 +584,19 @@ reg(
     const qs = q.toString()
     return jsonResult(await platformGet('/api/v1/records' + (qs ? '?' + qs : '')))
   },
+)
+
+reg(
+  'wait_for_event',
+  WAIT_FOR_EVENT_DESCRIPTION,
+  {
+    types: z.string().min(1).max(400).describe('Comma list of registered event types, e.g. git.main.advanced'),
+    match: z.string().max(200).optional().describe("A substring of the event's subject, e.g. bifrost-platform@"),
+    after: z.string().regex(/^[0-9]+\.[0-9]+$/).optional().describe('The next cursor of the previous call; left out: from now'),
+    wait_seconds: z.number().int().min(0).max(BUS_WAIT_MAX_SECONDS).optional().describe('Default 25'),
+    client: z.string().regex(/^[\x21-\x7e]{1,40}$/).optional().describe('Who waits, for the receipts; default mcp'),
+  },
+  async (args) => jsonResult(await platformGet(busEventsPath(args))),
 )
 
 reg(

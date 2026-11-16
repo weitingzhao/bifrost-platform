@@ -59,6 +59,10 @@ deny	POST /api/v1/approvals/{id}/withdraw
 deny	GET /api/v1/audit
 deny	POST /api/v1/audit/append
 deny	GET /api/v1/auth/capabilities
+deny	GET /api/v1/bus/events
+deny	POST /api/v1/bus/hooks/gitea
+deny	GET /api/v1/bus/stream
+deny	GET /api/v1/bus/trace
 deny	GET /api/v1/checklist/signals
 deny	GET /api/v1/cluster/
 deny	POST /api/v1/cluster/addons/kube-prometheus-stack/ensure

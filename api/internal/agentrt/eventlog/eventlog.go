@@ -71,6 +71,10 @@ type Appended struct {
 	At      time.Time
 }
 
+// LedgerChannel is the PostgreSQL notification channel Append notifies on
+// each commit that wrote an event.
+const LedgerChannel = "bus_ledger"
+
 // TimeLayout is the layout of an event's time and of the instants in its body.
 const TimeLayout = "2006-01-02T15:04:05.000000Z"
 
@@ -186,6 +190,12 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 		return Appended{}, err
 	}
 	if _, err := tx.Exec(ctx, `SELECT set_config('agentrt.event_id', $1, true)`, strconv.FormatInt(id, 10)); err != nil {
+		return Appended{}, err
+	}
+	// The bus's relay listens on this channel (bus/RULES.md §7): the notice
+	// is delivered when the transaction commits, never before, and several
+	// in one transaction are folded into one.
+	if _, err := tx.Exec(ctx, `SELECT pg_notify('`+LedgerChannel+`', '')`); err != nil {
 		return Appended{}, err
 	}
 	return Appended{EventID: id, Seq: seq, SHA256: sum, At: at}, nil

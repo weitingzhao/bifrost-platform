@@ -70,6 +70,34 @@
       "status": "assigned",
       "basis": "2026-11-16 placement answer: the bus is sub-domain 0.2 of foundation, built by seat 8.2"
     },
+    "api/internal/bus/relay": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 placement answer: bus sub-domain 0.2"
+    },
+    "api/internal/bus/gate": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 placement answer: bus sub-domain 0.2"
+    },
+    "api/internal/bus/hook": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 placement answer: bus sub-domain 0.2"
+    },
+    "api/cmd/bifrost-bus": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 placement answer: bus sub-domain 0.2"
+    },
     "api/internal/agentrt/actor": {
       "domains": [
         "foundation"
