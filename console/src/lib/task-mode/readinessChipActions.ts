@@ -60,19 +60,4 @@ export type ChipNavigation = {
   /** Prefill Satellite Health view segment. */
   healthSection?: SatelliteHealthSection
 }
-const SATELLITE_API_ENV_KEY = 'bifrost.satelliteApi.env'
-const SATELLITE_HEALTH_SECTION_KEY = 'bifrost.satelliteHealth.section'
-
-export function consumeSatelliteApiEnv(): ReadinessChipAction['apiEnv'] | null {
-  const raw = sessionStorage.getItem(SATELLITE_API_ENV_KEY)
-  sessionStorage.removeItem(SATELLITE_API_ENV_KEY)
-  if (raw === 'dev' || raw === 'stg' || raw === 'prod') return raw
-  return null
-}
-
-export function consumeSatelliteHealthSection(): SatelliteHealthSection | null {
-  const raw = sessionStorage.getItem(SATELLITE_HEALTH_SECTION_KEY)
-  sessionStorage.removeItem(SATELLITE_HEALTH_SECTION_KEY)
-  if (raw === 'probes' || raw === 'runtime') return raw
-  return null
-}
+export { consumeSatelliteApiEnv, consumeSatelliteHealthSection } from '@/domains/tenant/environment/navigation'

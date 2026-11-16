@@ -1522,6 +1522,22 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/delivery/runtime-observation",
+      "files": [
+        "console/src/domains/delivery/runtime-observation/releaseSignal.ts"
+      ],
+      "imports": [
+        "console/src/api/deliveryTypes.ts",
+        "console/src/domains/foundation/observation-display",
+        "console/src/lib/delivery"
+      ],
+      "test_imports": [],
+      "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/foundation/activity",
       "files": [
         "console/src/domains/foundation/activity/__tests__/activityStore.test.ts",
@@ -1637,6 +1653,19 @@
         "react",
         "vitest"
       ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/foundation/environment-catalog",
+      "files": [
+        "console/src/domains/foundation/environment-catalog/contracts.ts",
+        "console/src/domains/foundation/environment-catalog/records.ts"
+      ],
+      "imports": [],
+      "test_imports": [],
+      "external_imports": [],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []
@@ -1771,6 +1800,33 @@
         "@tanstack/react-query",
         "@testing-library/react",
         "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/foundation/observation-display",
+      "files": [
+        "console/src/domains/foundation/observation-display/__tests__/__snapshots__/extractionParity.test.ts.snap",
+        "console/src/domains/foundation/observation-display/__tests__/extractionParity.test.ts",
+        "console/src/domains/foundation/observation-display/failingTargets.ts",
+        "console/src/domains/foundation/observation-display/matrixSummary.ts",
+        "console/src/domains/foundation/observation-display/signals.ts"
+      ],
+      "imports": [
+        "console/src/api",
+        "console/src/api/clusterTypes.ts",
+        "console/src/lib/agent",
+        "console/src/lib/control-room"
+      ],
+      "test_imports": [
+        "console/src/api",
+        "console/src/lib",
+        "console/src/lib/control-room"
+      ],
+      "external_imports": [
         "vitest"
       ],
       "source_inputs": [],
@@ -2002,6 +2058,24 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/tenant/environment",
+      "files": [
+        "console/src/domains/tenant/environment/catalog.ts",
+        "console/src/domains/tenant/environment/envVisual.ts",
+        "console/src/domains/tenant/environment/navigation.ts"
+      ],
+      "imports": [
+        "console/src/domains/foundation/environment-catalog"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/tenant/husbandry/api",
       "files": [
         "console/src/domains/tenant/husbandry/api/dataHusbandry.ts"
@@ -2087,6 +2161,21 @@
         "@tanstack/react-query",
         "react"
       ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/tenant/readiness",
+      "files": [
+        "console/src/domains/tenant/readiness/payloadReadiness.ts",
+        "console/src/domains/tenant/readiness/payloadVerification.ts"
+      ],
+      "imports": [
+        "console/src/lib/control-room"
+      ],
+      "test_imports": [],
+      "external_imports": [],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []
@@ -2363,14 +2452,15 @@
       ],
       "imports": [
         "console/src/api",
-        "console/src/domains/foundation/patrol-view"
+        "console/src/domains/foundation/environment-catalog",
+        "console/src/domains/foundation/patrol-view",
+        "console/src/domains/tenant/environment"
       ],
       "test_imports": [
         "console/src/lib/signInError.ts",
         "console/src/lib/tradeFrontendUrls.ts"
       ],
       "external_imports": [
-        "@bifrost/ui",
         "node:fs",
         "node:path",
         "node:url",
@@ -2637,9 +2727,11 @@
         "console/src/api/clusterTypes.ts",
         "console/src/api/deliveryTypes.ts",
         "console/src/api/satelliteBusTypes.ts",
+        "console/src/domains/delivery/runtime-observation",
+        "console/src/domains/foundation/observation-display",
+        "console/src/domains/tenant/readiness",
         "console/src/lib",
-        "console/src/lib/agent",
-        "console/src/lib/delivery"
+        "console/src/lib/agent"
       ],
       "test_imports": [
         "console/src/api",

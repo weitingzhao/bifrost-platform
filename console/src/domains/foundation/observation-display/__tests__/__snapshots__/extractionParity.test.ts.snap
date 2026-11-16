@@ -1,0 +1,680 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`environment and observation extraction parity > preserves complete payload rows and fallback matching 1`] = `
+[
+  [
+    {
+      "dev": {
+        "detail": "No Fleet cell satellite:dev",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+      "envDiverges": false,
+      "fleetRole": "satellite",
+      "id": "daemon",
+      "label": "Daemon",
+      "mapMode": "runtime-map",
+      "prod": {
+        "detail": "No Fleet cell satellite:prod",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+      "role": "GsTrading FSM · monitor API health",
+      "stg": {
+        "detail": "No Fleet cell satellite:stg",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+    },
+    {
+      "dev": {
+        "detail": "No Fleet cell satellite:dev",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+      "envDiverges": false,
+      "fleetRole": "satellite",
+      "id": "celery",
+      "label": "Celery / Ops",
+      "mapMode": "runtime-map",
+      "prod": {
+        "detail": "No Fleet cell satellite:prod",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+      "role": "Workers · Flower · ops API health",
+      "stg": {
+        "detail": "No Fleet cell satellite:stg",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+    },
+    {
+      "dev": {
+        "detail": "No Fleet cell vendor:dev",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+      "envDiverges": false,
+      "fleetRole": "vendor",
+      "id": "ib",
+      "label": "IB edge",
+      "mapMode": "fleet-vendor",
+      "prod": {
+        "detail": "No Fleet cell vendor:prod",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+      "role": "Operator RPC · ingestor · account agent",
+      "stg": {
+        "detail": "No Fleet cell vendor:stg",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+    },
+    {
+      "dev": {
+        "detail": "No Fleet cell satellite:dev",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+      "envDiverges": false,
+      "fleetRole": "satellite",
+      "id": "datastore",
+      "label": "PG / Redis",
+      "mapMode": "runtime-map",
+      "prod": {
+        "detail": "No Fleet cell satellite:prod",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+      "role": "PostgreSQL + Redis TCP from probe host",
+      "stg": {
+        "detail": "No Fleet cell satellite:stg",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+    },
+    {
+      "dev": {
+        "detail": "No Fleet cell satellite:dev",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+      "envDiverges": false,
+      "fleetRole": "satellite",
+      "id": "frontend",
+      "label": "Trade UI",
+      "mapMode": "runtime-map",
+      "prod": {
+        "detail": "No Fleet cell satellite:prod",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+      "role": "Nginx SPA entry",
+      "stg": {
+        "detail": "No Fleet cell satellite:stg",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+    },
+  ],
+  [
+    {
+      "dev": {
+        "detail": "monitor",
+        "mapTargetId": "api-monitor",
+        "signal": "ok",
+      },
+      "envDiverges": true,
+      "fleetRole": "satellite",
+      "id": "daemon",
+      "label": "Daemon",
+      "mapMode": "runtime-map",
+      "prod": {
+        "detail": "No Fleet cell satellite:prod",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+      "role": "GsTrading FSM · monitor API health",
+      "stg": {
+        "detail": "STG smoke rollup · smoke",
+        "mapTargetId": null,
+        "signal": "degraded",
+      },
+    },
+    {
+      "dev": {
+        "detail": "ops",
+        "mapTargetId": "api-ops",
+        "signal": "degraded",
+      },
+      "envDiverges": false,
+      "fleetRole": "satellite",
+      "id": "celery",
+      "label": "Celery / Ops",
+      "mapMode": "runtime-map",
+      "prod": {
+        "detail": "No Fleet cell satellite:prod",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+      "role": "Workers · Flower · ops API health",
+      "stg": {
+        "detail": "STG smoke rollup · smoke",
+        "mapTargetId": null,
+        "signal": "degraded",
+      },
+    },
+    {
+      "dev": {
+        "detail": "shared",
+        "mapTargetId": null,
+        "signal": "ok",
+      },
+      "envDiverges": false,
+      "fleetRole": "vendor",
+      "id": "ib",
+      "label": "IB edge",
+      "mapMode": "fleet-vendor",
+      "prod": {
+        "detail": "shared",
+        "mapTargetId": null,
+        "signal": "ok",
+      },
+      "role": "Operator RPC · ingestor · account agent",
+      "stg": {
+        "detail": "shared",
+        "mapTargetId": null,
+        "signal": "ok",
+      },
+    },
+    {
+      "dev": {
+        "detail": "pg missing · redis",
+        "mapTargetId": "postgres",
+        "signal": "unknown",
+      },
+      "envDiverges": false,
+      "fleetRole": "satellite",
+      "id": "datastore",
+      "label": "PG / Redis",
+      "mapMode": "runtime-map",
+      "prod": {
+        "detail": "No Fleet cell satellite:prod",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+      "role": "PostgreSQL + Redis TCP from probe host",
+      "stg": {
+        "detail": "STG smoke rollup · smoke",
+        "mapTargetId": null,
+        "signal": "degraded",
+      },
+    },
+    {
+      "dev": {
+        "detail": "edge fail",
+        "mapTargetId": "nginx",
+        "signal": "fail",
+      },
+      "envDiverges": true,
+      "fleetRole": "satellite",
+      "id": "frontend",
+      "label": "Trade UI",
+      "mapMode": "runtime-map",
+      "prod": {
+        "detail": "No Fleet cell satellite:prod",
+        "mapTargetId": null,
+        "signal": "unknown",
+      },
+      "role": "Nginx SPA entry",
+      "stg": {
+        "detail": "STG smoke rollup · smoke",
+        "mapTargetId": null,
+        "signal": "degraded",
+      },
+    },
+  ],
+]
+`;
+
+exports[`environment and observation extraction parity > preserves full catalog and identity colors 1`] = `
+{
+  "CATALOG_VERSION": "2026-06-29-ai-compute-strategy",
+  "HARDWARE_ROWS": [
+    {
+      "host": "192.168.10.70",
+      "id": "mini-pc-a",
+      "roleCompose": "Prod compose · Redis · nginx",
+      "roleK3s": "Server ① · API · Redis · Ingress · Gitea · ArgoCD",
+    },
+    {
+      "host": "192.168.10.79",
+      "id": "ubt-k3s-06",
+      "roleCompose": "— (former bare PG .80 decommissioned 2026-06-29)",
+      "roleK3s": "Outside the cluster since 2026-10-17 · Agent host (agentd for PROD and STG)",
+    },
+    {
+      "host": "192.168.10.73 (ubt-k3s-01)",
+      "id": "mini-pc-c",
+      "roleCompose": "K3s bootstrap server (first node)",
+      "roleK3s": "Live K3s bootstrap @ .73 · monitoring · Tekton (planned)",
+    },
+    {
+      "host": "192.168.10.50 (macOS · Agent)",
+      "id": "mac-mini-1",
+      "roleCompose": "Out-of-band operator-plane · mutual watch of .52 · alert relay on .50",
+      "roleK3s": "UTM Agent ops-vm-ubt-01 · frontend dev (Ready) · operator-plane stays OUTSIDE cluster",
+    },
+    {
+      "host": "192.168.10.52 (macOS · Agent)",
+      "id": "mac-mini-2",
+      "roleCompose": "Out-of-band operator-plane · mutual watch of .50",
+      "roleK3s": "UTM Agent ops-vm-ubt-02 · CI · external watchdog (Ready) · operator-plane stays OUTSIDE cluster",
+    },
+    {
+      "host": "192.168.10.60",
+      "id": "gpu-server",
+      "roleCompose": "Data warehouse · Ollama dev trial — no Prod Redis",
+      "roleK3s": "Agent compute · warehouse · GPU/AI · Tekton heavy (WOL eno1)",
+    },
+    {
+      "host": "192.168.10.75",
+      "id": "ubt-k3s-04",
+      "roleCompose": "—",
+      "roleK3s": "Agent · CNPG primary · data-primary pool · NFS client",
+    },
+    {
+      "host": "192.168.10.77",
+      "id": "ubt-k3s-05",
+      "roleCompose": "—",
+      "roleK3s": "Agent · general runtime pool · stg/dev/CI offload · NFS client",
+    },
+    {
+      "host": "(LAN TBD)",
+      "id": "win11-host",
+      "roleCompose": "TWS Host account",
+      "roleK3s": "Never in cluster",
+    },
+    {
+      "host": "(LAN TBD)",
+      "id": "win11-secondary",
+      "roleCompose": "TWS Secondary account",
+      "roleK3s": "Never in cluster",
+    },
+    {
+      "host": "127.0.0.1",
+      "id": "macbook",
+      "roleCompose": "Cursor dev · platform console · local prod smoke",
+      "roleK3s": "kubectl · MCP client",
+    },
+  ],
+  "SCOPE_ROWS": [
+    {
+      "component": "Bifrost Ops Platform (control plane)",
+      "notes": "Control plane — Go API :8780, React Ops Console :5180, MCP tools. Probes matrix/topology/spine; no Monitor POST /control/* or ib:operator:cmd.",
+      "tag": "PLATFORM",
+      "technology": "Go API :8780 · React Ops Console :5180 · Dense UI tokens",
+    },
+    {
+      "component": "bifrost-trade-frontend",
+      "notes": "Trade monitoring SPA :5173. Separate from Platform Console. Phase 1: New FE + Legacy API equivalence.",
+      "tag": "TRADE-FE",
+      "technology": "React 18 · Vite · TanStack Query · shadcn/ui",
+    },
+    {
+      "component": "bifrost-trade-api (path domains; massive retired)",
+      "notes": "monitor · docs · ops · trading · strategy · portfolio · market · research (massive REST retired → Market Data Plugin). Platform probes health endpoints only.",
+      "tag": "TRADE-API",
+      "technology": "FastAPI · ports 8765–8773 via nginx /api/{domain}/",
+    },
+    {
+      "component": "bifrost-trade-worker",
+      "notes": "Daemon reads Redis quotes/account; orders via ib_operator RPC. Does not connect to TWS directly.",
+      "tag": "WORKER",
+      "technology": "Python · daemon (GsTrading FSM) · account-sync",
+    },
+    {
+      "component": "bifrost-trade-socket (RETIRED / reference-only)",
+      "notes": "Wave 14G-F: production IB edge is Platform IB Gateway Plugin → redis-ib (IBGP). Do not start trade-socket for Inner Loop or K3s. Repo kept as reference until Phase 3 archive. Compose default path still pending Phase 1 profile cutover.",
+      "tag": "SOCKET",
+      "technology": "Python · legacy IB ingestor / account / operator (reference)",
+    },
+    {
+      "component": "bifrost-trade-core",
+      "notes": "Shared library pip-installed by api/worker/socket. Version via BIFROST_CORE_REF tag in Docker builds.",
+      "tag": "CORE",
+      "technology": "Python package bifrost_core — config, persistence, portfolio, monitor",
+    },
+    {
+      "component": "bifrost-trade-infra",
+      "notes": "Prod: docker-compose.yml on mini-pc-a. Dev: docker-compose.dev.yml. make prod-health · prod-preflight · release_gate (planned).",
+      "tag": "INFRA",
+      "technology": "Docker Compose · nginx · Makefile · config/*.yaml",
+    },
+    {
+      "component": "PostgreSQL",
+      "notes": "D2-prime: CNPG is truth. Legacy bare .80 / options_db decommissioned 2026-06-29 (box → ubt-k3s-06 @ .79). LAN DBeaver: NodePort 30432.",
+      "tag": "PG",
+      "technology": "CloudNativePG bifrost-postgres @ data NS · bifrost_dev / bifrost_stg / bifrost_prod",
+    },
+    {
+      "component": "Redis",
+      "notes": "Streams: ib:ingester:tick:* · RPC: ib:operator:cmd · Health keys bifrost:health:ws_*",
+      "tag": "REDIS",
+      "technology": "Prod on mini-pc-a :6379 · Dev local or co-located",
+    },
+    {
+      "component": "Interactive Brokers TWS / Gateway",
+      "notes": "R-DV3: Dev/Prod distinct client_id; one auto-trading Engine per IB account. D4: auto-order switch deferred.",
+      "tag": "TWS",
+      "technology": "Win11 ×2 (Host + Secondary) — cluster-external forever",
+    },
+    {
+      "component": "Source control & CI (target)",
+      "notes": "Near-term: pytest · npm run build · check:legacy-css on PR. Target: Tekton Pipeline in K3s cicd namespace.",
+      "tag": "GITHUB",
+      "technology": "Git · Gitea on K3s (internal) · Mac Mini #2 runner (near-term)",
+    },
+    {
+      "component": "K3s cluster (target)",
+      "notes": "Phase B GitOps: Gitea · ArgoCD · Tekton. Namespaces: data · cicd · monitoring · ai · bifrost. deployment_phase in topology.yaml.",
+      "tag": "K3S",
+      "technology": "K3s HA · Traefik Ingress · CloudNativePG · local-path PVC",
+    },
+    {
+      "component": "Observability (target)",
+      "notes": "Phase C on mini-pc-c. External watchdog cron on Mac Mini #2 (monitor the monitors).",
+      "tag": "OBSERVE",
+      "technology": "Prometheus · Loki · Grafana · AlertManager · AIOps webhook",
+    },
+    {
+      "component": "Inference & MCP (target)",
+      "notes": "L0/L1 ops only; research RAG CronJob read-only. Forbidden: trade write paths for platform AI.",
+      "tag": "AI",
+      "technology": "Ollama on gpu-server (4090) · mcp-server-kubernetes · bifrost-ops-mcp",
+    },
+    {
+      "component": "Out-of-Band Operator Plane (L-1)",
+      "notes": "The engineer on the ground — recovers Ops Platform (rocket) + Trade (payload) from OUTSIDE K8s; never an in-cluster Pod. Mutual watchdog + platform-api failover. See cicdBootstrapCatalog.ts L-1 · k3sBootstrapCatalog.ts · Flywheel Vision.",
+      "tag": "AGENT",
+      "technology": "Mac minis run the operator plane out of band and peer-watchdog; .50 relays alerts · Git Bridge (Mac Pro, Dev-only)",
+    },
+  ],
+  "colors": [
+    [
+      "dev",
+      "info",
+      "bg-sky-500/15 text-sky-800 dark:text-sky-300 font-semibold shadow-sm z-[1] ring-1 ring-inset ring-sky-500/45",
+    ],
+    [
+      "stg",
+      "warning",
+      "bg-amber-500/15 text-amber-900 dark:text-amber-300 font-semibold shadow-sm z-[1] ring-1 ring-inset ring-amber-500/45",
+    ],
+    [
+      "prod",
+      "danger",
+      "bg-red-500/15 text-red-800 dark:text-red-300 font-semibold shadow-sm z-[1] ring-1 ring-inset ring-red-500/45",
+    ],
+  ],
+}
+`;
+
+exports[`environment and observation extraction parity > preserves full observation summaries and mission text 1`] = `
+{
+  "degradation": [
+    [
+      {
+        "detail": "Cluster: probing",
+        "id": "Infra",
+        "segment": "rocket",
+        "signal": "unknown",
+      },
+      {
+        "detail": "Release: probing",
+        "id": "Release",
+        "segment": "rocket",
+        "signal": "unknown",
+      },
+      {
+        "detail": "Control plane: probing",
+        "id": "Control",
+        "segment": "rocket",
+        "signal": "unknown",
+      },
+      {
+        "detail": "Automation — operator-plane ?",
+        "id": "Agent",
+        "segment": "rocket",
+        "signal": "unknown",
+      },
+      {
+        "detail": "probing",
+        "id": "Trade · dev",
+        "segment": "payload",
+        "signal": "unknown",
+      },
+      {
+        "detail": "No STG matrix or smoke",
+        "id": "Trade · stg",
+        "segment": "payload",
+        "signal": "unknown",
+      },
+      {
+        "detail": "probing",
+        "id": "Trade · prod",
+        "segment": "payload",
+        "signal": "unknown",
+      },
+    ],
+    [
+      {
+        "detail": "1 failing pods",
+        "id": "Infra",
+        "segment": "rocket",
+        "signal": "degraded",
+      },
+      {
+        "detail": "Deliver-stg failed (fixture: Failed) · STG smoke 1/1 — runtime OK, rerun pipeline (not cluster/nodes)",
+        "id": "Release",
+        "segment": "rocket",
+        "signal": "degraded",
+      },
+      {
+        "detail": "Platform self-health 1/2 probes OK (platform-api · console · ArgoCD)",
+        "id": "Control",
+        "segment": "rocket",
+        "signal": "degraded",
+      },
+      {
+        "detail": "Automation — operator-plane ?",
+        "id": "Agent",
+        "segment": "rocket",
+        "signal": "unknown",
+      },
+      {
+        "detail": "1/2 services reachable",
+        "id": "Trade · dev",
+        "segment": "payload",
+        "signal": "degraded",
+      },
+      {
+        "detail": "0/1 services reachable",
+        "id": "Trade · prod",
+        "segment": "payload",
+        "signal": "degraded",
+      },
+    ],
+  ],
+  "failing": [
+    {
+      "detail": undefined,
+      "environment": "dev",
+      "id": "write",
+      "reachability": "fail",
+    },
+    {
+      "detail": "fixture",
+      "environment": "prod",
+      "id": "api-ops",
+      "reachability": "degraded",
+    },
+  ],
+  "matrix": [
+    {
+      "degraded": 0,
+      "fail": 1,
+      "ok": 1,
+      "total": 4,
+      "unknown": 2,
+      "worstReach": "fail",
+    },
+    {
+      "degraded": 1,
+      "fail": 0,
+      "ok": 0,
+      "total": 1,
+      "unknown": 0,
+      "worstReach": "degraded",
+    },
+  ],
+  "snapshots": [
+    {
+      "agent": {
+        "detail": "Automation — operator-plane ?",
+        "signal": "unknown",
+        "value": "…",
+      },
+      "control": {
+        "detail": "Control plane: probing",
+        "signal": "unknown",
+        "value": "…",
+      },
+      "infra": {
+        "detail": "Cluster: probing",
+        "signal": "unknown",
+        "value": "…",
+      },
+      "missionOverall": "unknown",
+      "payloadOverall": "unknown",
+      "release": {
+        "detail": "Release: probing",
+        "signal": "unknown",
+        "value": "…",
+      },
+      "rocketOverall": "unknown",
+      "tradeDev": {
+        "detail": "probing",
+        "signal": "unknown",
+        "value": "…",
+      },
+      "tradeProd": {
+        "detail": "probing",
+        "signal": "unknown",
+        "value": "…",
+      },
+      "tradeStg": {
+        "detail": "No STG matrix or smoke",
+        "signal": "unknown",
+        "value": "n/a",
+      },
+    },
+    {
+      "agent": {
+        "detail": "Automation — operator-plane ?",
+        "signal": "unknown",
+        "value": "…",
+      },
+      "control": {
+        "detail": "Platform self-health 1/2 probes OK (platform-api · console · ArgoCD)",
+        "signal": "degraded",
+        "value": "1/2",
+      },
+      "infra": {
+        "detail": "1 failing pods",
+        "signal": "degraded",
+        "value": "1 pods",
+      },
+      "missionOverall": "degraded",
+      "payloadOverall": "degraded",
+      "release": {
+        "detail": "Deliver-stg failed (fixture: Failed) · STG smoke 1/1 — runtime OK, rerun pipeline (not cluster/nodes)",
+        "signal": "degraded",
+        "value": "stale-fail",
+      },
+      "rocketOverall": "degraded",
+      "tradeDev": {
+        "detail": "1/2 services reachable",
+        "signal": "degraded",
+        "value": "1/2",
+      },
+      "tradeProd": {
+        "detail": "0/1 services reachable",
+        "signal": "degraded",
+        "value": "0/1",
+      },
+      "tradeStg": {
+        "detail": "STG smoke 1/1 targets",
+        "signal": "ok",
+        "value": "1/1",
+      },
+    },
+  ],
+  "text": [
+    "7 issues ()",
+    "6 issues (5 caution)",
+  ],
+}
+`;
+
+exports[`environment and observation extraction parity > preserves navigation consume-and-clear behavior including invalid input 1`] = `
+[
+  [
+    "dev",
+    "dev",
+    null,
+  ],
+  [
+    "stg",
+    "stg",
+    null,
+  ],
+  [
+    "prod",
+    "prod",
+    null,
+  ],
+  [
+    "invalid",
+    null,
+    null,
+  ],
+  [
+    "",
+    null,
+    null,
+  ],
+  [
+    "probes",
+    "probes",
+    null,
+  ],
+  [
+    "runtime",
+    "runtime",
+    null,
+  ],
+  [
+    "invalid",
+    null,
+    null,
+  ],
+  [
+    "",
+    null,
+    null,
+  ],
+]
+`;

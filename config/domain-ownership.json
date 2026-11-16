@@ -2186,6 +2186,41 @@
         ],
         "status": "assigned",
         "basis": "2026-11-16 verified against api/internal/tenant/husbandry: complete GET/DTO contract contains market_batch, flex_batch and research_olap only; no backup lane. Pure Tenant client moved with unchanged HTTP/error/JSON behavior. Corrected prior mixed attribution; not a mixed-business closure."
+      },
+      "console/src/domains/foundation/environment-catalog": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-authorized extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
+      },
+      "console/src/domains/tenant/environment": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-authorized extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
+      },
+      "console/src/domains/foundation/observation-display": {
+        "domains": [
+          "foundation"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-authorized extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
+      },
+      "console/src/domains/tenant/readiness": {
+        "domains": [
+          "tenant"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-authorized extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
+      },
+      "console/src/domains/delivery/runtime-observation": {
+        "domains": [
+          "delivery"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-16 Owner-authorized extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
       }
     }
   }
