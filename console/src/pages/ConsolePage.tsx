@@ -5,6 +5,7 @@ import { ConsoleSidebar } from '@/components/ConsoleSidebar'
 import { EntryRail, EntryTabBar, type EntryNavProps } from '@/components/shell/EntryNav'
 import { LocalDevSessionsDock } from '@/components/shell/LocalDevSessionsDock'
 import { DomainNav } from '@/components/shell/DomainNav'
+import { BusPage } from '@/domains/foundation/bus/BusPage'
 import { MorePage } from '@/components/shell/MorePage'
 import { useShellStatusLine } from '@/domains/foundation/shell/useShellStatusLine'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
@@ -52,6 +53,7 @@ const DETAIL_PAGES: Record<DetailRouteId, ComponentType> = {
   ib: IbPage,
   releases: ReleasesPage,
   infrastructure: InfrastructurePage,
+  bus: BusPage,
   records: RecordsPage,
 }
 

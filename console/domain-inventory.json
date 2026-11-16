@@ -1610,6 +1610,32 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/foundation/bus",
+      "files": [
+        "console/src/domains/foundation/bus/BusPage.tsx",
+        "console/src/domains/foundation/bus/__tests__/bus.test.ts",
+        "console/src/domains/foundation/bus/busTrace.ts",
+        "console/src/domains/foundation/bus/sseParser.ts",
+        "console/src/domains/foundation/bus/useBusStream.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/serverContact.ts",
+        "console/src/components/layout",
+        "console/src/lib/signInError.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui",
+        "@tanstack/react-query",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/foundation/checklist/api",
       "files": [
         "console/src/domains/foundation/checklist/api/checklist.ts"
@@ -3354,6 +3380,7 @@
       "imports": [
         "console/src/components",
         "console/src/components/shell",
+        "console/src/domains/foundation/bus",
         "console/src/domains/foundation/shell",
         "console/src/lib/shell",
         "console/src/pages/ApprovalsPage.tsx",

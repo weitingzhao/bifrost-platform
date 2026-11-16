@@ -7,7 +7,7 @@ const LINKS: Record<EntryRouteId, readonly [string, string][]> = {
   crew: [['Overview', '#crew?section=overview'], ['Capability evidence', '#crew?section=capability-evidence'], ['Rules & reference', '#crew?section=references']],
   work: [['Activity', '#work?section=activity'], ['Plan', '#work?section=plan'], ['Releases', '#releases'], ['Delivery boundaries', '#work?section=delivery-boundaries'], ['CI', '#work?section=ci'], ['History', '#records?tab=work'], ['Code health', '#work?section=code-health'], ['Commit lineage', '#work?section=commit-lineage']],
   services: [['Overview', '#services'], ['Versions', '#services?section=versions'], ['Applications', '#services?section=applications'], ['Plugins', '#data?section=plugins'], ['Market data', '#data?section=market-data'], ['IB Flex', '#data?section=flex'], ['Research', '#data?section=research'], ['IB connectivity', '#ib']],
-  system: [['Overview', '#system'], ['Status', '#status'], ['Cluster', '#infrastructure?section=cluster'], ['Network', '#infrastructure?section=network'], ['Hosts', '#infrastructure?section=hosts'], ['Storage & backup', '#infrastructure?section=backup'], ['Audit', '#records?tab=audit'], ['Patrol', '#records?tab=patrol']],
+  system: [['Overview', '#system'], ['Status', '#status'], ['Cluster', '#infrastructure?section=cluster'], ['Network', '#infrastructure?section=network'], ['Hosts', '#infrastructure?section=hosts'], ['Storage & backup', '#infrastructure?section=backup'], ['Bus', '#bus'], ['Audit', '#records?tab=audit'], ['Patrol', '#records?tab=patrol']],
 }
 
 export function DomainNav({ entry, local = false, vertical = false }: { entry: EntryRouteId; local?: boolean; vertical?: boolean }) {

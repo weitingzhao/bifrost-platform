@@ -24,6 +24,12 @@ export const SHELL_NAV = [
     group: 'detail',
   },
   {
+    id: 'bus',
+    label: 'Bus',
+    question: 'What is moving on the event bus, and where did one event go?',
+    group: 'detail',
+  },
+  {
     id: 'records',
     label: 'Records',
     question: 'History: closed requests, finished work, audit, and patrol runs.',

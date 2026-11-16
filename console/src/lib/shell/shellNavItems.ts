@@ -2,6 +2,7 @@ import type { ShellNavItem } from '@bifrost/ui'
 import {
   Activity,
   Archive,
+  Cable,
   Database,
   Gauge,
   Inbox,
@@ -25,6 +26,7 @@ const ICONS: Record<ShellRouteId, ShellNavItem['icon']> = {
   ib: Plug,
   releases: Rocket,
   infrastructure: Server,
+  bus: Cable,
   records: Archive,
 }
 
