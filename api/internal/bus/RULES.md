@@ -105,7 +105,7 @@ NATS 权限只从登记表生成一份（中继和身份服务读同一份，解
 
 ## §11 NATS 落地（第 1 步照此装）
 单节点 R1，`nats:2.15.3`，放在已有的 `data` 命名空间（`nats.data.svc:4222`；执行卡按准入规则不能建命名空间，2026-11-16 卡 #581；清单在 infra `k8s/bus/`，只对两个平台命名空间和 monitoring 开端口）；数据放 `local-path`（节点本地盘，不放 NFS）；`sync_interval: always`；JetStream 限额显式写（内存 256Mi、文件 10Gi）；容器内存上限 1Gi；每个租户一个账户（现在只 `ROCKET`，结构按多个写；系统账户单列）。
-流：每个租户每个环境一个流 `EV_<TENANT>_<ENV>`，主题 `ev.<tenant>.<env>.>`，文件存储，`max_age` 30 天，`max_bytes` 5Gi，`discard: old`，`duplicate_window` 2 分钟（解第 42 条）。
+流：每个租户每个环境一个流 `EV_<TENANT>_<ENV>`，主题 `ev.<tenant>.<env>.>`，文件存储，`max_age` 30 天，`max_bytes` 2Gi（回执流 512Mi；两个环境合计 5Gi，在账户 10GB 之内），`discard: old`，`duplicate_window` 2 分钟（解第 42 条）。
 身份：第 1 步先用两组静态用户（`relay`，workers 用：发 `ev.rocket.>` 和回执、建流、建并消费 headrelease；`reader`，api 用：只订 `ev.rocket.>`、发回执、有序读两条流；`cmd.>` 对两者都拒——2026-11-16 在本机同版本服务器上逐条验过），密码放 Secret（Owner 那份不读）；第 2 步起换 auth callout 按席位身份签（解第 30、31 条的顺序）。
 
 ## §11.1 谁在哪个环境订

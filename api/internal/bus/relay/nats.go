@@ -73,12 +73,16 @@ func Connect(url, user, password, name string) (*nats.Conn, error) {
 // RULES.md §11 sets it, or brings an existing one to that configuration.
 func EnsureEventStream(ctx context.Context, js jetstream.JetStream, tenant, env string) (jetstream.Stream, error) {
 	return js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-		Name:       EventStreamName(tenant, env),
-		Subjects:   []string{"ev." + tenant + "." + env + ".>"},
-		Storage:    jetstream.FileStorage,
-		Retention:  jetstream.LimitsPolicy,
-		MaxAge:     30 * 24 * time.Hour,
-		MaxBytes:   5 << 30,
+		Name:      EventStreamName(tenant, env),
+		Subjects:  []string{"ev." + tenant + "." + env + ".>"},
+		Storage:   jetstream.FileStorage,
+		Retention: jetstream.LimitsPolicy,
+		MaxAge:    30 * 24 * time.Hour,
+		// The ROCKET account holds 10 GB of file store for every stream of both
+		// environments (k8s/bus/nats-config.yaml): EV 2 GiB + RCPT 512 MiB each,
+		// 5 GiB in all. At 5 GiB each the two EV streams took it all and the
+		// first receipt stream was refused (PROD, 2026-11-16).
+		MaxBytes:   EventStreamBytes,
 		Discard:    jetstream.DiscardOld,
 		Duplicates: 2 * time.Minute,
 	})
@@ -101,7 +105,7 @@ func EnsureReceiptStream(ctx context.Context, js jetstream.JetStream, tenant, en
 		Storage:   jetstream.FileStorage,
 		Retention: jetstream.LimitsPolicy,
 		MaxAge:    7 * 24 * time.Hour,
-		MaxBytes:  1 << 30,
+		MaxBytes:  ReceiptStreamBytes,
 		Discard:   jetstream.DiscardOld,
 	})
 	if errors.Is(err, jetstream.ErrStreamNameAlreadyInUse) {
@@ -274,3 +278,11 @@ func ScanFrom(ctx context.Context, js jetstream.JetStream, stream, subject strin
 	}
 	return nil
 }
+
+// Stream sizes. Both environments' streams live in the one ROCKET account,
+// whose file store is 10 GB (bifrost-trade-infra k8s/bus/nats-config.yaml).
+const (
+	EventStreamBytes   = 2 << 30
+	ReceiptStreamBytes = 512 << 20
+	accountFileBytes   = 10_000_000_000
+)
