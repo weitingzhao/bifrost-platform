@@ -104,7 +104,7 @@ NATS 权限只从登记表生成一份（中继和身份服务读同一份，解
 - R3 门禁依赖的（CI 绿没绿、窗口、冻结）新旧并排对账后再切。
 
 ## §11 NATS 落地（第 1 步照此装）
-单节点 R1，`nats:2.15.3`，放在已有的 `data` 命名空间（`nats.data.svc:4222`；执行卡按准入规则不能建命名空间，2026-11-16 卡 #581；清单在 infra `k8s/bus/`，只对两个平台命名空间和 monitoring 开端口）；数据放 `local-path`（节点本地盘，不放 NFS）；`sync_interval: always`；JetStream 限额显式写（内存 256Mi、文件 10Gi）；容器内存上限 1Gi；每个租户一个账户（现在只 `ROCKET`，结构按多个写；系统账户单列）。
+单节点 R1，`nats:2.15.3`，放在已有的 `data` 命名空间（`nats.data.svc:4222`；执行卡按准入规则不能建命名空间，2026-11-16 卡 #581；平台自己的集群身份对命名空间也只有读权限，2026-11-16 #585 起的那条路因此搁下。**何时搬到独立命名空间**：第一个要直连 NATS 的租户出现，或「建命名空间」有了正经的门（平台身份或执行口能建）时再搬；搬家清单在 infra 分支 agent-tool-comm-bus-move（7a45a782，用 ExternalName 留 `nats.data` 这个旧地址），生产配置清单里的 bifrost-bus 名字已在；清单在 infra `k8s/bus/`，只对两个平台命名空间和 monitoring 开端口）；数据放 `local-path`（节点本地盘，不放 NFS）；`sync_interval: always`；JetStream 限额显式写（内存 256Mi、文件 10Gi）；容器内存上限 1Gi；每个租户一个账户（现在只 `ROCKET`，结构按多个写；系统账户单列）。
 流：每个租户每个环境一个流 `EV_<TENANT>_<ENV>`，主题 `ev.<tenant>.<env>.>`，文件存储，`max_age` 30 天，`max_bytes` 2Gi（回执流 512Mi；两个环境合计 5Gi，在账户 10GB 之内），`discard: old`，`duplicate_window` 2 分钟（解第 42 条）。
 身份：第 1 步先用两组静态用户（`relay`，workers 用：发 `ev.rocket.>` 和回执、建流、建并消费 headrelease；`reader`，api 用：只订 `ev.rocket.>`、发回执、有序读两条流；`cmd.>` 对两者都拒——2026-11-16 在本机同版本服务器上逐条验过），密码放 Secret（Owner 那份不读）；第 2 步起换 auth callout 按席位身份签（解第 30、31 条的顺序）。
 
