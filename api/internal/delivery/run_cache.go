@@ -18,7 +18,7 @@ import (
 // chain and release context pages listed every run of the namespace on each
 // poll (one of them with no label selector at all). Only display reads: what
 // gates a release, a CI verdict or a promotion (releases, head-release,
-// FullCI, landingci, CIIndex, lastDeliverRun / lastDeliverSuccess,
+// FullCI, landingci, lastDeliverRun / lastDeliverSuccess,
 // ProdDeliverArtifactsReady) keeps its own list until the side-by-side with
 // the CI line (RULES.md §10 R3).
 //

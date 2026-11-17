@@ -41,8 +41,8 @@ type agentRuntime struct {
 	// schema is what the platform last read of the database's agentrt
 	// schema (TD-411, agentrt_schema.go); nil without AGENTRT_DSN.
 	schema *schemaWatch
-	// evidenceCI, when set, is the ledger answering "did CI pass"
-	// (evidence_gate.go); nil: the retained runs answer.
+	// evidenceCI is the ledger answering "did CI pass" (evidence_gate.go);
+	// nil in a process with no delivery service: then CI is not read.
 	evidenceCI delivery.CIReader
 	// late is the runtime's database as it connects: its routes are ready
 	// once it is (/health says agentrt_ready); nil without AGENTRT_DSN.
@@ -61,7 +61,7 @@ type agentRuntime struct {
 // process the controller loops. Without it the routes answer 503 and nothing
 // runs, so the code ships before the database is wired into the Deployment.
 //
-// The controller reads approvals, questions, CI runs and deployments from the
+// The controller reads approvals, questions, CI verdicts and deployments from the
 // platform's own stores (agentRuntimeSources); a record it cannot read leaves
 // the rule atoms on it unknown, so nothing is judged done on facts it cannot
 // see. Pushed branches are checked on Gitea in the organization
@@ -73,7 +73,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint,
 		DiskFloor: diskFloorFromEnv(), PinReason: pinReasonFromEnv()}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
 	s.agentRuntime = rt
-	rt.evidenceCI = s.wireEvidenceGate(rt.env)
+	rt.evidenceCI = s.wireEvidenceGate()
 	if s.releases != nil && s.releases.Service() != nil {
 		rt.api.ProductionDelivery = func(ctx context.Context) store.DeliveryProduction {
 			return productionDeliveryEvidence(ctx, s.releases.Service())
@@ -322,26 +322,19 @@ func identityFits(user, db, env string) error {
 func (s *Server) agentRuntimeSources() controller.Sources {
 	var (
 		ap  approvalReader
-		ci  ciIndexer
+		ci  delivery.CIReader
 		rel currentDeployment
 	)
 	if s.approvals != nil {
 		ap = s.approvals
 	}
-	if s.delivery != nil {
-		ci = s.delivery.PolicyFacts()
+	if s.agentRuntime != nil {
+		ci = s.agentRuntime.evidenceCI
 	}
 	if s.releases != nil && s.releases.Service() != nil {
 		rel = s.releases.Service()
 	}
 	src := agentRuntimeSources(ap, s.questionRuntime.agentRuntimeQuestion(), ci, rel)
-	if s.agentRuntime != nil && s.agentRuntime.evidenceCI != nil {
-		read := s.agentRuntime.evidenceCI
-		src.CI = func(ctx context.Context, repo, commit string) (string, string, bool) {
-			status, run, err := read(ctx, repo, commit)
-			return status, run, err == nil && status != ""
-		}
-	}
 	s.wireExternalRecords(&src)
 	src.Ack = s.questionRuntime.agentRuntimeAck()
 	src.Unacked = s.questionRuntime.agentRuntimeUnacked()

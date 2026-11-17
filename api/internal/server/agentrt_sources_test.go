@@ -13,7 +13,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
-	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 )
 
@@ -47,13 +46,18 @@ func question(_ context.Context, id string) (store.Question, bool) {
 	return store.Question{}, false
 }
 
-type fakeCI struct{ lists atomic.Int32 }
-
-func (f *fakeCI) CIIndex(context.Context) (map[string]delivery.CIOutcome, error) {
-	if f.lists.Add(1) > 10 {
-		return nil, errors.New("cluster unreachable")
+// fakeCI answers as the ledger's reader does: a verdict, none, or an error.
+func fakeCI(_ context.Context, repo, commit string) (string, string, error) {
+	switch repo + "@" + commit {
+	case "bifrost-platform@ok":
+		return "Succeeded", "ci-platform-1", nil
+	case "bifrost-platform@red":
+		return "Failed", "ci-platform-2", nil
+	case "bifrost-platform@unread":
+		// An error is no verdict, whatever came with it.
+		return "Succeeded", "ci-platform-3", errors.New("the evidence ledger is not connected")
 	}
-	return map[string]delivery.CIOutcome{"bifrost-platform@ok": {Status: "Succeeded", Run: "ci-platform-1"}}, nil
+	return "", "", nil
 }
 
 type fakeCurrent map[string]releases.Record
@@ -104,11 +108,10 @@ func platformRec(run, sha string) releases.Record {
 
 // The controller's sources read the platform's stores (design v5 §5.2 外部事实).
 func TestAgentRuntimeSources(t *testing.T) {
-	ci := &fakeCI{}
 	src := agentRuntimeSources(
 		fakeApprovals{"7": {Number: 7, Status: approvals.StatusExecuted}, "8": {Number: 8}},
 		question,
-		ci,
+		fakeCI,
 		fakeCurrent{"stg": platformRec("deliver-platform-2", sha2), "prod": platformRec("deliver-platform-prod-1", sha1),
 			"short": platformRec("deliver-short", "abc"), "norepo": platformRec("deliver-norepo", ""), "norun": platformRec("", sha1),
 			"drift": platformRec("deliver-drift", sha1), "podless": platformRec("deliver-podless", sha1),
@@ -141,16 +144,17 @@ func TestAgentRuntimeSources(t *testing.T) {
 		}
 	}
 
-	for i := 0; i < 5; i++ {
-		if s, run, ok := src.CI(ctx, "bifrost-platform", "ok"); !ok || s != "Succeeded" || run != "ci-platform-1" {
-			t.Errorf("ci = %q %q %v", s, run, ok)
-		}
-		if _, _, ok := src.CI(ctx, "bifrost-platform", fmt.Sprint("commit-", i)); ok {
-			t.Errorf("a commit with no run read")
-		}
+	if s, run, ok := src.CI(ctx, "bifrost-platform", "ok"); !ok || s != "Succeeded" || run != "ci-platform-1" {
+		t.Errorf("ci = %q %q %v", s, run, ok)
 	}
-	if n := ci.lists.Load(); n != 1 {
-		t.Errorf("ten CI reads within the snapshot listed %d times", n)
+	if s, run, ok := src.CI(ctx, "bifrost-platform", "red"); !ok || s != "Failed" || run != "ci-platform-2" {
+		t.Errorf("a failed ci = %q %q %v", s, run, ok)
+	}
+	// No verdict, and a read that failed, are both not read: never a pass.
+	for _, commit := range []string{"unknown", "unread"} {
+		if s, run, ok := src.CI(ctx, "bifrost-platform", commit); ok || s != "" || run != "" {
+			t.Errorf("ci of %s = %q %q %v, read", commit, s, run, ok)
+		}
 	}
 
 	images := " images:map[platform-api:" + digestA + " platform-console:" + digestC + "]]"
@@ -187,82 +191,6 @@ func TestAgentRuntimeSources(t *testing.T) {
 	}
 	if _, _, ok := empty.Deployed(ctx, "stg"); ok {
 		t.Error("a server with no stores read a deployment")
-	}
-}
-
-// The CI snapshot lists again once its time is up, and an error is not kept.
-func TestCISnapshot(t *testing.T) {
-	var lists int
-	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
-	fail := false
-	s := &ciSnapshot{ttl: 5 * time.Second, now: func() time.Time { return now }, index: func(context.Context) (map[string]delivery.CIOutcome, error) {
-		lists++
-		if fail {
-			return nil, errors.New("down")
-		}
-		return map[string]delivery.CIOutcome{"r@c": {Status: "Failed", Run: fmt.Sprint("run-", lists)}}, nil
-	}}
-	ctx := context.Background()
-	if o, _ := s.get(ctx, "r@c"); o.Run != "run-1" {
-		t.Fatalf("first = %+v", o)
-	}
-	now = now.Add(4 * time.Second)
-	if o, _ := s.get(ctx, "r@c"); o.Run != "run-1" || lists != 1 {
-		t.Fatalf("within the snapshot = %+v after %d lists", o, lists)
-	}
-	now = now.Add(2 * time.Second)
-	if o, _ := s.get(ctx, "r@c"); o.Run != "run-2" {
-		t.Fatalf("after it = %+v", o)
-	}
-	fail, now = true, now.Add(10*time.Second)
-	if _, err := s.get(ctx, "r@c"); err == nil {
-		t.Fatal("a failed list read as an old snapshot")
-	}
-	fail = false
-	if o, err := s.get(ctx, "r@c"); err != nil || o.Run != "run-4" {
-		t.Fatalf("after a failed list = %+v %v; it lists again", o, err)
-	}
-}
-
-// A caller waiting for another's list gives up with its own context, and
-// the list, once done, serves the rest (review 162 B1).
-func TestCISnapshotWaitEndsWithTheCaller(t *testing.T) {
-	release := make(chan struct{})
-	var lists atomic.Int32
-	s := &ciSnapshot{ttl: time.Minute, index: func(context.Context) (map[string]delivery.CIOutcome, error) {
-		lists.Add(1)
-		<-release
-		return map[string]delivery.CIOutcome{"r@c": {Status: "Succeeded", Run: "ci-1"}}, nil
-	}}
-	first := make(chan error, 1)
-	go func() { _, err := s.get(context.Background(), "r@c"); first <- err }()
-	for lists.Load() == 0 {
-		time.Sleep(5 * time.Millisecond)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-	waited := make(chan error, 1)
-	go func() { _, err := s.get(ctx, "r@c"); waited <- err }()
-	select {
-	case err := <-waited:
-		if !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("a waiter = %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		close(release)
-		t.Fatal("a waiter outlived its context")
-	}
-	close(release)
-	if err := <-first; err != nil {
-		t.Fatal(err)
-	}
-	if o, err := s.get(context.Background(), "r@c"); err != nil || o.Run != "ci-1" || lists.Load() != 1 {
-		t.Fatalf("after the list = %+v %v, %d lists", o, err, lists.Load())
-	}
-	done, cancelDone := context.WithCancel(context.Background())
-	cancelDone()
-	if _, err := s.get(done, "r@c"); !errors.Is(err, context.Canceled) {
-		t.Fatalf("a cancelled caller read the snapshot: %v", err)
 	}
 }
 

@@ -48,7 +48,6 @@ var intendedRouteAdditions = map[string][]string{
 	// from the evidence ledger, for the same readers (read-only).
 	"GET /api/v1/evidence/commit": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// Block F: the ledger beside the release policy's CI reading (read-only).
-	"GET /api/v1/evidence/compare": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// Block G: the ledger's CI status of one commit, read by the release
 	// scripts and by in-cluster gates that hold no platform credential: open
 	// like /releases (a repository, a commit, a run name; read-only).

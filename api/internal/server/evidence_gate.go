@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -14,35 +13,15 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 )
 
-// The switch of "is this commit's CI green" (CI design v4, landing wave 1
-// blocks G and H): the evidence ledger, or the retained ci-* runs as before.
-//
-// EVIDENCE_GATE=ledger or =runs says which; unset, evidenceGateDefault holds
-// for this platform's AGENTRT_ENV. With the ledger, the release policy's
-// ci_succeeded (delivery.PolicyFacts.CIRun) and the runtime's CI source read
-// ledgerCI; GET /api/v1/evidence/compare keeps reading both, so the two are
-// compared after the switch as before it. To go back: EVIDENCE_GATE=runs, or
-// the default below, and a restart.
-const evidenceGateEnv = "EVIDENCE_GATE"
-
-// evidenceGateDefault is the environments whose platform asks the ledger
-// when EVIDENCE_GATE is unset: STG since 2026-11-13 06:00Z, PROD since the
-// Owner's word the same day, after the comparison on PROD showed no commit
-// the runs call green and the ledger does not know.
-var evidenceGateDefault = map[string]bool{"stg": true, "prod": true}
-
-func evidenceGateOn(env string) bool {
-	switch v := strings.ToLower(strings.TrimSpace(os.Getenv(evidenceGateEnv))); v {
-	case "ledger":
-		return true
-	case "runs":
-		return false
-	case "":
-	default:
-		slog.Error("evidence gate: "+evidenceGateEnv+" is neither ledger nor runs; the default holds", "value", v)
-	}
-	return evidenceGateDefault[env]
-}
+// "Is this commit's CI green" has one source in every environment: the
+// evidence ledger (CI design v4, landing wave 1 blocks G and H). The release
+// policy's ci_succeeded (delivery.PolicyFacts.CIRun) and the runtime's CI
+// source read it through wireEvidenceGate. Until 2026-11-16 the retained
+// ci-* runs were a second reading, chosen by a switch in the environment and
+// the default in dev; it did not count an incremental pass, so it could no
+// longer stand in for the ledger, and it is retired with the switch and the
+// side-by-side route that compared the two. A platform with no ledger
+// connected has no CI verdict: the reader answers an error, never a pass.
 
 // ledgerCI answers "did CI pass for this commit" from the ledger: Succeeded
 // when a full pass is recorded for the commit (with the commits beside it
@@ -172,13 +151,11 @@ func ledgerCIWith(db func() store.DB, tree func(context.Context, string, string)
 // rest on before a full pass is needed (the daily full CI is one every day).
 const maxVerdictChain = 20
 
-// wireEvidenceGate turns the switch for this process and says so once.
-func (s *Server) wireEvidenceGate(env string) delivery.CIReader {
+// wireEvidenceGate makes the ledger the delivery service's CI reader and
+// returns it; nil when this process has no delivery service. The database is
+// read when asked: before it connects, or without one, the answer is an error.
+func (s *Server) wireEvidenceGate() delivery.CIReader {
 	if s.delivery == nil {
-		return nil
-	}
-	if !evidenceGateOn(env) {
-		slog.Info("evidence gate: CI is read from the retained runs", "env", env)
 		return nil
 	}
 	// Strict: this reader is the release policy's ci_succeeded.
@@ -189,7 +166,7 @@ func (s *Server) wireEvidenceGate(env string) delivery.CIReader {
 		return s.agentRuntime.api.DB
 	}, giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second}))
 	s.delivery.SetCIReader(reader)
-	slog.Info("evidence gate: CI is read from the evidence ledger", "env", env)
+	slog.Info("evidence gate: CI is read from the evidence ledger")
 	return reader
 }
 
@@ -197,9 +174,8 @@ func (s *Server) wireEvidenceGate(env string) delivery.CIReader {
 // answer for one commit: {repo, commit, scope, status, run}, status Succeeded,
 // Failed or "" (no verdict the ledger knows). scope=any also counts a pass
 // of part of the repository; scope=chain follows an incremental pass to its
-// base (ledgerCI); without scope the answer is the strict one. It answers from the ledger whatever this
-// platform's own switch says: the callers are the release scripts and the
-// in-cluster gates (ci_gate.py), which have their own. It needs no token, as
+// base (ledgerCI); without scope the answer is the strict one. The callers
+// are the release scripts and the in-cluster gates (ci_gate.py). It needs no token, as
 // /releases and /health need none: those gates run in Pods that hold no
 // platform credential, and the answer names only a repository, a commit and
 // a CI run, all of which the public mirrors and /releases already show.

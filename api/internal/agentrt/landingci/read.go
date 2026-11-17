@@ -1,6 +1,7 @@
-// Package landingci reads Tekton CI runs for the two things that still use
-// it: the daily full CI (full.go, failure.go) and the release policy's check
-// of a run that reused another run's tests (reuse.go). The landing lane's own
+// Package landingci reads Tekton CI runs for the daily full CI (full.go,
+// failure.go) and the runs view (runs.go). The check of a run that reused
+// another run's tests went with the release policy's reading of CI by runs
+// (2026-11-16): the evidence ledger records no reused run. The landing lane's own
 // CI client (pinned runs, S5, grants) was retired with that lane
 // (LANE-BIZ-ALIGN, 2026-11-13). It does not import delivery: the server
 // supplies only Kubernetes transports.
@@ -60,17 +61,6 @@ type Evidence struct {
 	InfraCommit string
 	Results     map[string]string
 	Reason      string
-}
-
-// strictCandidate is the repository-aware Read filter, not the legacy
-// candidate predicate. Legacy only uses it to downgrade conflicting evidence.
-func strictCandidate(item unstructured.Unstructured, repo, revision string) bool {
-	if _, inline, _ := unstructured.NestedFieldNoCopy(item.Object, "spec", "pipelineSpec"); inline {
-		return false
-	}
-	params, counts := namedValues(item, "spec", "params")
-	label := item.GetLabels()["bifrost.io/repo"]
-	return counts["revision"] == 1 && params["revision"] == revision && (label == "" || label == repo)
 }
 
 // pipelineRuns is shared by pinned landing reads, legacy reads and release

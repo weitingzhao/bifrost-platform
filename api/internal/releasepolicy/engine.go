@@ -39,7 +39,8 @@ type Git interface {
 	ListDir(ctx context.Context, repo, ref, dir string) ([]string, error)
 }
 
-// CI reports whether a Succeeded ci-* run exists for repo at sha.
+// CI reports whether CI passed for repo at sha (the evidence ledger's verdict,
+// delivery.PolicyFacts.Succeeded); an error is never a pass.
 type CI interface {
 	Succeeded(ctx context.Context, repo, sha string) (bool, error)
 }

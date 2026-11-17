@@ -6,8 +6,6 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
-	"sync"
-	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -41,9 +39,6 @@ type (
 	approvalReader interface {
 		Lookup(ref string) (approvals.Approval, bool, error)
 	}
-	ciIndexer interface {
-		CIIndex(ctx context.Context) (map[string]delivery.CIOutcome, error)
-	}
 	currentDeployment interface {
 		Current(ctx context.Context, lane, env string) (releases.Record, error)
 		PodDigests(ctx context.Context, namespace, deployment, container string) ([]string, error)
@@ -52,11 +47,12 @@ type (
 
 // agentRuntimeSources reads the records the runtime does not own from the
 // platform's own stores (design v5 §5.2 外部事实), each without side effects:
-// approvals and questions by Lookup (no sweep), CI runs from Tekton, and the
-// deployment from the release records. A record that cannot be read now is
+// approvals and questions by Lookup (no sweep), the CI verdict from ci (the
+// evidence ledger's reader, wireEvidenceGate), and the deployment from the
+// release records. A record that cannot be read now is
 // ok=false: the controller records nothing for it, a fact seen before stays
 // seen, and gates_passed on the deployment is unknown.
-func agentRuntimeSources(ap approvalReader, question func(context.Context, string) (store.Question, bool), ci ciIndexer, rel currentDeployment) controller.Sources {
+func agentRuntimeSources(ap approvalReader, question func(context.Context, string) (store.Question, bool), ci delivery.CIReader, rel currentDeployment) controller.Sources {
 	src := controller.Sources{
 		Approval: func(context.Context, int64) (store.ApprovalFact, bool) { return store.ApprovalFact{}, false },
 		Question: func(context.Context, string) (store.Question, bool) { return store.Question{}, false },
@@ -77,13 +73,12 @@ func agentRuntimeSources(ap approvalReader, question func(context.Context, strin
 		src.Question = question
 	}
 	if ci != nil {
-		snap := &ciSnapshot{index: ci.CIIndex, ttl: 5 * time.Second}
 		src.CI = func(ctx context.Context, repo, commit string) (string, string, bool) {
-			o, err := snap.get(ctx, repo+"@"+commit)
-			if err != nil || o.Status == "" {
+			status, run, err := ci(ctx, repo, commit)
+			if err != nil || status == "" {
 				return "", "", false
 			}
-			return o.Status, o.Run, true
+			return status, run, true
 		}
 	}
 	if rel != nil {
@@ -100,63 +95,6 @@ func agentRuntimeSources(ap approvalReader, question func(context.Context, strin
 		}
 	}
 	return src
-}
-
-// ciSnapshot lists the CI runs once and answers every read from that list
-// for ttl (five seconds; a facts pass over many commits mostly lists once,
-// review 161 B3). One caller lists at a time; the others wait for it, each
-// for no longer than its own context (review 162 B1). A failed list is not
-// kept: the next read lists again.
-type ciSnapshot struct {
-	index func(context.Context) (map[string]delivery.CIOutcome, error)
-	ttl   time.Duration
-	now   func() time.Time
-
-	mu      sync.Mutex
-	at      time.Time
-	idx     map[string]delivery.CIOutcome
-	listing chan struct{} // closed when the list in progress ends
-}
-
-func (s *ciSnapshot) get(ctx context.Context, key string) (delivery.CIOutcome, error) {
-	now := time.Now
-	if s.now != nil {
-		now = s.now
-	}
-	for {
-		if err := ctx.Err(); err != nil {
-			return delivery.CIOutcome{}, err
-		}
-		s.mu.Lock()
-		if s.idx != nil && now().Sub(s.at) < s.ttl {
-			o := s.idx[key]
-			s.mu.Unlock()
-			return o, nil
-		}
-		if wait := s.listing; wait != nil {
-			s.mu.Unlock()
-			select {
-			case <-wait:
-				continue
-			case <-ctx.Done():
-				return delivery.CIOutcome{}, ctx.Err()
-			}
-		}
-		done := make(chan struct{})
-		s.listing = done
-		s.mu.Unlock()
-		idx, err := s.index(ctx)
-		s.mu.Lock()
-		if err == nil {
-			s.idx, s.at = idx, now()
-		}
-		s.listing = nil
-		close(done)
-		s.mu.Unlock()
-		if err != nil {
-			return delivery.CIOutcome{}, err
-		}
-	}
 }
 
 // deployedFrom is what the record says the environment runs: its

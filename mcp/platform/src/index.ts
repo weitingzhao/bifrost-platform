@@ -516,13 +516,6 @@ reg(
 )
 
 reg(
-  'compare_commit_evidence',
-  'Put the evidence ledger beside the release policy\'s CI reading for every commit that reading has a verdict for (read-only; nothing is started or written). Returns {at, counts, commits: [{repo, commit, old, old_run, verdict, as_tested, gate, class, note}], skipped}. old is the policy\'s reading (Succeeded / Failed / Unknown), verdict the ledger\'s answer now (green / red / none), as_tested whether gate is Succeeded. gate is the commit CI verdict read by the gate (Succeeded / Failed / empty); ledger_red means old is green, the current ledger verdict is not green, and gate is Failed. class: agree; beside_moved (old green, the full pass is in the ledger, a repository beside it moved since); not_in_ledger (old green, no full pass in the ledger: a missed input, must be zero); ledger_only (ledger green, old not).',
-  {},
-  async () => jsonResult(await platformGet('/api/v1/evidence/compare')),
-)
-
-reg(
   'get_unit_plan',
   'CI\'s plan of one commit, computed from its tree and its bifrost.units.yaml (read-only; nothing is started). Returns {repo, commit, tree, pins: [{repo, commit, tree}], units: [{unit, task, module, input_key, shards, verdict}], to_run, counts}. A unit is a Go package with tests, the console, or the repository; input_key is the hash of exactly what the task reads; verdict is what the evidence ledger says of that key (green, red, none); to_run counts the tasks that are not green. Pass inputs: true to get the document each key is the hash of. The first plan after a platform restart reads every Go file once and can take a minute.',
   {

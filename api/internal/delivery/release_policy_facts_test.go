@@ -10,15 +10,9 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/dynamic"
-	dynfake "k8s.io/client-go/dynamic/fake"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
 
@@ -27,23 +21,6 @@ const (
 	factSHA2 = "2222222222222222222222222222222222222222"
 	factSHA3 = "3333333333333333333333333333333333333333"
 )
-
-func ciRun(name, pipeline, repoParam, repoLabel, revision, status string) *unstructured.Unstructured {
-	labels := map[string]any{"tekton.dev/pipeline": pipeline}
-	if repoLabel != "" {
-		labels["bifrost.io/repo"] = repoLabel
-	}
-	params := []any{map[string]any{"name": "revision", "value": revision}}
-	if repoParam != "" {
-		params = append(params, map[string]any{"name": "repo", "value": repoParam})
-	}
-	return &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "tekton.dev/v1", "kind": "PipelineRun",
-		"metadata": map[string]any{"name": name, "namespace": "cicd", "labels": labels},
-		"spec":     map[string]any{"params": params},
-		"status":   map[string]any{"conditions": []any{map[string]any{"type": "Succeeded", "status": status}}},
-	}}
-}
 
 func newFactsService(t *testing.T, cms ...*corev1.ConfigMap) PolicyFacts {
 	t.Helper()
@@ -86,17 +63,6 @@ func newFactsService(t *testing.T, cms ...*corev1.ConfigMap) PolicyFacts {
 		objs = append(objs, cm)
 	}
 	s.SetClientsetForTest(k8sfake.NewSimpleClientset(objs...))
-	dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
-		pipelineRunGVR: "PipelineRunList",
-	},
-		ciRun("ci-py-1", "bifrost-ci-python", "repo-app", "", factSHA1, "True"),
-		ciRun("ci-fe-1", "bifrost-ci-frontend", "", "repo-ui", factSHA2, "True"),
-		ciRun("ci-py-2", "bifrost-ci-python", "repo-app", "", factSHA3, "False"),
-		ciRun("deliver-1", "bifrost-deliver-stg", "repo-app", "", factSHA2, "True"),
-		ciRun("ci-py-3", "bifrost-ci-python", "repo-app", "", factSHA2, "Unknown"),
-		ciRun("ci-py-4", "bifrost-ci-python", "repo-app", "", factSHA1, "False"),
-	)
-	s.SetDynamicFactoryForTest(func() (dynamic.Interface, error) { return dyn, nil })
 	return s.PolicyFacts()
 }
 
@@ -130,24 +96,6 @@ func TestPolicyFactsGitea(t *testing.T) {
 	}
 	if _, err := f.ChangedFiles(ctx, "repo-app", factSHA3, factSHA1); err == nil {
 		t.Fatal("an unreadable range gave no error")
-	}
-}
-
-func TestPolicyFactsCI(t *testing.T) {
-	f := newFactsService(t)
-	ctx := context.Background()
-	for _, tc := range []struct {
-		repo, sha string
-		want      bool
-	}{
-		{"repo-app", factSHA1, true},  // repo param
-		{"repo-ui", factSHA2, true},   // bifrost.io/repo label
-		{"repo-app", factSHA3, false}, // failed run
-		{"repo-app", factSHA2, false}, // a deliver run is not CI
-	} {
-		if got, err := f.Succeeded(ctx, tc.repo, tc.sha); err != nil || got != tc.want {
-			t.Errorf("Succeeded(%s, %s) = %v %v", tc.repo, tc.sha[:4], got, err)
-		}
 	}
 }
 
@@ -262,125 +210,5 @@ func TestPolicyFactsReadFilesAndWriteConfigMaps(t *testing.T) {
 	data, found, err := f.ConfigMap(ctx, "bifrost-release-freeze")
 	if err != nil || !found || data["frozen"] != "false" || len(data) != 1 {
 		t.Fatalf("ConfigMap after two writes = %v %v %v", data, found, err)
-	}
-}
-
-// CIRun (for the agent runtime's ci_seen): a success wins over a failure of
-// the same commit, a run with no verdict is Running, a deliver run is not a
-// CI run, and no run is "".
-func TestPolicyFactsCIRun(t *testing.T) {
-	f := newFactsService(t)
-	ctx := context.Background()
-	for _, tc := range []struct{ repo, sha, status, run string }{
-		{"repo-app", factSHA1, CISucceeded, "ci-py-1"},
-		{"repo-app", factSHA3, CIFailed, "ci-py-2"},
-		{"repo-app", factSHA2, CIRunning, "ci-py-3"},
-		{"repo-ui", factSHA2, CISucceeded, "ci-fe-1"},
-		{"repo-ui", factSHA1, "", ""},
-	} {
-		status, run, err := f.CIRun(ctx, tc.repo, tc.sha)
-		if err != nil || status != tc.status || run != tc.run {
-			t.Errorf("%s@%s = %q %q %v; want %q %q", tc.repo, tc.sha[:4], status, run, err, tc.status, tc.run)
-		}
-	}
-}
-
-func TestPolicyFactsCIReuse(t *testing.T) {
-	at := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
-	setResult := func(o *unstructured.Unstructured, name, value string) {
-		t.Helper()
-		results, _, _ := unstructured.NestedSlice(o.Object, "status", "results")
-		for _, entry := range results {
-			m := entry.(map[string]any)
-			if m["name"] == name {
-				m["value"] = value
-				if err := unstructured.SetNestedSlice(o.Object, results, "status", "results"); err != nil {
-					t.Fatal(err)
-				}
-				return
-			}
-		}
-		if err := unstructured.SetNestedSlice(o.Object, append(results, map[string]any{"name": name, "value": value}), "status", "results"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	makeRun := func(name, revision string, created time.Time) *unstructured.Unstructured {
-		o := ciRun(name, "bifrost-ci-platform", "bifrost-platform", "bifrost-platform", revision, "True")
-		o.SetUID(types.UID(name))
-		o.SetCreationTimestamp(metav1.NewTime(created))
-		spec := o.Object["spec"].(map[string]any)
-		spec["pipelineRef"] = map[string]any{"name": "bifrost-ci-platform"}
-		spec["params"] = append(spec["params"].([]any), map[string]any{"name": "repo-url", "value": landingci.PlatformRepoURL})
-		for key, value := range map[string]string{
-			"platform-commit": revision, "ui-commit": factSHA2, "infra-commit": factSHA3,
-			"platform-tree": factSHA4, "api-scope": "full", "api-packages": "",
-			"api-store-run": "", "api-scope-why": "",
-		} {
-			setResult(o, key, value)
-		}
-		return o
-	}
-	for _, tc := range []string{
-		"valid", "missing", "red", "different-tree", "different-ui", "different-infra",
-		"later", "same-time", "chain", "copied-packages", "copied-store-run", "copied-why",
-		"console", "incremental", "no-tested-by", "legacy",
-	} {
-		t.Run(tc, func(t *testing.T) {
-			original := makeRun("original", factSHA2, at)
-			reuse := makeRun("reuse", factSHA1, at.Add(time.Hour))
-			setResult(reuse, "tested-by", original.GetName())
-			objects := []runtime.Object{original, reuse}
-			switch tc {
-			case "missing":
-				objects = objects[1:]
-			case "red":
-				original.Object["status"].(map[string]any)["conditions"] = []any{map[string]any{"type": "Succeeded", "status": "False"}}
-			case "different-tree":
-				setResult(original, "platform-tree", factSHA5)
-			case "different-ui":
-				setResult(original, "ui-commit", factSHA5)
-			case "different-infra":
-				setResult(original, "infra-commit", factSHA5)
-			case "later":
-				original.SetCreationTimestamp(metav1.NewTime(at.Add(2 * time.Hour)))
-			case "same-time":
-				original.SetCreationTimestamp(reuse.GetCreationTimestamp())
-			case "chain":
-				setResult(original, "tested-by", "another")
-			case "copied-packages":
-				setResult(reuse, "api-packages", "./internal/delivery")
-			case "copied-store-run":
-				setResult(reuse, "api-store-run", "TestExample")
-			case "copied-why":
-				setResult(reuse, "api-scope-why", "different")
-			case "console", "incremental":
-				setResult(original, "api-scope", tc)
-				setResult(reuse, "api-scope", tc)
-			case "no-tested-by", "legacy":
-				reuse = makeRun("reuse", factSHA1, at.Add(time.Hour))
-				if tc == "legacy" {
-					reuse = ciRun("reuse", "bifrost-ci-platform", "bifrost-platform", "", factSHA1, "True")
-				}
-				objects = []runtime.Object{reuse}
-			}
-			f := ciFacts(t, objects...)
-			ok, err := f.Succeeded(context.Background(), "bifrost-platform", factSHA1)
-			accepted := tc == "valid" || tc == "no-tested-by" || tc == "legacy"
-			if ok != accepted {
-				t.Fatalf("Succeeded = %v, %v; want %v", ok, err, accepted)
-			}
-			if accepted || tc == "console" || tc == "incremental" {
-				if err != nil {
-					t.Fatal(err)
-				}
-			} else if err == nil || !strings.Contains(err.Error(), "CI run reuse") {
-				t.Fatalf("missing refusal naming the reuse run: %v", err)
-			}
-			// Rejected evidence must not poison another revision's CI lookup.
-			other := ciFacts(t, append(objects, ciRun("unrelated", "bifrost-ci-python", "repo-app", "", factSHA3, "True"))...)
-			if ok, err := other.Succeeded(context.Background(), "repo-app", factSHA3); err != nil || !ok {
-				t.Fatalf("unrelated CI = %v, %v", ok, err)
-			}
-		})
 	}
 }

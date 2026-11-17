@@ -59,7 +59,8 @@ func sanitizeLabelValue(v string) string {
 
 type Service struct {
 	windowRecorder WindowRecorder
-	// ciReader, when set, answers PolicyFacts.CIRun (release_policy_facts.go).
+	// ciReader answers PolicyFacts.CIRun (release_policy_facts.go); unset,
+	// CIRun has no verdict.
 	ciReader       CIReader
 	entry          *config.ClusterEntry
 	cluster        *cluster.Service

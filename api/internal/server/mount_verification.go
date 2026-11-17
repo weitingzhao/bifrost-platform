@@ -24,9 +24,6 @@ func (s *Server) mountVerification(r chi.Router) {
 	// "Is this commit green", from the evidence ledger: read-only; it names
 	// repositories, commits and CI runs, so viewer and above.
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/evidence/commit", s.handleEvidenceCommit)
-	// The ledger's answers beside the release policy's CI reading, for
-	// every commit that reading knows: read-only, viewer and above.
-	r.With(s.auth.Require(actuation.RoleViewer)).Get("/evidence/compare", s.handleEvidenceCompare)
 	// The ledger's "did CI pass" for one commit, for the release scripts
 	// and the in-cluster gates: no token, as /releases beside it.
 	r.Get("/evidence/ci", s.handleEvidenceCI)
