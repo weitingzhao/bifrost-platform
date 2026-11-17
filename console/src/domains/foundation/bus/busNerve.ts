@@ -130,3 +130,22 @@ export async function fetchBusObserve(): Promise<BusObserve> {
   const r = await authedFetch('bus observe', '/api/v1/bus/observe?hours=24')
   return (await r.json()) as BusObserve
 }
+
+/**
+ * A domain's own colour on the map: a hue fixed by its id (the same id gives
+ * the same hue on every load; nothing is listed by hand), saturated and light
+ * enough to glow on black. Returned as #rrggbb so canvas and three take it.
+ */
+export function domainColor(id: string, light = 0.62): string {
+  let h = 2166136261
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619)
+  const hue = ((h >>> 0) % 360) / 360
+  const sat = 0.85
+  const f = (n: number) => {
+    const k = (n + hue * 12) % 12
+    const a = sat * Math.min(light, 1 - light)
+    const c = light - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))
+    return Math.round(c * 255).toString(16).padStart(2, '0')
+  }
+  return `#${f(0)}${f(8)}${f(4)}`
+}

@@ -8,7 +8,7 @@ import { BUS_LIST_CAP, fetchBusClients, fetchBusReplay, type BusStreamState } fr
 import { clockTime, type BusEnvelope } from './busTrace'
 import {
   LATE_AFTER_S, OWN_CONSUMER, QUIET_AFTER_H, SPEEDS, STUCK_AFTER_MIN, fetchBusObserve, nerveModel, readerOf, replaySchedule,
-  seatLabel, seatMail, seatState, shortSeconds,
+  domainColor, seatLabel, seatMail, seatState, shortSeconds,
   type ObserveSeat, type OrganTone,
 } from './busNerve'
 import { CORE, domainOf } from './busNerveLayout'
@@ -154,7 +154,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
   const graph = useMemo((): { nodes: GNode[]; links: GLink[] } | null => {
     if (!model) return null
     const wall = Date.now()
-    const nodes: GNode[] = [{ id: CORE, kind: 'core', label: 'bus', color: C.blue, size: 9, breath: 6, note: 'the bus: ledger and stream' }]
+    const nodes: GNode[] = [{ id: CORE, kind: 'core', label: 'bus', color: '#9be7ff', size: 4.5, breath: 6, note: 'the bus: ledger and stream' }]
     const links: GLink[] = []
     const byDomain = new Map<string, string[]>()
     for (const t of model.topics) {
@@ -171,17 +171,18 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
     for (const [d, types] of [...byDomain.entries()].sort()) {
       const open = expanded.has(d)
       const more = members.get(d) ?? 0
-      nodes.push({ id: `d:${d}`, kind: 'cluster', label: open ? `${d} ▾` : d, color: C.blue, size: 10 + Math.sqrt(types.length + more) * 2.4, breath: null,
+      const hue = domainColor(d)
+      nodes.push({ id: `d:${d}`, kind: 'cluster', label: open ? `${d} ▾` : d, color: hue, size: 5 + Math.sqrt(types.length + more) * 1.2, breath: null,
         note: `domain ${d}: ${types.length} topics${more > 0 ? `, ${more} more inside (seats, readers, old roads)` : ''} · click to ${open ? 'fold' : 'open'}` })
-      links.push({ source: `d:${d}`, target: CORE, color: C.link, width: 1 })
+      links.push({ source: `d:${d}`, target: CORE, color: domainColor(d, 0.45), width: 0.6 })
       if (!open) continue
       for (const t of types) {
-        nodes.push({ id: `t:${t}`, kind: 'topic', label: t, color: '#2b7fb0', size: 2.2, breath: null, note: t })
-        links.push({ source: `t:${t}`, target: `d:${d}`, color: C.link, width: 0.3 })
+        nodes.push({ id: `t:${t}`, kind: 'topic', label: t, color: domainColor(d, 0.72), size: 1.1, breath: null, note: t })
+        links.push({ source: `t:${t}`, target: `d:${d}`, color: domainColor(d, 0.4), width: 0.3 })
         const p = model.publisherOf.get(t) ?? 'unknown'
         if (!pubs.has(p)) {
           pubs.add(p)
-          nodes.push({ id: `p:${p}`, kind: 'publisher', label: p, color: C.blue, size: 5, breath: 6, note: `publisher ${p}` })
+          nodes.push({ id: `p:${p}`, kind: 'publisher', label: p, color: '#9be7ff', size: 2.5, breath: null, note: `publisher ${p}` })
           links.push({ source: `p:${p}`, target: CORE, color: C.link, width: 0.5 })
         }
         if (!links.some(l => l.source === `p:${p}` && l.target === `d:${d}`)) links.push({ source: `p:${p}`, target: `d:${d}`, color: C.link, width: 0.5 })
@@ -189,11 +190,11 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
     }
     for (const r of expanded.has('foundation') ? model.readers : []) {
       if (r.tone === 'old') {
-        nodes.push({ id: `o:${r.label}`, kind: 'old', label: r.label, color: C.grey, size: 2.5, breath: null, note: `old road, not on the bus yet: ${r.note ?? r.label}` })
+        nodes.push({ id: `o:${r.label}`, kind: 'old', label: r.label, color: C.grey, size: 1.4, breath: null, note: `old road, not on the bus yet: ${r.note ?? r.label}` })
         links.push({ source: `o:${r.label}`, target: 'd:foundation', color: C.grey, dashed: true, width: 0.4 })
         continue
       }
-      nodes.push({ id: `r:${r.id}`, kind: 'reader', label: r.label.replace(/^gate:events:/, ''), color: TONE[r.tone], size: 4.5, breath: null,
+      nodes.push({ id: `r:${r.id}`, kind: 'reader', label: r.label.replace(/^gate:events:/, ''), color: TONE[r.tone], size: 2.3, breath: null,
         note: `reader ${r.id} · ${r.tone}` })
       links.push({ source: `r:${r.id}`, target: CORE, color: C.link, width: 0.6 })
     }
@@ -213,7 +214,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
       const name = nameOf(id, names)
       const owner = id === 'owner'
       nodes.push({
-        id: `s:${id}`, kind: 'seat', label: name.length > 28 ? `${name.slice(0, 27)}…` : name, color: owner ? C.violet : br.color, size: owner ? 10 : 7,
+        id: `s:${id}`, kind: 'seat', label: name.length > 28 ? `${name.slice(0, 27)}…` : name, color: owner ? C.violet : br.color, size: owner ? 5 : 3.5,
         breath: owner ? null : br.dur, ring: st === 'stuck' ? C.red : undefined,
         note: `${name} (${id}) · ${owner ? 'the owner' : br.label}${read ? ` · ${read}` : ''}${st === 'quiet' ? ` · no report for ${QUIET_AFTER_H}h` : ''}${st === 'stuck' ? ` · something waits over ${STUCK_AFTER_MIN}m` : ''}`,
       })
@@ -236,11 +237,15 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
   }, [model, seats, beat, observed, team.data, names, domainOfType, expanded])
 
   const api = useRef<NerveApi | null>(null)
+  // The latest model, for a replay that must not restart when a read refreshes it.
+  const modelRef = useRef(model)
+  modelRef.current = model
   const [view, setView] = useState<View>(startView)
   const [mode, setMode] = useState<Mode>({ kind: 'live' })
   const [dimCI, setDimCI] = useState(true)
   const [last, setLast] = useState<{ event: BusEnvelope; readers: string[] } | null>(null)
   const [replayNote, setReplayNote] = useState<string | null>(null)
+  const [replayAt, setReplayAt] = useState<{ i: number; n: number; time: string } | null>(null)
   const pending = useRef(new Map<string, { topic: string; since: number; landed: boolean }>())
   const seenEvents = useRef(new Set<string>())
   const seenReceipts = useRef(new Set<string>())
@@ -248,6 +253,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
   const faint = (type: string) => dimCI && type.startsWith('ci.')
   const fireEvent = (e: BusEnvelope) => {
     const a = api.current
+    const model = modelRef.current
     if (!a || !model) return
     const d = domainOfType.get(e.type) ?? domainOf(e.type)
     const dom = `d:${d}`
@@ -309,10 +315,11 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
 
   // Replay: the last day from the ledger at speed, each event's receipts landing after it as they did.
   useEffect(() => {
-    if (mode.kind !== 'replay' || !model) return
+    if (mode.kind !== 'replay' || !modelRef.current) return
     let cancelled = false
     const timers: number[] = []
     setLast(null)
+    setReplayAt(null)
     setReplayNote('reading the last 24 hours from the ledger…')
     fetchBusReplay(new Date(Date.now() - 24 * 3600_000).toISOString())
       .then(({ events, receipts, receiptsNote }) => {
@@ -321,10 +328,10 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
         const byEvent = new Map<string, typeof receipts>()
         for (const r of receipts) if (r.consumer !== OWN_CONSUMER) byEvent.set(r.id, [...(byEvent.get(r.id) ?? []), r])
         setReplayNote(`replay: ${events.length} events of the last 24h at ${mode.speed}×; ${receipts.length > 0 ? `${receipts.length} receipts replayed with them` : `receipts not replayed: ${receiptsNote ?? 'none found in the receipt stream for these events'}`}`)
-        for (const { at: t, event } of plan) {
-          timers.push(window.setTimeout(() => { fireEvent(event); setLast({ event, readers: [] }) }, t))
+        plan.forEach(({ at: t, event }, i) => {
+          timers.push(window.setTimeout(() => { fireEvent(event); setLast({ event, readers: [] }); setReplayAt({ i: i + 1, n: plan.length, time: event.time }) }, t))
           for (const r of byEvent.get(event.id) ?? []) {
-            const reader = readerOf(r.consumer, model.readers)
+            const reader = readerOf(r.consumer, modelRef.current?.readers ?? [])
             if (!reader) continue
             const lag = Math.min(1500, Math.max(SECOND_HOP_MS, (Date.parse(r.at) - Date.parse(event.time)) / mode.speed))
             timers.push(window.setTimeout(() => {
@@ -332,14 +339,15 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
               setLast(l => (l && l.event.id === event.id ? { ...l, readers: [...l.readers, reader] } : l))
             }, t + lag))
           }
-        }
+        })
         const end = plan.length > 0 ? plan[plan.length - 1].at + 2 * SECOND_HOP_MS : 0
         timers.push(window.setTimeout(() => setReplayNote(`replay done: ${events.length} events`), end))
       })
       .catch(err => !cancelled && setReplayNote(`replay failed: ${err instanceof Error ? err.message : 'request failed'}`))
     return () => { cancelled = true; timers.forEach(clearTimeout) }
+    // A replay starts once per press: the model refreshing every minute must not restart it (STG, 2026-11-17: it never got going).
     // eslint-disable-next-line react-hooks/exhaustive-deps -- a replay runs once per start
-  }, [mode, model])
+  }, [mode])
 
   const late = mode.kind === 'live'
     ? [...pending.current.values()].filter(p => !p.landed && Date.now() - p.since > LATE_AFTER_S * 1000).length
@@ -377,7 +385,11 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
           {' '}· letters between seats mostly go through Desktop sessions, not the bus, so the team's nerves are mostly not on it yet
         </p>
       )}
-      {replayNote && last && <p className="m-0 font-mono text-xs" style={{ color: C.muted }}>{replayNote}</p>}
+      {mode.kind === 'replay' && (
+        <p className="m-0 font-mono text-xs" data-testid="bus-nerve-replay" style={{ color: C.green }}>
+          ▶ replay {mode.speed}× {replayAt ? `· ${clockTime(replayAt.time)} · ${replayAt.i}/${replayAt.n}` : ''} <span style={{ color: C.muted }}>{replayNote}</span>
+        </p>
+      )}
       {view === 'list'
         ? <div className="rounded-sm bg-[var(--card-fill)] p-2"><ContractGraph contract={contract.data} roster={roster} /></div>
         : (

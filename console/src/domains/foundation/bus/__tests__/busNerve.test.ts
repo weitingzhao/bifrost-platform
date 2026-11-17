@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { OWN_CONSUMER, nerveModel, readerOf, replaySchedule, seatLabel, seatMail, seatState, shortSeconds, type ObserveSeat } from '../busNerve'
+import { OWN_CONSUMER, domainColor, nerveModel, readerOf, replaySchedule, seatLabel, seatMail, seatState, shortSeconds, type ObserveSeat } from '../busNerve'
 import type { BusContract, BusNextgen } from '../busNextgen'
 import type { BusEnvelope } from '../busTrace'
 import type { BusClient } from '../useBusStream'
@@ -85,5 +85,17 @@ describe('labels', () => {
     expect(seatLabel('seat:chief_of_staff')).toBe('chief_of_staff')
     expect(seatLabel('owner')).toBe('owner')
     expect([shortSeconds(4.8), shortSeconds(134.8), shortSeconds(32785.8)]).toEqual(['4.8s', '2.2m', '9.1h'])
+  })
+})
+
+// Origin: 2026-11-17, the coordinator on STG: every domain the same matte
+// blue looked like plastic. Each domain gets its own hue from its id, the
+// same on every load, as #rrggbb.
+describe('domainColor', () => {
+  it('is fixed per id, a hex colour, and differs between domains', () => {
+    expect(domainColor('coordination')).toBe(domainColor('coordination'))
+    expect(domainColor('coordination')).toMatch(/^#[0-9a-f]{6}$/)
+    const all = ['foundation', 'plan', 'lineage', 'verification', 'delivery', 'owner', 'compute', 'tenant', 'coordination'].map(d => domainColor(d))
+    expect(new Set(all).size).toBe(all.length)
   })
 })

@@ -38,6 +38,8 @@ const FIT_AFTER_MS = 1200
 const FIT_PADDING = 30
 const FLASH_MS = 900
 const DRIFT = 0.04
+/** A drag that moved a node less than this (world units) was a click. */
+const CLICK_SLOP = 2
 
 /** How hard a node pushes the others away: seats and the owner get room of their own, topics sit close to their domain. */
 function chargeOf(o: object): number {
@@ -77,6 +79,29 @@ function driftForce(nodes: () => SimNode[], dims: 2 | 3) {
   return f
 }
 
+/** Keeps the bodies apart: two nodes closer than their halos plus a margin push each other away. */
+function collideForce(nodes: () => SimNode[], dims: 2 | 3) {
+  return () => {
+    const ns = nodes()
+    for (let i = 0; i < ns.length; i++) {
+      for (let j = i + 1; j < ns.length; j++) {
+        const a = ns[i]
+        const b = ns[j]
+        const dx = (b.x ?? 0) - (a.x ?? 0)
+        const dy = (b.y ?? 0) - (a.y ?? 0)
+        const dz = dims === 3 ? (b.z ?? 0) - (a.z ?? 0) : 0
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.01
+        const min = (a.size + b.size) * 2.2 + 4
+        if (d >= min) continue
+        const k = ((min - d) / d) * 0.25
+        a.vx = (a.vx ?? 0) - dx * k; a.vy = (a.vy ?? 0) - dy * k
+        b.vx = (b.vx ?? 0) + dx * k; b.vy = (b.vy ?? 0) + dy * k
+        if (dims === 3) { a.vz = (a.vz ?? 0) - dz * k; b.vz = (b.vz ?? 0) + dz * k }
+      }
+    }
+  }
+}
+
 export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick }: {
   nodes: GNode[]; links: GLink[]; flat: boolean; onReady: (api: NerveApi) => void; onNodeClick?: (id: string) => void
 }) {
@@ -90,6 +115,7 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
   const click = useRef(onNodeClick)
   click.current = onNodeClick
   const labelsRef = useRef(new Map<string, HTMLDivElement>())
+  const hovered = useRef<string | null>(null)
   const fitted = useRef(-1)
 
   // Build the renderer once per kind (3D or 2D).
@@ -125,10 +151,10 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
           .nodeCanvasObject((o: object, ctx: CanvasRenderingContext2D, scale: number) => {
             const n = o as SimNode
             const t = performance.now() / 1000
-            const r = n.size * (n.breath ? 1 + 0.06 * Math.sin((2 * Math.PI * t) / n.breath) : 1) * (lit(n) ? 1.25 : 1)
+            const r = n.size * (n.breath ? 1 + 0.06 * Math.sin((2 * Math.PI * t) / n.breath) : 1) * (lit(n) || hovered.current === n.id ? 1.3 : 1)
             ctx.save()
             ctx.shadowColor = n.color
-            ctx.shadowBlur = lit(n) ? 10 : n.kind === 'topic' ? 2 : 5
+            ctx.shadowBlur = lit(n) ? 18 : n.kind === 'topic' ? 4 : 12
             ctx.beginPath()
             ctx.arc(n.x ?? 0, n.y ?? 0, r, 0, 2 * Math.PI)
             ctx.fillStyle = n.kind === 'old' ? '#3b4a5288' : n.color
@@ -151,14 +177,17 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
           .linkLineDash((o: object) => { const l = o as SimLink; return (l.dashed ? [3, 3] : null) })
           .linkLabel((o: object) => { const l = o as SimLink; return l.label ?? '' })
           .linkDirectionalParticleColor((o: object) => { const l = o as SimLink; return l.__pulse ?? l.color })
-          .linkDirectionalParticleWidth(3.2)
+          .linkDirectionalParticleWidth(4)
           .linkDirectionalParticleSpeed(0.014)
           .d3AlphaMin(0)
           .cooldownTicks(Infinity)
           .autoPauseRedraw(false)
         g.d3Force('drift', driftForce(() => data.current.nodes, 2))
+        g.d3Force('collide', collideForce(() => data.current.nodes, 2))
         g.d3Force('charge')?.strength(chargeOf)
         g.onNodeClick((o: object) => click.current?.((o as SimNode).id))
+        g.onNodeHover((o: object | null) => { hovered.current = o ? (o as SimNode).id : null; el.style.cursor = o ? 'pointer' : '' })
+        g.onNodeDragEnd((o: object, t: { x: number; y: number }) => { if (Math.hypot(t.x, t.y) < CLICK_SLOP) click.current?.((o as SimNode).id) })
         g.graphData(data.current)
         graph.current = g
         fitted.current = -1
@@ -167,11 +196,24 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
       })
     } else {
       void Promise.all([
-        import('3d-force-graph'), import('three'), import('three/examples/jsm/postprocessing/UnrealBloomPass.js'), import('three/examples/jsm/renderers/CSS2DRenderer.js'),
+        import('3d-force-graph'), import('three'), import('three/examples/jsm/renderers/CSS2DRenderer.js'),
       ]).then(
-        ([{ default: ForceGraph3D }, THREE, { UnrealBloomPass }, { CSS2DRenderer, CSS2DObject }]) => {
+        ([{ default: ForceGraph3D }, THREE, { CSS2DRenderer, CSS2DObject }]) => {
           if (disposed) return
-          const bodies = new Map<string, { mesh: import('three').Mesh; base: number }>()
+          const bodies = new Map<string, { mesh: import('three').Mesh; halo: import('three').Sprite; base: number }>()
+          // One soft halo for every node: bright at the centre, fading out (no full-screen bloom, so words stay sharp).
+          const haloTexture = (() => {
+            const c = document.createElement('canvas')
+            c.width = c.height = 64
+            const ctx = c.getContext('2d')!
+            const gr = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
+            gr.addColorStop(0, 'rgba(255,255,255,0.9)')
+            gr.addColorStop(0.25, 'rgba(255,255,255,0.35)')
+            gr.addColorStop(1, 'rgba(255,255,255,0)')
+            ctx.fillStyle = gr
+            ctx.fillRect(0, 0, 64, 64)
+            return new THREE.CanvasTexture(c)
+          })()
           // Labels are HTML drawn over the canvas (CSS2D), so the bloom never blurs them.
           const label = (n: SimNode) => {
             const div = document.createElement('div')
@@ -198,32 +240,39 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
               const group = new THREE.Group()
               const mesh = new THREE.Mesh(
                 new THREE.SphereGeometry(n.size, 20, 14),
-                new THREE.MeshBasicMaterial({ color: new THREE.Color(n.color).multiplyScalar(0.55), transparent: true, opacity: n.kind === 'old' ? 0.35 : 0.9 }),
+                new THREE.MeshBasicMaterial({ color: n.color, transparent: true, opacity: n.kind === 'old' ? 0.35 : 1 }),
               )
               group.add(mesh)
+              const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+                map: haloTexture, color: n.color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: n.kind === 'old' ? 0.15 : 0.55,
+              }))
+              halo.scale.setScalar(n.size * 6)
+              group.add(halo)
               if (n.ring) {
                 const ring = new THREE.Mesh(new THREE.TorusGeometry(n.size * 1.5, Math.max(0.15, n.size * 0.04), 6, 40), new THREE.MeshBasicMaterial({ color: n.ring }))
                 group.add(ring)
               }
               if (n.kind !== 'topic') group.add(label(n))
-              bodies.set(n.id, { mesh, base: 1 })
+              bodies.set(n.id, { mesh, halo, base: n.size * 6 })
               return group
             })
             .linkColor((o: object) => { const l = o as SimLink; return l.color })
-            .linkOpacity(0.18)
+            .linkOpacity(0.35)
             .linkWidth((o: object) => { const l = o as SimLink; return (l.width ?? 0) * 0.5 })
             .linkLabel((o: object) => { const l = o as SimLink; return l.label ?? '' })
             .linkDirectionalParticleColor((o: object) => { const l = o as SimLink; return l.__pulse ?? l.color })
-            .linkDirectionalParticleWidth(2.2)
+            .linkDirectionalParticleWidth(3.5)
+            .linkDirectionalParticleResolution(8)
             .linkDirectionalParticleSpeed(0.012)
             .d3AlphaMin(0)
             .cooldownTicks(Infinity)
           g.d3Force('drift', driftForce(() => data.current.nodes, 3))
+          g.d3Force('collide', collideForce(() => data.current.nodes, 3))
           g.d3Force('charge')?.strength(chargeOf)
           g.onNodeClick((o: object) => click.current?.((o as SimNode).id))
-          // A faint glow on the nodes' cores and the particles only: high threshold, low strength.
-          const bloom = new UnrealBloomPass(new THREE.Vector2(width(), height()), 0.55, 0.3, 0.45)
-          g.postProcessingComposer().addPass(bloom)
+          g.onNodeHover((o: object | null) => { hovered.current = o ? (o as SimNode).id : null; el.style.cursor = o ? 'pointer' : '' })
+          // A press and release that barely moved the node is a click, not a drag.
+          g.onNodeDragEnd((o: object, t: { x: number; y: number; z: number }) => { if (Math.hypot(t.x, t.y, t.z) < CLICK_SLOP) click.current?.((o as SimNode).id) })
           ;(g.controls() as { zoomSpeed?: number }).zoomSpeed = 2.5
           g.graphData(data.current)
           graph.current = g
@@ -236,9 +285,10 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
             for (const n of data.current.nodes) {
               const b = bodies.get(n.id)
               if (!b) continue
-              const s = (n.breath ? 1 + 0.06 * Math.sin((2 * Math.PI * t) / n.breath) : 1) * (lit(n) ? 1.25 : 1)
+              const s = (n.breath ? 1 + 0.06 * Math.sin((2 * Math.PI * t) / n.breath) : 1) * (lit(n) || hovered.current === n.id ? 1.3 : 1)
               b.mesh.scale.setScalar(s)
-              ;(b.mesh.material as import('three').MeshBasicMaterial).color.copy(tint.set(n.color).multiplyScalar(lit(n) ? 1 : 0.55))
+              b.halo.scale.setScalar(b.base * s * (lit(n) ? 1.6 : 1))
+              ;(b.mesh.material as import('three').MeshBasicMaterial).color.copy(tint.set(n.color))
             }
             raf = requestAnimationFrame(tick)
           }
