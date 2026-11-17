@@ -50,6 +50,39 @@ type testFile struct {
 	Tests   int      // top-level Test, Benchmark, Fuzz and Example functions
 	Imports []string // imports of this module's packages, named like Pkg
 	Flow    string   // the declaration line, "" when the file has none
+	Owner   string   // the "//bifrost:owner <domain>" line, "" when the file has none
+}
+
+// ownerMark is how a test file in a package several domains share says which
+// one of them answers for it, before its package clause:
+//
+//	//bifrost:owner <domain>
+//
+// The domain is one of those the package's row names. The file is then no
+// longer without an owner, and it is counted apart (declared in a shared
+// package) until it moves to a package of that domain. A new test in a
+// shared package lands this way: the Owner's rule is that a test names its
+// domain, not that nothing may be added before the shared packages are split.
+const ownerMark = "//bifrost:owner"
+
+// ownerRefusal says why an owner declaration does not hold, "" when it does.
+func ownerRefusal(o ownership, f testFile) string {
+	name := strings.TrimSpace(strings.TrimPrefix(f.Owner, ownerMark))
+	row, listed := o.Packages[f.Pkg]
+	switch {
+	case o.domainOf(f.Pkg) != "mixed":
+		return fmt.Sprintf("%s is declared for a file of %s, which config/domain-ownership.json already gives to %s: take the line out", ownerMark, f.Pkg, o.domainOf(f.Pkg))
+	case name == "" || strings.ContainsAny(name, " \t"):
+		return fmt.Sprintf("%q is not \"%s <domain>\"", f.Owner, ownerMark)
+	case !listed:
+		return fmt.Sprintf("%s has no row in config/domain-ownership.json", f.Pkg)
+	}
+	for _, d := range row.Domains {
+		if d == name {
+			return ""
+		}
+	}
+	return fmt.Sprintf("%s names %q, which is not one of the domains %s is shared by (%s)", ownerMark, name, f.Pkg, strings.Join(row.Domains, ", "))
 }
 
 // baseOf is the default domain, which every domain stands on.
@@ -119,6 +152,12 @@ func testOwners(o ownership, files []testFile) (without map[string]int, flows, r
 			}
 			continue
 		}
+		if f.Owner != "" {
+			if why := ownerRefusal(o, f); why != "" {
+				refused = append(refused, f.Path+": "+why)
+			}
+			continue
+		}
 		if o.domainOf(f.Pkg) == "mixed" && f.Tests > 0 {
 			without[f.Pkg] += f.Tests
 		}
@@ -137,7 +176,7 @@ func ownerBaselineErrors(without, baseline map[string]int, pkgs map[string]bool)
 	var out []string
 	for pkg, n := range without {
 		if held, ok := baseline[pkg]; !ok || n > held {
-			out = append(out, fmt.Sprintf("a test with no owner was added to %s (%d test functions, baseline %d): several domains share that package, so nobody answers for the test. Put it in a package config/domain-ownership.json gives to one domain, or declare the file a flow test: make it package x_test, import only its owner's and the base's packages, and write before the package clause: %s owner=<domain> contracts=<name>[,<name>...]", pkg, n, baseline[pkg], flowMark))
+			out = append(out, fmt.Sprintf("a test with no owner was added to %s (%d test functions, baseline %d): several domains share that package, so nobody answers for the test. Three ways, best first: put it in a package config/domain-ownership.json gives to one domain; or, if it must stay in this package for now, put it in a file of its own that says before the package clause which of the package's domains answers for it: %s <domain>; or, if it checks a flow across domains, make the file package x_test, import only its owner's and the base's packages, and write before the package clause: %s owner=<domain> contracts=<name>[,<name>...]", pkg, n, baseline[pkg], ownerMark, flowMark))
 		}
 	}
 	for pkg, held := range baseline {
@@ -161,9 +200,9 @@ func ownerBaselineErrors(without, baseline map[string]int, pkgs map[string]bool)
 var testsWithoutOwner = map[string]int{
 	"api/internal/agentrt/agentrtapi": 68,
 	"api/internal/agentrt/controller": 38,
-	"api/internal/agentrt/store":      176,
+	"api/internal/agentrt/store":      171,
 	"api/internal/cluster":            143,
-	"api/internal/delivery":           182,
+	"api/internal/delivery":           181,
 	"api/internal/operatorplane":      10,
 	"api/internal/server":             205,
 }
@@ -224,6 +263,9 @@ func readTestFile(root, path string) (testFile, error) {
 		for _, c := range group.List {
 			if c.Pos() < parsed.Package && (c.Text == flowMark || strings.HasPrefix(c.Text, flowMark+" ")) && f.Flow == "" {
 				f.Flow = c.Text
+			}
+			if c.Pos() < parsed.Package && (c.Text == ownerMark || strings.HasPrefix(c.Text, ownerMark+" ")) && f.Owner == "" {
+				f.Owner = c.Text
 			}
 		}
 	}
@@ -415,6 +457,41 @@ func TestOwnerCheckSeesATestAddedToASharedPackage(t *testing.T) {
 // above): each declaration that does not hold is refused with its reason,
 // and one that holds in a shared package's directory cannot exist, because
 // the file would import the shared package.
+// Origin: 2026-11-16, the Owner's rule the same evening: a test that is added names its domain. A file in a shared
+// package that says which of the package's domains answers for it is owned (the server's handler tests live in the
+// shared server package until it is split, and every lane adds some); what it may not do is name a domain the package
+// is not shared by, name none, or sit in a package that already has one domain. The first file is the control: the
+// same file without the line is counted without an owner.
+func TestATestInASharedPackageMayNameItsDomain(t *testing.T) {
+	o := controlOwnership(t)
+	file := func(name, pkg, owner string) testFile {
+		return testFile{Path: pkg + "/" + name, Pkg: pkg, PkgName: "x", Tests: 2, Owner: owner}
+	}
+	without, _, refused := testOwners(o, []testFile{
+		file("none_test.go", "api/internal/both", ""),
+		file("mine_test.go", "api/internal/both", "//bifrost:owner plan"),
+		file("other_test.go", "api/internal/both", "//bifrost:owner tenant"),
+		file("empty_test.go", "api/internal/both", "//bifrost:owner"),
+		file("single_test.go", "api/internal/plan", "//bifrost:owner plan"),
+	})
+	if len(without) != 1 || without["api/internal/both"] != 2 {
+		t.Fatalf("without an owner: %v, want the two tests of none_test.go only", without)
+	}
+	want := []string{"empty_test.go", "is not", "other_test.go", "not one of the domains", "single_test.go", "already gives to plan"}
+	if len(refused) != 3 {
+		t.Fatalf("refused: %q", refused)
+	}
+	for i := 0; i < len(want); i += 2 {
+		found := false
+		for _, r := range refused {
+			found = found || (strings.Contains(r, want[i]) && strings.Contains(r, want[i+1]))
+		}
+		if !found {
+			t.Errorf("no refusal of %s saying %q in %q", want[i], want[i+1], refused)
+		}
+	}
+}
+
 func TestFlowDeclarationIsRefusedWithItsReason(t *testing.T) {
 	o := controlOwnership(t)
 	flow := func(name, pkgName, line string, imports ...string) testFile {
