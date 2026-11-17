@@ -42,6 +42,11 @@ type exportUses struct{ prod, test bool }
 func testOnlyExports(root, module string) ([]string, error) {
 	fset := token.NewFileSet()
 	exported := map[string]bool{}
+	// signature is, by an exported function's key, the keys of its own
+	// package's types its parameters and results name: a production use of
+	// the function is a use of them (Load returns Input; nobody writes
+	// domainscore.Input to call it).
+	signature := map[string][]string{}
 	uses := map[string]*exportUses{}
 	type parsed struct {
 		pkg  string
@@ -82,7 +87,21 @@ func testOnlyExports(root, module string) ([]string, error) {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
 				if d.Recv == nil && d.Name.IsExported() {
-					exported[p.pkg+"."+d.Name.Name] = true
+					k := p.pkg + "." + d.Name.Name
+					exported[k] = true
+					for _, fl := range []*ast.FieldList{d.Type.Params, d.Type.Results} {
+						if fl == nil {
+							continue
+						}
+						for _, field := range fl.List {
+							ast.Inspect(field.Type, func(n ast.Node) bool {
+								if id, ok := n.(*ast.Ident); ok && id.IsExported() {
+									signature[k] = append(signature[k], p.pkg+"."+id.Name)
+								}
+								return true
+							})
+						}
+					}
 				}
 			case *ast.GenDecl:
 				for _, spec := range d.Specs {
@@ -153,6 +172,19 @@ func testOnlyExports(root, module string) ([]string, error) {
 			return true
 		})
 	}
+	for k, u := range uses {
+		if !u.prod {
+			continue
+		}
+		for _, t := range signature[k] {
+			if exported[t] {
+				if uses[t] == nil {
+					uses[t] = &exportUses{}
+				}
+				uses[t].prod = true
+			}
+		}
+	}
 	var out []string
 	for k, u := range uses {
 		if u.test && !u.prod {
@@ -200,7 +232,9 @@ func TestNoNewNameIsExportedForAnotherPackagesTests(t *testing.T) {
 // The positive control of the check above, on a made-up module: a name
 // another package's test uses and no other package's production code does is
 // listed; one production code elsewhere uses is not, nor one only its own
-// package's tests use, nor a method; an alias import is followed.
+// package's tests use, nor a method; an alias import is followed; a type
+// that another package's production code takes through a function's
+// signature (Load returns In) is not listed though it never names it.
 func TestTestOnlyExportsReadsTheNamesAndTheirUsers(t *testing.T) {
 	root := t.TempDir()
 	write := func(path, src string) {
@@ -213,10 +247,10 @@ func TestTestOnlyExportsReadsTheNamesAndTheirUsers(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("api/internal/a/a.go", "package a\nfunc ForTests() {}\nfunc Used() {}\nfunc Own() {}\ntype T struct{}\nfunc (T) M() {}\nconst Limit = 3\n")
+	write("api/internal/a/a.go", "package a\nfunc ForTests() {}\nfunc Used() {}\nfunc Own() {}\ntype T struct{}\nfunc (T) M() {}\nconst Limit = 3\ntype In struct{}\nfunc Load() (In, error) { return In{}, nil }\n")
 	write("api/internal/a/a_test.go", "package a\nfunc x() { Own() }\n")
-	write("api/internal/b/b.go", "package b\nimport \"m.test/api/internal/a\"\nfunc f() { a.Used() }\n")
-	write("api/internal/b/b_test.go", "package b\nimport aa \"m.test/api/internal/a\"\nfunc g() { aa.ForTests(); aa.Used(); var t aa.T; t.M(); _ = aa.Limit }\n")
+	write("api/internal/b/b.go", "package b\nimport \"m.test/api/internal/a\"\nfunc f() { a.Used(); a.Load() }\n")
+	write("api/internal/b/b_test.go", "package b\nimport aa \"m.test/api/internal/a\"\nfunc g() { aa.ForTests(); aa.Used(); var t aa.T; t.M(); _ = aa.Limit; var i aa.In; _ = i }\n")
 	got, err := testOnlyExports(root, "m.test/")
 	if err != nil {
 		t.Fatal(err)

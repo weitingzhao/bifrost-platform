@@ -2,7 +2,8 @@ package codeguard
 
 // The baseline of test_only_exports_test.go, 2026-11-17 (platform origin/main
 // 8215afd8): 239 package-level exported names that other packages' tests name
-// and no other package's production code does. It only shrinks. The 42 of
+// and no other package's production code does. It only shrinks (232 since the scan counts a type taken through a used
+// function's signature as surface, the same day). The 42 of
 // agentrt/planstore include the 21 the decoupling line exports for the store
 // tests (TD-582).
 
@@ -55,7 +56,6 @@ var exportedForOtherTests = []string{
 	"api/internal/agentrt/evidence.ControllerStream",
 	"api/internal/agentrt/evidence.EvidenceScopeIncremental",
 	"api/internal/agentrt/evidence.UnitRunsByKey",
-	"api/internal/agentrt/externalwork.ExternalDescription",
 	"api/internal/agentrt/fullci.FullCILandingsMax",
 	"api/internal/agentrt/landing.History",
 	"api/internal/agentrt/landingci.FullRunName",
@@ -69,7 +69,6 @@ var exportedForOtherTests = []string{
 	"api/internal/agentrt/plan.StateStopped",
 	"api/internal/agentrt/planimport.FromPlanWithRequest",
 	"api/internal/agentrt/planimport.ImportHead",
-	"api/internal/agentrt/planreadings.TreeRoot",
 	"api/internal/agentrt/planstore.AlertClaim",
 	"api/internal/agentrt/planstore.Binding",
 	"api/internal/agentrt/planstore.CardApplyKey",
@@ -120,7 +119,6 @@ var exportedForOtherTests = []string{
 	"api/internal/agentrt/planview.Edge",
 	"api/internal/agentrt/planview.Estimate",
 	"api/internal/agentrt/planview.Evidence",
-	"api/internal/agentrt/planview.Item",
 	"api/internal/agentrt/planview.NodeRef",
 	"api/internal/agentrt/planview.ParseBinding",
 	"api/internal/agentrt/planview.Source",
@@ -155,7 +153,6 @@ var exportedForOtherTests = []string{
 	"api/internal/bus/hook.ChangePushed",
 	"api/internal/bus/registry.Agree",
 	"api/internal/bus/registry.CheckSubscriptions",
-	"api/internal/bus/relay.Row",
 	"api/internal/bus/releases.Type",
 	"api/internal/cidomains.Domain",
 	"api/internal/cidomains.Edge",
@@ -212,7 +209,6 @@ var exportedForOtherTests = []string{
 	"api/internal/ownerexec.Claim",
 	"api/internal/ownerexec.CodeAt",
 	"api/internal/ownerexec.EncodeSeed",
-	"api/internal/ownerexec.Outcome",
 	"api/internal/ownerexec.Result",
 	"api/internal/ownerexec.RunPath",
 	"api/internal/ownerexec.StatusError",
@@ -237,9 +233,7 @@ var exportedForOtherTests = []string{
 	"api/internal/releasepolicy/rptest.Writer",
 	"api/internal/releases.RepoBuild",
 	"api/internal/resourceview.CoverageReach",
-	"api/internal/server.Server",
 	"api/internal/statefile/k8sstate/k8sstatetest.New",
-	"api/internal/tenant/appreadings.ActivityObservation",
 	"api/internal/tenant/appreadings.FreshnessVerdictFromLag",
 	"api/internal/unitexec.NameValue",
 	"api/internal/unitplan.Hash",
