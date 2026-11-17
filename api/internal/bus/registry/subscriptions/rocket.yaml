@@ -1,0 +1,36 @@
+# Who is woken by which event, for tenant rocket (2026-11-16, the coordinator
+# for the Owner: one declarative table, one generic dispatcher; new reactions
+# are new rows, not new code). A row decides who is told, never what may be
+# done: an action row only asks for its action, which keeps its own tier,
+# rules and approval (checked at registration, registry.CheckSubscriptions).
+#
+# deliver: wake   -> a message to the seat's inbox, which announces
+#                    seat.mail.arrived; the seat's doorbell waits on that.
+#          action -> (later) request a catalogued action.
+#          notify -> (later) a phone notice.
+# to (wake):  a literal address (seat:..., thread:...), or
+#             commit.session -> the Claude-Session trailer of the event's commit.
+# by: who delivers today. "dispatcher" is this table's generic dispatcher;
+#     another value names hand-written code that still delivers it, to be
+#     switched to the dispatcher after a side-by-side run.
+tenant: rocket
+subscriptions:
+  - id: card-concluded-to-requester
+    on: [approval.card.executed, approval.card.decided]
+    deliver: wake
+    to: ref.requester
+    guarantee: durable
+    by: approvals.thread-inbox
+  - id: verdict-red-to-committer
+    on: [ci.verdict.changed]
+    change: red
+    deliver: wake
+    to: commit.session
+    guarantee: durable
+    by: dispatcher
+  - id: mail-to-recipient
+    on: [seat.mail.arrived]
+    deliver: wake
+    to: subject
+    guarantee: durable
+    by: platform-inbox

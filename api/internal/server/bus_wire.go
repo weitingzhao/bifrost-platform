@@ -6,6 +6,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	busalerts "github.com/weitingzhao/bifrost-platform/api/internal/bus/alerts"
 	buscards "github.com/weitingzhao/bifrost-platform/api/internal/bus/cards"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/subscribe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"log/slog"
 	"net/http"
@@ -353,6 +354,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 		if headReleaseOn() {
 			s.consumeHeadRelease(ctx, js, env)
 		}
+		s.consumeSubscriptions(ctx, js, env, pool)
 		r := &relay.Relay{Ledger: ledger, Out: &relay.JSOut{JS: js, Stream: relay.EventStreamName(relay.Tenant, env)},
 			Tenant: rocket, Env: env, Logf: busLogf}
 		r.Run(ctx, relay.Listen(ctx, pool, busLogf))
@@ -412,6 +414,47 @@ func (s *Server) startRunCache(ctx context.Context) {
 	s.delivery.SetRunCache(g)
 	safego.Go("bus-run-cache", func() { g.Run(ctx) })
 	slog.Info("bus run cache: watching PipelineRuns for the display reads", "namespace", ns)
+}
+
+// consumeSubscriptions runs the subscription tables' dispatcher (bus/subscribe):
+// one durable consumer per row the dispatcher delivers, each event handed to
+// its row, a receipt left under the row's name. Rows other code still
+// delivers (by: ...) are not consumed here.
+func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStream, env string, pool *pgxpool.Pool) {
+	subs, err := registry.LoadSubscriptions()
+	if err != nil {
+		slog.Error("bus: subscription tables do not load; no row is dispatched", "error", err)
+		return
+	}
+	var read subscribe.CommitMessage
+	if s.delivery != nil {
+		read = s.delivery.PolicyFacts().CommitMessage
+	}
+	send := func(ctx context.Context, key, to, body string) error {
+		return store.PostConclusion(ctx, pool, key, to, body)
+	}
+	receipts := &relay.Receipts{JS: js, Tenant: relay.Tenant, Env: env}
+	for _, row := range subscribe.Rows(subs, relay.Tenant) {
+		name := "sub-" + row.ID
+		cc, err := relay.ConsumeDurable(ctx, js, relay.Tenant, env, name, row.On, func(e relay.Envelope) error {
+			dctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			defer cancel()
+			if err := subscribe.Deliver(dctx, row, subscribe.FromEnvelope(e), read, send); err != nil {
+				slog.Warn("bus: subscription delivery; asked again", "row", row.ID, "event", e.ID, "error", err)
+				return err
+			}
+			if err := receipts.Publish(dctx, e.ID, name); err != nil {
+				slog.Warn("bus: subscription receipt", "row", row.ID, "event", e.ID, "error", err)
+			}
+			return nil
+		})
+		if err != nil {
+			slog.Error("bus: subscription consumer", "row", row.ID, "error", err)
+			continue
+		}
+		context.AfterFunc(ctx, func() { cc.Stop() })
+		slog.Info("bus: subscription dispatched", "row", row.ID, "on", row.On, "deliver", row.Deliver)
+	}
 }
 
 // consumeHeadRelease is head-release's durable consumer: each

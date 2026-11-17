@@ -1,0 +1,62 @@
+package registry
+
+import (
+	"strings"
+	"testing"
+)
+
+// 2026-11-16 (the coordinator for the Owner): a subscription row decides who
+// is told and never grants anything. Each refusal below is a row that tries.
+func TestCheckSubscriptionsRefuses(t *testing.T) {
+	tenants := map[string]Tenant{
+		"rocket": {Name: "rocket", Channels: map[string]Channel{"ci.run.finished": {}, "seat.mail.arrived": {}}},
+		"demo":   {Name: "demo", Channels: map[string]Channel{"demo.thing.happened": {Exports: []string{"rocket"}}}},
+	}
+	tier := func(id string) (string, bool) {
+		switch id {
+		case "rollout_restart_deployment":
+			return "B", true
+		case "scale_deployment":
+			return "C", true
+		}
+		return "", false
+	}
+	row := func(r Subscription) map[string]Subscriptions {
+		if r.Guarantee == "" {
+			r.Guarantee = "durable"
+		}
+		if r.By == "" {
+			r.By = ByDispatcher
+		}
+		return map[string]Subscriptions{"rocket": {Tenant: "rocket", Rows: []Subscription{r}}}
+	}
+	ok := []Subscription{
+		{ID: "a", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci"},
+		{ID: "b", On: []string{"demo.thing.happened"}, Deliver: DeliverWake, To: "subject"},
+		{ID: "c", On: []string{"ci.run.finished"}, Deliver: DeliverAction, Action: "rollout_restart_deployment"},
+		{ID: "d", On: []string{"ci.run.finished"}, Deliver: DeliverAction, Action: "scale_deployment", Params: map[string]string{"mode": "request"}},
+	}
+	for _, r := range ok {
+		if err := CheckSubscriptions(tenants, row(r), tier); err != nil {
+			t.Errorf("positive control %s: %v", r.ID, err)
+		}
+	}
+	refused := map[string]Subscription{
+		"is neither in":      {ID: "x", On: []string{"git.main.advanced"}, Deliver: DeliverWake, To: "seat:ci"},
+		"not in the catalog": {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverAction, Action: "drop_everything"},
+		"needs an approval":  {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverAction, Action: "scale_deployment"},
+		"wake to":            {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "everyone"},
+		"deliver is":         {ID: "x", On: []string{"ci.run.finished"}, Deliver: "run"},
+	}
+	for want, r := range refused {
+		err := CheckSubscriptions(tenants, row(r), tier)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: err = %v", want, err)
+		}
+	}
+	// demo exports its type to rocket, not the other way round.
+	foreign := map[string]Subscriptions{"demo": {Tenant: "demo", Rows: []Subscription{{ID: "y", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:x", Guarantee: "durable", By: ByDispatcher}}}}
+	if err := CheckSubscriptions(tenants, foreign, tier); err == nil {
+		t.Error("demo subscribed to rocket's ci.run.finished, which rocket does not export to it")
+	}
+}
