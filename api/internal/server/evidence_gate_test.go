@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -372,5 +374,31 @@ func TestIncrementalBaseReadsOnlyAPassedIncrementalRow(t *testing.T) {
 		if got := evidence.IncrementalBase(r); got != "" {
 			t.Errorf("%s: %q, want none", name, got)
 		}
+	}
+}
+
+// Origin: 2026-11-16. The chain answer (what STG is delivered on) was added to
+// GET /api/v1/evidence/ci as scope=chain, and the handler's own check of the
+// scope still refused it: read on PROD right after the release, it answered
+// 400. A scope it does not know is still refused (the control).
+func TestEvidenceCIAcceptsTheScopesItAnswers(t *testing.T) {
+	s := &Server{}
+	ask := func(scope string) int {
+		rec := httptest.NewRecorder()
+		q := "/api/v1/evidence/ci?repo=bifrost-platform&commit=" + strings.Repeat("a", 40)
+		if scope != "" {
+			q += "&scope=" + scope
+		}
+		s.handleEvidenceCI(rec, httptest.NewRequest(http.MethodGet, q, nil))
+		return rec.Code
+	}
+	for _, scope := range []string{"", "full", "any", "chain"} {
+		// No ledger on this server: past the check, it is 503.
+		if code := ask(scope); code != http.StatusServiceUnavailable {
+			t.Errorf("scope %q: %d, want 503 (accepted, no ledger here)", scope, code)
+		}
+	}
+	if code := ask("everything"); code != http.StatusBadRequest {
+		t.Errorf("control: an unknown scope answered %d, want 400", code)
 	}
 }

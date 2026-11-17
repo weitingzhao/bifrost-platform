@@ -209,8 +209,8 @@ func (s *Server) handleEvidenceCI(w http.ResponseWriter, r *http.Request) {
 	if scope == "" {
 		scope = "full"
 	}
-	if !giteaName.MatchString(repo) || strings.HasSuffix(repo, ".git") || !commitID.MatchString(commit) || (scope != "full" && scope != "any") {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "repo is a repository name, commit a 40-character lowercase SHA, scope full or any"})
+	if !giteaName.MatchString(repo) || strings.HasSuffix(repo, ".git") || !commitID.MatchString(commit) || (scope != "full" && scope != "any" && scope != "chain") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "repo is a repository name, commit a 40-character lowercase SHA, scope full, any or chain"})
 		return
 	}
 	if s.agentRuntime == nil || s.agentRuntime.api == nil || s.agentRuntime.api.DB == nil || s.delivery == nil {
