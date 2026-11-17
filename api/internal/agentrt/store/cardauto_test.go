@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
 // cardStore is a question store as the card-auto-answer rule sees it: cards
@@ -22,12 +22,12 @@ type cardStore struct {
 }
 
 type storedCard struct {
-	card                     store.RuntimeCard
+	card                     planstore.RuntimeCard
 	status, option, by, text string
 	read                     bool
 }
 
-func (s *cardStore) put(c store.RuntimeCard) {
+func (s *cardStore) put(c planstore.RuntimeCard) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.cards == nil {
@@ -38,7 +38,7 @@ func (s *cardStore) put(c store.RuntimeCard) {
 }
 
 // ask makes a card asked now; created moves it back.
-func (s *cardStore) ask(_ context.Context, c store.Card) (string, error) {
+func (s *cardStore) ask(_ context.Context, c planstore.Card) (string, error) {
 	id := "q_" + c.Key[:16]
 	s.mu.Lock()
 	_, have := s.cards[id]
@@ -53,7 +53,7 @@ func (s *cardStore) ask(_ context.Context, c store.Card) (string, error) {
 		for i := range c.Options {
 			keys = append(keys, string(rune('a'+i)))
 		}
-		s.put(store.RuntimeCard{ID: id, TaskID: c.TaskID, Recommended: rec, CreatedAt: time.Now(), Options: keys})
+		s.put(planstore.RuntimeCard{ID: id, TaskID: c.TaskID, Recommended: rec, CreatedAt: time.Now(), Options: keys})
 	}
 	return id, nil
 }

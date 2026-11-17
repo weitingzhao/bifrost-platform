@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -21,7 +22,7 @@ import (
 // later, as the Owner would.
 type asker struct {
 	mu      sync.Mutex
-	cards   []store.Card
+	cards   []planstore.Card
 	answers map[string]seenfacts.Question
 	acked   map[string]int
 }
@@ -36,7 +37,7 @@ func (a *asker) ack(_ context.Context, id string) error {
 	return nil
 }
 
-func (a *asker) ask(_ context.Context, c store.Card) (string, error) {
+func (a *asker) ask(_ context.Context, c planstore.Card) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for i, prev := range a.cards {
@@ -76,7 +77,7 @@ func (a *asker) question(_ context.Context, id string) (seenfacts.Question, bool
 func (w *world) activate(t *testing.T, step string) {
 	t.Helper()
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err := store.SetStepState(ctx, tx, "controller", root, step, "active", "test")
+		_, err := planstore.SetStepState(ctx, tx, "controller", root, step, "active", "test")
 		return err
 	}))
 }
@@ -89,7 +90,7 @@ func TestPlanChangeStanding(t *testing.T) {
 	w := newKernelWorld(t)
 	w.activate(t, s1)
 	a := &asker{}
-	out, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, "one more step", []store.PlanChange{
+	out, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, "one more step", []planstore.PlanChange{
 		{Op: "add_node", Parent: item, Kind: "step", StepKind: "agent", Title: "s4", MissionID: "M-1"},
 		{Op: "add_node", Parent: item, Kind: "step", StepKind: "agent", Title: "s5"},
 		{Op: "retitle", Node: s2, Title: "s2, renamed"},
@@ -112,14 +113,14 @@ func TestPlanChangeStanding(t *testing.T) {
 	    AND d.body_json->>'proposal_event_id' = $1`, fmt.Sprint(out["proposal_event_id"])); n != 1 {
 		t.Fatal("the change does not name its standing decision")
 	}
-	again, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, "one more step", []store.PlanChange{
+	again, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, "one more step", []planstore.PlanChange{
 		{Op: "add_node", Parent: item, Kind: "step", StepKind: "agent", Title: "s4", MissionID: "M-1"},
 		{Op: "add_node", Parent: item, Kind: "step", StepKind: "agent", Title: "s5"},
 		{Op: "retitle", Node: s2, Title: "s2, renamed"},
 	}, a.ask)
 	ok(t, err)
 	same(t, again, out)
-	w.chainHolds(t, store.PlanStream(root))
+	w.chainHolds(t, planstore.PlanStream(root))
 }
 
 // Outside it the change is tried and rolled back, then put to the Owner;
@@ -131,7 +132,7 @@ func TestPlanChangeOutside(t *testing.T) {
 	w := newKernelWorld(t)
 	a := &asker{}
 	before := w.footprint(t)
-	out, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, "a new item", []store.PlanChange{
+	out, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, "a new item", []planstore.PlanChange{
 		{Op: "add_node", Parent: root, Kind: "item", Title: "2.2"},
 		{Op: "add_node", Parent: item, Kind: "step", StepKind: "agent", Title: "s4"},
 	}, a.ask)
@@ -149,20 +150,20 @@ func TestPlanChangeOutside(t *testing.T) {
 	t1 := "t_01M5192P0JPMJAP63ZKRPXJ2VV"
 	before = w.footprint(t)
 	for name, c := range map[string]struct {
-		change store.PlanChange
+		change planstore.PlanChange
 		has    string
 	}{
-		"a step under a round":             {store.PlanChange{Op: "add_node", Parent: root, Kind: "step", StepKind: "agent", Title: "x"}, "cannot sit under"},
-		"a rule naming an unbound record":  {store.PlanChange{Op: "set_done_rule", Node: s3, Rule: json.RawMessage(`{"approval_executed":77}`)}, "not bound to this step"},
-		"a task out of the step naming it": {store.PlanChange{Op: "move_task", Task: t1, Node: s3}, "move_task is retired"},
-		"a node there is not":              {store.PlanChange{Op: "retitle", Node: "R2:9", Title: "x"}, "there is no"},
-		"a rule that does not parse":       {store.PlanChange{Op: "set_done_rule", Node: s3, Rule: json.RawMessage(`{"nonsense":1}`)}, "does not parse"},
-		"an op there is not":               {store.PlanChange{Op: "delete", Node: s3}, "one of"},
+		"a step under a round":             {planstore.PlanChange{Op: "add_node", Parent: root, Kind: "step", StepKind: "agent", Title: "x"}, "cannot sit under"},
+		"a rule naming an unbound record":  {planstore.PlanChange{Op: "set_done_rule", Node: s3, Rule: json.RawMessage(`{"approval_executed":77}`)}, "not bound to this step"},
+		"a task out of the step naming it": {planstore.PlanChange{Op: "move_task", Task: t1, Node: s3}, "move_task is retired"},
+		"a node there is not":              {planstore.PlanChange{Op: "retitle", Node: "R2:9", Title: "x"}, "there is no"},
+		"a rule that does not parse":       {planstore.PlanChange{Op: "set_done_rule", Node: s3, Rule: json.RawMessage(`{"nonsense":1}`)}, "does not parse"},
+		"an op there is not":               {planstore.PlanChange{Op: "delete", Node: s3}, "one of"},
 		// R5:5.5-15: a rule counting the step's own work needs the sign-off gate.
-		"step work without a sign-off":  {store.PlanChange{Op: "set_done_rule", Node: s3, Rule: json.RawMessage(`{"all":[{"step_tasks":{"state":"accepted"}},{"step_landed":{}},{"step_stg_settled":{}}]}`)}, "R5:5.5-15"},
-		"step work, sign-off in an any": {store.PlanChange{Op: "set_done_rule", Node: s3, Rule: json.RawMessage(`{"any":[{"step_landed":{}},{"owner_signoff":"r"}]}`)}, "owner_signoff among its parts"},
+		"step work without a sign-off":  {planstore.PlanChange{Op: "set_done_rule", Node: s3, Rule: json.RawMessage(`{"all":[{"step_tasks":{"state":"accepted"}},{"step_landed":{}},{"step_stg_settled":{}}]}`)}, "R5:5.5-15"},
+		"step work, sign-off in an any": {planstore.PlanChange{Op: "set_done_rule", Node: s3, Rule: json.RawMessage(`{"any":[{"step_landed":{}},{"owner_signoff":"r"}]}`)}, "owner_signoff among its parts"},
 	} {
-		_, perr := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "r-"+name, root, "bad", []store.PlanChange{c.change}, a.ask)
+		_, perr := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "r-"+name, root, "bad", []planstore.PlanChange{c.change}, a.ask)
 		if perr == nil || !containsFold(perr.Error(), c.has) {
 			t.Errorf("%s: err = %v", name, perr)
 		}
@@ -172,11 +173,11 @@ func TestPlanChangeOutside(t *testing.T) {
 	}
 	// The same step work behind the sign-off gate is not refused (it is put to the Owner like any other change here).
 	gated := json.RawMessage(`{"all":[{"step_tasks":{"state":"accepted"}},{"step_landed":{}},{"step_stg_settled":{}},{"owner_signoff":"s3 accepted"}]}`)
-	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k-gated", root, "gated", []store.PlanChange{{Op: "set_done_rule", Node: s3, Rule: gated}}, a.ask)
+	_, err = planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k-gated", root, "gated", []planstore.PlanChange{{Op: "set_done_rule", Node: s3, Rule: gated}}, a.ask)
 	ok(t, err)
-	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k9", root, "x", []store.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: "y"}}, nil)
-	is(t, err, store.ErrAsk)
-	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k10", "R9", "x", []store.PlanChange{{Op: "retitle", Node: s2, Title: "y"}}, a.ask)
+	_, err = planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k9", root, "x", []planstore.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: "y"}}, nil)
+	is(t, err, planstore.ErrAsk)
+	_, err = planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k10", "R9", "x", []planstore.PlanChange{{Op: "retitle", Node: s2, Title: "y"}}, a.ask)
 	is(t, err, store.ErrInvalid)
 }
 
@@ -215,28 +216,28 @@ func TestPlanDecisions(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	a := &asker{}
-	propose := func(key string, c store.PlanChange) string {
+	propose := func(key string, c planstore.PlanChange) string {
 		t.Helper()
-		out, perr := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, root, "test", []store.PlanChange{c}, a.ask)
+		out, perr := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, root, "test", []planstore.PlanChange{c}, a.ask)
 		ok(t, perr)
 		return out["question_id"].(string)
 	}
-	applied := propose("k1", store.PlanChange{Op: "add_node", Parent: root, Kind: "item", Title: "2.2"})
-	refused := propose("k2", store.PlanChange{Op: "add_node", Parent: root, Kind: "item", Title: "2.3"})
-	expired := propose("k3", store.PlanChange{Op: "retitle", Node: item, Title: "renamed"})
-	failed := propose("k4", store.PlanChange{Op: "drop_step", Node: s3})
-	open := propose("k5", store.PlanChange{Op: "retitle", Node: root, Title: "round two"})
+	applied := propose("k1", planstore.PlanChange{Op: "add_node", Parent: root, Kind: "item", Title: "2.2"})
+	refused := propose("k2", planstore.PlanChange{Op: "add_node", Parent: root, Kind: "item", Title: "2.3"})
+	expired := propose("k3", planstore.PlanChange{Op: "retitle", Node: item, Title: "renamed"})
+	failed := propose("k4", planstore.PlanChange{Op: "drop_step", Node: s3})
+	open := propose("k5", planstore.PlanChange{Op: "retitle", Node: root, Title: "round two"})
 	// Before the answer, the step is dropped by another hand: dropping it
 	// no longer fits.
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err := store.SetStepState(ctx, tx, "controller", root, s3, "dropped", "test")
+		_, err := planstore.SetStepState(ctx, tx, "controller", root, s3, "dropped", "test")
 		return err
 	}))
-	a.answer(applied, seenfacts.QuestionAnswered, store.CardApplyKey)
-	a.answer(refused, seenfacts.QuestionAnswered, store.CardRefuseKey)
+	a.answer(applied, seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	a.answer(refused, seenfacts.QuestionAnswered, planstore.CardRefuseKey)
 	a.answer(expired, "expired", "")
-	a.answer(failed, seenfacts.QuestionAnswered, store.CardApplyKey)
-	n, err := store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
+	a.answer(failed, seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	n, err := planstore.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 	ok(t, err)
 	if n != 4 {
 		t.Fatalf("decided %d; want 4", n)
@@ -268,7 +269,7 @@ func TestPlanDecisions(t *testing.T) {
 		w.count(t, `SELECT count(*) FROM agentrt.plan_node WHERE plan_node_id = $1 AND title = 'renamed'`, item) != 0 {
 		t.Fatal("the plan does not show the decisions")
 	}
-	if n, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack); err != nil || n != 0 {
+	if n, err = planstore.DecidePlanChanges(ctx, w.rt, a.question, a.ack); err != nil || n != 0 {
 		t.Fatalf("a second pass decided %d (%v)", n, err)
 	}
 	// Review 180 B3, 182 B3: every answered card decided is acknowledged,
@@ -281,7 +282,7 @@ func TestPlanDecisions(t *testing.T) {
 	if a.acked[expired] != 0 || a.acked[open] != 0 {
 		t.Errorf("acknowledged cards nobody answered: %v", a.acked)
 	}
-	w.chainHolds(t, store.PlanStream(root))
+	w.chainHolds(t, planstore.PlanStream(root))
 }
 
 // Proposals still waiting for an answer never keep later answered ones from
@@ -293,15 +294,15 @@ func TestPlanDecisionsPage(t *testing.T) {
 	a := &asker{}
 	var last string
 	for i := range 101 {
-		out, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), fmt.Sprint("k", i), root, "test",
-			[]store.PlanChange{{Op: "retitle", Node: root, Title: fmt.Sprint("title ", i)}}, func(context.Context, store.Card) (string, error) {
+		out, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), fmt.Sprint("k", i), root, "test",
+			[]planstore.PlanChange{{Op: "retitle", Node: root, Title: fmt.Sprint("title ", i)}}, func(context.Context, planstore.Card) (string, error) {
 				return fmt.Sprint("q_", i), nil
 			})
 		ok(t, err)
 		last = out["question_id"].(string)
 	}
-	a.answer(last, seenfacts.QuestionAnswered, store.CardRefuseKey)
-	n, err := store.DecidePlanChanges(ctx, w.rt, a.question, nil)
+	a.answer(last, seenfacts.QuestionAnswered, planstore.CardRefuseKey)
+	n, err := planstore.DecidePlanChanges(ctx, w.rt, a.question, nil)
 	if err != nil || n != 1 {
 		t.Fatalf("decided %d (%v); want the last one", n, err)
 	}
@@ -312,21 +313,21 @@ func TestPlanChangeStaysInItsTree(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	a := &asker{}
-	for _, n := range []store.PlanNode{
+	for _, n := range []planstore.PlanNode{
 		{ID: "R3", Kind: "round", Label: "3", Title: "round 3", Ordinal: 1, Root: "R3"},
 		{ID: "R3:3.1", Parent: "R3", Kind: "item", Label: "3.1", Title: "other", Root: "R3"},
 		{ID: "R3:3.1-1", Parent: "R3:3.1", Kind: "step", Label: "3.1-1", Title: "other step", MissionID: "M-1", StepKind: "agent", Root: "R3"},
 	} {
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { _, err := store.CreatePlanNode(ctx, tx, "controller", n); return err }))
+		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); return err }))
 	}
 	before := w.footprint(t)
-	for name, c := range map[string]store.PlanChange{
+	for name, c := range map[string]planstore.PlanChange{
 		"retitle a step of another tree":      {Op: "retitle", Node: "R3:3.1-1", Title: "x"},
 		"add under another tree":              {Op: "add_node", Parent: "R3:3.1", Kind: "step", StepKind: "agent", Title: "x"},
 		"rebind a step of another tree":       {Op: "rebind_step", Node: "R3:3.1-1", MissionID: "M-2"},
 		"set the rule of another tree's step": {Op: "set_done_rule", Node: "R3:3.1-1", Rule: json.RawMessage(`{"owner_signoff":"x"}`)},
 	} {
-		_, perr := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "r-"+name, root, "x", []store.PlanChange{c}, a.ask)
+		_, perr := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "r-"+name, root, "x", []planstore.PlanChange{c}, a.ask)
 		if !errors.Is(perr, store.ErrInvalid) || !containsFold(perr.Error(), "in plan R3, not R2") {
 			t.Errorf("%s: %v", name, perr)
 		}
@@ -347,12 +348,12 @@ func TestStandingReadsWhatItLocks(t *testing.T) {
 	tx, err := pool.Begin(ctx)
 	ok(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
-	_, err = store.SetStepState(ctx, tx, "controller", root, s2, "active", "test")
+	_, err = planstore.SetStepState(ctx, tx, "controller", root, s2, "active", "test")
 	ok(t, err)
 	done := make(chan map[string]any, 1)
 	fail := make(chan error, 1)
 	go func() {
-		out, perr := store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "rename", []store.PlanChange{{Op: "retitle", Node: s2, Title: "renamed"}}, a.ask)
+		out, perr := planstore.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "rename", []planstore.PlanChange{{Op: "retitle", Node: s2, Title: "renamed"}}, a.ask)
 		if perr != nil {
 			fail <- perr
 			return
@@ -379,9 +380,9 @@ func TestDecisionAgainstRuleLoop(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	a := &asker{}
-	out, err := store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "rename", []store.PlanChange{{Op: "retitle", Node: item, Title: "renamed"}}, a.ask)
+	out, err := planstore.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "rename", []planstore.PlanChange{{Op: "retitle", Node: item, Title: "renamed"}}, a.ask)
 	ok(t, err)
-	a.answer(out["question_id"].(string), seenfacts.QuestionAnswered, store.CardApplyKey)
+	a.answer(out["question_id"].(string), seenfacts.QuestionAnswered, planstore.CardApplyKey)
 	// The loop: the step locked, then (after the decision starts) the stream.
 	tx, err := pool.Begin(ctx)
 	ok(t, err)
@@ -390,11 +391,11 @@ func TestDecisionAgainstRuleLoop(t *testing.T) {
 	ok(t, err)
 	decided := make(chan error, 1)
 	go func() {
-		_, derr := store.DecidePlanChanges(ctx, pool, a.question, nil)
+		_, derr := planstore.DecidePlanChanges(ctx, pool, a.question, nil)
 		decided <- derr
 	}()
 	w.waitFor(t, "", time.Now().Add(5*time.Second))
-	_, err = store.Append(ctx, tx, store.Event{Stream: store.PlanStream(root), Type: "plan_changed", Actor: "controller", Body: map[string]any{"change": "loop"}})
+	_, err = store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream(root), Type: "plan_changed", Actor: "controller", Body: map[string]any{"change": "loop"}})
 	ok(t, err)
 	ok(t, tx.Commit(ctx))
 	ok(t, <-decided)
@@ -409,13 +410,13 @@ func TestPlanChangeNumbering(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	w.activate(t, s1)
-	for _, n := range []store.PlanNode{
+	for _, n := range []planstore.PlanNode{
 		{ID: "R2:2.1-7", Parent: item, Kind: "step", Label: "2.1-7", Title: "seventh", MissionID: "M-1", StepKind: "agent", Ordinal: 3, Root: root},
 		{ID: "R2:2.1-9", Parent: item, Kind: "step", Label: "odd", Title: "an odd label", MissionID: "M-1", StepKind: "agent", Ordinal: 4, Root: root},
 	} {
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { _, err := store.CreatePlanNode(ctx, tx, "controller", n); return err }))
+		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); return err }))
 	}
-	out, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, "two more", []store.PlanChange{
+	out, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, "two more", []planstore.PlanChange{
 		{Op: "add_node", Parent: item, Kind: "step", StepKind: "agent", Title: "a"},
 		{Op: "add_node", Parent: item, Kind: "step", StepKind: "agent", Title: "b"},
 	}, (&asker{}).ask)
@@ -438,8 +439,8 @@ func TestPlanChangeCardRefused(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	before := w.footprint(t)
-	_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, "x",
-		[]store.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: "y"}}, func(context.Context, store.Card) (string, error) {
+	_, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, "x",
+		[]planstore.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: "y"}}, func(context.Context, planstore.Card) (string, error) {
 			return "", fmt.Errorf("%w: body exceeds 3000 bytes", store.ErrInvalid)
 		})
 	is(t, err, store.ErrInvalid)
@@ -456,12 +457,12 @@ func TestPlanDecisionAcks(t *testing.T) {
 	a := &asker{}
 	var ids []string
 	for i := range 2 {
-		out, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), fmt.Sprint("k", i), root, "t",
-			[]store.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: fmt.Sprint("i", i)}}, a.ask)
+		out, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), fmt.Sprint("k", i), root, "t",
+			[]planstore.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: fmt.Sprint("i", i)}}, a.ask)
 		ok(t, err)
 		id := out["question_id"].(string)
 		ids = append(ids, id)
-		a.answer(id, seenfacts.QuestionAnswered, store.CardRefuseKey)
+		a.answer(id, seenfacts.QuestionAnswered, planstore.CardRefuseKey)
 	}
 	calls := map[string]int{}
 	failing := true
@@ -469,18 +470,18 @@ func TestPlanDecisionAcks(t *testing.T) {
 		calls[id]++
 		switch {
 		case id == ids[1]:
-			return fmt.Errorf("%w: %s", store.ErrQuestionGone, id)
+			return fmt.Errorf("%w: %s", planstore.ErrQuestionGone, id)
 		case failing:
 			return fmt.Errorf("the store is busy")
 		}
 		return nil
 	}
-	if _, err := store.DecidePlanChanges(ctx, w.rt, a.question, ack); err == nil {
+	if _, err := planstore.DecidePlanChanges(ctx, w.rt, a.question, ack); err == nil {
 		t.Fatal("a failed acknowledgement was not reported")
 	}
 	failing = false
 	for range 2 {
-		_, err := store.DecidePlanChanges(ctx, w.rt, a.question, ack)
+		_, err := planstore.DecidePlanChanges(ctx, w.rt, a.question, ack)
 		ok(t, err)
 	}
 	if calls[ids[0]] != 2 || calls[ids[1]] != 1 {
@@ -500,21 +501,21 @@ func TestPlanChangeQueuedUngatedRuleIsRefusedOnApply(t *testing.T) {
 	w := newKernelWorld(t)
 	a := &asker{}
 	// A proposal made the usual way, so the writer and its card exist.
-	_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k-item", root, "a new item", []store.PlanChange{
+	_, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k-item", root, "a new item", []planstore.PlanChange{
 		{Op: "add_node", Parent: root, Kind: "item", Title: "2.2"}}, a.ask)
 	ok(t, err)
-	q, err := a.ask(ctx, store.Card{})
+	q, err := a.ask(ctx, planstore.Card{})
 	ok(t, err)
 	var ungated map[string]any
 	ok(t, json.Unmarshal([]byte(`{"all":[{"step_tasks":{"state":"accepted"}},{"step_landed":{}},{"step_stg_settled":{}}]}`), &ungated))
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, aerr := store.Append(ctx, tx, store.Event{Stream: store.PlanStream(root), Type: "plan_change_proposed", Actor: "thread:s1",
+		_, aerr := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream(root), Type: "plan_change_proposed", Actor: "thread:s1",
 			Body: map[string]any{"changes": []any{map[string]any{"op": "set_done_rule", "node": s3, "rule": ungated}},
 				"reason": "queued before the sign-off gate", "standing": false, "token": "operator", "question_id": q}})
 		return aerr
 	}))
-	a.answer(q, seenfacts.QuestionAnswered, store.CardApplyKey)
-	_, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
+	a.answer(q, seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	_, err = planstore.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 	ok(t, err)
 	var rule string
 	ok(t, w.rt.QueryRow(ctx, `SELECT done_rule_json::text FROM agentrt.plan_node WHERE plan_node_id = $1`, s3).Scan(&rule))

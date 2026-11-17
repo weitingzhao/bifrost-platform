@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -170,7 +171,7 @@ func TestExternalHeartbeatCommits(t *testing.T) {
 		t.Fatalf("after a heartbeat naming none: %v", got)
 	}
 	// Running, and the plan view's record of the work carries the commit.
-	view, err := store.PlanView(ctx, w.rt, root)
+	view, err := planstore.PlanView(ctx, w.rt, root)
 	ok(t, err)
 	raw, _ := json.Marshal(view["external_work"])
 	var works []struct {

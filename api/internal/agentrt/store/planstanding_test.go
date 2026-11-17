@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -35,9 +36,9 @@ func putPlanStanding(t *testing.T, w *world, doneRules, activeOnLease bool) {
 func TestPlanStandingDoneRules(t *testing.T) {
 	t.Parallel()
 	a := &asker{}
-	setRule := func(w *world, key, step, rule string, bind ...store.Binding) map[string]any {
+	setRule := func(w *world, key, step, rule string, bind ...planstore.Binding) map[string]any {
 		t.Helper()
-		out, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, root, "test", []store.PlanChange{{Op: "set_done_rule", Node: step,
+		out, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, root, "test", []planstore.PlanChange{{Op: "set_done_rule", Node: step,
 			Rule: []byte(rule), Bind: bind}}, a.ask)
 		ok(t, err)
 		return out
@@ -54,13 +55,13 @@ func TestPlanStandingDoneRules(t *testing.T) {
 	putPlanStanding(t, w, true, false)
 	// Approvals 16 and 18 and question Q1 bound to s3 by a change the Owner
 	// applied, with no rule yet.
-	out := setRule(w, "b0", s3, `{}`, store.Binding{Kind: "approval", Ref: "16"}, store.Binding{Kind: "approval", Ref: "18"},
-		store.Binding{Kind: "question", Ref: "Q1"})
+	out := setRule(w, "b0", s3, `{}`, planstore.Binding{Kind: "approval", Ref: "16"}, planstore.Binding{Kind: "approval", Ref: "18"},
+		planstore.Binding{Kind: "question", Ref: "Q1"})
 	if out["decision"] != "" {
 		t.Fatalf("a rule binding something new within the standing authorization: %v", out)
 	}
-	a.answer(out["question_id"].(string), seenfacts.QuestionAnswered, store.CardApplyKey)
-	_, err := store.DecidePlanChanges(ctx, w.rt, a.question, nil)
+	a.answer(out["question_id"].(string), seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	_, err := planstore.DecidePlanChanges(ctx, w.rt, a.question, nil)
 	ok(t, err)
 
 	// Within it: the first rule of a step not done, naming its own task.
@@ -82,13 +83,13 @@ func TestPlanStandingDoneRules(t *testing.T) {
 			Body: map[string]any{"approval": 16, "status": seenfacts.ApprovalExecuted, "action": "test", "tier": "test", "created_at": "2026-01-01T00:00:00Z", "expired": false}}); aerr != nil {
 			return aerr
 		}
-		return store.SignOff(ctx, tx, "owner", s1, "TD-1")
+		return planstore.SignOff(ctx, tx, "owner", s1, "TD-1")
 	}))
 	for name, c := range map[string]struct {
 		step, rule string
-		bind       []store.Binding
+		bind       []planstore.Binding
 	}{
-		"a new binding":   {s1, `{"approval_executed":16}`, []store.Binding{{Kind: "approval", Ref: "16"}}},
+		"a new binding":   {s1, `{"approval_executed":16}`, []planstore.Binding{{Kind: "approval", Ref: "16"}}},
 		"a CI run":        {s1, `{"ci_succeeded":{"repo":"bifrost-platform","commit":"2333e00753f91c74c8b2f4d693a803f8e89e7892"}}`, nil},
 		"a gate":          {s1, `{"gates_passed":[{"test":"T19","spec_sha256":"` + gateSum + `"}],"env":"prod"}`, nil},
 		"a manual atom":   {s1, `{"manual":"by hand"}`, nil},
@@ -104,7 +105,7 @@ func TestPlanStandingDoneRules(t *testing.T) {
 		}
 	}
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err := store.SetStepState(ctx, tx, "controller", root, s1, "done", "test")
+		_, err := planstore.SetStepState(ctx, tx, "controller", root, s1, "done", "test")
 		return err
 	}))
 	if out := setRule(w, "k4", s1, `{"owner_signoff":"TD-1"}`); out["decision"] != "" {
@@ -142,12 +143,12 @@ func TestPlanStandingExpiresWhileWaiting(t *testing.T) {
 			holder := w.db.Connect(t, w.db.Runtime)
 			tx, err := holder.Begin(ctx)
 			ok(t, err)
-			_, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.event_stream WHERE event_stream_id = $1 FOR UPDATE`, store.PlanStream(root))
+			_, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.event_stream WHERE event_stream_id = $1 FOR UPDATE`, planstore.PlanStream(root))
 			ok(t, err)
 			done := make(chan map[string]any, 1)
 			a := &asker{}
 			go func() {
-				out, perr := store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "test", []store.PlanChange{{Op: "set_done_rule",
+				out, perr := planstore.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "test", []planstore.PlanChange{{Op: "set_done_rule",
 					Node: s2, Rule: []byte(`{"task_accepted":"` + t2 + `"}`)}}, a.ask)
 				if perr != nil {
 					out = map[string]any{"err": perr}

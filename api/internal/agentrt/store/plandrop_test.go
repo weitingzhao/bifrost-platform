@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // The two plan changes added for the plan import (CUT-plan-import-2026-10-19.md
@@ -19,23 +19,23 @@ func TestPlanChangeDropAndMarks(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	a := &asker{}
-	propose := func(key string, c store.PlanChange) (map[string]any, error) {
+	propose := func(key string, c planstore.PlanChange) (map[string]any, error) {
 		t.Helper()
-		return store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, root, "test", []store.PlanChange{c}, a.ask)
+		return planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, root, "test", []planstore.PlanChange{c}, a.ask)
 	}
 	yes, no := true, false
-	out, err := propose("k1", store.PlanChange{Op: "drop_step", Node: s2})
+	out, err := propose("k1", planstore.PlanChange{Op: "drop_step", Node: s2})
 	ok(t, err)
 	if out["decision"] != "" || out["question_id"] == nil {
 		t.Fatalf("a drop within the standing authorization? %v", out)
 	}
 	drop := out["question_id"].(string)
-	out, err = propose("k2", store.PlanChange{Op: "set_marks", Node: s3, OwnerStep: &yes, EffectStep: &no})
+	out, err = propose("k2", planstore.PlanChange{Op: "set_marks", Node: s3, OwnerStep: &yes, EffectStep: &no})
 	ok(t, err)
 	marks := out["question_id"].(string)
-	a.answer(drop, seenfacts.QuestionAnswered, store.CardApplyKey)
-	a.answer(marks, seenfacts.QuestionAnswered, store.CardApplyKey)
-	n, err := store.DecidePlanChanges(ctx, w.rt, a.question, nil)
+	a.answer(drop, seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	a.answer(marks, seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	n, err := planstore.DecidePlanChanges(ctx, w.rt, a.question, nil)
 	ok(t, err)
 	if n != 2 {
 		t.Fatalf("decided %d; want 2", n)
@@ -55,7 +55,7 @@ func TestPlanChangeDropAndMarks(t *testing.T) {
 	}
 	// Its number stays taken: the next step is numbered past it.
 	w.activate(t, s1)
-	out, err = propose("k3", store.PlanChange{Op: "add_node", Parent: item, Kind: "step", StepKind: "agent", Title: "after the drop"})
+	out, err = propose("k3", planstore.PlanChange{Op: "add_node", Parent: item, Kind: "step", StepKind: "agent", Title: "after the drop"})
 	ok(t, err)
 	if fmt.Sprint(out["nodes"]) != "[R2:2.1-4]" {
 		t.Fatalf("added after the drop: %v", out)
@@ -70,27 +70,27 @@ func TestPlanChangeDropAndMarksRefusals(t *testing.T) {
 	a := &asker{}
 	yes := true
 	for name, c := range map[string]struct {
-		change store.PlanChange
+		change planstore.PlanChange
 		want   string
 	}{
-		"an item":       {store.PlanChange{Op: "drop_step", Node: item}, "only a step is dropped"},
-		"marks on item": {store.PlanChange{Op: "set_marks", Node: item, OwnerStep: &yes}, "only a step has marks"},
-		"no marks":      {store.PlanChange{Op: "set_marks", Node: s2}, "owner_step, effect_step or both"},
-		"no node":       {store.PlanChange{Op: "drop_step"}, "names the step"},
+		"an item":       {planstore.PlanChange{Op: "drop_step", Node: item}, "only a step is dropped"},
+		"marks on item": {planstore.PlanChange{Op: "set_marks", Node: item, OwnerStep: &yes}, "only a step has marks"},
+		"no marks":      {planstore.PlanChange{Op: "set_marks", Node: s2}, "owner_step, effect_step or both"},
+		"no node":       {planstore.PlanChange{Op: "drop_step"}, "names the step"},
 	} {
 		before := len(a.cards)
-		_, perr := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k-"+name, root, "test", []store.PlanChange{c.change}, a.ask)
+		_, perr := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k-"+name, root, "test", []planstore.PlanChange{c.change}, a.ask)
 		wantErr(t, perr, c.want)
 		if len(a.cards) != before {
 			t.Errorf("%s: a card was asked for a refused change", name)
 		}
 	}
 	// Dropped once, a second drop is refused when it is decided.
-	out, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "d1", root, "test", []store.PlanChange{{Op: "drop_step", Node: s2}}, a.ask)
+	out, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "d1", root, "test", []planstore.PlanChange{{Op: "drop_step", Node: s2}}, a.ask)
 	ok(t, err)
-	a.answer(out["question_id"].(string), seenfacts.QuestionAnswered, store.CardApplyKey)
-	_, err = store.DecidePlanChanges(ctx, w.rt, a.question, nil)
+	a.answer(out["question_id"].(string), seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	_, err = planstore.DecidePlanChanges(ctx, w.rt, a.question, nil)
 	ok(t, err)
-	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "d2", root, "test", []store.PlanChange{{Op: "drop_step", Node: s2}}, a.ask)
+	_, err = planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "d2", root, "test", []planstore.PlanChange{{Op: "drop_step", Node: s2}}, a.ask)
 	wantErr(t, err, "dropped already")
 }

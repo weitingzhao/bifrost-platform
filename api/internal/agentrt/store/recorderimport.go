@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
@@ -33,9 +35,9 @@ import (
 // log of the same work is refused.
 
 // The plan's decision pass and the progress projection reach the recorder
-// import through the plan code's ports (planports.go).
+// import through the plan code's ports (planstore, planports.go).
 func init() {
-	BindPlanRecorderImport(RecorderImportPorts{LogOf: recorderImportOf, Decide: decideRecorderImport})
+	planstore.BindPlanRecorderImport(planstore.RecorderImportPorts{LogOf: recorderImportOf, Decide: decideRecorderImport})
 }
 
 // OpRecorderImport is the change a recorder import proposal holds.
@@ -61,7 +63,7 @@ func RecorderStream(work string) string { return "legacy:recorder:" + work }
 func recorderSource(logID string) string { return "recorder_import:" + logID }
 
 // recorderImportOf is the kept log of a proposal that is a recorder import.
-func recorderImportOf(changes []PlanChange) (string, bool) {
+func recorderImportOf(changes []planstore.PlanChange) (string, bool) {
 	if len(changes) == 1 && changes[0].Op == OpRecorderImport && changes[0].Artifact != "" {
 		return changes[0].Artifact, true
 	}
@@ -89,7 +91,7 @@ func keptLog(log recorderimport.Log) ([]byte, string, error) {
 // ProposeRecorderImport proposes importing a recorder log, why reason says.
 // key is the writer's idempotency key. A log imported already answers so,
 // with no card; one waiting on the Owner answers with its card.
-func ProposeRecorderImport(ctx context.Context, db DB, w Writer, key, reason string, req recorderimport.Request, ask Ask) (map[string]any, error) {
+func ProposeRecorderImport(ctx context.Context, db DB, w Writer, key, reason string, req recorderimport.Request, ask planstore.Ask) (map[string]any, error) {
 	switch {
 	case key == "":
 		return nil, invalid("an idempotency key is required")
@@ -146,19 +148,19 @@ func ProposeRecorderImport(ctx context.Context, db DB, w Writer, key, reason str
 		if _, err = artifact.PutArtifact(ctx, tx, w.Actor, "other", "application/json", doc); err != nil {
 			return nil, err
 		}
-		cardKey := CanonKey(w.Actor, "recorder:"+key)
+		cardKey := planstore.CanonKey(w.Actor, "recorder:"+key)
 		body := recorderCardBody(w, cardKey, reason, log, logID)
 		if n := questions.BodyBytes(body); n > questions.BodyLimit {
 			return nil, invalid("the Owner's card for this import would be %d bytes, more than the question store's %d", n, questions.BodyLimit)
 		}
 		if ask == nil {
-			return nil, fmt.Errorf("%w: no question store is configured", ErrAsk)
+			return nil, fmt.Errorf("%w: no question store is configured", planstore.ErrAsk)
 		}
-		byRule, err := RuleAnswers(ctx, tx, CardRecorderImport, "")
+		byRule, err := planstore.RuleAnswers(ctx, tx, planstore.CardRecorderImport, "")
 		if err != nil {
 			return nil, err
 		}
-		q, err := ask(ctx, Card{Key: cardKey, Title: "Import recorder log " + work + ": " + firstLine(reason), Body: body,
+		q, err := ask(ctx, planstore.Card{Key: cardKey, Title: "Import recorder log " + work + ": " + firstLine(reason), Body: body,
 			Options: []string{RecorderApply, RecorderRefuse}, Recommended: 1, RecommendedWhy: RecorderRecommendWhy,
 			Meanwhile: "the log is not imported; the recorder keeps it as it is",
 			OwnerDuty: "irreversible", Urgency: "when you can: only this import waits for you", ByRule: byRule})
@@ -166,9 +168,9 @@ func ProposeRecorderImport(ctx context.Context, db DB, w Writer, key, reason str
 			return nil, err
 		}
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrAsk, err)
+			return nil, fmt.Errorf("%w: %v", planstore.ErrAsk, err)
 		}
-		changes, err := ChangesDoc([]PlanChange{{Op: OpRecorderImport, Artifact: logID}})
+		changes, err := planstore.ChangesDoc([]planstore.PlanChange{{Op: OpRecorderImport, Artifact: logID}})
 		if err != nil {
 			return nil, err
 		}
@@ -203,8 +205,8 @@ func recorderImported(ctx context.Context, tx pgx.Tx, stream, logID string) (int
 
 // waitingRecorderImport is the recorder import of stream that waits on a
 // decision, if any.
-func waitingRecorderImport(ctx context.Context, tx pgx.Tx, stream string) (*PendingImport, error) {
-	var p PendingImport
+func waitingRecorderImport(ctx context.Context, tx pgx.Tx, stream string) (*planstore.PendingImport, error) {
+	var p planstore.PendingImport
 	err := tx.QueryRow(ctx, `SELECT p.event_id, p.body_json->'changes'->0->>'artifact', p.body_json->>'question_id' FROM agentrt.event p
 	  WHERE p.event_stream_id = $1 AND p.event_type = 'plan_change_proposed' AND p.body_json->'changes'->0->>'op' = $2
 	    AND NOT EXISTS (SELECT 1 FROM agentrt.event d WHERE d.event_type = 'plan_change_decided' AND d.event_stream_id = p.event_stream_id
@@ -304,4 +306,24 @@ func landRecorder(ctx context.Context, tx pgx.Tx, actor string, log recorderimpo
 		}
 	}
 	return h.EventID, nil
+}
+
+// firstLine and decodeStrict are the plan code's two small helpers of the
+// same names (planstore), which this file used while it shared their
+// package; copied, 3 and 10 lines.
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(s, "\n")
+	return line
+}
+
+func decodeStrict(doc []byte, v any) error {
+	dec := json.NewDecoder(bytes.NewReader(doc))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		return err
+	}
+	if dec.More() {
+		return errors.New("more than one value")
+	}
+	return nil
 }

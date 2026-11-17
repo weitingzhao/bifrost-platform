@@ -19,6 +19,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -383,7 +384,7 @@ func TestBindingAtomicity(t *testing.T) {
 	t.Run("linked, still the same work", func(t *testing.T) {
 		pool, _ := world(t)
 		must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-			_, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: "R2:1-2", Parent: "R2:1", Kind: "step", Label: "1-2", Title: "step 2", StepKind: "agent", Ordinal: 2, Root: "R2"})
+			_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R2:1-2", Parent: "R2:1", Kind: "step", Label: "1-2", Title: "step 2", StepKind: "agent", Ordinal: 2, Root: "R2"})
 			return err
 		}))
 		s := server(t, pool)

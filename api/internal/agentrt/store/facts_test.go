@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -17,7 +18,7 @@ import (
 func (w *world) step(t *testing.T, id string, ordinal int, rule string, binds ...[2]string) {
 	t.Helper()
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: id, Parent: item, Kind: "step", Label: id, Title: id,
+		_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: id, Parent: item, Kind: "step", Label: id, Title: id,
 			MissionID: "M-1", StepKind: "agent", Ordinal: ordinal, Root: root})
 		return err
 	}))
@@ -100,7 +101,7 @@ func (d *deployments) read(_ context.Context, env string) (string, map[string]an
 func (w *world) evaluate(t *testing.T, step string, d *deployments) string {
 	t.Helper()
 	ctx := ctxOf(t)
-	moved, err := store.EvaluateStep(ctx, w.rt, step, d.read)
+	moved, err := planstore.EvaluateStep(ctx, w.rt, step, d.read)
 	ok(t, err)
 	return moved
 }
@@ -240,11 +241,11 @@ func TestStepRules(t *testing.T) {
 
 	// A sign-off counts on its own step only.
 	w.rule(t, s2, `{"owner_signoff":"TD-1"}`)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.SignOff(ctx, tx, "owner", s3, "TD-1") }))
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return planstore.SignOff(ctx, tx, "owner", s3, "TD-1") }))
 	if w.evaluate(t, s2, d) != "" {
 		t.Fatal("a sign-off on another step moved this one")
 	}
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.SignOff(ctx, tx, "owner", s2, "TD-1") }))
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return planstore.SignOff(ctx, tx, "owner", s2, "TD-1") }))
 	if w.evaluate(t, s2, d) != "done" {
 		t.Fatal("the sign-off did not move its step")
 	}
@@ -253,12 +254,12 @@ func TestStepRules(t *testing.T) {
 	// says it was manual.
 	w.step(t, "R2:2.1-4", 3, `{"manual":"checked by hand"}`)
 	err = store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		return store.RecordManual(ctx, tx, "owner", "R2:2.1-4", "checked by hand", "looked at it", nil)
+		return planstore.RecordManual(ctx, tx, "owner", "R2:2.1-4", "checked by hand", "looked at it", nil)
 	})
 	is(t, err, store.ErrState)
 	proof := w.artifact(t, "other", "screenshot")
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		return store.RecordManual(ctx, tx, "owner", "R2:2.1-4", "checked by hand", "looked at it", []string{proof})
+		return planstore.RecordManual(ctx, tx, "owner", "R2:2.1-4", "checked by hand", "looked at it", []string{proof})
 	}))
 	if w.evaluate(t, "R2:2.1-4", d) != "done" {
 		t.Fatal("the manual record did not move its step")
@@ -285,22 +286,22 @@ func TestRuledNodes(t *testing.T) {
 	w.rule(t, s1, `{"owner_signoff":"a"}`)
 	w.rule(t, s2, `{"owner_signoff":"b"}`)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err := store.SetStepState(ctx, tx, "controller", root, s2, "dropped", "test")
+		_, err := planstore.SetStepState(ctx, tx, "controller", root, s2, "dropped", "test")
 		return err
 	}))
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		for _, n := range []store.PlanNode{
+		for _, n := range []planstore.PlanNode{
 			{ID: "A", Kind: "arch_root", Label: "A", Title: "architecture", Root: "A"},
 			{ID: "A:1", Parent: "A", Kind: "arch_row", Label: "1", Title: "state database", Root: "A"},
 		} {
-			if _, err := store.CreatePlanNode(ctx, tx, "controller", n); err != nil {
+			if _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); err != nil {
 				return err
 			}
 		}
 		return nil
 	}))
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: store.PlanStream("A"), Type: "plan_changed", Actor: "controller",
+		if _, err := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream("A"), Type: "plan_changed", Actor: "controller",
 			Body: map[string]any{"change": "test"}}); err != nil {
 			return err
 		}
@@ -308,7 +309,7 @@ func TestRuledNodes(t *testing.T) {
 			`{"gates_passed":[{"test":"T19","spec_sha256":"`+strings.Repeat("ab", 32)+`"}],"env":"prod"}`)
 		return err
 	}))
-	nodes, err := store.RuledNodes(ctx, w.rt)
+	nodes, err := planstore.RuledNodes(ctx, w.rt)
 	ok(t, err)
 	var got []string
 	for _, n := range nodes {

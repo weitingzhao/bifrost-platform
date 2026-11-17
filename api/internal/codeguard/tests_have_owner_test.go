@@ -200,7 +200,7 @@ func ownerBaselineErrors(without, baseline map[string]int, pkgs map[string]bool)
 var testsWithoutOwner = map[string]int{
 	"api/internal/agentrt/agentrtapi": 26,
 	"api/internal/agentrt/controller": 17,
-	"api/internal/agentrt/store":      66,
+	"api/internal/agentrt/store":      62,
 	"api/internal/cluster":            36,
 	"api/internal/delivery":           12,
 	"api/internal/server":             87,

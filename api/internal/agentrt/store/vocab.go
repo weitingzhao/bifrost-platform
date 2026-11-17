@@ -8,6 +8,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 )
 
@@ -251,13 +252,13 @@ func init() {
 		},
 		Before: map[string]func(map[string]any) error{
 			"metrics_computed": checkMetricDefinitions,
-			"note":             CheckViewNote,
+			"note":             planstore.CheckViewNote,
 		},
 		After: map[string]func(map[string]any) error{
 			"policy_alert":      checkPolicyAlert,
 			"wait_limit_passed": checkWaitLimit,
 		},
-		Events: []func(Event) error{CheckPlanObservation, retiredRecord},
+		Events: []func(Event) error{planstore.CheckPlanObservation, retiredRecord},
 	})
 }
 
@@ -359,7 +360,7 @@ var fieldValues = map[string]map[string]value{
 	"metrics_computed":        {"source": oneOf("computed", "imported"), "label": metricLabel, "artifact_id": artifactID},
 	"metric_label_set":        {"label": metricLabel, "window_start": instant, "window_end": instant},
 	"plan_node_created":       {"node_kind": oneOf("round", "item", "step", "arch_root", "arch_row")},
-	"plan_node_state_changed": {"from": oneOf(statesOf(StepMoves)...), "to": oneOf(statesOf(StepMoves)...)},
+	"plan_node_state_changed": {"from": oneOf(statesOf(planstore.StepMoves)...), "to": oneOf(statesOf(planstore.StepMoves)...)},
 	"plan_change_decided":     {"decision": oneOf("applied", "refused", "failed", "withdrawn", "expired")},
 	"mission_state_changed":   {"from": oneOf(statesOf(missionMoves)...), "to": oneOf(statesOf(missionMoves)...)},
 	"task_proposed":           {"role": oneOf("plan", "implement", "verify", "review", "brief", "other"), "executor_pin": oneOf(ExecutorPins...)},

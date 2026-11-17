@@ -13,6 +13,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -24,13 +25,13 @@ const corruptStep = "Rbad:2.1-1"
 
 func pvSecondRoot(t *testing.T, w *world) (string, planview.Binding) {
 	t.Helper()
-	for _, n := range []store.PlanNode{
+	for _, n := range []planstore.PlanNode{
 		{ID: corruptRoot, Root: corruptRoot, Kind: "round", Ordinal: 99, Label: "bad", Title: "Second root"},
 		{ID: corruptItem, Root: corruptRoot, Parent: corruptRoot, Kind: "item", Label: "2.1", Title: "Second item"},
 		{ID: corruptStep, Root: corruptRoot, Parent: corruptItem, Kind: "step", Label: "2.1-1", Title: "Second step", StepKind: "agent"},
 	} {
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			_, err := store.CreatePlanNode(ctx, tx, "controller", n)
+			_, err := planstore.CreatePlanNode(ctx, tx, "controller", n)
 			return err
 		}))
 	}
@@ -41,10 +42,10 @@ func pvSecondRoot(t *testing.T, w *world) (string, planview.Binding) {
 	artifact := pvArtifact(t, w, d, b)
 	zero := 0
 	a := &asker{}
-	_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), "second-root", corruptRoot, "isolation fixture", []store.PlanChange{{Op: "adopt_plan_view", Artifact: artifact, ExpectedVersion: &zero}}, a.ask)
+	_, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:pv"), "second-root", corruptRoot, "isolation fixture", []planstore.PlanChange{{Op: "adopt_plan_view", Artifact: artifact, ExpectedVersion: &zero}}, a.ask)
 	ok(t, err)
-	a.answer(a.lastID(), seenfacts.QuestionAnswered, store.CardApplyKey)
-	_, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
+	a.answer(a.lastID(), seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	_, err = planstore.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 	ok(t, err)
 	return artifact, b
 }
@@ -59,7 +60,7 @@ func pvCorruptView(t *testing.T, w *world, body []byte) {
 			return err
 		}
 		var raw []byte
-		if err = tx.QueryRow(ctx, `SELECT body_json->'plan_view' FROM agentrt.event WHERE event_stream_id=$1 AND body_json ? 'plan_view' ORDER BY seq DESC LIMIT 1`, store.PlanStream(corruptRoot)).Scan(&raw); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT body_json->'plan_view' FROM agentrt.event WHERE event_stream_id=$1 AND body_json ? 'plan_view' ORDER BY seq DESC LIMIT 1`, planstore.PlanStream(corruptRoot)).Scan(&raw); err != nil {
 			return err
 		}
 		parsed, err := canon.Parse(raw)
@@ -68,7 +69,7 @@ func pvCorruptView(t *testing.T, w *world, body []byte) {
 		}
 		adoption := parsed.(map[string]any)
 		adoption["artifact_id"] = artifact
-		_, err = store.Append(ctx, tx, store.Event{Stream: store.PlanStream(corruptRoot), Type: "note", Actor: "controller", Body: map[string]any{"text": "Corrupt document fixture", "plan_view": adoption}})
+		_, err = store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream(corruptRoot), Type: "note", Actor: "controller", Body: map[string]any{"text": "Corrupt document fixture", "plan_view": adoption}})
 		return err
 	}))
 }
@@ -83,13 +84,13 @@ func TestPV2CorruptViewIsolatesRoot(t *testing.T) {
 			goodBinding := pvBinding(d, s1, "main_effective", "git")
 			goodBinding.Repo, goodBinding.Result = "bifrost-platform", commitA
 			adoptView(t, w, pvArtifact(t, w, d, goodBinding), 0)
-			src := store.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
+			src := planstore.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
 				return landing.MainHistory{State: landing.Effective, Commit: commitA}, nil
 			}}
 			pvPoll(t, w, src)
 			pvEvaluate(t, w, s1, "done")
 			pvEvaluate(t, w, corruptStep, "done")
-			before, err := store.PlanView(ctx, w.rt, root)
+			before, err := planstore.PlanView(ctx, w.rt, root)
 			ok(t, err)
 			body := []byte(`{"items":{}}`)
 			switch corruption {
@@ -106,7 +107,7 @@ func TestPV2CorruptViewIsolatesRoot(t *testing.T) {
 			pvPoll(t, w, src)
 			pvEvaluate(t, w, s1, "done")
 			pvEvaluate(t, w, corruptStep, "active")
-			after, err := store.PlanView(ctx, w.rt, root)
+			after, err := planstore.PlanView(ctx, w.rt, root)
 			ok(t, err)
 			for _, field := range []string{"items", "edges", "mainline", "next", "waiting_on", "owner_waiting", "owner_later", "warnings"} {
 				old, _ := json.Marshal(before[field])
@@ -115,7 +116,7 @@ func TestPV2CorruptViewIsolatesRoot(t *testing.T) {
 					t.Fatalf("unrelated root changed %s: %s -> %s", field, old, got)
 				}
 			}
-			bad, err := store.PlanView(ctx, w.rt, corruptRoot)
+			bad, err := planstore.PlanView(ctx, w.rt, corruptRoot)
 			ok(t, err)
 			warnings := bad["warnings"].([]string) // Console's existing string[] wire shape.
 			if len(warnings) == 0 || !strings.Contains(warnings[0], corruptRoot) || !strings.Contains(warnings[0], "view document unavailable:") || len([]rune(warnings[0])) > 240 {
@@ -142,14 +143,14 @@ func TestPV2CorruptDependencyKeepsGoodRootView(t *testing.T) {
 	b := pvBinding(d, s1, "main_effective", "git")
 	b.Repo, b.Result = "bifrost-platform", commitA
 	adoptView(t, w, pvArtifact(t, w, d, b), 0)
-	src := store.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
+	src := planstore.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
 		return landing.MainHistory{State: landing.Effective, Commit: commitA}, nil
 	}}
 	pvPoll(t, w, src)
 	pvEvaluate(t, w, s1, "done")
 	pvCorruptView(t, w, []byte(`{"items":{}}`))
 	pvEvaluate(t, w, s1, "active")
-	view, err := store.PlanView(ctx, w.rt, root)
+	view, err := planstore.PlanView(ctx, w.rt, root)
 	ok(t, err)
 	waiting := view["waiting_on"].([]map[string]any)
 	if len(view["items"].([]planview.Item)) != 1 || len(view["edges"].([]planview.Dependency)) != 1 || len(waiting) != 1 || waiting[0]["status"] != "Unknown" {

@@ -23,6 +23,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
@@ -128,7 +129,7 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 	asked := 0
 	s := server(t, f.pool, func(a *agentrtapi.API) {
 		a.Anchor = key.Fingerprint
-		a.Ask = func(context.Context, store.Card) (string, error) {
+		a.Ask = func(context.Context, planstore.Card) (string, error) {
 			askMu.Lock()
 			defer askMu.Unlock()
 			asked++
@@ -181,7 +182,7 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 	ok("POST plan/proposals", "operator", "POST", "plan/proposals", map[string]any{"idempotency_key": "v6-signoff", "root": "R2", "reason": "fuzz",
 		"changes": []any{map[string]any{"op": "set_done_rule", "node": "R2:1-1", "rule": map[string]any{"owner_signoff": "fuzz"}}}})
 	ok("POST plan/imports", "proposer", "POST", "plan/imports", importBody("v-import", arch))
-	if _, err = store.DecidePlanChanges(ctx, f.pool, answer(store.CardApplyKey), nil); err != nil {
+	if _, err = planstore.DecidePlanChanges(ctx, f.pool, answer(planstore.CardApplyKey), nil); err != nil {
 		t.Fatal(err)
 	}
 	ok("POST plan/{id}/notes", "operator", "POST", "plan/ARCH:state-db/notes", map[string]any{"idempotency_key": "v7", "text": "in use on STG"})
@@ -247,13 +248,14 @@ var fuzzCallers = []string{"agentd:h1", "agentd:h2", "reporter", "operator", "ad
 
 func (f *stateFuzz) pick(xs []string) string { return xs[f.r.Intn(len(xs))] }
 
-// requestFields is every JSON field name the package and the store declare,
-// read from their sources: what any route might read from a body.
+// requestFields is every JSON field name the package, the store and the plan
+// code that was the store's (planstore, 2026-11-17) declare, read from their
+// sources: what any route might read from a body.
 func requestFields(t *testing.T) []string {
 	t.Helper()
 	tag := regexp.MustCompile("json:\"([a-z_0-9]+)")
 	seen := map[string]bool{}
-	for _, dir := range []string{".", "../store"} {
+	for _, dir := range []string{".", "../store", "../planstore"} {
 		files, err := filepath.Glob(filepath.Join(dir, "*.go"))
 		must(t, err)
 		for _, file := range files {

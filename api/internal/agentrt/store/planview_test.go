@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -44,10 +45,10 @@ func viewDoc(t *testing.T, w *world, version int) string {
 func adoptView(t *testing.T, w *world, artifact string, version int) *asker {
 	t.Helper()
 	a := &asker{}
-	_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), fmt.Sprintf("adopt-%d", version), root, "view metadata", []store.PlanChange{{Op: "adopt_plan_view", Artifact: artifact, ExpectedVersion: &version}}, a.ask)
+	_, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:pv"), fmt.Sprintf("adopt-%d", version), root, "view metadata", []planstore.PlanChange{{Op: "adopt_plan_view", Artifact: artifact, ExpectedVersion: &version}}, a.ask)
 	ok(t, err)
-	a.answer(a.lastID(), seenfacts.QuestionAnswered, store.CardApplyKey)
-	_, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
+	a.answer(a.lastID(), seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	_, err = planstore.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 	ok(t, err)
 	return a
 }
@@ -67,11 +68,11 @@ func TestPlanViewAdoptionAndCAS(t *testing.T) {
 	w := newKernelWorld(t)
 	id := viewDoc(t, w, 1)
 	zeroVersion := 0
-	_, badErr := store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), "smuggled-binding", root, "view", []store.PlanChange{{Op: "adopt_plan_view", Artifact: id, ExpectedVersion: &zeroVersion, Bind: []store.Binding{{Kind: "question", Ref: "q_bad"}}}}, (&asker{}).ask)
+	_, badErr := planstore.ProposePlanChange(ctx, w.rt, wr("thread:pv"), "smuggled-binding", root, "view", []planstore.PlanChange{{Op: "adopt_plan_view", Artifact: id, ExpectedVersion: &zeroVersion, Bind: []planstore.Binding{{Kind: "question", Ref: "q_bad"}}}}, (&asker{}).ask)
 	is(t, badErr, store.ErrInvalid)
 	adoptView(t, w, id, 0)
 	before := w.footprint(t)
-	out, err := store.PlanView(ctx, w.rt, root)
+	out, err := planstore.PlanView(ctx, w.rt, root)
 	ok(t, err)
 	if before != w.footprint(t) {
 		t.Fatal("read wrote state")
@@ -80,17 +81,17 @@ func TestPlanViewAdoptionAndCAS(t *testing.T) {
 		t.Fatalf("not adopted: %v", out)
 	}
 	zero := 0
-	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), "stale", root, "stale", []store.PlanChange{{Op: "adopt_plan_view", Artifact: id, ExpectedVersion: &zero}}, (&asker{}).ask)
+	_, err = planstore.ProposePlanChange(ctx, w.rt, wr("thread:pv"), "stale", root, "stale", []planstore.PlanChange{{Op: "adopt_plan_view", Artifact: id, ExpectedVersion: &zero}}, (&asker{}).ask)
 	is(t, err, store.ErrConflict)
 	id2 := viewDoc(t, w, 2)
 	one := 1
 	a := &asker{}
 	for i := 0; i < 2; i++ {
-		_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), fmt.Sprint("race", i), root, "version two", []store.PlanChange{{Op: "adopt_plan_view", Artifact: id2, ExpectedVersion: &one}}, a.ask)
+		_, err = planstore.ProposePlanChange(ctx, w.rt, wr("thread:pv"), fmt.Sprint("race", i), root, "version two", []planstore.PlanChange{{Op: "adopt_plan_view", Artifact: id2, ExpectedVersion: &one}}, a.ask)
 		ok(t, err)
-		a.answer(a.lastID(), seenfacts.QuestionAnswered, store.CardApplyKey)
+		a.answer(a.lastID(), seenfacts.QuestionAnswered, planstore.CardApplyKey)
 	}
-	_, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
+	_, err = planstore.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 	ok(t, err)
 	if n := w.count(t, `SELECT count(*) FROM agentrt.event WHERE body_json ? 'plan_view'`); n != 2 {
 		t.Fatalf("CAS wrote %d adoptions", n)
@@ -148,7 +149,7 @@ func TestExternalWorkLifecycle(t *testing.T) {
 	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "submit", Seq: 3, Type: "submitted"})
 	ok(t, err)
 	before := w.footprint(t)
-	snapshot, err := store.PlanView(ctx, w.rt, root)
+	snapshot, err := planstore.PlanView(ctx, w.rt, root)
 	ok(t, err)
 	if before != w.footprint(t) {
 		t.Fatal("read wrote state")
@@ -175,12 +176,12 @@ func TestExternalWorkLifecycle(t *testing.T) {
 func TestPlanViewLegacyAndMissing(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	out, err := store.PlanView(ctx, w.rt, root)
+	out, err := planstore.PlanView(ctx, w.rt, root)
 	ok(t, err)
 	if out["plan_version"] != 0 {
 		t.Fatal(out)
 	}
-	_, err = store.PlanView(ctx, w.rt, "absent")
+	_, err = planstore.PlanView(ctx, w.rt, "absent")
 	is(t, err, pgx.ErrNoRows)
 }
 
@@ -191,12 +192,12 @@ func TestPlanViewDevBoundary(t *testing.T) {
 	w.legacy(t, `UPDATE agentrt.mission SET tenant='business' WHERE mission_id='M-1'`)
 	id := viewDoc(t, w, 1)
 	zero := 0
-	_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), "bad-tenant", root, "view", []store.PlanChange{{Op: "adopt_plan_view", Artifact: id, ExpectedVersion: &zero}}, (&asker{}).ask)
+	_, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:pv"), "bad-tenant", root, "view", []planstore.PlanChange{{Op: "adopt_plan_view", Artifact: id, ExpectedVersion: &zero}}, (&asker{}).ask)
 	is(t, err, store.ErrInvalid)
 	w.legacy(t, `UPDATE agentrt.mission SET tenant='dev' WHERE mission_id='M-1'`, `UPDATE agentrt.mission SET tenant='business' WHERE mission_id='M-2'`)
 	adoptView(t, w, id, 0)
-	for i, c := range []store.PlanChange{{Op: "rebind_step", Node: s2, MissionID: "M-2"}, {Op: "add_node", Parent: item, Kind: "step", StepKind: "agent", Title: "bad", MissionID: "M-2"}} {
-		_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), fmt.Sprint("bad-bind", i), root, "bind", []store.PlanChange{c}, (&asker{}).ask)
+	for i, c := range []planstore.PlanChange{{Op: "rebind_step", Node: s2, MissionID: "M-2"}, {Op: "add_node", Parent: item, Kind: "step", StepKind: "agent", Title: "bad", MissionID: "M-2"}} {
+		_, err = planstore.ProposePlanChange(ctx, w.rt, wr("thread:pv"), fmt.Sprint("bad-bind", i), root, "bind", []planstore.PlanChange{c}, (&asker{}).ask)
 		is(t, err, store.ErrInvalid)
 	}
 	_, err = store.RegisterExternalWork(ctx, w.rt, wr("thread:ext"), externalwork.ExternalRegistration{Key: "bad", Root: root, Node: s2, RunKey: "bad", Artifact: externalSpec(t, w), Mission: "M-2"})
@@ -214,7 +215,7 @@ func TestExternalUnconfirmedRecoveryAndRebind(t *testing.T) {
 	thaw()
 	ok(t, err)
 	id := out["external_work_id"].(string)
-	view, err := store.PlanView(ctx, w.rt, root)
+	view, err := planstore.PlanView(ctx, w.rt, root)
 	ok(t, err)
 	ext := view["external_work"].([]map[string]any)
 	if len(ext) != 1 || ext[0]["status"] != "Unconfirmed" {
@@ -222,7 +223,7 @@ func TestExternalUnconfirmedRecoveryAndRebind(t *testing.T) {
 	}
 	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
 	ok(t, err)
-	view, err = store.PlanView(ctx, w.rt, root)
+	view, err = planstore.PlanView(ctx, w.rt, root)
 	ok(t, err)
 	if view["external_work"].([]map[string]any)[0]["status"] != "Running" || view["external_work"].([]map[string]any)[0]["backfilled"] != true {
 		t.Fatal(view)
@@ -254,7 +255,7 @@ func TestPlanViewRecentCursor(t *testing.T) {
 		_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
 		ok(t, err)
 	}
-	first, err := store.PlanView(ctx, w.rt, root)
+	first, err := planstore.PlanView(ctx, w.rt, root)
 	ok(t, err)
 	cursor := first["recent_next"].(string)
 	if cursor == "" {
@@ -262,7 +263,7 @@ func TestPlanViewRecentCursor(t *testing.T) {
 	}
 	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "end", Seq: 2, Type: "submitted"})
 	ok(t, err)
-	page, err := store.PlanViewPage(ctx, w.rt, root, cursor)
+	page, err := planstore.PlanViewPage(ctx, w.rt, root, cursor)
 	ok(t, err)
 	if page["recent_as_of"] != first["recent_as_of"] {
 		t.Fatal("recent boundary moved")
@@ -279,7 +280,7 @@ func TestPlanViewRecentCursor(t *testing.T) {
 			t.Fatal("duplicate page event")
 		}
 	}
-	_, err = store.PlanViewPage(ctx, w.rt, root, "invalid")
+	_, err = planstore.PlanViewPage(ctx, w.rt, root, "invalid")
 	is(t, err, store.ErrInvalid)
 }
 
@@ -302,7 +303,7 @@ func TestPlanViewRecentSkipsHeartbeats(t *testing.T) {
 		_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: fmt.Sprint(i + 1), Seq: int64(i + 1), Type: typ})
 		ok(t, err)
 	}
-	view, err := store.PlanView(ctx, w.rt, root)
+	view, err := planstore.PlanView(ctx, w.rt, root)
 	ok(t, err)
 	var got []map[string]any
 	ok(t, json.Unmarshal(view["recent_changes"].(json.RawMessage), &got))
@@ -330,7 +331,7 @@ func TestPlanViewLargeSnapshot(t *testing.T) {
 	d.Sources = []planview.Source{{ID: "test", Path: "plan.json", Locator: "test", Basis: "repository"}}
 	edgeCount := 0
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: d.Root, Root: d.Root, Kind: "round", Label: "big", Title: "big", Ordinal: 99}); err != nil {
+		if _, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: d.Root, Root: d.Root, Kind: "round", Label: "big", Title: "big", Ordinal: 99}); err != nil {
 			return err
 		}
 		for i := 0; i < 499; i++ {
@@ -343,7 +344,7 @@ func TestPlanViewLargeSnapshot(t *testing.T) {
 				edgeCount++
 			}
 			d.Items = append(d.Items, n)
-			if _, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: d.Root + ":" + label, Root: d.Root, Parent: d.Root, Kind: "item", Label: label, Title: "item", Ordinal: i}); err != nil {
+			if _, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: d.Root + ":" + label, Root: d.Root, Parent: d.Root, Kind: "item", Label: label, Title: "item", Ordinal: i}); err != nil {
 				return err
 			}
 		}
@@ -359,15 +360,15 @@ func TestPlanViewLargeSnapshot(t *testing.T) {
 	}))
 	a := &asker{}
 	zero := 0
-	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:large"), "large", d.Root, "large plan", []store.PlanChange{{Op: "adopt_plan_view", Artifact: view, ExpectedVersion: &zero}}, a.ask)
+	_, err = planstore.ProposePlanChange(ctx, w.rt, wr("thread:large"), "large", d.Root, "large plan", []planstore.PlanChange{{Op: "adopt_plan_view", Artifact: view, ExpectedVersion: &zero}}, a.ask)
 	ok(t, err)
-	a.answer(a.lastID(), seenfacts.QuestionAnswered, store.CardApplyKey)
-	_, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
+	a.answer(a.lastID(), seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	_, err = planstore.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 	ok(t, err)
 	durations := []time.Duration{}
 	for i := 0; i < 20; i++ {
 		started := time.Now()
-		out, err := store.PlanView(ctx, w.rt, d.Root)
+		out, err := planstore.PlanView(ctx, w.rt, d.Root)
 		ok(t, err)
 		_, err = json.Marshal(out)
 		ok(t, err)
@@ -417,17 +418,17 @@ func TestPlanViewCrossRootAdoption(t *testing.T) {
 	apply := func(d *planview.Document, key string) error {
 		a := &asker{}
 		version := d.Version - 1
-		_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:cross"), key, d.Root, "cross root graph", []store.PlanChange{{Op: "adopt_plan_view", Artifact: save(d), ExpectedVersion: &version}}, a.ask)
+		_, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:cross"), key, d.Root, "cross root graph", []planstore.PlanChange{{Op: "adopt_plan_view", Artifact: save(d), ExpectedVersion: &version}}, a.ask)
 		if err != nil {
 			return err
 		}
-		a.answer(a.lastID(), seenfacts.QuestionAnswered, store.CardApplyKey)
-		_, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
+		a.answer(a.lastID(), seenfacts.QuestionAnswered, planstore.CardApplyKey)
+		_, err = planstore.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 		return err
 	}
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		for _, n := range []store.PlanNode{{ID: "R3", Root: "R3", Kind: "round", Label: "3", Title: "three", Ordinal: 3}, {ID: "R3:3.1", Root: "R3", Parent: "R3", Kind: "item", Label: "3.1", Title: "item"}} {
-			if _, err := store.CreatePlanNode(ctx, tx, "controller", n); err != nil {
+		for _, n := range []planstore.PlanNode{{ID: "R3", Root: "R3", Kind: "round", Label: "3", Title: "three", Ordinal: 3}, {ID: "R3:3.1", Root: "R3", Parent: "R3", Kind: "item", Label: "3.1", Title: "item"}} {
+			if _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); err != nil {
 				return err
 			}
 		}

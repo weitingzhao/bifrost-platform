@@ -4,22 +4,34 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
+
+// missionCard is a mission's card as the frozen projection below takes one
+// from its caller: the three fields of the plan code's own type of this name
+// (planstore's progressneeds.go), which this file used while it shared its
+// package.
+type missionCard struct {
+	at       time.Time
+	question string
+	it       map[string]any
+}
 
 type frozenPending struct {
 	event                    int64
 	stream, reason, question string
 	at                       time.Time
-	changes                  []PlanChange
+	changes                  []planstore.PlanChange
 }
 
-func frozenPendingProjection(list []frozenPending, limit int, now time.Time, resolveBlocks func([]PlanChange) (any, error), missions func(map[string]map[string]any) ([]missionCard, bool, error)) (map[string]any, error) {
+func frozenPendingProjection(list []frozenPending, limit int, now time.Time, resolveBlocks func([]planstore.PlanChange) (any, error), missions func(map[string]map[string]any) ([]missionCard, bool, error)) (map[string]any, error) {
 	truncated := len(list) > limit
 	if truncated {
 		list = list[:limit]
@@ -39,8 +51,8 @@ func frozenPendingProjection(list []frozenPending, limit int, now time.Time, res
 			it["also_refs"] = append(it["also_refs"].([]string), fmt.Sprint(p.event))
 			continue
 		}
-		root := StreamRoot(p.stream)
-		title, options := "Plan change to "+root+": "+firstLine(p.reason), []string{CardApply, CardRefuse}
+		root := planstore.StreamRoot(p.stream)
+		title, options := "Plan change to "+root+": "+firstLine(p.reason), []string{planstore.CardApply, planstore.CardRefuse}
 		after := "Apply: the controller lands the change on its next pass (about 15 seconds). Do not apply: the plan stays as it is."
 		var blocks any
 		if _, isRecorder := recorderImportOf(p.changes); isRecorder {
@@ -49,9 +61,9 @@ func frozenPendingProjection(list []frozenPending, limit int, now time.Time, res
 			title, options = "Import recorder log "+work+": "+firstLine(p.reason), []string{RecorderApply, RecorderRefuse}
 			after = "Import: the controller imports the log on its next pass (about 15 seconds). Do not import: nothing is written."
 			blocks = map[string]any{"unknown": "a recorder log is history; no plan or mission waits on it"}
-		} else if _, isImport := ImportOf(p.changes); isImport {
+		} else if _, isImport := planstore.ImportOf(p.changes); isImport {
 			// An import adds a plan no mission's work sits on yet.
-			title, options = "Import plan "+root+": "+firstLine(p.reason), []string{ImportApply, ImportRefuse}
+			title, options = "Import plan "+root+": "+firstLine(p.reason), []string{planstore.ImportApply, planstore.ImportRefuse}
 			after = "Import: the controller imports the plan on its next pass (about 15 seconds). Do not import: nothing is written."
 			blocks = map[string]any{"unknown": "an import adds a plan; no mission's work sits on it yet"}
 		} else {
@@ -96,30 +108,30 @@ func frozenPendingProjection(list []frozenPending, limit int, now time.Time, res
 func TestPendingProjectionFrozenParity(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
-	labels := planreadings.NeedLabels{Apply: CardApply, Refuse: CardRefuse, RecorderApply: RecorderApply, RecorderRefuse: RecorderRefuse, ImportApply: ImportApply, ImportRefuse: ImportRefuse}
+	labels := planreadings.NeedLabels{Apply: planstore.CardApply, Refuse: planstore.CardRefuse, RecorderApply: RecorderApply, RecorderRefuse: RecorderRefuse, ImportApply: planstore.ImportApply, ImportRefuse: planstore.ImportRefuse}
 	for count := 0; count < 12; count++ {
 		for limit := 0; limit < 9; limit++ {
 			for fail := 0; fail < 3; fail++ {
 				var old []frozenPending
 				var in []planreadings.PendingNeed
 				for i := 0; i < count; i++ {
-					p := frozenPending{event: int64(i), stream: PlanStream("p"), reason: "why\nline", question: fmt.Sprint(i % 4), at: now.Add(time.Duration(i%3-5) * time.Minute), changes: []PlanChange{{Op: "retitle", Node: fmt.Sprint(i)}}}
+					p := frozenPending{event: int64(i), stream: planstore.PlanStream("p"), reason: "why\nline", question: fmt.Sprint(i % 4), at: now.Add(time.Duration(i%3-5) * time.Minute), changes: []planstore.PlanChange{{Op: "retitle", Node: fmt.Sprint(i)}}}
 					kind := "change"
 					if i%3 == 1 {
-						p.changes = []PlanChange{{Op: OpImport, Artifact: "artifact"}}
+						p.changes = []planstore.PlanChange{{Op: planstore.OpImport, Artifact: "artifact"}}
 						kind = "import"
 					}
 					if i%3 == 2 {
-						p.changes = []PlanChange{{Op: OpRecorderImport, Artifact: "artifact"}}
+						p.changes = []planstore.PlanChange{{Op: OpRecorderImport, Artifact: "artifact"}}
 						p.stream = RecorderStream("W-1")
 						kind = "recorder"
 					}
 					old = append(old, p)
-					in = append(in, planreadings.PendingNeed{Event: p.event, Stream: p.stream, Root: StreamRoot(p.stream), Work: strings.TrimPrefix(p.stream, RecorderStream("")), Reason: p.reason, Question: p.question, At: p.at, Kind: kind, Payload: p.changes})
+					in = append(in, planreadings.PendingNeed{Event: p.event, Stream: p.stream, Root: planstore.StreamRoot(p.stream), Work: strings.TrimPrefix(p.stream, RecorderStream("")), Reason: p.reason, Question: p.question, At: p.at, Kind: kind, Payload: p.changes})
 				}
 				var traceOld, traceNew []string
 				errSentinel := errors.New("read failed")
-				block := func(trace *[]string, c []PlanChange) (any, error) {
+				block := func(trace *[]string, c []planstore.PlanChange) (any, error) {
 					*trace = append(*trace, "block:"+c[0].Node)
 					if fail == 1 {
 						return nil, errSentinel
@@ -134,8 +146,8 @@ func TestPendingProjectionFrozenParity(t *testing.T) {
 					}
 					return []missionCard{{at: now.Add(-9 * time.Minute), question: "m", it: map[string]any{"id": "mission"}}}, count%2 == 0, nil
 				}
-				want, we := frozenPendingProjection(old, limit, now, func(c []PlanChange) (any, error) { return block(&traceOld, c) }, func(m map[string]map[string]any) ([]missionCard, bool, error) { return mission(&traceOld, m) })
-				got, ge := planreadings.ProjectPendingNeeds(in, limit, now, labels, func(c any) (any, error) { return block(&traceNew, c.([]PlanChange)) }, func(m map[string]map[string]any) ([]planreadings.WaitingCard, bool, error) {
+				want, we := frozenPendingProjection(old, limit, now, func(c []planstore.PlanChange) (any, error) { return block(&traceOld, c) }, func(m map[string]map[string]any) ([]missionCard, bool, error) { return mission(&traceOld, m) })
+				got, ge := planreadings.ProjectPendingNeeds(in, limit, now, labels, func(c any) (any, error) { return block(&traceNew, c.([]planstore.PlanChange)) }, func(m map[string]map[string]any) ([]planreadings.WaitingCard, bool, error) {
 					cards, more, e := mission(&traceNew, m)
 					var out []planreadings.WaitingCard
 					for _, c := range cards {

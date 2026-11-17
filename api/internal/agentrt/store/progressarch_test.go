@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -38,13 +39,13 @@ func (w *world) arch(t *testing.T, rows ...[2]string) {
 	t.Helper()
 	ctx := ctxOf(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: "ARCH", Kind: "arch_root", Label: "ARCH", Title: "架构对照",
+		if _, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "ARCH", Kind: "arch_root", Label: "ARCH", Title: "架构对照",
 			Root: "ARCH"}); err != nil {
 			return err
 		}
 		for i, r := range rows {
 			label := strings.TrimPrefix(r[0], "ARCH:")
-			if _, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: r[0], Parent: "ARCH", Kind: "arch_row", Label: label,
+			if _, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: r[0], Parent: "ARCH", Kind: "arch_row", Label: label,
 				Title: label, Ordinal: i, Root: "ARCH"}); err != nil {
 				return err
 			}
@@ -56,7 +57,7 @@ func (w *world) arch(t *testing.T, rows ...[2]string) {
 			continue
 		}
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			if _, err := store.Append(ctx, tx, store.Event{Stream: store.PlanStream("ARCH"), Type: "plan_changed", Actor: "controller",
+			if _, err := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream("ARCH"), Type: "plan_changed", Actor: "controller",
 				Body: map[string]any{"change": "set_done_rule"}}); err != nil {
 				return err
 			}
@@ -102,12 +103,12 @@ func TestArchGatesReadUnknown(t *testing.T) {
 	if len(rows) != 3 {
 		t.Fatalf("rows = %v", rows)
 	}
-	wantTick(t, rows["ARCH:gateway"], "unknown", store.ReasonNoGate)
-	if rows["ARCH:gateway"]["reason"] != store.ReasonNoGate || rows["ARCH:gateway"]["note"] != nil || rows["ARCH:gateway"]["title"] != "gateway" {
+	wantTick(t, rows["ARCH:gateway"], "unknown", planstore.ReasonNoGate)
+	if rows["ARCH:gateway"]["reason"] != planstore.ReasonNoGate || rows["ARCH:gateway"]["note"] != nil || rows["ARCH:gateway"]["title"] != "gateway" {
 		t.Fatalf("a row with no rule: %v", rows["ARCH:gateway"])
 	}
-	wantTick(t, rows["ARCH:state-db"], "unknown", "T19, T20: "+store.ReasonGatesRetired+" (stg)")
-	wantTick(t, rows["ARCH:prod-only"], "unknown", "T19: "+store.ReasonGatesRetired+" (prod)")
+	wantTick(t, rows["ARCH:state-db"], "unknown", "T19, T20: "+planstore.ReasonGatesRetired+" (stg)")
+	wantTick(t, rows["ARCH:prod-only"], "unknown", "T19: "+planstore.ReasonGatesRetired+" (prod)")
 }
 
 // A rule the row cannot be ticked by says so on the row, and the rest of the
@@ -127,19 +128,19 @@ func TestPlanNotes(t *testing.T) {
 	w.arch(t, [2]string{"ARCH:state-db", ""}, [2]string{"ARCH:bus", ""})
 	thread := store.Writer{Actor: "thread:night", Token: "fixture-operator-1"}
 
-	first, err := store.PostPlanNote(ctx, w.rt, thread, "n1", "ARCH:state-db", "PROD and STG both use it")
+	first, err := planstore.PostPlanNote(ctx, w.rt, thread, "n1", "ARCH:state-db", "PROD and STG both use it")
 	ok(t, err)
 	if first["by"] != "thread:night" || first["plan_node_id"] != "ARCH:state-db" || first["event_id"] == nil || first["at"] == "" {
 		t.Fatalf("first note = %v", first)
 	}
-	again, err := store.PostPlanNote(ctx, w.rt, thread, "n1", "ARCH:state-db", "PROD and STG both use it")
+	again, err := planstore.PostPlanNote(ctx, w.rt, thread, "n1", "ARCH:state-db", "PROD and STG both use it")
 	ok(t, err)
 	if again["event_id"] != first["event_id"] {
 		t.Fatalf("a retry wrote another note: %v, then %v", first, again)
 	}
-	_, err = store.PostPlanNote(ctx, w.rt, thread, "n1", "ARCH:state-db", "something else")
+	_, err = planstore.PostPlanNote(ctx, w.rt, thread, "n1", "ARCH:state-db", "something else")
 	is(t, err, store.ErrConflict)
-	later, err := store.PostPlanNote(ctx, w.rt, owner, "n2", "ARCH:state-db", "PROD rebuild drill done")
+	later, err := planstore.PostPlanNote(ctx, w.rt, owner, "n2", "ARCH:state-db", "PROD rebuild drill done")
 	ok(t, err)
 	rows := w.archRows(t)
 	note, _ := rows["ARCH:state-db"]["note"].(map[string]any)
@@ -167,7 +168,7 @@ func TestPlanNotes(t *testing.T) {
 		"no such node":      {"ARCH:nothing", "x", pgx.ErrNoRows},
 		"empty":             {"ARCH:bus", "", store.ErrInvalid},
 		"white space":       {"ARCH:bus", " \n\t", store.ErrInvalid},
-		"too long":          {"ARCH:bus", strings.Repeat("长", store.MaxNoteText/3+1), store.ErrInvalid},
+		"too long":          {"ARCH:bus", strings.Repeat("长", planstore.MaxNoteText/3+1), store.ErrInvalid},
 		"not UTF-8":         {"ARCH:bus", "a\xffb", store.ErrInvalid},
 		"a NUL":             {"ARCH:bus", "a\x00b", store.ErrInvalid},
 		"a local path":      {"ARCH:bus", "see /Users/someone/notes.md", store.ErrInvalid},
@@ -179,12 +180,12 @@ func TestPlanNotes(t *testing.T) {
 		if name == "no idempotent key" {
 			key = ""
 		}
-		if _, perr := store.PostPlanNote(ctx, w.rt, thread, key, c.node, c.text); !errors.Is(perr, c.want) {
+		if _, perr := planstore.PostPlanNote(ctx, w.rt, thread, key, c.node, c.text); !errors.Is(perr, c.want) {
 			t.Errorf("%s: err = %v; want %v", name, perr, c.want)
 		}
 	}
 	// At the bound it is taken.
-	_, err = store.PostPlanNote(ctx, w.rt, thread, "k-bound", "ARCH:bus", strings.Repeat("a", store.MaxNoteText))
+	_, err = planstore.PostPlanNote(ctx, w.rt, thread, "k-bound", "ARCH:bus", strings.Repeat("a", planstore.MaxNoteText))
 	ok(t, err)
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'note' AND plan_node_id = 'ARCH:bus'`).Scan(&notes))
 	if notes != 1 {
@@ -198,7 +199,7 @@ func TestPlanNotes(t *testing.T) {
 func TestArchImportBesideTheRound(t *testing.T) {
 	t.Parallel()
 	pool, round := importDB(t)
-	_, err := store.ImportPlan(ctx, pool, "controller", round)
+	_, err := planstore.ImportPlan(ctx, pool, "controller", round)
 	ok(t, err)
 	text, err := os.ReadFile("../planimport/testdata/ledger.md")
 	ok(t, err)
@@ -206,7 +207,7 @@ func TestArchImportBesideTheRound(t *testing.T) {
 	arch, err := planimport.ParseArch(string(text), []planimport.ArchRow{{Label: "release-guard", Rule: []byte(gates)}, {Label: "state-db"}},
 		planimport.LedgerOptions{File: "WORK.md"})
 	ok(t, err)
-	res, err := store.ImportPlan(ctx, pool, "controller", arch)
+	res, err := planstore.ImportPlan(ctx, pool, "controller", arch)
 	ok(t, err)
 	if !res.Imported || res.Root != "ARCH" || res.Nodes != 3 || res.Done != 0 || res.Active != 0 {
 		t.Fatalf("import = %+v", res)
@@ -225,7 +226,7 @@ func TestArchImportBesideTheRound(t *testing.T) {
 	if noteText != "两个环境都在用" || evidence != res.Request || cause != head {
 		t.Fatalf("first note %q, evidence %s, caused by %d; want the line's text, the request %s, the head %d", noteText, evidence, cause, res.Request, head)
 	}
-	out, err := store.Progress(ctx, pool)
+	out, err := planstore.Progress(ctx, pool)
 	ok(t, err)
 	var kinds []string
 	for _, r := range out["plan"].([]any) {
@@ -236,15 +237,15 @@ func TestArchImportBesideTheRound(t *testing.T) {
 		}
 		rows := doc["rows"].([]any)
 		first, second := rows[0].(map[string]any), rows[1].(map[string]any)
-		if first["tick"] != "unknown" || !strings.Contains(first["reason"].(string), store.ReasonGatesRetired) ||
-			first["note"].(map[string]any)["text"] != "在正式环境" || second["reason"] != store.ReasonNoGate {
+		if first["tick"] != "unknown" || !strings.Contains(first["reason"].(string), planstore.ReasonGatesRetired) ||
+			first["note"].(map[string]any)["text"] != "在正式环境" || second["reason"] != planstore.ReasonNoGate {
 			t.Fatalf("rows = %v", rows)
 		}
 	}
 	if strings.Join(kinds, ",") != "ARCH/arch_root,R2/round" {
 		t.Fatalf("roots = %v", kinds)
 	}
-	again, err := store.ImportPlan(ctx, pool, "controller", arch)
+	again, err := planstore.ImportPlan(ctx, pool, "controller", arch)
 	ok(t, err)
 	if again.Imported || again.EventID != res.EventID {
 		t.Fatalf("the same request again = %+v", again)
@@ -259,7 +260,7 @@ func TestArchImportRefusesALocalPath(t *testing.T) {
 	arch, err := planimport.ParseArch(text, []planimport.ArchRow{{Label: "board"}}, planimport.LedgerOptions{File: "WORK.md"})
 	ok(t, err)
 	before := rows(t, pool)
-	_, err = store.ImportPlan(ctx, pool, "controller", arch)
+	_, err = planstore.ImportPlan(ctx, pool, "controller", arch)
 	if !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), "a local path in the note") {
 		t.Fatalf("err = %v", err)
 	}
@@ -276,12 +277,12 @@ func TestArchRowRuleIsGatesOnly(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	w.arch(t, [2]string{"ARCH:state-db", `{"ci_succeeded":{"repo":"bifrost-platform","commit":"` + commitA + `"}}`}, [2]string{"ARCH:bus", ""})
-	wantTick(t, w.archRows(t)["ARCH:state-db"], "unknown", store.ReasonNotGates)
+	wantTick(t, w.archRows(t)["ARCH:state-db"], "unknown", planstore.ReasonNotGates)
 
 	a := &asker{}
 	propose := func(key, rule string) (map[string]any, error) {
-		return store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, "ARCH", "test",
-			[]store.PlanChange{{Op: "set_done_rule", Node: "ARCH:bus", Rule: []byte(rule)}}, a.ask)
+		return planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, "ARCH", "test",
+			[]planstore.PlanChange{{Op: "set_done_rule", Node: "ARCH:bus", Rule: []byte(rule)}}, a.ask)
 	}
 	if _, err := propose("k-ci", `{"ci_succeeded":{"repo":"bifrost-platform","commit":"`+commitA+`"}}`); err == nil ||
 		!strings.Contains(err.Error(), "gate tests only") {
@@ -293,8 +294,8 @@ func TestArchRowRuleIsGatesOnly(t *testing.T) {
 	out, err := propose("k-gates", gateRule("stg", [2]string{"T21", strings.Repeat("ab", 32)}))
 	ok(t, err)
 	gates := out["question_id"].(string)
-	a.answer(gates, seenfacts.QuestionAnswered, store.CardApplyKey)
-	n, err := store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
+	a.answer(gates, seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	n, err := planstore.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 	ok(t, err)
 	if n != 1 {
 		t.Fatalf("decided %d; want 1", n)
@@ -312,7 +313,7 @@ func TestArchRowRuleIsGatesOnly(t *testing.T) {
 	if d := decided[gates]; d[0] != "applied" {
 		t.Fatalf("a gates rule on an architecture row: %v", d)
 	}
-	wantTick(t, w.archRows(t)["ARCH:bus"], "unknown", "T21: "+store.ReasonGatesRetired+" (stg)")
+	wantTick(t, w.archRows(t)["ARCH:bus"], "unknown", "T21: "+planstore.ReasonGatesRetired+" (stg)")
 }
 
 // Review 427 C1, 429: the latest note is the one appended last (event_id),
@@ -325,11 +326,11 @@ func TestArchLatestNoteIsTheLastAppended(t *testing.T) {
 	thread := store.Writer{Actor: "thread:night", Token: "fixture-operator-1"}
 	later := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
 	restore := freezeClock(t, later)
-	first, err := store.PostPlanNote(ctx, w.rt, thread, "n1", "ARCH:state-db", "written first, stamped later")
+	first, err := planstore.PostPlanNote(ctx, w.rt, thread, "n1", "ARCH:state-db", "written first, stamped later")
 	restore()
 	ok(t, err)
 	restore = freezeClock(t, later.Add(-time.Hour))
-	second, err := store.PostPlanNote(ctx, w.rt, thread, "n2", "ARCH:state-db", "written second, stamped earlier")
+	second, err := planstore.PostPlanNote(ctx, w.rt, thread, "n2", "ARCH:state-db", "written second, stamped earlier")
 	restore()
 	ok(t, err)
 	id := func(v any) int64 {

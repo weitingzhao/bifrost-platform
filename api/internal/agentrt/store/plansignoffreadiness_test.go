@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -17,7 +18,7 @@ import (
 func pvSignoffReadiness(t *testing.T, w *world, step, want string, candidates bool) {
 	t.Helper()
 	before := w.footprint(t)
-	out, err := store.PlanView(ctx, w.rt, root)
+	out, err := planstore.PlanView(ctx, w.rt, root)
 	ok(t, err)
 	if before != w.footprint(t) {
 		t.Fatal("reading readiness wrote state")
@@ -78,7 +79,7 @@ func TestPV2SignoffReadinessExecution(t *testing.T) {
 			b := pvBinding(d, s1, "external_verified", "owner_signoff")
 			adoptView(t, w, pvArtifact(t, w, d, b), 0)
 			ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-				_, err := store.SetStepState(ctx, tx, "controller", root, s1, mode, "execution readiness test")
+				_, err := planstore.SetStepState(ctx, tx, "controller", root, s1, mode, "execution readiness test")
 				return err
 			}))
 			pvSignoffReadiness(t, w, s1, "Ready", false)
@@ -90,10 +91,10 @@ func TestPV2SignoffReadinessBlocked(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: "R2:2.2", Parent: root, Kind: "item", Label: "2.2", Title: "Prerequisite", Root: root, Ordinal: 2}); err != nil {
+		if _, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R2:2.2", Parent: root, Kind: "item", Label: "2.2", Title: "Prerequisite", Root: root, Ordinal: 2}); err != nil {
 			return err
 		}
-		_, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: "R2:2.2-1", Parent: "R2:2.2", Kind: "step", StepKind: "agent", Label: "2.2-1", Title: "Prerequisite step", Root: root})
+		_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R2:2.2-1", Parent: "R2:2.2", Kind: "step", StepKind: "agent", Label: "2.2-1", Title: "Prerequisite step", Root: root})
 		return err
 	}))
 	d := pvDocument(t, 1)
@@ -111,12 +112,12 @@ func TestPV2SignoffReadinessBlocked(t *testing.T) {
 	d.Items = append(d.Items, prerequisite)
 	d.Items[0].Dependencies = []planview.Edge{{Root: root, Node: "2.2", Milestone: "accepted", RequiredFor: "accepted", Relation: "blocks", Reason: "Prerequisite must pass", Sources: []string{"work"}}}
 	adoptView(t, w, pvArtifact(t, w, d, b), 0)
-	pvPoll(t, w, store.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
+	pvPoll(t, w, planstore.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
 		return landing.MainHistory{State: landing.Never}, nil
 	}})
 	pvSignoffReadiness(t, w, s1, "Blocked", false)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err := store.SetStepState(ctx, tx, "controller", root, s1, "active", "execution readiness test")
+		_, err := planstore.SetStepState(ctx, tx, "controller", root, s1, "active", "execution readiness test")
 		return err
 	}))
 	pvSignoffReadiness(t, w, s1, "Blocked", false)
@@ -129,7 +130,7 @@ func TestPV2SignoffReadinessBlocked(t *testing.T) {
 	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "submit", Seq: 2, Type: "submitted", ReportDigest: w.artifact(t, "report", "Blocked candidate")})
 	ok(t, err)
 	pvSignoffReadiness(t, w, s1, "Blocked", true)
-	out, err := store.PlanView(ctx, w.rt, root)
+	out, err := planstore.PlanView(ctx, w.rt, root)
 	ok(t, err)
 	waiting := out["waiting_on"].([]map[string]any)
 	if len(waiting) != 1 || waiting[0]["status"] != "Blocked" {

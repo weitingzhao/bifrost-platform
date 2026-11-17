@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
 // Real PostgreSQL, two runtime connections and the production collector.
@@ -31,8 +31,8 @@ func TestPV2CollectorPostgresOutOfOrder(t *testing.T) {
 			if slow.PgConn().PID() == w.rt.PgConn().PID() {
 				t.Fatal("test requires two PostgreSQL backends")
 			}
-			source := func(state landing.History) store.PlanSources {
-				return store.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
+			source := func(state landing.History) planstore.PlanSources {
+				return planstore.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
 					return landing.MainHistory{State: state, Commit: commitA}, nil
 				}}
 			}
@@ -57,7 +57,7 @@ func TestPV2CollectorPostgresOutOfOrder(t *testing.T) {
 			done := make(chan result, 1)
 			finished := false
 			go func() {
-				n, err := store.CollectPlanObservations(readctx, slow, store.PlanSources{History: func(ctx context.Context, _, _, _, _ string) (landing.MainHistory, error) {
+				n, err := planstore.CollectPlanObservations(readctx, slow, planstore.PlanSources{History: func(ctx context.Context, _, _, _, _ string) (landing.MainHistory, error) {
 					close(started)
 					select {
 					case <-release:

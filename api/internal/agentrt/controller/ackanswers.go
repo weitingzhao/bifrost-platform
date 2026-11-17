@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // An answered card the runtime had not acknowledged counted against its
@@ -63,7 +63,7 @@ func (c *Controller) AckUsedAnswers(ctx context.Context) (int, error) {
 			continue
 		}
 		if err := ack(ctx, q.ID); err != nil {
-			if !errors.Is(err, store.ErrQuestionGone) {
+			if !errors.Is(err, planstore.ErrQuestionGone) {
 				errs = append(errs, fmt.Errorf("acknowledging Q%d: %w", q.Number, err))
 			}
 			continue

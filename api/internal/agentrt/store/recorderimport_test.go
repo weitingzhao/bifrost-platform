@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -98,7 +99,7 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 		t.Fatalf("needs_you action %v, blocks %v", action, blocks)
 	}
 
-	a.answer(q, seenfacts.QuestionAnswered, store.CardApplyKey)
+	a.answer(q, seenfacts.QuestionAnswered, planstore.CardApplyKey)
 	// Two passes at once decide it once (review 402 B3).
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -107,7 +108,7 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			d, derr := store.DecidePlanChanges(ctx, pool, a.question, nil)
+			d, derr := planstore.DecidePlanChanges(ctx, pool, a.question, nil)
 			if derr != nil {
 				t.Error(derr)
 			}
@@ -117,7 +118,7 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	_, err = store.DecidePlanChanges(ctx, pool, a.question, a.ack)
+	_, err = planstore.DecidePlanChanges(ctx, pool, a.question, a.ack)
 	ok(t, err)
 	if recorderCard(t, pool, q) != nil {
 		t.Fatal("the decided card is still in needs_you")
@@ -188,7 +189,7 @@ func TestRecorderImportRefused(t *testing.T) {
 	ok(t, err)
 	q := out["question_id"].(string)
 	a.answer(q, seenfacts.QuestionAnswered, "b")
-	_, err = store.DecidePlanChanges(ctx, pool, a.question, nil)
+	_, err = planstore.DecidePlanChanges(ctx, pool, a.question, nil)
 	ok(t, err)
 	stream := store.RecorderStream("td-336")
 	var decision string
@@ -224,7 +225,7 @@ func TestRecorderImportRefused(t *testing.T) {
 // recorderCard is the needs_you item of question q, or nil.
 func recorderCard(t *testing.T, pool *pgxpool.Pool, q string) map[string]any {
 	t.Helper()
-	prog, err := store.Progress(ctx, pool)
+	prog, err := planstore.Progress(ctx, pool)
 	ok(t, err)
 	raw, err := json.Marshal(prog["needs_you"])
 	ok(t, err)
@@ -249,7 +250,7 @@ func TestRecorderImportTwoPassesAtOnce(t *testing.T) {
 	out, err := store.ProposeRecorderImport(ctx, pool, wr("thread:s1"), "k1", "retire the recorder", tdLog(t), a.ask)
 	ok(t, err)
 	q := out["question_id"].(string)
-	a.answer(q, seenfacts.QuestionAnswered, store.CardApplyKey)
+	a.answer(q, seenfacts.QuestionAnswered, planstore.CardApplyKey)
 	stream := store.RecorderStream("td-336")
 	var mu sync.Mutex
 	arrived := 0
@@ -275,7 +276,7 @@ func TestRecorderImportTwoPassesAtOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			n, derr := store.DecidePlanChanges(ctx, pool, a.question, nil)
+			n, derr := planstore.DecidePlanChanges(ctx, pool, a.question, nil)
 			if derr != nil {
 				t.Error(derr)
 			}

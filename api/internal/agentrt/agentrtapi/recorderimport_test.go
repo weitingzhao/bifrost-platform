@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -51,7 +52,7 @@ func TestRecorderImportThroughTheRoute(t *testing.T) {
 		cards[len(cards)-1].Options[0] != store.RecorderApply {
 		t.Fatalf("cards = %+v", cards[before:])
 	}
-	n, err := store.DecidePlanChanges(ctx, pool, answer(store.CardApplyKey), nil)
+	n, err := planstore.DecidePlanChanges(ctx, pool, answer(planstore.CardApplyKey), nil)
 	must(t, err)
 	var landed int
 	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = 'legacy:recorder:td-337'

@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 func TestHumanApprovalHomeOnRouter(t *testing.T) {
@@ -57,7 +57,7 @@ func TestSTGRuleCardKeepsWorkingWithoutOwnerRequests(t *testing.T) {
 	t.Setenv("OPS_VIEWER_ENV", "stg")
 	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
 	rt.takeCardsByRule(true)
-	card := store.Card{Key: strings.Repeat("cd", 16), Title: "Blocked in M-3", Body: "test", Options: []string{questioncards.BlockedRetry, questioncards.BlockedDrop}, Recommended: 2, RecommendedWhy: "test", Meanwhile: "wait", OwnerDuty: "goal", ByRule: true}
+	card := planstore.Card{Key: strings.Repeat("cd", 16), Title: "Blocked in M-3", Body: "test", Options: []string{questioncards.BlockedRetry, questioncards.BlockedDrop}, Recommended: 2, RecommendedWhy: "test", Meanwhile: "wait", OwnerDuty: "goal", ByRule: true}
 	ctx := context.Background()
 	id, err := rt.agentRuntimeAsk()(ctx, card)
 	if err != nil {

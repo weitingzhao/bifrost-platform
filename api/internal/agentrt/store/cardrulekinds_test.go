@@ -3,6 +3,7 @@ package store_test
 import (
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
@@ -26,7 +27,7 @@ func TestCardsAreAskedByRuleWhenTheRuleAnswersThem(t *testing.T) {
 	var s seenCards
 	propose := func(key string) string {
 		t.Helper()
-		out, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, root, "rename", []store.PlanChange{{Op: "retitle", Node: item, Title: key}}, s.ask)
+		out, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, root, "rename", []planstore.PlanChange{{Op: "retitle", Node: item, Title: key}}, s.ask)
 		ok(t, err)
 		id, _ := out["question_id"].(string)
 		if id == "" {

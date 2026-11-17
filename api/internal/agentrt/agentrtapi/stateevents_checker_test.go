@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -60,11 +61,11 @@ func TestStateEventCheckerCatches(t *testing.T) {
 	}
 	// A node written beside an import head on its tree, with no event of its own.
 	must(t, store.InTx(ctx, f.pool, func(tx pgx.Tx) error {
-		_, cerr := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: "ARCH", Kind: "arch_root", Label: "A", Title: "architecture", Root: "ARCH"})
+		_, cerr := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "ARCH", Kind: "arch_root", Label: "A", Title: "architecture", Root: "ARCH"})
 		return cerr
 	}))
 	err := judge(http.StatusOK, func(tx pgx.Tx) error {
-		if _, ierr := store.Append(ctx, tx, store.Event{Stream: store.PlanStream("ARCH"), Type: "legacy_imported", Actor: "controller",
+		if _, ierr := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream("ARCH"), Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test: an import head"}}); ierr != nil {
 			return ierr
 		}

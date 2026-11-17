@@ -7,8 +7,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 func TestAcceptanceSignoffEvidenceHTTP(t *testing.T) {
@@ -41,7 +41,7 @@ func TestAcceptanceSignoffEvidenceHTTP(t *testing.T) {
 	if code, out := call(t, s, "proposer", "POST", "plan/proposals", map[string]any{"idempotency_key": "acceptance", "root": "R2", "reason": "adopt acceptance", "changes": []any{map[string]any{"op": "adopt_plan_view", "artifact": artifactID(raw), "expected_version": 0}}}, session, "signoff-test"); code != 200 {
 		t.Fatalf("adopt %d %v", code, out)
 	}
-	if count, err := store.DecidePlanChanges(ctx, pool, answer(store.CardApplyKey), nil); err != nil || count != 1 {
+	if count, err := planstore.DecidePlanChanges(ctx, pool, answer(planstore.CardApplyKey), nil); err != nil || count != 1 {
 		t.Fatalf("decide %d %v", count, err)
 	}
 	evidence := []byte("Owner-selected evidence")

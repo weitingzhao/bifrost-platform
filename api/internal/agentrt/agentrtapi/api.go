@@ -22,6 +22,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -40,7 +41,7 @@ type API struct {
 	// Ask creates the Owner's decision card for a plan change outside the
 	// standing authorization (nil answers such a proposal 503) and for a
 	// mission outside the standing envelope (nil leaves it proposed).
-	Ask store.Ask
+	Ask planstore.Ask
 	// Anchor is the fingerprint of the Owner's signing key a signed rule must
 	// verify against (releasepolicy.OwnerKeyFingerprint); empty refuses every
 	// signed rule.
@@ -203,7 +204,7 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotYours), errors.Is(err, externalwork.ErrNotOwnRecord):
 		writeError(w, http.StatusForbidden, "not_yours", err.Error())
-	case errors.Is(err, store.ErrNotOwner):
+	case errors.Is(err, planstore.ErrNotOwner):
 		writeError(w, http.StatusForbidden, "not_owner", err.Error())
 	case errors.Is(err, store.ErrExternalHost):
 		writeError(w, http.StatusForbidden, "external_host", err.Error())
@@ -227,9 +228,9 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnprocessableEntity, "invalid", err.Error())
 	case errors.Is(err, store.ErrUnsigned):
 		writeError(w, http.StatusForbidden, "unsigned", err.Error())
-	case errors.Is(err, store.ErrAsk):
+	case errors.Is(err, planstore.ErrAsk):
 		writeError(w, http.StatusServiceUnavailable, "owner_unreachable", err.Error())
-	case errors.Is(err, store.ErrBusy):
+	case errors.Is(err, planstore.ErrBusy):
 		w.Header().Set("Retry-After", "1")
 		writeError(w, http.StatusServiceUnavailable, "busy", err.Error())
 	case errors.As(err, &pg) && constraintCodes[pg.Code]:

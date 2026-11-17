@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/lineage"
 )
 
-func (s *Server) agentRuntimePlanSources() store.PlanSources {
-	var src store.PlanSources
+func (s *Server) agentRuntimePlanSources() planstore.PlanSources {
+	var src planstore.PlanSources
 	if s.delivery != nil {
 		// One reader for the process: it keeps each repo's main between passes.
 		reader := &lineage.PlanHistoryReader{

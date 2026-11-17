@@ -17,6 +17,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -28,7 +29,7 @@ import (
 
 func proposeImport(t *testing.T, pool *pgxpool.Pool, req planimport.Request, a *asker) string {
 	t.Helper()
-	out, err := store.ProposePlanImport(ctx, pool, wr("thread:s1"), "k1", "round 2 into the runtime", req, a.ask)
+	out, err := planstore.ProposePlanImport(ctx, pool, wr("thread:s1"), "k1", "round 2 into the runtime", req, a.ask)
 	ok(t, err)
 	q, _ := out["question_id"].(string)
 	if q == "" {
@@ -50,7 +51,7 @@ func TestImportDecisionOnce(t *testing.T) {
 	pool, req := importDB(t)
 	a := &asker{}
 	q := proposeImport(t, pool, req, a)
-	a.answer(q, seenfacts.QuestionAnswered, store.CardApplyKey)
+	a.answer(q, seenfacts.QuestionAnswered, planstore.CardApplyKey)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	total := 0
@@ -58,7 +59,7 @@ func TestImportDecisionOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			n, err := store.DecidePlanChanges(ctx, pool, a.question, nil)
+			n, err := planstore.DecidePlanChanges(ctx, pool, a.question, nil)
 			if err != nil {
 				t.Error(err)
 			}
@@ -109,14 +110,14 @@ func TestImportDecisionBadRequest(t *testing.T) {
 				ok(t, err)
 			}
 			ok(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-				_, err := store.Append(ctx, tx, store.Event{Stream: store.PlanStream("R2"), Type: "plan_change_proposed", Actor: "controller",
+				_, err := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream("R2"), Type: "plan_change_proposed", Actor: "controller",
 					Body: map[string]any{"changes": []any{map[string]any{"op": "import", "artifact": id}}, "reason": "test", "standing": false,
 						"question_id": "q_x"}})
 				return err
 			}))
 			a := &asker{}
-			a.answer("q_x", seenfacts.QuestionAnswered, store.CardApplyKey)
-			n, err := store.DecidePlanChanges(ctx, pool, a.question, nil)
+			a.answer("q_x", seenfacts.QuestionAnswered, planstore.CardApplyKey)
+			n, err := planstore.DecidePlanChanges(ctx, pool, a.question, nil)
 			ok(t, err)
 			var decision, why string
 			ok(t, pool.QueryRow(ctx, `SELECT body_json->>'decision', COALESCE(body_json->>'error', '') FROM agentrt.event
@@ -134,7 +135,7 @@ func TestImportDecisionFailsHalfWay(t *testing.T) {
 	pool, req := importDB(t)
 	a := &asker{}
 	q := proposeImport(t, pool, req, a)
-	a.answer(q, seenfacts.QuestionAnswered, store.CardApplyKey)
+	a.answer(q, seenfacts.QuestionAnswered, planstore.CardApplyKey)
 	errFail := errors.New("fail here")
 	unhook := store.SetHook(func(point, arg string) {
 		if point == "plan import step" && arg == "R2:2.1-2" {
@@ -147,13 +148,13 @@ func TestImportDecisionFailsHalfWay(t *testing.T) {
 				t.Fatalf("recovered %v", r)
 			}
 		}()
-		_, _ = store.DecidePlanChanges(ctx, pool, a.question, nil)
+		_, _ = planstore.DecidePlanChanges(ctx, pool, a.question, nil)
 	}()
 	unhook()
 	if nodes, heads, decided := importCounts(t, pool); nodes != 0 || heads != 0 || decided != 0 {
 		t.Fatalf("a decision that failed half way left %d nodes, %d heads, %d decisions", nodes, heads, decided)
 	}
-	n, err := store.DecidePlanChanges(ctx, pool, a.question, nil)
+	n, err := planstore.DecidePlanChanges(ctx, pool, a.question, nil)
 	ok(t, err)
 	if nodes, heads, decided := importCounts(t, pool); n != 1 || nodes != 1+len(req.Nodes) || heads != 1 || decided != 1 {
 		t.Fatalf("the next pass: %d decided, %d nodes, %d heads, %d decisions", n, nodes, heads, decided)
@@ -165,14 +166,14 @@ func TestImportDecisionAcknowledged(t *testing.T) {
 	pool, req := importDB(t)
 	a := &asker{}
 	q := proposeImport(t, pool, req, a)
-	a.answer(q, seenfacts.QuestionAnswered, store.CardApplyKey)
+	a.answer(q, seenfacts.QuestionAnswered, planstore.CardApplyKey)
 	failing := func(context.Context, string) error { return errors.New("question store down") }
-	n, err := store.DecidePlanChanges(ctx, pool, a.question, failing)
+	n, err := planstore.DecidePlanChanges(ctx, pool, a.question, failing)
 	if n != 1 || err == nil {
 		t.Fatalf("a pass whose acknowledgement fails: %d decided, %v", n, err)
 	}
 	for i := 0; i < 2; i++ {
-		_, err = store.DecidePlanChanges(ctx, pool, a.question, a.ack)
+		_, err = planstore.DecidePlanChanges(ctx, pool, a.question, a.ack)
 		ok(t, err)
 	}
 	if a.acked[q] != 1 || len(a.acked) != 1 {

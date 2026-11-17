@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // The Console's fixture of a card answered by rule (console/src/api/__fixtures__/question-rule-answered.testdb.json):
@@ -31,7 +31,7 @@ func TestCardRuleOnTheStore(t *testing.T) {
 	ctx := context.Background()
 	ask, cards, answer, read := rt.agentRuntimeAsk(), rt.agentRuntimeCards(), rt.agentRuntimeRuleAnswer(), rt.agentRuntimeQuestion()
 	task := "t_01M5192P0JPMJAP63ZKRPXJ2VV"
-	id, err := ask(ctx, store.Card{Key: strings.Repeat("ab", 16), Title: "Blocked in M-3: STG walk", Body: "Recommended: Close mission M-3 — why",
+	id, err := ask(ctx, planstore.Card{Key: strings.Repeat("ab", 16), Title: "Blocked in M-3: STG walk", Body: "Recommended: Close mission M-3 — why",
 		Options: []string{questioncards.BlockedRetry, questioncards.BlockedDrop, "Close mission M-3"}, Recommended: 3, RecommendedWhy: "why",
 		Meanwhile: "the task stays blocked", OwnerDuty: "goal", TaskID: task, Urgency: "when you can", SameByKey: true})
 	if err != nil {
@@ -87,8 +87,8 @@ func TestCardRuleOnTheStore(t *testing.T) {
 // the per-requester quota of 3 went in cleanup wave 1, 2026-11-11).
 func TestRuntimeCardsTheRuleAnswersSkipTheQuotas(t *testing.T) {
 	ctx := context.Background()
-	card := func(i int, byRule bool) store.Card {
-		return store.Card{Key: fmt.Sprintf("%032x", i), Title: fmt.Sprintf("Blocked in M-%d: a task", i), Body: "b",
+	card := func(i int, byRule bool) planstore.Card {
+		return planstore.Card{Key: fmt.Sprintf("%032x", i), Title: fmt.Sprintf("Blocked in M-%d: a task", i), Body: "b",
 			Options: []string{questioncards.BlockedRetry, questioncards.BlockedDrop}, OwnerDuty: "goal", TaskID: "t_01M5192P0JPMJAP63ZKRPXJ2VV",
 			Meanwhile: "m", ByRule: byRule}
 	}

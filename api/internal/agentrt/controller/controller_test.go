@@ -13,6 +13,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
@@ -41,14 +42,14 @@ func setup(t *testing.T) *pgxpool.Pool {
 		_, err := storekit.CreateMission(ctx, tx, "controller", storekit.Mission{ID: "M-1", Title: "m", Goal: "g", Deadline: time.Now().Add(time.Hour)})
 		return err
 	}))
-	for _, n := range []store.PlanNode{
+	for _, n := range []planstore.PlanNode{
 		{ID: "R2", Kind: "round", Label: "2", Title: "round", Root: "R2"},
 		{ID: "R2:1", Parent: "R2", Kind: "item", Label: "1", Title: "item", Root: "R2"},
 		{ID: "R2:1-1", Parent: "R2:1", Kind: "step", Label: "1-1", Title: "one", MissionID: "M-1", StepKind: "agent", Root: "R2"},
 		{ID: "R2:1-2", Parent: "R2:1", Kind: "step", Label: "1-2", Title: "two", MissionID: "M-1", StepKind: "agent", Ordinal: 1, Root: "R2"},
 	} {
 		must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-			_, err := store.CreatePlanNode(ctx, tx, "controller", n)
+			_, err := planstore.CreatePlanNode(ctx, tx, "controller", n)
 			return err
 		}))
 	}
@@ -58,7 +59,7 @@ func setup(t *testing.T) *pgxpool.Pool {
 func setRule(t *testing.T, pool *pgxpool.Pool, step, rule string, binds ...[2]string) {
 	t.Helper()
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: store.PlanStream("R2"), Type: "plan_changed", Actor: "controller",
+		if _, err := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream("R2"), Type: "plan_changed", Actor: "controller",
 			Body: map[string]any{"change": "test"}}); err != nil {
 			return err
 		}
@@ -240,14 +241,14 @@ func TestSlowDeploymentReadInRulesIsCutOff(t *testing.T) {
 // first option, the change lands.
 func TestStartDecidesPlanChanges(t *testing.T) {
 	pool := setup(t)
-	out, err := store.ProposePlanChange(ctx, pool, store.Writer{Actor: "thread:s1", Token: "operator"}, "k1", "R2", "a new item",
-		[]store.PlanChange{{Op: "add_node", Parent: "R2", Kind: "item", Title: "second"}},
-		func(context.Context, store.Card) (string, error) { return "q_9", nil })
+	out, err := planstore.ProposePlanChange(ctx, pool, store.Writer{Actor: "thread:s1", Token: "operator"}, "k1", "R2", "a new item",
+		[]planstore.PlanChange{{Op: "add_node", Parent: "R2", Kind: "item", Title: "second"}},
+		func(context.Context, planstore.Card) (string, error) { return "q_9", nil })
 	must(t, err)
 	if out["question_id"] != "q_9" {
 		t.Fatalf("proposal: %v", out)
 	}
-	w := &world{questions: map[string]seenfacts.Question{"q_9": {ID: "q_9", Status: seenfacts.QuestionAnswered, Option: store.CardApplyKey,
+	w := &world{questions: map[string]seenfacts.Question{"q_9": {ID: "q_9", Status: seenfacts.QuestionAnswered, Option: planstore.CardApplyKey,
 		AnsweredBy: "owner", AnsweredAt: "2026-10-14T20:00:00Z"}}}
 	c := &controller.Controller{DB: pool, Sources: w.sources(), LeaseEvery: time.Hour, FactsEvery: 20 * time.Millisecond}
 	run, cancel := context.WithCancel(ctx)

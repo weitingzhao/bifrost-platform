@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
@@ -69,7 +70,7 @@ type progressDoc struct {
 func (w *world) progress(t *testing.T) progressDoc {
 	t.Helper()
 	ctx := ctxOf(t)
-	out, err := store.Progress(ctx, w.rt)
+	out, err := planstore.Progress(ctx, w.rt)
 	ok(t, err)
 	raw, err := json.Marshal(out)
 	ok(t, err)
@@ -118,7 +119,7 @@ func TestProgressPausedMissionWithoutTasks(t *testing.T) {
 		return storekit.MoveMission(ctx, tx, "controller", "M-1", "paused", "the Owner asked")
 	}))
 	for _, m := range w.progress(t).Work.Missions {
-		if m.MissionID == "M-1" && (m.Status != store.StatusBlocked || m.Reason != "the mission is paused by controller: the Owner asked" ||
+		if m.MissionID == "M-1" && (m.Status != planstore.StatusBlocked || m.Reason != "the mission is paused by controller: the Owner asked" ||
 			m.WaitingOn != "coordinator" || m.Since == "") {
 			t.Fatalf("M-1 %s %q %s since %q", m.Status, m.Reason, m.WaitingOn, m.Since)
 		}
@@ -133,21 +134,21 @@ func TestChangeBlocks(t *testing.T) {
 	w := newKernelWorld(t)
 	const s4 = "R2:2.1-4"
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: s4, Parent: item, Kind: "step", Label: "2.1-4", Title: "s4",
+		_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: s4, Parent: item, Kind: "step", Label: "2.1-4", Title: "s4",
 			MissionID: "M-2", StepKind: "agent", Ordinal: 3, Root: root})
 		return err
 	}))
 	for name, c := range map[string]struct {
-		changes []store.PlanChange
+		changes []planstore.PlanChange
 		want    string
 	}{
-		"retitle an item: the tasks on its steps": {[]store.PlanChange{{Op: "retitle", Node: item, Title: "x"}}, "map[missions:[M-1 M-2] unfinished_tasks:0]"},
-		"retitle a step": {[]store.PlanChange{{Op: "retitle", Node: s1, Title: "x"}}, "map[missions:[M-1] unfinished_tasks:0]"},
-		"a mission_id a retitle carries binds nothing": {[]store.PlanChange{{Op: "retitle", Node: s1, Title: "x", MissionID: "M-2"}}, "map[missions:[M-1] unfinished_tasks:0]"},
-		"rebind a step: both missions":                 {[]store.PlanChange{{Op: "rebind_step", Node: s1, MissionID: "M-2"}}, "map[missions:[M-1 M-2] unfinished_tasks:0]"},
-		"bind a step with no mission":                  {[]store.PlanChange{{Op: "rebind_step", Node: s2, MissionID: "M-2"}}, "map[missions:[M-2] unfinished_tasks:0]"},
-		"add a step to an item":                        {[]store.PlanChange{{Op: "add_node", Parent: item, Kind: "step", Title: "x"}}, "map[missions:[M-1 M-2] unfinished_tasks:0]"},
-		"add an item to a round: nothing known":        {[]store.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: "x"}}, "map[unknown:the change touches no step a mission's work sits on]"},
+		"retitle an item: the tasks on its steps": {[]planstore.PlanChange{{Op: "retitle", Node: item, Title: "x"}}, "map[missions:[M-1 M-2] unfinished_tasks:0]"},
+		"retitle a step": {[]planstore.PlanChange{{Op: "retitle", Node: s1, Title: "x"}}, "map[missions:[M-1] unfinished_tasks:0]"},
+		"a mission_id a retitle carries binds nothing": {[]planstore.PlanChange{{Op: "retitle", Node: s1, Title: "x", MissionID: "M-2"}}, "map[missions:[M-1] unfinished_tasks:0]"},
+		"rebind a step: both missions":                 {[]planstore.PlanChange{{Op: "rebind_step", Node: s1, MissionID: "M-2"}}, "map[missions:[M-1 M-2] unfinished_tasks:0]"},
+		"bind a step with no mission":                  {[]planstore.PlanChange{{Op: "rebind_step", Node: s2, MissionID: "M-2"}}, "map[missions:[M-2] unfinished_tasks:0]"},
+		"add a step to an item":                        {[]planstore.PlanChange{{Op: "add_node", Parent: item, Kind: "step", Title: "x"}}, "map[missions:[M-1 M-2] unfinished_tasks:0]"},
+		"add an item to a round: nothing known":        {[]planstore.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: "x"}}, "map[unknown:the change touches no step a mission's work sits on]"},
 	} {
 		got, err := store.ChangeBlocksForTest(ctx, w.rt, c.changes)
 		ok(t, err)
@@ -163,22 +164,22 @@ func TestChangeBlocks(t *testing.T) {
 // Serial: it lowers needs_you's bound (LimitPendingChangesForTest).
 func TestNeedsYouOneItemPerCard(t *testing.T) {
 	w := newWorld(t)
-	card := func(id string) func(context.Context, store.Card) (string, error) {
-		return func(context.Context, store.Card) (string, error) { return id, nil }
+	card := func(id string) func(context.Context, planstore.Card) (string, error) {
+		return func(context.Context, planstore.Card) (string, error) { return id, nil }
 	}
 	for key, q := range map[string]string{"c1": "q_same", "c2": "q_same", "c3": "q_other", "c4": "q_done"} {
-		_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, root, "rename the item "+key,
-			[]store.PlanChange{{Op: "retitle", Node: item, Title: key}}, card(q))
+		_, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, root, "rename the item "+key,
+			[]planstore.PlanChange{{Op: "retitle", Node: item, Title: key}}, card(q))
 		ok(t, err)
 	}
 	refused := func(_ context.Context, id string) (seenfacts.Question, bool) {
 		if id == "q_done" {
-			return seenfacts.Question{ID: id, Status: seenfacts.QuestionAnswered, Option: store.CardRefuseKey, AnsweredBy: "owner",
+			return seenfacts.Question{ID: id, Status: seenfacts.QuestionAnswered, Option: planstore.CardRefuseKey, AnsweredBy: "owner",
 				AnsweredAt: "2026-10-14T20:00:00Z"}, true
 		}
 		return seenfacts.Question{ID: id, Status: "open"}, true
 	}
-	if n, err := store.DecidePlanChanges(ctx, w.rt, refused, nil); err != nil || n != 1 {
+	if n, err := planstore.DecidePlanChanges(ctx, w.rt, refused, nil); err != nil || n != 1 {
 		t.Fatalf("decided %d (%v); want the one answered card", n, err)
 	}
 	doc := w.progress(t)

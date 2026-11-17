@@ -1,0 +1,252 @@
+package planstore
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
+)
+
+type planFactsSnapshot struct {
+	Now          time.Time
+	Views        map[string]viewAdoption
+	Docs         map[string]*planview.Document
+	Warnings     map[string]string
+	Observations map[string]planObservation
+	Passes       map[string]planPassSeen
+}
+
+// planPassSeen is a root's latest collector pass.
+type planPassSeen struct {
+	Fresh map[string]time.Time
+	At    time.Time
+}
+
+// One SQL statement gives a committed snapshot even inside the runtime's
+// required READ COMMITTED write transaction. No global event-id watermark is
+// used: each stream's sequence is authoritative (including late commits).
+func readPlanFacts(ctx context.Context, tx pgx.Tx) (*planFactsSnapshot, error) {
+	var raw []byte
+	err := tx.QueryRow(ctx, `WITH views AS (
+ SELECT DISTINCT ON(event_stream_id) body_json->'plan_view' a FROM agentrt.event WHERE event_type='note' AND body_json ? 'plan_view' ORDER BY event_stream_id,seq DESC
+ ), docs AS (
+ SELECT a,encode(b.body,'base64') body FROM views LEFT JOIN agentrt.artifact_blob b ON b.artifact_id=a->>'artifact_id'
+ ), observations AS (
+ SELECT DISTINCT ON(body_json->'plan_observation'->>'binding_sha256') body_json->'plan_observation' o FROM agentrt.event WHERE event_type='note' AND body_json ? 'plan_observation' AND actor_id='controller'
+ ORDER BY body_json->'plan_observation'->>'binding_sha256',(body_json->'plan_observation'->>'source_version')::bigint DESC
+ ), passes AS (
+ SELECT p.* FROM views v CROSS JOIN LATERAL (SELECT body_json->'plan_observation_pass' pass FROM agentrt.event WHERE event_stream_id='plan-observation-pass:'||(v.a->>'root') AND actor_id='controller' AND body_json ? 'plan_observation_pass' ORDER BY seq DESC LIMIT 1) p
+ ) SELECT jsonb_build_object('now',statement_timestamp(),
+ 'views',COALESCE((SELECT jsonb_agg(a) FROM docs),'[]'),
+ 'docs',COALESCE((SELECT jsonb_agg(jsonb_build_object('root',a->>'root','body',body)) FROM docs),'[]'),
+ 'observations',COALESCE((SELECT jsonb_agg(o) FROM observations),'[]'),
+ 'passes',COALESCE((SELECT jsonb_agg(pass) FROM passes),'[]'))`).Scan(&raw)
+	if err != nil {
+		return nil, err
+	}
+	var rows struct {
+		Now   time.Time
+		Views []viewAdoption
+		Docs  []struct {
+			Root string
+			Body []byte
+		}
+		Observations []planObservation
+		Passes       []planObservationPass
+	}
+	if err = json.Unmarshal(raw, &rows); err != nil {
+		return nil, err
+	}
+	s := &planFactsSnapshot{Now: rows.Now, Views: map[string]viewAdoption{}, Docs: map[string]*planview.Document{}, Warnings: map[string]string{}, Observations: map[string]planObservation{}, Passes: map[string]planPassSeen{}}
+	for _, v := range rows.Views {
+		s.Views[v.Root] = v
+	}
+	for _, r := range rows.Docs {
+		// Parse the original bytes here: a SQL JSON cast (or extracting bindings
+		// before validation) lets one corrupt artifact abort every root's read.
+		d, e := planview.Parse(r.Body)
+		if e == nil && (d.Root != r.Root || d.Tenant != s.Views[r.Root].Tenant || d.Version != s.Views[r.Root].Version) {
+			e = fmt.Errorf("document identity does not match adoption")
+		}
+		if e != nil {
+			detail := []rune(strings.Join(strings.Fields(e.Error()), " "))
+			if len(detail) > 180 {
+				detail = append(detail[:180], '…')
+			}
+			s.Warnings[r.Root] = fmt.Sprintf("Plan root %s: view document unavailable: %s", r.Root, string(detail))
+			continue
+		}
+		s.Docs[r.Root] = d
+	}
+	for _, o := range rows.Observations {
+		s.Observations[o.Digest] = o
+	}
+	// A pass that read a binding again with the same answer is its latest
+	// success: the answer was not rewritten (CollectPlanObservations).
+	for _, p := range rows.Passes {
+		seen := planPassSeen{Fresh: map[string]time.Time{}}
+		var e error
+		if seen.At, e = time.Parse(time.RFC3339Nano, p.At); e != nil {
+			return nil, e
+		}
+		for d, at := range p.Fresh {
+			if seen.Fresh[d], e = time.Parse(time.RFC3339Nano, at); e != nil {
+				return nil, e
+			}
+		}
+		s.applyPass(p.Root, seen)
+	}
+	return s, nil
+}
+
+// applyPass records a root's latest pass and moves each binding's last
+// success to the time the pass recorded for it, when later.
+func (s *planFactsSnapshot) applyPass(root string, p planPassSeen) {
+	s.Passes[root] = p
+	for d, seen := range p.Fresh {
+		o, ok := s.Observations[d]
+		if !ok || o.Status != "Fresh" || o.Root != root {
+			continue
+		}
+		if at, e := time.Parse(time.RFC3339Nano, o.LastSuccess); e == nil && seen.After(at) {
+			o.LastSuccess = timeText(seen)
+			s.Observations[d] = o
+		}
+	}
+}
+
+func (s *planFactsSnapshot) find(step, atom, id string, version int) (planview.Binding, bool) {
+	for _, d := range s.Docs {
+		bs, _ := d.Bindings()
+		for _, b := range bs {
+			if b.Step == step && b.Atom == atom && b.ID == id && b.Version == version {
+				return b, true
+			}
+		}
+	}
+	return planview.Binding{}, false
+}
+func (s *planFactsSnapshot) reading(b planview.Binding) (plan.Tri, string, planObservation) {
+	o := s.Observations[b.Digest()]
+	if b.Retired() {
+		// Its source is retired: whatever was last observed proves nothing now.
+		return plan.Unknown, "Unknown", o
+	}
+	if o.Digest == "" {
+		return plan.Unknown, "Unknown", o
+	}
+	at, e := time.Parse(time.RFC3339Nano, o.LastSuccess)
+	if e == nil && s.Now.Before(at) {
+		return plan.Unknown, "Unknown", o
+	}
+	if e == nil && s.Now.Sub(at) > planObservationTTL {
+		return plan.Unknown, "Stale", o
+	}
+	if o.Status != "Fresh" {
+		return plan.Unknown, "Unknown", o
+	}
+	switch o.Value {
+	case "true":
+		return plan.True, "Fresh", o
+	case "false":
+		return plan.False, "Fresh", o
+	}
+	return plan.Unknown, "Unknown", o
+}
+func (s *planFactsSnapshot) bindingValue(b planview.Binding, visiting map[string]bool) plan.Tri {
+	value, _, _ := s.reading(b)
+	if value != plan.True {
+		return value
+	}
+	d := s.Docs[b.Root]
+	if d == nil {
+		return plan.Unknown
+	}
+	for _, n := range d.Items {
+		if n.Node == b.Node {
+			milestone := ""
+			for _, a := range n.Acceptance {
+				if a.ID == b.Acceptance {
+					milestone = a.Milestone
+				}
+			}
+			for _, edge := range n.Dependencies {
+				if edge.Relation == "blocks" && edge.RequiredFor == milestone {
+					v := s.milestone(edge.Root, edge.Node, edge.Milestone, visiting)
+					if v != plan.True {
+						return v
+					}
+				}
+			}
+		}
+	}
+	return value
+}
+func (s *planFactsSnapshot) milestone(root, node, milestone string, visiting map[string]bool) plan.Tri {
+	key := root + "/" + node + "/" + milestone
+	if visiting[key] {
+		return plan.Unknown
+	}
+	visiting[key] = true
+	defer delete(visiting, key)
+	d := s.Docs[root]
+	if d == nil {
+		return plan.Unknown
+	}
+	bs, _ := d.Bindings()
+	result := plan.True
+	found := false
+	for _, n := range d.Items {
+		if n.Node != node {
+			continue
+		}
+		for _, a := range n.Acceptance {
+			if a.Milestone != milestone {
+				continue
+			}
+			found = true
+			bound := false
+			for _, b := range bs {
+				if b.Node != node || b.Acceptance != a.ID {
+					continue
+				}
+				bound = true
+				v := s.bindingValue(b, visiting)
+				if v == plan.False {
+					return plan.False
+				}
+				if v == plan.Unknown {
+					result = plan.Unknown
+				}
+			}
+			if !bound {
+				result = plan.Unknown
+			}
+		}
+	}
+	if !found {
+		return plan.Unknown
+	}
+	return result
+}
+func (f *stepFacts) BoundFact(atom, id string, version int) plan.Tri {
+	if f.err != nil {
+		return plan.Unknown
+	}
+	if f.planFacts == nil {
+		f.planFacts, f.err = readPlanFacts(f.ctx, f.tx)
+		if f.err != nil {
+			return plan.Unknown
+		}
+	}
+	b, ok := f.planFacts.find(f.step, atom, id, version)
+	if !ok {
+		return plan.Unknown
+	}
+	return f.planFacts.bindingValue(b, map[string]bool{})
+}

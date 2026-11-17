@@ -12,6 +12,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
@@ -112,7 +113,7 @@ func newWorld(t *testing.T) *world {
 			return err
 		}))
 	}
-	nodes := []store.PlanNode{
+	nodes := []planstore.PlanNode{
 		{ID: root, Kind: "round", Label: "2", Title: "round 2", Root: root},
 		{ID: item, Parent: root, Kind: "item", Label: "2.1", Title: "data layer", Root: root},
 		{ID: s1, Parent: item, Kind: "step", Label: "2.1-1", Title: "s1", MissionID: "M-1", StepKind: "agent", Ordinal: 0, Root: root},
@@ -121,7 +122,7 @@ func newWorld(t *testing.T) *world {
 	}
 	for _, n := range nodes {
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			_, err = store.CreatePlanNode(ctx, tx, "controller", n)
+			_, err = planstore.CreatePlanNode(ctx, tx, "controller", n)
 			return err
 		}))
 	}
@@ -167,7 +168,7 @@ func TestSeedAndFirstCreation(t *testing.T) {
 	if after := w.lastSeq(t, store.MissionStream("M-1")); after != before {
 		t.Fatalf("seq moved from %d to %d after a rolled-back event", before, after)
 	}
-	for _, s := range []string{"system", store.PlanStream(root), store.MissionStream("M-1"), store.MissionStream("M-2")} {
+	for _, s := range []string{"system", planstore.PlanStream(root), store.MissionStream("M-1"), store.MissionStream("M-2")} {
 		if _, err := store.VerifyStream(ctx, w.rt, s); err != nil {
 			t.Fatalf("%s: %v", s, err)
 		}
@@ -269,7 +270,7 @@ func TestTamperIsDetected(t *testing.T) {
 func planChange(w *world, fn func(tx pgx.Tx) error) error {
 	ctx := w.ctx
 	return store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: store.PlanStream(root), Type: "plan_changed", Actor: "controller",
+		if _, err := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream(root), Type: "plan_changed", Actor: "controller",
 			Body: map[string]any{"change": "test"}}); err != nil {
 			return err
 		}
@@ -298,7 +299,7 @@ func TestPlanNumberingIsFixed(t *testing.T) {
 	}), "")
 	// A step under a round, an item under an item.
 	wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: "R2:x", Parent: root, Kind: "step", Label: "x", Title: "x", StepKind: "agent", Ordinal: 5, Root: root})
+		_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R2:x", Parent: root, Kind: "step", Label: "x", Title: "x", StepKind: "agent", Ordinal: 5, Root: root})
 		return err
 	}), "cannot sit under")
 	// State only with its own event type.
@@ -313,10 +314,10 @@ func TestCountingFromTheDatabase(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.SetStepState(ctx, tx, "controller", root, s1, "done", "test"); err != nil {
+		if _, err := planstore.SetStepState(ctx, tx, "controller", root, s1, "done", "test"); err != nil {
 			return err
 		}
-		_, err := store.SetStepState(ctx, tx, "controller", root, s2, "dropped", "test")
+		_, err := planstore.SetStepState(ctx, tx, "controller", root, s2, "dropped", "test")
 		return err
 	}))
 	rows, err := w.rt.Query(ctx, `SELECT plan_node_id, state FROM agentrt.plan_node WHERE parent_plan_node_id = $1 ORDER BY ordinal`, item)

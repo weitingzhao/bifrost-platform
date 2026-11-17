@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
 // Review td397-rec-1 A1: a plan change's card made by a try whose
@@ -20,11 +20,11 @@ func TestPlanChangeCardRetryFindsItsCard(t *testing.T) {
 	ctx := context.Background()
 	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
 	ask := rt.agentRuntimeAsk()
-	recommended := store.Card{Title: "Plan change to ARCH: the catalog's gates", Body: "A thread proposes to change plan ARCH.\n\n- a change",
+	recommended := planstore.Card{Title: "Plan change to ARCH: the catalog's gates", Body: "A thread proposes to change plan ARCH.\n\n- a change",
 		Recommended: 1, RecommendedWhy: "it gives architecture rows their first gates, exactly the reviewed catalog's for stg"}
 	plain := recommended
 	plain.Recommended, plain.RecommendedWhy = 0, ""
-	for i, tries := range [][2]store.Card{{recommended, plain}, {plain, recommended}} {
+	for i, tries := range [][2]planstore.Card{{recommended, plain}, {plain, recommended}} {
 		first, retry := tries[0], tries[1]
 		first.Key = strings.Repeat(string(rune('a'+i)), 32)
 		retry.Key = first.Key
@@ -36,7 +36,7 @@ func TestPlanChangeCardRetryFindsItsCard(t *testing.T) {
 			t.Fatalf("try %d: the retry got %q (%v), want card %s", i, again, err, id)
 		}
 		q, ok, err := rt.svc.Lookup(id)
-		if err != nil || !ok || (q.Recommended == store.CardApplyKey) != (first.Recommended == 1) {
+		if err != nil || !ok || (q.Recommended == planstore.CardApplyKey) != (first.Recommended == 1) {
 			t.Fatalf("try %d: the card %+v %v %v", i, q, ok, err)
 		}
 		other := retry

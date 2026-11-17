@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -41,12 +42,12 @@ func sessionServer(t *testing.T) (*Server, http.Handler) {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)
-	for _, n := range []store.PlanNode{
+	for _, n := range []planstore.PlanNode{
 		{ID: "R2", Kind: "round", Label: "2", Title: "round", Root: "R2"},
 		{ID: "R2:1", Parent: "R2", Kind: "item", Label: "1", Title: "item", Root: "R2"},
 		{ID: "R2:1-1", Parent: "R2:1", Kind: "step", Label: "1-1", Title: "step", StepKind: "agent", Root: "R2"},
 	} {
-		if err := store.InTx(ctx, pool, func(tx pgx.Tx) error { _, err := store.CreatePlanNode(ctx, tx, "controller", n); return err }); err != nil {
+		if err := store.InTx(ctx, pool, func(tx pgx.Tx) error { _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); return err }); err != nil {
 			t.Fatal(err)
 		}
 	}

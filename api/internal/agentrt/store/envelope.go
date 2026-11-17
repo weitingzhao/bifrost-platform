@@ -7,20 +7,21 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // The plan code reads the two rules it acts under through its ports
-// (planports.go): the rule in force of each kind, as far as the plan code
+// (planstore, planports.go): the rule in force of each kind, as far as the plan code
 // reads it. A rule that does not read counts as none there too (inForce).
 func init() {
-	BindPlanRules(RulePorts{
-		PlanRuleInForce: func(ctx context.Context, tx pgx.Tx) (*PlanRule, error) {
+	planstore.BindPlanRules(planstore.RulePorts{
+		PlanRuleInForce: func(ctx context.Context, tx pgx.Tx) (*planstore.PlanRule, error) {
 			r, err := inForce(ctx, tx, rules.KindPlan)
 			if err != nil || r == nil {
 				return nil, err
 			}
-			return &PlanRule{ID: r.ID, Version: r.Version, DoneRules: r.Plan.DoneRules}, nil
+			return &planstore.PlanRule{ID: r.ID, Version: r.Version, DoneRules: r.Plan.DoneRules}, nil
 		},
 		CardAutoKindsInForce: func(ctx context.Context, tx pgx.Tx) ([]string, error) {
 			r, err := inForce(ctx, tx, rules.KindCardAuto)

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 
 	"github.com/jackc/pgx/v5"
@@ -20,18 +21,18 @@ func SetHook(f func(point, arg string)) func() {
 // LimitPendingChangesForTest lowers the most plan changes needs_you lists,
 // and returns the function that restores it.
 func LimitPendingChangesForTest(n int) func() {
-	old := PendingChangeLimit
-	PendingChangeLimit = n
-	return func() { PendingChangeLimit = old }
+	old := planstore.PendingChangeLimit
+	planstore.PendingChangeLimit = n
+	return func() { planstore.PendingChangeLimit = old }
 }
 
 // ChangeBlocksForTest is what changes would hold up, read in a transaction
 // of their own.
-func ChangeBlocksForTest(ctx context.Context, db DB, changes []PlanChange) (any, error) {
+func ChangeBlocksForTest(ctx context.Context, db DB, changes []planstore.PlanChange) (any, error) {
 	var out any
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		var err error
-		out, err = ChangeBlocks(ctx, tx, changes)
+		out, err = planstore.ChangeBlocks(ctx, tx, changes)
 		return err
 	})
 	return out, err

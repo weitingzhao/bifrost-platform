@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -233,15 +234,15 @@ func TestPlanTreeOrder(t *testing.T) {
 	t.Parallel()
 	pool, _ := world(t)
 	s := server(t, pool)
-	for _, n := range []store.PlanNode{
+	for _, n := range []planstore.PlanNode{
 		{ID: "R2:2", Parent: "R2", Kind: "item", Label: "2", Title: "second item", Ordinal: 1, Root: "R2"},
 		{ID: "R2:1-2", Parent: "R2:1", Kind: "step", Label: "1-2", Title: "second step", MissionID: "M-1", StepKind: "agent", Ordinal: 1, Root: "R2"},
 		{ID: "R2:2-1", Parent: "R2:2", Kind: "step", Label: "2-1", Title: "a step", MissionID: "M-1", StepKind: "agent", Root: "R2"},
 	} {
-		must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error { _, err := store.CreatePlanNode(ctx, tx, "controller", n); return err }))
+		must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error { _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); return err }))
 	}
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		_, err := store.SetStepState(ctx, tx, "controller", "R2", "R2:1-2", "active", "test")
+		_, err := planstore.SetStepState(ctx, tx, "controller", "R2", "R2:1-2", "active", "test")
 		return err
 	}))
 	_, tree := call(t, s, "viewer", "GET", "plan?root=R2", nil)

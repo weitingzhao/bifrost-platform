@@ -16,6 +16,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
@@ -26,7 +27,7 @@ import (
 func TestRulePortsAreBoundToTheRuleStore(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	read := func() (plan *store.PlanRule, kinds []string, direct [2]*store.StoredRule) {
+	read := func() (plan *planstore.PlanRule, kinds []string, direct [2]*store.StoredRule) {
 		t.Helper()
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			var err error
@@ -55,7 +56,7 @@ func TestRulePortsAreBoundToTheRuleStore(t *testing.T) {
 	if direct[0] == nil || direct[1] == nil || len(direct[1].CardAuto.Kinds) == 0 || !direct[0].Plan.DoneRules {
 		t.Fatalf("the fixture rules are not in force: %+v", direct)
 	}
-	if plan == nil || *plan != (store.PlanRule{ID: direct[0].ID, Version: direct[0].Version, DoneRules: direct[0].Plan.DoneRules}) {
+	if plan == nil || *plan != (planstore.PlanRule{ID: direct[0].ID, Version: direct[0].Version, DoneRules: direct[0].Plan.DoneRules}) {
 		t.Fatalf("the plan-standing port: %+v; the rule store: %+v", plan, direct[0])
 	}
 	if !reflect.DeepEqual(kinds, direct[1].CardAuto.Kinds) {
@@ -145,7 +146,7 @@ func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 // Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the recorder import binds its two ports at the package's start (recorderimport.go); this holds that binding in place, that each port answers what the recorder import's own function answers, and that the plan's copies of its card options and stream prefix (the progress projection shows them) are the recorder import's words.
 func TestRecorderImportPortsAreBoundToTheRecorderImport(t *testing.T) {
 	t.Parallel()
-	for _, changes := range [][]store.PlanChange{
+	for _, changes := range [][]planstore.PlanChange{
 		{{Op: store.OpRecorderImport, Artifact: "sha256:log"}},
 		{{Op: store.OpRecorderImport}},
 		{{Op: "retitle", Node: s1, Title: "x"}},
@@ -158,7 +159,7 @@ func TestRecorderImportPortsAreBoundToTheRecorderImport(t *testing.T) {
 			t.Fatalf("the port on %+v: %q %v; the recorder import: %q %v", changes, log, is, wantLog, wantIs)
 		}
 	}
-	if log, is, _ := store.RecorderImportLogForTest([]store.PlanChange{{Op: store.OpRecorderImport, Artifact: "sha256:log"}}); log != "sha256:log" || !is {
+	if log, is, _ := store.RecorderImportLogForTest([]planstore.PlanChange{{Op: store.OpRecorderImport, Artifact: "sha256:log"}}); log != "sha256:log" || !is {
 		t.Fatalf("a recorder import is not told: %q %v", log, is)
 	}
 	// The landing of a log that is not stored: refused in the recorder
@@ -186,18 +187,18 @@ func TestCoordinationPortIsBoundToCoord(t *testing.T) {
 	w := newWorld(t)
 	alerts := func() []string {
 		t.Helper()
-		rows, err := w.rt.Query(ctx, `SELECT body_json::text || ' cause ' || cause_event_id || ' node ' || plan_node_id FROM agentrt.event WHERE event_type = 'policy_alert' AND event_stream_id = $1 ORDER BY event_id`, store.PlanStream(root))
+		rows, err := w.rt.Query(ctx, `SELECT body_json::text || ' cause ' || cause_event_id || ' node ' || plan_node_id FROM agentrt.event WHERE event_type = 'policy_alert' AND event_stream_id = $1 ORDER BY event_id`, planstore.PlanStream(root))
 		ok(t, err)
 		out, err := pgx.CollectRows(rows, pgx.RowTo[string])
 		ok(t, err)
 		return out
 	}
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		note, err := store.Append(ctx, tx, store.Event{Stream: store.PlanStream(root), Type: "note", Actor: "controller", PlanNode: s1, Body: map[string]any{"text": "a note"}})
+		note, err := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream(root), Type: "note", Actor: "controller", PlanNode: s1, Body: map[string]any{"text": "a note"}})
 		if err != nil {
 			return err
 		}
-		on := store.Event{Stream: store.PlanStream(root), PlanNode: s1}
+		on := store.Event{Stream: planstore.PlanStream(root), PlanNode: s1}
 		if err = store.AlertClaimForTest(ctx, tx, on, note.EventID, "plan_note", "", []byte("nothing claimed here")); err != nil {
 			return err
 		}
@@ -209,8 +210,8 @@ func TestCoordinationPortIsBoundToCoord(t *testing.T) {
 	if got := alerts(); len(got) != 2 || got[0] != got[1] || !strings.Contains(got[0], "approval_claim") {
 		t.Fatalf("the port's alert and coord's: %q", got)
 	}
-	if store.MaxNoteText != coord.MaxMessageBody {
-		t.Fatalf("a note is at most %d bytes; a message body %d", store.MaxNoteText, coord.MaxMessageBody)
+	if planstore.MaxNoteText != coord.MaxMessageBody {
+		t.Fatalf("a note is at most %d bytes; a message body %d", planstore.MaxNoteText, coord.MaxMessageBody)
 	}
 }
 

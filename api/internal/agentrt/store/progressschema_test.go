@@ -8,6 +8,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -30,7 +31,7 @@ type schemaDoc struct {
 
 func progressOf(t *testing.T, db store.DB) (schemaDoc, json.RawMessage) {
 	t.Helper()
-	out, err := store.Progress(ctx, db)
+	out, err := planstore.Progress(ctx, db)
 	ok(t, err)
 	raw, err := json.Marshal(out)
 	ok(t, err)

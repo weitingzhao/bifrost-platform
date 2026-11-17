@@ -5,10 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -16,6 +17,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -25,7 +27,7 @@ func (a *API) getPlanView(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "bad_request", "root is required")
 		return
 	}
-	out, err := store.PlanViewPage(r.Context(), a.DB, root, r.URL.Query().Get("recent_cursor"))
+	out, err := planstore.PlanViewPage(r.Context(), a.DB, root, r.URL.Query().Get("recent_cursor"))
 	if err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):

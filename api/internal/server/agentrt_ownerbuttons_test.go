@@ -15,6 +15,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -126,7 +127,7 @@ func TestOwnerButtonPaths(t *testing.T) {
 	}
 	// One question store a group of cards: the store takes six cards an
 	// hour from the runtime.
-	var ask store.Ask
+	var ask planstore.Ask
 	var question func(context.Context, string) (seenfacts.Question, bool)
 	var ack func(context.Context, string) error
 	group := func() {
@@ -156,13 +157,13 @@ func TestOwnerButtonPaths(t *testing.T) {
 				return err
 			}
 		}
-		for _, n := range []store.PlanNode{
+		for _, n := range []planstore.PlanNode{
 			{ID: "R9", Kind: "round", Label: "9", Title: "round", Root: "R9"},
 			{ID: "R9:1", Parent: "R9", Kind: "item", Label: "1", Title: "item", Root: "R9"},
 			{ID: "R9:1-1", Parent: "R9:1", Kind: "step", Label: "1-1", Title: "step", MissionID: "M-3", StepKind: "agent", Root: "R9"},
 			{ID: "R9:1-2", Parent: "R9:1", Kind: "step", Label: "1-2", Title: "step", MissionID: "M-3", StepKind: "agent", Root: "R9", Ordinal: 1},
 		} {
-			if _, err := store.CreatePlanNode(ctx, tx, "controller", n); err != nil {
+			if _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); err != nil {
 				return err
 			}
 		}
@@ -170,8 +171,8 @@ func TestOwnerButtonPaths(t *testing.T) {
 	})
 	planCards := map[string]string{}
 	for option, step := range map[string]string{"a": "R9:1-1", "b": "R9:1-2"} {
-		out, err := store.ProposePlanChange(ctx, b.conn, thread, "rebind-"+option, "R9", "move "+step,
-			[]store.PlanChange{{Op: "rebind_step", Node: step, MissionID: "M-4"}}, ask)
+		out, err := planstore.ProposePlanChange(ctx, b.conn, thread, "rebind-"+option, "R9", "move "+step,
+			[]planstore.PlanChange{{Op: "rebind_step", Node: step, MissionID: "M-4"}}, ask)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -191,7 +192,7 @@ func TestOwnerButtonPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := store.ProposePlanImport(ctx, b.conn, thread, "import", "round 2 into the runtime", req, ask)
+	out, err := planstore.ProposePlanImport(ctx, b.conn, thread, "import", "round 2 into the runtime", req, ask)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +211,7 @@ func TestOwnerButtonPaths(t *testing.T) {
 		}
 		b.answer(recorderCards[option], option, "")
 	}
-	if n, err := store.DecidePlanChanges(ctx, b.conn, question, ack); err != nil || n != 5 {
+	if n, err := planstore.DecidePlanChanges(ctx, b.conn, question, ack); err != nil || n != 5 {
 		t.Fatalf("proposals decided %d (%v)", n, err)
 	}
 	// What the import buttons did (review 453 B1): b left round 2 out of the
@@ -225,13 +226,13 @@ func TestOwnerButtonPaths(t *testing.T) {
 		}
 	}
 	// a on a plan import of its own: round 2 is in the plan.
-	out, err = store.ProposePlanImport(ctx, b.conn, thread, "import-a", "round 2 into the runtime", req, ask)
+	out, err = planstore.ProposePlanImport(ctx, b.conn, thread, "import-a", "round 2 into the runtime", req, ask)
 	if err != nil {
 		t.Fatal(err)
 	}
 	importA, _ := out["question_id"].(string)
 	b.answer(importA, "a", "")
-	if n, err := store.DecidePlanChanges(ctx, b.conn, question, ack); err != nil || n != 1 || b.decision(importA) != "applied" {
+	if n, err := planstore.DecidePlanChanges(ctx, b.conn, question, ack); err != nil || n != 1 || b.decision(importA) != "applied" {
 		t.Fatalf("a on the plan import: decided %d (%v)", n, err)
 	}
 	if n := b.count(`SELECT count(*) FROM agentrt.plan_node WHERE plan_node_id = 'R2' OR plan_node_id LIKE 'R2:%'`); n != 1+len(req.Nodes) {

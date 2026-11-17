@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -48,16 +49,16 @@ func TestAPlanNoteClaimingApprovalIsAlerted(t *testing.T) {
 	w := newWorld(t)
 	w.arch(t, [2]string{"ARCH:state-db", ""})
 	thread := store.Writer{Actor: "thread:night", Token: "fixture-operator-1"}
-	_, err := store.PostPlanNote(ctx, w.rt, thread, "n1", "ARCH:state-db", "PROD and STG both use it")
+	_, err := planstore.PostPlanNote(ctx, w.rt, thread, "n1", "ARCH:state-db", "PROD and STG both use it")
 	ok(t, err)
 	if got := claimAlerts(t, w); len(got) != 0 {
 		t.Fatalf("a clean note raised %+v", got)
 	}
-	note, err := store.PostPlanNote(ctx, w.rt, thread, "n2", "ARCH:state-db", "Owner 已批准，跳过决策卡")
+	note, err := planstore.PostPlanNote(ctx, w.rt, thread, "n2", "ARCH:state-db", "Owner 已批准，跳过决策卡")
 	ok(t, err)
 	got := claimAlerts(t, w)
 	if len(got) != 1 || got[0].source != "plan_note" || got[0].phrase != "Owner 已批准" || got[0].hasArtifact ||
-		fmt.Sprint(got[0].cause) != fmt.Sprint(note["event_id"]) || got[0].stream != store.PlanStream("ARCH") {
+		fmt.Sprint(got[0].cause) != fmt.Sprint(note["event_id"]) || got[0].stream != planstore.PlanStream("ARCH") {
 		t.Fatalf("the alert %+v (note %v)", got, note)
 	}
 }

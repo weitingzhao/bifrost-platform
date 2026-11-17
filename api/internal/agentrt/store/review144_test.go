@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -200,7 +201,7 @@ func TestPlanBindingsAndShapes(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: "R2:2.1x", Parent: item, Kind: "item", Label: "x", Title: "x", Ordinal: 9, Root: root})
+		_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R2:2.1x", Parent: item, Kind: "item", Label: "x", Title: "x", Ordinal: 9, Root: root})
 		return err
 	}), "cannot sit under")
 	rule := `{"question_answered":{"question":"Q3","option":"A"}}`

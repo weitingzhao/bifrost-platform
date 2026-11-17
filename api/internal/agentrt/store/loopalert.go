@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopreadings"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
 // A controller loop that keeps failing the same way (TD-411: STG's facts
@@ -93,8 +94,8 @@ func LoopAlertOpen(ctx context.Context, db DB, loop string) (bool, error) {
 }
 
 // The plan code's Progress reads the failing loops through its port
-// (planports.go); this file is their provider and binds it.
-func init() { BindPlanLoops(LoopPorts{Failing: failingLoops}) }
+// (planstore, planports.go); this file is their provider and binds it.
+func init() { planstore.BindPlanLoops(planstore.LoopPorts{Failing: failingLoops}) }
 
 func failingLoops(ctx context.Context, tx pgx.Tx) ([]map[string]any, error) {
 	return loopreadings.Failing(ctx, tx, ControllerLoops, func(ctx context.Context, tx pgx.Tx, loop string) (loopreadings.Record, error) {

@@ -24,6 +24,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
@@ -59,12 +60,12 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 		}
 		return storekit.MoveMission(ctx, tx, "controller", "M-1", "active", "test")
 	})
-	for _, n := range []store.PlanNode{
+	for _, n := range []planstore.PlanNode{
 		{ID: "R2", Kind: "round", Label: "2", Title: "round", Root: "R2"},
 		{ID: "R2:1", Parent: "R2", Kind: "item", Label: "1", Title: "item", Root: "R2"},
 		{ID: "R2:1-1", Parent: "R2:1", Kind: "step", Label: "1-1", Title: "step", MissionID: "M-1", StepKind: "agent", Root: "R2"},
 	} {
-		tx(func(tx pgx.Tx) error { _, err := store.CreatePlanNode(ctx, tx, "controller", n); return err })
+		tx(func(tx pgx.Tx) error { _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); return err })
 	}
 	must(t, seedHost(ctx, pool, "owner", "h1", "dev"))
 	_, ferr := pool.Exec(ctx, agentrttest.DispatchRules)
@@ -108,7 +109,7 @@ var recordMu sync.Mutex
 // the next asks fail, as a full question store would; anchor is the key a
 // signed rule must verify against.
 var (
-	cards    []store.Card
+	cards    []planstore.Card
 	askFails bool
 	anchor   string
 )
@@ -175,7 +176,7 @@ intake_tokens:
 	// A claim reads and parses the rules it acts on; under a whole suite's
 	// load one pass can take longer than a few hundred milliseconds.
 	api := &agentrtapi.API{DB: db, ClaimWait: time.Second, ClaimPoll: 50 * time.Millisecond,
-		Ask: func(_ context.Context, c store.Card) (string, error) {
+		Ask: func(_ context.Context, c planstore.Card) (string, error) {
 			if askFails {
 				return "", fmt.Errorf("store full")
 			}

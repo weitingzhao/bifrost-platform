@@ -4,12 +4,14 @@ package store_test
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
 // Old cards remain readable even though their creation path is retired.
@@ -35,8 +37,8 @@ func historicalMissionCard(t *testing.T, w *world, id, question string) (string,
 func TestNeedsYouOneBoundForEveryCard(t *testing.T) {
 	w := newKernelWorld(t)
 	historicalMissionCard(t, w, "M-30", "q_old_a")
-	_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "c", root, "rename the item", []store.PlanChange{{Op: "retitle", Node: item, Title: "x"}},
-		func(context.Context, store.Card) (string, error) { return "q_plan", nil })
+	_, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "c", root, "rename the item", []planstore.PlanChange{{Op: "retitle", Node: item, Title: "x"}},
+		func(context.Context, planstore.Card) (string, error) { return "q_plan", nil })
 	ok(t, err)
 	defer store.LimitPendingChangesForTest(1)()
 	doc := w.progress(t)

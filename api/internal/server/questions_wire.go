@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -119,15 +120,15 @@ func (rt *questionRuntime) agentRuntimeQuestion() func(context.Context, string) 
 // proposal so a retry finds the same card. A planner's card and a mission's
 // card name their own options; only a planner's has a default and a task.
 // nil without a question store.
-func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
+func (rt *questionRuntime) agentRuntimeAsk() planstore.Ask {
 	if rt == nil || rt.svc == nil {
 		return nil
 	}
-	return func(ctx context.Context, card store.Card) (string, error) {
+	return func(ctx context.Context, card planstore.Card) (string, error) {
 		req := map[string]any{
 			"title":           questions.ClipTitle(card.Title),
 			"body":            card.Body,
-			"options":         []map[string]string{{"label": store.CardApply}, {"label": store.CardRefuse}},
+			"options":         []map[string]string{{"label": planstore.CardApply}, {"label": planstore.CardRefuse}},
 			"urgency":         "when you can: only this change waits for you",
 			"meanwhile":       "the plan stays as it is",
 			"owner_duty":      "goal",
@@ -137,7 +138,7 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 		// (TD-397 F-T33-rec: the catalog's first gates, gatesRecommend), with
 		// why beside that option; STG's rule takes it, PROD's Owner reads it.
 		if card.Recommended > 0 && len(card.Options) == 0 {
-			options := []map[string]string{{"label": store.CardApply}, {"label": store.CardRefuse}}
+			options := []map[string]string{{"label": planstore.CardApply}, {"label": planstore.CardRefuse}}
 			if card.Recommended <= len(options) && card.RecommendedWhy != "" {
 				options[card.Recommended-1]["detail"] = card.RecommendedWhy
 			}
@@ -226,11 +227,11 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 // (TD-390): the open ones and those its rule answered that it has not
 // acknowledged, by RuleCards, which writes nothing; nil without a question
 // store.
-func (rt *questionRuntime) agentRuntimeCards() func(context.Context) ([]store.RuntimeCard, error) {
+func (rt *questionRuntime) agentRuntimeCards() func(context.Context) ([]planstore.RuntimeCard, error) {
 	if rt == nil || rt.svc == nil || rt.reads == nil {
 		return nil
 	}
-	return func(ctx context.Context) ([]store.RuntimeCard, error) {
+	return func(ctx context.Context) ([]planstore.RuntimeCard, error) {
 		type r struct {
 			qs  []questions.Question
 			err error
@@ -245,9 +246,9 @@ func (rt *questionRuntime) agentRuntimeCards() func(context.Context) ([]store.Ru
 		if x.err != nil {
 			return nil, x.err
 		}
-		cards := make([]store.RuntimeCard, 0, len(x.qs))
+		cards := make([]planstore.RuntimeCard, 0, len(x.qs))
 		for _, q := range x.qs {
-			c := store.RuntimeCard{ID: q.ID, TaskID: q.TaskID, Recommended: q.Recommended, CreatedAt: q.CreatedAt}
+			c := planstore.RuntimeCard{ID: q.ID, TaskID: q.TaskID, Recommended: q.Recommended, CreatedAt: q.CreatedAt}
 			for _, o := range q.Options {
 				c.Options = append(c.Options, o.Key)
 			}
@@ -280,7 +281,7 @@ func (rt *questionRuntime) agentRuntimeRuleAnswer() func(ctx context.Context, id
 // sameCard says whether a question the store holds is the card c: the same
 // task and option labels (a blocked card's third names its mission). The
 // title is not compared: the store cleans it, and it is the task's anyway.
-func sameCard(q questions.Question, c store.Card) bool {
+func sameCard(q questions.Question, c planstore.Card) bool {
 	if q.TaskID != c.TaskID || len(q.Options) != len(c.Options) {
 		return false
 	}
@@ -349,7 +350,7 @@ func (rt *questionRuntime) agentRuntimeAck() func(context.Context, string) error
 		case http.StatusOK:
 			return nil
 		case http.StatusNotFound:
-			return fmt.Errorf("%w: %s", store.ErrQuestionGone, id)
+			return fmt.Errorf("%w: %s", planstore.ErrQuestionGone, id)
 		}
 		return fmt.Errorf("the question store answered %d: %v", res.Code, res.Body)
 	}

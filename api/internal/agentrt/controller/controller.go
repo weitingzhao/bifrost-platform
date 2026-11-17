@@ -16,6 +16,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
@@ -60,7 +61,7 @@ type Sources struct {
 	// settled and records the verdict (server/post_release.go); nil when
 	// that is switched off.
 	PostRelease func(ctx context.Context) error
-	Plan        store.PlanSources
+	Plan        planstore.PlanSources
 	Approval    func(ctx context.Context, number int64) (seenfacts.ApprovalFact, bool)
 	Question    func(ctx context.Context, id string) (q seenfacts.Question, ok bool)
 	// Ack tells the question store the runtime used the answer of a card it
@@ -73,7 +74,7 @@ type Sources struct {
 	// leaves a plan with questions submitted until there is one. Withdraw
 	// takes back the cards of a plan's round that was refused; nil leaves
 	// them open.
-	Ask      store.Ask
+	Ask      planstore.Ask
 	Withdraw store.Withdraw
 	CI       func(ctx context.Context, repo, commit string) (status, run string, ok bool)
 	Deployed seenfacts.Deployed
@@ -144,7 +145,7 @@ func (c *Controller) PlanObservations(ctx context.Context) (int, error) {
 			return original(rctx, repo, task, result, snapshot)
 		}
 	}
-	return store.CollectPlanObservations(ctx, c.DB, src)
+	return planstore.CollectPlanObservations(ctx, c.DB, src)
 }
 
 // boundedDeployed reads a deployment with the per-read timeout, for the done
@@ -184,7 +185,7 @@ func (c *Controller) logf(format string, args ...any) {
 // is recorded. One record that cannot be read or recorded does not stop the
 // others; the errors come back joined. It returns how many it recorded.
 func (c *Controller) Facts(ctx context.Context) (int, error) {
-	nodes, err := store.RuledNodes(ctx, c.DB)
+	nodes, err := planstore.RuledNodes(ctx, c.DB)
 	if err != nil {
 		return 0, err
 	}
@@ -283,7 +284,7 @@ func (c *Controller) PlanDecisions(ctx context.Context) (int, error) {
 	if c.Sources.Question == nil {
 		return 0, nil
 	}
-	return store.DecidePlanChanges(ctx, c.DB, c.question, c.ack())
+	return planstore.DecidePlanChanges(ctx, c.DB, c.question, c.ack())
 }
 
 // question reads a question with the per-read timeout.
@@ -311,7 +312,7 @@ func (c *Controller) ack() func(context.Context, string) error {
 // evaluated, standing conditions against what is deployed now. One step that
 // fails does not stop the others. It returns how many steps moved.
 func (c *Controller) Rules(ctx context.Context) (int, error) {
-	nodes, err := store.RuledNodes(ctx, c.DB)
+	nodes, err := planstore.RuledNodes(ctx, c.DB)
 	if err != nil {
 		return 0, err
 	}
@@ -321,7 +322,7 @@ func (c *Controller) Rules(ctx context.Context) (int, error) {
 		if n.Kind != "step" {
 			continue
 		}
-		to, err := store.EvaluateStep(ctx, c.DB, n.ID, c.boundedDeployed)
+		to, err := planstore.EvaluateStep(ctx, c.DB, n.ID, c.boundedDeployed)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("step %s: %w", n.ID, err))
 		}

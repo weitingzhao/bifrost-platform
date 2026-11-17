@@ -20,6 +20,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -106,7 +107,7 @@ func checkImport(t *testing.T, path, board string, stars []string) {
 			active++
 		}
 	}
-	res, err := store.ImportPlan(ctx, pool, "controller", req)
+	res, err := planstore.ImportPlan(ctx, pool, "controller", req)
 	must(t, err)
 	if !res.Imported || res.Nodes != 1+len(req.Nodes) || res.Done != done || res.Active != active || res.EventID == 0 {
 		t.Fatalf("import = %+v; want %d nodes, %d done, %d active", res, 1+len(req.Nodes), done, active)
@@ -272,7 +273,7 @@ func checkImport(t *testing.T, path, board string, stars []string) {
 	}
 
 	// The plan's stream is one unbroken chain.
-	if _, err := store.VerifyStream(ctx, pool, store.PlanStream("R2")); err != nil {
+	if _, err := store.VerifyStream(ctx, pool, planstore.PlanStream("R2")); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -305,14 +306,14 @@ func TestPlanImportHeadAfterOtherEvents(t *testing.T) {
 	pool := seeded(t)
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
 		for i := 0; i < 501; i++ {
-			if _, err := store.Append(ctx, tx, store.Event{Stream: store.PlanStream("R2"), Type: "note", Actor: "controller",
+			if _, err := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream("R2"), Type: "note", Actor: "controller",
 				Body: map[string]any{"text": fmt.Sprintf("before the import %d", i)}}); err != nil {
 				return err
 			}
 		}
 		return nil
 	}))
-	res, err := store.ImportPlan(ctx, pool, "controller", ledger(t, fixtureLedger))
+	res, err := planstore.ImportPlan(ctx, pool, "controller", ledger(t, fixtureLedger))
 	must(t, err)
 	s := server(t, pool)
 	if got := importHead(t, s, "R2"); got != res.Request {
@@ -338,10 +339,10 @@ func TestPlanImportTwice(t *testing.T) {
 	t.Parallel()
 	pool := seeded(t)
 	req := ledger(t, fixtureLedger)
-	first, err := store.ImportPlan(ctx, pool, "controller", req)
+	first, err := planstore.ImportPlan(ctx, pool, "controller", req)
 	must(t, err)
 	after := counts(t, pool)
-	again, err := store.ImportPlan(ctx, pool, "controller", req)
+	again, err := planstore.ImportPlan(ctx, pool, "controller", req)
 	must(t, err)
 	if again.Imported || again.EventID != first.EventID || again.Request != first.Request || counts(t, pool) != after {
 		t.Fatalf("second import = %+v (first %+v); counts %v, were %v", again, first, counts(t, pool), after)
@@ -351,7 +352,7 @@ func TestPlanImportTwice(t *testing.T) {
 	other := ledger(t, fixtureLedger)
 	other.Nodes[1].Evidence.Line = strings.Replace(other.Nodes[1].Evidence.Line, other.Nodes[1].Title, other.Nodes[1].Title+"（改）", 1)
 	other.Nodes[1].Title += "（改）"
-	if _, oerr := store.ImportPlan(ctx, pool, "controller", other); !errors.Is(oerr, store.ErrInvalid) ||
+	if _, oerr := planstore.ImportPlan(ctx, pool, "controller", other); !errors.Is(oerr, store.ErrInvalid) ||
 		!strings.Contains(oerr.Error(), "already exists and was not imported from this request") {
 		t.Fatalf("a different request: %v", oerr)
 	}
@@ -361,14 +362,14 @@ func TestPlanImportTwice(t *testing.T) {
 
 	// The plan moves on (a step added within the standing authorization);
 	// the same request again still only says it was imported.
-	out, err := store.ProposePlanChange(ctx, pool, store.Writer{Actor: "thread:local_test", Token: "reporter"}, "k1", "R2", "one more step",
-		[]store.PlanChange{{Op: "add_node", Parent: "R2:2.1", Kind: "step", StepKind: "agent", Title: "new"}}, nil)
+	out, err := planstore.ProposePlanChange(ctx, pool, store.Writer{Actor: "thread:local_test", Token: "reporter"}, "k1", "R2", "one more step",
+		[]planstore.PlanChange{{Op: "add_node", Parent: "R2:2.1", Kind: "step", StepKind: "agent", Title: "new"}}, nil)
 	must(t, err)
 	if out["decision"] != "applied" {
 		t.Fatalf("proposal = %v", out)
 	}
 	moved := counts(t, pool)
-	again, err = store.ImportPlan(ctx, pool, "controller", req)
+	again, err = planstore.ImportPlan(ctx, pool, "controller", req)
 	must(t, err)
 	if again.Imported || counts(t, pool) != moved {
 		t.Fatalf("import after the plan moved = %+v", again)
@@ -381,27 +382,27 @@ func TestPlanImportTwice(t *testing.T) {
 func TestPlanImportNumberingContinues(t *testing.T) {
 	t.Parallel()
 	pool := seeded(t)
-	_, err := store.ImportPlan(ctx, pool, "controller", ledger(t, fixtureLedger))
+	_, err := planstore.ImportPlan(ctx, pool, "controller", ledger(t, fixtureLedger))
 	must(t, err)
-	out, err := store.ProposePlanChange(ctx, pool, store.Writer{Actor: "thread:local_test", Token: "reporter"}, "k1", "R2", "one more step",
-		[]store.PlanChange{{Op: "add_node", Parent: "R2:2.1", Kind: "step", StepKind: "agent", Title: "new step"}}, nil)
+	out, err := planstore.ProposePlanChange(ctx, pool, store.Writer{Actor: "thread:local_test", Token: "reporter"}, "k1", "R2", "one more step",
+		[]planstore.PlanChange{{Op: "add_node", Parent: "R2:2.1", Kind: "step", StepKind: "agent", Title: "new step"}}, nil)
 	must(t, err)
 	if fmt.Sprint(out["nodes"]) != "[R2:2.1-6]" {
 		t.Fatalf("step added = %v", out)
 	}
 	// An item is outside the standing authorization: the Owner's card, his
 	// Apply, the controller's decision pass.
-	ask := func(context.Context, store.Card) (string, error) { return "q_1", nil }
-	out, err = store.ProposePlanChange(ctx, pool, store.Writer{Actor: "thread:local_test", Token: "reporter"}, "k2", "R2", "one more item",
-		[]store.PlanChange{{Op: "add_node", Parent: "R2", Kind: "item", Title: "new item"}}, ask)
+	ask := func(context.Context, planstore.Card) (string, error) { return "q_1", nil }
+	out, err = planstore.ProposePlanChange(ctx, pool, store.Writer{Actor: "thread:local_test", Token: "reporter"}, "k2", "R2", "one more item",
+		[]planstore.PlanChange{{Op: "add_node", Parent: "R2", Kind: "item", Title: "new item"}}, ask)
 	must(t, err)
 	if out["question_id"] != "q_1" {
 		t.Fatalf("item proposal = %v", out)
 	}
 	answered := func(_ context.Context, id string) (seenfacts.Question, bool) {
-		return seenfacts.Question{ID: id, Status: seenfacts.QuestionAnswered, Option: store.CardApplyKey}, true
+		return seenfacts.Question{ID: id, Status: seenfacts.QuestionAnswered, Option: planstore.CardApplyKey}, true
 	}
-	n, err := store.DecidePlanChanges(ctx, pool, answered, nil)
+	n, err := planstore.DecidePlanChanges(ctx, pool, answered, nil)
 	must(t, err)
 	if n != 1 {
 		t.Fatalf("%d decided", n)
@@ -423,11 +424,11 @@ func TestPlanImportAllOrNothing(t *testing.T) {
 	t.Parallel()
 	pool := seeded(t)
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		_, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: "R9", Kind: "round", Label: "9", Title: "x", Ordinal: 2, Root: "R9"})
+		_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R9", Kind: "round", Label: "9", Title: "x", Ordinal: 2, Root: "R9"})
 		return err
 	}))
 	before := counts(t, pool)
-	if _, err := store.ImportPlan(ctx, pool, "controller", ledger(t, fixtureLedger)); err == nil {
+	if _, err := planstore.ImportPlan(ctx, pool, "controller", ledger(t, fixtureLedger)); err == nil {
 		t.Fatal("an import over a taken root place succeeded")
 	}
 	if counts(t, pool) != before {

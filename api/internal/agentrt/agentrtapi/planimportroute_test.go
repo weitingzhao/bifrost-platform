@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -51,7 +52,7 @@ func TestPlanImportThroughTheCard(t *testing.T) {
 	}
 	c := cards[len(cards)-1]
 	if !strings.HasPrefix(c.Title, "Import plan R2: ") || c.OwnerDuty != "irreversible" || len(c.Options) != 2 ||
-		c.Options[0] != store.ImportApply || !strings.Contains(c.Body, "9 done") {
+		c.Options[0] != planstore.ImportApply || !strings.Contains(c.Body, "9 done") {
 		t.Fatalf("card = %+v", c)
 	}
 	q := out["question_id"].(string)
@@ -92,13 +93,13 @@ func TestPlanImportThroughTheCard(t *testing.T) {
 	mustJSON(t, get(t, s, "progress"), &progress)
 	if len(progress.NeedsYou.Items) != 1 || progress.NeedsYou.Items[0].ID != "question:"+q ||
 		!strings.HasPrefix(progress.NeedsYou.Items[0].Title, "Import plan R2") ||
-		fmt.Sprint(progress.NeedsYou.Items[0].Action["options"]) != fmt.Sprint([]string{store.ImportApply, store.ImportRefuse}) {
+		fmt.Sprint(progress.NeedsYou.Items[0].Action["options"]) != fmt.Sprint([]string{planstore.ImportApply, planstore.ImportRefuse}) {
 		t.Fatalf("needs_you = %+v", progress.NeedsYou.Items)
 	}
 
 	// He answers Import: the controller lands it, its head caused by the
 	// decision.
-	n, err := store.DecidePlanChanges(ctx, pool, answer(store.CardApplyKey), nil)
+	n, err := planstore.DecidePlanChanges(ctx, pool, answer(planstore.CardApplyKey), nil)
 	must(t, err)
 	if n != 1 {
 		t.Fatalf("%d decided", n)
@@ -143,7 +144,7 @@ func TestPlanImportRefusedAndFailed(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("import proposal = %d %v", code, out)
 	}
-	n, err := store.DecidePlanChanges(ctx, pool, answer(store.CardRefuseKey), nil)
+	n, err := planstore.DecidePlanChanges(ctx, pool, answer(planstore.CardRefuseKey), nil)
 	must(t, err)
 	if n != 1 {
 		t.Fatalf("%d decided", n)
@@ -162,9 +163,9 @@ func TestPlanImportRefusedAndFailed(t *testing.T) {
 	other := ledger(t, fixtureLedger)
 	other.Nodes[1].Evidence.Line = strings.Replace(other.Nodes[1].Evidence.Line, other.Nodes[1].Title, other.Nodes[1].Title+"（改）", 1)
 	other.Nodes[1].Title += "（改）"
-	_, err = store.ImportPlan(ctx, pool, "controller", other)
+	_, err = planstore.ImportPlan(ctx, pool, "controller", other)
 	must(t, err)
-	_, err = store.DecidePlanChanges(ctx, pool, answer(store.CardApplyKey), nil)
+	_, err = planstore.DecidePlanChanges(ctx, pool, answer(planstore.CardApplyKey), nil)
 	must(t, err)
 	var decision, why string
 	must(t, pool.QueryRow(ctx, `SELECT body_json->>'decision', COALESCE(body_json->>'error', '') FROM agentrt.event
@@ -178,7 +179,7 @@ func TestPlanImportRefusedAndFailed(t *testing.T) {
 	pool2 := seeded(t)
 	s2 := server(t, pool2)
 	must(t, store.InTx(ctx, pool2, func(tx pgx.Tx) error {
-		_, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: "R9", Kind: "round", Label: "9", Title: "x", Ordinal: 2, Root: "R9"})
+		_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R9", Kind: "round", Label: "9", Title: "x", Ordinal: 2, Root: "R9"})
 		return err
 	}))
 	before = len(cards)

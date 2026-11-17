@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -46,7 +47,7 @@ func TestArchTableThroughTheInterface(t *testing.T) {
 		if code, out := call(t, s, "proposer", "POST", "plan/imports", importBody(key, req), session, "s1"); code != 200 || out["question_id"] == nil {
 			t.Fatalf("import %s = %d %v", req.Root.ID, code, out)
 		}
-		if n, err := store.DecidePlanChanges(ctx, pool, answer(store.CardApplyKey), nil); err != nil || n != 1 {
+		if n, err := planstore.DecidePlanChanges(ctx, pool, answer(planstore.CardApplyKey), nil); err != nil || n != 1 {
 			t.Fatalf("decide %s: %d %v", req.Root.ID, n, err)
 		}
 	}
@@ -92,11 +93,11 @@ func TestArchTableThroughTheInterface(t *testing.T) {
 	}
 	got := rows()
 	guard, state := got["ARCH:release-guard"], got["ARCH:state-db"]
-	if guard.Tick != "unknown" || !strings.Contains(guard.Reason, store.ReasonGatesRetired) || guard.Title != "发布护栏" ||
+	if guard.Tick != "unknown" || !strings.Contains(guard.Reason, planstore.ReasonGatesRetired) || guard.Title != "发布护栏" ||
 		guard.Note == nil || guard.Note.Text != "在正式环境" || guard.Note.By != "controller" {
 		t.Fatalf("release-guard = %+v", guard)
 	}
-	if state.Tick != "unknown" || state.Reason != store.ReasonNoGate || state.Note == nil || state.Note.Text != "两个环境都在用" {
+	if state.Tick != "unknown" || state.Reason != planstore.ReasonNoGate || state.Note == nil || state.Note.Text != "两个环境都在用" {
 		t.Fatalf("state-db = %+v", state)
 	}
 
@@ -146,7 +147,7 @@ func TestArchTableThroughTheInterface(t *testing.T) {
 		"empty":          {"plan/ARCH:state-db/notes", note("e5", ""), http.StatusUnprocessableEntity},
 		"no key":         {"plan/ARCH:state-db/notes", note("", "x"), http.StatusUnprocessableEntity},
 		"a local path":   {"plan/ARCH:state-db/notes", note("e6", "see /home/agent/notes"), http.StatusUnprocessableEntity},
-		"too long":       {"plan/ARCH:state-db/notes", note("e7", strings.Repeat("a", store.MaxNoteText+1)), http.StatusUnprocessableEntity},
+		"too long":       {"plan/ARCH:state-db/notes", note("e7", strings.Repeat("a", planstore.MaxNoteText+1)), http.StatusUnprocessableEntity},
 		"an extra field": {"plan/ARCH:state-db/notes", map[string]any{"idempotency_key": "e8", "text": "x", "manual": "y"}, http.StatusBadRequest},
 	} {
 		if code, out := call(t, s, "operator", "POST", c.path, c.body, session, "night"); code != c.code {

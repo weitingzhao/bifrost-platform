@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -240,7 +241,7 @@ func TestEventsReadOnSeesALateCommit(t *testing.T) {
 	first := appendIn(early, "system", "legacy_imported", map[string]any{"source": "test: the early one"})
 	var second int64
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		second = appendIn(tx, store.PlanStream("R2"), "plan_change_proposed", map[string]any{"changes": []any{map[string]any{"op": "retitle"}},
+		second = appendIn(tx, planstore.PlanStream("R2"), "plan_change_proposed", map[string]any{"changes": []any{map[string]any{"op": "retitle"}},
 			"reason": "test: the later one", "standing": false, "question_id": "q_late"})
 		return nil
 	}))

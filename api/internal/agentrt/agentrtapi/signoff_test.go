@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
 // The Console's fixture of steps the Owner signs off (console/src/api/__fixtures__/agentrt-plan-signoffs.testdb.json):
@@ -41,7 +41,7 @@ func TestOwnerSignsAStepOff(t *testing.T) {
 	if code, out := call(t, s, "proposer", "POST", "plan/imports", importBody("r2", ledger(t, fixtureLedger)), session, "s1"); code != 200 || out["question_id"] == nil {
 		t.Fatalf("import = %d %v", code, out)
 	}
-	if n, err := store.DecidePlanChanges(ctx, pool, answer(store.CardApplyKey), nil); err != nil || n != 1 {
+	if n, err := planstore.DecidePlanChanges(ctx, pool, answer(planstore.CardApplyKey), nil); err != nil || n != 1 {
 		t.Fatalf("decide the import: %d %v", n, err)
 	}
 	rule := func(node, doc string, bind ...map[string]string) map[string]any {
@@ -61,7 +61,7 @@ func TestOwnerSignsAStepOff(t *testing.T) {
 	if code != 200 || out["question_id"] == nil {
 		t.Fatalf("propose the rules = %d %v", code, out)
 	}
-	if n, err := store.DecidePlanChanges(ctx, pool, answer(store.CardApplyKey), nil); err != nil || n != 1 {
+	if n, err := planstore.DecidePlanChanges(ctx, pool, answer(planstore.CardApplyKey), nil); err != nil || n != 1 {
 		t.Fatalf("decide the rules: %d %v", n, err)
 	}
 	nodes := func() map[string]signedNode {

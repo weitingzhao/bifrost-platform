@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -46,7 +47,7 @@ func TestSessionHeldToItsToken(t *testing.T) {
 	for name, write := range map[string]func() error{
 		"a rule proposal": func() error { _, e := proposeForSession(ctx, w.rt, second, "k2"); return e },
 		"a plan change": func() error {
-			_, e := store.ProposePlanChange(ctx, w.rt, second, "k4", root, "rename", []store.PlanChange{{Op: "retitle", Node: item, Title: "x"}}, a.ask)
+			_, e := planstore.ProposePlanChange(ctx, w.rt, second, "k4", root, "rename", []planstore.PlanChange{{Op: "retitle", Node: item, Title: "x"}}, a.ask)
 			return e
 		},
 		"a control": func() error {

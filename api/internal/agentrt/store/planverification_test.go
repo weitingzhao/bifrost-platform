@@ -12,6 +12,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -61,14 +62,14 @@ func pvArtifact(t *testing.T, w *world, d *planview.Document, bs ...planview.Bin
 	}))
 	return id
 }
-func pvPoll(t *testing.T, w *world, src store.PlanSources) {
+func pvPoll(t *testing.T, w *world, src planstore.PlanSources) {
 	t.Helper()
-	_, err := store.CollectPlanObservations(ctx, w.rt, src)
+	_, err := planstore.CollectPlanObservations(ctx, w.rt, src)
 	ok(t, err)
 }
 func pvEvaluate(t *testing.T, w *world, step, want string) {
 	t.Helper()
-	_, err := store.EvaluateStep(ctx, w.rt, step, nil)
+	_, err := planstore.EvaluateStep(ctx, w.rt, step, nil)
 	ok(t, err)
 	if got := w.stepState(t, step); got != want {
 		t.Fatalf("step %s = %s; want %s", step, got, want)
@@ -83,7 +84,7 @@ func TestPV2MainFactsWithdrawAndReplay(t *testing.T) {
 	b.Repo = "bifrost-platform"
 	adoptView(t, w, pvArtifact(t, w, d, b), 0)
 	history := landing.Never
-	src := store.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
+	src := planstore.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
 		return landing.MainHistory{State: history, Commit: commitB}, nil
 	}}
 	ctl := controller.Controller{DB: w.rt, Sources: controller.Sources{Plan: src}}
@@ -118,7 +119,7 @@ func TestPV2MainFactsWithdrawAndReplay(t *testing.T) {
 	// A failed read writes no answer and does not withdraw done: the last
 	// answer stands until it is Stale (PV2 review S4); the pass records that
 	// this binding was not read.
-	if _, err := store.CollectPlanObservations(ctx, w.rt, store.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
+	if _, err := planstore.CollectPlanObservations(ctx, w.rt, planstore.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
 		return landing.MainHistory{}, errors.New("offline")
 	}}); err == nil || !strings.Contains(err.Error(), "offline") {
 		t.Fatalf("a failed read was not reported: %v", err)
@@ -153,14 +154,14 @@ func TestPV2OwnerAcceptanceVersionAndAuthority(t *testing.T) {
 	b := pvBinding(d, s1, "external_verified", "owner_signoff")
 	evidence := []string{w.artifact(t, "report", "drill evidence")}
 	adoptView(t, w, pvArtifact(t, w, d, b), 0)
-	pvPoll(t, w, store.PlanSources{})
+	pvPoll(t, w, planstore.PlanSources{})
 	pvEvaluate(t, w, s1, "planned")
-	_, err := store.SignOffStep(ctx, w.rt, "thread:pv", s1, b.SignoffRef(), evidence...)
-	is(t, err, store.ErrNotOwner)
-	_, err = store.SignOffStep(ctx, w.rt, store.OwnerActor, s1, b.SignoffRef(), evidence...)
+	_, err := planstore.SignOffStep(ctx, w.rt, "thread:pv", s1, b.SignoffRef(), evidence...)
+	is(t, err, planstore.ErrNotOwner)
+	_, err = planstore.SignOffStep(ctx, w.rt, planstore.OwnerActor, s1, b.SignoffRef(), evidence...)
 	ok(t, err)
 	pvEvaluate(t, w, s1, "planned")
-	pvPoll(t, w, store.PlanSources{})
+	pvPoll(t, w, planstore.PlanSources{})
 	pvEvaluate(t, w, s1, "done")
 	oldRef := b.SignoffRef()
 	d.Version = 2
@@ -168,13 +169,13 @@ func TestPV2OwnerAcceptanceVersionAndAuthority(t *testing.T) {
 	d.Items[0].Acceptance[0].Criterion = "A different acceptance"
 	b.AcceptanceSHA256 = planview.AcceptanceDigest(d.Items[0].Acceptance[0])
 	adoptView(t, w, pvArtifact(t, w, d, b), 1)
-	pvPoll(t, w, store.PlanSources{})
+	pvPoll(t, w, planstore.PlanSources{})
 	pvEvaluate(t, w, s1, "active")
-	_, err = store.SignOffStep(ctx, w.rt, store.OwnerActor, s1, oldRef, evidence...)
+	_, err = planstore.SignOffStep(ctx, w.rt, planstore.OwnerActor, s1, oldRef, evidence...)
 	is(t, err, store.ErrInvalid)
-	_, err = store.SignOffStep(ctx, w.rt, store.OwnerActor, s1, b.SignoffRef(), evidence...)
+	_, err = planstore.SignOffStep(ctx, w.rt, planstore.OwnerActor, s1, b.SignoffRef(), evidence...)
 	ok(t, err)
-	pvPoll(t, w, store.PlanSources{})
+	pvPoll(t, w, planstore.PlanSources{})
 	pvEvaluate(t, w, s1, "done")
 }
 
@@ -187,8 +188,8 @@ func TestPV2RetiredSourcesAreNotAdopted(t *testing.T) {
 	w := newKernelWorld(t)
 	zero := 0
 	adopt := func(key string, d *planview.Document, b planview.Binding) error {
-		_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), key, root, "test",
-			[]store.PlanChange{{Op: "adopt_plan_view", Artifact: pvArtifact(t, w, d, b), ExpectedVersion: &zero}}, (&asker{}).ask)
+		_, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:pv"), key, root, "test",
+			[]planstore.PlanChange{{Op: "adopt_plan_view", Artifact: pvArtifact(t, w, d, b), ExpectedVersion: &zero}}, (&asker{}).ask)
 		return err
 	}
 	runtime := func(b planview.Binding) planview.Binding {
@@ -227,10 +228,10 @@ func TestPV2DependencyReblocksActualSteps(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, e := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: "R2:2.2", Parent: root, Kind: "item", Label: "2.2", Title: "dependent", Root: root, Ordinal: 2}); e != nil {
+		if _, e := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R2:2.2", Parent: root, Kind: "item", Label: "2.2", Title: "dependent", Root: root, Ordinal: 2}); e != nil {
 			return e
 		}
-		_, e := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: "R2:2.2-1", Parent: "R2:2.2", Kind: "step", StepKind: "agent", Label: "2.2-1", Title: "dependent step", Root: root})
+		_, e := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R2:2.2-1", Parent: "R2:2.2", Kind: "step", StepKind: "agent", Label: "2.2-1", Title: "dependent step", Root: root})
 		return e
 	}))
 	d := pvDocument(t, 1)
@@ -254,7 +255,7 @@ func TestPV2DependencyReblocksActualSteps(t *testing.T) {
 	d.Items = append(d.Items, second)
 	adoptView(t, w, pvArtifact(t, w, d, b), 0)
 	history := landing.Effective
-	src := store.PlanSources{History: func(_ context.Context, repo, task, result, snapshot string) (landing.MainHistory, error) {
+	src := planstore.PlanSources{History: func(_ context.Context, repo, task, result, snapshot string) (landing.MainHistory, error) {
 		if result == commitA {
 			return landing.MainHistory{State: history, Commit: commitA}, nil
 		}
@@ -267,7 +268,7 @@ func TestPV2DependencyReblocksActualSteps(t *testing.T) {
 	pvPoll(t, w, src)
 	// Read model and downstream step react before the prerequisite step's own
 	// write. No dependence on iteration order or cached node states.
-	out, err := store.PlanView(ctx, w.rt, root)
+	out, err := planstore.PlanView(ctx, w.rt, root)
 	ok(t, err)
 	if len(out["waiting_on"].([]map[string]any)) != 1 {
 		t.Fatalf("dependency not blocked: %v", out["waiting_on"])

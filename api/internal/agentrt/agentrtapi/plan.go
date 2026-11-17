@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -76,10 +77,10 @@ func (a *API) getPlanNode(w http.ResponseWriter, r *http.Request) {
 }
 
 type planProposalBody struct {
-	IdempotencyKey string             `json:"idempotency_key"`
-	Root           string             `json:"root"`
-	Reason         string             `json:"reason"`
-	Changes        []store.PlanChange `json:"changes"`
+	IdempotencyKey string                 `json:"idempotency_key"`
+	Root           string                 `json:"root"`
+	Reason         string                 `json:"reason"`
+	Changes        []planstore.PlanChange `json:"changes"`
 }
 
 // proposePlanChange is POST /plan/proposals: plan_change_proposed; within
@@ -95,7 +96,7 @@ func (a *API) proposePlanChange(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	out, err := store.ProposePlanChange(r.Context(), a.DB, who, b.IdempotencyKey, b.Root, b.Reason, b.Changes, a.Ask)
+	out, err := planstore.ProposePlanChange(r.Context(), a.DB, who, b.IdempotencyKey, b.Root, b.Reason, b.Changes, a.Ask)
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -124,7 +125,7 @@ func (a *API) postPlanNote(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	out, err := store.PostPlanNote(r.Context(), a.DB, who, b.IdempotencyKey, chi.URLParam(r, "id"), b.Text)
+	out, err := planstore.PostPlanNote(r.Context(), a.DB, who, b.IdempotencyKey, chi.URLParam(r, "id"), b.Text)
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -155,7 +156,7 @@ func (a *API) signOffStep(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	out, err := store.SignOffStep(r.Context(), a.DB, who.Actor, chi.URLParam(r, "id"), b.Ref, b.Evidence...)
+	out, err := planstore.SignOffStep(r.Context(), a.DB, who.Actor, chi.URLParam(r, "id"), b.Ref, b.Evidence...)
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -203,7 +204,7 @@ func (a *API) proposePlanImport(w http.ResponseWriter, r *http.Request) {
 	if head.Format == recorderimport.Format {
 		out, err = store.ProposeRecorderImport(r.Context(), a.DB, who, b.IdempotencyKey, b.Reason, recorder, a.Ask)
 	} else {
-		out, err = store.ProposePlanImport(r.Context(), a.DB, who, b.IdempotencyKey, b.Reason, plan, a.Ask)
+		out, err = planstore.ProposePlanImport(r.Context(), a.DB, who, b.IdempotencyKey, b.Reason, plan, a.Ask)
 	}
 	if err != nil {
 		a.fail(w, err)
@@ -228,7 +229,7 @@ func strictly(w http.ResponseWriter, raw json.RawMessage, v any) bool {
 // SPEC-agentrt-progress-2026-10-14.md, computed on every read. A read that
 // fails is 503, never an old copy (review 181 B1).
 func (a *API) progress(w http.ResponseWriter, r *http.Request) {
-	out, err := store.ProgressSince(r.Context(), a.DB, a.back())
+	out, err := planstore.ProgressSince(r.Context(), a.DB, a.back())
 	if err != nil {
 		// Unknown, never an old copy or half of one (SPEC §1).
 		a.logf("agentrt progress: %v", err)

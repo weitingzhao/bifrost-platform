@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -23,22 +24,22 @@ func TestPV2SignoffEvidenceAtSigning(t *testing.T) {
 		evidence = append(evidence, w.artifact(t, "report", fmt.Sprintf("Evidence %d", i)))
 	}
 	for _, ids := range [][]string{nil, {}, {"not-an-artifact"}, {evidence[0], evidence[0]}, append(slices.Clone(evidence), evidence[0]), {"sha256:" + strings.Repeat("f", 64)}} {
-		if _, err := store.SignOffStep(ctx, w.rt, store.OwnerActor, s1, b.SignoffRef(), ids...); err == nil {
+		if _, err := planstore.SignOffStep(ctx, w.rt, planstore.OwnerActor, s1, b.SignoffRef(), ids...); err == nil {
 			t.Fatalf("accepted invalid evidence %v", ids)
 		}
 	}
 	if n := w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_type='owner_signoff'`); n != 0 {
 		t.Fatal("invalid requests wrote signoffs")
 	}
-	first, err := store.SignOffStep(ctx, w.rt, store.OwnerActor, s1, b.SignoffRef(), evidence...)
+	first, err := planstore.SignOffStep(ctx, w.rt, planstore.OwnerActor, s1, b.SignoffRef(), evidence...)
 	ok(t, err)
 	slices.Reverse(evidence)
-	again, err := store.SignOffStep(ctx, w.rt, store.OwnerActor, s1, b.SignoffRef(), evidence...)
+	again, err := planstore.SignOffStep(ctx, w.rt, planstore.OwnerActor, s1, b.SignoffRef(), evidence...)
 	ok(t, err)
 	if again["already_signed"] != true || again["event_id"] != first["event_id"] {
 		t.Fatal("retry was not idempotent")
 	}
-	if _, err = store.SignOffStep(ctx, w.rt, store.OwnerActor, s1, b.SignoffRef(), evidence[0]); err == nil {
+	if _, err = planstore.SignOffStep(ctx, w.rt, planstore.OwnerActor, s1, b.SignoffRef(), evidence[0]); err == nil {
 		t.Fatal("silently ignored changed evidence")
 	}
 	var body struct {
@@ -54,7 +55,7 @@ func TestPV2SignoffEvidenceAtSigning(t *testing.T) {
 	if body.Binding != b.Digest() || body.Acceptance != b.AcceptanceSHA256 || body.Version != 1 || !slices.Equal(body.Evidence, evidence) {
 		t.Fatalf("wrong signoff body: %s", raw)
 	}
-	pvPoll(t, w, store.PlanSources{})
+	pvPoll(t, w, planstore.PlanSources{})
 	var observed []string
 	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->'plan_observation'->'evidence' FROM agentrt.event WHERE event_stream_id=$1 ORDER BY seq DESC LIMIT 1`, "plan-observation:"+root).Scan(&observed))
 	if !slices.Equal(observed[1:], evidence) || !strings.HasPrefix(observed[0], "event:") {
@@ -82,7 +83,7 @@ func TestPV2SignoffCandidateEvidence(t *testing.T) {
 	otherSpec := w.artifact(t, "other", `{"v":1,"kind":"agentrt.external_work/v1","task":"Other","executor":"codex","provider":"openai","repo":"platform","branch":"other","acceptance_refs":["other"],"estimate_minutes":[1,2]}`)
 	_, err = store.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "other", Root: root, Node: s2, RunKey: "other", Artifact: otherSpec})
 	ok(t, err)
-	view, err := store.PlanView(ctx, w.rt, root)
+	view, err := planstore.PlanView(ctx, w.rt, root)
 	ok(t, err)
 	raw, err := json.Marshal(view)
 	ok(t, err)
@@ -108,6 +109,6 @@ func TestPV2SignoffCandidateEvidence(t *testing.T) {
 	if !ids[spec] || !ids[report] || ids[otherSpec] {
 		t.Fatalf("missing or cross-step evidence: %+v", out)
 	}
-	pvPoll(t, w, store.PlanSources{})
+	pvPoll(t, w, planstore.PlanSources{})
 	pvEvaluate(t, w, s1, "planned") // Suggestions are not a signature.
 }

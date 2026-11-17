@@ -8,18 +8,20 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
 
-// The plan code's ports (planports.go) whose providers are packages already
-// outside this one are bound here, at the package's start: this file is the
-// store's wiring and not the plan's, and it is the one place of the store
-// that names both sides. A provider still in this package binds its own
-// port from its own file (envelope.go, recorderimport.go).
+// The plan code's ports (planstore's planports.go) whose providers are
+// packages outside this one are bound here, at the package's start: this
+// file is the store's wiring and not the plan's, and it is the one place of
+// the store that names both sides. A provider still in this package binds
+// its own port from its own file (envelope.go, recorderimport.go,
+// loopalert.go).
 
 func init() {
-	BindPlanExternalWork(ExternalWorkPorts{
+	planstore.BindPlanExternalWork(planstore.ExternalWorkPorts{
 		CheckNote: func(record any) error {
 			var n externalwork.ExternalNote
 			if err := strictViewValue(record, &n); err != nil {
@@ -38,6 +40,6 @@ func init() {
 		},
 		ActivityBuckets: workregistration.ActivityBuckets,
 	})
-	BindPlanCoordination(CoordinationPorts{AlertClaim: coord.AlertClaim})
-	BindPlanQuestions(QuestionPorts{BodyBytes: questions.BodyBytes})
+	planstore.BindPlanCoordination(planstore.CoordinationPorts{AlertClaim: coord.AlertClaim})
+	planstore.BindPlanQuestions(planstore.QuestionPorts{BodyBytes: questions.BodyBytes})
 }

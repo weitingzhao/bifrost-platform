@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -45,7 +46,7 @@ func TestSignOffStepOnceAtATime(t *testing.T) {
 	}
 	results := make(chan result, 2)
 	press := func() {
-		out, err := store.SignOffStep(ctx, pool, store.OwnerActor, s1, "")
+		out, err := planstore.SignOffStep(ctx, pool, planstore.OwnerActor, s1, "")
 		results <- result{out, err}
 	}
 	go press()
@@ -86,7 +87,7 @@ func TestSignOffStepIsTheOwners(t *testing.T) {
 	w := newWorld(t)
 	w.rule(t, s1, `{"owner_signoff":"x"}`)
 	for _, actor := range []string{"thread:night", "seat:chief_of_staff", "controller", ""} {
-		if _, err := store.SignOffStep(ctx, w.rt, actor, s1, ""); !errors.Is(err, store.ErrNotOwner) {
+		if _, err := planstore.SignOffStep(ctx, w.rt, actor, s1, ""); !errors.Is(err, planstore.ErrNotOwner) {
 			t.Fatalf("%q signed a step off: %v", actor, err)
 		}
 	}
@@ -120,7 +121,7 @@ func TestSignOffStepAndAChangeAtOnce(t *testing.T) {
 		"a drop": {rule: `{"owner_signoff":"x"}`, change: func(pool *pgxpool.Pool) (int64, error) {
 			var id int64
 			err := store.InTx(ctx, pool, func(tx pgx.Tx) error {
-				ev, err := store.SetStepState(ctx, tx, "controller", root, s1, "dropped", "test")
+				ev, err := planstore.SetStepState(ctx, tx, "controller", root, s1, "dropped", "test")
 				id = ev.EventID
 				return err
 			})
@@ -133,7 +134,7 @@ func TestSignOffStepAndAChangeAtOnce(t *testing.T) {
 				if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 FOR UPDATE`, s1); err != nil {
 					return err
 				}
-				ev, err := store.Append(ctx, tx, store.Event{Stream: store.PlanStream(root), Type: "plan_changed", Actor: "controller",
+				ev, err := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream(root), Type: "plan_changed", Actor: "controller",
 					Body: map[string]any{"change": "set_done_rule"}})
 				if err != nil {
 					return err
@@ -148,10 +149,10 @@ func TestSignOffStepAndAChangeAtOnce(t *testing.T) {
 		"the rules pass": {rule: `{"any":[{"owner_signoff":"x"},{"manual":"m"}]}`, before: func(t *testing.T, w *world) {
 			proof := w.artifact(t, "other", "screenshot")
 			ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-				return store.RecordManual(ctx, tx, "owner", s1, "m", "checked", []string{proof})
+				return planstore.RecordManual(ctx, tx, "owner", s1, "m", "checked", []string{proof})
 			}))
 		}, change: func(pool *pgxpool.Pool) (int64, error) {
-			if to, err := store.EvaluateStep(ctx, pool, s1, nil); err != nil || to != "done" {
+			if to, err := planstore.EvaluateStep(ctx, pool, s1, nil); err != nil || to != "done" {
 				return 0, errors.Join(err, errors.New("the pass did not move the step to done: "+to))
 			}
 			return last(pool, "plan_node_state_changed")
@@ -178,7 +179,7 @@ func TestSignOffStepAndAChangeAtOnce(t *testing.T) {
 			}
 			signedC := make(chan signed, 1)
 			go func() {
-				out, err := store.SignOffStep(ctx, pool, store.OwnerActor, s1, "x")
+				out, err := planstore.SignOffStep(ctx, pool, planstore.OwnerActor, s1, "x")
 				signedC <- signed{out, err}
 			}()
 			<-held

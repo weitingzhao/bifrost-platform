@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -65,7 +66,7 @@ func TestALoopFailingTheSameWayIsAlertedOnce(t *testing.T) {
 		return out
 	}
 	failing := func() ([]string, error) {
-		doc, err := store.Progress(ctx, pool)
+		doc, err := planstore.Progress(ctx, pool)
 		if err != nil {
 			return nil, err
 		}
@@ -193,7 +194,7 @@ func TestAnOpenAlertIsAnsweredOnceTheLoopPasses(t *testing.T) {
 			t.Errorf("%s: %d notes that it passes again, want %d", loop, got, want)
 		}
 	}
-	doc, err := store.Progress(ctx, pool)
+	doc, err := planstore.Progress(ctx, pool)
 	must(t, err)
 	if alerts := doc["controller_alerts"].([]map[string]any); len(alerts) != 0 {
 		t.Fatalf("Progress lists %v", alerts)
