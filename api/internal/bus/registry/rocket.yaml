@@ -364,7 +364,7 @@ channels:
       version: 1
       lane: event
       guarantee: durable
-      subject: "<alertname>"
+      subject: "<alertname>@<namespace>"
       publisher: gate-db
       ref: "/api/v1/telemetry/alerts"
       reconcile: "Alertmanager re-sends while firing"

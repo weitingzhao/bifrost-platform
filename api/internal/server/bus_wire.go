@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"fmt"
+	busalerts "github.com/weitingzhao/bifrost-platform/api/internal/bus/alerts"
+	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"log/slog"
 	"net/http"
 	"os"
@@ -179,6 +181,23 @@ func (b *busWiring) db() eventlog.DB {
 	return nil
 }
 
+// announceAlerts writes Alertmanager's alerts to the bus as alert.rule.fired
+// (bus/alerts). Alerts it cannot name are left out; nothing is written while
+// the ledger is not connected.
+func (s *Server) announceAlerts(ctx context.Context, facts []opsagent.AlertFact) error {
+	db := s.bus.db()
+	if db == nil {
+		return nil
+	}
+	list := make([]busalerts.Alert, 0, len(facts))
+	for _, f := range facts {
+		if a, ok := busalerts.Normalize(f.Name, f.Namespace, f.Severity, f.Status); ok {
+			list = append(list, a)
+		}
+	}
+	return busalerts.Announce(ctx, db, list)
+}
+
 func busLogf(format string, args ...any) { slog.Info(fmt.Sprintf(format, args...)) }
 
 // busEventsAfter is the event log's cross-stream read, for the relay and the
@@ -194,6 +213,9 @@ func busEventsAfter(ctx context.Context, tx pgx.Tx, after relay.Cursor, limit in
 func (s *Server) mountBus(r chi.Router) {
 	h := bushook.New(s.bus.db)
 	r.Post("/bus/hooks/gitea", h.ServeHTTP)
+	if s.opsagent != nil {
+		s.opsagent.Announce = s.announceAlerts
+	}
 	route := func(serve func(*gate.Gate, http.ResponseWriter, *http.Request)) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			g := s.bus.gate.Load()

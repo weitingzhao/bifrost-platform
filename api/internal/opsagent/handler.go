@@ -1,7 +1,9 @@
 package opsagent
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -10,6 +12,16 @@ import (
 
 type Handler struct {
 	audit *actuation.AuditLog
+	// Announce, when set, writes each alert to the bus (alert.rule.fired) so
+	// the seat owning its namespace hears it (2026-11-16: warnings that went
+	// only to this webhook reached nobody for 43 hours). A failure is logged;
+	// the webhook still answers, and Alertmanager re-sends while firing.
+	Announce func(ctx context.Context, alerts []AlertFact) error
+}
+
+// AlertFact is what the bus takes of one alert.
+type AlertFact struct {
+	Name, Namespace, Severity, Status string
 }
 
 func NewHandler(audit *actuation.AuditLog) *Handler {
@@ -83,6 +95,20 @@ func (h *Handler) HandleAlertmanager(w http.ResponseWriter, r *http.Request) {
 			role = actuation.RoleReporter
 		}
 		h.audit.RecordDirect(name, role, "ops-agent.alertmanager", payload.Receiver, "ok", detail)
+	}
+	if h.Announce != nil {
+		facts := make([]AlertFact, 0, len(payload.Alerts))
+		for _, a := range payload.Alerts {
+			status := a.Status
+			if status == "" {
+				status = payload.Status
+			}
+			facts = append(facts, AlertFact{Name: labelVal(a.Labels, "alertname"), Namespace: labelVal(a.Labels, "namespace"),
+				Severity: labelVal(a.Labels, "severity"), Status: status})
+		}
+		if err := h.Announce(r.Context(), facts); err != nil {
+			slog.Warn("alerts not announced on the bus", "err", err, "count", len(facts))
+		}
 	}
 	writeJSON(w, http.StatusOK, diag)
 }
