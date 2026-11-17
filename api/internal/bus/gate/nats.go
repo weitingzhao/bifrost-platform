@@ -73,3 +73,55 @@ func (j *JSJourney) Receipts(ctx context.Context, id string, at time.Time) ([]Re
 	}
 	return out, err
 }
+
+// ReceiptRange reads back the receipts a page of events had, in one scan of
+// the receipt stream (a replay's receipts=1).
+type ReceiptRange interface {
+	ReceiptsOf(ctx context.Context, events []relay.Envelope) ([]ReceiptNote, error)
+}
+
+// ReceiptsOf scans the receipt stream from the first event's time (less
+// JourneyLead) to the last one's plus JourneyWindow, at most MaxScan
+// messages, and keeps the receipts of these events.
+func (j *JSJourney) ReceiptsOf(ctx context.Context, events []relay.Envelope) ([]ReceiptNote, error) {
+	ids := map[string]bool{}
+	var from, until time.Time
+	for _, e := range events {
+		ids[e.ID] = true
+		t, err := time.Parse(time.RFC3339Nano, e.Time)
+		if err != nil {
+			continue
+		}
+		if from.IsZero() || t.Before(from) {
+			from = t
+		}
+		if t.After(until) {
+			until = t
+		}
+	}
+	if from.IsZero() {
+		return nil, nil
+	}
+	var out []ReceiptNote
+	err := relay.ScanFrom(ctx, j.JS, relay.ReceiptStreamName(j.Tenant, j.Env), relay.ReceiptSubject(j.Tenant, j.Env),
+		from.Add(-JourneyLead), until.Add(JourneyWindow), MaxScan,
+		func(m relay.StreamMsg) bool {
+			id := m.Header.Get(relay.ReceiptEventHeader)
+			if !ids[id] {
+				return false
+			}
+			n := ReceiptNote{ID: id, Consumer: m.Header.Get(relay.ReceiptConsumerHeader), At: m.At}
+			var body relay.Receipt
+			if json.Unmarshal(m.Data, &body) == nil {
+				if t, err := time.Parse(time.RFC3339Nano, body.At); err == nil {
+					n.At = t
+				}
+			}
+			out = append(out, n)
+			return false
+		})
+	if errors.Is(err, jetstream.ErrStreamNotFound) {
+		return nil, nil
+	}
+	return out, err
+}

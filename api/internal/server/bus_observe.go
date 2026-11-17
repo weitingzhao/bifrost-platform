@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/observe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
 )
 
@@ -39,12 +40,46 @@ func (s *Server) handleBusObserve(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	cards, err := observeCards(r.Context(), &relay.PGLedger{DB: func() relay.TxBeginner { return pool }, EventsAfter: busEventsAfter}, busCursorAt(pool), since)
+	ledger := &relay.PGLedger{DB: func() relay.TxBeginner { return pool }, EventsAfter: busEventsAfter}
+	cards, err := observeCards(r.Context(), ledger, busCursorAt(pool), since)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, observe.Build(now, hours, letters, status, cards))
+	p := observe.Build(now, hours, letters, status, cards)
+	if tenants, err := registry.Load(); err == nil {
+		if t, ok := tenants[relay.Tenant]; ok {
+			if types, err := observeTypes(r.Context(), ledger, busCursorAt(pool), now.Add(-time.Hour), t.Types()); err == nil {
+				p.Rate = observe.NewRate(60, types)
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, p)
+}
+
+// observeTypes is the type of every bus event since a time, a page at a time.
+func observeTypes(ctx context.Context, l relay.Ledger, at func(context.Context, time.Time) (relay.Cursor, error), since time.Time, types []string) ([]string, error) {
+	c, err := at(ctx, since)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for page := 0; page < 50; page++ {
+		rows, next, err := l.After(ctx, c, 100, types)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			if !row.At.Before(since) {
+				out = append(out, row.Type)
+			}
+		}
+		if len(rows) < 100 || next == c {
+			break
+		}
+		c = next
+	}
+	return out, nil
 }
 
 // observeCards reads the cards' created and decided events since a time,

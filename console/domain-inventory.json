@@ -1772,6 +1772,7 @@
       "imports": [
         "console/src/api/agentThreads.ts",
         "console/src/api/client.ts",
+        "console/src/api/lineage.ts",
         "console/src/api/serverContact.ts",
         "console/src/components/layout"
       ],

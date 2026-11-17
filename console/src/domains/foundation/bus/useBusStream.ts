@@ -177,25 +177,29 @@ export async function fetchBusClients(): Promise<BusClientsResponse> {
 export const REPLAY_MAX_PAGES = 40
 
 /**
- * The last hours of events for the nerve map's replay: GET /api/v1/bus/events
- * with since=, each page from the time of the last event the one before gave
- * (an after= cursor would make it a delivery and write receipts; a since=
- * read writes none). Kept once by id; stops at an empty page or one with
- * nothing new. One read when asked, not a poll.
+ * The last hours of events for the nerve map's replay, with the receipts they
+ * had: GET /api/v1/bus/events with since= and receipts=1, each page from the
+ * time of the last event the one before gave (an after= cursor would make it
+ * a delivery and write receipts; a since= read writes none). Kept once by
+ * id; stops at an empty page or one with nothing new. One read when asked,
+ * not a poll. receiptsNote says why receipts are missing, when they are.
  */
-export async function fetchBusReplay(sinceIso: string): Promise<BusEnvelope[]> {
+export async function fetchBusReplay(sinceIso: string): Promise<{ events: BusEnvelope[]; receipts: BusReceipt[]; receiptsNote?: string }> {
   const out: BusEnvelope[] = []
+  const receipts: BusReceipt[] = []
+  let receiptsNote: string | undefined
   const seen = new Set<string>()
   let since = sinceIso
   for (let page = 0; page < REPLAY_MAX_PAGES; page++) {
-    const r = await authedFetch('bus replay', `/api/v1/bus/events?since=${encodeURIComponent(since)}&limit=100&wait=0&client=console`)
-    const body = (await r.json()) as { events?: BusEnvelope[] }
+    const r = await authedFetch('bus replay', `/api/v1/bus/events?since=${encodeURIComponent(since)}&limit=100&wait=0&receipts=1&client=console`)
+    const body = (await r.json()) as { events?: BusEnvelope[]; receipts?: BusReceipt[]; receipts_note?: string }
     const fresh = (body.events ?? []).filter(e => !seen.has(e.id))
     if (fresh.length === 0) break
     for (const e of fresh) seen.add(e.id)
     out.push(...fresh)
+    receipts.push(...(body.receipts ?? []))
+    receiptsNote ??= body.receipts_note
     since = fresh[fresh.length - 1].time
   }
-  return out
+  return { events: out, receipts, receiptsNote }
 }
-

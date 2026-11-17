@@ -71,6 +71,30 @@ type Picture struct {
 	Seats       []Seat       `json:"seats"`
 	Links       []Link       `json:"links"`
 	Unmeasured  []Unmeasured `json:"unmeasured"`
+	// Rate is how many bus events the last hour carried (the live map's
+	// "how busy is it now"), set by the caller from the ledger.
+	Rate *Rate `json:"rate,omitempty"`
+}
+
+// Rate is the bus's events over a recent window.
+type Rate struct {
+	Minutes   int            `json:"minutes"`
+	Events    int            `json:"events"`
+	PerMinute float64        `json:"per_minute"`
+	ByType    map[string]int `json:"by_type"`
+}
+
+// NewRate counts events by type over minutes.
+func NewRate(minutes int, types []string) *Rate {
+	r := &Rate{Minutes: minutes, ByType: map[string]int{}}
+	for _, t := range types {
+		r.ByType[t]++
+		r.Events++
+	}
+	if minutes > 0 {
+		r.PerMinute = float64(int64(float64(r.Events)/float64(minutes)*100+0.5)) / 100
+	}
+	return r
 }
 
 // Owner is the actor the cards wait on.

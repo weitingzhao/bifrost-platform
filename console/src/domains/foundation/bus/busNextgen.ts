@@ -31,7 +31,7 @@ export async function fetchBusNextgen(): Promise<BusNextgen> {
   return (await r.json()) as BusNextgen
 }
 
-export type ContractTopic = { tenant: string; type: string; version: number; publisher: string; guarantee: string; consumers: string[]; exports?: string[] }
+export type ContractTopic = { tenant: string; type: string; version: number; publisher: string; domain?: string; guarantee: string; consumers: string[]; exports?: string[] }
 export type ContractRow = { tenant: string; id: string; on: string[]; deliver: string; to?: string; action?: string; by: string; envs?: string[] }
 export type ContractClient = { tenant: string; name: string; kind: string; lost_after?: string; envs?: string[] }
 export type BusContract = { topics: ContractTopic[]; subscriptions: ContractRow[]; clients: ContractClient[] }

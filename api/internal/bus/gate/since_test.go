@@ -2,6 +2,7 @@ package gate
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -87,5 +88,47 @@ func TestSinceReplaysFromATimeWithoutReceipts(t *testing.T) {
 	g.HandleEvents(rec, httptest.NewRequest(http.MethodGet, "/api/v1/bus/events?types=git.main.advanced&wait=0&since="+since.Format(time.RFC3339), nil))
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("without Since: HTTP %d", rec.Code)
+	}
+}
+
+type rangeJourney struct{ Journey }
+
+func (rangeJourney) ReceiptsOf(_ context.Context, events []relay.Envelope) ([]ReceiptNote, error) {
+	out := make([]ReceiptNote, 0, len(events))
+	for _, e := range events {
+		out = append(out, ReceiptNote{ID: e.ID, Consumer: "headrelease", At: time.Now()})
+	}
+	return out, nil
+}
+
+// Origin: 2026-11-17, the coordinator on STG: replayed pulses stopped at
+// their topic because receipts were not replayed. A since= read asked with
+// receipts=1 answers the receipts its events had; not asked, it answers
+// none (the control); a gate whose journey reads no receipt stream says so.
+func TestSinceAnswersReceiptsWhenAsked(t *testing.T) {
+	l := &fakeLedger{horizon: 50}
+	l.add(gitRow(8, 30, "bifrost-platform"))
+	g := newGate(t, l)
+	g.Since = func(context.Context, time.Time) (relay.Cursor, error) { return relay.Cursor{TxID: 25}, nil }
+	g.Journey = rangeJourney{}
+	since := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
+	body := func(q string) map[string]any {
+		rec := httptest.NewRecorder()
+		g.HandleEvents(rec, httptest.NewRequest(http.MethodGet, "/api/v1/bus/events?types=git.main.advanced&wait=0&since="+since+q, nil))
+		var m map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	if rs, _ := body("&receipts=1")["receipts"].([]any); len(rs) != 1 {
+		t.Fatalf("asked, receipts %v", rs)
+	}
+	if _, ok := body("")["receipts"]; ok {
+		t.Fatal("not asked, receipts came")
+	}
+	g.Journey = nil
+	if n, _ := body("&receipts=1")["receipts_note"].(string); n == "" {
+		t.Fatal("no receipt stream, not said")
 	}
 }

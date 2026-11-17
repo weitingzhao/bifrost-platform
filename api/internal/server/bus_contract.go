@@ -19,6 +19,7 @@ type contractTopic struct {
 	Type      string   `json:"type"`
 	Version   int      `json:"version"`
 	Publisher string   `json:"publisher"`
+	Domain    string   `json:"domain"`
 	Guarantee string   `json:"guarantee"`
 	Consumers []string `json:"consumers"`
 	Exports   []string `json:"exports,omitempty"`
@@ -63,7 +64,7 @@ func (s *Server) handleBusContract(w http.ResponseWriter, _ *http.Request) {
 	out := busContract{Topics: []contractTopic{}, Subscriptions: []contractRow{}, Clients: []contractClient{}}
 	for name, t := range tenants {
 		for typ, ch := range t.Channels {
-			out.Topics = append(out.Topics, contractTopic{Tenant: name, Type: typ, Version: ch.Version, Publisher: ch.Publisher,
+			out.Topics = append(out.Topics, contractTopic{Tenant: name, Type: typ, Version: ch.Version, Publisher: ch.Publisher, Domain: ch.Domain,
 				Guarantee: ch.Guarantee, Consumers: ch.Consumers, Exports: ch.Exports})
 		}
 	}

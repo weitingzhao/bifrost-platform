@@ -36,6 +36,17 @@ const GROUND = '#04070a'
 const FLASH_MS = 900
 const DRIFT = 0.04
 
+/** How hard a node pushes the others away: seats and the owner get room of their own, topics sit close to their domain. */
+function chargeOf(o: object): number {
+  switch ((o as SimNode).kind) {
+    case 'seat': return -260
+    case 'cluster': return -160
+    case 'core': return -200
+    case 'topic': return -12
+    default: return -70
+  }
+}
+
 function idOf(end: string | SimNode): string {
   return typeof end === 'string' ? end : end.id
 }
@@ -63,7 +74,9 @@ function driftForce(nodes: () => SimNode[], dims: 2 | 3) {
   return f
 }
 
-export default function BusNerveGraph({ nodes, links, flat, onReady }: { nodes: GNode[]; links: GLink[]; flat: boolean; onReady: (api: NerveApi) => void }) {
+export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick }: {
+  nodes: GNode[]; links: GLink[]; flat: boolean; onReady: (api: NerveApi) => void; onNodeClick?: (id: string) => void
+}) {
   const host = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the two libraries' chainable instances share no type
   const graph = useRef<any>(null)
@@ -71,6 +84,8 @@ export default function BusNerveGraph({ nodes, links, flat, onReady }: { nodes: 
   const flashes = useRef(new Map<string, number>())
   const ready = useRef(onReady)
   ready.current = onReady
+  const click = useRef(onNodeClick)
+  click.current = onNodeClick
 
   // Build the renderer once per kind (3D or 2D).
   useEffect(() => {
@@ -120,7 +135,7 @@ export default function BusNerveGraph({ nodes, links, flat, onReady }: { nodes: 
             }
             ctx.restore()
             if (n.kind !== 'topic' && scale > 0.6) {
-              ctx.font = `${10 / scale}px ui-monospace, monospace`
+              ctx.font = `${(n.kind === 'seat' || n.kind === 'cluster' ? 12 : 9) / scale}px ui-monospace, monospace`
               ctx.textAlign = 'center'
               ctx.fillStyle = n.kind === 'old' ? '#5f7f72' : '#c7f9d6'
               ctx.fillText(n.label, n.x ?? 0, (n.y ?? 0) + r + 11 / scale)
@@ -137,6 +152,8 @@ export default function BusNerveGraph({ nodes, links, flat, onReady }: { nodes: 
           .cooldownTicks(Infinity)
           .autoPauseRedraw(false)
         g.d3Force('drift', driftForce(() => data.current.nodes, 2))
+        g.d3Force('charge')?.strength(chargeOf)
+        g.onNodeClick((o: object) => click.current?.((o as SimNode).id))
         g.graphData(data.current)
         graph.current = g
         ready.current(api)
@@ -178,7 +195,8 @@ export default function BusNerveGraph({ nodes, links, flat, onReady }: { nodes: 
                 group.add(ring)
               }
               if (n.kind !== 'topic') {
-                const s = label(n.label, n.kind === 'old' ? '#5f7f72' : '#c7f9d6')
+                const s = label(n.label, n.kind === 'old' ? '#5f7f72' : n.kind === 'seat' ? '#e6fff0' : '#c7f9d6')
+                if (n.kind === 'seat' || n.kind === 'cluster') s.scale.multiplyScalar(1.35)
                 s.position.set(0, -(n.size + 5), 0)
                 group.add(s)
               }
@@ -195,6 +213,8 @@ export default function BusNerveGraph({ nodes, links, flat, onReady }: { nodes: 
             .d3AlphaMin(0)
             .cooldownTicks(Infinity)
           g.d3Force('drift', driftForce(() => data.current.nodes, 3))
+          g.d3Force('charge')?.strength(chargeOf)
+          g.onNodeClick((o: object) => click.current?.((o as SimNode).id))
           const bloom = new UnrealBloomPass(new THREE.Vector2(width(), height()), 1.6, 0.6, 0.05)
           g.postProcessingComposer().addPass(bloom)
           g.graphData(data.current)

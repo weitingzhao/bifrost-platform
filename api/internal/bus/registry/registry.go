@@ -30,14 +30,18 @@ const (
 
 // Channel is one event type's register entry.
 type Channel struct {
-	Type      string   `yaml:"-"`
-	Address   string   `yaml:"address"`
-	Version   int      `yaml:"version"`
-	Lane      string   `yaml:"lane"`
-	Guarantee string   `yaml:"guarantee"`
-	Key       string   `yaml:"key"`
-	Subject   string   `yaml:"subject"`
-	Publisher string   `yaml:"publisher"`
+	Type      string `yaml:"-"`
+	Address   string `yaml:"address"`
+	Version   int    `yaml:"version"`
+	Lane      string `yaml:"lane"`
+	Guarantee string `yaml:"guarantee"`
+	Key       string `yaml:"key"`
+	Subject   string `yaml:"subject"`
+	Publisher string `yaml:"publisher"`
+	// Domain is the domain (config/domain-ownership.json) whose work the
+	// event tells of, for the Bus page's map: the publisher is often a gate
+	// of the bus itself. Not a contract field.
+	Domain    string   `yaml:"domain"`
 	Ref       string   `yaml:"ref"`
 	Reconcile string   `yaml:"reconcile"`
 	OnUnread  string   `yaml:"on_unread"`

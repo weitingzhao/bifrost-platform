@@ -301,7 +301,8 @@ func (g *Gate) receipt(events []relay.Envelope, route, client string) {
 
 // HandleEvents is GET /api/v1/bus/events?types=a,b&match=&after=&since=&wait=&limit=&client=.
 // since= (RFC 3339, at most MaxReplay back) reads from about that time
-// instead of a cursor, and writes no receipts.
+// instead of a cursor, and writes no receipts; with receipts=1 it also
+// answers the receipts those events had (ReceiptRange).
 // It answers {events: [<CloudEvents envelope>], next: "<cursor>"}; after
 // empty reads from now. Read-only.
 func (g *Gate) HandleEvents(w http.ResponseWriter, r *http.Request) {
@@ -322,7 +323,21 @@ func (g *Gate) HandleEvents(w http.ResponseWriter, r *http.Request) {
 	if !q.replay {
 		g.receipt(events, "events", q.client)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"events": events, "next": next.String()})
+	out := map[string]any{"events": events, "next": next.String()}
+	// A replay may ask for the receipts its events had (receipts=1): read
+	// back from the receipt stream once for the page, so the map can land
+	// replayed pulses as the live ones landed.
+	if q.replay && r.URL.Query().Get("receipts") == "1" && len(events) > 0 {
+		rr, ok := g.Journey.(ReceiptRange)
+		if !ok {
+			out["receipts_note"] = "this gate reads no receipt stream"
+		} else if got, err := rr.ReceiptsOf(r.Context(), events); err != nil {
+			out["receipts_note"] = "receipts not read: " + err.Error()
+		} else {
+			out["receipts"] = got
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // HandleStream is GET /api/v1/bus/stream?types=&match=&after=&since=&receipts=&client=, the

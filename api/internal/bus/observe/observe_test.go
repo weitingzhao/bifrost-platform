@@ -50,3 +50,15 @@ func TestBuildCountsLinksWaitsAndReports(t *testing.T) {
 		t.Fatal("nothing named as unmeasured")
 	}
 }
+
+// Origin: 2026-11-17, the Owner wants the live map to say how busy the bus
+// is now: NewRate counts the last window's events by type and per minute.
+func TestNewRateCountsByTypeAndMinute(t *testing.T) {
+	r := NewRate(60, []string{"ci.run.started", "ci.run.started", "git.main.advanced"})
+	if r.Events != 3 || r.ByType["ci.run.started"] != 2 || r.PerMinute != 0.05 {
+		t.Fatalf("rate %+v", r)
+	}
+	if z := NewRate(60, nil); z.Events != 0 || z.PerMinute != 0 {
+		t.Fatalf("empty rate %+v", z)
+	}
+}
