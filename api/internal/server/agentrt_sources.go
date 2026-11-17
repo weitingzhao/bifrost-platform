@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -188,8 +189,10 @@ func within[T any](ctx context.Context, reads *boundedReads, read func() (T, boo
 
 // productionDeliveryEvidence joins existing release records with live settled
 // workloads. It writes no legacy cycle or synthetic deployment event.
-func productionDeliveryEvidence(ctx context.Context, rel currentDeployment) store.DeliveryProduction {
-	unknown := func(reason string) store.DeliveryProduction { return store.DeliveryProduction{Reason: reason} }
+func productionDeliveryEvidence(ctx context.Context, rel currentDeployment) deliveryview.DeliveryProduction {
+	unknown := func(reason string) deliveryview.DeliveryProduction {
+		return deliveryview.DeliveryProduction{Reason: reason}
+	}
 	prod, err := rel.Current(ctx, agentrtDeployLane, "prod")
 	if err != nil {
 		return unknown("current PROD release is unavailable or unsettled")
@@ -249,7 +252,7 @@ func productionDeliveryEvidence(ctx context.Context, rel currentDeployment) stor
 			return unknown("release evidence changed while checking PROD workloads")
 		}
 	}
-	return store.DeliveryProduction{Commit: sha, StartedAt: prod.StartedAt, CompletedAt: prod.CompletedAt}
+	return deliveryview.DeliveryProduction{Commit: sha, StartedAt: prod.StartedAt, CompletedAt: prod.CompletedAt}
 }
 
 // prodRunsBuild reports whether every settled PROD workload runs the image

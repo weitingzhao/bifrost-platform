@@ -16,6 +16,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
@@ -75,7 +76,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	s.agentRuntime = rt
 	rt.evidenceCI = s.wireEvidenceGate()
 	if s.releases != nil && s.releases.Service() != nil {
-		rt.api.ProductionDelivery = func(ctx context.Context) store.DeliveryProduction {
+		rt.api.ProductionDelivery = func(ctx context.Context) deliveryview.DeliveryProduction {
 			return productionDeliveryEvidence(ctx, s.releases.Service())
 		}
 	}

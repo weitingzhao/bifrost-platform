@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -24,17 +25,17 @@ func externalRun(run, pipeline, result string, start time.Time, took time.Durati
 		Revision: externalCommit, CreatedAt: start, StartedAt: start, CompletedAt: start.Add(took)}
 }
 
-func externalStages(t *testing.T, list []store.DeliveryStage) map[string]store.DeliveryStage {
+func externalStages(t *testing.T, list []deliveryview.DeliveryStage) map[string]deliveryview.DeliveryStage {
 	t.Helper()
-	if len(list) != len(store.DeliveryStageOrder) {
+	if len(list) != len(deliveryview.DeliveryStageOrder) {
 		t.Fatalf("stages %+v", list)
 	}
-	out := map[string]store.DeliveryStage{}
+	out := map[string]deliveryview.DeliveryStage{}
 	for i, s := range list {
-		if s.Stage != store.DeliveryStageOrder[i] {
+		if s.Stage != deliveryview.DeliveryStageOrder[i] {
 			t.Fatalf("stage %d is %s", i, s.Stage)
 		}
-		if s.State == store.StageUnknown && s.Reason == "" {
+		if s.State == deliveryview.StageUnknown && s.Reason == "" {
 			t.Errorf("%s is unknown without a reason", s.Stage)
 		}
 		out[s.Stage] = s
@@ -49,25 +50,25 @@ func TestDeliveryViewAdapter(t *testing.T) {
 	at := time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC)
 	in := store.ExternalDelivery{Registrant: "thread:reader", Repo: "bifrost-platform", Commit: externalCommit, NamedAt: at}
 	unread := externalStages(t, store.FoldExternalDelivery(in))
-	if !strings.Contains(unread[store.StageLandingCI].Reason, "were not read") {
+	if !strings.Contains(unread[deliveryview.StageLandingCI].Reason, "were not read") {
 		t.Fatal(unread)
 	}
 	in.Runs = []store.PipelineRun{}
 	empty := externalStages(t, store.FoldExternalDelivery(in))
-	if !strings.Contains(empty[store.StageLandingCI].Reason, "no completed CI") {
+	if !strings.Contains(empty[deliveryview.StageLandingCI].Reason, "no completed CI") {
 		t.Fatal(empty)
 	}
 	in.Runs = []store.PipelineRun{externalRun("ci-adapter", "bifrost-ci-platform", "Succeeded", at.Add(time.Minute), time.Minute)}
-	in.Production = &store.DeliveryProduction{Commit: externalCommit, StartedAt: at.Add(3 * time.Minute), CompletedAt: at.Add(4 * time.Minute)}
+	in.Production = &deliveryview.DeliveryProduction{Commit: externalCommit, StartedAt: at.Add(3 * time.Minute), CompletedAt: at.Add(4 * time.Minute)}
 	stages := externalStages(t, store.FoldExternalDelivery(in))
-	ci := stages[store.StageLandingCI]
-	if ci.State != store.StageDone || !ci.EnteredAt.Equal(in.Runs[0].StartedAt) || !ci.LeftAt.Equal(in.Runs[0].CompletedAt) {
+	ci := stages[deliveryview.StageLandingCI]
+	if ci.State != deliveryview.StageDone || !ci.EnteredAt.Equal(in.Runs[0].StartedAt) || !ci.LeftAt.Equal(in.Runs[0].CompletedAt) {
 		t.Fatal(ci)
 	}
-	if h := stages[store.StageHandedIn]; h.Actor != in.Registrant || !h.EnteredAt.Equal(at) {
+	if h := stages[deliveryview.StageHandedIn]; h.Actor != in.Registrant || !h.EnteredAt.Equal(at) {
 		t.Fatal(h)
 	}
-	if p := stages[store.StageOnProd]; p.State != store.StageDone || !p.EnteredAt.Equal(in.Production.CompletedAt) {
+	if p := stages[deliveryview.StageOnProd]; p.State != deliveryview.StageDone || !p.EnteredAt.Equal(in.Production.CompletedAt) {
 		t.Fatal(p)
 	}
 }
@@ -110,7 +111,7 @@ func TestReadExternalDelivery(t *testing.T) {
 	w := newKernelWorld(t)
 	at := time.Date(2026, 11, 12, 18, 0, 0, 0, time.UTC)
 	t.Cleanup(freezeClock(t, at.Add(40*time.Minute)))
-	read := func(commit string, p *store.DeliveryProduction) (map[string]any, error) {
+	read := func(commit string, p *deliveryview.DeliveryProduction) (map[string]any, error) {
 		return store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: commit, Production: p})
 	}
 	_, err := read(externalCommit[:8], nil)
@@ -135,30 +136,30 @@ func TestReadExternalDelivery(t *testing.T) {
 	if ws, _ := doc["warnings"].([]string); !anyContains(ws, "exact commit") {
 		t.Errorf("warnings %v", doc["warnings"])
 	}
-	st := externalStages(t, doc["stages"].([]store.DeliveryStage))
-	if s := st[store.StageHandedIn]; s.State != store.StageDone || !s.EnteredAt.Equal(ci.CreatedAt) || s.Actor != "thread:giant" {
+	st := externalStages(t, doc["stages"].([]deliveryview.DeliveryStage))
+	if s := st[deliveryview.StageHandedIn]; s.State != deliveryview.StageDone || !s.EnteredAt.Equal(ci.CreatedAt) || s.Actor != "thread:giant" {
 		t.Errorf("handed in %+v", s)
 	}
-	if s := st[store.StageLandingCI]; s.State != store.StageDone || !s.LeftAt.Equal(ci.CompletedAt) {
+	if s := st[deliveryview.StageLandingCI]; s.State != deliveryview.StageDone || !s.LeftAt.Equal(ci.CompletedAt) {
 		t.Errorf("CI %+v", s)
 	}
-	if s := st[store.StageSTG]; s.State != store.StageDone || !s.LeftAt.Equal(stgEnd.CompletedAt) {
+	if s := st[deliveryview.StageSTG]; s.State != deliveryview.StageDone || !s.LeftAt.Equal(stgEnd.CompletedAt) {
 		t.Errorf("STG %+v; want the run as last recorded", s)
 	}
 	// The current PROD release was not read (no reader passed): unknown, not waiting.
-	if s := st[store.StageProdRelease]; s.State != store.StageUnknown || !strings.Contains(s.Reason, "was not read") {
+	if s := st[deliveryview.StageProdRelease]; s.State != deliveryview.StageUnknown || !strings.Contains(s.Reason, "was not read") {
 		t.Errorf("PROD release %+v", s)
 	}
-	doc, err = read(externalCommit, &store.DeliveryProduction{Reason: "current STG evidence does not match the promoted PROD revision", NotCommit: externalCommit})
+	doc, err = read(externalCommit, &deliveryview.DeliveryProduction{Reason: "current STG evidence does not match the promoted PROD revision", NotCommit: externalCommit})
 	ok(t, err)
-	if s := externalStages(t, doc["stages"].([]store.DeliveryStage))[store.StageProdRelease]; s.State != store.StageCurrent {
+	if s := externalStages(t, doc["stages"].([]deliveryview.DeliveryStage))[deliveryview.StageProdRelease]; s.State != deliveryview.StageCurrent {
 		t.Errorf("PROD release %+v; want waiting: the workloads do not run this build", s)
 	}
 
 	// The current PROD release is passed through for the platform's own repository.
-	doc, err = read(externalCommit, &store.DeliveryProduction{Commit: externalCommit, StartedAt: at.Add(30 * time.Minute), CompletedAt: at.Add(31 * time.Minute)})
+	doc, err = read(externalCommit, &deliveryview.DeliveryProduction{Commit: externalCommit, StartedAt: at.Add(30 * time.Minute), CompletedAt: at.Add(31 * time.Minute)})
 	ok(t, err)
-	if s := externalStages(t, doc["stages"].([]store.DeliveryStage))[store.StageOnProd]; s.State != store.StageDone || s.Source != "release_record" {
+	if s := externalStages(t, doc["stages"].([]deliveryview.DeliveryStage))[deliveryview.StageOnProd]; s.State != deliveryview.StageDone || s.Source != "release_record" {
 		t.Errorf("on PROD %+v", s)
 	}
 
@@ -195,9 +196,9 @@ func TestReadExternalDeliveryFromHeartbeat(t *testing.T) {
 		ok(t, err)
 		return doc
 	}
-	handedIn := func(doc map[string]any) store.DeliveryStage {
+	handedIn := func(doc map[string]any) deliveryview.DeliveryStage {
 		t.Helper()
-		return externalStages(t, doc["stages"].([]store.DeliveryStage))[store.StageHandedIn]
+		return externalStages(t, doc["stages"].([]deliveryview.DeliveryStage))[deliveryview.StageHandedIn]
 	}
 	who := wr("thread:giant")
 	clock(0)
@@ -220,21 +221,21 @@ func TestReadExternalDeliveryFromHeartbeat(t *testing.T) {
 	if doc["commit"] != externalCommit || doc["external_work_id"] != id || doc["plan_node_id"] != s1 || doc["repo"] != "platform" {
 		t.Fatalf("response %+v", doc)
 	}
-	st := externalStages(t, doc["stages"].([]store.DeliveryStage))
-	if s := st[store.StageHandedIn]; s.State != store.StageDone || !s.EnteredAt.Equal(at.Add(10*time.Minute)) || s.Source != "external_work" || s.Actor != "thread:giant" {
+	st := externalStages(t, doc["stages"].([]deliveryview.DeliveryStage))
+	if s := st[deliveryview.StageHandedIn]; s.State != deliveryview.StageDone || !s.EnteredAt.Equal(at.Add(10*time.Minute)) || s.Source != "external_work" || s.Actor != "thread:giant" {
 		t.Errorf("handed in %+v; want the heartbeat naming the commit", s)
 	}
-	if s := st[store.StageLandingCI]; s.State != store.StageUnknown || !strings.Contains(s.Reason, "no completed CI run") {
+	if s := st[deliveryview.StageLandingCI]; s.State != deliveryview.StageUnknown || !strings.Contains(s.Reason, "no completed CI run") {
 		t.Errorf("CI %+v", s)
 	}
 	// Its recorded runs tell the stages as they do after a submitted event.
 	ci := externalRun("ci-platform-a", "bifrost-ci-platform", "Succeeded", at.Add(12*time.Minute), 7*time.Minute)
 	recordRuns(t, w, ci)
-	st = externalStages(t, read(externalCommit)["stages"].([]store.DeliveryStage))
-	if s := st[store.StageHandedIn]; !s.EnteredAt.Equal(at.Add(10*time.Minute)) || !s.LeftAt.Equal(ci.StartedAt) {
+	st = externalStages(t, read(externalCommit)["stages"].([]deliveryview.DeliveryStage))
+	if s := st[deliveryview.StageHandedIn]; !s.EnteredAt.Equal(at.Add(10*time.Minute)) || !s.LeftAt.Equal(ci.StartedAt) {
 		t.Errorf("handed in %+v", s)
 	}
-	if s := st[store.StageLandingCI]; s.State != store.StageDone || !s.LeftAt.Equal(ci.CompletedAt) {
+	if s := st[deliveryview.StageLandingCI]; s.State != deliveryview.StageDone || !s.LeftAt.Equal(ci.CompletedAt) {
 		t.Errorf("CI %+v", s)
 	}
 

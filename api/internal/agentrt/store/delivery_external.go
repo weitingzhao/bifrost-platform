@@ -24,11 +24,11 @@ type ExternalDelivery struct {
 	// Runs are the recorded pipeline runs: nil when they were not read, an
 	// empty non-nil slice when they were read and hold none.
 	Runs       []PipelineRun
-	Production *DeliveryProduction
+	Production *deliveryview.DeliveryProduction
 }
 
 // FoldExternalDelivery adapts recorded observations to the pure delivery view.
-func FoldExternalDelivery(in ExternalDelivery) []DeliveryStage {
+func FoldExternalDelivery(in ExternalDelivery) []deliveryview.DeliveryStage {
 	var runs []deliveryview.Run
 	// nil means unread; a non-nil empty slice means read and no runs found.
 	if in.Runs != nil {

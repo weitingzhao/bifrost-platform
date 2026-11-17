@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 )
 
 // ReadDelivery: one read of a commit's delivery stages. The commit is one an
@@ -21,7 +23,7 @@ import (
 type DeliveryQuery struct {
 	Commit string
 	// Production is supplied by the server's trusted release reader, never URL input.
-	Production *DeliveryProduction
+	Production *deliveryview.DeliveryProduction
 }
 
 var deliveryCommitPrefix = regexp.MustCompile(`^[0-9a-f]{7,40}$`)

@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -50,7 +51,7 @@ type API struct {
 	Sessions func(context.Context) (any, error)
 	// ProductionDelivery reads the current PROD release for GET /delivery;
 	// nil means not wired, and the PROD stages say so.
-	ProductionDelivery func(context.Context) store.DeliveryProduction
+	ProductionDelivery func(context.Context) deliveryview.DeliveryProduction
 	// PinReason is what an implement task pinned to the coordinator without
 	// a pin_reason gets (AGENTRT_PIN_REASON, store/pinreason.go); "" is warn.
 	PinReason store.PinReasonMode

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 )
 
 // Without a database GET /delivery refuses the anonymous caller as such
@@ -50,9 +50,9 @@ func TestDeliveryRouteCurrentEvidenceIsServerSupplied(t *testing.T) {
 	pool, _ := world(t)
 	called := false
 	s := server(t, pool, func(a *agentrtapi.API) {
-		a.ProductionDelivery = func(context.Context) store.DeliveryProduction {
+		a.ProductionDelivery = func(context.Context) deliveryview.DeliveryProduction {
 			called = true
-			return store.DeliveryProduction{Reason: "unsettled"}
+			return deliveryview.DeliveryProduction{Reason: "unsettled"}
 		}
 	})
 	code, _ := call(t, s, "viewer", "GET", "delivery?commit=fedcba9876543&production=done", nil)
