@@ -16,7 +16,7 @@ type ObservabilityComponentView struct {
 	Status       string             `json:"status"`
 	Reachability probe.Reachability `json:"reachability"`
 	Detail       string             `json:"detail"`
-	Phase        string             `json:"phase,omitempty"` // required | planned
+	Phase        string             `json:"phase,omitempty"` // required | optional
 }
 
 type layerBComponentSpec struct {
@@ -24,7 +24,7 @@ type layerBComponentSpec struct {
 	Label   string
 	Match   string
 	Exclude string
-	Phase   string // required | planned
+	Phase   string // required | optional
 }
 
 var layerBRequired = []layerBComponentSpec{
@@ -33,14 +33,16 @@ var layerBRequired = []layerBComponentSpec{
 	{ID: "alertmanager", Label: "Alertmanager", Match: "alertmanager", Phase: "required"},
 }
 
-var layerBPlanned = []layerBComponentSpec{
-	{ID: "loki", Label: "Loki", Match: "loki", Phase: "planned"},
+// layerBOptional components are listed only when a matching workload runs in the
+// monitoring namespace; their absence is not a gap and is not reported.
+var layerBOptional = []layerBComponentSpec{
+	{ID: "loki", Label: "Loki", Match: "loki", Phase: "optional"},
 }
 
 func allLayerBComponents() []layerBComponentSpec {
-	out := make([]layerBComponentSpec, 0, len(layerBRequired)+len(layerBPlanned))
+	out := make([]layerBComponentSpec, 0, len(layerBRequired)+len(layerBOptional))
 	out = append(out, layerBRequired...)
-	out = append(out, layerBPlanned...)
+	out = append(out, layerBOptional...)
 	return out
 }
 
@@ -52,8 +54,7 @@ func MatchLayerBComponents(deployments []DeploymentView, statefulSets []Deployme
 			views = append(views, view)
 			continue
 		}
-		if spec.Phase == "planned" {
-			views = append(views, plannedLayerBComponent(spec))
+		if spec.Phase == "optional" {
 			continue
 		}
 		views = append(views, missingLayerBComponent(spec))
@@ -124,29 +125,12 @@ func missingLayerBComponent(spec layerBComponentSpec) ObservabilityComponentView
 	}
 }
 
-func plannedLayerBComponent(spec layerBComponentSpec) ObservabilityComponentView {
-	return ObservabilityComponentView{
-		ID:           spec.ID,
-		Label:        spec.Label,
-		Kind:         "—",
-		Name:         "—",
-		Ready:        "—",
-		Status:       "planned",
-		Reachability: probe.ReachUnknown,
-		Detail:       "planned for Phase 5",
-		Phase:        "planned",
-	}
-}
-
+// MissingLayerBComponents is the view when the monitoring namespace could not be
+// read: every required component is missing; optional ones are not listed.
 func MissingLayerBComponents() []ObservabilityComponentView {
-	specs := allLayerBComponents()
-	out := make([]ObservabilityComponentView, len(specs))
-	for i, spec := range specs {
-		if spec.Phase == "planned" {
-			out[i] = plannedLayerBComponent(spec)
-		} else {
-			out[i] = missingLayerBComponent(spec)
-		}
+	out := make([]ObservabilityComponentView, len(layerBRequired))
+	for i, spec := range layerBRequired {
+		out[i] = missingLayerBComponent(spec)
 	}
 	return out
 }
@@ -203,7 +187,7 @@ func ComponentReach(components []ObservabilityComponentView, id string) probe.Re
 func AggregateLayerBStatus(okCount, totalRequired int) (status string, reach probe.Reachability, detail string) {
 	switch {
 	case okCount == 0:
-		return "not_installed", probe.ReachDegraded, "kube-prometheus-stack not detected (Layer B planned)"
+		return "not_installed", probe.ReachDegraded, "kube-prometheus-stack not detected in monitoring namespace"
 	case okCount < totalRequired:
 		return "partial", probe.ReachDegraded, fmt.Sprintf("%d/%d observability components ready", okCount, totalRequired)
 	default:

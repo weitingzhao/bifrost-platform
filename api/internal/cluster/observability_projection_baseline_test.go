@@ -17,7 +17,7 @@ type baselineLayerBComponentSpec struct {
 	Label   string
 	Match   string
 	Exclude string
-	Phase   string // required | planned
+	Phase   string // required | optional
 }
 
 var baselineLayerBRequired = []baselineLayerBComponentSpec{
@@ -27,7 +27,7 @@ var baselineLayerBRequired = []baselineLayerBComponentSpec{
 }
 
 var baselineLayerBPlanned = []baselineLayerBComponentSpec{
-	{ID: "loki", Label: "Loki", Match: "loki", Phase: "planned"},
+	{ID: "loki", Label: "Loki", Match: "loki", Phase: "optional"},
 }
 
 func baselineAllLayerBComponents() []baselineLayerBComponentSpec {
@@ -45,8 +45,7 @@ func baselineMatchLayerBComponents(deployments []appsv1.Deployment, statefulSets
 			views = append(views, view)
 			continue
 		}
-		if spec.Phase == "planned" {
-			views = append(views, baselinePlannedLayerBComponent(spec))
+		if spec.Phase == "optional" {
 			continue
 		}
 		views = append(views, baselineMissingLayerBComponent(spec))
@@ -117,29 +116,10 @@ func baselineMissingLayerBComponent(spec baselineLayerBComponentSpec) Observabil
 	}
 }
 
-func baselinePlannedLayerBComponent(spec baselineLayerBComponentSpec) ObservabilityComponentView {
-	return ObservabilityComponentView{
-		ID:           spec.ID,
-		Label:        spec.Label,
-		Kind:         "—",
-		Name:         "—",
-		Ready:        "—",
-		Status:       "planned",
-		Reachability: probe.ReachUnknown,
-		Detail:       "planned for Phase 5",
-		Phase:        "planned",
-	}
-}
-
 func baselineMissingLayerBComponents() []ObservabilityComponentView {
-	specs := baselineAllLayerBComponents()
-	out := make([]ObservabilityComponentView, len(specs))
-	for i, spec := range specs {
-		if spec.Phase == "planned" {
-			out[i] = baselinePlannedLayerBComponent(spec)
-		} else {
-			out[i] = baselineMissingLayerBComponent(spec)
-		}
+	out := make([]ObservabilityComponentView, len(baselineLayerBRequired))
+	for i, spec := range baselineLayerBRequired {
+		out[i] = baselineMissingLayerBComponent(spec)
 	}
 	return out
 }
@@ -174,7 +154,7 @@ func baselineStatefulSetWorkload(ss appsv1.StatefulSet) WorkloadView {
 func baselineAggregateLayerBStatus(okCount, totalRequired int) (status string, reach probe.Reachability, detail string) {
 	switch {
 	case okCount == 0:
-		return "not_installed", probe.ReachDegraded, "kube-prometheus-stack not detected (Layer B planned)"
+		return "not_installed", probe.ReachDegraded, "kube-prometheus-stack not detected in monitoring namespace"
 	case okCount < totalRequired:
 		return "partial", probe.ReachDegraded, fmt.Sprintf("%d/%d observability components ready", okCount, totalRequired)
 	default:

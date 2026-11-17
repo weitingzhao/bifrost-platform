@@ -30,16 +30,12 @@ func TestObservabilityNoMonitoringNamespace(t *testing.T) {
 	if resp.Reachability != probe.ReachDegraded {
 		t.Fatalf("reachability: got %s want degraded", resp.Reachability)
 	}
-	if len(resp.Components) != 4 {
-		t.Fatalf("components: got %d want 4", len(resp.Components))
+	// 2026-11-17 audit row #8 (LANE-BIZ-ALIGN): Loki is no longer listed as "planned";
+	// with no loki workload it is not listed at all.
+	if len(resp.Components) != 3 {
+		t.Fatalf("components: got %d want 3", len(resp.Components))
 	}
 	for _, c := range resp.Components {
-		if c.Phase == "planned" {
-			if c.Status != "planned" {
-				t.Fatalf("component %s: expected planned, got %s", c.ID, c.Status)
-			}
-			continue
-		}
 		if c.Status != "missing" {
 			t.Fatalf("component %s: expected missing, got %s", c.ID, c.Status)
 		}
@@ -143,14 +139,10 @@ func TestObservabilityThreeRequiredReady(t *testing.T) {
 		t.Fatalf("reachability: got %s want ok", resp.Reachability)
 	}
 
-	var loki ObservabilityComponentView
 	for _, c := range resp.Components {
 		if c.ID == "loki" {
-			loki = c
+			t.Fatalf("loki listed without a loki workload: %+v", c)
 		}
-	}
-	if loki.Status != "planned" {
-		t.Fatalf("loki status: got %s want planned", loki.Status)
 	}
 }
 

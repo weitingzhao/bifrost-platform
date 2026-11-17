@@ -526,8 +526,8 @@ export interface ObservabilityComponent {
   status: string
   reachability: Reachability
   detail: string
-  /** required = counts toward Layer B ready; planned = Phase 5+ */
-  phase?: 'required' | 'planned'
+  /** required = counts toward Layer B ready; optional = listed only when its workload runs */
+  phase?: 'required' | 'optional'
 }
 
 export interface ClusterObservabilityResponse {

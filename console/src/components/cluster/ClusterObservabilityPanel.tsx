@@ -180,7 +180,7 @@ export function ClusterObservabilityPanel({
                 <DenseTableCell>
                   <StatusLamp value={component.reachability} kind="reach" />{' '}
                   <span className="font-mono-tabular">
-                    {component.status === 'planned' ? 'Planned (Phase 5)' : component.status}
+                    {component.status}
                   </span>
                 </DenseTableCell>
                 <DenseTableCell>

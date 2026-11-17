@@ -27,24 +27,26 @@ func TestMonitoringCatalogOrderMatchingAndMissing(t *testing.T) {
 	ds := []resourceview.DeploymentView{{Kind: "Deployment", Name: "grafana-prometheus", Ready: "1/1", Status: "Ready", Reachability: probe.ReachOK}, {Kind: "Deployment", Name: "PROMETHEUS-main", Ready: "0/1", Status: "Unavailable", Reachability: probe.ReachFail}}
 	ss := []resourceview.DeploymentView{{Kind: "StatefulSet", Name: "prometheus-second", Reachability: probe.ReachOK}, {Kind: "StatefulSet", Name: "alertmanager", Ready: "1/1", Status: "Ready", Reachability: probe.ReachOK}}
 	got := resourceview.MatchLayerBComponents(ds, ss)
-	if len(got) != 4 {
+	// 2026-11-17 audit row #8 (LANE-BIZ-ALIGN): Loki was always listed as "planned for
+	// Phase 5"; it is now listed only when a loki workload runs in the namespace.
+	if len(got) != 3 {
 		t.Fatalf("len=%d", len(got))
 	}
 	ids := []string{}
 	for _, c := range got {
 		ids = append(ids, c.ID)
 	}
-	if !reflect.DeepEqual(ids, []string{"prometheus", "grafana", "alertmanager", "loki"}) {
+	if !reflect.DeepEqual(ids, []string{"prometheus", "grafana", "alertmanager"}) {
 		t.Fatal(ids)
 	}
-	if got[0].Name != "PROMETHEUS-main" || got[0].Detail != "Unavailable (0/1)" || got[1].Name != "grafana-prometheus" || got[3].Status != "planned" {
+	if got[0].Name != "PROMETHEUS-main" || got[0].Detail != "Unavailable (0/1)" || got[1].Name != "grafana-prometheus" {
 		t.Fatalf("components=%#v", got)
 	}
 	if resourceview.CountReadyRequiredComponents(got) != 2 || resourceview.ComponentReach(got, "absent") != probe.ReachUnknown {
 		t.Fatal("required count or missing reach changed")
 	}
 	missing := resourceview.MatchLayerBComponents(nil, nil)
-	if !reflect.DeepEqual(missing, resourceview.MissingLayerBComponents()) || missing[0].Status != "missing" || missing[3].Phase != "planned" {
+	if !reflect.DeepEqual(missing, resourceview.MissingLayerBComponents()) || missing[0].Status != "missing" || len(missing) != resourceview.RequiredLayerBCount() {
 		t.Fatalf("missing=%#v", missing)
 	}
 }
