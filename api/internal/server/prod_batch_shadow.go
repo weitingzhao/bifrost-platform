@@ -48,7 +48,20 @@ const (
 	policyWindowReason = "release window: "
 )
 
-func prodShadowMode() string { return headrelease.ProdMode(os.Getenv(prodShadowEnv)) }
+// prodShadowMode reads the switch. Unset, it is shadow in the process where
+// head-release is on (the one that would release PROD) and off anywhere else;
+// "off" turns it off there too. The coordinator asked on 2026-11-16 for a
+// night of shadow records before anyone decides to turn releasing on, and the
+// PROD manifest is not an agent's to change: the default ships with the code,
+// through CI and the release policy, and it can do nothing but read and write
+// an audit record.
+func prodShadowMode() string {
+	v := strings.TrimSpace(os.Getenv(prodShadowEnv))
+	if v == "" && headReleaseOn() {
+		return headrelease.ProdShadow
+	}
+	return headrelease.ProdMode(v)
+}
 
 func prodShadowOn() bool { return prodShadowMode() == headrelease.ProdShadow }
 
@@ -256,6 +269,7 @@ func (s *Server) prodShadowOf(table headrelease.Table) *headrelease.ProdShadowLo
 	slog.Info("prod batch shadow: on (records only)", "deliverable", prod.Name, "candidate_from", source.Name, "soak", soak.String(), "gap", gap.String())
 	return &headrelease.ProdShadowLoop{
 		Mode:   mode,
+		Every:  time.Minute,
 		Gather: func(ctx context.Context) headrelease.ProdFacts { return reads.gather(ctx, *prod, *source, soak, gap) },
 		Batch: func(ctx context.Context, from, to string) headrelease.ProdBatch {
 			return s.prodShadowBatch(ctx, repo, from, to)

@@ -303,3 +303,26 @@ func TestProdShadowSwitchDefaultsOff(t *testing.T) {
 		t.Error("positive control: shadow is not on")
 	}
 }
+
+// Origin: 2026-11-16 night. The coordinator asked for a night of shadow
+// records; the switch is an environment variable of PROD's workers, and the
+// PROD manifest is not an agent's to change while the Owner sleeps. So where
+// head-release runs the shadow is on unless it is switched off, and where it
+// does not run (STG's platform, a local process) nothing is judged. "on" is
+// still nothing: that code is not written.
+func TestProdShadowIsOnWhereHeadReleaseRunsUnlessSwitchedOff(t *testing.T) {
+	for _, c := range []struct{ head, value, want string }{
+		{"stg", "", headrelease.ProdShadow},
+		{"stg", "off", headrelease.ProdOff},
+		{"stg", "on", headrelease.ProdOff},
+		{"stg", "shadow", headrelease.ProdShadow},
+		{"", "", headrelease.ProdOff},
+		{"", "shadow", headrelease.ProdShadow},
+	} {
+		t.Setenv("HEAD_RELEASE", c.head)
+		t.Setenv(prodShadowEnv, c.value)
+		if got := prodShadowMode(); got != c.want {
+			t.Errorf("HEAD_RELEASE=%q %s=%q: %s, want %s", c.head, prodShadowEnv, c.value, got, c.want)
+		}
+	}
+}

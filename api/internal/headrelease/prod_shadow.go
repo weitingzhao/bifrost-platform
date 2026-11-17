@@ -328,14 +328,33 @@ type ProdShadowLoop struct {
 	// Record writes one record: result is would_release, wait or unknown.
 	Record func(result, detail string)
 
-	mu   sync.Mutex
-	last string
+	// Every is the least time between two judgements; zero judges each
+	// pass. Gathering reads the release records, which lists the runs of the
+	// pipelines' namespace: head-release passes come every few seconds and
+	// on every wake, and the platform's lists of runs are what is being cut
+	// down (2026-11-16: 1,838 in ten minutes on PROD).
+	Every time.Duration
+
+	mu     sync.Mutex
+	last   string
+	judged time.Time
 }
 
 // Pass judges once. recorded says whether a record was written.
 func (s *ProdShadowLoop) Pass(ctx context.Context) (d ProdDecision, recorded bool) {
 	if s == nil || s.Mode != ProdShadow || s.Gather == nil {
 		return ProdDecision{}, false
+	}
+	if s.Every > 0 {
+		s.mu.Lock()
+		wait := !s.judged.IsZero() && time.Since(s.judged) < s.Every
+		if !wait {
+			s.judged = time.Now()
+		}
+		s.mu.Unlock()
+		if wait {
+			return ProdDecision{}, false
+		}
 	}
 	f := s.Gather(ctx)
 	d = DecideProd(f)
