@@ -64,7 +64,7 @@ channels:
   - {id: N19, class: K5, disposition: not-this-way, what: "owner-exec 执行通道：领卡、20 秒心跳、交结果（命令按指纹+一次性码）", by: "永远不走：D 级命令与一次性码不上总线；卡的执行结果由 approval.card.executed 宣布"}
   - {id: N20, class: K3, disposition: deleted, what: "审批 claim 长轮询 wait_seconds（本仓库唯一调用方不传）", by: "死路（其他仓库没查，删前核）"}
   - {id: N21, class: K2, disposition: replaced, what: "Kick：L02 → L09 的进程内提示", by: "门·集群的 watch 事件（进程内提示不再需要）"}
-  - {id: N22, class: K2, disposition: deleted, what: "PG pg_notify 触发器+agentrt.outbox（设计过，无写入者无读者）", by: "死路；新中继不要复用（设计里的 outbox 被「账」顶掉，结果等同）"}
+  - {id: N22, class: K2, disposition: deleted, what: "PG pg_notify 触发器+agentrt.outbox（设计过，无写入者无读者）", by: "死路；新中继不要复用（设计里的 outbox 被「账」顶掉，结果等同）", retired: {at: "2026-11-17", change: Id818b64d36e851fb3e31d91e06f0dd08ae027a12, absent_text: ['FROM agentrt.outbox)', 'FROM agentrt.outbox`']}}
   - {id: W01, class: K3, disposition: replaced, what: "wait_for_messages：客户端循环套服务端长轮询（服务端每秒读 PG）", by: "入户口子④（长轮询工具，背后是 NATS 拉取消费者）"}
   - {id: W02, class: K3, disposition: replaced, what: "wait_for_request：每 2 秒读审批状态", by: "入户口子④/③订阅并等"}
   - {id: W03, class: K3, disposition: replaced, what: "wait_for_answer：每 2 秒读问题状态", by: "入户口子④订阅并等"}
@@ -94,7 +94,7 @@ channels:
   - {id: S10, class: K12, disposition: replaced, what: "线程标题 ConfigMap（手改、转录扫描、上报三个来源）", by: "席位记录的标题字段"}
   - {id: S11, class: K13, disposition: merged, what: "信箱存放：agentrt.message + artifact（正文 ≤8 KiB）", by: "随 N09 留下并改造：正文仍在这里，事件只带指针"}
   - {id: S12, class: K8, disposition: deleted, what: "metric_reading：交付度量读数（无非测试写入者）", by: "死路（删前要连 baseline1109.go:37 的存在性检查一起改）"}
-  - {id: S13, class: K2, disposition: deleted, what: "同 N22：agentrt.outbox", by: "死路"}
+  - {id: S13, class: K2, disposition: deleted, what: "同 N22：agentrt.outbox", by: "死路", retired: {at: "2026-11-17", change: Id818b64d36e851fb3e31d91e06f0dd08ae027a12, absent_text: ['FROM agentrt.outbox)', 'FROM agentrt.outbox`']}}
   - {id: S14, class: K6, disposition: announced, what: "maintainer 指标：8 个循环的成功时间戳与运行计数，给 Prometheus", by: "指标留给 Prometheus（对账兜底）；循环健康变化以 loop.health.changed 宣布，登记表要求每个循环都登记（现在 8/约 20）"}
   - {id: C01, class: K1, disposition: replaced, what: "Console 每页各自 TanStack Query 轮询（约 215 处）", by: "入户口子②（共用一条事件流）+读口；剩下的轮询只许是登记过的对账"}
   - {id: C02, class: K2, disposition: replaced, what: "Console 构建漂移检测：轮询自己的静态资源", by: "入户口子②收 release.deploy.finished（主体=console）"}
