@@ -7,6 +7,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	busalerts "github.com/weitingzhao/bifrost-platform/api/internal/bus/alerts"
 	buscards "github.com/weitingzhao/bifrost-platform/api/internal/bus/cards"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/runhooks"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/subscribe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"log/slog"
@@ -62,7 +63,14 @@ type busWiring struct {
 	finished     chan string
 	finishedOnce sync.Once
 	recordsLive  atomic.Bool
+	// runHooks are the readers woken by ci.run.finished instead of a timer
+	// (bus/runhooks); RunHooks registers one.
+	runHooks runhooks.Registry
 }
+
+// RunHooks is where a reader of pipeline runs registers to be woken by
+// ci.run.finished (one durable consumer per hook, in the workers).
+func (s *Server) RunHooks() *runhooks.Registry { return &s.bus.runHooks }
 
 // finishedRuns is the queue of runs gate-cluster said finished.
 func (b *busWiring) finishedRuns() chan string {
@@ -385,6 +393,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 			s.consumeHeadRelease(ctx, js, env)
 		}
 		s.consumeSubscriptions(ctx, js, env, pool)
+		s.startRunHooks(ctx, js, env)
 		r := &relay.Relay{Ledger: ledger, Out: &relay.JSOut{JS: js, Stream: relay.EventStreamName(relay.Tenant, env)},
 			Tenant: rocket, Env: env, Logf: busLogf}
 		r.Run(ctx, relay.Listen(ctx, pool, busLogf))
@@ -444,6 +453,34 @@ func (s *Server) startRunCache(ctx context.Context) {
 	s.delivery.SetRunCache(g)
 	safego.Go("bus-run-cache", func() { g.Run(ctx) })
 	slog.Info("bus run cache: watching PipelineRuns for the display reads", "namespace", ns)
+}
+
+// startRunHooks starts the run hooks' durable consumers on ci.run.finished,
+// leaving a receipt under each hook's consumer name.
+func (s *Server) startRunHooks(ctx context.Context, js jetstream.JetStream, env string) {
+	receipts := &relay.Receipts{JS: js, Tenant: relay.Tenant, Env: env}
+	for _, err := range s.bus.runHooks.Start(func(h runhooks.Hook) error {
+		cc, err := relay.ConsumeDurable(ctx, js, relay.Tenant, env, h.Consumer(), []string{gatecluster.TypeRunFinished}, func(e relay.Envelope) error {
+			dctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			if err := runhooks.Deliver(dctx, h, e.Subject); err != nil {
+				slog.Warn("bus: run hook; asked again", "hook", h.Name, "event", e.ID, "error", err)
+				return err
+			}
+			if err := receipts.Publish(dctx, e.ID, h.Consumer()); err != nil {
+				slog.Warn("bus: run hook receipt", "hook", h.Name, "event", e.ID, "error", err)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		context.AfterFunc(ctx, func() { cc.Stop() })
+		slog.Info("bus: run hook woken by ci.run.finished", "hook", h.Name, "prefix", h.Prefix, "consumer", h.Consumer())
+		return nil
+	}) {
+		slog.Error("bus: run hook consumer", "error", err)
+	}
 }
 
 // consumeSubscriptions runs the subscription tables' dispatcher (bus/subscribe):
