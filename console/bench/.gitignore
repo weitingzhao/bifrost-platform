@@ -1,0 +1,2 @@
+# Real snapshots hold session ids: never committed (export-snapshot.py writes them).
+*.local.json

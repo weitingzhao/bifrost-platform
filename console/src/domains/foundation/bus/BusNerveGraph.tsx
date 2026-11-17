@@ -43,7 +43,9 @@ const DRIFT = 0.03
 const CLICK_SLOP = 2
 /** Fit the body to the frame this long after it loads or a domain opens or folds, and with this margin in pixels. */
 const FIT_AFTER_MS = 1400
-const FIT_PADDING = 40
+/** When to fit again while the body settles, after a load or an open or fold. */
+const FIT_TIMES_MS = [FIT_AFTER_MS, 3000, 5000, 8000]
+const FIT_PADDING = 90
 
 function idOf(end: string | SimNode): string {
   return typeof end === 'string' ? end : end.id
@@ -78,7 +80,17 @@ function gauss(rnd: () => number): number {
 /** The radius of a domain's cloud for its count of points. */
 function cloudRadius(n: GNode): number {
   const c = n.cloud
-  return 6 + Math.sqrt((c?.parts ?? 0) * 6 + (c?.dust.length ?? 0)) * 1.1
+  return 8 + Math.sqrt((c?.parts ?? 0) * 20 + (c?.dust.length ?? 0)) * 0.6
+}
+
+/** How long a link wants to be: a cloud sits out from the bus by its own size. */
+function linkLength(o: object): number {
+  const l = o as SimLink
+  const end = (e: string | SimNode) => (typeof e === 'string' ? undefined : e)
+  const a = end(l.source)
+  const b = end(l.target)
+  const r = (n?: SimNode) => (n?.kind === 'cluster' ? cloudRadius(n) : 0)
+  return 30 + 1.6 * (r(a) + r(b))
 }
 
 /** How hard a node pushes the others away: clouds get room, parts sit close. */
@@ -197,11 +209,11 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
               ctx.fillStyle = n.color
               for (let i = 0; i < n.cloud.parts * 6; i++) {
                 ctx.globalAlpha = 0.5 + 0.4 * rnd()
-                ctx.beginPath(); ctx.arc(x + gauss(rnd) * R * 0.45, y + gauss(rnd) * R * 0.45, (0.9 + rnd() * 1.4) / Math.sqrt(scale), 0, 2 * Math.PI); ctx.fill()
+                ctx.beginPath(); ctx.arc(x + gauss(rnd) * R * 0.22, y + gauss(rnd) * R * 0.22, (0.9 + rnd() * 1.4) / Math.sqrt(scale), 0, 2 * Math.PI); ctx.fill()
               }
               for (const age of n.cloud.dust) {
                 ctx.globalAlpha = Math.max(0.08, 0.7 * (1 - age / 26))
-                ctx.beginPath(); ctx.arc(x + gauss(rnd) * R * 0.7, y + gauss(rnd) * R * 0.7, (0.4 + rnd() * 0.6) / Math.sqrt(scale), 0, 2 * Math.PI); ctx.fill()
+                ctx.beginPath(); ctx.arc(x + gauss(rnd) * R * 0.38, y + gauss(rnd) * R * 0.38, (0.4 + rnd() * 0.6) / Math.sqrt(scale), 0, 2 * Math.PI); ctx.fill()
               }
             }
             const r = n.size * (n.breath ? 1 + 0.08 * Math.sin((2 * Math.PI * t) / n.breath) : 1) * (lit(n) || hovered.current === n.id ? 1.4 : 1)
@@ -227,8 +239,11 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
           .linkDirectionalParticleWidth(2.6)
           .linkDirectionalParticleSpeed(0.012)
           .d3AlphaMin(0)
+          .d3AlphaDecay(0.012)
+          .warmupTicks(1200)
           .cooldownTicks(Infinity)
           .autoPauseRedraw(false)
+        g.d3Force('link')?.distance(linkLength)
         g.d3Force('drift', driftForce(() => data.current.nodes, 2))
         g.d3Force('collide', collideForce(() => data.current.nodes, 2))
         g.d3Force('charge')?.strength(chargeOf)
@@ -238,7 +253,7 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
         g.graphData(data.current)
         graph.current = g
         fitted.current = -1
-        window.setTimeout(() => fit(), FIT_AFTER_MS)
+        fitSoonRef.current()
         ready.current(api)
       })
     } else {
@@ -279,22 +294,31 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
             const white = new THREE.Color('#fff4ea')
             const pp: number[] = []
             const pc: number[] = []
-            const parts = Math.max(1, (n.cloud?.parts ?? 0) * 6)
+            const parts = Math.max(8, (n.cloud?.parts ?? 0) * 20)
             for (let i = 0; i < parts; i++) {
-              pp.push(gauss(rnd) * R * 0.4, gauss(rnd) * R * 0.4, gauss(rnd) * R * 0.4)
+              pp.push(gauss(rnd) * R * 0.22, gauss(rnd) * R * 0.22, gauss(rnd) * R * 0.22)
               const c = base.clone().lerp(white, rnd() * 0.5).multiplyScalar(0.7 + rnd() * 0.5)
               pc.push(c.r, c.g, c.b)
             }
             const dp: number[] = []
             const dc: number[] = []
             for (const age of n.cloud?.dust ?? []) {
-              const b = Math.max(0.1, 1 - (0.9 * Math.min(24, age)) / 24)
-              dp.push(gauss(rnd) * R * 0.75, gauss(rnd) * R * 0.75, gauss(rnd) * R * 0.75)
+              const b = Math.max(0.25, 1 - (0.75 * Math.min(24, age)) / 24)
+              dp.push(gauss(rnd) * R * 0.38, gauss(rnd) * R * 0.38, gauss(rnd) * R * 0.38)
               const c = base.clone().lerp(white, rnd() * 0.3).multiplyScalar(b * (0.6 + rnd() * 0.4))
               dc.push(c.r, c.g, c.b)
             }
-            group.add(pointsOf(pp, pc, 2.6).points)
-            const d = pointsOf(dp, dc, 1.1)
+            group.add(pointsOf(pp, pc, 3.2).points)
+            // A few larger stars, one per part: the parts themselves, brighter than their dust.
+            const sp: number[] = []
+            const sc: number[] = []
+            for (let i = 0; i < Math.max(1, n.cloud?.parts ?? 0); i++) {
+              sp.push(gauss(rnd) * R * 0.18, gauss(rnd) * R * 0.18, gauss(rnd) * R * 0.18)
+              const c = base.clone().lerp(white, 0.6)
+              sc.push(c.r, c.g, c.b)
+            }
+            group.add(pointsOf(sp, sc, 6).points)
+            const d = pointsOf(dp, dc, 1.9)
             group.add(d.points)
             return { group, dust: d.mat }
           }
@@ -347,11 +371,14 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
             .linkWidth(0)
             .linkLabel((o: object) => (o as SimLink).label ?? '')
             .linkDirectionalParticleColor((o: object) => { const l = o as SimLink; return l.__pulse ?? l.color })
-            .linkDirectionalParticleWidth(1.6)
-            .linkDirectionalParticleResolution(6)
+            .linkDirectionalParticleWidth(3)
+            .linkDirectionalParticleResolution(8)
             .linkDirectionalParticleSpeed(0.011)
             .d3AlphaMin(0)
+            .d3AlphaDecay(0.012)
+            .warmupTicks(1200)
             .cooldownTicks(Infinity)
+          g.d3Force('link')?.distance(linkLength)
           g.d3Force('drift', driftForce(() => data.current.nodes, 3))
           g.d3Force('collide', collideForce(() => data.current.nodes, 3))
           g.d3Force('charge')?.strength(chargeOf)
@@ -376,8 +403,10 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
           }
           g.graphData(data.current)
           graph.current = g
+          // The bench (console/bench) looks at the instance; dev builds only.
+          if (import.meta.env.DEV) (window as unknown as { __nerve?: unknown }).__nerve = g
           fitted.current = -1
-          window.setTimeout(() => fit(), FIT_AFTER_MS)
+          fitSoonRef.current()
           // Breath: the whole body breathes slowly; a seat's light with its heartbeat; a flash or hover brightens a node.
           const tick = () => {
             const t = performance.now() / 1000
@@ -435,14 +464,44 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
     }
     graph.current?.graphData(data.current)
     // A domain opened or folded: fit the body to the frame again once it has moved.
-    if (graph.current && fitted.current !== -1 && fitted.current !== next.length) window.setTimeout(() => fit(), FIT_AFTER_MS)
+    if (graph.current && fitted.current !== -1 && fitted.current !== next.length) fitSoonRef.current()
   }, [nodes, links])
 
-  // Fits the body to the frame.
+  // Fits the body to the frame, again and again while it settles. Kept in a ref: the effects call the latest one.
+  const fitSoonRef = useRef(() => {})
+  fitSoonRef.current = () => {
+    for (const ms of FIT_TIMES_MS) window.setTimeout(() => fit(), ms)
+  }
+
   function fit() {
     const g = graph.current
     if (!g) return
-    g.zoomToFit(800, FIT_PADDING)
+    const ns = data.current.nodes
+    if (ns.length === 0) return
+    const ms = document.hidden ? 0 : 600
+    if (flat || !g.cameraPosition) {
+      g.zoomToFit(ms, FIT_PADDING)
+    } else {
+      // 3D: fit from where the nodes are and how far their clouds reach, not from rendered boxes
+      // (a page that renders rarely has stale ones). Keep the current look direction.
+      let min = [Infinity, Infinity, Infinity]
+      let max = [-Infinity, -Infinity, -Infinity]
+      for (const n of ns) {
+        const r = n.kind === 'cluster' ? cloudRadius(n) * 0.9 : n.size * 3
+        const p = [n.x ?? 0, n.y ?? 0, n.z ?? 0]
+        min = min.map((v, i) => Math.min(v, p[i] - r))
+        max = max.map((v, i) => Math.max(v, p[i] + r))
+      }
+      const center = { x: (min[0] + max[0]) / 2, y: (min[1] + max[1]) / 2, z: (min[2] + max[2]) / 2 }
+      const radius = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]) / 2
+      const cam = g.camera() as { position: { x: number; y: number; z: number }; fov: number; aspect: number }
+      const vfov = (cam.fov * Math.PI) / 180
+      const fov = Math.min(vfov, 2 * Math.atan(Math.tan(vfov / 2) * cam.aspect))
+      const distance = (radius / Math.sin(fov / 2)) * 0.62
+      const d = { x: cam.position.x - center.x, y: cam.position.y - center.y, z: cam.position.z - center.z }
+      const len = Math.hypot(d.x, d.y, d.z) || 1
+      g.cameraPosition({ x: center.x + (d.x / len) * distance, y: center.y + (d.y / len) * distance, z: center.z + (d.z / len) * distance }, center, ms)
+    }
     fitted.current = data.current.nodes.length
   }
 
