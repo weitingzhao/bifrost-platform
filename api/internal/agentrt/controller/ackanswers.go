@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -23,8 +24,8 @@ const (
 	AnswerWaitLimit = 24 * time.Hour
 )
 
-// taskWait reads an answered card's task (store.TaskWait); tests replace it.
-var taskWait = store.TaskWait
+// taskWait reads an answered card's task (questioncards.TaskWait); tests replace it.
+var taskWait = questioncards.TaskWait
 
 // AckUsedAnswers is one pass over the runtime's answered cards it has not
 // acknowledged (Sources.Unacked): each is acknowledged (Sources.Ack) when
@@ -38,7 +39,7 @@ func (c *Controller) AckUsedAnswers(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 	type list struct {
-		cards []store.AnsweredCard
+		cards []questioncards.AnsweredCard
 		err   error
 	}
 	x := bounded(c, ctx, func(ctx context.Context) list { cs, err := c.Sources.Unacked(ctx); return list{cs, err} })
@@ -75,7 +76,7 @@ func (c *Controller) AckUsedAnswers(ctx context.Context) (int, error) {
 
 // answerUsed says why the runtime no longer waits on the answer of q, or ""
 // when its task may still.
-func (c *Controller) answerUsed(ctx context.Context, q store.AnsweredCard, now time.Time) (string, error) {
+func (c *Controller) answerUsed(ctx context.Context, q questioncards.AnsweredCard, now time.Time) (string, error) {
 	if !q.AnsweredAt.IsZero() && now.Sub(q.AnsweredAt) > AnswerWaitLimit {
 		return fmt.Sprintf("answered %s ago, more than %s", now.Sub(q.AnsweredAt).Round(time.Minute), AnswerWaitLimit), nil
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -30,7 +31,7 @@ func TestOnlyTheSameCardIsTakenByItsKey(t *testing.T) {
 	}
 	task := "t_01M5192P0JPMJAP63ZKRPXJ2VV"
 	blocked := store.Card{Key: strings.Repeat("cd", 16), Title: "Blocked in M-3: t", Body: "started 30 hours ago",
-		Options: []string{store.BlockedRetry, store.BlockedDrop, "Close mission M-3"}, Recommended: 3, RecommendedWhy: "why",
+		Options: []string{questioncards.BlockedRetry, questioncards.BlockedDrop, "Close mission M-3"}, Recommended: 3, RecommendedWhy: "why",
 		Meanwhile: "the task stays blocked", OwnerDuty: "goal", TaskID: task, Urgency: "when you can", SameByKey: true}
 	card, err := ask(ctx, blocked)
 	if err != nil || card == first {
@@ -42,9 +43,11 @@ func TestOnlyTheSameCardIsTakenByItsKey(t *testing.T) {
 		t.Fatalf("the same card in other words: %q %v; want %s", id, err, card)
 	}
 	for name, edit := range map[string]func(*store.Card){
-		"another task":    func(c *store.Card) { c.TaskID = "t_01M5192P0JPMJAP63ZKRPXJ2VW" },
-		"another mission": func(c *store.Card) { c.Options = []string{store.BlockedRetry, store.BlockedDrop, "Close mission M-4"} },
-		"not asked so":    func(c *store.Card) { c.SameByKey = false },
+		"another task": func(c *store.Card) { c.TaskID = "t_01M5192P0JPMJAP63ZKRPXJ2VW" },
+		"another mission": func(c *store.Card) {
+			c.Options = []string{questioncards.BlockedRetry, questioncards.BlockedDrop, "Close mission M-4"}
+		},
+		"not asked so": func(c *store.Card) { c.SameByKey = false },
 	} {
 		other := later
 		edit(&other)

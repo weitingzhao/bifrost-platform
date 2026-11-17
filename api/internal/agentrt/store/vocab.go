@@ -217,12 +217,9 @@ var bodies = map[string][]field{
 		// attempt branches it was handed, opened or closed (presencelive.go,
 		// review 526 A1).
 		{"prune_round", kStr, true}},
-	// owner_wait_opened, owner_wait_closed (v5 §5.1.3, with the question they
-	// are about): a blocked task's decision card, asked for the block its
-	// blocked_event_id names (the card-th asked for it), and how the card
-	// ended (blockedcard.go); by names the rule that answered it for the
-	// Owner (cardauto.go, TD-390), never present when he answered.
-	"owner_wait_opened": {{"question_id", kID, false}, {"blocked_event_id", kInt, false}, {"card", kInt, false}},
+	// owner_wait_opened, owner_wait_closed: their bodies and values are
+	// declared by package questioncards (blockedcard.go), which took them
+	// with the outcomes they name; the two type names stay in eventTypes.
 	// wait_limit_passed: a wait the controller keeps the clock of passed its
 	// limit (waits.go): which wait, the attempt, task or message waited on
 	// (ref), since when, the limit in seconds and what it came from, how long
@@ -230,7 +227,6 @@ var bodies = map[string][]field{
 	// was known.
 	"wait_limit_passed": {{"wait", kStr, false}, {"ref", kID, false}, {"since", kStr, false}, {"limit_s", kInt, false},
 		{"basis", kStr, false}, {"waited_s", kInt, false}, {"calls", kID, false}, {"usual_s", kInt, true}},
-	"owner_wait_closed": {{"question_id", kID, false}, {"outcome", kStr, false}, {"answer", kStr, true}, {"text", kStr, true}, {"by", kStr, true}},
 }
 
 func checkBody(eventType string, body map[string]any) error {
@@ -400,7 +396,6 @@ var fieldValues = map[string]map[string]value{
 	"ci_reused":                {"repo": ciRepo, "revision": commit, "tree": commit, "reused_run": ciRunName, "reused_uid": ciUID},
 	"pipeline_seen":            {"tree": commit, "tested_by": ciRunName, "created_at": instant, "started_at": instant, "completed_at": instant, "kind": oneOf("ci", "delivery", "other"), "result": oneOf("Succeeded", "Failed"), "reason": shaped("a reason", regexp.MustCompile(`^[A-Za-z]{1,64}$`))},
 	"question_seen":            {"answered_at": instant, "created_at": instant, "withdrawn_at": instant, "expired_at": instant},
-	"owner_wait_closed":        {"outcome": oneOf(OutcomeRetried, OutcomeDropped, OutcomeClosed, OutcomeNone, OutcomeMoot, "expired", "withdrawn")},
 	"ci_seen":                  {"commit": commit},
 	"deploy_seen":              {"env": oneOf("dev", "stg", "prod"), "commit": commit},
 	"note": {"landed": commit, "landed_tip": commit, "landed_via": oneOf(LandedViaLanding, LandedViaHarvest, LandedViaOwnerMerge),

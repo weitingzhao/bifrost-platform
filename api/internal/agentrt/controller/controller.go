@@ -16,6 +16,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -66,7 +67,7 @@ type Sources struct {
 	Ack func(ctx context.Context, id string) error
 	// Unacked lists the runtime's answered cards it has not acknowledged
 	// (AckUsedAnswers); nil acknowledges none of them.
-	Unacked func(ctx context.Context) ([]store.AnsweredCard, error)
+	Unacked func(ctx context.Context) ([]questioncards.AnsweredCard, error)
 	// Ask puts a plan's decision cards to the Owner (store.AcceptPlan); nil
 	// leaves a plan with questions submitted until there is one. Withdraw
 	// takes back the cards of a plan's round that was refused; nil leaves

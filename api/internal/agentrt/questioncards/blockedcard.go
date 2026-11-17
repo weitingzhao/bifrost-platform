@@ -1,8 +1,10 @@
-package store
+package questioncards
 
 import (
 	"context"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // A blocked task's decision card (design v5 §5.2 控制器「验收编排」: checks that
@@ -93,6 +95,14 @@ const (
 	OutcomeMoot    = "moot" // answered after the task moved on, its mission ended or a stop held it: nothing moves
 )
 
+// Historical blocked-card vocabulary retained for recorded outcomes.
+// The old dispatcher no longer closes missions through these cards.
+
+// The third option of a blocked card, and its key in the question store.
+const (
+	OutcomeClosed = "closed" // the Owner closed the task's mission on its card
+)
+
 // AnsweredCard is one of the runtime's cards the Owner answered that the
 // runtime has not acknowledged: an unacknowledged answer counts against the
 // runtime's question quota.
@@ -109,6 +119,27 @@ type AnsweredCard struct {
 // TaskWait was what an answered card's task is now. No task is in work and
 // the tasks' table is not read (store cut 4, 2026-11-14): no such task is
 // found, so an answered card that names one is acknowledged as nobody's.
-func TaskWait(ctx context.Context, db DB, task string) (state string, stopped, found bool, err error) {
+func TaskWait(ctx context.Context, db eventlog.DB, task string) (state string, stopped, found bool, err error) {
 	return "", false, false, nil
+}
+
+// The cards' events, declared to the event log from here: owner_wait_opened
+// and owner_wait_closed (v5 §5.1.3, with the question they are about): a
+// blocked task's decision card, asked for the block its blocked_event_id
+// names (the card-th asked for it), and how the card ended; by names the rule
+// that answered it for the Owner (TD-390), never present when he answered.
+// The two type names stay in the store's closed list (store/vocab.go), which
+// is held against the database's; their bodies and values came here with the
+// outcomes they name (2026-11-17).
+func init() {
+	eventlog.Declare(eventlog.Vocabulary{
+		Bodies: map[string][]eventlog.Field{
+			"owner_wait_opened": {{Name: "question_id", Kind: eventlog.ID}, {Name: "blocked_event_id", Kind: eventlog.Int}, {Name: "card", Kind: eventlog.Int}},
+			"owner_wait_closed": {{Name: "question_id", Kind: eventlog.ID}, {Name: "outcome", Kind: eventlog.Str}, {Name: "answer", Kind: eventlog.Str, Optional: true},
+				{Name: "text", Kind: eventlog.Str, Optional: true}, {Name: "by", Kind: eventlog.Str, Optional: true}},
+		},
+		Values: map[string]map[string]eventlog.Value{
+			"owner_wait_closed": {"outcome": eventlog.OneOf(OutcomeRetried, OutcomeDropped, OutcomeClosed, OutcomeNone, OutcomeMoot, "expired", "withdrawn")},
+		},
+	})
 }

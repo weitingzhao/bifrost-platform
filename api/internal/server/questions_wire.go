@@ -357,7 +357,7 @@ func (rt *questionRuntime) agentRuntimeAck() func(context.Context, string) error
 // agentRuntimeUnacked lists the runtime's answered cards it has not
 // acknowledged (questioncards.Unacked), for the controller to acknowledge
 // those no task waits on; nil without a question store.
-func (rt *questionRuntime) agentRuntimeUnacked() func(context.Context) ([]store.AnsweredCard, error) {
+func (rt *questionRuntime) agentRuntimeUnacked() func(context.Context) ([]questioncards.AnsweredCard, error) {
 	if rt == nil {
 		return nil
 	}
