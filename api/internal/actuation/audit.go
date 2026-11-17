@@ -88,7 +88,7 @@ func (l *AuditLog) Record(r *http.Request, action, target, status, detail string
 	if len(l.records) > maxAuditRecords {
 		l.records = l.records[:maxAuditRecords]
 	}
-	_ = l.persistLocked()
+	l.saveLocked()
 }
 
 func (l *AuditLog) RecordDirect(actor string, role Role, action, target, status, detail string) {
@@ -113,7 +113,7 @@ func (l *AuditLog) RecordDirect(actor string, role Role, action, target, status,
 	if len(l.records) > maxAuditRecords {
 		l.records = l.records[:maxAuditRecords]
 	}
-	_ = l.persistLocked()
+	l.saveLocked()
 }
 
 // Has reports whether this log holds a record of the action on the target.
@@ -182,7 +182,7 @@ func (l *AuditLog) HandleAppend(w http.ResponseWriter, r *http.Request) {
 	if len(l.records) > 500 {
 		l.records = l.records[:500]
 	}
-	_ = l.persistLocked()
+	l.saveLocked()
 	writeJSON(w, http.StatusOK, map[string]any{"id": record.ID, "at": record.At})
 }
 
@@ -237,6 +237,15 @@ func (l *AuditLog) load() error {
 	}
 	l.records = records
 	return nil
+}
+
+// saveLocked writes the records to the log's file and says so when it could
+// not: the record was emitted and is held in memory, but a restart loses it,
+// and nobody would know. The action itself is not failed for it.
+func (l *AuditLog) saveLocked() {
+	if err := l.persistLocked(); err != nil {
+		slog.Error("audit log not written to its file", "path", l.path, "held_in_memory", len(l.records), "error", err.Error())
+	}
 }
 
 func (l *AuditLog) persistLocked() error {
