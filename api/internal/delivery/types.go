@@ -201,10 +201,9 @@ type PipelineTaskRunView struct {
 	CompletionTime string `json:"completion_time,omitempty"`
 }
 
-type PipelineRunResult struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-}
+// PipelineRunResult keeps a string value verbatim and a typed Tekton result as
+// JSON text (cirunview.Results); an absent result list is an empty JSON array.
+type PipelineRunResult = cirunview.Result
 
 type PipelineRunStepsResponse struct {
 	ClusterID    string                `json:"cluster_id"`

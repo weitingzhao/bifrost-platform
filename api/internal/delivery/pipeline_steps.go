@@ -15,30 +15,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 )
 
-var deliverStgPhaseDefs = cirunview.DeliverStgPhaseDefs
-var deliverPlatformPhaseDefs = cirunview.DeliverPlatformPhaseDefs
-var deliverPlatformProdPhaseDefs = cirunview.DeliverPlatformProdPhaseDefs
-var deliverResearchPhaseDefs = cirunview.DeliverResearchPhaseDefs
-
-func aggregatePhasesForPipeline(pipelineName string, taskStatus map[string]string, runTasks map[string]bool) []PipelinePhaseView {
-	return cirunview.AggregatePhasesForPipeline(pipelineName, taskStatus, runTasks)
-}
-func pipelineRunTaskNames(run *unstructured.Unstructured) map[string]bool {
-	return cirunview.PipelineRunTaskNames(run)
-}
-func aggregateDeliverStgPhases(taskStatus map[string]string) []PipelinePhaseView {
-	return cirunview.AggregateDeliverStgPhases(taskStatus)
-}
-func aggregateDeliverPlatformProdPhases(taskStatus map[string]string) []PipelinePhaseView {
-	return cirunview.AggregateDeliverPlatformProdPhases(taskStatus)
-}
-func aggregatePhaseStatus(tasks []string, taskStatus map[string]string) (status, detail string) {
-	return cirunview.AggregatePhaseStatus(tasks, taskStatus)
-}
-func pipelineRunSkippedTasks(run *unstructured.Unstructured) []string {
-	return cirunview.PipelineRunSkippedTasks(run)
-}
-
 func tektonTaskRunState(obj unstructured.Unstructured) string { return cirunview.TaskRunState(obj) }
 
 func pipelineTaskFromTaskRun(obj unstructured.Unstructured, runName string) string {
@@ -81,11 +57,11 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 			pipelineName = run.GetLabels()["tekton.dev/pipeline"]
 		}
 		out.Pipeline = pipelineName
-		out.Results = pipelineRunResults(run)
-		skippedTasks = pipelineRunSkippedTasks(run)
-		runTasks = pipelineRunTaskNames(run)
+		out.Results = cirunview.Results(run)
+		skippedTasks = cirunview.PipelineRunSkippedTasks(run)
+		runTasks = cirunview.PipelineRunTaskNames(run)
 	}
-	out.Phases = aggregatePhasesForPipeline(pipelineName, map[string]string{}, runTasks)
+	out.Phases = cirunview.AggregatePhasesForPipeline(pipelineName, map[string]string{}, runTasks)
 
 	list, err := dyn.Resource(taskRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", runName),
@@ -138,20 +114,9 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 	}
 	sort.Slice(tasks, func(i, j int) bool { return tasks[i].PipelineTask < tasks[j].PipelineTask })
 
-	out.Phases = aggregatePhasesForPipeline(pipelineName, taskStatus, runTasks)
+	out.Phases = cirunview.AggregatePhasesForPipeline(pipelineName, taskStatus, runTasks)
 	out.Tasks = tasks
 	out.Reachability = probe.ReachOK
 	out.Detail = fmt.Sprintf("%d task(s) · %d phase(s)", len(tasks), len(out.Phases))
-	return out
-}
-
-// pipelineRunResults keeps string values verbatim and encodes typed Tekton
-// results as JSON text. An absent result list is always an empty JSON array.
-func pipelineRunResults(run *unstructured.Unstructured) []PipelineRunResult {
-	rows := cirunview.Results(run)
-	out := make([]PipelineRunResult, len(rows))
-	for i, row := range rows {
-		out[i] = PipelineRunResult(row)
-	}
 	return out
 }

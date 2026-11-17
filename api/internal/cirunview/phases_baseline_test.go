@@ -1,4 +1,4 @@
-package delivery
+package cirunview
 
 import (
 	"fmt"
@@ -220,14 +220,14 @@ func TestPipelinePhaseProjectionOriginalParity(t *testing.T) {
 					ID    string
 					Label string
 					Tasks []string
-				}{deliverStgPhaseDefs, deliverPlatformPhaseDefs, deliverPlatformProdPhaseDefs, deliverResearchPhaseDefs} {
+				}{DeliverStgPhaseDefs, DeliverPlatformPhaseDefs, DeliverPlatformProdPhaseDefs, DeliverResearchPhaseDefs} {
 					for _, def := range defs {
 						for _, task := range def.Tasks {
 							taskStatus[task] = state
 						}
 					}
 				}
-				got, want := aggregatePhasesForPipeline(name, taskStatus, runTasks), baselineAggregatePhasesForPipeline(name, taskStatus, runTasks)
+				got, want := AggregatePhasesForPipeline(name, taskStatus, runTasks), baselineAggregatePhasesForPipeline(name, taskStatus, runTasks)
 				if !reflect.DeepEqual(got, want) {
 					t.Fatalf("%s %s: %#v != %#v", name, state, got, want)
 				}
@@ -236,7 +236,7 @@ func TestPipelinePhaseProjectionOriginalParity(t *testing.T) {
 	}
 	for _, a := range states {
 		for _, b := range states {
-			x, y := aggregatePhaseStatus([]string{"a", "b"}, map[string]string{"a": a, "b": b})
+			x, y := AggregatePhaseStatus([]string{"a", "b"}, map[string]string{"a": a, "b": b})
 			u, v := baselineAggregatePhaseStatus([]string{"a", "b"}, map[string]string{"a": a, "b": b})
 			if x != u || y != v {
 				t.Fatal("priority mismatch")
@@ -245,7 +245,7 @@ func TestPipelinePhaseProjectionOriginalParity(t *testing.T) {
 	}
 	for _, raw := range []map[string]any{{}, {"status": map[string]any{"pipelineSpec": map[string]any{"tasks": []any{nil, map[string]any{"name": "a"}}, "finally": []any{map[string]any{"name": "z"}}}, "skippedTasks": []any{nil, map[string]any{"name": "a"}, map[string]any{"name": ""}}}}} {
 		obj := unstructured.Unstructured{Object: raw}
-		if !reflect.DeepEqual(pipelineRunTaskNames(&obj), baselinePipelineRunTaskNames(&obj)) || !reflect.DeepEqual(pipelineRunSkippedTasks(&obj), baselinePipelineRunSkippedTasks(&obj)) {
+		if !reflect.DeepEqual(PipelineRunTaskNames(&obj), baselinePipelineRunTaskNames(&obj)) || !reflect.DeepEqual(PipelineRunSkippedTasks(&obj), baselinePipelineRunSkippedTasks(&obj)) {
 			t.Fatal("task list mismatch")
 		}
 	}

@@ -20,7 +20,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 )
 
-type timingStep = cirunview.TimingStep
 type timingTask = cirunview.TimingTask
 type timingRun struct {
 	PipelineRunView
@@ -86,9 +85,6 @@ func (h *Handler) HandlePipelineTimings(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, 200, out)
 }
 
-func timingString(obj unstructured.Unstructured, path ...string) string {
-	return cirunview.TimingString(obj, path...)
-}
 func timingParams(obj unstructured.Unstructured) map[string]string {
 	out := map[string]string{}
 	items, _, _ := unstructured.NestedSlice(obj.Object, "spec", "params")
@@ -104,9 +100,6 @@ func timingParams(obj unstructured.Unstructured) map[string]string {
 		}
 	}
 	return out
-}
-func taskTiming(obj unstructured.Unstructured, run string) timingTask {
-	return cirunview.TaskTiming(obj, run)
 }
 
 func (s *Service) readPipelineTimings(ctx context.Context, pipeline, repo, run string, limit int) (pipelineTimings, error) {
@@ -130,20 +123,20 @@ func (s *Service) readPipelineTimings(ctx context.Context, pipeline, repo, run s
 	}
 	for _, item := range items {
 		params := timingParams(item)
-		actual := timingString(item, "spec", "pipelineRef", "name")
+		actual := cirunview.TimingString(item, "spec", "pipelineRef", "name")
 		if actual == "" {
 			actual = item.GetLabels()["tekton.dev/pipeline"]
 		}
 		if actual != pipeline || repo != "" && item.GetLabels()["bifrost.io/repo"] != repo && params["repo"] != repo {
 			continue
 		}
-		skipped := pipelineRunSkippedTasks(&item)
+		skipped := cirunview.PipelineRunSkippedTasks(&item)
 		if skipped == nil {
 			skipped = []string{}
 		}
 		out.Runs = append(out.Runs, timingRun{PipelineRunView: pipelineRunFromUnstructured(item, pipeline),
 			Created: item.GetCreationTimestamp().UTC().Format(time.RFC3339), Trigger: item.GetLabels()["bifrost.io/trigger"],
-			Params: params, Results: pipelineRunResults(&item), Tasks: []timingTask{}, Skipped: skipped})
+			Params: params, Results: cirunview.Results(&item), Tasks: []timingTask{}, Skipped: skipped})
 	}
 	sort.Slice(out.Runs, func(i, j int) bool { return out.Runs[i].Created > out.Runs[j].Created })
 	out.Retained = len(out.Runs)
@@ -169,7 +162,7 @@ func (s *Service) readPipelineTimings(ctx context.Context, pipeline, repo, run s
 			}
 			for _, task := range page.Items {
 				if parent := index[task.GetLabels()["tekton.dev/pipelineRun"]]; parent != nil {
-					parent.Tasks = append(parent.Tasks, taskTiming(task, parent.Name))
+					parent.Tasks = append(parent.Tasks, cirunview.TaskTiming(task, parent.Name))
 				}
 			}
 			options.Continue = page.GetContinue()

@@ -1,4 +1,4 @@
-package delivery
+package cirunview
 
 import (
 	"encoding/json"
@@ -33,7 +33,7 @@ func TestTaskTimingProjectionMatchesOriginal(t *testing.T) {
 	for i, obj := range objects {
 		u := unstructured.Unstructured{Object: obj}
 		for _, run := range []string{"run", "", "other"} {
-			pairs := [][2]func() any{{func() any { return baselineTaskTiming(u, run) }, func() any { return taskTiming(u, run) }}, {func() any { return baselineTimingParams(u) }, func() any { return timingParams(u) }}, {func() any { return baselinePipelineRunResults(&u) }, func() any { return pipelineRunResults(&u) }}}
+			pairs := [][2]func() any{{func() any { return baselineTaskTiming(u, run) }, func() any { return TaskTiming(u, run) }}, {func() any { return baselinePipelineRunResults(&u) }, func() any { return Results(&u) }}}
 			for j, p := range pairs {
 				want, wp := timingOutcome(p[0])
 				got, gp := timingOutcome(p[1])
@@ -50,7 +50,7 @@ func TestTaskTimingProjectionMatchesOriginal(t *testing.T) {
 	}
 	// The original internal result helper panics on nil input; preserve that too.
 	_, wp := timingOutcome(func() any { return baselinePipelineRunResults(nil) })
-	_, gp := timingOutcome(func() any { return pipelineRunResults(nil) })
+	_, gp := timingOutcome(func() any { return Results(nil) })
 	if wp == "" || wp != gp {
 		t.Fatal("nil input panic changed")
 	}

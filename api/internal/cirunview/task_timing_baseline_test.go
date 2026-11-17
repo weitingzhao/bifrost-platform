@@ -1,9 +1,8 @@
-package delivery
+package cirunview
 
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"strings"
 	"time"
@@ -14,32 +13,15 @@ func baselineTimingString(obj unstructured.Unstructured, path ...string) string 
 	return value
 }
 
-func baselineTimingParams(obj unstructured.Unstructured) map[string]string {
-	out := map[string]string{}
-	items, _, _ := unstructured.NestedSlice(obj.Object, "spec", "params")
-	for _, item := range items {
-		m, _ := item.(map[string]any)
-		name, _ := m["name"].(string)
-		// Only references used by this view, never arbitrary parameters.
-		switch name {
-		case "revision", "repo", "base", "branch", "uiRevision":
-			if value, ok := m["value"].(string); ok {
-				out[name] = value
-			}
-		}
-	}
-	return out
-}
-
-func baselineTaskTiming(obj unstructured.Unstructured, run string) timingTask {
-	out := timingTask{Name: obj.GetName(), Task: baselinePipelineTaskFromTaskRun(obj, run), Status: baselineTektonTaskRunState(obj),
+func baselineTaskTiming(obj unstructured.Unstructured, run string) TimingTask {
+	out := TimingTask{Name: obj.GetName(), Task: baselinePipelineTaskFromTaskRun(obj, run), Status: baselineTektonTaskRunState(obj),
 		Created: obj.GetCreationTimestamp().UTC().Format(time.RFC3339), Finished: baselineTimingString(obj, "status", "completionTime"),
-		Results: baselineTimingResults(&obj), Steps: []timingStep{}}
+		Results: baselineTimingResults(&obj), Steps: []TimingStep{}}
 	items, _, _ := unstructured.NestedSlice(obj.Object, "status", "steps")
 	for _, item := range items {
 		m, _ := item.(map[string]any)
 		name, _ := m["name"].(string)
-		step := timingStep{Name: name, Status: "waiting"}
+		step := TimingStep{Name: name, Status: "waiting"}
 		if state, ok := m["terminated"].(map[string]any); ok {
 			step.Status = "terminated"
 			step.Started, _ = state["startedAt"].(string)
@@ -98,9 +80,9 @@ func baselinePipelineTaskFromTaskRun(obj unstructured.Unstructured, runName stri
 	return name
 }
 
-func baselinePipelineRunResults(run *unstructured.Unstructured) []PipelineRunResult {
+func baselinePipelineRunResults(run *unstructured.Unstructured) []Result {
 	items, _, _ := unstructured.NestedSlice(run.Object, "status", "results")
-	out := make([]PipelineRunResult, 0, len(items))
+	out := make([]Result, 0, len(items))
 	for _, item := range items {
 		result, ok := item.(map[string]any)
 		if !ok {
@@ -115,16 +97,16 @@ func baselinePipelineRunResults(run *unstructured.Unstructured) []PipelineRunRes
 			}
 			value = string(raw)
 		}
-		out = append(out, PipelineRunResult{Name: name, Value: value})
+		out = append(out, Result{Name: name, Value: value})
 	}
 	return out
 }
 
-func baselineTimingResults(obj *unstructured.Unstructured) []cirunview.Result {
+func baselineTimingResults(obj *unstructured.Unstructured) []Result {
 	rows := baselinePipelineRunResults(obj)
-	out := make([]cirunview.Result, len(rows))
+	out := make([]Result, len(rows))
 	for i, row := range rows {
-		out[i] = cirunview.Result(row)
+		out[i] = Result(row)
 	}
 	return out
 }

@@ -1,4 +1,4 @@
-package delivery
+package cirunview
 
 import (
 	"strings"
@@ -10,25 +10,25 @@ import (
 func TestAggregatePhaseStatus(t *testing.T) {
 	tasks := []string{"a", "b", "c"}
 	m := map[string]string{"a": "succeeded", "b": "succeeded", "c": "succeeded"}
-	st, detail := aggregatePhaseStatus(tasks, m)
+	st, detail := AggregatePhaseStatus(tasks, m)
 	if st != "succeeded" || detail != "3/3 done" {
 		t.Fatalf("all succeeded: got %s %s", st, detail)
 	}
 
 	m = map[string]string{"a": "succeeded", "b": "running", "c": "pending"}
-	st, _ = aggregatePhaseStatus(tasks, m)
+	st, _ = AggregatePhaseStatus(tasks, m)
 	if st != "running" {
 		t.Fatalf("partial: got %s", st)
 	}
 
 	m = map[string]string{"a": "failed", "b": "succeeded"}
-	st, _ = aggregatePhaseStatus([]string{"a", "b"}, m)
+	st, _ = AggregatePhaseStatus([]string{"a", "b"}, m)
 	if st != "failed" {
 		t.Fatalf("failed: got %s", st)
 	}
 
 	m = map[string]string{}
-	st, _ = aggregatePhaseStatus(tasks, m)
+	st, _ = AggregatePhaseStatus(tasks, m)
 	if st != "pending" {
 		t.Fatalf("pending: got %s", st)
 	}
@@ -47,7 +47,7 @@ func TestAggregateDeliverPlatformProdPhasesAllSucceeded(t *testing.T) {
 		"gitops-sync":    "succeeded",
 		"rollout":        "succeeded",
 	}
-	phases := aggregateDeliverPlatformProdPhases(taskStatus)
+	phases := AggregateDeliverPlatformProdPhases(taskStatus)
 	if len(phases) != 7 {
 		t.Fatalf("expected 7 phases, got %d", len(phases))
 	}
@@ -66,7 +66,7 @@ func TestAggregateDeliverPlatformProdPhasesAllSucceeded(t *testing.T) {
 
 func TestAggregatePhasesForPipelinePlatformProdNotStg(t *testing.T) {
 	taskStatus := map[string]string{"check-source": "succeeded", "clone-platform": "pending"}
-	phases := aggregatePhasesForPipeline("bifrost-deliver-platform-prod", taskStatus, nil)
+	phases := AggregatePhasesForPipeline("bifrost-deliver-platform-prod", taskStatus, nil)
 	if len(phases) != 7 {
 		t.Fatalf("expected 7 platform-prod phases, got %d", len(phases))
 	}
@@ -91,7 +91,7 @@ func TestAggregateDeliverStgPhasesBuildRunning(t *testing.T) {
 		"prepare":        "succeeded",
 		"build-all-apis": "running",
 	}
-	phases := aggregateDeliverStgPhases(taskStatus)
+	phases := AggregateDeliverStgPhases(taskStatus)
 	if len(phases) != 6 {
 		t.Fatalf("expected 6 phases, got %d", len(phases))
 	}
@@ -116,7 +116,7 @@ func TestAggregatePhasesForPipelineResearch(t *testing.T) {
 		"rollout-research": "succeeded",
 		"verify-research":  "failed",
 	}
-	phases := aggregatePhasesForPipeline("bifrost-deliver-research", taskStatus, nil)
+	phases := AggregatePhasesForPipeline("bifrost-deliver-research", taskStatus, nil)
 	if len(phases) != 7 {
 		t.Fatalf("expected 7 research phases, got %d", len(phases))
 	}
@@ -146,7 +146,7 @@ func TestAggregatePhasesForPipelineResearchBuildOnly(t *testing.T) {
 		"rollout-research": "skipped",
 		"verify-research":  "skipped",
 	}
-	phases := aggregatePhasesForPipeline("bifrost-deliver-research", taskStatus, nil)
+	phases := AggregatePhasesForPipeline("bifrost-deliver-research", taskStatus, nil)
 	want := []string{"succeeded", "succeeded", "succeeded", "succeeded", "skipped", "skipped", "skipped"}
 	for i, p := range phases {
 		if p.Status != want[i] {
@@ -156,11 +156,11 @@ func TestAggregatePhasesForPipelineResearchBuildOnly(t *testing.T) {
 }
 
 func TestAggregatePhaseStatusSkippedMix(t *testing.T) {
-	st, _ := aggregatePhaseStatus([]string{"a", "b"}, map[string]string{"a": "succeeded", "b": "skipped"})
+	st, _ := AggregatePhaseStatus([]string{"a", "b"}, map[string]string{"a": "succeeded", "b": "skipped"})
 	if st != "succeeded" {
 		t.Fatalf("done+skipped: got %s", st)
 	}
-	st, _ = aggregatePhaseStatus([]string{"a", "b"}, map[string]string{"a": "skipped"})
+	st, _ = AggregatePhaseStatus([]string{"a", "b"}, map[string]string{"a": "skipped"})
 	if st != "running" && st != "pending" {
 		t.Fatalf("skipped+pending must not read as finished: got %s", st)
 	}
@@ -176,11 +176,11 @@ func TestPipelineRunSkippedTasks(t *testing.T) {
 			},
 		},
 	}}
-	got := pipelineRunSkippedTasks(run)
+	got := PipelineRunSkippedTasks(run)
 	if len(got) != 2 || got[0] != "gitops-sync" || got[1] != "rollout-research" {
 		t.Fatalf("got %v", got)
 	}
-	if pipelineRunSkippedTasks(&unstructured.Unstructured{Object: map[string]any{}}) != nil {
+	if PipelineRunSkippedTasks(&unstructured.Unstructured{Object: map[string]any{}}) != nil {
 		t.Fatalf("no status must yield nil")
 	}
 }
@@ -209,7 +209,7 @@ func TestPhaseTablesMatchWhatThePipelinesRun(t *testing.T) {
 		for _, task := range tasks {
 			done[task] = "succeeded"
 		}
-		phases := aggregatePhasesForPipeline(pipeline, done, nil)
+		phases := AggregatePhasesForPipeline(pipeline, done, nil)
 		if len(phases) == 0 {
 			t.Errorf("%s has no phase table", pipeline)
 		}
@@ -234,12 +234,12 @@ func TestPhasesLeaveOutTasksTheRunDoesNotHave(t *testing.T) {
 			map[string]any{"name": "rollout"}, map[string]any{"name": "gitops-sync"},
 		},
 	}}}}
-	runTasks := pipelineRunTaskNames(run)
+	runTasks := PipelineRunTaskNames(run)
 	done := map[string]string{}
 	for name := range runTasks {
 		done[name] = "succeeded"
 	}
-	phases := aggregatePhasesForPipeline("bifrost-deliver-platform", done, runTasks)
+	phases := AggregatePhasesForPipeline("bifrost-deliver-platform", done, runTasks)
 	ids := []string{}
 	for _, p := range phases {
 		ids = append(ids, p.ID)
@@ -256,20 +256,20 @@ func TestPhasesLeaveOutTasksTheRunDoesNotHave(t *testing.T) {
 		}
 	}
 	// The control: the same finished run read without what it runs is the bug.
-	for _, p := range aggregatePhasesForPipeline("bifrost-deliver-platform", done, nil) {
+	for _, p := range AggregatePhasesForPipeline("bifrost-deliver-platform", done, nil) {
 		if p.ID == "mirror" && p.Status != "pending" {
 			t.Errorf("control: mirror = %s, want pending when the table is taken whole", p.Status)
 		}
 	}
 	// A run Tekton has not resolved yet says nothing, and the table stands.
-	if pipelineRunTaskNames(&unstructured.Unstructured{Object: map[string]any{}}) != nil {
+	if PipelineRunTaskNames(&unstructured.Unstructured{Object: map[string]any{}}) != nil {
 		t.Fatal("a run with no pipelineSpec must yield nil, not an empty set")
 	}
 }
 
 func TestPipelineWithoutAPhaseTableGetsNoPhases(t *testing.T) {
 	for _, pipeline := range []string{"bifrost-ci-platform", "bifrost-deliver-prod", "bifrost-build-market-data", ""} {
-		phases := aggregatePhasesForPipeline(pipeline, map[string]string{"clone-core": "succeeded"}, nil)
+		phases := AggregatePhasesForPipeline(pipeline, map[string]string{"clone-core": "succeeded"}, nil)
 		if phases == nil || len(phases) != 0 {
 			t.Errorf("%q: phases = %#v, want an empty list", pipeline, phases)
 		}
