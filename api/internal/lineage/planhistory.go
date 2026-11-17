@@ -30,6 +30,9 @@ type PlanHistoryReader struct {
 	// same pass (default 30s).
 	HeadTTL time.Duration
 	Now     func() time.Time
+	// Main, when set, answers main's head first (the bus ledger, for the
+	// repositories gate-git watches); "" or an error falls back to Gitea.
+	Main func(ctx context.Context, repo string) (string, error)
 
 	mu      sync.Mutex
 	repos   map[string]*repoMain
@@ -110,6 +113,11 @@ func (r *PlanHistoryReader) now() time.Time {
 }
 
 func (r *PlanHistoryReader) head(ctx context.Context, g *gitea, repo string, m *repoMain) (string, error) {
+	if r.Main != nil {
+		if commit, err := r.Main(ctx, repo); err == nil && commit != "" {
+			return commit, nil
+		}
+	}
 	ttl := r.HeadTTL
 	if ttl <= 0 {
 		ttl = 30 * time.Second

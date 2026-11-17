@@ -55,8 +55,14 @@ func (s *Server) handleUnitConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// mainHead is the commit main of repo is at, as Gitea says.
+// mainHead is the commit main of repo is at: the ledger's when gate-git
+// watches repo, else Gitea's (mainOf).
 func (s *Server) mainHead(ctx context.Context, repo string) (string, error) {
+	return s.mainOf(s.giteaMainHead)(ctx, repo)
+}
+
+// giteaMainHead is the commit main of repo is at, as Gitea says.
+func (s *Server) giteaMainHead(ctx context.Context, repo string) (string, error) {
 	s.unitTreesOf()
 	body, err := s.unitTrees.get(ctx, url.PathEscape(repo)+"/branches/main", 1<<20)
 	var branch struct {

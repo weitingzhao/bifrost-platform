@@ -24,5 +24,7 @@ func (s *Server) handleReleaseContext(w http.ResponseWriter, r *http.Request) {
 	if s.questionRuntime != nil && s.questionRuntime.svc != nil {
 		src.Questions = s.questionRuntime.svc.Observations
 	}
+	// main is shown, not gated on: read it where the ledger has it.
+	src.MainHead = s.mainOf(s.delivery.PolicyFacts().MainHead)
 	s.delivery.HandleReleaseContext(src)(w, r)
 }

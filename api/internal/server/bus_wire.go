@@ -66,6 +66,10 @@ type busWiring struct {
 	finished     chan string
 	finishedOnce sync.Once
 	recordsLive  atomic.Bool
+	// gitLedger: this environment keeps git.main.advanced in the ledger
+	// (the Gitea hook or the bus is on), so display readers may ask it where
+	// main is (mainOf).
+	gitLedger atomic.Bool
 	// runHooks are the readers woken by ci.run.finished instead of a timer
 	// (bus/runhooks); RunHooks registers one.
 	runHooks runhooks.Registry
@@ -325,6 +329,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 		slog.Error("bus: NATS is off", "error", err)
 	}
 	hookOn := strings.TrimSpace(os.Getenv(bushook.EnvSecret)) != ""
+	s.bus.gitLedger.Store((hookOn || natsOn) && s.delivery != nil)
 
 	if role.RunsAPI() {
 		g := &gate.Gate{Ledger: ledger, Tenant: rocket, Env: env, Wake: &gate.Waker{}, Logf: busLogf}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"net/http"
 	"sort"
 	"strings"
@@ -137,7 +138,10 @@ func (s *Server) handleEvidenceCommit(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "repo is a repository name and commit a 40-character lowercase SHA"})
 		return
 	}
-	main := s.agentRuntimeMains()
+	main := agentrtapi.MainHead(nil)
+	if m := s.agentRuntimeMains(); m != nil {
+		main = s.mainOf(m)
+	}
 	if s.agentRuntime == nil || s.agentRuntime.api == nil || s.agentRuntime.api.DB == nil || s.delivery == nil || main == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "the evidence ledger is not available on this platform"})
 		return
