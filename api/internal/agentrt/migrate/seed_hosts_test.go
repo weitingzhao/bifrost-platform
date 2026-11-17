@@ -13,13 +13,15 @@ import (
 // 3b-2, 2026-11-14): nothing registers a host or leases a task any more, and
 // the tests here still need the rows to exist.
 
-// seedHost registers host id of kind as the lane did: its event, its actor,
-// its row.
+// seedHost registers host id of kind: its actor and its row, under an event.
 func seedHost(ctx context.Context, db store.DB, by, id, kind string) error {
 	return store.InTx(ctx, db, func(tx pgx.Tx) error {
 		actor := "host:" + id
-		if _, err := store.Append(ctx, tx, store.Event{Stream: "host:" + id, Type: "host_registered", Actor: by,
-			Body: map[string]any{"host_id": id, "actor_id": actor, "host_kind": kind}}); err != nil {
+		// host_registered has no declared body any more (no code writes it,
+		// 2026-11-17); the rows still need an event in their transaction, as
+		// seedLease writes one.
+		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: by,
+			Body: map[string]any{"source": "test"}}); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name) VALUES ($1, 'host', $2)`,

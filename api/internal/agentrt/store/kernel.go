@@ -83,12 +83,6 @@ var taskMoves = map[string][]string{
 
 // Hosts.
 
-// hostKinds are the kinds of host (0010): an Agent host of the cluster's
-// (dev, vm), or the one external host, the coordinator's Mac, which leases
-// only the tasks pinned to it (DESIGN-coordinator-landing-v3 §2.4); the
-// database holds an external host to those and allows one.
-var hostKinds = []string{"dev", "vm", HostExternal}
-
 // HostExternal is the kind of the external host.
 const HostExternal = "external"
 

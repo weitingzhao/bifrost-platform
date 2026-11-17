@@ -2,8 +2,6 @@ package store
 
 import (
 	"fmt"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 )
 
 // Executor pins (W-31 round 4, core blocks C-0 and C-1; bifrost-trade-infra
@@ -31,16 +29,3 @@ var ErrPinNotPermitted = fmt.Errorf("%w: pin_not_permitted", ErrInvalid)
 // entry's (§2.8, F4 A: the first version takes only the coordinator's own
 // work); nothing of the batch was written. It is an ErrInvalid.
 var ErrMixedSource = fmt.Errorf("%w: mixed_source_not_supported", ErrInvalid)
-
-// badViaSession says why a via_session is refused, "" when it is a
-// session id or empty.
-func badViaSession(v any) string {
-	s, ok := v.(string)
-	switch {
-	case !ok:
-		return "is not a string"
-	case s != "" && !actor.IsSession(s):
-		return fmt.Sprintf("is %q, not a session id", s)
-	}
-	return ""
-}
