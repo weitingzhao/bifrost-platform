@@ -14,7 +14,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
 )
 
 const (
@@ -88,7 +88,7 @@ func (f *fullCI) controller(pool *pgxpool.Pool) *controller.Controller {
 // at is a time of the day in the controller's zone.
 func at(t *testing.T, day, hhmm string) time.Time {
 	t.Helper()
-	loc, err := time.LoadLocation(store.BriefZone)
+	loc, err := time.LoadLocation(planpace.BriefZone)
 	must(t, err)
 	v, err := time.ParseInLocation("2006-01-02 15:04", day+" "+hhmm, loc)
 	must(t, err)

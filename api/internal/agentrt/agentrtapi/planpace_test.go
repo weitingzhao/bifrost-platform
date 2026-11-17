@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -31,7 +32,7 @@ func TestPlanPaceRoute(t *testing.T) {
 	if code != 200 || out["root"] != "R2" || out["timezone"] != "America/Chicago" || out["remaining"] != float64(left) {
 		t.Fatalf("pace %d %v", code, out)
 	}
-	if days, _ := out["days"].([]any); len(days) != store.PaceDays {
+	if days, _ := out["days"].([]any); len(days) != planpace.PaceDays {
 		t.Fatalf("days %v", out["days"])
 	}
 	if sum, _ := out["summary"].(string); !strings.HasPrefix(sum, "R2: ") {

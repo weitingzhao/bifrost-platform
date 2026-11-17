@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalreadings"
 	"net/http"
 	"time"
@@ -13,7 +13,7 @@ func (s *Server) handleApprovalReadings(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "this platform keeps no approval records"})
 		return
 	}
-	loc, err := time.LoadLocation(store.BriefZone)
+	loc, err := time.LoadLocation(planpace.BriefZone)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

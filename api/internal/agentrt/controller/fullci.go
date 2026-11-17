@@ -13,12 +13,12 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
 )
 
 // The daily full CI (R5:5.7-9): with incremental Go tests per landing
 // (R5:5.7-1), the whole suite runs on a schedule and a red run is fixed
-// forward. Once a day at At, in the Owner's zone (store.BriefZone, the zone
+// forward. Once a day at At, in the Owner's zone (planpace.BriefZone, the zone
 // of the briefs), a full run of main's head starts, and one of the commit
 // STG runs now when that differs, so a PROD promotion of STG's commit
 // usually has a full green by morning. A commit runs at most once a day (the
@@ -184,7 +184,7 @@ func (c *Controller) FullCIPass(ctx context.Context) (int, error) {
 // again on the next pass; a run of the day already there (a restart) means
 // the day's runs were started.
 func (c *Controller) startFullRuns(ctx context.Context, f *FullCI, now time.Time, runs []landingci.FullRun) (int, error) {
-	loc, err := time.LoadLocation(store.BriefZone)
+	loc, err := time.LoadLocation(planpace.BriefZone)
 	if err != nil {
 		return 0, err
 	}

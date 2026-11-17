@@ -15,6 +15,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
@@ -35,7 +36,7 @@ func TestFullCIGaugeAndNotesRoute(t *testing.T) {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)
-	loc, err := time.LoadLocation(store.BriefZone)
+	loc, err := time.LoadLocation(planpace.BriefZone)
 	if err != nil {
 		t.Fatal(err)
 	}

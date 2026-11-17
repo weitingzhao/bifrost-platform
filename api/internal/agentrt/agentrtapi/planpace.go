@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 )
 
 // getPlanPace is GET /plan-pace?root=: a round's steps left, its steps done
@@ -21,7 +21,7 @@ func (a *API) getPlanPace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "bad_request", "root is required")
 		return
 	}
-	out, err := store.PlanPace(r.Context(), a.DB, root, time.Now())
+	out, err := planreadings.PlanPace(r.Context(), a.DB, root, time.Now())
 	if err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):

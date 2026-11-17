@@ -18,7 +18,7 @@ import (
 // request and stores nothing. Read-only; viewer and above.
 //
 // A day is the day the request was made, in the Owner's zone
-// (store.BriefZone). "Approved" is decided and not rejected. A request
+// (planpace.BriefZone). "Approved" is decided and not rejected. A request
 // approved and then failed, or left with a result nobody could read
 // (unknown), is an approval that bought no change: failed and unknown list
 // those. Whether an approval should not have been asked for at all is not in
