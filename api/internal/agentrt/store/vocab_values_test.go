@@ -143,6 +143,11 @@ func TestEventFieldValues(t *testing.T) {
 	// Every checked field has its pair above (review 334 B3) and is in its
 	// event's body, so no check sits on a field no event has.
 	for event, fields := range checked {
+		// Bus types (dotted names) are checked by their publisher's tests
+		// (evidence's for ci.verdict.changed); see TestEventTypesAreTheDatabases.
+		if strings.Contains(event, ".") {
+			continue
+		}
 		for _, name := range fields {
 			if !covered[event+"."+name] {
 				t.Errorf("%s.%s is checked but has no good and bad value here", event, name)

@@ -3,6 +3,7 @@ package store_test
 import (
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -20,6 +21,12 @@ func TestEventTypesAreTheDatabases(t *testing.T) {
 		db = append(db, m[1])
 	}
 	vocabulary, written := store.EventTypesForTest()
+	// A bus type (a dotted name, bus/registry/rocket.yaml) is declared by its
+	// publisher's package and lands in this binary only when a test imports
+	// that package (evidence declares ci.verdict.changed, 2026-11-16); its
+	// body is checked by the publisher's own tests, and the regexp above
+	// reads only the store's names. Compare the store's names.
+	vocabulary = slices.DeleteFunc(vocabulary, func(t string) bool { return strings.Contains(t, ".") })
 	slices.Sort(db)
 	slices.Sort(vocabulary)
 	if !slices.Equal(db, vocabulary) {
