@@ -13,7 +13,7 @@ import (
 // Ledger is what the relay and the gate read of the event log.
 type Ledger interface {
 	// After is the events of types committed since after, in commit order,
-	// up to limit, and where to read on from (store.EventsAfter's rule: an
+	// up to limit, and where to read on from (eventlog.EventsAfter's rule: an
 	// event shows once every transaction older than its own has ended).
 	After(ctx context.Context, after Cursor, limit int, types []string) ([]Row, Cursor, error)
 	// Horizon is "now": a cursor before every event not yet readable and
@@ -23,7 +23,7 @@ type Ledger interface {
 	Event(ctx context.Context, eventID int64) (Row, bool, error)
 }
 
-// EventsAfterFunc is the event log's cross-stream read (store.EventsAfter),
+// EventsAfterFunc is the event log's cross-stream read (eventlog.EventsAfter),
 // handed in by the wiring: the rows as a JSON array of agentrt.event rows.
 type EventsAfterFunc func(ctx context.Context, tx pgx.Tx, after Cursor, limit int, types []string) ([]byte, Cursor, error)
 

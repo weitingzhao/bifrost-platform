@@ -6,7 +6,7 @@
 // cursor, the ledger reading and the NATS streams.
 //
 // It imports no domain package: the ledger's cross-stream read
-// (store.EventsAfter) is handed in by the server's wiring.
+// (eventlog.EventsAfter) is handed in by the server's wiring.
 package relay
 
 import (
@@ -28,7 +28,7 @@ const MaxEnvelope = 2048
 
 // Cursor is a position in the ledger, "<txid>.<event_id>": every event of a
 // transaction below TxID, and of TxID up to EventID, comes before it. It is
-// the event log's read-on cursor (store.EventCursor), the same text.
+// the event log's read-on cursor (eventlog.EventCursor), the same text.
 type Cursor struct{ TxID, EventID int64 }
 
 func (c Cursor) String() string {

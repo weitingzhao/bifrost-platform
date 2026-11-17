@@ -41,7 +41,7 @@ var ledgerSQL = map[string]int{
 	"agentrt/evidence":         2,
 	"agentrt/loopreadings":     1,
 	"agentrt/planreadings":     12,
-	"agentrt/store":            39,
+	"agentrt/store":            37,
 	"agentrt/workregistration": 3,
 	"assessmentreadings":       1,
 	"bus/relay":                1,

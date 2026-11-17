@@ -17,7 +17,7 @@ import (
 )
 
 // 2026-11-16: bus step 1 (RULES.md §7): the relay's and the gate's reading
-// of the ledger is store.EventsAfter's, through the wiring: an event gate-git
+// of the ledger is eventlog.EventsAfter's, through the wiring: an event gate-git
 // appends wakes a listener at its commit (eventlog.Append's pg_notify) and is
 // read after the horizon taken before it, as an envelope of its type.
 func TestBusReadsTheLedgerThroughEventsAfter(t *testing.T) {
@@ -50,7 +50,7 @@ func TestBusReadsTheLedgerThroughEventsAfter(t *testing.T) {
 		t.Fatal("no wake at the commit")
 	}
 	// An event shows once every older transaction of the cluster has ended
-	// (store.EventsAfter's horizon): other tests' databases share the server.
+	// (eventlog.EventsAfter's horizon): other tests' databases share the server.
 	var rows []relay.Row
 	var next relay.Cursor
 	for deadline := time.Now().Add(10 * time.Second); len(rows) == 0 && err == nil && time.Now().Before(deadline); {

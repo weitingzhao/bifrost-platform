@@ -269,7 +269,7 @@ func busLogf(format string, args ...any) { slog.Info(fmt.Sprintf(format, args...
 // busEventsAfter is the event log's cross-stream read, for the relay and the
 // gate (they import no domain package).
 func busEventsAfter(ctx context.Context, tx pgx.Tx, after relay.Cursor, limit int, types []string) ([]byte, relay.Cursor, error) {
-	doc, next, err := store.EventsAfter(ctx, tx, store.EventCursor{TxID: after.TxID, EventID: after.EventID}, limit, store.EventFilter{Types: types})
+	doc, next, err := eventlog.EventsAfter(ctx, tx, eventlog.EventCursor{TxID: after.TxID, EventID: after.EventID}, limit, eventlog.EventFilter{Types: types})
 	return doc, relay.Cursor{TxID: next.TxID, EventID: next.EventID}, err
 }
 

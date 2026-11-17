@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -57,9 +58,9 @@ func (a *API) getRecentEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		before = n
 	}
-	var after *store.EventCursor
+	var after *eventlog.EventCursor
 	if s := q.Get("after"); s != "" {
-		c, ok := store.ParseEventCursor(s)
+		c, ok := eventlog.ParseEventCursor(s)
 		if !ok {
 			writeError(w, http.StatusBadRequest, "bad_request", "after is a cursor a read gave as next (<txid>.<event_id>)")
 			return
@@ -80,15 +81,15 @@ func (a *API) getRecentEvents(w http.ResponseWriter, r *http.Request) {
 			types = append(types, t)
 		}
 	}
-	filter := store.EventFilter{Types: types, Hidden: hiddenFrom(r), HiddenPrefixes: hiddenPrefixes}
+	filter := eventlog.EventFilter{Types: types, Hidden: hiddenFrom(r), HiddenPrefixes: hiddenPrefixes}
 	var doc []byte
-	var next store.EventCursor
+	var next eventlog.EventCursor
 	err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
 		var err error
 		if after == nil {
-			doc, next, err = store.LatestEvents(r.Context(), tx, before, limit, filter)
+			doc, next, err = eventlog.LatestEvents(r.Context(), tx, before, limit, filter)
 		} else {
-			doc, next, err = store.EventsAfter(r.Context(), tx, *after, limit, filter)
+			doc, next, err = eventlog.EventsAfter(r.Context(), tx, *after, limit, filter)
 		}
 		return err
 	})
