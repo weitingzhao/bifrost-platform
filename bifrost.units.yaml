@@ -89,6 +89,7 @@ modules:
       api/internal/agentprogress: ["api/internal/agentprogress"]
       # Foundation: HTTP observations, moved out of server; no domain inputs.
       api/internal/httpmetrics: ["api/internal/httpmetrics"]
+      api/internal/bus/registry: ["api/internal/bus/registry"]
       api/internal/agentrt/agentrtapi:
         - "api/internal/agentrt/agentrtapi"
         - "api/internal/agentrt/planimport/testdata"
