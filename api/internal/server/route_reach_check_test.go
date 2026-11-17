@@ -120,6 +120,7 @@ var intendedRouteAdditions = map[string][]string{
 	"GET /api/v1/bus/events":                {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/bus/stream":                {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/bus/trace":                 {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"GET /api/v1/bus/clients":               {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/bus/hooks/gitea":          {"", "viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1", "executor"},
 	"GET /api/v1/network/clients/{mac}":     {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/network/clients/fixed-ip": {"operator", "admin", "trade-satellite"},

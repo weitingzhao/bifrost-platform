@@ -34,3 +34,21 @@ subscriptions:
     to: subject
     guarantee: durable
     by: platform-inbox
+
+# The bus's known users. name is the receipt consumer: gate:<route>:<client>
+# for a reader of /bus/events (route events) or /bus/stream (route stream),
+# the durable's name for a durable consumer. lost_after: how long without
+# coming before it is shown as lost.
+clients:
+  - name: gate:stream:console
+    kind: reader
+    lost_after: 24h
+    note: the Ops Bus page, open while someone looks at it
+  - name: headrelease
+    kind: durable
+    lost_after: 24h
+    note: PROD workers' automatic STG release; woken on main and on CI runs
+  - name: sub-verdict-red-to-committer
+    kind: durable
+    lost_after: 168h
+    note: the dispatcher's row; only receipts when a verdict turns red

@@ -133,3 +133,29 @@ export async function fetchBusTrace(id: string): Promise<BusTraceResponse> {
   const r = await authedFetch('bus trace', `/api/v1/bus/trace?id=${encodeURIComponent(id)}`)
   return r.json() as Promise<BusTraceResponse>
 }
+
+/** One user of the bus (GET /api/v1/bus/clients). */
+export interface BusClient {
+  name: string
+  kind?: string
+  declared: boolean
+  lost_after?: string
+  last_seen?: string
+  receipts: number
+  status: 'active' | 'lost' | 'new'
+  note?: string
+}
+
+export interface BusClientsResponse {
+  tenant: string
+  env: string
+  hours: number
+  clients: BusClient[]
+  receipts_error?: string
+}
+
+/** GET /api/v1/bus/clients: who uses the bus, declared or new, and who went quiet. */
+export async function fetchBusClients(): Promise<BusClientsResponse> {
+  const r = await authedFetch('bus clients', '/api/v1/bus/clients?hours=24')
+  return r.json() as Promise<BusClientsResponse>
+}

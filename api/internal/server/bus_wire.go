@@ -265,6 +265,7 @@ func (s *Server) mountBus(r chi.Router) {
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/events", route((*gate.Gate).HandleEvents))
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/stream", route((*gate.Gate).HandleStream))
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/trace", route((*gate.Gate).HandleTrace))
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/clients", route((*gate.Gate).HandleClients))
 }
 
 // startBus starts what this process runs of the bus, once the ledger's pool
@@ -290,6 +291,9 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 
 	if role.RunsAPI() {
 		g := &gate.Gate{Ledger: ledger, Tenant: rocket, Env: env, Wake: &gate.Waker{}, Logf: busLogf}
+		if subs, err := registry.LoadSubscriptions(); err == nil {
+			g.Clients = subs[relay.Tenant].Clients
+		}
 		if natsOn {
 			nc, cerr := relay.Connect(cfg.URL, relay.ReaderUser, cfg.ReaderPassword, "platform-api bus gate")
 			if cerr != nil {

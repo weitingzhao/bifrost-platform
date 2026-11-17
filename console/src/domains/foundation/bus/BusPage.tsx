@@ -16,7 +16,7 @@ import {
   type DenseTagVariant,
 } from '@bifrost/ui'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { BUS_LIST_CAP, fetchBusTrace, useBusStream, type BusConnection } from './useBusStream'
+import { BUS_LIST_CAP, fetchBusClients, fetchBusTrace, useBusStream, type BusClient, type BusConnection } from './useBusStream'
 import { EVENT_ID_PATTERN, clockTime, traceTimeline, type TimelineRow } from './busTrace'
 
 const CONNECTION: Record<BusConnection, { label: string; variant: DenseTagVariant }> = {
@@ -25,6 +25,52 @@ const CONNECTION: Record<BusConnection, { label: string; variant: DenseTagVarian
   reconnecting: { label: 'reconnecting', variant: 'warning' },
   off: { label: 'bus off', variant: 'danger' },
   denied: { label: 'not signed in', variant: 'danger' },
+}
+
+const CLIENT_STATUS: Record<BusClient['status'], { label: string; variant: DenseTagVariant }> = {
+  active: { label: 'active', variant: 'success' },
+  lost: { label: 'lost', variant: 'danger' },
+  new: { label: 'new', variant: 'warning' },
+}
+
+function BusClients() {
+  const q = useQuery({ queryKey: ['bus', 'clients'], queryFn: fetchBusClients, refetchInterval: 60_000 })
+  if (q.isLoading) return <p className="m-0 text-sm text-muted-foreground">Reading the roster…</p>
+  if (q.isError) {
+    return <p className="m-0 text-sm text-destructive">{q.error instanceof Error ? q.error.message : 'Roster failed'}</p>
+  }
+  const rows = q.data?.clients ?? []
+  return (
+    <>
+      {q.data?.receipts_error ? <p className="m-0 mb-2 text-sm text-destructive">Receipts not read: {q.data.receipts_error}</p> : null}
+      <DenseDataTable aria-label="Bus clients">
+        <DenseTableHead>
+          <DenseTableHeadRow>
+            <DenseTableHeader>Client</DenseTableHeader>
+            <DenseTableHeader>Status</DenseTableHeader>
+            <DenseTableHeader>Kind</DenseTableHeader>
+            <DenseTableHeader>Last seen</DenseTableHeader>
+            <DenseTableHeader>Receipts 24h</DenseTableHeader>
+            <DenseTableHeader>Lost after</DenseTableHeader>
+          </DenseTableHeadRow>
+        </DenseTableHead>
+        <DenseTableBody>
+          {rows.length === 0 ? (
+            <DenseTableRow><DenseTableCell colSpan={6}>No client declared or seen.</DenseTableCell></DenseTableRow>
+          ) : rows.map(c => (
+            <DenseTableRow key={c.name}>
+              <DenseTableCell className="break-all font-mono-tabular" title={c.note}>{c.name}</DenseTableCell>
+              <DenseTableCell><DenseTag variant={CLIENT_STATUS[c.status].variant}>{CLIENT_STATUS[c.status].label}</DenseTag></DenseTableCell>
+              <DenseTableCell className="whitespace-nowrap">{c.kind || (c.declared ? '—' : 'undeclared')}</DenseTableCell>
+              <DenseTableCell className="font-mono-tabular whitespace-nowrap" title={c.last_seen}>{c.last_seen ? clockTime(c.last_seen) : 'never'}</DenseTableCell>
+              <DenseTableCell className="font-mono-tabular">{c.receipts}</DenseTableCell>
+              <DenseTableCell className="font-mono-tabular">{c.lost_after || '—'}</DenseTableCell>
+            </DenseTableRow>
+          ))}
+        </DenseTableBody>
+      </DenseDataTable>
+    </>
+  )
 }
 
 function TraceTimeline({ id }: { id: string }) {
@@ -143,6 +189,14 @@ export function BusPage() {
             ))}
           </DenseTableBody>
         </DenseDataTable>
+      </OpsSection>
+      <OpsSection
+        title="Clients"
+        description="From /api/v1/bus/clients: the subscription table's declared users (active or lost after their own limit) and any name that came without being declared (new). Last seen is the later of the last read and the last receipt."
+        bodyPadding="default"
+        overflow="visible"
+      >
+        <BusClients />
       </OpsSection>
       <OpsSection
         title="Journey"

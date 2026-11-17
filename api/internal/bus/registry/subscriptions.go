@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -54,10 +55,23 @@ func (r Subscription) InEnv(env string) bool {
 	return false
 }
 
+// Client is one declared user of the bus: a reader of the gate (its name is
+// the receipt consumer, gate:<route>:<client>) or a durable consumer. A
+// client that has not come for longer than LostAfter is shown as lost; a
+// name that comes without being declared is shown as new (2026-11-16, the
+// Owner: the bus must recognise users coming and going).
+type Client struct {
+	Name      string `yaml:"name"`
+	Kind      string `yaml:"kind"`
+	LostAfter string `yaml:"lost_after"`
+	Note      string `yaml:"note"`
+}
+
 // Subscriptions is one tenant's table.
 type Subscriptions struct {
-	Tenant string         `yaml:"tenant"`
-	Rows   []Subscription `yaml:"subscriptions"`
+	Tenant  string         `yaml:"tenant"`
+	Rows    []Subscription `yaml:"subscriptions"`
+	Clients []Client       `yaml:"clients"`
 }
 
 var (
@@ -117,6 +131,20 @@ func CheckSubscriptions(tenants map[string]Tenant, subs map[string]Subscriptions
 		if !ok {
 			bad("%s: subscriptions for a tenant with no register", name)
 			continue
+		}
+		names := map[string]bool{}
+		for _, c := range table.Clients {
+			at := name + "/clients/" + c.Name
+			if c.Name == "" || names[c.Name] {
+				bad("%s: a client needs a name used once", at)
+			}
+			names[c.Name] = true
+			if c.Kind != "reader" && c.Kind != "durable" {
+				bad("%s: kind is reader or durable", at)
+			}
+			if d, err := time.ParseDuration(c.LostAfter); err != nil || d <= 0 {
+				bad("%s: lost_after is a duration such as 2h", at)
+			}
 		}
 		seen := map[string]bool{}
 		for _, r := range table.Rows {

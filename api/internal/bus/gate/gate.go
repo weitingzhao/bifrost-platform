@@ -88,6 +88,9 @@ type Gate struct {
 	Receipts Receipts
 	Journey  Journey
 	Logf     func(format string, args ...any)
+	// Clients are the subscription table's declared users (the roster).
+	Clients []registry.Client
+	seen    seenClients
 
 	// Poll is the re-read interval without NATS (2 s); Heartbeat the SSE
 	// comment interval (15 s). Zero is the default.
@@ -277,6 +280,7 @@ func (g *Gate) HandleEvents(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
 	}
+	g.seen.mark("gate:events:"+q.client, time.Now())
 	g.receipt(events, "events", q.client)
 	writeJSON(w, http.StatusOK, map[string]any{"events": events, "next": next.String()})
 }
@@ -337,6 +341,7 @@ func (g *Gate) HandleStream(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		_ = rc.Flush()
+		g.seen.mark("gate:stream:"+q.client, time.Now())
 		g.receipt(events, "stream", q.client)
 	}
 }
