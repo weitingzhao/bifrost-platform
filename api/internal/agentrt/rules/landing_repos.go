@@ -34,5 +34,3 @@ var LandingRepositories = map[string]LandingRepository{
 		Siblings:  []string{"bifrost-platform"}, GrantSupported: false, FloorGrantSupported: true,
 	},
 }
-
-func LandingRepoSupported(repo string) bool { _, ok := LandingRepositories[repo]; return ok }

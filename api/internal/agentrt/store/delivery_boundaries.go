@@ -114,19 +114,3 @@ func ReadDeliveryBoundaries(ctx context.Context, db DB, diskFloor int64, availab
 	}
 	return out, nil
 }
-
-func landingBoundaryRows(rule rules.Rule) []map[string]any {
-	rows := []map[string]any{}
-	if rule.Landing == nil {
-		return rows
-	}
-	for _, repo := range rule.Landing.Repos {
-		configured := rule.Landing.EffectiveLimits(repo.Repo)
-		limits := rule.Landing.CheckedLimits(repo.Repo)
-		rows = append(rows, map[string]any{"rule_id": rule.ID, "rule_version": rule.Version, "repo": repo.Repo,
-			"max_files": limits.MaxFiles, "max_changed_lines": limits.MaxChangedLines, "configured_changed_lines": configured.MaxChangedLines, "code_clamped": false,
-			"max_in_flight": limits.MaxInFlightPerRepo,
-			"source":        "rules.Landing.CheckedLimits", "note": "Size limits are not in effect. This is not a task authorization."})
-	}
-	return rows
-}

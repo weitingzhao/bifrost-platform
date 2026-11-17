@@ -21,8 +21,6 @@ func Tightens(prev, next Rule) error {
 		return errors.New("it takes effect earlier")
 	}
 	switch next.Kind {
-	case KindLanding:
-		return landingTightens(prev.Landing, next.Landing)
 	case KindPlan:
 		// Each grant only goes from true to false.
 		if next.Plan.DoneRules && !prev.Plan.DoneRules || next.Plan.ActiveOnLease && !prev.Plan.ActiveOnLease {

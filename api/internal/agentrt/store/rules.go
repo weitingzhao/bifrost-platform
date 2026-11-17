@@ -178,7 +178,6 @@ func CheckRule(ctx context.Context, db DB, id string, text []byte) (map[string]a
 		}
 		out = map[string]any{"rule_id": r.ID, "rule_version": r.Version, "direction": r.Direction, "body": r.Doc(),
 			"tightens": why == nil, "needs_signature": why != nil}
-		out["proposed_landing_effects"] = landingBoundaryRows(r)
 		if why != nil {
 			out["why_not_tighter"] = why.Error()
 		}
@@ -225,9 +224,6 @@ func SignRule(ctx context.Context, db DB, w Writer, id string, text []byte, sign
 	if err != nil {
 		return nil, err
 	}
-	if err := s5SigningOrder(ctx, r); err != nil {
-		return nil, err
-	}
 	if err := releasepolicy.VerifyAnchored([]byte(signature), text, rules.Namespace, anchor); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUnsigned, err)
 	}
@@ -237,34 +233,6 @@ func SignRule(ctx context.Context, db DB, w Writer, id string, text []byte, sign
 		}
 		return nil
 	}, ruleRecord{signature: signature, signedBy: anchor})
-}
-
-// S5SigningReady reports whether the deployment's trusted S5 contract is
-// usable: checker image built, materials pinned, profile the reviewed one.
-// The server wires landingci's embedded trust root; unset, it refuses.
-var S5SigningReady func(context.Context) error
-
-// s5SigningOrder enforces the S5 design §9 order mechanically: checker and
-// trusted CI first, the rule last. A landing rule whose allow enrolls an S5
-// path, signed while the trust root is UNBUILT or unpinned, would route
-// every platform TS/TSX change (the display lane included) to an S5 lane
-// that can never produce evidence. Signing is the only way such an allow
-// enters (an unsigned tightening grants nothing new), so it is checked here,
-// before the signature, and nowhere a stored rule is read: an already
-// stored rule keeps failing closed per operation, never unreadable.
-func s5SigningOrder(ctx context.Context, r rules.Rule) error {
-	paths := rules.S5Enrolled(r)
-	if len(paths) == 0 {
-		return nil
-	}
-	ready := S5SigningReady
-	if ready == nil {
-		return invalid("rule %s enrolls S5 paths %v but no trusted S5 contract is wired", r.ID, paths)
-	}
-	if err := ready(ctx); err != nil {
-		return invalid("rule %s enrolls S5 paths %v before the trusted S5 contract is deployable: %v", r.ID, paths, err)
-	}
-	return nil
 }
 
 // TightenRule takes a rule without a signature: only a version that the

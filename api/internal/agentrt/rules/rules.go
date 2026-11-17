@@ -56,8 +56,6 @@ const (
 	Tighten = "tighten"
 )
 
-var tenants = []string{"dev", "business"}
-
 // Header is the five fields the signature covers, written at the top of
 // every rule and compared with the row's columns.
 type Header struct {
@@ -104,7 +102,6 @@ type Rule struct {
 	Kind     string
 	Plan     *PlanStanding
 	CardAuto *CardAuto
-	Landing  *Landing
 	// Tuning is a tuning rule's part (tuning.go).
 	Tuning *Tuning
 }
@@ -113,16 +110,12 @@ type Rule struct {
 func KindOf(id string) (kind, arg string, err error) {
 	kind, arg, _ = strings.Cut(id, ":")
 	switch kind {
-	case KindLanding:
-		if slices.Contains(tenants, arg) {
-			return kind, arg, nil
-		}
 	case KindPlan, KindCardAuto, KindTuning:
 		if arg == "" && !strings.Contains(id, ":") {
 			return kind, "", nil
 		}
 	}
-	return "", "", fmt.Errorf("rule_id %q is none of plan-standing, card-auto-answer, tuning, landing:<tenant>", id)
+	return "", "", fmt.Errorf("rule_id %q is none of plan-standing, card-auto-answer, tuning", id)
 }
 
 // Parse reads a rule's text. Nothing it does not list passes.
@@ -135,7 +128,7 @@ func Parse(text []byte) (Rule, error) {
 	if r.ID, err = o.str("rule_id", false); err != nil {
 		return Rule{}, err
 	}
-	kind, arg, err := KindOf(r.ID)
+	kind, _, err := KindOf(r.ID)
 	if err != nil {
 		return Rule{}, err
 	}
@@ -162,8 +155,6 @@ func Parse(text []byte) (Rule, error) {
 		return Rule{}, errors.New("expires_at is after effective_at")
 	}
 	switch kind {
-	case KindLanding:
-		err = r.landing(o, arg)
 	case KindPlan:
 		err = r.plan(o)
 	case KindCardAuto:
@@ -175,14 +166,6 @@ func Parse(text []byte) (Rule, error) {
 		return Rule{}, err
 	}
 	return r, o.done()
-}
-
-func tenant(o *object, want string) (string, error) {
-	t, err := o.str("tenant", false)
-	if err == nil && t != want {
-		err = fmt.Errorf("tenant is %q, the rule_id's", want)
-	}
-	return t, err
 }
 
 // cardAuto reads a card-auto-answer rule: after_seconds (or, as the first
@@ -270,10 +253,6 @@ func (r Rule) Doc() map[string]any {
 	doc := map[string]any{"rule_id": r.ID, "rule_version": r.Version, "direction": r.Direction,
 		"effective_at": stamp(r.Effective), "expires_at": stamp(r.Expires)}
 	switch r.Kind {
-	case KindLanding:
-		for k, v := range r.Landing.doc() {
-			doc[k] = v
-		}
 	case KindPlan:
 		doc["done_rules"], doc["active_on_lease"] = r.Plan.DoneRules, r.Plan.ActiveOnLease
 	case KindCardAuto:

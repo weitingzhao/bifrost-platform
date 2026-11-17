@@ -25,19 +25,6 @@ func capacityField(kind string) func(path string) bool {
 	switch kind {
 	case KindTuning:
 		return func(p string) bool { return strings.HasPrefix(p, "values.") }
-	case KindLanding:
-		return func(p string) bool {
-			switch p {
-			case "limits.max_files", "limits.max_changed_lines", "limits.max_landings_per_day", "limits.max_in_flight_per_repo",
-				// Legacy, bounds nothing: stating, changing or dropping it
-				// needs no signature (cleanup wave 1).
-				"limits.max_batch":
-				return true
-			}
-			// Repository capacities.
-			return strings.HasPrefix(p, "repos[") &&
-				(strings.HasSuffix(p, "].limits.max_files") || strings.HasSuffix(p, "].limits.max_changed_lines") || strings.HasSuffix(p, "].limits.max_in_flight"))
-		}
 	}
 	return nil
 }
@@ -168,9 +155,6 @@ func CapacityOnly(prev, next Rule) error {
 		if !ok {
 			// Non-integer fields are bounded by their parser.
 			continue
-		}
-		if next.Kind == KindLanding && (c.Field == "limits.max_in_flight_per_repo" || strings.HasSuffix(c.Field, "].limits.max_in_flight")) && (n < 1 || n > LandingInFlightCeiling) {
-			return fmt.Errorf("%s must be between 1 and %d", c.Field, LandingInFlightCeiling)
 		}
 		if n < 0 {
 			return fmt.Errorf("%s is %d, below zero", c.Field, n)
