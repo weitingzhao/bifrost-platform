@@ -36,7 +36,11 @@ type Gate struct {
 	Ledger    Ledger
 	Dynamic   func() (dynamic.Interface, error)
 	Namespace string
-	Logf      func(format string, args ...any)
+	// Env is this ledger's environment: a run's cause label is taken only
+	// when its LabelCauseEnv names it (PROD and STG watch the same runs, and
+	// an event number belongs to one ledger).
+	Env  string
+	Logf func(format string, args ...any)
 	// Now is the clock (tests set it).
 	Now func() time.Time
 	// ResyncEvery lists the runs again although the watch holds (30 min):
@@ -118,8 +122,8 @@ func (g *Gate) up(which *atomic.Bool) {
 // append writes one event and counts it; it says whether the ledger now
 // agrees (written, or already there). An error is logged and counted, not
 // retried: the next observation or relist says it again.
-func (g *Gate) append(ctx context.Context, stream, typ string, decide Decide) bool {
-	ok, err := g.Ledger.Append(ctx, stream, typ, decide)
+func (g *Gate) append(ctx context.Context, stream, typ string, cause int64, decide Decide) bool {
+	ok, err := g.Ledger.Append(ctx, stream, typ, cause, decide)
 	if err != nil {
 		metricErrors.Add(1)
 		g.logf("bus gate-cluster: %s on %s: %v", typ, stream, err)

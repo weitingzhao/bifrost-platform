@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/observe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
@@ -52,9 +53,73 @@ func (s *Server) handleBusObserve(w http.ResponseWriter, r *http.Request) {
 			if types, err := observeTypes(r.Context(), ledger, busCursorAt(pool), now.Add(-time.Hour), t.Types()); err == nil {
 				p.Rate = observe.NewRate(60, types)
 			}
+			if l, err := s.observeListening(r.Context(), ledger, busCursorAt(pool), now, t); err == nil {
+				p.Listening = &l
+			}
 		}
 	}
 	writeJSON(w, http.StatusOK, p)
+}
+
+// listenHours is the window of the listening readings: the last day.
+const listenHours = 24
+
+// listenScan bounds the receipt messages one reading scans (a day of PROD is some thousands).
+const listenScan = 60000
+
+// observeListening reads whether anyone listens: the last day's bus events
+// (ledger), who took each (one scan of the receipt stream), and who may read
+// each topic (declared consumers and subscription rows).
+func (s *Server) observeListening(ctx context.Context, l relay.Ledger, at func(context.Context, time.Time) (relay.Cursor, error), now time.Time, t registry.Tenant) (observe.Listening, error) {
+	since := now.Add(-listenHours * time.Hour)
+	c, err := at(ctx, since)
+	if err != nil {
+		return observe.Listening{}, err
+	}
+	var events []observe.ListenEvent
+	for page := 0; page < 200; page++ {
+		rows, next, err := l.After(ctx, c, 100, t.Types())
+		if err != nil {
+			return observe.Listening{}, err
+		}
+		for _, row := range rows {
+			if !row.At.Before(since) {
+				events = append(events, observe.ListenEvent{ID: relay.EventID(row.EventID), Type: row.Type, Cause: row.Cause, N: row.EventID})
+			}
+		}
+		if len(rows) < 100 || next == c {
+			break
+		}
+		c = next
+	}
+	readers := map[string][]string{}
+	for typ, ch := range t.Channels {
+		readers[typ] = append(readers[typ], ch.Consumers...)
+	}
+	if subs, err := registry.LoadSubscriptions(); err == nil {
+		for _, set := range subs {
+			for _, row := range set.Rows {
+				for _, on := range row.On {
+					readers[on] = append(readers[on], "row:"+row.ID)
+				}
+			}
+		}
+	}
+	var receipts map[string][]string
+	read := false
+	var cut bool
+	if g := s.bus.gate.Load(); g != nil {
+		if j, ok := g.Journey.(*gate.JSJourney); ok {
+			if receipts, cut, err = j.ReceiptsByEvent(ctx, since, listenScan); err == nil {
+				read = true
+			}
+		}
+	}
+	out := observe.BuildListening(listenHours, events, receipts, read, readers, "gate:stream:console")
+	if cut {
+		out.Notes = append(out.Notes, "the receipt scan stopped at its limit: the heard share is a floor")
+	}
+	return out, nil
 }
 
 // observeTypes is the type of every bus event since a time, a page at a time.

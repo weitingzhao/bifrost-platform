@@ -64,7 +64,7 @@ func TestPGLedgerWritesOncePerFact(t *testing.T) {
 	body := map[string]any{"subject": "ci-x", "ref": gatecluster.RunRef("ci-x"), "change": gatecluster.ChangeSucceeded,
 		"run": "ci-x", "status": "True"}
 	for i, want := range []bool{true, false} {
-		ok, err := l.Append(ctx, gatecluster.RunStream("ci-x"), gatecluster.TypeRunFinished, func(lastType string, _ map[string]any) (map[string]any, bool) {
+		ok, err := l.Append(ctx, gatecluster.RunStream("ci-x"), gatecluster.TypeRunFinished, 0, func(lastType string, _ map[string]any) (map[string]any, bool) {
 			return body, lastType != gatecluster.TypeRunFinished
 		})
 		if err != nil || ok != want {
@@ -78,6 +78,45 @@ func TestPGLedgerWritesOncePerFact(t *testing.T) {
 	}
 	if _, err := eventlog.VerifyStream(ctx, pool, gatecluster.RunStream("ci-x")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Origin: 2026-11-17, the CI line: a run's cause label holds an event number
+// of another ledger when the environments differ. A cause this ledger does
+// not hold is left out and the event is still written (the column is a
+// foreign key: kept, it would refuse the event); a cause it holds is set.
+func TestPGLedgerDropsACauseItDoesNotHold(t *testing.T) {
+	ctx := context.Background()
+	db := agentrttest.Migrated(t)
+	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+		t.Fatal(err)
+	}
+	pool := db.Pool(t, db.Runtime)
+	l := &gatecluster.PGLedger{DB: func() eventlog.DB { return pool }}
+	body := func(run string) map[string]any {
+		return map[string]any{"subject": run, "ref": gatecluster.RunRef(run), "change": gatecluster.ChangeCreated, "run": run}
+	}
+	if ok, err := l.Append(ctx, gatecluster.RunStream("ci-a"), gatecluster.TypeRunStarted, 999999999, func(string, map[string]any) (map[string]any, bool) {
+		return body("ci-a"), true
+	}); err != nil || !ok {
+		t.Fatalf("an unknown cause lost the event: %v %v", ok, err)
+	}
+	var known int64
+	if err := pool.QueryRow(ctx, `SELECT max(event_id) FROM agentrt.event WHERE event_stream_id = 'ci:ci-a'`).Scan(&known); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := l.Append(ctx, gatecluster.RunStream("ci-b"), gatecluster.TypeRunStarted, known, func(string, map[string]any) (map[string]any, bool) {
+		return body("ci-b"), true
+	}); err != nil || !ok {
+		t.Fatalf("a known cause: %v %v", ok, err)
+	}
+	var a, b *int64
+	if err := pool.QueryRow(ctx, `SELECT (SELECT cause_event_id FROM agentrt.event WHERE event_stream_id = 'ci:ci-a'),
+	  (SELECT cause_event_id FROM agentrt.event WHERE event_stream_id = 'ci:ci-b')`).Scan(&a, &b); err != nil {
+		t.Fatal(err)
+	}
+	if a != nil || b == nil || *b != known {
+		t.Fatalf("causes: unknown %v, known %v (want nil, %d)", a, b, known)
 	}
 }
 

@@ -33,4 +33,19 @@ describe('buildBody', () => {
     expect(ids).not.toContain('s:owner')
     expect(ids).not.toContain('r:headrelease')
   })
+  // Origin: 2026-11-17, the Owner: an event nobody hears was sent for nothing. A topic that published
+  // and got no receipt says so by name; one that was heard does not.
+  it('names a topic no one listens to, and only that one', () => {
+    const listening = { hours: 24, topics: [
+      { type: 'ci.run.finished', published: 5, readers: ['seat:*'], heard: 0, followed: 0 },
+      { type: 'seat.mail.arrived', published: 3, readers: ['row:mail'], heard: 3, followed: 0 },
+    ] }
+    const b = buildBody({ ...base, expanded: new Set(['verification', 'coordination']), listening })
+    const deaf = b.nodes.find(n => n.id === 't:ci.run.finished')!
+    const heard = b.nodes.find(n => n.id === 't:seat.mail.arrived')!
+    expect(deaf.label).toContain('no one listening')
+    expect(deaf.named).toBe(true)
+    expect(heard.label).toBe('seat.mail.arrived')
+    expect(b.nodes.find(n => n.id === 'd:verification')!.note).toContain('0% heard · 1 topics no one listens to')
+  })
 })

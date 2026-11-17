@@ -136,7 +136,7 @@ func (g *Gate) observeWindow(ctx context.Context, r windowRecord) {
 	if d == g.winDigest {
 		return // nothing moved since the ledger was last asked
 	}
-	if g.append(ctx, WindowStream, TypeWindowChanged, func(_ string, lastBody map[string]any) (map[string]any, bool) {
+	if g.append(ctx, WindowStream, TypeWindowChanged, 0, func(_ string, lastBody map[string]any) (map[string]any, bool) {
 		return windowChange(r, now, lastBody)
 	}) {
 		g.winDigest = d

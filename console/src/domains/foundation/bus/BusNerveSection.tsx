@@ -145,7 +145,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
   // By default each domain is one node; an expanded domain shows its topics and their publishers.
   const graph = useMemo((): { nodes: GNode[]; links: GLink[] } | null => {
     if (!model) return null
-    return buildBody({ model, domainOfType, expanded, seats, beat, observed, teamLinks: team.data?.links ?? [], names, dustByDomain, now: Date.now() })
+    return buildBody({ model, domainOfType, expanded, seats, beat, observed, teamLinks: team.data?.links ?? [], names, dustByDomain, listening: team.data?.listening, now: Date.now() })
   }, [model, seats, beat, observed, team.data, names, domainOfType, expanded, dustByDomain])
 
   const api = useRef<NerveApi | null>(null)
@@ -297,6 +297,9 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
       {mode.kind === 'live' && team.data?.rate && (
         <p className="m-0 font-mono text-xs" data-testid="bus-nerve-rate" style={{ color: C.muted }}>
           <span style={{ color: C.text }}>{team.data.rate.per_minute}/min</span> · {team.data.rate.events} in 1h
+          {team.data.listening?.heard_share != null && <> · <span style={{ color: C.text }}>{Math.round(team.data.listening.heard_share * 100)}%</span> heard</>}
+          {team.data.listening?.closed_share != null && <> · <span style={{ color: C.text }}>{Math.round(team.data.listening.closed_share * 100)}%</span> loops closed</>}
+          {team.data.listening?.caused_share != null && <> · <span style={{ color: C.text }}>{Math.round(team.data.listening.caused_share * 100)}%</span> with a cause</>}
           {Object.keys(team.data.rate.by_type).length > 0 ? ` · ${Object.entries(team.data.rate.by_type).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t, n]) => `${t} ${n}`).join(' · ')}` : ''}
         </p>
       )}
@@ -306,7 +309,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
         </p>
       )}
       <div className="relative w-full min-w-0">
-      {help && <HelpPanel unmeasured={team.data?.unmeasured ?? []} onClose={() => setHelp(false)} />}
+      {help && <HelpPanel unmeasured={[...(team.data?.unmeasured ?? []), ...(team.data?.listening?.notes ?? []).map(n => ({ what: n.split(':')[0], why: n.includes(':') ? n.slice(n.indexOf(':') + 1).trim() : '' }))]} onClose={() => setHelp(false)} />}
       {view === 'list'
         ? <div className="rounded-sm bg-[var(--card-fill)] p-2"><ContractGraph contract={contract.data} roster={roster} /></div>
         : (
@@ -362,12 +365,14 @@ function HelpPanel({ unmeasured, onClose }: { unmeasured: { what: string; why: s
         <Key mark={<span style={{ color: C.amber }}>┄</span>}>card to owner</Key>
         <Key mark={dot(C.red, true)}>waiting &gt;{STUCK_AFTER_MIN}m</Key>
         <Key mark={dot(C.grey)}>old road · down</Key>
+        <Key mark={dot(C.amber, true)}>no one listening</Key>
       </ul>
       <p className="m-0 mt-2 mb-1" style={{ color: C.muted }}>┌ move</p>
       <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
         <li>drag: turn · wheel: zoom</li>
         <li>click a cloud: open · again: fold</li>
         <li>hover: readings</li>
+        <li>home: back to where it was</li>
       </ul>
       {unmeasured.length > 0 && (
         <>
@@ -377,7 +382,7 @@ function HelpPanel({ unmeasured, onClose }: { unmeasured: { what: string; why: s
           </ul>
         </>
       )}
-      <p className="m-0 mt-2" style={{ color: C.muted }}>dust: each event of the last day, dimmer with age · seats breathe with their heartbeat; quiet {QUIET_AFTER_H}h shows on hover · the Console's own receipt ({OWN_CONSUMER}) is not drawn</p>
+      <p className="m-0 mt-2" style={{ color: C.muted }}>heard: an event someone took (a receipt from anyone but this page) · loops closed: an event something did next names as its cause · with a cause: an event that names the event it answers · dust: each event of the last day, dimmer with age · seats breathe with their heartbeat; quiet {QUIET_AFTER_H}h shows on hover · the Console's own receipt ({OWN_CONSUMER}) is not drawn</p>
     </div>
   )
 }

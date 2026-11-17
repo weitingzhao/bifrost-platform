@@ -62,3 +62,43 @@ func TestNewRateCountsByTypeAndMinute(t *testing.T) {
 		t.Fatalf("empty rate %+v", z)
 	}
 }
+
+// Origin: 2026-11-17, the Owner: an event nobody hears was sent for nothing;
+// a loop is someone sending, someone hearing, and the hearer acting. Per
+// topic: published, heard (a receipt from anyone but the page itself), and
+// followed (an event names it as its cause); shares over all published; and
+// the reasons a share is missing.
+func TestBuildListeningCountsHeardAndFollowed(t *testing.T) {
+	events := []ListenEvent{
+		{ID: "ev-1", Type: "git.main.advanced", N: 1},
+		{ID: "ev-2", Type: "git.main.advanced", N: 2},
+		{ID: "ev-3", Type: "ci.run.started", N: 3, Cause: 1},
+		{ID: "ev-4", Type: "alert.rule.fired", N: 4},
+	}
+	receipts := map[string][]string{
+		"ev-1": {"gate:stream:console", "headrelease"},
+		"ev-2": {"gate:stream:console"},
+		"ev-3": {"gate:events:seat-ci"},
+	}
+	l := BuildListening(24, events, receipts, true, map[string][]string{"git.main.advanced": {"platform-workers"}, "plan.fact.changed": {"seat:*"}}, "gate:stream:console")
+	by := map[string]TopicListen{}
+	for _, tp := range l.Topics {
+		by[tp.Type] = tp
+	}
+	if g := by["git.main.advanced"]; g.Published != 2 || g.Heard != 1 || g.Followed != 1 || len(g.Readers) != 1 {
+		t.Fatalf("git %+v", g)
+	}
+	if a := by["alert.rule.fired"]; a.Published != 1 || a.Heard != 0 {
+		t.Fatalf("an unheard topic %+v", a)
+	}
+	if p, ok := by["plan.fact.changed"]; !ok || p.Published != 0 {
+		t.Fatalf("a declared topic that published nothing %+v", p)
+	}
+	if l.HeardShare == nil || *l.HeardShare != 0.5 || l.ClosedShare == nil || *l.ClosedShare != 0.25 || l.CausedShare == nil || *l.CausedShare != 0.25 {
+		t.Fatalf("shares %v %v %v", l.HeardShare, l.ClosedShare, l.CausedShare)
+	}
+	// Receipts not read: no heard share, and a note says why.
+	if u := BuildListening(24, events, nil, false, nil, "gate:stream:console"); u.HeardShare != nil || len(u.Notes) == 0 {
+		t.Fatalf("unread receipts %+v", u)
+	}
+}

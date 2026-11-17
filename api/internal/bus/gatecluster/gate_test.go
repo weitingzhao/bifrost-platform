@@ -38,11 +38,12 @@ type memLedger struct {
 }
 
 type memEvent struct {
-	typ  string
-	body map[string]any
+	typ   string
+	body  map[string]any
+	cause int64
 }
 
-func (l *memLedger) Append(_ context.Context, stream, typ string, decide Decide) (bool, error) {
+func (l *memLedger) Append(_ context.Context, stream, typ string, cause int64, decide Decide) (bool, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.streams == nil {
@@ -64,7 +65,7 @@ func (l *memLedger) Append(_ context.Context, stream, typ string, decide Decide)
 		l.errs = append(l.errs, err)
 		return false, err
 	}
-	l.streams[stream] = append(l.streams[stream], memEvent{typ, body})
+	l.streams[stream] = append(l.streams[stream], memEvent{typ, body, cause})
 	return true, nil
 }
 
@@ -398,6 +399,41 @@ func TestOnFinishedOncePerRunAfterTheLedger(t *testing.T) {
 
 type failingLedger struct{}
 
-func (failingLedger) Append(context.Context, string, string, Decide) (bool, error) {
+func (failingLedger) Append(context.Context, string, string, int64, Decide) (bool, error) {
 	return false, errors.New("ledger away")
+}
+
+// Origin: 2026-11-17, the coordinator: of a day's 2,464 bus events none named
+// its cause, so no loop could be followed. A run labelled with the event it
+// was started for (bifrost.io/cause=ev-<n>) and that ledger's environment
+// (bifrost.io/cause-env, the CI line's point: PROD and STG watch the same
+// runs, and the number is PROD's) says so on its ci.run.started and
+// ci.run.finished; an unlabelled run names no cause (the control), and so
+// does one labelled for another environment or with a label that is not an
+// event id.
+func TestARunCarriesTheCauseItWasStartedFor(t *testing.T) {
+	l := &memLedger{}
+	g := &Gate{Ledger: l, Env: "prod"}
+	g.init()
+	bg := context.Background()
+	labelled := func(name, cause, env, status string) Run {
+		r := run(name, "bifrost-deliver-platform", shaA, status, "")
+		_ = unstructured.SetNestedField(r.Object, cause, "metadata", "labels", LabelCause)
+		_ = unstructured.SetNestedField(r.Object, env, "metadata", "labels", LabelCauseEnv)
+		return RunOf(r)
+	}
+	g.observeRun(bg, labelled("r1", "ev-42", "prod", "Unknown"), false)
+	g.observeRun(bg, labelled("r1", "ev-42", "prod", "True"), false)
+	g.observeRun(bg, RunOf(run("r2", "bifrost-deliver-platform", shaA, "Unknown", "")), false)
+	g.observeRun(bg, labelled("r3", "not-an-event", "prod", "Unknown"), false)
+	g.observeRun(bg, labelled("r4", "ev-42", "stg", "Unknown"), false)
+	evs := l.events(RunStream("r1"))
+	if len(evs) != 2 || evs[0].cause != 42 || evs[1].cause != 42 {
+		t.Fatalf("r1 events %+v", evs)
+	}
+	for _, r := range []string{"r2", "r3", "r4"} {
+		if e := l.events(RunStream(r)); len(e) != 1 || e[0].cause != 0 {
+			t.Fatalf("%s named a cause: %+v", r, e)
+		}
+	}
 }

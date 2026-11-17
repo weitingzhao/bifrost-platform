@@ -1,5 +1,5 @@
 import type { AgentThreadStatus } from '@/api/agentThreads'
-import { QUIET_AFTER_H, STUCK_AFTER_MIN, seatLabel, seatState, shortSeconds, warmColor, type NerveModel, type ObserveLink, type ObserveSeat, type OrganTone } from './busNerve'
+import { QUIET_AFTER_H, STUCK_AFTER_MIN, seatLabel, seatState, shortSeconds, warmColor, type BusListening, type NerveModel, type ObserveLink, type ObserveSeat, type OrganTone } from './busNerve'
 import { CORE, domainOf } from './busNerveLayout'
 import type { GLink, GNode } from './BusNerveGraph'
 
@@ -58,6 +58,8 @@ export type BodyInput = {
   names: Map<string, string>
   /** The ages in hours of each domain's events of the last day. */
   dustByDomain: Map<string, number[]>
+  /** Who hears each topic over the last day (bus/observe); absent, nothing is said about listening. */
+  listening?: BusListening
   now: number
 }
 
@@ -66,7 +68,7 @@ export type BodyInput = {
  * By default each domain is one cloud; an opened domain shows its topics and
  * their publishers, and its seats, readers or old roads.
  */
-export function buildBody({ model, domainOfType, expanded, seats, beat, observed, teamLinks, names, dustByDomain, now }: BodyInput): { nodes: GNode[]; links: GLink[] } {
+export function buildBody({ model, domainOfType, expanded, seats, beat, observed, teamLinks, names, dustByDomain, listening, now }: BodyInput): { nodes: GNode[]; links: GLink[] } {
     const wall = now
     const nodes: GNode[] = [{ id: CORE, kind: 'core', label: 'bus', color: '#ffe6cc', size: 3, breath: 6, note: 'the bus: ledger and stream' }]
     const links: GLink[] = []
@@ -81,19 +83,31 @@ export function buildBody({ model, domainOfType, expanded, seats, beat, observed
     for (const id of seats) members.set(seatDomain(id), (members.get(seatDomain(id)) ?? 0) + 1)
     members.set('foundation', (members.get('foundation') ?? 0) + model.readers.length)
     for (const d of members.keys()) if (!byDomain.has(d)) byDomain.set(d, [])
+    const listen = new Map((listening?.topics ?? []).map(t => [t.type, t]))
     const pubs = new Set<string>()
     for (const [d, types] of [...byDomain.entries()].sort()) {
       const open = expanded.has(d)
       const more = members.get(d) ?? 0
       const hue = warmColor(d)
       const ages = dustByDomain.get(d) ?? []
+      const pub = types.reduce((n, t) => n + (listen.get(t)?.published ?? 0), 0)
+      const heardN = types.reduce((n, t) => n + (listen.get(t)?.heard ?? 0), 0)
+      const deafN = types.filter(t => (listen.get(t)?.published ?? 0) > 0 && listen.get(t)?.heard === 0).length
+      const hearing = listening && pub > 0 ? ` · ${Math.round((heardN / pub) * 100)}% heard${deafN > 0 ? ` · ${deafN} topics no one listens to` : ''}` : ''
       nodes.push({ id: `d:${d}`, kind: 'cluster', label: open ? `${d} ▾` : d, color: hue, size: 3, breath: null,
         cloud: { parts: types.length + more, dust: ages }, open,
-        note: `domain ${d}: ${types.length} topics${more > 0 ? `, ${more} more inside (seats, readers, old roads)` : ''}, ${ages.length} events in the last day · click to ${open ? 'fold' : 'open'}` })
+        note: `domain ${d}: ${types.length} topics${more > 0 ? `, ${more} more inside (seats, readers, old roads)` : ''}, ${ages.length} events in the last day${hearing} · click to ${open ? 'fold' : 'open'}` })
       links.push({ source: `d:${d}`, target: CORE, color: '#ffd9c2', width: 0.4 })
       if (!open) continue
       for (const t of types) {
-        nodes.push({ id: `t:${t}`, kind: 'topic', label: t, color: warmColor(d, 0.78), size: 0.9, breath: null, note: t })
+        const heard = listen.get(t)
+        // A topic that published and nobody heard: the event dies at the topic. Grey, with its name and why.
+        const deaf = heard != null && heard.published > 0 && heard.heard === 0
+        nodes.push({
+          id: `t:${t}`, kind: 'topic', label: deaf ? `${t} · no one listening` : t, color: deaf ? C.grey : warmColor(d, 0.78), size: deaf ? 1.4 : 0.9, breath: null,
+          ring: deaf ? C.amber : undefined, named: deaf,
+          note: heard ? `${t} · ${heard.published} published in ${listening?.hours ?? 24}h · ${heard.heard} heard · ${heard.followed} followed · ${heard.readers.length} declared readers` : t,
+        })
         links.push({ source: `t:${t}`, target: `d:${d}`, color: warmColor(d, 0.5), width: 0.3 })
         const p = model.publisherOf.get(t) ?? 'unknown'
         if (!pubs.has(p)) {

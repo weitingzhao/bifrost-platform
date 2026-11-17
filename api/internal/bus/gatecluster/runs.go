@@ -11,6 +11,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
 )
 
 // PipelineRunGVR is Tekton's PipelineRun.
@@ -20,6 +22,14 @@ var PipelineRunGVR = schema.GroupVersionResource{Group: "tekton.dev", Version: "
 const (
 	labelPipeline = "tekton.dev/pipeline"
 	labelRevision = "bifrost.io/revision"
+	// LabelCause names the bus event a run was started for (ev-<n>): whoever
+	// starts a run in answer to an event labels it so, and the run's
+	// ci.run.started and ci.run.finished carry that event as their cause, so
+	// the loop event → run → result can be followed (2026-11-17: of a day's
+	// 2,464 bus events none had a cause).
+	LabelCause = "bifrost.io/cause"
+	// LabelCauseEnv is the environment whose ledger the cause's number is in.
+	LabelCauseEnv = "bifrost.io/cause-env"
 )
 
 // runFacts is what the gate remembers of a run between events: a few
@@ -27,6 +37,10 @@ const (
 // megabytes an informer's cache of whole runs would.
 type runFacts struct {
 	pipeline, commit string
+	// cause is the ledger event the run answers (its LabelCause), 0 if none;
+	// causeEnv the environment whose ledger that number is in.
+	cause    int64
+	causeEnv string
 	// status is the Succeeded condition's: "" or Unknown while it runs,
 	// True or False once it finished.
 	status, reason string
@@ -48,7 +62,21 @@ func factsFrom(r Run) runFacts {
 	} else if v := r.Params["revision"]; sha40.MatchString(v) {
 		f.commit = v
 	}
+	if n, ok := relay.ParseEventID(r.Labels[LabelCause]); ok {
+		f.cause = n
+		f.causeEnv = r.Labels[LabelCauseEnv]
+	}
 	return f
+}
+
+// causeOf is the run's cause in this gate's ledger: only when the label names
+// this environment (PROD and STG watch the same runs; an event number means
+// one ledger's event).
+func (g *Gate) causeOf(f runFacts) int64 {
+	if f.cause == 0 || g.Env == "" || f.causeEnv != g.Env {
+		return 0
+	}
+	return f.cause
 }
 
 // finishedChange names how a finished run ended.
@@ -78,7 +106,7 @@ func runBody(run string, f runFacts, change string) map[string]any {
 // started appends ci.run.started unless the run's stream already holds an
 // event (said before a restart, or its finish was said first).
 func (g *Gate) started(ctx context.Context, run string, f runFacts) {
-	g.append(ctx, RunStream(run), TypeRunStarted, func(lastType string, _ map[string]any) (map[string]any, bool) {
+	g.append(ctx, RunStream(run), TypeRunStarted, g.causeOf(f), func(lastType string, _ map[string]any) (map[string]any, bool) {
 		return runBody(run, f, ChangeCreated), lastType == ""
 	})
 }
@@ -87,7 +115,7 @@ func (g *Gate) started(ctx context.Context, run string, f runFacts) {
 // stream's last event already is one. Once the ledger holds it, OnFinished
 // is told.
 func (g *Gate) finished(ctx context.Context, run string, f runFacts) {
-	agrees := g.append(ctx, RunStream(run), TypeRunFinished, func(lastType string, _ map[string]any) (map[string]any, bool) {
+	agrees := g.append(ctx, RunStream(run), TypeRunFinished, g.causeOf(f), func(lastType string, _ map[string]any) (map[string]any, bool) {
 		b := runBody(run, f, finishedChange(f))
 		b["status"] = f.status
 		if r := f.reason; r != "" {

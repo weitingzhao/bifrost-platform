@@ -74,6 +74,8 @@ type Picture struct {
 	// Rate is how many bus events the last hour carried (the live map's
 	// "how busy is it now"), set by the caller from the ledger.
 	Rate *Rate `json:"rate,omitempty"`
+	// Listening is who hears each topic and what follows, over the last day.
+	Listening *Listening `json:"listening,omitempty"`
 }
 
 // Rate is the bus's events over a recent window.
@@ -244,4 +246,100 @@ func ReadLetters(ctx context.Context, db Querier, since time.Time) ([]Letter, ma
 		letters = append(letters, l)
 	}
 	return letters, status, rows.Err()
+}
+
+// TopicListen is whether anyone listens to a topic: what it published over
+// the window, who may read it (declared consumers and subscription rows),
+// how many of its events someone took (a receipt from anyone but the
+// Console's own view), and how many led to an event that names it as its
+// cause.
+type TopicListen struct {
+	Type      string   `json:"type"`
+	Published int      `json:"published"`
+	Readers   []string `json:"readers"`
+	Heard     int      `json:"heard"`
+	Followed  int      `json:"followed"`
+}
+
+// Listening is the bus's loop over the window: who hears, what follows.
+type Listening struct {
+	Hours  int           `json:"hours"`
+	Topics []TopicListen `json:"topics"`
+	// Events heard by someone, and events that something followed, as shares of all published.
+	HeardShare  *float64 `json:"heard_share,omitempty"`
+	ClosedShare *float64 `json:"closed_share,omitempty"`
+	// CausedShare is the share of events that name the event they answer (their cause).
+	CausedShare *float64 `json:"caused_share,omitempty"`
+	// Why a share is missing or partial (the receipt stream not read, a scan cut short).
+	Notes []string `json:"notes,omitempty"`
+}
+
+// ListenEvent is one bus event of the window: its id (ev-<n>), type and cause (0, none).
+type ListenEvent struct {
+	ID    string
+	Type  string
+	Cause int64
+	N     int64
+}
+
+// BuildListening counts, per topic, what was published, heard and followed.
+// own is the receipt consumer that is only the page looking (not a listener).
+func BuildListening(hours int, events []ListenEvent, receipts map[string][]string, receiptsRead bool, readers map[string][]string, own string) Listening {
+	l := Listening{Hours: hours}
+	causes := map[int64]bool{}
+	caused := 0
+	for _, e := range events {
+		if e.Cause != 0 {
+			causes[e.Cause] = true
+			caused++
+		}
+	}
+	by := map[string]*TopicListen{}
+	for t, rs := range readers {
+		by[t] = &TopicListen{Type: t, Readers: rs}
+	}
+	heard, followed := 0, 0
+	for _, e := range events {
+		t, ok := by[e.Type]
+		if !ok {
+			t = &TopicListen{Type: e.Type}
+			by[e.Type] = t
+		}
+		t.Published++
+		for _, c := range receipts[e.ID] {
+			if c != own {
+				t.Heard++
+				heard++
+				break
+			}
+		}
+		if causes[e.N] {
+			t.Followed++
+			followed++
+		}
+	}
+	for _, t := range by {
+		l.Topics = append(l.Topics, *t)
+	}
+	sort.Slice(l.Topics, func(i, j int) bool { return l.Topics[i].Type < l.Topics[j].Type })
+	if len(events) > 0 {
+		f := float64(followed) / float64(len(events))
+		f = float64(int64(f*1000+0.5)) / 1000
+		l.ClosedShare = &f
+		c := float64(caused) / float64(len(events))
+		c = float64(int64(c*1000+0.5)) / 1000
+		l.CausedShare = &c
+		if receiptsRead {
+			h := float64(heard) / float64(len(events))
+			h = float64(int64(h*1000+0.5)) / 1000
+			l.HeardShare = &h
+		}
+	}
+	if !receiptsRead {
+		l.Notes = append(l.Notes, "receipts not read: who heard each event is unknown")
+	}
+	if followed == 0 && len(events) > 0 {
+		l.Notes = append(l.Notes, "no consumer records the event it acted on (causeid) yet, so no loop can be seen closing")
+	}
+	return l
 }

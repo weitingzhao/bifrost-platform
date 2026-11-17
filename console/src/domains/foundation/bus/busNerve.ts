@@ -94,7 +94,12 @@ export type ObserveSeat = {
   last_status?: string; cards_open?: number; card_wait_p50_s?: number
 }
 export type BusRate = { minutes: number; events: number; per_minute: number; by_type: Record<string, number> }
-export type BusObserve = { hours: number; generated_at: string; seats: ObserveSeat[]; links: ObserveLink[]; unmeasured: { what: string; why: string }[]; rate?: BusRate }
+export type TopicListen = { type: string; published: number; readers: string[]; heard: number; followed: number }
+export type BusListening = { hours: number; topics: TopicListen[]; heard_share?: number; closed_share?: number; caused_share?: number; notes?: string[] }
+export type BusObserve = {
+  hours: number; generated_at: string; seats: ObserveSeat[]; links: ObserveLink[]; unmeasured: { what: string; why: string }[]
+  rate?: BusRate; listening?: BusListening
+}
 
 /** Minutes an unacked letter or open card may wait before it is drawn as stuck. */
 export const STUCK_AFTER_MIN = 10

@@ -29,7 +29,9 @@ type Decide func(lastType string, lastBody map[string]any) (map[string]any, bool
 // Ledger is where the gate writes. PGLedger is the event log; the tests hand
 // in a memory one.
 type Ledger interface {
-	Append(ctx context.Context, stream, typ string, decide Decide) (bool, error)
+	// Append writes the event decide returns; cause is the ledger event it
+	// answers (0: none), set on the event so a loop can be followed.
+	Append(ctx context.Context, stream, typ string, cause int64, decide Decide) (bool, error)
 }
 
 // PGLedger appends to agentrt's event log. DB is nil while the ledger is not
@@ -43,7 +45,7 @@ var errNoLedger = errors.New("bus gate-cluster: the ledger is not connected")
 // Append locks the stream's head, reads its last event, and appends what
 // decide returns, in one transaction: two writers of one stream take turns,
 // and a fact the stream already holds is not written again.
-func (l *PGLedger) Append(ctx context.Context, stream, typ string, decide Decide) (bool, error) {
+func (l *PGLedger) Append(ctx context.Context, stream, typ string, cause int64, decide Decide) (bool, error) {
 	var db eventlog.DB
 	if l.DB != nil {
 		db = l.DB()
@@ -68,7 +70,15 @@ func (l *PGLedger) Append(ctx context.Context, stream, typ string, decide Decide
 		if !ok {
 			return nil
 		}
-		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: stream, Type: typ, Actor: Actor, Body: body}); err != nil {
+		// A cause this ledger does not hold is left out, never a reason to lose the event.
+		if cause != 0 {
+			if ok, err := eventlog.Exists(ctx, tx, cause); err != nil {
+				return err
+			} else if !ok {
+				cause = 0
+			}
+		}
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: stream, Type: typ, Actor: Actor, Body: body, Cause: cause}); err != nil {
 			return err
 		}
 		appended = true

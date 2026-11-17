@@ -414,7 +414,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 	if !natsOn {
 		return
 	}
-	s.startGateCluster(ctx)
+	s.startGateCluster(ctx, env)
 	nc, err := relay.Connect(cfg.URL, relay.RelayUser, cfg.RelayPassword, "platform-workers bus relay")
 	if err != nil {
 		slog.Error("bus relay: NATS connection; the relay is off", "error", err)
@@ -456,7 +456,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 // namespace's runs and the release window and writes ci.run.started,
 // ci.run.finished and release.window.changed into the ledger. Workers only,
 // with the relay's switch (BUS_NATS_URL); without a cluster it stays off.
-func (s *Server) startGateCluster(ctx context.Context) {
+func (s *Server) startGateCluster(ctx context.Context, env string) {
 	if s.cluster == nil {
 		return
 	}
@@ -464,7 +464,7 @@ func (s *Server) startGateCluster(ctx context.Context) {
 	if s.delivery != nil {
 		ns = s.delivery.PipelinesNamespace()
 	}
-	g := &gatecluster.Gate{Ledger: &gatecluster.PGLedger{DB: s.bus.db}, Namespace: ns, Logf: busLogf, OnFinished: s.bus.runFinished,
+	g := &gatecluster.Gate{Ledger: &gatecluster.PGLedger{DB: s.bus.db}, Namespace: ns, Env: env, Logf: busLogf, OnFinished: s.bus.runFinished,
 		Dynamic: s.clusterDynamic}
 	if s.delivery != nil {
 		s.delivery.SetRunCache(g, s.earnedReadRoutes(ctx))

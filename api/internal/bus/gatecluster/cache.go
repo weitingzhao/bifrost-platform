@@ -18,7 +18,7 @@ import (
 const labelRepo = "bifrost.io/repo"
 
 var (
-	displayLabels = []string{labelPipeline, labelRevision, labelRepo}
+	displayLabels = []string{labelPipeline, labelRevision, labelRepo, LabelCause, LabelCauseEnv}
 	displayParams = []string{"revision", "repo", "repo-url", "url"}
 )
 

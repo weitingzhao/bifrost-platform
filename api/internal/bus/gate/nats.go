@@ -125,3 +125,25 @@ func (j *JSJourney) ReceiptsOf(ctx context.Context, events []relay.Envelope) ([]
 	}
 	return out, err
 }
+
+// ReceiptsByEvent is who took each event, from one scan of the receipt stream
+// from a time to now (at most max messages): event id → consumers. The Bus
+// page's "is anyone listening" readings (2026-11-17).
+func (j *JSJourney) ReceiptsByEvent(ctx context.Context, from time.Time, max int) (map[string][]string, bool, error) {
+	out := map[string][]string{}
+	n := 0
+	err := relay.ScanFrom(ctx, j.JS, relay.ReceiptStreamName(j.Tenant, j.Env), relay.ReceiptSubject(j.Tenant, j.Env),
+		from, time.Now().Add(time.Minute), max,
+		func(m relay.StreamMsg) bool {
+			n++
+			id := m.Header.Get(relay.ReceiptEventHeader)
+			if id != "" {
+				out[id] = append(out[id], m.Header.Get(relay.ReceiptConsumerHeader))
+			}
+			return false
+		})
+	if errors.Is(err, jetstream.ErrStreamNotFound) {
+		return out, false, nil
+	}
+	return out, n >= max, err
+}

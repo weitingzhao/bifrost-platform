@@ -25,6 +25,8 @@ export type GNode = {
   cloud?: { parts: number; dust: number[] }
   /** An opened domain: its parts are around it, so it needs more room from its neighbours. */
   open?: boolean
+  /** A part whose name always shows (a topic nobody listens to says so). */
+  named?: boolean
 }
 export type GLink = { source: string; target: string; color: string; dashed?: boolean; width?: number; label?: string }
 
@@ -399,7 +401,7 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
           const labelOf = (n: SimNode) => {
             const div = document.createElement('div')
             const big = n.kind === 'cluster' || n.kind === 'core'
-            div.textContent = big || n.label.length <= 18 ? n.label : `${n.label.slice(0, 17)}…`
+            div.textContent = big || n.named || n.label.length <= 18 ? n.label : `${n.label.slice(0, 17)}…`
             div.style.cssText = `font: ${big ? 11 : 9}px ui-monospace, monospace; color: ${big ? '#f4e9df' : '#c9b6a8'}; white-space: nowrap; pointer-events: none;` +
               ` letter-spacing: 0.04em; text-shadow: 0 0 2px #000, 0 0 4px #000; transform: translateY(${n.kind === 'cluster' ? -Math.round(cloudRadius(n) * 2.2) : -12}px);`
             labelsRef.current.set(n.id, div)
@@ -441,7 +443,7 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
                 const ring = new THREE.Mesh(new THREE.TorusGeometry(n.size * 1.8, 0.12, 6, 40), new THREE.MeshBasicMaterial({ color: n.ring }))
                 group.add(ring)
               }
-              if (n.kind !== 'topic') group.add(labelOf(n))
+              if (n.kind !== 'topic' || n.named) group.add(labelOf(n))
               bodies.set(n.id, { group, core, cloud, dust, glow, points: pointMaterials(cloud), sig: cloudSig(n), base })
               return group
             })
