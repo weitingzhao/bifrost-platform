@@ -3,6 +3,7 @@ package agentrtapi
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -10,7 +11,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // The plan, read (v5 §5.2: GET /plan?root=R2, GET /plan/{plan_node_id}: the
@@ -202,7 +202,12 @@ func (a *API) proposePlanImport(w http.ResponseWriter, r *http.Request) {
 	}
 	var out map[string]any
 	if head.Format == recorderimport.Format {
-		out, err = store.ProposeRecorderImport(r.Context(), a.DB, who, b.IdempotencyKey, b.Reason, recorder, a.Ask)
+		// The lineage reads, checks and keeps the log; the plan proposes its
+		// import (2026-11-17: it left the store along this line).
+		var log externalwork.PreparedRecorderLog
+		if log, err = externalwork.PrepareRecorderImport(recorder); err == nil {
+			out, err = planstore.ProposeRecorderImport(r.Context(), a.DB, who, b.IdempotencyKey, b.Reason, planstore.RecorderLog(log), a.Ask)
+		}
 	} else {
 		out, err = planstore.ProposePlanImport(r.Context(), a.DB, who, b.IdempotencyKey, b.Reason, plan, a.Ask)
 	}

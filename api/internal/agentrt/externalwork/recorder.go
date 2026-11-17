@@ -22,13 +22,14 @@ import (
 // 2026-11-17, plan core wall step 6): a work's recorder log kept as an
 // artifact and written as the stream legacy:recorder:<work>, tried whole in a
 // savepoint before the Owner's card and landed under his decision. Proposing
-// the import stays in store (store/recorderimport.go): it is a plan change
-// with the Owner's card, and names the plan's types; the plan's decision
-// pass reaches DecideRecorderImport through the port store binds
+// the import is the plan's (planstore.ProposeRecorderImport: a plan change
+// with the Owner's card); this package prepares the log for it
+// (PrepareRecorderImport), and the plan's decision pass reaches
+// DecideRecorderImport through the port the store's wiring binds
 // (planstore.BindPlanRecorderImport).
 
-// RecorderStream is the stream a work's recorder log is imported into.
-func RecorderStream(work string) string { return "legacy:recorder:" + work }
+// recorderStream is the stream a work's recorder log is imported into.
+func recorderStream(work string) string { return "legacy:recorder:" + work }
 
 // recorderSource is the head event's source: the kept log it came from.
 func recorderSource(logID string) string { return "recorder_import:" + logID }
@@ -120,7 +121,7 @@ func DecideRecorderImport(ctx context.Context, tx pgx.Tx, artifact string, decid
 // (the decision; 0 for none) and each record caused by the head, or finds
 // that this same log was imported already. It returns the head.
 func landRecorder(ctx context.Context, tx pgx.Tx, actor string, log recorderimport.Log, doc []byte, logID string, cause int64) (int64, error) {
-	stream := RecorderStream(log.Source.WorkID)
+	stream := recorderStream(log.Source.WorkID)
 	if err := eventlog.LockStream(ctx, tx, stream); err != nil {
 		return 0, err
 	}
@@ -166,4 +167,49 @@ func decodeStrict(doc []byte, v any) error {
 		return errors.New("more than one value")
 	}
 	return nil
+}
+
+// PreparedRecorderLog is a recorder log read, checked and kept, as the plan's
+// proposal of its import needs it (planstore.RecorderLog has the same
+// fields): the work, the stream it would be imported into, the kept log's
+// artifact id and bytes, the Owner's card text, and in tx whether the log was
+// imported already and the whole import tried and rolled back.
+type PreparedRecorderLog struct {
+	Work, Stream, LogID string
+	Doc                 []byte
+	CardBody            func(actor, cardKey, reason string) string
+	Imported            func(ctx context.Context, tx pgx.Tx) (head int64, other string, err error)
+	TryImport           func(ctx context.Context, tx pgx.Tx) error
+}
+
+// PrepareRecorderImport reads req's log and checks what the decision will
+// check, before any card: a log the Owner could answer Import to and that
+// would then fail is refused now (review 402 B1). eventlog.ErrInvalid for a
+// log that does not read or check. (Moved from store/recorderimport.go,
+// 2026-11-17: the lineage's half of proposing the import.)
+func PrepareRecorderImport(req recorderimport.Request) (PreparedRecorderLog, error) {
+	log, err := recorderimport.Read(req)
+	if err != nil {
+		return PreparedRecorderLog{}, fmt.Errorf("%w: recorder import: %v", eventlog.ErrInvalid, err)
+	}
+	if err = recorderimport.Check(log); err != nil {
+		return PreparedRecorderLog{}, fmt.Errorf("%w: recorder import: the kept log does not check: %v", eventlog.ErrInvalid, err)
+	}
+	doc, logID, err := KeptLog(log)
+	if err != nil {
+		return PreparedRecorderLog{}, err
+	}
+	work := log.Source.WorkID
+	stream := recorderStream(work)
+	return PreparedRecorderLog{Work: work, Stream: stream, LogID: logID, Doc: doc,
+		CardBody: func(actor, cardKey, reason string) string {
+			return recorderimport.CardBody(actor, cardKey, reason, log, logID, stream)
+		},
+		Imported: func(ctx context.Context, tx pgx.Tx) (int64, string, error) {
+			return RecorderImported(ctx, tx, stream, logID)
+		},
+		TryImport: func(ctx context.Context, tx pgx.Tx) error {
+			return TryRecorderImport(ctx, tx, log, doc, logID)
+		},
+	}, nil
 }

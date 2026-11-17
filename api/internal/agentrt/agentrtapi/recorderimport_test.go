@@ -13,7 +13,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // recorderRequest seals two recorder events as events.py does.
@@ -49,7 +48,7 @@ func TestRecorderImportThroughTheRoute(t *testing.T) {
 		t.Fatalf("recorder import proposal = %d %v", code, out)
 	}
 	if len(cards) != before+1 || !strings.HasPrefix(cards[len(cards)-1].Title, "Import recorder log td-337: ") ||
-		cards[len(cards)-1].Options[0] != store.RecorderApply {
+		cards[len(cards)-1].Options[0] != planstore.RecorderApplyLabel {
 		t.Fatalf("cards = %+v", cards[before:])
 	}
 	n, err := planstore.DecidePlanChanges(ctx, pool, answer(planstore.CardApplyKey), nil)

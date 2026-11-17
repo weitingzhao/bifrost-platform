@@ -144,20 +144,27 @@ func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 // Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the recorder import binds its two ports at the package's start (recorderimport.go); this holds that binding in place, that each port answers what the recorder import's own function answers, and that the plan's copies of its card options and stream prefix (the progress projection shows them) are the recorder import's words.
 func TestRecorderImportPortsAreBoundToTheRecorderImport(t *testing.T) {
 	t.Parallel()
-	for _, changes := range [][]planstore.PlanChange{
-		{{Op: store.OpRecorderImport, Artifact: "sha256:log"}},
-		{{Op: store.OpRecorderImport}},
-		{{Op: "retitle", Node: s1, Title: "x"}},
-		{{Op: store.OpRecorderImport, Artifact: "a"}, {Op: store.OpRecorderImport, Artifact: "b"}},
-		nil,
+	// Whether a proposal is a recorder import is the plan's own since the
+	// proposal moved into planstore (2026-11-17): one change, op
+	// recorder_import, naming a log.
+	for _, c := range []struct {
+		changes []planstore.PlanChange
+		log     string
+		is      bool
+	}{
+		{[]planstore.PlanChange{{Op: "recorder_import", Artifact: "sha256:log"}}, "sha256:log", true},
+		{[]planstore.PlanChange{{Op: "recorder_import"}}, "", false},
+		{[]planstore.PlanChange{{Op: "retitle", Node: s1, Title: "x"}}, "", false},
+		{[]planstore.PlanChange{{Op: "recorder_import", Artifact: "a"}, {Op: "recorder_import", Artifact: "b"}}, "", false},
+		{nil, "", false},
 	} {
-		log, is, err := store.RecorderImportLogForTest(changes)
+		log, is, err := store.RecorderImportLogForTest(c.changes)
 		ok(t, err)
-		if wantLog, wantIs := store.RecorderImportOfForTest(changes); log != wantLog || is != wantIs {
-			t.Fatalf("the port on %+v: %q %v; the recorder import: %q %v", changes, log, is, wantLog, wantIs)
+		if log != c.log || is != c.is {
+			t.Fatalf("on %+v: %q %v, want %q %v", c.changes, log, is, c.log, c.is)
 		}
 	}
-	if log, is, _ := store.RecorderImportLogForTest([]planstore.PlanChange{{Op: store.OpRecorderImport, Artifact: "sha256:log"}}); log != "sha256:log" || !is {
+	if log, is, _ := store.RecorderImportLogForTest([]planstore.PlanChange{{Op: "recorder_import", Artifact: "sha256:log"}}); log != "sha256:log" || !is {
 		t.Fatalf("a recorder import is not told: %q %v", log, is)
 	}
 	// The landing of a log that is not stored: refused in the recorder
@@ -172,10 +179,10 @@ func TestRecorderImportPortsAreBoundToTheRecorderImport(t *testing.T) {
 	if !errors.Is(want, store.ErrInvalid) || errText(got) != errText(want) {
 		t.Fatalf("the landing port: %v; the recorder import: %v", got, want)
 	}
-	if store.RecorderApplyLabelForTest != store.RecorderApply || store.RecorderRefuseLabelForTest != store.RecorderRefuse ||
-		store.RecorderStreamPrefixForTest != externalwork.RecorderStream("") {
+	if store.RecorderApplyLabelForTest != planstore.RecorderApplyLabel || store.RecorderRefuseLabelForTest != planstore.RecorderRefuseLabel ||
+		store.RecorderStreamPrefixForTest != "legacy:recorder:" {
 		t.Fatalf("the plan's copies %q %q %q are not the recorder import's %q %q %q", store.RecorderApplyLabelForTest, store.RecorderRefuseLabelForTest,
-			store.RecorderStreamPrefixForTest, store.RecorderApply, store.RecorderRefuse, externalwork.RecorderStream(""))
+			store.RecorderStreamPrefixForTest, planstore.RecorderApplyLabel, planstore.RecorderRefuseLabel, "legacy:recorder:")
 	}
 }
 
@@ -225,9 +232,6 @@ func TestQuestionPortAndWordsAreTheQuestionStores(t *testing.T) {
 	}
 	if questions.BodyBytes("plain") == len("plain") {
 		t.Fatal("the question store counts a body as its length: the comparison above shows less than it should")
-	}
-	if store.QuestionBodyLimitForTest != questions.BodyLimit {
-		t.Fatalf("the plan holds a card's body to %d bytes; the question store to %d", store.QuestionBodyLimitForTest, questions.BodyLimit)
 	}
 	if store.RuleAnswerChannelForTest != questions.RuleChannel {
 		t.Fatalf("the plan reads a rule's answer by channel %q; the question store writes %q", store.RuleAnswerChannelForTest, questions.RuleChannel)

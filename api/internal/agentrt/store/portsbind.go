@@ -59,6 +59,7 @@ func init() {
 		},
 	})
 	planstore.BindPlanLoops(planstore.LoopPorts{Failing: loopalert.FailingLoops})
+	planstore.BindPlanRecorderImport(planstore.RecorderImportPorts{Decide: externalwork.DecideRecorderImport})
 	planstore.BindPlanCoordination(planstore.CoordinationPorts{AlertClaim: coord.AlertClaim})
-	planstore.BindPlanQuestions(planstore.QuestionPorts{BodyBytes: questions.BodyBytes})
+	planstore.BindPlanQuestions(planstore.QuestionPorts{BodyBytes: questions.BodyBytes, BodyLimit: questions.BodyLimit})
 }

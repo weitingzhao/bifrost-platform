@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -69,11 +70,11 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 	pool := recorderDB(t)
 	a := &asker{}
 	req := tdLog(t)
-	stream := externalwork.RecorderStream("td-336")
-	out, err := store.ProposeRecorderImport(ctx, pool, wr("thread:s1"), "k1", "retire the recorder", req, a.ask)
+	stream := "legacy:recorder:" + "td-336"
+	out, err := proposeRecorder(ctx, pool, wr("thread:s1"), "k1", "retire the recorder", req, a.ask)
 	ok(t, err)
 	q, _ := out["question_id"].(string)
-	if q == "" || len(a.cards) != 1 || a.cards[0].Options[0] != store.RecorderApply || !strings.Contains(a.cards[0].Body, "3 events") ||
+	if q == "" || len(a.cards) != 1 || a.cards[0].Options[0] != planstore.RecorderApplyLabel || !strings.Contains(a.cards[0].Body, "3 events") ||
 		!strings.Contains(a.cards[0].Body, "1 of them had a path into one machine") {
 		t.Fatalf("proposal %v, cards %+v", out, a.cards)
 	}
@@ -83,7 +84,7 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 	if n := streamEvents(t, pool, stream, "legacy_imported"); n != 0 {
 		t.Fatalf("the trial import left %d events", n)
 	}
-	again, err := store.ProposeRecorderImport(ctx, pool, wr("thread:s1"), "k2", "retire the recorder", req, a.ask)
+	again, err := proposeRecorder(ctx, pool, wr("thread:s1"), "k2", "retire the recorder", req, a.ask)
 	ok(t, err)
 	if again["question_id"] != q || len(a.cards) != 1 {
 		t.Fatalf("asking again while the card waits: %v", again)
@@ -95,7 +96,7 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 	}
 	action, _ := card["action"].(map[string]any)
 	blocks, _ := card["blocks"].(map[string]any)
-	if fmt.Sprint(action["options"]) != "["+store.RecorderApply+" "+store.RecorderRefuse+"]" || action["question_id"] != q ||
+	if fmt.Sprint(action["options"]) != "["+planstore.RecorderApplyLabel+" "+planstore.RecorderRefuseLabel+"]" || action["question_id"] != q ||
 		!strings.Contains(fmt.Sprint(blocks["unknown"]), "recorder log is history") {
 		t.Fatalf("needs_you action %v, blocks %v", action, blocks)
 	}
@@ -160,7 +161,7 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Imported: the same log answers so; another log of the work is refused.
-	done, err := store.ProposeRecorderImport(ctx, pool, wr("thread:s1"), "k3", "again", req, a.ask)
+	done, err := proposeRecorder(ctx, pool, wr("thread:s1"), "k3", "again", req, a.ask)
 	ok(t, err)
 	if done["imported"] != false || done["decision"] != "applied" || len(a.cards) != 1 {
 		t.Fatalf("the imported log asked again: %v", done)
@@ -173,7 +174,7 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 	longer.Lines = append(longer.Lines, hex.EncodeToString(s[:])+" "+body)
 	all := sha256.Sum256([]byte(strings.Join(longer.Lines, "\n") + "\n"))
 	longer.Source.SHA256 = hex.EncodeToString(all[:])
-	_, err = store.ProposeRecorderImport(ctx, pool, wr("thread:s1"), "k4", "another", longer, a.ask)
+	_, err = proposeRecorder(ctx, pool, wr("thread:s1"), "k4", "another", longer, a.ask)
 	if !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), "imported once") {
 		t.Fatalf("another log of an imported work: %v", err)
 	}
@@ -186,13 +187,13 @@ func TestRecorderImportRefused(t *testing.T) {
 	t.Parallel()
 	pool := recorderDB(t)
 	a := &asker{}
-	out, err := store.ProposeRecorderImport(ctx, pool, wr("thread:s1"), "k1", "retire the recorder", tdLog(t), a.ask)
+	out, err := proposeRecorder(ctx, pool, wr("thread:s1"), "k1", "retire the recorder", tdLog(t), a.ask)
 	ok(t, err)
 	q := out["question_id"].(string)
 	a.answer(q, seenfacts.QuestionAnswered, "b")
 	_, err = planstore.DecidePlanChanges(ctx, pool, a.question, nil)
 	ok(t, err)
-	stream := externalwork.RecorderStream("td-336")
+	stream := "legacy:recorder:" + "td-336"
 	var decision string
 	ok(t, pool.QueryRow(ctx, `SELECT body_json->>'decision' FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'plan_change_decided'`,
 		stream).Scan(&decision))
@@ -213,7 +214,7 @@ func TestRecorderImportRefused(t *testing.T) {
 		"file":   {func() recorderimport.Request { r := tdLog(t); r.Source.File = "/Users/x/events.jsonl"; return r }(), "relative path"},
 		"format": {func() recorderimport.Request { r := tdLog(t); r.Format = "x"; return r }(), "format"},
 	} {
-		_, err := store.ProposeRecorderImport(ctx, pool, wr("thread:s2"), "k-"+name, "bad", c.req, a.ask)
+		_, err := proposeRecorder(ctx, pool, wr("thread:s2"), "k-"+name, "bad", c.req, a.ask)
 		if !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v; want %q", name, err, c.want)
 		}
@@ -248,11 +249,11 @@ func recorderCard(t *testing.T, pool *pgxpool.Pool, q string) map[string]any {
 func TestRecorderImportTwoPassesAtOnce(t *testing.T) {
 	pool := recorderDB(t)
 	a := &asker{}
-	out, err := store.ProposeRecorderImport(ctx, pool, wr("thread:s1"), "k1", "retire the recorder", tdLog(t), a.ask)
+	out, err := proposeRecorder(ctx, pool, wr("thread:s1"), "k1", "retire the recorder", tdLog(t), a.ask)
 	ok(t, err)
 	q := out["question_id"].(string)
 	a.answer(q, seenfacts.QuestionAnswered, planstore.CardApplyKey)
-	stream := externalwork.RecorderStream("td-336")
+	stream := "legacy:recorder:" + "td-336"
 	var mu sync.Mutex
 	arrived := 0
 	both := make(chan struct{})
@@ -294,4 +295,15 @@ func TestRecorderImportTwoPassesAtOnce(t *testing.T) {
 		t.Fatalf("decided %d times; %d decisions, %d imported events", total, streamEvents(t, pool, stream, "plan_change_decided"),
 			streamEvents(t, pool, stream, "legacy_imported"))
 	}
+}
+
+// proposeRecorder is POST /plan/imports for a recorder log, as agentrtapi
+// does it: the lineage prepares the log, the plan proposes its import
+// (2026-11-17, the proposal left the store).
+func proposeRecorder(ctx context.Context, db store.DB, w store.Writer, key, reason string, req recorderimport.Request, ask planstore.Ask) (map[string]any, error) {
+	log, err := externalwork.PrepareRecorderImport(req)
+	if err != nil {
+		return nil, err
+	}
+	return planstore.ProposeRecorderImport(ctx, db, w, key, reason, planstore.RecorderLog(log), ask)
 }

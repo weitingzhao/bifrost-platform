@@ -24,7 +24,6 @@ var (
 	ExternalActivityBucketsForTest  = planstore.ExternalActivityBuckets
 	RecorderImportLogForTest        = planstore.RecorderImportLog
 	DecideRecorderImportLogForTest  = planstore.DecideRecorderImportLog
-	RecorderImportOfForTest         = recorderImportOf
 	DecideRecorderImportForTest     = externalwork.DecideRecorderImport
 )
 
@@ -45,7 +44,6 @@ var (
 )
 
 const (
-	QuestionBodyLimitForTest = planstore.QuestionBodyLimit
 	RuleAnswerChannelForTest = planstore.RuleAnswerChannel
 )
 

@@ -202,7 +202,11 @@ func TestOwnerButtonPaths(t *testing.T) {
 	b.answer(importCard, "b", "")
 	recorderCards := map[string]string{}
 	for option, work := range map[string]string{"a": "td-901", "b": "td-902"} {
-		out, err := store.ProposeRecorderImport(ctx, b.conn, thread, "recorder-"+option, "retire the recorder", recorderLog(t, work), ask)
+		prepared, err := externalwork.PrepareRecorderImport(recorderLog(t, work))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := planstore.ProposeRecorderImport(ctx, b.conn, thread, "recorder-"+option, "retire the recorder", planstore.RecorderLog(prepared), ask)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -222,7 +226,7 @@ func TestOwnerButtonPaths(t *testing.T) {
 	}
 	for work, want := range map[string]bool{"td-901": true, "td-902": false} {
 		if n := b.count(`SELECT count(*) FROM agentrt.event WHERE event_type = 'legacy_imported' AND event_stream_id = '` +
-			externalwork.RecorderStream(work) + `'`); (n > 0) != want {
+			"legacy:recorder:" + work + `'`); (n > 0) != want {
 			t.Errorf("the recorder log of %s: %d events; imported %v", work, n, want)
 		}
 	}

@@ -84,11 +84,6 @@ func TestUnboundLineagePortsRefuse(t *testing.T) {
 		}
 	}
 	for name, p := range map[string]*RecorderImportPorts{"nothing bound": nil, "an empty binding": {}} {
-		log, is, err := recorderImportLogVia(p, []PlanChange{{Op: unboundOp, Artifact: "sha256:log"}})
-		refused(t, name+": whether a proposal is a recorder import", err)
-		if log != "" || is {
-			t.Fatalf("%s: an answer with the refusal: %q %v", name, log, is)
-		}
 		refused(t, name+": the landing", decideRecorderImportLogVia(ctx, p, nil, "sha256:log", 1))
 	}
 	// The positive control: bound ports are called and their answers returned.
@@ -120,11 +115,7 @@ func TestUnboundLineagePortsRefuse(t *testing.T) {
 		t.Fatalf("bound buckets: %v %v %v", working, finished, err)
 	}
 	rec := &RecorderImportPorts{
-		LogOf:  func([]PlanChange) (string, bool) { return "kept", true },
 		Decide: func(context.Context, pgx.Tx, string, int64) error { return errors.New("landed") },
-	}
-	if log, is, err := recorderImportLogVia(rec, nil); err != nil || log != "kept" || !is {
-		t.Fatalf("a bound recorder detect: %q %v %v", log, is, err)
 	}
 	if err := decideRecorderImportLogVia(ctx, rec, nil, "kept", 1); err == nil || err.Error() != "landed" {
 		t.Fatalf("a bound recorder landing: %v", err)

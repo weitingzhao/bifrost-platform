@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 )
 
@@ -31,7 +30,7 @@ func original_recorderCardBody(w Writer, cardKey, reason string, log recorderimp
 		fmt.Fprintf(&b, " %d of them had a path into one machine, masked before they are kept; each keeps the digest of its original line.", n)
 	}
 	fmt.Fprintf(&b, "\n\nFrom %s, sha256 %s; kept log %s.\n\n", s.File, s.SHA256, logID)
-	b.WriteString("Importing writes the log as the stream " + externalwork.RecorderStream(s.WorkID) + ", one event per line, under your decision; " +
+	b.WriteString("Importing writes the log as the stream " + "legacy:recorder:" + s.WorkID + ", one event per line, under your decision; " +
 		"it is then fixed. Not importing writes nothing; the recorder keeps its log as it is.")
 	return b.String()
 }
@@ -46,7 +45,7 @@ func TestRecorderCardDisplayFrozenParity(t *testing.T) {
 		for _, records := range [][]recorderimport.Record{nil, {{Type: "z"}, {Type: "a", Masked: true}, {Type: "z"}}} {
 			log := recorderimport.Log{Source: recorderimport.Source{WorkID: "W-1", File: "log", SHA256: "hash"}, Records: records}
 			w := Writer{Actor: "actor"}
-			if got, want := recorderCardBody(w, "0123456789abcdef", reason, log, "id"), original_recorderCardBody(w, "0123456789abcdef", reason, log, "id"); got != want {
+			if got, want := recorderimport.CardBody(w.Actor, "0123456789abcdef", reason, log, "id", "legacy:recorder:"+log.Source.WorkID), original_recorderCardBody(w, "0123456789abcdef", reason, log, "id"); got != want {
 				t.Fatalf("recorder differs: %q / %q", got, want)
 			}
 		}

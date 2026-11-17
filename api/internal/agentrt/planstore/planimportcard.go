@@ -101,12 +101,12 @@ func ProposePlanImport(ctx context.Context, db eventlog.DB, w actor.Writer, key,
 		}
 		cardKey := CanonKey(w.Actor, "import:"+key)
 		body := importCardBody(w, cardKey, reason, req, reqID)
-		n, err := CardBodyBytes(body)
+		n, limit, err := cardBodyFits(body)
 		if err != nil {
 			return nil, err
 		}
-		if n > QuestionBodyLimit {
-			return nil, eventlog.Invalid("the Owner's card for this import would be %d bytes, more than the question store's %d", n, QuestionBodyLimit)
+		if n > limit {
+			return nil, eventlog.Invalid("the Owner's card for this import would be %d bytes, more than the question store's %d", n, limit)
 		}
 		if ask == nil {
 			return nil, fmt.Errorf("%w: no question store is configured", ErrAsk)

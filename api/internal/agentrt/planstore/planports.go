@@ -167,11 +167,10 @@ func collectorActorPrefixVia(p *ExternalWorkPorts) (string, error) {
 }
 
 // RecorderImportPorts is what the plan code needs of the recorder import
-// (lineage), whose proposals the plan's decision pass decides: whether a
-// proposal is one, and the landing of its log under the decision.
+// (lineage), whose proposals the plan's decision pass decides: the landing of
+// its log under the decision. Whether a proposal is one is the plan's own
+// (recorderpropose.go, opRecorderImport).
 type RecorderImportPorts struct {
-	// LogOf is the kept log of a proposal that is a recorder import.
-	LogOf func(changes []PlanChange) (log string, is bool)
 	// Decide lands the log in tx under the decision decided.
 	Decide func(ctx context.Context, tx pgx.Tx, log string, decided int64) error
 }
@@ -179,18 +178,14 @@ type RecorderImportPorts struct {
 var recorderImportPorts atomic.Pointer[RecorderImportPorts]
 
 // BindPlanRecorderImport binds the recorder import's side. It is called
-// once, from the init of its file (store's recorderimport.go).
+// once, from the store's wiring (portsbind.go).
 func BindPlanRecorderImport(p RecorderImportPorts) { recorderImportPorts.Store(&p) }
 
+// RecorderImportLog is the kept log of a proposal that is a recorder import.
+// It never fails now (the plan answers it itself); the error stays for its
+// callers.
 func RecorderImportLog(changes []PlanChange) (log string, is bool, err error) {
-	return recorderImportLogVia(recorderImportPorts.Load(), changes)
-}
-
-func recorderImportLogVia(p *RecorderImportPorts, changes []PlanChange) (log string, is bool, err error) {
-	if p == nil || p.LogOf == nil {
-		return "", false, unbound("whether a proposal is a recorder import", "BindPlanRecorderImport")
-	}
-	log, is = p.LogOf(changes)
+	log, is = recorderImportOf(changes)
 	return log, is, nil
 }
 
@@ -249,6 +244,9 @@ func alertClaimVia(ctx context.Context, p *CoordinationPorts, tx pgx.Tx, ev even
 type QuestionPorts struct {
 	// BodyBytes is the size of a body as the question store checks it.
 	BodyBytes func(body string) int
+	// BodyLimit is the most a question's body holds, in the bytes BodyBytes
+	// counts (questions.BodyLimit).
+	BodyLimit int
 }
 
 var questionPorts atomic.Pointer[QuestionPorts]
@@ -267,14 +265,25 @@ func cardBodyBytesVia(p *QuestionPorts, body string) (int, error) {
 	return p.BodyBytes(body), nil
 }
 
-// The question store's two words the plan code reads, as the plan's own
-// constants: the most a question's body holds, in the bytes BodyBytes counts
-// (questions.BodyLimit), and the channel of an answer a rule gave
-// (questions.RuleChannel). A test holds each equal to the question store's.
-const (
-	QuestionBodyLimit = 3000
-	RuleAnswerChannel = "rule"
-)
+// cardBodyFits checks a card's body against the question store's limit, as
+// that store counts it: the size and the limit, an error when either is not
+// bound.
+func cardBodyFits(body string) (n, limit int, err error) {
+	p := questionPorts.Load()
+	if n, err = cardBodyBytesVia(p, body); err != nil {
+		return 0, 0, err
+	}
+	if p.BodyLimit <= 0 {
+		return 0, 0, unbound("the most a question's body holds", "BindPlanQuestions")
+	}
+	return n, p.BodyLimit, nil
+}
+
+// The question store's word the plan code reads as its own constant: the
+// channel of an answer a rule gave (questions.RuleChannel). A test holds it
+// equal to the question store's. (The body limit comes through QuestionPorts
+// since 2026-11-17.)
+const RuleAnswerChannel = "rule"
 
 // LoopPorts is what the plan code needs of the controller's loop alerts (the
 // store's loopalert.go, over foundation's loopreadings): the loops failing
