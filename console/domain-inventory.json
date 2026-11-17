@@ -1783,8 +1783,10 @@
     {
       "path": "console/src/domains/foundation/bus",
       "files": [
+        "console/src/domains/foundation/bus/BusEffectSection.tsx",
         "console/src/domains/foundation/bus/BusPage.tsx",
         "console/src/domains/foundation/bus/__tests__/bus.test.ts",
+        "console/src/domains/foundation/bus/busEffect.ts",
         "console/src/domains/foundation/bus/busTrace.ts",
         "console/src/domains/foundation/bus/sseParser.ts",
         "console/src/domains/foundation/bus/useBusStream.ts"

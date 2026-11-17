@@ -142,3 +142,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 func (h *Handler) ScrapedHosts(ctx context.Context) map[string]string {
 	return h.svc.ScrapedHosts(ctx)
 }
+
+// PromQL runs one instant query for another package (the bus's effect
+// readings); an empty result is no points, not an error.
+func (h *Handler) PromQL(ctx context.Context, promQL string) ([]SamplePoint, error) {
+	resp, err := h.svc.PromQL(ctx, promQL)
+	return resp.Points, err
+}

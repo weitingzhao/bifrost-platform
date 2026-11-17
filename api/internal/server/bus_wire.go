@@ -307,6 +307,8 @@ func (s *Server) mountBus(r chi.Router) {
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/stream", route((*gate.Gate).HandleStream))
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/trace", route((*gate.Gate).HandleTrace))
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/clients", route((*gate.Gate).HandleClients))
+	// What the bus's work does, computed when asked (bus_effect.go).
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/effect", s.handleBusEffect)
 }
 
 // startBus starts what this process runs of the bus, once the ledger's pool

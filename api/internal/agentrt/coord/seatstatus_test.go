@@ -91,3 +91,32 @@ func TestParseSeatStatus(t *testing.T) {
 		}
 	}
 }
+
+// 2026-11-17 (the Owner: he cannot see what the bus's work does): the Bus
+// page counts the dispatcher's wakes from the messages themselves — those
+// that reached a seat, those that went to the duty seat because the
+// recipient was unknown, and how long a seat took to acknowledge one. A
+// message that is not a wake is not counted.
+func TestWakeReadingsPG(t *testing.T) {
+	t.Parallel()
+	_, pool, a := conclusionDB(t)
+	since := time.Now().Add(-time.Minute)
+	ok2(t, coord.PostConclusion(ctx, pool, "sub:land-refused:ev-1", a.Actor, "bus: ci.run.finished land-x@abc (change failed). Read /x."))
+	ok2(t, coord.PostConclusion(ctx, pool, "sub:land-refused:ev-2:undeliverable", a.Actor, "bus: a wake could not be delivered: thread:local_gone is not a registered thread here."))
+	ok2(t, coord.PostConclusion(ctx, pool, "approval:appr_1:executed", a.Actor, "card #1 executed"))
+	unread, err := store.Unread(ctx, pool, a, 10)
+	ok2(t, err)
+	var wake string
+	for _, m := range unread {
+		if strings.HasPrefix(m.Body, "bus: ci.run") {
+			wake = m.ID
+		}
+	}
+	_, err = store.AckMessages(ctx, pool, a, []string{wake})
+	ok2(t, err)
+	got, err := coord.Wakes(ctx, pool, since)
+	ok2(t, err)
+	if got.Delivered != 1 || got.Undeliverable != 1 || got.Acked != 1 || got.BySeat[a.Actor] != 1 {
+		t.Fatalf("readings: %+v", got)
+	}
+}
