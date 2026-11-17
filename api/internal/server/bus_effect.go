@@ -57,6 +57,7 @@ var effectSwitches = struct {
 		{"supply chain page reads the run cache", "2026-11-16 21:52", "display side by side"},
 		{"release context reads the run cache", "2026-11-16 21:52", "display side by side"},
 		{"CI index retired", "2026-11-16 23:19", "CI line"},
+		{"post-release check reads the run cache", "2026-11-17", "post_release.go"},
 	},
 	main: []effectItem{
 		{"units/config, CI scorecard and domains ask the ledger", "2026-11-17 15:46Z", "162700cb"},

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gatecluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/postrelease"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -87,6 +88,40 @@ func postListed(name, pipeline string, created time.Time, condition, started, co
 // The runs as the cluster lists them (the shape head_release_test.go took
 // from the listing of 2026-11-13): only the pipeline followed, newest first,
 // with the run's own start and completion times and its revision as the
+
+// 2026-11-17: the pass reads the bus's run cache instead of listing the
+// pipeline's runs every 30 seconds (~56 LISTs in 10 minutes on STG). The
+// cache keeps only some of a run; what the pass reads of a run — the
+// pipeline, the times, the verdict, the revision and the *Revision params —
+// must come out the same from a cached run as from a listed one.
+func TestPostRunsReadTheSameFromTheRunCache(t *testing.T) {
+	const prod = "bifrost-deliver-platform-prod"
+	sha := strings.Repeat("a", 40)
+	at := time.Date(2026, 11, 14, 20, 0, 0, 0, time.UTC)
+	listed := []unstructured.Unstructured{
+		postListed("prod-1", prod, at, "True", "2026-11-14T20:00:05Z", "2026-11-14T20:06:00Z", map[string]string{"revision": sha, "uiRevision": strings.Repeat("b", 40)}),
+		postListed("prod-2", prod, at.Add(10*time.Minute), "False", "2026-11-14T20:10:05Z", "2026-11-14T20:11:00Z", nil),
+		postListed("prod-3", prod, at.Add(20*time.Minute), "", "", "", nil),
+	}
+	cached := make([]unstructured.Unstructured, len(listed))
+	for i := range listed {
+		cached[i] = gatecluster.RunOf(&listed[i]).Object()
+	}
+	want, got := postRuns(listed, prod), postRuns(cached, prod)
+	if len(got) != len(want) {
+		t.Fatalf("cached %d runs, listed %d", len(got), len(want))
+	}
+	for i := range want {
+		w, g := want[i], got[i]
+		if w.Name != g.Name || w.Status != g.Status || w.Commit != g.Commit || !w.Started.Equal(g.Started) || !w.Completed.Equal(g.Completed) {
+			t.Errorf("run %d: cached %+v, listed %+v", i, g, w)
+		}
+		if a, b := postTrialParams(w.Params), postTrialParams(g.Params); len(a) != len(b) || a["uiRevision"] != b["uiRevision"] {
+			t.Errorf("run %d trial params: cached %v, listed %v", i, b, a)
+		}
+	}
+}
+
 // commit released.
 func TestPostRunsReadsThePipelinesRunsNewestFirst(t *testing.T) {
 	const prod, stg = "bifrost-deliver-platform-prod", "bifrost-deliver-platform"

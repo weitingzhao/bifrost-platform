@@ -357,10 +357,16 @@ func (s *Server) postReleaseSource() func(context.Context) error {
 	return func(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(ctx, postReleasePass)
 		defer cancel()
-		// Only this pipeline's runs are read (delivery.PipelineRunsOf has why).
-		items, err := s.delivery.PipelineRunsOf(kubemetrics.WithSite(ctx, "post-release"), pipeline)
-		if err != nil {
-			return err
+		// Only this pipeline's runs are read: from the bus's run cache when
+		// it is synced (2026-11-17: this pass listed the pipeline's runs from
+		// the cluster every 30 seconds, ~56 LISTs in 10 minutes on STG), else
+		// listed (delivery.PipelineRunsOf has why only this pipeline).
+		items, cached := s.delivery.CachedRunsOf(pipeline)
+		if !cached {
+			var err error
+			if items, err = s.delivery.PipelineRunsOf(kubemetrics.WithSite(ctx, "post-release"), pipeline); err != nil {
+				return err
+			}
 		}
 		// The audit log outlives the process (a state ConfigMap in the
 		// cluster): a run recorded before a restart is not judged again.
