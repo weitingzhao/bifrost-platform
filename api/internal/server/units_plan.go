@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"io"
 	"net/http"
 	"net/url"
@@ -120,7 +121,62 @@ func (g *giteaTrees) tree(ctx context.Context, repo, commit string) (*unitplan.T
 	if err != nil {
 		return nil, err
 	}
+	g.prefetch(ctx, repo, listing)
 	return unitplan.NewTree(rootID, entries, func(id string) ([]byte, error) { return g.blob(ctx, repo, id) })
+}
+
+// coldBlobs is how many Go files of a tree may be missing from the cache
+// before they are read side by side rather than one after another as the
+// plan walks them; prefetchers is how many read at once.
+const (
+	coldBlobs   = 100
+	prefetchers = 12
+)
+
+// prefetch reads the Go files of a tree that the cache does not hold, a few
+// at a time, when there are many of them: a process that has just started.
+// 2026-11-16 23:05 CST on STG: after a delivery restarted platform-api,
+// Work > CI's "who depends on whom" was still "Reading the domains of main"
+// after two minutes, because /ci/domains and /units/config read 1,424 files
+// one after another. The files are the same and each is read once; only the
+// order changes. A file that fails here is read again when it is asked for.
+func (g *giteaTrees) prefetch(ctx context.Context, repo string, listing map[string]commitTreeEntry) {
+	var missing []string
+	g.mu.Lock()
+	for p, e := range listing {
+		if e.Type != "blob" || !(strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "/go.mod") || p == "go.mod") {
+			continue
+		}
+		if _, ok := g.blobs[e.SHA]; !ok {
+			missing = append(missing, e.SHA)
+		}
+	}
+	g.mu.Unlock()
+	if len(missing) < coldBlobs {
+		return
+	}
+	next := make(chan string)
+	var wg sync.WaitGroup
+	for i := 0; i < prefetchers; i++ {
+		wg.Add(1)
+		go func() {
+			defer safego.Recover("gitea-prefetch")
+			defer wg.Done()
+			for id := range next {
+				_, _ = g.blob(ctx, repo, id)
+			}
+		}()
+	}
+feed:
+	for _, id := range missing {
+		select {
+		case next <- id:
+		case <-ctx.Done():
+			break feed
+		}
+	}
+	close(next)
+	wg.Wait()
 }
 
 func (g *giteaTrees) blob(ctx context.Context, repo, id string) ([]byte, error) {
