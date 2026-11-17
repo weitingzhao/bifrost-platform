@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -184,6 +185,29 @@ func (b *busWiring) db() eventlog.DB {
 	return nil
 }
 
+// rosterClients is every tenant's declared users expected in env, and each
+// dispatcher row's consumer (declared by its row; no lost_after: a row that
+// only fires on red verdicts is quiet most days).
+func rosterClients(subs map[string]registry.Subscriptions, env string) []registry.Client {
+	var out []registry.Client
+	names := make([]string, 0, len(subs))
+	for n := range subs {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		for _, c := range subs[n].Clients {
+			if c.InEnv(env) {
+				out = append(out, c)
+			}
+		}
+	}
+	for _, c := range subscribe.Consumers(subs, env) {
+		out = append(out, registry.Client{Name: c.Name(relay.Tenant), Kind: "durable", Note: "subscription row " + c.Tenant + "/" + c.Row.ID})
+	}
+	return out
+}
+
 // announceCards writes the approval cards' transitions to the bus
 // (bus/cards), in the background: the approvals flow does not wait on the
 // ledger. A failed write is logged; the store stays the truth.
@@ -292,10 +316,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 	if role.RunsAPI() {
 		g := &gate.Gate{Ledger: ledger, Tenant: rocket, Env: env, Wake: &gate.Waker{}, Logf: busLogf}
 		if subs, err := registry.LoadSubscriptions(); err == nil {
-			// Every tenant's declared users: one comes and goes with its table.
-			for _, t := range subs {
-				g.Clients = append(g.Clients, t.Clients...)
-			}
+			g.Clients = rosterClients(subs, env)
 		}
 		if natsOn {
 			nc, cerr := relay.Connect(cfg.URL, relay.ReaderUser, cfg.ReaderPassword, "platform-api bus gate")

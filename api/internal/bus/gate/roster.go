@@ -26,6 +26,7 @@ const (
 	RosterActive = "active" // declared, came within lost_after
 	RosterLost   = "lost"   // declared, has not come for longer than lost_after
 	RosterNew    = "new"    // came, not declared: shown, not refused
+	RosterIdle   = "idle"   // declared with no lost_after (a dispatcher row): quiet is normal
 )
 
 // RosterEntry is one user.
@@ -114,10 +115,16 @@ func Roster(declared []registry.Client, polled map[string]time.Time, receipts ma
 		known[c.Name] = true
 		e := RosterEntry{Name: c.Name, Kind: c.Kind, Declared: true, LostAfter: c.LostAfter, Note: c.Note}
 		e.LastSeen, e.Receipts = last(c.Name)
-		d, _ := time.ParseDuration(c.LostAfter)
-		if e.LastSeen.IsZero() || now.Sub(e.LastSeen) > d {
+		d, err := time.ParseDuration(c.LostAfter)
+		switch {
+		case c.LostAfter == "" || err != nil:
+			e.Status = RosterIdle
+			if !e.LastSeen.IsZero() {
+				e.Status = RosterActive
+			}
+		case e.LastSeen.IsZero() || now.Sub(e.LastSeen) > d:
 			e.Status = RosterLost
-		} else {
+		default:
 			e.Status = RosterActive
 		}
 		out = append(out, e)

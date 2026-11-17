@@ -16,6 +16,7 @@ func TestRosterSeesComingAndGoing(t *testing.T) {
 		{Name: "gate:stream:console", Kind: "reader", LostAfter: "24h"},
 		{Name: "headrelease", Kind: "durable", LostAfter: "1h"},
 		{Name: "sub-never", Kind: "durable", LostAfter: "1h"},
+		{Name: "sub-quiet-row", Kind: "durable"},
 	}
 	polled := map[string]time.Time{"gate:stream:console": now.Add(-time.Minute), "gate:events:demo-seat": now.Add(-2 * time.Minute)}
 	receipts := map[string]ReceiptCount{"headrelease": {Last: now.Add(-3 * time.Hour), Count: 4}, "gate:events:claude-8.2-doorbell": {Last: now.Add(-time.Hour), Count: 1}}
@@ -29,6 +30,8 @@ func TestRosterSeesComingAndGoing(t *testing.T) {
 		"sub-never":                       RosterLost,
 		"gate:events:demo-seat":           RosterNew,
 		"gate:events:claude-8.2-doorbell": RosterNew,
+		// 2026-11-16 drill: a dispatcher row has no lost_after; quiet is idle, not lost.
+		"sub-quiet-row": RosterIdle,
 	}
 	for name, status := range want {
 		if got[name].Status != status {

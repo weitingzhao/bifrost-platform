@@ -47,8 +47,5 @@ clients:
   - name: headrelease
     kind: durable
     lost_after: 24h
+    envs: [prod]
     note: PROD workers' automatic STG release; woken on main and on CI runs
-  - name: sub-verdict-red-to-committer
-    kind: durable
-    lost_after: 168h
-    note: the dispatcher's row; only receipts when a verdict turns red

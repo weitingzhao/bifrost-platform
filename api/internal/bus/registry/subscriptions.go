@@ -65,6 +65,22 @@ type Client struct {
 	Kind      string `yaml:"kind"`
 	LostAfter string `yaml:"lost_after"`
 	Note      string `yaml:"note"`
+	// Envs, when set, are the environments it is expected in (head-release
+	// runs only in PROD's workers; on STG it is not lost, it is not there).
+	Envs []string `yaml:"envs"`
+}
+
+// InEnv says whether the client is expected in env.
+func (c Client) InEnv(env string) bool {
+	if len(c.Envs) == 0 {
+		return true
+	}
+	for _, e := range c.Envs {
+		if e == env {
+			return true
+		}
+	}
+	return false
 }
 
 // Subscriptions is one tenant's table.
