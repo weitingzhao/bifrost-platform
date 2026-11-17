@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"github.com/weitingzhao/bifrost-platform/api/internal/postrelease"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile/k8sstate"
 	corev1 "k8s.io/api/core/v1"
@@ -357,7 +358,7 @@ func (s *Server) postReleaseSource() func(context.Context) error {
 		ctx, cancel := context.WithTimeout(ctx, postReleasePass)
 		defer cancel()
 		// Only this pipeline's runs are read (delivery.PipelineRunsOf has why).
-		items, err := s.delivery.PipelineRunsOf(ctx, pipeline)
+		items, err := s.delivery.PipelineRunsOf(kubemetrics.WithSite(ctx, "post-release"), pipeline)
 		if err != nil {
 			return err
 		}

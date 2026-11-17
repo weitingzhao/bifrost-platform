@@ -2,11 +2,14 @@ package server
 
 import (
 	"context"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 )
 
 // wireFullCI gives PROD's controller the daily full CI (controller/fullci.go):
@@ -24,7 +27,11 @@ func (s *Server) wireFullCI(c *controller.Controller) {
 	ci := s.landingCIClient()
 	ci.FullScopeParam = param
 	git := func() (*landinggit.Git, error) { return landinggit.ReaderFromEnv("bifrost-platform") }
-	c.FullCI = &controller.FullCI{At: at, Runs: ci.FullRuns, Ensure: ci.EnsureFullRun, TestLog: ci.FullRunTestLog,
+	c.FullCI = &controller.FullCI{At: at, Runs: func(ctx context.Context, since time.Time) ([]landingci.FullRun, error) {
+		// A name for the platform's count of its own Kubernetes requests: these
+		// loops were the 1,077 unnamed LISTs of ten minutes on PROD, 2026-11-17.
+		return ci.FullRuns(kubemetrics.WithSite(ctx, "landingci.full"), since)
+	}, Ensure: ci.EnsureFullRun, TestLog: ci.FullRunTestLog,
 		FailedTasks: ci.FullRunFailedTasks, RunModules: ci.RunModules,
 		Main: func(ctx context.Context) (string, error) {
 			g, err := git()

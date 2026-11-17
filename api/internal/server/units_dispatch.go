@@ -15,6 +15,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitexec"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 )
@@ -425,7 +426,7 @@ func (d deliveryUnitCluster) Create(ctx context.Context, obj map[string]any) (bo
 func (s *Server) unitClusterOf() unitCluster {
 	return deliveryUnitCluster{
 		list: func(ctx context.Context, label, selector string) ([]map[string]any, error) {
-			items, err := s.delivery.UnitTaskRuns(ctx, label, selector)
+			items, err := s.delivery.UnitTaskRuns(kubemetrics.WithSite(ctx, "units.dispatch"), label, selector)
 			if err != nil {
 				return nil, err
 			}

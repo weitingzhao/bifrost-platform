@@ -242,7 +242,7 @@ func New(cfg *config.Config) (*Server, error) {
 		return core, dyn, err
 	})
 	if role.RunsWorkers() && releases.RecorderWanted() {
-		releasesSvc.Start(context.Background(), 5*time.Minute)
+		releasesSvc.Start(kubemetrics.WithSite(context.Background(), "releases.tick"), 5*time.Minute)
 	}
 	srv.releases = releases.NewHandler(releasesSvc)
 	titleStore := threadtitles.NewStore(releasesSvc.Status().Namespace, func() (kubernetes.Interface, error) {
