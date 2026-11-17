@@ -33,6 +33,14 @@ func (o ownership) domainOf(pkg string) string {
 	return domains[0]
 }
 
+// heldAsFoundation are packages the ownership table records as mixed whose
+// imports are held as foundation's all the same. cluster is the Kubernetes
+// adapter with blocks nobody has ruled on (data clone, database status,
+// readiness of compute's pools); it is recorded as mixed until they are split
+// out, and it must not grow an import of a domain meanwhile: it had two until
+// 2026-11-16.
+var heldAsFoundation = map[string]bool{"api/internal/cluster": true}
+
 // upward lists, sorted, every direct import by a foundation package of a
 // package of this module that is not foundation's, as "importer -> imported
 // (domain)". The assembly roots under api/cmd wire everything and are not
@@ -40,7 +48,7 @@ func (o ownership) domainOf(pkg string) string {
 func upward(o ownership, imports map[string][]string) []string {
 	var out []string
 	for pkg, deps := range imports {
-		if strings.HasPrefix(pkg, "api/cmd/") || o.domainOf(pkg) != "foundation" {
+		if strings.HasPrefix(pkg, "api/cmd/") || (o.domainOf(pkg) != "foundation" && !heldAsFoundation[pkg]) {
 			continue
 		}
 		for _, dep := range deps {
@@ -124,7 +132,8 @@ func TestFoundationWallSeesAnUpwardImport(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"default":{"domains":["foundation"]},"packages":{
 		"api/internal/base":{"domains":["foundation"]},
 		"api/internal/plan":{"domains":["plan"]},
-		"api/internal/both":{"domains":["plan","owner"]}}}`), &o); err != nil {
+		"api/internal/both":{"domains":["plan","owner"]},
+		"api/internal/cluster":{"domains":["foundation","tenant"]}}}`), &o); err != nil {
 		t.Fatal(err)
 	}
 	got := upward(o, map[string][]string{
@@ -132,8 +141,11 @@ func TestFoundationWallSeesAnUpwardImport(t *testing.T) {
 		"api/internal/unlisted": {"api/internal/base", "api/internal/both"},
 		"api/internal/plan":     {"api/internal/base", "api/internal/both"},
 		"api/cmd/root":          {"api/internal/plan"},
+		"api/internal/cluster":  {"api/internal/base", "api/internal/plan"},
 	})
-	want := []string{"api/internal/base -> api/internal/plan (plan)", "api/internal/unlisted -> api/internal/both (mixed)"}
+	// cluster's row names two domains (mixed); held by name, its imports are
+	// checked all the same.
+	want := []string{"api/internal/base -> api/internal/plan (plan)", "api/internal/cluster -> api/internal/plan (plan)", "api/internal/unlisted -> api/internal/both (mixed)"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("upward = %q, want %q", got, want)
 	}

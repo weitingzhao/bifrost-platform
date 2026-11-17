@@ -936,10 +936,12 @@
     },
     "api/internal/cluster": {
       "domains": [
-        "foundation"
+        "foundation",
+        "tenant",
+        "compute"
       ],
-      "status": "assigned",
-      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the Kubernetes adapter: nodes, workloads, data and identity paths, read by nine packages of five domains. The node pools (compute) and the tenant's readings of applications and data are bound, not imported, since 2026-11-16. Was default-maintainer. It is 8,555 lines in one package; splitting it is a separate debt, not an ownership question."
+      "status": "mixed",
+      "basis": "2026-11-16, corrected the same day after the CI line's audit of the ownership changes (duty/from-ci-w1-2026-11-16-ownership-changes-audit.md): the package is not one domain's. Foundation's on review: the Kubernetes adapter (client, nodes, workloads, pods, capabilities, actuation). Not ruled, and named by the review of that day: the data clone (data_clone.go, 1,093 lines) and data freshness, which serve the tenant's databases; the PostgreSQL and Redis status; the service readiness of GPU, warehouse and workers and the elastic node health, which compute reads. The node pools and the tenant's readings of applications and data are bound, not imported, since 2026-11-16. It stays mixed until those blocks are split out or ruled."
     },
     "api/internal/probe": {
       "domains": [
