@@ -326,7 +326,6 @@ export const STATUS_CHECKPOINTS: StatusCheckpointRow[] = [
 
 export const RELATED_AUTHORITIES = [
   'Mac mini seats: environments catalog (operator-plane, mutual watch, alert relay on .50)',
-  'North star: blueprintCatalog.ts · Blueprint § AI Native Platform',
   'Live cluster: Rocket → Cluster · Placement · Control Room topology sheet',
   'Spine: config/ops-context.yaml · GET /api/v1/context',
 ]
