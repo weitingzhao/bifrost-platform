@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/datahusbandry"
 )
 
 // TD-253: a signal is true only for SignalTTL after it was observed.
@@ -83,8 +81,10 @@ func TestStoreDropsItemsNoLongerInTheCatalog(t *testing.T) {
 
 type emptyHusbandry struct{}
 
-func (emptyHusbandry) Snapshot(context.Context) datahusbandry.Snapshot {
-	return datahusbandry.Snapshot{}
+// Signals answers as the tenant's source does for a snapshot with no lanes:
+// one signal for each of its three items.
+func (emptyHusbandry) Signals(context.Context) []ItemSignal {
+	return []ItemSignal{{ItemID: "market-batch-sla", Signal: SignalUnknown}, {ItemID: "flex-tokens-secret", Signal: SignalUnknown}, {ItemID: "research-batch-sla", Signal: SignalUnknown}}
 }
 
 func TestLiveHusbandrySignalsCarryTheirObservation(t *testing.T) {

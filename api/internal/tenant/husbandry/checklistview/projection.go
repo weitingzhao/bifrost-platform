@@ -2,8 +2,9 @@
 package checklistview
 
 import (
-	husbandry "github.com/weitingzhao/bifrost-platform/api/internal/tenant/husbandry"
 	"strings"
+
+	husbandry "github.com/weitingzhao/bifrost-platform/api/internal/tenant/husbandry"
 )
 
 type Signal struct{ ItemID, Signal, Detail, Env string }

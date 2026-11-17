@@ -64,17 +64,13 @@ func upward(o ownership, imports map[string][]string) []string {
 // week, when tenant logic was extracted and the package left behind imported
 // the new one.
 var foundationUpward = []string{
-	"api/internal/checklist -> api/internal/tenant/husbandry/checklistview (tenant)",
 	"api/internal/cluster -> api/internal/placement (compute)",
 	"api/internal/cluster -> api/internal/tenant/appreadings (tenant)",
-	"api/internal/datahusbandry -> api/internal/tenant/husbandry (tenant)",
 	"api/internal/operatorplane -> api/internal/agentbridge (compute)",
 	"api/internal/operatorplane -> api/internal/agentdeploy (compute)",
 	"api/internal/operatorplane -> api/internal/launchd (compute)",
-	"api/internal/releasepolicy/rptest -> api/internal/releasepolicy (delivery)",
 	"api/internal/satellite -> api/internal/tenant/ingestview (tenant)",
 	"api/internal/selfhealth -> api/internal/gitops (delivery)",
-	"api/internal/topology -> api/internal/tenanttopology (tenant)",
 	"api/internal/workactions -> api/internal/approvalnotify (owner)",
 }
 

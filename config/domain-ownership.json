@@ -830,10 +830,10 @@
     },
     "api/internal/topology": {
       "domains": [
-        "foundation"
+        "tenant"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 Owner-approved domain split. Thin observation composition: generic projection explicitly consumes the tenant adapter; no observation or execution implementation remains here."
+      "basis": "2026-11-16 foundation wall: this package only plugs the tenant adapter (tenanttopology) into the generic projection (topologyview), so it is the tenant's composition; the generic projection stays foundation's. No code moved."
     },
     "api/internal/topologyview": {
       "domains": [
@@ -883,13 +883,6 @@
       ],
       "status": "assigned",
       "basis": "2026-11-16 Owner-confirmed split: Generic GET proxy transport, bounded response reading and JSON decoding; caller owns status-error representation and proxy policy."
-    },
-    "api/internal/datahusbandry": {
-      "domains": [
-        "foundation"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 Owner-confirmed split: Compatibility aliases and construction only; Tenant owns husbandry semantics and Foundation owns generic proxy JSON transport. Existing server/checklist callers unchanged."
     },
     "api/internal/resourceview": {
       "domains": [
@@ -946,6 +939,13 @@
       ],
       "status": "default-maintainer",
       "basis": "2026-11-16 Complete file/reader audit: Tenant ingest observation projection is separate. Retain HTTP/source composition, original Monitor and auto-status contracts, and communication-lane Bus implementation. Foundation maintenance follows the existing overlap ruling; protected or communication contracts are not claimed as extracted."
+    },
+    "api/internal/releasepolicy/rptest": {
+      "domains": [
+        "delivery"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 foundation wall: test fixtures of releasepolicy (keys and signed policies), imported by tests only; it had no row and fell to the default."
     }
   },
   "frontend": {

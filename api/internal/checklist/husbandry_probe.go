@@ -2,30 +2,20 @@ package checklist
 
 import (
 	"context"
-	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/husbandry/checklistview"
 	"time"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/datahusbandry"
 )
 
-// HusbandrySource probes GET /api/v1/data-husbandry lanes (injected from server).
-type HusbandrySource interface {
-	Snapshot(ctx context.Context) datahusbandry.Snapshot
+// SignalSource gives live item signals that a domain above the checklist
+// reads from its own services. The checklist declares the shape and knows
+// nothing of the domain: on 2026-11-16 this file imported the tenant's
+// husbandry projection and called it itself, which made the checklist (a
+// foundation package) depend on the tenant domain. The server binds the
+// tenant's source (tenant/husbandry/checklistview.Source).
+type SignalSource interface {
+	Signals(ctx context.Context) []ItemSignal
 }
 
-func (h *Handler) BindHusbandry(src HusbandrySource) { h.husbandry = src }
-
-// ProbeHusbandrySignals maps Market/Flex/Research husbandry lanes → checklist items.
-// Market due/draining → ok (not Operate). missed/degraded → fail.
-// Flex source=none / degraded → fail. Batch missed/degraded via research_olap → fail.
-func ProbeHusbandrySignals(snap datahusbandry.Snapshot) []ItemSignal {
-	projected := checklistview.Project(snap)
-	out := make([]ItemSignal, 0, len(projected))
-	for _, s := range projected {
-		out = append(out, ItemSignal{ItemID: s.ItemID, Signal: s.Signal, Detail: s.Detail, Env: s.Env})
-	}
-	return out
-}
+func (h *Handler) BindHusbandry(src SignalSource) { h.husbandry = src }
 
 func mergeHusbandryOverlay(base []ItemSignal, overlay []ItemSignal) []ItemSignal {
 	byID := map[string]ItemSignal{}
@@ -48,7 +38,7 @@ func (h *Handler) liveHusbandrySignals(ctx context.Context) []ItemSignal {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
-	sigs := ProbeHusbandrySignals(h.husbandry.Snapshot(ctx))
+	sigs := h.husbandry.Signals(ctx)
 	// Read live on every call: observed now, by data-husbandry (TD-253).
 	now := time.Now().UTC().Format(time.RFC3339)
 	for i := range sigs {

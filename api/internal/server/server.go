@@ -14,6 +14,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	datahusbandry "github.com/weitingzhao/bifrost-platform/api/internal/tenant/husbandry"
+	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/husbandry/checklistview"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -31,7 +34,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/codehealth"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
-	"github.com/weitingzhao/bifrost-platform/api/internal/datahusbandry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/devsession"
 	"github.com/weitingzhao/bifrost-platform/api/internal/flexquery"
@@ -253,7 +255,7 @@ func New(cfg *config.Config) (*Server, error) {
 	fqH := srv.flexquery
 	rsH := srv.research
 	srv.datahusbandry = datahusbandry.NewHandler(datahusbandry.NewService(mdH.Service(), fqH.Service(), rsH.Service()))
-	srv.checklist.BindHusbandry(srv.datahusbandry.Service())
+	srv.checklist.BindHusbandry(checklistview.Source(srv.datahusbandry.Service()))
 	// One producer of maintenance signals: only the PROD workers overlay sets
 	// CHECKLIST_PROBER=on (TD-253).
 	if role.RunsWorkers() && checklist.ProberWanted() {

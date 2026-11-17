@@ -10,7 +10,7 @@ import (
 type Handler struct {
 	store     *Store
 	audit     *actuation.AuditLog
-	husbandry HusbandrySource
+	husbandry SignalSource
 }
 
 func NewHandler(configDir string, audit *actuation.AuditLog) *Handler {

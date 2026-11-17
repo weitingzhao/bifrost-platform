@@ -1,27 +1,29 @@
-package checklist
+package checklistview
 
 import (
-	"github.com/weitingzhao/bifrost-platform/api/internal/datahusbandry"
 	"strings"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
+	husbandry "github.com/weitingzhao/bifrost-platform/api/internal/tenant/husbandry"
 )
 
-func baselineHusbandrySignals(snap datahusbandry.Snapshot) []ItemSignal {
-	byID := map[string]datahusbandry.LaneView{}
+func baselineHusbandrySignals(snap husbandry.Snapshot) []checklist.ItemSignal {
+	byID := map[string]husbandry.LaneView{}
 	for _, l := range snap.Lanes {
 		byID[l.ID] = l
 	}
 
-	out := make([]ItemSignal, 0, 3)
+	out := make([]checklist.ItemSignal, 0, 3)
 
 	if m, ok := byID["market_batch"]; ok {
-		out = append(out, ItemSignal{
+		out = append(out, checklist.ItemSignal{
 			ItemID: "market-batch-sla",
 			Signal: baselineMarketSignal(m.Verdict),
 			Detail: truncate("market_batch "+m.Verdict+": "+m.Detail, 240),
 			Env:    "span",
 		})
 	} else {
-		out = append(out, ItemSignal{
+		out = append(out, checklist.ItemSignal{
 			ItemID: "market-batch-sla",
 			Signal: SignalUnknown,
 			Detail: "market_batch lane missing from data-husbandry",
@@ -30,14 +32,14 @@ func baselineHusbandrySignals(snap datahusbandry.Snapshot) []ItemSignal {
 	}
 
 	if f, ok := byID["flex_batch"]; ok {
-		out = append(out, ItemSignal{
+		out = append(out, checklist.ItemSignal{
 			ItemID: "flex-tokens-secret",
 			Signal: baselineFlexSignal(f.Verdict, f.Source, f.Detail),
 			Detail: truncate("flex_batch "+f.Verdict+" src="+f.Source+": "+f.Detail, 240),
 			Env:    "span",
 		})
 	} else {
-		out = append(out, ItemSignal{
+		out = append(out, checklist.ItemSignal{
 			ItemID: "flex-tokens-secret",
 			Signal: SignalUnknown,
 			Detail: "flex_batch lane missing from data-husbandry",
@@ -46,14 +48,14 @@ func baselineHusbandrySignals(snap datahusbandry.Snapshot) []ItemSignal {
 	}
 
 	if r, ok := byID["research_olap"]; ok {
-		out = append(out, ItemSignal{
+		out = append(out, checklist.ItemSignal{
 			ItemID: "research-batch-sla",
 			Signal: baselineResearchSignal(r.Verdict),
 			Detail: truncate("research_olap "+r.Verdict+": "+r.Detail, 240),
 			Env:    "span",
 		})
 	} else {
-		out = append(out, ItemSignal{
+		out = append(out, checklist.ItemSignal{
 			ItemID: "research-batch-sla",
 			Signal: SignalUnknown,
 			Detail: "research_olap lane missing from data-husbandry",
