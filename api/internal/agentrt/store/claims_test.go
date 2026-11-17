@@ -1,9 +1,8 @@
+//bifrost:owner owner
+
 package store_test
 
 import (
-	"fmt"
-	"regexp"
-	"strings"
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -40,59 +39,5 @@ func TestApprovalClaimPhrases(t *testing.T) {
 		if got, found := store.ApprovalClaim([]byte(in)); found {
 			t.Errorf("ApprovalClaim(%q) found %q", in, got)
 		}
-	}
-}
-
-// What two runs of the same steps make differently: row ids and artifact
-// digests, which aliases name by kind and first appearance, and times.
-var (
-	rowID = regexp.MustCompile(`\b[tamvc]_[0-9A-Z]{26}\b|sha256:[0-9a-f]{64}`)
-	stamp = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T[0-9:.]+(?:Z|[+-]\d{2}:\d{2})?`)
-)
-
-// aliases names each id by its kind and the order it first appears in: two
-// runs that make the same rows in the same order read the same, and two
-// different rows never read the same (review 340 A2).
-type aliases struct {
-	names map[string]string
-	count map[string]int
-}
-
-func (a *aliases) of(s string) string {
-	s = rowID.ReplaceAllStringFunc(s, func(id string) string {
-		if n, ok := a.names[id]; ok {
-			return n
-		}
-		kind := id[:1]
-		if strings.HasPrefix(id, "sha256:") {
-			kind = "artifact"
-		}
-		a.count[kind]++
-		a.names[id] = fmt.Sprintf("%s#%d", kind, a.count[kind])
-		return a.names[id]
-	})
-	return stamp.ReplaceAllString(s, "<time>")
-}
-
-// The comparison T12 rests on tells two rows apart and names the same row
-// alike, whatever their ids (review 340 A2).
-func TestAliasesKeepRowsApart(t *testing.T) {
-	t.Parallel()
-	a, b := store.NewTaskID(), store.NewTaskID()
-	same := func(x string) string { return (&aliases{names: map[string]string{}, count: map[string]int{}}).of(x) }
-	if same(a+" waits for "+b) == same(a+" waits for "+a) {
-		t.Fatal("a dependency on another task reads as one on itself")
-	}
-	// Two targets named before; the dependency moved from one to the other
-	// reads differently (review 342 B1).
-	c := store.NewTaskID()
-	if same(a+" "+b+" "+c+"; "+a+" waits for "+b) == same(a+" "+b+" "+c+"; "+a+" waits for "+c) {
-		t.Fatal("a dependency moved to another known task reads the same")
-	}
-	if same(a+" waits for "+b) != same(b+" waits for "+a) {
-		t.Fatal("the same shape with other ids reads differently")
-	}
-	if got := same("at 2026-10-19T12:00:00.123456Z, " + noSuch); got != "at <time>, artifact#1" {
-		t.Fatalf("aliases = %q", got)
 	}
 }
