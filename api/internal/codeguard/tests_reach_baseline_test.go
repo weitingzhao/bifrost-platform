@@ -273,7 +273,6 @@ var testFilesInShared = []string{
 	"api/internal/server/action_trace_test.go",
 	"api/internal/server/actions_executor_coverage_test.go",
 	"api/internal/server/actions_wire_test.go",
-	"api/internal/server/agent_progress_test.go",
 	"api/internal/server/agent_threads_auth_test.go",
 	"api/internal/server/agent_threads_sessions_test.go",
 	"api/internal/server/agentrt_assessment_list_test.go",

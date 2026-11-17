@@ -25,7 +25,6 @@ var exportedForOtherTests = []string{
 	"api/internal/actuationpolicy.Mirrors",
 	"api/internal/actuationpolicy.Probe",
 	"api/internal/actuationpolicy.Repo",
-	"api/internal/agentprogress.MaxDocumentBytes",
 	"api/internal/agentrt/agentrttest.BindOwnerFacts",
 	"api/internal/agentrt/agentrttest.CardAutoRule",
 	"api/internal/agentrt/agentrttest.ConcurrencyRule",

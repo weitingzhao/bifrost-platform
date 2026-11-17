@@ -868,13 +868,6 @@
       "status": "assigned",
       "basis": "2026-11-16 source and caller audit: agent host deployment inventory and HTTP adapter; implementation, authorization, refusal and dispatch behavior unchanged"
     },
-    "api/internal/agentprogress": {
-      "domains": [
-        "coordination"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: latest coordinating-thread progress document bridge; implementation, authorization, refusal and dispatch behavior unchanged"
-    },
     "api/internal/agentrt/mainhistory": {
       "domains": [
         "foundation"
@@ -1937,20 +1930,6 @@
         "basis": "2026-11-16 source/caller audit: seat/session communication and progress display"
       },
       "console/src/api/agentProgress.ts": {
-        "domains": [
-          "coordination"
-        ],
-        "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: seat/session communication and progress display"
-      },
-      "console/src/api/agentProgressBoard.ts": {
-        "domains": [
-          "coordination"
-        ],
-        "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: seat/session communication and progress display"
-      },
-      "console/src/api/agentProgressExtra.ts": {
         "domains": [
           "coordination"
         ],

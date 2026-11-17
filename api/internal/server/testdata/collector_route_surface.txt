@@ -12,8 +12,6 @@ deny	GET /api/v1/agent/governance/trust-matrix
 deny	GET /api/v1/agent/governance/trust-overrides
 allow	POST /api/v1/agent/hosts/heartbeat
 deny	GET /api/v1/agent/launchd
-deny	GET /api/v1/agent/progress
-deny	PUT /api/v1/agent/progress
 allow	GET /api/v1/agent/threads
 allow	POST /api/v1/agent/threads/heartbeat
 deny	GET /api/v1/agentrt/artifacts

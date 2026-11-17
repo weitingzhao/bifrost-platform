@@ -16,10 +16,7 @@ func (s *Server) mountCoordination(r chi.Router) {
 		r.Post("/agent/threads/heartbeat", s.agentThreads.HandleBeat)
 		// One machine's hook wiring and token readability (W-57).
 		r.Post("/agent/hosts/heartbeat", s.agentThreads.HandleHost)
-		// Latest coordination progress document (W-62), same reporter token.
-		r.Put("/agent/progress", s.agentProgress.HandlePut)
 	})
 	// Titles and host names: viewer and above.
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/agent/threads", s.agentThreads.HandleList)
-	r.With(s.auth.Require(actuation.RoleViewer)).Get("/agent/progress", s.agentProgress.HandleGet)
 }

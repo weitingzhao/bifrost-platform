@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import progress from '../__fixtures__/agentrt-progress.stg.json'
-import roadmap from '../__fixtures__/board-roadmap-round-arch.json'
 import task from '../__fixtures__/agentrt-task.stg.json'
 import mission from '../__fixtures__/agentrt-mission.stg.json'
 import { parseRuntimeProgress, parseRuntimeTask } from '../agentRuntime'
-import { parseRoadmap } from '../agentProgressBoard'
-import { parseAgentProgress } from '../agentProgress'
 
 describe('agent runtime fixtures', () => {
   it('retains missions, tasks, hosts, counts and the publication time', () => {
@@ -26,24 +23,7 @@ describe('agent runtime fixtures', () => {
     expect(parseRuntimeTask(task)).toMatchObject({ task_id: 't_01M50M1CZSDN8PNHRH8C2241RS', role: 'implement', state: 'accepted', round_no: 1, max_rounds: 2 })
     expect(parseRuntimeProgress({ work: { missions: [mission] } }).work.missions[0]).toMatchObject({ mission_id: 'M-2', state: 'active', tasks: [] })
   })
-  it('keeps the typed round and architecture on the board document', () => {
-    const parsed = parseRoadmap(roadmap)!
-    expect(parsed.round?.n).toBe(2)
-    expect(parsed.round?.items).toHaveLength(7)
-    expect(parsed.round?.items[0]).toMatchObject({ key: '2.0', done: 3, total: 3 })
-    expect(parsed.round?.items[0].steps[0]).toMatchObject({ state: 'done', when: '10-13 23:00' })
-    expect(parsed.arch?.rows).toHaveLength(17)
-    expect(parsed.arch?.rows[0].state).toBe('part')
-    expect(parsed.arch?.checked).toBe(1792106220)
-    const response = parseAgentProgress({ document: { roadmap }, generated_at: 'now' })
-    expect(response.document?.roadmap?.round).toEqual(parsed.round)
-  })
   it.each([null, undefined, false, 7, 'new', [], {}, { hosts: [null, 2], work: { missions: [{ tasks: [null, {}], eta: false }] }, live: [{}] }])('handles missing or unfamiliar JSON: %j', value => {
     expect(() => parseRuntimeProgress(value)).not.toThrow()
-    expect(() => parseRoadmap(value)).not.toThrow()
-  })
-  it('does not accept invalid nested plan arrays or numeric strings', () => {
-    expect(parseRoadmap({ round: { n: '2', items: [null, { done: '3', steps: [null, {}] }] }, arch: { rows: [null, {}] } }))
-      .toMatchObject({ round: { n: undefined, items: [{ done: undefined, steps: [{ t: '' }] }] }, arch: { rows: [{ state: '' }] } })
   })
 })

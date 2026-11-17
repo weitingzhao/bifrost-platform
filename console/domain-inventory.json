@@ -60,7 +60,6 @@
         "console/src/api/__fixtures__/agentrt-task.stg.json",
         "console/src/api/__fixtures__/agentrt-tasks-M-2.prod.json",
         "console/src/api/__fixtures__/assessment-streams.testdb.json",
-        "console/src/api/__fixtures__/board-roadmap-round-arch.json",
         "console/src/api/__fixtures__/plan-view-collector.generated.json",
         "console/src/api/__fixtures__/plan-view-handler-empty.json",
         "console/src/api/__fixtures__/plan-view-handler-legacy.json",
@@ -106,7 +105,6 @@
       ],
       "test_imports": [
         "console/src/api/agentProgress.ts",
-        "console/src/api/agentProgressBoard.ts",
         "console/src/api/agentRuntimeBus.ts",
         "console/src/api/agentRuntimeEvents.ts",
         "console/src/api/agentRuntimePlan.ts",
@@ -170,38 +168,8 @@
         "console/src/api/agentProgress.ts"
       ],
       "imports": [
-        "console/src/api/agentProgressBoard.ts",
-        "console/src/api/agentProgressExtra.ts",
-        "console/src/api/client.ts",
         "console/src/pages/shell/progress"
       ],
-      "test_imports": [],
-      "external_imports": [],
-      "source_inputs": [],
-      "test_inputs": [],
-      "unresolved_imports": []
-    },
-    {
-      "path": "console/src/api/agentProgressBoard.ts",
-      "files": [
-        "console/src/api/agentProgressBoard.ts"
-      ],
-      "imports": [
-        "console/src/api/agentProgressExtra.ts",
-        "console/src/api/agentRuntimePlan.ts"
-      ],
-      "test_imports": [],
-      "external_imports": [],
-      "source_inputs": [],
-      "test_inputs": [],
-      "unresolved_imports": []
-    },
-    {
-      "path": "console/src/api/agentProgressExtra.ts",
-      "files": [
-        "console/src/api/agentProgressExtra.ts"
-      ],
-      "imports": [],
       "test_imports": [],
       "external_imports": [],
       "source_inputs": [],

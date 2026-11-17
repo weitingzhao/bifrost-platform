@@ -98,7 +98,6 @@ viewer	GET /api/v1/agent/deploy
 viewer	GET /api/v1/agent/governance/trust-matrix
 viewer	GET /api/v1/agent/governance/trust-overrides
 viewer	GET /api/v1/agent/launchd
-viewer	GET /api/v1/agent/progress
 viewer	GET /api/v1/agent/threads
 viewer	GET /api/v1/agentrt/artifacts
 viewer	GET /api/v1/agentrt/artifacts/{id}
@@ -216,7 +215,6 @@ reporter	GET /api/v1/agent/deploy
 reporter	GET /api/v1/agent/governance/trust-matrix
 reporter	GET /api/v1/agent/governance/trust-overrides
 reporter	GET /api/v1/agent/launchd
-reporter	GET /api/v1/agent/progress
 reporter	GET /api/v1/agent/threads
 reporter	GET /api/v1/agentrt/artifacts
 reporter	GET /api/v1/agentrt/artifacts/{id}
@@ -341,7 +339,6 @@ reporter	POST /api/v1/ops-agent/alertmanager
 reporter	POST /api/v1/questions
 reporter	POST /api/v1/questions/{id}/ack
 reporter	POST /api/v1/questions/{id}/withdraw
-reporter	PUT /api/v1/agent/progress
 reporter	PUT /api/v1/agentrt/artifacts/{id}
 reporter	PUT /api/v1/lineage/transcript-title
 operator	DELETE /api/v1/cluster/workloads/pods/{namespace}/{name}
@@ -355,7 +352,6 @@ operator	GET /api/v1/agent/deploy
 operator	GET /api/v1/agent/governance/trust-matrix
 operator	GET /api/v1/agent/governance/trust-overrides
 operator	GET /api/v1/agent/launchd
-operator	GET /api/v1/agent/progress
 operator	GET /api/v1/agent/threads
 operator	GET /api/v1/agentrt/artifacts
 operator	GET /api/v1/agentrt/artifacts/{id}
@@ -514,7 +510,6 @@ operator	POST /api/v1/questions/{id}/withdraw
 operator	POST /api/v1/release-policy/freeze
 operator	POST /api/v1/release-policy/unfreeze
 operator	POST /api/v1/telemetry/attention-mute
-operator	PUT /api/v1/agent/progress
 operator	PUT /api/v1/agentrt/artifacts/{id}
 operator	PUT /api/v1/delivery/release-window
 operator	PUT /api/v1/lineage/thread-title
@@ -534,7 +529,6 @@ admin	GET /api/v1/agent/deploy
 admin	GET /api/v1/agent/governance/trust-matrix
 admin	GET /api/v1/agent/governance/trust-overrides
 admin	GET /api/v1/agent/launchd
-admin	GET /api/v1/agent/progress
 admin	GET /api/v1/agent/threads
 admin	GET /api/v1/agentrt/artifacts
 admin	GET /api/v1/agentrt/artifacts/{id}
@@ -708,7 +702,6 @@ admin	POST /api/v1/questions/{id}/withdraw
 admin	POST /api/v1/release-policy/freeze
 admin	POST /api/v1/release-policy/unfreeze
 admin	POST /api/v1/telemetry/attention-mute
-admin	PUT /api/v1/agent/progress
 admin	PUT /api/v1/agentrt/artifacts/{id}
 admin	PUT /api/v1/cluster/data-clone/schedule
 admin	PUT /api/v1/delivery/release-window
@@ -728,7 +721,6 @@ trade-satellite	GET /api/v1/agent/deploy
 trade-satellite	GET /api/v1/agent/governance/trust-matrix
 trade-satellite	GET /api/v1/agent/governance/trust-overrides
 trade-satellite	GET /api/v1/agent/launchd
-trade-satellite	GET /api/v1/agent/progress
 trade-satellite	GET /api/v1/agent/threads
 trade-satellite	GET /api/v1/agentrt/artifacts
 trade-satellite	GET /api/v1/agentrt/artifacts/{id}
@@ -887,7 +879,6 @@ trade-satellite	POST /api/v1/questions/{id}/withdraw
 trade-satellite	POST /api/v1/release-policy/freeze
 trade-satellite	POST /api/v1/release-policy/unfreeze
 trade-satellite	POST /api/v1/telemetry/attention-mute
-trade-satellite	PUT /api/v1/agent/progress
 trade-satellite	PUT /api/v1/agentrt/artifacts/{id}
 trade-satellite	PUT /api/v1/delivery/release-window
 trade-satellite	PUT /api/v1/lineage/thread-title

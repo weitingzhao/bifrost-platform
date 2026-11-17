@@ -28,7 +28,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentprogress"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
@@ -121,7 +120,6 @@ type Server struct {
 	questionRuntime *questionRuntime
 	releasePolicy   *releasepolicy.Engine
 	agentThreads    *agentthreads.Handler
-	agentProgress   *agentprogress.Handler
 	agentRuntime    *agentRuntime
 	bus             busWiring // the event bus, step 1 (bus_wire.go)
 	// landingHealth is what the workers wired for landing (S3): each reach
@@ -280,7 +278,6 @@ func New(cfg *config.Config) (*Server, error) {
 	srv.wireQuestions(dataDir, role.RunsWorkers())
 	srv.wireReleasePolicy(releasesSvc, dataDir, role.RunsWorkers())
 	srv.wireAgentThreads(dataDir, role, titleStore)
-	srv.wireAgentProgress(dataDir, role)
 	srv.wireAgentRuntime(role)
 	if role.RunsWorkers() {
 		// The CI page's domain graph is read ahead of any request (ci_domains.go).

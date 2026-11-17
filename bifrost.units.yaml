@@ -86,7 +86,6 @@ modules:
       api/internal/cirunview: ["api/internal/cirunview"]
       api/internal/resourceview: ["api/internal/resourceview"]
       api/internal/tenant/appreadings: ["api/internal/tenant/appreadings"]
-      api/internal/agentprogress: ["api/internal/agentprogress"]
       # Foundation: HTTP observations, moved out of server; no domain inputs.
       # Its test parses two of its own files (prod_shadow_test.go: the shadow
       # names nothing that acts); it reads nothing outside the directory.
@@ -146,8 +145,8 @@ modules:
       api/internal/checklist: ["api/internal/checklist"]
       api/internal/cluster: ["api/internal/cluster"]
       # Guards that read every Go file of the module, and the walls between
-      # packages (go list -deps); moved here from delivery, questions and
-      # agentprogress so that those are rerun for their own changes.
+      # packages (go list -deps); moved here from delivery and questions so
+      # that those are rerun for their own changes.
       api/internal/codeguard: ["api", "config/domain-ownership.json"]
       api/internal/config: ["api/internal/config", "config/environments.yaml"]
       api/internal/delivery: ["api/internal/delivery", "bifrost-trade-infra:k8s/cicd"]

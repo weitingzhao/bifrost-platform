@@ -36,9 +36,8 @@ function withQuery(base: Record<string, unknown>, query: URLSearchParams, keys: 
 }
 
 // Reporter evidence writes are not catalog actions and are not listed here:
-// POST /api/v1/agent/threads/heartbeat, POST /api/v1/agent/hosts/heartbeat,
-// PUT /api/v1/agent/progress. coverage.go exempts them. Mapping the progress
-// document onto an approval would hold the coordinating thread's publish.
+// POST /api/v1/agent/threads/heartbeat, POST /api/v1/agent/hosts/heartbeat.
+// coverage.go exempts them.
 export const WRITE_SPECS: readonly WriteMapping[] = [
   {
     action: 'plan_manifest',

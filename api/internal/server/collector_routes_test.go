@@ -182,7 +182,6 @@ func TestCollectorGateOnTheRouter(t *testing.T) {
 		{"POST", "/api/v1/agentrt/rules/routing:dev/tighten"},
 		{"POST", "/api/v1/agentrt/missions"},
 		{"PUT", "/api/v1/lineage/transcript-title"},
-		{"PUT", "/api/v1/agent/progress"},
 		{"POST", "/api/v1/agent/governance/skill-runs"},
 		{"POST", "/api/v1/ops-agent/alertmanager"},
 		{"GET", "/api/v1/questions"},
