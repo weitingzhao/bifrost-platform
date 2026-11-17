@@ -16,7 +16,7 @@ const control = 'min-h-11 max-w-full rounded border border-transparent bg-[var(-
 
 export function PlatformTimings({ module = '', ciRun, ciCommit, onPickCI }: { module?: string; ciRun?: string; ciCommit?: string; onPickCI?: (name: string) => void }) {
   const [pipeline,setPipeline] = useState<string>(pipelines[0][0])
-  const [hours,setHours] = useState(72)
+  const [hours,setHours] = useState(48)
   const [picked,setPicked] = useState('')
   const [focusCommit,setFocusCommit] = useState('')
   const [typed,setTyped] = useState('')
@@ -35,7 +35,7 @@ export function PlatformTimings({ module = '', ciRun, ciCommit, onPickCI }: { mo
       <p className="text-sm">bifrost-platform{module ? ` / ${module}` : ''} · CI → Merge → STG → PROD. {module ? 'CI history follows the selected module; reused and unreported scope stay visible. Merge and delivery still operate on the whole repository; independent module delivery is not declared.' : 'Select a pipeline stage below. Stages show retained runs, not a release action.'}</p>
       <div className="flex min-w-0 flex-wrap gap-2" role="group" aria-label="Pipeline">
         {pipelines.map(([id,label])=><button key={id} className={`${READ_BUTTON} ${pipeline===id?'bg-[var(--accent)]':''}`} aria-pressed={pipeline===id} onClick={()=>{setPipeline(id);setPicked('');setLookup('');setFocusCommit('')}}>{label}</button>)}
-        <label className="flex items-center gap-2 text-xs">Window<select className={control} value={hours} onChange={e=>setHours(Number(e.target.value))}><option value={24}>24 hours</option><option value={72}>72 hours</option></select></label>
+        <label className="flex items-center gap-2 text-xs">Window<select className={control} value={hours} onChange={e=>setHours(Number(e.target.value))}><option value={24}>24 hours</option><option value={48}>48 hours</option></select></label>
       </div>
       {query.error && <p role="alert" className="text-sm text-destructive">Run timings could not be read: {query.error.message}. {query.data ? 'Showing the last successful read.' : 'Retained history is unknown.'}</p>}
       {query.isPending && <p className="text-sm">Reading run and task records…</p>}

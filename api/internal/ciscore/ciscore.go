@@ -18,8 +18,12 @@ import (
 	"time"
 )
 
-// WindowDays is how far back a completed run counts.
-const WindowDays = 3
+// WindowDays is how far back a completed run counts. Two since 2026-11-17:
+// the cluster keeps a run two days (infra k8s/cicd/tekton/pipelinerun-ttl.yaml,
+// seven before; the 15,000 TaskRuns without a pod that stalled Tekton for 23
+// minutes that night), and a window longer than what is kept would report
+// two days of runs as three.
+const WindowDays = 2
 
 const (
 	Pass       = "pass"

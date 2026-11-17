@@ -266,7 +266,7 @@ func TestCleanupKeepsUp(t *testing.T) {
 // for every item, and CI is scored by the same rule as its users.
 func TestScore(t *testing.T) {
 	out := Score(Input{Now: now, Repos: []Repo{{Repo: "a", Pipeline: "ci-a"}}, Cleanup: now.Add(-43 * time.Hour)})
-	if out.WindowDays != 3 || out.GeneratedAt != "2026-11-16T12:00:00Z" || len(out.Repos) != 1 || out.Repos[0].Repo != "a" {
+	if out.WindowDays != 2 || out.GeneratedAt != "2026-11-16T12:00:00Z" || len(out.Repos) != 1 || out.Repos[0].Repo != "a" {
 		t.Fatalf("answer = %+v", out)
 	}
 	if out.Provider.Overall != Fail {

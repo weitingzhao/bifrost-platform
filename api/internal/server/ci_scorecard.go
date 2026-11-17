@@ -27,7 +27,7 @@ import (
 // that read every run each round took the workers past their memory limit.
 
 // Ten minutes: one read is about 1,300 runs and 1,800 TaskRuns (some 12 MB of
-// JSON), and a three-day window does not move faster than that. Incident #63
+// JSON), and a two-day window does not move faster than that. Incident #63
 // (2026-11-11): a Console page that made the API list the cluster on every
 // poll starved PROD's platform.
 const ciScorecardKeep = 10 * time.Minute
