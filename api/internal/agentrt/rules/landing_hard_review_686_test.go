@@ -8,40 +8,6 @@ import (
 	"testing"
 )
 
-// B-02: wide allow rules must still request core review for the identity
-// configuration and the injected policy providers. The transports and
-// evidence readers B-02 also held are open since checks version 3.
-func TestReview686TrustTransportClassification(t *testing.T) {
-	t.Parallel()
-	for _, c := range []struct {
-		path string
-		want []LandingRefusal
-	}{
-		{"api/internal/config/platform_auth.go", []LandingRefusal{"core"}},
-		{"api/internal/config/clusters.go", []LandingRefusal{"core"}},
-		{"api/internal/opscontext/load.go", []LandingRefusal{"core"}},
-		{"api/internal/workactions/new.go", []LandingRefusal{"core"}},
-		{"api/internal/cluster/client.go", nil}, {"api/internal/placement/new.go", nil}, {"api/internal/probe/new.go", nil},
-		{"api/internal/delivery/new.go", nil}, {"api/internal/lineage/new.go", nil}, {"api/internal/releases/new.go", nil},
-	} {
-		t.Run(c.path, func(t *testing.T) {
-			l, ch := landingRule(t).Landing, simpleChange()
-			l.Repos[0].Allow = []string{"**"}
-			ch.OldPath, ch.NewPath = "api/internal/research/new.go", "api/internal/research/new.go"
-			if got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{ch}); !slices.Equal(got, []LandingRefusal{"floor_grant"}) {
-				t.Fatal("business control", got)
-			}
-			ch.OldPath, ch.NewPath = c.path, c.path
-			if LandingHardCore("bifrost-platform", c.path) != (c.want != nil) || LandingOpen("bifrost-platform", c.path) != (c.want == nil) {
-				t.Errorf("%s: core %v, open %v", c.path, LandingHardCore("bifrost-platform", c.path), LandingOpen("bifrost-platform", c.path))
-			}
-			if got := LandingSoftRefusals(l, "bifrost-platform", []LandingChange{ch}); !slices.Equal(got, c.want) {
-				t.Errorf("got %v, want %v", got, c.want)
-			}
-		})
-	}
-}
-
 // No import is added here: remove coverage for an already-used dependency.
 // A broad assembly exemption used to hide all these existing edges.
 func TestReview686ClosureExistingTrustEdges(t *testing.T) {

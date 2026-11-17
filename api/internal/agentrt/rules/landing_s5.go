@@ -22,49 +22,6 @@ func S5Allowed(l *Landing, repo, path string) bool {
 	return ok && S5Candidate(repo, path) && !LandingHard(repo, path) && landingMatches(r.Allow, path) && !landingMatches(r.Deny, path)
 }
 
-func S5Active(l *Landing, repo string) bool {
-	for _, path := range S5Paths() {
-		if S5Allowed(l, repo, path) {
-			return true
-		}
-	}
-	return false
-}
-
-// S5Refusals removes floor/display ONLY for each enrolled ordinary modification
-// (floor is floor_soft or, for a floor-grantable path, floor_grant).
-// All other changes keep the original predicate, including mixed display diffs.
-// Size is checked over the original whole diff, never separate subsets.
-func S5Refusals(l *Landing, repo string, changes []LandingChange) []LandingRefusal {
-	failed := map[LandingRefusal]bool{}
-	for _, r := range LandingSoftRefusals(l, repo, changes) {
-		if !s5Removable(r) {
-			failed[r] = true
-		}
-	}
-	for _, c := range changes {
-		if c.Kind == "M" && c.OldPath == c.NewPath && c.OldMode == "100644" && c.NewMode == "100644" && !c.Binary && S5Allowed(l, repo, c.NewPath) {
-			continue
-		}
-		for _, r := range LandingSoftRefusals(l, repo, []LandingChange{c}) {
-			if s5Removable(r) {
-				failed[r] = true
-			}
-		}
-	}
-	var out []LandingRefusal
-	for _, r := range landingCategories {
-		if failed[r] {
-			out = append(out, r)
-		}
-	}
-	return out
-}
-
-func s5Removable(r LandingRefusal) bool {
-	return r == LandingFloorSoft || r == LandingFloorGrant || r == LandingPresentation
-}
-
 // S5Enrolled lists the S5 paths a landing rule's allow covers (after deny
 // and the hard prefixes). A rule that enrolls one turns every platform
 // TS/TSX change into an S5 lane; store.SignRule therefore takes it only once

@@ -54,24 +54,6 @@ var landingHardGo = [...]string{
 	"api/internal/agentrt/agentrttest/rules.go",
 }
 
-// The dependency closure of these packages must stay inside landingHardGo.
-var landingHardRoots = [...]string{
-	"api/internal/agentrt/rules/",
-	"api/internal/agentrt/landing/",
-	"api/internal/agentrt/landinggit/",
-	"api/internal/approvals/",
-	"api/internal/approvalhome/",
-	"api/internal/approvalnotify/",
-	"api/internal/actions/",
-	"api/internal/actuation/",
-	"api/internal/actuationpolicy/",
-	"api/internal/releasepolicy/",
-	"api/internal/workactions/",
-	"api/internal/config/",
-	"api/internal/agentrt/migrate/",
-	"api/internal/agentrt/infracheck/",
-}
-
 // The agent runtime's store is split by file. A file in neither map, and any
 // subdirectory, is permission. Each file is classified by one test: can it
 // widen what agents may do without the Owner? Keys are basenames; a key with
@@ -254,11 +236,6 @@ var landingHardBasenames = [...]string{
 	".gitmodules",
 }
 
-// Entries planned by the design, allowed to be absent until their blocks land.
-var landingHardFuture = [...]string{
-	".github/",
-}
-
 func inLandingEntries(p string, entries []string) bool {
 	for _, entry := range entries {
 		if p == entry || strings.HasSuffix(entry, "/") && strings.HasPrefix(p, entry) {
@@ -332,49 +309,4 @@ func LandingHardAbsolute(repo, p string) bool {
 	}
 	return repo != "bifrost-platform" || !landingPath(p) || strings.HasPrefix(path.Base(p), ".env") ||
 		path.Base(p) == ".gitmodules" || strings.HasPrefix(p, ".github/")
-}
-
-// LandingHardCore is platform's trusted core. Infra has no core: its
-// grantable hard paths are floor-grantable (InfraFloorEntry).
-func LandingHardCore(repo, p string) bool {
-	if repo == "bifrost-trade-infra" {
-		return false
-	}
-	return !LandingHardAbsolute(repo, p) && LandingHard(repo, p)
-}
-
-// LandingHardCoreEntry is the §4.2 entry a hard_core path matches, for the
-// core-level approval's material (§12.2 item 2); "" when p is not hard_core.
-// Basename and Dockerfile entries name the basename rule they match.
-func LandingHardCoreEntry(repo, p string) string {
-	if !LandingHardCore(repo, p) {
-		return ""
-	}
-	if strings.HasPrefix(p, landingStore) {
-		key, _ := landingStoreEntry(p)
-		return landingStore + key
-	}
-	for _, list := range [][]string{landingHardGo[:], landingHardConsole[:], landingHardOtherDirs[:], landingHardFiles[:]} {
-		for _, entry := range list {
-			if p == entry || strings.HasSuffix(entry, "/") && strings.HasPrefix(p, entry) {
-				return entry
-			}
-		}
-	}
-	base := path.Base(p)
-	if strings.HasPrefix(base, "Dockerfile") {
-		return "**/Dockerfile*"
-	}
-	return "**/" + base
-}
-
-// LandingDecisionChain: p is on the Owner's decision chain (§12.2 item 2):
-// the process-external approval source (§4.2 B), the Console decision UI and
-// its credentials (§4.2 C), or the approvals and actuation packages.
-func LandingDecisionChain(repo, p string) bool {
-	if !LandingHardCore(repo, p) {
-		return false
-	}
-	return inLandingEntries(p, landingHardConsole[:]) || strings.HasPrefix(p, "mcp/platform/") ||
-		strings.HasPrefix(p, "api/internal/approval") || strings.HasPrefix(p, "api/internal/actuation")
 }

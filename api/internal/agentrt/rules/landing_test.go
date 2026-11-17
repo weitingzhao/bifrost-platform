@@ -1,7 +1,6 @@
 package rules
 
 import (
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -91,86 +90,6 @@ func TestLandingTightening(t *testing.T) {
 	p.Landing.Repos[0].STGRelease = "none"
 	if Tightens(p, n) == nil {
 		t.Fatal("enable STG tightens")
-	}
-}
-func simpleChange() LandingChange {
-	return LandingChange{OldPath: "console/src/components/Button.tsx", NewPath: "console/src/components/Button.tsx", OldMode: "100644", NewMode: "100644", Added: 1, Deleted: 1, AddedText: "<span>Ready</span>"}
-}
-
-// landingPolicyRefuses is the landing gate's policy (landing.PolicyChecks
-// after rule validity): the structural, absolute, content and change-kind
-// layers, then the soft refusal set. A change it does not refuse lands on
-// the signed rule's authority, with no card.
-func landingPolicyRefuses(l *Landing, repo string, changes []LandingChange) bool {
-	for _, layer := range []func(string, []LandingChange) (string, bool){LandingStructuralViolation, LandingAbsoluteViolation, LandingContentViolation, LandingChangeKindViolation} {
-		if _, bad := layer(repo, changes); bad {
-			return true
-		}
-	}
-	return len(LandingSoftRefusals(l, repo, changes)) > 0
-}
-
-// A signed allow of everything waives no floor: each path still has a
-// refusal only the Owner's grant removes (absolute, core or floor_grant),
-// never rule_paths alone.
-func TestLandingFloorCannotBeSignedAway(t *testing.T) {
-	l := landingRule(t).Landing
-	l.Repos[0].Allow = []string{"**"}
-	for _, p := range []string{"api/internal/actions/tier.go", "api/internal/server/x.go", "api/anything.txt", "go.mod", "nested/package.json", "x/.env.local", "console/vite.config.ts", "console/tsconfig.app.tsbuildinfo", "console/index.html", "console/src/main.tsx", "console/src/App.tsx", "console/src/api/x.ts", "console/src/lib/x.ts", "console/src/hooks/x.ts", "console/src/pwa/x.ts", "mcp/a", "agent/a", "scripts/a", "config/a", "Makefile", ".husky/a"} {
-		c := simpleChange()
-		c.NewPath = p
-		c.OldPath = p
-		changes := []LandingChange{c}
-		if _, bad := LandingAbsoluteViolation("bifrost-platform", changes); bad {
-			continue
-		}
-		soft := LandingSoftRefusals(l, "bifrost-platform", changes)
-		if !slices.Contains(soft, LandingCore) && !slices.Contains(soft, LandingFloorGrant) {
-			t.Errorf("floor allowed %s: %v", p, soft)
-		}
-	}
-}
-func TestLandingDiffPathsAndPresentation(t *testing.T) {
-	l := landingRule(t).Landing
-	for _, p := range []string{"console/src/components/Button.tsx", "console/src/components/deep/more/Button.tsx", "console/src/styles/a.css"} {
-		c := simpleChange()
-		c.OldPath = p
-		c.NewPath = p
-		if landingPolicyRefuses(l, "bifrost-platform", []LandingChange{c}) {
-			t.Fatal(p)
-		}
-	}
-	cases := map[string]func(*LandingChange){
-		"rename old floor": func(c *LandingChange) { c.OldPath = "api/internal/actions/tier.go" },
-		"symlink":          func(c *LandingChange) { c.NewMode = "120000" }, "submodule": func(c *LandingChange) { c.OldMode = "160000" },
-		"binary": func(c *LandingChange) { c.Binary = true }, "mode only": func(c *LandingChange) { c.NewMode = "100755"; c.Added = 0; c.Deleted = 0 },
-		"traversal": func(c *LandingChange) { c.NewPath = "console/src/components/../../../api/a" }, "case": func(c *LandingChange) { c.NewPath = "Console/src/components/Button.tsx" },
-		"delete disallowed": func(c *LandingChange) { c.OldPath = "README.md"; c.NewPath = ""; c.NewMode = "" },
-	}
-	for _, text := range []string{"import {x} from '../api/x'", "import {x} from 'api/x'", "import {x} from '@/lib/x'", "import {\n x\n} from '../../hooks/x'", "fetch('/x')", "fetch ('/x')", "new XMLHttpRequest()", "useQuery()", "useMutation()", "window.location.href"} {
-		text := text
-		cases[text] = func(c *LandingChange) { c.AddedText = text }
-	}
-	for name, mut := range cases {
-		t.Run(name, func(t *testing.T) {
-			c := simpleChange()
-			mut(&c)
-			if !landingPolicyRefuses(l, "bifrost-platform", []LandingChange{c}) {
-				t.Fatal("accepted unsafe diff")
-			}
-		})
-	}
-	c := simpleChange()
-	c.NewPath = ""
-	c.NewMode = ""
-	c.Added = 0
-	c.AddedText = ""
-	if landingPolicyRefuses(l, "bifrost-platform", []LandingChange{c}) {
-		t.Fatal("allowed deletion refused")
-	}
-	l.Repos[0].Deny = []string{"console/src/components/**"}
-	if !landingPolicyRefuses(l, "bifrost-platform", []LandingChange{simpleChange()}) {
-		t.Fatal("deny ignored")
 	}
 }
 

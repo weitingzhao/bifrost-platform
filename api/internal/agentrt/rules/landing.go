@@ -290,32 +290,6 @@ type LandingChange struct {
 	Binary                             bool
 }
 
-var presentationImport = regexp.MustCompile(`(?s)\bimport\b[^;]*?\bfrom\s*["'](?:[^"']*/)?(?:api|lib|hooks)/`)
-var presentationEffect = regexp.MustCompile(`\bfetch\s*\(|XMLHttpRequest|useQuery|useMutation|window\s*\.\s*location`)
-
-// LandingPresentationOnly implements CUT §2.3's three display checks without
-// I/O. It is deliberately separate from the immutable floor.
-// Both sides of a rename and the old path of a deletion are changed paths.
-func LandingPresentationOnly(allow []string, changes []LandingChange) bool {
-	if len(changes) == 0 {
-		return false
-	}
-	for _, c := range changes {
-		if c.OldPath == "" && c.NewPath == "" {
-			return false
-		}
-		for _, p := range c.Paths() {
-			if p != "" && (!landingPath(p) || !landingMatches(allow, p)) {
-				return false
-			}
-		}
-		if presentationImport.MatchString(c.AddedText) || presentationEffect.MatchString(c.AddedText) {
-			return false
-		}
-	}
-	return true
-}
-
 // Keep the signed canonical form stable while retaining the stated pattern order.
 func sortedLandingAllow(allow []string) []string {
 	out := slices.Clone(allow)

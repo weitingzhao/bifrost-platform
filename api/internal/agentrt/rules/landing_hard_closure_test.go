@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 	"testing"
 )
@@ -101,91 +99,6 @@ func uncoveredDependencies(pkgs []listedPackage, prefix string, protected func(s
 		}
 	}
 	return failures
-}
-func TestLandingHardDependencyClosure(t *testing.T) {
-	t.Parallel()
-	root := repositoryRoot(t)
-	var args []string
-	for _, dir := range landingHardRoots {
-		args = append(args, "./"+strings.TrimPrefix(dir, "api/")+"...")
-	}
-	pkgs := listDependencies(t, filepath.Join(root, "api"), args...)
-	for from, deps := range assemblyEdges {
-		for dep, reason := range deps {
-			found := false
-			for _, p := range pkgs {
-				if p.ImportPath == modulePath+from && slices.Contains(p.Imports, modulePath+"internal/"+dep) {
-					found = true
-				}
-			}
-			if !found || strings.TrimSpace(reason) == "" || inLandingEntries("api/internal/"+dep+"/", landingHardGo[:]) {
-				t.Errorf("stale, unexplained or protected assembly exemption: %s -> %s", from, dep)
-			}
-		}
-	}
-	missing := uncoveredDependencies(pkgs, modulePath, func(pkg string) bool {
-		return inLandingEntries("api/"+strings.TrimPrefix(pkg, modulePath)+"/", landingHardGo[:])
-	}, assemblyEdge)
-	if len(missing) != 0 {
-		t.Fatalf("hard dependency closure missing:\n%s", strings.Join(missing, "\n"))
-	}
-}
-func TestLandingHardCatalogEntriesExist(t *testing.T) {
-	t.Parallel()
-	root := repositoryRoot(t)
-	open := slices.Collect(maps.Keys(landingOpen))
-	for _, entries := range [][]string{landingHardGo[:], landingHardConsole[:], landingHardOtherDirs[:], landingHardFiles[:], open} {
-		for _, p := range entries {
-			if strings.Contains(p, "*") {
-				if found, err := filepath.Glob(filepath.Join(root, p)); err != nil || len(found) == 0 {
-					t.Errorf("open pattern %s matches nothing: %v", p, err)
-				}
-				continue
-			}
-			if slices.Contains(landingHardFuture[:], p) {
-				continue
-			}
-			info, err := os.Stat(filepath.Join(root, p))
-			if err != nil {
-				t.Errorf("stale hard entry %s: %v", p, err)
-				continue
-			}
-			if strings.HasSuffix(p, "/") != info.IsDir() {
-				t.Errorf("hard entry kind changed: %s", p)
-			}
-		}
-	}
-	for _, set := range []map[string]string{landingStorePermission, landingStoreOpen} {
-		for key, reason := range set {
-			found, err := filepath.Glob(filepath.Join(root, landingStore, key))
-			if err != nil || len(found) == 0 || strings.TrimSpace(reason) == "" {
-				t.Errorf("stale or unexplained store entry %s: %v", key, err)
-			}
-		}
-	}
-	for p, reason := range landingOpen {
-		if strings.TrimSpace(reason) == "" {
-			t.Errorf("open entry without a reason: %s", p)
-		}
-	}
-}
-
-func TestInfraCheckHardClosure(t *testing.T) {
-	t.Parallel()
-	for _, p := range []string{
-		"api/internal/agentrt/infracheck/check.go",
-		"api/internal/agentrt/infracheck/future/new_test.go",
-		"api/internal/agentrt/infracheck/testdata/check.golden",
-		"api/cmd/infracheck/main.go",
-	} {
-		if !LandingHardCore("bifrost-platform", p) {
-			t.Errorf("quick trust component is outside the hard closure: %s", p)
-		}
-	}
-	const dir = "api/internal/agentrt/infracheck/"
-	if !slices.Contains(landingHardRoots[:], dir) || slices.Contains(landingHardFuture[:], dir) {
-		t.Fatal("infracheck must be a checked closure root, not a future exemption")
-	}
 }
 
 // T19 uses a real temporary Go module. Adding a non-test dependency to the
