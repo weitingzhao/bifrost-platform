@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
@@ -68,7 +68,7 @@ func (c *Controller) startPipelineEvents(ctx context.Context, wg *sync.WaitGroup
 }
 
 // RecordPipelineRun records the one run a ci.run.finished names, as a pass
-// records each listed run: its pipeline_seen record (store.RecordExternal
+// records each listed run: its pipeline_seen record (seenfacts.RecordExternal
 // compares it with the database by run and uid, so a run the loop recorded
 // is not written twice) and its evidence, with what a failed run failed on
 // (Sources.RunFailure). It says whether this call wrote the record; a run the
@@ -78,7 +78,7 @@ func (c *Controller) RecordPipelineRun(ctx context.Context, name string) (bool, 
 		return false, nil
 	}
 	type result struct {
-		p   store.PipelineRun
+		p   seenfacts.PipelineRun
 		ok  bool
 		err error
 	}
@@ -94,7 +94,7 @@ func (c *Controller) RecordPipelineRun(ctx context.Context, name string) (bool, 
 	}
 	p := r.p
 	b := p.Body()
-	if err := store.CheckExternal("pipeline_seen", b); err != nil {
+	if err := seenfacts.CheckExternal("pipeline_seen", b); err != nil {
 		return false, fmt.Errorf("run %s: %w", p.Run, err)
 	}
 	doc, err := canon.Encode(b)
@@ -112,7 +112,7 @@ func (c *Controller) RecordPipelineRun(ctx context.Context, name string) (bool, 
 		m.known[key] = true
 		return false, nil
 	}
-	n, err := store.RecordExternal(ctx, c.DB, "pipeline_seen", []map[string]any{b})
+	n, err := seenfacts.RecordExternal(ctx, c.DB, "pipeline_seen", []map[string]any{b})
 	if err != nil {
 		return false, err
 	}
@@ -135,7 +135,7 @@ func (c *Controller) RecordPipelineRun(ctx context.Context, name string) (bool, 
 	if m.evidenced == nil {
 		m.evidenced = map[string]bool{}
 	}
-	return n > 0, errors.Join(c.recordEvidence(ctx, m, map[string]store.PipelineRun{key: p}, m.evidenced)...)
+	return n > 0, errors.Join(c.recordEvidence(ctx, m, map[string]seenfacts.PipelineRun{key: p}, m.evidenced)...)
 }
 
 // countMissedByEvents counts and names the runs a reconciliation pass

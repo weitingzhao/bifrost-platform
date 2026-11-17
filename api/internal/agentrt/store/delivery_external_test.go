@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -19,12 +20,12 @@ const (
 )
 
 // externalRun is a recorded pipeline run of externalCommit.
-func externalRun(run, pipeline, result string, start time.Time, took time.Duration) store.PipelineRun {
+func externalRun(run, pipeline, result string, start time.Time, took time.Duration) seenfacts.PipelineRun {
 	kind := "delivery"
 	if strings.HasPrefix(pipeline, "bifrost-ci-") {
 		kind = "ci"
 	}
-	return store.PipelineRun{Run: run, UID: "uid-" + run, Pipeline: pipeline, Kind: kind, Result: result, Repo: "bifrost-platform",
+	return seenfacts.PipelineRun{Run: run, UID: "uid-" + run, Pipeline: pipeline, Kind: kind, Result: result, Repo: "bifrost-platform",
 		Revision: externalCommit, CreatedAt: start, StartedAt: start, CompletedAt: start.Add(took)}
 }
 
@@ -56,12 +57,12 @@ func TestDeliveryViewAdapter(t *testing.T) {
 	if !strings.Contains(unread[deliveryview.StageLandingCI].Reason, "were not read") {
 		t.Fatal(unread)
 	}
-	in.Runs = []store.PipelineRun{}
+	in.Runs = []seenfacts.PipelineRun{}
 	empty := externalStages(t, store.FoldExternalDelivery(in))
 	if !strings.Contains(empty[deliveryview.StageLandingCI].Reason, "no completed CI") {
 		t.Fatal(empty)
 	}
-	in.Runs = []store.PipelineRun{externalRun("ci-adapter", "bifrost-ci-platform", "Succeeded", at.Add(time.Minute), time.Minute)}
+	in.Runs = []seenfacts.PipelineRun{externalRun("ci-adapter", "bifrost-ci-platform", "Succeeded", at.Add(time.Minute), time.Minute)}
 	in.Production = &deliveryview.DeliveryProduction{Commit: externalCommit, StartedAt: at.Add(3 * time.Minute), CompletedAt: at.Add(4 * time.Minute)}
 	stages := externalStages(t, store.FoldExternalDelivery(in))
 	ci := stages[deliveryview.StageLandingCI]
@@ -91,14 +92,14 @@ func externalSubmitted(t *testing.T, w *world, actor, node, run string, commits 
 	return id
 }
 
-func recordRuns(t *testing.T, w *world, runs ...store.PipelineRun) {
+func recordRuns(t *testing.T, w *world, runs ...seenfacts.PipelineRun) {
 	t.Helper()
 	ctx := ctxOf(t)
 	facts := make([]map[string]any, 0, len(runs))
 	for _, r := range runs {
 		facts = append(facts, r.Body())
 	}
-	n, err := store.RecordExternal(ctx, w.rt, "pipeline_seen", facts)
+	n, err := seenfacts.RecordExternal(ctx, w.rt, "pipeline_seen", facts)
 	ok(t, err)
 	if n != len(runs) {
 		t.Fatalf("recorded %d of %d runs", n, len(runs))

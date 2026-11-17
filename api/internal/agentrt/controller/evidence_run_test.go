@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -44,14 +45,14 @@ func fill(t *testing.T, v reflect.Value) {
 // what the store's run had.
 func TestEvidenceRunCarriesEveryField(t *testing.T) {
 	t.Parallel()
-	var p store.PipelineRun
+	var p seenfacts.PipelineRun
 	fill(t, reflect.ValueOf(&p).Elem())
 	got := reflect.ValueOf(EvidenceRun(p))
 	for i := 0; i < got.NumField(); i++ {
 		name := got.Type().Field(i).Name
 		want := reflect.ValueOf(p).FieldByName(name)
 		if !want.IsValid() {
-			t.Errorf("evidence.Run.%s has no field of that name in store.PipelineRun; say in the conversion where it comes from and in this test how it is checked", name)
+			t.Errorf("evidence.Run.%s has no field of that name in seenfacts.PipelineRun; say in the conversion where it comes from and in this test how it is checked", name)
 			continue
 		}
 		if got.Field(i).IsZero() {

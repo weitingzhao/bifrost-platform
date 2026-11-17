@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
@@ -187,12 +188,12 @@ func TestNeedsYouOneItemPerCard(t *testing.T) {
 			[]store.PlanChange{{Op: "retitle", Node: item, Title: key}}, card(q))
 		ok(t, err)
 	}
-	refused := func(_ context.Context, id string) (store.Question, bool) {
+	refused := func(_ context.Context, id string) (seenfacts.Question, bool) {
 		if id == "q_done" {
-			return store.Question{ID: id, Status: store.QuestionAnswered, Option: store.CardRefuseKey, AnsweredBy: "owner",
+			return seenfacts.Question{ID: id, Status: seenfacts.QuestionAnswered, Option: store.CardRefuseKey, AnsweredBy: "owner",
 				AnsweredAt: "2026-10-14T20:00:00Z"}, true
 		}
-		return store.Question{ID: id, Status: "open"}, true
+		return seenfacts.Question{ID: id, Status: "open"}, true
 	}
 	if n, err := store.DecidePlanChanges(ctx, w.rt, refused, nil); err != nil || n != 1 {
 		t.Fatalf("decided %d (%v); want the one answered card", n, err)

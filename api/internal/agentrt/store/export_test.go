@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -65,8 +66,9 @@ func EventTypesForTest() (vocabulary, written []string) { return eventlog.EventT
 
 // QuestionSeenBodyForTest is the question_seen body of q as read, checked
 // against the event's vocabulary.
-func QuestionSeenBodyForTest(id string, q Question) (map[string]any, error) {
-	body, _, err := questionSeenBody(id, q)
+func QuestionSeenBodyForTest(id string, q seenfacts.Question) (map[string]any, error) {
+	q.ID = id
+	body, err := q.Body()
 	if err != nil {
 		return nil, err
 	}

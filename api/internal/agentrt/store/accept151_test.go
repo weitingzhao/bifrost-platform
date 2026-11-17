@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -22,24 +23,24 @@ func TestOutsideReadsUnderTheLock(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
-	_, err := store.SeeApproval(ctx, w.rt, 16, approvalIs("pending"))
+	_, err := seenfacts.SeeApproval(ctx, w.rt, 16, approvalIs("pending"))
 	ok(t, err)
 	inside, release := make(chan struct{}), make(chan struct{})
 	var released sync.Once
 	t.Cleanup(func() { released.Do(func() { close(release) }) })
 	slow := make(chan error, 1)
 	go func() {
-		_, seeErr := store.SeeApproval(ctx, pool, 16, func(context.Context) (store.ApprovalFact, bool) {
+		_, seeErr := seenfacts.SeeApproval(ctx, pool, 16, func(context.Context) (seenfacts.ApprovalFact, bool) {
 			close(inside)
 			<-release
-			return store.ApprovalFact{Status: "pending", Action: "test", Tier: "test"}, true
+			return seenfacts.ApprovalFact{Status: "pending", Action: "test", Tier: "test"}, true
 		})
 		slow <- seeErr
 	}()
 	<-inside
 	fast := make(chan error, 1)
 	go func() {
-		_, seeErr := store.SeeApproval(ctx, pool, 16, approvalIs(store.ApprovalExecuted))
+		_, seeErr := seenfacts.SeeApproval(ctx, pool, 16, approvalIs(seenfacts.ApprovalExecuted))
 		fast <- seeErr
 	}()
 	w.waitFor(t, "pg_advisory_xact_lock(742104", time.Now().Add(10*time.Second))
@@ -56,7 +57,7 @@ func TestOutsideReadsUnderTheLock(t *testing.T) {
 	}
 
 	// Changes seen in order are all kept: pending, executed, pending.
-	_, err = store.SeeApproval(ctx, w.rt, 16, approvalIs("pending"))
+	_, err = seenfacts.SeeApproval(ctx, w.rt, 16, approvalIs("pending"))
 	ok(t, err)
 	var n int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'approval_seen'`).Scan(&n))
@@ -69,9 +70,9 @@ func TestOutsideReadsUnderTheLock(t *testing.T) {
 func TestAnswerIsCopiedWhole(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	_, err := store.SeeQuestion(ctx, w.rt, "Q3", questionIs(store.Question{Status: store.QuestionAnswered, Option: "A", AnsweredAt: "2026-10-14T12:00:00Z"}))
+	_, err := seenfacts.SeeQuestion(ctx, w.rt, "Q3", questionIs(seenfacts.Question{Status: seenfacts.QuestionAnswered, Option: "A", AnsweredAt: "2026-10-14T12:00:00Z"}))
 	is(t, err, store.ErrState)
-	_, err = store.SeeQuestion(ctx, w.rt, "Q3", questionIs(answered("Q3", "A")))
+	_, err = seenfacts.SeeQuestion(ctx, w.rt, "Q3", questionIs(answered("Q3", "A")))
 	ok(t, err)
 	var copy map[string]any
 	ok(t, w.rt.QueryRow(ctx, `SELECT body_json FROM agentrt.event WHERE event_type = 'question_seen' ORDER BY event_id DESC LIMIT 1`).Scan(&copy))

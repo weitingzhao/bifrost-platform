@@ -10,7 +10,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
 
 // testClock is a clock the test moves.
@@ -37,11 +37,11 @@ func TestRecordPipelineRunRecordsOneRunOnce(t *testing.T) {
 	red.Result, red.Reason = "Failed", "Failed"
 	asked, gets, told := 0, 0, 0
 	c := controller.Controller{DB: pool, PipelineRecorded: func() { told++ }, Sources: controller.Sources{
-		PipelineRuns: func(context.Context) ([]store.PipelineRun, error) { return []store.PipelineRun{red}, nil },
-		PipelineRun: func(_ context.Context, name string) (store.PipelineRun, bool, error) {
+		PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) { return []seenfacts.PipelineRun{red}, nil },
+		PipelineRun: func(_ context.Context, name string) (seenfacts.PipelineRun, bool, error) {
 			gets++
 			if name != red.Run {
-				return store.PipelineRun{}, false, nil
+				return seenfacts.PipelineRun{}, false, nil
 			}
 			return red, true, nil
 		},
@@ -78,8 +78,8 @@ func TestRecordPipelineRunRecordsOneRunOnce(t *testing.T) {
 	}
 	// A read that fails says so and records nothing.
 	away := errors.New("cluster away")
-	c.Sources.PipelineRun = func(context.Context, string) (store.PipelineRun, bool, error) {
-		return store.PipelineRun{}, false, away
+	c.Sources.PipelineRun = func(context.Context, string) (seenfacts.PipelineRun, bool, error) {
+		return seenfacts.PipelineRun{}, false, away
 	}
 	if _, err := c.RecordPipelineRun(ctx, "x"); !errors.Is(err, away) {
 		t.Fatalf("a failed read: %v", err)
@@ -94,7 +94,7 @@ func TestPipelineTickReconcilesEveryFiveMinutesWhileLive(t *testing.T) {
 	clock := &testClock{t: time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)}
 	live, lists := false, 0
 	c := controller.Controller{DB: noDB{}, Now: clock.now, PipelineLive: func() bool { return live }, Sources: controller.Sources{
-		PipelineRuns: func(context.Context) ([]store.PipelineRun, error) { lists++; return nil, nil }}}
+		PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) { lists++; return nil, nil }}}
 	tick := func(want int) {
 		t.Helper()
 		if _, err := c.PipelineTickForTest(ctx); err != nil {
@@ -126,19 +126,19 @@ func TestPipelineTickReconcilesEveryFiveMinutesWhileLive(t *testing.T) {
 func TestReconciliationRecordsAndCountsWhatTheEventsMissed(t *testing.T) {
 	pool := setup(t)
 	clock := &testClock{t: time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)}
-	runs := []store.PipelineRun{completedRun("deliver-old")}
+	runs := []seenfacts.PipelineRun{completedRun("deliver-old")}
 	var infos []string
 	c := controller.Controller{DB: pool, Now: clock.now, PipelineLive: func() bool { return true },
 		Infof: func(format string, args ...any) { infos = append(infos, format) },
 		Sources: controller.Sources{
-			PipelineRuns: func(context.Context) ([]store.PipelineRun, error) { return runs, nil },
-			PipelineRun: func(_ context.Context, name string) (store.PipelineRun, bool, error) {
+			PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) { return runs, nil },
+			PipelineRun: func(_ context.Context, name string) (seenfacts.PipelineRun, bool, error) {
 				for _, p := range runs {
 					if p.Run == name {
 						return p, true, nil
 					}
 				}
-				return store.PipelineRun{}, false, nil
+				return seenfacts.PipelineRun{}, false, nil
 			}}}
 	_, missed0 := controller.PipelineEventCountsForTest()
 	if _, err := c.PipelineTickForTest(ctx); err != nil { // the first pass of the process

@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -20,9 +21,9 @@ import (
 // import waits on one decision card and lands when the Owner answers it.
 
 // answer is a question source that answers every card with option.
-func answer(option string) func(context.Context, string) (store.Question, bool) {
-	return func(_ context.Context, id string) (store.Question, bool) {
-		return store.Question{ID: id, Status: store.QuestionAnswered, Option: option, Text: option, AnsweredBy: "owner",
+func answer(option string) func(context.Context, string) (seenfacts.Question, bool) {
+	return func(_ context.Context, id string) (seenfacts.Question, bool) {
+		return seenfacts.Question{ID: id, Status: seenfacts.QuestionAnswered, Option: option, Text: option, AnsweredBy: "owner",
 			AnsweredAt: "2026-10-19T04:00:00Z"}, true
 	}
 }

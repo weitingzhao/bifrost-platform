@@ -56,7 +56,7 @@ type RepoAt struct {
 type Run struct {
 	Kind, Repo, Run, UID, Pipeline string
 	Result, Reason, Scope          string
-	// Base: the commit an incremental run was judged against (store.PipelineRun.Base).
+	// Base: the commit an incremental run was judged against (seenfacts.PipelineRun.Base).
 	Base                     string
 	TestedBy                 string
 	CompletedAt              time.Time

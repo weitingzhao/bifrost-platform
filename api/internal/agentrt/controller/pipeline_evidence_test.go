@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -19,10 +20,10 @@ func sha(c string) string { return strings.Repeat(c, 40) }
 
 // ciRun is a completed bifrost-ci-platform run as the cluster reports one:
 // its own commit and tree, and the commits of the two repositories beside it.
-func ciRun(name, commit, tree string) store.PipelineRun {
+func ciRun(name, commit, tree string) seenfacts.PipelineRun {
 	p := completedRun(name)
 	p.Pipeline, p.Kind, p.Revision, p.Tree, p.Reason = "bifrost-ci-platform", "ci", commit, tree, "Succeeded"
-	p.Inputs = []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree},
+	p.Inputs = []seenfacts.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree},
 		{Repo: "bifrost-trade-infra", Commit: sha("1")}, {Repo: "bifrost-ui", Commit: sha("2")}}
 	return p
 }
@@ -70,9 +71,9 @@ func TestPipelineRecordsWritesEvidence(t *testing.T) {
 	reused.TestedBy = "ci-platform-green"
 	cancelled := ciRun("ci-platform-cancelled", sha("a"), sha("c"))
 	cancelled.Result, cancelled.Reason = "Failed", "Cancelled"
-	runs := []store.PipelineRun{green, same, red, reused, cancelled, completedRun("deliver-1")}
+	runs := []seenfacts.PipelineRun{green, same, red, reused, cancelled, completedRun("deliver-1")}
 	c := controller.Controller{DB: pool, PipelineFullEvery: time.Nanosecond, Sources: controller.Sources{
-		PipelineRuns: func(context.Context) ([]store.PipelineRun, error) { return runs, nil },
+		PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) { return runs, nil },
 		CommitTree: func(_ context.Context, repo, commit string) (string, error) {
 			reads++
 			return trees[repo+"@"+commit], nil
@@ -115,8 +116,8 @@ func TestPipelineRecordsEvidenceWaitsForATree(t *testing.T) {
 	away := errors.New("gitea is away")
 	fail := true
 	c := controller.Controller{DB: pool, PipelineFullEvery: time.Hour, Sources: controller.Sources{
-		PipelineRuns: func(context.Context) ([]store.PipelineRun, error) {
-			return []store.PipelineRun{ciRun("ci-platform-1", sha("a"), sha("c"))}, nil
+		PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) {
+			return []seenfacts.PipelineRun{ciRun("ci-platform-1", sha("a"), sha("c"))}, nil
 		},
 		CommitTree: func(context.Context, string, string) (string, error) {
 			if fail {
@@ -145,14 +146,14 @@ func TestPipelineRecordsFullCIFailureInvalidatesAPass(t *testing.T) {
 	t.Parallel()
 	pool := setup(t)
 	tree := func(context.Context, string, string) (string, error) { return sha("e"), nil }
-	fail := func(name, commit, treeID string, audit bool) store.PipelineRun {
+	fail := func(name, commit, treeID string, audit bool) seenfacts.PipelineRun {
 		p := ciRun(name, commit, treeID)
 		p.Result, p.Reason, p.Audit = "Failed", "Failed", audit
 		return p
 	}
-	runs := []store.PipelineRun{ciRun("ci-platform-green", sha("a"), sha("c"))}
+	runs := []seenfacts.PipelineRun{ciRun("ci-platform-green", sha("a"), sha("c"))}
 	c := controller.Controller{DB: pool, PipelineFullEvery: time.Nanosecond, Sources: controller.Sources{
-		PipelineRuns: func(context.Context) ([]store.PipelineRun, error) { return runs, nil }, CommitTree: tree}}
+		PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) { return runs, nil }, CommitTree: tree}}
 	results := func() string {
 		t.Helper()
 		if _, err := c.PipelineRecords(ctx); err != nil {
@@ -194,8 +195,8 @@ func TestPipelineRecordsFailedRunSaysWhatFailed(t *testing.T) {
 	fail := true
 	asked := map[string]int{}
 	c := controller.Controller{DB: pool, PipelineFullEvery: time.Nanosecond, Sources: controller.Sources{
-		PipelineRuns: func(context.Context) ([]store.PipelineRun, error) {
-			return []store.PipelineRun{ciRun("ci-platform-green", sha("a"), sha("c")), red, build}, nil
+		PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) {
+			return []seenfacts.PipelineRun{ciRun("ci-platform-green", sha("a"), sha("c")), red, build}, nil
 		},
 		CommitTree: func(context.Context, string, string) (string, error) { return sha("e"), nil },
 		RunFailure: func(_ context.Context, run string) ([]string, []string, string, error) {
@@ -266,17 +267,17 @@ func TestPipelineRecordsTellsEvidencedRunsOnce(t *testing.T) {
 	reused.TestedBy = "ci-platform-green"
 	cancelled := ciRun("ci-platform-cancelled", sha("a"), sha("c"))
 	cancelled.Result, cancelled.Reason = "Failed", "Cancelled"
-	runs := []store.PipelineRun{ciRun("ci-platform-green", sha("a"), sha("c")), red, reused, cancelled, completedRun("deliver-1")}
+	runs := []seenfacts.PipelineRun{ciRun("ci-platform-green", sha("a"), sha("c")), red, reused, cancelled, completedRun("deliver-1")}
 	lists := 0
 	told := map[string]int{}
 	var redTests []string
 	c := controller.Controller{DB: pool, PipelineFullEvery: time.Nanosecond, Sources: controller.Sources{
-		PipelineRuns: func(context.Context) ([]store.PipelineRun, error) { lists++; return runs, nil },
+		PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) { lists++; return runs, nil },
 		CommitTree:   func(context.Context, string, string) (string, error) { return sha("e"), nil },
 		RunFailure: func(context.Context, string) ([]string, []string, string, error) {
 			return []string{"test-api"}, []string{"example.com/m/a.TestA"}, evidence.FailClassTest, nil
 		},
-		RunEvidenced: func(_ context.Context, p store.PipelineRun) {
+		RunEvidenced: func(_ context.Context, p seenfacts.PipelineRun) {
 			told[p.Run]++
 			if p.Run == "ci-platform-red" {
 				redTests = p.FailedTests

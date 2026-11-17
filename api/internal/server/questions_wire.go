@@ -15,6 +15,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
@@ -98,14 +99,14 @@ func (s *Server) mountQuestions(r chi.Router) {
 // agentRuntimeQuestion reads a question for the agent runtime's controller
 // (agentRuntimeSources) by Lookup, which writes nothing; nil without a
 // question store.
-func (rt *questionRuntime) agentRuntimeQuestion() func(context.Context, string) (store.Question, bool) {
+func (rt *questionRuntime) agentRuntimeQuestion() func(context.Context, string) (seenfacts.Question, bool) {
 	if rt == nil || rt.svc == nil || rt.reads == nil {
 		return nil
 	}
-	return func(ctx context.Context, id string) (store.Question, bool) {
+	return func(ctx context.Context, id string) (seenfacts.Question, bool) {
 		q, ok, err := within(ctx, rt.reads, func() (questions.Question, bool, error) { return rt.svc.Lookup(id) })
 		if err != nil || !ok {
-			return store.Question{}, false
+			return seenfacts.Question{}, false
 		}
 		return questionFact(q)
 	}
@@ -370,12 +371,12 @@ func (s *Server) wireQuestionAssessments() {
 	}
 }
 
-func questionFact(q questions.Question) (store.Question, bool) {
+func questionFact(q questions.Question) (seenfacts.Question, bool) {
 	return questioncards.Fact(q)
 }
 
 // questionAnswerFact supplies the same source records to the shared adapter.
-func questionAnswerFact(id, status string, answered bool, option, text, by string, at time.Time) (store.Question, bool) {
+func questionAnswerFact(id, status string, answered bool, option, text, by string, at time.Time) (seenfacts.Question, bool) {
 	q := questions.Question{ID: id, Status: status, Requester: questions.RuntimeSession}
 	if answered {
 		q.Answer = &questions.Answer{Option: option, Text: text, By: by, At: at}
@@ -384,11 +385,11 @@ func questionAnswerFact(id, status string, answered bool, option, text, by strin
 }
 
 // agentRuntimeQuestionObservations lists retained cards without sweeping.
-func (rt *questionRuntime) agentRuntimeQuestionObservations() func(context.Context) ([]store.Question, error) {
+func (rt *questionRuntime) agentRuntimeQuestionObservations() func(context.Context) ([]seenfacts.Question, error) {
 	if rt == nil || rt.svc == nil || rt.reads == nil {
 		return nil
 	}
-	return func(ctx context.Context) ([]store.Question, error) {
+	return func(ctx context.Context) ([]seenfacts.Question, error) {
 		items, ok, err := within(ctx, rt.reads, func() ([]questions.Question, bool, error) {
 			items, err := rt.svc.Observations()
 			return items, true, err
@@ -400,7 +401,7 @@ func (rt *questionRuntime) agentRuntimeQuestionObservations() func(context.Conte
 			return nil, fmt.Errorf("question observations unavailable")
 		}
 		now := time.Now()
-		var out []store.Question
+		var out []seenfacts.Question
 		for _, q := range items {
 			if f, ok := questionObservation(q, now); ok {
 				out = append(out, f)
@@ -410,9 +411,9 @@ func (rt *questionRuntime) agentRuntimeQuestionObservations() func(context.Conte
 	}
 }
 
-func questionObservation(q questions.Question, now time.Time) (store.Question, bool) {
+func questionObservation(q questions.Question, now time.Time) (seenfacts.Question, bool) {
 	if q.Status == questions.StatusOpen && !q.ExpiresAt.IsZero() && !now.Before(q.ExpiresAt) {
-		return store.Question{}, false
+		return seenfacts.Question{}, false
 	}
 	return questioncards.Fact(q)
 }

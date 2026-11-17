@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -32,8 +33,8 @@ func TestPlanChangeDropAndMarks(t *testing.T) {
 	out, err = propose("k2", store.PlanChange{Op: "set_marks", Node: s3, OwnerStep: &yes, EffectStep: &no})
 	ok(t, err)
 	marks := out["question_id"].(string)
-	a.answer(drop, store.QuestionAnswered, store.CardApplyKey)
-	a.answer(marks, store.QuestionAnswered, store.CardApplyKey)
+	a.answer(drop, seenfacts.QuestionAnswered, store.CardApplyKey)
+	a.answer(marks, seenfacts.QuestionAnswered, store.CardApplyKey)
 	n, err := store.DecidePlanChanges(ctx, w.rt, a.question, nil)
 	ok(t, err)
 	if n != 2 {
@@ -87,7 +88,7 @@ func TestPlanChangeDropAndMarksRefusals(t *testing.T) {
 	// Dropped once, a second drop is refused when it is decided.
 	out, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "d1", root, "test", []store.PlanChange{{Op: "drop_step", Node: s2}}, a.ask)
 	ok(t, err)
-	a.answer(out["question_id"].(string), store.QuestionAnswered, store.CardApplyKey)
+	a.answer(out["question_id"].(string), seenfacts.QuestionAnswered, store.CardApplyKey)
 	_, err = store.DecidePlanChanges(ctx, w.rt, a.question, nil)
 	ok(t, err)
 	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "d2", root, "test", []store.PlanChange{{Op: "drop_step", Node: s2}}, a.ask)

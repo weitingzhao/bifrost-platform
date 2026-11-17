@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -292,7 +293,7 @@ func TestArchRowRuleIsGatesOnly(t *testing.T) {
 	out, err := propose("k-gates", gateRule("stg", [2]string{"T21", strings.Repeat("ab", 32)}))
 	ok(t, err)
 	gates := out["question_id"].(string)
-	a.answer(gates, store.QuestionAnswered, store.CardApplyKey)
+	a.answer(gates, seenfacts.QuestionAnswered, store.CardApplyKey)
 	n, err := store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 	ok(t, err)
 	if n != 1 {

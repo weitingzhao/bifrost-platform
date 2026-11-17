@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
@@ -27,7 +28,7 @@ func (f fakeApprovals) Lookup(ref string) (approvals.Approval, bool, error) {
 }
 
 // question answers as questions_wire.go's reader does, from plain fields.
-func question(_ context.Context, id string) (store.Question, bool) {
+func question(_ context.Context, id string) (seenfacts.Question, bool) {
 	at := time.Date(2026, 10, 14, 12, 0, 0, 0, time.FixedZone("CDT", -5*3600))
 	switch id {
 	case "q_open":
@@ -43,7 +44,7 @@ func question(_ context.Context, id string) (store.Question, bool) {
 	case "q_untimed":
 		return questionAnswerFact(id, "answered", true, "a", "", "owner", time.Time{})
 	}
-	return store.Question{}, false
+	return seenfacts.Question{}, false
 }
 
 // fakeCI answers as the ledger's reader does: a verdict, none, or an error.
@@ -131,7 +132,7 @@ func TestAgentRuntimeSources(t *testing.T) {
 	if q, ok := src.Question(ctx, "q_open"); !ok || q.Status != "open" || q.Option != "" {
 		t.Errorf("open question = %+v %v", q, ok)
 	}
-	want := store.Question{ID: "q_done", Status: "answered", Option: "a", Text: "go", AnsweredBy: "owner", AnsweredAt: "2026-10-14T17:00:00Z"}
+	want := seenfacts.Question{ID: "q_done", Status: "answered", Option: "a", Text: "go", AnsweredBy: "owner", AnsweredAt: "2026-10-14T17:00:00Z"}
 	if q, ok := src.Question(ctx, "q_done"); !ok || q != want {
 		t.Errorf("answered question = %+v %v", q, ok)
 	}
@@ -318,7 +319,7 @@ func TestPlanChangeCardOnTheStore(t *testing.T) {
 		t.Fatalf("answer = %d %v", res.Code, res.Body)
 	}
 	q, ok := read(ctx, id)
-	if !ok || q.Status != store.QuestionAnswered || q.Option != store.CardApplyKey {
+	if !ok || q.Status != seenfacts.QuestionAnswered || q.Option != store.CardApplyKey {
 		t.Fatalf("the answer reads %+v; want option %q", q, store.CardApplyKey)
 	}
 	for range 2 {
@@ -380,7 +381,7 @@ func TestPlannerCardOnTheStore(t *testing.T) {
 	if res := rt.svc.Answer(ctx, "owner-console", "admin", "admin", id, raw); res.Code >= 300 {
 		t.Fatalf("answer = %d %v", res.Code, res.Body)
 	}
-	if q, ok := read(ctx, id); !ok || q.Status != store.QuestionAnswered {
+	if q, ok := read(ctx, id); !ok || q.Status != seenfacts.QuestionAnswered {
 		t.Fatalf("the answer %+v", q)
 	}
 	// Answered: not withdrawn (that is not an error), asked before.

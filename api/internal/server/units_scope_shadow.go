@@ -14,6 +14,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	busdrift "github.com/weitingzhao/bifrost-platform/api/internal/bus/drift"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
@@ -86,7 +87,7 @@ type unitScopeShadow struct {
 
 // unitScopeShadowSource is the controller's RunEvidenced, or nil when the
 // switch is not "on" or there is nothing to read commits from.
-func (s *Server) unitScopeShadowSource() func(context.Context, store.PipelineRun) {
+func (s *Server) unitScopeShadowSource() func(context.Context, seenfacts.PipelineRun) {
 	if os.Getenv(unitScopeShadowEnv) != "on" || s.delivery == nil {
 		return nil
 	}
@@ -194,7 +195,7 @@ func (s *Server) giteaFirstParent(ctx context.Context, repo, commit string) (str
 // returns at once: the ledger is asked here (before the pass writes the row
 // that would answer yes), the plans are computed off the pass. Nothing it
 // does fails or holds the pass; what goes wrong is logged and dropped.
-func (u *unitScopeShadow) observe(ctx context.Context, p store.PipelineRun) {
+func (u *unitScopeShadow) observe(ctx context.Context, p seenfacts.PipelineRun) {
 	if p.Kind != "ci" || p.Repo != u.repo || p.Pipeline != u.pipeline || p.UID == "" {
 		return
 	}
@@ -284,7 +285,7 @@ func (u *unitScopeShadow) observe(ctx context.Context, p store.PipelineRun) {
 // touches (by_module), and what failed.
 const ciReconcileAction = "ci_reconcile"
 
-func (u *unitScopeShadow) reconcileFull(ctx context.Context, p store.PipelineRun, commit string, line []any) {
+func (u *unitScopeShadow) reconcileFull(ctx context.Context, p seenfacts.PipelineRun, commit string, line []any) {
 	if u.incremental == nil || u.reconcile == nil || p.Scope != evidence.EvidenceScopeFull {
 		return
 	}
@@ -337,6 +338,6 @@ func (u *unitScopeShadow) logger() *slog.Logger {
 // everything run, and missed: the units that have a failed test of the run
 // and whose keys are the base's. unmatched counts the failed tests of no unit
 // of the plan, which are neither a miss nor covered.
-func shadowLine(p store.PipelineRun, commit string, scope unitplan.Scope) []any {
+func shadowLine(p seenfacts.PipelineRun, commit string, scope unitplan.Scope) []any {
 	return cirunview.ShadowLine(cirunview.ShadowRun{Run: p.Run, Result: p.Result, Scope: p.Scope, FailedTests: p.FailedTests}, commit, scope)
 }

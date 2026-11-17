@@ -16,6 +16,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
@@ -126,7 +127,7 @@ func TestOwnerButtonPaths(t *testing.T) {
 	// One question store a group of cards: the store takes six cards an
 	// hour from the runtime.
 	var ask store.Ask
-	var question func(context.Context, string) (store.Question, bool)
+	var question func(context.Context, string) (seenfacts.Question, bool)
 	var ack func(context.Context, string) error
 	group := func() {
 		b.rt = newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)

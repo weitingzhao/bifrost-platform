@@ -21,7 +21,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
@@ -34,7 +34,7 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 	src.Questions = s.questionRuntime.agentRuntimeQuestionObservations()
 	if s.approvals != nil {
 		reads := newBoundedReads(2)
-		src.Approvals = func(ctx context.Context) ([]store.ApprovalFact, error) {
+		src.Approvals = func(ctx context.Context) ([]seenfacts.ApprovalFact, error) {
 			items, ok, err := within(ctx, reads, func() ([]approvals.Approval, bool, error) {
 				items, err := s.approvals.Observations()
 				return items, true, err
@@ -46,7 +46,7 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 				return nil, fmt.Errorf("approval observations unavailable")
 			}
 			now := time.Now()
-			var out []store.ApprovalFact
+			var out []seenfacts.ApprovalFact
 			for _, a := range items {
 				if f, ok := approvalObservation(a, now); ok {
 					out = append(out, f)
@@ -69,20 +69,20 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 			tasks, tests, class := runFailure(failed)
 			return tasks, tests, class, nil
 		}
-		src.PipelineRun = func(ctx context.Context, name string) (store.PipelineRun, bool, error) {
+		src.PipelineRun = func(ctx context.Context, name string) (seenfacts.PipelineRun, bool, error) {
 			item, ok, err := s.delivery.PipelineRunObservation(kubemetrics.WithSite(ctx, "records"), name)
 			if err != nil || !ok {
-				return store.PipelineRun{}, false, err
+				return seenfacts.PipelineRun{}, false, err
 			}
 			f, ok := pipelineRunFact(item)
 			return f, ok, nil
 		}
-		src.PipelineRuns = func(ctx context.Context) ([]store.PipelineRun, error) {
+		src.PipelineRuns = func(ctx context.Context) ([]seenfacts.PipelineRun, error) {
 			items, err := s.delivery.PipelineRunObservations(kubemetrics.WithSite(ctx, "records"))
 			if err != nil {
 				return nil, err
 			}
-			var out []store.PipelineRun
+			var out []seenfacts.PipelineRun
 			for _, item := range items {
 				if f, ok := pipelineRunFact(item); ok {
 					out = append(out, f)
@@ -133,22 +133,22 @@ func (s *Server) wirePipelineRecords(c *controller.Controller) {
 	}
 }
 
-func approvalObservation(a approvals.Approval, now time.Time) (store.ApprovalFact, bool) {
+func approvalObservation(a approvals.Approval, now time.Time) (seenfacts.ApprovalFact, bool) {
 	// Leave time transitions to the sweeping writer, whose DecidedAt is
 	// the sweep time. A stale file must never reverse its terminal record.
 	if a.Status == approvals.StatusPending && now.After(a.ExpiresAt) {
-		return store.ApprovalFact{}, false
+		return seenfacts.ApprovalFact{}, false
 	}
 	if a.Status == approvals.StatusApproved && a.Execution != nil && !a.Execution.Deadline.IsZero() && now.After(a.Execution.Deadline) {
-		return store.ApprovalFact{}, false
+		return seenfacts.ApprovalFact{}, false
 	}
 	return approvalFact(a)
 }
 
 var pipelineReason = regexp.MustCompile("^[A-Za-z]{1,64}$")
 
-func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
-	f := store.PipelineRun{Run: run.GetName(), UID: string(run.GetUID()), Kind: "other", CreatedAt: run.GetCreationTimestamp().Time}
+func pipelineRunFact(run unstructured.Unstructured) (seenfacts.PipelineRun, bool) {
+	f := seenfacts.PipelineRun{Run: run.GetName(), UID: string(run.GetUID()), Kind: "other", CreatedAt: run.GetCreationTimestamp().Time}
 	f.Pipeline, _, _ = unstructured.NestedString(run.Object, "spec", "pipelineRef", "name")
 	switch {
 	case strings.HasPrefix(f.Pipeline, "bifrost-ci-"):
@@ -168,7 +168,7 @@ func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
 		case "False":
 			f.Result = "Failed"
 		default:
-			return store.PipelineRun{}, false
+			return seenfacts.PipelineRun{}, false
 		}
 		reason, _ := c["reason"].(string)
 		if pipelineReason.MatchString(reason) {
@@ -177,7 +177,7 @@ func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
 		break
 	}
 	if f.Result == "" {
-		return store.PipelineRun{}, false
+		return seenfacts.PipelineRun{}, false
 	}
 	readTime := func(key string) time.Time {
 		value, _, _ := unstructured.NestedString(run.Object, "status", key)
@@ -209,7 +209,7 @@ func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
 		}
 	}
 	results, _, _ := unstructured.NestedSlice(run.Object, "status", "results")
-	inputs, own := map[string]*store.RepoAt{}, map[string]*store.RepoAt{}
+	inputs, own := map[string]*seenfacts.RepoAt{}, map[string]*seenfacts.RepoAt{}
 	scopeSeen := false
 	for _, value := range results {
 		r, _ := value.(map[string]any)
@@ -264,7 +264,7 @@ func pipelineRunFact(run unstructured.Unstructured) (store.PipelineRun, bool) {
 			continue
 		}
 		if into[repo] == nil {
-			into[repo] = &store.RepoAt{Repo: repo}
+			into[repo] = &seenfacts.RepoAt{Repo: repo}
 		}
 		if field == "commit" {
 			into[repo].Commit = v

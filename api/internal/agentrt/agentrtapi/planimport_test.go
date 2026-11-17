@@ -20,6 +20,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -397,8 +398,8 @@ func TestPlanImportNumberingContinues(t *testing.T) {
 	if out["question_id"] != "q_1" {
 		t.Fatalf("item proposal = %v", out)
 	}
-	answered := func(_ context.Context, id string) (store.Question, bool) {
-		return store.Question{ID: id, Status: store.QuestionAnswered, Option: store.CardApplyKey}, true
+	answered := func(_ context.Context, id string) (seenfacts.Question, bool) {
+		return seenfacts.Question{ID: id, Status: seenfacts.QuestionAnswered, Option: store.CardApplyKey}, true
 	}
 	n, err := store.DecidePlanChanges(ctx, pool, answered, nil)
 	must(t, err)

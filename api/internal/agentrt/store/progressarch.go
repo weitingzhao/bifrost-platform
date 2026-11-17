@@ -106,7 +106,7 @@ func archTick(ctx context.Context, tx pgx.Tx, id, doc string, deploys *recordedD
 }
 
 // recordedDeploys reads what each environment runs as the controller last
-// recorded it (deploy_seen, store.SeeDeploy), once per environment per
+// recorded it (deploy_seen, seenfacts.SeeDeploy), once per environment per
 // projection, so every row is checked against the same deployment.
 type recordedDeploys struct {
 	ctx context.Context

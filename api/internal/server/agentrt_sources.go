@@ -9,7 +9,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
@@ -54,19 +54,19 @@ type (
 // release records. A record that cannot be read now is
 // ok=false: the controller records nothing for it, a fact seen before stays
 // seen, and gates_passed on the deployment is unknown.
-func agentRuntimeSources(ap approvalReader, question func(context.Context, string) (store.Question, bool), ci delivery.CIReader, rel currentDeployment) controller.Sources {
+func agentRuntimeSources(ap approvalReader, question func(context.Context, string) (seenfacts.Question, bool), ci delivery.CIReader, rel currentDeployment) controller.Sources {
 	src := controller.Sources{
-		Approval: func(context.Context, int64) (store.ApprovalFact, bool) { return store.ApprovalFact{}, false },
-		Question: func(context.Context, string) (store.Question, bool) { return store.Question{}, false },
+		Approval: func(context.Context, int64) (seenfacts.ApprovalFact, bool) { return seenfacts.ApprovalFact{}, false },
+		Question: func(context.Context, string) (seenfacts.Question, bool) { return seenfacts.Question{}, false },
 		CI:       func(context.Context, string, string) (string, string, bool) { return "", "", false },
 		Deployed: func(context.Context, string) (string, map[string]any, bool) { return "", nil, false },
 	}
 	if ap != nil {
 		reads := newBoundedReads(2)
-		src.Approval = func(ctx context.Context, number int64) (store.ApprovalFact, bool) {
+		src.Approval = func(ctx context.Context, number int64) (seenfacts.ApprovalFact, bool) {
 			a, ok, err := within(ctx, reads, func() (approvals.Approval, bool, error) { return ap.Lookup(strconv.FormatInt(number, 10)) })
 			if err != nil || !ok || a.Status == "" {
-				return store.ApprovalFact{}, false
+				return seenfacts.ApprovalFact{}, false
 			}
 			return approvalFact(a)
 		}
@@ -282,9 +282,9 @@ var approvalRepo = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,99}$`)
 var approvalTask = regexp.MustCompile(`^t_[0-9A-HJKMNP-TV-Z]{26}$`)
 var approvalOp = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,80}$`)
 
-func approvalFact(a approvals.Approval) (store.ApprovalFact, bool) {
+func approvalFact(a approvals.Approval) (seenfacts.ApprovalFact, bool) {
 	if a.Number == 0 || a.Status == "" {
-		return store.ApprovalFact{}, false
+		return seenfacts.ApprovalFact{}, false
 	}
 	get := func(key string, re *regexp.Regexp) string {
 		v, _ := a.Params[key].(string)
@@ -297,5 +297,5 @@ func approvalFact(a approvals.Approval) (store.ApprovalFact, bool) {
 	if task == "" {
 		task = get("task", approvalTask)
 	}
-	return store.ApprovalFact{Number: int64(a.Number), Status: a.Status, Action: a.Action, Tier: a.Tier, Env: a.Env, Repo: get("repo", approvalRepo), Task: task, Op: get("op", approvalOp), CreatedAt: a.CreatedAt, DecidedAt: a.DecidedAt, Expired: a.Status == approvals.StatusExpired}, true
+	return seenfacts.ApprovalFact{Number: int64(a.Number), Status: a.Status, Action: a.Action, Tier: a.Tier, Env: a.Env, Repo: get("repo", approvalRepo), Task: task, Op: get("op", approvalOp), CreatedAt: a.CreatedAt, DecidedAt: a.DecidedAt, Expired: a.Status == approvals.StatusExpired}, true
 }

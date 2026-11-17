@@ -1,4 +1,4 @@
-package store
+package seenfacts
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // RepoAt is a repository at a commit, with that commit's git tree.
@@ -58,15 +59,15 @@ func pipelineSeenBody(p PipelineRun) map[string]any {
 // CheckExternal says whether RecordExternal would refuse fact as one of kind:
 // nil when it would not. A caller that remembers what it recorded asks first,
 // so a refused fact does not hide which of the others were recorded.
-func CheckExternal(kind string, fact map[string]any) error { return checkBody(kind, fact) }
+func CheckExternal(kind string, fact map[string]any) error { return eventlog.CheckBody(kind, fact) }
 
 // RecordExternal records changed external facts, continuing after invalid facts.
 // The initial batch read avoids taking locks for facts that have not changed;
 // each changed fact is checked again under its advisory lock.
-func RecordExternal(ctx context.Context, db DB, kind string, facts []map[string]any) (int, error) {
+func RecordExternal(ctx context.Context, db eventlog.DB, kind string, facts []map[string]any) (int, error) {
 	keys := map[string][]string{"approval_seen": {"approval"}, "question_seen": {"question"}, "pipeline_seen": {"run", "uid"}}[kind]
 	if len(keys) == 0 {
-		return 0, fmt.Errorf("%w: unsupported external kind %q", ErrInvalid, kind)
+		return 0, fmt.Errorf("%w: unsupported external kind %q", eventlog.ErrInvalid, kind)
 	}
 	type fact struct {
 		body     map[string]any
@@ -75,7 +76,7 @@ func RecordExternal(ctx context.Context, db DB, kind string, facts []map[string]
 	var valid []fact
 	var errs []error
 	for i, b := range facts {
-		if err := checkBody(kind, b); err != nil {
+		if err := eventlog.CheckBody(kind, b); err != nil {
 			errs = append(errs, fmt.Errorf("fact %d: %w", i, err))
 			continue
 		}
@@ -99,7 +100,7 @@ func RecordExternal(ctx context.Context, db DB, kind string, facts []map[string]
 		return 0, errors.Join(errs...)
 	}
 	latest := map[string]string{}
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
+	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		args := []any{kind}
 		predicates := make([]string, len(valid))
 		for i, f := range valid {

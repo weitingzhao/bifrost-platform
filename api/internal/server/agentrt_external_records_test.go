@@ -13,7 +13,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
@@ -101,12 +101,12 @@ func TestLandResultsOptionalAndScoped(t *testing.T) {
 		_ = unstructured.SetNestedField(run.Object, time.Now().UTC().Format(time.RFC3339), "status", "startTime")
 		_ = unstructured.SetNestedField(run.Object, time.Now().UTC().Format(time.RFC3339), "status", "completionTime")
 		old, ok := pipelineRunFact(run)
-		if !ok || old.LandedCommit != "" || store.CheckExternal("pipeline_seen", old.Body()) != nil {
+		if !ok || old.LandedCommit != "" || seenfacts.CheckExternal("pipeline_seen", old.Body()) != nil {
 			t.Fatalf("legacy: %+v", old)
 		}
 		_ = unstructured.SetNestedSlice(run.Object, []any{map[string]any{"name": "commit", "value": commitForExternalRecord}, map[string]any{"name": "change-ids", "value": "Ione Itwo"}, map[string]any{"name": "outcome", "value": "landed"}}, "status", "results")
 		got, ok := pipelineRunFact(run)
-		if !ok || store.CheckExternal("pipeline_seen", got.Body()) != nil {
+		if !ok || seenfacts.CheckExternal("pipeline_seen", got.Body()) != nil {
 			t.Fatalf("new: %+v", got)
 		}
 		if pipeline == "bifrost-land" {
@@ -210,7 +210,7 @@ func TestWirePipelineRecords(t *testing.T) {
 func TestPipelineRunFactReadsWhatACIRunTested(t *testing.T) {
 	t.Parallel()
 	a, b, c, d := strings.Repeat("a", 40), strings.Repeat("b", 40), strings.Repeat("c", 40), strings.Repeat("d", 40)
-	run := func(pipeline, repo string, results map[string]string) store.PipelineRun {
+	run := func(pipeline, repo string, results map[string]string) seenfacts.PipelineRun {
 		var list []any
 		for k, v := range results {
 			list = append(list, map[string]any{"name": k, "value": v})
@@ -229,26 +229,26 @@ func TestPipelineRunFactReadsWhatACIRunTested(t *testing.T) {
 	}
 	f := run("bifrost-ci-platform", "bifrost-platform", map[string]string{"platform-commit": a, "platform-tree": b, "ui-commit": c, "infra-commit": d,
 		"api-scope": "incremental", "base-commit": a, "tested-by": "r", "failed-tests": ""})
-	want := []store.RepoAt{{Repo: "bifrost-platform", Commit: a, Tree: b}, {Repo: "bifrost-trade-infra", Commit: d}, {Repo: "bifrost-ui", Commit: c}}
+	want := []seenfacts.RepoAt{{Repo: "bifrost-platform", Commit: a, Tree: b}, {Repo: "bifrost-trade-infra", Commit: d}, {Repo: "bifrost-ui", Commit: c}}
 	if !reflect.DeepEqual(f.Inputs, want) || f.Scope != "incremental" || f.Tree != b {
 		t.Fatalf("platform run: %+v scope %q", f.Inputs, f.Scope)
 	}
 	// A core run of the Python pipeline names core twice: the run's own wins.
 	f = run("bifrost-ci-python", "bifrost-trade-core", map[string]string{"repo-commit": a, "repo-tree": b, "core-commit": c, "core-tree": d,
 		"infra-commit": c, "infra-tree": d, "ui-commit": "main"})
-	want = []store.RepoAt{{Repo: "bifrost-trade-core", Commit: a, Tree: b}, {Repo: "bifrost-trade-infra", Commit: c, Tree: d}}
+	want = []seenfacts.RepoAt{{Repo: "bifrost-trade-core", Commit: a, Tree: b}, {Repo: "bifrost-trade-infra", Commit: c, Tree: d}}
 	if !reflect.DeepEqual(f.Inputs, want) || f.Scope != "" {
 		t.Fatalf("python run: %+v scope %q", f.Inputs, f.Scope)
 	}
 	f = run("bifrost-ci-python", "bifrost-research", map[string]string{"source-commit": a, "source-tree": b, "infra-commit": c, "infra-tree": d})
-	want = []store.RepoAt{{Repo: "bifrost-research", Commit: a, Tree: b}, {Repo: "bifrost-trade-infra", Commit: c, Tree: d}}
+	want = []seenfacts.RepoAt{{Repo: "bifrost-research", Commit: a, Tree: b}, {Repo: "bifrost-trade-infra", Commit: c, Tree: d}}
 	if !reflect.DeepEqual(f.Inputs, want) {
 		t.Fatalf("research run: %+v", f.Inputs)
 	}
 	// An infra run reports the platform checkout it used as platform-tree:
 	// an input, and not the tree of the run's repository.
 	f = run("bifrost-ci-infra", "bifrost-trade-infra", map[string]string{"infra-commit": a, "infra-tree": b, "platform-commit": c, "platform-tree": d})
-	want = []store.RepoAt{{Repo: "bifrost-platform", Commit: c, Tree: d}, {Repo: "bifrost-trade-infra", Commit: a, Tree: b}}
+	want = []seenfacts.RepoAt{{Repo: "bifrost-platform", Commit: c, Tree: d}, {Repo: "bifrost-trade-infra", Commit: a, Tree: b}}
 	if !reflect.DeepEqual(f.Inputs, want) || f.Tree != "" {
 		t.Fatalf("infra run: %+v tree %q", f.Inputs, f.Tree)
 	}
@@ -359,7 +359,7 @@ func TestRunFailure(t *testing.T) {
 func TestAPipelineRunWithABadScopeIsNotAFullRun(t *testing.T) {
 	t.Parallel()
 	a, b := strings.Repeat("a", 40), strings.Repeat("b", 40)
-	fact := func(results ...any) store.PipelineRun {
+	fact := func(results ...any) seenfacts.PipelineRun {
 		u := unstructured.Unstructured{Object: map[string]any{
 			"spec":   map[string]any{"pipelineRef": map[string]any{"name": "bifrost-ci-platform"}},
 			"status": map[string]any{"completionTime": "2026-11-13T00:00:00Z", "conditions": []any{map[string]any{"type": "Succeeded", "status": "True", "reason": "Succeeded"}}, "results": results},
@@ -399,7 +399,7 @@ func TestAPipelineRunWithABadScopeIsNotAFullRun(t *testing.T) {
 func TestPipelineRunFactReadsTheBaseOfAnIncrementalRun(t *testing.T) {
 	t.Parallel()
 	base := strings.Repeat("b", 40)
-	fact := func(pipeline, value string) store.PipelineRun {
+	fact := func(pipeline, value string) seenfacts.PipelineRun {
 		u := unstructured.Unstructured{Object: map[string]any{
 			"spec": map[string]any{"pipelineRef": map[string]any{"name": pipeline}},
 			"status": map[string]any{"conditions": []any{map[string]any{"type": "Succeeded", "status": "True", "reason": "Succeeded"}},
@@ -427,7 +427,7 @@ func TestPipelineRunFactReadsTheBaseOfAnIncrementalRun(t *testing.T) {
 	// It reaches the row: the statement of a passed incremental row names it.
 	p := fact("bifrost-ci-platform", base)
 	p.UID, p.CompletedAt = "uid", time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
-	p.Inputs = []store.RepoAt{{Repo: "bifrost-platform", Commit: strings.Repeat("a", 40), Tree: strings.Repeat("c", 40)}}
+	p.Inputs = []seenfacts.RepoAt{{Repo: "bifrost-platform", Commit: strings.Repeat("a", 40), Tree: strings.Repeat("c", 40)}}
 	row, is, err := evidence.RunEvidence(controller.EvidenceRun(p))
 	if err != nil || !is || evidence.IncrementalBase(row) != base {
 		t.Fatalf("row base = %q (is %v, %v)", evidence.IncrementalBase(row), is, err)

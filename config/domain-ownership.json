@@ -483,6 +483,13 @@
       "status": "assigned",
       "basis": "2026-11-17 moved out of store (store split step F2): the artifact store every domain writes bodies through (PutArtifact, UploadArtifact, their search, the local-path and workspace scans); it imports eventlog, actor and localpath only and does not import store; the check of plan-view and external-work documents stays with store and reaches it by registration (RegisterCheck), and with none registered it stores nothing"
     },
+    "api/internal/agentrt/seenfacts": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-17 moved out of store (store split step 2), a foundation package by the ruling of the foundation domain's owner on 2026-11-17: the record of what the controller saw outside the runtime (ApprovalFact, Question, PipelineRun, the Deployed read, SeeApproval, SeeQuestion, SeeCI, SeeDeploy, RecordExternal, CheckExternal); it judges nothing, imports only eventlog and canon (and actor for the one test hook point), does not import store, and is read by four domains (its importers: questioncards, which is owner, and the mixed packages controller, store and server); the event types and their bodies stay declared in store's vocabulary"
+    },
     "api/internal/statefile": {
       "domains": [
         "foundation"

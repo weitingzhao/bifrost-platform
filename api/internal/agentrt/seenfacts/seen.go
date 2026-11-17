@@ -1,4 +1,4 @@
-package store
+package seenfacts
 
 import (
 	"context"
@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // External facts and step evaluation (design v5 §5.1.2 「done_rule」, §5.2
@@ -36,13 +38,13 @@ type read func(ctx context.Context) (body map[string]any, ok bool, err error)
 // two controllers record changes in the order they were read and a read
 // that a newer one overtook is never recorded as a change back (review 151
 // A5). A record that cannot be read records nothing.
-func seen(ctx context.Context, db DB, typ string, key map[string]any, r read) (bool, error) {
+func seen(ctx context.Context, db eventlog.DB, typ string, key map[string]any, r read) (bool, error) {
 	keyDoc, err := canon.Encode(key)
 	if err != nil {
 		return false, err
 	}
 	var recorded bool
-	err = InTx(ctx, db, func(tx pgx.Tx) error {
+	err = eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		var e error
 		recorded, e = recordIfChanged(ctx, tx, typ, string(keyDoc), r)
 		return e
@@ -65,7 +67,7 @@ func recordIfChanged(ctx context.Context, tx pgx.Tx, typ, keyDoc string, r read)
 	var last string
 	err = tx.QueryRow(ctx, `SELECT body_json::text FROM agentrt.event WHERE event_type = $1 AND body_json @> $2::jsonb
 	  ORDER BY event_id DESC LIMIT 1`, typ, keyDoc).Scan(&last)
-	hook("seen", typ)
+	actor.Hook("seen", typ)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 	case err != nil:
@@ -83,7 +85,7 @@ func recordIfChanged(ctx context.Context, tx pgx.Tx, typ, keyDoc string, r read)
 			return false, nil
 		}
 	}
-	if _, err := Append(ctx, tx, Event{Stream: ExternalStream, Type: typ, Actor: "controller", Body: body}); err != nil {
+	if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: ExternalStream, Type: typ, Actor: "controller", Body: body}); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -111,7 +113,7 @@ func approvalSeenBody(a ApprovalFact) map[string]any {
 	return body
 }
 
-func SeeApproval(ctx context.Context, db DB, number int64, fact func(context.Context) (ApprovalFact, bool)) (bool, error) {
+func SeeApproval(ctx context.Context, db eventlog.DB, number int64, fact func(context.Context) (ApprovalFact, bool)) (bool, error) {
 	return seen(ctx, db, "approval_seen", map[string]any{"approval": number}, func(ctx context.Context) (map[string]any, bool, error) {
 		a, ok := fact(ctx)
 		a.Number = number
@@ -145,7 +147,7 @@ type Question struct {
 // answered, the answer (question_seen): the copy the plan keeps after the
 // question store trims the question. An answer without its option, who
 // answered or when is refused, so the copy is never partial (review 151 B2).
-func SeeQuestion(ctx context.Context, db DB, id string, question func(context.Context) (Question, bool)) (bool, error) {
+func SeeQuestion(ctx context.Context, db eventlog.DB, id string, question func(context.Context) (Question, bool)) (bool, error) {
 	return seen(ctx, db, "question_seen", map[string]any{"question": id}, func(ctx context.Context) (map[string]any, bool, error) {
 		q, ok := question(ctx)
 		if !ok {
@@ -160,7 +162,7 @@ func SeeQuestion(ctx context.Context, db DB, id string, question func(context.Co
 // recommends when the reader gave it.
 func questionSeenBody(id string, q Question) (map[string]any, bool, error) {
 	if q.Status == QuestionAnswered && (q.Option == "" || q.AnsweredBy == "" || q.AnsweredAt == "") {
-		return nil, false, fmt.Errorf("%w: question %s is answered but its option, answerer or time is missing", ErrState, id)
+		return nil, false, fmt.Errorf("%w: question %s is answered but its option, answerer or time is missing", eventlog.ErrState, id)
 	}
 	body := map[string]any{"question": id, "status": q.Status}
 	if q.Number > 0 {
@@ -177,7 +179,7 @@ func questionSeenBody(id string, q Question) (map[string]any, bool, error) {
 
 // SeeCI reads the status of the CI run of a commit and records a change
 // (ci_seen).
-func SeeCI(ctx context.Context, db DB, repo, commit string, status func(context.Context) (string, string, bool)) (bool, error) {
+func SeeCI(ctx context.Context, db eventlog.DB, repo, commit string, status func(context.Context) (string, string, bool)) (bool, error) {
 	return seen(ctx, db, "ci_seen", map[string]any{"repo": repo, "commit": commit}, func(ctx context.Context) (map[string]any, bool, error) {
 		s, run, ok := status(ctx)
 		body := map[string]any{"repo": repo, "commit": commit, "status": s}
@@ -191,7 +193,7 @@ func SeeCI(ctx context.Context, db DB, repo, commit string, status func(context.
 // SeeDeploy reads what an environment runs now and records a change
 // (deploy_seen): the commit and the deploy reference (delivery run and image
 // digests).
-func SeeDeploy(ctx context.Context, db DB, env string, deployed Deployed) (bool, error) {
+func SeeDeploy(ctx context.Context, db eventlog.DB, env string, deployed Deployed) (bool, error) {
 	return seen(ctx, db, "deploy_seen", map[string]any{"env": env}, func(ctx context.Context) (map[string]any, bool, error) {
 		commit, ref, ok := deployed(ctx, env)
 		return map[string]any{"env": env, "commit": commit, "deploy_ref": ref}, ok, nil

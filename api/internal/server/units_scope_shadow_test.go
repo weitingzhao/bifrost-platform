@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 )
@@ -81,9 +81,9 @@ func (f *shadowFixture) lines(t *testing.T) []map[string]any {
 	return out
 }
 
-func shadowRun(name, result string, tests ...string) store.PipelineRun {
-	p := store.PipelineRun{Run: name, UID: "uid-" + name, Kind: "ci", Pipeline: "ci-r", Repo: "r", Result: result, Reason: result, FailedTests: tests,
-		Inputs: []store.RepoAt{{Repo: "other", Commit: strings.Repeat("9", 40)}, {Repo: "r", Commit: strings.Repeat("c", 40)}}}
+func shadowRun(name, result string, tests ...string) seenfacts.PipelineRun {
+	p := seenfacts.PipelineRun{Run: name, UID: "uid-" + name, Kind: "ci", Pipeline: "ci-r", Repo: "r", Result: result, Reason: result, FailedTests: tests,
+		Inputs: []seenfacts.RepoAt{{Repo: "other", Commit: strings.Repeat("9", 40)}, {Repo: "r", Commit: strings.Repeat("c", 40)}}}
 	return p
 }
 
@@ -95,7 +95,7 @@ func TestUnitScopeShadow(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name          string
-		run           store.PipelineRun
+		run           seenfacts.PipelineRun
 		missed        string
 		unnamed       bool
 		unmatched     float64
@@ -269,7 +269,7 @@ func TestAFullRunIsReconciledWithTheIncrementalRunBeforeIt(t *testing.T) {
 	t.Parallel()
 	type rec struct{ run, status, detail string }
 	var told []string
-	observe := func(p store.PipelineRun, incremental string) []rec {
+	observe := func(p seenfacts.PipelineRun, incremental string) []rec {
 		f := newShadowFixture(t)
 		var got []rec
 		f.drift = func(_ context.Context, repo, commit, passed, contradicts string) error {
@@ -281,7 +281,7 @@ func TestAFullRunIsReconciledWithTheIncrementalRunBeforeIt(t *testing.T) {
 		f.observe(context.Background(), p)
 		return got
 	}
-	full := func(name, result string, tests ...string) store.PipelineRun {
+	full := func(name, result string, tests ...string) seenfacts.PipelineRun {
 		p := shadowRun(name, result, tests...)
 		p.Scope = "full"
 		p.StartedAt = time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)

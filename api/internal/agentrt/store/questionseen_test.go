@@ -5,6 +5,7 @@ package store_test
 import (
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -19,7 +20,7 @@ func TestQuestionSeenRecommendedBody(t *testing.T) {
 	if body["recommended"] != "b" || body["option"] != "a" {
 		t.Fatalf("body %v", body)
 	}
-	body, err = store.QuestionSeenBodyForTest("Q1", store.Question{ID: "Q1", Status: "open", Recommended: "a"})
+	body, err = store.QuestionSeenBodyForTest("Q1", seenfacts.Question{ID: "Q1", Status: "open", Recommended: "a"})
 	ok(t, err)
 	if body["recommended"] != "a" {
 		t.Fatalf("open body %v", body)
@@ -38,10 +39,10 @@ func TestQuestionSeenRecommendedSeen(t *testing.T) {
 	w := newWorld(t)
 	q := answered("Q7", "a")
 	q.Recommended = "b"
-	if did, err := store.SeeQuestion(ctx, w.rt, "Q7", questionIs(q)); err != nil || !did {
+	if did, err := seenfacts.SeeQuestion(ctx, w.rt, "Q7", questionIs(q)); err != nil || !did {
 		t.Fatalf("seen %v %v", did, err)
 	}
-	if did, err := store.SeeQuestion(ctx, w.rt, "Q7", questionIs(q)); err != nil || did {
+	if did, err := seenfacts.SeeQuestion(ctx, w.rt, "Q7", questionIs(q)); err != nil || did {
 		t.Fatalf("seen again %v %v", did, err)
 	}
 	var rec string

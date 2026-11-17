@@ -10,6 +10,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
 
 const externalDeliveryRepo = "bifrost-platform"
@@ -24,7 +25,7 @@ type ExternalDelivery struct {
 	NamedAt time.Time
 	// Runs are the recorded pipeline runs: nil when they were not read, an
 	// empty non-nil slice when they were read and hold none.
-	Runs       []PipelineRun
+	Runs       []seenfacts.PipelineRun
 	Production *deliveryview.DeliveryProduction
 }
 
@@ -101,13 +102,13 @@ func externalDeliveryCommit(ctx context.Context, tx pgx.Tx, prefix string) (exte
 
 // externalDeliveryRuns are the recorded pipeline runs naming commit as their
 // revision, each as last recorded, oldest first.
-func externalDeliveryRuns(ctx context.Context, tx pgx.Tx, commit string) ([]PipelineRun, error) {
+func externalDeliveryRuns(ctx context.Context, tx pgx.Tx, commit string) ([]seenfacts.PipelineRun, error) {
 	runs, err := deliveryreadings.Runs(ctx, tx, commit)
-	var out []PipelineRun
+	var out []seenfacts.PipelineRun
 	if runs != nil {
-		out = make([]PipelineRun, len(runs))
+		out = make([]seenfacts.PipelineRun, len(runs))
 		for i, r := range runs {
-			out[i] = PipelineRun{Run: r.Run, Pipeline: r.Pipeline, Kind: r.Kind, Result: r.Result, Repo: r.Repo, Revision: r.Revision, CreatedAt: r.CreatedAt, StartedAt: r.StartedAt, CompletedAt: r.CompletedAt}
+			out[i] = seenfacts.PipelineRun{Run: r.Run, Pipeline: r.Pipeline, Kind: r.Kind, Result: r.Result, Repo: r.Repo, Revision: r.Revision, CreatedAt: r.CreatedAt, StartedAt: r.StartedAt, CompletedAt: r.CompletedAt}
 		}
 	}
 	return out, err

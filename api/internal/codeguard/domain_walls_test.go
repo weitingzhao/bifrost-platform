@@ -51,7 +51,6 @@ func across(o ownership, imports map[string][]string) []string {
 // to every domain.
 var domainsAcross = []string{
 	"api/internal/agentrt/planreadings -> api/internal/agentrt/workregistration (plan -> lineage)",
-	"api/internal/agentrt/questioncards -> api/internal/agentrt/store (owner -> mixed)",
 	"api/internal/approvals -> api/internal/threadinbox (owner -> coordination)",
 	"api/internal/devsession -> api/internal/cluster (compute -> mixed)",
 	"api/internal/flexquery -> api/internal/cluster (tenant -> mixed)",

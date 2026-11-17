@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -97,7 +98,7 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 		t.Fatalf("needs_you action %v, blocks %v", action, blocks)
 	}
 
-	a.answer(q, store.QuestionAnswered, store.CardApplyKey)
+	a.answer(q, seenfacts.QuestionAnswered, store.CardApplyKey)
 	// Two passes at once decide it once (review 402 B3).
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -186,7 +187,7 @@ func TestRecorderImportRefused(t *testing.T) {
 	out, err := store.ProposeRecorderImport(ctx, pool, wr("thread:s1"), "k1", "retire the recorder", tdLog(t), a.ask)
 	ok(t, err)
 	q := out["question_id"].(string)
-	a.answer(q, store.QuestionAnswered, "b")
+	a.answer(q, seenfacts.QuestionAnswered, "b")
 	_, err = store.DecidePlanChanges(ctx, pool, a.question, nil)
 	ok(t, err)
 	stream := store.RecorderStream("td-336")
@@ -248,7 +249,7 @@ func TestRecorderImportTwoPassesAtOnce(t *testing.T) {
 	out, err := store.ProposeRecorderImport(ctx, pool, wr("thread:s1"), "k1", "retire the recorder", tdLog(t), a.ask)
 	ok(t, err)
 	q := out["question_id"].(string)
-	a.answer(q, store.QuestionAnswered, store.CardApplyKey)
+	a.answer(q, seenfacts.QuestionAnswered, store.CardApplyKey)
 	stream := store.RecorderStream("td-336")
 	var mu sync.Mutex
 	arrived := 0

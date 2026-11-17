@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -21,7 +22,7 @@ import (
 type asker struct {
 	mu      sync.Mutex
 	cards   []store.Card
-	answers map[string]store.Question
+	answers map[string]seenfacts.Question
 	acked   map[string]int
 }
 
@@ -57,17 +58,17 @@ func (a *asker) answer(id, status, option string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.answers == nil {
-		a.answers = map[string]store.Question{}
+		a.answers = map[string]seenfacts.Question{}
 	}
-	a.answers[id] = store.Question{ID: id, Status: status, Option: option, AnsweredBy: "owner", AnsweredAt: "2026-10-14T20:00:00Z"}
+	a.answers[id] = seenfacts.Question{ID: id, Status: status, Option: option, AnsweredBy: "owner", AnsweredAt: "2026-10-14T20:00:00Z"}
 }
 
-func (a *asker) question(_ context.Context, id string) (store.Question, bool) {
+func (a *asker) question(_ context.Context, id string) (seenfacts.Question, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	q, ok := a.answers[id]
 	if !ok {
-		return store.Question{ID: id, Status: "open"}, true
+		return seenfacts.Question{ID: id, Status: "open"}, true
 	}
 	return q, true
 }
@@ -231,10 +232,10 @@ func TestPlanDecisions(t *testing.T) {
 		_, err := store.SetStepState(ctx, tx, "controller", root, s3, "dropped", "test")
 		return err
 	}))
-	a.answer(applied, store.QuestionAnswered, store.CardApplyKey)
-	a.answer(refused, store.QuestionAnswered, store.CardRefuseKey)
+	a.answer(applied, seenfacts.QuestionAnswered, store.CardApplyKey)
+	a.answer(refused, seenfacts.QuestionAnswered, store.CardRefuseKey)
 	a.answer(expired, "expired", "")
-	a.answer(failed, store.QuestionAnswered, store.CardApplyKey)
+	a.answer(failed, seenfacts.QuestionAnswered, store.CardApplyKey)
 	n, err := store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 	ok(t, err)
 	if n != 4 {
@@ -299,7 +300,7 @@ func TestPlanDecisionsPage(t *testing.T) {
 		ok(t, err)
 		last = out["question_id"].(string)
 	}
-	a.answer(last, store.QuestionAnswered, store.CardRefuseKey)
+	a.answer(last, seenfacts.QuestionAnswered, store.CardRefuseKey)
 	n, err := store.DecidePlanChanges(ctx, w.rt, a.question, nil)
 	if err != nil || n != 1 {
 		t.Fatalf("decided %d (%v); want the last one", n, err)
@@ -380,7 +381,7 @@ func TestDecisionAgainstRuleLoop(t *testing.T) {
 	a := &asker{}
 	out, err := store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "rename", []store.PlanChange{{Op: "retitle", Node: item, Title: "renamed"}}, a.ask)
 	ok(t, err)
-	a.answer(out["question_id"].(string), store.QuestionAnswered, store.CardApplyKey)
+	a.answer(out["question_id"].(string), seenfacts.QuestionAnswered, store.CardApplyKey)
 	// The loop: the step locked, then (after the decision starts) the stream.
 	tx, err := pool.Begin(ctx)
 	ok(t, err)
@@ -460,7 +461,7 @@ func TestPlanDecisionAcks(t *testing.T) {
 		ok(t, err)
 		id := out["question_id"].(string)
 		ids = append(ids, id)
-		a.answer(id, store.QuestionAnswered, store.CardRefuseKey)
+		a.answer(id, seenfacts.QuestionAnswered, store.CardRefuseKey)
 	}
 	calls := map[string]int{}
 	failing := true
@@ -512,7 +513,7 @@ func TestPlanChangeQueuedUngatedRuleIsRefusedOnApply(t *testing.T) {
 				"reason": "queued before the sign-off gate", "standing": false, "token": "operator", "question_id": q}})
 		return aerr
 	}))
-	a.answer(q, store.QuestionAnswered, store.CardApplyKey)
+	a.answer(q, seenfacts.QuestionAnswered, store.CardApplyKey)
 	_, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 	ok(t, err)
 	var rule string

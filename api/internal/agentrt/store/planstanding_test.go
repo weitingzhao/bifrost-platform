@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -58,7 +59,7 @@ func TestPlanStandingDoneRules(t *testing.T) {
 	if out["decision"] != "" {
 		t.Fatalf("a rule binding something new within the standing authorization: %v", out)
 	}
-	a.answer(out["question_id"].(string), store.QuestionAnswered, store.CardApplyKey)
+	a.answer(out["question_id"].(string), seenfacts.QuestionAnswered, store.CardApplyKey)
 	_, err := store.DecidePlanChanges(ctx, w.rt, a.question, nil)
 	ok(t, err)
 
@@ -78,7 +79,7 @@ func TestPlanStandingDoneRules(t *testing.T) {
 	gateSum := strings.Repeat("ab", 32)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, aerr := store.Append(ctx, tx, store.Event{Stream: "approvals", Type: "approval_seen", Actor: "controller",
-			Body: map[string]any{"approval": 16, "status": store.ApprovalExecuted, "action": "test", "tier": "test", "created_at": "2026-01-01T00:00:00Z", "expired": false}}); aerr != nil {
+			Body: map[string]any{"approval": 16, "status": seenfacts.ApprovalExecuted, "action": "test", "tier": "test", "created_at": "2026-01-01T00:00:00Z", "expired": false}}); aerr != nil {
 			return aerr
 		}
 		return store.SignOff(ctx, tx, "owner", s1, "TD-1")

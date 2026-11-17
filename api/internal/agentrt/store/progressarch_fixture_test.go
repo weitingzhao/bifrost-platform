@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -56,7 +57,7 @@ func TestConsoleArchFixture(t *testing.T) {
 		}))
 	}
 	ref := map[string]any{"delivery_run": "bifrost-deliver-platform-1792461534", "images": map[string]any{"platform-api": "sha256:aa", "platform-workers": "sha256:aa"}}
-	_, err := store.SeeDeploy(ctx, w.rt, "stg", deployedIs(commitA, ref))
+	_, err := seenfacts.SeeDeploy(ctx, w.rt, "stg", deployedIs(commitA, ref))
 	ok(t, err)
 	_, err = store.PostPlanNote(ctx, w.rt, store.Writer{Actor: "thread:night", Token: "fixture-operator-1"}, "n1", "ARCH:state-db", "PROD 与 STG 都在用；PROD 重建演练还欠")
 	ok(t, err)

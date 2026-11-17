@@ -13,6 +13,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -45,7 +46,7 @@ func adoptView(t *testing.T, w *world, artifact string, version int) *asker {
 	a := &asker{}
 	_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), fmt.Sprintf("adopt-%d", version), root, "view metadata", []store.PlanChange{{Op: "adopt_plan_view", Artifact: artifact, ExpectedVersion: &version}}, a.ask)
 	ok(t, err)
-	a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
+	a.answer(a.lastID(), seenfacts.QuestionAnswered, store.CardApplyKey)
 	_, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 	ok(t, err)
 	return a
@@ -87,7 +88,7 @@ func TestPlanViewAdoptionAndCAS(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), fmt.Sprint("race", i), root, "version two", []store.PlanChange{{Op: "adopt_plan_view", Artifact: id2, ExpectedVersion: &one}}, a.ask)
 		ok(t, err)
-		a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
+		a.answer(a.lastID(), seenfacts.QuestionAnswered, store.CardApplyKey)
 	}
 	_, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 	ok(t, err)
@@ -360,7 +361,7 @@ func TestPlanViewLargeSnapshot(t *testing.T) {
 	zero := 0
 	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:large"), "large", d.Root, "large plan", []store.PlanChange{{Op: "adopt_plan_view", Artifact: view, ExpectedVersion: &zero}}, a.ask)
 	ok(t, err)
-	a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
+	a.answer(a.lastID(), seenfacts.QuestionAnswered, store.CardApplyKey)
 	_, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 	ok(t, err)
 	durations := []time.Duration{}
@@ -420,7 +421,7 @@ func TestPlanViewCrossRootAdoption(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
+		a.answer(a.lastID(), seenfacts.QuestionAnswered, store.CardApplyKey)
 		_, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 		return err
 	}

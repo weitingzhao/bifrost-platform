@@ -18,6 +18,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -27,19 +28,19 @@ import (
 // record's lock, so it must return when its context ends: each read gets
 // ReadTimeout (review 152 B2).
 type Sources struct {
-	Approvals    func(context.Context) ([]store.ApprovalFact, error)
-	Questions    func(context.Context) ([]store.Question, error)
-	PipelineRuns func(context.Context) ([]store.PipelineRun, error)
+	Approvals    func(context.Context) ([]seenfacts.ApprovalFact, error)
+	Questions    func(context.Context) ([]seenfacts.Question, error)
+	PipelineRuns func(context.Context) ([]seenfacts.PipelineRun, error)
 	// PipelineRun reads one run by name, as PipelineRuns reads each (ok is
 	// false when it is not kept or not completed): the run a ci.run.finished
 	// names (RecordPipelineRun). nil: no event path.
-	PipelineRun func(ctx context.Context, name string) (p store.PipelineRun, ok bool, err error)
+	PipelineRun func(ctx context.Context, name string) (p seenfacts.PipelineRun, ok bool, err error)
 	// CommitTree reads the git tree of a commit of a repository, for a CI
 	// run that reports a commit it used without its tree (evidence.go);
 	// nil: such a run gives no evidence.
 	CommitTree func(ctx context.Context, repo, commit string) (string, error)
 	// RunFailure reads what a failed CI run failed on from its tasks: the
-	// tasks, the tests they name and the class (store.PipelineRun's fields),
+	// tasks, the tests they name and the class (seenfacts.PipelineRun's fields),
 	// for its evidence row; nil: the row says only that it failed.
 	RunFailure func(ctx context.Context, run string) (tasks, tests []string, class string, err error)
 	// RunEvidenced is told each completed run that is evidence, with its
@@ -48,7 +49,7 @@ type Sources struct {
 	// again within PipelineFullEvery), and again after a restart, when the
 	// ledger already has the run. It is called inside the pass and must
 	// return at once; nil tells no one.
-	RunEvidenced func(ctx context.Context, p store.PipelineRun)
+	RunEvidenced func(ctx context.Context, p seenfacts.PipelineRun)
 	// UnitRuns records the unit tasks that finished and settles what they
 	// add up to (server: receiveUnits); nil: this platform runs no units.
 	UnitRuns func(ctx context.Context) error
@@ -60,8 +61,8 @@ type Sources struct {
 	// that is switched off.
 	PostRelease func(ctx context.Context) error
 	Plan        store.PlanSources
-	Approval    func(ctx context.Context, number int64) (store.ApprovalFact, bool)
-	Question    func(ctx context.Context, id string) (q store.Question, ok bool)
+	Approval    func(ctx context.Context, number int64) (seenfacts.ApprovalFact, bool)
+	Question    func(ctx context.Context, id string) (q seenfacts.Question, ok bool)
 	// Ack tells the question store the runtime used the answer of a card it
 	// asked (a plan change's); nil acknowledges nothing.
 	Ack func(ctx context.Context, id string) error
@@ -75,7 +76,7 @@ type Sources struct {
 	Ask      store.Ask
 	Withdraw store.Withdraw
 	CI       func(ctx context.Context, repo, commit string) (status, run string, ok bool)
-	Deployed store.Deployed
+	Deployed seenfacts.Deployed
 }
 
 // Controller holds what the loops need. Zero intervals take the design's
@@ -216,18 +217,18 @@ func (c *Controller) see(ctx context.Context, w plan.Watch) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		return store.SeeApproval(ctx, c.DB, n, func(ctx context.Context) (store.ApprovalFact, bool) {
+		return seenfacts.SeeApproval(ctx, c.DB, n, func(ctx context.Context) (seenfacts.ApprovalFact, bool) {
 			type r struct {
-				s  store.ApprovalFact
+				s  seenfacts.ApprovalFact
 				ok bool
 			}
 			x := bounded(c, ctx, func(ctx context.Context) r { s, ok := c.Sources.Approval(ctx, n); return r{s, ok} })
 			return x.s, x.ok
 		})
 	case plan.WatchQuestion:
-		return store.SeeQuestion(ctx, c.DB, w.ID, func(ctx context.Context) (store.Question, bool) {
+		return seenfacts.SeeQuestion(ctx, c.DB, w.ID, func(ctx context.Context) (seenfacts.Question, bool) {
 			type r struct {
-				q  store.Question
+				q  seenfacts.Question
 				ok bool
 			}
 			x := bounded(c, ctx, func(ctx context.Context) r { q, ok := c.Sources.Question(ctx, w.ID); return r{q, ok} })
@@ -235,7 +236,7 @@ func (c *Controller) see(ctx context.Context, w plan.Watch) (bool, error) {
 		})
 	case plan.WatchCI:
 		repo, commit, _ := strings.Cut(w.ID, "@")
-		return store.SeeCI(ctx, c.DB, repo, commit, func(ctx context.Context) (string, string, bool) {
+		return seenfacts.SeeCI(ctx, c.DB, repo, commit, func(ctx context.Context) (string, string, bool) {
 			type r struct {
 				s, run string
 				ok     bool
@@ -244,7 +245,7 @@ func (c *Controller) see(ctx context.Context, w plan.Watch) (bool, error) {
 			return x.s, x.run, x.ok
 		})
 	case plan.WatchDeploy:
-		return store.SeeDeploy(ctx, c.DB, w.ID, c.boundedDeployed)
+		return seenfacts.SeeDeploy(ctx, c.DB, w.ID, c.boundedDeployed)
 	}
 	return false, nil
 }
@@ -286,9 +287,9 @@ func (c *Controller) PlanDecisions(ctx context.Context) (int, error) {
 }
 
 // question reads a question with the per-read timeout.
-func (c *Controller) question(ctx context.Context, id string) (store.Question, bool) {
+func (c *Controller) question(ctx context.Context, id string) (seenfacts.Question, bool) {
 	type r struct {
-		q  store.Question
+		q  seenfacts.Question
 		ok bool
 	}
 	x := bounded(c, ctx, func(ctx context.Context) r { q, ok := c.Sources.Question(ctx, id); return r{q, ok} })

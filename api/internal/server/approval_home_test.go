@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -66,7 +67,7 @@ func TestSTGRuleCardKeepsWorkingWithoutOwnerRequests(t *testing.T) {
 		t.Fatal(err)
 	}
 	q, ok := rt.agentRuntimeQuestion()(ctx, id)
-	if !ok || q.Status != store.QuestionAnswered || q.Channel != "rule" {
+	if !ok || q.Status != seenfacts.QuestionAnswered || q.Channel != "rule" {
 		t.Fatalf("rule result: %+v", q)
 	}
 	card.Key, card.ByRule = strings.Repeat("ef", 16), false

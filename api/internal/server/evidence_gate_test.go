@@ -16,6 +16,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -75,9 +76,9 @@ func TestLedgerCI(t *testing.T) {
 		if result == "Failed" {
 			reason = "Failed"
 		}
-		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: reason, Repo: "bifrost-platform",
+		p := seenfacts.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: reason, Repo: "bifrost-platform",
 			Scope: scope, Audit: audit, CompletedAt: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC),
-			Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree}, {Repo: "bifrost-ui", Commit: h("2"), Tree: h("f")}}}
+			Inputs: []seenfacts.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree}, {Repo: "bifrost-ui", Commit: h("2"), Tree: h("f")}}}
 		e, is, err := evidence.RunEvidence(controller.EvidenceRun(p))
 		if err != nil || !is {
 			t.Fatalf("run %s: %v", name, err)
@@ -164,9 +165,9 @@ func TestLedgerCIIsNotAUnitTasksWord(t *testing.T) {
 	}
 	ci := func(name, commit, tree, result string) {
 		t.Helper()
-		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: result, Repo: "bifrost-platform",
+		p := seenfacts.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: result, Repo: "bifrost-platform",
 			Scope: "full", CompletedAt: time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC),
-			Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree}}}
+			Inputs: []seenfacts.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree}}}
 		e, is, err := evidence.RunEvidence(controller.EvidenceRun(p))
 		if err != nil || !is {
 			t.Fatalf("run %s: %v", name, err)
@@ -217,8 +218,8 @@ func TestLedgerCIBookkeeping(t *testing.T) {
 	h := func(c string) string { return strings.Repeat(c, 40) }
 	run := func(name, commit, tree, result string, audit bool, at time.Time) evidence.EvidenceRow {
 		t.Helper()
-		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: result, Repo: "bifrost-platform",
-			Scope: "full", Audit: audit, CompletedAt: at, Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree}}}
+		p := seenfacts.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: result, Repo: "bifrost-platform",
+			Scope: "full", Audit: audit, CompletedAt: at, Inputs: []seenfacts.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: tree}}}
 		e, is, err := evidence.RunEvidence(controller.EvidenceRun(p))
 		if err != nil || !is {
 			t.Fatalf("run %s: %v", name, err)
@@ -291,9 +292,9 @@ func TestLedgerCIFollowsAnIncrementalPassToItsBase(t *testing.T) {
 		if result == "Failed" {
 			reason = "Failed"
 		}
-		p := store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: reason, Repo: "bifrost-platform",
+		p := seenfacts.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: reason, Repo: "bifrost-platform",
 			Scope: scope, Base: base, CompletedAt: time.Date(2026, 11, 16, 0, 0, seq, 0, time.UTC),
-			Inputs: []store.RepoAt{{Repo: "bifrost-platform", Commit: c, Tree: treeOf[c]}, {Repo: "bifrost-ui", Commit: strings.Repeat("2", 40), Tree: strings.Repeat("f", 40)}}}
+			Inputs: []seenfacts.RepoAt{{Repo: "bifrost-platform", Commit: c, Tree: treeOf[c]}, {Repo: "bifrost-ui", Commit: strings.Repeat("2", 40), Tree: strings.Repeat("f", 40)}}}
 		e, is, err := evidence.RunEvidence(controller.EvidenceRun(p))
 		if err != nil || !is {
 			t.Fatalf("run %s: %v", name, err)

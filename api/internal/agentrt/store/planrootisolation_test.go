@@ -14,6 +14,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -42,7 +43,7 @@ func pvSecondRoot(t *testing.T, w *world) (string, planview.Binding) {
 	a := &asker{}
 	_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), "second-root", corruptRoot, "isolation fixture", []store.PlanChange{{Op: "adopt_plan_view", Artifact: artifact, ExpectedVersion: &zero}}, a.ask)
 	ok(t, err)
-	a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
+	a.answer(a.lastID(), seenfacts.QuestionAnswered, store.CardApplyKey)
 	_, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 	ok(t, err)
 	return artifact, b

@@ -9,7 +9,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
@@ -18,12 +18,12 @@ func (c *Controller) ExternalRecords(ctx context.Context) (int, error) {
 	n := 0
 	var errs []error
 	if c.Sources.Approvals != nil {
-		k, err := recordList(c, ctx, "approval_seen", c.Sources.Approvals, func(a store.ApprovalFact) (map[string]any, error) { return a.Body(), nil })
+		k, err := recordList(c, ctx, "approval_seen", c.Sources.Approvals, func(a seenfacts.ApprovalFact) (map[string]any, error) { return a.Body(), nil })
 		n += k
 		errs = append(errs, err)
 	}
 	if c.Sources.Questions != nil {
-		k, err := recordList(c, ctx, "question_seen", c.Sources.Questions, store.Question.Body)
+		k, err := recordList(c, ctx, "question_seen", c.Sources.Questions, seenfacts.Question.Body)
 		n += k
 		errs = append(errs, err)
 	}
@@ -99,7 +99,7 @@ func (c *Controller) pipelineRecords(ctx context.Context, reconcile bool) (int, 
 		m.docs, m.full = nil, now
 	}
 	type result struct {
-		runs []store.PipelineRun
+		runs []seenfacts.PipelineRun
 		err  error
 	}
 	r := bounded(c, ctx, func(ctx context.Context) result {
@@ -111,12 +111,12 @@ func (c *Controller) pipelineRecords(ctx context.Context, reconcile bool) (int, 
 	}
 	held := make(map[string]string, len(r.runs))
 	sent := map[string]string{}
-	byKey := make(map[string]store.PipelineRun, len(r.runs))
+	byKey := make(map[string]seenfacts.PipelineRun, len(r.runs))
 	var facts []map[string]any
 	var errs []error
 	for _, p := range r.runs {
 		b := p.Body()
-		if err := store.CheckExternal("pipeline_seen", b); err != nil {
+		if err := seenfacts.CheckExternal("pipeline_seen", b); err != nil {
 			errs = append(errs, fmt.Errorf("run %s: %w", p.Run, err))
 			continue
 		}
@@ -139,7 +139,7 @@ func (c *Controller) pipelineRecords(ctx context.Context, reconcile bool) (int, 
 	n := 0
 	if len(facts) > 0 {
 		var err error
-		if n, err = store.RecordExternal(ctx, c.DB, "pipeline_seen", facts); err != nil {
+		if n, err = seenfacts.RecordExternal(ctx, c.DB, "pipeline_seen", facts); err != nil {
 			// What was recorded of this batch is not known: none of it is
 			// remembered, and the next pass compares it again.
 			errs = append(errs, err)
@@ -170,7 +170,7 @@ func (c *Controller) pipelineRecords(ctx context.Context, reconcile bool) (int, 
 			evidenced[key] = true
 		}
 	}
-	todo := map[string]store.PipelineRun{}
+	todo := map[string]seenfacts.PipelineRun{}
 	for key, p := range byKey {
 		if !evidenced[key] && sent[key] != "" && held[key] != "" {
 			todo[key] = p
@@ -185,7 +185,7 @@ func (c *Controller) pipelineRecords(ctx context.Context, reconcile bool) (int, 
 // beside their pipeline_seen records and marks each settled in evidenced. A
 // tree that cannot be read stops it: the rest wait for the next full pass
 // rather than each wait out a read of its own.
-func (c *Controller) recordEvidence(ctx context.Context, m *pipelineMemo, todo map[string]store.PipelineRun, evidenced map[string]bool) []error {
+func (c *Controller) recordEvidence(ctx context.Context, m *pipelineMemo, todo map[string]seenfacts.PipelineRun, evidenced map[string]bool) []error {
 	var errs []error
 	var rows []evidence.EvidenceRow
 	var rowKeys []string
@@ -221,11 +221,11 @@ func (c *Controller) recordEvidence(ctx context.Context, m *pipelineMemo, todo m
 // runEvidence is the evidence a completed run is (evidence.RunEvidence), after
 // reading from Sources.CommitTree the tree of each commit the run reports
 // without one. The trees and what a failed run failed on are written to p.
-func (c *Controller) runEvidence(ctx context.Context, m *pipelineMemo, p *store.PipelineRun) (evidence.EvidenceRow, bool, error) {
+func (c *Controller) runEvidence(ctx context.Context, m *pipelineMemo, p *seenfacts.PipelineRun) (evidence.EvidenceRow, bool, error) {
 	if p.Kind != "ci" || len(p.Inputs) == 0 {
 		return evidence.EvidenceRow{}, false, nil
 	}
-	inputs := append([]store.RepoAt(nil), p.Inputs...)
+	inputs := append([]seenfacts.RepoAt(nil), p.Inputs...)
 	for i, in := range inputs {
 		if in.Tree != "" || in.Commit == "" {
 			continue
@@ -276,7 +276,7 @@ func (c *Controller) runEvidence(ctx context.Context, m *pipelineMemo, p *store.
 // EvidenceRun is the store's record of a pipeline run as the evidence ledger
 // reads it (evidence.Run). It is the one conversion between the two: every
 // field of evidence.Run is set here (TestEvidenceRunCarriesEveryField).
-func EvidenceRun(p store.PipelineRun) evidence.Run {
+func EvidenceRun(p seenfacts.PipelineRun) evidence.Run {
 	var inputs []evidence.RepoAt
 	for _, in := range p.Inputs {
 		inputs = append(inputs, evidence.RepoAt(in))
@@ -308,7 +308,7 @@ func recordList[T any](c *Controller, ctx context.Context, kind string, list fun
 		}
 		facts = append(facts, b)
 	}
-	n, err := store.RecordExternal(ctx, c.DB, kind, facts)
+	n, err := seenfacts.RecordExternal(ctx, c.DB, kind, facts)
 	return n, errors.Join(append(errs, err)...)
 }
 

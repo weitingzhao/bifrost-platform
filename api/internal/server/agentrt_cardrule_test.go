@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -54,7 +55,7 @@ func TestCardRuleOnTheStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	q, ok := read(ctx, id)
-	if !ok || q.Status != store.QuestionAnswered || q.Option != "c" || q.AnsweredBy != "rule card-auto-answer v1" || q.Options != 3 ||
+	if !ok || q.Status != seenfacts.QuestionAnswered || q.Option != "c" || q.AnsweredBy != "rule card-auto-answer v1" || q.Options != 3 ||
 		q.Channel != "rule" {
 		t.Fatalf("read back: %+v %v", q, ok)
 	}

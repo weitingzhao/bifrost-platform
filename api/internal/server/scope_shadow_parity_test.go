@@ -5,7 +5,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 	"reflect"
 	"sort"
@@ -31,7 +31,7 @@ func frozenShadowRecord(line []any) (status, detail string) {
 	return status, string(raw)
 }
 
-func frozenShadowLine(p store.PipelineRun, commit string, scope unitplan.Scope) []any {
+func frozenShadowLine(p seenfacts.PipelineRun, commit string, scope unitplan.Scope) []any {
 	same := map[string]bool{} // unit -> its keys are the base's
 	run, byModule := 0, []string{}
 	for _, m := range scope.Modules {
@@ -119,7 +119,7 @@ func TestScopeShadowFrozenProjection(t *testing.T) {
 	t.Parallel()
 	for n := 0; n < 9; n++ {
 		for _, result := range []string{"", "Succeeded", "Failed"} {
-			p := store.PipelineRun{Run: "ci-<>&", Result: result, Scope: "scope"}
+			p := seenfacts.PipelineRun{Run: "ci-<>&", Result: result, Scope: "scope"}
 			scope := unitplan.Scope{Base: "base", Note: "reason"}
 			for i := 0; i < n; i++ {
 				m := unitplan.ModuleScope{Module: fmt.Sprint(i), RunUnits: []string{fmt.Sprintf("svc/%d/a", i)}, SameUnits: []string{fmt.Sprintf("pkg/%d/a", i)}}

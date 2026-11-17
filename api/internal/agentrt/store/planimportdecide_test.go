@@ -17,6 +17,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -49,7 +50,7 @@ func TestImportDecisionOnce(t *testing.T) {
 	pool, req := importDB(t)
 	a := &asker{}
 	q := proposeImport(t, pool, req, a)
-	a.answer(q, store.QuestionAnswered, store.CardApplyKey)
+	a.answer(q, seenfacts.QuestionAnswered, store.CardApplyKey)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	total := 0
@@ -114,7 +115,7 @@ func TestImportDecisionBadRequest(t *testing.T) {
 				return err
 			}))
 			a := &asker{}
-			a.answer("q_x", store.QuestionAnswered, store.CardApplyKey)
+			a.answer("q_x", seenfacts.QuestionAnswered, store.CardApplyKey)
 			n, err := store.DecidePlanChanges(ctx, pool, a.question, nil)
 			ok(t, err)
 			var decision, why string
@@ -133,7 +134,7 @@ func TestImportDecisionFailsHalfWay(t *testing.T) {
 	pool, req := importDB(t)
 	a := &asker{}
 	q := proposeImport(t, pool, req, a)
-	a.answer(q, store.QuestionAnswered, store.CardApplyKey)
+	a.answer(q, seenfacts.QuestionAnswered, store.CardApplyKey)
 	errFail := errors.New("fail here")
 	unhook := store.SetHook(func(point, arg string) {
 		if point == "plan import step" && arg == "R2:2.1-2" {
@@ -164,7 +165,7 @@ func TestImportDecisionAcknowledged(t *testing.T) {
 	pool, req := importDB(t)
 	a := &asker{}
 	q := proposeImport(t, pool, req, a)
-	a.answer(q, store.QuestionAnswered, store.CardApplyKey)
+	a.answer(q, seenfacts.QuestionAnswered, store.CardApplyKey)
 	failing := func(context.Context, string) error { return errors.New("question store down") }
 	n, err := store.DecidePlanChanges(ctx, pool, a.question, failing)
 	if n != 1 || err == nil {

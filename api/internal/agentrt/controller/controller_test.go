@@ -13,6 +13,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
@@ -86,7 +87,7 @@ func stepState(t *testing.T, pool *pgxpool.Pool, step string) string {
 type world struct {
 	mu        sync.Mutex
 	approvals map[int64]string
-	questions map[string]store.Question
+	questions map[string]seenfacts.Question
 	ci        map[string]string
 	deploys   map[string]string
 	reads     int
@@ -108,14 +109,14 @@ func (w *world) read() {
 
 func (w *world) sources() controller.Sources {
 	return controller.Sources{
-		Approval: func(_ context.Context, n int64) (store.ApprovalFact, bool) {
+		Approval: func(_ context.Context, n int64) (seenfacts.ApprovalFact, bool) {
 			w.read()
 			w.mu.Lock()
 			defer w.mu.Unlock()
 			s, ok := w.approvals[n]
-			return store.ApprovalFact{Number: n, Status: s, Action: "test", Tier: "test"}, ok
+			return seenfacts.ApprovalFact{Number: n, Status: s, Action: "test", Tier: "test"}, ok
 		},
-		Question: func(_ context.Context, id string) (store.Question, bool) {
+		Question: func(_ context.Context, id string) (seenfacts.Question, bool) {
 			w.read()
 			w.mu.Lock()
 			defer w.mu.Unlock()
@@ -147,7 +148,7 @@ func (w *world) sources() controller.Sources {
 func TestStart(t *testing.T) {
 	pool := setup(t)
 	setRule(t, pool, "R2:1-2", `{"approval_executed":20}`, [2]string{"approval", "20"})
-	w := &world{approvals: map[int64]string{20: store.ApprovalExecuted}, panics: 1}
+	w := &world{approvals: map[int64]string{20: seenfacts.ApprovalExecuted}, panics: 1}
 	var mu sync.Mutex
 	var logs []string
 	c := &controller.Controller{DB: pool, Sources: w.sources(), LeaseEvery: 20 * time.Millisecond, FactsEvery: 20 * time.Millisecond,
@@ -202,9 +203,9 @@ func TestSlowSourceIsCutOff(t *testing.T) {
 	pool := setup(t)
 	setRule(t, pool, "R2:1-1", `{"approval_executed":16}`, [2]string{"approval", "16"})
 	c := &controller.Controller{DB: pool, ReadTimeout: 100 * time.Millisecond, Sources: controller.Sources{
-		Approval: func(ctx context.Context, _ int64) (store.ApprovalFact, bool) {
+		Approval: func(ctx context.Context, _ int64) (seenfacts.ApprovalFact, bool) {
 			<-ctx.Done()
-			return store.ApprovalFact{}, false
+			return seenfacts.ApprovalFact{}, false
 		},
 	}}
 	start := time.Now()
@@ -246,7 +247,7 @@ func TestStartDecidesPlanChanges(t *testing.T) {
 	if out["question_id"] != "q_9" {
 		t.Fatalf("proposal: %v", out)
 	}
-	w := &world{questions: map[string]store.Question{"q_9": {ID: "q_9", Status: store.QuestionAnswered, Option: store.CardApplyKey,
+	w := &world{questions: map[string]seenfacts.Question{"q_9": {ID: "q_9", Status: seenfacts.QuestionAnswered, Option: store.CardApplyKey,
 		AnsweredBy: "owner", AnsweredAt: "2026-10-14T20:00:00Z"}}}
 	c := &controller.Controller{DB: pool, Sources: w.sources(), LeaseEvery: time.Hour, FactsEvery: 20 * time.Millisecond}
 	run, cancel := context.WithCancel(ctx)

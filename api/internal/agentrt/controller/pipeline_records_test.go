@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -23,9 +24,9 @@ var errNoDB = errors.New("the database was read")
 
 func (noDB) BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error) { return nil, errNoDB }
 
-func completedRun(name string) store.PipelineRun {
+func completedRun(name string) seenfacts.PipelineRun {
 	at := time.Date(2026, 11, 12, 21, 41, 54, 0, time.UTC)
-	return store.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-deliver-platform-prod", Kind: "delivery", Result: "Succeeded",
+	return seenfacts.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-deliver-platform-prod", Kind: "delivery", Result: "Succeeded",
 		Repo: "bifrost-platform", Revision: strings.Repeat("a", 40), CreatedAt: at.Add(-5 * time.Minute), StartedAt: at.Add(-5 * time.Minute), CompletedAt: at}
 }
 
@@ -44,10 +45,10 @@ func pipelineSeenCount(t *testing.T, db store.DB, run string) int {
 func TestPipelineRecordsRemembersWhatItRecorded(t *testing.T) {
 	t.Parallel()
 	pool := setup(t)
-	runs := []store.PipelineRun{completedRun("deliver-1")}
+	runs := []seenfacts.PipelineRun{completedRun("deliver-1")}
 	told := 0
 	c := controller.Controller{DB: pool, PipelineRecorded: func() { told++ }, Sources: controller.Sources{
-		PipelineRuns: func(context.Context) ([]store.PipelineRun, error) { return runs, nil }}}
+		PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) { return runs, nil }}}
 	pass := func(db store.DB, want, wantTold int) {
 		t.Helper()
 		c.DB = db
@@ -92,9 +93,9 @@ func TestPipelineRecordsRemembersWhatItRecorded(t *testing.T) {
 func TestPipelineRecordsFullPassComparesEveryRunAgain(t *testing.T) {
 	t.Parallel()
 	pool := setup(t)
-	runs := []store.PipelineRun{completedRun("deliver-1")}
+	runs := []seenfacts.PipelineRun{completedRun("deliver-1")}
 	c := controller.Controller{DB: pool, PipelineFullEvery: time.Hour, Sources: controller.Sources{
-		PipelineRuns: func(context.Context) ([]store.PipelineRun, error) { return runs, nil }}}
+		PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) { return runs, nil }}}
 	if n, err := c.PipelineRecords(ctx); n != 1 || err != nil {
 		t.Fatalf("first pass: %d %v", n, err)
 	}
@@ -119,9 +120,9 @@ func TestPipelineRecordsRefusedRunDoesNotHoldTheOthers(t *testing.T) {
 	pool := setup(t)
 	bad := completedRun("deliver-bad")
 	bad.Kind = "nightly"
-	runs := []store.PipelineRun{bad, completedRun("deliver-ok")}
+	runs := []seenfacts.PipelineRun{bad, completedRun("deliver-ok")}
 	c := controller.Controller{DB: pool, Sources: controller.Sources{
-		PipelineRuns: func(context.Context) ([]store.PipelineRun, error) { return runs, nil }}}
+		PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) { return runs, nil }}}
 	n, err := c.PipelineRecords(ctx)
 	if n != 1 || !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), "deliver-bad") {
 		t.Fatalf("first pass: %d %v", n, err)
@@ -142,14 +143,14 @@ func TestPipelineRecordsLoopRecordsACompletedRunWithinItsInterval(t *testing.T) 
 	t.Parallel()
 	pool := setup(t)
 	var mu sync.Mutex
-	var runs []store.PipelineRun
+	var runs []seenfacts.PipelineRun
 	var told atomic.Int32
 	c := &controller.Controller{DB: pool, LeaseEvery: time.Hour, FactsEvery: time.Hour, PipelineEvery: 20 * time.Millisecond,
 		PipelineRecorded: func() { told.Add(1) },
-		Sources: controller.Sources{PipelineRuns: func(context.Context) ([]store.PipelineRun, error) {
+		Sources: controller.Sources{PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) {
 			mu.Lock()
 			defer mu.Unlock()
-			return append([]store.PipelineRun(nil), runs...), nil
+			return append([]seenfacts.PipelineRun(nil), runs...), nil
 		}}}
 	run, cancel := context.WithCancel(ctx)
 	wait := c.Start(run)
@@ -157,7 +158,7 @@ func TestPipelineRecordsLoopRecordsACompletedRunWithinItsInterval(t *testing.T) 
 	defer cancel()
 	time.Sleep(60 * time.Millisecond) // the startup backfill and a pass or two see no run
 	mu.Lock()
-	runs = []store.PipelineRun{completedRun("deliver-late")}
+	runs = []seenfacts.PipelineRun{completedRun("deliver-late")}
 	mu.Unlock()
 	for deadline := time.Now().Add(10 * time.Second); pipelineSeenCount(t, pool, "deliver-late") != 1 || told.Load() != 1; time.Sleep(10 * time.Millisecond) {
 		if time.Now().After(deadline) {

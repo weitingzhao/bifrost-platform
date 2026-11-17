@@ -3,15 +3,17 @@ package store
 import (
 	"testing"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
 
 func TestExternalFactsBodies(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.FixedZone("offset", 3600))
-	a := ApprovalFact{Number: 1, Status: "executed", Action: "deploy", Tier: "T2", CreatedAt: at, DecidedAt: at, Expired: false}
-	p := PipelineRun{Run: "run", UID: "uid", Pipeline: "pipeline", Kind: "delivery", Result: "Succeeded", CreatedAt: at, StartedAt: at, CompletedAt: at, Reason: "Completed"}
-	q := Question{ID: "question", Status: "open", CreatedAt: at.UTC().Format(time.RFC3339), WithdrawnAt: at.UTC().Format(time.RFC3339), ExpiredAt: at.UTC().Format(time.RFC3339)}
-	qb, _, err := questionSeenBody(q.ID, q)
+	a := seenfacts.ApprovalFact{Number: 1, Status: "executed", Action: "deploy", Tier: "T2", CreatedAt: at, DecidedAt: at, Expired: false}
+	p := seenfacts.PipelineRun{Run: "run", UID: "uid", Pipeline: "pipeline", Kind: "delivery", Result: "Succeeded", CreatedAt: at, StartedAt: at, CompletedAt: at, Reason: "Completed"}
+	q := seenfacts.Question{ID: "question", Status: "open", CreatedAt: at.UTC().Format(time.RFC3339), WithdrawnAt: at.UTC().Format(time.RFC3339), ExpiredAt: at.UTC().Format(time.RFC3339)}
+	qb, err := q.Body()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
 
@@ -104,7 +105,7 @@ func ensureRuleNoteOn(ctx context.Context, tx pgx.Tx, on cardOn, by answerer, qu
 // the actor a budget it grows is amended as.
 type answerer struct{ who, actor, rule string }
 
-func answerOf(q Question) answerer {
+func answerOf(q seenfacts.Question) answerer {
 	if q.Channel == questions.RuleChannel && q.AnsweredBy != "" {
 		return answerer{who: "the " + q.AnsweredBy, actor: "controller", rule: q.AnsweredBy}
 	}

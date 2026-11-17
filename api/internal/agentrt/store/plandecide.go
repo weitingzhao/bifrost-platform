@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
 
 // The Owner's decisions on plan changes (planproposal.go makes the
@@ -39,7 +40,7 @@ func streamRoot(stream string) string {
 // change that no longer fits when it is applied is decided failed, with
 // the database's reason. One that fails to be read does not stop the
 // others. It returns how many proposals it decided.
-func DecidePlanChanges(ctx context.Context, db DB, question func(context.Context, string) (Question, bool), ack func(context.Context, string) error) (int, error) {
+func DecidePlanChanges(ctx context.Context, db DB, question func(context.Context, string) (seenfacts.Question, bool), ack func(context.Context, string) error) (int, error) {
 	n, err := decidePending(ctx, db, question)
 	if ack == nil {
 		return n, err
@@ -100,7 +101,7 @@ func ackDecided(ctx context.Context, db DB, ack func(context.Context, string) er
 	return errors.Join(errs...)
 }
 
-func decidePending(ctx context.Context, db DB, question func(context.Context, string) (Question, bool)) (int, error) {
+func decidePending(ctx context.Context, db DB, question func(context.Context, string) (seenfacts.Question, bool)) (int, error) {
 	decided := 0
 	var errs []error
 	// Every waiting proposal, a page at a time after a cursor, so ones still
@@ -152,14 +153,14 @@ func decidePending(ctx context.Context, db DB, question func(context.Context, st
 // decidePage is how many waiting proposals a pass reads at a time.
 const decidePage = 100
 
-func decideOne(ctx context.Context, db DB, p pendingChange, question func(context.Context, string) (Question, bool)) (bool, error) {
+func decideOne(ctx context.Context, db DB, p pendingChange, question func(context.Context, string) (seenfacts.Question, bool)) (bool, error) {
 	q, ok := question(ctx, p.question)
 	switch {
 	case !ok:
 		return false, nil
-	case q.Status == QuestionAnswered && q.Option == CardApplyKey:
+	case q.Status == seenfacts.QuestionAnswered && q.Option == CardApplyKey:
 		return decide(ctx, db, p, "applied", "", answerOf(q), q.Option)
-	case q.Status == QuestionAnswered:
+	case q.Status == seenfacts.QuestionAnswered:
 		return decide(ctx, db, p, "refused", "", answerOf(q), q.Option)
 	case q.Status == "withdrawn" || q.Status == "expired":
 		return decide(ctx, db, p, q.Status, "", answerer{who: "the Owner", actor: "owner"}, "")

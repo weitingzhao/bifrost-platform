@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -53,27 +54,27 @@ func (w *world) stepState(t *testing.T, id string) string {
 }
 
 // Readers of outside records that always return the given value.
-func approvalIs(status string) func(context.Context) (store.ApprovalFact, bool) {
-	return func(context.Context) (store.ApprovalFact, bool) {
-		return store.ApprovalFact{Status: status, Action: "test", Tier: "test"}, true
+func approvalIs(status string) func(context.Context) (seenfacts.ApprovalFact, bool) {
+	return func(context.Context) (seenfacts.ApprovalFact, bool) {
+		return seenfacts.ApprovalFact{Status: status, Action: "test", Tier: "test"}, true
 	}
 }
 
-func questionIs(q store.Question) func(context.Context) (store.Question, bool) {
-	return func(context.Context) (store.Question, bool) { return q, true }
+func questionIs(q seenfacts.Question) func(context.Context) (seenfacts.Question, bool) {
+	return func(context.Context) (seenfacts.Question, bool) { return q, true }
 }
 
 func ciIs(status, run string) func(context.Context) (string, string, bool) {
 	return func(context.Context) (string, string, bool) { return status, run, true }
 }
 
-func deployedIs(commit string, ref map[string]any) store.Deployed {
+func deployedIs(commit string, ref map[string]any) seenfacts.Deployed {
 	return func(context.Context, string) (string, map[string]any, bool) { return commit, ref, true }
 }
 
 // answered is a full answer: option, who, when.
-func answered(id, option string) store.Question {
-	return store.Question{ID: id, Status: store.QuestionAnswered, Option: option, Text: "yes", AnsweredBy: "owner",
+func answered(id, option string) seenfacts.Question {
+	return seenfacts.Question{ID: id, Status: seenfacts.QuestionAnswered, Option: option, Text: "yes", AnsweredBy: "owner",
 		AnsweredAt: "2026-10-14T12:00:00Z"}
 }
 
@@ -114,36 +115,38 @@ func TestExternalFactsRecordChangesOnly(t *testing.T) {
 		see  func() (bool, error)
 		want bool
 	}{
-		{func() (bool, error) { return store.SeeApproval(ctx, w.rt, 16, approvalIs("pending")) }, true},
-		{func() (bool, error) { return store.SeeApproval(ctx, w.rt, 16, approvalIs("pending")) }, false},
-		{func() (bool, error) { return store.SeeApproval(ctx, w.rt, 16, approvalIs(store.ApprovalExecuted)) }, true},
-		{func() (bool, error) { return store.SeeApproval(ctx, w.rt, 160, approvalIs("pending")) }, true},
+		{func() (bool, error) { return seenfacts.SeeApproval(ctx, w.rt, 16, approvalIs("pending")) }, true},
+		{func() (bool, error) { return seenfacts.SeeApproval(ctx, w.rt, 16, approvalIs("pending")) }, false},
 		{func() (bool, error) {
-			return store.SeeQuestion(ctx, w.rt, "Q3", questionIs(store.Question{ID: "Q3", Status: "pending"}))
+			return seenfacts.SeeApproval(ctx, w.rt, 16, approvalIs(seenfacts.ApprovalExecuted))
+		}, true},
+		{func() (bool, error) { return seenfacts.SeeApproval(ctx, w.rt, 160, approvalIs("pending")) }, true},
+		{func() (bool, error) {
+			return seenfacts.SeeQuestion(ctx, w.rt, "Q3", questionIs(seenfacts.Question{ID: "Q3", Status: "pending"}))
 		}, true},
 		{func() (bool, error) {
-			return store.SeeQuestion(ctx, w.rt, "Q3", questionIs(answered("Q3", "A")))
+			return seenfacts.SeeQuestion(ctx, w.rt, "Q3", questionIs(answered("Q3", "A")))
 		}, true},
 		{func() (bool, error) {
-			return store.SeeQuestion(ctx, w.rt, "Q3", questionIs(answered("Q3", "A")))
+			return seenfacts.SeeQuestion(ctx, w.rt, "Q3", questionIs(answered("Q3", "A")))
 		}, false},
 		{func() (bool, error) {
-			return store.SeeCI(ctx, w.rt, "bifrost-platform", commitA, ciIs("Running", "ci-1"))
+			return seenfacts.SeeCI(ctx, w.rt, "bifrost-platform", commitA, ciIs("Running", "ci-1"))
 		}, true},
 		{func() (bool, error) {
-			return store.SeeCI(ctx, w.rt, "bifrost-platform", commitA, ciIs(store.CISucceeded, "ci-1"))
+			return seenfacts.SeeCI(ctx, w.rt, "bifrost-platform", commitA, ciIs(seenfacts.CISucceeded, "ci-1"))
 		}, true},
 		{func() (bool, error) {
-			return store.SeeCI(ctx, w.rt, "bifrost-platform", commitA, ciIs(store.CISucceeded, "ci-1"))
+			return seenfacts.SeeCI(ctx, w.rt, "bifrost-platform", commitA, ciIs(seenfacts.CISucceeded, "ci-1"))
 		}, false},
 		{func() (bool, error) {
-			return store.SeeDeploy(ctx, w.rt, "stg", deployedIs(commitA, map[string]any{"run": "d-1"}))
+			return seenfacts.SeeDeploy(ctx, w.rt, "stg", deployedIs(commitA, map[string]any{"run": "d-1"}))
 		}, true},
 		{func() (bool, error) {
-			return store.SeeDeploy(ctx, w.rt, "stg", deployedIs(commitA, map[string]any{"run": "d-1"}))
+			return seenfacts.SeeDeploy(ctx, w.rt, "stg", deployedIs(commitA, map[string]any{"run": "d-1"}))
 		}, false},
 		{func() (bool, error) {
-			return store.SeeDeploy(ctx, w.rt, "stg", deployedIs(commitA, map[string]any{"run": "d-2"}))
+			return seenfacts.SeeDeploy(ctx, w.rt, "stg", deployedIs(commitA, map[string]any{"run": "d-2"}))
 		}, true},
 	} {
 		got, err := c.see()
@@ -178,7 +181,7 @@ func TestExternalFactsRecordChangesOnly(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			_, errs[i] = store.SeeApproval(ctx, pool, 18, approvalIs(store.ApprovalExecuted))
+			_, errs[i] = seenfacts.SeeApproval(ctx, pool, 18, approvalIs(seenfacts.ApprovalExecuted))
 		}(i)
 	}
 	wg.Wait()
@@ -191,7 +194,7 @@ func TestExternalFactsRecordChangesOnly(t *testing.T) {
 	if events != 1 {
 		t.Fatalf("%d approval_seen events for one change", events)
 	}
-	w.chainHolds(t, store.ExternalStream)
+	w.chainHolds(t, seenfacts.ExternalStream)
 }
 
 // A step's done rule moves it once its facts hold, and only facts bound to
@@ -205,16 +208,16 @@ func TestStepRules(t *testing.T) {
 	if w.evaluate(t, s1, d) != "" {
 		t.Fatal("a rule with no facts moved the step")
 	}
-	_, err := store.SeeApproval(ctx, w.rt, 16, approvalIs(store.ApprovalExecuted))
+	_, err := seenfacts.SeeApproval(ctx, w.rt, 16, approvalIs(seenfacts.ApprovalExecuted))
 	ok(t, err)
-	_, err = store.SeeQuestion(ctx, w.rt, "Q3", questionIs(answered("Q3", "B")))
+	_, err = seenfacts.SeeQuestion(ctx, w.rt, "Q3", questionIs(answered("Q3", "B")))
 	ok(t, err)
-	_, err = store.SeeCI(ctx, w.rt, "bifrost-platform", commitA, ciIs(store.CISucceeded, ""))
+	_, err = seenfacts.SeeCI(ctx, w.rt, "bifrost-platform", commitA, ciIs(seenfacts.CISucceeded, ""))
 	ok(t, err)
 	if w.evaluate(t, s1, d) != "" {
 		t.Fatal("option B answered option A's atom")
 	}
-	_, err = store.SeeQuestion(ctx, w.rt, "Q3", questionIs(answered("Q3", "A")))
+	_, err = seenfacts.SeeQuestion(ctx, w.rt, "Q3", questionIs(answered("Q3", "A")))
 	ok(t, err)
 	if got := w.evaluate(t, s1, d); got != "done" || w.stepState(t, s1) != "done" {
 		t.Fatalf("moved to %q", got)

@@ -11,6 +11,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
 
 // stepRoot is the round a step belongs to, which names its event stream.
@@ -105,7 +106,7 @@ type stepFacts struct {
 	ctx       context.Context
 	tx        pgx.Tx
 	step      string
-	deployed  Deployed
+	deployed  seenfacts.Deployed
 	err       error
 }
 
@@ -141,18 +142,18 @@ func (f *stepFacts) ApprovalExecuted(number int64) bool {
 	return f.exists(`SELECT EXISTS (SELECT 1 FROM agentrt.plan_node_binding WHERE plan_node_id = $1 AND bound_kind = 'approval' AND bound_ref = $2)
 	  AND EXISTS (SELECT 1 FROM agentrt.event WHERE event_type = 'approval_seen'
 	              AND body_json @> jsonb_build_object('approval', $3::bigint, 'status', $4::text))`,
-		f.step, strconv.FormatInt(number, 10), number, ApprovalExecuted)
+		f.step, strconv.FormatInt(number, 10), number, seenfacts.ApprovalExecuted)
 }
 
 func (f *stepFacts) QuestionAnswered(question, option string) bool {
 	return f.exists(`SELECT EXISTS (SELECT 1 FROM agentrt.plan_node_binding WHERE plan_node_id = $1 AND bound_kind = 'question' AND bound_ref = $2)
 	  AND EXISTS (SELECT 1 FROM agentrt.event WHERE event_type = 'question_seen'
 	              AND body_json @> jsonb_build_object('question', $2::text, 'status', $3::text, 'option', $4::text))`,
-		f.step, question, QuestionAnswered, option)
+		f.step, question, seenfacts.QuestionAnswered, option)
 }
 
 func (f *stepFacts) CISucceeded(repo, commit string) bool {
-	return f.hasBody("ci_seen", "", map[string]any{"repo": repo, "commit": commit, "status": CISucceeded})
+	return f.hasBody("ci_seen", "", map[string]any{"repo": repo, "commit": commit, "status": seenfacts.CISucceeded})
 }
 
 func (f *stepFacts) OwnerSignoff(ref string) bool {
@@ -176,7 +177,7 @@ func (f *stepFacts) GatePassed(env, test, specSHA256 string) plan.Tri {
 // says so: planned or active to done when it holds; done back to active
 // (standing_lapsed) when a standing condition no longer holds. An unknown
 // result moves nothing. It returns the state it moved to, or "".
-func EvaluateStep(ctx context.Context, db DB, stepID string, deployed Deployed) (string, error) {
+func EvaluateStep(ctx context.Context, db DB, stepID string, deployed seenfacts.Deployed) (string, error) {
 	var moved string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		var err error
@@ -188,7 +189,7 @@ func EvaluateStep(ctx context.Context, db DB, stepID string, deployed Deployed) 
 
 // evaluateStep is EvaluateStep inside tx; a plan import runs it on the steps
 // it brings in done (planimport.go).
-func evaluateStep(ctx context.Context, tx pgx.Tx, stepID string, deployed Deployed) (string, error) {
+func evaluateStep(ctx context.Context, tx pgx.Tx, stepID string, deployed seenfacts.Deployed) (string, error) {
 	var state, doc string
 	if err := tx.QueryRow(ctx, `SELECT state, done_rule_json::text FROM agentrt.plan_node
 	  WHERE plan_node_id = $1 AND node_kind = 'step' FOR UPDATE`, stepID).Scan(&state, &doc); err != nil {

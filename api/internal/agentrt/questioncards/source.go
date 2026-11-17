@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
 
@@ -42,19 +42,19 @@ func Unacked(svc *questions.Service) func(ctx context.Context) ([]AnsweredCard, 
 }
 
 // Fact converts a trusted question without copying non-runtime free text.
-func Fact(q questions.Question) (store.Question, bool) {
+func Fact(q questions.Question) (seenfacts.Question, bool) {
 	var option, text, by string
 	var at time.Time
 	if q.Answer != nil {
 		option, text, by, at = q.Answer.Option, q.Answer.Text, q.Answer.By, q.Answer.At
 	}
-	f := store.Question{ID: q.ID, Status: q.Status}
+	f := seenfacts.Question{ID: q.ID, Status: q.Status}
 	if q.Status == questions.StatusAnswered {
 		if option == "" && text != "" {
 			option = "none"
 		}
 		if option == "" || by == "" || at.IsZero() {
-			return store.Question{}, false
+			return seenfacts.Question{}, false
 		}
 		f.Option, f.Text, f.AnsweredBy, f.AnsweredAt = option, text, by, at.UTC().Format(time.RFC3339)
 	}
