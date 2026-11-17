@@ -6,6 +6,7 @@ import (
 	"context"
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +16,7 @@ import (
 func historicalMissionCard(t *testing.T, w *world, id, question string) (string, string) {
 	t.Helper()
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: id, Title: "historical mission", Goal: "g", Deadline: time.Now().Add(time.Hour)}); err != nil {
+		if _, err := storekit.CreateMission(ctx, tx, "controller", storekit.Mission{ID: id, Title: "historical mission", Goal: "g", Deadline: time.Now().Add(time.Hour)}); err != nil {
 			return err
 		}
 		if _, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream(id), Type: "mission_state_changed", Actor: "controller", MissionID: id,

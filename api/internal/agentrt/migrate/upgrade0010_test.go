@@ -13,6 +13,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
 func must0010(t *testing.T, err error) {
@@ -47,12 +48,12 @@ func database0009(t *testing.T) (*agentrttest.DB, *pgx.Conn, []migrate.File) {
 		must0010(t, seedHost(ctx, rt, "owner", host, kind))
 	}
 	must0010(t, store.InTx(ctx, rt, func(tx pgx.Tx) error {
-		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{
+		if _, err := storekit.CreateMission(ctx, tx, "controller", storekit.Mission{
 			ID: "M-1", WorkID: "W-31", Title: "T50", Goal: "upgrade", Deadline: time.Now().Add(24 * time.Hour),
 		}); err != nil {
 			return err
 		}
-		return store.MoveMission(ctx, tx, "controller", "M-1", "active", "T50 fixture")
+		return storekit.MoveMission(ctx, tx, "controller", "M-1", "active", "T50 fixture")
 	}))
 	must0010(t, store.InTx(ctx, rt, func(tx pgx.Tx) error {
 		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("T50 ordinary task"))

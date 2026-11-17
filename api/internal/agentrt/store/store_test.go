@@ -12,6 +12,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
 var ctx = context.Background()
@@ -106,7 +107,7 @@ func newWorld(t *testing.T) *world {
 	deadline := time.Now().Add(7 * 24 * time.Hour)
 	for _, m := range []string{"M-1", "M-2"} {
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			_, err = store.CreateMission(ctx, tx, "controller", store.Mission{ID: m, WorkID: "W-31", Title: m, Goal: "test", Deadline: deadline})
+			_, err = storekit.CreateMission(ctx, tx, "controller", storekit.Mission{ID: m, WorkID: "W-31", Title: m, Goal: "test", Deadline: deadline})
 			return err
 		}))
 	}

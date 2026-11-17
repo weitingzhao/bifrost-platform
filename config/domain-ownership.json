@@ -462,6 +462,13 @@
       "status": "assigned",
       "basis": "2026-11-15 source and caller audit: db.go disposable PostgreSQL/Redis test infrastructure, no business state machine"
     },
+    "api/internal/agentrt/storekit": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-17 added as the home of test-only fixtures that tests of several packages use to set up agentrt state (CreateMission, MoveMission, moved out of store, where no binary called them); it writes through eventlog and canon only and does not import store; kept apart from agentrttest, which is database infrastructure with no business state machine"
+    },
     "api/internal/statefile": {
       "domains": [
         "foundation"

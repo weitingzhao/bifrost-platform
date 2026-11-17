@@ -1,13 +1,9 @@
 package store
 
 import (
-	"context"
 	"errors"
-	"fmt"
-	"slices"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
@@ -65,41 +61,6 @@ var missionMoves = map[string][]string{
 	"awaiting_owner": {"active", "stopped"},
 	"active":         {"paused", "done", "stopped", "expired"},
 	"paused":         {"active", "stopped", "expired"},
-}
-
-// MoveMission changes a mission's state with mission_state_changed. It holds
-// the mission row exclusively, so a claim of one of its tasks either commits
-// first or sees the new state.
-func MoveMission(ctx context.Context, tx pgx.Tx, actor, missionID, to, reason string) error {
-	return moveMission(ctx, tx, actor, missionID, to, reason, "", "")
-}
-
-// moveMission is MoveMission naming the decision card the move is about and,
-// when the move acts on its answer, the option answered.
-func moveMission(ctx context.Context, tx pgx.Tx, actor, missionID, to, reason, question, answer string) error {
-	var from string
-	if err := tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 FOR NO KEY UPDATE`, missionID).Scan(&from); err != nil {
-		return err
-	}
-	if !slices.Contains(missionMoves[from], to) {
-		return fmt.Errorf("%w: mission %s %s -> %s", ErrState, missionID, from, to)
-	}
-	body := map[string]any{"from": from, "to": to}
-	if reason != "" {
-		body["reason"] = reason
-	}
-	if question != "" {
-		body["question_id"] = question
-	}
-	if answer != "" {
-		body["answer"] = answer
-	}
-	if _, err := Append(ctx, tx, Event{Stream: MissionStream(missionID), Type: "mission_state_changed", Actor: actor,
-		MissionID: missionID, Body: body}); err != nil {
-		return err
-	}
-	_, err := tx.Exec(ctx, `UPDATE agentrt.mission SET state = $2, version = version + 1 WHERE mission_id = $1`, missionID, to)
-	return err
 }
 
 // Tasks.

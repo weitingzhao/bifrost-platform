@@ -25,6 +25,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
 var ctx = context.Background()
@@ -53,10 +54,10 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 	pool := db.Pool(t, db.Runtime)
 	tx := func(fn func(pgx.Tx) error) { t.Helper(); must(t, store.InTx(ctx, pool, fn)) }
 	tx(func(tx pgx.Tx) error {
-		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-1", Title: "m", Goal: "g", Deadline: time.Now().Add(time.Hour)}); err != nil {
+		if _, err := storekit.CreateMission(ctx, tx, "controller", storekit.Mission{ID: "M-1", Title: "m", Goal: "g", Deadline: time.Now().Add(time.Hour)}); err != nil {
 			return err
 		}
-		return store.MoveMission(ctx, tx, "controller", "M-1", "active", "test")
+		return storekit.MoveMission(ctx, tx, "controller", "M-1", "active", "test")
 	})
 	for _, n := range []store.PlanNode{
 		{ID: "R2", Kind: "round", Label: "2", Title: "round", Root: "R2"},

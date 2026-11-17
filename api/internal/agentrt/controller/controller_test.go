@@ -14,6 +14,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
 var ctx = context.Background()
@@ -36,7 +37,7 @@ func setup(t *testing.T) *pgxpool.Pool {
 	_, err = pool.Exec(ctx, agentrttest.DispatchRules)
 	must(t, err)
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		_, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-1", Title: "m", Goal: "g", Deadline: time.Now().Add(time.Hour)})
+		_, err := storekit.CreateMission(ctx, tx, "controller", storekit.Mission{ID: "M-1", Title: "m", Goal: "g", Deadline: time.Now().Add(time.Hour)})
 		return err
 	}))
 	for _, n := range []store.PlanNode{

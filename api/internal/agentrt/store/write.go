@@ -11,7 +11,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
@@ -105,87 +104,6 @@ func UploadArtifact(ctx context.Context, db DB, w Writer, kind, mediaType string
 	return id, created, err
 }
 
-// Mission is the part of a mission row the store writes at creation. The
-// success criteria, repos, bases and budget are optional here (an empty list
-// or a zero is left out of the row's JSON); MaxAction defaults to branch and
-// Tenant to dev. Bases are a goal's: the commit of each repository's main its
-// tasks start from (scope_json.bases).
-type Mission struct {
-	ID, WorkID, Title, Goal string
-	Deadline                time.Time
-	Tenant, MaxAction       string
-	Success, Repos          []string
-	Bases                   map[string]string
-	MaxAttempts             int
-	MaxWallHours            int
-	NoMerge                 string         // why its accepted results stay off main, "" for none (scope_json.no_merge, TD-383)
-	NeedsOwner              string         // why its cards wait for the Owner himself, "" for none (scope_json.needs_owner, TD-390)
-	GateRun                 map[string]any // a batch of gate tasks, the controller's own (scope_json.gate_run, gates.go, TD-397)
-	AssessmentOf            string         // the stream of the item it assesses, "" for none (scope_json.assessment_of, TD-391)
-	Token                   string         // the token that proposed it, when a route did (review 176 B2)
-}
-
-// CreateMission writes mission_proposed and the mission row.
-func CreateMission(ctx context.Context, tx pgx.Tx, actor string, m Mission) (Appended, error) {
-	if m.Tenant == "" {
-		m.Tenant = "dev"
-	}
-	if m.MaxAction == "" {
-		m.MaxAction = "branch"
-	}
-	success := map[string]any{}
-	if len(m.Success) > 0 {
-		success["criteria"] = m.Success
-	}
-	scope := map[string]any{"max_action": m.MaxAction}
-	if len(m.Repos) > 0 {
-		scope["repos"] = m.Repos
-	}
-	if len(m.Bases) > 0 {
-		scope["bases"] = anyMap(m.Bases)
-	}
-	if m.NoMerge != "" {
-		scope["no_merge"] = m.NoMerge
-	}
-	if m.NeedsOwner != "" {
-		scope["needs_owner"] = m.NeedsOwner
-	}
-	if m.AssessmentOf != "" {
-		scope["assessment_of"] = m.AssessmentOf
-	}
-	if m.GateRun != nil {
-		scope["gate_run"] = m.GateRun
-	}
-	budget := map[string]any{}
-	if m.MaxAttempts > 0 {
-		budget["max_attempts"] = m.MaxAttempts
-	}
-	if m.MaxWallHours > 0 {
-		budget["max_wall_hours"] = m.MaxWallHours
-	}
-	var docs [3][]byte
-	for i, v := range []any{success, scope, budget} {
-		var err error
-		if docs[i], err = canon.Encode(v); err != nil {
-			return Appended{}, err
-		}
-	}
-	body := map[string]any{"title": m.Title}
-	if m.Token != "" {
-		body["token"] = m.Token
-	}
-	ev, err := Append(ctx, tx, Event{Stream: MissionStream(m.ID), Type: "mission_proposed", Actor: actor,
-		MissionID: m.ID, Body: body})
-	if err != nil {
-		return ev, err
-	}
-	_, err = tx.Exec(ctx, `INSERT INTO agentrt.mission (mission_id, work_id, title, goal, success_json, scope_json,
-	  tenant, state, deadline_at, budget_json, created_by_actor_id)
-	  VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,'proposed',$8,$9::jsonb,$10)`,
-		m.ID, nullable(m.WorkID), m.Title, m.Goal, string(docs[0]), string(docs[1]), m.Tenant, m.Deadline, string(docs[2]), actor)
-	return ev, err
-}
-
 // PlanNode is a node to create.
 type PlanNode struct {
 	ID, Parent, Kind, Label, Title, WorkID, MissionID, StepKind string
@@ -269,13 +187,4 @@ type Task struct {
 	// nothing outside this package, and nothing else in it, sets them.
 	pin, viaSession, pinReason string
 	providers                  []string
-}
-
-// anyMap is m as canonical JSON takes it.
-func anyMap(m map[string]string) map[string]any {
-	out := make(map[string]any, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
-	return out
 }

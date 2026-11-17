@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
 type progressDoc struct {
@@ -79,7 +80,7 @@ func (w *world) progress(t *testing.T) progressDoc {
 func TestProgressMissionWithoutTasks(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return storekit.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
 	var lastM1, proposedM2 time.Time
 	ok(t, w.rt.QueryRow(ctx, `SELECT max(at) FILTER (WHERE mission_id = 'M-1'),
 	    max(at) FILTER (WHERE mission_id = 'M-2' AND event_type = 'mission_proposed') FROM agentrt.event`).Scan(&lastM1, &proposedM2))
@@ -126,9 +127,9 @@ func sameMoment(t *testing.T, got string, want time.Time) bool {
 func TestProgressPausedMissionWithoutTasks(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return storekit.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		return store.MoveMission(ctx, tx, "controller", "M-1", "paused", "the Owner asked")
+		return storekit.MoveMission(ctx, tx, "controller", "M-1", "paused", "the Owner asked")
 	}))
 	for _, m := range w.progress(t).Work.Missions {
 		if m.MissionID == "M-1" && (m.Status != store.StatusBlocked || m.Reason != "the mission is paused by controller: the Owner asked" ||

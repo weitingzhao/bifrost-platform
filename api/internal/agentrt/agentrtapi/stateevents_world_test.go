@@ -25,6 +25,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
 
@@ -105,14 +106,14 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 	tx := func(fn func(pgx.Tx) error) { t.Helper(); must(t, store.InTx(ctx, f.pool, fn)) }
 	tx(func(tx pgx.Tx) error {
 		for _, id := range []string{"M-2", "M-3"} {
-			if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: id, Title: id, Goal: "g", Deadline: time.Now().Add(time.Hour)}); err != nil {
+			if _, err := storekit.CreateMission(ctx, tx, "controller", storekit.Mission{ID: id, Title: id, Goal: "g", Deadline: time.Now().Add(time.Hour)}); err != nil {
 				return err
 			}
 		}
-		if err := store.MoveMission(ctx, tx, "controller", "M-3", "active", "test"); err != nil {
+		if err := storekit.MoveMission(ctx, tx, "controller", "M-3", "active", "test"); err != nil {
 			return err
 		}
-		return store.MoveMission(ctx, tx, "controller", "M-3", "paused", "test")
+		return storekit.MoveMission(ctx, tx, "controller", "M-3", "paused", "test")
 	})
 	must(t, seedHost(ctx, f.pool, "owner", "h2", "dev"))
 	chiefJob(t, f.pool)

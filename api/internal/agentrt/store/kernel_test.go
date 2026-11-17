@@ -11,6 +11,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
 var (
@@ -31,7 +32,7 @@ func newKernelWorld(t *testing.T) *world {
 	t.Helper()
 	ctx := ctxOf(t)
 	w := newWorld(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return storekit.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
 	w.seeded(t, func(tx pgx.Tx) {
 		for i := 1; i <= 8; i++ {
 			seedHost(t, tx, fmt.Sprintf("h%d", i))
