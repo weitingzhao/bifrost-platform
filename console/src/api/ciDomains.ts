@@ -12,6 +12,8 @@ export type CiPackagePair = { from: string; to: string }
 export type CiDomainEdge = { from: string; to: string; imports: number; wrong_way: boolean; pairs?: CiPackagePair[] }
 export type CiDomainGraph = {
   version: number; repo: string; commit: string; measured: boolean; note: string
+  /** main's head when the answer was given; while it differs from commit the graph of head is being read (refreshing). */
+  head?: string; refreshing?: boolean
   /** The domain every other stands on; '' or absent when the table names none. */
   base?: string
   domains: CiDomainNode[]; edges: CiDomainEdge[]; shared_packages: string[]

@@ -103,7 +103,12 @@ type Pair struct {
 type Graph struct {
 	Version int    `json:"version"`
 	Repo    string `json:"repo"`
-	Commit  string `json:"commit"`
+	// Commit is the commit this graph was read at. Head is main's head when
+	// the answer was given; while they differ the graph of Head is being read
+	// (Refreshing) and this one is the last that was.
+	Commit     string `json:"commit"`
+	Head       string `json:"head"`
+	Refreshing bool   `json:"refreshing"`
 	// Measured is false for a repository with no ownership table (or one that
 	// does not read); Note says which.
 	Measured bool   `json:"measured"`

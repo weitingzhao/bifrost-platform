@@ -425,6 +425,21 @@ it('draws every dependency arrow at full strength when no domain is selected', a
   expect(screen.getByTestId('ci-dep-edge-foundation>owner')).toHaveAttribute('data-opacity', '0.75')
 })
 
+// Origin: 2026-11-16 22:5x, the Owner switched from By time to another view and saw "loading" for a long time: main had
+// moved and the page waited for the new graph. While a newer graph is being read the last one is drawn, and one line
+// says which commit it is of and where main is; nothing spins.
+it('draws the last graph while a newer one is being read, and says which commit it is of', async () => {
+  setup({ repos: ['bifrost-platform', 'plain'], runs: history(), graph: { ...graph(), head: sha(1000), refreshing: true }, changes })
+  await screen.findByTestId('ci-verdict')
+  expect(screen.queryByTestId('ci-domains-behind')).not.toBeInTheDocument() // By time does not draw the graph
+  view('By dependency')
+  expect(await screen.findAllByTestId(/^ci-dep-edge-/)).toHaveLength(5)
+  expect(screen.getByTestId('ci-domains-behind')).toHaveTextContent(`Showing the domains of ${sha(999).slice(0, 8)}; main is at ${sha(1000).slice(0, 8)} and its graph is being read.`)
+  view('By domain')
+  expect(screen.getByTestId('ci-domain-plan')).toBeInTheDocument()
+  expect(screen.getByTestId('ci-domains-behind')).toBeInTheDocument()
+})
+
 // Origin: page — domain views exist only for a repository with an ownership table; for another the two views say
 // once that its domains are not measured, and By time still draws its runs.
 it('says once that domains are not measured for a repository without an ownership table', async () => {

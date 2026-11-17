@@ -70,7 +70,9 @@ export function CiSection() {
   const policy = useQuery({ queryKey: ['ci', 'release-policy'], queryFn: fetchReleasePolicy, enabled: delivers, staleTime: 60_000 })
   // The strip reads the scorecard; the same read (one key, one fetch) names its unmeasured items below.
   const score = useQuery({ queryKey: ['ci', 'scorecard'], queryFn: ({ signal }) => fetchCiScorecard(signal), refetchInterval: 600_000 })
-  const graph = useQuery({ queryKey: ['ci', 'domains', repo], queryFn: ({ signal }) => fetchCiDomains(repo!, signal), enabled: !!repo, staleTime: 5 * 60_000, retry: false })
+  const graph = useQuery({ queryKey: ['ci', 'domains', repo], queryFn: ({ signal }) => fetchCiDomains(repo!, signal), enabled: !!repo, staleTime: 60_000, retry: false,
+    // While a newer graph is being read the page shows the last one and asks again shortly; otherwise once a minute.
+    refetchInterval: query => (query.state.data?.refreshing ? 5_000 : 60_000) })
 
   const runs = useMemo(() => ownRuns(history.data?.runs ?? [], asOf, ciDetail.data?.runs), [history.data, asOf, ciDetail.data])
   const commits = useMemo(() => [...new Set(runs.map(r => r.commit))].slice(0, CI_CHANGES_MAX), [runs])
@@ -151,7 +153,7 @@ export function CiSection() {
 
   const cards = graph.data?.measured ? domainCards(graph.data, runs, changes) : []
   const domainsNote = graph.error ? `Who depends on whom could not be read: ${errorText(graph.error)}.`
-    : graph.data == null ? 'Reading the domains of main… the first read after main moves reads every Go file of the repository and can take a minute.'
+    : graph.data == null ? 'Reading the domains of main for the first time: every Go file of the repository is read once, which can take a minute. After that the last graph is always shown at once.'
       : !graph.data.measured ? `Domains are not measured for this repository: ${graph.data.note}.` : null
   const projectsError = errorText(projects.error)
   return (
@@ -182,6 +184,9 @@ export function CiSection() {
             {(domain || run) && <button type="button" className={`ml-2 min-h-8 text-xs underline underline-offset-4 ${MUTED}`} onClick={() => { setDomain(''); setRun('') }}>clear</button>}
           </div>
         </div>
+        {view !== 'time' && graph.data?.measured && graph.data.refreshing && <p className={`m-0 mb-2 text-xs ${MUTED}`} data-testid="ci-domains-behind">
+          {`Showing the domains of ${graph.data.commit.slice(0, 8)}; main is at ${(graph.data.head ?? '').slice(0, 8)} and its graph is being read. This updates by itself.`}
+        </p>}
         {history.data == null
           ? (history.error ? <p role="alert" className="m-0 text-sm text-[var(--destructive)]">{`The CI runs of ${repo} could not be read: ${errorText(history.error)}. Which runs are retained, and what they ran, is not known.`}</p> : <p className={`m-0 text-sm ${MUTED}`}>Loading…</p>)
           : view === 'time' ? <CiTimeline key={repo} runs={runs} changes={changes} domain={domain} selectedRun={run} onSelectRun={setRun} />
