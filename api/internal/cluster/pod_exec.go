@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
 )
@@ -29,7 +30,10 @@ func (s *Service) SetPodExecForTest(fn PodExecFunc) {
 	s.execFunc = fn
 }
 
-func (s *Service) execOnPrimary(ctx context.Context, primary string, command ...string) (string, error) {
+// ExecOnPrimary runs command in the postgres container of the CNPG primary pod
+// (namespace data). It is the adapter the tenant's data clone runs its
+// pg_dump, psql and catalog reads through.
+func (s *Service) ExecOnPrimary(ctx context.Context, primary string, command ...string) (string, error) {
 	if fn := s.podExec(); fn != nil {
 		kubeconfig := s.kubeconfigPath()
 		if kubeconfig == "" {
@@ -57,6 +61,28 @@ func (s *Service) execOnPrimary(ctx context.Context, primary string, command ...
 		return "", fmt.Errorf("%w (kubectl fallback: %v)", err, kerr)
 	}
 	return "", err
+}
+
+// ResolveCNPGPrimary names the pod of the CNPG cluster's current primary
+// (status.currentPrimary of the Cluster resource), the pod ExecOnPrimary runs
+// in.
+func (s *Service) ResolveCNPGPrimary(ctx context.Context) (string, error) {
+	if s != nil && s.primaryOverride != "" {
+		return s.primaryOverride, nil
+	}
+	dyn, err := s.buildDynamicClient()
+	if err != nil {
+		return "", fmt.Errorf("dynamic client: %w", err)
+	}
+	obj, err := dyn.Resource(cnpgClusterGVR).Namespace(cnpgNamespace).Get(ctx, cnpgClusterName, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("get CNPG cluster: %w", err)
+	}
+	primary := strings.TrimSpace(stringFromUnstructured(obj, "status", "currentPrimary"))
+	if primary == "" {
+		return "", fmt.Errorf("CNPG cluster %s has no currentPrimary", cnpgClusterName)
+	}
+	return primary, nil
 }
 
 func (s *Service) execViaAPI(ctx context.Context, namespace, pod, container string, command ...string) (string, error) {

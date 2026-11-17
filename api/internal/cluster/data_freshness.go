@@ -10,8 +10,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
@@ -137,25 +135,6 @@ func (s *Service) probeDataFreshness(ctx context.Context) DataFreshnessResponse 
 		resp.Databases = appReadings.FreshnessDatabases(resp.Databases, observed, resp.ReferenceDB, resp.LastCloneAt, now)
 	}
 	return resp
-}
-
-func (s *Service) resolveCNPGPrimary(ctx context.Context) (string, error) {
-	if s != nil && s.primaryOverride != "" {
-		return s.primaryOverride, nil
-	}
-	dyn, err := s.buildDynamicClient()
-	if err != nil {
-		return "", fmt.Errorf("dynamic client: %w", err)
-	}
-	obj, err := dyn.Resource(cnpgClusterGVR).Namespace(cnpgNamespace).Get(ctx, cnpgClusterName, metav1.GetOptions{})
-	if err != nil {
-		return "", fmt.Errorf("get CNPG cluster: %w", err)
-	}
-	primary := strings.TrimSpace(stringFromUnstructured(obj, "status", "currentPrimary"))
-	if primary == "" {
-		return "", fmt.Errorf("CNPG cluster %s has no currentPrimary", cnpgClusterName)
-	}
-	return primary, nil
 }
 
 func parsePostgresTimestamp(raw string) (time.Time, error) {

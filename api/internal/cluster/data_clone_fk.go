@@ -162,7 +162,7 @@ func (s *Service) checkSelectiveFKClosure(ctx context.Context, primary string, t
 		selected = append(selected, dataCloneQualify(t))
 	}
 	for _, target := range targets {
-		out, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-X", "-tA", "-F", "\t", "-c",
+		out, err := s.ExecOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-X", "-tA", "-F", "\t", "-c",
 			dataCloneFKEdgesSQL)
 		if err != nil {
 			return fmt.Errorf("selective clone foreign-key check in %s failed: %w", target, err)

@@ -555,7 +555,7 @@ func (s *Service) startDataClone(ctx context.Context, req DataCloneRequest, trig
 		return nil, err
 	}
 	if req.Mode == "selective" {
-		primary, err := s.resolveCNPGPrimary(ctx)
+		primary, err := s.ResolveCNPGPrimary(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -664,7 +664,7 @@ func (s *Service) runDataClone(ctx context.Context, jobID string) {
 		return
 	}
 
-	primary, err := s.resolveCNPGPrimary(ctx)
+	primary, err := s.ResolveCNPGPrimary(ctx)
 	if err != nil {
 		fail(err.Error())
 		return
@@ -672,10 +672,10 @@ func (s *Service) runDataClone(ctx context.Context, jobID string) {
 
 	// Always remove remote dump on exit (done or failed) once primary is known.
 	defer func() {
-		_, _ = s.execOnPrimary(ctx, primary, "rm", "-f", dataCloneRemoteDump)
+		_, _ = s.ExecOnPrimary(ctx, primary, "rm", "-f", dataCloneRemoteDump)
 	}()
 	// Clear an orphaned dump before starting; the deferred cleanup covers this run.
-	if _, err := s.execOnPrimary(ctx, primary, "rm", "-f", dataCloneRemoteDump); err != nil {
+	if _, err := s.ExecOnPrimary(ctx, primary, "rm", "-f", dataCloneRemoteDump); err != nil {
 		fail("dump preflight cleanup failed: " + err.Error())
 		return
 	}
@@ -689,12 +689,12 @@ func (s *Service) runDataClone(ctx context.Context, jobID string) {
 		}
 	}
 	dumpArgs := dataCloneDumpArgs(job.Source, job.Mode, job.Tables)
-	if _, err := s.execOnPrimary(ctx, primary, dumpArgs...); err != nil {
+	if _, err := s.ExecOnPrimary(ctx, primary, dumpArgs...); err != nil {
 		fail("dump failed: " + err.Error())
 		return
 	}
 
-	sizeOut, err := s.execOnPrimary(ctx, primary, "sh", "-c", fmt.Sprintf("wc -c < '%s'", dataCloneRemoteDump))
+	sizeOut, err := s.ExecOnPrimary(ctx, primary, "sh", "-c", fmt.Sprintf("wc -c < '%s'", dataCloneRemoteDump))
 	if err != nil {
 		fail("dump size check failed: " + err.Error())
 		return
@@ -766,7 +766,7 @@ func (s *Service) validateSelectiveSourceTables(ctx context.Context, primary, so
 		if !safeIdentRe.MatchString(table) {
 			return fmt.Errorf("invalid table %q", table)
 		}
-		out, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", source, "-tAc",
+		out, err := s.ExecOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", source, "-tAc",
 			fmt.Sprintf("SELECT to_regclass('public.%s') IS NOT NULL", table))
 		if err != nil {
 			return fmt.Errorf("selective source table check %q failed: %w", table, err)
@@ -791,7 +791,7 @@ func (s *Service) restoreTarget(ctx context.Context, primary, target, mode strin
 		// references a selected table and is not selected fails the TRUNCATE instead of being
 		// emptied (startDataClone refuses such a selection up front), and any failure leaves
 		// the target as it was.
-		_, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-v", "ON_ERROR_STOP=1",
+		_, err := s.ExecOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-v", "ON_ERROR_STOP=1",
 			"--single-transaction",
 			"-c", fmt.Sprintf("TRUNCATE TABLE %s;", strings.Join(qualified, ", ")),
 			"-f", dataCloneRemoteDump)
@@ -801,21 +801,21 @@ func (s *Service) restoreTarget(ctx context.Context, primary, target, mode strin
 	} else {
 		// Full clone dumps may include non-public schemas (market / data_ops / …).
 		// Dropping only public leaves those schemas and CREATE SCHEMA in the dump fails.
-		_, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-v", "ON_ERROR_STOP=1", "-c",
+		_, err := s.ExecOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-v", "ON_ERROR_STOP=1", "-c",
 			dataCloneFullResetSQL)
 		if err != nil {
 			return err
 		}
-		_, err = s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-v", "ON_ERROR_STOP=1", "-f", dataCloneRemoteDump)
+		_, err = s.ExecOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-v", "ON_ERROR_STOP=1", "-f", dataCloneRemoteDump)
 		if err != nil {
 			return err
 		}
 	}
-	if _, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-v", "ON_ERROR_STOP=1", "-c",
+	if _, err := s.ExecOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-v", "ON_ERROR_STOP=1", "-c",
 		dataCloneOwnerSQL); err != nil {
 		return fmt.Errorf("reassign public ownership in %s: %w", target, err)
 	}
-	_, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-c", dataCloneGrantBifrostSQL)
+	_, err := s.ExecOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-c", dataCloneGrantBifrostSQL)
 	return err
 }
 
@@ -914,7 +914,7 @@ END $$;
 
 func (s *Service) verifyTarget(ctx context.Context, primary, target, source string) DataCloneVerifyResult {
 	vr := DataCloneVerifyResult{Database: target}
-	countOut, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-tAc",
+	countOut, err := s.ExecOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-tAc",
 		"SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")
 	if err != nil {
 		vr.Detail = err.Error()
@@ -926,7 +926,7 @@ func (s *Service) verifyTarget(ctx context.Context, primary, target, source stri
 		return vr
 	}
 
-	srcCountOut, _ := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", source, "-tAc",
+	srcCountOut, _ := s.ExecOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", source, "-tAc",
 		"SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")
 	var srcCount int
 	fmt.Sscanf(strings.TrimSpace(srcCountOut), "%d", &srcCount)
@@ -935,7 +935,7 @@ func (s *Service) verifyTarget(ctx context.Context, primary, target, source stri
 		return vr
 	}
 
-	leftoverOut, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-tAc",
+	leftoverOut, err := s.ExecOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-tAc",
 		dataCloneOwnerLeftoverSQL)
 	if err != nil {
 		vr.Detail = "ownership check: " + err.Error()
