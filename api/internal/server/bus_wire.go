@@ -292,7 +292,10 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 	if role.RunsAPI() {
 		g := &gate.Gate{Ledger: ledger, Tenant: rocket, Env: env, Wake: &gate.Waker{}, Logf: busLogf}
 		if subs, err := registry.LoadSubscriptions(); err == nil {
-			g.Clients = subs[relay.Tenant].Clients
+			// Every tenant's declared users: one comes and goes with its table.
+			for _, t := range subs {
+				g.Clients = append(g.Clients, t.Clients...)
+			}
 		}
 		if natsOn {
 			nc, cerr := relay.Connect(cfg.URL, relay.ReaderUser, cfg.ReaderPassword, "platform-api bus gate")
