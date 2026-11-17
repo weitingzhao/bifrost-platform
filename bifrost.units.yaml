@@ -140,6 +140,9 @@ modules:
       api/internal/config: ["api/internal/config", "config/environments.yaml"]
       api/internal/delivery: ["api/internal/delivery", "bifrost-trade-infra:k8s/cicd"]
       api/internal/devsession: ["api/internal/devsession", "config/sessions-catalog.yaml"]
+      # Reads the ruler, the ownership table and the wall tests the ruler names,
+      # and runs "go list" inside api/ to score the tree it is in.
+      api/internal/domainscore: ["api", "config/quality-ruler.json", "config/domain-ownership.json"]
       api/internal/localpath: ["api/internal/localpath"]
       api/internal/maintainer:
         - "api/internal/maintainer"

@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "source": "Owner 2026-11-16: one standard for every domain, kept in the system, scored on a schedule so a domain's number can be compared with its own earlier numbers. The items, weights and first data point (foundation, 54 of 100 at 80589bfb) are the independent review in the shared notes, brain/foundation-code-quality-review-2026-11-16.md section 9.",
+  "rules": [
+    "A score always carries this version. Scores of different versions are not compared.",
+    "Changing an item, a weight, a measure or a formula raises the version.",
+    "An item is machine (computed by api/cmd/domainscore from the code) or review (a fixed brief, a fixed sample, an independent model). The two are reported apart and never added into one number.",
+    "An item this version does not yet measure is reported as unmeasured, never as zero and never as full marks."
+  ],
+  "items": [
+    {
+      "id": "dependency_direction",
+      "label": "Boundaries and dependency direction",
+      "max": 25,
+      "by": "machine",
+      "measured": true,
+      "measures": {
+        "cycle_edges": "direct imports (production code, api/cmd assembly roots left out) from a package of this domain to a package of a domain that itself reaches this domain through imports: the edges that make two domains one piece. A package with several domains counts as the domain 'mixed'; a package with no row counts as the default domain. An import of the default domain (the base every domain stands on) is never a cycle edge of the importer; an import of a 'mixed' package is one only for the base. Between two other domains a mutual dependency counts against both.",
+        "wall": "a test named in 'walls' below exists in the code and holds this domain's cycle edges to a list that only shrinks",
+        "assigned_share": "the share of this domain's production lines that are in packages whose row says status assigned (not default-maintainer, not without a row)"
+      },
+      "formula": "direction 17 when cycle_edges is 0, otherwise 17 - ceil(cycle_edges / 2) and never under 11; plus 4 for the wall; plus 4 x assigned_share. One decimal.",
+      "fit": "at 80589bfb foundation has 12 cycle edges, no wall and an assigned share of 0.45: 11 + 0 + 1.8 = 12.8, the review's 13."
+    },
+    {
+      "id": "contracts",
+      "label": "Contracts other domains can read",
+      "max": 20,
+      "by": "machine",
+      "measured": false,
+      "measures": {
+        "interface_calls": "calls from other domains through an interface this domain declares",
+        "concrete_calls": "calls from other domains to methods of this domain's concrete types",
+        "field_accesses": "reads and writes by other domains of fields of this domain's structs",
+        "registered_share": "the share of what other domains use that is in a registered contract"
+      }
+    },
+    {
+      "id": "shared_storage",
+      "label": "Shared storage and data ownership",
+      "max": 15,
+      "by": "machine",
+      "measured": false,
+      "measures": {"tables_written_by_others": "tables this domain owns that another domain's package writes with its own SQL", "tables_read_by_others": "the same for reads"}
+    },
+    {
+      "id": "implementation",
+      "label": "Implementation inside the packages",
+      "max": 15,
+      "by": "machine",
+      "measured": false,
+      "measures": {"lint_per_kloc": "golangci-lint findings per thousand production lines", "long_functions": "functions over 150 lines", "swallowed_errors": "errors assigned to the blank identifier outside the allowed forms"}
+    },
+    {
+      "id": "tests",
+      "label": "Testability and tests",
+      "max": 15,
+      "by": "machine",
+      "measured": false,
+      "measures": {"black_box_share": "the share of top-level tests that are in an external _test package", "for_test_hooks": "exported ...ForTest functions in production code"}
+    },
+    {
+      "id": "baggage",
+      "label": "Dead code and leftovers",
+      "max": 10,
+      "by": "machine",
+      "measured": false,
+      "measures": {"test_only_exports": "exported functions and methods only tests call", "unused_exports": "exported symbols nothing uses"}
+    }
+  ],
+  "walls": {
+    "foundation": {"file": "api/internal/codeguard/foundation_wall_test.go", "test": "TestFoundationDoesNotImportTheDomainsAboveIt"}
+  }
+}

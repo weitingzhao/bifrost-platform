@@ -238,6 +238,20 @@
       "status": "assigned",
       "basis": "CI charter; 2026-11-16 scorecard of how each repository uses CI and of CI as their provider, computed from runs already read; a reading, no CI or release decisions"
     },
+    "api/internal/domainscore": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "CI charter; coordinator ruling 2026-11-16: CI is the referee that scores every domain's code against config/quality-ruler.json; a reading, no decisions"
+    },
+    "api/cmd/domainscore": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "CI charter; the command that prints the domain scores of a checkout"
+    },
     "api/internal/releasepolicy": {
       "domains": [
         "delivery"
