@@ -11,13 +11,10 @@
 
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { projectWaveStatus } from '@/lib/architecture/waveProjection'
-import type { DataLayerMigrationPhase } from './dataLayerCatalogTypes'
 import { GENERATED_DATA_LAYER_PHASES } from './migrateWaves.generated'
 
-export type { DataLayerMigrationPhase } from './dataLayerCatalogTypes'
 export const DATA_LAYER_MIGRATION_PHASES = GENERATED_DATA_LAYER_PHASES
 
-export const DATA_LAYER_VERSION = '2026-06-20'
 export const DATA_LAYER_SOURCE = 'config/migrate-waves/data-layer-k3s.yaml'
 
 export const DATA_LAYER_MIGRATE_STREAM_ID = 'data-layer-k3s'
@@ -25,59 +22,6 @@ export const DATA_LAYER_MIGRATE_STREAM_ID = 'data-layer-k3s'
 // ---------------------------------------------------------------------------
 // Redis architecture
 // ---------------------------------------------------------------------------
-
-export type RedisInstanceDef = {
-  name: string
-  roles: string
-  maxmemoryPolicy: string
-  persistence: string
-  ha: string
-}
-
-export const REDIS_INSTANCES: RedisInstanceDef[] = [
-  {
-    name: 'redis-live',
-    roles: 'R1 Realtime quotes · R2 Operator RPC · R3 Account stream · R4 Health · R5 Console logs',
-    maxmemoryPolicy: 'noeviction',
-    persistence: 'AOF appendfsync everysec',
-    ha: 'Primary + Replica + 3 Sentinel (quorum across mini-pc-a/b)',
-  },
-  {
-    name: 'redis-queue',
-    roles: 'R6 — retired (Trade Celery removed Wave 5); historical redis-queue instance archived',
-    maxmemoryPolicy: 'allkeys-lru or volatile-lru',
-    persistence: 'AOF or RDB+AOF (task results can expire)',
-    ha: 'Primary + Replica + Sentinel (same quorum)',
-  },
-]
-
-export type RedisEnvIsolationRow = {
-  environment: string
-  liveInstance: string
-  queueInstance: string
-  networkPolicy: string
-}
-
-export const REDIS_ENV_ISOLATION: RedisEnvIsolationRow[] = [
-  {
-    environment: 'prod',
-    liveInstance: 'redis-live-prod.data.svc',
-    queueInstance: 'redis-queue-prod.data.svc',
-    networkPolicy: 'Only bifrost-prod Pods egress allowed',
-  },
-  {
-    environment: 'stg',
-    liveInstance: 'redis-live-stg.data.svc',
-    queueInstance: 'redis-queue-stg.data.svc',
-    networkPolicy: 'Only bifrost-stg Pods egress allowed',
-  },
-  {
-    environment: 'dev',
-    liveInstance: 'Local (Mac docker / brew) or redis-dev.data.svc',
-    queueInstance: 'Same instance db=1 (dev simplicity)',
-    networkPolicy: 'Never writes Prod/STG Redis',
-  },
-]
 
 export type RedisDeployPrinciple = {
   dimension: string
@@ -136,23 +80,9 @@ export const DATA_SERVICES_AGENT_FLOW: string[] = [
   '7. Cursor MCP: after adding tools, reload the bifrost-platform MCP server (Settings → MCP) so get_data_freshness / trigger_data_clone / get_data_clone_status appear',
 ]
 
-export const DATA_SERVICES_MCP = {
-  getFreshness: 'get_data_freshness — GET /api/v1/cluster/data-freshness',
-  triggerClone: 'trigger_data_clone — POST /api/v1/cluster/data-clone (admin, confirm:true + confirmation_token)',
-  cloneStatus: 'get_data_clone_status — GET /api/v1/cluster/data-clone/{id}',
-  schedule: 'GET/PUT /api/v1/cluster/data-clone/schedule (default disabled; weekly optional)',
-} as const
-
 /** Freshness note — stale non-prod DBs surface in Console Postgres panel; Agent uses get_data_freshness. */
 export const DATA_FRESHNESS_NOTE =
   'Data freshness: Rocket → Cluster → Postgres → Data Freshness, or Ops TCC → Refresh DEV ledger (Agent Task data-layer-clone, bifrost_dev only). Verdict uses lag_vs_prod_days (fresh|aging|stale; not wall-clock age alone — wall_age in detail can be large while lag=0). Inner-loop cadence (Program trade-dev-inner-loop / D-IL2): prefer last_clone_at ≤7d (or on-demand) before ledger-heavy Trade UI work. If bifrost_dev/stg lag ≥ 7d (stale) or last_clone_at old, Sync from Prod (admin, both targets) or TCC Refresh DEV ledger / MCP trigger_data_clone (confirm:true; targets=["bifrost_dev"]). Aging (3–7d) is a soft warning. Live quotes ≠ PG — use redis-ib (never clone redis-live-prod → redis-dev).'
-
-/** Acceptance — Cursor MCP must list data tools after reload. */
-export const DATA_SERVICES_CURSOR_MCP_ACCEPTANCE: string[] = [
-  'mcp.json bifrost-platform → npx tsx …/mcp/platform/src/index.ts',
-  'Reload Cursor MCP after tool additions',
-  'Tools visible: get_data_freshness, trigger_data_clone, get_data_clone_status',
-]
 
 /**
  * Controlled E2E checklist (Owner-run). Agent may assist observing job/logs but must not
@@ -167,49 +97,9 @@ export const DATA_SERVICES_E2E_ACCEPTANCE: string[] = [
   'Weekly auto-clone remains disabled by default — enable only on explicit Owner request',
 ]
 
-
-// ---------------------------------------------------------------------------
-// MinIO / Object Storage (future)
-// ---------------------------------------------------------------------------
-
-export type MinioRole = {
-  purpose: string
-  bucket: string
-  consumers: string
-}
-
-export const MINIO_ROLES: MinioRole[] = [
-  { purpose: 'PG WAL archive', bucket: 's3://postgres-backup', consumers: 'CloudNativePG barman' },
-  { purpose: 'Redis RDB snapshots', bucket: 's3://redis-backup', consumers: 'CronJob redis-cli --rdb' },
-  { purpose: 'Tekton artifacts', bucket: 's3://tekton-artifacts', consumers: 'Tekton Pipeline results' },
-  { purpose: 'ML model storage (future)', bucket: 's3://models', consumers: 'Ollama / AI namespace' },
-]
-
-// ---------------------------------------------------------------------------
-// Data layer responsibility split (Redis vs PG)
-// ---------------------------------------------------------------------------
-
-export type ResponsibilitySplit = {
-  concern: string
-  redis: string
-  pg: string
-}
-
-export const DATA_RESPONSIBILITY: ResponsibilitySplit[] = [
-  { concern: 'Real-time quotes', redis: 'Source of truth (tick-level, ephemeral)', pg: 'N/A' },
-  { concern: 'Trade commands (RPC)', redis: 'Transport (Stream + ACK)', pg: 'Audit log (after execution)' },
-  { concern: 'Account positions', redis: 'Staging bus (event stream)', pg: 'Business truth (synced by Account Sync)' },
-  { concern: 'Daemon state', redis: 'Health hash (live lamp)', pg: 'Historical snapshots (status sink)' },
-  { concern: 'Strategy config', redis: 'N/A', pg: 'Source of truth (gate_safety_*, strategy_*)' },
-  { concern: 'Bars / ingest jobs', redis: 'N/A', pg: 'Golden Source ops_jobs.job_ingest (Market Data Plugin)' },
-  { concern: 'Trade history', redis: 'N/A', pg: 'Source of truth (executions, fills)' },
-]
-
 // ---------------------------------------------------------------------------
 // K3s data layer migration (spine stream data-layer-k3s)
 // ---------------------------------------------------------------------------
-
-export type DataLayerPhaseStatus = 'pending' | 'next' | 'in_progress' | 'done'
 
 export const DATA_LAYER_SESSION_CONSTRAINTS: string[] = [
   'PG hot storage: local-path on postgres node (ubt-k3s-02) — NOT nfs-hot for PGDATA',
@@ -219,20 +109,6 @@ export const DATA_LAYER_SESSION_CONSTRAINTS: string[] = [
   'Prod PG cutover requires Owner maintenance window — no parallel compose→k3s changes',
   'Remove per-namespace postgres/redis Deployments from bifrost-{dev,stg,prod} after each env cutover',
 ]
-
-/** Index of the active (recommended) phase from spine stream progress (done = completed count). */
-export function activeDataLayerPhaseIndex(ctx?: OpsContextResponse): number {
-  const stream = ctx?.tracks?.migrate?.streams.find(s => s.id === DATA_LAYER_MIGRATE_STREAM_ID)
-  if (stream == null) return 0
-  if (stream.status === 'closed' || stream.status === 'signed') return DATA_LAYER_MIGRATION_PHASES.length
-  return Math.min(Math.max(stream.done, 0), DATA_LAYER_MIGRATION_PHASES.length - 1)
-}
-
-export function activeDataLayerPhase(ctx?: OpsContextResponse): DataLayerMigrationPhase | undefined {
-  const idx = activeDataLayerPhaseIndex(ctx)
-  if (idx >= DATA_LAYER_MIGRATION_PHASES.length) return undefined
-  return DATA_LAYER_MIGRATION_PHASES[idx]
-}
 
 /** Spine appendix — phased migration queue aligned with spine stream data-layer-k3s. */
 export function formatDataLayerSpineAppendix(ctx?: OpsContextResponse): string {
@@ -283,76 +159,5 @@ export function formatDataLayerSpineAppendix(ctx?: OpsContextResponse): string {
   lines.push('')
   lines.push('### Data Services E2E (Owner-controlled)')
   for (const step of DATA_SERVICES_E2E_ACCEPTANCE) lines.push(`- ${step}`)
-  return lines.join('\n')
-}
-
-// ---------------------------------------------------------------------------
-// LLM pack
-// ---------------------------------------------------------------------------
-
-export const DATA_LAYER_RELATED_AUTHORITIES = [
-  'Live PG/Redis/MinIO readiness: Rocket → Cluster (Postgres / Redis / Issues panels)',
-  'Data Freshness + Sync from Prod: Rocket → Cluster → Postgres → Data Freshness OpsSection',
-  'MCP: get_data_freshness · trigger_data_clone · get_data_clone_status',
-  'Migrate progress: spine stream data-layer-k3s (GET /api/v1/context)',
-  'Target topology complement: k3sArchitectureCatalog.ts',
-  'Spine: config/ops-context.yaml · GET /api/v1/context',
-]
-
-/** Archived migration phase definitions — live done/total/next_task uses spine + formatDataLayerSpineAppendix(ctx). */
-export function buildDataLayerHistoricalAppendix(): string {
-  const lines: string[] = [
-    '## Historical progress (archived phase definitions — do not treat spine counts as live here)',
-    '',
-    `Spine stream: \`${DATA_LAYER_MIGRATE_STREAM_ID}\` · live progress: formatDataLayerSpineAppendix(ctx).`,
-    '',
-    'Authority: decision **D2-prime** supersedes D2 (.80 bare-metal interim).',
-    '',
-    '### Migration phases (①–⑦)',
-    ...DATA_LAYER_MIGRATION_PHASES.map(p => [
-      `${p.displayCode}. **${p.id}**: ${p.label}`,
-      `   - repo: ${p.repo}`,
-      `   - verify: ${p.verify}`,
-      ...(p.blockedBy != null ? [`   - blocked_by: ${p.blockedBy}`] : []),
-      '',
-    ]).flat(),
-  ]
-  return lines.join('\n')
-}
-
-export function buildDataLayerLlmPack(): string {
-  const lines: string[] = [
-    '# Bifrost Ops — Data Layer Architecture',
-    `# Source: ${DATA_LAYER_SOURCE} v${DATA_LAYER_VERSION}`,
-    'Live cluster + migrate progress: Rocket → Cluster / spine stream data-layer-k3s — not this catalog.',
-    '',
-    '## Redis instances (per environment)',
-    ...REDIS_INSTANCES.map(r =>
-      `- **${r.name}**: ${r.roles} | policy=${r.maxmemoryPolicy} | persist=${r.persistence} | HA=${r.ha}`),
-    '',
-    '## Redis environment isolation',
-    ...REDIS_ENV_ISOLATION.map(r =>
-      `- **${r.environment}**: live=${r.liveInstance}; queue=${r.queueInstance}; policy=${r.networkPolicy}`),
-    '',
-    '## Redis deployment principles',
-    ...REDIS_DEPLOY_PRINCIPLES.map(r => `- **${r.dimension}**: ${r.principle} — ${r.note}`),
-    '',
-    '## PostgreSQL deployment principles',
-    ...PG_DEPLOY_PRINCIPLES.map(p => `- **${p.dimension}**: ${p.principle} — ${p.note}`),
-    '',
-    '## MinIO roles',
-    ...MINIO_ROLES.map(m => `- **${m.purpose}**: ${m.bucket} → ${m.consumers}`),
-    '',
-    '## Data responsibility split (Redis vs PG)',
-    ...DATA_RESPONSIBILITY.map(d => `- **${d.concern}**: Redis=[${d.redis}] | PG=[${d.pg}]`),
-    '',
-    '## Session constraints',
-    ...DATA_LAYER_SESSION_CONSTRAINTS.map(c => `- ${c}`),
-    '',
-    '## Related authorities',
-    ...DATA_LAYER_RELATED_AUTHORITIES.map(a => `- ${a}`),
-    '',
-    buildDataLayerHistoricalAppendix(),
-  ]
   return lines.join('\n')
 }

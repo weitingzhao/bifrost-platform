@@ -21,7 +21,6 @@ import type { ClusterPlacementResponse } from '@/api/clusterTypes'
 import { NodeArchLabel } from '@/components/cluster/NodeArchLabel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { StatusLamp } from '@/components/StatusLamp'
-import { KANIKO_PIPELINE_NAMES, PLACEMENT_CATALOG_VERSION } from '@/lib/architecture/workloadPlacementCatalog'
 import type { FacilityCategory } from '@/lib/cluster/clusterCategories'
 
 interface FacilityPanelProps {
@@ -36,7 +35,7 @@ function ClusterFacilityPoolsPanel({ placement, isLoading }: FacilityPanelProps)
   return (
     <div className="flex flex-col gap-3">
       <p className="m-0 text-dense-caption text-muted-foreground">
-        Fleet facility pools (catalog v{PLACEMENT_CATALOG_VERSION}) — Rocket CI, Satellite runtime,
+        Fleet facility pools (GET /api/v1/cluster/placement) — Rocket CI, Satellite runtime,
         shared infra.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -215,6 +214,8 @@ function ClusterFacilityCiPanel({
       reason: undefined as string | undefined,
     }
   }, [pipelinesQuery.data, amd64CiPool])
+  // Kaniko pipelines = Tekton pipelines the delivery API marks with build_ready (GET /api/v1/delivery/pipelines).
+  const kanikoPipelines = pipelinesQuery.data?.pipelines.filter(p => p.build_ready != null).map(p => p.name)
 
   return (
     <div className="flex flex-col gap-3">
@@ -231,7 +232,8 @@ function ClusterFacilityCiPanel({
           <p className="m-0 text-dense-meta text-[var(--destructive)]">{deliverPreflight.reason}</p>
         )}
       <p className="m-0 text-dense-caption text-muted-foreground">
-        Kaniko pipelines: {KANIKO_PIPELINE_NAMES.join(', ')}
+        Kaniko pipelines:{' '}
+        {kanikoPipelines == null ? 'unknown' : kanikoPipelines.length > 0 ? kanikoPipelines.join(', ') : 'none'}
       </p>
       {amd64CiPool != null && (
         <p className="m-0 text-dense-meta">

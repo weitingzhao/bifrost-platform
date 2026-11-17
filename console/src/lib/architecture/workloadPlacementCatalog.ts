@@ -7,10 +7,8 @@
  * This file mirrors that contract for offline LLM packs.
  */
 
-import { NAMESPACE_ALLOCATION, type NamespaceRow } from '@/lib/architecture/k3sArchitectureCatalog'
 import type { ClusterPlacementPool, ClusterPlacementRule } from '@/api/clusterTypes'
 
-export const PLACEMENT_CATALOG_VERSION = '2026-08-10-amd64-only'
 export const PLACEMENT_CATALOG_SOURCE = 'console/src/lib/architecture/workloadPlacementCatalog.ts'
 
 /** Pool ids aligned with api/internal/placement/evaluate.go poolDefs. */
@@ -32,26 +30,13 @@ export type NodePoolDef = {
   workloadLabel?: string
   /** Capability id mirror (e.g. nfs-client) — optional metadata for LLM pack. */
   capabilityId?: string
-  status: 'live' | 'planned'
-  plannedHost?: string
 }
 
 export const NODE_POOLS: NodePoolDef[] = [
-  { id: 'amd64_ci', label: 'amd64 CI / Kaniko', arch: 'amd64', status: 'live' },
-  { id: 'amd64_general', label: 'amd64 general runtime', arch: 'amd64', status: 'live' },
-  {
-    id: 'nfs_client',
-    label: 'NFS PV clients',
-    capabilityId: 'nfs-client',
-    status: 'live',
-  },
-  {
-    id: 'gpu',
-    label: 'GPU workloads',
-    workloadLabel: 'gpu',
-    status: 'planned',
-    plannedHost: 'gpu-server',
-  },
+  { id: 'amd64_ci', label: 'amd64 CI / Kaniko', arch: 'amd64' },
+  { id: 'amd64_general', label: 'amd64 general runtime', arch: 'amd64' },
+  { id: 'nfs_client', label: 'NFS PV clients', capabilityId: 'nfs-client' },
+  { id: 'gpu', label: 'GPU workloads', workloadLabel: 'gpu' },
 ]
 
 export type PlacementRuleDef = {
@@ -123,8 +108,6 @@ export const PLACEMENT_RULES: PlacementRuleDef[] = [
   },
 ]
 
-export { NAMESPACE_ALLOCATION, type NamespaceRow }
-
 export const AMD64_CI_TASK_RUN_TEMPLATE = {
   nodeSelector: { 'kubernetes.io/arch': 'amd64' },
   tolerations: [
@@ -135,13 +118,6 @@ export const AMD64_CI_TASK_RUN_TEMPLATE = {
     },
   ],
 } as const
-
-export const KANIKO_PIPELINE_NAMES = [
-  'bifrost-deliver-stg',
-  'bifrost-deliver-platform',
-  'bifrost-build-stg',
-  'bifrost-build-frontend-stg',
-] as const
 
 export function buildPlacementLlmPack(liveSummary?: {
   reachability?: string
@@ -154,7 +130,7 @@ export function buildPlacementLlmPack(liveSummary?: {
     'Mode: Ops',
     '',
     '## Fleet facility constraints (Cluster → Facility)',
-    `Catalog: ${PLACEMENT_CATALOG_SOURCE} v${PLACEMENT_CATALOG_VERSION}`,
+    `Catalog: ${PLACEMENT_CATALOG_SOURCE}`,
     'Scope: Rocket CI, Satellite STG runtime, and shared infra — not satellite-only planning.',
     'Live SSOT: api/internal/placement/evaluate.go via GET /api/v1/cluster/placement',
     'Console: Rocket → Cluster → Categories → Facility',
@@ -174,9 +150,10 @@ export function buildPlacementLlmPack(liveSummary?: {
       )
     }
   } else {
+    // Pool status is only known from the placement API; without it, say so.
     for (const p of NODE_POOLS) {
       lines.push(
-        `- ${p.id}: ${p.label}${p.arch != null ? ` (arch=${p.arch})` : ''}${p.workloadLabel != null ? ` (workload=${p.workloadLabel})` : ''}${p.capabilityId != null ? ` (capability=${p.capabilityId})` : ''} [${p.status}]${p.plannedHost != null ? ` → planned ${p.plannedHost}` : ''}`,
+        `- ${p.id}: ${p.label}${p.arch != null ? ` (arch=${p.arch})` : ''}${p.workloadLabel != null ? ` (workload=${p.workloadLabel})` : ''}${p.capabilityId != null ? ` (capability=${p.capabilityId})` : ''} [status unknown — placement API not loaded]`,
       )
     }
   }

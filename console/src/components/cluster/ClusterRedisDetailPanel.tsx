@@ -15,7 +15,6 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { StatusLamp } from '@/components/StatusLamp'
 import { CopyChip } from '@/components/cluster/CopyChip'
-import { REDIS_INSTANCES } from '@/lib/architecture/dataLayerCatalog'
 
 interface ClusterRedisDetailPanelProps {
   redis: ClusterRedisStatusResponse | undefined
@@ -163,7 +162,7 @@ export function ClusterRedisDetailPanel({
         ) : null}
       </section>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-3">
         <OpsSection
           title="Environment isolation (R-DV1)"
           description="Separate live / queue endpoints per env @ data namespace"
@@ -199,29 +198,6 @@ export function ClusterRedisDetailPanel({
           </DenseDataTable>
         </OpsSection>
 
-        <OpsSection title="Instance roles (design)" description="Bitnami live vs queue split · phase ⑥ deploy" bodyPadding="none">
-          <DenseDataTable>
-            <DenseTableHeader>
-              <DenseTableHeadRow>
-                <DenseTableHead>Instance</DenseTableHead>
-                <DenseTableHead>Policy</DenseTableHead>
-                <DenseTableHead>HA</DenseTableHead>
-              </DenseTableHeadRow>
-            </DenseTableHeader>
-            <DenseTableBody>
-              {REDIS_INSTANCES.map(inst => (
-                <DenseTableRow key={inst.name}>
-                  <DenseTableCell>
-                    <span className="font-mono-tabular text-dense-meta">{inst.name}</span>
-                    <p className="m-0 mt-0.5 text-dense-caption text-[var(--muted-foreground)]">{inst.roles}</p>
-                  </DenseTableCell>
-                  <DenseTableCell className="text-dense-meta">{inst.maxmemoryPolicy}</DenseTableCell>
-                  <DenseTableCell className="text-dense-meta">{inst.ha}</DenseTableCell>
-                </DenseTableRow>
-              ))}
-            </DenseTableBody>
-          </DenseDataTable>
-        </OpsSection>
       </div>
 
       <RedisLanAccessSection endpoints={redis.lan_endpoints} />
