@@ -26,6 +26,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
+	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
 
@@ -325,7 +326,7 @@ func (f *stateFuzz) path(t *testing.T, pattern string) string {
 		var pool []string
 		switch p {
 		case "{kind}":
-			pool = []string{store.AssessCard, store.AssessApproval}
+			pool = []string{assessmentreadings.AssessCard, assessmentreadings.AssessApproval}
 		case "{action}":
 			pool = slices.Concat(fuzzAttemptActions, fuzzAttemptActions, []string{"accept", "state", "cancel", "lost"})
 		case "{rule_id}":

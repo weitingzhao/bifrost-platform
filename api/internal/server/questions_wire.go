@@ -16,6 +16,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -365,7 +366,7 @@ func (rt *questionRuntime) agentRuntimeUnacked() func(context.Context) ([]store.
 
 func (s *Server) wireQuestionAssessments() {
 	if s.questionRuntime != nil && s.questionRuntime.svc != nil {
-		s.questionRuntime.svc.Assessment = s.assessmentReader(store.AssessCard)
+		s.questionRuntime.svc.Assessment = s.assessmentReader(assessmentreadings.AssessCard)
 	}
 }
 

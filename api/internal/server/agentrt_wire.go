@@ -19,6 +19,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
@@ -84,7 +85,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		rt.api.ConfigurationBoundaries = s.delivery.ConfigurationBoundaries
 	}
 	if s.approvals != nil {
-		s.approvals.Assessment = s.assessmentReader(store.AssessApproval)
+		s.approvals.Assessment = s.assessmentReader(assessmentreadings.AssessApproval)
 	}
 	s.wireQuestionAssessments()
 	dsn := strings.TrimSpace(os.Getenv("AGENTRT_DSN"))

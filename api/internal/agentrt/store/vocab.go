@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 )
 
 // The kinds, fields and value checks of the vocabulary are the event log's
@@ -245,7 +246,7 @@ func init() {
 		Bodies: declaredBodies(bodies),
 		Values: fieldValues,
 		WholeValues: map[string]map[string]func(any) string{
-			"note": {"assessment_requested": badAssessmentRequest, "agentd_build": badAgentdBuild},
+			"note": {"assessment_requested": assessmentreadings.BadAssessmentRequest, "agentd_build": badAgentdBuild},
 			// Only on a pinned task (pin.go): the header the proposal came
 			// with, "" for none; recorded, granting nothing.
 			"task_proposed": {"via_session": badViaSession},

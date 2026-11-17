@@ -17,8 +17,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
+	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 )
 
 type unresponsiveAssessmentDB struct{ calls atomic.Int32 }
@@ -32,19 +32,19 @@ func (db *unresponsiveAssessmentDB) BeginTx(ctx context.Context, _ pgx.TxOptions
 // Exercise the real handlers, assessmentReader and ReadAssessment without PG.
 // Optional advice must not consume the ordinary Console read's 15s deadline.
 func TestAssessmentListsReturnWithinBudgetWhenDatabaseDoesNotRespond(t *testing.T) {
-	for _, kind := range []string{store.AssessApproval, store.AssessCard} {
+	for _, kind := range []string{assessmentreadings.AssessApproval, assessmentreadings.AssessCard} {
 		for _, count := range []int{8, 32} {
 			t.Run(fmt.Sprintf("%s/%d", kind, count), func(t *testing.T) {
 				db := &unresponsiveAssessmentDB{}
 				s := &Server{agentRuntime: &agentRuntime{api: &agentrtapi.API{DB: db}}}
 				key := "approvals"
-				if kind == store.AssessCard {
+				if kind == assessmentreadings.AssessCard {
 					key = "questions"
 				}
 				path := filepath.Join(t.TempDir(), key)
 				records := make([]any, count)
 				for i := range records {
-					if kind == store.AssessApproval {
+					if kind == assessmentreadings.AssessApproval {
 						records[i] = approvals.Approval{ID: fmt.Sprintf("a_%d", i+1), Number: i + 1,
 							Status: approvals.StatusPending, CreatedAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour),
 							Params: map[string]any{"material_digest": "unchanged"}, ParamsHash: "unchanged"}
@@ -63,7 +63,7 @@ func TestAssessmentListsReturnWithinBudgetWhenDatabaseDoesNotRespond(t *testing.
 					t.Fatal(err)
 				}
 				var handler http.HandlerFunc
-				if kind == store.AssessApproval {
+				if kind == assessmentreadings.AssessApproval {
 					s.approvals = approvals.New(path, nil)
 					s.approvals.Assessment = s.assessmentReader(kind)
 					handler = s.approvals.HandleList

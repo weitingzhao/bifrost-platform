@@ -29,8 +29,7 @@ func TestAssessmentsCannotAnswer(t *testing.T) {
 		path    string
 		imports bool // may import the question store and the approvals, to read them
 	}{
-		{"assess.go", false},
-		{"assessrequest.go", false},
+		{filepath.Join("..", "..", "assessmentreadings", "assess.go"), false},
 		{filepath.Join("..", "controller", "assess.go"), false},
 		{filepath.Join("..", "..", "server", "agentrt_assess.go"), true},
 	} {

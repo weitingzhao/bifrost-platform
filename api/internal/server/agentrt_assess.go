@@ -4,9 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentview"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // What the runtime's assessments read from the platform (TD-391,
@@ -25,7 +24,7 @@ func (s *Server) assessmentReader(kind string) func(context.Context, string) map
 			return map[string]any{"error": "assessment runtime is unavailable"}
 		}
 		return assessmentview.Read(ctx, func(ctx context.Context) (json.RawMessage, error) {
-			return store.ReadAssessment(ctx, s.agentRuntime.api.DB, kind, id)
+			return assessmentreadings.ReadAssessment(ctx, s.agentRuntime.api.DB, kind, id)
 		})
 	}
 }
