@@ -92,9 +92,22 @@ func (s *Service) Current(ctx context.Context, lane, env string) (Record, error)
 // environment's workers, the largest unnamed share of the platform's own
 // requests. Only the runs of these pipelines can make the answer unsettled.
 func (r Rules) deployingPipelines(lane, env string) string {
+	return r.pipelinesOf(func(rule Rule) bool { return rule.Deploys && rule.Lane == lane && rule.Env == env })
+}
+
+// recordedPipelines is that selector for every run the rules know: what Tick
+// records. 2026-11-17, measured on PROD: Tick read every run of the namespace
+// a hundred a page, 2,127 runs, and was the largest share of the platform's
+// LISTs of runs left (147 in ten minutes). A run Tick records is finished, so
+// Tekton has labelled it.
+func (r Rules) recordedPipelines() string {
+	return r.pipelinesOf(func(Rule) bool { return true })
+}
+
+func (r Rules) pipelinesOf(keep func(Rule) bool) string {
 	var names []string
 	for _, rule := range r.Rules {
-		if !rule.Deploys || rule.Lane != lane || rule.Env != env {
+		if !keep(rule) {
 			continue
 		}
 		if rule.Match.Pipeline == "" {

@@ -38,3 +38,28 @@ func TestDeployingPipelinesNarrowsOnlyWhatALabelCanTell(t *testing.T) {
 		}
 	}
 }
+
+// Origin: 2026-11-17 04:00 CST, the same count on PROD an hour after Current
+// was narrowed: the recorder's Tick was the largest share left, 147 LISTs of
+// PipelineRuns in ten minutes, reading all 2,127 runs a hundred a page to
+// find the few the rules know. It lists the runs of the rules' pipelines; a
+// rule that knows its runs by a name prefix cannot be told by label, and then
+// everything is listed, as before.
+func TestRecordedPipelinesIsEveryRuleOrNothing(t *testing.T) {
+	rule := func(pipeline, prefix string, deploys bool) Rule {
+		var r Rule
+		r.Match.Pipeline, r.Match.NamePrefix, r.Deploys = pipeline, prefix, deploys
+		return r
+	}
+	byLabel := Rules{Rules: []Rule{rule("bifrost-deliver-stg", "", true), rule("bifrost-build-market-data", "", false)}}
+	if got, want := byLabel.recordedPipelines(), "tekton.dev/pipeline in (bifrost-build-market-data,bifrost-deliver-stg)"; got != want {
+		t.Errorf("%q, want %q", got, want)
+	}
+	byName := Rules{Rules: append(byLabel.Rules, rule("", "pinned-", true))}
+	if got := byName.recordedPipelines(); got != "" {
+		t.Errorf("a name-prefix rule was narrowed away: %q", got)
+	}
+	if got := (Rules{}).recordedPipelines(); got != "" {
+		t.Errorf("no rules: %q", got)
+	}
+}

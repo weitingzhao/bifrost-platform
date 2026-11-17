@@ -180,7 +180,7 @@ func (s *Service) Tick(ctx context.Context) TickResult {
 		have[cms.Items[i].Name] = &cms.Items[i]
 	}
 
-	runs, err := listRuns(ctx, dyn, ns)
+	runs, err := listRunsOf(ctx, dyn, ns, s.rules.recordedPipelines())
 	if err != nil {
 		res.Errors = append(res.Errors, "list runs: "+err.Error())
 		return res
