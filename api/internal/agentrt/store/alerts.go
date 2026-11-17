@@ -15,7 +15,7 @@ import (
 // goes without the lines: whoever claimed his authority is not told it was
 // reported.
 //
-// The event is the one claims.go writes for a text that claims the Owner's
+// The event is the one coord/claims.go writes for a text that claims the Owner's
 // approval (rule approval_claim), with one body: like that one it carries no
 // text's own words. Its phrase is seatAlertPhrase, its artifact the seat's
 // report, which holds the line; line_digest tells one line from another.

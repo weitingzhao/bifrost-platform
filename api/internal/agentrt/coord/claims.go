@@ -1,4 +1,4 @@
-package store
+package coord
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/localpath"
 )
 
@@ -17,9 +18,10 @@ import (
 // approved something, or that a card or an approval is not needed, is
 // recorded as a policy_alert where it came in; nothing else changes.
 
-// approvalClaims is the closed list, in the readable form; claimPhrases is
-// it normalized, as texts are before they are searched.
-var approvalClaims = []string{
+// ApprovalClaims is the closed list, in the readable form (the vocabulary
+// names it as the values of a policy_alert's phrase); claimPhrases is it
+// normalized, as texts are before they are searched.
+var ApprovalClaims = []string{
 	"Owner 已批准", "Owner 批准了", "Owner 已经批准", "Owner 批了", "Owner 已批",
 	"Owner 已同意", "Owner 同意了", "Owner 已授权", "Owner 已签", "Owner 已确认", "Owner 点头", "Owner 放行",
 	"已获 Owner 批准", "经 Owner 批准", "甲方已批准", "甲方同意了",
@@ -32,8 +34,8 @@ var approvalClaims = []string{
 }
 
 var claimPhrases = func() []string {
-	out := make([]string, len(approvalClaims))
-	for i, p := range approvalClaims {
+	out := make([]string, len(ApprovalClaims))
+	for i, p := range ApprovalClaims {
 		out[i] = normalizeClaim(p)
 	}
 	return out
@@ -69,27 +71,27 @@ func ApprovalClaim(body []byte) (string, bool) {
 	}
 	for i, p := range claimPhrases {
 		if strings.Contains(text, p) {
-			return approvalClaims[i], true
+			return ApprovalClaims[i], true
 		}
 	}
 	return "", false
 }
 
-// alertClaim records a policy_alert on stream when body claims the Owner's
+// AlertClaim records a policy_alert on stream when body claims the Owner's
 // approval: the controller's record that a text said so, caused by the event
 // that brought the text in, and nothing more. source is where the text came
 // in (task_spec, message; since review 489 B3 also plan_note, an
 // architecture row's note, and assessment, a seat's AI assessment of a card
 // or an approval). artifact is the text's artifact, "" for a plan note's,
 // whose text is in the note its alert is caused by.
-func alertClaim(ctx context.Context, tx pgx.Tx, ev Event, cause int64, source, artifact string, body []byte) error {
+func AlertClaim(ctx context.Context, tx pgx.Tx, ev eventlog.Event, cause int64, source, artifact string, body []byte) error {
 	return alertClaimIn(ctx, tx, ev, cause, source, artifact, body)
 }
 
-// alertClaimIn is alertClaim over readings of one text (an assessment's
+// alertClaimIn is AlertClaim over readings of one text (an assessment's
 // whole report and the JSON its parser took out of it, decoded: review 491
 // B3): one alert, the first reading's phrase that claims an approval.
-func alertClaimIn(ctx context.Context, tx pgx.Tx, ev Event, cause int64, source, artifact string, bodies ...[]byte) error {
+func alertClaimIn(ctx context.Context, tx pgx.Tx, ev eventlog.Event, cause int64, source, artifact string, bodies ...[]byte) error {
 	var phrase string
 	found := false
 	for _, body := range bodies {
@@ -108,6 +110,6 @@ func alertClaimIn(ctx context.Context, tx pgx.Tx, ev Event, cause int64, source,
 		b[k] = v
 	}
 	ev.Type, ev.Actor, ev.Cause, ev.Body = "policy_alert", "controller", cause, b
-	_, err := Append(ctx, tx, ev)
+	_, err := eventlog.Append(ctx, tx, ev)
 	return err
 }

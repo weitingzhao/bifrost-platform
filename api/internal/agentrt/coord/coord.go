@@ -23,8 +23,8 @@ func NewMessageID() string { return "m_" + eventlog.NewULID(time.Now()) }
 func NewControlID() string { return "c_" + eventlog.NewULID(time.Now()) }
 
 // artifactStore stores a message's body as an artifact and returns its id;
-// claims records a text that claims an approval. Both are the store's and
-// reach this package by registration (Register).
+// claims records a text that claims an approval (AlertClaim, claims.go).
+// Both reach this package by registration from the store's init (Register).
 var (
 	artifactStore atomic.Pointer[func(ctx context.Context, tx pgx.Tx, actor, kind, mediaType string, body []byte) (string, error)]
 	claims        atomic.Pointer[func(ctx context.Context, tx pgx.Tx, ev eventlog.Event, cause int64, source, artifact string, body []byte) error]

@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 )
@@ -382,7 +383,7 @@ var fieldValues = map[string]map[string]value{
 		"host_offline", "executor_unavailable", "presence_unjudged", "presence_deferred"),
 		"source": oneOf("task_spec", "message", "seat_answer", "seat_plan", "report", "verify", "review", "attempt", "controller",
 			"plan_note", "assessment"),
-		"phrase": oneOf(append(slices.Clone(approvalClaims), seatAlertPhrase, localPathPhrase, workspaceRefPhrase, repeatedFailurePhrase,
+		"phrase": oneOf(append(slices.Clone(coord.ApprovalClaims), seatAlertPhrase, localPathPhrase, workspaceRefPhrase, repeatedFailurePhrase,
 			controllerFailingPhrase, diskLowPhrase, hostOfflinePhrase, executorUnavailablePhrase, presenceUnjudgedPhrase, presenceDeferredPhrase)...),
 		"artifact_id": artifactID, "message_id": messageID,
 		"line_digest": fingerprint},

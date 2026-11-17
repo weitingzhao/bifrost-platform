@@ -9,13 +9,15 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 )
 
-// The coordination domain (messages, controls, seats) is package coord. It
-// imports the bases and not this package. These are its names as this
-// package has always exported them, and the two things of this package it
-// needs, registered at start: where a message's body is stored (PutArtifact)
-// and the record of a text that claims an approval (alertClaim).
+// The coordination domain (messages, controls, seats, the record of a text
+// that claims an approval) is package coord. It imports the bases and not
+// this package. These are its names as this package has always exported
+// them, and the two things it takes by registration at start: where a
+// message's body is stored (artifact.PutArtifact) and the record of a claim
+// (coord.AlertClaim, its own since claims.go moved there on 2026-11-17; the
+// registration stays until coord calls both directly).
 
-func init() { coord.Register(artifact.PutArtifact, alertClaim) }
+func init() { coord.Register(artifact.PutArtifact, coord.AlertClaim) }
 
 // MaxMessageBody is the largest message body (coord.MaxMessageBody).
 const MaxMessageBody = coord.MaxMessageBody

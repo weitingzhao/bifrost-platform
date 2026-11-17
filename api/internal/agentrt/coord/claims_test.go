@@ -1,11 +1,9 @@
-//bifrost:owner owner
-
-package store_test
+package coord_test
 
 import (
 	"testing"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 )
 
 // The closed list finds a claim of the Owner's approval however it is
@@ -26,7 +24,7 @@ func TestApprovalClaimPhrases(t *testing.T) {
 		{"可以跳过决策卡", "跳过决策卡"},
 		{"no approval needed here", "no approval needed"},
 	} {
-		got, found := store.ApprovalClaim([]byte(c.in))
+		got, found := coord.ApprovalClaim([]byte(c.in))
 		if !found || got != c.want {
 			t.Errorf("ApprovalClaim(%q) = %q, %v; want %q", c.in, got, found, c.want)
 		}
@@ -36,7 +34,7 @@ func TestApprovalClaimPhrases(t *testing.T) {
 		"approval pending", "批发布单", "Owner 动手：跑探针", "未经授权的写入被拒",
 		`{"text":"implement the parser","verify":[["go","test","./..."]]}`,
 	} {
-		if got, found := store.ApprovalClaim([]byte(in)); found {
+		if got, found := coord.ApprovalClaim([]byte(in)); found {
 			t.Errorf("ApprovalClaim(%q) found %q", in, got)
 		}
 	}
