@@ -1,3 +1,5 @@
+//bifrost:owner owner
+
 package server
 
 import (

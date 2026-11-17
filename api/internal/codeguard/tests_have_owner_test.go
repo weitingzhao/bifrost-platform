@@ -198,13 +198,12 @@ func ownerBaselineErrors(without, baseline map[string]int, pkgs map[string]bool)
 // by moving to a package of one domain (usually with the code it checks,
 // when the package is split), or by its file becoming a declared flow test.
 var testsWithoutOwner = map[string]int{
-	"api/internal/agentrt/agentrtapi": 68,
-	"api/internal/agentrt/controller": 38,
-	"api/internal/agentrt/store":      171,
-	"api/internal/cluster":            143,
-	"api/internal/delivery":           181,
-	"api/internal/operatorplane":      10,
-	"api/internal/server":             205,
+	"api/internal/agentrt/agentrtapi": 26,
+	"api/internal/agentrt/controller": 17,
+	"api/internal/agentrt/store":      82,
+	"api/internal/cluster":            36,
+	"api/internal/delivery":           69,
+	"api/internal/server":             87,
 }
 
 // isTestFunc reports whether a top-level declaration is a function "go test"

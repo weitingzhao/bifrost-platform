@@ -1,3 +1,5 @@
+//bifrost:owner verification
+
 package store
 
 import (

@@ -1,3 +1,5 @@
+//bifrost:owner delivery
+
 package store
 
 import (

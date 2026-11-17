@@ -1,3 +1,5 @@
+//bifrost:owner compute
+
 package cluster
 
 import (
