@@ -15,7 +15,6 @@ import { NetworkDevicesPanel } from '@/components/network/NetworkDevicesPanel'
 import { NetworkFirewallPanel } from '@/components/network/NetworkFirewallPanel'
 import { NetworkSlaPanel } from '@/components/network/NetworkSlaPanel'
 import { useNetworkLiveProbe } from '@/hooks/useNetworkLiveProbe'
-import { NETWORK_HEALTH_PROJECTION } from '@/lib/architecture/networkConsoleProjection'
 
 function networkVerdict(
   liveProbe: ReturnType<typeof useNetworkLiveProbe>,
@@ -142,10 +141,7 @@ export function NetworkPage({ context }: { context: OpsContextResponse | undefin
         summary={verdict.summary}
         meta={
           <>
-            <span>
-              Catalog {NETWORK_HEALTH_PROJECTION.catalogVersion} ·{' '}
-              {spineLoaded ? 'spine + catalog' : 'catalog fallback'}
-            </span>
+            <span>Streams {spineLoaded ? 'from spine' : 'unknown — spine not loaded'}</span>
             <span>Live probe every 30s · L0 health/bandwidth/anomalies/SLA</span>
             {anomalyCount > 0 && <DenseTag variant="warning">{anomalyCount} alerts</DenseTag>}
           </>
@@ -155,7 +151,7 @@ export function NetworkPage({ context }: { context: OpsContextResponse | undefin
       <NetworkHealthPanel
         context={context}
         title="Probe & stream evidence"
-        description="Catalog/spine stream projection and live UniFi probe detail (GET /api/v1/network/status + audit + health, Session v2 / D9)."
+        description="Spine network streams and live UniFi probe detail (GET /api/v1/network/status + audit + health, Session v2 / D9)."
       />
 
       <NetworkSlaPanel

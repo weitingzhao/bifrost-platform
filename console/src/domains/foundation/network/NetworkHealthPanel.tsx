@@ -13,15 +13,11 @@ import {
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { useNetworkLiveProbe } from '@/hooks/useNetworkLiveProbe'
-import {
-  NETWORK_HEALTH_PROJECTION,
-  resolveNetworkStreamProjections,
-} from '@/lib/architecture/networkConsoleProjection'
 
 interface NetworkHealthPanelProps {
   context: OpsContextResponse | undefined
   onOpenNetwork?: () => void
-  /** Catalog version and the closed upgrade streams. Status hides them; history is not a live signal. */
+  /** Spine network-* infra streams. Status hides them; history is not a live signal. */
   showUpgradeRecord?: boolean
   /** Section title — Control Room keeps Health; Ground Network page uses evidence wording. */
   title?: string
@@ -49,11 +45,11 @@ export function NetworkHealthPanel({
   onOpenNetwork,
   showUpgradeRecord = true,
   title = 'Network Health — ground floor (LAN / UniFi)',
-  description = 'Catalog + spine projection plus live UniFi probe via GET /api/v1/network/status + audit + health (Session v2 per D9).',
+  description = 'Spine network streams plus live UniFi probe via GET /api/v1/network/status + audit + health (Session v2 per D9).',
 }: NetworkHealthPanelProps) {
-  const streams = resolveNetworkStreamProjections(context)
+  // Streams come only from the spine (GET /api/v1/context); nothing is filled in when it is not loaded.
   const spineLoaded = context?.tracks?.infra != null
-  const { firewall } = NETWORK_HEALTH_PROJECTION
+  const streams = (context?.tracks?.infra?.streams ?? []).filter(s => s.id.startsWith('network-'))
   const liveProbe = useNetworkLiveProbe()
 
   const headerActions =
@@ -72,15 +68,7 @@ export function NetworkHealthPanel({
       overflow="visible"
     >
       <div className="mb-3 flex flex-wrap items-center gap-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-        {showUpgradeRecord && (
-          <>
-            <DenseTag variant="info">{NETWORK_HEALTH_PROJECTION.status}</DenseTag>
-            <span>
-              Catalog <strong>{NETWORK_HEALTH_PROJECTION.catalogVersion}</strong>
-            </span>
-            <span>· Projection {spineLoaded ? 'spine + catalog' : 'catalog fallback'}</span>
-          </>
-        )}
+        {showUpgradeRecord && <span>Streams {spineLoaded ? 'from spine' : 'unknown — spine not loaded'}</span>}
         <DenseTag variant={liveProbeTagVariant(liveProbe.probeReach)}>
           Live probe {liveProbe.isLoading ? '…' : liveProbe.probeReach.toUpperCase()}
         </DenseTag>
@@ -110,53 +98,36 @@ export function NetworkHealthPanel({
           </p>
         )}
         <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-          {NETWORK_HEALTH_PROJECTION.liveProbeNote}
+          Live probe polls platform-api every 30s — requires UNIFI_HOST/USER/PASS on platform-api host.
         </p>
       </div>
 
-      {showUpgradeRecord && (
+      {showUpgradeRecord && streams.length > 0 && (
         <DenseDataTable>
           <DenseTableHeader>
             <DenseTableHeadRow>
               <DenseTableHead>Stream</DenseTableHead>
               <DenseTableHead className="text-right">Progress</DenseTableHead>
-              <DenseTableHead>Source</DenseTableHead>
               <DenseTableHead>Note</DenseTableHead>
             </DenseTableHeadRow>
           </DenseTableHeader>
           <DenseTableBody>
             {streams.map(row => (
-              <DenseTableRow key={row.stream}>
+              <DenseTableRow key={row.id}>
                 <DenseTableCell className="font-medium whitespace-nowrap">
                   <StatusLamp value={streamReach(row.done, row.total)} kind="reach" />
-                  <span className="ml-2 font-mono text-xs">{row.stream}</span>
+                  <span className="ml-2 font-mono text-xs">{row.id}</span>
                 </DenseTableCell>
                 <DenseTableCell className="text-right font-mono tabular-nums">
                   {row.done}/{row.total}
                 </DenseTableCell>
-                <DenseTableCell>
-                  <DenseTag variant={row.source === 'spine' ? 'success' : 'neutral'}>{row.source}</DenseTag>
-                </DenseTableCell>
-                <DenseTableCell className="text-[var(--muted-foreground)]">{row.note}</DenseTableCell>
+                <DenseTableCell className="text-[var(--muted-foreground)]">{row.note ?? row.label}</DenseTableCell>
               </DenseTableRow>
             ))}
           </DenseTableBody>
         </DenseDataTable>
       )}
 
-      <div className="mt-4 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
-        <p className="m-0 text-[var(--text-dense-label)] font-medium">
-          ZBF firewall applied · spine {firewall.spineDecision}
-        </p>
-        <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          {firewall.appliedAt} · {firewall.zoneCount} Bifrost zones · {firewall.policyCount} policies ·{' '}
-          {firewall.actuationPath}
-        </p>
-        <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Drift audit: <code className="font-mono text-xs">{firewall.auditScript}</code> vs{' '}
-          <code className="font-mono text-xs">FIREWALL_RULES</code>
-        </p>
-      </div>
     </OpsSection>
   )
 }

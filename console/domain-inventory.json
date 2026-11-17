@@ -1901,10 +1901,11 @@
       "imports": [
         "console/src/api/opsContextTypes.ts",
         "console/src/components/layout",
-        "console/src/hooks/useNetworkLiveProbe.ts",
-        "console/src/lib/architecture"
+        "console/src/hooks/useNetworkLiveProbe.ts"
       ],
-      "test_imports": [],
+      "test_imports": [
+        "console/src/api/opsContextTypes.ts"
+      ],
       "external_imports": [
         "@bifrost/ui",
         "@testing-library/react",
@@ -2795,8 +2796,6 @@
         "console/src/lib/architecture/dualFlywheelVisionCatalog.ts",
         "console/src/lib/architecture/k3sArchitectureCatalog.ts",
         "console/src/lib/architecture/migrateWaves.generated.ts",
-        "console/src/lib/architecture/networkConsoleProjection.ts",
-        "console/src/lib/architecture/networkUpgradeCatalog.ts",
         "console/src/lib/architecture/opsToolRackCatalog.ts",
         "console/src/lib/architecture/opsUiActuationSignoffChecklist.ts",
         "console/src/lib/architecture/postQaOwnerGatePack.ts",
@@ -3885,8 +3884,7 @@
         "console/src/components/layout",
         "console/src/components/network",
         "console/src/domains/foundation/network",
-        "console/src/hooks/useNetworkLiveProbe.ts",
-        "console/src/lib/architecture"
+        "console/src/hooks/useNetworkLiveProbe.ts"
       ],
       "test_imports": [],
       "external_imports": [
