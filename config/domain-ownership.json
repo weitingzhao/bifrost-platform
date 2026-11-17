@@ -1122,6 +1122,13 @@
       ],
       "status": "assigned",
       "basis": "2026-11-16 cluster split, first block: the readings of the elastic compute domains of service readiness (GPU / AI, data warehouse) and the eight functions that decide standby against missing compute, moved from cluster as they were. cluster gathers the inputs and binds this package (cluster.BindComputeReadings); it imports only probe and resourceview."
+    },
+    "api/internal/agentrt/strictjson": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-17 moved out of store (plan core wall step 5, shared notes duty/from-biz-2026-11-17-plan-core-wall.md): store's strictview.go, 30 lines relocated unchanged: the reading of a JSON document into a struct that refuses a field the struct does not name (Value, JSON) and the shape of a 40- or 64-digit digest (SHAPattern); it knows no document and no domain, imports only canon and eventlog, and is read by the plan code (which may not import store), by store's vocabulary and by store's wiring of external work, for which store keeps the old names as aliases. Placed in foundation by the business-alignment lane; the foundation domain's owner has not ruled on the placement or the name"
     }
   },
   "frontend": {

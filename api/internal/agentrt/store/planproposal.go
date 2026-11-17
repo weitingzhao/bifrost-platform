@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"strings"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -44,7 +45,7 @@ type Card struct {
 	Urgency                      string
 	SameByKey                    bool
 	// ByRule: a card-auto-answer rule in force answers a card of its kind
-	// (ruleAnswers, TD-393), so the question store may take it past its
+	// (RuleAnswers, TD-393), so the question store may take it past its
 	// quotas: the rule, not the Owner, answers it within seconds.
 	ByRule bool
 	// WorkID is a business issue's number (BI-<n>); Link, LinkText its page (issuecard.go).
@@ -72,7 +73,7 @@ func ProposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 	if err := checkChanges(root, reason, changes); err != nil {
 		return nil, err
 	}
-	doc, err := changesDoc(changes)
+	doc, err := ChangesDoc(changes)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +114,7 @@ func proposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 		if err := lockStream(ctx, tx, PlanStream(root)); err != nil {
 			return nil, err
 		}
-		rule, err := planRuleInForce(ctx, tx)
+		rule, err := PlanRuleInForce(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
@@ -154,9 +155,9 @@ func proposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 		}
 		// The question store cuts the title and checks the body by its own
 		// rules (review 182 B2); a card that does not fit comes back invalid.
-		card := Card{Key: canonKey(w.Actor, key), Title: "Plan change to " + root + ": " + firstLine(reason),
+		card := Card{Key: CanonKey(w.Actor, key), Title: "Plan change to " + root + ": " + firstLine(reason),
 			Body: cardBody(root, reason, changes)}
-		if card.ByRule, err = ruleAnswers(ctx, tx, CardPlanChange, ""); err != nil {
+		if card.ByRule, err = RuleAnswers(ctx, tx, CardPlanChange, ""); err != nil {
 			return nil, err
 		}
 		// What finishes a plan step is the Owner's to adopt: a view that binds
@@ -207,7 +208,7 @@ func tryChanges(ctx context.Context, tx pgx.Tx, root string, changes []PlanChang
 	return err
 }
 
-func canonKey(actor, key string) string {
+func CanonKey(actor, key string) string {
 	sum, _ := canon.Sum(map[string]any{"actor": actor, "key": key, "route": "plan/proposals"})
 	return strings.TrimPrefix(sum, "sha256:")
 }
@@ -223,4 +224,11 @@ func cardBody(root, reason string, changes []PlanChange) string {
 		items = append(items, c)
 	}
 	return planreadings.ChangeCardBody(root, reason, items)
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

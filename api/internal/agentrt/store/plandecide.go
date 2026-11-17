@@ -25,8 +25,8 @@ type pendingChange struct {
 	changes  []PlanChange
 }
 
-// streamRoot is the plan root a stream belongs to, or "".
-func streamRoot(stream string) string {
+// StreamRoot is the plan root a stream belongs to, or "".
+func StreamRoot(stream string) string {
 	if root, ok := strings.CutPrefix(stream, "plan:"); ok {
 		return root
 	}
@@ -126,7 +126,7 @@ func decidePending(ctx context.Context, db DB, question func(context.Context, st
 				if serr := r.Scan(&p.event, &p.stream, &p.question, &doc); serr != nil {
 					return p, serr
 				}
-				p.root = streamRoot(p.stream)
+				p.root = StreamRoot(p.stream)
 				return p, json.Unmarshal([]byte(doc), &p.changes)
 			})
 			return cerr
@@ -177,8 +177,8 @@ func decide(ctx context.Context, db DB, p pendingChange, decision, reason string
 	hook("plan change deciding", p.stream)
 	did := false
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		artifact, isImport := importOf(p.changes)
-		log, isRecorder, err := recorderImportLog(p.changes)
+		artifact, isImport := ImportOf(p.changes)
+		log, isRecorder, err := RecorderImportLog(p.changes)
 		if err != nil {
 			return err
 		}
@@ -226,7 +226,7 @@ func decide(ctx context.Context, db DB, p pendingChange, decision, reason string
 				return err
 			}
 		case decision == "applied" && isRecorder:
-			if err = decideRecorderImportLog(ctx, tx, log, ev.EventID); err != nil {
+			if err = DecideRecorderImportLog(ctx, tx, log, ev.EventID); err != nil {
 				return err
 			}
 		case decision == "applied":

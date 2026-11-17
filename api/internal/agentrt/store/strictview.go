@@ -1,30 +1,14 @@
 package store
 
 import (
-	"bytes"
-	"encoding/json"
-	"regexp"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/strictjson"
 )
 
-var shaPattern = regexp.MustCompile(`^[0-9a-f]{40}([0-9a-f]{24})?$`)
+// The strict reading of a JSON document and the shape of a digest are
+// package strictjson's (they were this file); these are its names as this
+// package has always written them, for the vocabulary (vocab.go), the
+// external work's writes (externalwork.go) and the wiring of the plan
+// code's ports (portsbind.go).
+var shaPattern = strictjson.SHAPattern
 
-func strictViewValue(v any, out any) error {
-	raw, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	return strictViewJSON(raw, out)
-}
-func strictViewJSON(raw []byte, out any) error {
-	if _, err := canon.Parse(raw); err != nil {
-		return invalid("invalid JSON: %v", err)
-	}
-	d := json.NewDecoder(bytes.NewReader(raw))
-	d.DisallowUnknownFields()
-	if err := d.Decode(out); err != nil {
-		return invalid("invalid fields: %v", err)
-	}
-	return nil
-}
+func strictViewValue(v any, out any) error { return strictjson.Value(v, out) }

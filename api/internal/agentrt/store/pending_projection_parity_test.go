@@ -39,7 +39,7 @@ func frozenPendingProjection(list []frozenPending, limit int, now time.Time, res
 			it["also_refs"] = append(it["also_refs"].([]string), fmt.Sprint(p.event))
 			continue
 		}
-		root := streamRoot(p.stream)
+		root := StreamRoot(p.stream)
 		title, options := "Plan change to "+root+": "+firstLine(p.reason), []string{CardApply, CardRefuse}
 		after := "Apply: the controller lands the change on its next pass (about 15 seconds). Do not apply: the plan stays as it is."
 		var blocks any
@@ -49,7 +49,7 @@ func frozenPendingProjection(list []frozenPending, limit int, now time.Time, res
 			title, options = "Import recorder log "+work+": "+firstLine(p.reason), []string{RecorderApply, RecorderRefuse}
 			after = "Import: the controller imports the log on its next pass (about 15 seconds). Do not import: nothing is written."
 			blocks = map[string]any{"unknown": "a recorder log is history; no plan or mission waits on it"}
-		} else if _, isImport := importOf(p.changes); isImport {
+		} else if _, isImport := ImportOf(p.changes); isImport {
 			// An import adds a plan no mission's work sits on yet.
 			title, options = "Import plan "+root+": "+firstLine(p.reason), []string{ImportApply, ImportRefuse}
 			after = "Import: the controller imports the plan on its next pass (about 15 seconds). Do not import: nothing is written."
@@ -115,7 +115,7 @@ func TestPendingProjectionFrozenParity(t *testing.T) {
 						kind = "recorder"
 					}
 					old = append(old, p)
-					in = append(in, planreadings.PendingNeed{Event: p.event, Stream: p.stream, Root: streamRoot(p.stream), Work: strings.TrimPrefix(p.stream, RecorderStream("")), Reason: p.reason, Question: p.question, At: p.at, Kind: kind, Payload: p.changes})
+					in = append(in, planreadings.PendingNeed{Event: p.event, Stream: p.stream, Root: StreamRoot(p.stream), Work: strings.TrimPrefix(p.stream, RecorderStream("")), Reason: p.reason, Question: p.question, At: p.at, Kind: kind, Payload: p.changes})
 				}
 				var traceOld, traceNew []string
 				errSentinel := errors.New("read failed")

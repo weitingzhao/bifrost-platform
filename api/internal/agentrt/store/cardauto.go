@@ -105,7 +105,7 @@ func ensureRuleNoteOn(ctx context.Context, tx pgx.Tx, on cardOn, by answerer, qu
 type answerer struct{ who, actor, rule string }
 
 func answerOf(q seenfacts.Question) answerer {
-	if q.Channel == ruleAnswerChannel && q.AnsweredBy != "" {
+	if q.Channel == RuleAnswerChannel && q.AnsweredBy != "" {
 		return answerer{who: "the " + q.AnsweredBy, actor: "controller", rule: q.AnsweredBy}
 	}
 	return answerer{who: "the Owner", actor: "owner"}

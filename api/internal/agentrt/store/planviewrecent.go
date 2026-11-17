@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/strictjson"
 )
 
 type viewRecentCursor struct {
@@ -29,7 +30,7 @@ func planViewRecent(ctx context.Context, tx pgx.Tx, root, cursor string, now tim
 		if err != nil {
 			return nil, "", "", invalid("invalid recent cursor")
 		}
-		if err = strictViewJSON(raw, &c); err != nil {
+		if err = strictjson.JSON(raw, &c); err != nil {
 			return nil, "", "", err
 		}
 		if c.Root != root || len(c.Streams) > 2000 || c.Before < 1 {

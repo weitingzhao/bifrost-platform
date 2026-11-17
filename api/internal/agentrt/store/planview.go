@@ -12,6 +12,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/strictjson"
 )
 
 type viewAdoption = planreadings.Adoption
@@ -40,7 +41,7 @@ func viewArtifact(ctx context.Context, tx pgx.Tx, id string) (*planview.Document
 // All adopted roots are included: incoming edges must be revalidated too.
 func lockPlanViewChanges(ctx context.Context, tx pgx.Tx, root string, cs []PlanChange) error {
 	if len(cs) != 1 || cs[0].Op != "adopt_plan_view" {
-		return lockTree(ctx, tx, root)
+		return LockTree(ctx, tx, root)
 	}
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742119)`); err != nil {
 		return err
@@ -56,18 +57,18 @@ func lockPlanViewChanges(ctx context.Context, tx pgx.Tx, root string, cs []PlanC
 	slices.Sort(roots)
 	roots = slices.Compact(roots)
 	for _, r := range roots {
-		if err = lockTree(ctx, tx, r); err != nil {
+		if err = LockTree(ctx, tx, r); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-const viewTree = `WITH RECURSIVE tree AS (SELECT plan_node_id FROM agentrt.plan_node WHERE plan_node_id=$1 UNION ALL SELECT n.plan_node_id FROM agentrt.plan_node n JOIN tree t ON n.parent_plan_node_id=t.plan_node_id) `
+const ViewTree = `WITH RECURSIVE tree AS (SELECT plan_node_id FROM agentrt.plan_node WHERE plan_node_id=$1 UNION ALL SELECT n.plan_node_id FROM agentrt.plan_node n JOIN tree t ON n.parent_plan_node_id=t.plan_node_id) `
 
-func devTree(ctx context.Context, tx pgx.Tx, root string) error {
+func DevTree(ctx context.Context, tx pgx.Tx, root string) error {
 	var bad bool
-	err := tx.QueryRow(ctx, viewTree+`SELECT EXISTS(SELECT 1 FROM tree JOIN agentrt.plan_node n USING(plan_node_id) JOIN agentrt.mission m USING(mission_id) WHERE m.tenant<>'dev')`, root).Scan(&bad)
+	err := tx.QueryRow(ctx, ViewTree+`SELECT EXISTS(SELECT 1 FROM tree JOIN agentrt.plan_node n USING(plan_node_id) JOIN agentrt.mission m USING(mission_id) WHERE m.tenant<>'dev')`, root).Scan(&bad)
 	if err != nil {
 		return err
 	}
@@ -84,7 +85,7 @@ func checkViewBinding(ctx context.Context, tx pgx.Tx, node, mission string) erro
 	if err := tx.QueryRow(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id=$1 FOR SHARE`, node).Scan(&one); err != nil {
 		return err
 	}
-	root, err := rootOf(ctx, tx, node)
+	root, err := RootOf(ctx, tx, node)
 	if err != nil {
 		return err
 	}
@@ -123,7 +124,7 @@ func adoptPlanView(ctx context.Context, tx pgx.Tx, actor, root string, decision 
 	}
 	// Lock every existing node, including unclassified steps. A concurrent task
 	// proposal already holds its step FOR SHARE and must finish before this scan.
-	rows, err := tx.Query(ctx, viewTree+`SELECT n.plan_node_id,COALESCE(n.parent_plan_node_id,''),n.label FROM tree JOIN agentrt.plan_node n USING(plan_node_id) ORDER BY n.plan_node_id FOR UPDATE OF n`, root)
+	rows, err := tx.Query(ctx, ViewTree+`SELECT n.plan_node_id,COALESCE(n.parent_plan_node_id,''),n.label FROM tree JOIN agentrt.plan_node n USING(plan_node_id) ORDER BY n.plan_node_id FOR UPDATE OF n`, root)
 	if err != nil {
 		return err
 	}
@@ -174,7 +175,7 @@ func adoptPlanView(ctx context.Context, tx pgx.Tx, actor, root string, decision 
 			return invalid("parent mismatch for %s", item.Node)
 		}
 	}
-	if err = devTree(ctx, tx, root); err != nil {
+	if err = DevTree(ctx, tx, root); err != nil {
 		return err
 	}
 	docs := map[string]*planview.Document{root: doc}
@@ -184,7 +185,7 @@ func adoptPlanView(ctx context.Context, tx pgx.Tx, actor, root string, decision 
 			if err != nil {
 				return err
 			}
-			if err = devTree(ctx, tx, r); err != nil {
+			if err = DevTree(ctx, tx, r); err != nil {
 				return err
 			}
 		}
@@ -217,24 +218,24 @@ func jsonObject(v any) (map[string]any, error) {
 }
 
 // Subprotocols are closed even when an internal caller uses Append directly.
-func checkViewNote(body map[string]any) error {
+func CheckViewNote(body map[string]any) error {
 	if raw, ok := body["plan_observation_pass"]; ok {
 		var p planObservationPass
-		if err := strictViewValue(raw, &p); err != nil {
+		if err := strictjson.Value(raw, &p); err != nil {
 			return err
 		}
 		return p.validate()
 	}
 	if raw, ok := body["plan_observation"]; ok {
 		var n planObservation
-		if err := strictViewValue(raw, &n); err != nil {
+		if err := strictjson.Value(raw, &n); err != nil {
 			return err
 		}
 		return n.validate()
 	}
 	if raw, ok := body["plan_view"]; ok {
 		var a viewAdoption
-		if err := strictViewValue(raw, &a); err != nil {
+		if err := strictjson.Value(raw, &a); err != nil {
 			return err
 		}
 		if a.V != 1 || a.Kind != "agentrt.plan_view/v1" || a.Root == "" || a.Tenant != "dev" || a.Version < 1 || a.Artifact == "" || len(a.Nodes) == 0 {
@@ -242,7 +243,7 @@ func checkViewNote(body map[string]any) error {
 		}
 	}
 	if raw, ok := body["external_work"]; ok {
-		return checkExternalNote(raw)
+		return CheckExternalNote(raw)
 	}
 	return nil
 }
@@ -271,7 +272,7 @@ func validateViewArtifact(kind string, raw []byte) error {
 			return invalid("plan view artifact: %v", err)
 		}
 	case "agentrt.external_work/v1":
-		if err := checkExternalDescription(raw); err != nil {
+		if err := CheckExternalDescription(raw); err != nil {
 			return err
 		}
 	}

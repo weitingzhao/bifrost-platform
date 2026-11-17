@@ -92,6 +92,10 @@ func LoopAlertOpen(ctx context.Context, db DB, loop string) (bool, error) {
 	return open, err
 }
 
+// The plan code's Progress reads the failing loops through its port
+// (planports.go); this file is their provider and binds it.
+func init() { BindPlanLoops(LoopPorts{Failing: failingLoops}) }
+
 func failingLoops(ctx context.Context, tx pgx.Tx) ([]map[string]any, error) {
 	return loopreadings.Failing(ctx, tx, ControllerLoops, func(ctx context.Context, tx pgx.Tx, loop string) (loopreadings.Record, error) {
 		return loopreadings.Latest(ctx, tx, ControllerStream, lineDigest(loop), loop+passesAgain)

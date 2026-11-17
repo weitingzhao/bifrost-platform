@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/strictjson"
 )
 
 // Evidence is a set selected at signing; a reordered retry has the same body.
@@ -18,7 +19,7 @@ func signoffEvidence(ids []string) ([]string, error) {
 	ids = slices.Clone(ids)
 	slices.Sort(ids)
 	for i, id := range ids {
-		if !strings.HasPrefix(id, "sha256:") || len(id) != 71 || !shaPattern.MatchString(id[7:]) || (i > 0 && ids[i-1] == id) {
+		if !strings.HasPrefix(id, "sha256:") || len(id) != 71 || !strictjson.SHAPattern.MatchString(id[7:]) || (i > 0 && ids[i-1] == id) {
 			return nil, invalid("invalid or duplicate signoff evidence artifact id")
 		}
 	}

@@ -28,7 +28,7 @@ func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, er
 		changes                  []PlanChange
 	}
 	var list []pending
-	err := planreadings.PendingChanges(ctx, tx, now, pendingChangeWindow, pendingChangeLimit, func(observed planreadings.PendingChange) error {
+	err := planreadings.PendingChanges(ctx, tx, now, pendingChangeWindow, PendingChangeLimit, func(observed planreadings.PendingChange) error {
 		p := pending{event: observed.Event, stream: observed.Stream, reason: observed.Reason, question: observed.Question, at: observed.At}
 		if err := json.Unmarshal([]byte(observed.Changes), &p.changes); err != nil {
 			return err
@@ -43,18 +43,18 @@ func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, er
 	inputs := make([]planreadings.PendingNeed, 0, len(list))
 	for _, p := range list {
 		kind := "change"
-		_, isRecorder, err := recorderImportLog(p.changes)
+		_, isRecorder, err := RecorderImportLog(p.changes)
 		if err != nil {
 			return nil, err
 		}
 		if isRecorder {
 			kind = "recorder"
-		} else if _, ok := importOf(p.changes); ok {
+		} else if _, ok := ImportOf(p.changes); ok {
 			kind = "import"
 		}
-		inputs = append(inputs, planreadings.PendingNeed{Event: p.event, Stream: p.stream, Root: streamRoot(p.stream), Work: strings.TrimPrefix(p.stream, recorderStreamPrefix), Reason: p.reason, Question: p.question, At: p.at, Kind: kind, Payload: p.changes})
+		inputs = append(inputs, planreadings.PendingNeed{Event: p.event, Stream: p.stream, Root: StreamRoot(p.stream), Work: strings.TrimPrefix(p.stream, RecorderStreamPrefix), Reason: p.reason, Question: p.question, At: p.at, Kind: kind, Payload: p.changes})
 	}
-	return planreadings.ProjectPendingNeeds(inputs, pendingChangeLimit, now, planreadings.NeedLabels{Apply: CardApply, Refuse: CardRefuse, RecorderApply: recorderApplyLabel, RecorderRefuse: recorderRefuseLabel, ImportApply: ImportApply, ImportRefuse: ImportRefuse}, func(raw any) (any, error) { return changeBlocks(ctx, tx, raw.([]PlanChange)) }, func(listed map[string]map[string]any) ([]planreadings.WaitingCard, bool, error) {
+	return planreadings.ProjectPendingNeeds(inputs, PendingChangeLimit, now, planreadings.NeedLabels{Apply: CardApply, Refuse: CardRefuse, RecorderApply: RecorderApplyLabel, RecorderRefuse: RecorderRefuseLabel, ImportApply: ImportApply, ImportRefuse: ImportRefuse}, func(raw any) (any, error) { return ChangeBlocks(ctx, tx, raw.([]PlanChange)) }, func(listed map[string]map[string]any) ([]planreadings.WaitingCard, bool, error) {
 		cards, more, err := missionCards(ctx, tx, now, listed)
 		var out []planreadings.WaitingCard
 		for _, c := range cards {
@@ -80,11 +80,11 @@ type missionCard struct {
 // their card, oldest first, at most the bound (more says there were more),
 // leaving out a card already listed.
 func missionCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[string]map[string]any) ([]missionCard, bool, error) {
-	list, err := planreadings.WaitingMissions(ctx, tx, pendingChangeLimit)
+	list, err := planreadings.WaitingMissions(ctx, tx, PendingChangeLimit)
 	if err != nil {
 		return nil, false, err
 	}
-	projected, more := planreadings.ProjectWaitingCards(list, pendingChangeLimit, now, listed, MissionStart, MissionNotStart)
+	projected, more := planreadings.ProjectWaitingCards(list, PendingChangeLimit, now, listed, MissionStart, MissionNotStart)
 	var cards []missionCard
 	for _, c := range projected {
 		cards = append(cards, missionCard{at: c.At, question: c.Question, it: c.Item})
@@ -92,7 +92,7 @@ func missionCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[stri
 	return cards, more, nil
 }
 
-// changeBlocks is what a waiting plan change holds up (SPEC §2.1), from one
+// ChangeBlocks is what a waiting plan change holds up (SPEC §2.1), from one
 // set: the steps it touches (a node that is a step, or the steps under a
 // node that is an item: an added node's parent, a retitled or re-ruled node,
 // a rebound step, a moved task's target) and the tasks it moves. Its
@@ -100,7 +100,7 @@ func missionCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[stri
 // mission), of the moved tasks (where they come from) and the missions a
 // change binds to; its unfinished tasks are those on these steps and the
 // moved ones. Unknown when it touches no mission.
-func changeBlocks(ctx context.Context, tx pgx.Tx, changes []PlanChange) (any, error) {
+func ChangeBlocks(ctx context.Context, tx pgx.Tx, changes []PlanChange) (any, error) {
 	var nodes, bound []string
 	for _, c := range changes {
 		switch c.Op {

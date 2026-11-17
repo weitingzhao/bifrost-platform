@@ -34,8 +34,8 @@ const (
 	ImportRefuse = "Do not import it"
 )
 
-// importOf is the request artifact of a proposal that is an import.
-func importOf(changes []PlanChange) (string, bool) {
+// ImportOf is the request artifact of a proposal that is an import.
+func ImportOf(changes []PlanChange) (string, bool) {
 	if len(changes) == 1 && changes[0].Op == OpImport && changes[0].Artifact != "" {
 		return changes[0].Artifact, true
 	}
@@ -62,7 +62,7 @@ func ProposePlanImport(ctx context.Context, db DB, w Writer, key, reason string,
 		if err := ensureWriter(ctx, tx, w, true); err != nil {
 			return nil, err
 		}
-		if err := lockTree(ctx, tx, root); err != nil {
+		if err := LockTree(ctx, tx, root); err != nil {
 			return nil, err
 		}
 		var exists bool
@@ -84,10 +84,10 @@ func ProposePlanImport(ctx context.Context, db DB, w Writer, key, reason string,
 			return nil, err
 		}
 		if waiting != nil {
-			if waiting.artifact != reqID {
-				return nil, invalid("another import of %s (%s) waits on the Owner's card %s", root, waiting.artifact, waiting.question)
+			if waiting.Artifact != reqID {
+				return nil, invalid("another import of %s (%s) waits on the Owner's card %s", root, waiting.Artifact, waiting.Question)
 			}
-			return map[string]any{"proposal_event_id": waiting.event, "decision": "", "question_id": waiting.question,
+			return map[string]any{"proposal_event_id": waiting.Event, "decision": "", "question_id": waiting.Question,
 				"request_artifact_id": reqID, "waiting": "the Owner decides a plan import"}, nil
 		}
 		// Tried whole, with every deferred check made now, and rolled back.
@@ -97,19 +97,19 @@ func ProposePlanImport(ctx context.Context, db DB, w Writer, key, reason string,
 		if _, err = artifact.PutArtifact(ctx, tx, w.Actor, "other", "application/json", doc); err != nil {
 			return nil, err
 		}
-		cardKey := canonKey(w.Actor, "import:"+key)
+		cardKey := CanonKey(w.Actor, "import:"+key)
 		body := importCardBody(w, cardKey, reason, req, reqID)
-		n, err := cardBodyBytes(body)
+		n, err := CardBodyBytes(body)
 		if err != nil {
 			return nil, err
 		}
-		if n > questionBodyLimit {
-			return nil, invalid("the Owner's card for this import would be %d bytes, more than the question store's %d", n, questionBodyLimit)
+		if n > QuestionBodyLimit {
+			return nil, invalid("the Owner's card for this import would be %d bytes, more than the question store's %d", n, QuestionBodyLimit)
 		}
 		if ask == nil {
 			return nil, fmt.Errorf("%w: no question store is configured", ErrAsk)
 		}
-		byRule, err := ruleAnswers(ctx, tx, CardPlanImport, "")
+		byRule, err := RuleAnswers(ctx, tx, CardPlanImport, "")
 		if err != nil {
 			return nil, err
 		}
@@ -122,7 +122,7 @@ func ProposePlanImport(ctx context.Context, db DB, w Writer, key, reason string,
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrAsk, err)
 		}
-		changes, err := changesDoc([]PlanChange{{Op: OpImport, Artifact: reqID}})
+		changes, err := ChangesDoc([]PlanChange{{Op: OpImport, Artifact: reqID}})
 		if err != nil {
 			return nil, err
 		}
@@ -136,19 +136,19 @@ func ProposePlanImport(ctx context.Context, db DB, w Writer, key, reason string,
 	})
 }
 
-type pendingImport struct {
-	event              int64
-	artifact, question string
+type PendingImport struct {
+	Event              int64
+	Artifact, Question string
 }
 
 // waitingImport is the import of root that waits on a decision, if any.
-func waitingImport(ctx context.Context, tx pgx.Tx, root string) (*pendingImport, error) {
-	var p pendingImport
+func waitingImport(ctx context.Context, tx pgx.Tx, root string) (*PendingImport, error) {
+	var p PendingImport
 	err := tx.QueryRow(ctx, `SELECT p.event_id, p.body_json->'changes'->0->>'artifact', p.body_json->>'question_id' FROM agentrt.event p
 	  WHERE p.event_stream_id = $1 AND p.event_type = 'plan_change_proposed' AND p.body_json->'changes'->0->>'op' = $2
 	    AND NOT EXISTS (SELECT 1 FROM agentrt.event d WHERE d.event_type = 'plan_change_decided' AND d.event_stream_id = p.event_stream_id
 	      AND (d.body_json->>'proposal_event_id')::bigint = p.event_id)
-	  ORDER BY p.event_id LIMIT 1`, PlanStream(root), OpImport).Scan(&p.event, &p.artifact, &p.question)
+	  ORDER BY p.event_id LIMIT 1`, PlanStream(root), OpImport).Scan(&p.Event, &p.Artifact, &p.Question)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

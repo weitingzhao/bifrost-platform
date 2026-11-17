@@ -15,11 +15,12 @@ import (
 // warning in the workers log. A schema that cannot be read is unknown, never
 // a state that looks normal.
 
-// controllerState reads the failing loops, then the schema. The schema is
+// controllerState reads the failing loops (through the plan code's port,
+// planports.go), then the schema. The schema is
 // read last: a read that fails ends the transaction, and it is the one read
 // here that may.
 func controllerState(ctx context.Context, tx pgx.Tx) ([]map[string]any, any, error) {
-	alerts, err := failingLoops(ctx, tx)
+	alerts, err := ControllerLoopsFailing(ctx, tx)
 	if err != nil {
 		return nil, nil, err
 	}

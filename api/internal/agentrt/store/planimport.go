@@ -100,7 +100,7 @@ func importedFrom(ctx context.Context, tx pgx.Tx, root, reqID string) (int64, er
 func importOnce(ctx context.Context, tx pgx.Tx, actor string, req planimport.Request, doc []byte, reqID string, cause int64,
 	out *ImportResult) error {
 	root := req.Root.ID
-	if err := lockTree(ctx, tx, root); err != nil {
+	if err := LockTree(ctx, tx, root); err != nil {
 		return err
 	}
 	hook("plan import locked", root)

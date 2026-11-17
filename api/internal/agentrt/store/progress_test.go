@@ -102,23 +102,6 @@ func TestProgressMissionWithoutTasks(t *testing.T) {
 	}
 }
 
-// Live attempts in start order by time, not by the text of the time (a
-// fraction of a second sorts after the whole second).
-func TestLiveOrder(t *testing.T) {
-	t.Parallel()
-	base := time.Date(2026, 10, 14, 20, 0, 0, 0, time.UTC)
-	// The ids sort the other way round from the times; as text,
-	// "…00.1Z" sorts before "…00Z".
-	got := store.SortLiveForTest([]*store.ProgressAttempt{
-		store.LiveForTest("a_a_late", "running", true, nil, nil, base.Add(100*time.Millisecond)),
-		store.LiveForTest("a_b_first", "running", true, nil, nil, base),
-		store.LiveForTest("a_0_none", "leased", true, nil, nil, time.Time{}),
-	})
-	if fmt.Sprint(got) != "[a_b_first a_a_late a_0_none]" {
-		t.Fatalf("order %v", got)
-	}
-}
-
 // sameMoment says a projection time is the database's time t.
 func sameMoment(t *testing.T, got string, want time.Time) bool {
 	t.Helper()

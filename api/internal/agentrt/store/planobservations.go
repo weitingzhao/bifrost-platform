@@ -14,6 +14,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/mainhistory"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/strictjson"
 )
 
 // A binding's last persisted successful read ages to Stale after planObservationTTL;
@@ -55,7 +56,7 @@ type planObservation struct {
 }
 
 func (n planObservation) validate() error {
-	if n.V != 1 || n.Kind != "agentrt.plan_observation/v1" || n.Root == "" || n.Step == "" || n.Binding == "" || n.Version < 1 || len(n.Digest) != 64 || !shaPattern.MatchString(n.Digest) || n.Source != n.Root+":"+n.Digest || n.SourceVersion < 1 || (n.Status != "Fresh" && n.Status != "Unknown") || (n.Value != "true" && n.Value != "false" && n.Value != "unknown") || n.Evidence == nil {
+	if n.V != 1 || n.Kind != "agentrt.plan_observation/v1" || n.Root == "" || n.Step == "" || n.Binding == "" || n.Version < 1 || len(n.Digest) != 64 || !strictjson.SHAPattern.MatchString(n.Digest) || n.Source != n.Root+":"+n.Digest || n.SourceVersion < 1 || (n.Status != "Fresh" && n.Status != "Unknown") || (n.Value != "true" && n.Value != "false" && n.Value != "unknown") || n.Evidence == nil {
 		return invalid("invalid plan observation")
 	}
 	if n.Status == "Fresh" && n.LastSuccess == "" || n.Value == "true" && len(n.Evidence) == 0 || n.Reason == "" {
@@ -97,7 +98,7 @@ func (p planObservationPass) validate() error {
 		return invalid("invalid plan observation pass time")
 	}
 	for d, at := range p.Fresh {
-		if len(d) != 64 || !shaPattern.MatchString(d) {
+		if len(d) != 64 || !strictjson.SHAPattern.MatchString(d) {
 			return invalid("invalid plan observation pass")
 		}
 		if _, err := time.Parse(time.RFC3339Nano, at); err != nil {
@@ -427,12 +428,12 @@ func readPlanSource(ctx context.Context, tx pgx.Tx, remote remoteRead, b planvie
 	return nil
 }
 
-// checkPlanObservation holds plan observations and their passes to the
+// CheckPlanObservation holds plan observations and their passes to the
 // controller (the vocabulary asks it of every event: vocab.go).
-func checkPlanObservation(ev Event) error {
+func CheckPlanObservation(ev Event) error {
 	if raw, ok := ev.Body["plan_observation"]; ok {
 		var n planObservation
-		if err := strictViewValue(raw, &n); err != nil {
+		if err := strictjson.Value(raw, &n); err != nil {
 			return err
 		}
 		if ev.Actor != "controller" || ev.Type != "note" || ev.Stream != observationStream(n.Root) || ev.PlanNode != n.Step {
@@ -441,7 +442,7 @@ func checkPlanObservation(ev Event) error {
 	}
 	if raw, ok := ev.Body["plan_observation_pass"]; ok {
 		var p planObservationPass
-		if err := strictViewValue(raw, &p); err != nil {
+		if err := strictjson.Value(raw, &p); err != nil {
 			return err
 		}
 		if err := p.validate(); err != nil {

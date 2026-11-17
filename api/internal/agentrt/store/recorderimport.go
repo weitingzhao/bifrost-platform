@@ -134,10 +134,10 @@ func ProposeRecorderImport(ctx context.Context, db DB, w Writer, key, reason str
 			return nil, err
 		}
 		if waiting != nil {
-			if waiting.artifact != logID {
-				return nil, invalid("another import of %s's log (%s) waits on the Owner's card %s", work, waiting.artifact, waiting.question)
+			if waiting.Artifact != logID {
+				return nil, invalid("another import of %s's log (%s) waits on the Owner's card %s", work, waiting.Artifact, waiting.Question)
 			}
-			return map[string]any{"proposal_event_id": waiting.event, "decision": "", "question_id": waiting.question,
+			return map[string]any{"proposal_event_id": waiting.Event, "decision": "", "question_id": waiting.Question,
 				"log_artifact_id": logID, "waiting": "the Owner decides a recorder import"}, nil
 		}
 		if err = tryRecorderImport(ctx, tx, log, doc, logID); err != nil {
@@ -146,7 +146,7 @@ func ProposeRecorderImport(ctx context.Context, db DB, w Writer, key, reason str
 		if _, err = artifact.PutArtifact(ctx, tx, w.Actor, "other", "application/json", doc); err != nil {
 			return nil, err
 		}
-		cardKey := canonKey(w.Actor, "recorder:"+key)
+		cardKey := CanonKey(w.Actor, "recorder:"+key)
 		body := recorderCardBody(w, cardKey, reason, log, logID)
 		if n := questions.BodyBytes(body); n > questions.BodyLimit {
 			return nil, invalid("the Owner's card for this import would be %d bytes, more than the question store's %d", n, questions.BodyLimit)
@@ -154,7 +154,7 @@ func ProposeRecorderImport(ctx context.Context, db DB, w Writer, key, reason str
 		if ask == nil {
 			return nil, fmt.Errorf("%w: no question store is configured", ErrAsk)
 		}
-		byRule, err := ruleAnswers(ctx, tx, CardRecorderImport, "")
+		byRule, err := RuleAnswers(ctx, tx, CardRecorderImport, "")
 		if err != nil {
 			return nil, err
 		}
@@ -168,7 +168,7 @@ func ProposeRecorderImport(ctx context.Context, db DB, w Writer, key, reason str
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrAsk, err)
 		}
-		changes, err := changesDoc([]PlanChange{{Op: OpRecorderImport, Artifact: logID}})
+		changes, err := ChangesDoc([]PlanChange{{Op: OpRecorderImport, Artifact: logID}})
 		if err != nil {
 			return nil, err
 		}
@@ -203,13 +203,13 @@ func recorderImported(ctx context.Context, tx pgx.Tx, stream, logID string) (int
 
 // waitingRecorderImport is the recorder import of stream that waits on a
 // decision, if any.
-func waitingRecorderImport(ctx context.Context, tx pgx.Tx, stream string) (*pendingImport, error) {
-	var p pendingImport
+func waitingRecorderImport(ctx context.Context, tx pgx.Tx, stream string) (*PendingImport, error) {
+	var p PendingImport
 	err := tx.QueryRow(ctx, `SELECT p.event_id, p.body_json->'changes'->0->>'artifact', p.body_json->>'question_id' FROM agentrt.event p
 	  WHERE p.event_stream_id = $1 AND p.event_type = 'plan_change_proposed' AND p.body_json->'changes'->0->>'op' = $2
 	    AND NOT EXISTS (SELECT 1 FROM agentrt.event d WHERE d.event_type = 'plan_change_decided' AND d.event_stream_id = p.event_stream_id
 	      AND (d.body_json->>'proposal_event_id')::bigint = p.event_id)
-	  ORDER BY p.event_id LIMIT 1`, stream, OpRecorderImport).Scan(&p.event, &p.artifact, &p.question)
+	  ORDER BY p.event_id LIMIT 1`, stream, OpRecorderImport).Scan(&p.Event, &p.Artifact, &p.Question)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

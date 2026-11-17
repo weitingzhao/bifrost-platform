@@ -135,9 +135,9 @@ func checkChanges(root, reason string, changes []PlanChange) error {
 	return nil
 }
 
-// lockTree serializes the changes of one plan tree: numbering, the standing
+// LockTree serializes the changes of one plan tree: numbering, the standing
 // check and the application read and write it under this lock.
-func lockTree(ctx context.Context, tx pgx.Tx, root string) error {
+func LockTree(ctx context.Context, tx pgx.Tx, root string) error {
 	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742110, hashtext($1))`, root)
 	return err
 }
@@ -255,7 +255,7 @@ func lockChanges(ctx context.Context, tx pgx.Tx, root string, changes []PlanChan
 		if err != nil {
 			return err
 		}
-		in, err := rootOf(ctx, tx, id)
+		in, err := RootOf(ctx, tx, id)
 		if err != nil {
 			return err
 		}
@@ -279,8 +279,8 @@ func deadlocked(err error) bool {
 	return errors.As(err, &pg) && pg.Code == "40P01"
 }
 
-// rootOf is the root of a node's tree, along its parents.
-func rootOf(ctx context.Context, tx pgx.Tx, id string) (string, error) {
+// RootOf is the root of a node's tree, along its parents.
+func RootOf(ctx context.Context, tx pgx.Tx, id string) (string, error) {
 	var root string
 	err := tx.QueryRow(ctx, `WITH RECURSIVE up AS (
 	    SELECT plan_node_id, parent_plan_node_id FROM agentrt.plan_node WHERE plan_node_id = $1
@@ -540,7 +540,7 @@ func canonRule(raw json.RawMessage) ([]byte, error) {
 	return canon.Encode(v)
 }
 
-func changesDoc(changes []PlanChange) (any, error) {
+func ChangesDoc(changes []PlanChange) (any, error) {
 	raw, err := json.Marshal(changes)
 	if err != nil {
 		return nil, err

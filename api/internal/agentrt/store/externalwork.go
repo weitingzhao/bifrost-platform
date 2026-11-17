@@ -17,14 +17,14 @@ func externalBinding(ctx context.Context, tx pgx.Tx, root, node, mission, task s
 	// Callers hold the root lock. Like view adoption, lock every node before
 	// reading the dev boundary: task proposals hold their step FOR SHARE.
 	// This also protects a linked event claiming a previously unclaimed root.
-	rows, err := tx.Query(ctx, viewTree+`SELECT n.plan_node_id FROM tree JOIN agentrt.plan_node n USING(plan_node_id) ORDER BY n.plan_node_id FOR UPDATE OF n`, root)
+	rows, err := tx.Query(ctx, ViewTree+`SELECT n.plan_node_id FROM tree JOIN agentrt.plan_node n USING(plan_node_id) ORDER BY n.plan_node_id FOR UPDATE OF n`, root)
 	if err != nil {
 		return err
 	}
 	if _, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
 		return err
 	}
-	r, err := rootOf(ctx, tx, node)
+	r, err := RootOf(ctx, tx, node)
 	if err != nil {
 		return err
 	}
@@ -32,7 +32,7 @@ func externalBinding(ctx context.Context, tx pgx.Tx, root, node, mission, task s
 		return invalid("node belongs to another root")
 	}
 	// Registration is allowed for legacy dev trees, but never business trees.
-	if err = devTree(ctx, tx, root); err != nil {
+	if err = DevTree(ctx, tx, root); err != nil {
 		return err
 	}
 	if task != "" {
@@ -91,7 +91,7 @@ func RegisterExternalWork(ctx context.Context, db DB, w Writer, in externalwork.
 		if err := ensureWriter(ctx, tx, w, true); err != nil {
 			return nil, err
 		}
-		if err := lockTree(ctx, tx, in.Root); err != nil {
+		if err := LockTree(ctx, tx, in.Root); err != nil {
 			return nil, err
 		}
 		if err := externalBinding(ctx, tx, in.Root, in.Node, in.Mission, in.Task); err != nil {
@@ -199,7 +199,7 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in exter
 		}
 		slices.Sort(roots)
 		for _, r := range slices.Compact(roots) {
-			if err = lockTree(ctx, tx, r); err != nil {
+			if err = LockTree(ctx, tx, r); err != nil {
 				return nil, err
 			}
 		}

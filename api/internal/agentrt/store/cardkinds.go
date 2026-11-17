@@ -41,13 +41,13 @@ func ignoreNoRows(err error) error {
 	return err
 }
 
-// ruleAnswers says whether a card-auto-answer rule in force answers cards of
+// RuleAnswers says whether a card-auto-answer rule in force answers cards of
 // kind, and the card's mission ("" for a proposal's card) does not need the
 // Owner: the card is then asked ByRule (TD-393, the coordinating thread
 // 2026-10-20: the runtime's cards were held by the question store's quotas
 // while no card was open for the rule to answer).
-func ruleAnswers(ctx context.Context, tx pgx.Tx, kind, mission string) (bool, error) {
-	kinds, err := cardAutoKindsInForce(ctx, tx)
+func RuleAnswers(ctx context.Context, tx pgx.Tx, kind, mission string) (bool, error) {
+	kinds, err := CardAutoKindsInForce(ctx, tx)
 	if err != nil || !slices.Contains(kinds, kind) {
 		return false, err
 	}

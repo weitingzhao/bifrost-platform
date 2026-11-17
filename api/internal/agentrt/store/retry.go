@@ -17,6 +17,9 @@ const (
 	workspaceRefPhrase    = "another task's workspace"
 )
 
+// reportKinds are the kinds a result's report may be stored as.
+var reportKinds = map[string]bool{"report": true, "verify": true, "review": true}
+
 // refusedRules are the rules by which the platform refuses an artifact:
 // the phrase each records.
 var refusedRules = map[string]string{"local_path": localPathPhrase, "workspace_ref": workspaceRefPhrase}

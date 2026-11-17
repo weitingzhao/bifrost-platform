@@ -43,9 +43,9 @@ func CreatePlanNode(ctx context.Context, tx pgx.Tx, actor string, n PlanNode) (A
 	return ev, err
 }
 
-// stepMoves is every step state change there is: a done step goes back to
+// StepMoves is every step state change there is: a done step goes back to
 // active when a standing condition lapses; a dropped step is final.
-var stepMoves = map[string][]string{
+var StepMoves = map[string][]string{
 	"planned": {"active", "done", "stopped", "dropped"},
 	"active":  {"done", "stopped", "dropped"},
 	"done":    {"active", "dropped"},
@@ -53,7 +53,7 @@ var stepMoves = map[string][]string{
 }
 
 // SetStepState moves a step's state with its plan_node_state_changed event,
-// along stepMoves only.
+// along StepMoves only.
 func SetStepState(ctx context.Context, tx pgx.Tx, actor, root, stepID, to, cause string) (Appended, error) {
 	var from string
 	var mission *string
@@ -61,7 +61,7 @@ func SetStepState(ctx context.Context, tx pgx.Tx, actor, root, stepID, to, cause
 		stepID).Scan(&from, &mission); err != nil {
 		return Appended{}, err
 	}
-	if !slices.Contains(stepMoves[from], to) {
+	if !slices.Contains(StepMoves[from], to) {
 		return Appended{}, fmt.Errorf("%w: step %s %s -> %s", ErrState, stepID, from, to)
 	}
 	m := ""

@@ -52,9 +52,9 @@ const (
 	pendingChangeWindow = 8 * 24 * time.Hour
 )
 
-// pendingChangeLimit is the most plan changes needs_you lists (a test lowers
+// PendingChangeLimit is the most plan changes needs_you lists (a test lowers
 // it).
-var pendingChangeLimit = 50
+var PendingChangeLimit = 50
 
 // ProgressAttempt is a live attempt.
 type ProgressAttempt struct {

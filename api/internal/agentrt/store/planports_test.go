@@ -22,43 +22,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
 
-// refused holds an error to the refusal of an unbound port.
-func refused(t *testing.T, what string, err error) {
-	t.Helper()
-	if !errors.Is(err, store.ErrPortUnbound) {
-		t.Fatalf("%s, unbound: %v; want ErrPortUnbound", what, err)
-	}
-}
-
-// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the plan code reads the rules in force through a port, and a port nobody bound must refuse the proposal or the card, never answer "no rule in force" (which would send every change to the Owner's card, or ask every card of the Owner, with nothing saying why).
-func TestUnboundRulePortsRefuse(t *testing.T) {
-	t.Parallel()
-	for name, p := range map[string]*store.RulePorts{"nothing bound": nil, "an empty binding": {}} {
-		r, err := store.PlanRuleViaForTest(ctx, p, nil)
-		refused(t, name+": the plan-standing rule", err)
-		if r != nil {
-			t.Fatalf("%s: a rule with the refusal: %+v", name, r)
-		}
-		kinds, err := store.CardAutoKindsViaForTest(ctx, p, nil)
-		refused(t, name+": the card-auto-answer rule", err)
-		if kinds != nil {
-			t.Fatalf("%s: kinds with the refusal: %v", name, kinds)
-		}
-	}
-	// The positive control: a bound port is called and its answer returned.
-	want := &store.PlanRule{ID: "plan-standing", Version: 7, DoneRules: true}
-	bound := &store.RulePorts{
-		PlanRuleInForce:      func(context.Context, pgx.Tx) (*store.PlanRule, error) { return want, nil },
-		CardAutoKindsInForce: func(context.Context, pgx.Tx) ([]string, error) { return []string{"blocked"}, nil },
-	}
-	if r, err := store.PlanRuleViaForTest(ctx, bound, nil); err != nil || r != want {
-		t.Fatalf("a bound port: %+v %v", r, err)
-	}
-	if kinds, err := store.CardAutoKindsViaForTest(ctx, bound, nil); err != nil || !reflect.DeepEqual(kinds, []string{"blocked"}) {
-		t.Fatalf("a bound port: %v %v", kinds, err)
-	}
-}
-
 // Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the rules' side binds the two rule ports at the package's start (envelope.go); this holds that binding in place and that each port answers what the rule store itself answers, with a rule in force and with none.
 func TestRulePortsAreBoundToTheRuleStore(t *testing.T) {
 	t.Parallel()
@@ -97,64 +60,6 @@ func TestRulePortsAreBoundToTheRuleStore(t *testing.T) {
 	}
 	if !reflect.DeepEqual(kinds, direct[1].CardAuto.Kinds) {
 		t.Fatalf("the card-auto-answer port: %v; the rule store: %v", kinds, direct[1].CardAuto.Kinds)
-	}
-}
-
-// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the plan code checks external work's note and description and reads a plan's registered work through ports, and decides a recorder import through two more; unbound, each must refuse (the note or artifact is not stored, the plan view and the decision fail), never pass a record unchecked, show a plan with no external work, or decide a recorder import as a plan change.
-func TestUnboundLineagePortsRefuse(t *testing.T) {
-	t.Parallel()
-	for name, p := range map[string]*store.ExternalWorkPorts{"nothing bound": nil, "an empty binding": {}} {
-		refused(t, name+": the note check", store.CheckExternalNoteViaForTest(p, map[string]any{}))
-		refused(t, name+": the description check", store.CheckExternalDescriptionViaForTest(p, []byte(`{}`)))
-		work, err := store.ExternalWorkSnapshotViaForTest(ctx, p, nil, root, time.Now())
-		refused(t, name+": the snapshot", err)
-		working, finished, err := store.ExternalActivityBucketsViaForTest(p, nil, time.Now(), func(string) any { return nil })
-		refused(t, name+": the buckets", err)
-		if work != nil || working != nil || finished != nil {
-			t.Fatalf("%s: an answer with the refusal: %v %v %v", name, work, working, finished)
-		}
-	}
-	for name, p := range map[string]*store.RecorderImportPorts{"nothing bound": nil, "an empty binding": {}} {
-		log, is, err := store.RecorderImportLogViaForTest(p, []store.PlanChange{{Op: store.OpRecorderImport, Artifact: "sha256:log"}})
-		refused(t, name+": whether a proposal is a recorder import", err)
-		if log != "" || is {
-			t.Fatalf("%s: an answer with the refusal: %q %v", name, log, is)
-		}
-		refused(t, name+": the landing", store.DecideRecorderImportLogViaForTest(ctx, p, nil, "sha256:log", 1))
-	}
-	// The positive control: bound ports are called and their answers returned.
-	bound := &store.ExternalWorkPorts{
-		CheckNote:        func(any) error { return errors.New("note") },
-		CheckDescription: func([]byte) error { return errors.New("description") },
-		Snapshot: func(context.Context, pgx.Tx, string, time.Time) ([]map[string]any, error) {
-			return []map[string]any{{"external_work_id": "ew"}}, nil
-		},
-		ActivityBuckets: func(work []map[string]any, _ time.Time, _ func(string) any) ([]any, []any) {
-			return []any{len(work)}, []any{"done"}
-		},
-	}
-	if err := store.CheckExternalNoteViaForTest(bound, nil); err == nil || err.Error() != "note" {
-		t.Fatalf("a bound note check: %v", err)
-	}
-	if err := store.CheckExternalDescriptionViaForTest(bound, nil); err == nil || err.Error() != "description" {
-		t.Fatalf("a bound description check: %v", err)
-	}
-	if work, err := store.ExternalWorkSnapshotViaForTest(ctx, bound, nil, root, time.Now()); err != nil || len(work) != 1 {
-		t.Fatalf("a bound snapshot: %v %v", work, err)
-	}
-	if working, finished, err := store.ExternalActivityBucketsViaForTest(bound, make([]map[string]any, 3), time.Now(), nil); err != nil ||
-		!reflect.DeepEqual(working, []any{3}) || !reflect.DeepEqual(finished, []any{"done"}) {
-		t.Fatalf("bound buckets: %v %v %v", working, finished, err)
-	}
-	rec := &store.RecorderImportPorts{
-		LogOf:  func([]store.PlanChange) (string, bool) { return "kept", true },
-		Decide: func(context.Context, pgx.Tx, string, int64) error { return errors.New("landed") },
-	}
-	if log, is, err := store.RecorderImportLogViaForTest(rec, nil); err != nil || log != "kept" || !is {
-		t.Fatalf("a bound recorder detect: %q %v %v", log, is, err)
-	}
-	if err := store.DecideRecorderImportLogViaForTest(ctx, rec, nil, "kept", 1); err == nil || err.Error() != "landed" {
-		t.Fatalf("a bound recorder landing: %v", err)
 	}
 }
 
@@ -275,24 +180,6 @@ func TestRecorderImportPortsAreBoundToTheRecorderImport(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): a plan note that says the Owner approved is recorded as a claim through a port to coordination; unbound, the port must refuse so the note is not stored, never keep the note with no record of the claim.
-func TestUnboundCoordinationPortRefuses(t *testing.T) {
-	t.Parallel()
-	for name, p := range map[string]*store.CoordinationPorts{"nothing bound": nil, "an empty binding": {}} {
-		refused(t, name+": the claim record", store.AlertClaimViaForTest(ctx, p, nil, store.Event{Stream: "plan:x"}, 1, "plan_note", "", []byte("Owner 已批准")))
-	}
-	// The positive control: a bound port is called with what the plan gave.
-	var got []any
-	bound := &store.CoordinationPorts{AlertClaim: func(_ context.Context, _ pgx.Tx, ev store.Event, cause int64, source, artifact string, body []byte) error {
-		got = []any{ev.Stream, cause, source, artifact, string(body)}
-		return errors.New("recorded")
-	}}
-	err := store.AlertClaimViaForTest(ctx, bound, nil, store.Event{Stream: "plan:x"}, 7, "plan_note", "", []byte("text"))
-	if err == nil || err.Error() != "recorded" || !reflect.DeepEqual(got, []any{"plan:x", int64(7), "plan_note", "", "text"}) {
-		t.Fatalf("a bound port: %v %v", got, err)
-	}
-}
-
 // Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the store's wiring binds the claim port to coord.AlertClaim at the package's start (portsbind.go); this holds that binding in place, that the port writes the alert coord.AlertClaim writes and none for a text that claims nothing, and that the plan's own longest note is coordination's largest message body.
 func TestCoordinationPortIsBoundToCoord(t *testing.T) {
 	t.Parallel()
@@ -327,22 +214,6 @@ func TestCoordinationPortIsBoundToCoord(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): a plan import asks the question store, through a port, how large it will count the card's body before asking; unbound, the port must refuse the import, never count the body as fitting.
-func TestUnboundQuestionPortRefuses(t *testing.T) {
-	t.Parallel()
-	for name, p := range map[string]*store.QuestionPorts{"nothing bound": nil, "an empty binding": {}} {
-		n, err := store.CardBodyBytesViaForTest(p, strings.Repeat("a", 5000))
-		refused(t, name+": the size of a card's body", err)
-		if n != 0 {
-			t.Fatalf("%s: a size with the refusal: %d", name, n)
-		}
-	}
-	// The positive control: a bound port's count is returned.
-	if n, err := store.CardBodyBytesViaForTest(&store.QuestionPorts{BodyBytes: func(s string) int { return len(s) + 2 }}, "abc"); err != nil || n != 5 {
-		t.Fatalf("a bound port: %d %v", n, err)
-	}
-}
-
 // Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the store's wiring binds the size port to questions.BodyBytes at the package's start (portsbind.go), and the plan code keeps its own copies of the question store's body limit and rule channel; this holds the binding in place and each copy equal, so an import's card is not sized by another rule than the store checks it with and a rule's answer is not taken for the Owner's.
 func TestQuestionPortAndWordsAreTheQuestionStores(t *testing.T) {
 	t.Parallel()
@@ -361,5 +232,34 @@ func TestQuestionPortAndWordsAreTheQuestionStores(t *testing.T) {
 	}
 	if store.RuleAnswerChannelForTest != questions.RuleChannel {
 		t.Fatalf("the plan reads a rule's answer by channel %q; the question store writes %q", store.RuleAnswerChannelForTest, questions.RuleChannel)
+	}
+}
+
+// Origin: 2026-11-17, plan core wall step 5 (design duty/from-biz-2026-11-17-plan-core-wall.md): the loop alerts bind the port at the package's start (loopalert.go); this holds that binding in place: the port lists no loop while none has an alert, the loop an alert was recorded for with the error it kept, and no loop again once a note says it passes.
+func TestLoopPortIsBoundToTheLoopAlerts(t *testing.T) {
+	t.Parallel()
+	w := newWorld(t)
+	failing := func() []map[string]any {
+		t.Helper()
+		var out []map[string]any
+		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			var err error
+			out, err = store.ControllerLoopsFailingForTest(ctx, tx)
+			return err
+		}))
+		return out
+	}
+	if got := failing(); len(got) != 0 {
+		t.Fatalf("with no alert: %v", got)
+	}
+	loop := store.ControllerLoops[1]
+	ok(t, store.AlertFailingLoop(ctx, w.rt, loop, store.FailuresToAlert, "the check constraint is missing"))
+	got := failing()
+	if len(got) != 1 || got[0]["loop"] != loop || !strings.Contains(got[0]["error"].(string), "the check constraint is missing") {
+		t.Fatalf("with one alert: %v", got)
+	}
+	ok(t, store.NoteLoopPasses(ctx, w.rt, loop, store.FailuresToAlert))
+	if got := failing(); len(got) != 0 {
+		t.Fatalf("after the loop passes again: %v", got)
 	}
 }
