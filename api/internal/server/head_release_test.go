@@ -151,3 +151,18 @@ func TestHeadBroughtReadsEachCommitsThread(t *testing.T) {
 		t.Errorf("the commit without: %+v", got[1])
 	}
 }
+
+// 2026-11-16 night: of 564 s from main to STG released, 267 s were waiting
+// for the release window; a pass that found it held waited for the next
+// 5-minute reconciliation. The window's change now wakes head-release too.
+func TestHeadReleaseWakesOnTheWindow(t *testing.T) {
+	want := map[string]bool{"git.main.advanced": false, "ci.run.finished": false, "release.window.changed": false}
+	for _, typ := range headReleaseWakes {
+		want[typ] = true
+	}
+	for typ, ok := range want {
+		if !ok {
+			t.Errorf("head-release is not woken by %s", typ)
+		}
+	}
+}

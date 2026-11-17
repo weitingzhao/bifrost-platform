@@ -557,6 +557,9 @@ func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStrea
 	}
 }
 
+// headReleaseWakes are the events that start a head-release pass now.
+var headReleaseWakes = []string{bushook.Type, gatecluster.TypeRunFinished, gatecluster.TypeWindowChanged}
+
 // consumeHeadRelease is head-release's durable consumer: each
 // git.main.advanced starts its pass now (the 30-second loop stays the
 // reconciliation), is acknowledged, and leaves a receipt.
@@ -565,7 +568,11 @@ func (s *Server) consumeHeadRelease(ctx context.Context, js jetstream.JetStream,
 	safego.Go("bus-head-release-kicks", func() { s.bus.runKicks(ctx) })
 	// git.main.advanced, and ci.run.finished: main's CI verdict often comes after
 	// the push that woke it (2026-11-16 21:06: the verdict 40 s after the wake).
-	cc, err := relay.ConsumeDurable(ctx, js, relay.Tenant, env, "headrelease", []string{bushook.Type, gatecluster.TypeRunFinished}, func(e relay.Envelope) error {
+	// And release.window.changed: a pass that found the window held waited
+	// for the next 5-minute reconciliation; the window's release now wakes it
+	// (2026-11-16 night: of 564 s from main to STG released, 267 s were
+	// waiting for the window).
+	cc, err := relay.ConsumeDurable(ctx, js, relay.Tenant, env, "headrelease", headReleaseWakes, func(e relay.Envelope) error {
 		s.bus.kickHeadRelease()
 		rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
