@@ -12,7 +12,6 @@ const rows: ChecklistRow[] = [
       + 'Ticker Types (reference classification: returns all supported instrument type codes with descriptions, filterable by asset_class and locale), '
       + 'and Related Tickers (peers persisted in Golden Source market.ticker_related via related-rotate; live Polygon proxy remains for ad-hoc refresh).',
     tierMin: 'starter',
-    projectStatus: 'implemented',
     verification:
       'Subcontractors → Market Data → Coverage (Stock) → Tickers: each sub-tab has Execute → JSON. '
       + 'Proxies: GET /market/tickers, GET /market/tickers/{ticker}, GET /market/tickers/types, GET /market/related-companies/{ticker}. '
@@ -47,7 +46,6 @@ const rows: ChecklistRow[] = [
       'Four Polygon REST aggregate endpoints for stocks: Custom Bars (OHLC), Daily Market Summary (OHLC), '
       + 'Daily Ticker Summary (OHLC), and Previous Day Bar (OHLC).',
     tierMin: 'starter',
-    projectStatus: 'implemented',
     verification:
       'Subcontractors → Market Data → Coverage (Stock) → Aggregate Bars (OHLC): each sub-tab has Execute → JSON. '
       + 'Proxies: GET /market/stocks/bars/range, GET /market/stocks/bars/grouped-daily/{date}, '
@@ -70,7 +68,6 @@ const rows: ChecklistRow[] = [
       'Real-time snapshots: All Tickers (universe-wide), Single Ticker, and Gainers/Losers. '
       + '15-minute delay on Starter tier.',
     tierMin: 'starter',
-    projectStatus: 'not-implemented',
     verification: 'N/A — not yet implemented.',
     purpose:
       'Quick current-state lookups for stocks. All Tickers snapshot enables screener inputs; Gainers/Losers for market movers.',
@@ -86,7 +83,6 @@ const rows: ChecklistRow[] = [
     description:
       'Four REST endpoints: Historical Trades, Last Trade, Historical Quotes (NBBO), and Last Quote (NBBO).',
     tierMin: 'starter',
-    projectStatus: 'not-implemented',
     verification: 'N/A — not yet implemented.',
     purpose:
       'Query tick-level trade and quote data for stocks. Useful for spread analysis, trade tape replay, and real-time lookups.',
@@ -102,7 +98,6 @@ const rows: ChecklistRow[] = [
       'Dividends, splits, IPOs, and ticker events synced via Polygon REST into massive_corporate_action. '
       + 'Already implemented and shared with Massive Option.',
     tierMin: 'starter',
-    projectStatus: 'implemented',
     verification:
       'Subcontractors → Market Data → Coverage (Option) → Corporate actions: enqueue sync for a ticker, then Load from DB.',
     purpose:
@@ -126,7 +121,6 @@ const rows: ChecklistRow[] = [
       + 'Short Volume (daily venue-level short volume + ratio), '
       + 'and Float (free float shares and percent).',
     tierMin: 'starter',
-    projectStatus: 'implemented',
     verification:
       'Subcontractors → Market Data → Coverage (Stock) → Fundamentals: each sub-tab has Execute → JSON. '
       + 'Proxies: GET /market/stocks/fundamentals/income-statements, '
@@ -163,7 +157,6 @@ const rows: ChecklistRow[] = [
       + 'Form 3 (initial insider ownership statements), '
       + 'and Form 4 (changes in insider ownership).',
     tierMin: 'starter',
-    projectStatus: 'implemented',
     verification:
       'Subcontractors → Market Data → Coverage (Stock) → Filings & Disclosures: each sub-tab has Execute → JSON. '
       + 'Proxies: GET /market/stocks/filings/edgar-index, '
@@ -203,7 +196,6 @@ const rows: ChecklistRow[] = [
     description:
       'Market news articles for stocks via Polygon REST news endpoint, filterable by ticker, publisher, and date range.',
     tierMin: 'starter',
-    projectStatus: 'implemented',
     verification:
       'Subcontractors → Market Data → Coverage (Stock) → News: set query filters and Execute. '
       + 'Proxy: GET /market/stocks/news.',
@@ -219,7 +211,6 @@ const rows: ChecklistRow[] = [
     group: 'ws',
     description: 'WebSocket per-second aggregate bars for stocks channel A.{ticker}.',
     tierMin: 'starter',
-    projectStatus: 'not-implemented',
     verification: 'N/A — not yet implemented.',
     purpose: 'Stream second-by-second OHLCV bars for a stock ticker in real time.',
     helpVerification:
@@ -231,7 +222,6 @@ const rows: ChecklistRow[] = [
     group: 'ws',
     description: 'WebSocket per-minute aggregate bars for stocks channel AM.{ticker}.',
     tierMin: 'starter',
-    projectStatus: 'not-implemented',
     verification: 'N/A — not yet implemented.',
     purpose: 'Stream minute-by-minute OHLCV bars for a stock ticker in real time.',
     helpVerification:
@@ -243,7 +233,6 @@ const rows: ChecklistRow[] = [
     group: 'ws',
     description: 'WebSocket tick-level trades for stocks channel T.{ticker}.',
     tierMin: 'starter',
-    projectStatus: 'not-implemented',
     verification: 'N/A — not yet implemented.',
     purpose: 'Stream tick-by-tick trade prints for a stock ticker.',
     helpVerification:
@@ -255,7 +244,6 @@ const rows: ChecklistRow[] = [
     group: 'ws',
     description: 'WebSocket real-time NBBO quotes for stocks channel Q.{ticker}.',
     tierMin: 'starter',
-    projectStatus: 'not-implemented',
     verification: 'N/A — not yet implemented.',
     purpose: 'Stream top-of-book bid/ask updates for a stock ticker.',
     helpVerification:
@@ -268,7 +256,6 @@ const rows: ChecklistRow[] = [
     group: 'flat',
     description: 'Daily OHLCV across all US stocks as downloadable S3 flat file.',
     tierMin: 'starter',
-    projectStatus: 'not-implemented',
     verification: 'N/A — bulk download not yet integrated.',
     purpose: 'Bulk download of daily stock aggregates from S3.',
     helpVerification: 'Not yet available. See Massive documentation for S3 flat file access.',
@@ -279,7 +266,6 @@ const rows: ChecklistRow[] = [
     group: 'flat',
     description: 'Minute-level OHLCV across all US stocks as downloadable S3 flat file.',
     tierMin: 'starter',
-    projectStatus: 'not-implemented',
     verification: 'N/A — bulk download not yet integrated.',
     purpose: 'Bulk download of minute-level stock aggregates from S3.',
     helpVerification: 'Not yet available. See Massive documentation for S3 flat file access.',
@@ -290,7 +276,6 @@ const rows: ChecklistRow[] = [
     group: 'flat',
     description: 'Tick-level stock trades with nanosecond timestamps as downloadable S3 flat file. Requires Developer tier.',
     tierMin: 'developer',
-    projectStatus: 'not-implemented',
     verification: 'N/A — bulk download not yet integrated.',
     purpose: 'Bulk download of tick-level stock trades from S3.',
     helpVerification: 'Not yet available. Requires Developer tier. See Massive documentation for S3 flat file access.',
@@ -301,7 +286,6 @@ const rows: ChecklistRow[] = [
     group: 'flat',
     description: 'Top-of-book stock quotes with nanosecond timestamps as downloadable S3 flat file.',
     tierMin: 'starter',
-    projectStatus: 'not-implemented',
     verification: 'N/A — bulk download not yet integrated.',
     purpose: 'Bulk download of top-of-book stock quotes from S3.',
     helpVerification: 'Not yet available. See Massive documentation for S3 flat file access.',

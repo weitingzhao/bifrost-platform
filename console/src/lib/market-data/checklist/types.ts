@@ -16,11 +16,8 @@ export interface ChecklistRow {
   description: string
   tierMin: 'starter' | 'developer' | 'business'
   requiresTrades?: boolean
-  projectStatus: 'implemented' | 'partial' | 'not-implemented'
   verification: string
   purpose: string
   helpVerification: string
   testHint?: string
 }
-
-export type EffectiveServiceStatus = ChecklistRow['projectStatus'] | 'not-on-tier'

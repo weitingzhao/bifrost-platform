@@ -9,7 +9,6 @@ const rows: ChecklistRow[] = [
     description:
       'Massive Options REST: All Contracts (index) and Contract Overview (single contract), plus local DB coverage and contract-level snapshot linking.',
     tierMin: 'starter',
-    projectStatus: 'implemented',
     verification:
       'Contracts section: All Contracts (GET /v3/reference/options/contracts via Plugin ingest option_contract), Contract Overview (GET /v3/reference/options/contracts/{options_ticker}), DB Verify (option_contracts coverage & mapping), Snapshot Link (contract → snapshot end-to-end).',
     purpose:
@@ -27,7 +26,6 @@ const rows: ChecklistRow[] = [
     description:
       'Three Polygon REST DocPage rows under Aggregate Bars (OHLC): Custom Bars (OHLC), Daily Ticker Summary (OHLC), and Previous Day Bar (OHLC). WebSocket aggregate streams are listed separately under WebSocket.',
     tierMin: 'starter',
-    projectStatus: 'implemented',
     verification:
       'REST: Enqueue feed_options_aggregate with mode custom_bars | open_close | prev → check Job queue result.',
     purpose:
@@ -44,7 +42,6 @@ const rows: ChecklistRow[] = [
     description:
       'Three Polygon REST DocPage rows under Snapshots (UI tab order): Option Contract Snapshot (per-contract), Option Chain Snapshot (chain → option_snapshots), Unified Snapshot (cross-asset).',
     tierMin: 'starter',
-    projectStatus: 'implemented',
     verification:
       'Plugin ingest option_snapshot (chain/contract/unified) → GET /research/option-snapshots or Verify section below',
     purpose: 'Pull delayed chain or contract data from Polygon REST; chain persists bid/ask/last and greeks when returned.',
@@ -60,7 +57,6 @@ const rows: ChecklistRow[] = [
       'REST (coverage sheet): Last Trade, Quotes, Trades — three DocPage rows. Optional Flat Files pointers: Quotes and Trades bulk downloads (not REST; same section for convenience). '
       + 'Starter: Last Trade and Quotes; Trades requires Developer tier and trades_enabled.',
     tierMin: 'starter',
-    projectStatus: 'implemented',
     verification:
       'Trade & Quotes section: REST tabs in order Trades / Last Trade / Quotes; then Flat Files tabs. Trades REST tab shows tier gate when trades_enabled is off.',
     purpose:
@@ -79,7 +75,6 @@ const rows: ChecklistRow[] = [
       'Four Polygon REST DocPage rows (coverage sheet order): Simple Moving Average (SMA), Exponential Moving Average (EMA), Moving Average Convergence/Divergence (MACD), Relative Strength Index (RSI). '
       + 'Read-only; option tickers (O:) or equities.',
     tierMin: 'starter',
-    projectStatus: 'implemented',
     verification:
       'Technical Indicators section: DocPage-named tabs. Each: ticker + parameters, Fetch, data table.',
     purpose:
@@ -96,7 +91,6 @@ const rows: ChecklistRow[] = [
     description:
       'Four Polygon REST DocPage rows (UI tab order): Exchanges, Market Holidays, Market Status, Condition Codes — venues, holiday calendar, live status, trade/quote conditions.',
     tierMin: 'starter',
-    projectStatus: 'implemented',
     verification:
       'Market Operations section: tab order Exchanges → Market Holidays → Market Status → Condition Codes (each maps to one DocPage row).',
     purpose:
@@ -114,7 +108,6 @@ const rows: ChecklistRow[] = [
     group: 'project',
     description: 'Expirations and strikes for an underlying',
     tierMin: 'starter',
-    projectStatus: 'implemented',
     verification: 'GET /research/option-expirations?provider=massive or Research → Option Discovery',
     purpose: 'Resolve option expirations and strikes for an underlying before building chains or screens.',
     helpVerification:
@@ -126,7 +119,6 @@ const rows: ChecklistRow[] = [
     group: 'project',
     description: 'Historical daily OI backfill into option_open_interest_daily',
     tierMin: 'starter',
-    projectStatus: 'partial',
     verification: 'GET /research/option-oi — worker OI placeholder only',
     purpose: 'Track daily open interest per contract; full Massive OI backfill may be added later.',
     helpVerification:
@@ -139,7 +131,6 @@ const rows: ChecklistRow[] = [
     description:
       'Dividends, splits, IPOs, and ticker events synced via Polygon REST into massive_corporate_action.',
     tierMin: 'starter',
-    projectStatus: 'implemented',
     verification:
       'Subcontractors → Market Data → Coverage (Option) → Corporate actions: Enqueue sync for a ticker, then Load from DB. Or: POST /market/sync kind=feed_stocks_corporate_action, then GET /market/corporate-actions?symbol=AAPL.',
     purpose:
@@ -154,7 +145,6 @@ const rows: ChecklistRow[] = [
     group: 'ws',
     description: 'WebSocket per-second aggregate bars for options channel A.O:{optionsTicker}.',
     tierMin: 'starter',
-    projectStatus: 'partial',
     verification:
       'WebSocket → Aggregates (Per Second): copy verify command with --channel "A.O:…" and run in terminal.',
     purpose: 'Stream second-by-second OHLCV bars for a single options contract in real time.',
@@ -168,7 +158,6 @@ const rows: ChecklistRow[] = [
     group: 'ws',
     description: 'WebSocket per-minute aggregate bars for options channel AM.O:{optionsTicker}.',
     tierMin: 'starter',
-    projectStatus: 'partial',
     verification:
       'WebSocket → Aggregates (Per Minute): copy verify command with --channel "AM.O:…" and run in terminal.',
     purpose: 'Stream minute-by-minute OHLCV bars for a single options contract in real time.',
@@ -182,7 +171,6 @@ const rows: ChecklistRow[] = [
     group: 'ws',
     description: 'WebSocket real-time BBO quotes for options channel Q.O:{optionsTicker}.',
     tierMin: 'starter',
-    projectStatus: 'partial',
     verification:
       'WebSocket → Quotes: copy verify command with --channel "Q.O:…" and run in terminal.',
     purpose: 'Stream top-of-book bid/ask updates for a single options contract.',
@@ -197,7 +185,6 @@ const rows: ChecklistRow[] = [
     description: 'WebSocket tick-level trades for options channel T.O:{optionsTicker}. Requires Developer tier and trades_enabled.',
     tierMin: 'developer',
     requiresTrades: true,
-    projectStatus: 'partial',
     verification:
       'WebSocket → Trades: copy verify command with --channel "T.O:…" and run in terminal.',
     purpose: 'Stream tick-by-tick trade prints for a single options contract.',
@@ -213,7 +200,6 @@ const rows: ChecklistRow[] = [
       'Fair Market Value streaming via WebSocket channel FMV.O:{optionsTicker}. '
       + 'Delivers real-time fair market value estimates for option contracts. Requires Business tier.',
     tierMin: 'business',
-    projectStatus: 'partial',
     verification:
       'WebSocket → Fair Market Value: WS FMV Channel tab provides a one-click copy of the verify command '
       + 'for python scripts/verify_massive_options_ws.py with --channel "FMV.O:…". '
@@ -234,7 +220,6 @@ const rows: ChecklistRow[] = [
     description:
       'Options Starter includes WS access. A standalone verification script is provided; the engine does not maintain a persistent WS bridge.',
     tierMin: 'starter',
-    projectStatus: 'partial',
     verification:
       'Run: python scripts/verify_massive_options_ws.py --config config/config.dev.yaml — prints auth status and first messages from the options WS feed.',
     purpose: 'Verify WebSocket connectivity via CLI script. Not a Massive doc section — local verify entry point.',
@@ -248,7 +233,6 @@ const rows: ChecklistRow[] = [
     group: 'flat',
     description: 'Daily OHLCV across all US options as downloadable S3 flat file.',
     tierMin: 'starter',
-    projectStatus: 'not-implemented',
     verification: 'N/A — bulk download not yet integrated.',
     purpose: 'Bulk download of daily aggregates for all US options from S3. Alternative to REST per-contract aggregates.',
     helpVerification: 'Not yet available in this project. See Massive documentation for S3 flat file access.',
@@ -259,7 +243,6 @@ const rows: ChecklistRow[] = [
     group: 'flat',
     description: 'Minute-level OHLCV across all US options as downloadable S3 flat file.',
     tierMin: 'starter',
-    projectStatus: 'not-implemented',
     verification: 'N/A — bulk download not yet integrated.',
     purpose: 'Bulk download of minute-level aggregates for all US options from S3.',
     helpVerification: 'Not yet available in this project. See Massive documentation for S3 flat file access.',
@@ -270,7 +253,6 @@ const rows: ChecklistRow[] = [
     group: 'flat',
     description: 'Top-of-book quotes with nanosecond timestamps as downloadable S3 flat file.',
     tierMin: 'starter',
-    projectStatus: 'not-implemented',
     verification: 'N/A — bulk download not yet integrated.',
     purpose: 'Bulk download of top-of-book option quotes from S3 for historical analysis.',
     helpVerification: 'Not yet available in this project. See Massive documentation for S3 flat file access.',
@@ -281,7 +263,6 @@ const rows: ChecklistRow[] = [
     group: 'flat',
     description: 'Tick-level trades with nanosecond timestamps as downloadable S3 flat file. Requires Developer tier.',
     tierMin: 'developer',
-    projectStatus: 'not-implemented',
     verification: 'N/A — bulk download not yet integrated.',
     purpose: 'Bulk download of tick-level option trades from S3 for detailed historical analysis.',
     helpVerification: 'Not yet available in this project. Requires Developer tier. See Massive documentation for S3 flat file access.',

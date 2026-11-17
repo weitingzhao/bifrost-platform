@@ -3,4 +3,4 @@ export { OPTION_CHECKLIST_ROWS } from './optionChecklistRows'
 export { STOCK_CHECKLIST_ROWS } from './stockChecklistRows'
 export { optionFeedChecklistRows, commonFeedChecklistRows, groupedOptionFeedChecklistRows, groupedCommonFeedChecklistRows } from './optionStatus';
 export { groupedStockChecklistRows } from './stockStatus';
-export { shortServiceLabel, checklistEffectiveStatusLabel } from './displayHelpers'
+export { shortServiceLabel } from './displayHelpers'
