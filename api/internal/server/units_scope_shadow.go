@@ -68,7 +68,12 @@ type unitScopeShadow struct {
 	// The workers are replaced at every release of the environment, and
 	// with them their log (2026-11-15: three lines read, then none).
 	record func(run, status, detail string)
-	log    *slog.Logger
+	// incremental is the run of a passed incremental row the ledger has for
+	// the commit (by commit, then by tree), "" for none; nil: no reconciling.
+	incremental func(ctx context.Context, repo, commit string) (string, error)
+	// reconcile keeps one reconciliation where record keeps a line.
+	reconcile func(run, status, detail string)
+	log       *slog.Logger
 
 	mu      sync.Mutex
 	seen    map[string]bool // run uid: told in this process
@@ -114,6 +119,32 @@ func (s *Server) unitScopeShadowSource() func(context.Context, store.PipelineRun
 		start: func(fn func()) { safego.Go("unit-scope-shadow", fn) },
 		record: func(run, status, detail string) {
 			s.audit.RecordDirect(unitScopeShadowPrincipal, actuation.RoleOperator, unitScopeShadowAction, "run/"+run, status, detail)
+		},
+		incremental: func(ctx context.Context, repo, commit string) (string, error) {
+			d := db()
+			if d == nil {
+				return "", fmt.Errorf("the evidence ledger is not connected")
+			}
+			rows, err := evidence.EvidenceCIByCommit(ctx, d, repo, commit, 50)
+			if err != nil {
+				return "", err
+			}
+			if tree, terr := giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second})(ctx, repo, commit); terr == nil {
+				more, err := evidence.EvidenceByTree(ctx, d, repo, tree, 50)
+				if err != nil {
+					return "", err
+				}
+				rows = append(rows, more...)
+			}
+			for _, r := range rows {
+				if evidence.IncrementalBase(r) != "" {
+					return r.RunName, nil
+				}
+			}
+			return "", nil
+		},
+		reconcile: func(run, status, detail string) {
+			s.audit.RecordDirect(unitScopeShadowPrincipal, actuation.RoleOperator, ciReconcileAction, "run/"+run, status, detail)
 		},
 	}
 	return sh.observe
@@ -224,7 +255,57 @@ func (u *unitScopeShadow) observe(ctx context.Context, p store.PipelineRun) {
 			status, detail := shadowRecord(line)
 			u.record(p.Run, status, detail)
 		}
+		u.reconcileFull(sctx, p, commit, line)
 	})
+}
+
+// ciReconcileAction is the audit action of one reconciliation: a full CI run
+// of a commit that the ledger already has a passed incremental run for.
+//
+// Owner 2026-11-16: the landing lets a commit in on an incremental run and the
+// full run of the push to main, which nobody waits for, is the check on it.
+// status "ok": the full run passed too. "missed": it failed, so the
+// incremental run passed something a full run catches; the row of the full
+// run makes the commit failed in the ledger, which holds PROD (ledgerCIStrict)
+// and leaves the commits after it without a verdict until one passes in full.
+// The detail is the material of the "does CI time follow the change" reading:
+// which runs, how long the full one took, how much of the plan the change
+// touches (by_module), and what failed.
+const ciReconcileAction = "ci_reconcile"
+
+func (u *unitScopeShadow) reconcileFull(ctx context.Context, p store.PipelineRun, commit string, line []any) {
+	if u.incremental == nil || u.reconcile == nil || p.Scope != evidence.EvidenceScopeFull {
+		return
+	}
+	inc, err := u.incremental(ctx, p.Repo, commit)
+	if err != nil {
+		u.logger().Warn("ci reconcile", "run", p.Run, "revision", commit, "error", err.Error())
+		return
+	}
+	if inc == "" || inc == p.Run {
+		return
+	}
+	status := "ok"
+	if p.Result != "Succeeded" {
+		status = "missed"
+	}
+	fields := map[string]any{"repo": p.Repo, "revision": commit, "full_run": p.Run, "full_result": p.Result,
+		"incremental_run": inc, "failed_tests": p.FailedTests, "failed_tasks": p.FailedTasks}
+	if !p.StartedAt.IsZero() && !p.CompletedAt.IsZero() {
+		fields["full_seconds"] = int(p.CompletedAt.Sub(p.StartedAt).Seconds())
+	}
+	for i := 0; i+1 < len(line); i += 2 {
+		if k, _ := line[i].(string); k == "by_module" || k == "would_run" || k == "total" {
+			fields[k] = line[i+1]
+		}
+	}
+	detail, _ := json.Marshal(fields)
+	if status == "missed" {
+		u.logger().Error("ci reconcile: a full run failed on a commit an incremental run passed", "run", p.Run, "revision", commit, "incremental_run", inc, "failed_tests", p.FailedTests)
+	} else {
+		u.logger().Info("ci reconcile", "run", p.Run, "revision", commit, "incremental_run", inc, "status", status)
+	}
+	u.reconcile(p.Run, status, string(detail))
 }
 
 func (u *unitScopeShadow) logger() *slog.Logger {

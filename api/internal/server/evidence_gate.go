@@ -58,13 +58,30 @@ func evidenceGateOn(env string) bool {
 // run that reused another's result). tree reads a commit's tree; nil, or a
 // tree that cannot be read, leaves the commit's own answer.
 func ledgerCI(db func() store.DB, tree func(context.Context, string, string) (string, error)) delivery.CIReader {
-	return ledgerCIScoped(db, tree, false)
+	return ledgerCIWith(db, tree, false, true)
+}
+
+// ledgerCIStrict is ledgerCI without the chain: only a full pass of the
+// commit itself (by commit, then by tree) is Succeeded. It is what a release
+// to PROD is judged on (the policy's ci_succeeded, the PROD pipeline's
+// check-source through GET /api/v1/evidence/ci): a commit that landed on an
+// incremental pass reaches STG on the chain, and PROD only once the full run
+// of the push to main has passed (Owner 2026-11-16: the incremental run lets
+// it in, the full run after it is the reconciliation).
+func ledgerCIStrict(db func() store.DB, tree func(context.Context, string, string) (string, error)) delivery.CIReader {
+	return ledgerCIWith(db, tree, false, false)
 }
 
 // ledgerCIScoped is ledgerCI; with anyScope a pass of part of the repository
 // (an incremental or a console run) counts as well when no full run failed
 // after it, as the push to main reads CI (ci_gate.py without --require-full).
 func ledgerCIScoped(db func() store.DB, tree func(context.Context, string, string) (string, error), anyScope bool) delivery.CIReader {
+	return ledgerCIWith(db, tree, anyScope, true)
+}
+
+// ledgerCIWith is the one reading of the ledger; chain says whether a passed
+// incremental row counts together with its base's verdict (read below).
+func ledgerCIWith(db func() store.DB, tree func(context.Context, string, string) (string, error), anyScope, chain bool) delivery.CIReader {
 	// verdict also returns chained: the base of the newest passed incremental
 	// row that no newer failure follows, when no full run decided.
 	verdict := func(ctx context.Context, d store.DB, rows []evidence.EvidenceRow) (status, run, chained, chainedRun string, err error) {
@@ -132,7 +149,7 @@ func ledgerCIScoped(db func() store.DB, tree func(context.Context, string, strin
 				}
 			}
 		}
-		if chained == "" || chained == sha || depth >= maxVerdictChain {
+		if !chain || chained == "" || chained == sha || depth >= maxVerdictChain {
 			return "", "", nil
 		}
 		baseStatus, _, err := read(ctx, d, repo, chained, depth+1)
@@ -164,7 +181,8 @@ func (s *Server) wireEvidenceGate(env string) delivery.CIReader {
 		slog.Info("evidence gate: CI is read from the retained runs", "env", env)
 		return nil
 	}
-	reader := ledgerCI(func() store.DB {
+	// Strict: this reader is the release policy's ci_succeeded.
+	reader := ledgerCIStrict(func() store.DB {
 		if s.agentRuntime == nil || s.agentRuntime.api == nil {
 			return nil
 		}
@@ -175,10 +193,11 @@ func (s *Server) wireEvidenceGate(env string) delivery.CIReader {
 	return reader
 }
 
-// GET /api/v1/evidence/ci?repo=…&commit=…[&scope=any] is ledgerCI's answer
-// for one commit: {repo, commit, scope, status, run}, status Succeeded,
+// GET /api/v1/evidence/ci?repo=…&commit=…[&scope=any|chain] is the ledger's
+// answer for one commit: {repo, commit, scope, status, run}, status Succeeded,
 // Failed or "" (no verdict the ledger knows). scope=any also counts a pass
-// of part of the repository. It answers from the ledger whatever this
+// of part of the repository; scope=chain follows an incremental pass to its
+// base (ledgerCI); without scope the answer is the strict one. It answers from the ledger whatever this
 // platform's own switch says: the callers are the release scripts and the
 // in-cluster gates (ci_gate.py), which have their own. It needs no token, as
 // /releases and /health need none: those gates run in Pods that hold no
@@ -200,8 +219,10 @@ func (s *Server) handleEvidenceCI(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
-	read := ledgerCIScoped(func() store.DB { return s.agentRuntime.api.DB },
-		giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second}), scope == "any")
+	// scope full (the default, what the PROD pipeline's check-source asks) is
+	// strict; any also counts a pass of part; chain is what STG is delivered on.
+	read := ledgerCIWith(func() store.DB { return s.agentRuntime.api.DB },
+		giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second}), scope == "any", scope == "chain")
 	status, run, err := read(ctx, repo, commit)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})

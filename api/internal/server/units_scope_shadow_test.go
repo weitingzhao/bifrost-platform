@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -253,5 +254,52 @@ func TestShadowRecordKeepsTheLineAndNamesAMiss(t *testing.T) {
 	status, detail = shadowRecord([]any{"run", "ci-2", "missed", []string{"svc/d"}})
 	if status != "missed" || !strings.Contains(detail, `"missed":["svc/d"]`) {
 		t.Fatalf("status=%q detail=%s", status, detail)
+	}
+}
+
+// Origin: Owner 2026-11-16, reopening the incremental landing: the run that
+// lets a commit in is incremental, and the full run of the push to main is
+// the check on it. Every such pair is one reconciliation; a full run that
+// fails where the incremental one passed is a miss, said so by name. A full
+// run of a commit that had no incremental run is not a reconciliation (the
+// control), nor is an incremental run itself.
+func TestAFullRunIsReconciledWithTheIncrementalRunBeforeIt(t *testing.T) {
+	t.Parallel()
+	type rec struct{ run, status, detail string }
+	observe := func(p store.PipelineRun, incremental string) []rec {
+		f := newShadowFixture(t)
+		var got []rec
+		f.incremental = func(context.Context, string, string) (string, error) { return incremental, nil }
+		f.reconcile = func(run, status, detail string) { got = append(got, rec{run, status, detail}) }
+		f.observe(context.Background(), p)
+		return got
+	}
+	full := func(name, result string, tests ...string) store.PipelineRun {
+		p := shadowRun(name, result, tests...)
+		p.Scope = "full"
+		p.StartedAt = time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
+		p.CompletedAt = p.StartedAt.Add(150 * time.Second)
+		return p
+	}
+	got := observe(full("ci-main-1", "Succeeded"), "ci-ready-1")
+	if len(got) != 1 || got[0].run != "ci-main-1" || got[0].status != "ok" {
+		t.Fatalf("a full pass after an incremental pass: %+v", got)
+	}
+	var d map[string]any
+	if err := json.Unmarshal([]byte(got[0].detail), &d); err != nil || d["incremental_run"] != "ci-ready-1" || d["full_seconds"] != float64(150) ||
+		d["by_module"] != "svc=1/3 web=0/1" || d["revision"] != strings.Repeat("c", 40) || d["repo"] != "r" {
+		t.Fatalf("detail %s (%v)", got[0].detail, err)
+	}
+	got = observe(full("ci-main-2", "Failed", "example.com/m/a.TestA"), "ci-ready-2")
+	if len(got) != 1 || got[0].status != "missed" || !strings.Contains(got[0].detail, "example.com/m/a.TestA") {
+		t.Fatalf("a full failure after an incremental pass: %+v", got)
+	}
+	if got = observe(full("ci-main-3", "Failed", "example.com/m/a.TestA"), ""); len(got) != 0 {
+		t.Fatalf("control, no incremental run before it: %+v", got)
+	}
+	inc := shadowRun("ci-ready-4", "Succeeded")
+	inc.Scope = "incremental"
+	if got = observe(inc, "ci-ready-4"); len(got) != 0 {
+		t.Fatalf("an incremental run is not reconciled with itself: %+v", got)
 	}
 }

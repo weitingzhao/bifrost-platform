@@ -295,6 +295,22 @@ func TestLedgerCIFollowsAnIncrementalPassToItsBase(t *testing.T) {
 	ask("one step", b, delivery.CISucceeded, "incr-b")
 	ask("two steps", c, delivery.CISucceeded, "incr-c")
 
+	// What PROD is judged on does not follow the chain: b and c have no
+	// verdict there until a full run of theirs passes, and then they have.
+	strict := ledgerCIStrict(func() store.DB { return pool }, nil)
+	for what, sha := range map[string]string{"one step, strict": b, "two steps, strict": c} {
+		if st, run, err := strict(ctx, "bifrost-platform", sha); err != nil || st != "" || run != "" {
+			t.Fatalf("%s: %q %q %v, want no verdict", what, st, run, err)
+		}
+	}
+	if st, _, _ := strict(ctx, "bifrost-platform", a); st != delivery.CISucceeded {
+		t.Fatalf("the full pass, strict: %q", st)
+	}
+	record("full-b", b, "Succeeded", "full", "")
+	if st, run, _ := strict(ctx, "bifrost-platform", b); st != delivery.CISucceeded || run != "full-b" {
+		t.Fatalf("after the full run of the push to main, strict: %q %q", st, run)
+	}
+
 	// Controls: each is an incremental pass that must not be a verdict.
 	// Its base has no verdict at all.
 	orphanBase, orphan := commit(), commit()
