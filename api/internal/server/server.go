@@ -72,7 +72,9 @@ type Server struct {
 	// (units_plan.go), keeping the blobs it read.
 	unitTrees *giteaTrees
 	// unitRunsKept keeps the run view's answers a short while (units_runs.go).
-	unitRunsKept    unitRunsCache
+	unitRunsKept unitRunsCache
+	// ciScorecardKept keeps the CI scorecard a short while (ci_scorecard.go).
+	ciScorecardKept ciScorecardCache
 	unitTreesOnce   sync.Once
 	promote         *promote.Handler
 	tradeagent      *tradeagent.Handler
@@ -560,6 +562,9 @@ func (s *Server) Router() http.Handler {
 		// The newest CI runs of one project, for the run view. Read-only;
 		// viewer and above.
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/units/runs", s.handleUnitRuns)
+		// How each repository uses CI and how CI serves them, scored from
+		// the retained runs (ci_scorecard.go). Read-only.
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/ci/scorecard", s.handleCIScorecard)
 		// What the approval records say, counted by day and requester, each
 		// count with the request numbers behind it. Read-only; viewer and above.
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/readings/approvals", s.handleApprovalReadings)

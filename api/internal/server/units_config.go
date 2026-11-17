@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -39,20 +40,12 @@ func (s *Server) handleUnitConfig(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	trees := s.unitTreesOf()
 	if commit == "" {
-		body, err := s.unitTrees.get(ctx, url.PathEscape(repo)+"/branches/main", 1<<20)
-		var branch struct {
-			Commit struct {
-				ID string `json:"id"`
-			} `json:"commit"`
-		}
-		if err == nil {
-			err = json.Unmarshal(body, &branch)
-		}
-		if err != nil || !commitID.MatchString(branch.Commit.ID) {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "gitea: main of " + repo + " could not be read"})
+		head, err := s.mainHead(ctx, repo)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 			return
 		}
-		commit = branch.Commit.ID
+		commit = head
 	}
 	out, err := unitConfig(ctx, trees, repo, commit)
 	if err != nil {
@@ -60,4 +53,22 @@ func (s *Server) handleUnitConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// mainHead is the commit main of repo is at, as Gitea says.
+func (s *Server) mainHead(ctx context.Context, repo string) (string, error) {
+	s.unitTreesOf()
+	body, err := s.unitTrees.get(ctx, url.PathEscape(repo)+"/branches/main", 1<<20)
+	var branch struct {
+		Commit struct {
+			ID string `json:"id"`
+		} `json:"commit"`
+	}
+	if err == nil {
+		err = json.Unmarshal(body, &branch)
+	}
+	if err != nil || !commitID.MatchString(branch.Commit.ID) {
+		return "", fmt.Errorf("gitea: main of %s could not be read", repo)
+	}
+	return branch.Commit.ID, nil
 }

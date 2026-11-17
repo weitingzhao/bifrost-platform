@@ -11,6 +11,7 @@ import { DomainMapView } from './DomainMapView'
 import { CommitJourney } from './CommitJourney'
 import { TimingBudget } from './TimingBudget'
 import { ApprovalReadingsBlock } from './ApprovalReadingsBlock'
+import { CiScorecardBlock } from './CiScorecardBlock'
 import { NO_FULL_RUN_TEXT, NO_RUNS_TEXT, fullCiView, runRow, matchesModule } from './ciViewModel'
 
 /*
@@ -155,6 +156,7 @@ export function CiSection() {
   const error = errorText(projects.error)
   return (
     <section aria-label="CI" className="flex min-w-0 flex-col gap-6">
+      <CiScorecardBlock />
       <OpsSection title="Projects" description="Choose once. Configuration, dependencies, pipeline and runs below share this selection." bodyPadding="compact">
         {repos && repo && <div role="group" aria-label="Project" className="flex flex-wrap gap-2">{repos.map(name => <ScopeChip key={name} name={name} selected={repo === name} onClick={() => { setPickedRepo(name); setModule(''); setPickedRun('') }} />)}</div>}
         {repos == null && (error != null

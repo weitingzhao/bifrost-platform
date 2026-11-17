@@ -16,6 +16,7 @@ import { contract } from './contract'
  */
 
 vi.mock('../PlatformTimings', () => ({ PlatformTimings: () => null }))
+vi.mock('../CiScorecardBlock', () => ({ CiScorecardBlock: () => null }))
 vi.mock('@/api/units', () => ({ fetchUnitsConfig: vi.fn(), fetchUnitsRuns: vi.fn(), fetchFullCi: vi.fn(), fetchUnitsPlan: vi.fn() }))
 vi.mock('@/api/readings', () => ({ fetchApprovalReadings: vi.fn() }))
 vi.mock('@/api/delivery', () => ({ fetchSupplyChain: vi.fn() }))

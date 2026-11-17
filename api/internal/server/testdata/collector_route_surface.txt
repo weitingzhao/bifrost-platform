@@ -64,6 +64,7 @@ deny	POST /api/v1/bus/hooks/gitea
 deny	GET /api/v1/bus/stream
 deny	GET /api/v1/bus/trace
 deny	GET /api/v1/checklist/signals
+deny	GET /api/v1/ci/scorecard
 deny	GET /api/v1/cluster/
 deny	POST /api/v1/cluster/addons/kube-prometheus-stack/ensure
 deny	POST /api/v1/cluster/addons/metrics-server/ensure

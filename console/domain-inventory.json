@@ -89,6 +89,7 @@
         "console/src/api/__tests__/serverContactCoverage.test.ts",
         "console/src/api/agentRuntime.ts",
         "console/src/api/agentTypes.ts",
+        "console/src/api/ciScorecard.ts",
         "console/src/api/matrixTypes.ts"
       ],
       "imports": [
@@ -4557,6 +4558,7 @@
       "path": "console/src/pages/shell/ci",
       "files": [
         "console/src/pages/shell/ci/ApprovalReadingsBlock.tsx",
+        "console/src/pages/shell/ci/CiScorecardBlock.tsx",
         "console/src/pages/shell/ci/CiSection.tsx",
         "console/src/pages/shell/ci/CommitJourney.tsx",
         "console/src/pages/shell/ci/DomainMapView.tsx",
@@ -4567,6 +4569,7 @@
         "console/src/pages/shell/ci/TimingBudget.tsx",
         "console/src/pages/shell/ci/TimingTrends.tsx",
         "console/src/pages/shell/ci/__tests__/ApprovalReadingsBlock.test.tsx",
+        "console/src/pages/shell/ci/__tests__/CiScorecardBlock.test.tsx",
         "console/src/pages/shell/ci/__tests__/CiSection.test.tsx",
         "console/src/pages/shell/ci/__tests__/CommitJourney.test.tsx",
         "console/src/pages/shell/ci/__tests__/DomainMapView.test.tsx",
@@ -4584,6 +4587,7 @@
         "console/src/pages/shell/ci/timingModel.ts"
       ],
       "imports": [
+        "console/src/api",
         "console/src/api/ciTimings.ts",
         "console/src/api/delivery.ts",
         "console/src/api/readings.ts",
@@ -4593,6 +4597,7 @@
         "console/src/pages/shell/releases"
       ],
       "test_imports": [
+        "console/src/api",
         "console/src/api/ciTimings.ts",
         "console/src/api/delivery.ts",
         "console/src/api/deliveryTypes.ts",
