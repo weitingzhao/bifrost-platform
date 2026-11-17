@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"log/slog"
 	"net/http"
 	"os"
@@ -420,6 +421,14 @@ func (s *Server) Router() http.Handler {
 	r.Use(s.httpMetrics.Middleware(r))
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	// Kubernetes requests made while answering HTTP are counted under site
+	// "http" (kubemetrics, 2026-11-16: which of the platform's LISTs are page
+	// reads and which are its loops).
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			next.ServeHTTP(w, req.WithContext(kubemetrics.WithSite(req.Context(), "http")))
+		})
+	})
 	// A request for an action the signed policy covers is run, not answered
 	// "call directly" (covered_request.go).
 	r.Use(coveredRequestRuns(r))

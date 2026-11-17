@@ -9,6 +9,7 @@ import (
 	buscards "github.com/weitingzhao/bifrost-platform/api/internal/bus/cards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/runhooks"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/subscribe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"log/slog"
 	"net/http"
@@ -123,6 +124,7 @@ func (p *serialPass) clock() time.Time {
 }
 
 func (p *serialPass) run(ctx context.Context) error {
+	ctx = kubemetrics.WithSite(ctx, "head-release")
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.last = p.clock()
@@ -417,7 +419,7 @@ func (s *Server) startGateCluster(ctx context.Context) {
 	if s.delivery != nil {
 		s.delivery.SetRunCache(g)
 	}
-	safego.Go("bus-gate-cluster", func() { g.Run(ctx) })
+	safego.Go("bus-gate-cluster", func() { g.Run(kubemetrics.WithSite(ctx, "bus.gate-cluster")) })
 	safego.Go("bus-gate-cluster-records-live", func() {
 		select {
 		case <-ctx.Done():
@@ -451,7 +453,7 @@ func (s *Server) startRunCache(ctx context.Context) {
 	ns := s.delivery.PipelinesNamespace()
 	g := &gatecluster.Gate{CacheOnly: true, Namespace: ns, Logf: busLogf, Dynamic: s.clusterDynamic}
 	s.delivery.SetRunCache(g)
-	safego.Go("bus-run-cache", func() { g.Run(ctx) })
+	safego.Go("bus-run-cache", func() { g.Run(kubemetrics.WithSite(ctx, "bus.run-cache")) })
 	slog.Info("bus run cache: watching PipelineRuns for the display reads", "namespace", ns)
 }
 
