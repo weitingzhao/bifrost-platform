@@ -1,7 +1,11 @@
 create: execution card with both lines => 201 card pending
 create: execution card with no lines => 400 the reason must have a line starting with each o
 create: execution card, only the first line => 400 the reason must have a line starting with each o
-create: command uses --raw => 400 the command uses --raw, which the execution port
+create: kubectl get --raw => 201 card pending
+create: kubectl delete --raw => 400 the command uses --raw with "kubectl delete"; --
+create: made-up subcommand with --raw => 400 the command uses --raw with "kubectl apply2"; --
+create: dry run expansion to server => 201 card pending
+create: dry run expansion to client => 400 the command uses --dry-run=client; a trial run o
 create: dry-run=client => 400 the command uses --dry-run=client; a trial run o
 create: dry-run=server => 201 card pending
 create: own kubeconfig => 400 the command names its own connection (--kubeconf

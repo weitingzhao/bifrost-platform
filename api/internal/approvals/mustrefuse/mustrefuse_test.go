@@ -19,7 +19,7 @@ import (
 
 // caseCount is how many cases the set has. Cases are added, with this number;
 // a case is never dropped to make a change pass.
-const caseCount = 11
+const caseCount = 12
 
 const goodReason = "x\n改了什么：一个对象\n批了以后谁因此能做什么新事：没有新能力"
 
@@ -122,6 +122,16 @@ func code(rec *httptest.ResponseRecorder, want ...int) string {
 }
 
 var cases = []mustRefuse{
+	{"an execution card with --raw under a made-up subcommand, or a dry run that is not the server's, is not built", "#550 and 2026-11-17: --raw is read by position, only with get; a client dry run stays refused whatever wraps it", func(w *world) string {
+		for _, command := range []string{"kubectl -n get apply2 --raw /x", "kubectl delete --raw /x --dry-run=server", `D="${V:+--dry-run=client}"; kubectl apply -f x ${D}`} {
+			body, _ := json.Marshal(map[string]any{"action": "owner_run_command", "reason": goodReason,
+				"params": map[string]any{"command": command, "reason": "r"}})
+			if msg := code(w.call(http.MethodPost, "/approvals", string(body), "operator-tok", "s1"), http.StatusBadRequest); msg != "" {
+				return command + ": " + msg
+			}
+		}
+		return ""
+	}},
 	{"an agent cannot approve a card", "ADR section 5; Owner 2026-10-07: approval is the Owner's", func(w *world) string {
 		id, _ := w.card("s1", goodReason)
 		rec := w.call(http.MethodPost, "/approvals/"+id+"/approve", `{"channel":"chat"}`, "operator-tok", "s1")
@@ -233,9 +243,9 @@ var cases = []mustRefuse{
 		_, rec := w.card("s1", "plain reason")
 		return code(rec, http.StatusBadRequest)
 	}},
-	{"an execution card with --raw is not built", "#550: a trial run with --raw really deleted", func(w *world) string {
+	{"an execution card with --raw after a write verb is not built", "#550: a trial run with --raw really deleted; --raw is a read only after get (2026-11-17)", func(w *world) string {
 		body, _ := json.Marshal(map[string]any{"action": "owner_run_command", "reason": goodReason,
-			"params": map[string]any{"command": "kubectl get --raw /x", "reason": "r"}})
+			"params": map[string]any{"command": "kubectl delete --raw /x", "reason": "r"}})
 		return code(w.call(http.MethodPost, "/approvals", string(body), "operator-tok", "s1"), http.StatusBadRequest)
 	}},
 }
