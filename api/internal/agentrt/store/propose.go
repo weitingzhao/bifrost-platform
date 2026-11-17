@@ -32,12 +32,6 @@ const ThreadsPerDay = actor.ThreadsPerDay
 
 func ThreadActor(session string) (string, error) { return actor.ThreadActor(session) }
 
-func holdsSessionTx(ctx context.Context, tx pgx.Tx, w Writer) error {
-	return actor.HoldsSessionTx(ctx, tx, w)
-}
-
-func kindOf(a string) string { return actor.KindOf(a) }
-
 func CheckWriter(ctx context.Context, tx pgx.Tx, w Writer) (bool, error) {
 	return actor.CheckWriter(ctx, tx, w)
 }
