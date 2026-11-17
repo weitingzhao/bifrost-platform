@@ -4,7 +4,7 @@
  * Static catalog for LLM packs and Runtime Map registry (probe targets, scope, hardware).
  * Milestones and decisions: authoritative via config/ops-context.yaml + GET /api/v1/context.
  *
- * Live environment status: Control Room + Runtime Map. Governance UI: Blueprint, Standards, Agent Protocol.
+ * Live environment status: Control Room + Runtime Map. These rows are static descriptions, never status.
  */
 
 export const CATALOG_VERSION = '2026-06-29-ai-compute-strategy'
@@ -25,13 +25,6 @@ export const SCOPE_ROWS: ScopeRow[] = [
   tenantScopeRows['TRADE-FE'],
   tenantScopeRows['TRADE-API'],
   tenantScopeRows['WORKER'],
-  {
-    tag: 'SOCKET',
-    component: 'bifrost-trade-socket (RETIRED / reference-only)',
-    technology: 'Python · legacy IB ingestor / account / operator (reference)',
-    notes:
-      'Wave 14G-F: production IB edge is Platform IB Gateway Plugin → redis-ib (IBGP). Do not start trade-socket for Inner Loop or K3s. Repo kept as reference until Phase 3 archive. Compose default path still pending Phase 1 profile cutover.',
-  },
   tenantScopeRows['CORE'],
   tenantScopeRows['INFRA'],
   foundationScopeRows['PG'],
@@ -40,14 +33,14 @@ export const SCOPE_ROWS: ScopeRow[] = [
     tag: 'TWS',
     component: 'Interactive Brokers TWS / Gateway',
     technology: 'Win11 ×2 (Host + Secondary) — cluster-external forever',
-    notes: 'R-DV3: Dev/Prod distinct client_id; one auto-trading Engine per IB account. D4: auto-order switch deferred.',
+    notes: 'R-DV3: Dev/Prod distinct client_id; one auto-trading Engine per IB account.',
   },
   foundationScopeRows['GITHUB'],
   foundationScopeRows['K3S'],
   foundationScopeRows['OBSERVE'],
   {
     tag: 'AI',
-    component: 'Inference & MCP (target)',
+    component: 'Inference & MCP',
     technology: 'Ollama on gpu-server (4090) · mcp-server-kubernetes · bifrost-ops-mcp',
     notes: 'L0/L1 ops only; research RAG CronJob read-only. Forbidden: trade write paths for platform AI.',
   },
