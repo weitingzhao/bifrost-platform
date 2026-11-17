@@ -40,6 +40,9 @@ var (
 type Release struct {
 	Env, Lane, Repo, SHA, Run string
 	Succeeded                 bool
+	// Cause is the ledger event that woke the run's start (the run's
+	// bifrost.io/cause label); 0 for none (2026-11-17).
+	Cause int64
 }
 
 // Subject is "<env>/<lane>@<sha>", the register's "<env>/<app>@<sha40>".
@@ -73,7 +76,7 @@ func Append(ctx context.Context, tx pgx.Tx, r Release) (int64, error) {
 	if ok, err := actor.Exists(ctx, tx, writer); err != nil || !ok {
 		return 0, err
 	}
-	ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: Stream(r), Type: Type, Actor: writer, Body: Body(r)})
+	ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: Stream(r), Type: Type, Actor: writer, Cause: r.Cause, Body: Body(r)})
 	if err != nil {
 		return 0, err
 	}

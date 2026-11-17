@@ -593,3 +593,26 @@ func TestAnUnreadDefinitionIsCheckedAndNamed(t *testing.T) {
 		t.Fatalf("a pipeline that runs no kaniko is not held by the amd64 check: %+v", pf)
 	}
 }
+
+// 2026-11-17, with the communication layer (no bus event carried a cause, so
+// git.main.advanced -> the run -> release.deploy.finished could not be
+// followed): a start made with a cause names it on the run, with the
+// environment whose ledger holds it (event ids are per ledger); anything that
+// is not a ledger event's bus id, or no environment, names nothing. Positive control: without the
+// LabelCause line in StartPipelineRun the first run has no label.
+func TestAStartNamesTheEventThatCausedIt(t *testing.T) {
+	pipe := infraPipelines(t)["bifrost-ci-platform"]
+	for _, tc := range []struct{ id, env, want, wantEnv string }{
+		{"ev-42", "prod", "ev-42", "prod"}, {"42", "prod", "", ""}, {"ev-x", "prod", "", ""}, {"", "prod", "", ""}, {"ev-42", "", "", ""},
+	} {
+		s, dyn, _ := contractService(t, pipe, "present")
+		resp, _, err := s.StartPipelineRun(WithCause(context.Background(), tc.id, tc.env), "bifrost-ci-platform", factSHA1, "", "", nil)
+		if err != nil || !resp.OK {
+			t.Fatal(resp, err)
+		}
+		labels := createdContractRun(t, dyn).GetLabels()
+		if labels[LabelCause] != tc.want || labels[LabelCauseEnv] != tc.wantEnv {
+			t.Fatalf("cause %q env %q: labels %q %q, want %q %q", tc.id, tc.env, labels[LabelCause], labels[LabelCauseEnv], tc.want, tc.wantEnv)
+		}
+	}
+}

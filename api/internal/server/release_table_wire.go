@@ -2,10 +2,13 @@ package server
 
 import (
 	"context"
+	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	busreleases "github.com/weitingzhao/bifrost-platform/api/internal/bus/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
@@ -18,6 +21,29 @@ import (
 // revision names no single repository's built commit is a row without an
 // announcement. A run with a row already (a record built again) is a new
 // row naming the first announcement, and is not announced again.
+// ledgerCause is the ledger event a run's cause label names ("ev-<n>"), when
+// this ledger has it; 0 otherwise. Head-release and the recorder both run in
+// PROD's workers, so the label names an event of this ledger; one it does not
+// have is left out rather than failing the row on the foreign key.
+func ledgerCause(ctx context.Context, tx pgx.Tx, label string) (int64, error) {
+	n, ok := strings.CutPrefix(label, "ev-")
+	if !ok {
+		return 0, nil
+	}
+	id, err := strconv.ParseInt(n, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, nil
+	}
+	found, err := eventlog.Exists(ctx, tx, id)
+	if err != nil {
+		return 0, err
+	}
+	if !found {
+		return 0, nil
+	}
+	return id, nil
+}
+
 // releaseRows reads the record table for the recorder's side-by-side
 // comparison and copies into it the records written before it (step 2).
 type releaseRows struct{ pool *pgxpool.Pool }
@@ -44,8 +70,12 @@ func releaseTable(pool *pgxpool.Pool) releases.TableWriter {
 				return err
 			}
 			if repo, sha, ok := releases.Announced(rec); ok && !again {
+				cause, err := ledgerCause(ctx, tx, rec.Cause)
+				if err != nil {
+					return err
+				}
 				id, err := busreleases.Append(ctx, tx, busreleases.Release{
-					Env: rec.Env, Lane: rec.Lane, Repo: repo, SHA: sha, Run: rec.Run, Succeeded: succeeded,
+					Env: rec.Env, Lane: rec.Lane, Repo: repo, SHA: sha, Run: rec.Run, Succeeded: succeeded, Cause: cause,
 				})
 				if err != nil {
 					return err

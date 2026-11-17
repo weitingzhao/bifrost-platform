@@ -46,6 +46,9 @@ type Record struct {
 	// source gate that ran without the commit it owes ("check-source (ui-commit)").
 	Missing    []string  `json:"missing,omitempty"`
 	RecordedAt time.Time `json:"recorded_at"`
+	// Cause is the bus event that woke the run's start ("ev-<n>"), from its
+	// bifrost.io/cause label; "" when the run names none (2026-11-17).
+	Cause string `json:"cause,omitempty"`
 }
 
 const (
@@ -241,6 +244,7 @@ func buildRecord(run *unstructured.Unstructured, rule Rule, taskRuns []unstructu
 		Revision:    runParam(run, "revision"),
 		Tag:         runParam(run, "tag"),
 		FromRun:     run.GetLabels()["bifrost.io/from-stg-run"],
+		Cause:       run.GetLabels()["bifrost.io/cause"],
 		StartedAt:   nestedTime(run.Object, "status", "startTime"),
 		CompletedAt: nestedTime(run.Object, "status", "completionTime"),
 		Repos:       map[string]RepoBuild{},

@@ -48,6 +48,15 @@ func Last(ctx context.Context, tx pgx.Tx, stream string) (Row, bool, error) {
 	return r, true, nil
 }
 
+// Exists says whether the ledger holds the event id: a cause another
+// process names (a run's bifrost.io/cause label) is checked before it is
+// written as cause_event_id, whose foreign key would refuse the whole event.
+func Exists(ctx context.Context, tx pgx.Tx, eventID int64) (bool, error) {
+	var have bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_id = $1)`, eventID).Scan(&have)
+	return have, err
+}
+
 // Has says whether a stream holds an event of the type (any type when it is
 // empty) whose body has each of these top-level keys with this text: the
 // text a key reads as, as body_json->>key gives it.

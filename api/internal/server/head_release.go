@@ -267,7 +267,7 @@ func (s *Server) headWorldOf() *headWorld {
 			}
 			return s.delivery.PipelineRunsOf(kubemetrics.WithSite(ctx, "head-release"), pipeline)
 		},
-		start: s.delivery.StartDeliveryIfFree,
+		start: s.startHeadRelease,
 		frozen: func(ctx context.Context) (bool, string) {
 			if s.releasePolicy == nil {
 				return false, ""
@@ -285,6 +285,21 @@ func (s *Server) headWorldOf() *headWorld {
 			return approvedReleaseWaiting(items, time.Now()), nil
 		},
 	}
+}
+
+// startHeadRelease starts a head-release run naming, as its cause, the newest
+// bus event worth a pass (delivery.LabelCause; 2026-11-17, the communication
+// layer: git.main.advanced -> the run -> release.deploy.finished could not be
+// followed, no event carried a cause). A run started by the loop's own
+// reconciliation, with no wake since the last start, names none.
+func (s *Server) startHeadRelease(ctx context.Context, principal, pipeline, revision string, params map[string]string) (delivery.PipelineRunView, string, error) {
+	cause := s.bus.lastWake()
+	env, _ := s.bus.wakeEnv.Load().(string)
+	run, heldBy, err := s.delivery.StartDeliveryIfFree(delivery.WithCause(ctx, cause, env), principal, pipeline, revision, params)
+	if err == nil && run.Name != "" && cause != "" {
+		s.bus.clearWake(cause)
+	}
+	return run, heldBy, err
 }
 
 // headReleaseSource is the loop's pass, or nil when the switch is off.

@@ -76,7 +76,9 @@ type fakeRows struct {
 	refuse map[string]bool
 }
 
-func (f *fakeRows) Records(context.Context) ([]Record, error) { return append([]Record(nil), f.rows...), nil }
+func (f *fakeRows) Records(context.Context) ([]Record, error) {
+	return append([]Record(nil), f.rows...), nil
+}
 
 func (f *fakeRows) Backfill(_ context.Context, rec Record) (bool, error) {
 	for _, r := range f.rows {
@@ -134,5 +136,19 @@ func TestTickBackfillsTheTableAndComparesCurrentBothWays(t *testing.T) {
 	c = s.Tick(ctx).Compare
 	if c.Differ != 1 || len(c.Diffs) != 1 || !strings.Contains(c.Diffs[0], "app/stg: configmaps run deliver-stg-2, rows unsettled") {
 		t.Fatalf("compare = %+v", c)
+	}
+}
+
+// Same origin: the record carries the run's cause label, so the recorder's
+// release.deploy.finished can name the event that woke the start.
+func TestARecordCarriesTheRunsCause(t *testing.T) {
+	t1 := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+	run := pipelineRun("deliver-stg-9", "deliver-stg", true, t1, nil, map[string]string{"bifrost.io/cause": "ev-77"})
+	rule := Rule{Lane: "app", Env: "stg", Deploys: true}
+	if rec := buildRecord(run, rule, nil, t1); rec.Cause != "ev-77" {
+		t.Fatalf("cause = %q", rec.Cause)
+	}
+	if rec := buildRecord(pipelineRun("deliver-stg-8", "deliver-stg", true, t1, nil, nil), rule, nil, t1); rec.Cause != "" {
+		t.Fatalf("a run with no label named %q", rec.Cause)
 	}
 }

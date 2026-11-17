@@ -383,6 +383,10 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 			"bifrost.io/revision": sanitizeLabelValue(rev),
 		},
 	}
+	if cause, env := causeOf(ctx); cause != "" {
+		meta["labels"].(map[string]any)[LabelCause] = cause
+		meta["labels"].(map[string]any)[LabelCauseEnv] = env
+	}
 	if ciRepo != "" {
 		meta["labels"].(map[string]any)["bifrost.io/repo"] = ciRepo
 	}

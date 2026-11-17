@@ -185,3 +185,29 @@ func TestHeadReleaseAsksForItsPipelineOnly(t *testing.T) {
 		t.Fatalf("asked %v, got %+v, err %v", asked, got, err)
 	}
 }
+
+// 2026-11-17, with the communication layer: the newest event worth a
+// head-release pass is the cause a started run names; a start clears it only
+// if no newer wake came meanwhile. Positive control: with clearWake storing
+// "" unconditionally, the last check sees "" instead of ev-3.
+func TestHeadReleaseRemembersTheNewestWake(t *testing.T) {
+	var b busWiring
+	if b.lastWake() != "" {
+		t.Fatal("no wake yet")
+	}
+	b.clearWake("ev-1") // nothing kept: no panic, nothing changes
+	b.noteWake("ev-1")
+	b.noteWake("ev-2")
+	if b.lastWake() != "ev-2" {
+		t.Fatalf("lastWake = %q", b.lastWake())
+	}
+	b.clearWake("ev-2")
+	if b.lastWake() != "" {
+		t.Fatalf("a run started with ev-2 left %q", b.lastWake())
+	}
+	b.noteWake("ev-3")
+	b.clearWake("ev-2") // a start that read ev-2 before ev-3 came
+	if b.lastWake() != "ev-3" {
+		t.Fatalf("a newer wake was lost: %q", b.lastWake())
+	}
+}

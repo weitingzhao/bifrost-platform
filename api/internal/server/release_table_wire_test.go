@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -132,5 +133,56 @@ func TestReleaseRowsBackfillWithoutAnnouncingAndReadBack(t *testing.T) {
 	if r.Run != old.Run || r.Lane != "platform" || r.Env != "prod" || !r.Deploys || r.Repos["bifrost-platform"].SHA != sha ||
 		!r.CompletedAt.Equal(old.CompletedAt) || len(r.Missing) != 1 {
 		t.Fatalf("read back %+v", r)
+	}
+}
+
+// 2026-11-17, with the communication layer: release.deploy.finished names, as
+// its cause, the ledger event the run's cause label names (the
+// git.main.advanced that woke head-release), so the chain can be followed on
+// the bus. A label naming an event this ledger does not have is left out,
+// and the row is still written. Positive control: with Cause dropped from
+// busreleases.Append the first announcement's cause_event_id is NULL.
+func TestReleaseTableNamesTheCauseOfTheRun(t *testing.T) {
+	ctx := context.Background()
+	db := agentrttest.Migrated(t)
+	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+		t.Fatal(err)
+	}
+	pool := db.Pool(t, db.Runtime)
+	write := releaseTable(pool)
+	sha := strings.Repeat("d", 40)
+	at := time.Date(2026, 11, 17, 22, 0, 0, 0, time.UTC)
+	base := releases.Record{
+		Run: "bifrost-deliver-platform-1794952405", Pipeline: "bifrost-deliver-platform",
+		Lane: "platform", Env: "stg", Deploys: true, Revision: sha,
+		StartedAt: at, CompletedAt: at.Add(3 * time.Minute),
+		Repos: map[string]releases.RepoBuild{"bifrost-platform": {SHA: sha, Source: "param"}},
+	}
+	// an earlier announcement stands in for the git.main.advanced that woke the start
+	if err := write(ctx, base, true); err != nil {
+		t.Fatal(err)
+	}
+	var woke int64
+	if err := pool.QueryRow(ctx, `SELECT event_id FROM agentrt.release_record WHERE run = $1`, base.Run).Scan(&woke); err != nil {
+		t.Fatal(err)
+	}
+	caused := base
+	caused.Run, caused.Cause = "bifrost-deliver-platform-1794952406", fmt.Sprintf("ev-%d", woke)
+	unknown := base
+	unknown.Run, unknown.Cause = "bifrost-deliver-platform-1794952407", "ev-999999999"
+	for _, rec := range []releases.Record{caused, unknown} {
+		if err := write(ctx, rec, true); err != nil {
+			t.Fatalf("%s: %v", rec.Run, err)
+		}
+	}
+	for run, want := range map[string]*int64{caused.Run: &woke, unknown.Run: nil} {
+		var cause *int64
+		if err := pool.QueryRow(ctx, `SELECT e.cause_event_id FROM agentrt.release_record r JOIN agentrt.event e ON e.event_id = r.event_id
+			WHERE r.run = $1`, run).Scan(&cause); err != nil {
+			t.Fatalf("%s: %v", run, err)
+		}
+		if (want == nil) != (cause == nil) || (want != nil && *cause != *want) {
+			t.Fatalf("%s: cause %v, want %v", run, cause, want)
+		}
 	}
 }

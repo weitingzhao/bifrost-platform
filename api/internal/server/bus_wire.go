@@ -73,7 +73,27 @@ type busWiring struct {
 	// runHooks are the readers woken by ci.run.finished instead of a timer
 	// (bus/runhooks); RunHooks registers one.
 	runHooks runhooks.Registry
+	// wake is the bus id of the newest event worth a head-release pass
+	// ("ev-<n>"): a run head-release starts names it as its cause
+	// (delivery.LabelCause, 2026-11-17).
+	wake atomic.Value
+	// wakeEnv is the environment whose ledger those ids are of (the
+	// consumer's AGENTRT_ENV).
+	wakeEnv atomic.Value
 }
+
+// noteWake keeps id as the newest event worth a head-release pass.
+func (b *busWiring) noteWake(id string) { b.wake.Store(id) }
+
+// lastWake is the newest event worth a head-release pass, "" for none.
+func (b *busWiring) lastWake() string {
+	id, _ := b.wake.Load().(string)
+	return id
+}
+
+// clearWake forgets id once a run started with it as the cause; a newer wake
+// that came meanwhile stays.
+func (b *busWiring) clearWake(id string) { b.wake.CompareAndSwap(id, "") }
 
 // RunHooks is where a reader of pipeline runs registers to be woken by
 // ci.run.finished (one durable consumer per hook, in the workers).
@@ -613,6 +633,8 @@ func (s *Server) consumeHeadRelease(ctx context.Context, js jetstream.JetStream,
 	}
 	cc, err := relay.ConsumeDurable(ctx, js, relay.Tenant, env, "headrelease", headReleaseWakes, func(e relay.Envelope) error {
 		if worth == nil || worth(e) {
+			s.bus.wakeEnv.Store(env)
+			s.bus.noteWake(e.ID)
 			s.bus.kickHeadRelease()
 		}
 		rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
