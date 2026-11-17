@@ -266,9 +266,14 @@ func TestShadowRecordKeepsTheLineAndNamesAMiss(t *testing.T) {
 func TestAFullRunIsReconciledWithTheIncrementalRunBeforeIt(t *testing.T) {
 	t.Parallel()
 	type rec struct{ run, status, detail string }
+	var told []string
 	observe := func(p store.PipelineRun, incremental string) []rec {
 		f := newShadowFixture(t)
 		var got []rec
+		f.drift = func(_ context.Context, repo, commit, passed, contradicts string) error {
+			told = append(told, repo+" "+commit[:1]+" "+passed+" "+contradicts)
+			return nil
+		}
 		f.incremental = func(context.Context, string, string) (string, error) { return incremental, nil }
 		f.reconcile = func(run, status, detail string) { got = append(got, rec{run, status, detail}) }
 		f.observe(context.Background(), p)
@@ -294,6 +299,10 @@ func TestAFullRunIsReconciledWithTheIncrementalRunBeforeIt(t *testing.T) {
 	if len(got) != 1 || got[0].status != "missed" || !strings.Contains(got[0].detail, "example.com/m/a.TestA") {
 		t.Fatalf("a full failure after an incremental pass: %+v", got)
 	}
+	// The bus is told of the miss and of nothing else (the pass above, the two controls below).
+	if strings.Join(told, "|") != "r c ci-ready-2 ci-main-2" {
+		t.Fatalf("told the bus: %v", told)
+	}
 	if got = observe(full("ci-main-3", "Failed", "example.com/m/a.TestA"), ""); len(got) != 0 {
 		t.Fatalf("control, no incremental run before it: %+v", got)
 	}
@@ -301,5 +310,8 @@ func TestAFullRunIsReconciledWithTheIncrementalRunBeforeIt(t *testing.T) {
 	inc.Scope = "incremental"
 	if got = observe(inc, "ci-ready-4"); len(got) != 0 {
 		t.Fatalf("an incremental run is not reconciled with itself: %+v", got)
+	}
+	if strings.Join(told, "|") != "r c ci-ready-2 ci-main-2" {
+		t.Fatalf("told the bus after the controls: %v", told)
 	}
 }

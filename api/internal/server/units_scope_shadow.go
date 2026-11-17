@@ -15,6 +15,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	busdrift "github.com/weitingzhao/bifrost-platform/api/internal/bus/drift"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
@@ -73,7 +74,9 @@ type unitScopeShadow struct {
 	incremental func(ctx context.Context, repo, commit string) (string, error)
 	// reconcile keeps one reconciliation where record keeps a line.
 	reconcile func(run, status, detail string)
-	log       *slog.Logger
+	// drift tells the bus of a miss (reconcile.drift.found); nil: nobody is told.
+	drift func(ctx context.Context, repo, commit, passed, contradicts string) error
+	log   *slog.Logger
 
 	mu      sync.Mutex
 	seen    map[string]bool // run uid: told in this process
@@ -145,6 +148,14 @@ func (s *Server) unitScopeShadowSource() func(context.Context, store.PipelineRun
 		},
 		reconcile: func(run, status, detail string) {
 			s.audit.RecordDirect(unitScopeShadowPrincipal, actuation.RoleOperator, ciReconcileAction, "run/"+run, status, detail)
+		},
+		drift: func(ctx context.Context, repo, commit, passed, contradicts string) error {
+			d := db()
+			if d == nil {
+				return fmt.Errorf("the ledger is not connected")
+			}
+			_, err := busdrift.Announce(ctx, d, busdrift.Found{Repo: repo, Commit: commit, Kind: busdrift.FullVsIncremental, Passed: passed, Contradicts: contradicts})
+			return err
 		},
 	}
 	return sh.observe
@@ -306,6 +317,12 @@ func (u *unitScopeShadow) reconcileFull(ctx context.Context, p store.PipelineRun
 		u.logger().Info("ci reconcile", "run", p.Run, "revision", commit, "incremental_run", inc, "status", status)
 	}
 	u.reconcile(p.Run, status, string(detail))
+	if status == "missed" && u.drift != nil {
+		// The record above stands whether or not the bus could be told.
+		if err := u.drift(ctx, p.Repo, commit, inc, p.Run); err != nil {
+			u.logger().Warn("ci reconcile", "run", p.Run, "revision", commit, "error", "the miss was not announced: "+err.Error())
+		}
+	}
 }
 
 func (u *unitScopeShadow) logger() *slog.Logger {
