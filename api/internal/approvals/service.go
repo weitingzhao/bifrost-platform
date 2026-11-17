@@ -28,6 +28,11 @@ type Service struct {
 	// Installed at startup; observers only copy execution materials, never authorize.
 	BeforeExecution func(context.Context, Approval) context.Context
 	AfterExecution  func(context.Context, any, error)
+	// Announce, installed at startup, hands every audited transition to the
+	// bus (approval.card.*): a seat waiting on its card is woken by the
+	// decision. Called after the state is stored and the audit written; it
+	// must not block (2026-11-16).
+	Announce func(transitions []Transition)
 	// Assessment reads an existing stream for HTTP views only; installed at startup.
 	// List reads are concurrent and must honor the shared context deadline.
 	Assessment  func(context.Context, string) map[string]any
@@ -752,7 +757,31 @@ func (s *Service) record(r *http.Request, evs []event) {
 	s.noticeEvents(evs)
 }
 
+// Transition is one audited change of a card, for the bus.
+type Transition struct {
+	AuditAction, ID, Action, Status string
+	Number                          int
+}
+
+func (s *Service) announce(evs []event) {
+	if s.Announce == nil || len(evs) == 0 {
+		return
+	}
+	out := make([]Transition, 0, len(evs))
+	for _, e := range evs {
+		rec, ok := s.find(e.target)
+		if !ok {
+			continue
+		}
+		out = append(out, Transition{AuditAction: e.action, ID: rec.ID, Action: rec.Action, Status: e.status, Number: rec.Number})
+	}
+	if len(out) > 0 {
+		s.Announce(out)
+	}
+}
+
 func (s *Service) writeAudit(r *http.Request, evs []event) {
+	s.announce(evs)
 	if s.audit == nil {
 		return
 	}

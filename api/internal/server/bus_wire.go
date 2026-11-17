@@ -3,7 +3,9 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	busalerts "github.com/weitingzhao/bifrost-platform/api/internal/bus/alerts"
+	buscards "github.com/weitingzhao/bifrost-platform/api/internal/bus/cards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"log/slog"
 	"net/http"
@@ -181,6 +183,33 @@ func (b *busWiring) db() eventlog.DB {
 	return nil
 }
 
+// announceCards writes the approval cards' transitions to the bus
+// (bus/cards), in the background: the approvals flow does not wait on the
+// ledger. A failed write is logged; the store stays the truth.
+func (s *Server) announceCards(ts []approvals.Transition) {
+	db := s.bus.db()
+	if db == nil {
+		return
+	}
+	list := make([]buscards.Card, 0, len(ts))
+	for _, t := range ts {
+		c := buscards.Card{Type: buscards.TypeOf(t.AuditAction), ID: t.ID, Action: t.Action, Status: t.Status, Number: t.Number}
+		if buscards.Valid(c) {
+			list = append(list, c)
+		}
+	}
+	if len(list) == 0 {
+		return
+	}
+	safego.Go("bus.cards", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := buscards.Announce(ctx, db, list); err != nil {
+			slog.Warn("bus: approval cards not announced", "error", err, "count", len(list))
+		}
+	})
+}
+
 // announceAlerts writes Alertmanager's alerts to the bus as alert.rule.fired
 // (bus/alerts). Alerts it cannot name are left out; nothing is written while
 // the ledger is not connected.
@@ -215,6 +244,9 @@ func (s *Server) mountBus(r chi.Router) {
 	r.Post("/bus/hooks/gitea", h.ServeHTTP)
 	if s.opsagent != nil {
 		s.opsagent.Announce = s.announceAlerts
+	}
+	if s.approvals != nil {
+		s.approvals.Announce = s.announceCards
 	}
 	route := func(serve func(*gate.Gate, http.ResponseWriter, *http.Request)) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
