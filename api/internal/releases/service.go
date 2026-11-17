@@ -319,7 +319,14 @@ func listRuns(ctx context.Context, dyn dynamic.Interface, ns string) ([]unstruct
 // listRunsOf is listRuns for the runs a label selector takes; "" is all.
 func listRunsOf(ctx context.Context, dyn dynamic.Interface, ns, selector string) ([]unstructured.Unstructured, error) {
 	var out []unstructured.Unstructured
+	// A hundred a page for the whole namespace (the workers once held these
+	// lists at 512Mi); the runs a selector takes are a few hundred at most,
+	// and one page of them is one request where two were made every fifteen
+	// seconds (agentrt.deployed, 80 LISTs in ten minutes, 2026-11-17).
 	options := metav1.ListOptions{Limit: 100, LabelSelector: selector}
+	if selector != "" {
+		options.Limit = 500
+	}
 	seen := map[string]bool{}
 	for {
 		page, err := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, options)

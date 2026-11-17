@@ -65,7 +65,15 @@ type Evidence struct {
 
 // pipelineRuns is shared by pinned landing reads, legacy reads and release
 // selection. Never truncate the list: a newer red run may be on the last page.
-func (c *Client) pipelineRuns(ctx context.Context, pipeline string) ([]unstructured.Unstructured, error) {
+// selectors narrows the list by labels the creator of the run sets (2026-11-17:
+// the daily full CI's look at its own runs, once a minute, read every run of
+// the namespace, five pages of 2,058, to find a handful: 47 LISTs in ten
+// minutes on PROD). Never tekton.dev/pipeline: Tekton's controller writes that
+// label when it first reconciles a run, and a run it has not reached (the
+// 23 minutes of 2026-11-17 00:01) would be missing from the list. What is
+// kept is checked by the caller as before.
+func (c *Client) pipelineRuns(ctx context.Context, pipeline string, selectors ...string) ([]unstructured.Unstructured, error) {
+	selector := strings.Join(selectors, ",")
 	res, err := c.resource()
 	if err != nil {
 		return nil, err
@@ -74,7 +82,7 @@ func (c *Client) pipelineRuns(ctx context.Context, pipeline string) ([]unstructu
 	seenPages := map[string]bool{}
 	continuation := ""
 	for {
-		list, err := res.List(ctx, metav1.ListOptions{Limit: 500, Continue: continuation})
+		list, err := res.List(ctx, metav1.ListOptions{Limit: 500, Continue: continuation, LabelSelector: selector})
 		if err != nil {
 			return nil, err
 		}

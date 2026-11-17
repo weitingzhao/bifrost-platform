@@ -8,6 +8,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	clienttesting "k8s.io/client-go/testing"
 )
 
 func fullParams(t *testing.T, c *Client, name string) (map[string]string, map[string]string) {
@@ -213,5 +214,36 @@ func TestRunModulesReadsTheNewestRunOfTheRevision(t *testing.T) {
 	c, _ = fakeClient(oldRun, oldTask)
 	if run, modules, err = c.RunModules(context.Background(), factSHA1); err != nil || run != "ci-old" || modules != "*" {
 		t.Fatalf("the star: %q %q %v", run, modules, err)
+	}
+}
+
+// 2026-11-17, measured on PROD: the daily full CI's look at its own runs, once
+// a minute, listed every run of the namespace (five pages of 2,058) to find a
+// handful: 47 LISTs in ten minutes. The list asks for the trigger label the
+// run is created with; a run without the tekton.dev/pipeline label (Tekton's
+// controller writes it when it first reaches the run, and did not for 23
+// minutes on 2026-11-17 00:01) is still listed. Positive control: without the
+// selector in pipelineRuns the first assertion fails.
+func TestFullRunsListsByTheTriggerLabelOnly(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC().Truncate(time.Second)
+	fresh := drillCI(t, FullRunName(factSHA1, now), "Unknown", now)
+	fresh.SetLabels(map[string]string{"bifrost.io/trigger": FullCITrigger})
+	c, d := drillService(t, fresh)
+	runs, err := c.FullRuns(context.Background(), now.Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var selectors []string
+	for _, a := range d.Actions() {
+		if l, ok := a.(clienttesting.ListAction); ok {
+			selectors = append(selectors, l.GetListRestrictions().Labels.String())
+		}
+	}
+	if !reflect.DeepEqual(selectors, []string{"bifrost.io/trigger=" + FullCITrigger}) {
+		t.Fatal("the list did not ask for the trigger label alone", selectors)
+	}
+	if len(runs) != 1 || runs[0].Name != fresh.GetName() {
+		t.Fatal("a run Tekton has not labelled yet is missing", runs)
 	}
 }

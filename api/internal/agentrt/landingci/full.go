@@ -83,7 +83,7 @@ func (c *Client) EnsureFullRun(ctx context.Context, revision string, day time.Ti
 
 // FullRuns lists the full runs created at or after since, oldest first.
 func (c *Client) FullRuns(ctx context.Context, since time.Time) ([]FullRun, error) {
-	items, err := c.pipelineRuns(ctx, "bifrost-ci-platform")
+	items, err := c.pipelineRuns(ctx, "bifrost-ci-platform", "bifrost.io/trigger="+FullCITrigger)
 	if err != nil {
 		return nil, err
 	}
