@@ -136,7 +136,7 @@ channels:
       lane: event
       guarantee: durable
       subject: "<env>/<app>@<sha40>"
-      publisher: gate-cluster
+      publisher: gate-db
       ref: "/api/v1/delivery/context?repo={repo}"
       reconcile: "release records (releases package) recorder tick"
       on_unread: stale
