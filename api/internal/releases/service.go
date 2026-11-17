@@ -37,7 +37,9 @@ type TickResult struct {
 	Runs     int       `json:"runs"`
 	Matched  int       `json:"matched"`
 	Recorded int       `json:"recorded"`
-	Errors   []string  `json:"errors"`
+	// Rows: records also written as rows of the record table (SetTable).
+	Rows   int      `json:"rows"`
+	Errors []string `json:"errors"`
 }
 
 // Service records finished delivery runs as ConfigMaps and reads them back.
@@ -53,8 +55,9 @@ type Service struct {
 	// enough, so it holds one.
 	kick chan struct{}
 
-	mu   sync.Mutex
-	last *TickResult
+	mu    sync.Mutex
+	last  *TickResult
+	table TableWriter
 }
 
 func NewService(configDir string, clients Clients) *Service {
@@ -214,6 +217,11 @@ func (s *Service) Tick(ctx context.Context) TickResult {
 			continue
 		}
 		res.Recorded++
+		if wrote, err := s.writeRow(ctx, rec, true); err != nil {
+			res.Errors = append(res.Errors, run.GetName()+": row: "+err.Error())
+		} else if wrote {
+			res.Rows++
+		}
 	}
 	return res
 }

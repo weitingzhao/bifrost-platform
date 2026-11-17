@@ -138,6 +138,9 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		// Both processes say whether the database has this binary's
 		// migrations (TD-411), in their health and their log.
 		safego.Go("agentrt-schema", func() { rt.schema.run(ctx, pool) })
+		if s.releases != nil {
+			s.releases.Service().SetTable(releaseTable(pool))
+		}
 		s.startBus(ctx, pool, env, role)
 		if !role.RunsWorkers() {
 			<-ctx.Done()
