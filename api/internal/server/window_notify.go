@@ -16,7 +16,7 @@ import (
 // So this posts through the store's public message path only: it writes no
 // store table of its own and takes no store lock (agentrt/store is another
 // seat's, and a durable once-per-key table here would duplicate
-// store.PostConclusion's internals).
+// coord.PostConclusion's internals).
 func (s *Server) wireWindowNotices(db store.DB) {
 	if s.delivery == nil {
 		return

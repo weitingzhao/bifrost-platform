@@ -1,6 +1,4 @@
-//bifrost:owner coordination
-
-package store_test
+package coord_test
 
 import (
 	"context"
@@ -10,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/threadinbox"
 )
@@ -45,7 +44,7 @@ func TestConclusionValidLongThreadReachesSender(t *testing.T) {
 					t.Errorf("source selected %q for %q", to, label)
 				}
 				spy := &conclusionBeginSpy{}
-				err = store.PostConclusion(context.Background(), spy, "question:q_boundary:answered", to, "answer")
+				err = coord.PostConclusion(context.Background(), spy, "question:q_boundary:answered", to, "answer")
 				if n <= 128 && (spy.calls != 1 || !errors.Is(err, errConclusionBeginReached)) {
 					t.Errorf("valid thread silently skipped: session=%d calls=%d err=%v", n, spy.calls, err)
 				}
@@ -71,7 +70,7 @@ func TestConclusionLongRegisteredThreadPG(t *testing.T) {
 			ok(t, err)
 			for _, key := range []string{"approval:appr_long:executed", "question:q_long:answered"} {
 				for _, label := range []string{id, actor, id + " (W-31)", actor + " (W-31)"} {
-					ok(t, store.PostConclusion(ctx, conn, key, threadinbox.Recipient(label), key))
+					ok(t, coord.PostConclusion(ctx, conn, key, threadinbox.Recipient(label), key))
 				}
 			}
 			mail, err := store.Unread(ctx, conn, w, 100)

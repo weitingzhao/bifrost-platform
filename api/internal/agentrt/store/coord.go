@@ -38,6 +38,12 @@ func Thread(ctx context.Context, db DB, actor, with string, limit int) ([]Messag
 	return coord.Thread(ctx, db, actor, with, limit)
 }
 
+// PostConclusion is coord.PostConclusion. The name stays here for the
+// approvals' and questions' tests, which post through this package.
+func PostConclusion(ctx context.Context, db DB, key, to, body string) error {
+	return coord.PostConclusion(ctx, db, key, to, body)
+}
+
 func PostMessage(ctx context.Context, tx pgx.Tx, from, to, kind string, body []byte) (string, error) {
 	return coord.PostMessage(ctx, tx, from, to, kind, body)
 }

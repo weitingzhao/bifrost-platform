@@ -1,6 +1,4 @@
-//bifrost:owner coordination
-
-package store_test
+package coord_test
 
 import (
 	"context"
@@ -13,13 +11,33 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
+var ctx = context.Background()
+
+func ok(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The seed (the actors a message names) and nothing else: no mission, plan
+// or artifact of the store's shared fixture.
+func seedOnly(ctx context.Context, owner *pgx.Conn) error {
+	seeded, err := store.Seed(ctx, owner)
+	if err == nil && !seeded {
+		err = errors.New("seed did nothing on an empty database")
+	}
+	return err
+}
+
 func conclusionDB(t *testing.T) (*agentrttest.DB, store.DB, store.Writer) {
 	t.Helper()
-	db := seededDB(t)
+	db := agentrttest.MigratedWith(t, "seeded", seedOnly)
 	pool := db.Pool(t, db.Runtime)
 	w := store.Writer{Actor: "thread:local_conclusion", Token: "fixture"}
 	_, _, err := store.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register the requesting thread"))
@@ -41,7 +59,7 @@ func TestConclusionConcurrentRestartAndAck(t *testing.T) {
 		wg.Add(1)
 		safego.Go("test-conclusion-race", func() {
 			defer wg.Done()
-			errs <- store.PostConclusion(ctx, conn, "approval:appr_test:executed", w.Actor, "Approval #1: executed")
+			errs <- coord.PostConclusion(ctx, conn, "approval:appr_test:executed", w.Actor, "Approval #1: executed")
 		})
 	}
 	wg.Wait()
@@ -58,7 +76,7 @@ func TestConclusionConcurrentRestartAndAck(t *testing.T) {
 	ok(t, err)
 	// A fresh pool/process, changed body, and an acknowledged message still
 	// find the permanent receipt. The state is the identity, not the body.
-	ok(t, store.PostConclusion(ctx, db.Pool(t, db.Runtime), "approval:appr_test:executed", w.Actor, "new summary"))
+	ok(t, coord.PostConclusion(ctx, db.Pool(t, db.Runtime), "approval:appr_test:executed", w.Actor, "new summary"))
 	mail, err = store.Unread(ctx, second, w, 100)
 	ok(t, err)
 	if len(mail) != 0 {
@@ -74,7 +92,7 @@ func TestConclusionConcurrentRestartAndAck(t *testing.T) {
 		t.Fatalf("messages/signals/receipts=%d/%d/%d", messages, signals, receipts)
 	}
 	// A second terminal state of the same approval is a different conclusion.
-	ok(t, store.PostConclusion(ctx, first, "approval:appr_test:unknown", w.Actor, "unknown"))
+	ok(t, coord.PostConclusion(ctx, first, "approval:appr_test:unknown", w.Actor, "unknown"))
 	mail, err = store.Unread(ctx, first, w, 100)
 	ok(t, err)
 	if len(mail) != 1 || mail[0].Body != "unknown" {
@@ -100,7 +118,7 @@ func (tx failConclusionReceiptTx) Exec(ctx context.Context, sql string, args ...
 func TestConclusionFailureRollsBackThenRetries(t *testing.T) {
 	t.Parallel()
 	db, conn, w := conclusionDB(t)
-	if err := store.PostConclusion(ctx, failConclusionReceipt{conn}, "question:q_test:answered", w.Actor, "answer"); err == nil {
+	if err := coord.PostConclusion(ctx, failConclusionReceipt{conn}, "question:q_test:answered", w.Actor, "answer"); err == nil {
 		t.Fatal("injected receipt failure succeeded")
 	}
 	read := db.Connect(t, db.Reader)
@@ -110,8 +128,8 @@ func TestConclusionFailureRollsBackThenRetries(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("partial commit after failed receipt: %d", count)
 	}
-	ok(t, store.PostConclusion(ctx, conn, "question:q_test:answered", w.Actor, "answer"))
-	ok(t, store.PostConclusion(ctx, conn, "question:q_test:answered", w.Actor, "answer"))
+	ok(t, coord.PostConclusion(ctx, conn, "question:q_test:answered", w.Actor, "answer"))
+	ok(t, coord.PostConclusion(ctx, conn, "question:q_test:answered", w.Actor, "answer"))
 	mail, err := store.Unread(ctx, conn, w, 100)
 	ok(t, err)
 	if len(mail) != 1 {
@@ -123,7 +141,7 @@ func TestConclusionSkipsUndeliverableActors(t *testing.T) {
 	t.Parallel()
 	db, conn, w := conclusionDB(t)
 	for _, to := range []string{"", "owner", "seat:chief_of_staff", "thread:missing", "not a thread"} {
-		ok(t, store.PostConclusion(ctx, conn, "approval:skipped:failed", to, "failed"))
+		ok(t, coord.PostConclusion(ctx, conn, "approval:skipped:failed", to, "failed"))
 	}
 	// The fixture records the actor change with its event, just as the real
 	// schema requires; delivery itself must never revive the recipient.
@@ -140,14 +158,14 @@ func TestConclusionSkipsUndeliverableActors(t *testing.T) {
 		}))
 	}
 	retire(true)
-	ok(t, store.PostConclusion(ctx, conn, "approval:skipped:failed", w.Actor, "failed"))
+	ok(t, coord.PostConclusion(ctx, conn, "approval:skipped:failed", w.Actor, "failed"))
 	var count int
 	ok(t, admin.QueryRow(ctx, `SELECT count(*) FROM agentrt.message`).Scan(&count))
 	if count != 0 {
 		t.Fatalf("undeliverable actors got %d messages", count)
 	}
 	retire(false)
-	ok(t, store.PostConclusion(ctx, conn, "approval:skipped:failed", w.Actor, "failed"))
+	ok(t, coord.PostConclusion(ctx, conn, "approval:skipped:failed", w.Actor, "failed"))
 	mail, err := store.Unread(ctx, conn, w, 100)
 	ok(t, err)
 	if len(mail) != 1 {
@@ -162,14 +180,14 @@ func TestConclusionTakesTheDispatchersWake(t *testing.T) {
 	t.Parallel()
 	_, pool, w := conclusionDB(t)
 	for range 2 {
-		ok(t, store.PostConclusion(ctx, pool, "sub:drill:ev-65987", w.Actor, "bus: git.main.advanced"))
+		ok(t, coord.PostConclusion(ctx, pool, "sub:drill:ev-65987", w.Actor, "bus: git.main.advanced"))
 	}
 	mail, err := store.Unread(ctx, pool, w, 100)
 	ok(t, err)
 	if len(mail) != 1 || mail[0].From != "controller" {
 		t.Fatalf("mail=%+v, want one message from the controller", mail)
 	}
-	if err := store.PostConclusion(ctx, pool, "other:x", w.Actor, "x"); err == nil {
+	if err := coord.PostConclusion(ctx, pool, "other:x", w.Actor, "x"); err == nil {
 		t.Fatal("a key of no known sender was taken")
 	}
 }

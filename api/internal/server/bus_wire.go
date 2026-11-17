@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	busalerts "github.com/weitingzhao/bifrost-platform/api/internal/bus/alerts"
 	buscards "github.com/weitingzhao/bifrost-platform/api/internal/bus/cards"
@@ -501,7 +502,7 @@ func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStrea
 		read = s.delivery.PolicyFacts().CommitMessage
 	}
 	send := func(ctx context.Context, key, to, body string) error {
-		return store.PostConclusion(ctx, pool, key, to, body)
+		return coord.PostConclusion(ctx, pool, key, to, body)
 	}
 	known := func(ctx context.Context, addr string) (bool, error) {
 		var kind string

@@ -57,7 +57,7 @@ func changeMatches(want, got string) bool {
 // CommitMessage reads a commit's message (delivery.PolicyFacts.CommitMessage).
 type CommitMessage func(ctx context.Context, repo, sha string) (string, bool, error)
 
-// Sender posts a message to an inbox once per key (store.PostConclusion).
+// Sender posts a message to an inbox once per key (coord.PostConclusion).
 type Sender func(ctx context.Context, key, to, body string) error
 
 var (

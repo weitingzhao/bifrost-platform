@@ -1,4 +1,4 @@
-package store
+package coord
 
 import (
 	"context"
@@ -9,7 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	writer "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/threadinbox"
 )
 
@@ -17,7 +19,7 @@ import (
 // It reuses the idempotency table with a permanent receipt (ordinary request
 // keys expire after seven days). Receipt, message, artifact, event and outbox
 // signal commit together. There is no HTTP route that accepts this sender.
-func PostConclusion(ctx context.Context, db DB, key, to, body string) error {
+func PostConclusion(ctx context.Context, db eventlog.DB, key, to, body string) error {
 	if to == "" || threadinbox.Recipient(to) != to {
 		return nil
 	}
@@ -25,10 +27,10 @@ func PostConclusion(ctx context.Context, db DB, key, to, body string) error {
 	// dispatcher's wake (sub:<row>:<event>, bus/subscribe), one per row and
 	// event (2026-11-16: the tenant drill found the dispatcher refused here).
 	if !strings.HasPrefix(key, "approval:") && !strings.HasPrefix(key, "question:") && !strings.HasPrefix(key, "sub:") {
-		return invalid("a conclusion names its approval, question or subscription")
+		return eventlog.Invalid("a conclusion names its approval, question or subscription")
 	}
 	id := "thread-conclusion|" + key
-	return InTx(ctx, db, func(tx pgx.Tx) error {
+	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742103, hashtext($1))`, id); err != nil {
 			return err
 		}
@@ -36,7 +38,7 @@ func PostConclusion(ctx context.Context, db DB, key, to, body string) error {
 		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.idempotency_key WHERE idempotency_key_id = $1)`, id).Scan(&exists); err != nil || exists {
 			return err
 		}
-		kind, err := ActorKind(ctx, tx, to)
+		kind, err := writer.ActorKind(ctx, tx, to)
 		if errors.Is(err, pgx.ErrNoRows) || err == nil && kind != "thread" {
 			return nil // never register or revive a recipient on someone else's behalf
 		}
