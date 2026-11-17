@@ -80,7 +80,6 @@ function buildPostgresLiveSection(pg: ClusterPostgresStatusResponse): string[] {
   const lines = [
     `- reachability: ${pg.reachability}`,
     `- summary: ${pg.summary}`,
-    `- migration: ${pg.migration_step}/${pg.migration_total} (${pg.migration_phase})`,
     `- instances: ${pg.instances_ready}/${pg.instances_spec} ready`,
     `- rw: ${pg.rw_service}`,
     `- ro: ${pg.ro_service}`,
@@ -108,8 +107,6 @@ function buildRedisLiveSection(redis: ClusterRedisStatusResponse): string[] {
   const lines = [
     `- reachability: ${redis.reachability}`,
     `- summary: ${redis.summary}`,
-    `- migration: ${redis.migration_step}/${redis.migration_total} (${redis.migration_phase})`,
-    `- redis_target_phase: ${redis.migration_redis_step}`,
     `- targets: ${redis.targets_ready}/${redis.targets_total} ready`,
     `- embedded_active: ${redis.embedded_active}`,
     '',
@@ -139,7 +136,6 @@ function buildRedisLiveSection(redis: ClusterRedisStatusResponse): string[] {
     '',
     'Interim embedded:',
     ...redis.embedded.map(e => `- ${e.namespace}: ${e.reachability} — ${e.detail ?? '—'}`),
-    ...redis.legacy.map(l => `- ${l.kind} ${l.host ?? ''}: ${l.reachability} — ${l.detail ?? '—'}`),
   ]
   return llmSection('Live · Redis (data namespace targets + embedded interim)', lines)
 }

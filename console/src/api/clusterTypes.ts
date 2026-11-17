@@ -148,9 +148,6 @@ export interface ClusterPostgresStatusResponse {
   cluster_id: string
   reachability: Reachability
   summary: string
-  migration_phase: string
-  migration_step: number
-  migration_total: number
   operator: ServiceDependency
   cnpg_cluster: ServiceDependency
   instances: PostgresInstance[]
@@ -305,10 +302,6 @@ export interface ClusterRedisStatusResponse {
   cluster_id: string
   reachability: Reachability
   summary: string
-  migration_phase: string
-  migration_step: number
-  migration_total: number
-  migration_redis_step: number
   targets_ready: number
   targets_total: number
   embedded_active: number
@@ -316,7 +309,6 @@ export interface ClusterRedisStatusResponse {
   env_endpoints: RedisEnvEndpoint[]
   lan_endpoints: RedisLanEndpoint[]
   embedded: RedisEmbeddedEndpoint[]
-  legacy: PostgresLegacyEndpoint[]
   backup: ServiceDependency
   minio: ServiceDependency
   generated_at: string

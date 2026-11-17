@@ -69,9 +69,6 @@ type PostgresStatusResponse struct {
 	ClusterID      string                 `json:"cluster_id"`
 	Reachability   probe.Reachability     `json:"reachability"`
 	Summary        string                 `json:"summary"`
-	MigrationPhase string                 `json:"migration_phase"`
-	MigrationStep  int                    `json:"migration_step"`
-	MigrationTotal int                    `json:"migration_total"`
 	Operator       ServiceDependencyView  `json:"operator"`
 	CnpgCluster    ServiceDependencyView  `json:"cnpg_cluster"`
 	Instances      []PostgresInstanceView `json:"instances"`
@@ -96,14 +93,11 @@ func (s *Service) PostgresStatus(ctx context.Context) PostgresStatusResponse {
 	now := time.Now().UTC()
 	base := s.baseMeta(now)
 	resp := PostgresStatusResponse{
-		ClusterID:      base.ClusterID,
-		MigrationPhase: "data-layer-k3s",
-		MigrationStep:  6,
-		MigrationTotal: 7,
-		RwService:      fmt.Sprintf("%s-rw.%s.svc.cluster.local:5432", cnpgClusterName, cnpgNamespace),
-		RoService:      fmt.Sprintf("%s-ro.%s.svc.cluster.local:5432", cnpgClusterName, cnpgNamespace),
-		GeneratedAt:    now,
-		Databases:      []PostgresDatabaseView{},
+		ClusterID:   base.ClusterID,
+		RwService:   fmt.Sprintf("%s-rw.%s.svc.cluster.local:5432", cnpgClusterName, cnpgNamespace),
+		RoService:   fmt.Sprintf("%s-ro.%s.svc.cluster.local:5432", cnpgClusterName, cnpgNamespace),
+		GeneratedAt: now,
+		Databases:   []PostgresDatabaseView{},
 	}
 	// The CNPG Database CRs are named after the namespace (infra k8s/data/databases.yaml).
 	for _, e := range s.appEnvs {

@@ -197,9 +197,6 @@ func inferNodeTargets(
 					add(n.ID, id)
 				}
 			}
-			if env.Redis.Host == "127.0.0.1" || env.Redis.Host == "localhost" {
-				add("macbook", id)
-			}
 		}
 	}
 

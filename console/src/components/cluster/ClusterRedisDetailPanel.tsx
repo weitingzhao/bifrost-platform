@@ -134,9 +134,6 @@ export function ClusterRedisDetailPanel({
     )
   }
 
-  const streamLabel = `Spine ${redis.migration_step}/${redis.migration_total}`
-  const redisPhaseLabel = `Redis target · phase ${redis.migration_redis_step}`
-
   return (
     <div className="cluster-redis-detail flex flex-col gap-3 p-3">
       <section className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
@@ -152,8 +149,6 @@ export function ClusterRedisDetailPanel({
             {redis.embedded_active > 0 ? (
               <DenseTag variant="warning">{redis.embedded_active} embedded active</DenseTag>
             ) : null}
-            <DenseTag variant="category">{streamLabel}</DenseTag>
-            <DenseTag variant="neutral">{redisPhaseLabel}</DenseTag>
             <SectionRefreshButton isFetching={redisLoading} onClick={refresh} />
           </div>
         </div>
@@ -277,31 +272,6 @@ export function ClusterRedisDetailPanel({
         </OpsSection>
       </div>
 
-      <OpsSection title="Legacy & external" description="Bare-metal / compose paths outside data NS" bodyPadding="none">
-        <DenseDataTable>
-          <DenseTableHeader>
-            <DenseTableHeadRow>
-              <DenseTableHead>Source</DenseTableHead>
-              <DenseTableHead>Host</DenseTableHead>
-              <DenseTableHead>Status</DenseTableHead>
-            </DenseTableHeadRow>
-          </DenseTableHeader>
-          <DenseTableBody>
-            {redis.legacy.map(item => (
-              <DenseTableRow key={`legacy-${item.host ?? item.kind}`}>
-                <DenseTableCell>{item.kind}</DenseTableCell>
-                <DenseTableCell className="font-mono-tabular">{item.host ?? '—'}</DenseTableCell>
-                <DenseTableCell>
-                  <span className="inline-flex items-center gap-1 text-dense-meta">
-                    <StatusLamp value={item.reachability} kind="reach" />
-                    {item.detail ?? '—'}
-                  </span>
-                </DenseTableCell>
-              </DenseTableRow>
-            ))}
-          </DenseTableBody>
-        </DenseDataTable>
-      </OpsSection>
 
       {domain != null && domain.dependencies.length > 0 ? (
         <OpsSection title="Infrastructure dependencies" description="Storage, targets, embedded interim" bodyPadding="compact">

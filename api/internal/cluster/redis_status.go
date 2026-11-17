@@ -16,9 +16,6 @@ import (
 
 const (
 	redisDataNamespace = "data"
-	redisMigrationStep = 6
-	redisMigrationTotal = 7
-	redisTargetPhase   = 6
 )
 
 type redisTargetSpec struct {
@@ -37,13 +34,13 @@ var redisTargetCatalog = []redisTargetSpec{
 }
 
 type RedisTargetInstanceView struct {
-	Name         string             `json:"name"`
-	Environment  string             `json:"environment"`
-	Role         string             `json:"role"`
-	Service      string             `json:"service"`
-	MaxmemoryPolicy string          `json:"maxmemory_policy,omitempty"`
-	Reach        probe.Reachability `json:"reachability"`
-	Detail       string             `json:"detail,omitempty"`
+	Name            string             `json:"name"`
+	Environment     string             `json:"environment"`
+	Role            string             `json:"role"`
+	Service         string             `json:"service"`
+	MaxmemoryPolicy string             `json:"maxmemory_policy,omitempty"`
+	Reach           probe.Reachability `json:"reachability"`
+	Detail          string             `json:"detail,omitempty"`
 }
 
 type RedisEmbeddedView struct {
@@ -79,44 +76,28 @@ type RedisLanEndpointView struct {
 }
 
 type RedisStatusResponse struct {
-	ClusterID          string                    `json:"cluster_id"`
-	Reachability       probe.Reachability        `json:"reachability"`
-	Summary            string                    `json:"summary"`
-	MigrationPhase     string                    `json:"migration_phase"`
-	MigrationStep      int                       `json:"migration_step"`
-	MigrationTotal     int                       `json:"migration_total"`
-	MigrationRedisStep int                       `json:"migration_redis_step"`
-	TargetsReady       int                       `json:"targets_ready"`
-	TargetsTotal       int                       `json:"targets_total"`
-	EmbeddedActive     int                       `json:"embedded_active"`
-	TargetInstances    []RedisTargetInstanceView `json:"target_instances"`
-	EnvEndpoints       []RedisEnvEndpointView    `json:"env_endpoints"`
-	LanEndpoints       []RedisLanEndpointView    `json:"lan_endpoints"`
-	Embedded           []RedisEmbeddedView       `json:"embedded"`
-	Legacy             []PostgresLegacyView      `json:"legacy"`
-	Backup             ServiceDependencyView     `json:"backup"`
-	MinIO              ServiceDependencyView     `json:"minio"`
-	GeneratedAt        time.Time                 `json:"generated_at"`
+	ClusterID       string                    `json:"cluster_id"`
+	Reachability    probe.Reachability        `json:"reachability"`
+	Summary         string                    `json:"summary"`
+	TargetsReady    int                       `json:"targets_ready"`
+	TargetsTotal    int                       `json:"targets_total"`
+	EmbeddedActive  int                       `json:"embedded_active"`
+	TargetInstances []RedisTargetInstanceView `json:"target_instances"`
+	EnvEndpoints    []RedisEnvEndpointView    `json:"env_endpoints"`
+	LanEndpoints    []RedisLanEndpointView    `json:"lan_endpoints"`
+	Embedded        []RedisEmbeddedView       `json:"embedded"`
+	Backup          ServiceDependencyView     `json:"backup"`
+	MinIO           ServiceDependencyView     `json:"minio"`
+	GeneratedAt     time.Time                 `json:"generated_at"`
 }
 
 func (s *Service) RedisStatus(ctx context.Context) RedisStatusResponse {
 	now := time.Now().UTC()
 	base := s.baseMeta(now)
 	resp := RedisStatusResponse{
-		ClusterID:          base.ClusterID,
-		MigrationPhase:     "data-layer-k3s",
-		MigrationStep:      redisMigrationStep,
-		MigrationTotal:     redisMigrationTotal,
-		MigrationRedisStep: redisTargetPhase,
-		TargetsTotal:       len(redisTargetCatalog),
-		GeneratedAt:        now,
-		Legacy: []PostgresLegacyView{
-			{
-				Kind: "bare-metal", Host: "192.168.10.70",
-				Reach: probe.ReachOK,
-				Detail: "Compose / legacy prod Redis until phase ⑥ · separate from K3s embedded",
-			},
-		},
+		ClusterID:    base.ClusterID,
+		TargetsTotal: len(redisTargetCatalog),
+		GeneratedAt:  now,
 	}
 
 	clientset, _, err := s.buildClient()
@@ -217,17 +198,17 @@ func buildRedisEnvEndpoints(targets []RedisTargetInstanceView) []RedisEnvEndpoin
 	byEnv := map[string]*RedisEnvEndpointView{
 		"prod": {
 			Environment: "prod", LiveService: "redis-live-prod.data.svc",
-			QueueService: "redis-queue-prod.data.svc",
+			QueueService:  "redis-queue-prod.data.svc",
 			NetworkPolicy: "Only bifrost-prod Pods egress allowed",
 		},
 		"stg": {
 			Environment: "stg", LiveService: "redis-live-stg.data.svc",
-			QueueService: "redis-queue-stg.data.svc",
+			QueueService:  "redis-queue-stg.data.svc",
 			NetworkPolicy: "Only bifrost-stg Pods egress allowed",
 		},
 		"dev": {
 			Environment: "dev", LiveService: "redis-dev.data.svc or Mac local",
-			QueueService: "same instance db=1 (dev simplicity)",
+			QueueService:  "same instance db=1 (dev simplicity)",
 			NetworkPolicy: "Never writes Prod/STG Redis",
 		},
 	}
@@ -335,11 +316,11 @@ func redisBackupDep(snap readinessSnapshot, minioReach probe.Reachability) Servi
 }
 
 type redisLanSpec struct {
-	lanService string
-	targetName string
+	lanService  string
+	targetName  string
 	environment string
-	role       string
-	database   string
+	role        string
+	database    string
 }
 
 // Only DEV Redis has a LAN NodePort. STG and PROD lost theirs on 2026-10-07

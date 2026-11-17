@@ -142,7 +142,6 @@ export function ClusterPostgresDetailPanel({
   }
 
   const haOk = postgres.instances_spec >= 2 && postgres.instances_ready >= 2
-  const migrationLabel = `Phase ${postgres.migration_step}/${postgres.migration_total} · ${postgres.migration_phase}`
 
   return (
     <div className="cluster-postgres-detail flex flex-col gap-3 p-3">
@@ -156,7 +155,6 @@ export function ClusterPostgresDetailPanel({
             <DenseTag variant={reachVariant(postgres.reachability)}>
               {haOk ? 'HA 2/2' : `${postgres.instances_ready}/${postgres.instances_spec || 2} instances`}
             </DenseTag>
-            <DenseTag variant="category">{migrationLabel}</DenseTag>
             <SectionRefreshButton isFetching={postgresLoading} onClick={refresh} />
           </div>
         </div>
