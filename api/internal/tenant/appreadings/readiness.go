@@ -2,23 +2,16 @@ package appreadings
 
 import (
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"strings"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 	appsv1 "k8s.io/api/apps/v1"
-	"strings"
 )
 
 type ServiceDependencyView = resourceview.ServiceDependencyView
 type ServiceDomainView = resourceview.ServiceDomainView
-type Snapshot struct {
-	Finalize                       func(string, string, []ServiceDependencyView, string) ServiceDomainView
-	DeploymentReach                func(*appsv1.Deployment) (probe.Reachability, string)
-	Deployments                    map[string]appsv1.Deployment
-	IngressRoutes                  map[string]bool
-	Environments                   []config.AppEnv
-	Schedulable, IngressController ServiceDependencyView
-}
+type Snapshot = resourceview.ApplicationsSnapshot
 
 func CountReadyDeployments(snap Snapshot, namespace, namePrefix string) (int, string) {
 	total := 0

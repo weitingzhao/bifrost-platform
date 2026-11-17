@@ -3,11 +3,12 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/appreadings"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -21,7 +22,7 @@ const (
 	dataCloneConfirmTok = "CLONE-FROM-PROD"
 )
 
-type DataFreshnessDB = appreadings.DataFreshnessDB
+type DataFreshnessDB = resourceview.DataFreshnessDB
 
 type DataFreshnessResponse struct {
 	ClusterID      string            `json:"cluster_id"`
@@ -128,18 +129,14 @@ func (s *Service) probeDataFreshness(ctx context.Context) DataFreshnessResponse 
 		}
 	}
 
-	observed := make([]appreadings.ActivityObservation, len(probes))
+	observed := make([]resourceview.ActivityObservation, len(probes))
 	for i, p := range probes {
-		observed[i] = appreadings.ActivityObservation{At: p.ts, Sources: p.sources, Err: p.err}
+		observed[i] = resourceview.ActivityObservation{At: p.ts, Sources: p.sources, Err: p.err}
 	}
-	resp.Databases = appreadings.FreshnessDatabases(resp.Databases, observed, resp.ReferenceDB, resp.LastCloneAt, now)
+	if appReadings.FreshnessDatabases != nil {
+		resp.Databases = appReadings.FreshnessDatabases(resp.Databases, observed, resp.ReferenceDB, resp.LastCloneAt, now)
+	}
 	return resp
-}
-
-// freshnessVerdictFromLag maps lag_vs_prod_days → verdict for non-prod DBs.
-// Aligns with Console badge: <3 fresh/green · 3–7 aging/yellow · ≥7 stale/red.
-func freshnessVerdictFromLag(lagDays float64) string {
-	return appreadings.FreshnessVerdictFromLag(lagDays)
 }
 
 func (s *Service) resolveCNPGPrimary(ctx context.Context) (string, error) {

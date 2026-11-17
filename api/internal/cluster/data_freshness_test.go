@@ -3,6 +3,8 @@ package cluster
 import (
 	"testing"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/appreadings"
 )
 
 func TestFreshnessVerdictFromLag(t *testing.T) {
@@ -19,19 +21,19 @@ func TestFreshnessVerdictFromLag(t *testing.T) {
 		{7.5, "stale"},
 	}
 	for _, tc := range cases {
-		if got := freshnessVerdictFromLag(tc.days); got != tc.want {
-			t.Errorf("freshnessVerdictFromLag(%.1f)=%s want %s", tc.days, got, tc.want)
+		if got := appreadings.FreshnessVerdictFromLag(tc.days); got != tc.want {
+			t.Errorf("FreshnessVerdictFromLag(%.1f)=%s want %s", tc.days, got, tc.want)
 		}
 	}
 }
 
 func TestFreshnessLagSemantics(t *testing.T) {
 	// lag=0 → fresh (even if wall age would be huge)
-	if got := freshnessVerdictFromLag(0); got != "fresh" {
+	if got := appreadings.FreshnessVerdictFromLag(0); got != "fresh" {
 		t.Fatalf("lag=0 → fresh, got %s", got)
 	}
 	// lag=5 → aging / yellow (aligned with badge)
-	if got := freshnessVerdictFromLag(5); got != "aging" {
+	if got := appreadings.FreshnessVerdictFromLag(5); got != "aging" {
 		t.Fatalf("lag=5 → aging, got %s", got)
 	}
 }

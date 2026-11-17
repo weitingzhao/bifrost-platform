@@ -77,4 +77,9 @@ func TestServerBindsThePoolEvaluator(t *testing.T) {
 	if !strings.Contains(string(src), "clusterH.Service().BindPools(placement.ClusterPools)") {
 		t.Fatal("server.go does not bind placement.ClusterPools to the cluster service")
 	}
+	// The same for the tenant's readings of applications and data
+	// (cluster.BindAppReadings): unbound, the applications domain is unknown.
+	if !strings.Contains(string(src), "cluster.BindAppReadings(cluster.AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain, FreshnessDatabases: appreadings.FreshnessDatabases})") {
+		t.Fatal("server.go does not bind tenant/appreadings to the cluster package")
+	}
 }

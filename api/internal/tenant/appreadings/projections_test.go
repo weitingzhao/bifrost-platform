@@ -2,14 +2,15 @@ package appreadings_test
 
 import (
 	"errors"
+	"reflect"
+	"testing"
+	"time"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/appreadings"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"reflect"
-	"testing"
-	"time"
 )
 
 func TestApplicationProjectionOrderAndInjectedPolicy(t *testing.T) {

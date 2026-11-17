@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
-	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/appreadings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -375,7 +374,13 @@ func evalWorkersDomain(snap readinessSnapshot) ServiceDomainView {
 }
 
 func evalApplicationsDomain(snap readinessSnapshot) ServiceDomainView {
-	return appreadings.EvalApplicationsDomain(tenantReadinessInput(snap))
+	if appReadings.ApplicationsDomain == nil {
+		// Not ready rather than unknown: an unknown dependency counts as
+		// satisfied in domainStatusFromDeps, and unbound must not read as ready.
+		return finalizeDomain("applications", "General applications", []ServiceDependencyView{{ID: "application-readings", Label: "Application readings",
+			Reachability: probe.ReachFail, Detail: "no reader of the applications is bound"}}, "")
+	}
+	return appReadings.ApplicationsDomain(tenantReadinessInput(snap))
 }
 
 func evalCICDDomain(snap readinessSnapshot) ServiceDomainView {
@@ -809,6 +814,6 @@ func (snap readinessSnapshot) appDeployRefs(name string) []deployRef {
 	return out
 }
 
-func tenantReadinessInput(snap readinessSnapshot) appreadings.Snapshot {
-	return appreadings.Snapshot{Deployments: snap.deployments, IngressRoutes: snap.ingressRoutes, Environments: snap.appEnvs, Schedulable: schedulableAnyDep(snap, "Schedulable nodes"), IngressController: deploymentDep(snap, "kube-system", "traefik", "Traefik ingress controller"), DeploymentReach: deploymentReach, Finalize: finalizeDomain}
+func tenantReadinessInput(snap readinessSnapshot) resourceview.ApplicationsSnapshot {
+	return resourceview.ApplicationsSnapshot{Deployments: snap.deployments, IngressRoutes: snap.ingressRoutes, Environments: snap.appEnvs, Schedulable: schedulableAnyDep(snap, "Schedulable nodes"), IngressController: deploymentDep(snap, "kube-system", "traefik", "Traefik ingress controller"), DeploymentReach: deploymentReach, Finalize: finalizeDomain}
 }

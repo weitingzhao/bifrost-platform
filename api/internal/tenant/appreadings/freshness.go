@@ -3,6 +3,8 @@ package appreadings
 import (
 	"fmt"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 )
 
 const (
@@ -10,26 +12,8 @@ const (
 	freshnessStaleDays = 7.0
 )
 
-type ActivityObservation struct {
-	At      *time.Time
-	Sources []string
-	Err     error
-}
-type DataFreshnessDB struct {
-	Name           string  `json:"name"`
-	Environment    string  `json:"environment"`
-	LastActivityTS *string `json:"last_activity_ts,omitempty"`
-	// AgeDays is wall-clock age (now − last_activity). Informational only — do not drive Sync decisions.
-	AgeDays *float64 `json:"age_days,omitempty"`
-	// LagVsProdDays is max(0, prod_activity − target_activity) in days. Nil for bifrost_prod (reference).
-	LagVsProdDays *float64 `json:"lag_vs_prod_days,omitempty"`
-	// StaleDays mirrors LagVsProdDays for non-prod (backward-compatible Sync signal). Nil for prod reference.
-	StaleDays   *float64 `json:"stale_days,omitempty"`
-	Verdict     string   `json:"verdict"` // fresh | aging | stale | reference | unknown
-	Detail      string   `json:"detail,omitempty"`
-	Sources     []string `json:"sources,omitempty"`
-	LastCloneAt *string  `json:"last_clone_at,omitempty"`
-}
+type ActivityObservation = resourceview.ActivityObservation
+type DataFreshnessDB = resourceview.DataFreshnessDB
 
 func FreshnessDatabases(databases []DataFreshnessDB, probes []ActivityObservation, referenceDB string, lastCloneAt *string, now time.Time) []DataFreshnessDB {
 	var prodTS *time.Time

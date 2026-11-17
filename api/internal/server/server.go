@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/appreadings"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	datahusbandry "github.com/weitingzhao/bifrost-platform/api/internal/tenant/husbandry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/husbandry/checklistview"
@@ -168,6 +170,8 @@ func New(cfg *config.Config) (*Server, error) {
 	clusterH := cluster.NewHandler(cfg, audit)
 	// The compute domain evaluates the node pools; cluster declares the shape.
 	clusterH.Service().BindPools(placement.ClusterPools)
+	// The tenant domain reads its applications and data from what cluster gathers.
+	cluster.BindAppReadings(cluster.AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain, FreshnessDatabases: appreadings.FreshnessDatabases})
 	ibgatewayH := ibgateway.NewHandler(clusterH.Service(), audit)
 	if role.RunsWorkers() {
 		ibgatewayH.StartBackground(context.Background(), audit)
