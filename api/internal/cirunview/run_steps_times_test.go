@@ -1,4 +1,4 @@
-package delivery
+package cirunview
 
 import (
 	"context"
@@ -12,14 +12,13 @@ import (
 	"k8s.io/client-go/dynamic"
 	dynfake "k8s.io/client-go/dynamic/fake"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
 // A reader that waits for a run reports how long each task took from the
 // steps route alone: every task carries its TaskRun's own times, and one
 // that has not finished carries no completion time.
-func TestPipelineRunStepsCarryTaskTimes(t *testing.T) {
+func TestRunStepsCarryTaskTimes(t *testing.T) {
 	taskRun := func(task, start, done string) *unstructured.Unstructured {
 		status := map[string]any{"conditions": []any{map[string]any{"type": "Succeeded", "status": "True", "reason": "Succeeded"}}}
 		if start != "" {
@@ -47,10 +46,9 @@ func TestPipelineRunStepsCarryTaskTimes(t *testing.T) {
 	}, run,
 		taskRun("clone-platform", "2026-11-12T21:40:45Z", "2026-11-12T21:40:52Z"),
 		taskRun("rollout", "2026-11-12T21:41:10Z", ""))
-	s := NewService(&config.ClusterEntry{ID: "test"})
-	s.SetDynamicFactoryForTest(func() (dynamic.Interface, error) { return dyn, nil })
+	client := func() (dynamic.Interface, error) { return dyn, nil }
 
-	out := s.PipelineRunSteps(context.Background(), "cicd", "run-1")
+	out := ReadRunSteps(context.Background(), client, "test", "cicd", "run-1")
 	if out.Reachability != probe.ReachOK || len(out.Tasks) != 2 {
 		t.Fatalf("steps = %+v", out)
 	}
@@ -66,7 +64,7 @@ func TestPipelineRunStepsCarryTaskTimes(t *testing.T) {
 // The steps route answers phases only for a pipeline that has a phase table:
 // a CI run and a run that cannot be read get an empty list (not null), and
 // neither is labelled with another pipeline's name.
-func TestPipelineRunStepsWithoutAPhaseTable(t *testing.T) {
+func TestRunStepsWithoutAPhaseTable(t *testing.T) {
 	run := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "tekton.dev/v1", "kind": "PipelineRun",
 		"metadata": map[string]any{"name": "ci-platform-x", "namespace": "cicd"},
@@ -81,10 +79,9 @@ func TestPipelineRunStepsWithoutAPhaseTable(t *testing.T) {
 	dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		pipelineRunGVR: "PipelineRunList", taskRunGVR: "TaskRunList",
 	}, run, task)
-	s := NewService(&config.ClusterEntry{ID: "test"})
-	s.SetDynamicFactoryForTest(func() (dynamic.Interface, error) { return dyn, nil })
+	client := func() (dynamic.Interface, error) { return dyn, nil }
 
-	ci := s.PipelineRunSteps(context.Background(), "cicd", "ci-platform-x")
+	ci := ReadRunSteps(context.Background(), client, "test", "cicd", "ci-platform-x")
 	if ci.Pipeline != "bifrost-ci-platform" || len(ci.Tasks) != 1 || ci.Phases == nil || len(ci.Phases) != 0 {
 		t.Fatalf("ci run = %+v", ci)
 	}
@@ -92,7 +89,7 @@ func TestPipelineRunStepsWithoutAPhaseTable(t *testing.T) {
 	if err != nil || !strings.Contains(string(raw), `"phases":[]`) {
 		t.Fatalf("phases must be [] in JSON: %s %v", raw, err)
 	}
-	missing := s.PipelineRunSteps(context.Background(), "cicd", "no-such-run")
+	missing := ReadRunSteps(context.Background(), client, "test", "cicd", "no-such-run")
 	if missing.Pipeline != "" || missing.Phases == nil || len(missing.Phases) != 0 {
 		t.Fatalf("missing run = %+v", missing)
 	}

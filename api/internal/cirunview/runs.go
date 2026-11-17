@@ -1,4 +1,6 @@
-// Package cirunview serves cached CI run observations, without deciding or executing releases.
+// Package cirunview reads, projects and serves CI and pipeline run observations,
+// without deciding or executing releases. It owns no cluster access: a read
+// takes the client of the caller that does.
 package cirunview
 
 import (

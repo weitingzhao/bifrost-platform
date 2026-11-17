@@ -189,31 +189,11 @@ type RefPreflightResponse struct {
 
 type PipelinePhaseView = cirunview.PipelinePhaseView
 
-type PipelineTaskRunView struct {
-	PipelineTask string `json:"pipeline_task"`
-	Name         string `json:"name"`
-	Status       string `json:"status"`
-	Reason       string `json:"reason,omitempty"`
-	// StartTime and CompletionTime are the TaskRun's own (RFC 3339), empty
-	// until it has them: a reader that waits for a run reports how long each
-	// task took without reading the cluster itself.
-	StartTime      string `json:"start_time,omitempty"`
-	CompletionTime string `json:"completion_time,omitempty"`
-}
+// The steps route's answer and its task rows are cirunview's observation.
+type PipelineTaskRunView = cirunview.TaskRunView
 
 // PipelineRunResult keeps a string value verbatim and a typed Tekton result as
 // JSON text (cirunview.Results); an absent result list is an empty JSON array.
 type PipelineRunResult = cirunview.Result
 
-type PipelineRunStepsResponse struct {
-	ClusterID    string                `json:"cluster_id"`
-	Namespace    string                `json:"namespace"`
-	RunName      string                `json:"run_name"`
-	Pipeline     string                `json:"pipeline"`
-	Reachability probe.Reachability    `json:"reachability"`
-	Detail       string                `json:"detail"`
-	Phases       []PipelinePhaseView   `json:"phases"`
-	Tasks        []PipelineTaskRunView `json:"tasks,omitempty"`
-	Results      []PipelineRunResult   `json:"results"`
-	GeneratedAt  time.Time             `json:"generated_at"`
-}
+type PipelineRunStepsResponse = cirunview.RunSteps

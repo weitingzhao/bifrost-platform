@@ -453,7 +453,7 @@
         "coordination"
       ],
       "status": "mixed",
-      "basis": "2026-11-16 Complete file/reader audit: CI phases/run observations and Delivery configuration/supply projections are in their domains. Retain Delivery resource/context composition, strict policy/health/ref/success checks, execution, window queue transitions and communication contracts. Existing CI and coordination ownership ruling is unchanged."
+      "basis": "2026-11-16 Complete file/reader audit: CI phases/run observations and Delivery configuration/supply projections are in their domains. Retain Delivery resource/context composition, strict policy/health/ref/success checks, execution, window queue transitions and communication contracts. Existing CI and coordination ownership ruling is unchanged. 2026-11-17 the tests of the phase and task-timing decoders and the read of a run's steps followed that code to cirunview; the parameter exposure allowlist and its test stay."
     },
     "api/internal/agentrt/canon": {
       "domains": [
@@ -607,7 +607,7 @@
         "verification"
       ],
       "status": "assigned",
-      "basis": "CI charter; cached run, daily-full-note, metric and failure-list projection extracted from server; no CI or release decisions Complete task timing and shared Tekton observation decoders extracted from delivery; parameter exposure allowlist retained verbatim in delivery; phase priority and result serialization unchanged; no evidence/release decisions. Whole PipelineRun observation decoding and chronological key extracted with unchanged status/revision fields; all success predicates and release consumers unchanged. Complete pipeline phase catalogs and observed-task phase aggregation extracted; preflight task names are display labels only, no release decisions. 2026-11-16 scope-shadow log/audit projection consumes minimal recorded fields; switches, scope/evidence reads, queues and all decisions remain in server."
+      "basis": "CI charter; cached run, daily-full-note, metric and failure-list projection extracted from server; no CI or release decisions Complete task timing and shared Tekton observation decoders extracted from delivery; parameter exposure allowlist retained verbatim in delivery; phase priority and result serialization unchanged; no evidence/release decisions. Whole PipelineRun observation decoding and chronological key extracted with unchanged status/revision fields; all success predicates and release consumers unchanged. Complete pipeline phase catalogs and observed-task phase aggregation extracted; preflight task names are display labels only, no release decisions. 2026-11-16 scope-shadow log/audit projection consumes minimal recorded fields; switches, scope/evidence reads, queues and all decisions remain in server. 2026-11-17 the read of one run's steps (the PipelineRun and its TaskRuns, through a cluster client the caller supplies) extracted from delivery with its answer unchanged; delivery keeps the client, the namespace default and the route."
     },
     "api/internal/modtidy": {
       "domains": [
