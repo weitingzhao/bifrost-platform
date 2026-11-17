@@ -1,5 +1,9 @@
 {
-  "version": 1,
+  "version": 2,
+  "history": [
+    "1 (2026-11-16, platform 891a4135): the six items and weights of the review; dependency direction measured. No score of version 1 was stored.",
+    "2 (2026-11-16): cycle edges no longer count a way back that passes through the base or through a mixed package. Version 1 called plan -> lineage, lineage -> verification and owner -> coordination cycles; none of the three is imported back. Foundation's number is the same under both."
+  ],
   "source": "Owner 2026-11-16: one standard for every domain, kept in the system, scored on a schedule so a domain's number can be compared with its own earlier numbers. The items, weights and first data point (foundation, 54 of 100 at 80589bfb) are the independent review in the shared notes, brain/foundation-code-quality-review-2026-11-16.md section 9.",
   "rules": [
     "A score always carries this version. Scores of different versions are not compared.",
@@ -15,7 +19,7 @@
       "by": "machine",
       "measured": true,
       "measures": {
-        "cycle_edges": "direct imports (production code, api/cmd assembly roots left out) from a package of this domain to a package of a domain that itself reaches this domain through imports: the edges that make two domains one piece. A package with several domains counts as the domain 'mixed'; a package with no row counts as the default domain. An import of the default domain (the base every domain stands on) is never a cycle edge of the importer; an import of a 'mixed' package is one only for the base. Between two other domains a mutual dependency counts against both.",
+        "cycle_edges": "direct imports (production code, api/cmd assembly roots left out) from a package of this domain to a package of a domain that itself reaches this domain through imports, by a path that does not pass through the default domain or through a 'mixed' package: the edges that make two domains one piece. A package with several domains counts as the domain 'mixed'; a package with no row counts as the default domain. An import of the default domain (the base every domain stands on) is never a cycle edge of the importer; an import of a 'mixed' package is one only for the base. Between two other domains a mutual dependency counts against both.",
         "wall": "a test named in 'walls' below exists in the code and holds this domain's cycle edges to a list that only shrinks",
         "assigned_share": "the share of this domain's production lines that are in packages whose row says status assigned (not default-maintainer, not without a row)"
       },

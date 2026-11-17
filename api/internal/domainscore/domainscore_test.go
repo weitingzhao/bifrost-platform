@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-const testRuler = `{"version":1,"items":[
+const testRuler = `{"version":2,"items":[
 	{"id":"dependency_direction","label":"Direction","max":25,"by":"machine","measured":true},
 	{"id":"contracts","label":"Contracts","max":75,"by":"machine","measured":false}],
 	"walls":{"base":{"file":"w_test.go","test":"TestWall"}}}`
@@ -63,7 +63,7 @@ func TestTheBaseIsScoredForImportsThatPointUp(t *testing.T) {
 		Package{Path: "api/cmd/root", Imports: []string{"api/internal/plan", "api/internal/unlisted"}, Lines: 900},
 	)
 	a := Score(in)
-	if a.RulerVersion != 1 || a.Commit != "c" || len(a.Domains) != 4 {
+	if a.RulerVersion != 2 || a.Commit != "c" || len(a.Domains) != 4 {
 		t.Fatalf("answer = %+v", a)
 	}
 	base := domain(t, a, "base")
@@ -131,8 +131,30 @@ func TestAMutualDependencyCountsAgainstBoth(t *testing.T) {
 	}
 }
 
+// Origin: 2026-11-16, version 1 of the ruler on main: lineage imports
+// verification and nothing of verification imports lineage, yet lineage was
+// charged two cycle edges, because verification imports the base, the base
+// imports owner, owner imports a shared package and the shared package imports
+// lineage. A way back through the base or a shared package is no cycle.
+func TestAWayBackThroughTheBaseOrASharedPackageIsNoCycle(t *testing.T) {
+	in := input(t, own, false,
+		Package{Path: "api/internal/plan", Imports: []string{"api/internal/tenant"}, Lines: 1},
+		Package{Path: "api/internal/tenant", Imports: []string{"api/internal/core", "api/internal/both"}, Lines: 1},
+		Package{Path: "api/internal/core", Imports: []string{"api/internal/owner"}, Lines: 1},
+		Package{Path: "api/internal/owner", Imports: []string{"api/internal/both", "api/internal/core"}, Lines: 1},
+		Package{Path: "api/internal/both", Imports: []string{"api/internal/plan"}, Lines: 1})
+	a := Score(in)
+	if d := domain(t, a, "plan"); d.Items[0].Measures["cycle_edges"] != 0 {
+		t.Errorf("plan = %+v", d.Items[0])
+	}
+	// The base's own import of owner is still one: owner stands on the base.
+	if d := domain(t, a, "base"); d.Items[0].Measures["cycle_edges"] != 1 {
+		t.Errorf("base = %+v", d.Items[0])
+	}
+}
+
 func TestARulerOfAnotherVersionIsRefused(t *testing.T) {
-	if _, err := ParseRuler([]byte(strings.Replace(testRuler, `"version":1`, `"version":2`, 1))); err == nil || !strings.Contains(err.Error(), "version 2") {
+	if _, err := ParseRuler([]byte(strings.Replace(testRuler, `"version":2`, `"version":3`, 1))); err == nil || !strings.Contains(err.Error(), "version 3") {
 		t.Fatalf("err = %v", err)
 	}
 	if _, err := ParseRuler([]byte(strings.Replace(testRuler, `"max":75`, `"max":70`, 1))); err == nil || !strings.Contains(err.Error(), "not 100") {

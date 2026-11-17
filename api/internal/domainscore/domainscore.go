@@ -16,7 +16,7 @@ import (
 
 // RulerVersion is the ruler version whose formulas this code computes. The
 // ruler file must say the same number.
-const RulerVersion = 1
+const RulerVersion = 2
 
 // Mixed is the domain of a package whose row names several domains.
 const Mixed = "mixed"
@@ -160,6 +160,17 @@ func Score(in Input) Answer {
 			}
 		}
 	}
+	// The base is the default domain: every domain stands on it.
+	base := ""
+	if len(in.Ownership.Default.Domains) == 1 {
+		base = in.Ownership.Default.Domains[0]
+	}
+	// reaches does not pass through the base or through Mixed. Every domain
+	// imports the base and the shared packages import every domain, so a path
+	// through either joins any two domains: version 1 counted those and
+	// called plan -> lineage, lineage -> verification and owner ->
+	// coordination cycles when none of the three is imported back
+	// (2026-11-16, found drawing the domain graph from the same imports).
 	reaches := func(from, to string) bool {
 		seen, queue := map[string]bool{from: true}, []string{from}
 		for len(queue) > 0 {
@@ -169,7 +180,7 @@ func Score(in Input) Answer {
 				if n == to {
 					return true
 				}
-				if !seen[n] {
+				if !seen[n] && n != base && n != Mixed {
 					seen[n] = true
 					queue = append(queue, n)
 				}
@@ -187,15 +198,10 @@ func Score(in Input) Answer {
 		return back[k]
 	}
 
-	// The base is the default domain: every domain stands on it, so an import
-	// of it points the right way whatever it imports in turn, and the shared
-	// packages of several domains (Mixed) are the base's to answer for, not
-	// their importer's. Between two other domains neither is below the other:
-	// a mutual dependency counts against both.
-	base := ""
-	if len(in.Ownership.Default.Domains) == 1 {
-		base = in.Ownership.Default.Domains[0]
-	}
+	// An import of the base points the right way whatever the base imports in
+	// turn, and the shared packages of several domains (Mixed) are the base's
+	// to answer for, not their importer's. Between two other domains neither
+	// is below the other: a mutual dependency counts against both.
 	wrongWay := func(from, to string) bool {
 		if to == base || (to == Mixed && from != base) {
 			return false
