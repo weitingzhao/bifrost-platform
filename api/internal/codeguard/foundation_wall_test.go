@@ -36,10 +36,10 @@ func (o ownership) domainOf(pkg string) string {
 
 // heldAsFoundation are packages the ownership table records as mixed whose
 // imports are held as foundation's all the same. cluster is the Kubernetes
-// adapter with blocks nobody has ruled on (data clone, database status,
-// readiness of compute's pools); it is recorded as mixed until they are split
-// out, and it must not grow an import of a domain meanwhile: it had two until
-// 2026-11-16.
+// adapter with blocks nobody has ruled on (database status, readiness of
+// compute's pools; the data clone left on 2026-11-17); it is recorded as
+// mixed until they are split out, and it must not grow an import of a domain
+// meanwhile: it had two until 2026-11-16.
 var heldAsFoundation = map[string]bool{"api/internal/cluster": true}
 
 // upward lists, sorted, every direct import by a foundation package of a
