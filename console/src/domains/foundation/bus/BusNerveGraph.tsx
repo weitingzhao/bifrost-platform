@@ -161,6 +161,16 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
   ready.current = onReady
   const click = useRef(onNodeClick)
   click.current = onNodeClick
+  const lastClick = useRef({ id: '', at: 0 })
+  /** One click per press, whichever path saw it (the library's node click, or a still press on the hovered node). */
+  const fireClick = (id: string) => {
+    const now = performance.now()
+    if (lastClick.current.id === id && now - lastClick.current.at < 500) return
+    lastClick.current = { id, at: now }
+    click.current?.(id)
+  }
+  /** A press holds the spin, so the node under the pointer stays put while it is clicked. */
+  const spinHeld = useRef(false)
   const labelsRef = useRef(new Map<string, HTMLDivElement>())
   const hovered = useRef<string | null>(null)
   const fitted = useRef(-1)
@@ -250,9 +260,9 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
         g.d3Force('drift', driftForce(() => data.current.nodes, 2))
         g.d3Force('collide', collideForce(() => data.current.nodes, 2))
         g.d3Force('charge')?.strength(chargeOf)
-        g.onNodeClick((o: object) => click.current?.((o as SimNode).id))
+        g.onNodeClick((o: object) => fireClick((o as SimNode).id))
         g.onNodeHover((o: object | null) => { hovered.current = o ? (o as SimNode).id : null; el.style.cursor = o ? 'pointer' : '' })
-        g.onNodeDragEnd((o: object, t: { x: number; y: number }) => { if (Math.hypot(t.x, t.y) < CLICK_SLOP) click.current?.((o as SimNode).id) })
+        g.onNodeDragEnd((o: object, t: { x: number; y: number }) => { if (Math.hypot(t.x, t.y) < CLICK_SLOP) fireClick((o as SimNode).id) })
         g.graphData(data.current)
         graph.current = g
         fitted.current = -1
@@ -386,10 +396,10 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
           g.d3Force('drift', driftForce(() => data.current.nodes, 3))
           g.d3Force('collide', collideForce(() => data.current.nodes, 3))
           g.d3Force('charge')?.strength(chargeOf)
-          g.onNodeClick((o: object) => click.current?.((o as SimNode).id))
+          g.onNodeClick((o: object) => fireClick((o as SimNode).id))
           g.onNodeHover((o: object | null) => { hovered.current = o ? (o as SimNode).id : null; el.style.cursor = o ? 'pointer' : '' })
           // A press and release that barely moved the node is a click, not a drag.
-          g.onNodeDragEnd((o: object, t: { x: number; y: number; z: number }) => { if (Math.hypot(t.x, t.y, t.z) < CLICK_SLOP) click.current?.((o as SimNode).id) })
+          g.onNodeDragEnd((o: object, t: { x: number; y: number; z: number }) => { if (Math.hypot(t.x, t.y, t.z) < CLICK_SLOP) fireClick((o as SimNode).id) })
           const controls = g.controls() as { zoomSpeed?: number; autoRotate?: boolean; autoRotateSpeed?: number }
           controls.zoomSpeed = 2.5
           controls.autoRotateSpeed = 0.35
@@ -412,9 +422,32 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
           fitted.current = -1
           fitSoonRef.current()
           // Breath: the whole body breathes slowly; a seat's light with its heartbeat; a flash or hover brightens a node.
+          // Labels that would overlap on the screen: the larger cloud keeps its name, the other fades.
+          const v = new THREE.Vector3()
+          let frame = 0
+          const declutter = () => {
+            const cam = g.camera()
+            const w = width()
+            const h = height()
+            const placed: { x: number; y: number; w: number }[] = []
+            const named = data.current.nodes
+              .filter(n => labelsRef.current.has(n.id) && n.kind !== 'topic')
+              .sort((a, b) => (b.kind === 'cluster' ? cloudRadius(b) + 100 : b.size) - (a.kind === 'cluster' ? cloudRadius(a) + 100 : a.size))
+            for (const n of named) {
+              const div = labelsRef.current.get(n.id)!
+              v.set(n.x ?? 0, n.y ?? 0, n.z ?? 0).project(cam)
+              const x = ((v.x + 1) / 2) * w
+              const y = ((1 - v.y) / 2) * h
+              const lw = (div.textContent?.length ?? 0) * (n.kind === 'cluster' ? 7 : 6)
+              const clash = placed.some(p => Math.abs(p.x - x) < (p.w + lw) / 2 + 4 && Math.abs(p.y - y) < 15)
+              div.style.opacity = clash ? '0' : '1'
+              if (!clash) placed.push({ x, y, w: lw })
+            }
+          }
           const tick = () => {
             const t = performance.now() / 1000
-            controls.autoRotate = spinRef.current
+            if (++frame % 12 === 0) declutter()
+            controls.autoRotate = spinRef.current && !spinHeld.current
             const breath = 1 + 0.08 * Math.sin((2 * Math.PI * t) / 7)
             for (const n of data.current.nodes) {
               const b = bodies.get(n.id)
@@ -436,11 +469,29 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
     // The wheel turns the body, not the page under it.
     const wheel = (e: WheelEvent) => e.preventDefault()
     el.addEventListener('wheel', wheel, { passive: false })
+    // A press holds the spin; a press that did not move, on a hovered node, is a click on it.
+    let down: { x: number; y: number } | null = null
+    let resume = 0
+    const press = (e: PointerEvent) => {
+      down = { x: e.clientX, y: e.clientY }
+      spinHeld.current = true
+      window.clearTimeout(resume)
+    }
+    const release = (e: PointerEvent) => {
+      if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5 && hovered.current) fireClick(hovered.current)
+      down = null
+      resume = window.setTimeout(() => { spinHeld.current = false }, 4000)
+    }
+    el.addEventListener('pointerdown', press, true)
+    el.addEventListener('pointerup', release, true)
     return () => {
       disposed = true
       cancelAnimationFrame(raf)
       window.removeEventListener('resize', resize)
       el.removeEventListener('wheel', wheel)
+      el.removeEventListener('pointerdown', press, true)
+      el.removeEventListener('pointerup', release, true)
+      window.clearTimeout(resume)
       recloud.current = null
       graph.current?._destructor?.()
       graph.current = null

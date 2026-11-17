@@ -114,6 +114,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
   const domainOfType = useMemo(() => new Map((contract.data?.topics ?? []).map(t => [t.type, t.domain || domainOf(t.type)])), [contract.data])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [spin, setSpin] = useState(true)
+  const [help, setHelp] = useState(false)
 
   // Dust: every event of the last day, by the domain it tells of, read once when the page opens (no receipts asked), then the live ones.
   const [dust, setDust] = useState<{ type: string; time: string }[]>([])
@@ -281,6 +282,8 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
         {(['3d', '2d', 'list'] as const).map(v => <TermButton key={v} on={view === v} onClick={() => setView(v)}>{v}</TermButton>)}
         {late > 0 && <span className="font-mono text-xs" style={{ color: C.amber }}>{late} events waiting over {LATE_AFTER_S}s for a receipt</span>}
         {stream.receiptsOff && <span className="font-mono text-xs" style={{ color: C.amber }}>receipts off on this gate</span>}
+        <span className="ml-auto" />
+        <TermButton on={help} onClick={() => setHelp(h => !h)}>?</TermButton>
       </div>
       <p className="m-0 min-h-5 truncate font-mono text-xs" data-testid="bus-nerve-last" style={{ color: C.text }}>
         <span style={{ color: C.muted }}>$ </span>
@@ -288,13 +291,12 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
           ? <button type="button" className="cursor-pointer hover:underline" onClick={() => onSelect(last.event.id)}>
               {clockTime(last.event.time)} {last.event.type} {last.event.subject} → {last.readers.length > 0 ? last.readers.join(', ') : mode.kind === 'live' ? 'awaiting receipt' : 'topic'}
             </button>
-          : <span style={{ color: C.muted }}>{mode.kind === 'live' ? 'no event since this page opened · seats breathe with their own heartbeat · ▶ replays the last day' : replayNote}</span>}
+          : <span style={{ color: C.muted }}>{mode.kind === 'live' ? 'no event since this page opened' : replayNote}</span>}
       </p>
       {mode.kind === 'live' && team.data?.rate && (
         <p className="m-0 font-mono text-xs" data-testid="bus-nerve-rate" style={{ color: C.muted }}>
-          bus now: <span style={{ color: C.text }}>{team.data.rate.per_minute}/min</span> over the last hour ({team.data.rate.events} events
-          {Object.keys(team.data.rate.by_type).length > 0 ? `; most ${Object.entries(team.data.rate.by_type).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t, n]) => `${t} ${n}`).join(', ')}` : ''})
-          {' '}· letters between seats mostly go through Desktop sessions, not the bus, so the team's nerves are mostly not on it yet
+          <span style={{ color: C.text }}>{team.data.rate.per_minute}/min</span> · {team.data.rate.events} in 1h
+          {Object.keys(team.data.rate.by_type).length > 0 ? ` · ${Object.entries(team.data.rate.by_type).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t, n]) => `${t} ${n}`).join(' · ')}` : ''}
         </p>
       )}
       {mode.kind === 'replay' && (
@@ -302,6 +304,8 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
           ▶ replay {mode.speed}× {replayAt ? `· ${clockTime(replayAt.time)} · ${replayAt.i}/${replayAt.n}` : ''} <span style={{ color: C.muted }}>{replayNote}</span>
         </p>
       )}
+      <div className="relative w-full min-w-0">
+      {help && <HelpPanel unmeasured={team.data?.unmeasured ?? []} onClose={() => setHelp(false)} />}
       {view === 'list'
         ? <div className="rounded-sm bg-[var(--card-fill)] p-2"><ContractGraph contract={contract.data} roster={roster} /></div>
         : (
@@ -314,14 +318,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
               }} />
           </Suspense>
         )}
-      <p className="m-0 font-mono text-[11px]" style={{ color: C.muted }}>
-        each domain is a cloud: a light for each of its parts, a dust point for each event of the last day, dimmer with age · gold particle: an event · white: a reader's receipt, the reader lights up · pink: a letter between seats · amber dashed: cards to the owner · seats breathe with their session's heartbeat (fast in a turn, slow idle, still and grey when down; a lost reader is grey too) · thin red ring: a letter or card unanswered over {STUCK_AFTER_MIN}m (the only red) · a seat quiet for {QUIET_AFTER_H}h says so on hover · the map opens at the domains: seats live in coordination, the owner in owner, the bus's readers and old roads in foundation · grey: old roads not on the bus yet · hover a node or link for its readings · drag the background to turn the body, wheel or pinch to zoom, drag a node to move it · click a domain to open or fold it · the Console's own receipt ({OWN_CONSUMER}) is not drawn
-      </p>
-      {team.data && team.data.unmeasured.length > 0 && (
-        <ul className="m-0 flex list-none flex-col gap-0.5 p-0 font-mono text-[11px]" style={{ color: C.muted }}>
-          {team.data.unmeasured.map(u => <li key={u.what}><span style={{ color: C.amber }}>not measured</span> {u.what}: {u.why}</li>)}
-        </ul>
-      )}
+      </div>
       {team.isError && <p className="m-0 font-mono text-[11px]" style={{ color: C.red }}>team readings unreadable: {team.error instanceof Error ? team.error.message : 'request failed'}</p>}
     </div>
   )
@@ -329,6 +326,55 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
     <OpsSection title="Nerves" bodyPadding="compact">
       <div className="w-full min-w-0 rounded-sm p-2" style={{ background: C.ground, color: C.text }}>{content}</div>
     </OpsSection>
+  )
+}
+
+/** A legend row: a mark and two or three words. */
+function Key({ mark, children }: { mark: ReactNode; children: ReactNode }) {
+  return <li className="flex items-center gap-2"><span className="inline-flex w-4 justify-center">{mark}</span><span>{children}</span></li>
+}
+const dot = (color: string, ring = false) => (
+  <span className="inline-block size-2 rounded-full" style={ring ? { border: `1px solid ${color}` } : { background: color, boxShadow: `0 0 4px ${color}` }} />
+)
+
+/**
+ * Everything that explains the map, kept off the page until asked (the Owner,
+ * 2026-11-17: explanations go behind a "?"): the legend, how to move it, and
+ * what is not measured and why.
+ */
+function HelpPanel({ unmeasured, onClose }: { unmeasured: { what: string; why: string }[]; onClose: () => void }) {
+  return (
+    <div className="absolute top-2 right-2 z-10 max-w-80 rounded-sm p-2 font-mono text-[11px]" role="dialog" aria-label="Nerve map help"
+      style={{ background: 'rgba(4,7,10,0.92)', border: `1px solid ${C.rule}`, color: C.text }}>
+      <div className="mb-1 flex items-center justify-between" style={{ color: C.muted }}>
+        <span>┌ legend</span>
+        <button type="button" className="cursor-pointer" onClick={onClose} aria-label="Close help">×</button>
+      </div>
+      <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+        <Key mark={<span style={{ color: '#ffc46b' }}>✦</span>}>cloud = a domain</Key>
+        <Key mark={dot(PULSE.event)}>event</Key>
+        <Key mark={dot(PULSE.receipt)}>receipt</Key>
+        <Key mark={dot(PULSE.letter)}>seat letter</Key>
+        <Key mark={<span style={{ color: C.amber }}>┄</span>}>card to owner</Key>
+        <Key mark={dot(C.red, true)}>waiting &gt;{STUCK_AFTER_MIN}m</Key>
+        <Key mark={dot(C.grey)}>old road · down</Key>
+      </ul>
+      <p className="m-0 mt-2 mb-1" style={{ color: C.muted }}>┌ move</p>
+      <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+        <li>drag: turn · wheel: zoom</li>
+        <li>click a cloud: open · again: fold</li>
+        <li>hover: readings</li>
+      </ul>
+      {unmeasured.length > 0 && (
+        <>
+          <p className="m-0 mt-2 mb-1" style={{ color: C.muted }}>┌ {unmeasured.length} not measured</p>
+          <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+            {unmeasured.map(u => <li key={u.what}><span style={{ color: C.amber }}>{u.what}</span> · {u.why}</li>)}
+          </ul>
+        </>
+      )}
+      <p className="m-0 mt-2" style={{ color: C.muted }}>dust: each event of the last day, dimmer with age · seats breathe with their heartbeat; quiet {QUIET_AFTER_H}h shows on hover · the Console's own receipt ({OWN_CONSUMER}) is not drawn</p>
+    </div>
   )
 }
 
