@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"log/slog"
 	"net/http"
 	"os"
@@ -15,11 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/elasticreadings"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/appreadings"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	datahusbandry "github.com/weitingzhao/bifrost-platform/api/internal/tenant/husbandry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/husbandry/checklistview"
 
@@ -31,7 +27,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/actuationpolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentprogress"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
@@ -51,7 +46,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/network"
 	"github.com/weitingzhao/bifrost-platform/api/internal/operatorplane"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
-	"github.com/weitingzhao/bifrost-platform/api/internal/patrol"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
@@ -174,12 +168,7 @@ func New(cfg *config.Config) (*Server, error) {
 	gitopsH := gitops.NewHandler(cfg, audit)
 	role := config.CurrentRole()
 	clusterH := cluster.NewHandler(cfg, audit)
-	// The compute domain evaluates the node pools; cluster declares the shape.
-	clusterH.Service().BindPools(placement.ClusterPools)
-	// The tenant domain reads its applications and data from what cluster gathers.
-	cluster.BindAppReadings(cluster.AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain, FreshnessDatabases: appreadings.FreshnessDatabases})
-	// The compute domain reads the elastic domains (GPU, data warehouse) of service readiness.
-	cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain})
+	bindClusterReadings(clusterH)
 	ibgatewayH := ibgateway.NewHandler(clusterH.Service(), audit)
 	if role.RunsWorkers() {
 		ibgatewayH.StartBackground(context.Background(), audit)
@@ -195,45 +184,9 @@ func New(cfg *config.Config) (*Server, error) {
 	promoteH := promote.NewHandler(cfg, audit, clusterH)
 	prober := probe.NewProber()
 	checklistH := checklist.NewHandler(cfg.ConfigDir(), audit)
-	// L-1 lives out of band once OPERATOR_PLANE_URL is set: forward those routes.
-	// /patrol/* is never forwarded. This process serves it from the shared
-	// statefile and does not start the autopilot — that loop runs on workers.
-	planeURL := strings.TrimSpace(os.Getenv("OPERATOR_PLANE_URL"))
-	var plane *operatorplane.Plane
-	var mountPlane func(chi.Router)
-	var patrolH *patrol.Handler
-	if planeURL == "" {
-		plane, err = operatorplane.New(operatorplane.Deps{
-			Auth:      auth,
-			Audit:     audit,
-			ConfigDir: cfg.ConfigDir(),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("operator plane: %w", err)
-		}
-		if role.RunsWorkers() {
-			plane.StartBackground(context.Background())
-		}
-		patrolH = plane.Patrol()
-		mountPlane = func(r chi.Router) {
-			plane.Mount(r)
-			operatorplane.MountPatrol(auth, patrolH, r)
-		}
-	} else {
-		mountPlane, err = operatorplane.NewProxyMount(auth, planeURL)
-		if err != nil {
-			return nil, fmt.Errorf("operator plane proxy: %w", err)
-		}
-		patrolH, err = patrol.NewHandler(cfg.ConfigDir())
-		if err != nil {
-			return nil, fmt.Errorf("patrol: %w", err)
-		}
-		proxy := mountPlane
-		mountPlane = func(r chi.Router) {
-			proxy(r)
-			operatorplane.MountPatrol(auth, patrolH, r)
-		}
-		slog.Info("operator plane is out of band", "url", planeURL, "note", "L-1 routes proxied; patrol stays local; no patrol autopilot in this process")
+	plane, planeURL, mountPlane, err := newOperatorPlane(cfg, auth, audit, role)
+	if err != nil {
+		return nil, err
 	}
 	srv := &Server{
 		cfg:             cfg,
@@ -303,87 +256,8 @@ func New(cfg *config.Config) (*Server, error) {
 	if dir := threadtitles.TranscriptDir(); role.RunsWorkers() && threadtitles.SyncWanted(dir) {
 		threadtitles.StartSync(context.Background(), titleStore, threadtitles.NewScanner(dir, 30*24*time.Hour), 3*time.Minute)
 	}
-	srv.lineage = lineage.NewHandler(lineage.NewService(func(ctx context.Context) (lineage.Access, error) {
-		a, err := srv.delivery.GiteaAccess(ctx)
-		// The agent organization's branches too (T36), as the result check reads them.
-		return lineage.Access{Base: a.Base, Org: a.Org, User: a.User, Pass: a.Pass,
-			AgentOrg: strings.TrimSpace(os.Getenv("AGENTRT_GIT_ORG"))}, err
-	}).WithReleases(func(ctx context.Context) ([]lineage.Release, error) {
-		recs, err := releasesSvc.List(ctx)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]lineage.Release, 0, len(recs))
-		for _, r := range recs {
-			repos := make(map[string]string, len(r.Repos))
-			for name, b := range r.Repos {
-				repos[name] = b.SHA
-			}
-			out = append(out, lineage.Release{Run: r.Run, Lane: r.Lane, Env: r.Env, Deploys: r.Deploys, At: r.CompletedAt, Repos: repos})
-		}
-		return out, nil
-	})).WithTitles(func(ctx context.Context) (lineage.ThreadTitles, error) {
-		tt, err := titleStore.Load(ctx)
-		out := lineage.ThreadTitles{Manual: map[string]lineage.TitleAt{}, Transcript: map[string]lineage.TitleAt{}}
-		for k, v := range tt.Manual {
-			out.Manual[k] = lineage.TitleAt{Title: v.Title, At: v.At}
-		}
-		for k, v := range tt.Transcripts {
-			out.Transcript[k] = lineage.TitleAt{Title: v.Title, At: v.At}
-		}
-		return out, err
-	}, func(ctx context.Context, session, title string) error {
-		return titleStore.SetManual(ctx, session, title, time.Now().UTC())
-	}).WithTitleReports(func(ctx context.Context, transcript, title string) error {
-		return titleStore.ReportTranscript(ctx, transcript, title, time.Now().UTC())
-	})
-	actions.SetDaemonReplicas(func(ctx context.Context, namespace string) (int32, bool) {
-		return srv.lookupDaemonReplicas(ctx, namespace)
-	})
-	actions.SetD10Paths(srv.d10Paths)
-	if pol, err := actuationpolicy.LoadFromConfigDir(cfg.ConfigDir()); err != nil {
-		slog.Error("actuation policy not loaded; generic write actions refuse", "err", err)
-	} else {
-		actions.SetActuationPolicy(pol)
-		srv.delivery.SetPolicy(pol)
-		workSvc := &workactions.Service{
-			Policy: pol,
-			Sync: func(ctx context.Context, repo, commit string) error {
-				res, err := srv.delivery.SyncOne(ctx, repo, commit)
-				if err != nil {
-					return err
-				}
-				if !res.Present {
-					if res.Error != "" {
-						return fmt.Errorf("%s", res.Error)
-					}
-					return fmt.Errorf("mirror commit is not present")
-				}
-				return nil
-			},
-			Clients: workactions.Clients{
-				Kube: func() (kubernetes.Interface, error) {
-					cs, _, err := clusterH.Service().KubernetesClient()
-					return cs, err
-				},
-				Dynamic: func() (dynamic.Interface, error) {
-					rc, _, err := clusterH.Service().RestConfig()
-					if err != nil {
-						return nil, err
-					}
-					return dynamic.NewForConfig(rc)
-				},
-			},
-		}
-		srv.work = &workactions.Handler{Svc: workSvc, Audit: srv.audit}
-		actions.SetPlanLookup(func(ctx context.Context, planID string) (actions.PlanSummary, error) {
-			sum, err := workSvc.Summarize(ctx, planID)
-			if err != nil {
-				return actions.PlanSummary{}, err
-			}
-			return actions.PlanSummary{Ready: sum.Ready, Namespaces: sum.Namespaces, Daemon: sum.Daemon, Path: sum.Path, Objects: len(sum.Objects), Migrated: sum.Migrated}, nil
-		})
-	}
+	srv.wireLineage(releasesSvc, titleStore)
+	srv.wireWorkActions(cfg, clusterH)
 	dataDir := strings.TrimSpace(os.Getenv("PLATFORM_DATA_DIR"))
 	if dataDir == "" {
 		dataDir = filepath.Join(cfg.ConfigDir(), "..", "data")

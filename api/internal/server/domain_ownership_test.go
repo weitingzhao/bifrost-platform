@@ -70,20 +70,28 @@ func TestDomainOwnershipCatalog(t *testing.T) {
 // line of wiring.
 func TestServerBindsThePoolEvaluator(t *testing.T) {
 	t.Parallel()
-	src, err := os.ReadFile("server.go")
+	// New calls bindClusterReadings, and that function holds the three lines.
+	root, err := os.ReadFile("server.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(root), "\tbindClusterReadings(clusterH)\n") {
+		t.Fatal("New does not call bindClusterReadings")
+	}
+	src, err := os.ReadFile("mount_cluster.go")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(src), "clusterH.Service().BindPools(placement.ClusterPools)") {
-		t.Fatal("server.go does not bind placement.ClusterPools to the cluster service")
+		t.Fatal("bindClusterReadings does not bind placement.ClusterPools to the cluster service")
 	}
 	// The same for the tenant's readings of applications and data
 	// (cluster.BindAppReadings): unbound, the applications domain is unknown.
 	if !strings.Contains(string(src), "cluster.BindAppReadings(cluster.AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain, FreshnessDatabases: appreadings.FreshnessDatabases})") {
-		t.Fatal("server.go does not bind tenant/appreadings to the cluster package")
+		t.Fatal("bindClusterReadings does not bind tenant/appreadings to the cluster package")
 	}
 	// And for compute's readings of the elastic domains (cluster.BindComputeReadings).
 	if !strings.Contains(string(src), "cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain})") {
-		t.Fatal("server.go does not bind elasticreadings to the cluster package")
+		t.Fatal("bindClusterReadings does not bind elasticreadings to the cluster package")
 	}
 }

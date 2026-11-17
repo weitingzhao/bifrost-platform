@@ -1,9 +1,18 @@
 package server
 
 import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+	"strings"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/operatorplane"
+	"github.com/weitingzhao/bifrost-platform/api/internal/patrol"
 )
 
 // mountFoundation registers the foundation domain's routes under /api/v1. They were lines
@@ -58,4 +67,49 @@ func (s *Server) mountFoundation(r chi.Router) {
 		r.Post("/network/clients/fixed-ip", s.guard("unifi_client_fixed_ip", s.network.HandleClientFixedIP))
 		r.Post("/network/firewall/apply", s.guard("unifi_firewall_apply", s.network.HandleFirewallApply))
 	})
+}
+
+// newOperatorPlane is the L-1 surface: served in this process, or proxied to
+// the out-of-band plane when OPERATOR_PLANE_URL is set; patrol is mounted
+// beside it either way. Lines of New until 2026-11-16, unchanged.
+func newOperatorPlane(cfg *config.Config, auth *actuation.AuthService, audit *actuation.AuditLog, role config.Role) (plane *operatorplane.Plane, planeURL string, mountPlane func(chi.Router), err error) {
+	// L-1 lives out of band once OPERATOR_PLANE_URL is set: forward those routes.
+	// /patrol/* is never forwarded. This process serves it from the shared
+	// statefile and does not start the autopilot — that loop runs on workers.
+	planeURL = strings.TrimSpace(os.Getenv("OPERATOR_PLANE_URL"))
+	var patrolH *patrol.Handler
+	if planeURL == "" {
+		plane, err = operatorplane.New(operatorplane.Deps{
+			Auth:      auth,
+			Audit:     audit,
+			ConfigDir: cfg.ConfigDir(),
+		})
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("operator plane: %w", err)
+		}
+		if role.RunsWorkers() {
+			plane.StartBackground(context.Background())
+		}
+		patrolH = plane.Patrol()
+		mountPlane = func(r chi.Router) {
+			plane.Mount(r)
+			operatorplane.MountPatrol(auth, patrolH, r)
+		}
+	} else {
+		mountPlane, err = operatorplane.NewProxyMount(auth, planeURL)
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("operator plane proxy: %w", err)
+		}
+		patrolH, err = patrol.NewHandler(cfg.ConfigDir())
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("patrol: %w", err)
+		}
+		proxy := mountPlane
+		mountPlane = func(r chi.Router) {
+			proxy(r)
+			operatorplane.MountPatrol(auth, patrolH, r)
+		}
+		slog.Info("operator plane is out of band", "url", planeURL, "note", "L-1 routes proxied; patrol stays local; no patrol autopilot in this process")
+	}
+	return plane, planeURL, mountPlane, nil
 }

@@ -4,6 +4,10 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
+	"github.com/weitingzhao/bifrost-platform/api/internal/elasticreadings"
+	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
+	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/appreadings"
 )
 
 // mountCluster registers the cluster package's routes (the package is
@@ -71,4 +75,15 @@ func (s *Server) mountDevSessions(r chi.Router) {
 			r.Post("/{name}/control", s.devSession.HandleControl)
 		})
 	})
+}
+
+// bindClusterReadings binds the readings other domains own to the cluster
+// package, which gathers their inputs. Lines of New until 2026-11-16.
+func bindClusterReadings(clusterH *cluster.Handler) {
+	// The compute domain evaluates the node pools; cluster declares the shape.
+	clusterH.Service().BindPools(placement.ClusterPools)
+	// The tenant domain reads its applications and data from what cluster gathers.
+	cluster.BindAppReadings(cluster.AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain, FreshnessDatabases: appreadings.FreshnessDatabases})
+	// The compute domain reads the elastic domains (GPU, data warehouse) of service readiness.
+	cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain})
 }

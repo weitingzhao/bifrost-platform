@@ -1,9 +1,20 @@
 package server
 
 import (
-	"github.com/go-chi/chi/v5"
+	"context"
+	"fmt"
+	"log/slog"
 
+	"github.com/go-chi/chi/v5"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuationpolicy"
+	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
+	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/workactions"
 )
 
 // mountOwner registers the owner domain's routes under /api/v1. They were lines
@@ -34,4 +45,57 @@ func (s *Server) mountOwner(r chi.Router) {
 		r.Post("/actuation/jobs/delete-finished", s.guard("delete_finished_jobs", s.handleDeleteFinished))
 		r.Post("/actuation/probes", s.guard("run_probe_pod", s.handleProbe))
 	})
+}
+
+// wireWorkActions gives the action catalog what it asks of this process (the
+// daemon's replicas, the D10 paths, the actuation policy) and builds the
+// generic write actions. Lines of New until 2026-11-16, unchanged.
+func (srv *Server) wireWorkActions(cfg *config.Config, clusterH *cluster.Handler) {
+	actions.SetDaemonReplicas(func(ctx context.Context, namespace string) (int32, bool) {
+		return srv.lookupDaemonReplicas(ctx, namespace)
+	})
+	actions.SetD10Paths(srv.d10Paths)
+	if pol, err := actuationpolicy.LoadFromConfigDir(cfg.ConfigDir()); err != nil {
+		slog.Error("actuation policy not loaded; generic write actions refuse", "err", err)
+	} else {
+		actions.SetActuationPolicy(pol)
+		srv.delivery.SetPolicy(pol)
+		workSvc := &workactions.Service{
+			Policy: pol,
+			Sync: func(ctx context.Context, repo, commit string) error {
+				res, err := srv.delivery.SyncOne(ctx, repo, commit)
+				if err != nil {
+					return err
+				}
+				if !res.Present {
+					if res.Error != "" {
+						return fmt.Errorf("%s", res.Error)
+					}
+					return fmt.Errorf("mirror commit is not present")
+				}
+				return nil
+			},
+			Clients: workactions.Clients{
+				Kube: func() (kubernetes.Interface, error) {
+					cs, _, err := clusterH.Service().KubernetesClient()
+					return cs, err
+				},
+				Dynamic: func() (dynamic.Interface, error) {
+					rc, _, err := clusterH.Service().RestConfig()
+					if err != nil {
+						return nil, err
+					}
+					return dynamic.NewForConfig(rc)
+				},
+			},
+		}
+		srv.work = &workactions.Handler{Svc: workSvc, Audit: srv.audit}
+		actions.SetPlanLookup(func(ctx context.Context, planID string) (actions.PlanSummary, error) {
+			sum, err := workSvc.Summarize(ctx, planID)
+			if err != nil {
+				return actions.PlanSummary{}, err
+			}
+			return actions.PlanSummary{Ready: sum.Ready, Namespaces: sum.Namespaces, Daemon: sum.Daemon, Path: sum.Path, Objects: len(sum.Objects), Migrated: sum.Migrated}, nil
+		})
+	}
 }
