@@ -184,14 +184,14 @@ export const REPLAY_MAX_PAGES = 40
  * id; stops at an empty page or one with nothing new. One read when asked,
  * not a poll. receiptsNote says why receipts are missing, when they are.
  */
-export async function fetchBusReplay(sinceIso: string): Promise<{ events: BusEnvelope[]; receipts: BusReceipt[]; receiptsNote?: string }> {
+export async function fetchBusReplay(sinceIso: string, withReceipts = true): Promise<{ events: BusEnvelope[]; receipts: BusReceipt[]; receiptsNote?: string }> {
   const out: BusEnvelope[] = []
   const receipts: BusReceipt[] = []
   let receiptsNote: string | undefined
   const seen = new Set<string>()
   let since = sinceIso
   for (let page = 0; page < REPLAY_MAX_PAGES; page++) {
-    const r = await authedFetch('bus replay', `/api/v1/bus/events?since=${encodeURIComponent(since)}&limit=100&wait=0&receipts=1&client=console`)
+    const r = await authedFetch('bus replay', `/api/v1/bus/events?since=${encodeURIComponent(since)}&limit=100&wait=0${withReceipts ? '&receipts=1' : ''}&client=console`)
     const body = (await r.json()) as { events?: BusEnvelope[]; receipts?: BusReceipt[]; receipts_note?: string }
     const fresh = (body.events ?? []).filter(e => !seen.has(e.id))
     if (fresh.length === 0) break

@@ -132,15 +132,15 @@ export async function fetchBusObserve(): Promise<BusObserve> {
 }
 
 /**
- * A domain's own colour on the map: a hue fixed by its id (the same id gives
- * the same hue on every load; nothing is listed by hand), saturated and light
- * enough to glow on black. Returned as #rrggbb so canvas and three take it.
+ * A warm colour for a domain (the Owner's reference, 2026-11-17: nebulae of
+ * small lights in orange, pink and white): a hue between magenta and amber
+ * fixed by the id, so domains differ but share one warm range.
  */
-export function domainColor(id: string, light = 0.62): string {
+export function warmColor(id: string, light = 0.66): string {
   let h = 2166136261
   for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619)
-  const hue = ((h >>> 0) % 360) / 360
-  const sat = 0.85
+  const hue = ((320 + ((h >>> 0) % 85)) % 360) / 360
+  const sat = 0.9
   const f = (n: number) => {
     const k = (n + hue * 12) % 12
     const a = sat * Math.min(light, 1 - light)
@@ -148,4 +148,9 @@ export function domainColor(id: string, light = 0.62): string {
     return Math.round(c * 255).toString(16).padStart(2, '0')
   }
   return `#${f(0)}${f(8)}${f(4)}`
+}
+
+/** How bright a dust point of an event this many hours old is: full when new, a tenth after a day. */
+export function dustBrightness(ageHours: number): number {
+  return Math.max(0.1, 1 - (0.9 * Math.min(24, Math.max(0, ageHours))) / 24)
 }

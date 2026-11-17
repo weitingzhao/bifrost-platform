@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react'
 
 /**
- * The nerve map's renderer, loaded only on the Bus page (a chunk of its own,
- * the Owner, 2026-11-17: "I want this effect"): 3d-force-graph with a bloom
- * glow, or force-graph's 2D canvas on a phone or without WebGL. Nodes find
- * their own place, can be dragged, and drift a little; a pulse is a particle
- * running along a link. What the nodes are and when a pulse fires is decided
- * by the section; this only draws.
+ * The nerve map's renderer, loaded only on the Bus page (a chunk of its own).
+ * Its look follows the Owner's reference (2026-11-17): not balls but nebulae,
+ * thousands of small warm lights of different sizes that brighten where they
+ * overlap, joined by faint silk. A domain is a cloud of points: one for each
+ * of its parts and a dust point for each event of the last day, fading with
+ * age. 3d-force-graph places the clouds and runs the particles; force-graph's
+ * 2D canvas on a phone or without WebGL. The section decides what the nodes
+ * are and when a pulse fires; this only draws.
  */
 
 export type GNode = {
@@ -19,6 +21,8 @@ export type GNode = {
   breath: number | null
   ring?: string
   note: string
+  /** A domain's cloud: how many parts it has and the age in hours of each event of its last day. */
+  cloud?: { parts: number; dust: number[] }
 }
 export type GLink = { source: string; target: string; color: string; dashed?: boolean; width?: number; label?: string }
 
@@ -33,24 +37,13 @@ type SimNode = GNode & { x?: number; y?: number; z?: number; vx?: number; vy?: n
 type SimLink = { source: string | SimNode; target: string | SimNode; color: string; dashed?: boolean; width?: number; label?: string; __pulse?: string }
 
 const GROUND = '#000000'
-/** Fit the body to the frame this long after it loads or a domain opens or folds, and with this margin in pixels. */
-const FIT_AFTER_MS = 1200
-const FIT_PADDING = 30
 const FLASH_MS = 900
-const DRIFT = 0.04
+const DRIFT = 0.03
 /** A drag that moved a node less than this (world units) was a click. */
 const CLICK_SLOP = 2
-
-/** How hard a node pushes the others away: seats and the owner get room of their own, topics sit close to their domain. */
-function chargeOf(o: object): number {
-  switch ((o as SimNode).kind) {
-    case 'seat': return -260
-    case 'cluster': return -160
-    case 'core': return -200
-    case 'topic': return -12
-    default: return -70
-  }
-}
+/** Fit the body to the frame this long after it loads or a domain opens or folds, and with this margin in pixels. */
+const FIT_AFTER_MS = 1400
+const FIT_PADDING = 40
 
 function idOf(end: string | SimNode): string {
   return typeof end === 'string' ? end : end.id
@@ -65,10 +58,44 @@ function hasWebGL(): boolean {
   }
 }
 
+/** A seeded random stream: the same cloud gets the same shape on every build. */
+function seeded(seed: string): () => number {
+  let h = 2166136261
+  for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619)
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507)
+    h = Math.imul(h ^ (h >>> 13), 3266489909)
+    h ^= h >>> 16
+    return (h >>> 0) / 4294967296
+  }
+}
+
+/** A point of a cloud: gaussian around its centre, denser in the middle. */
+function gauss(rnd: () => number): number {
+  return Math.sqrt(-2 * Math.log(Math.max(1e-6, rnd()))) * Math.cos(2 * Math.PI * rnd())
+}
+
+/** The radius of a domain's cloud for its count of points. */
+function cloudRadius(n: GNode): number {
+  const c = n.cloud
+  return 6 + Math.sqrt((c?.parts ?? 0) * 6 + (c?.dust.length ?? 0)) * 1.1
+}
+
+/** How hard a node pushes the others away: clouds get room, parts sit close. */
+function chargeOf(o: object): number {
+  const n = o as SimNode
+  switch (n.kind) {
+    case 'cluster': return -40 - cloudRadius(n) * 12
+    case 'core': return -120
+    case 'seat': return -90
+    case 'topic': return -8
+    default: return -40
+  }
+}
 
 /** A drift that never settles: a small random push each tick, so the body is never frozen still. */
 function driftForce(nodes: () => SimNode[], dims: 2 | 3) {
-  const f = () => {
+  return () => {
     for (const n of nodes()) {
       if (n.kind === 'core') continue
       n.vx = (n.vx ?? 0) + (Math.random() - 0.5) * DRIFT
@@ -76,11 +103,11 @@ function driftForce(nodes: () => SimNode[], dims: 2 | 3) {
       if (dims === 3) n.vz = (n.vz ?? 0) + (Math.random() - 0.5) * DRIFT
     }
   }
-  return f
 }
 
-/** Keeps the bodies apart: two nodes closer than their halos plus a margin push each other away. */
+/** Keeps clouds apart: two nodes closer than their reach plus a margin push each other away. */
 function collideForce(nodes: () => SimNode[], dims: 2 | 3) {
+  const reach = (n: SimNode) => (n.kind === 'cluster' ? cloudRadius(n) * 1.6 : n.size * 2)
   return () => {
     const ns = nodes()
     for (let i = 0; i < ns.length; i++) {
@@ -91,9 +118,9 @@ function collideForce(nodes: () => SimNode[], dims: 2 | 3) {
         const dy = (b.y ?? 0) - (a.y ?? 0)
         const dz = dims === 3 ? (b.z ?? 0) - (a.z ?? 0) : 0
         const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.01
-        const min = (a.size + b.size) * 2.2 + 4
+        const min = reach(a) + reach(b) + 4
         if (d >= min) continue
-        const k = ((min - d) / d) * 0.25
+        const k = ((min - d) / d) * 0.2
         a.vx = (a.vx ?? 0) - dx * k; a.vy = (a.vy ?? 0) - dy * k
         b.vx = (b.vx ?? 0) + dx * k; b.vy = (b.vy ?? 0) + dy * k
         if (dims === 3) { a.vz = (a.vz ?? 0) - dz * k; b.vz = (b.vz ?? 0) + dz * k }
@@ -102,8 +129,13 @@ function collideForce(nodes: () => SimNode[], dims: 2 | 3) {
   }
 }
 
-export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick }: {
-  nodes: GNode[]; links: GLink[]; flat: boolean; onReady: (api: NerveApi) => void; onNodeClick?: (id: string) => void
+/** The signature of a cloud: rebuilt only when its counts change. */
+function cloudSig(n: GNode): string {
+  return n.cloud ? `${n.cloud.parts}:${n.cloud.dust.length}:${n.color}` : ''
+}
+
+export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNodeClick }: {
+  nodes: GNode[]; links: GLink[]; flat: boolean; spin: boolean; onReady: (api: NerveApi) => void; onNodeClick?: (id: string) => void
 }) {
   const host = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the two libraries' chainable instances share no type
@@ -117,22 +149,25 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
   const labelsRef = useRef(new Map<string, HTMLDivElement>())
   const hovered = useRef<string | null>(null)
   const fitted = useRef(-1)
+  const spinRef = useRef(spin)
+  spinRef.current = spin
+  /** Rebuilds a domain's cloud in place when its counts change (3D only). */
+  const recloud = useRef<((n: SimNode) => void) | null>(null)
 
-  // Build the renderer once per kind (3D or 2D).
   useEffect(() => {
     const el = host.current
     if (!el) return
     let disposed = false
     let raf = 0
     const width = () => el.clientWidth || 900
-    const height = () => Math.max(420, Math.min(720, Math.round(width() * 0.66)))
+    const height = () => Math.max(440, Math.min(760, Math.round(width() * 0.68)))
     const api: NerveApi = {
       pulse: (a, b, color, faint) => {
         const g = graph.current
         if (!g) return false
         const l = data.current.links.find(x => (idOf(x.source) === a && idOf(x.target) === b) || (idOf(x.source) === b && idOf(x.target) === a))
         if (!l) return false
-        l.__pulse = faint ? `${color ?? l.color}55` : (color ?? l.color)
+        l.__pulse = faint ? `${color ?? l.color}66` : (color ?? l.color)
         g.emitParticle(l)
         return true
       },
@@ -147,38 +182,50 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
           .width(width()).height(height())
           .backgroundColor(GROUND)
           .nodeId('id')
-          .nodeLabel((o: object) => { const n = o as SimNode; return n.note })
+          .nodeLabel((o: object) => (o as SimNode).note)
           .nodeCanvasObject((o: object, ctx: CanvasRenderingContext2D, scale: number) => {
             const n = o as SimNode
             const t = performance.now() / 1000
-            const r = n.size * (n.breath ? 1 + 0.06 * Math.sin((2 * Math.PI * t) / n.breath) : 1) * (lit(n) || hovered.current === n.id ? 1.3 : 1)
+            const x = n.x ?? 0
+            const y = n.y ?? 0
             ctx.save()
-            ctx.shadowColor = n.color
-            ctx.shadowBlur = lit(n) ? 18 : n.kind === 'topic' ? 4 : 12
-            ctx.beginPath()
-            ctx.arc(n.x ?? 0, n.y ?? 0, r, 0, 2 * Math.PI)
-            ctx.fillStyle = n.kind === 'old' ? '#3b4a5288' : n.color
-            ctx.fill()
-            if (n.ring) {
-              ctx.lineWidth = 1 / scale
-              ctx.strokeStyle = n.ring
-              ctx.stroke()
+            ctx.globalCompositeOperation = 'lighter'
+            if (n.cloud) {
+              // The cloud: parts brighter and larger, dust small and fading with age.
+              const rnd = seeded(n.id)
+              const R = cloudRadius(n)
+              ctx.fillStyle = n.color
+              for (let i = 0; i < n.cloud.parts * 6; i++) {
+                ctx.globalAlpha = 0.5 + 0.4 * rnd()
+                ctx.beginPath(); ctx.arc(x + gauss(rnd) * R * 0.45, y + gauss(rnd) * R * 0.45, (0.9 + rnd() * 1.4) / Math.sqrt(scale), 0, 2 * Math.PI); ctx.fill()
+              }
+              for (const age of n.cloud.dust) {
+                ctx.globalAlpha = Math.max(0.08, 0.7 * (1 - age / 26))
+                ctx.beginPath(); ctx.arc(x + gauss(rnd) * R * 0.7, y + gauss(rnd) * R * 0.7, (0.4 + rnd() * 0.6) / Math.sqrt(scale), 0, 2 * Math.PI); ctx.fill()
+              }
             }
+            const r = n.size * (n.breath ? 1 + 0.08 * Math.sin((2 * Math.PI * t) / n.breath) : 1) * (lit(n) || hovered.current === n.id ? 1.4 : 1)
+            ctx.globalAlpha = n.kind === 'old' ? 0.35 : 0.95
+            ctx.shadowColor = n.color
+            ctx.shadowBlur = lit(n) ? 16 : 8
+            ctx.fillStyle = n.kind === 'cluster' ? '#fff3e6' : n.color
+            ctx.beginPath(); ctx.arc(x, y, n.kind === 'cluster' ? 1.6 : r, 0, 2 * Math.PI); ctx.fill()
+            if (n.ring) { ctx.globalAlpha = 1; ctx.lineWidth = 0.8 / scale; ctx.strokeStyle = n.ring; ctx.stroke() }
             ctx.restore()
-            if (n.kind !== 'topic' && (n.kind === 'cluster' || scale > 0.9)) {
-              ctx.font = `${(n.kind === 'cluster' ? 13 : 9) / scale}px ui-monospace, monospace`
+            if (n.kind === 'cluster' || n.kind === 'core' || scale > 1.4) {
+              const label = n.kind === 'cluster' || n.label.length <= 18 ? n.label : `${n.label.slice(0, 17)}…`
+              ctx.font = `${(n.kind === 'cluster' ? 11 : 8) / scale}px ui-monospace, monospace`
               ctx.textAlign = 'center'
-              ctx.fillStyle = n.kind === 'old' ? '#5f7f72' : '#c7f9d6'
-              ctx.fillText(n.kind === 'cluster' || n.label.length <= 18 ? n.label : `${n.label.slice(0, 17)}…`, n.x ?? 0, (n.y ?? 0) + r + 11 / scale)
+              ctx.fillStyle = n.kind === 'cluster' ? '#f4e9df' : '#c9b6a8'
+              ctx.fillText(label, x, y - (n.kind === 'cluster' ? cloudRadius(n) * 0.9 : r + 3 / scale))
             }
           })
-          .linkColor((o: object) => { const l = o as SimLink; return `${l.color}66` })
-          .linkWidth((o: object) => { const l = o as SimLink; return l.width ?? 0.6 })
-          .linkLineDash((o: object) => { const l = o as SimLink; return (l.dashed ? [3, 3] : null) })
-          .linkLabel((o: object) => { const l = o as SimLink; return l.label ?? '' })
+          .linkColor((o: object) => `${(o as SimLink).color}40`)
+          .linkWidth(0.4)
+          .linkLabel((o: object) => (o as SimLink).label ?? '')
           .linkDirectionalParticleColor((o: object) => { const l = o as SimLink; return l.__pulse ?? l.color })
-          .linkDirectionalParticleWidth(4)
-          .linkDirectionalParticleSpeed(0.014)
+          .linkDirectionalParticleWidth(2.6)
+          .linkDirectionalParticleSpeed(0.012)
           .d3AlphaMin(0)
           .cooldownTicks(Infinity)
           .autoPauseRedraw(false)
@@ -195,34 +242,68 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
         ready.current(api)
       })
     } else {
-      void Promise.all([
-        import('3d-force-graph'), import('three'), import('three/examples/jsm/renderers/CSS2DRenderer.js'),
-      ]).then(
+      void Promise.all([import('3d-force-graph'), import('three'), import('three/examples/jsm/renderers/CSS2DRenderer.js')]).then(
         ([{ default: ForceGraph3D }, THREE, { CSS2DRenderer, CSS2DObject }]) => {
           if (disposed) return
-          const bodies = new Map<string, { mesh: import('three').Mesh; halo: import('three').Sprite; base: number }>()
-          // One soft halo for every node: bright at the centre, fading out (no full-screen bloom, so words stay sharp).
-          const haloTexture = (() => {
+          type Body = { group: import('three').Group; core: import('three').Sprite; cloud?: import('three').Group; dust?: import('three').PointsMaterial; sig: string; base: number }
+          const bodies = new Map<string, Body>()
+          // One round, soft light: bright centre, fading edge. Points and cores both use it.
+          const disc = (() => {
             const c = document.createElement('canvas')
             c.width = c.height = 64
             const ctx = c.getContext('2d')!
             const gr = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
-            gr.addColorStop(0, 'rgba(255,255,255,0.9)')
-            gr.addColorStop(0.25, 'rgba(255,255,255,0.35)')
+            gr.addColorStop(0, 'rgba(255,255,255,1)')
+            gr.addColorStop(0.2, 'rgba(255,255,255,0.6)')
+            gr.addColorStop(0.5, 'rgba(255,255,255,0.15)')
             gr.addColorStop(1, 'rgba(255,255,255,0)')
             ctx.fillStyle = gr
             ctx.fillRect(0, 0, 64, 64)
             return new THREE.CanvasTexture(c)
           })()
-          // Labels are HTML drawn over the canvas (CSS2D), so the bloom never blurs them.
-          const label = (n: SimNode) => {
+          const pointsOf = (positions: number[], colors: number[], size: number) => {
+            const geo = new THREE.BufferGeometry()
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+            geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+            const mat = new THREE.PointsMaterial({
+              size, map: disc, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true,
+            })
+            return { points: new THREE.Points(geo, mat), mat }
+          }
+          // A domain's cloud: parts as brighter, larger lights near the centre; each event of the last day a dust point, dimmer with age.
+          const cloudOf = (n: SimNode) => {
+            const group = new THREE.Group()
+            const rnd = seeded(n.id)
+            const R = cloudRadius(n)
+            const base = new THREE.Color(n.color)
+            const white = new THREE.Color('#fff4ea')
+            const pp: number[] = []
+            const pc: number[] = []
+            const parts = Math.max(1, (n.cloud?.parts ?? 0) * 6)
+            for (let i = 0; i < parts; i++) {
+              pp.push(gauss(rnd) * R * 0.4, gauss(rnd) * R * 0.4, gauss(rnd) * R * 0.4)
+              const c = base.clone().lerp(white, rnd() * 0.5).multiplyScalar(0.7 + rnd() * 0.5)
+              pc.push(c.r, c.g, c.b)
+            }
+            const dp: number[] = []
+            const dc: number[] = []
+            for (const age of n.cloud?.dust ?? []) {
+              const b = Math.max(0.1, 1 - (0.9 * Math.min(24, age)) / 24)
+              dp.push(gauss(rnd) * R * 0.75, gauss(rnd) * R * 0.75, gauss(rnd) * R * 0.75)
+              const c = base.clone().lerp(white, rnd() * 0.3).multiplyScalar(b * (0.6 + rnd() * 0.4))
+              dc.push(c.r, c.g, c.b)
+            }
+            group.add(pointsOf(pp, pc, 2.6).points)
+            const d = pointsOf(dp, dc, 1.1)
+            group.add(d.points)
+            return { group, dust: d.mat }
+          }
+          const labelOf = (n: SimNode) => {
             const div = document.createElement('div')
-            div.textContent = n.label
-            // Domains named large and plain; parts small, cut short (the full name is on hover).
             const big = n.kind === 'cluster' || n.kind === 'core'
-            if (!big && n.label.length > 18) div.textContent = `${n.label.slice(0, 17)}…`
-            div.style.cssText = `font: ${big ? 14 : 9}px ui-monospace, monospace; color: ${n.kind === 'old' ? '#5f7f72' : big ? '#f2fff7' : '#9cc9b0'};` +
-              ' white-space: nowrap; pointer-events: none; text-shadow: 0 0 3px #000, 0 0 6px #000; transform: translateY(14px);'
+            div.textContent = big || n.label.length <= 18 ? n.label : `${n.label.slice(0, 17)}…`
+            div.style.cssText = `font: ${big ? 11 : 9}px ui-monospace, monospace; color: ${big ? '#f4e9df' : '#c9b6a8'}; white-space: nowrap; pointer-events: none;` +
+              ` letter-spacing: 0.04em; text-shadow: 0 0 2px #000, 0 0 4px #000; transform: translateY(${n.kind === 'cluster' ? -Math.round(cloudRadius(n) * 2.2) : -12}px);`
             labelsRef.current.set(n.id, div)
             return new CSS2DObject(div)
           }
@@ -234,36 +315,41 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
             .width(width()).height(height())
             .backgroundColor(GROUND)
             .nodeId('id')
-            .nodeLabel((o: object) => { const n = o as SimNode; return n.note })
+            .nodeLabel((o: object) => (o as SimNode).note)
             .nodeThreeObject((o: object) => {
               const n = o as SimNode
               const group = new THREE.Group()
-              const mesh = new THREE.Mesh(
-                new THREE.SphereGeometry(n.size, 20, 14),
-                new THREE.MeshBasicMaterial({ color: n.color, transparent: true, opacity: n.kind === 'old' ? 0.35 : 1 }),
-              )
-              group.add(mesh)
-              const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-                map: haloTexture, color: n.color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: n.kind === 'old' ? 0.15 : 0.55,
+              const core = new THREE.Sprite(new THREE.SpriteMaterial({
+                map: disc, color: n.kind === 'cluster' ? '#fff3e6' : n.color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+                opacity: n.kind === 'old' ? 0.3 : 0.95,
               }))
-              halo.scale.setScalar(n.size * 6)
-              group.add(halo)
+              const base = n.kind === 'cluster' ? 5 : n.size * 3
+              core.scale.setScalar(base)
+              group.add(core)
+              let cloud: import('three').Group | undefined
+              let dust: import('three').PointsMaterial | undefined
+              if (n.cloud) {
+                const c = cloudOf(n)
+                cloud = c.group
+                dust = c.dust
+                group.add(cloud)
+              }
               if (n.ring) {
-                const ring = new THREE.Mesh(new THREE.TorusGeometry(n.size * 1.5, Math.max(0.15, n.size * 0.04), 6, 40), new THREE.MeshBasicMaterial({ color: n.ring }))
+                const ring = new THREE.Mesh(new THREE.TorusGeometry(n.size * 1.8, 0.12, 6, 40), new THREE.MeshBasicMaterial({ color: n.ring }))
                 group.add(ring)
               }
-              if (n.kind !== 'topic') group.add(label(n))
-              bodies.set(n.id, { mesh, halo, base: n.size * 6 })
+              if (n.kind !== 'topic') group.add(labelOf(n))
+              bodies.set(n.id, { group, core, cloud, dust, sig: cloudSig(n), base })
               return group
             })
-            .linkColor((o: object) => { const l = o as SimLink; return l.color })
-            .linkOpacity(0.35)
-            .linkWidth((o: object) => { const l = o as SimLink; return (l.width ?? 0) * 0.5 })
-            .linkLabel((o: object) => { const l = o as SimLink; return l.label ?? '' })
+            .linkColor((o: object) => (o as SimLink).color)
+            .linkOpacity(0.14)
+            .linkWidth(0)
+            .linkLabel((o: object) => (o as SimLink).label ?? '')
             .linkDirectionalParticleColor((o: object) => { const l = o as SimLink; return l.__pulse ?? l.color })
-            .linkDirectionalParticleWidth(3.5)
-            .linkDirectionalParticleResolution(8)
-            .linkDirectionalParticleSpeed(0.012)
+            .linkDirectionalParticleWidth(1.6)
+            .linkDirectionalParticleResolution(6)
+            .linkDirectionalParticleSpeed(0.011)
             .d3AlphaMin(0)
             .cooldownTicks(Infinity)
           g.d3Force('drift', driftForce(() => data.current.nodes, 3))
@@ -273,22 +359,37 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
           g.onNodeHover((o: object | null) => { hovered.current = o ? (o as SimNode).id : null; el.style.cursor = o ? 'pointer' : '' })
           // A press and release that barely moved the node is a click, not a drag.
           g.onNodeDragEnd((o: object, t: { x: number; y: number; z: number }) => { if (Math.hypot(t.x, t.y, t.z) < CLICK_SLOP) click.current?.((o as SimNode).id) })
-          ;(g.controls() as { zoomSpeed?: number }).zoomSpeed = 2.5
+          const controls = g.controls() as { zoomSpeed?: number; autoRotate?: boolean; autoRotateSpeed?: number }
+          controls.zoomSpeed = 2.5
+          controls.autoRotateSpeed = 0.35
+          recloud.current = n => {
+            const b = bodies.get(n.id)
+            if (!b || b.sig === cloudSig(n)) return
+            if (b.cloud) b.group.remove(b.cloud)
+            if (n.cloud) {
+              const c = cloudOf(n)
+              b.group.add(c.group)
+              b.cloud = c.group
+              b.dust = c.dust
+            }
+            b.sig = cloudSig(n)
+          }
           g.graphData(data.current)
           graph.current = g
           fitted.current = -1
           window.setTimeout(() => fit(), FIT_AFTER_MS)
-          // Breath and flash: each body's scale follows its node's breath; a flash whitens it.
-          const tint = new THREE.Color()
+          // Breath: the whole body breathes slowly; a seat's light with its heartbeat; a flash or hover brightens a node.
           const tick = () => {
             const t = performance.now() / 1000
+            controls.autoRotate = spinRef.current
+            const breath = 1 + 0.08 * Math.sin((2 * Math.PI * t) / 7)
             for (const n of data.current.nodes) {
               const b = bodies.get(n.id)
               if (!b) continue
-              const s = (n.breath ? 1 + 0.06 * Math.sin((2 * Math.PI * t) / n.breath) : 1) * (lit(n) || hovered.current === n.id ? 1.3 : 1)
-              b.mesh.scale.setScalar(s)
-              b.halo.scale.setScalar(b.base * s * (lit(n) ? 1.6 : 1))
-              ;(b.mesh.material as import('three').MeshBasicMaterial).color.copy(tint.set(n.color))
+              const s = (n.breath ? 1 + 0.12 * Math.sin((2 * Math.PI * t) / n.breath) : 1) * (lit(n) ? 1.8 : hovered.current === n.id ? 1.5 : 1)
+              b.core.scale.setScalar(b.base * s)
+              if (b.dust) b.dust.opacity = 0.75 * breath
+              if (b.cloud) b.cloud.scale.setScalar(breath * (lit(n) ? 1.06 : 1))
             }
             raf = requestAnimationFrame(tick)
           }
@@ -307,13 +408,14 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
       cancelAnimationFrame(raf)
       window.removeEventListener('resize', resize)
       el.removeEventListener('wheel', wheel)
+      recloud.current = null
       graph.current?._destructor?.()
       graph.current = null
       el.replaceChildren()
     }
   }, [flat])
 
-  // New data: keep where known nodes are, so a read does not throw the body around.
+  // New data: keep where known nodes are, so a read does not throw the body around; rebuild a cloud whose counts changed.
   useEffect(() => {
     const prev = new Map(data.current.nodes.map(n => [n.id, n]))
     const next: SimNode[] = nodes.map(n => {
@@ -326,19 +428,21 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
       links: links.filter(l => ids.has(l.source) && ids.has(l.target)).map(l => ({ ...l })),
     }
     for (const n of next) {
+      recloud.current?.(n)
       const div = labelsRef.current.get(n.id)
-      if (div && div.textContent !== n.label) div.textContent = n.label
+      const text = n.kind === 'cluster' || n.kind === 'core' || n.label.length <= 18 ? n.label : `${n.label.slice(0, 17)}…`
+      if (div && div.textContent !== text) div.textContent = text
     }
     graph.current?.graphData(data.current)
     // A domain opened or folded: fit the body to the frame again once it has moved.
     if (graph.current && fitted.current !== -1 && fitted.current !== next.length) window.setTimeout(() => fit(), FIT_AFTER_MS)
   }, [nodes, links])
 
-  // Fits the body to 70–80% of the frame.
+  // Fits the body to the frame.
   function fit() {
     const g = graph.current
     if (!g) return
-    g.zoomToFit(700, FIT_PADDING)
+    g.zoomToFit(800, FIT_PADDING)
     fitted.current = data.current.nodes.length
   }
 

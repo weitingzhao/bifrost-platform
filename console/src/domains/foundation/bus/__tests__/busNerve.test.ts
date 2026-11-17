@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { OWN_CONSUMER, domainColor, nerveModel, readerOf, replaySchedule, seatLabel, seatMail, seatState, shortSeconds, type ObserveSeat } from '../busNerve'
+import { OWN_CONSUMER, dustBrightness, nerveModel, warmColor, readerOf, replaySchedule, seatLabel, seatMail, seatState, shortSeconds, type ObserveSeat } from '../busNerve'
 import type { BusContract, BusNextgen } from '../busNextgen'
 import type { BusEnvelope } from '../busTrace'
 import type { BusClient } from '../useBusStream'
@@ -88,14 +88,16 @@ describe('labels', () => {
   })
 })
 
-// Origin: 2026-11-17, the coordinator on STG: every domain the same matte
-// blue looked like plastic. Each domain gets its own hue from its id, the
-// same on every load, as #rrggbb.
-describe('domainColor', () => {
-  it('is fixed per id, a hex colour, and differs between domains', () => {
-    expect(domainColor('coordination')).toBe(domainColor('coordination'))
-    expect(domainColor('coordination')).toMatch(/^#[0-9a-f]{6}$/)
-    const all = ['foundation', 'plan', 'lineage', 'verification', 'delivery', 'owner', 'compute', 'tenant', 'coordination'].map(d => domainColor(d))
-    expect(new Set(all).size).toBe(all.length)
+// Origin: 2026-11-17, the Owner: nebulae of small warm lights, not balls.
+// Each domain a warm hue fixed by its id; an event's dust dims with age.
+describe('warmColor and dustBrightness', () => {
+  it('gives each domain its own fixed warm colour, and dims dust over a day', () => {
+    expect(warmColor('coordination')).toBe(warmColor('coordination'))
+    expect(warmColor('coordination')).toMatch(/^#[0-9a-f]{6}$/)
+    const all = ['foundation', 'plan', 'lineage', 'verification', 'delivery', 'owner', 'compute', 'tenant', 'coordination'].map(d => warmColor(d))
+    expect(new Set(all).size).toBeGreaterThan(5)
+    expect(dustBrightness(0)).toBe(1)
+    expect(dustBrightness(24)).toBeCloseTo(0.1)
+    expect(dustBrightness(12)).toBeGreaterThan(dustBrightness(20))
   })
 })

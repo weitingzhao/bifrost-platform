@@ -8,7 +8,7 @@ import { BUS_LIST_CAP, fetchBusClients, fetchBusReplay, type BusStreamState } fr
 import { clockTime, type BusEnvelope } from './busTrace'
 import {
   LATE_AFTER_S, OWN_CONSUMER, QUIET_AFTER_H, SPEEDS, STUCK_AFTER_MIN, fetchBusObserve, nerveModel, readerOf, replaySchedule,
-  domainColor, seatLabel, seatMail, seatState, shortSeconds,
+  seatLabel, seatMail, seatState, shortSeconds, warmColor,
   type ObserveSeat, type OrganTone,
 } from './busNerve'
 import { CORE, domainOf } from './busNerveLayout'
@@ -37,13 +37,16 @@ const C = {
   link: '#2a4a5a',
 } as const
 
-const TONE: Record<OrganTone, string> = { live: C.green, lost: C.grey, new: C.amber, old: C.grey, plain: C.muted }
+/** The particles, in the same warm range: an event gold, a receipt white, a seat's letter pink. */
+const PULSE = { event: '#ffc46b', receipt: '#ffffff', letter: '#ff8fc7' } as const
+
+const TONE: Record<OrganTone, string> = { live: '#ffd0a8', lost: C.grey, new: C.amber, old: C.grey, plain: C.muted }
 
 /** A seat's breath, from its session's own heartbeat (GET /agent/threads): fast in a turn, slow idle, none when down. */
 const BREATH: Record<AgentThreadStatus | 'none', { color: string; dur: number | null; label: string }> = {
-  in_turn: { color: C.green, dur: 1.1, label: 'in a turn' },
-  waiting_owner: { color: C.amber, dur: 2.2, label: 'waiting for the owner' },
-  idle: { color: C.green, dur: 4.5, label: 'idle' },
+  in_turn: { color: '#fff1c9', dur: 1.1, label: 'in a turn' },
+  waiting_owner: { color: '#ffb347', dur: 2.2, label: 'waiting for the owner' },
+  idle: { color: '#ff9a6b', dur: 4.5, label: 'idle' },
   silent: { color: C.grey, dur: null, label: 'silent mid-turn' },
   host_lost: { color: C.grey, dur: null, label: 'host lost' },
   superseded: { color: C.grey, dur: null, label: 'superseded' },
@@ -148,13 +151,39 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
   // Which domain each topic tells of (the register's domain, else its prefix).
   const domainOfType = useMemo(() => new Map((contract.data?.topics ?? []).map(t => [t.type, t.domain || domainOf(t.type)])), [contract.data])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [spin, setSpin] = useState(true)
+
+  // Dust: every event of the last day, by the domain it tells of, read once when the page opens (no receipts asked), then the live ones.
+  const [dust, setDust] = useState<{ type: string; time: string }[]>([])
+  useEffect(() => {
+    let cancelled = false
+    fetchBusReplay(new Date(Date.now() - 24 * 3600_000).toISOString(), false)
+      .then(({ events }) => { if (!cancelled) setDust(d => [...events.map(e => ({ type: e.type, time: e.time })), ...d]) })
+      .catch(() => { /* no dust: the clouds keep their parts */ })
+    return () => { cancelled = true }
+  }, [])
+  const dustByDomain = useMemo(() => {
+    const m = new Map<string, number[]>()
+    const now = Date.now()
+    const seen = new Set<string>()
+    for (const e of [...dust, ...stream.events.map(x => ({ type: x.type, time: x.time }))]) {
+      const k = `${e.type}|${e.time}`
+      if (seen.has(k)) continue
+      seen.add(k)
+      const age = (now - Date.parse(e.time)) / 3600_000
+      if (!(age >= 0 && age <= 24)) continue
+      const d = domainOfType.get(e.type) ?? domainOf(e.type)
+      m.set(d, [...(m.get(d) ?? []), Math.round(age * 4) / 4])
+    }
+    return m
+  }, [dust, stream.events, domainOfType])
 
   // The body's nodes and links, rebuilt when a read changes; the renderer keeps known nodes where they are.
   // By default each domain is one node; an expanded domain shows its topics and their publishers.
   const graph = useMemo((): { nodes: GNode[]; links: GLink[] } | null => {
     if (!model) return null
     const wall = Date.now()
-    const nodes: GNode[] = [{ id: CORE, kind: 'core', label: 'bus', color: '#9be7ff', size: 4.5, breath: 6, note: 'the bus: ledger and stream' }]
+    const nodes: GNode[] = [{ id: CORE, kind: 'core', label: 'bus', color: '#ffe6cc', size: 3, breath: 6, note: 'the bus: ledger and stream' }]
     const links: GLink[] = []
     const byDomain = new Map<string, string[]>()
     for (const t of model.topics) {
@@ -171,18 +200,20 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
     for (const [d, types] of [...byDomain.entries()].sort()) {
       const open = expanded.has(d)
       const more = members.get(d) ?? 0
-      const hue = domainColor(d)
-      nodes.push({ id: `d:${d}`, kind: 'cluster', label: open ? `${d} ▾` : d, color: hue, size: 5 + Math.sqrt(types.length + more) * 1.2, breath: null,
-        note: `domain ${d}: ${types.length} topics${more > 0 ? `, ${more} more inside (seats, readers, old roads)` : ''} · click to ${open ? 'fold' : 'open'}` })
-      links.push({ source: `d:${d}`, target: CORE, color: domainColor(d, 0.45), width: 0.6 })
+      const hue = warmColor(d)
+      const ages = dustByDomain.get(d) ?? []
+      nodes.push({ id: `d:${d}`, kind: 'cluster', label: open ? `${d} ▾` : d, color: hue, size: 3, breath: null,
+        cloud: { parts: types.length + more, dust: ages },
+        note: `domain ${d}: ${types.length} topics${more > 0 ? `, ${more} more inside (seats, readers, old roads)` : ''}, ${ages.length} events in the last day · click to ${open ? 'fold' : 'open'}` })
+      links.push({ source: `d:${d}`, target: CORE, color: '#ffd9c2', width: 0.4 })
       if (!open) continue
       for (const t of types) {
-        nodes.push({ id: `t:${t}`, kind: 'topic', label: t, color: domainColor(d, 0.72), size: 1.1, breath: null, note: t })
-        links.push({ source: `t:${t}`, target: `d:${d}`, color: domainColor(d, 0.4), width: 0.3 })
+        nodes.push({ id: `t:${t}`, kind: 'topic', label: t, color: warmColor(d, 0.78), size: 0.9, breath: null, note: t })
+        links.push({ source: `t:${t}`, target: `d:${d}`, color: warmColor(d, 0.5), width: 0.3 })
         const p = model.publisherOf.get(t) ?? 'unknown'
         if (!pubs.has(p)) {
           pubs.add(p)
-          nodes.push({ id: `p:${p}`, kind: 'publisher', label: p, color: '#9be7ff', size: 2.5, breath: null, note: `publisher ${p}` })
+          nodes.push({ id: `p:${p}`, kind: 'publisher', label: p, color: '#ffe6cc', size: 1.6, breath: null, note: `publisher ${p}` })
           links.push({ source: `p:${p}`, target: CORE, color: C.link, width: 0.5 })
         }
         if (!links.some(l => l.source === `p:${p}` && l.target === `d:${d}`)) links.push({ source: `p:${p}`, target: `d:${d}`, color: C.link, width: 0.5 })
@@ -214,7 +245,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
       const name = nameOf(id, names)
       const owner = id === 'owner'
       nodes.push({
-        id: `s:${id}`, kind: 'seat', label: name.length > 28 ? `${name.slice(0, 27)}…` : name, color: owner ? C.violet : br.color, size: owner ? 5 : 3.5,
+        id: `s:${id}`, kind: 'seat', label: name.length > 28 ? `${name.slice(0, 27)}…` : name, color: owner ? '#ff8fc7' : br.color, size: owner ? 2.4 : 1.6,
         breath: owner ? null : br.dur, ring: st === 'stuck' ? C.red : undefined,
         note: `${name} (${id}) · ${owner ? 'the owner' : br.label}${read ? ` · ${read}` : ''}${st === 'quiet' ? ` · no report for ${QUIET_AFTER_H}h` : ''}${st === 'stuck' ? ` · something waits over ${STUCK_AFTER_MIN}m` : ''}`,
       })
@@ -228,13 +259,13 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
       const openMin = l.oldest_open ? (wall - Date.parse(l.oldest_open)) / 60_000 : 0
       const stuck = l.unacked > 0 && openMin > STUCK_AFTER_MIN
       links.push({
-        source: a, target: b, color: stuck ? C.red : l.kind === 'card' ? C.amber : C.violet, dashed: l.kind === 'card',
+        source: a, target: b, color: stuck ? C.red : l.kind === 'card' ? C.amber : PULSE.letter, dashed: l.kind === 'card',
         width: stuck ? 0.6 : Math.min(2.5, 0.6 + Math.log2(1 + l.count) * 0.5),
         label: `${nameOf(l.from, names)} → ${nameOf(l.to, names)}: ${l.count} ${l.kind === 'card' ? 'cards' : 'letters'}${l.ack_p50_s != null ? ` · ${l.kind === 'card' ? 'wait' : 'ack'} ${shortSeconds(l.ack_p50_s)}` : ''}${l.unacked > 0 ? ` · ${l.unacked} open${stuck ? ` ${Math.round(openMin)}m` : ''}` : ''}`,
       })
     }
     return { nodes, links }
-  }, [model, seats, beat, observed, team.data, names, domainOfType, expanded])
+  }, [model, seats, beat, observed, team.data, names, domainOfType, expanded, dustByDomain])
 
   const api = useRef<NerveApi | null>(null)
   // The latest model, for a replay that must not restart when a read refreshes it.
@@ -258,17 +289,17 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
     const d = domainOfType.get(e.type) ?? domainOf(e.type)
     const dom = `d:${d}`
     if (expanded.has(d)) {
-      a.pulse(`p:${model.publisherOf.get(e.type) ?? 'unknown'}`, dom, C.blue, faint(e.type))
-      window.setTimeout(() => { a.pulse(dom, `t:${e.type}`, C.blue, faint(e.type)); a.flash(dom) }, SECOND_HOP_MS)
+      a.pulse(`p:${model.publisherOf.get(e.type) ?? 'unknown'}`, dom, PULSE.event, faint(e.type))
+      window.setTimeout(() => { a.pulse(dom, `t:${e.type}`, PULSE.event, faint(e.type)); a.flash(dom) }, SECOND_HOP_MS)
     } else {
-      a.pulse(CORE, dom, C.blue, faint(e.type))
+      a.pulse(CORE, dom, PULSE.event, faint(e.type))
       window.setTimeout(() => a.flash(dom), SECOND_HOP_MS)
     }
     if (e.type === 'seat.mail.arrived') {
       const w = `s:${e.actor}`
       const r = `s:${e.subject}`
       // Folded, the letter is a pulse into its domain; open, it runs between the seats.
-      if (!a.pulse(w, r, C.violet) && !a.pulse(w, 'd:coordination', C.violet)) a.pulse(CORE, 'd:coordination', C.violet)
+      if (!a.pulse(w, r, PULSE.letter) && !a.pulse(w, 'd:coordination', PULSE.letter)) a.pulse(CORE, 'd:coordination', PULSE.letter)
       window.setTimeout(() => a.flash(r), SECOND_HOP_MS * 2)
     }
   }
@@ -277,8 +308,8 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
   const land = (reader: string, dim: boolean) => {
     const a = api.current
     if (!a) return
-    if (a.pulse(CORE, `r:${reader}`, C.green, dim)) window.setTimeout(() => a.flash(`r:${reader}`), SECOND_HOP_MS)
-    else a.pulse(CORE, 'd:foundation', C.green, dim)
+    if (a.pulse(CORE, `r:${reader}`, PULSE.receipt, dim)) window.setTimeout(() => a.flash(`r:${reader}`), SECOND_HOP_MS)
+    else a.pulse(CORE, 'd:foundation', PULSE.receipt, dim)
   }
 
   // Live: a new event leaves its publisher for its topic and waits there for receipts.
@@ -364,6 +395,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
           <TermButton key={s} on={mode.kind === 'replay' && mode.speed === s} onClick={() => setMode({ kind: 'replay', speed: s })}>▶ 24h {s}×</TermButton>
         ))}
         <TermButton on={dimCI} onClick={() => setDimCI(d => !d)}>dim ci.*</TermButton>
+        <TermButton on={spin} onClick={() => setSpin(v => !v)}>spin</TermButton>
         <TermButton on={expanded.size > 0} onClick={() => setExpanded(e => (e.size > 0 ? new Set() : new Set(domainOfType.values())))}>{expanded.size > 0 ? 'fold domains' : 'open all domains'}</TermButton>
         <span className="mx-1 font-mono text-xs" style={{ color: C.rule }}>|</span>
         {(['3d', '2d', 'list'] as const).map(v => <TermButton key={v} on={view === v} onClick={() => setView(v)}>{v}</TermButton>)}
@@ -394,7 +426,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
         ? <div className="rounded-sm bg-[var(--card-fill)] p-2"><ContractGraph contract={contract.data} roster={roster} /></div>
         : (
           <Suspense fallback={<p className="m-0 font-mono text-xs" style={{ color: C.muted }}>loading the body…</p>}>
-            <BusNerveGraph nodes={graph.nodes} links={graph.links} flat={view === '2d'} onReady={a => { api.current = a }}
+            <BusNerveGraph nodes={graph.nodes} links={graph.links} flat={view === '2d'} spin={spin} onReady={a => { api.current = a }}
               onNodeClick={id => {
                 if (!id.startsWith('d:')) return
                 const d = id.slice(2)
@@ -403,7 +435,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
           </Suspense>
         )}
       <p className="m-0 font-mono text-[11px]" style={{ color: C.muted }}>
-        blue particle: an event leaving its publisher through its domain · green: a reader's receipt, the reader lights up · violet: a letter between seats · amber dashed: cards to the owner · seats breathe with their session's heartbeat (fast in a turn, slow idle, still and grey when down; a lost reader is grey too) · thin red ring: a letter or card unanswered over {STUCK_AFTER_MIN}m (the only red) · a seat quiet for {QUIET_AFTER_H}h says so on hover · the map opens at the domains: seats live in coordination, the owner in owner, the bus's readers and old roads in foundation · grey: old roads not on the bus yet · hover a node or link for its readings · drag the background to turn the body, wheel or pinch to zoom, drag a node to move it · click a domain to open or fold it · the Console's own receipt ({OWN_CONSUMER}) is not drawn
+        each domain is a cloud: a light for each of its parts, a dust point for each event of the last day, dimmer with age · gold particle: an event · white: a reader's receipt, the reader lights up · pink: a letter between seats · amber dashed: cards to the owner · seats breathe with their session's heartbeat (fast in a turn, slow idle, still and grey when down; a lost reader is grey too) · thin red ring: a letter or card unanswered over {STUCK_AFTER_MIN}m (the only red) · a seat quiet for {QUIET_AFTER_H}h says so on hover · the map opens at the domains: seats live in coordination, the owner in owner, the bus's readers and old roads in foundation · grey: old roads not on the bus yet · hover a node or link for its readings · drag the background to turn the body, wheel or pinch to zoom, drag a node to move it · click a domain to open or fold it · the Console's own receipt ({OWN_CONSUMER}) is not drawn
       </p>
       {team.data && team.data.unmeasured.length > 0 && (
         <ul className="m-0 flex list-none flex-col gap-0.5 p-0 font-mono text-[11px]" style={{ color: C.muted }}>
