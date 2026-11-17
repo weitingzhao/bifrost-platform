@@ -21,7 +21,7 @@ channels:
       on_unread: stale
       retention: 30d
       consumers: [platform-workers, platform-api, seat:*]
-      exports: []
+      exports: [demo]
       replaces: [L04, L06, X-A28]
   git.ready.pushed:
     address: ev.rocket.{env}.git.ready.pushed

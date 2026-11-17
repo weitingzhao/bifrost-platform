@@ -1,0 +1,16 @@
+# Tenant demo's table (the drill, 2026-11-16, STG only).
+tenant: demo
+subscriptions:
+  - id: drill
+    on: [git.main.advanced]
+    match: bifrost-platform
+    deliver: wake
+    to: thread:local_ab850773-fe26-40fa-ac01-b3b590b73164
+    guarantee: durable
+    by: dispatcher
+    envs: [stg]
+clients:
+  - name: gate:events:demo-drill
+    kind: reader
+    lost_after: 10m
+    note: the drill's reader; lost after ten minutes without reading
