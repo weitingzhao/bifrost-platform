@@ -37,15 +37,15 @@ const C = {
   link: '#2a4a5a',
 } as const
 
-const TONE: Record<OrganTone, string> = { live: C.green, lost: C.red, new: C.amber, old: C.grey, plain: C.muted }
+const TONE: Record<OrganTone, string> = { live: C.green, lost: C.grey, new: C.amber, old: C.grey, plain: C.muted }
 
 /** A seat's breath, from its session's own heartbeat (GET /agent/threads): fast in a turn, slow idle, none when down. */
 const BREATH: Record<AgentThreadStatus | 'none', { color: string; dur: number | null; label: string }> = {
   in_turn: { color: C.green, dur: 1.1, label: 'in a turn' },
   waiting_owner: { color: C.amber, dur: 2.2, label: 'waiting for the owner' },
   idle: { color: C.green, dur: 4.5, label: 'idle' },
-  silent: { color: C.red, dur: null, label: 'silent mid-turn' },
-  host_lost: { color: C.red, dur: null, label: 'host lost' },
+  silent: { color: C.grey, dur: null, label: 'silent mid-turn' },
+  host_lost: { color: C.grey, dur: null, label: 'host lost' },
   superseded: { color: C.grey, dur: null, label: 'superseded' },
   none: { color: C.grey, dur: null, label: 'no heartbeat' },
 }
@@ -161,11 +161,18 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
       const d = domainOfType.get(t.id) ?? domainOf(t.id)
       byDomain.set(d, [...(byDomain.get(d) ?? []), t.id])
     }
+    // Who else lives in a domain: seats in coordination, the owner in owner, the bus's readers and old roads in foundation.
+    const seatDomain = (id: string) => (id === 'owner' ? 'owner' : 'coordination')
+    const members = new Map<string, number>()
+    for (const id of seats) members.set(seatDomain(id), (members.get(seatDomain(id)) ?? 0) + 1)
+    members.set('foundation', (members.get('foundation') ?? 0) + model.readers.length)
+    for (const d of members.keys()) if (!byDomain.has(d)) byDomain.set(d, [])
     const pubs = new Set<string>()
     for (const [d, types] of [...byDomain.entries()].sort()) {
       const open = expanded.has(d)
-      nodes.push({ id: `d:${d}`, kind: 'cluster', label: open ? `${d} ▾` : `${d} ▸ ${types.length}`, color: C.blue, size: 10 + Math.sqrt(types.length) * 2.6, breath: 5,
-        note: `domain ${d}: ${types.length} topics · click to ${open ? 'fold' : 'open'}` })
+      const more = members.get(d) ?? 0
+      nodes.push({ id: `d:${d}`, kind: 'cluster', label: open ? `${d} ▾` : d, color: C.blue, size: 10 + Math.sqrt(types.length + more) * 2.4, breath: null,
+        note: `domain ${d}: ${types.length} topics${more > 0 ? `, ${more} more inside (seats, readers, old roads)` : ''} · click to ${open ? 'fold' : 'open'}` })
       links.push({ source: `d:${d}`, target: CORE, color: C.link, width: 1 })
       if (!open) continue
       for (const t of types) {
@@ -180,17 +187,17 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
         if (!links.some(l => l.source === `p:${p}` && l.target === `d:${d}`)) links.push({ source: `p:${p}`, target: `d:${d}`, color: C.link, width: 0.5 })
       }
     }
-    for (const r of model.readers) {
+    for (const r of expanded.has('foundation') ? model.readers : []) {
       if (r.tone === 'old') {
         nodes.push({ id: `o:${r.label}`, kind: 'old', label: r.label, color: C.grey, size: 2.5, breath: null, note: `old road, not on the bus yet: ${r.note ?? r.label}` })
-        links.push({ source: `o:${r.label}`, target: CORE, color: C.grey, dashed: true, width: 0.4 })
+        links.push({ source: `o:${r.label}`, target: 'd:foundation', color: C.grey, dashed: true, width: 0.4 })
         continue
       }
-      nodes.push({ id: `r:${r.id}`, kind: 'reader', label: r.label.replace(/^gate:events:/, ''), color: TONE[r.tone], size: 4.5, breath: r.tone === 'lost' ? null : 3,
-        ring: r.tone === 'lost' ? C.red : undefined, note: `reader ${r.id} · ${r.tone}` })
+      nodes.push({ id: `r:${r.id}`, kind: 'reader', label: r.label.replace(/^gate:events:/, ''), color: TONE[r.tone], size: 4.5, breath: null,
+        note: `reader ${r.id} · ${r.tone}` })
       links.push({ source: `r:${r.id}`, target: CORE, color: C.link, width: 0.6 })
     }
-    for (const id of seats) {
+    for (const id of seats.filter(i => expanded.has(seatDomain(i)))) {
       const t = beat.get(id)
       const br = BREATH[t?.status ?? 'none']
       const o: ObserveSeat | undefined = observed.get(id)
@@ -207,10 +214,10 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
       const owner = id === 'owner'
       nodes.push({
         id: `s:${id}`, kind: 'seat', label: name.length > 28 ? `${name.slice(0, 27)}…` : name, color: owner ? C.violet : br.color, size: owner ? 10 : 7,
-        breath: owner ? 4 : br.dur, ring: st === 'stuck' ? C.red : st === 'quiet' ? C.amber : undefined,
+        breath: owner ? null : br.dur, ring: st === 'stuck' ? C.red : undefined,
         note: `${name} (${id}) · ${owner ? 'the owner' : br.label}${read ? ` · ${read}` : ''}${st === 'quiet' ? ` · no report for ${QUIET_AFTER_H}h` : ''}${st === 'stuck' ? ` · something waits over ${STUCK_AFTER_MIN}m` : ''}`,
       })
-      links.push({ source: `s:${id}`, target: CORE, color: C.link, width: 0.5 })
+      links.push({ source: `s:${id}`, target: `d:${seatDomain(id)}`, color: C.link, width: 0.5 })
     }
     const ids = new Set(nodes.map(n => n.id))
     for (const l of team.data?.links ?? []) {
@@ -221,7 +228,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
       const stuck = l.unacked > 0 && openMin > STUCK_AFTER_MIN
       links.push({
         source: a, target: b, color: stuck ? C.red : l.kind === 'card' ? C.amber : C.violet, dashed: l.kind === 'card',
-        width: Math.min(4, 0.8 + Math.log2(1 + l.count)),
+        width: stuck ? 0.6 : Math.min(2.5, 0.6 + Math.log2(1 + l.count) * 0.5),
         label: `${nameOf(l.from, names)} → ${nameOf(l.to, names)}: ${l.count} ${l.kind === 'card' ? 'cards' : 'letters'}${l.ack_p50_s != null ? ` · ${l.kind === 'card' ? 'wait' : 'ack'} ${shortSeconds(l.ack_p50_s)}` : ''}${l.unacked > 0 ? ` · ${l.unacked} open${stuck ? ` ${Math.round(openMin)}m` : ''}` : ''}`,
       })
     }
@@ -254,12 +261,18 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
     if (e.type === 'seat.mail.arrived') {
       const w = `s:${e.actor}`
       const r = `s:${e.subject}`
-      if (!a.pulse(w, r, C.violet)) {
-        a.pulse(w, CORE, C.violet)
-        window.setTimeout(() => a.pulse(CORE, r, C.violet), SECOND_HOP_MS)
-      }
+      // Folded, the letter is a pulse into its domain; open, it runs between the seats.
+      if (!a.pulse(w, r, C.violet) && !a.pulse(w, 'd:coordination', C.violet)) a.pulse(CORE, 'd:coordination', C.violet)
       window.setTimeout(() => a.flash(r), SECOND_HOP_MS * 2)
     }
+  }
+
+  // A receipt lands on its reader; with the bus's domain folded, on that domain.
+  const land = (reader: string, dim: boolean) => {
+    const a = api.current
+    if (!a) return
+    if (a.pulse(CORE, `r:${reader}`, C.green, dim)) window.setTimeout(() => a.flash(`r:${reader}`), SECOND_HOP_MS)
+    else a.pulse(CORE, 'd:foundation', C.green, dim)
   }
 
   // Live: a new event leaves its publisher for its topic and waits there for receipts.
@@ -288,8 +301,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
       const p = pending.current.get(r.id)
       if (!reader || !p) continue
       p.landed = true
-      api.current?.pulse(CORE, `r:${reader}`, C.green, faint(p.topic))
-      window.setTimeout(() => api.current?.flash(`r:${reader}`), SECOND_HOP_MS)
+      land(reader, faint(p.topic))
       setLast(l => (l && l.event.id === r.id ? { ...l, readers: [...l.readers, reader] } : l))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fire per new receipt only
@@ -316,8 +328,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
             if (!reader) continue
             const lag = Math.min(1500, Math.max(SECOND_HOP_MS, (Date.parse(r.at) - Date.parse(event.time)) / mode.speed))
             timers.push(window.setTimeout(() => {
-              api.current?.pulse(CORE, `r:${reader}`, C.green, faint(event.type))
-              window.setTimeout(() => api.current?.flash(`r:${reader}`), SECOND_HOP_MS)
+              land(reader, faint(event.type))
               setLast(l => (l && l.event.id === event.id ? { ...l, readers: [...l.readers, reader] } : l))
             }, t + lag))
           }
@@ -380,7 +391,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
           </Suspense>
         )}
       <p className="m-0 font-mono text-[11px]" style={{ color: C.muted }}>
-        blue particle: an event leaving its publisher through its domain · green: a reader's receipt, the reader lights up · violet: a letter between seats · amber dashed: cards to the owner · seats breathe with their session's heartbeat (fast in a turn, slow idle, still when down) · red ring: a letter or card waiting over {STUCK_AFTER_MIN}m · amber ring: no report for {QUIET_AFTER_H}h · grey: old roads not on the bus yet · hover a node or link for its readings · drag the background to turn the body, wheel or pinch to zoom, drag a node to move it · click a domain to open or fold it · the Console's own receipt ({OWN_CONSUMER}) is not drawn
+        blue particle: an event leaving its publisher through its domain · green: a reader's receipt, the reader lights up · violet: a letter between seats · amber dashed: cards to the owner · seats breathe with their session's heartbeat (fast in a turn, slow idle, still and grey when down; a lost reader is grey too) · thin red ring: a letter or card unanswered over {STUCK_AFTER_MIN}m (the only red) · a seat quiet for {QUIET_AFTER_H}h says so on hover · the map opens at the domains: seats live in coordination, the owner in owner, the bus's readers and old roads in foundation · grey: old roads not on the bus yet · hover a node or link for its readings · drag the background to turn the body, wheel or pinch to zoom, drag a node to move it · click a domain to open or fold it · the Console's own receipt ({OWN_CONSUMER}) is not drawn
       </p>
       {team.data && team.data.unmeasured.length > 0 && (
         <ul className="m-0 flex list-none flex-col gap-0.5 p-0 font-mono text-[11px]" style={{ color: C.muted }}>

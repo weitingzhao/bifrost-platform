@@ -125,25 +125,25 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
           .nodeCanvasObject((o: object, ctx: CanvasRenderingContext2D, scale: number) => {
             const n = o as SimNode
             const t = performance.now() / 1000
-            const r = n.size * (n.breath ? 1 + 0.18 * Math.sin((2 * Math.PI * t) / n.breath) : 1) * (lit(n) ? 1.5 : 1)
+            const r = n.size * (n.breath ? 1 + 0.06 * Math.sin((2 * Math.PI * t) / n.breath) : 1) * (lit(n) ? 1.25 : 1)
             ctx.save()
-            ctx.shadowColor = lit(n) ? '#ffffff' : n.color
-            ctx.shadowBlur = n.kind === 'topic' ? 4 : 14
+            ctx.shadowColor = n.color
+            ctx.shadowBlur = lit(n) ? 10 : n.kind === 'topic' ? 2 : 5
             ctx.beginPath()
             ctx.arc(n.x ?? 0, n.y ?? 0, r, 0, 2 * Math.PI)
             ctx.fillStyle = n.kind === 'old' ? '#3b4a5288' : n.color
             ctx.fill()
             if (n.ring) {
-              ctx.lineWidth = 2 / scale
+              ctx.lineWidth = 1 / scale
               ctx.strokeStyle = n.ring
               ctx.stroke()
             }
             ctx.restore()
-            if (n.kind !== 'topic' && scale > 0.6) {
-              ctx.font = `${(n.kind === 'seat' || n.kind === 'cluster' ? 12 : 9) / scale}px ui-monospace, monospace`
+            if (n.kind !== 'topic' && (n.kind === 'cluster' || scale > 0.9)) {
+              ctx.font = `${(n.kind === 'cluster' ? 13 : 9) / scale}px ui-monospace, monospace`
               ctx.textAlign = 'center'
               ctx.fillStyle = n.kind === 'old' ? '#5f7f72' : '#c7f9d6'
-              ctx.fillText(n.label, n.x ?? 0, (n.y ?? 0) + r + 11 / scale)
+              ctx.fillText(n.kind === 'cluster' || n.label.length <= 18 ? n.label : `${n.label.slice(0, 17)}…`, n.x ?? 0, (n.y ?? 0) + r + 11 / scale)
             }
           })
           .linkColor((o: object) => { const l = o as SimLink; return `${l.color}66` })
@@ -176,8 +176,10 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
           const label = (n: SimNode) => {
             const div = document.createElement('div')
             div.textContent = n.label
-            const big = n.kind === 'seat' || n.kind === 'cluster' || n.kind === 'core'
-            div.style.cssText = `font: ${big ? 12 : 10}px ui-monospace, monospace; color: ${n.kind === 'old' ? '#5f7f72' : big ? '#eafff2' : '#a9d9bd'};` +
+            // Domains named large and plain; parts small, cut short (the full name is on hover).
+            const big = n.kind === 'cluster' || n.kind === 'core'
+            if (!big && n.label.length > 18) div.textContent = `${n.label.slice(0, 17)}…`
+            div.style.cssText = `font: ${big ? 14 : 9}px ui-monospace, monospace; color: ${n.kind === 'old' ? '#5f7f72' : big ? '#f2fff7' : '#9cc9b0'};` +
               ' white-space: nowrap; pointer-events: none; text-shadow: 0 0 3px #000, 0 0 6px #000; transform: translateY(14px);'
             labelsRef.current.set(n.id, div)
             return new CSS2DObject(div)
@@ -196,11 +198,11 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
               const group = new THREE.Group()
               const mesh = new THREE.Mesh(
                 new THREE.SphereGeometry(n.size, 20, 14),
-                new THREE.MeshBasicMaterial({ color: n.color, transparent: n.kind === 'old', opacity: n.kind === 'old' ? 0.35 : 1 }),
+                new THREE.MeshBasicMaterial({ color: new THREE.Color(n.color).multiplyScalar(0.55), transparent: true, opacity: n.kind === 'old' ? 0.35 : 0.9 }),
               )
               group.add(mesh)
               if (n.ring) {
-                const ring = new THREE.Mesh(new THREE.TorusGeometry(n.size * 1.6, n.size * 0.12, 8, 32), new THREE.MeshBasicMaterial({ color: n.ring }))
+                const ring = new THREE.Mesh(new THREE.TorusGeometry(n.size * 1.5, Math.max(0.15, n.size * 0.04), 6, 40), new THREE.MeshBasicMaterial({ color: n.ring }))
                 group.add(ring)
               }
               if (n.kind !== 'topic') group.add(label(n))
@@ -219,7 +221,8 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
           g.d3Force('drift', driftForce(() => data.current.nodes, 3))
           g.d3Force('charge')?.strength(chargeOf)
           g.onNodeClick((o: object) => click.current?.((o as SimNode).id))
-          const bloom = new UnrealBloomPass(new THREE.Vector2(width(), height()), 1.15, 0.5, 0.12)
+          // A faint glow on the nodes' cores and the particles only: high threshold, low strength.
+          const bloom = new UnrealBloomPass(new THREE.Vector2(width(), height()), 0.55, 0.3, 0.45)
           g.postProcessingComposer().addPass(bloom)
           ;(g.controls() as { zoomSpeed?: number }).zoomSpeed = 2.5
           g.graphData(data.current)
@@ -227,15 +230,15 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
           fitted.current = -1
           window.setTimeout(() => fit(), FIT_AFTER_MS)
           // Breath and flash: each body's scale follows its node's breath; a flash whitens it.
-          const white = new THREE.Color('#ffffff')
+          const tint = new THREE.Color()
           const tick = () => {
             const t = performance.now() / 1000
             for (const n of data.current.nodes) {
               const b = bodies.get(n.id)
               if (!b) continue
-              const s = (n.breath ? 1 + 0.2 * Math.sin((2 * Math.PI * t) / n.breath) : 1) * (lit(n) ? 1.6 : 1)
+              const s = (n.breath ? 1 + 0.06 * Math.sin((2 * Math.PI * t) / n.breath) : 1) * (lit(n) ? 1.25 : 1)
               b.mesh.scale.setScalar(s)
-              ;(b.mesh.material as import('three').MeshBasicMaterial).color.set(lit(n) ? white : n.color)
+              ;(b.mesh.material as import('three').MeshBasicMaterial).color.copy(tint.set(n.color).multiplyScalar(lit(n) ? 1 : 0.55))
             }
             raf = requestAnimationFrame(tick)
           }
