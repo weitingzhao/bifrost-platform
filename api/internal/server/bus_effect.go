@@ -16,7 +16,7 @@ import (
 )
 
 // GET /api/v1/bus/effect: what the bus's work does, each reading computed
-// from its source when asked, none typed in (2026-11-17, the Owner: he cannot
+// from its source when asked (2026-11-17, the Owner: he cannot
 // see where the communication work stands or what it actually does). A
 // reading that cannot be taken here says so instead of a number.
 
@@ -27,10 +27,15 @@ type effectItem struct {
 }
 
 type effectRow struct {
-	Key        string       `json:"key"`
-	Label      string       `json:"label"`
-	Value      string       `json:"value"`
-	Before     string       `json:"before"`
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	Value string `json:"value"`
+	// Before is what the value is compared with, computed too: a
+	// baseline the system took at a time (bus/nextgen baselines.yaml,
+	// queried at that time) or the same reading over the previous window.
+	// Empty when the system has none.
+	Before     string       `json:"before,omitempty"`
+	BeforeKind string       `json:"before_kind,omitempty"`
 	How        string       `json:"how"`
 	Unmeasured string       `json:"unmeasured,omitempty"`
 	Items      []effectItem `json:"items,omitempty"`
@@ -42,33 +47,6 @@ type busEffect struct {
 	Rows        []effectRow `json:"rows"`
 }
 
-// effectSwitches are the source readers moved onto the bus, each with the
-// commit that moved it (nextgen/run-readers.md is the inventory). They are
-// the code's own state, so they live beside it.
-var effectSwitches = struct {
-	runReaders, mainReaders int
-	runs, main              []effectItem
-}{
-	runReaders: 15, mainReaders: 11,
-	runs: []effectItem{
-		{"pipeline run records read the gate's finished-run events", "2026-11-16", "bus step 2"},
-		{"head-release reads the run cache", "2026-11-17 00:57", "f508ab3c"},
-		{"pipeline runs page reads the run cache", "2026-11-16 21:44", "display side by side"},
-		{"supply chain page reads the run cache", "2026-11-16 21:52", "display side by side"},
-		{"release context reads the run cache", "2026-11-16 21:52", "display side by side"},
-		{"CI index retired", "2026-11-16 23:19", "CI line"},
-		{"post-release check reads the run cache", "2026-11-17", "post_release.go"},
-	},
-	main: []effectItem{
-		{"units/config, CI scorecard and domains ask the ledger", "2026-11-17 15:46Z", "162700cb"},
-		{"release context asks the ledger", "2026-11-17 15:46Z", "162700cb"},
-		{"commit evidence asks the ledger", "2026-11-17 15:46Z", "162700cb"},
-		{"plan history asks the ledger", "2026-11-17 15:46Z", "162700cb"},
-		{"configuration boundaries (infra main)", "not yet", "infra is not in BUS_GIT_REPOS"},
-		{"five gate readers keep asking Gitea by design", "-", "gates read the source"},
-	},
-}
-
 func (s *Server) handleBusEffect(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	now := time.Now().UTC()
@@ -76,19 +54,7 @@ func (s *Server) handleBusEffect(w http.ResponseWriter, r *http.Request) {
 	out := busEffect{GeneratedAt: now, Env: env}
 	out.Rows = append(out.Rows, s.effectMainToSTG(now))
 	out.Rows = append(out.Rows, s.effectListRuns(ctx, env)...)
-	out.Rows = append(out.Rows, effectRow{
-		Key: "switch_runs", Label: "Source readers moved: run lists",
-		Value:  fmt.Sprintf("%d / %d", len(effectSwitches.runs), effectSwitches.runReaders),
-		Before: "0 / 15 on 2026-11-16 morning",
-		How:    "Readers that listed pipeline runs from the cluster, now on the bus or retired; the gate readers left belong to the CI line.",
-		Items:  effectSwitches.runs,
-	}, effectRow{
-		Key: "switch_main", Label: "Source readers moved: where main is",
-		Value:  fmt.Sprintf("%d of %d judged; 4 moved, 5 kept on Gitea by design", effectSwitches.mainReaders, effectSwitches.mainReaders),
-		Before: "0 on 2026-11-16",
-		How:    "Display readers ask the ledger's git.main.advanced for the repositories gate-git watches (bifrost-platform today), Gitea for the rest.",
-		Items:  effectSwitches.main,
-	})
+	out.Rows = append(out.Rows, effectSwitchRows()...)
 	out.Rows = append(out.Rows, s.effectWakes(ctx, now))
 	out.Rows = append(out.Rows, s.effectRelay(ctx, env)...)
 	writeJSON(w, http.StatusOK, out)
@@ -98,8 +64,7 @@ func (s *Server) handleBusEffect(w http.ResponseWriter, r *http.Request) {
 // created, over the last 24 hours and the 24 before, from the run cache.
 func (s *Server) effectMainToSTG(now time.Time) effectRow {
 	row := effectRow{Key: "main_to_stg", Label: "Main moved → STG delivery started",
-		Before: "baseline 51 s (2026-11-16); 42–47 s on 2026-11-13..15",
-		How:    "Median seconds from a bifrost-platform landing (land-*) finishing to the next bifrost-deliver-platform run being created, last 24 h; read from the bus run cache. Minutes-long ones waited for the release window."}
+		How: "Median seconds from a bifrost-platform landing (land-*) finishing to the next bifrost-deliver-platform run being created, last 24 h; read from the bus run cache. Minutes-long ones waited for the release window."}
 	if s.delivery == nil {
 		row.Unmeasured = "no delivery reader on this platform"
 		return row
@@ -119,7 +84,7 @@ func (s *Server) effectMainToSTG(now time.Time) effectRow {
 		row.Value = fmt.Sprintf("median %.0f s (%d landings, %d within 60 s)", m, n, fast)
 	}
 	if pn > 0 {
-		row.Before = fmt.Sprintf("median %.0f s the 24 h before (%d); ", pm, pn) + row.Before
+		row.Before, row.BeforeKind = fmt.Sprintf("median %.0f s the 24 h before (%d landings)", pm, pn), "previous"
 	}
 	return row
 }
@@ -233,8 +198,7 @@ func (s *Server) promql(ctx context.Context, q string) (map[string]float64, erro
 // beside this platform's by caller.
 func (s *Server) effectListRuns(ctx context.Context, env string) []effectRow {
 	cluster := effectRow{Key: "list_cluster", Label: "Pipeline run lists, whole cluster",
-		Before: "9,312 per 10 min on 2026-11-16 22:02; 820 on 2026-11-17 02:09",
-		How:    "apiserver_request_total, LIST of pipelineruns, increase over 10 minutes (every client, not only the platform); beside it the runs created in the same 10 minutes and the runs kept, from the bus run cache. Two 10-minute windows differ by their edges: compare with the run counts."}
+		How: "apiserver_request_total, LIST of pipelineruns, increase over 10 minutes (every client, not only the platform); beside it the runs created in the same 10 minutes and the runs kept, from the bus run cache. Two 10-minute windows differ by their edges: compare with the run counts."}
 	if v, err := s.promql(ctx, `sum(increase(apiserver_request_total{verb="LIST",resource="pipelineruns"}[10m]))`); err != nil {
 		cluster.Unmeasured = err.Error()
 	} else {
@@ -250,11 +214,11 @@ func (s *Server) effectListRuns(ctx context.Context, env string) []effectRow {
 	}
 	ns := "bifrost-platform-" + env
 	own := effectRow{Key: "list_platform", Label: "Pipeline run lists, this platform by caller",
-		Before: "about 1,840 per 10 min on 2026-11-17 00:43 (PROD); 179 at 02:09",
-		How:    "bifrost_kube_requests_total{site}, LIST of pipelineruns, increase over 10 minutes, namespace " + ns + "; the site is the calling reader."}
+		How: "bifrost_kube_requests_total{site}, LIST of pipelineruns, increase over 10 minutes, namespace " + ns + "; the site is the calling reader."}
 	v, err := s.promql(ctx, fmt.Sprintf(`sum by (site) (increase(bifrost_kube_requests_total{verb="LIST",resource="pipelineruns",namespace=%q}[10m]))`, ns))
 	if err != nil {
 		own.Unmeasured = err.Error()
+		s.baselineInto(ctx, &cluster, "list_cluster")
 		return []effectRow{cluster, own}
 	}
 	type kv struct {
@@ -275,20 +239,20 @@ func (s *Server) effectListRuns(ctx context.Context, env string) []effectRow {
 		own.Items = append(own.Items, effectItem{What: e.k, When: fmt.Sprintf("%.0f", e.v)})
 	}
 	readers := effectRow{Key: "display_reads", Label: "Display pages reading runs",
-		Before: "every page view listed the cluster before 2026-11-16 21:44",
-		How:    "bifrost_bus_readers_*: reads answered from the run cache, sampled comparisons with a list, differences; since this process started."}
+		How: "bifrost_bus_readers_*: reads answered from the run cache, sampled comparisons with a list, differences; since this process started."}
 	if r, err := s.promql(ctx, fmt.Sprintf(`sum by (__name__) ({__name__=~"bifrost_bus_readers_(cache_served|compared|mismatch)_total",namespace=%q})`, ns)); err != nil {
 		readers.Unmeasured = err.Error()
 	} else {
 		readers.Value = fmt.Sprintf("%.0f from the cache, %.0f sampled, %.0f differences", r["bifrost_bus_readers_cache_served_total"], r["bifrost_bus_readers_compared_total"], r["bifrost_bus_readers_mismatch_total"])
 	}
+	s.baselineInto(ctx, &cluster, "list_cluster")
+	s.baselineInto(ctx, &own, "list_platform_"+env)
 	return []effectRow{cluster, own, readers}
 }
 
 func (s *Server) effectWakes(ctx context.Context, now time.Time) effectRow {
 	row := effectRow{Key: "wakes", Label: "Seats woken by the bus (last 24 h)",
-		Before: "before 2026-11-16 seats were nudged by the duty seat every 30 minutes",
-		How:    "The dispatcher's wake messages in the ledger: delivered to a seat's inbox, or sent to the duty seat because the recipient was unknown; seconds from the message to the seat acknowledging it (its doorbell wakes it, then it reads)."}
+		How: "The dispatcher's wake messages in the ledger: delivered to a seat's inbox, or sent to the duty seat because the recipient was unknown; seconds from the message to the seat acknowledging it (its doorbell wakes it, then it reads)."}
 	db := s.recordDB()
 	if db == nil {
 		row.Unmeasured = "the agent runtime database is not connected"
@@ -314,8 +278,7 @@ func (s *Server) effectWakes(ctx context.Context, now time.Time) effectRow {
 func (s *Server) effectRelay(ctx context.Context, env string) []effectRow {
 	ns := "bifrost-platform-" + env
 	row := effectRow{Key: "relay", Label: "Bus health",
-		Before: "-",
-		How:    "bifrost_bus_relay_* since the workers started; seconds since the cluster gate's last event; per event type, how long ago the relay last published one (bifrost_bus_relay_last_published_timestamp_seconds). Who reads is in Clients below."}
+		How: "bifrost_bus_relay_* since the workers started; seconds since the cluster gate's last event; per event type, how long ago the relay last published one (bifrost_bus_relay_last_published_timestamp_seconds). Who reads is in Clients below."}
 	v, err := s.promql(ctx, fmt.Sprintf(`sum by (__name__) ({__name__=~"bifrost_bus_relay_(published|errors|drift)_total",namespace=%q})`, ns))
 	if err != nil {
 		row.Unmeasured = err.Error()

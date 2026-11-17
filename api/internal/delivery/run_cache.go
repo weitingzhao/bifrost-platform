@@ -33,10 +33,11 @@ import (
 //
 // Trust used to live only in memory, so every release (a restart) put the
 // routes back on their lists until N more pages were viewed; at night, with
-// nobody viewing, they never got there. A route that has earned trust in
-// PROD (earnedRoutes, with its evidence) now starts trusted, and a trusted
-// route still compares one read in sampleEvery: a difference takes its trust
-// away and it earns it again as before.
+// nobody viewing, they never got there. A route whose readings show it
+// earned trust (the caller reads them: N clean comparisons and no difference
+// over the last days) starts trusted, and a trusted route still compares one
+// read in sampleEvery: a difference takes its trust away and it earns it
+// again as before.
 
 // RunCache is the cluster gate's read cache (gatecluster.Gate).
 type RunCache interface {
@@ -63,17 +64,6 @@ const EnvReadersCompareN = "BUS_READERS_COMPARE_N"
 
 const defaultReadersCompareN = 50
 
-// earnedRoutes are the routes that start trusted, each with the evidence that
-// earned it. A route is added here only with PROD readings.
-var earnedRoutes = map[string]string{
-	// 2026-11-16 21:44–21:52 PROD: 50 clean comparisons in a row each; no
-	// difference on any route over the night's restarts (02:36 11-17:
-	// pipeline_runs 22 more, 0 differences).
-	routePipelineRuns:   "PROD 2026-11-16 21:44–21:52, 50 clean in a row, 0 differences",
-	routeSupplyChain:    "PROD 2026-11-16 21:44–21:52, 50 clean in a row, 0 differences",
-	routeReleaseContext: "PROD 2026-11-16 21:44–21:52, 50 clean in a row, 0 differences",
-}
-
 // sampleEvery: a trusted route compares one read in this many.
 const sampleEvery = 100
 
@@ -96,22 +86,34 @@ type cacheReaders struct {
 }
 
 // SetRunCache hands the service the cluster gate's run cache; nil (or never
-// calling it) keeps every route on its list.
-func (s *Service) SetRunCache(c RunCache) {
+// calling it) keeps every route on its list. earned are the routes that start
+// trusted: the caller computes them from the routes' own side-by-side
+// readings (bifrost_bus_readers_compared/mismatch over the last days), not a
+// hand-kept list (the Owner, 2026-11-17); nil starts every route comparing.
+func (s *Service) SetRunCache(c RunCache, earned map[string]bool) {
 	if c == nil {
 		s.readers.Store(nil)
 		return
 	}
 	trust := map[string]bool{}
-	for route := range earnedRoutes {
-		trust[route] = true
+	for route, ok := range earned {
+		if ok {
+			trust[route] = true
+		}
 	}
 	s.readers.Store(&cacheReaders{cache: c, n: readersCompareN(), clean: map[string]int{}, trust: trust, since: map[string]int{},
 		logf: func(format string, args ...any) { slog.Info(fmt.Sprintf(format, args...)) }})
 }
 
 // SetRunCache hands the service the cluster gate's run cache (wiring).
-func (h *Handler) SetRunCache(c RunCache) { h.svc.SetRunCache(c) }
+func (h *Handler) SetRunCache(c RunCache, earned map[string]bool) { h.svc.SetRunCache(c, earned) }
+
+// CacheRoutes are the display routes that read the run cache, as the
+// readings name them.
+func CacheRoutes() []string { return append([]string(nil), cacheRoutes...) }
+
+// ReadersCompareN is how many clean comparisons a route needs to be trusted.
+func ReadersCompareN() int { return readersCompareN() }
 
 // syncedCache is the cache when it answers now, else nil.
 func (s *Service) syncedCache() *cacheReaders {

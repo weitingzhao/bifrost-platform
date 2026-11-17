@@ -1,0 +1,44 @@
+# The source switch: the platform's readers that went to the cluster or to
+# Gitea, and where each stands (inventory: shared notes
+# agent-tool-comm/nextgen/run-readers.md, 2026-11-16).
+#
+# status: moved (reads the bus or its cache now), retired (the reader is
+# gone), kept (reads the source by design: a gate reads the source), open
+# (not moved yet; owner says whose it is).
+#
+# A moved reader names its proof: a file and text that must be in it (the
+# code that reads the bus). A retired one names text that must be in no Go
+# file. TestReadersStandAsTheySay checks both, so a line cannot stay "moved"
+# after the code went back, nor be "open" while nothing proves it.
+groups:
+  - id: runs
+    title: Readers that listed pipeline runs
+    readers:
+      - {id: records, what: "pipeline run records (30 s loop)", status: moved, at: "2026-11-16", proof: {file: api/internal/server/bus_wire.go, contains: "s.bus.recordsLive.Store(true)"}}
+      - {id: head-release, what: "head-release each pass", status: moved, at: "2026-11-17", proof: {file: api/internal/server/head_release.go, contains: "s.delivery.CachedRunsOf(pipeline)"}}
+      - {id: post-release, what: "post-release check (30 s)", status: moved, at: "2026-11-17", proof: {file: api/internal/server/post_release.go, contains: "items, cached := s.delivery.CachedRunsOf(pipeline)"}}
+      - {id: pipeline-runs-page, what: "Console pipeline runs page", status: moved, at: "2026-11-16", proof: {file: api/internal/delivery/service.go, contains: "readThrough(s, routePipelineRuns,"}}
+      - {id: supply-chain-page, what: "Console supply chain page", status: moved, at: "2026-11-16", proof: {file: api/internal/delivery/supply_chain.go, contains: "readThrough(s, routeSupplyChain,"}}
+      - {id: release-context, what: "release context (/delivery/context)", status: moved, at: "2026-11-16", proof: {file: api/internal/delivery/release_context.go, contains: "readThrough(s, routeReleaseContext,"}}
+      - {id: ci-index, what: "CI index snapshot (5 s)", status: retired, at: "2026-11-16", absent_text: ") CIIndex(ctx context.Context)"}
+      - {id: releases-tick, what: "release recorder tick", status: open, owner: CI line, note: "reads the 0027 table when the CI line switches the reads"}
+      - {id: releases-current, what: "full CI deployed → releases.Current (and agentrt.deployed)", status: open, owner: CI line, note: "same switch"}
+      - {id: unit-taskruns, what: "unit TaskRuns (30 s)", status: open, owner: communication, note: "the gate does not watch TaskRuns yet"}
+      - {id: landingci-full, what: "landing CI full runs (1 min)", status: open, owner: CI line, note: "run-hooks consumer"}
+      - {id: last-deliver, what: "promote gate: last delivery run and success", status: open, owner: CI line}
+      - {id: prod-artifacts-ready, what: "promote gate: PROD artifacts ready", status: open, owner: CI line}
+      - {id: run-steps, what: "a run's steps (display)", status: open, owner: communication}
+      - {id: pipeline-timings, what: "pipeline timings (display)", status: open, owner: communication}
+  - id: main
+    title: Readers that asked Gitea where main is
+    readers:
+      - {id: plan-history, what: "plan history's main (1 min)", status: moved, at: "2026-11-17", proof: {file: api/internal/server/agentrt_planfacts.go, contains: "s.mainOf(nil)"}}
+      - {id: release-context-main, what: "release context's main", status: moved, at: "2026-11-17", proof: {file: api/internal/server/release_context_wire.go, contains: "s.mainOf(s.delivery.PolicyFacts().MainHead)"}}
+      - {id: evidence, what: "commit evidence and compare", status: moved, at: "2026-11-17", proof: {file: api/internal/server/evidence_commit.go, contains: "s.mainOf(m)"}}
+      - {id: units-config, what: "units/config, CI scorecard and domains", status: moved, at: "2026-11-17", proof: {file: api/internal/server/units_config.go, contains: "s.mainOf(s.giteaMainHead)"}}
+      - {id: config-boundaries, what: "configuration boundaries (infra main)", status: open, owner: communication, watch_repo: bifrost-trade-infra, note: "moves when gate-git watches infra (its Gitea hook is an execution card)"}
+      - {id: head-release-main, what: "head-release reads main after a wake", status: kept, note: "a gate reads the source; the event only wakes it"}
+      - {id: release-policy-main, what: "release policy MainHead", status: kept, note: "a gate"}
+      - {id: migration-main, what: "migration action's main (infra)", status: kept, note: "a gate"}
+      - {id: daily-full-ci-main, what: "daily full CI's main (once a day)", status: kept, note: "a gate, once a day"}
+      - {id: scorecard-content, what: "CI scorecard content reads", status: kept, note: "reads content by commit, not where main is; the CI line's"}

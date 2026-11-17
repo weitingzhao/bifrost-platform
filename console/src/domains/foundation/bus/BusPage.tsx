@@ -19,6 +19,8 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { BUS_LIST_CAP, fetchBusClients, fetchBusTrace, useBusStream, type BusClient, type BusConnection } from './useBusStream'
 import { EVENT_ID_PATTERN, clockTime, traceTimeline, type TimelineRow } from './busTrace'
 import { BusEffectSection } from './BusEffectSection'
+import { BusGenerationSection } from './BusGenerationSection'
+import { BusContractSection } from './BusContractSection'
 
 const CONNECTION: Record<BusConnection, { label: string; variant: DenseTagVariant }> = {
   connecting: { label: 'connecting', variant: 'neutral' },
@@ -140,7 +142,9 @@ export function BusPage() {
 
   return (
     <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="min-w-0 lg:col-span-2"><BusGenerationSection /></div>
       <div className="min-w-0 lg:col-span-2"><BusEffectSection /></div>
+      <div className="min-w-0 lg:col-span-2"><BusContractSection /></div>
       <OpsSection
         title="Live events"
         description={`From /api/v1/bus/stream, newest first, the last ${BUS_LIST_CAP} kept. The list starts when this page opens: the gate has no "latest N" read.`}

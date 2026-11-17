@@ -147,6 +147,10 @@ modules:
       # Guards that read every Go file of the module, and the walls between
       # packages (go list -deps); moved here from delivery and questions so
       # that those are rerun for their own changes.
+      # The communication layer's registers of its change of generation: their
+      # tests check every retired channel is gone from the Go code and every
+      # moved reader's code is there, so they read the whole module.
+      api/internal/bus/nextgen: ["api"]
       api/internal/codeguard: ["api", "config/domain-ownership.json"]
       api/internal/config: ["api/internal/config", "config/environments.yaml"]
       api/internal/delivery: ["api/internal/delivery", "bifrost-trade-infra:k8s/cicd"]

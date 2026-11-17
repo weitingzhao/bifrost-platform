@@ -1751,10 +1751,14 @@
     {
       "path": "console/src/domains/foundation/bus",
       "files": [
+        "console/src/domains/foundation/bus/BusContractSection.tsx",
         "console/src/domains/foundation/bus/BusEffectSection.tsx",
+        "console/src/domains/foundation/bus/BusGenerationSection.tsx",
         "console/src/domains/foundation/bus/BusPage.tsx",
         "console/src/domains/foundation/bus/__tests__/bus.test.ts",
+        "console/src/domains/foundation/bus/__tests__/busNextgen.test.ts",
         "console/src/domains/foundation/bus/busEffect.ts",
+        "console/src/domains/foundation/bus/busNextgen.ts",
         "console/src/domains/foundation/bus/busTrace.ts",
         "console/src/domains/foundation/bus/sseParser.ts",
         "console/src/domains/foundation/bus/useBusStream.ts"
@@ -1768,6 +1772,8 @@
       "external_imports": [
         "@bifrost/ui",
         "@tanstack/react-query",
+        "@xyflow/react",
+        "@xyflow/react/dist/style.css",
         "react",
         "vitest"
       ],

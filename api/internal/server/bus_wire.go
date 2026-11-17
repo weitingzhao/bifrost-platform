@@ -309,6 +309,10 @@ func (s *Server) mountBus(r chi.Router) {
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/clients", route((*gate.Gate).HandleClients))
 	// What the bus's work does, computed when asked (bus_effect.go).
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/effect", s.handleBusEffect)
+	// The change of generation, from its registers (bus_nextgen.go).
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/nextgen", s.handleBusNextgen)
+	// What the bus promises and to whom, from its registers (bus_contract.go).
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/contract", s.handleBusContract)
 }
 
 // startBus starts what this process runs of the bus, once the ledger's pool
@@ -426,7 +430,7 @@ func (s *Server) startGateCluster(ctx context.Context) {
 	g := &gatecluster.Gate{Ledger: &gatecluster.PGLedger{DB: s.bus.db}, Namespace: ns, Logf: busLogf, OnFinished: s.bus.runFinished,
 		Dynamic: s.clusterDynamic}
 	if s.delivery != nil {
-		s.delivery.SetRunCache(g)
+		s.delivery.SetRunCache(g, s.earnedReadRoutes(ctx))
 	}
 	safego.Go("bus-gate-cluster", func() { g.Run(kubemetrics.WithSite(ctx, "bus.gate-cluster")) })
 	safego.Go("bus-gate-cluster-records-live", func() {
@@ -461,7 +465,7 @@ func (s *Server) startRunCache(ctx context.Context) {
 	}
 	ns := s.delivery.PipelinesNamespace()
 	g := &gatecluster.Gate{CacheOnly: true, Namespace: ns, Logf: busLogf, Dynamic: s.clusterDynamic}
-	s.delivery.SetRunCache(g)
+	s.delivery.SetRunCache(g, s.earnedReadRoutes(ctx))
 	safego.Go("bus-run-cache", func() { g.Run(kubemetrics.WithSite(ctx, "bus.run-cache")) })
 	slog.Info("bus run cache: watching PipelineRuns for the display reads", "namespace", ns)
 }

@@ -11,7 +11,9 @@ export type BusEffectRow = {
   key: string
   label: string
   value: string
-  before: string
+  /** What the value is compared with: a baseline the system took at a time, or the previous window; absent when there is none. */
+  before?: string
+  before_kind?: 'baseline' | 'previous'
   how: string
   unmeasured?: string
   items?: BusEffectItem[]

@@ -1,0 +1,16 @@
+# Baselines the bus's readings are compared with. Each is taken by the
+# system: the query and the time are written here (when the comparison
+# started), the value is computed from Prometheus at that time when asked
+# ("@ <unix seconds>" is filled in from at). A baseline the system did not
+# record at the time (an earlier hand measurement) is not here.
+baselines:
+  - key: list_cluster
+    label: "Pipeline run lists, whole cluster, per 10 min"
+    at: "2026-11-16T22:02:00-06:00"
+    query: 'sum(increase(apiserver_request_total{verb="LIST",resource="pipelineruns"}[10m] @ {{at}}))'
+    note: "before the bus took over the run readers"
+  - key: list_platform_prod
+    label: "Pipeline run lists, PROD platform, per 10 min"
+    at: "2026-11-17T00:43:00-06:00"
+    query: 'sum(increase(bifrost_kube_requests_total{verb="LIST",resource="pipelineruns",namespace="bifrost-platform-prod"}[10m] @ {{at}}))'
+    note: "the first reading after the platform counted its own lists"

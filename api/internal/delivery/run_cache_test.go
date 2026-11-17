@@ -121,14 +121,6 @@ func capture(s *Service) func() string {
 	}
 }
 
-// unearned starts every route untrusted, as before earnedRoutes.
-func unearned(t *testing.T) {
-	t.Helper()
-	saved := earnedRoutes
-	earnedRoutes = nil
-	t.Cleanup(func() { earnedRoutes = saved })
-}
-
 func readerCounts(route string) (compared, mismatch, served int64) {
 	return readerMetric(&metricReadersCompared, route).Load(), readerMetric(&metricReadersMismatch, route).Load(),
 		readerMetric(&metricReadersServed, route).Load()
@@ -140,12 +132,11 @@ func readerCounts(route string) (compared, mismatch, served int64) {
 // a row (counted, no mismatch), then answers from the cache exactly as the
 // list did and lists no more.
 func TestDisplayReadsMatchTheListThenStopListing(t *testing.T) {
-	unearned(t)
 	t.Setenv(EnvReadersCompareN, "3")
 	dyn, lists := listCounting(cacheRuns()...)
 	g := liveCache(t, dyn)
 	s := cacheService(dyn)
-	s.SetRunCache(g)
+	s.SetRunCache(g, nil)
 	logs := capture(s)
 	ctx := context.Background()
 	read := map[string]func() any{
@@ -228,7 +219,7 @@ func TestDisplayReadsFallBackWhenTheCacheIsNotSynced(t *testing.T) {
 		t.Fatalf("without a cache: %d runs, %d lists", len(want), lists.Load())
 	}
 	stale := *cacheRun("ghost", "bifrost-deliver-stg", "True", "Succeeded", 9*time.Hour, true)
-	s.SetRunCache(&fakeCache{synced: false, objs: []unstructured.Unstructured{stale}})
+	s.SetRunCache(&fakeCache{synced: false, objs: []unstructured.Unstructured{stale}}, nil)
 	c0, _, s0 := readerCounts(routePipelineRuns)
 	before := lists.Load()
 	got := s.PipelineRuns(ctx, "bifrost-deliver-stg").Runs
@@ -248,7 +239,6 @@ func TestDisplayReadsFallBackWhenTheCacheIsNotSynced(t *testing.T) {
 // list is logged by run name and counted, the list's answer stands, and the
 // clean count starts again (the route keeps listing).
 func TestDisplayReadMismatchIsCountedAndLogged(t *testing.T) {
-	unearned(t)
 	t.Setenv(EnvReadersCompareN, "2")
 	dyn, lists := listCounting(cacheRuns()...)
 	s := cacheService(dyn)
@@ -265,7 +255,7 @@ func TestDisplayReadMismatchIsCountedAndLogged(t *testing.T) {
 	// the cache, and deliver-stg-1 is missing.
 	wrong := []unstructured.Unstructured{good[1], *cacheRun("deliver-stg-3", "bifrost-deliver-stg", "True", "Succeeded", 2*time.Hour, true)}
 	fc := &fakeCache{synced: true, objs: good}
-	s.SetRunCache(fc)
+	s.SetRunCache(fc, nil)
 	logs := capture(s)
 	_, m0, _ := readerCounts(routePipelineRuns)
 	s.PipelineRuns(ctx, "bifrost-deliver-stg") // clean 1
@@ -327,7 +317,7 @@ func TestEarnedRouteStartsTrustedSamplesAndLosesTrustOnDifference(t *testing.T) 
 		}
 	}
 	fc := &fakeCache{synced: true, objs: good}
-	s.SetRunCache(fc)
+	s.SetRunCache(fc, map[string]bool{routePipelineRuns: true})
 	logs := capture(s)
 
 	// Earned: the first read after a restart lists nothing.

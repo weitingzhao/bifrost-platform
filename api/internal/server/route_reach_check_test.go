@@ -46,6 +46,9 @@ var intendedRouteAdditions = map[string][]string{
 	// 2026-11-17 (the Owner cannot see what the bus's work does): the
 	// effect readings, read-only, for the Bus page's readers.
 	"GET /api/v1/bus/effect": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// The change of generation, read-only, for the same readers.
+	"GET /api/v1/bus/nextgen":  {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"GET /api/v1/bus/contract": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-15 relay F: retained run/step timings, read-only like /units/runs.
 	"GET /api/v1/delivery/pipelines/{name}/timings": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/ops/facts/system":                  {"viewer", "reporter", "operator", "admin", "trade-satellite"},

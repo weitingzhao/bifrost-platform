@@ -13,7 +13,9 @@ function EffectRow({ row }: { row: BusEffectRow }) {
           <span className="font-mono-tabular text-sm">{row.value}</span>
         )}
       </div>
-      <p className="m-0 text-xs text-muted-foreground">Before: {row.before}</p>
+      {row.before ? (
+        <p className="m-0 text-xs text-muted-foreground">{row.before_kind === 'baseline' ? 'Baseline (taken by the system)' : 'Previous window'}: {row.before}</p>
+      ) : null}
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer">How it is counted{row.items?.length ? ` · ${row.items.length} items` : ''}</summary>
         <p className="m-0 mt-1">{row.how}</p>

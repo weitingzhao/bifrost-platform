@@ -1,0 +1,93 @@
+import { authedFetch } from '@/api/client'
+
+/**
+ * GET /api/v1/bus/nextgen and /api/v1/bus/contract: the communication
+ * layer's change of generation and its contract, both read from the
+ * registers compiled into the platform (bus/nextgen, bus/registry), whose
+ * tests hold them to the code. Nothing here is typed in on the page.
+ */
+
+export type NextgenChannel = {
+  id: string
+  class: string
+  disposition: string
+  what: string
+  by: string
+  retired?: { at: string; change: string; outside?: string }
+}
+export type NextgenCount = { disposition: string; total: number; retired: number }
+export type NextgenReader = { id: string; what: string; status: string; at?: string; owner?: string; note?: string }
+export type NextgenReaderGroup = { id: string; title: string; readers: NextgenReader[]; counts: Record<string, number> }
+export type NextgenBaseline = { key: string; label: string; at: string; note?: string; value?: number; unmeasured?: string }
+export type BusNextgen = {
+  generated_at: string
+  progress: { start: number; now: number; target: number; retired: number; to_go: number; counts: NextgenCount[]; recent: NextgenChannel[] }
+  readers: NextgenReaderGroup[]
+  baselines: NextgenBaseline[]
+}
+
+export async function fetchBusNextgen(): Promise<BusNextgen> {
+  const r = await authedFetch('bus nextgen', '/api/v1/bus/nextgen')
+  return (await r.json()) as BusNextgen
+}
+
+export type ContractTopic = { tenant: string; type: string; version: number; publisher: string; guarantee: string; consumers: string[]; exports?: string[] }
+export type ContractRow = { tenant: string; id: string; on: string[]; deliver: string; to?: string; action?: string; by: string; envs?: string[] }
+export type ContractClient = { tenant: string; name: string; kind: string; lost_after?: string; envs?: string[] }
+export type BusContract = { topics: ContractTopic[]; subscriptions: ContractRow[]; clients: ContractClient[] }
+
+export async function fetchBusContract(): Promise<BusContract> {
+  const r = await authedFetch('bus contract', '/api/v1/bus/contract')
+  const b = (await r.json()) as BusContract
+  return { topics: b.topics ?? [], subscriptions: b.subscriptions ?? [], clients: b.clients ?? [] }
+}
+
+/** The bar's segments: each disposition's share of the start, its retired part first. */
+export function generationSegments(counts: readonly NextgenCount[], start: number): { disposition: string; retired: number; left: number }[] {
+  if (start <= 0) return []
+  return counts.filter(c => c.total > 0).map(c => ({
+    disposition: c.disposition,
+    retired: (c.retired / start) * 100,
+    left: ((c.total - c.retired) / start) * 100,
+  }))
+}
+
+/** A subscriber as the graph names it: a thread's session shortened, anything else as it is. */
+export function shortAddress(a: string): string {
+  const m = /^thread:(local_[0-9a-f]{8})/.exec(a)
+  return m ? `thread:${m[1].slice(6)}…` : a
+}
+
+export type ContractGraphModel = {
+  publishers: string[]
+  topics: string[]
+  subscribers: string[]
+  edges: { from: string; to: string; kind: 'publishes' | 'reads' | 'wakes'; label?: string }[]
+}
+
+/** Publisher → topic → subscriber, from the contract: declared readers and the subscription rows' wakes. */
+export function contractGraph(c: BusContract): ContractGraphModel {
+  const pubs = new Set<string>()
+  const subs = new Set<string>()
+  const edges: ContractGraphModel['edges'] = []
+  const topics = c.topics.map(t => t.type)
+  for (const t of c.topics) {
+    const pub = t.publisher || 'unknown'
+    pubs.add(pub)
+    edges.push({ from: `p:${pub}`, to: `t:${t.type}`, kind: 'publishes' })
+    for (const r of t.consumers ?? []) {
+      subs.add(r)
+      edges.push({ from: `t:${t.type}`, to: `s:${r}`, kind: 'reads' })
+    }
+  }
+  for (const row of c.subscriptions) {
+    const target = row.deliver === 'wake' ? row.to ?? '' : row.action ?? row.deliver
+    if (!target) continue
+    const name = shortAddress(target)
+    subs.add(name)
+    for (const on of row.on) {
+      if (topics.includes(on)) edges.push({ from: `t:${on}`, to: `s:${name}`, kind: 'wakes', label: row.id })
+    }
+  }
+  return { publishers: [...pubs].sort(), topics: [...topics].sort(), subscribers: [...subs].sort(), edges }
+}
