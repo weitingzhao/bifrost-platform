@@ -1,4 +1,4 @@
-package cluster
+package dataclone
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
+	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/appreadings"
 )
 
 const (
@@ -131,9 +132,7 @@ func (s *Service) probeDataFreshness(ctx context.Context) DataFreshnessResponse 
 	for i, p := range probes {
 		observed[i] = resourceview.ActivityObservation{At: p.ts, Sources: p.sources, Err: p.err}
 	}
-	if appReadings.FreshnessDatabases != nil {
-		resp.Databases = appReadings.FreshnessDatabases(resp.Databases, observed, resp.ReferenceDB, resp.LastCloneAt, now)
-	}
+	resp.Databases = appreadings.FreshnessDatabases(resp.Databases, observed, resp.ReferenceDB, resp.LastCloneAt, now)
 	return resp
 }
 

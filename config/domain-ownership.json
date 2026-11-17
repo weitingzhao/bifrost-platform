@@ -1004,6 +1004,13 @@
       "status": "mixed",
       "basis": "2026-11-16, corrected the same day after the CI line's audit of the ownership changes (duty/from-ci-w1-2026-11-16-ownership-changes-audit.md): the package is not one domain's. Foundation's on review: the Kubernetes adapter (client, nodes, workloads, pods, capabilities, actuation). Not ruled, and named by the review of that day: the data clone (data_clone.go, 1,093 lines) and data freshness, which serve the tenant's databases; the PostgreSQL and Redis status; the service readiness of GPU, warehouse and workers and the elastic node health, which compute reads. The node pools and the tenant's readings of applications and data are bound, not imported, since 2026-11-16. It stays mixed until those blocks are split out or ruled."
     },
+    "api/internal/dataclone": {
+      "domains": [
+        "tenant"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-17, moved out of api/internal/cluster unchanged (data_clone.go, data_clone_fk.go, data_freshness.go, data_probe.go and their tests): it clones bifrost_prod into the tenant's bifrost_dev and bifrost_stg, says how far each of the tenant's databases lags, and reads what each environment's application publishes about its data (the data probe, also the market-data watchlist). It runs its commands in the CNPG primary through cluster's Kubernetes/PostgreSQL adapter by an interface it declares (Postgres: ResolveCNPGPrimary, ExecOnPrimary), which the server binds; it does not import cluster. It calls tenant/appreadings for the freshness verdicts. Imports: tenant/appreadings and foundation packages only."
+    },
     "api/internal/probe": {
       "domains": [
         "foundation"

@@ -1,6 +1,4 @@
-//bifrost:owner tenant
-
-package cluster
+package dataclone
 
 import (
 	"context"

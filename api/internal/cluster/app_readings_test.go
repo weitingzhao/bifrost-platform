@@ -14,7 +14,7 @@ import (
 func init() { bindTenantReadings() }
 
 func bindTenantReadings() {
-	BindAppReadings(AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain, FreshnessDatabases: appreadings.FreshnessDatabases})
+	BindAppReadings(AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain})
 	BindComputeReadings(ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain, NodeMode: elasticreadings.NodeMode})
 }
 

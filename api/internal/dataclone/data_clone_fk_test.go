@@ -1,6 +1,4 @@
-//bifrost:owner tenant
-
-package cluster
+package dataclone
 
 import (
 	"context"
@@ -177,7 +175,7 @@ const ordersEdgesOut = "public.line_notes\tpublic.order_lines\tline_notes_line_f
 
 func TestCheckSelectiveFKClosureChecksEveryTarget(t *testing.T) {
 	var seen []string
-	svc := NewService(nil)
+	svc := NewService(nil, nil)
 	svc.SetPodExecForTest(fkEdgesExec(map[string]string{
 		"bifrost_dev": "public.refunds\tpublic.orders\trefunds_order_fk\n",
 		"bifrost_stg": ordersEdgesOut,
@@ -208,8 +206,8 @@ func TestStartDataCloneRefusesIncompleteSelectionBeforeQueueing(t *testing.T) {
 	t.Setenv("PLATFORM_DATA_CLONE_JOBS_DIR", t.TempDir())
 	t.Setenv("PLATFORM_DATA_CLONE_LAST", filepath.Join(t.TempDir(), "last.json"))
 	var seen []string
-	svc := NewService(nil)
-	svc.primaryOverride = "bifrost-postgres-1"
+	svc := NewService(nil, nil)
+	svc.setPrimaryForTest("bifrost-postgres-1")
 	svc.SetPodExecForTest(fkEdgesExec(map[string]string{"bifrost_dev": ordersEdgesOut}, &seen))
 	svc.cloneJobs = NewDataCloneJobStore()
 	svc.cloneLast = NewDataCloneLastStore()
@@ -236,8 +234,8 @@ func TestHandleDataCloneReturnsMissingTables(t *testing.T) {
 	t.Setenv("PLATFORM_DATA_CLONE_LAST", filepath.Join(t.TempDir(), "last.json"))
 	t.Setenv("PLATFORM_DATA_CLONE_SCHEDULE", filepath.Join(t.TempDir(), "sched.json"))
 	var seen []string
-	svc := NewService(nil)
-	svc.primaryOverride = "bifrost-postgres-1"
+	svc := NewService(nil, nil)
+	svc.setPrimaryForTest("bifrost-postgres-1")
 	svc.SetPodExecForTest(fkEdgesExec(map[string]string{"bifrost_dev": ordersEdgesOut}, &seen))
 	h := &Handler{svc: svc}
 

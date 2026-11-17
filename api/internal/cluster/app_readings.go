@@ -1,22 +1,19 @@
 package cluster
 
 import (
-	"time"
-
 	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 )
 
-// AppReadings is how the tenant's applications and data are read from what
-// this package gathers. The tenant domain owns the reading (which
-// deployments make an application ready, when a database is stale); this
-// package declares the shape and the server binds tenant/appreadings. Until
-// 2026-11-16 this package imported the tenant's package and called it.
+// AppReadings is how the tenant's applications are read from what this
+// package gathers. The tenant domain owns the reading (which deployments
+// make an application ready); this package declares the shape and the server
+// binds tenant/appreadings. Until 2026-11-16 this package imported the
+// tenant's package and called it. The reading of the databases' freshness
+// left with the data freshness for package dataclone on 2026-11-17, which
+// calls tenant/appreadings itself.
 type AppReadings struct {
 	// ApplicationsDomain is the applications domain of service readiness.
 	ApplicationsDomain func(resourceview.ApplicationsSnapshot) ServiceDomainView
-	// FreshnessDatabases fills each database's lag, age and verdict from the
-	// observations of last activity.
-	FreshnessDatabases func(databases []DataFreshnessDB, observed []resourceview.ActivityObservation, referenceDB string, lastCloneAt *string, now time.Time) []DataFreshnessDB
 }
 
 // appReadings is bound once, at start-up, before anything is served. It is
@@ -25,7 +22,7 @@ type AppReadings struct {
 var appReadings AppReadings
 
 // BindAppReadings sets the reader. Without one the applications domain is
-// unavailable and the databases carry no verdict.
+// unavailable.
 func BindAppReadings(r AppReadings) { appReadings = r }
 
 // ComputeReadings is how the elastic compute domains of service readiness

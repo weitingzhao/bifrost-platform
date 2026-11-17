@@ -25,6 +25,9 @@ type Service struct {
 	readinessProbe func(ctx context.Context) *ReadinessRollup
 	// watchlistProbe overrides the per-env data-probe watchlist read in unit tests.
 	watchlistProbe func(ctx context.Context, env string) ([]string, error)
+	// watchlist reads an environment's watchlist from its data probe
+	// (dataclone.Service.WatchlistSymbols, bound by the server: BindWatchlist).
+	watchlist func(ctx context.Context, env string) ([]string, error)
 	// deploymentsOverride skips live K8s reads in unit tests.
 	deploymentsOverride []DeploymentInfo
 }
@@ -35,6 +38,12 @@ func NewService(clusterSvc *cluster.Service) *Service {
 		cluster: clusterSvc,
 		client:  &http.Client{Timeout: 5 * time.Second},
 	}
+}
+
+// BindWatchlist sets the reader of the environments' watchlists. Without one
+// the watchlist union reports every environment as an error.
+func (s *Service) BindWatchlist(read func(ctx context.Context, env string) ([]string, error)) {
+	s.watchlist = read
 }
 
 func (s *Service) Status(ctx context.Context) StatusResponse {

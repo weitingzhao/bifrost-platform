@@ -47,7 +47,7 @@ type Loop struct {
 func Loops() []Loop {
 	return []Loop{
 		{Name: LoopIBAutoRepair, Symbol: "LoopIBAutoRepair", File: "internal/ibgateway/autorepair.go"},
-		{Name: LoopDataClone, Symbol: "LoopDataClone", File: "internal/cluster/data_clone.go"},
+		{Name: LoopDataClone, Symbol: "LoopDataClone", File: "internal/dataclone/data_clone.go"},
 		{Name: LoopBackupSweep, Symbol: "LoopBackupSweep", File: "internal/cluster/postgres_wal_repair.go"},
 		{Name: LoopPatrol, Symbol: "LoopPatrol", File: "internal/patrol/handler.go"},
 		{Name: LoopChecklistProber, Symbol: "LoopChecklistProber", File: "internal/checklist/prober.go"},

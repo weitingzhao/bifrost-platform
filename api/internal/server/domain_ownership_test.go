@@ -87,13 +87,53 @@ func TestServerBindsThePoolEvaluator(t *testing.T) {
 	if !strings.Contains(string(src), "clusterH.Service().BindPools(placement.ClusterPools)") {
 		t.Fatal("bindClusterReadings does not bind placement.ClusterPools to the cluster service")
 	}
-	// The same for the tenant's readings of applications and data
+	// The same for the tenant's readings of applications
 	// (cluster.BindAppReadings): unbound, the applications domain is unknown.
-	if !strings.Contains(string(src), "cluster.BindAppReadings(cluster.AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain, FreshnessDatabases: appreadings.FreshnessDatabases})") {
+	if !strings.Contains(string(src), "cluster.BindAppReadings(cluster.AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain})") {
 		t.Fatal("bindClusterReadings does not bind tenant/appreadings to the cluster package")
 	}
 	// And for compute's readings of the elastic domains (cluster.BindComputeReadings).
 	if !strings.Contains(string(src), "cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain, NodeMode: elasticreadings.NodeMode})") {
 		t.Fatal("bindClusterReadings does not bind elasticreadings to the cluster package")
+	}
+}
+
+// Origin: 2026-11-17, the data clone, data freshness and data probe moved
+// out of cluster into package dataclone. Three lines of wiring hold it
+// together and nothing else would notice one missing: the data clone runs
+// its commands through cluster's PostgreSQL adapter (unbound, every clone
+// fails); the trust-anchored action wiring reaches its two write handlers
+// through cluster's forwarders (unbound, they answer 503); the market-data
+// watchlist union reads the watchlists through its data probe (unbound,
+// every environment is an error). And the hourly scheduler is started on
+// the data clone's service in the workers process.
+func TestServerBindsTheDataClone(t *testing.T) {
+	t.Parallel()
+	root, err := os.ReadFile("server.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range []string{
+		"\tdataH := dataclone.NewHandler(clusterH.Service().Entry(), audit, clusterH.Service())\n",
+		"\tbindDataClone(clusterH, dataH, marketdataH)\n",
+		"\t\tdataH.Service().StartDataCloneScheduler(context.Background())\n",
+		"\t\tdataclone:       dataH,\n",
+		"\t\tmarketdata:      marketdataH,\n",
+	} {
+		if !strings.Contains(string(root), line) {
+			t.Fatalf("server.go lacks %q", line)
+		}
+	}
+	src, err := os.ReadFile("mount_cluster.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range []string{
+		"clusterH.BindDataClone(cluster.DataCloneWrites{Clone: dataH.HandleDataClone, SchedulePut: dataH.HandleDataCloneSchedulePut})",
+		"marketdataH.Service().BindWatchlist(dataH.Service().WatchlistSymbols)",
+	} {
+		if !strings.Contains(string(src), line) {
+			t.Fatalf("bindDataClone does not hold %q", line)
+		}
 	}
 }

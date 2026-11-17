@@ -46,16 +46,16 @@ func (s *Service) WatchlistUnion(ctx context.Context) WatchlistUnionResponse {
 
 	read := s.watchlistProbe
 	if read == nil {
-		if s.cluster == nil {
+		if s.watchlist == nil {
 			for _, envID := range watchlistEnvs {
 				resp.Sources[envID] = EnvWatchlistResult{
 					Status: "error",
-					Error:  "cluster service unavailable",
+					Error:  "watchlist reader not bound",
 				}
 			}
 			return resp
 		}
-		read = s.cluster.WatchlistSymbols
+		read = s.watchlist
 	}
 
 	type result struct {

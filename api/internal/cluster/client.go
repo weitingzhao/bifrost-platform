@@ -20,12 +20,8 @@ type Service struct {
 	entry         *config.ClusterEntry
 	clientFactory func() (kubernetes.Interface, string, error)
 	execFunc      PodExecFunc
-	cloneJobs     *DataCloneJobStore
-	cloneSched    *DataCloneScheduleStore
-	cloneLast     *DataCloneLastStore
 	// pools is the compute domain's pool evaluator (BindPools).
-	pools           PoolEvaluator
-	primaryOverride string // unit tests only
+	pools PoolEvaluator
 	// minioHealthProbe replaces the HTTP check of an external MinIO (unit tests only).
 	minioHealthProbe func(ctx context.Context, endpoint string) (int, error)
 	// dynamicFactory replaces the CRD client (unit tests only).

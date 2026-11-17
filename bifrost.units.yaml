@@ -161,6 +161,7 @@ modules:
         - "api/internal/agentthreads"
         - "api/internal/checklist"
         - "api/internal/cluster"
+        - "api/internal/dataclone"
         - "api/internal/ibgateway"
         - "api/internal/patrol"
         - "api/internal/releasepolicy"

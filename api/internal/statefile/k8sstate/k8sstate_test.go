@@ -21,7 +21,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
+	"github.com/weitingzhao/bifrost-platform/api/internal/dataclone"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile/k8sstate"
 )
@@ -75,8 +75,8 @@ func withBackend(t *testing.T) string {
 
 func TestDataCloneScheduleSetOnAPIReachesWorkers(t *testing.T) {
 	withBackend(t)
-	api := cluster.NewDataCloneScheduleStore()
-	workers := cluster.NewDataCloneScheduleStore() // built first, then the api pod writes
+	api := dataclone.NewDataCloneScheduleStore()
+	workers := dataclone.NewDataCloneScheduleStore() // built first, then the api pod writes
 	cfg := api.Get()
 	cfg.Enabled, cfg.Interval = true, "daily"
 	api.Put(cfg)

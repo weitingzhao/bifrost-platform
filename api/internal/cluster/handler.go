@@ -16,6 +16,9 @@ import (
 type Handler struct {
 	svc   *Service
 	audit *actuation.AuditLog
+	// dataClone are the data clone's write handlers the forwarders call
+	// (BindDataClone).
+	dataClone DataCloneWrites
 }
 
 func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {

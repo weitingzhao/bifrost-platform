@@ -67,9 +67,6 @@ func (s *Service) ExecOnPrimary(ctx context.Context, primary string, command ...
 // (status.currentPrimary of the Cluster resource), the pod ExecOnPrimary runs
 // in.
 func (s *Service) ResolveCNPGPrimary(ctx context.Context) (string, error) {
-	if s != nil && s.primaryOverride != "" {
-		return s.primaryOverride, nil
-	}
 	dyn, err := s.buildDynamicClient()
 	if err != nil {
 		return "", fmt.Errorf("dynamic client: %w", err)

@@ -1,6 +1,4 @@
-//bifrost:owner tenant
-
-package cluster
+package dataclone
 
 import (
 	"context"
@@ -120,7 +118,7 @@ func TestFetchDataProbeFallsBackPastTheSPA(t *testing.T) {
 		_, _ = w.Write([]byte(spaIndex))
 	}))
 	defer srv.Close()
-	svc := NewService(gatewayEntry(t, srv.URL+"/", "", ""))
+	svc := NewService(gatewayEntry(t, srv.URL+"/", "", ""), nil)
 	p, err := svc.fetchDataProbe(context.Background(), "dev")
 	if err != nil || p.Sample == nil || *p.Sample.Rows != 3 {
 		t.Fatalf("probe %+v err %v", p, err)
@@ -134,7 +132,7 @@ func TestFetchDataProbeReportsTheApplicationsReason(t *testing.T) {
 		_, _ = w.Write([]byte(`{"detail":"data_probe: database unavailable","reason":"read_failed"}`))
 	}))
 	defer srv.Close()
-	svc := NewService(gatewayEntry(t, "", srv.URL, ""))
+	svc := NewService(gatewayEntry(t, "", srv.URL, ""), nil)
 	_, err := svc.fetchDataProbe(context.Background(), "stg")
 	if err == nil || !strings.Contains(err.Error(), "HTTP 503: data_probe: database unavailable") {
 		t.Fatalf("want the 503 reason, got %v", err)
@@ -149,7 +147,7 @@ func TestDataFreshnessReadsActivityFromTheDataProbe(t *testing.T) {
 	prod := probeApp(t, orderDeskProbe("2031-03-10T12:00:00Z", "2031-03-09T12:00:00Z", 40))
 	dev := probeApp(t, orderDeskProbe("2031-03-05T12:00:00Z", "2031-03-01T12:00:00Z", 30)) // 5d behind
 	stg := probeApp(t, orderDeskProbe("2031-03-02T00:00:00Z", "2031-03-09T18:00:00Z", 38)) // 0.75d behind
-	svc := NewService(gatewayEntry(t, dev.URL, stg.URL, prod.URL))
+	svc := NewService(gatewayEntry(t, dev.URL, stg.URL, prod.URL), nil)
 	svc.SetPodExecForTest(noDatabaseReads(t))
 
 	resp := svc.probeDataFreshness(context.Background())
@@ -189,7 +187,7 @@ func TestDataFreshnessUnknownWhenProdProbeIsDown(t *testing.T) {
 	down := httptest.NewServer(http.NotFoundHandler())
 	downURL := down.URL
 	down.Close() // connection refused
-	svc := NewService(gatewayEntry(t, dev.URL, dev.URL, downURL))
+	svc := NewService(gatewayEntry(t, dev.URL, dev.URL, downURL), nil)
 	svc.SetPodExecForTest(noDatabaseReads(t))
 
 	resp := svc.probeDataFreshness(context.Background())
@@ -214,7 +212,7 @@ func TestDataFreshnessForAnAppWithoutADataProbe(t *testing.T) {
 	spa := probeApp(t, "")
 	notFound := httptest.NewServer(http.NotFoundHandler())
 	defer notFound.Close()
-	svc := NewService(gatewayEntry(t, spa.URL, notFound.URL, spa.URL))
+	svc := NewService(gatewayEntry(t, spa.URL, notFound.URL, spa.URL), nil)
 	svc.SetPodExecForTest(noDatabaseReads(t))
 
 	resp := svc.probeDataFreshness(context.Background())
@@ -233,7 +231,7 @@ func TestDataFreshnessForAnAppWithoutADataProbe(t *testing.T) {
 
 func TestVerifyTargetReadsTheSampleFromTheDataProbe(t *testing.T) {
 	dev := probeApp(t, orderDeskProbe("2031-03-05T12:00:00Z", "2031-03-01T12:00:00Z", 30))
-	svc := NewService(gatewayEntry(t, dev.URL, "", ""))
+	svc := NewService(gatewayEntry(t, dev.URL, "", ""), nil)
 	var seen []string
 	svc.SetPodExecForTest(func(ctx context.Context, kubeconfig, namespace, pod, container string, command ...string) (string, error) {
 		joined := strings.Join(command, " ")
@@ -259,7 +257,7 @@ func TestVerifyTargetReadsTheSampleFromTheDataProbe(t *testing.T) {
 
 func TestVerifyTargetPassesWithAnUnknownSample(t *testing.T) {
 	spa := probeApp(t, "")
-	svc := NewService(gatewayEntry(t, "", spa.URL, ""))
+	svc := NewService(gatewayEntry(t, "", spa.URL, ""), nil)
 	svc.SetPodExecForTest(func(ctx context.Context, kubeconfig, namespace, pod, container string, command ...string) (string, error) {
 		joined := strings.Join(command, " ")
 		switch {
@@ -279,7 +277,7 @@ func TestVerifyTargetPassesWithAnUnknownSample(t *testing.T) {
 func TestWatchlistSymbolsFromTheDataProbe(t *testing.T) {
 	body := `{"generated_at": "2031-03-04T14:30:00Z", "activity": [],
   "watchlist": {"label": "optionable_stocks", "symbols": ["qzbb ", "QZAA", "QZBB", ""], "count": 4}}`
-	svc := NewService(gatewayEntry(t, probeApp(t, body).URL, "", ""))
+	svc := NewService(gatewayEntry(t, probeApp(t, body).URL, "", ""), nil)
 	syms, err := svc.WatchlistSymbols(context.Background(), "dev")
 	if err != nil {
 		t.Fatal(err)
@@ -291,7 +289,7 @@ func TestWatchlistSymbolsFromTheDataProbe(t *testing.T) {
 
 func TestWatchlistSymbolsEmptyIsAnAnswer(t *testing.T) {
 	body := `{"activity": [], "watchlist": {"label": "optionable_stocks", "symbols": [], "count": 0}}`
-	svc := NewService(gatewayEntry(t, "", probeApp(t, body).URL, ""))
+	svc := NewService(gatewayEntry(t, "", probeApp(t, body).URL, ""), nil)
 	syms, err := svc.WatchlistSymbols(context.Background(), "stg")
 	if err != nil || syms == nil || len(syms) != 0 {
 		t.Fatalf("want an empty, non-nil list, got %v %v", syms, err)
@@ -309,7 +307,7 @@ func TestWatchlistSymbolsNeverReadsSilenceAsEmpty(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			svc := NewService(gatewayEntry(t, "", "", probeApp(t, c.body).URL))
+			svc := NewService(gatewayEntry(t, "", "", probeApp(t, c.body).URL), nil)
 			syms, err := svc.WatchlistSymbols(context.Background(), "prod")
 			if err == nil || !strings.Contains(err.Error(), c.want) || syms != nil {
 				t.Fatalf("want error containing %q, got %v %v", c.want, syms, err)

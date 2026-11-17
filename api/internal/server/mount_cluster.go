@@ -5,7 +5,9 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
+	"github.com/weitingzhao/bifrost-platform/api/internal/dataclone"
 	"github.com/weitingzhao/bifrost-platform/api/internal/elasticreadings"
+	"github.com/weitingzhao/bifrost-platform/api/internal/marketdata"
 	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/appreadings"
 )
@@ -21,10 +23,10 @@ func (s *Server) mountCluster(r chi.Router) {
 		r.Get("/service-readiness", s.cluster.HandleServiceReadiness)
 		r.Get("/postgres", s.cluster.HandlePostgresStatus)
 		r.Get("/postgres/backup-status", s.cluster.HandlePostgresBackupStatus)
-		r.Get("/data-freshness", s.cluster.HandleDataFreshness)
-		r.Get("/data-clone", s.cluster.HandleDataCloneList)
-		r.Get("/data-clone/schedule", s.cluster.HandleDataCloneScheduleGet)
-		r.Get("/data-clone/{id}", s.cluster.HandleDataCloneStatus)
+		r.Get("/data-freshness", s.dataclone.HandleDataFreshness)
+		r.Get("/data-clone", s.dataclone.HandleDataCloneList)
+		r.Get("/data-clone/schedule", s.dataclone.HandleDataCloneScheduleGet)
+		r.Get("/data-clone/{id}", s.dataclone.HandleDataCloneStatus)
 		r.Get("/redis", s.cluster.HandleRedisStatus)
 		r.Get("/nodes/{name}/power", s.cluster.HandleNodePower)
 		r.Get("/placement", s.cluster.HandlePlacement)
@@ -58,8 +60,8 @@ func (s *Server) mountCluster(r chi.Router) {
 			r.Post("/addons/kube-prometheus-stack/ensure", s.guard("ensure_kube_prometheus_stack", s.cluster.HandleEnsureKubePrometheusStack))
 			r.Post("/nodes/{name}/drain", s.guard("drain_node", s.cluster.HandleDrainNode))
 			r.Post("/nodes/{name}/poweroff", s.guard("poweroff_compute_node", s.cluster.HandlePowerOffNode))
-			r.Post("/data-clone", s.guard("trigger_data_clone", s.cluster.HandleDataClone))
-			r.Put("/data-clone/schedule", s.guard("update_data_clone_schedule", s.cluster.HandleDataCloneSchedulePut))
+			r.Post("/data-clone", s.guard("trigger_data_clone", s.dataclone.HandleDataClone))
+			r.Put("/data-clone/schedule", s.guard("update_data_clone_schedule", s.dataclone.HandleDataCloneSchedulePut))
 		})
 	})
 }
@@ -82,8 +84,18 @@ func (s *Server) mountDevSessions(r chi.Router) {
 func bindClusterReadings(clusterH *cluster.Handler) {
 	// The compute domain evaluates the node pools; cluster declares the shape.
 	clusterH.Service().BindPools(placement.ClusterPools)
-	// The tenant domain reads its applications and data from what cluster gathers.
-	cluster.BindAppReadings(cluster.AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain, FreshnessDatabases: appreadings.FreshnessDatabases})
+	// The tenant domain reads its applications from what cluster gathers.
+	cluster.BindAppReadings(cluster.AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain})
 	// The compute domain reads the elastic domains (GPU, data warehouse) of service readiness.
 	cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain, NodeMode: elasticreadings.NodeMode})
+}
+
+// bindDataClone wires the tenant's data clone (package dataclone, moved out of
+// cluster on 2026-11-17, unchanged). The action wiring (actions_wire.go,
+// trust-anchored) names its two write handlers on the cluster handler, which
+// forwards them; the market-data plugin's watchlist union reads the
+// environments' watchlists from its data probe.
+func bindDataClone(clusterH *cluster.Handler, dataH *dataclone.Handler, marketdataH *marketdata.Handler) {
+	clusterH.BindDataClone(cluster.DataCloneWrites{Clone: dataH.HandleDataClone, SchedulePut: dataH.HandleDataCloneSchedulePut})
+	marketdataH.Service().BindWatchlist(dataH.Service().WatchlistSymbols)
 }

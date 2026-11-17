@@ -35,6 +35,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/codehealth"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/dataclone"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/devsession"
 	"github.com/weitingzhao/bifrost-platform/api/internal/flexquery"
@@ -64,12 +65,15 @@ import (
 )
 
 type Server struct {
-	cfg      *config.Config
-	prober   *probe.Prober
-	cluster  *cluster.Handler
-	gitops   *gitops.Handler
-	mcp      *mcp.Handler
-	delivery *delivery.Handler
+	cfg     *config.Config
+	prober  *probe.Prober
+	cluster *cluster.Handler
+	// dataclone is the tenant's data clone, freshness and data probe
+	// (moved out of cluster on 2026-11-17).
+	dataclone *dataclone.Handler
+	gitops    *gitops.Handler
+	mcp       *mcp.Handler
+	delivery  *delivery.Handler
 	// unitTrees reads commits' trees from Gitea for the unit plan
 	// (units_plan.go), keeping the blobs it read.
 	unitTrees *giteaTrees
@@ -169,6 +173,10 @@ func New(cfg *config.Config) (*Server, error) {
 	role := config.CurrentRole()
 	clusterH := cluster.NewHandler(cfg, audit)
 	bindClusterReadings(clusterH)
+	// The tenant's data clone runs its commands through cluster's PostgreSQL adapter.
+	dataH := dataclone.NewHandler(clusterH.Service().Entry(), audit, clusterH.Service())
+	marketdataH := marketdata.NewHandler(clusterH.Service())
+	bindDataClone(clusterH, dataH, marketdataH)
 	ibgatewayH := ibgateway.NewHandler(clusterH.Service(), audit)
 	if role.RunsWorkers() {
 		ibgatewayH.StartBackground(context.Background(), audit)
@@ -178,7 +186,7 @@ func New(cfg *config.Config) (*Server, error) {
 		"runs_background_loops", role.RunsWorkers(),
 		"note", "workers must stay a singleton — the loops keep per-process last-run state")
 	if role.RunsWorkers() {
-		clusterH.Service().StartDataCloneScheduler(context.Background())
+		dataH.Service().StartDataCloneScheduler(context.Background())
 		clusterH.Service().StartFailedBackupSweep(context.Background())
 	}
 	promoteH := promote.NewHandler(cfg, audit, clusterH)
@@ -192,6 +200,7 @@ func New(cfg *config.Config) (*Server, error) {
 		cfg:             cfg,
 		prober:          prober,
 		cluster:         clusterH,
+		dataclone:       dataH,
 		gitops:          gitopsH,
 		mcp:             mcp.NewHandler(),
 		delivery:        delivery.NewHandler(cfg, audit),
@@ -208,7 +217,7 @@ func New(cfg *config.Config) (*Server, error) {
 		selfhealth:      selfhealth.NewHandler(cfg, selfHealthArgoApps(gitopsH.Service())),
 		network:         network.NewHandler(audit),
 		ibgateway:       ibgatewayH,
-		marketdata:      marketdata.NewHandler(clusterH.Service()),
+		marketdata:      marketdataH,
 		flexquery:       flexquery.NewHandler(clusterH.Service()),
 		research:        research.NewHandler(clusterH.Service()),
 		telemetry:       telemetry.NewHandler(cfg, audit),
