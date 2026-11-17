@@ -49,6 +49,8 @@ var intendedRouteAdditions = map[string][]string{
 	// The change of generation, read-only, for the same readers.
 	"GET /api/v1/bus/nextgen":  {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/bus/contract": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// The team at work for the nerve map (2026-11-17), read-only.
+	"GET /api/v1/bus/observe": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-15 relay F: retained run/step timings, read-only like /units/runs.
 	"GET /api/v1/delivery/pipelines/{name}/timings": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/ops/facts/system":                  {"viewer", "reporter", "operator", "admin", "trade-satellite"},

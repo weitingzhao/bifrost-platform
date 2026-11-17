@@ -3,9 +3,13 @@ import { authedFetch, authHeaders } from '@/api/client'
 import { serverFetch } from '@/api/serverContact'
 import type { BusEnvelope, BusTraceResponse } from './busTrace'
 import { SseParser } from './sseParser'
+import type { BusReceipt } from './busNerve'
 
 /** Events kept in memory, newest first. */
 export const BUS_LIST_CAP = 200
+
+/** Receipts kept in memory, newest first (the nerve map lands pulses by them). */
+export const BUS_RECEIPT_CAP = 500
 
 /** Name this Console's receipts carry (`gate:stream:console`). */
 const CLIENT = 'console'
@@ -14,6 +18,10 @@ export type BusConnection = 'connecting' | 'live' | 'reconnecting' | 'off' | 'de
 
 export interface BusStreamState {
   events: BusEnvelope[]
+  /** Live receipts the stream passed on (receipts=1), newest first. */
+  receipts: BusReceipt[]
+  /** The gate follows no receipts (": receipts off"). */
+  receiptsOff: boolean
   connection: BusConnection
   detail: string | null
   /** Cursor the stream resumes from (Last-Event-ID). */
@@ -53,7 +61,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
  * now — the gate has no "latest N" read — and resumes from the last cursor with Last-Event-ID.
  */
 export function useBusStream(): BusStreamState {
-  const [state, setState] = useState<BusStreamState>({ events: [], connection: 'connecting', detail: null, cursor: null })
+  const [state, setState] = useState<BusStreamState>({ events: [], receipts: [], receiptsOff: false, connection: 'connecting', detail: null, cursor: null })
 
   useEffect(() => {
     const abort = new AbortController()
@@ -68,7 +76,7 @@ export function useBusStream(): BusStreamState {
           const headers = authHeaders()
           headers.set('Accept', 'text/event-stream')
           if (cursor) headers.set('Last-Event-ID', cursor)
-          const r = await serverFetch(`/api/v1/bus/stream?client=${CLIENT}`, { headers, signal, cache: 'no-store' })
+          const r = await serverFetch(`/api/v1/bus/stream?client=${CLIENT}&receipts=1`, { headers, signal, cache: 'no-store' })
           if (r.status === 503 || r.status === 404 || r.status === 502) {
             const detail = r.status === 404 ? 'this platform-api has no bus routes' : await errorText(r)
             setState(s => ({ ...s, connection: 'off', detail }))
@@ -92,18 +100,23 @@ export function useBusStream(): BusStreamState {
               if (batch.retry != null) retry = batch.retry
               const error = batch.comments.find(c => c.startsWith('error '))
               const arrived: BusEnvelope[] = []
+              const receipts: BusReceipt[] = []
               for (const m of batch.messages) {
                 try {
-                  arrived.push(JSON.parse(m.data) as BusEnvelope)
+                  if (m.event === 'rcpt') receipts.push(JSON.parse(m.data) as BusReceipt)
+                  else arrived.push(JSON.parse(m.data) as BusEnvelope)
                 } catch {
                   // a message that is not an envelope is skipped; its id still moves the cursor
                 }
               }
+              const off = batch.comments.includes('receipts off')
               if (parser.lastEventId) cursor = parser.lastEventId
-              if (arrived.length > 0 || error) {
+              if (arrived.length > 0 || receipts.length > 0 || error || off) {
                 setState(s => ({
                   ...s,
                   events: mergeEvents(s.events, arrived),
+                  receipts: receipts.length > 0 ? [...receipts.reverse(), ...s.receipts].slice(0, BUS_RECEIPT_CAP) : s.receipts,
+                  receiptsOff: s.receiptsOff || off,
                   cursor: cursor ?? s.cursor,
                   detail: error ? error.slice('error '.length) : s.detail,
                 }))
@@ -159,3 +172,30 @@ export async function fetchBusClients(): Promise<BusClientsResponse> {
   const r = await authedFetch('bus clients', '/api/v1/bus/clients?hours=24')
   return r.json() as Promise<BusClientsResponse>
 }
+
+/** Pages a replay may read: 100 events each, a day of PROD is some 2,300. */
+export const REPLAY_MAX_PAGES = 40
+
+/**
+ * The last hours of events for the nerve map's replay: GET /api/v1/bus/events
+ * with since=, each page from the time of the last event the one before gave
+ * (an after= cursor would make it a delivery and write receipts; a since=
+ * read writes none). Kept once by id; stops at an empty page or one with
+ * nothing new. One read when asked, not a poll.
+ */
+export async function fetchBusReplay(sinceIso: string): Promise<BusEnvelope[]> {
+  const out: BusEnvelope[] = []
+  const seen = new Set<string>()
+  let since = sinceIso
+  for (let page = 0; page < REPLAY_MAX_PAGES; page++) {
+    const r = await authedFetch('bus replay', `/api/v1/bus/events?since=${encodeURIComponent(since)}&limit=100&wait=0&client=console`)
+    const body = (await r.json()) as { events?: BusEnvelope[] }
+    const fresh = (body.events ?? []).filter(e => !seen.has(e.id))
+    if (fresh.length === 0) break
+    for (const e of fresh) seen.add(e.id)
+    out.push(...fresh)
+    since = fresh[fresh.length - 1].time
+  }
+  return out
+}
+

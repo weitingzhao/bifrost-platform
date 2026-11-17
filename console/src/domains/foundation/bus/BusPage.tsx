@@ -21,6 +21,7 @@ import { EVENT_ID_PATTERN, clockTime, traceTimeline, type TimelineRow } from './
 import { BusEffectSection } from './BusEffectSection'
 import { BusGenerationSection } from './BusGenerationSection'
 import { BusContractSection } from './BusContractSection'
+import { BusNervePanels, BusNerveSection } from './BusNerveSection'
 
 const CONNECTION: Record<BusConnection, { label: string; variant: DenseTagVariant }> = {
   connecting: { label: 'connecting', variant: 'neutral' },
@@ -126,7 +127,7 @@ function TimelineStep({ row, last }: { row: TimelineRow; last: boolean }) {
   )
 }
 
-/** Foundation 0.2 event bus, read-only: live events from the gate's stream, and one event's journey. */
+/** Foundation 0.2 event bus, read-only: the nerve map first, then the generation, effect and contract, live events from the gate's one stream, and one event's journey. */
 export function BusPage() {
   const stream = useBusStream()
   const [selected, setSelected] = useState<string | null>(null)
@@ -135,6 +136,8 @@ export function BusPage() {
   const draftValid = EVENT_ID_PATTERN.test(draftId)
   const conn = CONNECTION[stream.connection]
 
+  const select = (id: string) => { setSelected(id); setDraft(id) }
+
   const onTrace = (e: FormEvent) => {
     e.preventDefault()
     if (draftValid) setSelected(draftId)
@@ -142,6 +145,8 @@ export function BusPage() {
 
   return (
     <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="min-w-0 lg:col-span-2"><BusNerveSection stream={stream} onSelect={select} /></div>
+      <div className="min-w-0 lg:col-span-2"><BusNervePanels stream={stream} onSelect={select} /></div>
       <div className="min-w-0 lg:col-span-2"><BusGenerationSection /></div>
       <div className="min-w-0 lg:col-span-2"><BusEffectSection /></div>
       <div className="min-w-0 lg:col-span-2"><BusContractSection /></div>

@@ -1,0 +1,89 @@
+import { describe, expect, it } from 'vitest'
+import { OWN_CONSUMER, nerveModel, readerOf, replaySchedule, seatLabel, seatMail, seatState, shortSeconds, type ObserveSeat } from '../busNerve'
+import type { BusContract, BusNextgen } from '../busNextgen'
+import type { BusEnvelope } from '../busTrace'
+import type { BusClient } from '../useBusStream'
+
+// Origin: 2026-11-17, the Bus page's nerve map (the coordinator relaying the
+// Owner): organs come from the contract, the roster and the source switch;
+// the Console's own receipt is not a reader; a replay keeps the events'
+// order and shortens long quiet gaps so the map does not stand still.
+
+const contract: BusContract = {
+  topics: [
+    { tenant: 'rocket', type: 'git.main.advanced', version: 1, publisher: 'gate-git', guarantee: 'at-least-once', consumers: ['seat:*'] },
+    { tenant: 'rocket', type: 'ci.run.finished', version: 1, publisher: 'gate-cluster', guarantee: 'at-least-once', consumers: ['seat:*'] },
+  ],
+  subscriptions: [],
+  clients: [],
+}
+const clients: BusClient[] = [
+  { name: OWN_CONSUMER, declared: true, receipts: 9, status: 'active' },
+  { name: 'headrelease', declared: true, receipts: 4, status: 'lost' },
+  { name: 'gate:events:seat-ci', declared: false, receipts: 1, status: 'new' },
+]
+const ev = (id: string, time: string, type = 'git.main.advanced'): BusEnvelope => ({
+  specversion: '1.0', id, source: 's', type, time, subject: id, tenant: 'rocket', env: 'prod', cursor: '1.1', ref: '', actor: '',
+})
+
+describe('nerveModel', () => {
+  it('takes publishers and topics from the contract and readers from the roster, the Console aside', () => {
+    const nextgen = { readers: [{ id: 'runs', title: 'Runs', counts: {}, readers: [
+      { id: 'moved-one', what: 'x', status: 'moved' },
+      { id: 'still-polling', what: 'lists runs', status: 'open', owner: 'ci' },
+    ] }] } as unknown as BusNextgen
+    const m = nerveModel(contract, clients, nextgen)
+    expect(m.publishers.map(p => p.id)).toEqual(['gate-cluster', 'gate-git'])
+    expect(m.topics.map(t => t.id)).toEqual(['ci.run.finished', 'git.main.advanced'])
+    expect(m.publisherOf.get('ci.run.finished')).toBe('gate-cluster')
+    expect(m.readers.map(r => [r.id, r.tone])).toEqual([
+      ['gate:events:seat-ci', 'new'], ['headrelease', 'lost'], ['old:still-polling', 'old'],
+    ])
+  })
+})
+
+describe('readerOf', () => {
+  it('is no reader for the Console itself, and the consumer for anyone else', () => {
+    const m = nerveModel(contract, clients)
+    expect(readerOf(OWN_CONSUMER, m.readers)).toBeNull()
+    expect(readerOf('headrelease', m.readers)).toBe('headrelease')
+    expect(readerOf('gate:events:somebody', m.readers)).toBe('gate:events:somebody')
+  })
+})
+
+describe('replaySchedule', () => {
+  it('keeps order and spacing at speed, and shortens a long gap', () => {
+    const plan = replaySchedule([
+      ev('ev-3', '2026-11-17T10:00:00Z'), ev('ev-1', '2026-11-17T09:00:00Z'), ev('ev-2', '2026-11-17T09:00:06Z'),
+    ], 60, 1500)
+    expect(plan.map(p => p.event.id)).toEqual(['ev-1', 'ev-2', 'ev-3'])
+    expect(plan.map(p => p.at)).toEqual([0, 100, 1600])
+  })
+})
+
+describe('seatMail', () => {
+  it('is the seats letters only', () => {
+    expect(seatMail([ev('ev-1', 't', 'seat.mail.arrived'), ev('ev-2', 't')]).map(e => e.id)).toEqual(['ev-1'])
+  })
+})
+
+describe('seatState', () => {
+  const now = Date.parse('2026-11-17T21:00:00Z')
+  const seat: ObserveSeat = { id: 'seat:b', letters_out: 0, letters_in: 2, unacked: 1, last_status: '2026-11-17T20:50:00Z' }
+  it('is stuck while a letter to it waits past the limit, ok before', () => {
+    expect(seatState(seat, [{ from: 'seat:a', to: 'seat:b', kind: 'letter', count: 2, unacked: 1, oldest_open: '2026-11-17T20:40:00Z' }], now)).toBe('stuck')
+    expect(seatState(seat, [{ from: 'seat:a', to: 'seat:b', kind: 'letter', count: 2, unacked: 1, oldest_open: '2026-11-17T20:55:00Z' }], now)).toBe('ok')
+  })
+  it('is quiet when its last report is old', () => {
+    expect(seatState({ ...seat, last_status: '2026-11-17T17:00:00Z' }, [], now)).toBe('quiet')
+  })
+})
+
+describe('labels', () => {
+  it('shortens a thread to its session and a seat to its name', () => {
+    expect(seatLabel('thread:local_ab850773-fe26-40fa-ac01-b3b590b73164')).toBe('ab850773')
+    expect(seatLabel('seat:chief_of_staff')).toBe('chief_of_staff')
+    expect(seatLabel('owner')).toBe('owner')
+    expect([shortSeconds(4.8), shortSeconds(134.8), shortSeconds(32785.8)]).toEqual(['4.8s', '2.2m', '9.1h'])
+  })
+})

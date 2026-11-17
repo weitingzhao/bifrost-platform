@@ -327,6 +327,7 @@ func (s *Server) mountBus(r chi.Router) {
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/nextgen", s.handleBusNextgen)
 	// What the bus promises and to whom, from its registers (bus_contract.go).
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/contract", s.handleBusContract)
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/observe", s.handleBusObserve)
 }
 
 // startBus starts what this process runs of the bus, once the ledger's pool
