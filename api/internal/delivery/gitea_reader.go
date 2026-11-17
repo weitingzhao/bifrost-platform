@@ -107,13 +107,3 @@ func (s *Service) giteaReaderConfigured(ctx context.Context) bool {
 // GiteaReaderFromEnv is the platform's read-only Gitea account for a reader
 // outside this package (the agentd package's .sha256, deploy_agentd).
 func GiteaReaderFromEnv(ctx context.Context) (string, string, error) { return giteaReaderFromEnv(ctx) }
-
-// AgentdPackageReaderFromEnv reads only the dedicated package-read mount.
-// Missing credentials never fall back to the repository reader or publisher.
-func AgentdPackageReaderFromEnv(context.Context) (string, string, error) {
-	dir := strings.TrimSpace(os.Getenv("AGENTD_PACKAGE_READER_DIR"))
-	if dir == "" {
-		return "", "", errors.New("AGENTD_PACKAGE_READER_DIR is not set")
-	}
-	return readReaderDirectory(dir)
-}

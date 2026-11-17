@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -64,21 +63,6 @@ func init() {
 		}
 		return tune.Int(rules.TuneThreadsPerDay), nil
 	})
-}
-
-// TaskProposal is one task of a POST /missions/{id}/tasks batch. Ref names
-// it within the batch; DependsOn holds refs of the batch or ids of tasks of
-// the same mission.
-type TaskProposal struct {
-	Wave                             string
-	Urgent                           bool
-	Ref                              string
-	PlanNode, OffPlanReason, Subject string
-	Role, Class, Title, SpecArtifact string
-	Effect, Repo, BaseCommit         string
-	Core                             bool
-	Needs, DependsOn                 []string
-	HardLimit                        time.Duration
 }
 
 // ErrBusy: a write found the rows it needs locked, every time it tried.

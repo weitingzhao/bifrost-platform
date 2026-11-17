@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -41,70 +40,6 @@ type MetricComputation struct {
 	Xmin              int64
 }
 
-// WriteMetricReadings records one computation and its new readings atomically.
-// A savepoint measures actual inserts before the immutable event is hashed.
-func WriteMetricReadings(ctx context.Context, db DB, c MetricComputation) (int, error) {
-	n := 0
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		n = 0
-		// Hold the stream lock outside the savepoint, including on its first use.
-		if _, err := tx.Exec(ctx, `INSERT INTO agentrt.event_stream (event_stream_id) VALUES ('metrics') ON CONFLICT DO NOTHING`); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.event_stream WHERE event_stream_id='metrics' FOR UPDATE`); err != nil {
-			return err
-		}
-		defs := make([]any, 0, len(c.Definitions))
-		for _, d := range c.Definitions {
-			defs = append(defs, map[string]any{"id": d.ID, "version": d.Version, "sha256": d.SHA256})
-		}
-		body := map[string]any{"source": c.Source, "rows": 0, "definitions": defs}
-		if c.Windows != nil {
-			body["windows"] = c.Windows
-		}
-		if c.Label != "" {
-			body["label"] = c.Label
-		}
-		if c.ArtifactID != "" {
-			body["artifact_id"] = c.ArtifactID
-		}
-		if c.Xmin != 0 {
-			body["xmin"] = c.Xmin
-		}
-		if _, err := tx.Exec(ctx, `SAVEPOINT metric_count`); err != nil {
-			return err
-		}
-		probe, err := Append(ctx, tx, Event{Stream: "metrics", Type: "metrics_computed", Actor: "controller", Body: body})
-		if err != nil {
-			return err
-		}
-		n, err = insertMetricReadings(ctx, tx, c, probe.EventID)
-		if err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, `ROLLBACK TO SAVEPOINT metric_count`); err != nil {
-			return err
-		}
-		body["rows"] = n
-		ev, err := Append(ctx, tx, Event{Stream: "metrics", Type: "metrics_computed", Actor: "controller", Body: body})
-		if err != nil {
-			return err
-		}
-		written, err := insertMetricReadings(ctx, tx, c, ev.EventID)
-		if err != nil {
-			return err
-		}
-		if written != n {
-			return fmt.Errorf("store: metric readings changed during computation; retry")
-		}
-		return nil
-	})
-	if err != nil {
-		return 0, err
-	}
-	return n, nil
-}
-
 func insertMetricReadings(ctx context.Context, tx pgx.Tx, c MetricComputation, eventID int64) (int, error) {
 	n := 0
 	for _, r := range c.Readings {
@@ -124,19 +59,4 @@ func insertMetricReadings(ctx context.Context, tx pgx.Tx, c MetricComputation, e
 		n += int(tag.RowsAffected())
 	}
 	return n, nil
-}
-
-// SetMetricLabel records a named baseline or group window.
-func SetMetricLabel(ctx context.Context, db DB, label string, windowStart, windowEnd time.Time, reason, by string) error {
-	if !windowEnd.After(windowStart) {
-		return invalid("metric label window must end after it starts")
-	}
-	return InTx(ctx, db, func(tx pgx.Tx) error {
-		body := map[string]any{"label": label, "window_start": windowStart.UTC().Format(time.RFC3339Nano), "window_end": windowEnd.UTC().Format(time.RFC3339Nano), "reason": reason}
-		if by != "" {
-			body["by"] = by
-		}
-		_, err := Append(ctx, tx, Event{Stream: "metric-labels", Type: "metric_label_set", Actor: "controller", Body: body})
-		return err
-	})
 }
