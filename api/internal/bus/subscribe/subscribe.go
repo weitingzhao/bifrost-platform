@@ -113,9 +113,9 @@ func Recipient(ctx context.Context, row registry.Subscription, ev Event, read Co
 }
 
 // Detail answers a row's params.detail for one event: what the event alone
-// does not say, read where it is kept (a run's task result, for a refused
-// landing). "" adds nothing.
-type Detail func(ctx context.Context, row registry.Subscription, ev Event) (string, error)
+// does not say, read where it is kept (a run's task results and params),
+// by name; a name with nothing is left out or "".
+type Detail func(ctx context.Context, row registry.Subscription, ev Event) (map[string]string, error)
 
 // RunOf is the run an event of ci.run.finished names ("<run>@<commit>").
 func RunOf(ev Event) string {
@@ -123,20 +123,42 @@ func RunOf(ev Event) string {
 	return run
 }
 
-// withDetail is body with the row's detail added; a detail that cannot be
-// read says so and the wake still goes (it is a hint, not the message).
-func withDetail(ctx context.Context, row registry.Subscription, ev Event, detail Detail, body string) string {
+// readDetail reads the row's detail: values by name, or why it could not.
+func readDetail(ctx context.Context, row registry.Subscription, ev Event, detail Detail) (map[string]string, error) {
 	if detail == nil || row.Params[registry.ParamDetail] == "" {
+		return nil, nil
+	}
+	return detail(ctx, row, ev)
+}
+
+// withDetail is body with the row's detail added: one name as "Why: <it>",
+// several as "name=value; …" in the detail's order. A detail that cannot be
+// read says so and the wake still goes (it is a hint, not the message).
+func withDetail(row registry.Subscription, values map[string]string, err error, body string) string {
+	spec := row.Params[registry.ParamDetail]
+	if spec == "" {
 		return body
 	}
-	d, err := detail(ctx, row, ev)
-	switch {
-	case err != nil:
-		return body + " (" + row.Params[registry.ParamDetail] + " could not be read: " + err.Error() + ")"
-	case d != "":
-		return body + " Why: " + d
+	if err != nil {
+		return body + " (" + spec + " could not be read: " + err.Error() + ")"
 	}
-	return body
+	_, names, _ := registry.TaskResults(spec)
+	if len(names) == 1 {
+		if v := values[names[0]]; v != "" {
+			return body + " Why: " + v
+		}
+		return body
+	}
+	var parts []string
+	for _, n := range names {
+		if v := values[n]; v != "" {
+			parts = append(parts, n+"="+v)
+		}
+	}
+	if len(parts) == 0 {
+		return body
+	}
+	return body + " Detail: " + strings.Join(parts, "; ")
 }
 
 // Body is the wake message: what happened and where to read it.
@@ -169,6 +191,12 @@ func Deliver(ctx context.Context, row registry.Subscription, ev Event, read Comm
 	if row.Deliver != registry.DeliverWake || !Matches(row, ev) {
 		return Skipped, nil
 	}
+	values, derr := readDetail(ctx, row, ev, detail)
+	// params.require: only when the named value is there; a detail that
+	// could not be read wakes anyway (it may be the one that matters).
+	if req := row.Params[registry.ParamRequire]; req != "" && derr == nil && values[req] == "" {
+		return Skipped, nil
+	}
 	to, err := Recipient(ctx, row, ev, read)
 	if err != nil || to == "" {
 		return Skipped, err
@@ -186,7 +214,7 @@ func Deliver(ctx context.Context, row registry.Subscription, ev Event, read Comm
 			return Rerouted, send(ctx, Key(row, ev)+":undeliverable", undeliverableTo, body)
 		}
 	}
-	return Delivered, send(ctx, Key(row, ev), to, withDetail(ctx, row, ev, detail, Body(row, ev)))
+	return Delivered, send(ctx, Key(row, ev), to, withDetail(row, values, derr, Body(row, ev)))
 }
 
 // UndeliverableTo is the tenant's undeliverable_to.

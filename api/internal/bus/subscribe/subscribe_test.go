@@ -201,9 +201,9 @@ func TestRefusedLandingWakeCarriesTheReason(t *testing.T) {
 	var got []string
 	send := func(_ context.Context, _, _, body string) error { got = append(got, body); return nil }
 	var asked string
-	detail := func(_ context.Context, r registry.Subscription, e Event) (string, error) {
+	detail := func(_ context.Context, r registry.Subscription, e Event) (map[string]string, error) {
 		asked = RunOf(e) + " " + r.Params["detail"]
-		return "refused: commit bc6b49b22fa9 has no Change-Id trailer", nil
+		return map[string]string{"refusal": "refused: commit bc6b49b22fa9 has no Change-Id trailer"}, nil
 	}
 	if _, err := Deliver(context.Background(), row, ev, read, detail, send, nil, ""); err != nil || len(got) != 1 {
 		t.Fatalf("delivered %d, %v", len(got), err)
@@ -214,8 +214,8 @@ func TestRefusedLandingWakeCarriesTheReason(t *testing.T) {
 	if !strings.Contains(got[0], "Why: refused: commit bc6b49b22fa9 has no Change-Id trailer") {
 		t.Fatalf("the reason is not in the wake: %s", got[0])
 	}
-	broken := func(context.Context, registry.Subscription, Event) (string, error) {
-		return "", errors.New("cluster down")
+	broken := func(context.Context, registry.Subscription, Event) (map[string]string, error) {
+		return nil, errors.New("cluster down")
 	}
 	got = nil
 	ev.ID = "ev-10"
@@ -231,5 +231,46 @@ func TestRefusedLandingWakeCarriesTheReason(t *testing.T) {
 	ev.ID = "ev-11"
 	if _, err := Deliver(context.Background(), row, ev, read, detail, send, nil, ""); err != nil || asked != "" || strings.Contains(got[0], "Why:") {
 		t.Fatalf("a row without detail asked %q: %v %v", asked, got, err)
+	}
+}
+
+// 2026-11-17 (the coordinator's tripwire, CI line): a landing that touched
+// the paths deciding whether the release loop may ship to PROD writes them
+// as the land task's result tripwire; the CI line and the coordinator are
+// woken with the paths, the commit, the change ids and the branch. A landing
+// that touched none wakes nobody (params.require); one whose detail cannot be
+// read still wakes, saying so.
+func TestTripwireWakesOnlyWhenTouched(t *testing.T) {
+	sha := strings.Repeat("b", 40)
+	row := registry.Subscription{ID: "land-tripwire-to-ci", On: []string{"ci.run.finished"}, Match: "land-",
+		Deliver: registry.DeliverWake, To: "thread:local_ci",
+		Params:    map[string]string{"detail": "task-result:land/tripwire,commit,change-ids,branch", "require": "tripwire"},
+		Guarantee: "durable", By: registry.ByDispatcher}
+	ev := Event{ID: "ev-20", Type: "ci.run.finished", Subject: "land-x1@" + sha, Ref: "/r", Change: "succeeded"}
+	var got []string
+	send := func(_ context.Context, _, _, body string) error { got = append(got, body); return nil }
+	touched := func(context.Context, registry.Subscription, Event) (map[string]string, error) {
+		return map[string]string{"tripwire": "api/internal/headrelease/wakes.go", "commit": sha, "change-ids": "Iabc", "branch": "refs/heads/ready/x"}, nil
+	}
+	if out, err := Deliver(context.Background(), row, ev, nil, touched, send, nil, ""); err != nil || out != Delivered || len(got) != 1 {
+		t.Fatalf("touched: %v %v %d", out, err, len(got))
+	}
+	if !strings.Contains(got[0], "Detail: tripwire=api/internal/headrelease/wakes.go; commit="+sha+"; change-ids=Iabc; branch=refs/heads/ready/x") {
+		t.Fatalf("the wake does not carry the detail: %s", got[0])
+	}
+	untouched := func(context.Context, registry.Subscription, Event) (map[string]string, error) {
+		return map[string]string{"commit": sha, "branch": "refs/heads/ready/y"}, nil
+	}
+	got = nil
+	ev.ID = "ev-21"
+	if out, err := Deliver(context.Background(), row, ev, nil, untouched, send, nil, ""); err != nil || out != Skipped || len(got) != 0 {
+		t.Fatalf("untouched woke: %v %v %v", out, err, got)
+	}
+	broken := func(context.Context, registry.Subscription, Event) (map[string]string, error) {
+		return nil, errors.New("cluster down")
+	}
+	ev.ID = "ev-22"
+	if out, err := Deliver(context.Background(), row, ev, nil, broken, send, nil, ""); err != nil || out != Delivered || !strings.Contains(got[0], "could not be read") {
+		t.Fatalf("an unreadable tripwire did not wake: %v %v %v", out, err, got)
 	}
 }

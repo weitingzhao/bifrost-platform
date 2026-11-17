@@ -38,6 +38,8 @@ func TestCheckSubscriptionsRefuses(t *testing.T) {
 		// 2026-11-17: a refused landing's wake carries its reason (the land
 		// task's refusal result); the positive control of the two below.
 		{ID: "e", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/refusal"}},
+		// 2026-11-17: the tripwire row, several names and a required one.
+		{ID: "f", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/tripwire,commit,branch", "require": "tripwire"}},
 	}
 	for _, r := range ok {
 		if err := CheckSubscriptions(tenants, row(r), tier); err != nil {
@@ -51,6 +53,7 @@ func TestCheckSubscriptionsRefuses(t *testing.T) {
 		"wake to":            {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "everyone"},
 		"deliver is":         {ID: "x", On: []string{"ci.run.finished"}, Deliver: "run"},
 		"is task-result:":    {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "log:land"}},
+		"not one of":         {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/commit", "require": "tripwire"}},
 		"names no run":       {ID: "x", On: []string{"seat.mail.arrived"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/refusal"}},
 	}
 	for want, r := range refused {

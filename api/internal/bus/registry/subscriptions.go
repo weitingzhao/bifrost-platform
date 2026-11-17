@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -197,8 +198,12 @@ func CheckSubscriptions(tenants map[string]Tenant, subs map[string]Subscriptions
 				bad("%s: by names who delivers it (dispatcher, or the hand-written code that still does)", at)
 			}
 			if d := r.Params[ParamDetail]; d != "" {
-				if _, _, ok := TaskResult(d); !ok {
-					bad("%s: params.detail %q is task-result:<pipeline task>/<result>", at, d)
+				_, names, ok := TaskResults(d)
+				if !ok {
+					bad("%s: params.detail %q is task-result:<pipeline task>/<name>[,<name>…]", at, d)
+				}
+				if req := r.Params[ParamRequire]; req != "" && !slices.Contains(names, req) {
+					bad("%s: params.require %q is not one of params.detail's names", at, req)
 				}
 				for _, typ := range r.On {
 					if typ != "ci.run.finished" {
@@ -251,17 +256,35 @@ func mayHear(tenants map[string]Tenant, name string, own Tenant, typ string) boo
 }
 
 // ParamDetail is the row parameter naming what a wake adds to its message
-// (subscribe.Detail): task-result:<pipeline task>/<result>, the result a
-// task of the event's run wrote (a refused landing's reason: land/refusal).
+// (subscribe.Detail): task-result:<pipeline task>/<name>[,<name>…], each
+// name a result the task of the event's run wrote, or else one of its params
+// (a refused landing's reason: land/refusal; a tripwire: land/tripwire,
+// commit,change-ids,branch).
 const ParamDetail = "detail"
 
-var taskResultRE = regexp.MustCompile(`^task-result:([a-z0-9]([-a-z0-9]*[a-z0-9])?)/([a-z0-9]([-a-z0-9]*[a-z0-9])?)$`)
+// ParamRequire names one of the detail's names: the row wakes only when it
+// is not empty (2026-11-17: a landing that touched a watched path, the
+// tripwire; every other landing wakes nobody). A detail that cannot be read
+// still wakes, saying so.
+const ParamRequire = "require"
 
-// TaskResult reads a params.detail of the form task-result:<task>/<result>.
-func TaskResult(detail string) (task, result string, ok bool) {
-	m := taskResultRE.FindStringSubmatch(detail)
+var (
+	taskResultsRE = regexp.MustCompile(`^task-result:([a-z0-9]([-a-z0-9]*[a-z0-9])?)/(.+)$`)
+	detailNameRE  = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+)
+
+// TaskResults reads a params.detail of the form
+// task-result:<task>/<name>[,<name>…].
+func TaskResults(detail string) (task string, names []string, ok bool) {
+	m := taskResultsRE.FindStringSubmatch(detail)
 	if m == nil {
-		return "", "", false
+		return "", nil, false
 	}
-	return m[1], m[3], true
+	for _, n := range strings.Split(m[3], ",") {
+		if !detailNameRE.MatchString(n) || slices.Contains(names, n) {
+			return "", nil, false
+		}
+		names = append(names, n)
+	}
+	return m[1], names, true
 }

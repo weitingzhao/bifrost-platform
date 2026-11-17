@@ -47,6 +47,27 @@ subscriptions:
     params: {detail: "task-result:land/refusal"}
     guarantee: durable
     by: dispatcher
+  # 2026-11-17 (the coordinator's tripwire, CI line): a landing that touched
+  # the paths deciding whether the release loop may ship to PROD (the land
+  # task's result tripwire) wakes the CI line and the coordinator with the
+  # paths, the commit, the change ids and the branch. Alarm only: it stops
+  # nothing. Other landings wake nobody (params.require).
+  - id: land-tripwire-to-ci
+    on: [ci.run.finished]
+    match: "land-"
+    deliver: wake
+    to: thread:local_7de640c4-4b19-4a71-a0ac-ced2ce5fc7ff
+    params: {detail: "task-result:land/tripwire,commit,change-ids,branch", require: tripwire}
+    guarantee: durable
+    by: dispatcher
+  - id: land-tripwire-to-coordinator
+    on: [ci.run.finished]
+    match: "land-"
+    deliver: wake
+    to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a
+    params: {detail: "task-result:land/tripwire,commit,change-ids,branch", require: tripwire}
+    guarantee: durable
+    by: dispatcher
   - id: mail-to-recipient
     on: [seat.mail.arrived]
     deliver: wake
