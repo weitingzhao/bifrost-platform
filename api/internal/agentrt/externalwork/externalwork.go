@@ -83,12 +83,6 @@ type ExternalEvent struct {
 // Keep validation methods local while the record shape belongs to its domain.
 type ExternalNote workregistration.Note
 
-// CollectorActorPrefix starts a collector's actor, thread:collector@<host>
-// (actuation.CollectorActorPrefix; agentrtapi's tests hold the two equal).
-// The plan view gets it through the external work port store binds
-// (store's portsbind.go), and keeps no copy.
-const CollectorActorPrefix = "thread:collector@"
-
 // ErrIdentityRequired: a collector's write lacks its session identity, or
 // names one of the wrong shape (400 identity_required). ErrIdentityMismatch:
 // an event names another identity than its work's (409 identity_mismatch).

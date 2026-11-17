@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
@@ -318,9 +319,9 @@ func PostExternalEvent(ctx context.Context, db eventlog.DB, w actor.Writer, id s
 // host's collector; a writer that is not host-bound is no collector.
 func collectorWriter(w actor.Writer) (bool, error) {
 	switch {
-	case w.Host != "" && w.Actor != CollectorActorPrefix+w.Host:
+	case w.Host != "" && w.Actor != actuation.CollectorActorPrefix+w.Host:
 		return false, eventlog.Invalid("a host-bound writer is its host's collector")
-	case w.Host == "" && strings.HasPrefix(w.Actor, CollectorActorPrefix):
+	case w.Host == "" && strings.HasPrefix(w.Actor, actuation.CollectorActorPrefix):
 		return false, eventlog.Invalid("a collector writes bound to its host")
 	}
 	return w.Host != "", nil

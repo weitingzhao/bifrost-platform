@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
@@ -42,7 +43,7 @@ func init() {
 			})
 		},
 		ActivityBuckets:      workregistration.ActivityBuckets,
-		CollectorActorPrefix: externalwork.CollectorActorPrefix,
+		CollectorActorPrefix: actuation.CollectorActorPrefix,
 	})
 	externalwork.BindPlanTree(externalwork.PlanTreePorts{
 		LockTree: planstore.LockTree,

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 )
 
@@ -83,7 +84,7 @@ func newCollectorWorkViewFixture(t *testing.T) *collectorWorkViewDB {
 	// A collector's run key is <vendor>:<session>:<epoch>, as externalwork's
 	// registration writes it (identityRunKey, externalwork.go).
 	collector := func(id, session string, epoch int64, node string) externalwork.ExternalNote {
-		return externalwork.ExternalNote{ID: "ew_" + strings.Repeat(id, 64), Actor: externalwork.CollectorActorPrefix + "h1", Host: "h1", Vendor: "claude",
+		return externalwork.ExternalNote{ID: "ew_" + strings.Repeat(id, 64), Actor: actuation.CollectorActorPrefix + "h1", Host: "h1", Vendor: "claude",
 			Session: session, Epoch: epoch, Node: node, RunKey: fmt.Sprintf("claude:%s:%d", session, epoch)}
 	}
 	running := collector("1", "0b8e2f4a-1111-2222-3333-444455556666", 1, "R4:4.1-1")

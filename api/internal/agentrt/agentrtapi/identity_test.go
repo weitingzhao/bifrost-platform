@@ -16,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
@@ -81,13 +80,9 @@ func eventOf(key string, seq int, typ string, id map[string]any, more ...map[str
 
 // The note of a collector's work carries the host from its token and the
 // identity it registered with; its run key is the identity's, whether the
-// client names it or not; a host in the body is refused. The two actor
-// prefixes (actuation's, the store's) are one.
+// client names it or not; a host in the body is refused.
 func TestCollectorIdentityRecorded(t *testing.T) {
 	t.Parallel()
-	if actuation.CollectorActorPrefix != externalwork.CollectorActorPrefix {
-		t.Fatalf("actuation %q, store %q", actuation.CollectorActorPrefix, externalwork.CollectorActorPrefix)
-	}
 	pool, _ := world(t)
 	s := server(t, pool)
 	spec := putSpec(t, s, "collector:h1", "recorded")
