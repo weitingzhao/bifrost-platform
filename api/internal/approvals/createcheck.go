@@ -43,73 +43,12 @@ func labelled(reason, label string) bool {
 }
 
 var (
-	rawFlag = regexp.MustCompile(`--raw(\s|=|$)`)
-	// The value of --dry-run is read as a word, so "--dry-run=server}" in a
-	// shell expansion and "--dry-run=server." at the end of a comment are the
-	// server dry run they say (card #576 draft, 2026-11-17).
-	dryRunAny     = regexp.MustCompile(`--dry-run(=[A-Za-z0-9_-]*)?`)
+	rawFlag       = regexp.MustCompile(`--raw(\s|=|$)`)
+	dryRunAny     = regexp.MustCompile(`--dry-run(=[^\s'"]*)?`)
 	connectionArg = regexp.MustCompile(`--(kubeconfig|server|token|certificate-authority|client-key|client-certificate)(\s|=|$)`)
-	// Global kubectl flags that take their value as the next word; the
-	// subcommand is the first word that is neither one of these nor its value.
-	valueFlags = map[string]bool{"-n": true, "--namespace": true, "--context": true, "--cluster": true, "--user": true,
-		"--as": true, "--as-group": true, "-v": true, "--v": true, "--request-timeout": true, "--cache-dir": true,
-		"--profile": true, "--profile-output": true}
 	// Words that destroy data in a database; each must be named in the reason.
 	destructive = []string{"DROP", "TRUNCATE", "DELETE FROM"}
 )
-
-// kubectlSubcommand returns the subcommand of the kubectl command whose words
-// are given (the words after "kubectl"), or "" when it cannot be told: the
-// first word that is not a flag and not the value of a flag that takes one.
-func kubectlSubcommand(words []string) string {
-	for i := 0; i < len(words); i++ {
-		w := words[i]
-		switch {
-		case strings.HasPrefix(w, "-"):
-			if valueFlags[w] {
-				i++ // its value is the next word
-			}
-		default:
-			return w
-		}
-	}
-	return ""
-}
-
-// rawProblem allows --raw only as a read: on its line, the kubectl command it
-// belongs to must have the subcommand get, read by position (not by finding
-// the word get anywhere). Any other subcommand with --raw, one that cannot be
-// told, or a --raw that is not part of a kubectl command, is refused. Origin:
-// #550, a trial run with --raw really deleted (--raw ignores --dry-run);
-// narrowed 2026-11-17 (main coordinator, Owner: the owner of the codebase
-// decides) because a script that pages a list with "kubectl get --raw" was
-// refused with it.
-func rawProblem(command string) string {
-	for _, line := range strings.Split(command, "\n") {
-		for from := 0; ; {
-			i := rawFlag.FindStringIndex(line[from:])
-			if i == nil {
-				break
-			}
-			at := from + i[0]
-			from = at + len("--raw")
-			head := line[:at]
-			k := strings.LastIndex(head, "kubectl")
-			if k < 0 {
-				return "the command uses --raw outside a kubectl command, so it cannot be told to be a read; --raw is allowed only as \"kubectl get ... --raw\" (origin #550)"
-			}
-			words := strings.Fields(head[k:])
-			sub := kubectlSubcommand(words[1:])
-			if sub != "get" {
-				if sub == "" {
-					return "the command uses --raw and its kubectl subcommand cannot be told; --raw is allowed only as \"kubectl get ... --raw\" (origin #550)"
-				}
-				return "the command uses --raw with \"kubectl " + sub + "\"; --raw is allowed only with the subcommand get, because --raw ignores --dry-run (origin #550: a trial run with --raw really deleted)"
-			}
-		}
-	}
-	return ""
-}
 
 // ownerRunProblem returns a plain-language reason the card cannot be built,
 // or "" when it can.
@@ -125,8 +64,8 @@ func ownerRunProblem(command, reason string) string {
 		return "the reason must have a line starting with each of " + strings.Join(missing, " and ") +
 			" followed by one plain sentence: what changes, and who can do what new thing once it is approved (the Owner decides in about a minute and cannot read the script)"
 	}
-	if why := rawProblem(command); why != "" {
-		return why
+	if rawFlag.MatchString(command) {
+		return "the command uses --raw, which the execution port does not take (origin #550: a trial run with --raw really deleted); use the object API with an explicit path or a plan_manifest"
 	}
 	for _, m := range dryRunAny.FindAllString(command, -1) {
 		if m != "--dry-run=server" {

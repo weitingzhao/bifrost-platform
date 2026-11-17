@@ -32,8 +32,8 @@ Owner 当晚同意：批过的卡可以延后执行，最多 30 分钟。
 缺哪一行，建卡就被拒，错误里点名缺哪行。演练卡（drill）不要求。
 
 命令里出现下面这些，也在建卡时被拒（都是以前白批过的）：
-- `--raw` 只在 kubectl 的子命令是 `get` 时放行（按子命令位置认，不按出现 get 字样认）；别的子命令带 --raw、认不出子命令、或 --raw 不在 kubectl 命令里，都拒（#550：试运行真的删了，因为 --raw 不理 --dry-run；2026-11-17 从「一律拒」收窄，出处：CronJob 脚本用 kubectl get --raw 分页读列表被拒）。
-- `--dry-run` 的值不是 `server`（同上）。`${V:+--dry-run=server}` 这类展开和注释里的 `--dry-run=server.` 按 server 读；`--dry-run=client`、`--dry-run=${X}`、`--dry-run=server-x` 仍拒。
+- `--raw`（#550：试运行真的删了）。
+- `--dry-run` 不是 `--dry-run=server`（同上）。
 - 自己带连接参数（`--kubeconfig`、`--server`、`--token` 等）：执行口自带身份。
 - 含 `DROP`、`TRUNCATE`、`DELETE FROM`，而理由里没有同一个词：要在理由里写明丢什么、数据在哪、有什么保护（#558/#559）。
 
