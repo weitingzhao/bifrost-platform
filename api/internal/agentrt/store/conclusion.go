@@ -21,8 +21,11 @@ func PostConclusion(ctx context.Context, db DB, key, to, body string) error {
 	if to == "" || threadinbox.Recipient(to) != to {
 		return nil
 	}
-	if !strings.HasPrefix(key, "approval:") && !strings.HasPrefix(key, "question:") {
-		return invalid("a conclusion names its approval or question")
+	// approval: and question: are those flows' conclusions; sub: is the bus
+	// dispatcher's wake (sub:<row>:<event>, bus/subscribe), one per row and
+	// event (2026-11-16: the tenant drill found the dispatcher refused here).
+	if !strings.HasPrefix(key, "approval:") && !strings.HasPrefix(key, "question:") && !strings.HasPrefix(key, "sub:") {
+		return invalid("a conclusion names its approval, question or subscription")
 	}
 	id := "thread-conclusion|" + key
 	return InTx(ctx, db, func(tx pgx.Tx) error {

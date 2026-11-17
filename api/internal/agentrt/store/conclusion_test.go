@@ -152,3 +152,22 @@ func TestConclusionSkipsUndeliverableActors(t *testing.T) {
 		t.Fatal("successful control did not deliver")
 	}
 }
+
+// 2026-11-16, the tenant drill on STG: the bus dispatcher's wake
+// (sub:<row>:<event>) was refused here, so no subscription row could wake a
+// seat. It is posted once per key, as the approvals' and questions' are.
+func TestConclusionTakesTheDispatchersWake(t *testing.T) {
+	t.Parallel()
+	_, pool, w := conclusionDB(t)
+	for range 2 {
+		ok(t, store.PostConclusion(ctx, pool, "sub:drill:ev-65987", w.Actor, "bus: git.main.advanced"))
+	}
+	mail, err := store.Unread(ctx, pool, w, 100)
+	ok(t, err)
+	if len(mail) != 1 || mail[0].From != "controller" {
+		t.Fatalf("mail=%+v, want one message from the controller", mail)
+	}
+	if err := store.PostConclusion(ctx, pool, "other:x", w.Actor, "x"); err == nil {
+		t.Fatal("a key of no known sender was taken")
+	}
+}
