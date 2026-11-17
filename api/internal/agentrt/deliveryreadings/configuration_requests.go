@@ -36,3 +36,16 @@ func ConfigurationRequests(ctx context.Context, q interface {
 	}
 	return out, rows.Err()
 }
+
+// ConfigurationRequestsReadOnly runs the read in its own read-only transaction.
+func ConfigurationRequestsReadOnly(ctx context.Context, db interface {
+	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
+}, limit int) ([]map[string]any, error) {
+	out := []map[string]any{}
+	tx, err := db.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return out, err
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	return ConfigurationRequests(ctx, tx, limit)
+}

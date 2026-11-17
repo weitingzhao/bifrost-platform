@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -22,7 +23,7 @@ func (a *API) getDelivery(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 503, "unavailable", "configuration reader is not connected")
 			return
 		}
-		requests, readErr := store.ConfigurationRequests(r.Context(), a.DB, listLimit)
+		requests, readErr := deliveryreadings.ConfigurationRequestsReadOnly(r.Context(), a.DB, listLimit)
 		out, err := a.ConfigurationBoundaries(r.Context(), r.URL.Query().Get("key"), r.URL.Query().Get("value"), requests)
 		if err != nil {
 			writeError(w, 422, "configuration_unavailable", err.Error())

@@ -1,6 +1,4 @@
-//bifrost:owner delivery
-
-package store_test
+package deliveryreadings_test
 
 import (
 	"context"
@@ -71,6 +69,12 @@ func TestConfigurationRequestsFrozenQueryPG(t *testing.T) {
 	var _ interface {
 		Query(context.Context, string, ...any) (pgx.Rows, error)
 	} = pool
+}
+func ok(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 func errorString(e error) string {
 	if e == nil {
