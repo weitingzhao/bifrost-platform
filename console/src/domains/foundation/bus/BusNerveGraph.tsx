@@ -32,7 +32,10 @@ export type NerveApi = {
 type SimNode = GNode & { x?: number; y?: number; z?: number; vx?: number; vy?: number; vz?: number }
 type SimLink = { source: string | SimNode; target: string | SimNode; color: string; dashed?: boolean; width?: number; label?: string; __pulse?: string }
 
-const GROUND = '#04070a'
+const GROUND = '#000000'
+/** Fit the body to the frame this long after it loads or a domain opens or folds, and with this margin in pixels. */
+const FIT_AFTER_MS = 1200
+const FIT_PADDING = 30
 const FLASH_MS = 900
 const DRIFT = 0.04
 
@@ -86,6 +89,8 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
   ready.current = onReady
   const click = useRef(onNodeClick)
   click.current = onNodeClick
+  const labelsRef = useRef(new Map<string, HTMLDivElement>())
+  const fitted = useRef(-1)
 
   // Build the renderer once per kind (3D or 2D).
   useEffect(() => {
@@ -156,28 +161,32 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
         g.onNodeClick((o: object) => click.current?.((o as SimNode).id))
         g.graphData(data.current)
         graph.current = g
+        fitted.current = -1
+        window.setTimeout(() => fit(), FIT_AFTER_MS)
         ready.current(api)
       })
     } else {
-      void Promise.all([import('3d-force-graph'), import('three'), import('three/examples/jsm/postprocessing/UnrealBloomPass.js')]).then(
-        ([{ default: ForceGraph3D }, THREE, { UnrealBloomPass }]) => {
+      void Promise.all([
+        import('3d-force-graph'), import('three'), import('three/examples/jsm/postprocessing/UnrealBloomPass.js'), import('three/examples/jsm/renderers/CSS2DRenderer.js'),
+      ]).then(
+        ([{ default: ForceGraph3D }, THREE, { UnrealBloomPass }, { CSS2DRenderer, CSS2DObject }]) => {
           if (disposed) return
           const bodies = new Map<string, { mesh: import('three').Mesh; base: number }>()
-          const label = (text: string, color: string) => {
-            const c = document.createElement('canvas')
-            const ctx = c.getContext('2d')!
-            const fs = 28
-            ctx.font = `${fs}px ui-monospace, monospace`
-            c.width = Math.ceil(ctx.measureText(text).width) + 8
-            c.height = fs + 8
-            ctx.font = `${fs}px ui-monospace, monospace`
-            ctx.fillStyle = color
-            ctx.fillText(text, 4, fs)
-            const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }))
-            s.scale.set(c.width / 9, c.height / 9, 1)
-            return s
+          // Labels are HTML drawn over the canvas (CSS2D), so the bloom never blurs them.
+          const label = (n: SimNode) => {
+            const div = document.createElement('div')
+            div.textContent = n.label
+            const big = n.kind === 'seat' || n.kind === 'cluster' || n.kind === 'core'
+            div.style.cssText = `font: ${big ? 12 : 10}px ui-monospace, monospace; color: ${n.kind === 'old' ? '#5f7f72' : big ? '#eafff2' : '#a9d9bd'};` +
+              ' white-space: nowrap; pointer-events: none; text-shadow: 0 0 3px #000, 0 0 6px #000; transform: translateY(14px);'
+            labelsRef.current.set(n.id, div)
+            return new CSS2DObject(div)
           }
-          const g = new ForceGraph3D(el, { controlType: 'orbit' })
+          const css = new CSS2DRenderer()
+          css.domElement.style.position = 'absolute'
+          css.domElement.style.top = '0'
+          css.domElement.style.pointerEvents = 'none'
+          const g = new ForceGraph3D(el, { controlType: 'orbit', extraRenderers: [css] as never })
             .width(width()).height(height())
             .backgroundColor(GROUND)
             .nodeId('id')
@@ -194,17 +203,12 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
                 const ring = new THREE.Mesh(new THREE.TorusGeometry(n.size * 1.6, n.size * 0.12, 8, 32), new THREE.MeshBasicMaterial({ color: n.ring }))
                 group.add(ring)
               }
-              if (n.kind !== 'topic') {
-                const s = label(n.label, n.kind === 'old' ? '#5f7f72' : n.kind === 'seat' ? '#e6fff0' : '#c7f9d6')
-                if (n.kind === 'seat' || n.kind === 'cluster') s.scale.multiplyScalar(1.35)
-                s.position.set(0, -(n.size + 5), 0)
-                group.add(s)
-              }
+              if (n.kind !== 'topic') group.add(label(n))
               bodies.set(n.id, { mesh, base: 1 })
               return group
             })
             .linkColor((o: object) => { const l = o as SimLink; return l.color })
-            .linkOpacity(0.25)
+            .linkOpacity(0.18)
             .linkWidth((o: object) => { const l = o as SimLink; return (l.width ?? 0) * 0.5 })
             .linkLabel((o: object) => { const l = o as SimLink; return l.label ?? '' })
             .linkDirectionalParticleColor((o: object) => { const l = o as SimLink; return l.__pulse ?? l.color })
@@ -215,10 +219,13 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
           g.d3Force('drift', driftForce(() => data.current.nodes, 3))
           g.d3Force('charge')?.strength(chargeOf)
           g.onNodeClick((o: object) => click.current?.((o as SimNode).id))
-          const bloom = new UnrealBloomPass(new THREE.Vector2(width(), height()), 1.6, 0.6, 0.05)
+          const bloom = new UnrealBloomPass(new THREE.Vector2(width(), height()), 1.15, 0.5, 0.12)
           g.postProcessingComposer().addPass(bloom)
+          ;(g.controls() as { zoomSpeed?: number }).zoomSpeed = 2.5
           g.graphData(data.current)
           graph.current = g
+          fitted.current = -1
+          window.setTimeout(() => fit(), FIT_AFTER_MS)
           // Breath and flash: each body's scale follows its node's breath; a flash whitens it.
           const white = new THREE.Color('#ffffff')
           const tick = () => {
@@ -239,10 +246,14 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
     }
     const resize = () => graph.current?.width(width()).height(height())
     window.addEventListener('resize', resize)
+    // The wheel turns the body, not the page under it.
+    const wheel = (e: WheelEvent) => e.preventDefault()
+    el.addEventListener('wheel', wheel, { passive: false })
     return () => {
       disposed = true
       cancelAnimationFrame(raf)
       window.removeEventListener('resize', resize)
+      el.removeEventListener('wheel', wheel)
       graph.current?._destructor?.()
       graph.current = null
       el.replaceChildren()
@@ -261,8 +272,22 @@ export default function BusNerveGraph({ nodes, links, flat, onReady, onNodeClick
       nodes: next,
       links: links.filter(l => ids.has(l.source) && ids.has(l.target)).map(l => ({ ...l })),
     }
+    for (const n of next) {
+      const div = labelsRef.current.get(n.id)
+      if (div && div.textContent !== n.label) div.textContent = n.label
+    }
     graph.current?.graphData(data.current)
+    // A domain opened or folded: fit the body to the frame again once it has moved.
+    if (graph.current && fitted.current !== -1 && fitted.current !== next.length) window.setTimeout(() => fit(), FIT_AFTER_MS)
   }, [nodes, links])
 
-  return <div ref={host} className="w-full min-w-0 overflow-hidden rounded-sm" style={{ background: GROUND }} data-testid="bus-nerve-graph" />
+  // Fits the body to 70–80% of the frame.
+  function fit() {
+    const g = graph.current
+    if (!g) return
+    g.zoomToFit(700, FIT_PADDING)
+    fitted.current = data.current.nodes.length
+  }
+
+  return <div ref={host} className="relative w-full min-w-0 overflow-hidden rounded-sm" style={{ background: GROUND }} data-testid="bus-nerve-graph" />
 }

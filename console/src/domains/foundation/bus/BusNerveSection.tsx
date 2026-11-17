@@ -24,7 +24,7 @@ const BusNerveGraph = lazy(() => import('./BusNerveGraph'))
  * panels, a living picture in the middle). Fixed on purpose, not theme tokens.
  */
 const C = {
-  ground: '#04070a',
+  ground: '#020305',
   rule: '#14232c',
   text: '#c7f9d6',
   muted: '#5f7f72',
@@ -164,17 +164,17 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
     const pubs = new Set<string>()
     for (const [d, types] of [...byDomain.entries()].sort()) {
       const open = expanded.has(d)
-      nodes.push({ id: `d:${d}`, kind: 'cluster', label: open ? `${d} ▾` : `${d} ▸ ${types.length}`, color: C.blue, size: 5 + Math.sqrt(types.length) * 1.6, breath: 5,
+      nodes.push({ id: `d:${d}`, kind: 'cluster', label: open ? `${d} ▾` : `${d} ▸ ${types.length}`, color: C.blue, size: 10 + Math.sqrt(types.length) * 2.6, breath: 5,
         note: `domain ${d}: ${types.length} topics · click to ${open ? 'fold' : 'open'}` })
       links.push({ source: `d:${d}`, target: CORE, color: C.link, width: 1 })
       if (!open) continue
       for (const t of types) {
-        nodes.push({ id: `t:${t}`, kind: 'topic', label: t, color: '#2b7fb0', size: 1.6, breath: null, note: t })
+        nodes.push({ id: `t:${t}`, kind: 'topic', label: t, color: '#2b7fb0', size: 2.2, breath: null, note: t })
         links.push({ source: `t:${t}`, target: `d:${d}`, color: C.link, width: 0.3 })
         const p = model.publisherOf.get(t) ?? 'unknown'
         if (!pubs.has(p)) {
           pubs.add(p)
-          nodes.push({ id: `p:${p}`, kind: 'publisher', label: p, color: C.blue, size: 4, breath: 6, note: `publisher ${p}` })
+          nodes.push({ id: `p:${p}`, kind: 'publisher', label: p, color: C.blue, size: 5, breath: 6, note: `publisher ${p}` })
           links.push({ source: `p:${p}`, target: CORE, color: C.link, width: 0.5 })
         }
         if (!links.some(l => l.source === `p:${p}` && l.target === `d:${d}`)) links.push({ source: `p:${p}`, target: `d:${d}`, color: C.link, width: 0.5 })
