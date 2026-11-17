@@ -53,8 +53,8 @@ func upward(o ownership, imports map[string][]string) []string {
 	return out
 }
 
-// foundationUpward is the baseline: the imports that point the wrong way on
-// 2026-11-16. It only shrinks. Foundation is what every other domain stands
+// foundationUpward is the baseline: the imports that point the wrong way. It
+// held twelve on 2026-11-16 and was emptied the same day; it stays empty. Foundation is what every other domain stands
 // on, so a foundation package that imports a domain's package makes the two
 // one piece: the domain can no longer change without the base changing.
 //
@@ -63,9 +63,7 @@ func upward(o ownership, imports map[string][]string) []string {
 // found that nothing stopped a new one; five of them had been made that same
 // week, when tenant logic was extracted and the package left behind imported
 // the new one.
-var foundationUpward = []string{
-	"api/internal/workactions -> api/internal/approvalnotify (owner)",
-}
+var foundationUpward = []string{}
 
 func TestFoundationDoesNotImportTheDomainsAboveIt(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "config", "domain-ownership.json"))

@@ -931,22 +931,22 @@
       "domains": [
         "foundation"
       ],
-      "status": "default-maintainer",
-      "basis": "2026-11-16 Complete file/reader audit: HTTP observation transport and Tenant husbandry projection are separate domain implementations. Retain HTTP/source composition, the signal contract and existing auto-dispatch, staleness and persistence decisions. Foundation maintenance follows the existing overlap ruling; this is not exclusive business ownership."
+      "status": "assigned",
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the checklist of the platform's daily operation and its signal store, read by patrol. The tenant's husbandry signals are bound from tenant/husbandry/checklistview since 2026-11-16 (SignalSource); this package no longer imports a tenant. Was default-maintainer."
     },
     "api/internal/cluster": {
       "domains": [
         "foundation"
       ],
-      "status": "default-maintainer",
-      "basis": "2026-11-16 Complete file/reader audit: resource, monitoring, Pod, Tenant application and freshness projections are separate domain implementations. Retain K8s adapters, data/identity/action paths, shared health predicates and D10 Workers behavior. Elastic GPU/warehouse predicate extraction was refused by approval review; its capability inputs stay unchanged. Foundation maintenance is not a claim of single-domain isolation."
+      "status": "assigned",
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the Kubernetes adapter: nodes, workloads, data and identity paths, read by nine packages of five domains. The node pools (compute) and the tenant's readings of applications and data are bound, not imported, since 2026-11-16. Was default-maintainer. It is 8,555 lines in one package; splitting it is a separate debt, not an ownership question."
     },
     "api/internal/probe": {
       "domains": [
         "foundation"
       ],
-      "status": "default-maintainer",
-      "basis": "2026-11-16 Complete file/reader audit: transport and datastore observation projections are separate domain implementations. Retain environment/client composition, authenticated probes, capability restrictions and post-fix verification predicates. Foundation maintenance follows the existing overlap ruling, not exclusive ownership of protected contracts."
+      "status": "assigned",
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): reachability probing and the connectivity matrix, read by eighteen packages of every domain. Its trade_routes file names Trade routes from configuration and is counted by the Trade vocabulary budget. Was default-maintainer."
     },
     "api/internal/satellite": {
       "domains": [
@@ -961,6 +961,97 @@
       ],
       "status": "assigned",
       "basis": "2026-11-16 foundation wall: test fixtures of releasepolicy (keys and signed policies), imported by tests only; it had no row and fell to the default."
+    },
+    "api/internal/bus/alerts": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): an entry or dispatcher of the bus (sub-domain 0.2 of foundation, built by the communication line); it imports only the ledger and the bus registry. It had no row."
+    },
+    "api/internal/bus/cards": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): an entry or dispatcher of the bus (sub-domain 0.2 of foundation, built by the communication line); it imports only the ledger and the bus registry. It had no row."
+    },
+    "api/internal/bus/drift": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): an entry or dispatcher of the bus (sub-domain 0.2 of foundation, built by the communication line); it imports only the ledger and the bus registry. It had no row."
+    },
+    "api/internal/bus/subscribe": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): an entry or dispatcher of the bus (sub-domain 0.2 of foundation, built by the communication line); it imports only the ledger and the bus registry. It had no row."
+    },
+    "api/internal/releases": {
+      "domains": [
+        "delivery"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): records per finished delivery run the commit each repository was built from; read by delivery and the server. It had no row."
+    },
+    "api/internal/releasepolicy/mustrefuse": {
+      "domains": [
+        "delivery"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the must-refuse set of the release policy: test-only guard of releasepolicy. It had no row."
+    },
+    "api/internal/approvals/mustrefuse": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the must-refuse set of the approval service: test-only guard of approvals. It had no row."
+    },
+    "api/internal/ownerexec/mustrefuse": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the must-refuse set of the execution port: test-only guard of ownerexec. It had no row."
+    },
+    "api/internal/actions": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the catalog of actions with their tiers, what needs the Owner and what was approved: the Owner-decisions domain reads and enforces it; no foundation package imports it. It had no row. Trust-anchor path: ownership recorded, code untouched."
+    },
+    "api/internal/actuationpolicy": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the allow-list of the generic write actions, read by actions and workactions. It had no row. Trust-anchor path: ownership recorded, code untouched."
+    },
+    "api/internal/workactions": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): runs the generic write actions behind the action guard and the approval tiers; it uses actions, actuationpolicy and approvalnotify, all the Owner-decisions domain. It had no row. Trust-anchor path: ownership recorded, code untouched."
+    },
+    "api/internal/agentgovernance": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the trust matrix of agent tasks, its overrides and the skill-run outcomes it is computed from: how far an agent is trusted is an Owner decision; only the server imports it. It had no row."
+    },
+    "api/internal/patrol": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the platform's own patrol: it reads the checklist signals and repairs the platform and the cluster through platform routes. It serves no one domain; its tenant items are read through signals a tenant binds. It had no row."
     }
   },
   "frontend": {
