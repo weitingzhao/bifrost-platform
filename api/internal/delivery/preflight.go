@@ -4,29 +4,11 @@ import (
 	"context"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
-
-// Kaniko pipelines must schedule TaskRuns on amd64 (see workload placement G2).
-var kanikoPipelineNames = map[string]bool{
-	"bifrost-deliver-stg":            true,
-	"bifrost-deliver-prod":           true,
-	"bifrost-deliver-platform":       true,
-	"bifrost-deliver-platform-prod":  true,
-	"bifrost-deliver-research":       true,
-	"bifrost-build-stg":              true,
-	"bifrost-build-frontend-stg":     true,
-	"bifrost-build-research-dagster": true,
-	"bifrost-build-market-data":      true,
-	"bifrost-build-flex-query":       true,
-	"bifrost-build-ib-gateway":       true,
-	"bifrost-build-ci-infra-tools":   true,
-}
-
-func isKanikoPipeline(name string) bool {
-	return kanikoPipelineNames[name]
-}
 
 func (s *Service) ciNodeInputs(ctx context.Context) []placement.NodeInput {
 	nodesResp := s.cluster.Nodes(ctx)
@@ -43,6 +25,21 @@ func (s *Service) ciNodeInputs(ctx context.Context) []placement.NodeInput {
 }
 
 func (s *Service) PipelinePreflight(ctx context.Context, pipelineName string) PipelinePreflightResponse {
+	kaniko, unread := true, ""
+	dyn, err := s.buildDynamicClient()
+	if err != nil {
+		unread = "the pipeline definition was not read: " + err.Error()
+	} else if pipe, getErr := dyn.Resource(pipelineGVR).Namespace(s.PipelinesNamespace()).Get(ctx, pipelineName, metav1.GetOptions{}); getErr != nil {
+		unread = "the pipeline definition was not read: " + getErr.Error()
+	} else {
+		kaniko, unread = kanikoOf(pipe.Object, s.clusterTasks(ctx, dyn))
+	}
+	return s.buildPreflight(ctx, pipelineName, kaniko, unread)
+}
+
+// buildPreflight checks the amd64 CI pool for a kaniko pipeline (or one whose
+// definition was not read: unread says why, and a refusal names it).
+func (s *Service) buildPreflight(ctx context.Context, pipelineName string, kaniko bool, unread string) PipelinePreflightResponse {
 	now := time.Now().UTC()
 	resp := PipelinePreflightResponse{
 		ClusterID:    s.clusterID(),
@@ -51,11 +48,14 @@ func (s *Service) PipelinePreflight(ctx context.Context, pipelineName string) Pi
 		Reachability: probe.ReachOK,
 		GeneratedAt:  now,
 	}
-	if !isKanikoPipeline(pipelineName) {
+	if !kaniko {
 		return resp
 	}
 	reason := placement.CIPreflightReason(s.ciNodeInputs(ctx))
 	if reason != "" {
+		if unread != "" {
+			reason += " (checked because " + unread + ")"
+		}
 		resp.BuildReady = false
 		resp.Reason = reason
 		resp.Reachability = probe.ReachFail
@@ -63,12 +63,13 @@ func (s *Service) PipelinePreflight(ctx context.Context, pipelineName string) Pi
 	return resp
 }
 
-func (s *Service) enrichPipelineView(ctx context.Context, name, ns string) PipelineView {
+func (s *Service) enrichPipelineView(ctx context.Context, name, ns string, pipe map[string]any, getTask taskGetter) PipelineView {
 	v := PipelineView{Name: name, Namespace: ns}
-	if !isKanikoPipeline(name) {
+	kaniko, unread := kanikoOf(pipe, getTask)
+	if !kaniko {
 		return v
 	}
-	pf := s.PipelinePreflight(ctx, name)
+	pf := s.buildPreflight(ctx, name, kaniko, unread)
 	ready := pf.BuildReady
 	v.BuildReady = &ready
 	if !pf.BuildReady {

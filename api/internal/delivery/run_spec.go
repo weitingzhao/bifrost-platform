@@ -6,7 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func buildPipelineRunSpec(pipelineName, rev, tag string, extra map[string]string, pipe *unstructured.Unstructured) (map[string]any, string, error) {
+func buildPipelineRunSpec(pipelineName, rev, tag string, extra map[string]string, pipe *unstructured.Unstructured, kaniko bool) (map[string]any, string, error) {
 	if isInfraPipeline(pipelineName) {
 		return infraPipelineRunSpec(pipelineName, rev, tag, extra, pipe)
 	}
@@ -56,7 +56,7 @@ func buildPipelineRunSpec(pipelineName, rev, tag string, extra map[string]string
 	if ws := pipelineRunWorkspaces(pipelineName); len(ws) > 0 {
 		spec["workspaces"] = ws
 	}
-	if isKanikoPipeline(pipelineName) {
+	if kaniko {
 		spec["taskRunTemplate"] = amd64CITaskRunTemplate()
 	}
 	if err := applyDeclaredRunExtras(spec, pipe.GetAnnotations()); err != nil {

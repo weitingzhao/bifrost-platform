@@ -20,7 +20,7 @@ func TestPipelineRunWorkspacesDeliverProd(t *testing.T) {
 
 func TestIsKanikoPipelineDeliverProd(t *testing.T) {
 	t.Parallel()
-	if !isKanikoPipeline("bifrost-deliver-prod") {
+	if !kanikoInInfra(t, infraPipelines(t)["bifrost-deliver-prod"]) {
 		t.Fatal("bifrost-deliver-prod should be a Kaniko pipeline")
 	}
 }
@@ -62,7 +62,7 @@ func TestTheDagsterSuffixIsEnforcedNotTrusted(t *testing.T) {
 func TestTheDagsterBuildSchedulesOnAmd64(t *testing.T) {
 	// It runs kaniko, so it carries the same placement rule as every other
 	// build pipeline — an arm64 node gives "exec format error".
-	if !isKanikoPipeline("bifrost-build-research-dagster") {
+	if !kanikoInInfra(t, infraPipelines(t)["bifrost-build-research-dagster"]) {
 		t.Fatal("the Dagster build runs kaniko and must be placed like one")
 	}
 }

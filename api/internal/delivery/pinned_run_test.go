@@ -40,6 +40,9 @@ func pinnedService(t *testing.T, name string, refs map[string]string, missing []
 	if pipe == nil {
 		pipe = &unstructured.Unstructured{Object: map[string]any{"apiVersion": "tekton.dev/v1", "kind": "Pipeline", "metadata": map[string]any{"name": name, "namespace": "cicd"}, "spec": map[string]any{}}}
 	}
+	if mainKanikoNames[name] {
+		pipe = withKanikoStep(pipe)
+	}
 	s, dyn, _ := contractService(t, pipe, "present")
 	repos := reposForPipeline(name)
 	s.SetPolicy(&actuationpolicy.Policy{Mirrors: actuationpolicy.Mirrors{Repos: repos}})

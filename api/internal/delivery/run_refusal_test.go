@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -37,7 +38,8 @@ func contractService(t *testing.T, pipe *unstructured.Unstructured, visibility s
 	// them, review 788 C1) pass the build preflight here; the no-node refusal
 	// has its own test.
 	s.SetClientsetForTest(k8sfake.NewSimpleClientset(readyAmd64Node()))
-	dyn := dynfake.NewSimpleDynamicClient(runtime.NewScheme(), pipe)
+	// The Tasks infra declares: whether a pipeline runs kaniko is read through them (2026-11-17, proposal B).
+	dyn := dynfake.NewSimpleDynamicClient(runtime.NewScheme(), append([]runtime.Object{pipe}, infraTaskObjects(t)...)...)
 	s.SetDynamicFactoryForTest(func() (dynamic.Interface, error) { return dyn, nil })
 	paths := []string{}
 	s.httpClient = &http.Client{Transport: contractTransport(func(r *http.Request) (*http.Response, error) {
@@ -306,6 +308,9 @@ func TestNonCICreatedRunsUnchangedFromMain(t *testing.T) {
 			if pipe == nil {
 				pipe = &unstructured.Unstructured{Object: map[string]any{"apiVersion": "tekton.dev/v1", "kind": "Pipeline", "metadata": map[string]any{"name": name, "namespace": "cicd"}, "spec": map[string]any{}}}
 			}
+			if mainKanikoNames[name] {
+				pipe = withKanikoStep(pipe)
+			}
 			s, dyn, _ := contractService(t, pipe, "unknown")
 			cs := k8sfake.NewSimpleClientset(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "ci", Labels: map[string]string{"kubernetes.io/arch": "amd64"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}})
 			if repos, known := requiredRepos(name); known {
@@ -407,7 +412,7 @@ func TestCIContradictoryInputsRefused(t *testing.T) {
 				if len(*paths) != 0 {
 					t.Fatal("invalid inputs reached preflight", *paths)
 				}
-				if _, _, err := buildPipelineRunSpec(name, factSHA1, tc.tag, extra, pipe); err == nil {
+				if _, _, err := buildPipelineRunSpec(name, factSHA1, tc.tag, extra, pipe, false); err == nil {
 					t.Fatal("builder accepted contradictory CI inputs")
 				}
 			})
@@ -440,5 +445,151 @@ func TestPythonCIRefPreflightResponse(t *testing.T) {
 	}
 	if fields["generated_at"] == "0001-01-01T00:00:00Z" {
 		t.Fatal(string(b))
+	}
+}
+
+// mainKanikoNames is the hand-kept list main 2726c47 and 26a10b5 knew. The
+// frozen baselines (non_ci_runs_main.json, the ref-check parity) enumerate the
+// pipelines it named and were recorded with the amd64 template on each; they
+// pin the run builder's output given that flag, not which pipelines get it,
+// which kanikoOf reads from the definitions now (2026-11-17, proposal B).
+var mainKanikoNames = map[string]bool{
+	"bifrost-deliver-stg": true, "bifrost-deliver-prod": true, "bifrost-deliver-platform": true,
+	"bifrost-deliver-platform-prod": true, "bifrost-deliver-research": true, "bifrost-build-stg": true,
+	"bifrost-build-frontend-stg": true, "bifrost-build-research-dagster": true, "bifrost-build-market-data": true,
+	"bifrost-build-flex-query": true, "bifrost-build-ib-gateway": true, "bifrost-build-ci-infra-tools": true,
+}
+
+// withKanikoStep: a copy of a baseline pipeline that runs the executor. The
+// main baselines hold pipelines without their build steps; their frozen runs
+// were recorded while these names were kaniko pipelines (2026-11-17, proposal B).
+func withKanikoStep(pipe *unstructured.Unstructured) *unstructured.Unstructured {
+	out := pipe.DeepCopy()
+	tasks, _, _ := unstructured.NestedSlice(out.Object, "spec", "tasks")
+	tasks = append(tasks, map[string]any{"name": "baseline-kaniko", "taskSpec": map[string]any{"steps": []any{
+		map[string]any{"name": "build", "image": "gcr.io/kaniko-project/executor:v1.23.2"}}}})
+	_ = unstructured.SetNestedSlice(out.Object, tasks, "spec", "tasks")
+	return out
+}
+
+// infraTaskObjects reads the Tasks infra declares (k8s/cicd/tekton/task-*.yaml).
+func infraTaskObjects(t *testing.T) []runtime.Object {
+	t.Helper()
+	paths, err := filepath.Glob(filepath.Join(infraTektonDir(t), "task-*.yaml"))
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("task definitions: %v", err)
+	}
+	var out []runtime.Object
+	for _, path := range paths {
+		for _, obj := range readYAMLObjects(t, path) {
+			if obj.GetKind() == "Task" {
+				obj.SetNamespace("cicd")
+				out = append(out, obj)
+			}
+		}
+	}
+	return out
+}
+
+// infraTasks looks a Task up among those infra declares.
+func infraTasks(t *testing.T) taskGetter {
+	t.Helper()
+	tasks := map[string]map[string]any{}
+	for _, obj := range infraTaskObjects(t) {
+		u := obj.(*unstructured.Unstructured)
+		tasks[u.GetName()] = u.Object
+	}
+	return func(name string) (map[string]any, error) {
+		if obj, ok := tasks[name]; ok {
+			return obj, nil
+		}
+		return nil, fmt.Errorf("task %s not declared", name)
+	}
+}
+
+// kanikoInInfra: whether infra's declaration of a pipeline runs kaniko, as the
+// platform reads it from the cluster.
+func kanikoInInfra(t *testing.T, pipe *unstructured.Unstructured) bool {
+	t.Helper()
+	if pipe == nil {
+		return false
+	}
+	kaniko, _ := kanikoOf(pipe.Object, infraTasks(t))
+	return kaniko
+}
+
+// 2026-11-17, Owner approved proposal B (duty/proposal-ci-w1-2026-11-17-kaniko-gate-list.md):
+// the hand-kept list missed bifrost-build-research-pine and bifrost-ci-finance,
+// both kaniko builds, and named bifrost-deliver-platform-prod, which builds
+// nothing. Read from infra's declarations, the three come out right, and the
+// pipelines that run kaniko through a Task (deliver-stg) are still found.
+func TestKanikoIsReadFromThePipelineDefinition(t *testing.T) {
+	pipes := infraPipelines(t)
+	tasks := infraTasks(t)
+	want := map[string]bool{
+		"bifrost-build-research-pine":   true,
+		"bifrost-deliver-stg":           true,
+		"bifrost-deliver-platform":      true,
+		"bifrost-deliver-research":      true,
+		"bifrost-build-ci-infra-tools":  true,
+		"bifrost-deliver-platform-prod": false,
+		"bifrost-ci-platform":           false,
+	}
+	for name, kaniko := range want {
+		pipe := pipes[name]
+		if pipe == nil {
+			t.Fatalf("%s is not declared in infra", name)
+		}
+		got, err := pipelineRunsKaniko(pipe.Object, tasks)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got != kaniko {
+			t.Errorf("%s: kaniko = %v, want %v", name, got, kaniko)
+		}
+	}
+	// bifrost-ci-finance is declared outside infra; its build task runs the
+	// executor inline, as in the cluster on 2026-11-17.
+	finance := map[string]any{"spec": map[string]any{"tasks": []any{map[string]any{
+		"name": "build", "taskSpec": map[string]any{"steps": []any{
+			map[string]any{"name": "build", "image": "gcr.io/kaniko-project/executor:v1.23.2"}}}}}}}
+	if got, err := pipelineRunsKaniko(finance, tasks); err != nil || !got {
+		t.Fatalf("an inline executor step is a kaniko build: %v %v", got, err)
+	}
+	// An image given as a task parameter is read through the parameter default.
+	param := map[string]any{"spec": map[string]any{"tasks": []any{map[string]any{
+		"name": "build", "taskSpec": map[string]any{
+			"params": []any{map[string]any{"name": "builder", "default": "gcr.io/kaniko-project/executor:v1.23.2"}},
+			"steps":  []any{map[string]any{"name": "build", "image": "$(params.builder)"}}}}}}}
+	if got, _ := pipelineRunsKaniko(param, tasks); !got {
+		t.Fatal("an executor image given through a parameter default was missed")
+	}
+}
+
+// Same origin: a definition the platform cannot read still gets the amd64
+// check, and the refusal says the definition was not read.
+func TestAnUnreadDefinitionIsCheckedAndNamed(t *testing.T) {
+	missing := func(string) (map[string]any, error) { return nil, fmt.Errorf("forbidden") }
+	pipe := map[string]any{"spec": map[string]any{"tasks": []any{map[string]any{"name": "build", "taskRef": map[string]any{"name": "some-build"}}}}}
+	kaniko, unread := kanikoOf(pipe, missing)
+	if !kaniko || !strings.Contains(unread, "not read") {
+		t.Fatalf("an unread Task must count as kaniko and say so: %v %q", kaniko, unread)
+	}
+	resolved := map[string]any{"spec": map[string]any{"tasks": []any{map[string]any{"name": "x", "taskRef": map[string]any{"resolver": "git"}}}}}
+	if kaniko, _ := kanikoOf(resolved, missing); !kaniko {
+		t.Fatal("a resolver taskRef is not read here and must count as kaniko")
+	}
+
+	s, _, _ := contractService(t, &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "tekton.dev/v1", "kind": "Pipeline",
+		"metadata": map[string]any{"name": "other", "namespace": "cicd"}, "spec": map[string]any{}}}, "present")
+	s.SetClientsetForTest(k8sfake.NewSimpleClientset())
+	pf := s.PipelinePreflight(context.Background(), "bifrost-not-installed")
+	if pf.BuildReady || !strings.Contains(pf.Reason, "definition was not read") {
+		t.Fatalf("with no amd64 node an unread pipeline must be refused and say why: %+v", pf)
+	}
+	pf = s.PipelinePreflight(context.Background(), "other")
+	if !pf.BuildReady {
+		t.Fatalf("a pipeline that runs no kaniko is not held by the amd64 check: %+v", pf)
 	}
 }

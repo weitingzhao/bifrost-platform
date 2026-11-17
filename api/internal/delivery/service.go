@@ -134,8 +134,9 @@ func (s *Service) Pipelines(ctx context.Context) PipelinesResponse {
 	}
 
 	views := make([]PipelineView, 0, len(list.Items))
+	getTask := s.clusterTasks(ctx, dyn)
 	for _, item := range list.Items {
-		view := s.enrichPipelineView(ctx, item.GetName(), item.GetNamespace())
+		view := s.enrichPipelineView(ctx, item.GetName(), item.GetNamespace(), item.Object, getTask)
 		view.Repos, view.RevisionRepo = pipelineClones(item.Object)
 		views = append(views, view)
 	}
@@ -358,18 +359,17 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 		return resp, empty, fmt.Errorf("%s", resp.Message)
 	}
 
-	if isKanikoPipeline(pipelineName) {
-		if pf := s.PipelinePreflight(ctx, pipelineName); !pf.BuildReady {
-			resp.Message = pf.Reason
-			return resp, empty, fmt.Errorf("%s", pf.Reason)
-		}
+	kaniko, unread := kanikoOf(pipe.Object, s.clusterTasks(ctx, dyn))
+	if pf := s.buildPreflight(ctx, pipelineName, kaniko, unread); !pf.BuildReady {
+		resp.Message = pf.Reason
+		return resp, empty, fmt.Errorf("%s", pf.Reason)
 	}
 
 	runName := fmt.Sprintf("%s-%d", pipelineName, now.Unix())
 	if att, ok := actions.CreateAttemptFrom(ctx); ok {
 		runName = actions.ObjectName(pipelineName, att)
 	}
-	spec, rev, buildErr := buildPipelineRunSpec(pipelineName, rev, tag, extra, pipe)
+	spec, rev, buildErr := buildPipelineRunSpec(pipelineName, rev, tag, extra, pipe, kaniko)
 	if buildErr != nil {
 		resp.Message = buildErr.Error()
 		return resp, empty, buildErr

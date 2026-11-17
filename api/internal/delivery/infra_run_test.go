@@ -94,7 +94,7 @@ func TestInfraPipelineRunsMatchDeclarations(t *testing.T) {
 
 func TestInfraPipelineRequiredBindings(t *testing.T) {
 	for name, pipe := range infraRunPipelines(t) {
-		spec, _, err := buildPipelineRunSpec(name, factSHA1, "", nil, pipe)
+		spec, _, err := buildPipelineRunSpec(name, factSHA1, "", nil, pipe, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -187,7 +187,7 @@ func readyAmd64Node() *corev1.Node {
 // of t_01M6796F06X57VF6T36PNFCQWV): with no Ready amd64 node the build preflight
 // refuses it before any PipelineRun is created.
 func TestCIInfraToolsBuildNeedsAnAmd64Node(t *testing.T) {
-	if !isKanikoPipeline("bifrost-build-ci-infra-tools") {
+	if !kanikoInInfra(t, infraPipelines(t)["bifrost-build-ci-infra-tools"]) {
 		t.Fatal("the ci-infra tools build runs kaniko and must be placed like one")
 	}
 	pipe := infraRunPipelines(t)["bifrost-build-ci-infra-tools"]

@@ -110,7 +110,7 @@ func baselineRunSpecs(t *testing.T) map[string]any {
 	t.Helper()
 	pipes := baselinePipelines(t)
 	names := map[string]bool{"unknown": true, "bifrost-smoke": true, "bifrost-clone-frontend-smoke": true, "bifrost-build-flex-query": true}
-	for name := range kanikoPipelineNames {
+	for name := range mainKanikoNames {
 		if isInfraPipeline(name) {
 			// Infra did not exist in this baseline; infra_run_test pins its runs.
 			continue
@@ -130,7 +130,7 @@ func baselineRunSpecs(t *testing.T) map[string]any {
 				tag = "1.2.3"
 				suffix = "tagged"
 			}
-			spec, rev, err := buildPipelineRunSpec(name, factSHA1, tag, nil, pipe)
+			spec, rev, err := buildPipelineRunSpec(name, factSHA1, tag, nil, pipe, mainKanikoNames[name])
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -157,7 +157,7 @@ func TestNonCIRunsUnchangedFromMain(t *testing.T) {
 func TestPipelineRunRequirementsRatchet(t *testing.T) {
 	count := 0
 	for name, pipe := range infraPipelines(t) {
-		if !isCIPipeline(name) && !pipelineTakesRevision(name) && len(pipelineRunWorkspaces(name)) == 0 && !isKanikoPipeline(name) {
+		if !isCIPipeline(name) && !pipelineTakesRevision(name) && len(pipelineRunWorkspaces(name)) == 0 && !mainKanikoNames[name] {
 			continue
 		}
 		count++
@@ -170,7 +170,7 @@ func TestPipelineRunRequirementsRatchet(t *testing.T) {
 			if isCIPipeline(name) || isInfraPipeline(name) {
 				tag = ""
 			}
-			spec, _, err := buildPipelineRunSpec(name, factSHA1, tag, extra, pipe)
+			spec, _, err := buildPipelineRunSpec(name, factSHA1, tag, extra, pipe, kanikoInInfra(t, pipe))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -249,7 +249,7 @@ func TestCIRunTriggerEquivalence(t *testing.T) {
 				if name == "bifrost-ci-infra" {
 					extra["base"], extra["purpose"] = defaults["base"], defaults["purpose"]
 				}
-				spec, _, err := buildPipelineRunSpec(name, factSHA1, "", extra, pipes[name])
+				spec, _, err := buildPipelineRunSpec(name, factSHA1, "", extra, pipes[name], false)
 				if err != nil {
 					t.Fatal(err)
 				}

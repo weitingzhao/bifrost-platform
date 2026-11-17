@@ -23,7 +23,7 @@ func TestNonPlatformRefChecksMatchMain(t *testing.T) {
 	for name := range baselinePipelines(t) {
 		names[name] = true
 	}
-	for name := range kanikoPipelineNames {
+	for name := range mainKanikoNames {
 		names[name] = true
 	}
 	for name := range pipelineMirrorRepos {

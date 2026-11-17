@@ -82,7 +82,8 @@ func (s *Service) CheckRequestRefs(ctx context.Context, params map[string]any) e
 	// The run's spec, built whatever the refs are: its param rules (a uiRevision
 	// that must be a full SHA, a param the pipeline does not declare) refuse here
 	// as they would at the run.
-	spec, rev, err := buildPipelineRunSpec(name, rev, req.Tag, req.Params, pipe)
+	kaniko, _ := kanikoOf(pipe.Object, s.clusterTasks(ctx, dyn))
+	spec, rev, err := buildPipelineRunSpec(name, rev, req.Tag, req.Params, pipe, kaniko)
 	if err != nil {
 		return err
 	}
