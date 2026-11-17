@@ -44,7 +44,7 @@ func (h *Handler) ClusterNodes(ctx context.Context) NodesResponse {
 }
 
 func (h *Handler) HandlePlacement(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, h.svc.Placement(r.Context()))
+	writeJSON(w, http.StatusOK, h.svc.Placement(r.Context()).Body)
 }
 
 func (h *Handler) HandleMetrics(w http.ResponseWriter, r *http.Request) {

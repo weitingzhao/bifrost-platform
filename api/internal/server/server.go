@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	datahusbandry "github.com/weitingzhao/bifrost-platform/api/internal/tenant/husbandry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/husbandry/checklistview"
 
@@ -165,6 +166,8 @@ func New(cfg *config.Config) (*Server, error) {
 	gitopsH := gitops.NewHandler(cfg, audit)
 	role := config.CurrentRole()
 	clusterH := cluster.NewHandler(cfg, audit)
+	// The compute domain evaluates the node pools; cluster declares the shape.
+	clusterH.Service().BindPools(placement.ClusterPools)
 	ibgatewayH := ibgateway.NewHandler(clusterH.Service(), audit)
 	if role.RunsWorkers() {
 		ibgatewayH.StartBackground(context.Background(), audit)

@@ -3,10 +3,11 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
-	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/appreadings"
 	"strings"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
+	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/appreadings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -15,7 +16,6 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
-	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
@@ -41,7 +41,7 @@ type readinessSnapshot struct {
 	nodes         []NodeView
 	clusterCaps   map[string]ClusterCapabilityView
 	nodeCoverage  map[string]CapabilityCoverageView
-	pools         map[string]placement.PoolView
+	pools         map[string]PoolReading
 	deployments   map[string]appsv1.Deployment
 	ingressRoutes map[string]bool // "namespace/name" → present
 	minio         minioBackend    // where Service data/minio points (in-cluster vs external)
@@ -84,7 +84,7 @@ func (s *Service) buildReadinessSnapshot(ctx context.Context) (readinessSnapshot
 	for _, c := range coverage {
 		covMap[c.ID] = c
 	}
-	poolMap := make(map[string]placement.PoolView, len(placementResp.Pools))
+	poolMap := make(map[string]PoolReading, len(placementResp.Pools))
 	for _, p := range placementResp.Pools {
 		poolMap[p.ID] = p
 	}
@@ -494,14 +494,14 @@ func poolDep(snap readinessSnapshot, id, label string) ServiceDependencyView {
 	reach := probe.ReachOK
 	detail := fmt.Sprintf("%d/%d ready", p.NodesReady, p.NodesTotal)
 	switch p.Status {
-	case placement.PoolStatusPlanned:
+	case PoolPlanned:
 		reach = probe.ReachDegraded
 		detail = "pool planned — no live nodes"
-	case placement.PoolStatusDegraded:
+	case PoolDegraded:
 		reach = probe.ReachDegraded
 		detail = fmt.Sprintf("pool degraded — %d/%d ready", p.NodesReady, p.NodesTotal)
 	}
-	if p.NodesReady == 0 && p.Status != placement.PoolStatusPlanned {
+	if p.NodesReady == 0 && p.Status != PoolPlanned {
 		reach = probe.ReachFail
 	}
 	return ServiceDependencyView{ID: "pool-" + id, Label: label, Reachability: reach, Detail: detail}

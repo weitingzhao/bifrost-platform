@@ -9,7 +9,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
-	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
@@ -42,12 +41,12 @@ func TestEvalGPUDomainStandbyNoDemand(t *testing.T) {
 		nodes: []NodeView{
 			{
 				Name: "gpu-server", Status: "NotReady", Reachability: probe.ReachUnknown,
-				ElasticMode: "standby",
+				ElasticMode:  "standby",
 				Capabilities: []NodeCapabilityView{{ID: "gpu-pool"}, {ID: "warehouse"}},
 			},
 		},
-		pools: map[string]placement.PoolView{
-			"gpu": {ID: "gpu", NodesReady: 0, NodesTotal: 1, Status: placement.PoolStatusDegraded},
+		pools: map[string]PoolReading{
+			"gpu": {ID: "gpu", NodesReady: 0, NodesTotal: 1, Status: PoolDegraded},
 		},
 		deployments: map[string]appsv1.Deployment{
 			"ai/ollama": {
@@ -75,12 +74,12 @@ func TestEvalGPUDomainStandbyWithDemand(t *testing.T) {
 		nodes: []NodeView{
 			{
 				Name: "gpu-server", Status: "NotReady", Reachability: probe.ReachUnknown,
-				ElasticMode: "standby",
+				ElasticMode:  "standby",
 				Capabilities: []NodeCapabilityView{{ID: "gpu-pool"}},
 			},
 		},
-		pools: map[string]placement.PoolView{
-			"gpu": {ID: "gpu", NodesReady: 0, NodesTotal: 1, Status: placement.PoolStatusDegraded},
+		pools: map[string]PoolReading{
+			"gpu": {ID: "gpu", NodesReady: 0, NodesTotal: 1, Status: PoolDegraded},
 		},
 		deployments: map[string]appsv1.Deployment{
 			"ai/ollama": {
@@ -105,7 +104,7 @@ func TestEvalWarehouseDomainStandbyNoDemand(t *testing.T) {
 		nodes: []NodeView{
 			{
 				Name: "gpu-server", Status: "NotReady", Reachability: probe.ReachUnknown,
-				ElasticMode: "standby",
+				ElasticMode:  "standby",
 				Capabilities: []NodeCapabilityView{{ID: "gpu-pool"}, {ID: "warehouse"}},
 			},
 		},
@@ -116,8 +115,8 @@ func TestEvalWarehouseDomainStandbyNoDemand(t *testing.T) {
 				GapReason: "warehouse: 1 node(s) labeled but none Ready",
 			},
 		},
-		pools: map[string]placement.PoolView{
-			"gpu": {ID: "gpu", NodesReady: 0, NodesTotal: 1, Status: placement.PoolStatusDegraded},
+		pools: map[string]PoolReading{
+			"gpu": {ID: "gpu", NodesReady: 0, NodesTotal: 1, Status: PoolDegraded},
 		},
 		deployments: map[string]appsv1.Deployment{
 			"data-warehouse/minio": {
@@ -143,14 +142,14 @@ func TestEvalDatabaseDomainWithCaps(t *testing.T) {
 			"nfs-provisioner-cold":     {ID: "nfs-provisioner-cold", Reachability: probe.ReachOK, Detail: "ok"},
 		},
 		nodeCoverage: map[string]CapabilityCoverageView{
-			"nfs-client":     {ID: "nfs-client", NodesReady: 3, NodesTotal: 3, Reachability: probe.ReachOK},
-			"postgres-role":  {ID: "postgres-role", NodesReady: 1, NodesTotal: 1, Reachability: probe.ReachOK},
+			"nfs-client":    {ID: "nfs-client", NodesReady: 3, NodesTotal: 3, Reachability: probe.ReachOK},
+			"postgres-role": {ID: "postgres-role", NodesReady: 1, NodesTotal: 1, Reachability: probe.ReachOK},
 		},
 		nodes: []NodeView{
 			{Name: "n1", Architecture: "amd64", Status: "Ready", Reachability: probe.ReachOK},
 		},
-		pools: map[string]placement.PoolView{
-			"amd64_general": {ID: "amd64_general", NodesReady: 1, NodesTotal: 1, Status: placement.PoolStatusLive},
+		pools: map[string]PoolReading{
+			"amd64_general": {ID: "amd64_general", NodesReady: 1, NodesTotal: 1, Status: "live"},
 		},
 		deployments: map[string]appsv1.Deployment{
 			cnpgOperatorNS + "/" + cnpgOperatorDeploy: {
@@ -212,8 +211,8 @@ func applicationsReadySnapshot() readinessSnapshot {
 			{Name: "n1", Architecture: "amd64", Status: "Ready", Reachability: probe.ReachOK},
 			{Name: "n2", Architecture: "amd64", Status: "Ready", Reachability: probe.ReachOK},
 		},
-		pools: map[string]placement.PoolView{
-			"amd64_general": {ID: "amd64_general", NodesReady: 2, NodesTotal: 2, Status: placement.PoolStatusLive},
+		pools: map[string]PoolReading{
+			"amd64_general": {ID: "amd64_general", NodesReady: 2, NodesTotal: 2, Status: "live"},
 		},
 		deployments:   deploys,
 		ingressRoutes: routes,
@@ -290,8 +289,8 @@ func TestEvalWorkersDomainDaemonStandby(t *testing.T) {
 	replicas := int32(0)
 	snap := readinessSnapshot{
 		appEnvs: testAppEnvs,
-		pools: map[string]placement.PoolView{
-			"amd64_general": {ID: "amd64_general", NodesReady: 2, NodesTotal: 2, Status: placement.PoolStatusLive},
+		pools: map[string]PoolReading{
+			"amd64_general": {ID: "amd64_general", NodesReady: 2, NodesTotal: 2, Status: "live"},
 		},
 		nodeCoverage: map[string]CapabilityCoverageView{
 			"nfs-client": {ID: "nfs-client", NodesReady: 2, NodesTotal: 2, Reachability: probe.ReachOK},

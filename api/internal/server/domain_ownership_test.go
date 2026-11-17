@@ -62,3 +62,19 @@ func TestDomainOwnershipCatalog(t *testing.T) {
 		t.Fatal("mixed and default-maintainer responsibilities must remain visible")
 	}
 }
+
+// Origin: 2026-11-16, cluster reads the node pools through an evaluator the
+// server binds (cluster.BindPools) instead of importing compute's placement
+// package. Unbound, GET /cluster/placement answers unknown and service
+// readiness finds no pool, and nothing else would say so: this holds the one
+// line of wiring.
+func TestServerBindsThePoolEvaluator(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile("server.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(src), "clusterH.Service().BindPools(placement.ClusterPools)") {
+		t.Fatal("server.go does not bind placement.ClusterPools to the cluster service")
+	}
+}
