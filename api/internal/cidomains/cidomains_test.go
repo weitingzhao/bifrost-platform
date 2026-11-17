@@ -76,8 +76,8 @@ func TestGraphNodesEdgesAndSharedPackages(t *testing.T) {
 }
 
 // Origin: as above — guards "the same rule as the domain score": an edge is
-// red on the page exactly when domainscore.Score takes points off the
-// importing domain for an import of that domain. 2026-11-16: ruler v1 called
+// red on the page exactly when domainscore.Score counts it a cycle edge of
+// the importing domain. 2026-11-16: ruler v1 called
 // plan -> lineage a cycle through the shared packages; a second copy of the
 // rule on the page would have kept doing so.
 func TestWrongWayIsTheDomainScoresRule(t *testing.T) {
@@ -93,7 +93,9 @@ func TestWrongWayIsTheDomainScoresRule(t *testing.T) {
 	counted := map[[2]string]bool{}
 	for _, d := range score.Domains {
 		for _, it := range d.Items {
-			for _, line := range it.Evidence {
+			// The cycle edges come first in the evidence; since ruler 3 the
+			// cross edges follow them, and those are not red on the page.
+			for _, line := range it.Evidence[:int(it.Measures["cycle_edges"])] {
 				if _, rest, ok := strings.Cut(line, " -> "); ok {
 					to := rest[strings.LastIndex(rest, "(")+1 : len(rest)-1]
 					counted[[2]string{d.Domain, to}] = true

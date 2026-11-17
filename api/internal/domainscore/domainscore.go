@@ -267,10 +267,10 @@ func (g *Graph) WrongWay(from, to string) bool {
 }
 
 // Score computes every domain's score. Domains are those the ownership
-// table declares, in its order, then Mixed when a package is.
+// table declares, in its order.
 func Score(in Input) Answer {
 	graph := NewGraph(in.Ownership, in.Packages)
-	pkgs, wrongWay, order := graph.pkgs, graph.WrongWay, graph.Order
+	pkgs, wrongWay, order, base := graph.pkgs, graph.WrongWay, graph.Order, graph.base
 
 	out := Answer{RulerVersion: in.Ruler.Version, Commit: in.Commit, Domains: []Domain{}}
 	for _, d := range order {
