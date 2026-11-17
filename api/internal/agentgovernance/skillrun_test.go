@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 )
@@ -106,4 +108,27 @@ func findEntry(t *testing.T, h *Handler, skillID string) TrustMatrixEntry {
 	}
 	t.Fatalf("%s not in trust matrix", skillID)
 	return TrustMatrixEntry{}
+}
+
+// Origin: foundation code review item 12 (2026-11-15). A skill outcome that
+// could not be written to disk was told to the caller as recorded. It must
+// answer 500 instead, and write nothing.
+func TestAnOutcomeThatCannotBeStoredIsNotAnswered200(t *testing.T) {
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The store's directory sits under a plain file, so it can be neither made nor written.
+	t.Setenv("PLATFORM_REMEDIATION_JOBS_DIR", filepath.Join(blocker, "jobs"))
+	store := NewOutcomeStore()
+	err := store.Put(Outcome{ID: "x", Status: OutcomeDone})
+	if err == nil {
+		t.Fatal("Put reported success for a directory it could not use")
+	}
+	// Positive control: a usable directory stores it.
+	t.Setenv("PLATFORM_REMEDIATION_JOBS_DIR", filepath.Join(dir, "jobs"))
+	if err = NewOutcomeStore().Put(Outcome{ID: "y", Status: OutcomeDone}); err != nil {
+		t.Fatalf("Put into a usable directory: %v", err)
+	}
 }

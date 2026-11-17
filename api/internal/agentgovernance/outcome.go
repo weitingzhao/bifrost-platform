@@ -2,6 +2,7 @@ package agentgovernance
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -46,11 +47,19 @@ func NewOutcomeStore() *OutcomeStore {
 			dir = filepath.Join(os.Getenv("HOME"), ".bifrost-platform", "remediation-jobs")
 		}
 	}
-	_ = os.MkdirAll(dir, 0o755)
+	// The directory is made again on each Put; a failure here is logged now so
+	// the first Put that fails is not the first sign.
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		slog.Error("skill outcome directory not created", "dir", dir, "err", err)
+	}
 	return &OutcomeStore{dir: dir}
 }
 
-func (s *OutcomeStore) Put(job Outcome) {
+// Put stores one outcome. It returns the error instead of dropping it: a
+// skill's result that was not written must not be told to the caller as
+// recorded (origin: the foundation code review, item 12, 2026-11-15; the same
+// swallowed error was fixed in the audit log).
+func (s *OutcomeStore) Put(job Outcome) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if job.CreatedAt.IsZero() {
@@ -61,9 +70,12 @@ func (s *OutcomeStore) Put(job Outcome) {
 	}
 	raw, err := json.MarshalIndent(job, "", "  ")
 	if err != nil {
-		return
+		return err
 	}
-	_ = os.WriteFile(filepath.Join(s.dir, job.ID+".json"), raw, 0o644)
+	if err = os.MkdirAll(s.dir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(s.dir, job.ID+".json"), raw, 0o644)
 }
 
 func (s *OutcomeStore) List() []Outcome {

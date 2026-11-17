@@ -3,6 +3,7 @@ package agentgovernance
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -68,7 +69,11 @@ func (h *Handler) HandleRecordSkillRun(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	h.store.Put(job)
+	if err := h.store.Put(job); err != nil {
+		slog.Error("skill outcome not stored", "scope", scope, "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "the outcome was not stored"})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":     true,
 		"job_id": job.ID,
