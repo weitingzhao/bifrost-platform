@@ -83,13 +83,12 @@ func TestConclusionConcurrentRestartAndAck(t *testing.T) {
 		t.Fatal("replay became unread again")
 	}
 	read := db.Connect(t, db.Reader)
-	var messages, signals, receipts int
+	var messages, receipts int
 	ok(t, read.QueryRow(ctx, `SELECT count(*) FROM agentrt.message WHERE to_actor_id=$1`, w.Actor).Scan(&messages))
-	ok(t, read.QueryRow(ctx, `SELECT count(*) FROM agentrt.outbox WHERE topic=$1`, "mbox:"+w.Actor).Scan(&signals))
 	ok(t, read.QueryRow(ctx, `SELECT count(*) FROM agentrt.idempotency_key
 	  WHERE route='thread-conclusion' AND expires_at='infinity' AND created_at<=now()`).Scan(&receipts))
-	if messages != 1 || signals != 0 || receipts != 1 {
-		t.Fatalf("messages/signals/receipts=%d/%d/%d", messages, signals, receipts)
+	if messages != 1 || receipts != 1 {
+		t.Fatalf("messages/receipts=%d/%d", messages, receipts)
 	}
 	// A second terminal state of the same approval is a different conclusion.
 	ok(t, coord.PostConclusion(ctx, first, "approval:appr_test:unknown", w.Actor, "unknown"))
@@ -123,7 +122,7 @@ func TestConclusionFailureRollsBackThenRetries(t *testing.T) {
 	}
 	read := db.Connect(t, db.Reader)
 	var count int
-	ok(t, read.QueryRow(ctx, `SELECT (SELECT count(*) FROM agentrt.message) + (SELECT count(*) FROM agentrt.outbox)
+	ok(t, read.QueryRow(ctx, `SELECT (SELECT count(*) FROM agentrt.message)
 	  + (SELECT count(*) FROM agentrt.idempotency_key) + (SELECT count(*) FROM agentrt.event WHERE event_type='message_posted')`).Scan(&count))
 	if count != 0 {
 		t.Fatalf("partial commit after failed receipt: %d", count)

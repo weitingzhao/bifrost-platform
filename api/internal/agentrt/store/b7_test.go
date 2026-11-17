@@ -168,11 +168,10 @@ func (h hookedTx) QueryRow(c context.Context, sql string, args ...any) pgx.Row {
 }
 
 // Relay A, 2026-11-15: messages and controls remain durable without producing
-// unread Redis signals; existing outbox history is left untouched.
+// unread Redis signals. (The outbox they once wrote is retired, 0028.)
 func TestMessagesAndControlsNeedNoRedisOutbox(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	before := w.count(t, `SELECT count(*) FROM agentrt.outbox`)
 	var message string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
@@ -186,8 +185,5 @@ func TestMessagesAndControlsNeedNoRedisOutbox(t *testing.T) {
 	}
 	if n := w.count(t, `SELECT count(*) FROM agentrt.control WHERE control_id=$1 AND cleared_at IS NULL`, control); n != 1 {
 		t.Fatalf("active controls: %d", n)
-	}
-	if after := w.count(t, `SELECT count(*) FROM agentrt.outbox`); after != before {
-		t.Fatalf("outbox changed: %d -> %d", before, after)
 	}
 }

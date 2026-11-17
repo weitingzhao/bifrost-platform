@@ -142,7 +142,7 @@ func TestWhoamiTellsWhyNot(t *testing.T) {
 		var fp string
 		must(t, pool.QueryRow(ctx, `SELECT concat_ws(' ', (SELECT count(*) FROM agentrt.actor), (SELECT count(*) FROM agentrt.event),
 		  (SELECT string_agg(event_stream_id || '=' || last_seq, ',' ORDER BY event_stream_id) FROM agentrt.event_stream),
-		  (SELECT count(*) FROM agentrt.outbox), (SELECT count(*) FROM agentrt.idempotency_key))`).Scan(&fp))
+		  (SELECT count(*) FROM agentrt.idempotency_key))`).Scan(&fp))
 		return fp
 	}
 	cases := map[string]string{"old": "retired", "odd": "is a seat, not a thread", "fresh": ""}

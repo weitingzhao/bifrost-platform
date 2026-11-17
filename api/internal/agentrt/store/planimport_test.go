@@ -24,12 +24,12 @@ func importDB(t *testing.T) (*pgxpool.Pool, planimport.Request) {
 }
 
 // rows counts what an import writes: nodes, events, artifacts and their
-// bodies, streams, outbox rows.
+// bodies, streams, idempotency keys (the outbox is retired, 0028).
 func rows(t *testing.T, pool *pgxpool.Pool) [6]int {
 	t.Helper()
 	var c [6]int
 	ok(t, pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM agentrt.plan_node), (SELECT count(*) FROM agentrt.event),
 	  (SELECT count(*) FROM agentrt.artifact), (SELECT count(*) FROM agentrt.artifact_blob),
-	  (SELECT count(*) FROM agentrt.event_stream), (SELECT count(*) FROM agentrt.outbox)`).Scan(&c[0], &c[1], &c[2], &c[3], &c[4], &c[5]))
+	  (SELECT count(*) FROM agentrt.event_stream), (SELECT count(*) FROM agentrt.idempotency_key)`).Scan(&c[0], &c[1], &c[2], &c[3], &c[4], &c[5]))
 	return c
 }
