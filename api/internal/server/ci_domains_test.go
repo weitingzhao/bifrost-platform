@@ -185,6 +185,47 @@ func TestCIDomainsWithoutATableIsUnmeasuredAndAFailedReadIsNotKept(t *testing.T)
 // have is read false (2026-11-16: 21 of 102 runs were of commits that never
 // reached main; they must not read as "changed nothing"), a read commit is
 // kept for good and an unread one is asked again only after a while.
+// Origin: 2026-11-16 22:5x, the Owner waited when he clicked: the graph was read on the click. The workers now read
+// it ahead and keep it; another process (the API) that still holds the graph of the commit before finds the kept one
+// of main's head and answers with it, without reading the tree itself. The control is the same cache with nothing
+// newer kept: it answers the old graph, marked as being refreshed.
+func TestCIDomainsTakesTheGraphAnotherProcessKept(t *testing.T) {
+	head := "c1"
+	moved := ciDomainsFiles()
+	moved["api/internal/plan/plan.go"] = "package plan\n\nimport (\n\t_ \"example.com/p/api/internal/base\"\n\t_ \"example.com/p/api/internal/owner\"\n)\n"
+	trees := map[string]map[string]string{"c1": ciDomainsFiles(), "c2": moved}
+	kept := &memKept{}
+	workersSrc, _ := ciDomainsSrc(t, &head, trees, nil)
+	workers := ciDomainsCache{kept: kept}
+	apiSrc, apiReads := ciDomainsSrc(t, &head, trees, nil)
+	api := ciDomainsCache{kept: kept}
+	if _, err := workers.graph(context.Background(), workersSrc, "r"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := api.graph(context.Background(), apiSrc, "r"); err != nil || got.Commit != "c1" || apiReads.Load() != 0 {
+		t.Fatalf("the API at the first commit: %d reads, %+v, %v", apiReads.Load(), got, err)
+	}
+	// Main moves; nothing newer is kept yet: the old graph, marked.
+	head = "c2"
+	if got, err := api.graph(context.Background(), apiSrc, "r"); err != nil || got.Commit != "c1" || !got.Refreshing {
+		t.Fatalf("control: %+v, %v", got, err)
+	}
+	// The workers read ahead and keep it.
+	for deadline := time.Now().Add(5 * time.Second); ; {
+		got, err := workers.graph(context.Background(), workersSrc, "r")
+		if err != nil || got.Commit == "c2" || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	api.graphMu.Lock()
+	api.looked = nil // the API looks at what is kept at most every five seconds
+	api.graphMu.Unlock()
+	if got, err := api.graph(context.Background(), apiSrc, "r"); err != nil || got.Commit != "c2" || got.Refreshing {
+		t.Fatalf("the API after the workers kept the new graph: %+v, %v", got, err)
+	}
+}
+
 func TestCIChangesCountsByDomainAndKeepsWhatItRead(t *testing.T) {
 	head := "c1"
 	a, b := strings.Repeat("a", 40), strings.Repeat("b", 40)

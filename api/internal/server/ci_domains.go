@@ -18,6 +18,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/cidomains"
 	"github.com/weitingzhao/bifrost-platform/api/internal/domainscore"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
@@ -65,6 +66,7 @@ type ciDomainsCache struct {
 	graphs  map[string]cidomains.Graph // by repo: the last graph read
 	reading map[string]*ciGraphRead    // by repo: the read under way
 	loaded  map[string]bool            // by repo: the kept file was looked at
+	looked  map[string]time.Time       // by repo: when the kept file was last looked at for a newer graph
 
 	// kept is where the last graph and the files of commits outlive the
 	// process; nil is the platform's state store (ciKeptState).
@@ -256,6 +258,20 @@ func (c *ciDomainsCache) graph(ctx context.Context, src ciDomainsSource, repo st
 		}
 	}
 	last, known := c.graphs[repo]
+	if known && last.Commit != head && time.Since(c.looked[repo]) > 5*time.Second {
+		// Another process may have read this head already (the workers read
+		// ahead, ciDomainsAhead): look at what is kept before reading here.
+		if c.looked == nil {
+			c.looked = map[string]time.Time{}
+		}
+		c.looked[repo] = time.Now()
+		if raw, rerr := c.store().Read("domains-" + repo); rerr == nil && len(raw) > 0 {
+			var g cidomains.Graph
+			if json.Unmarshal(raw, &g) == nil && g.Version == cidomains.Version && g.Repo == repo && g.Commit == head {
+				c.graphs[repo], last = g, g
+			}
+		}
+	}
 	if known && last.Commit == head {
 		c.graphMu.Unlock()
 		last.Head, last.Refreshing = head, false
@@ -477,6 +493,42 @@ func (c *ciDomainsCache) saveChanged(repo string, commits []string, results []ci
 	if err != nil {
 		slog.Warn("ci changes: the files of commits were not kept", "repo", repo, "error", err)
 	}
+}
+
+// ciDomainsAheadEvery is how often the workers look whether main moved.
+const ciDomainsAheadEvery = time.Minute
+
+// ciDomainsAhead reads the domain graph before anybody asks: once a minute,
+// in the workers, it asks for the graph of each repository the scorecard
+// knows, which starts the read of a new head and keeps the result in the
+// platform's state; the API then answers from what is kept.
+//
+// Owner 2026-11-16 22:5x, the coordinator's reading of it: the graph was
+// computed when he clicked, so he waited. A click should only read. This is
+// the plain form (a look a minute); waking on git.main.advanced instead is
+// the communication line's bus, and can replace the ticker.
+func (s *Server) ciDomainsAhead(ctx context.Context) {
+	if s.delivery == nil {
+		return
+	}
+	safego.Go("ci-domains-ahead", func() {
+		t := time.NewTicker(ciDomainsAheadEvery)
+		defer t.Stop()
+		for {
+			for _, r := range ciScoreRepos {
+				pass, cancel := context.WithTimeout(kubemetrics.WithSite(ctx, "ci-domains-ahead"), 20*time.Second)
+				if _, err := s.ciDomainsKept.graph(pass, s.ciDomainsSourceOf(), r.repo); err != nil && ctx.Err() == nil {
+					slog.Debug("ci domains ahead", "repo", r.repo, "error", err)
+				}
+				cancel()
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+		}
+	})
 }
 
 func (s *Server) ciDomainsSourceOf() ciDomainsSource {
