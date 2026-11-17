@@ -80,13 +80,12 @@ func LastCommit(ctx context.Context, db eventlog.DB) func(repo string) (string, 
 }
 
 func lastCommit(ctx context.Context, tx pgx.Tx, repo string, commit *string) error {
-	err := tx.QueryRow(ctx, `SELECT COALESCE(body_json->>'commit', '') FROM agentrt.event
-	  WHERE event_stream_id = $1 ORDER BY seq DESC LIMIT 1`, Stream(repo)).Scan(commit)
-	if errors.Is(err, pgx.ErrNoRows) {
-		*commit = ""
-		return nil
+	last, _, err := eventlog.Last(ctx, tx, Stream(repo))
+	if err != nil {
+		return err
 	}
-	return err
+	*commit, _ = last.Body["commit"].(string)
+	return nil
 }
 
 // Advance appends git.main.advanced for repo at commit, unless the stream's

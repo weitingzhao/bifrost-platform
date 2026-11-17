@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 )
 
@@ -310,6 +311,18 @@ func (f *stepFacts) exists(q string, args ...any) bool {
 	return ok && f.err == nil
 }
 
+// hasBody asks the ledger for an event of the type, of the plan node when
+// one is named, whose body contains doc (eventlog.HasBody); like exists, a
+// failed read is kept and answers false.
+func (f *stepFacts) hasBody(typ, planNode string, doc map[string]any) bool {
+	if f.err != nil {
+		return false
+	}
+	var ok bool
+	ok, f.err = eventlog.HasBody(f.ctx, f.tx, typ, planNode, doc)
+	return ok && f.err == nil
+}
+
 func (f *stepFacts) TaskAccepted(taskID string) bool {
 	// No task is accepted any more and the tasks' table is not read (store
 	// cut 4, 2026-11-14). A step that became done by this atom stays done:
@@ -332,13 +345,11 @@ func (f *stepFacts) QuestionAnswered(question, option string) bool {
 }
 
 func (f *stepFacts) CISucceeded(repo, commit string) bool {
-	return f.exists(`SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_type = 'ci_seen'
-	  AND body_json @> jsonb_build_object('repo', $1::text, 'commit', $2::text, 'status', $3::text))`, repo, commit, CISucceeded)
+	return f.hasBody("ci_seen", "", map[string]any{"repo": repo, "commit": commit, "status": CISucceeded})
 }
 
 func (f *stepFacts) OwnerSignoff(ref string) bool {
-	return f.exists(`SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_type = 'owner_signoff' AND plan_node_id = $1
-	  AND body_json @> jsonb_build_object('ref', $2::text))`, f.step, ref)
+	return f.hasBody("owner_signoff", f.step, map[string]any{"ref": ref})
 }
 
 func (f *stepFacts) ManualRecorded(note string) bool {

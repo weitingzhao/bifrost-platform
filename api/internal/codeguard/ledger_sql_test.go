@@ -32,7 +32,8 @@ var ledgerOwners = map[string]bool{"agentrt/eventlog": true, "agentrt/actor": tr
 // their own and five inserted into agentrt.actor, two of them with the same
 // sentences copied. By this count there were 83 such lines that day; the
 // first replacement (the actor checks of the bus and of evidence, through
-// actor.Exists and actor.RegisterController) left 73.
+// actor.Exists and actor.RegisterController) left 73, and the second (the
+// ledger's own Last, Has and HasBody) 67.
 var ledgerSQL = map[string]int{
 	"agentrt/agentrtapi":       5,
 	"agentrt/coord":            2,
@@ -40,13 +41,10 @@ var ledgerSQL = map[string]int{
 	"agentrt/evidence":         2,
 	"agentrt/loopreadings":     1,
 	"agentrt/planreadings":     12,
-	"agentrt/store":            42,
+	"agentrt/store":            39,
 	"agentrt/workregistration": 3,
 	"assessmentreadings":       1,
-	"bus/gatecluster":          1,
-	"bus/hook":                 1,
 	"bus/relay":                1,
-	"server":                   1,
 }
 
 // countLedgerSQL counts, by package directory under root, the lines of

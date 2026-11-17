@@ -2,7 +2,6 @@ package gatecluster
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
@@ -61,20 +60,11 @@ func (l *PGLedger) Append(ctx context.Context, stream, typ string, decide Decide
 		if err := eventlog.LockStream(ctx, tx, stream); err != nil {
 			return err
 		}
-		var lastType string
-		var raw []byte
-		err := tx.QueryRow(ctx, `SELECT event_type, body_json FROM agentrt.event
-		  WHERE event_stream_id = $1 ORDER BY seq DESC LIMIT 1`, stream).Scan(&lastType, &raw)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		last, _, err := eventlog.Last(ctx, tx, stream)
+		if err != nil {
 			return err
 		}
-		var lastBody map[string]any
-		if len(raw) > 0 {
-			if err := json.Unmarshal(raw, &lastBody); err != nil {
-				return err
-			}
-		}
-		body, ok := decide(lastType, lastBody)
+		body, ok := decide(last.Type, last.Body)
 		if !ok {
 			return nil
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // Historical retry phrases and current artifact-refusal recording.
@@ -34,9 +35,7 @@ func RefusedReport(ctx context.Context, db DB, hostID, kind, artifactID, rule st
 		if err := lockStream(ctx, tx, stream); err != nil {
 			return err
 		}
-		var seen bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'policy_alert'
-		  AND body_json->>'artifact_id' = $2)`, stream, artifactID).Scan(&seen); err != nil || seen {
+		if seen, err := eventlog.Has(ctx, tx, stream, "policy_alert", map[string]string{"artifact_id": artifactID}); err != nil || seen {
 			return err
 		}
 		_, err := Append(ctx, tx, Event{Stream: stream, Type: "policy_alert", Actor: "controller",

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
@@ -53,8 +54,8 @@ func appendWindowEvent(ctx context.Context, db interface {
 		return err
 	}
 	if event.Action != "refused" {
-		var exists bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_stream_id=$1 AND body_json->>'text'=$2)`, stream, text).Scan(&exists); err != nil {
+		exists, err := eventlog.Has(ctx, tx, stream, "", map[string]string{"text": text})
+		if err != nil {
 			return err
 		}
 		if exists {
