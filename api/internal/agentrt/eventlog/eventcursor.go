@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -124,4 +125,24 @@ func EventsAfter(ctx context.Context, tx pgx.Tx, after EventCursor, limit int, f
 		next = after
 	}
 	return doc, next, err
+}
+
+// CursorAt is a read-on position from about time t (the Bus page's replay,
+// 2026-11-17): reading on from it lists every event written at or after t,
+// and may list a few written just before it by transactions that committed
+// later. Without an event at or after t it is the horizon: reading on lists
+// only what comes. It walks back from the newest event, so it is cheap for a
+// replay of hours, not of months.
+func CursorAt(ctx context.Context, tx pgx.Tx, t time.Time) (EventCursor, error) {
+	var c EventCursor
+	var found bool
+	err := tx.QueryRow(ctx, `WITH b AS (SELECT COALESCE((SELECT e.event_id FROM agentrt.event e WHERE e.at < $1 ORDER BY e.event_id DESC LIMIT 1), 0) AS id)
+	  SELECT COALESCE(min(e.txid), 0), count(*) > 0 FROM agentrt.event e WHERE e.event_id > (SELECT id FROM b)`, t).Scan(&c.TxID, &found)
+	if err != nil || !found {
+		if err == nil {
+			err = tx.QueryRow(ctx, `SELECT txid_snapshot_xmin(txid_current_snapshot())`).Scan(&c.TxID)
+		}
+		return c, err
+	}
+	return c, nil
 }

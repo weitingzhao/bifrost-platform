@@ -28,6 +28,9 @@ import (
 const (
 	MaxWait  = 25 * time.Second
 	MaxLimit = 100
+	// MaxReplay is how far back since= may start a read (the Bus page's
+	// replay of the last day, 2026-11-17).
+	MaxReplay = 24 * time.Hour
 )
 
 // Waker wakes everyone waiting at once.
@@ -87,7 +90,13 @@ type Gate struct {
 	NATSUp   func() bool
 	Receipts Receipts
 	Journey  Journey
-	Logf     func(format string, args ...any)
+	// Since is a read-on position from about a time (eventlog.CursorAt);
+	// nil, and since= is refused.
+	Since func(ctx context.Context, t time.Time) (relay.Cursor, error)
+	// ReceiptFeed passes live receipts to streams asked with receipts=1;
+	// nil, and those streams say ": receipts off".
+	ReceiptFeed *ReceiptFeed
+	Logf        func(format string, args ...any)
 	// Clients are the subscription table's declared users (the roster);
 	// TablesLoadedAt is when they were loaded.
 	Clients        []registry.Client
@@ -126,6 +135,9 @@ type query struct {
 	wait   time.Duration
 	limit  int
 	client string
+	// replay: read from since=, a look back and not a delivery, so it
+	// writes no receipts (a day of console receipts would bury the real ones).
+	replay bool
 }
 
 var clientRE = regexp.MustCompile(`^[\x21-\x7e]{1,40}$`)
@@ -161,6 +173,24 @@ func (g *Gate) parse(r *http.Request, after string) (query, error) {
 		q.after = c
 	} else {
 		return q, fmt.Errorf("after %q is not a cursor <txid>.<event_id>", after)
+	}
+	if s := v.Get("since"); s != "" {
+		t, err := time.Parse(time.RFC3339, s)
+		switch {
+		case after != "":
+			return q, fmt.Errorf("since and a cursor (after, Last-Event-ID) do not go together")
+		case err != nil:
+			return q, fmt.Errorf("since %q is not an RFC 3339 time", s)
+		case time.Since(t) > MaxReplay:
+			return q, fmt.Errorf("since reaches back at most %s", MaxReplay)
+		case g.Since == nil:
+			return q, fmt.Errorf("this gate does not read from a time")
+		}
+		c, err := g.Since(r.Context(), t)
+		if err != nil {
+			return q, fmt.Errorf("since: %w", err)
+		}
+		q.after, q.now, q.replay = c, false, true
 	}
 	if s := v.Get("wait"); s != "" {
 		n, err := strconv.Atoi(s)
@@ -265,7 +295,9 @@ func (g *Gate) receipt(events []relay.Envelope, route, client string) {
 	})
 }
 
-// HandleEvents is GET /api/v1/bus/events?types=a,b&match=&after=&wait=&limit=&client=.
+// HandleEvents is GET /api/v1/bus/events?types=a,b&match=&after=&since=&wait=&limit=&client=.
+// since= (RFC 3339, at most MaxReplay back) reads from about that time
+// instead of a cursor, and writes no receipts.
 // It answers {events: [<CloudEvents envelope>], next: "<cursor>"}; after
 // empty reads from now. Read-only.
 func (g *Gate) HandleEvents(w http.ResponseWriter, r *http.Request) {
@@ -283,16 +315,20 @@ func (g *Gate) HandleEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g.seen.mark("gate:events:"+q.client, time.Now())
-	g.receipt(events, "events", q.client)
+	if !q.replay {
+		g.receipt(events, "events", q.client)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"events": events, "next": next.String()})
 }
 
-// HandleStream is GET /api/v1/bus/stream?types=&match=&after=&client=, the
+// HandleStream is GET /api/v1/bus/stream?types=&match=&after=&since=&receipts=&client=, the
 // same events as Server-Sent Events: each event's id: is its cursor, so a
 // client that reconnects resumes from Last-Event-ID; a comment every
 // Heartbeat keeps the connection open. The route keeps the viewer bearer: a
 // browser's EventSource cannot send one, so the Console reads it with fetch
-// streaming and sends Last-Event-ID itself.
+// streaming and sends Last-Event-ID itself. With receipts=1 it also passes
+// on every live receipt as an "rcpt" event ({id, consumer, at}; no id:
+// line, so Last-Event-ID stays the events' cursor).
 func (g *Gate) HandleStream(w http.ResponseWriter, r *http.Request) {
 	after := r.URL.Query().Get("after")
 	if id := strings.TrimSpace(r.Header.Get("Last-Event-ID")); id != "" {
@@ -314,11 +350,45 @@ func (g *Gate) HandleStream(w http.ResponseWriter, r *http.Request) {
 	h.Set("Cache-Control", "no-cache")
 	h.Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	if _, err := fmt.Fprint(w, "retry: 2000\n: connected\n\n"); err != nil {
+	// One writer at a time: the events below, and the receipts' forwarder.
+	var wmu sync.Mutex
+	write := func(text string) error {
+		wmu.Lock()
+		defer wmu.Unlock()
+		if _, err := fmt.Fprint(w, text); err != nil {
+			return err
+		}
+		return rc.Flush()
+	}
+	if write("retry: 2000\n: connected\n\n") != nil {
 		return
 	}
-	_ = rc.Flush()
-	ctx := r.Context()
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	if r.URL.Query().Get("receipts") == "1" {
+		if g.ReceiptFeed == nil {
+			if write(": receipts off\n\n") != nil {
+				return
+			}
+		} else {
+			notes, stop := g.ReceiptFeed.Listen()
+			defer stop()
+			safego.Go("bus-gate-stream-receipts", func() {
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case n := <-notes:
+						data, _ := json.Marshal(n)
+						if write("event: rcpt\ndata: "+string(data)+"\n\n") != nil {
+							cancel()
+							return
+						}
+					}
+				}
+			})
+		}
+	}
 	for ctx.Err() == nil {
 		events, next, err := g.read(ctx, q)
 		if err != nil {
@@ -326,25 +396,25 @@ func (g *Gate) HandleStream(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			// The ledger is unreachable: say so, and let the client come back.
-			_, _ = fmt.Fprintf(w, ": error %s\n\n", strings.ReplaceAll(err.Error(), "\n", " "))
-			_ = rc.Flush()
+			_ = write(": error " + strings.ReplaceAll(err.Error(), "\n", " ") + "\n\n")
 			return
 		}
 		q.after, q.now = next, false
+		var b strings.Builder
 		if len(events) == 0 {
-			if _, err := fmt.Fprint(w, ": heartbeat\n\n"); err != nil {
-				return
-			}
+			b.WriteString(": heartbeat\n\n")
 		}
 		for _, e := range events {
 			data, _ := json.Marshal(e)
-			if _, err := fmt.Fprintf(w, "id: %s\ndata: %s\n\n", e.Cursor, data); err != nil {
-				return
-			}
+			fmt.Fprintf(&b, "id: %s\ndata: %s\n\n", e.Cursor, data)
 		}
-		_ = rc.Flush()
+		if write(b.String()) != nil {
+			return
+		}
 		g.seen.mark("gate:stream:"+q.client, time.Now())
-		g.receipt(events, "stream", q.client)
+		if !q.replay {
+			g.receipt(events, "stream", q.client)
+		}
 	}
 }
 

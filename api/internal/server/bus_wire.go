@@ -278,6 +278,20 @@ func busEventsAfter(ctx context.Context, tx pgx.Tx, after relay.Cursor, limit in
 	return doc, relay.Cursor{TxID: next.TxID, EventID: next.EventID}, err
 }
 
+// busCursorAt is the gate's since=: the ledger's read-on position from
+// about a time (eventlog.CursorAt), read in a read-only transaction.
+func busCursorAt(db relay.TxBeginner) func(context.Context, time.Time) (relay.Cursor, error) {
+	return func(ctx context.Context, t time.Time) (relay.Cursor, error) {
+		tx, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted, AccessMode: pgx.ReadOnly})
+		if err != nil {
+			return relay.Cursor{}, err
+		}
+		defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+		c, err := eventlog.CursorAt(ctx, tx, t)
+		return relay.Cursor{TxID: c.TxID, EventID: c.EventID}, err
+	}
+}
+
 // mountBus mounts the gate's routes and Gitea's hook. The gate answers 503
 // until the ledger is connected (and without AGENTRT_ENV); the hook answers
 // 503 without its secret.
@@ -338,7 +352,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 	s.bus.gitLedger.Store((hookOn || natsOn) && s.delivery != nil)
 
 	if role.RunsAPI() {
-		g := &gate.Gate{Ledger: ledger, Tenant: rocket, Env: env, Wake: &gate.Waker{}, Logf: busLogf}
+		g := &gate.Gate{Ledger: ledger, Tenant: rocket, Env: env, Wake: &gate.Waker{}, Logf: busLogf, Since: busCursorAt(pool)}
 		if subs, err := registry.LoadSubscriptions(); err == nil {
 			g.Clients = rosterClients(subs, env)
 			g.TablesLoadedAt = time.Now()
@@ -355,6 +369,8 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 				if js, jerr := jetstream.New(nc); jerr == nil {
 					g.Receipts = &relay.Receipts{JS: js, Tenant: relay.Tenant, Env: env}
 					g.Journey = &gate.JSJourney{JS: js, Tenant: relay.Tenant, Env: env}
+					g.ReceiptFeed = &gate.ReceiptFeed{}
+					safego.Go("bus-gate-follow-receipts", func() { gate.FollowReceipts(ctx, js, relay.Tenant, env, g.ReceiptFeed, busLogf) })
 				}
 				context.AfterFunc(ctx, nc.Close)
 			}
