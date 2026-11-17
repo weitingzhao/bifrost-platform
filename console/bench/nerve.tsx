@@ -44,6 +44,14 @@ function Bench({ snap }: { snap: Snapshot }) {
     })
   }, [snap, domainOfType])
 
+  // ?focus=d:coordination flies into a node once the body has settled (as a click on a cloud does).
+  useEffect(() => {
+    const id = q.get('focus')
+    if (!id) return
+    const t = window.setTimeout(() => api.current?.focus(id), 9000)
+    return () => clearTimeout(t)
+  }, [])
+
   // ?speed= replays the snapshot's real events through the body, as the page's replay does.
   useEffect(() => {
     const speed = Number(q.get('speed') ?? 0)

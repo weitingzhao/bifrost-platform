@@ -277,6 +277,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
         ))}
         <TermButton on={dimCI} onClick={() => setDimCI(d => !d)}>dim ci.*</TermButton>
         <TermButton on={spin} onClick={() => setSpin(v => !v)}>spin</TermButton>
+        <TermButton on={false} onClick={() => api.current?.home()}>home</TermButton>
         <TermButton on={expanded.size > 0} onClick={() => setExpanded(e => (e.size > 0 ? new Set() : new Set(domainOfType.values())))}>{expanded.size > 0 ? 'fold domains' : 'open all domains'}</TermButton>
         <span className="mx-1 font-mono text-xs" style={{ color: C.rule }}>|</span>
         {(['3d', '2d', 'list'] as const).map(v => <TermButton key={v} on={view === v} onClick={() => setView(v)}>{v}</TermButton>)}
@@ -314,6 +315,9 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
               onNodeClick={id => {
                 if (!id.startsWith('d:')) return
                 const d = id.slice(2)
+                // Opening a cloud flies into it; folding it goes back to the whole body.
+                if (expanded.has(d)) api.current?.home()
+                else api.current?.focus(id)
                 setExpanded(e => { const n = new Set(e); if (n.has(d)) n.delete(d); else n.add(d); return n })
               }} />
           </Suspense>

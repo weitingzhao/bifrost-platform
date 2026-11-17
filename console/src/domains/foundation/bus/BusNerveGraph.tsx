@@ -33,6 +33,10 @@ export type NerveApi = {
   pulse: (a: string, b: string, color?: string, faint?: boolean) => boolean
   /** Lights a node for a moment. */
   flash: (id: string) => void
+  /** Puts every node back where the layout first settled it, and the camera on the whole body. */
+  home: () => void
+  /** Flies the camera to a node (a cloud fills most of the frame). */
+  focus: (id: string) => void
 }
 
 type SimNode = GNode & { x?: number; y?: number; z?: number; vx?: number; vy?: number; vz?: number }
@@ -108,16 +112,31 @@ function chargeOf(o: object): number {
 }
 
 /** A drift that never settles: a small random push each tick, so the body is never frozen still. */
-function driftForce(nodes: () => SimNode[], dims: 2 | 3) {
+function driftForce(nodes: () => SimNode[], dims: 2 | 3, live: () => boolean) {
   return () => {
+    // Random drift only once the layout has settled: the settling itself stays the same on every load.
+    const d = live() ? DRIFT : 0
     for (const n of nodes()) {
       if (n.kind === 'core') continue
-      n.vx = (n.vx ?? 0) + (Math.random() - 0.5) * DRIFT
-      n.vy = (n.vy ?? 0) + (Math.random() - 0.5) * DRIFT
+      n.vx = (n.vx ?? 0) + (Math.random() - 0.5) * d
+      n.vy = (n.vy ?? 0) + (Math.random() - 0.5) * d
       // A body flatter in depth than across: clouds lying behind one another would overlap on the screen.
-      if (dims === 3) n.vz = (n.vz ?? 0) + (Math.random() - 0.5) * DRIFT - (n.z ?? 0) * 0.02
+      if (dims === 3) n.vz = (n.vz ?? 0) + (Math.random() - 0.5) * d - (n.z ?? 0) * 0.02
     }
   }
+}
+
+/**
+ * Where a node starts, from its id alone (the Owner: the clouds must be where
+ * they were last time, so he knows his way): a domain on a ring at an angle
+ * fixed by its name; a part near the middle. Same input, same layout.
+ */
+function homeStart(n: GNode, dims: 2 | 3): { x: number; y: number; z: number } {
+  const rnd = seeded(`home:${n.id}`)
+  if (n.kind === 'core') return { x: 0, y: 0, z: 0 }
+  const a = rnd() * 2 * Math.PI
+  const r = n.kind === 'cluster' ? 140 : 40 + rnd() * 40
+  return { x: Math.cos(a) * r, y: Math.sin(a) * r, z: dims === 3 ? (rnd() - 0.5) * 20 : 0 }
 }
 
 /** Keeps clouds apart: two nodes closer than their reach plus a margin push each other away. */
@@ -176,6 +195,15 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
   const fitted = useRef(-1)
   const spinRef = useRef(spin)
   spinRef.current = spin
+  const flatRef = useRef(flat)
+  flatRef.current = flat
+  const fitRef = useRef(() => {})
+  /** The layout has settled once (warm-up done): drift may start, and home is known. */
+  const settled = useRef(false)
+  /** Where each node first settled: the home button puts them back. */
+  const homes = useRef(new Map<string, { x: number; y: number; z: number }>())
+  /** When a cloud was last flown into: an open that follows does not refit the whole body over it. */
+  const focusedAt = useRef(0)
   /** Rebuilds a domain's cloud in place when its counts change (3D only). */
   const recloud = useRef<((n: SimNode) => void) | null>(null)
 
@@ -197,6 +225,33 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
         return true
       },
       flash: id => { flashes.current.set(id, performance.now()) },
+      home: () => {
+        for (const n of data.current.nodes) {
+          const h = homes.current.get(n.id)
+          if (!h) continue
+          n.x = h.x; n.y = h.y; n.z = h.z
+          n.vx = 0; n.vy = 0; n.vz = 0
+        }
+        focusedAt.current = 0
+        fitRef.current()
+      },
+      focus: id => {
+        const g = graph.current
+        const n = data.current.nodes.find(x => x.id === id)
+        if (!g || !n) return
+        focusedAt.current = performance.now()
+        if (flat || !g.cameraPosition) {
+          g.centerAt?.(n.x, n.y, 600)
+          g.zoom?.(4, 600)
+          return
+        }
+        const reach = (n.kind === 'cluster' ? cloudRadius(n) : n.size * 3) * 4 + 40
+        const c = g.camera().position
+        const dx = c.x - (n.x ?? 0), dy = c.y - (n.y ?? 0), dz = c.z - (n.z ?? 0)
+        const l = Math.hypot(dx, dy, dz) || 1
+        g.cameraPosition({ x: (n.x ?? 0) + (dx / l) * reach, y: (n.y ?? 0) + (dy / l) * reach, z: (n.z ?? 0) + (dz / l) * reach },
+          { x: n.x ?? 0, y: n.y ?? 0, z: n.z ?? 0 }, document.hidden ? 0 : 900)
+      },
     }
     const lit = (n: SimNode) => (flashes.current.get(n.id) ?? 0) > performance.now() - FLASH_MS
 
@@ -257,7 +312,7 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
           .cooldownTicks(Infinity)
           .autoPauseRedraw(false)
         g.d3Force('link')?.distance(linkLength)
-        g.d3Force('drift', driftForce(() => data.current.nodes, 2))
+        g.d3Force('drift', driftForce(() => data.current.nodes, 2, () => settled.current))
         g.d3Force('collide', collideForce(() => data.current.nodes, 2))
         g.d3Force('charge')?.strength(chargeOf)
         g.onNodeClick((o: object) => fireClick((o as SimNode).id))
@@ -273,7 +328,12 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
       void Promise.all([import('3d-force-graph'), import('three'), import('three/examples/jsm/renderers/CSS2DRenderer.js')]).then(
         ([{ default: ForceGraph3D }, THREE, { CSS2DRenderer, CSS2DObject }]) => {
           if (disposed) return
-          type Body = { group: import('three').Group; core: import('three').Sprite; cloud?: import('three').Group; dust?: import('three').PointsMaterial; sig: string; base: number }
+          type Body = {
+            group: import('three').Group; core: import('three').Sprite; cloud?: import('three').Group; dust?: import('three').PointsMaterial
+            glow?: import('three').Sprite; points: import('three').PointsMaterial[]; sig: string; base: number
+          }
+          const pointMaterials = (cloud?: import('three').Group) =>
+            (cloud?.children ?? []).map(c => (c as import('three').Points).material as import('three').PointsMaterial)
           const bodies = new Map<string, Body>()
           // One round, soft light: bright centre, fading edge. Points and cores both use it.
           const disc = (() => {
@@ -366,18 +426,23 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
               group.add(core)
               let cloud: import('three').Group | undefined
               let dust: import('three').PointsMaterial | undefined
+              let glow: import('three').Sprite | undefined
               if (n.cloud) {
                 const c = cloudOf(n)
                 cloud = c.group
                 dust = c.dust
                 group.add(cloud)
+                // Seen from far, a cloud is one soft light; its points show as the camera comes near (bodies' tick).
+                glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: disc, color: n.color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }))
+                glow.scale.setScalar(cloudRadius(n) * 2.2)
+                group.add(glow)
               }
               if (n.ring) {
                 const ring = new THREE.Mesh(new THREE.TorusGeometry(n.size * 1.8, 0.12, 6, 40), new THREE.MeshBasicMaterial({ color: n.ring }))
                 group.add(ring)
               }
               if (n.kind !== 'topic') group.add(labelOf(n))
-              bodies.set(n.id, { group, core, cloud, dust, sig: cloudSig(n), base })
+              bodies.set(n.id, { group, core, cloud, dust, glow, points: pointMaterials(cloud), sig: cloudSig(n), base })
               return group
             })
             .linkColor((o: object) => (o as SimLink).color)
@@ -393,7 +458,7 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
             .warmupTicks(1200)
             .cooldownTicks(Infinity)
           g.d3Force('link')?.distance(linkLength)
-          g.d3Force('drift', driftForce(() => data.current.nodes, 3))
+          g.d3Force('drift', driftForce(() => data.current.nodes, 3, () => settled.current))
           g.d3Force('collide', collideForce(() => data.current.nodes, 3))
           g.d3Force('charge')?.strength(chargeOf)
           g.onNodeClick((o: object) => fireClick((o as SimNode).id))
@@ -412,13 +477,14 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
               b.group.add(c.group)
               b.cloud = c.group
               b.dust = c.dust
+              b.points = pointMaterials(c.group)
             }
             b.sig = cloudSig(n)
           }
           g.graphData(data.current)
           graph.current = g
           // The bench (console/bench) looks at the instance; dev builds only.
-          if (import.meta.env.DEV) (window as unknown as { __nerve?: unknown }).__nerve = g
+          if (import.meta.env.DEV) Object.assign(window as unknown as Record<string, unknown>, { __nerve: g, __nerveApi: api })
           fitted.current = -1
           fitSoonRef.current()
           // Breath: the whole body breathes slowly; a seat's light with its heartbeat; a flash or hover brightens a node.
@@ -439,7 +505,8 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
               const x = ((v.x + 1) / 2) * w
               const y = ((1 - v.y) / 2) * h
               const lw = (div.textContent?.length ?? 0) * (n.kind === 'cluster' ? 7 : 6)
-              const clash = placed.some(p => Math.abs(p.x - x) < (p.w + lw) / 2 + 4 && Math.abs(p.y - y) < 15)
+              const far = n.kind !== 'cluster' && n.kind !== 'core' && cam.position.distanceTo(v.set(n.x ?? 0, n.y ?? 0, n.z ?? 0)) > 220
+              const clash = far || placed.some(p => Math.abs(p.x - x) < (p.w + lw) / 2 + 4 && Math.abs(p.y - y) < 15)
               div.style.opacity = clash ? '0' : '1'
               if (!clash) placed.push({ x, y, w: lw })
             }
@@ -454,8 +521,15 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
               if (!b) continue
               const s = (n.breath ? 1 + 0.12 * Math.sin((2 * Math.PI * t) / n.breath) : 1) * (lit(n) ? 1.8 : hovered.current === n.id ? 1.5 : 1)
               b.core.scale.setScalar(b.base * s)
-              if (b.dust) b.dust.opacity = 0.75 * breath
-              if (b.cloud) b.cloud.scale.setScalar(breath * (lit(n) ? 1.06 : 1))
+              if (b.cloud) {
+                // Level of detail: far, one soft glow; near, the cloud resolves into its lights.
+                const R = cloudRadius(n)
+                const d = g.camera().position.distanceTo(v.set(n.x ?? 0, n.y ?? 0, n.z ?? 0))
+                const near = Math.max(0, Math.min(1, (R * 16 - d) / (R * 9)))
+                for (const m of b.points) m.opacity = (0.5 + 0.5 * near) * (m === b.dust ? 0.75 * breath : 1)
+                if (b.glow) (b.glow.material as import('three').SpriteMaterial).opacity = 0.22 * (1 - near) + (lit(n) ? 0.25 : 0)
+                b.cloud.scale.setScalar(breath * (lit(n) ? 1.06 : 1))
+              }
             }
             raf = requestAnimationFrame(tick)
           }
@@ -504,7 +578,7 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
     const prev = new Map(data.current.nodes.map(n => [n.id, n]))
     const next: SimNode[] = nodes.map(n => {
       const p = prev.get(n.id)
-      return p ? Object.assign(p, n) : { ...n }
+      return p ? Object.assign(p, n) : { ...n, ...homeStart(n, flatRef.current || !hasWebGL() ? 2 : 3) }
     })
     const ids = new Set(next.map(n => n.id))
     data.current = {
@@ -519,7 +593,7 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
     }
     graph.current?.graphData(data.current)
     // A domain opened or folded: fit the body to the frame again once it has moved.
-    if (graph.current && fitted.current !== -1 && fitted.current !== next.length) fitSoonRef.current()
+    if (graph.current && fitted.current !== -1 && fitted.current !== next.length && performance.now() - focusedAt.current > 3000) fitSoonRef.current()
   }, [nodes, links])
 
   // Fits the body to the frame, again and again while it settles. Kept in a ref: the effects call the latest one.
@@ -528,9 +602,15 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
     for (const ms of FIT_TIMES_MS) window.setTimeout(() => fit(), ms)
   }
 
+  fitRef.current = () => fit()
   function fit() {
     const g = graph.current
     if (!g) return
+    // The first fit comes after the warm-up: that is home, and from then on the body may drift.
+    if (!settled.current) {
+      for (const n of data.current.nodes) homes.current.set(n.id, { x: n.x ?? 0, y: n.y ?? 0, z: n.z ?? 0 })
+      settled.current = true
+    }
     const ns = data.current.nodes
     if (ns.length === 0) return
     const ms = document.hidden ? 0 : 600
