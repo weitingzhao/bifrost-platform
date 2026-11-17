@@ -1,0 +1,148 @@
+{
+  "rocket": {
+    "alert.channel.changed": {
+      "version": 1,
+      "hash": "22ce4f4056f6519a"
+    },
+    "alert.rule.fired": {
+      "version": 1,
+      "hash": "4d683a5e3d4a2fcd"
+    },
+    "approval.card.created": {
+      "version": 1,
+      "hash": "20b41b2261edbdb8"
+    },
+    "approval.card.decided": {
+      "version": 1,
+      "hash": "ca7bbda89bdc85a7"
+    },
+    "approval.card.executed": {
+      "version": 1,
+      "hash": "37d0e0709e81b7a1"
+    },
+    "audit.action.recorded": {
+      "version": 1,
+      "hash": "ba76373feab91722"
+    },
+    "ci.run.finished": {
+      "version": 1,
+      "hash": "07d82110aab68a9b"
+    },
+    "ci.run.started": {
+      "version": 1,
+      "hash": "cc73ab509ebbeb28"
+    },
+    "ci.verdict.changed": {
+      "version": 1,
+      "hash": "32da46ba12d63395"
+    },
+    "cluster.workload.changed": {
+      "version": 1,
+      "hash": "56fe9de31afd5550"
+    },
+    "codehealth.report.published": {
+      "version": 1,
+      "hash": "8315b2cac8d66849"
+    },
+    "data.job.finished": {
+      "version": 1,
+      "hash": "560f303ba315699b"
+    },
+    "dev.session.changed": {
+      "version": 1,
+      "hash": "108b07dadaff952d"
+    },
+    "env.health.changed": {
+      "version": 1,
+      "hash": "5250014534df1833"
+    },
+    "git.main.advanced": {
+      "version": 1,
+      "hash": "bd14194edeac095f"
+    },
+    "git.mirror.settled": {
+      "version": 1,
+      "hash": "6b3b015e3c29c7d1"
+    },
+    "git.pr.changed": {
+      "version": 1,
+      "hash": "c19df9fda5f63a4b"
+    },
+    "git.ready.pushed": {
+      "version": 1,
+      "hash": "536aca3a25dd5de4"
+    },
+    "git.tag.changed": {
+      "version": 1,
+      "hash": "b8ac522e18637e75"
+    },
+    "loop.health.changed": {
+      "version": 1,
+      "hash": "a12a9f12598878ab"
+    },
+    "owner.question.answered": {
+      "version": 1,
+      "hash": "7e12da5b915c049a"
+    },
+    "owner.question.asked": {
+      "version": 1,
+      "hash": "67fb6c5e061f30b0"
+    },
+    "plan.fact.changed": {
+      "version": 1,
+      "hash": "83ef006849abb484"
+    },
+    "plugin.status.changed": {
+      "version": 1,
+      "hash": "c3df988bf1c86421"
+    },
+    "reconcile.drift.found": {
+      "version": 1,
+      "hash": "5b1f2205349c00a4"
+    },
+    "release.deploy.finished": {
+      "version": 1,
+      "hash": "e0896a76b2532e1c"
+    },
+    "release.freeze.changed": {
+      "version": 1,
+      "hash": "fe4a9834ae797701"
+    },
+    "release.gitops.changed": {
+      "version": 1,
+      "hash": "5d7df26df188b194"
+    },
+    "release.policy.expiring": {
+      "version": 1,
+      "hash": "27d4d6d2d1172491"
+    },
+    "release.window.changed": {
+      "version": 1,
+      "hash": "a9827c385e249a22"
+    },
+    "schema.migration.applied": {
+      "version": 1,
+      "hash": "45e8a122b5c8129c"
+    },
+    "seat.liveness.changed": {
+      "version": 1,
+      "hash": "8295b1aa1b273cc3"
+    },
+    "seat.mail.arrived": {
+      "version": 1,
+      "hash": "dae8cf4a8ce0a74a"
+    },
+    "seat.session.changed": {
+      "version": 1,
+      "hash": "a1a0b0f706d0a132"
+    },
+    "seat.status.changed": {
+      "version": 1,
+      "hash": "e998d62c5e636463"
+    },
+    "seat.work.changed": {
+      "version": 1,
+      "hash": "a20ce516f8cd54e1"
+    }
+  }
+}
