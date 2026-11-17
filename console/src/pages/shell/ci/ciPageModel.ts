@@ -211,27 +211,46 @@ export function ciSteps(runs: UnitsRun[], reference?: UnitsRun): Step[] {
   }
   const left = reference ? modulesRun(reference) : null
   const out: Step[] = []
-  if (before.length) out.push({ label: 'clone and scope', state: stateOf(before), title: before.join(', ') })
+  if (before.length) out.push({ label: 'setup', state: stateOf(before), title: `clone and scope: ${before.join(', ')}` })
   for (const task of tests) {
     const state = stateOf([task])
     // A side its change did not reach is skipped, not waiting: the scope task said so.
     const skipped = state === 'idle' && left?.kind === 'some' && !left.names.some(n => task.includes(n)) && reference!.tasks.some(t => isTest(t.task))
-    out.push({ label: task, state: skipped ? 'skip' : state, title: task })
+    out.push({ label: task.replace(/^test-/, ''), state: skipped ? 'skip' : state, title: task })
   }
   return out
 }
 
 const stageStatus = (run: TimingRun) => runStatus(run)
 
-/** A stage's steps from its newest run's tasks, in the order they were created; lit only while that run is in flight. */
+/**
+ * The phase a delivery task belongs to, by what its name says it does. On STG, 2026-11-16, one step a task gave the
+ * strip ten chips a stage whose names were cut on both sides ("e and sco", "t-api-sto"); a phase is a word.
+ */
+export function phaseOf(task: string): string {
+  const rules: Array<[RegExp, string]> = [
+    [/^clone|mirror/, 'clone'], [/freeze|preflight|release-check|check-source/, 'check'], [/^build/, 'build'],
+    [/migrat|schema/, 'migrate'], [/promote/, 'promote'], [/gitops|sync/, 'sync'], [/rollout/, 'rollout'], [/^land$|merge/, 'merge'],
+  ]
+  return rules.find(([re]) => re.test(task))?.[1] ?? task
+}
+
+/** A stage's steps: the phases of its newest run's tasks, in the order they first started; lit only while that run is in flight. */
 export function stageSteps(runs: TimingRun[]): Step[] {
   const newest = runs[0]
   if (!newest) return []
   const live = stageStatus(newest) === 'Running'
-  return [...newest.tasks].sort((a, b) => Date.parse(a.created_at ?? '') - Date.parse(b.created_at ?? '') || a.task.localeCompare(b.task)).map(t => {
-    const status = t.status.toLowerCase()
-    const state: StepState = !live ? 'idle' : status === 'failed' ? 'failed' : status === 'running' ? 'now' : status === 'succeeded' ? 'done' : 'idle'
-    return { label: t.task, state, title: t.task }
+  const phases = new Map<string, { tasks: string[]; statuses: string[] }>()
+  for (const t of [...newest.tasks].sort((a, b) => Date.parse(a.created_at ?? '') - Date.parse(b.created_at ?? '') || a.task.localeCompare(b.task))) {
+    const phase = phases.get(phaseOf(t.task)) ?? { tasks: [], statuses: [] }
+    phase.tasks.push(t.task)
+    phase.statuses.push(t.status.toLowerCase())
+    phases.set(phaseOf(t.task), phase)
+  }
+  return [...phases].map(([label, { tasks, statuses }]) => {
+    const state: StepState = !live ? 'idle' : statuses.includes('failed') ? 'failed' : statuses.includes('running') ? 'now'
+      : statuses.every(x => x === 'succeeded') ? 'done' : 'idle'
+    return { label, state, title: tasks.join(', ') }
   })
 }
 

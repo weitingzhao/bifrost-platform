@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { CiScorecard } from '@/api/ciScorecard'
 import type { TimingRun } from '@/api/ciTimings'
 import {
-  changeMap, ciSteps, domainCards, domainPanel, edgeSides, graphLayout, graphSize, notMeasured, ownRuns, selectiveFact, startsAfterMain, timelineGeometry, verdict,
+  changeMap, ciSteps, phaseOf, stageSteps, domainCards, domainPanel, edgeSides, graphLayout, graphSize, notMeasured, ownRuns, selectiveFact, startsAfterMain, timelineGeometry, verdict,
   type DeliveryStage, type VerdictInput,
 } from '../ciPageModel'
 import { AS_OF, change, graph, running, sha, unitsRun } from './ciPageFixture'
@@ -84,10 +84,22 @@ describe('runs', () => {
 
   // Guards "the run in flight is lit on the step it is at": the running task is now, what finished is done, a side
   // the scope left out is skipped, and with no run in flight every step is idle.
+  // Origin: 2026-11-16, the redesigned page on STG with real runs: one chip a task gave STG ten chips and PROD nine,
+  // wrapped over three rows with names cut on both sides. A stage shows its phases; a phase with a task running is now.
+  it('groups a delivery run\'s tasks into phases', () => {
+    const task = (name: string, status: string, at: number) => ({ task: name, status, created_at: new Date(Date.UTC(2026, 10, 17, 3, 0, at)).toISOString() })
+    const run = (status: string, tasks: ReturnType<typeof task>[]) => ({ name: 'r', status, created_at: '2026-11-17T03:00:00Z', tasks }) as never
+    const tasks = [task('freeze-check', 'Succeeded', 0), task('clone-platform', 'Succeeded', 1), task('clone-ui', 'Succeeded', 1), task('build-platform-api', 'Running', 2),
+      task('build-platform-console', 'Succeeded', 2), task('agentrt-migrate', 'Pending', 3), task('gitops-sync', 'Pending', 4), task('rollout', 'Pending', 5)]
+    expect(stageSteps([run('Running', tasks)]).map(s => `${s.label}:${s.state}`)).toEqual(['check:done', 'clone:done', 'build:now', 'migrate:idle', 'sync:idle', 'rollout:idle'])
+    expect(stageSteps([run('Succeeded', tasks)]).every(s => s.state === 'idle')).toBe(true)
+    expect(['mirror-sync', 'check-source', 'agentrt-schema', 'promote-images', 'land', 'something-else'].map(phaseOf)).toEqual(['clone', 'check', 'migrate', 'promote', 'merge', 'something-else'])
+  })
+
   it('lights the step of the run in flight', () => {
     const history = [unitsRun(2, 20), unitsRun(1, 30)]
     const flying = { ...running(9, 1, [{ task: 'clone', status: 'Succeeded', seconds: 16, waited: 8 }, { task: 'changes', status: 'Succeeded', seconds: 9 }, { task: 'test-api', status: 'Running', waited: 5 }]), run_modules: ' api repo ' }
-    expect(ciSteps([flying, ...history], flying).map(s => `${s.label}:${s.state}`)).toEqual(['clone and scope:done', 'test-api:now', 'test-console:skip'])
+    expect(ciSteps([flying, ...history], flying).map(s => `${s.label}:${s.state}`)).toEqual(['setup:done', 'api:now', 'console:skip'])
     expect(ciSteps(history).map(s => s.state)).toEqual(['idle', 'idle', 'idle'])
   })
 
