@@ -6,8 +6,6 @@ import (
 	"slices"
 
 	"github.com/jackc/pgx/v5"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // The kinds of card the runtime asks, as the card-auto-answer rule tells
@@ -49,8 +47,8 @@ func ignoreNoRows(err error) error {
 // 2026-10-20: the runtime's cards were held by the question store's quotas
 // while no card was open for the rule to answer).
 func ruleAnswers(ctx context.Context, tx pgx.Tx, kind, mission string) (bool, error) {
-	r, err := inForce(ctx, tx, rules.KindCardAuto)
-	if err != nil || r == nil || !slices.Contains(r.CardAuto.Kinds, kind) {
+	kinds, err := cardAutoKindsInForce(ctx, tx)
+	if err != nil || !slices.Contains(kinds, kind) {
 		return false, err
 	}
 	if mission == "" {

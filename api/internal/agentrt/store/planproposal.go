@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // Ask creates the Owner's decision card for a plan change and returns its
@@ -114,7 +113,7 @@ func proposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 		if err := lockStream(ctx, tx, PlanStream(root)); err != nil {
 			return nil, err
 		}
-		rule, err := inForce(ctx, tx, rules.KindPlan)
+		rule, err := planRuleInForce(ctx, tx)
 		if err != nil {
 			return nil, err
 		}

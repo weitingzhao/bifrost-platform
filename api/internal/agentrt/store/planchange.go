@@ -148,7 +148,7 @@ func lockTree(ctx context.Context, tx pgx.Tx, root string) error {
 // grants done_rules, the first done rule of a step not done that names no
 // manual atom (CUT-plan-import-2026-10-19.md §7). Anything else is the
 // Owner's.
-func standing(ctx context.Context, tx pgx.Tx, c PlanChange, rule *StoredRule) (bool, error) {
+func standing(ctx context.Context, tx pgx.Tx, c PlanChange, rule *PlanRule) (bool, error) {
 	var ok bool
 	var err error
 	switch {
@@ -176,8 +176,8 @@ func standing(ctx context.Context, tx pgx.Tx, c PlanChange, rule *StoredRule) (b
 // step) or a gate; and not already holding, so no rule makes a step done at
 // once. The holding check reads no deployment (its reader is a stub), so an
 // atom read against what an environment runs must be refused here too.
-func standingRule(ctx context.Context, tx pgx.Tx, c PlanChange, rule *StoredRule) (bool, error) {
-	if rule == nil || !rule.Plan.DoneRules || len(c.Bind) > 0 {
+func standingRule(ctx context.Context, tx pgx.Tx, c PlanChange, rule *PlanRule) (bool, error) {
+	if rule == nil || !rule.DoneRules || len(c.Bind) > 0 {
 		return false, nil
 	}
 	parsed, err := plan.Parse(c.Rule)
