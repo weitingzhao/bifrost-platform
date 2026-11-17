@@ -9,6 +9,7 @@ import (
 	buscards "github.com/weitingzhao/bifrost-platform/api/internal/bus/cards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/runhooks"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/subscribe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/headrelease"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"log/slog"
@@ -572,8 +573,18 @@ func (s *Server) consumeHeadRelease(ctx context.Context, js jetstream.JetStream,
 	// for the next 5-minute reconciliation; the window's release now wakes it
 	// (2026-11-16 night: of 564 s from main to STG released, 267 s were
 	// waiting for the window).
+	// Only the events of the enabled rows start a pass (headrelease.Wakes,
+	// 2026-11-17: every run of every pipeline and every window renewal woke
+	// it, ~400 LISTs per 10 minutes). Without the table, every event does.
+	var worth func(relay.Envelope) bool
+	if table, _, err := headrelease.LoadTable(); err == nil {
+		w := headrelease.WakesOf(table)
+		worth = func(e relay.Envelope) bool { return w.Worth(e.Type, e.Subject, e.Change) }
+	}
 	cc, err := relay.ConsumeDurable(ctx, js, relay.Tenant, env, "headrelease", headReleaseWakes, func(e relay.Envelope) error {
-		s.bus.kickHeadRelease()
+		if worth == nil || worth(e) {
+			s.bus.kickHeadRelease()
+		}
 		rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		if err := receipts.Publish(rctx, e.ID, "headrelease"); err != nil {
