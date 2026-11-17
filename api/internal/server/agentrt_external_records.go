@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"io"
 	"log/slog"
 	"net/http"
@@ -77,7 +78,7 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 			return f, ok, nil
 		}
 		src.PipelineRuns = func(ctx context.Context) ([]store.PipelineRun, error) {
-			items, err := s.delivery.PipelineRunObservations(ctx)
+			items, err := s.delivery.PipelineRunObservations(kubemetrics.WithSite(ctx, "records"))
 			if err != nil {
 				return nil, err
 			}

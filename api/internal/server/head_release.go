@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"io"
 	"log/slog"
 	"net/http"
@@ -250,10 +251,12 @@ func (s *Server) headWorldOf() *headWorld {
 	db := func() store.DB { return s.agentRuntime.api.DB }
 	tree := giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second})
 	return &headWorld{
-		head:  s.agentRuntimeMains(),
-		ci:    ledgerCI(db, tree),
-		db:    db,
-		runs:  s.delivery.PipelineRunObservations,
+		head: s.agentRuntimeMains(),
+		ci:   ledgerCI(db, tree),
+		db:   db,
+		runs: func(ctx context.Context) ([]unstructured.Unstructured, error) {
+			return s.delivery.PipelineRunObservations(kubemetrics.WithSite(ctx, "head-release"))
+		},
 		start: s.delivery.StartDeliveryIfFree,
 		frozen: func(ctx context.Context) (bool, string) {
 			if s.releasePolicy == nil {

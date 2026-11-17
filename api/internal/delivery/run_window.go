@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"log/slog"
 	"strings"
 	"time"
@@ -222,7 +223,7 @@ func (h *Handler) recoverRunWindowTicks(ctx context.Context, ticks <-chan time.T
 }
 
 func (h *Handler) recoverRunWindowOnce() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(kubemetrics.WithSite(context.Background(), "window.recovery"), 10*time.Second)
 	defer cancel()
 	s := h.svc
 	cs, _, err := s.cluster.KubernetesClient()
