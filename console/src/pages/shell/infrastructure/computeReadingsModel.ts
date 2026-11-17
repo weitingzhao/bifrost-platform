@@ -1,12 +1,5 @@
 import type { TelemetryMetricResult, TelemetrySamplePoint } from '@/api/clusterTypes'
 
-/** Readings the design names that nothing measures yet, and what each waits for. */
-export const NOT_MEASURED: { title: string; missing: string }[] = [
-  { title: 'Time from asking for a result to having it, by kind of work', missing: 'Needs the CI evidence ledger to time each kind of task.' },
-  { title: 'GPU node: share of awake hours with work, tokens served, time to wake', missing: 'The node has been off; nothing wakes it or records its use yet.' },
-  { title: 'Times the Owner acted or was asked about compute or quota', missing: 'Nothing records it under this heading.' },
-]
-
 export function formatReading(value: number, unit?: string): string {
   if (!Number.isFinite(value)) return '—'
   if (unit === 'ratio') return `${(value * 100).toFixed(1)}%`

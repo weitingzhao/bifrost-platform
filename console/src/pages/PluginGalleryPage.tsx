@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { Button, DenseTag, StatusLamp } from '@bifrost/ui'
+import { Button, StatusLamp } from '@bifrost/ui'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   OpsVerdictStrip,
@@ -15,7 +15,6 @@ type PluginRegistryEntry = {
   name: string
   vendor: string
   role: string
-  lifecycle: 'live' | 'planned'
   openTabId: string | null
   openLabel: string | null
 }
@@ -26,7 +25,6 @@ const PLUGIN_REGISTRY: PluginRegistryEntry[] = [
     name: 'IB Client',
     vendor: 'Interactive Brokers',
     role: 'TWS socket bridge · redis-ib @ data NS',
-    lifecycle: 'live',
     openTabId: 'ib-gateway-manage',
     openLabel: 'Open IB Client',
   },
@@ -35,7 +33,6 @@ const PLUGIN_REGISTRY: PluginRegistryEntry[] = [
     name: 'Massive',
     vendor: 'Polygon.io',
     role: 'REST ingest · stock/option bars + snapshots · PG-as-broker @ plugin-market-data NS',
-    lifecycle: 'live',
     openTabId: 'market-data-manage',
     openLabel: 'Open Massive',
   },
@@ -44,7 +41,6 @@ const PLUGIN_REGISTRY: PluginRegistryEntry[] = [
     name: 'IB Flex',
     vendor: 'Interactive Brokers',
     role: 'Flex Web Service ingest · trades/cash → brokerage.* @ plugin-flex-query NS',
-    lifecycle: 'live',
     openTabId: 'flex-query-manage',
     openLabel: 'Open IB Flex',
   },
@@ -104,14 +100,14 @@ export function PluginGalleryPage({
   const marketProbe = useMarketDataLiveProbe()
   const flexProbe = useFlexQueryLiveProbe()
 
-  const liveCount = PLUGIN_REGISTRY.filter(p => p.lifecycle === 'live').length
-  const plannedCount = PLUGIN_REGISTRY.filter(p => p.lifecycle === 'planned').length
-
   const busReach =
     liveProbe.isLoading || marketProbe.isLoading || flexProbe.isLoading
       ? 'unknown'
       : worseReach(worseReach(liveProbe.probeReach, marketProbe.probeReach), flexProbe.probeReach)
   const busVerdict = reachToVerdict(busReach)
+  const probes = [liveProbe, marketProbe, flexProbe]
+  const reachableCount = probes.filter(p => !p.isLoading && p.probeReach === 'ok').length
+  const probedCount = probes.filter(p => !p.isLoading && p.probeReach !== 'unknown').length
   const busSummary = `IB ${reachLabel(liveProbe.probeReach, liveProbe.isLoading)} · Massive ${reachLabel(marketProbe.probeReach, marketProbe.isLoading)} · Flex ${reachLabel(flexProbe.probeReach, flexProbe.isLoading)}`
 
   const refreshBoth = useCallback(() => {
@@ -148,7 +144,7 @@ export function PluginGalleryPage({
         }
         meta={
           <span>
-            {liveCount} live · {plannedCount} planned · detail on manage pages
+            {reachableCount} of {PLUGIN_REGISTRY.length} reachable · {PLUGIN_REGISTRY.length - probedCount} unknown · detail on manage pages
           </span>
         }
       />
@@ -189,7 +185,6 @@ export function PluginGalleryPage({
                   />
                 ) : null}
                 <span className="text-[var(--text-dense-label)] font-semibold">{plugin.name}</span>
-                <DenseTag variant="neutral">{plugin.lifecycle}</DenseTag>
               </div>
               <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
                 {plugin.vendor} · {plugin.role}

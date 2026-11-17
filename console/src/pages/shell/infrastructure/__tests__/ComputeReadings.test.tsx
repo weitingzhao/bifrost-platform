@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TelemetryMetricResult, TelemetryOverviewResponse } from '@/api/clusterTypes'
 import { ComputeReadings } from '../ComputeReadings'
-import { NOT_MEASURED, formatReading, readingValues } from '../computeReadingsModel'
+import { formatReading, readingValues } from '../computeReadingsModel'
 
 const fetchComputeReadings = vi.fn<() => Promise<TelemetryOverviewResponse>>()
 vi.mock('@/api/telemetry', () => ({ fetchComputeReadings: () => fetchComputeReadings() }))
@@ -56,8 +56,10 @@ describe('compute readings', () => {
     expect(readingValues(broken)).toBe('Could not be read: prometheus: timeout')
     expect(readingValues(empty)).toBe('No series')
   })
-  it('shows each reading with its target and note, a failed one as failed, and names what is not measured', async () => {
-    fetchComputeReadings.mockResolvedValue({ namespace: 'bifrost-stg', metrics: [pending, load, broken], generated_at: '2026-11-13T07:00:00Z' })
+  // 2026-11-17 OWNER_LAW #30: the hand-written "not measured" list is gone; a reading without a series is
+  // known only from the API's own status (audit row #31).
+  it('shows each reading with its target and note, a failed one as failed, and an empty one as no series', async () => {
+    fetchComputeReadings.mockResolvedValue({ namespace: 'bifrost-stg', metrics: [pending, load, broken, empty], generated_at: '2026-11-13T07:00:00Z' })
     const view = show()
     const row = (await screen.findByText('Load per CPU thread per host, p99')).closest('tr')!
     expect(row).toHaveTextContent('ubt-k3s-06 5.58×')
@@ -66,12 +68,14 @@ describe('compute readings', () => {
     const failed = view.container.querySelector('[data-reading="compute_oom_kills"]')!
     expect(failed.getAttribute('data-status')).toBe('error')
     expect(failed).toHaveTextContent('Could not be read: prometheus: timeout')
-    expect(view.container.querySelectorAll('[data-reading="not-measured"]')).toHaveLength(NOT_MEASURED.length)
+    const none = view.container.querySelector('[data-reading="compute_pods_evicted"]')!
+    expect(none.getAttribute('data-status')).toBe('empty')
+    expect(none).toHaveTextContent('No series')
   })
-  it('says so when the readings cannot be loaded, and still names what is not measured', async () => {
+  it('says so when the readings cannot be loaded', async () => {
     fetchComputeReadings.mockRejectedValue(new Error('compute readings: HTTP 503'))
     const view = show()
     expect(await screen.findByText(/Compute readings could not be loaded: compute readings: HTTP 503/)).toBeInTheDocument()
-    expect(view.container.querySelectorAll('[data-reading="not-measured"]')).toHaveLength(NOT_MEASURED.length)
+    expect(view.container.querySelectorAll('tbody tr')).toHaveLength(1)
   })
 })

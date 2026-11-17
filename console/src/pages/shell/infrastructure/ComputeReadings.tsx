@@ -2,8 +2,8 @@
  * Compute readings, under the cluster panels: is work waiting while capacity
  * is idle, are the protected tiers squeezed, is the Agent host queueing, and
  * do the requests match the use. Seven-day Prometheus readings from
- * /telemetry/overview?group=compute; the readings that cannot be measured yet
- * are listed with what is missing, not left out.
+ * /telemetry/overview?group=compute. A reading the API returns without a
+ * series shows "No series"; nothing here is listed by hand.
  */
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -17,7 +17,7 @@ import {
 } from '@bifrost/ui'
 import { fetchComputeReadings } from '@/api/telemetry'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { NOT_MEASURED, readingValues } from './computeReadingsModel'
+import { readingValues } from './computeReadingsModel'
 
 export function ComputeReadings() {
   const q = useQuery({
@@ -65,14 +65,6 @@ export function ComputeReadings() {
               </DenseTableRow>
             ))
           )}
-          {NOT_MEASURED.map(row => (
-            <DenseTableRow key={row.title} data-reading="not-measured">
-              <DenseTableCell>{row.title}</DenseTableCell>
-              <DenseTableCell className="text-muted-foreground">Not measured yet</DenseTableCell>
-              <DenseTableCell>—</DenseTableCell>
-              <DenseTableCell className="text-muted-foreground">{row.missing}</DenseTableCell>
-            </DenseTableRow>
-          ))}
         </DenseTableBody>
       </DenseDataTable>
     </OpsSection>
