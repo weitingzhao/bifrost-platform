@@ -1,3 +1,5 @@
+//bifrost:owner plan
+
 package store_test
 
 import (
