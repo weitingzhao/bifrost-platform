@@ -1,21 +1,19 @@
 package landing
 
-type History string
+import "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/mainhistory"
+
+// The answer to "is this result on main, and in effect" is package
+// mainhistory's since 2026-11-17 (the plan's completion atoms read it and may
+// not import this package). These are its names as this package has always
+// exported them: the same types and values, not copies.
+
+type History = mainhistory.History
 
 const (
-	Unknown   History = "unknown"
-	Never     History = "never"
-	Effective History = "effective"
-	Reverted  History = "reverted"
+	Unknown   = mainhistory.Unknown
+	Never     = mainhistory.Never
+	Effective = mainhistory.Effective
+	Reverted  = mainhistory.Reverted
 )
 
-type MainHistory struct {
-	State  History
-	Commit string
-	// RevertedBy is the commit whose reversal of Commit is in effect, when
-	// State is Reverted (S3 B-02: the reconciler records it).
-	RevertedBy string
-	// Snapshot is the main commit the answer was read at, when the reader
-	// pinned one (plan observations keep it as evidence).
-	Snapshot string
-}
+type MainHistory = mainhistory.MainHistory

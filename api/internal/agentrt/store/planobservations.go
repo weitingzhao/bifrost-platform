@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/mainhistory"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 )
 
@@ -32,7 +32,7 @@ const (
 // PlanSources are controller-owned adapters, never request payloads. History
 // must read complete Git history, including reverts.
 type PlanSources struct {
-	History func(context.Context, string, string, string, string) (landing.MainHistory, error)
+	History func(context.Context, string, string, string, string) (mainhistory.MainHistory, error)
 }
 
 type planObservation struct {
@@ -112,7 +112,7 @@ func (p planObservationPass) validate() error {
 type remoteRead struct {
 	read    bool
 	at      time.Time
-	history landing.MainHistory
+	history mainhistory.MainHistory
 	err     error
 }
 
@@ -402,18 +402,18 @@ func readPlanSource(ctx context.Context, tx pgx.Tx, remote remoteRead, b planvie
 		}
 		h := remote.history
 		switch h.State {
-		case landing.Unknown:
+		case mainhistory.Unknown:
 			return fmt.Errorf("incomplete history")
-		case landing.Never:
+		case mainhistory.Never:
 			n.Value = "false"
 			n.Reason = "Not landed"
 			return nil
-		case landing.Reverted:
+		case mainhistory.Reverted:
 			n.Value = "false"
 			n.Reason = "Result reverted"
 			n.Evidence = []string{h.Commit}
 			return nil
-		case landing.Effective:
+		case mainhistory.Effective:
 			if h.Commit == "" {
 				return fmt.Errorf("missing main result")
 			}

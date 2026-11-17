@@ -869,6 +869,13 @@
       "status": "assigned",
       "basis": "2026-11-16 source and caller audit: latest coordinating-thread progress document bridge; implementation, authorization, refusal and dispatch behavior unchanged"
     },
+    "api/internal/agentrt/mainhistory": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-17 the types of one observation, moved out of agentrt/landing (plan core wall, shared notes duty/from-biz-2026-11-17-plan-core-wall.md step 3): History, its four states and MainHistory, 21 lines with no function, no SQL and no JSON tag, importing nothing; the reader that produces the answer stays verification's (landinggit) and the plan's completion atoms read it, so neither imports the other; landing keeps the names as aliases. Placed in foundation by the business-alignment lane's design; the foundation domain's owner has not ruled on the placement or the name"
+    },
     "api/internal/agentrt/landing": {
       "domains": [
         "verification"
