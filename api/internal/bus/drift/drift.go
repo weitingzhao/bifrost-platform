@@ -13,6 +13,8 @@ import (
 	"context"
 	"regexp"
 
+	actors "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
@@ -72,8 +74,7 @@ func Announce(ctx context.Context, db eventlog.DB, f Found) (announced bool, err
 		return false, nil
 	}
 	err = eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
-		var seeded bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.actor WHERE actor_id = $1)`, actor).Scan(&seeded); err != nil || !seeded {
+		if seeded, err := actors.Exists(ctx, tx, actor); err != nil || !seeded {
 			return err
 		}
 		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: Stream(f.Repo), Type: Type, Actor: actor, Body: Body(f)}); err != nil {

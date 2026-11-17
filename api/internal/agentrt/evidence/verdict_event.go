@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"regexp"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
@@ -192,8 +194,8 @@ func announceVerdict(ctx context.Context, tx pgx.Tx, e EvidenceRow, previous str
 	// A ledger with no controller (a database the platform has not seeded:
 	// the CI line's own tests write evidence into one) announces nothing;
 	// the platform seeds it at migration, so on STG and PROD it is there.
-	var seeded bool
-	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.actor WHERE actor_id = $1)`, verdictActor).Scan(&seeded); err != nil || !seeded {
+	seeded, err := actor.Exists(ctx, tx, verdictActor)
+	if err != nil || !seeded {
 		return err
 	}
 	tree := verdictTree(e)

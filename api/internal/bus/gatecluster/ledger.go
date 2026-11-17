@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
@@ -90,22 +92,6 @@ func (l *PGLedger) Append(ctx context.Context, stream, typ string, decide Decide
 // event written by the controller.
 func ensureActor(ctx context.Context, db eventlog.DB) error {
 	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
-		var have bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.actor WHERE actor_id = $1)`, Actor).Scan(&have); err != nil || have {
-			return err
-		}
-		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742109)`); err != nil {
-			return err
-		}
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.actor WHERE actor_id = $1)`, Actor).Scan(&have); err != nil || have {
-			return err
-		}
-		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "actor_registered", Actor: "controller",
-			Body: map[string]any{"actors": []string{Actor}, "note": "the bus's gate for the cluster, registered at its first write"}}); err != nil {
-			return err
-		}
-		_, err := tx.Exec(ctx, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name) VALUES ($1, 'controller', $2)`,
-			Actor, "Bus gate-cluster")
-		return err
+		return actor.RegisterController(ctx, tx, Actor, "Bus gate-cluster", "the bus's gate for the cluster, registered at its first write")
 	})
 }

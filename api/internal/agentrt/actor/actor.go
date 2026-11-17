@@ -381,3 +381,36 @@ func response(b []byte) (map[string]any, error) {
 	}
 	return m, nil
 }
+
+// Exists says whether an actor is registered, retired or not. It is how a
+// writer outside this package asks: the table is this package's, and a
+// package that names it in its own SQL has to follow every change of it
+// (2026-11-16: five packages did, with the same sentence copied).
+func Exists(ctx context.Context, tx pgx.Tx, id string) (bool, error) {
+	var have bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.actor WHERE actor_id = $1)`, id).Scan(&have)
+	return have, err
+}
+
+// RegisterController registers a controller-kind actor once, as the platform
+// registers a seat: nothing if it is there; else under the registration
+// lock, read again (a writer that held the lock may have registered it), an
+// actor_registered event written by the controller with the note, then the
+// row. The bus's gates register themselves with it at their first write.
+func RegisterController(ctx context.Context, tx pgx.Tx, id, display, note string) error {
+	if have, err := Exists(ctx, tx, id); err != nil || have {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742109)`); err != nil {
+		return err
+	}
+	if have, err := Exists(ctx, tx, id); err != nil || have {
+		return err
+	}
+	if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "actor_registered", Actor: "controller",
+		Body: map[string]any{"actors": []string{id}, "note": note}}); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name) VALUES ($1, 'controller', $2)`, id, display)
+	return err
+}
