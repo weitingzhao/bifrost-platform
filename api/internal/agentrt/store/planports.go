@@ -227,3 +227,34 @@ func alertClaimVia(ctx context.Context, p *CoordinationPorts, tx pgx.Tx, ev Even
 	}
 	return p.AlertClaim(ctx, tx, ev, cause, source, artifact, body)
 }
+
+// QuestionPorts is what the plan code needs of the Owner's question store:
+// the size it will count a card's body as, asked before the card is.
+type QuestionPorts struct {
+	// BodyBytes is the size of a body as the question store checks it.
+	BodyBytes func(body string) int
+}
+
+var questionPorts atomic.Pointer[QuestionPorts]
+
+// BindPlanQuestions binds the question store's side. It is called once, from
+// the init that wires the packages already outside this one (portsbind.go).
+func BindPlanQuestions(p QuestionPorts) { questionPorts.Store(&p) }
+
+func cardBodyBytes(body string) (int, error) { return cardBodyBytesVia(questionPorts.Load(), body) }
+
+func cardBodyBytesVia(p *QuestionPorts, body string) (int, error) {
+	if p == nil || p.BodyBytes == nil {
+		return 0, unbound("the size the question store counts a card's body as", "BindPlanQuestions")
+	}
+	return p.BodyBytes(body), nil
+}
+
+// The question store's two words the plan code reads, as the plan's own
+// constants: the most a question's body holds, in the bytes BodyBytes counts
+// (questions.BodyLimit), and the channel of an answer a rule gave
+// (questions.RuleChannel). A test holds each equal to the question store's.
+const (
+	questionBodyLimit = 3000
+	ruleAnswerChannel = "rule"
+)

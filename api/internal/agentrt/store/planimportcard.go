@@ -12,7 +12,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
-	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
 
 // The first import of a plan through the interface (POST /plan/imports;
@@ -100,8 +99,12 @@ func ProposePlanImport(ctx context.Context, db DB, w Writer, key, reason string,
 		}
 		cardKey := canonKey(w.Actor, "import:"+key)
 		body := importCardBody(w, cardKey, reason, req, reqID)
-		if n := questions.BodyBytes(body); n > questions.BodyLimit {
-			return nil, invalid("the Owner's card for this import would be %d bytes, more than the question store's %d", n, questions.BodyLimit)
+		n, err := cardBodyBytes(body)
+		if err != nil {
+			return nil, err
+		}
+		if n > questionBodyLimit {
+			return nil, invalid("the Owner's card for this import would be %d bytes, more than the question store's %d", n, questionBodyLimit)
 		}
 		if ask == nil {
 			return nil, fmt.Errorf("%w: no question store is configured", ErrAsk)

@@ -19,6 +19,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
+	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
 
 // refused holds an error to the refusal of an unbound port.
@@ -323,5 +324,42 @@ func TestCoordinationPortIsBoundToCoord(t *testing.T) {
 	}
 	if store.MaxNoteText != coord.MaxMessageBody {
 		t.Fatalf("a note is at most %d bytes; a message body %d", store.MaxNoteText, coord.MaxMessageBody)
+	}
+}
+
+// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): a plan import asks the question store, through a port, how large it will count the card's body before asking; unbound, the port must refuse the import, never count the body as fitting.
+func TestUnboundQuestionPortRefuses(t *testing.T) {
+	t.Parallel()
+	for name, p := range map[string]*store.QuestionPorts{"nothing bound": nil, "an empty binding": {}} {
+		n, err := store.CardBodyBytesViaForTest(p, strings.Repeat("a", 5000))
+		refused(t, name+": the size of a card's body", err)
+		if n != 0 {
+			t.Fatalf("%s: a size with the refusal: %d", name, n)
+		}
+	}
+	// The positive control: a bound port's count is returned.
+	if n, err := store.CardBodyBytesViaForTest(&store.QuestionPorts{BodyBytes: func(s string) int { return len(s) + 2 }}, "abc"); err != nil || n != 5 {
+		t.Fatalf("a bound port: %d %v", n, err)
+	}
+}
+
+// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the store's wiring binds the size port to questions.BodyBytes at the package's start (portsbind.go), and the plan code keeps its own copies of the question store's body limit and rule channel; this holds the binding in place and each copy equal, so an import's card is not sized by another rule than the store checks it with and a rule's answer is not taken for the Owner's.
+func TestQuestionPortAndWordsAreTheQuestionStores(t *testing.T) {
+	t.Parallel()
+	for _, body := range []string{"", "plain", "引号 \" 和换行\n", "a\x00b\tc\r\n", strings.Repeat("长", 1200), "<b>&amp;</b> \u2028"} {
+		n, err := store.CardBodyBytesForTest(body)
+		ok(t, err)
+		if want := questions.BodyBytes(body); n != want {
+			t.Fatalf("the port counts %q as %d bytes; the question store as %d", body, n, want)
+		}
+	}
+	if questions.BodyBytes("plain") == len("plain") {
+		t.Fatal("the question store counts a body as its length: the comparison above shows less than it should")
+	}
+	if store.QuestionBodyLimitForTest != questions.BodyLimit {
+		t.Fatalf("the plan holds a card's body to %d bytes; the question store to %d", store.QuestionBodyLimitForTest, questions.BodyLimit)
+	}
+	if store.RuleAnswerChannelForTest != questions.RuleChannel {
+		t.Fatalf("the plan reads a rule's answer by channel %q; the question store writes %q", store.RuleAnswerChannelForTest, questions.RuleChannel)
 	}
 }

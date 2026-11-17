@@ -43,3 +43,14 @@ var (
 	AlertClaimForTest    = alertClaim
 	AlertClaimViaForTest = alertClaimVia
 )
+
+// The question store's port and the plan's copies of its two words.
+var (
+	CardBodyBytesForTest    = cardBodyBytes
+	CardBodyBytesViaForTest = cardBodyBytesVia
+)
+
+const (
+	QuestionBodyLimitForTest = questionBodyLimit
+	RuleAnswerChannelForTest = ruleAnswerChannel
+)

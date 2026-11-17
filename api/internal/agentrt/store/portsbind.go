@@ -9,6 +9,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
+	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
 
 // The plan code's ports (planports.go) whose providers are packages already
@@ -38,4 +39,5 @@ func init() {
 		ActivityBuckets: workregistration.ActivityBuckets,
 	})
 	BindPlanCoordination(CoordinationPorts{AlertClaim: coord.AlertClaim})
+	BindPlanQuestions(QuestionPorts{BodyBytes: questions.BodyBytes})
 }
