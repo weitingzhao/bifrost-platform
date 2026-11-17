@@ -51,7 +51,10 @@ type Surface struct {
 	// are the keys another domain names.
 	exported map[string]string
 	used     map[string]bool
-	owners   map[*types.Package]map[*types.Var]string
+	// users are, by "<domain>\x00<key>", the packages of other domains whose
+	// production code names the key (UseList).
+	users  map[string]map[string]bool
+	owners map[*types.Package]map[*types.Var]string
 }
 
 // NewSurface counts over the packages of g. module is the import path of
@@ -60,7 +63,8 @@ type Surface struct {
 // "api/internal/x".
 func NewSurface(g *Graph, module string) *Surface {
 	return &Surface{graph: g, module: module, use: map[string]*ContractUse{}, held: map[[3]string]*Held{},
-		exported: map[string]string{}, used: map[string]bool{}, owners: map[*types.Package]map[*types.Var]string{}}
+		exported: map[string]string{}, used: map[string]bool{}, users: map[string]map[string]bool{},
+		owners: map[*types.Package]map[*types.Var]string{}}
 }
 
 func (s *Surface) of(domain string) *ContractUse {
@@ -215,6 +219,10 @@ func (s *Surface) Add(pkg string, fset *token.FileSet, info *types.Info) {
 		}
 		if k := key(originOf(o)); k != "" {
 			s.used[to+"\x00"+k] = true
+			if s.users[to+"\x00"+k] == nil {
+				s.users[to+"\x00"+k] = map[string]bool{}
+			}
+			s.users[to+"\x00"+k][pkg] = true
 		}
 	}
 }
@@ -259,6 +267,38 @@ func (s *Surface) Uses() map[string]ContractUse {
 	for _, u := range s.use {
 		u.ExportedTotal, u.ExportedUsedByOthers, u.Held = 0, 0, nil
 	}
+	return out
+}
+
+// Use is one exported name of a domain that a package of another domain
+// names in its production code. Key is "api/internal/x.Name" (a method:
+// "api/internal/x.Type.Method"), Domain the domain that declares it, User
+// the package that names it.
+type Use struct {
+	Key, Domain, User string
+}
+
+// UseList is every exported name another domain's production code names,
+// one entry per name and user package, sorted by Key then User. It counts
+// the way Uses does (other domains' production code; a "mixed" package is
+// another domain; _test.go files are not read). The contract check of the
+// decoupling line reads it (2026-11-17): a name in this list is a name some
+// domain offers another, and is either registered as that domain's contract
+// or held in a baseline.
+func (s *Surface) UseList() []Use {
+	var out []Use
+	for dk, users := range s.users {
+		d, k, _ := strings.Cut(dk, "\x00")
+		for u := range users {
+			out = append(out, Use{Key: strings.TrimPrefix(k, s.module), Domain: d, User: u})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Key != out[j].Key {
+			return out[i].Key < out[j].Key
+		}
+		return out[i].User < out[j].User
+	})
 	return out
 }
 

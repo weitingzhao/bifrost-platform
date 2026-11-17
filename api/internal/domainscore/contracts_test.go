@@ -37,6 +37,13 @@ func (m fromMemory) Import(path string) (*types.Package, error) {
 // imports and the counts of Surface.
 func counted(t *testing.T, ownership string, sources ...source) Input {
 	t.Helper()
+	in, _ := surfaced(t, ownership, sources...)
+	return in
+}
+
+// surfaced is counted, with the Surface it counted with.
+func surfaced(t *testing.T, ownership string, sources ...source) (Input, *Surface) {
+	t.Helper()
 	ruler, err := ParseRuler([]byte(strings.Replace(testRuler, `"max":75,"by":"machine","measured":false`, `"max":75,"by":"machine","measured":true,"measured_max":5`, 1)))
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +87,7 @@ func counted(t *testing.T, ownership string, sources ...source) Input {
 		surface.Add(s.path, fset, infos[s.path])
 	}
 	in.Contracts = surface.Uses()
-	return in
+	return in, surface
 }
 
 // The provider every case uses: a package of the base with one interface,
@@ -148,6 +155,38 @@ var _ getter = (*core.Store)(nil)`)}, [4]float64{0, 0, 0, 0}},
 				t.Errorf("interface, concrete, function, field = %v, want %v (guards: %s)", got, c.want, c.guards)
 			}
 		})
+	}
+}
+
+// Origin: 2026-11-17, the decoupling line's contract check: a name one
+// domain's production code takes from another must be registered as that
+// domain's contract or held in a baseline, so the check needs the names and
+// who takes them, counted the way the ruler counts. Guards: one entry per
+// name and user package (the same name used twice by one package is one);
+// a type named in a signature is a use of it; a method is keyed by its
+// type; the user's own domain, test files and the
+// assembly roots are not users; the list is sorted, so a baseline diff is
+// stable. Positive control: without the users map in Add the list is empty
+// and the first comparison fails.
+func TestUseListNamesEachNameAndWhoTakesIt(t *testing.T) {
+	_, s := surfaced(t, own, core,
+		user("api/internal/plan", "p.go", `func f(s *core.Store, r core.Reader) string { return s.Get() + s.Get() + r.Read() + s.Name + core.Open().Name }`),
+		user("api/internal/both", "p.go", `var o = core.Open()`),
+		user("api/internal/unlisted", "p.go", `var o = core.Open()`),
+		user("api/cmd/root", "p.go", `var o = core.Open()`),
+		source{"api/internal/plan2", map[string]string{"p.go": "package p\n", "p_test.go": "package p\nimport \"" + testModule + "api/internal/core\"\nvar o = core.Open()\n"}},
+	)
+	got := s.UseList()
+	want := []Use{
+		{Key: "api/internal/core.Open", Domain: "base", User: "api/internal/both"},
+		{Key: "api/internal/core.Open", Domain: "base", User: "api/internal/plan"},
+		{Key: "api/internal/core.Reader", Domain: "base", User: "api/internal/plan"},
+		{Key: "api/internal/core.Reader.Read", Domain: "base", User: "api/internal/plan"},
+		{Key: "api/internal/core.Store", Domain: "base", User: "api/internal/plan"},
+		{Key: "api/internal/core.Store.Get", Domain: "base", User: "api/internal/plan"},
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("UseList =\n%v\nwant\n%v", got, want)
 	}
 }
 
