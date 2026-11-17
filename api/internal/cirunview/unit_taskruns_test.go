@@ -1,14 +1,12 @@
-package delivery
+package cirunview
 
 import (
 	"context"
 	"testing"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
 	dynfake "k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
@@ -45,9 +43,7 @@ func TestUnitTaskRunsArePagedAndSlim(t *testing.T) {
 		calls++
 		return true, page, nil
 	})
-	s := NewService(&config.ClusterEntry{ID: "test"})
-	s.SetDynamicFactoryForTest(func() (dynamic.Interface, error) { return dyn, nil })
-	items, err := s.UnitTaskRuns(context.Background(), "unit=yes", "")
+	items, err := UnitTaskRuns(context.Background(), dyn, "cicd", "unit=yes", "")
 	if err != nil || calls != 2 || len(items) != 2 || items[1].GetName() != "second" {
 		t.Fatalf("items=%d calls=%d err=%v", len(items), calls, err)
 	}

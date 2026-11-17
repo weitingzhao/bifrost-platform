@@ -2,11 +2,12 @@ package delivery
 
 import (
 	"context"
-	"fmt"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 )
 
 // UnitTaskRuns lists the TaskRuns of unit tasks in the delivery namespace:
@@ -19,35 +20,7 @@ func (s *Service) UnitTaskRuns(ctx context.Context, label, selector string) ([]u
 	if err != nil {
 		return nil, err
 	}
-	if selector == "" {
-		selector = label
-	}
-	// Paged, and each run without the copy of its Task that Tekton keeps in
-	// status.taskSpec and without managedFields: the loop that reads these
-	// every 30 s reads labels, conditions, times and results (see
-	// PipelineRunObservations for what the copies cost the workers).
-	var out []unstructured.Unstructured
-	options := metav1.ListOptions{LabelSelector: selector, Limit: 100}
-	seen := map[string]bool{}
-	for {
-		page, err := dyn.Resource(taskRunGVR).Namespace(s.PipelinesNamespace()).List(ctx, options)
-		if err != nil {
-			return nil, err
-		}
-		for i := range page.Items {
-			unstructured.RemoveNestedField(page.Items[i].Object, "status", "taskSpec")
-			unstructured.RemoveNestedField(page.Items[i].Object, "metadata", "managedFields")
-		}
-		out = append(out, page.Items...)
-		options.Continue = page.GetContinue()
-		if options.Continue == "" {
-			return out, nil
-		}
-		if seen[options.Continue] {
-			return nil, fmt.Errorf("unit task run pagination repeated a cursor")
-		}
-		seen[options.Continue] = true
-	}
+	return cirunview.UnitTaskRuns(ctx, dyn, s.PipelinesNamespace(), label, selector)
 }
 
 // CreateUnitTaskRun creates the TaskRun; one of that name being there
