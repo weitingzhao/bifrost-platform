@@ -42,6 +42,9 @@ subscriptions:
     deliver: wake
     to: commit.session
     repos: [bifrost-platform, bifrost-trade-infra]
+    # The land task writes why it refused (CI line, 11-17 08:53); the wake
+    # carries it, so the pusher does not have to find the pod's log.
+    params: {detail: "task-result:land/refusal"}
     guarantee: durable
     by: dispatcher
   - id: mail-to-recipient

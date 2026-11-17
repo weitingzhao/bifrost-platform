@@ -509,6 +509,7 @@ func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStrea
 	send := func(ctx context.Context, key, to, body string) error {
 		return coord.PostConclusion(ctx, pool, key, to, body)
 	}
+	detail := s.busRunDetail()
 	known := func(ctx context.Context, addr string) (bool, error) {
 		var kind string
 		err := store.InTx(ctx, pool, func(tx pgx.Tx) error {
@@ -542,7 +543,7 @@ func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStrea
 		cc, err := relay.ConsumeDurable(ctx, js, relay.Tenant, env, name, row.On, func(e relay.Envelope) error {
 			dctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 			defer cancel()
-			out, err := subscribe.Deliver(dctx, row, subscribe.FromEnvelope(e), read, send, known, subscribe.UndeliverableTo(subs, c.Tenant))
+			out, err := subscribe.Deliver(dctx, row, subscribe.FromEnvelope(e), read, detail, send, known, subscribe.UndeliverableTo(subs, c.Tenant))
 			if err != nil {
 				slog.Warn("bus: subscription delivery; asked again", "tenant", c.Tenant, "row", row.ID, "event", e.ID, "error", err)
 				return err

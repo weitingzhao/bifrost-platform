@@ -112,6 +112,33 @@ func Recipient(ctx context.Context, row registry.Subscription, ev Event, read Co
 	return "", fmt.Errorf("%s: wake to %q is not resolved by the dispatcher", row.ID, row.To)
 }
 
+// Detail answers a row's params.detail for one event: what the event alone
+// does not say, read where it is kept (a run's task result, for a refused
+// landing). "" adds nothing.
+type Detail func(ctx context.Context, row registry.Subscription, ev Event) (string, error)
+
+// RunOf is the run an event of ci.run.finished names ("<run>@<commit>").
+func RunOf(ev Event) string {
+	run, _, _ := strings.Cut(ev.Subject, "@")
+	return run
+}
+
+// withDetail is body with the row's detail added; a detail that cannot be
+// read says so and the wake still goes (it is a hint, not the message).
+func withDetail(ctx context.Context, row registry.Subscription, ev Event, detail Detail, body string) string {
+	if detail == nil || row.Params[registry.ParamDetail] == "" {
+		return body
+	}
+	d, err := detail(ctx, row, ev)
+	switch {
+	case err != nil:
+		return body + " (" + row.Params[registry.ParamDetail] + " could not be read: " + err.Error() + ")"
+	case d != "":
+		return body + " Why: " + d
+	}
+	return body
+}
+
 // Body is the wake message: what happened and where to read it.
 func Body(row registry.Subscription, ev Event) string {
 	return fmt.Sprintf("bus: %s %s (change %s). Read %s. [subscription %s, event %s]", ev.Type, ev.Subject, ev.Change, ev.Ref, row.ID, ev.ID)
@@ -138,7 +165,7 @@ const (
 // an error asks for it again. A wake whose recipient is not known here is
 // not dropped silently: it goes to the tenant's undeliverable_to, naming the
 // row, the event and the address (2026-11-16, the tenant drill).
-func Deliver(ctx context.Context, row registry.Subscription, ev Event, read CommitMessage, send Sender, known Known, undeliverableTo string) (Outcome, error) {
+func Deliver(ctx context.Context, row registry.Subscription, ev Event, read CommitMessage, detail Detail, send Sender, known Known, undeliverableTo string) (Outcome, error) {
 	if row.Deliver != registry.DeliverWake || !Matches(row, ev) {
 		return Skipped, nil
 	}
@@ -159,7 +186,7 @@ func Deliver(ctx context.Context, row registry.Subscription, ev Event, read Comm
 			return Rerouted, send(ctx, Key(row, ev)+":undeliverable", undeliverableTo, body)
 		}
 	}
-	return Delivered, send(ctx, Key(row, ev), to, Body(row, ev))
+	return Delivered, send(ctx, Key(row, ev), to, withDetail(ctx, row, ev, detail, Body(row, ev)))
 }
 
 // UndeliverableTo is the tenant's undeliverable_to.

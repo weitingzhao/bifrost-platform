@@ -2,6 +2,7 @@ package subscribe
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -31,7 +32,7 @@ func TestVerdictRedWakesTheCommitter(t *testing.T) {
 		return nil
 	}
 
-	if _, err := Deliver(context.Background(), row, ev, read, send, nil, ""); err != nil {
+	if _, err := Deliver(context.Background(), row, ev, read, nil, send, nil, ""); err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || got[0].to != "thread:local_ab850773-fe26-40fa-ac01-b3b590b73164" || got[0].key != "sub:verdict-red-to-committer:ev-7" ||
@@ -41,16 +42,16 @@ func TestVerdictRedWakesTheCommitter(t *testing.T) {
 
 	green := ev
 	green.Change = "green"
-	if _, err := Deliver(context.Background(), row, green, read, send, nil, ""); err != nil || len(got) != 1 {
+	if _, err := Deliver(context.Background(), row, green, read, nil, send, nil, ""); err != nil || len(got) != 1 {
 		t.Fatalf("a green verdict woke someone: %+v %v", got, err)
 	}
 	noTrailer := func(context.Context, string, string) (string, bool, error) { return "feat: x\n", true, nil }
-	if _, err := Deliver(context.Background(), row, ev, noTrailer, send, nil, ""); err != nil || len(got) != 1 {
+	if _, err := Deliver(context.Background(), row, ev, noTrailer, nil, send, nil, ""); err != nil || len(got) != 1 {
 		t.Fatalf("a commit without a session woke someone: %+v %v", got, err)
 	}
 	broken := ev
 	broken.Ref = "/api/v1/units/plan"
-	if _, err := Deliver(context.Background(), row, broken, read, send, nil, ""); err == nil {
+	if _, err := Deliver(context.Background(), row, broken, read, nil, send, nil, ""); err == nil {
 		t.Fatal("an event naming no repo was taken as delivered")
 	}
 }
@@ -131,17 +132,17 @@ func TestUnknownRecipientIsNotDroppedSilently(t *testing.T) {
 	var to, body string
 	send := func(_ context.Context, _ string, t, b string) error { to, body = t, b; return nil }
 	unknown := func(context.Context, string) (bool, error) { return false, nil }
-	out, err := Deliver(context.Background(), row, ev, nil, send, unknown, "thread:local_duty")
+	out, err := Deliver(context.Background(), row, ev, nil, nil, send, unknown, "thread:local_duty")
 	if err != nil || out != Rerouted || to != "thread:local_duty" || !strings.Contains(body, "thread:local_gone") {
 		t.Fatalf("out=%s to=%q body=%q err=%v", out, to, body, err)
 	}
 	to = ""
-	out, err = Deliver(context.Background(), row, ev, nil, send, unknown, "")
+	out, err = Deliver(context.Background(), row, ev, nil, nil, send, unknown, "")
 	if err != nil || out != Undeliverable || to != "" {
 		t.Fatalf("with nowhere to tell: out=%s to=%q err=%v", out, to, err)
 	}
 	knownOK := func(context.Context, string) (bool, error) { return true, nil }
-	if out, _ := Deliver(context.Background(), row, ev, nil, send, knownOK, "thread:local_duty"); out != Delivered || to != "thread:local_gone" {
+	if out, _ := Deliver(context.Background(), row, ev, nil, nil, send, knownOK, "thread:local_duty"); out != Delivered || to != "thread:local_gone" {
 		t.Fatalf("known recipient: out=%s to=%q", out, to)
 	}
 }
@@ -172,13 +173,63 @@ func TestRefusedLandingWakesThePusher(t *testing.T) {
 	}
 	var to string
 	send := func(_ context.Context, _ string, t, _ string) error { to = t; return nil }
-	out, err := Deliver(context.Background(), row, ev, read, send, nil, "")
+	out, err := Deliver(context.Background(), row, ev, read, nil, send, nil, "")
 	if err != nil || out != Delivered || to != "thread:local_7de640c4-4b19-4a71-a0ac-ced2ce5fc7ff" || len(asked) != 2 {
 		t.Fatalf("out=%s to=%q asked=%v err=%v", out, to, asked, err)
 	}
 	ok := ev
 	ok.Change = "succeeded"
-	if out, _ := Deliver(context.Background(), row, ok, read, send, nil, ""); out != Skipped {
+	if out, _ := Deliver(context.Background(), row, ok, read, nil, send, nil, ""); out != Skipped {
 		t.Fatalf("a landing that landed woke someone: %s", out)
+	}
+}
+
+// 2026-11-17: a refused landing woke the pusher with only "land-… failed";
+// why it was refused was in the pod's log (two pushes refused overnight, the
+// line learned it an hour later). The land task now writes its refusal as a
+// result (CI line, 08:53) and a row's params.detail adds it to the wake; a
+// detail that cannot be read is said, and the wake still goes.
+func TestRefusedLandingWakeCarriesTheReason(t *testing.T) {
+	sha := strings.Repeat("a", 40)
+	row := registry.Subscription{ID: "land-refused-to-pusher", On: []string{"ci.run.finished"}, Match: "land-", Change: "!succeeded",
+		Deliver: registry.DeliverWake, To: "commit.session", Repos: []string{"bifrost-platform"},
+		Params: map[string]string{"detail": "task-result:land/refusal"}, Guarantee: "durable", By: registry.ByDispatcher}
+	ev := Event{ID: "ev-9", Type: "ci.run.finished", Subject: "land-k88n5@" + sha, Ref: "/api/v1/delivery/runs/land-k88n5", Change: "failed"}
+	read := func(context.Context, string, string) (string, bool, error) {
+		return "x\n\nClaude-Session: local_pusher\n", true, nil
+	}
+	var got []string
+	send := func(_ context.Context, _, _, body string) error { got = append(got, body); return nil }
+	var asked string
+	detail := func(_ context.Context, r registry.Subscription, e Event) (string, error) {
+		asked = RunOf(e) + " " + r.Params["detail"]
+		return "refused: commit bc6b49b22fa9 has no Change-Id trailer", nil
+	}
+	if _, err := Deliver(context.Background(), row, ev, read, detail, send, nil, ""); err != nil || len(got) != 1 {
+		t.Fatalf("delivered %d, %v", len(got), err)
+	}
+	if asked != "land-k88n5 task-result:land/refusal" {
+		t.Fatalf("detail asked for %q", asked)
+	}
+	if !strings.Contains(got[0], "Why: refused: commit bc6b49b22fa9 has no Change-Id trailer") {
+		t.Fatalf("the reason is not in the wake: %s", got[0])
+	}
+	broken := func(context.Context, registry.Subscription, Event) (string, error) {
+		return "", errors.New("cluster down")
+	}
+	got = nil
+	ev.ID = "ev-10"
+	if _, err := Deliver(context.Background(), row, ev, read, broken, send, nil, ""); err != nil || len(got) != 1 {
+		t.Fatalf("an unreadable detail held the wake back: %d, %v", len(got), err)
+	}
+	if !strings.Contains(got[0], "could not be read: cluster down") {
+		t.Fatalf("an unreadable detail is not said: %s", got[0])
+	}
+	// Positive control: a row without params.detail never asks.
+	row.Params = nil
+	got, asked = nil, ""
+	ev.ID = "ev-11"
+	if _, err := Deliver(context.Background(), row, ev, read, detail, send, nil, ""); err != nil || asked != "" || strings.Contains(got[0], "Why:") {
+		t.Fatalf("a row without detail asked %q: %v %v", asked, got, err)
 	}
 }

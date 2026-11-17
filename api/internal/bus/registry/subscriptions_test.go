@@ -35,6 +35,9 @@ func TestCheckSubscriptionsRefuses(t *testing.T) {
 		{ID: "b", On: []string{"demo.thing.happened"}, Deliver: DeliverWake, To: "subject"},
 		{ID: "c", On: []string{"ci.run.finished"}, Deliver: DeliverAction, Action: "rollout_restart_deployment"},
 		{ID: "d", On: []string{"ci.run.finished"}, Deliver: DeliverAction, Action: "scale_deployment", Params: map[string]string{"mode": "request"}},
+		// 2026-11-17: a refused landing's wake carries its reason (the land
+		// task's refusal result); the positive control of the two below.
+		{ID: "e", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/refusal"}},
 	}
 	for _, r := range ok {
 		if err := CheckSubscriptions(tenants, row(r), tier); err != nil {
@@ -47,6 +50,8 @@ func TestCheckSubscriptionsRefuses(t *testing.T) {
 		"needs an approval":  {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverAction, Action: "scale_deployment"},
 		"wake to":            {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "everyone"},
 		"deliver is":         {ID: "x", On: []string{"ci.run.finished"}, Deliver: "run"},
+		"is task-result:":    {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "log:land"}},
+		"names no run":       {ID: "x", On: []string{"seat.mail.arrived"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/refusal"}},
 	}
 	for want, r := range refused {
 		err := CheckSubscriptions(tenants, row(r), tier)

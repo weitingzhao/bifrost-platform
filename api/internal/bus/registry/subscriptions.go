@@ -196,6 +196,16 @@ func CheckSubscriptions(tenants map[string]Tenant, subs map[string]Subscriptions
 			if r.By == "" {
 				bad("%s: by names who delivers it (dispatcher, or the hand-written code that still does)", at)
 			}
+			if d := r.Params[ParamDetail]; d != "" {
+				if _, _, ok := TaskResult(d); !ok {
+					bad("%s: params.detail %q is task-result:<pipeline task>/<result>", at, d)
+				}
+				for _, typ := range r.On {
+					if typ != "ci.run.finished" {
+						bad("%s: params.detail reads a run's task result; %s names no run", at, typ)
+					}
+				}
+			}
 			switch r.Deliver {
 			case DeliverWake:
 				if !wakeFrom[r.To] && !addressRE.MatchString(r.To) {
@@ -238,4 +248,20 @@ func mayHear(tenants map[string]Tenant, name string, own Tenant, typ string) boo
 		}
 	}
 	return false
+}
+
+// ParamDetail is the row parameter naming what a wake adds to its message
+// (subscribe.Detail): task-result:<pipeline task>/<result>, the result a
+// task of the event's run wrote (a refused landing's reason: land/refusal).
+const ParamDetail = "detail"
+
+var taskResultRE = regexp.MustCompile(`^task-result:([a-z0-9]([-a-z0-9]*[a-z0-9])?)/([a-z0-9]([-a-z0-9]*[a-z0-9])?)$`)
+
+// TaskResult reads a params.detail of the form task-result:<task>/<result>.
+func TaskResult(detail string) (task, result string, ok bool) {
+	m := taskResultRE.FindStringSubmatch(detail)
+	if m == nil {
+		return "", "", false
+	}
+	return m[1], m[3], true
 }
