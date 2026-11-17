@@ -40,10 +40,18 @@ func Matches(row registry.Subscription, ev Event) bool {
 	if !on {
 		return false
 	}
-	if row.Change != "" && ev.Change != row.Change {
+	if row.Change != "" && !changeMatches(row.Change, ev.Change) {
 		return false
 	}
 	return row.Match == "" || strings.Contains(ev.Subject, row.Match)
+}
+
+// changeMatches reads a row's change: one value, or "!value" for any other.
+func changeMatches(want, got string) bool {
+	if strings.HasPrefix(want, "!") {
+		return got != "" && got != want[1:]
+	}
+	return got == want
 }
 
 // CommitMessage reads a commit's message (delivery.PolicyFacts.CommitMessage).
@@ -71,22 +79,32 @@ func Recipient(ctx context.Context, row registry.Subscription, ev Event, read Co
 		return "", nil
 	case "commit.session":
 		m := shaRE.FindStringSubmatch(ev.Subject)
-		u, err := url.Parse(ev.Ref)
-		if m == nil || err != nil || u.Query().Get("repo") == "" {
+		repos := row.Repos
+		if u, err := url.Parse(ev.Ref); err == nil && u.Query().Get("repo") != "" {
+			repos = []string{u.Query().Get("repo")}
+		}
+		if m == nil || len(repos) == 0 {
 			return "", fmt.Errorf("%s: %s names no commit and repo (subject %q, ref %q)", row.ID, ev.ID, ev.Subject, ev.Ref)
 		}
 		if read == nil {
 			return "", fmt.Errorf("%s: no commit reader", row.ID)
 		}
-		msg, ok, err := read(ctx, u.Query().Get("repo"), m[1])
-		if err != nil {
-			return "", err
-		}
-		s := sessionRE.FindStringSubmatch(msg)
-		if !ok || s == nil {
+		// The commit is looked for in each candidate repository; a commit id
+		// is in one of them.
+		for _, repo := range repos {
+			msg, ok, err := read(ctx, repo, m[1])
+			if err != nil {
+				return "", err
+			}
+			if !ok {
+				continue
+			}
+			if s := sessionRE.FindStringSubmatch(msg); s != nil {
+				return "thread:" + s[1], nil
+			}
 			return "", nil
 		}
-		return "thread:" + s[1], nil
+		return "", nil
 	}
 	if addrRE.MatchString(row.To) {
 		return row.To, nil

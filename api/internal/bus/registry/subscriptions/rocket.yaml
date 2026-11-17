@@ -31,6 +31,19 @@ subscriptions:
     to: commit.session
     guarantee: durable
     by: dispatcher
+  # A landing that did not land wakes whoever pushed the commit
+  # (2026-11-17, the CI line: refusals were seen only in a Pod's log, and a
+  # seat found out by measuring). The landing run's finish is already on the
+  # bus; its subject's commit is the one pushed to ready/.
+  - id: land-refused-to-pusher
+    on: [ci.run.finished]
+    match: "land-"
+    change: "!succeeded"
+    deliver: wake
+    to: commit.session
+    repos: [bifrost-platform, bifrost-trade-infra]
+    guarantee: durable
+    by: dispatcher
   - id: mail-to-recipient
     on: [seat.mail.arrived]
     deliver: wake

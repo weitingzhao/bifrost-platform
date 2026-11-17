@@ -40,6 +40,9 @@ type Subscription struct {
 	// Envs, when set, are the only environments the row is dispatched in
 	// (a drill on STG must not wake anyone from PROD).
 	Envs []string `yaml:"envs"`
+	// Repos are where commit.session looks for the event's commit when the
+	// event's ref names no repository (ci.run.finished of a landing run).
+	Repos []string `yaml:"repos"`
 }
 
 // InEnv says whether the row is dispatched in env.

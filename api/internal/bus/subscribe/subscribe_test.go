@@ -145,3 +145,40 @@ func TestUnknownRecipientIsNotDroppedSilently(t *testing.T) {
 		t.Fatalf("known recipient: out=%s to=%q", out, to)
 	}
 }
+
+// 2026-11-17, the CI line: a refused landing was seen only in a Pod's log.
+// The landing run's ci.run.finished (any change but succeeded) wakes the
+// pusher; its ref names no repository, so the row's repos are searched.
+func TestRefusedLandingWakesThePusher(t *testing.T) {
+	subs, err := registry.LoadSubscriptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var row registry.Subscription
+	for _, r := range subs["rocket"].Rows {
+		if r.ID == "land-refused-to-pusher" {
+			row = r
+		}
+	}
+	sha := strings.Repeat("d", 40)
+	ev := Event{ID: "ev-1", Type: "ci.run.finished", Subject: "land-2gmqc@" + sha, Ref: "/api/v1/delivery/runs/land-2gmqc", Change: "failed"}
+	var asked []string
+	read := func(_ context.Context, repo, commit string) (string, bool, error) {
+		asked = append(asked, repo)
+		if repo != "bifrost-trade-infra" || commit != sha {
+			return "", false, nil
+		}
+		return "fix: x\n\nClaude-Session: local_7de640c4-4b19-4a71-a0ac-ced2ce5fc7ff\n", true, nil
+	}
+	var to string
+	send := func(_ context.Context, _ string, t, _ string) error { to = t; return nil }
+	out, err := Deliver(context.Background(), row, ev, read, send, nil, "")
+	if err != nil || out != Delivered || to != "thread:local_7de640c4-4b19-4a71-a0ac-ced2ce5fc7ff" || len(asked) != 2 {
+		t.Fatalf("out=%s to=%q asked=%v err=%v", out, to, asked, err)
+	}
+	ok := ev
+	ok.Change = "succeeded"
+	if out, _ := Deliver(context.Background(), row, ok, read, send, nil, ""); out != Skipped {
+		t.Fatalf("a landing that landed woke someone: %s", out)
+	}
+}
