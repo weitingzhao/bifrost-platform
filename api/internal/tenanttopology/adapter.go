@@ -3,21 +3,15 @@ package tenanttopology
 
 import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/topologyview"
-	"strings"
 )
 
+// Adapter supplies no target-to-node mapping: which machine an API runs on is
+// a pod's spec.nodeName, and this projection reads no pods. A hand-written map
+// (api-* on mini-pc-a, or on macbook and mac-mini-1 in dev) used to stand in
+// for it; targets now attach to nodes only through edges and the node's own
+// matrix_targets in topology.yaml, and are otherwise not placed (unknown).
 func Adapter() topologyview.Adapter {
-	return topologyview.Adapter{TargetNodes: targetNodes, EdgeDetail: edgeDetail}
-}
-
-func targetNodes(id, environment string) []string {
-	if strings.HasPrefix(id, "api-") || id == "nginx-spa" || id == "ops-capabilities" {
-		if environment == "dev" {
-			return []string{"macbook", "mac-mini-1"}
-		}
-		return []string{"mini-pc-a"}
-	}
-	return nil
+	return topologyview.Adapter{EdgeDetail: edgeDetail}
 }
 
 func edgeDetail(kind string) (string, bool) {

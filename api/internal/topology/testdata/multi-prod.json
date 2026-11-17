@@ -75,7 +75,7 @@
         "col": 0
       },
       "status": "fail",
-      "detail": "api-account: api fail; api-ops: api ok; nginx-spa: nginx degraded; ops-capabilities: capability unknown; postgres: pg ok; redis: redis fail",
+      "detail": "api-ops: api ok; postgres: pg ok; redis: redis fail",
       "matrix_services": [
         {
           "id": "absent",
@@ -84,27 +84,9 @@
           "category": ""
         },
         {
-          "id": "api-account",
-          "reachability": "fail",
-          "detail": "api fail",
-          "category": ""
-        },
-        {
           "id": "api-ops",
           "reachability": "ok",
           "detail": "api ok",
-          "category": ""
-        },
-        {
-          "id": "nginx-spa",
-          "reachability": "degraded",
-          "detail": "nginx degraded",
-          "category": ""
-        },
-        {
-          "id": "ops-capabilities",
-          "reachability": "unknown",
-          "detail": "capability unknown",
           "category": ""
         },
         {

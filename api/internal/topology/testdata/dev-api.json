@@ -16,16 +16,9 @@
         "row": 2,
         "col": 0
       },
-      "status": "ok",
-      "detail": "api-ops: fixture",
-      "matrix_services": [
-        {
-          "id": "api-ops",
-          "reachability": "ok",
-          "detail": "fixture",
-          "category": "fixture"
-        }
-      ]
+      "status": "unknown",
+      "detail": "no linked probes",
+      "matrix_services": []
     },
     {
       "id": "mac-mini-1",
@@ -39,16 +32,9 @@
         "row": 0,
         "col": 0
       },
-      "status": "ok",
-      "detail": "api-ops: fixture",
-      "matrix_services": [
-        {
-          "id": "api-ops",
-          "reachability": "ok",
-          "detail": "fixture",
-          "category": "fixture"
-        }
-      ]
+      "status": "unknown",
+      "detail": "no linked probes",
+      "matrix_services": []
     },
     {
       "id": "mini-pc-a",
