@@ -15,7 +15,7 @@ func init() { bindTenantReadings() }
 
 func bindTenantReadings() {
 	BindAppReadings(AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain, FreshnessDatabases: appreadings.FreshnessDatabases})
-	BindComputeReadings(ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain})
+	BindComputeReadings(ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain, NodeMode: elasticreadings.NodeMode})
 }
 
 // Origin: 2026-11-16, the GPU and warehouse domains are read through

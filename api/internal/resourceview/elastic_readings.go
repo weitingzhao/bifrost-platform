@@ -38,3 +38,21 @@ type ElasticSnapshot struct {
 	DeploymentDep   func(namespace, name, label string) ServiceDependencyView
 	Finalize        func(id, label string, deps []ServiceDependencyView, purpose string) ServiceDomainView
 }
+
+// ElasticNodeObservation is what the cluster package can observe of an
+// on-demand node when it asks whether the node is active, standby or
+// degraded. The three functions are asked in the reader's order and only
+// when needed: the last is an SSH probe of the host.
+type ElasticNodeObservation struct {
+	Ready                bool
+	PendingPods          func() (int, error)
+	WorkloadsUnsatisfied func() (bool, string)
+	HostReachable        func() bool
+}
+
+// The modes of an on-demand node.
+const (
+	ElasticNodeActive   = "active"
+	ElasticNodeStandby  = "standby"
+	ElasticNodeDegraded = "degraded"
+)

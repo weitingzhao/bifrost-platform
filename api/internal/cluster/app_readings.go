@@ -36,6 +36,9 @@ func BindAppReadings(r AppReadings) { appReadings = r }
 type ComputeReadings struct {
 	GPUDomain       func(resourceview.ElasticSnapshot) ServiceDomainView
 	WarehouseDomain func(resourceview.ElasticSnapshot) ServiceDomainView
+	// NodeMode says whether an on-demand node is active, standby or
+	// degraded, with why (resourceview.ElasticNode* modes).
+	NodeMode func(resourceview.ElasticNodeObservation) (mode, detail string)
 }
 
 // computeReadings is bound once, at start-up, as appReadings is.

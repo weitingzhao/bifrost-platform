@@ -85,5 +85,5 @@ func bindClusterReadings(clusterH *cluster.Handler) {
 	// The tenant domain reads its applications and data from what cluster gathers.
 	cluster.BindAppReadings(cluster.AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain, FreshnessDatabases: appreadings.FreshnessDatabases})
 	// The compute domain reads the elastic domains (GPU, data warehouse) of service readiness.
-	cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain})
+	cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain, NodeMode: elasticreadings.NodeMode})
 }

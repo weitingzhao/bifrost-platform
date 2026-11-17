@@ -11,6 +11,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 )
 
 type elasticNodeMode string
@@ -71,27 +72,26 @@ func (s *Service) classifyElasticNode(
 	node *corev1.Node,
 	spec *config.ComputeNodeSpec,
 ) (elasticNodeMode, string) {
-	if nodeReadyStatus(node) == "Ready" {
-		return elasticModeActive, "node Ready"
+	// Whether an on-demand node that is not Ready is standby or degraded is
+	// the compute domain's reading (elasticreadings.NodeMode). This package
+	// gathers what it reads, each observation only when it is asked for: the
+	// host probe is an SSH call and must not run for a node that is Ready or
+	// already known degraded.
+	if computeReadings.NodeMode == nil {
+		// Degraded rather than standby: standby reads as expected-off and is
+		// never a failure, and unbound must not hide a node.
+		return elasticModeDegraded, "no reader of elastic node health is bound"
 	}
-
-	pendingOnNode, _, pendingErr := s.countNodePods(ctx, clientset, node.Name)
-	if pendingErr != nil {
-		return elasticModeDegraded, pendingErr.Error()
-	}
-	if pendingOnNode > 0 {
-		return elasticModeDegraded, fmt.Sprintf("%d pending pod(s) on node", pendingOnNode)
-	}
-
-	if unsatisfied, detail := s.computeWorkloadsUnsatisfied(ctx, clientset, spec); unsatisfied {
-		return elasticModeDegraded, detail
-	}
-
-	if probeHostReachableFast(ctx, spec.SSHHost) {
-		return elasticModeDegraded, "host online but node not Ready"
-	}
-
-	return elasticModeStandby, "on-demand standby (no pending compute workloads)"
+	mode, detail := computeReadings.NodeMode(resourceview.ElasticNodeObservation{
+		Ready: nodeReadyStatus(node) == "Ready",
+		PendingPods: func() (int, error) {
+			pending, _, err := s.countNodePods(ctx, clientset, node.Name)
+			return pending, err
+		},
+		WorkloadsUnsatisfied: func() (bool, string) { return s.computeWorkloadsUnsatisfied(ctx, clientset, spec) },
+		HostReachable:        func() bool { return probeHostReachableFast(ctx, spec.SSHHost) },
+	})
+	return elasticNodeMode(mode), detail
 }
 
 func (s *Service) computeWorkloadsUnsatisfied(ctx context.Context, clientset kubernetes.Interface, spec *config.ComputeNodeSpec) (bool, string) {
