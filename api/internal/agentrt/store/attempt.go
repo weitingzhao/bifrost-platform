@@ -3,9 +3,6 @@ package store
 import (
 	"context"
 	"errors"
-	"fmt"
-
-	"github.com/jackc/pgx/v5"
 )
 
 // Attempts.
@@ -20,21 +17,6 @@ var ErrNoHead = errors.New("store: no reader of branch heads is configured")
 
 // reportKinds are the kinds a result's report may be stored as.
 var reportKinds = map[string]bool{"report": true, "verify": true, "review": true}
-
-func haveArtifacts(ctx context.Context, tx pgx.Tx, ids []string) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	var missing []string
-	if err := tx.QueryRow(ctx, `SELECT COALESCE(array_agg(id ORDER BY id), '{}') FROM unnest($1::text[]) AS id
-	  WHERE NOT EXISTS (SELECT 1 FROM agentrt.artifact WHERE artifact_id = id)`, ids).Scan(&missing); err != nil {
-		return err
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("%w: artifacts not stored: %v", ErrState, missing)
-	}
-	return nil
-}
 
 func nonNil(s []string) []string {
 	if s == nil {

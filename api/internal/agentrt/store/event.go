@@ -29,34 +29,6 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 	return eventlog.Append(ctx, tx, ev)
 }
 
-// checkPlanObservation holds plan observations and their passes to the
-// controller (the vocabulary asks it of every event: vocab.go).
-func checkPlanObservation(ev Event) error {
-	if raw, ok := ev.Body["plan_observation"]; ok {
-		var n planObservation
-		if err := strictViewValue(raw, &n); err != nil {
-			return err
-		}
-		if ev.Actor != "controller" || ev.Type != "note" || ev.Stream != observationStream(n.Root) || ev.PlanNode != n.Step {
-			return invalid("plan observations are controller-owned")
-		}
-	}
-	if raw, ok := ev.Body["plan_observation_pass"]; ok {
-		var p planObservationPass
-		if err := strictViewValue(raw, &p); err != nil {
-			return err
-		}
-		if err := p.validate(); err != nil {
-			return err
-		}
-		if ev.Actor != "controller" || ev.Type != "note" || ev.Stream != passStream(p.Root) || ev.PlanNode != "" {
-			return invalid("plan observation passes are controller-owned")
-		}
-	}
-
-	return nil
-}
-
 func lockStream(ctx context.Context, tx pgx.Tx, stream string) error {
 	return eventlog.LockStream(ctx, tx, stream)
 }

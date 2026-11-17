@@ -433,3 +433,6 @@ var metricIDRE = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 var ciRepo = shaped("a repository name", regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,99}$`))
 var ciRunName = shaped("a PipelineRun name", regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`))
 var ciUID = shaped("a run UID", regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`))
+
+// approvalIDRE is the shape of an approval's id.
+var approvalIDRE = regexp.MustCompile(`^appr_[0-9a-f]{16}$`)
