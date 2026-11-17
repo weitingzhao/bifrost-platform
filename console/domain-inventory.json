@@ -4606,36 +4606,6 @@
       "unresolved_imports": []
     },
     {
-      "path": "console/src/pages/shell/crew",
-      "files": [
-        "console/src/pages/shell/crew/CrewOverview.tsx",
-        "console/src/pages/shell/crew/__tests__/CrewOverview.test.tsx",
-        "console/src/pages/shell/crew/developmentModel.ts",
-        "console/src/pages/shell/crew/useDevelopment.ts"
-      ],
-      "imports": [
-        "console/src/api",
-        "console/src/api/agentRuntimePlan.ts",
-        "console/src/components/layout",
-        "console/src/lib/shell",
-        "console/src/pages/shell/agents"
-      ],
-      "test_imports": [
-        "console/src/api",
-        "console/src/api/agentRuntimePlan.ts",
-        "console/src/pages/shell/agents"
-      ],
-      "external_imports": [
-        "@tanstack/react-query",
-        "@testing-library/jest-dom/vitest",
-        "@testing-library/react",
-        "vitest"
-      ],
-      "source_inputs": [],
-      "test_inputs": [],
-      "unresolved_imports": []
-    },
-    {
       "path": "console/src/pages/shell/data",
       "files": [
         "console/src/pages/shell/data/DataPage.tsx"
@@ -4849,7 +4819,6 @@
         "console/src/pages/shell/agents",
         "console/src/pages/shell/agents/WorkPlanView.tsx",
         "console/src/pages/shell/ci",
-        "console/src/pages/shell/crew",
         "console/src/pages/shell/needs-you",
         "console/src/pages/shell/progress",
         "console/src/pages/shell/releases",
@@ -4905,9 +4874,7 @@
         "console/src/api/approvals.ts",
         "console/src/api/governanceMcp.ts",
         "console/src/api/releases.ts",
-        "console/src/components/agent",
         "console/src/components/layout",
-        "console/src/lib/architecture",
         "console/src/lib/shell",
         "console/src/pages/CodeHealthPage.tsx",
         "console/src/pages/CommitLineagePage.tsx",

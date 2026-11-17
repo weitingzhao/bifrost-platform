@@ -29,9 +29,10 @@ describe('P1 reference reachability', () => {
     expect(resolved.canonical).toBe(referenceHref(item.id))
     open(`#${item.id}`)
     expect(screen.getByRole('heading', { name: item.title })).toBeTruthy()
-    expect(screen.getByText(item.body.split('\n\n')[0])).toBeTruthy()
-    expect(screen.getByText(item.history)).toBeTruthy()
+    // 2026-11-17 OWNER_LAW #30 (audit row #35): the hand-written summaries were deleted; each reference
+    // now only links to its documents on main, so the link is what this address must still open.
     expect(screen.getAllByRole('link').some(link => link.getAttribute('href') === item.sources[0].href)).toBe(true)
+    expect(item.sources.every(source => source.href.includes('/blob/main/'))).toBe(true)
   })
 
   it('keeps the four-entry shell, entity links and the separate Market Data blueprint', () => {

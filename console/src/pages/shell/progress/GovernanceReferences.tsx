@@ -1,18 +1,9 @@
 import { canonicalQuery } from '@/lib/shell/useHashSection'
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { DenseMarkdown } from '@/components/agent/DenseMarkdown'
 import { fetchMcpDirectory } from '@/api/governanceMcp'
-import { GOVERNANCE_REFERENCES, REFERENCE_REVIEW, findReference, referenceHref } from '@/lib/shell/governanceReferences'
-import { buildBlueprintLlmPack } from '@/lib/architecture/blueprintCatalog'
-import { buildStandardsLlmPack } from '@/lib/architecture/standardsCatalog'
-import { buildDualFlywheelVisionLlmPack } from '@/lib/architecture/dualFlywheelVisionCatalog'
+import { GOVERNANCE_REFERENCES, findReference, referenceHref } from '@/lib/shell/governanceReferences'
 
-const ARCHIVES: Record<string, () => string> = {
-  blueprint: () => buildBlueprintLlmPack(),
-  'platform-standards': buildStandardsLlmPack,
-  'flywheel-vision': buildDualFlywheelVisionLlmPack,
-}
 function selection() {
   return new URLSearchParams(canonicalQuery(window.location.hash)).get('reference')
 }
@@ -42,38 +33,29 @@ function McpDirectory() {
   </section>
 }
 
-/** Work-owned in P1; move the component, not its facts, when Crew navigation lands. */
+/** Links to the rule documents on main; the MCP directory is read live. Nothing here is a hand-kept summary. */
 export function GovernanceReferences() {
   const [selected, setSelected] = useState(selection)
-  const [archiveOpen, setArchiveOpen] = useState(false)
   useEffect(() => {
-    const update = () => { setSelected(selection()); setArchiveOpen(false) }
+    const update = () => setSelected(selection())
     window.addEventListener('hashchange', update)
     return () => window.removeEventListener('hashchange', update)
   }, [])
   const item = findReference(selected)
-  const archive = item && ARCHIVES[item.id]
   return <section id="references" aria-label="Governance references" className="panel-elevated ops-section min-w-0 scroll-mt-4 p-4">
     <h2 className="m-0 text-base font-semibold">Governance references</h2>
-    <p className="text-sm text-muted-foreground">Read-only references · Reviewed {REFERENCE_REVIEW}. Source versions below are snapshots, not live authorization.</p>
+    <p className="text-sm text-muted-foreground">Read-only links to the rule documents on main. Reading a document is not authorization.</p>
     <nav aria-label="Reference index" className="mb-4 flex flex-wrap gap-2">
       {GOVERNANCE_REFERENCES.map(row => <a key={row.id} href={referenceHref(row.id)} aria-current={row.id === item?.id ? 'page' : undefined}
         className="inline-flex min-h-11 items-center rounded border border-[var(--card-border)] px-3 py-2 text-sm aria-[current=page]:bg-secondary">{row.title}</a>)}
     </nav>
     {selected && !item && <p role="status">Unknown reference. Choose a document from the index.</p>}
-    {!selected && <p className="text-sm">Choose a reference to read its current interpretation, source versions and retirement history. The Market Data blueprint remains in Data › Massive › Coverage › Blueprint.</p>}
+    {!selected && <p className="text-sm">Choose a reference to see the documents it points to. The Market Data blueprint remains in Data › Massive › Coverage › Blueprint.</p>}
     {item && <article key={item.id} className="min-w-0">
       <h3 className="text-base font-semibold">{item.title}</h3>
-      <p className="text-xs text-muted-foreground">{item.status} · Content owner: {item.owner} · Reviewed {REFERENCE_REVIEW}</p>
-      <div className="text-sm"><DenseMarkdown source={item.body} /></div>
-      <h4 className="mt-4 text-sm font-semibold">What happened to the former page</h4><p className="text-sm">{item.history}</p>
-      <h4 className="mt-4 text-sm font-semibold">Sources at review</h4>
+      <h4 className="mt-4 text-sm font-semibold">Documents</h4>
       <ul className="space-y-2 pl-5 text-xs">{item.sources.map(s => <li key={s.href}><a href={s.href} target="_blank" rel="noopener noreferrer" className="[overflow-wrap:anywhere]">{s.label}</a></li>)}</ul>
       <div className="my-3 flex flex-wrap gap-3">{item.related.map(link => <a key={link.href} className="inline-flex min-h-11 items-center text-sm underline" href={link.href}>{link.label}</a>)}</div>
-      {archive && <details open={archiveOpen} onToggle={e => setArchiveOpen(e.currentTarget.open)}>
-        <summary className="min-h-11 cursor-pointer py-3 text-sm">Historical catalog text — not current operational instructions</summary>
-        {archiveOpen && <div className="min-w-0 overflow-x-auto"><DenseMarkdown source={archive()} /></div>}
-      </details>}
       {item.id === 'mcp-contract' && <McpDirectory />}
     </article>}
   </section>

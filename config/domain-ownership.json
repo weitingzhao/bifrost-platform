@@ -1901,13 +1901,6 @@
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
-      "console/src/pages/shell/crew": {
-        "domains": [
-          "coordination"
-        ],
-        "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: seat/session communication and progress display"
-      },
       "console/src/components/agent": {
         "domains": [
           "coordination"
