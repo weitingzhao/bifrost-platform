@@ -11,6 +11,7 @@ package k8sstate
 import (
 	"context"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"io/fs"
 	"os"
 	"regexp"
@@ -220,7 +221,7 @@ func ClientsFromEnv() func() (kubernetes.Interface, error) {
 				cfg, err = rest.InClusterConfig()
 			}
 			if err == nil {
-				core, err = kubernetes.NewForConfig(cfg)
+				core, err = kubernetes.NewForConfig(kubemetrics.Instrument(cfg))
 			}
 		})
 		return core, err

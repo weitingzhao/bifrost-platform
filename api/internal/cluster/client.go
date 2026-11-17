@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"os"
 	"path/filepath"
 
@@ -114,7 +115,7 @@ func (s *Service) RestConfig() (*rest.Config, string, error) {
 			Detail:       fmt.Sprintf("invalid kubeconfig %s: %v", path, err),
 		}
 	}
-	return cfg, path, nil
+	return kubemetrics.Instrument(cfg), path, nil
 }
 
 func (s *Service) buildClient() (kubernetes.Interface, string, error) {
@@ -148,6 +149,7 @@ func (s *Service) buildClient() (kubernetes.Interface, string, error) {
 			Detail:       fmt.Sprintf("invalid kubeconfig %s: %v", path, err),
 		}
 	}
+	kubemetrics.Instrument(cfg)
 
 	clientset, err := kubernetes.NewForConfig(cfg)
 	if err != nil {

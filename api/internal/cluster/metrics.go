@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 
 	"time"
 
@@ -27,7 +28,7 @@ func (s *Service) buildMetricsClient() (metricsclientset.Interface, error) {
 	if err != nil {
 		return nil, err
 	}
-	return metricsclientset.NewForConfig(cfg)
+	return metricsclientset.NewForConfig(kubemetrics.Instrument(cfg))
 }
 
 func (s *Service) Metrics(ctx context.Context, topLimit int) MetricsResponse {
