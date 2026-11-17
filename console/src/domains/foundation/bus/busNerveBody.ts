@@ -88,7 +88,7 @@ export function buildBody({ model, domainOfType, expanded, seats, beat, observed
       const hue = warmColor(d)
       const ages = dustByDomain.get(d) ?? []
       nodes.push({ id: `d:${d}`, kind: 'cluster', label: open ? `${d} ▾` : d, color: hue, size: 3, breath: null,
-        cloud: { parts: types.length + more, dust: ages },
+        cloud: { parts: types.length + more, dust: ages }, open,
         note: `domain ${d}: ${types.length} topics${more > 0 ? `, ${more} more inside (seats, readers, old roads)` : ''}, ${ages.length} events in the last day · click to ${open ? 'fold' : 'open'}` })
       links.push({ source: `d:${d}`, target: CORE, color: '#ffd9c2', width: 0.4 })
       if (!open) continue
@@ -128,11 +128,13 @@ export function buildBody({ model, domainOfType, expanded, seats, beat, observed
         t && t.status !== 'in_turn' && t.quiet_seconds > 0 ? `quiet ${shortSeconds(t.quiet_seconds)}` : '',
       ].filter(Boolean).join(' · ')
       const name = nameOf(id, names)
+      // Why a seat shows its id: neither its heartbeat nor its commits' lineage carries a title for it.
+      const unnamed = !names.has(id) && id !== 'owner' ? ' · shown by its id: no title from its heartbeat or from its commits\' lineage' : ''
       const owner = id === 'owner'
       nodes.push({
         id: `s:${id}`, kind: 'seat', label: name.length > 28 ? `${name.slice(0, 27)}…` : name, color: owner ? '#ff8fc7' : br.color, size: owner ? 2.4 : 1.6,
         breath: owner ? null : br.dur, ring: st === 'stuck' ? C.red : undefined,
-        note: `${name} (${id}) · ${owner ? 'the owner' : br.label}${read ? ` · ${read}` : ''}${st === 'quiet' ? ` · no report for ${QUIET_AFTER_H}h` : ''}${st === 'stuck' ? ` · something waits over ${STUCK_AFTER_MIN}m` : ''}`,
+        note: `${name} (${id}) · ${owner ? 'the owner' : br.label}${unnamed}${read ? ` · ${read}` : ''}${st === 'quiet' ? ` · no report for ${QUIET_AFTER_H}h` : ''}${st === 'stuck' ? ` · something waits over ${STUCK_AFTER_MIN}m` : ''}`,
       })
       links.push({ source: `s:${id}`, target: `d:${seatDomain(id)}`, color: C.link, width: 0.5 })
     }

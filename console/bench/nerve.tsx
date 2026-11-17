@@ -20,6 +20,7 @@ type Snapshot = {
   events: { type: string; time: string }[]
   letters: { from: string; to: string; count: number; unacked: number }[]
   seats: string[]
+  names?: Record<string, string>
 }
 
 const q = new URLSearchParams(location.search)
@@ -39,7 +40,7 @@ function Bench({ snap }: { snap: Snapshot }) {
     const teamLinks: ObserveLink[] = snap.letters.map(l => ({ from: l.from, to: l.to, kind: 'letter', count: l.count, unacked: l.unacked }))
     return buildBody({
       model, domainOfType, expanded: new Set((q.get('open') ?? '').split(',').filter(Boolean)), seats: snap.seats,
-      beat: new Map(), observed: new Map(), teamLinks, names: new Map(), dustByDomain: dust, now,
+      beat: new Map(), observed: new Map(), teamLinks, names: new Map(Object.entries(snap.names ?? {})), dustByDomain: dust, now,
     })
   }, [snap, domainOfType])
 

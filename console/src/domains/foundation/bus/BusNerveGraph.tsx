@@ -23,6 +23,8 @@ export type GNode = {
   note: string
   /** A domain's cloud: how many parts it has and the age in hours of each event of its last day. */
   cloud?: { parts: number; dust: number[] }
+  /** An opened domain: its parts are around it, so it needs more room from its neighbours. */
+  open?: boolean
 }
 export type GLink = { source: string; target: string; color: string; dashed?: boolean; width?: number; label?: string }
 
@@ -97,7 +99,7 @@ function linkLength(o: object): number {
 function chargeOf(o: object): number {
   const n = o as SimNode
   switch (n.kind) {
-    case 'cluster': return -40 - cloudRadius(n) * 12
+    case 'cluster': return -40 - cloudRadius(n) * 12 - (n.open ? 150 : 0)
     case 'core': return -120
     case 'seat': return -90
     case 'topic': return -8
@@ -112,14 +114,15 @@ function driftForce(nodes: () => SimNode[], dims: 2 | 3) {
       if (n.kind === 'core') continue
       n.vx = (n.vx ?? 0) + (Math.random() - 0.5) * DRIFT
       n.vy = (n.vy ?? 0) + (Math.random() - 0.5) * DRIFT
-      if (dims === 3) n.vz = (n.vz ?? 0) + (Math.random() - 0.5) * DRIFT
+      // A body flatter in depth than across: clouds lying behind one another would overlap on the screen.
+      if (dims === 3) n.vz = (n.vz ?? 0) + (Math.random() - 0.5) * DRIFT - (n.z ?? 0) * 0.02
     }
   }
 }
 
 /** Keeps clouds apart: two nodes closer than their reach plus a margin push each other away. */
 function collideForce(nodes: () => SimNode[], dims: 2 | 3) {
-  const reach = (n: SimNode) => (n.kind === 'cluster' ? cloudRadius(n) * 1.6 : n.size * 2)
+  const reach = (n: SimNode) => (n.kind === 'cluster' ? cloudRadius(n) * 2 + (n.open ? 35 : 0) : n.size * 2)
   return () => {
     const ns = nodes()
     for (let i = 0; i < ns.length; i++) {
@@ -294,10 +297,11 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
             const white = new THREE.Color('#fff4ea')
             const pp: number[] = []
             const pc: number[] = []
-            const parts = Math.max(8, (n.cloud?.parts ?? 0) * 20)
+            // A small domain still shows as a cloud: at least sixty lights.
+            const parts = Math.max(60, (n.cloud?.parts ?? 0) * 20)
             for (let i = 0; i < parts; i++) {
               pp.push(gauss(rnd) * R * 0.22, gauss(rnd) * R * 0.22, gauss(rnd) * R * 0.22)
-              const c = base.clone().lerp(white, rnd() * 0.5).multiplyScalar(0.7 + rnd() * 0.5)
+              const c = base.clone().lerp(white, rnd() * 0.5).multiplyScalar(0.85 + rnd() * 0.5)
               pc.push(c.r, c.g, c.b)
             }
             const dp: number[] = []
@@ -314,10 +318,10 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
             const sc: number[] = []
             for (let i = 0; i < Math.max(1, n.cloud?.parts ?? 0); i++) {
               sp.push(gauss(rnd) * R * 0.18, gauss(rnd) * R * 0.18, gauss(rnd) * R * 0.18)
-              const c = base.clone().lerp(white, 0.6)
+              const c = base.clone().lerp(white, 0.75)
               sc.push(c.r, c.g, c.b)
             }
-            group.add(pointsOf(sp, sc, 6).points)
+            group.add(pointsOf(sp, sc, 7.5).points)
             const d = pointsOf(dp, dc, 1.9)
             group.add(d.points)
             return { group, dust: d.mat }
@@ -487,20 +491,34 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
       let min = [Infinity, Infinity, Infinity]
       let max = [-Infinity, -Infinity, -Infinity]
       for (const n of ns) {
-        const r = n.kind === 'cluster' ? cloudRadius(n) * 0.9 : n.size * 3
+        const r = n.kind === 'cluster' ? cloudRadius(n) * 0.6 : n.size * 3
         const p = [n.x ?? 0, n.y ?? 0, n.z ?? 0]
         min = min.map((v, i) => Math.min(v, p[i] - r))
         max = max.map((v, i) => Math.max(v, p[i] + r))
       }
-      const center = { x: (min[0] + max[0]) / 2, y: (min[1] + max[1]) / 2, z: (min[2] + max[2]) / 2 }
-      const radius = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]) / 2
-      const cam = g.camera() as { position: { x: number; y: number; z: number }; fov: number; aspect: number }
-      const vfov = (cam.fov * Math.PI) / 180
-      const fov = Math.min(vfov, 2 * Math.atan(Math.tan(vfov / 2) * cam.aspect))
-      const distance = (radius / Math.sin(fov / 2)) * 0.62
-      const d = { x: cam.position.x - center.x, y: cam.position.y - center.y, z: cam.position.z - center.z }
-      const len = Math.hypot(d.x, d.y, d.z) || 1
-      g.cameraPosition({ x: center.x + (d.x / len) * distance, y: center.y + (d.y / len) * distance, z: center.z + (d.z / len) * distance }, center, ms)
+      const center = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2]
+      type V = [number, number, number]
+      const cam = g.camera() as { position: { x: number; y: number; z: number }; up: { x: number; y: number; z: number }; fov: number; aspect: number }
+      const pos: V = [cam.position.x, cam.position.y, cam.position.z]
+      const sub = (a: V, c: number[]): V => [a[0] - c[0], a[1] - c[1], a[2] - c[2]]
+      const dot = (a: V, c: V) => a[0] * c[0] + a[1] * c[1] + a[2] * c[2]
+      const cross = (a: V, c: V): V => [a[1] * c[2] - a[2] * c[1], a[2] * c[0] - a[0] * c[2], a[0] * c[1] - a[1] * c[0]]
+      const unit = (a: V): V => { const l = Math.hypot(...a) || 1; return [a[0] / l, a[1] / l, a[2] / l] }
+      // The view's axes, keeping the current look direction (as the library's own fit does).
+      const back = unit(sub(pos, center))
+      const right = unit(cross([cam.up.x, cam.up.y, cam.up.z], back))
+      const up = cross(back, right)
+      const vHalf = (cam.fov * Math.PI) / 360
+      const hHalf = Math.atan(Math.tan(vHalf) * cam.aspect)
+      let distance = 0
+      for (const x of [min[0], max[0]]) for (const y of [min[1], max[1]]) for (const z of [min[2], max[2]]) {
+        const d = sub([x, y, z], center)
+        distance = Math.max(distance, Math.max(Math.abs(dot(d, up)) / Math.tan(vHalf), Math.abs(dot(d, right)) / Math.tan(hHalf)) + dot(d, back))
+      }
+      // Fill about 80% of the frame.
+      distance *= 0.95
+      g.cameraPosition({ x: center[0] + back[0] * distance, y: center[1] + back[1] * distance, z: center[2] + back[2] * distance },
+        { x: center[0], y: center[1], z: center[2] }, ms)
     }
     fitted.current = data.current.nodes.length
   }

@@ -2,7 +2,9 @@
 """Export a real snapshot for the nerve map bench (console/bench/nerve.html).
 
 Reads, never writes: the bus register in this repository (topics, their domain
-and publisher) and, through psql as agent_reader (read-only; psql reads its own
+and publisher), the seats' reported titles (ConfigMap cicd/lineage-thread-titles
+with the read-only kubeconfig, matched to sessions by this repo's commit
+trailers) and, through psql as agent_reader (read-only; psql reads its own
 ~/.pgpass), the last day of bus events and of letters between seats. Writes
 bench/snapshot.local.json, which is not committed: it holds session ids.
 
@@ -47,7 +49,28 @@ seats = sorted({r[0] for r in q(
     "select distinct from_actor_id from agentrt.message where created_at > now() - interval '24 hours' and to_actor_id = 'controller'")}
     | {l['from'] for l in letters} | {l['to'] for l in letters})
 
-snap = {'topics': topics, 'events': events, 'letters': letters, 'seats': seats}
+# Names, from where the page gets them: each session's reported title (the
+# lineage-thread-titles ConfigMap, read-only) by its transcript, matched to the
+# session through the commits' Claude-Session and Claude-Transcript trailers.
+names = {}
+try:
+    cm = json.loads(subprocess.run(['kubectl', '--kubeconfig', os.path.expanduser('~/.kube/bifrost-k3s.yaml'), '-n', 'cicd', 'get', 'cm',
+                                    'lineage-thread-titles', '-o', 'json'], check=True, capture_output=True, text=True).stdout)['data']
+    by_transcript = {k: v['title'] for k, v in json.loads(cm.get('transcripts.json', '{}')).items()}
+    log = subprocess.run(['git', '-C', repo, 'log', '--all', '--since=30.days',
+                          '--format=%(trailers:key=Claude-Session,valueonly,separator=)|%(trailers:key=Claude-Transcript,valueonly,separator=)'],
+                         check=True, capture_output=True, text=True).stdout
+    for line in log.splitlines():
+        session, _, transcript = line.partition('|')
+        session, transcript = session.strip(), transcript.strip()
+        if session and transcript in by_transcript:
+            names['thread:' + session] = by_transcript[transcript]
+    for k, v in json.loads(cm.get('manual.json', '{}')).items():
+        names['thread:' + k] = v['title'] if isinstance(v, dict) else v
+except Exception as e:  # names are a nicety of the bench: without them it shows ids
+    print(f"names not read: {e}", file=sys.stderr)
+
+snap = {'topics': topics, 'events': events, 'letters': letters, 'seats': seats, 'names': names}
 path = os.path.join(here, 'snapshot.local.json')
 json.dump(snap, open(path, 'w'), indent=1)
-print(f"{path}: {len(topics)} topics, {len(events)} events, {len(letters)} letter pairs, {len(seats)} seats", file=sys.stderr)
+print(f"{path}: {len(topics)} topics, {len(events)} events, {len(letters)} letter pairs, {len(seats)} seats, {len(names)} names", file=sys.stderr)
