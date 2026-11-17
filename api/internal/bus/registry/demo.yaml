@@ -1,6 +1,0 @@
-# Tenant demo: the drill of a user that comes and goes by configuration
-# (2026-11-16). It publishes nothing; it hears rocket's git.main.advanced,
-# which rocket exports to it. Removed again when the drill ends.
-asyncapi: 3.0.0
-x-bifrost-tenant: demo
-channels: {}
