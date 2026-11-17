@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Layer 1–3 drift scan (no report, no Cursor). Invoked by: python scripts/run_agent.py drift
+# Layer 1–2 drift scan (no report, no Cursor). Invoked by: python scripts/run_agent.py drift
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../" && pwd)"
@@ -20,7 +20,4 @@ python3 "${ROOT}/agent/drift/scan_layer1.py" --platform-root "${ROOT}" || EXIT=1
 python3 "${ROOT}/agent/drift/scan_layer2.py" \
   --platform-api "${PLATFORM_API}" \
   --runner-url "${RUNNER_URL}" || EXIT=1
-python3 "${ROOT}/agent/drift/scan_layer3.py" \
-  --platform-root "${ROOT}" \
-  --platform-api "${PLATFORM_API}" || EXIT=1
 exit "${EXIT}"

@@ -38,7 +38,6 @@ export function gapAnalysisGuidance(categoryLabel: string): string[] {
     '',
     'Cross-reference (static catalogs):',
     '- dataLayerCatalog.ts — PG/Redis target topology',
-    '- k3sArchitectureCatalog.ts — target topology, namespace allocation, CI/CD design',
     '- environments-catalog.ts — static probe targets, scope, hardware',
     '- config/ops-context.yaml · GET /api/v1/context (migrate streams)',
     '',

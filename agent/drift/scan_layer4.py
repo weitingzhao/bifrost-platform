@@ -39,7 +39,6 @@ def main() -> int:
     parser.add_argument("--report", required=True, help="Path to nightly markdown report")
     parser.add_argument("--l1-exit", type=int, default=0)
     parser.add_argument("--l2-exit", type=int, default=0)
-    parser.add_argument("--l3-exit", type=int, default=0)
     parser.add_argument("--host", default="")
     parser.add_argument("--platform-api", default="")
     args = parser.parse_args()
@@ -49,8 +48,6 @@ def main() -> int:
         layers_failed.append("layer1")
     if args.l2_exit != 0:
         layers_failed.append("layer2")
-    if args.l3_exit != 0:
-        layers_failed.append("layer3")
 
     if not layers_failed:
         print(json.dumps({"has_drift": False}))
@@ -64,7 +61,6 @@ def main() -> int:
         key = {
             "layer1": "Layer 1",
             "layer2": "Layer 2",
-            "layer3": "Layer 3",
         }.get(layer, layer)
         chunk = layer_excerpt(report_text, key)
         if chunk:

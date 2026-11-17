@@ -30,9 +30,6 @@ drift-scan:
 drift-scan-api:
 	python3 agent/drift/scan_layer2.py
 
-drift-scan-semantic:
-	python3 agent/drift/scan_layer3.py
-
 drift-scan-all:
 	python3 scripts/run_agent.py drift
 
