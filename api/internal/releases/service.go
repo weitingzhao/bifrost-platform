@@ -313,8 +313,13 @@ func (s *Service) Status() Status {
 // 2026-11-15 on 1182 retained runs it is 77% of the listed bytes, and the
 // workers that hold these lists were OOMKilled at 512Mi in STG.
 func listRuns(ctx context.Context, dyn dynamic.Interface, ns string) ([]unstructured.Unstructured, error) {
+	return listRunsOf(ctx, dyn, ns, "")
+}
+
+// listRunsOf is listRuns for the runs a label selector takes; "" is all.
+func listRunsOf(ctx context.Context, dyn dynamic.Interface, ns, selector string) ([]unstructured.Unstructured, error) {
 	var out []unstructured.Unstructured
-	options := metav1.ListOptions{Limit: 100}
+	options := metav1.ListOptions{Limit: 100, LabelSelector: selector}
 	seen := map[string]bool{}
 	for {
 		page, err := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, options)

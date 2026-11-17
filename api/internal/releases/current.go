@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -60,7 +62,7 @@ func (s *Service) Current(ctx context.Context, lane, env string) (Record, error)
 	if newest == nil {
 		return Record{}, ErrNoDeployment
 	}
-	runs, err := listRuns(ctx, dyn, ns)
+	runs, err := listRunsOf(ctx, dyn, ns, s.rules.deployingPipelines(lane, env))
 	if err != nil {
 		return Record{}, err
 	}
@@ -76,4 +78,33 @@ func (s *Service) Current(ctx context.Context, lane, env string) (Record, error)
 		}
 	}
 	return *newest, nil
+}
+
+// deployingPipelines are the pipelines whose runs can change lane/env by the
+// rules, as a label selector on tekton.dev/pipeline; "" when a deploying rule
+// of that lane and environment knows its runs by name prefix (an inline
+// pipelineSpec's run carries its own name in that label), and then every run
+// has to be looked at.
+//
+// 2026-11-17: Current looked at every run of the namespace, a hundred a page.
+// The agent runtime asks it for the deployment every fifteen seconds, and
+// with 2,058 runs kept that was about eighty LISTs a minute from each
+// environment's workers, the largest unnamed share of the platform's own
+// requests. Only the runs of these pipelines can make the answer unsettled.
+func (r Rules) deployingPipelines(lane, env string) string {
+	var names []string
+	for _, rule := range r.Rules {
+		if !rule.Deploys || rule.Lane != lane || rule.Env != env {
+			continue
+		}
+		if rule.Match.Pipeline == "" {
+			return ""
+		}
+		names = append(names, rule.Match.Pipeline)
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	sort.Strings(names)
+	return "tekton.dev/pipeline in (" + strings.Join(names, ",") + ")"
 }
