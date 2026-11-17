@@ -1758,15 +1758,18 @@
         "console/src/domains/foundation/bus/BusPage.tsx",
         "console/src/domains/foundation/bus/__tests__/bus.test.ts",
         "console/src/domains/foundation/bus/__tests__/busNerve.test.ts",
+        "console/src/domains/foundation/bus/__tests__/busNerveLayout.test.ts",
         "console/src/domains/foundation/bus/__tests__/busNextgen.test.ts",
         "console/src/domains/foundation/bus/busEffect.ts",
         "console/src/domains/foundation/bus/busNerve.ts",
+        "console/src/domains/foundation/bus/busNerveLayout.ts",
         "console/src/domains/foundation/bus/busNextgen.ts",
         "console/src/domains/foundation/bus/busTrace.ts",
         "console/src/domains/foundation/bus/sseParser.ts",
         "console/src/domains/foundation/bus/useBusStream.ts"
       ],
       "imports": [
+        "console/src/api/agentThreads.ts",
         "console/src/api/client.ts",
         "console/src/api/serverContact.ts",
         "console/src/components/layout"

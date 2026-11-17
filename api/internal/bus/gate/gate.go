@@ -31,6 +31,10 @@ const (
 	// MaxReplay is how far back since= may start a read (the Bus page's
 	// replay of the last day, 2026-11-17).
 	MaxReplay = 24 * time.Hour
+	// ReplayGrace: a client asking for exactly the last MaxReplay reaches
+	// the gate a moment later (STG, 2026-11-17: "since reaches back at most
+	// 24h0m0s" for a request of now minus 24 hours).
+	ReplayGrace = 5 * time.Minute
 )
 
 // Waker wakes everyone waiting at once.
@@ -181,7 +185,7 @@ func (g *Gate) parse(r *http.Request, after string) (query, error) {
 			return q, fmt.Errorf("since and a cursor (after, Last-Event-ID) do not go together")
 		case err != nil:
 			return q, fmt.Errorf("since %q is not an RFC 3339 time", s)
-		case time.Since(t) > MaxReplay:
+		case time.Since(t) > MaxReplay+ReplayGrace:
 			return q, fmt.Errorf("since reaches back at most %s", MaxReplay)
 		case g.Since == nil:
 			return q, fmt.Errorf("this gate does not read from a time")

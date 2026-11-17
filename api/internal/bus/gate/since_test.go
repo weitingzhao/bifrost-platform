@@ -48,6 +48,12 @@ func TestSinceReplaysFromATimeWithoutReceipts(t *testing.T) {
 		return relay.Cursor{TxID: 25}, nil
 	}
 	since := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
+	// Exactly MaxReplay back, as the page asks, a moment before it arrives:
+	// accepted (STG, 2026-11-17, the replay was refused for this).
+	full := time.Now().Add(-MaxReplay).UTC().Format(time.RFC3339)
+	if a, _ := get(t, g, "types=git.main.advanced&wait=0&since="+full); a.Next == "" {
+		t.Fatalf("a full day back was refused: %+v", a)
+	}
 	a, _ := get(t, g, "types=git.main.advanced&wait=0&since="+since.Format(time.RFC3339))
 	if !asked.Equal(since) || len(a.Events) != 1 || a.Events[0].ID != "ev-8" {
 		t.Fatalf("since %s (asked %s): %+v", since, asked, a)
@@ -67,7 +73,7 @@ func TestSinceReplaysFromATimeWithoutReceipts(t *testing.T) {
 
 	for name, q := range map[string]string{
 		"with a cursor": "after=0.0&since=" + since.Format(time.RFC3339),
-		"too far back":  "since=" + time.Now().Add(-25*time.Hour).UTC().Format(time.RFC3339),
+		"too far back":  "since=" + time.Now().Add(-MaxReplay-ReplayGrace-time.Minute).UTC().Format(time.RFC3339),
 		"not a time":    "since=yesterday",
 	} {
 		rec := httptest.NewRecorder()
