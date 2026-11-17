@@ -7,14 +7,14 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
+// poolDef says which nodes belong to a pool (by label). A pool's status is
+// never written here: it comes from the nodes that match.
 type poolDef struct {
-	id            string
-	label         string
-	arch          string
-	workload      string
-	capabilityID  string
-	status        PoolStatus
-	plannedHost   string
+	id           string
+	label        string
+	arch         string
+	workload     string
+	capabilityID string
 }
 
 type ruleDef struct {
@@ -27,10 +27,10 @@ type ruleDef struct {
 }
 
 var poolDefs = []poolDef{
-	{id: "amd64_ci", label: "amd64 CI / Kaniko", arch: "amd64", status: PoolStatusLive},
-	{id: "amd64_general", label: "amd64 general runtime", arch: "amd64", status: PoolStatusLive},
-	{id: "nfs_client", label: "NFS PV clients", capabilityID: "nfs-client", status: PoolStatusLive},
-	{id: "gpu", label: "GPU workloads", workload: "gpu", status: PoolStatusPlanned, plannedHost: "gpu-server"},
+	{id: "amd64_ci", label: "amd64 CI / Kaniko", arch: "amd64"},
+	{id: "amd64_general", label: "amd64 general runtime", arch: "amd64"},
+	{id: "nfs_client", label: "NFS PV clients", capabilityID: "nfs-client"},
+	{id: "gpu", label: "GPU workloads", workload: "gpu"},
 }
 
 var ruleDefs = []ruleDef{
@@ -96,13 +96,11 @@ func evaluatePools(nodes []NodeInput) []PoolView {
 	out := make([]PoolView, 0, len(poolDefs))
 	for _, def := range poolDefs {
 		pv := PoolView{
-			ID:          def.id,
-			Label:       def.label,
-			Arch:        def.arch,
-			Workload:    def.workload,
-			Status:      def.status,
-			PlannedHost: def.plannedHost,
-			NodeNames:   []string{},
+			ID:        def.id,
+			Label:     def.label,
+			Arch:      def.arch,
+			Workload:  def.workload,
+			NodeNames: []string{},
 		}
 		for _, n := range nodes {
 			if !nodeMatchesPool(n, def) {
@@ -114,11 +112,9 @@ func evaluatePools(nodes []NodeInput) []PoolView {
 				pv.NodesReady++
 			}
 		}
-		if def.status == PoolStatusPlanned && pv.NodesReady == 0 {
-			pv.Status = PoolStatusPlanned
-		} else if pv.NodesReady == 0 && pv.NodesTotal > 0 {
-			pv.Status = PoolStatusDegraded
-		} else if pv.NodesReady > 0 {
+		// No Ready node, or no node carrying the pool's label, is degraded.
+		pv.Status = PoolStatusDegraded
+		if pv.NodesReady > 0 {
 			pv.Status = PoolStatusLive
 		}
 		out = append(out, pv)
@@ -161,10 +157,6 @@ func evaluateRules(pools []PoolView) []RuleView {
 			PlannedBinding:   def.plannedBinding,
 		}
 		switch {
-		case pool.Status == PoolStatusPlanned:
-			rv.Satisfied = false
-			rv.Reachability = probe.ReachDegraded
-			rv.GapReason = fmt.Sprintf("pool %s is planned — no live nodes yet", def.poolID)
 		case pool.NodesReady > 0:
 			rv.Satisfied = true
 			rv.Reachability = probe.ReachOK
@@ -207,8 +199,8 @@ func collectViolations(pools []PoolView, rules []RuleView) []ViolationView {
 		if !r.Satisfied && r.PoolID == "gpu" {
 			out = append(out, ViolationView{
 				Severity: "warning",
-				Code:     "gpu_pool_planned",
-				Message:  "GPU node is on standby: gpu-server is a cluster node that stays powered off until it is woken",
+				Code:     "gpu_pool_not_ready",
+				Message:  gpuPoolMessage(pools),
 			})
 		}
 		if !r.Satisfied && r.WorkloadClass == "nfs_storage" {
@@ -220,6 +212,20 @@ func collectViolations(pools []PoolView, rules []RuleView) []ViolationView {
 		}
 	}
 	return dedupeViolations(out)
+}
+
+// gpuPoolMessage describes the gpu pool from the nodes labelled workload=gpu.
+func gpuPoolMessage(pools []PoolView) string {
+	for _, p := range pools {
+		if p.ID != "gpu" {
+			continue
+		}
+		if p.NodesTotal == 0 {
+			return "No node is labelled workload=gpu"
+		}
+		return fmt.Sprintf("GPU pool has %d node(s) labelled workload=gpu, none Ready: %s", p.NodesTotal, strings.Join(p.NodeNames, ", "))
+	}
+	return "GPU pool not evaluated"
 }
 
 func dedupeViolations(in []ViolationView) []ViolationView {

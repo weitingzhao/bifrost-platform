@@ -34,15 +34,14 @@ type Response struct {
 }
 
 type PoolView struct {
-	ID          string     `json:"id"`
-	Label       string     `json:"label"`
-	Arch        string     `json:"arch,omitempty"`
-	Workload    string     `json:"workload_label,omitempty"`
-	Status      PoolStatus `json:"status"`
-	NodesTotal  int        `json:"nodes_total"`
-	NodesReady  int        `json:"nodes_ready"`
-	PlannedHost string     `json:"planned_host,omitempty"`
-	NodeNames   []string   `json:"node_names"`
+	ID         string     `json:"id"`
+	Label      string     `json:"label"`
+	Arch       string     `json:"arch,omitempty"`
+	Workload   string     `json:"workload_label,omitempty"`
+	Status     PoolStatus `json:"status"`
+	NodesTotal int        `json:"nodes_total"`
+	NodesReady int        `json:"nodes_ready"`
+	NodeNames  []string   `json:"node_names"`
 }
 
 type RuleView struct {

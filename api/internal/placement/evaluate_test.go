@@ -1,6 +1,7 @@
 package placement
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -60,5 +61,31 @@ func TestCIPreflightReason(t *testing.T) {
 	}
 	if r := CIPreflightReason(nil); r == "" {
 		t.Fatal("expected reason for empty nodes")
+	}
+}
+
+// 2026-11-17 audit row #12 (LANE-BIZ-ALIGN): the gpu pool was written as "planned" on
+// gpu-server whatever the nodes said; its status now comes from nodes labelled workload=gpu.
+func TestGPUPoolStatusFromNodeLabels(t *testing.T) {
+	none := findPool(Evaluate("t", []NodeInput{{Name: "a", Architecture: "amd64", Reachability: probe.ReachOK}}).Pools, "gpu")
+	if none == nil || none.Status != PoolStatusDegraded || none.NodesTotal != 0 {
+		t.Fatalf("gpu pool without labelled nodes: %+v", none)
+	}
+	live := findPool(Evaluate("t", []NodeInput{{Name: "g", Architecture: "amd64", WorkloadLabel: "gpu", Reachability: probe.ReachOK}}).Pools, "gpu")
+	if live == nil || live.Status != PoolStatusLive || live.NodesReady != 1 {
+		t.Fatalf("gpu pool with a Ready labelled node: %+v", live)
+	}
+	off := Evaluate("t", []NodeInput{{Name: "g", Architecture: "amd64", WorkloadLabel: "gpu", Reachability: probe.ReachFail}})
+	if p := findPool(off.Pools, "gpu"); p == nil || p.Status != PoolStatusDegraded || p.NodesTotal != 1 {
+		t.Fatalf("gpu pool with a NotReady labelled node: %+v", p)
+	}
+	found := false
+	for _, v := range off.Violations {
+		if v.Code == "gpu_pool_not_ready" && strings.Contains(v.Message, "g") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("violations: %+v", off.Violations)
 	}
 }
