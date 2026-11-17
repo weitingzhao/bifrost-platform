@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Button, DenseTag, cn } from '@bifrost/ui'
+import { fetchContext } from '@/api/core'
 import type { ClusterWorkload } from '@/api/clusterTypes'
 import { isActivityInFlight } from '@/lib/activity/activityPageFocus'
 import { useActivityFeed } from '@/lib/activity/activityStore'
@@ -22,6 +24,13 @@ function parseDesiredReplicas(ready: string | undefined): number | null {
 
 function findWorkload(workloads: ClusterWorkload[], name: string): ClusterWorkload | undefined {
   return workloads.find(w => w.name === name && w.kind.toLowerCase().includes('deploy'))
+}
+
+/** Display only: spine decisions[id=D10].status as GET /api/v1/context reports it; anything unread is unknown. */
+function useD10Status(): string {
+  const q = useQuery({ queryKey: ['ops-context'], queryFn: fetchContext, staleTime: 60_000 })
+  const status = q.isError ? undefined : q.data?.decisions?.find(d => d.id === 'D10')?.status?.trim()
+  return status ? status.toUpperCase() : 'unknown'
 }
 
 function WorkloadRolloutMeta({
@@ -76,6 +85,7 @@ export function TradeDaemonOperatePanel({
   highlightWorkload?: string | null
 }) {
   const { events } = useActivityFeed()
+  const d10Status = useD10Status()
 
   const applyingRestart = useMemo(() => {
     const prefix = `actuation:daemon-restart:${namespace}/`
@@ -95,7 +105,7 @@ export function TradeDaemonOperatePanel({
       title="Trade daemon operate"
       bodyPadding="none"
       overflow="hidden"
-      description={`${namespace} · co-scaled pair (daemon ↔ account-sync). Daemon Start blocked by D10 until Owner unlock.`}
+      description={`${namespace} · co-scaled pair (daemon ↔ account-sync). Daemon Start is disabled here · D10 ${d10Status}.`}
     >
       <div className="flex flex-col gap-2 px-2.5 py-2">
         {!canOperate && (
@@ -161,7 +171,7 @@ export function TradeDaemonOperatePanel({
             size="sm"
             variant="outline"
             disabled
-            title="Trading execution is BLOCKED (D10). Daemon scale-up requires Owner unlock."
+            title={`D10 ${d10Status} (spine, GET /api/v1/context). Daemon scale-up requires Owner unlock.`}
           >
             Start
           </Button>
@@ -178,7 +188,7 @@ export function TradeDaemonOperatePanel({
             disabled={!canOperate || !daemonRunning}
           />
           <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-            D10 · {tradeEnv.toUpperCase()} Start disabled
+            D10 {d10Status} · {tradeEnv.toUpperCase()} Start disabled
           </span>
         </div>
 
