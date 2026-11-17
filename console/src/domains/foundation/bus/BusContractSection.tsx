@@ -37,7 +37,7 @@ function toneOf(name: string, roster: Map<string, string>): BoxData['tone'] {
   return 'plain'
 }
 
-function ContractGraph({ contract, roster }: { contract: BusContract; roster: Map<string, string> }) {
+export function ContractGraph({ contract, roster }: { contract: BusContract; roster: Map<string, string> }) {
   const [focus, setFocus] = useState<string | null>(null)
   const model = useMemo(() => contractGraph(contract), [contract])
   const { nodes, edges, height } = useMemo(() => {

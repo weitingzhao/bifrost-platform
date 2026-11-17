@@ -1754,6 +1754,7 @@
         "console/src/domains/foundation/bus/BusContractSection.tsx",
         "console/src/domains/foundation/bus/BusEffectSection.tsx",
         "console/src/domains/foundation/bus/BusGenerationSection.tsx",
+        "console/src/domains/foundation/bus/BusNerveGraph.tsx",
         "console/src/domains/foundation/bus/BusNerveSection.tsx",
         "console/src/domains/foundation/bus/BusPage.tsx",
         "console/src/domains/foundation/bus/__tests__/bus.test.ts",
@@ -1776,11 +1777,15 @@
       ],
       "test_imports": [],
       "external_imports": [
+        "3d-force-graph",
         "@bifrost/ui",
         "@tanstack/react-query",
         "@xyflow/react",
         "@xyflow/react/dist/style.css",
+        "force-graph",
         "react",
+        "three",
+        "three/examples/jsm/postprocessing/UnrealBloomPass.js",
         "vitest"
       ],
       "source_inputs": [],
