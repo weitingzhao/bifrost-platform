@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-const testRuler = `{"version":2,"items":[
+const testRuler = `{"version":3,"items":[
 	{"id":"dependency_direction","label":"Direction","max":25,"by":"machine","measured":true},
 	{"id":"contracts","label":"Contracts","max":75,"by":"machine","measured":false}],
 	"walls":{"base":{"file":"w_test.go","test":"TestWall"}}}`
@@ -63,7 +63,7 @@ func TestTheBaseIsScoredForImportsThatPointUp(t *testing.T) {
 		Package{Path: "api/cmd/root", Imports: []string{"api/internal/plan", "api/internal/unlisted"}, Lines: 900},
 	)
 	a := Score(in)
-	if a.RulerVersion != 2 || a.Commit != "c" || len(a.Domains) != 4 {
+	if a.RulerVersion != 3 || a.Commit != "c" || len(a.Domains) != 4 {
 		t.Fatalf("answer = %+v", a)
 	}
 	base := domain(t, a, "base")
@@ -81,12 +81,20 @@ func TestTheBaseIsScoredForImportsThatPointUp(t *testing.T) {
 	if strings.Join(it.Evidence, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("evidence = %q", it.Evidence)
 	}
-	// The domains: plan imports the base and a shared package, tenant the
-	// base; neither is charged. They have no wall of their own: 17 + 0 + 4.
-	for _, id := range []string{"plan", "tenant"} {
-		if d := domain(t, a, id); d.Items[0].Score != 21 || d.Items[0].Measures["cycle_edges"] != 0 {
-			t.Errorf("%s = %+v", id, d.Items[0])
-		}
+	// The domains: an import of the base is the right way and costs nothing
+	// (tenant: 17 + 0 + 4). Plan also imports a package two domains share:
+	// no cycle, one cross edge, named in its evidence (16 + 0 + 4).
+	// Origin of the cross edge: 2026-11-16, ruler version 2 with a wall for
+	// every domain gave all nine domains 25 of 25 while sixteen imports ran
+	// from one domain into another's package or a shared one.
+	if d := domain(t, a, "tenant"); d.Items[0].Score != 21 || d.Items[0].Measures["cycle_edges"] != 0 || d.Items[0].Measures["cross_edges"] != 0 {
+		t.Errorf("tenant = %+v", d.Items[0])
+	}
+	if d := domain(t, a, "plan"); d.Items[0].Score != 20 || d.Items[0].Measures["cross_edges"] != 1 || d.Items[0].Evidence[0] != "api/internal/plan -> api/internal/both (mixed)" {
+		t.Errorf("plan = %+v", d.Items[0])
+	}
+	if base.Items[0].Measures["cross_edges"] != 0 {
+		t.Errorf("the base has cross edges: %+v", base.Items[0])
 	}
 	// A domain with no package is not measured, and the item this version
 	// does not compute is unmeasured for everyone.
@@ -106,7 +114,7 @@ func TestAMutualDependencyCountsAgainstBoth(t *testing.T) {
 	oneWay := input(t, own, false,
 		Package{Path: "api/internal/plan", Imports: []string{"api/internal/owner"}, Lines: 1},
 		Package{Path: "api/internal/owner", Lines: 1})
-	if d := domain(t, Score(oneWay), "plan"); d.Items[0].Measures["cycle_edges"] != 0 {
+	if d := domain(t, Score(oneWay), "plan"); d.Items[0].Measures["cycle_edges"] != 0 || d.Items[0].Measures["cross_edges"] != 1 {
 		t.Fatalf("one way: plan = %+v", d.Items[0])
 	}
 	both := input(t, own, false,
@@ -154,7 +162,7 @@ func TestAWayBackThroughTheBaseOrASharedPackageIsNoCycle(t *testing.T) {
 }
 
 func TestARulerOfAnotherVersionIsRefused(t *testing.T) {
-	if _, err := ParseRuler([]byte(strings.Replace(testRuler, `"version":2`, `"version":3`, 1))); err == nil || !strings.Contains(err.Error(), "version 3") {
+	if _, err := ParseRuler([]byte(strings.Replace(testRuler, `"version":3`, `"version":4`, 1))); err == nil || !strings.Contains(err.Error(), "version 4") {
 		t.Fatalf("err = %v", err)
 	}
 	if _, err := ParseRuler([]byte(strings.Replace(testRuler, `"max":75`, `"max":70`, 1))); err == nil || !strings.Contains(err.Error(), "not 100") {

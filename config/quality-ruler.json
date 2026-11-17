@@ -1,8 +1,9 @@
 {
-  "version": 2,
+  "version": 3,
   "history": [
     "1 (2026-11-16, platform 891a4135): the six items and weights of the review; dependency direction measured. No score of version 1 was stored.",
-    "2 (2026-11-16): cycle edges no longer count a way back that passes through the base or through a mixed package. Version 1 called plan -> lineage, lineage -> verification and owner -> coordination cycles; none of the three is imported back. Foundation's number is the same under both."
+    "2 (2026-11-16): cycle edges no longer count a way back that passes through the base or through a mixed package. Version 1 called plan -> lineage, lineage -> verification and owner -> coordination cycles; none of the three is imported back. Foundation's number is the same under both.",
+    "3 (2026-11-16): cross edges count. With a wall for every domain, version 2 gave all nine domains 25 of 25 while sixteen imports ran from one domain into another's package or into a shared one; an item everyone has full marks on measures nothing. The base's number on the commit the review read is unchanged (its wrong imports were all cycle edges)."
   ],
   "source": "Owner 2026-11-16: one standard for every domain, kept in the system, scored on a schedule so a domain's number can be compared with its own earlier numbers. The items, weights and first data point (foundation, 54 of 100 at 80589bfb) are the independent review in the shared notes, brain/foundation-code-quality-review-2026-11-16.md section 9.",
   "rules": [
@@ -20,10 +21,11 @@
       "measured": true,
       "measures": {
         "cycle_edges": "direct imports (production code, api/cmd assembly roots left out) from a package of this domain to a package of a domain that itself reaches this domain through imports, by a path that does not pass through the default domain or through a 'mixed' package: the edges that make two domains one piece. A package with several domains counts as the domain 'mixed'; a package with no row counts as the default domain. An import of the default domain (the base every domain stands on) is never a cycle edge of the importer; an import of a 'mixed' package is one only for the base. Between two other domains a mutual dependency counts against both.",
+        "cross_edges": "direct imports from a package of this domain (not the base) into a package of another domain or into a 'mixed' package, that are not cycle edges: the list the wall holds",
         "wall": "a test named in 'walls' below exists in the code and holds this domain's cycle edges to a list that only shrinks",
         "assigned_share": "the share of this domain's production lines that are in packages whose row says status assigned (not default-maintainer, not without a row)"
       },
-      "formula": "direction 17 when cycle_edges is 0, otherwise 17 - ceil(cycle_edges / 2) and never under 11; plus 4 for the wall; plus 4 x assigned_share. One decimal.",
+      "formula": "direction 17 when cycle_edges + cross_edges is 0, otherwise 17 - ceil((cycle_edges + cross_edges) / 2) and never under 11; plus 4 for the wall; plus 4 x assigned_share. One decimal.",
       "fit": "at 80589bfb foundation has 12 cycle edges, no wall and an assigned share of 0.45: 11 + 0 + 1.8 = 12.8, the review's 13."
     },
     {
@@ -73,6 +75,14 @@
     }
   ],
   "walls": {
-    "foundation": {"file": "api/internal/codeguard/foundation_wall_test.go", "test": "TestFoundationDoesNotImportTheDomainsAboveIt"}
+    "foundation": {"file": "api/internal/codeguard/foundation_wall_test.go", "test": "TestFoundationDoesNotImportTheDomainsAboveIt"},
+    "plan": {"file": "api/internal/codeguard/domain_walls_test.go", "test": "TestADomainImportsOnlyItselfAndTheBase"},
+    "lineage": {"file": "api/internal/codeguard/domain_walls_test.go", "test": "TestADomainImportsOnlyItselfAndTheBase"},
+    "verification": {"file": "api/internal/codeguard/domain_walls_test.go", "test": "TestADomainImportsOnlyItselfAndTheBase"},
+    "delivery": {"file": "api/internal/codeguard/domain_walls_test.go", "test": "TestADomainImportsOnlyItselfAndTheBase"},
+    "owner": {"file": "api/internal/codeguard/domain_walls_test.go", "test": "TestADomainImportsOnlyItselfAndTheBase"},
+    "compute": {"file": "api/internal/codeguard/domain_walls_test.go", "test": "TestADomainImportsOnlyItselfAndTheBase"},
+    "tenant": {"file": "api/internal/codeguard/domain_walls_test.go", "test": "TestADomainImportsOnlyItselfAndTheBase"},
+    "coordination": {"file": "api/internal/codeguard/domain_walls_test.go", "test": "TestADomainImportsOnlyItselfAndTheBase"}
   }
 }

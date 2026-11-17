@@ -16,7 +16,7 @@ import (
 
 // RulerVersion is the ruler version whose formulas this code computes. The
 // ruler file must say the same number.
-const RulerVersion = 2
+const RulerVersion = 3
 
 // Mixed is the domain of a package whose row names several domains.
 const Mixed = "mixed"
@@ -228,7 +228,7 @@ func Score(in Input) Answer {
 	out := Answer{RulerVersion: in.Ruler.Version, Commit: in.Commit, Domains: []Domain{}}
 	for _, d := range order {
 		row := Domain{Domain: d}
-		var edges []string
+		var edges, cross []string
 		assignedLines := 0
 		for _, p := range pkgs {
 			if p.domain != d {
@@ -242,16 +242,21 @@ func Score(in Input) Answer {
 			for _, dep := range p.Imports {
 				if q, ok := pkgs[dep]; ok && q.domain != d && wrongWay(d, q.domain) {
 					edges = append(edges, p.Path+" -> "+dep+" ("+q.domain+")")
+				} else if ok && d != base && q.domain != d && q.domain != base {
+					// Another domain's package, or one several domains share:
+					// no cycle, and still two domains that change together.
+					cross = append(cross, p.Path+" -> "+dep+" ("+q.domain+")")
 				}
 			}
 		}
 		sort.Strings(edges)
+		sort.Strings(cross)
 		for _, it := range in.Ruler.Items {
 			item := Item{ID: it.ID, Label: it.Label, Max: it.Max, By: it.By}
 			if it.ID == "dependency_direction" && row.Packages > 0 {
 				item.Measured = true
 				direction := 17.0
-				if n := len(edges); n > 0 {
+				if n := len(edges) + len(cross); n > 0 {
 					direction = math.Max(11, 17-math.Ceil(float64(n)/2))
 				}
 				wall, share := 0.0, 0.0
@@ -262,8 +267,8 @@ func Score(in Input) Answer {
 					share = float64(assignedLines) / float64(row.Lines)
 				}
 				item.Score = round1(direction + 4*wall + 4*share)
-				item.Measures = map[string]float64{"cycle_edges": float64(len(edges)), "wall": wall, "assigned_share": math.Round(share*100) / 100}
-				item.Evidence = edges
+				item.Measures = map[string]float64{"cycle_edges": float64(len(edges)), "cross_edges": float64(len(cross)), "wall": wall, "assigned_share": math.Round(share*100) / 100}
+				item.Evidence = append(append([]string{}, edges...), cross...)
 				if wall == 0 {
 					item.Evidence = append(item.Evidence, "no wall: nothing stops a new import that points the wrong way")
 				}
