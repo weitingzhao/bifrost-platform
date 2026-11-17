@@ -55,6 +55,15 @@ type giteaTrees struct {
 	mu     sync.Mutex
 	blobs  map[string][]byte
 	size   int
+	// flight is the blobs being read now: a second asker waits for the first
+	// one's answer.
+	flight map[string]*blobRead
+}
+
+type blobRead struct {
+	done chan struct{}
+	raw  []byte
+	err  error
 }
 
 const blobCacheBytes = 96 << 20
@@ -115,12 +124,41 @@ func (g *giteaTrees) tree(ctx context.Context, repo, commit string) (*unitplan.T
 }
 
 func (g *giteaTrees) blob(ctx context.Context, repo, id string) ([]byte, error) {
+	// One read a blob at a time. 2026-11-16 21:59 CST: the redesigned CI page
+	// asks for /units/config and /ci/domains together, each walks every Go file
+	// of main's head, and on a platform-api that had just started both missed
+	// the cache for all 1,424 blobs: Gitea served 2,795 blob reads in two
+	// minutes (the communication line's count).
 	g.mu.Lock()
-	b, ok := g.blobs[id]
-	g.mu.Unlock()
-	if ok {
+	if b, ok := g.blobs[id]; ok {
+		g.mu.Unlock()
 		return b, nil
 	}
+	if other, ok := g.flight[id]; ok {
+		g.mu.Unlock()
+		select {
+		case <-other.done:
+			return other.raw, other.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	mine := &blobRead{done: make(chan struct{})}
+	if g.flight == nil {
+		g.flight = map[string]*blobRead{}
+	}
+	g.flight[id] = mine
+	g.mu.Unlock()
+	mine.raw, mine.err = g.readBlob(ctx, repo, id)
+	g.mu.Lock()
+	delete(g.flight, id)
+	g.mu.Unlock()
+	close(mine.done)
+	return mine.raw, mine.err
+}
+
+// readBlob reads one blob from Gitea and keeps it.
+func (g *giteaTrees) readBlob(ctx context.Context, repo, id string) ([]byte, error) {
 	body, err := g.get(ctx, url.PathEscape(repo)+"/git/blobs/"+id, 16<<20)
 	if err != nil {
 		return nil, err
