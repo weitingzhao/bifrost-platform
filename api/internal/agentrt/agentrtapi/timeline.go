@@ -53,7 +53,7 @@ func (a *API) getDelivery(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "bad_request", "delivery by task ended with the dispatch lane; name a commit an external work handed in")
 		return
 	}
-	q := store.DeliveryQuery{Commit: r.URL.Query().Get("commit")}
+	q := deliveryreadings.DeliveryQuery{Commit: r.URL.Query().Get("commit")}
 	if q.Commit == "" {
 		writeError(w, 400, "bad_request", "commit is required")
 		return
@@ -62,7 +62,7 @@ func (a *API) getDelivery(w http.ResponseWriter, r *http.Request) {
 		observed := a.ProductionDelivery(r.Context())
 		q.Production = &observed
 	}
-	out, err := store.ReadDelivery(r.Context(), a.DB, q)
+	out, err := deliveryreadings.ReadDelivery(r.Context(), a.DB, q)
 	if err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):

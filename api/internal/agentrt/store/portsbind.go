@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
@@ -16,7 +17,8 @@ import (
 // The plan code's ports (planstore's planports.go) whose providers are
 // packages outside this one are bound here, at the package's start, and so
 // are the external work writes' ports onto the plan tree (externalwork's
-// ports.go, provided by planstore): this file is the store's wiring and not
+// ports.go, provided by planstore), and the delivery read's port onto the
+// lineage (deliveryreadings' LineagePorts, provided by externalwork): this file is the store's wiring and not
 // the plan's, and it is the one place of the store that names both sides. A provider still in this package binds
 // its own port from its own file (envelope.go, recorderimport.go,
 // loopalert.go).
@@ -47,6 +49,12 @@ func init() {
 		RootOf:   planstore.RootOf,
 		DevTree:  planstore.DevTree,
 		ViewTree: func() string { return planstore.ViewTree },
+	})
+	deliveryreadings.BindLineage(deliveryreadings.LineagePorts{
+		CommitNaming: func(ctx context.Context, tx pgx.Tx, prefix string) (deliveryreadings.CommitNaming, error) {
+			n, err := externalwork.NamingOfCommit(ctx, tx, prefix)
+			return deliveryreadings.CommitNaming(n), err
+		},
 	})
 	planstore.BindPlanCoordination(planstore.CoordinationPorts{AlertClaim: coord.AlertClaim})
 	planstore.BindPlanQuestions(planstore.QuestionPorts{BodyBytes: questions.BodyBytes})
