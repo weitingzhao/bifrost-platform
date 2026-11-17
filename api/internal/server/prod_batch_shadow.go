@@ -16,6 +16,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/headrelease"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 )
@@ -268,9 +269,18 @@ func (s *Server) prodShadowOf(table headrelease.Table) *headrelease.ProdShadowLo
 	}
 	slog.Info("prod batch shadow: on (records only)", "deliverable", prod.Name, "candidate_from", source.Name, "soak", soak.String(), "gap", gap.String())
 	return &headrelease.ProdShadowLoop{
-		Mode:   mode,
-		Every:  time.Minute,
-		Gather: func(ctx context.Context) headrelease.ProdFacts { return reads.gather(ctx, *prod, *source, soak, gap) },
+		Mode: mode,
+		// Five minutes. Each judgement asks the release records what STG and
+		// what PROD run, and each of those answers lists every run of the
+		// pipelines' namespace a hundred a page: on 2026-11-17, with 2,058 runs
+		// kept, one judgement a minute was 327 LISTs in ten minutes under
+		// head-release's name (the communication line's count). The records
+		// move to a table next; until then the shadow asks less often, and a
+		// decision that is five minutes late is still a shadow's decision.
+		Every: 5 * time.Minute,
+		Gather: func(ctx context.Context) headrelease.ProdFacts {
+			return reads.gather(kubemetrics.WithSite(ctx, "prod-shadow"), *prod, *source, soak, gap)
+		},
 		Batch: func(ctx context.Context, from, to string) headrelease.ProdBatch {
 			return s.prodShadowBatch(ctx, repo, from, to)
 		},
