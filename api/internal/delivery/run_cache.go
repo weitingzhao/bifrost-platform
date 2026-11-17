@@ -30,6 +30,13 @@ import (
 // count again. After N in a row the route answers from the cache and lists no
 // more. Without the cache, or while it is not synced, the route lists as it
 // always did.
+//
+// Trust used to live only in memory, so every release (a restart) put the
+// routes back on their lists until N more pages were viewed; at night, with
+// nobody viewing, they never got there. A route that has earned trust in
+// PROD (earnedRoutes, with its evidence) now starts trusted, and a trusted
+// route still compares one read in sampleEvery: a difference takes its trust
+// away and it earns it again as before.
 
 // RunCache is the cluster gate's read cache (gatecluster.Gate).
 type RunCache interface {
@@ -56,6 +63,20 @@ const EnvReadersCompareN = "BUS_READERS_COMPARE_N"
 
 const defaultReadersCompareN = 50
 
+// earnedRoutes are the routes that start trusted, each with the evidence that
+// earned it. A route is added here only with PROD readings.
+var earnedRoutes = map[string]string{
+	// 2026-11-16 21:44–21:52 PROD: 50 clean comparisons in a row each; no
+	// difference on any route over the night's restarts (02:36 11-17:
+	// pipeline_runs 22 more, 0 differences).
+	routePipelineRuns:   "PROD 2026-11-16 21:44–21:52, 50 clean in a row, 0 differences",
+	routeSupplyChain:    "PROD 2026-11-16 21:44–21:52, 50 clean in a row, 0 differences",
+	routeReleaseContext: "PROD 2026-11-16 21:44–21:52, 50 clean in a row, 0 differences",
+}
+
+// sampleEvery: a trusted route compares one read in this many.
+const sampleEvery = 100
+
 func readersCompareN() int {
 	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(EnvReadersCompareN))); err == nil && n > 0 {
 		return n
@@ -70,7 +91,8 @@ type cacheReaders struct {
 	logf  func(format string, args ...any)
 	mu    sync.Mutex
 	clean map[string]int  // clean comparisons in a row
-	trust map[string]bool // N in a row reached: the list is no longer called
+	trust map[string]bool // N in a row reached (or earned): reads come from the cache
+	since map[string]int  // reads served from the cache since the last sample
 }
 
 // SetRunCache hands the service the cluster gate's run cache; nil (or never
@@ -80,7 +102,11 @@ func (s *Service) SetRunCache(c RunCache) {
 		s.readers.Store(nil)
 		return
 	}
-	s.readers.Store(&cacheReaders{cache: c, n: readersCompareN(), clean: map[string]int{}, trust: map[string]bool{},
+	trust := map[string]bool{}
+	for route := range earnedRoutes {
+		trust[route] = true
+	}
+	s.readers.Store(&cacheReaders{cache: c, n: readersCompareN(), clean: map[string]int{}, trust: trust, since: map[string]int{},
 		logf: func(format string, args ...any) { slog.Info(fmt.Sprintf(format, args...)) }})
 }
 
@@ -96,10 +122,20 @@ func (s *Service) syncedCache() *cacheReaders {
 	return r
 }
 
-func (r *cacheReaders) trusted(route string) bool {
+// serve says whether this read answers from the cache alone: the route is
+// trusted and this is not its sampled read.
+func (r *cacheReaders) serve(route string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.trust[route]
+	if !r.trust[route] {
+		return false
+	}
+	r.since[route]++
+	if r.since[route] >= sampleEvery {
+		r.since[route] = 0
+		return false
+	}
+	return true
 }
 
 // record counts one comparison; diff is "" when it was clean.
@@ -110,6 +146,10 @@ func (r *cacheReaders) record(route, diff string) {
 	if diff != "" {
 		readerMetric(&metricReadersMismatch, route).Add(1)
 		r.clean[route] = 0
+		if r.trust[route] {
+			r.trust[route] = false
+			r.logf("bus readers: %s: a sampled read differs; it lists again until %d clean comparisons in a row", route, r.n)
+		}
 		r.logf("bus readers: %s: the run cache and the list differ (the list answered): %s", route, diff)
 		return
 	}
@@ -129,7 +169,7 @@ func readThrough[T any](s *Service, route string, cached func(RunCache) T, liste
 	if r == nil {
 		return listed()
 	}
-	if r.trusted(route) {
+	if r.serve(route) {
 		readerMetric(&metricReadersServed, route).Add(1)
 		return cached(r.cache), nil
 	}

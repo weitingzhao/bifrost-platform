@@ -121,6 +121,14 @@ func capture(s *Service) func() string {
 	}
 }
 
+// unearned starts every route untrusted, as before earnedRoutes.
+func unearned(t *testing.T) {
+	t.Helper()
+	saved := earnedRoutes
+	earnedRoutes = nil
+	t.Cleanup(func() { earnedRoutes = saved })
+}
+
 func readerCounts(route string) (compared, mismatch, served int64) {
 	return readerMetric(&metricReadersCompared, route).Load(), readerMetric(&metricReadersMismatch, route).Load(),
 		readerMetric(&metricReadersServed, route).Load()
@@ -132,6 +140,7 @@ func readerCounts(route string) (compared, mismatch, served int64) {
 // a row (counted, no mismatch), then answers from the cache exactly as the
 // list did and lists no more.
 func TestDisplayReadsMatchTheListThenStopListing(t *testing.T) {
+	unearned(t)
 	t.Setenv(EnvReadersCompareN, "3")
 	dyn, lists := listCounting(cacheRuns()...)
 	g := liveCache(t, dyn)
@@ -239,6 +248,7 @@ func TestDisplayReadsFallBackWhenTheCacheIsNotSynced(t *testing.T) {
 // list is logged by run name and counted, the list's answer stands, and the
 // clean count starts again (the route keeps listing).
 func TestDisplayReadMismatchIsCountedAndLogged(t *testing.T) {
+	unearned(t)
 	t.Setenv(EnvReadersCompareN, "2")
 	dyn, lists := listCounting(cacheRuns()...)
 	s := cacheService(dyn)
@@ -297,5 +307,58 @@ func TestBusReaderMetricsNameEachRoute(t *testing.T) {
 				t.Errorf("%s{route=%q} missing:\n%s", name, route, b.String())
 			}
 		}
+	}
+}
+
+// 2026-11-17: trust lived only in memory, so each PROD release put the three
+// display routes back on their lists (02:36: pipeline_runs at 22 of 50 after
+// the 01:11 restart, the other two at 0 with nobody viewing at night). An
+// earned route starts trusted, still compares one read in sampleEvery, and a
+// sampled difference takes its trust away.
+func TestEarnedRouteStartsTrustedSamplesAndLosesTrustOnDifference(t *testing.T) {
+	dyn, lists := listCounting(cacheRuns()...)
+	s := cacheService(dyn)
+	ctx := context.Background()
+	var good []unstructured.Unstructured
+	for _, o := range cacheRuns() {
+		u := o.(*unstructured.Unstructured)
+		if u.GetLabels()["tekton.dev/pipeline"] == "bifrost-deliver-stg" {
+			good = append(good, *u)
+		}
+	}
+	fc := &fakeCache{synced: true, objs: good}
+	s.SetRunCache(fc)
+	logs := capture(s)
+
+	// Earned: the first read after a restart lists nothing.
+	before := lists.Load()
+	s.PipelineRuns(ctx, "bifrost-deliver-stg")
+	if lists.Load() != before {
+		t.Fatal("an earned route listed on its first read after a restart")
+	}
+	// One read in sampleEvery is compared with the list.
+	for i := 1; i < sampleEvery-1; i++ {
+		s.PipelineRuns(ctx, "bifrost-deliver-stg")
+	}
+	if lists.Load() != before {
+		t.Fatalf("listed %d times before the sampled read", lists.Load()-before)
+	}
+	c0, m0, _ := readerCounts(routePipelineRuns)
+	fc.objs = good[1:] // the cache lost a run: the sampled read sees it
+	s.PipelineRuns(ctx, "bifrost-deliver-stg")
+	if lists.Load() == before {
+		t.Fatal("the sampled read did not list")
+	}
+	if c1, m1, _ := readerCounts(routePipelineRuns); c1-c0 != 1 || m1-m0 != 1 {
+		t.Fatalf("sampled read: %d compared, %d differences; want 1 and 1", c1-c0, m1-m0)
+	}
+	if !strings.Contains(logs(), "a sampled read differs") {
+		t.Fatalf("losing trust is not logged: %s", logs())
+	}
+	// Trust is gone: the next read lists again.
+	before = lists.Load()
+	s.PipelineRuns(ctx, "bifrost-deliver-stg")
+	if lists.Load() == before {
+		t.Fatal("still answering from the cache after a sampled difference")
 	}
 }
