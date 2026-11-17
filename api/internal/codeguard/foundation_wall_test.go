@@ -16,6 +16,7 @@ const module = "github.com/weitingzhao/bifrost-platform/"
 
 // ownership is config/domain-ownership.json as far as the wall reads it.
 type ownership struct {
+	Domains  []struct{ ID string }
 	Default  struct{ Domains []string }
 	Packages map[string]struct{ Domains []string }
 }
