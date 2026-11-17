@@ -88,9 +88,11 @@ type Gate struct {
 	Receipts Receipts
 	Journey  Journey
 	Logf     func(format string, args ...any)
-	// Clients are the subscription table's declared users (the roster).
-	Clients []registry.Client
-	seen    seenClients
+	// Clients are the subscription table's declared users (the roster);
+	// TablesLoadedAt is when they were loaded.
+	Clients        []registry.Client
+	TablesLoadedAt time.Time
+	seen           seenClients
 
 	// Poll is the re-read interval without NATS (2 s); Heartbeat the SSE
 	// comment interval (15 s). Zero is the default.

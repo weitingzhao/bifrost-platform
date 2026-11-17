@@ -98,9 +98,12 @@ func (j *JSJourney) ReceiptsSince(ctx context.Context, since time.Time, max int)
 	return out, err
 }
 
-// Roster builds the list: declared clients first (active or lost), then the
-// names that came without being declared (new).
-func Roster(declared []registry.Client, polled map[string]time.Time, receipts map[string]ReceiptCount, now time.Time) []RosterEntry {
+// Roster builds the list: declared clients first (active, lost or idle), then
+// the names that came without being declared (new). An undeclared name last
+// seen before since (when this process loaded its tables) is a user that
+// left with an earlier table: it is not listed (2026-11-16, the tenant
+// drill: demo's names stayed on the page as new after it was removed).
+func Roster(declared []registry.Client, polled map[string]time.Time, receipts map[string]ReceiptCount, now, since time.Time) []RosterEntry {
 	var out []RosterEntry
 	known := map[string]bool{}
 	last := func(name string) (time.Time, int) {
@@ -146,6 +149,9 @@ func Roster(declared []registry.Client, polled map[string]time.Time, receipts ma
 	for _, name := range fresh {
 		e := RosterEntry{Name: name, Status: RosterNew}
 		e.LastSeen, e.Receipts = last(name)
+		if e.LastSeen.Before(since) {
+			continue
+		}
 		out = append(out, e)
 	}
 	return out
@@ -178,7 +184,7 @@ func (g *Gate) HandleClients(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	body := map[string]any{"tenant": g.Tenant.Name, "env": g.Env, "hours": hours,
-		"clients": Roster(g.Clients, g.seen.snapshot(), receipts, now)}
+		"clients": Roster(g.Clients, g.seen.snapshot(), receipts, now, g.TablesLoadedAt)}
 	if readErr != "" {
 		body["receipts_error"] = readErr
 	}

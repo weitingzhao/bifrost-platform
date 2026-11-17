@@ -318,6 +318,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 		g := &gate.Gate{Ledger: ledger, Tenant: rocket, Env: env, Wake: &gate.Waker{}, Logf: busLogf}
 		if subs, err := registry.LoadSubscriptions(); err == nil {
 			g.Clients = rosterClients(subs, env)
+			g.TablesLoadedAt = time.Now()
 		}
 		if natsOn {
 			nc, cerr := relay.Connect(cfg.URL, relay.ReaderUser, cfg.ReaderPassword, "platform-api bus gate")

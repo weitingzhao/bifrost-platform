@@ -21,7 +21,7 @@ func TestRosterSeesComingAndGoing(t *testing.T) {
 	polled := map[string]time.Time{"gate:stream:console": now.Add(-time.Minute), "gate:events:demo-seat": now.Add(-2 * time.Minute)}
 	receipts := map[string]ReceiptCount{"headrelease": {Last: now.Add(-3 * time.Hour), Count: 4}, "gate:events:claude-8.2-doorbell": {Last: now.Add(-time.Hour), Count: 1}}
 	got := map[string]RosterEntry{}
-	for _, e := range Roster(declared, polled, receipts, now) {
+	for _, e := range Roster(declared, polled, receipts, now, now.Add(-24*time.Hour)) {
 		got[e.Name] = e
 	}
 	want := map[string]string{
@@ -40,5 +40,22 @@ func TestRosterSeesComingAndGoing(t *testing.T) {
 	}
 	if got["headrelease"].Receipts != 4 || !got["headrelease"].Declared || got["gate:events:demo-seat"].Declared {
 		t.Errorf("entries: %+v", got)
+	}
+}
+
+// 2026-11-16, the tenant drill: after demo was removed its names stayed on
+// the page as new, from receipts older than the table that dropped it. An
+// undeclared name not seen since the tables were loaded is not listed; one
+// seen after is new.
+func TestRosterForgetsUsersThatLeft(t *testing.T) {
+	now := time.Date(2026, 11, 16, 21, 45, 0, 0, time.UTC)
+	loaded := now.Add(-3 * time.Minute)
+	receipts := map[string]ReceiptCount{
+		"sub-demo-drill":       {Last: now.Add(-5 * time.Minute), Count: 8},
+		"gate:events:stranger": {Last: now.Add(-time.Minute), Count: 1},
+	}
+	got := Roster(nil, nil, receipts, now, loaded)
+	if len(got) != 1 || got[0].Name != "gate:events:stranger" || got[0].Status != RosterNew {
+		t.Fatalf("roster %+v, want only the stranger seen after the tables loaded", got)
 	}
 }
