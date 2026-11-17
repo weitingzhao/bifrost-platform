@@ -23,7 +23,7 @@ describe('lines', () => {
       { landed: false }, { landed: true }, { landed: true, reached: [{ env: 'stg' }] }, { landed: true, reached: [{ env: 'stg' }, { env: 'prod' }] },
     ] }] }] as unknown as LineageThread[]
     const rows = linesOf(statuses, threads, approvals, lineage, now)
-    expect(rows.map(r => r.session)).toEqual(['local_a', 'local_b'])
+    expect(rows.filter(r => r.status).map(r => r.session)).toEqual(['local_a', 'local_b'])
     const a = rows[0]
     expect(a.title).toBe('Line A')
     expect(a.ownerCards).toBe(1)
@@ -42,7 +42,24 @@ describe('lines', () => {
     const bad = { seat: 'thread:local_bad', message_id: 'm_2', at: '2026-11-17T15:00:00Z', summary: 'hi', problem: 'format: no next',
       goal: '', doing: '', percent: 0, percent_basis: '', next: '' }
     const rows = linesOf([bad], [], [], [], now)
-    expect(rows[0].status.problem).toBe('format: no next')
+    expect(rows[0].status?.problem).toBe('format: no next')
+  })
+  // 2026-11-17 (the coordinator): with only one line reporting, the page read
+  // as one line working. A line active in the last day (a heartbeat or a
+  // commit) without a status gets a row of its own, after those that report;
+  // one quiet for longer does not.
+  it('lists active lines that have not reported, after those that have', () => {
+    const threads = [
+      { thread: 'local_quiet', session: 'local_quiet', status: 'idle', quiet_seconds: 60, at: '2026-11-17T15:30:00Z' },
+      { thread: 'local_old', session: 'local_old', status: 'idle', quiet_seconds: 9e4, at: '2026-11-15T10:00:00Z' },
+    ] as AgentThread[]
+    const lineage = [{ session: 'local_committer', title: 'CI', last_at: '2026-11-17T14:00:00Z', repos: [{ repo: 'p', commits: [{ landed: true }] }] }] as unknown as LineageThread[]
+    const rows = linesOf([status('thread:local_a', '2026-11-17T15:50:00Z')], threads, [], lineage, now)
+    expect(rows.map(r => [r.session, r.status ? 'reports' : 'not yet'])).toEqual([
+      ['local_a', 'reports'], ['local_quiet', 'not yet'], ['local_committer', 'not yet'],
+    ])
+    expect(rows[2].title).toBe('CI')
+    expect(rows[2].commits.main).toBe(1)
   })
   it('reads sessions and stages', () => {
     expect(sessionOf('thread:local_x')).toBe('local_x')

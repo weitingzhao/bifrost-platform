@@ -36,16 +36,22 @@ export type CommitStage = 'written' | 'main' | 'stg' | 'prod'
 export type LineRow = {
   session: string
   title: string
-  status: SeatStatus
-  /** Minutes since the seat wrote its status. */
-  statusAgeMinutes: number
+  /** The seat's latest status; undefined for a line that is active but has not reported one yet. */
+  status?: SeatStatus
+  /** Minutes since the seat wrote its status (undefined without one). */
+  statusAgeMinutes?: number
   /** The session's last heartbeat: in a turn, idle, silent…; undefined when no beat is known. */
   thread?: Pick<AgentThread, 'status' | 'quiet_seconds' | 'at'>
   /** Its cards waiting for the Owner (drills apart). */
   ownerCards: number
   /** Its commits of the lineage window by the furthest stage they reached. */
   commits: Record<CommitStage, number>
+  /** The line's last sign of life: heartbeat, commit or status (ISO time; "" when none). */
+  lastActivity: string
 }
+
+/** A line with no status counts as active when it beat or committed within this. */
+export const LINE_ACTIVE_HOURS = 24
 
 /** A status older than this is shown as stale. */
 export const SEAT_STATUS_STALE_MINUTES = 120
@@ -62,9 +68,12 @@ export function stageOf(c: { landed: boolean; reached?: { env: string }[] }): Co
 }
 
 /**
- * The rows: one per seat that wrote a status, newest status first; a line
- * that waits on something or has cards for the Owner comes before one that
- * does not.
+ * The rows: one per seat that wrote a status, and one per line active in the
+ * last day (a heartbeat or a commit) that has not reported yet, so a page
+ * with few statuses does not read as few lines working. Lines that report
+ * come first, those that wait on something or have cards for the Owner
+ * first among them, then newest status; then the ones not reporting, most
+ * recently active first.
  */
 export function linesOf(
   statuses: readonly SeatStatus[],
@@ -73,24 +82,37 @@ export function linesOf(
   lineage: readonly LineageThread[],
   now: Date,
 ): LineRow[] {
-  const rows = statuses.map((status): LineRow => {
-    const session = sessionOf(status.seat)
+  const row = (session: string, status?: SeatStatus): LineRow => {
     const beat = threads
       .filter(t => t.thread === session || t.session === session)
       .sort((a, b) => b.at.localeCompare(a.at))[0]
     const line = lineage.find(l => l.session === session)
     const commits: Record<CommitStage, number> = { written: 0, main: 0, stg: 0, prod: 0 }
     for (const repo of line?.repos ?? []) for (const c of repo.commits) commits[stageOf(c)]++
+    const last = [status?.at ?? '', beat?.at ?? '', line?.last_at ?? ''].sort().at(-1) ?? ''
     return {
       session,
       title: line?.title || beat?.title || session,
       status,
-      statusAgeMinutes: Math.max(0, Math.round((now.getTime() - Date.parse(status.at)) / 60_000)),
+      statusAgeMinutes: status ? Math.max(0, Math.round((now.getTime() - Date.parse(status.at)) / 60_000)) : undefined,
       thread: beat ? { status: beat.status, quiet_seconds: beat.quiet_seconds, at: beat.at } : undefined,
-      ownerCards: approvals.filter(a => !a.drill && (a.requester === session || a.requester === status.seat)).length,
+      ownerCards: approvals.filter(a => !a.drill && (a.requester === session || a.requester === `thread:${session}`)).length,
       commits,
+      lastActivity: last,
     }
-  })
-  const waiting = (r: LineRow) => (r.ownerCards > 0 || r.status.waiting_on ? 1 : 0)
-  return rows.sort((a, b) => waiting(b) - waiting(a) || b.status.at.localeCompare(a.status.at))
+  }
+  const reported = statuses.map(st => row(sessionOf(st.seat), st))
+  const seen = new Set(reported.map(r => r.session))
+  const since = now.getTime() - LINE_ACTIVE_HOURS * 3_600_000
+  const candidates = new Set<string>()
+  for (const t of threads) {
+    const s = t.session || t.thread
+    if (s && Date.parse(t.at) >= since) candidates.add(s)
+  }
+  for (const l of lineage) if (l.session && Date.parse(l.last_at) >= since) candidates.add(l.session)
+  const silent = [...candidates].filter(s => !seen.has(s)).map(s => row(s))
+  const waiting = (r: LineRow) => (r.ownerCards > 0 || r.status?.waiting_on ? 1 : 0)
+  reported.sort((a, b) => waiting(b) - waiting(a) || (b.status?.at ?? '').localeCompare(a.status?.at ?? ''))
+  silent.sort((a, b) => b.lastActivity.localeCompare(a.lastActivity))
+  return [...reported, ...silent]
 }
