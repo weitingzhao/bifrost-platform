@@ -136,7 +136,7 @@ modules:
       # Guards that read every Go file of the module, and the walls between
       # packages (go list -deps); moved here from delivery, questions and
       # agentprogress so that those are rerun for their own changes.
-      api/internal/codeguard: ["api"]
+      api/internal/codeguard: ["api", "config/domain-ownership.json"]
       api/internal/config: ["api/internal/config", "config/environments.yaml"]
       api/internal/delivery: ["api/internal/delivery", "bifrost-trade-infra:k8s/cicd"]
       api/internal/devsession: ["api/internal/devsession", "config/sessions-catalog.yaml"]
