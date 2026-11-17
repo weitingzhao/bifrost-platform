@@ -72,6 +72,10 @@ var intendedRouteAdditions = map[string][]string{
 	// Owner 2026-11-16: the CI scorecard (how each repository uses CI, and CI
 	// as their provider), for the Ops page, like /units/runs (read-only).
 	"GET /api/v1/ci/scorecard": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// Owner 2026-11-16: the CI page's domain graph and what each commit
+	// changed by domain, like /ci/scorecard (read-only; contracts v1).
+	"GET /api/v1/ci/domains": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"GET /api/v1/ci/changes": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-14: the approval records counted, for the Ops page (read-only).
 	"GET /api/v1/readings/approvals": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/units/evidence":    {"operator", "admin", "trade-satellite"},

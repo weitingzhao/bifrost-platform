@@ -238,6 +238,13 @@
       "status": "assigned",
       "basis": "CI charter; 2026-11-16 scorecard of how each repository uses CI and of CI as their provider, computed from runs already read; a reading, no CI or release decisions"
     },
+    "api/internal/cidomains": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "CI charter; 2026-11-16 the CI page's two reads about domains (who imports whom at main's head, which domains a commit changed), computed with the domain score's own graph; a reading, no CI or release decisions"
+    },
     "api/internal/domainscore": {
       "domains": [
         "verification"

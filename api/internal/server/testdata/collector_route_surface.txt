@@ -65,6 +65,8 @@ deny	GET /api/v1/bus/stream
 deny	GET /api/v1/bus/clients
 deny	GET /api/v1/bus/trace
 deny	GET /api/v1/checklist/signals
+deny	GET /api/v1/ci/changes
+deny	GET /api/v1/ci/domains
 deny	GET /api/v1/ci/scorecard
 deny	GET /api/v1/cluster/
 deny	POST /api/v1/cluster/addons/kube-prometheus-stack/ensure

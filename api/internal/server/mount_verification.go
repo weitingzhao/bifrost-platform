@@ -52,6 +52,11 @@ func (s *Server) mountVerification(r chi.Router) {
 	// How each repository uses CI and how CI serves them, scored from
 	// the retained runs (ci_scorecard.go). Read-only.
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/ci/scorecard", s.handleCIScorecard)
+	// The CI page's two reads about domains: who imports whom at main's
+	// head, and which domains each commit changed (ci_domains.go;
+	// contracts, version 1). Read-only.
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/ci/domains", s.handleCIDomains)
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/ci/changes", s.handleCIChanges)
 	r.Group(func(r chi.Router) {
 		r.Use(s.auth.Require(actuation.RoleOperator))
 		// Run the unit tasks of a commit the ledger has no verdict on

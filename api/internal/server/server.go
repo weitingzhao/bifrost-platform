@@ -80,6 +80,9 @@ type Server struct {
 	unitRunsKept unitRunsCache
 	// ciScorecardKept keeps the CI scorecard a short while (ci_scorecard.go).
 	ciScorecardKept ciScorecardCache
+	// ciDomainsKept keeps the CI page's domain graph and the files commits
+	// changed (ci_domains.go).
+	ciDomainsKept   ciDomainsCache
 	unitTreesOnce   sync.Once
 	promote         *promote.Handler
 	tradeagent      *tradeagent.Handler

@@ -132,98 +132,145 @@ type Answer struct {
 
 func round1(v float64) float64 { return math.Round(v*10) / 10 }
 
-// Score computes every domain's score. Domains are those the ownership
-// table declares, in its order, then Mixed when a package is.
-func Score(in Input) Answer {
-	type pkg struct {
-		Package
-		domain   string
-		assigned bool
-	}
-	pkgs := map[string]pkg{}
-	for _, p := range in.Packages {
+// Graph is the domain of every package of a module and the imports between
+// its domains: the one reading of "which domain is this package in" and
+// "does this import point the wrong way" (ruler v2). Score and the CI page's
+// dependency view (cidomains) both stand on it, so the page cannot draw an
+// edge red that the score does not count, or the other way round.
+type Graph struct {
+	pkgs map[string]graphPackage
+	next map[string]map[string]bool
+	base string
+	back map[[2]string]bool
+	// Order is the domains the ownership table declares, in its order, then
+	// the domains only a row names, sorted. Mixed is not among them.
+	Order []string
+}
+
+type graphPackage struct {
+	Package
+	domain   string
+	assigned bool
+}
+
+// NewGraph reads the packages against the ownership table. The assembly
+// roots (api/cmd/) are left out: a command imports every domain it wires.
+func NewGraph(own Ownership, packages []Package) *Graph {
+	g := &Graph{pkgs: map[string]graphPackage{}, next: map[string]map[string]bool{}, back: map[[2]string]bool{}}
+	for _, p := range packages {
 		if strings.HasPrefix(p.Path, assemblyRoots) {
 			continue
 		}
-		d, assigned := in.Ownership.DomainOf(p.Path)
-		pkgs[p.Path] = pkg{p, d, assigned}
+		d, assigned := own.DomainOf(p.Path)
+		g.pkgs[p.Path] = graphPackage{p, d, assigned}
 	}
 	// The domain graph: a reaches b when a package of a imports one of b.
-	next := map[string]map[string]bool{}
-	for _, p := range pkgs {
+	for _, p := range g.pkgs {
 		for _, dep := range p.Imports {
-			if q, ok := pkgs[dep]; ok && q.domain != p.domain {
-				if next[p.domain] == nil {
-					next[p.domain] = map[string]bool{}
+			if q, ok := g.pkgs[dep]; ok && q.domain != p.domain {
+				if g.next[p.domain] == nil {
+					g.next[p.domain] = map[string]bool{}
 				}
-				next[p.domain][q.domain] = true
+				g.next[p.domain][q.domain] = true
 			}
 		}
 	}
 	// The base is the default domain: every domain stands on it.
-	base := ""
-	if len(in.Ownership.Default.Domains) == 1 {
-		base = in.Ownership.Default.Domains[0]
+	if len(own.Default.Domains) == 1 {
+		g.base = own.Default.Domains[0]
 	}
-	// reaches does not pass through the base or through Mixed. Every domain
-	// imports the base and the shared packages import every domain, so a path
-	// through either joins any two domains: version 1 counted those and
-	// called plan -> lineage, lineage -> verification and owner ->
-	// coordination cycles when none of the three is imported back
-	// (2026-11-16, found drawing the domain graph from the same imports).
-	reaches := func(from, to string) bool {
-		seen, queue := map[string]bool{from: true}, []string{from}
-		for len(queue) > 0 {
-			at := queue[0]
-			queue = queue[1:]
-			for n := range next[at] {
-				if n == to {
-					return true
-				}
-				if !seen[n] && n != base && n != Mixed {
-					seen[n] = true
-					queue = append(queue, n)
-				}
-			}
-		}
-		return false
-	}
-	back := map[[2]string]bool{}
-	comesBack := func(from, to string) bool {
-		k := [2]string{to, from}
-		if v, ok := back[k]; ok {
-			return v
-		}
-		back[k] = reaches(to, from)
-		return back[k]
-	}
-
-	// An import of the base points the right way whatever the base imports in
-	// turn, and the shared packages of several domains (Mixed) are the base's
-	// to answer for, not their importer's. Between two other domains neither
-	// is below the other: a mutual dependency counts against both.
-	wrongWay := func(from, to string) bool {
-		if to == base || (to == Mixed && from != base) {
-			return false
-		}
-		return comesBack(from, to)
-	}
-
-	var order []string
 	seen := map[string]bool{}
-	for _, d := range in.Ownership.Domains {
-		order, seen[d.ID] = append(order, d.ID), true
+	for _, d := range own.Domains {
+		g.Order, seen[d.ID] = append(g.Order, d.ID), true
 	}
 	// A domain the table does not declare but a row names is scored too. Mixed
 	// is not a domain: nobody owns its number.
 	var extra []string
-	for _, p := range pkgs {
+	for _, p := range g.pkgs {
 		if !seen[p.domain] && p.domain != Mixed {
 			extra, seen[p.domain] = append(extra, p.domain), true
 		}
 	}
 	sort.Strings(extra)
-	order = append(order, extra...)
+	g.Order = append(g.Order, extra...)
+	return g
+}
+
+// Packages are the paths of the packages in the graph, sorted.
+func (g *Graph) Packages() []string {
+	out := make([]string, 0, len(g.pkgs))
+	for p := range g.pkgs {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// DomainOf is the domain of a package in the graph (Mixed for a package of
+// several); ok is false for a path that is not one of its packages.
+func (g *Graph) DomainOf(pkg string) (domain string, ok bool) {
+	p, ok := g.pkgs[pkg]
+	return p.domain, ok
+}
+
+// Imports are the packages of the graph that pkg's production code imports.
+func (g *Graph) Imports(pkg string) []string {
+	var out []string
+	for _, dep := range g.pkgs[pkg].Imports {
+		if _, ok := g.pkgs[dep]; ok {
+			out = append(out, dep)
+		}
+	}
+	return out
+}
+
+// reaches does not pass through the base or through Mixed. Every domain
+// imports the base and the shared packages import every domain, so a path
+// through either joins any two domains: version 1 counted those and
+// called plan -> lineage, lineage -> verification and owner ->
+// coordination cycles when none of the three is imported back
+// (2026-11-16, found drawing the domain graph from the same imports).
+func (g *Graph) reaches(from, to string) bool {
+	seen, queue := map[string]bool{from: true}, []string{from}
+	for len(queue) > 0 {
+		at := queue[0]
+		queue = queue[1:]
+		for n := range g.next[at] {
+			if n == to {
+				return true
+			}
+			if !seen[n] && n != g.base && n != Mixed {
+				seen[n] = true
+				queue = append(queue, n)
+			}
+		}
+	}
+	return false
+}
+
+// WrongWay says an import from a package of domain from to one of domain to
+// points the wrong way. An import of the base points the right way whatever
+// the base imports in turn, and the shared packages of several domains
+// (Mixed) are the base's to answer for, not their importer's. Between two
+// other domains neither is below the other: a mutual dependency counts
+// against both.
+func (g *Graph) WrongWay(from, to string) bool {
+	if to == g.base || (to == Mixed && from != g.base) {
+		return false
+	}
+	k := [2]string{to, from}
+	if v, ok := g.back[k]; ok {
+		return v
+	}
+	g.back[k] = g.reaches(to, from)
+	return g.back[k]
+}
+
+// Score computes every domain's score. Domains are those the ownership
+// table declares, in its order, then Mixed when a package is.
+func Score(in Input) Answer {
+	graph := NewGraph(in.Ownership, in.Packages)
+	pkgs, wrongWay, order := graph.pkgs, graph.WrongWay, graph.Order
 
 	out := Answer{RulerVersion: in.Ruler.Version, Commit: in.Commit, Domains: []Domain{}}
 	for _, d := range order {
