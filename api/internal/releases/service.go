@@ -134,7 +134,11 @@ func (s *Service) Start(ctx context.Context, interval time.Duration) {
 			}
 			// the first pass always logs, so a silent recorder is visibly alive
 			if first || r.Recorded > 0 || len(r.Errors) > 0 {
+				// rows and table: what reached the record table (2026-11-17: the
+				// first PROD pass with the table logged recorded=1 errors=0, and
+				// whether a row was written could not be told from the log).
 				slog.Info("release recorder", "first", first, "runs", r.Runs, "matched", r.Matched, "recorded", r.Recorded,
+					"rows", r.Rows, "table", s.tableWriter() != nil,
 					"errors", len(r.Errors), "rules", len(s.rules.Rules), "path", s.rulesPath)
 				for _, e := range r.Errors {
 					slog.Warn("release recorder error", "err", e)
