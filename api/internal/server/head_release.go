@@ -279,7 +279,7 @@ func (s *Server) headWorldOf() *headWorld {
 
 // headReleaseSource is the loop's pass, or nil when the switch is off.
 func (s *Server) headReleaseSource() func(context.Context) error {
-	if s.delivery == nil || !headReleaseOn() {
+	if s.delivery == nil || (!headReleaseOn() && !prodShadowOn()) {
 		return nil
 	}
 	table, path, err := headrelease.LoadTable()
@@ -287,15 +287,19 @@ func (s *Server) headReleaseSource() func(context.Context) error {
 		slog.Error("head release: the table does not load; nothing is released", "path", path, "error", err)
 		return nil
 	}
-	slog.Info("head release: on", "path", path, "deliverables", len(table.Deliverables))
+	releasing := headReleaseOn()
+	// The shadow of PROD by batch (prod_batch_shadow.go): nil unless
+	// PROD_HEAD_RELEASE=shadow. It records and does nothing else.
+	shadow := s.prodShadowOf(table)
+	slog.Info("head release: on", "path", path, "deliverables", len(table.Deliverables), "releasing", releasing, "prod_shadow", shadow != nil)
 	var mu sync.Mutex
 	last := map[string]string{} // the last outcome said, by deliverable
-	return func(ctx context.Context) error {
+	rows := func(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(ctx, headReleasePass)
 		defer cancel()
 		var errs []error
 		for _, d := range table.Deliverables {
-			if !d.Enabled {
+			if !d.Enabled || !releasing {
 				continue
 			}
 			w := s.headWorldOf()
@@ -319,6 +323,17 @@ func (s *Server) headReleaseSource() func(context.Context) error {
 			}
 		}
 		return errors.Join(errs...)
+	}
+	return func(ctx context.Context) error {
+		err := rows(ctx)
+		// After the rows, whatever they did, and on its own time: the shadow
+		// neither delays a delivery nor fails the pass.
+		if shadow != nil {
+			sctx, cancel := context.WithTimeout(ctx, prodShadowPassTimeout)
+			shadow.Pass(sctx)
+			cancel()
+		}
+		return err
 	}
 }
 
@@ -365,7 +380,7 @@ func (s *Server) recordHeadDecision(ctx context.Context, d headrelease.Deliverab
 			if c.TestedWith != "" {
 				continue
 			}
-			brought, note := s.headBrought(ctx, c.Repo, out.Previous[c.Param], out.Commits[c.Param])
+			brought, _, note := s.headBrought(ctx, c.Repo, out.Previous[c.Param], out.Commits[c.Param])
 			rec.Brought = append(rec.Brought, brought...)
 			if note != "" {
 				rec.BroughtNote = strings.TrimSpace(rec.BroughtNote + " " + c.Repo + ": " + note)
@@ -387,45 +402,47 @@ func (s *Server) recordHeadDecision(ctx context.Context, d headrelease.Deliverab
 }
 
 // headBrought lists the commits to has and from lacks, newest first, each
-// with its lineage trailers, from Gitea. What it cannot read it says in note;
-// the record is written all the same.
-func (s *Server) headBrought(ctx context.Context, repo, from, to string) ([]headBroughtCommit, string) {
+// with its lineage trailers, from Gitea: one request. total is how many there
+// are, which can be more than it lists; -1 when it could not be read. What it
+// cannot read it says in note; the record is written all the same.
+func (s *Server) headBrought(ctx context.Context, repo, from, to string) (brought []headBroughtCommit, total int, note string) {
 	if !commitID.MatchString(from) || !commitID.MatchString(to) {
-		return nil, "no earlier delivery to compare with"
+		return nil, -1, "no earlier delivery to compare with"
 	}
 	if from == to {
-		return nil, ""
+		return nil, 0, ""
 	}
 	acc, err := s.delivery.GiteaAccess(ctx)
 	if err != nil {
-		return nil, "gitea access: " + err.Error()
+		return nil, -1, "gitea access: " + err.Error()
 	}
 	q := url.Values{"sha": {to}, "not": {from}, "stat": {"false"}, "verification": {"false"}, "files": {"false"}, "limit": {strconv.Itoa(headBroughtMax)}}
 	endpoint := strings.TrimRight(acc.Base, "/") + "/api/v1/repos/" + url.PathEscape(acc.Org) + "/" + url.PathEscape(repo) + "/commits?" + q.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, err.Error()
+		return nil, -1, err.Error()
 	}
 	if acc.User != "" || acc.Pass != "" {
 		req.SetBasicAuth(acc.User, acc.Pass)
 	}
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
-		return nil, "gitea: " + err.Error()
+		return nil, -1, "gitea: " + err.Error()
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Sprintf("gitea: HTTP %d", resp.StatusCode)
+		return nil, -1, fmt.Sprintf("gitea: HTTP %d", resp.StatusCode)
 	}
 	var listed []headListed
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&listed); err != nil {
-		return nil, "gitea: " + err.Error()
+		return nil, -1, "gitea: " + err.Error()
 	}
-	out, note := headBroughtOf(repo, listed), ""
-	if total, _ := strconv.Atoi(strings.TrimSpace(resp.Header.Get("X-Total-Count"))); total > len(out) {
-		note = fmt.Sprintf("the newest %d of %d commits", len(out), total)
+	out := headBroughtOf(repo, listed)
+	total = len(out)
+	if counted, _ := strconv.Atoi(strings.TrimSpace(resp.Header.Get("X-Total-Count"))); counted > len(out) {
+		total, note = counted, fmt.Sprintf("the newest %d of %d commits", len(out), counted)
 	}
-	return out, note
+	return out, total, note
 }
 
 // headListed is one commit of Gitea's commit list.

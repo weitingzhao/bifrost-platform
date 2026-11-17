@@ -88,6 +88,9 @@ modules:
       api/internal/tenant/appreadings: ["api/internal/tenant/appreadings"]
       api/internal/agentprogress: ["api/internal/agentprogress"]
       # Foundation: HTTP observations, moved out of server; no domain inputs.
+      # Its test parses two of its own files (prod_shadow_test.go: the shadow
+      # names nothing that acts); it reads nothing outside the directory.
+      api/internal/headrelease: ["api/internal/headrelease"]
       api/internal/httpmetrics: ["api/internal/httpmetrics"]
       api/internal/bus/registry: ["api/internal/bus/registry"]
       api/internal/agentrt/agentrtapi:

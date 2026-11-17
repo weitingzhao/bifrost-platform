@@ -134,6 +134,39 @@ func TestPolicyFactsWindowAndConfigMaps(t *testing.T) {
 	}
 }
 
+// Origin: 2026-11-16, 19 PROD releases of the platform in one evening, each
+// by a seat holding the window ~129 s; the coordinator asked for a shadow of
+// "the platform releases PROD in batches" before anyone turns it on. The
+// shadow asks whether the window is free on every pass. Guards that the
+// answer is the holder of a live window, that the expired record every
+// release leaves behind reads as free, and that asking changes nothing (the
+// ConfigMap is as it was: a reader that recorded or cleared would show in
+// the morning's window timeline as something nobody did).
+func TestPolicyFactsWindowHolderOnlyReads(t *testing.T) {
+	ctx := context.Background()
+	live := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: releaseWindowConfigMap, Namespace: "cicd"},
+		Data:       map[string]string{"window.json": `{"who":"ci-w1","what":"bifrost-platform","expires_at":"2999-01-01T00:00:00Z"}`},
+	}
+	f := newFactsService(t, live)
+	if who, what, open, err := f.WindowHolder(ctx); err != nil || !open || who != "ci-w1" || what != "bifrost-platform" {
+		t.Fatalf("live window = %q %q %v %v", who, what, open, err)
+	}
+	if data, found, err := f.ConfigMap(ctx, releaseWindowConfigMap); err != nil || !found || data["window.json"] != live.Data["window.json"] {
+		t.Fatalf("the window after reading it = %v %v %v", data, found, err)
+	}
+	expired := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: releaseWindowConfigMap, Namespace: "cicd"},
+		Data:       map[string]string{"window.json": `{"who":"ci-w1","what":"bifrost-platform","expires_at":"2020-01-01T00:00:00Z"}`},
+	}
+	if who, _, open, err := newFactsService(t, expired).WindowHolder(ctx); err != nil || open || who != "" {
+		t.Fatalf("expired window = %q %v %v", who, open, err)
+	}
+	if _, _, open, err := newFactsService(t).WindowHolder(ctx); err != nil || open {
+		t.Fatalf("no window = %v %v", open, err)
+	}
+}
+
 // The policy's window clause holds only for a live window that covers the
 // pipeline and is held by the caller. The pipelines here need not hold a
 // window to start a run (windowPipelines: required false), which is the case

@@ -392,7 +392,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 			case <-time.After(15 * time.Second):
 			}
 		}
-		if headReleaseOn() {
+		if headReleaseOn() || prodShadowOn() {
 			s.consumeHeadRelease(ctx, js, env)
 		}
 		s.consumeSubscriptions(ctx, js, env, pool)

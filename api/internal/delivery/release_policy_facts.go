@@ -260,6 +260,23 @@ type CIReader func(ctx context.Context, repo, sha string) (status, run string, e
 // ci_succeeded, asks. Set while wiring, before the service serves.
 func (s *Service) SetCIReader(r CIReader) { s.ciReader = r }
 
+// WindowHolder names who holds the release window now and what for; open is
+// false when no live window exists. It reads and nothing else: no refusal is
+// recorded, as a caller that only wants to know must not leave one.
+func (f PolicyFacts) WindowHolder(ctx context.Context) (who, what string, open bool, err error) {
+	found, window, err := f.s.readReleaseWindow(ctx)
+	if err != nil {
+		return "", "", false, err
+	}
+	who, _ = window["who"].(string)
+	who = strings.TrimSpace(who)
+	if !found || who == "" || releaseWindowExpired(window, time.Now().UTC()) {
+		return "", "", false, nil
+	}
+	what, _ = window["what"].(string)
+	return who, what, true, nil
+}
+
 // HeldBy is "" only when a live window covers pipeline and its holder is who.
 // It does not share the start gate's rule (decideReleaseWindow), which lets a
 // pipeline that need not hold a window run when none is open: here no window
