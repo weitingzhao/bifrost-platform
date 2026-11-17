@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -269,5 +271,57 @@ func TestRecorderImportPortsAreBoundToTheRecorderImport(t *testing.T) {
 		store.RecorderStreamPrefixForTest != store.RecorderStream("") {
 		t.Fatalf("the plan's copies %q %q %q are not the recorder import's %q %q %q", store.RecorderApplyLabelForTest, store.RecorderRefuseLabelForTest,
 			store.RecorderStreamPrefixForTest, store.RecorderApply, store.RecorderRefuse, store.RecorderStream(""))
+	}
+}
+
+// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): a plan note that says the Owner approved is recorded as a claim through a port to coordination; unbound, the port must refuse so the note is not stored, never keep the note with no record of the claim.
+func TestUnboundCoordinationPortRefuses(t *testing.T) {
+	t.Parallel()
+	for name, p := range map[string]*store.CoordinationPorts{"nothing bound": nil, "an empty binding": {}} {
+		refused(t, name+": the claim record", store.AlertClaimViaForTest(ctx, p, nil, store.Event{Stream: "plan:x"}, 1, "plan_note", "", []byte("Owner 已批准")))
+	}
+	// The positive control: a bound port is called with what the plan gave.
+	var got []any
+	bound := &store.CoordinationPorts{AlertClaim: func(_ context.Context, _ pgx.Tx, ev store.Event, cause int64, source, artifact string, body []byte) error {
+		got = []any{ev.Stream, cause, source, artifact, string(body)}
+		return errors.New("recorded")
+	}}
+	err := store.AlertClaimViaForTest(ctx, bound, nil, store.Event{Stream: "plan:x"}, 7, "plan_note", "", []byte("text"))
+	if err == nil || err.Error() != "recorded" || !reflect.DeepEqual(got, []any{"plan:x", int64(7), "plan_note", "", "text"}) {
+		t.Fatalf("a bound port: %v %v", got, err)
+	}
+}
+
+// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the store's wiring binds the claim port to coord.AlertClaim at the package's start (portsbind.go); this holds that binding in place, that the port writes the alert coord.AlertClaim writes and none for a text that claims nothing, and that the plan's own longest note is coordination's largest message body.
+func TestCoordinationPortIsBoundToCoord(t *testing.T) {
+	t.Parallel()
+	w := newWorld(t)
+	alerts := func() []string {
+		t.Helper()
+		rows, err := w.rt.Query(ctx, `SELECT body_json::text || ' cause ' || cause_event_id || ' node ' || plan_node_id FROM agentrt.event WHERE event_type = 'policy_alert' AND event_stream_id = $1 ORDER BY event_id`, store.PlanStream(root))
+		ok(t, err)
+		out, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		ok(t, err)
+		return out
+	}
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		note, err := store.Append(ctx, tx, store.Event{Stream: store.PlanStream(root), Type: "note", Actor: "controller", PlanNode: s1, Body: map[string]any{"text": "a note"}})
+		if err != nil {
+			return err
+		}
+		on := store.Event{Stream: store.PlanStream(root), PlanNode: s1}
+		if err = store.AlertClaimForTest(ctx, tx, on, note.EventID, "plan_note", "", []byte("nothing claimed here")); err != nil {
+			return err
+		}
+		if err = store.AlertClaimForTest(ctx, tx, on, note.EventID, "plan_note", "", []byte("Owner 已批准")); err != nil {
+			return err
+		}
+		return coord.AlertClaim(ctx, tx, on, note.EventID, "plan_note", "", []byte("Owner 已批准"))
+	}))
+	if got := alerts(); len(got) != 2 || got[0] != got[1] || !strings.Contains(got[0], "approval_claim") {
+		t.Fatalf("the port's alert and coord's: %q", got)
+	}
+	if store.MaxNoteText != coord.MaxMessageBody {
+		t.Fatalf("a note is at most %d bytes; a message body %d", store.MaxNoteText, coord.MaxMessageBody)
 	}
 }

@@ -200,3 +200,30 @@ const (
 	recorderRefuseLabel  = "Do not import it"
 	recorderStreamPrefix = "legacy:recorder:"
 )
+
+// CoordinationPorts is what the plan code needs of coordination: the record
+// of a text that claims the Owner's approval.
+type CoordinationPorts struct {
+	// AlertClaim records a policy_alert on ev's stream, caused by cause,
+	// when body claims the Owner's approval, and nothing when it does not.
+	// source is where the text came in; artifact is the text's artifact, ""
+	// for a text that is in the event the alert is caused by.
+	AlertClaim func(ctx context.Context, tx pgx.Tx, ev Event, cause int64, source, artifact string, body []byte) error
+}
+
+var coordinationPorts atomic.Pointer[CoordinationPorts]
+
+// BindPlanCoordination binds coordination's side. It is called once, from
+// the init that wires the packages already outside this one (portsbind.go).
+func BindPlanCoordination(p CoordinationPorts) { coordinationPorts.Store(&p) }
+
+func alertClaim(ctx context.Context, tx pgx.Tx, ev Event, cause int64, source, artifact string, body []byte) error {
+	return alertClaimVia(ctx, coordinationPorts.Load(), tx, ev, cause, source, artifact, body)
+}
+
+func alertClaimVia(ctx context.Context, p *CoordinationPorts, tx pgx.Tx, ev Event, cause int64, source, artifact string, body []byte) error {
+	if p == nil || p.AlertClaim == nil {
+		return unbound("the record of a text that claims an approval", "BindPlanCoordination")
+	}
+	return p.AlertClaim(ctx, tx, ev, cause, source, artifact, body)
+}

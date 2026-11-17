@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 )
@@ -36,4 +37,5 @@ func init() {
 		},
 		ActivityBuckets: workregistration.ActivityBuckets,
 	})
+	BindPlanCoordination(CoordinationPorts{AlertClaim: coord.AlertClaim})
 }

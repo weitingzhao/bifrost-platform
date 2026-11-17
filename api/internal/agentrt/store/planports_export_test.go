@@ -37,3 +37,9 @@ const (
 	RecorderRefuseLabelForTest  = recorderRefuseLabel
 	RecorderStreamPrefixForTest = recorderStreamPrefix
 )
+
+// The coordination port.
+var (
+	AlertClaimForTest    = alertClaim
+	AlertClaimViaForTest = alertClaimVia
+)
