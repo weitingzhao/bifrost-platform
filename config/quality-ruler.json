@@ -1,16 +1,18 @@
 {
-  "version": 3,
+  "version": 4,
   "history": [
     "1 (2026-11-16, platform 891a4135): the six items and weights of the review; dependency direction measured. No score of version 1 was stored.",
     "2 (2026-11-16): cycle edges no longer count a way back that passes through the base or through a mixed package. Version 1 called plan -> lineage, lineage -> verification and owner -> coordination cycles; none of the three is imported back. Foundation's number is the same under both.",
-    "3 (2026-11-16): cross edges count. With a wall for every domain, version 2 gave all nine domains 25 of 25 while sixteen imports ran from one domain into another's package or into a shared one; an item everyone has full marks on measures nothing. The base's number on the commit the review read is unchanged (its wrong imports were all cycle edges)."
+    "3 (2026-11-16): cross edges count. With a wall for every domain, version 2 gave all nine domains 25 of 25 while sixteen imports ran from one domain into another's package or into a shared one; an item everyone has full marks on measures nothing. The base's number on the commit the review read is unchanged (its wrong imports were all cycle edges).",
+    "4 (2026-11-17): contracts is measured in part. Of its 20 points the 5 of the Go surface are computed (5 x the share of other domains' method calls that go through an interface the domain declares); the other 15 (registered events 9, HTTP route list 4, ledger read contract 2) stay unmeasured and are in no total, so a domain's max is now 30 where it was 25. The counts are the review's tool's method (uses the type checker records, production code of other domains) run for every domain; on 80589bfb they are 6 / 412 / 1,177 for foundation against the review's 6 / 412 / 1,177. The measure registered_share that versions 1 to 3 named is dropped as not computable yet; function_calls, interface_share, users, exported_total, exported_used_by_others and http_routes are reported beside the formula's two counts."
   ],
   "source": "Owner 2026-11-16: one standard for every domain, kept in the system, scored on a schedule so a domain's number can be compared with its own earlier numbers. The items, weights and first data point (foundation, 54 of 100 at 80589bfb) are the independent review in the shared notes, brain/foundation-code-quality-review-2026-11-16.md section 9.",
   "rules": [
     "A score always carries this version. Scores of different versions are not compared.",
     "Changing an item, a weight, a measure or a formula raises the version.",
     "An item is machine (computed by api/cmd/domainscore from the code) or review (a fixed brief, a fixed sample, an independent model). The two are reported apart and never added into one number.",
-    "An item this version does not yet measure is reported as unmeasured, never as zero and never as full marks."
+    "An item this version does not yet measure is reported as unmeasured, never as zero and never as full marks.",
+    "An item measured in part says so: measured_max is the points this version measures, its parts say which, and the score is out of measured_max. The unmeasured parts are not in any total."
   ],
   "items": [
     {
@@ -33,13 +35,49 @@
       "label": "Contracts other domains can read",
       "max": 20,
       "by": "machine",
-      "measured": false,
+      "measured": true,
+      "measured_max": 5,
+      "what_a_contract_is": "Coordinator ruling 2026-11-16. Between domains a contract is one of four things: (a) Go: an interface the provider domain declares and other domains call through; (b) a registered event type (api/internal/bus/registry, rocket.yaml); (c) the HTTP routes a domain mounts (api/internal/server/mount_<domain>.go); (d) for the ledger tables, eventlog.ReadShape and the read functions (the guards in api/internal/codeguard hold SQL on the ledger tables to a baseline).",
+      "parts": [
+        {
+          "id": "go_surface",
+          "max": 5,
+          "measured": true,
+          "what": "(a). The review took these 5 off the base for a Go surface that cannot be read: 45% of the exports not needed outside, 22 packages with no package comment, almost nothing called through an interface. Version 4 measures the last of the three, the interface share; the first is reported as a count (exported_total, exported_used_by_others) and is not in the formula; package comments are not counted."
+        },
+        {
+          "id": "registered_contracts",
+          "max": 9,
+          "measured": false,
+          "what": "(b) and the ledger vocabulary: the 9 points the review gave the base for the bus registry and the eventlog vocabulary. Not measured: the registry names the publishing process of an event type (gate-git, platform-api), not a domain, so a count per domain would be a guess."
+        },
+        {
+          "id": "http_route_list",
+          "max": 4,
+          "measured": false,
+          "what": "(c). The review took 4 off for HTTP with no list. Not measured: http_routes is reported as a count where a mount file is named after the domain, and nothing yet checks that the list is every route of the domain."
+        },
+        {
+          "id": "ledger_reads",
+          "max": 2,
+          "measured": false,
+          "what": "(d). The review took 2 off for reads of the event ledger with no contract. Not measured here; it is the shared_storage item's subject and codeguard's ledger baseline holds it meanwhile."
+        }
+      ],
       "measures": {
-        "interface_calls": "calls from other domains through an interface this domain declares",
-        "concrete_calls": "calls from other domains to methods of this domain's concrete types",
-        "field_accesses": "reads and writes by other domains of fields of this domain's structs",
-        "registered_share": "the share of what other domains use that is in a registered contract"
-      }
+        "interface_calls": "uses, in the production code of packages of other domains ('mixed' packages are other; api/cmd is left out; _test.go files are not read), of a method of an interface type declared in a package of this domain. A use is an identifier the type checker resolves to the method: a call or a method value.",
+        "concrete_calls": "the same for a method of any other (non-interface) type declared in this domain",
+        "function_calls": "the same for a package-level function of this domain. Reported, not in the formula: the review's count was of methods, and a function is the form the ledger's own contract takes (eventlog.Append, Last, Has).",
+        "field_accesses": "the same for a field of a struct declared in this domain: selectors that read or write it and keys of struct literals. Reported, not in the formula: filling a value object's fields is normal use (the review, section 3) and the count cannot tell that from reaching into a service's state.",
+        "interface_share": "interface_calls / (interface_calls + concrete_calls); 1 when both are 0",
+        "users": "packages of other domains (or 'mixed') whose production code imports a package of this domain",
+        "exported_total": "exported package-level names and exported methods of exported types this domain declares in production files",
+        "exported_used_by_others": "those among them that the production code of another domain names at least once (through an interface satisfied elsewhere, reflection or handler registration is not seen)",
+        "http_routes": "routes registered in api/internal/server/mount_<domain>.go (calls of a router's Get, Post, Put, Patch, Delete, Head, Options, Handle, HandleFunc, Method, MethodFunc with a path that starts with '/'). Absent when no file has the domain's name: mount_cluster.go is named after a package, not a domain, and is not counted for any domain."
+      },
+      "not_measured": "registered_share (the share of what other domains use that is in a registered contract), which versions 1 to 3 named, is not computed: it needs parts (b) and (c) by domain. Registered event types per publishing domain are left out for the reason given under registered_contracts.",
+      "formula": "5 x interface_share, one decimal. A domain no other domain calls a method of (interface_calls + concrete_calls = 0) gets 5: the points are taken off for other domains being held to concrete types, and none is. The item's score is out of measured_max (5), and a domain's total adds 5 to its max for this item, not 20; the other 15 points are unmeasured, neither zero nor full.",
+      "fit": "on the tree of 80589bfb this tool counts for foundation 6 interface calls, 412 concrete calls and 1,177 field accesses, the review's three numbers (section 3) exactly; the share is 6 / 418 = 0.014 and the score 0.1 of 5. The review took all 5 of these points off (0 of 5). Its 9 of 20 for the whole item are the 9 points of registered_contracts, which this version does not measure, so this version has no number to put beside the 9."
     },
     {
       "id": "shared_storage",
@@ -47,7 +85,10 @@
       "max": 15,
       "by": "machine",
       "measured": false,
-      "measures": {"tables_written_by_others": "tables this domain owns that another domain's package writes with its own SQL", "tables_read_by_others": "the same for reads"}
+      "measures": {
+        "tables_written_by_others": "tables this domain owns that another domain's package writes with its own SQL",
+        "tables_read_by_others": "the same for reads"
+      }
     },
     {
       "id": "implementation",
@@ -55,7 +96,11 @@
       "max": 15,
       "by": "machine",
       "measured": false,
-      "measures": {"lint_per_kloc": "golangci-lint findings per thousand production lines", "long_functions": "functions over 150 lines", "swallowed_errors": "errors assigned to the blank identifier outside the allowed forms"}
+      "measures": {
+        "lint_per_kloc": "golangci-lint findings per thousand production lines",
+        "long_functions": "functions over 150 lines",
+        "swallowed_errors": "errors assigned to the blank identifier outside the allowed forms"
+      }
     },
     {
       "id": "tests",
@@ -63,7 +108,10 @@
       "max": 15,
       "by": "machine",
       "measured": false,
-      "measures": {"black_box_share": "the share of top-level tests that are in an external _test package", "for_test_hooks": "exported ...ForTest functions in production code"}
+      "measures": {
+        "black_box_share": "the share of top-level tests that are in an external _test package",
+        "for_test_hooks": "exported ...ForTest functions in production code"
+      }
     },
     {
       "id": "baggage",
@@ -71,18 +119,48 @@
       "max": 10,
       "by": "machine",
       "measured": false,
-      "measures": {"test_only_exports": "exported functions and methods only tests call", "unused_exports": "exported symbols nothing uses"}
+      "measures": {
+        "test_only_exports": "exported functions and methods only tests call",
+        "unused_exports": "exported symbols nothing uses"
+      }
     }
   ],
   "walls": {
-    "foundation": {"file": "api/internal/codeguard/foundation_wall_test.go", "test": "TestFoundationDoesNotImportTheDomainsAboveIt"},
-    "plan": {"file": "api/internal/codeguard/domain_walls_test.go", "test": "TestADomainImportsOnlyItselfAndTheBase"},
-    "lineage": {"file": "api/internal/codeguard/domain_walls_test.go", "test": "TestADomainImportsOnlyItselfAndTheBase"},
-    "verification": {"file": "api/internal/codeguard/domain_walls_test.go", "test": "TestADomainImportsOnlyItselfAndTheBase"},
-    "delivery": {"file": "api/internal/codeguard/domain_walls_test.go", "test": "TestADomainImportsOnlyItselfAndTheBase"},
-    "owner": {"file": "api/internal/codeguard/domain_walls_test.go", "test": "TestADomainImportsOnlyItselfAndTheBase"},
-    "compute": {"file": "api/internal/codeguard/domain_walls_test.go", "test": "TestADomainImportsOnlyItselfAndTheBase"},
-    "tenant": {"file": "api/internal/codeguard/domain_walls_test.go", "test": "TestADomainImportsOnlyItselfAndTheBase"},
-    "coordination": {"file": "api/internal/codeguard/domain_walls_test.go", "test": "TestADomainImportsOnlyItselfAndTheBase"}
+    "foundation": {
+      "file": "api/internal/codeguard/foundation_wall_test.go",
+      "test": "TestFoundationDoesNotImportTheDomainsAboveIt"
+    },
+    "plan": {
+      "file": "api/internal/codeguard/domain_walls_test.go",
+      "test": "TestADomainImportsOnlyItselfAndTheBase"
+    },
+    "lineage": {
+      "file": "api/internal/codeguard/domain_walls_test.go",
+      "test": "TestADomainImportsOnlyItselfAndTheBase"
+    },
+    "verification": {
+      "file": "api/internal/codeguard/domain_walls_test.go",
+      "test": "TestADomainImportsOnlyItselfAndTheBase"
+    },
+    "delivery": {
+      "file": "api/internal/codeguard/domain_walls_test.go",
+      "test": "TestADomainImportsOnlyItselfAndTheBase"
+    },
+    "owner": {
+      "file": "api/internal/codeguard/domain_walls_test.go",
+      "test": "TestADomainImportsOnlyItselfAndTheBase"
+    },
+    "compute": {
+      "file": "api/internal/codeguard/domain_walls_test.go",
+      "test": "TestADomainImportsOnlyItselfAndTheBase"
+    },
+    "tenant": {
+      "file": "api/internal/codeguard/domain_walls_test.go",
+      "test": "TestADomainImportsOnlyItselfAndTheBase"
+    },
+    "coordination": {
+      "file": "api/internal/codeguard/domain_walls_test.go",
+      "test": "TestADomainImportsOnlyItselfAndTheBase"
+    }
   }
 }

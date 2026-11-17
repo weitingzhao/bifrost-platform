@@ -96,13 +96,7 @@ func TestGraphNodesEdgesAndSharedPackages(t *testing.T) {
 func TestWrongWayIsTheDomainScoresRule(t *testing.T) {
 	own := parsed(t).Ownership
 	score := domainscore.Score(domainscore.Input{Ownership: own, Packages: packages(), Ruler: domainscore.Ruler{Version: domainscore.RulerVersion,
-		Items: []struct {
-			ID       string
-			Label    string
-			Max      float64
-			By       string
-			Measured bool
-		}{{ID: "dependency_direction", Max: 25}}}})
+		Items: []domainscore.RulerItem{{ID: "dependency_direction", Max: 25}}}})
 	counted := map[[2]string]bool{}
 	for _, d := range score.Domains {
 		for _, it := range d.Items {

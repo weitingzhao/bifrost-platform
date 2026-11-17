@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-const testRuler = `{"version":3,"items":[
+const testRuler = `{"version":4,"items":[
 	{"id":"dependency_direction","label":"Direction","max":25,"by":"machine","measured":true},
 	{"id":"contracts","label":"Contracts","max":75,"by":"machine","measured":false}],
 	"walls":{"base":{"file":"w_test.go","test":"TestWall"}}}`
@@ -63,7 +63,7 @@ func TestTheBaseIsScoredForImportsThatPointUp(t *testing.T) {
 		Package{Path: "api/cmd/root", Imports: []string{"api/internal/plan", "api/internal/unlisted"}, Lines: 900},
 	)
 	a := Score(in)
-	if a.RulerVersion != 3 || a.Commit != "c" || len(a.Domains) != 4 {
+	if a.RulerVersion != 4 || a.Commit != "c" || len(a.Domains) != 4 {
 		t.Fatalf("answer = %+v", a)
 	}
 	base := domain(t, a, "base")
@@ -162,7 +162,7 @@ func TestAWayBackThroughTheBaseOrASharedPackageIsNoCycle(t *testing.T) {
 }
 
 func TestARulerOfAnotherVersionIsRefused(t *testing.T) {
-	if _, err := ParseRuler([]byte(strings.Replace(testRuler, `"version":3`, `"version":4`, 1))); err == nil || !strings.Contains(err.Error(), "version 4") {
+	if _, err := ParseRuler([]byte(strings.Replace(testRuler, `"version":4`, `"version":5`, 1))); err == nil || !strings.Contains(err.Error(), "version 5") {
 		t.Fatalf("err = %v", err)
 	}
 	if _, err := ParseRuler([]byte(strings.Replace(testRuler, `"max":75`, `"max":70`, 1))); err == nil || !strings.Contains(err.Error(), "not 100") {
@@ -171,8 +171,9 @@ func TestARulerOfAnotherVersionIsRefused(t *testing.T) {
 }
 
 // The ruler in the repository is the version this code computes, its items
-// add up to 100, the one item this version measures is marked so and no
-// other, and every wall it names is a test that is in the code.
+// add up to 100, the two items this version measures are marked so and no
+// other (contracts for 5 of its 20 points), and every wall it names is a test
+// that is in the code.
 func TestTheRepositoryRulerIsWhatThisCodeComputes(t *testing.T) {
 	root := filepath.Join("..", "..", "..")
 	raw, err := os.ReadFile(filepath.Join(root, "config", "quality-ruler.json"))
@@ -184,8 +185,11 @@ func TestTheRepositoryRulerIsWhatThisCodeComputes(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, it := range ruler.Items {
-		if it.Measured != (it.ID == "dependency_direction") {
-			t.Errorf("the ruler says %s measured=%v; this code measures dependency_direction only", it.ID, it.Measured)
+		if it.Measured != (it.ID == "dependency_direction" || it.ID == "contracts") {
+			t.Errorf("the ruler says %s measured=%v; this code measures dependency_direction and contracts only", it.ID, it.Measured)
+		}
+		if want := map[string]float64{"dependency_direction": 25, "contracts": GoSurfaceMax}[it.ID]; it.MeasuredMax != want {
+			t.Errorf("the ruler says %v points of %s are measured; this code measures %v", it.MeasuredMax, it.ID, want)
 		}
 	}
 	if len(ruler.Walls) == 0 {

@@ -2,8 +2,9 @@
 // one ruler for every domain, a version on every score, so that a domain's
 // number can be compared with its own earlier numbers (Owner 2026-11-16).
 //
-// It is a reading: it decides nothing and gates nothing. Version 1 measures
-// one item, dependency direction; the others are reported unmeasured.
+// It is a reading: it decides nothing and gates nothing. Version 4 measures
+// dependency direction and, of the contracts item, the Go surface (5 of its
+// 20 points, contracts.go); everything else is reported unmeasured.
 package domainscore
 
 import (
@@ -16,7 +17,7 @@ import (
 
 // RulerVersion is the ruler version whose formulas this code computes. The
 // ruler file must say the same number.
-const RulerVersion = 3
+const RulerVersion = 4
 
 // Mixed is the domain of a package whose row names several domains.
 const Mixed = "mixed"
@@ -53,14 +54,25 @@ func (o Ownership) DomainOf(pkg string) (domain string, assigned bool) {
 // Ruler is config/quality-ruler.json.
 type Ruler struct {
 	Version int
-	Items   []struct {
+	Items   []RulerItem
+	Walls   map[string]struct{ File, Test string }
+}
+
+// RulerItem is one item of the ruler. MeasuredMax is how many of its Max
+// points this version measures: all of them when the ruler does not say, and
+// fewer when only some of its Parts are measured.
+type RulerItem struct {
+	ID          string
+	Label       string
+	Max         float64
+	By          string
+	Measured    bool
+	MeasuredMax float64 `json:"measured_max"`
+	Parts       []struct {
 		ID       string
-		Label    string
 		Max      float64
-		By       string
 		Measured bool
 	}
-	Walls map[string]struct{ File, Test string }
 }
 
 // ParseRuler reads the ruler and refuses one this code does not compute.
@@ -73,8 +85,29 @@ func ParseRuler(raw []byte) (Ruler, error) {
 		return r, fmt.Errorf("the ruler is version %d and this code computes version %d", r.Version, RulerVersion)
 	}
 	total := 0.0
-	for _, it := range r.Items {
+	for i, it := range r.Items {
 		total += it.Max
+		if it.Measured && it.MeasuredMax == 0 {
+			r.Items[i].MeasuredMax = it.Max
+		}
+		if !it.Measured && it.MeasuredMax != 0 || it.MeasuredMax > it.Max {
+			return r, fmt.Errorf("the ruler's item %s measures %v of %v points (measured=%v)", it.ID, it.MeasuredMax, it.Max, it.Measured)
+		}
+		if len(it.Parts) > 0 {
+			all, measured := 0.0, 0.0
+			for _, p := range it.Parts {
+				all += p.Max
+				if p.Measured {
+					measured += p.Max
+				}
+			}
+			if all != it.Max || measured != r.Items[i].MeasuredMax {
+				return r, fmt.Errorf("the parts of the ruler's item %s add up to %v with %v measured; the item says %v and %v", it.ID, all, measured, it.Max, r.Items[i].MeasuredMax)
+			}
+		}
+		if it.ID == "contracts" && it.Measured && r.Items[i].MeasuredMax != GoSurfaceMax {
+			return r, fmt.Errorf("the ruler measures %v points of contracts and this code computes %d", r.Items[i].MeasuredMax, GoSurfaceMax)
+		}
 	}
 	if total != 100 || len(r.Items) == 0 {
 		return r, fmt.Errorf("the ruler's items add up to %v, not 100", total)
@@ -100,16 +133,26 @@ type Input struct {
 	// WallHolds says, by domain, that the wall test the ruler names is in
 	// the code.
 	WallHolds map[string]bool
+	// Contracts is, by domain, what other domains use of its Go packages
+	// (Surface.Uses). Nil when the tree was not type-checked: the contracts
+	// item is then unmeasured for every domain.
+	Contracts map[string]ContractUse
+	// Routes is, by domain, the routes its api/internal/server/mount_<domain>.go
+	// registers; a domain with no such file has no entry.
+	Routes map[string]int
 }
 
 type Item struct {
-	ID       string             `json:"id"`
-	Label    string             `json:"label"`
-	Max      float64            `json:"max"`
-	By       string             `json:"by"`
-	Measured bool               `json:"measured"`
-	Score    float64            `json:"score"`
-	Measures map[string]float64 `json:"measures,omitempty"`
+	ID       string  `json:"id"`
+	Label    string  `json:"label"`
+	Max      float64 `json:"max"`
+	By       string  `json:"by"`
+	Measured bool    `json:"measured"`
+	// MeasuredMax is how many of Max points Score is out of: an item may be
+	// measured in part (ruler rule 4: the rest is neither zero nor full).
+	MeasuredMax float64            `json:"measured_max,omitempty"`
+	Score       float64            `json:"score"`
+	Measures    map[string]float64 `json:"measures,omitempty"`
 	// Evidence is what the score was taken off for, one line each.
 	Evidence []string `json:"evidence,omitempty"`
 }
@@ -118,7 +161,8 @@ type Domain struct {
 	Domain   string `json:"domain"`
 	Packages int    `json:"packages"`
 	Lines    int    `json:"lines"`
-	// Score and Max add up the measured machine items only.
+	// Score and Max add up the measured machine items only, and of an item
+	// measured in part only the part that is (its measured_max).
 	Score float64 `json:"score"`
 	Max   float64 `json:"max"`
 	Items []Item  `json:"items"`
@@ -280,6 +324,17 @@ func Score(in Input) Answer {
 		row := Domain{Domain: d}
 		var edges, cross []string
 		assignedLines := 0
+		users := map[string]bool{}
+		for _, p := range pkgs {
+			if p.domain == d {
+				continue
+			}
+			for _, dep := range p.Imports {
+				if q, ok := pkgs[dep]; ok && q.domain == d {
+					users[p.Path] = true
+				}
+			}
+		}
 		for _, p := range pkgs {
 			if p.domain != d {
 				continue
@@ -305,6 +360,7 @@ func Score(in Input) Answer {
 			item := Item{ID: it.ID, Label: it.Label, Max: it.Max, By: it.By}
 			if it.ID == "dependency_direction" && row.Packages > 0 {
 				item.Measured = true
+				item.MeasuredMax = it.Max
 				direction := 17.0
 				if n := len(edges) + len(cross); n > 0 {
 					direction = math.Max(11, 17-math.Ceil(float64(n)/2))
@@ -325,8 +381,13 @@ func Score(in Input) Answer {
 				if share < 1 {
 					item.Evidence = append(item.Evidence, fmt.Sprintf("%d of %d production lines are in packages whose row is not 'assigned'", row.Lines-assignedLines, row.Lines))
 				}
+			}
+			if it.ID == "contracts" && it.Measured && row.Packages > 0 && in.Contracts != nil {
+				contracts(&item, in.Contracts[d], len(users), in.Routes, d)
+			}
+			if item.Measured {
 				row.Score += item.Score
-				row.Max += item.Max
+				row.Max += item.MeasuredMax
 			}
 			row.Items = append(row.Items, item)
 		}
