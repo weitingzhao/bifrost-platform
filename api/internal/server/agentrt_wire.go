@@ -140,6 +140,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		safego.Go("agentrt-schema", func() { rt.schema.run(ctx, pool) })
 		if s.releases != nil {
 			s.releases.Service().SetTable(releaseTable(pool))
+			s.releases.Service().SetTableReader(releaseRows{pool: pool})
 		}
 		s.startBus(ctx, pool, env, role)
 		if !role.RunsWorkers() {

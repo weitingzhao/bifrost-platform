@@ -88,3 +88,49 @@ func TestReleaseTableWritesTheRowWithItsAnnouncement(t *testing.T) {
 		t.Fatalf("rows=%d announcements=%d events named=%v first=%d", rows, n, named, *eventID)
 	}
 }
+
+// 2026-11-17, step 2 (the side-by-side reading before Current reads the
+// table): a ConfigMap record from before the rows is copied in without an
+// announcement, once; the rows read back as the records they were written
+// from, newest row of each run. Positive control: BackfillRecord without its
+// PriorEvent check writes the second copy and the count below is 2.
+func TestReleaseRowsBackfillWithoutAnnouncingAndReadBack(t *testing.T) {
+	ctx := context.Background()
+	db := agentrttest.Migrated(t)
+	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+		t.Fatal(err)
+	}
+	pool := db.Pool(t, db.Runtime)
+	rows := releaseRows{pool: pool}
+	sha := strings.Repeat("b", 40)
+	at := time.Date(2026, 11, 16, 9, 0, 0, 0, time.UTC)
+	old := releases.Record{
+		Run: "bifrost-deliver-platform-prod-1794800000", Pipeline: "bifrost-deliver-platform-prod",
+		Lane: "platform", Env: "prod", Deploys: true, Revision: sha,
+		StartedAt: at, CompletedAt: at.Add(80 * time.Second),
+		Repos:   map[string]releases.RepoBuild{"bifrost-platform": {SHA: sha, Source: "param"}},
+		Missing: []string{"build-x (digest)"},
+	}
+	for i, want := range []bool{true, false} {
+		wrote, err := rows.Backfill(ctx, old)
+		if err != nil || wrote != want {
+			t.Fatalf("backfill %d: wrote=%v err=%v", i, wrote, err)
+		}
+	}
+	var n, announced int
+	if err := pool.QueryRow(ctx, `SELECT count(*), count(event_id) FROM agentrt.release_record WHERE run = $1`, old.Run).Scan(&n, &announced); err != nil || n != 1 || announced != 0 {
+		t.Fatalf("rows=%d announced=%d err=%v", n, announced, err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = $1`, busreleases.Type).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("a backfilled record was announced: %d %v", n, err)
+	}
+	got, err := rows.Records(ctx)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("records=%+v err=%v", got, err)
+	}
+	r := got[0]
+	if r.Run != old.Run || r.Lane != "platform" || r.Env != "prod" || !r.Deploys || r.Repos["bifrost-platform"].SHA != sha ||
+		!r.CompletedAt.Equal(old.CompletedAt) || len(r.Missing) != 1 {
+		t.Fatalf("read back %+v", r)
+	}
+}

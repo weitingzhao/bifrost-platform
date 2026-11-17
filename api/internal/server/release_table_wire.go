@@ -18,6 +18,24 @@ import (
 // revision names no single repository's built commit is a row without an
 // announcement. A run with a row already (a record built again) is a new
 // row naming the first announcement, and is not announced again.
+// releaseRows reads the record table for the recorder's side-by-side
+// comparison and copies into it the records written before it (step 2).
+type releaseRows struct{ pool *pgxpool.Pool }
+
+func (r releaseRows) Records(ctx context.Context) ([]releases.Record, error) {
+	return releases.ReadRecords(ctx, r.pool)
+}
+
+func (r releaseRows) Backfill(ctx context.Context, rec releases.Record) (bool, error) {
+	var wrote bool
+	err := store.InTx(ctx, r.pool, func(tx pgx.Tx) error {
+		var err error
+		wrote, err = releases.BackfillRecord(ctx, tx, rec)
+		return err
+	})
+	return wrote, err
+}
+
 func releaseTable(pool *pgxpool.Pool) releases.TableWriter {
 	return func(ctx context.Context, rec releases.Record, succeeded bool) error {
 		return store.InTx(ctx, pool, func(tx pgx.Tx) error {

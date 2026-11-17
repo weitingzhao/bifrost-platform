@@ -3,6 +3,7 @@ package releases
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,5 +67,72 @@ func TestAnnouncedNamesTheRepositoryOfTheRevision(t *testing.T) {
 		if repo != c.repo || ok != c.ok || (ok && sha != c.rec.Revision) {
 			t.Errorf("%s: %q %q %v", c.name, repo, sha, ok)
 		}
+	}
+}
+
+// fakeRows is a record table in memory; refuse names runs Backfill skips.
+type fakeRows struct {
+	rows   []Record
+	refuse map[string]bool
+}
+
+func (f *fakeRows) Records(context.Context) ([]Record, error) { return append([]Record(nil), f.rows...), nil }
+
+func (f *fakeRows) Backfill(_ context.Context, rec Record) (bool, error) {
+	for _, r := range f.rows {
+		if r.Run == rec.Run {
+			return false, nil
+		}
+	}
+	if f.refuse[rec.Run] {
+		return false, nil
+	}
+	f.rows = append(f.rows, rec)
+	return true, nil
+}
+
+// 2026-11-17, step 2 of moving the release records into the database (with
+// the communication layer's bus step 3): before Current reads the table,
+// each pass copies the ConfigMap records the table lacks (those from before
+// 12:27, when rows started) and asks Current both ways; a lane whose two
+// answers differ is counted and named, and readers still get the ConfigMaps'.
+// Positive control: without the Backfill loop the first check fails
+// (backfilled 0, and the rows answer "no deployment").
+// The second control: comparing nothing (Differ never counted) fails the last check.
+func TestTickBackfillsTheTableAndComparesCurrentBothWays(t *testing.T) {
+	ctx := context.Background()
+	t1 := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+	s, _ := newFakeService(t,
+		pipelineRun("deliver-stg-1", "deliver-stg", true, t1, nil, nil),
+		cloneTaskRun("deliver-stg-1", "clone-core", "core", shaA),
+		pipelineRun("deliver-stg-2", "deliver-stg", true, t1.Add(time.Hour), nil, nil),
+		cloneTaskRun("deliver-stg-2", "clone-core", "core", shaC),
+	)
+	if r := s.Tick(ctx); r.Recorded != 2 || r.Compare != nil {
+		t.Fatalf("without a reader nothing is compared: %+v", r)
+	}
+
+	rows := &fakeRows{}
+	s.SetTableReader(rows)
+	r := s.Tick(ctx)
+	c := r.Compare
+	if c == nil || c.Backfilled != 2 || c.Compared != 2 || c.Differ != 0 || c.Err != "" {
+		t.Fatalf("compare = %+v", c)
+	}
+	if got, err := s.Current(ctx, "app", "stg"); err != nil || got.Run != "deliver-stg-2" {
+		t.Fatalf("readers still get the ConfigMaps' answer: %+v %v", got, err)
+	}
+	if again := s.Tick(ctx).Compare; again.Backfilled != 0 || again.Differ != 0 {
+		t.Fatalf("a run with a row is not copied again: %+v", again)
+	}
+
+	// The table lacks the newest deployment: from the rows its run is a later
+	// delivery than the newest row, so unsettled (never the older one); the
+	// two answers differ, by name.
+	short := &fakeRows{refuse: map[string]bool{"deliver-stg-2": true}}
+	s.SetTableReader(short)
+	c = s.Tick(ctx).Compare
+	if c.Differ != 1 || len(c.Diffs) != 1 || !strings.Contains(c.Diffs[0], "app/stg: configmaps run deliver-stg-2, rows unsettled") {
+		t.Fatalf("compare = %+v", c)
 	}
 }

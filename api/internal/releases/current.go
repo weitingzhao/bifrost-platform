@@ -34,7 +34,7 @@ var (
 // deployment. A delivery that failed or went unrecorded and was then pruned
 // from Tekton is not seen (review 162 A1, the Owner's decision).
 func (s *Service) Current(ctx context.Context, lane, env string) (Record, error) {
-	core, dyn, err := s.clients()
+	core, _, err := s.clients()
 	if err != nil {
 		return Record{}, err
 	}
@@ -45,7 +45,7 @@ func (s *Service) Current(ctx context.Context, lane, env string) (Record, error)
 	if err != nil {
 		return Record{}, err
 	}
-	var newest *Record
+	recs := make([]Record, 0, len(cms.Items))
 	for _, cm := range cms.Items {
 		var rec Record
 		if perr := json.Unmarshal([]byte(cm.Data[dataKey]), &rec); perr != nil {
@@ -54,14 +54,29 @@ func (s *Service) Current(ctx context.Context, lane, env string) (Record, error)
 		if rec.Run == "" || rec.Lane != lane || rec.Env != env || !rec.Deploys || rec.StartedAt.IsZero() || rec.CompletedAt.IsZero() {
 			return Record{}, fmt.Errorf("%w: %s does not read as a deployment of %s/%s", ErrUnsettled, cm.Name, lane, env)
 		}
-		if newest == nil || rec.CompletedAt.After(newest.CompletedAt) {
-			r := rec
-			newest = &r
+		recs = append(recs, rec)
+	}
+	return s.settledNewest(ctx, recs, lane, env)
+}
+
+// settledNewest is Current's answer from lane/env's deploying records, wherever
+// they were read: the newest, unless a delivery run of lane/env may have
+// changed the environment after it.
+func (s *Service) settledNewest(ctx context.Context, recs []Record, lane, env string) (Record, error) {
+	var newest *Record
+	for i := range recs {
+		if newest == nil || recs[i].CompletedAt.After(newest.CompletedAt) {
+			newest = &recs[i]
 		}
 	}
 	if newest == nil {
 		return Record{}, ErrNoDeployment
 	}
+	_, dyn, err := s.clients()
+	if err != nil {
+		return Record{}, err
+	}
+	ns := s.rules.Namespace
 	runs, err := listRunsOf(ctx, dyn, ns, s.rules.deployingPipelines(lane, env))
 	if err != nil {
 		return Record{}, err
