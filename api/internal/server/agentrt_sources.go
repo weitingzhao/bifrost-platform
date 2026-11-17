@@ -11,6 +11,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -83,6 +84,14 @@ func agentRuntimeSources(ap approvalReader, question func(context.Context, strin
 	}
 	if rel != nil {
 		src.Deployed = func(ctx context.Context, env string) (string, map[string]any, bool) {
+			// The controller's facts and rules pass asks this every fifteen
+			// seconds for each deploy watch and step (SeeDeploy, EvaluateStep),
+			// and each answer lists the deploying pipeline's runs
+			// (releases.Current). It had no name: PROD, 2026-11-17 02:09 CST,
+			// counted 80 unnamed LISTs of PipelineRuns in ten minutes, which is
+			// one read a pass at two pages; the daily full CI's reads, taken
+			// for them, list only while a red run is first handled.
+			ctx = kubemetrics.WithSite(ctx, "agentrt.deployed")
 			rec, err := rel.Current(ctx, agentrtDeployLane, env)
 			if err != nil {
 				return "", nil, false

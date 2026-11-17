@@ -31,8 +31,22 @@ func (s *Server) wireFullCI(c *controller.Controller) {
 		// A name for the platform's count of its own Kubernetes requests: these
 		// loops were the 1,077 unnamed LISTs of ten minutes on PROD, 2026-11-17.
 		return ci.FullRuns(kubemetrics.WithSite(ctx, "landingci.full"), since)
-	}, Ensure: ci.EnsureFullRun, TestLog: ci.FullRunTestLog,
-		FailedTasks: ci.FullRunFailedTasks, RunModules: ci.RunModules,
+	}, Ensure: func(ctx context.Context, revision string, day time.Time) (string, error) {
+		return ci.EnsureFullRun(kubemetrics.WithSite(ctx, "landingci.full"), revision, day)
+	},
+		// A red run's handling, once per red run: the failed TaskRuns are read
+		// one by one (landingci.failure), and each landing since the last green
+		// lists every run of the pipeline again (landingci.read, up to
+		// FullCILandingsMax lists of all pages). Unnamed until 2026-11-17.
+		TestLog: func(ctx context.Context, run string) (string, error) {
+			return ci.FullRunTestLog(kubemetrics.WithSite(ctx, "landingci.failure"), run)
+		},
+		FailedTasks: func(ctx context.Context, run string) ([]string, error) {
+			return ci.FullRunFailedTasks(kubemetrics.WithSite(ctx, "landingci.failure"), run)
+		},
+		RunModules: func(ctx context.Context, revision string) (string, string, error) {
+			return ci.RunModules(kubemetrics.WithSite(ctx, "landingci.read"), revision)
+		},
 		Main: func(ctx context.Context) (string, error) {
 			g, err := git()
 			if err != nil {

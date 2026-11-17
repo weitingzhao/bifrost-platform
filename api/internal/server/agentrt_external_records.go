@@ -62,7 +62,7 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 		src.RunEvidenced = s.unitScopeShadowSource()
 		src.CommitTree = giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second})
 		src.RunFailure = func(ctx context.Context, run string) ([]string, []string, string, error) {
-			failed, err := s.delivery.RunFailedTasks(ctx, run)
+			failed, err := s.delivery.RunFailedTasks(kubemetrics.WithSite(ctx, "records"), run)
 			if err != nil {
 				return nil, nil, "", err
 			}
@@ -70,7 +70,7 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 			return tasks, tests, class, nil
 		}
 		src.PipelineRun = func(ctx context.Context, name string) (store.PipelineRun, bool, error) {
-			item, ok, err := s.delivery.PipelineRunObservation(ctx, name)
+			item, ok, err := s.delivery.PipelineRunObservation(kubemetrics.WithSite(ctx, "records"), name)
 			if err != nil || !ok {
 				return store.PipelineRun{}, false, err
 			}
