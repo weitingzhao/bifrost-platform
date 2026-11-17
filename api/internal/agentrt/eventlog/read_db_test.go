@@ -79,3 +79,47 @@ func TestLedgerReads(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Origin: 2026-11-16, the read shape is the contract other packages read
+// the ledger by. It is held to the table the migrations build: a column
+// added, dropped, retyped or made nullable in a migration without the
+// declaration following fails here, and the declaration cannot name a
+// column the table does not have.
+func TestReadShapeIsTheTable(t *testing.T) {
+	ctx := context.Background()
+	db := agentrttest.Migrated(t)
+	conn := db.Connect(t, db.Owner)
+	rows, err := conn.Query(ctx, `SELECT column_name, data_type, is_nullable = 'YES' FROM information_schema.columns
+	  WHERE table_schema = 'agentrt' AND table_name = 'event' ORDER BY ordinal_position`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var table []eventlog.Column
+	for rows.Next() {
+		var c eventlog.Column
+		if err = rows.Scan(&c.Name, &c.Type, &c.Nullable); err != nil {
+			t.Fatal(err)
+		}
+		table = append(table, c)
+	}
+	if err = rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(table) == 0 {
+		t.Fatal("the table has no columns: the check read nothing")
+	}
+	if len(table) != len(eventlog.ReadShape) {
+		t.Fatalf("the table has %d columns, the read shape declares %d", len(table), len(eventlog.ReadShape))
+	}
+	for i, want := range table {
+		got := eventlog.ReadShape[i]
+		if got.Name != want.Name || got.Type != want.Type || got.Nullable != want.Nullable {
+			t.Errorf("column %d: the table has %s %s nullable=%v, the read shape declares %s %s nullable=%v",
+				i+1, want.Name, want.Type, want.Nullable, got.Name, got.Type, got.Nullable)
+		}
+		if got.Meaning == "" {
+			t.Errorf("column %s is declared without a meaning", got.Name)
+		}
+	}
+}

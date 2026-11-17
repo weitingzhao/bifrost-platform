@@ -140,3 +140,68 @@ func TestLedgerSQLCountSeesWhatItShould(t *testing.T) {
 		t.Fatalf("count = %v, want a:2 only", got)
 	}
 }
+
+// ledgerWrite matches SQL that writes one of the two tables.
+var ledgerWrite = regexp.MustCompile(`(?i)(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+agentrt\.(event|actor)([^_a-z]|$)`)
+
+// ledgerWrites are the lines outside the two owners that write a ledger
+// table. None writes agentrt.event (the table also refuses it: it is
+// append-only by trigger); two still insert an actor of a kind the actor
+// package has no function for yet (a seat, the seeded actors). It only falls.
+//
+// Origin: 2026-11-16, the coordinator's ruling on the ledger's contract: the
+// write is one package's, the read is by the declared shape
+// (eventlog.ReadShape).
+var ledgerWrites = map[string]int{
+	"agentrt/coord": 1,
+	"agentrt/store": 1,
+}
+
+func TestLedgerTablesAreWrittenByTheirPackagesOnly(t *testing.T) {
+	found := map[string]int{}
+	err := filepath.WalkDir("..", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel("..", filepath.Dir(path))
+		pkg := filepath.ToSlash(rel)
+		for _, line := range strings.Split(string(raw), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "//") {
+				continue
+			}
+			if m := ledgerWrite.FindStringSubmatch(line); m != nil {
+				if m[2] == "event" && !ledgerOwners[pkg] {
+					t.Errorf("%s writes agentrt.event in SQL of its own: %s — only eventlog.Append writes the ledger", pkg, strings.TrimSpace(line))
+				}
+				found[pkg]++
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The positive control: the owners' own writes are seen.
+	if found["agentrt/eventlog"] == 0 || found["agentrt/actor"] == 0 {
+		t.Fatalf("the check does not see the owners' own writes: %v", found)
+	}
+	delete(found, "agentrt/eventlog")
+	delete(found, "agentrt/actor")
+	for pkg, n := range found {
+		if n > ledgerWrites[pkg] {
+			t.Errorf("%s: %d lines write a ledger table, allowed %d — ask the actor package for a function", pkg, n, ledgerWrites[pkg])
+		}
+	}
+	for pkg, allowed := range ledgerWrites {
+		if found[pkg] < allowed {
+			t.Errorf("%s: %d lines, allowed %d — lower the number (it only falls)", pkg, found[pkg], allowed)
+		}
+	}
+}

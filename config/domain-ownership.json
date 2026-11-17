@@ -5,7 +5,26 @@
     {
       "id": "foundation",
       "name": "Foundation",
-      "source": "domains/0-foundation-decouple/charter.md"
+      "source": "domains/0-foundation-decouple/charter.md",
+      "contracts": {
+        "shared_storage": [
+          {
+            "table": "agentrt.event",
+            "owner": "api/internal/agentrt/eventlog",
+            "write": "eventlog.Append only; codeguard TestLedgerTablesAreWrittenByTheirPackagesOnly",
+            "read": "functions eventlog.Last, Has, HasBody; projections may name the columns of eventlog.ReadShape and no others",
+            "read_shape": "eventlog.ReadShape",
+            "read_shape_version": 1,
+            "held_by": "eventlog TestReadShapeIsTheTable (declaration equals the table), TestReadShapeChangesOnlyWithItsVersion (fingerprint lock); codeguard ledgerSQL lists the readers"
+          },
+          {
+            "table": "agentrt.actor",
+            "owner": "api/internal/agentrt/actor",
+            "write": "actor.Ensure and actor.RegisterController; two inserts remain outside (coord: a seat; store: the seed), counted by codeguard ledgerWrites",
+            "read": "functions actor.Exists, ActorKind, CheckWriter; no read shape declared yet"
+          }
+        ]
+      }
     },
     {
       "id": "plan",
