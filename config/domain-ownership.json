@@ -711,10 +711,11 @@
     },
     "api/internal/operatorplane": {
       "domains": [
-        "foundation"
+        "foundation",
+        "compute"
       ],
-      "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: cluster-free out-of-band platform repair composition; mounted domain services retain their own ownership; implementation, authorization, refusal and dispatch behavior unchanged"
+      "status": "mixed",
+      "basis": "2026-11-16 foundation wall: an assembly root inside internal/ (the out-of-band process and the server both mount it); it wires compute's agentbridge, agentdeploy and launchd beside foundation services, as the server wires every domain. Implementation, authorization, refusal and dispatch unchanged."
     },
     "api/internal/maintainer": {
       "domains": [
@@ -949,10 +950,10 @@
     },
     "api/internal/satellite": {
       "domains": [
-        "foundation"
+        "tenant"
       ],
-      "status": "default-maintainer",
-      "basis": "2026-11-16 Complete file/reader audit: Tenant ingest observation projection is separate. Retain HTTP/source composition, original Monitor and auto-status contracts, and communication-lane Bus implementation. Foundation maintenance follows the existing overlap ruling; protected or communication contracts are not claimed as extracted."
+      "status": "assigned",
+      "basis": "2026-11-16 foundation wall and review of unclaimed packages: this package reads the Trade satellite's bus, monitor and ingest (Trade routes, IB and auto_status contracts), which is the tenant's integration, not the base; only the server imports it. It was foundation's by default (overlap ruling), never by review. Bus and communication contracts inside it stay with the communication line. No code moved."
     },
     "api/internal/releasepolicy/rptest": {
       "domains": [

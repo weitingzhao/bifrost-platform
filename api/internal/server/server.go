@@ -237,7 +237,7 @@ func New(cfg *config.Config) (*Server, error) {
 		agentgovernance: agentgovernance.NewHandler(),
 		codehealth:      codehealth.NewHandler(audit),
 		satellite:       satellite.NewHandler(cfg),
-		selfhealth:      selfhealth.NewHandler(cfg, gitopsH.Service()),
+		selfhealth:      selfhealth.NewHandler(cfg, selfHealthArgoApps(gitopsH.Service())),
 		network:         network.NewHandler(audit),
 		ibgateway:       ibgatewayH,
 		marketdata:      marketdata.NewHandler(clusterH.Service()),
@@ -874,4 +874,20 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// selfHealthArgoApps is the delivery domain's Argo CD reader in the shape
+// self-health declares (selfhealth.ArgoApps); nil without a gitops service.
+func selfHealthArgoApps(svc *gitops.Service) selfhealth.ArgoApps {
+	if svc == nil {
+		return nil
+	}
+	return func(ctx context.Context) []selfhealth.ArgoApp {
+		resp := svc.Apps(ctx)
+		out := make([]selfhealth.ArgoApp, 0, len(resp.Apps))
+		for _, app := range resp.Apps {
+			out = append(out, selfhealth.ArgoApp{Name: app.Name, SyncStatus: app.SyncStatus, HealthStatus: app.HealthStatus})
+		}
+		return out
+	}
 }

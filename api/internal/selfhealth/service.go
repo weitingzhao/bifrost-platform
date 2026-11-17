@@ -11,17 +11,16 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
-	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 type ProbeStatus string
 
 const (
-	StatusOK      ProbeStatus = "ok"
+	StatusOK       ProbeStatus = "ok"
 	StatusDegraded ProbeStatus = "degraded"
-	StatusFail    ProbeStatus = "fail"
-	StatusUnknown ProbeStatus = "unknown"
+	StatusFail     ProbeStatus = "fail"
+	StatusUnknown  ProbeStatus = "unknown"
 )
 
 type SelfHealthProbe struct {
@@ -43,16 +42,25 @@ type SelfHealthResponse struct {
 }
 
 type Service struct {
-	cfg       *config.Config
-	gitopsSvc *gitops.Service
-	client    *http.Client
+	cfg    *config.Config
+	argo   ArgoApps
+	client *http.Client
 }
 
-func NewService(cfg *config.Config, gitopsSvc *gitops.Service) *Service {
+// ArgoApp is one Argo CD application as the self-health probe reads it.
+type ArgoApp struct{ Name, SyncStatus, HealthStatus string }
+
+// ArgoApps lists the Argo CD applications. Self-health declares the shape and
+// the server binds the delivery domain's reader: until 2026-11-16 this
+// package held a *gitops.Service, which made a foundation package depend on
+// the delivery domain. Nil means no reader is available.
+type ArgoApps func(ctx context.Context) []ArgoApp
+
+func NewService(cfg *config.Config, argo ArgoApps) *Service {
 	return &Service{
-		cfg:       cfg,
-		gitopsSvc: gitopsSvc,
-		client:    &http.Client{Timeout: 6 * time.Second},
+		cfg:    cfg,
+		argo:   argo,
+		client: &http.Client{Timeout: 6 * time.Second},
 	}
 }
 
@@ -187,13 +195,13 @@ func (s *Service) probeHTTP(ctx context.Context, id, category, env, url string) 
 }
 
 func (s *Service) probeArgo(ctx context.Context) []SelfHealthProbe {
-	if s.gitopsSvc == nil {
+	if s.argo == nil {
 		return []SelfHealthProbe{
 			{ID: "argo-platform-stg", Category: "gitops", Env: "stg", Status: StatusUnknown, Detail: "gitops service not available"},
 			{ID: "argo-platform-prod", Category: "gitops", Env: "prod", Status: StatusUnknown, Detail: "gitops service not available"},
 		}
 	}
-	appsResp := s.gitopsSvc.Apps(ctx)
+	apps := s.argo(ctx)
 
 	platformApps := map[string]string{
 		"bifrost-platform-stg":  "stg",
@@ -202,7 +210,7 @@ func (s *Service) probeArgo(ctx context.Context) []SelfHealthProbe {
 	found := map[string]bool{}
 	var probes []SelfHealthProbe
 
-	for _, app := range appsResp.Apps {
+	for _, app := range apps {
 		env, ok := platformApps[app.Name]
 		if !ok {
 			continue
@@ -274,8 +282,8 @@ type Handler struct {
 	svc *Service
 }
 
-func NewHandler(cfg *config.Config, gitopsSvc *gitops.Service) *Handler {
-	return &Handler{svc: NewService(cfg, gitopsSvc)}
+func NewHandler(cfg *config.Config, argo ArgoApps) *Handler {
+	return &Handler{svc: NewService(cfg, argo)}
 }
 
 func (h *Handler) HandleSelfHealth(w http.ResponseWriter, r *http.Request) {

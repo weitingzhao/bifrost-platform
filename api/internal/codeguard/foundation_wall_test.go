@@ -66,11 +66,6 @@ func upward(o ownership, imports map[string][]string) []string {
 var foundationUpward = []string{
 	"api/internal/cluster -> api/internal/placement (compute)",
 	"api/internal/cluster -> api/internal/tenant/appreadings (tenant)",
-	"api/internal/operatorplane -> api/internal/agentbridge (compute)",
-	"api/internal/operatorplane -> api/internal/agentdeploy (compute)",
-	"api/internal/operatorplane -> api/internal/launchd (compute)",
-	"api/internal/satellite -> api/internal/tenant/ingestview (tenant)",
-	"api/internal/selfhealth -> api/internal/gitops (delivery)",
 	"api/internal/workactions -> api/internal/approvalnotify (owner)",
 }
 
