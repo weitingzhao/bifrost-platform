@@ -14,6 +14,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -47,7 +48,7 @@ func TestFullCIGaugeAndNotesRoute(t *testing.T) {
 		{Name: red, Revision: strings.Repeat("1", 40), Status: "Failed", CreatedAt: now.Add(-26 * time.Hour)},
 	}
 	c := &controller.Controller{DB: pool, Now: func() time.Time { return now }}
-	c.FullCI = &controller.FullCI{
+	c.FullCI = &fullci.FullCI{
 		Runs:   func(context.Context, time.Time) ([]landingci.FullRun, error) { return runs, nil },
 		Ensure: func(context.Context, string, time.Time) (string, error) { return "", nil },
 		Main:   func(context.Context) (string, error) { return strings.Repeat("2", 40), nil },

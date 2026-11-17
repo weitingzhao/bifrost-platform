@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
@@ -100,7 +101,7 @@ type Controller struct {
 	// Env is the platform's own environment (AGENTRT_ENV).
 	Env     string
 	Started time.Time
-	FullCI  *FullCI // the daily full CI (fullci.go); nil runs none
+	FullCI  *fullci.FullCI // the daily full CI (agentrt/fullci, fullci_loop.go); nil runs none
 	// PipelineEvery is how often the retained pipeline runs are listed for
 	// the ones that completed (PipelineRecords); zero means
 	// DefaultPipelineEvery. PipelineFullEvery is how often a pass compares

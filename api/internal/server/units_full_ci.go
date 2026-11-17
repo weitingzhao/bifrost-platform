@@ -10,7 +10,7 @@ import (
 )
 
 // GET /api/v1/units/full-ci is what the daily full CI recorded
-// (controller/fullci.go): its last notes on the controller's stream, newest
+// (agentrt/fullci): its last notes on the controller's stream, newest
 // first, each with when, its text and its full_ci body: the runs a day
 // started, or a red run with the tasks that failed and the landed commits
 // whose own CI run left a module out. Read-only; viewer and above, as

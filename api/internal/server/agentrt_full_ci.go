@@ -8,16 +8,17 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 )
 
-// wireFullCI gives PROD's controller the daily full CI (controller/fullci.go):
+// wireFullCI gives PROD's controller the daily full CI (agentrt/fullci):
 // the landing CI's client creates and lists the runs, the platform's
 // read-only Gitea identity reads main. AGENTRT_FULL_CI=off, another
 // environment or no cluster wires none.
 func (s *Server) wireFullCI(c *controller.Controller) {
-	on, at, param, err := controller.FullCISettings(os.Getenv)
+	on, at, param, err := fullci.FullCISettings(os.Getenv)
 	if err != nil {
 		slog.Error("agentrt full CI not started", "error", err)
 	}
@@ -27,7 +28,7 @@ func (s *Server) wireFullCI(c *controller.Controller) {
 	ci := s.landingCIClient()
 	ci.FullScopeParam = param
 	git := func() (*landinggit.Git, error) { return landinggit.ReaderFromEnv("bifrost-platform") }
-	c.FullCI = &controller.FullCI{At: at, Runs: func(ctx context.Context, since time.Time) ([]landingci.FullRun, error) {
+	c.FullCI = &fullci.FullCI{At: at, Runs: func(ctx context.Context, since time.Time) ([]landingci.FullRun, error) {
 		// A name for the platform's count of its own Kubernetes requests: these
 		// loops were the 1,077 unnamed LISTs of ten minutes on PROD, 2026-11-17.
 		return ci.FullRuns(kubemetrics.WithSite(ctx, "landingci.full"), since)
@@ -54,7 +55,7 @@ func (s *Server) wireFullCI(c *controller.Controller) {
 			}
 			return g.Ref(ctx, "refs/heads/main")
 		},
-		Landings: func(ctx context.Context, from, to string, max int) ([]controller.FullCILanding, error) {
+		Landings: func(ctx context.Context, from, to string, max int) ([]fullci.FullCILanding, error) {
 			g, err := git()
 			if err != nil {
 				return nil, err
@@ -68,9 +69,9 @@ func (s *Server) wireFullCI(c *controller.Controller) {
 			if err != nil {
 				return nil, err
 			}
-			out := make([]controller.FullCILanding, len(subjects))
+			out := make([]fullci.FullCILanding, len(subjects))
 			for i, s := range subjects {
-				out[i] = controller.FullCILanding{Commit: s.SHA, Subject: s.Subject}
+				out[i] = fullci.FullCILanding{Commit: s.SHA, Subject: s.Subject}
 			}
 			return out, nil
 		},

@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// The daily full CI's records (controller/fullci.go): a note on the
+// The daily full CI's records (agentrt/fullci): a note on the
 // controller's stream for the runs a day started, and one for each red run,
 // with the pipeline tasks that failed and the landed commits whose own CI
 // run left a module out. The Console lists them with the other events and

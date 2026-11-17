@@ -16,7 +16,7 @@ import (
 // Full CI (the daily full run): with incremental Go tests per landing
 // (R5:5.7-1), the whole suite of a commit runs on a schedule, a run of the
 // platform's pipeline with the spec a landing's CI has. The controller starts
-// them (controller/fullci.go); this file only creates and lists them.
+// them (agentrt/fullci); this file only creates and lists them.
 const (
 	FullCITrigger = "agentrt-full-ci"
 	// FailedTestsResult names the run's failed tests, separated by spaces,

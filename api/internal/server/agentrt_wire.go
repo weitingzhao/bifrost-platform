@@ -17,6 +17,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
@@ -52,7 +53,7 @@ type agentRuntime struct {
 	// fullCI is the controller's daily full CI once the workers process
 	// has wired it (wireFullCI), for the gauge /metrics serves; nil in a
 	// process that runs no controller, or where the loop is off.
-	fullCI atomic.Pointer[controller.FullCI]
+	fullCI atomic.Pointer[fullci.FullCI]
 }
 
 // wireAgentRuntime connects the agent runtime (design v5 §5.2) when

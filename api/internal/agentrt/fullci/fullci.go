@@ -1,4 +1,8 @@
-package controller
+// Package fullci is the daily full CI's decisions (verification): when the
+// day's full runs start, and how a red one is noted. The controller runs the
+// loop (agentrt/controller, startFullCI) and lends each pass what it holds:
+// the ledger, its clock, its log and the commit STG runs (Host).
+package fullci
 
 import (
 	"context"
@@ -11,15 +15,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
 )
 
 // The daily full CI (R5:5.7-9): with incremental Go tests per landing
 // (R5:5.7-1), the whole suite runs on a schedule and a red run is fixed
-// forward. Once a day at At, in the Owner's zone (planpace.BriefZone, the zone
-// of the briefs), a full run of main's head starts, and one of the commit
+// forward. Once a day at At, in the Owner's zone (Host.Zone: the controller
+// binds planpace.BriefZone, the zone of the briefs), a full run of main's
+// head starts, and one of the commit
 // STG runs now when that differs, so a PROD promotion of STG's commit
 // usually has a full green by morning. A commit runs at most once a day (the
 // run's name is its commit and the day). A red run is noted once, with the
@@ -58,7 +63,7 @@ type FullCILanding struct {
 // commit, its own CI run and which modules that run ran ("*" for all of
 // them, otherwise their names each between spaces; "" for no such run). Any
 // of these nil is not read, and the note says so. The commit STG runs now
-// is Sources.Deployed's.
+// is Host.STG's (the controller binds its Sources.Deployed).
 type FullCI struct {
 	At       string // HH:MM; "" is FullCIAt
 	Runs     func(ctx context.Context, since time.Time) ([]landingci.FullRun, error)
@@ -145,37 +150,58 @@ func fullCIClock(at string) (int, int, error) {
 	return h, min, nil
 }
 
-// startFullCI runs the loop when there is one, timed as the others are.
-func (c *Controller) startFullCI(ctx context.Context, wg *sync.WaitGroup) {
-	if c.FullCI == nil {
-		return
-	}
-	c.every(ctx, wg, "agentrt-full-ci", FullCIEvery, func() error {
-		passCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-		defer cancel()
-		_, err := c.FullCIPass(passCtx)
-		return err
-	})
+// Host is what the controller lends a pass. DB is the ledger the notes go
+// to; Now its clock (time.Now when nil); Logf and Slow its log (nothing is
+// logged when nil; Slow logs a step that took the controller's step time).
+// STG reads the commit STG runs now (ok false when it cannot be read); nil
+// when the controller has no deployment reader, and then only main's head
+// runs. Zone is the zone of the day's time: unbound (""), no run is started
+// and the pass says so; red runs are still noted.
+type Host struct {
+	DB   eventlog.DB
+	Now  func() time.Time
+	Logf func(format string, args ...any)
+	Slow func(start time.Time, format string, args ...any)
+	STG  func(ctx context.Context) (commit string, ok bool)
+	Zone string
 }
 
-// FullCIPass is one pass of the full CI loop: the day's runs once their
+func (h Host) logf(format string, args ...any) {
+	if h.Logf != nil {
+		h.Logf(format, args...)
+	}
+}
+
+func (h Host) slow(start time.Time, format string, args ...any) {
+	if h.Slow != nil {
+		h.Slow(start, format, args...)
+	}
+}
+
+func (h Host) clock() time.Time {
+	if h.Now != nil {
+		return h.Now()
+	}
+	return time.Now()
+}
+
+// Pass is one pass of the full CI loop: the day's runs once their
 // time has come, then the red runs not handled yet. It returns how many
 // runs it started and red runs it noted.
-func (c *Controller) FullCIPass(ctx context.Context) (int, error) {
-	f := c.FullCI
+func (f *FullCI) Pass(ctx context.Context, h Host) (int, error) {
 	if f == nil || f.Runs == nil || f.Ensure == nil || f.Main == nil {
 		return 0, nil
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	now := c.clock()
+	now := h.clock()
 	runs, err := f.Runs(ctx, now.Add(-fullCIWindow))
 	if err != nil {
 		return 0, fmt.Errorf("full CI runs: %w", err)
 	}
 	f.setLatest(runs)
-	started, serr := c.startFullRuns(ctx, f, now, runs)
-	noted, rerr := c.fullCIReds(ctx, f, runs)
+	started, serr := startFullRuns(ctx, h, f, now, runs)
+	noted, rerr := fullCIReds(ctx, h, f, runs)
 	return started + noted, errors.Join(serr, rerr)
 }
 
@@ -183,8 +209,13 @@ func (c *Controller) FullCIPass(ctx context.Context) (int, error) {
 // and STG's commit, read once a day. A run that cannot be started is tried
 // again on the next pass; a run of the day already there (a restart) means
 // the day's runs were started.
-func (c *Controller) startFullRuns(ctx context.Context, f *FullCI, now time.Time, runs []landingci.FullRun) (int, error) {
-	loc, err := time.LoadLocation(planpace.BriefZone)
+func startFullRuns(ctx context.Context, host Host, f *FullCI, now time.Time, runs []landingci.FullRun) (int, error) {
+	if host.Zone == "" {
+		// time.LoadLocation("") is UTC: unbound, the day's time would be read
+		// in another zone. Nothing starts.
+		return 0, errors.New("full CI: no zone bound; no run started")
+	}
+	loc, err := time.LoadLocation(host.Zone)
 	if err != nil {
 		return 0, err
 	}
@@ -209,11 +240,11 @@ func (c *Controller) startFullRuns(ctx context.Context, f *FullCI, now time.Time
 			return 0, fmt.Errorf("full CI: main's head: %v", err)
 		}
 		f.day, f.pending = day, []string{main}
-		if c.Sources.Deployed != nil {
-			if stg, _, ok := c.boundedDeployed(ctx, "stg"); ok && stg != "" && stg != main {
+		if host.STG != nil {
+			if stg, ok := host.STG(ctx); ok && stg != "" && stg != main {
 				f.pending = append(f.pending, stg)
 			} else if !ok {
-				c.logf("agentrt-full-ci: the commit STG runs cannot be read; only main's head runs today")
+				host.logf("agentrt-full-ci: the commit STG runs cannot be read; only main's head runs today")
 			}
 		}
 	}
@@ -222,7 +253,7 @@ func (c *Controller) startFullRuns(ctx context.Context, f *FullCI, now time.Time
 	for _, commit := range f.pending {
 		start := time.Now()
 		name, err := f.Ensure(ctx, commit, local)
-		c.slow(slowStepLog, start, "agentrt-full-ci: start %s", commit)
+		host.slow(start, "agentrt-full-ci: start %s", commit)
 		if err != nil {
 			left = append(left, commit)
 			errs = append(errs, fmt.Errorf("full CI of %s: %w", commit, err))
@@ -233,7 +264,7 @@ func (c *Controller) startFullRuns(ctx context.Context, f *FullCI, now time.Time
 	f.pending = left
 	if len(names) > 0 {
 		text := "Full CI started: " + strings.Join(names, ", ") + "."
-		if err := evidence.NoteFullCI(ctx, c.DB, text, evidence.FullCI{Started: names}); err != nil {
+		if err := evidence.NoteFullCI(ctx, host.DB, text, evidence.FullCI{Started: names}); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -243,7 +274,7 @@ func (c *Controller) startFullRuns(ctx context.Context, f *FullCI, now time.Time
 // fullCIReds handles each red run not handled yet, oldest first: each is
 // noted once (evidence.FullCIRedNoted), with what failed and the landings that
 // left a module out.
-func (c *Controller) fullCIReds(ctx context.Context, f *FullCI, runs []landingci.FullRun) (int, error) {
+func fullCIReds(ctx context.Context, h Host, f *FullCI, runs []landingci.FullRun) (int, error) {
 	noted := 0
 	var errs []error
 	for i, r := range runs {
@@ -251,8 +282,8 @@ func (c *Controller) fullCIReds(ctx context.Context, f *FullCI, runs []landingci
 			continue
 		}
 		start := time.Now()
-		did, err := c.fullCIRed(ctx, f, r, runs[:i])
-		c.slow(slowStepLog, start, "agentrt-full-ci: red %s", r.Name)
+		did, err := fullCIRed(ctx, h, f, r, runs[:i])
+		h.slow(start, "agentrt-full-ci: red %s", r.Name)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("full CI red %s: %w", r.Name, err))
 		}
@@ -263,8 +294,8 @@ func (c *Controller) fullCIReds(ctx context.Context, f *FullCI, runs []landingci
 	return noted, errors.Join(errs...)
 }
 
-func (c *Controller) fullCIRed(ctx context.Context, f *FullCI, r landingci.FullRun, before []landingci.FullRun) (bool, error) {
-	if noted, err := evidence.FullCIRedNoted(ctx, c.DB, r.Name); err != nil || noted {
+func fullCIRed(ctx context.Context, h Host, f *FullCI, r landingci.FullRun, before []landingci.FullRun) (bool, error) {
+	if noted, err := evidence.FullCIRedNoted(ctx, h.DB, r.Name); err != nil || noted {
 		return false, err
 	}
 	failed := r.FailedTests
@@ -274,7 +305,7 @@ func (c *Controller) fullCIRed(ctx context.Context, f *FullCI, r landingci.FullR
 			if l, err := f.TestLog(ctx, r.Name); err == nil {
 				log = l
 			} else {
-				c.logf("agentrt-full-ci: %s's test log: %v", r.Name, err)
+				h.logf("agentrt-full-ci: %s's test log: %v", r.Name, err)
 			}
 		}
 		failed = failedInLog(log)
@@ -284,7 +315,7 @@ func (c *Controller) fullCIRed(ctx context.Context, f *FullCI, r landingci.FullR
 	if f.FailedTasks != nil {
 		tasks, err := f.FailedTasks(ctx, r.Name)
 		if err != nil {
-			c.logf("agentrt-full-ci: %s's failed tasks: %v", r.Name, err)
+			h.logf("agentrt-full-ci: %s's failed tasks: %v", r.Name, err)
 		}
 		note.FailedTasks = tasks
 	}
@@ -295,13 +326,13 @@ func (c *Controller) fullCIRed(ctx context.Context, f *FullCI, r landingci.FullR
 			break
 		}
 	}
-	note.Suspects, note.Unread, note.Unreconciled = c.fullCIReconcile(ctx, f, r, green)
+	note.Suspects, note.Unread, note.Unreconciled = fullCIReconcile(ctx, h, f, r, green)
 	tasks := "no failed task could be read"
 	if len(note.FailedTasks) > 0 {
 		tasks = "failed tasks: " + strings.Join(note.FailedTasks, ", ")
 	}
-	c.logf("agentrt-full-ci: ALERT full CI run %s of %s is red; %s", r.Name, r.Revision, tasks)
-	return true, evidence.NoteFullCI(ctx, c.DB, fullCIRedText(note, failed, green), note)
+	h.logf("agentrt-full-ci: ALERT full CI run %s of %s is red; %s", r.Name, r.Revision, tasks)
+	return true, evidence.NoteFullCI(ctx, h.DB, fullCIRedText(note, failed, green), note)
 }
 
 // fullCIReconcile looks, for red run r, at the commits landed since the
@@ -310,7 +341,7 @@ func (c *Controller) fullCIRed(ctx context.Context, f *FullCI, r landingci.FullR
 // whose CI run or result cannot be read is counted in unread. When the
 // landings cannot be looked at, or not all of them, unreconciled says why,
 // so that no suspect is not read as none.
-func (c *Controller) fullCIReconcile(ctx context.Context, f *FullCI, r landingci.FullRun, green *landingci.FullRun) (suspects []evidence.FullCISuspect, unread int, unreconciled string) {
+func fullCIReconcile(ctx context.Context, h Host, f *FullCI, r landingci.FullRun, green *landingci.FullRun) (suspects []evidence.FullCISuspect, unread int, unreconciled string) {
 	switch {
 	case green == nil:
 		return nil, 0, fmt.Sprintf("no full run in the last %d days was green", int(fullCIWindow.Hours()/24))
@@ -331,7 +362,7 @@ func (c *Controller) fullCIReconcile(ctx context.Context, f *FullCI, r landingci
 		run, modules, err := f.RunModules(ctx, l.Commit)
 		switch {
 		case err != nil:
-			c.logf("agentrt-full-ci: the CI run of landing %s: %v", l.Commit, err)
+			h.logf("agentrt-full-ci: the CI run of landing %s: %v", l.Commit, err)
 			unread++
 		case run == "":
 			unread++

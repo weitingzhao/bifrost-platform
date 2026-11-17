@@ -17,12 +17,12 @@ import (
 // red, each with its own CI run and which modules that run ran, and marks
 // the suspects: those whose run left a module out. With run it also names
 // the pipeline tasks of that run that failed. It is the same reading the
-// controller does for a real red full run (controller/fullci.go), done on
+// controller does for a real red full run (agentrt/fullci), done on
 // request, so that the reconciliation can be seen on real landings without
 // waiting for a red run, and it is the run view's "what each landing ran".
 // Read-only; viewer and above.
 
-const unitFullCICheckMax = 30 // as controller.FullCILandingsMax
+const unitFullCICheckMax = 30 // as fullci.FullCILandingsMax
 
 type unitCheckLanding struct {
 	Commit  string `json:"commit"`

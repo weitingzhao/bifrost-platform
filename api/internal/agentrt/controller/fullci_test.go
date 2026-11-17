@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
 )
@@ -47,7 +48,7 @@ func (f *fullCI) controller(pool *pgxpool.Pool) *controller.Controller {
 		}
 		return f.stg, nil, true
 	}
-	c.FullCI = &controller.FullCI{
+	c.FullCI = &fullci.FullCI{
 		Runs: func(_ context.Context, since time.Time) ([]landingci.FullRun, error) {
 			var out []landingci.FullRun
 			for _, r := range f.runs {
@@ -69,11 +70,11 @@ func (f *fullCI) controller(pool *pgxpool.Pool) *controller.Controller {
 			return name, nil
 		},
 		Main: func(context.Context) (string, error) { return f.main, nil },
-		Landings: func(_ context.Context, from, to string, max int) ([]controller.FullCILanding, error) {
-			if from != fullGreen || to != fullMain || max <= controller.FullCILandingsMax {
+		Landings: func(_ context.Context, from, to string, max int) ([]fullci.FullCILanding, error) {
+			if from != fullGreen || to != fullMain || max <= fullci.FullCILandingsMax {
 				return nil, nil
 			}
-			return []controller.FullCILanding{{Commit: fullMain, Subject: "feat: the latest landing"},
+			return []fullci.FullCILanding{{Commit: fullMain, Subject: "feat: the latest landing"},
 				{Commit: fullMid, Subject: "fix: an earlier landing"}, {Commit: fullOld, Subject: "chore: the first landing"}}, nil
 		},
 		FailedTasks: func(_ context.Context, run string) ([]string, error) { return f.failedTasks[run], nil },
@@ -151,23 +152,23 @@ func TestFullCIRunsSTGCommitWhenItDiffers(t *testing.T) {
 
 func TestFullCISwitchOffAndParam(t *testing.T) {
 	env := func(vars map[string]string) func(string) string { return func(k string) string { return vars[k] } }
-	on, at, param, err := controller.FullCISettings(env(nil))
+	on, at, param, err := fullci.FullCISettings(env(nil))
 	if !on || at != "03:00" || param || err != nil {
 		t.Fatal("defaults", on, at, param, err)
 	}
-	if on, _, _, _ = controller.FullCISettings(env(map[string]string{"AGENTRT_FULL_CI": "off"})); on {
+	if on, _, _, _ = fullci.FullCISettings(env(map[string]string{"AGENTRT_FULL_CI": "off"})); on {
 		t.Fatal("AGENTRT_FULL_CI=off left the loop on")
 	}
-	if _, _, param, _ = controller.FullCISettings(env(map[string]string{"AGENTRT_FULL_CI_PARAM": "on"})); !param {
+	if _, _, param, _ = fullci.FullCISettings(env(map[string]string{"AGENTRT_FULL_CI_PARAM": "on"})); !param {
 		t.Fatal("AGENTRT_FULL_CI_PARAM=on did not add the param")
 	}
-	if _, _, param, _ = controller.FullCISettings(env(map[string]string{"AGENTRT_FULL_CI_PARAM": "yes"})); param {
+	if _, _, param, _ = fullci.FullCISettings(env(map[string]string{"AGENTRT_FULL_CI_PARAM": "yes"})); param {
 		t.Fatal("the param without on")
 	}
-	if on, at, _, _ = controller.FullCISettings(env(map[string]string{"AGENTRT_FULL_CI_AT": "05:30"})); !on || at != "05:30" {
+	if on, at, _, _ = fullci.FullCISettings(env(map[string]string{"AGENTRT_FULL_CI_AT": "05:30"})); !on || at != "05:30" {
 		t.Fatal(on, at)
 	}
-	if on, _, _, err = controller.FullCISettings(env(map[string]string{"AGENTRT_FULL_CI_AT": "25:00"})); on || err == nil {
+	if on, _, _, err = fullci.FullCISettings(env(map[string]string{"AGENTRT_FULL_CI_AT": "25:00"})); on || err == nil {
 		t.Fatal("a time that does not parse", on, err)
 	}
 	// Off, the wiring leaves FullCI nil: a pass starts nothing.
@@ -286,7 +287,7 @@ func TestFullCIRedWithoutAGreenIsUnreconciled(t *testing.T) {
 	// The landings that cannot be read are a reason as well, not "none".
 	f.runs = append([]landingci.FullRun{{Name: "ci-full-444444444444-20261104", Revision: fullGreen, Status: "Succeeded", CreatedAt: now.Add(-50 * time.Hour)}},
 		append(f.runs, landingci.FullRun{Name: "ci-full-222222222222-20261106", Revision: fullMain2, Status: "Failed", CreatedAt: now.Add(-time.Hour)})...)
-	c.FullCI.Landings = func(context.Context, string, string, int) ([]controller.FullCILanding, error) {
+	c.FullCI.Landings = func(context.Context, string, string, int) ([]fullci.FullCILanding, error) {
 		return nil, errors.New("gitea is away")
 	}
 	pass(t, c)
@@ -324,7 +325,7 @@ func TestFullCILatestIsTheNewestFinishedRun(t *testing.T) {
 	if name, status, ok := c.FullCI.Latest(); !ok || name != "ci-full-111111111111-20261105" || status != "Failed" {
 		t.Fatal("a running run replaced the last finished one", name, status, ok)
 	}
-	var none *controller.FullCI
+	var none *fullci.FullCI
 	if _, _, ok := none.Latest(); ok {
 		t.Fatal("no loop gave an answer")
 	}

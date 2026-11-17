@@ -29,7 +29,7 @@ const (
 )
 
 // verdictActor writes the event: the evidence package already writes its
-// notes as the controller (fullci.go), which the platform seeds.
+// notes as the controller (agentrt/fullci), which the platform seeds.
 const verdictActor = "controller"
 
 // VerdictRef is where a reader of the event reads the state (the register's

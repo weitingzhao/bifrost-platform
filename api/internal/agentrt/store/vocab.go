@@ -198,7 +198,7 @@ var bodies = map[string][]field{
 		{"card", kAny, true}, {"plan_view", kAny, true}, {"external_work", kAny, true},
 		{"leak_value", kAny, true},
 		// full_ci: on the controller's stream, the daily full CI runs started
-		// and how a red one was handled (fullci.go).
+		// and how a red one was handled (agentrt/fullci).
 		{"full_ci", kAny, true},
 		// check_value: on the controller's stream, the goal proposed to
 		// delete a check or retry the check value table marked (checkvalue.go).

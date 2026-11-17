@@ -14,7 +14,7 @@ type Subject struct {
 
 // FirstParents reads the first-parent commits of base..p, newest first, at
 // most max of them, with their subjects: the landings between two commits of
-// main, for a red full CI run's goal (controller/fullci.go). Reads only.
+// main, for a red full CI run's goal (agentrt/fullci). Reads only.
 func (w *Workspace) FirstParents(ctx context.Context, base, p string, max int) ([]Subject, error) {
 	if !fullSHA.MatchString(base) || !fullSHA.MatchString(p) || max < 1 {
 		return nil, errors.New("invalid first-parent range")
