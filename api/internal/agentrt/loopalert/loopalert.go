@@ -1,13 +1,18 @@
-package store
+// Package loopalert records a controller loop that keeps failing the same
+// way, and the note that it passes again, on the controller stream; the reads
+// of those records are loopreadings'. Moved from the store 2026-11-17.
+package loopalert
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopreadings"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
 // A controller loop that keeps failing the same way (TD-411: STG's facts
@@ -28,8 +33,8 @@ const ControllerStream = "controller"
 // alert: a minute of the facts loop, four seconds of the card rule's.
 const FailuresToAlert = 4
 
-// controllerFailingPhrase is the alert's phrase.
-const controllerFailingPhrase = "a controller loop failed the same way several times in a row"
+// FailingPhrase is the alert's phrase (the event vocabulary lists it).
+const FailingPhrase = "a controller loop failed the same way several times in a row"
 
 // ControllerLoops are the controller's loops (controller.Start), the names an
 // alert's line_digest is read back to.
@@ -40,15 +45,15 @@ var ControllerLoops = []string{"agentrt-leases", "agentrt-facts-rules", "agentrt
 const errorKept = 4096
 
 // AlertFailingLoop records that loop failed n times in a row with errText.
-func AlertFailingLoop(ctx context.Context, db DB, loop string, n int, errText string) error {
+func AlertFailingLoop(ctx context.Context, db eventlog.DB, loop string, n int, errText string) error {
 	text := loopreadings.FailureText(loop, n, errText, errorKept)
-	return InTx(ctx, db, func(tx pgx.Tx) error {
+	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		art, err := artifact.PutArtifact(ctx, tx, "controller", "log_tail", "text/plain; charset=utf-8", []byte(text))
 		if err != nil {
 			return err
 		}
-		_, err = Append(ctx, tx, Event{Stream: ControllerStream, Type: "policy_alert", Actor: "controller",
-			Body: map[string]any{"rule": "controller_failing", "source": "controller", "phrase": controllerFailingPhrase,
+		_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: ControllerStream, Type: "policy_alert", Actor: "controller",
+			Body: map[string]any{"rule": "controller_failing", "source": "controller", "phrase": FailingPhrase,
 				"artifact_id": art, "line_digest": lineDigest(loop)}})
 		return err
 	})
@@ -56,10 +61,10 @@ func AlertFailingLoop(ctx context.Context, db DB, loop string, n int, errText st
 
 // NoteLoopPasses records that loop passed again after n failures in a row
 // (n 0: the count is not known, as after a restart).
-func NoteLoopPasses(ctx context.Context, db DB, loop string, n int) error {
+func NoteLoopPasses(ctx context.Context, db eventlog.DB, loop string, n int) error {
 	text := loopreadings.RecoveryText(loop, n, passesAgain)
-	return InTx(ctx, db, func(tx pgx.Tx) error {
-		_, err := Append(ctx, tx, Event{Stream: ControllerStream, Type: "note", Actor: "controller", Body: map[string]any{"text": text}})
+	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: ControllerStream, Type: "note", Actor: "controller", Body: map[string]any{"text": text}})
 		return err
 	})
 }
@@ -83,9 +88,9 @@ func latestLoopRecord(ctx context.Context, q interface {
 // LoopAlertOpen says whether loop's latest record is an alert no note has
 // answered: a loop starting again (a restart) writes the note once it passes
 // (review 466 A-1).
-func LoopAlertOpen(ctx context.Context, db DB, loop string) (bool, error) {
+func LoopAlertOpen(ctx context.Context, db eventlog.DB, loop string) (bool, error) {
 	var open bool
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
+	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		r, err := latestLoopRecord(ctx, tx, loop)
 		open = r.alert
 		return err
@@ -93,12 +98,17 @@ func LoopAlertOpen(ctx context.Context, db DB, loop string) (bool, error) {
 	return open, err
 }
 
-// The plan code's Progress reads the failing loops through its port
-// (planstore, planports.go); this file is their provider and binds it.
-func init() { planstore.BindPlanLoops(planstore.LoopPorts{Failing: failingLoops}) }
-
-func failingLoops(ctx context.Context, tx pgx.Tx) ([]map[string]any, error) {
+// FailingLoops lists the loops whose latest record is an alert. The plan
+// code's Progress reads them through its port (planstore, planports.go); the
+// store's wiring (portsbind.go) binds it to this.
+func FailingLoops(ctx context.Context, tx pgx.Tx) ([]map[string]any, error) {
 	return loopreadings.Failing(ctx, tx, ControllerLoops, func(ctx context.Context, tx pgx.Tx, loop string) (loopreadings.Record, error) {
 		return loopreadings.Latest(ctx, tx, ControllerStream, lineDigest(loop), loop+passesAgain)
 	})
+}
+
+// lineDigest names an alert line in its event.
+func lineDigest(line string) string {
+	sum := sha256.Sum256([]byte(line))
+	return "sha256:" + hex.EncodeToString(sum[:])
 }

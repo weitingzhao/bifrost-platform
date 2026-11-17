@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopalert"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -17,9 +18,8 @@ import (
 // handled once.
 
 // ControllerStream is the controller's own stream, where the notes of the
-// daily full CI are written. It is the store's ControllerStream
-// (controller.TestEvidenceWritesToTheControllerStream).
-const ControllerStream = "controller"
+// daily full CI are written (loopalert.ControllerStream: one name, kept there).
+const ControllerStream = loopalert.ControllerStream
 
 // FullCISuspect is a commit landed since the last green full run whose own
 // CI run left a module out: Run is that CI run and Modules its run-modules

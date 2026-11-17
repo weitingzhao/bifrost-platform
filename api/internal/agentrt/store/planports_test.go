@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopalert"
 	"reflect"
 	"strings"
 	"testing"
@@ -250,13 +251,13 @@ func TestLoopPortIsBoundToTheLoopAlerts(t *testing.T) {
 	if got := failing(); len(got) != 0 {
 		t.Fatalf("with no alert: %v", got)
 	}
-	loop := store.ControllerLoops[1]
-	ok(t, store.AlertFailingLoop(ctx, w.rt, loop, store.FailuresToAlert, "the check constraint is missing"))
+	loop := "agentrt-facts-rules" // one of the controller's loops (loopalert.ControllerLoops)
+	ok(t, loopalert.AlertFailingLoop(ctx, w.rt, loop, loopalert.FailuresToAlert, "the check constraint is missing"))
 	got := failing()
 	if len(got) != 1 || got[0]["loop"] != loop || !strings.Contains(got[0]["error"].(string), "the check constraint is missing") {
 		t.Fatalf("with one alert: %v", got)
 	}
-	ok(t, store.NoteLoopPasses(ctx, w.rt, loop, store.FailuresToAlert))
+	ok(t, loopalert.NoteLoopPasses(ctx, w.rt, loop, loopalert.FailuresToAlert))
 	if got := failing(); len(got) != 0 {
 		t.Fatalf("after the loop passes again: %v", got)
 	}

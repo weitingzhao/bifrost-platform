@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"encoding/json"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopalert"
 	"os"
 	"strings"
 	"testing"
@@ -69,8 +70,8 @@ func TestProgressSaysTheSchemaAndTheFailingLoops(t *testing.T) {
 		t.Fatalf("a database with every migration: %+v", current.Schema)
 	}
 	failure := `ERROR: new row for relation "task" violates check constraint "task_check2" (SQLSTATE 23514)`
-	ok(t, store.AlertFailingLoop(ctx, w.rt, "agentrt-facts-rules", store.FailuresToAlert, failure))
-	ok(t, store.AlertFailingLoop(ctx, w.rt, "not-a-loop", store.FailuresToAlert, failure))
+	ok(t, loopalert.AlertFailingLoop(ctx, w.rt, "agentrt-facts-rules", loopalert.FailuresToAlert, failure))
+	ok(t, loopalert.AlertFailingLoop(ctx, w.rt, "not-a-loop", loopalert.FailuresToAlert, failure))
 	failing, failingRaw := progressOf(t, w.rt)
 	if len(failing.Alerts) != 1 || failing.Alerts[0].Loop != "agentrt-facts-rules" || failing.Alerts[0].Since == "" ||
 		failing.Alerts[0].Error != "agentrt-facts-rules failed 4 times in a row:\n"+failure {
@@ -84,17 +85,17 @@ func TestProgressSaysTheSchemaAndTheFailingLoops(t *testing.T) {
 	// Review 466 B-1: another loop alerted and answered a hundred times over
 	// does not push the standing alert out of what Progress reads.
 	for range 101 {
-		ok(t, store.AlertFailingLoop(ctx, w.rt, "agentrt-assess", store.FailuresToAlert, "the evidence read failed"))
-		ok(t, store.NoteLoopPasses(ctx, w.rt, "agentrt-assess", store.FailuresToAlert))
+		ok(t, loopalert.AlertFailingLoop(ctx, w.rt, "agentrt-assess", loopalert.FailuresToAlert, "the evidence read failed"))
+		ok(t, loopalert.NoteLoopPasses(ctx, w.rt, "agentrt-assess", loopalert.FailuresToAlert))
 	}
 	if still, _ := progressOf(t, w.rt); len(still.Alerts) != 1 || still.Alerts[0].Loop != "agentrt-facts-rules" {
 		t.Fatalf("after another loop's 202 records: %+v", still.Alerts)
 	}
-	if open, oerr := store.LoopAlertOpen(ctx, w.rt, "agentrt-facts-rules"); oerr != nil || !open {
+	if open, oerr := loopalert.LoopAlertOpen(ctx, w.rt, "agentrt-facts-rules"); oerr != nil || !open {
 		t.Fatalf("the standing alert reads open %v (%v)", open, oerr)
 	}
-	ok(t, store.NoteLoopPasses(ctx, w.rt, "agentrt-facts-rules", 6))
-	if open, oerr := store.LoopAlertOpen(ctx, w.rt, "agentrt-facts-rules"); oerr != nil || open {
+	ok(t, loopalert.NoteLoopPasses(ctx, w.rt, "agentrt-facts-rules", 6))
+	if open, oerr := loopalert.LoopAlertOpen(ctx, w.rt, "agentrt-facts-rules"); oerr != nil || open {
 		t.Fatalf("an answered alert reads open %v (%v)", open, oerr)
 	}
 	if passed, _ := progressOf(t, w.rt); len(passed.Alerts) != 0 {

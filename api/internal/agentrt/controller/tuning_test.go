@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopalert"
 	"testing"
 	"time"
 
@@ -37,11 +38,11 @@ func TestTuningFailuresToAlert(t *testing.T) {
 		t.Helper()
 		var n int
 		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'policy_alert'`,
-			store.ControllerStream).Scan(&n))
+			loopalert.ControllerStream).Scan(&n))
 		return n
 	}
-	if store.FailuresToAlert <= 2 {
-		t.Fatalf("FailuresToAlert is %d: the test lowers it to 2", store.FailuresToAlert)
+	if loopalert.FailuresToAlert <= 2 {
+		t.Fatalf("FailuresToAlert is %d: the test lowers it to 2", loopalert.FailuresToAlert)
 	}
 	fail("agentrt-assess", 2)
 	if n := alerts(); n != 0 {

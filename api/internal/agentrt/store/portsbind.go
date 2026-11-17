@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopalert"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -57,6 +58,7 @@ func init() {
 			return deliveryreadings.CommitNaming(n), err
 		},
 	})
+	planstore.BindPlanLoops(planstore.LoopPorts{Failing: loopalert.FailingLoops})
 	planstore.BindPlanCoordination(planstore.CoordinationPorts{AlertClaim: coord.AlertClaim})
 	planstore.BindPlanQuestions(planstore.QuestionPorts{BodyBytes: questions.BodyBytes})
 }

@@ -43,7 +43,7 @@ type TuningKey struct {
 const (
 	TuneLeaseTTL             = "lease_ttl_s"              // store.LeaseTTL: a lease's life from its last heartbeat
 	TuneAssessPerPass        = "assess_per_pass"          // store.AssessPerPass: assessments one pass asks for
-	TuneFailuresToAlert      = "failures_to_alert"        // store.FailuresToAlert: a loop's failures in a row before an alert
+	TuneFailuresToAlert      = "failures_to_alert"        // loopalert.FailuresToAlert: a loop's failures in a row before an alert
 	TuneThreadsPerDay        = "threads_per_day"          // store.ThreadsPerDay: threads registered in a day
 	TuneRetryBackoff         = "retry_backoff_s"          // store retryBackoff: an executor's wait after its first failure
 	TuneNudgeAfter           = "nudge_after_s"            // store.NudgeAfter: a decision's wait before the chief of staff is told

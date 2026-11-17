@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopalert"
 	"regexp"
 	"slices"
 
@@ -385,7 +386,7 @@ var fieldValues = map[string]map[string]value{
 		"source": oneOf("task_spec", "message", "seat_answer", "seat_plan", "report", "verify", "review", "attempt", "controller",
 			"plan_note", "assessment"),
 		"phrase": oneOf(append(slices.Clone(coord.ApprovalClaims), seatAlertPhrase, localPathPhrase, workspaceRefPhrase, repeatedFailurePhrase,
-			controllerFailingPhrase, diskLowPhrase, hostOfflinePhrase, executorUnavailablePhrase, presenceUnjudgedPhrase, presenceDeferredPhrase)...),
+			loopalert.FailingPhrase, diskLowPhrase, hostOfflinePhrase, executorUnavailablePhrase, presenceUnjudgedPhrase, presenceDeferredPhrase)...),
 		"artifact_id": artifactID, "message_id": messageID,
 		"line_digest": fingerprint},
 	"pool_cooldown_set":        {"until": instant},

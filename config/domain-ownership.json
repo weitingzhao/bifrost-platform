@@ -896,6 +896,13 @@
       "status": "assigned",
       "basis": "delivery charter; recorded run reads extracted from store; no prefix admission, evidence or deployment decisions; 2026-11-16 recorded configuration-request query and malformed-record filtering extracted without installing policy Full registered configuration row/request-value observation projection extracted; selector registry, strict reads/validation/equality and preview goal assembly remain with delivery caller. Complete supply-chain ConfigMap metadata and TaskRun observation serialization extracted; success/ref/health/execution predicates remain verbatim."
     },
+    "api/internal/agentrt/loopalert": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-17: the controller loops' failure alerts and recovery notes, moved out of agentrt/store unchanged; the reads of those records are loopreadings' (foundation)"
+    },
     "api/internal/agentrt/loopreadings": {
       "domains": [
         "foundation"

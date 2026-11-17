@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopalert"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -54,7 +55,7 @@ func TestALoopFailingTheSameWayIsAlertedOnce(t *testing.T) {
 	events := func(kind string) []string {
 		t.Helper()
 		rows, err := pool.Query(ctx, `SELECT COALESCE(body_json->>'text', body_json->>'rule') FROM agentrt.event
-		  WHERE event_stream_id = $1 AND event_type = $2 ORDER BY seq`, store.ControllerStream, kind)
+		  WHERE event_stream_id = $1 AND event_type = $2 ORDER BY seq`, loopalert.ControllerStream, kind)
 		must(t, err)
 		defer rows.Close()
 		var out []string
@@ -155,7 +156,7 @@ func TestAnOpenAlertIsAnsweredOnceTheLoopPasses(t *testing.T) {
 	}
 	open := func(loop string) bool {
 		t.Helper()
-		o, err := store.LoopAlertOpen(ctx, pool, loop)
+		o, err := loopalert.LoopAlertOpen(ctx, pool, loop)
 		must(t, err)
 		return o
 	}
@@ -163,7 +164,7 @@ func TestAnOpenAlertIsAnsweredOnceTheLoopPasses(t *testing.T) {
 		t.Helper()
 		var n int
 		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
-		  AND starts_with(body_json->>'text', $2)`, store.ControllerStream, loop+" passes again").Scan(&n))
+		  AND starts_with(body_json->>'text', $2)`, loopalert.ControllerStream, loop+" passes again").Scan(&n))
 		return n
 	}
 	// The error changes after the alert, then the loop passes.

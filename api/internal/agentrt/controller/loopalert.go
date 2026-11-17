@@ -3,20 +3,20 @@ package controller
 import (
 	"context"
 	"errors"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopalert"
 	"regexp"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // A loop that keeps failing the same way is told (TD-411: STG's facts pass
 // failed every 15 seconds for two hours on a check constraint the database's
 // schema lacked, a warning each time and nothing else). After
-// store.FailuresToAlert failures in a row (the tuning rule's
+// loopalert.FailuresToAlert failures in a row (the tuning rule's
 // failures_to_alert, as the last pass read it) with the same error the loop records
-// an alert the Owner sees (store.AlertFailingLoop: a policy_alert, listed by
+// an alert the Owner sees (loopalert.AlertFailingLoop: a policy_alert, listed by
 // Progress, said on Work and System); once it passes again, a note
-// (store.NoteLoopPasses). Errors are the same when they differ only in
+// (loopalert.NoteLoopPasses). Errors are the same when they differ only in
 // numbers and ids. An alert that cannot be recorded is tried again on the
 // next failure.
 
@@ -50,7 +50,7 @@ func (c *Controller) track(ctx context.Context, name string, run *failureRun, er
 		failures := run.n
 		run.n, run.key, run.alerted = 0, "", false
 		if !run.known {
-			open, rerr := store.LoopAlertOpen(ctx, c.DB, name)
+			open, rerr := loopalert.LoopAlertOpen(ctx, c.DB, name)
 			if rerr != nil {
 				c.logf("%s: whether its alert is answered could not be read: %v", name, rerr)
 				return
@@ -60,7 +60,7 @@ func (c *Controller) track(ctx context.Context, name string, run *failureRun, er
 		if !run.open {
 			return
 		}
-		if nerr := store.NoteLoopPasses(ctx, c.DB, name, failures); nerr != nil {
+		if nerr := loopalert.NoteLoopPasses(ctx, c.DB, name, failures); nerr != nil {
 			c.logf("%s: passes again, and that could not be recorded: %v", name, nerr)
 			return
 		}
@@ -74,7 +74,7 @@ func (c *Controller) track(ctx context.Context, name string, run *failureRun, er
 	if run.n < c.tuned().Int(rules.TuneFailuresToAlert) || run.alerted {
 		return
 	}
-	if aerr := store.AlertFailingLoop(ctx, c.DB, name, run.n, err.Error()); aerr != nil {
+	if aerr := loopalert.AlertFailingLoop(ctx, c.DB, name, run.n, err.Error()); aerr != nil {
 		c.logf("%s: failed %d times in a row; the alert could not be recorded: %v", name, run.n, aerr)
 		return
 	}

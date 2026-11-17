@@ -7,9 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // fill sets every field of the struct v points at to a value that is not its
@@ -71,14 +69,5 @@ func TestEvidenceRunCarriesEveryField(t *testing.T) {
 		if !reflect.DeepEqual(got.Field(i).Interface(), want.Interface()) {
 			t.Errorf("evidence.Run.%s = %v, the store's run has %v", name, got.Field(i).Interface(), want.Interface())
 		}
-	}
-}
-
-// The evidence ledger writes the daily full CI's notes to the controller's
-// stream under a constant of its own, since it no longer imports the store.
-func TestEvidenceWritesToTheControllerStream(t *testing.T) {
-	t.Parallel()
-	if evidence.ControllerStream != store.ControllerStream {
-		t.Fatalf("evidence.ControllerStream is %q, the store's is %q", evidence.ControllerStream, store.ControllerStream)
 	}
 }
