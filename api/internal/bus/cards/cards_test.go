@@ -8,6 +8,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // the seed, in the test only
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/cards"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 )
 
 var ctx = context.Background()
@@ -76,5 +77,14 @@ func TestTypeOfAndBody(t *testing.T) {
 	}
 	if cards.Valid(cards.Card{Type: cards.TypeDecided, ID: "appr_0123456789abcdef", Action: "x", Status: "approved"}) {
 		t.Error("a card without a number is valid")
+	}
+}
+
+// The bodies carry what the register promises (its key "card" for decided).
+func TestCardsAgreeWithTheRegister(t *testing.T) {
+	for _, typ := range []string{cards.TypeCreated, cards.TypeDecided, cards.TypeExecuted} {
+		if err := registry.Agree(typ); err != nil {
+			t.Error(err)
+		}
 	}
 }

@@ -67,6 +67,7 @@ func Stream(id string) string { return "card:" + id }
 func Body(c Card) map[string]any {
 	return map[string]any{
 		"id":      c.ID,
+		"card":    Subject(c.Number),
 		"number":  c.Number,
 		"action":  c.Action,
 		"status":  c.Status,
@@ -106,6 +107,7 @@ func Announce(ctx context.Context, db eventlog.DB, list []Card) error {
 func init() {
 	fields := []eventlog.Field{
 		{Name: "id", Kind: eventlog.Str},
+		{Name: "card", Kind: eventlog.Str},
 		{Name: "number", Kind: eventlog.Int},
 		{Name: "action", Kind: eventlog.Str},
 		{Name: "status", Kind: eventlog.Str},
@@ -128,7 +130,7 @@ func init() {
 		case float64:
 			n = int(v)
 		}
-		if n <= 0 || body["subject"] != Subject(n) || body["key"] != Subject(n) || body["ref"] != Ref(s("id")) || body["change"] != s("status") {
+		if n <= 0 || body["subject"] != Subject(n) || body["card"] != Subject(n) || body["key"] != Subject(n) || body["ref"] != Ref(s("id")) || body["change"] != s("status") {
 			return eventlog.Invalid("approval.card: subject, key, ref and change are made of number, id and status")
 		}
 		return nil

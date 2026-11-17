@@ -8,6 +8,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // the seed (the controller actor), in the test only
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/alerts"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 )
 
 var ctx = context.Background()
@@ -85,5 +86,11 @@ func TestNormalizeAndBody(t *testing.T) {
 	bad["subject"] = "X"
 	if eventlog.CheckBody(alerts.Type, bad) == nil {
 		t.Error("a subject without the namespace is taken")
+	}
+}
+
+func TestAlertsAgreeWithTheRegister(t *testing.T) {
+	if err := registry.Agree(alerts.Type); err != nil {
+		t.Error(err)
 	}
 }
