@@ -7336,3 +7336,6 @@ button.infra-stack-chip:hover {
   animation: md-tick-down 1.1s ease-out;
 }
 
+/* Work > CI > By dependency: the graph library's own attribution, legible on the Console's themes. */
+.ci-dep-graph .react-flow .react-flow__attribution { background: transparent; }
+.ci-dep-graph .react-flow .react-flow__attribution a { color: var(--muted-foreground); }

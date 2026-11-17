@@ -1,13 +1,15 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, expect, it, vi } from 'vitest'
 import { fetchCiScorecard, type CiScorecard } from '@/api/ciScorecard'
-import { CiScorecardBlock } from '../CiScorecardBlock'
+import { CiScoreStrip } from '../CiScoreStrip'
 
 /*
  * Origin of every case in this file — Owner 2026-11-16: CI scores every repository that uses it, and its users score
  * CI; only what is measured is shown, each item with its verdict and raw number, and the pass lines are on the page.
+ * The same day he read Work → CI and could not tell what was running, who depends on whom, or what a change pulls in;
+ * this page and its two routes replace it, and the scorecard became one line on it.
  */
 
 vi.mock('@/api/ciScorecard', () => ({ fetchCiScorecard: vi.fn() }))
@@ -39,44 +41,44 @@ function setup(how: 'rows' | 'fail' | 'pending' = 'rows') {
   if (how === 'fail') vi.mocked(fetchCiScorecard).mockRejectedValue(new Error('CI scorecard: HTTP 502'))
   else if (how === 'pending') vi.mocked(fetchCiScorecard).mockReturnValue(new Promise(() => {}))
   else vi.mocked(fetchCiScorecard).mockResolvedValue(scorecard())
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><CiScorecardBlock /></QueryClientProvider>)
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><CiScoreStrip /></QueryClientProvider>)
 }
 
-// Origin: as above — one row per repository and one for CI itself, each item with its verdict and the number behind it.
-it('draws a row per repository and one for CI as provider, each cell with verdict and value', async () => {
+// Origin: as above — one row per repository and one for CI itself, on one line: a failing item is a pill with its
+// name, a passing one a dot with a title, an unmeasured one hollow.
+it('draws a row per repository and one for CI itself; only a failing item carries its name', async () => {
   setup()
   const platform = await screen.findByTestId('ci-score-row-bifrost-platform')
-  expect(platform).toHaveTextContent('bifrost-ci-platform · tier selective')
+  expect(screen.getByRole('heading', { name: 'Three-day scores' })).toBeInTheDocument()
   const failed = within(platform).getByTestId('ci-score-bifrost-platform-landing_time')
   expect(failed).toHaveTextContent('Landing time')
-  expect(failed).toHaveTextContent('fail')
-  expect(failed).toHaveTextContent('median 183 s')
-  expect(within(platform).getByTestId('ci-score-bifrost-platform-red_ratio')).toHaveTextContent('pass14 failed of 430')
-
-  const infra = screen.getByTestId('ci-score-row-bifrost-trade-infra')
-  expect(infra).toHaveTextContent('tier full')
-  const unmeasured = within(infra).getByTestId('ci-score-bifrost-trade-infra-follows_change')
-  expect(unmeasured).toHaveTextContent('unmeasured')
-  expect(unmeasured).toHaveTextContent('the pipeline reports no api-scope')
-
-  const provider = screen.getByTestId('ci-score-row-provider')
-  expect(provider).toHaveTextContent('CI as provider')
-  expect(within(provider).getByTestId('ci-score-provider-cleanup_keeps_up')).toHaveTextContent('0.6 h since it last succeeded')
-  expect(screen.getByText(/Read 2026-11-16 12:00Z; kept up to 10 min\./)).toBeInTheDocument()
+  expect(failed).toHaveAttribute('data-verdict', 'fail')
+  const passed = within(platform).getByTestId('ci-score-bifrost-platform-red_ratio')
+  expect(passed).toHaveTextContent('')
+  expect(passed).toHaveAttribute('title', 'Red runs: pass')
+  expect(screen.getByTestId('ci-score-bifrost-trade-infra-follows_change')).toHaveAttribute('title', 'Time follows the change: not measured')
+  expect(within(screen.getByTestId('ci-score-row-provider')).getByRole('button', { name: 'CI itself · Cleanup keeps up: pass' })).toBeInTheDocument()
+  expect(screen.queryByTestId('ci-score-detail')).toBeNull()
 })
 
-// Origin: as above — the pass lines are CI's and are published where the scores are.
-it('lists the pass line of every standard', async () => {
+// Origin: as above — the number behind a verdict and CI's pass line are one click away, for every item.
+it('opens an item\'s value and its pass line on click, and closes it on a second click', async () => {
   setup()
-  const lines = within(await screen.findByRole('list', { name: 'Pass lines' })).getAllByRole('listitem')
-  expect(lines.map(li => li.textContent)).toEqual([
-    'Landing time: median of the runs that tested a ready branch themselves is at most 120 s (at least 5 runs)',
-    'Red runs: at most 10% of completed runs failed',
-    'Cleanup keeps up: the job that deletes old runs last succeeded at most 2 h ago',
-  ])
+  fireEvent.click(await screen.findByTestId('ci-score-bifrost-platform-landing_time'))
+  const detail = screen.getByTestId('ci-score-detail')
+  expect(detail).toHaveTextContent('Landing time · bifrost-platform · fail · median 183 s')
+  expect(detail).toHaveTextContent('Pass line: median of the runs that tested a ready branch themselves is at most 120 s (at least 5 runs) · 247 samples · runs completed in the last 3 days · read 2026-11-16 12:00Z, kept up to 10 min')
+  fireEvent.click(screen.getByTestId('ci-score-provider-cleanup_keeps_up'))
+  expect(screen.getByTestId('ci-score-detail')).toHaveTextContent('Cleanup keeps up · CI itself · pass · 0.6 h since it last succeeded')
+  expect(screen.getByTestId('ci-score-detail')).toHaveTextContent('the job that deletes old runs last succeeded at most 2 h ago')
+  fireEvent.click(screen.getByTestId('ci-score-bifrost-trade-infra-follows_change'))
+  expect(screen.getByTestId('ci-score-detail')).toHaveTextContent('not measured · the pipeline reports no api-scope')
+  expect(screen.getByTestId('ci-score-detail')).toHaveTextContent('Pass line: not published for this item')
+  fireEvent.click(screen.getByTestId('ci-score-bifrost-trade-infra-follows_change'))
+  expect(screen.queryByTestId('ci-score-detail')).toBeNull()
 })
 
-// Origin: as above, and the page's rule that not read is not none — a failed read is one line, never an empty scorecard.
+// Origin: as above, and the page's rule that not read is not none — a failed read is one line, never an empty strip.
 it('a failed read shows one alert and no row; a read not yet answered shows loading', async () => {
   setup('fail')
   expect(await screen.findByRole('alert')).toHaveTextContent('The CI scorecard could not be read: CI scorecard: HTTP 502. The scores are not known.')

@@ -101,8 +101,8 @@ export async function fetchUnitsConfig(repo: string, signal?: AbortSignal): Prom
 }
 
 /** The CI runs retained for the project, newest first. */
-export async function fetchUnitsRuns(repo: string, signal?: AbortSignal): Promise<UnitsRuns> {
-  const value: unknown = await (await authedFetch('CI runs', `/api/v1/units/runs?repo=${encodeURIComponent(repo)}`, { signal })).json()
+export async function fetchUnitsRuns(repo: string, signal?: AbortSignal, limit?: number): Promise<UnitsRuns> {
+  const value: unknown = await (await authedFetch('CI runs', `/api/v1/units/runs?repo=${encodeURIComponent(repo)}${limit != null ? `&limit=${limit}` : ''}`, { signal })).json()
   if (!record(value) || !Array.isArray(value.runs)
     || !value.runs.every(r => record(r) && typeof r.name === 'string' && typeof r.asked === 'boolean' && Array.isArray(r.tasks))) {
     throw new Error('CI runs: incomplete answer; which runs are retained is not known')
