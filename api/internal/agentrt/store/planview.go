@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
@@ -251,6 +252,10 @@ func checkViewNote(body map[string]any) error {
 }
 
 func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
+
+// The artifact store checks every body with validateViewArtifact before it
+// keeps it. With no check registered it stores nothing (artifact.ErrNoCheck).
+func init() { artifact.RegisterCheck(validateViewArtifact) }
 
 // Known subprotocols are validated at artifact ingress as well as adoption;
 // an arbitrary other artifact remains compatible with the existing API.

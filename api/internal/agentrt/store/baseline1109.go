@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 )
 
 // Frozen evidence supplied by the Owner's AM-6 brief, sealed 2026-11-09.
@@ -40,7 +41,7 @@ func ImportBaseline1109(ctx context.Context, db DB) (int, error) {
 		if exists {
 			return nil
 		}
-		artifact, err := PutArtifact(ctx, tx, "controller", "report", "text/plain", []byte(baseline1109Evidence))
+		artifact, err := artifact.PutArtifact(ctx, tx, "controller", "report", "text/plain", []byte(baseline1109Evidence))
 		if err != nil {
 			return err
 		}

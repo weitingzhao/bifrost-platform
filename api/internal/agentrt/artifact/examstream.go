@@ -1,4 +1,4 @@
-package store
+package artifact
 
 // ExamsStream is the stream the executor exams wrote to (papers issued,
 // answers taken, scores) until the exams were removed on 2026-11-13: PROD's

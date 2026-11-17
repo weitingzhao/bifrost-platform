@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -20,7 +21,7 @@ import (
 // reads one, and an Agent host's token is shown no exam artifact here either.
 func (a *API) searchArtifacts(w http.ResponseWriter, r *http.Request) {
 	in := r.URL.Query()
-	q := store.ArtifactQuery{Task: in.Get("task"), Mission: in.Get("mission"), Author: in.Get("author"), Before: in.Get("before"),
+	q := artifact.ArtifactQuery{Task: in.Get("task"), Mission: in.Get("mission"), Author: in.Get("author"), Before: in.Get("before"),
 		HideExams: actuation.PrincipalFromContext(r.Context()).Role == actuation.RoleAgentd}
 	if s := in.Get("kind"); s != "" {
 		q.Kinds = strings.Split(s, ",")
@@ -35,13 +36,13 @@ func (a *API) searchArtifacts(w http.ResponseWriter, r *http.Request) {
 	}
 	if s := in.Get("limit"); s != "" {
 		n, err := strconv.Atoi(s)
-		if err != nil || n < 1 || n > store.ArtifactSearchLimit {
-			writeError(w, http.StatusBadRequest, "bad_request", "limit is 1 to "+strconv.Itoa(store.ArtifactSearchLimit))
+		if err != nil || n < 1 || n > artifact.ArtifactSearchLimit {
+			writeError(w, http.StatusBadRequest, "bad_request", "limit is 1 to "+strconv.Itoa(artifact.ArtifactSearchLimit))
 			return
 		}
 		q.Limit = n
 	}
-	list, next, err := store.SearchArtifacts(r.Context(), a.DB, q)
+	list, next, err := artifact.SearchArtifacts(r.Context(), a.DB, q)
 	if errors.Is(err, store.ErrInvalid) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return

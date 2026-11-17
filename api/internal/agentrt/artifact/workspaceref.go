@@ -1,4 +1,4 @@
-package store
+package artifact
 
 import "github.com/weitingzhao/bifrost-platform/api/internal/localpath"
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
@@ -385,7 +386,7 @@ func readPlanSource(ctx context.Context, tx pgx.Tx, remote remoteRead, b planvie
 			n.Reason = "Owner signoff lacks matching acceptance evidence"
 			return nil
 		}
-		if e := haveArtifacts(ctx, tx, signed.Evidence); e != nil {
+		if e := artifact.HaveArtifacts(ctx, tx, signed.Evidence); e != nil {
 			if !errors.Is(e, ErrState) {
 				return e
 			}

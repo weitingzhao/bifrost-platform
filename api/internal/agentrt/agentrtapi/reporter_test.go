@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 )
 
 var externalSpec = []byte(`{"v":1,"kind":"agentrt.external_work/v1","task":"reporter dispatch","executor":"codex","provider":"openai","repo":"platform","branch":"test","acceptance_refs":["PV1"],"estimate_minutes":[1,2]}`)
@@ -87,7 +87,7 @@ func TestReporterUploadScope(t *testing.T) {
 	s := server(t, pool)
 	var before int
 	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.artifact`).Scan(&before))
-	for kind := range store.ArtifactKinds {
+	for kind := range artifact.ArtifactKinds {
 		if kind == "other" {
 			continue
 		}

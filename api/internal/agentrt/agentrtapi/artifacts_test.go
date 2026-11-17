@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -19,10 +20,10 @@ func TestSearchArtifactsRoute(t *testing.T) {
 	var exam, handover string
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
 		var err error
-		if exam, err = store.PutArtifact(ctx, tx, "controller", "exam", "text/plain", []byte("an answer")); err != nil {
+		if exam, err = artifact.PutArtifact(ctx, tx, "controller", "exam", "text/plain", []byte("an answer")); err != nil {
 			return err
 		}
-		handover, err = store.PutArtifact(ctx, tx, "controller", "handover", "text/markdown", []byte("# handover"))
+		handover, err = artifact.PutArtifact(ctx, tx, "controller", "handover", "text/markdown", []byte("# handover"))
 		return err
 	}))
 	ids := func(out map[string]any) []string {

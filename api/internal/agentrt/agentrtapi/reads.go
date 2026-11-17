@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -31,7 +32,7 @@ func (a *API) getArtifact(w http.ResponseWriter, r *http.Request) {
 		return tx.QueryRow(r.Context(), `SELECT a.media_type, a.artifact_kind, b.body,
 		    $3 AND EXISTS (SELECT 1 FROM agentrt.event e WHERE e.event_stream_id = $2 AND e.body_json->>'artifact_id' = a.artifact_id),
 		    a.created_by_actor_id
-		  FROM agentrt.artifact a JOIN agentrt.artifact_blob b USING (artifact_id) WHERE a.artifact_id = $1`, id, store.ExamsStream, host).
+		  FROM agentrt.artifact a JOIN agentrt.artifact_blob b USING (artifact_id) WHERE a.artifact_id = $1`, id, artifact.ExamsStream, host).
 			Scan(&media, &kind, &body, &exam, &by)
 	})
 	if actuation.IsCollector(p) {
@@ -77,7 +78,7 @@ func (a *API) getRow(w http.ResponseWriter, r *http.Request, q, id string) {
 // (TD-377), the token included.
 func hiddenFrom(r *http.Request) []string {
 	if actuation.PrincipalFromContext(r.Context()).Role == actuation.RoleAgentd {
-		return []string{store.ExamsStream}
+		return []string{artifact.ExamsStream}
 	}
 	return []string{}
 }

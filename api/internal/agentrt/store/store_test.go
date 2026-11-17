@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
@@ -125,11 +126,11 @@ func newWorld(t *testing.T) *world {
 		}))
 	}
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		w.spec, err = store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# task\n"))
+		w.spec, err = artifact.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# task\n"))
 		if err != nil {
 			return err
 		}
-		w.impl, err = store.PutArtifact(ctx, tx, "controller", "task_spec", "application/json", []byte(`{"task":"task"}`))
+		w.impl, err = artifact.PutArtifact(ctx, tx, "controller", "task_spec", "application/json", []byte(`{"task":"task"}`))
 		return err
 	}))
 	return w

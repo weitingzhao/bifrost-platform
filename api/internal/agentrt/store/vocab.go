@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"slices"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 )
@@ -376,7 +377,7 @@ var fieldValues = map[string]map[string]value{
 	"host_state_changed":      {"from": oneOf("active", "draining", "retired"), "to": oneOf("active", "draining", "retired")},
 	"host_slots_set":          {"policy": oneOf("aimd", "fixed")},
 	"verification_recorded":   {"verification_id": verifyID, "method": oneOf("deterministic", "review", "gate", "landing_ci"), "verdict": oneOf("pass", "fail", "none"), "env": oneOf("dev", "stg", "prod")},
-	"artifact_put":            {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(ArtifactKinds)...)},
+	"artifact_put":            {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(artifact.ArtifactKinds)...)},
 	"policy_alert": {"rule": oneOf("approval_claim", "seat_alert", "local_path", "workspace_ref", "repeated_failure", "controller_failing", "disk_low",
 		"host_offline", "executor_unavailable", "presence_unjudged", "presence_deferred"),
 		"source": oneOf("task_spec", "message", "seat_answer", "seat_plan", "report", "verify", "review", "attempt", "controller",

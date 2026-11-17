@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 )
@@ -74,8 +75,8 @@ func prepareImport(req planimport.Request) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	if len(doc) > maxArtifactBytes {
-		return nil, "", invalid("plan import: the request is %d bytes; an artifact is at most %d", len(doc), maxArtifactBytes)
+	if len(doc) > artifact.MaxArtifactBytes {
+		return nil, "", invalid("plan import: the request is %d bytes; an artifact is at most %d", len(doc), artifact.MaxArtifactBytes)
 	}
 	sum := sha256.Sum256(doc)
 	return doc, "sha256:" + hex.EncodeToString(sum[:]), nil
@@ -121,7 +122,7 @@ func importOnce(ctx context.Context, tx pgx.Tx, actor string, req planimport.Req
 func importTree(ctx context.Context, tx pgx.Tx, actor string, req planimport.Request, doc []byte, reqID string, cause int64,
 	out *ImportResult) error {
 	root := req.Root.ID
-	if _, err := PutArtifact(ctx, tx, actor, "other", "application/json", doc); err != nil {
+	if _, err := artifact.PutArtifact(ctx, tx, actor, "other", "application/json", doc); err != nil {
 		return err
 	}
 	head, err := Append(ctx, tx, Event{Stream: PlanStream(root), Type: "legacy_imported", Actor: actor, Cause: cause,
@@ -153,7 +154,7 @@ func importTree(ctx context.Context, tx pgx.Tx, actor string, req planimport.Req
 			if err != nil {
 				return err
 			}
-			eid, err := PutArtifact(ctx, tx, actor, "other", "application/json", evidence)
+			eid, err := artifact.PutArtifact(ctx, tx, actor, "other", "application/json", evidence)
 			if err != nil {
 				return err
 			}

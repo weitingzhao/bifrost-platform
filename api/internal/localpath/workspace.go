@@ -14,7 +14,7 @@ import (
 // from its directory. agentd keeps an attempt's checkout at
 // <root>/tasks/<task>/a<n>, its output beside it at a<n>.out, a task's
 // siblings at <root>/tasks/<task>/<repo> (agentd.WorkspaceDir). The platform
-// refuses an artifact that names one (agentrt/store.WorkspaceRef); agentd
+// refuses an artifact that names one (agentrt/artifact.WorkspaceRef); agentd
 // withholds a check's output that still names one after it wrote its own
 // directories as "." and "..", as it does for H8 (agentd handIn). One rule,
 // used by both.

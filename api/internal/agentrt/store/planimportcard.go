@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
@@ -94,7 +95,7 @@ func ProposePlanImport(ctx context.Context, db DB, w Writer, key, reason string,
 		if err = tryImport(ctx, tx, req, doc, reqID); err != nil {
 			return nil, err
 		}
-		if _, err = PutArtifact(ctx, tx, w.Actor, "other", "application/json", doc); err != nil {
+		if _, err = artifact.PutArtifact(ctx, tx, w.Actor, "other", "application/json", doc); err != nil {
 			return nil, err
 		}
 		cardKey := canonKey(w.Actor, "import:"+key)

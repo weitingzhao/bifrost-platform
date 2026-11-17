@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopreadings"
 )
 
@@ -41,7 +42,7 @@ const errorKept = 4096
 func AlertFailingLoop(ctx context.Context, db DB, loop string, n int, errText string) error {
 	text := loopreadings.FailureText(loop, n, errText, errorKept)
 	return InTx(ctx, db, func(tx pgx.Tx) error {
-		art, err := PutArtifact(ctx, tx, "controller", "log_tail", "text/plain; charset=utf-8", []byte(text))
+		art, err := artifact.PutArtifact(ctx, tx, "controller", "log_tail", "text/plain; charset=utf-8", []byte(text))
 		if err != nil {
 			return err
 		}

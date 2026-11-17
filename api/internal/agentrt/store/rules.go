@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
@@ -399,7 +400,7 @@ func ProposeRule(ctx context.Context, db DB, w Writer, key, id string, text []by
 		if err != nil {
 			return nil, err
 		}
-		art, err := PutArtifact(ctx, tx, w.Actor, "other", "application/yaml", text)
+		art, err := artifact.PutArtifact(ctx, tx, w.Actor, "other", "application/yaml", text)
 		if err != nil {
 			return nil, err
 		}

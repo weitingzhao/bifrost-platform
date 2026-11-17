@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 )
@@ -50,7 +51,7 @@ func RecordManual(ctx context.Context, tx pgx.Tx, actor, stepID, manual, text st
 	if len(evidence) == 0 {
 		return fmt.Errorf("%w: a manual record needs evidence", ErrState)
 	}
-	if err := haveArtifacts(ctx, tx, evidence); err != nil {
+	if err := artifact.HaveArtifacts(ctx, tx, evidence); err != nil {
 		return err
 	}
 	root, err := stepRoot(ctx, tx, stepID)

@@ -36,12 +36,13 @@ var ledgerOwners = map[string]bool{"agentrt/eventlog": true, "agentrt/actor": tr
 // ledger's own Last, Has and HasBody) 67.
 var ledgerSQL = map[string]int{
 	"agentrt/agentrtapi":       5,
+	"agentrt/artifact":         2,
 	"agentrt/coord":            2,
 	"agentrt/deliveryreadings": 1,
 	"agentrt/evidence":         2,
 	"agentrt/loopreadings":     1,
 	"agentrt/planreadings":     12,
-	"agentrt/store":            37,
+	"agentrt/store":            35,
 	"agentrt/workregistration": 3,
 	"assessmentreadings":       1,
 	"bus/relay":                1,

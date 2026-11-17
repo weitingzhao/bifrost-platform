@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
@@ -52,7 +53,7 @@ func pvSecondRoot(t *testing.T, w *world) (string, planview.Binding) {
 func pvCorruptView(t *testing.T, w *world, body []byte) {
 	t.Helper()
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		artifact, err := store.PutArtifact(ctx, tx, "controller", "other", "application/json", body)
+		artifact, err := artifact.PutArtifact(ctx, tx, "controller", "other", "application/json", body)
 		if err != nil {
 			return err
 		}

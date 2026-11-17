@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
@@ -56,7 +57,7 @@ func database0009(t *testing.T) (*agentrttest.DB, *pgx.Conn, []migrate.File) {
 		return storekit.MoveMission(ctx, tx, "controller", "M-1", "active", "T50 fixture")
 	}))
 	must0010(t, store.InTx(ctx, rt, func(tx pgx.Tx) error {
-		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("T50 ordinary task"))
+		spec, err := artifact.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("T50 ordinary task"))
 		if err != nil {
 			return err
 		}

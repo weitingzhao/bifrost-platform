@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 )
@@ -197,7 +198,7 @@ func ValidateExternalDescription(raw []byte) error {
 
 func parseExternalDescription(raw []byte) (ExternalDescription, error) {
 	var d ExternalDescription
-	if len(raw) > maxArtifactBytes {
+	if len(raw) > artifact.MaxArtifactBytes {
 		return d, invalid("external description is at most 1 MiB")
 	}
 	v, err := canon.Parse(raw)

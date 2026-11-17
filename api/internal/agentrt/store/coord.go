@@ -5,6 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 )
 
@@ -14,7 +15,7 @@ import (
 // needs, registered at start: where a message's body is stored (PutArtifact)
 // and the record of a text that claims an approval (alertClaim).
 
-func init() { coord.Register(PutArtifact, alertClaim) }
+func init() { coord.Register(artifact.PutArtifact, alertClaim) }
 
 // MaxMessageBody is the largest message body (coord.MaxMessageBody).
 const MaxMessageBody = coord.MaxMessageBody

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
@@ -113,7 +114,7 @@ func (w *world) artifact(t *testing.T, kind, body string) string {
 	var id string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
-		id, err = store.PutArtifact(ctx, tx, "controller", kind, "text/plain", []byte(body))
+		id, err = artifact.PutArtifact(ctx, tx, "controller", kind, "text/plain", []byte(body))
 		return err
 	}))
 	return id

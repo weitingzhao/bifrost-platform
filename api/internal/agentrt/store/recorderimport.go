@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
@@ -72,8 +73,8 @@ func keptLog(log recorderimport.Log) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	if len(doc) > maxArtifactBytes {
-		return nil, "", invalid("recorder import: the log is %d bytes kept; an artifact is at most %d", len(doc), maxArtifactBytes)
+	if len(doc) > artifact.MaxArtifactBytes {
+		return nil, "", invalid("recorder import: the log is %d bytes kept; an artifact is at most %d", len(doc), artifact.MaxArtifactBytes)
 	}
 	sum := sha256.Sum256(doc)
 	return doc, "sha256:" + hex.EncodeToString(sum[:]), nil
@@ -136,7 +137,7 @@ func ProposeRecorderImport(ctx context.Context, db DB, w Writer, key, reason str
 		if err = tryRecorderImport(ctx, tx, log, doc, logID); err != nil {
 			return nil, err
 		}
-		if _, err = PutArtifact(ctx, tx, w.Actor, "other", "application/json", doc); err != nil {
+		if _, err = artifact.PutArtifact(ctx, tx, w.Actor, "other", "application/json", doc); err != nil {
 			return nil, err
 		}
 		cardKey := canonKey(w.Actor, "recorder:"+key)
@@ -278,7 +279,7 @@ func landRecorder(ctx context.Context, tx pgx.Tx, actor string, log recorderimpo
 	case other != "":
 		return 0, invalid("the recorder log of %s was already imported from %s; a log is imported once", log.Source.WorkID, other)
 	}
-	if _, err = PutArtifact(ctx, tx, actor, "other", "application/json", doc); err != nil {
+	if _, err = artifact.PutArtifact(ctx, tx, actor, "other", "application/json", doc); err != nil {
 		return 0, err
 	}
 	h, err := Append(ctx, tx, Event{Stream: stream, Type: "legacy_imported", Actor: actor, Cause: cause,

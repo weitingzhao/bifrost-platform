@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -290,7 +291,7 @@ var agentdKinds = map[string]bool{"report": true, "verify": true, "review": true
 // id in the path must be the hash of the body; the kind comes in the
 // X-Artifact-Kind header and must be one the schema has; an artifact with a
 // local path in it is refused unless its kind is one H8 lets through
-// (store.LocalPath). The first upload of a body records artifact_put, as
+// (artifact.LocalPath). The first upload of a body records artifact_put, as
 // the writer (agentd as its host, others as for proposals); uploading it
 // again is harmless.
 func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
@@ -306,7 +307,7 @@ func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "forbidden", "an agentd token must be bound to a host")
 		return
 	}
-	if !store.ArtifactKinds[kind] {
+	if !artifact.ArtifactKinds[kind] {
 		writeError(w, http.StatusBadRequest, "kind", fmt.Sprintf("X-Artifact-Kind %q is not an artifact kind", kind))
 		return
 	}
@@ -330,11 +331,11 @@ func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "hash", "the path is not the sha256 of the body")
 		return
 	}
-	if p, found := store.LocalPath(kind, body); found {
+	if p, found := artifact.LocalPath(kind, body); found {
 		a.refuse(w, r, host, kind, id, "local_path", "a local path in the artifact: "+p)
 		return
 	}
-	if ref, found := store.WorkspaceRef(kind, body); found {
+	if ref, found := artifact.WorkspaceRef(kind, body); found {
 		a.refuse(w, r, host, kind, id, "workspace_ref", "the artifact refers to a task's workspace: "+ref)
 		return
 	}

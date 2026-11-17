@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 )
 
@@ -39,7 +40,7 @@ func acceptanceSignoffBody(ctx context.Context, tx pgx.Tx, actor, step, ref stri
 	if err != nil {
 		return nil, err
 	}
-	if err = haveArtifacts(ctx, tx, ids); err != nil {
+	if err = artifact.HaveArtifacts(ctx, tx, ids); err != nil {
 		return nil, err
 	}
 	snap, err := readPlanFacts(ctx, tx)

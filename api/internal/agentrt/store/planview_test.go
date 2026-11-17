@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -33,7 +34,7 @@ func viewDoc(t *testing.T, w *world, version int) string {
 	var id string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
-		id, err = store.PutArtifact(ctx, tx, "controller", "other", "application/json", raw)
+		id, err = artifact.PutArtifact(ctx, tx, "controller", "other", "application/json", raw)
 		return err
 	}))
 	return id
@@ -54,7 +55,7 @@ func externalSpec(t *testing.T, w *world) string {
 	var id string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
-		id, err = store.PutArtifact(ctx, tx, "controller", "other", "application/json", []byte(`{"v":1,"kind":"agentrt.external_work/v1","task":"实现可见性","executor":"codex","provider":"openai","repo":"platform","branch":"w31/pv1","acceptance_refs":["PV1"],"estimate_minutes":[10,20]}`))
+		id, err = artifact.PutArtifact(ctx, tx, "controller", "other", "application/json", []byte(`{"v":1,"kind":"agentrt.external_work/v1","task":"实现可见性","executor":"codex","provider":"openai","repo":"platform","branch":"w31/pv1","acceptance_refs":["PV1"],"estimate_minutes":[10,20]}`))
 		return err
 	}))
 	return id
@@ -348,15 +349,15 @@ func TestPlanViewLargeSnapshot(t *testing.T) {
 	}))
 	raw, err = json.Marshal(d)
 	ok(t, err)
-	var artifact string
+	var view string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
-		artifact, err = store.PutArtifact(ctx, tx, "controller", "other", "application/json", raw)
+		view, err = artifact.PutArtifact(ctx, tx, "controller", "other", "application/json", raw)
 		return err
 	}))
 	a := &asker{}
 	zero := 0
-	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:large"), "large", d.Root, "large plan", []store.PlanChange{{Op: "adopt_plan_view", Artifact: artifact, ExpectedVersion: &zero}}, a.ask)
+	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:large"), "large", d.Root, "large plan", []store.PlanChange{{Op: "adopt_plan_view", Artifact: view, ExpectedVersion: &zero}}, a.ask)
 	ok(t, err)
 	a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
 	_, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
@@ -406,7 +407,7 @@ func TestPlanViewCrossRootAdoption(t *testing.T) {
 		var id string
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			var err error
-			id, err = store.PutArtifact(ctx, tx, "controller", "other", "application/json", b)
+			id, err = artifact.PutArtifact(ctx, tx, "controller", "other", "application/json", b)
 			return err
 		}))
 		return id

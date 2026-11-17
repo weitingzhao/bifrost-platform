@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
@@ -55,7 +56,7 @@ func pvArtifact(t *testing.T, w *world, d *planview.Document, bs ...planview.Bin
 	var id string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var e error
-		id, e = store.PutArtifact(ctx, tx, "controller", "other", "application/json", raw)
+		id, e = artifact.PutArtifact(ctx, tx, "controller", "other", "application/json", raw)
 		return e
 	}))
 	return id

@@ -1,15 +1,18 @@
-package store
+package artifact
 
 import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // Searching the artifacts (W-31 2.3, search_artifacts; the Owner 2026-10-21
@@ -59,6 +62,9 @@ type ArtifactMeta struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+// ulid is the shape of the ULID in a task's id (the vocabulary's, store/vocab.go).
+const ulid = `[0-9A-HJKMNP-TV-Z]{26}`
+
 var (
 	missionIDRE = regexp.MustCompile(`^M-[1-9][0-9]*$`)
 	taskIDRE    = regexp.MustCompile(`^t_` + ulid + `$`)
@@ -74,11 +80,11 @@ func artifactCursor(m ArtifactMeta) string {
 func parseArtifactCursor(s string) (time.Time, string, error) {
 	g := cursorRE.FindStringSubmatch(s)
 	if g == nil {
-		return time.Time{}, "", invalid("before is a cursor from a previous page (<microseconds>.<64 hex>), not %q", s)
+		return time.Time{}, "", eventlog.Invalid("before is a cursor from a previous page (<microseconds>.<64 hex>), not %q", s)
 	}
 	us, err := strconv.ParseInt(g[1], 10, 64)
 	if err != nil {
-		return time.Time{}, "", invalid("before is a cursor from a previous page, not %q", s)
+		return time.Time{}, "", eventlog.Invalid("before is a cursor from a previous page, not %q", s)
 	}
 	return time.UnixMicro(us), "sha256:" + g[2], nil
 }
@@ -87,21 +93,21 @@ func parseArtifactCursor(s string) (time.Time, string, error) {
 func (q *ArtifactQuery) check() error {
 	for _, k := range q.Kinds {
 		if !ArtifactKinds[k] {
-			return invalid("kind %q is not an artifact kind (%s)", k, strings.Join(keysOf(ArtifactKinds), ", "))
+			return eventlog.Invalid("kind %q is not an artifact kind (%s)", k, strings.Join(keysOf(ArtifactKinds), ", "))
 		}
 	}
 	switch {
 	case q.Task != "" && !taskIDRE.MatchString(q.Task):
-		return invalid("task is a task id (t_…), not %q", q.Task)
+		return eventlog.Invalid("task is a task id (t_…), not %q", q.Task)
 	case q.Mission != "" && !missionIDRE.MatchString(q.Mission):
-		return invalid("mission is a mission id (M-n), not %q", q.Mission)
-	case q.Author != "" && (kindOf(q.Author) == "" || len(q.Author) > maxActorName || !utf8.ValidString(q.Author) ||
+		return eventlog.Invalid("mission is a mission id (M-n), not %q", q.Mission)
+	case q.Author != "" && (actor.KindOf(q.Author) == "" || len(q.Author) > maxActorName || !utf8.ValidString(q.Author) ||
 		strings.ContainsRune(q.Author, 0)):
 		// What the database cannot hold as text is refused here, not left
 		// to fail there (review 478 B1).
-		return invalid("author is an actor's name, not %q", q.Author)
+		return eventlog.Invalid("author is an actor's name, not %q", q.Author)
 	case q.Limit < 0 || q.Limit > ArtifactSearchLimit:
-		return invalid("limit is 1 to %d", ArtifactSearchLimit)
+		return eventlog.Invalid("limit is 1 to %d", ArtifactSearchLimit)
 	}
 	if q.Limit == 0 {
 		q.Limit = ArtifactSearchDefault
@@ -111,7 +117,7 @@ func (q *ArtifactQuery) check() error {
 
 // SearchArtifacts answers q: at most q.Limit artifacts, newest first, and the
 // cursor of the next page ("" when this one is the last).
-func SearchArtifacts(ctx context.Context, db DB, q ArtifactQuery) ([]ArtifactMeta, string, error) {
+func SearchArtifacts(ctx context.Context, db eventlog.DB, q ArtifactQuery) ([]ArtifactMeta, string, error) {
 	if err := q.check(); err != nil {
 		return nil, "", err
 	}
@@ -140,7 +146,7 @@ func SearchArtifacts(ctx context.Context, db DB, q ArtifactQuery) ([]ArtifactMet
 		kinds = []string{}
 	}
 	var out []ArtifactMeta
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
+	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, artifactSearch, kinds, q.Task, q.Mission, q.Author, since, beforeAt, beforeID, q.HideExams,
 			ExamsStream, q.Limit+1)
 		if err != nil {
@@ -200,3 +206,12 @@ const artifactSearch = `WITH tasks AS (
 	    WHERE x.event_stream_id = $9 AND x.body_json->>'artifact_id' = a.artifact_id)))
 	ORDER BY a.created_at DESC, a.artifact_id DESC
 	LIMIT $10`
+
+func keysOf[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	slices.Sort(out)
+	return out
+}

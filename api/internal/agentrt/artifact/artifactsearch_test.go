@@ -1,6 +1,4 @@
-//bifrost:owner foundation
-
-package store_test
+package artifact_test
 
 import (
 	"errors"
@@ -10,12 +8,13 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-func search(t *testing.T, w *world, q store.ArtifactQuery) ([]string, string) {
+func search(t *testing.T, w *world, q artifact.ArtifactQuery) ([]string, string) {
 	t.Helper()
-	list, next, err := store.SearchArtifacts(ctx, w.rt, q)
+	list, next, err := artifact.SearchArtifacts(ctx, w.rt, q)
 	ok(t, err)
 	ids := make([]string, 0, len(list))
 	for _, m := range list {
@@ -40,9 +39,9 @@ func allArtifacts(t *testing.T, w *world, where string) []string {
 // artifact once; an Agent host is shown no exam artifact.
 func TestSearchArtifacts(t *testing.T) {
 	t.Parallel()
-	w := newKernelWorld(t)
+	w := newWorld(t)
 	thread := wr("thread:s1")
-	handover, _, err := store.UploadArtifact(ctx, w.rt, thread, "handover", "text/markdown", []byte("# handover\nwhat I judged"))
+	handover, _, err := artifact.UploadArtifact(ctx, w.rt, thread, "handover", "text/markdown", []byte("# handover\nwhat I judged"))
 	ok(t, err)
 	// No task has rows any more (0020): a task id finds nothing of its own.
 	impl := "t_01M5192P0JPMJAP63ZKRPXJ2VV"
@@ -53,20 +52,20 @@ func TestSearchArtifacts(t *testing.T) {
 	exam := w.artifact(t, "exam", "an answer")
 	paper := w.artifact(t, "other", "a paper put as other first")
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, aerr := store.Append(ctx, tx, store.Event{Stream: store.ExamsStream, Type: "artifact_put", Actor: "controller",
+		_, aerr := store.Append(ctx, tx, store.Event{Stream: artifact.ExamsStream, Type: "artifact_put", Actor: "controller",
 			Body: map[string]any{"artifact_id": paper, "artifact_kind": "other", "size_bytes": 26, "uploaded_by": "controller"}})
 		return aerr
 	}))
 
 	all := allArtifacts(t, w, "true")
-	if got, next := search(t, w, store.ArtifactQuery{Limit: 100}); !slices.Equal(got, all) || next != "" {
+	if got, next := search(t, w, artifact.ArtifactQuery{Limit: 100}); !slices.Equal(got, all) || next != "" {
 		t.Fatalf("everything: %v (next %q), want %v", got, next, all)
 	}
 	// Pages of two, chained, list each artifact once and in order.
 	var paged []string
 	before := ""
 	for i := 0; ; i++ {
-		got, next := search(t, w, store.ArtifactQuery{Limit: 2, Before: before})
+		got, next := search(t, w, artifact.ArtifactQuery{Limit: 2, Before: before})
 		paged = append(paged, got...)
 		if next == "" {
 			break
@@ -80,27 +79,27 @@ func TestSearchArtifacts(t *testing.T) {
 		t.Fatalf("paged %v, want %v", paged, all)
 	}
 
-	if got, _ := search(t, w, store.ArtifactQuery{Kinds: []string{"handover"}}); !slices.Equal(got, []string{handover}) {
+	if got, _ := search(t, w, artifact.ArtifactQuery{Kinds: []string{"handover"}}); !slices.Equal(got, []string{handover}) {
 		t.Fatalf("kind handover: %v", got)
 	}
-	if got, _ := search(t, w, store.ArtifactQuery{Author: "thread:s1"}); !slices.Equal(got, []string{handover}) {
+	if got, _ := search(t, w, artifact.ArtifactQuery{Author: "thread:s1"}); !slices.Equal(got, []string{handover}) {
 		t.Fatalf("author thread:s1: %v", got)
 	}
-	if got, _ := search(t, w, store.ArtifactQuery{Task: impl}); len(got) != 0 {
+	if got, _ := search(t, w, artifact.ArtifactQuery{Task: impl}); len(got) != 0 {
 		t.Fatalf("task %s: %v", impl, got)
 	}
-	got, _ := search(t, w, store.ArtifactQuery{Mission: "M-1"})
+	got, _ := search(t, w, artifact.ArtifactQuery{Mission: "M-1"})
 	if slices.Contains(got, report) || slices.Contains(got, handover) {
 		t.Fatalf("mission M-1 lists artifacts no record of it names: %v", got)
 	}
 	// A mission's own spec is still its record; its tasks' specs are not read.
-	if got, _ = search(t, w, store.ArtifactQuery{Mission: "M-2"}); !slices.Equal(got, []string{missionSpec}) {
+	if got, _ = search(t, w, artifact.ArtifactQuery{Mission: "M-2"}); !slices.Equal(got, []string{missionSpec}) {
 		t.Fatalf("mission M-2: %v", got)
 	}
-	if got, _ = search(t, w, store.ArtifactQuery{Mission: "M-2", Task: impl}); len(got) != 0 {
+	if got, _ = search(t, w, artifact.ArtifactQuery{Mission: "M-2", Task: impl}); len(got) != 0 {
 		t.Fatalf("a task of M-1 within M-2: %v", got)
 	}
-	if got, _ = search(t, w, store.ArtifactQuery{Task: store.NewTaskID()}); len(got) != 0 {
+	if got, _ = search(t, w, artifact.ArtifactQuery{Task: store.NewTaskID()}); len(got) != 0 {
 		t.Fatalf("a task that is not: %v", got)
 	}
 	// Since: an artifact stored now is listed, the earlier ones are not.
@@ -108,16 +107,16 @@ func TestSearchArtifacts(t *testing.T) {
 	cut := time.Now()
 	time.Sleep(10 * time.Millisecond)
 	late := w.artifact(t, "other", "stored after the cut")
-	if got, _ = search(t, w, store.ArtifactQuery{Since: cut}); !slices.Equal(got, []string{late}) {
+	if got, _ = search(t, w, artifact.ArtifactQuery{Since: cut}); !slices.Equal(got, []string{late}) {
 		t.Fatalf("since: %v, want %s", got, late)
 	}
 	// An Agent host is shown no exam artifact: of kind exam or named on the
 	// exams' stream.
-	got, _ = search(t, w, store.ArtifactQuery{HideExams: true, Limit: 100})
+	got, _ = search(t, w, artifact.ArtifactQuery{HideExams: true, Limit: 100})
 	if slices.Contains(got, exam) || slices.Contains(got, paper) || len(got) != len(all)+1-2 {
 		t.Fatalf("hidden from a host: %v", got)
 	}
-	if got, _ = search(t, w, store.ArtifactQuery{Limit: 100}); !slices.Contains(got, exam) || !slices.Contains(got, paper) {
+	if got, _ = search(t, w, artifact.ArtifactQuery{Limit: 100}); !slices.Contains(got, exam) || !slices.Contains(got, paper) {
 		t.Fatalf("the exams are listed to others: %v", got)
 	}
 }
@@ -126,20 +125,20 @@ func TestSearchArtifacts(t *testing.T) {
 // error, never answered with something else.
 func TestSearchArtifactsRefusals(t *testing.T) {
 	t.Parallel()
-	w := newKernelWorld(t)
-	for name, q := range map[string]store.ArtifactQuery{
+	w := newWorld(t)
+	for name, q := range map[string]artifact.ArtifactQuery{
 		"kind":     {Kinds: []string{"report", "patch"}},
 		"task":     {Task: "t1"},
 		"mission":  {Mission: "M-0"},
 		"author":   {Author: "someone"},
 		"nul":      {Author: "thread:a\x00b"},
 		"utf8":     {Author: "thread:\xff"},
-		"limit":    {Limit: store.ArtifactSearchLimit + 1},
+		"limit":    {Limit: artifact.ArtifactSearchLimit + 1},
 		"negative": {Limit: -1},
 		"before":   {Before: "2026-10-21T00:00:00Z"},
 		"digest":   {Before: "1792600000000000.ABC"},
 	} {
-		if _, _, err := store.SearchArtifacts(ctx, w.rt, q); !errors.Is(err, store.ErrInvalid) {
+		if _, _, err := artifact.SearchArtifacts(ctx, w.rt, q); !errors.Is(err, store.ErrInvalid) {
 			t.Errorf("%s: %v, want invalid", name, err)
 		}
 	}
@@ -150,7 +149,7 @@ func TestSearchArtifactsRefusals(t *testing.T) {
 // time, in their digests' order; exam artifacts never on any page of a host's.
 func TestSearchArtifactsEdges(t *testing.T) {
 	t.Parallel()
-	w := newKernelWorld(t)
+	w := newWorld(t)
 	// One transaction: created_at is its start, the same microsecond for all three.
 	var a, b, exam string
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
@@ -159,7 +158,7 @@ func TestSearchArtifactsEdges(t *testing.T) {
 			id         *string
 			kind, body string
 		}{{&a, "report", "the first of a microsecond"}, {&b, "report", "the second of it"}, {&exam, "exam", "an answer of the same time"}} {
-			if *x.id, err = store.PutArtifact(ctx, tx, "controller", x.kind, "text/plain", []byte(x.body)); err != nil {
+			if *x.id, err = artifact.PutArtifact(ctx, tx, "controller", x.kind, "text/plain", []byte(x.body)); err != nil {
 				return err
 			}
 		}
@@ -178,7 +177,7 @@ func TestSearchArtifactsEdges(t *testing.T) {
 	}{
 		{at.Add(-time.Nanosecond), true}, {at, true}, {at.Add(time.Nanosecond), false}, {at.Add(time.Microsecond), false},
 	} {
-		got, _ := search(t, w, store.ArtifactQuery{Kinds: []string{"report"}, Since: c.since})
+		got, _ := search(t, w, artifact.ArtifactQuery{Kinds: []string{"report"}, Since: c.since})
 		if in := slices.Contains(got, a) && slices.Contains(got, b); in != c.in || (!c.in && len(got) != 0) {
 			t.Errorf("since %s: %v, want listed %v", c.since.Format(time.RFC3339Nano), got, c.in)
 		}
@@ -187,8 +186,8 @@ func TestSearchArtifactsEdges(t *testing.T) {
 	want := []string{a, b}
 	slices.Sort(want)
 	slices.Reverse(want)
-	first, next := search(t, w, store.ArtifactQuery{Kinds: []string{"report"}, Since: at, Limit: 1})
-	second, last := search(t, w, store.ArtifactQuery{Kinds: []string{"report"}, Since: at, Limit: 1, Before: next})
+	first, next := search(t, w, artifact.ArtifactQuery{Kinds: []string{"report"}, Since: at, Limit: 1})
+	second, last := search(t, w, artifact.ArtifactQuery{Kinds: []string{"report"}, Since: at, Limit: 1, Before: next})
 	if !slices.Equal(append(first, second...), want) || next == "" || last != "" {
 		t.Fatalf("one a page: %v then %v (next %q, last %q), want %v", first, second, next, last, want)
 	}
@@ -207,7 +206,7 @@ func TestSearchArtifactsEdges(t *testing.T) {
 		if i > len(visible) {
 			t.Fatalf("a host's paging did not end after %d pages: %v", i, paged)
 		}
-		got, n := search(t, w, store.ArtifactQuery{HideExams: true, Limit: 1, Before: before})
+		got, n := search(t, w, artifact.ArtifactQuery{HideExams: true, Limit: 1, Before: before})
 		if len(got) != 1 {
 			t.Fatalf("page %d of a host's: %v (next %q), want one", i, got, n)
 		}
