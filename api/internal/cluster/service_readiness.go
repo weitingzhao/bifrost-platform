@@ -296,46 +296,57 @@ func evalRedisDomain(snap readinessSnapshot) ServiceDomainView {
 }
 
 func evalGPUDomain(snap readinessSnapshot) ServiceDomainView {
-	gpuNodes := filterNodes(snap.nodes, func(n NodeView) bool {
-		return hasCapabilityID(n, "gpu-pool")
-	})
-	demand := deploymentDesiredReplicas(snap, "ai", "ollama") > 0
-	deps := []ServiceDependencyView{
-		elasticPoolDep(snap, "gpu", "GPU node pool", gpuNodes, demand),
+	if computeReadings.GPUDomain == nil {
+		return unboundDomain("gpu", "GPU / AI", "compute-readings", "Compute readings")
 	}
-	if len(gpuNodes) == 0 {
-		deps = append(deps, ServiceDependencyView{
-			ID: "gpu-nodes", Label: "GPU nodes",
-			Reachability: probe.ReachDegraded, Detail: "no workload=gpu node registered",
-		})
-	} else {
-		deps = append(deps, gpuNodesDep(gpuNodes, demand))
-	}
-	wl := deploymentDep(snap, "ai", "ollama", "Ollama (ai)")
-	if wl.Reachability == probe.ReachDegraded && strings.Contains(wl.Detail, "not deployed") {
-		wl.Detail = "scaled to zero or not deployed (make gpu-ollama-up)"
-	}
-	deps = append(deps, wl)
-	domain := finalizeDomain("gpu", "GPU / AI", deps, "Elastic compute on gpu-server")
-	return applyElasticDomainVerdict(domain, gpuNodes, demand, "Standby — no demand", "Compute needed but GPU node offline")
+	return computeReadings.GPUDomain(elasticInput(snap))
 }
 
 func evalWarehouseDomain(snap readinessSnapshot) ServiceDomainView {
-	whNodes := filterNodes(snap.nodes, func(n NodeView) bool {
-		return hasCapabilityID(n, "warehouse") || hasCapabilityID(n, "gpu-pool")
-	})
-	demand := deploymentDesiredReplicas(snap, "data-warehouse", "minio") > 0
-	deps := []ServiceDependencyView{
-		elasticNodeCovDep(snap, "warehouse", "Warehouse nodes", demand),
-		elasticPoolDep(snap, "gpu", "GPU / warehouse host", whNodes, demand),
+	if computeReadings.WarehouseDomain == nil {
+		return unboundDomain("warehouse", "Data warehouse", "compute-readings", "Compute readings")
 	}
-	wl := deploymentDep(snap, "data-warehouse", "minio", "MinIO (data-warehouse)")
-	if wl.Reachability == probe.ReachDegraded && (strings.Contains(wl.Detail, "standby") || strings.Contains(wl.Detail, "scaled to zero")) {
-		wl.Detail = "scaled to zero — make gpu-warehouse-up to start"
+	return computeReadings.WarehouseDomain(elasticInput(snap))
+}
+
+// unboundDomain is a domain whose reader was not bound: not ready rather
+// than unknown, since an unknown dependency counts as satisfied in
+// domainStatusFromDeps and unbound must not read as ready.
+func unboundDomain(id, label, depID, depLabel string) ServiceDomainView {
+	return finalizeDomain(id, label, []ServiceDependencyView{{ID: depID, Label: depLabel,
+		Reachability: probe.ReachFail, Detail: "no reader is bound"}}, "")
+}
+
+// elasticInput is what service readiness has gathered, in the shape compute's
+// readings take (resourceview.ElasticSnapshot).
+func elasticInput(snap readinessSnapshot) resourceview.ElasticSnapshot {
+	nodes := make([]resourceview.ElasticNode, len(snap.nodes))
+	for i, n := range snap.nodes {
+		nodes[i] = resourceview.ElasticNode{Name: n.Name, Status: n.Status, ElasticMode: n.ElasticMode,
+			Unschedulable: n.Unschedulable, Reachability: n.Reachability, CapabilityIDs: capabilityIDsFromView(n)}
 	}
-	deps = append(deps, wl)
-	domain := finalizeDomain("warehouse", "Data warehouse", deps, "MinIO object store on gpu-server")
-	return applyElasticDomainVerdict(domain, whNodes, demand, "Standby — no demand", "Compute needed but warehouse node offline")
+	coverage := make(map[string]resourceview.ElasticCoverage, len(snap.nodeCoverage))
+	for id, c := range snap.nodeCoverage {
+		coverage[id] = resourceview.ElasticCoverage{NodesReady: c.NodesReady, NodesTotal: c.NodesTotal, NodeNames: c.NodeNames}
+	}
+	return resourceview.ElasticSnapshot{
+		Nodes:        nodes,
+		NodeCoverage: coverage,
+		DesiredReplicas: func(ns, name string) int32 {
+			d, ok := snap.deployments[ns+"/"+name]
+			if !ok {
+				return 0
+			}
+			if d.Spec.Replicas != nil {
+				return *d.Spec.Replicas
+			}
+			return d.Status.Replicas
+		},
+		PoolDep:       func(id, label string) ServiceDependencyView { return poolDep(snap, id, label) },
+		NodeCovDep:    func(id, label string) ServiceDependencyView { return nodeCovDep(snap, id, label) },
+		DeploymentDep: func(ns, name, label string) ServiceDependencyView { return deploymentDep(snap, ns, name, label) },
+		Finalize:      finalizeDomain,
+	}
 }
 
 func evalWorkersDomain(snap readinessSnapshot) ServiceDomainView {
@@ -559,162 +570,6 @@ func schedulableAny(nodes []NodeView) (ready, total int) {
 	return ready, total
 }
 
-func gpuNodesDep(nodes []NodeView, demand bool) ServiceDependencyView {
-	ready := 0
-	names := make([]string, 0, len(nodes))
-	standby := 0
-	for _, n := range nodes {
-		names = append(names, n.Name)
-		if n.ElasticMode == "standby" || (n.Unschedulable && n.Status != "Ready") {
-			standby++
-			continue
-		}
-		if n.Status == "Ready" && n.Reachability == probe.ReachOK {
-			ready++
-		}
-	}
-	reach := probe.ReachOK
-	detail := fmt.Sprintf("%d/%d active", ready, len(nodes))
-	if ready == 0 && standby > 0 {
-		if demand {
-			reach = probe.ReachFail
-			detail = fmt.Sprintf("Compute needed but node offline (%s)", strings.Join(names, ", "))
-		} else {
-			// Expected off — neutral reachability.
-			reach = probe.ReachOK
-			detail = fmt.Sprintf("standby — no demand (%s)", strings.Join(names, ", "))
-		}
-	} else if ready == 0 {
-		reach = probe.ReachFail
-		detail = "GPU nodes not ready"
-	}
-	return ServiceDependencyView{ID: "gpu-nodes", Label: "GPU nodes", Reachability: reach, Detail: detail}
-}
-
-func deploymentDesiredReplicas(snap readinessSnapshot, ns, name string) int32 {
-	d, ok := snap.deployments[ns+"/"+name]
-	if !ok {
-		return 0
-	}
-	if d.Spec.Replicas != nil {
-		return *d.Spec.Replicas
-	}
-	return d.Status.Replicas
-}
-
-func nodesAllElasticStandby(nodes []NodeView) bool {
-	if len(nodes) == 0 {
-		return false
-	}
-	for _, n := range nodes {
-		if n.ElasticMode == "standby" {
-			continue
-		}
-		// Any Ready/active node breaks the all-standby rollup.
-		if n.Status == "Ready" && n.Reachability == probe.ReachOK {
-			return false
-		}
-		if n.ElasticMode == "active" {
-			return false
-		}
-		// Non-elastic NotReady is not "elastic standby".
-		if n.ElasticMode == "" {
-			return false
-		}
-	}
-	return countElasticStandby(nodes) == len(nodes)
-}
-
-// elasticPoolDep — GPU/warehouse pools may be powered off with no demand (expected).
-func elasticPoolDep(snap readinessSnapshot, id, label string, nodes []NodeView, demand bool) ServiceDependencyView {
-	if nodesAllElasticStandby(nodes) || (len(nodes) > 0 && countElasticStandby(nodes) == len(nodes)) {
-		if demand {
-			return ServiceDependencyView{
-				ID: "pool-" + id, Label: label,
-				Reachability: probe.ReachFail,
-				Detail:       "Compute needed but node offline",
-			}
-		}
-		return ServiceDependencyView{
-			ID: "pool-" + id, Label: label,
-			Reachability: probe.ReachOK,
-			Detail:       "standby — no demand",
-		}
-	}
-	return poolDep(snap, id, label)
-}
-
-func countElasticStandby(nodes []NodeView) int {
-	n := 0
-	for _, node := range nodes {
-		if node.ElasticMode == "standby" {
-			n++
-		}
-	}
-	return n
-}
-
-// elasticNodeCovDep — warehouse/gpu coverage when the only matching nodes are elastic standby.
-func elasticNodeCovDep(snap readinessSnapshot, id, label string, demand bool) ServiceDependencyView {
-	base := nodeCovDep(snap, id, label)
-	if base.Reachability == probe.ReachOK {
-		return base
-	}
-	c, ok := snap.nodeCoverage[id]
-	if !ok || c.NodesTotal == 0 {
-		return base
-	}
-	// All labeled nodes present but none Ready — treat as standby when no demand.
-	if c.NodesReady == 0 && !demand {
-		return ServiceDependencyView{
-			ID: id, Label: label,
-			Reachability: probe.ReachOK,
-			Detail:       fmt.Sprintf("standby — no demand (%s)", strings.Join(c.NodeNames, ", ")),
-		}
-	}
-	if c.NodesReady == 0 && demand {
-		return ServiceDependencyView{
-			ID: id, Label: label,
-			Reachability: probe.ReachFail,
-			Detail:       fmt.Sprintf("Compute needed but node offline (%s)", strings.Join(c.NodeNames, ", ")),
-		}
-	}
-	return base
-}
-
-// applyElasticDomainVerdict — product formula for GPU/Warehouse elastic domains.
-func applyElasticDomainVerdict(
-	domain ServiceDomainView,
-	nodes []NodeView,
-	demand bool,
-	standbySummary, demandSummary string,
-) ServiceDomainView {
-	standbyNodes := countElasticStandby(nodes) > 0 || nodesAllElasticStandby(nodes)
-	if !standbyNodes && !demand {
-		// Workload scaled to zero on a ready host still counts as standby.
-		if domain.Status == "standby" {
-			domain.Reachability = probe.ReachOK
-			if domain.Summary == "" || strings.Contains(domain.Summary, "scaled to zero") {
-				domain.Summary = standbySummary
-			}
-		}
-		return domain
-	}
-	if standbyNodes && !demand {
-		domain.Status = "standby"
-		domain.Reachability = probe.ReachOK
-		domain.Summary = standbySummary
-		return domain
-	}
-	if standbyNodes && demand {
-		domain.Status = "unavailable"
-		domain.Reachability = probe.ReachFail
-		domain.Summary = demandSummary
-		return domain
-	}
-	return domain
-}
-
 func deploymentDep(snap readinessSnapshot, ns, name, label string) ServiceDependencyView {
 	key := ns + "/" + name
 	d, ok := snap.deployments[key]
@@ -784,25 +639,6 @@ func findDeploymentByPrefix(snap readinessSnapshot, namespace, prefix string) *a
 		}
 	}
 	return best
-}
-
-func hasCapabilityID(n NodeView, id string) bool {
-	for _, c := range n.Capabilities {
-		if c.ID == id {
-			return true
-		}
-	}
-	return false
-}
-
-func filterNodes(nodes []NodeView, pred func(NodeView) bool) []NodeView {
-	out := make([]NodeView, 0)
-	for _, n := range nodes {
-		if pred(n) {
-			out = append(out, n)
-		}
-	}
-	return out
 }
 
 // appDeployRefs is one ref to the named Deployment per application namespace.

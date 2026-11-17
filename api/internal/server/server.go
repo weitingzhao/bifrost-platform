@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/elasticreadings"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/appreadings"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
@@ -175,6 +177,8 @@ func New(cfg *config.Config) (*Server, error) {
 	clusterH.Service().BindPools(placement.ClusterPools)
 	// The tenant domain reads its applications and data from what cluster gathers.
 	cluster.BindAppReadings(cluster.AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain, FreshnessDatabases: appreadings.FreshnessDatabases})
+	// The compute domain reads the elastic domains (GPU, data warehouse) of service readiness.
+	cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain})
 	ibgatewayH := ibgateway.NewHandler(clusterH.Service(), audit)
 	if role.RunsWorkers() {
 		ibgatewayH.StartBackground(context.Background(), audit)

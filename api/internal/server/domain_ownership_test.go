@@ -82,4 +82,8 @@ func TestServerBindsThePoolEvaluator(t *testing.T) {
 	if !strings.Contains(string(src), "cluster.BindAppReadings(cluster.AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain, FreshnessDatabases: appreadings.FreshnessDatabases})") {
 		t.Fatal("server.go does not bind tenant/appreadings to the cluster package")
 	}
+	// And for compute's readings of the elastic domains (cluster.BindComputeReadings).
+	if !strings.Contains(string(src), "cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain})") {
+		t.Fatal("server.go does not bind elasticreadings to the cluster package")
+	}
 }

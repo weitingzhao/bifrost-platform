@@ -27,3 +27,20 @@ var appReadings AppReadings
 // BindAppReadings sets the reader. Without one the applications domain is
 // unavailable and the databases carry no verdict.
 func BindAppReadings(r AppReadings) { appReadings = r }
+
+// ComputeReadings is how the elastic compute domains of service readiness
+// (GPU, data warehouse) are read from what this package gathers: when a pool
+// that is powered off is standby and when it is missing compute is the
+// compute domain's reading. The server binds elasticreadings. Until
+// 2026-11-16 those functions were this package's.
+type ComputeReadings struct {
+	GPUDomain       func(resourceview.ElasticSnapshot) ServiceDomainView
+	WarehouseDomain func(resourceview.ElasticSnapshot) ServiceDomainView
+}
+
+// computeReadings is bound once, at start-up, as appReadings is.
+var computeReadings ComputeReadings
+
+// BindComputeReadings sets the reader. Without one the two domains are
+// unavailable.
+func BindComputeReadings(r ComputeReadings) { computeReadings = r }

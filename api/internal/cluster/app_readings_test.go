@@ -3,6 +3,8 @@ package cluster
 import (
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/elasticreadings"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/appreadings"
 )
@@ -13,6 +15,21 @@ func init() { bindTenantReadings() }
 
 func bindTenantReadings() {
 	BindAppReadings(AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain, FreshnessDatabases: appreadings.FreshnessDatabases})
+	BindComputeReadings(ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain})
+}
+
+// Origin: 2026-11-16, the GPU and warehouse domains are read through
+// ComputeReadings (the functions moved to elasticreadings). Unbound, they
+// must not read as ready or as standby. The other tests of this package are
+// the positive control: bound, the domains are evaluated as before.
+func TestElasticDomainsAreUnavailableWithoutAReader(t *testing.T) {
+	BindComputeReadings(ComputeReadings{})
+	t.Cleanup(bindTenantReadings)
+	for _, d := range []ServiceDomainView{evalGPUDomain(readinessSnapshot{}), evalWarehouseDomain(readinessSnapshot{})} {
+		if d.Reachability != probe.ReachFail || d.Status != "unavailable" {
+			t.Fatalf("unbound: %+v", d)
+		}
+	}
 }
 
 // Origin: 2026-11-16, cluster stopped importing tenant/appreadings (the

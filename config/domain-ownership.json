@@ -1080,6 +1080,13 @@
       ],
       "status": "assigned",
       "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the platform's own patrol: it reads the checklist signals and repairs the platform and the cluster through platform routes. It serves no one domain; its tenant items are read through signals a tenant binds. It had no row."
+    },
+    "api/internal/elasticreadings": {
+      "domains": [
+        "compute"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-16 cluster split, first block: the readings of the elastic compute domains of service readiness (GPU / AI, data warehouse) and the eight functions that decide standby against missing compute, moved from cluster as they were. cluster gathers the inputs and binds this package (cluster.BindComputeReadings); it imports only probe and resourceview."
     }
   },
   "frontend": {
