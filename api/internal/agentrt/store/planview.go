@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 )
@@ -243,11 +242,7 @@ func checkViewNote(body map[string]any) error {
 		}
 	}
 	if raw, ok := body["external_work"]; ok {
-		var n externalwork.ExternalNote
-		if err := strictViewValue(raw, &n); err != nil {
-			return err
-		}
-		return n.Validate()
+		return checkExternalNote(raw)
 	}
 	return nil
 }
@@ -276,7 +271,7 @@ func validateViewArtifact(kind string, raw []byte) error {
 			return invalid("plan view artifact: %v", err)
 		}
 	case "agentrt.external_work/v1":
-		if _, err := externalwork.ParseExternalDescription(raw); err != nil {
+		if err := checkExternalDescription(raw); err != nil {
 			return err
 		}
 	}

@@ -178,7 +178,10 @@ func decide(ctx context.Context, db DB, p pendingChange, decision, reason string
 	did := false
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		artifact, isImport := importOf(p.changes)
-		log, isRecorder := recorderImportOf(p.changes)
+		log, isRecorder, err := recorderImportLog(p.changes)
+		if err != nil {
+			return err
+		}
 		switch {
 		case isRecorder:
 			// A recorder log's stream is its own lock (landRecorder).
@@ -223,7 +226,7 @@ func decide(ctx context.Context, db DB, p pendingChange, decision, reason string
 				return err
 			}
 		case decision == "applied" && isRecorder:
-			if err = decideRecorderImport(ctx, tx, log, ev.EventID); err != nil {
+			if err = decideRecorderImportLog(ctx, tx, log, ev.EventID); err != nil {
 				return err
 			}
 		case decision == "applied":

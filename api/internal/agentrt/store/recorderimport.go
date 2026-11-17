@@ -32,6 +32,12 @@ import (
 // is imported once: the same kept log again answers that it was; another
 // log of the same work is refused.
 
+// The plan's decision pass and the progress projection reach the recorder
+// import through the plan code's ports (planports.go).
+func init() {
+	BindPlanRecorderImport(RecorderImportPorts{LogOf: recorderImportOf, Decide: decideRecorderImport})
+}
+
 // OpRecorderImport is the change a recorder import proposal holds.
 const OpRecorderImport = "recorder_import"
 
