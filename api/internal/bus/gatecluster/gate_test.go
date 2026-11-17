@@ -324,7 +324,8 @@ func TestTheKeptRunDropsTheHeavyFields(t *testing.T) {
 	}
 	raw, _ := json.Marshal(s.Object)
 	fullRaw, _ := json.Marshal(full.Object)
-	if len(raw) > 600 || strings.Contains(string(raw), "mmmm") || strings.Contains(string(raw), "uiRevision") || strings.Contains(string(raw), `"other"`) {
+	// uiRevision is kept since 2026-11-17 (head-release reads it from here).
+	if len(raw) > 600 || strings.Contains(string(raw), "mmmm") || strings.Contains(string(raw), `"other"`) {
 		t.Errorf("slim run is %d bytes (full %d): %s", len(raw), len(fullRaw), raw)
 	}
 	// The positive control: what is read survives.

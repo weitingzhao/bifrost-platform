@@ -104,7 +104,8 @@ func TestSnapshotAnswersAsAListOfTheSameRuns(t *testing.T) {
 			t.Errorf("%s: object reads back as %+v, was %+v", got.Name, back, got)
 		}
 		raw, _ := json.Marshal(obj.Object)
-		for _, gone := range []string{"pipelineSpec", "managedFields", "childReferences", "not-kept", "uiRevision", "managed-by", "mmmm"} {
+		// uiRevision is kept since 2026-11-17 (head-release reads it from here).
+		for _, gone := range []string{"pipelineSpec", "managedFields", "childReferences", "not-kept", "managed-by", "mmmm"} {
 			if strings.Contains(string(raw), gone) {
 				t.Errorf("%s: the cached object keeps %s: %s", got.Name, gone, raw)
 			}

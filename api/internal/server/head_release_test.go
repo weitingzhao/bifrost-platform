@@ -166,3 +166,22 @@ func TestHeadReleaseWakesOnTheWindow(t *testing.T) {
 		}
 	}
 }
+
+// 2026-11-17: head-release listed every run in cicd on each read (~470
+// pipelineruns LISTs in 10 minutes with the PROD shadow). It now asks for its
+// pipeline's runs only; a run of another pipeline returned anyway is still
+// left out.
+func TestHeadReleaseAsksForItsPipelineOnly(t *testing.T) {
+	var asked []string
+	run := func(name, pipeline string) unstructured.Unstructured {
+		return unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": name}, "spec": map[string]any{"pipelineRef": map[string]any{"name": pipeline}}}}
+	}
+	w := &headWorld{runs: func(_ context.Context, pipeline string) ([]unstructured.Unstructured, error) {
+		asked = append(asked, pipeline)
+		return []unstructured.Unstructured{run("a", "bifrost-deliver-platform"), run("b", "other")}, nil
+	}}
+	got, err := w.Runs(context.Background(), "bifrost-deliver-platform")
+	if err != nil || len(asked) != 1 || asked[0] != "bifrost-deliver-platform" || len(got) != 1 || got[0].Name != "a" {
+		t.Fatalf("asked %v, got %+v, err %v", asked, got, err)
+	}
+}

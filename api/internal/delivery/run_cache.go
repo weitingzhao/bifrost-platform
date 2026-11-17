@@ -274,3 +274,20 @@ func WriteBusReaderMetrics(b *strings.Builder) {
 		}
 	}
 }
+
+// CachedRunsOf is a pipeline's runs from the bus run cache when it is synced
+// (ok false otherwise): what head-release reads each pass instead of listing
+// every run of its pipeline (2026-11-17, ~470 LISTs in 10 minutes). The
+// start itself still reads the cluster (StartDeliveryIfFree).
+func (s *Service) CachedRunsOf(pipeline string) ([]unstructured.Unstructured, bool) {
+	r := s.syncedCache()
+	if r == nil {
+		return nil, false
+	}
+	return r.cache.Objects(pipeline), true
+}
+
+// CachedRunsOf is Service.CachedRunsOf for the server's wiring.
+func (h *Handler) CachedRunsOf(pipeline string) ([]unstructured.Unstructured, bool) {
+	return h.svc.CachedRunsOf(pipeline)
+}

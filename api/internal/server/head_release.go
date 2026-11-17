@@ -48,10 +48,12 @@ func headReleaseOn() bool {
 // headWorld is headrelease.World on this process's Gitea access, ledger and
 // delivery service.
 type headWorld struct {
-	head  func(ctx context.Context, repo string) (string, error)
-	ci    delivery.CIReader
-	db    func() store.DB
-	runs  func(ctx context.Context) ([]unstructured.Unstructured, error)
+	head func(ctx context.Context, repo string) (string, error)
+	ci   delivery.CIReader
+	db   func() store.DB
+	// runs is one pipeline's runs: the bus run cache when it is synced,
+	// else the cluster's list of that pipeline.
+	runs  func(ctx context.Context, pipeline string) ([]unstructured.Unstructured, error)
 	start func(ctx context.Context, principal, pipeline, revision string, params map[string]string) (delivery.PipelineRunView, string, error)
 	// frozen reports a release freeze someone set, and its reason.
 	frozen func(ctx context.Context) (bool, string)
@@ -121,7 +123,7 @@ func (w *headWorld) Runs(ctx context.Context, pipeline string) ([]headrelease.Ru
 	// Every call lists again: a step reads the runs a second time just
 	// before it starts, and that reading must be the cluster's, not this
 	// pass's memory of it.
-	items, err := w.runs(ctx)
+	items, err := w.runs(ctx, pipeline)
 	if err != nil {
 		return nil, err
 	}
@@ -254,8 +256,16 @@ func (s *Server) headWorldOf() *headWorld {
 		head: s.agentRuntimeMains(),
 		ci:   ledgerCI(db, tree),
 		db:   db,
-		runs: func(ctx context.Context) ([]unstructured.Unstructured, error) {
-			return s.delivery.PipelineRunObservations(kubemetrics.WithSite(ctx, "head-release"))
+		runs: func(ctx context.Context, pipeline string) ([]unstructured.Unstructured, error) {
+			// The bus run cache when it is synced: a pass, and the PROD
+			// shadow once a minute, read it instead of listing every run in
+			// cicd (2026-11-17: ~470 LISTs in 10 minutes). The start itself
+			// reads the cluster (StartDeliveryIfFree), so a stale cache cannot
+			// start a second run beside an unfinished one.
+			if items, ok := s.delivery.CachedRunsOf(pipeline); ok {
+				return items, nil
+			}
+			return s.delivery.PipelineRunsOf(kubemetrics.WithSite(ctx, "head-release"), pipeline)
 		},
 		start: s.delivery.StartDeliveryIfFree,
 		frozen: func(ctx context.Context) (bool, string) {

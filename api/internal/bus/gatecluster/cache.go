@@ -2,6 +2,7 @@ package gatecluster
 
 import (
 	"sort"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -20,6 +21,19 @@ var (
 	displayLabels = []string{labelPipeline, labelRevision, labelRepo}
 	displayParams = []string{"revision", "repo", "repo-url", "url"}
 )
+
+// keptParam says whether the cache keeps a param: the display ones, and every
+// *Revision (uiRevision, infraRevision), which head-release reads to know
+// what a delivery shipped (2026-11-17: its reads listed every run of its
+// pipeline each pass, ~470 LISTs in 10 minutes).
+func keptParam(name string) bool {
+	for _, k := range displayParams {
+		if k == name {
+			return true
+		}
+	}
+	return strings.HasSuffix(name, "Revision")
+}
 
 // Run is a run as the gate keeps it, for itself and for the read cache: what
 // the gate and the display reads use of it and nothing more. Everything else
@@ -79,13 +93,11 @@ func RunOf(obj *unstructured.Unstructured) Run {
 		if !ok {
 			continue
 		}
-		for _, k := range displayParams {
-			if name == k {
-				if r.Params == nil {
-					r.Params = map[string]string{}
-				}
-				r.Params[k] = v
+		if keptParam(name) {
+			if r.Params == nil {
+				r.Params = map[string]string{}
 			}
+			r.Params[name] = v
 		}
 	}
 	r.StartTime, _, _ = unstructured.NestedString(obj.Object, "status", "startTime")
@@ -119,10 +131,13 @@ func (r Run) Object() unstructured.Unstructured {
 		spec["pipelineRef"] = map[string]any{"name": r.PipelineRef}
 	}
 	var params []any
-	for _, k := range displayParams {
-		if v, ok := r.Params[k]; ok {
-			params = append(params, map[string]any{"name": k, "value": v})
-		}
+	names := make([]string, 0, len(r.Params))
+	for k := range r.Params {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	for _, k := range names {
+		params = append(params, map[string]any{"name": k, "value": r.Params[k]})
 	}
 	if len(params) > 0 {
 		spec["params"] = params

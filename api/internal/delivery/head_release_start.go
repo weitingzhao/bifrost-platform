@@ -31,7 +31,7 @@ func (h *Handler) StartDeliveryIfFree(ctx context.Context, principal, pipeline, 
 	// while it still builds (Codex review 2026-11-13, A1, reproduced: "both
 	// live"). The loop starts nothing beside an unfinished run of the same
 	// pipeline, whatever the window says.
-	items, err := h.svc.PipelineRunObservations(ctx)
+	items, err := h.svc.PipelineRunsOf(ctx, pipeline)
 	if err != nil {
 		return PipelineRunView{}, "", err
 	}
