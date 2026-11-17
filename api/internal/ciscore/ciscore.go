@@ -76,7 +76,11 @@ type Task struct {
 type Declaration struct {
 	Err      string // the read failed
 	Declared bool
-	Units    int
+	// Invalid is why a declaration that is there does not parse.
+	Invalid string
+	// Units counts the modules it declares (the units of a commit are a
+	// plan, which this does not compute).
+	Units int
 }
 
 // Repo is the input of one repository.
@@ -145,7 +149,7 @@ type Scorecard struct {
 var standards = []Standard{
 	{"landing_time", "Landing time", fmt.Sprintf("median of the runs that tested a ready branch themselves is at most %d s (at least %d runs)", landingSeconds, landingSamples)},
 	{"follows_change", "Time follows the change", fmt.Sprintf("median of incremental runs is at most %.1f of the median of full runs (at least %d of each)", followsRatio, followsSamples)},
-	{"declares_units", "Declares its units", "main has a bifrost.units.yaml with at least one unit"},
+	{"declares_units", "Declares its units", "main has a bifrost.units.yaml that parses and declares at least one module"},
 	{"sides_separated", "Sides tested apart", fmt.Sprintf("at least one of at least %d runs left %s out", sidesSamples, frontModule)},
 	{"red_ratio", "Red runs", fmt.Sprintf("at most %d%% of completed runs failed", redPercent)},
 	{"push_to_verdict", "Push to verdict", fmt.Sprintf("median of the merges that landed is at most %d s", verdictSeconds)},
@@ -318,10 +322,12 @@ func scoreRepo(in Repo, now time.Time) RepoScore {
 		out.Items = append(out.Items, item("declares_units", Unmeasured, "not read: "+d.Err, 0))
 	case !d.Declared:
 		out.Items = append(out.Items, item("declares_units", Fail, "no bifrost.units.yaml", 0))
+	case d.Invalid != "":
+		out.Items = append(out.Items, item("declares_units", Fail, "bifrost.units.yaml does not parse: "+d.Invalid, 0))
 	case d.Units == 0:
-		out.Items = append(out.Items, item("declares_units", Fail, "bifrost.units.yaml declares 0 units", 0))
+		out.Items = append(out.Items, item("declares_units", Fail, "bifrost.units.yaml declares 0 modules", 0))
 	default:
-		out.Items = append(out.Items, item("declares_units", Pass, fmt.Sprintf("%d units", d.Units), d.Units))
+		out.Items = append(out.Items, item("declares_units", Pass, fmt.Sprintf("%d modules", d.Units), d.Units))
 	}
 
 	// sides_separated

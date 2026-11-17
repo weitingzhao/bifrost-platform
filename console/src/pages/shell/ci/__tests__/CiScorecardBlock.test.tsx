@@ -62,7 +62,7 @@ it('draws a row per repository and one for CI as provider, each cell with verdic
   const provider = screen.getByTestId('ci-score-row-provider')
   expect(provider).toHaveTextContent('CI as provider')
   expect(within(provider).getByTestId('ci-score-provider-cleanup_keeps_up')).toHaveTextContent('0.6 h since it last succeeded')
-  expect(screen.getByText(/Read 2026-11-16 12:00Z; kept up to 60 s\./)).toBeInTheDocument()
+  expect(screen.getByText(/Read 2026-11-16 12:00Z; kept up to 10 min\./)).toBeInTheDocument()
 })
 
 // Origin: as above — the pass lines are CI's and are published where the scores are.

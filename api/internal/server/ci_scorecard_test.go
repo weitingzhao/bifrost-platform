@@ -130,7 +130,7 @@ func TestCIScorecardReadsRunsAsTheClusterKeepsThem(t *testing.T) {
 	for id, want := range map[string]string{
 		"landing_time":    "pass median 100 s",                                         // six runs with no base that reused nothing; the reuse is left out
 		"follows_change":  "unmeasured 0 incremental and 5 full runs, needs 3 of each", // api-scope read without its newline
-		"declares_units":  "pass 12 units",
+		"declares_units":  "pass 12 modules",
 		"sides_separated": "pass console skipped in 1 of 5 runs",
 		"red_ratio":       "fail 1 failed of 7",
 	} {

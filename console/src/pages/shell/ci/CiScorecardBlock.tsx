@@ -44,7 +44,7 @@ export function CiScorecardBlock() {
   const error = errorText(score.error)
   const data = score.data
   const description = `How each repository uses CI, and how CI serves them, from the runs completed in the last ${data?.window_days ?? 3} days. Each item is pass, fail or unmeasured with the number behind it; the overall verdict is the worst item.${
-    data != null ? ` Read ${formatInstant(data.generated_at)}; kept up to 60 s.` : ''}`
+    data != null ? ` Read ${formatInstant(data.generated_at)}; kept up to 10 min.` : ''}`
   return (
     <OpsSection title="CI scorecard" description={description} bodyPadding="compact">
       {error != null && <p role="alert" className="m-0 text-[var(--destructive)]">{`The CI scorecard could not be read: ${error}.${data != null ? ' The scores below are the last ones read.' : ' The scores are not known.'}`}</p>}

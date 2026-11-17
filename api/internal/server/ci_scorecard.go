@@ -11,6 +11,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ciscore"
+	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -221,13 +222,22 @@ func (s *Server) ciDeclaration(ctx context.Context, repo string) ciscore.Declara
 	if kept, ok := s.ciScorecardKept.declared[repo]; ok && kept.commit == head {
 		return kept.answer
 	}
-	config, err := unitConfig(ctx, s.unitTreesOf(), repo, head)
+	// The file and its modules, not the plan /units/config computes: on
+	// 2026-11-16 the plan did not build within this limit on STG, the answer
+	// came back declared with no module, and bifrost-platform was scored
+	// "declares 0 units".
+	tree, err := s.unitTreesOf()(ctx, repo, head)
 	if err != nil {
 		return ciscore.Declaration{Err: err.Error()}
 	}
-	out := ciscore.Declaration{Declared: config.Declared}
-	for _, m := range config.Modules {
-		out.Units += m.Units
+	out := ciscore.Declaration{}
+	if doc, err := tree.ReadFile(unitplan.ManifestPath); err == nil {
+		out.Declared = true
+		if manifest, err := unitplan.ParseManifest(doc); err != nil {
+			out.Invalid = err.Error()
+		} else {
+			out.Units = len(manifest.Modules)
+		}
 	}
 	if s.ciScorecardKept.declared == nil {
 		s.ciScorecardKept.declared = map[string]ciDeclared{}

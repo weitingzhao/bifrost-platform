@@ -109,9 +109,12 @@ func TestFollowsChange(t *testing.T) {
 
 // Origin: as the file's.
 func TestDeclaresUnits(t *testing.T) {
-	want(t, repoItem(t, Repo{Declaration: Declaration{Declared: true, Units: 7}}, "declares_units"), Pass, "7 units")
+	want(t, repoItem(t, Repo{Declaration: Declaration{Declared: true, Units: 7}}, "declares_units"), Pass, "7 modules")
 	want(t, repoItem(t, Repo{Declaration: Declaration{}}, "declares_units"), Fail, "no bifrost.units.yaml")
-	want(t, repoItem(t, Repo{Declaration: Declaration{Declared: true}}, "declares_units"), Fail, "0 units")
+	want(t, repoItem(t, Repo{Declaration: Declaration{Declared: true}}, "declares_units"), Fail, "0 modules")
+	// 2026-11-16, STG: the first version built the whole plan under a 20 s limit, the build
+	// timed out, and bifrost-platform (two modules declared) was scored "declares 0 units".
+	want(t, repoItem(t, Repo{Declaration: Declaration{Declared: true, Invalid: "yaml: line 3"}}, "declares_units"), Fail, "does not parse: yaml: line 3")
 	want(t, repoItem(t, Repo{Declaration: Declaration{Err: "gitea: HTTP 502"}}, "declares_units"), Unmeasured, "gitea: HTTP 502")
 }
 
