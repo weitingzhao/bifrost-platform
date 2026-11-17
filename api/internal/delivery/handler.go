@@ -11,6 +11,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
+	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
 
@@ -23,7 +24,7 @@ type Handler struct {
 	audit             *actuation.AuditLog
 	onPipelineStarted PipelineStartedHook
 	notices           windowNotifier // window_notify.go
-	timings           pipelineTimingsCache
+	timings           cirunview.TimingsCache
 }
 
 // NewHandlerForTest builds a handler around an existing service.
