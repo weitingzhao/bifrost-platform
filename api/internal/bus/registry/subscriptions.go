@@ -36,6 +36,22 @@ type Subscription struct {
 	Params    map[string]string `yaml:"params"`
 	Guarantee string            `yaml:"guarantee"`
 	By        string            `yaml:"by"`
+	// Envs, when set, are the only environments the row is dispatched in
+	// (a drill on STG must not wake anyone from PROD).
+	Envs []string `yaml:"envs"`
+}
+
+// InEnv says whether the row is dispatched in env.
+func (r Subscription) InEnv(env string) bool {
+	if len(r.Envs) == 0 {
+		return true
+	}
+	for _, e := range r.Envs {
+		if e == env {
+			return true
+		}
+	}
+	return false
 }
 
 // Subscriptions is one tenant's table.

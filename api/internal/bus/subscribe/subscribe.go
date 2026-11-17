@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
@@ -122,5 +123,62 @@ func Rows(subs map[string]registry.Subscriptions, tenant string) []registry.Subs
 			out = append(out, r)
 		}
 	}
+	return out
+}
+
+// Consumer is one durable consumer the dispatcher runs: a row of a tenant's
+// table, in this environment.
+type Consumer struct {
+	Tenant string
+	Row    registry.Subscription
+}
+
+// ConsumerPrefix starts every durable consumer the dispatcher owns.
+const ConsumerPrefix = "sub-"
+
+// Name is the consumer's durable name: sub-<row> for the stream's own
+// tenant (the names already in use), sub-<tenant>-<row> for another.
+func (c Consumer) Name(streamTenant string) string {
+	if c.Tenant == streamTenant {
+		return ConsumerPrefix + c.Row.ID
+	}
+	return ConsumerPrefix + c.Tenant + "-" + c.Row.ID
+}
+
+// Consumers is every row of every tenant the dispatcher delivers in env, in
+// tenant then table order. A tenant comes and goes with its files: nothing
+// here names one (2026-11-16, the Owner: users come and go by configuration).
+func Consumers(subs map[string]registry.Subscriptions, env string) []Consumer {
+	names := make([]string, 0, len(subs))
+	for n := range subs {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	var out []Consumer
+	for _, n := range names {
+		for _, r := range Rows(subs, n) {
+			if r.InEnv(env) {
+				out = append(out, Consumer{Tenant: n, Row: r})
+			}
+		}
+	}
+	return out
+}
+
+// Stale is the dispatcher's durable consumers (names with ConsumerPrefix)
+// that no row asks for any more: a row or a tenant was removed, so its
+// consumer goes too and nothing keeps its messages for it.
+func Stale(existing []string, want []Consumer, streamTenant string) []string {
+	keep := map[string]bool{}
+	for _, c := range want {
+		keep[c.Name(streamTenant)] = true
+	}
+	var out []string
+	for _, n := range existing {
+		if strings.HasPrefix(n, ConsumerPrefix) && !keep[n] {
+			out = append(out, n)
+		}
+	}
+	sort.Strings(out)
 	return out
 }

@@ -434,13 +434,28 @@ func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStrea
 		return store.PostConclusion(ctx, pool, key, to, body)
 	}
 	receipts := &relay.Receipts{JS: js, Tenant: relay.Tenant, Env: env}
-	for _, row := range subscribe.Rows(subs, relay.Tenant) {
-		name := "sub-" + row.ID
+	want := subscribe.Consumers(subs, env)
+	// A row or a tenant that left takes its consumer with it.
+	lctx, lcancel := context.WithTimeout(ctx, 10*time.Second)
+	if names, err := relay.DurableNames(lctx, js, relay.Tenant, env); err != nil {
+		slog.Warn("bus: subscription consumers not listed; none removed", "error", err)
+	} else {
+		for _, n := range subscribe.Stale(names, want, relay.Tenant) {
+			if err := relay.DeleteDurable(lctx, js, relay.Tenant, env, n); err != nil {
+				slog.Warn("bus: stale subscription consumer not removed", "consumer", n, "error", err)
+				continue
+			}
+			slog.Info("bus: subscription consumer removed, its row is gone", "consumer", n)
+		}
+	}
+	lcancel()
+	for _, c := range want {
+		row, name := c.Row, c.Name(relay.Tenant)
 		cc, err := relay.ConsumeDurable(ctx, js, relay.Tenant, env, name, row.On, func(e relay.Envelope) error {
 			dctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 			defer cancel()
 			if err := subscribe.Deliver(dctx, row, subscribe.FromEnvelope(e), read, send); err != nil {
-				slog.Warn("bus: subscription delivery; asked again", "row", row.ID, "event", e.ID, "error", err)
+				slog.Warn("bus: subscription delivery; asked again", "tenant", c.Tenant, "row", row.ID, "event", e.ID, "error", err)
 				return err
 			}
 			if err := receipts.Publish(dctx, e.ID, name); err != nil {
@@ -449,11 +464,11 @@ func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStrea
 			return nil
 		})
 		if err != nil {
-			slog.Error("bus: subscription consumer", "row", row.ID, "error", err)
+			slog.Error("bus: subscription consumer", "tenant", c.Tenant, "row", row.ID, "error", err)
 			continue
 		}
 		context.AfterFunc(ctx, func() { cc.Stop() })
-		slog.Info("bus: subscription dispatched", "row", row.ID, "on", row.On, "deliver", row.Deliver)
+		slog.Info("bus: subscription dispatched", "tenant", c.Tenant, "row", row.ID, "consumer", name, "on", row.On, "deliver", row.Deliver)
 	}
 }
 

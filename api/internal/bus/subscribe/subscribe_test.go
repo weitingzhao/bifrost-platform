@@ -26,7 +26,10 @@ func TestVerdictRedWakesTheCommitter(t *testing.T) {
 	}
 	type sent struct{ key, to, body string }
 	var got []sent
-	send := func(_ context.Context, key, to, body string) error { got = append(got, sent{key, to, body}); return nil }
+	send := func(_ context.Context, key, to, body string) error {
+		got = append(got, sent{key, to, body})
+		return nil
+	}
 
 	if err := Deliver(context.Background(), row, ev, read, send); err != nil {
 		t.Fatal(err)
@@ -81,5 +84,39 @@ func TestRowsAreTheDispatchers(t *testing.T) {
 		if r.By != registry.ByDispatcher {
 			t.Errorf("%s is delivered by %s", r.ID, r.By)
 		}
+	}
+}
+
+// 2026-11-16 (the Owner: users come and go by configuration): a tenant's
+// rows are dispatched because its file is there, a row limited to STG is not
+// dispatched in PROD, and when a row or a tenant leaves, its consumer is
+// named stale so the dispatcher removes it.
+func TestTenantsComeAndGoByTheirFiles(t *testing.T) {
+	row := func(id string, envs ...string) registry.Subscription {
+		return registry.Subscription{ID: id, On: []string{"git.main.advanced"}, Deliver: registry.DeliverWake, To: "seat:x",
+			Guarantee: "durable", By: registry.ByDispatcher, Envs: envs}
+	}
+	subs := map[string]registry.Subscriptions{
+		"rocket": {Tenant: "rocket", Rows: []registry.Subscription{row("verdict-red-to-committer"), {ID: "legacy", By: "approvals.thread-inbox"}}},
+		"demo":   {Tenant: "demo", Rows: []registry.Subscription{row("drill", "stg")}},
+	}
+	names := func(cs []Consumer) []string {
+		var out []string
+		for _, c := range cs {
+			out = append(out, c.Name("rocket"))
+		}
+		return out
+	}
+	if got := strings.Join(names(Consumers(subs, "stg")), ","); got != "sub-demo-drill,sub-verdict-red-to-committer" {
+		t.Fatalf("stg consumers %s", got)
+	}
+	if got := strings.Join(names(Consumers(subs, "prod")), ","); got != "sub-verdict-red-to-committer" {
+		t.Fatalf("prod consumers %s (the drill is STG only)", got)
+	}
+	existing := []string{"headrelease", "sub-verdict-red-to-committer", "sub-demo-drill"}
+	delete(subs, "demo")
+	stale := Stale(existing, Consumers(subs, "stg"), "rocket")
+	if strings.Join(stale, ",") != "sub-demo-drill" {
+		t.Fatalf("stale %v: the gone tenant's consumer goes, headrelease is not the dispatcher's", stale)
 	}
 }

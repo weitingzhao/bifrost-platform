@@ -293,3 +293,23 @@ const (
 	ReceiptStreamBytes = 512 << 20
 	accountFileBytes   = 10_000_000_000
 )
+
+// DurableNames lists the durable consumers of the events stream.
+func DurableNames(ctx context.Context, js jetstream.JetStream, tenant, env string) ([]string, error) {
+	s, err := js.Stream(ctx, EventStreamName(tenant, env))
+	if err != nil {
+		return nil, err
+	}
+	l := s.ConsumerNames(ctx)
+	var out []string
+	for n := range l.Name() {
+		out = append(out, n)
+	}
+	return out, l.Err()
+}
+
+// DeleteDurable removes one durable consumer of the events stream; it and
+// what it held for its reader are gone.
+func DeleteDurable(ctx context.Context, js jetstream.JetStream, tenant, env, name string) error {
+	return js.DeleteConsumer(ctx, EventStreamName(tenant, env), name)
+}
