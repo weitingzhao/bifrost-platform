@@ -1,4 +1,5 @@
 import { AgentThreadsInProgress } from '../status/AgentThreadsInProgress'
+import { LinesNow } from '../status/LinesNow'
 import { useEffect } from 'react'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { CodeHealthPage } from '@/pages/CodeHealthPage'
@@ -30,6 +31,7 @@ export function ProgressPage({ part }: { part: ProgressPart }) {
   }, [])
   return <div className="flex w-full min-w-0 flex-col gap-4 overflow-x-hidden" data-testid="merged-progress">
     {part === 'activity' && <>
+      <section id="lines" aria-label="Where each line stands"><LinesNow /></section>
       <section id="activity" aria-label="Activity"><AgentThreadsInProgress /><a href="#infrastructure?section=hosts">Host health and capacity · System</a></section>
       <section aria-label="History"><OpsSection title="History" bodyPadding="compact">
         <p className="m-0 text-sm">The runtime's event timeline is in <a href={formatShellHash('records', 'tab=work')}>Records › Work history</a>.</p>

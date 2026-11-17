@@ -86,15 +86,20 @@
         "console/src/api/__tests__/planSnapshotMixedVersions.test.ts",
         "console/src/api/__tests__/questions.test.tsx",
         "console/src/api/__tests__/recoveryConfirmation.test.ts",
+        "console/src/api/__tests__/seatStatus.test.ts",
         "console/src/api/__tests__/serverContactCoverage.test.ts",
         "console/src/api/agentRuntime.ts",
         "console/src/api/agentTypes.ts",
         "console/src/api/ciDomains.ts",
         "console/src/api/ciScorecard.ts",
-        "console/src/api/matrixTypes.ts"
+        "console/src/api/matrixTypes.ts",
+        "console/src/api/seatStatus.ts"
       ],
       "imports": [
+        "console/src/api/agentThreads.ts",
+        "console/src/api/approvals.ts",
         "console/src/api/client.ts",
+        "console/src/api/lineage.ts",
         "console/src/domains/foundation/agent-observation/api",
         "console/src/domains/foundation/runtime-health",
         "console/src/domains/plan/readings"
@@ -113,6 +118,7 @@
         "console/src/api/approvalsServerContract.ts",
         "console/src/api/client.ts",
         "console/src/api/deliveryStages.ts",
+        "console/src/api/lineage.ts",
         "console/src/api/planSnapshot.ts",
         "console/src/api/questions.ts",
         "console/src/pages/question",
@@ -5082,14 +5088,18 @@
       "files": [
         "console/src/pages/shell/status/AgentThreadsInProgress.tsx",
         "console/src/pages/shell/status/ChecklistSignalsSummary.tsx",
+        "console/src/pages/shell/status/LinesNow.tsx",
         "console/src/pages/shell/status/StatusPage.tsx",
         "console/src/pages/shell/status/__tests__/AgentThreadsInProgress.test.tsx",
         "console/src/pages/shell/status/__tests__/StatusPage.test.tsx"
       ],
       "imports": [
+        "console/src/api",
         "console/src/api/agentThreads.ts",
+        "console/src/api/approvals.ts",
         "console/src/api/checklist.ts",
         "console/src/api/core.ts",
+        "console/src/api/lineage.ts",
         "console/src/components/layout",
         "console/src/components/shell",
         "console/src/hooks/useAgentThreads.ts",

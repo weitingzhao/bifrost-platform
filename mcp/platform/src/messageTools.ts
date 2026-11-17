@@ -7,7 +7,7 @@
  * no longer read the body: read it first.
  */
 import { MESSAGE_DATA_NOTE, ackMessages, defaultRuntimeDeps, sendMessage, waitForMessages, type RuntimeDeps } from './runtimeTools.js'
-import { buildEnvelope, present, type Detail, type EnvelopeInput, type InboxMessage } from './messageEnvelope.js'
+import { SUMMARY_MAX, buildEnvelope, present, type Detail, type EnvelopeInput, type InboxMessage } from './messageEnvelope.js'
 
 const KEEP = 500
 const kept = new Map<string, InboxMessage>()
@@ -92,4 +92,27 @@ export async function ack(input: { message_ids: string[] }, d: RuntimeDeps = def
   const out = (await ackMessages(input, d)) as { acknowledged?: string[] } | undefined
   for (const id of out?.acknowledged ?? []) kept.delete(id)
   return out
+}
+
+/** Where statuses go: the platform's status board reads them (api coord.StatusBoard). */
+export const STATUS_BOARD = 'controller'
+
+/** A seat's own status: the five things the Owner asks of a line (2026-11-17). */
+export interface SeatStatusInput {
+  goal: string; doing: string; percent: number; percent_basis: string; waiting_on?: string; next: string
+}
+
+/**
+ * Record where this line stands: one "status" message to the status board
+ * with the existing message route (no route of its own, after card #587); the
+ * board shows each seat's latest on Ops. The summary is what it is doing.
+ */
+export async function reportStatus(input: SeatStatusInput, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
+  const fields: Record<string, unknown> = {
+    goal: input.goal, doing: input.doing, percent: input.percent, percent_basis: input.percent_basis, next: input.next,
+  }
+  if (input.waiting_on) fields.waiting_on = input.waiting_on
+  const line = input.doing.replace(/[\r\n]+/g, ' ').trim()
+  const summary = line.length > SUMMARY_MAX ? line.slice(0, SUMMARY_MAX - 1) + '…' : line
+  return send({ to: STATUS_BOARD, type: 'status', summary, body: JSON.stringify(fields) }, d)
 }

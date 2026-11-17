@@ -39,6 +39,10 @@ var oldPrincipals = []string{"", "viewer", "reporter", "operator", "admin", "tra
 // this walk reaches the guarded handler, not the controller operation; the
 // handler-level approval refusal is checked by TestFixedIPWriteMatchesFirewallApprovalBoundary.
 var intendedRouteAdditions = map[string][]string{
+	// 2026-11-17 (the Owner: "I ask for progress because Ops does not show
+	// it"): every seat's latest status message, for everyone who reads the
+	// runtime (read-only; a status is written with POST /messages).
+	"GET /api/v1/agentrt/seats": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// 2026-11-15 relay F: retained run/step timings, read-only like /units/runs.
 	"GET /api/v1/delivery/pipelines/{name}/timings": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/ops/facts/system":                  {"viewer", "reporter", "operator", "admin", "trade-satellite"},

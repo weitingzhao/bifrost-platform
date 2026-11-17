@@ -26,6 +26,7 @@ deny	GET /api/v1/agentrt/events
 allow	POST /api/v1/agentrt/external-work
 allow	GET /api/v1/agentrt/external-work/{id}
 allow	POST /api/v1/agentrt/external-work/{id}/events
+deny	GET /api/v1/agentrt/seats
 deny	GET /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages/ack

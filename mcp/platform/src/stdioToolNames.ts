@@ -93,6 +93,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_artifact',
   'request_stop',
   'send_message',
+  'report_status',
   'wait_for_messages',
   'read_message',
   'ack_messages',

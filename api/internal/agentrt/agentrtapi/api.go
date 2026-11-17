@@ -143,6 +143,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(propose, cfg).Post("/rules/{rule_id}/sign", a.signRule)
 		r.With(gate("stop"), cfg).Post("/rules/{rule_id}/tighten", a.tightenRule)
 		r.With(read, cfg).Get("/progress", a.progress)
+		r.With(read, cfg).Get("/seats", a.seatStatuses)
 	})
 }
 

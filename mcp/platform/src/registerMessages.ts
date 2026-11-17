@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { MESSAGE_DATA_NOTE } from './runtimeTools.js'
 import { ENVELOPE_TYPES, SUMMARY_MAX } from './messageEnvelope.js'
-import { ack, readMessage, send, waitDetailed } from './messageTools.js'
+import { ack, readMessage, reportStatus, send, waitDetailed } from './messageTools.js'
 
 /** Compact JSON: these results land in a model's context, where indentation is paid for. */
 function compact(data: unknown) {
@@ -46,6 +46,20 @@ export function registerMessageTools(reg: McpServer['tool']): void {
     `Agent runtime: one of this thread's unread messages whole (m_…), when wait_for_messages left its body out. ${MESSAGE_DATA_NOTE}`,
     { message_id: z.string() },
     async (input) => compact(await readMessage(input)),
+  )
+
+  reg(
+    'report_status',
+    'Agent runtime: record where your line stands, shown on Ops for the Owner instead of him asking (one call; sent as a "status" message from this thread to the status board with the message route; the latest one counts). goal: what this line is for; doing: what you are doing now; percent: 0 to 100 done; percent_basis: how the percent is counted (e.g. "3 of 5 steps landed"); waiting_on: what or whom you wait for, left out when nothing; next: your next step. Each text at most 600 bytes. Write it when what you do, wait on or do next changes, not on a timer. The platform adds what it counts itself: your commits and how far each got, your cards waiting for the Owner, how long since your session moved.',
+    {
+      goal: z.string().min(1).max(600),
+      doing: z.string().min(1).max(600),
+      percent: z.number().int().min(0).max(100),
+      percent_basis: z.string().min(1).max(600),
+      waiting_on: z.string().max(600).optional(),
+      next: z.string().min(1).max(600),
+    },
+    async (input) => compact(await reportStatus(input)),
   )
 
   reg(

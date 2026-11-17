@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { beforeEach, describe, it } from 'node:test'
 import { buildEnvelope, parseEnvelope, present, wholeUnderAuto } from './messageEnvelope.js'
-import { ack, forgetKeptMessagesForTests, readMessage, send, waitDetailed } from './messageTools.js'
+import { STATUS_BOARD, ack, forgetKeptMessagesForTests, readMessage, reportStatus, send, waitDetailed } from './messageTools.js'
 import type { RuntimeDeps } from './runtimeTools.js'
 
 // Origin: 2026-11-14, the Owner asked that seats talk through the platform to
@@ -102,5 +102,32 @@ describe('summaries', () => {
     const whole = JSON.stringify(present(status, 'full')).length
     const summary = JSON.stringify(present(status, 'auto')).length
     assert.ok(summary * 5 < whole, `${summary} vs ${whole}`)
+  })
+})
+
+// 2026-11-17 (the Owner: he asks for progress because Ops does not show it;
+// after card #587, no route of its own): report_status is a "status" message
+// to the status board whose text is the status fields; the summary is what
+// the line is doing, one line, cut to the summary bound.
+describe('report_status', () => {
+  it('sends the fields as a status envelope to the board', async () => {
+    const { d, calls } = deps()
+    await reportStatus({ goal: 'g', doing: 'release\nthe batch', percent: 40, percent_basis: '2 of 5', next: 'n' }, d)
+    const sent = calls[0].body as { to: string; kind: string; body: string }
+    assert.equal(calls[0].path, '/api/v1/agentrt/messages')
+    assert.equal(sent.to, STATUS_BOARD)
+    assert.equal(sent.kind, 'note')
+    const env = parseEnvelope(sent.body) as { type: string; summary: string; text: string }
+    assert.equal(env.type, 'status')
+    assert.equal(env.summary, 'release the batch')
+    assert.deepEqual(JSON.parse(env.text), { goal: 'g', doing: 'release\nthe batch', percent: 40, percent_basis: '2 of 5', next: 'n' })
+  })
+  it('a long doing is cut in the summary, kept whole in the text', async () => {
+    const { d, calls } = deps()
+    await reportStatus({ goal: 'g', doing: 'x'.repeat(500), percent: 1, percent_basis: 'b', waiting_on: 'CI', next: 'n' }, d)
+    const env = parseEnvelope((calls[0].body as { body: string }).body) as { summary: string; text: string }
+    assert.ok(env.summary.length <= 200)
+    assert.equal(JSON.parse(env.text).doing.length, 500)
+    assert.equal(JSON.parse(env.text).waiting_on, 'CI')
   })
 })
