@@ -3,7 +3,9 @@ package relay
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -102,6 +104,7 @@ func (r *Relay) Pass(ctx context.Context) (int, error) {
 			r.cursor = row.Cursor()
 			n++
 			metricPublished.Add(1)
+			publishedType(row.Type, time.Now())
 		}
 		if len(rows) < PageSize {
 			if r.cursor.Less(next) {
@@ -244,6 +247,23 @@ func listenOnce(ctx context.Context, pool *pgxpool.Pool, wake func()) error {
 
 var metricPublished, metricSkipped, metricDrift, metricErrors atomic.Int64
 
+// byType is what was published of each event type and when the last one was
+// (2026-11-17: whether the first release.deploy.finished went out could not
+// be told without a token; the total does not name types). Types are the
+// register's, a few dozen at most.
+var byType = struct {
+	sync.Mutex
+	n    map[string]int64
+	last map[string]time.Time
+}{n: map[string]int64{}, last: map[string]time.Time{}}
+
+func publishedType(typ string, at time.Time) {
+	byType.Lock()
+	defer byType.Unlock()
+	byType.n[typ]++
+	byType.last[typ] = at
+}
+
 // WriteMetrics writes the relay's counters in the exposition format; a
 // process that runs no relay writes zeros.
 func WriteMetrics(b *strings.Builder) {
@@ -257,5 +277,20 @@ func WriteMetrics(b *strings.Builder) {
 		{"bifrost_bus_relay_errors_total", "Relay passes that ended in an error", metricErrors.Load()},
 	} {
 		fmt.Fprintf(b, "# HELP %s %s\n# TYPE %s counter\n%s %d\n", m.name, m.help, m.name, m.name, m.v)
+	}
+	byType.Lock()
+	defer byType.Unlock()
+	types := make([]string, 0, len(byType.n))
+	for t := range byType.n {
+		types = append(types, t)
+	}
+	sort.Strings(types)
+	b.WriteString("# HELP bifrost_bus_relay_published_by_type_total Events the bus relay published, by event type (since the process started)\n# TYPE bifrost_bus_relay_published_by_type_total counter\n")
+	for _, t := range types {
+		fmt.Fprintf(b, "bifrost_bus_relay_published_by_type_total{type=%q} %d\n", t, byType.n[t])
+	}
+	b.WriteString("# HELP bifrost_bus_relay_last_published_timestamp_seconds When the bus relay last published an event of the type\n# TYPE bifrost_bus_relay_last_published_timestamp_seconds gauge\n")
+	for _, t := range types {
+		fmt.Fprintf(b, "bifrost_bus_relay_last_published_timestamp_seconds{type=%q} %d\n", t, byType.last[t].Unix())
 	}
 }

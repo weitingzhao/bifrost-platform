@@ -218,7 +218,7 @@ func (s *Server) promql(ctx context.Context, q string) (map[string]float64, erro
 	out := map[string]float64{}
 	for _, p := range points {
 		key := ""
-		for _, k := range []string{"site", "route", "__name__"} {
+		for _, k := range []string{"site", "route", "type", "__name__"} {
 			if v := p.Labels[k]; v != "" {
 				key = v
 				break
@@ -315,7 +315,7 @@ func (s *Server) effectRelay(ctx context.Context, env string) []effectRow {
 	ns := "bifrost-platform-" + env
 	row := effectRow{Key: "relay", Label: "Bus health",
 		Before: "-",
-		How:    "bifrost_bus_relay_* since the workers started; seconds since the cluster gate's last event. Each type's latest event and who reads are in Live events and Clients below."}
+		How:    "bifrost_bus_relay_* since the workers started; seconds since the cluster gate's last event; per event type, how long ago the relay last published one (bifrost_bus_relay_last_published_timestamp_seconds). Who reads is in Clients below."}
 	v, err := s.promql(ctx, fmt.Sprintf(`sum by (__name__) ({__name__=~"bifrost_bus_relay_(published|errors|drift)_total",namespace=%q})`, ns))
 	if err != nil {
 		row.Unmeasured = err.Error()
@@ -329,5 +329,28 @@ func (s *Server) effectRelay(ctx context.Context, env string) []effectRow {
 		}
 	}
 	row.Value = fmt.Sprintf("%.0f relayed, %.0f errors, %.0f drift; last cluster event %s", v["bifrost_bus_relay_published_total"], v["bifrost_bus_relay_errors_total"], v["bifrost_bus_relay_drift_total"], last)
+	if ages, err := s.promql(ctx, fmt.Sprintf(`time() - max by (type) (bifrost_bus_relay_last_published_timestamp_seconds{namespace=%q})`, ns)); err == nil {
+		types := make([]string, 0, len(ages))
+		for t := range ages {
+			if t != "" {
+				types = append(types, t)
+			}
+		}
+		sort.Strings(types)
+		for _, t := range types {
+			row.Items = append(row.Items, effectItem{What: t, When: "last published " + secondsAgo(ages[t])})
+		}
+	}
 	return []effectRow{row}
+}
+
+func secondsAgo(s float64) string {
+	switch {
+	case s < 120:
+		return fmt.Sprintf("%.0f s ago", s)
+	case s < 7200:
+		return fmt.Sprintf("%.0f min ago", s/60)
+	default:
+		return fmt.Sprintf("%.1f h ago", s/3600)
+	}
 }
