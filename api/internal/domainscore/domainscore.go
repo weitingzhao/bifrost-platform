@@ -197,6 +197,9 @@ func NewGraph(own Ownership, packages []Package) *Graph {
 }
 
 // Packages are the paths of the packages in the graph, sorted.
+// Base is the domain every other stands on, "" when the table names none.
+func (g *Graph) Base() string { return g.base }
+
 func (g *Graph) Packages() []string {
 	out := make([]string, 0, len(g.pkgs))
 	for p := range g.pkgs {

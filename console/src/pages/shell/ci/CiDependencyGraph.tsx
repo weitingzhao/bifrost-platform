@@ -1,3 +1,4 @@
+import { CiDomainDirections } from './CiDomainDirections'
 import { useMemo } from 'react'
 import { BaseEdge, EdgeLabelRenderer, Handle, MarkerType, Position, ReactFlow, getBezierPath, getStraightPath, type Edge, type EdgeProps, type Node, type NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -97,6 +98,7 @@ export function CiDependencyGraph({ graph, runs, changes, domain, asOf, onSelect
   const edgeText = (list: { id: string; imports: number; wrongWay: boolean }[], none: string) => list.map(e => `${e.id} (${e.imports}${e.wrongWay ? ', wrong way' : ''})`).join(', ') || none
   const wrong = graph.edges.filter(e => e.wrong_way)
   return (
+    <div className="flex min-w-0 flex-col gap-4">
     <div className="grid min-w-0 gap-3.5 lg:grid-cols-[minmax(0,2.4fr)_minmax(220px,1fr)]">
       <div className="min-w-0">
         {/* The frame has the drawing's own shape, so the graph fills it. */}
@@ -106,7 +108,7 @@ export function CiDependencyGraph({ graph, runs, changes, domain, asOf, onSelect
             onNodeClick={(_, node) => onSelectDomain(node.id === selected ? '' : node.id)} />
         </div>
         <p className="mb-0 mt-1.5 text-xs text-[var(--muted-foreground)]">
-          {`Arrow = imports (production code at ${graph.commit.slice(0, 8)}), with the number of package pairs. Red = points the wrong way, by the domain score's rule: ${wrong.length === 0 ? 'none now' : wrong.map(e => `${e.from} → ${e.to}`).join(', ')}. `}
+          {`An arrow points from the user to the used (A → B: A imports B). Production code at ${graph.commit.slice(0, 8)}; the number on an arrow is how many package pairs. Red = points the wrong way, by the domain score's rule: ${wrong.length === 0 ? 'none now' : wrong.map(e => `${e.from} → ${e.to}`).join(', ')}. `}
           {graph.shared_packages.length > 0 && `The ${graph.shared_packages.length} packages several domains share are not a node; they import every domain.`}
         </p>
       </div>
@@ -126,6 +128,8 @@ export function CiDependencyGraph({ graph, runs, changes, domain, asOf, onSelect
           </dl>
         </>}
       </div>
+    </div>
+    <CiDomainDirections graph={graph} domain={selected} onSelectDomain={onSelectDomain} />
     </div>
   )
 }

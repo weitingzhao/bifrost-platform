@@ -29,12 +29,12 @@ export function running(n: number, minutesAgo: number, tasks: UnitsRunTask[]): U
 }
 
 export const graph = (): CiDomainGraph => ({
-  version: 1, repo: 'r', commit: sha(999), measured: true, note: '',
+  version: 1, repo: 'r', commit: sha(999), measured: true, note: '', base: 'foundation',
   domains: [{ id: 'foundation', packages: 60 }, { id: 'plan', packages: 5 }, { id: 'lineage', packages: 5 }, { id: 'owner', packages: 8 }],
   edges: [
-    { from: 'foundation', to: 'owner', imports: 1, wrong_way: true },
+    { from: 'foundation', to: 'owner', imports: 1, wrong_way: true, pairs: [{ from: 'api/internal/acts', to: 'api/internal/notify' }] },
     { from: 'plan', to: 'foundation', imports: 2, wrong_way: false },
-    { from: 'plan', to: 'lineage', imports: 1, wrong_way: false },
+    { from: 'plan', to: 'lineage', imports: 1, wrong_way: false, pairs: [{ from: 'api/internal/plan/readings', to: 'api/internal/lineage/registration' }] },
     { from: 'lineage', to: 'foundation', imports: 9, wrong_way: false },
     { from: 'owner', to: 'foundation', imports: 14, wrong_way: false },
   ],

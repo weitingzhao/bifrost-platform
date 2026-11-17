@@ -376,6 +376,20 @@ it('shares one selection (domain, run) across By time, By domain and By dependen
   fireEvent.click(screen.getByTestId('ci-dep-node-owner'))
   expect(screen.getByTestId('ci-selection')).toHaveTextContent('Domain owner')
   expect(screen.getByTestId('ci-dep-panel')).toHaveTextContent('Depended on byfoundation (1, wrong way)')
+  // Origin: 2026-11-16 22:4x, the Owner read the page and asked "does foundation depend on the other packages, or do
+  // they depend on it?". Every domain says both directions in words, with nothing selected or clicked: the base
+  // depends on one domain (the wrong way, in red) and three depend on it; the packages on both sides are one fold down.
+  const base = screen.getByTestId('ci-direction-foundation')
+  expect(base).toHaveTextContent('foundation · base')
+  expect(base).toHaveTextContent('Depends on: 1 domain — owner (1 import, wrong way)')
+  expect(base).toHaveTextContent('Depended on by: 3 domains — plan (2 imports), lineage (9 imports), owner (14 imports)')
+  expect(base).toHaveTextContent('acts → notify')
+  expect(screen.getByTestId('ci-direction-lineage')).toHaveTextContent('Depended on by: 1 domain — plan (1 import)')
+  expect(screen.getByTestId('ci-direction-lineage')).toHaveTextContent('plan/readings → lineage/registration')
+  expect(screen.getByTestId('ci-direction-plan')).toHaveTextContent('Depended on by: nobody')
+  const words = screen.getByTestId('ci-domain-directions')
+  expect(words).toHaveTextContent('An arrow points from the user to the used: A → B means A imports B, so A depends on B.')
+  expect(words).toHaveTextContent('Wrong-way imports now: 1.')
 
   view('By time')
   expect(screen.getByTestId('ci-bar-ci-2')).toHaveAttribute('data-dim', 'no')

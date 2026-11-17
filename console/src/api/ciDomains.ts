@@ -7,9 +7,13 @@ import { authedFetch } from './client'
  */
 
 export type CiDomainNode = { id: string; packages: number }
-export type CiDomainEdge = { from: string; to: string; imports: number; wrong_way: boolean }
+/** One import: the package that uses, the package it uses. */
+export type CiPackagePair = { from: string; to: string }
+export type CiDomainEdge = { from: string; to: string; imports: number; wrong_way: boolean; pairs?: CiPackagePair[] }
 export type CiDomainGraph = {
   version: number; repo: string; commit: string; measured: boolean; note: string
+  /** The domain every other stands on; '' or absent when the table names none. */
+  base?: string
   domains: CiDomainNode[]; edges: CiDomainEdge[]; shared_packages: string[]
 }
 export type CiChange = { commit: string; read: boolean; domains: Record<string, number> }

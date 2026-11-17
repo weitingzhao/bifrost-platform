@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { CiScorecard } from '@/api/ciScorecard'
 import type { TimingRun } from '@/api/ciTimings'
 import {
-  changeMap, ciSteps, phaseOf, stageSteps, domainCards, domainPanel, edgeSides, graphLayout, graphSize, notMeasured, ownRuns, selectiveFact, startsAfterMain, timelineGeometry, verdict,
+  changeMap, ciSteps, phaseOf, stageSteps, domainCards, domainDirections, domainPanel, edgeSides, graphLayout, graphSize, notMeasured, ownRuns, selectiveFact, startsAfterMain, timelineGeometry, verdict,
   type DeliveryStage, type VerdictInput,
 } from '../ciPageModel'
 import { AS_OF, change, graph, running, sha, unitsRun } from './ciPageFixture'
@@ -132,6 +132,12 @@ describe('domains', () => {
   it('says what a domain depends on and who depends on it', () => {
     expect(domainPanel(graph(), 'owner')).toEqual({ dependsOn: [{ id: 'foundation', imports: 14, wrongWay: false }], dependedOnBy: [{ id: 'foundation', imports: 1, wrongWay: true }], packages: 8, shared: 1 })
     expect(domainPanel(graph(), 'nope')).toBeNull()
+    // The same edges, both directions for every domain; a base the API does not name is nobody's base.
+    const rows = domainDirections(graph())
+    expect(rows.map(r => `${r.id}${r.isBase ? '*' : ''} uses ${r.uses.map(s => s.id).join('+') || '-'} usedBy ${r.usedBy.map(s => s.id).join('+') || '-'}`)).toEqual([
+      'foundation* uses owner usedBy plan+lineage+owner', 'plan uses foundation+lineage usedBy -', 'lineage uses foundation usedBy plan', 'owner uses foundation usedBy foundation'])
+    expect(rows[0].uses[0]).toMatchObject({ wrongWay: true, pairs: [{ from: 'api/internal/acts', to: 'api/internal/notify' }] })
+    expect(domainDirections({ ...graph(), base: undefined }).some(r => r.isBase)).toBe(false)
   })
 
   // Guards the drawing: the base every domain stands on is in the middle with a row above and a row below (an arrow

@@ -4562,6 +4562,7 @@
         "console/src/pages/shell/ci/CiDependencyGraph.tsx",
         "console/src/pages/shell/ci/CiDetails.tsx",
         "console/src/pages/shell/ci/CiDomainCards.tsx",
+        "console/src/pages/shell/ci/CiDomainDirections.tsx",
         "console/src/pages/shell/ci/CiFirstScreen.tsx",
         "console/src/pages/shell/ci/CiRunPanel.tsx",
         "console/src/pages/shell/ci/CiScoreStrip.tsx",

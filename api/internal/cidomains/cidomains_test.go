@@ -61,11 +61,24 @@ func TestGraphNodesEdgesAndSharedPackages(t *testing.T) {
 	if !reflect.DeepEqual(got.Domains, wantDomains) {
 		t.Fatalf("domains: %+v", got.Domains)
 	}
+	// Origin of base and pairs: 2026-11-16 22:4x, the Owner read the page and asked "does
+	// foundation depend on the other packages, or do they depend on it": an edge alone did
+	// not say it. The answer names the base and, under each edge, who uses whom.
+	if got.Base != "foundation" {
+		t.Fatalf("base: %q", got.Base)
+	}
+	pair := func(v ...string) []Pair {
+		var out []Pair
+		for i := 0; i < len(v); i += 2 {
+			out = append(out, Pair{"api/internal/" + v[i], "api/internal/" + v[i+1]})
+		}
+		return out
+	}
 	wantEdges := []Edge{
-		{"foundation", "owner", 1, true},
-		{"plan", "foundation", 3, false},
-		{"plan", "lineage", 2, false},
-		{"owner", "foundation", 1, false},
+		{"foundation", "owner", 1, true, pair("base", "owner")},
+		{"plan", "foundation", 3, false, pair("plan", "base", "plan", "base/util", "plan/view", "base")},
+		{"plan", "lineage", 2, false, pair("plan", "lineage", "plan/view", "lineage")},
+		{"owner", "foundation", 1, false, pair("owner", "base")},
 	}
 	if !reflect.DeepEqual(got.Edges, wantEdges) {
 		t.Fatalf("edges: %+v", got.Edges)

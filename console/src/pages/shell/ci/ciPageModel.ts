@@ -356,6 +356,24 @@ export function domainPanel(graph: CiDomainGraph, domain: string): DomainPanel |
   }
 }
 
+/** One side of a domain's row in words: the other domain, how many imports, whether they point the wrong way, and the imports themselves. */
+export type DirectionSide = { id: string; imports: number; wrongWay: boolean; pairs: { from: string; to: string }[] }
+export type DomainDirection = { id: string; isBase: boolean; packages: number; uses: DirectionSide[]; usedBy: DirectionSide[] }
+
+/**
+ * Every domain with both directions spelled out: what it uses and who uses it. From the same edges as the drawing and
+ * the domain score, so the three agree. Owner 2026-11-16: "does foundation depend on the other packages, or do they
+ * depend on it" could not be read off a list of imports.
+ */
+export function domainDirections(graph: CiDomainGraph): DomainDirection[] {
+  const side = (e: CiDomainGraph['edges'][number], other: string): DirectionSide => ({ id: other, imports: e.imports, wrongWay: e.wrong_way, pairs: e.pairs ?? [] })
+  return graph.domains.map(d => ({
+    id: d.id, isBase: !!graph.base && d.id === graph.base, packages: d.packages,
+    uses: graph.edges.filter(e => e.from === d.id).map(e => side(e, e.to)),
+    usedBy: graph.edges.filter(e => e.to === d.id).map(e => side(e, e.from)),
+  }))
+}
+
 export type GraphNode = { id: string; x: number; y: number; width: number; height: number; packages: number }
 export const NODE_W = 168
 export const NODE_H = 58

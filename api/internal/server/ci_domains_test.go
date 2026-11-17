@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -75,8 +76,12 @@ func TestCIDomainsReadsTheTreeAndKeepsItByCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []cidomains.Edge{{From: "foundation", To: "owner", Imports: 1, WrongWay: true}, {From: "plan", To: "foundation", Imports: 1}, {From: "owner", To: "foundation", Imports: 1}}
-	if got.Version != 1 || !got.Measured || got.Commit != "c1" || !reflect.DeepEqual(got.Edges, want) || !reflect.DeepEqual(got.SharedPackages, []string{"api/internal/server"}) {
+	var edges []string
+	for _, e := range got.Edges {
+		edges = append(edges, fmt.Sprintf("%s>%s %d %v %d", e.From, e.To, e.Imports, e.WrongWay, len(e.Pairs)))
+	}
+	want := []string{"foundation>owner 1 true 1", "plan>foundation 1 false 1", "owner>foundation 1 false 1"}
+	if got.Version != 1 || !got.Measured || got.Commit != "c1" || got.Base != "foundation" || !reflect.DeepEqual(edges, want) || !reflect.DeepEqual(got.SharedPackages, []string{"api/internal/server"}) {
 		t.Fatalf("graph: %+v", got)
 	}
 	if !reflect.DeepEqual(got.Domains, []cidomains.Domain{{ID: "foundation", Packages: 2}, {ID: "plan", Packages: 1}, {ID: "owner", Packages: 1}}) {
@@ -90,7 +95,8 @@ func TestCIDomainsReadsTheTreeAndKeepsItByCommit(t *testing.T) {
 	if err != nil || reads.Load() != 2 || got.Commit != "c2" {
 		t.Fatalf("main moved: %d reads, %+v, %v", reads.Load(), got, err)
 	}
-	if len(got.Edges) != 4 || got.Edges[1] != (cidomains.Edge{From: "plan", To: "foundation", Imports: 1}) || got.Edges[2] != (cidomains.Edge{From: "plan", To: "owner", Imports: 1}) {
+	edge := func(e cidomains.Edge) string { return fmt.Sprintf("%s>%s %d %v", e.From, e.To, e.Imports, e.WrongWay) }
+	if len(got.Edges) != 4 || edge(got.Edges[1]) != "plan>foundation 1 false" || edge(got.Edges[2]) != "plan>owner 1 false" || len(got.Edges[1].Pairs) != 1 {
 		t.Fatalf("edges after the move: %+v", got.Edges)
 	}
 }

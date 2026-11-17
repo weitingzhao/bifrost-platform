@@ -88,19 +88,32 @@ type Edge struct {
 	To       string `json:"to"`
 	Imports  int    `json:"imports"`
 	WrongWay bool   `json:"wrong_way"`
+	// Pairs are the imports themselves, importer then imported, sorted: the
+	// package layer under the edge. Imports is their number.
+	Pairs []Pair `json:"pairs"`
 }
 
 // Graph is the answer of GET /api/v1/ci/domains.
+// Pair is one import: the package that uses and the package it uses.
+type Pair struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
 type Graph struct {
 	Version int    `json:"version"`
 	Repo    string `json:"repo"`
 	Commit  string `json:"commit"`
 	// Measured is false for a repository with no ownership table (or one that
 	// does not read); Note says which.
-	Measured bool     `json:"measured"`
-	Note     string   `json:"note"`
-	Domains  []Domain `json:"domains"`
-	Edges    []Edge   `json:"edges"`
+	Measured bool   `json:"measured"`
+	Note     string `json:"note"`
+	// Base is the domain every other stands on (the ownership table's
+	// default), "" when the table names none: an import of it points the
+	// right way, an import by it of a domain that stands on it the wrong way.
+	Base    string   `json:"base"`
+	Domains []Domain `json:"domains"`
+	Edges   []Edge   `json:"edges"`
 	// SharedPackages are the packages several domains share. They are not a
 	// node: they import every domain, and an edge through them joins any two.
 	SharedPackages []string `json:"shared_packages"`
@@ -118,7 +131,7 @@ func GraphOf(repo, commit string, own domainscore.Ownership, packages []domainsc
 	out := Unmeasured(repo, commit, "")
 	out.Measured = true
 	count := map[string]int{}
-	edges := map[[2]string]int{}
+	edges := map[[2]string][]Pair{}
 	for _, p := range g.Packages() {
 		from, _ := g.DomainOf(p)
 		if from == domainscore.Mixed {
@@ -128,7 +141,7 @@ func GraphOf(repo, commit string, own domainscore.Ownership, packages []domainsc
 		count[from]++
 		for _, dep := range g.Imports(p) {
 			if to, _ := g.DomainOf(dep); to != from && to != domainscore.Mixed {
-				edges[[2]string{from, to}]++
+				edges[[2]string{from, to}] = append(edges[[2]string{from, to}], Pair{From: p, To: dep})
 			}
 		}
 	}
@@ -137,9 +150,16 @@ func GraphOf(repo, commit string, own domainscore.Ownership, packages []domainsc
 		at[d] = i
 		out.Domains = append(out.Domains, Domain{ID: d, Packages: count[d]})
 	}
-	for k, n := range edges {
-		out.Edges = append(out.Edges, Edge{From: k[0], To: k[1], Imports: n, WrongWay: g.WrongWay(k[0], k[1])})
+	for k, pairs := range edges {
+		sort.Slice(pairs, func(i, j int) bool {
+			if pairs[i].From != pairs[j].From {
+				return pairs[i].From < pairs[j].From
+			}
+			return pairs[i].To < pairs[j].To
+		})
+		out.Edges = append(out.Edges, Edge{From: k[0], To: k[1], Imports: len(pairs), WrongWay: g.WrongWay(k[0], k[1]), Pairs: pairs})
 	}
+	out.Base = g.Base()
 	sort.Slice(out.Edges, func(i, j int) bool {
 		a, b := out.Edges[i], out.Edges[j]
 		if a.From != b.From {
