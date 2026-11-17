@@ -17,15 +17,12 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
-var dockerfileConfigMapNames = []string{
-	"bifrost-api-stg-dockerfile",
-	"bifrost-frontend-stg-dockerfile",
-	"bifrost-worker-stg-dockerfile",
-	"bifrost-socket-stg-dockerfile",
-	"bifrost-platform-api-stg-dockerfile",
-	"bifrost-platform-console-stg-dockerfile",
-}
-
+// trackedGiteaRepos is the ref checks' fallback for a pipeline missing from
+// pipelineMirrorRepos (reposForPipeline). The pages do not read it: the
+// supply chain's tracked_repos are what the cluster's Pipelines clone
+// (pipelineClones). It and pipelineMirrorRepos still hold the retired socket
+// entry because the ref checks read them; changing what those checks ask is
+// not a page change.
 var trackedGiteaRepos = []string{
 	"bifrost-trade-core",
 	"bifrost-trade-worker",
@@ -86,13 +83,6 @@ func reposForPipeline(pipelineName string) []string {
 	return trackedGiteaRepos
 }
 
-var stgImageDeployments = []string{
-	"nginx", "frontend",
-	"api-monitor", "api-account", "api-market", "api-research",
-	"daemon", "account-sync",
-	"ib-market-gateway", "ib-account-agent", "ib-operator",
-}
-
 func (s *Service) stgNamespace() string {
 	if s.entry != nil {
 		for _, ns := range s.entry.BifrostNamespaces {
@@ -111,7 +101,7 @@ func (s *Service) SupplyChain(ctx context.Context) SupplyChainResponse {
 		CicdNamespace:   s.PipelinesNamespace(),
 		StgNamespace:    s.stgNamespace(),
 		Reachability:    probe.ReachFail,
-		TrackedRepos:    append([]string(nil), trackedGiteaRepos...),
+		TrackedRepos:    []string{},
 		DockerfileCMs:   []DockerfileConfigMapView{},
 		StgWorkloads:    []StgWorkloadImageView{},
 		GeneratedAt:     now,
@@ -125,6 +115,7 @@ func (s *Service) SupplyChain(ctx context.Context) SupplyChainResponse {
 			out.Reachability = ce.Reachability
 			out.Detail = ce.Detail
 		}
+		out.TrackedReposError = "cluster not read: " + out.Detail
 		return out
 	}
 
@@ -132,30 +123,67 @@ func (s *Service) SupplyChain(ctx context.Context) SupplyChainResponse {
 	// reads no Secret for it.
 	out.MirrorCredentialsConfigured = s.giteaReaderConfigured(ctx)
 
-	for _, name := range dockerfileConfigMapNames {
-		cm, cmErr := clientset.CoreV1().ConfigMaps(out.CicdNamespace).Get(ctx, name, metav1.GetOptions{})
-		if cmErr != nil {
-			out.DockerfileCMs = append(out.DockerfileCMs, DockerfileConfigMapView{
-				Name: name, Namespace: out.CicdNamespace, Present: false, Detail: cmErr.Error(),
-			})
-			continue
+	// What the cluster's Pipelines and Tasks name, read now: the repositories
+	// the Pipelines clone, and the Dockerfile ConfigMaps they and the Tasks
+	// mount (OWNER_LAW #30, 2026-11-17: no hand-kept list).
+	var unread []string
+	dyn, dynErr := s.buildDynamicClient()
+	if dynErr != nil {
+		out.TrackedReposError = "Pipelines not read: " + dynErr.Error()
+		unread = append(unread, "Dockerfile ConfigMaps: "+dynErr.Error())
+	} else {
+		cmNames := map[string]bool{}
+		pipes, listErr := dyn.Resource(pipelineGVR).Namespace(out.CicdNamespace).List(ctx, metav1.ListOptions{})
+		if listErr != nil {
+			out.TrackedReposError = "Pipelines not read: " + listErr.Error()
+			unread = append(unread, "Dockerfile ConfigMaps (Pipelines): "+listErr.Error())
+		} else {
+			repos := map[string]bool{}
+			for _, item := range pipes.Items {
+				cloned, _ := pipelineClones(item.Object)
+				for _, r := range cloned {
+					repos[r] = true
+				}
+				dockerfileConfigMapRefs(item.Object, cmNames)
+			}
+			out.TrackedRepos = sortedSet(repos)
 		}
-		out.DockerfileCMs = append(out.DockerfileCMs, dockerfileCMFrom(cm))
+		tasks, taskErr := dyn.Resource(taskGVR).Namespace(out.CicdNamespace).List(ctx, metav1.ListOptions{})
+		if taskErr != nil {
+			unread = append(unread, "Dockerfile ConfigMaps (Tasks): "+taskErr.Error())
+		} else {
+			for _, item := range tasks.Items {
+				dockerfileConfigMapRefs(item.Object, cmNames)
+			}
+		}
+		for _, name := range sortedSet(cmNames) {
+			cm, cmErr := clientset.CoreV1().ConfigMaps(out.CicdNamespace).Get(ctx, name, metav1.GetOptions{})
+			if cmErr != nil {
+				out.DockerfileCMs = append(out.DockerfileCMs, DockerfileConfigMapView{
+					Name: name, Namespace: out.CicdNamespace, Present: false, Detail: cmErr.Error(),
+				})
+				continue
+			}
+			out.DockerfileCMs = append(out.DockerfileCMs, dockerfileCMFrom(cm))
+		}
 	}
 
-	for _, depName := range stgImageDeployments {
-		dep, depErr := clientset.AppsV1().Deployments(out.StgNamespace).Get(ctx, depName, metav1.GetOptions{})
-		if depErr != nil {
-			continue
+	// Every Deployment in the STG namespace, not a hand-kept list of names.
+	deps, depErr := clientset.AppsV1().Deployments(out.StgNamespace).List(ctx, metav1.ListOptions{})
+	if depErr != nil {
+		unread = append(unread, "STG workloads: "+depErr.Error())
+	} else {
+		sort.Slice(deps.Items, func(i, j int) bool { return deps.Items[i].Name < deps.Items[j].Name })
+		for _, dep := range deps.Items {
+			if len(dep.Spec.Template.Spec.Containers) == 0 {
+				continue
+			}
+			out.StgWorkloads = append(out.StgWorkloads, StgWorkloadImageView{
+				Deployment: dep.Name,
+				Namespace:  out.StgNamespace,
+				Image:      dep.Spec.Template.Spec.Containers[0].Image,
+			})
 		}
-		if len(dep.Spec.Template.Spec.Containers) == 0 {
-			continue
-		}
-		out.StgWorkloads = append(out.StgWorkloads, StgWorkloadImageView{
-			Deployment: depName,
-			Namespace:  out.StgNamespace,
-			Image:      dep.Spec.Template.Spec.Containers[0].Image,
-		})
 	}
 
 	if last, err := readThrough(s, routeSupplyChain,
@@ -165,8 +193,7 @@ func (s *Service) SupplyChain(ctx context.Context) SupplyChainResponse {
 		out.LastDeliverRun, out.LastDeliverSuccess = last.run, last.success
 	}
 
-	dyn, err := s.buildDynamicClient()
-	if err == nil {
+	if dynErr == nil {
 		taskRuns, trErr := dyn.Resource(taskRunGVR).Namespace(out.CicdNamespace).List(ctx, metav1.ListOptions{
 			LabelSelector: "bifrost.io/supply-chain",
 		})
@@ -181,10 +208,127 @@ func (s *Service) SupplyChain(ctx context.Context) SupplyChainResponse {
 
 	out.Reachability = probe.ReachOK
 	out.Detail = fmt.Sprintf(
-		"%d Dockerfile CMs · %d STG workloads · mirror creds=%v",
-		len(out.DockerfileCMs), len(out.StgWorkloads), out.MirrorCredentialsConfigured,
+		"%d Dockerfile CMs · %d STG workloads · %d tracked repos · mirror creds=%v",
+		len(out.DockerfileCMs), len(out.StgWorkloads), len(out.TrackedRepos), out.MirrorCredentialsConfigured,
 	)
+	if len(unread) > 0 {
+		out.Reachability = probe.ReachDegraded
+		out.Detail += " · not read: " + strings.Join(unread, "; ")
+	}
 	return out
+}
+
+// gitRepoURL is a clone URL's last path segment: the repository it names.
+var gitRepoURL = regexp.MustCompile(`([A-Za-z0-9._-]+)\.git$`)
+
+// pipelineParamRef is a value that is only a pipeline parameter: $(params.x).
+var pipelineParamRef = regexp.MustCompile(`^\$\(params\.([A-Za-z0-9_-]+)\)$`)
+
+// pipelineClones reads the Gitea repositories a Tekton Pipeline object clones:
+// every task parameter (tasks and finally) whose value, after a bare
+// $(params.x) is replaced by that pipeline parameter's default, ends in
+// "<repo>.git". revisionRepo is the one repository cloned at the pipeline's
+// own $(params.revision), empty when none or several are (a run's revision
+// then names no single repository).
+func pipelineClones(obj map[string]any) (repos []string, revisionRepo string) {
+	spec, _ := obj["spec"].(map[string]any)
+	defaults := map[string]string{}
+	for _, p := range anyList(spec["params"]) {
+		pm, _ := p.(map[string]any)
+		name, _ := pm["name"].(string)
+		if def, ok := pm["default"].(string); ok && name != "" {
+			defaults[name] = def
+		}
+	}
+	seen := map[string]bool{}
+	atRevision := map[string]bool{}
+	for _, key := range []string{"tasks", "finally"} {
+		for _, t := range anyList(spec[key]) {
+			tm, _ := t.(map[string]any)
+			var cloned []string
+			takesRevision := false
+			for _, p := range anyList(tm["params"]) {
+				pm, _ := p.(map[string]any)
+				name, _ := pm["name"].(string)
+				value, _ := pm["value"].(string)
+				if name == "revision" && strings.TrimSpace(value) == "$(params.revision)" {
+					takesRevision = true
+				}
+				if m := pipelineParamRef.FindStringSubmatch(strings.TrimSpace(value)); m != nil {
+					value = defaults[m[1]]
+				}
+				if m := gitRepoURL.FindStringSubmatch(strings.TrimSpace(value)); m != nil {
+					cloned = append(cloned, m[1])
+				}
+			}
+			for _, r := range cloned {
+				seen[r] = true
+				if takesRevision {
+					atRevision[r] = true
+				}
+			}
+		}
+	}
+	repos = sortedSet(seen)
+	if len(atRevision) == 1 {
+		revisionRepo = sortedSet(atRevision)[0]
+	}
+	return repos, revisionRepo
+}
+
+// dockerfileConfigMapRefs adds every ConfigMap volume an object mounts whose
+// name ends in "-dockerfile".
+func dockerfileConfigMapRefs(v any, into map[string]bool) {
+	switch x := v.(type) {
+	case map[string]any:
+		if cm, ok := x["configMap"].(map[string]any); ok {
+			if name, _ := cm["name"].(string); strings.HasSuffix(name, "-dockerfile") {
+				into[name] = true
+			}
+		}
+		for _, child := range x {
+			dockerfileConfigMapRefs(child, into)
+		}
+	case []any:
+		for _, child := range x {
+			dockerfileConfigMapRefs(child, into)
+		}
+	}
+}
+
+func anyList(v any) []any {
+	l, _ := v.([]any)
+	return l
+}
+
+func sortedSet(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// pipelineRepos lists the repositories every Pipeline in the pipelines
+// namespace clones: the default set a revisions read covers.
+func (s *Service) pipelineRepos(ctx context.Context) ([]string, error) {
+	dyn, err := s.buildDynamicClient()
+	if err != nil {
+		return nil, err
+	}
+	pipes, err := dyn.Resource(pipelineGVR).Namespace(s.PipelinesNamespace()).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	repos := map[string]bool{}
+	for _, item := range pipes.Items {
+		cloned, _ := pipelineClones(item.Object)
+		for _, r := range cloned {
+			repos[r] = true
+		}
+	}
+	return sortedSet(repos), nil
 }
 
 // supplyChainPipeline is the pipeline whose runs the supply chain shows.

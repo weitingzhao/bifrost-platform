@@ -1,7 +1,7 @@
 import { DenseTag } from '@bifrost/ui'
 import type { ApprovalItem } from '@/api/approvals'
-import type { DeliveryPipelineRunView } from '@/api/deliveryTypes'
-import type { ReleaseRecord, RunningImageCell } from '@/api/releases'
+import type { DeliveryPipelineRunView, DeliveryPipelineView } from '@/api/deliveryTypes'
+import type { ReleaseRecord, ReleaseRule, RunningImageCell } from '@/api/releases'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { formatPipelineRunStatus, isPipelineRunFailed, isPipelineRunRunning, isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
 import { RELEASE_RECORD_LIMIT, approvalHref, formatBuiltFrom, formatBuiltFromTitle, formatDuration, formatInstant, shortSha,
@@ -16,32 +16,41 @@ export type ReleaseLanesProps = {
   hasToken: boolean
   window: ReleaseWindowView
   records: LaneRead<ReleaseRecord[]>
-  /** The release pipelines delivery/pipelines lists. */
-  pipelines: LaneRead<string[]>
+  /** config/release-rules.yaml as the platform loaded it (GET /api/v1/releases status.rule_list): the lines come from it. */
+  rules: LaneRead<ReleaseRule[]>
+  /** The release pipelines delivery/pipelines lists, with the repositories each clones. */
+  pipelines: LaneRead<DeliveryPipelineView[]>
   /** By pipeline; a pipeline missing here was not read. */
   runs: Record<string, LaneRead<DeliveryPipelineRunView[]>>
   images: LaneRead<RunningImageCell[]>
   approvals: ApprovalItem[]
 }
 
-/** `rev`: the repository a run's `revision` parameter clones (other repositories take their own parameters). */
-type Lane = { id: string; lane: string; repos: string[]; rev?: string; stg?: string; prod?: string; build?: string; image?: string; prodNote?: string }
-
 /**
- * Release lines: config/release-rules.yaml (records), delivery/release_window.go (pipelines), config/running-images.yaml
- * (live images). Repositories are the clones of each line's pipelines (infra k8s/cicd/tekton/pipeline-deliver-*.yaml).
+ * One release line, read from release-rules.yaml (OWNER_LAW #30, 2026-11-17: no hand-kept list): `stg` and `prod` are the
+ * pipelines whose runs deploy that environment, `prefixes` the run-name rules of an environment (runs no pipeline label
+ * finds), `builds` the image builds a pin or GitOps sync deploys later. A line with neither STG nor PROD shows live images.
  */
-const LANES: Lane[] = [
-  { id: 'platform', lane: 'platform', repos: ['bifrost-platform', 'bifrost-ui', 'bifrost-trade-infra'], rev: 'platform', stg: 'bifrost-deliver-platform', prod: 'bifrost-deliver-platform-prod' },
-  { id: 'trade', lane: 'trade', repos: [...['core', 'worker', 'api', 'frontend'].map(r => `bifrost-trade-${r}`), 'bifrost-ui', 'bifrost-trade-infra'],
-    stg: 'bifrost-deliver-stg', prod: 'bifrost-deliver-prod', prodNote: 'pinned PROD runs (release.sh prod, bifrost-deliver-prod-pinned-*) are not in this run list: '
-      + 'one in flight, one that rolled out and then failed its checks, or one that succeeded in the last 5 minutes before the recorder wrote it does not show here' },
-  { id: 'research', lane: 'research', repos: ['bifrost-research'], rev: 'research', build: 'bifrost-deliver-research', image: 'research-api' },
-  { id: 'market-data', lane: 'market-data', repos: ['bifrost-platform-plugin-market-data'], rev: 'market-data', build: 'bifrost-build-market-data', image: 'market-data-api' },
-  { id: 'flex-query', lane: 'market-data', repos: ['bifrost-platform-plugin-flex-query'], rev: 'flex-query', build: 'bifrost-build-flex-query', image: 'flex-query-api' },
-  { id: 'ib-gateway', lane: 'market-data', repos: ['bifrost-platform-plugin'], rev: 'plugin', build: 'bifrost-build-ib-gateway', image: 'ib-gateway' },
-]
+type Line = { id: string; stg?: string; prod?: string; prefixes: { env: string; prefix: string }[]; builds: string[] }
 
+function releaseLines(rules: ReleaseRule[]): Line[] {
+  const lines: Line[] = []
+  for (const rule of rules) {
+    let line = lines.find(l => l.id === rule.lane)
+    if (line == null) lines.push(line = { id: rule.lane, prefixes: [], builds: [] })
+    const pipeline = rule.match.pipeline ?? ''
+    const env = rule.env === 'stg' || rule.env === 'prod' ? rule.env : null
+    if (rule.deploys && env != null) {
+      if (pipeline !== '' && line[env] == null) line[env] = pipeline
+      if ((rule.match.name_prefix ?? '') !== '') line.prefixes.push({ env, prefix: rule.match.name_prefix! })
+    } else if (pipeline !== '' && !line.builds.includes(pipeline)) line.builds.push(pipeline)
+  }
+  return lines
+}
+
+const deploys = (line: Line) => line.stg != null || line.prod != null
+/** The pipelines whose results a line's cells show. */
+const shown = (line: Line) => (deploys(line) ? [line.stg, line.prod].filter((n): n is string => n != null) : line.builds)
 
 type Note = { text: string; title?: string; href?: string }
 /** `at`: when what the cell shows finished, NaN when unknown. */
@@ -76,7 +85,13 @@ function recordCell(record: ReleaseRecord, now: number): Cell {
     notes: [{ text: when(record.completed_at, now) }, ...lost] }
 }
 
-/** A run's revision, named by the repository its `revision` parameter clones when the line has one. */
+/** The repository a pipeline's `revision` parameter clones (delivery/pipelines revision_repo), short; undefined when unknown. */
+const revOf = (p: ReleaseLanesProps, pipeline: string) => {
+  const repo = p.pipelines.data?.find(x => x.name === pipeline)?.revision_repo
+  return repo != null && repo !== '' ? short(repo) : undefined
+}
+
+/** A run's revision, named by the repository its `revision` parameter clones when there is one. */
 const runRevision = (run: DeliveryPipelineRunView, rev?: string) => (rev != null ? `${rev} ${revisionText(run.revision)}` : revisionText(run.revision))
 
 const runCell = (run: DeliveryPipelineRunView, now: number, rev?: string): Cell => ({ mono: true, at: time(run.completion_time),
@@ -95,7 +110,8 @@ function unreadWhy(p: ReleaseLanesProps, pipeline: string): string | null | unde
  * show. A shared revision proves nothing (`main` moves; each repository is cloned on its own), so different runs each
  * show their own. Times that cannot be compared show the one whose time is known and name the other; never the older alone.
  */
-function shipped(p: ReleaseLanesProps, pipeline: string, keep: (r: ReleaseRecord) => boolean, rev?: string): Cell | null {
+function shipped(p: ReleaseLanesProps, pipeline: string, keep: (r: ReleaseRecord) => boolean): Cell | null {
+  const rev = revOf(p, pipeline)
   const record = (p.records.data ?? []).filter(keep).sort((a, b) => rank(b.completed_at) - rank(a.completed_at))[0]
   const run = (p.runs[pipeline]?.data ?? []).filter(isPipelineRunSucceeded).sort((a, b) => rank(b.completion_time) - rank(a.completion_time))[0]
   // Records are written only for successful runs, every five minutes (releases.Service.Tick); an unread run list hides what came since.
@@ -125,7 +141,8 @@ function missing(p: ReleaseLanesProps, pipeline: string): Cell {
 }
 
 /** Runs of this pipeline in flight, and pending requests to start it (#approvals?id=). */
-function inFlight(pipeline: string | undefined, verb: string, p: ReleaseLanesProps, rev?: string): Note[] {
+function inFlight(pipeline: string | undefined, verb: string, p: ReleaseLanesProps): Note[] {
+  const rev = revOf(p, pipeline ?? '')
   const running = (p.runs[pipeline ?? '']?.data ?? []).filter(isPipelineRunRunning)
     .map(run => ({ text: `${verb} ${runRevision(run, rev)} · started ${ago(run.start_time, p.now) ?? 'at an unrecorded time'}`, title: run.name }))
   const waiting = p.approvals.filter(a => a.action === 'start_pipeline_run' && a.params?.name === pipeline)
@@ -134,33 +151,47 @@ function inFlight(pipeline: string | undefined, verb: string, p: ReleaseLanesPro
 }
 
 /** The last successful delivery. deliver-* roll out before they verify, so a later run that ended unsuccessfully may have rolled out. */
-function deployCell(row: Lane, env: 'stg' | 'prod', p: ReleaseLanesProps): Cell {
-  const pipeline = (env === 'stg' ? row.stg : row.prod) ?? ''
-  const cell = shipped(p, pipeline, r => r.deploys && r.lane === row.lane && r.env === env, row.rev) ?? missing(p, pipeline)
+function deployCell(row: Line, env: 'stg' | 'prod', p: ReleaseLanesProps): Cell {
+  const pipeline = row[env]
+  if (pipeline == null) return { text: `No ${env.toUpperCase()}`, notes: [{ text: `release-rules.yaml has no deploying ${env} rule for ${row.id}` }] }
+  const cell = shipped(p, pipeline, r => r.deploys && r.lane === row.id && r.env === env) ?? missing(p, pipeline)
   const shownAt = cell.at ?? Number.NaN
   const ended = (r: DeliveryPipelineRunView) => r.completion_time ?? r.start_time
   const failed = (p.runs[pipeline]?.data ?? []).filter(isPipelineRunFailed).filter(r => !Number.isFinite(shownAt) || rank(ended(r)) > shownAt)
     .sort((a, b) => rank(ended(b)) - rank(ended(a)))[0]
   const risk = failed == null ? [] : [{ title: failed.name,
     text: `${Number.isFinite(shownAt) ? 'newer ' : ''}run ${failed.name} ${formatPipelineRunStatus(failed)} at ${when(ended(failed), p.now)} — it may have rolled out; what runs now is not confirmed` }]
-  const pinned = env === 'prod' && row.prodNote != null ? [{ text: row.prodNote }] : []
-  return { ...cell, notes: [...cell.notes, ...risk, ...inFlight(pipeline, 'Delivering', p, row.rev), ...pinned] }
+  // Run-name rules (release-rules.yaml name_prefix) find runs this pipeline's run list does not hold.
+  const prefixed = row.prefixes.filter(x => x.env === env).map(x => ({ text: `runs named ${x.prefix}* are releases too but not in this run list: `
+    + 'one shows here only once the recorder (every 5 minutes) has recorded it, so one in flight or one that failed its checks after rolling out does not' }))
+  return { ...cell, notes: [...cell.notes, ...risk, ...inFlight(pipeline, 'Delivering', p), ...prefixed] }
 }
 
-/** Research and plugins: the live image (running-images), and under PROD the last image build. */
-function imageCell(row: Lane, env: 'stg' | 'prod', p: ReleaseLanesProps): Cell {
-  const live = p.images.data?.find(c => c.lane === row.lane && c.env === env)
-  const part = live?.text.split(' · ').find(t => t.startsWith(`${row.image} `))
+/** Lines without a deploying pipeline: the live images (running-images), and under PROD each image build's last success. */
+function imageCell(row: Line, env: 'stg' | 'prod', p: ReleaseLanesProps): Cell {
+  const live = p.images.data?.find(c => c.lane === row.id && c.env === env)
   const cell = p.images.error != null ? unknown(`running-images: ${p.images.error}`) : p.images.data == null ? READING
-    : live?.absent === true ? { text: live.text, notes: [] }
-    : part != null ? { mono: true, text: part, title: live?.title, notes: [{ text: 'image in the Deployment spec; rollout state not read' }] }
-    : unknown(live == null ? `running-images has no ${env} cell for ${row.lane}` : live.text)
+    : live == null ? unknown(`running-images has no ${env} cell for ${row.id}`)
+    : live.absent === true ? { text: live.text, notes: [] }
+    : { mono: true, text: live.text, title: live.title, notes: [{ text: 'image in the Deployment spec; rollout state not read' }] }
   if (env === 'stg') return cell
-  const build = shipped(p, row.build ?? '', r => r.pipeline === row.build, row.rev)
-  const built = build == null ? [] : [{ text: `last image build ${build.text} · ${build.notes.map(n => n.text).join('; ')}`, title: build.title }]
-  return { ...cell, notes: [...cell.notes, ...built, ...inFlight(row.build, 'Building', p, row.rev)] }
+  const built = row.builds.flatMap(build => {
+    const last = shipped(p, build, r => r.pipeline === build)
+    return [...(last == null ? [] : [{ text: `last ${short(build)} ${last.text} · ${last.notes.map(n => n.text).join('; ')}`, title: last.title }]),
+      ...inFlight(build, 'Building', p)]
+  })
+  return { ...cell, notes: [...cell.notes, ...built] }
 }
 
+/** The repositories a line's pipelines clone (delivery/pipelines repos), or why they are not known. */
+function lineRepos(row: Line, p: ReleaseLanesProps): string {
+  if (p.pipelines.error != null) return `repositories unknown: pipelines: ${p.pipelines.error}`
+  if (p.pipelines.data == null) return 'repositories: reading…'
+  const listed = shown(row).map(name => p.pipelines.data!.find(x => x.name === name)).filter((x): x is DeliveryPipelineView => x != null)
+  const repos = [...new Set(listed.flatMap(x => x.repos ?? []))]
+  if (listed.length === 0) return `repositories unknown: ${shown(row).join(', ') || 'no pipeline'} not listed`
+  return repos.length === 0 ? 'repositories unknown: its pipelines name no clone' : repos.map(short).join(' · ')
+}
 
 function LaneCell({ label, cell }: { label: string; cell: Cell }) {
   return <div className="min-w-0 text-sm [overflow-wrap:anywhere]">
@@ -173,21 +204,39 @@ function LaneCell({ label, cell }: { label: string; cell: Cell }) {
 }
 
 /** The line's runs, newest first: its run records, opened in place (Console has no page per run). */
-function LaneRuns({ row, p }: { row: Lane; p: ReleaseLanesProps }) {
-  const runs = [row.stg, row.prod, row.build].flatMap(name => (name != null ? (p.runs[name]?.data ?? []) : []))
+function LaneRuns({ row, p }: { row: Line; p: ReleaseLanesProps }) {
+  const runs = [row.stg, row.prod, ...row.builds].flatMap(name => (name != null ? (p.runs[name]?.data ?? []) : []))
     .sort((a, b) => (b.start_time ?? '').localeCompare(a.start_time ?? '')).slice(0, 6)
   return <details className="col-span-full text-xs">
     <summary className="cursor-pointer text-muted-foreground">{`${row.id} runs · ${runs.length}`}</summary>
     <ul className="m-0 list-none p-0 font-mono-tabular [overflow-wrap:anywhere]">
       {runs.length === 0 ? <li>No run read.</li> : runs.map(run => <li key={run.name}>
-        {`${run.name} · ${formatPipelineRunStatus(run)} · started ${ago(run.start_time, p.now) ?? 'at an unrecorded time'} · ${runRevision(run, row.rev)}`}
+        {`${run.name} · ${formatPipelineRunStatus(run)} · started ${ago(run.start_time, p.now) ?? 'at an unrecorded time'} · ${runRevision(run, revOf(p, run.pipeline))}`}
       </li>)}
     </ul>
   </details>
 }
 
+/** Release pipelines no rule names: their runs are never recorded, so which line and environment they ship is unknown. */
+function Unruled({ lines, p }: { lines: Line[]; p: ReleaseLanesProps }) {
+  const named = new Set(lines.flatMap(l => [l.stg, l.prod, ...l.builds]))
+  const rest = (p.pipelines.data ?? []).map(x => x.name).filter(name => !named.has(name)).sort()
+  if (rest.length === 0) return null
+  return <li data-lane="no-rule" className="border-t border-[var(--card-border)] px-3 py-2 text-sm">
+    <strong>No release rule</strong>
+    <div className="text-xs text-muted-foreground">release-rules.yaml names no rule for these pipelines: their runs are not recorded as releases, and their line and environment are unknown.</div>
+    <ul className="m-0 list-none p-0 text-xs font-mono-tabular [overflow-wrap:anywhere]">
+      {rest.map(name => {
+        const last = shipped(p, name, () => false)
+        return <li key={name}>{`${name} · ${last == null ? (unreadWhy(p, name) != null ? `runs not read (${unreadWhy(p, name)})` : 'no successful run read') : `last success ${last.text} · ${last.notes[0]?.text ?? ''}`}`}</li>
+      })}
+    </ul>
+  </li>
+}
+
 export function ReleaseLanesSection(p: ReleaseLanesProps) {
   const w = p.window
+  const lines = p.rules.data == null ? [] : releaseLines(p.rules.data)
   return <OpsSection id="release-lanes" title="Release lanes" bodyPadding="none" overflow="visible"
     description="Each release line: the last successful STG and PROD delivery (what runs now is not confirmed), and the one release window every repository shares.">
     <div className="@container flex min-w-0 flex-col">
@@ -198,14 +247,18 @@ export function ReleaseLanesSection(p: ReleaseLanesProps) {
         {w.state === 'held' && <strong>Blocks releases in every repository until it is released or expires.</strong>}
       </div>
       <ul aria-label="Release lanes: last successful delivery per environment" className="m-0 list-none p-0">
-        {LANES.map(row => <li key={row.id} data-lane={row.id}
+        {p.rules.data == null && <li data-lane="unread" className="border-t border-[var(--card-border)] px-3 py-2 text-sm">
+          {p.rules.error != null ? `Unknown: the release lines come from release-rules.yaml, which was not read (${p.rules.error})` : 'Reading…'}</li>}
+        {p.rules.data?.length === 0 && <li data-lane="none" className="border-t border-[var(--card-border)] px-3 py-2 text-sm">release-rules.yaml has no rules: no release line.</li>}
+        {lines.map(row => <li key={row.id} data-lane={row.id}
           className="grid gap-x-4 gap-y-1 border-t border-[var(--card-border)] px-3 py-2 @3xl:grid-cols-[minmax(0,9rem)_repeat(2,minmax(0,1fr))]">
-          <div className="min-w-0"><strong>{row.id}</strong><div className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{row.repos.map(short).join(' · ')}</div></div>
-          {(['stg', 'prod'] as const).map(env => (row.stg != null
+          <div className="min-w-0"><strong>{row.id}</strong><div className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{lineRepos(row, p)}</div></div>
+          {(['stg', 'prod'] as const).map(env => (deploys(row)
             ? <LaneCell key={env} label={`${env.toUpperCase()} · last successful delivery`} cell={deployCell(row, env, p)} />
             : <LaneCell key={env} label={`${env.toUpperCase()} · image in Deployment spec`} cell={imageCell(row, env, p)} />))}
           <LaneRuns row={row} p={p} />
         </li>)}
+        {p.rules.data != null && <Unruled lines={lines} p={p} />}
       </ul>
     </div>
   </OpsSection>

@@ -23,6 +23,11 @@ type PipelineView struct {
 	Detail      string `json:"detail,omitempty"`
 	BuildReady  *bool  `json:"build_ready,omitempty"`
 	BlockReason string `json:"block_reason,omitempty"`
+	// Repos are the Gitea repositories the Pipeline object clones, read from
+	// its spec (pipelineClones); RevisionRepo is the one its revision
+	// parameter clones, empty when none or several are.
+	Repos        []string `json:"repos,omitempty"`
+	RevisionRepo string   `json:"revision_repo,omitempty"`
 }
 
 type PipelinePreflightResponse struct {
@@ -91,20 +96,22 @@ type StgWorkloadImageView struct {
 type SupplyChainTaskRunView = deliveryreadings.SupplyChainTaskRunView
 
 type SupplyChainResponse struct {
-	ClusterID                   string                    `json:"cluster_id"`
-	CicdNamespace               string                    `json:"cicd_namespace"`
-	StgNamespace                string                    `json:"stg_namespace"`
-	Reachability                probe.Reachability        `json:"reachability"`
-	Detail                      string                    `json:"detail"`
-	MirrorCredentialsConfigured bool                      `json:"mirror_credentials_configured"`
-	DefaultRevision             string                    `json:"default_revision"`
-	TrackedRepos                []string                  `json:"tracked_repos"`
-	DockerfileCMs               []DockerfileConfigMapView `json:"dockerfile_configmaps"`
-	StgWorkloads                []StgWorkloadImageView    `json:"stg_workloads"`
-	LastDeliverRun              *PipelineRunView          `json:"last_deliver_run,omitempty"`
-	LastDeliverSuccess          *PipelineRunView          `json:"last_deliver_success,omitempty"`
-	LastSupplyChainTask         *SupplyChainTaskRunView   `json:"last_supply_chain_task,omitempty"`
-	GeneratedAt                 time.Time                 `json:"generated_at"`
+	ClusterID                   string             `json:"cluster_id"`
+	CicdNamespace               string             `json:"cicd_namespace"`
+	StgNamespace                string             `json:"stg_namespace"`
+	Reachability                probe.Reachability `json:"reachability"`
+	Detail                      string             `json:"detail"`
+	MirrorCredentialsConfigured bool               `json:"mirror_credentials_configured"`
+	DefaultRevision             string             `json:"default_revision"`
+	TrackedRepos                []string           `json:"tracked_repos"`
+	// TrackedReposError says why tracked_repos could not be read; it is then empty.
+	TrackedReposError   string                    `json:"tracked_repos_error,omitempty"`
+	DockerfileCMs       []DockerfileConfigMapView `json:"dockerfile_configmaps"`
+	StgWorkloads        []StgWorkloadImageView    `json:"stg_workloads"`
+	LastDeliverRun      *PipelineRunView          `json:"last_deliver_run,omitempty"`
+	LastDeliverSuccess  *PipelineRunView          `json:"last_deliver_success,omitempty"`
+	LastSupplyChainTask *SupplyChainTaskRunView   `json:"last_supply_chain_task,omitempty"`
+	GeneratedAt         time.Time                 `json:"generated_at"`
 }
 
 type StartPipelineRunRequest struct {

@@ -70,7 +70,9 @@ func cacheRuns() []runtime.Object {
 // listCounting is a fake cluster holding objs that counts PipelineRun lists.
 func listCounting(objs ...runtime.Object) (*dynfake.FakeDynamicClient, *atomic.Int64) {
 	dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
-		pipelineRunGVR: "PipelineRunList", taskRunGVR: "TaskRunList", gatecluster.ConfigMapGVR: "ConfigMapList"}, objs...)
+		pipelineRunGVR: "PipelineRunList", taskRunGVR: "TaskRunList", gatecluster.ConfigMapGVR: "ConfigMapList",
+		// The supply chain also lists Pipelines and Tasks (OWNER_LAW #30, 2026-11-17).
+		pipelineGVR: "PipelineList", taskGVR: "TaskList"}, objs...)
 	var lists atomic.Int64
 	dyn.PrependReactor("list", "pipelineruns", func(k8stesting.Action) (bool, runtime.Object, error) {
 		lists.Add(1)

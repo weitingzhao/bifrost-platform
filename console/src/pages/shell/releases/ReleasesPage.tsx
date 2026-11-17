@@ -117,10 +117,10 @@ export function ReleasesPage() {
     refetchInterval: 30_000,
   })
 
-  const pipelineNames = (pipelines.data?.pipelines ?? [])
-    .map(pipeline => pipeline.name)
-    .filter(isReleasePipeline)
-    .sort()
+  const releasePipelines = (pipelines.data?.pipelines ?? [])
+    .filter(pipeline => isReleasePipeline(pipeline.name))
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const pipelineNames = releasePipelines.map(pipeline => pipeline.name)
 
   const runQueries = useQueries({
     queries: pipelineNames.map(name => ({
@@ -154,6 +154,9 @@ export function ReleasesPage() {
   const pending = pendingReleaseApprovals(approvals.data ?? [])
   // A 200 can still carry an unread list: records and images say so in `error`, pipelines and runs in `reachability`.
   const pipelinesUnreached = pipelines.data != null && pipelines.data.reachability !== 'ok' ? pipelines.data.detail || pipelines.data.reachability || null : null
+  // The release lines come from release-rules.yaml as loaded; a rules error or a platform-api older than rule_list leaves them unknown.
+  const rulesError = errorText(releases.error) ?? (releases.data?.status?.rules_error || null)
+    ?? (releases.data != null && releases.data.status?.rule_list == null ? 'this platform-api sends no rule_list' : null)
   const laneRuns = Object.fromEntries(pipelineNames.map((name, index) => {
     const q = runQueries[index]
     const unreached = q?.data != null && q.data.reachability !== 'ok' ? q.data.detail || q.data.reachability : null
@@ -171,7 +174,8 @@ export function ReleasesPage() {
         hasToken={hasToken}
         window={windowView}
         records={{ data: releases.data?.error ? undefined : releases.data?.records, error: errorText(releases.error) ?? (releases.data?.error || null) }}
-        pipelines={{ data: pipelines.data == null || pipelinesUnreached != null ? undefined : pipelineNames, error: errorText(pipelines.error) ?? pipelinesUnreached }}
+        rules={{ data: rulesError == null ? releases.data?.status?.rule_list : undefined, error: rulesError }}
+        pipelines={{ data: pipelines.data == null || pipelinesUnreached != null ? undefined : releasePipelines, error: errorText(pipelines.error) ?? pipelinesUnreached }}
         runs={laneRuns}
         images={{ data: images.data == null || images.data.error ? undefined : (images.data.cells ?? []), error: errorText(images.error) ?? (images.data?.error || null) }}
         approvals={pending}

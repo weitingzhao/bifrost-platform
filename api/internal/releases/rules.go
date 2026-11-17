@@ -21,16 +21,16 @@ const rulesFile = "release-rules.yaml"
 type Rule struct {
 	Match struct {
 		// Pipeline is the tekton.dev/pipeline label (a pipelineRef name).
-		Pipeline string `yaml:"pipeline"`
+		Pipeline string `yaml:"pipeline" json:"pipeline,omitempty"`
 		// NamePrefix matches the run name — for runs with an inline pipelineSpec,
 		// whose tekton.dev/pipeline label is the run name itself.
-		NamePrefix string `yaml:"name_prefix"`
-	} `yaml:"match"`
-	Lane string `yaml:"lane"`
-	Env  string `yaml:"env"`
+		NamePrefix string `yaml:"name_prefix" json:"name_prefix,omitempty"`
+	} `yaml:"match" json:"match"`
+	Lane string `yaml:"lane" json:"lane"`
+	Env  string `yaml:"env" json:"env"`
 	// Deploys: the run puts what it built into a running environment. False for
 	// image builds that something else (a pin, a GitOps sync) deploys later.
-	Deploys bool `yaml:"deploys"`
+	Deploys bool `yaml:"deploys" json:"deploys"`
 }
 
 // Rules is release-rules.yaml.

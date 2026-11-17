@@ -305,10 +305,14 @@ type Status struct {
 	RulesErr  string      `json:"rules_error,omitempty"`
 	Namespace string      `json:"namespace"`
 	LastTick  *TickResult `json:"last_tick,omitempty"`
+	// RuleList is release-rules.yaml's rules as loaded, in order: the
+	// Releases page builds its release lines from them (OWNER_LAW #30).
+	RuleList []Rule `json:"rule_list"`
 }
 
 func (s *Service) Status() Status {
-	st := Status{RulesPath: s.rulesPath, Rules: len(s.rules.Rules), Namespace: s.rules.Namespace}
+	st := Status{RulesPath: s.rulesPath, Rules: len(s.rules.Rules), Namespace: s.rules.Namespace,
+		RuleList: append([]Rule{}, s.rules.Rules...)}
 	if s.rulesErr != nil {
 		st.RulesErr = s.rulesErr.Error()
 	}

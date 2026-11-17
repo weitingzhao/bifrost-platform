@@ -22,11 +22,21 @@ export type ReleaseRecord = {
   recorded_at: string
 }
 
+/** One rule of config/release-rules.yaml: which finished runs are a release of which line and environment. */
+export type ReleaseRule = {
+  match: { pipeline?: string; name_prefix?: string }
+  lane: string
+  env: string
+  deploys: boolean
+}
+
 export type ReleaseListStatus = {
   rules_path?: string
   rules?: number
   rules_error?: string
   namespace?: string
+  /** The rules as loaded, in order (absent from a platform older than 2026-11-17). */
+  rule_list?: ReleaseRule[]
 }
 
 export type ReleaseListResponse = {

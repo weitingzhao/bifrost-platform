@@ -61,6 +61,10 @@ export interface DeliveryPipelineView {
   detail?: string
   build_ready?: boolean
   block_reason?: string
+  /** Gitea repositories the Pipeline object clones (read from its spec). */
+  repos?: string[]
+  /** The one repository its `revision` parameter clones; absent when none or several are. */
+  revision_repo?: string
 }
 
 
@@ -168,6 +172,8 @@ export interface SupplyChainResponse {
   mirror_credentials_configured: boolean
   default_revision: string
   tracked_repos: string[]
+  /** Why tracked_repos could not be read from the cluster's Pipelines; it is then empty. */
+  tracked_repos_error?: string
   dockerfile_configmaps: DockerfileConfigMapView[]
   stg_workloads: StgWorkloadImageView[]
   last_deliver_run?: DeliveryPipelineRunView

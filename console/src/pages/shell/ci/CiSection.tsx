@@ -42,7 +42,9 @@ const VIEWS: [View, string][] = [['time', 'By time'], ['domain', 'By domain'], [
 
 export function CiSection() {
   const projects = useQuery({ queryKey: ['cockpit', 'supply-chain'], queryFn: fetchSupplyChain })
-  const repos = projects.data?.tracked_repos
+  // tracked_repos are the repositories the cluster's Pipelines clone; unread, the platform says why instead of a list.
+  const reposUnread = projects.data?.tracked_repos_error || null
+  const repos = reposUnread != null ? undefined : projects.data?.tracked_repos
   const [pickedRepo, setPickedRepo] = useState('')
   const repo = repos?.includes(pickedRepo) ? pickedRepo : repos?.includes(DELIVERY.repo) ? DELIVERY.repo : repos?.[0]
   const [view, setView] = useState<View>('time')
@@ -155,7 +157,7 @@ export function CiSection() {
   const domainsNote = graph.error ? `Who depends on whom could not be read: ${errorText(graph.error)}.`
     : graph.data == null ? 'Reading the domains of main for the first time: every Go file of the repository is read once, which can take a minute. After that the last graph is always shown at once.'
       : !graph.data.measured ? `Domains are not measured for this repository: ${graph.data.note}.` : null
-  const projectsError = errorText(projects.error)
+  const projectsError = errorText(projects.error) ?? reposUnread
   return (
     <section aria-label="CI" className="flex min-w-0 flex-col gap-3.5">
       <CiGuide />

@@ -34,6 +34,7 @@ var (
 	pipelineGVR    = schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "pipelines"}
 	pipelineRunGVR = schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "pipelineruns"}
 	taskRunGVR     = schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "taskruns"}
+	taskGVR        = schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "tasks"}
 )
 
 // sanitizeLabelValue converts a Git ref (e.g. "feature/release-ui-polish")
@@ -134,7 +135,9 @@ func (s *Service) Pipelines(ctx context.Context) PipelinesResponse {
 
 	views := make([]PipelineView, 0, len(list.Items))
 	for _, item := range list.Items {
-		views = append(views, s.enrichPipelineView(ctx, item.GetName(), item.GetNamespace()))
+		view := s.enrichPipelineView(ctx, item.GetName(), item.GetNamespace())
+		view.Repos, view.RevisionRepo = pipelineClones(item.Object)
+		views = append(views, view)
 	}
 	reach := probe.ReachOK
 	detail := fmt.Sprintf("%d pipeline(s) in %s", len(views), ns)
@@ -1255,7 +1258,13 @@ func (s *Service) Revisions(ctx context.Context, repos []string) RevisionsRespon
 	}
 
 	if len(repos) == 0 {
-		repos = trackedGiteaRepos
+		read, err := s.pipelineRepos(ctx)
+		if err != nil {
+			out.Repos = []string{}
+			out.Detail = "repositories not read from the Pipelines: " + err.Error()
+			return out
+		}
+		repos = read
 		out.Repos = repos
 	}
 

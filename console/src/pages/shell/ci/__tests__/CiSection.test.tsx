@@ -46,13 +46,14 @@ vi.mock('@xyflow/react', () => ({
 afterEach(() => { cleanup(); vi.resetAllMocks() })
 
 type Over = {
-  runs?: 'fail' | 'none' | UnitsRuns; fullCi?: 'none'; projects?: 'fail'; repos?: string[]
+  runs?: 'fail' | 'none' | UnitsRuns; fullCi?: 'none'; projects?: 'fail' | 'unread'; repos?: string[]
   graph?: CiDomainGraph | 'fail'; changes?: CiChanges['changes']; timings?: Record<string, TimingRun[]>; window?: 'held' | 'fail'; policy?: ReleasePolicyStatus; scorecard?: CiScorecard
 }
 
 /** Two projects the mocked platform tracks: `r` (the contract's) declares, `plain` (invented) does not. */
 function setup(over: Over = {}) {
   if (over.projects === 'fail') vi.mocked(fetchSupplyChain).mockRejectedValue(new Error('supply chain: HTTP 503'))
+  else if (over.projects === 'unread') vi.mocked(fetchSupplyChain).mockResolvedValue({ tracked_repos: [], tracked_repos_error: 'Pipelines not read: forbidden' } as SupplyChainResponse)
   else vi.mocked(fetchSupplyChain).mockResolvedValue({ tracked_repos: over.repos ?? ['r', 'plain'] } as SupplyChainResponse)
   const first = (over.repos ?? ['r', 'plain'])[0]
   vi.mocked(fetchUnitsConfig).mockImplementation(async repo => repo === first ? { ...contract.configDeclared(), repo } : { ...contract.configUndeclared(), repo })
@@ -191,6 +192,16 @@ it('a failed read of the project list is an alert, and the full run can still be
   expect(screen.queryByRole('group', { name: 'Arrange by' })).toBeNull()
   open('ci-fold-full')
   expect(await screen.findByText('1 more could not be read')).toBeInTheDocument()
+  expect(fetchUnitsConfig).not.toHaveBeenCalled()
+})
+
+// Origin: 2026-11-17, OWNER_LAW #30 — tracked_repos was a hand-kept list; it is now read from the cluster's Pipelines, and
+// when they are not read the platform sends the reason, which is not "the platform tracks no project".
+it('a project list the platform could not read from the Pipelines is an alert with its reason, not "no project"', async () => {
+  setup({ projects: 'unread' })
+  const alert = await screen.findByText(/The list of projects could not be read: Pipelines not read: forbidden\./)
+  expect(alert).toHaveAttribute('role', 'alert')
+  expect(screen.queryByText('The platform tracks no project')).toBeNull()
   expect(fetchUnitsConfig).not.toHaveBeenCalled()
 })
 

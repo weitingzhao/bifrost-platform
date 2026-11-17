@@ -1,7 +1,6 @@
 import type { ApprovalItem } from '@/api/approvals'
 import type { DeliveryPipelineRunView, GitOpsApplicationView } from '@/api/deliveryTypes'
 import type { ReleaseRecord } from '@/api/releases'
-import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
 import { describe, expect, it } from 'vitest'
 import {
   RELEASE_WINDOW_FREE,
@@ -10,7 +9,6 @@ import {
   catalogProdApp,
   formatDuration,
   isReleasePipeline,
-  namespaceForLaneEnv,
   pendingReleaseApprovals,
   prodRollbackApps,
   releaseWindowView,
@@ -68,7 +66,6 @@ describe('versionCell', () => {
     const cell = versionCell({
       lane: 'platform',
       env: 'stg',
-      apps: [],
       records: [
         record({
           run: 'older',
@@ -109,11 +106,11 @@ describe('versionCell', () => {
         repos: { 'bifrost-research': { sha: SHA, source: 'result' } },
       }),
     ]
-    expect(versionCell({ records, lane: 'research', env: 'stg', apps: [] }).text).toBe('—')
-    expect(versionCell({ records, lane: 'research', env: 'prod', apps: [] }).text).toBe('—')
-    expect(versionCell({ records, lane: 'agent', env: 'stg', apps: [] }).text).toBe('—')
-    expect(versionCell({ records, lane: 'agent', env: 'prod', apps: [] }).text).toBe('—')
-    expect(versionCell({ records, lane: 'market-data', env: 'prod', apps: [] }).text).toBe('—')
+    expect(versionCell({ records, lane: 'research', env: 'stg' }).text).toBe('—')
+    expect(versionCell({ records, lane: 'research', env: 'prod' }).text).toBe('—')
+    expect(versionCell({ records, lane: 'agent', env: 'stg' }).text).toBe('—')
+    expect(versionCell({ records, lane: 'agent', env: 'prod' }).text).toBe('—')
+    expect(versionCell({ records, lane: 'market-data', env: 'prod' }).text).toBe('—')
   })
 
   it('renders live image text, including an absent research cell', () => {
@@ -121,24 +118,19 @@ describe('versionCell', () => {
       { lane: 'research', env: 'stg', absent: true, text: 'No STG', title: '' },
       { lane: 'research', env: 'prod', text: 'research-api 0.205.0', title: 'research/research-api research-api:0.205.0' },
     ]
-    expect(versionCell({ records: [], lane: 'research', env: 'stg', apps: [], runningImages }).text).toBe('No STG')
-    const prod = versionCell({ records: [], lane: 'research', env: 'prod', apps: [], runningImages })
+    expect(versionCell({ records: [], lane: 'research', env: 'stg', runningImages }).text).toBe('No STG')
+    const prod = versionCell({ records: [], lane: 'research', env: 'prod', runningImages })
     expect(prod.text).toBe('research-api 0.205.0')
     expect(prod.title).toContain('research-api')
-    expect(versionCell({ records: [], lane: 'platform', env: 'stg', apps: [], runningImages }).text).toBe('—')
+    expect(versionCell({ records: [], lane: 'platform', env: 'stg', runningImages }).text).toBe('Unknown')
   })
 
-  it('falls back to the Argo revision for Platform and Trade namespaces', () => {
-    const namespace = namespaceForLaneEnv('platform', 'prod')
-    expect(namespace).toBe(deliveryTargetById('platform-prod').namespace)
-    const cell = versionCell({
-      records: [],
-      lane: 'platform',
-      env: 'prod',
-      apps: [{ name: 'bifrost-platform-prod', destination_namespace: namespace, revision: OTHER }],
-    })
-    expect(cell.text).toBe('fedcba9')
-    expect(cell.title).toContain('Argo CD revision')
+  // 2026-11-17, OWNER_LAW #30: Platform and Trade without a record fell back to the Argo revision of a namespace that a
+  // hand-kept target list (deliveryTargets.ts) named; with that list gone the version is unknown, and the cell says why.
+  it('says Unknown and why when Platform or Trade has no deploying record', () => {
+    const cell = versionCell({ records: [], lane: 'platform', env: 'prod' })
+    expect(cell.text).toBe('Unknown')
+    expect(cell.title).toBe('No deploying release record for platform prod in the newest 40 records')
   })
 })
 

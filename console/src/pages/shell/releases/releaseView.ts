@@ -1,7 +1,6 @@
 import { formatTimeRemaining, type ApprovalItem } from '@/api/approvals'
 import type { DeliveryPipelineRunView, GitOpsApplicationView, ReleaseWindowResponse } from '@/api/deliveryTypes'
 import type { ReleaseRecord, RunningImageCell } from '@/api/releases'
-import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
 import {
   formatPipelineRunStatus,
   isPipelineRunFailed,
@@ -43,12 +42,6 @@ export type AttentionRun = {
   revision: string
 }
 
-type VersionApp = {
-  name: string
-  destination_namespace?: string
-  revision?: string
-}
-
 /**
  * Name rule from the actions catalog (ProdApp): an application is PROD when
  * its name is "prod", starts with "prod-", ends with "-prod", or contains
@@ -71,14 +64,6 @@ export function rollbackUndo(): string {
 /** Deliver and image-build pipelines. CI and smoke runs are not release runs. */
 export function isReleasePipeline(name: string): boolean {
   return name.startsWith('bifrost-deliver-') || name.startsWith('bifrost-build-')
-}
-
-export function namespaceForLaneEnv(lane: string, env: 'stg' | 'prod'): string | undefined {
-  if (lane === 'platform' && env === 'stg') return deliveryTargetById('platform-stg').namespace
-  if (lane === 'platform' && env === 'prod') return deliveryTargetById('platform-prod').namespace
-  if (lane === 'trade' && env === 'stg') return deliveryTargetById('trade-stg').namespace
-  if (lane === 'trade' && env === 'prod') return deliveryTargetById('trade-prod').namespace
-  return undefined
 }
 
 export function formatInstant(iso: string | undefined): string {
@@ -134,25 +119,10 @@ function newestDeploy(records: ReleaseRecord[], lane: string, env: string): Rele
     .sort((a, b) => Date.parse(b.completed_at) - Date.parse(a.completed_at))[0]
 }
 
-function gitopsText(apps: VersionApp[], namespace: string): { text: string; title: string } | undefined {
-  const matches = apps.filter(
-    app => app.destination_namespace === namespace && (app.revision?.trim() ?? '') !== '',
-  )
-  if (matches.length === 0) return undefined
-  const unique = [...new Set(matches.map(app => app.revision?.trim() ?? ''))]
-  const text =
-    unique.length === 1
-      ? shortSha(unique[0])
-      : matches.map(app => `${app.name} ${shortSha(app.revision)}`).join(' · ')
-  const title = matches.map(app => `${app.name} ${app.revision}`).join('\n')
-  return { text, title: `Argo CD revision\n${title}` }
-}
-
 export function versionCell(input: {
   records: ReleaseRecord[]
   lane: string
   env: 'stg' | 'prod'
-  apps: VersionApp[]
   runningImages?: RunningImageCell[]
 }): VersionCell {
   if (LIVE_IMAGE_LANES.has(input.lane as VersionLane)) {
@@ -171,12 +141,8 @@ export function versionCell(input: {
       return { text, title }
     }
   }
-  const namespace = namespaceForLaneEnv(input.lane, input.env)
-  if (namespace != null) {
-    const fromGit = gitopsText(input.apps, namespace)
-    if (fromGit != null && fromGit.text !== '') return fromGit
-  }
-  return { text: '—', title: '' }
+  // No hand-kept lane → namespace map to fall back on (OWNER_LAW #30, 2026-11-17): without a record the version is unknown.
+  return { text: 'Unknown', title: `No deploying release record for ${input.lane} ${input.env} in the newest ${RELEASE_RECORD_LIMIT} records` }
 }
 
 export function prodRollbackApps(apps: GitOpsApplicationView[]): GitOpsApplicationView[] {

@@ -3055,9 +3055,6 @@
       "path": "console/src/lib/delivery",
       "files": [
         "console/src/lib/delivery/__tests__/researchRunLogHint.test.ts",
-        "console/src/lib/delivery/deliverPlatformPhases.ts",
-        "console/src/lib/delivery/deliverStgPhases.ts",
-        "console/src/lib/delivery/deliveryTargets.ts",
         "console/src/lib/delivery/pipelineRunAskPack.ts",
         "console/src/lib/delivery/tradeEnvAccess.ts"
       ],
@@ -5010,7 +5007,6 @@
         "console/src/api/deliveryTypes.ts",
         "console/src/api/releases.ts",
         "console/src/components/shell",
-        "console/src/lib/delivery",
         "console/src/lib/platformAuth.ts",
         "console/src/pages/shell/services"
       ],
@@ -5031,7 +5027,6 @@
         "console/src/pages/shell/services/ServiceVersions.tsx"
       ],
       "imports": [
-        "console/src/api/gitOps.ts",
         "console/src/api/releases.ts",
         "console/src/components/layout",
         "console/src/pages/shell/releases"

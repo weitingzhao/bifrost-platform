@@ -18,6 +18,21 @@ const record = (run: string, pipeline: string, lane: string, env: string, deploy
 const run = (name: string, pipeline: string, reason: string, start: string, end?: string, revision = P) => ({
   name, namespace: 'cicd', pipeline, revision, status: reason === 'Running' ? 'Unknown' : reason === 'Succeeded' ? 'True' : 'False', reason, start_time: start, completion_time: end,
 })
+// Shapes of releases.Rule (status.rule_list) and delivery.PipelineView, cut from config/release-rules.yaml and the infra
+// Pipelines: the lines and their repositories come from these (2026-11-17, OWNER_LAW #30), not from a list in the page.
+const rule = (lane: string, env: string, deploys: boolean, pipeline?: string, name_prefix?: string) => ({ match: { pipeline, name_prefix }, lane, env, deploys })
+const RULES = [rule('trade', 'prod', true, undefined, 'bifrost-deliver-prod-pinned-'), rule('trade', 'prod', true, 'bifrost-deliver-prod'),
+  rule('trade', 'stg', true, 'bifrost-deliver-stg'), rule('trade', 'stg-frontend-build', false, 'bifrost-build-frontend-stg'),
+  rule('platform', 'stg', true, 'bifrost-deliver-platform'), rule('platform', 'prod', true, 'bifrost-deliver-platform-prod'),
+  rule('research', 'image', false, 'bifrost-deliver-research'), rule('market-data', 'image', false, 'bifrost-build-market-data')]
+const TRADE_REPOS = [...['core', 'worker', 'api', 'frontend', 'infra'].map(r => `bifrost-trade-${r}`), 'bifrost-ui']
+const pipe = (name: string, repos: string[], revision_repo?: string) => ({ name, namespace: 'cicd', repos, revision_repo })
+const PIPES = [pipe('bifrost-deliver-stg', TRADE_REPOS), pipe('bifrost-deliver-prod', TRADE_REPOS),
+  pipe('bifrost-deliver-platform', ['bifrost-platform', 'bifrost-trade-infra', 'bifrost-ui'], 'bifrost-platform'),
+  pipe('bifrost-deliver-platform-prod', ['bifrost-platform', 'bifrost-ui'], 'bifrost-platform'),
+  pipe('bifrost-deliver-research', ['bifrost-research', 'bifrost-trade-infra'], 'bifrost-research'),
+  pipe('bifrost-build-market-data', ['bifrost-platform-plugin-market-data'], 'bifrost-platform-plugin-market-data'),
+  pipe('bifrost-build-flex-query', ['bifrost-platform-plugin-flex-query'], 'bifrost-platform-plugin-flex-query')]
 const approval = { id: 'ap-prod-1', action: 'start_pipeline_run', tier: 'C', status: 'pending', params: { name: 'bifrost-deliver-platform-prod', revision: P } } as unknown as ApprovalItem
 
 function props(over: Partial<ReleaseLanesProps> = {}): ReleaseLanesProps {
@@ -26,9 +41,11 @@ function props(over: Partial<ReleaseLanesProps> = {}): ReleaseLanesProps {
     window: releaseWindowView({ hasToken: true, isLoading: false, error: null, data: { open: false }, now: NOW }),
     records: { data: [record('stgrel-12-1-abcd1234', 'bifrost-deliver-platform', 'platform', 'stg', true, '2026-11-01T03:00:00Z'),
       record('bifrost-deliver-platform-prod-9', 'bifrost-deliver-platform-prod', 'platform', 'prod', true, '2026-10-31T18:00:00Z')], error: null },
-    pipelines: { data: ['bifrost-deliver-stg', 'bifrost-deliver-prod', 'bifrost-build-flex-query'], error: null },
+    rules: { data: RULES, error: null },
+    pipelines: { data: PIPES.filter(x => ['bifrost-deliver-stg', 'bifrost-deliver-prod', 'bifrost-build-flex-query', 'bifrost-deliver-research', 'bifrost-build-market-data'].includes(x.name)), error: null },
     runs: { 'bifrost-deliver-stg': { data: [run('deliver-stg-live', 'bifrost-deliver-stg', 'Running', '2026-11-01T05:50:00Z')], error: null },
-      'bifrost-deliver-prod': { data: [], error: null }, 'bifrost-build-flex-query': { data: [run('flex-1', 'bifrost-build-flex-query', 'Succeeded', '2026-10-30T00:00:00Z')], error: null } },
+      'bifrost-deliver-prod': { data: [], error: null }, 'bifrost-build-flex-query': { data: [run('flex-1', 'bifrost-build-flex-query', 'Succeeded', '2026-10-30T00:00:00Z')], error: null },
+      'bifrost-build-market-data': { data: [run('md-1', 'bifrost-build-market-data', 'Succeeded', '2026-10-30T00:00:00Z')], error: null } },
     images: { data: [{ lane: 'research', env: 'stg', absent: true, text: 'No STG' }, { lane: 'research', env: 'prod', text: 'research-api 0.205.0' },
       { lane: 'market-data', env: 'stg', absent: true, text: 'No STG' }, { lane: 'market-data', env: 'prod', text: 'market-data-api 0.61.0 · flex-query-api 0.9.1 · ib-gateway unread' }], error: null },
     ...over,
@@ -54,11 +71,15 @@ describe('ReleaseLanesSection', () => {
     expect(lane('platform').textContent).toContain('2026-11-01 03:00Z · 3h ago')
     expect(platform.getByRole('link', { name: `${PRD}: approval waiting ap-prod-1` }).getAttribute('href')).toBe(approvalHref('ap-prod-1'))
     expect(lane('trade').textContent).toContain('Delivering abcd123 · started 10m ago')
-    expect(lane('trade').textContent).toContain('trade-core · trade-worker · trade-api · trade-frontend · ui · trade-infra')
+    expect(lane('trade').textContent).toContain('trade-core · trade-worker · trade-api · trade-frontend · trade-infra · ui')
+    expect(lane('trade').textContent).not.toContain('socket')
     expect(lane('research').textContent).toContain('No STG')
-    expect(lane('flex-query').textContent).toContain('flex-query-api 0.9.1image in the Deployment spec; rollout state not read')
-    expect(lane('flex-query').textContent).toContain('last image build flex-query abcd123 · time unknown')
-    expect(lane('ib-gateway').textContent).toContain('ib-gateway unread')
+    expect(lane('research').textContent).toContain('research · trade-infra')
+    expect(lane('market-data').textContent).toContain('market-data-api 0.61.0 · flex-query-api 0.9.1 · ib-gateway unreadimage in the Deployment spec; rollout state not read')
+    expect(lane('market-data').textContent).toContain('last build-market-data platform-plugin-market-data abcd123 · time unknown')
+    // flex-query's pipeline is listed but no rule names it: not a line of its own; listed as unruled with its last success.
+    expect(lane('flex-query')).toBeNull()
+    expect(lane('no-rule').textContent).toContain('bifrost-build-flex-query · last success platform-plugin-flex-query abcd123 · time unknown')
     expect(screen.getByTestId('release-lanes-window').textContent).toContain('Release window free')
     // The daily landing quota is gone (cleanup wave 1): no quota line.
     expect(screen.queryByTestId('release-lanes-quota')).toBeNull()
@@ -66,7 +87,7 @@ describe('ReleaseLanesSection', () => {
 
   it('shows the later of the newest release record and the newest successful run, STG and PROD alike (review: record A, newer run B)', () => {
     const B = 'b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0'
-    const versus = (id: string, pipeline: string, env: string, records: [string, string, string?][], runs: ReturnType<typeof run>[]) => show(id, {
+    const versus = (id: string, pipeline: string, env: string, records: [string, string, string?][], runs: ReturnType<typeof run>[]) => show(id, { pipelines: { data: PIPES, error: null },
       runs: { [pipeline]: { data: runs, error: null } }, records: { data: records.map(([name, at, revision]) => ({ ...record(name, pipeline, id, env, true, at), revision })), error: null } })
     // Record A, then a newer successful run B the records do not hold yet: B.
     const newerRun = versus('platform', 'bifrost-deliver-platform-prod', 'prod', [['prod-A', '2026-10-31T18:00:00Z']], [run('prod-B', 'bifrost-deliver-platform-prod', 'Succeeded', '2026-11-01T03:40:00Z', '2026-11-01T04:00:00Z', B)])
@@ -105,10 +126,24 @@ describe('ReleaseLanesSection', () => {
     expect(text).not.toContain('prod-old Cancelled at')
   })
 
-  it('2: says pinned trade PROD runs are not in the run list, in flight, failed after rollout or not yet recorded', () => {
-    expect(show('trade', {})).toContain('pinned PROD runs (release.sh prod, bifrost-deliver-prod-pinned-*) are not in this run list: '
-      + 'one in flight, one that rolled out and then failed its checks, or one that succeeded in the last 5 minutes before the recorder wrote it does not show here')
-    expect(show('platform', {})).not.toContain('pinned PROD runs')
+  it('2: says runs a name_prefix rule finds are not in the run list, in flight, failed after rollout or not yet recorded', () => {
+    expect(show('trade', {})).toContain('runs named bifrost-deliver-prod-pinned-* are releases too but not in this run list: '
+      + 'one shows here only once the recorder (every 5 minutes) has recorded it, so one in flight or one that failed its checks after rolling out does not')
+    expect(show('platform', {})).not.toContain('runs named')
+  })
+
+  // 2026-11-17, OWNER_LAW #30: the lines were a hand-kept LANES list in this file; they now come from release-rules.yaml.
+  it('builds the lines from the release rules, and says Unknown when the rules are not read', () => {
+    expect(show('platform', { rules: { data: [rule('platform', 'stg', true, 'bifrost-deliver-platform')], error: null } }))
+      .toContain('PROD · last successful deliveryNo PRODrelease-rules.yaml has no deploying prod rule for platform')
+    const { unmount } = render(<ReleaseLanesSection {...props({ rules: { error: 'releases: HTTP 502' } })} />)
+    expect(lane('platform')).toBeNull()
+    expect(lane('unread').textContent).toBe('Unknown: the release lines come from release-rules.yaml, which was not read (releases: HTTP 502)')
+    unmount()
+    // Repositories: from the pipelines read, or why not.
+    expect(show('platform', { pipelines: { error: 'delivery pipelines: HTTP 502' } })).toContain('repositories unknown: pipelines: delivery pipelines: HTTP 502')
+    expect(show('platform', {})).toContain('repositories unknown: bifrost-deliver-platform, bifrost-deliver-platform-prod not listed')
+    expect(show('platform', { pipelines: { data: PIPES, error: null } })).toContain('platform · trade-infra · ui')
   })
 
   it('3: under a recorded release, says when its run list was not read', () => {
@@ -128,7 +163,7 @@ describe('ReleaseLanesSection', () => {
   })
 
   it('names the repository a running run and the runs list revision belong to', () => {
-    const text = show('platform', { runs: { 'bifrost-deliver-platform': { error: null, data: [run('stgrel-14-1-abcd1234', 'bifrost-deliver-platform', 'Running', '2026-11-01T05:54:00Z')] } } })
+    const text = show('platform', { pipelines: { data: PIPES, error: null }, runs: { 'bifrost-deliver-platform': { error: null, data: [run('stgrel-14-1-abcd1234', 'bifrost-deliver-platform', 'Running', '2026-11-01T05:54:00Z')] } } })
     expect(text).toContain('Delivering platform abcd123 · started 6m ago')
     expect(text).toContain('stgrel-14-1-abcd1234 · Running · started 6m ago · platform abcd123')
   })
@@ -185,6 +220,7 @@ describe('ReleaseLanesSection', () => {
       }
       const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } })
       if (url.endsWith('/delivery/pipelines')) return json({ reachability: 'ok', pipelines: ['stg', 'prod', 'platform', 'platform-prod', 'research'].map(n => ({ name: `bifrost-deliver-${n}` })) })
+      if (url.includes('/releases?limit')) return json({ status: { rules: RULES.length, rule_list: RULES }, records: [] })
       if (url.endsWith('/releases/running-images')) return json({ cells: [{ lane: 'research', env: 'stg', absent: true, text: 'No STG' }, { lane: 'research', env: 'prod', text: 'research-api 0.205.0' }] })
       if (url.endsWith('/gitops/apps')) return json({ apps: [{ name: 'bifrost-prod', namespace: 'argocd', destination_namespace: 'bifrost-prod', revision: P, sync_status: 'Synced', health_status: 'Healthy' }] })
       if (url.endsWith('/api/v1/actions')) return json([{ id: 'gitops_rollback_app', tier: 'B', description: 'rollback', params: [{ name: 'name', type: 'string', required: true }] }])

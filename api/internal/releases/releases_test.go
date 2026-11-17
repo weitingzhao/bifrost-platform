@@ -179,6 +179,32 @@ func TestTickRecordsOnceAndListReadsBack(t *testing.T) {
 	if st := s.Status(); st.Rules != 3 || st.LastTick == nil || st.Namespace != "cicd" {
 		t.Fatalf("status = %+v", st)
 	}
+	// 2026-11-17, OWNER_LAW #30: the Releases page kept its own copy of the
+	// release lines (ReleaseLanesSection LANES); it now builds them from the
+	// rules the status carries, so the status must carry every rule, in order,
+	// with its JSON names.
+	b, err := json.Marshal(s.Status())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire struct {
+		RuleList []struct {
+			Match   map[string]string `json:"match"`
+			Lane    string            `json:"lane"`
+			Env     string            `json:"env"`
+			Deploys bool              `json:"deploys"`
+		} `json:"rule_list"`
+	}
+	if err := json.Unmarshal(b, &wire); err != nil || len(wire.RuleList) != 3 {
+		t.Fatalf("rule_list = %s (%v)", b, err)
+	}
+	for i, rule := range s.rules.Rules {
+		got := wire.RuleList[i]
+		if got.Lane != rule.Lane || got.Env != rule.Env || got.Deploys != rule.Deploys ||
+			got.Match["pipeline"] != rule.Match.Pipeline || got.Match["name_prefix"] != rule.Match.NamePrefix {
+			t.Fatalf("rule_list[%d] = %+v, want %+v", i, got, rule)
+		}
+	}
 }
 
 func TestNoRulesRecordsNothing(t *testing.T) {
