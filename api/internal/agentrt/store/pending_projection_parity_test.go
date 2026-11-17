@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
@@ -57,7 +58,7 @@ func frozenPendingProjection(list []frozenPending, limit int, now time.Time, res
 		var blocks any
 		if _, isRecorder := recorderImportOf(p.changes); isRecorder {
 			// A recorder log is history: no plan or mission waits on it.
-			work := strings.TrimPrefix(p.stream, RecorderStream(""))
+			work := strings.TrimPrefix(p.stream, externalwork.RecorderStream(""))
 			title, options = "Import recorder log "+work+": "+firstLine(p.reason), []string{RecorderApply, RecorderRefuse}
 			after = "Import: the controller imports the log on its next pass (about 15 seconds). Do not import: nothing is written."
 			blocks = map[string]any{"unknown": "a recorder log is history; no plan or mission waits on it"}
@@ -123,11 +124,11 @@ func TestPendingProjectionFrozenParity(t *testing.T) {
 					}
 					if i%3 == 2 {
 						p.changes = []planstore.PlanChange{{Op: OpRecorderImport, Artifact: "artifact"}}
-						p.stream = RecorderStream("W-1")
+						p.stream = externalwork.RecorderStream("W-1")
 						kind = "recorder"
 					}
 					old = append(old, p)
-					in = append(in, planreadings.PendingNeed{Event: p.event, Stream: p.stream, Root: planstore.StreamRoot(p.stream), Work: strings.TrimPrefix(p.stream, RecorderStream("")), Reason: p.reason, Question: p.question, At: p.at, Kind: kind, Payload: p.changes})
+					in = append(in, planreadings.PendingNeed{Event: p.event, Stream: p.stream, Root: planstore.StreamRoot(p.stream), Work: strings.TrimPrefix(p.stream, externalwork.RecorderStream("")), Reason: p.reason, Question: p.question, At: p.at, Kind: kind, Payload: p.changes})
 				}
 				var traceOld, traceNew []string
 				errSentinel := errors.New("read failed")

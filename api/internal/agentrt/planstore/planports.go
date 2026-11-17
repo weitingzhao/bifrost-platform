@@ -195,8 +195,9 @@ func decideRecorderImportLogVia(ctx context.Context, p *RecorderImportPorts, tx 
 
 // The recorder import's words as the progress projection shows them: its
 // card's two options and what starts the stream a log is imported into
-// (recorderimport.go: RecorderApply, RecorderRefuse, RecorderStream). A test
-// holds each equal to the recorder import's own.
+// (store's recorderimport.go: RecorderApply, RecorderRefuse; externalwork's
+// recorder.go: RecorderStream). A test holds each equal to the recorder
+// import's own.
 const (
 	RecorderApplyLabel   = "Import the log"
 	RecorderRefuseLabel  = "Do not import it"

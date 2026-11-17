@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
@@ -68,7 +69,7 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 	pool := recorderDB(t)
 	a := &asker{}
 	req := tdLog(t)
-	stream := store.RecorderStream("td-336")
+	stream := externalwork.RecorderStream("td-336")
 	out, err := store.ProposeRecorderImport(ctx, pool, wr("thread:s1"), "k1", "retire the recorder", req, a.ask)
 	ok(t, err)
 	q, _ := out["question_id"].(string)
@@ -191,7 +192,7 @@ func TestRecorderImportRefused(t *testing.T) {
 	a.answer(q, seenfacts.QuestionAnswered, "b")
 	_, err = planstore.DecidePlanChanges(ctx, pool, a.question, nil)
 	ok(t, err)
-	stream := store.RecorderStream("td-336")
+	stream := externalwork.RecorderStream("td-336")
 	var decision string
 	ok(t, pool.QueryRow(ctx, `SELECT body_json->>'decision' FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'plan_change_decided'`,
 		stream).Scan(&decision))
@@ -251,7 +252,7 @@ func TestRecorderImportTwoPassesAtOnce(t *testing.T) {
 	ok(t, err)
 	q := out["question_id"].(string)
 	a.answer(q, seenfacts.QuestionAnswered, planstore.CardApplyKey)
-	stream := store.RecorderStream("td-336")
+	stream := externalwork.RecorderStream("td-336")
 	var mu sync.Mutex
 	arrived := 0
 	both := make(chan struct{})

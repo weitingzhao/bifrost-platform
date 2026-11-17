@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 )
 
@@ -30,7 +31,7 @@ func original_recorderCardBody(w Writer, cardKey, reason string, log recorderimp
 		fmt.Fprintf(&b, " %d of them had a path into one machine, masked before they are kept; each keeps the digest of its original line.", n)
 	}
 	fmt.Fprintf(&b, "\n\nFrom %s, sha256 %s; kept log %s.\n\n", s.File, s.SHA256, logID)
-	b.WriteString("Importing writes the log as the stream " + RecorderStream(s.WorkID) + ", one event per line, under your decision; " +
+	b.WriteString("Importing writes the log as the stream " + externalwork.RecorderStream(s.WorkID) + ", one event per line, under your decision; " +
 		"it is then fixed. Not importing writes nothing; the recorder keeps its log as it is.")
 	return b.String()
 }

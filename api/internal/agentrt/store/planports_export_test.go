@@ -1,6 +1,9 @@
 package store
 
-import "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
+import (
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
+)
 
 // The plan code's ports as the tests reach them (planports_test.go): each
 // port as the plan files call it, and the same call through a port value the
@@ -22,7 +25,7 @@ var (
 	RecorderImportLogForTest        = planstore.RecorderImportLog
 	DecideRecorderImportLogForTest  = planstore.DecideRecorderImportLog
 	RecorderImportOfForTest         = recorderImportOf
-	DecideRecorderImportForTest     = decideRecorderImport
+	DecideRecorderImportForTest     = externalwork.DecideRecorderImport
 )
 
 const (

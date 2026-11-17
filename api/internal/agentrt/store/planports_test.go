@@ -175,9 +175,9 @@ func TestRecorderImportPortsAreBoundToTheRecorderImport(t *testing.T) {
 		t.Fatalf("the landing port: %v; the recorder import: %v", got, want)
 	}
 	if store.RecorderApplyLabelForTest != store.RecorderApply || store.RecorderRefuseLabelForTest != store.RecorderRefuse ||
-		store.RecorderStreamPrefixForTest != store.RecorderStream("") {
+		store.RecorderStreamPrefixForTest != externalwork.RecorderStream("") {
 		t.Fatalf("the plan's copies %q %q %q are not the recorder import's %q %q %q", store.RecorderApplyLabelForTest, store.RecorderRefuseLabelForTest,
-			store.RecorderStreamPrefixForTest, store.RecorderApply, store.RecorderRefuse, store.RecorderStream(""))
+			store.RecorderStreamPrefixForTest, store.RecorderApply, store.RecorderRefuse, externalwork.RecorderStream(""))
 	}
 }
 

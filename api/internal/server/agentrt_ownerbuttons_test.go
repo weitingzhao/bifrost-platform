@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
@@ -221,7 +222,7 @@ func TestOwnerButtonPaths(t *testing.T) {
 	}
 	for work, want := range map[string]bool{"td-901": true, "td-902": false} {
 		if n := b.count(`SELECT count(*) FROM agentrt.event WHERE event_type = 'legacy_imported' AND event_stream_id = '` +
-			store.RecorderStream(work) + `'`); (n > 0) != want {
+			externalwork.RecorderStream(work) + `'`); (n > 0) != want {
 			t.Errorf("the recorder log of %s: %d events; imported %v", work, n, want)
 		}
 	}

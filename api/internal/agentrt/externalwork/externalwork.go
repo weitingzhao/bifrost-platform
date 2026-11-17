@@ -1,8 +1,9 @@
 // Package externalwork is what the runtime keeps of work done outside it
 // (lineage domain): the description a registration names, the note that is
 // the work's record, the session identity of a collector's work, and the
-// reads of a work by its id. It imports the bases, the artifact store and
-// workregistration, and not the store. Registering a work and posting its
+// reads of a work by its id, and the landing of a recorder log
+// (recorder.go). It imports the bases, the artifact store, workregistration
+// and recorderimport, and not the store. Registering a work and posting its
 // events lock and read the plan tree; those two writes are the store's
 // (store/externalwork.go) and use what this package exports.
 package externalwork

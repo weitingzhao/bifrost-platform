@@ -1,11 +1,7 @@
 package store
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
@@ -37,7 +33,7 @@ import (
 // The plan's decision pass and the progress projection reach the recorder
 // import through the plan code's ports (planstore, planports.go).
 func init() {
-	planstore.BindPlanRecorderImport(planstore.RecorderImportPorts{LogOf: recorderImportOf, Decide: decideRecorderImport})
+	planstore.BindPlanRecorderImport(planstore.RecorderImportPorts{LogOf: recorderImportOf, Decide: externalwork.DecideRecorderImport})
 }
 
 // OpRecorderImport is the change a recorder import proposal holds.
@@ -56,36 +52,12 @@ const (
 		"it is history, so no plan or mission waits on it, and once imported it is fixed"
 )
 
-// RecorderStream is the stream a work's recorder log is imported into.
-func RecorderStream(work string) string { return "legacy:recorder:" + work }
-
-// recorderSource is the head event's source: the kept log it came from.
-func recorderSource(logID string) string { return "recorder_import:" + logID }
-
 // recorderImportOf is the kept log of a proposal that is a recorder import.
 func recorderImportOf(changes []planstore.PlanChange) (string, bool) {
 	if len(changes) == 1 && changes[0].Op == OpRecorderImport && changes[0].Artifact != "" {
 		return changes[0].Artifact, true
 	}
 	return "", false
-}
-
-// keptLog gives a log's canonical bytes and the artifact id they are stored
-// under.
-func keptLog(log recorderimport.Log) ([]byte, string, error) {
-	raw, err := json.Marshal(log)
-	if err != nil {
-		return nil, "", err
-	}
-	doc, err := canon.Marshal(raw)
-	if err != nil {
-		return nil, "", err
-	}
-	if len(doc) > artifact.MaxArtifactBytes {
-		return nil, "", invalid("recorder import: the log is %d bytes kept; an artifact is at most %d", len(doc), artifact.MaxArtifactBytes)
-	}
-	sum := sha256.Sum256(doc)
-	return doc, "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
 // ProposeRecorderImport proposes importing a recorder log, why reason says.
@@ -108,12 +80,12 @@ func ProposeRecorderImport(ctx context.Context, db DB, w Writer, key, reason str
 	if err = recorderimport.Check(log); err != nil {
 		return nil, invalid("recorder import: the kept log does not check: %v", err)
 	}
-	doc, logID, err := keptLog(log)
+	doc, logID, err := externalwork.KeptLog(log)
 	if err != nil {
 		return nil, err
 	}
 	work := log.Source.WorkID
-	stream := RecorderStream(work)
+	stream := externalwork.RecorderStream(work)
 	request := map[string]any{"work_id": work, "log_artifact_id": logID, "reason": reason}
 	return idempotentAs(ctx, db, w, "plan/imports", key, request, nil, func(tx pgx.Tx) (map[string]any, error) {
 		if err := ensureWriter(ctx, tx, w, true); err != nil {
@@ -122,7 +94,7 @@ func ProposeRecorderImport(ctx context.Context, db DB, w Writer, key, reason str
 		if err := lockStream(ctx, tx, stream); err != nil {
 			return nil, err
 		}
-		head, other, err := recorderImported(ctx, tx, stream, logID)
+		head, other, err := externalwork.RecorderImported(ctx, tx, stream, logID)
 		switch {
 		case err != nil:
 			return nil, err
@@ -142,7 +114,7 @@ func ProposeRecorderImport(ctx context.Context, db DB, w Writer, key, reason str
 			return map[string]any{"proposal_event_id": waiting.Event, "decision": "", "question_id": waiting.Question,
 				"log_artifact_id": logID, "waiting": "the Owner decides a recorder import"}, nil
 		}
-		if err = tryRecorderImport(ctx, tx, log, doc, logID); err != nil {
+		if err = externalwork.TryRecorderImport(ctx, tx, log, doc, logID); err != nil {
 			return nil, err
 		}
 		if _, err = artifact.PutArtifact(ctx, tx, w.Actor, "other", "application/json", doc); err != nil {
@@ -184,25 +156,6 @@ func ProposeRecorderImport(ctx context.Context, db DB, w Writer, key, reason str
 	})
 }
 
-// recorderImported is the head of stream's import when it came from logID,
-// or the source of the import from another log; both zero when the stream
-// has no import.
-func recorderImported(ctx context.Context, tx pgx.Tx, stream, logID string) (int64, string, error) {
-	var id int64
-	var source string
-	err := tx.QueryRow(ctx, `SELECT event_id, body_json->>'source' FROM agentrt.event WHERE event_stream_id = $1
-	  AND event_type = 'legacy_imported' AND body_json->>'source' LIKE 'recorder_import:%' ORDER BY event_id LIMIT 1`, stream).Scan(&id, &source)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return 0, "", nil
-	case err != nil:
-		return 0, "", err
-	case source == recorderSource(logID):
-		return id, "", nil
-	}
-	return 0, strings.TrimPrefix(source, "recorder_import:"), nil
-}
-
 // waitingRecorderImport is the recorder import of stream that waits on a
 // decision, if any.
 func waitingRecorderImport(ctx context.Context, tx pgx.Tx, stream string) (*planstore.PendingImport, error) {
@@ -218,112 +171,15 @@ func waitingRecorderImport(ctx context.Context, tx pgx.Tx, stream string) (*plan
 	return &p, err
 }
 
-// tryRecorderImport lands the log in a savepoint with every deferred check
-// made at once, then rolls back.
-func tryRecorderImport(ctx context.Context, tx pgx.Tx, log recorderimport.Log, doc []byte, logID string) error {
-	if _, err := tx.Exec(ctx, `SAVEPOINT try_recorder_import`); err != nil {
-		return err
-	}
-	_, err := landRecorder(ctx, tx, "controller", log, doc, logID, 0)
-	if err == nil {
-		_, err = tx.Exec(ctx, `SET CONSTRAINTS ALL IMMEDIATE`)
-	}
-	if _, rerr := tx.Exec(ctx, `ROLLBACK TO SAVEPOINT try_recorder_import`); rerr != nil && err == nil {
-		err = rerr
-	}
-	return err
-}
-
 // recorderCardBody is the import card's text: who proposes, which log, what
 // it holds, and what each answer does.
 func recorderCardBody(w Writer, cardKey, reason string, log recorderimport.Log, logID string) string {
-	return recorderimport.CardBody(w.Actor, cardKey, reason, log, logID, RecorderStream(log.Source.WorkID))
+	return recorderimport.CardBody(w.Actor, cardKey, reason, log, logID, externalwork.RecorderStream(log.Source.WorkID))
 }
 
-// decideRecorderImport lands a recorder import proposal's log in tx under
-// the decision decided: the log is read back from its artifact and checked
-// again.
-func decideRecorderImport(ctx context.Context, tx pgx.Tx, artifact string, decided int64) error {
-	var doc []byte
-	err := tx.QueryRow(ctx, `SELECT body FROM agentrt.artifact_blob WHERE artifact_id = $1`, artifact).Scan(&doc)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return invalid("the recorder import's log %s is not stored", artifact)
-	}
-	if err != nil {
-		return err
-	}
-	var log recorderimport.Log
-	if err = decodeStrict(doc, &log); err != nil {
-		return invalid("the recorder import's log %s does not read: %v", artifact, err)
-	}
-	if err = recorderimport.Check(log); err != nil {
-		return invalid("the recorder import's log %s does not check: %v", artifact, err)
-	}
-	again, logID, err := keptLog(log)
-	if err != nil {
-		return err
-	}
-	if logID != artifact || string(again) != string(doc) {
-		return invalid("the recorder import's log %s does not read back as itself", artifact)
-	}
-	_, err = landRecorder(ctx, tx, "controller", log, doc, logID, decided)
-	return err
-}
-
-// landRecorder writes the log as its work's stream, the head caused by cause
-// (the decision; 0 for none) and each record caused by the head, or finds
-// that this same log was imported already. It returns the head.
-func landRecorder(ctx context.Context, tx pgx.Tx, actor string, log recorderimport.Log, doc []byte, logID string, cause int64) (int64, error) {
-	stream := RecorderStream(log.Source.WorkID)
-	if err := lockStream(ctx, tx, stream); err != nil {
-		return 0, err
-	}
-	head, other, err := recorderImported(ctx, tx, stream, logID)
-	switch {
-	case err != nil:
-		return 0, err
-	case head != 0:
-		return head, nil
-	case other != "":
-		return 0, invalid("the recorder log of %s was already imported from %s; a log is imported once", log.Source.WorkID, other)
-	}
-	if _, err = artifact.PutArtifact(ctx, tx, actor, "other", "application/json", doc); err != nil {
-		return 0, err
-	}
-	h, err := Append(ctx, tx, Event{Stream: stream, Type: "legacy_imported", Actor: actor, Cause: cause,
-		Body: map[string]any{"source": recorderSource(logID), "count": len(log.Records), "work_id": log.Source.WorkID}})
-	if err != nil {
-		return 0, err
-	}
-	for _, r := range log.Records {
-		body := map[string]any{"source": "recorder", "work_id": log.Source.WorkID, "seq": r.Seq, "digest": "sha256:" + r.Digest,
-			"record": r.Body}
-		if r.Masked {
-			body["masked"] = true
-		}
-		if _, err = Append(ctx, tx, Event{Stream: stream, Type: "legacy_imported", Actor: actor, Cause: h.EventID, Body: body}); err != nil {
-			return 0, fmt.Errorf("recorder import: record %d: %w", r.Seq, err)
-		}
-	}
-	return h.EventID, nil
-}
-
-// firstLine and decodeStrict are the plan code's two small helpers of the
-// same names (planstore), which this file used while it shared their
-// package; copied, 3 and 10 lines.
+// firstLine is the plan code's helper of the same name (planstore), which
+// this file used while it shared its package; copied, 3 lines.
 func firstLine(s string) string {
 	line, _, _ := strings.Cut(s, "\n")
 	return line
-}
-
-func decodeStrict(doc []byte, v any) error {
-	dec := json.NewDecoder(bytes.NewReader(doc))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(v); err != nil {
-		return err
-	}
-	if dec.More() {
-		return errors.New("more than one value")
-	}
-	return nil
 }
