@@ -8,7 +8,6 @@ import { PlatformTimings } from './PlatformTimings'
 import { ModuleExplorer } from './ModuleExplorer'
 import { DomainMapView } from './DomainMapView'
 import { CommitJourney } from './CommitJourney'
-import { TimingBudget } from './TimingBudget'
 import { ApprovalReadingsBlock } from './ApprovalReadingsBlock'
 import { NO_FULL_RUN_TEXT, NO_RUNS_TEXT, fullCiView, runRow, matchesModule } from './ciViewModel'
 
@@ -211,9 +210,6 @@ export function CiDetails({ repo, config, configError, selection, onSelectRun, n
         <PlatformTimings key={`${repo}:${selectedModule}:${run?.name ?? ''}`} module={selectedModule} ciRun={run?.name} ciCommit={run?.commit} onPickCI={onSelectRun} />
       </Fold>}
       <CiWideFolds note={selectedModule !== ''} />
-      {platform && <Fold title="Benchmark · designed vs actual, 15 Nov 2026" testId="ci-fold-benchmark">
-        <TimingBudget />
-      </Fold>}
     </section>
   )
 }

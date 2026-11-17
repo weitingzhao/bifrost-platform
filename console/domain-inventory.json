@@ -2919,10 +2919,8 @@
     {
       "path": "console/src/lib/code-health",
       "files": [
-        "console/src/lib/code-health/__tests__/codeHealthCoverage.test.ts",
         "console/src/lib/code-health/__tests__/codeHealthLens.test.ts",
         "console/src/lib/code-health/__tests__/codeHealthLowerBaseline.test.ts",
-        "console/src/lib/code-health/codeHealthCoverage.ts",
         "console/src/lib/code-health/codeHealthLens.ts",
         "console/src/lib/code-health/codeHealthLowerBaseline.ts",
         "console/src/lib/code-health/codeHealthPageHelpers.tsx"
@@ -2930,7 +2928,6 @@
       "imports": [
         "console/src/api/codeHealth.ts",
         "console/src/components/layout",
-        "console/src/lib/architecture",
         "console/src/lib/control-room"
       ],
       "test_imports": [
@@ -4550,7 +4547,6 @@
         "console/src/pages/shell/ci/ModuleExplorer.tsx",
         "console/src/pages/shell/ci/PlatformTimings.tsx",
         "console/src/pages/shell/ci/RunTimingDetail.tsx",
-        "console/src/pages/shell/ci/TimingBudget.tsx",
         "console/src/pages/shell/ci/TimingTrends.tsx",
         "console/src/pages/shell/ci/__tests__/ApprovalReadingsBlock.test.tsx",
         "console/src/pages/shell/ci/__tests__/CiScoreStrip.test.tsx",

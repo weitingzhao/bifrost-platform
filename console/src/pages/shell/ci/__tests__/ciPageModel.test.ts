@@ -180,13 +180,14 @@ describe('not measured', () => {
 
   // Guards "ONE list of everything the page could not measure": what it computed as missing (commits not read, scopes
   // not read), the sketch's facts no read answers, the reads that failed, and what the API itself reports unmeasured.
-  it('lists what the page computed as missing, what has no source, failed reads and the API\'s own unmeasured items', () => {
+  // 2026-11-17, OWNER_LAW #30 (nothing on Ops is kept by hand): the five facts "no read answers" were a
+  // list written into the page; they are gone, and every line here is computed or reported by the API.
+  it('lists what the page computed as missing, failed reads and the API\'s own unmeasured items, and nothing written by hand', () => {
     const lines = notMeasured({ repo: 'r', runs, changes: changeMap([change(3, { plan: 1 }), change(2, null)]), graph: graph(), scorecard, stages: true, unread: ['The release window: could not be read (HTTP 502)'] })
     expect(lines).toContain('What changed in 1 of 3 runs: their commits are not in the repository (they never reached a kept branch) or could not be read, so they appear By time but under no domain')
     expect(lines).toContain('What changed in 1 of 3 runs: not asked (one read names at most 120 commits)')
     expect(lines.some(l => l.startsWith('Whether 3 of 3 finished runs were selective'))).toBe(true)
-    expect(lines.some(l => l.startsWith('Reconcile:'))).toBe(true)
-    expect(lines.some(l => l.startsWith('Queue:'))).toBe(true)
+    expect(lines.some(l => l.startsWith('Reconcile:') || l.startsWith('Queue:'))).toBe(false)
     expect(lines).toContain('The release window: could not be read (HTTP 502)')
     expect(lines).toContain('Score "Time follows the change" of infra: its pipeline reports no scope')
     expect(lines.some(l => l.includes('Red runs'))).toBe(false)

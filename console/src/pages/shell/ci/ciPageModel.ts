@@ -471,14 +471,6 @@ export type NotMeasuredInput = {
   unread: string[]
 }
 
-/** The facts of the approved sketch that no read of the page answers. They are named here and drawn nowhere. */
-const NO_SOURCE = [
-  'Reconcile: whether main\'s full run agreed with the selective runs before it (the full run\'s notes carry no count)',
-  'Queue: how many deliveries waited behind another one, and how long',
-  'Whether the signed release policy covers the next release, and whether a card waits for the Owner',
-  'Which domain a failing test belongs to',
-  'Dependencies between repositories other than the pins a repository declares',
-]
 
 /** Everything the page could not measure, in one list: what it computed as missing, then what the API reports. */
 export function notMeasured(input: NotMeasuredInput): string[] {
@@ -497,7 +489,6 @@ export function notMeasured(input: NotMeasuredInput): string[] {
   if (noSplit > 0) out.push(`The phases of ${noSplit} of ${finished.length} finished runs (no task reported its start, or the run has no test task): their bars are one colour`)
   if (input.graph && !input.graph.measured) out.push(`Domains of ${input.repo}: ${input.graph.note || 'not measured'}`)
   if (!input.stages) out.push(`Land, STG and PROD of ${input.repo}: the delivery timings are read for bifrost-platform only`)
-  out.push(...NO_SOURCE)
   out.push(...input.unread)
   if (input.scorecard) {
     for (const row of scoreRows(input.scorecard)) for (const item of row.items) {

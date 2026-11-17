@@ -37,10 +37,6 @@ import {
   type CodeHealthMetricLens,
 } from '@/lib/code-health/codeHealthLens'
 import {
-  CODE_HEALTH_COVERAGE,
-  CODE_HEALTH_EXCLUSIONS,
-} from '@/lib/code-health/codeHealthCoverage'
-import {
   listLowerBaselineProposals,
   proposeLowerBaseline,
   type LowerBaselineProposal,
@@ -114,6 +110,13 @@ export function CodeHealthPage() {
   }, [lens.metrics])
 
   const report = lens.report
+  // 2026-11-17, OWNER_LAW #30 (nothing on Ops is kept by hand): the domains and repositories the latest reading
+  // measured, in the order it reports them; it was a list copied from scan.sh that had to be kept in step.
+  const coverage = (report?.metrics ?? []).reduce<{ domain: SystemDomainId; repos: string[] }[]>((planes, m) => {
+    const plane = planes.find(p => p.domain === m.domain) ?? (planes.push({ domain: m.domain as SystemDomainId, repos: [] }), planes[planes.length - 1])
+    if (!plane.repos.includes(m.repo)) plane.repos.push(m.repo)
+    return planes
+  }, [])
   const stale =
     report != null && Date.now() - new Date(report.received_at).getTime() > STALE_MS
   const neverScanned = query.isSuccess && !lens.reported
@@ -312,19 +315,19 @@ export function CodeHealthPage() {
 
       <OpsSection
         title="COVERAGE"
-        description="Domain ↔ repo — must match scan.sh KNOWN_REPOS. Metrics = one dimension inside that plane; POSTURE chips = dimension across all planes."
+        description="Domain ↔ repo as the latest reading reports them (computed, not listed by hand). Metrics = one dimension inside that plane; POSTURE chips = dimension across all planes."
         variant="elevated"
         collapsible
         defaultCollapsed={false}
         bodyPadding="compact"
       >
         <div className="flex flex-col gap-3">
-          {CODE_HEALTH_COVERAGE.map(plane => {
-            const measured =
-              report?.metrics
-                .filter(m => m.domain === plane.domain)
-                .map(m => m.repo)
-                .filter((r, i, a) => a.indexOf(r) === i) ?? []
+          {coverage.length === 0 && (
+            <p className="m-0 text-dense-meta text-muted-foreground">
+              Not measured: no reading has reported a metric, so which repositories are scanned is unknown.
+            </p>
+          )}
+          {coverage.map(plane => {
             const domainMetricRows = lens.metrics.filter(m => m.metric.domain === plane.domain)
             const dimsInDomain = (
               ['size', 'duplication', 'contract', 'image_spread'] as CodeHealthDimension[]
@@ -337,22 +340,11 @@ export function CodeHealthPage() {
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {plane.repos.map(r => {
-                    const seen = measured.length === 0 || measured.includes(r.repo)
-                    return (
-                      <DenseTag
-                        key={r.repo}
-                        variant={seen ? 'neutral' : 'warning'}
-                        title={
-                          seen
-                            ? `${r.repo} (${r.short}) — in coverage`
-                            : `${r.repo} expected but absent from latest reading (NOT MEASURED)`
-                        }
-                      >
-                        {r.repo}
-                      </DenseTag>
-                    )
-                  })}
+                  {plane.repos.map(repo => (
+                    <DenseTag key={repo} variant="neutral" title={`${repo} — in the latest reading`}>
+                      {repo}
+                    </DenseTag>
+                  ))}
                 </div>
                 {dimsInDomain.length > 0 && (
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -378,22 +370,6 @@ export function CodeHealthPage() {
               </div>
             )
           })}
-          <div className="flex flex-col gap-1.5 border-t border-[var(--table-rule)] pt-2">
-            <span className="text-dense-label font-medium text-muted-foreground">Out of scope</span>
-            <div className="flex flex-col gap-1">
-              {CODE_HEALTH_EXCLUSIONS.map(ex => (
-                <div
-                  key={ex.repo}
-                  className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-dense-meta"
-                >
-                  <DenseTag variant="warning" title={ex.reason}>
-                    {ex.repo}
-                  </DenseTag>
-                  <span className="text-muted-foreground">{ex.reason}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </OpsSection>
 

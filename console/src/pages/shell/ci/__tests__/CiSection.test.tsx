@@ -256,12 +256,11 @@ it('separates project-scoped information from global records and never calls unk
   expect(screen.queryByRole('group', { name: 'Uses shared files or other projects' })).toBeNull()
 })
 
-it('keeps the platform benchmark inside its project and removes it on project switch', async () => {
+// 2026-11-17, OWNER_LAW #30 (nothing on Ops is kept by hand): the "designed vs actual" benchmark was eleven rows copied
+// from a ledger of 15 Nov 2026 into the page; it is gone. The live timings above are what the page shows of time.
+it('shows no hand-copied benchmark', async () => {
   setup({ repos: ['bifrost-platform', 'plain'] })
   await screen.findByTestId('ci-verdict')
-  open('ci-fold-benchmark')
-  expect(screen.getByText('Designed vs actual')).toBeInTheDocument()
-  pickProject('plain')
   expect(screen.queryByTestId('ci-fold-benchmark')).toBeNull()
   expect(screen.queryByText('Designed vs actual')).toBeNull()
 })
@@ -454,19 +453,20 @@ it('says once that domains are not measured for a repository without an ownershi
 })
 
 // Origin: page — ONE folded block says everything the page could not measure: nothing of it on the first screen, and
-// when opened the computed gaps, the facts with no source, the reads that failed and what the API reports unmeasured.
+// when opened the computed gaps, the reads that failed and what the API reports unmeasured (no hand-written facts:
+// OWNER_LAW #30, 2026-11-17).
 it('lists everything not measured in one folded block', async () => {
   const scorecard: CiScorecard = { generated_at: AS_OF, window_days: 3, standards: [], repos: [{ repo: 'bifrost-trade-infra', pipeline: 'p', tier: 'full', overall: 'unmeasured', items: [{ id: 'follows_change', label: 'Time follows the change', verdict: 'unmeasured', value: 'its pipeline reports no scope', samples: 0 }] }], provider: { overall: 'pass', items: [] } }
   setup({ repos: ['bifrost-platform', 'plain'], runs: history(), graph: graph(), changes, window: 'fail', scorecard })
   await screen.findByTestId('ci-verdict')
-  await screen.findByText(/Not measured — the one place that says so \(1[0-9]\)/)
+  await screen.findByText(/Not measured — the one place that says so \([0-9]+\)/)
   expect(screen.queryByRole('list', { name: 'Not measured' })).toBeNull()
   open('ci-not-measured')
   const lines = within(screen.getByRole('list', { name: 'Not measured' })).getAllByRole('listitem').map(li => li.textContent)
   expect(lines).toContain('What changed in 2 of 5 runs: their commits are not in the repository (they never reached a kept branch) or could not be read, so they appear By time but under no domain')
   expect(lines.some(l => l?.startsWith('Whether 4 of 4 finished runs were selective'))).toBe(true)
-  expect(lines.some(l => l?.startsWith('Reconcile:'))).toBe(true)
-  expect(lines.some(l => l?.startsWith('Queue:'))).toBe(true)
+  expect(lines.some(l => l?.startsWith('Reconcile:'))).toBe(false) // OWNER_LAW #30, 2026-11-17: no hand-written lines
+  expect(lines.some(l => l?.startsWith('Queue:'))).toBe(false)
   expect(lines).toContain('The release window: could not be read (release window: HTTP 401)')
   expect(lines).toContain('The STG deliveries: could not be read (CI timings: HTTP 502)')
   expect(lines).toContain('Score "Time follows the change" of bifrost-trade-infra: its pipeline reports no scope')
