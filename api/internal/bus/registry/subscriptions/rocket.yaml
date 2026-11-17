@@ -14,6 +14,9 @@
 #     another value names hand-written code that still delivers it, to be
 #     switched to the dispatcher after a side-by-side run.
 tenant: rocket
+# A wake whose recipient is not a registered thread here goes to the duty
+# seat, naming the address (2026-11-16, the tenant drill).
+undeliverable_to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
 subscriptions:
   - id: card-concluded-to-requester
     on: [approval.card.executed, approval.card.decided]

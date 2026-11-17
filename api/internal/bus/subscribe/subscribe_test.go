@@ -31,7 +31,7 @@ func TestVerdictRedWakesTheCommitter(t *testing.T) {
 		return nil
 	}
 
-	if err := Deliver(context.Background(), row, ev, read, send); err != nil {
+	if _, err := Deliver(context.Background(), row, ev, read, send, nil, ""); err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || got[0].to != "thread:local_ab850773-fe26-40fa-ac01-b3b590b73164" || got[0].key != "sub:verdict-red-to-committer:ev-7" ||
@@ -41,16 +41,16 @@ func TestVerdictRedWakesTheCommitter(t *testing.T) {
 
 	green := ev
 	green.Change = "green"
-	if err := Deliver(context.Background(), row, green, read, send); err != nil || len(got) != 1 {
+	if _, err := Deliver(context.Background(), row, green, read, send, nil, ""); err != nil || len(got) != 1 {
 		t.Fatalf("a green verdict woke someone: %+v %v", got, err)
 	}
 	noTrailer := func(context.Context, string, string) (string, bool, error) { return "feat: x\n", true, nil }
-	if err := Deliver(context.Background(), row, ev, noTrailer, send); err != nil || len(got) != 1 {
+	if _, err := Deliver(context.Background(), row, ev, noTrailer, send, nil, ""); err != nil || len(got) != 1 {
 		t.Fatalf("a commit without a session woke someone: %+v %v", got, err)
 	}
 	broken := ev
 	broken.Ref = "/api/v1/units/plan"
-	if err := Deliver(context.Background(), row, broken, read, send); err == nil {
+	if _, err := Deliver(context.Background(), row, broken, read, send, nil, ""); err == nil {
 		t.Fatal("an event naming no repo was taken as delivered")
 	}
 }
@@ -118,5 +118,30 @@ func TestTenantsComeAndGoByTheirFiles(t *testing.T) {
 	stale := Stale(existing, Consumers(subs, "stg"), "rocket")
 	if strings.Join(stale, ",") != "sub-demo-drill" {
 		t.Fatalf("stale %v: the gone tenant's consumer goes, headrelease is not the dispatcher's", stale)
+	}
+}
+
+// 2026-11-16, the tenant drill on STG: a wake whose recipient was not a
+// registered thread there was dropped without a word. It now goes to the
+// tenant's undeliverable_to, naming the address; with none it is reported.
+func TestUnknownRecipientIsNotDroppedSilently(t *testing.T) {
+	row := registry.Subscription{ID: "drill", On: []string{"git.main.advanced"}, Deliver: registry.DeliverWake,
+		To: "thread:local_gone", Guarantee: "durable", By: registry.ByDispatcher}
+	ev := Event{ID: "ev-9", Type: "git.main.advanced", Subject: "bifrost-platform@" + strings.Repeat("b", 40)}
+	var to, body string
+	send := func(_ context.Context, _ string, t, b string) error { to, body = t, b; return nil }
+	unknown := func(context.Context, string) (bool, error) { return false, nil }
+	out, err := Deliver(context.Background(), row, ev, nil, send, unknown, "thread:local_duty")
+	if err != nil || out != Rerouted || to != "thread:local_duty" || !strings.Contains(body, "thread:local_gone") {
+		t.Fatalf("out=%s to=%q body=%q err=%v", out, to, body, err)
+	}
+	to = ""
+	out, err = Deliver(context.Background(), row, ev, nil, send, unknown, "")
+	if err != nil || out != Undeliverable || to != "" {
+		t.Fatalf("with nowhere to tell: out=%s to=%q err=%v", out, to, err)
+	}
+	knownOK := func(context.Context, string) (bool, error) { return true, nil }
+	if out, _ := Deliver(context.Background(), row, ev, nil, send, knownOK, "thread:local_duty"); out != Delivered || to != "thread:local_gone" {
+		t.Fatalf("known recipient: out=%s to=%q", out, to)
 	}
 }

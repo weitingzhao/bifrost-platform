@@ -102,17 +102,51 @@ func Body(row registry.Subscription, ev Event) string {
 // Key makes one message per row and event, however often it is delivered.
 func Key(row registry.Subscription, ev Event) string { return "sub:" + row.ID + ":" + ev.ID }
 
-// Deliver is one row's handling of one event: nil acknowledges it (also when
-// it does not match or has nobody to wake); an error asks for it again.
-func Deliver(ctx context.Context, row registry.Subscription, ev Event, read CommitMessage, send Sender) error {
+// Known says whether an address can receive a wake here (a registered
+// thread in this environment's ledger).
+type Known func(ctx context.Context, address string) (bool, error)
+
+// Outcome says what Deliver did, for the log and the receipts.
+type Outcome string
+
+const (
+	Skipped       Outcome = "skipped"       // not this row's event, or nobody to wake
+	Delivered     Outcome = "delivered"     // the recipient got its wake
+	Rerouted      Outcome = "rerouted"      // the recipient is unknown here; undeliverable_to was told
+	Undeliverable Outcome = "undeliverable" // unknown recipient and nowhere to tell
+)
+
+// Deliver is one row's handling of one event: a nil error acknowledges it;
+// an error asks for it again. A wake whose recipient is not known here is
+// not dropped silently: it goes to the tenant's undeliverable_to, naming the
+// row, the event and the address (2026-11-16, the tenant drill).
+func Deliver(ctx context.Context, row registry.Subscription, ev Event, read CommitMessage, send Sender, known Known, undeliverableTo string) (Outcome, error) {
 	if row.Deliver != registry.DeliverWake || !Matches(row, ev) {
-		return nil
+		return Skipped, nil
 	}
 	to, err := Recipient(ctx, row, ev, read)
 	if err != nil || to == "" {
-		return err
+		return Skipped, err
 	}
-	return send(ctx, Key(row, ev), to, Body(row, ev))
+	if known != nil {
+		ok, err := known(ctx, to)
+		if err != nil {
+			return Skipped, err
+		}
+		if !ok {
+			if undeliverableTo == "" {
+				return Undeliverable, nil
+			}
+			body := fmt.Sprintf("bus: a wake could not be delivered: %s is not a registered thread here. %s", to, Body(row, ev))
+			return Rerouted, send(ctx, Key(row, ev)+":undeliverable", undeliverableTo, body)
+		}
+	}
+	return Delivered, send(ctx, Key(row, ev), to, Body(row, ev))
+}
+
+// UndeliverableTo is the tenant's undeliverable_to.
+func UndeliverableTo(subs map[string]registry.Subscriptions, tenant string) string {
+	return subs[tenant].UndeliverableTo
 }
 
 // Rows is the rows of tenant the dispatcher delivers.

@@ -85,9 +85,13 @@ func (c Client) InEnv(env string) bool {
 
 // Subscriptions is one tenant's table.
 type Subscriptions struct {
-	Tenant  string         `yaml:"tenant"`
-	Rows    []Subscription `yaml:"subscriptions"`
-	Clients []Client       `yaml:"clients"`
+	Tenant string `yaml:"tenant"`
+	// UndeliverableTo is where a wake goes when its recipient is not a
+	// registered thread in this environment (2026-11-16, the tenant drill:
+	// such a wake was dropped without a word). Empty: logged only.
+	UndeliverableTo string         `yaml:"undeliverable_to"`
+	Rows            []Subscription `yaml:"subscriptions"`
+	Clients         []Client       `yaml:"clients"`
 }
 
 var (
@@ -147,6 +151,9 @@ func CheckSubscriptions(tenants map[string]Tenant, subs map[string]Subscriptions
 		if !ok {
 			bad("%s: subscriptions for a tenant with no register", name)
 			continue
+		}
+		if table.UndeliverableTo != "" && !addressRE.MatchString(table.UndeliverableTo) {
+			bad("%s: undeliverable_to %q is not an address", name, table.UndeliverableTo)
 		}
 		names := map[string]bool{}
 		for _, c := range table.Clients {

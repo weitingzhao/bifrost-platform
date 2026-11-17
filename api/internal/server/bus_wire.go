@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	busalerts "github.com/weitingzhao/bifrost-platform/api/internal/bus/alerts"
@@ -461,6 +462,18 @@ func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStrea
 	send := func(ctx context.Context, key, to, body string) error {
 		return store.PostConclusion(ctx, pool, key, to, body)
 	}
+	known := func(ctx context.Context, addr string) (bool, error) {
+		var kind string
+		err := store.InTx(ctx, pool, func(tx pgx.Tx) error {
+			k, err := store.ActorKind(ctx, tx, addr)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			kind = k
+			return err
+		})
+		return kind == "thread", err
+	}
 	receipts := &relay.Receipts{JS: js, Tenant: relay.Tenant, Env: env}
 	want := subscribe.Consumers(subs, env)
 	// A row or a tenant that left takes its consumer with it.
@@ -482,9 +495,13 @@ func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStrea
 		cc, err := relay.ConsumeDurable(ctx, js, relay.Tenant, env, name, row.On, func(e relay.Envelope) error {
 			dctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 			defer cancel()
-			if err := subscribe.Deliver(dctx, row, subscribe.FromEnvelope(e), read, send); err != nil {
+			out, err := subscribe.Deliver(dctx, row, subscribe.FromEnvelope(e), read, send, known, subscribe.UndeliverableTo(subs, c.Tenant))
+			if err != nil {
 				slog.Warn("bus: subscription delivery; asked again", "tenant", c.Tenant, "row", row.ID, "event", e.ID, "error", err)
 				return err
+			}
+			if out == subscribe.Rerouted || out == subscribe.Undeliverable {
+				slog.Warn("bus: subscription wake had no registered recipient", "tenant", c.Tenant, "row", row.ID, "event", e.ID, "outcome", out)
 			}
 			if err := receipts.Publish(dctx, e.ID, name); err != nil {
 				slog.Warn("bus: subscription receipt", "row", row.ID, "event", e.ID, "error", err)

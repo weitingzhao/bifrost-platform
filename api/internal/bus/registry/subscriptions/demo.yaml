@@ -1,5 +1,8 @@
 # Tenant demo's table (the drill, 2026-11-16, STG only).
 tenant: demo
+# A wake whose recipient is not a registered thread here goes to the duty
+# seat, naming the address (2026-11-16, the tenant drill).
+undeliverable_to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
 subscriptions:
   - id: drill
     on: [git.main.advanced]
