@@ -68,29 +68,5 @@ func commitTree(get func(string, int64) ([]byte, error), endpoint string) (map[s
 	return nil, fmt.Errorf("gitea: tree page limit exceeded")
 }
 
-func completeDiffPaths(before, after map[string]commitTreeEntry, paths []string) error {
-	changed := map[string]bool{}
-	for p, a := range before {
-		if a.Type != "tree" && a != after[p] {
-			changed[p] = true
-		}
-	}
-	for p, b := range after {
-		if b.Type != "tree" && b != before[p] {
-			changed[p] = true
-		}
-	}
-	for _, p := range paths {
-		// Unchanged source endpoints of a copy may also occur in the diff.
-		if _, a := before[p]; !a {
-			if _, b := after[p]; !b {
-				return fmt.Errorf("gitea: diff names a path absent from both trees")
-			}
-		}
-		delete(changed, p)
-	}
-	if len(changed) != 0 {
-		return fmt.Errorf("gitea: diff omits %d changed tree paths", len(changed))
-	}
-	return nil
-}
+// maxCommitDiff bounds one read of a commit from Gitea.
+const maxCommitDiff = 32 << 20

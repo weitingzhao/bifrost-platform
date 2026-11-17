@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -25,15 +24,6 @@ import (
 // releases clone from mirrors GitHub, takes no push and drops branches GitHub
 // does not have. Unset, there is no reader and a pushed branch answers 503
 // (store.ErrNoHead), as before.
-
-// agentRuntimeHeads is the branch reader of this process, or nil.
-func (s *Server) agentRuntimeHeads() store.BranchHead {
-	org := strings.TrimSpace(os.Getenv("AGENTRT_GIT_ORG"))
-	if org == "" || s.delivery == nil {
-		return nil
-	}
-	return giteaBranchHead(s.delivery.GiteaAccess, org, &http.Client{Timeout: 10 * time.Second})
-}
 
 // agentRuntimeMains reads the head of a repository's main where agentd clones
 // it from: the organization the releases clone from (the delivery service's

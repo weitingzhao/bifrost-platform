@@ -360,18 +360,3 @@ func TestGiteaBranchHeadRefusesWhatIsNotABranchOfARepository(t *testing.T) {
 		t.Fatalf("paths = %v: nothing is asked of Gitea for these", f.paths)
 	}
 }
-
-func TestAgentRuntimeHeadsNeedsTheOrganization(t *testing.T) {
-	s := &Server{delivery: delivery.NewHandlerForTest(&delivery.Service{}, nil)}
-	t.Setenv("AGENTRT_GIT_ORG", "")
-	if s.agentRuntimeHeads() != nil {
-		t.Fatal("a reader without AGENTRT_GIT_ORG")
-	}
-	t.Setenv("AGENTRT_GIT_ORG", " bifrost-agents ")
-	if s.agentRuntimeHeads() == nil {
-		t.Fatal("no reader with AGENTRT_GIT_ORG")
-	}
-	if (&Server{}).agentRuntimeHeads() != nil {
-		t.Fatal("a reader without the delivery service")
-	}
-}
