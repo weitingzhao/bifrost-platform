@@ -222,6 +222,12 @@ func postMessageAs(ctx context.Context, tx pgx.Tx, from, to, kind string, body [
 	  VALUES ($1,$2,$3,$4,$5,$6,NULLIF($7,''),NULLIF($8,''))`, id, from, to, kind, art, ev.EventID, mission, task); err != nil {
 		return "", err
 	}
+	// The bus learns of it in the same transaction (seat.mail.arrived): a seat
+	// waits for its own mail with one doorbell, whoever sent it (2026-11-16).
+	if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "mbox:" + to, Type: SeatMailType, Actor: from, MissionID: mission, TaskID: task,
+		Body: SeatMailBody(to, id, kind)}); err != nil {
+		return "", err
+	}
 	// A message that says the Owner approved is recorded where it came in;
 	// the receiver reads it as data, as every message (T04).
 	if checkClaims {
