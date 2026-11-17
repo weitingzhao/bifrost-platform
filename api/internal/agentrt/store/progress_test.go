@@ -142,12 +142,12 @@ func TestChangeBlocks(t *testing.T) {
 		changes []planstore.PlanChange
 		want    string
 	}{
-		"retitle an item: the tasks on its steps": {[]planstore.PlanChange{{Op: "retitle", Node: item, Title: "x"}}, "map[missions:[M-1 M-2] unfinished_tasks:0]"},
-		"retitle a step": {[]planstore.PlanChange{{Op: "retitle", Node: s1, Title: "x"}}, "map[missions:[M-1] unfinished_tasks:0]"},
-		"a mission_id a retitle carries binds nothing": {[]planstore.PlanChange{{Op: "retitle", Node: s1, Title: "x", MissionID: "M-2"}}, "map[missions:[M-1] unfinished_tasks:0]"},
-		"rebind a step: both missions":                 {[]planstore.PlanChange{{Op: "rebind_step", Node: s1, MissionID: "M-2"}}, "map[missions:[M-1 M-2] unfinished_tasks:0]"},
-		"bind a step with no mission":                  {[]planstore.PlanChange{{Op: "rebind_step", Node: s2, MissionID: "M-2"}}, "map[missions:[M-2] unfinished_tasks:0]"},
-		"add a step to an item":                        {[]planstore.PlanChange{{Op: "add_node", Parent: item, Kind: "step", Title: "x"}}, "map[missions:[M-1 M-2] unfinished_tasks:0]"},
+		"retitle an item: the tasks on its steps": {[]planstore.PlanChange{{Op: "retitle", Node: item, Title: "x"}}, "map[missions:[M-1 M-2]]"},
+		"retitle a step": {[]planstore.PlanChange{{Op: "retitle", Node: s1, Title: "x"}}, "map[missions:[M-1]]"},
+		"a mission_id a retitle carries binds nothing": {[]planstore.PlanChange{{Op: "retitle", Node: s1, Title: "x", MissionID: "M-2"}}, "map[missions:[M-1]]"},
+		"rebind a step: both missions":                 {[]planstore.PlanChange{{Op: "rebind_step", Node: s1, MissionID: "M-2"}}, "map[missions:[M-1 M-2]]"},
+		"bind a step with no mission":                  {[]planstore.PlanChange{{Op: "rebind_step", Node: s2, MissionID: "M-2"}}, "map[missions:[M-2]]"},
+		"add a step to an item":                        {[]planstore.PlanChange{{Op: "add_node", Parent: item, Kind: "step", Title: "x"}}, "map[missions:[M-1 M-2]]"},
 		"add an item to a round: nothing known":        {[]planstore.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: "x"}}, "map[unknown:the change touches no step a mission's work sits on]"},
 	} {
 		got, err := store.ChangeBlocksForTest(ctx, w.rt, c.changes)

@@ -98,8 +98,9 @@ func missionCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[stri
 // a rebound step, a moved task's target) and the tasks it moves. Its
 // missions are those of these steps (a task on a step is of the step's
 // mission), of the moved tasks (where they come from) and the missions a
-// change binds to; its unfinished tasks are those on these steps and the
-// moved ones. Unknown when it touches no mission.
+// change binds to. Unknown when it touches no mission. It carries no count of
+// unfinished tasks: no task is written any more (store cut 4, 2026-11-14), so
+// that count had no source and was a constant 0.
 func ChangeBlocks(ctx context.Context, tx pgx.Tx, changes []PlanChange) (any, error) {
 	var nodes, bound []string
 	for _, c := range changes {
@@ -117,7 +118,6 @@ func ChangeBlocks(ctx context.Context, tx pgx.Tx, changes []PlanChange) (any, er
 			bound = append(bound, c.MissionID)
 		}
 	}
-	open := 0 // no task is in work any more (store cut 4, 2026-11-14)
 	missions, err := planreadings.AffectedMissions(ctx, tx, nodes, bound)
 	if err != nil {
 		return nil, err
@@ -125,5 +125,5 @@ func ChangeBlocks(ctx context.Context, tx pgx.Tx, changes []PlanChange) (any, er
 	if len(missions) == 0 {
 		return map[string]any{"unknown": "the change touches no step a mission's work sits on"}, nil
 	}
-	return map[string]any{"missions": missions, "unfinished_tasks": open}, nil
+	return map[string]any{"missions": missions}, nil
 }
