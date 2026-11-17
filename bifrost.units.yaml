@@ -91,8 +91,9 @@ modules:
       # names nothing that acts); it reads nothing outside the directory.
       api/internal/headrelease: ["api/internal/headrelease"]
       api/internal/httpmetrics: ["api/internal/httpmetrics"]
-      # 2026-11-17: its test checks each channel's domain against the ownership table.
-      api/internal/bus/registry: ["api/internal/bus/registry", "config/domain-ownership.json"]
+      # 2026-11-17: its tests check each channel's and ledger type's domain against the
+      # ownership table, and the register against the latest closed vocabulary migration.
+      api/internal/bus/registry: ["api/internal/bus/registry", "config/domain-ownership.json", "api/internal/agentrt/migrations"]
       api/internal/agentrt/agentrtapi:
         - "api/internal/agentrt/agentrtapi"
         - "api/internal/agentrt/planimport/testdata"

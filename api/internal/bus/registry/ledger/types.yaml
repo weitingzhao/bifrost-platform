@@ -1,0 +1,77 @@
+# The event ledger's own types (agentrt.event rows that are not bus topics).
+# One register with ../rocket.yaml (the coordinator, 2026-11-17: one register,
+# each domain registers its own): a type is listed here with the domain whose
+# work it records (an id of config/domain-ownership.json). Bodies, value
+# checks and hooks stay with eventlog.Declare in the owning domain's package;
+# each domain's test checks its declared types are here under its domain.
+# The first split (2026-11-17, communication line) is for the foundation line
+# to confirm type by type.
+types:
+  - {type: actor_registered, domain: foundation}
+  - {type: approval_seen, domain: owner}
+  - {type: artifact_put, domain: foundation}
+  - {type: attempt_cancelled, domain: compute}
+  - {type: attempt_checkpointed, domain: compute}
+  - {type: attempt_computed, domain: compute}
+  - {type: attempt_ended, domain: compute}
+  - {type: attempt_leased, domain: compute}
+  - {type: attempt_lost, domain: compute}
+  - {type: attempt_persisted, domain: compute}
+  - {type: attempt_progress, domain: compute}
+  - {type: attempt_renewed, domain: compute}
+  - {type: attempt_salvaged, domain: compute}
+  - {type: attempt_stale, domain: compute}
+  - {type: attempt_started, domain: compute}
+  - {type: attempt_submitted, domain: compute}
+  - {type: budget_charged, domain: compute}
+  - {type: candidate_status_changed, domain: compute}
+  - {type: capability_scored, domain: compute}
+  - {type: ci_red_classified, domain: verification}
+  - {type: ci_reused, domain: verification}
+  - {type: ci_seen, domain: verification}
+  - {type: control_cleared, domain: coordination}
+  - {type: control_set, domain: coordination}
+  - {type: decision_recorded, domain: plan}
+  - {type: deploy_seen, domain: delivery}
+  - {type: host_registered, domain: compute}
+  - {type: host_retired, domain: compute}
+  - {type: host_slots_set, domain: compute}
+  - {type: host_state_changed, domain: compute}
+  - {type: legacy_imported, domain: foundation}
+  - {type: message_acked, domain: coordination}
+  - {type: message_posted, domain: coordination}
+  - {type: metric_label_set, domain: delivery}
+  - {type: metrics_computed, domain: delivery}
+  - {type: mission_amended, domain: plan}
+  - {type: mission_proposed, domain: plan}
+  - {type: mission_state_changed, domain: plan}
+  - {type: note, domain: foundation}
+  - {type: owner_signoff, domain: owner}
+  - {type: owner_wait_closed, domain: owner}
+  - {type: owner_wait_opened, domain: owner}
+  - {type: pipeline_seen, domain: delivery}
+  - {type: plan_change_decided, domain: plan}
+  - {type: plan_change_proposed, domain: plan}
+  - {type: plan_changed, domain: plan}
+  - {type: plan_node_created, domain: plan}
+  - {type: plan_node_retitled, domain: plan}
+  - {type: plan_node_state_changed, domain: plan}
+  - {type: policy_alert, domain: delivery}
+  - {type: pool_cooldown_set, domain: compute}
+  - {type: pool_measured, domain: compute}
+  - {type: question_seen, domain: owner}
+  - {type: route_decided, domain: plan}
+  - {type: rule_approved, domain: owner}
+  - {type: rule_expired, domain: owner}
+  - {type: rule_proposed, domain: owner}
+  - {type: rule_signed, domain: owner}
+  - {type: rule_tightened, domain: owner}
+  - {type: task_cancelled, domain: plan}
+  - {type: task_dependency_added, domain: plan}
+  - {type: task_proposed, domain: plan}
+  - {type: task_state_changed, domain: plan}
+  - {type: verification_recorded, domain: verification}
+  - {type: wait_limit_passed, domain: owner}
+  - {type: wave_abandoned, domain: plan}
+  - {type: wave_closed, domain: plan}
+  - {type: wave_opened, domain: plan}
