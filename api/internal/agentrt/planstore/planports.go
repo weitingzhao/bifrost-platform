@@ -94,6 +94,11 @@ type ExternalWorkPorts struct {
 	// ActivityBuckets marks each work with its verification and gives the
 	// ones working now and the ones finished today.
 	ActivityBuckets func(work []map[string]any, now time.Time, verification func(id string) any) (working, finished []any)
+	// CollectorActorPrefix starts a host collector's actor, a thread that is
+	// never unregistered work (the plan view's coverage count). It is the
+	// external work's word, passed in by the binding so the plan holds no
+	// copy of it.
+	CollectorActorPrefix string
 }
 
 var externalWorkPorts atomic.Pointer[ExternalWorkPorts]
@@ -148,11 +153,18 @@ func externalActivityBucketsVia(p *ExternalWorkPorts, work []map[string]any, now
 	return working, finished, nil
 }
 
-// CollectorActorPrefix starts a host collector's actor, a thread that is
-// never unregistered work (the plan view's coverage count). It is the
-// external work's word (externalwork.CollectorActorPrefix); a test holds the
-// two equal.
-const CollectorActorPrefix = "thread:collector@"
+// collectorActorPrefix is the bound prefix of a host collector's actor, or
+// the refusal of the plan view when it is not bound.
+func collectorActorPrefix() (string, error) {
+	return collectorActorPrefixVia(externalWorkPorts.Load())
+}
+
+func collectorActorPrefixVia(p *ExternalWorkPorts) (string, error) {
+	if p == nil || p.CollectorActorPrefix == "" {
+		return "", unbound("the prefix of a collector's actor", "BindPlanExternalWork")
+	}
+	return p.CollectorActorPrefix, nil
+}
 
 // RecorderImportPorts is what the plan code needs of the recorder import
 // (lineage), whose proposals the plan's decision pass decides: whether a

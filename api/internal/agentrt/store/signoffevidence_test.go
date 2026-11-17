@@ -9,7 +9,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 func TestPV2SignoffEvidenceAtSigning(t *testing.T) {
@@ -72,16 +71,16 @@ func TestPV2SignoffCandidateEvidence(t *testing.T) {
 	who := wr("thread:evidence")
 	spec := externalSpec(t, w)
 	report := w.artifact(t, "report", "Candidate report")
-	reg, err := store.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "work-633", Artifact: spec})
+	reg, err := externalwork.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "work-633", Artifact: spec})
 	ok(t, err)
 	id := reg["external_work_id"].(string)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
+	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
 	ok(t, err)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "submit", Seq: 2, Type: "submitted", ReportDigest: report})
+	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "submit", Seq: 2, Type: "submitted", ReportDigest: report})
 	ok(t, err)
 	// Other-step and unsubmitted reports must not become this acceptance's evidence.
 	otherSpec := w.artifact(t, "other", `{"v":1,"kind":"agentrt.external_work/v1","task":"Other","executor":"codex","provider":"openai","repo":"platform","branch":"other","acceptance_refs":["other"],"estimate_minutes":[1,2]}`)
-	_, err = store.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "other", Root: root, Node: s2, RunKey: "other", Artifact: otherSpec})
+	_, err = externalwork.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "other", Root: root, Node: s2, RunKey: "other", Artifact: otherSpec})
 	ok(t, err)
 	view, err := planstore.PlanView(ctx, w.rt, root)
 	ok(t, err)

@@ -77,6 +77,11 @@ func TestUnboundLineagePortsRefuse(t *testing.T) {
 		if work != nil || working != nil || finished != nil {
 			t.Fatalf("%s: an answer with the refusal: %v %v %v", name, work, working, finished)
 		}
+		prefix, err := collectorActorPrefixVia(p)
+		refused(t, name+": the collector's actor prefix", err)
+		if prefix != "" {
+			t.Fatalf("%s: a prefix with the refusal: %q", name, prefix)
+		}
 	}
 	for name, p := range map[string]*RecorderImportPorts{"nothing bound": nil, "an empty binding": {}} {
 		log, is, err := recorderImportLogVia(p, []PlanChange{{Op: unboundOp, Artifact: "sha256:log"}})
@@ -96,6 +101,7 @@ func TestUnboundLineagePortsRefuse(t *testing.T) {
 		ActivityBuckets: func(work []map[string]any, _ time.Time, _ func(string) any) ([]any, []any) {
 			return []any{len(work)}, []any{"done"}
 		},
+		CollectorActorPrefix: "thread:c@",
 	}
 	if err := checkExternalNoteVia(bound, nil); err == nil || err.Error() != "note" {
 		t.Fatalf("a bound note check: %v", err)
@@ -105,6 +111,9 @@ func TestUnboundLineagePortsRefuse(t *testing.T) {
 	}
 	if work, err := externalWorkSnapshotVia(ctx, bound, nil, unboundRoot, time.Now()); err != nil || len(work) != 1 {
 		t.Fatalf("a bound snapshot: %v %v", work, err)
+	}
+	if prefix, err := collectorActorPrefixVia(bound); err != nil || prefix != "thread:c@" {
+		t.Fatalf("a bound collector's actor prefix: %q %v", prefix, err)
 	}
 	if working, finished, err := externalActivityBucketsVia(bound, make([]map[string]any, 3), time.Now(), nil); err != nil ||
 		!reflect.DeepEqual(working, []any{3}) || !reflect.DeepEqual(finished, []any{"done"}) {

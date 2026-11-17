@@ -80,9 +80,11 @@ func newCollectorWorkViewFixture(t *testing.T) *collectorWorkViewDB {
 	f := &collectorWorkViewDB{signoffViewDB: newSignoffViewFixture(t), descs: map[string][]byte{}}
 	at := f.now.Add(-10 * time.Second)
 	digest := "sha256:" + strings.Repeat("d", 64)
+	// A collector's run key is <vendor>:<session>:<epoch>, as externalwork's
+	// registration writes it (identityRunKey, externalwork.go).
 	collector := func(id, session string, epoch int64, node string) externalwork.ExternalNote {
 		return externalwork.ExternalNote{ID: "ew_" + strings.Repeat(id, 64), Actor: externalwork.CollectorActorPrefix + "h1", Host: "h1", Vendor: "claude",
-			Session: session, Epoch: epoch, Node: node, RunKey: externalwork.IdentityRunKey("claude", session, epoch)}
+			Session: session, Epoch: epoch, Node: node, RunKey: fmt.Sprintf("claude:%s:%d", session, epoch)}
 	}
 	running := collector("1", "0b8e2f4a-1111-2222-3333-444455556666", 1, "R4:4.1-1")
 	running.Sidebar, running.Seq, running.Type, running.State = "local_0b8e2f4a-aaaa-bbbb-cccc-ddddeeeeffff", 1, "started", "Running"

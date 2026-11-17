@@ -63,7 +63,7 @@ func (a *API) registerExternalWork(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	out, err := store.RegisterExternalWork(r.Context(), a.DB, who, in)
+	out, err := externalwork.RegisterExternalWork(r.Context(), a.DB, who, in)
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -92,7 +92,7 @@ func (a *API) postExternalEvent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	out, err := store.PostExternalEvent(r.Context(), a.DB, who, id, in)
+	out, err := externalwork.PostExternalEvent(r.Context(), a.DB, who, id, in)
 	if err != nil {
 		a.fail(w, err)
 		return

@@ -14,9 +14,10 @@ import (
 )
 
 // The plan code's ports (planstore's planports.go) whose providers are
-// packages outside this one are bound here, at the package's start: this
-// file is the store's wiring and not the plan's, and it is the one place of
-// the store that names both sides. A provider still in this package binds
+// packages outside this one are bound here, at the package's start, and so
+// are the external work writes' ports onto the plan tree (externalwork's
+// ports.go, provided by planstore): this file is the store's wiring and not
+// the plan's, and it is the one place of the store that names both sides. A provider still in this package binds
 // its own port from its own file (envelope.go, recorderimport.go,
 // loopalert.go).
 
@@ -38,7 +39,14 @@ func init() {
 				return externalwork.ExternalDescriptionOf(ctx, tx, id)
 			})
 		},
-		ActivityBuckets: workregistration.ActivityBuckets,
+		ActivityBuckets:      workregistration.ActivityBuckets,
+		CollectorActorPrefix: externalwork.CollectorActorPrefix,
+	})
+	externalwork.BindPlanTree(externalwork.PlanTreePorts{
+		LockTree: planstore.LockTree,
+		RootOf:   planstore.RootOf,
+		DevTree:  planstore.DevTree,
+		ViewTree: func() string { return planstore.ViewTree },
 	})
 	planstore.BindPlanCoordination(planstore.CoordinationPorts{AlertClaim: coord.AlertClaim})
 	planstore.BindPlanQuestions(planstore.QuestionPorts{BodyBytes: questions.BodyBytes})

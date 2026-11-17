@@ -1,45 +1,50 @@
-package store
+package externalwork
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/strictjson"
 )
 
-func externalBinding(ctx context.Context, tx pgx.Tx, root, node, mission, task string) error {
+// Registering a work and posting its events (moved from store/externalwork.go
+// on 2026-11-17, plan core wall step 6). Both lock and read the plan tree,
+// which is the plan domain's: they reach it through the ports of ports.go,
+// which store binds at start, and refuse while they are not bound.
+
+func externalBinding(ctx context.Context, tx pgx.Tx, tree *PlanTreePorts, root, node, mission, task string) error {
 	// Callers hold the root lock. Like view adoption, lock every node before
 	// reading the dev boundary: task proposals hold their step FOR SHARE.
 	// This also protects a linked event claiming a previously unclaimed root.
-	rows, err := tx.Query(ctx, planstore.ViewTree+`SELECT n.plan_node_id FROM tree JOIN agentrt.plan_node n USING(plan_node_id) ORDER BY n.plan_node_id FOR UPDATE OF n`, root)
+	rows, err := tx.Query(ctx, tree.ViewTree()+`SELECT n.plan_node_id FROM tree JOIN agentrt.plan_node n USING(plan_node_id) ORDER BY n.plan_node_id FOR UPDATE OF n`, root)
 	if err != nil {
 		return err
 	}
 	if _, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
 		return err
 	}
-	r, err := planstore.RootOf(ctx, tx, node)
+	r, err := tree.RootOf(ctx, tx, node)
 	if err != nil {
 		return err
 	}
 	if r != root {
-		return invalid("node belongs to another root")
+		return eventlog.Invalid("node belongs to another root")
 	}
 	// Registration is allowed for legacy dev trees, but never business trees.
-	if err = planstore.DevTree(ctx, tx, root); err != nil {
+	if err = tree.DevTree(ctx, tx, root); err != nil {
 		return err
 	}
 	if task != "" {
 		// Nothing proposes a task any more (store cut 4, 2026-11-14).
-		return invalid("external work is not linked to a task any more: register it on its step")
+		return eventlog.Invalid("external work is not linked to a task any more: register it on its step")
 	}
 	if mission != "" {
 		var tenant string
@@ -48,34 +53,38 @@ func externalBinding(ctx context.Context, tx pgx.Tx, root, node, mission, task s
 			return err
 		}
 		if tenant != "dev" {
-			return invalid("external work only binds dev")
+			return eventlog.Invalid("external work only binds dev")
 		}
 		var bound bool
 		err = tx.QueryRow(ctx, `SELECT COALESCE(mission_id=$2, $3) FROM agentrt.plan_node WHERE plan_node_id=$1`, node, mission, task != "").Scan(&bound)
 		if err != nil || !bound {
-			return invalid("mission is not bound to this step")
+			return eventlog.Invalid("mission is not bound to this step")
 		}
 	}
 	return nil
 }
-func RegisterExternalWork(ctx context.Context, db DB, w Writer, in externalwork.ExternalRegistration) (map[string]any, error) {
+func RegisterExternalWork(ctx context.Context, db eventlog.DB, w actor.Writer, in ExternalRegistration) (map[string]any, error) {
+	tree, err := planTree()
+	if err != nil {
+		return nil, err
+	}
 	collector, err := collectorWriter(w)
 	if err != nil {
 		return nil, err
 	}
-	if err := externalwork.CheckIdentity(collector, in.Vendor, in.Session, in.Epoch, in.Sidebar); err != nil {
+	if err := CheckIdentity(collector, in.Vendor, in.Session, in.Epoch, in.Sidebar); err != nil {
 		return nil, err
 	}
 	if collector {
 		// The run key is the identity's; a client may leave it out.
-		run := externalwork.IdentityRunKey(in.Vendor, in.Session, in.Epoch)
+		run := identityRunKey(in.Vendor, in.Session, in.Epoch)
 		if in.RunKey != "" && in.RunKey != run {
-			return nil, invalid("a collector's source_run_key is <vendor>:<session>:<epoch>, %s", run)
+			return nil, eventlog.Invalid("a collector's source_run_key is <vendor>:<session>:<epoch>, %s", run)
 		}
 		in.RunKey = run
 	}
-	if in.Key == "" || in.Root == "" || in.Node == "" || in.RunKey == "" || len(in.RunKey) > 200 || !externalwork.DigestPattern.MatchString(in.Artifact) {
-		return nil, invalid("registration requires key, root, node, source_run_key and artifact digest")
+	if in.Key == "" || in.Root == "" || in.Node == "" || in.RunKey == "" || len(in.RunKey) > 200 || !DigestPattern.MatchString(in.Artifact) {
+		return nil, eventlog.Invalid("registration requires key, root, node, source_run_key and artifact digest")
 	}
 	if err := checkObserved(in.ObservedAt); err != nil {
 		return nil, err
@@ -89,38 +98,38 @@ func RegisterExternalWork(ctx context.Context, db DB, w Writer, in externalwork.
 	}
 	identity, _ := canon.Sum(map[string]any{"actor": w.Actor, "run": in.RunKey})
 	id := "ew_" + strings.TrimPrefix(identity, "sha256:")
-	return idempotentAs(ctx, db, w, "external-work", in.Key, req, nil, func(tx pgx.Tx) (map[string]any, error) {
-		if err := ensureWriter(ctx, tx, w, true); err != nil {
+	return actor.IdempotentAs(ctx, db, w, "external-work", in.Key, req, nil, func(tx pgx.Tx) (map[string]any, error) {
+		if err := actor.Ensure(ctx, tx, w, true); err != nil {
 			return nil, err
 		}
-		if err := planstore.LockTree(ctx, tx, in.Root); err != nil {
+		if err := tree.LockTree(ctx, tx, in.Root); err != nil {
 			return nil, err
 		}
-		if err := externalBinding(ctx, tx, in.Root, in.Node, in.Mission, in.Task); err != nil {
+		if err := externalBinding(ctx, tx, tree, in.Root, in.Node, in.Mission, in.Task); err != nil {
 			return nil, err
 		}
-		if _, err := externalwork.ExternalDescriptionOf(ctx, tx, in.Artifact); err != nil {
+		if _, err := ExternalDescriptionOf(ctx, tx, in.Artifact); err != nil {
 			return nil, err
 		}
-		if err := lockStream(ctx, tx, "external-work:"+id); err != nil {
+		if err := eventlog.LockStream(ctx, tx, "external-work:"+id); err != nil {
 			return nil, err
 		}
-		prev, event, _, err := externalwork.ReadExternal(ctx, tx, id)
+		prev, event, _, err := ReadExternal(ctx, tx, id)
 		if err == nil {
 			if prev.RegistrationDigest != sum {
-				return nil, ErrConflict
+				return nil, actor.ErrConflict
 			}
-			return externalwork.ExternalReply(prev, event), nil
+			return ExternalReply(prev, event), nil
 		}
 		if !isNoRows(err) {
 			return nil, err
 		}
-		now := timeText(eventNow(ctx))
-		n := externalwork.ExternalNote{V: 1, Kind: "agentrt.external_work/v1", ID: id, Actor: w.Actor, Root: in.Root, Node: in.Node, RunKey: in.RunKey, Artifact: in.Artifact, Mission: in.Mission, Task: in.Task, Type: "registered", State: "Registered", RequestDigest: sum, RegistrationDigest: sum, ObservedAt: in.ObservedAt, SourceStartedAt: in.ObservedAt, RegisteredAt: now, HeartbeatAt: now}
+		now := timeText(eventlog.Now(ctx))
+		n := ExternalNote{V: 1, Kind: "agentrt.external_work/v1", ID: id, Actor: w.Actor, Root: in.Root, Node: in.Node, RunKey: in.RunKey, Artifact: in.Artifact, Mission: in.Mission, Task: in.Task, Type: "registered", State: "Registered", RequestDigest: sum, RegistrationDigest: sum, ObservedAt: in.ObservedAt, SourceStartedAt: in.ObservedAt, RegisteredAt: now, HeartbeatAt: now}
 		if collector {
 			n.Host, n.Vendor, n.Session, n.Epoch, n.Sidebar = w.Host, in.Vendor, in.Session, in.Epoch, in.Sidebar
 		}
-		return externalwork.AppendExternal(ctx, tx, w.Actor, n)
+		return AppendExternal(ctx, tx, w.Actor, n)
 	})
 }
 
@@ -129,46 +138,50 @@ func RegisterExternalWork(ctx context.Context, db DB, w Writer, in externalwork.
 // one already recorded under that seq. An event that leaves seq out gets the
 // next one under the stream's lock, so two of them posted at once get two
 // seqs in turn; its replay is by its idempotency key alone.
-func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in externalwork.ExternalEvent) (map[string]any, error) {
+func PostExternalEvent(ctx context.Context, db eventlog.DB, w actor.Writer, id string, in ExternalEvent) (map[string]any, error) {
+	tree, err := planTree()
+	if err != nil {
+		return nil, err
+	}
 	collector, err := collectorWriter(w)
 	if err != nil {
 		return nil, err
 	}
-	if err := externalwork.CheckIdentity(collector, in.Vendor, in.Session, in.Epoch, ""); err != nil {
+	if err := CheckIdentity(collector, in.Vendor, in.Session, in.Epoch, ""); err != nil {
 		return nil, err
 	}
 	if in.Key == "" || in.Seq < 0 || !slices.Contains([]string{"started", "heartbeat", "submitted", "cancelled", "linked"}, in.Type) {
-		return nil, invalid("invalid external event type, key or seq")
+		return nil, eventlog.Invalid("invalid external event type, key or seq")
 	}
 	if err := checkObserved(in.ObservedAt); err != nil {
 		return nil, err
 	}
 	if in.Type != "linked" && (in.Root != "" || in.Node != "" || in.Mission != "" || in.Task != "") {
-		return nil, invalid("only linked changes bindings")
+		return nil, eventlog.Invalid("only linked changes bindings")
 	}
 	if in.Type == "linked" && (in.Root == "" || in.Node == "") {
-		return nil, invalid("linked requires root and node")
+		return nil, eventlog.Invalid("linked requires root and node")
 	}
 	if in.Type != "submitted" && (in.ReportPathDigest != "" || in.ReportDigest != "" || in.ExitCode != nil) {
-		return nil, invalid("only submitted carries results")
+		return nil, eventlog.Invalid("only submitted carries results")
 	}
 	if len(in.Commits) > 0 && in.Type != "submitted" && in.Type != "heartbeat" {
-		return nil, invalid("only heartbeat and submitted carry commits")
+		return nil, eventlog.Invalid("only heartbeat and submitted carry commits")
 	}
 	for _, s := range []string{in.ReportPathDigest, in.ReportDigest} {
-		if s != "" && !externalwork.DigestPattern.MatchString(s) {
-			return nil, invalid("invalid report digest")
+		if s != "" && !DigestPattern.MatchString(s) {
+			return nil, eventlog.Invalid("invalid report digest")
 		}
 	}
 	if len(in.Commits) > maxExternalCommits {
-		return nil, invalid("too many commits")
+		return nil, eventlog.Invalid("too many commits")
 	}
 	for _, s := range in.Commits {
-		if !shaPattern.MatchString(s) {
-			return nil, invalid("invalid commit SHA")
+		if !strictjson.SHAPattern.MatchString(s) {
+			return nil, eventlog.Invalid("invalid commit SHA")
 		}
 	}
-	req, sum, err := externalwork.ExternalEventDigest(in)
+	req, sum, err := ExternalEventDigest(in)
 	if err != nil {
 		return nil, err
 	}
@@ -178,22 +191,22 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in exter
 	// for good once registered, so it is compared here, before the key is
 	// looked at; the check under the stream lock below stays the authority.
 	if collector {
-		if err := externalwork.SameIdentityAsWork(ctx, db, w, id, in); err != nil {
+		if err := SameIdentityAsWork(ctx, db, w, id, in); err != nil {
 			return nil, err
 		}
 	}
-	return idempotentAs(ctx, db, w, "external-work/"+id+"/events", in.Key, req, nil, func(tx pgx.Tx) (map[string]any, error) {
-		if err := ensureWriter(ctx, tx, w, true); err != nil {
+	return actor.IdempotentAs(ctx, db, w, "external-work/"+id+"/events", in.Key, req, nil, func(tx pgx.Tx) (map[string]any, error) {
+		if err := actor.Ensure(ctx, tx, w, true); err != nil {
 			return nil, err
 		}
 		// Read binding before locking; retry a concurrent rebind without taking
 		// roots after the stream lock (the registration lock order).
-		before, _, _, err := externalwork.ReadExternal(ctx, tx, id)
+		before, _, _, err := ReadExternal(ctx, tx, id)
 		if err != nil {
 			return nil, err
 		}
 		if before.Actor != w.Actor {
-			return nil, ErrNotYours
+			return nil, actor.ErrNotYours
 		}
 		roots := []string{before.Root}
 		if in.Root != "" {
@@ -201,7 +214,7 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in exter
 		}
 		slices.Sort(roots)
 		for _, r := range slices.Compact(roots) {
-			if err = planstore.LockTree(ctx, tx, r); err != nil {
+			if err = tree.LockTree(ctx, tx, r); err != nil {
 				return nil, err
 			}
 		}
@@ -209,18 +222,18 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in exter
 		if in.Type == "linked" {
 			node, root, mission, task = in.Node, in.Root, in.Mission, in.Task
 		}
-		if err = externalBinding(ctx, tx, root, node, mission, task); err != nil {
+		if err = externalBinding(ctx, tx, tree, root, node, mission, task); err != nil {
 			return nil, err
 		}
-		if err = lockStream(ctx, tx, "external-work:"+id); err != nil {
+		if err = eventlog.LockStream(ctx, tx, "external-work:"+id); err != nil {
 			return nil, err
 		}
-		n, _, _, err := externalwork.ReadExternal(ctx, tx, id)
+		n, _, _, err := ReadExternal(ctx, tx, id)
 		if err != nil {
 			return nil, err
 		}
 		if n.Root != before.Root || n.Node != before.Node {
-			return nil, ErrConflict
+			return nil, actor.ErrConflict
 		}
 		// The identity is the work's for good, read under the stream's lock in
 		// this transaction: every event names it whole, before its sequence is
@@ -228,9 +241,9 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in exter
 		if collector {
 			switch {
 			case n.Vendor == "":
-				return nil, fmt.Errorf("%w: this work was registered without one", externalwork.ErrIdentityMismatch)
+				return nil, fmt.Errorf("%w: this work was registered without one", ErrIdentityMismatch)
 			case in.Vendor != n.Vendor || in.Session != n.Session || in.Epoch != n.Epoch:
-				return nil, externalwork.ErrIdentityMismatch
+				return nil, ErrIdentityMismatch
 			}
 		}
 		// No seq named: the next one, read under the stream's lock. The note
@@ -241,7 +254,7 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in exter
 			seq = n.Seq + 1
 			next := in
 			next.Seq = seq
-			if _, sum, err = externalwork.ExternalEventDigest(next); err != nil {
+			if _, sum, err = ExternalEventDigest(next); err != nil {
 				return nil, err
 			}
 		}
@@ -250,34 +263,34 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in exter
 			var event int64
 			err = tx.QueryRow(ctx, `SELECT body_json->'external_work',event_id FROM agentrt.event WHERE event_stream_id=$1 AND (body_json->'external_work'->>'seq')::bigint=$2`, "external-work:"+id, seq).Scan(&old, &event)
 			if err != nil {
-				return nil, ErrConflict
+				return nil, actor.ErrConflict
 			}
-			var previous externalwork.ExternalNote
+			var previous ExternalNote
 			if err = json.Unmarshal(old, &previous); err != nil {
 				return nil, err
 			}
 			if previous.RequestDigest != sum {
-				return nil, ErrConflict
+				return nil, actor.ErrConflict
 			}
-			return externalwork.ExternalReply(previous, event), nil
+			return ExternalReply(previous, event), nil
 		}
 		if seq != n.Seq+1 {
-			return nil, fmt.Errorf("%w: expected seq %d", ErrConflict, n.Seq+1)
+			return nil, fmt.Errorf("%w: expected seq %d", actor.ErrConflict, n.Seq+1)
 		}
 		if (n.State == "Submitted" || n.State == "Cancelled") && in.Type != "linked" {
-			return nil, ErrState
+			return nil, eventlog.ErrState
 		}
-		now := timeText(eventNow(ctx))
+		now := timeText(eventlog.Now(ctx))
 		n.Seq, n.Type, n.RequestDigest, n.ObservedAt = seq, in.Type, sum, in.ObservedAt
 		switch in.Type {
 		case "started":
 			if n.State != "Registered" {
-				return nil, ErrState
+				return nil, eventlog.ErrState
 			}
 			n.State, n.StartedAt, n.HeartbeatAt = "Running", now, now
 		case "heartbeat":
 			if n.State != "Running" {
-				return nil, ErrState
+				return nil, eventlog.ErrState
 			}
 			n.HeartbeatAt = now
 			if n.Commits, err = addExternalCommits(n.Commits, in.Commits); err != nil {
@@ -285,7 +298,7 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in exter
 			}
 		case "submitted":
 			if n.State != "Running" {
-				return nil, ErrState
+				return nil, eventlog.ErrState
 			}
 			n.State, n.EndedAt = "Submitted", now
 			n.ReportPathDigest, n.ReportDigest, n.ExitCode = in.ReportPathDigest, in.ReportDigest, in.ExitCode
@@ -297,18 +310,18 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in exter
 		case "linked":
 			n.Root, n.Node, n.Mission, n.Task = root, node, mission, task
 		}
-		return externalwork.AppendExternal(ctx, tx, w.Actor, n)
+		return AppendExternal(ctx, tx, w.Actor, n)
 	})
 }
 
 // collectorWriter checks a writer's binding: a host-bound writer is that
 // host's collector; a writer that is not host-bound is no collector.
-func collectorWriter(w Writer) (bool, error) {
+func collectorWriter(w actor.Writer) (bool, error) {
 	switch {
-	case w.Host != "" && w.Actor != externalwork.CollectorActorPrefix+w.Host:
-		return false, invalid("a host-bound writer is its host's collector")
-	case w.Host == "" && strings.HasPrefix(w.Actor, externalwork.CollectorActorPrefix):
-		return false, invalid("a collector writes bound to its host")
+	case w.Host != "" && w.Actor != CollectorActorPrefix+w.Host:
+		return false, eventlog.Invalid("a host-bound writer is its host's collector")
+	case w.Host == "" && strings.HasPrefix(w.Actor, CollectorActorPrefix):
+		return false, eventlog.Invalid("a collector writes bound to its host")
 	}
 	return w.Host != "", nil
 }
@@ -316,7 +329,7 @@ func collectorWriter(w Writer) (bool, error) {
 func checkObserved(s string) error {
 	if s != "" {
 		if _, err := time.Parse(time.RFC3339Nano, s); err != nil {
-			return invalid("observed_at must be RFC3339")
+			return eventlog.Invalid("observed_at must be RFC3339")
 		}
 	}
 	return nil
@@ -336,24 +349,13 @@ func addExternalCommits(have, add []string) ([]string, error) {
 		}
 	}
 	if len(out) > maxExternalCommits {
-		return nil, invalid("too many commits")
+		return nil, eventlog.Invalid("too many commits")
 	}
 	return out, nil
 }
 
-// jsonObject and isNoRows are the plan view's two small helpers of the same
-// names (planstore), which this file used while it shared their package;
-// copied, 10 lines and 1.
-func jsonObject(v any) (map[string]any, error) {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	out, err := canon.Parse(b)
-	if err != nil {
-		return nil, err
-	}
-	return out.(map[string]any), nil
+// timeText is the event log's text of a time (store's and planstore's
+// timeText, one line over eventlog.TimeLayout).
+func timeText(t time.Time) string {
+	return t.UTC().Truncate(time.Microsecond).Format(eventlog.TimeLayout)
 }
-
-func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }

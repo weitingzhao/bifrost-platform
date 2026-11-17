@@ -82,12 +82,12 @@ func externalSubmitted(t *testing.T, w *world, actor, node, run string, commits 
 	t.Helper()
 	ctx := ctxOf(t)
 	who := wr(actor)
-	out, err := store.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "reg-" + run, Root: root, Node: node, RunKey: run, Artifact: externalSpec(t, w)})
+	out, err := externalwork.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "reg-" + run, Root: root, Node: node, RunKey: run, Artifact: externalSpec(t, w)})
 	ok(t, err)
 	id := out["external_work_id"].(string)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
+	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
 	ok(t, err)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "end", Seq: 2, Type: "submitted", Commits: commits})
+	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "end", Seq: 2, Type: "submitted", Commits: commits})
 	ok(t, err)
 	return id
 }
@@ -206,12 +206,12 @@ func TestReadExternalDeliveryFromHeartbeat(t *testing.T) {
 	}
 	who := wr("thread:giant")
 	clock(0)
-	out, err := store.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "early", Artifact: externalSpec(t, w)})
+	out, err := externalwork.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "early", Artifact: externalSpec(t, w)})
 	ok(t, err)
 	id := out["external_work_id"].(string)
 	post := func(e externalwork.ExternalEvent) {
 		t.Helper()
-		_, err := store.PostExternalEvent(ctx, w.rt, who, id, e)
+		_, err := externalwork.PostExternalEvent(ctx, w.rt, who, id, e)
 		ok(t, err)
 	}
 	post(externalwork.ExternalEvent{Key: "start", Type: "started"})

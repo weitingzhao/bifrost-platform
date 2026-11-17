@@ -78,10 +78,10 @@ func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 	w := newKernelWorld(t)
 	adoptView(t, w, viewDoc(t, w, 1), 0)
 	who := wr("thread:external")
-	out, err := store.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "run", Root: root, Node: s1, RunKey: "ports", Artifact: externalSpec(t, w)})
+	out, err := externalwork.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "run", Root: root, Node: s1, RunKey: "ports", Artifact: externalSpec(t, w)})
 	ok(t, err)
 	id := out["external_work_id"].(string)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
+	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
 	ok(t, err)
 	now := time.Now()
 	verification := func(id string) any { return "seen " + id }
@@ -137,9 +137,6 @@ func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 	}
 	if _, err := externalwork.ParseExternalDescription([]byte(`not json`)); err == nil {
 		t.Fatal("externalwork took a description that is not JSON: the comparison above shows nothing")
-	}
-	if store.CollectorActorPrefixForTest != externalwork.CollectorActorPrefix {
-		t.Fatalf("the plan view excludes actors like %q; a collector's actor starts %q", store.CollectorActorPrefixForTest, externalwork.CollectorActorPrefix)
 	}
 }
 

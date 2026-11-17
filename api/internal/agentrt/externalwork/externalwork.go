@@ -1,11 +1,11 @@
 // Package externalwork is what the runtime keeps of work done outside it
 // (lineage domain): the description a registration names, the note that is
 // the work's record, the session identity of a collector's work, and the
-// reads of a work by its id, and the landing of a recorder log
-// (recorder.go). It imports the bases, the artifact store, workregistration
-// and recorderimport, and not the store. Registering a work and posting its
-// events lock and read the plan tree; those two writes are the store's
-// (store/externalwork.go) and use what this package exports.
+// reads of a work by its id, the two writes: registering a work and posting
+// its events (writes.go), and the landing of a recorder log (recorder.go). It
+// imports the bases, the artifact store, workregistration and recorderimport,
+// and not the store or the plan's package: the writes lock and read the plan
+// tree through ports (ports.go) that store binds.
 package externalwork
 
 import (
@@ -85,6 +85,8 @@ type ExternalNote workregistration.Note
 
 // CollectorActorPrefix starts a collector's actor, thread:collector@<host>
 // (actuation.CollectorActorPrefix; agentrtapi's tests hold the two equal).
+// The plan view gets it through the external work port store binds
+// (store's portsbind.go), and keeps no copy.
 const CollectorActorPrefix = "thread:collector@"
 
 // ErrIdentityRequired: a collector's write lacks its session identity, or
@@ -126,9 +128,9 @@ func CheckIdentity(collector bool, vendor, session string, epoch int64, sidebar 
 	return nil
 }
 
-// IdentityRunKey is the source run key of a collector's work: fixed by its
+// identityRunKey is the source run key of a collector's work: fixed by its
 // identity, <vendor>:<session>:<epoch> (§1.4), so its work id is too.
-func IdentityRunKey(vendor, session string, epoch int64) string {
+func identityRunKey(vendor, session string, epoch int64) string {
 	return fmt.Sprintf("%s:%s:%d", vendor, session, epoch)
 }
 

@@ -29,7 +29,6 @@ var (
 )
 
 const (
-	CollectorActorPrefixForTest = planstore.CollectorActorPrefix
 	RecorderApplyLabelForTest   = planstore.RecorderApplyLabel
 	RecorderRefuseLabelForTest  = planstore.RecorderRefuseLabel
 	RecorderStreamPrefixForTest = planstore.RecorderStreamPrefix

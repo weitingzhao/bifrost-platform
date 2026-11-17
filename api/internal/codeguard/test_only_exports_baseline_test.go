@@ -3,7 +3,8 @@ package codeguard
 // The baseline of test_only_exports_test.go, 2026-11-17 (platform origin/main
 // 8215afd8): 239 package-level exported names that other packages' tests name
 // and no other package's production code does. It only shrinks (232 since the scan counts a type taken through a used
-// function's signature as surface, the same day). The 42 of
+// function's signature as surface, the same day; 230 after the recorder
+// import and the external work writes left store). The 41 of
 // agentrt/planstore include the 21 the decoupling line exports for the store
 // tests (TD-582).
 
@@ -78,7 +79,6 @@ var exportedForOtherTests = []string{
 	"api/internal/agentrt/planstore.ChangeBlocks",
 	"api/internal/agentrt/planstore.CheckExternalDescription",
 	"api/internal/agentrt/planstore.CheckExternalNote",
-	"api/internal/agentrt/planstore.CollectorActorPrefix",
 	"api/internal/agentrt/planstore.ControllerLoopsFailing",
 	"api/internal/agentrt/planstore.CreatePlanNode",
 	"api/internal/agentrt/planstore.DecideRecorderImportLog",

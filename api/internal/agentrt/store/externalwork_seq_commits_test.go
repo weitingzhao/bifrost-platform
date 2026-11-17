@@ -39,11 +39,11 @@ func TestExternalEventSeqAssigned(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	who := wr("thread:seqless")
-	out, err := store.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "seqless", Artifact: externalSpec(t, w)})
+	out, err := externalwork.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "seqless", Artifact: externalSpec(t, w)})
 	ok(t, err)
 	id := out["external_work_id"].(string)
 	post := func(e externalwork.ExternalEvent) (map[string]any, error) {
-		return store.PostExternalEvent(ctx, w.rt, who, id, e)
+		return externalwork.PostExternalEvent(ctx, w.rt, who, id, e)
 	}
 	assigned := func(e externalwork.ExternalEvent, want int) map[string]any {
 		t.Helper()
@@ -94,7 +94,7 @@ func TestExternalEventSeqAssigned(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			out, e := store.PostExternalEvent(ctx, conn, who, id, externalwork.ExternalEvent{Key: key, Type: "heartbeat"})
+			out, e := externalwork.PostExternalEvent(ctx, conn, who, id, externalwork.ExternalEvent{Key: key, Type: "heartbeat"})
 			errs <- e
 			if e == nil {
 				got <- fmt.Sprint(out["seq"])
@@ -133,11 +133,11 @@ func TestExternalHeartbeatCommits(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	who := wr("thread:early-commit")
-	out, err := store.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "early-commit", Artifact: externalSpec(t, w)})
+	out, err := externalwork.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "early-commit", Artifact: externalSpec(t, w)})
 	ok(t, err)
 	id := out["external_work_id"].(string)
 	post := func(e externalwork.ExternalEvent) error {
-		_, err := store.PostExternalEvent(ctx, w.rt, who, id, e)
+		_, err := externalwork.PostExternalEvent(ctx, w.rt, who, id, e)
 		return err
 	}
 	a, b, c := strings.Repeat("a", 40), strings.Repeat("b", 40), strings.Repeat("c", 64)
