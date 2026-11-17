@@ -87,7 +87,6 @@ type PostgresStatusResponse struct {
 	Backup         ServiceDependencyView  `json:"backup"`
 	MinIO          ServiceDependencyView  `json:"minio"`
 	Databases      []PostgresDatabaseView `json:"databases"`
-	Legacy         []PostgresLegacyView   `json:"legacy"`
 	Embedded       []PostgresLegacyView   `json:"embedded"`
 	PostgresRole   ServiceDependencyView  `json:"postgres_role"`
 	GeneratedAt    time.Time              `json:"generated_at"`
@@ -117,6 +116,7 @@ func (s *Service) PostgresStatus(ctx context.Context) PostgresStatusResponse {
 	if err != nil {
 		resp.Reachability = probe.ReachFail
 		resp.Summary = err.Error()
+		markDatabasesFromCluster(resp.Databases, ServiceDependencyView{Reachability: probe.ReachUnknown, Detail: err.Error()})
 		return resp
 	}
 
@@ -147,20 +147,34 @@ func (s *Service) PostgresStatus(ctx context.Context) PostgresStatusResponse {
 		resp.Backup = backupDep(ctx, dyn, snap, resp.MinIO.Reachability)
 	}
 	resp.Embedded = embeddedPostgresProbe(snap)
-	resp.Legacy = []PostgresLegacyView{
-		{
-			Kind: "bare-metal", Host: "192.168.10.80", Reach: probe.ReachFail,
-			Detail: "Decommissioned 2026-06-29 — reinstalled as ubt-k3s-06 (.79); truth is CNPG bifrost_* @ data NS",
-		},
-	}
-
-	for i := range resp.Databases {
-		resp.Databases[i].Reach = probe.ReachOK
-		resp.Databases[i].Detail = "Database CR on CNPG cluster"
+	if dynErr != nil {
+		markDatabasesFromCluster(resp.Databases, ServiceDependencyView{Reachability: probe.ReachUnknown, Detail: dynErr.Error()})
+	} else {
+		markDatabasesFromCluster(resp.Databases, resp.CnpgCluster)
 	}
 
 	resp.Reachability, resp.Summary = summarizePostgresStatus(resp)
 	return resp
+}
+
+// markDatabasesFromCluster sets each logical database's reachability from the
+// one observation the platform has for it: the status of the CNPG cluster that
+// serves it. The database itself is not probed (platform RBAC cannot read the
+// CNPG Database CRs and the API opens no SQL connection here), so a cluster that
+// was not read leaves every database unknown, never ok.
+func markDatabasesFromCluster(dbs []PostgresDatabaseView, cluster ServiceDependencyView) {
+	reach := cluster.Reachability
+	if reach == "" {
+		reach = probe.ReachUnknown
+	}
+	for i := range dbs {
+		dbs[i].Reach = reach
+		if reach == probe.ReachUnknown {
+			dbs[i].Detail = "unknown — CNPG cluster status not read: " + cluster.Detail
+			continue
+		}
+		dbs[i].Detail = fmt.Sprintf("from CNPG cluster %s status (%s); the database itself is not probed", cnpgClusterName, cluster.Detail)
+	}
 }
 
 func (s *Service) buildDynamicClient() (dynamic.Interface, error) {

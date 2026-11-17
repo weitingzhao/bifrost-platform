@@ -166,7 +166,6 @@ export interface ClusterPostgresStatusResponse {
   backup: ServiceDependency
   minio: ServiceDependency
   databases: PostgresDatabase[]
-  legacy: PostgresLegacyEndpoint[]
   embedded: PostgresLegacyEndpoint[]
   postgres_role: ServiceDependency
   generated_at: string

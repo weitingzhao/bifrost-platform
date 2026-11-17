@@ -270,7 +270,7 @@ export function ClusterPostgresDetailPanel({
 
       <OpsSection
         title="Cutover tracker"
-        description="Target: apps → bifrost-postgres-rw.data.svc · retire embedded + bare .80"
+        description="Target: apps → bifrost-postgres-rw.data.svc · retire embedded"
         bodyPadding="none"
       >
         <DenseDataTable>
@@ -282,18 +282,6 @@ export function ClusterPostgresDetailPanel({
             </DenseTableHeadRow>
           </DenseTableHeader>
           <DenseTableBody>
-            {postgres.legacy.map(item => (
-              <DenseTableRow key={`legacy-${item.host ?? item.kind}`}>
-                <DenseTableCell>Bare metal</DenseTableCell>
-                <DenseTableCell className="font-mono-tabular">{item.host ?? '—'}</DenseTableCell>
-                <DenseTableCell>
-                  <span className="inline-flex items-center gap-1 text-dense-meta">
-                    <StatusLamp value={item.reachability} kind="reach" />
-                    {item.detail ?? '—'}
-                  </span>
-                </DenseTableCell>
-              </DenseTableRow>
-            ))}
             {postgres.embedded.map(item => (
               <DenseTableRow key={`embedded-${item.namespace}`}>
                 <DenseTableCell>Embedded Deployment</DenseTableCell>

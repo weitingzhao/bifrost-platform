@@ -100,7 +100,6 @@ function buildPostgresLiveSection(pg: ClusterPostgresStatusResponse): string[] {
     '',
     'Cutover:',
     ...pg.embedded.map(e => `- embedded ${e.namespace ?? '?'}: ${e.reachability} — ${e.detail ?? '—'}`),
-    ...pg.legacy.map(l => `- ${l.kind} ${l.host ?? ''}: ${l.reachability} — ${l.detail ?? '—'}`),
   ]
   return llmSection('Live · CloudNativePG (data namespace)', lines)
 }

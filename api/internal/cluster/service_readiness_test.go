@@ -354,4 +354,15 @@ func TestPostgresDatabasesComeFromEnvironments(t *testing.T) {
 	if len(resp.Databases) != 1 || resp.Databases[0].Name != "shop_qa" || resp.Databases[0].Environment != "qa" {
 		t.Fatalf("databases = %+v", resp.Databases)
 	}
+	// 2026-11-17 audit row #6 (LANE-BIZ-ALIGN): every database was written as reachable
+	// without any observation. With no cluster client the status is unread, so unknown.
+	if resp.Databases[0].Reach != probe.ReachUnknown {
+		t.Fatalf("database reach without a cluster read = %q, want unknown", resp.Databases[0].Reach)
+	}
+	// With a read, the databases follow the observed CNPG cluster status.
+	dbs := []PostgresDatabaseView{{Name: "a"}}
+	markDatabasesFromCluster(dbs, ServiceDependencyView{Reachability: probe.ReachDegraded, Detail: "ready 1/2"})
+	if dbs[0].Reach != probe.ReachDegraded {
+		t.Fatalf("database reach with a degraded cluster = %q, want degraded", dbs[0].Reach)
+	}
 }
