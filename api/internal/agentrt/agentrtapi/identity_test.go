@@ -18,6 +18,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -83,8 +84,8 @@ func eventOf(key string, seq int, typ string, id map[string]any, more ...map[str
 // prefixes (actuation's, the store's) are one.
 func TestCollectorIdentityRecorded(t *testing.T) {
 	t.Parallel()
-	if actuation.CollectorActorPrefix != store.CollectorActorPrefix {
-		t.Fatalf("actuation %q, store %q", actuation.CollectorActorPrefix, store.CollectorActorPrefix)
+	if actuation.CollectorActorPrefix != externalwork.CollectorActorPrefix {
+		t.Fatalf("actuation %q, store %q", actuation.CollectorActorPrefix, externalwork.CollectorActorPrefix)
 	}
 	pool, _ := world(t)
 	s := server(t, pool)
@@ -521,16 +522,16 @@ func TestIdentityOnlyFromCollector(t *testing.T) {
 	// The store holds a collector's actor to its host, both ways, and an
 	// identity to a collector (the route refuses one first).
 	for _, w := range []store.Writer{{Actor: "thread:collector@h1", Token: "collector:h1"}, {Actor: "thread:x", Token: "reporter", Host: "h1"}} {
-		if _, err := store.RegisterExternalWork(ctx, pool, w, store.ExternalRegistration{Key: "k", Root: "R2", Node: "R2:1-1", RunKey: "r", Artifact: spec}); err == nil {
+		if _, err := store.RegisterExternalWork(ctx, pool, w, externalwork.ExternalRegistration{Key: "k", Root: "R2", Node: "R2:1-1", RunKey: "r", Artifact: spec}); err == nil {
 			t.Fatalf("%+v registered", w)
 		}
 	}
 	plain := store.Writer{Actor: "thread:s-store", Token: "reporter"}
-	if _, err := store.RegisterExternalWork(ctx, pool, plain, store.ExternalRegistration{Key: "k", Root: "R2", Node: "R2:1-1", RunKey: "r", Artifact: spec,
+	if _, err := store.RegisterExternalWork(ctx, pool, plain, externalwork.ExternalRegistration{Key: "k", Root: "R2", Node: "R2:1-1", RunKey: "r", Artifact: spec,
 		Vendor: "claude", Session: "s", Epoch: 1}); err == nil {
 		t.Fatal("a plain writer registered an identity")
 	}
-	if _, err := store.PostExternalEvent(ctx, pool, plain, legacy, store.ExternalEvent{Key: "e", Seq: 1, Type: "started", Vendor: "claude", Session: "s", Epoch: 1}); err == nil {
+	if _, err := store.PostExternalEvent(ctx, pool, plain, legacy, externalwork.ExternalEvent{Key: "e", Seq: 1, Type: "started", Vendor: "claude", Session: "s", Epoch: 1}); err == nil {
 		t.Fatal("a plain writer posted an identity")
 	}
 }

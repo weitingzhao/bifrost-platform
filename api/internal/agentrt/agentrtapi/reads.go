@@ -12,6 +12,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -38,7 +39,7 @@ func (a *API) getArtifact(w http.ResponseWriter, r *http.Request) {
 	if actuation.IsCollector(p) {
 		own, ok := actuation.CollectorActor(p)
 		if errors.Is(err, pgx.ErrNoRows) || err == nil && (!ok || by != own) {
-			a.fail(w, store.ErrNotOwnRecord)
+			a.fail(w, externalwork.ErrNotOwnRecord)
 			return
 		}
 	}

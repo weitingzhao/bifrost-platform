@@ -1,6 +1,4 @@
-//bifrost:owner lineage
-
-package store
+package externalwork
 
 import (
 	"bytes"
@@ -10,7 +8,7 @@ import (
 	"testing"
 )
 
-func originalExternalReply(n externalNote, event int64) map[string]any {
+func originalExternalReply(n ExternalNote, event int64) map[string]any {
 	out := map[string]any{"external_work_id": n.ID, "event_id": event, "seq": n.Seq, "state": n.State, "plan_url": "#work?section=plan&root=" + url.QueryEscape(n.Root) + "&node=" + url.QueryEscape(n.Node)}
 	// When it was registered (R5:5.5-12 §3.3): every note of the work
 	// carries its registration's time, so a replay and a recovery read give
@@ -28,8 +26,8 @@ func TestExternalReplyMatchesOriginal(t *testing.T) {
 			for _, state := range []string{"Registered", "Running", "Submitted", "Cancelled", "Unknown", ""} {
 				for _, at := range []string{"", "2026-11-16T18:00:00.123456Z"} {
 					for _, event := range []int64{0, 91} {
-						n := externalNote{ID: "work-id", Root: root, Node: node, State: state, RegisteredAt: at, Seq: event, Actor: "not-in-response", RequestDigest: "not-in-response"}
-						want, got := originalExternalReply(n, event), externalReply(n, event)
+						n := ExternalNote{ID: "work-id", Root: root, Node: node, State: state, RegisteredAt: at, Seq: event, Actor: "not-in-response", RequestDigest: "not-in-response"}
+						want, got := originalExternalReply(n, event), ExternalReply(n, event)
 						if !reflect.DeepEqual(want, got) {
 							t.Fatalf("map mismatch %#v %#v", want, got)
 						}

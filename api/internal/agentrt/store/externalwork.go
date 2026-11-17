@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 )
 
 func externalBinding(ctx context.Context, tx pgx.Tx, root, node, mission, task string) error {
@@ -54,23 +56,23 @@ func externalBinding(ctx context.Context, tx pgx.Tx, root, node, mission, task s
 	}
 	return nil
 }
-func RegisterExternalWork(ctx context.Context, db DB, w Writer, in ExternalRegistration) (map[string]any, error) {
+func RegisterExternalWork(ctx context.Context, db DB, w Writer, in externalwork.ExternalRegistration) (map[string]any, error) {
 	collector, err := collectorWriter(w)
 	if err != nil {
 		return nil, err
 	}
-	if err := checkIdentity(collector, in.Vendor, in.Session, in.Epoch, in.Sidebar); err != nil {
+	if err := externalwork.CheckIdentity(collector, in.Vendor, in.Session, in.Epoch, in.Sidebar); err != nil {
 		return nil, err
 	}
 	if collector {
 		// The run key is the identity's; a client may leave it out.
-		run := IdentityRunKey(in.Vendor, in.Session, in.Epoch)
+		run := externalwork.IdentityRunKey(in.Vendor, in.Session, in.Epoch)
 		if in.RunKey != "" && in.RunKey != run {
 			return nil, invalid("a collector's source_run_key is <vendor>:<session>:<epoch>, %s", run)
 		}
 		in.RunKey = run
 	}
-	if in.Key == "" || in.Root == "" || in.Node == "" || in.RunKey == "" || len(in.RunKey) > 200 || !digestPattern.MatchString(in.Artifact) {
+	if in.Key == "" || in.Root == "" || in.Node == "" || in.RunKey == "" || len(in.RunKey) > 200 || !externalwork.DigestPattern.MatchString(in.Artifact) {
 		return nil, invalid("registration requires key, root, node, source_run_key and artifact digest")
 	}
 	if err := checkObserved(in.ObservedAt); err != nil {
@@ -95,28 +97,28 @@ func RegisterExternalWork(ctx context.Context, db DB, w Writer, in ExternalRegis
 		if err := externalBinding(ctx, tx, in.Root, in.Node, in.Mission, in.Task); err != nil {
 			return nil, err
 		}
-		if _, err := externalDescription(ctx, tx, in.Artifact); err != nil {
+		if _, err := externalwork.ExternalDescriptionOf(ctx, tx, in.Artifact); err != nil {
 			return nil, err
 		}
 		if err := lockStream(ctx, tx, "external-work:"+id); err != nil {
 			return nil, err
 		}
-		prev, event, _, err := readExternal(ctx, tx, id)
+		prev, event, _, err := externalwork.ReadExternal(ctx, tx, id)
 		if err == nil {
 			if prev.RegistrationDigest != sum {
 				return nil, ErrConflict
 			}
-			return externalReply(prev, event), nil
+			return externalwork.ExternalReply(prev, event), nil
 		}
 		if !isNoRows(err) {
 			return nil, err
 		}
 		now := timeText(eventNow(ctx))
-		n := externalNote{V: 1, Kind: "agentrt.external_work/v1", ID: id, Actor: w.Actor, Root: in.Root, Node: in.Node, RunKey: in.RunKey, Artifact: in.Artifact, Mission: in.Mission, Task: in.Task, Type: "registered", State: "Registered", RequestDigest: sum, RegistrationDigest: sum, ObservedAt: in.ObservedAt, SourceStartedAt: in.ObservedAt, RegisteredAt: now, HeartbeatAt: now}
+		n := externalwork.ExternalNote{V: 1, Kind: "agentrt.external_work/v1", ID: id, Actor: w.Actor, Root: in.Root, Node: in.Node, RunKey: in.RunKey, Artifact: in.Artifact, Mission: in.Mission, Task: in.Task, Type: "registered", State: "Registered", RequestDigest: sum, RegistrationDigest: sum, ObservedAt: in.ObservedAt, SourceStartedAt: in.ObservedAt, RegisteredAt: now, HeartbeatAt: now}
 		if collector {
 			n.Host, n.Vendor, n.Session, n.Epoch, n.Sidebar = w.Host, in.Vendor, in.Session, in.Epoch, in.Sidebar
 		}
-		return appendExternal(ctx, tx, w.Actor, n)
+		return externalwork.AppendExternal(ctx, tx, w.Actor, n)
 	})
 }
 
@@ -125,12 +127,12 @@ func RegisterExternalWork(ctx context.Context, db DB, w Writer, in ExternalRegis
 // one already recorded under that seq. An event that leaves seq out gets the
 // next one under the stream's lock, so two of them posted at once get two
 // seqs in turn; its replay is by its idempotency key alone.
-func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in ExternalEvent) (map[string]any, error) {
+func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in externalwork.ExternalEvent) (map[string]any, error) {
 	collector, err := collectorWriter(w)
 	if err != nil {
 		return nil, err
 	}
-	if err := checkIdentity(collector, in.Vendor, in.Session, in.Epoch, ""); err != nil {
+	if err := externalwork.CheckIdentity(collector, in.Vendor, in.Session, in.Epoch, ""); err != nil {
 		return nil, err
 	}
 	if in.Key == "" || in.Seq < 0 || !slices.Contains([]string{"started", "heartbeat", "submitted", "cancelled", "linked"}, in.Type) {
@@ -152,7 +154,7 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 		return nil, invalid("only heartbeat and submitted carry commits")
 	}
 	for _, s := range []string{in.ReportPathDigest, in.ReportDigest} {
-		if s != "" && !digestPattern.MatchString(s) {
+		if s != "" && !externalwork.DigestPattern.MatchString(s) {
 			return nil, invalid("invalid report digest")
 		}
 	}
@@ -164,7 +166,7 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 			return nil, invalid("invalid commit SHA")
 		}
 	}
-	req, sum, err := externalEventDigest(in)
+	req, sum, err := externalwork.ExternalEventDigest(in)
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +176,7 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 	// for good once registered, so it is compared here, before the key is
 	// looked at; the check under the stream lock below stays the authority.
 	if collector {
-		if err := sameIdentityAsWork(ctx, db, w, id, in); err != nil {
+		if err := externalwork.SameIdentityAsWork(ctx, db, w, id, in); err != nil {
 			return nil, err
 		}
 	}
@@ -184,7 +186,7 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 		}
 		// Read binding before locking; retry a concurrent rebind without taking
 		// roots after the stream lock (the registration lock order).
-		before, _, _, err := readExternal(ctx, tx, id)
+		before, _, _, err := externalwork.ReadExternal(ctx, tx, id)
 		if err != nil {
 			return nil, err
 		}
@@ -211,7 +213,7 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 		if err = lockStream(ctx, tx, "external-work:"+id); err != nil {
 			return nil, err
 		}
-		n, _, _, err := readExternal(ctx, tx, id)
+		n, _, _, err := externalwork.ReadExternal(ctx, tx, id)
 		if err != nil {
 			return nil, err
 		}
@@ -224,9 +226,9 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 		if collector {
 			switch {
 			case n.Vendor == "":
-				return nil, fmt.Errorf("%w: this work was registered without one", ErrIdentityMismatch)
+				return nil, fmt.Errorf("%w: this work was registered without one", externalwork.ErrIdentityMismatch)
 			case in.Vendor != n.Vendor || in.Session != n.Session || in.Epoch != n.Epoch:
-				return nil, ErrIdentityMismatch
+				return nil, externalwork.ErrIdentityMismatch
 			}
 		}
 		// No seq named: the next one, read under the stream's lock. The note
@@ -237,7 +239,7 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 			seq = n.Seq + 1
 			next := in
 			next.Seq = seq
-			if _, sum, err = externalEventDigest(next); err != nil {
+			if _, sum, err = externalwork.ExternalEventDigest(next); err != nil {
 				return nil, err
 			}
 		}
@@ -248,14 +250,14 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 			if err != nil {
 				return nil, ErrConflict
 			}
-			var previous externalNote
+			var previous externalwork.ExternalNote
 			if err = json.Unmarshal(old, &previous); err != nil {
 				return nil, err
 			}
 			if previous.RequestDigest != sum {
 				return nil, ErrConflict
 			}
-			return externalReply(previous, event), nil
+			return externalwork.ExternalReply(previous, event), nil
 		}
 		if seq != n.Seq+1 {
 			return nil, fmt.Errorf("%w: expected seq %d", ErrConflict, n.Seq+1)
@@ -293,6 +295,46 @@ func PostExternalEvent(ctx context.Context, db DB, w Writer, id string, in Exter
 		case "linked":
 			n.Root, n.Node, n.Mission, n.Task = root, node, mission, task
 		}
-		return appendExternal(ctx, tx, w.Actor, n)
+		return externalwork.AppendExternal(ctx, tx, w.Actor, n)
 	})
+}
+
+// collectorWriter checks a writer's binding: a host-bound writer is that
+// host's collector; a writer that is not host-bound is no collector.
+func collectorWriter(w Writer) (bool, error) {
+	switch {
+	case w.Host != "" && w.Actor != externalwork.CollectorActorPrefix+w.Host:
+		return false, invalid("a host-bound writer is its host's collector")
+	case w.Host == "" && strings.HasPrefix(w.Actor, externalwork.CollectorActorPrefix):
+		return false, invalid("a collector writes bound to its host")
+	}
+	return w.Host != "", nil
+}
+
+func checkObserved(s string) error {
+	if s != "" {
+		if _, err := time.Parse(time.RFC3339Nano, s); err != nil {
+			return invalid("observed_at must be RFC3339")
+		}
+	}
+	return nil
+}
+
+// maxExternalCommits is the most commits one event names, and the most a
+// work's note keeps.
+const maxExternalCommits = 100
+
+// addExternalCommits is have and then every commit of add it does not hold
+// yet: what a work named so far, in the order first named.
+func addExternalCommits(have, add []string) ([]string, error) {
+	out := slices.Clone(have)
+	for _, c := range add {
+		if !slices.Contains(out, c) {
+			out = append(out, c)
+		}
+	}
+	if len(out) > maxExternalCommits {
+		return nil, invalid("too many commits")
+	}
+	return out, nil
 }

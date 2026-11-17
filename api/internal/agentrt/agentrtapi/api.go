@@ -21,6 +21,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -200,7 +201,7 @@ func (a *API) logf(format string, args ...any) {
 func (a *API) fail(w http.ResponseWriter, err error) {
 	var pg *pgconn.PgError
 	switch {
-	case errors.Is(err, store.ErrNotYours), errors.Is(err, store.ErrNotOwnRecord):
+	case errors.Is(err, store.ErrNotYours), errors.Is(err, externalwork.ErrNotOwnRecord):
 		writeError(w, http.StatusForbidden, "not_yours", err.Error())
 	case errors.Is(err, store.ErrNotOwner):
 		writeError(w, http.StatusForbidden, "not_owner", err.Error())
@@ -208,9 +209,9 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusForbidden, "external_host", err.Error())
 	case errors.Is(err, store.ErrNotExternal):
 		writeError(w, http.StatusForbidden, "forbidden", err.Error())
-	case errors.Is(err, store.ErrIdentityRequired):
+	case errors.Is(err, externalwork.ErrIdentityRequired):
 		writeError(w, http.StatusBadRequest, "identity_required", err.Error())
-	case errors.Is(err, store.ErrIdentityMismatch):
+	case errors.Is(err, externalwork.ErrIdentityMismatch):
 		writeError(w, http.StatusConflict, "identity_mismatch", err.Error())
 	case errors.Is(err, store.ErrNotPinned):
 		writeError(w, http.StatusForbidden, "not_pinned", err.Error())
@@ -321,7 +322,7 @@ func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if limitedReporter(p) {
-		if err := store.ValidateExternalDescription(body); err != nil {
+		if err := externalwork.ValidateExternalDescription(body); err != nil {
 			writeError(w, http.StatusForbidden, "forbidden", "a reporter may only upload an external work description")
 			return
 		}

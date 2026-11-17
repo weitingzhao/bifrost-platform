@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -80,12 +81,12 @@ func externalSubmitted(t *testing.T, w *world, actor, node, run string, commits 
 	t.Helper()
 	ctx := ctxOf(t)
 	who := wr(actor)
-	out, err := store.RegisterExternalWork(ctx, w.rt, who, store.ExternalRegistration{Key: "reg-" + run, Root: root, Node: node, RunKey: run, Artifact: externalSpec(t, w)})
+	out, err := store.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "reg-" + run, Root: root, Node: node, RunKey: run, Artifact: externalSpec(t, w)})
 	ok(t, err)
 	id := out["external_work_id"].(string)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
 	ok(t, err)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "end", Seq: 2, Type: "submitted", Commits: commits})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "end", Seq: 2, Type: "submitted", Commits: commits})
 	ok(t, err)
 	return id
 }
@@ -204,21 +205,21 @@ func TestReadExternalDeliveryFromHeartbeat(t *testing.T) {
 	}
 	who := wr("thread:giant")
 	clock(0)
-	out, err := store.RegisterExternalWork(ctx, w.rt, who, store.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "early", Artifact: externalSpec(t, w)})
+	out, err := store.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "early", Artifact: externalSpec(t, w)})
 	ok(t, err)
 	id := out["external_work_id"].(string)
-	post := func(e store.ExternalEvent) {
+	post := func(e externalwork.ExternalEvent) {
 		t.Helper()
 		_, err := store.PostExternalEvent(ctx, w.rt, who, id, e)
 		ok(t, err)
 	}
-	post(store.ExternalEvent{Key: "start", Type: "started"})
+	post(externalwork.ExternalEvent{Key: "start", Type: "started"})
 	_, err = store.ReadDelivery(ctx, w.rt, store.DeliveryQuery{Commit: externalCommit})
 	is(t, err, pgx.ErrNoRows)
 
 	// started + heartbeat{commit_shas}: the strip is there, handed in at the heartbeat.
 	clock(10 * time.Minute)
-	post(store.ExternalEvent{Key: "pushed", Type: "heartbeat", Commits: []string{externalCommit}})
+	post(externalwork.ExternalEvent{Key: "pushed", Type: "heartbeat", Commits: []string{externalCommit}})
 	doc := read(externalCommit[:8])
 	if doc["commit"] != externalCommit || doc["external_work_id"] != id || doc["plan_node_id"] != s1 || doc["repo"] != "platform" {
 		t.Fatalf("response %+v", doc)
@@ -245,13 +246,13 @@ func TestReadExternalDeliveryFromHeartbeat(t *testing.T) {
 	// commit and the submitted event: the first commit keeps its first time,
 	// and the answer names the step the work is bound to now.
 	clock(20 * time.Minute)
-	post(store.ExternalEvent{Key: "alive", Type: "heartbeat"})
-	post(store.ExternalEvent{Key: "moved", Type: "linked", Root: root, Node: s2})
+	post(externalwork.ExternalEvent{Key: "alive", Type: "heartbeat"})
+	post(externalwork.ExternalEvent{Key: "moved", Type: "linked", Root: root, Node: s2})
 	clock(30 * time.Minute)
-	post(store.ExternalEvent{Key: "pushed-again", Type: "heartbeat", Commits: []string{externalOther}})
+	post(externalwork.ExternalEvent{Key: "pushed-again", Type: "heartbeat", Commits: []string{externalOther}})
 	clock(40 * time.Minute)
 	third := strings.Repeat("e", 40)
-	post(store.ExternalEvent{Key: "end", Type: "submitted", Commits: []string{third, externalCommit}})
+	post(externalwork.ExternalEvent{Key: "end", Type: "submitted", Commits: []string{third, externalCommit}})
 	for commit, named := range map[string]time.Duration{externalOther: 30 * time.Minute, third: 40 * time.Minute} {
 		doc = read(commit)
 		if s := handedIn(doc); doc["external_work_id"] != id || doc["plan_node_id"] != s2 || !s.EnteredAt.Equal(at.Add(named)) || s.Source != "external_work" {

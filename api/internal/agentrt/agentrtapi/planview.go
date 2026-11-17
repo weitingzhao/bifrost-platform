@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -50,7 +51,7 @@ func (a *API) sessionCoverage(ctx context.Context, out map[string]any) {
 }
 
 func (a *API) registerExternalWork(w http.ResponseWriter, r *http.Request) {
-	var in store.ExternalRegistration
+	var in externalwork.ExternalRegistration
 	raw, ok := decodeViewRaw(w, r, &in)
 	if !ok || !identityOnlyFromCollector(w, r, raw, registrationIdentity) {
 		return
@@ -68,7 +69,7 @@ func (a *API) registerExternalWork(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, out)
 }
 func (a *API) postExternalEvent(w http.ResponseWriter, r *http.Request) {
-	var in store.ExternalEvent
+	var in externalwork.ExternalEvent
 	raw, ok := decodeViewRaw(w, r, &in)
 	if !ok || !identityOnlyFromCollector(w, r, raw, eventIdentity) {
 		return
@@ -84,7 +85,7 @@ func (a *API) postExternalEvent(w http.ResponseWriter, r *http.Request) {
 	// not exist are refused alike, before the event is looked at. The store
 	// checks the registrant again in its own transaction.
 	if actuation.IsCollector(actuation.PrincipalFromContext(r.Context())) {
-		if _, err := store.ReadOwnExternalWork(r.Context(), a.DB, id, who.Actor); err != nil {
+		if _, err := externalwork.ReadOwnExternalWork(r.Context(), a.DB, id, who.Actor); err != nil {
 			a.fail(w, err)
 			return
 		}
@@ -108,7 +109,7 @@ func (a *API) getExternalWork(w http.ResponseWriter, r *http.Request) {
 			a.fail(w, err)
 			return
 		}
-		out, err := store.ReadOwnExternalWork(r.Context(), a.DB, id, who.Actor)
+		out, err := externalwork.ReadOwnExternalWork(r.Context(), a.DB, id, who.Actor)
 		if err != nil {
 			a.fail(w, err)
 			return
@@ -116,7 +117,7 @@ func (a *API) getExternalWork(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, out)
 		return
 	}
-	out, err := store.ReadExternalWork(r.Context(), a.DB, id)
+	out, err := externalwork.ReadExternalWork(r.Context(), a.DB, id)
 	if err != nil {
 		a.fail(w, err)
 		return

@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 )
 
 func rejectedDescriptions() map[string][]byte {
@@ -67,7 +67,7 @@ func rejectedDescriptions() map[string][]byte {
 func TestExternalDescriptionStrictValidation(t *testing.T) {
 	for name, raw := range rejectedDescriptions() {
 		t.Run(name, func(t *testing.T) {
-			if err := store.ValidateExternalDescription(raw); err == nil {
+			if err := externalwork.ValidateExternalDescription(raw); err == nil {
 				t.Fatal("accepted invalid description")
 			}
 		})
@@ -127,7 +127,7 @@ func TestReporterDescriptionPersistenceBoundary(t *testing.T) {
 		"one_mib":    append(append([]byte{}, externalSpec...), bytes.Repeat([]byte(" "), (1<<20)-len(externalSpec))...),
 	} {
 		t.Run(name, func(t *testing.T) {
-			must(t, store.ValidateExternalDescription(raw))
+			must(t, externalwork.ValidateExternalDescription(raw))
 			id := artifactID(raw)
 			if code, out := call(t, s, "reporter", "PUT", "artifacts/"+id, raw, "X-Artifact-Kind", "other", session, "valid-description"); code != 200 {
 				t.Fatalf("valid upload: %d %v", code, out)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -100,7 +101,7 @@ func TestExternalWorkLifecycle(t *testing.T) {
 	adoptView(t, w, viewDoc(t, w, 1), 0)
 	spec := externalSpec(t, w)
 	who := wr("thread:external")
-	in := store.ExternalRegistration{Key: "run", Root: root, Node: s1, RunKey: "work594", Artifact: spec, ObservedAt: "2000-01-01T00:00:00Z"}
+	in := externalwork.ExternalRegistration{Key: "run", Root: root, Node: s1, RunKey: "work594", Artifact: spec, ObservedAt: "2000-01-01T00:00:00Z"}
 	out, err := store.RegisterExternalWork(ctx, w.rt, who, in)
 	ok(t, err)
 	id := out["external_work_id"].(string)
@@ -110,22 +111,22 @@ func TestExternalWorkLifecycle(t *testing.T) {
 	in.RunKey = "other"
 	_, err = store.RegisterExternalWork(ctx, w.rt, who, in)
 	is(t, err, store.ErrConflict)
-	_, err = store.PostExternalEvent(ctx, w.rt, wr("thread:intruder"), id, store.ExternalEvent{Key: "steal", Seq: 1, Type: "started"})
+	_, err = store.PostExternalEvent(ctx, w.rt, wr("thread:intruder"), id, externalwork.ExternalEvent{Key: "steal", Seq: 1, Type: "started"})
 	is(t, err, store.ErrNotYours)
 	for _, typ := range []string{"verified", "verification_failed"} {
-		_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: typ, Seq: 1, Type: typ})
+		_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: typ, Seq: 1, Type: typ})
 		is(t, err, store.ErrInvalid)
 	}
-	start := store.ExternalEvent{Key: "start", Seq: 1, Type: "started"}
+	start := externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"}
 	out, err = store.PostExternalEvent(ctx, w.rt, who, id, start)
 	ok(t, err)
 	start.Key = "new-key-same-seq"
 	again, err = store.PostExternalEvent(ctx, w.rt, who, id, start)
 	ok(t, err)
 	same(t, out, again)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "same-seq", Seq: 1, Type: "heartbeat"})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "same-seq", Seq: 1, Type: "heartbeat"})
 	is(t, err, store.ErrConflict)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "gap", Seq: 3, Type: "heartbeat"})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "gap", Seq: 3, Type: "heartbeat"})
 	is(t, err, store.ErrConflict)
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
@@ -134,7 +135,7 @@ func TestExternalWorkLifecycle(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, e := store.PostExternalEvent(ctx, conn, who, id, store.ExternalEvent{Key: "hb", Seq: 2, Type: "heartbeat"})
+			_, e := store.PostExternalEvent(ctx, conn, who, id, externalwork.ExternalEvent{Key: "hb", Seq: 2, Type: "heartbeat"})
 			errs <- e
 		}()
 	}
@@ -143,7 +144,7 @@ func TestExternalWorkLifecycle(t *testing.T) {
 	for e := range errs {
 		ok(t, e)
 	}
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "submit", Seq: 3, Type: "submitted"})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "submit", Seq: 3, Type: "submitted"})
 	ok(t, err)
 	before := w.footprint(t)
 	snapshot, err := store.PlanView(ctx, w.rt, root)
@@ -197,7 +198,7 @@ func TestPlanViewDevBoundary(t *testing.T) {
 		_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:pv"), fmt.Sprint("bad-bind", i), root, "bind", []store.PlanChange{c}, (&asker{}).ask)
 		is(t, err, store.ErrInvalid)
 	}
-	_, err = store.RegisterExternalWork(ctx, w.rt, wr("thread:ext"), store.ExternalRegistration{Key: "bad", Root: root, Node: s2, RunKey: "bad", Artifact: externalSpec(t, w), Mission: "M-2"})
+	_, err = store.RegisterExternalWork(ctx, w.rt, wr("thread:ext"), externalwork.ExternalRegistration{Key: "bad", Root: root, Node: s2, RunKey: "bad", Artifact: externalSpec(t, w), Mission: "M-2"})
 	is(t, err, store.ErrInvalid)
 }
 
@@ -208,7 +209,7 @@ func TestExternalUnconfirmedRecoveryAndRebind(t *testing.T) {
 	spec := externalSpec(t, w)
 	who := wr("thread:recover")
 	thaw := freezeClock(t, time.Now().Add(-61*time.Second))
-	out, err := store.RegisterExternalWork(ctx, w.rt, who, store.ExternalRegistration{Key: "run", Root: root, Node: s1, RunKey: "recover", Artifact: spec, ObservedAt: "1999-01-01T00:00:00Z"})
+	out, err := store.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "run", Root: root, Node: s1, RunKey: "recover", Artifact: spec, ObservedAt: "1999-01-01T00:00:00Z"})
 	thaw()
 	ok(t, err)
 	id := out["external_work_id"].(string)
@@ -218,23 +219,23 @@ func TestExternalUnconfirmedRecoveryAndRebind(t *testing.T) {
 	if len(ext) != 1 || ext[0]["status"] != "Unconfirmed" {
 		t.Fatal(ext)
 	}
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
 	ok(t, err)
 	view, err = store.PlanView(ctx, w.rt, root)
 	ok(t, err)
 	if view["external_work"].([]map[string]any)[0]["status"] != "Running" || view["external_work"].([]map[string]any)[0]["backfilled"] != true {
 		t.Fatal(view)
 	}
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "bad-link", Seq: 2, Type: "linked", Root: "other", Node: s1})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "bad-link", Seq: 2, Type: "linked", Root: "other", Node: s1})
 	is(t, err, store.ErrInvalid)
 	// A link to a task is refused (store cut 4, 2026-11-14); a link to a step is taken.
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "task-link", Seq: 2, Type: "linked", Root: root, Node: s3, Task: "t_01M5192P0JPMJAP63ZKRPXJ2VV"})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "task-link", Seq: 2, Type: "linked", Root: root, Node: s3, Task: "t_01M5192P0JPMJAP63ZKRPXJ2VV"})
 	is(t, err, store.ErrInvalid)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "link", Seq: 2, Type: "linked", Root: root, Node: s3, Mission: "M-1"})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "link", Seq: 2, Type: "linked", Root: root, Node: s3, Mission: "M-1"})
 	ok(t, err)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "cancel", Seq: 3, Type: "cancelled"})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "cancel", Seq: 3, Type: "cancelled"})
 	ok(t, err)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "late-heartbeat", Seq: 4, Type: "heartbeat"})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "late-heartbeat", Seq: 4, Type: "heartbeat"})
 	is(t, err, store.ErrState)
 }
 
@@ -246,10 +247,10 @@ func TestPlanViewRecentCursor(t *testing.T) {
 	// Twelve runs, each registered and started: 24 listed events, more than a page.
 	var id string
 	for i := range 12 {
-		out, err := store.RegisterExternalWork(ctx, w.rt, who, store.ExternalRegistration{Key: fmt.Sprint("run-", i), Root: root, Node: s1, RunKey: fmt.Sprint("pages-", i), Artifact: spec})
+		out, err := store.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: fmt.Sprint("run-", i), Root: root, Node: s1, RunKey: fmt.Sprint("pages-", i), Artifact: spec})
 		ok(t, err)
 		id = out["external_work_id"].(string)
-		_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
+		_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
 		ok(t, err)
 	}
 	first, err := store.PlanView(ctx, w.rt, root)
@@ -258,7 +259,7 @@ func TestPlanViewRecentCursor(t *testing.T) {
 	if cursor == "" {
 		t.Fatal("missing recent continuation")
 	}
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "end", Seq: 2, Type: "submitted"})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "end", Seq: 2, Type: "submitted"})
 	ok(t, err)
 	page, err := store.PlanViewPage(ctx, w.rt, root, cursor)
 	ok(t, err)
@@ -288,7 +289,7 @@ func TestPlanViewRecentSkipsHeartbeats(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	who := wr("thread:beats")
-	out, err := store.RegisterExternalWork(ctx, w.rt, who, store.ExternalRegistration{Key: "run", Root: root, Node: s1, RunKey: "beats", Artifact: externalSpec(t, w)})
+	out, err := store.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "run", Root: root, Node: s1, RunKey: "beats", Artifact: externalSpec(t, w)})
 	ok(t, err)
 	id := out["external_work_id"].(string)
 	types := []string{"started"}
@@ -297,7 +298,7 @@ func TestPlanViewRecentSkipsHeartbeats(t *testing.T) {
 	}
 	types = append(types, "submitted")
 	for i, typ := range types {
-		_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: fmt.Sprint(i + 1), Seq: int64(i + 1), Type: typ})
+		_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: fmt.Sprint(i + 1), Seq: int64(i + 1), Type: typ})
 		ok(t, err)
 	}
 	view, err := store.PlanView(ctx, w.rt, root)

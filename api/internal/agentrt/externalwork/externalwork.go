@@ -1,7 +1,13 @@
-package store
+// Package externalwork is what the runtime keeps of work done outside it
+// (lineage domain): the description a registration names, the note that is
+// the work's record, the session identity of a collector's work, and the
+// reads of a work by its id. It imports the bases, the artifact store and
+// workregistration, and not the store. Registering a work and posting its
+// events lock and read the plan tree; those two writes are the store's
+// (store/externalwork.go) and use what this package exports.
+package externalwork
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,8 +18,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 )
 
@@ -72,7 +80,7 @@ type ExternalEvent struct {
 }
 
 // Keep validation methods local while the record shape belongs to its domain.
-type externalNote workregistration.Note
+type ExternalNote workregistration.Note
 
 // CollectorActorPrefix starts a collector's actor, thread:collector@<host>
 // (actuation.CollectorActorPrefix; agentrtapi's tests hold the two equal).
@@ -94,25 +102,13 @@ var (
 	identityShape   = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
 )
 
-// collectorWriter checks a writer's binding: a host-bound writer is that
-// host's collector; a writer that is not host-bound is no collector.
-func collectorWriter(w Writer) (bool, error) {
-	switch {
-	case w.Host != "" && w.Actor != CollectorActorPrefix+w.Host:
-		return false, invalid("a host-bound writer is its host's collector")
-	case w.Host == "" && strings.HasPrefix(w.Actor, CollectorActorPrefix):
-		return false, invalid("a collector writes bound to its host")
-	}
-	return w.Host != "", nil
-}
-
-// checkIdentity holds the identity a write names to its writer: a
+// CheckIdentity holds the identity a write names to its writer: a
 // collector names a whole one of the right shape (ErrIdentityRequired);
 // anyone else names none.
-func checkIdentity(collector bool, vendor, session string, epoch int64, sidebar string) error {
+func CheckIdentity(collector bool, vendor, session string, epoch int64, sidebar string) error {
 	if !collector {
 		if vendor != "" || session != "" || epoch != 0 || sidebar != "" {
-			return invalid("vendor, session, epoch and sidebar are a collector's")
+			return eventlog.Invalid("vendor, session, epoch and sidebar are a collector's")
 		}
 		return nil
 	}
@@ -135,33 +131,15 @@ func IdentityRunKey(vendor, session string, epoch int64) string {
 	return fmt.Sprintf("%s:%s:%d", vendor, session, epoch)
 }
 
-var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-var shaPattern = regexp.MustCompile(`^[0-9a-f]{40}([0-9a-f]{24})?$`)
+var DigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
-func strictViewValue(v any, out any) error {
-	raw, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	return strictViewJSON(raw, out)
-}
-func strictViewJSON(raw []byte, out any) error {
-	if _, err := canon.Parse(raw); err != nil {
-		return invalid("invalid JSON: %v", err)
-	}
-	d := json.NewDecoder(bytes.NewReader(raw))
-	d.DisallowUnknownFields()
-	if err := d.Decode(out); err != nil {
-		return invalid("invalid fields: %v", err)
-	}
-	return nil
-}
-func (n externalNote) validate() error {
-	if n.V != 1 || n.Kind != "agentrt.external_work/v1" || n.ID == "" || n.Actor == "" || n.Root == "" || n.Node == "" || n.RunKey == "" || n.Seq < 0 || !digestPattern.MatchString(n.Artifact) || !digestPattern.MatchString(n.RequestDigest) || !digestPattern.MatchString(n.RegistrationDigest) {
-		return invalid("invalid external_work note")
+// Validate holds a note to the record's shape.
+func (n ExternalNote) Validate() error {
+	if n.V != 1 || n.Kind != "agentrt.external_work/v1" || n.ID == "" || n.Actor == "" || n.Root == "" || n.Node == "" || n.RunKey == "" || n.Seq < 0 || !DigestPattern.MatchString(n.Artifact) || !DigestPattern.MatchString(n.RequestDigest) || !DigestPattern.MatchString(n.RegistrationDigest) {
+		return eventlog.Invalid("invalid external_work note")
 	}
 	if !slices.Contains([]string{"registered", "started", "heartbeat", "submitted", "cancelled", "linked"}, n.Type) || !slices.Contains([]string{"Registered", "Running", "Submitted", "Cancelled"}, n.State) {
-		return invalid("external work cannot verify completion")
+		return eventlog.Invalid("external work cannot verify completion")
 	}
 	return nil
 }
@@ -171,9 +149,9 @@ func (n externalNote) validate() error {
 // body that does not parse as one. It says nothing of the body, which may be
 // another writer's (R5:5.5-12 §1.3: a collector names a digest it may not
 // read), so no field name or value of it reaches the caller.
-var errNotDescription = invalid("the artifact is not an external work description")
+var errNotDescription = eventlog.Invalid("the artifact is not an external work description")
 
-func externalDescription(ctx context.Context, tx pgx.Tx, id string) (ExternalDescription, error) {
+func ExternalDescriptionOf(ctx context.Context, tx pgx.Tx, id string) (ExternalDescription, error) {
 	var raw []byte
 	err := tx.QueryRow(ctx, `SELECT b.body FROM agentrt.artifact_blob b JOIN agentrt.artifact a USING(artifact_id) WHERE a.artifact_id=$1 AND a.artifact_kind='other'`, id).Scan(&raw)
 	switch {
@@ -182,7 +160,7 @@ func externalDescription(ctx context.Context, tx pgx.Tx, id string) (ExternalDes
 	case err != nil:
 		return ExternalDescription{}, err
 	}
-	d, err := parseExternalDescription(raw)
+	d, err := ParseExternalDescription(raw)
 	if err != nil {
 		return ExternalDescription{}, errNotDescription
 	}
@@ -192,22 +170,22 @@ func externalDescription(ctx context.Context, tx pgx.Tx, id string) (ExternalDes
 // ValidateExternalDescription applies the registration's closed schema at
 // reporter upload, before the general artifact uploader selects a protocol.
 func ValidateExternalDescription(raw []byte) error {
-	_, err := parseExternalDescription(raw)
+	_, err := ParseExternalDescription(raw)
 	return err
 }
 
-func parseExternalDescription(raw []byte) (ExternalDescription, error) {
+func ParseExternalDescription(raw []byte) (ExternalDescription, error) {
 	var d ExternalDescription
 	if len(raw) > artifact.MaxArtifactBytes {
-		return d, invalid("external description is at most 1 MiB")
+		return d, eventlog.Invalid("external description is at most 1 MiB")
 	}
 	v, err := canon.Parse(raw)
 	if err != nil {
-		return d, invalid("invalid JSON: %v", err)
+		return d, eventlog.Invalid("invalid JSON: %v", err)
 	}
 	fields, ok := v.(map[string]any)
 	if !ok {
-		return d, invalid("external description must be an object")
+		return d, eventlog.Invalid("external description must be an object")
 	}
 	// Check the original key set before struct decoding: encoding/json also
 	// matches case/Unicode-folded aliases, which could hide invalid values
@@ -216,24 +194,24 @@ func parseExternalDescription(raw []byte) (ExternalDescription, error) {
 		switch key {
 		case "v", "kind", "task", "executor", "provider", "repo", "branch", "acceptance_refs", "estimate_minutes":
 		default:
-			return d, invalid("invalid external description field: %q", key)
+			return d, eventlog.Invalid("invalid external description field: %q", key)
 		}
 	}
 	if err := json.Unmarshal(raw, &d); err != nil {
-		return d, invalid("invalid fields: %v", err)
+		return d, eventlog.Invalid("invalid fields: %v", err)
 	}
 	if d.V != 1 || d.Kind != "agentrt.external_work/v1" || len(d.Acceptance) == 0 || len(d.Estimate) != 2 || d.Estimate[0] < 0 || d.Estimate[1] < d.Estimate[0] {
-		return d, invalid("invalid external description")
+		return d, eventlog.Invalid("invalid external description")
 	}
 	for _, s := range append([]string{d.Task, d.Executor, d.Provider, d.Repo, d.Branch}, d.Acceptance...) {
 		if strings.TrimSpace(s) == "" || len(s) > 2000 {
-			return d, invalid("external description needs bounded nonempty text")
+			return d, eventlog.Invalid("external description needs bounded nonempty text")
 		}
 	}
 	return d, nil
 }
-func readExternal(ctx context.Context, tx pgx.Tx, id string) (externalNote, int64, time.Time, error) {
-	var n externalNote
+func ReadExternal(ctx context.Context, tx pgx.Tx, id string) (ExternalNote, int64, time.Time, error) {
+	var n ExternalNote
 	var raw []byte
 	var event int64
 	var at time.Time
@@ -243,40 +221,32 @@ func readExternal(ctx context.Context, tx pgx.Tx, id string) (externalNote, int6
 	}
 	return n, event, at, err
 }
-func externalReply(n externalNote, event int64) map[string]any {
+func ExternalReply(n ExternalNote, event int64) map[string]any {
 	return workregistration.Reply(workregistration.Note(n), event)
 }
-func appendExternal(ctx context.Context, tx pgx.Tx, actor string, n externalNote) (map[string]any, error) {
+func AppendExternal(ctx context.Context, tx pgx.Tx, actor string, n ExternalNote) (map[string]any, error) {
 	body, err := jsonObject(n)
 	if err != nil {
 		return nil, err
 	}
-	ev, err := Append(ctx, tx, Event{Stream: "external-work:" + n.ID, Type: "note", Actor: actor, PlanNode: n.Node, Body: map[string]any{"text": "External work " + n.Type, "external_work": body}})
+	ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "external-work:" + n.ID, Type: "note", Actor: actor, PlanNode: n.Node, Body: map[string]any{"text": "External work " + n.Type, "external_work": body}})
 	if err != nil {
 		return nil, err
 	}
-	return externalReply(n, ev.EventID), nil
-}
-func checkObserved(s string) error {
-	if s != "" {
-		if _, err := time.Parse(time.RFC3339Nano, s); err != nil {
-			return invalid("observed_at must be RFC3339")
-		}
-	}
-	return nil
+	return ExternalReply(n, ev.EventID), nil
 }
 
-// sameIdentityAsWork compares an event's identity with its work's, read
+// SameIdentityAsWork compares an event's identity with its work's, read
 // without the stream lock: once registered, a work's identity never
 // changes. A writer whose session is not the one held, and a work that is
 // missing or another writer's, are left to the usual path, which answers
 // them as it always has; only the writer's own work is compared.
-func sameIdentityAsWork(ctx context.Context, db DB, w Writer, id string, in ExternalEvent) error {
-	return InTx(ctx, db, func(tx pgx.Tx) error {
-		if holdsSessionTx(ctx, tx, w) != nil {
+func SameIdentityAsWork(ctx context.Context, db eventlog.DB, w actor.Writer, id string, in ExternalEvent) error {
+	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+		if actor.HoldsSessionTx(ctx, tx, w) != nil {
 			return nil
 		}
-		n, _, _, err := readExternal(ctx, tx, id)
+		n, _, _, err := ReadExternal(ctx, tx, id)
 		switch {
 		case isNoRows(err):
 			return nil
@@ -293,13 +263,9 @@ func sameIdentityAsWork(ctx context.Context, db DB, w Writer, id string, in Exte
 	})
 }
 
-// maxExternalCommits is the most commits one event names, and the most a
-// work's note keeps.
-const maxExternalCommits = 100
-
-// externalEventDigest is an event's request and its digest: the event as
+// ExternalEventDigest is an event's request and its digest: the event as
 // posted, without its idempotency key.
-func externalEventDigest(in ExternalEvent) (map[string]any, string, error) {
+func ExternalEventDigest(in ExternalEvent) (map[string]any, string, error) {
 	req, err := jsonObject(in)
 	if err != nil {
 		return nil, "", err
@@ -307,21 +273,6 @@ func externalEventDigest(in ExternalEvent) (map[string]any, string, error) {
 	delete(req, "idempotency_key")
 	sum, err := canon.Sum(req)
 	return req, "sha256:" + sum, err
-}
-
-// addExternalCommits is have and then every commit of add it does not hold
-// yet: what a work named so far, in the order first named.
-func addExternalCommits(have, add []string) ([]string, error) {
-	out := slices.Clone(have)
-	for _, c := range add {
-		if !slices.Contains(out, c) {
-			out = append(out, c)
-		}
-	}
-	if len(out) > maxExternalCommits {
-		return nil, invalid("too many commits")
-	}
-	return out, nil
 }
 
 // ErrNotOwnRecord: the reader sees only the records it wrote (a collector,
@@ -333,17 +284,17 @@ var ErrNotOwnRecord = errors.New("store: this record is not the caller's")
 // ReadOwnExternalWork is ReadExternalWork for a reader held to its own
 // records: the work's registrant must be actor (the registrant never
 // changes, linked included), or the answer is ErrNotOwnRecord.
-func ReadOwnExternalWork(ctx context.Context, db DB, id, actor string) (map[string]any, error) {
+func ReadOwnExternalWork(ctx context.Context, db eventlog.DB, id, actor string) (map[string]any, error) {
 	var out map[string]any
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		n, event, _, err := readExternal(ctx, tx, id)
+	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+		n, event, _, err := ReadExternal(ctx, tx, id)
 		switch {
 		case isNoRows(err), err == nil && n.Actor != actor:
 			return ErrNotOwnRecord
 		case err != nil:
 			return err
 		}
-		out = externalReply(n, event)
+		out = ExternalReply(n, event)
 		return nil
 	})
 	return out, err
@@ -351,14 +302,28 @@ func ReadOwnExternalWork(ctx context.Context, db DB, id, actor string) (map[stri
 
 // ReadExternalWork supports crash recovery. It is read-only and exposes only
 // the same bounded metadata shown by the plan snapshot.
-func ReadExternalWork(ctx context.Context, db DB, id string) (map[string]any, error) {
+func ReadExternalWork(ctx context.Context, db eventlog.DB, id string) (map[string]any, error) {
 	var out map[string]any
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		n, event, _, err := readExternal(ctx, tx, id)
+	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+		n, event, _, err := ReadExternal(ctx, tx, id)
 		if err == nil {
-			out = externalReply(n, event)
+			out = ExternalReply(n, event)
 		}
 		return err
 	})
 	return out, err
+}
+
+func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
+
+func jsonObject(v any) (map[string]any, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	out, err := canon.Parse(b)
+	if err != nil {
+		return nil, err
+	}
+	return out.(map[string]any), nil
 }

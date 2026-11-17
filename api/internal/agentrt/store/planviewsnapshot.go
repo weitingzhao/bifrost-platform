@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
@@ -59,7 +60,7 @@ func PlanViewPage(ctx context.Context, db DB, root, cursor string) (map[string]a
 	// §1.1, §3.1) is a thread by its actor's kind, not a session, and is
 	// never unregistered work.
 	var unregistered int
-	err = tx.QueryRow(ctx, viewTree+`SELECT count(DISTINCT e.actor_id) FROM agentrt.event e JOIN tree ON tree.plan_node_id=e.plan_node_id WHERE e.actor_id LIKE 'thread:%' AND e.actor_id NOT LIKE '`+CollectorActorPrefix+`%' AND e.at >= $2::timestamptz-interval '24 hours' AND NOT EXISTS(SELECT 1 FROM agentrt.event x WHERE x.event_type='note' AND x.body_json->'external_work'->>'registrant'=e.actor_id AND x.body_json->'external_work'->>'root'=$1)`, root, now).Scan(&unregistered)
+	err = tx.QueryRow(ctx, viewTree+`SELECT count(DISTINCT e.actor_id) FROM agentrt.event e JOIN tree ON tree.plan_node_id=e.plan_node_id WHERE e.actor_id LIKE 'thread:%' AND e.actor_id NOT LIKE '`+externalwork.CollectorActorPrefix+`%' AND e.at >= $2::timestamptz-interval '24 hours' AND NOT EXISTS(SELECT 1 FROM agentrt.event x WHERE x.event_type='note' AND x.body_json->'external_work'->>'registrant'=e.actor_id AND x.body_json->'external_work'->>'root'=$1)`, root, now).Scan(&unregistered)
 	if err != nil {
 		return nil, err
 	}
@@ -82,6 +83,6 @@ func itemIndex(d *planview.Document, node string) int { return planview.ItemInde
 
 func snapshotExternal(ctx context.Context, tx pgx.Tx, root string, now time.Time) ([]map[string]any, error) {
 	return workregistration.Snapshot(ctx, tx, root, now, func(ctx context.Context, tx pgx.Tx, id string) (any, error) {
-		return externalDescription(ctx, tx, id)
+		return externalwork.ExternalDescriptionOf(ctx, tx, id)
 	})
 }

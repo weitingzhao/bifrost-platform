@@ -187,6 +187,13 @@
       "status": "assigned",
       "basis": "lineage charter and verified extraction; 2026-11-16 external observation working/finished buckets extracted with unchanged per-record verification callback order"
     },
+    "api/internal/agentrt/externalwork": {
+      "domains": [
+        "lineage"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-17 moved out of store (store split step 4): the description, record note, collector session identity and reads of work done outside the runtime; it imports eventlog, actor, canon, artifact (foundation) and workregistration (lineage) and does not import store; registering a work and posting its events stay in store because they lock and read the plan tree"
+    },
     "api/internal/unitplan": {
       "domains": [
         "verification"

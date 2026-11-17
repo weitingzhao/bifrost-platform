@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -54,13 +55,13 @@ func TestPV2SignoffReadinessRequiresWork(t *testing.T) {
 	adoptView(t, w, pvArtifact(t, w, d, b), 0)
 	pvSignoffReadiness(t, w, s1, "Not started", false)
 	who := wr("thread:signoff-readiness")
-	reg, err := store.RegisterExternalWork(ctx, w.rt, who, store.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "work-635", Artifact: externalSpec(t, w)})
+	reg, err := store.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "work-635", Artifact: externalSpec(t, w)})
 	ok(t, err)
 	id := reg["external_work_id"].(string)
 	pvSignoffReadiness(t, w, s1, "Not started", false)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
 	ok(t, err)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "submit", Seq: 2, Type: "submitted", ReportDigest: w.artifact(t, "report", "Candidate evidence")})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "submit", Seq: 2, Type: "submitted", ReportDigest: w.artifact(t, "report", "Candidate evidence")})
 	ok(t, err)
 	if w.stepState(t, s1) != "planned" {
 		t.Fatal("candidate case must leave execution unstarted")
@@ -120,12 +121,12 @@ func TestPV2SignoffReadinessBlocked(t *testing.T) {
 	}))
 	pvSignoffReadiness(t, w, s1, "Blocked", false)
 	who := wr("thread:blocked-readiness")
-	reg, err := store.RegisterExternalWork(ctx, w.rt, who, store.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "work-635", Artifact: externalSpec(t, w)})
+	reg, err := store.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "work-635", Artifact: externalSpec(t, w)})
 	ok(t, err)
 	id := reg["external_work_id"].(string)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
 	ok(t, err)
-	_, err = store.PostExternalEvent(ctx, w.rt, who, id, store.ExternalEvent{Key: "submit", Seq: 2, Type: "submitted", ReportDigest: w.artifact(t, "report", "Blocked candidate")})
+	_, err = store.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "submit", Seq: 2, Type: "submitted", ReportDigest: w.artifact(t, "report", "Blocked candidate")})
 	ok(t, err)
 	pvSignoffReadiness(t, w, s1, "Blocked", true)
 	out, err := store.PlanView(ctx, w.rt, root)

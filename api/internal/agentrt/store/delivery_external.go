@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 )
 
 const externalDeliveryRepo = "bifrost-platform"
@@ -47,7 +48,7 @@ func FoldExternalDelivery(in ExternalDelivery) []deliveryview.DeliveryStage {
 // externalDeliveryMatch is one external work naming a commit: the note of
 // its earliest event that carries the commit, and when that was recorded.
 type externalDeliveryMatch struct {
-	note   externalNote
+	note   externalwork.ExternalNote
 	commit string
 	at     time.Time
 }
@@ -123,11 +124,11 @@ func readExternalDelivery(ctx context.Context, tx pgx.Tx, q DeliveryQuery, now t
 		return nil, err
 	}
 	in := ExternalDelivery{Work: m.note.ID, Registrant: m.note.Actor, Commit: m.commit, NamedAt: m.at}
-	if m.note, _, _, err = readExternal(ctx, tx, m.note.ID); err != nil {
+	if m.note, _, _, err = externalwork.ReadExternal(ctx, tx, m.note.ID); err != nil {
 		return nil, err
 	}
 	warnings := []string{"stages are matched by this exact commit; a later revision that carries it is not recognised"}
-	if d, err := externalDescription(ctx, tx, m.note.Artifact); err != nil {
+	if d, err := externalwork.ExternalDescriptionOf(ctx, tx, m.note.Artifact); err != nil {
 		if ctx.Err() != nil {
 			return nil, err
 		}

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 )
 
 // The plan view of a collector's external work (R5:5.5-12 P-c1, §7 mixed
@@ -81,9 +82,9 @@ func newCollectorWorkViewFixture(t *testing.T) *collectorWorkViewDB {
 	f := &collectorWorkViewDB{signoffViewDB: newSignoffViewFixture(t), descs: map[string][]byte{}}
 	at := f.now.Add(-10 * time.Second)
 	digest := "sha256:" + strings.Repeat("d", 64)
-	collector := func(id, session string, epoch int64, node string) externalNote {
-		return externalNote{ID: "ew_" + strings.Repeat(id, 64), Actor: CollectorActorPrefix + "h1", Host: "h1", Vendor: "claude",
-			Session: session, Epoch: epoch, Node: node, RunKey: IdentityRunKey("claude", session, epoch)}
+	collector := func(id, session string, epoch int64, node string) externalwork.ExternalNote {
+		return externalwork.ExternalNote{ID: "ew_" + strings.Repeat(id, 64), Actor: externalwork.CollectorActorPrefix + "h1", Host: "h1", Vendor: "claude",
+			Session: session, Epoch: epoch, Node: node, RunKey: externalwork.IdentityRunKey("claude", session, epoch)}
 	}
 	running := collector("1", "0b8e2f4a-1111-2222-3333-444455556666", 1, "R4:4.1-1")
 	running.Sidebar, running.Seq, running.Type, running.State = "local_0b8e2f4a-aaaa-bbbb-cccc-ddddeeeeffff", 1, "started", "Running"
@@ -91,14 +92,14 @@ func newCollectorWorkViewFixture(t *testing.T) *collectorWorkViewDB {
 	submitted.Seq, submitted.Type, submitted.State, submitted.EndedAt = 2, "submitted", "Submitted", timeText(f.now.Add(-5*time.Second))
 	linked := collector("4", "9e5f0a1c-1111-2222-3333-444455556666", 1, "R4:4.3-1")
 	linked.Mission, linked.Task, linked.Seq, linked.Type, linked.State = "M-fixture", fixtureLiveTask, 1, "started", "Running"
-	for i, n := range []externalNote{
+	for i, n := range []externalwork.ExternalNote{
 		running,
 		{ID: "ew_" + strings.Repeat("2", 64), Actor: "thread:local_mcp", Node: "R4:4.2-1", RunKey: "mcp-run", Type: "registered", State: "Registered"},
 		submitted,
 		linked,
 	} {
 		task := []string{"collector hook work", "an MCP registration", "collector work submitted today", "collector work beside a live attempt"}[i]
-		desc, _ := json.Marshal(ExternalDescription{V: 1, Kind: "agentrt.external_work/v1", Task: task, Executor: "claude", Provider: "anthropic",
+		desc, _ := json.Marshal(externalwork.ExternalDescription{V: 1, Kind: "agentrt.external_work/v1", Task: task, Executor: "claude", Provider: "anthropic",
 			Repo: "platform", Branch: "test", Acceptance: []string{"PV1"}, Estimate: []int{1, 2}})
 		n.V, n.Kind, n.Root, n.Artifact, n.RequestDigest, n.RegistrationDigest = 1, "agentrt.external_work/v1", "R4", "sha256:"+strings.Repeat(string(rune('a'+i)), 64), digest, digest
 		n.RegisteredAt, n.HeartbeatAt = timeText(at), timeText(at)
