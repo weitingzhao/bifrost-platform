@@ -76,7 +76,7 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 	out, err := proposeRecorder(ctx, pool, wr("thread:s1"), "k1", "retire the recorder", req, a.ask)
 	ok(t, err)
 	q, _ := out["question_id"].(string)
-	if q == "" || len(a.cards) != 1 || a.cards[0].Options[0] != planstore.RecorderApplyLabel || !strings.Contains(a.cards[0].Body, "3 events") ||
+	if q == "" || len(a.cards) != 1 || a.cards[0].Options[0] != recorderApplyWords || !strings.Contains(a.cards[0].Body, "3 events") ||
 		!strings.Contains(a.cards[0].Body, "1 of them had a path into one machine") {
 		t.Fatalf("proposal %v, cards %+v", out, a.cards)
 	}
@@ -98,7 +98,7 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 	}
 	action, _ := card["action"].(map[string]any)
 	blocks, _ := card["blocks"].(map[string]any)
-	if fmt.Sprint(action["options"]) != "["+planstore.RecorderApplyLabel+" "+planstore.RecorderRefuseLabel+"]" || action["question_id"] != q ||
+	if fmt.Sprint(action["options"]) != "["+recorderApplyWords+" "+recorderRefuseWords+"]" || action["question_id"] != q ||
 		!strings.Contains(fmt.Sprint(blocks["unknown"]), "recorder log is history") {
 		t.Fatalf("needs_you action %v, blocks %v", action, blocks)
 	}

@@ -20,7 +20,7 @@ import (
 // read last: a read that fails ends the transaction, and it is the one read
 // here that may.
 func controllerState(ctx context.Context, tx pgx.Tx) ([]map[string]any, any, error) {
-	alerts, err := ControllerLoopsFailing(ctx, tx)
+	alerts, err := controllerLoopsFailing(ctx, tx)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -6,7 +6,8 @@ package codeguard
 // function's signature as surface, the same day; 230 after the recorder
 // import and the external work writes left store). The 41 of
 // agentrt/planstore include the 21 the decoupling line exports for the store
-// tests (TD-582).
+// tests (TD-582); 15 of those left on 2026-11-18, when the store's port tests
+// went through the plan's contract.
 
 var exportedForOtherTests = []string{
 	"api/internal/actions.AnnApprovalID",
@@ -67,19 +68,10 @@ var exportedForOtherTests = []string{
 	"api/internal/agentrt/plan.StateStopped",
 	"api/internal/agentrt/planimport.FromPlanWithRequest",
 	"api/internal/agentrt/planimport.ImportHead",
-	"api/internal/agentrt/planstore.AlertClaim",
 	"api/internal/agentrt/planstore.Binding",
 	"api/internal/agentrt/planstore.CardApplyKey",
-	"api/internal/agentrt/planstore.CardAutoKindsInForce",
-	"api/internal/agentrt/planstore.CardBodyBytes",
 	"api/internal/agentrt/planstore.CardRefuseKey",
-	"api/internal/agentrt/planstore.CheckExternalDescription",
-	"api/internal/agentrt/planstore.CheckExternalNote",
-	"api/internal/agentrt/planstore.ControllerLoopsFailing",
 	"api/internal/agentrt/planstore.CreatePlanNode",
-	"api/internal/agentrt/planstore.DecideRecorderImportLog",
-	"api/internal/agentrt/planstore.ExternalActivityBuckets",
-	"api/internal/agentrt/planstore.ExternalWorkSnapshot",
 	"api/internal/agentrt/planstore.ImportApply",
 	"api/internal/agentrt/planstore.ImportPlan",
 	"api/internal/agentrt/planstore.ImportRefuse",
@@ -87,18 +79,12 @@ var exportedForOtherTests = []string{
 	"api/internal/agentrt/planstore.OwnerActor",
 	"api/internal/agentrt/planstore.PendingChangeLimit",
 	"api/internal/agentrt/planstore.PlanNode",
-	"api/internal/agentrt/planstore.PlanRuleInForce",
 	"api/internal/agentrt/planstore.PlanStream",
 	"api/internal/agentrt/planstore.PlanView",
 	"api/internal/agentrt/planstore.Progress",
 	"api/internal/agentrt/planstore.ReasonGatesRetired",
 	"api/internal/agentrt/planstore.ReasonNoGate",
 	"api/internal/agentrt/planstore.RecordManual",
-	"api/internal/agentrt/planstore.RecorderApplyLabel",
-	"api/internal/agentrt/planstore.RecorderImportLog",
-	"api/internal/agentrt/planstore.RecorderRefuseLabel",
-	"api/internal/agentrt/planstore.RecorderStreamPrefix",
-	"api/internal/agentrt/planstore.RuleAnswerChannel",
 	"api/internal/agentrt/planstore.SetStepState",
 	"api/internal/agentrt/planstore.SignOff",
 	"api/internal/agentrt/planview.Acceptance",

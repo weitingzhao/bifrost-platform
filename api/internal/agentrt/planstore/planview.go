@@ -244,7 +244,7 @@ func CheckViewNote(body map[string]any) error {
 		}
 	}
 	if raw, ok := body["external_work"]; ok {
-		return CheckExternalNote(raw)
+		return checkExternalNote(raw)
 	}
 	return nil
 }
@@ -271,7 +271,7 @@ func validateViewArtifact(kind string, raw []byte) error {
 			return eventlog.Invalid("plan view artifact: %v", err)
 		}
 	case "agentrt.external_work/v1":
-		if err := CheckExternalDescription(raw); err != nil {
+		if err := checkExternalDescription(raw); err != nil {
 			return err
 		}
 	}

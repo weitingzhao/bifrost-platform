@@ -48,7 +48,7 @@ func TestRecorderImportThroughTheRoute(t *testing.T) {
 		t.Fatalf("recorder import proposal = %d %v", code, out)
 	}
 	if len(cards) != before+1 || !strings.HasPrefix(cards[len(cards)-1].Title, "Import recorder log td-337: ") ||
-		cards[len(cards)-1].Options[0] != planstore.RecorderApplyLabel {
+		cards[len(cards)-1].Options[0] != "Import the log" {
 		t.Fatalf("cards = %+v", cards[before:])
 	}
 	n, err := planstore.DecidePlanChanges(ctx, pool, answer(planstore.CardApplyKey), nil)

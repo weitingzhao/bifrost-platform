@@ -56,7 +56,7 @@ var rulePorts atomic.Pointer[RulePorts]
 // the rules' files (store's envelope.go).
 func BindPlanRules(p RulePorts) { rulePorts.Store(&p) }
 
-func PlanRuleInForce(ctx context.Context, tx pgx.Tx) (*PlanRule, error) {
+func planRuleInForce(ctx context.Context, tx pgx.Tx) (*PlanRule, error) {
 	return planRuleVia(ctx, rulePorts.Load(), tx)
 }
 
@@ -67,7 +67,7 @@ func planRuleVia(ctx context.Context, p *RulePorts, tx pgx.Tx) (*PlanRule, error
 	return p.PlanRuleInForce(ctx, tx)
 }
 
-func CardAutoKindsInForce(ctx context.Context, tx pgx.Tx) ([]string, error) {
+func cardAutoKindsInForce(ctx context.Context, tx pgx.Tx) ([]string, error) {
 	return cardAutoKindsVia(ctx, rulePorts.Load(), tx)
 }
 
@@ -108,7 +108,7 @@ var externalWorkPorts atomic.Pointer[ExternalWorkPorts]
 // portsbind.go).
 func BindPlanExternalWork(p ExternalWorkPorts) { externalWorkPorts.Store(&p) }
 
-func CheckExternalNote(record any) error {
+func checkExternalNote(record any) error {
 	return checkExternalNoteVia(externalWorkPorts.Load(), record)
 }
 
@@ -119,7 +119,7 @@ func checkExternalNoteVia(p *ExternalWorkPorts, record any) error {
 	return p.CheckNote(record)
 }
 
-func CheckExternalDescription(raw []byte) error {
+func checkExternalDescription(raw []byte) error {
 	return checkExternalDescriptionVia(externalWorkPorts.Load(), raw)
 }
 
@@ -130,7 +130,7 @@ func checkExternalDescriptionVia(p *ExternalWorkPorts, raw []byte) error {
 	return p.CheckDescription(raw)
 }
 
-func ExternalWorkSnapshot(ctx context.Context, tx pgx.Tx, root string, now time.Time) ([]map[string]any, error) {
+func externalWorkSnapshot(ctx context.Context, tx pgx.Tx, root string, now time.Time) ([]map[string]any, error) {
 	return externalWorkSnapshotVia(ctx, externalWorkPorts.Load(), tx, root, now)
 }
 
@@ -141,7 +141,7 @@ func externalWorkSnapshotVia(ctx context.Context, p *ExternalWorkPorts, tx pgx.T
 	return p.Snapshot(ctx, tx, root, now)
 }
 
-func ExternalActivityBuckets(work []map[string]any, now time.Time, verification func(string) any) (working, finished []any, err error) {
+func externalActivityBuckets(work []map[string]any, now time.Time, verification func(string) any) (working, finished []any, err error) {
 	return externalActivityBucketsVia(externalWorkPorts.Load(), work, now, verification)
 }
 
@@ -181,15 +181,15 @@ var recorderImportPorts atomic.Pointer[RecorderImportPorts]
 // once, from the store's wiring (portsbind.go).
 func BindPlanRecorderImport(p RecorderImportPorts) { recorderImportPorts.Store(&p) }
 
-// RecorderImportLog is the kept log of a proposal that is a recorder import.
+// recorderImportLog is the kept log of a proposal that is a recorder import.
 // It never fails now (the plan answers it itself); the error stays for its
 // callers.
-func RecorderImportLog(changes []PlanChange) (log string, is bool, err error) {
+func recorderImportLog(changes []PlanChange) (log string, is bool, err error) {
 	log, is = recorderImportOf(changes)
 	return log, is, nil
 }
 
-func DecideRecorderImportLog(ctx context.Context, tx pgx.Tx, log string, decided int64) error {
+func decideRecorderImportLog(ctx context.Context, tx pgx.Tx, log string, decided int64) error {
 	return decideRecorderImportLogVia(ctx, recorderImportPorts.Load(), tx, log, decided)
 }
 
@@ -206,9 +206,9 @@ func decideRecorderImportLogVia(ctx context.Context, p *RecorderImportPorts, tx 
 // recorder.go: RecorderStream). A test holds each equal to the recorder
 // import's own.
 const (
-	RecorderApplyLabel   = "Import the log"
-	RecorderRefuseLabel  = "Do not import it"
-	RecorderStreamPrefix = "legacy:recorder:"
+	recorderApplyLabel   = "Import the log"
+	recorderRefuseLabel  = "Do not import it"
+	recorderStreamPrefix = "legacy:recorder:"
 )
 
 // CoordinationPorts is what the plan code needs of coordination: the record
@@ -228,7 +228,7 @@ var coordinationPorts atomic.Pointer[CoordinationPorts]
 // portsbind.go).
 func BindPlanCoordination(p CoordinationPorts) { coordinationPorts.Store(&p) }
 
-func AlertClaim(ctx context.Context, tx pgx.Tx, ev eventlog.Event, cause int64, source, artifact string, body []byte) error {
+func alertClaim(ctx context.Context, tx pgx.Tx, ev eventlog.Event, cause int64, source, artifact string, body []byte) error {
 	return alertClaimVia(ctx, coordinationPorts.Load(), tx, ev, cause, source, artifact, body)
 }
 
@@ -256,8 +256,6 @@ var questionPorts atomic.Pointer[QuestionPorts]
 // portsbind.go).
 func BindPlanQuestions(p QuestionPorts) { questionPorts.Store(&p) }
 
-func CardBodyBytes(body string) (int, error) { return cardBodyBytesVia(questionPorts.Load(), body) }
-
 func cardBodyBytesVia(p *QuestionPorts, body string) (int, error) {
 	if p == nil || p.BodyBytes == nil {
 		return 0, unbound("the size the question store counts a card's body as", "BindPlanQuestions")
@@ -283,7 +281,7 @@ func cardBodyFits(body string) (n, limit int, err error) {
 // channel of an answer a rule gave (questions.RuleChannel). A test holds it
 // equal to the question store's. (The body limit comes through QuestionPorts
 // since 2026-11-17.)
-const RuleAnswerChannel = "rule"
+const ruleAnswerChannel = "rule"
 
 // LoopPorts is what the plan code needs of the controller's loop alerts (the
 // store's loopalert.go, over foundation's loopreadings): the loops failing
@@ -300,7 +298,7 @@ var loopPorts atomic.Pointer[LoopPorts]
 // init of their file (store's loopalert.go).
 func BindPlanLoops(p LoopPorts) { loopPorts.Store(&p) }
 
-func ControllerLoopsFailing(ctx context.Context, tx pgx.Tx) ([]map[string]any, error) {
+func controllerLoopsFailing(ctx context.Context, tx pgx.Tx) ([]map[string]any, error) {
 	return controllerLoopsFailingVia(ctx, loopPorts.Load(), tx)
 }
 

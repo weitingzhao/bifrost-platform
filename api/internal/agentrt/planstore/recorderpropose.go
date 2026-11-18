@@ -24,7 +24,7 @@ import (
 // stored as an artifact and the Owner gets one decision card. The proposal is
 // a plan_change_proposed of one change, op recorder_import, on the log's
 // stream, so the decision pass (plandecide.go) decides it like a plan import:
-// on Import it lands the log under that decision (DecideRecorderImportLog,
+// on Import it lands the log under that decision (decideRecorderImportLog,
 // through the port). A log is imported once: the same kept log again answers
 // that it was; another log of the same work is refused.
 //
@@ -127,7 +127,7 @@ func ProposeRecorderImport(ctx context.Context, db eventlog.DB, w actor.Writer, 
 			return nil, err
 		}
 		q, err := ask(ctx, Card{Key: cardKey, Title: "Import recorder log " + work + ": " + firstLine(reason), Body: body,
-			Options: []string{RecorderApplyLabel, RecorderRefuseLabel}, Recommended: 1, RecommendedWhy: RecorderRecommendWhy,
+			Options: []string{recorderApplyLabel, recorderRefuseLabel}, Recommended: 1, RecommendedWhy: RecorderRecommendWhy,
 			Meanwhile: "the log is not imported; the recorder keeps it as it is",
 			OwnerDuty: "irreversible", Urgency: "when you can: only this import waits for you", ByRule: byRule})
 		if errors.Is(err, eventlog.ErrInvalid) {

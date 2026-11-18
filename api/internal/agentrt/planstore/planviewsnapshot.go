@@ -53,7 +53,7 @@ func PlanViewPage(ctx context.Context, db eventlog.DB, root, cursor string) (map
 		return nil, err
 	}
 	mainline, next, waiting, acceptanceReady, ownerLater, verificationFreshness := verificationView(snap, root, nodes, graph, adoption, candidates)
-	working, finished, err := ExternalActivityBuckets(ext, now, func(id string) any { return snapshotExternalVerification(snap, id) })
+	working, finished, err := externalActivityBuckets(ext, now, func(id string) any { return snapshotExternalVerification(snap, id) })
 	if err != nil {
 		return nil, err
 	}
@@ -101,5 +101,5 @@ func databaseFreshness(readAt time.Time) string {
 func itemIndex(d *planview.Document, node string) int { return planview.ItemIndex(d, node) }
 
 func snapshotExternal(ctx context.Context, tx pgx.Tx, root string, now time.Time) ([]map[string]any, error) {
-	return ExternalWorkSnapshot(ctx, tx, root, now)
+	return externalWorkSnapshot(ctx, tx, root, now)
 }

@@ -55,10 +55,10 @@ func frozenPendingProjection(list []frozenPending, limit int, now time.Time, res
 		title, options := "Plan change to "+root+": "+firstLine(p.reason), []string{planstore.CardApply, planstore.CardRefuse}
 		after := "Apply: the controller lands the change on its next pass (about 15 seconds). Do not apply: the plan stays as it is."
 		var blocks any
-		if _, isRecorder, _ := planstore.RecorderImportLog(p.changes); isRecorder {
+		if _, isRecorder, _ := planstore.RecorderImportLogForTest(p.changes); isRecorder {
 			// A recorder log is history: no plan or mission waits on it.
 			work := strings.TrimPrefix(p.stream, "legacy:recorder:")
-			title, options = "Import recorder log "+work+": "+firstLine(p.reason), []string{planstore.RecorderApplyLabel, planstore.RecorderRefuseLabel}
+			title, options = "Import recorder log "+work+": "+firstLine(p.reason), []string{planstore.RecorderApplyLabelForTest, planstore.RecorderRefuseLabelForTest}
 			after = "Import: the controller imports the log on its next pass (about 15 seconds). Do not import: nothing is written."
 			blocks = map[string]any{"unknown": "a recorder log is history; no plan or mission waits on it"}
 		} else if _, isImport := planstore.ImportOfForTest(p.changes); isImport {
@@ -109,7 +109,7 @@ func frozenPendingProjection(list []frozenPending, limit int, now time.Time, res
 func TestPendingProjectionFrozenParity(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
-	labels := planreadings.NeedLabels{Apply: planstore.CardApply, Refuse: planstore.CardRefuse, RecorderApply: planstore.RecorderApplyLabel, RecorderRefuse: planstore.RecorderRefuseLabel, ImportApply: planstore.ImportApply, ImportRefuse: planstore.ImportRefuse}
+	labels := planreadings.NeedLabels{Apply: planstore.CardApply, Refuse: planstore.CardRefuse, RecorderApply: planstore.RecorderApplyLabelForTest, RecorderRefuse: planstore.RecorderRefuseLabelForTest, ImportApply: planstore.ImportApply, ImportRefuse: planstore.ImportRefuse}
 	for count := 0; count < 12; count++ {
 		for limit := 0; limit < 9; limit++ {
 			for fail := 0; fail < 3; fail++ {

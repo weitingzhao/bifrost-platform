@@ -6,63 +6,152 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopalert"
+	"fmt"
 	"reflect"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopalert"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
 
-// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the rules' side binds the two rule ports at the package's start (envelope.go); this holds that binding in place and that each port answers what the rule store itself answers, with a rule in force and with none.
+// The store binds the plan domain's ports at its start. These tests hold each
+// binding to its real provider from outside the plan: through what the plan
+// offers (proposals, the decision pass, notes, the plan view, Progress) and
+// the checks it declares to the event log and the artifact store.
+
+// The options of a recorder import's card, and the stream a log goes to.
+const (
+	recorderApplyWords   = "Import the log"
+	recorderRefuseWords  = "Do not import it"
+	recorderStreamPrefix = "legacy:recorder:"
+)
+
+// preparedLog is a recorder log as lineage hands it to the plan, with the
+// card body the test wants asked about; nothing of it is read from a store.
+func preparedLog(work, body string) planstore.RecorderLog {
+	return planstore.RecorderLog{Work: work, Stream: recorderStreamPrefix + work, LogID: noSuch, Doc: []byte(`{"fixture":"` + work + `"}`),
+		CardBody:  func(string, string, string) string { return body },
+		Imported:  func(context.Context, pgx.Tx) (int64, string, error) { return 0, "", nil },
+		TryImport: func(context.Context, pgx.Tx) error { return nil }}
+}
+
+// lastCard is the card the asker was last asked.
+func lastCard(t *testing.T, a *asker) planstore.Card {
+	t.Helper()
+	if len(a.cards) == 0 {
+		t.Fatal("no card was asked")
+	}
+	return a.cards[len(a.cards)-1]
+}
+
+// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the rules' side binds the two rule ports at the package's start (envelope.go); this holds that binding in place and that each port answers what the rule store itself answers, with a rule in force and with none. 2026-11-18 (TD-582): read through what the rules decide in a proposal (the standing authorization and its "by", a card's ByRule), so the ports' functions need not be exported.
 func TestRulePortsAreBoundToTheRuleStore(t *testing.T) {
 	t.Parallel()
-	w := newWorld(t)
-	read := func() (plan *planstore.PlanRule, kinds []string, direct [2]*store.StoredRule) {
+	direct := func(w *world) (plan, auto *store.StoredRule) {
 		t.Helper()
 		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			var err error
-			if plan, err = store.PlanRuleInForceForTest(ctx, tx); err != nil {
+			if plan, err = store.CurrentRule(ctx, tx, rules.KindPlan, time.Now()); err != nil {
 				return err
 			}
-			if kinds, err = store.CardAutoKindsInForceForTest(ctx, tx); err != nil {
-				return err
-			}
-			if direct[0], err = store.CurrentRule(ctx, tx, rules.KindPlan, time.Now()); err != nil {
-				return err
-			}
-			direct[1], err = store.CurrentRule(ctx, tx, rules.KindCardAuto, time.Now())
+			auto, err = store.CurrentRule(ctx, tx, rules.KindCardAuto, time.Now())
 			return err
 		}))
-		return plan, kinds, direct
+		return plan, auto
 	}
-	// No rule in force: the ports say none, as the rule store does.
-	if plan, kinds, direct := read(); plan != nil || kinds != nil || direct[0] != nil || direct[1] != nil {
-		t.Fatalf("with no rule: %+v %v %+v", plan, kinds, direct)
+	a := &asker{}
+	// A first done rule naming the step's own task: what the plan-standing
+	// rule grants, and only it.
+	doneRule := func(w *world, key string) map[string]any {
+		t.Helper()
+		out, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, root, "test", []planstore.PlanChange{{Op: "set_done_rule", Node: s2,
+			Rule: []byte(`{"task_accepted":"t_01M5192P0JPMJAP63ZKRPXJ2VV"}`)}}, a.ask)
+		ok(t, err)
+		return out
 	}
+	// Whether each kind of card is asked by rule, against the kinds the rule
+	// store has in force: one kind a rule can list, one it does not here.
+	cardsAskedAsTheRuleSays := func(w *world, key string, kinds []string) {
+		t.Helper()
+		_, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, root, "rename", []planstore.PlanChange{{Op: "retitle", Node: item, Title: key}}, a.ask)
+		ok(t, err)
+		if got, want := lastCard(t, a).ByRule, slices.Contains(kinds, "plan_change"); got != want {
+			t.Fatalf("%s: a plan change's card asked by rule %v; the rule store's kinds %v", key, got, kinds)
+		}
+		_, err = planstore.ProposeRecorderImport(ctx, w.rt, wr("thread:s1"), key, "retire", preparedLog(key, "a body"), a.ask)
+		ok(t, err)
+		if got, want := lastCard(t, a).ByRule, slices.Contains(kinds, "recorder_import"); got != want {
+			t.Fatalf("%s: a recorder import's card asked by rule %v; the rule store's kinds %v", key, got, kinds)
+		}
+	}
+	// No rule in force: the ports say none, as the rule store does; a port
+	// that refused would fail the proposals.
+	w := newWorld(t)
+	if plan, auto := direct(w); plan != nil || auto != nil {
+		t.Fatalf("with no rule: %+v %+v", plan, auto)
+	}
+	if out := doneRule(w, "none"); out["decision"] != "" {
+		t.Fatalf("with no rule in force, decided at once: %v", out)
+	}
+	cardsAskedAsTheRuleSays(w, "no-rule", nil)
+	// A rule in force that does not grant done rules grants nothing.
+	putPlanStanding(t, w, false, false)
+	if plan, _ := direct(w); plan == nil || plan.Plan.DoneRules {
+		t.Fatalf("the fixture rule: %+v", plan)
+	}
+	if out := doneRule(w, "not-granted"); out["decision"] != "" {
+		t.Fatalf("under a rule without done_rules, decided at once: %v", out)
+	}
+	// Rules in force: the decision names the rule the store has, and cards
+	// are asked by rule for the kinds it lists.
+	w = newWorld(t)
 	putPlanStanding(t, w, true, false)
-	_, err := w.rt.Exec(ctx, agentrttest.CardAutoRule)
-	ok(t, err)
-	plan, kinds, direct := read()
-	if direct[0] == nil || direct[1] == nil || len(direct[1].CardAuto.Kinds) == 0 || !direct[0].Plan.DoneRules {
-		t.Fatalf("the fixture rules are not in force: %+v", direct)
+	signCardAutoSeconds(t, w.rt, "5", "[blocked, plan_change]")
+	plan, auto := direct(w)
+	if plan == nil || auto == nil || len(auto.CardAuto.Kinds) == 0 || !plan.Plan.DoneRules {
+		t.Fatalf("the fixture rules are not in force: %+v %+v", plan, auto)
 	}
-	if plan == nil || *plan != (planstore.PlanRule{ID: direct[0].ID, Version: direct[0].Version, DoneRules: direct[0].Plan.DoneRules}) {
-		t.Fatalf("the plan-standing port: %+v; the rule store: %+v", plan, direct[0])
+	if out := doneRule(w, "granted"); out["decision"] != "applied" {
+		t.Fatalf("under the rule, a first done rule: %v", out)
 	}
-	if !reflect.DeepEqual(kinds, direct[1].CardAuto.Kinds) {
-		t.Fatalf("the card-auto-answer port: %v; the rule store: %v", kinds, direct[1].CardAuto.Kinds)
+	var by string
+	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'by' FROM agentrt.event WHERE event_type = 'plan_change_decided' ORDER BY event_id DESC LIMIT 1`).Scan(&by))
+	if want := fmt.Sprintf("standing authorization (%s v%d)", plan.ID, plan.Version); by != want {
+		t.Fatalf("decided by %q; the rule store has %q", by, want)
+	}
+	cardsAskedAsTheRuleSays(w, "listed", auto.CardAuto.Kinds)
+	// The third kind the plan asks about, a plan import, with no rule, under a
+	// rule that does not list it and under one that does (a database each: one
+	// import of a plan waits at a time).
+	for _, c := range []struct {
+		kinds string
+		want  bool
+	}{{"", false}, {"[blocked]", false}, {"[plan_import]", true}} {
+		pool, req := importDB(t)
+		if c.kinds != "" {
+			signCardAutoSeconds(t, pool, "5", c.kinds)
+		}
+		cards := &asker{}
+		_, err := planstore.ProposePlanImport(ctx, pool, wr("thread:s1"), "import", "import", req, cards.ask)
+		ok(t, err)
+		if got := lastCard(t, cards).ByRule; got != c.want {
+			t.Fatalf("under kinds %q: a plan import's card asked by rule %v", c.kinds, got)
+		}
 	}
 }
 
@@ -74,7 +163,7 @@ func errText(err error) string {
 	return err.Error()
 }
 
-// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the store's wiring binds the external work ports at the package's start (portsbind.go); this holds that binding in place and that each port answers what externalwork and workregistration themselves answer, on a registered work and on documents that are not valid, and that the plan's copy of the collector's actor prefix (it is in the plan view's SQL) is the external work's word.
+// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the store's wiring binds the external work ports at the package's start (portsbind.go); this holds that binding in place and that each port answers what externalwork and workregistration themselves answer, on a registered work and on documents that are not valid. 2026-11-18 (TD-582): read through the plan view, the event log's check of a plan_view_adopted body and the artifact store's check of a body, which is where the plan calls these ports.
 func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -85,133 +174,150 @@ func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 	id := out["external_work_id"].(string)
 	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
 	ok(t, err)
-	now := time.Now()
-	verification := func(id string) any { return "seen " + id }
+	view, err := planstore.PlanViewPage(ctx, w.rt, root, "")
+	ok(t, err)
+	now, err := time.Parse(eventlog.TimeLayout, view["as_of"].(string))
+	ok(t, err)
+	// No view binds this work to a verification, so the plan view says Unknown.
+	verification := func(string) any { return "Unknown" }
 	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		describe := func(ctx context.Context, tx pgx.Tx, id string) (any, error) {
 			return externalwork.ExternalDescriptionOf(ctx, tx, id)
-		}
-		got, err := store.ExternalWorkSnapshotForTest(ctx, tx, root, now)
-		if err != nil {
-			return err
 		}
 		want, err := workregistration.Snapshot(ctx, tx, root, now, describe)
 		if err != nil {
 			return err
 		}
-		if len(want) != 1 || want[0]["external_work_id"] != id || !reflect.DeepEqual(got, want) {
-			t.Errorf("the snapshot port: %v; workregistration: %v", got, want)
-		}
-		working, finished, err := store.ExternalActivityBucketsForTest(got, now, verification)
-		if err != nil {
-			return err
+		if len(want) != 1 || want[0]["external_work_id"] != id {
+			t.Errorf("workregistration: %v", want)
 		}
 		wantWorking, wantFinished := workregistration.ActivityBuckets(want, now, verification)
-		if len(wantWorking) != 1 || !reflect.DeepEqual(working, wantWorking) || !reflect.DeepEqual(finished, wantFinished) {
-			t.Errorf("the buckets port: %v %v; workregistration: %v %v", working, finished, wantWorking, wantFinished)
+		if got := view["external_work"]; !reflect.DeepEqual(got, want) {
+			t.Errorf("the snapshot port: %v; workregistration: %v", got, want)
+		}
+		if len(wantWorking) != 1 || !reflect.DeepEqual(view["working"], wantWorking) || !reflect.DeepEqual(view["finished_today"], wantFinished) {
+			t.Errorf("the buckets port: %v %v; workregistration: %v %v", view["working"], view["finished_today"], wantWorking, wantFinished)
 		}
 		return nil
 	}))
-	// The note check: the stored record passes; a record of the wrong shape
-	// is refused in externalwork's words; an unknown field is refused.
+	// The note check, which the plan runs on a view's event before its body:
+	// a record it passes goes on to the body's own first complaint, that this
+	// body has no text.
+	checkNote := func(record any) error {
+		return eventlog.CheckBody("plan_view_adopted", map[string]any{"external_work": record})
+	}
+	const passed = `store: plan_view_adopted needs "text"`
+	// The stored record passes; a record of the wrong shape is refused in
+	// externalwork's words; an unknown field is refused.
 	var raw []byte
 	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->'external_work' FROM agentrt.event WHERE event_type = 'external_work_noted' AND body_json->'external_work'->>'external_work_id' = $1 ORDER BY event_id DESC LIMIT 1`, id).Scan(&raw))
 	var record map[string]any
 	ok(t, json.Unmarshal(raw, &record))
-	ok(t, store.CheckExternalNoteForTest(record))
+	if got := errText(checkNote(record)); got != passed {
+		t.Fatalf("the stored record: %q", got)
+	}
 	var note externalwork.ExternalNote
 	ok(t, json.Unmarshal(raw, &note))
 	note.State = "Done"
-	if got, want := errText(store.CheckExternalNoteForTest(note)), errText(note.Validate()); want == "" || got != want {
+	if got, want := errText(checkNote(note)), errText(note.Validate()); want == "" || got != want {
 		t.Fatalf("the note check port: %q; externalwork: %q", got, want)
 	}
 	record["surprise"] = true
-	if err := store.CheckExternalNoteForTest(record); !errors.Is(err, eventlog.ErrInvalid) {
+	if err := checkNote(record); !errors.Is(err, eventlog.ErrInvalid) {
 		t.Fatalf("a note with an unknown field: %v", err)
 	}
-	// The description check, in externalwork's words.
-	for _, doc := range []string{`{"v":1,"kind":"agentrt.external_work/v1","task":"t","executor":"codex","provider":"openai","repo":"platform","branch":"b","acceptance_refs":["PV1"],"estimate_minutes":[10,20]}`,
-		`{"v":1,"kind":"agentrt.external_work/v1"}`, `not json`} {
-		_, want := externalwork.ParseExternalDescription([]byte(doc))
-		if got := store.CheckExternalDescriptionForTest([]byte(doc)); errText(got) != errText(want) {
-			t.Fatalf("the description check port on %s: %v; externalwork: %v", doc, got, want)
+	// The description check, in externalwork's words, as the artifact store
+	// asks it of a body that says it is a description. A body that is not
+	// JSON at all says nothing and never comes here; two "kind" keys read as
+	// one to the store's look at the kind, and are not JSON to externalwork.
+	const kind = `"kind":"agentrt.external_work/v1"`
+	valid := `{"v":1,` + kind + `,"task":"t","executor":"codex","provider":"openai","repo":"platform","branch":"b","acceptance_refs":["PV1"],"estimate_minutes":[10,20]}`
+	for _, c := range []struct {
+		doc, says string
+	}{{valid, ""}, {`{"v":1,` + kind + `}`, "invalid"}, {`{` + kind + `,` + kind + `}`, "invalid JSON"}, {`{` + kind + `,"surprise":1}`, "surprise"}} {
+		_, want := externalwork.ParseExternalDescription([]byte(c.doc))
+		if (want == nil) != (c.says == "") || !strings.Contains(errText(want), c.says) {
+			t.Fatalf("externalwork on %s: %v; the comparison below would show less than it should", c.doc, want)
 		}
-	}
-	if _, err := externalwork.ParseExternalDescription([]byte(`not json`)); err == nil {
-		t.Fatal("externalwork took a description that is not JSON: the comparison above shows nothing")
+		var got error
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			_, got = artifact.PutArtifact(ctx, tx, "controller", "other", "application/json", []byte(c.doc))
+			return nil
+		}))
+		if errText(got) != errText(want) {
+			t.Fatalf("the description check port on %s: %v; externalwork: %v", c.doc, got, want)
+		}
 	}
 }
 
-// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the recorder import binds its two ports at the package's start (recorderimport.go); this holds that binding in place, that each port answers what the recorder import's own function answers, and that the plan's copies of its card options and stream prefix (the progress projection shows them) are the recorder import's words.
+// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the recorder import binds its port at the package's start (portsbind.go); this holds that binding in place, that the port answers what the recorder import's own function answers, and that the plan's copies of its card options and stream prefix (the progress projection shows them) are the recorder import's words. 2026-11-18 (TD-582): read through a proposal, its card in needs_you and the decision pass; which changes are a recorder import is the plan's own and is held in planstore (TestARecorderImportIsItsOneChange).
 func TestRecorderImportPortsAreBoundToTheRecorderImport(t *testing.T) {
 	t.Parallel()
-	// Whether a proposal is a recorder import is the plan's own since the
-	// proposal moved into planstore (2026-11-17): one change, op
-	// recorder_import, naming a log.
-	for _, c := range []struct {
-		changes []planstore.PlanChange
-		log     string
-		is      bool
-	}{
-		{[]planstore.PlanChange{{Op: "recorder_import", Artifact: "sha256:log"}}, "sha256:log", true},
-		{[]planstore.PlanChange{{Op: "recorder_import"}}, "", false},
-		{[]planstore.PlanChange{{Op: "retitle", Node: s1, Title: "x"}}, "", false},
-		{[]planstore.PlanChange{{Op: "recorder_import", Artifact: "a"}, {Op: "recorder_import", Artifact: "b"}}, "", false},
-		{nil, "", false},
-	} {
-		log, is, err := store.RecorderImportLogForTest(c.changes)
-		ok(t, err)
-		if log != c.log || is != c.is {
-			t.Fatalf("on %+v: %q %v, want %q %v", c.changes, log, is, c.log, c.is)
-		}
+	pool := recorderDB(t)
+	a := &asker{}
+	// A log lineage really prepared: its stream, read back through the plan's
+	// prefix, is the work again, and the card shows the two options.
+	out, err := proposeRecorder(ctx, pool, wr("thread:s1"), "real", "retire", tdLog(t), a.ask)
+	ok(t, err)
+	options := "[" + recorderApplyWords + " " + recorderRefuseWords + "]"
+	if got := fmt.Sprint(lastCard(t, a).Options); got != options {
+		t.Fatalf("the card asked with %s; want %s", got, options)
 	}
-	if log, is, _ := store.RecorderImportLogForTest([]planstore.PlanChange{{Op: "recorder_import", Artifact: "sha256:log"}}); log != "sha256:log" || !is {
-		t.Fatalf("a recorder import is not told: %q %v", log, is)
+	card := recorderCard(t, pool, out["question_id"].(string))
+	if card == nil || card["title"] != "Import recorder log td-336: retire" {
+		t.Fatalf("needs_you item %v", card)
+	}
+	action, _ := card["action"].(map[string]any)
+	if got := fmt.Sprint(action["options"]); got != options {
+		t.Fatalf("needs_you shows %s; want %s", got, options)
 	}
 	// The landing of a log that is not stored: refused in the recorder
-	// import's own words, by the port as by the function.
-	w := newKernelWorld(t)
-	var got, want error
-	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		got = store.DecideRecorderImportLogForTest(ctx, tx, "sha256:absent", 1)
-		want = store.DecideRecorderImportForTest(ctx, tx, "sha256:absent", 1)
+	// import's own words, and the decision records them.
+	out, err = planstore.ProposeRecorderImport(ctx, pool, wr("thread:s1"), "absent", "retire", preparedLog("absent", "a body"), a.ask)
+	ok(t, err)
+	a.answer(out["question_id"].(string), seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	_, err = planstore.DecidePlanChanges(ctx, pool, a.question, nil)
+	ok(t, err)
+	var want error
+	ok(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
+		want = externalwork.DecideRecorderImport(ctx, tx, noSuch, 1)
 		return nil
 	}))
-	if !errors.Is(want, eventlog.ErrInvalid) || errText(got) != errText(want) {
-		t.Fatalf("the landing port: %v; the recorder import: %v", got, want)
-	}
-	if store.RecorderApplyLabelForTest != planstore.RecorderApplyLabel || store.RecorderRefuseLabelForTest != planstore.RecorderRefuseLabel ||
-		store.RecorderStreamPrefixForTest != "legacy:recorder:" {
-		t.Fatalf("the plan's copies %q %q %q are not the recorder import's %q %q %q", store.RecorderApplyLabelForTest, store.RecorderRefuseLabelForTest,
-			store.RecorderStreamPrefixForTest, planstore.RecorderApplyLabel, planstore.RecorderRefuseLabel, "legacy:recorder:")
+	var decision, got string
+	ok(t, pool.QueryRow(ctx, `SELECT body_json->>'decision', COALESCE(body_json->>'error', '') FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'plan_change_decided'`,
+		recorderStreamPrefix+"absent").Scan(&decision, &got))
+	if !errors.Is(want, eventlog.ErrInvalid) || decision != "failed" || got != errText(want) {
+		t.Fatalf("the landing port: %s %q; the recorder import: %v", decision, got, want)
 	}
 }
 
-// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the store's wiring binds the claim port to coord.AlertClaim at the package's start (portsbind.go); this holds that binding in place, that the port writes the alert coord.AlertClaim writes and none for a text that claims nothing, and that the plan's own longest note is coordination's largest message body.
+// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the store's wiring binds the claim port to coord.AlertClaim at the package's start (portsbind.go); this holds that binding in place, that the port writes the alert coord.AlertClaim writes and none for a text that claims nothing, and that the plan's own longest note is coordination's largest message body. 2026-11-18 (TD-582): read through PostPlanNote, which is where the plan calls the port.
 func TestCoordinationPortIsBoundToCoord(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
+	w.arch(t, [2]string{"ARCH:state-db", ""})
+	stream := planstore.PlanStream("ARCH")
 	alerts := func() []string {
 		t.Helper()
-		rows, err := w.rt.Query(ctx, `SELECT body_json::text || ' cause ' || cause_event_id || ' node ' || plan_node_id FROM agentrt.event WHERE event_type = 'policy_alert' AND event_stream_id = $1 ORDER BY event_id`, planstore.PlanStream(root))
+		rows, err := w.rt.Query(ctx, `SELECT body_json::text || ' cause ' || cause_event_id || ' node ' || plan_node_id FROM agentrt.event WHERE event_type = 'policy_alert' AND event_stream_id = $1 ORDER BY event_id`, stream)
 		ok(t, err)
 		out, err := pgx.CollectRows(rows, pgx.RowTo[string])
 		ok(t, err)
 		return out
 	}
+	_, err := planstore.PostPlanNote(ctx, w.rt, wr("thread:s1"), "clean", "ARCH:state-db", "nothing claimed here")
+	ok(t, err)
+	if got := alerts(); len(got) != 0 {
+		t.Fatalf("a note that claims nothing raised %q", got)
+	}
+	const claim = "Owner 已批准"
+	note, err := planstore.PostPlanNote(ctx, w.rt, wr("thread:s1"), "claim", "ARCH:state-db", claim)
+	ok(t, err)
+	cause, err := strconv.ParseInt(fmt.Sprint(note["event_id"]), 10, 64)
+	ok(t, err)
+	// What coordination itself writes for that note, beside what the port did.
 	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		note, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream(root), Type: "note", Actor: "controller", PlanNode: s1, Body: map[string]any{"text": "a note"}})
-		if err != nil {
-			return err
-		}
-		on := eventlog.Event{Stream: planstore.PlanStream(root), PlanNode: s1}
-		if err = store.AlertClaimForTest(ctx, tx, on, note.EventID, "plan_note", "", []byte("nothing claimed here")); err != nil {
-			return err
-		}
-		if err = store.AlertClaimForTest(ctx, tx, on, note.EventID, "plan_note", "", []byte("Owner 已批准")); err != nil {
-			return err
-		}
-		return coord.AlertClaim(ctx, tx, on, note.EventID, "plan_note", "", []byte("Owner 已批准"))
+		return coord.AlertClaim(ctx, tx, eventlog.Event{Stream: stream, PlanNode: "ARCH:state-db"}, cause, "plan_note", "", []byte(claim))
 	}))
 	if got := alerts(); len(got) != 2 || got[0] != got[1] || !strings.Contains(got[0], "approval_claim") {
 		t.Fatalf("the port's alert and coord's: %q", got)
@@ -221,36 +327,91 @@ func TestCoordinationPortIsBoundToCoord(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the store's wiring binds the size port to questions.BodyBytes at the package's start (portsbind.go), and the plan code keeps its own copies of the question store's body limit and rule channel; this holds the binding in place and each copy equal, so an import's card is not sized by another rule than the store checks it with and a rule's answer is not taken for the Owner's.
+// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the store's wiring binds the size port to questions.BodyBytes at the package's start (portsbind.go), and the plan code keeps its own copies of the question store's body limit and rule channel; this holds the binding in place and each copy equal, so an import's card is not sized by another rule than the store checks it with and a rule's answer is not taken for the Owner's. 2026-11-18 (TD-582): read through a recorder import's proposal, which sizes its card, and the decision pass, which reads who answered.
 func TestQuestionPortAndWordsAreTheQuestionStores(t *testing.T) {
 	t.Parallel()
-	for _, body := range []string{"", "plain", "引号 \" 和换行\n", "a\x00b\tc\r\n", strings.Repeat("长", 1200), "<b>&amp;</b> \u2028"} {
-		n, err := store.CardBodyBytesForTest(body)
-		ok(t, err)
-		if want := questions.BodyBytes(body); n != want {
-			t.Fatalf("the port counts %q as %d bytes; the question store as %d", body, n, want)
+	w := newWorld(t)
+	a := &asker{}
+	// sized is body grown to size bytes as the question store counts them; a
+	// body already past size stays as it is. The first letter goes on alone:
+	// it can bring white space the store trims from the end into the count.
+	sized := func(body string, size int) string {
+		t.Helper()
+		if questions.BodyBytes(body) < size {
+			body += "a"
 		}
+		for n := questions.BodyBytes(body); n < size; n = questions.BodyBytes(body) {
+			body += strings.Repeat("a", size-n)
+		}
+		return body
 	}
 	if questions.BodyBytes("plain") == len("plain") {
-		t.Fatal("the question store counts a body as its length: the comparison above shows less than it should")
+		t.Fatal("the question store counts a body as its length: the comparison below shows less than it should")
 	}
-	if store.RuleAnswerChannelForTest != questions.RuleChannel {
-		t.Fatalf("the plan reads a rule's answer by channel %q; the question store writes %q", store.RuleAnswerChannelForTest, questions.RuleChannel)
+	for i, body := range []string{"", "plain", "引号 \" 和换行\n", "a\x00b\tc\r\n", strings.Repeat("长", 1200), "<b>&amp;</b> \u2028"} {
+		work := fmt.Sprintf("size-%d", i)
+		// Past the limit, as the store counts (by one byte where the body
+		// allows): refused, and the refusal says that size and the store's limit.
+		over := sized(body, questions.BodyLimit+1)
+		_, err := planstore.ProposeRecorderImport(ctx, w.rt, wr("thread:s1"), work+"-over", "retire", preparedLog(work, over), a.ask)
+		want := fmt.Sprintf("would be %d bytes, more than the question store's %d", questions.BodyBytes(over), questions.BodyLimit)
+		if !errors.Is(err, eventlog.ErrInvalid) || !strings.Contains(errText(err), want) {
+			t.Fatalf("a body of %q past the limit: %v; want %q", body, err, want)
+		}
+		if questions.BodyBytes(body) > questions.BodyLimit {
+			continue
+		}
+		// At the limit exactly: asked.
+		fits := sized(body, questions.BodyLimit)
+		if questions.BodyBytes(fits) != questions.BodyLimit {
+			t.Fatalf("a body of %q does not come to the limit: %d", body, questions.BodyBytes(fits))
+		}
+		_, err = planstore.ProposeRecorderImport(ctx, w.rt, wr("thread:s1"), work+"-fits", "retire", preparedLog(work, fits), a.ask)
+		ok(t, err)
+		if lastCard(t, a).Body != fits {
+			t.Fatalf("a body of %q at the limit was not the card asked", body)
+		}
+	}
+	// A rule's answer, on the channel the question store writes it on, is the
+	// rule's in the decision; any other answer is the Owner's.
+	const rule = "rule card-auto-answer v3"
+	propose := func(key, channel, by string) string {
+		t.Helper()
+		out, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, root, "rename", []planstore.PlanChange{{Op: "retitle", Node: item, Title: key}}, a.ask)
+		ok(t, err)
+		id := out["question_id"].(string)
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if a.answers == nil {
+			a.answers = map[string]seenfacts.Question{}
+		}
+		a.answers[id] = seenfacts.Question{ID: id, Status: seenfacts.QuestionAnswered, Option: "b", AnsweredBy: by, AnsweredAt: "2026-10-14T20:00:00Z", Channel: channel}
+		return id
+	}
+	byRule, byOwner := propose("by-rule", questions.RuleChannel, rule), propose("by-owner", "", "owner")
+	_, err := planstore.DecidePlanChanges(ctx, w.rt, a.question, nil)
+	ok(t, err)
+	for id, want := range map[string]string{byRule: rule, byOwner: "owner"} {
+		var by string
+		ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'by' FROM agentrt.event WHERE event_type = 'plan_change_decided' AND body_json->>'question_id' = $1`, id).Scan(&by))
+		if by != want {
+			t.Fatalf("question %s was decided by %q; want %q", id, by, want)
+		}
 	}
 }
 
-// Origin: 2026-11-17, plan core wall step 5 (design duty/from-biz-2026-11-17-plan-core-wall.md): the loop alerts bind the port at the package's start (loopalert.go); this holds that binding in place: the port lists no loop while none has an alert, the loop an alert was recorded for with the error it kept, and no loop again once a note says it passes.
+// Origin: 2026-11-17, plan core wall step 5 (design duty/from-biz-2026-11-17-plan-core-wall.md): the loop alerts bind the port at the package's start (loopalert.go); this holds that binding in place: the port lists no loop while none has an alert, the loop an alert was recorded for with the error it kept, and no loop again once a note says it passes. 2026-11-18 (TD-582): read through Progress's controller_alerts, which is what the port is for.
 func TestLoopPortIsBoundToTheLoopAlerts(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	failing := func() []map[string]any {
 		t.Helper()
-		var out []map[string]any
-		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			var err error
-			out, err = store.ControllerLoopsFailingForTest(ctx, tx)
-			return err
-		}))
+		progress, err := planstore.ProgressSince(ctx, w.rt, time.Time{})
+		ok(t, err)
+		out, isList := progress["controller_alerts"].([]map[string]any)
+		if !isList {
+			t.Fatalf("controller_alerts: %#v", progress["controller_alerts"])
+		}
 		return out
 	}
 	if got := failing(); len(got) != 0 {

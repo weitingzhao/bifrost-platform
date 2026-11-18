@@ -176,3 +176,24 @@ func TestUnboundLoopPortRefuses(t *testing.T) {
 		t.Fatalf("a bound port: %v %v", loops, err)
 	}
 }
+
+// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): whether a proposal is a recorder import is the plan's own since the proposal moved into planstore: one change, op recorder_import, naming a log. Moved here from the store's TestRecorderImportPortsAreBoundToTheRecorderImport on 2026-11-18 (TD-582): it is no binding of the store's.
+func TestARecorderImportIsItsOneChange(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		changes []PlanChange
+		log     string
+		is      bool
+	}{
+		{[]PlanChange{{Op: unboundOp, Artifact: "sha256:log"}}, "sha256:log", true},
+		{[]PlanChange{{Op: unboundOp}}, "", false},
+		{[]PlanChange{{Op: "retitle", Node: "s1", Title: "x"}}, "", false},
+		{[]PlanChange{{Op: unboundOp, Artifact: "a"}, {Op: unboundOp, Artifact: "b"}}, "", false},
+		{nil, "", false},
+	} {
+		log, is, err := recorderImportLog(c.changes)
+		if err != nil || log != c.log || is != c.is {
+			t.Fatalf("on %+v: %q %v %v, want %q %v", c.changes, log, is, err, c.log, c.is)
+		}
+	}
+}

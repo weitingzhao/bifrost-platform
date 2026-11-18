@@ -116,7 +116,7 @@ func proposePlanChange(ctx context.Context, db eventlog.DB, w actor.Writer, key,
 		if err := eventlog.LockStream(ctx, tx, PlanStream(root)); err != nil {
 			return nil, err
 		}
-		rule, err := PlanRuleInForce(ctx, tx)
+		rule, err := planRuleInForce(ctx, tx)
 		if err != nil {
 			return nil, err
 		}

@@ -47,7 +47,7 @@ func ignoreNoRows(err error) error {
 // 2026-10-20: the runtime's cards were held by the question store's quotas
 // while no card was open for the rule to answer).
 func RuleAnswers(ctx context.Context, tx pgx.Tx, kind, mission string) (bool, error) {
-	kinds, err := CardAutoKindsInForce(ctx, tx)
+	kinds, err := cardAutoKindsInForce(ctx, tx)
 	if err != nil || !slices.Contains(kinds, kind) {
 		return false, err
 	}

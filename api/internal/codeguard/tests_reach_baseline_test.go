@@ -149,7 +149,6 @@ var testFilesInShared = []string{
 	"api/internal/agentrt/store/planimport_test.go",
 	"api/internal/agentrt/store/planimportdecide_test.go",
 	"api/internal/agentrt/store/planobservations_concurrency_test.go",
-	"api/internal/agentrt/store/planports_export_test.go",
 	"api/internal/agentrt/store/planports_test.go",
 	"api/internal/agentrt/store/planrootisolation_test.go",
 	"api/internal/agentrt/store/plansignoffreadiness_test.go",

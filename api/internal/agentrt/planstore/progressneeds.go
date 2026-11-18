@@ -43,7 +43,7 @@ func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, er
 	inputs := make([]planreadings.PendingNeed, 0, len(list))
 	for _, p := range list {
 		kind := "change"
-		_, isRecorder, err := RecorderImportLog(p.changes)
+		_, isRecorder, err := recorderImportLog(p.changes)
 		if err != nil {
 			return nil, err
 		}
@@ -52,9 +52,9 @@ func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, er
 		} else if _, ok := importOf(p.changes); ok {
 			kind = "import"
 		}
-		inputs = append(inputs, planreadings.PendingNeed{Event: p.event, Stream: p.stream, Root: streamRoot(p.stream), Work: strings.TrimPrefix(p.stream, RecorderStreamPrefix), Reason: p.reason, Question: p.question, At: p.at, Kind: kind, Payload: p.changes})
+		inputs = append(inputs, planreadings.PendingNeed{Event: p.event, Stream: p.stream, Root: streamRoot(p.stream), Work: strings.TrimPrefix(p.stream, recorderStreamPrefix), Reason: p.reason, Question: p.question, At: p.at, Kind: kind, Payload: p.changes})
 	}
-	return planreadings.ProjectPendingNeeds(inputs, PendingChangeLimit, now, planreadings.NeedLabels{Apply: CardApply, Refuse: CardRefuse, RecorderApply: RecorderApplyLabel, RecorderRefuse: RecorderRefuseLabel, ImportApply: ImportApply, ImportRefuse: ImportRefuse}, func(raw any) (any, error) { return changeBlocks(ctx, tx, raw.([]PlanChange)) }, func(listed map[string]map[string]any) ([]planreadings.WaitingCard, bool, error) {
+	return planreadings.ProjectPendingNeeds(inputs, PendingChangeLimit, now, planreadings.NeedLabels{Apply: CardApply, Refuse: CardRefuse, RecorderApply: recorderApplyLabel, RecorderRefuse: recorderRefuseLabel, ImportApply: ImportApply, ImportRefuse: ImportRefuse}, func(raw any) (any, error) { return changeBlocks(ctx, tx, raw.([]PlanChange)) }, func(listed map[string]map[string]any) ([]planreadings.WaitingCard, bool, error) {
 		cards, more, err := missionCards(ctx, tx, now, listed)
 		var out []planreadings.WaitingCard
 		for _, c := range cards {

@@ -180,7 +180,7 @@ func decide(ctx context.Context, db eventlog.DB, p pendingChange, decision, reas
 	did := false
 	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		artifact, isImport := importOf(p.changes)
-		log, isRecorder, err := RecorderImportLog(p.changes)
+		log, isRecorder, err := recorderImportLog(p.changes)
 		if err != nil {
 			return err
 		}
@@ -228,7 +228,7 @@ func decide(ctx context.Context, db eventlog.DB, p pendingChange, decision, reas
 				return err
 			}
 		case decision == "applied" && isRecorder:
-			if err = DecideRecorderImportLog(ctx, tx, log, ev.EventID); err != nil {
+			if err = decideRecorderImportLog(ctx, tx, log, ev.EventID); err != nil {
 				return err
 			}
 		case decision == "applied":
