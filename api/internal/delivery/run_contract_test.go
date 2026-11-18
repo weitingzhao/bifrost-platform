@@ -259,6 +259,13 @@ func TestCIRunTriggerEquivalence(t *testing.T) {
 				}
 				wantSpec := expected["spec"].(map[string]any)
 				gotSpec := run.Object["spec"].(map[string]any)
+				// 2026-11-18: the trigger's run carries the CI node, by default a
+				// selector true of every node (delivery/ci_node.go); it says nothing
+				// about the run's contract. Positive control: without this delete the
+				// platform CI case fails on that one key.
+				if selector, ok := nestedSelector(wantSpec); ok {
+					delete(selector, ciAnyNodeKey)
+				}
 				// Only param order is irrelevant. Sort lists without collapsing
 				// duplicate names, then compare every field of the complete spec.
 				for _, spec := range []map[string]any{gotSpec, wantSpec} {
@@ -336,4 +343,11 @@ func TestPythonCIRepoFilterEquivalence(t *testing.T) {
 	if !found {
 		t.Fatal("python-ci filter missing")
 	}
+}
+
+func nestedSelector(spec map[string]any) (map[string]any, bool) {
+	template, _ := spec["taskRunTemplate"].(map[string]any)
+	pod, _ := template["podTemplate"].(map[string]any)
+	selector, ok := pod["nodeSelector"].(map[string]any)
+	return selector, ok
 }
