@@ -9,6 +9,7 @@ import {
   ListChecks,
   Users,
   Boxes,
+  Building2,
   Plug,
   Rocket,
   Server,
@@ -27,6 +28,7 @@ const ICONS: Record<ShellRouteId, ShellNavItem['icon']> = {
   releases: Rocket,
   infrastructure: Server,
   bus: Cable,
+  city: Building2,
   records: Archive,
 }
 

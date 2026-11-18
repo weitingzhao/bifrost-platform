@@ -29,6 +29,7 @@ export const SHELL_NAV = [
     question: 'What is moving on the event bus, and where did one event go?',
     group: 'detail',
   },
+  { id: 'city', label: 'City', question: 'The system as a city the Owner builds.', group: 'detail' },
   {
     id: 'records',
     label: 'Records',

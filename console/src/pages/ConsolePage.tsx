@@ -1,5 +1,5 @@
 import { PageShell, SidebarInset, SidebarProvider, TooltipProvider, cn } from '@bifrost/ui'
-import { useCallback, useEffect, useState, type ComponentType } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useState, type ComponentType } from 'react'
 import { ConsoleHeader, type HeaderBack } from '@/components/ConsoleHeader'
 import { ConsoleSidebar } from '@/components/ConsoleSidebar'
 import { EntryRail, EntryTabBar, type EntryNavProps } from '@/components/shell/EntryNav'
@@ -47,6 +47,10 @@ import { useShellLayout } from '@/lib/shell/useShellLayout'
 
 type DetailRouteId = Exclude<ShellRouteId, EntryRouteId>
 
+// Its own chunk, with Phaser behind it: nothing of the city loads until this page opens.
+const CityPage = lazy(() => import('@/pages/shell/CityPage'))
+const CityRoute = () => <Suspense fallback={null}><CityPage /></Suspense>
+
 const DETAIL_PAGES: Record<DetailRouteId, ComponentType> = {
   status: StatusPage,
   data: DataPage,
@@ -54,6 +58,7 @@ const DETAIL_PAGES: Record<DetailRouteId, ComponentType> = {
   releases: ReleasesPage,
   infrastructure: InfrastructurePage,
   bus: BusPage,
+  city: CityRoute,
   records: RecordsPage,
 }
 

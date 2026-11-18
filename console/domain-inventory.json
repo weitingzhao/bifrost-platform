@@ -2224,6 +2224,33 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/owner/city",
+      "files": [
+        "console/src/domains/owner/city/CityBuilder.tsx",
+        "console/src/domains/owner/city/__tests__/cityBuilder.test.ts",
+        "console/src/domains/owner/city/builderDoc.ts",
+        "console/src/domains/owner/city/builderScene.ts",
+        "console/src/domains/owner/city/catalog.ts",
+        "console/src/domains/owner/city/defaultLayout.ts",
+        "console/src/domains/owner/city/kit.ts",
+        "console/src/domains/owner/city/landmarks.ts",
+        "console/src/domains/owner/city/layoutStore.ts",
+        "console/src/domains/owner/city/platformLayoutStore.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "phaser",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/plan/display",
       "files": [
         "console/src/domains/plan/display/CapabilityEvidence.tsx",
@@ -4247,9 +4274,15 @@
     {
       "path": "console/src/pages/shell",
       "files": [
+        "console/src/pages/shell/CityPage.tsx",
         "console/src/pages/shell/shellPages.tsx"
       ],
       "imports": [
+        "console/src/api",
+        "console/src/domains/delivery/api",
+        "console/src/domains/owner/city",
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib/shell",
         "console/src/pages/shell/data",
         "console/src/pages/shell/ib",
         "console/src/pages/shell/infrastructure",
@@ -4261,7 +4294,10 @@
         "console/src/pages/shell/status"
       ],
       "test_imports": [],
-      "external_imports": [],
+      "external_imports": [
+        "@tanstack/react-query",
+        "react"
+      ],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []

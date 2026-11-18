@@ -2399,6 +2399,13 @@
         "status": "assigned",
         "basis": "2026-11-16 Owner confirmed read-only backup status display belongs to Foundation (compute charter excludes storage). Owns panel, response type and GET client; no backup execution, database or permission changes."
       },
+      "console/src/domains/owner/city": {
+        "domains": [
+          "owner"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-18 cockpit line: the Owner's city page, presentation over the platform's reads and /api/v1/home/layout"
+      },
       "console/src/domains/foundation/bus": {
         "domains": [
           "foundation"

@@ -23,6 +23,7 @@
     "3d-force-graph": "1.80.1",
     "clsx": "^2.1.1",
     "force-graph": "1.52.0",
+    "phaser": "4.2.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "simple-icons": "^14.15.0",

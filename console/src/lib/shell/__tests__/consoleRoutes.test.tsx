@@ -24,7 +24,7 @@ import {
 } from '@/lib/shell/consoleRoutes'
 
 const ENTRIES = ['Command', 'Crew', 'Work', 'Services', 'System']
-const DETAILS = ['Status', 'Data', 'IB', 'Releases', 'Infrastructure', 'Bus', 'Records']
+const DETAILS = ['Status', 'Data', 'IB', 'Releases', 'Infrastructure', 'Bus', 'City', 'Records']
 
 describe('shell navigation', () => {
   it('has four entries, For you first, then the detail pages with Records last', () => {
@@ -154,7 +154,7 @@ describe('which entry a place lights', () => {
     expect(entryOf({ kind: 'approval' })).toBe('command')
     expect(entryOf({ kind: 'question' })).toBe('command')
     expect(entryOf({ kind: 'shell', id: 'work' })).toBe('work')
-    for (const id of ['status', 'data', 'ib', 'releases', 'infrastructure', 'bus', 'records'] as const) {
+    for (const id of ['status', 'data', 'ib', 'releases', 'infrastructure', 'bus', 'city', 'records'] as const) {
       expect(entryOf({ kind: 'shell', id }), id).toBe(id === 'data' || id === 'ib' ? 'services' : id === 'releases' ? 'work' : id === 'records' ? 'command' : 'system')
     }
     expect(entryOf({ kind: 'more' })).toBeNull()
