@@ -1,4 +1,5 @@
 import { platformGet } from './platformClient.js'
+import { BUS_RECHECK_MS, busPause } from './busWait.js'
 import { pollPipelineRun } from './pollPipelineRun.js'
 
 // Read-only delivery tools: the release policy's judgement of one run
@@ -75,14 +76,21 @@ export interface WaitForPipelineRunInput {
 export async function waitForPipelineRun(input: WaitForPipelineRunInput, get: Get = platformGet): Promise<unknown> {
   const timeout = clamp(input.timeout_seconds ?? RUN_WAIT_DEFAULT_SECONDS, 1, RUN_WAIT_MAX_SECONDS)
   const poll = clamp(input.poll_seconds ?? RUN_POLL_DEFAULT_SECONDS, RUN_POLL_MIN_SECONDS, RUN_WAIT_MAX_SECONDS)
+  const run = trimmed(input.run)
+  const revision = trimmed(input.revision)
+  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
   return pollPipelineRun({
-    run: trimmed(input.run),
+    run,
     pipeline: trimmed(input.pipeline),
-    revision: trimmed(input.revision),
+    revision,
     timeoutMs: timeout * 1000,
-    intervalMs: poll * 1000,
+    // Between reads it holds a long poll for the run's events (subject <run>@<sha>); poll_seconds is the pace without the bus.
+    intervalMs: Math.max(poll * 1000, BUS_RECHECK_MS),
     now: () => Date.now(),
-    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    sleep: busPause({
+      types: 'ci.run.started,ci.run.finished', match: () => run || revision, fallbackMs: poll * 1000,
+      get, now: () => Date.now(), sleep,
+    }),
     get,
   })
 }

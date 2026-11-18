@@ -1,3 +1,4 @@
+import { BUS_RECHECK_MS, busPause } from './busWait.js'
 import { bifrostSessionId, sessionFellBack } from './sessionId.js'
 import { platformGet, platformSend } from './platformClient.js'
 import { CanonicalError, canonicalizeObject, defaultKey } from './questionCanonical.js'
@@ -112,6 +113,11 @@ export async function waitForAnswer(
   const capped = Math.min(Math.max(timeoutSeconds, 1), 600)
   const deadline = d.now() + capped * 1000
   let last: Record<string, unknown> = { id }
+  // Between reads it holds a long poll for this question's event; the question stays the truth.
+  const pause = busPause({
+    types: 'owner.question.answered', fallbackMs: 2000, get: d.get, now: d.now, sleep: d.sleep,
+    match: () => (typeof last.id === 'string' ? last.id : id),
+  })
   for (;;) {
     const got = await d.get(`/api/v1/questions/${encodeURIComponent(id)}`)
     last = got != null && typeof got === 'object' ? { ...(got as Record<string, unknown>) } : { id }
@@ -122,7 +128,7 @@ export async function waitForAnswer(
     }
     const remaining = deadline - d.now()
     if (remaining <= 0) return annotate({ ...last, id, wait: 'timeout' })
-    await d.sleep(Math.min(2000, remaining))
+    await pause(Math.min(BUS_RECHECK_MS, remaining))
   }
 }
 

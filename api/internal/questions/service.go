@@ -17,6 +17,9 @@ import (
 
 // Service is the question record: one document, one write path.
 type Service struct {
+	// Announce, installed at startup, is handed every audited transition (the
+	// bus says the questions' life from them; it must return at once).
+	Announce func(transitions []Transition)
 	// Assessment reads an existing stream for HTTP views only; installed at startup.
 	// List reads are concurrent and must honor the shared context deadline.
 	Assessment   func(context.Context, string) map[string]any
@@ -36,6 +39,9 @@ type Result struct {
 	Code int
 	Body any
 }
+
+// Transition is one audited change of a question.
+type Transition struct{ AuditAction, ID, Status string }
 
 type caller struct {
 	session   string
@@ -229,6 +235,13 @@ func sweep(doc *document, now time.Time) []event {
 }
 
 func (s *Service) writeAudit(c caller, evs []event) {
+	if s.Announce != nil && len(evs) > 0 {
+		out := make([]Transition, 0, len(evs))
+		for _, e := range evs {
+			out = append(out, Transition{AuditAction: e.action, ID: e.target, Status: e.status})
+		}
+		s.Announce(out)
+	}
 	if s.audit == nil || len(evs) == 0 {
 		return
 	}

@@ -335,6 +335,7 @@ func (s *Server) mountBus(r chi.Router) {
 	}
 	if s.approvals != nil {
 		s.approvals.Announce = s.announceCards
+		s.announceQuestionsOnBus()
 	}
 	route := func(serve func(*gate.Gate, http.ResponseWriter, *http.Request)) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {

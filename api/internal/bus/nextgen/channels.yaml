@@ -43,8 +43,8 @@ channels:
   - {id: L12, class: K5, disposition: announced, step: "3", what: "ib-gateway auto-repair：每 30 秒读 Redis 健康键，必要时发 reconnect_all 到 ib:operator:cmd 并每 2 秒读结果", by: "命令流本身不动（见 N08）；修复结果以 plugin.status.changed 宣布"}
   - {id: L13, class: K11, disposition: announced, step: "3", what: "data-clone scheduler：每小时按调度触发数据克隆", by: "定时作业登记；结果 data.job.finished 宣布"}
   - {id: L14, class: K11, disposition: kept, step: "0", what: "failed-backup sweep：每 24 小时删 30 天前失败的 CNPG Backup CR", by: "原因：定时清理，不产生需要别人知道的变化；登记为定时作业"}
-  - {id: L15, class: K4, disposition: announced, step: "3", what: "approvals 循环：每 15 秒重试被瞬时拒绝的批准、过期租约转 unknown、发提醒、补写信箱", by: "状态机与租约逻辑留在原处；转移结果以 approval.card.executed 宣布；提醒改走通知器，信箱补写改走 seat.mail.arrived"}
-  - {id: L16, class: K4, disposition: announced, step: "3", what: "questions sweep：每 15 秒过期问题、补写信箱", by: "过期转移留在原处，以 question.answered（结果=过期）宣布"}
+  - {id: L15, class: K4, disposition: announced, step: "3", what: "approvals 循环：每 15 秒重试被瞬时拒绝的批准、过期租约转 unknown、发提醒、补写信箱", by: "状态机与租约逻辑留在原处；转移结果以 approval.card.executed 宣布；提醒改走通知器，信箱补写改走 seat.mail.arrived", cut: {at: "2026-11-17", evidence: ["topic:approval.card.executed"]}}
+  - {id: L16, class: K4, disposition: announced, step: "3", what: "questions sweep：每 15 秒过期问题、补写信箱", by: "过期转移留在原处，以 question.answered（结果=过期）宣布", cut: {at: "2026-11-18", evidence: ["topic:owner.question.answered"]}}
   - {id: L17, class: K7, disposition: replaced, step: "3", what: "release-policy 到期提醒：每小时一次推手机", by: "通知器订阅 release.policy.expiring（发一次并记已发）"}
   - {id: L18, class: K6, disposition: replaced, step: "3", what: "agent-thread watcher：每 30 秒扫线程/主机心跳，沉默则推手机", by: "席位记录里的「判死由一处做」+seat.liveness.changed+通知器"}
   - {id: L19, class: K12, disposition: replaced, step: "3", what: "agentthreads recorder：每 10 秒把线程心跳缓冲合并落盘", by: "席位记录（席位自己写，带版本）"}
@@ -80,9 +80,9 @@ channels:
   - {id: N21, class: K2, disposition: replaced, step: "2", what: "Kick：L02 → L09 的进程内提示", by: "门·集群的 watch 事件（进程内提示不再需要）"}
   - {id: N22, class: K2, disposition: deleted, step: "any", what: "PG pg_notify 触发器+agentrt.outbox（设计过，无写入者无读者）", by: "死路；新中继不要复用（设计里的 outbox 被「账」顶掉，结果等同）", retired: {at: "2026-11-17", change: Id818b64d36e851fb3e31d91e06f0dd08ae027a12, absent_text: ['FROM agentrt.outbox)', 'FROM agentrt.outbox`']}}
   - {id: W01, class: K3, disposition: replaced, step: "3", what: "wait_for_messages：客户端循环套服务端长轮询（服务端每秒读 PG）", by: "入户口子④（长轮询工具，背后是 NATS 拉取消费者）", retired: {at: "2026-11-18", change: Id491a910f8fac5d972d05cd42c6ec8effda9d128, absent_text: ["poll = time.Second"]}, cut: {at: "2026-11-18", evidence: ["reader:inbox-waiters"]}}
-  - {id: W02, class: K3, disposition: replaced, step: "3", what: "wait_for_request：每 2 秒读审批状态", by: "入户口子④/③订阅并等"}
-  - {id: W03, class: K3, disposition: replaced, step: "3", what: "wait_for_answer：每 2 秒读问题状态", by: "入户口子④订阅并等"}
-  - {id: W04, class: K3, disposition: replaced, step: "3", what: "wait_for_pipeline_run：每 10 秒读流水线（每次服务端一次 Tekton 列表）", by: "入户口子④订阅并等 ci.run.finished"}
+  - {id: W02, class: K3, disposition: replaced, step: "3", what: "wait_for_request：每 2 秒读审批状态", by: "入户口子④/③订阅并等", cut: {at: "2026-11-18", evidence: ["reader:mcp-wait"]}, retired: {at: "2026-11-18", change: I45675cba9f3c8c9adb5db12d203c3cd601a03321, outside: "mcp/platform/src: busWait.ts and its test; the tools hold a bus long poll between reads"}}
+  - {id: W03, class: K3, disposition: replaced, step: "3", what: "wait_for_answer：每 2 秒读问题状态", by: "入户口子④订阅并等", cut: {at: "2026-11-18", evidence: ["reader:mcp-wait"]}, retired: {at: "2026-11-18", change: I45675cba9f3c8c9adb5db12d203c3cd601a03321, outside: "mcp/platform/src: busWait.ts and its test; the tools hold a bus long poll between reads"}}
+  - {id: W04, class: K3, disposition: replaced, step: "3", what: "wait_for_pipeline_run：每 10 秒读流水线（每次服务端一次 Tekton 列表）", by: "入户口子④订阅并等 ci.run.finished", cut: {at: "2026-11-18", evidence: ["reader:mcp-wait"]}, retired: {at: "2026-11-18", change: I45675cba9f3c8c9adb5db12d203c3cd601a03321, outside: "mcp/platform/src: busWait.ts and its test; the tools hold a bus long poll between reads"}}
   - {id: W05, class: K3, disposition: merged, step: "3", what: "doorbell 命令行：后台长轮询，退出叫醒闲着的桌面会话", by: "留下并改造成「等 seat.mail.arrived」的叫醒方式（推断：材料里它是唯一验证过能叫醒空闲桌面会话的办法；设计没说怎么叫醒，见第 4 节）"}
   - {id: R01, class: K1, disposition: merged, step: "4", what: "读口组：平台/环境活着吗（每次请求实时探测，无缓存）", by: "留下并改造成带版本的读口；R12 并到它；探测改缓存+env.health.changed"}
   - {id: R02, class: K1, disposition: merged, step: "2", what: "读口组：流水线、发布（实时读 Tekton/ConfigMap/PG）", by: "留下并改造：14 处列流水线运行都并到它，数据来自门·集群的缓存", cut: {at: "2026-11-17", evidence: ["reader:pipeline-runs-page", "reader:supply-chain-page", "reader:release-context"]}}
@@ -159,7 +159,7 @@ channels:
   - {id: X-B13, class: K8, disposition: kept, step: "none", what: "git 提交血缘尾注：Claude-Session、Claude-Transcript、Change-Id、Work", by: "原因：永久血缘在 git 里，对账兜底；若席位号要进尾注则需改 hook（见第 4 节）"}
   - {id: X-B14, class: K1, disposition: kept, step: "none", what: "MCP 平台桥：8 个进程同一份程序，只靠 MCP_BRIDGE_FOCUS 区分", by: "原因：Agent 的工具载体，新的等待工具加在里面；令牌换席位身份由那一块覆盖"}
   - {id: X-B15, class: K1, disposition: kept, step: "none", what: "MCP trade-api：只读 Trade 健康", by: "原因：Trade 租户的只读口，租户边界"}
-  - {id: X-B16, class: K3, disposition: replaced, step: "3", what: "MCP 长轮询工具 wait_for_*（W01–W04 的 MCP 面）", by: "入户口子④的一个通用「等某主题」工具"}
+  - {id: X-B16, class: K3, disposition: replaced, step: "3", what: "MCP 长轮询工具 wait_for_*（W01–W04 的 MCP 面）", by: "入户口子④的一个通用「等某主题」工具", cut: {at: "2026-11-18", evidence: ["reader:mcp-wait"]}, retired: {at: "2026-11-18", change: I45675cba9f3c8c9adb5db12d203c3cd601a03321, outside: "mcp/platform/src: busWait.ts and its test; the tools hold a bus long poll between reads"}}
   - {id: X-B17, class: K1, disposition: announced, step: "5", what: "bdev 本地服务事件日志（bdev events、get_dev_session_logs）", by: "文件留在原处（死因追查要的原始记录）；变化以 dev.session.changed 宣布（env=本机，本机怎么接总线设计没说）"}
   - {id: X-B18, class: K1, disposition: kept, step: "none", what: "Mac mini 操作面 :8783（launchd 状态、relay 宿主）", by: "原因：独立报警路的宿主，也是单点，待 Owner 决定 3"}
   - {id: X-B19, class: K5, disposition: kept, step: "4", what: "release.sh 整体：窗口、策略、冻结、镜像同步、CI 等待、审批轮询、kubectl create", by: "原因：发命令类走动作与卡，不进总线；它里面的等待换成③（见 X-A5、X-A14、X-A15），拷贝的判定换成调用"}

@@ -1,5 +1,6 @@
 import { withApproveHint } from './approveHint.js'
 import { platformGet, platformSend } from './platformClient.js'
+import { BUS_RECHECK_MS, busPause } from './busWait.js'
 import { pollRequest } from './pollRequest.js'
 import { filterRequests, type RequestFilter } from './readFilters.js'
 
@@ -51,15 +52,25 @@ export async function listRequests(status: ListStatus = 'pending', filter: Reque
 
 export async function waitForRequest(id: string, timeoutSeconds = 120): Promise<unknown> {
   const capped = Math.min(Math.max(timeoutSeconds, 1), 600)
+  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+  // The card's number is known after the first read; until then any card's event wakes this wait.
+  let card: string | undefined
   return pollRequest({
     id,
     timeoutMs: capped * 1000,
-    intervalMs: 2000,
+    intervalMs: BUS_RECHECK_MS,
     now: () => Date.now(),
-    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    sleep: busPause({
+      types: 'approval.card.decided,approval.card.executed', match: () => card, fallbackMs: 2000,
+      get: platformGet, now: () => Date.now(), sleep,
+    }),
     get: async (rid) => {
       const body = await getRequest(rid)
-      if (body != null && typeof body === 'object') return body as { status?: string }
+      if (body != null && typeof body === 'object') {
+        const n = (body as { number?: unknown }).number
+        if (typeof n === 'number') card = `#${n}`
+        return body as { status?: string }
+      }
       return { id: rid }
     },
   })

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/ownerq"
+	"log/slog"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -418,4 +420,36 @@ func questionObservation(q questions.Question, now time.Time) (seenfacts.Questio
 		return seenfacts.Question{}, false
 	}
 	return questioncards.Fact(q)
+}
+
+// announceQuestionsOnBus hands the questions' transitions to the bus.
+func (s *Server) announceQuestionsOnBus() {
+	if s.questionRuntime != nil && s.questionRuntime.svc != nil {
+		s.questionRuntime.svc.Announce = s.announceQuestions
+	}
+}
+
+// announceQuestions writes the Owner's questions' transitions to the bus
+// (bus/ownerq), in the background, as announceCards does for the cards.
+func (s *Server) announceQuestions(ts []questions.Transition) {
+	db := s.bus.db()
+	if db == nil {
+		return
+	}
+	list := make([]ownerq.Question, 0, len(ts))
+	for _, t := range ts {
+		if q := (ownerq.Question{Type: ownerq.TypeOf(t.AuditAction), ID: t.ID, Status: t.Status}); ownerq.Valid(q) {
+			list = append(list, q)
+		}
+	}
+	if len(list) == 0 {
+		return
+	}
+	safego.Go("bus.questions", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := ownerq.Announce(ctx, db, list); err != nil {
+			slog.Warn("bus: questions not announced", "error", err, "count", len(list))
+		}
+	})
 }

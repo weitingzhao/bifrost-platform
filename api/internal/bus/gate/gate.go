@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
 	"net/http"
 	"regexp"
 	"slices"
@@ -320,6 +321,9 @@ func (g *Gate) HandleEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g.seen.mark("gate:events:"+q.client, time.Now())
+	if q.client == WaitToolsClient {
+		readerseen.Saw(WaitToolsClient)
+	}
 	if !q.replay {
 		g.receipt(events, "events", q.client)
 	}
@@ -339,6 +343,10 @@ func (g *Gate) HandleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, out)
 }
+
+// WaitToolsClient is the MCP wait tools' name at the gate (mcp/platform
+// busWait.ts): each of their long polls is their run evidence on this road.
+const WaitToolsClient = "mcp-wait"
 
 // HandleStream is GET /api/v1/bus/stream?types=&match=&after=&since=&receipts=&client=, the
 // same events as Server-Sent Events: each event's id: is its cursor, so a
