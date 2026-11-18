@@ -44,10 +44,14 @@ func PlanViewPage(ctx context.Context, db eventlog.DB, root, cursor string) (map
 	}
 	adoption := snap.Views[root]
 	graph, items, warnings := planview.ProjectSnapshotNodes(nodes, snap.Docs[root], snap.Warnings[root], adoption.Nodes)
-	ext, err := snapshotExternal(ctx, tx, root, now)
+	// One read of the work's records answers the work shown here, the coverage
+	// count and Recent changes below.
+	recentAsked := parseRecentCursor(root, cursor, now)
+	activity, err := externalRootActivity(ctx, tx, root, now, recentAsked.workPage())
 	if err != nil {
 		return nil, err
 	}
+	ext := activity.Work
 	candidates, err := planEvidenceCandidates(ctx, tx, snap, root, ext)
 	if err != nil {
 		return nil, err
@@ -65,10 +69,7 @@ func PlanViewPage(ctx context.Context, db eventlog.DB, root, cursor string) (map
 	if err != nil {
 		return nil, err
 	}
-	registrants, err := externalRegistrants(ctx, tx, root)
-	if err != nil {
-		return nil, err
-	}
+	registrants := activity.Registrants
 	if registrants == nil {
 		registrants = []string{} // <> ALL(NULL) would hide every thread
 	}
@@ -81,7 +82,7 @@ func PlanViewPage(ctx context.Context, db eventlog.DB, root, cursor string) (map
 	if err != nil {
 		return nil, err
 	}
-	recent, nextRecent, recentAsOf, err := planViewRecent(ctx, tx, root, cursor, now)
+	recent, nextRecent, recentAsOf, err := planViewRecent(ctx, tx, root, recentAsked, activity)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +107,3 @@ func databaseFreshness(readAt time.Time) string {
 
 // Adapt the persisted view to the domain projection without changing snapshot reads.
 func itemIndex(d *planview.Document, node string) int { return planview.ItemIndex(d, node) }
-
-func snapshotExternal(ctx context.Context, tx pgx.Tx, root string, now time.Time) ([]map[string]any, error) {
-	return externalWorkSnapshot(ctx, tx, root, now)
-}

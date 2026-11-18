@@ -67,8 +67,13 @@ func (d *collectorWorkViewDB) QueryRow(ctx context.Context, q string, args ...an
 }
 
 func (d *collectorWorkViewDB) Query(ctx context.Context, q string, args ...any) (pgx.Rows, error) {
-	if strings.HasPrefix(q, "SELECT body,at FROM") {
-		return &signoffViewRows{data: d.notes}, nil
+	if strings.HasPrefix(q, "WITH seen AS MATERIALIZED") {
+		rows := &signoffViewRows{}
+		for i, n := range d.notes {
+			at, order := n[1].(time.Time), int64(i+1)
+			rows.data = append(rows.data, []any{(*string)(nil), (*int64)(nil), (*string)(nil), json.RawMessage(nil), (*int64)(nil), n[0], &at, &order})
+		}
+		return rows, nil
 	}
 	if strings.HasPrefix(q, "SELECT a.attempt_id") {
 		return &signoffViewRows{data: d.live}, nil

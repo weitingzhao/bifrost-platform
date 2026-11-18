@@ -19,31 +19,6 @@ const RecentLimit = 21
 // through the plan's port and merged by MergeRecentStreams and MergeRecent.
 const recentFrom = `FROM agentrt.event WHERE (event_stream_id=$1 OR (body_json->'plan_observation'->>'root'=$2 AND body_json->'plan_observation'->>'changed'='true'))`
 
-// RecentStreams captures the committed sequence of each stream the plan's own
-// part of Recent changes reads, within tx.
-func RecentStreams(ctx context.Context, tx pgx.Tx, stream, root string) (map[string]int64, error) {
-	bounds := map[string]int64{}
-	rows, err := tx.Query(ctx, `SELECT event_stream_id,max(seq) `+recentFrom+` GROUP BY event_stream_id`, stream, root)
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		var stream string
-		var seq int64
-		if err = rows.Scan(&stream, &seq); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		bounds[stream] = seq
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return nil, err
-	}
-	return bounds, nil
-}
-
 // RecentEvent retains the exact database JSON plus its pagination position.
 type RecentEvent struct {
 	Raw json.RawMessage
@@ -51,7 +26,7 @@ type RecentEvent struct {
 }
 
 // RecentEvents reads at most RecentLimit of the plan's own events under the
-// caller's fixed stream bounds.
+// caller's fixed stream bounds: a later page, whose bounds its cursor holds.
 // The caller owns cursor validation and the public 20-event page size.
 func RecentEvents(ctx context.Context, tx pgx.Tx, stream, root string, bounds []byte, before int64) ([]RecentEvent, error) {
 	rows, err := tx.Query(ctx, `SELECT to_jsonb(e),e.event_id FROM (SELECT event_id,event_stream_id,seq,event_type,actor_id,at,body_json `+recentFrom+` AND seq<=COALESCE(($3::jsonb->>event_stream_id)::bigint,0) AND ($4::bigint=0 OR event_id<$4) ORDER BY event_id DESC LIMIT `+strconv.Itoa(RecentLimit)+`) e`, stream, root, bounds, before)
@@ -63,6 +38,38 @@ func RecentEvents(ctx context.Context, tx pgx.Tx, stream, root string, bounds []
 		err := r.Scan(&e.Raw, &e.ID)
 		return e, err
 	})
+}
+
+// RecentFirstPage is RecentStreams and the first RecentEvents in one scan. The
+// first page needs no bounds: every event read here is within the highest
+// sequence of its own stream, and the work's streams can only raise that.
+func RecentFirstPage(ctx context.Context, tx pgx.Tx, stream, root string) (map[string]int64, []RecentEvent, error) {
+	rows, err := tx.Query(ctx, `WITH own AS MATERIALIZED (SELECT event_id,event_stream_id,seq,event_type,actor_id,at,body_json `+recentFrom+`)
+SELECT event_stream_id,max(seq),NULL::jsonb,NULL::bigint FROM own GROUP BY event_stream_id
+UNION ALL SELECT NULL,NULL,to_jsonb(e),e.event_id FROM (SELECT * FROM own ORDER BY event_id DESC LIMIT `+strconv.Itoa(RecentLimit)+`) e
+ORDER BY 4 DESC NULLS LAST`, stream, root)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	bounds, events := map[string]int64{}, []RecentEvent{}
+	for rows.Next() {
+		var s *string
+		var seq, id *int64
+		var raw json.RawMessage
+		if err = rows.Scan(&s, &seq, &raw, &id); err != nil {
+			return nil, nil, err
+		}
+		if id != nil {
+			events = append(events, RecentEvent{Raw: raw, ID: *id})
+		} else if s != nil && seq != nil {
+			bounds[*s] = *seq
+		}
+	}
+	if err = rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	return bounds, events, nil
 }
 
 // MergeRecentStreams is the highest sequence of each stream in either read.

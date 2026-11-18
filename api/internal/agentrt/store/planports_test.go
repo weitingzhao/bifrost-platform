@@ -204,10 +204,11 @@ func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 		describe := func(ctx context.Context, tx pgx.Tx, id string) (any, error) {
 			return externalwork.ExternalDescriptionOf(ctx, tx, id)
 		}
-		want, err := workregistration.Snapshot(ctx, tx, root, now, describe)
+		activity, err := workregistration.ReadRootActivity(ctx, tx, root, now, workregistration.RecentPage{Limit: 21}, describe)
 		if err != nil {
 			return err
 		}
+		want := activity.Work
 		if len(want) != 1 || want[0]["external_work_id"] != id {
 			t.Errorf("workregistration: %v", want)
 		}
@@ -233,68 +234,79 @@ func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 	ports := store.PlanExternalWorkPortsForTest
 	stream := "external-work:" + id
 	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		streams, err := ports.RecentStreams(ctx, tx, root)
-		if err != nil {
-			return err
-		}
-		if want := map[string]int64{stream: 2}; !reflect.DeepEqual(streams, want) {
-			t.Errorf("the recent streams port: %v; want %v", streams, want)
+		// Origin: 2026-11-18, the plan view went from 371 to 485 ms on PROD R2 after b6c6abc2 split one read into several scans; the streams, the page and the registrants now come from one read, which must answer as the separate ports did.
+		read := func(root string, page planstore.RecentWorkPage) planstore.RootActivity {
+			t.Helper()
+			got, err := ports.RootActivity(ctx, tx, root, now, page)
+			ok(t, err)
+			lineage, err := workregistration.ReadRootActivity(ctx, tx, root, now, workregistration.RecentPage(page), func(ctx context.Context, tx pgx.Tx, id string) (any, error) {
+				return externalwork.ExternalDescriptionOf(ctx, tx, id)
+			})
+			ok(t, err)
+			if !reflect.DeepEqual(got.Work, lineage.Work) || !reflect.DeepEqual(got.Streams, lineage.Streams) || !reflect.DeepEqual(got.Registrants, lineage.Registrants) || len(got.Recent) != len(lineage.Recent) {
+				t.Errorf("the activity port: %v; the lineage: %v", got, lineage)
+			}
+			for i, e := range got.Recent {
+				if i < len(lineage.Recent) && (string(e.Raw) != string(lineage.Recent[i].Raw) || e.ID != lineage.Recent[i].ID) {
+					t.Errorf("the activity port: %s; the lineage: %v", e.Raw, lineage.Recent)
+				}
+			}
+			return got
 		}
 		bounds := []byte(`{"` + stream + `":2}`)
-		listed := func(before, after int64, limit int) []int64 {
+		listed := func(before int64, limit int) []int64 {
 			t.Helper()
-			events, err := ports.RecentEvents(ctx, tx, root, bounds, before, after, limit)
-			ok(t, err)
-			records, err := workregistration.RecentRecords(ctx, tx, root, bounds, before, after, limit)
-			ok(t, err)
 			out := []int64{}
-			for i, e := range events {
-				if i >= len(records) || string(e.Raw) != string(records[i].Raw) || e.ID != records[i].ID {
-					t.Errorf("the recent events port: %s; the lineage: %v", e.Raw, records)
-				}
+			for _, e := range read(root, planstore.RecentWorkPage{Bounds: bounds, Before: before, Limit: limit}).Recent {
 				out = append(out, e.ID)
-			}
-			if len(events) != len(records) {
-				t.Errorf("the recent events port: %d events; the lineage: %d", len(events), len(records))
 			}
 			return out
 		}
-		all := listed(0, 0, 21)
+		first := read(root, planstore.RecentWorkPage{Limit: 21})
+		if want := map[string]int64{stream: 2}; !reflect.DeepEqual(first.Streams, want) {
+			t.Errorf("the recent streams: %v; want %v", first.Streams, want)
+		}
+		if !reflect.DeepEqual(first.Registrants, []string{who.Actor}) {
+			t.Errorf("the registrants: %v", first.Registrants)
+		}
+		all := listed(0, 21)
 		if len(all) != 2 || all[0] <= all[1] {
 			t.Fatalf("the work's listed events, newest first: %v", all)
 		}
+		// The first page, with no bounds, is the page bounded by its own streams.
+		if len(first.Recent) != 2 || first.Recent[0].ID != all[0] || first.Recent[1].ID != all[1] {
+			t.Errorf("the first page: %v; want %v", first.Recent, all)
+		}
 		for _, c := range []struct {
-			before, after int64
-			limit         int
-			want          []int64
-		}{{all[0], 0, 21, all[1:]}, {0, all[1], 21, all[:1]}, {0, 0, 1, all[:1]}} {
-			if got := listed(c.before, c.after, c.limit); !reflect.DeepEqual(got, c.want) {
-				t.Errorf("before %d after %d limit %d: %v; want %v", c.before, c.after, c.limit, got, c.want)
+			before int64
+			limit  int
+			want   []int64
+		}{{all[0], 21, all[1:]}, {0, 1, all[:1]}, {0, 0, []int64{}}} {
+			if got := listed(c.before, c.limit); !reflect.DeepEqual(got, c.want) {
+				t.Errorf("before %d limit %d: %v; want %v", c.before, c.limit, got, c.want)
 			}
 		}
-		// Only what the bounds hold, and only this root's.
+		// Only what the bounds hold, and only this root's; the streams and the
+		// registrants do not depend on the page.
 		for _, c := range []struct {
 			root, bounds string
 			want         int
 		}{{root, `{"` + stream + `":1}`, 1}, {root, `{}`, 0}, {"R-none", string(bounds), 0}} {
-			events, err := ports.RecentEvents(ctx, tx, c.root, []byte(c.bounds), 0, 0, 21)
-			if err != nil || len(events) != c.want || (c.want == 1 && events[0].ID != all[1]) {
-				t.Errorf("root %s within %s: %v %v; want %d of them", c.root, c.bounds, events, err, c.want)
+			got := read(c.root, planstore.RecentWorkPage{Bounds: []byte(c.bounds), Limit: 21})
+			if len(got.Recent) != c.want || (c.want == 1 && got.Recent[0].ID != all[1]) {
+				t.Errorf("root %s within %s: %v; want %d of them", c.root, c.bounds, got.Recent, c.want)
+			}
+			if c.root == root && (!reflect.DeepEqual(got.Streams, first.Streams) || !reflect.DeepEqual(got.Registrants, first.Registrants)) {
+				t.Errorf("within %s: %v", c.bounds, got)
 			}
 		}
-		if streams, err := ports.RecentStreams(ctx, tx, "R-none"); err != nil || len(streams) != 0 {
-			t.Errorf("the recent streams of a plan with no work: %v %v", streams, err)
+		if none := read("R-none", planstore.RecentWorkPage{Limit: 21}); len(none.Streams) != 0 || len(none.Recent) != 0 || none.Registrants == nil || len(none.Registrants) != 0 {
+			t.Errorf("the activity of a plan with no work: %v", none)
 		}
 		for r, want := range map[string]bool{root: true, "R-none": false} {
 			if has, err := ports.HasWork(ctx, tx, r); err != nil || has != want {
 				t.Errorf("has work under %s: %v %v; want %v", r, has, err, want)
 			}
-		}
-		if names, err := ports.Registrants(ctx, tx, root); err != nil || !reflect.DeepEqual(names, []string{who.Actor}) {
-			t.Errorf("the registrants: %v %v", names, err)
-		}
-		if names, err := ports.Registrants(ctx, tx, "R-none"); err != nil || len(names) != 0 {
-			t.Errorf("the registrants of a plan with no work: %v %v", names, err)
 		}
 		return nil
 	}))

@@ -180,8 +180,9 @@
 //
 // ExternalWorkPorts is also how the domain reads the records of registered
 // work, in the caller's transaction: the plan view's work, sign-off candidates,
-// Recent changes and coverage, and whether a plan has any work. The domain
-// does not name those records in SQL of its own.
+// Recent changes and coverage, together in one scan of the ledger
+// (RootActivity), and whether a plan has any work (HasWork). The domain does
+// not name those records in SQL of its own.
 //
 // The event types and bodies named here are the plan's own (vocab.go); the
 // tables are agentrt.plan_node and agentrt.plan_node_binding.

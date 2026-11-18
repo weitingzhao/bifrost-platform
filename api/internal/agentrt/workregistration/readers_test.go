@@ -28,6 +28,33 @@ func (r *noteRows) Scan(dest ...any) error {
 func (r *noteRows) Close()     { r.closed = true }
 func (r *noteRows) Err() error { return nil }
 
+// activityRows gives notes as the work rows of ReadRootActivity.
+type activityRows struct{ *noteRows }
+
+func (r activityRows) Scan(dest ...any) error {
+	*dest[5].(*[]byte) = []byte(r.raw[r.next])
+	at := r.at
+	*dest[6].(**time.Time) = &at
+	order := int64(r.next + 1)
+	*dest[7].(**int64) = &order
+	r.next++
+	return nil
+}
+
+type activityTx struct {
+	pgx.Tx
+	rows *noteRows
+}
+
+func (t *activityTx) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	return activityRows{t.rows}, nil
+}
+
+func readWork(tx pgx.Tx, now time.Time, description func(context.Context, pgx.Tx, string) (any, error)) ([]map[string]any, error) {
+	a, err := ReadRootActivity(context.Background(), tx, "root", now, RecentPage{Limit: 21}, description)
+	return a.Work, err
+}
+
 type noteTx struct {
 	pgx.Tx
 	rows *noteRows
@@ -44,8 +71,8 @@ func TestSnapshotBoundaryAndDescription(t *testing.T) {
 		`{"external_work_id":"one","artifact_id":"a","state":"Running","heartbeat_at":"2026-11-15T19:59:00.123456789Z","started_at":"2026-11-15T19:58:00.123456789Z"}`,
 		`{"external_work_id":"two","artifact_id":"a","state":"Registered","heartbeat_at":"2026-11-15T19:59:00Z","source_started_at":"old"}`,
 	}}
-	tx := &noteTx{rows: rows}
-	got, err := Snapshot(context.Background(), tx, "root", now, func(_ context.Context, actual pgx.Tx, id string) (any, error) {
+	tx := &activityTx{rows: rows}
+	got, err := readWork(tx, now, func(_ context.Context, actual pgx.Tx, id string) (any, error) {
 		if actual != tx || !rows.closed || id != "a" {
 			t.Fatalf("description lost snapshot or open rows: %v %v %s", actual == tx, rows.closed, id)
 		}
@@ -59,7 +86,7 @@ func TestSnapshotBoundaryAndDescription(t *testing.T) {
 	}
 	failure := errors.New("description rejected")
 	tx.rows = &noteRows{raw: []string{`{"artifact_id":"bad"}`}}
-	_, err = Snapshot(context.Background(), tx, "root", now, func(context.Context, pgx.Tx, string) (any, error) { return nil, failure })
+	_, err = readWork(tx, now, func(context.Context, pgx.Tx, string) (any, error) { return nil, failure })
 	if !errors.Is(err, failure) {
 		t.Fatalf("lost rejection: %v", err)
 	}
@@ -82,8 +109,7 @@ func TestWorkSpansFallbackAndWholeRecord(t *testing.T) {
 	if _, err = WorkSpans(context.Background(), tx, from, to); err == nil {
 		t.Fatal("malformed non-projected field accepted")
 	}
-	tx.rows = &noteRows{raw: []string{`{"commit_shas":7}`}}
-	if _, err = Snapshot(context.Background(), tx, "root", to, nil); err == nil {
+	if _, err = readWork(&activityTx{rows: &noteRows{raw: []string{`{"commit_shas":7}`}}}, to, nil); err == nil {
 		t.Fatal("snapshot accepted malformed whole record")
 	}
 }

@@ -72,12 +72,10 @@ func TestUnboundLineagePortsRefuse(t *testing.T) {
 	for name, p := range map[string]*ExternalWorkPorts{"nothing bound": nil, "an empty binding": {}} {
 		refused(t, name+": the note check", checkExternalNoteVia(p, map[string]any{}))
 		refused(t, name+": the description check", checkExternalDescriptionVia(p, []byte(`{}`)))
-		work, err := externalWorkSnapshotVia(ctx, p, nil, unboundRoot, time.Now())
-		refused(t, name+": the snapshot", err)
 		working, finished, err := externalActivityBucketsVia(p, nil, time.Now(), func(string) any { return nil })
 		refused(t, name+": the buckets", err)
-		if work != nil || working != nil || finished != nil {
-			t.Fatalf("%s: an answer with the refusal: %v %v %v", name, work, working, finished)
+		if working != nil || finished != nil {
+			t.Fatalf("%s: an answer with the refusal: %v %v", name, working, finished)
 		}
 		prefix, err := collectorActorPrefixVia(p)
 		refused(t, name+": the collector's actor prefix", err)
@@ -85,16 +83,12 @@ func TestUnboundLineagePortsRefuse(t *testing.T) {
 			t.Fatalf("%s: a prefix with the refusal: %q", name, prefix)
 		}
 		// Origin: 2026-11-18, TD-582 (inventory §2.3): the plan's reads of the work's records moved behind these ports; unbound, Recent changes must not read as a plan without work, the coverage count must not call every thread unregistered, and a plan with work must not lose its dev boundary.
-		streams, err := externalRecentStreamsVia(ctx, p, nil, unboundRoot)
-		refused(t, name+": the recent streams", err)
-		events, err := externalRecentEventsVia(ctx, p, nil, unboundRoot, []byte(`{}`), 0, 0, 21)
-		refused(t, name+": the recent events", err)
+		activity, err := externalRootActivityVia(ctx, p, nil, unboundRoot, time.Now(), RecentWorkPage{Bounds: []byte(`{}`), Limit: 21})
+		refused(t, name+": the root's activity", err)
 		has, err := externalHasWorkVia(ctx, p, nil, unboundRoot)
 		refused(t, name+": whether the plan has work", err)
-		registrants, err := externalRegistrantsVia(ctx, p, nil, unboundRoot)
-		refused(t, name+": the registrants", err)
-		if streams != nil || events != nil || has || registrants != nil {
-			t.Fatalf("%s: an answer with the refusal: %v %v %v %v", name, streams, events, has, registrants)
+		if activity.Work != nil || activity.Streams != nil || activity.Recent != nil || activity.Registrants != nil || has {
+			t.Fatalf("%s: an answer with the refusal: %v %v", name, activity, has)
 		}
 	}
 	for name, p := range map[string]*RecorderImportPorts{"nothing bound": nil, "an empty binding": {}} {
@@ -104,43 +98,34 @@ func TestUnboundLineagePortsRefuse(t *testing.T) {
 	bound := &ExternalWorkPorts{
 		CheckNote:        func(any) error { return errors.New("note") },
 		CheckDescription: func([]byte) error { return errors.New("description") },
-		Snapshot: func(context.Context, pgx.Tx, string, time.Time) ([]map[string]any, error) {
-			return []map[string]any{{"external_work_id": "ew"}}, nil
-		},
 		ActivityBuckets: func(work []map[string]any, _ time.Time, _ func(string) any) ([]any, []any) {
 			return []any{len(work)}, []any{"done"}
 		},
-		RecentStreams: func(_ context.Context, _ pgx.Tx, root string) (map[string]int64, error) {
-			return map[string]int64{root: 4}, nil
-		},
-		RecentEvents: func(_ context.Context, _ pgx.Tx, root string, bounds []byte, before, after int64, limit int) ([]planreadings.RecentEvent, error) {
-			return []planreadings.RecentEvent{{Raw: json.RawMessage(root + string(bounds)), ID: before + after + int64(limit)}}, nil
+		RootActivity: func(_ context.Context, _ pgx.Tx, root string, _ time.Time, page RecentWorkPage) (RootActivity, error) {
+			return RootActivity{
+				Work:        []map[string]any{{"external_work_id": "ew"}},
+				Streams:     map[string]int64{root: 4},
+				Recent:      []planreadings.RecentEvent{{Raw: json.RawMessage(root + string(page.Bounds)), ID: page.Before + int64(page.Limit)}},
+				Registrants: []string{root},
+			}, nil
 		},
 		HasWork:              func(_ context.Context, _ pgx.Tx, root string) (bool, error) { return root == unboundRoot, nil },
-		Registrants:          func(_ context.Context, _ pgx.Tx, root string) ([]string, error) { return []string{root}, nil },
 		CollectorActorPrefix: "thread:c@",
 	}
-	// Origin: 2026-11-18, TD-582: the positive control of the four refusals above: bound, each port gets what the plan gave and its answer comes back.
-	if streams, err := externalRecentStreamsVia(ctx, bound, nil, unboundRoot); err != nil || !reflect.DeepEqual(streams, map[string]int64{unboundRoot: 4}) {
-		t.Fatalf("bound recent streams: %v %v", streams, err)
-	}
-	if events, err := externalRecentEventsVia(ctx, bound, nil, unboundRoot, []byte(`{}`), 1, 2, 21); err != nil || len(events) != 1 || string(events[0].Raw) != unboundRoot+`{}` || events[0].ID != 24 {
-		t.Fatalf("bound recent events: %v %v", events, err)
+	// Origin: 2026-11-18, TD-582: the positive control of the two refusals above: bound, each port gets what the plan gave and its answer comes back.
+	activity, err := externalRootActivityVia(ctx, bound, nil, unboundRoot, time.Now(), RecentWorkPage{Bounds: []byte(`{}`), Before: 3, Limit: 21})
+	if err != nil || len(activity.Work) != 1 || !reflect.DeepEqual(activity.Streams, map[string]int64{unboundRoot: 4}) || !reflect.DeepEqual(activity.Registrants, []string{unboundRoot}) ||
+		len(activity.Recent) != 1 || string(activity.Recent[0].Raw) != unboundRoot+`{}` || activity.Recent[0].ID != 24 {
+		t.Fatalf("bound activity: %v %v", activity, err)
 	}
 	if has, err := externalHasWorkVia(ctx, bound, nil, unboundRoot); err != nil || !has {
 		t.Fatalf("bound has work: %v %v", has, err)
-	}
-	if names, err := externalRegistrantsVia(ctx, bound, nil, unboundRoot); err != nil || !reflect.DeepEqual(names, []string{unboundRoot}) {
-		t.Fatalf("bound registrants: %v %v", names, err)
 	}
 	if err := checkExternalNoteVia(bound, nil); err == nil || err.Error() != "note" {
 		t.Fatalf("a bound note check: %v", err)
 	}
 	if err := checkExternalDescriptionVia(bound, nil); err == nil || err.Error() != "description" {
 		t.Fatalf("a bound description check: %v", err)
-	}
-	if work, err := externalWorkSnapshotVia(ctx, bound, nil, unboundRoot, time.Now()); err != nil || len(work) != 1 {
-		t.Fatalf("a bound snapshot: %v %v", work, err)
 	}
 	if prefix, err := collectorActorPrefixVia(bound); err != nil || prefix != "thread:c@" {
 		t.Fatalf("a bound collector's actor prefix: %q %v", prefix, err)

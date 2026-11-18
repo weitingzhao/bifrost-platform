@@ -39,26 +39,21 @@ var planExternalWorkPorts = planstore.ExternalWorkPorts{
 		_, err := externalwork.ParseExternalDescription(raw)
 		return err
 	},
-	Snapshot: func(ctx context.Context, tx pgx.Tx, root string, now time.Time) ([]map[string]any, error) {
-		return workregistration.Snapshot(ctx, tx, root, now, func(ctx context.Context, tx pgx.Tx, id string) (any, error) {
+	ActivityBuckets: workregistration.ActivityBuckets,
+	RootActivity: func(ctx context.Context, tx pgx.Tx, root string, now time.Time, page planstore.RecentWorkPage) (planstore.RootActivity, error) {
+		a, err := workregistration.ReadRootActivity(ctx, tx, root, now, workregistration.RecentPage(page), func(ctx context.Context, tx pgx.Tx, id string) (any, error) {
 			return externalwork.ExternalDescriptionOf(ctx, tx, id)
 		})
-	},
-	ActivityBuckets: workregistration.ActivityBuckets,
-	RecentStreams:   workregistration.RecentStreams,
-	RecentEvents: func(ctx context.Context, tx pgx.Tx, root string, bounds []byte, before, after int64, limit int) ([]planreadings.RecentEvent, error) {
-		records, err := workregistration.RecentRecords(ctx, tx, root, bounds, before, after, limit)
 		if err != nil {
-			return nil, err
+			return planstore.RootActivity{}, err
 		}
-		out := make([]planreadings.RecentEvent, 0, len(records))
-		for _, r := range records {
-			out = append(out, planreadings.RecentEvent(r))
+		recent := make([]planreadings.RecentEvent, 0, len(a.Recent))
+		for _, r := range a.Recent {
+			recent = append(recent, planreadings.RecentEvent(r))
 		}
-		return out, nil
+		return planstore.RootActivity{Work: a.Work, Streams: a.Streams, Recent: recent, Registrants: a.Registrants}, nil
 	},
 	HasWork:              workregistration.HasWork,
-	Registrants:          workregistration.Registrants,
 	CollectorActorPrefix: actuation.CollectorActorPrefix,
 }
 

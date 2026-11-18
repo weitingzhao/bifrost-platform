@@ -23,15 +23,21 @@ func (tx *recentTx) Query(_ context.Context, _ string, args ...any) (pgx.Rows, e
 	return tx.rows, tx.err
 }
 
+// Origin: 2026-11-18, the plan view's slowdown after b6c6abc2: the first page and its stream bounds became one read (RecentFirstPage), whose rows of both kinds must reach their places with the raw JSON untouched.
 func TestRecentStreamBoundsAndRawEvents(t *testing.T) {
 	t.Parallel()
-	rows := &paceRows{data: [][]any{{"plan:R2", int64(8)}, {"external:one", int64(4)}}}
+	raw := json.RawMessage(`{"event_id":73,"body_json":{"unchanged":[1,null,"text"]}}`)
+	stream := func(s string, seq int64) []any { return []any{&s, &seq, json.RawMessage(nil), (*int64)(nil)} }
+	id := int64(73)
+	rows := &paceRows{data: [][]any{{(*string)(nil), (*int64)(nil), raw, &id}, stream("plan:R2", 8), stream("external:one", 4)}}
 	tx := &recentTx{rows: rows}
-	bounds, err := RecentStreams(context.Background(), tx, "plan:R2", "R2")
+	bounds, first, err := RecentFirstPage(context.Background(), tx, "plan:R2", "R2")
 	if err != nil || !rows.closed || !reflect.DeepEqual(bounds, map[string]int64{"plan:R2": 8, "external:one": 4}) || !reflect.DeepEqual(tx.args, []any{"plan:R2", "R2"}) {
 		t.Fatalf("stream bounds: %v %v %v", bounds, err, tx.args)
 	}
-	raw := json.RawMessage(`{"event_id":73,"body_json":{"unchanged":[1,null,"text"]}}`)
+	if len(first) != 1 || first[0].ID != 73 || string(first[0].Raw) != string(raw) {
+		t.Fatalf("the first page: %v", first)
+	}
 	rows = &paceRows{data: [][]any{{raw, int64(73)}}}
 	tx.rows = rows
 	encoded := []byte(`{"external:one":4,"plan:R2":8}`)
@@ -40,9 +46,9 @@ func TestRecentStreamBoundsAndRawEvents(t *testing.T) {
 		t.Fatalf("events: %v %v %v", events, err, tx.args)
 	}
 	tx.rows = &paceRows{}
-	empty, err := RecentStreams(context.Background(), tx, "plan:empty", "empty")
-	if err != nil || empty == nil || len(empty) != 0 {
-		t.Fatalf("empty bounds: %v %v", empty, err)
+	empty, none, err := RecentFirstPage(context.Background(), tx, "plan:empty", "empty")
+	if err != nil || empty == nil || len(empty) != 0 || none == nil || len(none) != 0 {
+		t.Fatalf("empty bounds: %v %v %v", empty, none, err)
 	}
 }
 
@@ -56,7 +62,8 @@ func TestRecentReadErrorsCloseRows(t *testing.T) {
 				if events {
 					rows.data = [][]any{{json.RawMessage(`{}`), int64(1)}}
 				} else {
-					rows.data = [][]any{{"plan:R2", int64(1)}}
+					s, seq := "plan:R2", int64(1)
+					rows.data = [][]any{{&s, &seq, json.RawMessage(nil), (*int64)(nil)}}
 				}
 				tx := &recentTx{rows: rows}
 				switch stage {
@@ -71,7 +78,7 @@ func TestRecentReadErrorsCloseRows(t *testing.T) {
 				if events {
 					_, err = RecentEvents(context.Background(), tx, "plan:R2", "R2", []byte(`{}`), 0)
 				} else {
-					_, err = RecentStreams(context.Background(), tx, "plan:R2", "R2")
+					_, _, err = RecentFirstPage(context.Background(), tx, "plan:R2", "R2")
 				}
 				if !errors.Is(err, failure) {
 					t.Fatalf("lost read error: %v", err)

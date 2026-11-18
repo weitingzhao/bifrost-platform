@@ -8,34 +8,23 @@ import (
 	"time"
 )
 
-// Snapshot reads registered work inside the caller's existing snapshot.
-// Description validation remains with the caller; errors are returned unchanged.
-func Snapshot(ctx context.Context, tx pgx.Tx, root string, now time.Time, description func(context.Context, pgx.Tx, string) (any, error)) ([]map[string]any, error) {
-	rows, err := tx.Query(ctx, `SELECT body,at FROM (SELECT DISTINCT ON(event_stream_id) body_json->'external_work' AS body,at FROM agentrt.event WHERE event_type IN ('external_work_noted','note') AND body_json ? 'external_work' ORDER BY event_stream_id,seq DESC) x WHERE body->>'root'=$1 ORDER BY body->>'external_work_id'`, root)
-	if err != nil {
-		return nil, err
-	}
-	type record struct {
-		n  Note
-		at time.Time
-	}
-	rs, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (record, error) {
-		var x record
-		var raw []byte
-		err := r.Scan(&raw, &x.at)
-		if err == nil {
-			err = json.Unmarshal(raw, &x.n)
-		}
-		return x, err
-	})
-	if err != nil {
-		return nil, err
-	}
+// workRecord is the latest record of one stream of a root's work, as
+// ReadRootActivity found it.
+type workRecord struct {
+	n  Note
+	at time.Time
+}
+
+// projectWork makes the registered work of a root from its records, in their
+// order, inside the caller's snapshot. Description validation remains with the
+// caller; errors are returned unchanged. The caller's rows are closed by now:
+// description reads in the same transaction.
+func projectWork(ctx context.Context, tx pgx.Tx, rs []workRecord, now time.Time, description func(context.Context, pgx.Tx, string) (any, error)) ([]map[string]any, error) {
 	out := []map[string]any{}
 	for _, r := range rs {
 		raw, _ := json.Marshal(r.n)
 		var m map[string]any
-		if err = json.Unmarshal(raw, &m); err != nil {
+		if err := json.Unmarshal(raw, &m); err != nil {
 			return nil, err
 		}
 		d, err := description(ctx, tx, r.n.Artifact)

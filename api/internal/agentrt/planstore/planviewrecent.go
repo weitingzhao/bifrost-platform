@@ -19,58 +19,77 @@ type viewRecentCursor struct {
 	Before  int64            `json:"before"`
 }
 
+// recentRead is a view's request for its Recent changes, made from its cursor
+// before the work is read, because the same read of the work answers the page
+// and the coverage count. A cursor that does not hold is refused where Recent
+// changes is built, after every other part of the view has been read.
+type recentRead struct {
+	cursor viewRecentCursor
+	first  bool
+	bounds []byte
+	err    error
+}
+
+func parseRecentCursor(root, cursor string, now time.Time) recentRead {
+	r := recentRead{cursor: viewRecentCursor{Root: root, AsOf: timeText(now), Streams: map[string]int64{}}, first: cursor == ""}
+	if r.first {
+		return r
+	}
+	c := &r.cursor
+	if len(cursor) > 128*1024 {
+		r.err = eventlog.Invalid("recent cursor too large")
+		return r
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		r.err = eventlog.Invalid("invalid recent cursor")
+		return r
+	}
+	if err = strictjson.JSON(raw, c); err != nil {
+		r.err = err
+		return r
+	}
+	if c.Root != root || len(c.Streams) > 2000 || c.Before < 1 {
+		r.err = eventlog.Invalid("recent cursor belongs to another root or is invalid")
+		return r
+	}
+	if _, err = time.Parse(time.RFC3339Nano, c.AsOf); err != nil {
+		r.err = eventlog.Invalid("invalid cursor time")
+		return r
+	}
+	r.bounds, r.err = json.Marshal(c.Streams)
+	return r
+}
+
+// workPage is the page of the work's events this request needs. The merge
+// keeps the newest RecentLimit of both sides, so RecentLimit of each is enough.
+func (r recentRead) workPage() RecentWorkPage {
+	if r.err != nil {
+		return RecentWorkPage{}
+	}
+	return RecentWorkPage{Bounds: r.bounds, Before: r.cursor.Before, Limit: planreadings.RecentLimit}
+}
+
 // A continuation fixes each stream's committed sequence, not a global
 // event-id high water mark: a late commit cannot enter an older page. The
 // plan's own events and its work's are two reads of tx, one snapshot.
-func planViewRecent(ctx context.Context, tx pgx.Tx, root, cursor string, now time.Time) (json.RawMessage, string, string, error) {
-	c := viewRecentCursor{Root: root, AsOf: timeText(now), Streams: map[string]int64{}}
-	if cursor != "" {
-		if len(cursor) > 128*1024 {
-			return nil, "", "", eventlog.Invalid("recent cursor too large")
-		}
-		raw, err := base64.RawURLEncoding.DecodeString(cursor)
-		if err != nil {
-			return nil, "", "", eventlog.Invalid("invalid recent cursor")
-		}
-		if err = strictjson.JSON(raw, &c); err != nil {
+func planViewRecent(ctx context.Context, tx pgx.Tx, root string, r recentRead, work RootActivity) (json.RawMessage, string, string, error) {
+	if r.err != nil {
+		return nil, "", "", r.err
+	}
+	c := r.cursor
+	var own []planreadings.RecentEvent
+	var err error
+	if r.first {
+		var streams map[string]int64
+		if streams, own, err = planreadings.RecentFirstPage(ctx, tx, PlanStream(root), root); err != nil {
 			return nil, "", "", err
 		}
-		if c.Root != root || len(c.Streams) > 2000 || c.Before < 1 {
-			return nil, "", "", eventlog.Invalid("recent cursor belongs to another root or is invalid")
-		}
-		if _, err = time.Parse(time.RFC3339Nano, c.AsOf); err != nil {
-			return nil, "", "", eventlog.Invalid("invalid cursor time")
-		}
-	} else {
-		streams, err := planreadings.RecentStreams(ctx, tx, PlanStream(root), root)
-		if err != nil {
-			return nil, "", "", err
-		}
-		work, err := externalRecentStreams(ctx, tx, root)
-		if err != nil {
-			return nil, "", "", err
-		}
-		c.Streams = planreadings.MergeRecentStreams(streams, work)
-	}
-	bounds, err := json.Marshal(c.Streams)
-	if err != nil {
+		c.Streams = planreadings.MergeRecentStreams(streams, work.Streams)
+	} else if own, err = planreadings.RecentEvents(ctx, tx, PlanStream(root), root, r.bounds, c.Before); err != nil {
 		return nil, "", "", err
 	}
-	own, err := planreadings.RecentEvents(ctx, tx, PlanStream(root), root, bounds, c.Before)
-	if err != nil {
-		return nil, "", "", err
-	}
-	// A full page of the plan's own events bounds what the work can add: an
-	// older event of the work could not make the page.
-	var after int64
-	if len(own) == planreadings.RecentLimit {
-		after = own[len(own)-1].ID
-	}
-	work, err := externalRecentEvents(ctx, tx, root, bounds, c.Before, after, planreadings.RecentLimit)
-	if err != nil {
-		return nil, "", "", err
-	}
-	events := planreadings.MergeRecent(own, work)
+	events := planreadings.MergeRecent(own, work.Recent)
 	next := ""
 	if len(events) > 20 {
 		events = events[:20]

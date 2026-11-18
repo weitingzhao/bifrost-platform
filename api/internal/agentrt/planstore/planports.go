@@ -79,6 +79,34 @@ func cardAutoKindsVia(ctx context.Context, p *RulePorts, tx pgx.Tx) ([]string, e
 	return p.CardAutoKindsInForce(ctx, tx)
 }
 
+// RecentWorkPage says which of a root's listed events RootActivity reads:
+// within Bounds (a JSON object of stream to highest sequence, a stream it does
+// not name having none; nil: all of them, the first page), with an id below
+// Before (0: any), at most Limit (0: none).
+type RecentWorkPage struct {
+	Bounds []byte
+	Before int64
+	Limit  int
+}
+
+// RootActivity is what the plan view takes from the records of a root's work,
+// read together: one scan of the ledger answers all of it.
+type RootActivity struct {
+	// Work is the work registered under the root, each with its description.
+	// The plan view shows it and takes the sign-off candidates from it:
+	// external_work_id, plan_node_id, source_run_key, artifact_id, state and
+	// report_digest.
+	Work []map[string]any
+	// Streams gives each stream holding events of the work that Recent
+	// changes lists its highest sequence, whatever the page.
+	Streams map[string]int64
+	// Recent is the asked page of those events, newest first.
+	Recent []planreadings.RecentEvent
+	// Registrants is who registered work under the root; the coverage count
+	// does not count them.
+	Registrants []string
+}
+
 // ExternalWorkPorts is what the plan code needs of registered external work
 // (lineage): the check of its two documents where the plan code checks every
 // note and every view artifact, and the reads of a root's registered work. The
@@ -90,25 +118,14 @@ type ExternalWorkPorts struct {
 	// CheckDescription holds an artifact that says it is an external work
 	// description to being one.
 	CheckDescription func(raw []byte) error
-	// Snapshot reads the work registered under root, each with its
-	// description, inside the caller's snapshot. The plan view shows it and
-	// takes the sign-off candidates from it: external_work_id, plan_node_id,
-	// source_run_key, artifact_id, state and report_digest.
-	Snapshot func(ctx context.Context, tx pgx.Tx, root string, now time.Time) ([]map[string]any, error)
 	// ActivityBuckets marks each work with its verification and gives the
 	// ones working now and the ones finished today.
 	ActivityBuckets func(work []map[string]any, now time.Time, verification func(id string) any) (working, finished []any)
-	// RecentStreams gives each stream holding events of root's work that
-	// Recent changes lists its highest sequence.
-	RecentStreams func(ctx context.Context, tx pgx.Tx, root string) (map[string]int64, error)
-	// RecentEvents lists those events, newest first and at most limit: within
-	// bounds (a JSON object of stream to highest sequence), with an id below
-	// before (0: any) and above after.
-	RecentEvents func(ctx context.Context, tx pgx.Tx, root string, bounds []byte, before, after int64, limit int) ([]planreadings.RecentEvent, error)
+	// RootActivity reads, in one scan of the ledger, what the plan view takes
+	// from the records of root's work: see RootActivity and RecentWorkPage.
+	RootActivity func(ctx context.Context, tx pgx.Tx, root string, now time.Time, page RecentWorkPage) (RootActivity, error)
 	// HasWork says whether any work was ever recorded under root.
 	HasWork func(ctx context.Context, tx pgx.Tx, root string) (bool, error)
-	// Registrants lists who registered work under root.
-	Registrants func(ctx context.Context, tx pgx.Tx, root string) ([]string, error)
 	// CollectorActorPrefix starts a host collector's actor, a thread that is
 	// never unregistered work (the plan view's coverage count). It is the
 	// external work's word, passed in by the binding so the plan holds no
@@ -145,17 +162,6 @@ func checkExternalDescriptionVia(p *ExternalWorkPorts, raw []byte) error {
 	return p.CheckDescription(raw)
 }
 
-func externalWorkSnapshot(ctx context.Context, tx pgx.Tx, root string, now time.Time) ([]map[string]any, error) {
-	return externalWorkSnapshotVia(ctx, externalWorkPorts.Load(), tx, root, now)
-}
-
-func externalWorkSnapshotVia(ctx context.Context, p *ExternalWorkPorts, tx pgx.Tx, root string, now time.Time) ([]map[string]any, error) {
-	if p == nil || p.Snapshot == nil {
-		return nil, unbound("the read of a plan's registered external work", "BindPlanExternalWork")
-	}
-	return p.Snapshot(ctx, tx, root, now)
-}
-
 func externalActivityBuckets(work []map[string]any, now time.Time, verification func(string) any) (working, finished []any, err error) {
 	return externalActivityBucketsVia(externalWorkPorts.Load(), work, now, verification)
 }
@@ -168,26 +174,15 @@ func externalActivityBucketsVia(p *ExternalWorkPorts, work []map[string]any, now
 	return working, finished, nil
 }
 
-func externalRecentStreams(ctx context.Context, tx pgx.Tx, root string) (map[string]int64, error) {
-	return externalRecentStreamsVia(ctx, externalWorkPorts.Load(), tx, root)
+func externalRootActivity(ctx context.Context, tx pgx.Tx, root string, now time.Time, page RecentWorkPage) (RootActivity, error) {
+	return externalRootActivityVia(ctx, externalWorkPorts.Load(), tx, root, now, page)
 }
 
-func externalRecentStreamsVia(ctx context.Context, p *ExternalWorkPorts, tx pgx.Tx, root string) (map[string]int64, error) {
-	if p == nil || p.RecentStreams == nil {
-		return nil, unbound("the streams of a plan's external work", "BindPlanExternalWork")
+func externalRootActivityVia(ctx context.Context, p *ExternalWorkPorts, tx pgx.Tx, root string, now time.Time, page RecentWorkPage) (RootActivity, error) {
+	if p == nil || p.RootActivity == nil {
+		return RootActivity{}, unbound("the activity of a plan's external work", "BindPlanExternalWork")
 	}
-	return p.RecentStreams(ctx, tx, root)
-}
-
-func externalRecentEvents(ctx context.Context, tx pgx.Tx, root string, bounds []byte, before, after int64, limit int) ([]planreadings.RecentEvent, error) {
-	return externalRecentEventsVia(ctx, externalWorkPorts.Load(), tx, root, bounds, before, after, limit)
-}
-
-func externalRecentEventsVia(ctx context.Context, p *ExternalWorkPorts, tx pgx.Tx, root string, bounds []byte, before, after int64, limit int) ([]planreadings.RecentEvent, error) {
-	if p == nil || p.RecentEvents == nil {
-		return nil, unbound("the recent events of a plan's external work", "BindPlanExternalWork")
-	}
-	return p.RecentEvents(ctx, tx, root, bounds, before, after, limit)
+	return p.RootActivity(ctx, tx, root, now, page)
 }
 
 func externalHasWork(ctx context.Context, tx pgx.Tx, root string) (bool, error) {
@@ -199,17 +194,6 @@ func externalHasWorkVia(ctx context.Context, p *ExternalWorkPorts, tx pgx.Tx, ro
 		return false, unbound("whether a plan has external work", "BindPlanExternalWork")
 	}
 	return p.HasWork(ctx, tx, root)
-}
-
-func externalRegistrants(ctx context.Context, tx pgx.Tx, root string) ([]string, error) {
-	return externalRegistrantsVia(ctx, externalWorkPorts.Load(), tx, root)
-}
-
-func externalRegistrantsVia(ctx context.Context, p *ExternalWorkPorts, tx pgx.Tx, root string) ([]string, error) {
-	if p == nil || p.Registrants == nil {
-		return nil, unbound("who registered a plan's external work", "BindPlanExternalWork")
-	}
-	return p.Registrants(ctx, tx, root)
 }
 
 // collectorActorPrefix is the bound prefix of a host collector's actor, or
