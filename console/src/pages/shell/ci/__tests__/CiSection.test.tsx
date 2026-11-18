@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, configure, fireEvent, render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, expect, it, vi } from 'vitest'
 import { fetchCiChanges, fetchCiDomains, type CiChanges, type CiDomainGraph } from '@/api/ciDomains'
@@ -44,6 +44,12 @@ vi.mock('@xyflow/react', () => ({
   Position: { Top: 'top', Bottom: 'bottom', Left: 'left', Right: 'right' }, MarkerType: { ArrowClosed: 'arrowclosed' },
 }))
 afterEach(() => { cleanup(); vi.resetAllMocks() })
+
+// Origin: 2026-11-18, 55e17090's ci-platform-t9w7b went red on this file's first test: the worker lost about 6 s (that
+// test took 7405 ms; 361-560 ms in the ten other runs retained) and findBy's default 1000 ms ran out with the runs read
+// still "Loading…". Its timer is wall-clock: once the event loop is blocked past it, it fires ahead of the query's pending
+// update. 10 s covers the stall measured and stays under testTimeout (15 s), so a real hang still fails here, with the DOM.
+configure({ asyncUtilTimeout: 10_000 })
 
 type Over = {
   runs?: 'fail' | 'none' | UnitsRuns; fullCi?: 'none'; projects?: 'fail' | 'unread'; repos?: string[]
