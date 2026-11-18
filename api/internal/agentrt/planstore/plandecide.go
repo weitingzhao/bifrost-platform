@@ -27,8 +27,8 @@ type pendingChange struct {
 	changes  []PlanChange
 }
 
-// StreamRoot is the plan root a stream belongs to, or "".
-func StreamRoot(stream string) string {
+// streamRoot is the plan root a stream belongs to, or "".
+func streamRoot(stream string) string {
 	if root, ok := strings.CutPrefix(stream, "plan:"); ok {
 		return root
 	}
@@ -128,7 +128,7 @@ func decidePending(ctx context.Context, db eventlog.DB, question func(context.Co
 				if serr := r.Scan(&p.event, &p.stream, &p.question, &doc); serr != nil {
 					return p, serr
 				}
-				p.root = StreamRoot(p.stream)
+				p.root = streamRoot(p.stream)
 				return p, json.Unmarshal([]byte(doc), &p.changes)
 			})
 			return cerr
@@ -179,7 +179,7 @@ func decide(ctx context.Context, db eventlog.DB, p pendingChange, decision, reas
 	actor.Hook("plan change deciding", p.stream)
 	did := false
 	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
-		artifact, isImport := ImportOf(p.changes)
+		artifact, isImport := importOf(p.changes)
 		log, isRecorder, err := RecorderImportLog(p.changes)
 		if err != nil {
 			return err

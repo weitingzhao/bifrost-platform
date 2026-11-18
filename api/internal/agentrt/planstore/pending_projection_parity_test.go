@@ -1,4 +1,4 @@
-package store
+package planstore_test
 
 import (
 	"encoding/json"
@@ -51,7 +51,7 @@ func frozenPendingProjection(list []frozenPending, limit int, now time.Time, res
 			it["also_refs"] = append(it["also_refs"].([]string), fmt.Sprint(p.event))
 			continue
 		}
-		root := planstore.StreamRoot(p.stream)
+		root := planstore.StreamRootForTest(p.stream)
 		title, options := "Plan change to "+root+": "+firstLine(p.reason), []string{planstore.CardApply, planstore.CardRefuse}
 		after := "Apply: the controller lands the change on its next pass (about 15 seconds). Do not apply: the plan stays as it is."
 		var blocks any
@@ -61,7 +61,7 @@ func frozenPendingProjection(list []frozenPending, limit int, now time.Time, res
 			title, options = "Import recorder log "+work+": "+firstLine(p.reason), []string{planstore.RecorderApplyLabel, planstore.RecorderRefuseLabel}
 			after = "Import: the controller imports the log on its next pass (about 15 seconds). Do not import: nothing is written."
 			blocks = map[string]any{"unknown": "a recorder log is history; no plan or mission waits on it"}
-		} else if _, isImport := planstore.ImportOf(p.changes); isImport {
+		} else if _, isImport := planstore.ImportOfForTest(p.changes); isImport {
 			// An import adds a plan no mission's work sits on yet.
 			title, options = "Import plan "+root+": "+firstLine(p.reason), []string{planstore.ImportApply, planstore.ImportRefuse}
 			after = "Import: the controller imports the plan on its next pass (about 15 seconds). Do not import: nothing is written."
@@ -105,6 +105,7 @@ func frozenPendingProjection(list []frozenPending, limit int, now time.Time, res
 	return map[string]any{"count": len(items), "items": items, "truncated": truncated}, nil
 }
 
+// Origin: moved from store/pending_projection_parity_test.go (TestPendingProjectionFrozenParity), 2026-11-18 (TD-582).
 func TestPendingProjectionFrozenParity(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
@@ -118,7 +119,7 @@ func TestPendingProjectionFrozenParity(t *testing.T) {
 					p := frozenPending{event: int64(i), stream: planstore.PlanStream("p"), reason: "why\nline", question: fmt.Sprint(i % 4), at: now.Add(time.Duration(i%3-5) * time.Minute), changes: []planstore.PlanChange{{Op: "retitle", Node: fmt.Sprint(i)}}}
 					kind := "change"
 					if i%3 == 1 {
-						p.changes = []planstore.PlanChange{{Op: planstore.OpImport, Artifact: "artifact"}}
+						p.changes = []planstore.PlanChange{{Op: planstore.OpImportForTest, Artifact: "artifact"}}
 						kind = "import"
 					}
 					if i%3 == 2 {
@@ -127,7 +128,7 @@ func TestPendingProjectionFrozenParity(t *testing.T) {
 						kind = "recorder"
 					}
 					old = append(old, p)
-					in = append(in, planreadings.PendingNeed{Event: p.event, Stream: p.stream, Root: planstore.StreamRoot(p.stream), Work: strings.TrimPrefix(p.stream, "legacy:recorder:"), Reason: p.reason, Question: p.question, At: p.at, Kind: kind, Payload: p.changes})
+					in = append(in, planreadings.PendingNeed{Event: p.event, Stream: p.stream, Root: planstore.StreamRootForTest(p.stream), Work: strings.TrimPrefix(p.stream, "legacy:recorder:"), Reason: p.reason, Question: p.question, At: p.at, Kind: kind, Payload: p.changes})
 				}
 				var traceOld, traceNew []string
 				errSentinel := errors.New("read failed")

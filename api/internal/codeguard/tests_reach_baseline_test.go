@@ -144,7 +144,6 @@ var testFilesInShared = []string{
 	"api/internal/agentrt/store/outside_inputs_test.go",
 	"api/internal/agentrt/store/ownclock_test.go",
 	"api/internal/agentrt/store/parallel_test.go",
-	"api/internal/agentrt/store/pending_projection_parity_test.go",
 	"api/internal/agentrt/store/pin_test.go",
 	"api/internal/agentrt/store/pinc2_test.go",
 	"api/internal/agentrt/store/planchange_test.go",

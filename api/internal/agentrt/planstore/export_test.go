@@ -23,6 +23,15 @@ var (
 	TimeTextForTest              = timeText
 )
 
+// What the plan tests moved from package store reach of the package's own
+// names (TD-582): no other package uses these.
+const OpImportForTest = opImport
+
+var (
+	ImportOfForTest   = importOf
+	StreamRootForTest = streamRoot
+)
+
 // ReadingForTest is the snapshot's reading of a binding.
 func ReadingForTest(s *planFactsSnapshot, b planview.Binding) (plan.Tri, string, planObservation) {
 	return s.reading(b)

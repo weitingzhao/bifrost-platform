@@ -26,8 +26,8 @@ import (
 // lands the import in the transaction that records the decision, the
 // import's head caused by that decision.
 
-// OpImport is the change an import proposal holds.
-const OpImport = "import"
+// opImport is the change an import proposal holds.
+const opImport = "import"
 
 // The import card's options, in the order the question store keys them (a,
 // b): the decision pass applies the first (CardApplyKey).
@@ -36,9 +36,9 @@ const (
 	ImportRefuse = "Do not import it"
 )
 
-// ImportOf is the request artifact of a proposal that is an import.
-func ImportOf(changes []PlanChange) (string, bool) {
-	if len(changes) == 1 && changes[0].Op == OpImport && changes[0].Artifact != "" {
+// importOf is the request artifact of a proposal that is an import.
+func importOf(changes []PlanChange) (string, bool) {
+	if len(changes) == 1 && changes[0].Op == opImport && changes[0].Artifact != "" {
 		return changes[0].Artifact, true
 	}
 	return "", false
@@ -124,7 +124,7 @@ func ProposePlanImport(ctx context.Context, db eventlog.DB, w actor.Writer, key,
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrAsk, err)
 		}
-		changes, err := ChangesDoc([]PlanChange{{Op: OpImport, Artifact: reqID}})
+		changes, err := ChangesDoc([]PlanChange{{Op: opImport, Artifact: reqID}})
 		if err != nil {
 			return nil, err
 		}
@@ -150,7 +150,7 @@ func waitingImport(ctx context.Context, tx pgx.Tx, root string) (*PendingImport,
 	  WHERE p.event_stream_id = $1 AND p.event_type = 'plan_change_proposed' AND p.body_json->'changes'->0->>'op' = $2
 	    AND NOT EXISTS (SELECT 1 FROM agentrt.event d WHERE d.event_type = 'plan_change_decided' AND d.event_stream_id = p.event_stream_id
 	      AND (d.body_json->>'proposal_event_id')::bigint = p.event_id)
-	  ORDER BY p.event_id LIMIT 1`, PlanStream(root), OpImport).Scan(&p.Event, &p.Artifact, &p.Question)
+	  ORDER BY p.event_id LIMIT 1`, PlanStream(root), opImport).Scan(&p.Event, &p.Artifact, &p.Question)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

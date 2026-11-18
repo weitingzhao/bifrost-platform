@@ -49,10 +49,10 @@ func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, er
 		}
 		if isRecorder {
 			kind = "recorder"
-		} else if _, ok := ImportOf(p.changes); ok {
+		} else if _, ok := importOf(p.changes); ok {
 			kind = "import"
 		}
-		inputs = append(inputs, planreadings.PendingNeed{Event: p.event, Stream: p.stream, Root: StreamRoot(p.stream), Work: strings.TrimPrefix(p.stream, RecorderStreamPrefix), Reason: p.reason, Question: p.question, At: p.at, Kind: kind, Payload: p.changes})
+		inputs = append(inputs, planreadings.PendingNeed{Event: p.event, Stream: p.stream, Root: streamRoot(p.stream), Work: strings.TrimPrefix(p.stream, RecorderStreamPrefix), Reason: p.reason, Question: p.question, At: p.at, Kind: kind, Payload: p.changes})
 	}
 	return planreadings.ProjectPendingNeeds(inputs, PendingChangeLimit, now, planreadings.NeedLabels{Apply: CardApply, Refuse: CardRefuse, RecorderApply: RecorderApplyLabel, RecorderRefuse: RecorderRefuseLabel, ImportApply: ImportApply, ImportRefuse: ImportRefuse}, func(raw any) (any, error) { return ChangeBlocks(ctx, tx, raw.([]PlanChange)) }, func(listed map[string]map[string]any) ([]planreadings.WaitingCard, bool, error) {
 		cards, more, err := missionCards(ctx, tx, now, listed)
