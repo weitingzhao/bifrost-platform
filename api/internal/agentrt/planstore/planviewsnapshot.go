@@ -44,11 +44,11 @@ func PlanViewPage(ctx context.Context, db eventlog.DB, root, cursor string) (map
 	}
 	adoption := snap.Views[root]
 	graph, items, warnings := planview.ProjectSnapshotNodes(nodes, snap.Docs[root], snap.Warnings[root], adoption.Nodes)
-	candidates, err := planEvidenceCandidates(ctx, tx, snap, root)
+	ext, err := snapshotExternal(ctx, tx, root, now)
 	if err != nil {
 		return nil, err
 	}
-	ext, err := snapshotExternal(ctx, tx, root, now)
+	candidates, err := planEvidenceCandidates(ctx, tx, snap, root, ext)
 	if err != nil {
 		return nil, err
 	}
@@ -65,8 +65,15 @@ func PlanViewPage(ctx context.Context, db eventlog.DB, root, cursor string) (map
 	if err != nil {
 		return nil, err
 	}
+	registrants, err := externalRegistrants(ctx, tx, root)
+	if err != nil {
+		return nil, err
+	}
+	if registrants == nil {
+		registrants = []string{} // <> ALL(NULL) would hide every thread
+	}
 	var unregistered int
-	err = tx.QueryRow(ctx, ViewTree+`SELECT count(DISTINCT e.actor_id) FROM agentrt.event e JOIN tree ON tree.plan_node_id=e.plan_node_id WHERE e.actor_id LIKE 'thread:%' AND e.actor_id NOT LIKE '`+collector+`%' AND e.at >= $2::timestamptz-interval '24 hours' AND NOT EXISTS(SELECT 1 FROM agentrt.event x WHERE x.event_type IN ('external_work_noted','note') AND x.body_json->'external_work'->>'registrant'=e.actor_id AND x.body_json->'external_work'->>'root'=$1)`, root, now).Scan(&unregistered)
+	err = tx.QueryRow(ctx, ViewTree+`SELECT count(DISTINCT e.actor_id) FROM agentrt.event e JOIN tree ON tree.plan_node_id=e.plan_node_id WHERE e.actor_id LIKE 'thread:%' AND e.actor_id NOT LIKE '`+collector+`%' AND e.at >= $2::timestamptz-interval '24 hours' AND e.actor_id<>ALL($3::text[])`, root, now, registrants).Scan(&unregistered)
 	if err != nil {
 		return nil, err
 	}

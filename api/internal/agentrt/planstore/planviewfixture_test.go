@@ -89,7 +89,8 @@ func (d *signoffViewDB) Query(_ context.Context, q string, _ ...any) (pgx.Rows, 
 				r.data = append(r.data, []any{step, c.Artifact, c.Label, c.Source})
 			}
 		}
-	case strings.HasPrefix(q, "SELECT body,at FROM"), strings.HasPrefix(q, "SELECT a.attempt_id"), strings.HasPrefix(q, "SELECT event_stream_id"), strings.HasPrefix(q, "SELECT to_jsonb(e)"):
+	case strings.HasPrefix(q, "SELECT body,at FROM"), strings.HasPrefix(q, "SELECT a.attempt_id"), strings.HasPrefix(q, "SELECT event_stream_id"), strings.HasPrefix(q, "SELECT to_jsonb(e)"),
+		strings.HasPrefix(q, "SELECT DISTINCT body_json->'external_work'->>'registrant'"): // 2026-11-18, TD-582: the coverage count's registrants, read apart from it (the count itself is the fixture's)
 	default:
 		return nil, fmt.Errorf("unexpected fixture SQL: %s", q)
 	}

@@ -20,7 +20,8 @@ type viewRecentCursor struct {
 }
 
 // A continuation fixes each stream's committed sequence, not a global
-// event-id high water mark: a late commit cannot enter an older page.
+// event-id high water mark: a late commit cannot enter an older page. The
+// plan's own events and its work's are two reads of tx, one snapshot.
 func planViewRecent(ctx context.Context, tx pgx.Tx, root, cursor string, now time.Time) (json.RawMessage, string, string, error) {
 	c := viewRecentCursor{Root: root, AsOf: timeText(now), Streams: map[string]int64{}}
 	if cursor != "" {
@@ -45,16 +46,31 @@ func planViewRecent(ctx context.Context, tx pgx.Tx, root, cursor string, now tim
 		if err != nil {
 			return nil, "", "", err
 		}
-		c.Streams = streams
+		work, err := externalRecentStreams(ctx, tx, root)
+		if err != nil {
+			return nil, "", "", err
+		}
+		c.Streams = planreadings.MergeRecentStreams(streams, work)
 	}
 	bounds, err := json.Marshal(c.Streams)
 	if err != nil {
 		return nil, "", "", err
 	}
-	events, err := planreadings.RecentEvents(ctx, tx, PlanStream(root), root, bounds, c.Before)
+	own, err := planreadings.RecentEvents(ctx, tx, PlanStream(root), root, bounds, c.Before)
 	if err != nil {
 		return nil, "", "", err
 	}
+	// A full page of the plan's own events bounds what the work can add: an
+	// older event of the work could not make the page.
+	var after int64
+	if len(own) == planreadings.RecentLimit {
+		after = own[len(own)-1].ID
+	}
+	work, err := externalRecentEvents(ctx, tx, root, bounds, c.Before, after, planreadings.RecentLimit)
+	if err != nil {
+		return nil, "", "", err
+	}
+	events := planreadings.MergeRecent(own, work)
 	next := ""
 	if len(events) > 20 {
 		events = events[:20]

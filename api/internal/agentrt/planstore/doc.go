@@ -172,11 +172,16 @@
 // bound refuses with ErrPortUnbound; it never answers as if there were nothing:
 //
 //	RulePorts            ProposePlanChange; and every card that asks whether a rule answers it
-//	ExternalWorkPorts    PlanViewPage; a stored external work description or note
+//	ExternalWorkPorts    PlanViewPage; a stored external work description or note; binding a mission to a node of a plan with no adopted view
 //	RecorderImportPorts  applying a recorder import (the proposal stays undecided)
 //	CoordinationPorts    PostPlanNote
 //	QuestionPorts        ProposePlanImport, ProposeRecorderImport
 //	LoopPorts            ProgressSince
+//
+// ExternalWorkPorts is also how the domain reads the records of registered
+// work, in the caller's transaction: the plan view's work, sign-off candidates,
+// Recent changes and coverage, and whether a plan has any work. The domain
+// does not name those records in SQL of its own.
 //
 // The event types and bodies named here are the plan's own (vocab.go); the
 // tables are agentrt.plan_node and agentrt.plan_node_binding.

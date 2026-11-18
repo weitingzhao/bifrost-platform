@@ -100,6 +100,12 @@ func TestPV2MainFactsWithdrawAndReplay(t *testing.T) {
 	pvEvaluate(t, w, s1, "done")
 	var firstSeq int64
 	ok(t, w.rt.QueryRow(ctx, `SELECT last_seq FROM agentrt.event_stream WHERE event_stream_id=$1`, "plan-observation:"+root).Scan(&firstSeq))
+	// Origin: 2026-11-18, TD-582: Recent changes is two reads now, and a changed observation is the plan's own part of it.
+	listed, listErr := planstore.PlanView(ctx, w.rt, root)
+	ok(t, listErr)
+	if !strings.Contains(string(listed["recent_changes"].(json.RawMessage)), `"plan-observation:`+root+`"`) {
+		t.Fatalf("a changed observation is not in Recent changes: %s", listed["recent_changes"])
+	}
 	pvPoll(t, w, src)
 	var secondSeq int64
 	ok(t, w.rt.QueryRow(ctx, `SELECT last_seq FROM agentrt.event_stream WHERE event_stream_id=$1`, "plan-observation:"+root).Scan(&secondSeq))

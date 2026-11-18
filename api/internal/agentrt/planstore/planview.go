@@ -91,8 +91,15 @@ func checkViewBinding(ctx context.Context, tx pgx.Tx, node, mission string) erro
 		return err
 	}
 	var adopted bool
-	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agentrt.event WHERE (event_type IN ('plan_view_adopted','note') AND event_stream_id=$1 AND body_json ? 'plan_view') OR (event_type IN ('external_work_noted','note') AND body_json->'external_work'->>'root'=$2))`, PlanStream(root), root).Scan(&adopted); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agentrt.event WHERE event_type IN ('plan_view_adopted','note') AND event_stream_id=$1 AND body_json ? 'plan_view')`, PlanStream(root)).Scan(&adopted); err != nil {
 		return err
+	}
+	if !adopted {
+		// Events are only ever added, so reading this second answers as one
+		// read of both would have at this later moment.
+		if adopted, err = externalHasWork(ctx, tx, root); err != nil {
+			return err
+		}
 	}
 	if !adopted {
 		return nil

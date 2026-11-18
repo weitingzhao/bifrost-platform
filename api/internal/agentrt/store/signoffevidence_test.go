@@ -82,6 +82,21 @@ func TestPV2SignoffCandidateEvidence(t *testing.T) {
 	otherSpec := w.artifact(t, "other", `{"v":1,"kind":"agentrt.external_work/v1","task":"Other","executor":"codex","provider":"openai","repo":"platform","branch":"other","acceptance_refs":["other"],"estimate_minutes":[1,2]}`)
 	_, err = externalwork.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "other", Root: root, Node: s2, RunKey: "other", Artifact: otherSpec})
 	ok(t, err)
+	// Origin: 2026-11-18, TD-582: the candidates are now made from the work the plan view reads through its port, no longer by one query over the records; what that query left out must stay out, and its order must stay: work not submitted, and a report no artifact holds.
+	running := w.artifact(t, "other", `{"v":1,"kind":"agentrt.external_work/v1","task":"Running","executor":"codex","provider":"openai","repo":"platform","branch":"running","acceptance_refs":["running"],"estimate_minutes":[1,2]}`)
+	_, err = externalwork.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "running", Root: root, Node: s1, RunKey: "running", Artifact: running})
+	ok(t, err)
+	gone := "sha256:" + strings.Repeat("0", 64)
+	report2 := w.artifact(t, "report", "Second candidate report")
+	for key, digest := range map[string]string{"gone": gone, "second": report2} {
+		reg, err := externalwork.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: key, Root: root, Node: s1, RunKey: key, Artifact: spec})
+		ok(t, err)
+		work := reg["external_work_id"].(string)
+		_, err = externalwork.PostExternalEvent(ctx, w.rt, who, work, externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"})
+		ok(t, err)
+		_, err = externalwork.PostExternalEvent(ctx, w.rt, who, work, externalwork.ExternalEvent{Key: "submit", Seq: 2, Type: "submitted", ReportDigest: digest})
+		ok(t, err)
+	}
 	view, err := planstore.PlanView(ctx, w.rt, root)
 	ok(t, err)
 	raw, err := json.Marshal(view)
@@ -99,7 +114,9 @@ func TestPV2SignoffCandidateEvidence(t *testing.T) {
 		t.Fatalf("not ready: %s", raw)
 	}
 	ids := map[string]bool{}
+	order := []string{}
 	for _, c := range out.Ready[0].Candidates {
+		order = append(order, c.ID)
 		if ids[c.ID] || c.Label == "" || c.Source == "" {
 			t.Fatalf("bad candidate %+v", c)
 		}
@@ -107,6 +124,9 @@ func TestPV2SignoffCandidateEvidence(t *testing.T) {
 	}
 	if !ids[spec] || !ids[report] || ids[otherSpec] {
 		t.Fatalf("missing or cross-step evidence: %+v", out)
+	}
+	if !ids[report2] || ids[running] || ids[gone] || len(order) != 3 || !slices.IsSorted(order) {
+		t.Fatalf("the candidates, in the database's order: %v (running %s, no artifact %s)", order, running, gone)
 	}
 	pvPoll(t, w, planstore.PlanSources{})
 	pvEvaluate(t, w, s1, "planned") // Suggestions are not a signature.

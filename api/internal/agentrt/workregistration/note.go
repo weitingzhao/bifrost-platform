@@ -1,5 +1,13 @@
 // Package workregistration owns the recorded work shape and read-only session bindings.
 // Registration authorization and writes remain in their existing store path.
+//
+// What it offers other domains, all read in the caller's transaction:
+// Snapshot and ActivityBuckets (a root's registered work, each map holding the
+// JSON fields of Note plus description, recorded_at, heartbeat_age_s, status,
+// elapsed_s and backfilled); RecentStreams and RecentRecords (the events of a
+// root's work its recent changes list); HasWork and Registrants (whether a
+// root has work, and who registered it). Other domains read a work's records
+// through these and do not name its events' shape in SQL of their own.
 package workregistration
 
 // Note is the persisted external-work record. Readers decode the whole shape

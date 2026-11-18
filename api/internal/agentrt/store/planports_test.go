@@ -227,6 +227,159 @@ func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 		}
 		return nil
 	}))
+	// Origin: 2026-11-18, TD-582 (inventory §2.3): the plan stopped reading the work's records with SQL of its own; each read port must answer what the lineage answers, in the caller's transaction, and the plan view must show it. A heartbeat is recorded and never listed (the 2026-10-26 finding of TestPlanViewRecentSkipsHeartbeats).
+	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "beat", Seq: 2, Type: "heartbeat"})
+	ok(t, err)
+	ports := store.PlanExternalWorkPortsForTest
+	stream := "external-work:" + id
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		streams, err := ports.RecentStreams(ctx, tx, root)
+		if err != nil {
+			return err
+		}
+		if want := map[string]int64{stream: 2}; !reflect.DeepEqual(streams, want) {
+			t.Errorf("the recent streams port: %v; want %v", streams, want)
+		}
+		bounds := []byte(`{"` + stream + `":2}`)
+		listed := func(before, after int64, limit int) []int64 {
+			t.Helper()
+			events, err := ports.RecentEvents(ctx, tx, root, bounds, before, after, limit)
+			ok(t, err)
+			records, err := workregistration.RecentRecords(ctx, tx, root, bounds, before, after, limit)
+			ok(t, err)
+			out := []int64{}
+			for i, e := range events {
+				if i >= len(records) || string(e.Raw) != string(records[i].Raw) || e.ID != records[i].ID {
+					t.Errorf("the recent events port: %s; the lineage: %v", e.Raw, records)
+				}
+				out = append(out, e.ID)
+			}
+			if len(events) != len(records) {
+				t.Errorf("the recent events port: %d events; the lineage: %d", len(events), len(records))
+			}
+			return out
+		}
+		all := listed(0, 0, 21)
+		if len(all) != 2 || all[0] <= all[1] {
+			t.Fatalf("the work's listed events, newest first: %v", all)
+		}
+		for _, c := range []struct {
+			before, after int64
+			limit         int
+			want          []int64
+		}{{all[0], 0, 21, all[1:]}, {0, all[1], 21, all[:1]}, {0, 0, 1, all[:1]}} {
+			if got := listed(c.before, c.after, c.limit); !reflect.DeepEqual(got, c.want) {
+				t.Errorf("before %d after %d limit %d: %v; want %v", c.before, c.after, c.limit, got, c.want)
+			}
+		}
+		// Only what the bounds hold, and only this root's.
+		for _, c := range []struct {
+			root, bounds string
+			want         int
+		}{{root, `{"` + stream + `":1}`, 1}, {root, `{}`, 0}, {"R-none", string(bounds), 0}} {
+			events, err := ports.RecentEvents(ctx, tx, c.root, []byte(c.bounds), 0, 0, 21)
+			if err != nil || len(events) != c.want || (c.want == 1 && events[0].ID != all[1]) {
+				t.Errorf("root %s within %s: %v %v; want %d of them", c.root, c.bounds, events, err, c.want)
+			}
+		}
+		if streams, err := ports.RecentStreams(ctx, tx, "R-none"); err != nil || len(streams) != 0 {
+			t.Errorf("the recent streams of a plan with no work: %v %v", streams, err)
+		}
+		for r, want := range map[string]bool{root: true, "R-none": false} {
+			if has, err := ports.HasWork(ctx, tx, r); err != nil || has != want {
+				t.Errorf("has work under %s: %v %v; want %v", r, has, err, want)
+			}
+		}
+		if names, err := ports.Registrants(ctx, tx, root); err != nil || !reflect.DeepEqual(names, []string{who.Actor}) {
+			t.Errorf("the registrants: %v %v", names, err)
+		}
+		if names, err := ports.Registrants(ctx, tx, "R-none"); err != nil || len(names) != 0 {
+			t.Errorf("the registrants of a plan with no work: %v %v", names, err)
+		}
+		return nil
+	}))
+	view, err = planstore.PlanViewPage(ctx, w.rt, root, "")
+	ok(t, err)
+	var recent []struct {
+		Stream string `json:"event_stream_id"`
+		Seq    int64  `json:"seq"`
+	}
+	ok(t, json.Unmarshal(view["recent_changes"].(json.RawMessage), &recent))
+	var workSeqs []int64
+	for _, e := range recent {
+		if e.Stream == stream {
+			workSeqs = append(workSeqs, e.Seq)
+		}
+	}
+	if want := []int64{2, 1}; !reflect.DeepEqual(workSeqs, want) {
+		t.Fatalf("the work's events in Recent changes: %v; want %v", workSeqs, want)
+	}
+	// The registrant acted on the plan's tree and is not unregistered work;
+	// the same thread with no work of this plan is.
+	unregistered := func() any { return view["coverage"].(map[string]any)["unregistered_work"] }
+	if got := unregistered(); got != 0 {
+		t.Fatalf("unregistered work with the thread registered: %v", got)
+	}
+	// A plan with no adopted view: a business mission may be proposed until
+	// work is registered under it, and is refused after (its dev boundary).
+	bare := newKernelWorld(t)
+	bare.legacy(t, `UPDATE agentrt.mission SET tenant='business' WHERE mission_id='M-2'`)
+	bind := func(key string) error {
+		_, err := planstore.ProposePlanChange(ctx, bare.rt, wr("thread:pv"), key, root, "bind", []planstore.PlanChange{{Op: "rebind_step", Node: s2, MissionID: "M-2"}}, (&asker{}).ask)
+		return err
+	}
+	ok(t, bind("no-work"))
+	_, err = externalwork.RegisterExternalWork(ctx, bare.rt, who, externalwork.ExternalRegistration{Key: "run", Root: root, Node: s1, RunKey: "ports", Artifact: externalSpec(t, bare)})
+	ok(t, err)
+	is(t, bind("with-work"), eventlog.ErrInvalid)
+	// The rows from before the record had its own type (migration 0032) stay
+	// and count the same.
+	admin := bare.db.Connect(t, bare.db.Admin)
+	for _, q := range []string{`SET session_replication_role=replica`, `UPDATE agentrt.event SET event_type='note' WHERE event_type='external_work_noted'`, `SET session_replication_role=DEFAULT`} {
+		_, err = admin.Exec(ctx, q)
+		ok(t, err)
+	}
+	is(t, bind("with-old-work"), eventlog.ErrInvalid)
+	// On the first plan, a thread that acted on the tree and registered
+	// nothing there does count.
+	stranger := wr("thread:unregistered")
+	_, err = planstore.ProposePlanChange(ctx, w.rt, stranger, "stranger", root, "retitle", []planstore.PlanChange{{Op: "retitle", Node: s3, Title: "new"}}, (&asker{}).ask)
+	ok(t, err)
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream(root), Type: "note", Actor: stranger.Actor, PlanNode: s2, Body: map[string]any{"text": "on the tree"}})
+		return err
+	}))
+	view, err = planstore.PlanViewPage(ctx, w.rt, root, "")
+	ok(t, err)
+	if got := unregistered(); got != 1 {
+		t.Fatalf("unregistered work with a thread that registered nothing: %v", got)
+	}
+	// A full page of the plan's own events does not push out a newer event of
+	// the work that falls among them.
+	ownNotes := func(n int) {
+		t.Helper()
+		for i := range n {
+			ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+				_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream(root), Type: "note", Actor: stranger.Actor, PlanNode: s2, Body: map[string]any{"text": fmt.Sprint("own ", i)}})
+				return err
+			}))
+		}
+	}
+	ownNotes(25)
+	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "among", Seq: 3, Type: "submitted"})
+	ok(t, err)
+	ownNotes(5)
+	view, err = planstore.PlanViewPage(ctx, w.rt, root, "")
+	ok(t, err)
+	recent = nil
+	ok(t, json.Unmarshal(view["recent_changes"].(json.RawMessage), &recent))
+	among := false
+	for _, e := range recent {
+		among = among || (e.Stream == stream && e.Seq == 4)
+	}
+	if !among {
+		t.Fatalf("the work's event among the plan's own is not listed: %+v", recent)
+	}
 	// The note check, which the plan runs on a view's event before its body:
 	// a record it passes goes on to the body's own first complaint, that this
 	// body has no text.

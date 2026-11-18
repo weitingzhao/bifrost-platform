@@ -16,8 +16,9 @@ type candidateEvidence struct {
 }
 
 // Read with the plan's repeatable-read transaction. Candidates are suggestions,
-// never verified facts, and never cross the bound step or dev tenant.
-func planEvidenceCandidates(ctx context.Context, tx pgx.Tx, snap *planFactsSnapshot, root string) (map[string][]candidateEvidence, error) {
+// never verified facts, and never cross the bound step or dev tenant. work is
+// the root's registered work as the external work port gave it to this view.
+func planEvidenceCandidates(ctx context.Context, tx pgx.Tx, snap *planFactsSnapshot, root string, work []map[string]any) (map[string][]candidateEvidence, error) {
 	out := map[string][]candidateEvidence{}
 	if d := snap.Docs[root]; d != nil {
 		bs, _ := d.Bindings()
@@ -30,23 +31,27 @@ func planEvidenceCandidates(ctx context.Context, tx pgx.Tx, snap *planFactsSnaps
 	if len(out) == 0 {
 		return out, nil
 	}
-	steps := make([]string, 0, len(out))
-	for step := range out {
-		steps = append(steps, step)
+	steps, ids, labels, sources := []string{}, []string{}, []string{}, []string{}
+	for _, w := range work {
+		field := func(name string) string { s, _ := w[name].(string); return s }
+		step := field("plan_node_id")
+		if _, bound := out[step]; !bound || field("state") != "Submitted" {
+			continue
+		}
+		for _, c := range []struct{ id, label, source string }{
+			{field("report_digest"), "Submitted report", "external_work.report"},
+			{field("artifact_id"), "Work registration", "external_work.registration"},
+		} {
+			if c.id != "" {
+				steps, ids = append(steps, step), append(ids, c.id)
+				labels = append(labels, c.label+" · "+field("source_run_key"))
+				sources = append(sources, c.source+":"+field("external_work_id"))
+			}
+		}
 	}
-	rows, err := tx.Query(ctx, `WITH external AS (
- SELECT DISTINCT ON(event_stream_id) body_json->'external_work' e
- FROM agentrt.event WHERE event_type IN ('external_work_noted','note') AND body_json ? 'external_work'
- ORDER BY event_stream_id,seq DESC
- ), candidates AS (
- SELECT e->>'plan_node_id' step, x.id, x.label || ' · ' || (e->>'source_run_key') label,
- x.source || ':' || (e->>'external_work_id') source
- FROM external CROSS JOIN LATERAL (VALUES (e->>'report_digest','Submitted report','external_work.report'),
- (e->>'artifact_id','Work registration','external_work.registration')) x(id,label,source)
- WHERE e->>'root'=$1 AND e->>'state'='Submitted' AND e->>'plan_node_id'=ANY($2::text[])
-
- ) SELECT c.step,c.id,c.label,c.source FROM candidates c JOIN agentrt.artifact a ON a.artifact_id=c.id
- ORDER BY c.step,c.id,c.source`, root, steps)
+	// Only what is still stored is offered, in the database's order.
+	rows, err := tx.Query(ctx, `SELECT c.step,c.id,c.label,c.source FROM unnest($1::text[],$2::text[],$3::text[],$4::text[]) c(step,id,label,source)
+ JOIN agentrt.artifact a ON a.artifact_id=c.id ORDER BY c.step,c.id,c.source`, steps, ids, labels, sources)
 	if err != nil {
 		return nil, err
 	}

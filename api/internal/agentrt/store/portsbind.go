@@ -12,6 +12,7 @@ import (
 	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliverymetrics" // declares its event types
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
@@ -43,7 +44,21 @@ var planExternalWorkPorts = planstore.ExternalWorkPorts{
 			return externalwork.ExternalDescriptionOf(ctx, tx, id)
 		})
 	},
-	ActivityBuckets:      workregistration.ActivityBuckets,
+	ActivityBuckets: workregistration.ActivityBuckets,
+	RecentStreams:   workregistration.RecentStreams,
+	RecentEvents: func(ctx context.Context, tx pgx.Tx, root string, bounds []byte, before, after int64, limit int) ([]planreadings.RecentEvent, error) {
+		records, err := workregistration.RecentRecords(ctx, tx, root, bounds, before, after, limit)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]planreadings.RecentEvent, 0, len(records))
+		for _, r := range records {
+			out = append(out, planreadings.RecentEvent(r))
+		}
+		return out, nil
+	},
+	HasWork:              workregistration.HasWork,
+	Registrants:          workregistration.Registrants,
 	CollectorActorPrefix: actuation.CollectorActorPrefix,
 }
 

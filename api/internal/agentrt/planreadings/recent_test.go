@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -80,5 +81,46 @@ func TestRecentReadErrorsCloseRows(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// Origin: 2026-11-18, TD-582: Recent changes was one query over the plan's events and its work's, and is now two reads merged here; the page must stay what the one query gave: newest first, an event in both reads once, at most RecentLimit, and each stream at its highest sequence in either read.
+func TestRecentReadsMergeAsOneQuery(t *testing.T) {
+	t.Parallel()
+	event := func(id int64) RecentEvent {
+		return RecentEvent{Raw: json.RawMessage(strconv.FormatInt(id, 10)), ID: id}
+	}
+	ids := func(events []RecentEvent) []int64 {
+		out := []int64{}
+		for _, e := range events {
+			out = append(out, e.ID)
+		}
+		return out
+	}
+	got := MergeRecent([]RecentEvent{event(9), event(5), event(2)}, []RecentEvent{event(7), event(5), event(1)})
+	if want := []int64{9, 7, 5, 2, 1}; !reflect.DeepEqual(ids(got), want) {
+		t.Fatalf("merged %v; want %v", ids(got), want)
+	}
+	if got := MergeRecent(nil, nil); got == nil || len(got) != 0 {
+		t.Fatalf("nothing merged: %#v", got)
+	}
+	var own, work []RecentEvent
+	for i := int64(RecentLimit * 2); i > 0; i-- {
+		if i%2 == 0 {
+			own = append(own, event(i))
+		} else {
+			work = append(work, event(i))
+		}
+	}
+	page := MergeRecent(own, work)
+	if len(page) != RecentLimit || page[0].ID != RecentLimit*2 || page[RecentLimit-1].ID != RecentLimit+1 {
+		t.Fatalf("a full page: %v", ids(page))
+	}
+	streams := MergeRecentStreams(map[string]int64{"plan:R2": 8, "both": 3}, map[string]int64{"both": 5, "external:one": 4})
+	if want := map[string]int64{"plan:R2": 8, "both": 5, "external:one": 4}; !reflect.DeepEqual(streams, want) {
+		t.Fatalf("streams %v; want %v", streams, want)
+	}
+	if streams := MergeRecentStreams(map[string]int64{"both": 5}, map[string]int64{"both": 3}); streams["both"] != 5 {
+		t.Fatalf("the lower sequence won: %v", streams)
 	}
 }

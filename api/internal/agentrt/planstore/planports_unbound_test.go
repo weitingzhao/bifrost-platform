@@ -2,6 +2,7 @@ package planstore
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 )
 
 // The refusals of the plan code's ports (planports.go), each shown on a port
@@ -82,6 +84,18 @@ func TestUnboundLineagePortsRefuse(t *testing.T) {
 		if prefix != "" {
 			t.Fatalf("%s: a prefix with the refusal: %q", name, prefix)
 		}
+		// Origin: 2026-11-18, TD-582 (inventory §2.3): the plan's reads of the work's records moved behind these ports; unbound, Recent changes must not read as a plan without work, the coverage count must not call every thread unregistered, and a plan with work must not lose its dev boundary.
+		streams, err := externalRecentStreamsVia(ctx, p, nil, unboundRoot)
+		refused(t, name+": the recent streams", err)
+		events, err := externalRecentEventsVia(ctx, p, nil, unboundRoot, []byte(`{}`), 0, 0, 21)
+		refused(t, name+": the recent events", err)
+		has, err := externalHasWorkVia(ctx, p, nil, unboundRoot)
+		refused(t, name+": whether the plan has work", err)
+		registrants, err := externalRegistrantsVia(ctx, p, nil, unboundRoot)
+		refused(t, name+": the registrants", err)
+		if streams != nil || events != nil || has || registrants != nil {
+			t.Fatalf("%s: an answer with the refusal: %v %v %v %v", name, streams, events, has, registrants)
+		}
 	}
 	for name, p := range map[string]*RecorderImportPorts{"nothing bound": nil, "an empty binding": {}} {
 		refused(t, name+": the landing", decideRecorderImportLogVia(ctx, p, nil, "sha256:log", 1))
@@ -96,7 +110,28 @@ func TestUnboundLineagePortsRefuse(t *testing.T) {
 		ActivityBuckets: func(work []map[string]any, _ time.Time, _ func(string) any) ([]any, []any) {
 			return []any{len(work)}, []any{"done"}
 		},
+		RecentStreams: func(_ context.Context, _ pgx.Tx, root string) (map[string]int64, error) {
+			return map[string]int64{root: 4}, nil
+		},
+		RecentEvents: func(_ context.Context, _ pgx.Tx, root string, bounds []byte, before, after int64, limit int) ([]planreadings.RecentEvent, error) {
+			return []planreadings.RecentEvent{{Raw: json.RawMessage(root + string(bounds)), ID: before + after + int64(limit)}}, nil
+		},
+		HasWork:              func(_ context.Context, _ pgx.Tx, root string) (bool, error) { return root == unboundRoot, nil },
+		Registrants:          func(_ context.Context, _ pgx.Tx, root string) ([]string, error) { return []string{root}, nil },
 		CollectorActorPrefix: "thread:c@",
+	}
+	// Origin: 2026-11-18, TD-582: the positive control of the four refusals above: bound, each port gets what the plan gave and its answer comes back.
+	if streams, err := externalRecentStreamsVia(ctx, bound, nil, unboundRoot); err != nil || !reflect.DeepEqual(streams, map[string]int64{unboundRoot: 4}) {
+		t.Fatalf("bound recent streams: %v %v", streams, err)
+	}
+	if events, err := externalRecentEventsVia(ctx, bound, nil, unboundRoot, []byte(`{}`), 1, 2, 21); err != nil || len(events) != 1 || string(events[0].Raw) != unboundRoot+`{}` || events[0].ID != 24 {
+		t.Fatalf("bound recent events: %v %v", events, err)
+	}
+	if has, err := externalHasWorkVia(ctx, bound, nil, unboundRoot); err != nil || !has {
+		t.Fatalf("bound has work: %v %v", has, err)
+	}
+	if names, err := externalRegistrantsVia(ctx, bound, nil, unboundRoot); err != nil || !reflect.DeepEqual(names, []string{unboundRoot}) {
+		t.Fatalf("bound registrants: %v %v", names, err)
 	}
 	if err := checkExternalNoteVia(bound, nil); err == nil || err.Error() != "note" {
 		t.Fatalf("a bound note check: %v", err)
