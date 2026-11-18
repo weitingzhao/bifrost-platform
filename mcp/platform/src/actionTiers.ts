@@ -172,6 +172,18 @@ export const WRITE_SPECS: readonly WriteMapping[] = [
     paramsFrom: (m, body) => ({ name: dec(m[1]), ...asRecord(body) }),
   },
   {
+    action: 'report_regression',
+    method: 'POST',
+    pattern: /^\/api\/v1\/bus\/regressions$/,
+    paramsFrom: (_m, body) => asRecord(body),
+  },
+  {
+    action: 'mark_regression_fixed',
+    method: 'POST',
+    pattern: /^\/api\/v1\/bus\/regressions\/fixed$/,
+    paramsFrom: (_m, body) => asRecord(body),
+  },
+  {
     action: 'release_window_hold',
     method: 'PUT',
     pattern: /^\/api\/v1\/delivery\/release-window$/,

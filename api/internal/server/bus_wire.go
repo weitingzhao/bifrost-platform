@@ -350,8 +350,8 @@ func (s *Server) mountBus(r chi.Router) {
 	// The known regressions on main (bus_regressions.go): a seat records one or its fix as itself.
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/regressions", s.handleRegressions)
 	writers := s.auth.RequireAny(actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin)
-	r.With(writers).Post("/bus/regressions", s.handleRegressionWrite(false))
-	r.With(writers).Post("/bus/regressions/fixed", s.handleRegressionWrite(true))
+	r.With(writers).Post("/bus/regressions", s.guard("report_regression", s.handleRegressionWrite(false)))
+	r.With(writers).Post("/bus/regressions/fixed", s.guard("mark_regression_fixed", s.handleRegressionWrite(true)))
 	// The change of generation, from its registers (bus_nextgen.go).
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/nextgen", s.handleBusNextgen)
 	// What the bus promises and to whom, from its registers (bus_contract.go).

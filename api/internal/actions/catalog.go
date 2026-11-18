@@ -186,6 +186,26 @@ var catalog = []Action{
 		},
 	},
 	{
+		ID: "report_regression", Tier: TierB,
+		Description: "Record a known regression on main: the commit (40 characters) that broke repo's main and in a line what is broken (impact, at most 200 characters), as the caller. Appends main.regression.known to the event log and starts, stops or refuses nothing (information, no gate: the coordinator 2026-11-17). Tier B; call the endpoint directly.",
+		Method:      "POST", Pattern: "/api/v1/bus/regressions",
+		Params: []Param{
+			{Name: "repo", Type: "string", Required: true, In: "body"},
+			{Name: "introduced", Type: "string", Required: true, In: "body"},
+			{Name: "impact", Type: "string", Required: true, In: "body"},
+		},
+	},
+	{
+		ID: "mark_regression_fixed", Tier: TierB,
+		Description: "Record the fix of a known regression on main: repo, the commit it was recorded with and the commit that fixed it (40 characters each), as the caller. Appends main.regression.fixed; refused (409) when no known regression has that repo and introduced commit. Tier B; call the endpoint directly.",
+		Method:      "POST", Pattern: "/api/v1/bus/regressions/fixed",
+		Params: []Param{
+			{Name: "repo", Type: "string", Required: true, In: "body"},
+			{Name: "introduced", Type: "string", Required: true, In: "body"},
+			{Name: "fixed", Type: "string", Required: true, In: "body"},
+		},
+	},
+	{
 		ID: "delete_pipeline_run", Tier: TierB,
 		Description: "Delete a terminal Tekton PipelineRun. Tier B; call the endpoint directly.",
 		Method:      "DELETE", Pattern: "/api/v1/delivery/runs/{id}",

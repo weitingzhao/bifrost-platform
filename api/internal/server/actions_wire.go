@@ -312,6 +312,15 @@ func (s *Server) bindActionExecutors() {
 		},
 		path("name"), fields("revision", "tag", "who", "params"), s.delivery.HandleStartPipelineRun)
 
+	// The known regressions on main (bus_regressions.go): tier B, called directly; an approved card
+	// (never needed for B) would run the same guarded handler.
+	reg("report_regression", http.MethodPost,
+		func(map[string]any) string { return "/api/v1/bus/regressions" },
+		nil, fields("repo", "introduced", "impact"), s.handleRegressionWrite(false))
+	reg("mark_regression_fixed", http.MethodPost,
+		func(map[string]any) string { return "/api/v1/bus/regressions/fixed" },
+		nil, fields("repo", "introduced", "fixed"), s.handleRegressionWrite(true))
+
 	reg("release_window_hold", http.MethodPut,
 		func(map[string]any) string { return "/api/v1/delivery/release-window" },
 		nil, fields("what", "who", "reason", "ttl_minutes", "env"), s.delivery.HandlePutReleaseWindow)
