@@ -26,6 +26,9 @@ type Service struct {
 
 	redisOnce sync.Once
 	redis     *redis.Client
+
+	// onAutoRepair hears how an automatic repair ended (set before the loops start).
+	onAutoRepair func(ctx context.Context, ok bool, message string)
 }
 
 func NewService(clusterSvc *cluster.Service) *Service {

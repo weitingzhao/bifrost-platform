@@ -34,7 +34,7 @@ func TestTheEventsKeepTheirContract(t *testing.T) {
 // Origin: 2026-11-18, the list of problem channels: a probe that turned red
 // was seen only by whoever opened the checklist page.
 func TestStateEventsCarrySourceSeverityAndCause(t *testing.T) {
-	for _, e := range []Event{EnvHealth("prod/redis", "fail", "checklist-prober", "dial\n tcp  refused"), PluginStatus("market-data", "ok", "checklist-prober", "")} {
+	for _, e := range []Event{EnvHealth("prod/redis", "fail", "checklist-prober", "dial\n tcp  refused"), PluginStatus("market-data", "ok", "checklist-prober", ""), PluginStatus("ib-gateway", "fail", "ib-auto-repair", "reconnect failed"), EnvHealth("prod/redis", "fail", "patrol-autopilot", "restart: HTTP 500")} {
 		if err := eventlog.CheckBody(e.Type, Body(e)); err != nil {
 			t.Errorf("%+v: %v", e, err)
 		}

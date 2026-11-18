@@ -97,6 +97,7 @@ func (a *autopilotDispatcher) Dispatch(ctx context.Context, skill PatrolSkill, t
 		}
 		r := a.fixItem(ctx, sig, &b, progress)
 		results = append(results, r)
+		sayFix(ctx, r)
 	}
 
 	// Phase 4: Write consolidated report BEFORE self-restart
@@ -109,6 +110,7 @@ func (a *autopilotDispatcher) Dispatch(ctx context.Context, skill PatrolSkill, t
 	for _, sig := range selfRestartItems {
 		r := a.fixItem(ctx, sig, &b, progress)
 		results = append(results, r)
+		sayFix(ctx, r)
 	}
 
 	// Final tally

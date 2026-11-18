@@ -11,6 +11,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/opsevents"
 	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
 	"github.com/weitingzhao/bifrost-platform/api/internal/maintainer"
+	"github.com/weitingzhao/bifrost-platform/api/internal/patrol"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
@@ -24,6 +25,20 @@ func (s *Server) wireOpsEvents() {
 		safego.Go("bus-audit-line", func() { s.sayAuditLine(r) })
 	})
 	s.checklist.OnFlip(s.sayChecklistFlip)
+	s.ibgateway.OnAutoRepair(func(ctx context.Context, ok bool, message string) {
+		state := "fail"
+		if ok {
+			state = "ok"
+		}
+		s.sayOpsEvent(ctx, opsevents.PluginStatus("ib-gateway", state, "ib-auto-repair", message))
+	})
+	patrol.OnFix(func(ctx context.Context, item string, ok bool, detail string) {
+		state := "fail"
+		if ok {
+			state = "ok"
+		}
+		s.sayOpsEvent(ctx, opsevents.EnvHealth(checklist.ViewerEnv()+"/"+item, state, "patrol-autopilot", detail))
+	})
 	if s.delivery != nil {
 		s.delivery.OnMirrorSettled(func(ctx context.Context, repo, commit string, present bool) {
 			s.sayOpsEvent(ctx, opsevents.Mirror(repo, commit, present))

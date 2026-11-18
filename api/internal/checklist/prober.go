@@ -69,10 +69,7 @@ func NewProberFromEnv() *Prober {
 	if base == "" {
 		base = "http://127.0.0.1:8780"
 	}
-	env := strings.ToLower(strings.TrimSpace(os.Getenv("OPS_VIEWER_ENV")))
-	if env == "" {
-		env = "dev"
-	}
+	env := ViewerEnv()
 	return &Prober{
 		Base:           base,
 		APIHealth:      envOr("CHECKLIST_PROBER_API_HEALTH_URL", "http://platform-api:8780/health"),
@@ -82,6 +79,14 @@ func NewProberFromEnv() *Prober {
 		SelfRetry:      45 * time.Second,
 		SelfRetryEvery: 5 * time.Second,
 	}
+}
+
+// ViewerEnv is the environment this process describes (OPS_VIEWER_ENV, default dev).
+func ViewerEnv() string {
+	if env := strings.ToLower(strings.TrimSpace(os.Getenv("OPS_VIEWER_ENV"))); env != "" {
+		return env
+	}
+	return "dev"
 }
 
 func envOr(key, def string) string {

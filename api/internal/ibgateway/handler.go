@@ -22,6 +22,12 @@ func NewHandler(clusterSvc *cluster.Service, audit *actuation.AuditLog) *Handler
 	return &Handler{svc: svc, audit: audit}
 }
 
+// OnAutoRepair sets who hears how an automatic repair ended. It only listens:
+// the repair and its operator command are unchanged.
+func (h *Handler) OnAutoRepair(f func(ctx context.Context, ok bool, message string)) {
+	h.svc.onAutoRepair = f
+}
+
 // StartBackground starts the auto-repair loop. Kept out of NewHandler so the
 // caller decides: only the process holding the workers role runs the loops, and
 // a constructor side effect cannot be gated.

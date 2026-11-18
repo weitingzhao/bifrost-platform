@@ -95,6 +95,7 @@ func (s *Service) maybeAutoRollout(
 	if audit != nil {
 		audit.RecordDirect("platform-auto-repair", actuation.RoleOperator, "ib-gateway.auto_reconnect", resp.Target, statusLabel, resp.Message)
 	}
+	s.sayAutoRepair(ctx, resp.OK && err == nil, repairMessage(resp.Message, err))
 	if err != nil {
 		log.Printf("ib-gateway auto-repair rollout: %v", err)
 		return err
@@ -104,4 +105,17 @@ func (s *Service) maybeAutoRollout(
 		return fmt.Errorf("auto-repair not ok: %s", resp.Message)
 	}
 	return nil
+}
+
+func (s *Service) sayAutoRepair(ctx context.Context, ok bool, message string) {
+	if s.onAutoRepair != nil {
+		s.onAutoRepair(ctx, ok, message)
+	}
+}
+
+func repairMessage(message string, err error) string {
+	if err != nil {
+		return err.Error()
+	}
+	return message
 }

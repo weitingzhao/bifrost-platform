@@ -4,7 +4,8 @@
 // X-A26), a commit reaching or missing the Git mirror after a sync
 // (git.mirror.settled; X-A13), a data clone ending (data.job.finished; L13), a
 // probed service or plugin changing state (env.health.changed: L10, R01, R11,
-// R12; plugin.status.changed: R09).
+// R12, and how an automatic patrol fix ended, L11; plugin.status.changed: R09,
+// and how an automatic IB repair ended, L12).
 // The work stays where it is; an event is a hint, its ref is the truth.
 package opsevents
 
