@@ -4,7 +4,6 @@ import { act, cleanup, render, renderHook, screen, waitFor, within } from '@test
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/pages/CommitLineagePage', () => ({ CommitLineagePage: () => null }))
-vi.mock('@/pages/CodeHealthPage', () => ({ CodeHealthPage: () => null }))
 import marks from '@/api/__fixtures__/agentrt-progress-marks.testdb.json'
 import mission from '@/api/__fixtures__/agentrt-mission-M-2.prod.json'
 import tasks from '@/api/__fixtures__/agentrt-tasks-M-2.prod.json'

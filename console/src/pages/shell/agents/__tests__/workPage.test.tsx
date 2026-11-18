@@ -11,8 +11,6 @@ import { PlatformAuthContext } from '@/hooks/platformAuthContext'
 import { OwnerConsolePage } from '@/pages/shell/owner/OwnerConsolePage'
 
 vi.mock('@/api/client', async original => ({ ...await original<object>(), operatorToken: () => 'owner-token' }))
-// Code health draws a @bifrost/ui Dialog, which jsdom here cannot render (a second React); that its page opens is enough.
-vi.mock('@/pages/CodeHealthPage', () => ({ CodeHealthPage: () => <p data-testid="code-health-page">Code health page</p> }))
 
 /*
  * R5:5.5-2 (the Owner 2026-11-01 03:3x: Work was 17.7 screens, 28 blocks, "太长了"): Work opens on one summary card and
@@ -122,7 +120,7 @@ describe('Work opens on the round', () => {
     expect(tab(/^Live · 0 registered/)).toHaveAttribute('href', '#work?tab=live')
     expect(tab(/^Changes/)).toHaveAttribute('href', '#work?tab=changes')
     expect(screen.getByRole('region', { name: 'Modules' })).toHaveTextContent('Modules · R5')
-    for (const name of ['Sign-offs', 'Live work', 'Recent changes', 'Whole plan', 'Waiting on', 'Now', 'Open goals', 'Crew', 'Quota', 'Release lane', 'Goals', 'Activity', 'History', 'Commit lineage', 'Code health']) {
+    for (const name of ['Sign-offs', 'Live work', 'Recent changes', 'Whole plan', 'Waiting on', 'Now', 'Open goals', 'Crew', 'Quota', 'Release lane', 'Goals', 'Activity', 'History', 'Commit lineage']) {
       expect(screen.queryByRole('region', { name })).toBeNull()
     }
     await act(async () => { await new Promise(r => setTimeout(r, 50)) })
@@ -200,10 +198,9 @@ describe('every block that was on Work is still reachable', () => {
     ['#work?tab=live', ['Where the round stands', 'Live work'], ['Modules', 'Recent changes']],
     ['#work?tab=changes', ['Where the round stands', 'Recent changes'], ['Modules', 'Live work']],
     ['#work?section=activity', ['Coordinator', 'Release lane', 'Activity', 'History'], ['Where the round stands', 'Goals', 'Now', 'Open goals', 'Crew', 'Quota']],
-    ['#work?section=commit-lineage', ['Commit lineage'], ['Where the round stands', 'Code health']],
-    ['#work?section=code-health', ['Code health'], ['Where the round stands', 'Commit lineage']],
+    ['#work?section=commit-lineage', ['Commit lineage'], ['Where the round stands', 'CI']],
     // 2026-11-13/14, the Owner: he accepts CI's configuration and runs only when the Ops page shows them.
-    ['#work?section=ci', ['CI'], ['Where the round stands', 'Code health']],
+    ['#work?section=ci', ['CI'], ['Where the round stands', 'Commit lineage']],
   ])('%s', async (hash, regions, elsewhere) => {
     page(hash)
     for (const name of regions) expect(await screen.findByRole('region', { name })).toBeInTheDocument()

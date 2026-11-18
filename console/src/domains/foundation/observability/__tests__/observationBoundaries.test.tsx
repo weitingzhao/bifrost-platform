@@ -61,8 +61,6 @@ describe('observation domain boundary', () => {
     const called = [...queries.refetches].filter(([, fn]) => fn.mock.calls.length > 0).map(([k]) => k)
     expect(called).toHaveLength(11)
     expect(called).toContain(key('satellite', 'bus-deep', 'stg'))
-    expect(called).not.toContain(key('code-health', 'observability'))
     expect(called).not.toContain(key('network', 'sla', 'observability'))
-    expect(queries.options.get(key('code-health', 'observability'))?.refetchInterval).toBe(300000)
   })
 })

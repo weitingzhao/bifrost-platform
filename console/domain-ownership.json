@@ -96,20 +96,6 @@
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: CI configuration/runs and code health observations"
       },
-      "console/src/lib/code-health": {
-        "domains": [
-          "verification"
-        ],
-        "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: CI configuration/runs and code health observations"
-      },
-      "console/src/pages/CodeHealthPage.tsx": {
-        "domains": [
-          "verification"
-        ],
-        "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: CI configuration/runs and code health observations"
-      },
       "console/src/api/units.ts": {
         "domains": [
           "verification"
@@ -118,13 +104,6 @@
         "basis": "2026-11-16 source/caller audit: CI configuration/runs and code health observations"
       },
       "console/src/api/ciTimings.ts": {
-        "domains": [
-          "verification"
-        ],
-        "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: CI configuration/runs and code health observations"
-      },
-      "console/src/api/codeHealth.ts": {
         "domains": [
           "verification"
         ],

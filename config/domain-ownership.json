@@ -694,13 +694,6 @@
       "status": "assigned",
       "basis": "2026-11-16 source and caller audit: shared environment, topology, cluster and maintenance configuration types/loaders used across probe, telemetry, server and development adapters; authentication and role defaults unchanged"
     },
-    "api/internal/codehealth": {
-      "domains": [
-        "verification"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: code-quality scan report ingestion, history and read projection for verification; scanner execution, report validation and freshness behavior unchanged"
-    },
     "api/cmd/owner-exec": {
       "domains": [
         "owner"

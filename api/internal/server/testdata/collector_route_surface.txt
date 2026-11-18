@@ -111,9 +111,6 @@ deny	DELETE /api/v1/cluster/workloads/pods/{namespace}/{name}
 deny	GET /api/v1/cluster/workloads/pods/{namespace}/{name}/logs
 deny	POST /api/v1/cluster/workloads/rollout-restart
 deny	POST /api/v1/cluster/workloads/scale
-deny	GET /api/v1/code-health/
-deny	POST /api/v1/code-health/report
-deny	POST /api/v1/code-health/rescan
 deny	GET /api/v1/context
 deny	GET /api/v1/data-husbandry
 deny	GET /api/v1/delivery/compare

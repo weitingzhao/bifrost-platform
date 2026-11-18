@@ -27,7 +27,7 @@ function CoordinatorNote({ view, now }: { view: OwnerConsoleData['coordinator'];
  * Work (R5:5.5-2, Design v3.6 WorkPage): the round's summary and its tabs (WorkPlanView); or, a step away, one of the
  * pages that were further down the same page before: Goals (the goal cards), Activity (the runtime as a whole: what
  * needs cleanup (R5:5.5-4: offline hosts and registered work with no heartbeat, moved off Work's top), Now, open goals,
- * crew, quota, the release lane, threads in progress), Code health and Commit lineage. Each is drawn, and read, only
+ * crew, quota, the release lane, threads in progress) and Commit lineage. Each is drawn, and read, only
  * while the address names it (`#work?section=…`, `#work?goal=…`).
  */
 export function OwnerWork({ data }: { data: OwnerConsoleData }) {

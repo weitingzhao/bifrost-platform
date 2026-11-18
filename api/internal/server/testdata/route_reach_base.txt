@@ -25,7 +25,6 @@
 -	GET /api/v1/cluster/redis
 -	GET /api/v1/cluster/service-readiness
 -	GET /api/v1/cluster/workloads
--	GET /api/v1/code-health
 -	GET /api/v1/context
 -	GET /api/v1/data-husbandry
 -	GET /api/v1/delivery/compare
@@ -132,7 +131,6 @@ viewer	GET /api/v1/cluster/redis
 viewer	GET /api/v1/cluster/service-readiness
 viewer	GET /api/v1/cluster/workloads
 viewer	GET /api/v1/cluster/workloads/pods/{namespace}/{name}/logs
-viewer	GET /api/v1/code-health
 viewer	GET /api/v1/context
 viewer	GET /api/v1/data-husbandry
 viewer	GET /api/v1/delivery/compare
@@ -247,7 +245,6 @@ reporter	GET /api/v1/cluster/redis
 reporter	GET /api/v1/cluster/service-readiness
 reporter	GET /api/v1/cluster/workloads
 reporter	GET /api/v1/cluster/workloads/pods/{namespace}/{name}/logs
-reporter	GET /api/v1/code-health
 reporter	GET /api/v1/context
 reporter	GET /api/v1/data-husbandry
 reporter	GET /api/v1/delivery/compare
@@ -382,7 +379,6 @@ operator	GET /api/v1/cluster/redis
 operator	GET /api/v1/cluster/service-readiness
 operator	GET /api/v1/cluster/workloads
 operator	GET /api/v1/cluster/workloads/pods/{namespace}/{name}/logs
-operator	GET /api/v1/code-health
 operator	GET /api/v1/context
 operator	GET /api/v1/data-husbandry
 operator	GET /api/v1/delivery/compare
@@ -481,8 +477,6 @@ operator	POST /api/v1/cluster/postgres/wal-store/repair
 operator	POST /api/v1/cluster/sync-kubeconfig
 operator	POST /api/v1/cluster/workloads/rollout-restart
 operator	POST /api/v1/cluster/workloads/scale
-operator	POST /api/v1/code-health/report
-operator	POST /api/v1/code-health/rescan
 operator	POST /api/v1/delivery/mirrors/sync
 operator	POST /api/v1/delivery/pipelines/{name}/runs
 operator	POST /api/v1/delivery/supply-chain/dockerfile-configmaps/refresh
@@ -557,7 +551,6 @@ admin	GET /api/v1/cluster/redis
 admin	GET /api/v1/cluster/service-readiness
 admin	GET /api/v1/cluster/workloads
 admin	GET /api/v1/cluster/workloads/pods/{namespace}/{name}/logs
-admin	GET /api/v1/code-health
 admin	GET /api/v1/context
 admin	GET /api/v1/data-husbandry
 admin	GET /api/v1/delivery/compare
@@ -669,8 +662,6 @@ admin	POST /api/v1/cluster/postgres/wal-store/repair
 admin	POST /api/v1/cluster/sync-kubeconfig
 admin	POST /api/v1/cluster/workloads/rollout-restart
 admin	POST /api/v1/cluster/workloads/scale
-admin	POST /api/v1/code-health/report
-admin	POST /api/v1/code-health/rescan
 admin	POST /api/v1/delivery/mirrors/sync
 admin	POST /api/v1/delivery/pipelines/{name}/runs
 admin	POST /api/v1/delivery/supply-chain/dockerfile-configmaps/refresh
@@ -747,7 +738,6 @@ trade-satellite	GET /api/v1/cluster/redis
 trade-satellite	GET /api/v1/cluster/service-readiness
 trade-satellite	GET /api/v1/cluster/workloads
 trade-satellite	GET /api/v1/cluster/workloads/pods/{namespace}/{name}/logs
-trade-satellite	GET /api/v1/code-health
 trade-satellite	GET /api/v1/context
 trade-satellite	GET /api/v1/data-husbandry
 trade-satellite	GET /api/v1/delivery/compare
@@ -846,8 +836,6 @@ trade-satellite	POST /api/v1/cluster/postgres/wal-store/repair
 trade-satellite	POST /api/v1/cluster/sync-kubeconfig
 trade-satellite	POST /api/v1/cluster/workloads/rollout-restart
 trade-satellite	POST /api/v1/cluster/workloads/scale
-trade-satellite	POST /api/v1/code-health/report
-trade-satellite	POST /api/v1/code-health/rescan
 trade-satellite	POST /api/v1/delivery/mirrors/sync
 trade-satellite	POST /api/v1/delivery/pipelines/{name}/runs
 trade-satellite	POST /api/v1/delivery/supply-chain/dockerfile-configmaps/refresh
@@ -912,7 +900,6 @@ agentd:h1	GET /api/v1/cluster/postgres/backup-status
 agentd:h1	GET /api/v1/cluster/redis
 agentd:h1	GET /api/v1/cluster/service-readiness
 agentd:h1	GET /api/v1/cluster/workloads
-agentd:h1	GET /api/v1/code-health
 agentd:h1	GET /api/v1/context
 agentd:h1	GET /api/v1/data-husbandry
 agentd:h1	GET /api/v1/delivery/compare
@@ -1007,7 +994,6 @@ executor	GET /api/v1/cluster/postgres/backup-status
 executor	GET /api/v1/cluster/redis
 executor	GET /api/v1/cluster/service-readiness
 executor	GET /api/v1/cluster/workloads
-executor	GET /api/v1/code-health
 executor	GET /api/v1/context
 executor	GET /api/v1/data-husbandry
 executor	GET /api/v1/delivery/compare

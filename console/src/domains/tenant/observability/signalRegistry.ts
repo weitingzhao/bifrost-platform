@@ -74,38 +74,4 @@ export const TENANT_SIGNAL_REGISTRY: SignalDef[] = [
     grafanaDashboardId: 'ib-gateway',
     affectsDomains: ['subcontractors', 'satellite'],
   },
-  {
-    id: 'code-health.satellite',
-    label: 'Code health (Trade)',
-    domain: 'satellite',
-    scope: 'shared',
-    role: 'evidence',
-    source: 'code_health',
-    optionalContract: true,
-    detailRoute: 'code-health',
-    description:
-      'Trade FE + OLTP (api/core/worker): duplication / oversized / FE API contract coverage vs baselines',
-  },
-  {
-    id: 'code-health.research',
-    label: 'Code health (Research)',
-    domain: 'research',
-    scope: 'shared',
-    role: 'evidence',
-    source: 'code_health',
-    optionalContract: true,
-    detailRoute: 'code-health',
-    description: 'Duplication / oversized files / image version spread vs ratchet baselines',
-  },
-  {
-    id: 'code-health.subcontractors',
-    label: 'Code health (Plugins)',
-    domain: 'subcontractors',
-    scope: 'shared',
-    role: 'evidence',
-    source: 'code_health',
-    optionalContract: true,
-    detailRoute: 'code-health',
-    description: 'Duplication / oversized files across IB Gateway / Market Data / Flex Query plugins',
-  }
 ]

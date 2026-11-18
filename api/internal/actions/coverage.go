@@ -93,8 +93,6 @@ func init() {
 	)
 	exempt("unclassified by LANE-B1: evidence, queue, or checklist — not a cluster write",
 		"POST /api/v1/audit/append",
-		"POST /api/v1/code-health/report",
-		"POST /api/v1/code-health/rescan",
 		"PUT /api/v1/lineage/thread-title",
 		"PUT /api/v1/lineage/transcript-title",
 		"POST /api/v1/agent/threads/heartbeat",

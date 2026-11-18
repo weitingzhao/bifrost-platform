@@ -32,7 +32,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
-	"github.com/weitingzhao/bifrost-platform/api/internal/codehealth"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/dataclone"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -93,7 +92,6 @@ type Server struct {
 	checklist       *checklist.Handler
 	opsagent        *opsagent.Handler
 	agentgovernance *agentgovernance.Handler
-	codehealth      *codehealth.Handler
 	lineage         *lineage.Handler
 	releases        *releases.Handler
 	work            *workactions.Handler
@@ -215,7 +213,6 @@ func New(cfg *config.Config) (*Server, error) {
 		planeURL:        planeURL,
 		mountPlane:      mountPlane,
 		agentgovernance: agentgovernance.NewHandler(),
-		codehealth:      codehealth.NewHandler(audit),
 		satellite:       satellite.NewHandler(cfg),
 		selfhealth:      selfhealth.NewHandler(cfg, selfHealthArgoApps(gitopsH.Service())),
 		network:         network.NewHandler(audit),

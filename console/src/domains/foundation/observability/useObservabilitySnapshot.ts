@@ -9,7 +9,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchAgentBridge } from '@/api/agentOps'
 import { fetchClusterMetrics, fetchClusterNodes, fetchClusterObservability } from '@/api/cluster'
-import { fetchCodeHealth } from '@/api/codeHealth'
 import { fetchIbGatewayStatus, fetchNetworkSla } from '@/api/network'
 import { fetchMatrix, fetchSatelliteBusDeep, fetchSelfHealth } from '@/api/core'
 import { fetchTelemetryAlerts, fetchTelemetryOverview, fetchTelemetryTargets } from '@/api/telemetry'
@@ -42,7 +41,7 @@ function errMessage(err: unknown): string | null {
 
 export function useObservabilitySnapshot(options?: {
   followViewerOnly?: boolean
-  /** Status keeps the health verdict. Cluster metrics and code-health are evidence and stay off until asked. */
+  /** Status keeps the health verdict. Cluster metrics are evidence and stay off until asked. */
   includeEvidence?: boolean
 }): {
   viewModel: ObservabilityViewModel
@@ -151,15 +150,6 @@ export function useObservabilitySnapshot(options?: {
     refetchInterval: REFETCH,
     retry: false,
   })
-  // Code-health readings change per commit, not per scrape — a slower cadence
-  // than REFETCH is enough and keeps the board's request budget for runtime.
-  const codeHealthQ = useQuery({
-    queryKey: ['code-health', 'observability'],
-    queryFn: () => fetchCodeHealth(1),
-    enabled: includeEvidence,
-    refetchInterval: 5 * 60_000,
-    retry: false,
-  })
   const bridgeQ = useQuery({
     queryKey: ['agent', 'bridge'],
     queryFn: fetchAgentBridge,
@@ -204,7 +194,6 @@ export function useObservabilitySnapshot(options?: {
         networkSla: networkSlaQ.data,
         agentBridge: bridgeQ.data,
         selfHealth: selfQ.data,
-        codeHealth: codeHealthQ.data,
         standbyNodes,
       }),
     [
@@ -221,7 +210,6 @@ export function useObservabilitySnapshot(options?: {
       busHealth,
       ibQ.data,
       networkSlaQ.data,
-      codeHealthQ.data,
       bridgeQ.data,
       selfQ.data,
       standbyNodes,

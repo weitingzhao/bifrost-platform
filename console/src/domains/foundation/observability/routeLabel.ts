@@ -18,8 +18,6 @@ export function routeLabel(route: string): string {
       return 'Governance → Blueprint'
     case 'observability':
       return 'Mission Control → Observability'
-    case 'code-health':
-      return 'Mission Control → Code Health'
     default:
       return route
   }

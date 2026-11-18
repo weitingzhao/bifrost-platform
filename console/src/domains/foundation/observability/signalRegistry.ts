@@ -90,17 +90,6 @@ const FOUNDATION_SIGNAL_REGISTRY: SignalDef[] = [
     grafanaDashboardId: 'agent-operations',
   },
   {
-    id: 'code-health.rocket',
-    label: 'Code health (Ops Platform)',
-    domain: 'rocket',
-    scope: 'shared',
-    role: 'evidence',
-    source: 'code_health',
-    optionalContract: true,
-    detailRoute: 'code-health',
-    description: 'Oversized files (platform + bifrost-ui) vs ratchet baselines',
-  },
-  {
     id: 'mission-control.hub',
     label: 'Mission Control runtime',
     domain: 'mission-control',
@@ -166,12 +155,8 @@ export const SIGNAL_REGISTRY: SignalDef[] = [
   TENANT_SIGNAL_REGISTRY[5]!,
   TENANT_SIGNAL_REGISTRY[6]!,
   FOUNDATION_SIGNAL_REGISTRY[7]!,
-  TENANT_SIGNAL_REGISTRY[7]!,
-  TENANT_SIGNAL_REGISTRY[8]!,
   FOUNDATION_SIGNAL_REGISTRY[8]!,
-  TENANT_SIGNAL_REGISTRY[9]!,
-  FOUNDATION_SIGNAL_REGISTRY[9]!,
-  FOUNDATION_SIGNAL_REGISTRY[10]!
+  FOUNDATION_SIGNAL_REGISTRY[9]!
 ]
 
 const BY_ID = Object.fromEntries(SIGNAL_REGISTRY.map(s => [s.id, s])) as Record<string, SignalDef>

@@ -432,21 +432,6 @@
       "unresolved_imports": []
     },
     {
-      "path": "console/src/api/codeHealth.ts",
-      "files": [
-        "console/src/api/codeHealth.ts"
-      ],
-      "imports": [
-        "console/src/api/client.ts",
-        "console/src/api/serverContact.ts"
-      ],
-      "test_imports": [],
-      "external_imports": [],
-      "source_inputs": [],
-      "test_inputs": [],
-      "unresolved_imports": []
-    },
-    {
       "path": "console/src/api/core.ts",
       "files": [
         "console/src/api/core.ts"
@@ -1873,7 +1858,6 @@
       "files": [
         "console/src/domains/foundation/observability/__tests__/attentionMuteBatch.test.ts",
         "console/src/domains/foundation/observability/__tests__/attentionRemediationCatalog.test.ts",
-        "console/src/domains/foundation/observability/__tests__/codeHealthSignals.test.ts",
         "console/src/domains/foundation/observability/__tests__/observabilityViewModel.test.ts",
         "console/src/domains/foundation/observability/__tests__/observationBoundaries.test.tsx",
         "console/src/domains/foundation/observability/alertMapping.ts",
@@ -1903,7 +1887,6 @@
         "console/src/api/agentOps.ts",
         "console/src/api/cluster.ts",
         "console/src/api/clusterTypes.ts",
-        "console/src/api/codeHealth.ts",
         "console/src/api/core.ts",
         "console/src/api/network.ts",
         "console/src/api/networkTypes.ts",
@@ -1920,7 +1903,6 @@
       ],
       "test_imports": [
         "console/src/api",
-        "console/src/api/codeHealth.ts",
         "console/src/domains/tenant/observability"
       ],
       "external_imports": [
@@ -2876,31 +2858,6 @@
       "unresolved_imports": []
     },
     {
-      "path": "console/src/lib/code-health",
-      "files": [
-        "console/src/lib/code-health/__tests__/codeHealthLens.test.ts",
-        "console/src/lib/code-health/__tests__/codeHealthLowerBaseline.test.ts",
-        "console/src/lib/code-health/codeHealthLens.ts",
-        "console/src/lib/code-health/codeHealthLowerBaseline.ts",
-        "console/src/lib/code-health/codeHealthPageHelpers.tsx"
-      ],
-      "imports": [
-        "console/src/api/codeHealth.ts",
-        "console/src/components/layout",
-        "console/src/lib/control-room"
-      ],
-      "test_imports": [
-        "console/src/api/codeHealth.ts"
-      ],
-      "external_imports": [
-        "@bifrost/ui",
-        "vitest"
-      ],
-      "source_inputs": [],
-      "test_inputs": [],
-      "unresolved_imports": []
-    },
-    {
       "path": "console/src/lib/control-room",
       "files": [
         "console/src/lib/control-room/__tests__/controlRoomBays.test.ts",
@@ -3609,27 +3566,6 @@
       ],
       "test_imports": [],
       "external_imports": [
-        "react"
-      ],
-      "source_inputs": [],
-      "test_inputs": [],
-      "unresolved_imports": []
-    },
-    {
-      "path": "console/src/pages/CodeHealthPage.tsx",
-      "files": [
-        "console/src/pages/CodeHealthPage.tsx"
-      ],
-      "imports": [
-        "console/src/api/codeHealth.ts",
-        "console/src/components/layout",
-        "console/src/lib/architecture",
-        "console/src/lib/code-health"
-      ],
-      "test_imports": [],
-      "external_imports": [
-        "@bifrost/ui",
-        "@tanstack/react-query",
         "react"
       ],
       "source_inputs": [],
@@ -4799,7 +4735,6 @@
         "console/src/api/releases.ts",
         "console/src/components/layout",
         "console/src/lib/shell",
-        "console/src/pages/CodeHealthPage.tsx",
         "console/src/pages/CommitLineagePage.tsx",
         "console/src/pages/shell/owner",
         "console/src/pages/shell/releases",

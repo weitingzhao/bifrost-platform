@@ -18,8 +18,6 @@ import { parseDaemonSetGaps, parseDownTargets, parseStandbyPods } from '../stand
 import { PlatformAuthContext } from '@/hooks/platformAuthContext'
 
 vi.mock('../../agents/WorkPlanView', () => ({ WorkPlanView: () => <section data-testid="plan-view" /> }))
-// Code health draws a @bifrost/ui Dialog, which jsdom here cannot render (a second React); its own page is all that is asserted.
-vi.mock('@/pages/CodeHealthPage', () => ({ CodeHealthPage: () => <p data-testid="code-health-page" /> }))
 
 const NOW = Date.parse('2026-10-16T20:10:43Z')
 const standbyKnown = vi.hoisted(() => ({ value: true }))
@@ -101,7 +99,7 @@ const viewer = { token: '', caps: undefined, capsLoading: false, capsError: fals
 function show(hash = '#you', signIn = false) {
   window.history.replaceState(null, '', hash)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  // Code health and Commit lineage read the sign-in (their own pages on Work since R5:5.5-2); the shell provides it.
+  // Commit lineage reads the sign-in (its own page on Work since R5:5.5-2); the shell provides it.
   return render(<QueryClientProvider client={client}>{signIn ? <PlatformAuthContext.Provider value={viewer}><Shell /></PlatformAuthContext.Provider> : <Shell />}</QueryClientProvider>)
 }
 const headings = () => screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)

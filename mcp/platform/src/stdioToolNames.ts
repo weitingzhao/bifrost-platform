@@ -63,7 +63,6 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'check_full_ci_landings',
   'request_unit_evidence',
   'run_agentrt_migration',
-  'get_code_health',
   'get_telemetry_overview',
   'get_telemetry_alerts',
   'get_telemetry_targets',

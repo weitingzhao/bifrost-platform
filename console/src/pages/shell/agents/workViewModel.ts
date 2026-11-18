@@ -4,14 +4,14 @@ import { canonicalQuery } from '@/lib/shell/useHashSection'
 
 /*
  * Which view of Work the address opens (R5:5.5-2, Design v3.6 WorkPage): the round summary and its four tabs, or one
- * of the pages Work keeps one step away (goals, activity, code health, commit lineage). Every address Work took before
+ * of the pages Work keeps one step away (goals, activity, commit lineage). Every address Work took before
  * still lands where it did: `goal=` on the goal cards, `section=signoff` on the sign-offs, `section=plan` / `node=` on
  * the round, `root=` / `round=` on that round.
  */
 
 export const WORK_TABS = ['round', 'signoffs', 'live', 'changes'] as const
 export type WorkTab = (typeof WORK_TABS)[number]
-export const WORK_SECTIONS = ['activity', 'code-health', 'commit-lineage', 'delivery-boundaries', 'ci'] as const
+export const WORK_SECTIONS = ['activity', 'commit-lineage', 'delivery-boundaries', 'ci'] as const
 export type WorkSection = (typeof WORK_SECTIONS)[number]
 export type WorkView = { kind: 'tab'; tab: WorkTab } | { kind: 'section'; section: WorkSection }
 
@@ -56,6 +56,6 @@ export const workSectionHref = (section: WorkSection, root: string | null = null
   formatShellHash('work', new URLSearchParams({ section, ...(root ? { root } : {}) }).toString())
 
 export const WORK_SECTION_TITLES: Record<WorkSection, string> = {
-  activity: 'Activity', 'code-health': 'Code health', 'commit-lineage': 'Commit lineage',
+  activity: 'Activity', 'commit-lineage': 'Commit lineage',
   'delivery-boundaries': 'Delivery boundaries', ci: 'CI',
 }

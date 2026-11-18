@@ -116,8 +116,6 @@ describe('Needs you and Progress, now part of For you and Work (W-31 2.2b)', () 
       ['needs-you?section=recently-handled', 'command', '#command?section=recently-handled'],
       ['progress', 'work', '#work?section=goals'],
       ['progress?goal=M-12', 'work', '#work?goal=M-12'],
-      ['progress?section=code-health', 'work', '#work?section=code-health'],
-      ['code-health', 'work', '#work?section=code-health'],
       ['commit-lineage', 'work', '#work?section=commit-lineage'],
       ['agents', 'work', '#work'],
       ['queue', 'command', '#command?section=waiting'],

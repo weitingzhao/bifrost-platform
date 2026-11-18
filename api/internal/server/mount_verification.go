@@ -11,17 +11,6 @@ import (
 // of Router until 2026-11-16, in one list ordered by who may call them; each
 // route keeps its path, its handler and the same gate.
 func (s *Server) mountVerification(r chi.Router) {
-	// Code-health ratchet readings (agent-config/scripts/code-health/scan.sh).
-	// Read is viewer-level; writing is operator-gated so a reading cannot be
-	// overwritten by anything that can reach the port.
-	r.Route("/code-health", func(r chi.Router) {
-		r.Get("/", s.codehealth.HandleGet)
-		r.Group(func(r chi.Router) {
-			r.Use(s.auth.Require(actuation.RoleOperator))
-			r.Post("/report", s.codehealth.HandleReport)
-			r.Post("/rescan", s.codehealth.HandleRescan)
-		})
-	})
 	// "Is this commit green", from the evidence ledger: read-only; it names
 	// repositories, commits and CI runs, so viewer and above.
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/evidence/commit", s.handleEvidenceCommit)

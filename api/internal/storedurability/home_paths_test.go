@@ -24,7 +24,6 @@ var homePathFiles = map[string]string{
 	// stores still resolving under $HOME when no env is set — TD-196 backlog
 	"agentdeploy/store.go":       "store; TD-196 moves it to a ConfigMap",
 	"dataclone/data_clone.go":    "store; TD-196 moves it to a ConfigMap",
-	"codehealth/store.go":        "store; TD-196 moves it to a ConfigMap",
 	"patrol/store.go":            "store; TD-196 moves it to a ConfigMap",
 	"agentgovernance/outcome.go": "skill-outcome archive; same $HOME fallback the retired runner job store used",
 	// operator credentials and workstation files, not platform state

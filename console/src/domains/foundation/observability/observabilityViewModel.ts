@@ -12,7 +12,6 @@ import { goldenFromMetrics } from '@/domains/tenant/observability/probeInterpret
 
 import type { AgentBridgeResponse } from '@/api/agentTypes'
 import type { ClusterMetricsResponse, ClusterObservabilityResponse, TelemetryMetricResult } from '@/api/clusterTypes'
-import type { CodeHealthResponse } from '@/api/codeHealth'
 import type { SelfHealthResponse } from '@/api/matrixTypes'
 import type { NetworkSlaResponse } from '@/api/networkTypes'
 import { bridgeRunners } from '@/lib/agent/macHostRole'
@@ -88,7 +87,6 @@ export type ObservabilityViewModelInput = {
   networkSla?: NetworkSlaResponse | null
   agentBridge?: AgentBridgeResponse | null
   selfHealth?: SelfHealthResponse | null
-  codeHealth?: CodeHealthResponse | null
   /**
    * Elastic standby hosts (`elastic_mode === 'standby'` only — not degraded).
    * Used to neutralize Expected-Off node alerts and TargetDown scrapes.
@@ -449,70 +447,6 @@ function evaluateOptionalNone(signalId: string): EvaluatedSignal {
   }
 }
 
-/**
- * Roll the ratchet readings for one domain into a single signal.
- *
- * States, in the order they are decided:
- * - report absent / never submitted → NOT OBSERVED. Nothing was measured, so
- *   nothing may be claimed. This is the whole point of the signal.
- * - domain has readings, any over baseline → DEGRADED (visible, not a page).
- * - readings present and none over → HEALTHY.
- *
- * A domain with no metric in an otherwise valid report is also NOT OBSERVED:
- * the scanner reports absent repos explicitly rather than as zero, and that
- * distinction has to survive all the way to the board.
- */
-function evaluateCodeHealth(
-  signalId: string,
-  domain: SystemDomainId,
-  codeHealth: CodeHealthResponse | null | undefined,
-): EvaluatedSignal {
-  const def = getSignalDef(signalId)!
-  const base = { def, env: 'shared' as ObservabilityEnvId }
-
-  if (codeHealth == null) {
-    return { ...base, state: 'not_observed', summary: 'Code-health report not loaded' }
-  }
-  if (!codeHealth.reported || codeHealth.latest == null) {
-    return {
-      ...base,
-      state: 'not_observed',
-      summary: 'Never scanned — run `make check-code-health`',
-    }
-  }
-
-  const report = codeHealth.latest
-  const mine = report.metrics.filter(m => m.domain === domain)
-  if (mine.length === 0) {
-    const absent = (report.not_measured ?? '').trim()
-    return {
-      ...base,
-      state: 'not_observed',
-      summary: absent !== '' ? `Not measured (${absent})` : 'No metric reported for this domain',
-      evidence: `commit ${report.commit}`,
-    }
-  }
-
-  const over = mine.filter(m => m.status === 'over')
-  const improved = mine.filter(m => m.status === 'improved')
-  if (over.length > 0) {
-    return {
-      ...base,
-      state: 'degraded',
-      summary: `${over.length}/${mine.length} over baseline — ${over.map(m => m.label).join(', ')}`,
-      evidence: `commit ${report.commit}`,
-      linkedIds: over.map(m => m.id),
-    }
-  }
-  const owed = improved.length > 0 ? ` (${improved.length} baseline lowering owed)` : ''
-  return {
-    ...base,
-    state: 'healthy',
-    summary: `${mine.length} metric(s) at or below baseline${owed}`,
-    evidence: `commit ${report.commit}`,
-  }
-}
-
 function evaluateNetworkProbe(sla: NetworkSlaResponse | null | undefined): EvaluatedSignal {
   const def = getSignalDef('ground.network')!
   if (sla == null) {
@@ -753,12 +687,6 @@ export function buildObservabilityViewModel(
 
   // Engineer
   signals.push(evaluateOperatorPlane(input.agentBridge))
-
-  // Code health — code assets, not runtime. NOT OBSERVED until scanned.
-  signals.push(evaluateCodeHealth('code-health.satellite', 'satellite', input.codeHealth))
-  signals.push(evaluateCodeHealth('code-health.research', 'research', input.codeHealth))
-  signals.push(evaluateCodeHealth('code-health.rocket', 'rocket', input.codeHealth))
-  signals.push(evaluateCodeHealth('code-health.subcontractors', 'subcontractors', input.codeHealth))
 
   // Mission Control / Governance — NOT OBSERVED
   signals.push(evaluateOptionalNone('mission-control.hub'))

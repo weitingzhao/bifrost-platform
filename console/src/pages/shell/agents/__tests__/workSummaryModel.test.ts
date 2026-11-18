@@ -368,7 +368,6 @@ describe('the address of each view of Work', () => {
     ['section=goals', { kind: 'tab', tab: 'round' }],
     ['goal=M-12&task=t_1', { kind: 'tab', tab: 'round' }],
     ['section=activity', { kind: 'section', section: 'activity' }],
-    ['section=code-health', { kind: 'section', section: 'code-health' }],
     ['section=commit-lineage', { kind: 'section', section: 'commit-lineage' }],
     ['section=ci', { kind: 'section', section: 'ci' }],
   ])('%s opens %j', (query, view) => {
