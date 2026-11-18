@@ -43,8 +43,6 @@ function agentBridgeOk(): AgentBridgeResponse {
   return {
     generated_at: '2026-07-21T11:59:00Z',
     remediation_runner: { url: 'http://runner', status: 'ok' },
-    git_bridge: { status: 'ok' },
-    satellite_probe_bridge: { status: 'ok' },
     platform_mcp: {
       server_name: 'bifrost-platform',
       server_version: '0.0.0',
@@ -54,7 +52,6 @@ function agentBridgeOk(): AgentBridgeResponse {
       transport: 'stdio',
       script_path: '',
     },
-    nightly_report: { available: false },
   }
 }
 
@@ -211,13 +208,6 @@ describe('observability signal registry + verdict aggregation', () => {
     const { verdict, reason } = domainVerdictFromSignals(signals, [])
     expect(verdict).toBe('healthy')
     expect(reason).toMatch(/not observed \(optional\)/i)
-
-    // Engineer on prod/stg seat: agent-bridge NOT OBSERVED (optionalContract).
-    const engineer = [
-      sig('engineer.operator-plane', 'healthy'),
-      sig('engineer.agent-bridge', 'not_observed'),
-    ]
-    expect(domainVerdictFromSignals(engineer, []).verdict).toBe('healthy')
 
     // Non-optional not_observed still blocks HEALTHY (partial observation → UNKNOWN).
     const partial = [

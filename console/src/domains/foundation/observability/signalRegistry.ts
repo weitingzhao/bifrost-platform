@@ -90,18 +90,6 @@ const FOUNDATION_SIGNAL_REGISTRY: SignalDef[] = [
     grafanaDashboardId: 'agent-operations',
   },
   {
-    id: 'engineer.agent-bridge',
-    label: 'Agent / probe bridge',
-    domain: 'engineer',
-    scope: 'shared',
-    role: 'required',
-    source: 'agent_bridge',
-    optionalContract: true,
-    detailRoute: 'operator-plane',
-    grafanaDashboardId: 'agent-operations',
-    description: 'Mac-adjacent bridge — NOT OBSERVED on prod/stg seats',
-  },
-  {
     id: 'code-health.rocket',
     label: 'Code health (Ops Platform)',
     domain: 'rocket',
@@ -178,13 +166,12 @@ export const SIGNAL_REGISTRY: SignalDef[] = [
   TENANT_SIGNAL_REGISTRY[5]!,
   TENANT_SIGNAL_REGISTRY[6]!,
   FOUNDATION_SIGNAL_REGISTRY[7]!,
-  FOUNDATION_SIGNAL_REGISTRY[8]!,
   TENANT_SIGNAL_REGISTRY[7]!,
   TENANT_SIGNAL_REGISTRY[8]!,
-  FOUNDATION_SIGNAL_REGISTRY[9]!,
+  FOUNDATION_SIGNAL_REGISTRY[8]!,
   TENANT_SIGNAL_REGISTRY[9]!,
-  FOUNDATION_SIGNAL_REGISTRY[10]!,
-  FOUNDATION_SIGNAL_REGISTRY[11]!
+  FOUNDATION_SIGNAL_REGISTRY[9]!,
+  FOUNDATION_SIGNAL_REGISTRY[10]!
 ]
 
 const BY_ID = Object.fromEntries(SIGNAL_REGISTRY.map(s => [s.id, s])) as Record<string, SignalDef>

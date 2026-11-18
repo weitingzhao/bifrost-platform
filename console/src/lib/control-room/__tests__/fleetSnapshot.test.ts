@@ -128,8 +128,6 @@ const supplyOk = {
 const bridgeOk = {
   generated_at: 't',
   remediation_runner: { url: 'http://127.0.0.1:8790', status: 'ok' },
-  git_bridge: { status: 'ok', dirty_repos: 0 },
-  satellite_probe_bridge: { status: 'ok' },
   platform_mcp: {
     server_name: 'p',
     server_version: '1',
@@ -139,7 +137,6 @@ const bridgeOk = {
     transport: 'stdio' as const,
     script_path: '',
   },
-  nightly_report: { available: false },
 }
 
 describe('std', () => {
@@ -516,14 +513,13 @@ describe('buildFleetSnapshot integration', () => {
       viewerEnv: 'prod',
       matrices: [matrix('dev'), matrix('stg'), matrix('prod')],
       self: selfHealth(['prod', 'stg'], 'ok', 'prod'),
-      groundBridgeReady: false,
     })
     expect(snap.columns).toEqual(['dev', 'stg', 'prod'])
     expect(getCell(snap, 'satellite', 'dev-local' as never)).toBeUndefined()
     expect(getCell(snap, 'rocket', 'dev-local' as never)).toBeUndefined()
   })
 
-  it('degrades Engineer when the local Mac probe-bridge fails, without affecting Ground', () => {
+  it('is GO with fleetClear when every module is green (incl. IB Gateway)', () => {
     const snap = buildFleetSnapshot({
       viewerEnv: 'dev',
       matrices: [matrix('dev'), matrix('stg'), matrix('prod')],
@@ -531,25 +527,6 @@ describe('buildFleetSnapshot integration', () => {
       stg: stgSmokeOk,
       supply: supplyOk,
       cluster: clusterOk,
-      groundBridgeReady: false,
-      runner: { status: 'ok' },
-      bridge: { ...bridgeOk, satellite_probe_bridge: { status: 'fail', error: 'not_configured' } },
-    })
-    const eng = getCell(snap, 'engineer', 'span')
-    expect(eng?.signal).toBe('fail')
-    expect(eng?.detail).toMatch(/Mac seat/)
-    expect(getCell(snap, 'ground', 'span')?.signal).toBe('ok')
-  })
-
-  it('is GO with fleetClear when every module is green (incl. Mac seat + IB Gateway)', () => {
-    const snap = buildFleetSnapshot({
-      viewerEnv: 'dev',
-      matrices: [matrix('dev'), matrix('stg'), matrix('prod')],
-      self: selfHealth(['dev', 'stg', 'prod']),
-      stg: stgSmokeOk,
-      supply: supplyOk,
-      cluster: clusterOk,
-      groundBridgeReady: true,
       runner: { status: 'ok' },
       ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
       postgresBackup: backupOk,
@@ -573,7 +550,6 @@ describe('buildFleetSnapshot integration', () => {
       stg: stgSmokeOk,
       supply: supplyOk,
       cluster: clusterOk,
-      groundBridgeReady: true,
       runner: { status: 'ok' },
       ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
       postgresBackup: {
@@ -602,7 +578,6 @@ describe('buildFleetSnapshot integration', () => {
       stg: stgSmokeOk,
       supply: supplyOk,
       cluster: clusterOk,
-      groundBridgeReady: true,
       runner: { status: 'ok' },
       ibGateway: {
         mode: 'live',
@@ -647,7 +622,6 @@ describe('buildFleetSnapshot integration', () => {
       stg: stgSmokeOk,
       supply: supplyOk,
       cluster: clusterOk,
-      groundBridgeReady: true,
       runner: { status: 'ok' },
       ibGateway: {
         mode: 'live',
@@ -670,11 +644,10 @@ describe('buildFleetSnapshot integration', () => {
       stg: stgSmokeOk,
       supply: supplyOk,
       cluster: clusterOk,
-      groundBridgeReady: false,
       runner: { status: 'ok' },
       ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
       postgresBackup: backupOk,
-      bridge: { ...bridgeOk, satellite_probe_bridge: { status: 'fail', error: 'unreachable from prod' } },
+      bridge: bridgeOk,
     })
     const rocketDev = getCell(snap, 'rocket', 'dev')
     expect(rocketDev?.signal).toBe('unavailable')
@@ -692,7 +665,6 @@ describe('buildFleetSnapshot integration', () => {
       stg: stgSmokeOk,
       supply: supplyOk,
       cluster: clusterOk,
-      groundBridgeReady: true,
       runner: { status: 'ok' },
       ibGateway: { reachability: 'fail', reachable: false, error: 'IB Client not running' },
       bridge: bridgeOk,
@@ -713,7 +685,6 @@ describe('buildFleetSnapshot integration', () => {
       stg: stgSmokeOk,
       supply: supplyOk,
       cluster: clusterOk,
-      groundBridgeReady: true,
       runner: { status: 'ok' },
       ibGateway: {
         mode: 'live',
@@ -748,7 +719,6 @@ describe('buildFleetSnapshot integration', () => {
       stg: stgSmokeOk,
       supply: supplyOk,
       cluster: clusterOk,
-      groundBridgeReady: true,
       runner: { status: 'ok' },
       ibGateway: {
         mode: 'live',
@@ -828,7 +798,6 @@ describe('fleetEnvColumnPosture', () => {
       stg: stgSmokeOk,
       supply: supplyOk,
       cluster: clusterOk,
-      groundBridgeReady: true,
       runner: { status: 'ok' },
       ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
       postgresBackup: backupOk,

@@ -43,38 +43,10 @@ export interface RunnerStatus {
 }
 
 
-/** Per-repo dirty summary from git-bridge via /api/v1/agent/bridge. */
-
-export interface GitDirtyRepoDetail {
-  repo: string
-  branch?: string
-  staged?: string[]
-  modified?: string[]
-  untracked?: string[]
-  insertions: number
-  deletions: number
-}
-
-
 export interface AgentBridgeResponse {
   generated_at: string
   remediation_runner: RunnerStatus
   runners?: RunnerStatus[]
-  git_bridge: {
-    url?: string
-    status: string
-    workspace?: string
-    repo_count?: number
-    dirty_repos?: number
-    dirty_repo_details?: GitDirtyRepoDetail[]
-    error?: string
-  }
-  satellite_probe_bridge: {
-    url?: string
-    status: string
-    trade_nginx_base?: string
-    error?: string
-  }
   platform_mcp: {
     server_name: string
     server_version: string
@@ -83,11 +55,5 @@ export interface AgentBridgeResponse {
     agent_tool_count: number
     transport: string
     script_path: string
-  }
-  nightly_report: {
-    available: boolean
-    generated_at?: string
-    source?: string
-    hint?: string
   }
 }

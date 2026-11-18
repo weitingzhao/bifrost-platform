@@ -590,38 +590,6 @@ function evaluateOperatorPlane(
   }
 }
 
-function evaluateAgentBridge(
-  bridge: AgentBridgeResponse | null | undefined,
-  self: SelfHealthResponse | null | undefined,
-): EvaluatedSignal {
-  const def = getSignalDef('engineer.agent-bridge')!
-  const viewer = (self?.viewer_env ?? '').toLowerCase()
-  if (viewer === 'prod' || viewer === 'stg') {
-    return {
-      def,
-      state: 'not_observed',
-      summary: 'Agent bridge not observed on this viewer seat (Mac-adjacent only)',
-      env: 'shared',
-    }
-  }
-  if (bridge == null) {
-    return { def, state: 'unknown', summary: 'Agent bridge probe missing', env: 'shared' }
-  }
-  const status = bridge.satellite_probe_bridge?.status
-  if (status == null) {
-    return { def, state: 'not_observed', summary: 'No satellite probe bridge field', env: 'shared' }
-  }
-  if (status === 'ok') {
-    return { def, state: 'healthy', summary: 'Probe bridge ok', env: 'shared' }
-  }
-  if (status === 'degraded') {
-    return { def, state: 'degraded', summary: 'Probe bridge degraded', env: 'shared' }
-  }
-  return { def, state: 'unknown', summary: `Probe bridge ${status}`, env: 'shared' }
-}
-
-
-
 function buildSelectedDetail(
   domain: SystemDomainId,
   signals: EvaluatedSignal[],
@@ -785,7 +753,6 @@ export function buildObservabilityViewModel(
 
   // Engineer
   signals.push(evaluateOperatorPlane(input.agentBridge))
-  signals.push(evaluateAgentBridge(input.agentBridge, input.selfHealth))
 
   // Code health — code assets, not runtime. NOT OBSERVED until scanned.
   signals.push(evaluateCodeHealth('code-health.satellite', 'satellite', input.codeHealth))

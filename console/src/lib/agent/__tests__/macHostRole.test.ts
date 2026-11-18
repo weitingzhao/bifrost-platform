@@ -14,8 +14,6 @@ function stubBridge(partial: Partial<AgentBridgeResponse>): AgentBridgeResponse 
   return {
     generated_at: '2026-07-24T00:00:00Z',
     remediation_runner: { url: 'http://192.168.10.50:8790', role: 'primary', status: 'ok' },
-    git_bridge: { status: 'ok' },
-    satellite_probe_bridge: { status: 'not_configured' },
     platform_mcp: {
       server_name: 'test',
       server_version: '0',
@@ -25,7 +23,6 @@ function stubBridge(partial: Partial<AgentBridgeResponse>): AgentBridgeResponse 
       transport: 'stdio',
       script_path: '',
     },
-    nightly_report: { available: false },
     ...partial,
   }
 }

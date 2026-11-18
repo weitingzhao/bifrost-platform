@@ -11,8 +11,6 @@ import {
 } from '@/lib/control-room/controlRoomBays'
 
 function bridge(partial: {
-  gitStatus?: string
-  dirty?: number
   runnersOk?: boolean
 }): AgentBridgeResponse {
   const runnersOk = partial.runnersOk !== false
@@ -37,12 +35,6 @@ function bridge(partial: {
         active: false,
       },
     ],
-    git_bridge: {
-      url: 'http://192.168.10.40:8785',
-      status: partial.gitStatus ?? 'ok',
-      dirty_repos: partial.dirty ?? 0,
-    },
-    satellite_probe_bridge: { status: 'ok' },
     platform_mcp: {
       server_name: 'mcp-server-platform',
       server_version: '0.1.0',
@@ -52,18 +44,15 @@ function bridge(partial: {
       transport: 'stdio',
       script_path: '/tmp/x',
     },
-    nightly_report: { available: false },
   }
 }
 
 describe('agentSignal (operator plane only)', () => {
-  it('stays ok when both planes are up, whatever git-bridge reports', () => {
-    for (const gitStatus of ['ok', 'unavailable', 'fail']) {
-      const state = agentSignal(bridge({ gitStatus, dirty: 4 }))
-      expect(state.signal).toBe('ok')
-      expect(state.detail).toContain('operator-plane 2/2')
-      expect(state.detail).not.toContain('Bridge')
-    }
+  it('stays ok when both planes are up', () => {
+    const state = agentSignal(bridge({}))
+    expect(state.signal).toBe('ok')
+    expect(state.detail).toContain('operator-plane 2/2')
+    expect(state.detail).not.toContain('Bridge')
   })
 
   it('fails when the operator plane is down', () => {
@@ -74,16 +63,16 @@ describe('agentSignal (operator plane only)', () => {
   })
 })
 
-describe('buildMissionSnapshot + Control Room bays (dirty alone)', () => {
-  it('does not list Agent as degraded when only dirty repos', () => {
+describe('buildMissionSnapshot + Control Room bays (Control Room bays)', () => {
+  it('does not list Agent as degraded when both planes are up', () => {
     const snap = buildMissionSnapshot({
-      bridge: bridge({ dirty: 4 }),
+      bridge: bridge({}),
       matrices: [],
     })
     expect(snap.agent.signal).toBe('ok')
     expect(collectMissionDegradationItems(snap).filter(i => i.id === 'Agent')).toHaveLength(0)
 
-    // Isolate Agent dirty by seeding a NOMINAL snapshot with dirty agent detail.
+    // Seed a NOMINAL snapshot around the agent signal.
     const nominal = {
       infra: { signal: 'ok' as const, value: 'ok', detail: 'ok' },
       release: { signal: 'ok' as const, value: 'ok', detail: 'ok' },
@@ -110,8 +99,8 @@ describe('buildMissionSnapshot + Control Room bays (dirty alone)', () => {
     expect(worstBayScanSignal(bays)).toBe('ok')
   })
 
-  it('Operate bay can still caution from pending brief without dirty degrading Mission', () => {
-    const agent = agentSignal(bridge({ dirty: 4 }))
+  it('Operate bay can still caution from pending brief without degrading Mission', () => {
+    const agent = agentSignal(bridge({}))
     const snap = {
       infra: { signal: 'ok' as const, value: 'ok', detail: 'ok' },
       release: { signal: 'ok' as const, value: 'ok', detail: 'ok' },

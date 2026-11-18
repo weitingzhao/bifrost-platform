@@ -1,5 +1,5 @@
 // Preserve public type paths for existing execution and protected callers.
-export type { AgentBridgeResponse, AgentDeployJob, AgentDeployStatusResponse, AgentDeployTarget, GitDirtyRepoDetail, RunnerStatus } from '@/domains/foundation/agent-observation/api/agentTypes'
+export type { AgentBridgeResponse, AgentDeployJob, AgentDeployStatusResponse, AgentDeployTarget, RunnerStatus } from '@/domains/foundation/agent-observation/api/agentTypes'
 
 export type RetrospectiveRootCause =
   | 'transient'

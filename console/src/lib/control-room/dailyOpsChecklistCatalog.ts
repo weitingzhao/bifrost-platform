@@ -245,18 +245,6 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
         ],
         critical: true,
       },
-      {
-        id: 'mac-probe-bridge',
-        label: 'Mac seat · probe-bridge',
-        group: 'seat',
-        idPattern: '^mac-seat$',
-        healthyCriteria:
-          'satellite_probe_bridge.status=ok from local viewer. Informational-only from remote viewer (not scored for NO-GO from prod/stg seat).',
-        fixScope: null,
-        fixCapability: 'manual',
-        manualAction:
-          'Physical: verify Mac is powered on, Ethernet connected, probe-bridge process running (launchd)',
-      },
     ],
     blocksDownstream: false,
   },

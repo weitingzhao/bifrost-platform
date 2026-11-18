@@ -32,8 +32,6 @@ export type BuildFleetSnapshotInput = {
   supply?: SupplyChainResponse
   stg?: StgSmokeResponse
   bridge?: AgentBridgeResponse
-  /** True when Ground Systems seat (probe-bridge) is reachable — Engineer Mac seat can be N/A. */
-  groundBridgeReady?: boolean
   cluster?: ClusterSummary
   postgresBackup?: ClusterPostgresBackupStatusResponse
   /** IB Gateway plugin — required Vendor feed (IB Client). */
@@ -78,8 +76,6 @@ export function buildFleetSnapshotCore(input: BuildFleetSnapshotInput): FleetSna
   cells.push(
     buildEngineerCell({
       bridge: input.bridge,
-      viewerEnv,
-      groundBridgeReady: input.groundBridgeReady,
     }),
   )
   cells.push(buildGroundCell({ cluster: input.cluster }))

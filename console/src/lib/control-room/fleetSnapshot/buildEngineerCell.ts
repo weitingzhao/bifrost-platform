@@ -1,5 +1,5 @@
 /**
- * Engineer Fleet cell (Mac seat / automation).
+ * Engineer Fleet cell (operator-plane automation).
  */
 import type { AgentBridgeResponse } from '@/api/agentTypes'
 import { bridgeRunners } from '@/lib/agent/macHostRole'
@@ -7,20 +7,14 @@ import { agentSignal, type Signal } from '@/lib/control-room/missionSignals'
 import {
   type FleetCell,
   type FleetStandard,
-  type FleetViewerEnv,
 } from '@/lib/control-room/fleetSnapshot/types'
 import { signalFromStandards, std } from '@/lib/control-room/fleetSnapshot/standards'
-import { cellKey, normalizeViewerEnv } from '@/lib/control-room/fleetSnapshot/nav'
+import { cellKey } from '@/lib/control-room/fleetSnapshot/nav'
 
 export function buildEngineerCell(input: {
   bridge?: AgentBridgeResponse
-  viewerEnv?: FleetViewerEnv
-  groundBridgeReady?: boolean
 }): FleetCell {
   const state = agentSignal(input.bridge)
-  const viewerEnv = normalizeViewerEnv(input.viewerEnv)
-  const viewerRemote = viewerEnv === 'prod' || viewerEnv === 'stg'
-  const probeBridge = input.bridge?.satellite_probe_bridge
   const bridge = input.bridge
   const probes = bridgeRunners(bridge)
 
@@ -46,38 +40,8 @@ export function buildEngineerCell(input: {
     planeReason = 'operator-plane status unknown'
   }
 
-  let macSig: Signal = 'unknown'
-  let macReason = 'Mac seat: probing'
-  if (viewerRemote) {
-    macSig =
-      probeBridge == null
-        ? 'ok'
-        : probeBridge.status === 'ok'
-          ? 'ok'
-          : (probeBridge.status as Signal) === 'degraded'
-            ? 'degraded'
-            : 'fail'
-    macReason =
-      probeBridge == null
-        ? 'Mac seat N/A from this viewer (info only)'
-        : `Mac seat · probe-bridge ${probeBridge.status} (info only from remote)`
-  } else if (probeBridge != null) {
-    macSig =
-      probeBridge.status === 'ok' ? 'ok' : probeBridge.status === 'degraded' ? 'degraded' : 'fail'
-    macReason =
-      probeBridge.status === 'ok'
-        ? 'Mac seat · probe-bridge ok'
-        : `Mac seat · probe-bridge ${probeBridge.status}${
-            probeBridge.error ? `: ${probeBridge.error}` : ''
-          }`
-  } else if (input.groundBridgeReady === false) {
-    macSig = 'degraded'
-    macReason = 'Mac seat · probe-bridge not ready'
-  }
-
   const standards: FleetStandard[] = [
     std('runners', 'operator-plane', planeSig, planeReason, 'automation'),
-    std('mac-seat', 'Mac seat · probe-bridge', macSig, macReason, 'seat', !viewerRemote),
   ]
   const signal = signalFromStandards(standards)
   const critical = signal === 'fail'

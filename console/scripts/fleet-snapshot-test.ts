@@ -183,7 +183,6 @@ check('board columns are DEV/STG/PROD only — no Mac column', () => {
     viewerEnv: 'prod',
     matrices: [matrix('dev'), matrix('stg'), matrix('prod')],
     self: selfHealth(['prod', 'stg'], 'ok', 'prod'),
-    groundBridgeReady: false,
   })
   assert.deepEqual(snap.columns, ['dev', 'stg', 'prod'])
   assert.equal(getCell(snap, 'satellite', 'dev-local' as never), undefined)
@@ -198,21 +197,10 @@ check('Engineer folds Mac seat; local bridge fail degrades Engineer', () => {
     stg: stgSmokeOk,
     supply: supplyOk,
     cluster: clusterOk,
-    groundBridgeReady: false,
     runner: { status: 'ok' },
     bridge: {
       generated_at: 't',
       remediation_runner: { url: 'http://127.0.0.1:8781', status: 'ok' },
-      git_bridge: { status: 'ok', dirty_repos: 0 },
-      satellite_probe_bridge: { status: 'fail', error: 'not_configured' },
-      hermes_mcp: { status: 'ok' },
-      nous_hermes: {
-        status: 'ok',
-        gateway_running: true,
-        active_agents: 0,
-        active_sessions: 0,
-        mcp_tool_count: 0,
-      },
       platform_mcp: {
         server_name: 'p',
         server_version: '1',
@@ -222,7 +210,6 @@ check('Engineer folds Mac seat; local bridge fail degrades Engineer', () => {
         transport: 'stdio',
         script_path: '',
       },
-      nightly_report: { available: false },
     },
   })
   const eng = getCell(snap, 'engineer', 'span')
@@ -282,7 +269,6 @@ check('all green + Mac seat ok → GO + fleetClear', () => {
     stg: stgSmokeOk,
     supply: supplyOk,
     cluster: clusterOk,
-    groundBridgeReady: true,
     runner: { status: 'ok' },
     ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
     postgresBackup: {
@@ -296,16 +282,6 @@ check('all green + Mac seat ok → GO + fleetClear', () => {
     bridge: {
       generated_at: 't',
       remediation_runner: { url: 'http://127.0.0.1:8781', status: 'ok' },
-      git_bridge: { status: 'ok', dirty_repos: 0 },
-      satellite_probe_bridge: { status: 'ok' },
-      hermes_mcp: { status: 'ok' },
-      nous_hermes: {
-        status: 'ok',
-        gateway_running: true,
-        active_agents: 0,
-        active_sessions: 0,
-        mcp_tool_count: 0,
-      },
       platform_mcp: {
         server_name: 'p',
         server_version: '1',
@@ -315,7 +291,6 @@ check('all green + Mac seat ok → GO + fleetClear', () => {
         transport: 'stdio',
         script_path: '',
       },
-      nightly_report: { available: false },
     },
   })
   assert.deepEqual(snap.columns, ['dev', 'stg', 'prod'])
@@ -339,7 +314,6 @@ check('PROD viewer all green + Rocket DEV structural unavailable → GO (Mac inf
     stg: stgSmokeOk,
     supply: supplyOk,
     cluster: clusterOk,
-    groundBridgeReady: false,
     runner: { status: 'ok' },
     ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
     postgresBackup: {
@@ -353,16 +327,6 @@ check('PROD viewer all green + Rocket DEV structural unavailable → GO (Mac inf
     bridge: {
       generated_at: 't',
       remediation_runner: { url: 'http://127.0.0.1:8781', status: 'ok' },
-      git_bridge: { status: 'ok', dirty_repos: 0 },
-      satellite_probe_bridge: { status: 'fail', error: 'unreachable from prod' },
-      hermes_mcp: { status: 'ok' },
-      nous_hermes: {
-        status: 'ok',
-        gateway_running: true,
-        active_agents: 0,
-        active_sessions: 0,
-        mcp_tool_count: 0,
-      },
       platform_mcp: {
         server_name: 'p',
         server_version: '1',
@@ -372,7 +336,6 @@ check('PROD viewer all green + Rocket DEV structural unavailable → GO (Mac inf
         transport: 'stdio',
         script_path: '',
       },
-      nightly_report: { available: false },
     },
   })
   const rocketDev = getCell(snap, 'rocket', 'dev')
@@ -396,22 +359,11 @@ check('Vendor NO-GO when IB Gateway plugin missing or fail', () => {
     stg: stgSmokeOk,
     supply: supplyOk,
     cluster: clusterOk,
-    groundBridgeReady: true,
     runner: { status: 'ok' },
     ibGateway: { reachability: 'fail', reachable: false, error: 'IB Client not running' },
     bridge: {
       generated_at: 't',
       remediation_runner: { url: 'http://127.0.0.1:8781', status: 'ok' },
-      git_bridge: { status: 'ok', dirty_repos: 0 },
-      satellite_probe_bridge: { status: 'ok' },
-      hermes_mcp: { status: 'ok' },
-      nous_hermes: {
-        status: 'ok',
-        gateway_running: true,
-        active_agents: 0,
-        active_sessions: 0,
-        mcp_tool_count: 0,
-      },
       platform_mcp: {
         server_name: 'p',
         server_version: '1',
@@ -421,7 +373,6 @@ check('Vendor NO-GO when IB Gateway plugin missing or fail', () => {
         transport: 'stdio',
         script_path: '',
       },
-      nightly_report: { available: false },
     },
   })
   const vendor = getCell(snap, 'vendor', 'span')!
@@ -440,7 +391,6 @@ check('Vendor IB fails when live heartbeat stale despite connected flag', () => 
     stg: stgSmokeOk,
     supply: supplyOk,
     cluster: clusterOk,
-    groundBridgeReady: true,
     runner: { status: 'ok' },
     ibGateway: {
       mode: 'live',
@@ -473,16 +423,6 @@ check('Vendor IB fails when live heartbeat stale despite connected flag', () => 
     bridge: {
       generated_at: 't',
       remediation_runner: { url: 'http://127.0.0.1:8781', status: 'ok' },
-      git_bridge: { status: 'ok', dirty_repos: 0 },
-      satellite_probe_bridge: { status: 'ok' },
-      hermes_mcp: { status: 'ok' },
-      nous_hermes: {
-        status: 'ok',
-        gateway_running: true,
-        active_agents: 0,
-        active_sessions: 0,
-        mcp_tool_count: 0,
-      },
       platform_mcp: {
         server_name: 'p',
         server_version: '1',
@@ -492,7 +432,6 @@ check('Vendor IB fails when live heartbeat stale despite connected flag', () => 
         transport: 'stdio',
         script_path: '',
       },
-      nightly_report: { available: false },
     },
   })
   const vendor = getCell(snap, 'vendor', 'span')!
@@ -512,7 +451,6 @@ check('Vendor IB fails on ghost session (connected + empty accounts_snapshot)', 
     stg: stgSmokeOk,
     supply: supplyOk,
     cluster: clusterOk,
-    groundBridgeReady: true,
     runner: { status: 'ok' },
     ibGateway: {
       mode: 'live',
@@ -547,16 +485,6 @@ check('Vendor IB fails on ghost session (connected + empty accounts_snapshot)', 
     bridge: {
       generated_at: 't',
       remediation_runner: { url: 'http://127.0.0.1:8781', status: 'ok' },
-      git_bridge: { status: 'ok', dirty_repos: 0 },
-      satellite_probe_bridge: { status: 'ok' },
-      hermes_mcp: { status: 'ok' },
-      nous_hermes: {
-        status: 'ok',
-        gateway_running: true,
-        active_agents: 0,
-        active_sessions: 0,
-        mcp_tool_count: 0,
-      },
       platform_mcp: {
         server_name: 'p',
         server_version: '1',
@@ -566,7 +494,6 @@ check('Vendor IB fails on ghost session (connected + empty accounts_snapshot)', 
         transport: 'stdio',
         script_path: '',
       },
-      nightly_report: { available: false },
     },
   })
   const vendor = getCell(snap, 'vendor', 'span')!

@@ -2550,7 +2550,6 @@
         "console/src/api/satelliteBusTypes.ts",
         "console/src/lib/control-room",
         "console/src/lib/control-room/buildFleetSnapshot.ts",
-        "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/satellite-bus"
       ],
       "test_imports": [],
