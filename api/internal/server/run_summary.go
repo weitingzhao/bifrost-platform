@@ -55,6 +55,7 @@ func (s *Server) startRunSummaries(ctx context.Context) {
 		}
 	}
 	safego.Go("run-summary-reconcile", func() {
+		refused := map[string]bool{} // runs the cluster refused to annotate, not read again by this process
 		pass := func() {
 			dyn, err := s.clusterDynamic()
 			if err != nil {
@@ -63,9 +64,9 @@ func (s *Server) startRunSummaries(ctx context.Context) {
 			}
 			pctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 			defer cancel()
-			r, err := cirunview.WriteMissingSummaries(kubemetrics.WithSite(pctx, "run-summary"), dyn, ns)
+			r, err := cirunview.WriteMissingSummaries(kubemetrics.WithSite(pctx, "run-summary"), dyn, ns, refused)
 			if err != nil || r.Written > 0 || r.Failed > 0 {
-				slog.Info("run summary reconcile", "runs", r.Runs, "written", r.Written, "failed", r.Failed, "forbidden", r.Forbidden, "first_error", r.FirstError, "error", err)
+				slog.Info("run summary reconcile", "runs", r.Runs, "written", r.Written, "failed", r.Failed, "forbidden", r.Forbidden, "refused_before", r.Refused, "first_error", r.FirstError, "error", err)
 			}
 		}
 		safego.Do("run-summary-reconcile", pass)

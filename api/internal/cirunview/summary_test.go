@@ -98,11 +98,11 @@ func TestSummaryIsWrittenOnceOntoFinishedRuns(t *testing.T) {
 	if !ok || len(s.Tasks) != 1 || s.Tasks[0].Results["digest"] != "sha256:a" {
 		t.Fatalf("read back %v %+v", ok, s)
 	}
-	pass, err := WriteMissingSummaries(ctx, dyn, "cicd")
+	pass, err := WriteMissingSummaries(ctx, dyn, "cicd", nil)
 	if err != nil || pass.Runs != 4 || pass.Written != 1 || pass.Failed != 0 {
 		t.Fatalf("pass %+v %v", pass, err)
 	}
-	if again, _ := WriteMissingSummaries(ctx, dyn, "cicd"); again.Written != 0 {
+	if again, _ := WriteMissingSummaries(ctx, dyn, "cicd", nil); again.Written != 0 {
 		t.Fatalf("again %+v", again)
 	}
 }
@@ -120,8 +120,45 @@ func TestSummaryPassStopsWhenRefused(t *testing.T) {
 	dyn.PrependReactor("patch", "pipelineruns", func(k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, apierrors.NewForbidden(schema.GroupResource{Group: "tekton.dev", Resource: "pipelineruns"}, "x", errors.New("no patch"))
 	})
-	pass, err := WriteMissingSummaries(ctx, dyn, "cicd")
+	pass, err := WriteMissingSummaries(ctx, dyn, "cicd", nil)
 	if err != nil || !pass.Forbidden || pass.Runs != 1 || pass.Failed != 1 || pass.Written != 0 {
 		t.Fatalf("pass %+v %v", pass, err)
+	}
+}
+
+// 2026-11-17, PROD's first pass: the admission policy refused every
+// bifrost-land run's annotation (244, TD-436's rule), and each 15-minute pass
+// read their TaskRuns and was refused again. A run refused once is not read
+// again by the process. Positive control: without the refused check the
+// second pass reads the run again (one more taskruns list).
+func TestSummaryPassSkipsRunsRefusedBefore(t *testing.T) {
+	ctx := context.Background()
+	dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		pipelineRunGVR: "PipelineRunList", taskRunGVR: "TaskRunList"},
+		summaryRun("land-1", "True"), summaryRun("ci-1", "True"))
+	dyn.PrependReactor("patch", "pipelineruns", func(a k8stesting.Action) (bool, runtime.Object, error) {
+		if a.(k8stesting.PatchAction).GetName() == "land-1" {
+			return true, nil, apierrors.NewInvalid(schema.GroupKind{Group: "tekton.dev", Kind: "PipelineRun"}, "land-1", nil)
+		}
+		return false, nil, nil
+	})
+	refused := map[string]bool{}
+	first, err := WriteMissingSummaries(ctx, dyn, "cicd", refused)
+	if err != nil || first.Written != 1 || first.Failed != 1 || !refused["land-1"] {
+		t.Fatalf("first %+v %v %v", first, err, refused)
+	}
+	lists := func() int {
+		n := 0
+		for _, a := range dyn.Actions() {
+			if a.GetVerb() == "list" && a.GetResource().Resource == "taskruns" {
+				n++
+			}
+		}
+		return n
+	}
+	before := lists()
+	second, err := WriteMissingSummaries(ctx, dyn, "cicd", refused)
+	if err != nil || second.Refused != 1 || second.Failed != 0 || lists() != before {
+		t.Fatalf("second %+v %v, taskruns lists %d -> %d", second, err, before, lists())
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -192,10 +193,22 @@ type SummaryPass struct {
 	FirstError            string
 	// Forbidden: the identity may not annotate runs; the pass stopped at the first refusal.
 	Forbidden bool
+	// Refused: runs refused in an earlier pass, skipped.
+	Refused int
+}
+
+// isRefusal: the cluster refused the annotation itself (an admission policy
+// denying the update), which asking again will not change.
+func isRefusal(err error) bool {
+	return apierrors.IsInvalid(err) || apierrors.IsForbidden(err) || strings.Contains(err.Error(), "denied request")
 }
 
 // WriteMissingSummaries is a SummaryPass over the namespace's runs, a page at a time.
-func WriteMissingSummaries(ctx context.Context, dyn dynamic.Interface, namespace string) (SummaryPass, error) {
+// refused holds the runs the cluster refused to annotate in an earlier pass,
+// which are not read again (nil keeps none): on PROD on 2026-11-17 every
+// bifrost-land run (244) was refused by the admission policy's TD-436 rule,
+// and each pass read their TaskRuns and was refused again.
+func WriteMissingSummaries(ctx context.Context, dyn dynamic.Interface, namespace string, refused map[string]bool) (SummaryPass, error) {
 	var out SummaryPass
 	opts := metav1.ListOptions{Limit: 100}
 	for {
@@ -205,6 +218,10 @@ func WriteMissingSummaries(ctx context.Context, dyn dynamic.Interface, namespace
 		}
 		for _, run := range page.Items {
 			out.Runs++
+			if refused[run.GetName()] {
+				out.Refused++
+				continue
+			}
 			wrote, err := writeSummaryOf(ctx, dyn, namespace, run)
 			switch {
 			case apierrors.IsForbidden(err):
@@ -219,6 +236,9 @@ func WriteMissingSummaries(ctx context.Context, dyn dynamic.Interface, namespace
 				out.Failed++
 				if out.FirstError == "" {
 					out.FirstError = err.Error()
+				}
+				if refused != nil && isRefusal(err) {
+					refused[run.GetName()] = true
 				}
 			case wrote:
 				out.Written++
