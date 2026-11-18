@@ -52,22 +52,16 @@ const (
 // eventTypes is the closed vocabulary, as the database's event_type_closed
 // constraint has it (migrations 0009, 0013); TestEventTypesAreTheDatabases holds
 // the two together. bodies below covers only the types the store writes.
-var eventTypes = map[string]bool{
-	"wave_opened": true, "wave_closed": true, "wave_abandoned": true,
-	"plan_node_created": true, "plan_node_retitled": true, "plan_node_state_changed": true,
-	"plan_change_proposed": true, "plan_change_decided": true, "plan_changed": true, "mission_proposed": true,
-	"mission_state_changed": true, "mission_amended": true, "task_proposed": true, "task_state_changed": true,
-	"task_dependency_added": true, "task_cancelled": true, "route_decided": true, "attempt_leased": true,
+var eventTypes = map[string]bool{"attempt_leased": true,
 	"attempt_started": true, "attempt_progress": true, "attempt_checkpointed": true, "attempt_stale": true,
 	"attempt_renewed": true, "attempt_computed": true, "attempt_persisted": true, "attempt_submitted": true,
 	"attempt_lost": true, "attempt_ended": true, "attempt_salvaged": true, "attempt_cancelled": true,
 	"artifact_put": true, "verification_recorded": true, "owner_wait_opened": true, "owner_wait_closed": true,
-	"approval_seen": true, "question_seen": true, "ci_seen": true, "pipeline_seen": true, "deploy_seen": true,
-	"owner_signoff": true, "actor_registered": true, "host_registered": true, "host_state_changed": true,
+	"approval_seen": true, "question_seen": true, "ci_seen": true, "pipeline_seen": true, "deploy_seen": true, "actor_registered": true, "host_registered": true, "host_state_changed": true,
 	"host_retired": true, "rule_proposed": true, "rule_signed": true,
 	"rule_tightened": true, "rule_expired": true, "rule_approved": true, "capability_scored": true, "candidate_status_changed": true,
 	"budget_charged": true, "pool_cooldown_set": true, "pool_measured": true,
-	"policy_alert": true, "decision_recorded": true, "note": true, "wait_limit_passed": true,
+	"policy_alert": true, "note": true, "wait_limit_passed": true,
 	"legacy_imported":  true,
 	"host_slots_set":   true,
 	"metrics_computed": true, "metric_label_set": true, "ci_reused": true, "ci_red_classified": true,
@@ -81,22 +75,11 @@ func IsEventType(t string) bool { return eventlog.IsEventType(t) }
 // no other field. The database checks the type against the full vocabulary;
 // a type with no body here is refused rather than written with a guessed shape.
 var bodies = map[string][]field{
-	// task_proposed: kept for migrate's 0010 trigger probe (runtime0010_test.go),
-	// the one writer left; nothing in production proposes a task since the
-	// dispatch lane ended. It goes with that probe and the task tables.
-	"task_proposed": {{"wave", kStr, true}, {"urgent", kBool, true}, {"title", kStr, false}, {"role", kStr, false}, {"off_plan_reason", kStr, true}, {"core", kBool, true}, {"needs", kIDs, true}, {"repo", kStr, true}, {"base_commit", kStr, true}, {"token", kStr, true}, {"executor_pin", kStr, true}, {"via_session", kAny, true}, {"providers", kIDs, true}, {"pin_reason", kStr, true}},
 	// Delivery measurement records (0016); CI fact bodies arrive in wave M-b.
 	"metrics_computed": {{"source", kStr, false}, {"rows", kInt, false}, {"definitions", kAny, false}, {"windows", kAny, true}, {"label", kStr, true}, {"artifact_id", kID, true}, {"xmin", kInt, true}},
 
-	"actor_registered":        {{"actors", kIDs, false}, {"capability_facts", kIDs, true}, {"note", kStr, true}, {"token", kStr, true}},
-	"plan_node_created":       {{"node_kind", kStr, false}, {"label", kStr, false}, {"title", kStr, false}, {"ordinal", kInt, false}},
-	"plan_node_state_changed": {{"from", kStr, false}, {"to", kStr, false}, {"cause", kStr, false}},
-	"plan_changed":            {{"change", kStr, false}, {"decided_event_id", kInt, true}, {"nodes", kAny, true}, {"bindings", kAny, true}, {"note", kStr, true}},
-	"plan_change_proposed":    {{"changes", kAny, false}, {"reason", kStr, false}, {"standing", kBool, false}, {"token", kStr, true}, {"question_id", kStr, true}},
-	"plan_change_decided":     {{"proposal_event_id", kInt, false}, {"decision", kStr, false}, {"by", kStr, false}, {"question_id", kStr, true}, {"error", kStr, true}},
-	"mission_proposed":        {{"title", kStr, false}, {"token", kStr, true}},
-	"mission_state_changed":   {{"from", kStr, false}, {"to", kStr, false}, {"reason", kStr, true}, {"question_id", kID, true}, {"answer", kStr, true}},
-	"artifact_put":            {{"artifact_id", kID, false}, {"artifact_kind", kStr, false}, {"size_bytes", kInt, false}, {"uploaded_by", kStr, false}},
+	"actor_registered": {{"actors", kIDs, false}, {"capability_facts", kIDs, true}, {"note", kStr, true}, {"token", kStr, true}},
+	"artifact_put":     {{"artifact_id", kID, false}, {"artifact_kind", kStr, false}, {"size_bytes", kInt, false}, {"uploaded_by", kStr, false}},
 	// policy_alert: a text claiming the Owner's approval (approval_claim, from
 	// a task's spec or a message: the closed phrase it holds), or a line the
 	// chief of staff ended an answer or a plan with (seat_alert, the seat's
@@ -145,7 +128,6 @@ var bodies = map[string][]field{
 	"question_seen": {{"question", kID, false}, {"status", kStr, false}, {"option", kStr, true}, {"text", kStr, true}, {"answered_by", kStr, true}, {"answered_at", kStr, true}, {"recommended", kStr, true}, {"number", kInt, true}, {"created_at", kStr, true}, {"owner_duty", kStr, true}, {"task", kStr, true}, {"channel", kStr, true}, {"withdrawn_at", kStr, true}, {"withdrawn_by", kStr, true}, {"expired_at", kStr, true}},
 	"ci_seen":       {{"repo", kStr, false}, {"commit", kStr, false}, {"status", kStr, false}, {"run", kStr, true}},
 	"deploy_seen":   {{"env", kStr, false}, {"commit", kStr, false}, {"deploy_ref", kAny, false}},
-	"owner_signoff": {{"ref", kStr, false}, {"binding_sha256", kStr, true}, {"plan_version", kInt, true}, {"acceptance_sha256", kStr, true}, {"evidence", kIDs, true}},
 	// note: landed, the commit an implementation's change first stood on main
 	// as, when the controller first saw it there, with landed_via (its
 	// route), matched_by (how main names it), landed_result (the pushed
@@ -217,7 +199,7 @@ func init() {
 		After: map[string]func(map[string]any) error{
 			"policy_alert": checkPolicyAlert,
 		},
-		Events: []func(Event) error{planstore.CheckPlanObservation, retiredRecord},
+		Events: []func(Event) error{retiredRecord},
 	})
 }
 
@@ -260,17 +242,6 @@ func checkPolicyAlert(body map[string]any) error {
 // oneOf is an enum (eventlog.OneOf).
 func oneOf(vals ...string) value { return eventlog.OneOf(vals...) }
 
-// statesOf is every state a state machine names.
-func statesOf(moves map[string][]string) []string {
-	var out []string
-	for from, tos := range moves {
-		out = append(out, from)
-		out = append(out, tos...)
-	}
-	slices.Sort(out)
-	return slices.Compact(out)
-}
-
 func keysOf[V any](m map[string]V) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
@@ -301,13 +272,8 @@ var (
 
 // fieldValues are the checked fields, by event type and field.
 var fieldValues = map[string]map[string]value{
-	"task_proposed":           {"role": oneOf("plan", "implement", "verify", "review", "brief", "other"), "executor_pin": oneOf(ExecutorPins...)},
-	"metrics_computed":        {"source": oneOf("computed", "imported"), "label": metricLabel, "artifact_id": artifactID},
-	"plan_node_created":       {"node_kind": oneOf("round", "item", "step", "arch_root", "arch_row")},
-	"plan_node_state_changed": {"from": oneOf(statesOf(planstore.StepMoves)...), "to": oneOf(statesOf(planstore.StepMoves)...)},
-	"plan_change_decided":     {"decision": oneOf("applied", "refused", "failed", "withdrawn", "expired")},
-	"mission_state_changed":   {"from": oneOf(statesOf(missionMoves)...), "to": oneOf(statesOf(missionMoves)...)},
-	"artifact_put":            {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(artifact.ArtifactKinds)...)},
+	"metrics_computed": {"source": oneOf("computed", "imported"), "label": metricLabel, "artifact_id": artifactID},
+	"artifact_put":     {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(artifact.ArtifactKinds)...)},
 	"policy_alert": {"rule": oneOf("approval_claim", "seat_alert", "local_path", "workspace_ref", "repeated_failure", "controller_failing", "disk_low",
 		"host_offline", "executor_unavailable", "presence_unjudged", "presence_deferred"),
 		"source": oneOf("task_spec", "message", "seat_answer", "seat_plan", "report", "verify", "review", "attempt", "controller",

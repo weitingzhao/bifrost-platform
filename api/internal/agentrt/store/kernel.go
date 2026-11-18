@@ -54,15 +54,6 @@ func hook(point, arg string) {
 
 func timeText(t time.Time) string { return t.UTC().Truncate(time.Microsecond).Format(timeLayout) }
 
-// Missions.
-
-var missionMoves = map[string][]string{
-	"proposed":       {"awaiting_owner", "active", "stopped"},
-	"awaiting_owner": {"active", "stopped"},
-	"active":         {"paused", "done", "stopped", "expired"},
-	"paused":         {"active", "stopped", "expired"},
-}
-
 // Tasks.
 
 // taskMoves is every task state change there is. The attempt routes below

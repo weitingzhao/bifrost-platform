@@ -134,7 +134,6 @@ var exportedForOtherTests = []string{
 	"api/internal/agentrt/store.VerifyStream",
 	"api/internal/agentrt/storekit.CreateMission",
 	"api/internal/agentrt/storekit.Mission",
-	"api/internal/agentrt/storekit.MissionMoves",
 	"api/internal/agentrt/storekit.MoveMission",
 	"api/internal/approvalnotify.Compose",
 	"api/internal/approvalnotify.DrillAsk",

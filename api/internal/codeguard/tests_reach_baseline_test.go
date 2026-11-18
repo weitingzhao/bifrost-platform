@@ -181,7 +181,6 @@ var testFilesInShared = []string{
 	"api/internal/agentrt/store/signoffevidence_test.go",
 	"api/internal/agentrt/store/snapshot_projection_parity_test.go",
 	"api/internal/agentrt/store/store_test.go",
-	"api/internal/agentrt/store/storekit_moves_internal_test.go",
 	"api/internal/agentrt/store/vocab_test.go",
 	"api/internal/agentrt/store/vocab_values_test.go",
 	"api/internal/cluster/actuation_scale_test.go",

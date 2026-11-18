@@ -127,10 +127,10 @@ func CreateMission(ctx context.Context, tx pgx.Tx, actor string, m Mission) (eve
 // does.
 func missionStream(missionID string) string { return "mission:" + missionID }
 
-// missionMoves is every mission state change there is. It is a copy of the
-// table of the same name in store (kernel.go), which store keeps for the
-// event vocabulary and does not export; a state added there has to be added
-// here before a fixture can move a mission into it.
+// missionMoves is every mission state change there is: the table storekit
+// moves missions by, and the plan's event vocabulary checks a mission's states
+// against (planstore/vocab.go, through MissionMoves). One copy since
+// 2026-11-17.
 var missionMoves = map[string][]string{
 	"proposed":       {"awaiting_owner", "active", "stopped"},
 	"awaiting_owner": {"active", "stopped"},
@@ -139,8 +139,7 @@ var missionMoves = map[string][]string{
 }
 
 // MissionMoves is a copy of the table this package moves missions by, for
-// the test in store that holds it to store's own (the two are kept apart
-// only because this package may not import store).
+// the plan's event vocabulary.
 func MissionMoves() map[string][]string {
 	out := make(map[string][]string, len(missionMoves))
 	for from, to := range missionMoves {

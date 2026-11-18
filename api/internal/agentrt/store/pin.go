@@ -18,9 +18,6 @@ import (
 // 1, 2026-11-11). The X-Bifrost-Session header the proposal came with is
 // recorded as via_session and grants nothing (§2.3).
 
-// ExecutorPins are the pins there are (0010 task_executor_pin_check).
-var ExecutorPins = []string{"external:coordinator"}
-
 // ErrPinNotPermitted: a pinned task the writer may not propose; nothing of
 // the batch was written. It is an ErrInvalid.
 var ErrPinNotPermitted = fmt.Errorf("%w: pin_not_permitted", ErrInvalid)
