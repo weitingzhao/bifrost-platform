@@ -246,15 +246,6 @@ func Notify(ctx context.Context, row registry.Subscription, ev Event, notify Not
 	return Delivered, notify(ctx, Key(row, ev), fill(row.Params[registry.ParamTitle]), Body(row, ev), fill(row.Params[registry.ParamClick]))
 }
 
-// NotifierFor is who handles a notify row's push: a shadow row's goes to
-// record, which sends nothing.
-func NotifierFor(row registry.Subscription, send, record Notifier) Notifier {
-	if row.Shadow {
-		return record
-	}
-	return send
-}
-
 // refID is the last segment of a ref ("/api/v1/approvals/appr_1" → "appr_1"), path-escaped.
 func refID(ref string) string {
 	ref, _, _ = strings.Cut(ref, "?")

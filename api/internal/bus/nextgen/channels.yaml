@@ -45,8 +45,8 @@ channels:
   - {id: L14, class: K11, disposition: kept, step: '0', what: failed-backup sweep：每 24 小时删 30 天前失败的 CNPG Backup CR, by: 在用：备份清理失败走 KubeJobFailed；断了：失败备份 CR 堆积}
   - {id: L15, class: K4, disposition: announced, step: "3", what: "approvals 循环：每 15 秒重试被瞬时拒绝的批准、过期租约转 unknown、发提醒、补写信箱", by: "状态机与租约逻辑留在原处；转移结果以 approval.card.executed 宣布；提醒改走通知器，信箱补写改走 seat.mail.arrived", cut: {at: "2026-11-17", evidence: ["topic:approval.card.executed"]}}
   - {id: L16, class: K4, disposition: announced, step: "3", what: "questions sweep：每 15 秒过期问题、补写信箱", by: "过期转移留在原处，以 question.answered（结果=过期）宣布", cut: {at: "2026-11-18", evidence: ["topic:owner.question.answered"]}}
-  - {id: L17, class: K7, disposition: replaced, step: "3", what: "release-policy 到期提醒：每小时一次推手机", by: "通知器订阅 release.policy.expiring（发一次并记已发）"}
-  - {id: L18, class: K6, disposition: replaced, step: "3", what: "agent-thread watcher：每 30 秒扫线程/主机心跳，沉默则推手机", by: "席位记录里的「判死由一处做」+seat.liveness.changed+通知器"}
+  - {id: L17, class: K7, disposition: announced, step: "3", what: "release-policy 到期提醒：每小时一次推手机", by: "到期提醒的推送留在原处，推完以 release.policy.expiring 宣布；这几种推送量小、已在工作，改走总线省不出，还要冒漏推手机的风险（11-18）"}
+  - {id: L18, class: K6, disposition: announced, step: "3", what: "agent-thread watcher：每 30 秒扫线程/主机心跳，沉默则推手机", by: "判定和推送留在原处，推完以 seat.liveness.changed 宣布；这几种推送量小、已在工作，改走总线省不出，还要冒漏推手机的风险（11-18）", cut: {at: "2026-11-18", evidence: ["topic:seat.liveness.changed"]}}
   - {id: L19, class: K12, disposition: kept, step: none, what: agentthreads recorder：每 10 秒把线程心跳缓冲合并落盘, by: 在用：`/agent/threads`（7 天 3.9 万次）；断了：线程在线状态和席位掉线判断失准}
   - {id: L20, class: K12, disposition: deleted, step: "any", what: "agentprogress recorder：每 10 秒把进度文档缓冲落盘（唯一发布方 N15/X-B9 已死）", by: "死路：随 N15、X-B9 一起删（推断：Console Progress 页是否还读 /agent/progress 材料互相矛盾，删前核）", retired: {at: "2026-11-17", change: Ic571bd2e1a39aaed29e8730ac81bcfaf84e2a664, absent: [api/internal/agentprogress], absent_text: ['api/internal/agentprogress"']}}
   - {id: L21, class: K12, disposition: deleted, step: any, what: threadtitles sync：每 3 分钟扫本机转录写线程标题（集群内默认关）, by: 已删：集群内关着，标题走 Stop 钩子, retired: {at: '2026-11-18', change: I61b81f1363800d8fefb03d92dce91cdb2a1ec0ca, absent_text: [threadtitles.StartSync(]}}
@@ -58,9 +58,9 @@ channels:
   - {id: L27, class: K6, disposition: kept, step: none, what: alertrelay 心跳检查：每分钟看 Mac mini 内存里的 Watchdog 时间戳，15 分钟没到发 CRITICAL, by: 例外：死人开关；断了：Alertmanager 死了没人知道}
   - {id: L28, class: K3, disposition: not-a-channel, step: none, what: 请求内等待一组：动作里等外部对象，各 2 秒（至少 5 份循环）, by: 请求内等待，不是通道}
   - {id: N01, class: K7, disposition: merged, step: "3", what: "统一手机通知口 notice.Send → Mac mini relay → ntfy → 手机", by: "留下并改造成「通知器」（入户口子⑤）：发一次并记已发，其余四种各写各的并到它；第二条路径待 Owner 决定 3"}
-  - {id: N02, class: K7, disposition: replaced, step: "3", what: "问题 ask_owner 创建时推手机", by: "通知器订阅 question.asked"}
-  - {id: N03, class: K7, disposition: replaced, step: "3", what: "线程沉默/主机丢失推手机（先认领再推）", by: "通知器订阅 seat.liveness.changed"}
-  - {id: N04, class: K7, disposition: replaced, step: "3", what: "发布策略到期提醒推手机", by: "通知器订阅 release.policy.expiring"}
+  - {id: N02, class: K7, disposition: announced, step: "3", what: "问题 ask_owner 创建时推手机", by: "创建问题时的推送留在原处，以 owner.question.asked 宣布；这几种推送量小、已在工作，改走总线省不出，还要冒漏推手机的风险（11-18）"}
+  - {id: N03, class: K7, disposition: announced, step: "3", what: "线程沉默/主机丢失推手机（先认领再推）", by: "同 L18；这几种推送量小、已在工作，改走总线省不出，还要冒漏推手机的风险（11-18）", cut: {at: "2026-11-18", evidence: ["topic:seat.liveness.changed"]}}
+  - {id: N04, class: K7, disposition: announced, step: "3", what: "发布策略到期提醒推手机", by: "同 L17；这几种推送量小、已在工作，改走总线省不出，还要冒漏推手机的风险（11-18）"}
   - {id: N05, class: K7, disposition: kept, step: none, what: Alertmanager → relay → ntfy（firing 与 resolved）, by: 例外：独立报警路，事件已镜像；断了：手机收不到告警}
   - {id: N06, class: K6, disposition: kept, step: none, what: Watchdog 死人开关：Alertmanager 永远触发的心跳到 relay, by: 例外：死人开关，镜像已写未上线；断了：告警链断了没人知道}
   - {id: N07, class: K7, disposition: announced, step: "3", what: "Alertmanager → platform-api /ops-agent/alertmanager，只写一条审计（无人读）", by: "留在原处作为 alert.fired 的入口（由门·平台库写账，不再只写 500 条审计）；只给观察和 Console，不推手机", cut: {at: "2026-11-18", evidence: ["topic:alert.rule.fired"]}}

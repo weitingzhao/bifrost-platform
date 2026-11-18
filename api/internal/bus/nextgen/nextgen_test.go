@@ -65,7 +65,7 @@ func TestRetiredChannelsAreGone(t *testing.T) {
 	if len(chs) != 153 {
 		t.Fatalf("%d channels, the table has 153", len(chs))
 	}
-	want := map[string]int{"replaced": 17, "merged": 20, "kept": 56, "announced": 25, "deleted": 21, "not-this-way": 4, "not-a-channel": 9, "reserved": 1}
+	want := map[string]int{"replaced": 12, "merged": 20, "kept": 56, "announced": 30, "deleted": 21, "not-this-way": 4, "not-a-channel": 9, "reserved": 1}
 	got := map[string]int{}
 	seen := map[string]bool{}
 	for _, c := range chs {
@@ -266,8 +266,8 @@ func TestStepsMatchTheTableAndCutsNameTheirProof(t *testing.T) {
 	}
 	// 2026-11-18, the Owner: what stays must say who uses it and what breaks
 	// without it; what cannot is deleted (the kept rows judged again).
-	if p.Removable != 38 || p.Stays != 115 || p.End != 128 {
-		t.Errorf("removable %d, stays %d, end %d; the table says 38, 115, 128", p.Removable, p.Stays, p.End)
+	if p.Removable != 33 || p.Stays != 120 || p.End != 133 {
+		t.Errorf("removable %d, stays %d, end %d; the table says 33, 120, 133", p.Removable, p.Stays, p.End)
 	}
 	for _, c := range chs {
 		if c.Cut == nil {

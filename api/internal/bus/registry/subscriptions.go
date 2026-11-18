@@ -44,10 +44,6 @@ type Subscription struct {
 	// Repos are where commit.session looks for the event's commit when the
 	// event's ref names no repository (ci.run.finished of a landing run).
 	Repos []string `yaml:"repos"`
-	// Shadow, on a notify row, records the push it would send and sends
-	// none: the side-by-side with a direct push that is still the one the
-	// Owner gets (2026-11-18), so nothing reaches the phone twice.
-	Shadow bool `yaml:"shadow"`
 }
 
 // TargetDomain is the domain a row's delivery reaches, for the Bus page's
@@ -218,9 +214,6 @@ func CheckSubscriptions(tenants map[string]Tenant, subs map[string]Subscriptions
 			}
 			if r.By == "" {
 				bad("%s: by names who delivers it (dispatcher, or the hand-written code that still does)", at)
-			}
-			if r.Shadow && r.Deliver != DeliverNotify {
-				bad("%s: only a notify row can be a shadow", at)
 			}
 			if d := r.Params[ParamDetail]; d != "" {
 				names, ok := DetailNames(d)

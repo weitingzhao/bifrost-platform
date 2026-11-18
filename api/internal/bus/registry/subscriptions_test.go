@@ -52,15 +52,13 @@ func TestCheckSubscriptionsRefuses(t *testing.T) {
 		}
 	}
 	refused := map[string]Subscription{
-		"is neither in":      {ID: "x", On: []string{"git.main.advanced"}, Deliver: DeliverWake, To: "seat:ci"},
-		"not in the catalog": {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverAction, Action: "drop_everything"},
-		"needs an approval":  {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverAction, Action: "scale_deployment"},
-		"wake to":            {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "everyone"},
-		"deliver is":         {ID: "x", On: []string{"ci.run.finished"}, Deliver: "run"},
-		"is task-result:":    {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "log:land"}},
-		"not one of":         {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/commit", "require": "tripwire"}},
-		// 2026-11-18: shadow means "record the push"; a wake has no push to record.
-		"can be a shadow":                  {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Shadow: true},
+		"is neither in":                    {ID: "x", On: []string{"git.main.advanced"}, Deliver: DeliverWake, To: "seat:ci"},
+		"not in the catalog":               {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverAction, Action: "drop_everything"},
+		"needs an approval":                {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverAction, Action: "scale_deployment"},
+		"wake to":                          {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "everyone"},
+		"deliver is":                       {ID: "x", On: []string{"ci.run.finished"}, Deliver: "run"},
+		"is task-result:":                  {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "log:land"}},
+		"not one of":                       {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/commit", "require": "tripwire"}},
 		"notify goes to":                   {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverNotify, To: "seat:ci", Params: map[string]string{"title": "t"}},
 		"needs params.title":               {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverNotify, To: NotifyTo},
 		"not one of params.detail's names": {ID: "x", On: []string{"seat.mail.arrived"}, Deliver: DeliverWake, To: "requester", Params: map[string]string{"detail": DetailOpenRegressions, "require": "tripwire"}},

@@ -223,6 +223,8 @@ channels:
       reconcile: "policy reader on each check"
       on_unread: stale
       retention: 30d
+      # For watching: the phone is told directly, by the code that decides.
+      display_only: true
       consumers: [console]
       exports: []
       replaces: [L17, N04]
@@ -288,6 +290,8 @@ channels:
       reconcile: "question store is the truth"
       on_unread: stale
       retention: 30d
+      # For watching: the phone is told directly, by the code that decides.
+      display_only: true
       consumers: [console]
       exports: []
       replaces: [L01, N02]
@@ -359,6 +363,8 @@ channels:
       reconcile: "liveness judge rescans last_seen every 30 s"
       on_unread: stale
       retention: 30d
+      # For watching: the phone is told directly, by the code that decides.
+      display_only: true
       consumers: [console]
       exports: []
       replaces: [L18, N03, N14]
