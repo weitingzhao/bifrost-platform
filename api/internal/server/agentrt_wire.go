@@ -73,7 +73,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	rt := &agentRuntime{api: &agentrtapi.API{Logf: func(format string, args ...any) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
 	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint,
-		DiskFloor: diskFloorFromEnv()}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
+		DiskFloor: diskFloorFromEnv(), MailWake: s.mailWake}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
 	s.agentRuntime = rt
 	rt.evidenceCI = s.wireEvidenceGate()
 	if s.releases != nil && s.releases.Service() != nil {

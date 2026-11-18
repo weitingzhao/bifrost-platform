@@ -37,11 +37,15 @@ func (a *API) sendMessage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"message_id": id, "from": who.Actor, "to": b.To})
 }
 
+// mailReconcile is how often a waiting reader re-reads its inbox without being
+// woken: the wake is a hint from the bus (MailWake), the inbox is the record,
+// and this covers a wake that did not come.
+const mailReconcile = 5 * time.Second
+
 // readMessages is the caller's unread messages, oldest first (GET /messages):
-// wait= 0 to 25 seconds holds the request until one arrives (a long poll on
-// PostgreSQL, the record; the mailbox signal in Redis is not needed to be
-// right), limit= 1 to 100. A thread reads only with the token its session is
-// held to (store.Unread, TD-370).
+// wait= 0 to 25 seconds holds the request until one arrives, woken by the bus
+// (seat.mail.arrived through MailWake), limit= 1 to 100. A thread reads only
+// with the token its session is held to (store.Unread, TD-370).
 func (a *API) readMessages(w http.ResponseWriter, r *http.Request) {
 	who, err := writer(r)
 	if err != nil {
@@ -66,7 +70,15 @@ func (a *API) readMessages(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	poll := a.ClaimPoll
 	if poll <= 0 {
-		poll = time.Second
+		poll = mailReconcile
+	}
+	// Listen before the first read: mail landing between a read and the wait
+	// still wakes this request.
+	var woken <-chan struct{}
+	if wait > 0 && a.MailWake != nil {
+		var stop func()
+		woken, stop = a.MailWake(who.Actor)
+		defer stop()
 	}
 	for {
 		qctx := r.Context()
@@ -101,6 +113,7 @@ func (a *API) readMessages(w http.ResponseWriter, r *http.Request) {
 		case <-ctx.Done():
 			writeJSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "messages": []coord.Message{}})
 			return
+		case <-woken:
 		case <-time.After(poll):
 		}
 	}

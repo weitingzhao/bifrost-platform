@@ -138,6 +138,11 @@ clients:
     kind: reader
     lost_after: 24h
     note: the Ops Bus page, open while someone looks at it
+  - name: inbox-waiters
+    kind: reader
+    lost_after: 24h
+    domain: coordination
+    note: the seats waiting on their inbox (wait_for_messages, the doorbell), woken by seat.mail.arrived; a receipt only when one was waiting
   - name: headrelease
     kind: durable
     lost_after: 24h

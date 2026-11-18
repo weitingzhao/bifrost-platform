@@ -316,7 +316,7 @@ channels:
       reconcile: "none: the inbox is the truth (self-declared)"
       on_unread: stale
       retention: 30d
-      consumers: [console]
+      consumers: [console, inbox-waiters]
       exports: []
       replaces: [N11, W01, X-B16, X-C2, X-C10, X-C12, X-C14]
   seat.status.changed:

@@ -65,7 +65,7 @@ channels:
   - {id: N20, class: K3, disposition: deleted, what: "审批 claim 长轮询 wait_seconds（本仓库唯一调用方不传）", by: "死路（其他仓库没查，删前核）"}
   - {id: N21, class: K2, disposition: replaced, what: "Kick：L02 → L09 的进程内提示", by: "门·集群的 watch 事件（进程内提示不再需要）"}
   - {id: N22, class: K2, disposition: deleted, what: "PG pg_notify 触发器+agentrt.outbox（设计过，无写入者无读者）", by: "死路；新中继不要复用（设计里的 outbox 被「账」顶掉，结果等同）", retired: {at: "2026-11-17", change: Id818b64d36e851fb3e31d91e06f0dd08ae027a12, absent_text: ['FROM agentrt.outbox)', 'FROM agentrt.outbox`']}}
-  - {id: W01, class: K3, disposition: replaced, what: "wait_for_messages：客户端循环套服务端长轮询（服务端每秒读 PG）", by: "入户口子④（长轮询工具，背后是 NATS 拉取消费者）"}
+  - {id: W01, class: K3, disposition: replaced, what: "wait_for_messages：客户端循环套服务端长轮询（服务端每秒读 PG）", by: "入户口子④（长轮询工具，背后是 NATS 拉取消费者）", retired: {at: "2026-11-18", change: Id491a910f8fac5d972d05cd42c6ec8effda9d128, absent_text: ["poll = time.Second"]}}
   - {id: W02, class: K3, disposition: replaced, what: "wait_for_request：每 2 秒读审批状态", by: "入户口子④/③订阅并等"}
   - {id: W03, class: K3, disposition: replaced, what: "wait_for_answer：每 2 秒读问题状态", by: "入户口子④订阅并等"}
   - {id: W04, class: K3, disposition: replaced, what: "wait_for_pipeline_run：每 10 秒读流水线（每次服务端一次 Tekton 列表）", by: "入户口子④订阅并等 ci.run.finished"}

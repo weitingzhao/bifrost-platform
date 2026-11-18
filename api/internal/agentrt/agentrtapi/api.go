@@ -34,9 +34,13 @@ import (
 type API struct {
 	ConfigurationBoundaries func(context.Context, string, string, []map[string]any) (map[string]any, error)
 	DB                      eventlog.DB
-	// ClaimWait and ClaimPoll retain legacy configuration fields. No dispatch
-	// claim route runs a long poll now.
+	// ClaimWait retains a legacy configuration field. ClaimPoll, when set,
+	// replaces how often a waiting inbox read re-reads the record (tests).
 	ClaimWait, ClaimPoll time.Duration
+	// MailWake registers a waiter on an address: its channel receives when the
+	// bus says mail reached the address; stop removes it. Nil: waiters only
+	// re-read the record.
+	MailWake func(addr string) (woken <-chan struct{}, stop func())
 	// DiskFloor retains the historical disk boundary configuration.
 	DiskFloor int64
 	Logf      func(format string, args ...any)

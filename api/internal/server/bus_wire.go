@@ -26,6 +26,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"k8s.io/client-go/dynamic"
 
@@ -35,6 +36,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gatecluster"
 	bushook "github.com/weitingzhao/bifrost-platform/api/internal/bus/hook"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/mailwake"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
@@ -81,6 +83,10 @@ type busWiring struct {
 	// wakeEnv is the environment whose ledger those ids are of (the
 	// consumer's AGENTRT_ENV).
 	wakeEnv atomic.Value
+	// mail wakes the seats waiting on their inbox (bus/mailwake); mailLive:
+	// this process follows seat.mail.arrived.
+	mail     mailwake.Hub
+	mailLive atomic.Bool
 	// postPass is the post-release check's pass (postReleaseSource), which
 	// the bus starts too (consumePostRelease); nil while the check is off.
 	postPass atomic.Pointer[func(context.Context, string) error]
@@ -397,10 +403,12 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 				}
 				g.NATSUp = nc.IsConnected
 				if js, jerr := jetstream.New(nc); jerr == nil {
-					g.Receipts = &relay.Receipts{JS: js, Tenant: relay.Tenant, Env: env}
+					receipts := &relay.Receipts{JS: js, Tenant: relay.Tenant, Env: env}
+					g.Receipts = receipts
 					g.Journey = &gate.JSJourney{JS: js, Tenant: relay.Tenant, Env: env}
 					g.ReceiptFeed = &gate.ReceiptFeed{}
 					safego.Go("bus-gate-follow-receipts", func() { gate.FollowReceipts(ctx, js, relay.Tenant, env, g.ReceiptFeed, busLogf) })
+					s.followSeatMail(ctx, nc, receipts, env)
 				}
 				context.AfterFunc(ctx, nc.Close)
 			}
@@ -516,6 +524,42 @@ func (s *Server) startRunCache(ctx context.Context) {
 	s.delivery.SetRunCache(g, s.earnedReadRoutes(ctx))
 	safego.Go("bus-run-cache", func() { g.Run(kubemetrics.WithSite(ctx, "bus.run-cache")) })
 	slog.Info("bus run cache: watching PipelineRuns for the display reads", "namespace", ns)
+}
+
+// followSeatMail wakes the inbox waiters of this api process on
+// seat.mail.arrived (core NATS, like the gate's waiters: nothing is kept; a
+// missed event is covered by the waiters' slow re-read). A receipt is left
+// only when a waiter was woken.
+func (s *Server) followSeatMail(ctx context.Context, nc *nats.Conn, receipts *relay.Receipts, env string) {
+	sub, err := nc.Subscribe(relay.EventSubject(relay.Tenant, env, coord.SeatMailType), func(m *nats.Msg) {
+		id := s.bus.mail.Take(m.Data)
+		if id == "" {
+			return
+		}
+		safego.Go("bus-mail-receipt", func() {
+			rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			if err := receipts.Publish(rctx, id, mailwake.Consumer); err != nil {
+				slog.Warn("bus: inbox waiters' receipt", "event", id, "error", err)
+			}
+		})
+	})
+	if err != nil {
+		slog.Error("bus: seat mail subscription; inbox waiters only re-read", "error", err)
+		return
+	}
+	context.AfterFunc(ctx, func() { _ = sub.Unsubscribe() })
+	s.bus.mailLive.Store(true)
+	slog.Info("bus: inbox waiters woken by seat.mail.arrived", "env", env)
+}
+
+// mailWake is the inbox read's wake (agentrtapi.API.MailWake): none until this
+// process follows seat.mail.arrived.
+func (s *Server) mailWake(addr string) (<-chan struct{}, func()) {
+	if !s.bus.mailLive.Load() {
+		return nil, func() {}
+	}
+	return s.bus.mail.Listen(addr)
 }
 
 // startRunHooks starts the run hooks' durable consumers on ci.run.finished,
