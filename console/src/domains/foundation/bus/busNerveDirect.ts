@@ -68,8 +68,10 @@ export type Route = { topic: string; reader: string; domain: string }
 
 export const ROW_CONSUMER_PREFIX = 'sub-'
 
-export function routesOf(c: BusContract): Route[] {
-  const domainOfClient = new Map(c.clients.filter(x => x.domain).map(x => [x.name, x.domain as string]))
+/** env: this platform's environment (GET /bus/clients); a reader or row declared for other environments only does not read here. */
+export function routesOf(c: BusContract, env?: string): Route[] {
+  const here = (envs?: string[]) => !env || !envs || envs.length === 0 || envs.includes(env)
+  const domainOfClient = new Map(c.clients.filter(x => x.domain && here(x.envs)).map(x => [x.name, x.domain as string]))
   const topics = new Set(c.topics.map(t => t.type))
   const out: Route[] = []
   for (const t of c.topics) {
@@ -79,7 +81,7 @@ export function routesOf(c: BusContract): Route[] {
     }
   }
   for (const row of c.subscriptions) {
-    if (!row.domain) continue
+    if (!row.domain || !here(row.envs)) continue
     for (const on of row.on) if (topics.has(on)) out.push({ topic: on, reader: ROW_CONSUMER_PREFIX + row.id, domain: row.domain })
   }
   return out

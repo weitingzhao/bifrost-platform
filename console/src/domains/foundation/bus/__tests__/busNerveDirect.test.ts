@@ -68,6 +68,14 @@ describe('routes and arcs', () => {
     expect(toDelivery.count).toBe(50)
     expect(arcs.find(a => a.id === 'arc:verification>coordination')!.readers).toEqual(['sub-land-refused'])
   })
+  it('counts only the readers that run in this environment (11-18: head-release reads in PROD alone; STG drew its arc anyway)', () => {
+    const c: BusContract = { ...contract, clients: contract.clients.map(x => (x.name === 'headrelease' ? { ...x, envs: ['prod'] } : x)) }
+    const stg = routesOf(c, 'stg')
+    expect(stg.some(r => r.reader === 'headrelease')).toBe(false)
+    expect(routesOf(c, 'prod').some(r => r.reader === 'headrelease')).toBe(true)
+    // On STG git.main.advanced is then taken by nobody: its domain wears a halo.
+    expect(halosOf(stg, domainOfType, listening).get('verification')?.topics).toContain('git.main.advanced')
+  })
   it('gives a halo to a domain sending what nobody takes; a display-only topic makes none', () => {
     const h = halosOf(routesOf(contract), domainOfType, listening)
     expect([...h.keys()]).toEqual(['compute'])

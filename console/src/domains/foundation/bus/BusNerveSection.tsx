@@ -125,7 +125,8 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
   const [byBus, setByBus] = useState(false)
   const domains = useQuery({ queryKey: ['ci-domains', TIER_REPO], queryFn: () => fetchCiDomains(TIER_REPO), staleTime: 300_000, retry: false })
   const tiers = useMemo(() => (domains.data?.domains ?? []).map(d => ({ id: d.id, tier: d.tier })), [domains.data])
-  const routes = useMemo((): Route[] => (contract.data ? routesOf(contract.data) : []), [contract.data])
+  // Only the readers that run here: head-release reads in PROD's workers alone, so on STG its topics are heard by nobody (11-18).
+  const routes = useMemo((): Route[] => (contract.data ? routesOf(contract.data, clients.data?.env) : []), [contract.data, clients.data])
   const routesByTopic = useMemo(() => {
     const m = new Map<string, Route[]>()
     for (const r of routes) m.set(r.topic, [...(m.get(r.topic) ?? []), r])
