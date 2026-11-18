@@ -60,6 +60,16 @@ type Gate struct {
 	// workers' gate does, writes nothing to the ledger, tells no one, and
 	// does not watch the window. Appending stays in the workers.
 	CacheOnly bool
+	// WatchTasks also keeps the namespace's TaskRuns for the display reads
+	// (taskruns.go). Only the process that serves those reads sets it.
+	WatchTasks bool
+
+	// The TaskRun cache: each kept TaskRun by its PipelineRun and name, and
+	// the PipelineRun of each name (taskruns.go).
+	taskMu      sync.RWMutex
+	tasksByRun  map[string]map[string]TaskRun
+	taskRunOf   map[string]string
+	tasksSynced atomic.Bool
 
 	// runs is what the runs loop knows of each run; only that loop writes
 	// it, under mu; the cache's readers read it under mu (cache.go).
@@ -101,6 +111,8 @@ func (g *Gate) backoff() time.Duration {
 func (g *Gate) init() {
 	g.initOnce.Do(func() {
 		g.runs = map[string]runFacts{}
+		g.tasksByRun = map[string]map[string]TaskRun{}
+		g.taskRunOf = map[string]string{}
 		g.watching = make(chan struct{})
 	})
 }
@@ -140,6 +152,9 @@ func (g *Gate) append(ctx context.Context, stream, typ string, cause int64, deci
 // goroutine; a cache-only gate the runs alone.
 func (g *Gate) Run(ctx context.Context) {
 	g.init()
+	if g.WatchTasks {
+		safego.Go("bus-gate-cluster-tasks", func() { g.runTasks(ctx) })
+	}
 	if g.CacheOnly {
 		g.runRuns(ctx)
 		return

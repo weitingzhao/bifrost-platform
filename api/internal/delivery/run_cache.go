@@ -3,6 +3,7 @@ package delivery
 import (
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
+	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"log/slog"
 	"os"
 	"sort"
@@ -61,10 +62,15 @@ const (
 
 	// RouteLandingFull is the daily full CI's runs (landingci.Client.FullRuns).
 	RouteLandingFull = "landingci_full"
+	routeRunSteps    = "run_steps"
+	routeTimings     = "pipeline_timings"
 )
 
 var cacheRoutes = []string{routePipelineRuns, routeReleaseContext, routeSupplyChain,
 	releases.RouteCurrent, releases.RouteTick, RouteLandingFull, routeLastDeliver, routeProdArtifacts}
+
+// taskRoutes read the TaskRun cache (tasksOf), under the same trust rules.
+var taskRoutes = []string{routeRunSteps, routeTimings}
 
 // routeReader is each route's reader in the source switch (bus/nextgen
 // readers.yaml): a read answered from the cache is its run evidence.
@@ -77,6 +83,57 @@ var routeReader = map[string]string{
 	RouteLandingFull:      "landingci-full",
 	routeLastDeliver:      "last-deliver",
 	routeProdArtifacts:    "prod-artifacts-ready",
+	routeRunSteps:         "run-steps",
+	routeTimings:          "pipeline-timings",
+}
+
+// TaskRunCache is the part of the gate's cache that holds TaskRuns: the api
+// process's gate has it (gatecluster.Gate.WatchTasks).
+type TaskRunCache interface {
+	TasksSynced() bool
+	// TaskObjects is one run's TaskRuns by name, holding only what displays read.
+	TaskObjects(run string) []unstructured.Unstructured
+}
+
+// tasksOf is the TaskRuns of the runs named, for a display route: from the
+// cache once the route has earned it (readThrough), else from list. Another
+// namespace than the cache's, or a cache not synced, lists.
+func (s *Service) tasksOf(route, namespace string, runs []string, list func() ([]unstructured.Unstructured, error)) ([]unstructured.Unstructured, error) {
+	r := s.syncedCache()
+	if r == nil || namespace != s.PipelinesNamespace() {
+		return list()
+	}
+	tc, ok := r.cache.(TaskRunCache)
+	if !ok || !tc.TasksSynced() {
+		return list()
+	}
+	return readThrough(s, route, func(RunCache) []unstructured.Unstructured {
+		var out []unstructured.Unstructured
+		for _, run := range runs {
+			out = append(out, tc.TaskObjects(run)...)
+		}
+		return out
+	}, func() ([]unstructured.Unstructured, error) {
+		items, err := list()
+		if err != nil {
+			return nil, err
+		}
+		sort.Slice(items, func(i, j int) bool { return items[i].GetName() < items[j].GetName() })
+		return items, nil
+	}, taskKeys)
+}
+
+// taskKeys is what the displays show of TaskRuns, for the side-by-side.
+func taskKeys(items []unstructured.Unstructured) []string {
+	out := make([]string, 0, len(items))
+	sorted := append([]unstructured.Unstructured(nil), items...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].GetName() < sorted[j].GetName() })
+	for i := range sorted {
+		t := cirunview.TaskTiming(sorted[i], sorted[i].GetLabels()["tekton.dev/pipelineRun"])
+		start, _, _ := unstructured.NestedString(sorted[i].Object, "status", "startTime")
+		out = append(out, strings.Join([]string{t.Name, t.Task, t.Status, start, t.Finished, fmt.Sprint(t.Results), fmt.Sprint(len(t.Steps))}, "\x00"))
+	}
+	return out
 }
 
 // EnvReadersCompareN is how many clean comparisons in a row a route needs
@@ -129,8 +186,9 @@ func (s *Service) SetRunCache(c RunCache, earned map[string]bool) {
 // SetRunCache hands the service the cluster gate's run cache (wiring).
 func (h *Handler) SetRunCache(c RunCache, earned map[string]bool) { h.svc.SetRunCache(c, earned) }
 
-// CacheRoutes are the routes that read the run cache, as the readings name them.
-func CacheRoutes() []string { return append([]string(nil), cacheRoutes...) }
+// CacheRoutes are the routes that read the run cache or the TaskRun cache, as
+// the readings name them.
+func CacheRoutes() []string { return append(append([]string(nil), cacheRoutes...), taskRoutes...) }
 
 // ReadersCompareN is how many clean comparisons a route needs to be trusted.
 func ReadersCompareN() int { return readersCompareN() }
@@ -332,7 +390,7 @@ func WriteBusReaderMetrics(b *strings.Builder) {
 		{"bifrost_bus_readers_cache_served_total", "Reads of runs answered from the bus run cache without a list", &metricReadersServed},
 	} {
 		fmt.Fprintf(b, "# HELP %s %s\n# TYPE %s counter\n", m.name, m.help, m.name)
-		for _, route := range cacheRoutes {
+		for _, route := range CacheRoutes() {
 			fmt.Fprintf(b, "%s{route=%q} %d\n", m.name, route, readerMetric(m.v, route).Load())
 		}
 	}

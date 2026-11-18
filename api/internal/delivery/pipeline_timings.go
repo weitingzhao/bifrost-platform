@@ -18,7 +18,10 @@ func (h *Handler) HandlePipelineTimings(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Service) timingsSource() cirunview.TimingsSource {
-	return cirunview.TimingsSource{Client: s.buildDynamicClient, RunsOf: s.PipelineRunsOf, Params: timingParams}
+	return cirunview.TimingsSource{Client: s.buildDynamicClient, RunsOf: s.PipelineRunsOf, Params: timingParams,
+		Tasks: func(runs []string, list func() ([]unstructured.Unstructured, error)) ([]unstructured.Unstructured, error) {
+			return s.tasksOf(routeTimings, s.PipelinesNamespace(), runs, list)
+		}}
 }
 
 func timingParams(obj unstructured.Unstructured) map[string]string {

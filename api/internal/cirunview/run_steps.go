@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -54,6 +53,15 @@ type RunSteps struct {
 // its name for it, namespace where its runs live. A cluster that cannot be
 // reached is an answer (Reachability, Detail), not an error.
 func ReadRunSteps(ctx context.Context, client func() (dynamic.Interface, error), clusterID, namespace, runName string) RunSteps {
+	return ReadRunStepsVia(ctx, client, clusterID, namespace, runName, nil)
+}
+
+// TaskRead answers TaskRuns: from what the caller keeps, or by calling list,
+// which reads the cluster. Nil always lists.
+type TaskRead func(list func() ([]unstructured.Unstructured, error)) ([]unstructured.Unstructured, error)
+
+// ReadRunStepsVia is ReadRunSteps with the run's TaskRuns read through tasks.
+func ReadRunStepsVia(ctx context.Context, client func() (dynamic.Interface, error), clusterID, namespace, runName string, tasks TaskRead) RunSteps {
 	now := time.Now().UTC()
 	// The pipeline is the one the run names; until the run is read there is
 	// none, and so no phases.
@@ -91,23 +99,24 @@ func ReadRunSteps(ctx context.Context, client func() (dynamic.Interface, error),
 	}
 	out.Phases = AggregatePhasesForPipeline(pipelineName, map[string]string{}, runTasks)
 
-	list, err := dyn.Resource(taskRunGVR).Namespace(namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", runName),
-	})
+	listed := func() ([]unstructured.Unstructured, error) {
+		list, err := dyn.Resource(taskRunGVR).Namespace(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", runName),
+		})
+		if err != nil {
+			return nil, err
+		}
+		return list.Items, nil
+	}
+	if tasks == nil {
+		tasks = func(list func() ([]unstructured.Unstructured, error)) ([]unstructured.Unstructured, error) {
+			return list()
+		}
+	}
+	items, err := tasks(listed)
 	if err != nil {
 		out.Detail = fmt.Sprintf("list taskruns: %v", err)
 		return out
-	}
-	if len(list.Items) == 0 {
-		all, listErr := dyn.Resource(taskRunGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
-		if listErr == nil {
-			prefix := runName + "-"
-			for _, item := range all.Items {
-				if strings.HasPrefix(item.GetName(), prefix) {
-					list.Items = append(list.Items, item)
-				}
-			}
-		}
 	}
 
 	// Skipped tasks never get a TaskRun; without this they would read as pending
@@ -116,8 +125,8 @@ func ReadRunSteps(ctx context.Context, client func() (dynamic.Interface, error),
 	for _, name := range skippedTasks {
 		taskStatus[name] = "skipped"
 	}
-	tasks := make([]TaskRunView, 0, len(list.Items))
-	for _, item := range list.Items {
+	views := make([]TaskRunView, 0, len(items))
+	for _, item := range items {
 		pt := PipelineTask(item, runName)
 		st := TaskRunState(item)
 		taskStatus[pt] = st
@@ -131,7 +140,7 @@ func ReadRunSteps(ctx context.Context, client func() (dynamic.Interface, error),
 		}
 		started, _, _ := unstructured.NestedString(item.Object, "status", "startTime")
 		completed, _, _ := unstructured.NestedString(item.Object, "status", "completionTime")
-		tasks = append(tasks, TaskRunView{
+		views = append(views, TaskRunView{
 			PipelineTask:   pt,
 			Name:           item.GetName(),
 			Status:         st,
@@ -140,11 +149,11 @@ func ReadRunSteps(ctx context.Context, client func() (dynamic.Interface, error),
 			CompletionTime: completed,
 		})
 	}
-	sort.Slice(tasks, func(i, j int) bool { return tasks[i].PipelineTask < tasks[j].PipelineTask })
+	sort.Slice(views, func(i, j int) bool { return views[i].PipelineTask < views[j].PipelineTask })
 
 	out.Phases = AggregatePhasesForPipeline(pipelineName, taskStatus, runTasks)
-	out.Tasks = tasks
+	out.Tasks = views
 	out.Reachability = probe.ReachOK
-	out.Detail = fmt.Sprintf("%d task(s) · %d phase(s)", len(tasks), len(out.Phases))
+	out.Detail = fmt.Sprintf("%d task(s) · %d phase(s)", len(views), len(out.Phases))
 	return out
 }

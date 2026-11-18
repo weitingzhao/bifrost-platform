@@ -21,5 +21,8 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 	if ns == "" {
 		ns = s.PipelinesNamespace()
 	}
-	return cirunview.ReadRunSteps(ctx, s.buildDynamicClient, s.clusterID(), ns, runName)
+	tasks := func(list func() ([]unstructured.Unstructured, error)) ([]unstructured.Unstructured, error) {
+		return s.tasksOf(routeRunSteps, ns, []string{runName}, list)
+	}
+	return cirunview.ReadRunStepsVia(ctx, s.buildDynamicClient, s.clusterID(), ns, runName, tasks)
 }

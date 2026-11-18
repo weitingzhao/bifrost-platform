@@ -45,6 +45,9 @@ type TimingsSource struct {
 	// caller's exposure list, not this package's: nothing else of spec.params
 	// reaches the answer.
 	Params func(run unstructured.Unstructured) map[string]string
+	// Tasks, when set, answers the TaskRuns of the runs named: from what the
+	// caller keeps, or by calling list, which reads the cluster.
+	Tasks func(runs []string, list func() ([]unstructured.Unstructured, error)) ([]unstructured.Unstructured, error)
 }
 
 type timingsKept struct {
@@ -161,26 +164,40 @@ func ReadPipelineTimings(ctx context.Context, src TimingsSource, pipeline, repo,
 		for _, item := range out.Runs[start:end] {
 			names = append(names, item.Name)
 		}
-		options := metav1.ListOptions{Limit: 100, LabelSelector: "tekton.dev/pipelineRun in (" + strings.Join(names, ",") + ")"}
-		seen := map[string]bool{}
-		for {
-			page, listErr := dyn.Resource(taskRunGVR).Namespace("cicd").List(ctx, options)
-			if listErr != nil {
-				return out, fmt.Errorf("read task timings: %w", listErr)
-			}
-			for _, task := range page.Items {
-				if parent := index[task.GetLabels()["tekton.dev/pipelineRun"]]; parent != nil {
-					parent.Tasks = append(parent.Tasks, TaskTiming(task, parent.Name))
+		listed := func() ([]unstructured.Unstructured, error) {
+			var items []unstructured.Unstructured
+			options := metav1.ListOptions{Limit: 100, LabelSelector: "tekton.dev/pipelineRun in (" + strings.Join(names, ",") + ")"}
+			seen := map[string]bool{}
+			for {
+				page, listErr := dyn.Resource(taskRunGVR).Namespace("cicd").List(ctx, options)
+				if listErr != nil {
+					return nil, listErr
 				}
+				items = append(items, page.Items...)
+				options.Continue = page.GetContinue()
+				if options.Continue == "" {
+					return items, nil
+				}
+				if seen[options.Continue] {
+					return nil, fmt.Errorf("task timing pagination repeated a cursor")
+				}
+				seen[options.Continue] = true
 			}
-			options.Continue = page.GetContinue()
-			if options.Continue == "" {
-				break
+		}
+		var tasks []unstructured.Unstructured
+		var taskErr error
+		if src.Tasks != nil {
+			tasks, taskErr = src.Tasks(names, listed)
+		} else {
+			tasks, taskErr = listed()
+		}
+		if taskErr != nil {
+			return out, fmt.Errorf("read task timings: %w", taskErr)
+		}
+		for _, task := range tasks {
+			if parent := index[task.GetLabels()["tekton.dev/pipelineRun"]]; parent != nil {
+				parent.Tasks = append(parent.Tasks, TaskTiming(task, parent.Name))
 			}
-			if seen[options.Continue] {
-				return out, fmt.Errorf("task timing pagination repeated a cursor")
-			}
-			seen[options.Continue] = true
 		}
 	}
 	for i := range out.Runs {
