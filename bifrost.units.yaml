@@ -104,6 +104,8 @@ modules:
       # Domain 4: delivery-stage read projection; no release authority.
       api/internal/agentrt/deliveryreadings: ["api/internal/agentrt/deliveryreadings"]
       api/internal/agentrt/loopreadings: ["api/internal/agentrt/loopreadings"]
+      # 2026-11-17: TestLoopTypesAreRegistered reads the event register.
+      api/internal/agentrt/loopalert: ["api/internal/agentrt/loopalert", "api/internal/bus/registry/ledger"]
       api/internal/agentrt/deliveryview: ["api/internal/agentrt/deliveryview"]
       api/internal/agentrt/canon: ["api/internal/agentrt/canon"]
       api/internal/agentrt/infracheck: ["api/internal/agentrt/infracheck"]

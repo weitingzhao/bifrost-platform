@@ -36,6 +36,8 @@ types:
   - {type: ci_seen, domain: foundation}
   - {type: control_cleared, domain: coordination}
   - {type: control_set, domain: coordination}
+  - {type: controller_loop_failing, domain: foundation, note: "a controller loop failed the same way several times in a row; loopalert (migration 0029, was policy_alert controller_failing)"}
+  - {type: controller_loop_recovered, domain: foundation, note: "a controller loop passes again; loopalert (migration 0029, was a note)"}
   - {type: decision_recorded, domain: plan}
   - {type: deploy_seen, domain: foundation}
   - {type: host_registered, domain: compute}

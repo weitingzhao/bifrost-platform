@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"regexp"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -52,9 +53,8 @@ func AlertFailingLoop(ctx context.Context, db eventlog.DB, loop string, n int, e
 		if err != nil {
 			return err
 		}
-		_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: ControllerStream, Type: "policy_alert", Actor: "controller",
-			Body: map[string]any{"rule": "controller_failing", "source": "controller", "phrase": FailingPhrase,
-				"artifact_id": art, "line_digest": lineDigest(loop)}})
+		_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: ControllerStream, Type: failingType, Actor: "controller",
+			Body: map[string]any{"loop": loop, "failures": n, "artifact_id": art, "line_digest": lineDigest(loop)}})
 		return err
 	})
 }
@@ -64,7 +64,8 @@ func AlertFailingLoop(ctx context.Context, db eventlog.DB, loop string, n int, e
 func NoteLoopPasses(ctx context.Context, db eventlog.DB, loop string, n int) error {
 	text := loopreadings.RecoveryText(loop, n, passesAgain)
 	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
-		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: ControllerStream, Type: "note", Actor: "controller", Body: map[string]any{"text": text}})
+		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: ControllerStream, Type: recoveredType, Actor: "controller",
+			Body: map[string]any{"loop": loop, "failures": n, "line_digest": lineDigest(loop), "text": text}})
 		return err
 	})
 }
@@ -111,4 +112,39 @@ func FailingLoops(ctx context.Context, tx pgx.Tx) ([]map[string]any, error) {
 func lineDigest(line string) string {
 	sum := sha256.Sum256([]byte(line))
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// The controller loops' own event types (2026-11-17, migration 0029): every
+// event type has one owning domain, and these two are the foundation's
+// (registered under foundation in bus/registry/ledger/types.yaml). Before,
+// an alert was a policy_alert of rule controller_failing and a recovery a
+// free-text note; those rows stay and loopreadings still reads them.
+const (
+	// failingType: loop failed failures times in a row the same way; its
+	// error is kept as a log_tail artifact; line_digest names the loop.
+	failingType = "controller_loop_failing"
+	// recoveredType: loop passes again after failures failures in a row (0:
+	// not known, as after a restart); text says so in words.
+	recoveredType = "controller_loop_recovered"
+)
+
+// loopTypes are this package's event types.
+var loopTypes = []string{failingType, recoveredType}
+
+var loopBodies = map[string][]eventlog.Field{
+	failingType: {{Name: "loop", Kind: eventlog.Str}, {Name: "failures", Kind: eventlog.Int}, {Name: "artifact_id", Kind: eventlog.ID},
+		{Name: "line_digest", Kind: eventlog.Str}},
+	recoveredType: {{Name: "loop", Kind: eventlog.Str}, {Name: "failures", Kind: eventlog.Int}, {Name: "line_digest", Kind: eventlog.Str},
+		{Name: "text", Kind: eventlog.Str}},
+}
+
+var loopValues = map[string]map[string]eventlog.Value{
+	failingType:   {"line_digest": digestValue},
+	recoveredType: {"line_digest": digestValue},
+}
+
+var digestValue = eventlog.Shaped("a line digest (sha256:<64 hex>)", regexp.MustCompile(`^sha256:[0-9a-f]{64}$`))
+
+func init() {
+	eventlog.Declare(eventlog.Vocabulary{Types: loopTypes, Bodies: loopBodies, Values: loopValues})
 }

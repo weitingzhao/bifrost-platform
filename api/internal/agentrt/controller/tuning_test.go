@@ -37,7 +37,7 @@ func TestTuningFailuresToAlert(t *testing.T) {
 	alerts := func() int {
 		t.Helper()
 		var n int
-		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'policy_alert'`,
+		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'controller_loop_failing'`,
 			loopalert.ControllerStream).Scan(&n))
 		return n
 	}

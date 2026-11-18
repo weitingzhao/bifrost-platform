@@ -38,7 +38,9 @@ func TestLatestDistinguishesMissingRecoveryAndFailure(t *testing.T) {
 		kind         string
 		err          error
 		found, alert bool
-	}{{"policy_alert", nil, true, true}, {"note", nil, true, false}, {"", pgx.ErrNoRows, false, false}, {"", failure, false, false}} {
+	}{{"controller_loop_failing", nil, true, true}, {"controller_loop_recovered", nil, true, false},
+		// The rows before migration 0029 (2026-11-17) are still read as before.
+		{"policy_alert", nil, true, true}, {"note", nil, true, false}, {"", pgx.ErrNoRows, false, false}, {"", failure, false, false}} {
 		q := &query{r: row{values: []any{tc.kind, at, "artifact"}, err: tc.err}}
 		got, err := Latest(context.Background(), q, "controller", "digest", "loop passes again")
 		if got.Found != tc.found || got.Alert != tc.alert || tc.err == failure && !errors.Is(err, failure) || tc.err != failure && err != nil || !reflect.DeepEqual(q.args, []any{"controller", "digest", "loop passes again"}) {

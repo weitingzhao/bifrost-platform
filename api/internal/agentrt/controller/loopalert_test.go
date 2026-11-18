@@ -54,7 +54,7 @@ func TestALoopFailingTheSameWayIsAlertedOnce(t *testing.T) {
 	}
 	events := func(kind string) []string {
 		t.Helper()
-		rows, err := pool.Query(ctx, `SELECT COALESCE(body_json->>'text', body_json->>'rule') FROM agentrt.event
+		rows, err := pool.Query(ctx, `SELECT COALESCE(body_json->>'text', body_json->>'loop') FROM agentrt.event
 		  WHERE event_stream_id = $1 AND event_type = $2 ORDER BY seq`, loopalert.ControllerStream, kind)
 		must(t, err)
 		defer rows.Close()
@@ -83,13 +83,13 @@ func TestALoopFailingTheSameWayIsAlertedOnce(t *testing.T) {
 	var whileFailing []string
 	var readErr error
 	run("agentrt-facts-rules", append(same(7), nil), map[int]func(){7: func() { whileFailing, readErr = failing() }})
-	if a := events("policy_alert"); len(a) != 1 || a[0] != "controller_failing" {
-		t.Fatalf("alerts %q; want one controller_failing", a)
+	if a := events("controller_loop_failing"); len(a) != 1 || a[0] != "agentrt-facts-rules" {
+		t.Fatalf("alerts %q; want one of agentrt-facts-rules", a)
 	}
 	if readErr != nil || len(whileFailing) != 1 || whileFailing[0] != "agentrt-facts-rules" {
 		t.Fatalf("while it failed, Progress listed %q (%v)", whileFailing, readErr)
 	}
-	if n := events("note"); len(n) != 1 || !strings.HasPrefix(n[0], "agentrt-facts-rules passes again after 7 failures in a row") {
+	if n := events("controller_loop_recovered"); len(n) != 1 || !strings.HasPrefix(n[0], "agentrt-facts-rules passes again after 7 failures in a row") {
 		t.Fatalf("notes %q", n)
 	}
 	if f, err := failing(); err != nil || len(f) != 0 {
@@ -102,7 +102,7 @@ func TestALoopFailingTheSameWayIsAlertedOnce(t *testing.T) {
 	}
 	run("agentrt-assess", changing, nil)
 	run("agentrt-landings", append(append(same(3), nil), same(3)...), nil)
-	if a := events("policy_alert"); len(a) != 1 {
+	if a := events("controller_loop_failing"); len(a) != 1 {
 		t.Fatalf("alerts %q; want still the one", a)
 	}
 }
@@ -163,8 +163,8 @@ func TestAnOpenAlertIsAnsweredOnceTheLoopPasses(t *testing.T) {
 	notes := func(loop string) int {
 		t.Helper()
 		var n int
-		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
-		  AND starts_with(body_json->>'text', $2)`, loopalert.ControllerStream, loop+" passes again").Scan(&n))
+		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND event_type = $3
+		  AND starts_with(body_json->>'text', $2)`, loopalert.ControllerStream, loop+" passes again", "controller_loop_recovered").Scan(&n))
 		return n
 	}
 	// The error changes after the alert, then the loop passes.

@@ -11,7 +11,8 @@ import type { ReleaseRecord } from '@/api/releases'
  * records merged in.
  */
 export const TIMELINE_TYPES = ['plan_node_state_changed', 'task_state_changed', 'attempt_computed', 'decision_recorded',
-  'plan_change_decided', 'legacy_imported', 'control_set', 'control_cleared', 'policy_alert', 'wait_limit_passed'] as const
+  'plan_change_decided', 'legacy_imported', 'control_set', 'control_cleared', 'policy_alert', 'controller_loop_failing',
+  'wait_limit_passed'] as const
 /** Events per read: the types above include every task move, of which only accepted and rejected are shown. */
 export const TIMELINE_PAGE = 200
 
@@ -100,6 +101,11 @@ export function eventRow(e: RuntimeEventRow, titles: Map<string, string>): Timel
       return row('lifted', 'Lifted', `${text(b.control_id)} by ${e.actor_id}`)
     case 'policy_alert':
       return row('alert', 'Alert', alertText(e, task), e.attempt_id ? `attempt ${e.attempt_id}` : '')
+    case 'controller_loop_failing': {
+      // A controller loop failing the same way (migration 0029; before, a policy_alert of rule controller_failing).
+      const n = typeof b.failures === 'number' ? ` ${b.failures} times` : ''
+      return row('alert', 'Alert', `Controller loop ${text(b.loop) || 'unknown'} failed${n} in a row the same way`)
+    }
     case 'wait_limit_passed':
       return row('wait', 'Waited past limit', waitText(e, task),
         [text(b.calls) && `calls ${text(b.calls)}`, LIMIT_FROM[text(b.basis)] && `limit from ${LIMIT_FROM[text(b.basis)]}`].filter(Boolean).join(' · '))

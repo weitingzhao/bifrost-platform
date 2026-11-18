@@ -17,8 +17,10 @@ type Record struct {
 	Artifact     string
 }
 
-// Latest reads loop's latest record: the controller's
-// controller_failing alert naming it, or its note that it passes again
+// Latest reads loop's latest record: the controller's alert naming it
+// (controller_loop_failing; before 2026-11-17 a policy_alert of rule
+// controller_failing) or the record that it passes again
+// (controller_loop_recovered; before, a note starting passedPrefix)
 // (review 466 B-1: by loop, not out of a window of the whole stream, which
 // another loop's alerts and notes could fill).
 func Latest(ctx context.Context, q interface {
@@ -28,13 +30,14 @@ func Latest(ctx context.Context, q interface {
 	var kind string
 	err := q.QueryRow(ctx, `SELECT event_type, at, COALESCE(body_json->>'artifact_id', '') FROM agentrt.event
 	  WHERE event_stream_id = $1 AND actor_id = 'controller' AND (
-	    (event_type = 'policy_alert' AND body_json->>'rule' = 'controller_failing' AND body_json->>'line_digest' = $2)
+	    (event_type IN ('controller_loop_failing', 'controller_loop_recovered') AND body_json->>'line_digest' = $2)
+	    OR (event_type = 'policy_alert' AND body_json->>'rule' = 'controller_failing' AND body_json->>'line_digest' = $2)
 	    OR (event_type = 'note' AND starts_with(body_json->>'text', $3)))
 	  ORDER BY seq DESC LIMIT 1`, stream, digest, passedPrefix).Scan(&kind, &r.At, &r.Artifact)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return r, nil
 	}
-	r.Found, r.Alert = err == nil, kind == "policy_alert"
+	r.Found, r.Alert = err == nil, kind == "controller_loop_failing" || kind == "policy_alert"
 	return r, err
 }
 
