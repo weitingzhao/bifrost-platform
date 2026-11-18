@@ -190,6 +190,8 @@ func writeSummaryOf(ctx context.Context, dyn dynamic.Interface, namespace string
 type SummaryPass struct {
 	Runs, Written, Failed int
 	FirstError            string
+	// Forbidden: the identity may not annotate runs; the pass stopped at the first refusal.
+	Forbidden bool
 }
 
 // WriteMissingSummaries is a SummaryPass over the namespace's runs, a page at a time.
@@ -205,6 +207,14 @@ func WriteMissingSummaries(ctx context.Context, dyn dynamic.Interface, namespace
 			out.Runs++
 			wrote, err := writeSummaryOf(ctx, dyn, namespace, run)
 			switch {
+			case apierrors.IsForbidden(err):
+				// This identity may not annotate runs (STG's has no patch on
+				// pipelineruns in cicd, 2026-11-17): every other run would be
+				// read and refused the same way. Stop the pass.
+				out.Failed++
+				out.FirstError = err.Error()
+				out.Forbidden = true
+				return out, nil
 			case err != nil:
 				out.Failed++
 				if out.FirstError == "" {

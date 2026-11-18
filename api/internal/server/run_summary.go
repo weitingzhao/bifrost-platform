@@ -65,7 +65,7 @@ func (s *Server) startRunSummaries(ctx context.Context) {
 			defer cancel()
 			r, err := cirunview.WriteMissingSummaries(kubemetrics.WithSite(pctx, "run-summary"), dyn, ns)
 			if err != nil || r.Written > 0 || r.Failed > 0 {
-				slog.Info("run summary reconcile", "runs", r.Runs, "written", r.Written, "failed", r.Failed, "first_error", r.FirstError, "error", err)
+				slog.Info("run summary reconcile", "runs", r.Runs, "written", r.Written, "failed", r.Failed, "forbidden", r.Forbidden, "first_error", r.FirstError, "error", err)
 			}
 		}
 		safego.Do("run-summary-reconcile", pass)

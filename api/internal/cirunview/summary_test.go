@@ -2,14 +2,17 @@ package cirunview
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynfake "k8s.io/client-go/dynamic/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 func summaryRun(name, status string) *unstructured.Unstructured {
@@ -101,5 +104,24 @@ func TestSummaryIsWrittenOnceOntoFinishedRuns(t *testing.T) {
 	}
 	if again, _ := WriteMissingSummaries(ctx, dyn, "cicd"); again.Written != 0 {
 		t.Fatalf("again %+v", again)
+	}
+}
+
+// 2026-11-17, STG's first pass: STG's platform identity has no patch on
+// pipelineruns in cicd, and a pass that went on would read every run's
+// TaskRuns and be refused for each, every 15 minutes. The pass stops at the
+// first refusal and says so. Positive control: without the IsForbidden case
+// the pass reads all four runs and the check on Runs fails.
+func TestSummaryPassStopsWhenRefused(t *testing.T) {
+	ctx := context.Background()
+	dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		pipelineRunGVR: "PipelineRunList", taskRunGVR: "TaskRunList"},
+		summaryRun("done-1", "True"), summaryRun("done-2", "True"), summaryRun("done-3", "False"), summaryRun("done-4", "True"))
+	dyn.PrependReactor("patch", "pipelineruns", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewForbidden(schema.GroupResource{Group: "tekton.dev", Resource: "pipelineruns"}, "x", errors.New("no patch"))
+	})
+	pass, err := WriteMissingSummaries(ctx, dyn, "cicd")
+	if err != nil || !pass.Forbidden || pass.Runs != 1 || pass.Failed != 1 || pass.Written != 0 {
+		t.Fatalf("pass %+v %v", pass, err)
 	}
 }
