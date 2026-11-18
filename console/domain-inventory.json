@@ -543,21 +543,6 @@
       "unresolved_imports": []
     },
     {
-      "path": "console/src/api/devSession.ts",
-      "files": [
-        "console/src/api/devSession.ts"
-      ],
-      "imports": [
-        "console/src/api/client.ts",
-        "console/src/api/serverContact.ts"
-      ],
-      "test_imports": [],
-      "external_imports": [],
-      "source_inputs": [],
-      "test_inputs": [],
-      "unresolved_imports": []
-    },
-    {
       "path": "console/src/api/flexQueryPlugin.ts",
       "files": [
         "console/src/api/flexQueryPlugin.ts"
@@ -990,7 +975,6 @@
         "console/src/components/AuditRecordsPanel.tsx",
         "console/src/components/ConfirmDialog.tsx",
         "console/src/components/ConsoleHostIpLabel.tsx",
-        "console/src/components/DevSessionsIndicator.tsx",
         "console/src/components/MatrixTable.tsx",
         "console/src/components/ReleasePolicyBanner.tsx",
         "console/src/components/StatusLamp.tsx",
@@ -1001,7 +985,6 @@
         "console/src/components/patrol/PatrolDispatchLog.tsx"
       ],
       "imports": [
-        "console/src/domains/compute/dev-sessions",
         "console/src/domains/delivery/policy",
         "console/src/domains/foundation/observation-ui",
         "console/src/domains/foundation/patrol-view"
@@ -1032,23 +1015,15 @@
       "path": "console/src/components/agent",
       "files": [
         "console/src/components/agent/DenseMarkdown.tsx",
-        "console/src/components/agent/DockDevSessionsPanel.tsx",
         "console/src/components/agent/denseMarkdownUtils.ts",
         "console/src/components/agent/sessionLogColor.tsx",
         "console/src/components/agent/sessionLogTone.ts"
       ],
-      "imports": [
-        "console/src/api/devSession.ts",
-        "console/src/api/serverContact.ts",
-        "console/src/hooks/usePlatformAuth.ts"
-      ],
+      "imports": [],
       "test_imports": [],
       "external_imports": [
         "@bifrost/ui",
-        "@tanstack/react-query",
-        "lucide-react",
-        "react",
-        "react-dom"
+        "react"
       ],
       "source_inputs": [],
       "test_inputs": [],
@@ -1133,7 +1108,6 @@
         "console/src/components/ConsoleHeader.tsx"
       ],
       "imports": [
-        "console/src/components",
         "console/src/components/ToolsMenu.tsx",
         "console/src/components/UserMenu.tsx",
         "console/src/components/shell",
@@ -1457,7 +1431,6 @@
         "console/src/components/shell/DomainSection.tsx",
         "console/src/components/shell/EntryNav.tsx",
         "console/src/components/shell/HostHeartbeatRow.tsx",
-        "console/src/components/shell/LocalDevSessionsDock.tsx",
         "console/src/components/shell/MorePage.tsx",
         "console/src/components/shell/RequestActionButton.tsx",
         "console/src/components/shell/SystemVerdictLine.tsx",
@@ -1472,7 +1445,6 @@
         "console/src/api/approvals.ts",
         "console/src/api/client.ts",
         "console/src/components/ToolsMenu.tsx",
-        "console/src/components/agent",
         "console/src/components/ui",
         "console/src/domains/foundation/shell",
         "console/src/lib/control-room/fleetSnapshot.ts",
@@ -1583,24 +1555,6 @@
         "@bifrost/ui",
         "lucide-react",
         "react"
-      ],
-      "source_inputs": [],
-      "test_inputs": [],
-      "unresolved_imports": []
-    },
-    {
-      "path": "console/src/domains/compute/dev-sessions",
-      "files": [
-        "console/src/domains/compute/dev-sessions/DevSessionsIndicator.tsx"
-      ],
-      "imports": [
-        "console/src/api/devSession.ts"
-      ],
-      "test_imports": [],
-      "external_imports": [
-        "@bifrost/ui",
-        "@tanstack/react-query",
-        "lucide-react"
       ],
       "source_inputs": [],
       "test_inputs": [],
@@ -2067,7 +2021,6 @@
         "console/src/lib/shell"
       ],
       "test_imports": [
-        "console/src/domains/compute/dev-sessions",
         "console/src/domains/foundation/patrol-view"
       ],
       "external_imports": [
@@ -3328,7 +3281,6 @@
         "console/src/lib/shell/__tests__/useShellLayout.test.ts",
         "console/src/lib/shell/consoleRoutes.ts",
         "console/src/lib/shell/governanceReferences.ts",
-        "console/src/lib/shell/localConsole.ts",
         "console/src/lib/shell/shellNavItems.ts",
         "console/src/lib/shell/shellStatusLine.ts",
         "console/src/lib/shell/useConsoleAppearance.ts",
@@ -3760,7 +3712,6 @@
         "console/src/domains/foundation/shell",
         "console/src/lib/shell",
         "console/src/pages/ApprovalsPage.tsx",
-        "console/src/pages/DevSessionsPage.tsx",
         "console/src/pages/QuestionPage.tsx",
         "console/src/pages/shell",
         "console/src/pages/shell/owner",
@@ -3830,27 +3781,6 @@
       ],
       "test_imports": [],
       "external_imports": [],
-      "source_inputs": [],
-      "test_inputs": [],
-      "unresolved_imports": []
-    },
-    {
-      "path": "console/src/pages/DevSessionsPage.tsx",
-      "files": [
-        "console/src/pages/DevSessionsPage.tsx"
-      ],
-      "imports": [
-        "console/src/api/devSession.ts",
-        "console/src/components/layout",
-        "console/src/hooks/usePlatformAuth.ts"
-      ],
-      "test_imports": [],
-      "external_imports": [
-        "@bifrost/ui",
-        "@tanstack/react-query",
-        "lucide-react",
-        "react"
-      ],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []

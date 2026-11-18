@@ -31,10 +31,8 @@ describe('P2 five-domain compatibility', () => {
       expect(entryOf(route.location, href.split('?')[1])).toBe(entry)
     }
   })
-  it('offers local tools only when the existing local guard permits them', () => {
-    const {rerender} = render(<DomainNav entry="system" />)
+  it('has no Local tools entry (C03: the local dev-sessions panel is gone)', () => {
+    render(<DomainNav entry="system" />)
     expect(screen.queryByRole('link', {name:'Local tools'})).toBeNull()
-    rerender(<DomainNav entry="system" local />)
-    expect(screen.getByRole('link', {name:'Local tools'}).getAttribute('href')).toBe('#dev-sessions')
   })
 })

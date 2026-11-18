@@ -8,7 +8,6 @@ import {
   systemVerdict,
   type VerdictInput,
 } from '@/lib/shell/shellStatusLine'
-import { showDevSessions } from '@/lib/shell/localConsole'
 
 function health(partial: Partial<SelfHealthResponse> & Pick<SelfHealthResponse, 'probes' | 'viewer_env'>): SelfHealthResponse {
   return {
@@ -163,19 +162,5 @@ describe('system verdict', () => {
     const verdict = systemVerdict(input({ checklist: { data: undefined, loading: true, error: null } }))
     expect(verdict.tone).toBe('loading')
     expect(verdict.sentence).toBe('Checking health…')
-  })
-})
-
-describe('showDevSessions', () => {
-  it('hides the entry on PROD and STG production builds', () => {
-    expect(showDevSessions({ viewerEnv: 'prod', viewerEnvLoading: false, devBuild: false })).toBe(false)
-    expect(showDevSessions({ viewerEnv: 'stg', viewerEnvLoading: false, devBuild: false })).toBe(false)
-    expect(showDevSessions({ viewerEnv: 'prod', viewerEnvLoading: true, devBuild: false })).toBe(false)
-  })
-
-  it('shows the entry for a local viewer or a dev build', () => {
-    expect(showDevSessions({ viewerEnv: 'dev', viewerEnvLoading: false, devBuild: false })).toBe(true)
-    expect(showDevSessions({ viewerEnv: 'dev-local', viewerEnvLoading: false, devBuild: false })).toBe(true)
-    expect(showDevSessions({ viewerEnv: 'prod', viewerEnvLoading: false, devBuild: true })).toBe(true)
   })
 })

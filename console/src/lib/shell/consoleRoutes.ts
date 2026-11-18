@@ -78,7 +78,7 @@ const QUESTION_ROUTE = 'questions'
 /** Server question ids. Anything else is not requested. */
 const QUESTION_ID_PATTERN = /^q_[0-9a-f]{16}$/
 
-/** Tabs that used to be real pages. `dev-sessions` stays a local-only route. */
+/** Tabs that used to be real pages. `dev-sessions` is retired and redirects like the rest. */
 export const FORMER_CONSOLE_TABS = [
   'maintenance',
   'queue',
@@ -134,7 +134,6 @@ export type ConsoleLocation =
   | { kind: 'approval' }
   | { kind: 'question' }
   | { kind: 'more' }
-  | { kind: 'dev-sessions' }
 
 /**
  * Old hash → new hash. Choices that the destination table left open:
@@ -198,6 +197,7 @@ export const LEGACY_HASH_REDIRECTS: Record<string, ShellRouteId> = {
   'mcp-contract': 'crew',
   'design-system': 'crew',
   'ai-compute': 'crew',
+  'dev-sessions': 'status',
   console: 'infrastructure',
   'agent-desk': 'command',
   'dev-agent': 'status',
@@ -283,7 +283,6 @@ export function isEntryRoute(value: string): value is EntryRouteId {
  */
 export function entryOf(location: ConsoleLocation, query = ''): EntryRouteId | null {
   if (location.kind === 'more') return null
-  if (location.kind === 'dev-sessions') return 'system'
   if (location.kind === 'approval' || location.kind === 'question') return 'command'
   if (isEntryRoute(location.id)) return location.id
   if (location.id === 'data' || location.id === 'ib') return 'services'
@@ -341,7 +340,6 @@ export function questionHref(id: string): string {
 }
 
 export function resolveHashTab(tab: string): { location: ConsoleLocation; legacy: boolean } {
-  if (tab === 'dev-sessions') return { location: { kind: 'dev-sessions' }, legacy: false }
   if (tab === APPROVAL_ROUTE) return { location: { kind: 'approval' }, legacy: false }
   if (tab === QUESTION_ROUTE) return { location: { kind: 'question' }, legacy: false }
   if (tab === MORE_ROUTE) return { location: { kind: 'more' }, legacy: false }
@@ -408,7 +406,6 @@ export function resolveConsoleHash(raw: string): { location: ConsoleLocation; ca
 }
 
 export function locationId(location: ConsoleLocation): string {
-  if (location.kind === 'dev-sessions') return 'dev-sessions'
   if (location.kind === 'approval') return APPROVAL_ROUTE
   if (location.kind === 'question') return QUESTION_ROUTE
   if (location.kind === 'more') return MORE_ROUTE

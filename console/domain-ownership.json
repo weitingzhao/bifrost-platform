@@ -453,13 +453,6 @@
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
       },
-      "console/src/pages/DevSessionsPage.tsx": {
-        "domains": [
-          "compute"
-        ],
-        "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
-      },
       "console/src/components/cluster": {
         "domains": [
           "compute"
@@ -496,13 +489,6 @@
         "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
       },
       "console/src/api/clusterTypes.ts": {
-        "domains": [
-          "compute"
-        ],
-        "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: cluster/network/runtime inventory and operational UI; protected handlers untouched"
-      },
-      "console/src/api/devSession.ts": {
         "domains": [
           "compute"
         ],
@@ -1317,13 +1303,6 @@
         ],
         "status": "assigned",
         "basis": "2026-11-16 complete read-only display implementations moved with compatibility entries; callbacks, request polling and local display settings preserved. No authentication, execution or refusal callers changed.; 2026-11-16 complete run-history and seven observation cells extracted from AutonomousSkillsPage; permission, mutation and action cells remain in original page."
-      },
-      "console/src/domains/compute/dev-sessions": {
-        "domains": [
-          "compute"
-        ],
-        "status": "assigned",
-        "basis": "2026-11-16 complete read-only display implementations moved with compatibility entries; callbacks, request polling and local display settings preserved. No authentication, execution or refusal callers changed."
       },
       "console/src/domains/delivery/display": {
         "domains": [

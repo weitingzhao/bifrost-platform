@@ -10,11 +10,11 @@ const LINKS: Record<EntryRouteId, readonly [string, string][]> = {
   system: [['Overview', '#system'], ['Status', '#status'], ['Cluster', '#infrastructure?section=cluster'], ['Network', '#infrastructure?section=network'], ['Hosts', '#infrastructure?section=hosts'], ['Storage & backup', '#infrastructure?section=backup'], ['Bus', '#bus'], ['Audit', '#records?tab=audit'], ['Patrol', '#records?tab=patrol']],
 }
 
-export function DomainNav({ entry, local = false, vertical = false }: { entry: EntryRouteId; local?: boolean; vertical?: boolean }) {
+export function DomainNav({ entry, vertical = false }: { entry: EntryRouteId; vertical?: boolean }) {
   const [hash, setHash] = useState(() => window.location.hash)
   useEffect(() => { const sync = () => setHash(window.location.hash); window.addEventListener('hashchange', sync); return () => window.removeEventListener('hashchange', sync) }, [])
   const canonical = resolveConsoleHash(hash.slice(1)).canonical
-  const links = [...LINKS[entry], ...(entry === 'system' && local ? [['Local tools', '#dev-sessions'] as const] : [])]
+  const links = LINKS[entry]
   const trade = resolveTradeFrontendUrls()
   const current = (href: string) => {
     if (canonical === href || (canonical === '#crew' && href === '#crew?section=capability-evidence')) return true

@@ -15,7 +15,6 @@ import {
 import { UserMenu } from '@/components/UserMenu'
 import { AppearanceMenu } from '@/components/shell/AppearanceMenu'
 import { ToolsMenu } from '@/components/ToolsMenu'
-import { DevSessionsIndicator } from '@/components/DevSessionsIndicator'
 import type { ShellLayout } from '@/lib/shell/useShellLayout'
 import { VERDICT_DOT_COLOR, type VerdictTone } from '@/lib/shell/shellStatusLine'
 
@@ -63,8 +62,6 @@ export function ConsoleHeader({
   onRefresh,
   viewerEnv,
   viewerEnvLoading,
-  showDevSessions,
-  onOpenDevSessions,
   layout = 'side',
   back,
   moreHref,
@@ -77,8 +74,6 @@ export function ConsoleHeader({
   onRefresh: () => void
   viewerEnv: FleetViewerEnv
   viewerEnvLoading?: boolean
-  showDevSessions: boolean
-  onOpenDevSessions: () => void
   layout?: ShellLayout
   back?: HeaderBack
   moreHref?: string
@@ -149,7 +144,6 @@ export function ConsoleHeader({
 
       <AppearanceMenu />
 
-      {showDevSessions ? <span className="ops-local-session"><DevSessionsIndicator onOpen={onOpenDevSessions} /></span> : null}
 
       {!side && moreHref != null ? (
         <a

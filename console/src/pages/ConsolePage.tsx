@@ -3,14 +3,12 @@ import { Suspense, lazy, useCallback, useEffect, useState, type ComponentType } 
 import { ConsoleHeader, type HeaderBack } from '@/components/ConsoleHeader'
 import { ConsoleSidebar } from '@/components/ConsoleSidebar'
 import { EntryRail, EntryTabBar, type EntryNavProps } from '@/components/shell/EntryNav'
-import { LocalDevSessionsDock } from '@/components/shell/LocalDevSessionsDock'
 import { DomainNav } from '@/components/shell/DomainNav'
 import { BusPage } from '@/domains/foundation/bus/BusPage'
 import { MorePage } from '@/components/shell/MorePage'
 import { useShellStatusLine } from '@/domains/foundation/shell/useShellStatusLine'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { QuestionPage } from '@/pages/QuestionPage'
-import { DevSessionsPage } from '@/pages/DevSessionsPage'
 import {
   DataPage,
   IbPage,
@@ -42,7 +40,6 @@ import {
   type EntryRouteId,
   type ShellRouteId,
 } from '@/lib/shell/consoleRoutes'
-import { showDevSessions } from '@/lib/shell/localConsole'
 import { useShellLayout } from '@/lib/shell/useShellLayout'
 
 type DetailRouteId = Exclude<ShellRouteId, EntryRouteId>
@@ -68,12 +65,6 @@ function readLocation(): ConsoleLocation {
 }
 
 function locationTitle(location: ConsoleLocation): { title: string; description: string } {
-  if (location.kind === 'dev-sessions') {
-    return {
-      title: 'Dev Sessions',
-      description: 'Local dev service orchestration — tmux sessions, logs, and restart.',
-    }
-  }
   if (location.kind === 'approval') {
     return { title: 'Request', description: 'Approve or reject one request.' }
   }
@@ -110,28 +101,16 @@ function ConsolePageInner() {
   const status = useShellStatusLine()
   const layout = useShellLayout()
   const { yours } = useOwnerYours(Date.now())
-  const local = showDevSessions({
-    viewerEnv: status.viewerEnv,
-    viewerEnvLoading: status.viewerEnvLoading,
-    devBuild: import.meta.env.DEV,
-  })
-  const viewerKnown = !status.viewerEnvLoading || import.meta.env.DEV === true
   const [location, setLocation] = useState<ConsoleLocation>(readLocation)
 
   const applyHash = useCallback(() => {
     const raw = window.location.hash.replace(/^#/, '')
     const resolved = resolveConsoleHash(raw)
-    let next = resolved.location
-    let canonical = resolved.canonical
-    if (next.kind === 'dev-sessions' && viewerKnown && !local) {
-      next = { kind: 'shell', id: HOME_ROUTE }
-      canonical = formatShellHash(HOME_ROUTE)
+    setLocation(resolved.location)
+    if (window.location.hash !== resolved.canonical) {
+      window.history.replaceState(null, '', resolved.canonical)
     }
-    setLocation(next)
-    if (window.location.hash !== canonical) {
-      window.history.replaceState(null, '', canonical)
-    }
-  }, [local, viewerKnown])
+  }, [])
 
   useEffect(() => {
     applyHash()
@@ -151,10 +130,6 @@ function ConsolePageInner() {
   }, [knownCount])
 
   const select = useCallback((id: string) => {
-    if (id === 'dev-sessions') {
-      window.location.hash = '#dev-sessions'
-      return
-    }
     const next = locationId(resolveHashTab(id).location)
     window.location.hash = formatShellHash(isShellRouteId(next) || next === MORE_ROUTE ? next : HOME_ROUTE)
   }, [])
@@ -163,11 +138,9 @@ function ConsolePageInner() {
   const Page = location.kind === 'shell' && entry == null ? DETAIL_PAGES[location.id as DetailRouteId] : null
   const { title, description } = locationTitle(location)
   const activeTab =
-    location.kind === 'dev-sessions'
-      ? 'dev-sessions'
-      : location.kind === 'approval' || location.kind === 'question'
-        ? NEEDS_YOU_ROUTE
-        : locationId(location)
+    location.kind === 'approval' || location.kind === 'question'
+      ? NEEDS_YOU_ROUTE
+      : locationId(location)
   const yoursBadge = yoursNavBadge(yours)
   const back = layout === 'side' ? undefined : backFor(location)
   const domain = entryOf(location, window.location.hash.split('?')[1])
@@ -184,7 +157,6 @@ function ConsolePageInner() {
       <SidebarProvider>
         {layout === 'side' ? (
           <ConsoleSidebar
-            local={local}
             activeTab={activeTab}
             onSelect={select}
             viewerEnv={status.viewerEnv}
@@ -197,7 +169,6 @@ function ConsolePageInner() {
           data-shell-layout={layout}
           className={cn(
             'ops-console-main min-w-0 overflow-x-clip',
-            local && layout !== 'tabs' && 'pb-14',
             layout === 'tabs' && 'pb-[calc(4.5rem+env(safe-area-inset-bottom))]',
           )}
         >
@@ -213,17 +184,14 @@ function ConsolePageInner() {
               }}
               viewerEnv={status.viewerEnv}
               viewerEnvLoading={status.viewerEnvLoading}
-              showDevSessions={local}
-              onOpenDevSessions={() => select('dev-sessions')}
               layout={layout}
               back={back}
               moreHref={undefined}
             />
-            {layout !== 'side' && domain && <DomainNav entry={domain} local={local} />}
+            {layout !== 'side' && domain && <DomainNav entry={domain} />}
           </div>
           <PageShell padding="compact" className={cn('ops-page-content flex w-full min-w-0 flex-col gap-4', entry !== 'command' && location.kind !== 'approval' && location.kind !== 'question' && 'ops-workspace')}>
             {location.kind !== 'approval' ? <ShellBuildBanner /> : null}
-            {location.kind === 'dev-sessions' && local ? <DevSessionsPage /> : null}
             {location.kind === 'approval' ? <ApprovalsPage /> : null}
             {location.kind === 'question' ? <QuestionPage /> : null}
             {location.kind === 'more' ? <MorePage viewerEnv={status.viewerEnv} viewerEnvLoading={status.viewerEnvLoading} /> : null}
@@ -233,8 +201,6 @@ function ConsolePageInner() {
           </PageShell>
         </SidebarInset>
         {layout === 'tabs' ? <EntryTabBar {...nav} /> : null}
-        {/* With the tab bar the header's Dev Sessions indicator stands in for the dock (local console only). */}
-        {local && layout !== 'tabs' ? <LocalDevSessionsDock onOpenPage={() => select('dev-sessions')} /> : null}
       </SidebarProvider>
     </TooltipProvider>
   )

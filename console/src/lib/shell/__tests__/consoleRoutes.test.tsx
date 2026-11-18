@@ -43,12 +43,13 @@ describe('shell navigation', () => {
 })
 
 describe('legacy hash redirects', () => {
-  it('sends every former tab except Dev Sessions to a shell route', () => {
+  it('treats the retired Dev Sessions link like any other former tab', () => {
+    // 2026-11-18 C03: the local panel was removed; #dev-sessions must land on Status, not a dead page.
+    expect(resolveHashTab('dev-sessions')).toEqual({ location: { kind: 'shell', id: 'status' }, legacy: true })
+  })
+
+  it('sends every former tab to a shell route', () => {
     for (const tab of FORMER_CONSOLE_TABS) {
-      if (tab === 'dev-sessions') {
-        expect(resolveHashTab(tab).location).toEqual({ kind: 'dev-sessions' })
-        continue
-      }
       expect(LEGACY_HASH_REDIRECTS[tab], tab).toBeTruthy()
       expect(isShellRouteId(LEGACY_HASH_REDIRECTS[tab] ?? '')).toBe(true)
     }
@@ -158,7 +159,6 @@ describe('which entry a place lights', () => {
       expect(entryOf({ kind: 'shell', id }), id).toBe(id === 'data' || id === 'ib' ? 'services' : id === 'releases' ? 'work' : id === 'records' ? 'command' : 'system')
     }
     expect(entryOf({ kind: 'more' })).toBeNull()
-    expect(entryOf({ kind: 'dev-sessions' })).toBe('system')
   })
 })
 

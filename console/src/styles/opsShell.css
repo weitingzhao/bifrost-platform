@@ -58,8 +58,6 @@ html[data-ops-theme] .ops-appearance-menu { width: 224px; padding: 10px; backgro
   html[data-ops-theme] .ops-console-header { padding-inline: 14px; gap: 6px; }
   .ops-console-header h1 { font-size: 18px; }
   .ops-console-header [data-viewer-env] { padding-inline: 6px; }
-  .ops-local-session { order: 10; flex-basis: 100%; }
-  .ops-local-session button { width: 100%; justify-content: flex-start; }
   html[data-ops-theme] .ops-page-content { padding-inline: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {

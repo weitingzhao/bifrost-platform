@@ -20,9 +20,7 @@ export function ConsoleSidebar({
   viewerEnv,
   viewerEnvLoading,
   badges,
-  local = false,
 }: {
-  local?: boolean
   activeTab: string
   onSelect: (id: string) => void
   viewerEnv: FleetViewerEnv
@@ -60,7 +58,7 @@ export function ConsoleSidebar({
       ) : (
         <SidebarMenu>
           <SidebarMenuSub>{entries.map(item => row(item, false))}</SidebarMenuSub>
-          {domain && <li className="list-none"><DomainNav entry={domain} local={local} vertical /></li>}
+          {domain && <li className="list-none"><DomainNav entry={domain} vertical /></li>}
         </SidebarMenu>
       )}
     </nav>
