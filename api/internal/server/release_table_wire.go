@@ -43,8 +43,7 @@ func ledgerCause(ctx context.Context, tx pgx.Tx, label string) (int64, error) {
 	return id, nil
 }
 
-// releaseRows reads the record table, for Current and the recorder's
-// comparison, and copies into it the records it lacks.
+// releaseRows reads the record table and copies into it the records it lacks.
 type releaseRows struct{ pool *pgxpool.Pool }
 
 func (r releaseRows) Records(ctx context.Context) ([]releases.Record, error) {
@@ -53,6 +52,10 @@ func (r releaseRows) Records(ctx context.Context) ([]releases.Record, error) {
 
 func (r releaseRows) Deployments(ctx context.Context, lane, env string) ([]releases.Record, error) {
 	return releases.ReadDeployments(ctx, r.pool, lane, env)
+}
+
+func (r releaseRows) MissingByRun(ctx context.Context, runs []string) (map[string]int, error) {
+	return releases.ReadMissingByRun(ctx, r.pool, runs)
 }
 
 func (r releaseRows) Backfill(ctx context.Context, rec releases.Record) (bool, error) {

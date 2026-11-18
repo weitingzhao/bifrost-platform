@@ -40,8 +40,8 @@ type TickResult struct {
 	// Rows: records also written as rows of the record table (SetTable).
 	Rows   int      `json:"rows"`
 	Errors []string `json:"errors"`
-	// Compare is the side-by-side reading of the record table (SetTableReader).
-	Compare *Comparison `json:"compare,omitempty"`
+	// Backfilled: ConfigMap records copied into the table by this pass.
+	Backfilled int `json:"backfilled,omitempty"`
 }
 
 // Service records finished delivery runs as ConfigMaps and reads them back.
@@ -63,6 +63,8 @@ type Service struct {
 	reader TableReader
 	// runReader reads runs through the bus run cache (SetRunReader).
 	runReader RunReader
+	// copiedMaps: this process has copied the ConfigMap records into the table.
+	copiedMaps bool
 }
 
 func NewService(configDir string, clients Clients) *Service {
@@ -98,16 +100,28 @@ func (s *Service) Enabled() bool { return len(s.rules.Rules) > 0 }
 // RecorderWanted says whether this process should write records. The records
 // live in the shared cluster, so by default only an in-cluster process (the
 // workers pod) writes them; a laptop dev server reads them but does not, unless
-// PLATFORM_RELEASE_RECORDER=on. PLATFORM_RELEASE_RECORDER=off turns it off anywhere.
+// PLATFORM_RELEASE_RECORDER=on. PLATFORM_RELEASE_RECORDER=off turns it off
+// anywhere, and =rows records quietly (RecorderQuiet).
 func RecorderWanted() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("PLATFORM_RELEASE_RECORDER"))) {
-	case "on", "true", "1":
+	switch recorderSetting() {
+	case "on", "true", "1", recorderRows:
 		return true
 	case "off", "false", "0":
 		return false
 	}
 	return os.Getenv("KUBERNETES_SERVICE_HOST") != ""
 }
+
+const recorderRows = "rows"
+
+func recorderSetting() string {
+	return strings.ToLower(strings.TrimSpace(os.Getenv("PLATFORM_RELEASE_RECORDER")))
+}
+
+// RecorderQuiet: this platform keeps its own table of the records and announces
+// nothing. STG does: each platform has its own database, the runs are shared,
+// and the release events are PROD's to publish.
+func RecorderQuiet() bool { return recorderSetting() == recorderRows }
 
 // Kick asks the recorder for a pass now instead of at its next interval: the
 // caller saw a run complete. It never blocks; asks made while one waits are
@@ -138,17 +152,13 @@ func (s *Service) Start(ctx context.Context, interval time.Duration) {
 				maintainer.Success(id)
 			}
 			// the first pass always logs, so a silent recorder is visibly alive
-			c := r.Compare
-			if c == nil {
-				c = &Comparison{}
-			}
-			if first || r.Recorded > 0 || len(r.Errors) > 0 || c.Backfilled > 0 || c.Differ > 0 || c.Err != "" {
+			if first || r.Recorded > 0 || len(r.Errors) > 0 || r.Backfilled > 0 {
 				// rows and table: what reached the record table (2026-11-17: the
 				// first PROD pass with the table logged recorded=1 errors=0, and
 				// whether a row was written could not be told from the log).
 				slog.Info("release recorder", "first", first, "runs", r.Runs, "matched", r.Matched, "recorded", r.Recorded,
 					"rows", r.Rows, "table", s.tableWriter() != nil,
-					"compared", c.Compared, "differ", c.Differ, "backfilled", c.Backfilled, "compare_error", c.Err,
+					"backfilled", r.Backfilled,
 					"errors", len(r.Errors), "rules", len(s.rules.Rules), "path", s.rulesPath)
 				for _, e := range r.Errors {
 					slog.Warn("release recorder error", "err", e)
@@ -172,7 +182,8 @@ func (s *Service) Start(ctx context.Context, interval time.Duration) {
 	})
 }
 
-// Tick records every finished, successful, matching run that has no record yet.
+// Tick records every finished, successful, matching run that has no record yet:
+// as rows when the service has the table, else as ConfigMaps.
 func (s *Service) Tick(ctx context.Context) TickResult {
 	res := TickResult{At: s.now(), Errors: []string{}}
 	defer func() {
@@ -183,6 +194,10 @@ func (s *Service) Tick(ctx context.Context) TickResult {
 	core, dyn, err := s.clients()
 	if err != nil {
 		res.Errors = append(res.Errors, "clients: "+err.Error())
+		return res
+	}
+	if r := s.tableReader(); r != nil {
+		s.tickRows(ctx, r, core, dyn, &res)
 		return res
 	}
 	ns := s.rules.Namespace
@@ -244,7 +259,6 @@ func (s *Service) Tick(ctx context.Context) TickResult {
 			res.Rows++
 		}
 	}
-	res.Compare = s.compare(ctx, cms.Items)
 	return res
 }
 
@@ -295,6 +309,17 @@ func (s *Service) write(ctx context.Context, core kubernetes.Interface, ns strin
 
 // List returns every record, newest completion first.
 func (s *Service) List(ctx context.Context) ([]Record, error) {
+	if r := s.tableReader(); r != nil {
+		rows, err := r.Records(ctx)
+		if err != nil {
+			return nil, err
+		}
+		// No row at all: a platform whose recorder has not filled its table.
+		if len(rows) > 0 {
+			sort.Slice(rows, func(i, j int) bool { return rows[i].CompletedAt.After(rows[j].CompletedAt) })
+			return rows, nil
+		}
+	}
 	core, _, err := s.clients()
 	if err != nil {
 		return nil, err

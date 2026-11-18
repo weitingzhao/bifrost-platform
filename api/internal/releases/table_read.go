@@ -3,24 +3,21 @@ package releases
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
-	"sort"
 
 	"github.com/jackc/pgx/v5"
-	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 )
 
-// Moving the release records into the database (2026-11-17, with the
-// communication layer's step 3: duty/from-agent-tool-comm-2026-11-16-bus-step3-
-// ci-checklist.md §6). Current reads the rows (current.go). The recorder still
-// writes the ConfigMaps too, and each pass
-//   - copies into the table every ConfigMap record whose run has no row (a row
-//     that failed, or a record from before the table), without an
-//     announcement: nobody should be woken for those;
-//   - asks Current of every deploying lane and environment both ways, and
-//     counts and logs where the ConfigMaps and the rows differ.
+// The record table is where the records are read from (2026-11-18: all 1,338
+// ConfigMap records matched their rows field by field, and the recorder's
+// passes had compared 0 differences). Current and List read the rows, and a
+// recorder pass asks the table which runs it has. The first pass of a process
+// copies in any ConfigMap record whose run has no row, without an announcement:
+// nobody should be woken for those.
 
 // TableReader reads the record table and copies a record into it.
 type TableReader interface {
@@ -29,14 +26,16 @@ type TableReader interface {
 	// Deployments is the newest row of each successful deploying run of lane
 	// and env.
 	Deployments(ctx context.Context, lane, env string) ([]Record, error)
+	// MissingByRun is, for those of runs with a successful row, how many
+	// sources the newest row could not read.
+	MissingByRun(ctx context.Context, runs []string) (map[string]int, error)
 	// Backfill writes rec as a row without an announcement, unless its run
 	// has a row already; it says whether it wrote one.
 	Backfill(ctx context.Context, rec Record) (bool, error)
 }
 
-// SetTableReader hands the service its table reader: Current reads the rows
-// and the recorder compares them with the ConfigMaps. nil keeps Current on the
-// ConfigMaps and compares nothing.
+// SetTableReader hands the service its table reader: the records are read from
+// and kept in the rows. nil keeps them in the ConfigMaps.
 func (s *Service) SetTableReader(r TableReader) {
 	s.mu.Lock()
 	s.reader = r
@@ -55,7 +54,7 @@ type Querier interface {
 }
 
 const recordColumns = `run, pipeline, lane, env, deploys, revision, tag, from_run,
-		started_at, completed_at, repos, images, missing, recorded_at`
+		started_at, completed_at, repos, images, missing, recorded_at, build_node, build_node_why`
 
 // ReadRecords is TableReader.Records over agentrt.release_record.
 func ReadRecords(ctx context.Context, q Querier) ([]Record, error) {
@@ -79,6 +78,27 @@ func ReadDeployments(ctx context.Context, q Querier, lane, env string) ([]Record
 	return scanRecords(rows)
 }
 
+// ReadMissingByRun is TableReader.MissingByRun over agentrt.release_record.
+func ReadMissingByRun(ctx context.Context, q Querier, runs []string) (map[string]int, error) {
+	rows, err := q.Query(ctx, `SELECT DISTINCT ON (run) run, jsonb_array_length(missing)
+		FROM agentrt.release_record WHERE tenant = $1 AND succeeded AND run = ANY($2)
+		ORDER BY run, release_record_id DESC`, Tenant, runs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]int, len(runs))
+	for rows.Next() {
+		var run string
+		var missing int
+		if err := rows.Scan(&run, &missing); err != nil {
+			return nil, err
+		}
+		out[run] = missing
+	}
+	return out, rows.Err()
+}
+
 func scanRecords(rows pgx.Rows) ([]Record, error) {
 	defer rows.Close()
 	var out []Record
@@ -86,7 +106,7 @@ func scanRecords(rows pgx.Rows) ([]Record, error) {
 		var rec Record
 		var repos, images, missing []byte
 		if err := rows.Scan(&rec.Run, &rec.Pipeline, &rec.Lane, &rec.Env, &rec.Deploys, &rec.Revision, &rec.Tag, &rec.FromRun,
-			&rec.StartedAt, &rec.CompletedAt, &repos, &images, &missing, &rec.RecordedAt); err != nil {
+			&rec.StartedAt, &rec.CompletedAt, &repos, &images, &missing, &rec.RecordedAt, &rec.BuildNode, &rec.BuildNodeWhy); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(repos, &rec.Repos); err != nil {
@@ -111,92 +131,121 @@ func BackfillRecord(ctx context.Context, tx pgx.Tx, rec Record) (bool, error) {
 	return true, InsertRecord(ctx, tx, rec, true, 0)
 }
 
-// Comparison is one pass's side-by-side reading.
-type Comparison struct {
-	// Backfilled: ConfigMap records copied into the table this pass.
-	Backfilled int `json:"backfilled"`
-	// Compared: deploying lane/environment pairs asked both ways; Differ of
-	// them answered differently (Diffs say how).
-	Compared int      `json:"compared"`
-	Differ   int      `json:"differ"`
-	Diffs    []string `json:"diffs,omitempty"`
-	Err      string   `json:"error,omitempty"`
-}
-
-// compare backfills and compares (see the top of this file). cms are the
-// record ConfigMaps the pass listed.
-func (s *Service) compare(ctx context.Context, cms []corev1.ConfigMap) *Comparison {
-	r := s.tableReader()
-	if r == nil {
-		return nil
+// copyMaps writes a row for every ConfigMap record whose run has none, and says
+// how many it wrote.
+func (s *Service) copyMaps(ctx context.Context, core kubernetes.Interface, r TableReader) (int, error) {
+	cms, err := core.CoreV1().ConfigMaps(s.rules.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labelRecord})
+	if err != nil {
+		return 0, fmt.Errorf("list records: %w", err)
 	}
-	out := &Comparison{Diffs: []string{}}
 	rows, err := r.Records(ctx)
 	if err != nil {
-		out.Err = "read rows: " + err.Error()
-		return out
+		return 0, fmt.Errorf("read rows: %w", err)
 	}
-	have := map[string]bool{}
+	have := make(map[string]bool, len(rows))
 	for _, row := range rows {
 		have[row.Run] = true
 	}
-	for _, cm := range cms {
+	copied := 0
+	for _, cm := range cms.Items {
 		var rec Record
 		if err := json.Unmarshal([]byte(cm.Data[dataKey]), &rec); err != nil || rec.Run == "" || have[rec.Run] {
 			continue
 		}
 		wrote, err := r.Backfill(ctx, rec)
 		if err != nil {
-			out.Err = "backfill " + rec.Run + ": " + err.Error()
-			return out
+			return copied, fmt.Errorf("backfill %s: %w", rec.Run, err)
 		}
 		if wrote {
-			out.Backfilled++
-			have[rec.Run] = true
+			copied++
 		}
 	}
-	for _, pair := range s.rules.deployingPairs() {
-		lane, env := pair[0], pair[1]
-		fromMaps, mapsErr := s.currentFromMaps(ctx, lane, env)
-		fromRows, rowsErr := s.currentFromTable(ctx, r, lane, env)
-		out.Compared++
-		if a, b := answerOf(fromMaps, mapsErr), answerOf(fromRows, rowsErr); a != b {
-			out.Differ++
-			out.Diffs = append(out.Diffs, fmt.Sprintf("%s/%s: configmaps %s, rows %s", lane, env, a, b))
-		}
-	}
-	if out.Differ > 0 {
-		slog.Warn("release records: the table answers differently", "differ", out.Differ, "diffs", out.Diffs)
-	}
-	return out
+	return copied, nil
 }
 
-// answerOf names a Current answer by what a reader acts on: the run, or the
-// kind of failure.
-func answerOf(rec Record, err error) string {
-	switch {
-	case err == nil:
-		return "run " + rec.Run
-	case errors.Is(err, ErrUnsettled):
-		return "unsettled"
-	case errors.Is(err, ErrNoDeployment):
-		return "no deployment"
-	default:
-		return "error"
+// tickRows is a recorder pass over the table: each finished, successful,
+// matching run with no row gets one, and a row that could not read a source is
+// written again when the run now gives more.
+func (s *Service) tickRows(ctx context.Context, r TableReader, core kubernetes.Interface, dyn dynamic.Interface, res *TickResult) {
+	ns := s.rules.Namespace
+	s.mu.Lock()
+	copied := s.copiedMaps
+	s.mu.Unlock()
+	if !copied {
+		n, err := s.copyMaps(ctx, core, r)
+		res.Backfilled = n
+		if err != nil {
+			res.Errors = append(res.Errors, err.Error())
+			return
+		}
+		s.mu.Lock()
+		s.copiedMaps = true
+		s.mu.Unlock()
 	}
-}
-
-// deployingPairs are the lane/environment pairs a deploying rule names, in order.
-func (r Rules) deployingPairs() [][2]string {
-	seen := map[[2]string]bool{}
-	var out [][2]string
-	for _, rule := range r.Rules {
-		p := [2]string{rule.Lane, rule.Env}
-		if rule.Deploys && !seen[p] {
-			seen[p] = true
-			out = append(out, p)
+	runs, err := s.readRuns(ctx, dyn, RouteTick, func(Rule) bool { return true })
+	if err != nil {
+		res.Errors = append(res.Errors, "list runs: "+err.Error())
+		return
+	}
+	res.Runs = len(runs)
+	type candidate struct {
+		name string
+		rule Rule
+	}
+	var todo []candidate
+	var names []string
+	for i := range runs {
+		rule, ok := s.rules.Match(runs[i].GetName(), runs[i].GetLabels()["tekton.dev/pipeline"])
+		if !ok {
+			continue
+		}
+		res.Matched++
+		if succeeded(&runs[i]) {
+			todo = append(todo, candidate{runs[i].GetName(), rule})
+			names = append(names, runs[i].GetName())
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i][0]+"/"+out[i][1] < out[j][0]+"/"+out[j][1] })
-	return out
+	missing, err := r.MissingByRun(ctx, names)
+	if err != nil {
+		res.Errors = append(res.Errors, "read rows: "+err.Error())
+		return
+	}
+	writer := s.tableWriter()
+	if RecorderQuiet() {
+		writer = nil
+	}
+	for _, c := range todo {
+		had, found := missing[c.name]
+		if found && (had == 0 || writer == nil) {
+			continue
+		}
+		// The list says which runs to record; the record is built from the run
+		// itself (the bus run cache keeps only part of one).
+		full, err := dyn.Resource(pipelineRunGVR).Namespace(ns).Get(ctx, c.name, metav1.GetOptions{})
+		if err != nil {
+			res.Errors = append(res.Errors, c.name+": run: "+err.Error())
+			continue
+		}
+		trs, err := dyn.Resource(taskRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{LabelSelector: "tekton.dev/pipelineRun=" + c.name})
+		if err != nil {
+			res.Errors = append(res.Errors, c.name+": taskruns: "+err.Error())
+			continue
+		}
+		rec := buildRecord(full, c.rule, trs.Items, s.now())
+		if found && len(rec.Missing) >= had {
+			continue
+		}
+		if writer != nil {
+			err = writer(ctx, rec, true)
+		} else {
+			_, err = r.Backfill(ctx, rec)
+		}
+		if err != nil {
+			slog.Warn("release record: the row was not written", "run", rec.Run, "err", err)
+			res.Errors = append(res.Errors, c.name+": row: "+err.Error())
+			continue
+		}
+		res.Recorded++
+		res.Rows++
+	}
 }

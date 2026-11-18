@@ -10,13 +10,11 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// The release record table (agentrt 0027, agentrt.release_record) next to the
-// ConfigMaps (2026-11-17, step 1 of moving the records into the database):
-// every record the recorder writes as a ConfigMap is also a row, written with
-// the bus's release.deploy.finished in one transaction by the writer the
-// server hands in (SetTable). The ConfigMaps stay the truth until the rows
-// are compared with them; a row that cannot be written is logged and counted,
-// and never stops a ConfigMap.
+// The release record table (agentrt 0027, agentrt.release_record) holds the
+// release records. A record is written with the bus's release.deploy.finished
+// in one transaction by the writer the server hands in (SetTable). The
+// ConfigMaps that held them until 2026-11-18 are read once, for what the table
+// lacks; a platform without the table still records there.
 
 // TableWriter writes one record as a row (and announces it). succeeded is
 // whether the run succeeded; the recorder writes successful runs only, so far.
@@ -73,10 +71,10 @@ func InsertRecord(ctx context.Context, tx pgx.Tx, rec Record, succeeded bool, ev
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO agentrt.release_record
 		(tenant, run, pipeline, lane, env, deploys, succeeded, revision, tag, from_run,
-		 started_at, completed_at, repos, images, missing, record_version, event_id)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::jsonb,$15::jsonb,$16,$17)`,
+		 started_at, completed_at, repos, images, missing, record_version, event_id, build_node, build_node_why)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::jsonb,$15::jsonb,$16,$17,$18,$19)`,
 		Tenant, rec.Run, rec.Pipeline, rec.Lane, rec.Env, rec.Deploys, succeeded, rec.Revision, rec.Tag, rec.FromRun,
-		rec.StartedAt, rec.CompletedAt, string(repos), string(images), string(missing), recordVersion, event)
+		rec.StartedAt, rec.CompletedAt, string(repos), string(images), string(missing), recordVersion, event, rec.BuildNode, rec.BuildNodeWhy)
 	if err != nil {
 		return fmt.Errorf("insert release record %s: %w", rec.Run, err)
 	}

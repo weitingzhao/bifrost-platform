@@ -92,6 +92,18 @@ func (f *fakeRows) Deployments(_ context.Context, lane, env string) ([]Record, e
 	return out, f.err
 }
 
+func (f *fakeRows) MissingByRun(_ context.Context, runs []string) (map[string]int, error) {
+	out := map[string]int{}
+	for _, want := range runs {
+		for _, r := range f.rows {
+			if r.Run == want {
+				out[want] = len(r.Missing)
+			}
+		}
+	}
+	return out, f.err
+}
+
 func (f *fakeRows) Backfill(_ context.Context, rec Record) (bool, error) {
 	for _, r := range f.rows {
 		if r.Run == rec.Run {
@@ -105,52 +117,94 @@ func (f *fakeRows) Backfill(_ context.Context, rec Record) (bool, error) {
 	return true, nil
 }
 
-// 2026-11-17, step 2 of moving the release records into the database (with
-// the communication layer's bus step 3): before Current reads the table,
-// each pass copies the ConfigMap records the table lacks (those from before
-// 12:27, when rows started) and asks Current both ways; a lane whose two
-// answers differ is counted and named.
-// Positive control: without the Backfill loop the first check fails
-// (backfilled 0, and the rows answer "no deployment").
-// The second control: comparing nothing (Differ never counted) fails the last check.
-func TestTickBackfillsTheTableAndComparesCurrentBothWays(t *testing.T) {
+// 2026-11-18, the records move to the table (all 1,338 ConfigMap records had
+// matched their rows): the first pass copies what the table lacks, later passes
+// neither read nor write ConfigMaps, and a new run becomes a row only.
+// Positive control: leaving the ConfigMap write in tickRows fails the check that
+// the new run has no ConfigMap; dropping copyMaps fails the first check.
+func TestTickKeepsTheRecordsInTheTable(t *testing.T) {
 	ctx := context.Background()
-	t1 := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
-	s, _ := newFakeService(t,
+	t1 := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	s, core := newFakeService(t,
 		pipelineRun("deliver-stg-1", "deliver-stg", true, t1, nil, nil),
 		cloneTaskRun("deliver-stg-1", "clone-core", "core", shaA),
-		pipelineRun("deliver-stg-2", "deliver-stg", true, t1.Add(time.Hour), nil, nil),
-		cloneTaskRun("deliver-stg-2", "clone-core", "core", shaC),
 	)
-	if r := s.Tick(ctx); r.Recorded != 2 || r.Compare != nil {
-		t.Fatalf("without a reader nothing is compared: %+v", r)
+	if r := s.Tick(ctx); r.Recorded != 1 {
+		t.Fatalf("without a table the ConfigMap is the record: %+v", r)
 	}
-
 	rows := &fakeRows{}
 	s.SetTableReader(rows)
-	r := s.Tick(ctx)
-	c := r.Compare
-	if c == nil || c.Backfilled != 2 || c.Compared != 2 || c.Differ != 0 || c.Err != "" {
-		t.Fatalf("compare = %+v", c)
+	var written []string
+	s.SetTable(func(_ context.Context, rec Record, _ bool) error {
+		written = append(written, rec.Run)
+		rows.rows = append(rows.rows, rec)
+		return nil
+	})
+	if r := s.Tick(ctx); r.Backfilled != 1 || r.Recorded != 0 || len(written) != 0 || len(r.Errors) != 0 {
+		t.Fatalf("first pass: %+v written %v", r, written)
 	}
-	if got, err := s.Current(ctx, "app", "stg"); err != nil || got.Run != "deliver-stg-2" {
-		t.Fatalf("current from the rows: %+v %v", got, err)
+	dyn := s.clients
+	_, d, _ := dyn()
+	run := pipelineRun("deliver-stg-2", "deliver-stg", true, t1.Add(time.Hour), nil, nil)
+	if _, err := d.Resource(pipelineRunGVR).Namespace("cicd").Create(ctx, run, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
 	}
-	if again := s.Tick(ctx).Compare; again.Backfilled != 0 || again.Differ != 0 {
-		t.Fatalf("a run with a row is not copied again: %+v", again)
+	core.ClearActions()
+	if r := s.Tick(ctx); r.Recorded != 1 || r.Rows != 1 || len(written) != 1 || written[0] != "deliver-stg-2" {
+		t.Fatalf("new run: %+v written %v", r, written)
 	}
+	if got := core.Actions(); len(got) != 0 {
+		t.Fatalf("a pass over the table touched ConfigMaps: %v", got)
+	}
+	if again := s.Tick(ctx); again.Recorded != 0 || len(written) != 1 {
+		t.Fatalf("a recorded run was written again: %+v", again)
+	}
+	list, err := s.List(ctx)
+	if err != nil || len(list) != 2 || list[0].Run != "deliver-stg-2" {
+		t.Fatalf("list from the rows, newest first: %+v %v", list, err)
+	}
+}
 
-	// The table lacks the newest deployment: from the rows its run is a later
-	// delivery than the newest row, so unsettled (never the older one); the
-	// two answers differ, by name.
-	short := &fakeRows{refuse: map[string]bool{"deliver-stg-2": true}}
-	s.SetTableReader(short)
-	c = s.Tick(ctx).Compare
-	if c.Differ != 1 || len(c.Diffs) != 1 || !strings.Contains(c.Diffs[0], "app/stg: configmaps run deliver-stg-2, rows unsettled") {
-		t.Fatalf("compare = %+v", c)
+// Same origin: STG keeps its own table from the shared runs and announces
+// nothing; release events are PROD's. Positive control: using the writer in
+// quiet mode fails the check that it was not called.
+func TestAQuietRecorderWritesRowsWithoutAnnouncing(t *testing.T) {
+	t.Setenv("PLATFORM_RELEASE_RECORDER", "rows")
+	if !RecorderWanted() || !RecorderQuiet() {
+		t.Fatal("rows is a recorder, quiet")
 	}
-	if _, err := s.Current(ctx, "app", "stg"); !errors.Is(err, ErrUnsettled) {
-		t.Fatalf("a deployment with no row yet reads as unsettled, never the one before it: %v", err)
+	s, _ := newFakeService(t,
+		pipelineRun("deliver-stg-1", "deliver-stg", true, time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC), nil, nil),
+		cloneTaskRun("deliver-stg-1", "clone-core", "core", shaA),
+	)
+	rows := &fakeRows{}
+	s.SetTableReader(rows)
+	s.SetTable(func(context.Context, Record, bool) error { t.Error("announced"); return nil })
+	if r := s.Tick(context.Background()); r.Recorded != 1 || len(rows.rows) != 1 {
+		t.Fatalf("tick = %+v rows %v", r, rows.rows)
+	}
+}
+
+// Same origin: a row that could not read a source is written again only when
+// the run now gives more. Positive control: dropping the Missing comparison
+// writes a row on every pass and fails the count.
+func TestARowMissingASourceIsRebuiltOnlyWhenItImproves(t *testing.T) {
+	s, _ := newFakeService(t,
+		pipelineRun("deliver-stg-1", "deliver-stg", true, time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC), nil, nil),
+		cloneTaskRun("deliver-stg-1", "clone-core", "core", shaA),
+	)
+	rows := &fakeRows{rows: []Record{{Run: "deliver-stg-1", Missing: []string{"clone-core"}}}}
+	s.SetTableReader(rows)
+	writes := 0
+	s.SetTable(func(_ context.Context, rec Record, _ bool) error {
+		writes++
+		rows.rows = []Record{rec}
+		return nil
+	})
+	s.Tick(context.Background())
+	s.Tick(context.Background())
+	if writes != 1 {
+		t.Fatalf("writes = %d", writes)
 	}
 }
 
