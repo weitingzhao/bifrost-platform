@@ -45,6 +45,16 @@ type Table struct {
 	// 0 the base, higher further from it), for the Bus page's map; a domain
 	// with none is not in it. Display only: no judgement reads it (2026-11-17).
 	Tiers map[string]int
+	// Facilities is each domain's facility on the Ops home's launch site and
+	// the page it opens (domains[].facility); a domain with none has no
+	// entrance there. Display only, like Tiers (2026-11-17).
+	Facilities map[string]Facility
+}
+
+// Facility is how a domain is drawn on the Ops home and the page it opens.
+type Facility struct {
+	Kind string `json:"kind"`
+	Page string `json:"page"`
 }
 
 // ParseTable reads the ownership table.
@@ -58,8 +68,9 @@ func ParseTable(raw []byte) (Table, error) {
 	}
 	var tiers struct {
 		Domains []struct {
-			ID   string `json:"id"`
-			Tier *int   `json:"tier"`
+			ID       string    `json:"id"`
+			Tier     *int      `json:"tier"`
+			Facility *Facility `json:"facility"`
 		} `json:"domains"`
 	}
 	if err := json.Unmarshal(raw, &tiers); err == nil {
@@ -70,16 +81,26 @@ func ParseTable(raw []byte) (Table, error) {
 				}
 				t.Tiers[d.ID] = *d.Tier
 			}
+			if d.Facility != nil && d.Facility.Kind != "" && d.Facility.Page != "" {
+				if t.Facilities == nil {
+					t.Facilities = map[string]Facility{}
+				}
+				t.Facilities[d.ID] = *d.Facility
+			}
 		}
 	}
 	return t, nil
 }
 
-// WithTiers is g with each domain's tier from the table (absent: untiered).
+// WithTiers is g with each domain's tier and facility from the table
+// (absent: untiered, no entrance).
 func (t Table) WithTiers(g Graph) Graph {
 	for i, d := range g.Domains {
 		if n, ok := t.Tiers[d.ID]; ok {
 			g.Domains[i].Tier = &n
+		}
+		if f, ok := t.Facilities[d.ID]; ok {
+			g.Domains[i].Facility = &f
 		}
 	}
 	return g
@@ -112,6 +133,8 @@ type Domain struct {
 	// Tier is the domain's floor in the ownership table (domains[].tier),
 	// absent when the table gives none.
 	Tier *int `json:"tier,omitempty"`
+	// Facility is its place on the Ops home and the page it opens, absent when the table gives none.
+	Facility *Facility `json:"facility,omitempty"`
 }
 
 // Edge is the imports of one domain's packages from another's: Imports

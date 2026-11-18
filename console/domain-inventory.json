@@ -6,21 +6,29 @@
       "path": "console/src",
       "files": [
         "console/src/App.tsx",
+        "console/src/domains/foundation/launchsite/__tests__/launchSite.test.ts",
+        "console/src/domains/foundation/launchsite/launchSite.ts",
         "console/src/index.css",
         "console/src/main.tsx",
         "console/src/vite-env.d.ts"
       ],
       "imports": [
+        "console/src/domains/foundation/bus",
         "console/src/hooks/PlatformAuthProvider.tsx",
         "console/src/pages/ConsolePage.tsx",
         "console/src/pwa",
         "console/src/styles"
       ],
-      "test_imports": [],
+      "test_imports": [
+        "console/src/lib/shell"
+      ],
       "external_imports": [
         "@tanstack/react-query",
+        "node:fs",
+        "node:path",
         "react",
-        "react-dom/client"
+        "react-dom/client",
+        "vitest"
       ],
       "source_inputs": [],
       "test_inputs": [],

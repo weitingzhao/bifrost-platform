@@ -7,7 +7,8 @@ import { authedFetch } from './client'
  */
 
 /** tier: the domain's floor as the ownership table declares it (0 = base); absent when the table gives none. */
-export type CiDomainNode = { id: string; packages: number; tier?: number }
+/** facility: how the domain is drawn on the Ops home and the page it opens; absent, it has no entrance there. */
+export type CiDomainNode = { id: string; packages: number; tier?: number; facility?: { kind: string; page: string } }
 /** One import: the package that uses, the package it uses. */
 export type CiPackagePair = { from: string; to: string }
 export type CiDomainEdge = { from: string; to: string; imports: number; wrong_way: boolean; pairs?: CiPackagePair[] }

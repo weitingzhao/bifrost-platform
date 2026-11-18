@@ -200,4 +200,13 @@ func TestGraphCarriesTheTablesTiers(t *testing.T) {
 	if g.Domains[0].Tier == nil || *g.Domains[0].Tier != 0 || g.Domains[1].Tier == nil || *g.Domains[1].Tier != 3 || g.Domains[2].Tier != nil {
 		t.Fatalf("domains %+v", g.Domains)
 	}
+	// 2026-11-17: the facility on the Ops home rides the same way; a domain with none gets none (no default entrance).
+	ft, err := ParseTable([]byte(`{"domains": [{"id": "base", "facility": {"kind": "ground-support", "page": "#system"}}, {"id": "loose"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fg := ft.WithTiers(Graph{Domains: []Domain{{ID: "base"}, {ID: "loose"}}})
+	if fg.Domains[0].Facility == nil || fg.Domains[0].Facility.Page != "#system" || fg.Domains[1].Facility != nil {
+		t.Fatalf("facilities %+v", fg.Domains)
+	}
 }
