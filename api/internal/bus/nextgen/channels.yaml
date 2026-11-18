@@ -76,7 +76,7 @@ channels:
   - {id: N17, class: K8, disposition: announced, step: "4", what: "Trade 卫星/CI 上报：POST /audit/append、/code-health/report、/skill-runs", by: "写入口留在原处（入户口子①，租户上报需在登记表声明）；落账后宣布 audit.action.recorded、codehealth.report.published"}
   - {id: N18, class: K12, disposition: replaced, step: "3", what: "外部工作登记 POST /agentrt/external-work（collector:<host> 令牌）", by: "席位记录+seat.work.changed+席位身份（替掉 collector 令牌）"}
   - {id: N19, class: K5, disposition: not-this-way, step: "none", what: "owner-exec 执行通道：领卡、20 秒心跳、交结果（命令按指纹+一次性码）", by: "永远不走：D 级命令与一次性码不上总线；卡的执行结果由 approval.card.executed 宣布"}
-  - {id: N20, class: K3, disposition: deleted, step: "any", what: "审批 claim 长轮询 wait_seconds（本仓库唯一调用方不传）", by: "死路（其他仓库没查，删前核）"}
+  - {id: N20, class: K3, disposition: deleted, step: "any", what: "审批 claim 长轮询 wait_seconds（本仓库唯一调用方不传）", by: "死路（其他仓库没查，删前核）", retired: {at: "2026-11-18", change: Ie32a1ac8615a55c7c9a64efe99707d7b604ff2d1, absent_text: ["in.WaitSeconds"]}}
   - {id: N21, class: K2, disposition: replaced, step: "2", what: "Kick：L02 → L09 的进程内提示", by: "门·集群的 watch 事件（进程内提示不再需要）"}
   - {id: N22, class: K2, disposition: deleted, step: "any", what: "PG pg_notify 触发器+agentrt.outbox（设计过，无写入者无读者）", by: "死路；新中继不要复用（设计里的 outbox 被「账」顶掉，结果等同）", retired: {at: "2026-11-17", change: Id818b64d36e851fb3e31d91e06f0dd08ae027a12, absent_text: ['FROM agentrt.outbox)', 'FROM agentrt.outbox`']}}
   - {id: W01, class: K3, disposition: replaced, step: "3", what: "wait_for_messages：客户端循环套服务端长轮询（服务端每秒读 PG）", by: "入户口子④（长轮询工具，背后是 NATS 拉取消费者）", retired: {at: "2026-11-18", change: Id491a910f8fac5d972d05cd42c6ec8effda9d128, absent_text: ["poll = time.Second"]}, cut: {at: "2026-11-18", evidence: ["reader:inbox-waiters"]}}

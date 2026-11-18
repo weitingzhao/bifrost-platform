@@ -238,7 +238,7 @@ func (s *Service) HandleReject(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleClaim leases the oldest approved record this token may run (or the
-// one named by id). 204 when there is none after wait_seconds (at most 25).
+// one named by id). 204 when there is none.
 func (s *Service) HandleClaim(w http.ResponseWriter, r *http.Request) {
 	var body claimInput
 	if err := decode(r, &body); err != nil {

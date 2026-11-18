@@ -29,7 +29,6 @@ const (
 
 	maxTail    = 2048
 	maxErrText = 300
-	maxWait    = 25 * time.Second
 )
 
 func deadlineFor(runner string) time.Duration {
@@ -501,11 +500,10 @@ func (s *Service) claimInternal(id string) (Approval, bool) {
 
 // claimInput is POST /approvals/claim.
 type claimInput struct {
-	ExecutorID  string   `json:"executor_id"`
-	ID          string   `json:"id"`
-	Runners     []string `json:"runners"`
-	Actions     []string `json:"actions"`
-	WaitSeconds int      `json:"wait_seconds"`
+	ExecutorID string   `json:"executor_id"`
+	ID         string   `json:"id"`
+	Runners    []string `json:"runners"`
+	Actions    []string `json:"actions"`
 }
 
 // claimRunners is what each role may claim: the executor token only host
@@ -544,22 +542,7 @@ func (s *Service) claim(ctx context.Context, role actuation.Role, in claimInput)
 	for _, a := range in.Actions {
 		wantActions[strings.TrimSpace(a)] = true
 	}
-	wait := time.Duration(in.WaitSeconds) * time.Second
-	if wait > maxWait {
-		wait = maxWait
-	}
-	until := time.Now().Add(wait)
-	for {
-		out := s.claimOnce(ctx, executor, strings.TrimSpace(in.ID), runners, wantActions)
-		if out.Status != 204 || in.ID != "" || !time.Now().Before(until) {
-			return out
-		}
-		select {
-		case <-ctx.Done():
-			return out
-		case <-time.After(time.Second):
-		}
-	}
+	return s.claimOnce(ctx, executor, strings.TrimSpace(in.ID), runners, wantActions)
 }
 
 func (s *Service) claimOnce(ctx context.Context, executor, ref string, runners, wantActions map[string]bool) decided {
