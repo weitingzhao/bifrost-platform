@@ -200,6 +200,12 @@ func (s *Service) Tick(ctx context.Context) TickResult {
 		s.tickRows(ctx, r, core, dyn, &res)
 		return res
 	}
+	// A platform with a ledger keeps its records there. The recorder's first pass
+	// can come before the ledger's pool is open: it waits for the next one rather
+	// than writing a ConfigMap (2026-11-18: each STG restart added one).
+	if os.Getenv("AGENTRT_ENV") != "" {
+		return res
+	}
 	ns := s.rules.Namespace
 
 	have := map[string]*corev1.ConfigMap{}

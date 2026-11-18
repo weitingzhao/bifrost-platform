@@ -323,3 +323,20 @@ func TestRecorderAndCurrentReadRunsThroughTheReader(t *testing.T) {
 		t.Fatalf("routes = %v", routes)
 	}
 }
+
+// Same origin: the release-record ConfigMaps kept growing after the move, one per
+// STG restart, written by the pass that ran before the table was wired.
+// Positive control: without the AGENTRT_ENV check a ConfigMap appears here.
+func TestAPassBeforeTheTableIsWiredWritesNoConfigMap(t *testing.T) {
+	t.Setenv("AGENTRT_ENV", "stg")
+	s, core := newFakeService(t,
+		pipelineRun("deliver-stg-1", "deliver-stg", true, time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC), nil, nil),
+		cloneTaskRun("deliver-stg-1", "clone-core", "core", shaA),
+	)
+	if r := s.Tick(context.Background()); r.Recorded != 0 || len(r.Errors) != 0 {
+		t.Fatalf("tick = %+v", r)
+	}
+	if got, err := core.CoreV1().ConfigMaps("cicd").List(context.Background(), metav1.ListOptions{}); err != nil || len(got.Items) != 0 {
+		t.Fatalf("configmaps = %v %v", got, err)
+	}
+}
