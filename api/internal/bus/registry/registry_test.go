@@ -94,7 +94,8 @@ func TestParseRefuses(t *testing.T) {
 // consumePostRelease) on ci.run.finished, the inbox waiters (bus/mailwake,
 // 2026-11-18, channel W01) on seat.mail.arrived, the conclusions' consumers
 // (server consumeConclusions, 2026-11-18) on what ends a card or a
-// question, and the Bus page (console) on
+// question, the window queue (server consumeWindowQueue, 2026-11-18) on the
+// window's changes, and the Bus page (console) on
 // every topic. Subscription
 // rows are their own register; a seat's ad hoc wait shows in the receipts.
 func TestRegisterNamesRealReaders(t *testing.T) {
@@ -118,6 +119,10 @@ func TestRegisterNamesRealReaders(t *testing.T) {
 			case "postrelease":
 				if typ != "ci.run.finished" {
 					t.Errorf("%s: the post-release check reads only ci.run.finished", typ)
+				}
+			case "window-queue":
+				if typ != "release.window.changed" {
+					t.Errorf("%s: the window queue reads only the window's changes", typ)
 				}
 			case "card-conclusions":
 				if typ != "approval.card.decided" && typ != "approval.card.executed" {

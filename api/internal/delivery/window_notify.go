@@ -109,6 +109,9 @@ func (h *Handler) EnableWindowQueueAdvance() {
 	h.notices.advance = true
 }
 
+// AdvanceWindowQueue runs one advancer step now; the release window changed.
+func (h *Handler) AdvanceWindowQueue() error { return h.advanceWindowQueueOnce() }
+
 func (h *Handler) advanceWindowQueueOnce() error {
 	h.notices.mu.Lock()
 	advance := h.notices.advance

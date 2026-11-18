@@ -51,7 +51,7 @@ channels:
   - {id: L20, class: K12, disposition: deleted, step: "any", what: "agentprogress recorder：每 10 秒把进度文档缓冲落盘（唯一发布方 N15/X-B9 已死）", by: "死路：随 N15、X-B9 一起删（推断：Console Progress 页是否还读 /agent/progress 材料互相矛盾，删前核）", retired: {at: "2026-11-17", change: Ic571bd2e1a39aaed29e8730ac81bcfaf84e2a664, absent: [api/internal/agentprogress], absent_text: ['api/internal/agentprogress"']}}
   - {id: L21, class: K12, disposition: replaced, step: "3", what: "threadtitles sync：每 3 分钟扫本机转录写线程标题（集群内默认关）", by: "席位记录的标题字段（Stop 钩子模板直接写）"}
   - {id: L22, class: K9, disposition: announced, step: "3", what: "run-window follower：每个被跟随 run 一个 20 秒循环续窗口", by: "锁和续期留在原处（锁的原语）；窗口变化由 门·集群 看 ConfigMap 宣布", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
-  - {id: L23, class: K9, disposition: announced, step: "3", what: "run-window recovery+队列推进：每 20 秒（api 与 workers 都跑，靠 CAS 抢）", by: "推进逻辑留在原处；队头「轮到你」写 seat.mail.arrived"}
+  - {id: L23, class: K9, disposition: announced, step: "3", what: "run-window recovery+队列推进：每 20 秒（api 与 workers 都跑，靠 CAS 抢）", by: "推进逻辑留在原处；队头「轮到你」写 seat.mail.arrived", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
   - {id: L24, class: K2, disposition: replaced, step: "3", what: "窗口到期观察：每 15 秒读窗口 ConfigMap，到期发提醒信（写 PG 事件流 release-window:<ns> 那段已删，a6862d84，底座线 11-17；观察和提醒信还在）", by: "门·集群（watch ConfigMap，缺口由 watch 加重新列出补上）"}
   - {id: L25, class: K11, disposition: announced, step: "3", what: "agentrt schema watch：每分钟比 PG 已应用迁移与期望", by: "留在原处作对账；迁移应用时 migration.applied 由门·平台库写", cut: {at: "2026-11-18", evidence: ["reader:schema-watch"]}}
   - {id: L26, class: K3, disposition: kept, step: "none", what: "agentrt 连接重试：PG 连不上时 2 秒起指数退避", by: "原因：进程连自己的数据库的重试，不是沟通"}
@@ -67,7 +67,7 @@ channels:
   - {id: N08, class: K5, disposition: reserved, step: "none", what: "Redis stream ib:operator:cmd + 结果键（Daemon / IB operator 命令流）", by: "现在不接，位置已留：指令道（D10 冻结，Agent 不写，平台只发 reconnect_all）；将来靠登记接入"}
   - {id: N09, class: K13, disposition: merged, step: "3", what: "PG 信箱 agentrt.message（+事件流 mbox:<actor>）：写入与存放", by: "留下并改造成席位信箱（seat.mail.arrived，事件只带指针，正文仍在 artifact）；X-C2、X-C8、X-C12 并到它"}
   - {id: N10, class: K4, disposition: replaced, step: "3", what: "把审批/问题结论复制成信箱 note（approval:/question: 键去重）", by: "席位订阅 approval.card.decided/question.answered 后到读口读结论，不再复制"}
-  - {id: N11, class: K9, disposition: replaced, step: "3", what: "窗口排队通知：队首可上时写信箱 note", by: "seat.mail.arrived（收件人=队头席位）+release.window.changed"}
+  - {id: N11, class: K9, disposition: replaced, step: "3", what: "窗口排队通知：队首可上时写信箱 note", by: "seat.mail.arrived（收件人=队头席位）+release.window.changed", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
   - {id: N12, class: K9, disposition: announced, step: "3", what: "发布窗口 ConfigMap cicd/bifrost-release-window（CAS，TTL 5 分钟，队列 100）", by: "锁的原语留在原处；变化由门·集群 watch 宣布", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
   - {id: N13, class: K5, disposition: announced, step: "3", what: "起 Tekton run：MCP、Console、head-release、full-ci、unit 四处各自创建", by: "动作与卡分级不变；起了什么由门·集群宣布（ci.run.started）。四处创建收成一个动作入口属动作层，设计没说（见第 4 节）", cut: {at: "2026-11-18", evidence: ["topic:ci.run.started"]}}
   - {id: N14, class: K6, disposition: replaced, step: "3", what: "线程/主机心跳 POST /agent/threads/heartbeat（共享 reporter 令牌，10 秒合并落盘）", by: "席位记录+席位身份（每席位自己的身份写，替掉共享令牌）"}
@@ -173,7 +173,7 @@ channels:
   - {id: X-C7, class: K1, disposition: replaced, step: "4", what: "snapshot.sh：主统筹一次读出此刻事实（kubectl 读窗口 ConfigMap、git 读分支）", by: "入户口子③的「读某状态」+读口（带版本）"}
   - {id: X-C8, class: K13, disposition: merged, step: "3", what: "平台收件箱+信封 type/topic/about/refs（席位 ↔ 席位）", by: "同 N09；信封词表两套（ask/answer/help/handover/note 与 fact/ask/decide/deliver/status/note）需收成一套"}
   - {id: X-C9, class: K3, disposition: merged, step: "3", what: "门铃 doorbell.ts：后台命令退出即叫醒会话（实测 4–7 秒）", by: "同 W05"}
-  - {id: X-C10, class: K9, disposition: replaced, step: "3", what: "窗口排队「轮到你了」（window.your_turn/missed/still_held/queue_timeout）", by: "同 N11"}
+  - {id: X-C10, class: K9, disposition: replaced, step: "3", what: "窗口排队「轮到你了」（window.your_turn/missed/still_held/queue_timeout）", by: "同 N11", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
   - {id: X-C11, class: K1, disposition: merged, step: "2", what: "get_release_context：发布现场读口（席位 → 平台）", by: "同 R02 的 /context，并到那一组", cut: {at: "2026-11-17", evidence: ["reader:release-context"]}}
   - {id: X-C12, class: K13, disposition: replaced, step: "3", what: "桌面应用跨会话消息 send_message（被「20 条」上限拦过）", by: "seat.mail.arrived（该工具是应用自带的，不拆，只是不再用）"}
   - {id: X-C13, class: K11, disposition: kept, step: "0", what: "自查定时器：值班会话每 30 分钟叫自己（额度紧时 2 小时）", by: "原因：对账兜底；推断：调度器上线后部分可被「席位有信才起」替代，间隔可放长"}

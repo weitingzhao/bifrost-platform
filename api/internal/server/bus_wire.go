@@ -471,6 +471,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 		s.startRunHooks(ctx, js, env)
 		s.consumePostRelease(ctx, js, env)
 		s.consumeConclusions(ctx, js, env)
+		s.consumeWindowQueue(ctx, js, env)
 		r := &relay.Relay{Ledger: ledger, Out: &relay.JSOut{JS: js, Stream: relay.EventStreamName(relay.Tenant, env)},
 			Tenant: rocket, Env: env, Logf: busLogf}
 		r.Run(ctx, relay.Listen(ctx, pool, busLogf))
@@ -697,34 +698,46 @@ func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStrea
 // seat that asked as soon as the bus says one changed (2026-11-18; N10 itself,
 // no copy at all, is still ahead; the 15-second loops reconcile). Each pass is the same scan
 // the loop runs: a conclusion is posted once, under its own key, whoever finds
-// it first. Each event taken leaves a receipt.
+// it first.
 func (s *Server) consumeConclusions(ctx context.Context, js jetstream.JetStream, env string) {
-	receipts := &relay.Receipts{JS: js, Tenant: relay.Tenant, Env: env}
-	for _, c := range []struct {
-		name  string
-		types []string
-		pass  func(context.Context)
-	}{
-		{"card-conclusions", []string{buscards.TypeDecided, buscards.TypeExecuted}, s.cardConclusionsPass},
-		{"question-conclusions", []string{ownerq.TypeAnswered}, s.questionConclusionsPass},
-	} {
-		cc, err := relay.ConsumeDurable(ctx, js, relay.Tenant, env, c.name, c.types, func(e relay.Envelope) error {
-			dctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-			defer cancel()
-			c.pass(dctx)
-			readerseen.Saw(c.name)
-			if err := receipts.Publish(dctx, e.ID, c.name); err != nil {
-				slog.Warn("bus: conclusions receipt", "consumer", c.name, "event", e.ID, "error", err)
-			}
-			return nil
-		})
-		if err != nil {
-			slog.Error("bus: conclusions consumer", "consumer", c.name, "error", err)
-			continue
-		}
-		context.AfterFunc(ctx, func() { cc.Stop() })
-		slog.Info("bus: conclusions delivered on events", "consumer", c.name, "on", c.types)
+	s.consumePasses(ctx, js, env, "card-conclusions", []string{buscards.TypeDecided, buscards.TypeExecuted}, s.cardConclusionsPass)
+	s.consumePasses(ctx, js, env, "question-conclusions", []string{ownerq.TypeAnswered}, s.questionConclusionsPass)
+}
+
+// consumeWindowQueue moves the release window's queue on as soon as the window
+// changes (L23, N11, 2026-11-18): the next in line hears at once that it is its
+// turn. The periodic advance stays, for a hold that simply runs out.
+func (s *Server) consumeWindowQueue(ctx context.Context, js jetstream.JetStream, env string) {
+	if s.delivery == nil {
+		return
 	}
+	s.consumePasses(ctx, js, env, "window-queue", []string{gatecluster.TypeWindowChanged}, func(context.Context) {
+		if err := s.delivery.AdvanceWindowQueue(); err != nil {
+			slog.Warn("bus: window queue not advanced", "error", err)
+		}
+	})
+}
+
+// consumePasses runs pass for each event of a durable consumer and leaves a
+// receipt: the event says "look now", pass reads the source.
+func (s *Server) consumePasses(ctx context.Context, js jetstream.JetStream, env, name string, types []string, pass func(context.Context)) {
+	receipts := &relay.Receipts{JS: js, Tenant: relay.Tenant, Env: env}
+	cc, err := relay.ConsumeDurable(ctx, js, relay.Tenant, env, name, types, func(e relay.Envelope) error {
+		dctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+		pass(dctx)
+		readerseen.Saw(name)
+		if err := receipts.Publish(dctx, e.ID, name); err != nil {
+			slog.Warn("bus: pass receipt", "consumer", name, "event", e.ID, "error", err)
+		}
+		return nil
+	})
+	if err != nil {
+		slog.Error("bus: pass consumer", "consumer", name, "error", err)
+		return
+	}
+	context.AfterFunc(ctx, func() { cc.Stop() })
+	slog.Info("bus: passes run on events", "consumer", name, "on", types)
 }
 
 func (s *Server) cardConclusionsPass(ctx context.Context) {

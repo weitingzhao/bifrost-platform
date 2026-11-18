@@ -174,6 +174,11 @@ clients:
     kind: reader
     lost_after: 24h
     note: the Ops Bus page, open while someone looks at it
+  - name: window-queue
+    kind: durable
+    lost_after: 168h
+    domain: delivery
+    note: moves the release window's queue on when the window changes, so the next in line is told at once; a periodic pass handles a hold that runs out
   - name: card-conclusions
     kind: durable
     lost_after: 168h

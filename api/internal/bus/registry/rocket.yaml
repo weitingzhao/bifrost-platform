@@ -188,7 +188,7 @@ channels:
       reconcile: "window ConfigMap is the truth"
       on_unread: closed
       retention: 30d
-      consumers: [headrelease, console]
+      consumers: [headrelease, console, window-queue]
       exports: []
       replaces: [L24, N11, X-A9, X-C2, X-C10]
   release.freeze.changed:
