@@ -104,8 +104,12 @@ func TestSearchArtifacts(t *testing.T) {
 		t.Fatalf("a task that is not: %v", got)
 	}
 	// Since: an artifact stored now is listed, the earlier ones are not.
+	// The cut comes from the database, the clock created_at is stamped by: taken
+	// from this process's clock, the test failed now and then with the database
+	// in a container (2026-11-18, twice in one evening, "since: []").
 	time.Sleep(10 * time.Millisecond)
-	cut := time.Now()
+	var cut time.Time
+	ok(t, w.rt.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&cut))
 	time.Sleep(10 * time.Millisecond)
 	late := w.artifact(t, "other", "stored after the cut")
 	if got, _ = search(t, w, artifact.ArtifactQuery{Since: cut}); !slices.Equal(got, []string{late}) {
