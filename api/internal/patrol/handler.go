@@ -284,19 +284,6 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, code, resp)
 }
 
-// TriggerInternal programmatically triggers a patrol skill from within the API
-// process (e.g. after a delivery pipeline completes). Runs asynchronously.
-func (h *Handler) TriggerInternal(skillID string) {
-	if h == nil {
-		return
-	}
-	slog.Info("patrol internal trigger", "skill_id", skillID)
-	go func() {
-		defer safego.Recover("patrol.execute.webhook")
-		_, _ = h.execute(context.Background(), skillID, TriggerWebhook)
-	}()
-}
-
 // webhookEventSkill maps well-known webhook event names to patrol skill IDs.
 func webhookEventSkill(event string) string {
 	switch strings.ToLower(strings.TrimSpace(event)) {

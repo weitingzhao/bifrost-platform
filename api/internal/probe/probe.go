@@ -50,10 +50,6 @@ func NewProber() *Prober {
 	}
 }
 
-func (p *Prober) ProbeEnvironment(ctx context.Context, env config.Environment) MatrixResponse {
-	return p.ProbeEnvironmentWithDatastore(ctx, env, nil)
-}
-
 func (p *Prober) ProbeEnvironmentWithDatastore(ctx context.Context, env config.Environment, ds *DatastoreSnapshot) MatrixResponse {
 	base := strings.TrimRight(env.NginxBase, "/")
 	targets := make([]Target, 0, len(tradeGatewayRoutes)+5+len(policyBlockedTargets))

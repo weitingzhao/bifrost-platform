@@ -31,7 +31,6 @@ var homePathFiles = map[string]string{
 	"cluster/metrics_server.go":        "default kubeconfig path",
 	"cluster/observability_install.go": "default kubeconfig path",
 	"cluster/pod_exec.go":              "default kubeconfig path",
-	"cluster/script_runner.go":         "default kubeconfig path",
 	"cluster/sync.go":                  "kubeconfig the sync script writes on the workstation",
 	"config/clusters.go":               "default kubeconfig path",
 	"devsession/provider_bdev.go":      "~/.bifrost-dev of the bdev workstation",

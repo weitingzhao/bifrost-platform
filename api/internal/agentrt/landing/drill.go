@@ -30,9 +30,6 @@ type CIScope struct {
 	Scope, Packages, StoreRun, Why string
 }
 
-// CIScopeMax bounds each CIScope value; a longer one is cut.
-const CIScopeMax = 1500
-
 // Historical budgets retained for the delivery boundary view.
 const ClaimWindow = 6 * time.Hour
 const WaitWindow = 72 * time.Hour

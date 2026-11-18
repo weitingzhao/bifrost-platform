@@ -66,7 +66,7 @@ func TestRunStepsInlineAndResults(t *testing.T) {
 				pipelineRunGVR: "PipelineRunList", taskRunGVR: "TaskRunList",
 			}, run, task)
 			client := func() (dynamic.Interface, error) { return dyn, nil }
-			out := ReadRunSteps(context.Background(), client, "test", "cicd", tc.name)
+			out := ReadRunStepsVia(context.Background(), client, "test", "cicd", tc.name, nil)
 			if out.Reachability != probe.ReachOK || out.ClusterID != "test" || out.Namespace != "cicd" || out.Pipeline != tc.pipeline || len(out.Tasks) != 1 || out.Tasks[0].PipelineTask != "check" || out.Tasks[0].Status != "succeeded" {
 				t.Fatalf("steps = %+v", out)
 			}

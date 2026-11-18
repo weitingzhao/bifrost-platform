@@ -18,7 +18,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 )
@@ -36,7 +35,7 @@ func TestWireEvidenceGateIsTheLedgerEverywhere(t *testing.T) {
 	ctx := context.Background()
 	commit := strings.Repeat("a", 40)
 	for _, env := range []string{"", "dev", "stg", "prod"} {
-		s := &Server{delivery: delivery.NewHandlerForTest(delivery.NewService(&config.ClusterEntry{ID: "test"}), nil)}
+		s := &Server{delivery: delivery.NewHandlerForTest(nil, nil)}
 		s.agentRuntime = &agentRuntime{env: env}
 		reader := s.wireEvidenceGate()
 		if reader == nil {

@@ -121,23 +121,6 @@ func (c *Client) V2Get(ctx context.Context, path string) (json.RawMessage, error
 	return c.doAuthed(ctx, http.MethodGet, fmt.Sprintf("/proxy/network/v2/api/site/%s%s", c.cfg.Site, path), nil)
 }
 
-// V2Post calls POST on the v2 site API.
-func (c *Client) V2Post(ctx context.Context, path string, body any) (json.RawMessage, error) {
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	return c.doAuthed(ctx, http.MethodPost, fmt.Sprintf("/proxy/network/v2/api/site/%s%s", c.cfg.Site, path), body)
-}
-
-// V2Delete calls DELETE on the v2 site API.
-func (c *Client) V2Delete(ctx context.Context, path string) error {
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	_, err := c.doAuthed(ctx, http.MethodDelete, fmt.Sprintf("/proxy/network/v2/api/site/%s%s", c.cfg.Site, path), nil)
-	return err
-}
-
 // IntegrationGet calls GET with X-API-KEY (audit-only when site UUID unavailable on UCG 10.4.57).
 func (c *Client) IntegrationGet(ctx context.Context, path string) (json.RawMessage, error) {
 	if c.cfg.APIKey == "" {

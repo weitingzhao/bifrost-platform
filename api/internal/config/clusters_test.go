@@ -146,9 +146,6 @@ func TestGitOpsAndStackResolution(t *testing.T) {
 	if got := empty.ResolvedStackNamespace(); got != "cicd" {
 		t.Fatalf("ResolvedStackNamespace() default = %q", got)
 	}
-	if addons := empty.ResolvedStackAddons(); len(addons) != 3 {
-		t.Fatalf("ResolvedStackAddons() default len = %d, want 3", len(addons))
-	}
 
 	withOverrides := &ClusterEntry{GitOps: GitOpsConfig{
 		ArgoCDNamespace: "custom-argocd", ApplicationsNamespace: "custom-apps", ArgoCDServerMatch: "custom-server",
@@ -164,9 +161,6 @@ func TestGitOpsAndStackResolution(t *testing.T) {
 	}
 	if got := withOverrides.ResolvedStackNamespace(); got != "custom-stack" {
 		t.Fatalf("ResolvedStackNamespace() = %q", got)
-	}
-	if addons := withOverrides.ResolvedStackAddons(); len(addons) != 1 || addons[0].ID != "custom" {
-		t.Fatalf("ResolvedStackAddons() = %+v", addons)
 	}
 
 	t.Setenv("PLATFORM_ARGOCD_NAMESPACE", "env-argocd")

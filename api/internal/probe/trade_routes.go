@@ -74,19 +74,6 @@ func TradeRouteFor(id string) (TradeGatewayRoute, bool) {
 	return TradeGatewayRoute{}, false
 }
 
-// TradeProcesses returns the distinct processes behind the routes, in first-seen order.
-func TradeProcesses() []string {
-	seen := map[string]bool{}
-	out := []string{}
-	for _, r := range tradeGatewayRoutes {
-		if !seen[r.Process] {
-			seen[r.Process] = true
-			out = append(out, r.Process)
-		}
-	}
-	return out
-}
-
 // TradeGatewayPath is the full gateway path of a path under a process's router, e.g.
 // TradeGatewayPath("ops", "/ops/data-probe") = /api/monitor/ops/data-probe. It panics on an
 // unknown id: the ids are compile-time constants of this package's callers.

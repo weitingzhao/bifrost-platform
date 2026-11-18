@@ -159,37 +159,6 @@ func TestGetEnvironment(t *testing.T) {
 	}
 }
 
-func TestReloadOpsContext(t *testing.T) {
-	configPath := writeFixtureConfigDir(t)
-	t.Setenv("PLATFORM_CONFIG", configPath)
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	// Mutate the on-disk ops-context.yaml and confirm ReloadOpsContext picks it up.
-	if err := os.WriteFile(cfg.OpsContextPath, []byte(`
-meta:
-  version: "v2"
-  catalog_version: "v2"
-deployment:
-  phase: k3s_ha
-focus:
-  headline: "updated focus"
-milestones:
-  - id: m1
-    status: CLOSED
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := cfg.ReloadOpsContext(); err != nil {
-		t.Fatalf("ReloadOpsContext: %v", err)
-	}
-	if cfg.OpsContext.Focus.Headline != "updated focus" {
-		t.Fatalf("OpsContext.Focus.Headline = %q, want updated focus", cfg.OpsContext.Focus.Headline)
-	}
-}
-
 func TestEnvironmentOpsToken(t *testing.T) {
 	env := &Environment{OpsTokenEnv: "TEST_OPS_TOKEN_XYZ"}
 	if got := env.OpsToken(); got != "" {

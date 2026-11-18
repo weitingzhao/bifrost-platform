@@ -182,18 +182,6 @@ func (s *Store) Merge(req MergeRequest) (SignalsResponse, error) {
 	return toResponse(rec, newFailures), nil
 }
 
-func (s *Store) SetDispatch(actions []DispatchAction) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	rec, err := s.loadLocked()
-	if err != nil {
-		return err
-	}
-	rec.LastDispatch = actions
-	rec.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-	return s.saveLocked(rec)
-}
-
 func toResponse(rec *FileRecord, newFailures []string) SignalsResponse {
 	if newFailures == nil {
 		newFailures = []string{}

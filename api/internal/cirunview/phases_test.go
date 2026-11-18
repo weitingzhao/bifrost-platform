@@ -47,7 +47,7 @@ func TestAggregateDeliverPlatformProdPhasesAllSucceeded(t *testing.T) {
 		"gitops-sync":    "succeeded",
 		"rollout":        "succeeded",
 	}
-	phases := AggregateDeliverPlatformProdPhases(taskStatus)
+	phases := AggregateDeliverPhases(DeliverPlatformProdPhaseDefs, taskStatus, nil)
 	if len(phases) != 7 {
 		t.Fatalf("expected 7 phases, got %d", len(phases))
 	}
@@ -91,7 +91,7 @@ func TestAggregateDeliverStgPhasesBuildRunning(t *testing.T) {
 		"prepare":        "succeeded",
 		"build-all-apis": "running",
 	}
-	phases := AggregateDeliverStgPhases(taskStatus)
+	phases := AggregateDeliverPhases(DeliverStgPhaseDefs, taskStatus, nil)
 	if len(phases) != 6 {
 		t.Fatalf("expected 6 phases, got %d", len(phases))
 	}

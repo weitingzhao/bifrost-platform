@@ -383,36 +383,6 @@ func (s *Service) listDeliverRuns(ctx context.Context, ns string) (deliverRuns, 
 	return deliverRunsOf(runs.Items), nil
 }
 
-// LastDeliverStgSuccess returns the most recent succeeded bifrost-deliver-stg PipelineRun, if any.
-func (s *Service) LastDeliverStgSuccess(ctx context.Context) *PipelineRunView {
-	return s.lastDeliverSuccess(ctx, "bifrost-deliver-stg")
-}
-
-// LastDeliverProdSuccess returns the most recent succeeded bifrost-deliver-prod PipelineRun, if any.
-func (s *Service) LastDeliverProdSuccess(ctx context.Context) *PipelineRunView {
-	return s.lastDeliverSuccess(ctx, "bifrost-deliver-prod")
-}
-
-// LastDeliverProdRun returns the most recent bifrost-deliver-prod PipelineRun regardless of status.
-func (s *Service) LastDeliverProdRun(ctx context.Context) *PipelineRunView {
-	return s.lastDeliverRun(ctx, "bifrost-deliver-prod")
-}
-
-// LastDeliverPlatformStgSuccess returns the most recent succeeded bifrost-deliver-platform PipelineRun.
-func (s *Service) LastDeliverPlatformStgSuccess(ctx context.Context) *PipelineRunView {
-	return s.lastDeliverSuccess(ctx, "bifrost-deliver-platform")
-}
-
-// LastDeliverPlatformProdSuccess returns the most recent succeeded bifrost-deliver-platform-prod PipelineRun.
-func (s *Service) LastDeliverPlatformProdSuccess(ctx context.Context) *PipelineRunView {
-	return s.lastDeliverSuccess(ctx, "bifrost-deliver-platform-prod")
-}
-
-// LastDeliverPlatformProdRun returns the most recent bifrost-deliver-platform-prod PipelineRun.
-func (s *Service) LastDeliverPlatformProdRun(ctx context.Context) *PipelineRunView {
-	return s.lastDeliverRun(ctx, "bifrost-deliver-platform-prod")
-}
-
 // deliverRuns are a delivery pipeline's runs for a promote check, the newest
 // start first (GateRuns).
 func (s *Service) deliverRuns(ctx context.Context, pipelineName string) []PipelineRunView {
@@ -463,60 +433,6 @@ func (s *Service) lastDeliverSuccess(ctx context.Context, pipelineName string) *
 		}
 	}
 	return nil
-}
-
-// ProdPostgresInCluster reports CNPG bifrost-postgres readiness via kube API (not LAN TCP).
-func (s *Service) ProdPostgresInCluster(ctx context.Context) (probe.Reachability, string) {
-	if s.cluster == nil {
-		return probe.ReachFail, "cluster service unavailable"
-	}
-	status := s.cluster.PostgresStatus(ctx)
-	switch status.Reachability {
-	case probe.ReachOK:
-		return probe.ReachOK, fmt.Sprintf("CNPG %s ready (%s)", status.RwService, status.Summary)
-	case probe.ReachDegraded:
-		return probe.ReachDegraded, status.Summary
-	default:
-		return probe.ReachFail, status.Summary
-	}
-}
-
-// ProdRedisInCluster reports redis-live-prod readiness in data NS (no host NodePort).
-func (s *Service) ProdRedisInCluster(ctx context.Context) (probe.Reachability, string) {
-	return s.deploymentReadyInNS(ctx, "data", "redis-live-prod")
-}
-
-// DevRedisInCluster reports redis deployment readiness in bifrost-dev.
-func (s *Service) DevRedisInCluster(ctx context.Context) (probe.Reachability, string) {
-	return s.deploymentReadyInNS(ctx, "bifrost-dev", "redis")
-}
-
-// DevPostgresInCluster reports postgres deployment readiness in bifrost-dev.
-func (s *Service) DevPostgresInCluster(ctx context.Context) (probe.Reachability, string) {
-	return s.deploymentReadyInNS(ctx, "bifrost-dev", "postgres")
-}
-
-func (s *Service) deploymentReadyInNS(ctx context.Context, ns, name string) (probe.Reachability, string) {
-	clientset, _, err := s.cluster.KubernetesClient()
-	if err != nil {
-		return probe.ReachFail, "cluster client: " + err.Error()
-	}
-	dep, depErr := clientset.AppsV1().Deployments(ns).Get(ctx, name, metav1.GetOptions{})
-	if depErr != nil {
-		return probe.ReachFail, fmt.Sprintf("deployment/%s in %s: %v", name, ns, depErr)
-	}
-	ready := int32(0)
-	if dep.Status.ReadyReplicas > 0 {
-		ready = dep.Status.ReadyReplicas
-	}
-	desired := dep.Status.Replicas
-	if desired == 0 && dep.Spec.Replicas != nil {
-		desired = *dep.Spec.Replicas
-	}
-	if ready > 0 && ready >= desired {
-		return probe.ReachOK, fmt.Sprintf("%s/%s %d/%d ready (in-cluster)", ns, name, ready, desired)
-	}
-	return probe.ReachDegraded, fmt.Sprintf("%s/%s %d/%d ready", ns, name, ready, desired)
 }
 
 func dockerfileCMFrom(cm *corev1.ConfigMap) DockerfileConfigMapView {

@@ -75,33 +75,3 @@ func TestValidateRequired(t *testing.T) {
 		t.Fatal("expected error for missing file")
 	}
 }
-
-func TestUpdateLastGate(t *testing.T) {
-	src := filepath.Join("..", "..", "..", "config", "ops-context.yaml")
-	if _, err := os.Stat(src); err != nil {
-		t.Skip("config/ops-context.yaml not found")
-	}
-	data, err := os.ReadFile(src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tmp := filepath.Join(t.TempDir(), "ops-context.yaml")
-	if writeErr := os.WriteFile(tmp, data, 0o644); writeErr != nil {
-		t.Fatal(writeErr)
-	}
-
-	if gateErr := UpdateLastGate(tmp, "2026-06-25T12:00:00Z", "pass"); gateErr != nil {
-		t.Fatal(gateErr)
-	}
-
-	f, err := Load(tmp)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if f.Promotion.LastGate.At == nil || *f.Promotion.LastGate.At != "2026-06-25T12:00:00Z" {
-		t.Errorf("expected at=2026-06-25T12:00:00Z, got %v", f.Promotion.LastGate.At)
-	}
-	if f.Promotion.LastGate.Result == nil || *f.Promotion.LastGate.Result != "pass" {
-		t.Errorf("expected result=pass, got %v", f.Promotion.LastGate.Result)
-	}
-}

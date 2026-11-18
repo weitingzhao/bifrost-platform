@@ -48,7 +48,7 @@ func TestRunStepsCarryTaskTimes(t *testing.T) {
 		taskRun("rollout", "2026-11-12T21:41:10Z", ""))
 	client := func() (dynamic.Interface, error) { return dyn, nil }
 
-	out := ReadRunSteps(context.Background(), client, "test", "cicd", "run-1")
+	out := ReadRunStepsVia(context.Background(), client, "test", "cicd", "run-1", nil)
 	if out.Reachability != probe.ReachOK || len(out.Tasks) != 2 {
 		t.Fatalf("steps = %+v", out)
 	}
@@ -81,7 +81,7 @@ func TestRunStepsWithoutAPhaseTable(t *testing.T) {
 	}, run, task)
 	client := func() (dynamic.Interface, error) { return dyn, nil }
 
-	ci := ReadRunSteps(context.Background(), client, "test", "cicd", "ci-platform-x")
+	ci := ReadRunStepsVia(context.Background(), client, "test", "cicd", "ci-platform-x", nil)
 	if ci.Pipeline != "bifrost-ci-platform" || len(ci.Tasks) != 1 || ci.Phases == nil || len(ci.Phases) != 0 {
 		t.Fatalf("ci run = %+v", ci)
 	}
@@ -89,7 +89,7 @@ func TestRunStepsWithoutAPhaseTable(t *testing.T) {
 	if err != nil || !strings.Contains(string(raw), `"phases":[]`) {
 		t.Fatalf("phases must be [] in JSON: %s %v", raw, err)
 	}
-	missing := ReadRunSteps(context.Background(), client, "test", "cicd", "no-such-run")
+	missing := ReadRunStepsVia(context.Background(), client, "test", "cicd", "no-such-run", nil)
 	if missing.Pipeline != "" || missing.Phases == nil || len(missing.Phases) != 0 {
 		t.Fatalf("missing run = %+v", missing)
 	}

@@ -262,11 +262,6 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-// GrantedSlotsHeader carries a claim's granted_slots on every answer, the
-// 204 of a long poll that leased nothing included (store.GrantedSlots), so
-// agentd learns its count without a lease.
-const GrantedSlotsHeader = "X-Agentrt-Granted-Slots"
-
 // The artifact kinds agentd may upload: results, not specs or plans.
 var agentdKinds = map[string]bool{"report": true, "verify": true, "review": true, "log_tail": true,
 	"checkpoint_patch": true, "handover": true, "other": true}

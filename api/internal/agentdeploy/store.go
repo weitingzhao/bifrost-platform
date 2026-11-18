@@ -91,12 +91,6 @@ func (s *Store) Last() *Job {
 	return cloneJob(s.last)
 }
 
-func (s *Store) IsRunning() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.current != nil && s.current.Status == "running"
-}
-
 // ErrRunning is Begin's answer while another job runs.
 var ErrRunning = errors.New("agentdeploy: another agent deploy is running")
 
@@ -121,30 +115,6 @@ func (s *Store) Logf(format string, args ...any) {
 		return
 	}
 	s.current.Log += time.Now().UTC().Format(time.RFC3339) + " " + fmt.Sprintf(format, args...) + "\n"
-}
-
-// Finish ends the current job, done when err is nil and failed with it
-// otherwise, and keeps it as the last job, on disk too.
-func (s *Store) Finish(err error) *Job {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.current == nil {
-		return nil
-	}
-	now := time.Now().UTC()
-	j := s.current
-	j.FinishedAt = &now
-	j.Status = "done"
-	if err != nil {
-		j.Status, j.Error = "failed", err.Error()
-	}
-	s.current, s.last = nil, j
-	if s.lastPath != "" {
-		if raw, merr := json.Marshal(j); merr == nil {
-			_ = statefile.WriteFile(s.lastPath, raw, 0o644)
-		}
-	}
-	return cloneJob(j)
 }
 
 func cloneJob(j *Job) *Job {

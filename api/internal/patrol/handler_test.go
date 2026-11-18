@@ -436,31 +436,6 @@ func TestHandlerWebhookCustomSkillID(t *testing.T) {
 	}
 }
 
-func TestHandlerTriggerInternal(t *testing.T) {
-	h := testHandler(t)
-
-	// TriggerInternal fires async
-	h.TriggerInternal("fleet-drift-scan")
-
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		last := h.store.LastRun("fleet-drift-scan")
-		if last != nil && last.Result == ResultSuccess && last.Trigger == TriggerWebhook {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for TriggerInternal completion: %+v", last)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-func TestHandlerTriggerInternalNilHandler(t *testing.T) {
-	// Should not panic
-	var h *Handler
-	h.TriggerInternal("ops-autopilot")
-}
-
 func TestStoreUpdateRun(t *testing.T) {
 	s, err := NewStore(t.TempDir())
 	if err != nil {

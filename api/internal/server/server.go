@@ -192,7 +192,7 @@ func New(cfg *config.Config) (*Server, error) {
 		dataH.Service().StartDataCloneScheduler(context.Background())
 		clusterH.Service().StartFailedBackupSweep(context.Background())
 	}
-	promoteH := promote.NewHandler(cfg, audit, clusterH)
+	promoteH := promote.NewHandler(cfg)
 	prober := probe.NewProber()
 	checklistH := checklist.NewHandler(cfg.ConfigDir(), audit)
 	plane, planeURL, mountPlane, err := newOperatorPlane(cfg, auth, audit, role)

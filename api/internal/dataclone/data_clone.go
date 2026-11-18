@@ -197,13 +197,6 @@ var dataCloneActiveStatuses = map[string]bool{
 	"verifying": true,
 }
 
-// FindActive returns the newest job whose status is still in-flight, if any.
-func (s *DataCloneJobStore) FindActive() (*DataCloneJob, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.findActiveLocked()
-}
-
 func (s *DataCloneJobStore) findActiveLocked() (*DataCloneJob, bool) {
 	var best *DataCloneJob
 	for _, j := range s.jobs {

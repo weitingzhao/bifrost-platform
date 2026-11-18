@@ -103,7 +103,3 @@ func (s *Service) giteaReaderConfigured(ctx context.Context) bool {
 	user, pass, err := s.readerCreds(ctx)
 	return err == nil && user != "" && pass != ""
 }
-
-// GiteaReaderFromEnv is the platform's read-only Gitea account for a reader
-// outside this package (the agentd package's .sha256, deploy_agentd).
-func GiteaReaderFromEnv(ctx context.Context) (string, string, error) { return giteaReaderFromEnv(ctx) }

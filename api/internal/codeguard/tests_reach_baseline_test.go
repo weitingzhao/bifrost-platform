@@ -46,7 +46,6 @@ var testsReachingAcross = map[string][]string{
 	"api/internal/patrol/outside_inputs_test.go":                         {"api/internal/outsideinput"},
 	"api/internal/placement/cluster_test.go":                             {"api/internal/cluster"},
 	"api/internal/probe/outside_inputs_test.go":                          {"api/internal/outsideinput"},
-	"api/internal/promote/service_test.go":                               {"api/internal/delivery"},
 	"api/internal/questions/thread_inbox_legacy_test.go":                 {"api/internal/threadinbox"},
 	"api/internal/questions/thread_inbox_pg_test.go":                     {"api/internal/agentrt/store"},
 	"api/internal/releasepolicy/apply_test.go":                           {"api/internal/actions"},

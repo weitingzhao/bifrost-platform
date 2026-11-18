@@ -46,17 +46,3 @@ func LedgerTypes() ([]LedgerType, error) {
 	sort.Slice(doc.Types, func(i, j int) bool { return doc.Types[i].Type < doc.Types[j].Type })
 	return doc.Types, nil
 }
-
-// LedgerDomain is the domain a ledger type is registered under.
-func LedgerDomain(typ string) (string, bool) {
-	ts, err := LedgerTypes()
-	if err != nil {
-		return "", false
-	}
-	for _, t := range ts {
-		if t.Type == typ {
-			return t.Domain, true
-		}
-	}
-	return "", false
-}

@@ -56,10 +56,5 @@ func writer(r *http.Request) (actor.Writer, error) {
 // regressions on main, bus/regressions).
 func WriterOf(r *http.Request) (actor.Writer, error) { return writer(r) }
 
-type budgetBody struct {
-	MaxAttempts  int `json:"max_attempts"`
-	MaxWallHours int `json:"max_wall_hours"`
-}
-
 // listLimit is the most rows a list answers.
 const listLimit = 500

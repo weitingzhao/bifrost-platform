@@ -1053,10 +1053,6 @@ func (s *Service) ProdSmoke(ctx context.Context) StgSmokeResponse {
 	return out
 }
 
-func (s *Service) ClusterClient() (kubernetes.Interface, string, error) {
-	return s.cluster.KubernetesClient()
-}
-
 // ProdDeliverArtifactsReady is true when the latest deliver-prod PipelineRun completed build tasks
 // (rollout may have failed transiently while the cluster later recovered).
 func (s *Service) ProdDeliverArtifactsReady(ctx context.Context) (bool, string) {
@@ -1144,21 +1140,6 @@ func pipelineRunStartedAt(view PipelineRunView) int64 {
 // SetDynamicFactoryForTest injects a fake dynamic client in unit tests.
 func (s *Service) SetDynamicFactoryForTest(factory func() (dynamic.Interface, error)) {
 	s.dynamicFactory = factory
-}
-
-// SetClusterForTest replaces the cluster service (for log tests).
-func (s *Service) SetClusterForTest(cs *cluster.Service) {
-	s.cluster = cs
-}
-
-// SetKubernetesUnavailableForTest makes cluster reads fail closed so a unit
-// test cannot reach a real apiserver.
-func (s *Service) SetKubernetesUnavailableForTest() {
-	cs := cluster.NewService(s.entry)
-	cs.SetClientFactoryForTest(func() (kubernetes.Interface, string, error) {
-		return nil, "", fmt.Errorf("no cluster in unit test")
-	})
-	s.cluster = cs
 }
 
 // SetClientsetForTest wires kubernetes client for log tests.

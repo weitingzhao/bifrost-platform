@@ -101,10 +101,6 @@ func (b *busWiring) lastWake() string {
 // that came meanwhile stays.
 func (b *busWiring) clearWake(id string) { b.wake.CompareAndSwap(id, "") }
 
-// RunHooks is where a reader of pipeline runs registers to be woken by
-// ci.run.finished (one durable consumer per hook, in the workers).
-func (s *Server) RunHooks() *runhooks.Registry { return &s.bus.runHooks }
-
 // finishedRuns is the queue of runs gate-cluster said finished.
 func (b *busWiring) finishedRuns() chan string {
 	b.finishedOnce.Do(func() { b.finished = make(chan string, 256) })

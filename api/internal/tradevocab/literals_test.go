@@ -22,7 +22,7 @@ var tradeVocab = regexp.MustCompile(`NVDA|"ib:|ws_ib_|auto_status|"bifrost-(prod
 // file under budget fails until its number is lowered. Namespaces belong in
 // environments.yaml (config.AppEnvs), contracts in the plugin's ConfigMap.
 var budget = map[string]int{
-	"delivery/supply_chain.go":     4,
+	"delivery/supply_chain.go":     2,
 	"ibgateway/autorepair.go":      1,
 	"ibgateway/config.go":          1,
 	"ibgateway/operator_cmd.go":    4,
@@ -42,7 +42,7 @@ var budget = map[string]int{
 // into another package, because the per-file numbers alone cannot tell a move
 // from new vocabulary. With the sum held here, a move is a change of keys and
 // new vocabulary is still refused.
-const ceiling = 29
+const ceiling = 27
 
 func TestTradeVocabularyBudgetMovesButNeverGrows(t *testing.T) {
 	sum := 0

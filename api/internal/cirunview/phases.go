@@ -156,14 +156,6 @@ func AggregateDeliverPhases(defs []struct {
 	return out
 }
 
-func AggregateDeliverStgPhases(taskStatus map[string]string) []PipelinePhaseView {
-	return AggregateDeliverPhases(DeliverStgPhaseDefs, taskStatus, nil)
-}
-
-func AggregateDeliverPlatformProdPhases(taskStatus map[string]string) []PipelinePhaseView {
-	return AggregateDeliverPhases(DeliverPlatformProdPhaseDefs, taskStatus, nil)
-}
-
 func AggregatePhaseStatus(tasks []string, taskStatus map[string]string) (status, detail string) {
 	if len(tasks) == 0 {
 		return "pending", ""

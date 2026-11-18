@@ -12,7 +12,6 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
-	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 )
 
@@ -41,10 +40,10 @@ func TestPipelineRunRequestChecksItsCommitsWhenMade(t *testing.T) {
 	t.Cleanup(gitea.Close)
 	t.Setenv("GITEA_BASE", gitea.URL)
 	dyn := pipelineDyn(t)
-	del := delivery.NewService(&config.ClusterEntry{})
+	del := delivery.NewHandlerForTest(nil, nil)
 	del.SetDynamicFactoryForTest(func() (dynamic.Interface, error) { return dyn, nil })
 	del.SetClientsetForTest(fake.NewSimpleClientset())
-	s := &Server{delivery: delivery.NewHandlerForTest(del, nil)}
+	s := &Server{delivery: del}
 	svc := approvals.New(filepath.Join(t.TempDir(), "approvals"), nil)
 	svc.SetCreateCheck(s.approvalCreateCheck)
 	h := serveApprovals(svc)

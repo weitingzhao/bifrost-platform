@@ -60,8 +60,6 @@ var domainsAcross = []string{
 	"api/internal/lineage -> api/internal/agentrt/landinggit (lineage -> verification)",
 	"api/internal/marketdata -> api/internal/cluster (tenant -> mixed)",
 	"api/internal/placement -> api/internal/cluster (compute -> mixed)",
-	"api/internal/promote -> api/internal/cluster (delivery -> mixed)",
-	"api/internal/promote -> api/internal/delivery (delivery -> mixed)",
 	"api/internal/questions -> api/internal/threadinbox (owner -> coordination)",
 	"api/internal/releasepolicy -> api/internal/actions (delivery -> owner)",
 	"api/internal/research -> api/internal/cluster (tenant -> mixed)",

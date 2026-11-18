@@ -93,7 +93,7 @@ func TestProbeEnvironment_IncludesPolicyBlocked(t *testing.T) {
 		Postgres: config.HostPort{Host: "127.0.0.1", Port: 1},
 		Redis:    config.HostPort{Host: "127.0.0.1", Port: 1},
 	}
-	matrix := p.ProbeEnvironment(context.Background(), env)
+	matrix := p.ProbeEnvironmentWithDatastore(context.Background(), env, nil)
 
 	var foundBlocked bool
 	for _, t := range matrix.Targets {

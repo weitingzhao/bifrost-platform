@@ -79,9 +79,6 @@ func threadLimitIn(ctx context.Context, tx pgx.Tx) (int, error) {
 // header the questions routes already take.
 var threadSession = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
 
-// IsSession says whether s is a session id.
-func IsSession(s string) bool { return threadSession.MatchString(s) }
-
 // ThreadActor is the actor of the thread with that session id.
 func ThreadActor(session string) (string, error) {
 	if !threadSession.MatchString(session) {

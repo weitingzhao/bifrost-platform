@@ -250,31 +250,6 @@ func (c *Controller) see(ctx context.Context, w plan.Watch) (bool, error) {
 	return false, nil
 }
 
-// CardRuleEvery is how often the cards are answered by rule: a loop of its
-// own, so a slow question store never holds up dispatch. Every second
-// (TD-402, the coordinating thread 2026-10-21; TD-393's 「循环每 5 秒」 ran it
-// with the facts loop, so a card the facts loop asked, a blocked card or a
-// planner's question, was first seen just under five seconds old and
-// answered on the next pass, about ten seconds after it opened): the loop
-// adds at most about a second to a card's wait, plus what a pass takes (the
-// question store's read, the cards answered before it). With no card for the
-// rule to look at (none open, none it answered and the runtime has not
-// read), a pass is one read of the question store's state (the whole state,
-// decoded) and no database work; a pass that fails logs once. Only STG wires
-// it (server/agentrt_wire.go).
-const CardRuleEvery = time.Second
-
-// LandingsEvery is how often the landings pass reads main: a loop of its own,
-// so a slow Gitea never holds up dispatch and the decisions (review 436 B4).
-const LandingsEvery = 5 * time.Minute
-
-// DrillPassCeiling bounds one landing drill pass, a ceiling for a hung pass,
-// not a schedule: a pass ends when its work does. 2026-11-07 at 5 minutes,
-// split between two repositories and a cleanup, bifrost-platform had 90
-// seconds: four operations each needing ~25s of Git fetches got 22.5s, were
-// cut off every pass, and no claim ever ran.
-const DrillPassCeiling = 15 * time.Minute
-
 // PlanDecisions is one pass of the plan decisions: proposals outside the
 // standing authorization whose decision card is answered are applied or
 // refused (store.DecidePlanChanges). Each question is read with the

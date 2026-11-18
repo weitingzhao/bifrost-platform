@@ -237,17 +237,6 @@ func (e *ClusterEntry) ResolvedStackNamespace() string {
 	return "cicd"
 }
 
-func (e *ClusterEntry) ResolvedStackAddons() []StackAddonSpec {
-	if e != nil && len(e.Stack.Addons) > 0 {
-		return e.Stack.Addons
-	}
-	return []StackAddonSpec{
-		{ID: "gitea", Label: "Gitea", Match: "gitea"},
-		{ID: "tekton", Label: "Tekton", Match: "tekton"},
-		{ID: "registry", Label: "Registry", Match: "registry"},
-	}
-}
-
 func (e *ClusterEntry) ResolvedStgGatewayHost() string {
 	if v := strings.TrimSpace(os.Getenv("PLATFORM_STG_GATEWAY_HOST")); v != "" {
 		return v

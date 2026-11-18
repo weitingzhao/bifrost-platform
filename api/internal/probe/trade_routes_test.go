@@ -18,11 +18,6 @@ func TestTradeRoutesOnePrefixPerProcess(t *testing.T) {
 	if n := len(TradeGatewayRoutes()); n != 6 {
 		t.Fatalf("routes = %d, want 6", n)
 	}
-	want := []string{"api-monitor", "api-account", "api-market", "api-research"}
-	got := TradeProcesses()
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("processes = %v, want %v", got, want)
-	}
 	// TD-55 option B: each process has exactly one prefix, named after it.
 	prefixOf := map[string]string{}
 	for _, r := range TradeGatewayRoutes() {

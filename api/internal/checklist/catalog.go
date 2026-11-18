@@ -6,7 +6,6 @@ type FixCapability string
 const (
 	FixFullAuto FixCapability = "full_auto"
 	FixSemiAuto FixCapability = "semi_auto"
-	FixManual   FixCapability = "manual"
 	FixObserve  FixCapability = "observe"
 )
 

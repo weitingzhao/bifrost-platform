@@ -196,11 +196,5 @@ type RefPreflightResponse struct {
 
 type PipelinePhaseView = cirunview.PipelinePhaseView
 
-// The steps route's answer and its task rows are cirunview's observation.
-type PipelineTaskRunView = cirunview.TaskRunView
-
-// PipelineRunResult keeps a string value verbatim and a typed Tekton result as
-// JSON text (cirunview.Results); an absent result list is an empty JSON array.
-type PipelineRunResult = cirunview.Result
-
+// The steps route's answer is cirunview's observation.
 type PipelineRunStepsResponse = cirunview.RunSteps

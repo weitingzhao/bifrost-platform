@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
@@ -28,9 +30,24 @@ type Handler struct {
 	configMain        func(MainHeadReader) MainHeadReader // configuration_boundaries.go
 }
 
-// NewHandlerForTest builds a handler around an existing service.
+// NewHandlerForTest builds a handler around an existing service; nil builds
+// one on an empty cluster entry, for tests of other packages that inject a
+// cluster through SetDynamicFactoryForTest and SetClientsetForTest.
 func NewHandlerForTest(svc *Service, audit *actuation.AuditLog) *Handler {
+	if svc == nil {
+		svc = NewService(&config.ClusterEntry{})
+	}
 	return &Handler{svc: svc, audit: audit}
+}
+
+// SetDynamicFactoryForTest injects a fake dynamic client in unit tests.
+func (h *Handler) SetDynamicFactoryForTest(factory func() (dynamic.Interface, error)) {
+	h.svc.SetDynamicFactoryForTest(factory)
+}
+
+// SetClientsetForTest injects a fake kubernetes client in unit tests.
+func (h *Handler) SetClientsetForTest(clientset kubernetes.Interface) {
+	h.svc.SetClientsetForTest(clientset)
 }
 
 func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {

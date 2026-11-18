@@ -4,7 +4,6 @@ import "time"
 
 const (
 	PromotionThreshold = 3
-	DemotionFailStreak = 1
 )
 
 type TrustMatrixEntry struct {

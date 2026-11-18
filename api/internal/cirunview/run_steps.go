@@ -48,19 +48,15 @@ type RunSteps struct {
 	GeneratedAt  time.Time           `json:"generated_at"`
 }
 
-// ReadRunSteps reads one PipelineRun and its TaskRuns and answers what the
-// run did. The caller owns the cluster: client is its way to one, clusterID
-// its name for it, namespace where its runs live. A cluster that cannot be
-// reached is an answer (Reachability, Detail), not an error.
-func ReadRunSteps(ctx context.Context, client func() (dynamic.Interface, error), clusterID, namespace, runName string) RunSteps {
-	return ReadRunStepsVia(ctx, client, clusterID, namespace, runName, nil)
-}
-
 // TaskRead answers TaskRuns: from what the caller keeps, or by calling list,
 // which reads the cluster. Nil always lists.
 type TaskRead func(list func() ([]unstructured.Unstructured, error)) ([]unstructured.Unstructured, error)
 
-// ReadRunStepsVia is ReadRunSteps with the run's TaskRuns read through tasks.
+// ReadRunStepsVia reads one PipelineRun and its TaskRuns and answers what the
+// run did, the TaskRuns read through tasks. The caller owns the cluster: client
+// is its way to one, clusterID its name for it, namespace where its runs live.
+// A cluster that cannot be reached is an answer (Reachability, Detail), not an
+// error.
 func ReadRunStepsVia(ctx context.Context, client func() (dynamic.Interface, error), clusterID, namespace, runName string, tasks TaskRead) RunSteps {
 	now := time.Now().UTC()
 	// The pipeline is the one the run names; until the run is read there is

@@ -31,7 +31,6 @@ const (
 	linkTextLimit  = 160
 	sessionLimit   = 128
 	principalLimit = 64
-	keyMin         = 16
 	keyMax         = 64
 )
 

@@ -19,9 +19,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 )
 
-const UsernameFileEnv = "AGENTRT_LANDING_USERNAME_FILE"
-const PasswordFileEnv = "AGENTRT_LANDING_PASSWORD_FILE"
-
 var fullSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
 var drillRef = regexp.MustCompile(`^refs/heads/land/stg/t_[0-9A-HJKMNP-TV-Z]{26}/[1-9][0-9]*$`)
 
@@ -39,10 +36,6 @@ type Git struct {
 	// (delivery/gitea_reader.go): one line, trimmed, bounded.
 	reader bool
 }
-
-// Lander credentials: the agentrt-lander identity's basic-auth files (S3).
-const LanderUsernameFileEnv = "AGENTRT_LANDER_USERNAME_FILE"
-const LanderPasswordFileEnv = "AGENTRT_LANDER_PASSWORD_FILE"
 
 // ReaderDirEnv names the platform's Gitea reader mount (TD-432): a
 // kubernetes.io/basic-auth Secret (files username and password) of an

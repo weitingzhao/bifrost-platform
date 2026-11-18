@@ -8,14 +8,13 @@ import (
 )
 
 const (
-	dataNamespace      = "data"
-	gatewayDeployName  = "ib-gateway"
-	redisDeployName    = "redis-ib"
-	configMapName      = "ib-gateway-config"
-	redisServiceHost   = "redis-ib.data.svc.cluster.local:6379"
+	dataNamespace     = "data"
+	gatewayDeployName = "ib-gateway"
+	configMapName     = "ib-gateway-config"
+	redisServiceHost  = "redis-ib.data.svc.cluster.local:6379"
 	// ACL user on redis-ib scoped to ib:* and bifrost:health:ws_ib_* (see acl.conf).
-	redisACLUser       = "platform"
-	consumerGroupName  = "ib-gateway"
+	redisACLUser      = "platform"
+	consumerGroupName = "ib-gateway"
 )
 
 var legacyIBStatefulSets = []string{"ib-market-gateway", "ib-account-agent", "ib-operator"}

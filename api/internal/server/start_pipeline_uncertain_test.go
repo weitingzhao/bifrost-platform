@@ -24,7 +24,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
-	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 )
 
@@ -80,10 +79,10 @@ func wireStartPipeline(t *testing.T, dyn dynamic.Interface, audit *actuation.Aud
 			NodeInfo:   corev1.NodeSystemInfo{Architecture: "amd64"},
 		},
 	}
-	del := delivery.NewService(&config.ClusterEntry{})
+	del := delivery.NewHandlerForTest(nil, audit)
 	del.SetDynamicFactoryForTest(func() (dynamic.Interface, error) { return dyn, nil })
 	del.SetClientsetForTest(fake.NewSimpleClientset(node))
-	s := &Server{delivery: delivery.NewHandlerForTest(del, audit)}
+	s := &Server{delivery: del}
 	s.bindActionExecutors()
 	return approvals.New(filepath.Join(t.TempDir(), "approvals"), audit)
 }
