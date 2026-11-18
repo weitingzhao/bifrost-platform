@@ -181,7 +181,7 @@ func checkImport(t *testing.T, path, board string, stars []string) {
 	must(t, json.Unmarshal(get(t, s, "plan/"+firstDone), &node))
 	var evidence []any
 	for _, e := range node.Events {
-		if e.Type == "note" && e.Body["manual"] == planimport.ManualAtom(firstDone) {
+		if e.Type == "plan_step_marked_done" && e.Body["manual"] == planimport.ManualAtom(firstDone) {
 			evidence, _ = e.Body["evidence"].([]any)
 		}
 	}

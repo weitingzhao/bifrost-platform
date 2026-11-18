@@ -77,7 +77,7 @@ func noteRuleAnswer(ctx context.Context, tx pgx.Tx, on cardOn, question, text st
 		return err
 	}
 	actor.Hook("rule note: none yet", question)
-	_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: on.stream, Type: "note", Actor: "controller", MissionID: on.mission,
+	_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: on.stream, Type: "plan_card_answered_by_rule", Actor: "controller", MissionID: on.mission,
 		PlanNode: on.step, TaskID: on.task, Body: map[string]any{"text": text}})
 	return err
 }
@@ -87,7 +87,7 @@ func noteRuleAnswer(ctx context.Context, tx pgx.Tx, on cardOn, question, text st
 // (review 443 B2).
 func ruleNoted(ctx context.Context, tx pgx.Tx, stream, question string) (bool, error) {
 	var noted bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_type = 'note' AND event_stream_id = $1
+	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_type IN ('plan_card_answered_by_rule', 'note') AND event_stream_id = $1
 	  AND body_json->>'text' LIKE 'rule % answered question ' || $2 || ' %')`, stream, question).Scan(&noted)
 	return noted, err
 }

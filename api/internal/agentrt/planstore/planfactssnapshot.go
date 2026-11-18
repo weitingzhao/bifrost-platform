@@ -33,11 +33,11 @@ type planPassSeen struct {
 func readPlanFacts(ctx context.Context, tx pgx.Tx) (*planFactsSnapshot, error) {
 	var raw []byte
 	err := tx.QueryRow(ctx, `WITH views AS (
- SELECT DISTINCT ON(event_stream_id) body_json->'plan_view' a FROM agentrt.event WHERE event_type='note' AND body_json ? 'plan_view' ORDER BY event_stream_id,seq DESC
+ SELECT DISTINCT ON(event_stream_id) body_json->'plan_view' a FROM agentrt.event WHERE event_type IN ('plan_view_adopted','note') AND body_json ? 'plan_view' ORDER BY event_stream_id,seq DESC
  ), docs AS (
  SELECT a,encode(b.body,'base64') body FROM views LEFT JOIN agentrt.artifact_blob b ON b.artifact_id=a->>'artifact_id'
  ), observations AS (
- SELECT DISTINCT ON(body_json->'plan_observation'->>'binding_sha256') body_json->'plan_observation' o FROM agentrt.event WHERE event_type='note' AND body_json ? 'plan_observation' AND actor_id='controller'
+ SELECT DISTINCT ON(body_json->'plan_observation'->>'binding_sha256') body_json->'plan_observation' o FROM agentrt.event WHERE event_type IN ('plan_observation','note') AND body_json ? 'plan_observation' AND actor_id='controller'
  ORDER BY body_json->'plan_observation'->>'binding_sha256',(body_json->'plan_observation'->>'source_version')::bigint DESC
  ), passes AS (
  SELECT p.* FROM views v CROSS JOIN LATERAL (SELECT body_json->'plan_observation_pass' pass FROM agentrt.event WHERE event_stream_id='plan-observation-pass:'||(v.a->>'root') AND actor_id='controller' AND body_json ? 'plan_observation_pass' ORDER BY seq DESC LIMIT 1) p

@@ -22,9 +22,8 @@ var planTypes = []string{
 	"plan_change_decided", "plan_change_proposed", "plan_changed", "plan_node_created", "plan_node_retitled",
 	"plan_node_state_changed", "route_decided", "task_cancelled", "task_dependency_added", "task_proposed",
 	"task_state_changed", "wave_abandoned", "wave_closed", "wave_opened",
-	// The plan's own records that are still notes today (step 5 of the note
-	// and policy_alert split; migration 0032 takes them, 2026-11-17): named
-	// here with no body until their writers move, so none is written yet.
+	// The plan's own records that were notes (step 5 of the note and
+	// policy_alert split, 2026-11-17; migration 0032).
 	"plan_card_answered_by_rule", "plan_card_settled", "plan_observation", "plan_observation_pass",
 	"plan_step_marked_done", "plan_view_adopted",
 }
@@ -52,6 +51,15 @@ var planBodies = map[string][]eventlog.Field{
 	"plan_node_created": {field("node_kind", eventlog.Str, false), field("label", eventlog.Str, false), field("title", eventlog.Str, false),
 		field("ordinal", eventlog.Int, false)},
 	"plan_node_state_changed": {field("from", eventlog.Str, false), field("to", eventlog.Str, false), field("cause", eventlog.Str, false)},
+	// The plan's own records that were notes (step 5 of the note and
+	// policy_alert split, 2026-11-17; migration 0032): the same bodies the
+	// notes carried, so readers by field read old and new alike.
+	"plan_step_marked_done":      {field("text", eventlog.Str, false), field("manual", eventlog.Str, false), field("evidence", eventlog.IDs, true)},
+	"plan_card_answered_by_rule": {field("text", eventlog.Str, false)},
+	"plan_card_settled":          {field("text", eventlog.Str, false)},
+	"plan_observation":           {field("text", eventlog.Str, false), field("plan_observation", eventlog.Any, false)},
+	"plan_observation_pass":      {field("text", eventlog.Str, false), field("plan_observation_pass", eventlog.Any, false)},
+	"plan_view_adopted":          {field("text", eventlog.Str, false), field("plan_view", eventlog.Any, false)},
 	// task_proposed: kept for migrate's 0010 trigger probe (runtime0010_test.go),
 	// the one writer left; nothing in production proposes a task since the
 	// dispatch lane ended. It goes with that probe and the task tables.
@@ -89,6 +97,11 @@ func init() {
 		Types:  planTypes,
 		Bodies: planBodies,
 		Values: planValues,
+		// The observation, pass and view records are held to their shapes by
+		// the check the notes had (CheckViewNote picks the field present).
+		Before: map[string]func(map[string]any) error{
+			"plan_observation": CheckViewNote, "plan_observation_pass": CheckViewNote, "plan_view_adopted": CheckViewNote,
+		},
 		Events: []func(eventlog.Event) error{CheckPlanObservation},
 	})
 }

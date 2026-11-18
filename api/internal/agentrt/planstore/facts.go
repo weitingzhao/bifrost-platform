@@ -59,7 +59,7 @@ func RecordManual(ctx context.Context, tx pgx.Tx, actor, stepID, manual, text st
 	if err != nil {
 		return err
 	}
-	_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "note", Actor: actor, PlanNode: stepID,
+	_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_step_marked_done", Actor: actor, PlanNode: stepID,
 		Body: map[string]any{"text": text, "manual": manual, "evidence": evidence}})
 	return err
 }
@@ -161,7 +161,7 @@ func (f *stepFacts) OwnerSignoff(ref string) bool {
 }
 
 func (f *stepFacts) ManualRecorded(note string) bool {
-	return f.exists(`SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_type = 'note' AND plan_node_id = $1
+	return f.exists(`SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_type IN ('plan_step_marked_done', 'note') AND plan_node_id = $1
 	  AND body_json @> jsonb_build_object('manual', $2::text) AND body_json ? 'evidence')`, f.step, note)
 }
 

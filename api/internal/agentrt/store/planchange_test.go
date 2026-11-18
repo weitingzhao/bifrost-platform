@@ -487,7 +487,7 @@ func TestPlanDecisionAcks(t *testing.T) {
 	if calls[ids[0]] != 2 || calls[ids[1]] != 1 {
 		t.Fatalf("acknowledgements %v; want the failed one twice and the gone one once", calls)
 	}
-	if n := w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_type = 'note' AND body_json->>'text' = $1`,
+	if n := w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_type = 'plan_card_settled' AND body_json->>'text' = $1`,
 		"question "+ids[1]+" is gone from the question store"); n != 1 {
 		t.Fatal("the gone card is not recorded")
 	}

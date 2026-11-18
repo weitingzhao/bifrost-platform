@@ -19,7 +19,7 @@ type Adoption struct {
 }
 
 func AdoptedViews(ctx context.Context, tx pgx.Tx) (map[string]Adoption, error) {
-	rows, err := tx.Query(ctx, `SELECT DISTINCT ON (event_stream_id) body_json->'plan_view' FROM agentrt.event WHERE event_type='note' AND body_json ? 'plan_view' ORDER BY event_stream_id, seq DESC`)
+	rows, err := tx.Query(ctx, `SELECT DISTINCT ON (event_stream_id) body_json->'plan_view' FROM agentrt.event WHERE event_type IN ('plan_view_adopted','note') AND body_json ? 'plan_view' ORDER BY event_stream_id, seq DESC`)
 	if err != nil {
 		return nil, err
 	}

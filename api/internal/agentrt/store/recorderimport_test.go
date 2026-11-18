@@ -128,8 +128,8 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 	if n != 1 || streamEvents(t, pool, stream, "legacy_imported") != 4 || streamEvents(t, pool, stream, "plan_change_decided") != 1 {
 		t.Fatalf("decided %d; the stream has %d legacy_imported", n, streamEvents(t, pool, stream, "legacy_imported"))
 	}
-	if a.acked[q] != 1 || streamEvents(t, pool, stream, "note") != 1 {
-		t.Fatalf("the card was acknowledged %d times, noted %d", a.acked[q], streamEvents(t, pool, stream, "note"))
+	if a.acked[q] != 1 || streamEvents(t, pool, stream, "plan_card_settled") != 1 {
+		t.Fatalf("the card was acknowledged %d times, noted %d", a.acked[q], streamEvents(t, pool, stream, "plan_card_settled"))
 	}
 	rows, err := pool.Query(ctx, `SELECT body_json FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'legacy_imported'
 	  AND body_json->>'source' = 'recorder' ORDER BY event_id`, stream)

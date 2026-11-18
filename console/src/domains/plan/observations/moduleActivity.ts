@@ -91,7 +91,11 @@ function planActivity(view: PlanSnapshot, scope: ModuleScope, scopes: Map<string
       case 'plan_changed':
         if (ours) row('Plan change', `Applied · ${str(b.change)}`)
         break
-      case 'note': {
+      // An external work's record and a plan observation were notes until
+      // 2026-11-17 (migration 0032); each is its own type now, and old rows stay notes.
+      case 'note':
+      case 'external_work_noted':
+      case 'plan_observation': {
         const work = isRecord(b.external_work) ? b.external_work : null
         const observation = isRecord(b.plan_observation) ? b.plan_observation : null
         if (work && scope.nodeIds.has(str(work.plan_node_id))) {

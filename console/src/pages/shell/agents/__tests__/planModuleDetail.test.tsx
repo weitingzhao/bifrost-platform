@@ -127,6 +127,26 @@ describe('plan changes at the window edge', () => {
   })
 })
 
+describe('records that were notes', () => {
+  // Origin: 2026-11-17, migration 0032: an external work's record and a plan observation left note for
+  // types of their own; the module's activity dropped them (it read only note). Old note rows still show.
+  it('shows an external work record and an observation of a module step, as their own types and as old notes', () => {
+    const raw = r5Raw()
+    const ev = (event_id: number, event_type: string, body_json: Record<string, unknown>, at: string) =>
+      ({ event_id, event_stream_id: 'x:' + event_id, seq: 1, event_type, actor_id: 'controller', at, body_json })
+    const work = { external_work_id: 'ew_' + 'a'.repeat(64), plan_node_id: 'R5:5.1-3', type: 'heartbeat' }
+    const observation = { step: 'R5:5.1-3', binding: 'ci', value: 'green' }
+    raw.recent_changes.push(ev(9140, 'external_work_noted', { text: 'External work heartbeat', external_work: work }, '2026-10-27T02:30:00Z'),
+      ev(9141, 'plan_observation', { text: 'Plan verification observed', plan_observation: observation }, '2026-10-27T02:31:00Z'),
+      ev(9142, 'note', { text: 'External work heartbeat', external_work: work }, '2026-10-27T02:32:00Z'))
+    const view = parsePlanSnapshot(raw, 'R5')
+    const scopes = moduleScopes(view)
+    const rows = planActivity(view, scopes.get('R5:5.1')!, scopes).rows
+    const kinds = Object.fromEntries(rows.filter(r => ['plan-9140', 'plan-9141', 'plan-9142'].includes(r.key)).map(r => [r.key, r.kind]))
+    expect(kinds).toEqual({ 'plan-9140': 'External work', 'plan-9141': 'Evidence', 'plan-9142': 'External work' })
+  })
+})
+
 describe('plan change groups', () => {
   it('puts an event whose proposal or decision id is missing in no group: it stands on its own evidence', () => {
     const raw = r5Raw()

@@ -68,7 +68,7 @@ func ackDecided(ctx context.Context, db eventlog.DB, ack func(context.Context, s
 		rows, err := tx.Query(ctx, `SELECT DISTINCT d.event_stream_id, d.body_json->>'question_id' FROM agentrt.event d
 		  WHERE d.event_type = 'plan_change_decided' AND d.body_json->>'decision' IN ('applied','refused','failed')
 		    AND d.body_json ? 'question_id' AND d.at > clock_timestamp() - interval '7 days'
-		    AND NOT EXISTS (SELECT 1 FROM agentrt.event n WHERE n.event_type = 'note' AND n.event_stream_id = d.event_stream_id
+		    AND NOT EXISTS (SELECT 1 FROM agentrt.event n WHERE n.event_type IN ('plan_card_settled', 'note') AND n.event_stream_id = d.event_stream_id
 		      AND n.body_json->>'text' IN ('acknowledged question ' || (d.body_json->>'question_id'),
 		                                  'question ' || (d.body_json->>'question_id') || ' is gone from the question store'))
 		  LIMIT 100`)
@@ -94,7 +94,7 @@ func ackDecided(ctx context.Context, db eventlog.DB, ack func(context.Context, s
 			continue
 		}
 		if nerr := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
-			_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: c.stream, Type: "note", Actor: "controller", Body: map[string]any{"text": text}})
+			_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: c.stream, Type: "plan_card_settled", Actor: "controller", Body: map[string]any{"text": text}})
 			return err
 		}); nerr != nil {
 			errs = append(errs, nerr)

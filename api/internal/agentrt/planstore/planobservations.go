@@ -312,7 +312,7 @@ func CollectPlanObservations(ctx context.Context, db eventlog.DB, src PlanSource
 			if e != nil {
 				return e
 			}
-			_, e = eventlog.Append(ctx, tx, eventlog.Event{Stream: passStream(root), Type: "note", Actor: "controller", Body: map[string]any{"text": "Plan verification pass", "plan_observation_pass": body}})
+			_, e = eventlog.Append(ctx, tx, eventlog.Event{Stream: passStream(root), Type: "plan_observation_pass", Actor: "controller", Body: map[string]any{"text": "Plan verification pass", "plan_observation_pass": body}})
 			return e
 		})
 		if err != nil {
@@ -368,7 +368,7 @@ func recordPlanObservation(ctx context.Context, tx pgx.Tx, n planObservation) (b
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return false, err
 	}
-	_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: observationStream(n.Root), Type: "note", Actor: "controller", PlanNode: n.Step, Body: map[string]any{"text": "Plan verification observed", "plan_observation": body}})
+	_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: observationStream(n.Root), Type: "plan_observation", Actor: "controller", PlanNode: n.Step, Body: map[string]any{"text": "Plan verification observed", "plan_observation": body}})
 	return err == nil, err
 }
 
@@ -438,7 +438,7 @@ func CheckPlanObservation(ev eventlog.Event) error {
 		if err := strictjson.Value(raw, &n); err != nil {
 			return err
 		}
-		if ev.Actor != "controller" || ev.Type != "note" || ev.Stream != observationStream(n.Root) || ev.PlanNode != n.Step {
+		if ev.Actor != "controller" || (ev.Type != "plan_observation" && ev.Type != "note") || ev.Stream != observationStream(n.Root) || ev.PlanNode != n.Step {
 			return eventlog.Invalid("plan observations are controller-owned")
 		}
 	}
@@ -450,7 +450,7 @@ func CheckPlanObservation(ev eventlog.Event) error {
 		if err := p.validate(); err != nil {
 			return err
 		}
-		if ev.Actor != "controller" || ev.Type != "note" || ev.Stream != passStream(p.Root) || ev.PlanNode != "" {
+		if ev.Actor != "controller" || (ev.Type != "plan_observation_pass" && ev.Type != "note") || ev.Stream != passStream(p.Root) || ev.PlanNode != "" {
 			return eventlog.Invalid("plan observation passes are controller-owned")
 		}
 	}
