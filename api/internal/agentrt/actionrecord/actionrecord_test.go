@@ -9,6 +9,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actionrecord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
 )
 
@@ -124,5 +125,29 @@ func TestRecordsAreAppendOnlyAndReadBackBySeatAndLaw(t *testing.T) {
 	if _, err = conn.Exec(ctx, `INSERT INTO agentrt.action_record (seat, action, reason, regret, regret_state, law, outcome)
 	  VALUES ('s','a','r','','not_ready','l','done')`); err == nil {
 		t.Error("the table took a done action without a regret ready")
+	}
+}
+
+// Origin: 2026-11-18, the coordinator's order for the switch: Agent actions go
+// on the bus (channel S07). The event names who did what and how it ended, and
+// nothing of the reason, which may hold what only the record should.
+func TestARecordsEventSaysWhoWhatAndHowItEndedOnly(t *testing.T) {
+	r := good()
+	r.Seat = "thread:local_a"
+	b := actionrecord.Body(7, r)
+	if b["subject"] != "thread:local_a:rollout_restart_deployment" || b["change"] != actionrecord.OutcomeDone {
+		t.Fatalf("body: %v", b)
+	}
+	for _, k := range []string{"reason", "target", "regret", "law"} {
+		if _, ok := b[k]; ok {
+			t.Errorf("the event carries %s", k)
+		}
+	}
+	if err := eventlog.CheckBody(actionrecord.TypeRecorded, b); err != nil {
+		t.Fatal(err)
+	}
+	b["subject"] = "someone:else"
+	if eventlog.CheckBody(actionrecord.TypeRecorded, b) == nil {
+		t.Fatal("a body whose subject is not its seat and action was taken")
 	}
 }

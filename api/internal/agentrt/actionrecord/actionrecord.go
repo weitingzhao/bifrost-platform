@@ -16,6 +16,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
@@ -120,13 +121,65 @@ func Insert(ctx context.Context, db eventlog.DB, r Record, redact Redactor) (int
 	}
 	var id int64
 	err = eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `INSERT INTO agentrt.action_record
+		if err := tx.QueryRow(ctx, `INSERT INTO agentrt.action_record
 		  (seat, action, target, reason, regret, regret_state, law, outcome, check_result, not_verified, params_hash)
 		  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,'')) RETURNING record_id`,
 			r.Seat, r.Action, r.Target, r.Reason, r.Regret, r.RegretState, r.Law, r.Outcome, r.CheckResult, r.NotVerified,
-			r.ParamsHash).Scan(&id)
+			r.ParamsHash).Scan(&id); err != nil {
+			return err
+		}
+		return announce(ctx, tx, id, r)
 	})
 	return id, err
+}
+
+// TypeRecorded is the bus's word that an action was recorded (channel S07,
+// 2026-11-18: Agent actions on the bus). It carries who, what and how it
+// ended; the reason and the rest stay in the record.
+const TypeRecorded = "audit.action.recorded"
+
+// busActor writes the events; the platform seeds it.
+const busActor = "controller"
+
+// busSeat is a seat the event can name.
+var busSeat = regexp.MustCompile(`^[A-Za-z0-9._:@-]{1,128}$`)
+
+// Body is the event's body for a record.
+func Body(id int64, r Record) map[string]any {
+	s := r.Seat + ":" + r.Action
+	return map[string]any{"record_id": id, "seat": r.Seat, "action": r.Action, "outcome": r.Outcome,
+		"subject": s, "ref": "/api/v1/audit", "change": r.Outcome}
+}
+
+// announce writes the event in the record's transaction. A seat the event
+// cannot name, or a ledger without the controller, leaves the record alone.
+func announce(ctx context.Context, tx pgx.Tx, id int64, r Record) error {
+	if !busSeat.MatchString(r.Seat) {
+		return nil
+	}
+	if ok, err := actor.Exists(ctx, tx, busActor); err != nil || !ok {
+		return err
+	}
+	_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "action:" + r.Seat, Type: TypeRecorded, Actor: busActor, Body: Body(id, r)})
+	return err
+}
+
+func init() {
+	eventlog.Declare(eventlog.Vocabulary{
+		Bodies: map[string][]eventlog.Field{TypeRecorded: {
+			{Name: "record_id", Kind: eventlog.Int}, {Name: "seat", Kind: eventlog.Str}, {Name: "action", Kind: eventlog.Str},
+			{Name: "outcome", Kind: eventlog.Str}, {Name: "subject", Kind: eventlog.Str}, {Name: "ref", Kind: eventlog.Str}, {Name: "change", Kind: eventlog.Str},
+		}},
+		Values: map[string]map[string]eventlog.Value{TypeRecorded: {"seat": eventlog.Shaped("a seat", busSeat), "action": eventlog.Shaped("an action id", actionName)}},
+		After: map[string]func(map[string]any) error{TypeRecorded: func(b map[string]any) error {
+			seat, _ := b["seat"].(string)
+			action, _ := b["action"].(string)
+			if b["subject"] != seat+":"+action || b["ref"] != "/api/v1/audit" || b["change"] != b["outcome"] {
+				return eventlog.Invalid("%s: subject, ref and change are made of seat, action and outcome", TypeRecorded)
+			}
+			return nil
+		}},
+	})
 }
 
 // Filter selects records; empty fields select all. Limit defaults to 100 and

@@ -525,6 +525,8 @@ channels:
       reconcile: "audit store"
       on_unread: stale
       retention: 30d
+      # Published to be watched on the Bus page: who did what, as it happens.
+      display_only: true
       consumers: [console]
       exports: []
       replaces: [S02]
