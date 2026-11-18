@@ -120,9 +120,29 @@ func TestRulePortsAreBoundToTheRuleStore(t *testing.T) {
 	// Rules in force: the decision names the rule the store has, and cards
 	// are asked by rule for the kinds it lists.
 	w = newWorld(t)
+	// The whole list of kinds, as the rule store has it, including kinds the
+	// plan never asks about: what follows through the plan sees only its own
+	// three. 2026-11-18, TD-582: the list comparison this test had before it
+	// went through the plan's contract.
+	kindsInForce := func() []string {
+		t.Helper()
+		var kinds []string
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			var err error
+			kinds, err = store.PlanRulePortsForTest.CardAutoKindsInForce(ctx, tx)
+			return err
+		}))
+		return kinds
+	}
+	if kinds := kindsInForce(); kinds != nil {
+		t.Fatalf("with no rule in force, the card-auto port: %v", kinds)
+	}
 	putPlanStanding(t, w, true, false)
-	signCardAutoSeconds(t, w.rt, "5", "[blocked, plan_change]")
+	signCardAutoSeconds(t, w.rt, "5", "[blocked, mission, plan_change]")
 	plan, auto := direct(w)
+	if kinds := kindsInForce(); auto == nil || !reflect.DeepEqual(kinds, auto.CardAuto.Kinds) || !slices.Contains(kinds, "blocked") || !slices.Contains(kinds, "mission") {
+		t.Fatalf("the card-auto port: %v; the rule store: %+v", kinds, auto)
+	}
 	if plan == nil || auto == nil || len(auto.CardAuto.Kinds) == 0 || !plan.Plan.DoneRules {
 		t.Fatalf("the fixture rules are not in force: %+v %+v", plan, auto)
 	}
@@ -198,6 +218,13 @@ func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 		if len(wantWorking) != 1 || !reflect.DeepEqual(view["working"], wantWorking) || !reflect.DeepEqual(view["finished_today"], wantFinished) {
 			t.Errorf("the buckets port: %v %v; workregistration: %v %v", view["working"], view["finished_today"], wantWorking, wantFinished)
 		}
+		// The port hands on the caller's verification function, whatever it
+		// answers. 2026-11-18, TD-582: the plan's own only ever says Unknown.
+		seen := func(id string) any { return "seen " + id }
+		working, _ := store.PlanExternalWorkPortsForTest.ActivityBuckets(want, now, seen)
+		if len(working) != 1 || working[0].(map[string]any)["verification"] != "seen "+id {
+			t.Errorf("the buckets port with another verification: %v", working)
+		}
 		return nil
 	}))
 	// The note check, which the plan runs on a view's event before its body:
@@ -247,6 +274,16 @@ func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 		if errText(got) != errText(want) {
 			t.Fatalf("the description check port on %s: %v; externalwork: %v", c.doc, got, want)
 		}
+	}
+	// Text that is not JSON at all: the artifact store never asks about it, so
+	// the port is asked directly. 2026-11-18, TD-582: the case this test had
+	// before it went through the plan's contract.
+	_, notJSON := externalwork.ParseExternalDescription([]byte(`not json`))
+	if notJSON == nil {
+		t.Fatal("externalwork took a description that is not JSON: the comparison below shows nothing")
+	}
+	if got := store.PlanExternalWorkPortsForTest.CheckDescription([]byte(`not json`)); errText(got) != errText(notJSON) {
+		t.Fatalf("the description check port on text that is not JSON: %v; externalwork: %v", got, notJSON)
 	}
 }
 

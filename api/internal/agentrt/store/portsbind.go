@@ -26,27 +26,29 @@ import (
 // its own port from its own file (envelope.go, recorderimport.go,
 // loopalert.go).
 
-func init() {
-	planstore.BindPlanExternalWork(planstore.ExternalWorkPorts{
-		CheckNote: func(record any) error {
-			var n externalwork.ExternalNote
-			if err := strictViewValue(record, &n); err != nil {
-				return err
-			}
-			return n.Validate()
-		},
-		CheckDescription: func(raw []byte) error {
-			_, err := externalwork.ParseExternalDescription(raw)
+var planExternalWorkPorts = planstore.ExternalWorkPorts{
+	CheckNote: func(record any) error {
+		var n externalwork.ExternalNote
+		if err := strictViewValue(record, &n); err != nil {
 			return err
-		},
-		Snapshot: func(ctx context.Context, tx pgx.Tx, root string, now time.Time) ([]map[string]any, error) {
-			return workregistration.Snapshot(ctx, tx, root, now, func(ctx context.Context, tx pgx.Tx, id string) (any, error) {
-				return externalwork.ExternalDescriptionOf(ctx, tx, id)
-			})
-		},
-		ActivityBuckets:      workregistration.ActivityBuckets,
-		CollectorActorPrefix: actuation.CollectorActorPrefix,
-	})
+		}
+		return n.Validate()
+	},
+	CheckDescription: func(raw []byte) error {
+		_, err := externalwork.ParseExternalDescription(raw)
+		return err
+	},
+	Snapshot: func(ctx context.Context, tx pgx.Tx, root string, now time.Time) ([]map[string]any, error) {
+		return workregistration.Snapshot(ctx, tx, root, now, func(ctx context.Context, tx pgx.Tx, id string) (any, error) {
+			return externalwork.ExternalDescriptionOf(ctx, tx, id)
+		})
+	},
+	ActivityBuckets:      workregistration.ActivityBuckets,
+	CollectorActorPrefix: actuation.CollectorActorPrefix,
+}
+
+func init() {
+	planstore.BindPlanExternalWork(planExternalWorkPorts)
 	externalwork.BindPlanTree(externalwork.PlanTreePorts{
 		LockTree: planstore.LockTree,
 		RootOf:   planstore.RootOf,
