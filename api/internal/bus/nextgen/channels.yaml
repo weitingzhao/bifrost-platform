@@ -107,7 +107,7 @@ channels:
   - {id: S09, class: K9, disposition: announced, step: "3", what: "同 N12：窗口 ConfigMap 的存放", by: "同 N12", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
   - {id: S10, class: K12, disposition: kept, step: "none", what: "线程标题 ConfigMap（手改、转录扫描、上报三个来源）", by: "原因：标题来源照用，省不出（11-18 按解耦线核对和实际流量判）"}
   - {id: S11, class: K13, disposition: merged, step: "3", what: "信箱存放：agentrt.message + artifact（正文 ≤8 KiB）", by: "随 N09 留下并改造：正文仍在这里，事件只带指针", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
-  - {id: S12, class: K8, disposition: deleted, step: "5", what: "metric_reading：交付度量读数（无非测试写入者）", by: "死路；代码引用已清（解耦线 11-18），表和 26,418 行留到第 5 步，随有数据的删改一起处理"}
+  - {id: S12, class: K8, disposition: deleted, step: "any", what: "metric_reading：交付度量读数（无非测试写入者）", by: "代码已拆，表保留：没人读写，只占 18 MB，删表没有回报（解耦线 11-18）", retired: {at: "2026-11-18", change: I9defd5e755a99f4279463fa079af5fdc3c74e6ff, outside: "表 agentrt.metric_reading 保留，不再有代码读写"}}
   - {id: S13, class: K2, disposition: deleted, step: "any", what: "同 N22：agentrt.outbox", by: "死路", retired: {at: "2026-11-17", change: Id818b64d36e851fb3e31d91e06f0dd08ae027a12, absent_text: ['FROM agentrt.outbox)', 'FROM agentrt.outbox`']}}
   - {id: S14, class: K6, disposition: announced, step: "3", what: "maintainer 指标：8 个循环的成功时间戳与运行计数，给 Prometheus", by: "指标留给 Prometheus（对账兜底）；循环健康变化以 loop.health.changed 宣布，登记表要求每个循环都登记（现在 8/约 20）", cut: {at: "2026-11-18", evidence: ["topic:loop.health.changed"]}}
   - {id: C01, class: K1, disposition: kept, step: "none", what: "Console 每页各自 TanStack Query 轮询（约 215 处）", by: "原因：全局事件流省不出：/plan 6 小时 7185 次共 46 秒（11-18 按解耦线核对和实际流量判）"}

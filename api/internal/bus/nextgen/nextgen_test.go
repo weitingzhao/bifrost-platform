@@ -258,7 +258,7 @@ func TestStepsMatchTheTableAndCutsNameTheirProof(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := Summarize(chs)
-	want := map[string]int{"0": 6, "1": 5, "2": 7, "3": 47, "4": 3, "5": 3, "any": 9, "none": 73}
+	want := map[string]int{"0": 6, "1": 5, "2": 7, "3": 47, "4": 3, "5": 2, "any": 10, "none": 73}
 	for _, st := range p.Steps {
 		if st.Total != want[st.Step] {
 			t.Errorf("step %s: %d rows, the table has %d", st.Step, st.Total, want[st.Step])
