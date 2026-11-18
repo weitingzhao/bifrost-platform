@@ -6,29 +6,21 @@
       "path": "console/src",
       "files": [
         "console/src/App.tsx",
-        "console/src/domains/foundation/launchsite/__tests__/launchSite.test.ts",
-        "console/src/domains/foundation/launchsite/launchSite.ts",
         "console/src/index.css",
         "console/src/main.tsx",
         "console/src/vite-env.d.ts"
       ],
       "imports": [
-        "console/src/domains/foundation/bus",
         "console/src/hooks/PlatformAuthProvider.tsx",
         "console/src/pages/ConsolePage.tsx",
         "console/src/pwa",
         "console/src/styles"
       ],
-      "test_imports": [
-        "console/src/lib/shell"
-      ],
+      "test_imports": [],
       "external_imports": [
         "@tanstack/react-query",
-        "node:fs",
-        "node:path",
         "react",
-        "react-dom/client",
-        "vitest"
+        "react-dom/client"
       ],
       "source_inputs": [],
       "test_inputs": [],
@@ -533,7 +525,6 @@
         "console/src/api/deliveryTypes.ts"
       ],
       "imports": [
-        "console/src/api",
         "console/src/domains/delivery/api"
       ],
       "test_imports": [],
@@ -550,20 +541,6 @@
       "imports": [
         "console/src/api/client.ts",
         "console/src/api/serverContact.ts"
-      ],
-      "test_imports": [],
-      "external_imports": [],
-      "source_inputs": [],
-      "test_inputs": [],
-      "unresolved_imports": []
-    },
-    {
-      "path": "console/src/api/gitOps.ts",
-      "files": [
-        "console/src/api/gitOps.ts"
-      ],
-      "imports": [
-        "console/src/domains/delivery/api"
       ],
       "test_imports": [],
       "external_imports": [],
@@ -732,9 +709,7 @@
       "files": [
         "console/src/api/opsContextTypes.ts"
       ],
-      "imports": [
-        "console/src/api"
-      ],
+      "imports": [],
       "test_imports": [],
       "external_imports": [],
       "source_inputs": [],
@@ -980,14 +955,11 @@
         "console/src/components/StatusLamp.tsx",
         "console/src/components/architecture/SelfHealthPanel.tsx",
         "console/src/components/feedback/OpsFeedback.tsx",
-        "console/src/components/log/StaticLogConsole.tsx",
-        "console/src/components/log/staticLogView.ts",
-        "console/src/components/patrol/PatrolDispatchLog.tsx"
+        "console/src/components/log/StaticLogConsole.tsx"
       ],
       "imports": [
         "console/src/domains/delivery/policy",
-        "console/src/domains/foundation/observation-ui",
-        "console/src/domains/foundation/patrol-view"
+        "console/src/domains/foundation/observation-ui"
       ],
       "test_imports": [],
       "external_imports": [
@@ -1015,9 +987,7 @@
       "path": "console/src/components/agent",
       "files": [
         "console/src/components/agent/DenseMarkdown.tsx",
-        "console/src/components/agent/denseMarkdownUtils.ts",
-        "console/src/components/agent/sessionLogColor.tsx",
-        "console/src/components/agent/sessionLogTone.ts"
+        "console/src/components/agent/denseMarkdownUtils.ts"
       ],
       "imports": [],
       "test_imports": [],
@@ -1565,7 +1535,6 @@
       "files": [
         "console/src/domains/delivery/api/delivery.ts",
         "console/src/domains/delivery/api/deliveryTypes.ts",
-        "console/src/domains/delivery/api/gitOps.ts",
         "console/src/domains/delivery/api/promote.ts",
         "console/src/domains/delivery/api/releasePolicy.ts",
         "console/src/domains/delivery/api/releases.ts"
@@ -2720,7 +2689,6 @@
         "console/src/lib/envVisual.ts",
         "console/src/lib/patrol/cronSchedule.ts",
         "console/src/lib/patrol/logLanguage.ts",
-        "console/src/lib/patrol/runLog.ts",
         "console/src/lib/patrol/usePatrolOutputLanguage.ts"
       ],
       "imports": [
@@ -2748,7 +2716,6 @@
         "console/src/lib/activity/__tests__/activityPageFocus.test.ts",
         "console/src/lib/activity/activityPageFocus.ts",
         "console/src/lib/activity/activityStore.ts",
-        "console/src/lib/activity/activityTypes.ts",
         "console/src/lib/activity/restartActuationSettle.ts"
       ],
       "imports": [
@@ -2801,7 +2768,6 @@
         "console/src/lib/architecture/migrateWaves.generated.ts",
         "console/src/lib/architecture/opsToolRackCatalog.ts",
         "console/src/lib/architecture/researchEngineCatalog.ts",
-        "console/src/lib/architecture/spineSemantics.ts",
         "console/src/lib/architecture/systemDomainCatalog.ts",
         "console/src/lib/architecture/tradeK8sNativeCatalogTypes.ts",
         "console/src/lib/architecture/waveProjection.ts",
@@ -3140,14 +3106,8 @@
       "files": [
         "console/src/lib/observability/alertMapping.ts",
         "console/src/lib/observability/attentionMute.ts",
-        "console/src/lib/observability/attentionRemediationCatalog.ts",
-        "console/src/lib/observability/dashboardCatalog.ts",
-        "console/src/lib/observability/grafanaUrlBuilder.ts",
         "console/src/lib/observability/index.ts",
-        "console/src/lib/observability/observabilityViewModel.ts",
-        "console/src/lib/observability/signalRegistry.ts",
-        "console/src/lib/observability/types.ts",
-        "console/src/lib/observability/verdictAggregation.ts"
+        "console/src/lib/observability/types.ts"
       ],
       "imports": [
         "console/src/domains/foundation/observability"
@@ -3869,7 +3829,6 @@
       "path": "console/src/pages/observability",
       "files": [
         "console/src/pages/observability/DomainCard.tsx",
-        "console/src/pages/observability/GrafanaSoloEmbed.tsx",
         "console/src/pages/observability/ObservabilityAttentionPanel.tsx",
         "console/src/pages/observability/ObservabilitySelectedDomain.tsx",
         "console/src/pages/observability/ReferenceDomainChip.tsx",
@@ -4245,7 +4204,6 @@
         "console/src/pages/shell/agents/PlanModuleRows.tsx",
         "console/src/pages/shell/agents/PlanPaceLine.tsx",
         "console/src/pages/shell/agents/PlanRecentChanges.tsx",
-        "console/src/pages/shell/agents/PlanRoundNav.tsx",
         "console/src/pages/shell/agents/PlanTree.tsx",
         "console/src/pages/shell/agents/SignoffWaiting.tsx",
         "console/src/pages/shell/agents/StepSignoffHere.tsx",
@@ -4282,7 +4240,6 @@
         "console/src/pages/shell/agents/__tests__/workPlanReach.test.tsx",
         "console/src/pages/shell/agents/__tests__/workSignoffsOutsideOps.test.tsx",
         "console/src/pages/shell/agents/__tests__/workSummaryModel.test.ts",
-        "console/src/pages/shell/agents/deliveryStripModel.ts",
         "console/src/pages/shell/agents/liveStepModel.ts",
         "console/src/pages/shell/agents/moduleRowReturn.ts",
         "console/src/pages/shell/agents/needsCleanupModel.ts",
@@ -4337,13 +4294,13 @@
         "console/src/api/planPace.ts",
         "console/src/api/planSnapshot.ts",
         "console/src/api/questions.ts",
+        "console/src/domains/delivery/display",
         "console/src/domains/plan/readings",
         "console/src/hooks/PlatformAuthProvider.tsx",
         "console/src/hooks/platformAuthContext.ts",
         "console/src/lib/platformAuth.ts",
         "console/src/lib/shell",
         "console/src/pages/decisionSignIn.ts",
-        "console/src/pages/shell/agents/AgentsPlan.tsx",
         "console/src/pages/shell/agents/PlanModuleDetail.tsx",
         "console/src/pages/shell/agents/WorkPlanView.tsx",
         "console/src/pages/shell/agents/moduleDetailModel.tsx",
@@ -4362,26 +4319,6 @@
         "node:url",
         "react",
         "vitest"
-      ],
-      "source_inputs": [],
-      "test_inputs": [],
-      "unresolved_imports": []
-    },
-    {
-      "path": "console/src/pages/shell/agents/AgentsPlan.tsx",
-      "files": [
-        "console/src/pages/shell/agents/AgentsPlan.tsx"
-      ],
-      "imports": [
-        "console/src/api/agentRuntimePlan.ts",
-        "console/src/components/layout",
-        "console/src/lib/shell",
-        "console/src/pages/shell/agents",
-        "console/src/pages/shell/owner"
-      ],
-      "test_imports": [],
-      "external_imports": [
-        "react"
       ],
       "source_inputs": [],
       "test_inputs": [],
@@ -5022,9 +4959,9 @@
       ],
       "test_imports": [
         "console/src/api/agentThreads.ts",
+        "console/src/domains/foundation/observability",
         "console/src/hooks/platformAuthContext.ts",
         "console/src/hooks/useObservabilitySnapshot.ts",
-        "console/src/lib/observability",
         "console/src/lib/platformAuth.ts",
         "console/src/pages/SatelliteHealthPage.tsx"
       ],
@@ -5122,7 +5059,6 @@
         "console/src/test/__tests__/clockShiftEveryTest.test.ts",
         "console/src/test/agentrtPlanStream.ts",
         "console/src/test/clockShift.ts",
-        "console/src/test/lastRead.ts",
         "console/src/test/webStorage.ts"
       ],
       "imports": [

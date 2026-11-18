@@ -5,5 +5,3 @@ export type RuntimeMapNavigateOptions = {
   env?: string
   targetId?: string
 }
-
-export type OpenRuntimeMapFn = (options?: RuntimeMapNavigateOptions) => void

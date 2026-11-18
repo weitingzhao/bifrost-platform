@@ -168,10 +168,3 @@ export function applyChecklistFleetUnion(
     fleetClear: fleetNominal,
   }
 }
-
-export type ChecklistFleetUnionAudit = {
-  boardGaps: Array<{ cellKey: string; standardId: string; group: string }>
-  checklistNeedsProjection: Array<{ stepId: string; itemId: string; label: string }>
-  virtualCount: number
-  boardGapCount: number
-}

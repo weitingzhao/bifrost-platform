@@ -909,18 +909,6 @@ export function enqueueIngestSlot(body: { slot: string; date?: string; force?: b
   return proxyPost<EnqueueSlotResponse>('/market/ingest/enqueue-slot', body)
 }
 
-/* ── Analytics ────────────────────────────────────────── */
-
-export type AnalyticsListResponse = {
-  ok?: boolean
-  rows?: Record<string, unknown>[]
-  count?: number
-  symbol?: string
-  trade_date?: string
-  error?: string
-  [key: string]: unknown
-}
-
 /** Generic JSON probe against any Plugin /market/* GET path. */
 export async function probeMarketPath(
   pluginPath: string,

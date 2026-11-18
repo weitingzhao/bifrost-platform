@@ -132,5 +132,3 @@ export function useClusterNodeMutations(
     handleWizardAction,
   }
 }
-
-export type ClusterNodeMutations = ReturnType<typeof useClusterNodeMutations>

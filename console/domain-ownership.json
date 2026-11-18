@@ -1283,13 +1283,6 @@
         "status": "assigned",
         "basis": "2026-11-16 compatibility export only; complete read client implementation moved to owning domain"
       },
-      "console/src/api/gitOps.ts": {
-        "domains": [
-          "delivery"
-        ],
-        "status": "assigned",
-        "basis": "2026-11-16 compatibility export only; complete read client implementation moved to owning domain"
-      },
       "console/src/domains/foundation/observation-ui": {
         "domains": [
           "foundation"
@@ -1506,13 +1499,6 @@
         ],
         "status": "assigned",
         "basis": "2026-11-16 exhaustive file audit: Observation display has moved to its domain. Polling, page state and action composition remain; enableMut, triggerMut and disabled conditions are unchanged."
-      },
-      "console/src/pages/shell/agents/AgentsPlan.tsx": {
-        "domains": [
-          "foundation"
-        ],
-        "status": "mixed",
-        "basis": "2026-11-16 exhaustive file audit: Retained page composition. Plan display and readers live in domain modules; signoff integration remains unchanged."
       },
       "console/src/pages/shell/agents/PlanModuleDetail.tsx": {
         "domains": [

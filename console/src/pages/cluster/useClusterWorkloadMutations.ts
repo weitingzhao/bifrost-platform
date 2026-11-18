@@ -186,5 +186,3 @@ export function useClusterWorkloadMutations(
     handleDeletePod,
   }
 }
-
-export type ClusterWorkloadMutations = ReturnType<typeof useClusterWorkloadMutations>

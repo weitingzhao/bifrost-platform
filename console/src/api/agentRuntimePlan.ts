@@ -21,37 +21,10 @@ export type RuntimePlanStep = {
  * manual record (v5 §5.1.2: Progress marks them "manual"); stopped steps count as not done.
  */
 export type RuntimePlanItem = { key: string; name: string; state: string; done?: number; total?: number; manual?: number; stopped?: number; steps: RuntimePlanStep[] }
-/**
- * A round, as the board publishes it or as read from the runtime. source 'runtime' means it came from
- * the agent runtime (GET /plan); unknown is the reason the board could not read it, with no items
- * (CUT-plan-import §6): a round that could not be read is never shown as one with no items.
- */
-/** Of the done steps, those done by a manual record (v5 §5.1.2: Progress marks them "manual"), and the stopped ones; '' for none. */
-export function manualAndStopped(item: { manual?: number; stopped?: number }): string {
-  return `${item.manual ? ` · ${item.manual} manual` : ''}${item.stopped ? ` · ${item.stopped} stopped` : ''}`
-}
 export type RuntimeRound = {
   n?: number; checked?: number; items: RuntimePlanItem[]; source?: string; unknown?: string
   /** The import request could not be read: why. The steps stand without their ledger lines, an imported one without its date. */
   ledgerUnread?: string
-}
-export type RuntimeArchitecture = { title: string; checked?: number; rows: { state: string; what: string; now: string }[] }
-const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v) ? v : undefined
-export function parseRuntimeRound(value: unknown): RuntimeRound | undefined {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
-  const r = record(value)
-  if (typeof r.unknown === 'string') return { unknown: r.unknown || 'the board gave no reason', items: [], source: text(r.source) || undefined }
-  return { n: num(r.n), checked: num(r.checked), source: text(r.source) || undefined, items: records(r.items).map(i => ({
-    key: text(i.key), name: text(i.name), state: text(i.state), done: num(i.done), total: num(i.total),
-    steps: records(i.steps).map(s => ({ id: text(s.id), t: text(s.t), state: text(s.state), when: text(s.when) })),
-  })) }
-}
-export function parseRuntimeArchitecture(value: unknown): RuntimeArchitecture | undefined {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
-  const r = record(value)
-  return { title: text(r.title), checked: num(r.checked), rows: records(r.rows).map(row => ({
-    state: text(row.state), what: text(row.what), now: text(row.now),
-  })) }
 }
 
 /**

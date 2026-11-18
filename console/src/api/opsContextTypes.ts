@@ -1,4 +1,3 @@
-import type { ActuationResponse } from './matrixTypes'
 
 export interface OpsContextMeta {
   version: string
@@ -140,31 +139,4 @@ export interface OpsContextResponse {
   environments_extended: Record<string, OpsContextEnvironmentExtended>
   probe_hints: OpsContextProbeHint[]
   tracks?: OpsContextTracks
-}
-
-export interface BuildPhaseGateCheck {
-  id: string
-  label: string
-  status: 'pass' | 'in_progress' | 'pending' | 'blocked'
-  required: boolean
-  detail?: string
-}
-
-export interface BuildPhaseGateResponse {
-  phase: string
-  total_tasks: number
-  done_tasks: number
-  ready: boolean
-  result: string
-  checks: BuildPhaseGateCheck[]
-  blockers?: string[]
-  signed_at?: string
-  signed_by?: string
-  last_run_at?: string
-  last_run_result?: string
-  generated_at: string
-}
-
-export interface RunBuildPhaseGateResponse extends ActuationResponse {
-  gate: BuildPhaseGateResponse
 }

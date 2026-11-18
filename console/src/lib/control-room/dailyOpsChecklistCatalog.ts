@@ -564,9 +564,3 @@ export function matchStandardToChecklistItem(
   }
   return null
 }
-
-export type ChecklistProjectionContractViolation = {
-  stepId: string
-  itemId: string
-  reason: string
-}

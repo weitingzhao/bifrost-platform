@@ -28,17 +28,6 @@ export interface NetworkAuditResponse {
   autonomy?: string
 }
 
-export interface NetworkFirewallApplyResponse {
-  action?: string
-  target?: string
-  autonomy?: string
-  include_default_deny?: boolean
-  message?: string
-  result?: Record<string, unknown>
-  post_apply_audit?: NetworkAuditResponse
-  error?: string
-}
-
 export interface NetworkDeviceView {
   name?: string
   model?: string
@@ -88,43 +77,6 @@ export interface NetworkClientsResponse {
   autonomy?: string
 }
 
-export interface NetworkHealthResponse {
-  reachable?: boolean
-  autonomy?: string
-  subsystems?: Record<string, unknown>[]
-  devices_up?: number
-  devices_total?: number
-  devices_up_fraction?: number
-  devices?: NetworkDeviceView[]
-  probe_fail_streak?: number
-  summary?: string
-  error?: string
-  hint?: string
-}
-
-export interface NetworkBandwidthRow {
-  name?: string
-  hostname?: string
-  mac?: string
-  type?: string
-  ip?: string
-  rx_bytes?: number
-  tx_bytes?: number
-  rx_rate?: number
-  tx_rate?: number
-}
-
-export interface NetworkBandwidthResponse {
-  autonomy?: string
-  devices?: NetworkBandwidthRow[]
-  clients?: NetworkBandwidthRow[]
-  totals?: { rx_bytes?: number; tx_bytes?: number }
-  device_count?: number
-  client_count?: number
-  error?: string
-  hint?: string
-}
-
 export interface NetworkAnomalyAlert {
   rule?: string
   severity?: string
@@ -157,21 +109,6 @@ export interface NetworkSlaResponse {
   probe_fail_streak?: number
   summary?: string
   tips?: string[]
-  error?: string
-  hint?: string
-}
-
-export interface NetworkZonesResponse {
-  zones?: Record<string, unknown>[]
-  count?: number
-  error?: string
-  hint?: string
-}
-
-export interface NetworkPoliciesResponse {
-  policies?: Record<string, unknown>[]
-  bifrost_count?: number
-  bifrost_policies?: Record<string, unknown>[]
   error?: string
   hint?: string
 }

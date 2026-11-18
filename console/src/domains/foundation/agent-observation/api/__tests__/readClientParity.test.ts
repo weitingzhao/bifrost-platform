@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as delivery from '@/domains/delivery/api/delivery'
 import * as releases from '@/domains/delivery/api/releases'
 import * as promote from '@/domains/delivery/api/promote'
-import * as gitOps from '@/domains/delivery/api/gitOps'
 import * as releasePolicy from '@/domains/delivery/api/releasePolicy'
 import * as agentOps from '@/domains/foundation/agent-observation/api/agentOps'
 import * as checklist from '@/domains/foundation/checklist/api/checklist'
@@ -27,7 +26,6 @@ const calls = [
 { name: "records default", call: () => releases.fetchReleaseRecords(), url: "/api/v1/releases?limit=100", prefix: "releases", auth: false },
 { name: "records zero", call: () => releases.fetchReleaseRecords(0), url: "/api/v1/releases?limit=0", prefix: "releases", auth: false },
 { name: "smoke", call: () => promote.fetchStgSmoke(), url: "/api/v1/delivery/stg/smoke", prefix: "stg smoke", auth: false },
-{ name: "gitops", call: () => gitOps.fetchGitOpsApps(), url: "/api/v1/gitops/apps", prefix: "gitops apps", auth: false },
 { name: "policy", call: () => releasePolicy.fetchReleasePolicy(), url: "/api/v1/release-policy", prefix: "release-policy", auth: true },
 { name: "deploy observation", call: () => agentOps.fetchAgentDeployStatus(), url: "/api/v1/agent/deploy", prefix: "agent deploy status", auth: false },
 { name: "bridge", call: () => agentOps.fetchAgentBridge(), url: "/api/v1/agent/bridge", prefix: "agent bridge", auth: false },

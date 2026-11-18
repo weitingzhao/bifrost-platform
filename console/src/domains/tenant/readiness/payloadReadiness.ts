@@ -3,7 +3,6 @@
  * (same truth as TCC Fleet Desk). No independent matrix/L0-blocked path.
  */
 
-import { type PromoteStatus } from '@/lib/control-room/matrixSummary'
 import { type Signal } from '@/lib/control-room/missionSignals'
 import type {
   FleetCell,
@@ -77,13 +76,6 @@ export type PayloadReadinessRow = PayloadReadinessRowDef & {
   prod: EnvReadinessCell
   /** True when any pair of env signals diverge (ignoring unknown) */
   envDiverges: boolean
-}
-
-export type PayloadCouplingSummary = {
-  promote: PromoteStatus
-  lamp: Signal
-  headline: string
-  detail: string
 }
 
 function toDisplaySignal(s: FleetCellSignal): Signal {

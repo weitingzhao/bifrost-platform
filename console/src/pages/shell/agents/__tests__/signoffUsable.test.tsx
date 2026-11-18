@@ -8,7 +8,6 @@ import { plainTitle, signoffNotStarted, signoffWaits } from '@/api/agentRuntimeP
 import type { AuthCapabilities } from '@/api/matrixTypes'
 import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
-import { AgentsPlan } from '../AgentsPlan'
 import { SignoffWaiting, SignoffWaitingLink } from '../SignoffWaiting'
 
 // The Owner 2026-10-21, after #78: 「这个页面根本没有达到可用的级别」. He could not find the steps to sign
@@ -140,16 +139,6 @@ describe('the steps waiting on the Owner\'s sign-off, on PROD\'s plan', () => {
     show(<SignoffWaitingLink />)
     const link = await screen.findByRole('link', { name: '7 steps wait for your sign-off ›' })
     expect(link).toHaveAttribute('href', '#work?section=signoff')
-  })
-
-  it('numbers every step of the plan with a badge and shows no markdown marks', async () => {
-    const { container } = show(<AgentsPlan />)
-    expect(await screen.findByText('Round 2 · from the agent runtime')).toBeInTheDocument()
-    const steps = nodes.filter(n => n.node_kind === 'step')
-    const badges = [...container.querySelectorAll('[data-step] [data-step-badge]')].map(b => b.textContent)
-    expect(badges.sort()).toEqual(steps.map(s => s.label).sort())
-    for (const li of container.querySelectorAll('[data-step]')) expect(li.querySelector('button[aria-expanded]')?.textContent).not.toMatch(/\*\*|`/)
-    expect(container.querySelector('summary')?.textContent).not.toMatch(/\*\*|`/)
   })
 
   it('says the plan could not be read, never that none waits, in the block and on For you (review 502 B1)', async () => {

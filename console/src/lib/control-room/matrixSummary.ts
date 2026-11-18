@@ -5,17 +5,6 @@ import '@/lib/control-room/bayRegistry'
 export type { BayLamp, MatrixSummary } from '@/domains/foundation/observation-display/matrixSummary'
 export { summarizeMatrix } from '@/domains/foundation/observation-display/matrixSummary'
 
-export type PromoteStatus = {
-  ready: boolean
-  blockedByDecision: boolean
-  prodFails: boolean
-  prodOk: boolean
-  gateDone: boolean
-  gatePass: boolean
-  cutoverBlocker: string | null
-  reasons: string[]
-}
-
 
 /**
  * Whether a matrix target should affect Trade / Satellite launch readiness.
@@ -38,19 +27,4 @@ export function tradeReadinessTargets(targets: Target[]): Target[] {
       countsTowardTradeReadiness(t) &&
       (t.category.startsWith('trade') || t.category === 'datastore'),
   )
-}
-
-export type StgDeliverStatus = {
-  ready: boolean
-  smokeOk: boolean
-  smokeFails: boolean
-  deliverSucceeded: boolean
-  reasons: string[]
-}
-
-export type StgReleaseStatus = StgDeliverStatus & {
-  gatePass: boolean
-  tierBReady: boolean
-  releaseReady: boolean
-  releaseReasons: string[]
 }

@@ -1,7 +1,7 @@
 import { CapabilityEvidence } from '../CapabilityEvidence'
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import imported from '@/api/__fixtures__/agentrt-plan-imported.testdb.json'
@@ -9,7 +9,6 @@ import moved from '@/api/__fixtures__/agentrt-plan-moved.testdb.json'
 import planApprovals from '@/api/__fixtures__/agentrt-plan-approvals.testdb.json'
 // signoffs: the same ledger with done rules waiting on the Owner's sign-off (agentrtapi TestOwnerSignsAStepOff).
 import planSignoffs from '@/api/__fixtures__/agentrt-plan-signoffs.testdb.json'
-import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
 // GET /progress with an architecture root, as store.Progress answered on a test database: four rows,
 // ticked true (two gates passed on stg, a thread's note), false (no pass on stg), unknown with no gate
 // test (the Owner's note) and unknown with nothing recorded for prod (W-31 2.5 ⑤ G2). Captured once by a
@@ -21,10 +20,8 @@ import poolsFixture from '../../owner/__tests__/fixtures/pools-utc.json'
 import { IMPORT_HEAD_PAGES, runtimeArch } from '@/api/agentRuntimePlan'
 import rootOnly from '@/api/__fixtures__/agentrt-plan-root-only.testdb.json'
 import { STREAM_PAGE, planStream, streamPage } from '@/test/agentrtPlanStream'
-import { AgentsPlan } from '../AgentsPlan'
-import { ARCH_NOT_IMPORTED, PLAN_NOT_IMPORTED, archRead } from '../useRuntimePlan'
+import { ARCH_NOT_IMPORTED, archRead } from '../useRuntimePlan'
 import { parseRuntimeProgress } from '@/api/agentRuntime'
-import { unavailableLine } from '@/test/lastRead'
 
 // The plan panes read the runtime's plan (2.5 slice 2): GET /plan?root=R2, the import request its head
 // names, and GET /progress's counts, as the platform answered them on a test database (agentrtapi over
@@ -87,122 +84,6 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); clients.forEach(c => c.clear()); clients.length = 0; vi.unstubAllGlobals(); fetchMock.mockClear() })
 
-const boardOnly = /2\.2 接口层与 agentd/
-
-describe('the plan pane on Progress', () => {
-  it('reads an imported plan from the runtime: its items, counts, each step\'s ledger date and line, nothing kept by hand', async () => {
-    const { container } = show(<AgentsPlan />)
-    expect(await screen.findByText('Round 2 · from the agent runtime')).toBeInTheDocument()
-    expect(screen.getByText('Execution steps, evidence and sign-off from the agent runtime')).toBeInTheDocument()
-    // Imported done steps are done by their manual atom: counted as done and marked manual (v5 §5.1.2, T24).
-    expect(screen.getByText('2.0 设计对齐：v4 到 v5 · 3/3 · 3 manual · done')).toBeInTheDocument()
-    expect(screen.getByText('2.1 数据层：状态库 · 2/5 · 2 manual · doing')).toBeInTheDocument()
-    expect(screen.getByText('2.4 缩进用不换行空格 · 0/2 · doing')).toBeInTheDocument()
-    expect(screen.getByText('2026-10-14 01:09')).toBeInTheDocument()
-    expect(screen.getAllByText('Ledger line').length).toBeGreaterThan(0)
-    expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
-    expect(screen.queryByText(PLAN_NOT_IMPORTED)).not.toBeInTheDocument()
-    expect(container).not.toHaveTextContent('✎')
-    // This runtime holds no architecture root: said so, not read from the board.
-    expect(screen.getByRole('link', { name: 'Capability evidence · runtime architecture gates' })).toHaveAttribute('href', '#crew?section=capability-evidence')
-    expect(boardRead()).toBe(false)
-  })
-
-  it('links a step done by a request to that request, by its number (v4 §20.5 scenario 10)', async () => {
-    source.plan = 'approvals'
-    const { container } = show(<AgentsPlan />)
-    expect(await screen.findByText('Round 2 · from the agent runtime')).toBeInTheDocument()
-    const links = [...container.querySelectorAll('a[data-step-approval]')].map(a => [a.textContent, a.getAttribute('href')])
-    expect(links).toEqual([['Request #16', '#approvals?id=16'], ['Request #17', '#approvals?id=17'], ['Request #16', '#approvals?id=16'],
-      ['Request #18', '#approvals?id=18']])
-  })
-
-
-  it('shows a failed read as failed, never the board\'s plan', async () => {
-    source.plan = 'fail'
-    show(<AgentsPlan />)
-    expect(await screen.findByText(unavailableLine('Plan unavailable: Plan: unavailable', 'never'))).toHaveAttribute('role', 'alert')
-    expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
-    expect(screen.queryByText(PLAN_NOT_IMPORTED)).not.toBeInTheDocument()
-  })
-
-  it('once read from the runtime, a later failed read is an error, not the last plan or the board\'s', async () => {
-    const { client } = show(<AgentsPlan />)
-    expect(await screen.findByText('Round 2 · from the agent runtime')).toBeInTheDocument()
-    source.plan = 'fail'
-    await client.refetchQueries({ queryKey: ['agent-runtime-plan'] })
-    // The plan was read whole before: the line says when (review 488 B1).
-    expect(await screen.findByText(unavailableLine('Plan unavailable: Plan: unavailable', 'last'))).toBeInTheDocument()
-    expect(screen.queryByText('Round 2 · from the agent runtime')).not.toBeInTheDocument()
-    expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
-  })
-
-  it('shows each step\'s Owner and ★ marks from the runtime, whatever its title says (review 416 C2)', async () => {
-    show(<AgentsPlan />)
-    await screen.findByText('Round 2 · from the agent runtime')
-    // R2:2.1-5 is an effect step whose title carries no ★; R2:2.1-3 is the Owner's.
-    // The title and the ledger line under it are in the same row.
-    const effect = screen.getAllByText(/本机测试库可用/)[0].closest('li')!
-    expect(within(effect).getByTitle('An effect step (effect_step)')).toHaveTextContent('★')
-    expect(within(effect).queryByTitle("The Owner's step (owner_step)")).not.toBeInTheDocument()
-    const owners = screen.getAllByText(/批 PROD 迁移作业/)[0].closest('li')!
-    expect(within(owners).getByTitle("The Owner's step (owner_step)")).toHaveTextContent('Owner')
-    expect(within(owners).queryByTitle('An effect step (effect_step)')).not.toBeInTheDocument()
-  })
-
-
-
-  // 2026-10-21 PROD: the import request was read by sha256%3A…, the platform answered 404, and the whole plan, with the
-  // Owner's Sign off, was "Plan unavailable". The request only gives ledger lines and imported steps' dates.
-  it('reads the import request by its artifact id, colon kept, and shows each step\'s ledger line', async () => {
-    show(<AgentsPlan />)
-    expect(await screen.findByText('Round 2 · from the agent runtime')).toBeInTheDocument()
-    const reads = fetchMock.mock.calls.map(c => String(c[0])).filter(url => url.includes('/agentrt/artifacts/'))
-    expect(reads.length).toBeGreaterThan(0)
-    for (const url of reads) expect(url).toMatch(/\/api\/v1\/agentrt\/artifacts\/sha256:[0-9a-f]{64}$/)
-    expect(screen.getAllByText('Ledger line').length).toBeGreaterThan(0)
-    expect(screen.queryByText(/The ledger lines could not be read/)).not.toBeInTheDocument()
-  })
-
-
-  it.each([
-    ['the request cannot be read', { artifact: 'fail' }, 'Plan import request: internal'],
-    ['the request is not one', { artifact: 'not json' }, 'Plan import request: invalid artifact'],
-    ['the plan stream\'s cursor does not move on', { events: 'stuck' }, 'Plan events: invalid pagination cursor'],
-    ['the import head is not within the pages read', { events: 'endless' }, `Plan events: no import head in the first ${IMPORT_HEAD_PAGES} pages of plan:R2`],
-  ] as const)('a plan whose import request cannot be had stands without its ledger lines and imported dates: %s', async (_, set, reason) => {
-    Object.assign(source, set)
-    show(<AgentsPlan />)
-    const escaped = reason.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    expect(await screen.findByText(new RegExp(`^The ledger lines could not be read: ${escaped}\\. The steps are shown without them`))).toHaveAttribute('role', 'status')
-    expect(screen.getByText('Round 2 · from the agent runtime')).toBeInTheDocument()
-    expect(screen.getByText('2.1 数据层：状态库 · 2/5 · 2 manual · doing')).toBeInTheDocument()
-    expect(screen.queryByText('Ledger line')).not.toBeInTheDocument()
-    // The ledger's date of an imported step is not known, and the import's own moment is not told in its place.
-    expect(screen.queryByText('2026-10-14 01:09')).not.toBeInTheDocument()
-    expect(screen.queryByText(/Plan unavailable/)).not.toBeInTheDocument()
-    expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
-  })
-
-  it('keeps the Owner\'s Sign off when the import request cannot be read (PROD 2026-10-21)', async () => {
-    source.plan = 'signoffs'
-    source.artifact = 'fail'
-    show(<PlatformAuthProvider><AgentsPlan /></PlatformAuthProvider>)
-    expect(await screen.findByText(/^The ledger lines could not be read: /)).toBeInTheDocument()
-    // In the block at the top and under each step of the plan; 2.3-2 is planned, so the block does not count it (TD-425).
-    for (const name of ['Sign off a', 'Sign off b', 'Sign off']) expect(screen.getAllByRole('button', { name }).length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { name: 'Waiting for your sign-off · 1' })).toBeInTheDocument()
-    expect(screen.getByText(/^Signed off exam-2\.4-1 by the Owner, /)).toBeInTheDocument()
-    expect(screen.queryByText(/Plan unavailable/)).not.toBeInTheDocument()
-  })
-
-  it('a plan whose counts cannot be read is an error too', async () => {
-    source.progressFails = true
-    show(<AgentsPlan />)
-    expect(await screen.findByText(/^Plan unavailable: Agent runtime:/)).toBeInTheDocument()
-    expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
-  })
-})
 
 
 describe('the architecture table from the runtime (2.5 ⑤ G2)', () => {

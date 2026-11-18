@@ -14,7 +14,6 @@ import { CAPABILITIES_QUERY_KEY } from '@/hooks/platformAuthContext'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { SIGN_IN_ABSENT, SIGN_IN_OPERATOR } from '@/pages/decisionSignIn'
 import { streamPage } from '@/test/agentrtPlanStream'
-import { AgentsPlan } from '../AgentsPlan'
 import { StepSignoffControls } from '../StepSignoffs'
 import { SIGNOFF_PRESS_AGAIN, signedLine } from '../stepSignoffText'
 
@@ -114,31 +113,6 @@ describe('the sign-offs a done rule waits on', () => {
 })
 
 describe('Sign off on the plan page', () => {
-  it('is offered under each step still waiting on a sign-off, and only there; a signed one says who and when', async () => {
-    const { container } = show(<AgentsPlan />)
-    expect(await screen.findByText('Round 2 · from the agent runtime')).toBeInTheDocument()
-    const under = (node: string) => container.querySelector(`[data-step-signoffs="${node}"]`) as HTMLElement | null
-    // a or b: one button for each, named.
-    expect(within(under('R2:2.1-3') as HTMLElement).getAllByRole('button').map(b => b.textContent)).toEqual(['Sign off a', 'Sign off b'])
-    expect(within(under('R2:2.3-2') as HTMLElement).getByRole('button', { name: 'Sign off' })).toBeEnabled()
-    // Signed: the line, no button.
-    expect(within(under('R2:2.4-1') as HTMLElement).queryByRole('button')).toBeNull()
-    expect(within(under('R2:2.4-1') as HTMLElement).getByText(/^Signed off exam-2\.4-1 by the Owner, /)).toBeInTheDocument()
-    // Done (or dropped) without it: nothing to press; a step with no owner_signoff has no sign-off part at all.
-    for (const node of ['R2:2.3-1', 'R2:2.1-4']) {
-      const part = under(node)
-      if (part != null) expect(within(part).queryByRole('button')).toBeNull()
-    }
-    expect(under('R2:2.4-2')).toBeNull()
-    // Under the steps of the plan: a, b and race. The block at the top lists 2.1-3 again (signoffUsable); 2.3-2 is
-    // planned, its work not started, so it is under Not started there and not counted (TD-425).
-    expect([...container.querySelectorAll('[data-step-signoffs] button')].length).toBe(3)
-    const block = container.querySelector('#signoff')
-    expect([...(block?.querySelectorAll('[data-signoff-wait]') ?? [])].map(r => r.getAttribute('data-signoff-wait'))).toEqual(['R2:2.1-3'])
-    expect([...(block?.querySelectorAll('[data-signoff-not-started]') ?? [])].map(r => r.getAttribute('data-signoff-not-started'))).toEqual(['R2:2.3-2'])
-    expect(sent).toEqual([])
-  })
-
   it('asks once, then sends the step and its ref with the admin sign-in and says what was recorded', async () => {
     const { client } = show(<StepSignoffControls label="2.3-2" state="planned" signoffs={stepOf('R2:2.3-2')} />)
     client.setQueryData(['agent-runtime-plan', PLAN_ROOT], { found: true, doc: plan })

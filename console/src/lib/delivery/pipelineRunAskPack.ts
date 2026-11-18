@@ -1,24 +1,5 @@
 import type { DeliveryPipelineRunView } from '@/api/deliveryTypes'
 
-/**
- * Context that customizes the Ask-AI pack for a given deliver pipeline.
- * Defaults target the Trade STG rollout; platform deliver supplies its own.
- */
-export interface PipelineRunAskContext {
-  /** One-line task framing in the "## Task" section. */
-  task: string
-  /** "## <title> milestones (reference)" — optional reference checklist. */
-  milestonesTitle?: string
-  milestones?: string
-  /** Pipeline tasks in typical order (one bullet each). */
-  pipelineTitle: string
-  pipelineOrder: string[]
-  /** Cluster signals to inspect (one bullet each). */
-  clusterSignals: string[]
-  /** Closing acceptance hint for "what I need from you" #4. */
-  acceptanceHint: string
-}
-
 export function isPipelineRunSucceeded(run: DeliveryPipelineRunView): boolean {
   const status = run.status.toLowerCase()
   const reason = (run.reason ?? '').toLowerCase()
@@ -90,6 +71,3 @@ export function researchRunLogHint(
       'Research run failed. Build-only runs (manifest not yet pinned) succeed, so this is a real failure — open the failed phase logs.',
   }
 }
-
-export type PipelineRunSortKey = 'status' | 'started'
-export type PipelineRunSortDir = 'asc' | 'desc'

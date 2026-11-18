@@ -100,17 +100,6 @@ export const PLACEMENT_RULES: PlacementRuleDef[] = [
   },
 ]
 
-export const AMD64_CI_TASK_RUN_TEMPLATE = {
-  nodeSelector: { 'kubernetes.io/arch': 'amd64' },
-  tolerations: [
-    {
-      key: 'node-role.kubernetes.io/control-plane',
-      operator: 'Exists',
-      effect: 'NoSchedule',
-    },
-  ],
-} as const
-
 export function buildPlacementLlmPack(liveSummary?: {
   reachability?: string
   detail?: string

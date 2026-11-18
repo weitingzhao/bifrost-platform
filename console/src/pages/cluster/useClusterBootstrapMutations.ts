@@ -103,5 +103,3 @@ export function useClusterBootstrapMutations(
     handleEnsureNamespaces,
   }
 }
-
-export type ClusterBootstrapMutations = ReturnType<typeof useClusterBootstrapMutations>

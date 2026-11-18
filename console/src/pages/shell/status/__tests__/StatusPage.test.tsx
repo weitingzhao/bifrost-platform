@@ -40,7 +40,7 @@ vi.mock('@bifrost/ui', () => {
 })
 import { PlatformAuthContext } from '@/hooks/platformAuthContext'
 import { tradeEnvFromViewer } from '@/hooks/useObservabilitySnapshot'
-import { TRADE_NS } from '@/lib/observability/signalRegistry'
+import { TRADE_NS } from '@/domains/foundation/observability/signalRegistry'
 import { StatusPage } from '@/pages/shell/status/StatusPage'
 
 function json(body: unknown, status = 200): Response {

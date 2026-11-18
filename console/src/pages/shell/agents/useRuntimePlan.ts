@@ -7,9 +7,6 @@ import { PLAN_ROOT, approvalsByStep, currentRound, fetchImportRequest, fetchRunt
 import { fromPlanWithRequest, type PlanRequest } from '@/api/agentRuntimePlanView'
 import { record, records, text } from '@/api/agentRuntime'
 
-/** The one line a plan pane shows while the runtime holds no plan. */
-export const PLAN_NOT_IMPORTED = 'The plan is not in the agent runtime here yet.'
-
 /** The one line an architecture pane shows while the runtime holds no architecture table. */
 export const ARCH_NOT_IMPORTED = 'The architecture table is not in the agent runtime here yet.'
 

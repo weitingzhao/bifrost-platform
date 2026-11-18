@@ -2,11 +2,6 @@ export type Reachability = 'ok' | 'degraded' | 'fail' | 'unknown'
 
 export type AuthStatus = 'ok' | 'missing' | 'invalid' | 'skipped' | 'blocked'
 
-export interface EnvironmentSummary {
-  id: string
-  label: string
-}
-
 export interface Target {
   id: string
   category: string
@@ -114,67 +109,6 @@ export interface PodLogsResponse {
 }
 
 export type PayloadClassification = 'NOMINAL' | 'PROBE_DRIFT' | 'DATA_LAYER' | 'HTTP_FAIL' | 'UNKNOWN'
-
-export interface DatastoreComponentVerification {
-  matrix_reachability: Reachability
-  cluster_reachability: Reachability
-  classification: PayloadClassification
-  detail: string
-}
-
-export interface EnvPayloadVerification {
-  environment: string
-  label: string
-  classification: PayloadClassification
-  postgres: DatastoreComponentVerification
-  redis: DatastoreComponentVerification
-  http_failures: string[] | null
-  detail: string
-}
-
-export interface VerifyPayloadSummary {
-  overall: PayloadClassification
-  probe_drift_count: number
-  data_layer_count: number
-  http_fail_count: number
-  nominal_count: number
-}
-
-export interface VerifyPayloadResponse {
-  generated_at: string
-  environments: EnvPayloadVerification[]
-  summary: VerifyPayloadSummary
-}
-
-export type MissionMatrixSignal = 'ok' | 'degraded' | 'fail' | 'unknown'
-
-export interface TradeEnvSnapshotView {
-  environment: string
-  label: string
-  signal: MissionMatrixSignal
-  reachable: number
-  total: number
-  detail: string
-}
-
-export interface PostFixVerificationView {
-  passed: boolean
-  mission_matrix_nominal: boolean
-  datastore_verification_nominal: boolean
-  probe_drift_remaining: boolean
-  detail: string
-  agent_guidance: string
-}
-
-export interface VerifyMissionSnapshotResponse {
-  generated_at: string
-  trade_dev: TradeEnvSnapshotView
-  trade_stg: TradeEnvSnapshotView
-  trade_prod: TradeEnvSnapshotView
-  payload_overall: MissionMatrixSignal
-  payload_verification: VerifyPayloadResponse
-  post_fix_verification: PostFixVerificationView
-}
 
 export type SelfHealthProbeStatus = 'ok' | 'degraded' | 'fail' | 'unknown'
 

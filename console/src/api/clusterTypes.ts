@@ -214,36 +214,6 @@ export interface DataCloneGroup {
   note?: string
 }
 
-export interface DataCloneVerifyResult {
-  database: string
-  table_count: number
-  /** The target application's sample label (data probe). */
-  sample_label?: string
-  /** null when the target's data probe could not be read. */
-  sample_rows: number | null
-  ok: boolean
-  detail?: string
-}
-
-export interface DataCloneJob {
-  id: string
-  action: string
-  status: string
-  step: string
-  source: string
-  targets: string[]
-  mode: string
-  tables?: string[]
-  progress: number
-  detail: string
-  verify?: DataCloneVerifyResult[]
-  actor?: string
-  trigger: string
-  created_at: string
-  updated_at: string
-  finished_at?: string
-}
-
 export interface DataCloneSchedule {
   enabled: boolean
   interval: string
