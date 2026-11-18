@@ -89,7 +89,7 @@ channels:
   - {id: R03, class: K1, disposition: merged, step: "3", what: "读口组：审批与问题状态（Console 8 处 3 种 key）", by: "留下并改造成带版本；Console 各处并到它"}
   - {id: R04, class: K1, disposition: merged, step: "1", what: "读口组：计划/运行时/事件（/agentrt/events 跨流游标，/progress 每次现算）", by: "留下并改造：事件读口就是「账」的读口，与 S05 同体"}
   - {id: R05, class: K1, disposition: merged, step: "3", what: "读口组：某提交的 CI/证据、单元范围（evidence/ci、units/scope）", by: "留下并改造成「判定逻辑只留一份」的那一份；X-A6/X-A7 的拷贝并到它"}
-  - {id: R06, class: K1, disposition: merged, step: "3", what: "读口组：谁做了什么（/audit 最近 500 条、/records）", by: "留下并改造成账+动作记录的读口"}
+  - {id: R06, class: K1, disposition: kept, step: "none", what: "读口组：谁做了什么（/audit 最近 500 条、/records）", by: "原因：/audit 近 24 小时只被读 1 次，搬到账没有回报，还要把目标和详情永久写进账（11-18 按实际流量判）"}
   - {id: R07, class: K1, disposition: merged, step: "3", what: "读口组：线程、主机、进度、开发会话", by: "留下并改造成席位记录的读口；/agent/progress 那一半是死路（见 L20）"}
   - {id: R08, class: K1, disposition: kept, step: "none", what: "读口组：指标与告警（请求时转发 Prometheus）", by: "原因：Prometheus 是源头，这里只是转发；版本字段对它不适用（见第 4 节）"}
   - {id: R09, class: K1, disposition: merged, step: "4", what: "读口组：数据插件状态（每次请求实时 HTTP 到插件，三份代理）", by: "留下并改造：三份代理并成一份，加缓存，变化 plugin.status.changed"}
@@ -97,7 +97,7 @@ channels:
   - {id: R11, class: K1, disposition: kept, step: "none", what: "读口组：Trade 总线深度（平台去拉 satellite-probe-bridge）", by: "原因：Trade 租户的只读健康口，租户边界；将来互通在登记表里声明"}
   - {id: R12, class: K1, disposition: replaced, step: "4", what: "读口组：协作进程状态（git-bridge、操作面、probe-bridge 汇总进 /agent/bridge）", by: "并到 R01 的健康读口（env.health.changed）"}
   - {id: S01, class: K8, disposition: kept, step: "none", what: "statefile：每个 key 一个 ConfigMap（≤900 KiB）存各模块小 JSON", by: "原因：状态存放不是传输；但其中 approvals/questions/threads/progress/title 几个 key 的归宿设计没说（见第 4 节）"}
-  - {id: S02, class: K8, disposition: replaced, step: "3", what: "审计日志：最近 500 条，同时发一行 slog 到 Loki", by: "账（audit.action.recorded）；Loki 那一行留作长尾", cut: {at: "2026-11-18", evidence: ["topic:audit.action.recorded"]}}
+  - {id: S02, class: K8, disposition: announced, step: "3", what: "审计日志：最近 500 条，同时发一行 slog 到 Loki", by: "日志留在原处；每行以 audit.action.recorded 宣布（谁、做什么、结果）", cut: {at: "2026-11-18", evidence: ["topic:audit.action.recorded"]}}
   - {id: S03, class: K4, disposition: announced, step: "3", what: "审批记录（全文、租约、结果、deliveries[]）", by: "记录留在原处（卡本身就是记录）；状态变化以 approval.card.* 宣布", cut: {at: "2026-11-18", evidence: ["topic:approval.card.created"]}}
   - {id: S04, class: K4, disposition: announced, step: "3", what: "问题记录（问题、答案、deliveries）", by: "记录留在原处；变化以 question.* 宣布", cut: {at: "2026-11-18", evidence: ["topic:owner.question.asked"]}}
   - {id: S05, class: K8, disposition: merged, step: "1", what: "PG 事件日志 agentrt.event（哈希链、封闭词表、cause_event_id）", by: "留下并改造成「账」本体：永久、按序、带起因；审计与窗口事件并到它", cut: {at: "2026-11-17", evidence: ["topic:git.main.advanced"]}}
