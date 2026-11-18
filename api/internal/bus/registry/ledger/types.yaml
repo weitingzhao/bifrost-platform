@@ -8,10 +8,12 @@
 # the same day against the package that Declares each type: the rule_* types
 # go to verification (rulestore), owner_signoff to plan (planstore), and
 # policy_alert, written by several domains each with its own rule, is a shared
-# type of foundation like note.
+# type of foundation like note. The *_seen types (approval, question, pipeline,
+# deploy, ci) are written by seenfacts, foundation's recorder of outside
+# systems' state, and declared there.
 types:
   - {type: actor_registered, domain: foundation}
-  - {type: approval_seen, domain: owner}
+  - {type: approval_seen, domain: foundation}
   - {type: artifact_put, domain: foundation}
   - {type: attempt_cancelled, domain: compute}
   - {type: attempt_checkpointed, domain: compute}
@@ -31,11 +33,11 @@ types:
   - {type: capability_scored, domain: compute}
   - {type: ci_red_classified, domain: verification}
   - {type: ci_reused, domain: verification}
-  - {type: ci_seen, domain: verification}
+  - {type: ci_seen, domain: foundation}
   - {type: control_cleared, domain: coordination}
   - {type: control_set, domain: coordination}
   - {type: decision_recorded, domain: plan}
-  - {type: deploy_seen, domain: delivery}
+  - {type: deploy_seen, domain: foundation}
   - {type: host_registered, domain: compute}
   - {type: host_retired, domain: compute}
   - {type: host_slots_set, domain: compute}
@@ -52,7 +54,7 @@ types:
   - {type: owner_signoff, domain: plan}
   - {type: owner_wait_closed, domain: owner}
   - {type: owner_wait_opened, domain: owner}
-  - {type: pipeline_seen, domain: delivery}
+  - {type: pipeline_seen, domain: foundation}
   - {type: plan_change_decided, domain: plan}
   - {type: plan_change_proposed, domain: plan}
   - {type: plan_changed, domain: plan}
@@ -62,7 +64,7 @@ types:
   - {type: policy_alert, domain: foundation}
   - {type: pool_cooldown_set, domain: compute}
   - {type: pool_measured, domain: compute}
-  - {type: question_seen, domain: owner}
+  - {type: question_seen, domain: foundation}
   - {type: route_decided, domain: plan}
   - {type: rule_approved, domain: verification}
   - {type: rule_expired, domain: verification}
