@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -291,6 +292,12 @@ func TestPostReleaseVerdictIsFoundAfterARestart(t *testing.T) {
 		return strings.Count(h.auditText(t), `"run/`+run+`"`)
 	}
 	onceFor := func(run string) *postOnce {
+		// A judgement waits for the other path to reach its judgement too, so
+		// two judgements that can overlap do (no sleeping on the scheduler);
+		// one that cannot (the other path waits for the lock) goes on after a
+		// short wait.
+		var entered atomic.Int32
+		met := make(chan struct{})
 		return &postOnce{
 			runs: func(context.Context) ([]postRun, error) {
 				r := postFinished(run, "succeeded", 0)
@@ -299,7 +306,13 @@ func TestPostReleaseVerdictIsFoundAfterARestart(t *testing.T) {
 			},
 			recorded: func(r string) bool { return h.srv.audit.Has(postReleaseAction, "run/"+r) },
 			judge: func(context.Context, postRun) postrelease.Verdict {
-				time.Sleep(50 * time.Millisecond) // a judgement takes readings: long enough for the other path to arrive
+				if entered.Add(1) == 2 {
+					close(met)
+				}
+				select {
+				case <-met:
+				case <-time.After(300 * time.Millisecond):
+				}
 				return postrelease.Verdict{Run: postrelease.Run{Name: run}, Verdict: postrelease.Passed}
 			},
 			record: h.srv.recordPostRelease,
