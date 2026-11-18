@@ -61,10 +61,6 @@ export function DeliveryBoundaries() {
   </>
 }
 
-function ObservationTable({ rows, columns }: { rows: Record<string, unknown>[]; columns: string[] }) {
-  return <div className="overflow-x-auto"><table className="w-full"><thead><tr>{columns.map(column => <th className={cell} key={column}>{column}</th>)}</tr></thead><tbody>{rows.map((row, i) => <tr key={i}>{columns.map(column => <td className={cell} key={column}>{row[column] == null ? 'Unknown' : String(row[column])}</td>)}</tr>)}</tbody></table></div>
-}
-
 function RuleEditor({ rule, unavailable, refresh }: { rule: BoundaryRule; unavailable: boolean; refresh: () => Promise<unknown> }) {
   const [text, setText] = useState(() => textOf(rule.draft))
   const [preview, setPreview] = useState<RulePreview | null>(null)
@@ -112,7 +108,6 @@ function RuleEditor({ rule, unavailable, refresh }: { rule: BoundaryRule; unavai
     {preview && <div className="flex flex-col gap-3 pt-3">
       <p>Server decision: <strong>{preview.apply_via}</strong>. Version {preview.previous_version ?? 'none'} → {preview.rule_version}.</p>
       {preview.capacity_changes && <pre className="overflow-auto text-xs">{textOf(preview.capacity_changes)}</pre>}
-      {!!preview.proposed_landing_effects?.length && <div><h4>Resulting capacities; size limits are not in effect</h4><ObservationTable rows={preview.proposed_landing_effects} columns={['repo', 'max_files', 'configured_changed_lines', 'max_changed_lines', 'code_clamped', 'max_in_flight']} /></div>}
       <details><summary>Validated next policy (compare with effective policy above)</summary><pre className="overflow-auto text-xs">{textOf(preview.body)}</pre></details>
       {preview.apply_via === 'capacity_approval' && <label>Reason<input className={field} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} /></label>}
       {preview.apply_via === 'signature' && <><p>{preview.why_not_capacity} Sign the exact draft using the existing Owner signing key and namespace bifrost-agentrt-rule. The private key never enters this page.</p>

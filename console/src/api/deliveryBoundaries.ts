@@ -13,7 +13,7 @@ export type BoundarySnapshot = {
   unknown: string[]
   code_limits: { boundary_id: string; value: number; unit: string; source: string; adjustment: string }[]
 }
-export type RulePreview = { rule_id: string; rule_version: number; previous_version?: number; apply_via: 'signature' | 'capacity_approval' | 'tighten'; body: RuleDocument; why_not_capacity?: string; capacity_changes?: { field: string; old: unknown; new: unknown }[]; proposed_landing_effects?: Record<string, unknown>[] }
+export type RulePreview = { rule_id: string; rule_version: number; previous_version?: number; apply_via: 'signature' | 'capacity_approval' | 'tighten'; body: RuleDocument; why_not_capacity?: string; capacity_changes?: { field: string; old: unknown; new: unknown }[] }
 export const readBoundaries = async (signal?: AbortSignal): Promise<BoundarySnapshot> => {
   const value = await (await authedFetch('Delivery boundaries', '/api/v1/agentrt/delivery?view=boundaries', { signal })).json()
   const record = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)
