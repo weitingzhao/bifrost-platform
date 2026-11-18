@@ -92,7 +92,9 @@ func TestParseRefuses(t *testing.T) {
 // (its durable consumer, server/bus_wire.go headReleaseWakes) on the three
 // events it consumes, the post-release check (server/post_release.go
 // consumePostRelease) on ci.run.finished, the inbox waiters (bus/mailwake,
-// 2026-11-18, channel W01) on seat.mail.arrived, and the Bus page (console) on
+// 2026-11-18, channel W01) on seat.mail.arrived, the conclusions' consumers
+// (server consumeConclusions, 2026-11-18) on what ends a card or a
+// question, and the Bus page (console) on
 // every topic. Subscription
 // rows are their own register; a seat's ad hoc wait shows in the receipts.
 func TestRegisterNamesRealReaders(t *testing.T) {
@@ -116,6 +118,14 @@ func TestRegisterNamesRealReaders(t *testing.T) {
 			case "postrelease":
 				if typ != "ci.run.finished" {
 					t.Errorf("%s: the post-release check reads only ci.run.finished", typ)
+				}
+			case "card-conclusions":
+				if typ != "approval.card.decided" && typ != "approval.card.executed" {
+					t.Errorf("%s: the card conclusions read only a card's decision and result", typ)
+				}
+			case "question-conclusions":
+				if typ != "owner.question.answered" {
+					t.Errorf("%s: the question conclusions read only the answer", typ)
 				}
 			case "inbox-waiters":
 				if typ != "seat.mail.arrived" {

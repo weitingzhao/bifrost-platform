@@ -138,6 +138,16 @@ clients:
     kind: reader
     lost_after: 24h
     note: the Ops Bus page, open while someone looks at it
+  - name: card-conclusions
+    kind: durable
+    lost_after: 168h
+    domain: owner
+    note: tells the seat that asked how its approval card ended, on each decision and result; the approvals' 15-second loop reconciles
+  - name: question-conclusions
+    kind: durable
+    lost_after: 168h
+    domain: owner
+    note: tells the seat that asked the Owner's answer, on each answer; the questions' sweep reconciles
   - name: inbox-waiters
     kind: reader
     lost_after: 24h

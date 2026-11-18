@@ -253,7 +253,7 @@ channels:
       reconcile: "approval store is the truth"
       on_unread: closed
       retention: 30d
-      consumers: [console]
+      consumers: [console, card-conclusions]
       exports: []
       replaces: [L01, N10, W02, X-A14, X-B16]
   approval.card.executed:
@@ -269,7 +269,7 @@ channels:
       reconcile: "approval store is the truth"
       on_unread: stale
       retention: 30d
-      consumers: [console]
+      consumers: [console, card-conclusions]
       exports: []
       replaces: [L28, W02]
   owner.question.asked:
@@ -301,7 +301,7 @@ channels:
       reconcile: "question store is the truth"
       on_unread: stale
       retention: 30d
-      consumers: [console]
+      consumers: [console, question-conclusions]
       exports: []
       replaces: [L01, N10, W03, X-B16]
   seat.mail.arrived:
