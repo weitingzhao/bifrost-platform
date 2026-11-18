@@ -136,7 +136,6 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 			asked++
 			return fmt.Sprintf("q_%d", asked), nil
 		}
-		a.Now = time.Now
 	})
 	ok := func(key, caller, method, path string, body any, header ...string) map[string]any {
 		t.Helper()

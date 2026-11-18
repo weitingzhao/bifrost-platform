@@ -34,9 +34,9 @@ import (
 type API struct {
 	ConfigurationBoundaries func(context.Context, string, string, []map[string]any) (map[string]any, error)
 	DB                      eventlog.DB
-	// ClaimWait retains a legacy configuration field. ClaimPoll, when set,
-	// replaces how often a waiting inbox read re-reads the record (tests).
-	ClaimWait, ClaimPoll time.Duration
+	// ClaimPoll, when set, replaces how often a waiting inbox read re-reads
+	// the record (tests).
+	ClaimPoll time.Duration
 	// MailWake registers a waiter on an address: its channel receives when the
 	// bus says mail reached the address; stop removes it. Nil: waiters only
 	// re-read the record.
@@ -52,8 +52,6 @@ type API struct {
 	// verify against (releasepolicy.OwnerKeyFingerprint); empty refuses every
 	// signed rule.
 	Anchor string
-	// Now is the clock; time.Now when nil.
-	Now func() time.Time
 	// Sessions counts the retained agent sessions by binding for the plan
 	// view's coverage.sessions (R5:5.5-12 §3.2); nil, or a failed read,
 	// leaves it out and says why in the warnings.

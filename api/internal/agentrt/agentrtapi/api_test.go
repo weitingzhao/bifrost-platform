@@ -176,7 +176,7 @@ intake_tokens:
 	must(t, err)
 	// A claim reads and parses the rules it acts on; under a whole suite's
 	// load one pass can take longer than a few hundred milliseconds.
-	api := &agentrtapi.API{DB: db, ClaimWait: time.Second, ClaimPoll: 50 * time.Millisecond,
+	api := &agentrtapi.API{DB: db, ClaimPoll: 50 * time.Millisecond,
 		Ask: func(_ context.Context, c planstore.Card) (string, error) {
 			if askFails {
 				return "", fmt.Errorf("store full")
