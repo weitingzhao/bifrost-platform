@@ -23,8 +23,14 @@ export type NextgenReaderGroup = { id: string; title: string; readers: NextgenRe
 /** One step of the switch: its channels, those cut over, those proven running here, the old roads gone. */
 export type NextgenStep = { step: string; label: string; total: number; cut: number; proven: number; unproven?: string[]; unmeasured: number; retired: number }
 export type NextgenBaseline = { key: string; label: string; at: string; note?: string; value?: number; unmeasured?: string }
+/** The channels that report problems: connected of live, and what is left. Absent from an older platform. */
+export type NextgenProblems = {
+  live: number; connected: number; proven: number; unmeasured: number; deleted: number; pending: number; todo: number
+  unproven: string[]; open: string[]; done: boolean
+}
 export type BusNextgen = {
   generated_at: string
+  problems?: NextgenProblems
   progress: {
     start: number; now: number; target: number; retired: number; to_go: number; counts: NextgenCount[]; recent: NextgenChannel[]
     /** Absent from an older platform. */

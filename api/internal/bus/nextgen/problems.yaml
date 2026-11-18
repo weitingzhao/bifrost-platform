@@ -1,0 +1,58 @@
+# Every channel that sends an alert, a failure, an anomaly, a call for help or
+# work waiting for a person (the Owner, 2026-11-18: first make problems visible).
+# state: connected (an event on the bus, seen in one place, with a receiver),
+# todo (plan: connect, the default, or delete), deleted (done: no longer used to
+# report problems) or pending (being decided).
+# events: what proves it runs here, as in channels.yaml cuts: topic:<type>.
+# id is a row of channels.yaml, or Y-n for a channel that table does not have.
+problems:
+  - {id: N07, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "comm"}
+  - {id: X-A22, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "comm"}
+  - {id: X-A20, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "comm"}
+  - {id: N05, state: connected, events: ["topic:alert.rule.fired"], to: "Owner phone and duty seat", owner: "comm"}
+  - {id: X-A21, state: connected, events: ["topic:alert.rule.fired"], to: "Owner phone and duty seat", owner: "comm"}
+  - {id: X-A24, state: connected, events: [], to: "Owner phone", owner: "comm"}
+  - {id: X-A27, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "research"}
+  - {id: L14, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "comm"}
+  - {id: X-A2, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "comm"}
+  - {id: X-A19, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "comm"}
+  - {id: X-A25, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "comm"}
+  - {id: L18, state: connected, events: ["topic:seat.liveness.changed"], to: "Owner phone", owner: "comm"}
+  - {id: N03, state: connected, events: ["topic:seat.liveness.changed"], to: "Owner phone", owner: "comm"}
+  - {id: N01, state: connected, events: ["topic:approval.card.created"], to: "Owner phone", owner: "comm"}
+  - {id: X-A23, state: connected, events: ["topic:approval.card.created"], to: "Owner phone", owner: "comm"}
+  - {id: L15, state: connected, events: ["topic:approval.card.executed"], to: "requesting seat", owner: "comm"}
+  - {id: L08, state: connected, events: ["topic:ci.run.finished", "topic:ci.verdict.changed"], to: "committer", owner: "ci"}
+  - {id: X-A18, state: connected, events: ["topic:release.deploy.finished"], to: "committer", owner: "ci"}
+  - {id: X-A13, state: connected, events: ["topic:git.mirror.settled"], to: "watchers", owner: "comm"}
+  - {id: N09, state: connected, events: ["topic:seat.mail.arrived"], to: "receiving seat", owner: "comm"}
+  - {id: S11, state: connected, events: ["topic:seat.mail.arrived"], to: "receiving seat", owner: "comm"}
+  - {id: X-C8, state: connected, events: ["topic:seat.mail.arrived"], to: "receiving seat", owner: "comm"}
+  - {id: N10, state: connected, events: ["topic:seat.mail.arrived"], to: "requesting seat", owner: "comm"}
+  - {id: N11, state: connected, events: ["topic:seat.mail.arrived"], to: "next in the queue", owner: "comm"}
+  - {id: X-C10, state: connected, events: ["topic:seat.mail.arrived"], to: "next in the queue", owner: "comm"}
+  - {id: L17, state: connected, events: ["topic:release.policy.expiring"], to: "Owner phone", owner: "comm"}
+  - {id: N04, state: connected, events: ["topic:release.policy.expiring"], to: "Owner phone", owner: "comm"}
+  - {id: N02, state: connected, events: ["topic:owner.question.asked"], to: "Owner phone", owner: "comm"}
+  - {id: L16, state: connected, events: ["topic:owner.question.answered"], to: "asking seat", owner: "comm"}
+  - {id: S14, state: connected, events: ["topic:loop.health.changed"], to: "watchers", owner: "comm"}
+  - {id: X-A26, state: connected, events: ["topic:loop.health.changed"], to: "watchers", owner: "comm"}
+  - {id: L13, state: connected, events: ["topic:data.job.finished"], to: "watchers", owner: "comm"}
+  - {id: N06, state: todo, events: [], to: "Owner phone and duty seat", owner: "comm"}
+  - {id: L27, state: todo, events: [], to: "Owner phone and duty seat", owner: "comm"}
+  - {id: N17, state: todo, events: [], to: "duty seat", owner: "comm, ci"}
+  - {id: L10, state: todo, events: [], to: "duty seat", owner: "decoupling"}
+  - {id: R01, state: todo, events: [], to: "duty seat", owner: "decoupling"}
+  - {id: R12, state: todo, events: [], to: "duty seat", owner: "decoupling"}
+  - {id: R11, state: todo, events: [], to: "duty seat", owner: "decoupling"}
+  - {id: R09, state: todo, events: [], to: "duty seat", owner: "decoupling"}
+  - {id: L12, state: todo, events: [], to: "duty seat", owner: "decoupling"}
+  - {id: L11, state: todo, events: [], to: "duty seat", owner: "decoupling"}
+  - {id: X-C2, state: todo, plan: delete, events: [], to: "", owner: "coordinator"}
+  - {id: X-C14, state: todo, plan: delete, events: [], to: "", owner: "ci"}
+  - {id: X-C12, state: todo, plan: delete, events: [], to: "", owner: "coordinator"}
+  - {id: L05, state: pending, events: [], to: "", owner: "ci"}
+  - {id: X-A29, state: pending, events: [], to: "", owner: "ci"}
+  - {id: X-C4, state: pending, events: [], to: "", owner: "coordinator"}
+  - {id: Y-1, state: todo, what: "Ledger problem records not on the bus: policy_alert, controller_loop_failing, artifact_refused, wait_limit_passed", events: [], to: "duty seat", owner: "comm"}
+  - {id: Y-2, state: todo, what: "Local disk guard: disk-guard.sh writes only its own log", events: [], to: "duty seat", owner: "compute"}

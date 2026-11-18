@@ -26,6 +26,9 @@ var readersYAML []byte
 //go:embed baselines.yaml
 var baselinesYAML []byte
 
+//go:embed problems.yaml
+var problemsYAML []byte
+
 // Target is the design's count of what the next generation is made of: kept
 // 31 + merged 20 + its 13 new pieces. The channels that only announce or never
 // take this road stay where they are too (End, the table's 2.4).
@@ -198,6 +201,97 @@ func Channels() ([]Channel, error) {
 		return nil, fmt.Errorf("nextgen: channels.yaml: %w", err)
 	}
 	return doc.Channels, nil
+}
+
+// States of a problem channel (problems.yaml).
+const (
+	ProblemConnected = "connected"
+	ProblemTodo      = "todo"
+	ProblemDeleted   = "deleted"
+	ProblemPending   = "pending"
+)
+
+// ProblemChannel is one channel that sends an alert, a failure, an anomaly, a
+// call for help or work waiting for a person.
+type ProblemChannel struct {
+	ID     string   `yaml:"id" json:"id"`
+	State  string   `yaml:"state" json:"state"`
+	Plan   string   `yaml:"plan" json:"plan,omitempty"`
+	What   string   `yaml:"what" json:"what,omitempty"`
+	Events []string `yaml:"events" json:"events"`
+	To     string   `yaml:"to" json:"to,omitempty"`
+	Owner  string   `yaml:"owner" json:"owner"`
+}
+
+// ProblemProgress is the reading of the problem channels: Connected of Live
+// (all but the deleted). Done is nothing pending, nothing left to connect or
+// delete, and every connected channel proven by a run or a drill.
+type ProblemProgress struct {
+	Live       int      `json:"live"`
+	Connected  int      `json:"connected"`
+	Proven     int      `json:"proven"`
+	Unmeasured int      `json:"unmeasured"`
+	Deleted    int      `json:"deleted"`
+	Pending    int      `json:"pending"`
+	Todo       int      `json:"todo"`
+	Unproven   []string `json:"unproven"`
+	Open       []string `json:"open"`
+	Done       bool     `json:"done"`
+}
+
+// Problems reads the problem channels.
+func Problems() ([]ProblemChannel, error) {
+	var doc struct {
+		Problems []ProblemChannel `yaml:"problems"`
+	}
+	if err := yaml.Unmarshal(problemsYAML, &doc); err != nil {
+		return nil, fmt.Errorf("nextgen: problems.yaml: %w", err)
+	}
+	return doc.Problems, nil
+}
+
+// SummarizeProblems counts the channels. A connected channel is proven when
+// each event it names was published inside the evidence window: a problem
+// topic is quiet when nothing is wrong, so a long gap inside the window (stale)
+// still proves it ran.
+func SummarizeProblems(ps []ProblemChannel, evidence func(string) Evidence) ProblemProgress {
+	out := ProblemProgress{Unproven: []string{}, Open: []string{}}
+	for _, c := range ps {
+		switch c.State {
+		case ProblemDeleted:
+			out.Deleted++
+			continue
+		case ProblemConnected:
+			out.Connected++
+			proven, unmeasured := len(c.Events) > 0, false
+			for _, id := range c.Events {
+				switch evidence(id).State {
+				case EvidenceRunning, EvidenceStale:
+				case EvidenceUnmeasured:
+					unmeasured = true
+				default:
+					proven = false
+				}
+			}
+			switch {
+			case !proven:
+				out.Unproven = append(out.Unproven, c.ID)
+			case unmeasured:
+				out.Unmeasured++
+			default:
+				out.Proven++
+			}
+		case ProblemPending:
+			out.Pending++
+			out.Open = append(out.Open, c.ID)
+		default:
+			out.Todo++
+			out.Open = append(out.Open, c.ID)
+		}
+		out.Live++
+	}
+	out.Done = out.Pending == 0 && out.Todo == 0 && out.Proven == out.Connected
+	return out
 }
 
 // Readers reads the source switch.

@@ -34,10 +34,11 @@ type nextgenBaseline struct {
 }
 
 type busNextgen struct {
-	GeneratedAt time.Time            `json:"generated_at"`
-	Progress    nextgen.Progress     `json:"progress"`
-	Readers     []nextgenReaderGroup `json:"readers"`
-	Baselines   []nextgenBaseline    `json:"baselines"`
+	GeneratedAt time.Time               `json:"generated_at"`
+	Progress    nextgen.Progress        `json:"progress"`
+	Problems    nextgen.ProblemProgress `json:"problems"`
+	Readers     []nextgenReaderGroup    `json:"readers"`
+	Baselines   []nextgenBaseline       `json:"baselines"`
 }
 
 func (s *Server) handleBusNextgen(w http.ResponseWriter, r *http.Request) {
@@ -54,6 +55,12 @@ func (s *Server) handleBusNextgen(w http.ResponseWriter, r *http.Request) {
 	}
 	evidence := s.readerEvidence(r.Context(), out.GeneratedAt)
 	nextgen.ApplyEvidence(&out.Progress, chs, evidence)
+	problems, err := nextgen.Problems()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	out.Problems = nextgen.SummarizeProblems(problems, evidence)
 	for _, g := range groups {
 		ng := nextgenReaderGroup{ReaderGroup: g, Counts: map[string]int{}}
 		for i, rd := range g.Readers {

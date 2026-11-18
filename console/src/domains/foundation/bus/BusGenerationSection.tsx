@@ -53,7 +53,22 @@ function GenerationBar({ d }: { d: BusNextgen }) {
           At the end: {p.stays} of the {p.start} stay where they are, plus {p.new_pieces} new pieces = {p.end} (the design's {p.target} counts only what is kept, reworked or new).
         </p>
       )}
+      {d.problems && <ProblemLine p={d.problems} />}
       {p.steps && <StepTable steps={p.steps} />}
+    </div>
+  )
+}
+
+function ProblemLine({ p }: { p: NonNullable<BusNextgen['problems']> }) {
+  return (
+    <div className="text-xs" data-testid="bus-problem-channels">
+      <span className="font-medium">Problem channels: {p.connected} connected / {p.live}</span>
+      <span className="text-muted-foreground">
+        {' '}· {p.deleted} deleted · {p.pending} pending · {p.todo} to do · {p.proven} proven by a run or drill
+        {p.unmeasured > 0 && ` · ${p.unmeasured} unmeasured`}
+      </span>
+      {p.open.length > 0 && <p className="m-0 text-muted-foreground">Open: {p.open.join(', ')}</p>}
+      {p.unproven.length > 0 && <p className="m-0 text-muted-foreground">Connected, no proof yet: {p.unproven.join(', ')}</p>}
     </div>
   )
 }
