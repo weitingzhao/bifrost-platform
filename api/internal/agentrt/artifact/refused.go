@@ -2,6 +2,8 @@ package artifact
 
 import (
 	"context"
+	"regexp"
+	"slices"
 
 	"github.com/jackc/pgx/v5"
 
@@ -26,14 +28,26 @@ var refusedRules = []string{"local_path", "workspace_ref"}
 // reportKinds are the kinds a result's report may be stored as.
 var reportKinds = []string{"report", "verify", "review"}
 
+// putType is the event that records a stored artifact.
+const putType = "artifact_put"
+
 func init() {
+	kinds := make([]string, 0, len(ArtifactKinds))
+	for k := range ArtifactKinds {
+		kinds = append(kinds, k)
+	}
+	slices.Sort(kinds)
 	eventlog.Declare(eventlog.Vocabulary{
-		Types: []string{refusedType},
+		Types: []string{refusedType, putType},
 		Bodies: map[string][]eventlog.Field{
+			putType: {{Name: "artifact_id", Kind: eventlog.ID}, {Name: "artifact_kind", Kind: eventlog.Str},
+				{Name: "size_bytes", Kind: eventlog.Int}, {Name: "uploaded_by", Kind: eventlog.Str}},
 			refusedType: {{Name: "rule", Kind: eventlog.Str}, {Name: "kind", Kind: eventlog.Str}, {Name: "artifact_id", Kind: eventlog.ID}},
 		},
 		Values: map[string]map[string]eventlog.Value{
 			refusedType: {"rule": eventlog.OneOf(refusedRules...), "kind": eventlog.OneOf(reportKinds...)},
+			putType: {"artifact_id": eventlog.Shaped("an artifact id (sha256:<64 hex>)", regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)),
+				"artifact_kind": eventlog.OneOf(kinds...)},
 		},
 	})
 }

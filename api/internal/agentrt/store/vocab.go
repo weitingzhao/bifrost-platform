@@ -4,7 +4,6 @@ import (
 	"regexp"
 	"slices"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
@@ -51,13 +50,12 @@ var eventTypes = map[string]bool{"attempt_leased": true,
 	"attempt_started": true, "attempt_progress": true, "attempt_checkpointed": true, "attempt_stale": true,
 	"attempt_renewed": true, "attempt_computed": true, "attempt_persisted": true, "attempt_submitted": true,
 	"attempt_lost": true, "attempt_ended": true, "attempt_salvaged": true, "attempt_cancelled": true,
-	"artifact_put": true, "verification_recorded": true, "owner_wait_opened": true, "owner_wait_closed": true, "actor_registered": true, "host_registered": true, "host_state_changed": true,
+	"verification_recorded": true, "owner_wait_opened": true, "owner_wait_closed": true, "host_registered": true, "host_state_changed": true,
 	"host_retired": true, "rule_proposed": true, "rule_signed": true,
 	"rule_tightened": true, "rule_expired": true, "rule_approved": true, "capability_scored": true, "candidate_status_changed": true,
 	"budget_charged": true, "pool_cooldown_set": true, "pool_measured": true, "wait_limit_passed": true,
-	"legacy_imported": true,
-	"host_slots_set":  true,
-	"ci_reused":       true, "ci_red_classified": true,
+	"host_slots_set": true,
+	"ci_reused":      true, "ci_red_classified": true,
 }
 
 // IsEventType says whether t is an event type of the closed vocabulary.
@@ -69,14 +67,6 @@ func IsEventType(t string) bool { return eventlog.IsEventType(t) }
 // a type with no body here is refused rather than written with a guessed shape.
 var bodies = map[string][]field{
 
-	"actor_registered": {{"actors", kIDs, false}, {"capability_facts", kIDs, true}, {"note", kStr, true}, {"token", kStr, true}},
-	"artifact_put":     {{"artifact_id", kID, false}, {"artifact_kind", kStr, false}, {"size_bytes", kInt, false}, {"uploaded_by", kStr, false}},
-	// legacy_imported: the head of an import (source names what it came from,
-	// count how many it holds) or, on a recorder log's stream, one line of
-	// the log (source recorder; the line's seq, its original digest, the
-	// body as kept, masked when its local paths were; recorderimport.go).
-	"legacy_imported": {{"source", kStr, false}, {"count", kInt, true}, {"work_id", kStr, true}, {"seq", kInt, true},
-		{"digest", kStr, true}, {"record", kStr, true}, {"masked", kBool, true}},
 	"rule_signed":    {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"job_ids", kIDs, true}, {"job_candidate_ids", kIDs, true}, {"capability_facts", kIDs, true}},
 	"rule_tightened": {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"capability_facts", kIDs, true}},
 	// rule_approved: a capacity change the Owner approved on a card
@@ -137,16 +127,13 @@ var (
 	messageID   = shaped("a message id", regexp.MustCompile(`^m_`+ulid+`$`))
 	artifactID  = shaped("an artifact id (sha256:<64 hex>)", regexp.MustCompile(`^sha256:[0-9a-f]{64}$`))
 	commit      = shaped("a commit (40 hex)", regexp.MustCompile(`^[0-9a-f]{40}$`))
-	fingerprint = shaped("a fingerprint (sha256:<64 hex>)", regexp.MustCompile(`^sha256:[0-9a-f]{64}$`))
 	approvalRef = shaped("an approval (appr_<16 hex>)", approvalIDRE)
 )
 
 // fieldValues are the checked fields, by event type and field.
 var fieldValues = map[string]map[string]value{
-	"artifact_put":    {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(artifact.ArtifactKinds)...)},
-	"rule_proposed":   {"direction": oneOf("initial", "loosen", "tighten"), "text_artifact_id": artifactID},
-	"rule_approved":   {"approval_id": approvalRef, "text_artifact_id": artifactID},
-	"legacy_imported": {"digest": fingerprint},
+	"rule_proposed": {"direction": oneOf("initial", "loosen", "tighten"), "text_artifact_id": artifactID},
+	"rule_approved": {"approval_id": approvalRef, "text_artifact_id": artifactID},
 }
 
 // badValue is why v, of its field's kind already, is refused, or ""
