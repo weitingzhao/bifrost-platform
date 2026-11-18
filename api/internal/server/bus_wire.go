@@ -419,6 +419,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 		return
 	}
 	s.startGateCluster(ctx, env)
+	s.startRunSummaries(ctx)
 	nc, err := relay.Connect(cfg.URL, relay.RelayUser, cfg.RelayPassword, "platform-workers bus relay")
 	if err != nil {
 		slog.Error("bus relay: NATS connection; the relay is off", "error", err)
