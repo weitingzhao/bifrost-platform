@@ -93,7 +93,7 @@ channels:
   - {id: R07, class: K1, disposition: merged, step: "3", what: "读口组：线程、主机、进度、开发会话", by: "留下并改造成席位记录的读口；/agent/progress 那一半是死路（见 L20）"}
   - {id: R08, class: K1, disposition: kept, step: "none", what: "读口组：指标与告警（请求时转发 Prometheus）", by: "原因：Prometheus 是源头，这里只是转发；版本字段对它不适用（见第 4 节）"}
   - {id: R09, class: K1, disposition: merged, step: "4", what: "读口组：数据插件状态（每次请求实时 HTTP 到插件，三份代理）", by: "留下并改造：三份代理并成一份，加缓存，变化 plugin.status.changed"}
-  - {id: R10, class: K1, disposition: merged, step: "3", what: "读口组：发布窗口与发布策略", by: "留下并改造成带版本；X-A9、X-A10 的流水线直读并到它"}
+  - {id: R10, class: K1, disposition: merged, step: "3", what: "读口组：发布窗口与发布策略", by: "留下并改造成带版本；X-A9、X-A10 的流水线直读并到它", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
   - {id: R11, class: K1, disposition: kept, step: "none", what: "读口组：Trade 总线深度（平台去拉 satellite-probe-bridge）", by: "原因：Trade 租户的只读健康口，租户边界；将来互通在登记表里声明"}
   - {id: R12, class: K1, disposition: replaced, step: "4", what: "读口组：协作进程状态（git-bridge、操作面、probe-bridge 汇总进 /agent/bridge）", by: "并到 R01 的健康读口（env.health.changed）"}
   - {id: S01, class: K8, disposition: kept, step: "none", what: "statefile：每个 key 一个 ConfigMap（≤900 KiB）存各模块小 JSON", by: "原因：状态存放不是传输；但其中 approvals/questions/threads/progress/title 几个 key 的归宿设计没说（见第 4 节）"}

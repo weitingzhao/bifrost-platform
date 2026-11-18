@@ -2,6 +2,7 @@ package questions
 
 import (
 	"encoding/json"
+	"github.com/weitingzhao/bifrost-platform/api/internal/versionedread"
 	"io"
 	"net/http"
 
@@ -21,7 +22,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, svc *Service) {
 	}
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Require(actuation.RoleViewer))
-		r.Get("/questions", svc.HandleList)
+		r.With(versionedread.Middleware).Get("/questions", svc.HandleList)
 		r.Get("/questions/{id}", svc.HandleGet)
 	})
 	r.Group(func(r chi.Router) {

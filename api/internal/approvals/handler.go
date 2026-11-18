@@ -3,6 +3,7 @@ package approvals
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/versionedread"
 	"io"
 	"net/http"
 	"strconv"
@@ -25,8 +26,8 @@ func Mount(r chi.Router, auth *actuation.AuthService, svc *Service) {
 	r.Get("/actions", actions.HandleList)
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Require(actuation.RoleViewer))
-		r.Get("/approvals", svc.HandleList)
-		r.Get("/approvals/{id}", svc.HandleGet)
+		r.With(versionedread.Middleware).Get("/approvals", svc.HandleList)
+		r.With(versionedread.Middleware).Get("/approvals/{id}", svc.HandleGet)
 	})
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Require(actuation.RoleOperator))

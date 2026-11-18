@@ -22,10 +22,16 @@ func (h *Handler) HandleGetReleaseWindow(w http.ResponseWriter, r *http.Request)
 	}
 	now := time.Now().UTC()
 	out := map[string]any{"open": open}
+	cm, gerr := cs.CoreV1().ConfigMaps(h.svc.PipelinesNamespace()).Get(r.Context(), releaseWindowConfigMap, metav1.GetOptions{})
+	if gerr == nil {
+		// The window's version: it changes when the record does (R10), while
+		// the rest of this answer also moves with the clock.
+		out["version"] = cm.ResourceVersion
+	}
 	if open {
 		out["window"] = rec
 		out["holder"] = viewHolder(rec, now)
-	} else if cm, gerr := cs.CoreV1().ConfigMaps(h.svc.PipelinesNamespace()).Get(r.Context(), releaseWindowConfigMap, metav1.GetOptions{}); gerr == nil {
+	} else if gerr == nil {
 		rec, _ = parseWindowCM(cm) // a free window still shows who waits
 	}
 	out["queue"] = viewQueue(rec.Queue, now)

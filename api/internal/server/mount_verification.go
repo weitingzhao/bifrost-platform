@@ -2,6 +2,7 @@ package server
 
 import (
 	"github.com/go-chi/chi/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/versionedread"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 )
@@ -26,13 +27,13 @@ func (s *Server) mountVerification(r chi.Router) {
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/evidence/commit", s.handleEvidenceCommit)
 	// The ledger's "did CI pass" for one commit, for the release scripts
 	// and the in-cluster gates: no token, as /releases beside it.
-	r.Get("/evidence/ci", s.handleEvidenceCI)
+	r.With(versionedread.Middleware).Get("/evidence/ci", s.handleEvidenceCI)
 	// CI's plan of one commit: its units, their keys, the ledger's word on
 	// each. Read-only; viewer and above.
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/units/plan", s.handleUnitPlan)
 	// Which modules of a commit run again against a base, from the two
 	// declarations. Read-only; no token, as /evidence/ci (units_scope.go).
-	r.Get("/units/scope", s.handleUnitScope)
+	r.With(versionedread.Middleware).Get("/units/scope", s.handleUnitScope)
 	// How CI is set up for one project, from its own declaration (the
 	// configuration view). Read-only; viewer and above.
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/units/config", s.handleUnitConfig)
