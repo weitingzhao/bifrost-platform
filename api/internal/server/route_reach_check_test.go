@@ -51,6 +51,12 @@ var intendedRouteAdditions = map[string][]string{
 	"GET /api/v1/bus/contract": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// The team at work for the nerve map (2026-11-17), read-only.
 	"GET /api/v1/bus/observe": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// 2026-11-17 (the coordinator: known regressions on main, information, no
+	// gate): read by anyone who reads the bus; a seat records one, or its fix,
+	// as itself (the writers the runtime's proposals have; the tenant's satellite too: a tenant may record a regression on its own main).
+	"GET /api/v1/bus/regressions":        {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"POST /api/v1/bus/regressions":       {"reporter", "operator", "admin", "trade-satellite"},
+	"POST /api/v1/bus/regressions/fixed": {"reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-15 relay F: retained run/step timings, read-only like /units/runs.
 	"GET /api/v1/delivery/pipelines/{name}/timings": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/ops/facts/system":                  {"viewer", "reporter", "operator", "admin", "trade-satellite"},

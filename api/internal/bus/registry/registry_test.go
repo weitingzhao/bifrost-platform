@@ -17,9 +17,10 @@ func TestRegisteredTenantsPass(t *testing.T) {
 		t.Fatal("no rocket tenant registered")
 	}
 	// 36 = the 38 types proposed in the 2026-11-16 disposition table less the
-	// two with no source to publish them (RULES.md §4 item 1).
-	if n := len(rocket.Channels); n != 36 {
-		t.Fatalf("rocket registers %d types, want 36", n)
+	// two with no source to publish them (RULES.md §4 item 1); and 2026-11-17
+	// main.regression.known and .fixed (known regressions on main): 38.
+	if n := len(rocket.Channels); n != 38 {
+		t.Fatalf("rocket registers %d types, want 38", n)
 	}
 	for _, typ := range []string{"git.main.advanced", "release.window.changed", "seat.mail.arrived"} {
 		if _, ok := rocket.Channels[typ]; !ok {

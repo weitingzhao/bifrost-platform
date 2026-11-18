@@ -102,6 +102,10 @@ type Envelope struct {
 	Key         string `json:"key,omitempty"`
 	Change      string `json:"change,omitempty"`
 	CauseID     string `json:"causeid,omitempty"`
+	// OnBehalfOf is whom the event tells of an act for (a thread or seat
+	// address): the seat that asked for a run (2026-11-17), from the body's
+	// on_behalf_of. The actor stays who wrote the event.
+	OnBehalfOf string `json:"onbehalfof,omitempty"`
 }
 
 // EnvRE is what an environment name may be: it is a segment of NATS subjects.
@@ -130,6 +134,7 @@ func Build(row Row, ch registry.Channel, tenant, env string) (Envelope, []byte, 
 		Actor:       row.Actor,
 		Key:         str("key"),
 		Change:      str("change"),
+		OnBehalfOf:  str("on_behalf_of"),
 	}
 	if row.Cause != 0 {
 		e.CauseID = EventID(row.Cause)

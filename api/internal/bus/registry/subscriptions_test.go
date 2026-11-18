@@ -43,6 +43,8 @@ func TestCheckSubscriptionsRefuses(t *testing.T) {
 		// 2026-11-17: a new card pages the Owner through the bus; the
 		// positive control of the two notify refusals below.
 		{ID: "g", On: []string{"ci.run.finished"}, Deliver: DeliverNotify, To: NotifyTo, Params: map[string]string{"title": "run {subject}"}},
+		// 2026-11-17: the open regressions read no run, so any topic may ask for them, and a wake may go to whom the event acts for.
+		{ID: "h", On: []string{"seat.mail.arrived"}, Deliver: DeliverWake, To: "requester", Params: map[string]string{"detail": DetailOpenRegressions, "require": "open"}},
 	}
 	for _, r := range ok {
 		if err := CheckSubscriptions(tenants, row(r), tier); err != nil {
@@ -50,16 +52,17 @@ func TestCheckSubscriptionsRefuses(t *testing.T) {
 		}
 	}
 	refused := map[string]Subscription{
-		"is neither in":      {ID: "x", On: []string{"git.main.advanced"}, Deliver: DeliverWake, To: "seat:ci"},
-		"not in the catalog": {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverAction, Action: "drop_everything"},
-		"needs an approval":  {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverAction, Action: "scale_deployment"},
-		"wake to":            {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "everyone"},
-		"deliver is":         {ID: "x", On: []string{"ci.run.finished"}, Deliver: "run"},
-		"is task-result:":    {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "log:land"}},
-		"not one of":         {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/commit", "require": "tripwire"}},
-		"notify goes to":     {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverNotify, To: "seat:ci", Params: map[string]string{"title": "t"}},
-		"needs params.title": {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverNotify, To: NotifyTo},
-		"names no run":       {ID: "x", On: []string{"seat.mail.arrived"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/refusal"}},
+		"is neither in":                    {ID: "x", On: []string{"git.main.advanced"}, Deliver: DeliverWake, To: "seat:ci"},
+		"not in the catalog":               {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverAction, Action: "drop_everything"},
+		"needs an approval":                {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverAction, Action: "scale_deployment"},
+		"wake to":                          {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "everyone"},
+		"deliver is":                       {ID: "x", On: []string{"ci.run.finished"}, Deliver: "run"},
+		"is task-result:":                  {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "log:land"}},
+		"not one of":                       {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/commit", "require": "tripwire"}},
+		"notify goes to":                   {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverNotify, To: "seat:ci", Params: map[string]string{"title": "t"}},
+		"needs params.title":               {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverNotify, To: NotifyTo},
+		"not one of params.detail's names": {ID: "x", On: []string{"seat.mail.arrived"}, Deliver: DeliverWake, To: "requester", Params: map[string]string{"detail": DetailOpenRegressions, "require": "tripwire"}},
+		"names no run":                     {ID: "x", On: []string{"seat.mail.arrived"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/refusal"}},
 	}
 	for want, r := range refused {
 		err := CheckSubscriptions(tenants, row(r), tier)

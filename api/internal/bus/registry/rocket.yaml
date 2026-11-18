@@ -593,3 +593,39 @@ channels:
       consumers: [console]
       exports: []
       replaces: []
+  # Known regressions on main (2026-11-17, the coordinator: information, no
+  # gate). Keyed <repo>@<introduced>; known and fixed pair on the key.
+  main.regression.known:
+    address: ev.rocket.{env}.main.regression.known
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      key: "<repo>@<introduced40>"
+      subject: "<repo>@<introduced40>"
+      publisher: gate-db
+      domain: verification
+      ref: "/api/v1/bus/regressions?repo={repo}"
+      reconcile: "the ledger is the truth; GET /api/v1/bus/regressions lists what is open"
+      on_unread: stale
+      retention: 30d
+      consumers: [console]
+      exports: []
+      replaces: []
+  main.regression.fixed:
+    address: ev.rocket.{env}.main.regression.fixed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      key: "<repo>@<introduced40>"
+      subject: "<repo>@<introduced40>"
+      publisher: gate-db
+      domain: verification
+      ref: "/api/v1/bus/regressions?repo={repo}"
+      reconcile: "the ledger is the truth; GET /api/v1/bus/regressions lists what is open"
+      on_unread: stale
+      retention: 30d
+      consumers: [console]
+      exports: []
+      replaces: []

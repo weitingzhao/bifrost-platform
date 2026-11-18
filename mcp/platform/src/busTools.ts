@@ -25,3 +25,26 @@ export const busEventsPath = (a: WaitForEventArgs): string => {
 
 export const WAIT_FOR_EVENT_DESCRIPTION =
   'Waits for platform events (read-only; it changes nothing). One long poll of the platform\'s event gate, up to wait_seconds (max 25), for the next event of the given types (comma list of registered types, e.g. git.main.advanced) whose subject contains match. Returns {events: [CloudEvents envelope], next}. An event is a pointer, not the state: it carries no data; read the current state at its ref (a platform read route) before acting, since events can be late, repeated or lost. Keep next and pass it as after on the following call to resume without gaps; left out, the wait starts from now. Each event has a stable id (ev-<n>) to drop repeats, and its cursor. client labels you in the delivery receipts (at most 40 characters).'
+
+/**
+ * The known regressions on main (2026-11-17; api/internal/bus/regressions):
+ * any seat records one, or its fix, as itself. Information, not a gate:
+ * nothing is refused because one is open; a PROD release's context lists
+ * them and its starter is woken with them.
+ */
+export const REPORT_REGRESSION_DESCRIPTION =
+  'Records a known regression on main: the commit (40 characters) that broke repo\'s main, and in a line what is broken (impact, at most 200 characters). Recorded as you; any seat may. Publishes main.regression.known, keyed <repo>@<introduced>; reporting the same key again records it again (the newest counts). Information, not a gate: nothing is refused because one is open. A PROD release\'s context lists those open between what runs and what goes out, and the seat starting a PROD release is woken with them. Record the fix with mark_regression_fixed.'
+export const MARK_REGRESSION_FIXED_DESCRIPTION =
+  'Records the fix of a known regression on main: repo, the commit that introduced it, and the commit that fixed it (40 characters each). Recorded as you. Publishes main.regression.fixed. Refused (409) when no known regression has that repo and introduced commit.'
+export const LIST_REGRESSIONS_DESCRIPTION =
+  'Lists the known regressions on main (read-only), newest first: {regressions: [{repo, introduced, impact, by, known_at, fixed, fixed_by, fixed_at}]}. repo narrows to one repository; open (default true) keeps those with no fix recorded.'
+
+export interface RegressionArgs { repo: string; introduced: string; impact?: string; fixed?: string }
+
+export const regressionsPath = (a: { repo?: string; open?: boolean }): string => {
+  const q = new URLSearchParams()
+  if (a.repo) q.set('repo', a.repo)
+  if (a.open !== false) q.set('open', '1')
+  const s = q.toString()
+  return '/api/v1/bus/regressions' + (s ? '?' + s : '')
+}

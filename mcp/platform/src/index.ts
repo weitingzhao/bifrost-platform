@@ -45,7 +45,7 @@ import { getReleaseWindow, holdReleaseWindow, releaseReleaseWindow } from './win
 import { presenceSkip, registerPresence } from './presence.js'
 import { registerPlanImportTools } from './registerPlanImport.js'
 import { FULL_CI_PATH, fullCICheckPath, unitConfigPath, unitRunsPath, unitScopePath } from './unitsTools.js'
-import { BUS_WAIT_MAX_SECONDS, WAIT_FOR_EVENT_DESCRIPTION, busEventsPath } from './busTools.js'
+import { BUS_WAIT_MAX_SECONDS, LIST_REGRESSIONS_DESCRIPTION, MARK_REGRESSION_FIXED_DESCRIPTION, REPORT_REGRESSION_DESCRIPTION, WAIT_FOR_EVENT_DESCRIPTION, busEventsPath, regressionsPath } from './busTools.js'
 
 const SERVER_NAME = 'mcp-server-platform'
 const SERVER_VERSION = '0.1.0'
@@ -593,6 +593,38 @@ reg(
     client: z.string().regex(/^[\x21-\x7e]{1,40}$/).optional().describe('Who waits, for the receipts; default mcp'),
   },
   async (args) => jsonResult(await platformGet(busEventsPath(args))),
+)
+
+const sha40 = z.string().regex(/^[0-9a-f]{40}$/)
+const repoName = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/)
+reg(
+  'report_regression',
+  REPORT_REGRESSION_DESCRIPTION,
+  {
+    repo: repoName.describe('The repository whose main is broken, e.g. bifrost-platform'),
+    introduced: sha40.describe('The commit that broke it (40 characters)'),
+    impact: z.string().min(1).max(200).describe('In a line, what is broken'),
+  },
+  async ({ repo, introduced, impact }) => jsonResult(await platformPost('/api/v1/bus/regressions', { repo, introduced, impact })),
+)
+reg(
+  'mark_regression_fixed',
+  MARK_REGRESSION_FIXED_DESCRIPTION,
+  {
+    repo: repoName.describe('The repository'),
+    introduced: sha40.describe('The commit the regression was recorded with'),
+    fixed: sha40.describe('The commit that fixed it'),
+  },
+  async ({ repo, introduced, fixed }) => jsonResult(await platformPost('/api/v1/bus/regressions/fixed', { repo, introduced, fixed })),
+)
+reg(
+  'list_regressions',
+  LIST_REGRESSIONS_DESCRIPTION,
+  {
+    repo: repoName.optional().describe('One repository; left out: all'),
+    open: z.boolean().optional().describe('Default true: only those with no fix'),
+  },
+  async (args) => jsonResult(await platformGet(regressionsPath(args))),
 )
 
 reg(

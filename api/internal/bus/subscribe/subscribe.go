@@ -24,11 +24,15 @@ import (
 // Event is what a row sees of an envelope.
 type Event struct {
 	ID, Type, Subject, Ref, Change string
+	// OnBehalfOf is whom the event tells of an act for (the envelope's
+	// onbehalfof: the seat that asked for a run, 2026-11-17), the address
+	// "requester" wakes.
+	OnBehalfOf string
 }
 
 // FromEnvelope keeps the fields a row reads.
 func FromEnvelope(e relay.Envelope) Event {
-	return Event{ID: e.ID, Type: e.Type, Subject: e.Subject, Ref: e.Ref, Change: e.Change}
+	return Event{ID: e.ID, Type: e.Type, Subject: e.Subject, Ref: e.Ref, Change: e.Change, OnBehalfOf: e.OnBehalfOf}
 }
 
 // Matches says whether ev is one of row's.
@@ -77,6 +81,12 @@ func Recipient(ctx context.Context, row registry.Subscription, ev Event, read Co
 	case "subject":
 		if addrRE.MatchString(ev.Subject) {
 			return ev.Subject, nil
+		}
+		return "", nil
+	case "requester":
+		// Only a thread or a seat is woken; an event on nobody's behalf wakes nobody.
+		if addrRE.MatchString(ev.OnBehalfOf) {
+			return ev.OnBehalfOf, nil
 		}
 		return "", nil
 	case "commit.session":
@@ -144,7 +154,7 @@ func withDetail(row registry.Subscription, values map[string]string, err error, 
 	if err != nil {
 		return body + " (" + spec + " could not be read: " + err.Error() + ")"
 	}
-	_, names, _ := registry.TaskResults(spec)
+	names, _ := registry.DetailNames(spec)
 	if len(names) == 1 {
 		if v := values[names[0]]; v != "" {
 			return body + " Why: " + v

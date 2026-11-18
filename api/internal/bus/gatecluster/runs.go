@@ -30,6 +30,10 @@ const (
 	LabelCause = "bifrost.io/cause"
 	// LabelCauseEnv is the environment whose ledger the cause's number is in.
 	LabelCauseEnv = "bifrost.io/cause-env"
+	// AnnotationRequester names who asked for the run (a thread or seat
+	// address), set by delivery when a run is started over HTTP (2026-11-17,
+	// the CI line): the run's start is that actor's act on the bus.
+	AnnotationRequester = "bifrost.io/requester"
 )
 
 // runFacts is what the gate remembers of a run between events: a few
@@ -107,7 +111,14 @@ func runBody(run string, f runFacts, change string) map[string]any {
 // event (said before a restart, or its finish was said first).
 func (g *Gate) started(ctx context.Context, run string, f runFacts) {
 	g.append(ctx, RunStream(run), TypeRunStarted, g.causeOf(f), func(lastType string, _ map[string]any) (map[string]any, bool) {
-		return runBody(run, f, ChangeCreated), lastType == ""
+		b := runBody(run, f, ChangeCreated)
+		// Who asked for the run, on whose behalf the gate tells of it: not the
+		// event's actor (the gate wrote it), a field the envelope carries
+		// (onbehalfof), for the wake to the seat starting a PROD release.
+		if f.run.Requester != "" {
+			b["on_behalf_of"] = f.run.Requester
+		}
+		return b, lastType == ""
 	})
 }
 

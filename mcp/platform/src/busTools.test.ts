@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { busEventsPath } from './busTools.js'
+import { busEventsPath, regressionsPath } from './busTools.js'
 import { PLATFORM_STDIO_TOOL_NAMES } from './stdioToolNames.js'
 
 // Origin: 2026-11-16, the bus's step 1 (api/internal/bus/RULES.md §8 item 4):
@@ -23,4 +23,11 @@ test('wait_for_event is registered and listed', () => {
   const index = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
   assert.match(index, /reg\(\s*'wait_for_event'/)
   assert.ok(new Set<string>(PLATFORM_STDIO_TOOL_NAMES).has('wait_for_event'))
+})
+
+// 2026-11-17: the known regressions on main; any seat records one, or its fix.
+test('the regression tools are on the full server and read the bus route', () => {
+  for (const name of ['report_regression', 'mark_regression_fixed', 'list_regressions']) assert.ok(new Set<string>(PLATFORM_STDIO_TOOL_NAMES).has(name), name)
+  assert.equal(regressionsPath({}), '/api/v1/bus/regressions?open=1')
+  assert.equal(regressionsPath({ repo: 'bifrost-platform', open: false }), '/api/v1/bus/regressions?repo=bifrost-platform')
 })

@@ -51,6 +51,11 @@ func writer(r *http.Request) (store.Writer, error) {
 	return w, err
 }
 
+// WriterOf is who a write is recorded as (writer), for a route outside
+// /agentrt that writes the ledger as its caller (2026-11-17: the known
+// regressions on main, bus/regressions).
+func WriterOf(r *http.Request) (store.Writer, error) { return writer(r) }
+
 type budgetBody struct {
 	MaxAttempts  int `json:"max_attempts"`
 	MaxWallHours int `json:"max_wall_hours"`

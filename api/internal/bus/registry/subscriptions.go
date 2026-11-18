@@ -119,7 +119,7 @@ type Subscriptions struct {
 var (
 	subIDRE   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 	addressRE = regexp.MustCompile(`^(seat|thread|agent):[A-Za-z0-9._:-]{1,128}$`)
-	wakeFrom  = map[string]bool{"subject": true, "commit.session": true, "ref.requester": true}
+	wakeFrom  = map[string]bool{"subject": true, "commit.session": true, "ref.requester": true, "requester": true}
 )
 
 // LoadSubscriptions reads every tenant's table compiled into the binary.
@@ -216,15 +216,15 @@ func CheckSubscriptions(tenants map[string]Tenant, subs map[string]Subscriptions
 				bad("%s: by names who delivers it (dispatcher, or the hand-written code that still does)", at)
 			}
 			if d := r.Params[ParamDetail]; d != "" {
-				_, names, ok := TaskResults(d)
+				names, ok := DetailNames(d)
 				if !ok {
-					bad("%s: params.detail %q is task-result:<pipeline task>/<name>[,<name>…]", at, d)
+					bad("%s: params.detail %q is task-result:<pipeline task>/<name>[,<name>…] or %s", at, d, DetailOpenRegressions)
 				}
 				if req := r.Params[ParamRequire]; req != "" && !slices.Contains(names, req) {
 					bad("%s: params.require %q is not one of params.detail's names", at, req)
 				}
 				for _, typ := range r.On {
-					if typ != "ci.run.finished" {
+					if d != DetailOpenRegressions && typ != "ci.run.finished" {
 						bad("%s: params.detail reads a run's task result; %s names no run", at, typ)
 					}
 				}
@@ -312,6 +312,21 @@ var (
 
 // TaskResults reads a params.detail of the form
 // task-result:<task>/<name>[,<name>…].
+// DetailOpenRegressions is the detail of the known regressions on main still
+// open (bus/regressions), one name: open, a line per regression, empty when
+// none (2026-11-17: the seat starting a PROD release is woken with them, and
+// only when there are any). It reads no run, so any topic may ask for it.
+const DetailOpenRegressions = "regressions:open"
+
+// DetailNames is the names a detail answers: a run's task results, or open.
+func DetailNames(detail string) ([]string, bool) {
+	if detail == DetailOpenRegressions {
+		return []string{"open"}, true
+	}
+	_, names, ok := TaskResults(detail)
+	return names, ok
+}
+
 func TaskResults(detail string) (task string, names []string, ok bool) {
 	m := taskResultsRE.FindStringSubmatch(detail)
 	if m == nil {

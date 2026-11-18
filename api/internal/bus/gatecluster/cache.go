@@ -1,6 +1,7 @@
 package gatecluster
 
 import (
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -55,7 +56,13 @@ type Run struct {
 	StartTime, CompletionTime string
 	// Status and Reason are the Succeeded condition's ("" while it has none).
 	Status, Reason string
+	// Requester is who asked for the run (AnnotationRequester), when it is a
+	// thread or seat address.
+	Requester string `json:"requester,omitempty"`
 }
+
+// requesterRE is what a requester may be: a thread or a seat address.
+var requesterRE = regexp.MustCompile(`^(thread|seat):[A-Za-z0-9_.:@-]{1,120}$`)
 
 // Pipeline is the run's pipeline: its tekton.dev/pipeline label, else its
 // pipelineRef.
@@ -83,6 +90,9 @@ func RunOf(obj *unstructured.Unstructured) Run {
 				r.Labels[k] = v
 			}
 		}
+	}
+	if a := obj.GetAnnotations()[AnnotationRequester]; requesterRE.MatchString(a) {
+		r.Requester = a
 	}
 	r.PipelineRef, _, _ = unstructured.NestedString(obj.Object, "spec", "pipelineRef", "name")
 	params, _, _ := unstructured.NestedSlice(obj.Object, "spec", "params")

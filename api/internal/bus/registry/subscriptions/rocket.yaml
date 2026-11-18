@@ -112,6 +112,23 @@ subscriptions:
     by: dispatcher
     envs: [prod]
 
+  # A PROD release starts while main has known regressions still open: the
+  # seat that asked for it is woken with them (2026-11-17, the coordinator:
+  # information, no gate; the run's requester annotation, which the start
+  # event carries as onbehalfof). Only when one is open (require: open).
+  # PROD only: the seats are registered in PROD's ledger.
+  - id: prod-release-open-regressions
+    on: [ci.run.started]
+    match: "-prod-"
+    deliver: wake
+    to: requester
+    params:
+      detail: "regressions:open"
+      require: open
+    guarantee: durable
+    by: dispatcher
+    envs: [prod]
+
 # The bus's known users. name is the receipt consumer: gate:<route>:<client>
 # for a reader of /bus/events (route events) or /bus/stream (route stream),
 # the durable's name for a durable consumer. lost_after: how long without

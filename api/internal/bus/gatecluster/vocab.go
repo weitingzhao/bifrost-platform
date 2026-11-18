@@ -91,7 +91,7 @@ func init() {
 	finishedValues["status"] = eventlog.OneOf("True", "False")
 	eventlog.Declare(eventlog.Vocabulary{
 		Bodies: map[string][]eventlog.Field{
-			TypeRunStarted: runFields(),
+			TypeRunStarted: runFields(eventlog.Field{Name: "on_behalf_of", Kind: eventlog.Str, Optional: true}),
 			TypeRunFinished: runFields(
 				eventlog.Field{Name: "status", Kind: eventlog.Str},
 				eventlog.Field{Name: "reason", Kind: eventlog.Str, Optional: true},

@@ -437,3 +437,34 @@ func TestARunCarriesTheCauseItWasStartedFor(t *testing.T) {
 		}
 	}
 }
+
+// 2026-11-17, the CI line and the communication line: a run started over HTTP
+// carries who asked for it (delivery's AnnotationRequester). The gate wrote the
+// event, so it stays its actor (the CI line: the ledger's actor is the writer,
+// in the hash chain and the audit); the start says on whose behalf in its body
+// (on_behalf_of), which the envelope carries. The finish is the cluster's; a
+// run with none, or a name that is no address, names nobody.
+func TestARunsStartSaysOnWhoseBehalf(t *testing.T) {
+	l := &memLedger{}
+	g := &Gate{Ledger: l, Env: "prod"}
+	g.init()
+	bg := context.Background()
+	asked := func(name, who, status string) Run {
+		r := run(name, "bifrost-deliver-platform-prod", shaA, status, "")
+		r.SetAnnotations(map[string]string{AnnotationRequester: who})
+		return RunOf(r)
+	}
+	seat := "thread:local_7de640c4-4b19-4a71-a0ac-ced2ce5fc7ff"
+	g.observeRun(bg, asked("r1", seat, "Unknown"), false)
+	g.observeRun(bg, asked("r1", seat, "True"), false)
+	g.observeRun(bg, RunOf(run("r2", "bifrost-deliver-platform-prod", shaA, "Unknown", "")), false)
+	g.observeRun(bg, asked("r3", "anyone at all", "Unknown"), false)
+	if evs := l.events(RunStream("r1")); len(evs) != 2 || evs[0].body["on_behalf_of"] != seat || evs[1].body["on_behalf_of"] != nil {
+		t.Fatalf("r1 events %+v", evs)
+	}
+	for _, r := range []string{"r2", "r3"} {
+		if e := l.events(RunStream(r)); len(e) != 1 || e[0].body["on_behalf_of"] != nil {
+			t.Fatalf("%s named someone: %+v", r, e)
+		}
+	}
+}

@@ -347,6 +347,11 @@ func (s *Server) mountBus(r chi.Router) {
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/clients", route((*gate.Gate).HandleClients))
 	// What the bus's work does, computed when asked (bus_effect.go).
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/effect", s.handleBusEffect)
+	// The known regressions on main (bus_regressions.go): a seat records one or its fix as itself.
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/regressions", s.handleRegressions)
+	writers := s.auth.RequireAny(actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin)
+	r.With(writers).Post("/bus/regressions", s.handleRegressionWrite(false))
+	r.With(writers).Post("/bus/regressions/fixed", s.handleRegressionWrite(true))
 	// The change of generation, from its registers (bus_nextgen.go).
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/nextgen", s.handleBusNextgen)
 	// What the bus promises and to whom, from its registers (bus_contract.go).

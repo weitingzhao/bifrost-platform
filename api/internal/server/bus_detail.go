@@ -16,10 +16,13 @@ import (
 // event's run: each name its result, else its param (a branch is a param).
 // One list by label, only for a row that asks, only when its event matched.
 func (s *Server) busRunDetail() subscribe.Detail {
-	if s.delivery == nil {
-		return nil
-	}
 	return func(ctx context.Context, row registry.Subscription, ev subscribe.Event) (map[string]string, error) {
+		if row.Params[registry.ParamDetail] == registry.DetailOpenRegressions {
+			return s.openRegressionsDetail(ctx)
+		}
+		if s.delivery == nil {
+			return nil, nil
+		}
 		task, names, ok := registry.TaskResults(row.Params[registry.ParamDetail])
 		run := subscribe.RunOf(ev)
 		if !ok || run == "" {

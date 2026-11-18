@@ -319,3 +319,34 @@ func TestNotifyFillsThePushFromTheEvent(t *testing.T) {
 		t.Fatal("a failed push acknowledged the event")
 	}
 }
+
+// 2026-11-17, the coordinator: a PROD release starting while main has known
+// regressions open wakes the seat that asked for it (the start's onbehalfof),
+// with the open ones; with none open, or on nobody's behalf, nobody.
+func TestReleaseStarterIsWokenWithOpenRegressions(t *testing.T) {
+	row := registry.Subscription{ID: "prod-release-open-regressions", On: []string{"ci.run.started"}, Match: "-prod-", Deliver: registry.DeliverWake, To: "requester",
+		Params: map[string]string{"detail": registry.DetailOpenRegressions, "require": "open"}, Guarantee: "durable", By: registry.ByDispatcher}
+	ev := Event{ID: "ev-41", Type: "ci.run.started", Subject: "bifrost-deliver-platform-prod-1@" + strings.Repeat("a", 40), OnBehalfOf: "thread:local_7de640c4-4b19-4a71-a0ac-ced2ce5fc7ff"}
+	open := ""
+	detail := func(context.Context, registry.Subscription, Event) (map[string]string, error) {
+		return map[string]string{"open": open}, nil
+	}
+	var got []string
+	send := func(_ context.Context, _, to, body string, _ int64) error { got = append(got, to, body); return nil }
+	if out, err := Deliver(context.Background(), row, ev, nil, detail, send, nil, ""); err != nil || out != Skipped || got != nil {
+		t.Fatalf("nothing open: out=%s err=%v got=%v", out, err, got)
+	}
+	open = "bifrost-platform@aaaaaaaaaaaa: Console module activity misses a type (thread:local_c00f7b95)"
+	if out, err := Deliver(context.Background(), row, ev, nil, detail, send, nil, ""); err != nil || out != Delivered {
+		t.Fatalf("open: out=%s err=%v", out, err)
+	}
+	if got[0] != ev.OnBehalfOf || !strings.Contains(got[1], "Console module activity") {
+		t.Fatalf("wake %q", got)
+	}
+	got = nil
+	nobody := ev
+	nobody.OnBehalfOf = ""
+	if out, _ := Deliver(context.Background(), row, nobody, nil, detail, send, nil, ""); out != Skipped || got != nil {
+		t.Fatalf("an event on nobody's behalf woke someone: %s %v", out, got)
+	}
+}
