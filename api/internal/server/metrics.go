@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"net/http"
@@ -65,6 +66,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	gatecluster.WriteMetrics(&b)
 	controller.WritePipelineEventMetrics(&b)
 	delivery.WriteBusReaderMetrics(&b)
+	readerseen.WriteMetrics(&b)
 	kubemetrics.Write(&b)
 	s.httpMetrics.Write(&b)
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")

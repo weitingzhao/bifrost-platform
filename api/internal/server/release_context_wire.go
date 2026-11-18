@@ -26,6 +26,6 @@ func (s *Server) handleReleaseContext(w http.ResponseWriter, r *http.Request) {
 	}
 	src.OpenRegressions = s.openRegressions
 	// main is shown, not gated on: read it where the ledger has it.
-	src.MainHead = s.mainOf(s.delivery.PolicyFacts().MainHead)
+	src.MainHead = s.mainOf("release-context-main", s.delivery.PolicyFacts().MainHead)
 	s.delivery.HandleReleaseContext(src)(w, r)
 }

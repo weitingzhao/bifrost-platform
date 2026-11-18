@@ -42,6 +42,23 @@ describe('nerveModel', () => {
   })
 })
 
+// Origin: 2026-11-18, the coordinator: the Owner reads the switch's progress off this map, and a reader
+// marked moved in the register with no run on its new source must not look finished.
+describe('a reader marked moved', () => {
+  const model = (evidence?: object) => nerveModel(contract, clients, { readers: [{ id: 'runs', title: 'Runs', counts: {}, readers: [
+    { id: 'r', what: 'x', status: 'moved', evidence },
+  ] }] } as unknown as BusNextgen).readers.map(r => r.id)
+  it('stays an old road until it is seen running', () => {
+    expect(model({ state: 'running', runs_7d: 9, last_seen: '2026-11-18T00:00:00Z' })).not.toContain('old:r')
+    expect(model({ state: 'stale', runs_7d: 9, last_seen: '2026-11-10T00:00:00Z' })).toContain('old:r')
+    expect(model({ state: 'none', runs_7d: 0 })).toContain('old:r')
+  })
+  it('is left as it is when the evidence could not be read, or the platform has none yet', () => {
+    expect(model({ state: 'unmeasured', runs_7d: 0 })).not.toContain('old:r')
+    expect(model()).not.toContain('old:r')
+  })
+})
+
 describe('readerOf', () => {
   it('is no reader for the Console itself, and the consumer for anyone else', () => {
     const m = nerveModel(contract, clients)

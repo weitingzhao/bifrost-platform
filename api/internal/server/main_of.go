@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
 	"slices"
 
 	bushook "github.com/weitingzhao/bifrost-platform/api/internal/bus/hook"
@@ -19,7 +20,7 @@ type mainReader = func(ctx context.Context, repo string) (string, error)
 // Gates (release policy, head-release, migrations, the daily full CI) keep
 // asking Gitea: the ledger is a hint for them, the source is the authority
 // (nextgen/run-readers.md, the main-head table).
-func (s *Server) mainOf(fallback mainReader) mainReader {
+func (s *Server) mainOf(reader string, fallback mainReader) mainReader {
 	var last mainReader
 	if s.bus.gitLedger.Load() {
 		last = func(ctx context.Context, repo string) (string, error) {
@@ -27,7 +28,11 @@ func (s *Server) mainOf(fallback mainReader) mainReader {
 			if db == nil {
 				return "", nil
 			}
-			return bushook.LastCommit(ctx, db)(repo)
+			commit, err := bushook.LastCommit(ctx, db)(repo)
+			if err == nil && commitID.MatchString(commit) {
+				readerseen.Saw(reader)
+			}
+			return commit, err
 		}
 	}
 	return ledgeredMain(bushook.ReposFromEnv(), last, fallback)

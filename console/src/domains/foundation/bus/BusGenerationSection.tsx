@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { fetchBusNextgen, generationSegments, type BusNextgen } from './busNextgen'
+import { fetchBusNextgen, generationSegments, movedWithoutEvidence, type BusNextgen, type NextgenReader } from './busNextgen'
 
 const COLOR: Record<string, string> = {
   replaced: 'var(--primary)',
@@ -89,6 +89,7 @@ export function BusGenerationSection() {
             {d.readers.map(g => (
               <li key={g.id}>
                 {g.title}: <span className="font-mono-tabular">{g.counts.moved ?? 0} moved · {g.counts.retired ?? 0} retired · {g.counts.kept ?? 0} kept · {g.counts.open ?? 0} open</span>
+                <ReaderEvidence readers={g.readers} />
               </li>
             ))}
           </ul>
@@ -109,4 +110,18 @@ export function BusGenerationSection() {
     </div>
   )
   return <OpsSection title="Generation" bodyPadding="compact">{body}</OpsSection>
+}
+
+/** Under a source-switch group: the moved readers with no recent run are named; the rest are counted as seen running. */
+function ReaderEvidence({ readers }: { readers: NextgenReader[] }) {
+  const moved = readers.filter(r => r.status === 'moved' && r.evidence)
+  if (moved.length === 0) return null
+  const running = moved.filter(r => r.evidence?.state === 'running')
+  const missing = moved.filter(movedWithoutEvidence)
+  return (
+    <div className="text-xs text-muted-foreground">
+      <span title={running.map(r => `${r.id}: ${new Date(r.evidence?.last_seen ?? '').toLocaleString()}`).join('\n')}>{running.length} seen running here</span>
+      {missing.length > 0 && <span className="text-amber-600"> · no recent run: {missing.map(r => r.id).join(', ')}</span>}
+    </div>
+  )
 }

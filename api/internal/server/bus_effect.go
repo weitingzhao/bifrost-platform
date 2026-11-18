@@ -54,7 +54,7 @@ func (s *Server) handleBusEffect(w http.ResponseWriter, r *http.Request) {
 	out := busEffect{GeneratedAt: now, Env: env}
 	out.Rows = append(out.Rows, s.effectMainToSTG(now))
 	out.Rows = append(out.Rows, s.effectListRuns(ctx, env)...)
-	out.Rows = append(out.Rows, effectSwitchRows()...)
+	out.Rows = append(out.Rows, effectSwitchRows(s.readerEvidence(ctx, now), now)...)
 	out.Rows = append(out.Rows, s.effectWakes(ctx, now))
 	out.Rows = append(out.Rows, s.effectRelay(ctx, env)...)
 	writeJSON(w, http.StatusOK, out)
@@ -183,7 +183,7 @@ func (s *Server) promql(ctx context.Context, q string) (map[string]float64, erro
 	out := map[string]float64{}
 	for _, p := range points {
 		key := ""
-		for _, k := range []string{"site", "route", "type", "__name__"} {
+		for _, k := range []string{"site", "route", "type", "reader", "__name__"} {
 			if v := p.Labels[k]; v != "" {
 				key = v
 				break

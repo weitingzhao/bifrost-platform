@@ -24,7 +24,7 @@ func (s *Server) agentRuntimePlanSources() planstore.PlanSources {
 			},
 			Client:   &http.Client{Timeout: 20 * time.Second},
 			MaxPages: 200,
-			Main:     s.mainOf(nil),
+			Main:     s.mainOf("plan-history", nil),
 		}
 		src.History = func(ctx context.Context, repo, task, result, snapshot string) (landing.MainHistory, error) {
 			return reader.History(ctx, repo, task, result, snapshot)

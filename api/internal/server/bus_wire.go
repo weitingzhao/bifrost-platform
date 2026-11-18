@@ -37,6 +37,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gatecluster"
 	bushook "github.com/weitingzhao/bifrost-platform/api/internal/bus/hook"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/mailwake"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
@@ -121,6 +122,7 @@ func (b *busWiring) finishedRuns() chan string {
 func (b *busWiring) runFinished(run, _ string) {
 	select {
 	case b.finishedRuns() <- run:
+		readerseen.Saw("records")
 	default:
 	}
 }

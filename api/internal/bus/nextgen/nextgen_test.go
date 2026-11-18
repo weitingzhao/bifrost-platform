@@ -195,3 +195,56 @@ func TestEarnedRoutesFromReadings(t *testing.T) {
 		t.Fatalf("earned %v", got)
 	}
 }
+
+// Origin: 2026-11-18, the coordinator: a reader's "moved" was proven only by
+// text in the code, so the Bus page could call a switch done that does not run
+// on PROD. How long a reader may be silent comes from its own pace.
+func TestEvidenceGoesByTheReadersOwnPace(t *testing.T) {
+	now := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	ago := func(d time.Duration) float64 { return float64(now.Add(-d).Unix()) }
+	loop := float64(EvidenceWindow / (30 * time.Second))
+	for _, c := range []struct {
+		name       string
+		last, runs float64
+		want       string
+	}{
+		{"a 30-second loop that just ran", ago(time.Minute), loop, EvidenceRunning},
+		{"a 30-second loop silent for an hour", ago(time.Hour), loop, EvidenceStale},
+		{"a page opened twice a week, silent for two days", ago(48 * time.Hour), 2, EvidenceRunning},
+		{"never answered from the new source", 0, 0, EvidenceNone},
+		{"last answered before the window", ago(8 * 24 * time.Hour), 0, EvidenceNone},
+	} {
+		if got := JudgeEvidence(now, c.last, c.runs).State; got != c.want {
+			t.Errorf("%s: %s, want %s", c.name, got, c.want)
+		}
+	}
+}
+
+// Same origin: every moved reader marks its answers, or the page could only
+// ever call it unproven; the mark names the reader as readers.yaml does.
+func TestEveryMovedReaderMarksItsRuns(t *testing.T) {
+	groups, err := Readers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := goFiles(t, root(t))
+	for _, g := range groups {
+		for _, rd := range g.Readers {
+			if rd.Status != StatusMoved {
+				continue
+			}
+			found := false
+			for f, body := range files {
+				// Directly, or through mainOf, which marks the reader it is given.
+				marks := strings.Contains(body, "bus/readerseen") || strings.Contains(body, `s.mainOf("`+rd.ID+`"`)
+				if !strings.HasSuffix(f, "_test.go") && marks && strings.Contains(body, `"`+rd.ID+`"`) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("moved reader %s has no run mark (readerseen) in the code", rd.ID)
+			}
+		}
+	}
+}

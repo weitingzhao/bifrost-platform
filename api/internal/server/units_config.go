@@ -58,7 +58,7 @@ func (s *Server) handleUnitConfig(w http.ResponseWriter, r *http.Request) {
 // mainHead is the commit main of repo is at: the ledger's when gate-git
 // watches repo, else Gitea's (mainOf).
 func (s *Server) mainHead(ctx context.Context, repo string) (string, error) {
-	return s.mainOf(s.giteaMainHead)(ctx, repo)
+	return s.mainOf("units-config", s.giteaMainHead)(ctx, repo)
 }
 
 // giteaMainHead is the commit main of repo is at, as Gitea says.

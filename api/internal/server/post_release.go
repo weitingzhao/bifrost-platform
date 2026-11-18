@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
 	"io"
 	"log/slog"
 	"net"
@@ -359,7 +360,9 @@ func (s *Server) postReleaseSource() func(context.Context) error {
 			// the cluster every 30 seconds, ~56 LISTs in 10 minutes on STG), else
 			// listed (delivery.PipelineRunsOf has why only this pipeline).
 			items, cached := s.delivery.CachedRunsOf(pipeline)
-			if !cached {
+			if cached {
+				readerseen.Saw("post-release")
+			} else {
 				var err error
 				if items, err = s.delivery.PipelineRunsOf(kubemetrics.WithSite(ctx, "post-release"), pipeline); err != nil {
 					return nil, err

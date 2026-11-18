@@ -12,6 +12,7 @@ import (
 	_ "embed"
 	"fmt"
 	"sort"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -67,6 +68,65 @@ type Reader struct {
 	// (BUS_GIT_REPOS); whether it does is read when asked, not written here.
 	WatchRepo  string `yaml:"watch_repo" json:"watch_repo,omitempty"`
 	AbsentText string `yaml:"absent_text" json:"absent_text,omitempty"`
+	// Evidence is whether a moved reader runs on its new source here; read
+	// from the running system when asked, never written in the file.
+	Evidence *Evidence `yaml:"-" json:"evidence,omitempty"`
+}
+
+// Evidence states of a moved reader.
+const (
+	EvidenceRunning    = "running"    // answered from its new source, as recently as it usually does
+	EvidenceStale      = "stale"      // it did, but has been silent far longer than its own pace
+	EvidenceNone       = "none"       // no answer from its new source in the window
+	EvidenceUnmeasured = "unmeasured" // the readings could not be read
+)
+
+// EvidenceWindow is how far back the readings are taken: the window the
+// display routes earn their trust over (EarnedRoutes' readings).
+const EvidenceWindow = 7 * 24 * time.Hour
+
+// A reader is stale after evidenceGaps of its own average gaps without an
+// answer, never sooner than evidenceFloor (a scrape or two of slack).
+const (
+	evidenceGaps  = 5
+	evidenceFloor = 15 * time.Minute
+)
+
+// Evidence is a moved reader's run-time proof in this environment.
+type Evidence struct {
+	State    string     `json:"state"`
+	LastSeen *time.Time `json:"last_seen,omitempty"`
+	Runs     float64    `json:"runs_7d"`
+	// StaleAfterSeconds is how long this reader may be silent, from its own pace.
+	StaleAfterSeconds float64 `json:"stale_after_seconds,omitempty"`
+}
+
+// JudgeEvidence reads one reader: last is the Unix time of its last answer
+// from the new source (0 for none), runs how many it gave in EvidenceWindow.
+// How long it may be silent comes from its own pace: a 30-second loop is
+// missed within minutes, a page opened twice a week only after days.
+func JudgeEvidence(now time.Time, last, runs float64) Evidence {
+	e := Evidence{State: EvidenceNone, Runs: runs}
+	if last <= 0 {
+		return e
+	}
+	at := time.Unix(int64(last), 0).UTC()
+	e.LastSeen = &at
+	age := now.Sub(at)
+	if age > EvidenceWindow {
+		return e
+	}
+	allow := EvidenceWindow
+	if runs >= 1 {
+		allow = time.Duration(float64(EvidenceWindow) / runs * evidenceGaps)
+	}
+	allow = max(evidenceFloor, min(allow, EvidenceWindow))
+	e.StaleAfterSeconds = allow.Seconds()
+	e.State = EvidenceRunning
+	if age > allow {
+		e.State = EvidenceStale
+	}
+	return e
 }
 
 // ReaderGroup is a kind of reader.

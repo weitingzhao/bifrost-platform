@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
 	"log/slog"
 	"os"
 	"sort"
@@ -57,6 +58,14 @@ const (
 )
 
 var cacheRoutes = []string{routePipelineRuns, routeReleaseContext, routeSupplyChain}
+
+// routeReader is each route's reader in the source switch (bus/nextgen
+// readers.yaml): a read answered from the cache is its run evidence.
+var routeReader = map[string]string{
+	routePipelineRuns:   "pipeline-runs-page",
+	routeSupplyChain:    "supply-chain-page",
+	routeReleaseContext: "release-context",
+}
 
 // EnvReadersCompareN is how many clean comparisons in a row a route needs
 // before it answers from the cache.
@@ -173,6 +182,7 @@ func readThrough[T any](s *Service, route string, cached func(RunCache) T, liste
 	}
 	if r.serve(route) {
 		readerMetric(&metricReadersServed, route).Add(1)
+		readerseen.Saw(routeReader[route])
 		return cached(r.cache), nil
 	}
 	before := keys(cached(r.cache))

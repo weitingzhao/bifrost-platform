@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"io"
 	"log/slog"
@@ -263,6 +264,7 @@ func (s *Server) headWorldOf() *headWorld {
 			// reads the cluster (StartDeliveryIfFree), so a stale cache cannot
 			// start a second run beside an unfinished one.
 			if items, ok := s.delivery.CachedRunsOf(pipeline); ok {
+				readerseen.Saw("head-release")
 				return items, nil
 			}
 			return s.delivery.PipelineRunsOf(kubemetrics.WithSite(ctx, "head-release"), pipeline)

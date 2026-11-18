@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
 	"log/slog"
 	"net/http"
 	"os"
@@ -51,11 +52,17 @@ func (s *Server) handleBusNextgen(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	evidence := s.readerEvidence(r.Context(), out.GeneratedAt)
 	for _, g := range groups {
 		ng := nextgenReaderGroup{ReaderGroup: g, Counts: map[string]int{}}
 		for i, rd := range g.Readers {
 			ng.Counts[rd.Status]++
 			ng.Readers[i].Note = watchNote(rd)
+			if rd.Status == nextgen.StatusMoved {
+				e := evidence(rd.ID)
+				ng.Readers[i].Evidence = &e
+				ng.Counts["evidence_"+e.State]++
+			}
 		}
 		out.Readers = append(out.Readers, ng)
 	}
@@ -112,9 +119,43 @@ func (s *Server) baselineInto(ctx context.Context, row *effectRow, key string) {
 	}
 }
 
+// readerEvidence reads, from this environment's metrics, whether each moved
+// reader really answers from its new source (bus/readerseen): the answer for
+// one reader id. Prometheus not answering is "unmeasured", not a failure of
+// the reader.
+func (s *Server) readerEvidence(ctx context.Context, now time.Time) func(string) nextgen.Evidence {
+	env := strings.TrimSpace(os.Getenv("AGENTRT_ENV"))
+	ns := "bifrost-platform-" + env
+	window := fmt.Sprintf("%dd", int(nextgen.EvidenceWindow.Hours()/24))
+	last, err := s.promql(ctx, fmt.Sprintf(`max by (reader) (max_over_time(%s{namespace=%q}[%s]))`, readerseen.MetricLast, ns, window))
+	var runs map[string]float64
+	if err == nil {
+		runs, err = s.promql(ctx, fmt.Sprintf(`sum by (reader) (increase(%s{namespace=%q}[%s]))`, readerseen.MetricRuns, ns, window))
+	}
+	if err != nil {
+		slog.Info("bus readers: run evidence not read", "error", err)
+		return func(string) nextgen.Evidence { return nextgen.Evidence{State: nextgen.EvidenceUnmeasured} }
+	}
+	return func(id string) nextgen.Evidence { return nextgen.JudgeEvidence(now, last[id], runs[id]) }
+}
+
+// evidenceWhen says a moved reader's evidence in a line.
+func evidenceWhen(e nextgen.Evidence, now time.Time) string {
+	switch e.State {
+	case nextgen.EvidenceRunning:
+		return "ran " + now.Sub(*e.LastSeen).Round(time.Second).String() + " ago"
+	case nextgen.EvidenceStale:
+		return "NO RECENT RUN: last " + now.Sub(*e.LastSeen).Round(time.Minute).String() + " ago"
+	case nextgen.EvidenceNone:
+		return "NO RUN EVIDENCE in 7 days"
+	}
+	return "run evidence not measured"
+}
+
 // effectSwitchRows are the source switch's two groups, counted from the
-// register (bus/nextgen readers.yaml), each reader an item.
-func effectSwitchRows() []effectRow {
+// register (bus/nextgen readers.yaml), each reader an item; a moved reader
+// says when it last ran on its new source.
+func effectSwitchRows(evidence func(string) nextgen.Evidence, now time.Time) []effectRow {
 	groups, err := nextgen.Readers()
 	if err != nil {
 		return []effectRow{{Key: "switch", Label: "Source readers moved", Unmeasured: err.Error()}}
@@ -122,12 +163,20 @@ func effectSwitchRows() []effectRow {
 	var rows []effectRow
 	for _, g := range groups {
 		counts := map[string]int{}
+		running := 0
 		var items []effectItem
 		for _, rd := range g.Readers {
 			counts[rd.Status]++
 			when := rd.Status
 			if rd.At != "" {
 				when += " " + rd.At
+			}
+			if rd.Status == nextgen.StatusMoved {
+				e := evidence(rd.ID)
+				if e.State == nextgen.EvidenceRunning {
+					running++
+				}
+				when += " · " + evidenceWhen(e, now)
 			}
 			ref := watchNote(rd)
 			if rd.Owner != "" {
@@ -138,9 +187,9 @@ func effectSwitchRows() []effectRow {
 		rows = append(rows, effectRow{
 			Key:   "switch_" + g.ID,
 			Label: "Source switch: " + g.Title,
-			Value: fmt.Sprintf("%d moved, %d retired, %d kept by design, %d open (of %d)",
-				counts[nextgen.StatusMoved], counts[nextgen.StatusRetired], counts[nextgen.StatusKept], counts[nextgen.StatusOpen], len(g.Readers)),
-			How:   "Counted from the register bus/nextgen/readers.yaml; its test checks each moved reader's code is there and each retired one's is gone.",
+			Value: fmt.Sprintf("%d moved (%d seen running), %d retired, %d kept by design, %d open (of %d)",
+				counts[nextgen.StatusMoved], running, counts[nextgen.StatusRetired], counts[nextgen.StatusKept], counts[nextgen.StatusOpen], len(g.Readers)),
+			How:   "Counted from the register bus/nextgen/readers.yaml; its test checks each moved reader's code is there and each retired one's is gone. Seen running: the reader answered from its new source in this environment, as recently as its own pace says (bifrost_bus_reader_new_source_*, last 7 days).",
 			Items: items,
 		})
 	}

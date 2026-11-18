@@ -140,7 +140,7 @@ func (s *Server) handleEvidenceCommit(w http.ResponseWriter, r *http.Request) {
 	}
 	main := agentrtapi.MainHead(nil)
 	if m := s.agentRuntimeMains(); m != nil {
-		main = s.mainOf(m)
+		main = s.mainOf("evidence", m)
 	}
 	if s.agentRuntime == nil || s.agentRuntime.api == nil || s.agentRuntime.api.DB == nil || s.delivery == nil || main == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "the evidence ledger is not available on this platform"})

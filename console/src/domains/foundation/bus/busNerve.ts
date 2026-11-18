@@ -1,6 +1,6 @@
 import { authedFetch } from '@/api/client'
 import type { BusEnvelope } from './busTrace'
-import type { BusContract, BusNextgen } from './busNextgen'
+import { movedWithoutEvidence, type BusContract, type BusNextgen } from './busNextgen'
 import type { BusClient } from './useBusStream'
 
 /**
@@ -38,6 +38,11 @@ export function nerveModel(contract: BusContract, clients: readonly BusClient[],
   // the gate under its own client name, which the roster lists once seen.
   for (const g of nextgen?.readers ?? []) {
     for (const r of g.readers) {
+      if (movedWithoutEvidence(r)) {
+        const last = r.evidence?.last_seen ? `last ran ${new Date(r.evidence.last_seen).toLocaleString()}` : 'no run in 7 days'
+        readers.push({ id: `old:${r.id}`, label: r.id, col: 'reader', tone: 'old', note: `marked moved, but no recent run on the new source (${last}): ${r.what}` })
+        continue
+      }
       if (r.status === 'moved' || r.status === 'retired') continue
       readers.push({ id: `old:${r.id}`, label: r.id, col: 'reader', tone: 'old', note: `not on the bus yet: ${r.what}` })
     }

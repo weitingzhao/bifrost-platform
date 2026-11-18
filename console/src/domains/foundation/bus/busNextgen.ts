@@ -16,7 +16,9 @@ export type NextgenChannel = {
   retired?: { at: string; change: string; outside?: string }
 }
 export type NextgenCount = { disposition: string; total: number; retired: number }
-export type NextgenReader = { id: string; what: string; status: string; at?: string; owner?: string; note?: string }
+/** Whether a moved reader really runs on its new source in this environment (absent from an older platform). */
+export type NextgenEvidence = { state: 'running' | 'stale' | 'none' | 'unmeasured'; last_seen?: string; runs_7d: number; stale_after_seconds?: number }
+export type NextgenReader = { id: string; what: string; status: string; at?: string; owner?: string; note?: string; evidence?: NextgenEvidence }
 export type NextgenReaderGroup = { id: string; title: string; readers: NextgenReader[]; counts: Record<string, number> }
 export type NextgenBaseline = { key: string; label: string; at: string; note?: string; value?: number; unmeasured?: string }
 export type BusNextgen = {
@@ -24,6 +26,11 @@ export type BusNextgen = {
   progress: { start: number; now: number; target: number; retired: number; to_go: number; counts: NextgenCount[]; recent: NextgenChannel[] }
   readers: NextgenReaderGroup[]
   baselines: NextgenBaseline[]
+}
+
+/** A reader called moved with no recent proof that it runs: not finished, whatever the register says. */
+export function movedWithoutEvidence(r: NextgenReader): boolean {
+  return r.status === 'moved' && (r.evidence?.state === 'stale' || r.evidence?.state === 'none')
 }
 
 export async function fetchBusNextgen(): Promise<BusNextgen> {

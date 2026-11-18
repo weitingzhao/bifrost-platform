@@ -9,7 +9,9 @@
 # A moved reader names its proof: a file and text that must be in it (the
 # code that reads the bus). A retired one names text that must be in no Go
 # file. TestReadersStandAsTheySay checks both, so a line cannot stay "moved"
-# after the code went back, nor be "open" while nothing proves it.
+# after the code went back, nor be "open" while nothing proves it. That proves
+# the code; a moved reader also marks each answer from its new source
+# (bus/readerseen), and the Bus page shows that run evidence per environment.
 groups:
   - id: runs
     title: Readers that listed pipeline runs
@@ -32,10 +34,10 @@ groups:
   - id: main
     title: Readers that asked Gitea where main is
     readers:
-      - {id: plan-history, what: "plan history's main (1 min)", status: moved, at: "2026-11-17", proof: {file: api/internal/server/agentrt_planfacts.go, contains: "s.mainOf(nil)"}}
-      - {id: release-context-main, what: "release context's main", status: moved, at: "2026-11-17", proof: {file: api/internal/server/release_context_wire.go, contains: "s.mainOf(s.delivery.PolicyFacts().MainHead)"}}
-      - {id: evidence, what: "commit evidence and compare", status: moved, at: "2026-11-17", proof: {file: api/internal/server/evidence_commit.go, contains: "s.mainOf(m)"}}
-      - {id: units-config, what: "units/config, CI scorecard and domains", status: moved, at: "2026-11-17", proof: {file: api/internal/server/units_config.go, contains: "s.mainOf(s.giteaMainHead)"}}
+      - {id: plan-history, what: "plan history's main (1 min)", status: moved, at: "2026-11-17", proof: {file: api/internal/server/agentrt_planfacts.go, contains: 's.mainOf("plan-history", nil)'}}
+      - {id: release-context-main, what: "release context's main", status: moved, at: "2026-11-17", proof: {file: api/internal/server/release_context_wire.go, contains: 's.mainOf("release-context-main", s.delivery.PolicyFacts().MainHead)'}}
+      - {id: evidence, what: "commit evidence and compare", status: moved, at: "2026-11-17", proof: {file: api/internal/server/evidence_commit.go, contains: 's.mainOf("evidence", m)'}}
+      - {id: units-config, what: "units/config, CI scorecard and domains", status: moved, at: "2026-11-17", proof: {file: api/internal/server/units_config.go, contains: 's.mainOf("units-config", s.giteaMainHead)'}}
       - {id: config-boundaries, what: "configuration boundaries (infra main)", status: open, owner: communication, watch_repo: bifrost-trade-infra, note: "moves when gate-git watches infra (its Gitea hook is an execution card)"}
       - {id: head-release-main, what: "head-release reads main after a wake", status: kept, note: "a gate reads the source; the event only wakes it"}
       - {id: release-policy-main, what: "release policy MainHead", status: kept, note: "a gate"}
