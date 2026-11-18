@@ -11,7 +11,7 @@ import (
 // Snapshot reads registered work inside the caller's existing snapshot.
 // Description validation remains with the caller; errors are returned unchanged.
 func Snapshot(ctx context.Context, tx pgx.Tx, root string, now time.Time, description func(context.Context, pgx.Tx, string) (any, error)) ([]map[string]any, error) {
-	rows, err := tx.Query(ctx, `SELECT body,at FROM (SELECT DISTINCT ON(event_stream_id) body_json->'external_work' AS body,at FROM agentrt.event WHERE event_type='note' AND body_json ? 'external_work' ORDER BY event_stream_id,seq DESC) x WHERE body->>'root'=$1 ORDER BY body->>'external_work_id'`, root)
+	rows, err := tx.Query(ctx, `SELECT body,at FROM (SELECT DISTINCT ON(event_stream_id) body_json->'external_work' AS body,at FROM agentrt.event WHERE event_type IN ('external_work_noted','note') AND body_json ? 'external_work' ORDER BY event_stream_id,seq DESC) x WHERE body->>'root'=$1 ORDER BY body->>'external_work_id'`, root)
 	if err != nil {
 		return nil, err
 	}

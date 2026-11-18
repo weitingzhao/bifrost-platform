@@ -3,6 +3,7 @@ package controller_test
 import (
 	"context"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"strings"
 	"sync"
 	"testing"
@@ -59,7 +60,7 @@ func setup(t *testing.T) *pgxpool.Pool {
 func setRule(t *testing.T, pool *pgxpool.Pool, step, rule string, binds ...[2]string) {
 	t.Helper()
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream("R2"), Type: "plan_changed", Actor: "controller",
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream("R2"), Type: "plan_changed", Actor: "controller",
 			Body: map[string]any{"change": "test"}}); err != nil {
 			return err
 		}

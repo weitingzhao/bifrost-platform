@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -60,7 +61,7 @@ func register(t *testing.T, s *httptest.Server, caller string, body map[string]a
 // notes are a work's notes, oldest first.
 func notes(t *testing.T, pool *pgxpool.Pool, id string) []map[string]any {
 	t.Helper()
-	rows, err := pool.Query(ctx, `SELECT body_json->'external_work' FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note' ORDER BY seq`, "external-work:"+id)
+	rows, err := pool.Query(ctx, `SELECT body_json->'external_work' FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'external_work_noted' ORDER BY seq`, "external-work:"+id)
 	must(t, err)
 	var out []map[string]any
 	for rows.Next() {
@@ -421,7 +422,7 @@ func TestCoverageCountsNoCollector(t *testing.T) {
 	}
 	for _, actor := range []string{"thread:collector@h1", "thread:cov-s"} {
 		must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-			_, err := store.Append(ctx, tx, store.Event{Stream: "coverage-test", Type: "note", Actor: actor, PlanNode: "R2:1-1", Body: map[string]any{"text": "plan-node work of " + actor}})
+			_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "coverage-test", Type: "note", Actor: actor, PlanNode: "R2:1-1", Body: map[string]any{"text": "plan-node work of " + actor}})
 			return err
 		}))
 	}
@@ -499,7 +500,7 @@ func TestIdentityOnlyFromCollector(t *testing.T) {
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
 		now := time.Now().UTC().Format(time.RFC3339Nano)
 		digest := "sha256:" + strings.Repeat("0", 64)
-		_, err := store.Append(ctx, tx, store.Event{Stream: "external-work:" + legacy, Type: "note", Actor: "thread:collector@h1", PlanNode: "R2:1-1",
+		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "external-work:" + legacy, Type: "note", Actor: "thread:collector@h1", PlanNode: "R2:1-1",
 			Body: map[string]any{"text": "External work registered", "external_work": map[string]any{"v": 1, "kind": "agentrt.external_work/v1",
 				"external_work_id": legacy, "registrant": "thread:collector@h1", "root": "R2", "plan_node_id": "R2:1-1", "source_run_key": "before",
 				"artifact_id": spec, "seq": 0, "type": "registered", "state": "Registered", "request_digest": digest, "registration_digest": digest,

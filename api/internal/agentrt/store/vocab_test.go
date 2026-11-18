@@ -12,6 +12,9 @@ import (
 	// (2026-11-17, store cut O2): link it, so TestEventFieldValues still
 	// holds their values and every type in the closed list has its body here.
 	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
+	// action_traced is declared by actionrecord (2026-11-17, migration 0032):
+	// link it for the same reason.
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actionrecord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 	"testing"
@@ -26,7 +27,7 @@ func TestAssessmentRecordedQueryParityPG(t *testing.T) {
 	for _, kind := range []string{assessmentreadings.AssessCard, assessmentreadings.AssessApproval} {
 		ok(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
 			for _, text := range []string{"recorded first", "recorded second"} {
-				_, err := store.Append(ctx, tx, store.Event{Stream: assessmentreadings.AssessStream(kind, "parity"), Type: "note", Actor: "controller", Body: map[string]any{"text": text}})
+				_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: assessmentreadings.AssessStream(kind, "parity"), Type: "note", Actor: "controller", Body: map[string]any{"text": text}})
 				if err != nil {
 					return err
 				}

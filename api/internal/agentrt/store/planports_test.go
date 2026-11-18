@@ -114,7 +114,7 @@ func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 	// The note check: the stored record passes; a record of the wrong shape
 	// is refused in externalwork's words; an unknown field is refused.
 	var raw []byte
-	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->'external_work' FROM agentrt.event WHERE event_type = 'note' AND body_json->'external_work'->>'external_work_id' = $1 ORDER BY event_id DESC LIMIT 1`, id).Scan(&raw))
+	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->'external_work' FROM agentrt.event WHERE event_type = 'external_work_noted' AND body_json->'external_work'->>'external_work_id' = $1 ORDER BY event_id DESC LIMIT 1`, id).Scan(&raw))
 	var record map[string]any
 	ok(t, json.Unmarshal(raw, &record))
 	ok(t, store.CheckExternalNoteForTest(record))

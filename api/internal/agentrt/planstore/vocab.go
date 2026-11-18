@@ -22,6 +22,11 @@ var planTypes = []string{
 	"plan_change_decided", "plan_change_proposed", "plan_changed", "plan_node_created", "plan_node_retitled",
 	"plan_node_state_changed", "route_decided", "task_cancelled", "task_dependency_added", "task_proposed",
 	"task_state_changed", "wave_abandoned", "wave_closed", "wave_opened",
+	// The plan's own records that are still notes today (step 5 of the note
+	// and policy_alert split; migration 0032 takes them, 2026-11-17): named
+	// here with no body until their writers move, so none is written yet.
+	"plan_card_answered_by_rule", "plan_card_settled", "plan_observation", "plan_observation_pass",
+	"plan_step_marked_done", "plan_view_adopted",
 }
 
 // executorPins are the pins there are (0010 task_executor_pin_check).

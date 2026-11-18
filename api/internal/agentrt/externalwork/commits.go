@@ -37,7 +37,7 @@ func NamingOfCommit(ctx context.Context, tx pgx.Tx, prefix string) (CommitNamed,
 	rows, err := tx.Query(ctx, `SELECT body, sha, at FROM (SELECT DISTINCT ON (e.event_stream_id, s.sha)
 	  e.event_id, e.body_json->'external_work' AS body, s.sha, e.at FROM agentrt.event e
 	  CROSS JOIN LATERAL jsonb_array_elements_text(e.body_json->'external_work'->'commit_shas') AS s(sha)
-	  WHERE e.event_stream_id LIKE 'external-work:%' AND e.event_type = 'note'
+	  WHERE e.event_stream_id LIKE 'external-work:%' AND e.event_type IN ('external_work_noted', 'note')
 	  AND jsonb_typeof(e.body_json->'external_work'->'commit_shas') = 'array'
 	  AND left(s.sha, length($1)) = $1 ORDER BY e.event_stream_id, s.sha, e.seq) x
 	  ORDER BY event_id, sha LIMIT 50`, prefix)

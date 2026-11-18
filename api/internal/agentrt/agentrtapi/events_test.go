@@ -5,6 +5,7 @@ package agentrtapi_test
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -123,11 +124,11 @@ func TestEventsAcrossStreams(t *testing.T) {
 	// A rolled-back append leaves a hole in the ids between two stored events.
 	tx, err := pool.Begin(ctx)
 	must(t, err)
-	hole, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller", Body: map[string]any{"source": "test: a hole"}})
+	hole, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller", Body: map[string]any{"source": "test: a hole"}})
 	must(t, err)
 	must(t, tx.Rollback(ctx))
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		_, aerr := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller", Body: map[string]any{"source": "test: after the hole"}})
+		_, aerr := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller", Body: map[string]any{"source": "test: after the hole"}})
 		return aerr
 	}))
 	all := sortedIDs(t, pool, `true`)
@@ -231,7 +232,7 @@ func TestEventsReadOnSeesALateCommit(t *testing.T) {
 
 	appendIn := func(tx pgx.Tx, stream, typ string, body map[string]any) int64 {
 		t.Helper()
-		ev, err := store.Append(ctx, tx, store.Event{Stream: stream, Type: typ, Actor: "controller", Body: body})
+		ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: stream, Type: typ, Actor: "controller", Body: body})
 		must(t, err)
 		return ev.EventID
 	}
@@ -292,7 +293,7 @@ func TestEventsReadOnPages(t *testing.T) {
 	var txid int64
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
 		for i := range 3 {
-			ev, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+			ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 				Body: map[string]any{"source": fmt.Sprint("test: one of three ", i)}})
 			if err != nil {
 				return err

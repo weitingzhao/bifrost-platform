@@ -212,7 +212,7 @@ func ReadExternal(ctx context.Context, tx pgx.Tx, id string) (ExternalNote, int6
 	var raw []byte
 	var event int64
 	var at time.Time
-	err := tx.QueryRow(ctx, `SELECT body_json->'external_work',event_id,at FROM agentrt.event WHERE event_stream_id=$1 AND event_type='note' AND body_json ? 'external_work' ORDER BY seq DESC LIMIT 1`, "external-work:"+id).Scan(&raw, &event, &at)
+	err := tx.QueryRow(ctx, `SELECT body_json->'external_work',event_id,at FROM agentrt.event WHERE event_stream_id=$1 AND event_type IN ('external_work_noted','note') AND body_json ? 'external_work' ORDER BY seq DESC LIMIT 1`, "external-work:"+id).Scan(&raw, &event, &at)
 	if err == nil {
 		err = json.Unmarshal(raw, &n)
 	}
@@ -226,7 +226,7 @@ func AppendExternal(ctx context.Context, tx pgx.Tx, actor string, n ExternalNote
 	if err != nil {
 		return nil, err
 	}
-	ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "external-work:" + n.ID, Type: "note", Actor: actor, PlanNode: n.Node, Body: map[string]any{"text": "External work " + n.Type, "external_work": body}})
+	ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "external-work:" + n.ID, Type: notedType, Actor: actor, PlanNode: n.Node, Body: map[string]any{"text": "External work " + n.Type, "external_work": body}})
 	if err != nil {
 		return nil, err
 	}

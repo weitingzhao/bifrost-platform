@@ -36,7 +36,7 @@ func planEvidenceCandidates(ctx context.Context, tx pgx.Tx, snap *planFactsSnaps
 	}
 	rows, err := tx.Query(ctx, `WITH external AS (
  SELECT DISTINCT ON(event_stream_id) body_json->'external_work' e
- FROM agentrt.event WHERE event_type='note' AND body_json ? 'external_work'
+ FROM agentrt.event WHERE event_type IN ('external_work_noted','note') AND body_json ? 'external_work'
  ORDER BY event_stream_id,seq DESC
  ), candidates AS (
  SELECT e->>'plan_node_id' step, x.id, x.label || ' · ' || (e->>'source_run_key') label,

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actionrecord"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -14,9 +15,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 )
@@ -201,7 +200,7 @@ func (s *Server) recordActionTrace(ctx context.Context, t *actionTrace) {
 		} else {
 			ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
-			err = appendActionTrace(ctx, s.agentRuntime.late, string(raw))
+			err = actionrecord.AppendTrace(ctx, s.agentRuntime.late, string(raw))
 		}
 	}
 	if err != nil {
@@ -211,11 +210,4 @@ func (s *Server) recordActionTrace(ctx context.Context, t *actionTrace) {
 			s.audit.RecordDirect("controller", actuation.RoleOperator, "action_trace.append_failed", t.Action, "alert", msg+" request_hash="+t.RequestHash)
 		}
 	}
-}
-
-func appendActionTrace(ctx context.Context, db store.DB, raw string) error {
-	return store.InTx(ctx, db, func(tx pgx.Tx) error {
-		_, err := store.Append(ctx, tx, store.Event{Stream: "action-trace", Type: "note", Actor: "controller", Body: map[string]any{"text": raw}})
-		return err
-	})
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -306,7 +307,7 @@ func TestPlanImportHeadAfterOtherEvents(t *testing.T) {
 	pool := seeded(t)
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
 		for i := 0; i < 501; i++ {
-			if _, err := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream("R2"), Type: "note", Actor: "controller",
+			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream("R2"), Type: "note", Actor: "controller",
 				Body: map[string]any{"text": fmt.Sprintf("before the import %d", i)}}); err != nil {
 				return err
 			}

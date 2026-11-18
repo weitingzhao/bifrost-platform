@@ -2,6 +2,7 @@ package agentrtapi_test
 
 import (
 	"context"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 
 	"github.com/jackc/pgx/v5"
 
@@ -19,7 +20,7 @@ func seedHost(ctx context.Context, db store.DB, by, id, kind string) error {
 		// host_registered has no declared body any more (no code writes it,
 		// 2026-11-17); the rows still need an event in their transaction, as
 		// seedLease writes one.
-		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: by,
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: by,
 			Body: map[string]any{"source": "test"}}); err != nil {
 			return err
 		}

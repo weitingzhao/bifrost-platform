@@ -12,6 +12,7 @@
 # deploy, ci) are written by seenfacts, foundation's recorder of outside
 # systems' state, and declared there.
 types:
+  - {type: action_traced, domain: foundation, note: "an action's trace (request, decision, result) for the review of automatic decisions; actionrecord (migration 0032, was a note)"}
   - {type: actor_registered, domain: foundation}
   - {type: approval_seen, domain: foundation}
   - {type: artifact_put, domain: foundation}
@@ -41,6 +42,7 @@ types:
   - {type: controller_loop_recovered, domain: foundation, note: "a controller loop passes again; loopalert (migration 0029, was a note)"}
   - {type: decision_recorded, domain: plan}
   - {type: deploy_seen, domain: foundation}
+  - {type: external_work_noted, domain: lineage, note: "an external work's record on its stream; externalwork (migration 0032, was a note with external_work)"}
   - {type: full_ci_noted, domain: verification, note: "the daily full CI's runs started and each red run; evidence (migration 0031, was a note with full_ci)"}
   - {type: host_registered, domain: compute}
   - {type: host_retired, domain: compute}
@@ -59,12 +61,18 @@ types:
   - {type: owner_wait_closed, domain: owner}
   - {type: owner_wait_opened, domain: owner}
   - {type: pipeline_seen, domain: foundation}
+  - {type: plan_card_answered_by_rule, domain: plan, note: "a card the plan rule answered; planstore (migration 0032, was a note; writer moves later)"}
+  - {type: plan_card_settled, domain: plan, note: "a card acknowledged or gone from the question store; planstore (migration 0032, was a note; writer moves later)"}
   - {type: plan_change_decided, domain: plan}
   - {type: plan_change_proposed, domain: plan}
   - {type: plan_changed, domain: plan}
   - {type: plan_node_created, domain: plan}
   - {type: plan_node_retitled, domain: plan}
   - {type: plan_node_state_changed, domain: plan}
+  - {type: plan_observation, domain: plan, note: "a plan verification observation; planstore (migration 0032, was a note with plan_observation; writer moves later)"}
+  - {type: plan_observation_pass, domain: plan, note: "a plan verification pass; planstore (migration 0032, was a note with plan_observation_pass; writer moves later)"}
+  - {type: plan_step_marked_done, domain: plan, note: "a step marked done by hand; planstore (migration 0032, was a note with manual; writer moves later)"}
+  - {type: plan_view_adopted, domain: plan, note: "a plan view adopted; planstore (migration 0032, was a note with plan_view; writer moves later)"}
   - {type: policy_alert, domain: foundation}
   - {type: pool_cooldown_set, domain: compute}
   - {type: pool_measured, domain: compute}

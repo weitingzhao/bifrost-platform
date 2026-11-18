@@ -26,7 +26,7 @@ func Identities(ctx context.Context, db eventlog.DB) ([]Identity, error) {
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	rows, err := tx.Query(ctx, `SELECT body FROM (SELECT DISTINCT ON(event_stream_id) body_json->'external_work' AS body FROM agentrt.event
-	  WHERE event_type='note' AND body_json ? 'external_work' AND event_stream_id LIKE 'external-work:%' ORDER BY event_stream_id,seq DESC) x
+	  WHERE event_type IN ('external_work_noted','note') AND body_json ? 'external_work' AND event_stream_id LIKE 'external-work:%' ORDER BY event_stream_id,seq DESC) x
 	  WHERE body ? 'vendor' ORDER BY body->>'external_work_id'`)
 	if err != nil {
 		return nil, err

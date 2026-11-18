@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"reflect"
 	"slices"
 	"testing"
@@ -61,7 +62,7 @@ func database0009(t *testing.T) (*agentrttest.DB, *pgx.Conn, []migrate.File) {
 		if err != nil {
 			return err
 		}
-		if _, err = store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+		if _, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "T50 0009 fixture"}}); err != nil {
 			return err
 		}

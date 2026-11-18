@@ -110,6 +110,10 @@ modules:
       api/internal/agentrt/artifact: ["api/internal/agentrt/artifact", "api/internal/bus/registry/ledger"]
       # 2026-11-17: TestFullCINotedIsRegistered reads the event register.
       api/internal/agentrt/evidence: ["api/internal/agentrt/evidence", "api/internal/bus/registry/ledger"]
+      # 2026-11-17: TestNotedTypeIsRegistered reads the event register.
+      api/internal/agentrt/externalwork: ["api/internal/agentrt/externalwork", "api/internal/bus/registry/ledger"]
+      # 2026-11-17: TestTracedTypeIsRegistered reads the event register.
+      api/internal/agentrt/actionrecord: ["api/internal/agentrt/actionrecord", "api/internal/bus/registry/ledger"]
       api/internal/agentrt/deliveryview: ["api/internal/agentrt/deliveryview"]
       api/internal/agentrt/canon: ["api/internal/agentrt/canon"]
       api/internal/agentrt/infracheck: ["api/internal/agentrt/infracheck"]

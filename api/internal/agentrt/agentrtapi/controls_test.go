@@ -2,6 +2,7 @@ package agentrtapi_test
 
 import (
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"net/http"
 	"slices"
 	"strings"
@@ -116,7 +117,7 @@ func TestPlanReads(t *testing.T) {
 func legacy(t *testing.T, pool *pgxpool.Pool, stmts ...string) {
 	t.Helper()
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test"}}); err != nil {
 			return err
 		}

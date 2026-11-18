@@ -106,9 +106,6 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	if s.delivery != nil && role.RunsWorkers() {
 		s.delivery.EnableWindowQueueAdvance()
 	}
-	if s.delivery != nil {
-		s.delivery.BindWindowRecorder(s.recordWindowEvent)
-	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	env := strings.TrimSpace(os.Getenv("AGENTRT_ENV"))

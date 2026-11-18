@@ -3,6 +3,7 @@ package coord_test
 import (
 	"context"
 	"errors"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"strings"
 	"sync"
 	"testing"
@@ -148,7 +149,7 @@ func TestConclusionSkipsUndeliverableActors(t *testing.T) {
 	retire := func(retired bool) {
 		t.Helper()
 		ok(t, store.InTx(ctx, admin, func(tx pgx.Tx) error {
-			if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "actor_registered", Actor: "controller",
+			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "actor_registered", Actor: "controller",
 				Body: map[string]any{"actors": []string{w.Actor}, "note": "test recipient availability"}}); err != nil {
 				return err
 			}

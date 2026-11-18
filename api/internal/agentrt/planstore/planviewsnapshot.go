@@ -66,7 +66,7 @@ func PlanViewPage(ctx context.Context, db eventlog.DB, root, cursor string) (map
 		return nil, err
 	}
 	var unregistered int
-	err = tx.QueryRow(ctx, ViewTree+`SELECT count(DISTINCT e.actor_id) FROM agentrt.event e JOIN tree ON tree.plan_node_id=e.plan_node_id WHERE e.actor_id LIKE 'thread:%' AND e.actor_id NOT LIKE '`+collector+`%' AND e.at >= $2::timestamptz-interval '24 hours' AND NOT EXISTS(SELECT 1 FROM agentrt.event x WHERE x.event_type='note' AND x.body_json->'external_work'->>'registrant'=e.actor_id AND x.body_json->'external_work'->>'root'=$1)`, root, now).Scan(&unregistered)
+	err = tx.QueryRow(ctx, ViewTree+`SELECT count(DISTINCT e.actor_id) FROM agentrt.event e JOIN tree ON tree.plan_node_id=e.plan_node_id WHERE e.actor_id LIKE 'thread:%' AND e.actor_id NOT LIKE '`+collector+`%' AND e.at >= $2::timestamptz-interval '24 hours' AND NOT EXISTS(SELECT 1 FROM agentrt.event x WHERE x.event_type IN ('external_work_noted','note') AND x.body_json->'external_work'->>'registrant'=e.actor_id AND x.body_json->'external_work'->>'root'=$1)`, root, now).Scan(&unregistered)
 	if err != nil {
 		return nil, err
 	}

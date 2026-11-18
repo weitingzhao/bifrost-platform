@@ -2,6 +2,7 @@ package migrate_test
 
 import (
 	"context"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"testing"
 	"time"
 
@@ -38,7 +39,7 @@ func checkRuntime0010(t *testing.T, db *agentrttest.DB) {
 			if eventPin != "" {
 				body["executor_pin"] = eventPin
 			}
-			if _, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "task_proposed", Actor: "controller",
+			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: store.MissionStream("M-1"), Type: "task_proposed", Actor: "controller",
 				MissionID: "M-1", TaskID: id, Body: body}); err != nil {
 				return err
 			}
@@ -64,7 +65,7 @@ func checkRuntime0010(t *testing.T, db *agentrttest.DB) {
 	}
 	update := func(sql string, args ...any) error {
 		return store.InTx(ctx, rt, func(tx pgx.Tx) error {
-			if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 				Body: map[string]any{"source": "T50 runtime trigger probe"}}); err != nil {
 				return err
 			}

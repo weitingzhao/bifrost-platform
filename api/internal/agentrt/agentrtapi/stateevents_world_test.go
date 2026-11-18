@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -502,7 +503,7 @@ func (f *stateFuzz) template(t *testing.T, rt fuzzRoute, caller, path string) ma
 func chiefJob(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test: the chief's job"}}); err != nil {
 			return err
 		}

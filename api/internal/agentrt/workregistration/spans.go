@@ -15,7 +15,7 @@ import (
 func WorkSpans(ctx context.Context, tx pgx.Tx, from, to time.Time) ([][2]time.Time, error) {
 	var spans [][2]time.Time
 	rows, err := tx.Query(ctx, `SELECT body FROM (SELECT DISTINCT ON(event_stream_id) body_json->'external_work' AS body FROM agentrt.event
-	  WHERE event_type='note' AND body_json ? 'external_work' ORDER BY event_stream_id, seq DESC) x`)
+	  WHERE event_type IN ('external_work_noted','note') AND body_json ? 'external_work' ORDER BY event_stream_id, seq DESC) x`)
 	if err != nil {
 		return nil, err
 	}

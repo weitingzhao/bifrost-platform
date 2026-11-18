@@ -91,8 +91,7 @@ func windowEnvelope(ns string, m windowNotice) string {
 		text += " Resume: " + e.Resume
 	}
 	body := map[string]any{"v": 1, "type": "fact", "summary": summary,
-		"about": []string{"topic:" + m.Topic, "what:" + e.What},
-		"refs":  []string{"release-window:" + ns}}
+		"about": []string{"topic:" + m.Topic, "what:" + e.What}}
 	if text != "" {
 		body["text"] = text
 	}

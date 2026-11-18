@@ -287,7 +287,6 @@ var testFilesInShared = []string{
 	"api/internal/server/agentrt_ruleapprove_test.go",
 	"api/internal/server/agentrt_schema_test.go",
 	"api/internal/server/agentrt_sources_test.go",
-	"api/internal/server/agentrt_window_test.go",
 	"api/internal/server/agentrt_wire_test.go",
 	"api/internal/server/alertmanager_auth_test.go",
 	"api/internal/server/approval_create_check_test.go",

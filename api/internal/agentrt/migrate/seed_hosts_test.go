@@ -2,6 +2,7 @@ package migrate_test
 
 import (
 	"context"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -20,7 +21,7 @@ func seedHost(ctx context.Context, db store.DB, by, id, kind string) error {
 		// host_registered has no declared body any more (no code writes it,
 		// 2026-11-17); the rows still need an event in their transaction, as
 		// seedLease writes one.
-		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: by,
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: by,
 			Body: map[string]any{"source": "test"}}); err != nil {
 			return err
 		}
@@ -36,7 +37,7 @@ func seedHost(ctx context.Context, db store.DB, by, id, kind string) error {
 // seedLease writes task's attempt no as leased to executor on host, in the
 // caller's transaction.
 func seedLease(ctx context.Context, tx pgx.Tx, actor, mission, task, executor, host string, no int, ttl time.Duration) (string, int64, error) {
-	if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+	if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 		Body: map[string]any{"source": "test"}}); err != nil {
 		return "", 0, err
 	}

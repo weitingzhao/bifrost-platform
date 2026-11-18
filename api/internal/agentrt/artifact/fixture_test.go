@@ -3,6 +3,7 @@ package artifact_test
 import (
 	"context"
 	"errors"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"testing"
 	"time"
 
@@ -69,7 +70,7 @@ func (w *world) artifact(t *testing.T, kind, body string) string {
 func (w *world) legacy(t *testing.T, stmts ...string) {
 	t.Helper()
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test"}}); err != nil {
 			return err
 		}

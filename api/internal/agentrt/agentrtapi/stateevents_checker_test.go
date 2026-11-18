@@ -3,6 +3,7 @@
 package agentrtapi_test
 
 import (
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"net/http"
 	"os"
 	"strconv"
@@ -65,7 +66,7 @@ func TestStateEventCheckerCatches(t *testing.T) {
 		return cerr
 	}))
 	err := judge(http.StatusOK, func(tx pgx.Tx) error {
-		if _, ierr := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream("ARCH"), Type: "legacy_imported", Actor: "controller",
+		if _, ierr := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream("ARCH"), Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test: an import head"}}); ierr != nil {
 			return ierr
 		}

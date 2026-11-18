@@ -2,6 +2,7 @@ package artifact_test
 
 import (
 	"errors"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"slices"
 	"testing"
 	"time"
@@ -52,7 +53,7 @@ func TestSearchArtifacts(t *testing.T) {
 	exam := w.artifact(t, "exam", "an answer")
 	paper := w.artifact(t, "other", "a paper put as other first")
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, aerr := store.Append(ctx, tx, store.Event{Stream: artifact.ExamsStream, Type: "artifact_put", Actor: "controller",
+		_, aerr := eventlog.Append(ctx, tx, eventlog.Event{Stream: artifact.ExamsStream, Type: "artifact_put", Actor: "controller",
 			Body: map[string]any{"artifact_id": paper, "artifact_kind": "other", "size_bytes": 26, "uploaded_by": "controller"}})
 		return aerr
 	}))
