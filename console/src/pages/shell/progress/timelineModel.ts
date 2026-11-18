@@ -11,7 +11,7 @@ import type { ReleaseRecord } from '@/api/releases'
  * records merged in.
  */
 export const TIMELINE_TYPES = ['plan_node_state_changed', 'task_state_changed', 'attempt_computed', 'decision_recorded',
-  'plan_change_decided', 'legacy_imported', 'control_set', 'control_cleared', 'policy_alert', 'controller_loop_failing',
+  'plan_change_decided', 'legacy_imported', 'control_set', 'control_cleared', 'policy_alert', 'controller_loop_failing', 'artifact_refused',
   'wait_limit_passed'] as const
 /** Events per read: the types above include every task move, of which only accepted and rejected are shown. */
 export const TIMELINE_PAGE = 200
@@ -24,6 +24,8 @@ const CONTROL: Record<string, string> = { stop: 'Stop', pause: 'Pause', drain: '
 const CLAIM_SOURCE: Record<string, string> = { message: 'message', task_spec: 'task spec', plan_note: 'plan note', assessment: 'AI assessment' }
 /** The kinds of report agentd uploads that the platform may refuse (store reportKinds). */
 const REPORT: Record<string, string> = { report: 'a report', verify: 'a verification report', review: 'a review report' }
+/** What each refusal rule found in the report (artifact.RecordRefusal; the phrases the old policy_alert rows carried). */
+const REFUSED: Record<string, string> = { local_path: 'a local path (H8)', workspace_ref: "another task's workspace" }
 
 /** What a wait's limit came from (store/waits.go basis). */
 const LIMIT_FROM: Record<string, string> = { floor: 'the floor of its kind', task_usual: 'twice its usual time',
@@ -101,6 +103,9 @@ export function eventRow(e: RuntimeEventRow, titles: Map<string, string>): Timel
       return row('lifted', 'Lifted', `${text(b.control_id)} by ${e.actor_id}`)
     case 'policy_alert':
       return row('alert', 'Alert', alertText(e, task), e.attempt_id ? `attempt ${e.attempt_id}` : '')
+    case 'artifact_refused':
+      // A report the platform refused (migration 0030; before, a policy_alert of rule local_path or workspace_ref).
+      return row('alert', 'Alert', `${e.event_stream_id.replace(/^host:/, 'Host ')} had ${REPORT[text(b.kind)] ?? 'a report'} refused: it named ${REFUSED[text(b.rule)] ?? text(b.rule)}`)
     case 'controller_loop_failing': {
       // A controller loop failing the same way (migration 0029; before, a policy_alert of rule controller_failing).
       const n = typeof b.failures === 'number' ? ` ${b.failures} times` : ''

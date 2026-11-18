@@ -15,6 +15,7 @@ types:
   - {type: actor_registered, domain: foundation}
   - {type: approval_seen, domain: foundation}
   - {type: artifact_put, domain: foundation}
+  - {type: artifact_refused, domain: foundation, note: "a report agentd uploaded that the platform refused (local path, another task's workspace); artifact (migration 0030, was policy_alert local_path/workspace_ref)"}
   - {type: attempt_cancelled, domain: compute}
   - {type: attempt_checkpointed, domain: compute}
   - {type: attempt_computed, domain: compute}

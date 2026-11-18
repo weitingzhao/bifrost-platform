@@ -62,6 +62,8 @@ func TestEventFieldValues(t *testing.T) {
 		{"task_proposed", "executor_pin", "external:coordinator", "external:other"},
 		{"controller_loop_failing", "line_digest", "sha256:" + strings.Repeat("a", 64), "agentrt-leases"},
 		{"controller_loop_recovered", "line_digest", "sha256:" + strings.Repeat("b", 64), "sha256:short"},
+		{"artifact_refused", "rule", "workspace_ref", "secret"},
+		{"artifact_refused", "kind", "verify", "spec"},
 		{"approval_seen", "created_at", "2026-01-01T00:00:00Z", "yesterday"},
 		{"approval_seen", "decided_at", "2026-01-01T00:00:00Z", "yesterday"},
 		{"question_seen", "created_at", "2026-01-01T00:00:00Z", "yesterday"},

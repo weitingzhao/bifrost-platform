@@ -106,6 +106,8 @@ modules:
       api/internal/agentrt/loopreadings: ["api/internal/agentrt/loopreadings"]
       # 2026-11-17: TestLoopTypesAreRegistered reads the event register.
       api/internal/agentrt/loopalert: ["api/internal/agentrt/loopalert", "api/internal/bus/registry/ledger"]
+      # 2026-11-17: TestRefusalTypeIsRegistered reads the event register.
+      api/internal/agentrt/artifact: ["api/internal/agentrt/artifact", "api/internal/bus/registry/ledger"]
       api/internal/agentrt/deliveryview: ["api/internal/agentrt/deliveryview"]
       api/internal/agentrt/canon: ["api/internal/agentrt/canon"]
       api/internal/agentrt/infracheck: ["api/internal/agentrt/infracheck"]

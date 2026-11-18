@@ -134,6 +134,13 @@ describe('the timeline from the runtime\'s events (2.5 G6)', () => {
     expect(failing({ loop: 'agentrt-facts-rules', failures: 4, artifact_id: 'sha256:' + 'a'.repeat(64), line_digest: 'sha256:' + 'b'.repeat(64) }))
       .toMatchObject({ kind: 'alert', label: 'Alert', text: 'Controller loop agentrt-facts-rules failed 4 times in a row the same way' })
   })
+  // Origin: 2026-11-17, migration 0030: a refused report left policy_alert; History says it as before.
+  it('says a refused report as the old alert did', () => {
+    const planRow = latest.events.find(e => e.event_type === 'plan_node_state_changed')!
+    const refused = (body: Record<string, unknown>) => eventRow(parseEventPage({ events: [{ ...planRow, event_stream_id: 'host:h1', event_type: 'artifact_refused', plan_node_id: null, body_json: body }], next: '1.0' }).events[0], titles)
+    expect(refused({ rule: 'local_path', kind: 'verify', artifact_id: 'sha256:' + 'a'.repeat(64) }))
+      .toMatchObject({ kind: 'alert', text: 'Host h1 had a verification report refused: it named a local path (H8)' })
+  })
 })
 
 function json(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }) }
@@ -162,7 +169,7 @@ describe('ProgressTimeline', () => {
     render(<QueryClientProvider client={client}><ProgressTimeline runtime={runtime} now={Date.parse('2026-10-19T23:40:00Z')} /></QueryClientProvider>)
     const list = await screen.findByRole('list', { name: 'Timeline' })
     await waitFor(() => expect(within(list).getAllByRole('listitem').map(li => li.getAttribute('data-kind'))).toEqual(['alert', 'stop', 'lifted', 'stop', 'release', 'step']))
-    expect(calls[0]).toEqual({ limit: '5', types: 'plan_node_state_changed,task_state_changed,attempt_computed,decision_recorded,plan_change_decided,legacy_imported,control_set,control_cleared,policy_alert,controller_loop_failing,wait_limit_passed' })
+    expect(calls[0]).toEqual({ limit: '5', types: 'plan_node_state_changed,task_state_changed,attempt_computed,decision_recorded,plan_change_decided,legacy_imported,control_set,control_cleared,policy_alert,controller_loop_failing,artifact_refused,wait_limit_passed' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Show older' }))
     await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(8))

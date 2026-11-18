@@ -360,12 +360,12 @@ func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 }
 
 // refuse answers an artifact refused by rule (422). A report agentd uploads
-// is recorded as refused on its host's stream (store.RefusedReport, TD-382),
+// is recorded as refused on its host's stream (artifact.RecordRefusal, TD-382),
 // and an attempt of the host that then ends without its result says so; the
 // answer is the refusal whatever the record does.
 func (a *API) refuse(w http.ResponseWriter, r *http.Request, host, kind, id, rule, message string) {
 	if host != "" {
-		if _, err := store.RefusedReport(r.Context(), a.DB, host, kind, id, rule); err != nil {
+		if _, err := artifact.RecordRefusal(r.Context(), a.DB, host, kind, id, rule); err != nil {
 			a.logf("agentrt: the refusal of %s from host %s was not recorded: %v", id, host, err)
 		}
 	}
