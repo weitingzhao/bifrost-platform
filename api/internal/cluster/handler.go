@@ -38,7 +38,7 @@ func (h *Handler) HandleSummary(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleNodes(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, h.svc.Nodes(r.Context()))
+	writeJSON(w, http.StatusOK, h.svc.NodesForDisplay(r.Context()))
 }
 
 // ClusterNodes exposes node inventory for other packages (e.g. console SSH host row).

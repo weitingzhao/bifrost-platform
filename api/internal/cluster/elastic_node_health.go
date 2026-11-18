@@ -32,7 +32,7 @@ type nodeHealthRollup struct {
 	ElasticNodeModes map[string]elasticNodeMode
 }
 
-func (s *Service) rollupNodeHealth(ctx context.Context, clientset kubernetes.Interface, nodes []corev1.Node) nodeHealthRollup {
+func (s *Service) rollupNodeHealth(ctx context.Context, clientset kubernetes.Interface, nodes []corev1.Node, hostAnswers hostProbe) nodeHealthRollup {
 	out := nodeHealthRollup{
 		RegisteredTotal:  len(nodes),
 		ElasticNodeModes: make(map[string]elasticNodeMode, len(nodes)),
@@ -50,7 +50,7 @@ func (s *Service) rollupNodeHealth(ctx context.Context, clientset kubernetes.Int
 			continue
 		}
 
-		mode, _ := s.classifyElasticNode(ctx, clientset, &n, spec)
+		mode, _ := s.classifyElasticNode(ctx, clientset, &n, spec, hostAnswers)
 		out.ElasticNodeModes[n.Name] = mode
 		switch mode {
 		case elasticModeStandby:
@@ -71,6 +71,7 @@ func (s *Service) classifyElasticNode(
 	clientset kubernetes.Interface,
 	node *corev1.Node,
 	spec *config.ComputeNodeSpec,
+	hostAnswers hostProbe,
 ) (elasticNodeMode, string) {
 	// Whether an on-demand node that is not Ready is standby or degraded is
 	// the compute domain's reading (elasticreadings.NodeMode). This package
@@ -89,7 +90,7 @@ func (s *Service) classifyElasticNode(
 			return pending, err
 		},
 		WorkloadsUnsatisfied: func() (bool, string) { return s.computeWorkloadsUnsatisfied(ctx, clientset, spec) },
-		HostReachable:        func() bool { return probeHostReachableFast(ctx, spec.SSHHost) },
+		HostReachable:        func() bool { return hostAnswers(ctx, spec.SSHHost) },
 	})
 	return elasticNodeMode(mode), detail
 }
@@ -118,6 +119,27 @@ func (s *Service) computeWorkloadsUnsatisfied(ctx context.Context, clientset kub
 		}
 	}
 	return false, ""
+}
+
+// hostProbe says whether a host answers.
+type hostProbe func(ctx context.Context, host string) bool
+
+func (s *Service) liveHostProbe() hostProbe {
+	if s.hostProbeOverride != nil {
+		return s.hostProbeOverride
+	}
+	return probeHostReachableFast
+}
+
+// displayedHostProbe is the probe behind what a page shows: the compute
+// domain's kept reading when one is bound, otherwise the live probe.
+func (s *Service) displayedHostProbe() hostProbe {
+	live := s.liveHostProbe()
+	read := computeReadings.DisplayedHost
+	if read == nil {
+		return live
+	}
+	return func(ctx context.Context, host string) bool { return read(ctx, host, live) }
 }
 
 func probeHostReachableFast(ctx context.Context, sshHost string) bool {

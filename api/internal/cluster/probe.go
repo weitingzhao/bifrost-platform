@@ -16,6 +16,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 )
 
+// Summary is what the cluster page shows; its elastic host reading may be a
+// moment old (ComputeReadings.DisplayedHost).
 func (s *Service) Summary(ctx context.Context) SummaryResponse {
 	now := time.Now().UTC()
 	base := s.baseMeta(now)
@@ -90,7 +92,7 @@ func (s *Service) Summary(ctx context.Context) SummaryResponse {
 		runningPods, pendingPods = countPodsByPhase(pods.Items)
 	}
 
-	rollup := s.rollupNodeHealth(ctx, clientset, nodes.Items)
+	rollup := s.rollupNodeHealth(ctx, clientset, nodes.Items, s.displayedHostProbe())
 	cpuAlloc, memAlloc := sumAllocatable(nodes.Items, true)
 
 	reach, detail := summaryReachFromNodes(rollup.CoreReady, rollup.CoreTotal, rollup.ElasticDegraded, failing)
@@ -122,7 +124,20 @@ func (s *Service) Summary(ctx context.Context) SummaryResponse {
 	}
 }
 
+// Nodes probes elastic hosts on every call: the patrol and the delivery
+// preflight act on the answer.
 func (s *Service) Nodes(ctx context.Context) NodesResponse {
+	return s.nodes(ctx, s.liveHostProbe())
+}
+
+// NodesForDisplay is Nodes for a page that polls: an elastic host's reading
+// may be a moment old, so a powered-off host does not cost every poll an SSH
+// timeout. Nothing may act on this answer; use Nodes for that.
+func (s *Service) NodesForDisplay(ctx context.Context) NodesResponse {
+	return s.nodes(ctx, s.displayedHostProbe())
+}
+
+func (s *Service) nodes(ctx context.Context, hostAnswers hostProbe) NodesResponse {
 	now := time.Now().UTC()
 	base := s.baseMeta(now)
 
@@ -142,7 +157,7 @@ func (s *Service) Nodes(ctx context.Context) NodesResponse {
 		}
 	}
 
-	rollup := s.rollupNodeHealth(ctx, clientset, list.Items)
+	rollup := s.rollupNodeHealth(ctx, clientset, list.Items, hostAnswers)
 
 	views := make([]NodeView, 0, len(list.Items))
 	for _, n := range list.Items {

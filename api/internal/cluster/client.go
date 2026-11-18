@@ -34,6 +34,8 @@ type Service struct {
 	// appEnvs are the application environments from environments.yaml; the
 	// probes iterate their namespaces and databases instead of Go literals.
 	appEnvs []config.AppEnv
+	// hostProbeOverride replaces the SSH probe of an elastic host (unit tests only).
+	hostProbeOverride hostProbe
 }
 
 func NewService(entry *config.ClusterEntry) *Service {

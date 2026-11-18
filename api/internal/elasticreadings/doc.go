@@ -13,6 +13,8 @@
 //     on-demand node is active, standby or degraded, with why. It calls the
 //     observation's functions only when it needs them, because the last is an
 //     SSH probe of the host.
+//   - HostReadings.Read answers whether a host is up for a page that polls,
+//     from a kept reading up to two minutes old. Nothing may act on it.
 //
 // What the answers mean: a powered-off GPU or warehouse node is standby and ok
 // while nothing asks for it, and missing compute once something does. General

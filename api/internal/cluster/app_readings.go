@@ -1,6 +1,8 @@
 package cluster
 
 import (
+	"context"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 )
 
@@ -37,6 +39,9 @@ type ComputeReadings struct {
 	// NodeMode says whether an on-demand node is active, standby or
 	// degraded, with why (resourceview.ElasticNode* modes).
 	NodeMode func(resourceview.ElasticNodeObservation) (mode, detail string)
+	// DisplayedHost answers whether a host is up for a page that polls, from
+	// a kept reading or else from probe. Unbound, pages probe live.
+	DisplayedHost func(ctx context.Context, host string, probe func(context.Context, string) bool) bool
 }
 
 // computeReadings is bound once, at start-up, as appReadings is.

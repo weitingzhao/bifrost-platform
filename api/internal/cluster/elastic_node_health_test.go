@@ -3,13 +3,17 @@
 package cluster
 
 import (
+	"context"
+	"sync/atomic"
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/elasticreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -35,7 +39,7 @@ func TestRollupNodeHealthElasticStandby(t *testing.T) {
 		}},
 	}
 	svc := NewService(entry)
-	rollup := svc.rollupNodeHealth(t.Context(), clientset, []corev1.Node{gpu, core})
+	rollup := svc.rollupNodeHealth(t.Context(), clientset, []corev1.Node{gpu, core}, probeHostReachableFast)
 
 	if rollup.CoreReady != 1 || rollup.CoreTotal != 1 {
 		t.Fatalf("core ready/total: got %d/%d want 1/1", rollup.CoreReady, rollup.CoreTotal)
@@ -77,7 +81,7 @@ func TestRollupNodeHealthElasticDegradedWorkloadDemand(t *testing.T) {
 		}},
 	}
 	svc := NewService(entry)
-	rollup := svc.rollupNodeHealth(t.Context(), clientset, []corev1.Node{gpu, core})
+	rollup := svc.rollupNodeHealth(t.Context(), clientset, []corev1.Node{gpu, core}, probeHostReachableFast)
 
 	if rollup.ElasticDegraded != 1 {
 		t.Fatalf("elastic degraded: got %d want 1", rollup.ElasticDegraded)
@@ -114,5 +118,50 @@ func readyNode(name string) corev1.Node {
 				Type: corev1.NodeReady, Status: corev1.ConditionTrue,
 			}},
 		},
+	}
+}
+
+// Origin: 2026-11-18, the cluster page waited out an SSH timeout per poll; the
+// reading it now shows may be old. The patrol and the delivery preflight act on
+// Nodes, so it must stay live;
+// the live count is also the positive control for the display count.
+func TestNodesProbesEveryCallAndDisplayDoesNot(t *testing.T) {
+	gpu := corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "gpu-server"},
+		Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{
+			Type: corev1.NodeReady, Status: corev1.ConditionUnknown,
+		}}},
+	}
+	clientset := fake.NewSimpleClientset(&gpu)
+	svc := NewService(&config.ClusterEntry{ComputeNodes: []config.ComputeNodeSpec{{
+		Name: "gpu-server", SSHHost: "gpu",
+	}}})
+	svc.SetClientFactoryForTest(func() (kubernetes.Interface, string, error) {
+		return clientset, "fake", nil
+	})
+	BindComputeReadings(ComputeReadings{
+		NodeMode:      elasticreadings.NodeMode,
+		DisplayedHost: (&elasticreadings.HostReadings{}).Read,
+	})
+	t.Cleanup(bindTenantReadings)
+	var calls atomic.Int32
+	svc.hostProbeOverride = func(context.Context, string) bool { calls.Add(1); return false }
+
+	var shown, live NodesResponse
+	for range 3 {
+		shown = svc.NodesForDisplay(t.Context())
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("display probes: got %d want 1", got)
+	}
+	calls.Store(0)
+	for range 3 {
+		live = svc.Nodes(t.Context())
+	}
+	if got := calls.Load(); got != 3 {
+		t.Fatalf("live probes: got %d want 3", got)
+	}
+	if shown.Nodes[0].ElasticMode != live.Nodes[0].ElasticMode || live.Nodes[0].ElasticMode != "standby" {
+		t.Fatalf("elastic mode: shown %q live %q want standby", shown.Nodes[0].ElasticMode, live.Nodes[0].ElasticMode)
 	}
 }
