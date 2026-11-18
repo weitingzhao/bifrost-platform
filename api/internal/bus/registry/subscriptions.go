@@ -46,6 +46,20 @@ type Subscription struct {
 	Repos []string `yaml:"repos"`
 }
 
+// TargetDomain is the domain a row's delivery reaches, for the Bus page's
+// map: a wake reaches a seat (coordination, the seats' domain), a notify the
+// Owner's phone (owner); an action is run by the platform for whoever asked,
+// and names none.
+func (r Subscription) TargetDomain() string {
+	switch r.Deliver {
+	case DeliverWake:
+		return "coordination"
+	case DeliverNotify:
+		return "owner"
+	}
+	return ""
+}
+
 // InEnv says whether the row is dispatched in env.
 func (r Subscription) InEnv(env string) bool {
 	if len(r.Envs) == 0 {
@@ -72,6 +86,10 @@ type Client struct {
 	// Envs, when set, are the environments it is expected in (head-release
 	// runs only in PROD's workers; on STG it is not lost, it is not there).
 	Envs []string `yaml:"envs"`
+	// Domain is the domain whose code runs a durable client (config/
+	// domain-ownership.json), for the Bus page's map: an arc runs from a
+	// topic's domain to its readers' (2026-11-17).
+	Domain string `yaml:"domain"`
 }
 
 // InEnv says whether the client is expected in env.

@@ -6,7 +6,8 @@ import { authedFetch } from './client'
  * against its first parent. A repository with no ownership table answers measured false with a note.
  */
 
-export type CiDomainNode = { id: string; packages: number }
+/** tier: the domain's floor as the ownership table declares it (0 = base); absent when the table gives none. */
+export type CiDomainNode = { id: string; packages: number; tier?: number }
 /** One import: the package that uses, the package it uses. */
 export type CiPackagePair = { from: string; to: string }
 export type CiDomainEdge = { from: string; to: string; imports: number; wrong_way: boolean; pairs?: CiPackagePair[] }

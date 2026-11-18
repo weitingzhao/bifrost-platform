@@ -5,6 +5,7 @@
     {
       "id": "foundation",
       "name": "Foundation",
+      "tier": 0,
       "source": "domains/0-foundation-decouple/charter.md",
       "contracts": {
         "shared_storage": [
@@ -29,41 +30,49 @@
     {
       "id": "plan",
       "name": "Demand & planning",
+      "tier": 3,
       "source": "domains/1-plan/charter.md"
     },
     {
       "id": "lineage",
       "name": "Work registration & lineage",
+      "tier": 2,
       "source": "domains/2-lineage/charter.md"
     },
     {
       "id": "verification",
       "name": "Merge & verification",
+      "tier": 2,
       "source": "domains/3-4-verify-release-ci/charter.md"
     },
     {
       "id": "delivery",
       "name": "Delivery",
+      "tier": 2,
       "source": "domains/3-4-verify-release-ci/charter.md"
     },
     {
       "id": "owner",
       "name": "Owner decisions",
+      "tier": 3,
       "source": "domains/5-owner/charter.md"
     },
     {
       "id": "compute",
       "name": "Compute",
+      "tier": 0,
       "source": "domains/6-compute/charter.md"
     },
     {
       "id": "tenant",
       "name": "Tenant integration",
+      "tier": 2,
       "source": "domains/7-tenant/charter.md"
     },
     {
       "id": "coordination",
       "name": "Seats & communication",
+      "tier": 1,
       "source": "domains/8-2-comm-desk/charter.md"
     }
   ],

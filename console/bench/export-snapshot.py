@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Export a real snapshot for the nerve map bench (console/bench/nerve.html).
 
-Reads, never writes: the bus register in this repository (topics, their domain
-and publisher), the seats' reported titles (ConfigMap cicd/lineage-thread-titles
+Reads, never writes: the bus register in this repository (topics, their domain,
+publisher and readers; the subscription rows and clients), the ownership
+table's tiers, the seats' reported titles (ConfigMap cicd/lineage-thread-titles
 with the read-only kubeconfig, matched to sessions by this repo's commit
 trailers) and, through psql as agent_reader (read-only; psql reads its own
 ~/.pgpass), the last day of bus events and of letters between seats. Writes
@@ -27,16 +28,23 @@ def q(sql):
                          check=True, capture_output=True, text=True).stdout
     return [line.split('\t') for line in out.splitlines() if line]
 
-topics, cur = [], None
-for line in open(os.path.join(repo, 'api/internal/bus/registry/rocket.yaml')):
-    m = re.match(r'^  ([a-z]+\.[a-z.]+):$', line)
-    if m:
-        cur = {'type': m.group(1), 'publisher': '', 'domain': ''}
-        topics.append(cur)
-    elif cur:
-        m = re.match(r'^\s+(publisher|domain): (\S+)', line)
-        if m:
-            cur[m.group(1)] = m.group(2)
+import yaml  # PyYAML: the bench is a dev tool on this machine
+
+reg = yaml.safe_load(open(os.path.join(repo, 'api/internal/bus/registry/rocket.yaml')))
+topics = []
+for typ, ch in (reg.get('channels') or {}).items():
+    xb = ch.get('x-bifrost') or {}
+    topics.append({'type': typ, 'publisher': xb.get('publisher', ''), 'domain': xb.get('domain', ''),
+                   'consumers': xb.get('consumers') or [], 'display_only': bool(xb.get('display_only'))})
+subs = yaml.safe_load(open(os.path.join(repo, 'api/internal/bus/registry/subscriptions/rocket.yaml')))
+# A row's target domain, as registry.Subscription.TargetDomain says (a wake reaches a seat, a notify the owner).
+target = {'wake': 'coordination', 'notify': 'owner'}
+rows = [{'id': r['id'], 'on': r.get('on', r.get(True)),  # YAML 1.1 reads the key on: as true
+         'deliver': r['deliver'], 'domain': target.get(r['deliver'], '')}
+        for r in subs.get('subscriptions') or [] if r.get('by') == 'dispatcher']
+clients = [{'name': c['name'], 'kind': c['kind'], 'domain': c.get('domain', '')} for c in subs.get('clients') or []]
+own = json.load(open(os.path.join(repo, 'config/domain-ownership.json')))
+tiers = [{'id': d['id'], 'tier': d.get('tier')} for d in own['domains']]
 
 types = ','.join("'%s'" % t['type'] for t in topics)
 events = [{'type': t, 'time': at} for t, at in q(
@@ -70,7 +78,7 @@ try:
 except Exception as e:  # names are a nicety of the bench: without them it shows ids
     print(f"names not read: {e}", file=sys.stderr)
 
-snap = {'topics': topics, 'events': events, 'letters': letters, 'seats': seats, 'names': names}
+snap = {'topics': topics, 'events': events, 'letters': letters, 'seats': seats, 'names': names, 'rows': rows, 'clients': clients, 'tiers': tiers}
 path = os.path.join(here, 'snapshot.local.json')
 json.dump(snap, open(path, 'w'), indent=1)
 print(f"{path}: {len(topics)} topics, {len(events)} events, {len(letters)} letter pairs, {len(seats)} seats, {len(names)} names", file=sys.stderr)

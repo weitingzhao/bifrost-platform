@@ -32,8 +32,10 @@ export async function fetchBusNextgen(): Promise<BusNextgen> {
 }
 
 export type ContractTopic = { tenant: string; type: string; version: number; publisher: string; domain?: string; guarantee: string; consumers: string[]; exports?: string[] }
-export type ContractRow = { tenant: string; id: string; on: string[]; deliver: string; to?: string; action?: string; by: string; envs?: string[] }
-export type ContractClient = { tenant: string; name: string; kind: string; lost_after?: string; envs?: string[] }
+/** domain: the domain a row's delivery reaches (a wake: the seats', coordination; a notify: the owner's), from the registry. */
+export type ContractRow = { tenant: string; id: string; on: string[]; deliver: string; to?: string; action?: string; by: string; envs?: string[]; domain?: string }
+/** domain: the domain whose code runs the client (a durable reader), as its register declares. */
+export type ContractClient = { tenant: string; name: string; kind: string; lost_after?: string; envs?: string[]; domain?: string }
 export type BusContract = { topics: ContractTopic[]; subscriptions: ContractRow[]; clients: ContractClient[] }
 
 export async function fetchBusContract(): Promise<BusContract> {

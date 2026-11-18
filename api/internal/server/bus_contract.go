@@ -34,6 +34,7 @@ type contractRow struct {
 	Action  string   `json:"action,omitempty"`
 	By      string   `json:"by"`
 	Envs    []string `json:"envs,omitempty"`
+	Domain  string   `json:"domain,omitempty"`
 }
 
 type contractClient struct {
@@ -42,6 +43,7 @@ type contractClient struct {
 	Kind      string   `json:"kind"`
 	LostAfter string   `json:"lost_after,omitempty"`
 	Envs      []string `json:"envs,omitempty"`
+	Domain    string   `json:"domain,omitempty"`
 }
 
 type busContract struct {
@@ -71,10 +73,10 @@ func (s *Server) handleBusContract(w http.ResponseWriter, _ *http.Request) {
 	for name, st := range subs {
 		for _, r := range st.Rows {
 			out.Subscriptions = append(out.Subscriptions, contractRow{Tenant: name, ID: r.ID, On: r.On, Deliver: r.Deliver, To: r.To,
-				Action: r.Action, By: r.By, Envs: r.Envs})
+				Action: r.Action, By: r.By, Envs: r.Envs, Domain: r.TargetDomain()})
 		}
 		for _, c := range st.Clients {
-			out.Clients = append(out.Clients, contractClient{Tenant: name, Name: c.Name, Kind: c.Kind, LostAfter: c.LostAfter, Envs: c.Envs})
+			out.Clients = append(out.Clients, contractClient{Tenant: name, Name: c.Name, Kind: c.Kind, LostAfter: c.LostAfter, Envs: c.Envs, Domain: c.Domain})
 		}
 	}
 	sort.Slice(out.Topics, func(i, j int) bool {

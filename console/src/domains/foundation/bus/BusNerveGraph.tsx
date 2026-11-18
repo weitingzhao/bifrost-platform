@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import type { GArc } from './busNerveBody'
 
 /**
  * The nerve map's renderer, loaded only on the Bus page (a chunk of its own).
@@ -13,7 +14,7 @@ import { useEffect, useRef } from 'react'
 
 export type GNode = {
   id: string
-  kind: 'core' | 'publisher' | 'cluster' | 'topic' | 'reader' | 'seat' | 'old'
+  kind: 'core' | 'publisher' | 'cluster' | 'topic' | 'reader' | 'seat' | 'old' | 'mid'
   label: string
   color: string
   size: number
@@ -27,6 +28,10 @@ export type GNode = {
   open?: boolean
   /** A part whose name always shows (a topic nobody listens to says so). */
   named?: boolean
+  /** Where the node stands, fixed (the direct view: a domain on its tier's floor, an arc's middle). */
+  pin?: { x: number; y: number; z: number }
+  /** A halo round a domain that sends what nobody takes: its strength, 0 to 1. */
+  halo?: number
 }
 export type GLink = { source: string; target: string; color: string; dashed?: boolean; width?: number; label?: string }
 
@@ -39,10 +44,21 @@ export type NerveApi = {
   home: () => void
   /** Flies the camera to a node (a cloud fills most of the frame). */
   focus: (id: string) => void
+  /**
+   * The direct view's pulse (key: one event to one reader): it runs along the
+   * arc to its middle and waits there, in the bus, until arrive (the reader's
+   * receipt) takes it on to the reader, or fail (no receipt in time) turns it
+   * red and the arc's far half with it. False when there is no such arc.
+   */
+  launch: (key: string, arc: string, color?: string, faint?: boolean) => boolean
+  arrive: (key: string) => void
+  fail: (key: string) => void
+  /** Lights a domain's halo once (it sent something nobody takes). */
+  halo: (id: string) => void
 }
 
 type SimNode = GNode & { x?: number; y?: number; z?: number; vx?: number; vy?: number; vz?: number }
-type SimLink = { source: string | SimNode; target: string | SimNode; color: string; dashed?: boolean; width?: number; label?: string; __pulse?: string }
+type SimLink = { source: string | SimNode; target: string | SimNode; color: string; dashed?: boolean; width?: number; label?: string; __pulse?: string; __arc?: string }
 
 const GROUND = '#000000'
 const FLASH_MS = 900
@@ -54,6 +70,17 @@ const FIT_AFTER_MS = 1400
 /** When to fit again while the body settles, after a load or an open or fold. */
 const FIT_TIMES_MS = [FIT_AFTER_MS, 3000, 5000, 8000]
 const FIT_PADDING = 90
+/** A direct pulse's run along one half of its arc, and how long a failed one takes to fade. */
+const HALF_MS = 650
+const FAIL_MS = 1600
+/** How long an arc's far half stays red after a receipt did not come. */
+const RED_MS = 10_000
+const ARC_RED = '#ff4d5e'
+const ARC_GREY = '#3b4a52'
+const HALO_COLOR = '#ffb347'
+const FLOOR_COLOR = '#8a6a58'
+/** The direction home looks from: a little above the floors. */
+const HOME_DIR = [0, 0.48, 0.88] as const
 
 function idOf(end: string | SimNode): string {
   return typeof end === 'string' ? end : end.id
@@ -141,6 +168,11 @@ function homeStart(n: GNode, dims: 2 | 3): { x: number; y: number; z: number } {
   return { x: Math.cos(a) * r, y: Math.sin(a) * r, z: dims === 3 ? (rnd() - 0.5) * 20 : 0 }
 }
 
+/** A 3D place on the flat canvas: height up the screen, the floor's depth tilted into it. */
+function flatOf(p: { x: number; y: number; z: number }): { x: number; y: number; z: number } {
+  return { x: p.x, y: -p.y * 1.3 + p.z * 0.3, z: 0 }
+}
+
 /** Keeps clouds apart: two nodes closer than their reach plus a margin push each other away. */
 function collideForce(nodes: () => SimNode[], dims: 2 | 3) {
   const reach = (n: SimNode) => (n.kind === 'cluster' ? cloudRadius(n) * 2 + (n.open ? 35 : 0) : n.size * 2)
@@ -170,8 +202,9 @@ function cloudSig(n: GNode): string {
   return n.cloud ? `${n.cloud.parts}:${n.cloud.dust.length}:${n.color}` : ''
 }
 
-export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNodeClick }: {
-  nodes: GNode[]; links: GLink[]; flat: boolean; spin: boolean; onReady: (api: NerveApi) => void; onNodeClick?: (id: string) => void
+export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], flat, spin, onReady, onNodeClick }: {
+  nodes: GNode[]; links: GLink[]; arcs?: GArc[]; rings?: { y: number; radius: number }[]
+  flat: boolean; spin: boolean; onReady: (api: NerveApi) => void; onNodeClick?: (id: string) => void
 }) {
   const host = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the two libraries' chainable instances share no type
@@ -208,6 +241,16 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
   const focusedAt = useRef(0)
   /** Rebuilds a domain's cloud in place when its counts change (3D only). */
   const recloud = useRef<((n: SimNode) => void) | null>(null)
+  /** Redraws the arcs and the floors (3D only); set once the scene exists. */
+  const redrawArcs = useRef<((arcs: GArc[], rings: { y: number; radius: number }[]) => void) | null>(null)
+  const arcsRef = useRef(arcs)
+  arcsRef.current = arcs
+  const ringsRef = useRef(rings)
+  ringsRef.current = rings
+  /** Moves the direct pulses each frame (3D only). */
+  const flyRef = useRef<((now: number) => void) | null>(null)
+  /** When each domain's halo last lit. */
+  const haloAt = useRef(new Map<string, number>())
 
   useEffect(() => {
     const el = host.current
@@ -254,6 +297,10 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
         g.cameraPosition({ x: (n.x ?? 0) + (dx / l) * reach, y: (n.y ?? 0) + (dy / l) * reach, z: (n.z ?? 0) + (dz / l) * reach },
           { x: n.x ?? 0, y: n.y ?? 0, z: n.z ?? 0 }, document.hidden ? 0 : 900)
       },
+      launch: () => false,
+      arrive: () => {},
+      fail: () => {},
+      halo: id => { haloAt.current.set(id, performance.now()) },
     }
     const lit = (n: SimNode) => (flashes.current.get(n.id) ?? 0) > performance.now() - FLASH_MS
 
@@ -302,8 +349,9 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
               ctx.fillText(label, x, y - (n.kind === 'cluster' ? cloudRadius(n) * 0.9 : r + 3 / scale))
             }
           })
-          .linkColor((o: object) => `${(o as SimLink).color}40`)
-          .linkWidth(0.4)
+          .linkColor((o: object) => `${(o as SimLink).color}${(o as SimLink).__arc ? '70' : '40'}`)
+          .linkWidth((o: object) => ((o as SimLink).__arc ? (o as SimLink).width ?? 0.6 : 0.4))
+          .linkCurvature((o: object) => ((o as SimLink).__arc ? 0.3 : 0))
           .linkLabel((o: object) => (o as SimLink).label ?? '')
           .linkDirectionalParticleColor((o: object) => { const l = o as SimLink; return l.__pulse ?? l.color })
           .linkDirectionalParticleWidth(2.6)
@@ -320,6 +368,18 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
         g.onNodeClick((o: object) => fireClick((o as SimNode).id))
         g.onNodeHover((o: object | null) => { hovered.current = o ? (o as SimNode).id : null; el.style.cursor = o ? 'pointer' : '' })
         g.onNodeDragEnd((o: object, t: { x: number; y: number }) => { if (Math.hypot(t.x, t.y) < CLICK_SLOP) fireClick((o as SimNode).id) })
+        // Flat: a pulse runs the whole arc at once and lights the reader's domain (the canvas has no waiting in the middle).
+        const flatKeys = new Map<string, string>()
+        api.launch = (key, arc, color, faint) => {
+          const l = data.current.links.find(x => x.__arc === arc)
+          if (!l) return false
+          l.__pulse = faint ? `${color ?? l.color}66` : (color ?? l.color)
+          g.emitParticle(l)
+          flatKeys.set(key, idOf(l.target))
+          return true
+        }
+        api.arrive = key => { const to = flatKeys.get(key); if (to) { flashes.current.set(to, performance.now()); flatKeys.delete(key) } }
+        api.fail = key => { flatKeys.delete(key) }
         g.graphData(data.current)
         graph.current = g
         fitted.current = -1
@@ -333,6 +393,7 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
           type Body = {
             group: import('three').Group; core: import('three').Sprite; cloud?: import('three').Group; dust?: import('three').PointsMaterial
             glow?: import('three').Sprite; points: import('three').PointsMaterial[]; sig: string; base: number
+            halo?: import('three').Mesh
           }
           const pointMaterials = (cloud?: import('three').Group) =>
             (cloud?.children ?? []).map(c => (c as import('three').Points).material as import('three').PointsMaterial)
@@ -436,15 +497,25 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
                 group.add(cloud)
                 // Seen from far, a cloud is one soft light; its points show as the camera comes near (bodies' tick).
                 glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: disc, color: n.color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }))
-                glow.scale.setScalar(cloudRadius(n) * 2.2)
+                glow.scale.setScalar(cloudRadius(n) * 3)
                 group.add(glow)
               }
               if (n.ring) {
                 const ring = new THREE.Mesh(new THREE.TorusGeometry(n.size * 1.8, 0.12, 6, 40), new THREE.MeshBasicMaterial({ color: n.ring }))
                 group.add(ring)
               }
-              if (n.kind !== 'topic' || n.named) group.add(labelOf(n))
-              bodies.set(n.id, { group, core, cloud, dust, glow, points: pointMaterials(cloud), sig: cloudSig(n), base })
+              // A halo lies flat round every domain; it shows only while the domain sends what nobody takes (n.halo).
+              let halo: import('three').Mesh | undefined
+              if (n.kind === 'cluster') {
+                halo = new THREE.Mesh(new THREE.TorusGeometry(Math.max(16, cloudRadius(n) * 1.6), 0.8, 8, 64),
+                  new THREE.MeshBasicMaterial({ color: HALO_COLOR, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }))
+                halo.rotation.x = Math.PI / 2
+                group.add(halo)
+              }
+              // An arc's middle: a faint light, large enough to hover from home.
+              if (n.kind === 'mid') (core.material as import('three').SpriteMaterial).opacity = 0.18
+              if ((n.kind !== 'topic' || n.named) && n.kind !== 'mid') group.add(labelOf(n))
+              bodies.set(n.id, { group, core, cloud, dust, glow, points: pointMaterials(cloud), sig: cloudSig(n), base, halo })
               return group
             })
             .linkColor((o: object) => (o as SimLink).color)
@@ -483,8 +554,111 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
             }
             b.sig = cloudSig(n)
           }
+          // The direct view: arcs between domains in two halves (sender to the bus, the bus to the reader), the floors as faint rings.
+          class Part extends THREE.Curve<import('three').Vector3> {
+            constructor(private c: import('three').Curve<import('three').Vector3>, private a: number, private b: number) { super() }
+            getPoint(t: number, target = new THREE.Vector3()) { return this.c.getPoint(this.a + (this.b - this.a) * t, target) }
+          }
+          type ArcDraw = { curve: import('three').CubicBezierCurve3; back: import('three').MeshBasicMaterial; to: string; color: string; lost: boolean; redUntil: number }
+          const arcDraws = new Map<string, ArcDraw>()
+          const arcGroup = new THREE.Group()
+          const flightGroup = new THREE.Group()
+          g.scene().add(arcGroup)
+          g.scene().add(flightGroup)
+          const v3 = (p: { x: number; y: number; z: number }) => new THREE.Vector3(p.x, p.y, p.z)
+          redrawArcs.current = (list, floors) => {
+            const red = new Map([...arcDraws].map(([id, d]) => [id, d.redUntil]))
+            for (const o of [...arcGroup.children]) {
+              const m = o as import('three').Mesh
+              m.geometry?.dispose()
+              ;(m.material as import('three').Material | undefined)?.dispose()
+              arcGroup.remove(o)
+            }
+            arcDraws.clear()
+            for (const f of floors) {
+              const pts: import('three').Vector3[] = []
+              for (let i = 0; i < 96; i++) pts.push(new THREE.Vector3(Math.cos((i / 96) * 2 * Math.PI) * f.radius, f.y, Math.sin((i / 96) * 2 * Math.PI) * f.radius))
+              arcGroup.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts),
+                new THREE.LineBasicMaterial({ color: FLOOR_COLOR, transparent: true, opacity: 0.16, depthWrite: false })))
+            }
+            for (const a of list) {
+              const curve = new THREE.CubicBezierCurve3(v3(a.curve[0]), v3(a.curve[1]), v3(a.curve[2]), v3(a.curve[3]))
+              const half = (from: number, to: number, color: string) => {
+                const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending })
+                arcGroup.add(new THREE.Mesh(new THREE.TubeGeometry(new Part(curve, from, to), 24, a.width * 0.55, 6, false), mat))
+                return mat
+              }
+              half(0, 0.5, a.color)
+              const back = half(0.5, 1, a.back === 'lost' ? ARC_GREY : a.color)
+              arcDraws.set(a.id, { curve, back, to: a.to, color: a.color, lost: a.back === 'lost', redUntil: red.get(a.id) ?? 0 })
+            }
+          }
+          redrawArcs.current(arcsRef.current, ringsRef.current)
+          type Flight = { sprite: import('three').Sprite; arc: string; phase: 'out' | 'wait' | 'in' | 'fail'; at: number; arrived: boolean; t: number }
+          const flights = new Map<string, Flight>()
+          const drop = (key: string) => {
+            const f = flights.get(key)
+            if (!f) return
+            flightGroup.remove(f.sprite)
+            f.sprite.material.dispose()
+            flights.delete(key)
+          }
+          api.launch = (key, arc, color, faint) => {
+            if (!arcDraws.has(arc) || flights.has(key)) return arcDraws.has(arc)
+            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: disc, color: color ?? '#ffc46b', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: faint ? 0.45 : 1 }))
+            sprite.scale.setScalar(faint ? 4 : 6)
+            sprite.position.copy(arcDraws.get(arc)!.curve.getPoint(0))
+            flightGroup.add(sprite)
+            flights.set(key, { sprite, arc, phase: 'out', at: performance.now(), arrived: false, t: 0 })
+            return true
+          }
+          api.arrive = key => {
+            const f = flights.get(key)
+            if (!f || f.phase === 'fail' || f.phase === 'in') return
+            f.arrived = true
+            if (f.phase === 'wait') { f.phase = 'in'; f.at = performance.now() }
+          }
+          api.fail = key => {
+            const f = flights.get(key)
+            if (!f || f.phase === 'in') return
+            f.phase = 'fail'
+            f.at = performance.now()
+            f.sprite.material.color.set(ARC_RED)
+            const d = arcDraws.get(f.arc)
+            if (d) d.redUntil = performance.now() + RED_MS
+          }
+          const flyAll = (now: number) => {
+            for (const [key, f] of flights) {
+              const d = arcDraws.get(f.arc)
+              if (!d) { drop(key); continue }
+              if (f.phase === 'out') {
+                f.t = Math.min(0.5, (0.5 * (now - f.at)) / HALF_MS)
+                // At the middle, in the bus: on at once if the receipt already came, else wait for it.
+                if (f.t >= 0.5) { f.phase = f.arrived ? 'in' : 'wait'; f.at = now }
+              } else if (f.phase === 'in') {
+                f.t = 0.5 + Math.min(0.5, (0.5 * (now - f.at)) / HALF_MS)
+                if (f.t >= 1) { flashes.current.set(d.to, now); drop(key); continue }
+              } else if (f.phase === 'fail') {
+                const k = (now - f.at) / FAIL_MS
+                if (k >= 1) { drop(key); continue }
+                f.sprite.material.opacity = 1 - k
+              }
+              f.sprite.position.copy(d.curve.getPoint(f.t))
+              if (f.phase === 'wait') f.sprite.scale.setScalar(5 + 1.5 * Math.sin(now / 160))
+            }
+            for (const d of arcDraws.values()) {
+              const red = d.redUntil > now
+              d.back.color.set(red ? ARC_RED : d.lost ? ARC_GREY : d.color)
+              // Red has to read against the warm arcs: brighter, and not added to the glow behind it.
+              d.back.opacity = red ? 1 : 0.55
+              d.back.blending = red ? THREE.NormalBlending : THREE.AdditiveBlending
+            }
+          }
+          flyRef.current = flyAll
           g.graphData(data.current)
           graph.current = g
+          // Home looks down a little on the floors, so several show at once.
+          g.cameraPosition({ x: HOME_DIR[0] * 800, y: HOME_DIR[1] * 800, z: HOME_DIR[2] * 800 }, { x: 0, y: 0, z: 0 }, 0)
           // The bench (console/bench) looks at the instance; dev builds only.
           if (import.meta.env.DEV) Object.assign(window as unknown as Record<string, unknown>, { __nerve: g, __nerveApi: api })
           fitted.current = -1
@@ -514,6 +688,7 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
             }
           }
           const tick = () => {
+            flyRef.current?.(performance.now())
             const t = performance.now() / 1000
             if (++frame % 12 === 0) declutter()
             controls.autoRotate = spinRef.current && !spinHeld.current
@@ -529,8 +704,15 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
                 const d = g.camera().position.distanceTo(v.set(n.x ?? 0, n.y ?? 0, n.z ?? 0))
                 const near = Math.max(0, Math.min(1, (R * 16 - d) / (R * 9)))
                 for (const m of b.points) m.opacity = (0.5 + 0.5 * near) * (m === b.dust ? 0.75 * breath : 1)
-                if (b.glow) (b.glow.material as import('three').SpriteMaterial).opacity = 0.22 * (1 - near) + (lit(n) ? 0.25 : 0)
+                // Far, the glow carries the cloud: bright enough to read as a nebula from home (the floors put clouds further off).
+                if (b.glow) (b.glow.material as import('three').SpriteMaterial).opacity = 0.6 * (1 - near) + (lit(n) ? 0.3 : 0)
                 b.cloud.scale.setScalar(breath * (lit(n) ? 1.06 : 1))
+              }
+              if (b.halo) {
+                const since = performance.now() - (haloAt.current.get(n.id) ?? -1e9)
+                const m = b.halo.material as import('three').MeshBasicMaterial
+                m.opacity = n.halo ? 0.08 + 0.22 * n.halo + (since < FLASH_MS ? 0.55 * (1 - since / FLASH_MS) : 0) : 0
+                b.halo.rotation.z = t * 0.15
               }
             }
             raf = requestAnimationFrame(tick)
@@ -569,6 +751,8 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
       el.removeEventListener('pointerup', release, true)
       window.clearTimeout(resume)
       recloud.current = null
+      redrawArcs.current = null
+      flyRef.current = null
       graph.current?._destructor?.()
       graph.current = null
       el.replaceChildren()
@@ -577,16 +761,29 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
 
   // New data: keep where known nodes are, so a read does not throw the body around; rebuild a cloud whose counts changed.
   useEffect(() => {
+    const two = flatRef.current || !hasWebGL()
     const prev = new Map(data.current.nodes.map(n => [n.id, n]))
-    const next: SimNode[] = nodes.map(n => {
+    // Flat, the library curves the arcs itself: their middles (hovered in 3D) would sit off them, and the arc's own label says the same.
+    const next: SimNode[] = nodes.filter(n => !(two && n.kind === 'mid')).map(n => {
       const p = prev.get(n.id)
-      return p ? Object.assign(p, n) : { ...n, ...homeStart(n, flatRef.current || !hasWebGL() ? 2 : 3) }
+      const out: SimNode = p ? Object.assign(p, n) : { ...n, ...homeStart(n, two ? 2 : 3) }
+      // A pinned node stands where it is told: a domain on its floor, an arc's middle.
+      if (n.pin) {
+        const at = two ? flatOf(n.pin) : n.pin
+        Object.assign(out, { x: at.x, y: at.y, z: at.z, fx: at.x, fy: at.y, fz: two ? undefined : at.z })
+      }
+      return out
     })
     const ids = new Set(next.map(n => n.id))
     data.current = {
       nodes: next,
-      links: links.filter(l => ids.has(l.source) && ids.has(l.target)).map(l => ({ ...l })),
+      links: [
+        ...links.filter(l => ids.has(l.source) && ids.has(l.target)).map(l => ({ ...l })),
+        // On the flat canvas the arcs are the library's curved links (no pause in the middle there).
+        ...(two ? arcs.filter(a => ids.has(a.from) && ids.has(a.to)).map(a => ({ source: a.from, target: a.to, color: a.color, width: a.width, label: a.label, __arc: a.id })) : []),
+      ],
     }
+    redrawArcs.current?.(arcs, rings)
     for (const n of next) {
       recloud.current?.(n)
       const div = labelsRef.current.get(n.id)
@@ -596,7 +793,7 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
     graph.current?.graphData(data.current)
     // A domain opened or folded: fit the body to the frame again once it has moved.
     if (graph.current && fitted.current !== -1 && fitted.current !== next.length && performance.now() - focusedAt.current > 3000) fitSoonRef.current()
-  }, [nodes, links])
+  }, [nodes, links, arcs, rings])
 
   // Fits the body to the frame, again and again while it settles. Kept in a ref: the effects call the latest one.
   const fitSoonRef = useRef(() => {})
@@ -604,8 +801,9 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
     for (const ms of FIT_TIMES_MS) window.setTimeout(() => fit(), ms)
   }
 
-  fitRef.current = () => fit()
-  function fit() {
+  // Home: the whole body again, looked at from home's direction (a little above the floors).
+  fitRef.current = () => fit(true)
+  function fit(fromHome = false) {
     const g = graph.current
     if (!g) return
     // The first fit comes after the warm-up: that is home, and from then on the body may drift.
@@ -638,8 +836,8 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
       const cross = (a: V, c: V): V => [a[1] * c[2] - a[2] * c[1], a[2] * c[0] - a[0] * c[2], a[0] * c[1] - a[1] * c[0]]
       const unit = (a: V): V => { const l = Math.hypot(...a) || 1; return [a[0] / l, a[1] / l, a[2] / l] }
       // The view's axes, keeping the current look direction (as the library's own fit does).
-      const back = unit(sub(pos, center))
-      const right = unit(cross([cam.up.x, cam.up.y, cam.up.z], back))
+      const back = fromHome ? unit([HOME_DIR[0], HOME_DIR[1], HOME_DIR[2]]) : unit(sub(pos, center))
+      const right = unit(cross(fromHome ? [0, 1, 0] : [cam.up.x, cam.up.y, cam.up.z], back))
       const up = cross(back, right)
       const vHalf = (cam.fov * Math.PI) / 360
       const hHalf = Math.atan(Math.tan(vHalf) * cam.aspect)

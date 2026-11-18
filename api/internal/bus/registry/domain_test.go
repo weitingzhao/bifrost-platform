@@ -21,7 +21,8 @@ func TestEveryChannelNamesAnOwnedDomain(t *testing.T) {
 	}
 	var own struct {
 		Domains []struct {
-			ID string `json:"id"`
+			ID   string `json:"id"`
+			Tier *int   `json:"tier"`
 		} `json:"domains"`
 	}
 	if err := json.Unmarshal(b, &own); err != nil {
@@ -30,6 +31,12 @@ func TestEveryChannelNamesAnOwnedDomain(t *testing.T) {
 	known := map[string]bool{}
 	for _, d := range own.Domains {
 		known[d.ID] = true
+		// 2026-11-17, the Owner via the coordinator: the map stands each
+		// domain on the floor of its tier (base at the bottom, the Owner on
+		// top), read from this table and not placed by hand.
+		if d.Tier == nil || *d.Tier < 0 {
+			t.Errorf("domain %s declares no tier (0 = base, higher = further from it)", d.ID)
+		}
 	}
 	if len(known) == 0 {
 		t.Fatal("no domains read")
@@ -49,6 +56,24 @@ func TestEveryChannelNamesAnOwnedDomain(t *testing.T) {
 	}
 	if n == 0 {
 		t.Fatal("no channels")
+	}
+	// 2026-11-17: the map draws an arc to a durable client's domain and to a
+	// row's target domain; neither may be a domain the table does not have.
+	subs, err := LoadSubscriptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, st := range subs {
+		for _, c := range st.Clients {
+			if c.Kind == "durable" && !known[c.Domain] {
+				t.Errorf("client %s: domain %q is not in config/domain-ownership.json", c.Name, c.Domain)
+			}
+		}
+		for _, r := range st.Rows {
+			if d := r.TargetDomain(); d != "" && !known[d] {
+				t.Errorf("row %s: target domain %q is not in config/domain-ownership.json", r.ID, d)
+			}
+		}
 	}
 }
 

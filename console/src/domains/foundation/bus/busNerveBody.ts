@@ -2,6 +2,7 @@ import type { AgentThreadStatus } from '@/api/agentThreads'
 import { QUIET_AFTER_H, isDeaf, STUCK_AFTER_MIN, seatLabel, seatState, shortSeconds, warmColor, type BusListening, type NerveModel, type ObserveLink, type ObserveSeat, type OrganTone } from './busNerve'
 import { CORE, domainOf } from './busNerveLayout'
 import type { GLink, GNode } from './BusNerveGraph'
+import { arcCurve, arcsOf, cubicAt, halosOf, layerPositions, median, tierRings, type DomainTier, type Route, type Vec } from './busNerveDirect'
 
 /**
  * The observatory's own palette: a dark glass the body lives in, whatever the
@@ -168,4 +169,88 @@ export function buildBody({ model, domainOfType, expanded, seats, beat, observed
       })
     }
     return { nodes, links }
+}
+
+/** An arc as the renderer draws it: its curve, how thick, and the state of its far half. */
+export type GArc = {
+  id: string
+  from: string
+  to: string
+  curve: [Vec, Vec, Vec, Vec]
+  width: number
+  color: string
+  /** The far half (the bus to the reader): grey when a reader on it is lost or stopped. */
+  back: 'ok' | 'lost'
+  label: string
+}
+
+/** What the direct view adds to the body's input: where domains stand, and who takes what. */
+export type DirectInput = BodyInput & {
+  tiers: DomainTier[]
+  routes: Route[]
+  /** Each reader's roster status (/bus/clients): a lost one greys its arcs' far half. */
+  roster: Map<string, string>
+  /** Seconds from each event to a reader's receipt, by arc, as seen on this page (live and replay). */
+  delays: Map<string, number[]>
+}
+
+/**
+ * The direct view (the default): domains on their tier's floor, an arc for
+ * each pair of domains one's topics reach the other's readers by, and a halo
+ * round a domain that sends what nobody takes. No bus node: the bus is the
+ * bridge, shown only by the pulse that waits at an arc's middle. An opened
+ * domain shows its parts around it, as in the bus view.
+ */
+export function buildDirectBody(input: DirectInput): { nodes: GNode[]; links: GLink[]; arcs: GArc[]; rings: { y: number; radius: number }[] } {
+  const bus = buildBody(input)
+  const { domainOfType, listening, tiers, routes, roster, delays } = input
+  const clusters = bus.nodes.filter(n => n.kind === 'cluster').map(n => n.id.slice(2))
+  // Every domain the table declares stands on its floor, with or without topics of its own.
+  const ids = [...new Set([...tiers.map(t => t.id), ...clusters])]
+  const tierOf = new Map(tiers.map(t => [t.id, t.tier]))
+  const positions = layerPositions(ids.map(id => ({ id, tier: tierOf.get(id) })))
+  const halos = halosOf(routes, domainOfType, listening)
+  const maxHalo = Math.max(1, ...[...halos.values()].map(h => h.count))
+  const nodes: GNode[] = []
+  const have = new Set(bus.nodes.map(n => n.id))
+  for (const id of ids) {
+    if (!have.has(`d:${id}`)) {
+      nodes.push({ id: `d:${id}`, kind: 'cluster', label: id, color: warmColor(id), size: 3, breath: null, cloud: { parts: 0, dust: [] },
+        note: `domain ${id}: no topics of its own on the bus` })
+    }
+  }
+  for (const n of [...bus.nodes, ...nodes]) {
+    if (n.kind === 'core') continue
+    if (n.kind === 'cluster') {
+      const d = n.id.slice(2)
+      const h = halos.get(d)
+      const undeclared = tierOf.get(d) == null ? ' · tier not declared in the ownership table' : ''
+      n.pin = positions.get(d)
+      if (h) {
+        n.halo = Math.max(0.25, h.count / maxHalo)
+        n.note += ` · sends what nobody takes: ${h.count} events in ${listening?.hours ?? 24}h (${h.topics.join(', ')})`
+      }
+      n.note += undeclared
+    }
+  }
+  const all = [...bus.nodes.filter(n => n.kind !== 'core'), ...nodes]
+  const arcs: GArc[] = []
+  const maxCount = Math.max(1, ...arcsOf(routes, domainOfType, listening).map(a => a.count))
+  for (const a of arcsOf(routes, domainOfType, listening)) {
+    const p = positions.get(a.from)
+    const q = positions.get(a.to)
+    if (!p || !q) continue
+    const curve = arcCurve(p, q)
+    const lost = a.readers.filter(r => roster.get(r) === 'lost')
+    const p50 = median(delays.get(a.id) ?? [])
+    const label = `${a.from} → ${a.to}: ${a.count} events in ${listening?.hours ?? 24}h · ${a.topics.join(', ')} · read by ${a.readers.join(', ')}` +
+      `${p50 != null ? ` · median ${shortSeconds(p50)} to a receipt` : ' · no receipt timed on this page yet'}${lost.length > 0 ? ` · lost: ${lost.join(', ')}` : ''}`
+    arcs.push({ id: a.id, from: `d:${a.from}`, to: `d:${a.to}`, curve, width: 0.35 + 1.6 * Math.sqrt(a.count / maxCount), color: warmColor(a.from, 0.7),
+      back: lost.length > 0 ? 'lost' : 'ok', label })
+    // The arc's middle: where a pulse waits in the bus; hovering it reads the arc.
+    all.push({ id: `m:${a.id}`, kind: 'mid', label: p50 != null ? shortSeconds(p50) : '', color: '#ffe6cc', size: 2.4, breath: null, note: label, pin: cubicAt(curve, 0.5) })
+  }
+  // Parts of an opened domain hang on their domain; links to the bus are gone with it.
+  const links = bus.links.filter(l => l.source !== CORE && l.target !== CORE)
+  return { nodes: all, links, arcs, rings: tierRings(positions) }
 }

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { AGENT_THREADS_REFRESH_MS, fetchAgentThreads, type AgentThread } from '@/api/agentThreads'
 import { fetchLineage } from '@/api/lineage'
+import { fetchCiDomains } from '@/api/ciDomains'
 import { fetchBusContract, fetchBusNextgen } from './busNextgen'
 import { BUS_LIST_CAP, fetchBusClients, fetchBusReplay, type BusStreamState } from './useBusStream'
 import { clockTime, type BusEnvelope } from './busTrace'
@@ -10,7 +11,8 @@ import {
   LATE_AFTER_S, OWN_CONSUMER, QUIET_AFTER_H, SPEEDS, STUCK_AFTER_MIN, fetchBusObserve, nerveModel, readerOf, replaySchedule,
   isDeaf, seatMail,
 } from './busNerve'
-import { C, PULSE, buildBody, nameOf } from './busNerveBody'
+import { C, PULSE, buildBody, buildDirectBody, nameOf, type GArc } from './busNerveBody'
+import { arcId, halosOf, routesOf, type Route } from './busNerveDirect'
 import { CORE, domainOf } from './busNerveLayout'
 import { ContractGraph } from './BusContractSection'
 import type { GLink, GNode, NerveApi } from './BusNerveGraph'
@@ -22,6 +24,10 @@ const BusNerveGraph = lazy(() => import('./BusNerveGraph'))
 const SEAT_HOURS = 24
 /** Milliseconds from a domain to its topic after the pulse left the publisher. */
 const SECOND_HOP_MS = 700
+/** The repository whose ownership table gives the domains' floors (this platform's own). */
+const TIER_REPO = 'bifrost-platform'
+/** Delays kept per arc for its median. */
+const DELAYS_KEPT = 200
 
 function seatId(t: AgentThread): string {
   return `thread:${(t.session || t.thread).replace(/^thread:/, '')}`
@@ -115,6 +121,29 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [spin, setSpin] = useState(true)
   const [help, setHelp] = useState(false)
+  // The default is who listens to whom, straight (the Owner, 2026-11-17); the old view through the bus stays behind "?".
+  const [byBus, setByBus] = useState(false)
+  const domains = useQuery({ queryKey: ['ci-domains', TIER_REPO], queryFn: () => fetchCiDomains(TIER_REPO), staleTime: 300_000, retry: false })
+  const tiers = useMemo(() => (domains.data?.domains ?? []).map(d => ({ id: d.id, tier: d.tier })), [domains.data])
+  const routes = useMemo((): Route[] => (contract.data ? routesOf(contract.data) : []), [contract.data])
+  const routesByTopic = useMemo(() => {
+    const m = new Map<string, Route[]>()
+    for (const r of routes) m.set(r.topic, [...(m.get(r.topic) ?? []), r])
+    return m
+  }, [routes])
+  const haloTopics = useMemo(() => new Set([...halosOf(routes, domainOfType, team.data?.listening).values()].flatMap(h => h.topics)), [routes, domainOfType, team.data])
+  // Seconds from each event to a reader's receipt, by arc, as this page saw them; the arcs' medians, refreshed at most every 10 seconds.
+  const delays = useRef(new Map<string, number[]>())
+  const [delayTick, setDelayTick] = useState(0)
+  const lastDelayTick = useRef(0)
+  const noteDelay = (arc: string, seconds: number) => {
+    if (!(seconds >= 0)) return
+    const xs = delays.current.get(arc) ?? []
+    xs.push(seconds)
+    if (xs.length > DELAYS_KEPT) xs.shift()
+    delays.current.set(arc, xs)
+    if (Date.now() - lastDelayTick.current > 10_000) { lastDelayTick.current = Date.now(); setDelayTick(t => t + 1) }
+  }
 
   // Dust: every event of the last day, by the domain it tells of, read once when the page opens (no receipts asked), then the live ones.
   const [dust, setDust] = useState<{ type: string; time: string }[]>([])
@@ -143,10 +172,13 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
 
   // The body's nodes and links, rebuilt when a read changes; the renderer keeps known nodes where they are.
   // By default each domain is one node; an expanded domain shows its topics and their publishers.
-  const graph = useMemo((): { nodes: GNode[]; links: GLink[] } | null => {
+  const graph = useMemo((): { nodes: GNode[]; links: GLink[]; arcs?: GArc[]; rings?: { y: number; radius: number }[] } | null => {
     if (!model) return null
-    return buildBody({ model, domainOfType, expanded, seats, beat, observed, teamLinks: team.data?.links ?? [], names, dustByDomain, listening: team.data?.listening, now: Date.now() })
-  }, [model, seats, beat, observed, team.data, names, domainOfType, expanded, dustByDomain])
+    const input = { model, domainOfType, expanded, seats, beat, observed, teamLinks: team.data?.links ?? [], names, dustByDomain, listening: team.data?.listening, now: Date.now() }
+    if (byBus) return buildBody(input)
+    return buildDirectBody({ ...input, tiers, routes, roster, delays: delays.current })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- delays is a ref; delayTick says when it changed
+  }, [model, seats, beat, observed, team.data, names, domainOfType, expanded, dustByDomain, byBus, tiers, routes, roster, delayTick])
 
   const api = useRef<NerveApi | null>(null)
   // The latest model, for a replay that must not restart when a read refreshes it.
@@ -159,6 +191,8 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
   const [replayNote, setReplayNote] = useState<string | null>(null)
   const [replayAt, setReplayAt] = useState<{ i: number; n: number; time: string } | null>(null)
   const pending = useRef(new Map<string, { topic: string; since: number; landed: boolean }>())
+  /** The direct view's pulses waiting in the bus: event|reader → its arc and when the event was. */
+  const waiting = useRef(new Map<string, { arc: string; time: string; since: number }>())
   const seenEvents = useRef(new Set<string>())
   const seenReceipts = useRef(new Set<string>())
 
@@ -169,6 +203,19 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
     if (!a || !model) return
     const d = domainOfType.get(e.type) ?? domainOf(e.type)
     const dom = `d:${d}`
+    if (!byBus) {
+      // Direct: the sender lights; each reader's pulse runs to its arc's middle and waits there for that reader's receipt.
+      a.flash(dom)
+      const rs = routesByTopic.get(e.type) ?? []
+      for (const r of rs) {
+        const key = `${e.id}|${r.reader}`
+        const arc = arcId(d, r.domain)
+        if (a.launch(key, arc, PULSE.event, faint(e.type))) waiting.current.set(key, { arc, time: e.time, since: Date.now() })
+      }
+      // Sent and nobody takes it: the sender's halo lights.
+      if (rs.length === 0 && haloTopics.has(e.type)) a.halo(dom)
+      return
+    }
     if (expanded.has(d)) {
       a.pulse(`p:${model.publisherOf.get(e.type) ?? 'unknown'}`, dom, PULSE.event, faint(e.type))
       window.setTimeout(() => { a.pulse(dom, `t:${e.type}`, PULSE.event, faint(e.type)); a.flash(dom) }, SECOND_HOP_MS)
@@ -184,6 +231,29 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
       window.setTimeout(() => a.flash(r), SECOND_HOP_MS * 2)
     }
   }
+
+  // Direct: a receipt takes its waiting pulse on from the bus to the reader; the wait is timed for the arc's median.
+  const arrive = (eventId: string, consumer: string, at: string) => {
+    const key = `${eventId}|${consumer}`
+    const w = waiting.current.get(key)
+    if (!w) return false
+    waiting.current.delete(key)
+    api.current?.arrive(key)
+    noteDelay(w.arc, (Date.parse(at) - Date.parse(w.time)) / 1000)
+    return true
+  }
+  // Direct, live: a pulse whose receipt did not come in time turns red at the middle, and its arc's far half with it.
+  useEffect(() => {
+    if (byBus || mode.kind !== 'live') return
+    const t = window.setInterval(() => {
+      for (const [key, w] of waiting.current) {
+        if (Date.now() - w.since < LATE_AFTER_S * 1000) continue
+        waiting.current.delete(key)
+        api.current?.fail(key)
+      }
+    }, 2000)
+    return () => window.clearInterval(t)
+  }, [byBus, mode.kind])
 
   // A receipt lands on its reader; with the bus's domain folded, on that domain.
   const land = (reader: string, dim: boolean) => {
@@ -219,7 +289,8 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
       const p = pending.current.get(r.id)
       if (!reader || !p) continue
       p.landed = true
-      land(reader, faint(p.topic))
+      if (!byBus) arrive(r.id, r.consumer, r.at)
+      else land(reader, faint(p.topic))
       setLast(l => (l && l.event.id === r.id ? { ...l, readers: [...l.readers, reader] } : l))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fire per new receipt only
@@ -242,12 +313,21 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
         setReplayNote(`replay: ${events.length} events of the last 24h at ${mode.speed}×; ${receipts.length > 0 ? `${receipts.length} receipts replayed with them` : `receipts not replayed: ${receiptsNote ?? 'none found in the receipt stream for these events'}`}`)
         plan.forEach(({ at: t, event }, i) => {
           timers.push(window.setTimeout(() => { fireEvent(event); setLast({ event, readers: [] }); setReplayAt({ i: i + 1, n: plan.length, time: event.time }) }, t))
+          // Direct: a reader whose receipt is not among the replayed ones turns its pulse red, once the others would have landed.
+          if (!byBus && receipts.length > 0) {
+            for (const rt of routesByTopic.get(event.type) ?? []) {
+              if ((byEvent.get(event.id) ?? []).some(x => x.consumer === rt.reader)) continue
+              const key = `${event.id}|${rt.reader}`
+              timers.push(window.setTimeout(() => { if (waiting.current.delete(key)) api.current?.fail(key) }, t + 1600))
+            }
+          }
           for (const r of byEvent.get(event.id) ?? []) {
             const reader = readerOf(r.consumer, modelRef.current?.readers ?? [])
             if (!reader) continue
             const lag = Math.min(1500, Math.max(SECOND_HOP_MS, (Date.parse(r.at) - Date.parse(event.time)) / mode.speed))
             timers.push(window.setTimeout(() => {
-              land(reader, faint(event.type))
+              if (!byBus) arrive(event.id, r.consumer, r.at)
+              else land(reader, faint(event.type))
               setLast(l => (l && l.event.id === event.id ? { ...l, readers: [...l.readers, reader] } : l))
             }, t + lag))
           }
@@ -309,12 +389,19 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
         </p>
       )}
       <div className="relative w-full min-w-0">
-      {help && <HelpPanel unmeasured={[...(team.data?.unmeasured ?? []), ...(team.data?.listening?.notes ?? []).map(n => ({ what: n.split(':')[0], why: n.includes(':') ? n.slice(n.indexOf(':') + 1).trim() : '' }))]} onClose={() => setHelp(false)} />}
+      {help && <HelpPanel byBus={byBus} onByBus={() => setByBus(b => !b)}
+        unmeasured={[
+          ...(team.data?.unmeasured ?? []),
+          ...(team.data?.listening?.notes ?? []).map(n => ({ what: n.split(':')[0], why: n.includes(':') ? n.slice(n.indexOf(':') + 1).trim() : '' })),
+          ...(!byBus && domains.isError ? [{ what: 'floors', why: `the ownership table could not be read (${domains.error instanceof Error ? domains.error.message : 'request failed'}); every domain stands on one floor` }] : []),
+          ...(!byBus && domains.data && tiers.every(t => t.tier == null) ? [{ what: 'floors', why: 'the ownership table this platform serves declares no tiers yet; every domain stands on one floor' }] : []),
+          ...(!byBus ? [{ what: 'red near half', why: 'a sender that failed to publish is not reported to this page yet; the arc\'s near half is never red' }] : []),
+        ]} onClose={() => setHelp(false)} />}
       {view === 'list'
         ? <div className="rounded-sm bg-[var(--card-fill)] p-2"><ContractGraph contract={contract.data} roster={roster} /></div>
         : (
           <Suspense fallback={<p className="m-0 font-mono text-xs" style={{ color: C.muted }}>loading the body…</p>}>
-            <BusNerveGraph nodes={graph.nodes} links={graph.links} flat={view === '2d'} spin={spin} onReady={a => { api.current = a }}
+            <BusNerveGraph nodes={graph.nodes} links={graph.links} arcs={graph.arcs} rings={graph.rings} flat={view === '2d'} spin={spin} onReady={a => { api.current = a }}
               onNodeClick={id => {
                 if (!id.startsWith('d:')) return
                 const d = id.slice(2)
@@ -349,7 +436,7 @@ const dot = (color: string, ring = false) => (
  * 2026-11-17: explanations go behind a "?"): the legend, how to move it, and
  * what is not measured and why.
  */
-function HelpPanel({ unmeasured, onClose }: { unmeasured: { what: string; why: string }[]; onClose: () => void }) {
+function HelpPanel({ unmeasured, onClose, byBus, onByBus }: { unmeasured: { what: string; why: string }[]; onClose: () => void; byBus: boolean; onByBus: () => void }) {
   return (
     <div className="absolute top-2 right-2 z-10 max-w-80 rounded-sm p-2 font-mono text-[11px]" role="dialog" aria-label="Nerve map help"
       style={{ background: 'rgba(4,7,10,0.92)', border: `1px solid ${C.rule}`, color: C.text }}>
@@ -359,6 +446,16 @@ function HelpPanel({ unmeasured, onClose }: { unmeasured: { what: string; why: s
       </div>
       <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
         <Key mark={<span style={{ color: '#ffc46b' }}>✦</span>}>cloud = a domain</Key>
+        {!byBus && (
+          <>
+            <Key mark={<span style={{ color: '#8a6a58' }}>◯</span>}>floor = a tier: base below, owner on top</Key>
+            <Key mark={<span style={{ color: '#ffc46b' }}>⌒</span>}>arc = one domain's topics taken by another's reader</Key>
+            <Key mark={dot('#ffc46b')}>pulse waits mid-arc = in the bus, until the receipt</Key>
+            <Key mark={<span style={{ color: C.red }}>⌒</span>}>far half red = no receipt in {LATE_AFTER_S}s</Key>
+            <Key mark={<span style={{ color: C.grey }}>⌒</span>}>far half grey = reader lost</Key>
+            <Key mark={dot(C.amber, true)}>halo = sends what nobody takes</Key>
+          </>
+        )}
         <Key mark={dot(PULSE.event)}>event</Key>
         <Key mark={dot(PULSE.receipt)}>receipt</Key>
         <Key mark={dot(PULSE.letter)}>seat letter</Key>
@@ -373,7 +470,10 @@ function HelpPanel({ unmeasured, onClose }: { unmeasured: { what: string; why: s
         <li>click a cloud: open · again: fold</li>
         <li>hover: readings</li>
         <li>home: back to where it was</li>
+        {!byBus && <li>hover an arc's middle: its topics, readers and median wait</li>}
       </ul>
+      <p className="m-0 mt-2 mb-1" style={{ color: C.muted }}>┌ view</p>
+      <button type="button" className="cursor-pointer underline" onClick={onByBus}>{byBus ? 'back to who listens to whom' : 'view by bus (every line through the bus)'}</button>
       {unmeasured.length > 0 && (
         <>
           <p className="m-0 mt-2 mb-1" style={{ color: C.muted }}>┌ {unmeasured.length} not measured</p>

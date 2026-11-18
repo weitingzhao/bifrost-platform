@@ -125,9 +125,11 @@ clients:
     kind: durable
     lost_after: 24h
     envs: [prod]
+    domain: delivery
     note: PROD workers' automatic STG release; woken on main and on CI runs
   - name: postrelease
     kind: durable
     lost_after: 24h
     envs: [stg]
+    domain: delivery
     note: the post-release check (on where POST_RELEASE_CHECK=observe, STG); woken by its pipeline's finished runs beside its 30-second loop
