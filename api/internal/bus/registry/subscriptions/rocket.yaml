@@ -185,6 +185,11 @@ clients:
     kind: reader
     lost_after: 24h
     note: the Ops Bus page, open while someone looks at it
+  - name: release-recorder
+    kind: durable
+    lost_after: 168h
+    domain: delivery
+    note: asks the release recorder for a pass when a run ends; its own interval reconciles
   - name: window-queue
     kind: durable
     lost_after: 168h

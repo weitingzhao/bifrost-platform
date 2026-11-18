@@ -98,12 +98,14 @@ func (r *Relay) Pass(ctx context.Context) (int, error) {
 				r.cursor = row.Cursor()
 				continue
 			}
+			publishStart := time.Now()
 			if err := r.Out.Publish(ctx, EventSubject(r.Tenant.Name, r.Env, row.Type), env.ID, row.Cursor(), data); err != nil {
 				return n, fmt.Errorf("bus relay: publish %s: %w", env.ID, err)
 			}
 			r.cursor = row.Cursor()
 			n++
 			metricPublished.Add(1)
+			observePublish(time.Since(publishStart))
 			publishedType(row.Type, time.Now())
 		}
 		if len(rows) < PageSize {
@@ -266,7 +268,36 @@ func publishedType(typ string, at time.Time) {
 
 // WriteMetrics writes the relay's counters in the exposition format; a
 // process that runs no relay writes zeros.
+// publishBuckets are the upper bounds, in seconds, of the time from handing an
+// event to the stream to its acknowledgement (2026-11-18, the CI line: the
+// stream's disk is slow at times and nothing here measured what that costs).
+var publishBuckets = []float64{0.005, 0.01, 0.05, 0.1, 0.5, 1, 5}
+
+var (
+	publishCounts [8]atomic.Int64 // one per bucket, then +Inf; not cumulative
+	publishMicros atomic.Int64
+)
+
+func observePublish(d time.Duration) {
+	publishMicros.Add(d.Microseconds())
+	i := sort.SearchFloat64s(publishBuckets, d.Seconds())
+	publishCounts[i].Add(1)
+}
+
+func writePublishHistogram(b *strings.Builder) {
+	const name = "bifrost_bus_relay_publish_seconds"
+	fmt.Fprintf(b, "# HELP %s Time from handing an event to the stream to its acknowledgement\n# TYPE %s histogram\n", name, name)
+	var total int64
+	for i, le := range publishBuckets {
+		total += publishCounts[i].Load()
+		fmt.Fprintf(b, "%s_bucket{le=\"%g\"} %d\n", name, le, total)
+	}
+	total += publishCounts[len(publishBuckets)].Load()
+	fmt.Fprintf(b, "%s_bucket{le=\"+Inf\"} %d\n%s_sum %g\n%s_count %d\n", name, total, name, float64(publishMicros.Load())/1e6, name, total)
+}
+
 func WriteMetrics(b *strings.Builder) {
+	writePublishHistogram(b)
 	for _, m := range []struct {
 		name, help string
 		v          int64

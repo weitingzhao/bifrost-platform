@@ -474,6 +474,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 		s.consumeConclusions(ctx, js, env)
 		s.consumeWindowQueue(ctx, js, env)
 		s.consumeUnitWatch(ctx, js, env)
+		s.consumeReleaseRecords(ctx, js, env)
 		r := &relay.Relay{Ledger: ledger, Out: &relay.JSOut{JS: js, Stream: relay.EventStreamName(relay.Tenant, env)},
 			Tenant: rocket, Env: env, Logf: busLogf}
 		r.Run(ctx, relay.Listen(ctx, pool, busLogf))
@@ -746,6 +747,17 @@ func (s *Server) unitWatchPass(ctx context.Context) error {
 		return errors.New("the ledger is not connected")
 	}
 	return unitwatch.Watch{DB: db, Head: s.giteaMainHead, Tree: s.unitTreesOf(), FirstParent: s.giteaFirstParent}.Pass(ctx)
+}
+
+// consumeReleaseRecords asks the release recorder for a pass when a run ends
+// (N21, 2026-11-18; it was told in-process by the pipeline records' loop).
+func (s *Server) consumeReleaseRecords(ctx context.Context, js jetstream.JetStream, env string) {
+	if s.releases == nil || s.releases.Service() == nil {
+		return
+	}
+	s.consumePasses(ctx, js, env, "release-recorder", []string{gatecluster.TypeRunFinished}, func(context.Context) {
+		s.releases.Service().Kick()
+	})
 }
 
 // consumePasses runs pass for each event of a durable consumer and leaves a

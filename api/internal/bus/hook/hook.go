@@ -31,8 +31,9 @@ import (
 const (
 	EnvSecret = "BUS_GITEA_HOOK_SECRET"
 	EnvRepos  = "BUS_GIT_REPOS"
-	// DefaultRepos is step 1's one repository.
-	DefaultRepos = "bifrost-platform"
+	// DefaultRepos are the repositories whose push hooks are installed:
+	// bifrost-trade-infra since card #597 (2026-11-18).
+	DefaultRepos = "bifrost-platform,bifrost-trade-infra"
 	// Actor is who writes the events: the gate, a service of the platform.
 	Actor = "service:gate-git"
 )

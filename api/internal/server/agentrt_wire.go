@@ -82,6 +82,11 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		}
 	}
 	if s.delivery != nil {
+		s.delivery.ReadConfigurationMainThrough(func(gitea delivery.MainHeadReader) delivery.MainHeadReader {
+			return func(ctx context.Context, repo string) (string, error) {
+				return s.mainOf("config-boundaries", gitea)(ctx, repo)
+			}
+		})
 		rt.api.ConfigurationBoundaries = s.delivery.ConfigurationBoundaries
 	}
 	if s.approvals != nil {

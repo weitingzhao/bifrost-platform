@@ -186,22 +186,17 @@ func TestPipelineRecordsDurationFromEnv(t *testing.T) {
 	}
 }
 
-// The controller is given the intervals and, when the release recorder
-// exists, its Kick as what a newly recorded run starts.
+// The controller is given the intervals. The release recorder is told of a
+// finished run by the bus (consumeReleaseRecords, N21), not by this loop.
 func TestWirePipelineRecords(t *testing.T) {
 	t.Setenv(pipelineRecordsEveryEnv, "20s")
 	t.Setenv(pipelineRecordsFullEveryEnv, "10m")
 	c := &controller.Controller{}
-	(&Server{}).wirePipelineRecords(c)
-	if c.PipelineEvery != 20*time.Second || c.PipelineFullEvery != 10*time.Minute || c.PipelineRecorded != nil {
-		t.Fatalf("without a recorder: every %s, full every %s, hook set %v", c.PipelineEvery, c.PipelineFullEvery, c.PipelineRecorded != nil)
-	}
 	s := &Server{releases: releases.NewHandler(releases.NewService(t.TempDir(), nil))}
 	s.wirePipelineRecords(c)
-	if c.PipelineRecorded == nil {
-		t.Fatal("the release recorder is not kicked by a recorded run")
+	if c.PipelineEvery != 20*time.Second || c.PipelineFullEvery != 10*time.Minute || c.PipelineRecorded != nil {
+		t.Fatalf("every %s, full every %s, hook set %v", c.PipelineEvery, c.PipelineFullEvery, c.PipelineRecorded != nil)
 	}
-	c.PipelineRecorded() // no recorder loop runs here: it must return
 }
 
 // A CI run's results name what it tested: <short>-commit and <short>-tree a

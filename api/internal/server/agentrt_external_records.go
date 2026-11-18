@@ -119,18 +119,12 @@ func pipelineRecordsDuration(name string) time.Duration {
 	return d
 }
 
-// wirePipelineRecords sets how often the controller records completed runs
-// and has a newly recorded run start a pass of the release recorder, so the
-// run's release record is written then and not at the recorder's own next
-// interval.
+// wirePipelineRecords sets how often the controller records completed runs.
 func (s *Server) wirePipelineRecords(c *controller.Controller) {
 	c.PipelineEvery = pipelineRecordsDuration(pipelineRecordsEveryEnv)
 	c.PipelineFullEvery = pipelineRecordsDuration(pipelineRecordsFullEveryEnv)
 	// Bus step 2: gate-cluster names each finished run (startGateCluster).
 	c.PipelineFinished, c.PipelineLive = s.bus.finishedRuns(), s.bus.recordsLive.Load
-	if s.releases != nil && s.releases.Service() != nil {
-		c.PipelineRecorded = s.releases.Service().Kick
-	}
 }
 
 func approvalObservation(a approvals.Approval, now time.Time) (seenfacts.ApprovalFact, bool) {

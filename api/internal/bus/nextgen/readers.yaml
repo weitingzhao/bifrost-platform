@@ -38,7 +38,7 @@ groups:
       - {id: release-context-main, what: "release context's main", status: moved, at: "2026-11-17", proof: {file: api/internal/server/release_context_wire.go, contains: 's.mainOf("release-context-main", s.delivery.PolicyFacts().MainHead)'}}
       - {id: evidence, what: "commit evidence and compare", status: moved, at: "2026-11-17", proof: {file: api/internal/server/evidence_commit.go, contains: 's.mainOf("evidence", m)'}}
       - {id: units-config, what: "units/config, CI scorecard and domains", status: moved, at: "2026-11-17", proof: {file: api/internal/server/units_config.go, contains: 's.mainOf("units-config", s.giteaMainHead)'}}
-      - {id: config-boundaries, what: "configuration boundaries (infra main)", status: open, owner: communication, watch_repo: bifrost-trade-infra, note: "moves when gate-git watches infra (its Gitea hook is an execution card)"}
+      - {id: config-boundaries, what: "configuration boundaries (infra main)", status: moved, at: "2026-11-18", proof: {file: api/internal/server/agentrt_wire.go, contains: 's.mainOf("config-boundaries", gitea)'}, watch_repo: bifrost-trade-infra}
       - {id: head-release-main, what: "head-release reads main after a wake", status: kept, note: "a gate reads the source; the event only wakes it"}
       - {id: release-policy-main, what: "release policy MainHead", status: kept, note: "a gate"}
       - {id: migration-main, what: "migration action's main (infra)", status: kept, note: "a gate"}

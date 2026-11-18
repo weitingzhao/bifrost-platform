@@ -157,9 +157,22 @@ func (b configBoundary) equal(a, c string) bool {
 
 // ConfigurationBoundaries reads only the registered non-secret fields. No
 // manifest, CI or goal is written by this method, including preview requests.
+// ReadConfigurationMainThrough has the boundaries ask where infra's main is
+// through wrap, given the Gitea reader as its fallback.
+func (h *Handler) ReadConfigurationMainThrough(wrap func(MainHeadReader) MainHeadReader) {
+	h.configMain = wrap
+}
+
+// MainHeadReader answers where main of a repository is.
+type MainHeadReader = func(ctx context.Context, repo string) (string, error)
+
 func (h *Handler) ConfigurationBoundaries(ctx context.Context, key, value string, requests []map[string]any) (map[string]any, error) {
 	f := h.PolicyFacts()
-	head, err := f.MainHead(ctx, "bifrost-trade-infra")
+	mainHead := f.MainHead
+	if h.configMain != nil {
+		mainHead = h.configMain(f.MainHead)
+	}
+	head, err := mainHead(ctx, "bifrost-trade-infra")
 	if err != nil {
 		return nil, fmt.Errorf("configuration source revision unavailable")
 	}

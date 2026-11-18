@@ -25,6 +25,7 @@ type Handler struct {
 	onPipelineStarted PipelineStartedHook
 	notices           windowNotifier // window_notify.go
 	timings           cirunview.TimingsCache
+	configMain        func(MainHeadReader) MainHeadReader // configuration_boundaries.go
 }
 
 // NewHandlerForTest builds a handler around an existing service.

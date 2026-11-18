@@ -120,6 +120,10 @@ func TestRegisterNamesRealReaders(t *testing.T) {
 				if typ != "ci.run.finished" {
 					t.Errorf("%s: the post-release check reads only ci.run.finished", typ)
 				}
+			case "release-recorder":
+				if typ != "ci.run.finished" {
+					t.Errorf("%s: the release recorder reads only finished runs", typ)
+				}
 			case "window-queue":
 				if typ != "release.window.changed" {
 					t.Errorf("%s: the window queue reads only the window's changes", typ)
