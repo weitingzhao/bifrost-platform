@@ -269,9 +269,6 @@ func New(cfg *config.Config) (*Server, error) {
 		filepath.Join(cfg.ConfigDir(), "trust-overrides.yaml"),
 	))
 	slog.Info("trust overrides store", "location", srv.agentgovernance.TrustOverrideLocation())
-	if dir := threadtitles.TranscriptDir(); role.RunsWorkers() && threadtitles.SyncWanted(dir) {
-		threadtitles.StartSync(context.Background(), titleStore, threadtitles.NewScanner(dir, 30*24*time.Hour), 3*time.Minute)
-	}
 	srv.wireLineage(releasesSvc, titleStore)
 	srv.wireWorkActions(cfg, clusterH)
 	dataDir := strings.TrimSpace(os.Getenv("PLATFORM_DATA_DIR"))

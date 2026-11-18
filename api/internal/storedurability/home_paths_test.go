@@ -37,7 +37,6 @@ var homePathFiles = map[string]string{
 	"devsession/provider_bdev.go":      "~/.bifrost-dev of the bdev workstation",
 	"ibgateway/config.go":              "default kubeconfig path",
 	"launchd/list.go":                  "reads the operator-plane host LaunchAgents directory; not platform state",
-	"threadtitles/threadtitles.go":     "Claude transcripts on the workstation",
 }
 
 func TestNoNewStoreUnderHome(t *testing.T) {
