@@ -124,7 +124,7 @@ func (s *Server) wirePipelineRecords(c *controller.Controller) {
 	c.PipelineEvery = pipelineRecordsDuration(pipelineRecordsEveryEnv)
 	c.PipelineFullEvery = pipelineRecordsDuration(pipelineRecordsFullEveryEnv)
 	// Bus step 2: gate-cluster names each finished run (startGateCluster).
-	c.PipelineFinished, c.PipelineLive = s.bus.finishedRuns(), s.bus.recordsLive.Load
+	c.PipelineFinished = s.bus.finishedRuns()
 }
 
 func approvalObservation(a approvals.Approval, now time.Time) (seenfacts.ApprovalFact, bool) {

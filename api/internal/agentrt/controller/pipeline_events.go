@@ -15,20 +15,16 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
-// PipelineReconcileEvery is the pipeline records loop's pass interval while
-// the bus names the finished runs (Controller.PipelineLive): the pass over
-// every retained run is then only the reconciliation (bus/RULES.md §8). The
-// missed-by-events count (bifrost_bus_records_missed_by_events_total) decides
-// whether it can grow.
+// PipelineReconcileEvery is the pipeline records loop's pass interval: the bus
+// names the finished runs and the pass over every retained run is the
+// reconciliation (bus/RULES.md §8). The missed-by-events count
+// (bifrost_bus_records_missed_by_events_total) decides whether it can grow; it
+// was 0 on PROD and STG when the 30-second mode went (2026-11-18, L02).
 const PipelineReconcileEvery = 5 * time.Minute
 
-// pipelineTick is the loop's call: a pass every PipelineEvery while the bus
-// does not name the finished runs, else a reconciliation pass once per
+// pipelineTick is the loop's call: a reconciliation pass once per
 // PipelineReconcileEvery.
 func (c *Controller) pipelineTick(ctx context.Context) (int, error) {
-	if c.PipelineLive == nil || !c.PipelineLive() {
-		return c.PipelineRecords(ctx)
-	}
 	m := &c.pipelines
 	m.mu.Lock()
 	last := m.last

@@ -115,12 +115,9 @@ type Controller struct {
 	PipelineRecorded  func()
 	// PipelineFinished, when set, names the runs the bus says finished
 	// (ci.run.finished, gate-cluster in this process): each is recorded at
-	// once (RecordPipelineRun). PipelineLive says whether those names come;
-	// while they do, the loop's pass over every run is the reconciliation
-	// and runs once per PipelineReconcileEvery (bus/RULES.md §8). nil: the
-	// loop passes every PipelineEvery as before.
+	// once (RecordPipelineRun). The loop's pass over every run is the
+	// reconciliation, once per PipelineReconcileEvery (bus/RULES.md §8).
 	PipelineFinished <-chan string
-	PipelineLive     func() bool
 	// pipelines remembers the completed runs this process knows are
 	// recorded (external_records.go); memory only.
 	pipelines pipelineMemo

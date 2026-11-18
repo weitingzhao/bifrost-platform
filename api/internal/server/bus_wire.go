@@ -64,15 +64,10 @@ type busWiring struct {
 	head atomic.Pointer[serialPass]
 	kick chan struct{}
 	once sync.Once
-	// consumerLive: head-release's durable consumer is subscribed, so the
-	// bus wakes it and its own loop is only the reconciliation.
-	consumerLive atomic.Bool
 	// finished names the runs gate-cluster said finished, for the pipeline
-	// records (bus step 2); recordsLive: gate-cluster watches the runs, so
-	// the records' loop is only the reconciliation.
+	// records (bus step 2).
 	finished     chan string
 	finishedOnce sync.Once
-	recordsLive  atomic.Bool
 	// gitLedger: this environment keeps git.main.advanced in the ledger
 	// (the Gitea hook or the bus is on), so display readers may ask it where
 	// main is (mainOf).
@@ -136,10 +131,6 @@ type serialPass struct {
 	mu   sync.Mutex
 	pass func(context.Context) error
 	last time.Time
-	// live says the bus wakes the pass; then the loop's tick only reconciles,
-	// at most once per reconcileEvery (bus/RULES.md §8: polling stays only
-	// as registered reconciliation).
-	live func() bool
 	now  func() time.Time
 	// hotUntil: after a bus kick the loop keeps its 30-second cadence for a
 	// while, because the kick often comes before main's CI has its verdict
@@ -148,9 +139,11 @@ type serialPass struct {
 	hotUntil time.Time
 }
 
-// headReleaseReconcileEvery is the loop's pass interval while the bus wakes
-// head-release (2026-11-16: main to STG release went from 51 s to 11 s on the
-// bus; the 30-second poll is kept only as the reconciliation).
+// headReleaseReconcileEvery is the loop's pass interval: the bus wakes
+// head-release (2026-11-16: main to STG release went from 51 s to 11 s), and
+// polling stays only as the reconciliation (bus/RULES.md §8). With the bus down
+// a release waits for this pass (2026-11-18, L04: the 30-second mode for that
+// case is gone).
 const headReleaseReconcileEvery = 5 * time.Minute
 
 // headReleaseHotAfterKick is how long the loop keeps its 30-second cadence
@@ -172,17 +165,15 @@ func (p *serialPass) run(ctx context.Context) error {
 	return p.pass(ctx)
 }
 
-// tick is the controller loop's call: a full pass while the bus is not
-// waking head-release, else one every headReleaseReconcileEvery.
+// tick is the controller loop's call: a pass once per
+// headReleaseReconcileEvery, or at each tick for a while after a bus kick.
 func (p *serialPass) tick(ctx context.Context) error {
-	if p.live != nil && p.live() {
-		p.mu.Lock()
-		now := p.clock()
-		recent := !p.last.IsZero() && now.Sub(p.last) < headReleaseReconcileEvery && !now.Before(p.hotUntil)
-		p.mu.Unlock()
-		if recent {
-			return nil
-		}
+	p.mu.Lock()
+	now := p.clock()
+	recent := !p.last.IsZero() && now.Sub(p.last) < headReleaseReconcileEvery && !now.Before(p.hotUntil)
+	p.mu.Unlock()
+	if recent {
+		return nil
 	}
 	return p.run(ctx)
 }
@@ -193,7 +184,7 @@ func (b *busWiring) serialHeadRelease(pass func(context.Context) error) func(con
 	if pass == nil {
 		return nil
 	}
-	p := &serialPass{pass: pass, live: b.consumerLive.Load}
+	p := &serialPass{pass: pass}
 	b.head.Store(p)
 	return p.tick
 }
@@ -499,16 +490,6 @@ func (s *Server) startGateCluster(ctx context.Context, env string) {
 		s.delivery.SetRunCache(g, s.earnedReadRoutes(ctx))
 	}
 	safego.Go("bus-gate-cluster", func() { g.Run(kubemetrics.WithSite(ctx, "bus.gate-cluster")) })
-	safego.Go("bus-gate-cluster-records-live", func() {
-		select {
-		case <-ctx.Done():
-			return
-		case <-g.Watching():
-		}
-		s.bus.recordsLive.Store(true)
-		context.AfterFunc(ctx, func() { s.bus.recordsLive.Store(false) })
-		slog.Info("bus: pipeline records woken by ci.run.finished; their 30-second loop now reconciles every 5 minutes")
-	})
 	slog.Info("bus gate-cluster: watching PipelineRuns and the release window", "namespace", ns)
 }
 
@@ -831,10 +812,9 @@ func (s *Server) consumeHeadRelease(ctx context.Context, js jetstream.JetStream,
 		return nil
 	})
 	if err != nil {
-		slog.Error("bus: head-release consumer; the 30-second loop alone starts releases", "error", err)
+		slog.Error("bus: head-release consumer; its 5-minute pass alone starts releases", "error", err)
 		return
 	}
-	s.bus.consumerLive.Store(true)
-	context.AfterFunc(ctx, func() { s.bus.consumerLive.Store(false); cc.Stop() })
-	slog.Info("bus: head-release woken by git.main.advanced; its 30-second loop now reconciles every 5 minutes")
+	context.AfterFunc(ctx, func() { cc.Stop() })
+	slog.Info("bus: head-release woken by git.main.advanced")
 }

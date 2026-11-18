@@ -137,15 +137,18 @@ func TestPipelineRecordsRefusedRunDoesNotHoldTheOthers(t *testing.T) {
 	}
 }
 
-// The loop records a run that completes after start within PipelineEvery, not
-// at the next five minutes.
-func TestPipelineRecordsLoopRecordsACompletedRunWithinItsInterval(t *testing.T) {
+// The loop's reconciliation records a run that completed after start, one the
+// bus did not name (since 2026-11-18, L02, the loop passes once per
+// PipelineReconcileEvery).
+func TestPipelineRecordsLoopRecordsACompletedRunAtItsReconciliation(t *testing.T) {
 	t.Parallel()
 	pool := setup(t)
 	var mu sync.Mutex
 	var runs []seenfacts.PipelineRun
 	var told atomic.Int32
-	c := &controller.Controller{DB: pool, LeaseEvery: time.Hour, FactsEvery: time.Hour, PipelineEvery: 20 * time.Millisecond,
+	var ahead atomic.Int64
+	c := &controller.Controller{DB: pool, Now: func() time.Time { return time.Now().Add(time.Duration(ahead.Load())) },
+		LeaseEvery: time.Hour, FactsEvery: time.Hour, PipelineEvery: 20 * time.Millisecond,
 		PipelineRecorded: func() { told.Add(1) },
 		Sources: controller.Sources{PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) {
 			mu.Lock()
@@ -160,6 +163,7 @@ func TestPipelineRecordsLoopRecordsACompletedRunWithinItsInterval(t *testing.T) 
 	mu.Lock()
 	runs = []seenfacts.PipelineRun{completedRun("deliver-late")}
 	mu.Unlock()
+	ahead.Store(int64(controller.PipelineReconcileEvery))
 	for deadline := time.Now().Add(10 * time.Second); pipelineSeenCount(t, pool, "deliver-late") != 1 || told.Load() != 1; time.Sleep(10 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatalf("the loop did not record the run: events %d, told %d", pipelineSeenCount(t, pool, "deliver-late"), told.Load())

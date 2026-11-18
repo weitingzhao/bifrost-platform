@@ -88,12 +88,11 @@ func TestRecordPipelineRunRecordsOneRunOnce(t *testing.T) {
 
 // 2026-11-16: bus step 2 — while gate-cluster names the finished runs the
 // records' 30-second loop is only the reconciliation (bus/RULES.md §8): its
-// pass over every run comes once per PipelineReconcileEvery; without the bus
-// every tick is a pass, as before.
-func TestPipelineTickReconcilesEveryFiveMinutesWhileLive(t *testing.T) {
+// pass over every run comes once per PipelineReconcileEvery.
+func TestPipelineTickReconcilesEveryFiveMinutes(t *testing.T) {
 	clock := &testClock{t: time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)}
-	live, lists := false, 0
-	c := controller.Controller{DB: noDB{}, Now: clock.now, PipelineLive: func() bool { return live }, Sources: controller.Sources{
+	lists := 0
+	c := controller.Controller{DB: noDB{}, Now: clock.now, Sources: controller.Sources{
 		PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) { lists++; return nil, nil }}}
 	tick := func(want int) {
 		t.Helper()
@@ -105,17 +104,12 @@ func TestPipelineTickReconcilesEveryFiveMinutesWhileLive(t *testing.T) {
 		}
 		clock.add(30 * time.Second)
 	}
-	tick(1) // without the bus: every tick lists
-	tick(2)
-	live = true
-	for i := 0; i < 9; i++ { // 30 s .. 4 min 30 s after the last pass
-		tick(2)
+	tick(1)                  // the first pass lists
+	for i := 0; i < 9; i++ { // 30 s .. 4 min 30 s after it
+		tick(1)
 	}
-	tick(3) // 5 minutes after: the reconciliation
-	tick(3)
-	live = false
-	tick(4) // the bus gone: every tick lists again
-	tick(5)
+	tick(2) // 5 minutes after: the reconciliation
+	tick(2)
 }
 
 // 2026-11-16: bus step 2 — the side-by-side reading: a run the event path
@@ -128,7 +122,7 @@ func TestReconciliationRecordsAndCountsWhatTheEventsMissed(t *testing.T) {
 	clock := &testClock{t: time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)}
 	runs := []seenfacts.PipelineRun{completedRun("deliver-old")}
 	var infos []string
-	c := controller.Controller{DB: pool, Now: clock.now, PipelineLive: func() bool { return true },
+	c := controller.Controller{DB: pool, Now: clock.now,
 		Infof: func(format string, args ...any) { infos = append(infos, format) },
 		Sources: controller.Sources{
 			PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) { return runs, nil },

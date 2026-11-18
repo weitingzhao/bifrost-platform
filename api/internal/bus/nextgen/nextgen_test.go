@@ -65,7 +65,7 @@ func TestRetiredChannelsAreGone(t *testing.T) {
 	if len(chs) != 153 {
 		t.Fatalf("%d channels, the table has 153", len(chs))
 	}
-	want := map[string]int{"replaced": 57, "merged": 20, "kept": 34, "announced": 27, "deleted": 10, "not-this-way": 4, "reserved": 1}
+	want := map[string]int{"replaced": 55, "merged": 22, "kept": 34, "announced": 27, "deleted": 10, "not-this-way": 4, "reserved": 1}
 	got := map[string]int{}
 	seen := map[string]bool{}
 	for _, c := range chs {
@@ -264,9 +264,9 @@ func TestStepsMatchTheTableAndCutsNameTheirProof(t *testing.T) {
 			t.Errorf("step %s: %d rows, the table has %d", st.Step, st.Total, want[st.Step])
 		}
 	}
-	// 2026-11-18: X-B20 and X-A11 stay (the coordinator), and L01 stays too, so 67 go, not 70.
-	if p.Removable != 67 || p.Stays != 86 || p.End != 99 {
-		t.Errorf("removable %d, stays %d, end %d; the table says 67, 86, 99", p.Removable, p.Stays, p.End)
+	// 2026-11-18: X-B20 and X-A11 stay (the coordinator), L01 stays too, and N11 and X-C10 turned out to be the new road already (their notices are the mail), so 65 go, not 70.
+	if p.Removable != 65 || p.Stays != 88 || p.End != 101 {
+		t.Errorf("removable %d, stays %d, end %d; the table says 65, 88, 101", p.Removable, p.Stays, p.End)
 	}
 	for _, c := range chs {
 		if c.Cut == nil {

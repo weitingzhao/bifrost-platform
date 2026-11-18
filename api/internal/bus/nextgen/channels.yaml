@@ -30,9 +30,9 @@
 # is not checked here.
 channels:
   - {id: L01, class: K2, disposition: kept, step: "none", what: "controller：审批/问题 statefile 每分钟转成 PG 事件", by: "原因：审批和问题继续存状态文件；单副本没出过事，搬表要新授权和执行卡，算不出稳定或效率回报（11-18 主统筹按 owner-decision-check 重判）"}
-  - {id: L02, class: K2, disposition: replaced, step: "2", what: "controller：全部 PipelineRun 每 30 秒记成 pipeline_seen 并入证据账", by: "门·集群（watch 代替列表）；证据写入改为订阅 ci.run.finished 的服务端订阅者", cut: {at: "2026-11-17", evidence: ["reader:records"]}}
+  - {id: L02, class: K2, disposition: replaced, step: "2", what: "controller：全部 PipelineRun 每 30 秒记成 pipeline_seen 并入证据账", by: "门·集群（watch 代替列表）；证据写入改为订阅 ci.run.finished 的服务端订阅者", cut: {at: "2026-11-17", evidence: ["reader:records"]}, retired: {at: "2026-11-18", change: I0681d9f1832d2b297e4b5cedf6ce34f262a26f70, absent_text: ["PipelineLive", "recordsLive"]}}
   - {id: L03, class: K2, disposition: replaced, step: "2", what: "controller：TaskRun 每 30 秒记成 unit_run 与证据（模式非 off 时还会创建 TaskRun）", by: "门·集群观察部分；创建 TaskRun 的部分归 X-A29", cut: {at: "2026-11-18", evidence: ["reader:unit-taskruns"]}}
-  - {id: L04, class: K2, disposition: replaced, step: "1", what: "head-release：每 30 秒读 Gitea main 头+证据账+Tekton，可能起 STG 发布", by: "门·代码（git.main.advanced）+ci.verdict.changed 唤醒；判定逻辑留作订阅者（入户口子①）", cut: {at: "2026-11-17", evidence: ["reader:head-release"]}}
+  - {id: L04, class: K2, disposition: replaced, step: "1", what: "head-release：每 30 秒读 Gitea main 头+证据账+Tekton，可能起 STG 发布", by: "门·代码（git.main.advanced）+ci.verdict.changed 唤醒；判定逻辑留作订阅者（入户口子①）", cut: {at: "2026-11-17", evidence: ["reader:head-release"]}, retired: {at: "2026-11-18", change: I0681d9f1832d2b297e4b5cedf6ce34f262a26f70, absent_text: ["consumerLive"]}}
   - {id: L05, class: K10, disposition: replaced, step: "4", what: "post-release-check：run 结束 180 秒后核对（默认关）", by: "并到 X-A18 那一份核对（只留一份判定），结果以 release.deploy.finished 宣布"}
   - {id: L06, class: K2, disposition: replaced, step: "3", what: "plan-observations：每分钟读 Gitea 历史记成 plan_observation", by: "门·代码（git.main.advanced 后按事件读历史）+plan.fact.changed"}
   - {id: L07, class: K10, disposition: kept, step: "3", what: "facts-rules：每 15 秒求值（部署记录、CI 判定、审批问题），写计划节点状态", by: "原因：它是规则求值引擎本身，不是通道；15 秒轮询改为被 ci.verdict.changed/release.deploy.finished/approval.card.* 唤醒，轮询降为登记过的对账（入户口子①+登记表）"}
@@ -67,7 +67,7 @@ channels:
   - {id: N08, class: K5, disposition: reserved, step: "none", what: "Redis stream ib:operator:cmd + 结果键（Daemon / IB operator 命令流）", by: "现在不接，位置已留：指令道（D10 冻结，Agent 不写，平台只发 reconnect_all）；将来靠登记接入"}
   - {id: N09, class: K13, disposition: merged, step: "3", what: "PG 信箱 agentrt.message（+事件流 mbox:<actor>）：写入与存放", by: "留下并改造成席位信箱（seat.mail.arrived，事件只带指针，正文仍在 artifact）；X-C2、X-C8、X-C12 并到它", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
   - {id: N10, class: K4, disposition: replaced, step: "3", what: "把审批/问题结论复制成信箱 note（approval:/question: 键去重）", by: "席位订阅 approval.card.decided/question.answered 后到读口读结论，不再复制"}
-  - {id: N11, class: K9, disposition: replaced, step: "3", what: "窗口排队通知：队首可上时写信箱 note", by: "seat.mail.arrived（收件人=队头席位）+release.window.changed", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
+  - {id: N11, class: K9, disposition: merged, step: "3", what: "窗口排队通知：队首可上时写信箱 note", by: "seat.mail.arrived（收件人=队头席位）+release.window.changed", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
   - {id: N12, class: K9, disposition: announced, step: "3", what: "发布窗口 ConfigMap cicd/bifrost-release-window（CAS，TTL 5 分钟，队列 100）", by: "锁的原语留在原处；变化由门·集群 watch 宣布", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
   - {id: N13, class: K5, disposition: announced, step: "3", what: "起 Tekton run：MCP、Console、head-release、full-ci、unit 四处各自创建", by: "动作与卡分级不变；起了什么由门·集群宣布（ci.run.started）。四处创建收成一个动作入口属动作层，设计没说（见第 4 节）", cut: {at: "2026-11-18", evidence: ["topic:ci.run.started"]}}
   - {id: N14, class: K6, disposition: replaced, step: "3", what: "线程/主机心跳 POST /agent/threads/heartbeat（共享 reporter 令牌，10 秒合并落盘）", by: "席位记录（会话带 charter 写自己的记录）；共享 reporter 令牌保留：同一系统用户下分席位凭证防不了冒名（11-18 定）"}
@@ -140,7 +140,7 @@ channels:
   - {id: X-A25, class: K11, disposition: kept, step: "0", what: "maintainer-reconcile：每天对账 MAINTAINERS.yaml 与实际，差异为 0 才重建 ConfigMap", by: "原因：对账兜底；差异宣布 reconcile.drift.found"}
   - {id: X-A26, class: K6, disposition: announced, step: "3", what: "平台后台循环存活指标（给 Prometheus）", by: "同 S14", cut: {at: "2026-11-18", evidence: ["topic:loop.health.changed"]}}
   - {id: X-A27, class: K7, disposition: kept, step: "none", what: "Dagster 传感器 → Alertmanager（研究 run 失败/资产检查失败）", by: "原因：走告警路；research 代码没读（材料只在 MAINTAINERS.yaml 里描述）"}
-  - {id: X-A28, class: K2, disposition: replaced, step: "1", what: "platform-workers 的 head_release 循环（infra 只放开关 HEAD_RELEASE=stg）", by: "同 L04", cut: {at: "2026-11-17", evidence: ["reader:head-release"]}}
+  - {id: X-A28, class: K2, disposition: replaced, step: "1", what: "platform-workers 的 head_release 循环（infra 只放开关 HEAD_RELEASE=stg）", by: "同 L04", cut: {at: "2026-11-17", evidence: ["reader:head-release"]}, retired: {at: "2026-11-18", change: I0681d9f1832d2b297e4b5cedf6ce34f262a26f70, absent_text: ["consumerLive"]}}
   - {id: X-A29, class: K5, disposition: announced, step: "3", what: "单元任务影子派发 UNIT_DISPATCH=shadow（还没有门读这些行）", by: "留在原处；有门读之前不并排；结果 ci.verdict.changed"}
   - {id: X-A30, class: K8, disposition: kept, step: "none", what: "Loki 步骤日志（promtail → Loki）", by: "原因：日志长尾，不是事件，也是审计 slog 的长尾存放"}
   - {id: X-A31, class: K5, disposition: not-this-way, step: "none", what: "执行卡执行口：owner_run_command 卡 → owner-exec（命令按指纹+一次性码）", by: "永远不走：同 N19"}
@@ -173,7 +173,7 @@ channels:
   - {id: X-C7, class: K1, disposition: replaced, step: "4", what: "snapshot.sh：主统筹一次读出此刻事实（kubectl 读窗口 ConfigMap、git 读分支）", by: "入户口子③的「读某状态」+读口（带版本）"}
   - {id: X-C8, class: K13, disposition: merged, step: "3", what: "平台收件箱+信封 type/topic/about/refs（席位 ↔ 席位）", by: "同 N09；信封词表两套（ask/answer/help/handover/note 与 fact/ask/decide/deliver/status/note）需收成一套"}
   - {id: X-C9, class: K3, disposition: merged, step: "3", what: "门铃 doorbell.ts：后台命令退出即叫醒会话（实测 4–7 秒）", by: "同 W05", cut: {at: "2026-11-18", evidence: ["reader:inbox-waiters"]}}
-  - {id: X-C10, class: K9, disposition: replaced, step: "3", what: "窗口排队「轮到你了」（window.your_turn/missed/still_held/queue_timeout）", by: "同 N11", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
+  - {id: X-C10, class: K9, disposition: merged, step: "3", what: "窗口排队「轮到你了」（window.your_turn/missed/still_held/queue_timeout）", by: "同 N11", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
   - {id: X-C11, class: K1, disposition: merged, step: "2", what: "get_release_context：发布现场读口（席位 → 平台）", by: "同 R02 的 /context，并到那一组", cut: {at: "2026-11-17", evidence: ["reader:release-context"]}}
   - {id: X-C12, class: K13, disposition: replaced, step: "3", what: "桌面应用跨会话消息 send_message（被「20 条」上限拦过）", by: "seat.mail.arrived（该工具是应用自带的，不拆，只是不再用）"}
   - {id: X-C13, class: K11, disposition: kept, step: "0", what: "自查定时器：值班会话每 30 分钟叫自己（额度紧时 2 小时）", by: "原因：对账兜底；推断：调度器上线后部分可被「席位有信才起」替代，间隔可放长"}
