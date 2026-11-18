@@ -32,6 +32,8 @@ export type GNode = {
   pin?: { x: number; y: number; z: number }
   /** A halo round a domain that sends what nobody takes: its strength, 0 to 1. */
   halo?: number
+  /** A domain whose own reader takes its own topics (drawn as a small inner ring, listed on hover). */
+  self?: boolean
 }
 export type GLink = { source: string; target: string; color: string; dashed?: boolean; width?: number; label?: string }
 
@@ -513,6 +515,13 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
                 group.add(halo)
               }
               // An arc's middle: a faint light, large enough to hover from home.
+              // A domain whose own reader takes its own topics: a small ring inside its cloud, not a loop over it.
+              if (n.self) {
+                const inner = new THREE.Mesh(new THREE.TorusGeometry(Math.max(5, cloudRadius(n) * 0.55), 0.35, 6, 48),
+                  new THREE.MeshBasicMaterial({ color: n.color, transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending }))
+                inner.rotation.x = Math.PI / 2
+                group.add(inner)
+              }
               if (n.kind === 'mid') (core.material as import('three').SpriteMaterial).opacity = 0.18
               if ((n.kind !== 'topic' || n.named) && n.kind !== 'mid') group.add(labelOf(n))
               bodies.set(n.id, { group, core, cloud, dust, glow, points: pointMaterials(cloud), sig: cloudSig(n), base, halo })
@@ -683,7 +692,8 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
               const lw = (div.textContent?.length ?? 0) * (n.kind === 'cluster' ? 7 : 6)
               const far = n.kind !== 'cluster' && n.kind !== 'core' && cam.position.distanceTo(v.set(n.x ?? 0, n.y ?? 0, n.z ?? 0)) > 220
               const clash = far || placed.some(p => Math.abs(p.x - x) < (p.w + lw) / 2 + 4 && Math.abs(p.y - y) < 15)
-              div.style.opacity = clash ? '0' : '1'
+              // While something is hovered its card is read: the other names step back.
+              div.style.opacity = clash ? '0' : hovered.current && hovered.current !== n.id ? '0.15' : '1'
               if (!clash) placed.push({ x, y, w: lw })
             }
           }
@@ -703,9 +713,10 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
                 const R = cloudRadius(n)
                 const d = g.camera().position.distanceTo(v.set(n.x ?? 0, n.y ?? 0, n.z ?? 0))
                 const near = Math.max(0, Math.min(1, (R * 16 - d) / (R * 9)))
-                for (const m of b.points) m.opacity = (0.5 + 0.5 * near) * (m === b.dust ? 0.75 * breath : 1)
+                // Far, the stars stay (the coordinator: keep their density); the glow only softens them.
+                for (const m of b.points) m.opacity = (0.85 + 0.15 * near) * (m === b.dust ? 0.8 * breath : 1)
                 // Far, the glow carries the cloud: bright enough to read as a nebula from home (the floors put clouds further off).
-                if (b.glow) (b.glow.material as import('three').SpriteMaterial).opacity = 0.6 * (1 - near) + (lit(n) ? 0.3 : 0)
+                if (b.glow) (b.glow.material as import('three').SpriteMaterial).opacity = 0.35 * (1 - near) + (lit(n) ? 0.3 : 0)
                 b.cloud.scale.setScalar(breath * (lit(n) ? 1.06 : 1))
               }
               if (b.halo) {
@@ -722,6 +733,15 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
         },
       )
     }
+    // The hover card beside the cursor, not across the labels: on a translucent card, flipped to the left on the right half.
+    const style = document.createElement('style')
+    style.textContent = `[data-testid=bus-nerve-graph] .float-tooltip-kap { font: 11px ui-monospace, monospace; color: #f4e9df; background: rgba(4,7,10,0.92);` +
+      ` border: 1px solid #2a3a44; padding: 4px 7px; max-width: 320px; white-space: normal; transform: translate(16px, 16px) !important; }` +
+      ` [data-testid=bus-nerve-graph].nerve-right .float-tooltip-kap { transform: translate(calc(-100% - 16px), 16px) !important; }`
+    // In the head: the libraries clear their host when they mount.
+    document.head.appendChild(style)
+    const side = (e: PointerEvent) => el.classList.toggle('nerve-right', e.offsetX > el.clientWidth / 2)
+    el.addEventListener('pointermove', side)
     const resize = () => graph.current?.width(width()).height(height())
     window.addEventListener('resize', resize)
     // The wheel turns the body, not the page under it.
@@ -749,6 +769,8 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
       el.removeEventListener('wheel', wheel)
       el.removeEventListener('pointerdown', press, true)
       el.removeEventListener('pointerup', release, true)
+      el.removeEventListener('pointermove', side)
+      style.remove()
       window.clearTimeout(resume)
       recloud.current = null
       redrawArcs.current = null

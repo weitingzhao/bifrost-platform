@@ -224,7 +224,7 @@ export function buildDirectBody(input: DirectInput): { nodes: GNode[]; links: GL
     if (n.kind === 'cluster') {
       const d = n.id.slice(2)
       const h = halos.get(d)
-      const undeclared = tierOf.get(d) == null ? ' · tier not declared in the ownership table' : ''
+      const undeclared = tierOf.get(d) == null ? ' · untiered: the ownership table gives it no tier' : ''
       n.pin = positions.get(d)
       if (h) {
         n.halo = Math.max(0.25, h.count / maxHalo)
@@ -236,7 +236,17 @@ export function buildDirectBody(input: DirectInput): { nodes: GNode[]; links: GL
   const all = [...bus.nodes.filter(n => n.kind !== 'core'), ...nodes]
   const arcs: GArc[] = []
   const maxCount = Math.max(1, ...arcsOf(routes, domainOfType, listening).map(a => a.count))
+  const byId = new Map(all.map(n => [n.id, n]))
   for (const a of arcsOf(routes, domainOfType, listening)) {
+    // A domain that takes its own topics: no loop over it, a ring inside it, and the topics on its hover.
+    if (a.from === a.to) {
+      const n = byId.get(`d:${a.from}`)
+      if (n) {
+        n.self = true
+        n.note += ` · hears itself: ${a.topics.join(', ')} read by ${a.readers.join(', ')} (${a.count} events)`
+      }
+      continue
+    }
     const p = positions.get(a.from)
     const q = positions.get(a.to)
     if (!p || !q) continue

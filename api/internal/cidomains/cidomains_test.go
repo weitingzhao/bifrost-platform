@@ -57,7 +57,7 @@ func TestGraphNodesEdgesAndSharedPackages(t *testing.T) {
 	if got.Version != Version || !got.Measured || got.Repo != "r" || got.Commit != "c" {
 		t.Fatalf("header: %+v", got)
 	}
-	wantDomains := []Domain{{"foundation", 2}, {"plan", 2}, {"owner", 1}, {"lineage", 1}}
+	wantDomains := []Domain{{ID: "foundation", Packages: 2}, {ID: "plan", Packages: 2}, {ID: "owner", Packages: 1}, {ID: "lineage", Packages: 1}}
 	if !reflect.DeepEqual(got.Domains, wantDomains) {
 		t.Fatalf("domains: %+v", got.Domains)
 	}
@@ -184,5 +184,20 @@ func TestParseTableRefusesWhatDoesNotRead(t *testing.T) {
 		if _, err := ParseTable([]byte(bad)); err == nil {
 			t.Errorf("%q was accepted", bad)
 		}
+	}
+}
+
+// 2026-11-17, the Owner via the coordinator: the Bus page stands each domain
+// on its tier's floor, read from the ownership table through this graph. A
+// declared tier is carried; a domain with none has none (the page says
+// "untiered"; it does not guess).
+func TestGraphCarriesTheTablesTiers(t *testing.T) {
+	table, err := ParseTable([]byte(`{"domains": [{"id": "base", "tier": 0}, {"id": "top", "tier": 3}, {"id": "loose"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := table.WithTiers(Graph{Domains: []Domain{{ID: "base"}, {ID: "top"}, {ID: "loose"}}})
+	if g.Domains[0].Tier == nil || *g.Domains[0].Tier != 0 || g.Domains[1].Tier == nil || *g.Domains[1].Tier != 3 || g.Domains[2].Tier != nil {
+		t.Fatalf("domains %+v", g.Domains)
 	}
 }

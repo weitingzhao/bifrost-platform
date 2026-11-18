@@ -41,6 +41,10 @@ const MaxCommits = 120
 type Table struct {
 	domainscore.Ownership
 	Frontend struct{ Root string }
+	// Tiers is each domain's floor as the table declares it (domains[].tier:
+	// 0 the base, higher further from it), for the Bus page's map; a domain
+	// with none is not in it. Display only: no judgement reads it (2026-11-17).
+	Tiers map[string]int
 }
 
 // ParseTable reads the ownership table.
@@ -52,7 +56,33 @@ func ParseTable(raw []byte) (Table, error) {
 	if len(t.Domains) == 0 {
 		return t, fmt.Errorf("the ownership table declares no domain")
 	}
+	var tiers struct {
+		Domains []struct {
+			ID   string `json:"id"`
+			Tier *int   `json:"tier"`
+		} `json:"domains"`
+	}
+	if err := json.Unmarshal(raw, &tiers); err == nil {
+		for _, d := range tiers.Domains {
+			if d.Tier != nil {
+				if t.Tiers == nil {
+					t.Tiers = map[string]int{}
+				}
+				t.Tiers[d.ID] = *d.Tier
+			}
+		}
+	}
 	return t, nil
+}
+
+// WithTiers is g with each domain's tier from the table (absent: untiered).
+func (t Table) WithTiers(g Graph) Graph {
+	for i, d := range g.Domains {
+		if n, ok := t.Tiers[d.ID]; ok {
+			g.Domains[i].Tier = &n
+		}
+	}
+	return g
 }
 
 // GoRoots are the top directories the table's package rows are under: where
@@ -79,6 +109,9 @@ func (t Table) consoleRoot() string {
 type Domain struct {
 	ID       string `json:"id"`
 	Packages int    `json:"packages"`
+	// Tier is the domain's floor in the ownership table (domains[].tier),
+	// absent when the table gives none.
+	Tier *int `json:"tier,omitempty"`
 }
 
 // Edge is the imports of one domain's packages from another's: Imports

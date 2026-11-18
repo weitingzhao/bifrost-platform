@@ -211,6 +211,8 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
         const key = `${e.id}|${r.reader}`
         const arc = arcId(d, r.domain)
         if (a.launch(key, arc, PULSE.event, faint(e.type))) waiting.current.set(key, { arc, time: e.time, since: Date.now() })
+        // Its own reader (no arc: a ring inside the cloud): the domain lights again.
+        else if (r.domain === d) window.setTimeout(() => a.flash(dom), SECOND_HOP_MS)
       }
       // Sent and nobody takes it: the sender's halo lights.
       if (rs.length === 0 && haloTopics.has(e.type)) a.halo(dom)

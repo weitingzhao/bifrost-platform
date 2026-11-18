@@ -220,7 +220,7 @@ func readCIDomains(ctx context.Context, src ciDomainsSource, repo, commit string
 	if len(packages) == 0 {
 		return cidomains.Unmeasured(repo, commit, "no Go package was found under the directories the ownership table names"), nil
 	}
-	return cidomains.GraphOf(repo, commit, table.Ownership, packages), nil
+	return table.WithTiers(cidomains.GraphOf(repo, commit, table.Ownership, packages)), nil
 }
 
 // graph answers with the graph of main's head when it is known, and
