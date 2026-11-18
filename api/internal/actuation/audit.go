@@ -28,9 +28,10 @@ type AuditRecord struct {
 }
 
 type AuditLog struct {
-	mu      sync.Mutex
-	path    string
-	records []AuditRecord
+	mu       sync.Mutex
+	path     string
+	records  []AuditRecord
+	observer func(AuditRecord)
 	// also lists the records other processes keep (the workers pod's audit,
 	// read by the api pod that serves GET /audit)
 	alsoList []string
@@ -54,6 +55,26 @@ func (l *AuditLog) AlsoList(paths ...string) {
 func emit(r AuditRecord) {
 	slog.Info("audit", "actor", r.Actor, "role", r.Role, "action", r.Action,
 		"target", r.Target, "status", r.Status, "detail", r.Detail)
+}
+
+// OnRecord is told of each record as it is written, on the caller's goroutine:
+// it must not block.
+func (l *AuditLog) OnRecord(fn func(AuditRecord)) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	l.observer = fn
+	l.mu.Unlock()
+}
+
+func (l *AuditLog) tell(r AuditRecord) {
+	l.mu.Lock()
+	fn := l.observer
+	l.mu.Unlock()
+	if fn != nil {
+		fn(r)
+	}
 }
 
 func NewAuditLog(path string) *AuditLog {
@@ -82,6 +103,7 @@ func (l *AuditLog) Record(r *http.Request, action, target, status, detail string
 		Detail: detail,
 	}
 	emit(record)
+	l.tell(record)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.records = append([]AuditRecord{record}, l.records...)
@@ -107,6 +129,7 @@ func (l *AuditLog) RecordDirect(actor string, role Role, action, target, status,
 		Detail: detail,
 	}
 	emit(record)
+	l.tell(record)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.records = append([]AuditRecord{record}, l.records...)

@@ -29,7 +29,7 @@
 # it is still there. A channel outside this repository says so (outside) and
 # is not checked here.
 channels:
-  - {id: L01, class: K2, disposition: replaced, step: "3", what: "controller：审批/问题 statefile 每分钟转成 PG 事件", by: "门·平台库（卡的状态与事件同一事务写）+账"}
+  - {id: L01, class: K2, disposition: kept, step: "none", what: "controller：审批/问题 statefile 每分钟转成 PG 事件", by: "原因：审批和问题继续存状态文件；单副本没出过事，搬表要新授权和执行卡，算不出稳定或效率回报（11-18 主统筹按 owner-decision-check 重判）"}
   - {id: L02, class: K2, disposition: replaced, step: "2", what: "controller：全部 PipelineRun 每 30 秒记成 pipeline_seen 并入证据账", by: "门·集群（watch 代替列表）；证据写入改为订阅 ci.run.finished 的服务端订阅者", cut: {at: "2026-11-17", evidence: ["reader:records"]}}
   - {id: L03, class: K2, disposition: replaced, step: "2", what: "controller：TaskRun 每 30 秒记成 unit_run 与证据（模式非 off 时还会创建 TaskRun）", by: "门·集群观察部分；创建 TaskRun 的部分归 X-A29", cut: {at: "2026-11-18", evidence: ["reader:unit-taskruns"]}}
   - {id: L04, class: K2, disposition: replaced, step: "1", what: "head-release：每 30 秒读 Gitea main 头+证据账+Tekton，可能起 STG 发布", by: "门·代码（git.main.advanced）+ci.verdict.changed 唤醒；判定逻辑留作订阅者（入户口子①）", cut: {at: "2026-11-17", evidence: ["reader:head-release"]}}
@@ -70,11 +70,11 @@ channels:
   - {id: N11, class: K9, disposition: replaced, step: "3", what: "窗口排队通知：队首可上时写信箱 note", by: "seat.mail.arrived（收件人=队头席位）+release.window.changed", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
   - {id: N12, class: K9, disposition: announced, step: "3", what: "发布窗口 ConfigMap cicd/bifrost-release-window（CAS，TTL 5 分钟，队列 100）", by: "锁的原语留在原处；变化由门·集群 watch 宣布", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
   - {id: N13, class: K5, disposition: announced, step: "3", what: "起 Tekton run：MCP、Console、head-release、full-ci、unit 四处各自创建", by: "动作与卡分级不变；起了什么由门·集群宣布（ci.run.started）。四处创建收成一个动作入口属动作层，设计没说（见第 4 节）", cut: {at: "2026-11-18", evidence: ["topic:ci.run.started"]}}
-  - {id: N14, class: K6, disposition: replaced, step: "3", what: "线程/主机心跳 POST /agent/threads/heartbeat（共享 reporter 令牌，10 秒合并落盘）", by: "席位记录+席位身份（每席位自己的身份写，替掉共享令牌）"}
+  - {id: N14, class: K6, disposition: replaced, step: "3", what: "线程/主机心跳 POST /agent/threads/heartbeat（共享 reporter 令牌，10 秒合并落盘）", by: "席位记录（会话带 charter 写自己的记录）；共享 reporter 令牌保留：同一系统用户下分席位凭证防不了冒名（11-18 定）"}
   - {id: N15, class: K12, disposition: deleted, step: "any", what: "进度文档 PUT /agent/progress（已无发布方，TD-414 观察中）", by: "死路", retired: {at: "2026-11-17", change: Ic571bd2e1a39aaed29e8730ac81bcfaf84e2a664, absent: [api/internal/server/agent_progress_wire.go], absent_text: ['"/agent/progress"']}}
   - {id: N16, class: K12, disposition: replaced, step: "3", what: "线程标题上报 PUT /lineage/transcript-title", by: "席位记录的标题字段"}
   - {id: N17, class: K8, disposition: announced, step: "4", what: "Trade 卫星/CI 上报：POST /audit/append、/code-health/report、/skill-runs", by: "写入口留在原处（入户口子①，租户上报需在登记表声明）；落账后宣布 audit.action.recorded、codehealth.report.published"}
-  - {id: N18, class: K12, disposition: replaced, step: "3", what: "外部工作登记 POST /agentrt/external-work（collector:<host> 令牌）", by: "席位记录+seat.work.changed+席位身份（替掉 collector 令牌）"}
+  - {id: N18, class: K12, disposition: replaced, step: "3", what: "外部工作登记 POST /agentrt/external-work（collector:<host> 令牌）", by: "席位记录+seat.work.changed；collector 令牌保留，理由同 N14"}
   - {id: N19, class: K5, disposition: not-this-way, step: "none", what: "owner-exec 执行通道：领卡、20 秒心跳、交结果（命令按指纹+一次性码）", by: "永远不走：D 级命令与一次性码不上总线；卡的执行结果由 approval.card.executed 宣布"}
   - {id: N20, class: K3, disposition: deleted, step: "any", what: "审批 claim 长轮询 wait_seconds（本仓库唯一调用方不传）", by: "死路（其他仓库没查，删前核）", retired: {at: "2026-11-18", change: Ie32a1ac8615a55c7c9a64efe99707d7b604ff2d1, absent_text: ["in.WaitSeconds"]}}
   - {id: N21, class: K2, disposition: replaced, step: "2", what: "Kick：L02 → L09 的进程内提示", by: "门·集群的 watch 事件（进程内提示不再需要）", cut: {at: "2026-11-18", evidence: ["reader:release-recorder"]}, retired: {at: "2026-11-18", change: Ifd72a15a494f97dfb707083c5289230eeb22b176, absent_text: ["c.PipelineRecorded = s.releases"]}}
@@ -97,7 +97,7 @@ channels:
   - {id: R11, class: K1, disposition: kept, step: "none", what: "读口组：Trade 总线深度（平台去拉 satellite-probe-bridge）", by: "原因：Trade 租户的只读健康口，租户边界；将来互通在登记表里声明"}
   - {id: R12, class: K1, disposition: replaced, step: "4", what: "读口组：协作进程状态（git-bridge、操作面、probe-bridge 汇总进 /agent/bridge）", by: "并到 R01 的健康读口（env.health.changed）"}
   - {id: S01, class: K8, disposition: kept, step: "none", what: "statefile：每个 key 一个 ConfigMap（≤900 KiB）存各模块小 JSON", by: "原因：状态存放不是传输；但其中 approvals/questions/threads/progress/title 几个 key 的归宿设计没说（见第 4 节）"}
-  - {id: S02, class: K8, disposition: replaced, step: "3", what: "审计日志：最近 500 条，同时发一行 slog 到 Loki", by: "账（audit.action.recorded）；Loki 那一行留作长尾"}
+  - {id: S02, class: K8, disposition: replaced, step: "3", what: "审计日志：最近 500 条，同时发一行 slog 到 Loki", by: "账（audit.action.recorded）；Loki 那一行留作长尾", cut: {at: "2026-11-18", evidence: ["topic:audit.action.recorded"]}}
   - {id: S03, class: K4, disposition: announced, step: "3", what: "审批记录（全文、租约、结果、deliveries[]）", by: "记录留在原处（卡本身就是记录）；状态变化以 approval.card.* 宣布", cut: {at: "2026-11-18", evidence: ["topic:approval.card.created"]}}
   - {id: S04, class: K4, disposition: announced, step: "3", what: "问题记录（问题、答案、deliveries）", by: "记录留在原处；变化以 question.* 宣布", cut: {at: "2026-11-18", evidence: ["topic:owner.question.asked"]}}
   - {id: S05, class: K8, disposition: merged, step: "1", what: "PG 事件日志 agentrt.event（哈希链、封闭词表、cause_event_id）", by: "留下并改造成「账」本体：永久、按序、带起因；审计与窗口事件并到它", cut: {at: "2026-11-17", evidence: ["topic:git.main.advanced"]}}
@@ -144,9 +144,9 @@ channels:
   - {id: X-A29, class: K5, disposition: announced, step: "3", what: "单元任务影子派发 UNIT_DISPATCH=shadow（还没有门读这些行）", by: "留在原处；有门读之前不并排；结果 ci.verdict.changed"}
   - {id: X-A30, class: K8, disposition: kept, step: "none", what: "Loki 步骤日志（promtail → Loki）", by: "原因：日志长尾，不是事件，也是审计 slog 的长尾存放"}
   - {id: X-A31, class: K5, disposition: not-this-way, step: "none", what: "执行卡执行口：owner_run_command 卡 → owner-exec（命令按指纹+一次性码）", by: "永远不走：同 N19"}
-  - {id: X-B1, class: K12, disposition: replaced, step: "3", what: "线程心跳钩子：13 个事件推 POST /agent/threads/heartbeat", by: "席位记录+席位身份（钩子模板写自己的席位记录，不发布每个心跳）"}
+  - {id: X-B1, class: K12, disposition: replaced, step: "3", what: "线程心跳钩子：13 个事件推 POST /agent/threads/heartbeat", by: "席位记录（钩子模板带 charter 写自己的记录，不发布每个心跳）；共享令牌保留，理由同 N14"}
   - {id: X-B2, class: K12, disposition: replaced, step: "3", what: "无头 run 进度拍：进度文件变大才发（默认 120 秒）", by: "席位记录"}
-  - {id: X-B3, class: K12, disposition: replaced, step: "3", what: "收集员模式：collector 令牌下多发 SessionStart 等事件", by: "席位记录+席位身份（替掉 collector 令牌）"}
+  - {id: X-B3, class: K12, disposition: replaced, step: "3", what: "收集员模式：collector 令牌下多发 SessionStart 等事件", by: "席位记录；collector 令牌保留，理由同 N14"}
   - {id: X-B4, class: K12, disposition: replaced, step: "3", what: "外部活登记+30 秒心跳（dispatch-codex/claude、register-claude-work）", by: "席位记录+seat.work.changed"}
   - {id: X-B5, class: K5, disposition: kept, step: "none", what: "agentd 取活：agent-06 上轮询领任务、心跳、交活（agentd.token）", by: "原因：指令道不通车，领任务继续走原路；将来可迁指令道（agentd:h1 是否仍有持有者没查）"}
   - {id: X-B6, class: K12, disposition: replaced, step: "3", what: "线程标题上报（Stop 钩子 report-thread-title.js）", by: "席位记录的标题字段"}
@@ -164,7 +164,7 @@ channels:
   - {id: X-B18, class: K1, disposition: kept, step: "none", what: "Mac mini 操作面 :8783（launchd 状态、relay 宿主）", by: "原因：独立报警路的宿主，也是单点，待 Owner 决定 3"}
   - {id: X-B19, class: K5, disposition: kept, step: "4", what: "release.sh 整体：窗口、策略、冻结、镜像同步、CI 等待、审批轮询、kubectl create", by: "原因：发命令类走动作与卡，不进总线；它里面的等待换成③（见 X-A5、X-A14、X-A15），拷贝的判定换成调用"}
   - {id: X-B20, class: K14, disposition: kept, step: "none", what: "Cursor 一侧残留（thread-heartbeat.js、preflight.js 里的适配代码）", by: "原因：删它要改 preflight，那是硬边界的一部分（主统筹 11-18 定不删）"}
-  - {id: X-C1, class: K12, disposition: replaced, step: "3", what: "通讯录 directory.md：席位号、thread:local_… 地址（手抄）", by: "席位身份+席位记录（地址写席位，会话绑定其上）；人读的通讯录由它生成"}
+  - {id: X-C1, class: K12, disposition: replaced, step: "3", what: "通讯录 directory.md：席位号、thread:local_… 地址（手抄）", by: "席位记录（章程名和绑定的会话）；人读的通讯录由它生成"}
   - {id: X-C2, class: K13, disposition: replaced, step: "3", what: "duty/ 的 from-/to-/hold-/draft- 文件（299 个，无程序读）", by: "seat.mail.arrived（from/to/draft）；hold- 并成窗口的一种（release.window.changed）；存量文件怎么办设计没说"}
   - {id: X-C3, class: K8, disposition: announced, step: "3", what: "duty/decisions.md：值班追加一行一个决定", by: "文件留给人读；变化以 decision.entry.recorded 宣布（没有门看文件，见第 4 节）"}
   - {id: X-C4, class: K8, disposition: announced, step: "3", what: "daily-readings.md、owner-two-things-watch.md：每日读数与 Owner 要知道的两件事", by: "文件留给人读；两件事变化以 owner.attention.changed 宣布（同 X-C3 的门问题）"}

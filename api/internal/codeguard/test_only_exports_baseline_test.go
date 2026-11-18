@@ -15,7 +15,6 @@ var exportedForOtherTests = []string{
 	"api/internal/actions.AnnParamsHash",
 	"api/internal/actions.Catalog",
 	"api/internal/actions.HasExecutor",
-	"api/internal/actuation.AuditRecord",
 	"api/internal/actuation.WithPrincipal",
 	"api/internal/actuationpolicy.Apply",
 	"api/internal/actuationpolicy.Cleanup",

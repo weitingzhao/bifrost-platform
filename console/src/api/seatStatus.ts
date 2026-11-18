@@ -21,6 +21,8 @@ export type SeatStatus = {
   percent_basis: string
   waiting_on?: string
   next: string
+  /** The charter this session says it works under: its own statement, not verified. */
+  charter?: string
 }
 
 export async function fetchSeatStatuses(): Promise<SeatStatus[]> {

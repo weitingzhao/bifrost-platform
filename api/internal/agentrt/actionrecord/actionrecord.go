@@ -164,13 +164,41 @@ func announce(ctx context.Context, tx pgx.Tx, id int64, r Record) error {
 	return err
 }
 
+// AuditBody is the event's body for a line of the platform's audit log, which
+// has no record of its own here: who, what and how it ended (S02, 2026-11-18).
+func AuditBody(who, action, status string) map[string]any {
+	return map[string]any{"seat": who, "action": action, "outcome": status,
+		"subject": who + ":" + action, "ref": "/api/v1/audit", "change": status}
+}
+
+// eventAction is an action the event can name: a record's, or an audit line's,
+// which is dotted ("delivery.release_window.hold").
+var eventAction = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,99}$`)
+
+var auditStatus = regexp.MustCompile(`^[a-z_]{1,40}$`)
+
+// AnnounceAudit says a line of the audit log on the bus. The target and the
+// detail stay in the log. A line the event cannot name is left out.
+func AnnounceAudit(ctx context.Context, db eventlog.DB, who, action, status string) error {
+	if !busSeat.MatchString(who) || !eventAction.MatchString(action) || !auditStatus.MatchString(status) {
+		return nil
+	}
+	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+		if ok, err := actor.Exists(ctx, tx, busActor); err != nil || !ok {
+			return err
+		}
+		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "audit:" + who, Type: TypeRecorded, Actor: busActor, Body: AuditBody(who, action, status)})
+		return err
+	})
+}
+
 func init() {
 	eventlog.Declare(eventlog.Vocabulary{
 		Bodies: map[string][]eventlog.Field{TypeRecorded: {
-			{Name: "record_id", Kind: eventlog.Int}, {Name: "seat", Kind: eventlog.Str}, {Name: "action", Kind: eventlog.Str},
+			{Name: "record_id", Kind: eventlog.Int, Optional: true}, {Name: "seat", Kind: eventlog.Str}, {Name: "action", Kind: eventlog.Str},
 			{Name: "outcome", Kind: eventlog.Str}, {Name: "subject", Kind: eventlog.Str}, {Name: "ref", Kind: eventlog.Str}, {Name: "change", Kind: eventlog.Str},
 		}},
-		Values: map[string]map[string]eventlog.Value{TypeRecorded: {"seat": eventlog.Shaped("a seat", busSeat), "action": eventlog.Shaped("an action id", actionName)}},
+		Values: map[string]map[string]eventlog.Value{TypeRecorded: {"seat": eventlog.Shaped("a seat", busSeat), "action": eventlog.Shaped("an action id", eventAction)}},
 		After: map[string]func(map[string]any) error{TypeRecorded: func(b map[string]any) error {
 			seat, _ := b["seat"].(string)
 			action, _ := b["action"].(string)

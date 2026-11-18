@@ -55,6 +55,9 @@ function LineItem({ r }: { r: LineRow }) {
         <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${d.cls}`} aria-label={d.label} title={d.label} />
         <span className="min-w-0 truncate text-sm font-medium">{r.title}</span>
         <span className="text-xs text-muted-foreground">{st.percent}% · {st.percent_basis}</span>
+        <span className="text-xs text-muted-foreground" title="Written by the session itself; the platform does not verify it">
+          {st.charter ? `${st.charter} · self-reported` : 'self-reported'}
+        </span>
         {r.ownerCards > 0 ? <span className="text-xs font-medium text-amber-600">{r.ownerCards} for you</span> : null}
         <span className={`ml-auto text-xs ${stale ? 'font-medium text-red-600' : 'text-muted-foreground'}`}>
           status {age(minutes)}{stale ? ' · stale' : ''}
