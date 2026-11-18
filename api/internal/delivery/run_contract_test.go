@@ -266,6 +266,13 @@ func TestCIRunTriggerEquivalence(t *testing.T) {
 				if selector, ok := nestedSelector(wantSpec); ok {
 					delete(selector, ciAnyNodeKey)
 				}
+				// The rule keeping CI off the deny nodes reaches the trigger file and
+				// the platform in separate landings; which nodes a run may use is not
+				// what this test pins. Positive control: without these deletes the
+				// platform and infra must land in one step, which they cannot.
+				for _, spec := range []map[string]any{gotSpec, wantSpec} {
+					deleteAffinity(spec)
+				}
 				// Only param order is irrelevant. Sort lists without collapsing
 				// duplicate names, then compare every field of the complete spec.
 				for _, spec := range []map[string]any{gotSpec, wantSpec} {
@@ -285,6 +292,7 @@ func TestCIRunTriggerEquivalence(t *testing.T) {
 					t.Fatal(created.GetLabels())
 				}
 				createdSpec := created.Object["spec"].(map[string]any)
+				deleteAffinity(createdSpec)
 				params := createdSpec["params"].([]any)
 				sort.SliceStable(params, func(i, j int) bool {
 					return params[i].(map[string]any)["name"].(string) < params[j].(map[string]any)["name"].(string)
@@ -350,4 +358,11 @@ func nestedSelector(spec map[string]any) (map[string]any, bool) {
 	pod, _ := template["podTemplate"].(map[string]any)
 	selector, ok := pod["nodeSelector"].(map[string]any)
 	return selector, ok
+}
+
+func deleteAffinity(spec map[string]any) {
+	template, _ := spec["taskRunTemplate"].(map[string]any)
+	if pod, _ := template["podTemplate"].(map[string]any); pod != nil {
+		delete(pod, "affinity")
+	}
 }
