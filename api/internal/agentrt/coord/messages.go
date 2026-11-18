@@ -242,6 +242,11 @@ func postMessageAs(ctx context.Context, tx pgx.Tx, from, to, kind string, body [
 		Body: SeatMailBody(to, id, kind), Cause: cause}); err != nil {
 		return "", err
 	}
+	if to == StatusBoard && kind == "note" {
+		if err := announceSeatStatus(ctx, tx, from, id, body); err != nil {
+			return "", err
+		}
+	}
 	// A message that says the Owner approved is recorded where it came in;
 	// the receiver reads it as data, as every message (T04).
 	if checkClaims {

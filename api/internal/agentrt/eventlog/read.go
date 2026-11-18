@@ -92,3 +92,26 @@ func HasBody(ctx context.Context, tx pgx.Tx, typ, planNode string, doc map[strin
 	  AND ($2 = '' OR plan_node_id = $2) AND body_json @> $3::jsonb)`, typ, planNode, string(want)).Scan(&have)
 	return have, err
 }
+
+// LatestByActor is each actor's latest event of one type since a time.
+func LatestByActor(ctx context.Context, tx pgx.Tx, eventType string, since time.Time) ([]Row, error) {
+	rows, err := tx.Query(ctx, `SELECT DISTINCT ON (actor_id) event_stream_id, event_id, seq, event_type, actor_id, at, body_json
+	  FROM agentrt.event WHERE event_type = $1 AND at >= $2 ORDER BY actor_id, event_id DESC`, eventType, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Row
+	for rows.Next() {
+		var r Row
+		var raw []byte
+		if err := rows.Scan(&r.Stream, &r.ID, &r.Seq, &r.Type, &r.Actor, &r.At, &raw); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(raw, &r.Body); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}

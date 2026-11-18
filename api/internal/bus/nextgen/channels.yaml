@@ -107,7 +107,7 @@ channels:
   - {id: S09, class: K9, disposition: announced, step: "3", what: "同 N12：窗口 ConfigMap 的存放", by: "同 N12", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
   - {id: S10, class: K12, disposition: replaced, step: "3", what: "线程标题 ConfigMap（手改、转录扫描、上报三个来源）", by: "席位记录的标题字段"}
   - {id: S11, class: K13, disposition: merged, step: "3", what: "信箱存放：agentrt.message + artifact（正文 ≤8 KiB）", by: "随 N09 留下并改造：正文仍在这里，事件只带指针", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
-  - {id: S12, class: K8, disposition: deleted, step: "any", what: "metric_reading：交付度量读数（无非测试写入者）", by: "死路（删前要连 baseline1109.go:37 的存在性检查一起改）"}
+  - {id: S12, class: K8, disposition: deleted, step: "any", what: "metric_reading：交付度量读数（无非测试写入者）", by: "死路；表和 26,418 行留到第 5 步，随有数据的删改一起处理，代码引用由解耦线清"}
   - {id: S13, class: K2, disposition: deleted, step: "any", what: "同 N22：agentrt.outbox", by: "死路", retired: {at: "2026-11-17", change: Id818b64d36e851fb3e31d91e06f0dd08ae027a12, absent_text: ['FROM agentrt.outbox)', 'FROM agentrt.outbox`']}}
   - {id: S14, class: K6, disposition: announced, step: "3", what: "maintainer 指标：8 个循环的成功时间戳与运行计数，给 Prometheus", by: "指标留给 Prometheus（对账兜底）；循环健康变化以 loop.health.changed 宣布，登记表要求每个循环都登记（现在 8/约 20）", cut: {at: "2026-11-18", evidence: ["topic:loop.health.changed"]}}
   - {id: C01, class: K1, disposition: replaced, step: "4", what: "Console 每页各自 TanStack Query 轮询（约 215 处）", by: "入户口子②（共用一条事件流）+读口；剩下的轮询只许是登记过的对账"}
@@ -123,7 +123,7 @@ channels:
   - {id: X-A8, class: K10, disposition: kept, step: "none", what: "CI 判范围：task 读 /units/scope，取不到退成全跑", by: "原因：已经是对读口的调用而不是拷贝；失败方向（退全跑）登记；返回里加版本"}
   - {id: X-A9, class: K10, disposition: replaced, step: "4", what: "流水线读发布窗口 ConfigMap（window_decision.py 拷贝）", by: "调用 R10 读口（带版本）；拷贝删掉。风险：读口宕机时的失败方向（见第 4 节）"}
   - {id: X-A10, class: K10, disposition: replaced, step: "4", what: "流水线读发布冻结 ConfigMap（读不到按冻结）", by: "调用读口，保持读不到按冻结；风险：平台宕机时平台自己的发布流水线也被冻（见第 4 节）"}
-  - {id: X-A11, class: K9, disposition: deleted, step: "any", what: "冻结 CRD 新办法（freeze_chain.py、墓碑 ConfigMap；仓库有、集群没有）", by: "死路（含一份没落地的防篡改设想，删前决定要不要保留设想）"}
+  - {id: X-A11, class: K9, disposition: kept, step: "none", what: "冻结 CRD 新办法（freeze_chain.py、墓碑 ConfigMap；仓库有、集群没有）", by: "原因：属发布的信任链（主统筹 11-18 定不删）"}
   - {id: X-A12, class: K9, disposition: kept, step: "none", what: "release.sh 经平台 API 占/续/放窗口 PUT/DELETE", by: "原因：锁的写路径，窗口只有这一个写入口；只改被占时怎么等（交给③）"}
   - {id: X-A13, class: K5, disposition: announced, step: "3", what: "镜像同步：POST mirrors/sync → Tekton task → Gitea，任务内每 4 秒轮询", by: "动作留在原处；结果以 git.mirror.settled 宣布，轮询换成订阅（lineage/mirrors.go 另一份实现并到同一处）", cut: {at: "2026-11-18", evidence: ["topic:git.mirror.settled"]}}
   - {id: X-A14, class: K3, disposition: replaced, step: "4", what: "release.sh 等审批单：每 15 秒读单子状态", by: "入户口子③（等 approval.card.decided）"}
@@ -163,7 +163,7 @@ channels:
   - {id: X-B17, class: K1, disposition: announced, step: "5", what: "bdev 本地服务事件日志（bdev events、get_dev_session_logs）", by: "文件留在原处（死因追查要的原始记录）；变化以 dev.session.changed 宣布（env=本机，本机怎么接总线设计没说）"}
   - {id: X-B18, class: K1, disposition: kept, step: "none", what: "Mac mini 操作面 :8783（launchd 状态、relay 宿主）", by: "原因：独立报警路的宿主，也是单点，待 Owner 决定 3"}
   - {id: X-B19, class: K5, disposition: kept, step: "4", what: "release.sh 整体：窗口、策略、冻结、镜像同步、CI 等待、审批轮询、kubectl create", by: "原因：发命令类走动作与卡，不进总线；它里面的等待换成③（见 X-A5、X-A14、X-A15），拷贝的判定换成调用"}
-  - {id: X-B20, class: K14, disposition: deleted, step: "any", what: "Cursor 一侧残留（thread-heartbeat.js、preflight.js 里的适配代码）", by: "死路（治理文档说 Cursor 一侧已删）"}
+  - {id: X-B20, class: K14, disposition: kept, step: "none", what: "Cursor 一侧残留（thread-heartbeat.js、preflight.js 里的适配代码）", by: "原因：删它要改 preflight，那是硬边界的一部分（主统筹 11-18 定不删）"}
   - {id: X-C1, class: K12, disposition: replaced, step: "3", what: "通讯录 directory.md：席位号、thread:local_… 地址（手抄）", by: "席位身份+席位记录（地址写席位，会话绑定其上）；人读的通讯录由它生成"}
   - {id: X-C2, class: K13, disposition: replaced, step: "3", what: "duty/ 的 from-/to-/hold-/draft- 文件（299 个，无程序读）", by: "seat.mail.arrived（from/to/draft）；hold- 并成窗口的一种（release.window.changed）；存量文件怎么办设计没说"}
   - {id: X-C3, class: K8, disposition: announced, step: "3", what: "duty/decisions.md：值班追加一行一个决定", by: "文件留给人读；变化以 decision.entry.recorded 宣布（没有门看文件，见第 4 节）"}

@@ -141,12 +141,12 @@
       "hash": "dae8cf4a8ce0a74a"
     },
     "seat.session.changed": {
-      "version": 1,
-      "hash": "a1a0b0f706d0a132"
+      "version": 2,
+      "hash": "2aec56051dcbeb78"
     },
     "seat.status.changed": {
-      "version": 1,
-      "hash": "e998d62c5e636463"
+      "version": 2,
+      "hash": "409a9e171f00ec57"
     },
     "seat.work.changed": {
       "version": 1,

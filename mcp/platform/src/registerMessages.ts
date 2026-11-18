@@ -58,6 +58,7 @@ export function registerMessageTools(reg: McpServer['tool']): void {
       percent_basis: z.string().min(1).max(600),
       waiting_on: z.string().max(600).optional(),
       next: z.string().min(1).max(600),
+      charter: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/).optional().describe('Your seat: the file name of your charter in agent-config/charters, without .md'),
     },
     async (input) => compact(await reportStatus(input)),
   )

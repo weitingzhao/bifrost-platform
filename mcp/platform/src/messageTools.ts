@@ -100,6 +100,8 @@ export const STATUS_BOARD = 'controller'
 /** A seat's own status: the five things the Owner asks of a line (2026-11-17). */
 export interface SeatStatusInput {
   goal: string; doing: string; percent: number; percent_basis: string; waiting_on?: string; next: string
+  /** The seat this session is: its charter's file name, without .md. */
+  charter?: string
 }
 
 /**
@@ -112,6 +114,7 @@ export async function reportStatus(input: SeatStatusInput, d: RuntimeDeps = defa
     goal: input.goal, doing: input.doing, percent: input.percent, percent_basis: input.percent_basis, next: input.next,
   }
   if (input.waiting_on) fields.waiting_on = input.waiting_on
+  if (input.charter) fields.charter = input.charter
   const line = input.doing.replace(/[\r\n]+/g, ' ').trim()
   const summary = line.length > SUMMARY_MAX ? line.slice(0, SUMMARY_MAX - 1) + '…' : line
   return send({ to: STATUS_BOARD, type: 'status', summary, body: JSON.stringify(fields) }, d)

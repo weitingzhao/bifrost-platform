@@ -38,6 +38,10 @@ type SeatStatus struct {
 	PercentBasis string `json:"percent_basis"`
 	WaitingOn    string `json:"waiting_on,omitempty"`
 	Next         string `json:"next"`
+	// Charter is the seat this session says it is: the name of its charter
+	// (agent-config/charters/<name>.md), declared by the session and shown as
+	// its own statement. Empty for a session that does not say.
+	Charter string `json:"charter,omitempty"`
 }
 
 // SeatStatusRecord is a seat's latest status message as the board reads it.
@@ -63,6 +67,9 @@ func CheckSeatStatus(s SeatStatus) string {
 		if len(f.v) > MaxSeatStatusField || !utf8.ValidString(f.v) || strings.IndexByte(f.v, 0) >= 0 {
 			return fmt.Sprintf("%s is not UTF-8 text of at most %d bytes", f.name, MaxSeatStatusField)
 		}
+	}
+	if s.Charter != "" && !charterRE.MatchString(s.Charter) {
+		return "charter is not a charter's name"
 	}
 	if s.Percent < 0 || s.Percent > 100 {
 		return "percent is not 0 to 100"

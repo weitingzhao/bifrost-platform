@@ -327,14 +327,14 @@ channels:
   seat.status.changed:
     address: ev.rocket.{env}.seat.status.changed
     x-bifrost:
-      version: 1
+      version: 2
       lane: event
       guarantee: ordered
       key: seat
       subject: "<seat>"
       publisher: gate-db
       domain: coordination
-      ref: "/api/v1/seats/{seat}"
+      ref: "/api/v1/agentrt/seats"
       reconcile: "none: the seat record is the truth (self-declared)"
       on_unread: stale
       retention: 30d
@@ -376,13 +376,13 @@ channels:
   seat.session.changed:
     address: ev.rocket.{env}.seat.session.changed
     x-bifrost:
-      version: 1
+      version: 2
       lane: event
       guarantee: best-effort
       subject: "<seat>/<session>"
       publisher: gate-db
       domain: coordination
-      ref: "/api/v1/seats/{seat}"
+      ref: "/api/v1/agentrt/seats"
       reconcile: "seat record bindings"
       on_unread: stale
       retention: 30d
