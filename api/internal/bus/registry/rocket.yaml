@@ -409,7 +409,7 @@ channels:
       reconcile: "Alertmanager re-sends while firing"
       on_unread: stale
       retention: 30d
-      consumers: [console]
+      consumers: [console, alert-letters]
       exports: []
       replaces: []
   alert.channel.changed:

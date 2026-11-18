@@ -115,3 +115,26 @@ func LatestByActor(ctx context.Context, tx pgx.Tx, eventType string, since time.
 	}
 	return out, rows.Err()
 }
+
+// EventBody is one event's type and body by its id.
+func EventBody(ctx context.Context, tx pgx.Tx, id int64) (string, map[string]any, error) {
+	var typ string
+	var raw []byte
+	if err := tx.QueryRow(ctx, `SELECT event_type, body_json FROM agentrt.event WHERE event_id = $1`, id).Scan(&typ, &raw); err != nil {
+		return "", nil, err
+	}
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return "", nil, err
+	}
+	return typ, body, nil
+}
+
+// DaysWithSubject is on how many UTC days since a time events of a type named
+// this subject.
+func DaysWithSubject(ctx context.Context, tx pgx.Tx, eventType, subject string, since time.Time) (int, error) {
+	var n int
+	err := tx.QueryRow(ctx, `SELECT count(DISTINCT (at AT TIME ZONE 'UTC')::date) FROM agentrt.event
+	  WHERE event_type = $1 AND at >= $2 AND body_json->>'subject' = $3`, eventType, since, subject).Scan(&n)
+	return n, err
+}

@@ -108,16 +108,19 @@ subscriptions:
     guarantee: durable
     by: dispatcher
   # 2026-11-17 (the coordinator, the same reading: alert.rule.fired heard by no
-  # one): a firing alert wakes the duty seat. Alertmanager re-sends while an
-  # alert keeps firing (some 120 a day on PROD, 11-17): the duty seat sees
-  # repeats until the rule's owner is woken instead (later, by domain).
+  # one): a firing alert wakes the duty seat. 2026-11-18 (agreed with it): repeats
+  # share a letter, one per alert per 6 hours or per day for one that keeps coming
+  # back; production, critical, node pressure and Prometheus always get their own
+  # (bus/alerts/letters.go).
   - id: alert-firing-to-duty
     on: [alert.rule.fired]
     change: firing
     deliver: wake
     to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    params:
+      always_namespaces: "bifrost-platform-prod,bifrost-prod"
     guarantee: durable
-    by: dispatcher
+    by: alert-letters
   # A new approval card pages the Owner's phone from this event (2026-11-18,
   # taken over from the direct push). The approvals service sends it, because
   # the notice is composed from the card and recorded on it, once per card; its
@@ -200,6 +203,11 @@ clients:
     lost_after: 168h
     domain: delivery
     note: asks the release recorder for a pass when a run ends; its own interval reconciles
+  - name: alert-letters
+    kind: durable
+    lost_after: 168h
+    domain: coordination
+    note: writes the duty seat its alert letters; repeats of one alert share a letter (bus/alerts), urgent ones never do
   - name: window-queue
     kind: durable
     lost_after: 168h

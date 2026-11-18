@@ -464,6 +464,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 		s.consumePostRelease(ctx, js, env)
 		s.consumeConclusions(ctx, js, env)
 		s.consumeWindowQueue(ctx, js, env)
+		s.consumeAlertLetters(ctx, js, env)
 		s.consumeUnitWatch(ctx, js, env)
 		s.consumeReleaseRecords(ctx, js, env)
 		r := &relay.Relay{Ledger: ledger, Out: &relay.JSOut{JS: js, Stream: relay.EventStreamName(relay.Tenant, env)},
