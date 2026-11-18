@@ -12,10 +12,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // POST /plan/imports (CUT-plan-import-2026-10-19.md §4 A): a plan's first
@@ -178,7 +178,7 @@ func TestPlanImportRefusedAndFailed(t *testing.T) {
 	// refused when it is proposed, before any card.
 	pool2 := seeded(t)
 	s2 := server(t, pool2)
-	must(t, store.InTx(ctx, pool2, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, pool2, func(tx pgx.Tx) error {
 		_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R9", Kind: "round", Label: "9", Title: "x", Ordinal: 2, Root: "R9"})
 		return err
 	}))

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 type seedActor struct {
@@ -50,7 +51,7 @@ func Seed(ctx context.Context, conn interface {
 	for _, a := range seedActors {
 		ids = append(ids, a.id)
 	}
-	if _, err := Append(ctx, tx, Event{
+	if _, err := eventlog.Append(ctx, tx, eventlog.Event{
 		Stream: "system",
 		Type:   "actor_registered",
 		Actor:  "controller",

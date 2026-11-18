@@ -9,9 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // R5:5.5-13 slice 1: GET /plan-pace reads a round's steps left and the steps
@@ -48,7 +48,7 @@ func TestPlanPaceRoute(t *testing.T) {
 	  AND state IN ('planned','active') ORDER BY plan_node_id LIMIT 1`).Scan(&step); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.InTx(context.Background(), pool, func(tx pgx.Tx) error {
+	if err := eventlog.InTx(context.Background(), pool, func(tx pgx.Tx) error {
 		_, err := planstore.SetStepState(context.Background(), tx, "controller", "R2", step, "done", "done_rule")
 		return err
 	}); err != nil {

@@ -13,8 +13,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // noDB fails every transaction: a pass that reads the database fails with it.
@@ -30,10 +30,10 @@ func completedRun(name string) seenfacts.PipelineRun {
 		Repo: "bifrost-platform", Revision: strings.Repeat("a", 40), CreatedAt: at.Add(-5 * time.Minute), StartedAt: at.Add(-5 * time.Minute), CompletedAt: at}
 }
 
-func pipelineSeenCount(t *testing.T, db store.DB, run string) int {
+func pipelineSeenCount(t *testing.T, db eventlog.DB, run string) int {
 	t.Helper()
 	var n int
-	must(t, store.InTx(ctx, db, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'pipeline_seen' AND body_json->>'run' = $1`, run).Scan(&n)
 	}))
 	return n
@@ -49,7 +49,7 @@ func TestPipelineRecordsRemembersWhatItRecorded(t *testing.T) {
 	told := 0
 	c := controller.Controller{DB: pool, PipelineRecorded: func() { told++ }, Sources: controller.Sources{
 		PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) { return runs, nil }}}
-	pass := func(db store.DB, want, wantTold int) {
+	pass := func(db eventlog.DB, want, wantTold int) {
 		t.Helper()
 		c.DB = db
 		n, err := c.PipelineRecords(ctx)
@@ -124,12 +124,12 @@ func TestPipelineRecordsRefusedRunDoesNotHoldTheOthers(t *testing.T) {
 	c := controller.Controller{DB: pool, Sources: controller.Sources{
 		PipelineRuns: func(context.Context) ([]seenfacts.PipelineRun, error) { return runs, nil }}}
 	n, err := c.PipelineRecords(ctx)
-	if n != 1 || !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), "deliver-bad") {
+	if n != 1 || !errors.Is(err, eventlog.ErrInvalid) || !strings.Contains(err.Error(), "deliver-bad") {
 		t.Fatalf("first pass: %d %v", n, err)
 	}
 	c.DB = noDB{}
 	n, err = c.PipelineRecords(ctx)
-	if n != 0 || !errors.Is(err, store.ErrInvalid) || errors.Is(err, errNoDB) {
+	if n != 0 || !errors.Is(err, eventlog.ErrInvalid) || errors.Is(err, errNoDB) {
 		t.Fatalf("second pass read the database or dropped the refusal: %d %v", n, err)
 	}
 	if pipelineSeenCount(t, pool, "deliver-bad") != 0 || pipelineSeenCount(t, pool, "deliver-ok") != 1 {

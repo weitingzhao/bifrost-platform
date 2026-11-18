@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -47,7 +48,7 @@ func sessionServer(t *testing.T) (*Server, http.Handler) {
 		{ID: "R2:1", Parent: "R2", Kind: "item", Label: "1", Title: "item", Root: "R2"},
 		{ID: "R2:1-1", Parent: "R2:1", Kind: "step", Label: "1-1", Title: "step", StepKind: "agent", Root: "R2"},
 	} {
-		if err := store.InTx(ctx, pool, func(tx pgx.Tx) error { _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); return err }); err != nil {
+		if err := eventlog.InTx(ctx, pool, func(tx pgx.Tx) error { _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); return err }); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -165,7 +166,7 @@ func bySidebar(t *testing.T, router http.Handler, sidebar string) []sessionRow {
 func registrantOf(t *testing.T, srv *Server, id string) string {
 	t.Helper()
 	var who string
-	err := store.InTx(context.Background(), srv.agentRuntime.api.DB, func(tx pgx.Tx) error {
+	err := eventlog.InTx(context.Background(), srv.agentRuntime.api.DB, func(tx pgx.Tx) error {
 		return tx.QueryRow(context.Background(), `SELECT body_json->'external_work'->>'registrant' FROM agentrt.event WHERE event_stream_id=$1 ORDER BY seq LIMIT 1`, "external-work:"+id).Scan(&who)
 	})
 	if err != nil {

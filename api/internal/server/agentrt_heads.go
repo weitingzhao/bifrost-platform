@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 )
 
@@ -47,7 +47,7 @@ var (
 // reads): the view agentd's push had. Gitea's branches API answered 404 for a
 // branch pushed the same second (10-15 on STG, attempt a1 of M-1's task), and
 // a done result was refused for it. A branch that is not in a whole
-// advertisement of that repository is a refused result (store.ErrState); a
+// advertisement of that repository is a refused result (eventlog.ErrState); a
 // repository it cannot see (a wrong organization, a credential that does not
 // reach it), an answer that is not an advertisement, or a Gitea it cannot
 // reach is an error of the platform, which agentd retries later, so no result
@@ -61,11 +61,11 @@ func giteaBranchHead(access func(context.Context) (delivery.GiteaAccess, error),
 	return func(ctx context.Context, repo, ref string) (string, error) {
 		branch, ok := strings.CutPrefix(ref, "refs/heads/")
 		if !ok || branch == "" || !giteaName.MatchString(repo) || strings.HasSuffix(repo, ".git") {
-			return "", fmt.Errorf("%w: %q of %q is not a branch of a repository", store.ErrState, ref, repo)
+			return "", fmt.Errorf("%w: %q of %q is not a branch of a repository", eventlog.ErrState, ref, repo)
 		}
 		for _, seg := range strings.Split(branch, "/") {
 			if seg == "" || seg == "." || seg == ".." {
-				return "", fmt.Errorf("%w: %q is not a branch name", store.ErrState, ref)
+				return "", fmt.Errorf("%w: %q is not a branch name", eventlog.ErrState, ref)
 			}
 		}
 		body, err := readAdvertisement(ctx, access, org, repo, client)
@@ -77,7 +77,7 @@ func giteaBranchHead(access func(context.Context) (delivery.GiteaAccess, error),
 			return "", fmt.Errorf("gitea: %s/%s refs: %w", org, repo, err)
 		}
 		if !found {
-			return "", fmt.Errorf("%w: %s is not on %s/%s", store.ErrState, ref, org, repo)
+			return "", fmt.Errorf("%w: %s is not on %s/%s", eventlog.ErrState, ref, org, repo)
 		}
 		return commit, nil
 	}

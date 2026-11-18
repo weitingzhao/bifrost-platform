@@ -14,6 +14,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
@@ -175,7 +177,7 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 	all := sha256.Sum256([]byte(strings.Join(longer.Lines, "\n") + "\n"))
 	longer.Source.SHA256 = hex.EncodeToString(all[:])
 	_, err = proposeRecorder(ctx, pool, wr("thread:s1"), "k4", "another", longer, a.ask)
-	if !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), "imported once") {
+	if !errors.Is(err, eventlog.ErrInvalid) || !strings.Contains(err.Error(), "imported once") {
 		t.Fatalf("another log of an imported work: %v", err)
 	}
 }
@@ -215,7 +217,7 @@ func TestRecorderImportRefused(t *testing.T) {
 		"format": {func() recorderimport.Request { r := tdLog(t); r.Format = "x"; return r }(), "format"},
 	} {
 		_, err := proposeRecorder(ctx, pool, wr("thread:s2"), "k-"+name, "bad", c.req, a.ask)
-		if !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), c.want) {
+		if !errors.Is(err, eventlog.ErrInvalid) || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v; want %q", name, err, c.want)
 		}
 	}
@@ -300,7 +302,7 @@ func TestRecorderImportTwoPassesAtOnce(t *testing.T) {
 // proposeRecorder is POST /plan/imports for a recorder log, as agentrtapi
 // does it: the lineage prepares the log, the plan proposes its import
 // (2026-11-17, the proposal left the store).
-func proposeRecorder(ctx context.Context, db store.DB, w store.Writer, key, reason string, req recorderimport.Request, ask planstore.Ask) (map[string]any, error) {
+func proposeRecorder(ctx context.Context, db eventlog.DB, w actor.Writer, key, reason string, req recorderimport.Request, ask planstore.Ask) (map[string]any, error) {
 	log, err := externalwork.PrepareRecorderImport(req)
 	if err != nil {
 		return nil, err

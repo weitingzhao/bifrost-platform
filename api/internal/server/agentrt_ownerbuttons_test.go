@@ -13,7 +13,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
@@ -41,7 +43,7 @@ type buttonWorld struct {
 
 func (b *buttonWorld) tx(fn func(pgx.Tx) error) {
 	b.t.Helper()
-	if err := store.InTx(context.Background(), b.conn, fn); err != nil {
+	if err := eventlog.InTx(context.Background(), b.conn, fn); err != nil {
 		b.t.Fatal(err)
 	}
 }
@@ -136,7 +138,7 @@ func TestOwnerButtonPaths(t *testing.T) {
 		ask, question, ack = b.rt.agentRuntimeAsk(), b.rt.agentRuntimeQuestion(), b.rt.agentRuntimeAck()
 	}
 	group()
-	thread := store.Writer{Actor: "thread:buttons", Token: "t"}
+	thread := actor.Writer{Actor: "thread:buttons", Token: "t"}
 	fixture := map[string]any{}
 	keep := func(kind, id string) {
 		res := b.rt.svc.Get(ctx, "owner-console", "admin", "admin", id)

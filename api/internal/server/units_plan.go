@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 )
@@ -252,7 +252,7 @@ func buildUnitPlan(ctx context.Context, trees func(ctx context.Context, repo, co
 }
 
 // unitPlan computes the plan and reads the ledger for each of its keys.
-func unitPlan(ctx context.Context, db store.DB, trees func(ctx context.Context, repo, commit string) (*unitplan.Tree, error), repo, commit string, withInputs bool) (unitPlanAnswer, error) {
+func unitPlan(ctx context.Context, db eventlog.DB, trees func(ctx context.Context, repo, commit string) (*unitplan.Tree, error), repo, commit string, withInputs bool) (unitPlanAnswer, error) {
 	plan, err := buildUnitPlan(ctx, trees, repo, commit)
 	if err != nil {
 		return unitPlanAnswer{}, err

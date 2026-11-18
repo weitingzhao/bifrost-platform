@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/threadinbox"
@@ -29,18 +30,18 @@ func TestConclusionValidLongThreadReachesSender(t *testing.T) {
 		t.Run(fmt.Sprint(n), func(t *testing.T) {
 			t.Parallel()
 			id := "local_" + strings.Repeat("a", n-len("local_"))
-			actor, err := store.ThreadActor(id)
+			thread, err := actor.ThreadActor(id)
 			if n > 128 {
 				if err == nil {
 					t.Fatal("invalid session accepted")
 				}
-				actor = "thread:" + id
+				thread = "thread:" + id
 			} else if err != nil {
 				t.Fatal(err)
 			}
-			for _, label := range []string{id, actor, id + " (W-31)", actor + " (W-31)"} {
+			for _, label := range []string{id, thread, id + " (W-31)", thread + " (W-31)"} {
 				to := threadinbox.Recipient(label)
-				if n <= 128 && to != actor || n > 128 && to != "" {
+				if n <= 128 && to != thread || n > 128 && to != "" {
 					t.Errorf("source selected %q for %q", to, label)
 				}
 				spy := &conclusionBeginSpy{}
@@ -63,13 +64,13 @@ func TestConclusionLongRegisteredThreadPG(t *testing.T) {
 			t.Parallel()
 			db, conn, _ := conclusionDB(t)
 			id := "local_" + strings.Repeat("a", n-len("local_"))
-			actor, err := store.ThreadActor(id)
+			thread, err := actor.ThreadActor(id)
 			ok(t, err)
-			w := store.Writer{Actor: actor, Token: "long-session"}
+			w := actor.Writer{Actor: thread, Token: "long-session"}
 			_, _, err = store.UploadArtifact(ctx, conn, w, "message", "text/plain", []byte("register"))
 			ok(t, err)
 			for _, key := range []string{"approval:appr_long:executed", "question:q_long:answered"} {
-				for _, label := range []string{id, actor, id + " (W-31)", actor + " (W-31)"} {
+				for _, label := range []string{id, thread, id + " (W-31)", thread + " (W-31)"} {
 					ok(t, coord.PostConclusion(ctx, conn, key, threadinbox.Recipient(label), key))
 				}
 			}

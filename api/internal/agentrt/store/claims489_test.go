@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 type claimAlert struct {
@@ -48,7 +48,7 @@ func TestAPlanNoteClaimingApprovalIsAlerted(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	w.arch(t, [2]string{"ARCH:state-db", ""})
-	thread := store.Writer{Actor: "thread:night", Token: "fixture-operator-1"}
+	thread := actor.Writer{Actor: "thread:night", Token: "fixture-operator-1"}
 	_, err := planstore.PostPlanNote(ctx, w.rt, thread, "n1", "ARCH:state-db", "PROD and STG both use it")
 	ok(t, err)
 	if got := claimAlerts(t, w); len(got) != 0 {

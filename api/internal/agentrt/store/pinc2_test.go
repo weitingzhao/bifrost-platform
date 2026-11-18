@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 )
 
 // The exact claim and the pinned result (W-31 round 4, core block C-2;
@@ -17,17 +17,17 @@ import (
 func TestEnsureSeats(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	done, err := store.EnsureSeats(ctx, w.rt, []string{"seat:ghost"})
+	done, err := coord.EnsureSeats(ctx, w.rt, []string{"seat:ghost"})
 	ok(t, err)
 	if len(done) != 0 || w.count(t, `SELECT count(*) FROM agentrt.actor WHERE actor_id IN ('seat:ghost', $1)`, coordinatorSeat) != 0 {
 		t.Fatalf("registered %v without the coordinator's token", done)
 	}
-	done, err = store.EnsureSeats(ctx, w.rt, []string{"seat:ghost", coordinatorSeat})
+	done, err = coord.EnsureSeats(ctx, w.rt, []string{"seat:ghost", coordinatorSeat})
 	ok(t, err)
 	if !slices.Equal(done, []string{coordinatorSeat}) {
 		t.Fatalf("registered %v", done)
 	}
-	again, err := store.EnsureSeats(ctx, w.rt, []string{coordinatorSeat})
+	again, err := coord.EnsureSeats(ctx, w.rt, []string{coordinatorSeat})
 	ok(t, err)
 	if len(again) != 0 || w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_type = 'actor_registered' AND body_json->'actors' ? $1`, coordinatorSeat) != 1 {
 		t.Fatalf("a second start registered %v", again)

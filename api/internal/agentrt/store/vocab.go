@@ -106,7 +106,7 @@ func init() {
 		Before: map[string]func(map[string]any) error{
 			"metrics_computed": checkMetricDefinitions,
 		},
-		Events: []func(Event) error{retiredRecord},
+		Events: []func(eventlog.Event) error{retiredRecord},
 	})
 }
 

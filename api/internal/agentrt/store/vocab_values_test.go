@@ -107,7 +107,7 @@ func TestEventFieldValues(t *testing.T) {
 	}
 	// Through checkBody: refused as the request's error, after the kind.
 	err := checkBody("mission_state_changed", map[string]any{"from": "proposed", "to": "stuck"})
-	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), `field "to" is "stuck"`) {
+	if !errors.Is(err, eventlog.ErrInvalid) || !strings.Contains(err.Error(), `field "to" is "stuck"`) {
 		t.Fatalf("a bad state: %v", err)
 	}
 	if err = checkBody("mission_state_changed", map[string]any{"from": "proposed", "to": "active"}); err != nil {

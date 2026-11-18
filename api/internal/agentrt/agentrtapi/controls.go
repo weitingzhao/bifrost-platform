@@ -10,15 +10,17 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // actorOf is who a write is recorded as: an agentd token is its host;
 // anyone else as writer says.
-func actorOf(r *http.Request) (store.Writer, error) {
+func actorOf(r *http.Request) (actor.Writer, error) {
 	p := actuation.PrincipalFromContext(r.Context())
 	if host, ok := actuation.AgentdHost(p); ok {
-		return store.Writer{Actor: "host:" + host, Token: p.Name}, nil
+		return actor.Writer{Actor: "host:" + host, Token: p.Name}, nil
 	}
 	return writer(r)
 }
@@ -43,13 +45,13 @@ func (a *API) whoami(w http.ResponseWriter, r *http.Request) {
 		// B1): retired, of another kind, not registered, or a thread's
 		// session another token's (TD-370) say so.
 		var registered bool
-		err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
+		err := eventlog.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
 			var err error
-			registered, err = store.CheckWriter(r.Context(), tx, who)
+			registered, err = actor.CheckWriter(r.Context(), tx, who)
 			return err
 		})
 		switch {
-		case errors.Is(err, store.ErrInvalid), errors.Is(err, store.ErrNotYours):
+		case errors.Is(err, eventlog.ErrInvalid), errors.Is(err, actor.ErrNotYours):
 			out["actor_error"] = err.Error()
 		case err != nil:
 			a.fail(w, err)
@@ -126,7 +128,7 @@ func (a *API) control(w http.ResponseWriter, r *http.Request, b controlBody) {
 		a.fail(w, err)
 		return
 	}
-	out, err := store.RequestControl(r.Context(), a.DB, who, b.IdempotencyKey, b.Scope, b.ScopeRef, b.Kind, b.Reason)
+	out, err := coord.RequestControl(r.Context(), a.DB, who, b.IdempotencyKey, b.Scope, b.ScopeRef, b.Kind, b.Reason)
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -136,7 +138,7 @@ func (a *API) control(w http.ResponseWriter, r *http.Request, b controlBody) {
 
 // liftControl is DELETE /controls/{id}: control_cleared by the Owner.
 func (a *API) liftControl(w http.ResponseWriter, r *http.Request) {
-	out, err := store.LiftControl(r.Context(), a.DB, "owner", chi.URLParam(r, "id"))
+	out, err := coord.LiftControl(r.Context(), a.DB, "owner", chi.URLParam(r, "id"))
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -158,7 +160,7 @@ func (a *API) listControls(w http.ResponseWriter, r *http.Request) {
 // list answers the one JSON document a query returns.
 func (a *API) list(w http.ResponseWriter, r *http.Request, q string, args ...any) {
 	var doc []byte
-	err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error { return tx.QueryRow(r.Context(), q, args...).Scan(&doc) })
+	err := eventlog.InTx(r.Context(), a.DB, func(tx pgx.Tx) error { return tx.QueryRow(r.Context(), q, args...).Scan(&doc) })
 	if err != nil {
 		a.fail(w, err)
 		return

@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
@@ -305,7 +306,7 @@ func importHead(t *testing.T, s *httptest.Server, root string) string {
 func TestPlanImportHeadAfterOtherEvents(t *testing.T) {
 	t.Parallel()
 	pool := seeded(t)
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 		for i := 0; i < 501; i++ {
 			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream("R2"), Type: "note", Actor: "controller",
 				Body: map[string]any{"text": fmt.Sprintf("before the import %d", i)}}); err != nil {
@@ -353,7 +354,7 @@ func TestPlanImportTwice(t *testing.T) {
 	other := ledger(t, fixtureLedger)
 	other.Nodes[1].Evidence.Line = strings.Replace(other.Nodes[1].Evidence.Line, other.Nodes[1].Title, other.Nodes[1].Title+"（改）", 1)
 	other.Nodes[1].Title += "（改）"
-	if _, oerr := planstore.ImportPlan(ctx, pool, "controller", other); !errors.Is(oerr, store.ErrInvalid) ||
+	if _, oerr := planstore.ImportPlan(ctx, pool, "controller", other); !errors.Is(oerr, eventlog.ErrInvalid) ||
 		!strings.Contains(oerr.Error(), "already exists and was not imported from this request") {
 		t.Fatalf("a different request: %v", oerr)
 	}
@@ -363,7 +364,7 @@ func TestPlanImportTwice(t *testing.T) {
 
 	// The plan moves on (a step added within the standing authorization);
 	// the same request again still only says it was imported.
-	out, err := planstore.ProposePlanChange(ctx, pool, store.Writer{Actor: "thread:local_test", Token: "reporter"}, "k1", "R2", "one more step",
+	out, err := planstore.ProposePlanChange(ctx, pool, actor.Writer{Actor: "thread:local_test", Token: "reporter"}, "k1", "R2", "one more step",
 		[]planstore.PlanChange{{Op: "add_node", Parent: "R2:2.1", Kind: "step", StepKind: "agent", Title: "new"}}, nil)
 	must(t, err)
 	if out["decision"] != "applied" {
@@ -385,7 +386,7 @@ func TestPlanImportNumberingContinues(t *testing.T) {
 	pool := seeded(t)
 	_, err := planstore.ImportPlan(ctx, pool, "controller", ledger(t, fixtureLedger))
 	must(t, err)
-	out, err := planstore.ProposePlanChange(ctx, pool, store.Writer{Actor: "thread:local_test", Token: "reporter"}, "k1", "R2", "one more step",
+	out, err := planstore.ProposePlanChange(ctx, pool, actor.Writer{Actor: "thread:local_test", Token: "reporter"}, "k1", "R2", "one more step",
 		[]planstore.PlanChange{{Op: "add_node", Parent: "R2:2.1", Kind: "step", StepKind: "agent", Title: "new step"}}, nil)
 	must(t, err)
 	if fmt.Sprint(out["nodes"]) != "[R2:2.1-6]" {
@@ -394,7 +395,7 @@ func TestPlanImportNumberingContinues(t *testing.T) {
 	// An item is outside the standing authorization: the Owner's card, his
 	// Apply, the controller's decision pass.
 	ask := func(context.Context, planstore.Card) (string, error) { return "q_1", nil }
-	out, err = planstore.ProposePlanChange(ctx, pool, store.Writer{Actor: "thread:local_test", Token: "reporter"}, "k2", "R2", "one more item",
+	out, err = planstore.ProposePlanChange(ctx, pool, actor.Writer{Actor: "thread:local_test", Token: "reporter"}, "k2", "R2", "one more item",
 		[]planstore.PlanChange{{Op: "add_node", Parent: "R2", Kind: "item", Title: "new item"}}, ask)
 	must(t, err)
 	if out["question_id"] != "q_1" {
@@ -424,7 +425,7 @@ func TestPlanImportNumberingContinues(t *testing.T) {
 func TestPlanImportAllOrNothing(t *testing.T) {
 	t.Parallel()
 	pool := seeded(t)
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 		_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R9", Kind: "round", Label: "9", Title: "x", Ordinal: 2, Root: "R9"})
 		return err
 	}))

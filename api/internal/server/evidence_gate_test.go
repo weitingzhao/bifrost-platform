@@ -15,9 +15,9 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
@@ -88,7 +88,7 @@ func TestLedgerCI(t *testing.T) {
 		}
 	}
 	trees := map[string]string{h("a"): h("c"), h("b"): h("c"), h("d"): h("9"), h("e"): h("9")}
-	read := ledgerCI(func() store.DB { return pool }, func(_ context.Context, _, commit string) (string, error) {
+	read := ledgerCI(func() eventlog.DB { return pool }, func(_ context.Context, _, commit string) (string, error) {
 		if t, ok := trees[commit]; ok {
 			return t, nil
 		}
@@ -120,7 +120,7 @@ func TestLedgerCI(t *testing.T) {
 	// The push to main also counts a pass of part of the repository, unless
 	// a newer run failed.
 	record("ci-console", h("3"), h("4"), "Succeeded", "console", false)
-	anyScope := ledgerCIScoped(func() store.DB { return pool }, nil, true)
+	anyScope := ledgerCIScoped(func() eventlog.DB { return pool }, nil, true)
 	for _, tc := range []struct{ commit, status, run string }{{h("3"), delivery.CISucceeded, "ci-console"}, {h("a"), delivery.CISucceeded, "ci-full"}, {h("d"), delivery.CIFailed, "ci-full-audit"}} {
 		if status, run, err := anyScope(ctx, "bifrost-platform", tc.commit); err != nil || status != tc.status || run != tc.run {
 			t.Fatalf("any scope, commit %s: %q %q %v", tc.commit[:1], status, run, err)
@@ -131,7 +131,7 @@ func TestLedgerCI(t *testing.T) {
 	if status, run, _ := anyScope(ctx, "bifrost-platform", h("3")); status != delivery.CIFailed || run != "ci-console-red" {
 		t.Fatalf("a pass of part before a failure still counts: %q %q", status, run)
 	}
-	if _, _, err := ledgerCI(func() store.DB { return nil }, nil)(ctx, "bifrost-platform", h("a")); err == nil {
+	if _, _, err := ledgerCI(func() eventlog.DB { return nil }, nil)(ctx, "bifrost-platform", h("a")); err == nil {
 		t.Fatal("no database, and an answer")
 	}
 }
@@ -179,7 +179,7 @@ func TestLedgerCIIsNotAUnitTasksWord(t *testing.T) {
 	trees := map[string]string{h("a"): h("c"), h("b"): h("c"), h("d"): h("8"), h("e"): h("7")}
 	tree := func(_ context.Context, _, commit string) (string, error) { return trees[commit], nil }
 	for _, anyScope := range []bool{false, true} {
-		read := ledgerCIScoped(func() store.DB { return pool }, tree, anyScope)
+		read := ledgerCIScoped(func() eventlog.DB { return pool }, tree, anyScope)
 		ask := func(when, commit, status, run string) {
 			t.Helper()
 			gotStatus, gotRun, err := read(ctx, "bifrost-platform", commit)
@@ -232,7 +232,7 @@ func TestLedgerCIBookkeeping(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	read := ledgerCI(func() store.DB { return pool }, nil)
+	read := ledgerCI(func() eventlog.DB { return pool }, nil)
 	ask := func(when, commit, status string) {
 		t.Helper()
 		if got, run, err := read(ctx, "bifrost-platform", commit); err != nil || got != status {
@@ -303,7 +303,7 @@ func TestLedgerCIFollowsAnIncrementalPassToItsBase(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	read := ledgerCI(func() store.DB { return pool }, func(_ context.Context, _, c string) (string, error) {
+	read := ledgerCI(func() eventlog.DB { return pool }, func(_ context.Context, _, c string) (string, error) {
 		if tr, ok := treeOf[c]; ok {
 			return tr, nil
 		}
@@ -328,7 +328,7 @@ func TestLedgerCIFollowsAnIncrementalPassToItsBase(t *testing.T) {
 
 	// What PROD is judged on does not follow the chain: b and c have no
 	// verdict there until a full run of theirs passes, and then they have.
-	strict := ledgerCIStrict(func() store.DB { return pool }, nil)
+	strict := ledgerCIStrict(func() eventlog.DB { return pool }, nil)
 	for what, sha := range map[string]string{"one step, strict": b, "two steps, strict": c} {
 		if st, run, err := strict(ctx, "bifrost-platform", sha); err != nil || st != "" || run != "" {
 			t.Fatalf("%s: %q %q %v, want no verdict", what, st, run, err)

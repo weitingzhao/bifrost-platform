@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // GET /artifacts (W-31 2.3 search_artifacts): any reader lists metadata,
@@ -18,7 +18,7 @@ func TestSearchArtifactsRoute(t *testing.T) {
 	pool, task := world(t)
 	s := server(t, pool)
 	var exam, handover string
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 		var err error
 		if exam, err = artifact.PutArtifact(ctx, tx, "controller", "exam", "text/plain", []byte("an answer")); err != nil {
 			return err

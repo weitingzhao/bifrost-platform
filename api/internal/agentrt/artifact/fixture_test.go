@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -45,7 +46,7 @@ func newWorld(t *testing.T) *world {
 	w := &world{rt: db.Connect(t, db.Runtime)}
 	deadline := time.Now().Add(7 * 24 * time.Hour)
 	for _, m := range []string{"M-1", "M-2"} {
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			_, err := storekit.CreateMission(ctx, tx, "controller", storekit.Mission{ID: m, WorkID: "W-31", Title: m, Goal: "test", Deadline: deadline})
 			return err
 		}))
@@ -53,12 +54,12 @@ func newWorld(t *testing.T) *world {
 	return w
 }
 
-func wr(actor string) store.Writer { return store.Writer{Actor: actor, Token: "operator"} }
+func wr(id string) actor.Writer { return actor.Writer{Actor: id, Token: "operator"} }
 
 func (w *world) artifact(t *testing.T, kind, body string) string {
 	t.Helper()
 	var id string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
 		id, err = artifact.PutArtifact(ctx, tx, "controller", kind, "text/plain", []byte(body))
 		return err
@@ -69,7 +70,7 @@ func (w *world) artifact(t *testing.T, kind, body string) string {
 // legacy writes rows with the import event, which may write any table.
 func (w *world) legacy(t *testing.T, stmts ...string) {
 	t.Helper()
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test"}}); err != nil {
 			return err

@@ -84,7 +84,7 @@ func (a *API) getRecentEvents(w http.ResponseWriter, r *http.Request) {
 	filter := eventlog.EventFilter{Types: types, Hidden: hiddenFrom(r), HiddenPrefixes: hiddenPrefixes}
 	var doc []byte
 	var next eventlog.EventCursor
-	err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
+	err := eventlog.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
 		var err error
 		if after == nil {
 			doc, next, err = eventlog.LatestEvents(r.Context(), tx, before, limit, filter)

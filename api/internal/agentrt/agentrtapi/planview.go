@@ -15,10 +15,10 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 func (a *API) getPlanView(w http.ResponseWriter, r *http.Request) {
@@ -32,7 +32,7 @@ func (a *API) getPlanView(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			writeError(w, 404, "not_found", "plan not found")
-		case errors.Is(err, store.ErrInvalid):
+		case errors.Is(err, eventlog.ErrInvalid):
 			a.fail(w, err)
 		default:
 			a.logf("plan view: %v", err)

@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // RunLoopForTest runs pass as the controller runs a loop named name, every d,
@@ -18,7 +18,7 @@ func (c *Controller) RunLoopForTest(ctx context.Context, name string, d time.Dur
 
 // SetTaskWaitForTest sets how AckUsedAnswers reads an answered card's task
 // and returns the function that restores it.
-func SetTaskWaitForTest(f func(ctx context.Context, db store.DB, task string) (string, bool, bool, error)) func() {
+func SetTaskWaitForTest(f func(ctx context.Context, db eventlog.DB, task string) (string, bool, bool, error)) func() {
 	old := taskWait
 	taskWait = f
 	return func() { taskWait = old }

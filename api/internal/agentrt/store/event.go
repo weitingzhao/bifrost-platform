@@ -6,41 +6,28 @@ package store
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"strings"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
-// The event log's own names, as this package has always exported them.
-type (
-	Event      = eventlog.Event
-	Appended   = eventlog.Appended
-	ChainBreak = eventlog.ChainBreak
-)
-
-const timeLayout = eventlog.TimeLayout
-
-// Append writes one event inside tx (eventlog.Append), after the checks of
-// the vocabulary this package and the other domains declare (vocab.go).
-func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
-	return eventlog.Append(ctx, tx, ev)
-}
-
 func nullable(s string) any { return eventlog.Nullable(s) }
 
-// WithEventClock, DecisionAt, VerifyStream and SetEventClock are the event
-// log's (eventlog).
-func WithEventClock(ctx context.Context, clock func() time.Time) context.Context {
-	return eventlog.WithEventClock(ctx, clock)
-}
+// ChainBreak, VerifyStream and WithEventClock are eventlog's. Only tests call
+// them through here; they go when those tests do (TD-582).
+type ChainBreak = eventlog.ChainBreak
 
 func VerifyStream(ctx context.Context, db interface {
 	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
 }, stream string) (int64, error) {
 	return eventlog.VerifyStream(ctx, db, stream)
+}
+
+func WithEventClock(ctx context.Context, clock func() time.Time) context.Context {
+	return eventlog.WithEventClock(ctx, clock)
 }
 
 // retiredNoteFields are the records of the landing lane, the B5 STG release
@@ -61,7 +48,7 @@ var retiredStreams = []string{"landing:", "landing-cards:", "stg-sample:", "wave
 
 // retiredRecord refuses an event that would write one of them: the stream is
 // retired, and nothing checks such a record any more.
-func retiredRecord(ev Event) error {
+func retiredRecord(ev eventlog.Event) error {
 	for _, prefix := range retiredStreams {
 		if strings.HasPrefix(ev.Stream, prefix) {
 			return invalid("stream %s is retired: the landing lane, the B5 STG release and waves ended on 2026-11-14", ev.Stream)

@@ -3,6 +3,7 @@ package agentrtapi_test
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"math"
 	"math/rand"
 	"net/http"
@@ -17,8 +18,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // T25 (design v5 §5.2 Gate A, 状态只由事件改), the routes' half. Every route

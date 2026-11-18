@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
@@ -38,11 +40,11 @@ func TestRuleRowsAndVersions(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			_, errs[i] = store.SignRule(ctx, pool, store.Writer{Actor: "owner", Token: "admin"}, "card-auto-answer", []byte(v1), sig, s.key.Fingerprint)
+			_, errs[i] = store.SignRule(ctx, pool, actor.Writer{Actor: "owner", Token: "admin"}, "card-auto-answer", []byte(v1), sig, s.key.Fingerprint)
 		}(i)
 	}
 	wg.Wait()
-	if (errs[0] == nil) == (errs[1] == nil) || (!errors.Is(errs[0], store.ErrInvalid) && !errors.Is(errs[1], store.ErrInvalid)) {
+	if (errs[0] == nil) == (errs[1] == nil) || (!errors.Is(errs[0], eventlog.ErrInvalid) && !errors.Is(errs[1], eventlog.ErrInvalid)) {
 		t.Fatalf("two signers of the same version: %v, %v; want one taken and one refused", errs[0], errs[1])
 	}
 }

@@ -12,11 +12,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 const corruptRoot = "Rbad"
@@ -30,7 +30,7 @@ func pvSecondRoot(t *testing.T, w *world) (string, planview.Binding) {
 		{ID: corruptItem, Root: corruptRoot, Parent: corruptRoot, Kind: "item", Label: "2.1", Title: "Second item"},
 		{ID: corruptStep, Root: corruptRoot, Parent: corruptItem, Kind: "step", Label: "2.1-1", Title: "Second step", StepKind: "agent"},
 	} {
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			_, err := planstore.CreatePlanNode(ctx, tx, "controller", n)
 			return err
 		}))
@@ -54,7 +54,7 @@ func pvSecondRoot(t *testing.T, w *world) (string, planview.Binding) {
 // Neither immutable blobs nor event guards are disabled by the test.
 func pvCorruptView(t *testing.T, w *world, body []byte) {
 	t.Helper()
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		artifact, err := artifact.PutArtifact(ctx, tx, "controller", "other", "application/json", body)
 		if err != nil {
 			return err
@@ -69,7 +69,7 @@ func pvCorruptView(t *testing.T, w *world, body []byte) {
 		}
 		adoption := parsed.(map[string]any)
 		adoption["artifact_id"] = artifact
-		_, err = store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream(corruptRoot), Type: "plan_view_adopted", Actor: "controller", Body: map[string]any{"text": "Corrupt document fixture", "plan_view": adoption}})
+		_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream(corruptRoot), Type: "plan_view_adopted", Actor: "controller", Body: map[string]any{"text": "Corrupt document fixture", "plan_view": adoption}})
 		return err
 	}))
 }

@@ -8,11 +8,11 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 func pvSignoffReadiness(t *testing.T, w *world, step, want string, candidates bool) {
@@ -78,7 +78,7 @@ func TestPV2SignoffReadinessExecution(t *testing.T) {
 			d := pvDocument(t, 1)
 			b := pvBinding(d, s1, "external_verified", "owner_signoff")
 			adoptView(t, w, pvArtifact(t, w, d, b), 0)
-			ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 				_, err := planstore.SetStepState(ctx, tx, "controller", root, s1, mode, "execution readiness test")
 				return err
 			}))
@@ -90,7 +90,7 @@ func TestPV2SignoffReadinessExecution(t *testing.T) {
 func TestPV2SignoffReadinessBlocked(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R2:2.2", Parent: root, Kind: "item", Label: "2.2", Title: "Prerequisite", Root: root, Ordinal: 2}); err != nil {
 			return err
 		}
@@ -116,7 +116,7 @@ func TestPV2SignoffReadinessBlocked(t *testing.T) {
 		return landing.MainHistory{State: landing.Never}, nil
 	}})
 	pvSignoffReadiness(t, w, s1, "Blocked", false)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := planstore.SetStepState(ctx, tx, "controller", root, s1, "active", "execution readiness test")
 		return err
 	}))

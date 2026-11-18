@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -60,7 +61,7 @@ func TestExternalFactsIdempotent(t *testing.T) {
 	if got := w.evaluate(t, s1, &deployments{}); got != "done" {
 		t.Fatalf("external facts did not satisfy atoms: %s", got)
 	}
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		as, e := store.SeenCopiesForTest(ctx, tx, "approval_seen", "approval", []string{"16"})
 		if e != nil {
 			return e
@@ -76,8 +77,8 @@ func TestExternalFactsIdempotent(t *testing.T) {
 	}))
 
 	// A historical copy with the old shape receives a single upgrade.
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, e := store.Append(ctx, tx, store.Event{Stream: seenfacts.ExternalStream, Type: "question_seen", Actor: "controller", Body: map[string]any{"question": q.ID, "status": "open"}})
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, e := eventlog.Append(ctx, tx, eventlog.Event{Stream: seenfacts.ExternalStream, Type: "question_seen", Actor: "controller", Body: map[string]any{"question": q.ID, "status": "open"}})
 		return e
 	}))
 	record("question_seen", qb, 1)

@@ -11,7 +11,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actionrecord"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -91,7 +91,7 @@ func (s *Server) recordDirect(r *http.Request, act actions.Action, params map[st
 }
 
 // recordDB is the agent runtime's database, nil when it is not connected.
-func (s *Server) recordDB() store.DB {
+func (s *Server) recordDB() eventlog.DB {
 	if s.agentRuntime == nil || s.agentRuntime.api == nil {
 		return nil
 	}

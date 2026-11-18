@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 )
 
@@ -36,7 +36,7 @@ import (
 // of its git tree, under whatever commit (a rebase or a squash onto main, a
 // run that reused another's result). tree reads a commit's tree; nil, or a
 // tree that cannot be read, leaves the commit's own answer.
-func ledgerCI(db func() store.DB, tree func(context.Context, string, string) (string, error)) delivery.CIReader {
+func ledgerCI(db func() eventlog.DB, tree func(context.Context, string, string) (string, error)) delivery.CIReader {
 	return ledgerCIWith(db, tree, false, true)
 }
 
@@ -47,23 +47,23 @@ func ledgerCI(db func() store.DB, tree func(context.Context, string, string) (st
 // incremental pass reaches STG on the chain, and PROD only once the full run
 // of the push to main has passed (Owner 2026-11-16: the incremental run lets
 // it in, the full run after it is the reconciliation).
-func ledgerCIStrict(db func() store.DB, tree func(context.Context, string, string) (string, error)) delivery.CIReader {
+func ledgerCIStrict(db func() eventlog.DB, tree func(context.Context, string, string) (string, error)) delivery.CIReader {
 	return ledgerCIWith(db, tree, false, false)
 }
 
 // ledgerCIScoped is ledgerCI; with anyScope a pass of part of the repository
 // (an incremental or a console run) counts as well when no full run failed
 // after it, as the push to main reads CI (ci_gate.py without --require-full).
-func ledgerCIScoped(db func() store.DB, tree func(context.Context, string, string) (string, error), anyScope bool) delivery.CIReader {
+func ledgerCIScoped(db func() eventlog.DB, tree func(context.Context, string, string) (string, error), anyScope bool) delivery.CIReader {
 	return ledgerCIWith(db, tree, anyScope, true)
 }
 
 // ledgerCIWith is the one reading of the ledger; chain says whether a passed
 // incremental row counts together with its base's verdict (read below).
-func ledgerCIWith(db func() store.DB, tree func(context.Context, string, string) (string, error), anyScope, chain bool) delivery.CIReader {
+func ledgerCIWith(db func() eventlog.DB, tree func(context.Context, string, string) (string, error), anyScope, chain bool) delivery.CIReader {
 	// verdict also returns chained: the base of the newest passed incremental
 	// row that no newer failure follows, when no full run decided.
-	verdict := func(ctx context.Context, d store.DB, rows []evidence.EvidenceRow) (status, run, chained, chainedRun string, err error) {
+	verdict := func(ctx context.Context, d eventlog.DB, rows []evidence.EvidenceRow) (status, run, chained, chainedRun string, err error) {
 		failed, part := "", ""
 		for _, row := range rows { // newest first
 			switch {
@@ -104,8 +104,8 @@ func ledgerCIWith(db func() store.DB, tree func(context.Context, string, string)
 	// head without a verdict and STG undelivered, 2026-11-15 12:44-14:30). A
 	// base that failed, or has no verdict, or a chain longer than the bound,
 	// leaves the commit with none: the answer is never a pass on less.
-	var read func(ctx context.Context, d store.DB, repo, sha string, depth int) (string, string, error)
-	read = func(ctx context.Context, d store.DB, repo, sha string, depth int) (string, string, error) {
+	var read func(ctx context.Context, d eventlog.DB, repo, sha string, depth int) (string, string, error)
+	read = func(ctx context.Context, d eventlog.DB, repo, sha string, depth int) (string, string, error) {
 		rows, err := evidence.EvidenceCIByCommit(ctx, d, repo, sha, 50)
 		if err != nil {
 			return "", "", err
@@ -159,7 +159,7 @@ func (s *Server) wireEvidenceGate() delivery.CIReader {
 		return nil
 	}
 	// Strict: this reader is the release policy's ci_succeeded.
-	reader := ledgerCIStrict(func() store.DB {
+	reader := ledgerCIStrict(func() eventlog.DB {
 		if s.agentRuntime == nil || s.agentRuntime.api == nil {
 			return nil
 		}
@@ -197,7 +197,7 @@ func (s *Server) handleEvidenceCI(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	// scope full (the default, what the PROD pipeline's check-source asks) is
 	// strict; any also counts a pass of part; chain is what STG is delivered on.
-	read := ledgerCIWith(func() store.DB { return s.agentRuntime.api.DB },
+	read := ledgerCIWith(func() eventlog.DB { return s.agentRuntime.api.DB },
 		giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second}), scope == "any", scope == "chain")
 	status, run, err := read(ctx, repo, commit)
 	if err != nil {

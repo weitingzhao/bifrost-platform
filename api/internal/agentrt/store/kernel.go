@@ -22,13 +22,6 @@ import (
 // Task rows are locked FOR NO KEY UPDATE, which foreign key checks (KEY
 // SHARE) never wait for.
 
-var (
-	// ErrConflict: an idempotency key reused with a different request.
-	ErrConflict = actor.ErrConflict
-	// ErrState: the operation does not fit the current state.
-	ErrState = eventlog.ErrState
-)
-
 // DB is what the kernel needs: a pool or a connection (eventlog.DB).
 type DB = eventlog.DB
 

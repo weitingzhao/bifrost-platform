@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	busreleases "github.com/weitingzhao/bifrost-platform/api/internal/bus/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 )
@@ -54,7 +53,7 @@ func (r releaseRows) Records(ctx context.Context) ([]releases.Record, error) {
 
 func (r releaseRows) Backfill(ctx context.Context, rec releases.Record) (bool, error) {
 	var wrote bool
-	err := store.InTx(ctx, r.pool, func(tx pgx.Tx) error {
+	err := eventlog.InTx(ctx, r.pool, func(tx pgx.Tx) error {
 		var err error
 		wrote, err = releases.BackfillRecord(ctx, tx, rec)
 		return err
@@ -64,7 +63,7 @@ func (r releaseRows) Backfill(ctx context.Context, rec releases.Record) (bool, e
 
 func releaseTable(pool *pgxpool.Pool) releases.TableWriter {
 	return func(ctx context.Context, rec releases.Record, succeeded bool) error {
-		return store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		return eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 			eventID, again, err := releases.PriorEvent(ctx, tx, rec.Run)
 			if err != nil {
 				return err

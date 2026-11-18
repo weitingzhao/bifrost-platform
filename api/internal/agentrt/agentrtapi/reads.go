@@ -12,8 +12,8 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // getArtifact is GET /artifacts/{id}. A collector reads only an artifact
@@ -27,7 +27,7 @@ func (a *API) getArtifact(w http.ResponseWriter, r *http.Request) {
 	var exam bool
 	p := actuation.PrincipalFromContext(r.Context())
 	host := p.Role == actuation.RoleAgentd
-	err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
+	err := eventlog.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
 		// Whether the exams' stream names it is read for an Agent host only
 		// (review 412 C1: the stream is read by its id, then its bodies).
 		return tx.QueryRow(r.Context(), `SELECT a.media_type, a.artifact_kind, b.body,
@@ -63,7 +63,7 @@ func (a *API) getArtifact(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) getRow(w http.ResponseWriter, r *http.Request, q, id string) {
 	var doc []byte
-	err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error { return tx.QueryRow(r.Context(), q, id).Scan(&doc) })
+	err := eventlog.InTx(r.Context(), a.DB, func(tx pgx.Tx) error { return tx.QueryRow(r.Context(), q, id).Scan(&doc) })
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -116,7 +116,7 @@ func (a *API) getEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var doc []byte
-	err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
+	err := eventlog.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
 		return tx.QueryRow(r.Context(), `SELECT COALESCE(jsonb_agg(to_jsonb(e) ORDER BY e.seq), '[]') FROM (
 		  SELECT * FROM agentrt.event WHERE event_stream_id = $1 AND seq > $2 ORDER BY seq LIMIT 500) e`, stream, after).Scan(&doc)
 	})

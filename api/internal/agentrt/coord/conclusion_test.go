@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -36,11 +37,11 @@ func seedOnly(ctx context.Context, owner *pgx.Conn) error {
 	return err
 }
 
-func conclusionDB(t *testing.T) (*agentrttest.DB, store.DB, store.Writer) {
+func conclusionDB(t *testing.T) (*agentrttest.DB, eventlog.DB, actor.Writer) {
 	t.Helper()
 	db := agentrttest.MigratedWith(t, "seeded", seedOnly)
 	pool := db.Pool(t, db.Runtime)
-	w := store.Writer{Actor: "thread:local_conclusion", Token: "fixture"}
+	w := actor.Writer{Actor: "thread:local_conclusion", Token: "fixture"}
 	_, _, err := store.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register the requesting thread"))
 	ok(t, err)
 	return db, pool, w
@@ -100,7 +101,7 @@ func TestConclusionConcurrentRestartAndAck(t *testing.T) {
 	}
 }
 
-type failConclusionReceipt struct{ store.DB }
+type failConclusionReceipt struct{ eventlog.DB }
 type failConclusionReceiptTx struct{ pgx.Tx }
 
 func (db failConclusionReceipt) BeginTx(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error) {
@@ -148,7 +149,7 @@ func TestConclusionSkipsUndeliverableActors(t *testing.T) {
 	admin := db.Connect(t, db.Admin)
 	retire := func(retired bool) {
 		t.Helper()
-		ok(t, store.InTx(ctx, admin, func(tx pgx.Tx) error {
+		ok(t, eventlog.InTx(ctx, admin, func(tx pgx.Tx) error {
 			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "actor_registered", Actor: "controller",
 				Body: map[string]any{"actors": []string{w.Actor}, "note": "test recipient availability"}}); err != nil {
 				return err

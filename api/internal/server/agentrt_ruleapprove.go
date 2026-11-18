@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
@@ -134,7 +135,7 @@ func (s *Server) ruleApprove(ctx context.Context, params map[string]any) (any, e
 		return nil, err
 	}
 	a.ID = rec.ID
-	return store.ApproveRule(ctx, s.agentRuntime.api.DB, store.Writer{Actor: "owner"}, a)
+	return store.ApproveRule(ctx, s.agentRuntime.api.DB, actor.Writer{Actor: "owner"}, a)
 }
 
 // ruleApproveOpenKey: a rule has at most one open agentrt_rule_approve

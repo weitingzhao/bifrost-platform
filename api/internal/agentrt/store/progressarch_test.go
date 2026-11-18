@@ -13,10 +13,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // The architecture table on GET /progress (W-31 2.5 G2 A): each row's tick
@@ -38,7 +39,7 @@ func archGates(env string, tests ...string) string {
 func (w *world) arch(t *testing.T, rows ...[2]string) {
 	t.Helper()
 	ctx := ctxOf(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "ARCH", Kind: "arch_root", Label: "ARCH", Title: "架构对照",
 			Root: "ARCH"}); err != nil {
 			return err
@@ -56,8 +57,8 @@ func (w *world) arch(t *testing.T, rows ...[2]string) {
 		if r[1] == "" {
 			continue
 		}
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			if _, err := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream("ARCH"), Type: "plan_changed", Actor: "controller",
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream("ARCH"), Type: "plan_changed", Actor: "controller",
 				Body: map[string]any{"change": "set_done_rule"}}); err != nil {
 				return err
 			}
@@ -126,7 +127,7 @@ func TestPlanNotes(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	w.arch(t, [2]string{"ARCH:state-db", ""}, [2]string{"ARCH:bus", ""})
-	thread := store.Writer{Actor: "thread:night", Token: "fixture-operator-1"}
+	thread := actor.Writer{Actor: "thread:night", Token: "fixture-operator-1"}
 
 	first, err := planstore.PostPlanNote(ctx, w.rt, thread, "n1", "ARCH:state-db", "PROD and STG both use it")
 	ok(t, err)
@@ -139,7 +140,7 @@ func TestPlanNotes(t *testing.T) {
 		t.Fatalf("a retry wrote another note: %v, then %v", first, again)
 	}
 	_, err = planstore.PostPlanNote(ctx, w.rt, thread, "n1", "ARCH:state-db", "something else")
-	is(t, err, store.ErrConflict)
+	is(t, err, actor.ErrConflict)
 	later, err := planstore.PostPlanNote(ctx, w.rt, owner, "n2", "ARCH:state-db", "PROD rebuild drill done")
 	ok(t, err)
 	rows := w.archRows(t)
@@ -162,19 +163,19 @@ func TestPlanNotes(t *testing.T) {
 		node, text string
 		want       error
 	}{
-		"a step":            {s1, "x", store.ErrInvalid},
-		"a round":           {root, "x", store.ErrInvalid},
-		"the root":          {"ARCH", "x", store.ErrInvalid},
+		"a step":            {s1, "x", eventlog.ErrInvalid},
+		"a round":           {root, "x", eventlog.ErrInvalid},
+		"the root":          {"ARCH", "x", eventlog.ErrInvalid},
 		"no such node":      {"ARCH:nothing", "x", pgx.ErrNoRows},
-		"empty":             {"ARCH:bus", "", store.ErrInvalid},
-		"white space":       {"ARCH:bus", " \n\t", store.ErrInvalid},
-		"too long":          {"ARCH:bus", strings.Repeat("长", planstore.MaxNoteText/3+1), store.ErrInvalid},
-		"not UTF-8":         {"ARCH:bus", "a\xffb", store.ErrInvalid},
-		"a NUL":             {"ARCH:bus", "a\x00b", store.ErrInvalid},
-		"a local path":      {"ARCH:bus", "see /Users/someone/notes.md", store.ErrInvalid},
-		"a home path":       {"ARCH:bus", "see ~/agent-work/status", store.ErrInvalid},
-		"a task workspace":  {"ARCH:bus", "read tasks/t_01JABCDEFGHJKMNPQRSTVWXYZ0/a1/out", store.ErrInvalid},
-		"no idempotent key": {"ARCH:bus", "x", store.ErrInvalid},
+		"empty":             {"ARCH:bus", "", eventlog.ErrInvalid},
+		"white space":       {"ARCH:bus", " \n\t", eventlog.ErrInvalid},
+		"too long":          {"ARCH:bus", strings.Repeat("长", planstore.MaxNoteText/3+1), eventlog.ErrInvalid},
+		"not UTF-8":         {"ARCH:bus", "a\xffb", eventlog.ErrInvalid},
+		"a NUL":             {"ARCH:bus", "a\x00b", eventlog.ErrInvalid},
+		"a local path":      {"ARCH:bus", "see /Users/someone/notes.md", eventlog.ErrInvalid},
+		"a home path":       {"ARCH:bus", "see ~/agent-work/status", eventlog.ErrInvalid},
+		"a task workspace":  {"ARCH:bus", "read tasks/t_01JABCDEFGHJKMNPQRSTVWXYZ0/a1/out", eventlog.ErrInvalid},
+		"no idempotent key": {"ARCH:bus", "x", eventlog.ErrInvalid},
 	} {
 		key := "k-" + name
 		if name == "no idempotent key" {
@@ -261,7 +262,7 @@ func TestArchImportRefusesALocalPath(t *testing.T) {
 	ok(t, err)
 	before := rows(t, pool)
 	_, err = planstore.ImportPlan(ctx, pool, "controller", arch)
-	if !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), "a local path in the note") {
+	if !errors.Is(err, eventlog.ErrInvalid) || !strings.Contains(err.Error(), "a local path in the note") {
 		t.Fatalf("err = %v", err)
 	}
 	if after := rows(t, pool); after != before {
@@ -323,7 +324,7 @@ func TestArchLatestNoteIsTheLastAppended(t *testing.T) {
 	ctx := ownClock(t)
 	w := newWorld(t)
 	w.arch(t, [2]string{"ARCH:state-db", ""})
-	thread := store.Writer{Actor: "thread:night", Token: "fixture-operator-1"}
+	thread := actor.Writer{Actor: "thread:night", Token: "fixture-operator-1"}
 	later := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
 	restore := freezeClock(t, later)
 	first, err := planstore.PostPlanNote(ctx, w.rt, thread, "n1", "ARCH:state-db", "written first, stamped later")

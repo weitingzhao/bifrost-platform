@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -50,7 +51,7 @@ func TestTuningFailuresToAlert(t *testing.T) {
 	}
 	key := rptest.NewKey(t)
 	text := "rule_id: tuning\nrule_version: 1\ndirection: initial\neffective_at: 2026-10-01T00:00:00Z\nexpires_at: 2099-01-01T00:00:00Z\nvalues: {failures_to_alert: 2}\n"
-	_, err := store.SignRule(ctx, pool, store.Writer{Actor: "owner", Token: "admin"}, rules.KindTuning, []byte(text),
+	_, err := store.SignRule(ctx, pool, actor.Writer{Actor: "owner", Token: "admin"}, rules.KindTuning, []byte(text),
 		key.Sign(t, []byte(text), rules.Namespace), key.Fingerprint)
 	must(t, err)
 	c.ReadTuningForTest(ctx)

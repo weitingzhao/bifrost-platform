@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -339,7 +340,7 @@ func TestPlanChangeCardOnTheStore(t *testing.T) {
 		t.Fatalf("a body of 3000 encoded bytes: %v", err)
 	}
 	_, err = ask(ctx, planstore.Card{Key: strings.Repeat("ef", 16), Title: "Plan change", Body: strings.Repeat("x", 2999)})
-	if !errors.Is(err, store.ErrInvalid) {
+	if !errors.Is(err, eventlog.ErrInvalid) {
 		t.Fatalf("a body of 3001 encoded bytes: %v", err)
 	}
 	// A fresh store for the titles: the runtime may have three cards open.

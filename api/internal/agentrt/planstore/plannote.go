@@ -24,7 +24,7 @@ import (
 // MaxNoteText is the longest note in bytes: as a message body, text and not
 // a document (that is an artifact). It is the plan's own number; a test
 // holds it equal to coordination's largest message body
-// (coord.MaxMessageBody).
+// (the coordination domain's limit, 8 KiB).
 const MaxNoteText = 8 << 10
 
 // checkNoteText checks a note's text: UTF-8 text of 1 to MaxNoteText bytes

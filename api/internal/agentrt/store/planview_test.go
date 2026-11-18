@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 func viewDoc(t *testing.T, w *world, version int) string {
@@ -35,7 +36,7 @@ func viewDoc(t *testing.T, w *world, version int) string {
 	raw, err = json.Marshal(d)
 	ok(t, err)
 	var id string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
 		id, err = artifact.PutArtifact(ctx, tx, "controller", "other", "application/json", raw)
 		return err
@@ -56,7 +57,7 @@ func externalSpec(t *testing.T, w *world) string {
 	t.Helper()
 	ctx := ctxOf(t)
 	var id string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
 		id, err = artifact.PutArtifact(ctx, tx, "controller", "other", "application/json", []byte(`{"v":1,"kind":"agentrt.external_work/v1","task":"实现可见性","executor":"codex","provider":"openai","repo":"platform","branch":"w31/pv1","acceptance_refs":["PV1"],"estimate_minutes":[10,20]}`))
 		return err
@@ -69,7 +70,7 @@ func TestPlanViewAdoptionAndCAS(t *testing.T) {
 	id := viewDoc(t, w, 1)
 	zeroVersion := 0
 	_, badErr := planstore.ProposePlanChange(ctx, w.rt, wr("thread:pv"), "smuggled-binding", root, "view", []planstore.PlanChange{{Op: "adopt_plan_view", Artifact: id, ExpectedVersion: &zeroVersion, Bind: []planstore.Binding{{Kind: "question", Ref: "q_bad"}}}}, (&asker{}).ask)
-	is(t, badErr, store.ErrInvalid)
+	is(t, badErr, eventlog.ErrInvalid)
 	adoptView(t, w, id, 0)
 	before := w.footprint(t)
 	out, err := planstore.PlanView(ctx, w.rt, root)
@@ -82,7 +83,7 @@ func TestPlanViewAdoptionAndCAS(t *testing.T) {
 	}
 	zero := 0
 	_, err = planstore.ProposePlanChange(ctx, w.rt, wr("thread:pv"), "stale", root, "stale", []planstore.PlanChange{{Op: "adopt_plan_view", Artifact: id, ExpectedVersion: &zero}}, (&asker{}).ask)
-	is(t, err, store.ErrConflict)
+	is(t, err, actor.ErrConflict)
 	id2 := viewDoc(t, w, 2)
 	one := 1
 	a := &asker{}
@@ -112,12 +113,12 @@ func TestExternalWorkLifecycle(t *testing.T) {
 	same(t, out, again)
 	in.RunKey = "other"
 	_, err = externalwork.RegisterExternalWork(ctx, w.rt, who, in)
-	is(t, err, store.ErrConflict)
+	is(t, err, actor.ErrConflict)
 	_, err = externalwork.PostExternalEvent(ctx, w.rt, wr("thread:intruder"), id, externalwork.ExternalEvent{Key: "steal", Seq: 1, Type: "started"})
-	is(t, err, store.ErrNotYours)
+	is(t, err, actor.ErrNotYours)
 	for _, typ := range []string{"verified", "verification_failed"} {
 		_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: typ, Seq: 1, Type: typ})
-		is(t, err, store.ErrInvalid)
+		is(t, err, eventlog.ErrInvalid)
 	}
 	start := externalwork.ExternalEvent{Key: "start", Seq: 1, Type: "started"}
 	out, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, start)
@@ -127,9 +128,9 @@ func TestExternalWorkLifecycle(t *testing.T) {
 	ok(t, err)
 	same(t, out, again)
 	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "same-seq", Seq: 1, Type: "heartbeat"})
-	is(t, err, store.ErrConflict)
+	is(t, err, actor.ErrConflict)
 	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "gap", Seq: 3, Type: "heartbeat"})
-	is(t, err, store.ErrConflict)
+	is(t, err, actor.ErrConflict)
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
 	for i := 0; i < 2; i++ {
@@ -193,15 +194,15 @@ func TestPlanViewDevBoundary(t *testing.T) {
 	id := viewDoc(t, w, 1)
 	zero := 0
 	_, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:pv"), "bad-tenant", root, "view", []planstore.PlanChange{{Op: "adopt_plan_view", Artifact: id, ExpectedVersion: &zero}}, (&asker{}).ask)
-	is(t, err, store.ErrInvalid)
+	is(t, err, eventlog.ErrInvalid)
 	w.legacy(t, `UPDATE agentrt.mission SET tenant='dev' WHERE mission_id='M-1'`, `UPDATE agentrt.mission SET tenant='business' WHERE mission_id='M-2'`)
 	adoptView(t, w, id, 0)
 	for i, c := range []planstore.PlanChange{{Op: "rebind_step", Node: s2, MissionID: "M-2"}, {Op: "add_node", Parent: item, Kind: "step", StepKind: "agent", Title: "bad", MissionID: "M-2"}} {
 		_, err = planstore.ProposePlanChange(ctx, w.rt, wr("thread:pv"), fmt.Sprint("bad-bind", i), root, "bind", []planstore.PlanChange{c}, (&asker{}).ask)
-		is(t, err, store.ErrInvalid)
+		is(t, err, eventlog.ErrInvalid)
 	}
 	_, err = externalwork.RegisterExternalWork(ctx, w.rt, wr("thread:ext"), externalwork.ExternalRegistration{Key: "bad", Root: root, Node: s2, RunKey: "bad", Artifact: externalSpec(t, w), Mission: "M-2"})
-	is(t, err, store.ErrInvalid)
+	is(t, err, eventlog.ErrInvalid)
 }
 
 func TestExternalUnconfirmedRecoveryAndRebind(t *testing.T) {
@@ -229,16 +230,16 @@ func TestExternalUnconfirmedRecoveryAndRebind(t *testing.T) {
 		t.Fatal(view)
 	}
 	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "bad-link", Seq: 2, Type: "linked", Root: "other", Node: s1})
-	is(t, err, store.ErrInvalid)
+	is(t, err, eventlog.ErrInvalid)
 	// A link to a task is refused (store cut 4, 2026-11-14); a link to a step is taken.
 	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "task-link", Seq: 2, Type: "linked", Root: root, Node: s3, Task: "t_01M5192P0JPMJAP63ZKRPXJ2VV"})
-	is(t, err, store.ErrInvalid)
+	is(t, err, eventlog.ErrInvalid)
 	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "link", Seq: 2, Type: "linked", Root: root, Node: s3, Mission: "M-1"})
 	ok(t, err)
 	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "cancel", Seq: 3, Type: "cancelled"})
 	ok(t, err)
 	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "late-heartbeat", Seq: 4, Type: "heartbeat"})
-	is(t, err, store.ErrState)
+	is(t, err, eventlog.ErrState)
 }
 
 func TestPlanViewRecentCursor(t *testing.T) {
@@ -281,7 +282,7 @@ func TestPlanViewRecentCursor(t *testing.T) {
 		}
 	}
 	_, err = planstore.PlanViewPage(ctx, w.rt, root, "invalid")
-	is(t, err, store.ErrInvalid)
+	is(t, err, eventlog.ErrInvalid)
 }
 
 // A dispatch run's heartbeat every 30 seconds says only that it is alive; Recent
@@ -330,7 +331,7 @@ func TestPlanViewLargeSnapshot(t *testing.T) {
 	d.Items = nil
 	d.Sources = []planview.Source{{ID: "test", Path: "plan.json", Locator: "test", Basis: "repository"}}
 	edgeCount := 0
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: d.Root, Root: d.Root, Kind: "round", Label: "big", Title: "big", Ordinal: 99}); err != nil {
 			return err
 		}
@@ -353,7 +354,7 @@ func TestPlanViewLargeSnapshot(t *testing.T) {
 	raw, err = json.Marshal(d)
 	ok(t, err)
 	var view string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
 		view, err = artifact.PutArtifact(ctx, tx, "controller", "other", "application/json", raw)
 		return err
@@ -408,7 +409,7 @@ func TestPlanViewCrossRootAdoption(t *testing.T) {
 		b, err := json.Marshal(d)
 		ok(t, err)
 		var id string
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			var err error
 			id, err = artifact.PutArtifact(ctx, tx, "controller", "other", "application/json", b)
 			return err
@@ -426,7 +427,7 @@ func TestPlanViewCrossRootAdoption(t *testing.T) {
 		_, err = planstore.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
 		return err
 	}
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		for _, n := range []planstore.PlanNode{{ID: "R3", Root: "R3", Kind: "round", Label: "3", Title: "three", Ordinal: 3}, {ID: "R3:3.1", Root: "R3", Parent: "R3", Kind: "item", Label: "3.1", Title: "item"}} {
 			if _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); err != nil {
 				return err
@@ -441,15 +442,15 @@ func TestPlanViewCrossRootAdoption(t *testing.T) {
 	ok(t, apply(second, "second"))
 	first.Version = 2
 	first.Items[0].Dependencies = []planview.Edge{{Root: "R3", Node: "3.1", Milestone: second.Items[0].Milestones[0], RequiredFor: first.Items[0].Milestones[0], Relation: "blocks", Reason: "cycle", Sources: []string{base.Sources[0].ID}}}
-	is(t, apply(first, "cycle"), store.ErrInvalid)
+	is(t, apply(first, "cycle"), eventlog.ErrInvalid)
 	first.Items[0].Dependencies = []planview.Edge{}
 	first.Items[0].Node = "missing"
-	is(t, apply(first, "missing"), store.ErrInvalid)
+	is(t, apply(first, "missing"), eventlog.ErrInvalid)
 	first.Items[0].Node = "2.1"
 	alias := first.Items[0]
 	alias.Node = item
 	order := 2
 	alias.Order = &order
 	first.Items = append(first.Items, alias)
-	is(t, apply(first, "alias"), store.ErrInvalid)
+	is(t, apply(first, "alias"), eventlog.ErrInvalid)
 }

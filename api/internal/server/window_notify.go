@@ -6,7 +6,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/threadinbox"
 )
 
@@ -17,7 +19,7 @@ import (
 // store table of its own and takes no store lock (agentrt/store is another
 // seat's, and a durable once-per-key table here would duplicate
 // coord.PostConclusion's internals).
-func (s *Server) wireWindowNotices(db store.DB) {
+func (s *Server) wireWindowNotices(db eventlog.DB) {
 	if s.delivery == nil {
 		return
 	}
@@ -26,19 +28,19 @@ func (s *Server) wireWindowNotices(db store.DB) {
 	})
 }
 
-func postWindowNotice(ctx context.Context, db store.DB, to, body string) error {
+func postWindowNotice(ctx context.Context, db eventlog.DB, to, body string) error {
 	if to == "" || threadinbox.Recipient(to) != to {
 		return nil
 	}
-	return store.InTx(ctx, db, func(tx pgx.Tx) error {
-		kind, err := store.ActorKind(ctx, tx, to)
+	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+		kind, err := actor.ActorKind(ctx, tx, to)
 		if errors.Is(err, pgx.ErrNoRows) || err == nil && kind != "thread" {
 			return nil // never register or revive a recipient on someone else's behalf
 		}
 		if err != nil {
 			return err
 		}
-		_, err = store.PostMessage(ctx, tx, "controller", to, "note", []byte(body))
+		_, err = coord.PostMessage(ctx, tx, "controller", to, "note", []byte(body))
 		return err
 	})
 }

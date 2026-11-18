@@ -5,6 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
@@ -27,7 +28,7 @@ func tuningIn(ctx context.Context, tx pgx.Tx) (*rules.Tuning, error) {
 // controller reads it once a pass.
 func ReadTuning(ctx context.Context, db DB) (*rules.Tuning, error) {
 	var t *rules.Tuning
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
+	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		var err error
 		t, err = tuningIn(ctx, tx)
 		return err

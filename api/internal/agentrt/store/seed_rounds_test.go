@@ -5,7 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // Scenes of the retired dispatch lane, written as its rows (store cut 3b-2,
@@ -30,8 +30,8 @@ func seedHost(t *testing.T, tx pgx.Tx, id string) {
 // fixture's rows need.
 func (w *world) seeded(t *testing.T, fn func(tx pgx.Tx)) {
 	t.Helper()
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test"}}); err != nil {
 			return err
 		}

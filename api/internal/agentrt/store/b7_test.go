@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -18,8 +20,8 @@ import (
 func notes(t *testing.T, w *world, stream string, n int) {
 	t.Helper()
 	for i := range n {
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			_, err := store.Append(ctx, tx, store.Event{Stream: stream, Type: "note", Actor: "controller", Body: map[string]any{"text": string(rune('a' + i))}})
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: stream, Type: "note", Actor: "controller", Body: map[string]any{"text": string(rune('a' + i))}})
 			return err
 		}))
 	}
@@ -63,8 +65,8 @@ func TestTamperOnACleanStream(t *testing.T) {
 	} {
 		if name == "set to null" {
 			for i := range 3 {
-				ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-					_, err := store.Append(ctx, tx, store.Event{Stream: name, Type: "note", Actor: "controller", MissionID: "M-1",
+				ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+					_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: name, Type: "note", Actor: "controller", MissionID: "M-1",
 						Body: map[string]any{"text": string(rune('a' + i))}})
 					return err
 				}))
@@ -93,7 +95,7 @@ func TestKilledInsideATransaction(t *testing.T) {
 	ok(t, conn.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pid))
 	tx, err := conn.Begin(ctx)
 	ok(t, err)
-	if _, err = store.Append(ctx, tx, store.Event{Stream: "mid", Type: "note", Actor: "controller", Body: map[string]any{"text": "lost"}}); err != nil {
+	if _, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: "mid", Type: "note", Actor: "controller", Body: map[string]any{"text": "lost"}}); err != nil {
 		t.Fatal(err)
 	}
 	var killed bool
@@ -124,8 +126,8 @@ func TestKilledInsideATransaction(t *testing.T) {
 	for round := range 3 {
 		bctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		hooked := hookedDB{db: pool, before: func() {
-			ok(t, store.InTx(bctx, pool, func(tx pgx.Tx) error {
-				_, aerr := store.Append(bctx, tx, store.Event{Stream: "busy", Type: "note", Actor: "controller", Body: map[string]any{"text": "between"}})
+			ok(t, eventlog.InTx(bctx, pool, func(tx pgx.Tx) error {
+				_, aerr := eventlog.Append(bctx, tx, eventlog.Event{Stream: "busy", Type: "note", Actor: "controller", Body: map[string]any{"text": "between"}})
 				return aerr
 			}))
 		}}
@@ -173,12 +175,12 @@ func TestMessagesAndControlsNeedNoRedisOutbox(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	var message string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
-		message, err = store.PostMessage(ctx, tx, "owner", store.Seat, "ask", []byte("status?"))
+		message, err = coord.PostMessage(ctx, tx, "owner", store.Seat, "ask", []byte("status?"))
 		return err
 	}))
-	control := store.NewControlID()
+	control := "c_" + eventlog.NewULID(time.Now())
 	w.control(t, control, "mission", "M-1", "stop")
 	if n := w.count(t, `SELECT count(*) FROM agentrt.message m JOIN agentrt.event e ON e.event_id=m.event_id WHERE m.message_id=$1 AND e.event_type='message_posted'`, message); n != 1 {
 		t.Fatalf("message/event pairs: %d", n)

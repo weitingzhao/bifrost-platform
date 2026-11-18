@@ -11,6 +11,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -108,7 +109,7 @@ func newWorld(t *testing.T) *world {
 	var err error
 	deadline := time.Now().Add(7 * 24 * time.Hour)
 	for _, m := range []string{"M-1", "M-2"} {
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			_, err = storekit.CreateMission(ctx, tx, "controller", storekit.Mission{ID: m, WorkID: "W-31", Title: m, Goal: "test", Deadline: deadline})
 			return err
 		}))
@@ -121,12 +122,12 @@ func newWorld(t *testing.T) *world {
 		{ID: s3, Parent: item, Kind: "step", Label: "2.1-3", Title: "s3", MissionID: "M-1", StepKind: "review", Ordinal: 2, Root: root},
 	}
 	for _, n := range nodes {
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			_, err = planstore.CreatePlanNode(ctx, tx, "controller", n)
 			return err
 		}))
 	}
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		w.spec, err = artifact.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# task\n"))
 		if err != nil {
 			return err
@@ -159,8 +160,8 @@ func TestSeedAndFirstCreation(t *testing.T) {
 	// The row an event names must exist: a mission never created (a task's
 	// id is no longer checked, its table is gone since 0020).
 	before := w.lastSeq(t, store.MissionStream("M-1"))
-	err = store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err = store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "mission_state_changed", Actor: "controller",
+	err = eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: store.MissionStream("M-1"), Type: "mission_state_changed", Actor: "controller",
 			MissionID: "M-99", Body: map[string]any{"from": "proposed", "to": "active"}})
 		return err
 	})
@@ -199,15 +200,15 @@ func TestIdentitiesAndTheEventRule(t *testing.T) {
 
 	// A state row without an event of this transaction.
 	wantErr(t, exec(w.rt, `UPDATE agentrt.mission SET state = 'active' WHERE mission_id = 'M-2'`), "needs SET LOCAL agentrt.event_id")
-	wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	wantErr(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err = tx.Exec(ctx, `SELECT set_config('agentrt.event_id', '1', true)`)
 		ok(t, err)
 		_, err = tx.Exec(ctx, `UPDATE agentrt.mission SET state = 'active' WHERE mission_id = 'M-2'`)
 		return err
 	}), "was not written by this transaction")
 	// An event of this transaction about another mission.
-	wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "mission_state_changed", Actor: "controller",
+	wantErr(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: store.MissionStream("M-1"), Type: "mission_state_changed", Actor: "controller",
 			MissionID: "M-1", Body: map[string]any{"from": "proposed", "to": "active"}}); err != nil {
 			return err
 		}
@@ -215,8 +216,8 @@ func TestIdentitiesAndTheEventRule(t *testing.T) {
 		return err
 	}), "mission_id")
 	// With its own event it goes through.
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-2"), Type: "mission_state_changed", Actor: "controller",
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: store.MissionStream("M-2"), Type: "mission_state_changed", Actor: "controller",
 			MissionID: "M-2", Body: map[string]any{"from": "proposed", "to": "active"}}); err != nil {
 			return err
 		}
@@ -269,8 +270,8 @@ func TestTamperIsDetected(t *testing.T) {
 
 func planChange(w *world, fn func(tx pgx.Tx) error) error {
 	ctx := w.ctx
-	return store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream(root), Type: "plan_changed", Actor: "controller",
+	return eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream(root), Type: "plan_changed", Actor: "controller",
 			Body: map[string]any{"change": "test"}}); err != nil {
 			return err
 		}
@@ -298,7 +299,7 @@ func TestPlanNumberingIsFixed(t *testing.T) {
 		return err
 	}), "")
 	// A step under a round, an item under an item.
-	wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	wantErr(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R2:x", Parent: root, Kind: "step", Label: "x", Title: "x", StepKind: "agent", Ordinal: 5, Root: root})
 		return err
 	}), "cannot sit under")
@@ -313,7 +314,7 @@ func TestPlanNumberingIsFixed(t *testing.T) {
 func TestCountingFromTheDatabase(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := planstore.SetStepState(ctx, tx, "controller", root, s1, "done", "test"); err != nil {
 			return err
 		}

@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // The checker catches what it is there to catch. Reviews 449 and 451 found
@@ -57,11 +56,11 @@ func TestStateEventCheckerCatches(t *testing.T) {
 	judge := func(code int, fn func(tx pgx.Tx) error) error {
 		t.Helper()
 		before, digest, since := f.snapshot(t), f.digest(t), f.lastEvent(t)
-		must(t, store.InTx(ctx, f.pool, fn))
+		must(t, eventlog.InTx(ctx, f.pool, fn))
 		return f.judge(t, "test", false, code, before, digest, since)
 	}
 	// A node written beside an import head on its tree, with no event of its own.
-	must(t, store.InTx(ctx, f.pool, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, f.pool, func(tx pgx.Tx) error {
 		_, cerr := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "ARCH", Kind: "arch_root", Label: "A", Title: "architecture", Root: "ARCH"})
 		return cerr
 	}))

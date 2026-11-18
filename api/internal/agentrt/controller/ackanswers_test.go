@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
 
@@ -46,7 +46,7 @@ func newAckStore(t *testing.T) *ackStore {
 	t.Setenv("OPS_VIEWER_ENV", "prod") // where the question store takes questions
 	s := &ackStore{t: t, svc: questions.New(filepath.Join(t.TempDir(), "questions"), nil), now: ackAsked, tasks: map[string]ackTaskState{}}
 	s.svc.SetClock(func() time.Time { return s.now })
-	t.Cleanup(controller.SetTaskWaitForTest(func(_ context.Context, _ store.DB, task string) (string, bool, bool, error) {
+	t.Cleanup(controller.SetTaskWaitForTest(func(_ context.Context, _ eventlog.DB, task string) (string, bool, bool, error) {
 		st, ok := s.tasks[task]
 		return st.state, st.stopped, ok, nil
 	}))

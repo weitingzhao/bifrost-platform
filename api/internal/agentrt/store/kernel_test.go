@@ -11,6 +11,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
@@ -33,7 +34,7 @@ func newKernelWorld(t *testing.T) *world {
 	t.Helper()
 	ctx := ctxOf(t)
 	w := newWorld(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return storekit.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error { return storekit.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
 	w.seeded(t, func(tx pgx.Tx) {
 		for i := 1; i <= 8; i++ {
 			seedHost(t, tx, fmt.Sprintf("h%d", i))
@@ -57,8 +58,8 @@ func newKernelWorld(t *testing.T) *world {
 func (w *world) jobs(t *testing.T, status, pattern string, tools ...store.Tool) {
 	t.Helper()
 	ctx := ctxOf(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test: jobs and candidates"}}); err != nil {
 			return err
 		}
@@ -112,7 +113,7 @@ func (w *world) artifact(t *testing.T, kind, body string) string {
 	t.Helper()
 	ctx := ctxOf(t)
 	var id string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
 		id, err = artifact.PutArtifact(ctx, tx, "controller", kind, "text/plain", []byte(body))
 		return err
@@ -122,7 +123,7 @@ func (w *world) artifact(t *testing.T, kind, body string) string {
 
 func (w *world) control(t *testing.T, id, scope, ref, kind string) {
 	t.Helper()
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.SetControl(ctx, tx, "owner", id, scope, ref, kind, "test") }))
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.SetControl(ctx, tx, "owner", id, scope, ref, kind, "test") }))
 }
 
 func (w *world) chainHolds(t *testing.T, stream string) {

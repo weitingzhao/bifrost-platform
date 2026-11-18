@@ -4,6 +4,7 @@ package agentrtapi_test
 
 import (
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"net/http"
 	"os"
 	"strings"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // The architecture table through the interface (W-31 2.5 G2 A): imported

@@ -1,21 +1,8 @@
 package store
 
 import (
-	"context"
 	"time"
-
-	"github.com/jackc/pgx/v5"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
-
-// InTx runs fn in one transaction and commits it; any error rolls back
-// (eventlog.InTx).
-func InTx(ctx context.Context, conn interface {
-	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
-}, fn func(pgx.Tx) error) error {
-	return eventlog.InTx(ctx, conn, fn)
-}
 
 // MissionStream names the event stream of a mission (PlanStream, of a plan
 // tree, is in plannode.go).

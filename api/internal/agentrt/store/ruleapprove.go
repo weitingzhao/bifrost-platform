@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
@@ -184,7 +185,7 @@ func (a *ruleApproval) done(ctx context.Context, tx pgx.Tx, r rules.Rule) (map[s
 		return nil, err
 	}
 	if approval == nil || *approval != a.ID {
-		return nil, fmt.Errorf("%w: rule %s v%d is already written, not by approval %s", ErrState, r.ID, r.Version, a.ID)
+		return nil, fmt.Errorf("%w: rule %s v%d is already written, not by approval %s", eventlog.ErrState, r.ID, r.Version, a.ID)
 	}
 	return map[string]any{"rule_id": r.ID, "rule_version": r.Version, "direction": r.Direction, "signed": false,
 		"approval_id": a.ID, "event_id": event, "duplicate": true}, nil

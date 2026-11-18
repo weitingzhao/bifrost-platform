@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
@@ -17,11 +18,11 @@ import (
 // Old cards remain readable even though their creation path is retired.
 func historicalMissionCard(t *testing.T, w *world, id, question string) (string, string) {
 	t.Helper()
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := storekit.CreateMission(ctx, tx, "controller", storekit.Mission{ID: id, Title: "historical mission", Goal: "g", Deadline: time.Now().Add(time.Hour)}); err != nil {
 			return err
 		}
-		if _, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream(id), Type: "mission_state_changed", Actor: "controller", MissionID: id,
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: store.MissionStream(id), Type: "mission_state_changed", Actor: "controller", MissionID: id,
 			Body: map[string]any{"from": "proposed", "to": "awaiting_owner", "question_id": question, "reason": "historical card"}}); err != nil {
 			return err
 		}

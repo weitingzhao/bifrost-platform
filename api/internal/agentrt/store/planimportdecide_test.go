@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
@@ -109,8 +110,8 @@ func TestImportDecisionBadRequest(t *testing.T) {
 				_, err = pool.Exec(ctx, `INSERT INTO agentrt.artifact_blob (artifact_id, body) VALUES ($1, $2)`, id, body)
 				ok(t, err)
 			}
-			ok(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-				_, err := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream("R2"), Type: "plan_change_proposed", Actor: "controller",
+			ok(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
+				_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream("R2"), Type: "plan_change_proposed", Actor: "controller",
 					Body: map[string]any{"changes": []any{map[string]any{"op": "import", "artifact": id}}, "reason": "test", "standing": false,
 						"question_id": "q_x"}})
 				return err

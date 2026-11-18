@@ -9,9 +9,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // The Console's architecture fixture (console/src/api/__fixtures__/agentrt-progress-arch.testdb.json):
@@ -33,7 +34,7 @@ func TestConsoleArchFixture(t *testing.T) {
 		{"ARCH:gateway", "推理网关", ""},
 		{"ARCH:prod-runtime", "运行时在正式环境", archGates("prod", "T19")},
 	}
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "ARCH", Kind: "arch_root", Label: "ARCH", Title: "架构对照", Root: "ARCH"}); err != nil {
 			return err
 		}
@@ -48,8 +49,8 @@ func TestConsoleArchFixture(t *testing.T) {
 		if r.rule == "" {
 			continue
 		}
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			if _, err := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream("ARCH"), Type: "plan_changed", Actor: "controller",
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream("ARCH"), Type: "plan_changed", Actor: "controller",
 				Body: map[string]any{"change": "set_done_rule"}}); err != nil {
 				return err
 			}
@@ -60,7 +61,7 @@ func TestConsoleArchFixture(t *testing.T) {
 	ref := map[string]any{"delivery_run": "bifrost-deliver-platform-1792461534", "images": map[string]any{"platform-api": "sha256:aa", "platform-workers": "sha256:aa"}}
 	_, err := seenfacts.SeeDeploy(ctx, w.rt, "stg", deployedIs(commitA, ref))
 	ok(t, err)
-	_, err = planstore.PostPlanNote(ctx, w.rt, store.Writer{Actor: "thread:night", Token: "fixture-operator-1"}, "n1", "ARCH:state-db", "PROD 与 STG 都在用；PROD 重建演练还欠")
+	_, err = planstore.PostPlanNote(ctx, w.rt, actor.Writer{Actor: "thread:night", Token: "fixture-operator-1"}, "n1", "ARCH:state-db", "PROD 与 STG 都在用；PROD 重建演练还欠")
 	ok(t, err)
 	_, err = planstore.PostPlanNote(ctx, w.rt, owner, "n2", "ARCH:gateway", "还没有：模型直连厂商")
 	ok(t, err)

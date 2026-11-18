@@ -14,6 +14,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -41,16 +44,19 @@ func (w *world) footprint(t *testing.T) string {
 	return s
 }
 
+// threadsPerDay is the default daily bound on registered threads.
+const threadsPerDay = 200
+
 // wr is a writer as the routes make one: the actor and the token.
-func wr(actor string) store.Writer { return store.Writer{Actor: actor, Token: "operator"} }
+func wr(id string) actor.Writer { return actor.Writer{Actor: id, Token: "operator"} }
 
 // legacy writes rows with the import event, which may write any table: the
 // fixture for actors the routes do not create (retired ones, odd kinds).
 func (w *world) legacy(t *testing.T, stmts ...string) {
 	t.Helper()
 	ctx := ctxOf(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test"}}); err != nil {
 			return err
 		}
@@ -71,10 +77,10 @@ func TestThreadRegistrationBound(t *testing.T) {
 	_, err := proposeForSession(ctx, w.rt, wr("thread:known"), "k1")
 	ok(t, err)
 	w.legacy(t, fmt.Sprintf(`INSERT INTO agentrt.actor (actor_id, actor_kind, display_name)
-	  SELECT 'thread:bulk' || i, 'thread', 'bulk' FROM generate_series(1, %d) i`, store.ThreadsPerDay-1))
+	  SELECT 'thread:bulk' || i, 'thread', 'bulk' FROM generate_series(1, %d) i`, threadsPerDay-1))
 	before := w.footprint(t)
 	_, err = proposeForSession(ctx, w.rt, wr("thread:one-more"), "k1")
-	if !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), "threads were registered") {
+	if !errors.Is(err, eventlog.ErrInvalid) || !strings.Contains(err.Error(), "threads were registered") {
 		t.Fatalf("a thread past the day's bound: %v", err)
 	}
 	if after := w.footprint(t); after != before {
@@ -92,7 +98,7 @@ func TestThreadQuotaAtOnce(t *testing.T) {
 	w := newWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	w.legacy(t, fmt.Sprintf(`INSERT INTO agentrt.actor (actor_id, actor_kind, display_name)
-	  SELECT 'thread:bulk' || i, 'thread', 'bulk' FROM generate_series(1, %d) i`, store.ThreadsPerDay-1))
+	  SELECT 'thread:bulk' || i, 'thread', 'bulk' FROM generate_series(1, %d) i`, threadsPerDay-1))
 	hold, reached := make(chan struct{}), make(chan struct{})
 	var first atomic.Bool
 	var release sync.Once
@@ -124,14 +130,14 @@ func TestThreadQuotaAtOnce(t *testing.T) {
 	free()
 	refused := 0
 	for range 2 {
-		if perr := <-got; errors.Is(perr, store.ErrInvalid) {
+		if perr := <-got; errors.Is(perr, eventlog.ErrInvalid) {
 			refused++
 		} else {
 			ok(t, perr)
 		}
 	}
-	if n := w.count(t, `SELECT count(*) FROM agentrt.actor WHERE actor_kind = 'thread'`); refused != 1 || n != store.ThreadsPerDay {
-		t.Fatalf("%d refused, %d threads; want 1 and %d", refused, n, store.ThreadsPerDay)
+	if n := w.count(t, `SELECT count(*) FROM agentrt.actor WHERE actor_kind = 'thread'`); refused != 1 || n != threadsPerDay {
+		t.Fatalf("%d refused, %d threads; want 1 and %d", refused, n, threadsPerDay)
 	}
 }
 
@@ -141,16 +147,16 @@ func TestControlsPastThreadQuota(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	w.legacy(t, fmt.Sprintf(`INSERT INTO agentrt.actor (actor_id, actor_kind, display_name)
-	  SELECT 'thread:bulk' || i, 'thread', 'bulk' FROM generate_series(1, %d) i`, store.ThreadsPerDay))
-	_, err := store.RequestControl(ctx, w.rt, wr("thread:late"), "k1", "global", "", "stop", "stop everything")
+	  SELECT 'thread:bulk' || i, 'thread', 'bulk' FROM generate_series(1, %d) i`, threadsPerDay))
+	_, err := coord.RequestControl(ctx, w.rt, wr("thread:late"), "k1", "global", "", "stop", "stop everything")
 	ok(t, err)
 	_, err = proposeForSession(ctx, w.rt, wr("thread:later"), "k1")
-	is(t, err, store.ErrInvalid)
+	is(t, err, eventlog.ErrInvalid)
 }
 
 // Retired missions no longer register sessions. Exercise the same actor and
 // idempotency guards through the live rule-proposal route (Relay A, 2026-11-15).
-func proposeForSession(ctx context.Context, db store.DB, w store.Writer, key string) (map[string]any, error) {
+func proposeForSession(ctx context.Context, db eventlog.DB, w actor.Writer, key string) (map[string]any, error) {
 	text := ruleText("tuning", 1, "initial", since, until, "values: {assess_per_pass: 5}\n")
 	return store.ProposeRule(ctx, db, w, key, "tuning", []byte(text), "session guard fixture")
 }
@@ -164,7 +170,7 @@ func TestProposalWriterValidation(t *testing.T) {
 		`INSERT INTO agentrt.actor (actor_id, actor_kind, display_name, retired_at) VALUES ('thread:old', 'thread', 'old', now()), ('seat:old', 'seat', 'old', now())`)
 	before := w.footprint(t)
 	for _, actor := range []string{"seat:ghost", "thread:x", "seat:odd", "thread:old", "seat:old", "someone"} {
-		if _, err := proposeForSession(ctx, w.rt, wr(actor), "invalid"); !errors.Is(err, store.ErrInvalid) {
+		if _, err := proposeForSession(ctx, w.rt, wr(actor), "invalid"); !errors.Is(err, eventlog.ErrInvalid) {
 			t.Errorf("%s: %v; want invalid", actor, err)
 		}
 	}

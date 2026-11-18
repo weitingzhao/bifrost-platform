@@ -34,7 +34,7 @@ func checkRuntime0010(t *testing.T, db *agentrttest.DB) {
 	}
 	insert := func(eventPin, pin, role string) (string, error) {
 		id := store.NewTaskID()
-		err := store.InTx(ctx, rt, func(tx pgx.Tx) error {
+		err := eventlog.InTx(ctx, rt, func(tx pgx.Tx) error {
 			body := map[string]any{"title": "pin probe", "role": role}
 			if eventPin != "" {
 				body["executor_pin"] = eventPin
@@ -64,7 +64,7 @@ func checkRuntime0010(t *testing.T, db *agentrttest.DB) {
 		t.Fatalf("runtime read pin=%q", got)
 	}
 	update := func(sql string, args ...any) error {
-		return store.InTx(ctx, rt, func(tx pgx.Tx) error {
+		return eventlog.InTx(ctx, rt, func(tx pgx.Tx) error {
 			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 				Body: map[string]any{"source": "T50 runtime trigger probe"}}); err != nil {
 				return err
@@ -80,7 +80,7 @@ func checkRuntime0010(t *testing.T, db *agentrttest.DB) {
 	must0010(t, seedHost(ctx, rt, "owner", "t50-external", "external"))
 	pgError0010(t, seedHost(ctx, rt, "owner", "t50-second", "external"), "23505", "host_one_external")
 	lease := func(task, host string) error {
-		return store.InTx(ctx, rt, func(tx pgx.Tx) error {
+		return eventlog.InTx(ctx, rt, func(tx pgx.Tx) error {
 			_, _, err := seedLease(ctx, tx, "controller", "M-1", task, "exec:codex", host, 1, time.Minute)
 			return err
 		})

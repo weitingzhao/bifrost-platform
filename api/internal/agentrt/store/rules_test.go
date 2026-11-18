@@ -9,6 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
@@ -44,7 +46,7 @@ type signer struct {
 
 func (s signer) sign(w *world, text string) (map[string]any, error) {
 	ctx := ctxOf(s.t)
-	return store.SignRule(ctx, w.rt, store.Writer{Actor: "owner", Token: "admin"}, idOf(text), []byte(text),
+	return store.SignRule(ctx, w.rt, actor.Writer{Actor: "owner", Token: "admin"}, idOf(text), []byte(text),
 		s.key.Sign(s.t, []byte(text), rules.Namespace), s.key.Fingerprint)
 }
 
@@ -57,7 +59,7 @@ func inForce(t *testing.T, w *world, id string, at time.Time) *store.StoredRule 
 	t.Helper()
 	ctx := ctxOf(t)
 	var r *store.StoredRule
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
 		r, err = store.CurrentRule(ctx, tx, id, at)
 		return err
@@ -111,7 +113,7 @@ func TestRuleSet(t *testing.T) {
 		}
 	}
 	// Signed, the label still has to be true.
-	if _, err := s.sign(w, autoText(2, rules.Tighten, until, 19, "blocked")); !errors.Is(err, store.ErrInvalid) {
+	if _, err := s.sign(w, autoText(2, rules.Tighten, until, 19, "blocked")); !errors.Is(err, eventlog.ErrInvalid) {
 		t.Errorf("signed, marked tighten, loosening: %v; want refused", err)
 	}
 	// A tightening takes effect at once, unsigned; it expires sooner, and
@@ -144,17 +146,17 @@ func TestRuleSet(t *testing.T) {
 		"over other text":                {s.key.Sign(t, []byte(v3+"\n"), rules.Namespace), s.key.Fingerprint},
 		"no signature":                   {"", s.key.Fingerprint},
 	} {
-		if _, err := store.SignRule(ctx, w.rt, store.Writer{Actor: "owner", Token: "admin"}, "card-auto-answer", []byte(v3), c.sig, c.anchor); !errors.Is(err, store.ErrUnsigned) {
+		if _, err := store.SignRule(ctx, w.rt, actor.Writer{Actor: "owner", Token: "admin"}, "card-auto-answer", []byte(v3), c.sig, c.anchor); !errors.Is(err, store.ErrUnsigned) {
 			t.Errorf("%s: %v; want refused as unsigned", name, err)
 		}
 	}
 	// A field the parser does not know, signed or not.
 	odd := autoText(3, rules.Loosen, until, 20, "blocked") + "approve_releases: true\n"
-	if _, err := s.sign(w, odd); !errors.Is(err, store.ErrInvalid) {
+	if _, err := s.sign(w, odd); !errors.Is(err, eventlog.ErrInvalid) {
 		t.Errorf("an unknown field: %v; want refused", err)
 	}
 	// A kind of card the parser does not know.
-	if _, err := s.sign(w, autoText(3, rules.Loosen, until, 20, "blocked, no_such_kind")); !errors.Is(err, store.ErrInvalid) {
+	if _, err := s.sign(w, autoText(3, rules.Loosen, until, 20, "blocked, no_such_kind")); !errors.Is(err, eventlog.ErrInvalid) {
 		t.Errorf("an unknown kind: %v; want refused", err)
 	}
 	ok(t, firstErr(s.sign(w, v3)))
@@ -165,7 +167,7 @@ func TestRuleSet(t *testing.T) {
 	bad := autoText(4, rules.Tighten, until, 30, "blocked")
 	w.legacy(t, fmt.Sprintf(`INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, effective_at, expires_at)
 	  VALUES ('card-auto-answer', 4, '{"after_seconds":1}', %s, 'tighten', '%s', '%s')`, quote(bad), since, until))
-	if err := store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	if err := eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := store.CurrentRule(ctx, tx, "card-auto-answer", now)
 		return err
 	}); err == nil {
@@ -201,7 +203,7 @@ func TestRuleCheckAndProposal(t *testing.T) {
 	if r := inForce(t, w, "card-auto-answer", at("2026-11-01T00:00:00Z")); r == nil || r.Version != 1 {
 		t.Fatalf("a proposal took effect: %+v", r)
 	}
-	if _, err := store.CheckRule(ctx, w.rt, "plan-standing", []byte(looser)); !errors.Is(err, store.ErrInvalid) {
+	if _, err := store.CheckRule(ctx, w.rt, "plan-standing", []byte(looser)); !errors.Is(err, eventlog.ErrInvalid) {
 		t.Errorf("a text for another rule id: %v; want refused", err)
 	}
 }

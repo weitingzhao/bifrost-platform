@@ -13,6 +13,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 )
@@ -271,7 +272,7 @@ type ruleRecord struct {
 func writeRule(ctx context.Context, db DB, w Writer, r rules.Rule, text []byte, allow func(prev *StoredRule, why error) error,
 	rec ruleRecord) (map[string]any, error) {
 	var out map[string]any
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
+	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		if err := ensureWriter(ctx, tx, w, false); err != nil {
 			return err
 		}
@@ -323,7 +324,7 @@ func insertRule(ctx context.Context, tx pgx.Tx, w Writer, r rules.Rule, text []b
 		evBody["approval_id"], evBody["text_artifact_id"], evBody["changes"] = a.ID, a.TextArtifactID, capacityDoc(a.changes)
 		approvalID = &a.ID
 	}
-	ev, err := Append(ctx, tx, Event{Stream: RuleStream(r.ID), Type: eventType, Actor: w.Actor, Body: evBody})
+	ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: RuleStream(r.ID), Type: eventType, Actor: w.Actor, Body: evBody})
 	if err != nil {
 		return nil, err
 	}
@@ -408,7 +409,7 @@ func ProposeRule(ctx context.Context, db DB, w Writer, key, id string, text []by
 		if w.Token != "" {
 			body["token"] = w.Token
 		}
-		ev, err := Append(ctx, tx, Event{Stream: RuleStream(id), Type: "rule_proposed", Actor: w.Actor, Body: body})
+		ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: RuleStream(id), Type: "rule_proposed", Actor: w.Actor, Body: body})
 		if err != nil {
 			return nil, err
 		}

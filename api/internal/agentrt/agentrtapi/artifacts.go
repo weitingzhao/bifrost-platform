@@ -9,7 +9,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // searchArtifacts lists artifacts' metadata, newest first (GET /artifacts,
@@ -43,7 +43,7 @@ func (a *API) searchArtifacts(w http.ResponseWriter, r *http.Request) {
 		q.Limit = n
 	}
 	list, next, err := artifact.SearchArtifacts(r.Context(), a.DB, q)
-	if errors.Is(err, store.ErrInvalid) {
+	if errors.Is(err, eventlog.ErrInvalid) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}

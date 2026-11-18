@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitexec"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
@@ -120,7 +120,7 @@ type unitAdvance struct {
 	Lost    []string `json:"lost"`
 }
 
-func advanceUnits(ctx context.Context, db store.DB, trees unitTreesFunc, cl unitCluster, cfg unitDispatchConfig, repo, commit, tier string) (unitAdvance, error) {
+func advanceUnits(ctx context.Context, db eventlog.DB, trees unitTreesFunc, cl unitCluster, cfg unitDispatchConfig, repo, commit, tier string) (unitAdvance, error) {
 	out := unitAdvance{Repo: repo, Commit: commit, Mode: cfg.Mode, Created: []string{}, Retried: []string{}, Refused: []string{}, Lost: []string{}}
 	if cfg.Mode == "off" {
 		return out, fmt.Errorf("units: dispatch is off on this platform (%s)", unitDispatchEnv)
@@ -226,7 +226,7 @@ type unitReceiver struct {
 // and the retry of a lost run get started without anyone asking again. (A
 // commit all of whose runs were put off has no run to be seen by, and waits
 // for the next request: the route's answer says how many were put off.)
-func (u *unitReceiver) receiveUnits(ctx context.Context, db store.DB, trees unitTreesFunc, cl unitCluster, advance func(ctx context.Context, repo, commit, tier string) error, now time.Time) (recorded, written int, err error) {
+func (u *unitReceiver) receiveUnits(ctx context.Context, db eventlog.DB, trees unitTreesFunc, cl unitCluster, advance func(ctx context.Context, repo, commit, tier string) error, now time.Time) (recorded, written int, err error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if u.settled == nil {

@@ -52,7 +52,7 @@ func TestSearchArtifacts(t *testing.T) {
 	w.legacy(t, `UPDATE agentrt.mission SET spec_artifact_id = '`+missionSpec+`' WHERE mission_id = 'M-2'`)
 	exam := w.artifact(t, "exam", "an answer")
 	paper := w.artifact(t, "other", "a paper put as other first")
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, aerr := eventlog.Append(ctx, tx, eventlog.Event{Stream: artifact.ExamsStream, Type: "artifact_put", Actor: "controller",
 			Body: map[string]any{"artifact_id": paper, "artifact_kind": "other", "size_bytes": 26, "uploaded_by": "controller"}})
 		return aerr
@@ -139,7 +139,7 @@ func TestSearchArtifactsRefusals(t *testing.T) {
 		"before":   {Before: "2026-10-21T00:00:00Z"},
 		"digest":   {Before: "1792600000000000.ABC"},
 	} {
-		if _, _, err := artifact.SearchArtifacts(ctx, w.rt, q); !errors.Is(err, store.ErrInvalid) {
+		if _, _, err := artifact.SearchArtifacts(ctx, w.rt, q); !errors.Is(err, eventlog.ErrInvalid) {
 			t.Errorf("%s: %v, want invalid", name, err)
 		}
 	}
@@ -153,7 +153,7 @@ func TestSearchArtifactsEdges(t *testing.T) {
 	w := newWorld(t)
 	// One transaction: created_at is its start, the same microsecond for all three.
 	var a, b, exam string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
 		for _, x := range []struct {
 			id         *string

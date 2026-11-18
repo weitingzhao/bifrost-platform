@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 )
 
@@ -85,7 +85,7 @@ func (s *Server) handleUnitScope(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
 	defer cancel()
-	baseCI := ledgerCIScoped(func() store.DB { return s.agentRuntime.api.DB },
+	baseCI := ledgerCIScoped(func() eventlog.DB { return s.agentRuntime.api.DB },
 		giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second}), false)
 	out, err := unitScope(ctx, s.unitTreesOf(), baseCIFunc(baseCI), repo, commit, base)
 	if err != nil {

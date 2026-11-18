@@ -15,8 +15,8 @@ import (
 // the tests here still need the rows to exist.
 
 // seedHost registers host id of kind: its actor and its row, under an event.
-func seedHost(ctx context.Context, db store.DB, by, id, kind string) error {
-	return store.InTx(ctx, db, func(tx pgx.Tx) error {
+func seedHost(ctx context.Context, db eventlog.DB, by, id, kind string) error {
+	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		actor := "host:" + id
 		// host_registered has no declared body any more (no code writes it,
 		// 2026-11-17); the rows still need an event in their transaction, as

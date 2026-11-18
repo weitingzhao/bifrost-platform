@@ -1,7 +1,7 @@
 package store_test
 
 import (
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 )
 
-var owner = store.Writer{Actor: "owner", Token: "admin"}
+var owner = actor.Writer{Actor: "owner", Token: "admin"}

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
@@ -84,7 +85,7 @@ func TestThreadInboxWiringRecoversPGAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)
-	w := store.Writer{Actor: "thread:local_wiring", Token: "fixture"}
+	w := actor.Writer{Actor: "thread:local_wiring", Token: "fixture"}
 	if _, _, err := store.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register wiring thread")); err != nil {
 		t.Fatal(err)
 	}

@@ -30,8 +30,8 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gatecluster"
 	bushook "github.com/weitingzhao/bifrost-platform/api/internal/bus/hook"
@@ -577,8 +577,8 @@ func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStrea
 	detail := s.busRunDetail()
 	known := func(ctx context.Context, addr string) (bool, error) {
 		var kind string
-		err := store.InTx(ctx, pool, func(tx pgx.Tx) error {
-			k, err := store.ActorKind(ctx, tx, addr)
+		err := eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
+			k, err := actor.ActorKind(ctx, tx, addr)
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil
 			}

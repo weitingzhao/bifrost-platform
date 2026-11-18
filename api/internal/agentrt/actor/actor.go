@@ -62,7 +62,7 @@ func holds(ctx context.Context, tx pgx.Tx, w Writer) error {
 }
 
 // threadLimit reads the day's limit of new threads where a rule may set it
-// (RegisterThreadLimit); ThreadsPerDay when nothing is registered.
+// (RegisterThreadLimit); threadsPerDay when nothing is registered.
 var threadLimit atomic.Pointer[func(context.Context, pgx.Tx) (int, error)]
 
 // RegisterThreadLimit installs the reader of the day's limit of new threads.
@@ -72,7 +72,7 @@ func threadLimitIn(ctx context.Context, tx pgx.Tx) (int, error) {
 	if f := threadLimit.Load(); f != nil {
 		return (*f)(ctx, tx)
 	}
-	return ThreadsPerDay, nil
+	return threadsPerDay, nil
 }
 
 // threadSession is what a thread names itself by: the X-Bifrost-Session
@@ -182,13 +182,13 @@ func KindOf(actor string) string {
 	return ""
 }
 
-// ThreadsPerDay bounds how many threads proposals and uploads register in a
+// threadsPerDay bounds how many threads proposals and uploads register in a
 // day: a session is what a caller says it is, so without a bound any token
 // could grow the actor table and the system stream without end (review 175
 // B3). Controls are not bounded: anyone authenticated may stop or pause
 // (v5 §5.2), and a new session must not find that taken by proposals
 // (review 176 part 2 A1); each control is a row of its own anyway.
-const ThreadsPerDay = 200
+const threadsPerDay = 200
 
 // CheckWriter checks a writer without writing: its actor is of the kind its
 // name says and not retired, and a thread's writer holds its session
@@ -237,7 +237,7 @@ func Lock(ctx context.Context, tx pgx.Tx, actor string) error {
 // naming the token. Every write route calls it before any lock of the rows
 // it writes (review 176 A1): its locks are the writer's own, then, for a
 // registration, the registration lock and the system stream. bounded holds
-// a registration to ThreadsPerDay.
+// a registration to threadsPerDay.
 func Ensure(ctx context.Context, tx pgx.Tx, w Writer, bounded bool) error {
 	if err := Lock(ctx, tx, w.Actor); err != nil {
 		return err

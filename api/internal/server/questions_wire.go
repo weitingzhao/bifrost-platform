@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
@@ -188,7 +189,7 @@ func (rt *questionRuntime) agentRuntimeAsk() planstore.Ask {
 		switch {
 		case res.Code == http.StatusBadRequest:
 			// The card itself does not fit: retrying will not help.
-			return "", fmt.Errorf("%w: the question store refused the card: %v", store.ErrInvalid, res.Body)
+			return "", fmt.Errorf("%w: the question store refused the card: %v", eventlog.ErrInvalid, res.Body)
 		case card.TaskID != "" && res.Code == http.StatusConflict &&
 			(strings.HasPrefix(msg, "already answered: ") || strings.HasPrefix(msg, "duplicate of ")):
 			// A planner's question the store holds under another key, open or

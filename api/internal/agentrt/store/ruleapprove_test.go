@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
@@ -36,7 +38,7 @@ func TestApproveRule(t *testing.T) {
 		ok(t, err)
 		return out["text_artifact_id"].(string)
 	}
-	owner := store.Writer{Actor: "owner"}
+	owner := actor.Writer{Actor: "owner"}
 
 	later := propose("later", tuningText(2, rules.Loosen, "2027-03-01T00:00:00Z", 3))
 	a := store.RuleApproval{RuleID: "tuning", Version: 2, TextArtifactID: later, ID: ruleApproval}
@@ -49,7 +51,7 @@ func TestApproveRule(t *testing.T) {
 
 	art := propose("up", tuningText(2, rules.Loosen, until, 5))
 	a.TextArtifactID = art
-	if _, err := store.CheckRuleApproval(ctx, w.rt, store.RuleApproval{RuleID: "tuning", Version: 3, TextArtifactID: art}); !errors.Is(err, store.ErrInvalid) {
+	if _, err := store.CheckRuleApproval(ctx, w.rt, store.RuleApproval{RuleID: "tuning", Version: 3, TextArtifactID: art}); !errors.Is(err, eventlog.ErrInvalid) {
 		t.Fatalf("a version never proposed: %v", err)
 	}
 	check, err := store.CheckRuleApproval(ctx, w.rt, a)
@@ -79,11 +81,11 @@ func TestApproveRule(t *testing.T) {
 		t.Fatalf("the executor retried: %v, first %v", again, out)
 	}
 	a.ID = "appr_fedcba9876543210"
-	if _, err := store.ApproveRule(ctx, w.rt, owner, a); !errors.Is(err, store.ErrState) {
+	if _, err := store.ApproveRule(ctx, w.rt, owner, a); !errors.Is(err, eventlog.ErrState) {
 		t.Fatalf("another approval of a written version: %v", err)
 	}
 	// A draft of a version already passed is not the next.
-	if _, err := store.CheckRuleApproval(ctx, w.rt, store.RuleApproval{RuleID: "tuning", Version: 2, TextArtifactID: art}); !errors.Is(err, store.ErrInvalid) {
+	if _, err := store.CheckRuleApproval(ctx, w.rt, store.RuleApproval{RuleID: "tuning", Version: 2, TextArtifactID: art}); !errors.Is(err, eventlog.ErrInvalid) {
 		t.Fatalf("a draft of a written version: %v", err)
 	}
 	// The table holds the rule: neither tighten, signed nor approved is refused.

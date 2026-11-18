@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // The Console's fixture of these moments (console/src/api/__fixtures__/agentrt-progress-schema.testdb.json):
@@ -30,7 +30,7 @@ type schemaDoc struct {
 	} `json:"controller_alerts"`
 }
 
-func progressOf(t *testing.T, db store.DB) (schemaDoc, json.RawMessage) {
+func progressOf(t *testing.T, db eventlog.DB) (schemaDoc, json.RawMessage) {
 	t.Helper()
 	out, err := planstore.Progress(ctx, db)
 	ok(t, err)

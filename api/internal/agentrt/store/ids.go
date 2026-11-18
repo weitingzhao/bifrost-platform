@@ -3,7 +3,6 @@ package store
 import (
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
@@ -12,8 +11,7 @@ func newULID(now time.Time) string { return eventlog.NewULID(now) }
 
 // NewTaskID, NewAttemptID, NewMessageID and NewVerificationID mint ids in the
 // shapes the tables check.
-func NewTaskID() string    { return "t_" + newULID(time.Now()) }
-func NewControlID() string { return coord.NewControlID() }
+func NewTaskID() string { return "t_" + newULID(time.Now()) }
 
 // NewAttemptID and NewVerificationID mint ids in the shapes the tables
 // check. Only test fixtures of several packages use them now: nothing leases

@@ -3,6 +3,8 @@ package store_test
 import (
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -11,11 +13,11 @@ import (
 
 // signCardAutoSeconds signs a card-auto-answer rule that waits seconds and
 // answers kinds, on db.
-func signCardAutoSeconds(t *testing.T, db store.DB, seconds, kinds string) {
+func signCardAutoSeconds(t *testing.T, db eventlog.DB, seconds, kinds string) {
 	t.Helper()
 	text := ruleText(rules.KindCardAuto, 1, rules.Initial, since, until, "after_seconds: "+seconds+"\nkinds: "+kinds+"\n")
 	key := rptest.NewKey(t)
-	_, err := store.SignRule(ctx, db, store.Writer{Actor: "owner", Token: "admin"}, rules.KindCardAuto, []byte(text),
+	_, err := store.SignRule(ctx, db, actor.Writer{Actor: "owner", Token: "admin"}, rules.KindCardAuto, []byte(text),
 		key.Sign(t, []byte(text), rules.Namespace), key.Fingerprint)
 	ok(t, err)
 }
@@ -40,7 +42,7 @@ func TestCardsAreAskedByRuleWhenTheRuleAnswersThem(t *testing.T) {
 	unlisted := propose("unlisted")
 	text := ruleText(rules.KindCardAuto, 2, rules.Loosen, since, until, "after_seconds: 5\nkinds: [blocked, plan_change]\n")
 	key := rptest.NewKey(t)
-	_, err := store.SignRule(ctx, w.rt, store.Writer{Actor: "owner", Token: "admin"}, rules.KindCardAuto, []byte(text), key.Sign(t, []byte(text), rules.Namespace), key.Fingerprint)
+	_, err := store.SignRule(ctx, w.rt, actor.Writer{Actor: "owner", Token: "admin"}, rules.KindCardAuto, []byte(text), key.Sign(t, []byte(text), rules.Namespace), key.Fingerprint)
 	ok(t, err)
 	listed := propose("listed")
 	for id, want := range map[string]bool{before: false, unlisted: false, listed: true} {

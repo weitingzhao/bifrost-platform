@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/headrelease"
@@ -50,7 +50,7 @@ func headReleaseOn() bool {
 type headWorld struct {
 	head func(ctx context.Context, repo string) (string, error)
 	ci   delivery.CIReader
-	db   func() store.DB
+	db   func() eventlog.DB
 	// runs is one pipeline's runs: the bus run cache when it is synced,
 	// else the cluster's list of that pipeline.
 	runs  func(ctx context.Context, pipeline string) ([]unstructured.Unstructured, error)
@@ -250,7 +250,7 @@ func (s *Server) headWorldOf() *headWorld {
 	if s.delivery == nil || s.agentRuntime == nil || s.agentRuntime.api == nil || s.agentRuntime.api.DB == nil {
 		return nil
 	}
-	db := func() store.DB { return s.agentRuntime.api.DB }
+	db := func() eventlog.DB { return s.agentRuntime.api.DB }
 	tree := giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second})
 	return &headWorld{
 		head: s.agentRuntimeMains(),

@@ -69,7 +69,7 @@ func RequestControl(ctx context.Context, db eventlog.DB, w writer.Writer, key, s
 				return nil, err
 			}
 		}
-		id := NewControlID()
+		id := newControlID()
 		if err := setControl(ctx, tx, w.Actor, w.Token, id, scope, ref, kind, reason); err != nil {
 			return nil, err
 		}

@@ -54,7 +54,7 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 	_, err := store.Seed(ctx, db.Connect(t, db.Owner))
 	must(t, err)
 	pool := db.Pool(t, db.Runtime)
-	tx := func(fn func(pgx.Tx) error) { t.Helper(); must(t, store.InTx(ctx, pool, fn)) }
+	tx := func(fn func(pgx.Tx) error) { t.Helper(); must(t, eventlog.InTx(ctx, pool, fn)) }
 	tx(func(tx pgx.Tx) error {
 		if _, err := storekit.CreateMission(ctx, tx, "controller", storekit.Mission{ID: "M-1", Title: "m", Goal: "g", Deadline: time.Now().Add(time.Hour)}); err != nil {
 			return err
@@ -119,7 +119,7 @@ var (
 // from a fixture file: two agentd tokens bound to h1 and h2, a viewer, a
 // reporter, an operator, an admin, two seat tokens (one registered) and the
 // collectors of h1 and h2.
-func server(t *testing.T, db store.DB, with ...func(*agentrtapi.API)) *httptest.Server {
+func server(t *testing.T, db eventlog.DB, with ...func(*agentrtapi.API)) *httptest.Server {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "auth.yaml")
 	must(t, os.WriteFile(path, []byte(`tokens:

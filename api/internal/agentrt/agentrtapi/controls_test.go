@@ -13,7 +13,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 func mayList(out map[string]any) []string {
@@ -116,7 +115,7 @@ func TestPlanReads(t *testing.T) {
 // fixture for actors and times the routes do not make.
 func legacy(t *testing.T, pool *pgxpool.Pool, stmts ...string) {
 	t.Helper()
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test"}}); err != nil {
 			return err
@@ -240,9 +239,9 @@ func TestPlanTreeOrder(t *testing.T) {
 		{ID: "R2:1-2", Parent: "R2:1", Kind: "step", Label: "1-2", Title: "second step", MissionID: "M-1", StepKind: "agent", Ordinal: 1, Root: "R2"},
 		{ID: "R2:2-1", Parent: "R2:2", Kind: "step", Label: "2-1", Title: "a step", MissionID: "M-1", StepKind: "agent", Root: "R2"},
 	} {
-		must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error { _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); return err }))
+		must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error { _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); return err }))
 	}
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 		_, err := planstore.SetStepState(ctx, tx, "controller", "R2", "R2:1-2", "active", "test")
 		return err
 	}))

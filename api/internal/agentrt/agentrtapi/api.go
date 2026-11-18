@@ -19,8 +19,10 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -31,7 +33,7 @@ import (
 // before the database is wired.
 type API struct {
 	ConfigurationBoundaries func(context.Context, string, string, []map[string]any) (map[string]any, error)
-	DB                      store.DB
+	DB                      eventlog.DB
 	// ClaimWait and ClaimPoll retain legacy configuration fields. No dispatch
 	// claim route runs a long poll now.
 	ClaimWait, ClaimPoll time.Duration
@@ -200,7 +202,7 @@ func (a *API) logf(format string, args ...any) {
 func (a *API) fail(w http.ResponseWriter, err error) {
 	var pg *pgconn.PgError
 	switch {
-	case errors.Is(err, store.ErrNotYours), errors.Is(err, externalwork.ErrNotOwnRecord):
+	case errors.Is(err, actor.ErrNotYours), errors.Is(err, externalwork.ErrNotOwnRecord):
 		writeError(w, http.StatusForbidden, "not_yours", err.Error())
 	case errors.Is(err, planstore.ErrNotOwner):
 		writeError(w, http.StatusForbidden, "not_owner", err.Error())
@@ -208,7 +210,7 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, "identity_required", err.Error())
 	case errors.Is(err, externalwork.ErrIdentityMismatch):
 		writeError(w, http.StatusConflict, "identity_mismatch", err.Error())
-	case errors.Is(err, store.ErrInvalid):
+	case errors.Is(err, eventlog.ErrInvalid):
 		writeError(w, http.StatusUnprocessableEntity, "invalid", err.Error())
 	case errors.Is(err, store.ErrUnsigned):
 		writeError(w, http.StatusForbidden, "unsigned", err.Error())
@@ -219,9 +221,9 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusServiceUnavailable, "busy", err.Error())
 	case errors.As(err, &pg) && constraintCodes[pg.Code]:
 		writeError(w, http.StatusUnprocessableEntity, "constraint", pg.Message)
-	case errors.Is(err, store.ErrConflict):
+	case errors.Is(err, actor.ErrConflict):
 		writeError(w, http.StatusConflict, "key_conflict", err.Error())
-	case errors.Is(err, store.ErrState):
+	case errors.Is(err, eventlog.ErrState):
 		writeError(w, http.StatusConflict, "state", err.Error())
 	case errors.Is(err, pgx.ErrNoRows):
 		writeError(w, http.StatusNotFound, "not_found", "no such record")

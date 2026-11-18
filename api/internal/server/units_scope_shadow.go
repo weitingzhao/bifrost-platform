@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	busdrift "github.com/weitingzhao/bifrost-platform/api/internal/bus/drift"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
@@ -91,7 +91,7 @@ func (s *Server) unitScopeShadowSource() func(context.Context, seenfacts.Pipelin
 	if os.Getenv(unitScopeShadowEnv) != "on" || s.delivery == nil {
 		return nil
 	}
-	db := func() store.DB {
+	db := func() eventlog.DB {
 		if s.agentRuntime == nil || s.agentRuntime.api == nil {
 			return nil
 		}

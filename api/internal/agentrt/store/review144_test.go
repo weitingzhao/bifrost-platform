@@ -7,12 +7,14 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 func note(tx pgx.Tx) error {
-	_, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "note", Actor: "controller", Body: map[string]any{"text": "x"}})
+	_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "note", Actor: "controller", Body: map[string]any{"text": "x"}})
 	return err
 }
 
@@ -21,24 +23,24 @@ func note(tx pgx.Tx) error {
 func TestEventWritesOnlyWhatItNames(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if err := store.SetControl(ctx, tx, "controller", "c-1", "global", "", "pause", "x"); err != nil {
 			return err
 		}
 		return store.SetControl(ctx, tx, "controller", "c-2", "global", "", "stop", "y")
 	}))
 	var m1, m2 string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
-		if m1, err = store.PostMessage(ctx, tx, "controller", "exec:codex", "note", []byte("1")); err != nil {
+		if m1, err = coord.PostMessage(ctx, tx, "controller", "exec:codex", "note", []byte("1")); err != nil {
 			return err
 		}
-		m2, err = store.PostMessage(ctx, tx, "controller", "exec:codex", "note", []byte("2"))
+		m2, err = coord.PostMessage(ctx, tx, "controller", "exec:codex", "note", []byte("2"))
 		return err
 	}))
 
 	// A note clears every control: refused by type.
-	wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	wantErr(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if err := note(tx); err != nil {
 			return err
 		}
@@ -46,8 +48,8 @@ func TestEventWritesOnlyWhatItNames(t *testing.T) {
 		return err
 	}), "does not write agentrt.control")
 	// control_cleared for c-1 also clears c-2: refused by name.
-	wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: "control", Type: "control_cleared", Actor: "owner",
+	wantErr(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "control", Type: "control_cleared", Actor: "owner",
 			Body: map[string]any{"control_id": "c-1"}}); err != nil {
 			return err
 		}
@@ -55,8 +57,8 @@ func TestEventWritesOnlyWhatItNames(t *testing.T) {
 		return err
 	}), "does not name agentrt.control row c-2")
 	// message_acked for m1 acks m2: refused by name.
-	wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: "mbox:exec:codex", Type: "message_acked", Actor: "exec:codex",
+	wantErr(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "mbox:exec:codex", Type: "message_acked", Actor: "exec:codex",
 			Body: map[string]any{"message_id": m1}}); err != nil {
 			return err
 		}
@@ -64,7 +66,7 @@ func TestEventWritesOnlyWhatItNames(t *testing.T) {
 		return err
 	}), "does not name agentrt.message row")
 	// An actor added under a note.
-	wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	wantErr(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if err := note(tx); err != nil {
 			return err
 		}
@@ -78,7 +80,7 @@ func TestEventWritesOnlyWhatItNames(t *testing.T) {
 	_, err = owner.Exec(ctx, `TRUNCATE agentrt.control`)
 	wantErr(t, err, "")
 	// The right event, the right row: goes through.
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.AckMessage(ctx, tx, "exec:codex", m2) }))
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.AckMessage(ctx, tx, "exec:codex", m2) }))
 }
 
 // T23a for all eight append-only tables, by the owner (the runtime role is
@@ -108,8 +110,8 @@ func TestAppendOnlyTablesRefuseTheOwner(t *testing.T) {
 		_, err := owner.Exec(ctx, q)
 		ok(t, err)
 	}
-	ok(t, store.InTx(ctx, owner, func(tx pgx.Tx) error {
-		ev, err := store.Append(ctx, tx, store.Event{Stream: "rule", Type: "rule_signed", Actor: "owner",
+	ok(t, eventlog.InTx(ctx, owner, func(tx pgx.Tx) error {
+		ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "rule", Type: "rule_signed", Actor: "owner",
 			Body: map[string]any{"rule_id": "job:implementer", "rule_version": 1, "job_ids": []string{"implementer"}}})
 		if err != nil {
 			return err
@@ -160,8 +162,8 @@ func TestTamperShapesAreFound(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	for i := range 3 {
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			_, err := store.Append(ctx, tx, store.Event{Stream: "audit", Type: "note", Actor: "controller", Body: map[string]any{"text": string(rune('a' + i))}})
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "audit", Type: "note", Actor: "controller", Body: map[string]any{"text": string(rune('a' + i))}})
 			return err
 		}))
 	}
@@ -200,7 +202,7 @@ func TestTamperShapesAreFound(t *testing.T) {
 func TestPlanBindingsAndShapes(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	wantErr(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R2:2.1x", Parent: item, Kind: "item", Label: "x", Title: "x", Ordinal: 9, Root: root})
 		return err
 	}), "cannot sit under")
@@ -229,10 +231,10 @@ func TestFailedCommitLeavesNoEvent(t *testing.T) {
 	w := newWorld(t)
 	var before int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event`).Scan(&before))
-	err := store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	err := eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		// The row the event names does not exist: a mission never created (a
 		// task's id is no longer checked, its table is gone since 0020).
-		_, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "mission_state_changed", Actor: "controller",
+		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: store.MissionStream("M-1"), Type: "mission_state_changed", Actor: "controller",
 			MissionID: "M-99", Body: map[string]any{"from": "proposed", "to": "active"}})
 		if err != nil {
 			return err
@@ -256,8 +258,8 @@ func TestKilledConnectionKeepsTheChain(t *testing.T) {
 	pool := w.db.Pool(t, w.db.Runtime)
 	admin := w.db.Connect(t, w.db.Admin)
 	write := func(i int) error {
-		return store.InTx(ctx, pool, func(tx pgx.Tx) error {
-			_, err := store.Append(ctx, tx, store.Event{Stream: "load", Type: "note", Actor: "controller", Body: map[string]any{"text": string(rune('a' + i%26))}})
+		return eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
+			_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "load", Type: "note", Actor: "controller", Body: map[string]any{"text": string(rune('a' + i%26))}})
 			return err
 		})
 	}

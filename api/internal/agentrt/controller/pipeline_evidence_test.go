@@ -11,9 +11,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 func sha(c string) string { return strings.Repeat(c, 40) }
@@ -30,10 +30,10 @@ func ciRun(name, commit, tree string) seenfacts.PipelineRun {
 
 type evidenceRow struct{ run, key, result, scope, commit string }
 
-func evidenceRows(t *testing.T, db store.DB) []evidenceRow {
+func evidenceRows(t *testing.T, db eventlog.DB) []evidenceRow {
 	t.Helper()
 	var out []evidenceRow
-	must(t, store.InTx(ctx, db, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		out = nil
 		rows, err := tx.Query(ctx, `SELECT run_name, input_key, result, scope, commit_sha FROM agentrt.evidence ORDER BY evidence_id`)
 		if err != nil {
@@ -220,7 +220,7 @@ func TestPipelineRecordsFailedRunSaysWhatFailed(t *testing.T) {
 		t.Fatal("a passed run was asked what it failed on")
 	}
 	got := map[string]string{}
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `SELECT run_name, COALESCE(statement->'predicate'->>'fail_class','') || ' ' ||
 		  COALESCE(statement->'predicate'->'failedTests','[]')::text || ' ' || COALESCE(statement->'predicate'->'failed_tasks','[]')::text FROM agentrt.evidence`)
 		if err != nil {

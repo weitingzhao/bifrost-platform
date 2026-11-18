@@ -25,7 +25,7 @@ func TestAssessmentRecordedQueryParityPG(t *testing.T) {
 	pool := db.Pool(t, db.Runtime)
 	ctx := context.Background()
 	for _, kind := range []string{assessmentreadings.AssessCard, assessmentreadings.AssessApproval} {
-		ok(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		ok(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 			for _, text := range []string{"recorded first", "recorded second"} {
 				_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: assessmentreadings.AssessStream(kind, "parity"), Type: "note", Actor: "controller", Body: map[string]any{"text": text}})
 				if err != nil {

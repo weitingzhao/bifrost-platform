@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -17,7 +18,7 @@ import (
 // step adds a step of M-1 under the item, with a done rule when rule is set.
 func (w *world) step(t *testing.T, id string, ordinal int, rule string, binds ...[2]string) {
 	t.Helper()
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: id, Parent: item, Kind: "step", Label: id, Title: id,
 			MissionID: "M-1", StepKind: "agent", Ordinal: ordinal, Root: root})
 		return err
@@ -241,11 +242,11 @@ func TestStepRules(t *testing.T) {
 
 	// A sign-off counts on its own step only.
 	w.rule(t, s2, `{"owner_signoff":"TD-1"}`)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return planstore.SignOff(ctx, tx, "owner", s3, "TD-1") }))
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error { return planstore.SignOff(ctx, tx, "owner", s3, "TD-1") }))
 	if w.evaluate(t, s2, d) != "" {
 		t.Fatal("a sign-off on another step moved this one")
 	}
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return planstore.SignOff(ctx, tx, "owner", s2, "TD-1") }))
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error { return planstore.SignOff(ctx, tx, "owner", s2, "TD-1") }))
 	if w.evaluate(t, s2, d) != "done" {
 		t.Fatal("the sign-off did not move its step")
 	}
@@ -253,12 +254,12 @@ func TestStepRules(t *testing.T) {
 	// A manual atom needs a record with evidence on its step, and the move
 	// says it was manual.
 	w.step(t, "R2:2.1-4", 3, `{"manual":"checked by hand"}`)
-	err = store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	err = eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		return planstore.RecordManual(ctx, tx, "owner", "R2:2.1-4", "checked by hand", "looked at it", nil)
 	})
-	is(t, err, store.ErrState)
+	is(t, err, eventlog.ErrState)
 	proof := w.artifact(t, "other", "screenshot")
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		return planstore.RecordManual(ctx, tx, "owner", "R2:2.1-4", "checked by hand", "looked at it", []string{proof})
 	}))
 	if w.evaluate(t, "R2:2.1-4", d) != "done" {
@@ -285,11 +286,11 @@ func TestRuledNodes(t *testing.T) {
 	w := newWorld(t)
 	w.rule(t, s1, `{"owner_signoff":"a"}`)
 	w.rule(t, s2, `{"owner_signoff":"b"}`)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := planstore.SetStepState(ctx, tx, "controller", root, s2, "dropped", "test")
 		return err
 	}))
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		for _, n := range []planstore.PlanNode{
 			{ID: "A", Kind: "arch_root", Label: "A", Title: "architecture", Root: "A"},
 			{ID: "A:1", Parent: "A", Kind: "arch_row", Label: "1", Title: "state database", Root: "A"},
@@ -300,8 +301,8 @@ func TestRuledNodes(t *testing.T) {
 		}
 		return nil
 	}))
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream("A"), Type: "plan_changed", Actor: "controller",
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream("A"), Type: "plan_changed", Actor: "controller",
 			Body: map[string]any{"change": "test"}}); err != nil {
 			return err
 		}

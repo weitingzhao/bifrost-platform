@@ -19,10 +19,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // A collector's external work carries an immutable session identity
@@ -381,7 +381,7 @@ func TestBindingAtomicity(t *testing.T) {
 	})
 	t.Run("linked, still the same work", func(t *testing.T) {
 		pool, _ := world(t)
-		must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 			_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R2:1-2", Parent: "R2:1", Kind: "step", Label: "1-2", Title: "step 2", StepKind: "agent", Ordinal: 2, Root: "R2"})
 			return err
 		}))
@@ -423,7 +423,7 @@ func TestCoverageCountsNoCollector(t *testing.T) {
 		t.Fatalf("the thread's upload: %d %v", code, out)
 	}
 	for _, actor := range []string{"thread:collector@h1", "thread:cov-s"} {
-		must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 			_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "coverage-test", Type: "note", Actor: actor, PlanNode: "R2:1-1", Body: map[string]any{"text": "plan-node work of " + actor}})
 			return err
 		}))
@@ -499,7 +499,7 @@ func TestIdentityOnlyFromCollector(t *testing.T) {
 	// refuses a collector's write without its identity).
 	spec := putSpec(t, s, "collector:h1", "from before")
 	legacy := "ew_" + fmt.Sprintf("%064x", 11)
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 		now := time.Now().UTC().Format(time.RFC3339Nano)
 		digest := "sha256:" + strings.Repeat("0", 64)
 		return oldShapeRow(ctx, tx, "external-work:"+legacy, "note", "thread:collector@h1", "R2:1-1",
@@ -519,12 +519,12 @@ func TestIdentityOnlyFromCollector(t *testing.T) {
 	}
 	// The store holds a collector's actor to its host, both ways, and an
 	// identity to a collector (the route refuses one first).
-	for _, w := range []store.Writer{{Actor: "thread:collector@h1", Token: "collector:h1"}, {Actor: "thread:x", Token: "reporter", Host: "h1"}} {
+	for _, w := range []actor.Writer{{Actor: "thread:collector@h1", Token: "collector:h1"}, {Actor: "thread:x", Token: "reporter", Host: "h1"}} {
 		if _, err := externalwork.RegisterExternalWork(ctx, pool, w, externalwork.ExternalRegistration{Key: "k", Root: "R2", Node: "R2:1-1", RunKey: "r", Artifact: spec}); err == nil {
 			t.Fatalf("%+v registered", w)
 		}
 	}
-	plain := store.Writer{Actor: "thread:s-store", Token: "reporter"}
+	plain := actor.Writer{Actor: "thread:s-store", Token: "reporter"}
 	if _, err := externalwork.RegisterExternalWork(ctx, pool, plain, externalwork.ExternalRegistration{Key: "k", Root: "R2", Node: "R2:1-1", RunKey: "r", Artifact: spec,
 		Vendor: "claude", Session: "s", Epoch: 1}); err == nil {
 		t.Fatal("a plain writer registered an identity")

@@ -13,8 +13,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // TD-411 (STG 2026-10-20: the facts pass failed every 15 seconds on a check
@@ -109,7 +109,7 @@ func TestALoopFailingTheSameWayIsAlertedOnce(t *testing.T) {
 
 // flakyDB fails the next fail transactions it is asked to begin.
 type flakyDB struct {
-	store.DB
+	eventlog.DB
 	fail atomic.Int32
 }
 

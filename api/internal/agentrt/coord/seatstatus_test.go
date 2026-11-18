@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -39,11 +40,11 @@ func ok2(t *testing.T, err error) {
 func TestSeatStatusesFromMessagesPG(t *testing.T) {
 	t.Parallel()
 	_, pool, a := conclusionDB(t)
-	b := store.Writer{Actor: "thread:local_other", Token: "other"}
+	b := actor.Writer{Actor: "thread:local_other", Token: "other"}
 	s := coord.SeatStatus{Goal: "bus", Doing: "mainOf", Percent: 40, PercentBasis: "2 of 5 steps", Next: "release"}
-	send := func(w store.Writer, body []byte) {
+	send := func(w actor.Writer, body []byte) {
 		t.Helper()
-		_, err := store.SendMessage(ctx, pool, w, coord.StatusBoard, "note", body)
+		_, err := coord.SendMessage(ctx, pool, w, coord.StatusBoard, "note", body)
 		ok2(t, err)
 	}
 	send(a, statusBody(t, "first", s))

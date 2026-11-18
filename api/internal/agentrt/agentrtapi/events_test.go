@@ -16,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 type eventRow struct {
@@ -127,7 +126,7 @@ func TestEventsAcrossStreams(t *testing.T) {
 	hole, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller", Body: map[string]any{"source": "test: a hole"}})
 	must(t, err)
 	must(t, tx.Rollback(ctx))
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 		_, aerr := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller", Body: map[string]any{"source": "test: after the hole"}})
 		return aerr
 	}))
@@ -241,7 +240,7 @@ func TestEventsReadOnSeesALateCommit(t *testing.T) {
 	defer func() { _ = early.Rollback(ctx) }()
 	first := appendIn(early, "system", "legacy_imported", map[string]any{"source": "test: the early one"})
 	var second int64
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 		second = appendIn(tx, planstore.PlanStream("R2"), "plan_change_proposed", map[string]any{"changes": []any{map[string]any{"op": "retitle"}},
 			"reason": "test: the later one", "standing": false, "question_id": "q_late"})
 		return nil
@@ -291,7 +290,7 @@ func TestEventsReadOnPages(t *testing.T) {
 	_, from := readOn(t, s, "0.0", "", 500)
 	var three []int64
 	var txid int64
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 		for i := range 3 {
 			ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 				Body: map[string]any{"source": fmt.Sprint("test: one of three ", i)}})

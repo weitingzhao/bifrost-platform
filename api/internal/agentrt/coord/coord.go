@@ -18,9 +18,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
-// NewMessageID and NewControlID mint ids in the shapes the tables check.
+// NewMessageID and newControlID mint ids in the shapes the tables check.
 func NewMessageID() string { return "m_" + eventlog.NewULID(time.Now()) }
-func NewControlID() string { return "c_" + eventlog.NewULID(time.Now()) }
+func newControlID() string { return "c_" + eventlog.NewULID(time.Now()) }
 
 // artifactStore stores a message's body as an artifact and returns its id;
 // claims records a text that claims an approval (AlertClaim, claims.go).

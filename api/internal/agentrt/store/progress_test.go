@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -84,7 +85,7 @@ func (w *world) progress(t *testing.T) progressDoc {
 func TestProgressMissionWithoutTasks(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return storekit.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error { return storekit.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
 	var lastM1, proposedM2 time.Time
 	ok(t, w.rt.QueryRow(ctx, `SELECT max(at) FILTER (WHERE mission_id = 'M-1'),
 	    max(at) FILTER (WHERE mission_id = 'M-2' AND event_type = 'mission_proposed') FROM agentrt.event`).Scan(&lastM1, &proposedM2))
@@ -114,8 +115,8 @@ func sameMoment(t *testing.T, got string, want time.Time) bool {
 func TestProgressPausedMissionWithoutTasks(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return storekit.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error { return storekit.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		return storekit.MoveMission(ctx, tx, "controller", "M-1", "paused", "the Owner asked")
 	}))
 	for _, m := range w.progress(t).Work.Missions {
@@ -133,7 +134,7 @@ func TestChangeBlocks(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	const s4 = "R2:2.1-4"
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: s4, Parent: item, Kind: "step", Label: "2.1-4", Title: "s4",
 			MissionID: "M-2", StepKind: "agent", Ordinal: 3, Root: root})
 		return err

@@ -106,7 +106,7 @@ func keyFor(rt fuzzRoute, path string) string {
 // its point.
 func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 	t.Helper()
-	tx := func(fn func(pgx.Tx) error) { t.Helper(); must(t, store.InTx(ctx, f.pool, fn)) }
+	tx := func(fn func(pgx.Tx) error) { t.Helper(); must(t, eventlog.InTx(ctx, f.pool, fn)) }
 	tx(func(tx pgx.Tx) error {
 		for _, id := range []string{"M-2", "M-3"} {
 			if _, err := storekit.CreateMission(ctx, tx, "controller", storekit.Mission{ID: id, Title: id, Goal: "g", Deadline: time.Now().Add(time.Hour)}); err != nil {
@@ -502,7 +502,7 @@ func (f *stateFuzz) template(t *testing.T, rt fuzzRoute, caller, path string) ma
 // chiefJob writes the job chief_of_staff, as the Owner's signed rule would.
 func chiefJob(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test: the chief's job"}}); err != nil {
 			return err

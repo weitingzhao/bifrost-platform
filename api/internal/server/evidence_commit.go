@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // GET /api/v1/evidence/commit?repo=…&commit=… answers "is this commit green"
@@ -59,7 +59,7 @@ type evidenceAnswer struct {
 
 // commitEvidence reads the ledger for one commit. tree reads a commit's git
 // tree and main a repository's main head; both are Gitea's.
-func commitEvidence(ctx context.Context, db store.DB, tree func(context.Context, string, string) (string, error),
+func commitEvidence(ctx context.Context, db eventlog.DB, tree func(context.Context, string, string) (string, error),
 	main func(context.Context, string) (string, error), repo, commit string) (evidenceAnswer, error) {
 	out := evidenceAnswer{Repo: repo, Commit: commit, Unit: evidence.EvidenceUnitRepo, Verdict: evidence.EvidenceNone, Tasks: []evidenceTask{}}
 	var err error
@@ -151,7 +151,7 @@ func (s *Server) handleEvidenceCommit(w http.ResponseWriter, r *http.Request) {
 	out, err := commitEvidence(ctx, s.agentRuntime.api.DB, giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second}), main, repo, commit)
 	if err != nil {
 		status := http.StatusBadGateway
-		if errors.Is(err, store.ErrInvalid) {
+		if errors.Is(err, eventlog.ErrInvalid) {
 			status = http.StatusBadRequest
 		}
 		writeJSON(w, status, map[string]string{"error": err.Error()})

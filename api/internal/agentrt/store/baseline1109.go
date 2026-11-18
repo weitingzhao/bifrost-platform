@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // Frozen evidence supplied by the Owner's AM-6 brief, sealed 2026-11-09.
@@ -27,7 +28,7 @@ Source: Owner AM-5/AM-6 R6 group 0 brief, 2026-11-10.
 // does not consult the current definition registry: raw data no longer exists.
 func ImportBaseline1109(ctx context.Context, db DB) (int, error) {
 	n := 0
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
+	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO agentrt.event_stream(event_stream_id) VALUES ('metrics') ON CONFLICT DO NOTHING`); err != nil {
 			return err
 		}
@@ -61,7 +62,7 @@ func ImportBaseline1109(ctx context.Context, db DB) (int, error) {
 		for _, d := range c.Definitions {
 			defs = append(defs, map[string]any{"id": d.ID, "version": d.Version, "sha256": d.SHA256})
 		}
-		ev, err := Append(ctx, tx, Event{Stream: "metrics", Type: "metrics_computed", Actor: "controller", Body: map[string]any{"source": "imported", "rows": len(c.Readings), "definitions": defs, "label": c.Label, "artifact_id": artifact}})
+		ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "metrics", Type: "metrics_computed", Actor: "controller", Body: map[string]any{"source": "imported", "rows": len(c.Readings), "definitions": defs, "label": c.Label, "artifact_id": artifact}})
 		if err != nil {
 			return err
 		}

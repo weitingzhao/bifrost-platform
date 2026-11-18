@@ -16,6 +16,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
@@ -30,7 +31,7 @@ func TestRulePortsAreBoundToTheRuleStore(t *testing.T) {
 	w := newWorld(t)
 	read := func() (plan *planstore.PlanRule, kinds []string, direct [2]*store.StoredRule) {
 		t.Helper()
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			var err error
 			if plan, err = store.PlanRuleInForceForTest(ctx, tx); err != nil {
 				return err
@@ -86,7 +87,7 @@ func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 	ok(t, err)
 	now := time.Now()
 	verification := func(id string) any { return "seen " + id }
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		describe := func(ctx context.Context, tx pgx.Tx, id string) (any, error) {
 			return externalwork.ExternalDescriptionOf(ctx, tx, id)
 		}
@@ -125,7 +126,7 @@ func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 		t.Fatalf("the note check port: %q; externalwork: %q", got, want)
 	}
 	record["surprise"] = true
-	if err := store.CheckExternalNoteForTest(record); !errors.Is(err, store.ErrInvalid) {
+	if err := store.CheckExternalNoteForTest(record); !errors.Is(err, eventlog.ErrInvalid) {
 		t.Fatalf("a note with an unknown field: %v", err)
 	}
 	// The description check, in externalwork's words.
@@ -171,12 +172,12 @@ func TestRecorderImportPortsAreBoundToTheRecorderImport(t *testing.T) {
 	// import's own words, by the port as by the function.
 	w := newKernelWorld(t)
 	var got, want error
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		got = store.DecideRecorderImportLogForTest(ctx, tx, "sha256:absent", 1)
 		want = store.DecideRecorderImportForTest(ctx, tx, "sha256:absent", 1)
 		return nil
 	}))
-	if !errors.Is(want, store.ErrInvalid) || errText(got) != errText(want) {
+	if !errors.Is(want, eventlog.ErrInvalid) || errText(got) != errText(want) {
 		t.Fatalf("the landing port: %v; the recorder import: %v", got, want)
 	}
 	if store.RecorderApplyLabelForTest != planstore.RecorderApplyLabel || store.RecorderRefuseLabelForTest != planstore.RecorderRefuseLabel ||
@@ -198,12 +199,12 @@ func TestCoordinationPortIsBoundToCoord(t *testing.T) {
 		ok(t, err)
 		return out
 	}
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		note, err := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream(root), Type: "note", Actor: "controller", PlanNode: s1, Body: map[string]any{"text": "a note"}})
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		note, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream(root), Type: "note", Actor: "controller", PlanNode: s1, Body: map[string]any{"text": "a note"}})
 		if err != nil {
 			return err
 		}
-		on := store.Event{Stream: planstore.PlanStream(root), PlanNode: s1}
+		on := eventlog.Event{Stream: planstore.PlanStream(root), PlanNode: s1}
 		if err = store.AlertClaimForTest(ctx, tx, on, note.EventID, "plan_note", "", []byte("nothing claimed here")); err != nil {
 			return err
 		}
@@ -215,8 +216,8 @@ func TestCoordinationPortIsBoundToCoord(t *testing.T) {
 	if got := alerts(); len(got) != 2 || got[0] != got[1] || !strings.Contains(got[0], "approval_claim") {
 		t.Fatalf("the port's alert and coord's: %q", got)
 	}
-	if planstore.MaxNoteText != coord.MaxMessageBody {
-		t.Fatalf("a note is at most %d bytes; a message body %d", planstore.MaxNoteText, coord.MaxMessageBody)
+	if planstore.MaxNoteText != 8<<10 {
+		t.Fatalf("a note is at most %d bytes; a message body %d", planstore.MaxNoteText, 8<<10)
 	}
 }
 
@@ -245,7 +246,7 @@ func TestLoopPortIsBoundToTheLoopAlerts(t *testing.T) {
 	failing := func() []map[string]any {
 		t.Helper()
 		var out []map[string]any
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			var err error
 			out, err = store.ControllerLoopsFailingForTest(ctx, tx)
 			return err

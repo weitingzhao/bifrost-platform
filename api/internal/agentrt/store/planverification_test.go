@@ -11,10 +11,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 func pvDocument(t *testing.T, version int) *planview.Document {
@@ -55,7 +55,7 @@ func pvArtifact(t *testing.T, w *world, d *planview.Document, bs ...planview.Bin
 	raw, err := json.Marshal(d)
 	ok(t, err)
 	var id string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var e error
 		id, e = artifact.PutArtifact(ctx, tx, "controller", "other", "application/json", raw)
 		return e
@@ -172,7 +172,7 @@ func TestPV2OwnerAcceptanceVersionAndAuthority(t *testing.T) {
 	pvPoll(t, w, planstore.PlanSources{})
 	pvEvaluate(t, w, s1, "active")
 	_, err = planstore.SignOffStep(ctx, w.rt, planstore.OwnerActor, s1, oldRef, evidence...)
-	is(t, err, store.ErrInvalid)
+	is(t, err, eventlog.ErrInvalid)
 	_, err = planstore.SignOffStep(ctx, w.rt, planstore.OwnerActor, s1, b.SignoffRef(), evidence...)
 	ok(t, err)
 	pvPoll(t, w, planstore.PlanSources{})
@@ -210,7 +210,7 @@ func TestPV2RetiredSourcesAreNotAdopted(t *testing.T) {
 		if !b.Retired() {
 			t.Fatalf("%s: not told as retired", name)
 		}
-		if err := adopt("retired-"+name, pvDocument(t, 1), b); !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), "retired") {
+		if err := adopt("retired-"+name, pvDocument(t, 1), b); !errors.Is(err, eventlog.ErrInvalid) || !strings.Contains(err.Error(), "retired") {
 			t.Errorf("%s: adopted or refused for another reason: %v", name, err)
 		}
 	}
@@ -227,7 +227,7 @@ func TestPV2RetiredSourcesAreNotAdopted(t *testing.T) {
 func TestPV2DependencyReblocksActualSteps(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, e := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R2:2.2", Parent: root, Kind: "item", Label: "2.2", Title: "dependent", Root: root, Ordinal: 2}); e != nil {
 			return e
 		}

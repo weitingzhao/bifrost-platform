@@ -8,10 +8,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // The plan-standing rule (CUT-plan-import-2026-10-19.md §7): what it grants
@@ -78,8 +78,8 @@ func TestPlanStandingDoneRules(t *testing.T) {
 	// approval long executed; a CI run, a gate, a manual atom; a rule that
 	// holds already; a step with a rule; a step done.
 	gateSum := strings.Repeat("ab", 32)
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, aerr := store.Append(ctx, tx, store.Event{Stream: "approvals", Type: "approval_seen", Actor: "controller",
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, aerr := eventlog.Append(ctx, tx, eventlog.Event{Stream: "approvals", Type: "approval_seen", Actor: "controller",
 			Body: map[string]any{"approval": 16, "status": seenfacts.ApprovalExecuted, "action": "test", "tier": "test", "created_at": "2026-01-01T00:00:00Z", "expired": false}}); aerr != nil {
 			return aerr
 		}
@@ -104,7 +104,7 @@ func TestPlanStandingDoneRules(t *testing.T) {
 			t.Errorf("%s: decided at once: %v", name, out)
 		}
 	}
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := planstore.SetStepState(ctx, tx, "controller", root, s1, "done", "test")
 		return err
 	}))

@@ -9,9 +9,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // externalSeqs are the seqs of a work's notes, in the order recorded.
@@ -56,7 +57,7 @@ func TestExternalEventSeqAssigned(t *testing.T) {
 	}
 
 	_, err = post(externalwork.ExternalEvent{Key: "negative", Seq: -1, Type: "started"})
-	is(t, err, store.ErrInvalid)
+	is(t, err, eventlog.ErrInvalid)
 	started := assigned(externalwork.ExternalEvent{Key: "start", Type: "started"}, 1)
 	if started["state"] != "Running" {
 		t.Fatalf("started %v", started)
@@ -75,13 +76,13 @@ func TestExternalEventSeqAssigned(t *testing.T) {
 	same(t, again, second)
 	third := assigned(externalwork.ExternalEvent{Key: "hb-3", Type: "heartbeat"}, 3)
 	_, err = post(externalwork.ExternalEvent{Key: "gap", Seq: 5, Type: "heartbeat"})
-	is(t, err, store.ErrConflict)
+	is(t, err, actor.ErrConflict)
 	// The assigned seq named later: the same event is its replay, another is a conflict.
 	again, err = post(externalwork.ExternalEvent{Key: "hb-3-named", Seq: 3, Type: "heartbeat"})
 	ok(t, err)
 	same(t, again, third)
 	_, err = post(externalwork.ExternalEvent{Key: "hb-3-other", Seq: 3, Type: "heartbeat", ObservedAt: "2026-11-12T00:00:00Z"})
-	is(t, err, store.ErrConflict)
+	is(t, err, actor.ErrConflict)
 	assigned(externalwork.ExternalEvent{Key: "hb-4", Seq: 4, Type: "heartbeat"}, 4)
 
 	// Two posted at once, each with its own key, get the next two seqs; two
@@ -119,7 +120,7 @@ func TestExternalEventSeqAssigned(t *testing.T) {
 
 	assigned(externalwork.ExternalEvent{Key: "end", Type: "submitted"}, 8)
 	_, err = post(externalwork.ExternalEvent{Key: "late", Type: "heartbeat"})
-	is(t, err, store.ErrState)
+	is(t, err, eventlog.ErrState)
 	if seqs := externalSeqs(t, w, id); !slices.Equal(seqs, []int64{0, 1, 2, 3, 4, 5, 6, 7, 8}) {
 		t.Fatalf("recorded seqs %v", seqs)
 	}
@@ -142,7 +143,7 @@ func TestExternalHeartbeatCommits(t *testing.T) {
 	}
 	a, b, c := strings.Repeat("a", 40), strings.Repeat("b", 40), strings.Repeat("c", 64)
 
-	is(t, post(externalwork.ExternalEvent{Key: "start-commit", Type: "started", Commits: []string{a}}), store.ErrInvalid)
+	is(t, post(externalwork.ExternalEvent{Key: "start-commit", Type: "started", Commits: []string{a}}), eventlog.ErrInvalid)
 	ok(t, post(externalwork.ExternalEvent{Key: "start", Type: "started"}))
 	for name, bad := range map[string]externalwork.ExternalEvent{
 		"upper case":      {Type: "heartbeat", Commits: []string{strings.Repeat("A", 40)}},
@@ -157,7 +158,7 @@ func TestExternalHeartbeatCommits(t *testing.T) {
 		"seq and bad sha": {Seq: 2, Type: "heartbeat", Commits: []string{"deadbeef"}},
 	} {
 		bad.Key = name
-		if err := post(bad); !errors.Is(err, store.ErrInvalid) {
+		if err := post(bad); !errors.Is(err, eventlog.ErrInvalid) {
 			t.Fatalf("%s: %v; want refused as invalid", name, err)
 		}
 	}
@@ -194,7 +195,7 @@ func TestExternalHeartbeatCommits(t *testing.T) {
 	for i := range many {
 		many[i] = fmt.Sprintf("%040x", i+1)
 	}
-	is(t, post(externalwork.ExternalEvent{Key: "hb-many", Type: "heartbeat", Commits: many}), store.ErrInvalid)
+	is(t, post(externalwork.ExternalEvent{Key: "hb-many", Type: "heartbeat", Commits: many}), eventlog.ErrInvalid)
 	ok(t, post(externalwork.ExternalEvent{Key: "end", Type: "submitted", Commits: []string{c, b}}))
 	if got := externalCommits(t, w, id); !slices.Equal(got, []string{a, b, c}) {
 		t.Fatalf("after submitted: %v", got)

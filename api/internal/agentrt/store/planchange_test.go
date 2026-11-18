@@ -13,9 +13,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // asker is a fake question store: it records the cards and answers them
@@ -76,7 +76,7 @@ func (a *asker) question(_ context.Context, id string) (seenfacts.Question, bool
 
 func (w *world) activate(t *testing.T, step string) {
 	t.Helper()
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := planstore.SetStepState(ctx, tx, "controller", root, step, "active", "test")
 		return err
 	}))
@@ -178,7 +178,7 @@ func TestPlanChangeOutside(t *testing.T) {
 	_, err = planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k9", root, "x", []planstore.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: "y"}}, nil)
 	is(t, err, planstore.ErrAsk)
 	_, err = planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k10", "R9", "x", []planstore.PlanChange{{Op: "retitle", Node: s2, Title: "y"}}, a.ask)
-	is(t, err, store.ErrInvalid)
+	is(t, err, eventlog.ErrInvalid)
 }
 
 func containsFold(s, sub string) bool {
@@ -229,7 +229,7 @@ func TestPlanDecisions(t *testing.T) {
 	open := propose("k5", planstore.PlanChange{Op: "retitle", Node: root, Title: "round two"})
 	// Before the answer, the step is dropped by another hand: dropping it
 	// no longer fits.
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := planstore.SetStepState(ctx, tx, "controller", root, s3, "dropped", "test")
 		return err
 	}))
@@ -318,7 +318,7 @@ func TestPlanChangeStaysInItsTree(t *testing.T) {
 		{ID: "R3:3.1", Parent: "R3", Kind: "item", Label: "3.1", Title: "other", Root: "R3"},
 		{ID: "R3:3.1-1", Parent: "R3:3.1", Kind: "step", Label: "3.1-1", Title: "other step", MissionID: "M-1", StepKind: "agent", Root: "R3"},
 	} {
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); return err }))
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error { _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); return err }))
 	}
 	before := w.footprint(t)
 	for name, c := range map[string]planstore.PlanChange{
@@ -328,7 +328,7 @@ func TestPlanChangeStaysInItsTree(t *testing.T) {
 		"set the rule of another tree's step": {Op: "set_done_rule", Node: "R3:3.1-1", Rule: json.RawMessage(`{"owner_signoff":"x"}`)},
 	} {
 		_, perr := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "r-"+name, root, "x", []planstore.PlanChange{c}, a.ask)
-		if !errors.Is(perr, store.ErrInvalid) || !containsFold(perr.Error(), "in plan R3, not R2") {
+		if !errors.Is(perr, eventlog.ErrInvalid) || !containsFold(perr.Error(), "in plan R3, not R2") {
 			t.Errorf("%s: %v", name, perr)
 		}
 	}
@@ -395,7 +395,7 @@ func TestDecisionAgainstRuleLoop(t *testing.T) {
 		decided <- derr
 	}()
 	w.waitFor(t, "", time.Now().Add(5*time.Second))
-	_, err = store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream(root), Type: "plan_changed", Actor: "controller", Body: map[string]any{"change": "loop"}})
+	_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream(root), Type: "plan_changed", Actor: "controller", Body: map[string]any{"change": "loop"}})
 	ok(t, err)
 	ok(t, tx.Commit(ctx))
 	ok(t, <-decided)
@@ -414,7 +414,7 @@ func TestPlanChangeNumbering(t *testing.T) {
 		{ID: "R2:2.1-7", Parent: item, Kind: "step", Label: "2.1-7", Title: "seventh", MissionID: "M-1", StepKind: "agent", Ordinal: 3, Root: root},
 		{ID: "R2:2.1-9", Parent: item, Kind: "step", Label: "odd", Title: "an odd label", MissionID: "M-1", StepKind: "agent", Ordinal: 4, Root: root},
 	} {
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); return err }))
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error { _, err := planstore.CreatePlanNode(ctx, tx, "controller", n); return err }))
 	}
 	out, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, "two more", []planstore.PlanChange{
 		{Op: "add_node", Parent: item, Kind: "step", StepKind: "agent", Title: "a"},
@@ -441,9 +441,9 @@ func TestPlanChangeCardRefused(t *testing.T) {
 	before := w.footprint(t)
 	_, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, "x",
 		[]planstore.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: "y"}}, func(context.Context, planstore.Card) (string, error) {
-			return "", fmt.Errorf("%w: body exceeds 3000 bytes", store.ErrInvalid)
+			return "", fmt.Errorf("%w: body exceeds 3000 bytes", eventlog.ErrInvalid)
 		})
-	is(t, err, store.ErrInvalid)
+	is(t, err, eventlog.ErrInvalid)
 	if after := w.footprint(t); after != before {
 		t.Fatalf("a refused card left something: %s -> %s", before, after)
 	}
@@ -508,8 +508,8 @@ func TestPlanChangeQueuedUngatedRuleIsRefusedOnApply(t *testing.T) {
 	ok(t, err)
 	var ungated map[string]any
 	ok(t, json.Unmarshal([]byte(`{"all":[{"step_tasks":{"state":"accepted"}},{"step_landed":{}},{"step_stg_settled":{}}]}`), &ungated))
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, aerr := store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream(root), Type: "plan_change_proposed", Actor: "thread:s1",
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, aerr := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream(root), Type: "plan_change_proposed", Actor: "thread:s1",
 			Body: map[string]any{"changes": []any{map[string]any{"op": "set_done_rule", "node": s3, "rule": ungated}},
 				"reason": "queued before the sign-off gate", "standing": false, "token": "operator", "question_id": q}})
 		return aerr

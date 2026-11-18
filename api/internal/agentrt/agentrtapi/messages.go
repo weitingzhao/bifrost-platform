@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -28,7 +29,7 @@ func (a *API) sendMessage(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	id, err := store.SendMessage(r.Context(), a.DB, who, b.To, b.Kind, []byte(b.Body))
+	id, err := coord.SendMessage(r.Context(), a.DB, who, b.To, b.Kind, []byte(b.Body))
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -84,21 +85,21 @@ func (a *API) readMessages(w http.ResponseWriter, r *http.Request) {
 		}
 		if ctx.Err() != nil && wait > 0 {
 			if ms == nil {
-				ms = []store.Message{}
+				ms = []coord.Message{}
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "messages": ms})
 			return
 		}
 		if len(ms) > 0 || wait == 0 {
 			if ms == nil {
-				ms = []store.Message{}
+				ms = []coord.Message{}
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "messages": ms})
 			return
 		}
 		select {
 		case <-ctx.Done():
-			writeJSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "messages": []store.Message{}})
+			writeJSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "messages": []coord.Message{}})
 			return
 		case <-time.After(poll):
 		}
@@ -135,7 +136,7 @@ func (a *API) threadMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ms == nil {
-		ms = []store.Message{}
+		ms = []coord.Message{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "with": q.Get("with"), "messages": ms})
 }

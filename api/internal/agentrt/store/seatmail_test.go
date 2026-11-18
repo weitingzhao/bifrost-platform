@@ -7,7 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // 2026-11-16: a seat that stops while it waits arms one doorbell on its own
@@ -18,9 +19,9 @@ func TestPostMessageAnnouncesSeatMail(t *testing.T) {
 	w := newWorld(t)
 	to := "seat:chief_of_staff"
 	var id string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
-		id, err = store.PostMessage(ctx, tx, "owner", to, "ask", []byte("status?"))
+		id, err = coord.PostMessage(ctx, tx, "owner", to, "ask", []byte("status?"))
 		return err
 	}))
 	var subject, change, msg string

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/headrelease"
@@ -233,7 +233,7 @@ func (s *Server) prodShadowOf(table headrelease.Table) *headrelease.ProdShadowLo
 	soak := headrelease.Seconds(os.Getenv(prodShadowSoakEnv), headrelease.DefaultProdSoak)
 	gap := headrelease.Seconds(os.Getenv(prodShadowGapEnv), headrelease.DefaultProdGap)
 	facts := s.delivery.PolicyFacts()
-	db := func() store.DB {
+	db := func() eventlog.DB {
 		if s.agentRuntime == nil || s.agentRuntime.api == nil {
 			return nil
 		}

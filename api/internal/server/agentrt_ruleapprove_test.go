@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -95,7 +96,7 @@ func TestRuleApproveOnTheRealPath(t *testing.T) {
 	draft := func(key, expires string, perHost int) string {
 		t.Helper()
 		text := fmt.Sprintf("rule_id: tuning\nrule_version: 2\ndirection: loosen\neffective_at: 2026-01-01T00:00:00Z\nexpires_at: %s\nvalues: {failures_to_alert: %d}\n", expires, perHost)
-		out, err := store.ProposeRule(ctx, conn, store.Writer{Actor: "thread:s1", Token: "operator"}, key, "tuning", []byte(text), "alert later")
+		out, err := store.ProposeRule(ctx, conn, actor.Writer{Actor: "thread:s1", Token: "operator"}, key, "tuning", []byte(text), "alert later")
 		if err != nil {
 			t.Fatal(err)
 		}

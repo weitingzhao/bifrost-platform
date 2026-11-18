@@ -16,10 +16,11 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -124,8 +125,8 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		late.open(pool, time.Now())
 		s.followWindowExpiry(ctx)
 		// The seats the token table names that the platform registers
-		// itself (store.EnsureSeats): the coordinator's proposer seat.
-		if seats, err := store.EnsureSeats(ctx, pool, s.auth.Seats()); err != nil {
+		// itself (coord.EnsureSeats): the coordinator's proposer seat.
+		if seats, err := coord.EnsureSeats(ctx, pool, s.auth.Seats()); err != nil {
 			slog.Error("agentrt: a configured seat could not be registered", "err", err)
 		} else if len(seats) > 0 {
 			slog.Info("agentrt: seats registered", "seats", seats)
@@ -164,7 +165,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 
 // agentRuntimeController is the platform-workers' controller. Every
 // environment runs the same passes.
-func agentRuntimeController(env string, db store.DB, src controller.Sources) *controller.Controller {
+func agentRuntimeController(env string, db eventlog.DB, src controller.Sources) *controller.Controller {
 	return &controller.Controller{DB: db, Sources: src, Env: env, Logf: func(format string, args ...any) {
 		slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
 	}, Infof: func(format string, args ...any) {

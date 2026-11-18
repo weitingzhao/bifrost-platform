@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
@@ -39,7 +40,7 @@ func setup(t *testing.T) *pgxpool.Pool {
 	pool := db.Pool(t, db.Runtime)
 	_, err = pool.Exec(ctx, agentrttest.DispatchRules)
 	must(t, err)
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 		_, err := storekit.CreateMission(ctx, tx, "controller", storekit.Mission{ID: "M-1", Title: "m", Goal: "g", Deadline: time.Now().Add(time.Hour)})
 		return err
 	}))
@@ -49,7 +50,7 @@ func setup(t *testing.T) *pgxpool.Pool {
 		{ID: "R2:1-1", Parent: "R2:1", Kind: "step", Label: "1-1", Title: "one", MissionID: "M-1", StepKind: "agent", Root: "R2"},
 		{ID: "R2:1-2", Parent: "R2:1", Kind: "step", Label: "1-2", Title: "two", MissionID: "M-1", StepKind: "agent", Ordinal: 1, Root: "R2"},
 	} {
-		must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 			_, err := planstore.CreatePlanNode(ctx, tx, "controller", n)
 			return err
 		}))
@@ -59,7 +60,7 @@ func setup(t *testing.T) *pgxpool.Pool {
 
 func setRule(t *testing.T, pool *pgxpool.Pool, step, rule string, binds ...[2]string) {
 	t.Helper()
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream("R2"), Type: "plan_changed", Actor: "controller",
 			Body: map[string]any{"change": "test"}}); err != nil {
 			return err
@@ -242,7 +243,7 @@ func TestSlowDeploymentReadInRulesIsCutOff(t *testing.T) {
 // first option, the change lands.
 func TestStartDecidesPlanChanges(t *testing.T) {
 	pool := setup(t)
-	out, err := planstore.ProposePlanChange(ctx, pool, store.Writer{Actor: "thread:s1", Token: "operator"}, "k1", "R2", "a new item",
+	out, err := planstore.ProposePlanChange(ctx, pool, actor.Writer{Actor: "thread:s1", Token: "operator"}, "k1", "R2", "a new item",
 		[]planstore.PlanChange{{Op: "add_node", Parent: "R2", Kind: "item", Title: "second"}},
 		func(context.Context, planstore.Card) (string, error) { return "q_9", nil })
 	must(t, err)

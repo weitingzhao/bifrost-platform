@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
@@ -86,7 +87,7 @@ type Sources struct {
 type Controller struct {
 	// tuning is the tuning rule the last pass read (tuning.go).
 	tuning  atomic.Pointer[rules.Tuning]
-	DB      store.DB
+	DB      eventlog.DB
 	Sources Sources
 	Logf    func(format string, args ...any)
 	// Infof logs what the controller did that needs no one's attention (an

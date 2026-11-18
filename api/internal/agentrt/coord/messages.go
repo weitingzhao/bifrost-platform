@@ -14,9 +14,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/localpath"
 )
 
-// MaxMessageBody is the largest message body: a question, an answer or a
+// maxMessageBody is the largest message body: a question, an answer or a
 // handover note, not a document (that is an artifact).
-const MaxMessageBody = 8 << 10
+const maxMessageBody = 8 << 10
 
 // sendKinds are the kinds a writer may send; "wake" is the runtime's own.
 var sendKinds = map[string]bool{"ask": true, "answer": true, "help": true, "handover": true, "note": true}
@@ -38,15 +38,15 @@ type Message struct {
 // SendMessage records a writer's message to another actor (POST /messages,
 // W-31 2.3): the writer is registered as for proposals (a thread on its first
 // write); the receiver must be a registered actor, not retired; the kind one
-// of sendKinds; the body UTF-8 text of at most MaxMessageBody bytes. The body
+// of sendKinds; the body UTF-8 text of at most maxMessageBody bytes. The body
 // is stored as a message artifact, the event and the mailbox signal go in the
 // same transaction (PostMessage).
 func SendMessage(ctx context.Context, db eventlog.DB, w writer.Writer, to, kind string, body []byte) (string, error) {
 	switch {
 	case !sendKinds[kind]:
 		return "", eventlog.Invalid("a message's kind is ask, answer, help, handover or note, not %q", kind)
-	case len(body) == 0 || len(body) > MaxMessageBody || !utf8.Valid(body) || bytes.IndexByte(body, 0) >= 0:
-		return "", eventlog.Invalid("a message's body is UTF-8 text of 1 to %d bytes, without NUL", MaxMessageBody)
+	case len(body) == 0 || len(body) > maxMessageBody || !utf8.Valid(body) || bytes.IndexByte(body, 0) >= 0:
+		return "", eventlog.Invalid("a message's body is UTF-8 text of 1 to %d bytes, without NUL", maxMessageBody)
 	case writer.KindOf(to) == "":
 		return "", eventlog.Invalid("%q is not an actor name", to)
 	case to == w.Actor:

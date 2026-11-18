@@ -49,7 +49,7 @@ func database0009(t *testing.T) (*agentrttest.DB, *pgx.Conn, []migrate.File) {
 	for host, kind := range map[string]string{"old-dev": "dev", "old-vm": "vm"} {
 		must0010(t, seedHost(ctx, rt, "owner", host, kind))
 	}
-	must0010(t, store.InTx(ctx, rt, func(tx pgx.Tx) error {
+	must0010(t, eventlog.InTx(ctx, rt, func(tx pgx.Tx) error {
 		if _, err := storekit.CreateMission(ctx, tx, "controller", storekit.Mission{
 			ID: "M-1", WorkID: "W-31", Title: "T50", Goal: "upgrade", Deadline: time.Now().Add(24 * time.Hour),
 		}); err != nil {
@@ -57,7 +57,7 @@ func database0009(t *testing.T) (*agentrttest.DB, *pgx.Conn, []migrate.File) {
 		}
 		return storekit.MoveMission(ctx, tx, "controller", "M-1", "active", "T50 fixture")
 	}))
-	must0010(t, store.InTx(ctx, rt, func(tx pgx.Tx) error {
+	must0010(t, eventlog.InTx(ctx, rt, func(tx pgx.Tx) error {
 		spec, err := artifact.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("T50 ordinary task"))
 		if err != nil {
 			return err

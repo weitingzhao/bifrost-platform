@@ -8,6 +8,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -17,15 +20,15 @@ func TestAcknowledgingTheSameInboxAtOnce(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime) // one connection each: a pgx.Conn is not for two goroutines
-	seat := store.Writer{Actor: "seat:chief_of_staff", Token: "fixture"}
+	seat := actor.Writer{Actor: "seat:chief_of_staff", Token: "fixture"}
 	for round := 0; round < 30; round++ {
 		var m1, m2 string
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			var err error
-			if m1, err = store.PostMessage(ctx, tx, "owner", seat.Actor, "ask", []byte("1")); err != nil {
+			if m1, err = coord.PostMessage(ctx, tx, "owner", seat.Actor, "ask", []byte("1")); err != nil {
 				return err
 			}
-			m2, err = store.PostMessage(ctx, tx, "owner", seat.Actor, "ask", []byte("2"))
+			m2, err = coord.PostMessage(ctx, tx, "owner", seat.Actor, "ask", []byte("2"))
 			return err
 		}))
 		var wg sync.WaitGroup

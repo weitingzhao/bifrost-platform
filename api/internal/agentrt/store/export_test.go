@@ -30,7 +30,7 @@ func LimitPendingChangesForTest(n int) func() {
 // of their own.
 func ChangeBlocksForTest(ctx context.Context, db DB, changes []planstore.PlanChange) (any, error) {
 	var out any
-	err := InTx(ctx, db, func(tx pgx.Tx) error {
+	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		var err error
 		out, err = planstore.ChangeBlocks(ctx, tx, changes)
 		return err

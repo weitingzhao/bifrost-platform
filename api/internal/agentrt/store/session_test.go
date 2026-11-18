@@ -10,14 +10,17 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // checkWriter is the check whoami and every write make, without writing.
-func checkWriter(w *world, wr store.Writer) error {
-	return store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err := store.CheckWriter(ctx, tx, wr)
+func checkWriter(w *world, wr actor.Writer) error {
+	return eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, err := actor.CheckWriter(ctx, tx, wr)
 		return err
 	})
 }
@@ -30,16 +33,16 @@ func checkWriter(w *world, wr store.Writer) error {
 func TestSessionHeldToItsToken(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	first := store.Writer{Actor: "thread:s", Token: "first"}
-	second := store.Writer{Actor: "thread:s", Token: "second"}
+	first := actor.Writer{Actor: "thread:s", Token: "first"}
+	second := actor.Writer{Actor: "thread:s", Token: "second"}
 	_, err := proposeForSession(ctx, w.rt, first, "k1")
 	ok(t, err)
 	_, _, err = store.UploadArtifact(ctx, w.rt, first, "task_spec", "text/plain", []byte("a spec"))
 	ok(t, err)
 	var msg string
-	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var perr error
-		msg, perr = store.PostMessage(ctx, tx, "owner", first.Actor, "note", []byte("for s"))
+		msg, perr = coord.PostMessage(ctx, tx, "owner", first.Actor, "note", []byte("for s"))
 		return perr
 	}))
 	a := &asker{}
@@ -51,11 +54,11 @@ func TestSessionHeldToItsToken(t *testing.T) {
 			return e
 		},
 		"a control": func() error {
-			_, e := store.RequestControl(ctx, w.rt, second, "k5", "global", "", "pause", "test")
+			_, e := coord.RequestControl(ctx, w.rt, second, "k5", "global", "", "pause", "test")
 			return e
 		},
 		"a message": func() error {
-			_, e := store.SendMessage(ctx, w.rt, second, "owner", "note", []byte("hi"))
+			_, e := coord.SendMessage(ctx, w.rt, second, "owner", "note", []byte("hi"))
 			return e
 		},
 		"an acknowledgement": func() error { _, e := store.AckMessages(ctx, w.rt, second, []string{msg}); return e },
@@ -71,7 +74,7 @@ func TestSessionHeldToItsToken(t *testing.T) {
 		"a replay of its key": func() error { _, e := proposeForSession(ctx, w.rt, second, "k1"); return e },
 		"whoami's check":      func() error { return checkWriter(w, second) },
 	} {
-		if e := write(); !errors.Is(e, store.ErrNotYours) {
+		if e := write(); !errors.Is(e, actor.ErrNotYours) {
 			t.Errorf("%s by another token: %v; want ErrNotYours", name, e)
 		}
 	}
@@ -92,10 +95,10 @@ func TestSessionHeldToItsToken(t *testing.T) {
 		t.Fatalf("acknowledged %v", done)
 	}
 	ok(t, checkWriter(w, first))
-	ok(t, checkWriter(w, store.Writer{Actor: first.Actor, Token: "message:m_1", Relayed: true}))
+	ok(t, checkWriter(w, actor.Writer{Actor: first.Actor, Token: "message:m_1", Relayed: true}))
 	// A thread not registered yet holds nothing; neither does the Owner.
-	ok(t, checkWriter(w, store.Writer{Actor: "thread:new", Token: "second"}))
-	ok(t, checkWriter(w, store.Writer{Actor: "owner", Token: "anyone"}))
+	ok(t, checkWriter(w, actor.Writer{Actor: "thread:new", Token: "second"}))
+	ok(t, checkWriter(w, actor.Writer{Actor: "owner", Token: "anyone"}))
 	if n := w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_type = 'actor_registered' AND body_json->'actors' ? 'thread:s'
 	  AND body_json->>'token' = 'first'`); n != 1 {
 		t.Fatalf("the registration names its token in %d events; want 1", n)
@@ -110,8 +113,8 @@ func TestSessionOfAnOlderRegistration(t *testing.T) {
 	w := newKernelWorld(t)
 	register := func(actor string, body map[string]any) {
 		t.Helper()
-		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "actor_registered", Actor: "controller", Body: body}); err != nil {
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "actor_registered", Actor: "controller", Body: body}); err != nil {
 				return err
 			}
 			_, err := tx.Exec(ctx, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name) VALUES ($1, 'thread', 'old')`, actor)
@@ -120,15 +123,15 @@ func TestSessionOfAnOlderRegistration(t *testing.T) {
 	}
 	register("thread:old", map[string]any{"actors": []string{"thread:old"}, "note": "first write of a thread, by token first"})
 	register("thread:bare", map[string]any{"actors": []string{"thread:bare"}, "note": "imported"})
-	ok(t, checkWriter(w, store.Writer{Actor: "thread:old", Token: "first"}))
-	_, err := proposeForSession(ctx, w.rt, store.Writer{Actor: "thread:old", Token: "first"}, "k1")
+	ok(t, checkWriter(w, actor.Writer{Actor: "thread:old", Token: "first"}))
+	_, err := proposeForSession(ctx, w.rt, actor.Writer{Actor: "thread:old", Token: "first"}, "k1")
 	ok(t, err)
-	_, err = proposeForSession(ctx, w.rt, store.Writer{Actor: "thread:old", Token: "second"}, "k2")
-	is(t, err, store.ErrNotYours)
-	_, err = proposeForSession(ctx, w.rt, store.Writer{Actor: "thread:bare", Token: "first"}, "k1")
-	is(t, err, store.ErrNotYours)
+	_, err = proposeForSession(ctx, w.rt, actor.Writer{Actor: "thread:old", Token: "second"}, "k2")
+	is(t, err, actor.ErrNotYours)
+	_, err = proposeForSession(ctx, w.rt, actor.Writer{Actor: "thread:bare", Token: "first"}, "k1")
+	is(t, err, actor.ErrNotYours)
 	w.legacy(t, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name) VALUES ('thread:legacy', 'thread', 'no event')`)
-	is(t, checkWriter(w, store.Writer{Actor: "thread:legacy", Token: "first"}), store.ErrNotYours)
+	is(t, checkWriter(w, actor.Writer{Actor: "thread:legacy", Token: "first"}), actor.ErrNotYours)
 }
 
 // Two tokens writing first as one new session at once: one registers it and
@@ -139,14 +142,14 @@ func TestSessionFirstWriteAtOnce(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	for round := range 10 {
-		actor := "thread:race" + string(rune('a'+round))
+		thread := "thread:race" + string(rune('a'+round))
 		var wg sync.WaitGroup
 		errs := make([]error, 2)
 		for i, token := range []string{"first", "second"} {
 			wg.Add(1)
 			go func(i int, token string) {
 				defer wg.Done()
-				_, errs[i] = proposeForSession(context.Background(), pool, store.Writer{Actor: actor, Token: token}, "k")
+				_, errs[i] = proposeForSession(context.Background(), pool, actor.Writer{Actor: thread, Token: token}, "k")
 			}(i, token)
 		}
 		wg.Wait()
@@ -154,7 +157,7 @@ func TestSessionFirstWriteAtOnce(t *testing.T) {
 			t.Fatalf("round %d: %v, %v; want one to register and the other refused", round, errs[0], errs[1])
 		}
 		for _, err := range errs {
-			if err != nil && !errors.Is(err, store.ErrNotYours) {
+			if err != nil && !errors.Is(err, actor.ErrNotYours) {
 				t.Fatalf("round %d: %v; want ErrNotYours", round, err)
 			}
 		}
@@ -187,8 +190,8 @@ func pauseHeld(t *testing.T, actor string) (held chan struct{}, release chan str
 func TestSessionReplayAcrossTheFirstWrite(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
-	first := store.Writer{Actor: "thread:race", Token: "first"}
-	second := store.Writer{Actor: "thread:race", Token: "second"}
+	first := actor.Writer{Actor: "thread:race", Token: "first"}
+	second := actor.Writer{Actor: "thread:race", Token: "second"}
 	held, release := pauseHeld(t, first.Actor)
 	replay := make(chan error, 1)
 	go func() {
@@ -215,7 +218,7 @@ func TestSessionReplayAcrossTheFirstWrite(t *testing.T) {
 		t.Fatalf("the first write %v, the replay %v; want one to register and the other refused", errs[0], errs[1])
 	}
 	for _, err := range errs {
-		if err != nil && !errors.Is(err, store.ErrNotYours) {
+		if err != nil && !errors.Is(err, actor.ErrNotYours) {
 			t.Fatalf("%v; want ErrNotYours", err)
 		}
 	}
@@ -229,11 +232,11 @@ func TestSessionReplayAcrossTheFirstWrite(t *testing.T) {
 func TestSessionMailAcrossTheFirstWrite(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
-	first := store.Writer{Actor: "thread:race", Token: "first"}
-	second := store.Writer{Actor: "thread:race", Token: "second"}
+	first := actor.Writer{Actor: "thread:race", Token: "first"}
+	second := actor.Writer{Actor: "thread:race", Token: "second"}
 	held, release := pauseHeld(t, first.Actor)
 	type read struct {
-		ms  []store.Message
+		ms  []coord.Message
 		err error
 	}
 	got := make(chan read, 1)
@@ -249,8 +252,8 @@ func TestSessionMailAcrossTheFirstWrite(t *testing.T) {
 			wrote <- err
 			return
 		}
-		wrote <- store.InTx(bg, pool, func(tx pgx.Tx) error {
-			_, err := store.PostMessage(bg, tx, "owner", first.Actor, "note", []byte("for the first token"))
+		wrote <- eventlog.InTx(bg, pool, func(tx pgx.Tx) error {
+			_, err := coord.PostMessage(bg, tx, "owner", first.Actor, "note", []byte("for the first token"))
 			return err
 		})
 	}()
@@ -261,7 +264,7 @@ func TestSessionMailAcrossTheFirstWrite(t *testing.T) {
 	}
 	close(release)
 	r := <-got
-	if r.err != nil && !errors.Is(r.err, store.ErrNotYours) {
+	if r.err != nil && !errors.Is(r.err, actor.ErrNotYours) {
 		t.Fatalf("the read by another token: %v", r.err)
 	}
 	if len(r.ms) != 0 {

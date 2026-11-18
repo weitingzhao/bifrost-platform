@@ -10,9 +10,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 const (
@@ -146,7 +146,7 @@ func TestReadExternalDelivery(t *testing.T) {
 	// Two commits under one prefix are refused naming both; the longer prefix still resolves.
 	externalSubmitted(t, w, "thread:other", s1, "wave-2", externalOther)
 	_, err = read(externalCommit[:12], nil)
-	is(t, err, store.ErrInvalid)
+	is(t, err, eventlog.ErrInvalid)
 	if !strings.Contains(err.Error(), externalOther) {
 		t.Fatalf("ambiguous prefix does not name both: %v", err)
 	}
@@ -244,7 +244,7 @@ func TestReadExternalDeliveryFromHeartbeat(t *testing.T) {
 		t.Fatalf("same commit named later by another work: %v", doc["external_work_id"])
 	}
 	_, err = deliveryreadings.ReadDelivery(ctx, w.rt, deliveryreadings.DeliveryQuery{Commit: externalCommit[:12]})
-	is(t, err, store.ErrInvalid)
+	is(t, err, eventlog.ErrInvalid)
 	if !strings.Contains(err.Error(), externalOther) {
 		t.Fatalf("ambiguous prefix does not name both: %v", err)
 	}

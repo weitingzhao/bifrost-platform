@@ -11,8 +11,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // Regression tests for review 151.
@@ -71,7 +71,7 @@ func TestAnswerIsCopiedWhole(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	_, err := seenfacts.SeeQuestion(ctx, w.rt, "Q3", questionIs(seenfacts.Question{Status: seenfacts.QuestionAnswered, Option: "A", AnsweredAt: "2026-10-14T12:00:00Z"}))
-	is(t, err, store.ErrState)
+	is(t, err, eventlog.ErrState)
 	_, err = seenfacts.SeeQuestion(ctx, w.rt, "Q3", questionIs(answered("Q3", "A")))
 	ok(t, err)
 	var copy map[string]any

@@ -36,12 +36,12 @@ func TestAnAgentIsHeldByTheRegisteredHolder(t *testing.T) {
 	}
 }
 
-// The day's limit of new threads is ThreadsPerDay until a domain registers
+// The day's limit of new threads is threadsPerDay until a domain registers
 // where a rule sets it; a registered reader's answer is the limit.
 func TestThreadLimitIsTheDefaultUntilRegistered(t *testing.T) {
 	saved := threadLimit.Swap(nil)
 	defer threadLimit.Store(saved)
-	if n, err := threadLimitIn(context.Background(), nil); err != nil || n != ThreadsPerDay {
+	if n, err := threadLimitIn(context.Background(), nil); err != nil || n != threadsPerDay {
 		t.Fatalf("the limit with nothing registered: %d, %v", n, err)
 	}
 	RegisterThreadLimit(func(context.Context, pgx.Tx) (int, error) { return 7, nil })

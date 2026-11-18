@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 )
 
@@ -174,7 +174,7 @@ func TestGiteaBranchHeadReadsWhatGitAdvertises(t *testing.T) {
 	if got, err := head(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a1"); err != nil || got != want {
 		t.Fatalf("head = %q, %v; want %s", got, err, want)
 	}
-	if _, err := head(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a2"); !errors.Is(err, store.ErrState) {
+	if _, err := head(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a2"); !errors.Is(err, eventlog.ErrState) {
 		t.Fatalf("a branch git does not advertise: err = %v, want ErrState", err)
 	}
 	// HEAD pointing at an annotated tag: git advertises HEAD^{} right after
@@ -188,7 +188,7 @@ func TestGiteaBranchHeadReadsWhatGitAdvertises(t *testing.T) {
 	dir = t.TempDir()
 	git("init", "-q", "-b", "main")
 	f = &fakeGitea{adverts: agentsRepo(pkt("# service=git-upload-pack\n") + "0000" + git("upload-pack", "--advertise-refs", "--stateless-rpc", dir))}
-	if _, err := headReader(t, f)(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a1"); !errors.Is(err, store.ErrState) {
+	if _, err := headReader(t, f)(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a1"); !errors.Is(err, eventlog.ErrState) {
 		t.Fatalf("an empty repository: err = %v, want ErrState", err)
 	}
 }
@@ -206,7 +206,7 @@ func TestGiteaBranchHeadRefusesAMissingBranch(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := &fakeGitea{adverts: agentsRepo(body)}
 			_, err := headReader(t, f)(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a1")
-			if !errors.Is(err, store.ErrState) {
+			if !errors.Is(err, eventlog.ErrState) {
 				t.Fatalf("err = %v, want ErrState", err)
 			}
 		})
@@ -253,7 +253,7 @@ func TestGiteaBranchHeadRetriesWhatIsNotTheAgents(t *testing.T) {
 	for name, f := range cases {
 		t.Run(name, func(t *testing.T) {
 			_, err := headReader(t, f)(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a1")
-			if err == nil || errors.Is(err, store.ErrState) {
+			if err == nil || errors.Is(err, eventlog.ErrState) {
 				t.Fatalf("err = %v, want an error that is not ErrState", err)
 			}
 		})
@@ -262,7 +262,7 @@ func TestGiteaBranchHeadRetriesWhatIsNotTheAgents(t *testing.T) {
 		head := giteaBranchHead(func(context.Context) (delivery.GiteaAccess, error) {
 			return delivery.GiteaAccess{}, errors.New("no cluster")
 		}, "bifrost-agents", http.DefaultClient)
-		if _, err := head(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a1"); err == nil || errors.Is(err, store.ErrState) {
+		if _, err := head(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a1"); err == nil || errors.Is(err, eventlog.ErrState) {
 			t.Fatalf("err = %v", err)
 		}
 	})
@@ -303,7 +303,7 @@ func TestGiteaBranchHeadNeedsAWholeWellFormedAdvertisement(t *testing.T) {
 		for name, f := range cases {
 			t.Run(fmt.Sprintf("%s (branch there: %v)", name, there), func(t *testing.T) {
 				got, err := headReader(t, f)(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a1")
-				if err == nil || errors.Is(err, store.ErrState) {
+				if err == nil || errors.Is(err, eventlog.ErrState) {
 					t.Fatalf("head = %q, err = %v; want an error that is not ErrState", got, err)
 				}
 			})
@@ -332,7 +332,7 @@ func TestGiteaBranchHeadSeesWhatFollowsTheLastFlushAnywhere(t *testing.T) {
 		for name, more := range map[string]string{"bytes": "garbage", "a ref": pkt(otherSHA + " refs/heads/late\n")} {
 			f := &fakeGitea{adverts: agentsRepo(body + more)}
 			got, err := headReader(t, f)(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a1")
-			if err == nil || errors.Is(err, store.ErrState) {
+			if err == nil || errors.Is(err, eventlog.ErrState) {
 				t.Fatalf("%s after the flush at 4096 (branch there: %v): head = %q, err = %v", name, there, got, err)
 			}
 		}
@@ -352,7 +352,7 @@ func TestGiteaBranchHeadRefusesWhatIsNotABranchOfARepository(t *testing.T) {
 		{"bifrost-platform.git", "refs/heads/agent/T-7/a1"},
 		{"", "refs/heads/agent/T-7/a1"},
 	} {
-		if _, err := head(context.Background(), c.repo, c.ref); !errors.Is(err, store.ErrState) {
+		if _, err := head(context.Background(), c.repo, c.ref); !errors.Is(err, eventlog.ErrState) {
 			t.Fatalf("%q %q: err = %v, want ErrState", c.repo, c.ref, err)
 		}
 	}

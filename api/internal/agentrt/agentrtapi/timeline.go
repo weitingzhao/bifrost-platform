@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryreadings"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -67,7 +68,7 @@ func (a *API) getDelivery(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			writeError(w, 404, "not_found", "change not found")
-		case errors.Is(err, store.ErrInvalid):
+		case errors.Is(err, eventlog.ErrInvalid):
 			a.fail(w, err)
 		default:
 			a.logf("delivery: %v", err)
