@@ -133,7 +133,8 @@ export function buildBody({ model, domainOfType, expanded, seats, beat, observed
     }
     for (const id of seats.filter(i => expanded.has(seatDomain(i)))) {
       const t = beat.get(id)
-      const br = BREATH[t?.status ?? 'none']
+      // A heartbeat status the map does not know breathes as none: never thrown on (2026-11-17, the roster's idle).
+      const br = (BREATH as Record<string, (typeof BREATH)['none']>)[t?.status ?? 'none'] ?? BREATH.none
       const o: ObserveSeat | undefined = observed.get(id)
       const st = o ? seatState(o, teamLinks, wall) : 'ok'
       const read = [

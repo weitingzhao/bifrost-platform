@@ -21,7 +21,7 @@ export type BusReceipt = { id: string; consumer: string; at: string }
 /** The Console's own reader: every event it shows has this receipt, so it is not a reader on the map. */
 export const OWN_CONSUMER = 'gate:stream:console'
 
-const TONE_OF: Record<BusClient['status'], OrganTone> = { active: 'live', lost: 'lost', new: 'new' }
+const TONE_OF: Record<string, OrganTone> = { active: 'live', lost: 'lost', new: 'new', idle: 'plain' }
 
 export function nerveModel(contract: BusContract, clients: readonly BusClient[], nextgen?: BusNextgen): NerveModel {
   const publisherOf = new Map<string, string>()
@@ -33,7 +33,7 @@ export function nerveModel(contract: BusContract, clients: readonly BusClient[],
   }
   const readers: Organ[] = clients
     .filter(c => c.name !== OWN_CONSUMER)
-    .map(c => ({ id: c.name, label: c.name, col: 'reader', tone: TONE_OF[c.status], note: c.note }))
+    .map(c => ({ id: c.name, label: c.name, col: 'reader', tone: TONE_OF[c.status] ?? 'plain', note: c.note }))
   // Wake rows name who is woken, not who reads: a woken seat reads through
   // the gate under its own client name, which the roster lists once seen.
   for (const g of nextgen?.readers ?? []) {

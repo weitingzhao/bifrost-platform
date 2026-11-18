@@ -13,29 +13,16 @@ import {
   EmptyState,
   Input,
   cn,
-  type DenseTagVariant,
 } from '@bifrost/ui'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { BUS_LIST_CAP, fetchBusClients, fetchBusTrace, useBusStream, type BusClient, type BusConnection } from './useBusStream'
+import { BUS_LIST_CAP, fetchBusClients, fetchBusTrace, useBusStream } from './useBusStream'
 import { EVENT_ID_PATTERN, clockTime, traceTimeline, type TimelineRow } from './busTrace'
 import { BusEffectSection } from './BusEffectSection'
 import { BusGenerationSection } from './BusGenerationSection'
 import { BusContractSection } from './BusContractSection'
 import { BusNervePanels, BusNerveSection } from './BusNerveSection'
-
-const CONNECTION: Record<BusConnection, { label: string; variant: DenseTagVariant }> = {
-  connecting: { label: 'connecting', variant: 'neutral' },
-  live: { label: 'live', variant: 'success' },
-  reconnecting: { label: 'reconnecting', variant: 'warning' },
-  off: { label: 'bus off', variant: 'danger' },
-  denied: { label: 'not signed in', variant: 'danger' },
-}
-
-const CLIENT_STATUS: Record<BusClient['status'], { label: string; variant: DenseTagVariant }> = {
-  active: { label: 'active', variant: 'success' },
-  lost: { label: 'lost', variant: 'danger' },
-  new: { label: 'new', variant: 'warning' },
-}
+import { BusSectionBoundary } from './BusSectionBoundary'
+import { clientStatus, connectionStatus } from './busStatus'
 
 function BusClients() {
   const q = useQuery({ queryKey: ['bus', 'clients'], queryFn: fetchBusClients, refetchInterval: 60_000 })
@@ -64,7 +51,7 @@ function BusClients() {
           ) : rows.map(c => (
             <DenseTableRow key={c.name}>
               <DenseTableCell className="break-all font-mono-tabular" title={c.note}>{c.name}</DenseTableCell>
-              <DenseTableCell><DenseTag variant={CLIENT_STATUS[c.status].variant}>{CLIENT_STATUS[c.status].label}</DenseTag></DenseTableCell>
+              <DenseTableCell><DenseTag variant={clientStatus(c.status).variant}>{clientStatus(c.status).label}</DenseTag></DenseTableCell>
               <DenseTableCell className="whitespace-nowrap">{c.kind || (c.declared ? '—' : 'undeclared')}</DenseTableCell>
               <DenseTableCell className="font-mono-tabular whitespace-nowrap" title={c.last_seen}>{c.last_seen ? clockTime(c.last_seen) : 'never'}</DenseTableCell>
               <DenseTableCell className="font-mono-tabular">{c.receipts}</DenseTableCell>
@@ -134,7 +121,7 @@ export function BusPage() {
   const [draft, setDraft] = useState('')
   const draftId = draft.trim()
   const draftValid = EVENT_ID_PATTERN.test(draftId)
-  const conn = CONNECTION[stream.connection]
+  const conn = connectionStatus(stream.connection)
 
   const select = (id: string) => { setSelected(id); setDraft(id) }
 
@@ -145,11 +132,11 @@ export function BusPage() {
 
   return (
     <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-      <div className="min-w-0 lg:col-span-2"><BusNerveSection stream={stream} onSelect={select} /></div>
-      <div className="min-w-0 lg:col-span-2"><BusNervePanels stream={stream} onSelect={select} /></div>
-      <div className="min-w-0 lg:col-span-2"><BusGenerationSection /></div>
-      <div className="min-w-0 lg:col-span-2"><BusEffectSection /></div>
-      <div className="min-w-0 lg:col-span-2"><BusContractSection /></div>
+      <div className="min-w-0 lg:col-span-2"><BusSectionBoundary name="Nerves"><BusNerveSection stream={stream} onSelect={select} /></BusSectionBoundary></div>
+      <div className="min-w-0 lg:col-span-2"><BusSectionBoundary name="Nerve panels"><BusNervePanels stream={stream} onSelect={select} /></BusSectionBoundary></div>
+      <div className="min-w-0 lg:col-span-2"><BusSectionBoundary name="Generation"><BusGenerationSection /></BusSectionBoundary></div>
+      <div className="min-w-0 lg:col-span-2"><BusSectionBoundary name="Effect"><BusEffectSection /></BusSectionBoundary></div>
+      <div className="min-w-0 lg:col-span-2"><BusSectionBoundary name="Contract"><BusContractSection /></BusSectionBoundary></div>
       <OpsSection
         title="Live events"
         description={`From /api/v1/bus/stream, newest first, the last ${BUS_LIST_CAP} kept. The list starts when this page opens: the gate has no "latest N" read.`}

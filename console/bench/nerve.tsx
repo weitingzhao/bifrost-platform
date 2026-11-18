@@ -48,7 +48,11 @@ function Bench({ snap }: { snap: Snapshot }) {
   const routes = useMemo(() => routesOf(contractOf(snap)), [snap])
   const body = useMemo(() => {
     const contract = contractOf(snap)
-    const model = nerveModel(contract, [{ name: 'headrelease', declared: true, receipts: 0, status: 'active' as const }])
+    // The roster as STG had it on 11-17: a dispatcher row with nothing yet is "idle" (it turned the Bus page white once).
+    const model = nerveModel(contract, [
+      { name: 'headrelease', declared: true, receipts: 0, status: 'active' as const },
+      { name: 'sub-card-created-to-owner', declared: true, receipts: 0, status: 'idle' as const },
+    ])
     const now = Date.now()
     const dust = new Map<string, number[]>()
     for (const e of snap.events) {

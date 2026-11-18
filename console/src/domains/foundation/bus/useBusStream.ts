@@ -155,7 +155,8 @@ export interface BusClient {
   lost_after?: string
   last_seen?: string
   receipts: number
-  status: 'active' | 'lost' | 'new'
+  /** gate roster: active, lost, new, idle (a dispatcher row with nothing yet); the page shows any other as itself. */
+  status: 'active' | 'lost' | 'new' | 'idle' | (string & {})
   note?: string
 }
 
