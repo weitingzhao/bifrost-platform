@@ -252,6 +252,9 @@ func New(cfg *config.Config) (*Server, error) {
 		releasesSvc.Start(kubemetrics.WithSite(context.Background(), "releases.tick"), 5*time.Minute)
 	}
 	srv.releases = releases.NewHandler(releasesSvc)
+	if srv.delivery != nil {
+		releasesSvc.SetRunReader(srv.delivery.GateRuns)
+	}
 	titleStore := threadtitles.NewStore(releasesSvc.Status().Namespace, func() (kubernetes.Interface, error) {
 		core, _, err := clusterH.Service().KubernetesClient()
 		return core, err

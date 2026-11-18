@@ -8,6 +8,7 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // 2026-11-17, step 1 of moving the release records into the database (0027):
@@ -219,5 +220,52 @@ func TestARecordCarriesTheRunsCause(t *testing.T) {
 	}
 	if rec := buildRecord(pipelineRun("deliver-stg-8", "deliver-stg", true, t1, nil, nil), rule, nil, t1); rec.Cause != "" {
 		t.Fatalf("a run with no label named %q", rec.Cause)
+	}
+}
+
+// slimRun is a run as the bus run cache hands it back: no params, no results,
+// and the labels it keeps.
+func slimRun(run *unstructured.Unstructured) unstructured.Unstructured {
+	out := run.DeepCopy()
+	unstructured.RemoveNestedField(out.Object, "spec", "params")
+	unstructured.RemoveNestedField(out.Object, "status", "results")
+	out.SetAnnotations(nil)
+	return *out
+}
+
+// 2026-11-18 (bus/RULES.md §10 R3; the recorder and Current were the largest
+// lists of runs left): both read runs through the compared cache, on their own
+// routes, and the record is built from the run read by name, because the
+// cache keeps only part of one.
+// Positive control: buildRecord over the listed run instead of the fetched
+// one leaves Revision empty and fails the check on it.
+func TestRecorderAndCurrentReadRunsThroughTheReader(t *testing.T) {
+	ctx := context.Background()
+	t1 := time.Date(2026, 11, 18, 1, 0, 0, 0, time.UTC)
+	run := pipelineRun("deliver-stg-1", "deliver-stg", true, t1, nil, nil)
+	_ = unstructured.SetNestedSlice(run.Object, []any{map[string]any{"name": "revision", "value": shaA}}, "spec", "params")
+	s, _ := newFakeService(t, run, cloneTaskRun("deliver-stg-1", "clone-core", "core", shaA))
+	routes := map[string]int{}
+	s.SetRunReader(func(route string, pipelines []string, _ func(*unstructured.Unstructured) bool, listed func() ([]unstructured.Unstructured, error)) ([]unstructured.Unstructured, error) {
+		routes[route]++
+		items, err := listed()
+		if err != nil {
+			return nil, err
+		}
+		out := make([]unstructured.Unstructured, 0, len(items))
+		for i := range items {
+			out = append(out, slimRun(&items[i]))
+		}
+		return out, nil
+	})
+	if r := s.Tick(ctx); r.Recorded != 1 || len(r.Errors) != 0 {
+		t.Fatalf("tick = %+v", r)
+	}
+	got, err := s.Current(ctx, "app", "stg")
+	if err != nil || got.Run != "deliver-stg-1" || got.Revision != shaA {
+		t.Fatalf("current = %+v %v", got, err)
+	}
+	if routes[RouteTick] != 1 || routes[RouteCurrent] != 1 {
+		t.Fatalf("routes = %v", routes)
 	}
 }

@@ -12,14 +12,18 @@ import (
 // The gate's run map is also a read cache (bus step 2, batch 2): the
 // display reads of runs (delivery's pipeline runs, supply chain and release
 // context) read it instead of listing every run of the namespace on each
-// page poll. Nothing that gates a release, a CI verdict or a promotion reads
-// it (bus/RULES.md §10 R3: those wait for a side-by-side with the CI line).
+// page poll. What gates a release, a CI verdict or a promotion reads it only
+// through delivery.GateRuns, after a side-by-side with its own list
+// (bus/RULES.md §10 R3).
 
 // The labels and params a display read uses; the cache keeps no other.
-const labelRepo = "bifrost.io/repo"
+const (
+	labelRepo    = "bifrost.io/repo"
+	labelTrigger = "bifrost.io/trigger" // what started a run: tells the daily full CI's runs
+)
 
 var (
-	displayLabels = []string{labelPipeline, labelRevision, labelRepo, LabelCause, LabelCauseEnv}
+	displayLabels = []string{labelPipeline, labelRevision, labelRepo, labelTrigger, LabelCause, LabelCauseEnv}
 	displayParams = []string{"revision", "repo", "repo-url", "url"}
 )
 

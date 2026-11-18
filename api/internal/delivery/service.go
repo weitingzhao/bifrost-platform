@@ -1098,16 +1098,17 @@ func (s *Service) ProdDeliverArtifactsReady(ctx context.Context) (bool, string) 
 		return false, err.Error()
 	}
 	ns := s.PipelinesNamespace()
-	runs, listErr := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{
-		LabelSelector: "tekton.dev/pipeline=bifrost-deliver-prod",
+	const pipeline = "bifrost-deliver-prod"
+	items, listErr := s.GateRuns(routeProdArtifacts, []string{pipeline}, nil, func() ([]unstructured.Unstructured, error) {
+		return s.listPipelineRuns(ctx, pipeline)
 	})
-	if listErr != nil || len(runs.Items) == 0 {
+	if listErr != nil || len(items) == 0 {
 		return false, "no deliver-prod PipelineRun"
 	}
-	sort.Slice(runs.Items, func(i, j int) bool {
-		return runs.Items[i].GetCreationTimestamp().After(runs.Items[j].GetCreationTimestamp().Time)
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].GetCreationTimestamp().After(items[j].GetCreationTimestamp().Time)
 	})
-	prName := runs.Items[0].GetName()
+	prName := items[0].GetName()
 	buildTasks := []string{"build-all-apis", "build-frontend", "build-worker-socket"}
 	for _, task := range buildTasks {
 		trName := prName + "-" + task

@@ -83,7 +83,19 @@ func (c *Client) EnsureFullRun(ctx context.Context, revision string, day time.Ti
 
 // FullRuns lists the full runs created at or after since, oldest first.
 func (c *Client) FullRuns(ctx context.Context, since time.Time) ([]FullRun, error) {
-	items, err := c.pipelineRuns(ctx, "bifrost-ci-platform", "bifrost.io/trigger="+FullCITrigger)
+	const pipeline = "bifrost-ci-platform"
+	listed := func() ([]unstructured.Unstructured, error) {
+		return c.pipelineRuns(ctx, pipeline, "bifrost.io/trigger="+FullCITrigger)
+	}
+	var items []unstructured.Unstructured
+	var err error
+	if c.GateRuns != nil {
+		items, err = c.GateRuns(pipeline, func(run *unstructured.Unstructured) bool {
+			return run.GetLabels()["bifrost.io/trigger"] == FullCITrigger
+		}, listed)
+	} else {
+		items, err = listed()
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -99,6 +111,18 @@ func (c *Client) FullRuns(ctx context.Context, since time.Time) ([]FullRun, erro
 		}
 		r := FullRun{Name: item.GetName(), Revision: params["revision"], Status: runStatus(item), CreatedAt: created}
 		results, _ := namedValues(item, "status", "results")
+		if r.Status == "Failed" && len(results) == 0 {
+			// The bus run cache keeps no results: a red run's come from the run.
+			res, err := c.resource()
+			if err != nil {
+				return nil, err
+			}
+			run, err := res.Get(ctx, item.GetName(), metav1.GetOptions{})
+			if err != nil {
+				return nil, err
+			}
+			results, _ = namedValues(*run, "status", "results")
+		}
 		if value, ok := results[FailedTestsResult]; ok {
 			r.HasFailedTests = true
 			r.FailedTests = strings.FieldsFunc(value, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\t' || r == '\r' })

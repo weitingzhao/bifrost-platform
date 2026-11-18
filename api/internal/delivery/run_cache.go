@@ -12,16 +12,17 @@ import (
 	"sync/atomic"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 )
 
-// The display reads of runs read the bus cluster gate's run cache (bus step
-// 2, batch 2; api/internal/bus/RULES.md): the Console's pipeline runs, supply
-// chain and release context pages listed every run of the namespace on each
-// poll (one of them with no label selector at all). Only display reads: what
-// gates a release, a CI verdict or a promotion (releases, head-release,
-// FullCI, landingci, lastDeliverRun / lastDeliverSuccess,
-// ProdDeliverArtifactsReady) keeps its own list until the side-by-side with
-// the CI line (RULES.md §10 R3).
+// The reads of runs read the bus cluster gate's run cache (bus step 2;
+// api/internal/bus/RULES.md): the Console's pipeline runs, supply chain and
+// release context pages listed every run of the namespace on each poll (one
+// of them with no label selector at all). What gates a release, a CI verdict
+// or a promotion comes the same way through GateRuns (2026-11-18, RULES.md
+// §10 R3): the recorder, Current, the daily full CI's runs and the promote
+// checks, each its own route that earns its trust by the same comparison.
 //
 // Side by side first: while a route has fewer than N clean comparisons in a
 // row (BUS_READERS_COMPARE_N, 50), each call still lists, answers from the
@@ -55,16 +56,27 @@ const (
 	routePipelineRuns   = "pipeline_runs"
 	routeSupplyChain    = "supply_chain"
 	routeReleaseContext = "release_context"
+	routeLastDeliver    = "last_deliver"
+	routeProdArtifacts  = "prod_artifacts"
+
+	// RouteLandingFull is the daily full CI's runs (landingci.Client.FullRuns).
+	RouteLandingFull = "landingci_full"
 )
 
-var cacheRoutes = []string{routePipelineRuns, routeReleaseContext, routeSupplyChain}
+var cacheRoutes = []string{routePipelineRuns, routeReleaseContext, routeSupplyChain,
+	releases.RouteCurrent, releases.RouteTick, RouteLandingFull, routeLastDeliver, routeProdArtifacts}
 
 // routeReader is each route's reader in the source switch (bus/nextgen
 // readers.yaml): a read answered from the cache is its run evidence.
 var routeReader = map[string]string{
-	routePipelineRuns:   "pipeline-runs-page",
-	routeSupplyChain:    "supply-chain-page",
-	routeReleaseContext: "release-context",
+	routePipelineRuns:     "pipeline-runs-page",
+	routeSupplyChain:      "supply-chain-page",
+	routeReleaseContext:   "release-context",
+	releases.RouteCurrent: "releases-current",
+	releases.RouteTick:    "releases-tick",
+	RouteLandingFull:      "landingci-full",
+	routeLastDeliver:      "last-deliver",
+	routeProdArtifacts:    "prod-artifacts-ready",
 }
 
 // EnvReadersCompareN is how many clean comparisons in a row a route needs
@@ -117,8 +129,7 @@ func (s *Service) SetRunCache(c RunCache, earned map[string]bool) {
 // SetRunCache hands the service the cluster gate's run cache (wiring).
 func (h *Handler) SetRunCache(c RunCache, earned map[string]bool) { h.svc.SetRunCache(c, earned) }
 
-// CacheRoutes are the display routes that read the run cache, as the
-// readings name them.
+// CacheRoutes are the routes that read the run cache, as the readings name them.
 func CacheRoutes() []string { return append([]string(nil), cacheRoutes...) }
 
 // ReadersCompareN is how many clean comparisons a route needs to be trusted.
@@ -316,15 +327,53 @@ func WriteBusReaderMetrics(b *strings.Builder) {
 		name, help string
 		v          *sync.Map
 	}{
-		{"bifrost_bus_readers_compared_total", "Display reads of runs answered by the list and compared with the bus run cache", &metricReadersCompared},
+		{"bifrost_bus_readers_compared_total", "Reads of runs answered by the list and compared with the bus run cache", &metricReadersCompared},
 		{"bifrost_bus_readers_mismatch_total", "Comparisons in which the list and the bus run cache differed (logged by run name)", &metricReadersMismatch},
-		{"bifrost_bus_readers_cache_served_total", "Display reads of runs answered from the bus run cache without a list", &metricReadersServed},
+		{"bifrost_bus_readers_cache_served_total", "Reads of runs answered from the bus run cache without a list", &metricReadersServed},
 	} {
 		fmt.Fprintf(b, "# HELP %s %s\n# TYPE %s counter\n", m.name, m.help, m.name)
 		for _, route := range cacheRoutes {
 			fmt.Fprintf(b, "%s{route=%q} %d\n", m.name, route, readerMetric(m.v, route).Load())
 		}
 	}
+}
+
+// GateRuns answers a gate's read of runs by readThrough: from listed until
+// route has its clean comparisons, then from the cache. pipelines are the
+// pipelines whose runs it reads (none: every run); keep, when set, is the
+// filter listed applies beyond them. A cached run holds only what the cache
+// keeps, so a reader that needs more of one (a result, every param) gets that
+// run from the cluster by name. Compared: what objectKey names, whatever the
+// order.
+func (s *Service) GateRuns(route string, pipelines []string, keep func(*unstructured.Unstructured) bool, listed func() ([]unstructured.Unstructured, error)) ([]unstructured.Unstructured, error) {
+	return readThrough(s, route, func(c RunCache) []unstructured.Unstructured {
+		var out []unstructured.Unstructured
+		if len(pipelines) == 0 {
+			out = c.Objects("")
+		}
+		for _, p := range pipelines {
+			out = append(out, c.Objects(p)...)
+		}
+		if keep == nil {
+			return out
+		}
+		kept := out[:0]
+		for i := range out {
+			if keep(&out[i]) {
+				kept = append(kept, out[i])
+			}
+		}
+		return kept
+	}, listed, func(items []unstructured.Unstructured) []string {
+		keys := objectKeys(items)
+		sort.Strings(keys)
+		return keys
+	})
+}
+
+// GateRuns is Service.GateRuns for the server's wiring.
+func (h *Handler) GateRuns(route string, pipelines []string, keep func(*unstructured.Unstructured) bool, listed func() ([]unstructured.Unstructured, error)) ([]unstructured.Unstructured, error) {
+	return h.svc.GateRuns(route, pipelines, keep, listed)
 }
 
 // CachedRunsOf is a pipeline's runs from the bus run cache when it is synced

@@ -108,6 +108,33 @@ func TestFullCIRunsListsStatusAndFailedTests(t *testing.T) {
 	}
 }
 
+// 2026-11-18 (bus/RULES.md §10 R3): the full runs come through the compared
+// run cache, which keeps no results, so a red run's failed tests are read from
+// the run by name; a green one costs no read.
+// Positive control: without that read HasFailedTests is false and this fails.
+func TestFullRunsThroughTheCacheStillNameFailedTests(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC().Truncate(time.Second)
+	red := drillCI(t, FullRunName(factSHA1, now), "False", now)
+	red.SetLabels(map[string]string{"bifrost.io/trigger": FullCITrigger})
+	setField(t, red, []any{map[string]any{"name": FailedTestsResult, "value": "TestA"}}, "status", "results")
+	c, _ := drillService(t, red)
+	var route string
+	c.GateRuns = func(pipeline string, keep func(*unstructured.Unstructured) bool, _ func() ([]unstructured.Unstructured, error)) ([]unstructured.Unstructured, error) {
+		route = pipeline
+		slim := red.DeepCopy()
+		unstructured.RemoveNestedField(slim.Object, "status", "results")
+		if !keep(slim) {
+			t.Fatal("a full run was filtered out")
+		}
+		return []unstructured.Unstructured{*slim}, nil
+	}
+	runs, err := c.FullRuns(context.Background(), now.Add(-time.Hour))
+	if err != nil || route != "bifrost-ci-platform" || len(runs) != 1 || !runs[0].HasFailedTests || !reflect.DeepEqual(runs[0].FailedTests, []string{"TestA"}) {
+		t.Fatal(runs, err, route)
+	}
+}
+
 // 2026-11-14: the daily full CI was the only run that would catch a module
 // wrongly left out of a landing's CI, and a red one reached nobody: a log
 // line, a note, and a goal for a dispatch lane that was being removed; it

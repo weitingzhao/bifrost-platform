@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
 )
 
 var (
@@ -121,8 +123,8 @@ func (s *Service) settledNewest(ctx context.Context, recs []Record, lane, env st
 	if err != nil {
 		return Record{}, err
 	}
-	ns := s.rules.Namespace
-	runs, err := listRunsOf(ctx, dyn, ns, s.rules.deployingPipelines(lane, env))
+	isDeploying := func(r Rule) bool { return r.Deploys && r.Lane == lane && r.Env == env }
+	runs, err := s.readRuns(ctx, dyn, RouteCurrent, isDeploying)
 	if err != nil {
 		return Record{}, err
 	}
@@ -165,19 +167,60 @@ func (r Rules) recordedPipelines() string {
 }
 
 func (r Rules) pipelinesOf(keep func(Rule) bool) string {
+	names := r.pipelineNames(keep)
+	if len(names) == 0 {
+		return ""
+	}
+	return "tekton.dev/pipeline in (" + strings.Join(names, ",") + ")"
+}
+
+// pipelineNames are the pipelines of the rules keep takes, sorted; none when
+// a rule knows its runs by name prefix, or no rule is taken.
+func (r Rules) pipelineNames(keep func(Rule) bool) []string {
 	var names []string
 	for _, rule := range r.Rules {
 		if !keep(rule) {
 			continue
 		}
 		if rule.Match.Pipeline == "" {
-			return ""
+			return nil
 		}
 		names = append(names, rule.Match.Pipeline)
 	}
-	if len(names) == 0 {
-		return ""
-	}
 	sort.Strings(names)
-	return "tekton.dev/pipeline in (" + strings.Join(names, ",") + ")"
+	return names
+}
+
+// The routes of the recorder's two reads of runs, as the run cache's
+// side-by-side readings name them.
+const (
+	RouteCurrent = "releases_current"
+	RouteTick    = "releases_tick"
+)
+
+// RunReader answers a read of runs on route: pipelines are the ones read
+// (none: every run), listed is the read from the cluster
+// (delivery.Service.GateRuns: the list until the bus run cache has matched it
+// long enough). A run it hands back may hold only what that cache keeps.
+type RunReader func(route string, pipelines []string, keep func(*unstructured.Unstructured) bool, listed func() ([]unstructured.Unstructured, error)) ([]unstructured.Unstructured, error)
+
+// SetRunReader hands the service its reader of runs; nil lists every time.
+func (s *Service) SetRunReader(r RunReader) {
+	s.mu.Lock()
+	s.runReader = r
+	s.mu.Unlock()
+}
+
+// readRuns are the runs of the pipelines of the rules keep takes.
+func (s *Service) readRuns(ctx context.Context, dyn dynamic.Interface, route string, keep func(Rule) bool) ([]unstructured.Unstructured, error) {
+	listed := func() ([]unstructured.Unstructured, error) {
+		return listRunsOf(ctx, dyn, s.rules.Namespace, s.rules.pipelinesOf(keep))
+	}
+	s.mu.Lock()
+	r := s.runReader
+	s.mu.Unlock()
+	if r == nil {
+		return listed()
+	}
+	return r(route, s.rules.pipelineNames(keep), nil, listed)
 }

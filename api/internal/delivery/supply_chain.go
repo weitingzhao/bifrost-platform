@@ -413,25 +413,41 @@ func (s *Service) LastDeliverPlatformProdRun(ctx context.Context) *PipelineRunVi
 	return s.lastDeliverRun(ctx, "bifrost-deliver-platform-prod")
 }
 
-func (s *Service) lastDeliverRun(ctx context.Context, pipelineName string) *PipelineRunView {
-	dyn, err := s.buildDynamicClient()
+// deliverRuns are a delivery pipeline's runs for a promote check, the newest
+// start first (GateRuns).
+func (s *Service) deliverRuns(ctx context.Context, pipelineName string) []PipelineRunView {
+	items, err := s.GateRuns(routeLastDeliver, []string{pipelineName}, nil, func() ([]unstructured.Unstructured, error) {
+		return s.listPipelineRuns(ctx, pipelineName)
+	})
 	if err != nil {
 		return nil
 	}
-	ns := s.PipelinesNamespace()
-	runs, listErr := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{
-		LabelSelector: "tekton.dev/pipeline=" + pipelineName,
-	})
-	if listErr != nil || len(runs.Items) == 0 {
-		return nil
-	}
-	var views []PipelineRunView
-	for _, item := range runs.Items {
+	views := make([]PipelineRunView, 0, len(items))
+	for _, item := range items {
 		views = append(views, pipelineRunFromUnstructured(item, pipelineName))
 	}
 	sort.Slice(views, func(i, j int) bool {
 		return pipelineRunStartedAt(views[i]) > pipelineRunStartedAt(views[j])
 	})
+	return views
+}
+
+func (s *Service) listPipelineRuns(ctx context.Context, pipelineName string) ([]unstructured.Unstructured, error) {
+	dyn, err := s.buildDynamicClient()
+	if err != nil {
+		return nil, err
+	}
+	runs, err := dyn.Resource(pipelineRunGVR).Namespace(s.PipelinesNamespace()).List(ctx, metav1.ListOptions{
+		LabelSelector: "tekton.dev/pipeline=" + pipelineName,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return runs.Items, nil
+}
+
+func (s *Service) lastDeliverRun(ctx context.Context, pipelineName string) *PipelineRunView {
+	views := s.deliverRuns(ctx, pipelineName)
 	if len(views) == 0 {
 		return nil
 	}
@@ -440,25 +456,7 @@ func (s *Service) lastDeliverRun(ctx context.Context, pipelineName string) *Pipe
 }
 
 func (s *Service) lastDeliverSuccess(ctx context.Context, pipelineName string) *PipelineRunView {
-	dyn, err := s.buildDynamicClient()
-	if err != nil {
-		return nil
-	}
-	ns := s.PipelinesNamespace()
-	runs, listErr := dyn.Resource(pipelineRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{
-		LabelSelector: "tekton.dev/pipeline=" + pipelineName,
-	})
-	if listErr != nil || len(runs.Items) == 0 {
-		return nil
-	}
-	var views []PipelineRunView
-	for _, item := range runs.Items {
-		views = append(views, pipelineRunFromUnstructured(item, pipelineName))
-	}
-	sort.Slice(views, func(i, j int) bool {
-		return pipelineRunStartedAt(views[i]) > pipelineRunStartedAt(views[j])
-	})
-	for _, v := range views {
+	for _, v := range s.deliverRuns(ctx, pipelineName) {
 		if isPipelineRunSucceededView(v) {
 			succ := v
 			return &succ

@@ -61,6 +61,8 @@ type Service struct {
 	last   *TickResult
 	table  TableWriter
 	reader TableReader
+	// runReader reads runs through the bus run cache (SetRunReader).
+	runReader RunReader
 }
 
 func NewService(configDir string, clients Clients) *Service {
@@ -195,7 +197,7 @@ func (s *Service) Tick(ctx context.Context) TickResult {
 		have[cms.Items[i].Name] = &cms.Items[i]
 	}
 
-	runs, err := listRunsOf(ctx, dyn, ns, s.rules.recordedPipelines())
+	runs, err := s.readRuns(ctx, dyn, RouteTick, func(Rule) bool { return true })
 	if err != nil {
 		res.Errors = append(res.Errors, "list runs: "+err.Error())
 		return res
@@ -213,6 +215,13 @@ func (s *Service) Tick(ctx context.Context) TickResult {
 		if (current && prev.Labels[labelComplete] != "false") || !succeeded(run) {
 			continue
 		}
+		// The list says which runs to record; the record is built from the
+		// run itself (the bus run cache keeps only part of one).
+		full, err := dyn.Resource(pipelineRunGVR).Namespace(ns).Get(ctx, run.GetName(), metav1.GetOptions{})
+		if err != nil {
+			res.Errors = append(res.Errors, run.GetName()+": run: "+err.Error())
+			continue
+		}
 		trs, err := dyn.Resource(taskRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{
 			LabelSelector: "tekton.dev/pipelineRun=" + run.GetName(),
 		})
@@ -220,7 +229,7 @@ func (s *Service) Tick(ctx context.Context) TickResult {
 			res.Errors = append(res.Errors, run.GetName()+": taskruns: "+err.Error())
 			continue
 		}
-		rec := buildRecord(run, rule, trs.Items, s.now())
+		rec := buildRecord(full, rule, trs.Items, s.now())
 		if current && !fewerMissing(prev, rec) {
 			continue
 		}

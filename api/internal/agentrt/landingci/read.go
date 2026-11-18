@@ -34,6 +34,10 @@ type Client struct {
 	// FullScopeParam has a full run ask for api-scope-request=full
 	// (EnsureFullRun, AGENTRT_FULL_CI_PARAM).
 	FullScopeParam bool
+	// GateRuns, when set, answers FullRuns' read of runs (delivery's GateRuns:
+	// the list until the bus run cache has matched it long enough). A run it
+	// hands back may hold only what that cache keeps.
+	GateRuns func(pipeline string, keep func(*unstructured.Unstructured) bool, listed func() ([]unstructured.Unstructured, error)) ([]unstructured.Unstructured, error)
 }
 
 func (c *Client) namespace() string {

@@ -157,7 +157,7 @@ func TestDisplayReadsMatchTheListThenStopListing(t *testing.T) {
 			return runs
 		},
 	}
-	for _, route := range cacheRoutes {
+	for _, route := range []string{routePipelineRuns, routeReleaseContext, routeSupplyChain} {
 		c0, m0, _ := readerCounts(route)
 		// The first read is all from the list (the pipeline runs read makes
 		// two calls, so its third comparison comes in its second read).
@@ -352,5 +352,37 @@ func TestEarnedRouteStartsTrustedSamplesAndLosesTrustOnDifference(t *testing.T) 
 	s.PipelineRuns(ctx, "bifrost-deliver-stg")
 	if lists.Load() == before {
 		t.Fatal("still answering from the cache after a sampled difference")
+	}
+}
+
+// 2026-11-18 (bus/RULES.md §10 R3): the promote checks read a delivery
+// pipeline's runs like the display routes: the list answers and is compared
+// until the route has its clean comparisons, then the cache answers and the
+// cluster is not listed.
+// Positive control: GateRuns calling listed every time keeps the list count
+// rising, and the last check fails.
+func TestPromoteReadsEarnTheCache(t *testing.T) {
+	t.Setenv(EnvReadersCompareN, "2")
+	ctx := context.Background()
+	const p = "bifrost-deliver-prod"
+	dyn, lists := listCounting(cacheRun("deliver-a", p, "True", "Succeeded", 0, true), cacheRun("deliver-b", p, "False", "Failed", time.Hour, true))
+	s := cacheService(dyn)
+	s.SetRunCache(liveCache(t, dyn), nil)
+	before, mismatchBefore, _ := readerCounts(routeLastDeliver)
+	for i := 0; i < 2; i++ {
+		if run := s.lastDeliverRun(ctx, p); run == nil || run.Name != "deliver-b" {
+			t.Fatalf("last run = %+v", run)
+		}
+	}
+	after, mismatch, _ := readerCounts(routeLastDeliver)
+	if after-before != 2 || mismatch != mismatchBefore {
+		t.Fatalf("compared %d, mismatches %d", after-before, mismatch-mismatchBefore)
+	}
+	n := lists.Load()
+	if run := s.lastDeliverSuccess(ctx, p); run == nil || run.Name != "deliver-a" {
+		t.Fatalf("last success = %+v", run)
+	}
+	if lists.Load() != n {
+		t.Fatalf("a trusted route listed: %d -> %d", n, lists.Load())
 	}
 }
