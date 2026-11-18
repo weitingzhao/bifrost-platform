@@ -2,16 +2,15 @@
 // the plan tree and its changes (proposals, the Owner's card, decisions,
 // imports, notes), the adopted plan view with its bindings and observations,
 // a step's facts and sign-off, and the Progress projection. It opens no
-// HTTP. Every state change is an event written through eventlog.Append,
-// under the vocabulary package store declares.
+// HTTP. Every state change is an event written through eventlog.Append, under
+// the vocabulary this package declares (vocab.go). doc.go states the contract.
 //
 // It was the plan files of package store and is the same code (2026-11-17,
 // plan core wall step 5). It imports the base (eventlog, actor, canon,
 // artifact, strictjson, ...) and the plan domain's own packages, and never
 // store: what it needs of another domain it declares as a port
 // (planports.go), which that domain's side binds at start. Store imports
-// this package, binds the ports whose providers it still holds, and names
-// this package's checks in its vocabulary.
+// this package and binds the ports whose providers it still holds.
 package planstore
 
 import (
