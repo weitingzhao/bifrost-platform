@@ -30,3 +30,30 @@ func TestTheEventsKeepTheirContract(t *testing.T) {
 		t.Error("a job event with a loop's change was taken")
 	}
 }
+
+// Origin: 2026-11-18, the list of problem channels: a probe that turned red
+// was seen only by whoever opened the checklist page.
+func TestStateEventsCarrySourceSeverityAndCause(t *testing.T) {
+	for _, e := range []Event{EnvHealth("prod/redis", "fail", "checklist-prober", "dial\n tcp  refused"), PluginStatus("market-data", "ok", "checklist-prober", "")} {
+		if err := eventlog.CheckBody(e.Type, Body(e)); err != nil {
+			t.Errorf("%+v: %v", e, err)
+		}
+		if err := registry.Agree(e.Type); err != nil {
+			t.Errorf("%s: %v", e.Type, err)
+		}
+	}
+	b := Body(EnvHealth("prod/redis", "fail", "checklist-prober", "dial\n tcp  refused"))
+	if b["severity"] != "critical" || b["cause"] != "dial tcp refused" || b["ref"] != "/api/v1/checklist/signals" {
+		t.Errorf("body %+v", b)
+	}
+	b["severity"] = "info"
+	if eventlog.CheckBody(TypeEnv, b) == nil {
+		t.Error("a failure called info was taken")
+	}
+	if Valid(EnvHealth("prod/redis", "unknown", "checklist-prober", "")) {
+		t.Error("unknown is not a state to announce")
+	}
+	if Valid(EnvHealth("redis", "fail", "checklist-prober", "")) || Valid(PluginStatus("market-data", "fail", "", "")) {
+		t.Error("an event without its environment or source was taken")
+	}
+}

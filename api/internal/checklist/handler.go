@@ -3,6 +3,7 @@ package checklist
 import (
 	"encoding/json"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 )
@@ -11,6 +12,7 @@ type Handler struct {
 	store     *Store
 	audit     *actuation.AuditLog
 	husbandry SignalSource
+	onFlip    atomic.Pointer[flipFuncBox]
 }
 
 func NewHandler(configDir string, audit *actuation.AuditLog) *Handler {

@@ -53,8 +53,8 @@
       "hash": "108b07dadaff952d"
     },
     "env.health.changed": {
-      "version": 1,
-      "hash": "5250014534df1833"
+      "version": 2,
+      "hash": "1fdf5a74a5e9639d"
     },
     "git.main.advanced": {
       "version": 1,
@@ -101,8 +101,8 @@
       "hash": "83ef006849abb484"
     },
     "plugin.status.changed": {
-      "version": 1,
-      "hash": "c3df988bf1c86421"
+      "version": 2,
+      "hash": "69019e89acb7b32e"
     },
     "reconcile.drift.found": {
       "version": 1,

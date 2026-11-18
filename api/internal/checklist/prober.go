@@ -129,6 +129,7 @@ func (h *Handler) probeAndMerge(ctx context.Context, p *Prober) {
 		}
 	}
 	slog.Info("checklist prober run", "run_id", runID, "items", len(sigs), "red", strings.Join(bad, ","))
+	h.sayFlips(ctx, append(p.watchedItems(sigs), p.watchedExtras(ctx)...))
 	maintainer.Success(maintainer.PlatformID(maintainer.LoopChecklistProber))
 }
 

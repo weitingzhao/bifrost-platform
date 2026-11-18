@@ -449,14 +449,14 @@ channels:
   env.health.changed:
     address: ev.rocket.{env}.env.health.changed
     x-bifrost:
-      version: 1
+      version: 2
       lane: event
       guarantee: best-effort
       subject: "<env>/<service>"
       publisher: gate-db
       domain: compute
-      ref: "/api/v1/environments"
-      reconcile: "health probes"
+      ref: "/api/v1/checklist/signals"
+      reconcile: "checklist prober, every 10 minutes"
       on_unread: stale
       retention: 30d
       consumers: [console]
@@ -465,14 +465,14 @@ channels:
   plugin.status.changed:
     address: ev.rocket.{env}.plugin.status.changed
     x-bifrost:
-      version: 1
+      version: 2
       lane: event
       guarantee: best-effort
       subject: "<plugin>"
       publisher: gate-db
       domain: tenant
-      ref: "/api/v1/plugins"
-      reconcile: "plugin health probes"
+      ref: "/api/v1/plugins/<plugin>/status"
+      reconcile: "checklist prober, every 10 minutes"
       on_unread: stale
       retention: 30d
       consumers: [console]

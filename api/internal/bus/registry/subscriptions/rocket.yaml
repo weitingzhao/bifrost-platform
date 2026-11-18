@@ -121,6 +121,23 @@ subscriptions:
       always_namespaces: "bifrost-platform-prod,bifrost-prod"
     guarantee: durable
     by: alert-letters
+  # 2026-11-18 (the communication line's list of problem channels, L10, R01, R09,
+  # R11, R12): a probed service or plugin that turns to fail wakes the duty seat
+  # once; degraded and recovery stay on the bus.
+  - id: env-health-fail-to-duty
+    on: [env.health.changed]
+    change: fail
+    deliver: wake
+    to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    guarantee: durable
+    by: dispatcher
+  - id: plugin-status-fail-to-duty
+    on: [plugin.status.changed]
+    change: fail
+    deliver: wake
+    to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    guarantee: durable
+    by: dispatcher
   # A new approval card pages the Owner's phone from this event (2026-11-18,
   # taken over from the direct push). The approvals service sends it, because
   # the notice is composed from the card and recorded on it, once per card; its

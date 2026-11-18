@@ -52,6 +52,8 @@ type FileRecord struct {
 	LastFailAt         string           `json:"last_fail_at,omitempty"`
 	LastAllOkAt        string           `json:"last_all_ok_at,omitempty"`
 	History            []RunSummary     `json:"history,omitempty"`
+	// Watched is the last signal said on the bus, by watched thing (flips.go).
+	Watched map[string]string `json:"watched,omitempty"`
 }
 
 type RunSummary struct {
