@@ -738,6 +738,21 @@ func TestBuildPlacementFollowsTheProfiles(t *testing.T) {
 	}
 }
 
+// 2026-11-18, the coordinator: the daily unit run does not land on 05, where two
+// tasks timed out. Unlike a release it can wait, so the slow disk is refused.
+// Positive control: MaxDiskTier 2 in UnitTask picks 05 here.
+func TestUnitsAreNeverPlacedOnTheSlowDisk(t *testing.T) {
+	s := NewService(&config.ClusterEntry{ID: "test"})
+	s.SetClientsetForTest(k8sfake.NewSimpleClientset(placementNode("ubt-k3s-05", true, false, "16")))
+	s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) {
+		return map[string]NodeMetrics{"ip-ubt-k3s-05": {WriteLatencySeconds: 0.161, MemoryAvailable: 0.6}}, nil
+	})
+	p, measured := s.PlaceTask(context.Background(), UnitTask)
+	if !measured || p.Node != "" || !strings.Contains(p.Why, "too slow") {
+		t.Fatalf("placement = %+v %v", p, measured)
+	}
+}
+
 // Same origin: metrics that cannot be read leave the run to the scheduler and
 // say so, and a platform with no reader changes nothing about its runs.
 // Positive control: treating the error as an empty answer loses "could not be read".

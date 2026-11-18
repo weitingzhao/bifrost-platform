@@ -26,6 +26,8 @@ import (
 // for this: with nothing measured or nothing fit, the scheduler decides as before.
 
 const (
+	// HostIDLabel names a node's host in selectors.
+	HostIDLabel = hostIDLabel
 	hostIDLabel = "bifrost.io/host-id"
 	batchLabel  = "bifrost.io/batch"
 
@@ -43,6 +45,7 @@ const (
 // TaskProfile is what a kind of work needs from a node.
 type TaskProfile struct {
 	DiskHeavy   bool
+	MaxDiskTier int     // the slowest disk tier a disk-heavy task may go to
 	CPUCores    float64 // unrequested CPU the node must have
 	MemoryBytes float64 // unrequested memory the node must have
 }
@@ -50,8 +53,12 @@ type TaskProfile struct {
 // placedBuildPipelines are the pipelines whose builds are placed. Others follow
 // once this one is measured. Room is what one kaniko step may reach.
 var placedBuildPipelines = map[string]TaskProfile{
-	"bifrost-deliver-platform": {DiskHeavy: true, CPUCores: 4, MemoryBytes: 4 << 30},
+	"bifrost-deliver-platform": {DiskHeavy: true, MaxDiskTier: 2, CPUCores: 4, MemoryBytes: 4 << 30},
 }
+
+// UnitTask is the unit runs: never on the slow disk, where two tasks timed out
+// on 2026-11-18; they wait for a node instead, nothing depends on them.
+var UnitTask = TaskProfile{DiskHeavy: true, MaxDiskTier: 1, CPUCores: 4, MemoryBytes: 4 << 30}
 
 // NodeMetrics is one node's measurements. All four are present or the node is
 // absent from the reader's answer.
@@ -137,6 +144,9 @@ func chooseNode(task TaskProfile, nodes []NodeProfile) BuildPlacement {
 	var passed []string
 	for _, n := range nodes {
 		problem := n.Problem
+		if problem == "" && task.DiskHeavy && diskTier(n.Metrics.WriteLatencySeconds) > task.MaxDiskTier {
+			problem = fmt.Sprintf("disk tier %d is too slow", diskTier(n.Metrics.WriteLatencySeconds))
+		}
 		if problem == "" {
 			if full := nodeFull(task, n); full != "" {
 				problem = "full: " + full
@@ -178,7 +188,23 @@ func chooseNode(task TaskProfile, nodes []NodeProfile) BuildPlacement {
 // spec; placed says the run's annotations should record the choice.
 func (s *Service) placeBuild(ctx context.Context, pipeline string, spec map[string]any) (BuildPlacement, bool) {
 	task, wanted := placedBuildPipelines[pipeline]
-	if !wanted || s.nodeMetrics == nil {
+	if !wanted {
+		return BuildPlacement{}, false
+	}
+	p, placed := s.PlaceTask(ctx, task)
+	if p.Node != "" {
+		pinBuildNode(spec, p.Node)
+	}
+	if placed {
+		slog.Info("delivery: build placement", "pipeline", pipeline, "node", p.Node, "why", p.Why)
+	}
+	return p, placed
+}
+
+// PlaceTask chooses the node for the task now; false when this platform reads
+// no node metrics. Node "" with a reason: nothing fits or nothing could be read.
+func (s *Service) PlaceTask(ctx context.Context, task TaskProfile) (BuildPlacement, bool) {
+	if s.nodeMetrics == nil {
 		return BuildPlacement{}, false
 	}
 	ctx, cancel := context.WithTimeout(kubemetrics.WithSite(ctx, "delivery.build-placement"), buildPlacementTimeout)
@@ -189,14 +215,15 @@ func (s *Service) placeBuild(ctx context.Context, pipeline string, spec map[stri
 	} else {
 		p = chooseNode(task, nodes)
 	}
-	if p.Node != "" {
-		pinBuildNode(spec, p.Node)
-	}
 	if len(p.Why) > placementWhyLimit {
 		p.Why = p.Why[:placementWhyLimit]
 	}
-	slog.Info("delivery: build placement", "pipeline", pipeline, "node", p.Node, "why", p.Why)
 	return p, true
+}
+
+// PlaceTask passes to the service.
+func (h *Handler) PlaceTask(ctx context.Context, task TaskProfile) (BuildPlacement, bool) {
+	return h.svc.PlaceTask(ctx, task)
 }
 
 // nodeProfiles reads the candidates: every node with a host id that batch work

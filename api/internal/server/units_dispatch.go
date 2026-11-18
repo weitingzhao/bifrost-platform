@@ -464,7 +464,11 @@ func (s *Server) unitRunsSource() func(context.Context) error {
 		var advance func(context.Context, string, string, string) error
 		if cfg.Mode != "off" {
 			advance = func(ctx context.Context, repo, commit, tier string) error {
-				_, err := advanceUnits(ctx, db, trees, cl, cfg, repo, commit, tier)
+				placed, err := s.placedUnitConfig(ctx)
+				if err != nil {
+					return err
+				}
+				_, err = advanceUnits(ctx, db, trees, cl, placed, repo, commit, tier)
 				return err
 			}
 		}
@@ -505,6 +509,11 @@ func (s *Server) handleUnitEvidenceRequest(w http.ResponseWriter, r *http.Reques
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
 	defer cancel()
+	cfg, err := s.placedUnitConfig(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
 	out, err := advanceUnits(ctx, s.agentRuntime.api.DB, s.unitTreesOf(), s.unitClusterOf(), cfg, repo, commit, "branch")
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error(), "partial": out})

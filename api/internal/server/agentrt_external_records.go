@@ -56,6 +56,7 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 		}
 	}
 	src.UnitRuns = s.unitRunsSource()
+	src.UnitsDaily = s.unitsDailySource()
 	src.HeadRelease = s.bus.serialHeadRelease(s.headReleaseSource())
 	src.PostRelease = s.postReleaseSource()
 	if s.delivery != nil {
