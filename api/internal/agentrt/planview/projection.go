@@ -5,7 +5,7 @@ import "sort"
 // Adoption validates the complete graph with planview.Resolve. Reading keeps
 // this root's validated items and edges even if a dependency's document cannot
 // be read now; its milestone evaluates Unknown through the same facts snapshot.
-func AdoptedGraph(d *Document) Graph {
+func adoptedGraph(d *Document) Graph {
 	g := Graph{Mainline: []NodeRef{}, Edges: []Dependency{}}
 	order := map[string]int{}
 	for _, n := range d.Items {

@@ -9,7 +9,7 @@ func ProjectSnapshotNodes(nodes []map[string]any, document *Document, warningTex
 	if warning := warningText; warning != "" {
 		warnings = append(warnings, warning)
 	} else if doc := document; doc != nil {
-		graph = AdoptedGraph(doc)
+		graph = adoptedGraph(doc)
 		items = doc.Items
 	} else {
 		warnings = append(warnings, "Legacy evidence: plan has no adopted view; nodes are Unclassified")
