@@ -34,6 +34,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/drill"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gatecluster"
 	bushook "github.com/weitingzhao/bifrost-platform/api/internal/bus/hook"
@@ -290,9 +291,17 @@ func (s *Server) announceAlerts(ctx context.Context, facts []opsagent.AlertFact)
 
 func busLogf(format string, args ...any) { slog.Info(fmt.Sprintf(format, args...)) }
 
-// busEventsAfter is the event log's cross-stream read, for the relay and the
-// gate (they import no domain package).
+// busEventsAfter is the event log's cross-stream read, for the gate and the
+// observer (they import no domain package). Drill streams are left out: nobody
+// follows a drill and it does not count as an event nobody heard (bus/drill).
 func busEventsAfter(ctx context.Context, tx pgx.Tx, after relay.Cursor, limit int, types []string) ([]byte, relay.Cursor, error) {
+	doc, next, err := eventlog.EventsAfter(ctx, tx, eventlog.EventCursor{TxID: after.TxID, EventID: after.EventID}, limit, eventlog.EventFilter{Types: types, HiddenPrefixes: []string{drill.StreamPrefix}})
+	return doc, relay.Cursor{TxID: next.TxID, EventID: next.EventID}, err
+}
+
+// relayEventsAfter is the same read for the relay, drills included: a drill goes
+// through the relay to the stream, which is what it proves.
+func relayEventsAfter(ctx context.Context, tx pgx.Tx, after relay.Cursor, limit int, types []string) ([]byte, relay.Cursor, error) {
 	doc, next, err := eventlog.EventsAfter(ctx, tx, eventlog.EventCursor{TxID: after.TxID, EventID: after.EventID}, limit, eventlog.EventFilter{Types: types})
 	return doc, relay.Cursor{TxID: next.TxID, EventID: next.EventID}, err
 }
@@ -414,6 +423,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 		return
 	}
 	s.startAlertRelayWatch(ctx)
+	s.startBusDrill(ctx)
 	if (hookOn || natsOn) && s.delivery != nil {
 		rec := &bushook.Reconciler{DB: s.bus.db, Repos: bushook.ReposFromEnv(), Head: s.agentRuntimeMains(), Logf: busLogf}
 		safego.Go("bus-gate-git-reconcile", func() { rec.Run(ctx) })
@@ -460,7 +470,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 		s.consumeAlertLetters(ctx, js, env)
 		s.consumeUnitWatch(ctx, js, env)
 		s.consumeReleaseRecords(ctx, js, env)
-		r := &relay.Relay{Ledger: ledger, Out: &relay.JSOut{JS: js, Stream: relay.EventStreamName(relay.Tenant, env)},
+		r := &relay.Relay{Ledger: &relay.PGLedger{DB: func() relay.TxBeginner { return pool }, EventsAfter: relayEventsAfter}, Out: &relay.JSOut{JS: js, Stream: relay.EventStreamName(relay.Tenant, env)},
 			Tenant: rocket, Env: env, Logf: busLogf}
 		r.Run(ctx, relay.Listen(ctx, pool, busLogf))
 	})

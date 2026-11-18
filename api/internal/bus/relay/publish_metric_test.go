@@ -45,3 +45,14 @@ func TestThePublishHistogramCountsSlowPublishes(t *testing.T) {
 		t.Errorf("5 s bucket grew by %d", got)
 	}
 }
+
+// Origin: 2026-11-18, the Owner's "first make problems visible": a drill must
+// reach the stream without passing for real traffic of the topic it borrows.
+func TestADrillIsCountedUnderItsOwnStream(t *testing.T) {
+	if got := countedAs(Row{Type: "alert.rule.fired", Stream: "drill:N06"}); got != "drill:N06" {
+		t.Fatalf("a drill counted as %q", got)
+	}
+	if got := countedAs(Row{Type: "alert.rule.fired", Stream: "alert:NodeDown"}); got != "alert.rule.fired" {
+		t.Fatalf("a real alert counted as %q", got)
+	}
+}

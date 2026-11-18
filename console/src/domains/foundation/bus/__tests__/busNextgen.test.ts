@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { contractGraph, generationSegments, shortAddress } from '../busNextgen'
+import { contractGraph, generationSegments, problemProofText, shortAddress } from '../busNextgen'
 
 // 2026-11-17 (the Owner: the Bus page must show the layer as it is, with
 // pictures; nothing kept by hand). The bar's segments come from the
@@ -42,5 +42,15 @@ describe('contract graph', () => {
   it('shortens a thread address', () => {
     expect(shortAddress('thread:local_ab850773-fe26')).toBe('thread:ab850773…')
     expect(shortAddress('commit.session')).toBe('commit.session')
+  })
+})
+
+// 2026-11-18, the Owner's "first make problems visible": a drill proves a
+// channel's event can be written, a real run proves it ran. The page must say
+// which, and an older platform with no drill count reads as none.
+describe('problem channel proof', () => {
+  it('counts real runs and drill-only channels apart', () => {
+    expect(problemProofText({ proven: 29, drilled: 12 })).toBe('29 proven by a real run · 12 by a drill only')
+    expect(problemProofText({ proven: 29 })).toBe('29 proven by a real run · 0 by a drill only')
   })
 })

@@ -177,3 +177,36 @@ func TestFireNamesTheRecordItTellsOf(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// 2026-11-18, the Owner's "first make problems visible": X-A24
+// (BifrostAlertmanagerWebhookFailing) had no bus event. The relay watch now says
+// Prometheus's reading of it as an alert, and a Prometheus that does not answer
+// changes nothing.
+func TestRelayWatchSaysTheWebhookOnlyWhenPrometheusAnswers(t *testing.T) {
+	var w alerts.RelayWatch
+	up := alerts.RelayReading{Reached: true, Enabled: true, HeartbeatOK: true}
+	if got := w.Step(up); len(got) != 0 {
+		t.Fatalf("nothing known of the webhook: %v", got)
+	}
+	failing := up
+	failing.WebhookKnown, failing.WebhookFailing = true, true
+	got := w.Step(failing)
+	if len(got) != 1 || got[0].Name != alerts.NameWebhookFailing || got[0].Status != "firing" || got[0].Namespace != "monitoring" {
+		t.Fatalf("firing: %v", got)
+	}
+	if got := w.Step(failing); len(got) != 0 {
+		t.Fatalf("a repeat is not said again: %v", got)
+	}
+	if got := w.Step(up); len(got) != 0 || !w.Webhook {
+		t.Fatalf("Prometheus not answering must not change state: %v, failing=%v", got, w.Webhook)
+	}
+	if got := w.Step(alerts.RelayReading{WebhookKnown: true, WebhookFailing: true}); len(got) != 0 {
+		t.Fatalf("an unreachable relay says nothing of the webhook it already said: %v", got)
+	}
+	ok := up
+	ok.WebhookKnown = true
+	got = w.Step(ok)
+	if len(got) != 1 || got[0].Name != alerts.NameWebhookFailing || got[0].Status != "resolved" {
+		t.Fatalf("resolved: %v", got)
+	}
+}

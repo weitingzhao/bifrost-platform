@@ -13,6 +13,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	busalerts "github.com/weitingzhao/bifrost-platform/api/internal/bus/alerts"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/drill"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/nextgen"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -60,7 +61,10 @@ func (s *Server) startAlertRelayWatch(ctx context.Context) {
 					if w.Missing, err = alertFiring(ctx, tx, busalerts.NameHeartbeatMissing); err != nil {
 						return err
 					}
-					w.Unreachable, err = alertFiring(ctx, tx, busalerts.NameRelayUnreachable)
+					if w.Unreachable, err = alertFiring(ctx, tx, busalerts.NameRelayUnreachable); err != nil {
+						return err
+					}
+					w.Webhook, err = alertFiring(ctx, tx, busalerts.NameWebhookFailing)
 					return err
 				}); err != nil {
 					slog.Warn("bus: alert relay watch not seeded", "error", err)
@@ -69,7 +73,9 @@ func (s *Server) startAlertRelayWatch(ctx context.Context) {
 				seeded = true
 			}
 			prev := w
-			if list := w.Step(readAlertRelay(ctx, client, url)); len(list) > 0 {
+			reading := readAlertRelay(ctx, client, url)
+			reading.WebhookFailing, reading.WebhookKnown = s.webhookFailing(ctx)
+			if list := w.Step(reading); len(list) > 0 {
 				if err := busalerts.Announce(ctx, db, list); err != nil {
 					slog.Warn("bus: alert relay change not said", "error", err)
 					w = prev // said on the next look
@@ -77,6 +83,16 @@ func (s *Server) startAlertRelayWatch(ctx context.Context) {
 			}
 		}
 	})
+}
+
+// webhookFailing is what Prometheus says of Alertmanager's webhook to the
+// platform; known is false when Prometheus does not answer.
+func (s *Server) webhookFailing(ctx context.Context) (failing, known bool) {
+	v, err := s.promql(ctx, `ALERTS{alertname="`+busalerts.NameWebhookFailing+`",alertstate="firing"}`)
+	if err != nil {
+		return false, false
+	}
+	return len(v) > 0, true
 }
 
 func alertFiring(ctx context.Context, tx pgx.Tx, name string) (bool, error) {
@@ -110,13 +126,18 @@ func readAlertRelay(ctx context.Context, client *http.Client, url string) busale
 // problemEvidence is evidence for the problem channels. Some topics are shared,
 // and their traffic says nothing about one channel, so a channel can name its
 // own proof: "alert:<name>" and "stream:<id>" are the last event of a stream,
-// "source:<type>:<source>" the last event of that type from that source.
+// "source:<type>:<source>" the last event of that type from that source. A
+// channel's drill key, "drill:<id>", is the last event of its drill stream
+// (bus/drill): shown apart, never counted as a run.
 // Anything else goes to base.
 func (s *Server) problemEvidence(ctx context.Context, now time.Time, base func(string) nextgen.Evidence) func(string) nextgen.Evidence {
 	return func(id string) nextgen.Evidence {
 		kind, rest, _ := strings.Cut(id, ":")
 		var read func(tx pgx.Tx) (eventlog.Row, bool, error)
 		switch kind {
+		case "drill":
+			// Published by the relay under its own stream's name (relay.Pass).
+			return base("topic:" + drill.Stream(rest))
 		case "alert", "stream":
 			stream := rest
 			if kind == "alert" {

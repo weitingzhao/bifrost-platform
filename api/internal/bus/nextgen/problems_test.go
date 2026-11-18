@@ -62,7 +62,15 @@ func TestProblemChannelsNameRealThings(t *testing.T) {
 		if p.Owner == "" {
 			t.Errorf("%s: no owner", p.ID)
 		}
+		if p.Drill != "" && (p.Drill != "drill:"+p.ID || p.State != ProblemConnected) {
+			t.Errorf("%s: drill %q must be drill:<id> and only on a connected row", p.ID, p.Drill)
+		}
 		for _, e := range p.Events {
+			// 2026-11-18, the Owner's "first make problems visible": a drill must
+			// never count as a real run, so no row names a drill stream as events.
+			if strings.Contains(e, "drill:") {
+				t.Errorf("%s: event %q names a drill stream; a drill goes in drill:", p.ID, e)
+			}
 			if name, ok := strings.CutPrefix(e, "alert:"); ok {
 				if !strings.Contains(raised, `"`+name+`"`) {
 					t.Errorf("%s: %q is not an alert the platform raises", p.ID, e)
@@ -99,7 +107,7 @@ func TestProblemReadingCountsOnlyWhatRan(t *testing.T) {
 		{ID: "G", State: ProblemDeleted},
 	}, func(id string) Evidence { return Evidence{State: ev[id]} })
 	want := ProblemProgress{Live: 6, Connected: 4, Proven: 1, Unmeasured: 1, Deleted: 1, Pending: 1, Todo: 1,
-		Unproven: []string{"B", "C"}, Open: []string{"E", "F"}}
+		Unproven: []string{"B", "C"}, Open: []string{"E", "F"}, DrilledOnly: []string{}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
@@ -107,5 +115,36 @@ func TestProblemReadingCountsOnlyWhatRan(t *testing.T) {
 		func(id string) Evidence { return Evidence{State: ev[id]} })
 	if !done.Done {
 		t.Fatalf("every channel proven or deleted is done: %+v", done)
+	}
+}
+
+// 2026-11-18, the Owner's "first make problems visible": 12 channels never fire
+// in normal life and stayed "unproven". A drill proves the event can be written;
+// it must show apart from a real run, and a real run must win over it.
+func TestProblemReadingSeparatesDrills(t *testing.T) {
+	ev := map[string]string{"topic:real": EvidenceRunning, "topic:never": EvidenceNone, "drill:A": EvidenceRunning, "drill:B": EvidenceNone,
+		"drill:C": EvidenceStale, "drill:D": EvidenceUnmeasured}
+	read := func(id string) Evidence { return Evidence{State: ev[id]} }
+	got := SummarizeProblems([]ProblemChannel{
+		{ID: "A", State: ProblemConnected, Events: []string{"topic:never"}, Drill: "drill:A"},
+		{ID: "B", State: ProblemConnected, Events: []string{"topic:never"}, Drill: "drill:B"},
+		{ID: "C", State: ProblemConnected, Events: []string{"topic:real"}, Drill: "drill:C"},
+		{ID: "D", State: ProblemConnected, Events: []string{"topic:never"}, Drill: "drill:D"},
+		{ID: "E", State: ProblemConnected, Events: []string{"topic:never"}},
+	}, read)
+	want := ProblemProgress{Live: 5, Connected: 5, Proven: 1, Drilled: 1, DrilledOnly: []string{"A"}, Unmeasured: 1,
+		Unproven: []string{"B", "E"}, Open: []string{}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+	if got.Done {
+		t.Fatal("a channel with neither a run nor a drill is not done")
+	}
+	done := SummarizeProblems([]ProblemChannel{
+		{ID: "A", State: ProblemConnected, Events: []string{"topic:never"}, Drill: "drill:A"},
+		{ID: "C", State: ProblemConnected, Events: []string{"topic:real"}, Drill: "drill:C"},
+	}, read)
+	if !done.Done || done.Proven != 1 || done.Drilled != 1 {
+		t.Fatalf("every channel proven or drilled is done: %+v", done)
 	}
 }

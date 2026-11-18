@@ -106,7 +106,7 @@ func (r *Relay) Pass(ctx context.Context) (int, error) {
 			n++
 			metricPublished.Add(1)
 			observePublish(time.Since(publishStart))
-			publishedType(row.Type, time.Now())
+			publishedType(countedAs(row), time.Now())
 		}
 		if len(rows) < PageSize {
 			if r.cursor.Less(next) {
@@ -258,6 +258,17 @@ var byType = struct {
 	n    map[string]int64
 	last map[string]time.Time
 }{n: map[string]int64{}, last: map[string]time.Time{}}
+
+// DrillStreamPrefix starts the stream of a drill (bus/drill). A drill is counted
+// under its stream, so it proves its own channel and no real topic's traffic.
+const DrillStreamPrefix = "drill:"
+
+func countedAs(row Row) string {
+	if strings.HasPrefix(row.Stream, DrillStreamPrefix) {
+		return row.Stream
+	}
+	return row.Type
+}
 
 func publishedType(typ string, at time.Time) {
 	byType.Lock()

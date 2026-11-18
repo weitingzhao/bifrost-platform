@@ -27,6 +27,13 @@ export type NextgenBaseline = { key: string; label: string; at: string; note?: s
 export type NextgenProblems = {
   live: number; connected: number; proven: number; unmeasured: number; deleted: number; pending: number; todo: number
   unproven: string[]; open: string[]; done: boolean
+  /** Channels with no real run whose drill ran (bus/drill), and which. Absent from an older platform. */
+  drilled?: number; drilled_only?: string[]
+}
+
+/** How many channels a real run proved and how many only a drill did. */
+export function problemProofText(p: Pick<NextgenProblems, 'proven' | 'drilled'>): string {
+  return `${p.proven} proven by a real run · ${p.drilled ?? 0} by a drill only`
 }
 export type BusNextgen = {
   generated_at: string

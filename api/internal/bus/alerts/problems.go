@@ -19,6 +19,10 @@ const (
 	NameArtifactRefused  = "ArtifactRefused"
 	NameHeartbeatMissing = "AlertmanagerHeartbeatMissing"
 	NameRelayUnreachable = "AlertRelayUnreachable"
+	// NameWebhookFailing is Prometheus's own alert that Alertmanager cannot
+	// deliver to the platform's webhook (X-A24): the platform says it on the bus
+	// from what Prometheus reports, as it does for the relay.
+	NameWebhookFailing = "BifrostAlertmanagerWebhookFailing"
 
 	// platformNamespace is the "namespace" of what the platform says of its
 	// own runtime; monitoringNamespace of the alert path itself.
@@ -64,19 +68,26 @@ const relayFailsToAlert = 3
 // RelayReading is one look at the phone relay (GET /api/v1/alerts/relay).
 type RelayReading struct {
 	Reached, Enabled, HeartbeatOK bool
+	// WebhookKnown is whether Prometheus answered; WebhookFailing what it said
+	// of NameWebhookFailing. A Prometheus that does not answer changes nothing.
+	WebhookKnown, WebhookFailing bool
 }
 
-// RelayWatch mirrors the relay's own view onto the bus. The relay still pages
+// RelayWatch mirrors the relay's own view onto the bus, and Prometheus's view of the webhook. The relay still pages
 // the phone by itself when the Watchdog stops: it shares nothing with the
 // cluster, and this watch is only the same fact where the rest can be seen.
 type RelayWatch struct {
-	Missing, Unreachable bool
-	fails                int
+	Missing, Unreachable, Webhook bool
+	fails                         int
 }
 
 // Step takes one reading and says what changed.
 func (w *RelayWatch) Step(r RelayReading) []Alert {
 	var out []Alert
+	if r.WebhookKnown && r.WebhookFailing != w.Webhook {
+		w.Webhook = r.WebhookFailing
+		out = append(out, relayAlert(NameWebhookFailing, w.Webhook))
+	}
 	if !r.Reached {
 		if w.fails++; w.fails >= relayFailsToAlert && !w.Unreachable {
 			w.Unreachable = true

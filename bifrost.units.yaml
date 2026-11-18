@@ -178,6 +178,9 @@ modules:
       # tests check every retired channel is gone from the Go code and every
       # moved reader's code is there, so they read the whole module.
       api/internal/bus/nextgen: ["api"]
+      # The drill's tests read the problem register and the subscription tables, and
+      # scan the Go files that import it or read the ledger for the bus.
+      api/internal/bus/drill: ["api"]
       api/internal/codeguard: ["api", "config/domain-ownership.json", "bifrost-trade-infra:agent-config/release-policy/paths.json"]
       api/internal/config: ["api/internal/config", "config/environments.yaml"]
       api/internal/delivery: ["api/internal/delivery", "bifrost-trade-infra:k8s/cicd"]

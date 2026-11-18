@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { fetchBusNextgen, generationSegments, movedWithoutEvidence, type BusNextgen, type NextgenReader, type NextgenStep } from './busNextgen'
+import { fetchBusNextgen, generationSegments, movedWithoutEvidence, problemProofText, type BusNextgen, type NextgenReader, type NextgenStep } from './busNextgen'
 
 const COLOR: Record<string, string> = {
   replaced: 'var(--primary)',
@@ -65,10 +65,11 @@ function ProblemLine({ p }: { p: NonNullable<BusNextgen['problems']> }) {
     <div className="text-xs" data-testid="bus-problem-channels">
       <span className="font-medium">Problem channels: {p.connected} connected / {p.live}</span>
       <span className="text-muted-foreground">
-        {' '}· {p.deleted} deleted · {p.pending} pending · {p.todo} to do · {p.proven} proven by a run or drill
+        {' '}· {p.deleted} deleted · {p.pending} pending · {p.todo} to do · {problemProofText(p)}
         {p.unmeasured > 0 && ` · ${p.unmeasured} unmeasured`}
       </span>
       {p.open.length > 0 && <p className="m-0 text-muted-foreground">Open: {p.open.join(', ')}</p>}
+      {p.drilled_only && p.drilled_only.length > 0 && <p className="m-0 text-muted-foreground">Proven by a drill only: {p.drilled_only.join(', ')}</p>}
       {p.unproven.length > 0 && <p className="m-0 text-muted-foreground">Connected, no proof yet: {p.unproven.join(', ')}</p>}
     </div>
   )

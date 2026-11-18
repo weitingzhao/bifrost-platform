@@ -219,24 +219,32 @@ type ProblemChannel struct {
 	Plan   string   `yaml:"plan" json:"plan,omitempty"`
 	What   string   `yaml:"what" json:"what,omitempty"`
 	Events []string `yaml:"events" json:"events"`
-	To     string   `yaml:"to" json:"to,omitempty"`
-	Owner  string   `yaml:"owner" json:"owner"`
+	// Drill is the evidence key of the channel's drill ("drill:<id>", bus/drill):
+	// a channel whose event never comes in normal life gets one controlled event a
+	// day, which shows apart from a real run.
+	Drill string `yaml:"drill" json:"drill,omitempty"`
+	To    string `yaml:"to" json:"to,omitempty"`
+	Owner string `yaml:"owner" json:"owner"`
 }
 
 // ProblemProgress is the reading of the problem channels: Connected of Live
 // (all but the deleted). Done is nothing pending, nothing left to connect or
-// delete, and every connected channel proven by a run or a drill.
+// delete, and every connected channel proven by a run or a drill. Proven are
+// the channels a real run proved; Drilled those with no real proof whose drill
+// ran (DrilledOnly names them); a real proof wins when both exist.
 type ProblemProgress struct {
-	Live       int      `json:"live"`
-	Connected  int      `json:"connected"`
-	Proven     int      `json:"proven"`
-	Unmeasured int      `json:"unmeasured"`
-	Deleted    int      `json:"deleted"`
-	Pending    int      `json:"pending"`
-	Todo       int      `json:"todo"`
-	Unproven   []string `json:"unproven"`
-	Open       []string `json:"open"`
-	Done       bool     `json:"done"`
+	Live        int      `json:"live"`
+	Connected   int      `json:"connected"`
+	Proven      int      `json:"proven"`
+	Drilled     int      `json:"drilled"`
+	DrilledOnly []string `json:"drilled_only"`
+	Unmeasured  int      `json:"unmeasured"`
+	Deleted     int      `json:"deleted"`
+	Pending     int      `json:"pending"`
+	Todo        int      `json:"todo"`
+	Unproven    []string `json:"unproven"`
+	Open        []string `json:"open"`
+	Done        bool     `json:"done"`
 }
 
 // Problems reads the problem channels.
@@ -251,11 +259,12 @@ func Problems() ([]ProblemChannel, error) {
 }
 
 // SummarizeProblems counts the channels. A connected channel is proven when
-// each event it names was published inside the evidence window: a problem
+// each event it names was published inside the evidence window (a channel with
+// none proven by a run is drilled when its drill ran inside it): a problem
 // topic is quiet when nothing is wrong, so a long gap inside the window (stale)
 // still proves it ran.
 func SummarizeProblems(ps []ProblemChannel, evidence func(string) Evidence) ProblemProgress {
-	out := ProblemProgress{Unproven: []string{}, Open: []string{}}
+	out := ProblemProgress{Unproven: []string{}, Open: []string{}, DrilledOnly: []string{}}
 	for _, c := range ps {
 		switch c.State {
 		case ProblemDeleted:
@@ -273,7 +282,16 @@ func SummarizeProblems(ps []ProblemChannel, evidence func(string) Evidence) Prob
 					proven = false
 				}
 			}
+			drill := ""
+			if !proven && c.Drill != "" {
+				drill = evidence(c.Drill).State
+			}
 			switch {
+			case drill == EvidenceRunning || drill == EvidenceStale:
+				out.Drilled++
+				out.DrilledOnly = append(out.DrilledOnly, c.ID)
+			case drill == EvidenceUnmeasured:
+				out.Unmeasured++
 			case !proven:
 				out.Unproven = append(out.Unproven, c.ID)
 			case unmeasured:
@@ -290,7 +308,7 @@ func SummarizeProblems(ps []ProblemChannel, evidence func(string) Evidence) Prob
 		}
 		out.Live++
 	}
-	out.Done = out.Pending == 0 && out.Todo == 0 && out.Proven == out.Connected
+	out.Done = out.Pending == 0 && out.Todo == 0 && out.Proven+out.Drilled == out.Connected
 	return out
 }
 
