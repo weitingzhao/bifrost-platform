@@ -14,6 +14,7 @@ const LABEL: Record<string, string> = {
   merged: 'kept and reworked',
   deleted: 'dead, deleted',
   kept: 'kept as it is',
+  'not-a-channel': 'not a channel between modules',
   announced: 'stays, says its changes on the bus',
   'not-this-way': 'not this way',
   reserved: 'reserved',

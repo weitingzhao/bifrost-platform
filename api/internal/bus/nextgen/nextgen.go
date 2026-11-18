@@ -182,7 +182,7 @@ type Baseline struct {
 }
 
 // Dispositions in the table, in the order the page shows them.
-var Dispositions = []string{"replaced", "merged", "deleted", "kept", "announced", "not-this-way", "reserved"}
+var Dispositions = []string{"replaced", "merged", "deleted", "kept", "announced", "not-this-way", "not-a-channel", "reserved"}
 
 // Reader statuses.
 const (

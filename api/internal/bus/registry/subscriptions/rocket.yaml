@@ -100,11 +100,32 @@ subscriptions:
     to: commit.session
     guarantee: durable
     by: dispatcher
+  # 2026-11-18: release.deploy.finished is written for successful runs only, so
+  # a row on it never fired. A failed delivery or build is a ci.run.finished of
+  # its pipeline, whatever the repository; the duty seat always hears of it,
+  # because Trade and Research runs often have no session behind the commit.
   - id: deploy-failed-to-committer
-    on: [release.deploy.finished]
+    on: [ci.run.finished]
+    match: "bifrost-deliver-"
     change: "!succeeded"
     deliver: wake
     to: commit.session
+    guarantee: durable
+    by: dispatcher
+  - id: deploy-failed-to-duty
+    on: [ci.run.finished]
+    match: "bifrost-deliver-"
+    change: "!succeeded"
+    deliver: wake
+    to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    guarantee: durable
+    by: dispatcher
+  - id: build-failed-to-duty
+    on: [ci.run.finished]
+    match: "bifrost-build-"
+    change: "!succeeded"
+    deliver: wake
+    to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
     guarantee: durable
     by: dispatcher
   # 2026-11-17 (the coordinator, the same reading: alert.rule.fired heard by no
