@@ -127,7 +127,11 @@ modules:
         - "api/internal/agentrt/planview/testdata"
         - "console/src/api/__fixtures__/plan-view-collector.generated.json"
         - "console/src/api/__fixtures__/plan-view-signoff.generated.json"
+        # 2026-11-17: TestPlanVocabularyIsRegistered reads the event register.
+        - "api/internal/bus/registry/ledger"
       api/internal/agentrt/recorderimport: ["api/internal/agentrt/recorderimport"]
+      # 2026-11-17: TestSeenFactsAreRegistered reads the event register.
+      api/internal/agentrt/seenfacts: ["api/internal/agentrt/seenfacts", "api/internal/bus/registry/ledger"]
       api/internal/agentrt/rules: ["."]
       api/internal/agentrt/store:
         - "api/internal/agentrt/store"

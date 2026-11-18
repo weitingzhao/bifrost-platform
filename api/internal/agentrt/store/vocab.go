@@ -56,8 +56,7 @@ var eventTypes = map[string]bool{"attempt_leased": true,
 	"attempt_started": true, "attempt_progress": true, "attempt_checkpointed": true, "attempt_stale": true,
 	"attempt_renewed": true, "attempt_computed": true, "attempt_persisted": true, "attempt_submitted": true,
 	"attempt_lost": true, "attempt_ended": true, "attempt_salvaged": true, "attempt_cancelled": true,
-	"artifact_put": true, "verification_recorded": true, "owner_wait_opened": true, "owner_wait_closed": true,
-	"approval_seen": true, "question_seen": true, "ci_seen": true, "pipeline_seen": true, "deploy_seen": true, "actor_registered": true, "host_registered": true, "host_state_changed": true,
+	"artifact_put": true, "verification_recorded": true, "owner_wait_opened": true, "owner_wait_closed": true, "actor_registered": true, "host_registered": true, "host_state_changed": true,
 	"host_retired": true, "rule_proposed": true, "rule_signed": true,
 	"rule_tightened": true, "rule_expired": true, "rule_approved": true, "capability_scored": true, "candidate_status_changed": true,
 	"budget_charged": true, "pool_cooldown_set": true, "pool_measured": true,
@@ -123,11 +122,6 @@ var bodies = map[string][]field{
 	// changes with its old and new value.
 	"rule_approved": {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"approval_id", kID, false}, {"text_artifact_id", kID, false}, {"changes", kAny, false}},
 	"rule_proposed": {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"direction", kStr, false}, {"text_artifact_id", kID, false}, {"reason", kStr, false}, {"token", kStr, true}},
-	"pipeline_seen": {{"run", kStr, false}, {"uid", kStr, false}, {"pipeline", kStr, false}, {"kind", kStr, false}, {"created_at", kStr, false}, {"started_at", kStr, false}, {"completed_at", kStr, false}, {"result", kStr, false}, {"repo", kStr, true}, {"revision", kStr, true}, {"reason", kStr, true}, {"tree", kStr, true}, {"tested_by", kStr, true}, {"landed_commit", kStr, true}, {"change_ids", kStr, true}, {"outcome", kStr, true}},
-	"approval_seen": {{"approval", kInt, false}, {"status", kStr, false}, {"action", kStr, false}, {"tier", kStr, false}, {"created_at", kStr, false}, {"expired", kBool, false}, {"env", kStr, true}, {"repo", kStr, true}, {"task", kStr, true}, {"op", kStr, true}, {"decided_at", kStr, true}},
-	"question_seen": {{"question", kID, false}, {"status", kStr, false}, {"option", kStr, true}, {"text", kStr, true}, {"answered_by", kStr, true}, {"answered_at", kStr, true}, {"recommended", kStr, true}, {"number", kInt, true}, {"created_at", kStr, true}, {"owner_duty", kStr, true}, {"task", kStr, true}, {"channel", kStr, true}, {"withdrawn_at", kStr, true}, {"withdrawn_by", kStr, true}, {"expired_at", kStr, true}},
-	"ci_seen":       {{"repo", kStr, false}, {"commit", kStr, false}, {"status", kStr, false}, {"run", kStr, true}},
-	"deploy_seen":   {{"env", kStr, false}, {"commit", kStr, false}, {"deploy_ref", kAny, false}},
 	// note: landed, the commit an implementation's change first stood on main
 	// as, when the controller first saw it there, with landed_via (its
 	// route), matched_by (how main names it), landed_result (the pushed
@@ -254,8 +248,6 @@ func keysOf[V any](m map[string]V) []string {
 // shaped is an id or a reference of a fixed shape (eventlog.Shaped).
 func shaped(name string, re *regexp.Regexp) value { return eventlog.Shaped(name, re) }
 
-func instant(s string) string { return eventlog.Instant(s) }
-
 var (
 	ulid        = `[0-9A-HJKMNP-TV-Z]{26}`
 	taskID      = shaped("a task id", regexp.MustCompile(`^t_`+ulid+`$`))
@@ -284,11 +276,6 @@ var fieldValues = map[string]map[string]value{
 		"line_digest": fingerprint},
 	"rule_proposed": {"direction": oneOf("initial", "loosen", "tighten"), "text_artifact_id": artifactID},
 	"rule_approved": {"approval_id": approvalRef, "text_artifact_id": artifactID},
-	"approval_seen": {"created_at": instant, "decided_at": instant},
-	"pipeline_seen": {"tree": commit, "tested_by": ciRunName, "created_at": instant, "started_at": instant, "completed_at": instant, "kind": oneOf("ci", "delivery", "other"), "result": oneOf("Succeeded", "Failed"), "reason": shaped("a reason", regexp.MustCompile(`^[A-Za-z]{1,64}$`))},
-	"question_seen": {"answered_at": instant, "created_at": instant, "withdrawn_at": instant, "expired_at": instant},
-	"ci_seen":       {"commit": commit},
-	"deploy_seen":   {"env": oneOf("dev", "stg", "prod"), "commit": commit},
 	"note": {"landed": commit, "landed_tip": commit, "landed_via": oneOf(LandedViaLanding, LandedViaHarvest, LandedViaOwnerMerge),
 		"matched_by": oneOf(MatchedResult, MatchedCherryPick, MatchedTrailer), "landed_result": commit, "pruned": agentBranch, "prune_refused": agentBranch, "prune_failed": agentBranch, "voided": approvalRef,
 		"prune_round": oneOf("opened", "closed")},
@@ -316,7 +303,6 @@ var metricLabel = shaped("a metric label", regexp.MustCompile(`^(baseline|group)
 var metricIDRE = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 var ciRepo = shaped("a repository name", regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,99}$`))
-var ciRunName = shaped("a PipelineRun name", regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`))
 
 // approvalIDRE is the shape of an approval's id.
 var approvalIDRE = regexp.MustCompile(`^appr_[0-9a-f]{16}$`)
