@@ -137,8 +137,10 @@ func nodeFull(task TaskProfile, n NodeProfile) string {
 	return ""
 }
 
-// chooseNode ranks the nodes that can take the task, the fastest disk first for
-// disk-heavy work, and says why of the first and of each node passed over.
+// chooseNode ranks the nodes that can take the task, the lowest write latency
+// first for disk-heavy work (by the number, not the tier: on 2026-11-18 CI load
+// took ubt-k3s-07 from 6.8 to 14.8 ms, and two nodes in one tier would otherwise
+// fall to name order, the slow disk first), and says why of the first and of each node passed over.
 func chooseNode(task TaskProfile, nodes []NodeProfile) BuildPlacement {
 	var fit []NodeProfile
 	var passed []string
@@ -160,7 +162,7 @@ func chooseNode(task TaskProfile, nodes []NodeProfile) BuildPlacement {
 	}
 	sort.SliceStable(fit, func(i, j int) bool {
 		if task.DiskHeavy {
-			if a, b := diskTier(fit[i].Metrics.WriteLatencySeconds), diskTier(fit[j].Metrics.WriteLatencySeconds); a != b {
+			if a, b := fit[i].Metrics.WriteLatencySeconds, fit[j].Metrics.WriteLatencySeconds; a != b {
 				return a < b
 			}
 		}

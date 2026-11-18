@@ -712,6 +712,8 @@ func TestBuildPlacementFollowsTheProfiles(t *testing.T) {
 		why     string
 	}{
 		{"today: 07 first, the batch-deny node never", append(two[:3:3], placementPod("done", fast, "15", corev1.PodSucceeded)), today(), fast, "disk tier 1"},
+		// Positive control: ordering by tier then name picks ubt-k3s-05 here.
+		{"two slow disks: the less slow one", two, set(fast, func(n *NodeMetrics) { n.WriteLatencySeconds = 0.03 }), fast, "disk tier 2 (30.0 ms"},
 		{"a new node that measures well is chosen", append(two[:3:3], placementNode(added, true, false, "16")), today(), added, "disk tier 0"},
 		{"CPU busy", two, set(fast, func(n *NodeMetrics) { n.CPUBusy = 0.9 }), slow, "CPU 90% busy"},
 		{"disk busy", two, set(fast, func(n *NodeMetrics) { n.DiskBusy = 0.9 }), slow, "disk 90% busy"},
