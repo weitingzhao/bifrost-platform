@@ -88,10 +88,21 @@ subscriptions:
   # 2026-11-17 (the coordinator, after the nerve map showed release.deploy.finished
   # heard by no one): a release that reached an environment wakes whoever
   # wrote its commit (the deploy's subject is <env>/<lane>@<sha>, its ref names
-  # the repo). Failed deploys are the CI line's (their own tripwire).
+  # the repo). 2026-11-18 (the coordinator): only PROD and failures. Of 65 such
+  # letters to two seats in a day, 44 were never acknowledged, most of them a
+  # successful STG deploy, which every commit gets. Read the acknowledged share
+  # after a week.
   - id: deploy-finished-to-committer
     on: [release.deploy.finished]
+    match: "prod/"
     change: succeeded
+    deliver: wake
+    to: commit.session
+    guarantee: durable
+    by: dispatcher
+  - id: deploy-failed-to-committer
+    on: [release.deploy.finished]
+    change: "!succeeded"
     deliver: wake
     to: commit.session
     guarantee: durable
