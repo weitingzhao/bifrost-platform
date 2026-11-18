@@ -65,7 +65,7 @@ func TestRetiredChannelsAreGone(t *testing.T) {
 	if len(chs) != 153 {
 		t.Fatalf("%d channels, the table has 153", len(chs))
 	}
-	want := map[string]int{"replaced": 53, "merged": 21, "kept": 36, "announced": 28, "deleted": 10, "not-this-way": 4, "reserved": 1}
+	want := map[string]int{"replaced": 23, "merged": 22, "kept": 68, "announced": 25, "deleted": 10, "not-this-way": 4, "reserved": 1}
 	got := map[string]int{}
 	seen := map[string]bool{}
 	for _, c := range chs {
@@ -258,15 +258,16 @@ func TestStepsMatchTheTableAndCutsNameTheirProof(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := Summarize(chs)
-	want := map[string]int{"0": 6, "1": 5, "2": 7, "3": 71, "4": 19, "5": 2, "any": 10, "none": 33}
+	want := map[string]int{"0": 6, "1": 5, "2": 7, "3": 47, "4": 11, "5": 3, "any": 9, "none": 65}
 	for _, st := range p.Steps {
 		if st.Total != want[st.Step] {
 			t.Errorf("step %s: %d rows, the table has %d", st.Step, st.Total, want[st.Step])
 		}
 	}
-	// 2026-11-18: X-B20 and X-A11 stay (the coordinator), L01 stays too, and N11 and X-C10 turned out to be the new road already (their notices are the mail), and S02 keeps its log (the audit route is read about once a day), and C03 is not worth moving, so 63 go, not 70.
-	if p.Removable != 63 || p.Stays != 90 || p.End != 103 {
-		t.Errorf("removable %d, stays %d, end %d; the table says 63, 90, 103", p.Removable, p.Stays, p.End)
+	// 2026-11-18: what is left to remove after the review of what each channel is
+	// still needed for, and of what moving it would save.
+	if p.Removable != 33 || p.Stays != 120 || p.End != 133 {
+		t.Errorf("removable %d, stays %d, end %d; the table says 33, 120, 133", p.Removable, p.Stays, p.End)
 	}
 	for _, c := range chs {
 		if c.Cut == nil {
