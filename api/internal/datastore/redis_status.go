@@ -190,7 +190,7 @@ func probeRedisTarget(spec redisTargetSpec, snap Snapshot, services map[string]c
 	}
 
 	view.Reach = probe.ReachDegraded
-	view.Detail = "not deployed — phase ⑥ (k8s/data/redis/)"
+	view.Detail = "not deployed"
 	return view
 }
 
@@ -248,7 +248,7 @@ func buildRedisEnvEndpoints(targets []RedisTargetInstanceView) []RedisEnvEndpoin
 			row.QueueReach = probe.ReachOK
 			row.Detail = "live ok · queue retired Wave 5 (PG-as-broker)"
 		default:
-			row.Detail = "Awaiting phase ⑥ Bitnami live deploy"
+			row.Detail = "Live target not ready"
 		}
 		out = append(out, *row)
 	}
@@ -285,7 +285,7 @@ func embeddedRedisProbe(snap Snapshot) []RedisEmbeddedView {
 			Namespace: ns,
 			Host:      "redis",
 			Reach:     reach,
-			Detail:    detail + " · single instance live+queue db=0 · retire in phase ⑥",
+			Detail:    detail + " · single instance live+queue db=0",
 			Image:     image,
 		})
 	}
@@ -302,7 +302,7 @@ func deploymentImage(d *appsv1.Deployment) string {
 func redisBackupDep(snap Snapshot, minioReach probe.Reachability) ServiceDependencyView {
 	nfsHot := snap.NFSHot
 	reach := probe.ReachDegraded
-	detail := "RDB → s3://redis-backup @ MinIO (phase ⑥)"
+	detail := "RDB → s3://redis-backup @ MinIO"
 	if minioReach == probe.ReachOK && nfsHot.Reachability == probe.ReachOK {
 		reach = probe.ReachDegraded
 		detail = "MinIO ready · CronJob redis-cli --rdb not deployed yet"
@@ -384,24 +384,24 @@ func redisLanAccessProbe(ctx context.Context, clientset kubernetes.Interface) []
 
 func summarizeRedisStatus(r RedisStatusResponse) (probe.Reachability, string) {
 	if r.TargetsReady == r.TargetsTotal && r.TargetsTotal > 0 && r.EmbeddedActive == 0 {
-		return probe.ReachOK, "Bitnami live @ data NS · Celery queue retired · embedded redis retired"
+		return probe.ReachOK, "All data namespace targets ready · no embedded redis active"
 	}
 	// Live targets ready (queue may be retired standby) + embedded still serving Trade envs.
 	if r.TargetsReady > 0 && r.EmbeddedActive > 0 {
 		return probe.ReachOK, fmt.Sprintf(
-			"live ok · queue retired Wave 5 · %d embedded still active (cutover optional)",
+			"Data namespace targets ready · %d embedded redis active",
 			r.EmbeddedActive,
 		)
 	}
 	if r.TargetsReady > 0 {
 		return probe.ReachOK, fmt.Sprintf(
-			"%d/%d data NS targets ready · queue targets standby/retired",
+			"%d/%d data namespace targets ready",
 			r.TargetsReady, r.TargetsTotal,
 		)
 	}
 	if r.EmbeddedActive > 0 {
 		return probe.ReachOK, fmt.Sprintf(
-			"Embedded redis in %d namespace(s) · Bitnami live optional · queue retired Wave 5",
+			"Embedded redis in %d namespace(s) · no data namespace target ready",
 			r.EmbeddedActive,
 		)
 	}
@@ -455,6 +455,6 @@ func EmbeddedRedisDependency(snap Snapshot, namespace string) *ServiceDependency
 		ID:           "embedded-redis-" + namespace,
 		Label:        fmt.Sprintf("Embedded redis (%s)", namespace),
 		Reachability: reach,
-		Detail:       detail + " — retire in phase ⑥",
+		Detail:       detail,
 	}
 }

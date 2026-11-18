@@ -241,7 +241,7 @@ export function ClusterRedisDetailPanel({
 
         <OpsSection
           title="Embedded redis (interim)"
-          description="Single redis:7-alpine per namespace · live+queue db=0 · retire phase ⑥"
+          description="Single redis:7-alpine per namespace · live+queue db=0"
           bodyPadding="none"
         >
           <DenseDataTable>

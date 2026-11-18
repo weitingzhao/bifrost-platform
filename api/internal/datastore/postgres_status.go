@@ -419,7 +419,7 @@ func embeddedPostgresProbe(snap Snapshot) []PostgresLegacyView {
 		reach, detail := snap.DeploymentReach(&d)
 		out = append(out, PostgresLegacyView{
 			Kind: "embedded", Namespace: env.Namespace, Reach: reach,
-			Detail: detail + " · pending cutover to data NS",
+			Detail: detail,
 		})
 	}
 	return out
@@ -442,9 +442,9 @@ func summarizePostgresStatus(r PostgresStatusResponse) (probe.Reachability, stri
 		}
 	}
 	if embeddedActive > 0 {
-		return probe.ReachDegraded, fmt.Sprintf("CNPG HA ready · %d embedded postgres still active (phase ③+)", embeddedActive)
+		return probe.ReachDegraded, fmt.Sprintf("CNPG HA ready · %d embedded postgres still active", embeddedActive)
 	}
-	return probe.ReachOK, "CNPG HA + backup ready · awaiting app cutover"
+	return probe.ReachOK, "CNPG HA + backup ready"
 }
 
 func intFromUnstructured(obj *unstructured.Unstructured, fields ...string) int {
