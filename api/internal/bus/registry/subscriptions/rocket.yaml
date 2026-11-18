@@ -254,6 +254,7 @@ clients:
   - name: unit-watch
     kind: durable
     lost_after: 168h
+    envs: [prod]
     domain: verification
     note: reads main's unit declaration on each advance of main; records a known regression when it stops reading and the fix when it reads again
   - name: card-created-notice

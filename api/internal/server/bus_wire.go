@@ -713,7 +713,10 @@ func (s *Server) consumeWindowQueue(ctx context.Context, js jetstream.JetStream,
 // unitwatch). The event only kicks the watch: a pass may read up to 100
 // trees, and an event is held for 15 seconds.
 func (s *Server) consumeUnitWatch(ctx context.Context, js jetstream.JetStream, env string) {
-	if s.delivery == nil {
+	// PROD's watch speaks for main. STG restarts with every delivery, so its
+	// empty cache read all of main's ~1,580 blobs from Gitea each time, about
+	// every ten minutes (2026-11-18), for a verdict PROD already gives.
+	if s.delivery == nil || env != "prod" {
 		return
 	}
 	kicks := make(chan struct{}, 1)
