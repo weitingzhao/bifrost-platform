@@ -13,6 +13,7 @@ import { CiFirstScreen, CiGuide, type Stage } from './CiFirstScreen'
 import { CiRunPanel } from './CiRunPanel'
 import { CiScoreStrip } from './CiScoreStrip'
 import { CiTimeline } from './CiTimeline'
+import { OpenRegressions } from './OpenRegressions'
 import {
   changeMap, ciSteps, domainCards, hhmm, inFlightOf, landedCommits, lastSucceeded, leftOutFact, median24h, notMeasured, ownRuns, placeLabel, selectiveFact,
   stageMedian, stageRuns, stageSteps, startsAfterMain, touchedRuns, verdict, type DeliveryStage,
@@ -166,6 +167,7 @@ export function CiSection() {
         : <p className={`m-0 ${MUTED}`}>Loading…</p>)}
       {repos?.length === 0 && <p className={`m-0 ${MUTED}`}>The platform tracks no project</p>}
       {repo && <CiFirstScreen verdict={now} loading={history.isPending} error={history.data == null ? errorText(history.error) : null} stages={stages} />}
+      {repo && <OpenRegressions repo={repo} />}
       <CiScoreStrip />
       {repo && <section aria-label="Runs" className={CARD}>
         <div className="mb-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">

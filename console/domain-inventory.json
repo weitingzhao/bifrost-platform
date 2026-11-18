@@ -100,6 +100,7 @@
         "console/src/api/ciDomains.ts",
         "console/src/api/ciScorecard.ts",
         "console/src/api/matrixTypes.ts",
+        "console/src/api/regressions.ts",
         "console/src/api/seatStatus.ts"
       ],
       "imports": [
@@ -4552,6 +4553,7 @@
         "console/src/pages/shell/ci/DomainMapView.tsx",
         "console/src/pages/shell/ci/FrontendDomainMapView.tsx",
         "console/src/pages/shell/ci/ModuleExplorer.tsx",
+        "console/src/pages/shell/ci/OpenRegressions.tsx",
         "console/src/pages/shell/ci/PlatformTimings.tsx",
         "console/src/pages/shell/ci/RunTimingDetail.tsx",
         "console/src/pages/shell/ci/TimingTrends.tsx",
@@ -4561,6 +4563,7 @@
         "console/src/pages/shell/ci/__tests__/CiTimeline.test.tsx",
         "console/src/pages/shell/ci/__tests__/CommitJourney.test.tsx",
         "console/src/pages/shell/ci/__tests__/DomainMapView.test.tsx",
+        "console/src/pages/shell/ci/__tests__/OpenRegressions.test.tsx",
         "console/src/pages/shell/ci/__tests__/PlatformTimings.test.tsx",
         "console/src/pages/shell/ci/__tests__/approvalReadingsModel.test.ts",
         "console/src/pages/shell/ci/__tests__/ciPageFixture.ts",

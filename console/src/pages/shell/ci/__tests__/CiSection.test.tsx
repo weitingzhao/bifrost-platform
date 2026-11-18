@@ -31,6 +31,7 @@ vi.mock('@/api/delivery', () => ({ fetchSupplyChain: vi.fn(), fetchReleaseWindow
 vi.mock('@/api/ciTimings', () => ({ fetchCITimings: vi.fn() }))
 vi.mock('@/api/ciScorecard', () => ({ fetchCiScorecard: vi.fn() }))
 vi.mock('@/api/releasePolicy', () => ({ fetchReleasePolicy: vi.fn() }))
+vi.mock('@/api/regressions', () => ({ fetchOpenRegressions: vi.fn(async () => []) }))
 vi.mock('@/api/ciDomains', async original => ({ ...(await original<typeof import('@/api/ciDomains')>()), fetchCiDomains: vi.fn(), fetchCiChanges: vi.fn() }))
 // The graph library measures the DOM to draw; here it is a list of the nodes and edges it was given.
 vi.mock('@xyflow/react', () => ({
