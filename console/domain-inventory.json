@@ -2682,7 +2682,6 @@
         "console/src/lib/__tests__/envVisual.test.ts",
         "console/src/lib/__tests__/materialFrames.test.ts",
         "console/src/lib/__tests__/noMutationInEffect.test.ts",
-        "console/src/lib/__tests__/releaseGateAgentCopy.test.ts",
         "console/src/lib/__tests__/signInError.test.ts",
         "console/src/lib/__tests__/tradeFrontendUrls.test.ts",
         "console/src/lib/envVisual.ts",

@@ -251,7 +251,6 @@ modules:
       # have left the console's keys as they were.
       - mcp/platform
       - mcp/trade/src
-      - agent/remediation/src
       - config/trade-api-domains.yaml
       - scripts/ci/console_reads_api.txt
     image: docker.io/library/node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0

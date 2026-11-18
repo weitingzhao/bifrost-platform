@@ -10,9 +10,8 @@
 #
 # After bootstrap:
 #   1. Sync ~/Desktop/stocks (at least bifrost-platform + bifrost-trade-infra)
-#   2. Copy .env from Mac Pro (CURSOR_API_KEY, tokens) — never commit
-#   3. cd bifrost-platform && make dev-agent
-#   4. On Mac Pro .env: REMEDIATION_RUNNER_URL=http://192.168.10.50:8781
+#   2. Deploy the host services: python scripts/run_agent.py deploy <user@host>
+#      (the remediation runner and Hermes gateway are retired; see deploy_mac_mini.sh)
 
 set -euo pipefail
 
@@ -76,24 +75,13 @@ Next steps (Owner):
      ~/Desktop/stocks/bifrost-trade-infra \\
      vision@${AGENT_IP_HINT}:~/Desktop/stocks/
 
-2. On this Mac Mini, create .env (copy from Mac Pro, do not paste secrets in chat):
+2. Deploy the host services (git-bridge, probe bridge, operator plane) from the Mac Pro:
    cd ~/Desktop/stocks/bifrost-platform
-   cp .env.example .env
-   # Edit: CURSOR_API_KEY, REMEDIATION_RUNNER_BIND=0.0.0.0
-   #       PLATFORM_API_URL=http://<Mac-Pro-LAN-IP>:8780
-   #       PLATFORM_OPERATOR_TOKEN=<operator token>
-   #       KUBECONFIG=~/.kube/bifrost-k3s.yaml  (if cluster tools needed)
+   python scripts/run_agent.py deploy vision@${AGENT_IP_HINT}
+   (The remediation runner and Hermes gateway are retired and no longer installed.)
 
-3. Start remediation runner (LAN-visible for Mac Pro platform-api):
-   cd ~/Desktop/stocks/bifrost-platform
-   python scripts/run_agent.py start
-
-4. On Mac Pro bifrost-platform/.env add:
-   REMEDIATION_RUNNER_URL=http://${AGENT_IP_HINT}:8781
-   Then restart platform-api (make start).
-
-5. Verify from Mac Pro:
-   curl -s http://${AGENT_IP_HINT}:8781/health
+3. Verify from Mac Pro:
+   curl -s http://${AGENT_IP_HINT}:8783/health
 
 EOF
 }
