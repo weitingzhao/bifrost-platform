@@ -352,57 +352,94 @@ func (s *Server) postReleaseSource() func(context.Context) error {
 	}
 	healthURL := fmt.Sprintf("http://%s.%s.svc:%d/health", postReleaseHealthService, namespace, postReleaseHealthPort)
 	slog.Info("post release check: observing", "pipeline", pipeline, "namespace", namespace, "settle", settle.String(), "health", healthURL)
-	var mu sync.Mutex
-	done := map[string]bool{} // the runs this process has recorded a verdict for
-	lastWhy := ""
-	// One pass at a time: the loop's and the bus's (consumePostRelease)
-	// would otherwise both judge a run before either recorded it.
-	var passMu sync.Mutex
-	pass := func(ctx context.Context, path string) error {
-		passMu.Lock()
-		defer passMu.Unlock()
-		ctx, cancel := context.WithTimeout(ctx, postReleasePass)
-		defer cancel()
-		// Only this pipeline's runs are read: from the bus's run cache when
-		// it is synced (2026-11-17: this pass listed the pipeline's runs from
-		// the cluster every 30 seconds, ~56 LISTs in 10 minutes on STG), else
-		// listed (delivery.PipelineRunsOf has why only this pipeline).
-		items, cached := s.delivery.CachedRunsOf(pipeline)
-		if !cached {
-			var err error
-			if items, err = s.delivery.PipelineRunsOf(kubemetrics.WithSite(ctx, "post-release"), pipeline); err != nil {
-				return err
+	o := &postOnce{
+		runs: func(ctx context.Context) ([]postRun, error) {
+			// Only this pipeline's runs are read: from the bus's run cache when
+			// it is synced (2026-11-17: this pass listed the pipeline's runs from
+			// the cluster every 30 seconds, ~56 LISTs in 10 minutes on STG), else
+			// listed (delivery.PipelineRunsOf has why only this pipeline).
+			items, cached := s.delivery.CachedRunsOf(pipeline)
+			if !cached {
+				var err error
+				if items, err = s.delivery.PipelineRunsOf(kubemetrics.WithSite(ctx, "post-release"), pipeline); err != nil {
+					return nil, err
+				}
 			}
-		}
+			return postRuns(items, pipeline), nil
+		},
 		// The audit log outlives the process (a state ConfigMap in the
 		// cluster): a run recorded before a restart is not judged again.
-		judged := func(run string) bool {
-			mu.Lock()
-			defer mu.Unlock()
-			return done[run] || s.audit.Has(postReleaseAction, "run/"+run)
-		}
-		run, why := postReleaseDue(postRuns(items, pipeline), time.Now(), settle, postReleaseMaxAge, judged)
-		if run == nil {
-			mu.Lock()
-			changed := lastWhy != why
-			lastWhy = why
-			mu.Unlock()
-			if changed {
-				slog.Info("post release check: nothing to judge", "why", why)
-			}
-			return nil
-		}
-		w := &postWorld{s: s, namespace: namespace, healthURL: healthURL, pipeline: pipeline, params: run.Params}
-		v := postrelease.Judge(ctx, w, run.Run, postReleaseDeployments)
-		mu.Lock()
-		done[run.Name] = true
-		lastWhy = ""
-		mu.Unlock()
-		s.recordPostRelease(v, path, time.Since(run.Completed))
-		return nil
+		recorded: func(run string) bool { return s.audit.Has(postReleaseAction, "run/"+run) },
+		judge: func(ctx context.Context, run postRun) postrelease.Verdict {
+			w := &postWorld{s: s, namespace: namespace, healthURL: healthURL, pipeline: pipeline, params: run.Params}
+			return postrelease.Judge(ctx, w, run.Run, postReleaseDeployments)
+		},
+		record: s.recordPostRelease,
+		settle: settle,
 	}
+	pass := o.pass
 	s.bus.postPass.Store(&pass)
 	return func(ctx context.Context) error { return pass(ctx, postPathLoop) }
+}
+
+// postOnce is the check's pass: one at a time, and each run judged once by
+// this process (done) or across a restart (recorded), whichever path, the
+// 30-second loop's or the bus's, starts it.
+type postOnce struct {
+	// serial: one pass at a time. Without it the loop and the bus would
+	// both find a run unjudged and both judge it (2026-11-17, the CI line).
+	serial   sync.Mutex
+	mu       sync.Mutex
+	done     map[string]bool // the runs this process has recorded a verdict for
+	lastWhy  string
+	runs     func(context.Context) ([]postRun, error)
+	recorded func(run string) bool
+	judge    func(context.Context, postRun) postrelease.Verdict
+	record   func(v postrelease.Verdict, path string, after time.Duration)
+	settle   time.Duration
+}
+
+// pass is step, one at a time.
+func (o *postOnce) pass(ctx context.Context, path string) error {
+	o.serial.Lock()
+	defer o.serial.Unlock()
+	return o.step(ctx, path)
+}
+
+// step judges the newest due run, if there is one, and records its verdict.
+func (o *postOnce) step(ctx context.Context, path string) error {
+	ctx, cancel := context.WithTimeout(ctx, postReleasePass)
+	defer cancel()
+	runs, err := o.runs(ctx)
+	if err != nil {
+		return err
+	}
+	judged := func(run string) bool {
+		o.mu.Lock()
+		defer o.mu.Unlock()
+		return o.done[run] || o.recorded(run)
+	}
+	run, why := postReleaseDue(runs, time.Now(), o.settle, postReleaseMaxAge, judged)
+	if run == nil {
+		o.mu.Lock()
+		changed := o.lastWhy != why
+		o.lastWhy = why
+		o.mu.Unlock()
+		if changed {
+			slog.Info("post release check: nothing to judge", "why", why)
+		}
+		return nil
+	}
+	v := o.judge(ctx, *run)
+	o.mu.Lock()
+	if o.done == nil {
+		o.done = map[string]bool{}
+	}
+	o.done[run.Name] = true
+	o.lastWhy = ""
+	o.mu.Unlock()
+	o.record(v, path, time.Since(run.Completed))
+	return nil
 }
 
 // The two paths that start a pass, named on the verdict: the 30-second loop,

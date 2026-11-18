@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -265,5 +266,52 @@ func TestPostReleaseVerdictIsFoundAfterARestart(t *testing.T) {
 	text := h.auditText(t)
 	if !strings.Contains(text, `"action":"post_release_check"`) || !strings.Contains(text, `"status":"passed"`) {
 		t.Fatalf("audit = %s", text)
+	}
+
+	// 2026-11-17, the CI line on the bus waking the check beside its loop:
+	// both paths may start a pass for the same run at once, and nothing held
+	// "one verdict" against that. Two passes at once, the loop's and the bus's,
+	// record one verdict; the positive control runs the unserialised step twice
+	// at once and must record two (without postOnce.serial this test is red).
+	both := func(o *postOnce, run string, start func(context.Context, string) error) int {
+		var wg sync.WaitGroup
+		gate := make(chan struct{})
+		for _, path := range []string{postPathLoop, postPathBus} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-gate
+				if err := start(context.Background(), path); err != nil {
+					t.Error(err)
+				}
+			}()
+		}
+		close(gate)
+		wg.Wait()
+		return strings.Count(h.auditText(t), `"run/`+run+`"`)
+	}
+	onceFor := func(run string) *postOnce {
+		return &postOnce{
+			runs: func(context.Context) ([]postRun, error) {
+				r := postFinished(run, "succeeded", 0)
+				r.Completed = time.Now().Add(-5 * time.Minute) // step reads the wall clock: settled, not too old
+				return []postRun{r}, nil
+			},
+			recorded: func(r string) bool { return h.srv.audit.Has(postReleaseAction, "run/"+r) },
+			judge: func(context.Context, postRun) postrelease.Verdict {
+				time.Sleep(50 * time.Millisecond) // a judgement takes readings: long enough for the other path to arrive
+				return postrelease.Verdict{Run: postrelease.Run{Name: run}, Verdict: postrelease.Passed}
+			},
+			record: h.srv.recordPostRelease,
+			settle: time.Minute,
+		}
+	}
+	shared := onceFor("prod-two")
+	if n := both(shared, "prod-two", shared.pass); n != 1 {
+		t.Fatalf("two paths at once recorded %d verdicts for one run, want 1", n)
+	}
+	control := onceFor("prod-control")
+	if n := both(control, "prod-control", control.step); n != 2 {
+		t.Fatalf("positive control: the unserialised step at once recorded %d verdicts, want 2", n)
 	}
 }
