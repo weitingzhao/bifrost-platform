@@ -648,8 +648,8 @@ export default function BusNerveGraph({ nodes, links, flat, spin, onReady, onNod
         const d = sub([x, y, z], center)
         distance = Math.max(distance, Math.max(Math.abs(dot(d, up)) / Math.tan(vHalf), Math.abs(dot(d, right)) / Math.tan(hHalf)) + dot(d, back))
       }
-      // Fill about 80% of the frame.
-      distance *= 0.95
+      // Fill about 80% of the frame, with a margin all round.
+      distance *= 1.1
       g.cameraPosition({ x: center[0] + back[0] * distance, y: center[1] + back[1] * distance, z: center[2] + back[2] * distance },
         { x: center[0], y: center[1], z: center[2] }, ms)
     }

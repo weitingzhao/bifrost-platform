@@ -382,7 +382,7 @@ function HelpPanel({ unmeasured, onClose }: { unmeasured: { what: string; why: s
           </ul>
         </>
       )}
-      <p className="m-0 mt-2" style={{ color: C.muted }}>heard: an event someone took (a receipt from anyone but this page) · loops closed: an event something did next names as its cause · with a cause: an event that names the event it answers · dust: each event of the last day, dimmer with age · seats breathe with their heartbeat; quiet {QUIET_AFTER_H}h shows on hover · the Console's own receipt ({OWN_CONSUMER}) is not drawn</p>
+      <p className="m-0 mt-2" style={{ color: C.muted }}>each subscription's backlog and the nightly reconcile are not wired yet (they come with the bus health readings) · heard: an event someone took (a receipt from anyone but this page) · loops closed: an event something did next names as its cause · with a cause: an event that names the event it answers · dust: each event of the last day, dimmer with age · seats breathe with their heartbeat; quiet {QUIET_AFTER_H}h shows on hover · the Console's own receipt ({OWN_CONSUMER}) is not drawn</p>
     </div>
   )
 }
@@ -399,6 +399,11 @@ function TermPanel({ title, children }: { title: string; children: ReactNode }) 
 /** The panels under the map: seats' letters, the newest events (each opens its journey), and what is not wired yet. */
 export function BusNervePanels({ stream, onSelect }: { stream: BusStreamState; onSelect: (id: string) => void }) {
   const names = useSeatNames()
+  // The topics that published and nobody took, most first: what the change of generation must decide (drop the publisher, or add a reader).
+  const team = useQuery({ queryKey: ['bus-observe'], queryFn: fetchBusObserve, refetchInterval: 60_000, retry: false })
+  const contract = useQuery({ queryKey: ['bus-contract'], queryFn: fetchBusContract, staleTime: 300_000, retry: false })
+  const publisherOf = new Map((contract.data?.topics ?? []).map(t => [t.type, t.publisher]))
+  const deaf = (team.data?.listening?.topics ?? []).filter(t => t.published > 0 && t.heard === 0).sort((a, b) => b.published - a.published)
   const mail = seatMail(stream.events).slice(0, 8)
   const recent = stream.events.slice(0, 8)
   const row = (e: BusEnvelope) => (
@@ -416,8 +421,19 @@ export function BusNervePanels({ stream, onSelect }: { stream: BusStreamState; o
       <TermPanel title="ledger">
         {recent.length === 0 ? <p className="m-0" style={{ color: C.muted }}>no event since this page opened</p> : <ul className="m-0 flex list-none flex-col gap-0.5 p-0">{recent.map(row)}</ul>}
       </TermPanel>
-      <TermPanel title="backlog · reconcile">
-        <p className="m-0" style={{ color: C.muted }}>not wired yet: each subscription's backlog and the nightly reconcile come with the bus health readings; nothing is shown until they are measured</p>
+      <TermPanel title={`no one listening · ${team.data?.listening?.hours ?? 24}h`}>
+        {deaf.length === 0
+          ? <p className="m-0" style={{ color: C.muted }}>—</p>
+          : (
+            <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+              {deaf.map(t => (
+                <li key={t.type} className="flex min-w-0 justify-between gap-2" title={`${t.type} · published by ${publisherOf.get(t.type) ?? '?'} · ${t.published} events, none taken`}>
+                  <span className="min-w-0 truncate">{t.type}</span>
+                  <span className="shrink-0" style={{ color: C.muted }}>{publisherOf.get(t.type) ?? '?'} · <span style={{ color: C.amber }}>{t.published}</span></span>
+                </li>
+              ))}
+            </ul>
+          )}
       </TermPanel>
     </div>
   )
