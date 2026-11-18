@@ -239,7 +239,7 @@ channels:
       reconcile: "approval store is the truth"
       on_unread: stale
       retention: 30d
-      consumers: [console]
+      consumers: [console, card-created-notice]
       exports: []
       replaces: [L01, C01]
   approval.card.decided:

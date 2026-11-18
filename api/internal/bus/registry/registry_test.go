@@ -132,6 +132,10 @@ func TestRegisterNamesRealReaders(t *testing.T) {
 				if typ != "git.main.advanced" {
 					t.Errorf("%s: the unit declaration watch reads only main's advances", typ)
 				}
+			case "card-created-notice":
+				if typ != "approval.card.created" {
+					t.Errorf("%s: the card notice reads only a new card", typ)
+				}
 			case "card-conclusions":
 				if typ != "approval.card.decided" && typ != "approval.card.executed" {
 					t.Errorf("%s: the card conclusions read only a card's decision and result", typ)

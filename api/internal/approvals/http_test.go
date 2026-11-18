@@ -114,26 +114,13 @@ func TestExecutedApprovalUsesStoredParamsOnce(t *testing.T) {
 	}
 }
 
-func TestCreateNotifiesAndSurvivesRelayFailure(t *testing.T) {
+// The request does not wait on the phone: the first notice goes out from the
+// bus's event or the approvals loop (created_notice_test.go, 2026-11-18).
+func TestCreateDoesNotPushItself(t *testing.T) {
 	h := newPlatform(t)
 	var hits int
-	var got struct {
-		Title    string `json:"title"`
-		Message  string `json:"message"`
-		ClickURL string `json:"click_url"`
-	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hits++
-		if r.Header.Get("Authorization") == "" {
-			t.Errorf("notify missing authorization")
-		}
-		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
-			t.Errorf("decode notify: %v", err)
-		}
-		if hits == 1 {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
 		w.WriteHeader(http.StatusBadGateway)
 	}))
 	t.Cleanup(srv.Close)
@@ -141,40 +128,8 @@ func TestCreateNotifiesAndSurvivesRelayFailure(t *testing.T) {
 	t.Setenv("APPROVAL_NOTIFY_TOKEN", "notify-test-token")
 
 	rec := call(t, h, http.MethodPost, "/api/v1/approvals", `{"action":"cordon_node","params":{"name":"node-a"},"reason":"patch","rollback":"uncordon"}`, "operator-test-token")
-	if rec.Code != http.StatusCreated || hits != 1 {
-		t.Fatalf("create with notify = %d hits=%d %s", rec.Code, hits, rec.Body.String())
-	}
-	if got.Title != "Decide · #1 · patch" || !strings.Contains(got.Message, "Runs as soon as you approve.") || !strings.Contains(got.Message, "name=node-a") ||
-		!strings.Contains(got.Message, "cursor-b1") || !strings.Contains(got.ClickURL, "#approvals?id=") {
-		t.Fatalf("notify body = %+v", got)
-	}
-	if strings.Contains(got.Message, "notify-test-token") {
-		t.Fatal("notify message contains the token")
-	}
-
-	rec = call(t, h, http.MethodPost, "/api/v1/approvals", `{"action":"cordon_node","params":{"name":"node-b"},"reason":"patch","rollback":"uncordon"}`, "operator-test-token")
-	if rec.Code != http.StatusCreated || hits != 2 {
-		t.Fatalf("create after relay failure = %d hits=%d %s", rec.Code, hits, rec.Body.String())
-	}
-
-	// TD-286: each record shows what happened to its push.
-	for _, tc := range []struct{ ref, result string }{{"1", "accepted"}, {"2", "failed"}} {
-		rec = call(t, h, http.MethodGet, "/api/v1/approvals/"+tc.ref, "", "viewer-test-token")
-		var a struct {
-			Number     int `json:"number"`
-			Deliveries []struct {
-				Kind, Channel, Result, Error string
-			} `json:"deliveries"`
-		}
-		if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil || rec.Code != http.StatusOK {
-			t.Fatalf("get #%s = %d %s", tc.ref, rec.Code, rec.Body.String())
-		}
-		if len(a.Deliveries) != 1 || a.Deliveries[0].Kind != "created" || a.Deliveries[0].Channel != "ntfy" || a.Deliveries[0].Result != tc.result {
-			t.Fatalf("#%s deliveries = %s", tc.ref, rec.Body.String())
-		}
-		if tc.result == "failed" && !strings.Contains(a.Deliveries[0].Error, "502") {
-			t.Fatalf("#%s failure reason = %s", tc.ref, rec.Body.String())
-		}
+	if rec.Code != http.StatusCreated || hits != 0 {
+		t.Fatalf("create = %d hits=%d %s", rec.Code, hits, rec.Body.String())
 	}
 }
 

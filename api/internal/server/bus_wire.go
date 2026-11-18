@@ -684,6 +684,9 @@ func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStrea
 // the loop runs: a conclusion is posted once, under its own key, whoever finds
 // it first.
 func (s *Server) consumeConclusions(ctx context.Context, js jetstream.JetStream, env string) {
+	if s.approvals != nil {
+		s.consumePasses(ctx, js, env, "card-created-notice", []string{buscards.TypeCreated}, s.approvals.NotifyCreated)
+	}
 	s.consumePasses(ctx, js, env, "card-conclusions", []string{buscards.TypeDecided, buscards.TypeExecuted}, s.cardConclusionsPass)
 	s.consumePasses(ctx, js, env, "question-conclusions", []string{ownerq.TypeAnswered}, s.questionConclusionsPass)
 }

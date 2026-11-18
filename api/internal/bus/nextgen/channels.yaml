@@ -135,7 +135,7 @@ channels:
   - {id: X-A20, class: K1, disposition: kept, step: "none", what: "Prometheus 抓取与规则（我把它归 K1：需求文件 K1 清单没点它的名字，但 K1 条数 21 少这一条）", by: "原因：指标不是事件，观测基础设施；与总线并行"}
   - {id: X-A21, class: K7, disposition: kept, step: "none", what: "Alertmanager → Mac mini .50 relay（critical 和备份类告警；Watchdog 单独）", by: "原因：独立于总线的报警路；Mac mini 单点，第二条路径待 Owner 决定 3"}
   - {id: X-A22, class: K7, disposition: announced, step: "3", what: "Alertmanager → PROD platform-api webhook（全部 Bifrost.* 告警，只写审计）", by: "同 N07", cut: {at: "2026-11-18", evidence: ["topic:alert.rule.fired"]}}
-  - {id: X-A23, class: K7, disposition: merged, step: "3", what: "平台 → relay 的审批通知（PROD platform-api → .50:8783）", by: "同 N01，由通知器接"}
+  - {id: X-A23, class: K7, disposition: merged, step: "3", what: "平台 → relay 的审批通知（PROD platform-api → .50:8783）", by: "同 N01，由通知器接", cut: {at: "2026-11-18", evidence: ["reader:card-created-notice"]}}
   - {id: X-A24, class: K6, disposition: kept, step: "none", what: "BifrostAlertmanagerWebhookFailing：告警通道自己坏了的告警（Prometheus 规则）", by: "原因：独立于总线的报警路本身"}
   - {id: X-A25, class: K11, disposition: kept, step: "0", what: "maintainer-reconcile：每天对账 MAINTAINERS.yaml 与实际，差异为 0 才重建 ConfigMap", by: "原因：对账兜底；差异宣布 reconcile.drift.found"}
   - {id: X-A26, class: K6, disposition: announced, step: "3", what: "平台后台循环存活指标（给 Prometheus）", by: "同 S14", cut: {at: "2026-11-18", evidence: ["topic:loop.health.changed"]}}

@@ -107,11 +107,10 @@ subscriptions:
     to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
     guarantee: durable
     by: dispatcher
-  # A new approval card pages the Owner's phone through the bus (2026-11-17,
-  # the coordinator). The approvals service's own direct push stays alongside
-  # until this path has reached the phone several times, shown by the relay's
-  # answers in the log ("bus: notify"); then the direct push is retired.
-  # PROD only: approvals are made only on the PROD platform.
+  # A new approval card pages the Owner's phone from this event (2026-11-18,
+  # taken over from the direct push). The approvals service sends it, because
+  # the notice is composed from the card and recorded on it, once per card; its
+  # 15-second loop sends it if the event does not arrive within 30 seconds.
   - id: card-created-to-owner
     on: [approval.card.created]
     deliver: notify
@@ -120,7 +119,7 @@ subscriptions:
       title: "Bus: approval {subject} waits for you"
       click: "http://ops.bifrost.lan/#approvals?id={ref_id}"
     guarantee: durable
-    by: dispatcher
+    by: approvals.card-created-notice
     envs: [prod]
 
   # What the phone is told directly today, side by side (2026-11-18): each row
@@ -200,6 +199,11 @@ clients:
     lost_after: 168h
     domain: verification
     note: reads main's unit declaration on each advance of main; records a known regression when it stops reading and the fix when it reads again
+  - name: card-created-notice
+    kind: durable
+    lost_after: 168h
+    domain: owner
+    note: sends the Owner the first notice of a new approval card; the approvals loop covers a missed event after 30 seconds
   - name: card-conclusions
     kind: durable
     lost_after: 168h

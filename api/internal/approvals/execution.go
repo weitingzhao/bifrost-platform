@@ -434,6 +434,7 @@ func (s *Service) RunRetries(ctx context.Context, every time.Duration) {
 			}
 			s.retryDue(ctx)
 			s.RetryThreadInbox(ctx)
+			s.notifyCreated(ctx, createdFallbackAfter)
 			s.remindDue(ctx)
 		}
 	}

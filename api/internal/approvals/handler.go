@@ -13,7 +13,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentview"
 )
 
@@ -76,8 +75,8 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		a := res.Approval
 		s.writeAudit(r, []event{{"approval.create", a.ID, StatusPending,
 			fmt.Sprintf("number=%d action=%s tier=%s runner=%s requester=%s drill=%t", a.Number, a.Action, a.Tier, a.Runner, a.Requester, a.Drill)}})
-		// A down relay must not fail create; the failed delivery is on the record.
-		s.deliver(r.Context(), approvalnotify.KindCreated, a)
+		// The first notice goes out on the bus's approval.card.created
+		// (NotifyCreated), or from the approvals loop if that does not come.
 		writeJSON(w, http.StatusCreated, map[string]any{
 			"id":          a.ID,
 			"number":      a.Number,

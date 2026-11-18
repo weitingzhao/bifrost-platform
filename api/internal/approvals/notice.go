@@ -74,14 +74,47 @@ const (
 // can accept the push and still look failed here, and there is no stable id
 // for the relay to drop the duplicate.
 func (s *Service) deliverReminder(ctx context.Context, kind string, rec Approval) {
+	s.deliverClaimed(ctx, kind, rec, s.clock(), func(a Approval, now time.Time) bool { return reminderDue(a, now) == kind })
+}
+
+// createdFallbackAfter is how long a new card waits for the bus before the
+// approvals loop sends its first notice itself.
+const createdFallbackAfter = 30 * time.Second
+
+func createdDue(a Approval, now time.Time) bool {
+	return a.Status == StatusPending && now.Before(a.ExpiresAt) && !reminderHeld(a, approvalnotify.KindCreated, now)
+}
+
+// NotifyCreated sends the first notice of every waiting card that has none:
+// the bus's word that a card was created asks for it (2026-11-18, the
+// notifier's first kind). Each card is claimed first, so it is pushed once
+// whoever gets there.
+func (s *Service) NotifyCreated(ctx context.Context) { s.notifyCreated(ctx, 0) }
+
+// notifyCreated covers cards at least minAge old.
+func (s *Service) notifyCreated(ctx context.Context, minAge time.Duration) {
+	doc, err := s.store.read()
+	if err != nil {
+		return
+	}
 	now := s.clock()
-	claimID, ok, err := s.claimReminder(rec.ID, kind, now)
+	for _, a := range doc.Approvals {
+		if createdDue(a, now) && now.Sub(a.CreatedAt) >= minAge {
+			s.deliverClaimed(ctx, approvalnotify.KindCreated, a, now, createdDue)
+		}
+	}
+}
+
+func (s *Service) deliverClaimed(ctx context.Context, kind string, rec Approval, now time.Time, due func(Approval, time.Time) bool) {
+	claimID, ok, err := s.claimNotice(rec.ID, kind, now, due)
 	if err != nil || !ok {
 		return
 	}
 	ds := noticeDeliveries(approvalnotify.Send(ctx, kind, noticeItem(rec), now))
 	evs := noticeAudit(rec.ID, ds)
-	if allFailed(ds) {
+	// A card's first notice is tried once and its failure stays on the card
+	// (TD-286); a reminder is tried again on the next pass.
+	if allFailed(ds) && kind != approvalnotify.KindCreated {
 		if err := s.releaseReminder(rec.ID, kind, claimID); err != nil {
 			evs = append(evs, event{"approval.notify", rec.ID, approvalnotify.ResultFailed, "release reminder: " + err.Error()})
 		}
@@ -96,13 +129,17 @@ func (s *Service) deliverReminder(ctx context.Context, kind string, rec Approval
 }
 
 func (s *Service) claimReminder(id, kind string, now time.Time) (string, bool, error) {
+	return s.claimNotice(id, kind, now, func(a Approval, now time.Time) bool { return reminderDue(a, now) == kind })
+}
+
+func (s *Service) claimNotice(id, kind string, now time.Time, due func(Approval, time.Time) bool) (string, bool, error) {
 	claimID := "claim_" + randomHex(8)
 	expires := now.Add(reminderClaimFor)
 	claimed := false
 	err := s.store.update(func(doc *file) error {
 		claimed = false
 		a, ok := doc.find(id)
-		if !ok || reminderDue(a, now) != kind {
+		if !ok || !due(a, now) {
 			return errNoChange
 		}
 		if liveClaim(a, kind, now) {
