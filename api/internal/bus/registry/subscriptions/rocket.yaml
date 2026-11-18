@@ -96,6 +96,21 @@ subscriptions:
     to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
     guarantee: durable
     by: dispatcher
+  # A new approval card pages the Owner's phone through the bus (2026-11-17,
+  # the coordinator). The approvals service's own direct push stays alongside
+  # until this path has reached the phone several times, shown by the relay's
+  # answers in the log ("bus: notify"); then the direct push is retired.
+  # PROD only: approvals are made only on the PROD platform.
+  - id: card-created-to-owner
+    on: [approval.card.created]
+    deliver: notify
+    to: owner
+    params:
+      title: "Bus: approval {subject} waits for you"
+      click: "http://ops.bifrost.lan/#approvals?id={ref_id}"
+    guarantee: durable
+    by: dispatcher
+    envs: [prod]
 
 # The bus's known users. name is the receipt consumer: gate:<route>:<client>
 # for a reader of /bus/events (route events) or /bus/stream (route stream),

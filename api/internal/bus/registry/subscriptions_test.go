@@ -40,6 +40,9 @@ func TestCheckSubscriptionsRefuses(t *testing.T) {
 		{ID: "e", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/refusal"}},
 		// 2026-11-17: the tripwire row, several names and a required one.
 		{ID: "f", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/tripwire,commit,branch", "require": "tripwire"}},
+		// 2026-11-17: a new card pages the Owner through the bus; the
+		// positive control of the two notify refusals below.
+		{ID: "g", On: []string{"ci.run.finished"}, Deliver: DeliverNotify, To: NotifyTo, Params: map[string]string{"title": "run {subject}"}},
 	}
 	for _, r := range ok {
 		if err := CheckSubscriptions(tenants, row(r), tier); err != nil {
@@ -54,6 +57,8 @@ func TestCheckSubscriptionsRefuses(t *testing.T) {
 		"deliver is":         {ID: "x", On: []string{"ci.run.finished"}, Deliver: "run"},
 		"is task-result:":    {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "log:land"}},
 		"not one of":         {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/commit", "require": "tripwire"}},
+		"notify goes to":     {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverNotify, To: "seat:ci", Params: map[string]string{"title": "t"}},
+		"needs params.title": {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverNotify, To: NotifyTo},
 		"names no run":       {ID: "x", On: []string{"seat.mail.arrived"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/refusal"}},
 	}
 	for want, r := range refused {

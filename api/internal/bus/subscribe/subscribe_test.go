@@ -283,3 +283,39 @@ func TestTripwireWakesOnlyWhenTouched(t *testing.T) {
 		t.Fatalf("an unreadable tripwire did not wake: %v %v %v", out, err, got)
 	}
 }
+
+// 2026-11-17, the coordinator: approval.card.created was heard by no one on
+// the bus; the approvals service pushed to the Owner's phone directly. A
+// notify row pushes once per event, its title and link filled from the
+// event, and a relay failure asks for the event again.
+func TestNotifyFillsThePushFromTheEvent(t *testing.T) {
+	row := registry.Subscription{ID: "card-created-to-owner", On: []string{"approval.card.created"}, Deliver: registry.DeliverNotify, To: registry.NotifyTo,
+		Params: map[string]string{"title": "Bus: card {subject} waits", "click": "http://console/#cards?id={ref_id}"}, Guarantee: "durable", By: registry.ByDispatcher}
+	ev := Event{ID: "ev-9", Type: "approval.card.created", Subject: "#612", Ref: "/api/v1/approvals/appr_abc"}
+	var got []string
+	push := func(_ context.Context, key, title, body, click string) error {
+		got = append(got, key, title, click, body)
+		return nil
+	}
+	out, err := Notify(context.Background(), row, ev, push)
+	if err != nil || out != Delivered || len(got) != 4 {
+		t.Fatalf("out=%s err=%v got=%v", out, err, got)
+	}
+	if got[0] != "sub:card-created-to-owner:ev-9" || got[1] != "Bus: card #612 waits" || got[2] != "http://console/#cards?id=appr_abc" || !strings.Contains(got[3], "ev-9") {
+		t.Fatalf("push %q", got)
+	}
+	// Not its event, or a wake row: nothing pushed.
+	got = nil
+	if out, _ := Notify(context.Background(), row, Event{ID: "ev-10", Type: "approval.card.decided"}, push); out != Skipped || got != nil {
+		t.Fatalf("another type pushed: %s %v", out, got)
+	}
+	wake := row
+	wake.Deliver = registry.DeliverWake
+	if out, _ := Notify(context.Background(), wake, ev, push); out != Skipped || got != nil {
+		t.Fatalf("a wake row pushed: %s %v", out, got)
+	}
+	// The relay failing is an error: the consumer asks for the event again.
+	if _, err := Notify(context.Background(), row, ev, func(context.Context, string, string, string, string) error { return errors.New("relay down") }); err == nil {
+		t.Fatal("a failed push acknowledged the event")
+	}
+}

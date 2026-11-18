@@ -12,6 +12,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/subscribe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/headrelease"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
+	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"log/slog"
 	"net/http"
@@ -552,6 +553,17 @@ func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStrea
 	send := func(ctx context.Context, key, to, body string, cause int64) error {
 		return coord.PostConclusionCaused(ctx, pool, key, to, body, cause)
 	}
+	// A notify row's push goes through the same relay as the approvals'
+	// own (notice.Send); the relay's answer per target is logged, the
+	// evidence that the bus's path reached the phone (2026-11-17: the old
+	// direct push stays until it has, several times).
+	notify := func(ctx context.Context, key, title, body, click string) error {
+		ds, err := notice.Send(ctx, notice.Message{Title: title, Message: body, ClickURL: click, Priority: 4, Fallback: "Bus notice", Kind: "bus", ID: key})
+		for _, d := range ds {
+			slog.Info("bus: notify", "key", key, "channel", d.Channel, "target", d.Target, "result", d.Result, "error", d.Error)
+		}
+		return err
+	}
 	detail := s.busRunDetail()
 	known := func(ctx context.Context, addr string) (bool, error) {
 		var kind string
@@ -586,7 +598,13 @@ func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStrea
 		cc, err := relay.ConsumeDurable(ctx, js, relay.Tenant, env, name, row.On, func(e relay.Envelope) error {
 			dctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 			defer cancel()
-			out, err := subscribe.Deliver(dctx, row, subscribe.FromEnvelope(e), read, detail, send, known, subscribe.UndeliverableTo(subs, c.Tenant))
+			var out subscribe.Outcome
+			var err error
+			if row.Deliver == registry.DeliverNotify {
+				out, err = subscribe.Notify(dctx, row, subscribe.FromEnvelope(e), notify)
+			} else {
+				out, err = subscribe.Deliver(dctx, row, subscribe.FromEnvelope(e), read, detail, send, known, subscribe.UndeliverableTo(subs, c.Tenant))
+			}
 			if err != nil {
 				slog.Warn("bus: subscription delivery; asked again", "tenant", c.Tenant, "row", row.ID, "event", e.ID, "error", err)
 				return err

@@ -219,6 +219,30 @@ func Deliver(ctx context.Context, row registry.Subscription, ev Event, read Comm
 	return Delivered, send(ctx, Key(row, ev), to, withDetail(row, values, derr, Body(row, ev)), causeOf(ev))
 }
 
+// Notifier pushes one notice to the Owner's phone (the platform's notice
+// relay); an error asks for the event again.
+type Notifier func(ctx context.Context, key, title, body, click string) error
+
+// Notify is a notify row's handling of one event: one push, its title and
+// link from the row's params, its body the event's line. A nil error
+// acknowledges the event.
+func Notify(ctx context.Context, row registry.Subscription, ev Event, notify Notifier) (Outcome, error) {
+	if row.Deliver != registry.DeliverNotify || row.To != registry.NotifyTo || !Matches(row, ev) || notify == nil {
+		return Skipped, nil
+	}
+	fill := func(t string) string {
+		return strings.NewReplacer("{type}", ev.Type, "{subject}", ev.Subject, "{change}", ev.Change, "{ref_id}", refID(ev.Ref)).Replace(t)
+	}
+	return Delivered, notify(ctx, Key(row, ev), fill(row.Params[registry.ParamTitle]), Body(row, ev), fill(row.Params[registry.ParamClick]))
+}
+
+// refID is the last segment of a ref ("/api/v1/approvals/appr_1" → "appr_1"), path-escaped.
+func refID(ref string) string {
+	ref, _, _ = strings.Cut(ref, "?")
+	ref = strings.TrimRight(ref, "/")
+	return url.PathEscape(ref[strings.LastIndex(ref, "/")+1:])
+}
+
 // causeOf is the ledger number of the event a wake answers (0 when its id is not ev-<n>).
 func causeOf(ev Event) int64 {
 	n, _ := relay.ParseEventID(ev.ID)

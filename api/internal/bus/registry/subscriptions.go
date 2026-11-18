@@ -225,6 +225,12 @@ func CheckSubscriptions(tenants map[string]Tenant, subs map[string]Subscriptions
 					bad("%s: action %s is tier %s, which needs an approval; a row may only ask for it (params.mode: request)", at, r.Action, t)
 				}
 			case DeliverNotify:
+				if r.To != NotifyTo {
+					bad("%s: notify goes to %q (the Owner's phone through the notice relay), not %q", at, NotifyTo, r.To)
+				}
+				if r.Params[ParamTitle] == "" {
+					bad("%s: notify needs params.title", at)
+				}
 			default:
 				bad("%s: deliver is wake, action or notify", at)
 			}
@@ -267,6 +273,19 @@ const ParamDetail = "detail"
 // tripwire; every other landing wakes nobody). A detail that cannot be read
 // still wakes, saying so.
 const ParamRequire = "require"
+
+// ParamTitle and ParamClick are a notify row's push: its title and the link
+// it opens, each with {type}, {subject}, {change} and {ref_id} (the last
+// segment of the event's ref) filled in (2026-11-17, approval.card.created
+// pages the Owner through the bus).
+const (
+	ParamTitle = "title"
+	ParamClick = "click"
+)
+
+// NotifyTo is the one target a notify row has: the Owner's phone, through
+// the platform's notice relay.
+const NotifyTo = "owner"
 
 var (
 	taskResultsRE = regexp.MustCompile(`^task-result:([a-z0-9]([-a-z0-9]*[a-z0-9])?)/(.+)$`)
