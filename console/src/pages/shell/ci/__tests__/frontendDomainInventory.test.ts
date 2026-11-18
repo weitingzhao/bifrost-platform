@@ -7,7 +7,7 @@ import { buildInventory } from '../../../../../scripts/frontend-domain-map.mjs'
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../../..')
 it('keeps source files and static imports in the published frontend inventory current', () => {
-  const declaration = JSON.parse(fs.readFileSync(path.join(repo, 'config/domain-ownership.json'), 'utf8')).frontend
+  const declaration = JSON.parse(fs.readFileSync(path.join(repo, 'console/domain-ownership.json'), 'utf8')).frontend
   const actual = buildInventory(repo, declaration)
   expect(actual).toEqual(JSON.parse(fs.readFileSync(path.join(repo, declaration.inventory), 'utf8')))
   const ci = actual.groups.find(g => g.path === 'console/src/pages/shell/ci')!

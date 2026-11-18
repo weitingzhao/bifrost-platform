@@ -183,6 +183,15 @@ func ciTable(t *unitplan.Tree) (table cidomains.Table, note string, err error) {
 	if table, err = cidomains.ParseTable(raw); err != nil {
 		return table, cidomains.OwnershipPath + ": " + err.Error(), nil
 	}
+	if _, ok := t.Lookup(cidomains.ConsolePath); !ok {
+		return table, "", nil
+	}
+	if raw, err = t.ReadFile(cidomains.ConsolePath); err != nil {
+		return table, "", err
+	}
+	if err = table.AddConsole(raw); err != nil {
+		return table, cidomains.ConsolePath + ": " + err.Error(), nil
+	}
 	return table, "", nil
 }
 

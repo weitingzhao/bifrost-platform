@@ -46,3 +46,33 @@ func TestFrontendInventorySharesRealTasksAndKeepsGoOnStaleInventory(t *testing.T
 		t.Fatalf("deleted file: %+v", got)
 	}
 }
+
+// Origin: 2026-11-18, the console's file groups moved out of the ownership
+// table so that Go package rows stop running its tests. The file wins over a
+// declaration left in the table; the test above is the control without one.
+func TestFrontendDeclarationComesFromTheConsoleFile(t *testing.T) {
+	files := map[string]string{
+		"bifrost.units.yaml": "version: 1\nmodules:\n  - name: web\n    root: web\n    tasks: {test: {}, build: {}}\n",
+		"web/src/a.ts":       "export const a = 1",
+	}
+	own := Ownership{Domains: []string{"plan"}, Status: "assigned", Basis: "source audit"}
+	decl := frontendDeclaration{Root: "web/src", Inventory: "web/inventory.json", Groups: map[string]Ownership{"web/src": own}}
+	raw, _ := json.Marshal(ownershipFile{Version: 1, Domains: []Domain{{ID: "plan", Name: "Planning"}}, Default: own})
+	files[OwnershipPath] = string(raw)
+	raw, _ = json.Marshal(map[string]any{"frontend": decl})
+	files[ConsoleOwnershipPath] = string(raw)
+	raw, _ = json.Marshal(frontendInventory{Version: 1, Root: "web/src", Groups: []FrontendGroup{{Path: "web/src", Files: []string{"web/src/a.ts"}}}})
+	files["web/inventory.json"] = string(raw)
+	got, err := Read(context.Background(), scopeTrees(t, map[string]map[string]string{"c": files}), "r", "c")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Domains == nil || got.Domains.Frontend == nil || got.Domains.Frontend.Root != "web/src" {
+		t.Fatalf("frontend not read from the console file: %+v", got.Domains)
+	}
+	files[ConsoleOwnershipPath] = "{"
+	got, err = Read(context.Background(), scopeTrees(t, map[string]map[string]string{"c": files}), "r", "c")
+	if err != nil || got.Domains == nil || got.Domains.Frontend != nil || got.Domains.FrontendNote == "" {
+		t.Fatalf("a broken file must leave a note: %+v, %v", got.Domains, err)
+	}
+}

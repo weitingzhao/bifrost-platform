@@ -57,10 +57,10 @@ describe('facility pages', () => {
     const { readFileSync } = await import('node:fs')
     const { resolve } = await import('node:path')
     const { SHELL_ROUTE_IDS } = await import('@/lib/shell/consoleRoutes')
-    const table = JSON.parse(readFileSync(resolve(__dirname, '../../../../../../config/domain-ownership.json'), 'utf8')) as { domains: { id: string; facility?: { page: string } }[] }
+    const table = JSON.parse(readFileSync(resolve(__dirname, '../../../../../domain-ownership.json'), 'utf8')) as { domains: { id: string; facility?: { page: string } }[] }
     const routeOf = (page: string) => page.replace(/^#/, '').split('?')[0]
     const known = (page: string) => page.startsWith('#') && (SHELL_ROUTE_IDS as readonly string[]).includes(routeOf(page))
-    const pages = table.domains.filter(d => d.facility).map(d => [d.id, d.facility!.page] as const)
+    const pages = Object.entries(table.facilities as Record<string, { page: string }>).map(([id, f]) => [id, f.page] as const)
     expect(pages.length).toBeGreaterThan(0)
     for (const [id, page] of pages) expect(`${id} ${page} ${known(page)}`).toBe(`${id} ${page} true`)
     expect(known('#foo')).toBe(false)

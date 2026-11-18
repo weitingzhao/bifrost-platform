@@ -210,3 +210,26 @@ func TestGraphCarriesTheTablesTiers(t *testing.T) {
 		t.Fatalf("facilities %+v", fg.Domains)
 	}
 }
+
+// Origin: 2026-11-18, 66 commits in 7 days ran every console test only because
+// config/domain-ownership.json changed, mostly Go package rows. The console's
+// part moved to its own file; a commit from before the move has it in the table.
+func TestConsoleFileAddsFrontendAndFacilities(t *testing.T) {
+	table, err := ParseTable([]byte(`{"domains": [{"id": "base"}, {"id": "loose"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if table.consoleRoot() != "" {
+		t.Fatalf("a table alone has no console root here: %q", table.consoleRoot())
+	}
+	if err = table.AddConsole([]byte(`{"frontend": {"root": "console/src"}, "facilities": {"base": {"kind": "ground-support", "page": "#system"}, "loose": {"kind": "", "page": "#x"}}}`)); err != nil {
+		t.Fatal(err)
+	}
+	g := table.WithTiers(Graph{Domains: []Domain{{ID: "base"}, {ID: "loose"}}})
+	if table.consoleRoot() != "console" || g.Domains[0].Facility == nil || g.Domains[0].Facility.Page != "#system" || g.Domains[1].Facility != nil {
+		t.Fatalf("root %q, domains %+v", table.consoleRoot(), g.Domains)
+	}
+	if err = table.AddConsole([]byte(`{`)); err == nil {
+		t.Fatal("a broken file must not read")
+	}
+}

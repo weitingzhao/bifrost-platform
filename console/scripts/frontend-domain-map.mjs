@@ -56,6 +56,6 @@ export function buildInventory(repo, declaration) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
-  const doc = JSON.parse(fs.readFileSync(path.join(repo, 'config/domain-ownership.json'), 'utf8'))
+  const doc = JSON.parse(fs.readFileSync(path.join(repo, 'console/domain-ownership.json'), 'utf8'))
   fs.writeFileSync(path.join(repo, doc.frontend.inventory), `${JSON.stringify(buildInventory(repo, doc.frontend), null, 2)}\n`)
 }

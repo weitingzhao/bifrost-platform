@@ -10,6 +10,11 @@ import (
 
 const OwnershipPath = "config/domain-ownership.json"
 
+// ConsoleOwnershipPath holds the console's file groups, in the console's own
+// tree so that a change to the Go packages' rows does not run its tests. A
+// commit from before the file has them under "frontend" in OwnershipPath.
+const ConsoleOwnershipPath = "console/domain-ownership.json"
+
 type Domain struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
@@ -158,12 +163,34 @@ func readDomains(t *unitplan.Tree, manifest *unitplan.Manifest, plan *unitplan.P
 			return nil, fmt.Errorf("domain ownership names missing Go package %s", p)
 		}
 	}
-	if doc.Frontend != nil {
-		out.Frontend, err = readFrontend(t, manifest, plan, doc.Frontend, check)
+	frontend, err := consoleFrontend(t, doc.Frontend)
+	if err != nil {
+		out.FrontendNote = err.Error()
+	} else if frontend != nil {
+		out.Frontend, err = readFrontend(t, manifest, plan, frontend, check)
 		if err != nil {
 			out.FrontendNote = err.Error()
 		}
 	}
 	sort.Slice(out.Packages, func(i, j int) bool { return out.Packages[i].Path < out.Packages[j].Path })
 	return out, nil
+}
+
+// consoleFrontend is the declaration in ConsoleOwnershipPath, or inTable for
+// a commit that has no such file.
+func consoleFrontend(t *unitplan.Tree, inTable *frontendDeclaration) (*frontendDeclaration, error) {
+	if _, ok := t.Lookup(ConsoleOwnershipPath); !ok {
+		return inTable, nil
+	}
+	raw, err := t.ReadFile(ConsoleOwnershipPath)
+	if err != nil {
+		return nil, fmt.Errorf("console ownership unreadable: %w", err)
+	}
+	var doc struct {
+		Frontend *frontendDeclaration `json:"frontend"`
+	}
+	if err = json.Unmarshal(raw, &doc); err != nil {
+		return nil, fmt.Errorf("console ownership unreadable: %w", err)
+	}
+	return doc.Frontend, nil
 }

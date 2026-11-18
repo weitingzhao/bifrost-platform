@@ -24,6 +24,12 @@ const Version = 1
 // OwnershipPath is the table a repository declares its domains in.
 const OwnershipPath = "config/domain-ownership.json"
 
+// ConsolePath is the part of the ownership the console's own tests read: its
+// file groups and each domain's entrance on the Ops home. It sits in the
+// console's tree so that moving a Go package between domains (about 70 changes
+// to the table in the 7 days to 2026-11-18) does not run the console's tests.
+const ConsolePath = "console/domain-ownership.json"
+
 // The three places of a changed file that are not a declared domain.
 const (
 	// Shared is a package whose row names several domains.
@@ -90,6 +96,31 @@ func ParseTable(raw []byte) (Table, error) {
 		}
 	}
 	return t, nil
+}
+
+// AddConsole adds what ConsolePath declares. A commit from before the file
+// has both in the table, which ParseTable has read.
+func (t *Table) AddConsole(raw []byte) error {
+	var c struct {
+		Frontend   struct{ Root string } `json:"frontend"`
+		Facilities map[string]Facility   `json:"facilities"`
+	}
+	if err := json.Unmarshal(raw, &c); err != nil {
+		return fmt.Errorf("the console's ownership file does not parse: %w", err)
+	}
+	if c.Frontend.Root != "" {
+		t.Frontend.Root = c.Frontend.Root
+	}
+	for id, f := range c.Facilities {
+		if f.Kind == "" || f.Page == "" {
+			continue
+		}
+		if t.Facilities == nil {
+			t.Facilities = map[string]Facility{}
+		}
+		t.Facilities[id] = f
+	}
+	return nil
 }
 
 // WithTiers is g with each domain's tier and facility from the table
