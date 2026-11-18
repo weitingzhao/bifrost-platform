@@ -107,12 +107,12 @@ channels:
   - {id: S09, class: K9, disposition: announced, step: "3", what: "同 N12：窗口 ConfigMap 的存放", by: "同 N12", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
   - {id: S10, class: K12, disposition: replaced, step: "3", what: "线程标题 ConfigMap（手改、转录扫描、上报三个来源）", by: "席位记录的标题字段"}
   - {id: S11, class: K13, disposition: merged, step: "3", what: "信箱存放：agentrt.message + artifact（正文 ≤8 KiB）", by: "随 N09 留下并改造：正文仍在这里，事件只带指针", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
-  - {id: S12, class: K8, disposition: deleted, step: "any", what: "metric_reading：交付度量读数（无非测试写入者）", by: "死路；表和 26,418 行留到第 5 步，随有数据的删改一起处理，代码引用由解耦线清"}
+  - {id: S12, class: K8, disposition: deleted, step: "any", what: "metric_reading：交付度量读数（无非测试写入者）", by: "死路；代码引用已清（解耦线 11-18），表和 26,418 行留到第 5 步，随有数据的删改一起处理"}
   - {id: S13, class: K2, disposition: deleted, step: "any", what: "同 N22：agentrt.outbox", by: "死路", retired: {at: "2026-11-17", change: Id818b64d36e851fb3e31d91e06f0dd08ae027a12, absent_text: ['FROM agentrt.outbox)', 'FROM agentrt.outbox`']}}
   - {id: S14, class: K6, disposition: announced, step: "3", what: "maintainer 指标：8 个循环的成功时间戳与运行计数，给 Prometheus", by: "指标留给 Prometheus（对账兜底）；循环健康变化以 loop.health.changed 宣布，登记表要求每个循环都登记（现在 8/约 20）", cut: {at: "2026-11-18", evidence: ["topic:loop.health.changed"]}}
   - {id: C01, class: K1, disposition: replaced, step: "4", what: "Console 每页各自 TanStack Query 轮询（约 215 处）", by: "入户口子②（共用一条事件流）+读口；剩下的轮询只许是登记过的对账"}
   - {id: C02, class: K2, disposition: replaced, step: "4", what: "Console 构建漂移检测：轮询自己的静态资源", by: "入户口子②收 release.deploy.finished（主体=console）"}
-  - {id: C03, class: K1, disposition: replaced, step: "4", what: "Dock 开发会话面板：轮询 /dev-sessions 日志", by: "入户口子②+dev.session.changed"}
+  - {id: C03, class: K1, disposition: kept, step: "none", what: "Dock 开发会话面板：轮询 /dev-sessions 日志", by: "原因：面板只在本机 Console 显示，PROD 7 天 /dev-sessions 3 次，不值得接事件（解耦线 11-18 核对）"}
   - {id: X-A1, class: K2, disposition: merged, step: "1", what: "Gitea push webhook → EventListener bifrost-ci（9 个 CEL trigger；无 webhook 密钥，TD-435）", by: "留下并改造成「门·代码」的入口：加密钥、发 git.main.advanced/git.ready.pushed/git.tag.changed；EL 起 CI 的 trigger 不动", cut: {at: "2026-11-17", evidence: ["topic:git.main.advanced"]}}
   - {id: X-A2, class: K11, disposition: kept, step: "0", what: "github-sync CronJob：每 15 分钟对账 Gitea 与 GitHub 的 main 和 tag", by: "原因：对账兜底（兜 webhook 丢失）；登记为 git.* 主题的对账；差异宣布 reconcile.drift.found"}
   - {id: X-A3, class: K3, disposition: replaced, step: "4", what: "land 任务等 CI 绿：每 15 秒读 PipelineRun（耐心期 3 分钟，上限 45 分钟）", by: "入户口子③（等 ci.verdict.changed，读 R05）"}
