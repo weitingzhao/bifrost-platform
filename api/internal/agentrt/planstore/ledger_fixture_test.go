@@ -2,20 +2,26 @@ package planstore_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"reflect"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
 // The ledger fixture of the plan tests that moved here from package store
@@ -37,6 +43,16 @@ func ok(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func wantErr(t *testing.T, err error, contains string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("succeeded; want an error containing %q", contains)
+	}
+	if !strings.Contains(err.Error(), contains) {
+		t.Fatalf("err = %v; want it to contain %q", err, contains)
 	}
 }
 
@@ -150,4 +166,150 @@ func (a *asker) question(_ context.Context, id string) (seenfacts.Question, bool
 		return seenfacts.Question{ID: id, Status: "open"}, true
 	}
 	return q, true
+}
+
+// world is a migrated, seeded database with two missions and a small plan:
+// round R2 > item R2:2.1 > steps S1 (bound to M-1), S2 (unbound), S3 (bound
+// to M-1).
+type world struct {
+	db *agentrttest.DB
+	rt *pgx.Conn
+	// t is the test the world was made for and ctx its context (ctxOf), for
+	// a helper that has the world and no t.
+	t    *testing.T
+	ctx  context.Context
+	spec string
+	// impl is an implementation's spec as a plan's is (store.ImplementSpec there),
+	// the one a proposed implementation needs (R5:5.7-8).
+	impl string
+}
+
+const (
+	root = "R2"
+	item = "R2:2.1"
+	s1   = "R2:2.1-1"
+	s2   = "R2:2.1-2"
+	s3   = "R2:2.1-3"
+)
+
+// The missions, plan and artifacts below stay per test: a mission's deadline
+// and creation time, and the events' times, are read against the test's own
+// clock, which many tests freeze before they make their world.
+func newWorld(t *testing.T) *world {
+	t.Helper()
+	ctx := ctxOf(t)
+	db := seededDB(t)
+	w := &world{db: db, rt: db.Connect(t, db.Runtime), t: t, ctx: ctx}
+	var err error
+	deadline := time.Now().Add(7 * 24 * time.Hour)
+	for _, m := range []string{"M-1", "M-2"} {
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			_, err = storekit.CreateMission(ctx, tx, "controller", storekit.Mission{ID: m, WorkID: "W-31", Title: m, Goal: "test", Deadline: deadline})
+			return err
+		}))
+	}
+	nodes := []planstore.PlanNode{
+		{ID: root, Kind: "round", Label: "2", Title: "round 2", Root: root},
+		{ID: item, Parent: root, Kind: "item", Label: "2.1", Title: "data layer", Root: root},
+		{ID: s1, Parent: item, Kind: "step", Label: "2.1-1", Title: "s1", MissionID: "M-1", StepKind: "agent", Ordinal: 0, Root: root},
+		{ID: s2, Parent: item, Kind: "step", Label: "2.1-2", Title: "s2", StepKind: "agent", Ordinal: 1, Root: root},
+		{ID: s3, Parent: item, Kind: "step", Label: "2.1-3", Title: "s3", MissionID: "M-1", StepKind: "review", Ordinal: 2, Root: root},
+	}
+	for _, n := range nodes {
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			_, err = planstore.CreatePlanNode(ctx, tx, "controller", n)
+			return err
+		}))
+	}
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		w.spec, err = artifact.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# task\n"))
+		if err != nil {
+			return err
+		}
+		w.impl, err = artifact.PutArtifact(ctx, tx, "controller", "task_spec", "application/json", []byte(`{"task":"task"}`))
+		return err
+	}))
+	return w
+}
+
+// newKernelWorld is a world with mission M-1 active. In store it also makes
+// hosts, jobs and candidates for the retired dispatch lane; no plan test reads
+// them.
+func newKernelWorld(t *testing.T) *world {
+	t.Helper()
+	ctx := ctxOf(t)
+	w := newWorld(t)
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error { return storekit.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
+	return w
+}
+
+// waitFor returns once a backend of this database waits for a lock in a
+// statement containing fragment, and fails the test if that has not happened
+// by the deadline: a race the test means to stage did not happen.
+func (w *world) waitFor(t *testing.T, fragment string, deadline time.Time) {
+	t.Helper()
+	w.waitForN(t, fragment, 1, deadline)
+}
+
+// waitForN is waitFor for at least n backends.
+func (w *world) waitForN(t *testing.T, fragment string, want int, deadline time.Time) {
+	t.Helper()
+	ctx := ctxOf(t)
+	for {
+		var n int
+		ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()
+		  AND wait_event_type = 'Lock' AND position($1 in query) > 0`, fragment).Scan(&n))
+		if n >= want {
+			return
+		}
+		if !time.Now().Before(deadline) {
+			t.Fatalf("nothing waited for a lock in %q in time; the case proves nothing", fragment)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func (w *world) chainHolds(t *testing.T, stream string) {
+	t.Helper()
+	if _, err := eventlog.VerifyStream(ctx, w.rt, stream); err != nil {
+		t.Fatalf("%s: %v", stream, err)
+	}
+}
+
+func is(t *testing.T, err, target error) {
+	t.Helper()
+	if !errors.Is(err, target) {
+		t.Fatalf("err = %v; want %v", err, target)
+	}
+}
+
+func same(t *testing.T, got, want map[string]any) {
+	t.Helper()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("answer %v; want the first answer %v", got, want)
+	}
+}
+
+func (w *world) count(t *testing.T, q string, args ...any) int {
+	t.Helper()
+	ctx := ctxOf(t)
+	var n int
+	ok(t, w.rt.QueryRow(ctx, q, args...).Scan(&n))
+	return n
+}
+
+// footprint is what a write could leave: actors, events, streams and their
+// heads, outbox rows, idempotency keys, missions, tasks, dependencies,
+// controls, artifacts and their bodies.
+func (w *world) footprint(t *testing.T) string {
+	t.Helper()
+	ctx := ctxOf(t)
+	var s string
+	ok(t, w.rt.QueryRow(ctx, `SELECT concat_ws(' ',
+	  (SELECT count(*) FROM agentrt.actor), (SELECT count(*) FROM agentrt.event), (SELECT count(*) FROM agentrt.event_stream),
+	  (SELECT string_agg(event_stream_id || '=' || last_seq || ':' || last_sha256, ',' ORDER BY event_stream_id) FROM agentrt.event_stream),
+	  (SELECT count(*) FROM agentrt.idempotency_key), (SELECT count(*) FROM agentrt.mission),
+	  (SELECT count(*) FROM agentrt.control),
+	  (SELECT count(*) FROM agentrt.artifact), (SELECT count(*) FROM agentrt.artifact_blob))`).Scan(&s))
+	return s
 }

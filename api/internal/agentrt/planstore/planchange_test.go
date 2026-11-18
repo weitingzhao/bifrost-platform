@@ -1,13 +1,10 @@
-//bifrost:owner plan
-
-package store_test
+package planstore_test
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -17,62 +14,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
-
-// asker is a fake question store: it records the cards and answers them
-// later, as the Owner would.
-type asker struct {
-	mu      sync.Mutex
-	cards   []planstore.Card
-	answers map[string]seenfacts.Question
-	acked   map[string]int
-}
-
-func (a *asker) ack(_ context.Context, id string) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.acked == nil {
-		a.acked = map[string]int{}
-	}
-	a.acked[id]++
-	return nil
-}
-
-func (a *asker) ask(_ context.Context, c planstore.Card) (string, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	for i, prev := range a.cards {
-		if prev.Key == c.Key {
-			return "q_" + string(rune('a'+i)), nil
-		}
-	}
-	a.cards = append(a.cards, c)
-	return "q_" + string(rune('a'+len(a.cards)-1)), nil
-}
-
-func (a *asker) lastID() string {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return "q_" + string(rune('a'+len(a.cards)-1))
-}
-
-func (a *asker) answer(id, status, option string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.answers == nil {
-		a.answers = map[string]seenfacts.Question{}
-	}
-	a.answers[id] = seenfacts.Question{ID: id, Status: status, Option: option, AnsweredBy: "owner", AnsweredAt: "2026-10-14T20:00:00Z"}
-}
-
-func (a *asker) question(_ context.Context, id string) (seenfacts.Question, bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	q, ok := a.answers[id]
-	if !ok {
-		return seenfacts.Question{ID: id, Status: "open"}, true
-	}
-	return q, true
-}
 
 func (w *world) activate(t *testing.T, step string) {
 	t.Helper()
@@ -85,6 +26,8 @@ func (w *world) activate(t *testing.T, step string) {
 // Within the standing authorization a change is decided and applied at
 // once: a step added to an item in progress (numbered one past its largest
 // sibling), the title of a step not started.
+//
+// Origin: moved from store/planchange_test.go (TestPlanChangeStanding), 2026-11-18 (TD-582).
 func TestPlanChangeStanding(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -127,6 +70,8 @@ func TestPlanChangeStanding(t *testing.T) {
 // nothing changes until he answers. A change the database would refuse is
 // refused at once, with its reason, and nobody is asked (T32 through the
 // plan route).
+//
+// Origin: moved from store/planchange_test.go (TestPlanChangeOutside), 2026-11-18 (TD-582).
 func TestPlanChangeOutside(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -212,6 +157,8 @@ func indexFold(s, sub string) int {
 // the other option, a withdrawal or an expiry leave the plan as it is; a
 // change that no longer fits when applied is decided failed, with the
 // reason. Each proposal is decided once.
+//
+// Origin: moved from store/planchange_test.go (TestPlanDecisions), 2026-11-18 (TD-582).
 func TestPlanDecisions(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -288,6 +235,8 @@ func TestPlanDecisions(t *testing.T) {
 // Proposals still waiting for an answer never keep later answered ones from
 // being decided: with more waiting than a page, the last is decided in one
 // pass.
+//
+// Origin: moved from store/planchange_test.go (TestPlanDecisionsPage), 2026-11-18 (TD-582).
 func TestPlanDecisionsPage(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -309,6 +258,8 @@ func TestPlanDecisionsPage(t *testing.T) {
 }
 
 // Review 180 A2: every change is within the tree it names.
+//
+// Origin: moved from store/planchange_test.go (TestPlanChangeStaysInItsTree), 2026-11-18 (TD-582).
 func TestPlanChangeStaysInItsTree(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -340,6 +291,8 @@ func TestPlanChangeStaysInItsTree(t *testing.T) {
 // Review 180 A3: the standing check reads what it locks. A step being moved
 // to active when a retitle is proposed: the proposal waits for it and then
 // sees an active step, so the retitle goes to the Owner instead of landing.
+//
+// Origin: moved from store/planchange_test.go (TestStandingReadsWhatItLocks), 2026-11-18 (TD-582).
 func TestStandingReadsWhatItLocks(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -375,6 +328,8 @@ func TestStandingReadsWhatItLocks(t *testing.T) {
 // Review 180 A3: a decision and the done-rule loop on the same step at once
 // do not deadlock: the decision takes the step before the plan's stream, as
 // the loop does.
+//
+// Origin: moved from store/planchange_test.go (TestDecisionAgainstRuleLoop), 2026-11-18 (TD-582).
 func TestDecisionAgainstRuleLoop(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -406,6 +361,8 @@ func TestDecisionAgainstRuleLoop(t *testing.T) {
 
 // Review 180 B1: a new node's number follows the numbers its siblings'
 // labels carry, not their positions, and skips ids already taken.
+//
+// Origin: moved from store/planchange_test.go (TestPlanChangeNumbering), 2026-11-18 (TD-582).
 func TestPlanChangeNumbering(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -435,6 +392,8 @@ func TestPlanChangeNumbering(t *testing.T) {
 // Review 180 B2, 182 B2: a card the question store refuses for its form is
 // refused as invalid, with nothing written (the store's own limits are
 // tested on the real store: TestPlanChangeCardOnTheStore).
+//
+// Origin: moved from store/planchange_test.go (TestPlanChangeCardRefused), 2026-11-18 (TD-582).
 func TestPlanChangeCardRefused(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -451,6 +410,8 @@ func TestPlanChangeCardRefused(t *testing.T) {
 
 // Review 182 B3: an acknowledgement that fails is tried again next pass; a
 // card the store has dropped is recorded as gone and not asked about again.
+//
+// Origin: moved from store/planchange_test.go (TestPlanDecisionAcks), 2026-11-18 (TD-582).
 func TestPlanDecisionAcks(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -496,6 +457,8 @@ func TestPlanDecisionAcks(t *testing.T) {
 // R5:5.5-15 review round 1: a proposal queued before the sign-off gate
 // shipped, approved after it, is refused where the rule is written; the
 // approval of a rule change is not the Owner's sign-off on the step.
+//
+// Origin: moved from store/planchange_test.go (TestPlanChangeQueuedUngatedRuleIsRefusedOnApply), 2026-11-18 (TD-582).
 func TestPlanChangeQueuedUngatedRuleIsRefusedOnApply(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)

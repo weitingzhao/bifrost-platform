@@ -1,6 +1,4 @@
-//bifrost:owner plan
-
-package store_test
+package planstore_test
 
 import (
 	"fmt"
@@ -15,6 +13,7 @@ import (
 // marks. Both are outside the standing authorization: the Owner decides them
 // on a card.
 
+// Origin: moved from store/plandrop_test.go (TestPlanChangeDropAndMarks), 2026-11-18 (TD-582).
 func TestPlanChangeDropAndMarks(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
@@ -64,6 +63,8 @@ func TestPlanChangeDropAndMarks(t *testing.T) {
 
 // Refused when proposed, with nothing written: a step with open work, a
 // step already dropped, a node that is not a step, marks with none named.
+//
+// Origin: moved from store/plandrop_test.go (TestPlanChangeDropAndMarksRefusals), 2026-11-18 (TD-582).
 func TestPlanChangeDropAndMarksRefusals(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)

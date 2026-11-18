@@ -146,8 +146,6 @@ var testFilesInShared = []string{
 	"api/internal/agentrt/store/parallel_test.go",
 	"api/internal/agentrt/store/pin_test.go",
 	"api/internal/agentrt/store/pinc2_test.go",
-	"api/internal/agentrt/store/planchange_test.go",
-	"api/internal/agentrt/store/plandrop_test.go",
 	"api/internal/agentrt/store/planimport_test.go",
 	"api/internal/agentrt/store/planimportdecide_test.go",
 	"api/internal/agentrt/store/planobservations_concurrency_test.go",

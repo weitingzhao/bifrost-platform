@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
 
 // cardStore is a question store as the card-auto-answer rule sees it: cards
@@ -56,4 +57,60 @@ func (s *cardStore) ask(_ context.Context, c planstore.Card) (string, error) {
 		s.put(planstore.RuntimeCard{ID: id, TaskID: c.TaskID, Recommended: rec, CreatedAt: time.Now(), Options: keys})
 	}
 	return id, nil
+}
+
+// asker is a fake question store: it records the cards and answers them
+// later, as the Owner would.
+type asker struct {
+	mu      sync.Mutex
+	cards   []planstore.Card
+	answers map[string]seenfacts.Question
+	acked   map[string]int
+}
+
+func (a *asker) ack(_ context.Context, id string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.acked == nil {
+		a.acked = map[string]int{}
+	}
+	a.acked[id]++
+	return nil
+}
+
+func (a *asker) ask(_ context.Context, c planstore.Card) (string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for i, prev := range a.cards {
+		if prev.Key == c.Key {
+			return "q_" + string(rune('a'+i)), nil
+		}
+	}
+	a.cards = append(a.cards, c)
+	return "q_" + string(rune('a'+len(a.cards)-1)), nil
+}
+
+func (a *asker) lastID() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return "q_" + string(rune('a'+len(a.cards)-1))
+}
+
+func (a *asker) answer(id, status, option string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.answers == nil {
+		a.answers = map[string]seenfacts.Question{}
+	}
+	a.answers[id] = seenfacts.Question{ID: id, Status: status, Option: option, AnsweredBy: "owner", AnsweredAt: "2026-10-14T20:00:00Z"}
+}
+
+func (a *asker) question(_ context.Context, id string) (seenfacts.Question, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	q, ok := a.answers[id]
+	if !ok {
+		return seenfacts.Question{ID: id, Status: "open"}, true
+	}
+	return q, true
 }
