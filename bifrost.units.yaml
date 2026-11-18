@@ -122,6 +122,8 @@ modules:
       api/internal/agentrt/coord: ["api/internal/agentrt/coord", "api/internal/bus/registry/ledger"]
       api/internal/agentrt/deliveryview: ["api/internal/agentrt/deliveryview"]
       api/internal/agentrt/canon: ["api/internal/agentrt/canon"]
+      # drop0036_test reads the file ROLLBACK_0036 names, only when that is set by hand; it is outside the repository.
+      api/internal/agentrt/migrate: ["api/internal/agentrt/migrate", "api/internal/agentrt/migrations"]
       api/internal/agentrt/infracheck: ["api/internal/agentrt/infracheck"]
       api/internal/agentrt/landingci: ["api/internal/agentrt/landingci"]
       api/internal/agentrt/landinggit: ["api/internal/agentrt/landinggit"]

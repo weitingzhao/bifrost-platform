@@ -88,12 +88,6 @@ func TestEventWritesOnlyWhatItNames(t *testing.T) {
 func TestAppendOnlyTablesRefuseTheOwner(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	// The budget ledger's row names an attempt id no row answers to: the
-	// attempts' table is gone since 0020 and the column is unconstrained.
-	w.seeded(t, func(tx pgx.Tx) {
-		_, err := tx.Exec(ctx, `INSERT INTO agentrt.budget_ledger (attempt_id, unit, amount, measured) VALUES ('a_01M5192P0JPMJAP63ZKRPXJ2VV', 'wall_s', 12, true)`)
-		ok(t, err)
-	})
 	ok(t, planChange(w, func(tx pgx.Tx) error {
 		var id int64
 		if err := tx.QueryRow(ctx, `SELECT current_setting('agentrt.event_id')::bigint`).Scan(&id); err != nil {
@@ -106,26 +100,18 @@ func TestAppendOnlyTablesRefuseTheOwner(t *testing.T) {
 	for _, q := range []string{
 		`INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, signed_by, signature, effective_at, expires_at)
 		 VALUES ('job:implementer', 1, '{}', '{}', 'initial', 'owner', 'sig', now(), now() + interval '90 days')`,
+		// evidence and action_record stand where budget_ledger and
+		// capability_score stood until 0036 dropped them (2026-11-18).
+		`INSERT INTO agentrt.evidence (repo, unit, task, input_key, result, scope, inputs, statement, commit_sha, run_name, run_uid)
+		 VALUES ('bifrost-platform', 'api', 'test', repeat('a', 64), 'passed', 'full', '{}', '{}', repeat('b', 40), 'run', 'uid')`,
+		`INSERT INTO agentrt.action_record (seat, action, reason, regret, regret_state, law, outcome)
+		 VALUES ('seat', 'act', 'why', '', 'undeclared', 'law', 'done')`,
 	} {
 		_, err := owner.Exec(ctx, q)
 		ok(t, err)
 	}
-	ok(t, eventlog.InTx(ctx, owner, func(tx pgx.Tx) error {
-		ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "rule", Type: "rule_signed", Actor: "owner",
-			Body: map[string]any{"rule_id": "job:implementer", "rule_version": 1, "job_ids": []string{"implementer"}}})
-		if err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, `INSERT INTO agentrt.job (job_id, tenant, rule_id, rule_version) VALUES ('implementer','dev','job:implementer',1)`); err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `INSERT INTO agentrt.capability_score (capability_score_id, executor_actor_id, model_provider, model, tool_version,
-		  job_id, task_class, core, source, window_start, window_end, attempts, first_pass, accepted, rework, score, computed_from_event_id)
-		  VALUES ('s1','exec:codex','openai','m','1','implementer','go',false,'exam', now() - interval '1 day', now(), 1,1,1,0,0.5,$1)`, ev.EventID)
-		return err
-	}))
-	for _, tbl := range []string{"event", "artifact", "artifact_blob", "budget_ledger",
-		"capability_score", "rule", "plan_node_binding", "schema_migration"} {
+	for _, tbl := range []string{"event", "artifact", "artifact_blob", "evidence",
+		"action_record", "rule", "plan_node_binding", "schema_migration"} {
 		var n int
 		ok(t, owner.QueryRow(ctx, `SELECT count(*) FROM agentrt.`+tbl).Scan(&n))
 		if n == 0 {
@@ -144,10 +130,10 @@ func firstColumn(tbl string) string {
 		return "event_type"
 	case "artifact", "artifact_blob":
 		return "artifact_id"
-	case "budget_ledger":
-		return "unit"
-	case "capability_score":
-		return "score"
+	case "evidence":
+		return "repo"
+	case "action_record":
+		return "seat"
 	case "rule":
 		return "body_text"
 	case "plan_node_binding":

@@ -16,20 +16,13 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
-var (
-	codex  = tool{Executor: "exec:codex", Provider: "openai", Model: "gpt-x"}
-	claude = tool{Executor: "exec:claude", Provider: "anthropic", Model: "opus"}
-	cursor = tool{Executor: "exec:cursor", Provider: "cursor-mix"}
-)
-
 const (
 	commitA = "2333e00753f91c74c8b2f4d693a803f8e89e7892"
 	commitB = "0b9e1f3c7a1d2e4f5a6b7c8d9e0f1a2b3c4d5e6f"
 	noSuch  = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 )
 
-// newKernelWorld is a world with mission M-1 active, hosts h1–h8, and every
-// tool the tests use a candidate for every job.
+// newKernelWorld is a world with mission M-1 active and hosts h1–h8.
 func newKernelWorld(t *testing.T) *world {
 	t.Helper()
 	ctx := ctxOf(t)
@@ -42,45 +35,7 @@ func newKernelWorld(t *testing.T) *world {
 	})
 	_, err := w.rt.Exec(ctx, agentrttest.DispatchRules)
 	ok(t, err)
-	// The seed's Owner facts as if he had signed capability-facts: core
-	// work needs its only facts to grant.
-	w.legacy(t, agentrttest.OwnerFactsRule, agentrttest.BindOwnerFacts)
-	w.jobs(t, "active", "*", codex, claude, cursor, deterministic, tool{Executor: "exec:claude", Provider: "other"},
-		tool{Executor: "exec:codex", Provider: "other"}, tool{Executor: "exec:codex", Provider: "cursor-mix"},
-		tool{Executor: "exec:claude", Provider: "cursor-mix"})
 	return w
-}
-
-// jobs writes the jobs and makes each tool a candidate for every job with
-// the given status and model pattern. The Owner's signed initial rule writes
-// these (O19); a test writes them with the import event, under a rule of its
-// own.
-func (w *world) jobs(t *testing.T, status, pattern string, tools ...tool) {
-	t.Helper()
-	ctx := ctxOf(t)
-	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
-			Body: map[string]any{"source": "test: jobs and candidates"}}); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, agentrttest.TestJobRule); err != nil {
-			return err
-		}
-		for _, job := range []string{"planner", "implementer", "verifier", "reviewer", "chief_of_staff"} {
-			if _, err := tx.Exec(ctx, `INSERT INTO agentrt.job (job_id, tenant, rule_id, rule_version) VALUES ($1, 'dev', 'job:test', 1)
-			  ON CONFLICT DO NOTHING`, job); err != nil {
-				return err
-			}
-			for _, tl := range tools {
-				if _, err := tx.Exec(ctx, `INSERT INTO agentrt.job_candidate (job_candidate_id, job_id, executor_actor_id, model_provider,
-				  model_pattern, status, rule_id, rule_version) VALUES ($1, $2, $3, $4, $5, $6, 'job:test', 1)`, job+"/"+tl.Executor+"/"+tl.Provider+"/"+pattern, job,
-					tl.Executor, tl.Provider, pattern, status); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	}))
 }
 
 // waitFor returns once a backend of this database waits for a lock in a

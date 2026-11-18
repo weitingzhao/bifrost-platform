@@ -106,7 +106,6 @@ var testFilesInShared = []string{
 	"api/internal/agentrt/controller/slowpass_internal_test.go",
 	"api/internal/agentrt/controller/tuning_test.go",
 	"api/internal/agentrt/store/accept151_test.go",
-	"api/internal/agentrt/store/accept_test.go",
 	"api/internal/agentrt/store/artifactcheck_test.go",
 	"api/internal/agentrt/store/assess_ratchet_test.go",
 	"api/internal/agentrt/store/assess_test.go",

@@ -10,7 +10,6 @@ import type { OwnerConsoleData } from '../useOwnerConsole'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
 import evidenceFixture from './fixtures/standby-evidence.prod.json'
 import poolsFixture from './fixtures/pools-utc.json'
-import capabilitiesFixture from '@/api/__fixtures__/agentrt-capabilities.testdb.json'
 import schemaFixture from '@/api/__fixtures__/agentrt-progress-schema.testdb.json'
 import { parseRuntimeProgress } from '@/api/agentRuntime'
 import type { TelemetryTargetEntry } from '@/api/clusterTypes'
@@ -120,12 +119,11 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); nowValue.value = undefined; missionsValue.value = []; archValue.value = undefined; runtimeValue.value = undefined; workValue.value = undefined })
 
 function json(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }) }
-/** GET /agentrt/pools and /capabilities as the platform answers them; anything else is not this page's. */
+/** GET /agentrt/pools as the platform answers it; anything else is not this page's. */
 function stubRuntimeReads() {
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
     if (url.includes('/agentrt/pools')) return json(poolsFixture)
-    if (url.includes('/agentrt/capabilities')) return json(capabilitiesFixture)
     return json({ error: `not stubbed: ${url}` })
   }))
 }

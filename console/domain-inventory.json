@@ -32,7 +32,6 @@
         "console/src/api/__fixtures__/agent-threads-identity-fields.json",
         "console/src/api/__fixtures__/agent-threads-sessions.generated.json",
         "console/src/api/__fixtures__/agent-threads.generated.json",
-        "console/src/api/__fixtures__/agentrt-capabilities.testdb.json",
         "console/src/api/__fixtures__/agentrt-delivery.go.json",
         "console/src/api/__fixtures__/agentrt-events-M-2.stg.json",
         "console/src/api/__fixtures__/agentrt-events-across.testdb.json",

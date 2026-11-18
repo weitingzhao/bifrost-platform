@@ -19,7 +19,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
@@ -119,7 +118,6 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 		return storekit.MoveMission(ctx, tx, "controller", "M-3", "paused", "test")
 	})
 	must(t, seedHost(ctx, f.pool, "owner", "h2", "dev"))
-	chiefJob(t, f.pool)
 
 	// What the routes need beside the database: a key the rules verify
 	// against, a reader of the attempt branches (it reads none), the Owner's
@@ -312,7 +310,6 @@ const (
 	idsMissions = `SELECT mission_id FROM agentrt.mission ORDER BY length(mission_id), mission_id`
 	idsNodes    = `SELECT plan_node_id FROM agentrt.plan_node x ORDER BY (SELECT min(event_id) FROM agentrt.event e WHERE e.plan_node_id = x.plan_node_id), plan_node_id`
 	idsControls = `SELECT control_id FROM agentrt.control x ORDER BY (SELECT min(event_id) FROM agentrt.event e WHERE e.body_json->>'control_id' = x.control_id), control_id`
-	idsPools    = `SELECT vendor_pool_id FROM agentrt.vendor_pool ORDER BY 1`
 	idsArts     = `SELECT artifact_id FROM agentrt.artifact x ORDER BY (SELECT min(event_id) FROM agentrt.event e WHERE e.event_type = 'artifact_put'
 	  AND e.body_json->>'artifact_id' = x.artifact_id), artifact_id`
 )
@@ -340,7 +337,7 @@ func (f *stateFuzz) path(t *testing.T, pattern string) string {
 				pool = []string{"463", "closed"}
 			} else {
 				pool = f.ids(t, map[string]string{"attempts": idsAttempts, "missions": idsMissions, "tasks": idsTasks, "plan": idsNodes,
-					"controls": idsControls, "pools": idsPools, "artifacts": idsArts, "hosts": `SELECT unnest(ARRAY['h1','h2','h9'])`}[parts[i-1]])
+					"controls": idsControls, "artifacts": idsArts, "hosts": `SELECT unnest(ARRAY['h1','h2','h9'])`}[parts[i-1]])
 			}
 		}
 		// The world's ids three times over: most requests name a real row.
@@ -496,17 +493,4 @@ func (f *stateFuzz) template(t *testing.T, rt fuzzRoute, caller, path string) ma
 		return map[string]any{"host_id": host, "results": []any{}}
 	}
 	return map[string]any{"idempotency_key": key, "reason": "fuzz"}
-}
-
-// chiefJob writes the job chief_of_staff, as the Owner's signed rule would.
-func chiefJob(t *testing.T, pool *pgxpool.Pool) {
-	t.Helper()
-	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
-		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
-			Body: map[string]any{"source": "test: the chief's job"}}); err != nil {
-			return err
-		}
-		_, err := tx.Exec(ctx, `INSERT INTO agentrt.job (job_id, tenant, rule_id, rule_version) VALUES ('chief_of_staff', 'dev', 'job:test', 1)`)
-		return err
-	}))
 }

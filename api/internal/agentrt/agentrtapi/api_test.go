@@ -71,23 +71,6 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 	must(t, seedHost(ctx, pool, "owner", "h1", "dev"))
 	_, ferr := pool.Exec(ctx, agentrttest.DispatchRules)
 	must(t, ferr)
-	tx(func(tx pgx.Tx) error {
-		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
-			Body: map[string]any{"source": "test: jobs"}}); err != nil {
-			return err
-		}
-		for _, q := range []string{
-			agentrttest.TestJobRule,
-			`INSERT INTO agentrt.job (job_id, tenant, rule_id, rule_version) VALUES ('implementer', 'dev', 'job:test', 1)`,
-			`INSERT INTO agentrt.job_candidate (job_candidate_id, job_id, executor_actor_id, model_provider, status, rule_id, rule_version)
-			 VALUES ('implementer/exec:cursor/cursor-mix', 'implementer', 'exec:cursor', 'cursor-mix', 'active', 'job:test', 1)`,
-		} {
-			if _, err := tx.Exec(ctx, q); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
 	// A task id no row answers to: the tasks' table is gone (0020).
 	return pool, "t_" + eventlog.NewULID(time.Now())
 }
