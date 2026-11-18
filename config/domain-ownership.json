@@ -865,13 +865,6 @@
       "status": "assigned",
       "basis": "2026-11-16 source and caller audit: shared Prometheus observation client used across compute and system views; implementation, authorization, refusal and dispatch behavior unchanged; 2026-11-16 generic log timestamp projection and elapsed-log formatting extracted with original output and threshold behavior"
     },
-    "api/cmd/agentrt-baseline-import": {
-      "domains": [
-        "delivery"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: one-time sealed runtime observation import command; not executed in this audit; implementation, authorization, refusal and dispatch behavior unchanged"
-    },
     "api/internal/agentbridge": {
       "domains": [
         "compute"
@@ -919,7 +912,7 @@
         "delivery"
       ],
       "status": "assigned",
-      "basis": "metric readings, metrics_computed and the sealed 2026-11-09 baseline, moved out of store; registered to delivery in the event ledger; 2026-11-18"
+      "basis": "declares metrics_computed and metric_label_set, delivery's in the event ledger, for the rows already written; moved out of store and its unused baseline import deleted, 2026-11-18"
     },
     "api/internal/agentrt/loopalert": {
       "domains": [

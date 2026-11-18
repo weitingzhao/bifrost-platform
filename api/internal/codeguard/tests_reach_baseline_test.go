@@ -112,7 +112,6 @@ var testFilesInShared = []string{
 	"api/internal/agentrt/store/assess_ratchet_test.go",
 	"api/internal/agentrt/store/assess_test.go",
 	"api/internal/agentrt/store/b7_test.go",
-	"api/internal/agentrt/store/baseline1109_test.go",
 	"api/internal/agentrt/store/boundary_projection_parity_test.go",
 	"api/internal/agentrt/store/brief_test.go",
 	"api/internal/agentrt/store/cardauto_test.go",

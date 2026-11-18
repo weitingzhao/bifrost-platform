@@ -1,7 +1,8 @@
-// Package deliverymetrics holds the delivery measurement records: the
-// metric readings, the metrics_computed event that accounts for them, and the
-// sealed baseline of 2026-11-09. It moved out of store on 2026-11-18; the
-// delivery domain owns these event types (OWNER_LAW #28).
+// Package deliverymetrics declares the delivery measurement event types. Nothing
+// writes them any more: the computation stopped with the dispatch lane on
+// 2026-11-13 and the sealed baseline import, which never ran, was deleted on
+// 2026-11-18 (OWNER_LAW #30). The rows already written stay, so the types and
+// the checks of their bodies stay. The delivery domain owns them (#28).
 package deliverymetrics
 
 import (
@@ -17,6 +18,13 @@ var (
 	metricID = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 	sha256ID = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
+
+// metricDefinition is one entry of a metrics_computed body's definitions.
+type metricDefinition struct {
+	ID      string `json:"id"`
+	Version int    `json:"version"`
+	SHA256  string `json:"sha256"`
+}
 
 func init() {
 	eventlog.Declare(eventlog.Vocabulary{
@@ -47,7 +55,7 @@ func init() {
 
 // checkDefinitions holds definitions to an array of well-formed definitions.
 func checkDefinitions(body map[string]any) error {
-	var defs []MetricDefinition
+	var defs []metricDefinition
 	if err := strictjson.Value(body["definitions"], &defs); err != nil {
 		return eventlog.Invalid("metrics_computed definitions: %v", err)
 	}
