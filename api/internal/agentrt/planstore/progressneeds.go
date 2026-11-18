@@ -54,7 +54,7 @@ func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, er
 		}
 		inputs = append(inputs, planreadings.PendingNeed{Event: p.event, Stream: p.stream, Root: streamRoot(p.stream), Work: strings.TrimPrefix(p.stream, RecorderStreamPrefix), Reason: p.reason, Question: p.question, At: p.at, Kind: kind, Payload: p.changes})
 	}
-	return planreadings.ProjectPendingNeeds(inputs, PendingChangeLimit, now, planreadings.NeedLabels{Apply: CardApply, Refuse: CardRefuse, RecorderApply: RecorderApplyLabel, RecorderRefuse: RecorderRefuseLabel, ImportApply: ImportApply, ImportRefuse: ImportRefuse}, func(raw any) (any, error) { return ChangeBlocks(ctx, tx, raw.([]PlanChange)) }, func(listed map[string]map[string]any) ([]planreadings.WaitingCard, bool, error) {
+	return planreadings.ProjectPendingNeeds(inputs, PendingChangeLimit, now, planreadings.NeedLabels{Apply: CardApply, Refuse: CardRefuse, RecorderApply: RecorderApplyLabel, RecorderRefuse: RecorderRefuseLabel, ImportApply: ImportApply, ImportRefuse: ImportRefuse}, func(raw any) (any, error) { return changeBlocks(ctx, tx, raw.([]PlanChange)) }, func(listed map[string]map[string]any) ([]planreadings.WaitingCard, bool, error) {
 		cards, more, err := missionCards(ctx, tx, now, listed)
 		var out []planreadings.WaitingCard
 		for _, c := range cards {
@@ -92,7 +92,7 @@ func missionCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[stri
 	return cards, more, nil
 }
 
-// ChangeBlocks is what a waiting plan change holds up (SPEC §2.1), from one
+// changeBlocks is what a waiting plan change holds up (SPEC §2.1), from one
 // set: the steps it touches (a node that is a step, or the steps under a
 // node that is an item: an added node's parent, a retitled or re-ruled node,
 // a rebound step, a moved task's target) and the tasks it moves. Its
@@ -101,7 +101,7 @@ func missionCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[stri
 // change binds to. Unknown when it touches no mission. It carries no count of
 // unfinished tasks: no task is written any more (store cut 4, 2026-11-14), so
 // that count had no source and was a constant 0.
-func ChangeBlocks(ctx context.Context, tx pgx.Tx, changes []PlanChange) (any, error) {
+func changeBlocks(ctx context.Context, tx pgx.Tx, changes []PlanChange) (any, error) {
 	var nodes, bound []string
 	for _, c := range changes {
 		switch c.Op {

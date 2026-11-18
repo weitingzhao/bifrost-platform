@@ -1,6 +1,4 @@
-//bifrost:owner plan
-
-package store_test
+package planstore_test
 
 import (
 	"encoding/json"
@@ -19,9 +17,10 @@ import (
 // GET /progress with an ARCH root of four rows, one of each kind the page shows (review 431 C2). Off
 // unless asked for; it writes the file, and the Console's tests read it:
 //
-//	CONSOLE_ARCH_FIXTURE_WRITE=1 go test ./internal/agentrt/store/ -run TestConsoleArchFixture
+//	CONSOLE_ARCH_FIXTURE_WRITE=1 go test ./internal/agentrt/planstore/ -run TestConsoleArchFixture
 const consoleArchFixture = "../../../../console/src/api/__fixtures__/agentrt-progress-arch.testdb.json"
 
+// Origin: moved from store/progressarch_fixture_test.go (TestConsoleArchFixture), 2026-11-18 (TD-582).
 func TestConsoleArchFixture(t *testing.T) {
 	t.Parallel()
 	if os.Getenv("CONSOLE_ARCH_FIXTURE_WRITE") != "1" {

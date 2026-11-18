@@ -26,18 +26,6 @@ func LimitPendingChangesForTest(n int) func() {
 	return func() { planstore.PendingChangeLimit = old }
 }
 
-// ChangeBlocksForTest is what changes would hold up, read in a transaction
-// of their own.
-func ChangeBlocksForTest(ctx context.Context, db DB, changes []planstore.PlanChange) (any, error) {
-	var out any
-	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
-		var err error
-		out, err = planstore.ChangeBlocks(ctx, tx, changes)
-		return err
-	})
-	return out, err
-}
-
 // EventTypesForTest is the closed vocabulary and the types with a body.
 func EventTypesForTest() (vocabulary, written []string) { return eventlog.EventTypes() }
 

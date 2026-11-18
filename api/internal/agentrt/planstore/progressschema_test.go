@@ -1,11 +1,12 @@
-package store_test
+package planstore_test
 
 import (
 	"encoding/json"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopalert"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopalert"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
@@ -47,6 +48,8 @@ func progressOf(t *testing.T, db eventlog.DB) (schemaDoc, json.RawMessage) {
 // every migration it is current, and ahead with one the binary lacks. A loop
 // alerted as failing is listed with when and its error until it passes again;
 // an alert names its loop by its digest, so an unknown name is not listed.
+//
+// Origin: moved from store/progressschema_test.go (TestProgressSaysTheSchemaAndTheFailingLoops), 2026-11-18 (TD-582).
 func TestProgressSaysTheSchemaAndTheFailingLoops(t *testing.T) {
 	t.Parallel()
 	at6 := agentrttest.New(t)

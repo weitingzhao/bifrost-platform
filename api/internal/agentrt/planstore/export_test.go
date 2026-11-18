@@ -25,11 +25,16 @@ var (
 
 // What the plan tests moved from package store reach of the package's own
 // names (TD-582): no other package uses these.
-const OpImportForTest = opImport
+const (
+	OpImportForTest       = opImport
+	ReasonNotGatesForTest = reasonNotGates
+	StatusBlockedForTest  = statusBlocked
+)
 
 var (
-	ImportOfForTest   = importOf
-	StreamRootForTest = streamRoot
+	ChangeBlocksForTest = changeBlocks
+	ImportOfForTest     = importOf
+	StreamRootForTest   = streamRoot
 )
 
 // ReadingForTest is the snapshot's reading of a binding.

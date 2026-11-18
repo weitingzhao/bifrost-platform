@@ -26,7 +26,7 @@ const (
 	StatusUnknown      = "unknown"
 	StatusWaitingOwner = "waiting_owner"
 	StatusStopped      = "stopped" // only the Owner lifts a stop (progressstop.go)
-	StatusBlocked      = "blocked"
+	statusBlocked      = "blocked"
 	StatusSlow         = "slow"
 	StatusWorking      = "working"
 	StatusWaitingRole  = "waiting_role"

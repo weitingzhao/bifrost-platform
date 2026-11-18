@@ -1,6 +1,4 @@
-//bifrost:owner plan
-
-package store_test
+package planstore_test
 
 import (
 	"errors"
@@ -95,6 +93,8 @@ func wantTick(t *testing.T, row map[string]any, tick, reason string) {
 // The coordinator, 2026-11-14: gates are no longer run, so a row whose rule
 // names gates is unknown and says why, whatever any environment runs; a row
 // with no rule is unknown as before.
+//
+// Origin: moved from store/progressarch_test.go (TestArchGatesReadUnknown), 2026-11-18 (TD-582).
 func TestArchGatesReadUnknown(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -114,6 +114,8 @@ func TestArchGatesReadUnknown(t *testing.T) {
 
 // A rule the row cannot be ticked by says so on the row, and the rest of the
 // page is still read.
+//
+// Origin: moved from store/progressarch_test.go (TestArchRowWithARuleThatDoesNotParse), 2026-11-18 (TD-582).
 func TestArchRowWithARuleThatDoesNotParse(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
@@ -123,6 +125,8 @@ func TestArchRowWithARuleThatDoesNotParse(t *testing.T) {
 
 // Notes on rows: append only, the latest shown, held to an agent text's
 // rules, only on architecture rows, one per key.
+//
+// Origin: moved from store/progressarch_test.go (TestPlanNotes), 2026-11-18 (TD-582).
 func TestPlanNotes(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
@@ -197,6 +201,8 @@ func TestPlanNotes(t *testing.T) {
 // The table imported beside round 2: rows with the rules the request gives,
 // what each line says it is now as the row's first note, the round as it
 // was; the same request again changes nothing.
+//
+// Origin: moved from store/progressarch_test.go (TestArchImportBesideTheRound), 2026-11-18 (TD-582).
 func TestArchImportBesideTheRound(t *testing.T) {
 	t.Parallel()
 	pool, round := importDB(t)
@@ -254,6 +260,8 @@ func TestArchImportBesideTheRound(t *testing.T) {
 }
 
 // A line whose text a note may not hold refuses the whole import.
+//
+// Origin: moved from store/progressarch_test.go (TestArchImportRefusesALocalPath), 2026-11-18 (TD-582).
 func TestArchImportRefusesALocalPath(t *testing.T) {
 	t.Parallel()
 	pool, _ := importDB(t)
@@ -274,11 +282,13 @@ func TestArchImportRefusesALocalPath(t *testing.T) {
 // that names a fact which stays true once recorded is unknown on the page,
 // and a plan change that would give a row one is refused: when proposed
 // (its trial apply) and so before any card reaches the Owner.
+//
+// Origin: moved from store/progressarch_test.go (TestArchRowRuleIsGatesOnly), 2026-11-18 (TD-582).
 func TestArchRowRuleIsGatesOnly(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	w.arch(t, [2]string{"ARCH:state-db", `{"ci_succeeded":{"repo":"bifrost-platform","commit":"` + commitA + `"}}`}, [2]string{"ARCH:bus", ""})
-	wantTick(t, w.archRows(t)["ARCH:state-db"], "unknown", planstore.ReasonNotGates)
+	wantTick(t, w.archRows(t)["ARCH:state-db"], "unknown", planstore.ReasonNotGatesForTest)
 
 	a := &asker{}
 	propose := func(key, rule string) (map[string]any, error) {
@@ -319,6 +329,8 @@ func TestArchRowRuleIsGatesOnly(t *testing.T) {
 
 // Review 427 C1, 429: the latest note is the one appended last (event_id),
 // whatever its time says.
+//
+// Origin: moved from store/progressarch_test.go (TestArchLatestNoteIsTheLastAppended), 2026-11-18 (TD-582).
 func TestArchLatestNoteIsTheLastAppended(t *testing.T) {
 	t.Parallel()
 	ctx := ownClock(t)

@@ -26,10 +26,10 @@ import (
 // ReasonNoGate is the reason of a row with no done rule.
 const ReasonNoGate = "no gate test yet"
 
-// ReasonNotGates is the reason of a row whose done rule names more than gate
+// reasonNotGates is the reason of a row whose done rule names more than gate
 // tests: a table row's tick is its gates against what runs now, never a fact
 // that stays true once recorded (review 427 A2).
-const ReasonNotGates = "its done rule is not gate tests only"
+const reasonNotGates = "its done rule is not gate tests only"
 
 // ReasonGatesRetired is why a row's gates read unknown: gates ran as tasks
 // of the dispatch lane, and nothing runs one any more (2026-11-14).
@@ -84,7 +84,7 @@ func archTick(ctx context.Context, tx pgx.Tx, id, doc string, deploys *recordedD
 	case rule.Empty():
 		return plan.Unknown.String(), ReasonNoGate, nil
 	case !rule.OnlyStanding():
-		return plan.Unknown.String(), ReasonNotGates, nil
+		return plan.Unknown.String(), reasonNotGates, nil
 	}
 	facts := &stepFacts{ctx: ctx, tx: tx, step: id, deployed: deploys.read}
 	seen := &explained{Facts: facts, gates: gates}

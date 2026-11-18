@@ -22,7 +22,7 @@ func TestMissionDocumentProjectionParity(t *testing.T) {
 		m.stateQuestion, m.stateReason, m.stateBy = "Q-7", "owner reason", "owner"
 		cases[state+"/question"] = m
 	}
-	for _, status := range []string{StatusHostLost, StatusMaybeStuck, StatusUnknown, StatusWaitingOwner, StatusStopped, StatusBlocked, StatusSlow, StatusWorking, StatusWaitingRole, StatusQueued, StatusFinished, "unrecognized"} {
+	for _, status := range []string{StatusHostLost, StatusMaybeStuck, StatusUnknown, StatusWaitingOwner, StatusStopped, statusBlocked, StatusSlow, StatusWorking, StatusWaitingRole, StatusQueued, StatusFinished, "unrecognized"} {
 		m := base
 		m.tasks = []*ProgressTask{{TaskID: "T-7", Status: status, Reason: "task reason", Since: "task-time", DependsOn: []string{"T-6"}}}
 		cases[status+"/task"] = m
@@ -111,7 +111,7 @@ func baselineMissionDoc(m *progressMission, eta map[string]any) map[string]any {
 			if len(roles) == 0 {
 				waiting = "coordinator"
 			}
-		case StatusHostLost, StatusMaybeStuck, StatusUnknown, StatusBlocked, StatusQueued:
+		case StatusHostLost, StatusMaybeStuck, StatusUnknown, statusBlocked, StatusQueued:
 			waiting = "coordinator"
 		}
 	} else {
@@ -123,7 +123,7 @@ func baselineMissionDoc(m *progressMission, eta map[string]any) map[string]any {
 				reason = baselineMissionCardReason(m)
 			}
 		case m.state == "paused":
-			status, waiting, since = StatusBlocked, "coordinator", m.stateAt
+			status, waiting, since = statusBlocked, "coordinator", m.stateAt
 			reason = "the mission is paused"
 			if m.stateBy != "" {
 				reason += " by " + m.stateBy

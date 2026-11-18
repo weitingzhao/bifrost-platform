@@ -4,7 +4,6 @@ package store_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -45,20 +44,5 @@ func TestNeedsYouOneBoundForEveryCard(t *testing.T) {
 	doc := w.progress(t)
 	if doc.NeedsYou.Count != 1 || !doc.NeedsYou.Truncated {
 		t.Fatalf("needs you at a bound of 1: %d, truncated %v", doc.NeedsYou.Count, doc.NeedsYou.Truncated)
-	}
-}
-
-// Review 190 B4: a mission on its card says on which question it waits, with
-// tasks or without, and its needs_you item counts its unfinished tasks.
-func TestMissionOnACardSaysSo(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	id, q := historicalMissionCard(t, w, "M-30", "q_old_a")
-	bare, bq := historicalMissionCard(t, w, "M-31", "q_old_b")
-	doc := w.progress(t)
-	for _, m := range doc.Work.Missions {
-		if (m.MissionID == id && !strings.Contains(m.Reason, "question "+q)) || (m.MissionID == bare && !strings.Contains(m.Reason, "question "+bq)) {
-			t.Errorf("mission %s: %q; want the question it waits on", m.MissionID, m.Reason)
-		}
 	}
 }

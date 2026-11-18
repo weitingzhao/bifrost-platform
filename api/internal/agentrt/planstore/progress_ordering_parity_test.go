@@ -33,7 +33,7 @@ func frozenSortedLive(live map[string]*ProgressAttempt) []*ProgressAttempt {
 
 func TestProgressDisplayOrderingFrozen(t *testing.T) {
 	t.Parallel()
-	rank := []string{StatusHostLost, StatusMaybeStuck, StatusUnknown, StatusWaitingOwner, StatusStopped, StatusBlocked, StatusSlow, StatusWorking, StatusWaitingRole, StatusQueued}
+	rank := []string{StatusHostLost, StatusMaybeStuck, StatusUnknown, StatusWaitingOwner, StatusStopped, statusBlocked, StatusSlow, StatusWorking, StatusWaitingRole, StatusQueued}
 	for _, a := range append(append([]string{}, rank...), "unrecognized", "") {
 		for _, b := range append(append([]string{}, rank...), "unrecognized", "") {
 			best := len(rank)

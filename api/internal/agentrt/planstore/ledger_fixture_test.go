@@ -313,3 +313,41 @@ func (w *world) footprint(t *testing.T) string {
 	  (SELECT count(*) FROM agentrt.artifact), (SELECT count(*) FROM agentrt.artifact_blob))`).Scan(&s))
 	return s
 }
+
+var owner = actor.Writer{Actor: "owner", Token: "admin"}
+
+const (
+	commitA = "2333e00753f91c74c8b2f4d693a803f8e89e7892"
+	commitB = "0b9e1f3c7a1d2e4f5a6b7c8d9e0f1a2b3c4d5e6f"
+	noSuch  = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+)
+
+func (w *world) artifact(t *testing.T, kind, body string) string {
+	t.Helper()
+	ctx := ctxOf(t)
+	var id string
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		var err error
+		id, err = artifact.PutArtifact(ctx, tx, "controller", kind, "text/plain", []byte(body))
+		return err
+	}))
+	return id
+}
+
+// missionStream is a mission's event stream.
+func missionStream(id string) string { return "mission:" + id }
+
+func deployedIs(commit string, ref map[string]any) seenfacts.Deployed {
+	return func(context.Context, string) (string, map[string]any, bool) { return commit, ref, true }
+}
+
+// rows counts what an import writes: nodes, events, artifacts and their
+// bodies, streams, idempotency keys (the outbox is retired, 0028).
+func rows(t *testing.T, pool *pgxpool.Pool) [6]int {
+	t.Helper()
+	var c [6]int
+	ok(t, pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM agentrt.plan_node), (SELECT count(*) FROM agentrt.event),
+	  (SELECT count(*) FROM agentrt.artifact), (SELECT count(*) FROM agentrt.artifact_blob),
+	  (SELECT count(*) FROM agentrt.event_stream), (SELECT count(*) FROM agentrt.idempotency_key)`).Scan(&c[0], &c[1], &c[2], &c[3], &c[4], &c[5]))
+	return c
+}
