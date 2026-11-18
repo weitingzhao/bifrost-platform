@@ -33,7 +33,44 @@ var (
 // lag and a delivery in flight read as unsettled, never as the previous
 // deployment. A delivery that failed or went unrecorded and was then pruned
 // from Tekton is not seen (review 162 A1, the Owner's decision).
+//
+// The records come from the record table once it is wired (2026-11-18: 1,272
+// ConfigMaps and rows compared field by field, the same runs and the same
+// content but for recorded_at, which no reader of Current uses), and from the
+// ConfigMaps before that. A deployment recorded as a ConfigMap whose row
+// failed reads as unsettled, never as the deployment before it, until the
+// recorder's next pass copies the row.
 func (s *Service) Current(ctx context.Context, lane, env string) (Record, error) {
+	if r := s.tableReader(); r != nil {
+		return s.currentFromTable(ctx, r, lane, env)
+	}
+	return s.currentFromMaps(ctx, lane, env)
+}
+
+// currentFromTable is Current from the rows of lane and env.
+func (s *Service) currentFromTable(ctx context.Context, r TableReader, lane, env string) (Record, error) {
+	recs, err := r.Deployments(ctx, lane, env)
+	if err != nil {
+		return Record{}, err
+	}
+	for _, rec := range recs {
+		if err := checkDeployment(rec, "the row of "+rec.Run, lane, env); err != nil {
+			return Record{}, err
+		}
+	}
+	return s.settledNewest(ctx, recs, lane, env)
+}
+
+// checkDeployment fails a record that does not read as a deployment of lane and env.
+func checkDeployment(rec Record, name, lane, env string) error {
+	if rec.Run == "" || rec.Lane != lane || rec.Env != env || !rec.Deploys || rec.StartedAt.IsZero() || rec.CompletedAt.IsZero() {
+		return fmt.Errorf("%w: %s does not read as a deployment of %s/%s", ErrUnsettled, name, lane, env)
+	}
+	return nil
+}
+
+// currentFromMaps is Current from the record ConfigMaps of lane and env.
+func (s *Service) currentFromMaps(ctx context.Context, lane, env string) (Record, error) {
 	core, _, err := s.clients()
 	if err != nil {
 		return Record{}, err
@@ -51,8 +88,8 @@ func (s *Service) Current(ctx context.Context, lane, env string) (Record, error)
 		if perr := json.Unmarshal([]byte(cm.Data[dataKey]), &rec); perr != nil {
 			return Record{}, fmt.Errorf("%w: %s is unreadable: %v", ErrUnsettled, cm.Name, perr)
 		}
-		if rec.Run == "" || rec.Lane != lane || rec.Env != env || !rec.Deploys || rec.StartedAt.IsZero() || rec.CompletedAt.IsZero() {
-			return Record{}, fmt.Errorf("%w: %s does not read as a deployment of %s/%s", ErrUnsettled, cm.Name, lane, env)
+		if err := checkDeployment(rec, cm.Name, lane, env); err != nil {
+			return Record{}, err
 		}
 		recs = append(recs, rec)
 	}

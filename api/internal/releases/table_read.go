@@ -12,29 +12,31 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// Step 2 of moving the release records into the database (2026-11-17, with
-// the communication layer's step 3: duty/from-agent-tool-comm-2026-11-16-
-// bus-step3-ci-checklist.md §6): reads move to the table only after the two
-// are compared side by side. Each recorder pass now
-//   - copies into the table every ConfigMap record whose run has no row
-//     (records from before the table was written, 12:27 2026-11-17), without
-//     an announcement: those releases happened long ago, and nobody should be
-//     woken for them;
-//   - asks Current of every deploying lane and environment twice, from the
-//     ConfigMaps (the answer readers get) and from the rows, and counts and
-//     logs where they differ.
-// The ConfigMaps stay the truth. Nothing reads the rows' answer yet.
+// Moving the release records into the database (2026-11-17, with the
+// communication layer's step 3: duty/from-agent-tool-comm-2026-11-16-bus-step3-
+// ci-checklist.md §6). Current reads the rows (current.go). The recorder still
+// writes the ConfigMaps too, and each pass
+//   - copies into the table every ConfigMap record whose run has no row (a row
+//     that failed, or a record from before the table), without an
+//     announcement: nobody should be woken for those;
+//   - asks Current of every deploying lane and environment both ways, and
+//     counts and logs where the ConfigMaps and the rows differ.
 
 // TableReader reads the record table and copies a record into it.
 type TableReader interface {
 	// Records is the newest row of each successful run of this tenant.
 	Records(ctx context.Context) ([]Record, error)
+	// Deployments is the newest row of each successful deploying run of lane
+	// and env.
+	Deployments(ctx context.Context, lane, env string) ([]Record, error)
 	// Backfill writes rec as a row without an announcement, unless its run
 	// has a row already; it says whether it wrote one.
 	Backfill(ctx context.Context, rec Record) (bool, error)
 }
 
-// SetTableReader hands the recorder its table reader; nil compares nothing.
+// SetTableReader hands the service its table reader: Current reads the rows
+// and the recorder compares them with the ConfigMaps. nil keeps Current on the
+// ConfigMaps and compares nothing.
 func (s *Service) SetTableReader(r TableReader) {
 	s.mu.Lock()
 	s.reader = r
@@ -52,15 +54,32 @@ type Querier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
+const recordColumns = `run, pipeline, lane, env, deploys, revision, tag, from_run,
+		started_at, completed_at, repos, images, missing, recorded_at`
+
 // ReadRecords is TableReader.Records over agentrt.release_record.
 func ReadRecords(ctx context.Context, q Querier) ([]Record, error) {
-	rows, err := q.Query(ctx, `SELECT DISTINCT ON (run) run, pipeline, lane, env, deploys, revision, tag, from_run,
-		started_at, completed_at, repos, images, missing, recorded_at
+	rows, err := q.Query(ctx, `SELECT DISTINCT ON (run) `+recordColumns+`
 		FROM agentrt.release_record WHERE tenant = $1 AND succeeded
 		ORDER BY run, release_record_id DESC`, Tenant)
 	if err != nil {
 		return nil, err
 	}
+	return scanRecords(rows)
+}
+
+// ReadDeployments is TableReader.Deployments over agentrt.release_record.
+func ReadDeployments(ctx context.Context, q Querier, lane, env string) ([]Record, error) {
+	rows, err := q.Query(ctx, `SELECT DISTINCT ON (run) `+recordColumns+`
+		FROM agentrt.release_record WHERE tenant = $1 AND succeeded AND deploys AND lane = $2 AND env = $3
+		ORDER BY run, release_record_id DESC`, Tenant, lane, env)
+	if err != nil {
+		return nil, err
+	}
+	return scanRecords(rows)
+}
+
+func scanRecords(rows pgx.Rows) ([]Record, error) {
 	defer rows.Close()
 	var out []Record
 	for rows.Next() {
@@ -136,22 +155,10 @@ func (s *Service) compare(ctx context.Context, cms []corev1.ConfigMap) *Comparis
 			have[rec.Run] = true
 		}
 	}
-	if out.Backfilled > 0 {
-		if rows, err = r.Records(ctx); err != nil {
-			out.Err = "read rows: " + err.Error()
-			return out
-		}
-	}
 	for _, pair := range s.rules.deployingPairs() {
 		lane, env := pair[0], pair[1]
-		var mine []Record
-		for _, row := range rows {
-			if row.Deploys && row.Lane == lane && row.Env == env {
-				mine = append(mine, row)
-			}
-		}
-		fromMaps, mapsErr := s.Current(ctx, lane, env)
-		fromRows, rowsErr := s.settledNewest(ctx, mine, lane, env)
+		fromMaps, mapsErr := s.currentFromMaps(ctx, lane, env)
+		fromRows, rowsErr := s.currentFromTable(ctx, r, lane, env)
 		out.Compared++
 		if a, b := answerOf(fromMaps, mapsErr), answerOf(fromRows, rowsErr); a != b {
 			out.Differ++

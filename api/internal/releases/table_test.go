@@ -74,10 +74,21 @@ func TestAnnouncedNamesTheRepositoryOfTheRevision(t *testing.T) {
 type fakeRows struct {
 	rows   []Record
 	refuse map[string]bool
+	err    error
 }
 
 func (f *fakeRows) Records(context.Context) ([]Record, error) {
 	return append([]Record(nil), f.rows...), nil
+}
+
+func (f *fakeRows) Deployments(_ context.Context, lane, env string) ([]Record, error) {
+	var out []Record
+	for _, r := range f.rows {
+		if r.Deploys && r.Lane == lane && r.Env == env {
+			out = append(out, r)
+		}
+	}
+	return out, f.err
 }
 
 func (f *fakeRows) Backfill(_ context.Context, rec Record) (bool, error) {
@@ -97,7 +108,7 @@ func (f *fakeRows) Backfill(_ context.Context, rec Record) (bool, error) {
 // the communication layer's bus step 3): before Current reads the table,
 // each pass copies the ConfigMap records the table lacks (those from before
 // 12:27, when rows started) and asks Current both ways; a lane whose two
-// answers differ is counted and named, and readers still get the ConfigMaps'.
+// answers differ is counted and named.
 // Positive control: without the Backfill loop the first check fails
 // (backfilled 0, and the rows answer "no deployment").
 // The second control: comparing nothing (Differ never counted) fails the last check.
@@ -122,7 +133,7 @@ func TestTickBackfillsTheTableAndComparesCurrentBothWays(t *testing.T) {
 		t.Fatalf("compare = %+v", c)
 	}
 	if got, err := s.Current(ctx, "app", "stg"); err != nil || got.Run != "deliver-stg-2" {
-		t.Fatalf("readers still get the ConfigMaps' answer: %+v %v", got, err)
+		t.Fatalf("current from the rows: %+v %v", got, err)
 	}
 	if again := s.Tick(ctx).Compare; again.Backfilled != 0 || again.Differ != 0 {
 		t.Fatalf("a run with a row is not copied again: %+v", again)
@@ -136,6 +147,43 @@ func TestTickBackfillsTheTableAndComparesCurrentBothWays(t *testing.T) {
 	c = s.Tick(ctx).Compare
 	if c.Differ != 1 || len(c.Diffs) != 1 || !strings.Contains(c.Diffs[0], "app/stg: configmaps run deliver-stg-2, rows unsettled") {
 		t.Fatalf("compare = %+v", c)
+	}
+	if _, err := s.Current(ctx, "app", "stg"); !errors.Is(err, ErrUnsettled) {
+		t.Fatalf("a deployment with no row yet reads as unsettled, never the one before it: %v", err)
+	}
+}
+
+// 2026-11-18: Current reads the rows once they are wired (all 1,272 records
+// matched their ConfigMaps that night), so a reader no longer depends on the
+// ConfigMaps being there, and a table it cannot read is an error, never the
+// older source's answer passed off as the table's.
+// Positive control: Current reading the ConfigMaps fails the first check,
+// where they are gone.
+func TestCurrentReadsTheTable(t *testing.T) {
+	ctx := context.Background()
+	t1 := time.Date(2026, 11, 18, 1, 0, 0, 0, time.UTC)
+	s, core := newFakeService(t,
+		pipelineRun("deliver-stg-1", "deliver-stg", true, t1, nil, nil),
+		cloneTaskRun("deliver-stg-1", "clone-core", "core", shaA),
+	)
+	s.Tick(ctx)
+	rows := &fakeRows{}
+	s.SetTableReader(rows)
+	s.Tick(ctx)
+	if err := core.CoreV1().ConfigMaps("cicd").Delete(ctx, "release-deliver-stg-1", metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.Current(ctx, "app", "stg"); err != nil || got.Run != "deliver-stg-1" || got.Repos["core"].SHA != shaA {
+		t.Fatalf("current = %+v %v", got, err)
+	}
+	rows.err = errors.New("database down")
+	if _, err := s.Current(ctx, "app", "stg"); err == nil || !strings.Contains(err.Error(), "database down") {
+		t.Fatalf("an unreadable table = %v", err)
+	}
+	rows.err = nil
+	rows.rows[0].CompletedAt = time.Time{}
+	if _, err := s.Current(ctx, "app", "stg"); !errors.Is(err, ErrUnsettled) {
+		t.Fatalf("a row that is no deployment = %v", err)
 	}
 }
 
