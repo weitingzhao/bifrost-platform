@@ -27,7 +27,8 @@ import (
 // GET /api/v1/delivery/context?repo=<repo>[&commit=<sha>]: one read of the
 // live release situation of one repository (what STG and PROD run, main's
 // head, runs in flight, pending approvals, the release window, the Owner's
-// last decision, and the lessons not yet made machine checks), so whoever is
+// last decision, the known regressions on main not fixed yet, and the lessons
+// not yet made machine checks), so whoever is
 // about to release does not ask another agent. It writes nothing.
 //
 // Every fact is read on its own, under its own timeout, and carries when it
@@ -36,7 +37,7 @@ import (
 // other facts or the response.
 
 // releaseContextSchema bumps when the response changes shape.
-const releaseContextSchema = 1
+const releaseContextSchema = 2
 
 // releaseContextTimeout bounds each source, so a slow one cannot hang the route.
 const releaseContextTimeout = 5 * time.Second
@@ -122,6 +123,16 @@ type Lesson struct {
 	Source string   `json:"source"`
 }
 
+// KnownRegression is a regression a line recorded on the repository's main
+// with no fix recorded yet (bus/regressions). Information: no verdict and no
+// gate reads it (2026-11-17, the coordinator).
+type KnownRegression struct {
+	Introduced string `json:"introduced"`
+	Impact     string `json:"impact"`
+	By         string `json:"by"`
+	KnownAt    string `json:"known_at"`
+}
+
 // ContextFacts are the facts of a release context.
 type ContextFacts struct {
 	STG              Fact[Deployed]          `json:"stg"`
@@ -132,6 +143,7 @@ type ContextFacts struct {
 	PendingApprovals Fact[[]PendingApproval] `json:"pending_approvals"`
 	Window           Fact[WindowView]        `json:"window"`
 	OwnerLastAction  Fact[OwnerAction]       `json:"owner_last_action"`
+	OpenRegressions  Fact[[]KnownRegression] `json:"open_regressions"`
 	Lessons          Fact[[]Lesson]          `json:"lessons"`
 }
 
@@ -183,6 +195,9 @@ type ReleaseContextSources struct {
 	ApprovalHistory func() ([]approvals.Approval, error)
 	// Questions is every retained question, read without a sweep.
 	Questions func() ([]questions.Question, error)
+	// OpenRegressions is the repository's known regressions on main with no
+	// fix recorded, newest first.
+	OpenRegressions func(ctx context.Context, repo string) ([]KnownRegression, error)
 	// Now and Timeout default to time.Now and releaseContextTimeout.
 	Now     func() time.Time
 	Timeout time.Duration
@@ -370,6 +385,14 @@ func AssembleReleaseContext(ctx context.Context, src ReleaseContextSources, repo
 	start("owner", func() {
 		f.OwnerLastAction = readFact(ctx, now, timeout, "approval records decided by the Owner (approve or reject) and questions the Owner answered (not by a rule)", func(ctx context.Context) (OwnerAction, error) {
 			return ownerLastAction(src)
+		})
+	})
+	start("regressions", func() {
+		f.OpenRegressions = readFact(ctx, now, timeout, "the ledger's main.regression.known events of "+repo+" with no main.regression.fixed after them", func(ctx context.Context) ([]KnownRegression, error) {
+			if src.OpenRegressions == nil {
+				return nil, errors.New("this platform has no regression reader wired")
+			}
+			return src.OpenRegressions(ctx, repo)
 		})
 	})
 	start("lessons", func() {

@@ -103,6 +103,12 @@ func fineSources() ReleaseContextSources {
 				{ID: "b", Status: approvals.StatusExpired, DecidedAt: ctxNow.Add(-time.Minute)},
 			}, nil
 		},
+		OpenRegressions: func(_ context.Context, repo string) ([]KnownRegression, error) {
+			if repo != "bifrost-platform" {
+				return []KnownRegression{}, nil
+			}
+			return []KnownRegression{{Introduced: ctxMain, Impact: "module activity is empty", By: "thread:local_x", KnownAt: "2026-11-15T11:50:00Z"}}, nil
+		},
 		Questions: func() ([]questions.Question, error) {
 			return []questions.Question{
 				{ID: "q1", Answer: &questions.Answer{By: "owner", At: ctxNow.Add(-20 * time.Minute), Channel: "phone"}},
@@ -119,7 +125,7 @@ func TestReleaseContextAllSourcesFine(t *testing.T) {
 	t.Parallel()
 	got := AssembleReleaseContext(context.Background(), fineSources(), "bifrost-platform", "")
 	f := got.Facts
-	if got.Schema != 1 || got.AsOf != "2026-11-15T12:00:00Z" || got.Verdicts != nil || got.Commit != "" {
+	if got.Schema != 2 || got.AsOf != "2026-11-15T12:00:00Z" || got.Verdicts != nil || got.Commit != "" {
 		t.Fatalf("head: %+v", got)
 	}
 	if f.STG.Value == nil || f.STG.Value.Commit != ctxSTG || f.STG.Value.Run != "platform-stg-run" || f.STG.Source != "release records, lane platform, env stg" {
@@ -150,7 +156,7 @@ func TestReleaseContextAllSourcesFine(t *testing.T) {
 		t.Fatalf("lessons: %+v", f.Lessons)
 	}
 	for name, e := range map[string]string{"stg": f.STG.Error, "prod": f.PROD.Error, "main": f.Main.Error, "runs": f.RunsInFlight.Error,
-		"approvals": f.PendingApprovals.Error, "window": f.Window.Error, "owner": f.OwnerLastAction.Error, "lessons": f.Lessons.Error} {
+		"approvals": f.PendingApprovals.Error, "window": f.Window.Error, "owner": f.OwnerLastAction.Error, "lessons": f.Lessons.Error, "regressions": f.OpenRegressions.Error} {
 		if e != "" {
 			t.Fatalf("%s: unexpected error %q", name, e)
 		}
@@ -193,6 +199,37 @@ func TestReleaseContextOneSourceFailsOthersStay(t *testing.T) {
 	raw, _ := json.Marshal(f.Main)
 	if string(raw) != `{"value":null,"read_at":"2026-11-15T12:00:00Z","source":"main branch of bifrost-platform on the platform's Gitea mirror","error":"gitea: status 502"}` {
 		t.Fatalf("json: %s", raw)
+	}
+}
+
+// 2026-11-17: 5d0ac234 went to PROD at 21:29 carrying a Console regression
+// already known on main; whoever released had nowhere to read that. The
+// release context lists what is open for its repository. It is information:
+// an unread list is null with the reason, and no verdict changes with it.
+func TestReleaseContextListsOpenRegressions(t *testing.T) {
+	t.Parallel()
+	src := fineSources()
+	withOne := AssembleReleaseContext(context.Background(), src, "bifrost-platform", ctxMain)
+	if v := withOne.Facts.OpenRegressions.Value; v == nil || len(*v) != 1 || (*v)[0].Introduced != ctxMain || (*v)[0].Impact == "" {
+		t.Fatalf("open: %+v", withOne.Facts.OpenRegressions)
+	}
+	// None open is an empty list, not an unread one.
+	other := AssembleReleaseContext(context.Background(), src, "bifrost-trade-api", "")
+	raw, _ := json.Marshal(other.Facts.OpenRegressions)
+	if !strings.HasPrefix(string(raw), `{"value":[],`) {
+		t.Fatalf("none open: %s", raw)
+	}
+	src.OpenRegressions = func(context.Context, string) ([]KnownRegression, error) { return nil, errors.New("ledger down") }
+	unread := AssembleReleaseContext(context.Background(), src, "bifrost-platform", ctxMain)
+	if unread.Facts.OpenRegressions.Value != nil || unread.Facts.OpenRegressions.Error != "ledger down" {
+		t.Fatalf("unread: %+v", unread.Facts.OpenRegressions)
+	}
+	if a, b := fmt.Sprintf("%+v", *withOne.Verdicts.CommitIsSTG.Value), fmt.Sprintf("%+v", *unread.Verdicts.CommitIsSTG.Value); a != b || withOne.Verdicts.OthersInFlight.Why != unread.Verdicts.OthersInFlight.Why {
+		t.Fatalf("a verdict moved with the regressions: %+v / %+v", withOne.Verdicts, unread.Verdicts)
+	}
+	src.OpenRegressions = nil
+	if got := AssembleReleaseContext(context.Background(), src, "bifrost-platform", "").Facts.OpenRegressions; got.Value != nil || !strings.Contains(got.Error, "no regression reader") {
+		t.Fatalf("not wired: %+v", got)
 	}
 }
 

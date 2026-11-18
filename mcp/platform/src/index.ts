@@ -455,8 +455,8 @@ reg(
     'what STG and PROD run (release records), main\'s head on the Gitea mirror, whether main is ahead of STG, ' +
     'PipelineRuns of the repo not finished (CI, landing, delivery), approvals still pending that concern it, ' +
     'the release window as stored (holder and queue), the latest time the Owner decided an approval or answered a question ' +
-    '(only that time; it says nothing about whether the Owner is around), and the release lessons not yet made machine checks. ' +
-    'Returns {schema, repo, commit?, as_of, facts: {stg, prod, main, main_ahead_of_stg, runs_in_flight, pending_approvals, window, owner_last_action, lessons}, verdicts?}. ' +
+    '(only that time; it says nothing about whether the Owner is around), the known regressions on main with no fix recorded (information, no gate), and the release lessons not yet made machine checks. ' +
+    'Returns {schema, repo, commit?, as_of, facts: {stg, prod, main, main_ahead_of_stg, runs_in_flight, pending_approvals, window, owner_last_action, open_regressions, lessons}, verdicts?}. ' +
     'Every fact is {value, read_at, source, error?}: each is read on its own with a timeout, and one that cannot be read now is value null with error set ' +
     '(an unsettled STG included) instead of an older value. With commit, verdicts {commit_is_stg, main_ahead_of_commit, others_in_flight} are each {value: true|false|null, why}. ' +
     'Unknown repo answers 400.',

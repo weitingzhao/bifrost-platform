@@ -3,8 +3,8 @@
 // it (main.regression.known); the line that fixes it records the fix
 // (main.regression.fixed). Both are keyed <repo>@<introduced commit>, the
 // event's subject: a known and its fixed pair on it. A PROD release's
-// context lists those still open (the CI line reads Open through the bus
-// route), and the seat starting a PROD release is woken with them.
+// context lists those still open (server.openRegressions reads List), and
+// the seat starting a PROD release is woken with them.
 //
 // The ledger is the truth: nothing is kept elsewhere, and the open ones are
 // computed from it whenever they are asked for.
