@@ -11,7 +11,9 @@ import (
 func TestAutoRepairResultIsSaid(t *testing.T) {
 	var ok bool
 	var message string
-	s := &Service{onAutoRepair: func(_ context.Context, o bool, m string) { ok, message = o, m }}
+	s := &Service{}
+	l := autoRepairListener(func(_ context.Context, o bool, m string) { ok, message = o, m })
+	s.onAutoRepair.Store(&l)
 	s.sayAutoRepair(t.Context(), false, repairMessage("ignored", errors.New("redis down")))
 	if ok || message != "redis down" {
 		t.Fatalf("ok %v, message %q", ok, message)

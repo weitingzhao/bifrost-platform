@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -27,9 +28,11 @@ type Service struct {
 	redisOnce sync.Once
 	redis     *redis.Client
 
-	// onAutoRepair hears how an automatic repair ended (set before the loops start).
-	onAutoRepair func(ctx context.Context, ok bool, message string)
+	// onAutoRepair hears how an automatic repair ended; the loop may already run when it is set.
+	onAutoRepair atomic.Pointer[autoRepairListener]
 }
+
+type autoRepairListener func(ctx context.Context, ok bool, message string)
 
 func NewService(clusterSvc *cluster.Service) *Service {
 	cfg, err := ConfigFromEnv()

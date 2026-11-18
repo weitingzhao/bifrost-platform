@@ -25,7 +25,8 @@ func NewHandler(clusterSvc *cluster.Service, audit *actuation.AuditLog) *Handler
 // OnAutoRepair sets who hears how an automatic repair ended. It only listens:
 // the repair and its operator command are unchanged.
 func (h *Handler) OnAutoRepair(f func(ctx context.Context, ok bool, message string)) {
-	h.svc.onAutoRepair = f
+	l := autoRepairListener(f)
+	h.svc.onAutoRepair.Store(&l)
 }
 
 // StartBackground starts the auto-repair loop. Kept out of NewHandler so the

@@ -108,8 +108,8 @@ func (s *Service) maybeAutoRollout(
 }
 
 func (s *Service) sayAutoRepair(ctx context.Context, ok bool, message string) {
-	if s.onAutoRepair != nil {
-		s.onAutoRepair(ctx, ok, message)
+	if f := s.onAutoRepair.Load(); f != nil {
+		(*f)(ctx, ok, message)
 	}
 }
 
