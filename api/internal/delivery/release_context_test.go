@@ -125,7 +125,7 @@ func TestReleaseContextAllSourcesFine(t *testing.T) {
 	t.Parallel()
 	got := AssembleReleaseContext(context.Background(), fineSources(), "bifrost-platform", "")
 	f := got.Facts
-	if got.Schema != 2 || got.AsOf != "2026-11-15T12:00:00Z" || got.Verdicts != nil || got.Commit != "" {
+	if got.Schema != 3 || got.AsOf != "2026-11-15T12:00:00Z" || got.Verdicts != nil || got.Commit != "" {
 		t.Fatalf("head: %+v", got)
 	}
 	if f.STG.Value == nil || f.STG.Value.Commit != ctxSTG || f.STG.Value.Run != "platform-stg-run" || f.STG.Source != "release records, lane platform, env stg" {
@@ -152,11 +152,8 @@ func TestReleaseContextAllSourcesFine(t *testing.T) {
 	if o := f.OwnerLastAction.Value; o == nil || o.Kind != "question" || o.At != "2026-11-15T11:40:00Z" {
 		t.Fatalf("owner: %+v", f.OwnerLastAction)
 	}
-	if f.Lessons.Value == nil || len(*f.Lessons.Value) == 0 {
-		t.Fatalf("lessons: %+v", f.Lessons)
-	}
 	for name, e := range map[string]string{"stg": f.STG.Error, "prod": f.PROD.Error, "main": f.Main.Error, "runs": f.RunsInFlight.Error,
-		"approvals": f.PendingApprovals.Error, "window": f.Window.Error, "owner": f.OwnerLastAction.Error, "lessons": f.Lessons.Error, "regressions": f.OpenRegressions.Error} {
+		"approvals": f.PendingApprovals.Error, "window": f.Window.Error, "owner": f.OwnerLastAction.Error, "regressions": f.OpenRegressions.Error} {
 		if e != "" {
 			t.Fatalf("%s: unexpected error %q", name, e)
 		}
@@ -356,19 +353,6 @@ func TestReleaseContextRepoFilters(t *testing.T) {
 	if strings.Join(ids, ",") != "p1,p2" {
 		t.Fatalf("approvals: %v", ids)
 	}
-	for _, l := range *got.Lessons.Value {
-		if len(l.Repos) != 0 {
-			t.Fatalf("a platform lesson reached trade-api: %+v", l)
-		}
-	}
-	platform := AssembleReleaseContext(context.Background(), src, "bifrost-platform", "").Facts
-	hasPlatformLesson := false
-	for _, l := range *platform.Lessons.Value {
-		hasPlatformLesson = hasPlatformLesson || l.ID == "L-564"
-	}
-	if !hasPlatformLesson || len(*platform.Lessons.Value) <= len(*got.Lessons.Value) {
-		t.Fatalf("platform lessons: %+v", platform.Lessons)
-	}
 }
 
 // 2026-11-15: an unknown repo or a short commit is the caller's mistake.
@@ -469,36 +453,5 @@ func TestReleaseContextOwnerLastActionNeedsBothStores(t *testing.T) {
 	got = AssembleReleaseContext(context.Background(), src, "bifrost-platform", "").Facts.OwnerLastAction
 	if got.Value == nil || got.Value.Kind != "approval" || got.Value.At != "2026-11-15T11:59:00Z" {
 		t.Fatalf("reject: %+v", got)
-	}
-}
-
-// 2026-11-15: the lessons file is the list of lessons not yet machine
-// checks; a malformed entry would silently drop out of every read.
-func TestReleaseLessonsFileIsValid(t *testing.T) {
-	t.Parallel()
-	all, err := releaseLessons()
-	if err != nil || len(all) == 0 {
-		t.Fatalf("lessons: %v (%d)", err, len(all))
-	}
-	known := knownRepos()
-	seen := map[string]bool{}
-	for _, l := range all {
-		if l.ID == "" || l.What == "" || l.Check == "" || l.Source == "" || l.Repos == nil || l.Cards == nil {
-			t.Fatalf("lesson missing a field: %+v", l)
-		}
-		if seen[l.ID] {
-			t.Fatalf("duplicate id %s", l.ID)
-		}
-		seen[l.ID] = true
-		for _, r := range l.Repos {
-			if !known[r] {
-				t.Fatalf("%s names unknown repo %q", l.ID, r)
-			}
-		}
-		for _, c := range l.Cards {
-			if !strings.HasPrefix(c, "#") {
-				t.Fatalf("%s card %q is not #<number>", l.ID, c)
-			}
-		}
 	}
 }

@@ -2,8 +2,6 @@ package delivery
 
 import (
 	"context"
-	_ "embed"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -27,9 +25,8 @@ import (
 // GET /api/v1/delivery/context?repo=<repo>[&commit=<sha>]: one read of the
 // live release situation of one repository (what STG and PROD run, main's
 // head, runs in flight, pending approvals, the release window, the Owner's
-// last decision, the known regressions on main not fixed yet, and the lessons
-// not yet made machine checks), so whoever is
-// about to release does not ask another agent. It writes nothing.
+// last decision and the known regressions on main not fixed yet), so whoever
+// is about to release does not ask another agent. It writes nothing.
 //
 // Every fact is read on its own, under its own timeout, and carries when it
 // was read and from where. A fact that cannot be read now is null with the
@@ -37,7 +34,7 @@ import (
 // other facts or the response.
 
 // releaseContextSchema bumps when the response changes shape.
-const releaseContextSchema = 2
+const releaseContextSchema = 3
 
 // releaseContextTimeout bounds each source, so a slow one cannot hang the route.
 const releaseContextTimeout = 5 * time.Second
@@ -113,16 +110,6 @@ type OwnerAction struct {
 	Kind string `json:"kind"`
 }
 
-// Lesson is a release lesson that has not become a machine check yet.
-type Lesson struct {
-	ID     string   `json:"id"`
-	Repos  []string `json:"repos"`
-	Cards  []string `json:"cards"`
-	What   string   `json:"what"`
-	Check  string   `json:"check"`
-	Source string   `json:"source"`
-}
-
 // KnownRegression is a regression a line recorded on the repository's main
 // with no fix recorded yet (bus/regressions). Information: no verdict and no
 // gate reads it (2026-11-17, the coordinator).
@@ -144,7 +131,6 @@ type ContextFacts struct {
 	Window           Fact[WindowView]        `json:"window"`
 	OwnerLastAction  Fact[OwnerAction]       `json:"owner_last_action"`
 	OpenRegressions  Fact[[]KnownRegression] `json:"open_regressions"`
-	Lessons          Fact[[]Lesson]          `json:"lessons"`
 }
 
 // Verdict is true, false, or null when it cannot be told; Why says which and why.
@@ -393,15 +379,6 @@ func AssembleReleaseContext(ctx context.Context, src ReleaseContextSources, repo
 				return nil, errors.New("this platform has no regression reader wired")
 			}
 			return src.OpenRegressions(ctx, repo)
-		})
-	})
-	start("lessons", func() {
-		f.Lessons = readFact(ctx, now, timeout, "release_lessons.json embedded in this build (lessons not yet machine checks)", func(context.Context) ([]Lesson, error) {
-			all, err := releaseLessons()
-			if err != nil {
-				return nil, err
-			}
-			return lessonsFor(all, repo), nil
 		})
 	})
 	wg.Wait()
@@ -689,32 +666,6 @@ func ownerLastAction(src ReleaseContextSources) (OwnerAction, error) {
 	}
 	best.At = bestAt.UTC().Format(time.RFC3339)
 	return best, nil
-}
-
-//go:embed release_lessons.json
-var releaseLessonsJSON []byte
-
-func releaseLessons() ([]Lesson, error) {
-	var out []Lesson
-	if err := json.Unmarshal(releaseLessonsJSON, &out); err != nil {
-		return nil, fmt.Errorf("release_lessons.json: %w", err)
-	}
-	return out, nil
-}
-
-// lessonsFor keeps the lessons of repo and those of every repo (no repos).
-func lessonsFor(all []Lesson, repo string) []Lesson {
-	out := []Lesson{}
-	for _, l := range all {
-		keep := len(l.Repos) == 0
-		for _, r := range l.Repos {
-			keep = keep || r == repo
-		}
-		if keep {
-			out = append(out, l)
-		}
-	}
-	return out
 }
 
 func mainAheadOfSTG(main Fact[MainRef], stg Fact[Deployed], asOf string) Fact[bool] {
