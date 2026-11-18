@@ -25,10 +25,13 @@ func TestVerdictRedWakesTheCommitter(t *testing.T) {
 		}
 		return "feat: x\n\nClaude-Session: local_ab850773-fe26-40fa-ac01-b3b590b73164\nWork: LANE-x\n", true, nil
 	}
-	type sent struct{ key, to, body string }
+	type sent struct {
+		key, to, body string
+		cause         int64
+	}
 	var got []sent
-	send := func(_ context.Context, key, to, body string) error {
-		got = append(got, sent{key, to, body})
+	send := func(_ context.Context, key, to, body string, cause int64) error {
+		got = append(got, sent{key, to, body, cause})
 		return nil
 	}
 
@@ -38,6 +41,12 @@ func TestVerdictRedWakesTheCommitter(t *testing.T) {
 	if len(got) != 1 || got[0].to != "thread:local_ab850773-fe26-40fa-ac01-b3b590b73164" || got[0].key != "sub:verdict-red-to-committer:ev-7" ||
 		!strings.Contains(got[0].body, ev.Ref) {
 		t.Fatalf("sent %+v", got)
+	}
+	// The bus's own contract (2026-11-17, the coordinator: what a subscriber
+	// sends because of an event names that event as its cause; none of a
+	// day's 2,464 events did): the wake carries the event's ledger number.
+	if got[0].cause != 7 {
+		t.Fatalf("the wake for ev-7 names cause %d", got[0].cause)
 	}
 
 	green := ev
@@ -130,7 +139,7 @@ func TestUnknownRecipientIsNotDroppedSilently(t *testing.T) {
 		To: "thread:local_gone", Guarantee: "durable", By: registry.ByDispatcher}
 	ev := Event{ID: "ev-9", Type: "git.main.advanced", Subject: "bifrost-platform@" + strings.Repeat("b", 40)}
 	var to, body string
-	send := func(_ context.Context, _ string, t, b string) error { to, body = t, b; return nil }
+	send := func(_ context.Context, _ string, t, b string, _ int64) error { to, body = t, b; return nil }
 	unknown := func(context.Context, string) (bool, error) { return false, nil }
 	out, err := Deliver(context.Background(), row, ev, nil, nil, send, unknown, "thread:local_duty")
 	if err != nil || out != Rerouted || to != "thread:local_duty" || !strings.Contains(body, "thread:local_gone") {
@@ -172,7 +181,7 @@ func TestRefusedLandingWakesThePusher(t *testing.T) {
 		return "fix: x\n\nClaude-Session: local_7de640c4-4b19-4a71-a0ac-ced2ce5fc7ff\n", true, nil
 	}
 	var to string
-	send := func(_ context.Context, _ string, t, _ string) error { to = t; return nil }
+	send := func(_ context.Context, _ string, t, _ string, _ int64) error { to = t; return nil }
 	out, err := Deliver(context.Background(), row, ev, read, nil, send, nil, "")
 	if err != nil || out != Delivered || to != "thread:local_7de640c4-4b19-4a71-a0ac-ced2ce5fc7ff" || len(asked) != 2 {
 		t.Fatalf("out=%s to=%q asked=%v err=%v", out, to, asked, err)
@@ -199,7 +208,7 @@ func TestRefusedLandingWakeCarriesTheReason(t *testing.T) {
 		return "x\n\nClaude-Session: local_pusher\n", true, nil
 	}
 	var got []string
-	send := func(_ context.Context, _, _, body string) error { got = append(got, body); return nil }
+	send := func(_ context.Context, _, _, body string, _ int64) error { got = append(got, body); return nil }
 	var asked string
 	detail := func(_ context.Context, r registry.Subscription, e Event) (map[string]string, error) {
 		asked = RunOf(e) + " " + r.Params["detail"]
@@ -248,7 +257,7 @@ func TestTripwireWakesOnlyWhenTouched(t *testing.T) {
 		Guarantee: "durable", By: registry.ByDispatcher}
 	ev := Event{ID: "ev-20", Type: "ci.run.finished", Subject: "land-x1@" + sha, Ref: "/r", Change: "succeeded"}
 	var got []string
-	send := func(_ context.Context, _, _, body string) error { got = append(got, body); return nil }
+	send := func(_ context.Context, _, _, body string, _ int64) error { got = append(got, body); return nil }
 	touched := func(context.Context, registry.Subscription, Event) (map[string]string, error) {
 		return map[string]string{"tripwire": "api/internal/headrelease/wakes.go", "commit": sha, "change-ids": "Iabc", "branch": "refs/heads/ready/x"}, nil
 	}

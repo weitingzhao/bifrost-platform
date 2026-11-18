@@ -1,5 +1,5 @@
 import type { AgentThreadStatus } from '@/api/agentThreads'
-import { QUIET_AFTER_H, STUCK_AFTER_MIN, seatLabel, seatState, shortSeconds, warmColor, type BusListening, type NerveModel, type ObserveLink, type ObserveSeat, type OrganTone } from './busNerve'
+import { QUIET_AFTER_H, isDeaf, STUCK_AFTER_MIN, seatLabel, seatState, shortSeconds, warmColor, type BusListening, type NerveModel, type ObserveLink, type ObserveSeat, type OrganTone } from './busNerve'
 import { CORE, domainOf } from './busNerveLayout'
 import type { GLink, GNode } from './BusNerveGraph'
 
@@ -90,9 +90,11 @@ export function buildBody({ model, domainOfType, expanded, seats, beat, observed
       const more = members.get(d) ?? 0
       const hue = warmColor(d)
       const ages = dustByDomain.get(d) ?? []
-      const pub = types.reduce((n, t) => n + (listen.get(t)?.published ?? 0), 0)
-      const heardN = types.reduce((n, t) => n + (listen.get(t)?.heard ?? 0), 0)
-      const deafN = types.filter(t => (listen.get(t)?.published ?? 0) > 0 && listen.get(t)?.heard === 0).length
+      // Display-only topics are watched, not acted on: out of the domain's heard share.
+      const acted = types.filter(t => !listen.get(t)?.display_only)
+      const pub = acted.reduce((n, t) => n + (listen.get(t)?.published ?? 0), 0)
+      const heardN = acted.reduce((n, t) => n + (listen.get(t)?.heard ?? 0), 0)
+      const deafN = types.filter(t => isDeaf(listen.get(t))).length
       const hearing = listening && pub > 0 ? ` · ${Math.round((heardN / pub) * 100)}% heard${deafN > 0 ? ` · ${deafN} topics no one listens to` : ''}` : ''
       nodes.push({ id: `d:${d}`, kind: 'cluster', label: open ? `${d} ▾` : d, color: hue, size: 3, breath: null,
         cloud: { parts: types.length + more, dust: ages }, open,
@@ -102,11 +104,11 @@ export function buildBody({ model, domainOfType, expanded, seats, beat, observed
       for (const t of types) {
         const heard = listen.get(t)
         // A topic that published and nobody heard: the event dies at the topic. Grey, with its name and why.
-        const deaf = heard != null && heard.published > 0 && heard.heard === 0
+        const deaf = isDeaf(heard)
         nodes.push({
           id: `t:${t}`, kind: 'topic', label: deaf ? `${t} · no one listening` : t, color: deaf ? C.grey : warmColor(d, 0.78), size: deaf ? 1.4 : 0.9, breath: null,
           ring: deaf ? C.amber : undefined, named: deaf,
-          note: heard ? `${t} · ${heard.published} published in ${listening?.hours ?? 24}h · ${heard.heard} heard · ${heard.followed} followed · ${heard.readers.length} declared readers` : t,
+          note: heard ? `${t} · ${heard.published} published in ${listening?.hours ?? 24}h · ${heard.heard} heard · ${heard.followed} followed · ${heard.readers.length} declared readers${heard.display_only ? ' · display only: published to be watched, not counted in heard' : ''}` : t,
         })
         links.push({ source: `t:${t}`, target: `d:${d}`, color: warmColor(d, 0.5), width: 0.3 })
         const p = model.publisherOf.get(t) ?? 'unknown'

@@ -80,7 +80,7 @@ func TestBuildListeningCountsHeardAndFollowed(t *testing.T) {
 		"ev-2": {"gate:stream:console"},
 		"ev-3": {"gate:events:seat-ci"},
 	}
-	l := BuildListening(24, events, receipts, true, map[string][]string{"git.main.advanced": {"platform-workers"}, "plan.fact.changed": {"seat:*"}}, "gate:stream:console")
+	l := BuildListening(24, events, receipts, true, map[string][]string{"git.main.advanced": {"platform-workers"}, "plan.fact.changed": {"seat:*"}}, "gate:stream:console", nil)
 	by := map[string]TopicListen{}
 	for _, tp := range l.Topics {
 		by[tp.Type] = tp
@@ -98,7 +98,20 @@ func TestBuildListeningCountsHeardAndFollowed(t *testing.T) {
 		t.Fatalf("shares %v %v %v", l.HeardShare, l.ClosedShare, l.CausedShare)
 	}
 	// Receipts not read: no heard share, and a note says why.
-	if u := BuildListening(24, events, nil, false, nil, "gate:stream:console"); u.HeardShare != nil || len(u.Notes) == 0 {
+	if u := BuildListening(24, events, nil, false, nil, "gate:stream:console", nil); u.HeardShare != nil || len(u.Notes) == 0 {
 		t.Fatalf("unread receipts %+v", u)
+	}
+	// 2026-11-17, the coordinator: ci.run.started (741 a day on PROD) is
+	// published to be watched; counting it as unheard put a third of the bus
+	// in the deaf share. A display-only topic keeps its own counts and leaves
+	// the shares: 3 counted events, 1 heard (ev-1), 1 followed (ev-1).
+	d := BuildListening(24, events, receipts, true, nil, "gate:stream:console", map[string]bool{"ci.run.started": true})
+	if d.Counted != 3 || d.Watched != 1 || d.HeardShare == nil || *d.HeardShare != 0.333 || *d.ClosedShare != 0.333 {
+		t.Fatalf("display-only shares %+v heard=%v closed=%v", d, d.HeardShare, d.ClosedShare)
+	}
+	for _, tp := range d.Topics {
+		if tp.Type == "ci.run.started" && (!tp.DisplayOnly || tp.Published != 1 || tp.Heard != 1) {
+			t.Fatalf("display-only topic %+v", tp)
+		}
 	}
 }

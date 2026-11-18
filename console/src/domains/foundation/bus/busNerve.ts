@@ -94,8 +94,13 @@ export type ObserveSeat = {
   last_status?: string; cards_open?: number; card_wait_p50_s?: number
 }
 export type BusRate = { minutes: number; events: number; per_minute: number; by_type: Record<string, number> }
-export type TopicListen = { type: string; published: number; readers: string[]; heard: number; followed: number }
-export type BusListening = { hours: number; topics: TopicListen[]; heard_share?: number; closed_share?: number; caused_share?: number; notes?: string[] }
+export type TopicListen = { type: string; published: number; readers: string[]; heard: number; followed: number; display_only?: boolean }
+export type BusListening = { hours: number; topics: TopicListen[]; heard_share?: number; closed_share?: number; caused_share?: number; counted?: number; watched?: number; notes?: string[] }
+
+/** A topic that published and nobody heard. A display-only topic (published to be watched, registry display_only) is never deaf. */
+export function isDeaf(t: TopicListen | undefined): boolean {
+  return t != null && !t.display_only && t.published > 0 && t.heard === 0
+}
 export type BusObserve = {
   hours: number; generated_at: string; seats: ObserveSeat[]; links: ObserveLink[]; unmeasured: { what: string; why: string }[]
   rate?: BusRate; listening?: BusListening

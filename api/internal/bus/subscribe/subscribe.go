@@ -58,7 +58,9 @@ func changeMatches(want, got string) bool {
 type CommitMessage func(ctx context.Context, repo, sha string) (string, bool, error)
 
 // Sender posts a message to an inbox once per key (coord.PostConclusion).
-type Sender func(ctx context.Context, key, to, body string) error
+// cause is the ledger number of the event the wake answers (its ev-<n>), so
+// the letter names what woke it (2026-11-17: the bus's loops).
+type Sender func(ctx context.Context, key, to, body string, cause int64) error
 
 var (
 	sessionRE = regexp.MustCompile(`(?m)^Claude-Session:\s*(local_[A-Za-z0-9-]{1,100})\s*$`)
@@ -211,10 +213,16 @@ func Deliver(ctx context.Context, row registry.Subscription, ev Event, read Comm
 				return Undeliverable, nil
 			}
 			body := fmt.Sprintf("bus: a wake could not be delivered: %s is not a registered thread here. %s", to, Body(row, ev))
-			return Rerouted, send(ctx, Key(row, ev)+":undeliverable", undeliverableTo, body)
+			return Rerouted, send(ctx, Key(row, ev)+":undeliverable", undeliverableTo, body, causeOf(ev))
 		}
 	}
-	return Delivered, send(ctx, Key(row, ev), to, withDetail(row, values, derr, Body(row, ev)))
+	return Delivered, send(ctx, Key(row, ev), to, withDetail(row, values, derr, Body(row, ev)), causeOf(ev))
+}
+
+// causeOf is the ledger number of the event a wake answers (0 when its id is not ev-<n>).
+func causeOf(ev Event) int64 {
+	n, _ := relay.ParseEventID(ev.ID)
+	return n
 }
 
 // UndeliverableTo is the tenant's undeliverable_to.

@@ -200,20 +200,34 @@ func PostMessage(ctx context.Context, tx pgx.Tx, from, to, kind string, body []b
 // of staff's answer to the mail its brief took): the event names them, as the
 // state guard requires of a row that does.
 func postMessage(ctx context.Context, tx pgx.Tx, from, to, kind string, body []byte, mission, task string) (string, error) {
-	return postMessageAs(ctx, tx, from, to, kind, body, mission, task, true)
+	return postMessageAs(ctx, tx, from, to, kind, body, mission, task, true, 0)
 }
 
 // postMessageAs is postMessage; checkClaims false is for a note that repeats
 // policy alerts just recorded (the seat's to the Owner, alerts.go), which is
 // not recorded a second time as a text that claims an approval.
-func postMessageAs(ctx context.Context, tx pgx.Tx, from, to, kind string, body []byte, mission, task string, checkClaims bool) (string, error) {
+//
+// cause is the ledger event this message answers (0: none): a wake the bus's
+// dispatcher sends for an event names it, on message_posted and on
+// seat.mail.arrived, so the loop event → woken seat can be followed. An event
+// this ledger does not hold is left out; the message is still sent.
+func postMessageAs(ctx context.Context, tx pgx.Tx, from, to, kind string, body []byte, mission, task string, checkClaims bool, cause int64) (string, error) {
+	if cause != 0 {
+		ok, err := eventlog.Exists(ctx, tx, cause)
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			cause = 0
+		}
+	}
 	art, err := putArtifact(ctx, tx, from, "message", "text/plain; charset=utf-8", body)
 	if err != nil {
 		return "", err
 	}
 	id := NewMessageID()
 	ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "mbox:" + to, Type: "message_posted", Actor: from, MissionID: mission, TaskID: task,
-		Body: map[string]any{"message_id": id, "to": to, "kind": kind}})
+		Body: map[string]any{"message_id": id, "to": to, "kind": kind}, Cause: cause})
 	if err != nil {
 		return "", err
 	}
@@ -225,7 +239,7 @@ func postMessageAs(ctx context.Context, tx pgx.Tx, from, to, kind string, body [
 	// The bus learns of it in the same transaction (seat.mail.arrived): a seat
 	// waits for its own mail with one doorbell, whoever sent it (2026-11-16).
 	if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "mbox:" + to, Type: SeatMailType, Actor: from, MissionID: mission, TaskID: task,
-		Body: SeatMailBody(to, id, kind)}); err != nil {
+		Body: SeatMailBody(to, id, kind), Cause: cause}); err != nil {
 		return "", err
 	}
 	// A message that says the Owner approved is recorded where it came in;

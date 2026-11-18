@@ -84,3 +84,40 @@ func TestParseRefuses(t *testing.T) {
 		}
 	}
 }
+
+// 2026-11-17, the coordinator: the register named the same three readers
+// (platform-workers, platform-api, seat:*) on every topic, so "who reads this"
+// could not be read off it. It names only readers the code runs: headrelease
+// (its durable consumer, server/bus_wire.go headReleaseWakes) on the three
+// events it consumes, and the Bus page (console) on every topic. Subscription
+// rows are their own register; a seat's ad hoc wait shows in the receipts.
+func TestRegisterNamesRealReaders(t *testing.T) {
+	tenants, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch := tenants["rocket"].Channels
+	if len(ch) == 0 {
+		t.Fatal("no rocket register loaded")
+	}
+	headrelease := map[string]bool{"git.main.advanced": true, "ci.run.finished": true, "release.window.changed": true}
+	for typ, c := range ch {
+		has, console := false, false
+		for _, r := range c.Consumers {
+			switch r {
+			case "headrelease":
+				has = true
+			case "console":
+				console = true
+			default:
+				t.Errorf("%s: reader %q is run by no code", typ, r)
+			}
+		}
+		if !console {
+			t.Errorf("%s: the Bus page reads every topic; console is missing", typ)
+		}
+		if has != headrelease[typ] {
+			t.Errorf("%s: headrelease reads it = %v, its consumer's filter says %v", typ, has, headrelease[typ])
+		}
+	}
+}

@@ -65,7 +65,8 @@ channels:
       reconcile: "gate-git 每 5 分钟比对 Gitea branches/main"   # 丢了靠什么对上；没有就写 none 并说明
       on_unread: stale      # 读不到状态时往哪失败：closed（按最坏）/ open（按放行）/ stale（标陈旧，不判）
       retention: 30d        # 总线上留多久；账永久（§7）
-      consumers: [platform-workers, console, seat:*]   # 谁能订（生成 NATS 权限）
+      consumers: [headrelease, console]   # 代码里真在读的（持久消费者名；console 是 Bus 页）。订阅行另算，席位临时 wait 看回执
+      display_only: false   # true：发出来只供看，没人按它动手；不算进 heard 的分母（2026-11-17）
       exports: []           # 给哪些别的租户（租户间契约，两边都要写）
       replaces: [L04, L06, X-A28]   # 顶掉的旧通道（去向表编号）
 ```

@@ -8,7 +8,7 @@ import { BUS_LIST_CAP, fetchBusClients, fetchBusReplay, type BusStreamState } fr
 import { clockTime, type BusEnvelope } from './busTrace'
 import {
   LATE_AFTER_S, OWN_CONSUMER, QUIET_AFTER_H, SPEEDS, STUCK_AFTER_MIN, fetchBusObserve, nerveModel, readerOf, replaySchedule,
-  seatMail,
+  isDeaf, seatMail,
 } from './busNerve'
 import { C, PULSE, buildBody, nameOf } from './busNerveBody'
 import { CORE, domainOf } from './busNerveLayout'
@@ -382,7 +382,7 @@ function HelpPanel({ unmeasured, onClose }: { unmeasured: { what: string; why: s
           </ul>
         </>
       )}
-      <p className="m-0 mt-2" style={{ color: C.muted }}>each subscription's backlog and the nightly reconcile are not wired yet (they come with the bus health readings) · heard: an event someone took (a receipt from anyone but this page) · loops closed: an event something did next names as its cause · with a cause: an event that names the event it answers · dust: each event of the last day, dimmer with age · seats breathe with their heartbeat; quiet {QUIET_AFTER_H}h shows on hover · the Console's own receipt ({OWN_CONSUMER}) is not drawn</p>
+      <p className="m-0 mt-2" style={{ color: C.muted }}>each subscription's backlog and the nightly reconcile are not wired yet (they come with the bus health readings) · heard: an event someone took (a receipt from anyone but this page), as a share of the events of every topic but the display-only ones (published to be watched, like ci.run.started; the register marks them) · loops closed: an event something did next names as its cause · with a cause: an event that names the event it answers · dust: each event of the last day, dimmer with age · seats breathe with their heartbeat; quiet {QUIET_AFTER_H}h shows on hover · the Console's own receipt ({OWN_CONSUMER}) is not drawn</p>
     </div>
   )
 }
@@ -403,7 +403,7 @@ export function BusNervePanels({ stream, onSelect }: { stream: BusStreamState; o
   const team = useQuery({ queryKey: ['bus-observe'], queryFn: fetchBusObserve, refetchInterval: 60_000, retry: false })
   const contract = useQuery({ queryKey: ['bus-contract'], queryFn: fetchBusContract, staleTime: 300_000, retry: false })
   const publisherOf = new Map((contract.data?.topics ?? []).map(t => [t.type, t.publisher]))
-  const deaf = (team.data?.listening?.topics ?? []).filter(t => t.published > 0 && t.heard === 0).sort((a, b) => b.published - a.published)
+  const deaf = (team.data?.listening?.topics ?? []).filter(t => isDeaf(t)).sort((a, b) => b.published - a.published)
   const mail = seatMail(stream.events).slice(0, 8)
   const recent = stream.events.slice(0, 8)
   const row = (e: BusEnvelope) => (

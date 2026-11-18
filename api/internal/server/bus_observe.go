@@ -93,8 +93,10 @@ func (s *Server) observeListening(ctx context.Context, l relay.Ledger, at func(c
 		c = next
 	}
 	readers := map[string][]string{}
+	display := map[string]bool{}
 	for typ, ch := range t.Channels {
 		readers[typ] = append(readers[typ], ch.Consumers...)
+		display[typ] = ch.DisplayOnly
 	}
 	if subs, err := registry.LoadSubscriptions(); err == nil {
 		for _, set := range subs {
@@ -115,7 +117,7 @@ func (s *Server) observeListening(ctx context.Context, l relay.Ledger, at func(c
 			}
 		}
 	}
-	out := observe.BuildListening(listenHours, events, receipts, read, readers, "gate:stream:console")
+	out := observe.BuildListening(listenHours, events, receipts, read, readers, "gate:stream:console", display)
 	if cut {
 		out.Notes = append(out.Notes, "the receipt scan stopped at its limit: the heard share is a floor")
 	}

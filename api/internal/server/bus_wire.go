@@ -549,8 +549,8 @@ func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStrea
 	if s.delivery != nil {
 		read = s.delivery.PolicyFacts().CommitMessage
 	}
-	send := func(ctx context.Context, key, to, body string) error {
-		return coord.PostConclusion(ctx, pool, key, to, body)
+	send := func(ctx context.Context, key, to, body string, cause int64) error {
+		return coord.PostConclusionCaused(ctx, pool, key, to, body, cause)
 	}
 	detail := s.busRunDetail()
 	known := func(ctx context.Context, addr string) (bool, error) {

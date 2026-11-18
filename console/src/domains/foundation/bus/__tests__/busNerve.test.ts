@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { OWN_CONSUMER, dustBrightness, nerveModel, warmColor, readerOf, replaySchedule, seatLabel, seatMail, seatState, shortSeconds, type ObserveSeat } from '../busNerve'
+import { OWN_CONSUMER, dustBrightness, isDeaf, nerveModel, warmColor, readerOf, replaySchedule, seatLabel, seatMail, seatState, shortSeconds, type ObserveSeat } from '../busNerve'
 import type { BusContract, BusNextgen } from '../busNextgen'
 import type { BusEnvelope } from '../busTrace'
 import type { BusClient } from '../useBusStream'
@@ -99,5 +99,18 @@ describe('warmColor and dustBrightness', () => {
     expect(dustBrightness(0)).toBe(1)
     expect(dustBrightness(24)).toBeCloseTo(0.1)
     expect(dustBrightness(12)).toBeGreaterThan(dustBrightness(20))
+  })
+})
+
+// 2026-11-17, the coordinator: ci.run.started is published to be watched
+// (display only in the register); it must not be called deaf.
+describe('isDeaf', () => {
+  it('names a published, unheard topic, but never a display-only one', () => {
+    const t = { type: 'alert.rule.fired', published: 3, readers: [], heard: 0, followed: 0 }
+    expect(isDeaf(t)).toBe(true)
+    expect(isDeaf({ ...t, display_only: true })).toBe(false)
+    expect(isDeaf({ ...t, heard: 1 })).toBe(false)
+    expect(isDeaf({ ...t, published: 0 })).toBe(false)
+    expect(isDeaf(undefined)).toBe(false)
   })
 })

@@ -21,7 +21,7 @@ channels:
       reconcile: "gate-git compares Gitea branches/main every 5 min"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [headrelease, console]
       exports: []
       replaces: [L04, L06, X-A28]
   git.ready.pushed:
@@ -37,7 +37,7 @@ channels:
       reconcile: "gate-git lists ready/* branches every 5 min"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: []
   git.tag.changed:
@@ -53,7 +53,7 @@ channels:
       reconcile: "gate-git lists tags every 30 min"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: []
   git.mirror.settled:
@@ -69,7 +69,7 @@ channels:
       reconcile: "mirror sync TaskRuns listed by gate-cluster"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [X-A13]
   git.pr.changed:
@@ -85,7 +85,7 @@ channels:
       reconcile: "gate-git lists open PRs every 5 min"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [X-A4]
   ci.run.started:
@@ -100,8 +100,11 @@ channels:
       ref: "/api/v1/delivery/runs/{run}"
       reconcile: "gate-cluster relist of PipelineRuns"
       on_unread: stale
+      # Display only (2026-11-17): the run's start is for watching; what
+      # follows a run is ci.run.finished. Not counted in heard.
+      display_only: true
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [L02]
   ci.run.finished:
@@ -117,7 +120,7 @@ channels:
       reconcile: "gate-cluster relist of PipelineRuns"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [headrelease, console]
       exports: []
       replaces: [L02, L28, N21, W04, C01, X-A15, X-B16]
   ci.verdict.changed:
@@ -134,7 +137,7 @@ channels:
       reconcile: "evidence ledger is the truth; readers re-read R05"
       on_unread: closed
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [L03, X-A3, X-A5, X-A6, X-A7]
   release.deploy.finished:
@@ -150,7 +153,7 @@ channels:
       reconcile: "release records (releases package) recorder tick"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [L05, L09, S08, C02]
   release.gitops.changed:
@@ -166,7 +169,7 @@ channels:
       reconcile: "Argo Application list"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [L28]
   release.window.changed:
@@ -183,7 +186,7 @@ channels:
       reconcile: "window ConfigMap is the truth"
       on_unread: closed
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [headrelease, console]
       exports: []
       replaces: [L24, N11, X-A9, X-C2, X-C10]
   release.freeze.changed:
@@ -199,7 +202,7 @@ channels:
       reconcile: "freeze ConfigMap is the truth"
       on_unread: closed
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [X-A10]
   release.policy.expiring:
@@ -215,7 +218,7 @@ channels:
       reconcile: "policy reader on each check"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [L17, N04]
   approval.card.created:
@@ -231,7 +234,7 @@ channels:
       reconcile: "approval store is the truth"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [L01, C01]
   approval.card.decided:
@@ -248,7 +251,7 @@ channels:
       reconcile: "approval store is the truth"
       on_unread: closed
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [L01, N10, W02, X-A14, X-B16]
   approval.card.executed:
@@ -264,7 +267,7 @@ channels:
       reconcile: "approval store is the truth"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [L28, W02]
   owner.question.asked:
@@ -280,7 +283,7 @@ channels:
       reconcile: "question store is the truth"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [L01, N02]
   owner.question.answered:
@@ -296,7 +299,7 @@ channels:
       reconcile: "question store is the truth"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [L01, N10, W03, X-B16]
   seat.mail.arrived:
@@ -313,7 +316,7 @@ channels:
       reconcile: "none: the inbox is the truth (self-declared)"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [N11, W01, X-B16, X-C2, X-C10, X-C12, X-C14]
   seat.status.changed:
@@ -330,7 +333,7 @@ channels:
       reconcile: "none: the seat record is the truth (self-declared)"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [L19, L21, N14, N16, S10, C01, X-B1, X-B2, X-B6, X-C1, X-C5, X-C6, X-C17]
   seat.liveness.changed:
@@ -346,7 +349,7 @@ channels:
       reconcile: "liveness judge rescans last_seen every 30 s"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [L18, N03, N14]
   seat.work.changed:
@@ -362,7 +365,7 @@ channels:
       reconcile: "external work records"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [N18, X-B4]
   seat.session.changed:
@@ -378,7 +381,7 @@ channels:
       reconcile: "seat record bindings"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [X-B3]
   alert.rule.fired:
@@ -394,7 +397,7 @@ channels:
       reconcile: "Alertmanager re-sends while firing"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: []
   alert.channel.changed:
@@ -410,7 +413,7 @@ channels:
       reconcile: "Watchdog alert"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: []
   loop.health.changed:
@@ -426,7 +429,7 @@ channels:
       reconcile: "loop registry heartbeat"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: []
   env.health.changed:
@@ -442,7 +445,7 @@ channels:
       reconcile: "health probes"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [R12, C01]
   plugin.status.changed:
@@ -458,7 +461,7 @@ channels:
       reconcile: "plugin health probes"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [C01]
   cluster.workload.changed:
@@ -474,7 +477,7 @@ channels:
       reconcile: "cluster relist"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: []
   schema.migration.applied:
@@ -490,7 +493,7 @@ channels:
       reconcile: "schema_migrations table"
       on_unread: closed
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [L28]
   data.job.finished:
@@ -506,7 +509,7 @@ channels:
       reconcile: "Job list"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: []
   audit.action.recorded:
@@ -522,7 +525,7 @@ channels:
       reconcile: "audit store"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [S02]
   plan.fact.changed:
@@ -539,7 +542,7 @@ channels:
       reconcile: "plan facts snapshot"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [L06]
   codehealth.report.published:
@@ -555,7 +558,7 @@ channels:
       reconcile: "code-health report store"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: []
   dev.session.changed:
@@ -571,7 +574,7 @@ channels:
       reconcile: "bdev sessions.yaml (dev only, not on the bus)"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: [C03]
   reconcile.drift.found:
@@ -587,6 +590,6 @@ channels:
       reconcile: "none: it is itself the reconciliation report"
       on_unread: stale
       retention: 30d
-      consumers: [platform-workers, platform-api, seat:*]
+      consumers: [console]
       exports: []
       replaces: []

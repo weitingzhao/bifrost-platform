@@ -49,6 +49,11 @@ type Channel struct {
 	Consumers []string `yaml:"consumers"`
 	Exports   []string `yaml:"exports"`
 	Replaces  []string `yaml:"replaces"`
+	// DisplayOnly marks a topic published for watching (the Bus page, a
+	// seat's look), which no consumer is meant to act on: the listening
+	// reading leaves it out of "heard" and does not call it deaf. Not a
+	// contract field.
+	DisplayOnly bool `yaml:"display_only"`
 }
 
 // Tenant is one tenant's register.

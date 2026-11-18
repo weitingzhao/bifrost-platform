@@ -259,17 +259,24 @@ type TopicListen struct {
 	Readers   []string `json:"readers"`
 	Heard     int      `json:"heard"`
 	Followed  int      `json:"followed"`
+	// DisplayOnly: published for watching (registry display_only); left out
+	// of the shares and never deaf.
+	DisplayOnly bool `json:"display_only,omitempty"`
 }
 
 // Listening is the bus's loop over the window: who hears, what follows.
 type Listening struct {
 	Hours  int           `json:"hours"`
 	Topics []TopicListen `json:"topics"`
-	// Events heard by someone, and events that something followed, as shares of all published.
+	// Events heard by someone, and events that something followed, as shares
+	// of all published but the display-only topics' (Counted).
 	HeardShare  *float64 `json:"heard_share,omitempty"`
 	ClosedShare *float64 `json:"closed_share,omitempty"`
 	// CausedShare is the share of events that name the event they answer (their cause).
 	CausedShare *float64 `json:"caused_share,omitempty"`
+	// Counted is the shares' denominator; Watched the display-only events left out of it.
+	Counted int `json:"counted"`
+	Watched int `json:"watched"`
 	// Why a share is missing or partial (the receipt stream not read, a scan cut short).
 	Notes []string `json:"notes,omitempty"`
 }
@@ -284,7 +291,8 @@ type ListenEvent struct {
 
 // BuildListening counts, per topic, what was published, heard and followed.
 // own is the receipt consumer that is only the page looking (not a listener).
-func BuildListening(hours int, events []ListenEvent, receipts map[string][]string, receiptsRead bool, readers map[string][]string, own string) Listening {
+// display is the display-only topics: counted per topic, left out of the shares.
+func BuildListening(hours int, events []ListenEvent, receipts map[string][]string, receiptsRead bool, readers map[string][]string, own string, display map[string]bool) Listening {
 	l := Listening{Hours: hours}
 	causes := map[int64]bool{}
 	caused := 0
@@ -296,47 +304,60 @@ func BuildListening(hours int, events []ListenEvent, receipts map[string][]strin
 	}
 	by := map[string]*TopicListen{}
 	for t, rs := range readers {
-		by[t] = &TopicListen{Type: t, Readers: rs}
+		by[t] = &TopicListen{Type: t, Readers: rs, DisplayOnly: display[t]}
 	}
 	heard, followed := 0, 0
 	for _, e := range events {
 		t, ok := by[e.Type]
 		if !ok {
-			t = &TopicListen{Type: e.Type}
+			t = &TopicListen{Type: e.Type, DisplayOnly: display[e.Type]}
 			by[e.Type] = t
 		}
 		t.Published++
+		counted := !display[e.Type]
+		if counted {
+			l.Counted++
+		} else {
+			l.Watched++
+		}
 		for _, c := range receipts[e.ID] {
 			if c != own {
 				t.Heard++
-				heard++
+				if counted {
+					heard++
+				}
 				break
 			}
 		}
 		if causes[e.N] {
 			t.Followed++
-			followed++
+			if counted {
+				followed++
+			}
 		}
 	}
 	for _, t := range by {
 		l.Topics = append(l.Topics, *t)
 	}
 	sort.Slice(l.Topics, func(i, j int) bool { return l.Topics[i].Type < l.Topics[j].Type })
-	if len(events) > 0 {
-		f := float64(followed) / float64(len(events))
+	if l.Counted > 0 {
+		f := float64(followed) / float64(l.Counted)
 		f = float64(int64(f*1000+0.5)) / 1000
 		l.ClosedShare = &f
 		c := float64(caused) / float64(len(events))
 		c = float64(int64(c*1000+0.5)) / 1000
 		l.CausedShare = &c
 		if receiptsRead {
-			h := float64(heard) / float64(len(events))
+			h := float64(heard) / float64(l.Counted)
 			h = float64(int64(h*1000+0.5)) / 1000
 			l.HeardShare = &h
 		}
 	}
 	if !receiptsRead {
 		l.Notes = append(l.Notes, "receipts not read: who heard each event is unknown")
+	}
+	if l.Watched > 0 {
+		l.Notes = append(l.Notes, fmt.Sprintf("%d events of display-only topics are left out of heard and followed: published to be watched, not acted on", l.Watched))
 	}
 	if followed == 0 && len(events) > 0 {
 		l.Notes = append(l.Notes, "no consumer records the event it acted on (causeid) yet, so no loop can be seen closing")

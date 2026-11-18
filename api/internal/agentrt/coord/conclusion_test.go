@@ -190,3 +190,36 @@ func TestConclusionTakesTheDispatchersWake(t *testing.T) {
 		t.Fatal("a key of no known sender was taken")
 	}
 }
+
+// 2026-11-17, the bus measured on PROD: of 2,482 events in 24h none named a
+// cause, so a wake the dispatcher sent could not be traced to the event that
+// sent it. A caused wake names its event on both letter events; a cause this
+// ledger does not hold is dropped and the letter still goes.
+func TestConclusionCarriesItsCause(t *testing.T) {
+	t.Parallel()
+	db, pool, w := conclusionDB(t)
+	read := db.Connect(t, db.Reader)
+	var origin int64
+	ok(t, read.QueryRow(ctx, `SELECT max(event_id) FROM agentrt.event`).Scan(&origin))
+	ok(t, coord.PostConclusionCaused(ctx, pool, "sub:cause:ev-1", w.Actor, "bus: release.deploy.finished", origin))
+	ok(t, coord.PostConclusionCaused(ctx, pool, "sub:cause:ev-2", w.Actor, "bus: unknown", origin+1_000_000))
+	rows, err := read.Query(ctx, `SELECT event_type, coalesce(cause_event_id, 0) FROM agentrt.event
+	  WHERE event_id > $1 AND event_type IN ('message_posted', $2) ORDER BY event_id`, origin, coord.SeatMailType)
+	ok(t, err)
+	var got []int64
+	for rows.Next() {
+		var typ string
+		var cause int64
+		ok(t, rows.Scan(&typ, &cause))
+		got = append(got, cause)
+	}
+	ok(t, rows.Err())
+	if len(got) != 4 || got[0] != origin || got[1] != origin || got[2] != 0 || got[3] != 0 {
+		t.Fatalf("causes=%v, want [%d %d 0 0]", got, origin, origin)
+	}
+	mail, err := store.Unread(ctx, pool, w, 100)
+	ok(t, err)
+	if len(mail) != 2 {
+		t.Fatalf("mail=%d, want both letters delivered", len(mail))
+	}
+}

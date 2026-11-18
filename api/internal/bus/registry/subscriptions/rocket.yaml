@@ -74,6 +74,28 @@ subscriptions:
     to: subject
     guarantee: durable
     by: platform-inbox
+  # 2026-11-17 (the coordinator, after the nerve map showed release.deploy.finished
+  # heard by no one): a release that reached an environment wakes whoever
+  # wrote its commit (the deploy's subject is <env>/<lane>@<sha>, its ref names
+  # the repo). Failed deploys are the CI line's (their own tripwire).
+  - id: deploy-finished-to-committer
+    on: [release.deploy.finished]
+    change: succeeded
+    deliver: wake
+    to: commit.session
+    guarantee: durable
+    by: dispatcher
+  # 2026-11-17 (the coordinator, the same reading: alert.rule.fired heard by no
+  # one): a firing alert wakes the duty seat. Alertmanager re-sends while an
+  # alert keeps firing (some 120 a day on PROD, 11-17): the duty seat sees
+  # repeats until the rule's owner is woken instead (later, by domain).
+  - id: alert-firing-to-duty
+    on: [alert.rule.fired]
+    change: firing
+    deliver: wake
+    to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    guarantee: durable
+    by: dispatcher
 
 # The bus's known users. name is the receipt consumer: gate:<route>:<client>
 # for a reader of /bus/events (route events) or /bus/stream (route stream),

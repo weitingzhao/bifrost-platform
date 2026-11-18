@@ -20,6 +20,13 @@ import (
 // keys expire after seven days). Receipt, message, artifact, event and outbox
 // signal commit together. There is no HTTP route that accepts this sender.
 func PostConclusion(ctx context.Context, db eventlog.DB, key, to, body string) error {
+	return PostConclusionCaused(ctx, db, key, to, body, 0)
+}
+
+// PostConclusionCaused is PostConclusion for a conclusion that answers a
+// ledger event (the bus dispatcher's wake, 2026-11-17): the letter's events
+// name it as their cause.
+func PostConclusionCaused(ctx context.Context, db eventlog.DB, key, to, body string, cause int64) error {
 	if to == "" || threadinbox.Recipient(to) != to {
 		return nil
 	}
@@ -45,7 +52,7 @@ func PostConclusion(ctx context.Context, db eventlog.DB, key, to, body string) e
 		if err != nil {
 			return err
 		}
-		msg, err := PostMessage(ctx, tx, "controller", to, "note", []byte(body))
+		msg, err := postMessageAs(ctx, tx, "controller", to, "note", []byte(body), "", "", true, cause)
 		if err != nil {
 			return err
 		}
