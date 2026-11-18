@@ -176,7 +176,9 @@ export function routesOf(c: BusContract, env?: string): Route[] {
     }
   }
   for (const row of c.subscriptions) {
-    if (!row.domain || !here(row.envs)) continue
+    // Only the dispatcher's rows take events off the bus (a receipt each); a row still delivered by other code
+    // reads its own store (11-18: approval.card.* showed a reader on the map and no one listening in the panel).
+    if (!row.domain || !here(row.envs) || row.by !== 'dispatcher') continue
     for (const on of row.on) if (topics.has(on)) out.push({ topic: on, reader: ROW_CONSUMER_PREFIX + row.id, domain: row.domain })
   }
   return out

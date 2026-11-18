@@ -252,6 +252,8 @@ export default function BusNerveGraph({ nodes, links, arcs = [], funnel, flat, s
   arcsRef.current = arcs
   const funnelRef = useRef(funnel)
   funnelRef.current = funnel
+  /** The pinned places last fitted to, so a change of places refits. */
+  const pinSig = useRef('')
   /** Moves the direct pulses each frame (3D only). */
   const flyRef = useRef<((now: number) => void) | null>(null)
   /** When each domain's halo last lit. */
@@ -609,16 +611,16 @@ export default function BusNerveGraph({ nodes, links, arcs = [], funnel, flat, s
                 const a = (m / 16) * 2 * Math.PI
                 const pts: import('three').Vector3[] = []
                 for (let i = 0; i <= 40; i++) pts.push(at(shell.start + (shell.length * i) / 40, a))
-                line(pts, 0.07, false)
+                line(pts, 0.13, false)
               }
               const ring = (sv: number, opacity: number) => {
                 const pts: import('three').Vector3[] = []
                 for (let i = 0; i < 72; i++) pts.push(at(sv, (i / 72) * 2 * Math.PI))
                 line(pts, opacity, true)
               }
-              for (let i = 1; i <= 4; i++) ring(shell.start + (shell.length * i) / 5, 0.05)
-              ring(end, 0.12)
-              for (const t of shell.tiers) ring(t.at, 0.2)
+              for (let i = 1; i <= 4; i++) ring(shell.start + (shell.length * i) / 5, 0.09)
+              ring(end, 0.2)
+              for (const t of shell.tiers) ring(t.at, 0.32)
             }
             for (const a of list) {
               const curve = new THREE.CubicBezierCurve3(v3(a.curve[0]), v3(a.curve[1]), v3(a.curve[2]), v3(a.curve[3]))
@@ -849,8 +851,12 @@ export default function BusNerveGraph({ nodes, links, arcs = [], funnel, flat, s
       if (div && div.textContent !== text) div.textContent = text
     }
     graph.current?.graphData(data.current)
-    // A domain opened or folded: fit the body to the frame again once it has moved.
-    if (graph.current && fitted.current !== -1 && fitted.current !== next.length && performance.now() - focusedAt.current > 3000) fitSoonRef.current()
+    // A domain opened or folded, or the domains took their places (the tiers arrive after the first build, 11-18:
+    // PROD's first view sat small in the middle): fit the body to the frame again once it has moved.
+    const pins = next.filter(n => n.pin).map(n => `${n.id}:${Math.round(n.pin!.x)},${Math.round(n.pin!.y)},${Math.round(n.pin!.z)}`).join('|')
+    const pinsMoved = pins !== pinSig.current
+    pinSig.current = pins
+    if (graph.current && fitted.current !== -1 && (fitted.current !== next.length || pinsMoved) && performance.now() - focusedAt.current > 3000) fitSoonRef.current()
   }, [nodes, links, arcs, funnel])
 
   // Fits the body to the frame, again and again while it settles. Kept in a ref: the effects call the latest one.

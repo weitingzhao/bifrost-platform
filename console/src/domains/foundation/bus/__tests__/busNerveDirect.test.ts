@@ -89,6 +89,10 @@ describe('routes and arcs', () => {
     expect(toDelivery.count).toBe(50)
     expect(arcs.find(a => a.id === 'arc:verification>coordination')!.readers).toEqual(['sub-land-refused'])
   })
+  it('counts only rows the dispatcher delivers (11-18: approval.card.* was delivered by the approvals code, off the bus)', () => {
+    const c: BusContract = { ...contract, subscriptions: [...contract.subscriptions, { tenant: 'rocket', id: 'card-concluded', on: ['alert.rule.fired'], deliver: 'wake', to: 'ref.requester', by: 'approvals.thread-inbox', domain: 'coordination' }] }
+    expect(routesOf(c).some(r => r.reader === 'sub-card-concluded')).toBe(false)
+  })
   it('counts only the readers that run in this environment (11-18: head-release reads in PROD alone; STG drew its arc anyway)', () => {
     const c: BusContract = { ...contract, clients: contract.clients.map(x => (x.name === 'headrelease' ? { ...x, envs: ['prod'] } : x)) }
     const stg = routesOf(c, 'stg')
