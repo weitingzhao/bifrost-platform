@@ -187,6 +187,27 @@ func TestCurrentReadsTheTable(t *testing.T) {
 	}
 }
 
+// 2026-11-18: ac7ece90 on STG. Only PROD's workers write records, so STG's
+// table is empty, and Current answered "no deployment" for an environment the
+// ConfigMaps say is deployed.
+// Positive control: returning currentFromTable's answer alone fails this.
+func TestCurrentWithAnEmptyTableReadsTheConfigMaps(t *testing.T) {
+	ctx := context.Background()
+	t1 := time.Date(2026, 11, 18, 1, 0, 0, 0, time.UTC)
+	s, _ := newFakeService(t,
+		pipelineRun("deliver-stg-1", "deliver-stg", true, t1, nil, nil),
+		cloneTaskRun("deliver-stg-1", "clone-core", "core", shaA),
+	)
+	s.Tick(ctx)
+	s.SetTableReader(&fakeRows{refuse: map[string]bool{"deliver-stg-1": true}})
+	if got, err := s.Current(ctx, "app", "stg"); err != nil || got.Run != "deliver-stg-1" {
+		t.Fatalf("current = %+v %v", got, err)
+	}
+	if _, err := s.Current(ctx, "app", "prod"); !errors.Is(err, ErrNoDeployment) {
+		t.Fatalf("nothing recorded anywhere = %v", err)
+	}
+}
+
 // Same origin: the record carries the run's cause label, so the recorder's
 // release.deploy.finished can name the event that woke the start.
 func TestARecordCarriesTheRunsCause(t *testing.T) {

@@ -40,9 +40,17 @@ var (
 // ConfigMaps before that. A deployment recorded as a ConfigMap whose row
 // failed reads as unsettled, never as the deployment before it, until the
 // recorder's next pass copies the row.
+//
+// A table with no row of lane and env is not where they are kept: only PROD's
+// workers record, into PROD's database, so STG's table stays empty while the
+// ConfigMaps in the shared cluster hold every environment's records
+// (2026-11-18: ac7ece90 answered "no deployment" on STG).
 func (s *Service) Current(ctx context.Context, lane, env string) (Record, error) {
 	if r := s.tableReader(); r != nil {
-		return s.currentFromTable(ctx, r, lane, env)
+		rec, err := s.currentFromTable(ctx, r, lane, env)
+		if !errors.Is(err, ErrNoDeployment) {
+			return rec, err
+		}
 	}
 	return s.currentFromMaps(ctx, lane, env)
 }
