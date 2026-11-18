@@ -26,9 +26,13 @@ var readersYAML []byte
 //go:embed baselines.yaml
 var baselinesYAML []byte
 
-// Target is how many channels the next generation keeps: kept 31 + merged
-// 20 + its 13 new pieces (design v1.2).
+// Target is the design's count of what the next generation is made of: kept
+// 31 + merged 20 + its 13 new pieces. The channels that only announce or never
+// take this road stay where they are too (End, the table's 2.4).
 const Target = 64
+
+// NewPieces is how many pieces the next generation adds (the table's 2.4).
+const NewPieces = 13
 
 // Retired says an old channel is gone and what proves it.
 type Retired struct {
@@ -41,12 +45,40 @@ type Retired struct {
 
 // Channel is one row of the disposition table.
 type Channel struct {
-	ID          string   `yaml:"id" json:"id"`
-	Class       string   `yaml:"class" json:"class"`
-	Disposition string   `yaml:"disposition" json:"disposition"`
-	What        string   `yaml:"what" json:"what"`
-	By          string   `yaml:"by" json:"by"`
-	Retired     *Retired `yaml:"retired" json:"retired,omitempty"`
+	ID          string `yaml:"id" json:"id"`
+	Class       string `yaml:"class" json:"class"`
+	Disposition string `yaml:"disposition" json:"disposition"`
+	What        string `yaml:"what" json:"what"`
+	By          string `yaml:"by" json:"by"`
+	// Step is the switch step that moves it: 0 to 5, any, none.
+	Step    string   `yaml:"step" json:"step"`
+	Cut     *Cut     `yaml:"cut" json:"cut,omitempty"`
+	Retired *Retired `yaml:"retired" json:"retired,omitempty"`
+}
+
+// Cut says a channel's traffic moved to the new path, and what proves it runs.
+type Cut struct {
+	At       string   `yaml:"at" json:"at"`
+	Evidence []string `yaml:"evidence" json:"evidence"`
+}
+
+// Steps of the switch, in order (design v1.2 section 8; the table's 2.2).
+var Steps = []struct{ ID, Label string }{
+	{"0", "Register what stays"}, {"1", "First line through"}, {"2", "Source gates"}, {"3", "Bulk cutover"},
+	{"4", "Console and pipelines"}, {"5", "Tail items"}, {"any", "Dead roads, deleted any time"}, {"none", "No switch needed"},
+}
+
+// StepCount is one step's channels: how many, how many cut over, how many of
+// those are proven running here (or not), and how many old roads are gone.
+type StepCount struct {
+	Step       string   `json:"step"`
+	Label      string   `json:"label"`
+	Total      int      `json:"total"`
+	Cut        int      `json:"cut"`
+	Proven     int      `json:"proven"`
+	Unproven   []string `json:"unproven,omitempty"`
+	Unmeasured int      `json:"unmeasured"`
+	Retired    int      `json:"retired"`
 }
 
 // Proof is the code a moved reader stands on.
@@ -199,13 +231,23 @@ type Count struct {
 
 // Progress is the change of generation in numbers.
 type Progress struct {
-	Start   int       `json:"start"`
-	Now     int       `json:"now"`
-	Target  int       `json:"target"`
-	Retired int       `json:"retired"`
-	ToGo    int       `json:"to_go"`
-	Counts  []Count   `json:"counts"`
-	Recent  []Channel `json:"recent"`
+	Start   int `json:"start"`
+	Now     int `json:"now"`
+	Target  int `json:"target"`
+	Retired int `json:"retired"`
+	// ToGo is the old channels still to remove.
+	ToGo   int       `json:"to_go"`
+	Counts []Count   `json:"counts"`
+	Recent []Channel `json:"recent"`
+	// Removable are the rows that go at all (replaced + deleted), Removed how
+	// many of them are gone; Stays the rows that remain, NewPieces what is
+	// added, End both together.
+	Removable int         `json:"removable"`
+	Removed   int         `json:"removed"`
+	Stays     int         `json:"stays"`
+	NewPieces int         `json:"new_pieces"`
+	End       int         `json:"end"`
+	Steps     []StepCount `json:"steps"`
 }
 
 // Summarize counts the table: now is the old channels not yet retired.
@@ -230,9 +272,34 @@ func Summarize(chs []Channel) Progress {
 		}
 	}
 	p.Now = p.Start - p.Retired
-	if p.ToGo = p.Now - p.Target; p.ToGo < 0 {
-		p.ToGo = 0
+	steps := map[string]*StepCount{}
+	for _, st := range Steps {
+		p.Steps = append(p.Steps, StepCount{Step: st.ID, Label: st.Label})
 	}
+	for i := range p.Steps {
+		steps[p.Steps[i].Step] = &p.Steps[i]
+	}
+	for _, c := range chs {
+		if c.Disposition == "replaced" || c.Disposition == "deleted" {
+			p.Removable++
+			if c.Retired != nil {
+				p.Removed++
+			}
+		}
+		if st := steps[c.Step]; st != nil {
+			st.Total++
+			if c.Cut != nil {
+				st.Cut++
+			}
+			if c.Retired != nil {
+				st.Retired++
+			}
+		}
+	}
+	p.ToGo = p.Removable - p.Removed
+	p.Stays = p.Start - p.Removable
+	p.NewPieces = NewPieces
+	p.End = p.Stays + NewPieces
 	for _, d := range Dispositions {
 		p.Counts = append(p.Counts, *by[d])
 	}
@@ -242,6 +309,40 @@ func Summarize(chs []Channel) Progress {
 	}
 	p.Recent = retired
 	return p
+}
+
+// ApplyEvidence counts, per step, the cuts proven running: a cut is proven when
+// everything it names runs here, unproven when any of it is stale or silent,
+// and unmeasured when the readings could not be read.
+func ApplyEvidence(p *Progress, chs []Channel, evidence func(string) Evidence) {
+	steps := map[string]*StepCount{}
+	for i := range p.Steps {
+		steps[p.Steps[i].Step] = &p.Steps[i]
+	}
+	for _, c := range chs {
+		st := steps[c.Step]
+		if st == nil || c.Cut == nil {
+			continue
+		}
+		proven, unmeasured := len(c.Cut.Evidence) > 0, false
+		for _, id := range c.Cut.Evidence {
+			switch evidence(id).State {
+			case EvidenceRunning:
+			case EvidenceUnmeasured:
+				unmeasured = true
+			default:
+				proven = false
+			}
+		}
+		switch {
+		case !proven:
+			st.Unproven = append(st.Unproven, c.ID)
+		case unmeasured:
+			st.Unmeasured++
+		default:
+			st.Proven++
+		}
+	}
 }
 
 // EarnedRoutes are the display routes that start trusted: n or more clean

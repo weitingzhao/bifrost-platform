@@ -53,6 +53,7 @@ func (s *Server) handleBusNextgen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	evidence := s.readerEvidence(r.Context(), out.GeneratedAt)
+	nextgen.ApplyEvidence(&out.Progress, chs, evidence)
 	for _, g := range groups {
 		ng := nextgenReaderGroup{ReaderGroup: g, Counts: map[string]int{}}
 		for i, rd := range g.Readers {
@@ -121,22 +122,39 @@ func (s *Server) baselineInto(ctx context.Context, row *effectRow, key string) {
 
 // readerEvidence reads, from this environment's metrics, whether each moved
 // reader really answers from its new source (bus/readerseen): the answer for
-// one reader id. Prometheus not answering is "unmeasured", not a failure of
+// one reader id, or for "reader:<id>" and "topic:<type>" (the relay publishing
+// that event). Prometheus not answering is "unmeasured", not a failure of
 // the reader.
 func (s *Server) readerEvidence(ctx context.Context, now time.Time) func(string) nextgen.Evidence {
 	env := strings.TrimSpace(os.Getenv("AGENTRT_ENV"))
 	ns := "bifrost-platform-" + env
 	window := fmt.Sprintf("%dd", int(nextgen.EvidenceWindow.Hours()/24))
-	last, err := s.promql(ctx, fmt.Sprintf(`max by (reader) (max_over_time(%s{namespace=%q}[%s]))`, readerseen.MetricLast, ns, window))
-	var runs map[string]float64
-	if err == nil {
-		runs, err = s.promql(ctx, fmt.Sprintf(`sum by (reader) (increase(%s{namespace=%q}[%s]))`, readerseen.MetricRuns, ns, window))
+	read := func(q string, metric string) (map[string]float64, error) {
+		return s.promql(ctx, fmt.Sprintf(q, metric, ns, window))
 	}
-	if err != nil {
-		slog.Info("bus readers: run evidence not read", "error", err)
-		return func(string) nextgen.Evidence { return nextgen.Evidence{State: nextgen.EvidenceUnmeasured} }
+	const lastQ, runsQ = `max by (reader) (max_over_time(%s{namespace=%q}[%s]))`, `sum by (reader) (increase(%s{namespace=%q}[%s]))`
+	const lastT, runsT = `max by (type) (max_over_time(%s{namespace=%q}[%s]))`, `sum by (type) (increase(%s{namespace=%q}[%s]))`
+	var last, runs, topicLast, topicRuns map[string]float64
+	var err error
+	for _, q := range []struct {
+		to            *map[string]float64
+		query, metric string
+	}{
+		{&last, lastQ, readerseen.MetricLast}, {&runs, runsQ, readerseen.MetricRuns},
+		{&topicLast, lastT, "bifrost_bus_relay_last_published_timestamp_seconds"}, {&topicRuns, runsT, "bifrost_bus_relay_published_by_type_total"},
+	} {
+		if *q.to, err = read(q.query, q.metric); err != nil {
+			slog.Info("bus readers: run evidence not read", "error", err)
+			return func(string) nextgen.Evidence { return nextgen.Evidence{State: nextgen.EvidenceUnmeasured} }
+		}
 	}
-	return func(id string) nextgen.Evidence { return nextgen.JudgeEvidence(now, last[id], runs[id]) }
+	return func(id string) nextgen.Evidence {
+		if t, ok := strings.CutPrefix(id, "topic:"); ok {
+			return nextgen.JudgeEvidence(now, topicLast[t], topicRuns[t])
+		}
+		r := strings.TrimPrefix(id, "reader:")
+		return nextgen.JudgeEvidence(now, last[r], runs[r])
+	}
 }
 
 // evidenceWhen says a moved reader's evidence in a line.

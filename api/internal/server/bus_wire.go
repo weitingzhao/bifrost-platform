@@ -538,6 +538,7 @@ func (s *Server) followSeatMail(ctx context.Context, nc *nats.Conn, receipts *re
 		if id == "" {
 			return
 		}
+		readerseen.Saw(mailwake.Consumer)
 		safego.Go("bus-mail-receipt", func() {
 			rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()

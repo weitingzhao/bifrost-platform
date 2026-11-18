@@ -248,3 +248,55 @@ func TestEveryMovedReaderMarksItsRuns(t *testing.T) {
 		}
 	}
 }
+
+// Origin: 2026-11-18, the coordinator: "153 minus retired, target 64" could
+// never be reached (only 70 rows go) and said nothing about the switch. The
+// steps are the disposition table's 2.2, a row's cut names what proves it runs.
+func TestStepsMatchTheTableAndCutsNameTheirProof(t *testing.T) {
+	chs, err := Channels()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := Summarize(chs)
+	want := map[string]int{"0": 6, "1": 5, "2": 7, "3": 73, "4": 20, "5": 2, "any": 12, "none": 28}
+	for _, st := range p.Steps {
+		if st.Total != want[st.Step] {
+			t.Errorf("step %s: %d rows, the table has %d", st.Step, st.Total, want[st.Step])
+		}
+	}
+	if p.Removable != 70 || p.Stays != 83 || p.End != 96 {
+		t.Errorf("removable %d, stays %d, end %d; the table's 2.4 says 70, 83, 96", p.Removable, p.Stays, p.End)
+	}
+	for _, c := range chs {
+		if c.Cut == nil {
+			continue
+		}
+		if _, err := time.Parse("2006-01-02", c.Cut.At); err != nil || len(c.Cut.Evidence) == 0 {
+			t.Errorf("%s: a cut needs a date and what proves it runs", c.ID)
+		}
+		for _, e := range c.Cut.Evidence {
+			if !strings.HasPrefix(e, "reader:") && !strings.HasPrefix(e, "topic:") {
+				t.Errorf("%s: evidence %q is neither reader: nor topic:", c.ID, e)
+			}
+		}
+	}
+}
+
+// Same origin: a cut counts as done only while what it names runs here.
+func TestACutIsProvenOnlyWhileItRuns(t *testing.T) {
+	chs := []Channel{
+		{ID: "A", Step: "2", Cut: &Cut{Evidence: []string{"reader:a"}}},
+		{ID: "B", Step: "2", Cut: &Cut{Evidence: []string{"reader:a", "reader:gone"}}},
+		{ID: "C", Step: "2", Cut: &Cut{Evidence: []string{"reader:unread"}}},
+		{ID: "D", Step: "2"},
+	}
+	p := Summarize(chs)
+	ApplyEvidence(&p, chs, func(id string) Evidence {
+		return Evidence{State: map[string]string{"reader:a": EvidenceRunning, "reader:gone": EvidenceNone, "reader:unread": EvidenceUnmeasured}[id]}
+	})
+	for _, st := range p.Steps {
+		if st.Step == "2" && (st.Total != 4 || st.Cut != 3 || st.Proven != 1 || st.Unmeasured != 1 || len(st.Unproven) != 1 || st.Unproven[0] != "B") {
+			t.Fatalf("step 2: %+v", st)
+		}
+	}
+}

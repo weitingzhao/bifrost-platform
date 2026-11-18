@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { fetchBusNextgen, generationSegments, movedWithoutEvidence, type BusNextgen, type NextgenReader } from './busNextgen'
+import { fetchBusNextgen, generationSegments, movedWithoutEvidence, type BusNextgen, type NextgenReader, type NextgenStep } from './busNextgen'
 
 const COLOR: Record<string, string> = {
   replaced: 'var(--primary)',
@@ -23,15 +23,14 @@ const LABEL: Record<string, string> = {
 function GenerationBar({ d }: { d: BusNextgen }) {
   const p = d.progress
   const segs = generationSegments(p.counts, p.start)
-  const targetAt = (p.target / p.start) * 100
   return (
     <div className="flex w-full min-w-0 flex-col gap-1.5" data-testid="bus-generation-bar">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="text-2xl font-semibold font-mono-tabular">{p.now}</span>
-        <span className="text-sm text-muted-foreground">channels now · started at {p.start} · target {p.target} · {p.retired} retired · {p.to_go} to go</span>
+        <span className="text-2xl font-semibold font-mono-tabular">{p.removed ?? p.retired}<span className="text-base text-muted-foreground"> / {p.removable ?? p.start}</span></span>
+        <span className="text-sm text-muted-foreground">old channels removed · {p.to_go} to go</span>
       </div>
       <div className="relative h-5 w-full overflow-hidden rounded bg-[var(--card-fill)]" role="img"
-        aria-label={`${p.now} of ${p.start} channels left, target ${p.target}`}>
+        aria-label={`${p.now} of ${p.start} channels left`}>
         <div className="flex h-full w-full">
           {segs.flatMap(s => [
             <div key={`${s.disposition}-retired`} className="h-full shrink-0" title={`${s.disposition} retired: ${LABEL[s.disposition] ?? ''}`}
@@ -40,7 +39,6 @@ function GenerationBar({ d }: { d: BusNextgen }) {
               style={{ width: `${s.left}%`, background: COLOR[s.disposition] ?? 'var(--muted-foreground)', opacity: 0.3 }} />,
           ])}
         </div>
-        <div className="absolute inset-y-0 border-l-2 border-dashed border-[var(--foreground)]" style={{ left: `${targetAt}%` }} title={`target ${p.target}`} />
       </div>
       <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 text-xs text-muted-foreground">
         {p.counts.filter(c => c.total > 0).map(c => (
@@ -49,8 +47,13 @@ function GenerationBar({ d }: { d: BusNextgen }) {
             {c.disposition} {c.retired}/{c.total}
           </li>
         ))}
-        <li>dashed line: target {p.target}</li>
       </ul>
+      {p.end != null && (
+        <p className="m-0 text-xs text-muted-foreground">
+          At the end: {p.stays} of the {p.start} stay where they are, plus {p.new_pieces} new pieces = {p.end} (the design's {p.target} counts only what is kept, reworked or new).
+        </p>
+      )}
+      {p.steps && <StepTable steps={p.steps} />}
     </div>
   )
 }
@@ -123,5 +126,29 @@ function ReaderEvidence({ readers }: { readers: NextgenReader[] }) {
       <span title={running.map(r => `${r.id}: ${new Date(r.evidence?.last_seen ?? '').toLocaleString()}`).join('\n')}>{running.length} seen running here</span>
       {missing.length > 0 && <span className="text-amber-600"> · no recent run: {missing.map(r => r.id).join(', ')}</span>}
     </div>
+  )
+}
+
+/** The switch step by step: cut over and proven running here are separate from the old road being gone. */
+function StepTable({ steps }: { steps: NextgenStep[] }) {
+  return (
+    <table className="w-full text-xs" data-testid="bus-generation-steps">
+      <thead className="text-muted-foreground">
+        <tr><th className="text-left font-normal">Step</th><th className="text-right font-normal">Channels</th><th className="text-right font-normal">Cut over</th><th className="text-right font-normal">Seen running</th><th className="text-right font-normal">Old road gone</th></tr>
+      </thead>
+      <tbody className="font-mono-tabular">
+        {steps.map(s => (
+          <tr key={s.step}>
+            <td className="font-sans">{/^\d$/.test(s.step) ? `${s.step} · ` : ''}{s.label}</td>
+            <td className="text-right">{s.total}</td>
+            <td className="text-right">{s.cut}</td>
+            <td className="text-right" title={s.unproven?.length ? `no recent run: ${s.unproven.join(', ')}` : undefined}>
+              {s.proven}{s.unproven?.length ? <span className="text-amber-600"> ({s.unproven.length} not)</span> : null}
+            </td>
+            <td className="text-right">{s.retired}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }

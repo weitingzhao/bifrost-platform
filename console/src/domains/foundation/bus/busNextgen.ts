@@ -20,10 +20,16 @@ export type NextgenCount = { disposition: string; total: number; retired: number
 export type NextgenEvidence = { state: 'running' | 'stale' | 'none' | 'unmeasured'; last_seen?: string; runs_7d: number; stale_after_seconds?: number }
 export type NextgenReader = { id: string; what: string; status: string; at?: string; owner?: string; note?: string; evidence?: NextgenEvidence }
 export type NextgenReaderGroup = { id: string; title: string; readers: NextgenReader[]; counts: Record<string, number> }
+/** One step of the switch: its channels, those cut over, those proven running here, the old roads gone. */
+export type NextgenStep = { step: string; label: string; total: number; cut: number; proven: number; unproven?: string[]; unmeasured: number; retired: number }
 export type NextgenBaseline = { key: string; label: string; at: string; note?: string; value?: number; unmeasured?: string }
 export type BusNextgen = {
   generated_at: string
-  progress: { start: number; now: number; target: number; retired: number; to_go: number; counts: NextgenCount[]; recent: NextgenChannel[] }
+  progress: {
+    start: number; now: number; target: number; retired: number; to_go: number; counts: NextgenCount[]; recent: NextgenChannel[]
+    /** Absent from an older platform. */
+    removable?: number; removed?: number; stays?: number; new_pieces?: number; end?: number; steps?: NextgenStep[]
+  }
   readers: NextgenReaderGroup[]
   baselines: NextgenBaseline[]
 }
