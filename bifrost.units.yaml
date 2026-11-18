@@ -176,7 +176,7 @@ modules:
       # tests check every retired channel is gone from the Go code and every
       # moved reader's code is there, so they read the whole module.
       api/internal/bus/nextgen: ["api"]
-      api/internal/codeguard: ["api", "config/domain-ownership.json"]
+      api/internal/codeguard: ["api", "config/domain-ownership.json", "bifrost-trade-infra:agent-config/release-policy/paths.json"]
       api/internal/config: ["api/internal/config", "config/environments.yaml"]
       api/internal/delivery: ["api/internal/delivery", "bifrost-trade-infra:k8s/cicd"]
       api/internal/devsession: ["api/internal/devsession", "config/sessions-catalog.yaml"]

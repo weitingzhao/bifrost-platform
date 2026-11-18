@@ -28,6 +28,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 )
 
 var (
@@ -60,6 +61,8 @@ func sanitizeLabelValue(v string) string {
 
 type Service struct {
 	windowRecorder WindowRecorder
+	// nodeMetrics feeds build placement (build_placement.go); unset, runs are not placed.
+	nodeMetrics NodeMetricsReader
 	// ciReader answers PolicyFacts.CIRun (release_policy_facts.go); unset,
 	// CIRun has no verdict.
 	ciReader       CIReader
@@ -375,6 +378,7 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 		resp.Message = buildErr.Error()
 		return resp, empty, buildErr
 	}
+	placement, placed := s.placeBuild(ctx, pipelineName, spec)
 	meta := map[string]any{
 		"name":      runName,
 		"namespace": ns,
@@ -391,13 +395,17 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	if ciRepo != "" {
 		meta["labels"].(map[string]any)["bifrost.io/repo"] = ciRepo
 	}
-	if ann := actions.IdentityAnnotations(ctx); len(ann) > 0 || requesterOf(ctx) != "" {
-		raw := make(map[string]any, len(ann)+1)
+	if ann := actions.IdentityAnnotations(ctx); len(ann) > 0 || requesterOf(ctx) != "" || placed {
+		raw := make(map[string]any, len(ann)+3)
 		for k, v := range ann {
 			raw[k] = v
 		}
 		if r := requesterOf(ctx); r != "" {
 			raw[AnnRequester] = r
+		}
+		if placed {
+			raw[releases.AnnBuildNode] = placement.Node
+			raw[releases.AnnBuildNodeWhy] = placement.Why
 		}
 		meta["annotations"] = raw
 	}

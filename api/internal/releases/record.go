@@ -49,13 +49,21 @@ type Record struct {
 	// Cause is the bus event that woke the run's start ("ev-<n>"), from its
 	// bifrost.io/cause label; "" when the run names none (2026-11-17).
 	Cause string `json:"cause,omitempty"`
+	// BuildNode and BuildNodeWhy are where the platform placed the run's image
+	// builds and why, from its annotations; empty when it placed none.
+	BuildNode    string `json:"build_node,omitempty"`
+	BuildNodeWhy string `json:"build_node_why,omitempty"`
 }
 
 const (
 	labelRecord = "bifrost.io/release-record"
-	labelLane   = "bifrost.io/release-lane"
-	labelEnv    = "bifrost.io/release-env"
-	labelRun    = "bifrost.io/release-run"
+	// AnnBuildNode and AnnBuildNodeWhy are written on a delivery run by the
+	// platform when it chooses where the run's image builds go.
+	AnnBuildNode    = "bifrost.io/build-node"
+	AnnBuildNodeWhy = "bifrost.io/build-node-why"
+	labelLane       = "bifrost.io/release-lane"
+	labelEnv        = "bifrost.io/release-env"
+	labelRun        = "bifrost.io/release-run"
 	// labelComplete is "false" while some clone's commit, or some build's
 	// digest, is unknown; such a record is rebuilt while its run still exists.
 	labelComplete = "bifrost.io/release-complete"
@@ -236,19 +244,21 @@ func builtImage(tr *unstructured.Unstructured) (image, digest string, declared, 
 // buildRecord assembles a Record from a finished run and its TaskRuns.
 func buildRecord(run *unstructured.Unstructured, rule Rule, taskRuns []unstructured.Unstructured, now time.Time) Record {
 	rec := Record{
-		Run:         run.GetName(),
-		Pipeline:    run.GetLabels()["tekton.dev/pipeline"],
-		Lane:        rule.Lane,
-		Env:         rule.Env,
-		Deploys:     rule.Deploys,
-		Revision:    runParam(run, "revision"),
-		Tag:         runParam(run, "tag"),
-		FromRun:     run.GetLabels()["bifrost.io/from-stg-run"],
-		Cause:       run.GetLabels()["bifrost.io/cause"],
-		StartedAt:   nestedTime(run.Object, "status", "startTime"),
-		CompletedAt: nestedTime(run.Object, "status", "completionTime"),
-		Repos:       map[string]RepoBuild{},
-		RecordedAt:  now,
+		Run:          run.GetName(),
+		Pipeline:     run.GetLabels()["tekton.dev/pipeline"],
+		Lane:         rule.Lane,
+		Env:          rule.Env,
+		Deploys:      rule.Deploys,
+		Revision:     runParam(run, "revision"),
+		Tag:          runParam(run, "tag"),
+		FromRun:      run.GetLabels()["bifrost.io/from-stg-run"],
+		Cause:        run.GetLabels()["bifrost.io/cause"],
+		BuildNode:    run.GetAnnotations()[AnnBuildNode],
+		BuildNodeWhy: run.GetAnnotations()[AnnBuildNodeWhy],
+		StartedAt:    nestedTime(run.Object, "status", "startTime"),
+		CompletedAt:  nestedTime(run.Object, "status", "completionTime"),
+		Repos:        map[string]RepoBuild{},
+		RecordedAt:   now,
 	}
 	pinned := pinnedClones(run)
 	paramSHA := ""

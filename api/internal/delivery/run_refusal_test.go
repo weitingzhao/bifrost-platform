@@ -5,8 +5,10 @@ package delivery
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,6 +21,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -647,5 +650,145 @@ func TestAStartOverHTTPNamesWhoAskedForIt(t *testing.T) {
 		if got := createdContractRun(t, dyn).GetAnnotations()[AnnRequester]; got != tc.want {
 			t.Fatalf("header %q: requester %q, want %q", tc.header, got, tc.want)
 		}
+	}
+}
+
+func placementNode(host string, ready, cordoned bool, cpu string) *corev1.Node {
+	status := corev1.ConditionTrue
+	if !ready {
+		status = corev1.ConditionFalse
+	}
+	return &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: host, Labels: map[string]string{hostIDLabel: host, "kubernetes.io/arch": "amd64"}},
+		Spec:       corev1.NodeSpec{Unschedulable: cordoned},
+		Status: corev1.NodeStatus{
+			Addresses:   []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "ip-" + host}},
+			Allocatable: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse(cpu), corev1.ResourceMemory: resource.MustParse("16Gi")},
+			Conditions:  []corev1.NodeCondition{{Type: corev1.NodeReady, Status: status}},
+		},
+	}
+}
+
+func placementPod(name, node, cpu string, phase corev1.PodPhase) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "cicd"},
+		Spec: corev1.PodSpec{NodeName: node, Containers: []corev1.Container{{Name: "c", Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse(cpu)}}}}},
+		Status: corev1.PodStatus{Phase: phase},
+	}
+}
+
+// 2026-11-18, the Owner: builds go to the fast node, and to the slower one when
+// it is full. #598's soft preference sent 11 of 13 deliveries to 05, where the
+// same build takes twice as long. The latencies are the 7-day readings of that
+// day. Whatever the nodes say, a release must not wait for one of them.
+// Positive control: without the tier in the sort, "today" picks ubt-k3s-05 (the
+// first by name); the "requests" case fails if finished pods are not skipped.
+func TestBuildPlacementFollowsTheProfiles(t *testing.T) {
+	const fast, slow, added, batch = "ubt-k3s-07", "ubt-k3s-05", "ubt-k3s-08", "ubt-k3s-01"
+	quiet := func(latency float64) NodeMetrics {
+		return NodeMetrics{WriteLatencySeconds: latency, CPUBusy: 0.2, DiskBusy: 0.1, MemoryAvailable: 0.6}
+	}
+	today := func() map[string]NodeMetrics {
+		return map[string]NodeMetrics{"ip-" + fast: quiet(0.0068), "ip-" + slow: quiet(0.161), "ip-" + added: quiet(0.001), "ip-" + batch: quiet(0.0009)}
+	}
+	with := func(change func(m map[string]NodeMetrics)) map[string]NodeMetrics {
+		m := today()
+		change(m)
+		return m
+	}
+	set := func(host string, change func(*NodeMetrics)) map[string]NodeMetrics {
+		return with(func(m map[string]NodeMetrics) { n := m["ip-"+host]; change(&n); m["ip-"+host] = n })
+	}
+	denied := placementNode(batch, true, false, "16")
+	denied.Labels[batchLabel] = "deny"
+	two := []runtime.Object{placementNode(fast, true, false, "16"), placementNode(slow, true, false, "16"), denied}
+	for _, c := range []struct {
+		name    string
+		objects []runtime.Object
+		metrics map[string]NodeMetrics
+		want    string
+		why     string
+	}{
+		{"today: 07 first, the batch-deny node never", append(two[:3:3], placementPod("done", fast, "15", corev1.PodSucceeded)), today(), fast, "disk tier 1"},
+		{"a new node that measures well is chosen", append(two[:3:3], placementNode(added, true, false, "16")), today(), added, "disk tier 0"},
+		{"CPU busy", two, set(fast, func(n *NodeMetrics) { n.CPUBusy = 0.9 }), slow, "CPU 90% busy"},
+		{"disk busy", two, set(fast, func(n *NodeMetrics) { n.DiskBusy = 0.9 }), slow, "disk 90% busy"},
+		{"memory short", two, set(fast, func(n *NodeMetrics) { n.MemoryAvailable = 0.1 }), slow, "memory 10% available"},
+		// The fake client ignores the pod list's node filter, so 05 is made big enough to hold 07's pod too.
+		{"requests leave no room", []runtime.Object{placementNode(fast, true, false, "16"), placementNode(slow, true, false, "32"), placementPod("busy", fast, "13", corev1.PodRunning)}, today(), slow, "CPU unrequested"},
+		{"cordoned", []runtime.Object{placementNode(fast, true, true, "16"), placementNode(slow, true, false, "16")}, today(), slow, "cordoned"},
+		{"not ready", []runtime.Object{placementNode(fast, false, false, "16"), placementNode(slow, true, false, "16")}, today(), slow, "not ready"},
+		{"not measured", two, with(func(m map[string]NodeMetrics) { delete(m, "ip-"+fast) }), slow, "not measured"},
+		{"nothing fits: left to the scheduler", two, map[string]NodeMetrics{}, "", "no node fits"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := NewService(&config.ClusterEntry{ID: "test"})
+			s.SetClientsetForTest(k8sfake.NewSimpleClientset(c.objects...))
+			s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) { return c.metrics, nil })
+			spec := map[string]any{}
+			got, placed := s.placeBuild(context.Background(), "bifrost-deliver-platform", spec)
+			if !placed || got.Node != c.want || !strings.Contains(got.Why, c.why) {
+				t.Fatalf("got %+v placed=%v, want node %q and a reason with %q", got, placed, c.want, c.why)
+			}
+			if c.want == "" && len(spec) != 0 {
+				t.Fatalf("an unplaced run was pinned: %v", spec)
+			}
+		})
+	}
+}
+
+// Same origin: metrics that cannot be read leave the run to the scheduler and
+// say so, and a platform with no reader changes nothing about its runs.
+// Positive control: treating the error as an empty answer loses "could not be read".
+func TestBuildPlacementWithoutMetricsLeavesTheRunAlone(t *testing.T) {
+	s := NewService(&config.ClusterEntry{ID: "test"})
+	s.SetClientsetForTest(k8sfake.NewSimpleClientset(placementNode("ubt-k3s-07", true, false, "16")))
+	spec := map[string]any{}
+	if _, placed := s.placeBuild(context.Background(), "bifrost-deliver-platform", spec); placed || len(spec) != 0 {
+		t.Fatalf("placed without a reader: %v", spec)
+	}
+	s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) { return nil, errors.New("prometheus down") })
+	p, placed := s.placeBuild(context.Background(), "bifrost-deliver-platform", spec)
+	if !placed || p.Node != "" || !strings.Contains(p.Why, "could not be read") || len(spec) != 0 {
+		t.Fatalf("placement = %+v %v, spec %v", p, placed, spec)
+	}
+}
+
+// Same origin: the choice reaches the run, beside the amd64 selector kaniko
+// needs; another pipeline's run is left alone.
+func TestAStartPinsOnlyThePlacedPipeline(t *testing.T) {
+	s := NewService(&config.ClusterEntry{ID: "test"})
+	s.SetClientsetForTest(k8sfake.NewSimpleClientset(placementNode("ubt-k3s-07", true, false, "16")))
+	s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) {
+		return map[string]NodeMetrics{"ip-ubt-k3s-07": {WriteLatencySeconds: 0.007, MemoryAvailable: 0.6}}, nil
+	})
+	spec := map[string]any{"taskRunTemplate": amd64CITaskRunTemplate()}
+	p, placed := s.placeBuild(context.Background(), "bifrost-deliver-platform", spec)
+	if !placed || p.Node != "ubt-k3s-07" {
+		t.Fatalf("placement = %+v %v", p, placed)
+	}
+	selector := spec["taskRunTemplate"].(map[string]any)["podTemplate"].(map[string]any)["nodeSelector"].(map[string]any)
+	if selector[hostIDLabel] != "ubt-k3s-07" || selector["kubernetes.io/arch"] != "amd64" {
+		t.Fatalf("selector = %v", selector)
+	}
+	other := map[string]any{}
+	if _, placed := s.placeBuild(context.Background(), "bifrost-ci-platform", other); placed || len(other) != 0 {
+		t.Fatalf("another pipeline was placed: %v", other)
+	}
+}
+
+// Same origin: a node missing one reading is "not measured", never judged on
+// zeros, which would read as an idle node with a perfect disk.
+// Positive control: dropping the presence checks makes 10.0.0.2 appear.
+func TestJoinNodeMetricsKeepsOnlyCompleteNodes(t *testing.T) {
+	got := JoinNodeMetrics(
+		map[string]float64{"10.0.0.1": 0.007, "10.0.0.2": 0.001, "10.0.0.3": math.NaN()},
+		map[string]float64{"10.0.0.1": 0.5, "10.0.0.3": 0.1},
+		map[string]float64{"10.0.0.1": 0.2, "10.0.0.2": 0.1, "10.0.0.3": 0.1},
+		map[string]float64{"10.0.0.1": 0.6, "10.0.0.2": 0.9, "10.0.0.3": 0.9},
+	)
+	if len(got) != 1 || got["10.0.0.1"].WriteLatencySeconds != 0.007 || got["10.0.0.1"].MemoryAvailable != 0.6 {
+		t.Fatalf("got %+v", got)
 	}
 }
