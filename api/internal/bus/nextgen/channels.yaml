@@ -37,7 +37,7 @@ channels:
   - {id: L06, class: K2, disposition: replaced, step: "3", what: "plan-observations：每分钟读 Gitea 历史记成 plan_observation", by: "门·代码（git.main.advanced 后按事件读历史）+plan.fact.changed"}
   - {id: L07, class: K10, disposition: kept, step: "3", what: "facts-rules：每 15 秒求值（部署记录、CI 判定、审批问题），写计划节点状态", by: "原因：它是规则求值引擎本身，不是通道；15 秒轮询改为被 ci.verdict.changed/release.deploy.finished/approval.card.* 唤醒，轮询降为登记过的对账（入户口子①+登记表）"}
   - {id: L08, class: K11, disposition: announced, step: "2", what: "full-ci：每天 03:00 起全量 CI（每分钟看时钟）", by: "门·集群看到它起的 run；登记为定时作业", cut: {at: "2026-11-18", evidence: ["topic:ci.run.started"]}}
-  - {id: L09, class: K2, disposition: replaced, step: "2", what: "release recorder：每 5 分钟（+Kick）把成功 run 记成 ConfigMap 发布记录", by: "门·集群+订阅者写发布事实进账（release.deploy.finished）"}
+  - {id: L09, class: K2, disposition: replaced, step: "2", what: "release recorder：每 5 分钟（+Kick）把成功 run 记成 ConfigMap 发布记录", by: "门·集群+订阅者写发布事实进账（release.deploy.finished）", cut: {at: "2026-11-18", evidence: ["reader:releases-tick", "reader:releases-current"]}}
   - {id: L10, class: K11, disposition: kept, step: "0", what: "checklist prober：每 10 分钟轮询 platform-api 自己的 8 条 GET 路由", by: "原因：对账兜底；登记后保留，间隔放长（推断：可进一步改成进程内直读读口，不再走 HTTP 自己敲自己）"}
   - {id: L11, class: K5, disposition: announced, step: "5", what: "patrol autopilot：每 30 秒扫 skill 到期表，读平台 GET，可能 delete_pod，轮询 Cursor 云端 run", by: "动作与卡的分级不变（指令道只定规矩）；它读平台改读读口；delete_pod 等结果以 audit.action.recorded 宣布。Cursor 云端轮询部分若 Cursor 已删则是死路（推断，材料说 Cursor 一侧已删，代码仍在）"}
   - {id: L12, class: K5, disposition: announced, step: "3", what: "ib-gateway auto-repair：每 30 秒读 Redis 健康键，必要时发 reconnect_all 到 ib:operator:cmd 并每 2 秒读结果", by: "命令流本身不动（见 N08）；修复结果以 plugin.status.changed 宣布"}
@@ -53,7 +53,7 @@ channels:
   - {id: L22, class: K9, disposition: announced, step: "3", what: "run-window follower：每个被跟随 run 一个 20 秒循环续窗口", by: "锁和续期留在原处（锁的原语）；窗口变化由 门·集群 看 ConfigMap 宣布", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
   - {id: L23, class: K9, disposition: announced, step: "3", what: "run-window recovery+队列推进：每 20 秒（api 与 workers 都跑，靠 CAS 抢）", by: "推进逻辑留在原处；队头「轮到你」写 seat.mail.arrived"}
   - {id: L24, class: K2, disposition: replaced, step: "3", what: "窗口到期观察：每 15 秒读窗口 ConfigMap，到期发提醒信（写 PG 事件流 release-window:<ns> 那段已删，a6862d84，底座线 11-17；观察和提醒信还在）", by: "门·集群（watch ConfigMap，缺口由 watch 加重新列出补上）"}
-  - {id: L25, class: K11, disposition: announced, step: "3", what: "agentrt schema watch：每分钟比 PG 已应用迁移与期望", by: "留在原处作对账；迁移应用时 migration.applied 由门·平台库写"}
+  - {id: L25, class: K11, disposition: announced, step: "3", what: "agentrt schema watch：每分钟比 PG 已应用迁移与期望", by: "留在原处作对账；迁移应用时 migration.applied 由门·平台库写", cut: {at: "2026-11-18", evidence: ["reader:schema-watch"]}}
   - {id: L26, class: K3, disposition: kept, step: "none", what: "agentrt 连接重试：PG 连不上时 2 秒起指数退避", by: "原因：进程连自己的数据库的重试，不是沟通"}
   - {id: L27, class: K6, disposition: kept, step: "none", what: "alertrelay 心跳检查：每分钟看 Mac mini 内存里的 Watchdog 时间戳，15 分钟没到发 CRITICAL", by: "原因：独立于总线的报警路（设计原则 6）；单点问题归 Owner 决定 3"}
   - {id: L28, class: K3, disposition: replaced, step: "3", what: "请求内等待一组：动作里等外部对象，各 2 秒（至少 5 份循环）", by: "入户口子③（订阅并等）或①；按被等对象换成对应主题"}

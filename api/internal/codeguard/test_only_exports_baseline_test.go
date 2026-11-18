@@ -60,7 +60,6 @@ var exportedForOtherTests = []string{
 	"api/internal/agentrt/landingci.PlatformRepoURL",
 	"api/internal/agentrt/landingci.TaskView",
 	"api/internal/agentrt/loopalert.FailuresToAlert",
-	"api/internal/agentrt/migrate.Applied",
 	"api/internal/agentrt/migrate.Files",
 	"api/internal/agentrt/migrate.RunFiles",
 	"api/internal/agentrt/migrate.SchemaCurrent",

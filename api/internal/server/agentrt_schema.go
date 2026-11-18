@@ -7,7 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/schemaevents"
 )
 
 // What platform-api reads of the agentrt schema (TD-411: STG ran a platform
@@ -31,6 +34,10 @@ type schemaWatch struct {
 	err    string
 	// log writes a line at a level; nil writes it with slog.
 	log func(level slog.Level, msg string, args ...any)
+	// announce, when set, says the applied migrations on the bus; said is the
+	// newest this process has seen said.
+	announce func(ctx context.Context, applied []migrate.Applied) error
+	said     int
 }
 
 // run reads the schema now and every schemaEvery until ctx ends.
@@ -63,6 +70,9 @@ func (w *schemaWatch) check(ctx context.Context, q migrate.Querier) {
 		w.status, w.err = &st, ""
 	}
 	w.mu.Unlock()
+	if err == nil {
+		w.say(ctx, st.Applied)
+	}
 	switch {
 	case err != nil && prevErr == "":
 		w.logf(slog.LevelWarn, "agentrt: the database's schema could not be read", "err", err)
@@ -77,6 +87,29 @@ func (w *schemaWatch) check(ctx context.Context, q migrate.Querier) {
 	default:
 		w.logf(slog.LevelInfo, "agentrt: the database's schema is current")
 	}
+}
+
+// say hands the applied migrations to the bus when a newer one is there; a
+// failure is said again at the next read.
+func (w *schemaWatch) say(ctx context.Context, applied []migrate.Applied) {
+	if w.announce == nil {
+		return
+	}
+	readerseen.Saw("schema-watch")
+	newest := 0
+	for _, a := range applied {
+		newest = max(newest, a.ID)
+	}
+	if newest <= w.said {
+		return
+	}
+	actx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := w.announce(actx, applied); err != nil {
+		w.logf(slog.LevelWarn, "agentrt: the applied migrations were not said on the bus", "err", err)
+		return
+	}
+	w.said = newest
 }
 
 func sameSchema(a, b migrate.SchemaStatus) bool {
@@ -125,4 +158,16 @@ func (s *Server) agentRuntimeSchema() map[string]any {
 		return (*schemaWatch)(nil).health()
 	}
 	return s.agentRuntime.schema.health()
+}
+
+// announceMigrations says the applied migrations through db (bus/schemaevents).
+func announceMigrations(db eventlog.DB) func(context.Context, []migrate.Applied) error {
+	return func(ctx context.Context, applied []migrate.Applied) error {
+		ms := make([]schemaevents.Migration, 0, len(applied))
+		for _, a := range applied {
+			ms = append(ms, schemaevents.Migration{ID: a.ID, SHA256: a.SHA256})
+		}
+		_, err := schemaevents.Announce(ctx, db, ms)
+		return err
+	}
 }
