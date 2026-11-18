@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -367,5 +368,30 @@ func TestFailedWinsOverUnknown(t *testing.T) {
 	if v.Verdict != Failed || !reflect.DeepEqual(v.Failed, []string{ItemSchema}) ||
 		!reflect.DeepEqual(v.Unknown, []string{ItemRestarts, ItemReady, ItemPanics}) {
 		t.Fatalf("verdict = %+v", v)
+	}
+}
+
+// 2026-11-17, the coordinator: the check read the run cache every 30 seconds;
+// the bus now wakes it on ci.run.finished. Only a succeeded run of the
+// watched pipeline starts a pass (the CI line: subscribe to the run's finish,
+// filtered by run-name prefix and change).
+func TestKicksOnlyOnTheWatchedPipelinesSucceededRun(t *testing.T) {
+	sha := strings.Repeat("a", 40)
+	cases := []struct {
+		subject, change string
+		want            bool
+	}{
+		{"bifrost-deliver-platform-1794962465@" + sha, "succeeded", true},
+		{"bifrost-deliver-platform-1794962465@" + sha, "failed", false},
+		{"ci-platform-1794962465@" + sha, "succeeded", false},
+		{"bifrost-deliver-platform@" + sha, "succeeded", false},
+	}
+	for _, c := range cases {
+		if got := Kicks("bifrost-deliver-platform", c.subject, c.change); got != c.want {
+			t.Errorf("Kicks(%q, %q) = %v, want %v", c.subject, c.change, got, c.want)
+		}
+	}
+	if Kicks("", "x-1@"+sha, "succeeded") {
+		t.Error("no pipeline kicked")
 	}
 }

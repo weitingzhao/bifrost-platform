@@ -81,6 +81,9 @@ type busWiring struct {
 	// wakeEnv is the environment whose ledger those ids are of (the
 	// consumer's AGENTRT_ENV).
 	wakeEnv atomic.Value
+	// postPass is the post-release check's pass (postReleaseSource), which
+	// the bus starts too (consumePostRelease); nil while the check is off.
+	postPass atomic.Pointer[func(context.Context, string) error]
 }
 
 // noteWake keeps id as the newest event worth a head-release pass.
@@ -447,6 +450,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 		}
 		s.consumeSubscriptions(ctx, js, env, pool)
 		s.startRunHooks(ctx, js, env)
+		s.consumePostRelease(ctx, js, env)
 		r := &relay.Relay{Ledger: ledger, Out: &relay.JSOut{JS: js, Stream: relay.EventStreamName(relay.Tenant, env)},
 			Tenant: rocket, Env: env, Logf: busLogf}
 		r.Run(ctx, relay.Listen(ctx, pool, busLogf))

@@ -120,7 +120,7 @@ channels:
       reconcile: "gate-cluster relist of PipelineRuns"
       on_unread: stale
       retention: 30d
-      consumers: [headrelease, console]
+      consumers: [headrelease, postrelease, console]
       exports: []
       replaces: [L02, L28, N21, W04, C01, X-A15, X-B16]
   ci.verdict.changed:

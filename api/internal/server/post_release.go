@@ -18,9 +18,13 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gatecluster"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"github.com/weitingzhao/bifrost-platform/api/internal/postrelease"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile/k8sstate"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -339,10 +343,7 @@ func (s *Server) postReleaseSource() func(context.Context) error {
 	if s.delivery == nil || !postReleaseOn() {
 		return nil
 	}
-	pipeline := strings.TrimSpace(os.Getenv(postReleasePipelineEnv))
-	if pipeline == "" {
-		pipeline = postReleasePipeline
-	}
+	pipeline := postReleasePipelineName()
 	settle := postReleaseSettleOf(os.Getenv(postReleaseSettleEnv))
 	namespace := k8sstate.Namespace()
 	if namespace == "" {
@@ -354,7 +355,12 @@ func (s *Server) postReleaseSource() func(context.Context) error {
 	var mu sync.Mutex
 	done := map[string]bool{} // the runs this process has recorded a verdict for
 	lastWhy := ""
-	return func(ctx context.Context) error {
+	// One pass at a time: the loop's and the bus's (consumePostRelease)
+	// would otherwise both judge a run before either recorded it.
+	var passMu sync.Mutex
+	pass := func(ctx context.Context, path string) error {
+		passMu.Lock()
+		defer passMu.Unlock()
 		ctx, cancel := context.WithTimeout(ctx, postReleasePass)
 		defer cancel()
 		// Only this pipeline's runs are read: from the bus's run cache when
@@ -392,19 +398,97 @@ func (s *Server) postReleaseSource() func(context.Context) error {
 		done[run.Name] = true
 		lastWhy = ""
 		mu.Unlock()
-		s.recordPostRelease(v)
+		s.recordPostRelease(v, path, time.Since(run.Completed))
 		return nil
 	}
+	s.bus.postPass.Store(&pass)
+	return func(ctx context.Context) error { return pass(ctx, postPathLoop) }
+}
+
+// The two paths that start a pass, named on the verdict: the 30-second loop,
+// and the bus (ci.run.finished of the watched pipeline, at its settle time).
+// Run side by side (2026-11-17, the coordinator) until the verdicts say
+// which comes first and by how much; then the loop is retired or kept.
+const (
+	postPathLoop = "loop"
+	postPathBus  = "bus"
+)
+
+// postReleasePipelineName is the pipeline whose runs are judged.
+func postReleasePipelineName() string {
+	if p := strings.TrimSpace(os.Getenv(postReleasePipelineEnv)); p != "" {
+		return p
+	}
+	return postReleasePipeline
 }
 
 // recordPostRelease writes the verdict where the loop's release decisions go
 // (recordHeadDecision): the platform's audit log, and the process log.
-func (s *Server) recordPostRelease(v postrelease.Verdict) {
+//
+// path is which path started the pass (postPathLoop, postPathBus) and after
+// is the time from the run's completion to the verdict: the side-by-side
+// reading. The audit record keeps the verdict as it was; the path rides in
+// the process log.
+func (s *Server) recordPostRelease(v postrelease.Verdict, path string, after time.Duration) {
 	detail, err := json.Marshal(v)
 	if err != nil {
 		detail = []byte(v.Verdict)
 	}
 	slog.Info("post release check", "run", v.Run.Name, "commit", v.Run.Commit, "verdict", v.Verdict,
-		"failed", strings.Join(v.Failed, ","), "unknown", strings.Join(v.Unknown, ","), "record", string(detail))
+		"failed", strings.Join(v.Failed, ","), "unknown", strings.Join(v.Unknown, ","),
+		"path", path, "after_completion_s", int(after.Seconds()), "record", string(detail))
 	s.audit.RecordDirect(postReleasePrincipal, actuation.RoleOperator, postReleaseAction, "run/"+v.Run.Name, v.Verdict, string(detail))
 }
+
+// consumePostRelease is the post-release check's durable consumer on
+// ci.run.finished (2026-11-17, the coordinator: the check read the run cache
+// every 30 seconds). A succeeded run of the watched pipeline starts a pass
+// when the run has settled; the loop keeps running beside it, and the pass
+// judges each run once whichever path comes first. Every event leaves a
+// receipt. ci.run.finished and not release.deploy.finished: the check runs
+// on STG, whose ledger has no deploy events (the recorder is PROD's), and
+// every environment's gate-cluster sees every run (the CI line, 11-17).
+func (s *Server) consumePostRelease(ctx context.Context, js jetstream.JetStream, env string) {
+	if !postReleaseOn() || s.delivery == nil {
+		return
+	}
+	pipeline := postReleasePipelineName()
+	settle := postReleaseSettleOf(os.Getenv(postReleaseSettleEnv))
+	receipts := &relay.Receipts{JS: js, Tenant: relay.Tenant, Env: env}
+	cc, err := relay.ConsumeDurable(ctx, js, relay.Tenant, env, postReleaseConsumer, []string{gatecluster.TypeRunFinished}, func(e relay.Envelope) error {
+		if postrelease.Kicks(pipeline, e.Subject, e.Change) {
+			// Settle from now: the event follows the run's completion by
+			// seconds, and a pass a little early only says "settles until".
+			safego.Go("post-release-bus-pass", func() {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(settle + postReleaseBusMargin):
+				}
+				if p := s.bus.postPass.Load(); p != nil {
+					if err := (*p)(ctx, postPathBus); err != nil && ctx.Err() == nil {
+						slog.Warn("post release check: pass started by the bus", "event", e.ID, "error", err)
+					}
+				}
+			})
+		}
+		rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		if err := receipts.Publish(rctx, e.ID, postReleaseConsumer); err != nil {
+			slog.Warn("post release check: receipt", "event", e.ID, "error", err)
+		}
+		return nil
+	})
+	if err != nil {
+		slog.Error("post release check: bus consumer; the 30-second loop alone judges", "error", err)
+		return
+	}
+	context.AfterFunc(ctx, func() { cc.Stop() })
+	slog.Info("post release check: woken by ci.run.finished beside its 30-second loop", "pipeline", pipeline)
+}
+
+// postReleaseConsumer is the check's durable consumer (and receipt) name.
+const postReleaseConsumer = "postrelease"
+
+// postReleaseBusMargin is past the settle time, so the bus's pass finds the run settled.
+const postReleaseBusMargin = 5 * time.Second

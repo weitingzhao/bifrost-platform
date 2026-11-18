@@ -328,3 +328,13 @@ func policy(ctx context.Context, w World, run Run) Item {
 	}
 	return Item{ItemPolicy, Pass, reading}
 }
+
+// Kicks says whether a ci.run.finished event (subject "<run>@<commit>",
+// change the run's result) should start a pass: a succeeded run named as the
+// pipeline's ("<pipeline>-<n>"). A wider match is harmless: the pass reads
+// each run's pipeline itself; this only starts it (2026-11-17, the bus wakes
+// the check beside its 30-second loop).
+func Kicks(pipeline, subject, change string) bool {
+	run, _, _ := strings.Cut(subject, "@")
+	return pipeline != "" && change == "succeeded" && strings.HasPrefix(run, pipeline+"-")
+}

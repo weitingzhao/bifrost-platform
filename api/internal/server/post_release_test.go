@@ -258,7 +258,7 @@ func TestPostReleaseVerdictIsFoundAfterARestart(t *testing.T) {
 	if h.srv.audit.Has(postReleaseAction, "run/prod-1") {
 		t.Fatal("found before it was recorded")
 	}
-	h.srv.recordPostRelease(postrelease.Verdict{Run: postrelease.Run{Name: "prod-1"}, Verdict: postrelease.Passed})
+	h.srv.recordPostRelease(postrelease.Verdict{Run: postrelease.Run{Name: "prod-1"}, Verdict: postrelease.Passed}, postPathLoop, 0)
 	if !h.srv.audit.Has(postReleaseAction, "run/prod-1") || h.srv.audit.Has(postReleaseAction, "run/prod-2") {
 		t.Fatal("the record is not found by its run")
 	}

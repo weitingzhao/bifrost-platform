@@ -89,7 +89,9 @@ func TestParseRefuses(t *testing.T) {
 // (platform-workers, platform-api, seat:*) on every topic, so "who reads this"
 // could not be read off it. It names only readers the code runs: headrelease
 // (its durable consumer, server/bus_wire.go headReleaseWakes) on the three
-// events it consumes, and the Bus page (console) on every topic. Subscription
+// events it consumes, the post-release check (server/post_release.go
+// consumePostRelease) on ci.run.finished, and the Bus page (console) on
+// every topic. Subscription
 // rows are their own register; a seat's ad hoc wait shows in the receipts.
 func TestRegisterNamesRealReaders(t *testing.T) {
 	tenants, err := Load()
@@ -109,6 +111,10 @@ func TestRegisterNamesRealReaders(t *testing.T) {
 				has = true
 			case "console":
 				console = true
+			case "postrelease":
+				if typ != "ci.run.finished" {
+					t.Errorf("%s: the post-release check reads only ci.run.finished", typ)
+				}
 			default:
 				t.Errorf("%s: reader %q is run by no code", typ, r)
 			}
