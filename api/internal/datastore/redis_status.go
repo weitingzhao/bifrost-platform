@@ -1,4 +1,4 @@
-package cluster
+package datastore
 
 import (
 	"context"
@@ -91,23 +91,23 @@ type RedisStatusResponse struct {
 	GeneratedAt     time.Time                 `json:"generated_at"`
 }
 
-func (s *Service) RedisStatus(ctx context.Context) RedisStatusResponse {
+// ReadRedis reads the status of the platform's Redis instances.
+func ReadRedis(ctx context.Context, src Source) RedisStatusResponse {
 	now := time.Now().UTC()
-	base := s.baseMeta(now)
 	resp := RedisStatusResponse{
-		ClusterID:    base.ClusterID,
+		ClusterID:    src.ClusterID,
 		TargetsTotal: len(redisTargetCatalog),
 		GeneratedAt:  now,
 	}
 
-	clientset, _, err := s.buildClient()
+	clientset, err := src.Client()
 	if err != nil {
 		resp.Reachability = probe.ReachFail
 		resp.Summary = err.Error()
 		return resp
 	}
 
-	snap, _ := s.buildReadinessSnapshot(ctx)
+	snap := src.Snapshot(ctx)
 	resp.MinIO = minioDep(snap)
 	resp.Backup = redisBackupDep(snap, resp.MinIO.Reachability)
 
@@ -147,7 +147,7 @@ func listDataRedisServices(ctx context.Context, clientset kubernetes.Interface) 
 	return out
 }
 
-func probeRedisTarget(spec redisTargetSpec, snap readinessSnapshot, services map[string]corev1.Service) RedisTargetInstanceView {
+func probeRedisTarget(spec redisTargetSpec, snap Snapshot, services map[string]corev1.Service) RedisTargetInstanceView {
 	policy := "noeviction"
 	if spec.role == "queue" || spec.role == "live+queue" {
 		if spec.role == "queue" {
@@ -166,8 +166,8 @@ func probeRedisTarget(spec redisTargetSpec, snap readinessSnapshot, services map
 	}
 
 	key := redisDataNamespace + "/" + spec.name
-	if dep, ok := snap.deployments[key]; ok {
-		reach, detail := deploymentReach(&dep)
+	if dep, ok := snap.Deployments[key]; ok {
+		reach, detail := snap.DeploymentReach(&dep)
 		view.Reach = reach
 		view.Detail = detail + " · Bitnami target @ data NS"
 		if reach == probe.ReachOK {
@@ -255,12 +255,12 @@ func buildRedisEnvEndpoints(targets []RedisTargetInstanceView) []RedisEnvEndpoin
 	return out
 }
 
-func embeddedRedisProbe(snap readinessSnapshot) []RedisEmbeddedView {
-	out := make([]RedisEmbeddedView, 0, len(snap.appEnvs))
-	for _, env := range snap.appEnvs {
+func embeddedRedisProbe(snap Snapshot) []RedisEmbeddedView {
+	out := make([]RedisEmbeddedView, 0, len(snap.Environments))
+	for _, env := range snap.Environments {
 		ns := env.Namespace
 		key := ns + "/redis"
-		d, ok := snap.deployments[key]
+		d, ok := snap.Deployments[key]
 		if !ok {
 			out = append(out, RedisEmbeddedView{
 				Namespace: ns, Host: "redis", Reach: probe.ReachOK,
@@ -279,7 +279,7 @@ func embeddedRedisProbe(snap readinessSnapshot) []RedisEmbeddedView {
 			})
 			continue
 		}
-		reach, detail := deploymentReach(&d)
+		reach, detail := snap.DeploymentReach(&d)
 		image := deploymentImage(&d)
 		out = append(out, RedisEmbeddedView{
 			Namespace: ns,
@@ -299,8 +299,8 @@ func deploymentImage(d *appsv1.Deployment) string {
 	return d.Spec.Template.Spec.Containers[0].Image
 }
 
-func redisBackupDep(snap readinessSnapshot, minioReach probe.Reachability) ServiceDependencyView {
-	nfsHot := clusterCapDep(snap, "storage-class-nfs-hot", "nfs-hot")
+func redisBackupDep(snap Snapshot, minioReach probe.Reachability) ServiceDependencyView {
+	nfsHot := snap.NFSHot
 	reach := probe.ReachDegraded
 	detail := "RDB → s3://redis-backup @ MinIO (phase ⑥)"
 	if minioReach == probe.ReachOK && nfsHot.Reachability == probe.ReachOK {
@@ -408,7 +408,17 @@ func summarizeRedisStatus(r RedisStatusResponse) (probe.Reachability, string) {
 	return probe.ReachDegraded, "No Redis live targets and no embedded redis"
 }
 
-func redisTargetDep(snap readinessSnapshot, name, role, env string) ServiceDependencyView {
+// RedisTargetDependencies is one dependency per Redis instance the platform
+// expects in the data namespace, in catalog order.
+func RedisTargetDependencies(snap Snapshot) []ServiceDependencyView {
+	out := make([]ServiceDependencyView, 0, len(redisTargetCatalog))
+	for _, spec := range redisTargetCatalog {
+		out = append(out, redisTargetDep(snap, spec.name, spec.role, spec.environment))
+	}
+	return out
+}
+
+func redisTargetDep(snap Snapshot, name, role, env string) ServiceDependencyView {
 	spec := redisTargetSpec{name: name, role: role, environment: env}
 	for _, s := range redisTargetCatalog {
 		if s.name == name {
@@ -425,9 +435,11 @@ func redisTargetDep(snap readinessSnapshot, name, role, env string) ServiceDepen
 	}
 }
 
-func embeddedRedisDep(snap readinessSnapshot, namespace string) *ServiceDependencyView {
+// EmbeddedRedisDependency is the redis Deployment still running in an
+// application namespace, nil when there is none or it is scaled to zero.
+func EmbeddedRedisDependency(snap Snapshot, namespace string) *ServiceDependencyView {
 	key := namespace + "/redis"
-	d, ok := snap.deployments[key]
+	d, ok := snap.Deployments[key]
 	if !ok {
 		return nil
 	}
@@ -438,7 +450,7 @@ func embeddedRedisDep(snap readinessSnapshot, namespace string) *ServiceDependen
 	if desired == 0 {
 		return nil
 	}
-	reach, detail := deploymentReach(&d)
+	reach, detail := snap.DeploymentReach(&d)
 	return &ServiceDependencyView{
 		ID:           "embedded-redis-" + namespace,
 		Label:        fmt.Sprintf("Embedded redis (%s)", namespace),

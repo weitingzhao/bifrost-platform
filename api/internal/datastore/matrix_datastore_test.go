@@ -1,4 +1,4 @@
-package cluster
+package datastore
 
 import (
 	"testing"
@@ -29,7 +29,7 @@ func TestBuildMatrixDatastoreSnapshot_PerEnv(t *testing.T) {
 		},
 	}
 
-	snap := BuildMatrixDatastoreSnapshot(pg, redis)
+	snap := buildMatrixDatastoreSnapshot(pg, redis)
 	for _, env := range []string{"dev", "stg", "prod"} {
 		row, ok := snap.ByEnv[env]
 		if !ok {

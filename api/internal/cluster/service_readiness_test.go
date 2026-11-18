@@ -359,10 +359,28 @@ func TestPostgresDatabasesComeFromEnvironments(t *testing.T) {
 	if resp.Databases[0].Reach != probe.ReachUnknown {
 		t.Fatalf("database reach without a cluster read = %q, want unknown", resp.Databases[0].Reach)
 	}
-	// With a read, the databases follow the observed CNPG cluster status.
-	dbs := []PostgresDatabaseView{{Name: "a"}}
-	markDatabasesFromCluster(dbs, ServiceDependencyView{Reachability: probe.ReachDegraded, Detail: "ready 1/2"})
-	if dbs[0].Reach != probe.ReachDegraded {
-		t.Fatalf("database reach with a degraded cluster = %q, want degraded", dbs[0].Reach)
+}
+
+func TestEvalRedisDomainPartial(t *testing.T) {
+	replicas := int32(1)
+	snap := readinessSnapshot{
+		clusterCaps: map[string]ClusterCapabilityView{
+			"storage-class-local-path": {Reachability: probe.ReachOK},
+			"storage-class-nfs-hot":    {Reachability: probe.ReachOK},
+		},
+		nodes: []NodeView{
+			{Name: "n1", Architecture: "amd64", Status: "Ready", Reachability: probe.ReachOK},
+		},
+		deployments: map[string]appsv1.Deployment{
+			"bifrost-stg/redis": {
+				ObjectMeta: metav1.ObjectMeta{Name: "redis", Namespace: "bifrost-stg"},
+				Status:     appsv1.DeploymentStatus{Replicas: 1, ReadyReplicas: 1},
+				Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+			},
+		},
+	}
+	d := evalRedisDomain(snap)
+	if d.Status != "partial" && d.Reachability != probe.ReachDegraded {
+		t.Fatalf("status=%s reach=%s summary=%s", d.Status, d.Reachability, d.Summary)
 	}
 }

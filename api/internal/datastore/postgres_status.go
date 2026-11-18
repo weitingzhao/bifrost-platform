@@ -1,4 +1,4 @@
-package cluster
+package datastore
 
 import (
 	"context"
@@ -16,15 +16,18 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
+// Where the platform's PostgreSQL runs. The backup, WAL repair and pod exec
+// actions that stay in cluster act on the same objects.
 const (
-	cnpgClusterName    = "bifrost-postgres"
-	cnpgNamespace      = "data"
-	cnpgOperatorNS     = "cnpg-system"
-	cnpgOperatorDeploy = "cnpg-controller-manager"
-	cnpgLanServiceName = "bifrost-postgres-lan"
+	CNPGClusterName        = "bifrost-postgres"
+	CNPGNamespace          = "data"
+	CNPGOperatorNamespace  = "cnpg-system"
+	CNPGOperatorDeployment = "cnpg-controller-manager"
+	cnpgLanServiceName     = "bifrost-postgres-lan"
 )
 
-var cnpgClusterGVR = schema.GroupVersionResource{
+// CNPGClusterGVR is the CloudNativePG Cluster resource.
+var CNPGClusterGVR = schema.GroupVersionResource{
 	Group: "postgresql.cnpg.io", Version: "v1", Resource: "clusters",
 }
 
@@ -89,24 +92,24 @@ type PostgresStatusResponse struct {
 	GeneratedAt    time.Time              `json:"generated_at"`
 }
 
-func (s *Service) PostgresStatus(ctx context.Context) PostgresStatusResponse {
+// ReadPostgres reads the status of the platform's PostgreSQL.
+func ReadPostgres(ctx context.Context, src Source) PostgresStatusResponse {
 	now := time.Now().UTC()
-	base := s.baseMeta(now)
 	resp := PostgresStatusResponse{
-		ClusterID:   base.ClusterID,
-		RwService:   fmt.Sprintf("%s-rw.%s.svc.cluster.local:5432", cnpgClusterName, cnpgNamespace),
-		RoService:   fmt.Sprintf("%s-ro.%s.svc.cluster.local:5432", cnpgClusterName, cnpgNamespace),
+		ClusterID:   src.ClusterID,
+		RwService:   fmt.Sprintf("%s-rw.%s.svc.cluster.local:5432", CNPGClusterName, CNPGNamespace),
+		RoService:   fmt.Sprintf("%s-ro.%s.svc.cluster.local:5432", CNPGClusterName, CNPGNamespace),
 		GeneratedAt: now,
 		Databases:   []PostgresDatabaseView{},
 	}
 	// The CNPG Database CRs are named after the namespace (infra k8s/data/databases.yaml).
-	for _, e := range s.appEnvs {
+	for _, e := range src.Environments {
 		if e.Database != "" {
 			resp.Databases = append(resp.Databases, PostgresDatabaseView{Name: e.Database, Environment: e.ID, CrName: e.Namespace})
 		}
 	}
 
-	clientset, _, err := s.buildClient()
+	clientset, err := src.Client()
 	if err != nil {
 		resp.Reachability = probe.ReachFail
 		resp.Summary = err.Error()
@@ -114,14 +117,14 @@ func (s *Service) PostgresStatus(ctx context.Context) PostgresStatusResponse {
 		return resp
 	}
 
-	snap, _ := s.buildReadinessSnapshot(ctx)
-	resp.PostgresRole = nodeCovDep(snap, "postgres-role", "PostgreSQL host nodes")
+	snap := src.Snapshot(ctx)
+	resp.PostgresRole = snap.PostgresRole
 
-	resp.Operator = operatorDep(ctx, clientset)
+	resp.Operator = operatorDep(ctx, clientset, snap)
 	resp.MinIO = minioDep(snap)
 	resp.LanAccess = lanAccessProbe(ctx, clientset)
 
-	dyn, dynErr := s.buildDynamicClient()
+	dyn, dynErr := src.Dynamic()
 	if dynErr != nil {
 		resp.CnpgCluster = ServiceDependencyView{
 			ID: "cnpg-cluster", Label: "CloudNativePG cluster",
@@ -167,50 +170,39 @@ func markDatabasesFromCluster(dbs []PostgresDatabaseView, cluster ServiceDepende
 			dbs[i].Detail = "unknown — CNPG cluster status not read: " + cluster.Detail
 			continue
 		}
-		dbs[i].Detail = fmt.Sprintf("from CNPG cluster %s status (%s); the database itself is not probed", cnpgClusterName, cluster.Detail)
+		dbs[i].Detail = fmt.Sprintf("from CNPG cluster %s status (%s); the database itself is not probed", CNPGClusterName, cluster.Detail)
 	}
 }
 
-func (s *Service) buildDynamicClient() (dynamic.Interface, error) {
-	if s.dynamicFactory != nil {
-		return s.dynamicFactory()
-	}
-	cfg, _, err := s.RestConfig()
-	if err != nil {
-		return nil, err
-	}
-	return dynamic.NewForConfig(cfg)
-}
-
-func operatorDep(ctx context.Context, clientset kubernetes.Interface) ServiceDependencyView {
-	dep, err := clientset.AppsV1().Deployments(cnpgOperatorNS).Get(ctx, cnpgOperatorDeploy, metav1.GetOptions{})
+func operatorDep(ctx context.Context, clientset kubernetes.Interface, snap Snapshot) ServiceDependencyView {
+	dep, err := clientset.AppsV1().Deployments(CNPGOperatorNamespace).Get(ctx, CNPGOperatorDeployment, metav1.GetOptions{})
 	if err != nil {
 		return ServiceDependencyView{
 			ID: "cnpg-operator", Label: "CloudNativePG operator",
 			Reachability: probe.ReachDegraded, Detail: "not deployed in cnpg-system",
 		}
 	}
-	reach, detail := deploymentReach(dep)
+	reach, detail := snap.DeploymentReach(dep)
 	return ServiceDependencyView{
 		ID: "cnpg-operator", Label: "CloudNativePG operator", Reachability: reach, Detail: detail,
 	}
 }
 
-func minioDep(snap readinessSnapshot) ServiceDependencyView {
-	return minioDepLabeled(snap, "MinIO backup (nfs-hot)")
+func minioDep(snap Snapshot) ServiceDependencyView {
+	return MinIODependency(snap, "MinIO backup (nfs-hot)")
 }
 
-// minioDepLabeled reports the backup MinIO: the minio Deployment when it runs in
+// MinIODependency reports the backup MinIO: the minio Deployment when it runs in
 // the cluster, the health of the server behind Service data/minio when that
 // Service points outside it (the Deployment is then 0 on purpose).
-func minioDepLabeled(snap readinessSnapshot, label string) ServiceDependencyView {
-	if snap.minio.External {
+func MinIODependency(snap Snapshot, label string) ServiceDependencyView {
+	if snap.MinIO.External {
 		return ServiceDependencyView{
 			ID: "minio-backup-external", Label: "MinIO backup (outside the cluster)",
-			Reachability: snap.minio.Reach, Detail: snap.minio.Detail,
+			Reachability: snap.MinIO.Reach, Detail: snap.MinIO.Detail,
 		}
 	}
-	return deploymentDep(snap, cnpgNamespace, "minio", label)
+	return snap.DeploymentDep(CNPGNamespace, "minio", label)
 }
 
 // lanAccessProbe reads the bifrost-postgres-lan NodePort Service and pairs it
@@ -218,7 +210,7 @@ func minioDepLabeled(snap readinessSnapshot, label string) ServiceDependencyView
 func lanAccessProbe(ctx context.Context, clientset kubernetes.Interface) PostgresLanAccessView {
 	view := PostgresLanAccessView{User: "bifrost", Reach: probe.ReachDegraded}
 
-	svc, err := clientset.CoreV1().Services(cnpgNamespace).Get(ctx, cnpgLanServiceName, metav1.GetOptions{})
+	svc, err := clientset.CoreV1().Services(CNPGNamespace).Get(ctx, cnpgLanServiceName, metav1.GetOptions{})
 	if err != nil {
 		view.Detail = "NodePort service bifrost-postgres-lan not found — apply k8s/data/postgres-nodeport.yaml"
 		return view
@@ -289,7 +281,7 @@ func cnpgClusterProbe(
 	spec, ready int,
 	primaryPod, primaryNode, storageClass, storageSize string,
 ) {
-	obj, err := dyn.Resource(cnpgClusterGVR).Namespace(cnpgNamespace).Get(ctx, cnpgClusterName, metav1.GetOptions{})
+	obj, err := dyn.Resource(CNPGClusterGVR).Namespace(CNPGNamespace).Get(ctx, CNPGClusterName, metav1.GetOptions{})
 	if err != nil {
 		return ServiceDependencyView{
 				ID: "cnpg-cluster", Label: "CloudNativePG bifrost-postgres",
@@ -321,8 +313,8 @@ func cnpgClusterProbe(
 		Reachability: reach, Detail: detail,
 	}
 
-	pods, listErr := clientset.CoreV1().Pods(cnpgNamespace).List(ctx, metav1.ListOptions{
-		LabelSelector: "cnpg.io/cluster=" + cnpgClusterName,
+	pods, listErr := clientset.CoreV1().Pods(CNPGNamespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "cnpg.io/cluster=" + CNPGClusterName,
 	})
 	if listErr != nil {
 		return clusterDep, instances, spec, ready, primaryPod, primaryNode, storageClass, storageSize
@@ -358,10 +350,10 @@ func cnpgClusterProbe(
 	return clusterDep, instances, spec, ready, primaryPod, primaryNode, storageClass, storageSize
 }
 
-func backupDep(ctx context.Context, dyn dynamic.Interface, snap readinessSnapshot, minioReach probe.Reachability) ServiceDependencyView {
+func backupDep(ctx context.Context, dyn dynamic.Interface, snap Snapshot, minioReach probe.Reachability) ServiceDependencyView {
 	_, err := dyn.Resource(schema.GroupVersionResource{
 		Group: "postgresql.cnpg.io", Version: "v1", Resource: "scheduledbackups",
-	}).Namespace(cnpgNamespace).Get(ctx, "bifrost-postgres-daily", metav1.GetOptions{})
+	}).Namespace(CNPGNamespace).Get(ctx, "bifrost-postgres-daily", metav1.GetOptions{})
 	if err != nil {
 		return ServiceDependencyView{
 			ID: "cnpg-backup", Label: "Scheduled backup",
@@ -369,7 +361,7 @@ func backupDep(ctx context.Context, dyn dynamic.Interface, snap readinessSnapsho
 		}
 	}
 
-	obj, err := dyn.Resource(cnpgClusterGVR).Namespace(cnpgNamespace).Get(ctx, cnpgClusterName, metav1.GetOptions{})
+	obj, err := dyn.Resource(CNPGClusterGVR).Namespace(CNPGNamespace).Get(ctx, CNPGClusterName, metav1.GetOptions{})
 	if err != nil {
 		return ServiceDependencyView{
 			ID: "cnpg-backup", Label: "Scheduled backup",
@@ -391,8 +383,8 @@ func backupDep(ctx context.Context, dyn dynamic.Interface, snap readinessSnapsho
 		detail += " · MinIO not ready"
 	}
 	// An external MinIO keeps its data on its own disk, not on nfs-hot.
-	nfsHot := clusterCapDep(snap, "storage-class-nfs-hot", "nfs-hot")
-	if !snap.minio.External && nfsHot.Reachability != probe.ReachOK {
+	nfsHot := snap.NFSHot
+	if !snap.MinIO.External && nfsHot.Reachability != probe.ReachOK {
 		reach = probe.ReachDegraded
 		detail += " · nfs-hot unavailable"
 	}
@@ -401,11 +393,11 @@ func backupDep(ctx context.Context, dyn dynamic.Interface, snap readinessSnapsho
 	}
 }
 
-func embeddedPostgresProbe(snap readinessSnapshot) []PostgresLegacyView {
-	out := make([]PostgresLegacyView, 0, len(snap.appEnvs))
-	for _, env := range snap.appEnvs {
+func embeddedPostgresProbe(snap Snapshot) []PostgresLegacyView {
+	out := make([]PostgresLegacyView, 0, len(snap.Environments))
+	for _, env := range snap.Environments {
 		key := env.Namespace + "/postgres"
-		d, ok := snap.deployments[key]
+		d, ok := snap.Deployments[key]
 		if !ok {
 			out = append(out, PostgresLegacyView{
 				Kind: "embedded", Namespace: env.Namespace, Reach: probe.ReachOK,
@@ -424,7 +416,7 @@ func embeddedPostgresProbe(snap readinessSnapshot) []PostgresLegacyView {
 			})
 			continue
 		}
-		reach, detail := deploymentReach(&d)
+		reach, detail := snap.DeploymentReach(&d)
 		out = append(out, PostgresLegacyView{
 			Kind: "embedded", Namespace: env.Namespace, Reach: reach,
 			Detail: detail + " · pending cutover to data NS",
@@ -470,14 +462,6 @@ func intFromUnstructured(obj *unstructured.Unstructured, fields ...string) int {
 	default:
 		return 0
 	}
-}
-
-func stringFromUnstructured(obj *unstructured.Unstructured, fields ...string) string {
-	v, found, _ := unstructured.NestedString(obj.Object, fields...)
-	if !found {
-		return ""
-	}
-	return v
 }
 
 func podReady(pod *corev1.Pod) bool {

@@ -163,6 +163,9 @@ modules:
       api/internal/approvals/mustrefuse: ["api/internal/approvals/mustrefuse"]
       api/internal/checklist: ["api/internal/checklist"]
       api/internal/cluster: ["api/internal/cluster"]
+      # Foundation: PostgreSQL and Redis status reads, moved out of cluster 2026-11-18;
+      # its tests read nothing outside the directory.
+      api/internal/datastore: ["api/internal/datastore"]
       # Guards that read every Go file of the module, and the walls between
       # packages (go list -deps); moved here from delivery and questions so
       # that those are rerun for their own changes.

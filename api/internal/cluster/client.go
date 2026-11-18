@@ -114,6 +114,17 @@ func (s *Service) RestConfig() (*rest.Config, string, error) {
 	return kubemetrics.Instrument(cfg), path, nil
 }
 
+func (s *Service) buildDynamicClient() (dynamic.Interface, error) {
+	if s.dynamicFactory != nil {
+		return s.dynamicFactory()
+	}
+	cfg, _, err := s.RestConfig()
+	if err != nil {
+		return nil, err
+	}
+	return dynamic.NewForConfig(cfg)
+}
+
 func (s *Service) buildClient() (kubernetes.Interface, string, error) {
 	if s.clientFactory != nil {
 		return s.clientFactory()

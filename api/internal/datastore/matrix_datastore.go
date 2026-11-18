@@ -1,4 +1,4 @@
-package cluster
+package datastore
 
 import (
 	"context"
@@ -7,16 +7,16 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
-// DatastoreSnapshot builds matrix datastore reachability from cluster status APIs.
+// MatrixSnapshot builds matrix datastore reachability from the two status reads.
 // platform-api on Mac cannot resolve *.svc.cluster.local — matrix uses this instead of raw TCP.
-func (s *Service) DatastoreSnapshot(ctx context.Context) probe.DatastoreSnapshot {
-	pg := s.PostgresStatus(ctx)
-	redis := s.RedisStatus(ctx)
-	return BuildMatrixDatastoreSnapshot(pg, redis)
+func MatrixSnapshot(ctx context.Context, src Source) probe.DatastoreSnapshot {
+	pg := ReadPostgres(ctx, src)
+	redis := ReadRedis(ctx, src)
+	return buildMatrixDatastoreSnapshot(pg, redis)
 }
 
-// BuildMatrixDatastoreSnapshot maps cluster/postgres + cluster/redis into per-env matrix signals.
-func BuildMatrixDatastoreSnapshot(pg PostgresStatusResponse, redis RedisStatusResponse) probe.DatastoreSnapshot {
+// buildMatrixDatastoreSnapshot maps cluster/postgres + cluster/redis into per-env matrix signals.
+func buildMatrixDatastoreSnapshot(pg PostgresStatusResponse, redis RedisStatusResponse) probe.DatastoreSnapshot {
 	snap := probe.DatastoreSnapshot{ByEnv: map[string]probe.DatastoreEnvReach{}}
 
 	for _, db := range pg.Databases {

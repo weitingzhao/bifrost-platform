@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/datastore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
@@ -243,11 +244,11 @@ func evalRedisDomain(snap readinessSnapshot) ServiceDomainView {
 		clusterCapDep(snap, "storage-class-local-path", "StorageClass local-path (Redis PVC)"),
 		clusterCapDep(snap, "storage-class-nfs-hot", "StorageClass nfs-hot (RDB backup)"),
 	}
-	for _, spec := range redisTargetCatalog {
-		deps = append(deps, redisTargetDep(snap, spec.name, spec.role, spec.environment))
-	}
+	stores := snap.datastoreSnapshot()
+	targets := datastore.RedisTargetDependencies(stores)
+	deps = append(deps, targets...)
 	for _, env := range snap.appEnvs {
-		if dep := embeddedRedisDep(snap, env.Namespace); dep != nil {
+		if dep := datastore.EmbeddedRedisDependency(stores, env.Namespace); dep != nil {
 			deps = append(deps, *dep)
 		}
 	}
@@ -263,7 +264,7 @@ func evalRedisDomain(snap readinessSnapshot) ServiceDomainView {
 			embeddedActive++
 		}
 	}
-	if targetsReady == len(redisTargetCatalog) && embeddedActive == 0 {
+	if targetsReady == len(targets) && embeddedActive == 0 {
 		return domain
 	}
 	// Queue targets are standby/retired; live+embedded OK must not force degraded.
@@ -276,7 +277,7 @@ func evalRedisDomain(snap readinessSnapshot) ServiceDomainView {
 		} else if targetsReady > 0 {
 			domain.Summary = fmt.Sprintf(
 				"%d/%d data NS targets · queue standby/retired",
-				targetsReady, len(redisTargetCatalog),
+				targetsReady, len(targets),
 			)
 		}
 		return domain
@@ -288,7 +289,7 @@ func evalRedisDomain(snap readinessSnapshot) ServiceDomainView {
 	if embeddedActive > 0 && targetsReady == 0 {
 		domain.Summary = fmt.Sprintf("Embedded redis in %d env(s) · Bitnami live optional", embeddedActive)
 	} else if targetsReady > 0 {
-		domain.Summary = fmt.Sprintf("%d/%d data NS targets · %d embedded active", targetsReady, len(redisTargetCatalog), embeddedActive)
+		domain.Summary = fmt.Sprintf("%d/%d data NS targets · %d embedded active", targetsReady, len(targets), embeddedActive)
 	} else {
 		domain.Summary = "No Redis live coverage"
 	}
