@@ -41,17 +41,3 @@ func recordWindowExpiry(ctx context.Context, ns string, r windowRecord, now time
 		recordWindow(ctx, ns, "expired", r, r.ExpiresAt, "")
 	}
 }
-
-// BindWindowRecorder connects release-window decisions to the runtime ledger.
-func (h *Handler) BindWindowRecorder(recorder WindowRecorder) { h.svc.windowRecorder = recorder }
-
-// ObserveWindowExpiry permits the runtime to observe TTL endings after a crash,
-// even when no session is reading or taking the window.
-func (h *Handler) ObserveWindowExpiry(ctx context.Context) error {
-	cs, _, err := h.svc.cluster.KubernetesClient()
-	if err != nil {
-		return err
-	}
-	_, _, err = getReleaseWindow(windowContext(ctx, h.svc.windowRecorder), cs, h.svc.PipelinesNamespace(), time.Now().UTC())
-	return err
-}
