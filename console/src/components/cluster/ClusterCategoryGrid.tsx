@@ -210,7 +210,7 @@ function observabilitySummary(data: ClusterObservabilityResponse | undefined) {
       headline = 'Layer B partial'
       break
     default:
-      headline = 'Layer A only · Layer B planned'
+      headline = 'Layer A only'
   }
   const detail =
     data.layer_b_status === 'partial'

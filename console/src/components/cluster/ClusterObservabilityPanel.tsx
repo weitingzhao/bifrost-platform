@@ -26,7 +26,7 @@ function layerBHeadline(status: LayerBStatus | undefined): string {
       return 'Partial · some observability components running'
     case 'not_installed':
     default:
-      return 'Planned · kube-prometheus-stack not detected'
+      return 'Not installed · kube-prometheus-stack not detected'
   }
 }
 

@@ -141,7 +141,6 @@ export function ClusterPostgresDetailPanel({
     )
   }
 
-  const haOk = postgres.instances_spec >= 2 && postgres.instances_ready >= 2
 
   return (
     <div className="cluster-postgres-detail flex flex-col gap-3 p-3">
@@ -153,7 +152,7 @@ export function ClusterPostgresDetailPanel({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <DenseTag variant={reachVariant(postgres.reachability)}>
-              {haOk ? 'HA 2/2' : `${postgres.instances_ready}/${postgres.instances_spec || 2} instances`}
+              {postgres.instances_spec > 0 ? `${postgres.instances_ready}/${postgres.instances_spec} instances` : 'instances unknown'}
             </DenseTag>
             <SectionRefreshButton isFetching={postgresLoading} onClick={refresh} />
           </div>

@@ -7,7 +7,6 @@ export type NamespacePlacementSummary = {
   /** Distinct ideal arch labels for UI (amd64, arm64, gpu, …) */
   idealArchs: string[]
   workloadClasses: string[]
-  plannedBinding?: string
   requiredSelectors: string[]
 }
 
@@ -43,7 +42,6 @@ export function getNamespacePlacementSummary(namespace: string): NamespacePlacem
     rules,
     idealArchs,
     workloadClasses: rules.map(r => r.workloadClass),
-    plannedBinding: rules.map(r => r.plannedBinding).join(' · '),
     requiredSelectors: rules.map(r => r.requiredSelector),
   }
 }

@@ -80,7 +80,7 @@ describe('doctorModel', () => {
     expect(text).toContain('- Enqueue calendar (force) ← stale:calendar')
     expect(text).toContain('`market_data_heal` with `{"dry_run": true}`')
     expect(text).toContain('EOD data (gates the Research dbt batch): critical — Option chain snapshot: 51% (2050)')
-    expect(text).toContain('D10 BLOCKED')
+    expect(text).toContain('never scale daemon')
   })
 })
 

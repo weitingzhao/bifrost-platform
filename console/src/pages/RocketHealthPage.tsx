@@ -11,7 +11,6 @@ import { Button, SegmentControl } from '@bifrost/ui'
 import { probesForViewer } from '@/lib/shell/shellStatusLine'
 import { normalizeViewerEnv } from '@/lib/control-room/fleetSnapshot'
 import { SelfHealthPanel } from '@/components/architecture/SelfHealthPanel'
-import { OpsSection } from '@/components/layout/OpsSection'
 import {
   OpsVerdictStrip,
   type OpsVerdictLamp,
@@ -185,19 +184,6 @@ export function RocketHealthPage({
         viewerOnly={lockToViewer}
       />
 
-      {!lockToViewer && (
-      <OpsSection
-        variant="flat"
-        title="Runtime (planned)"
-        description="Platform-namespace golden signals will land here when Prometheus scrape for control-plane workloads is stable. Until then use Cluster Layer B and Observability."
-        bodyPadding="default"
-      >
-        <p className="m-0 text-dense-meta text-muted-foreground">
-          No Rocket Runtime tab yet — avoids an empty metrics shell. Cluster owns Layer B install;
-          Observability owns system-wide rollup.
-        </p>
-      </OpsSection>
-      )}
     </div>
   )
 }

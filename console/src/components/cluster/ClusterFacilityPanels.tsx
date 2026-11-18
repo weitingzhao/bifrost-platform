@@ -121,8 +121,7 @@ function ClusterFacilityPolicyPanel({
               <DenseTableCell className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
                 <span className="inline-flex flex-wrap items-center gap-2">
                   <span>
-                    {rule.gap_reason ??
-                      (rule.planned_binding != null ? `target ${rule.planned_binding}` : '—')}
+                    {rule.gap_reason ?? '—'}
                   </span>
                   {!rule.satisfied && onSelectNodes != null ? (
                     <Button

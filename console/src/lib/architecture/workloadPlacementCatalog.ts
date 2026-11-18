@@ -45,7 +45,6 @@ export type PlacementRuleDef = {
   services: string
   requiredSelector: string
   poolId: NodePoolId
-  plannedBinding: string
 }
 
 /** Rules aligned with api/internal/placement/evaluate.go ruleDefs. */
@@ -56,7 +55,6 @@ export const PLACEMENT_RULES: PlacementRuleDef[] = [
     services: 'Tekton Kaniko build tasks',
     requiredSelector: 'kubernetes.io/arch=amd64',
     poolId: 'amd64_ci',
-    plannedBinding: 'mini-pc-a / ubt-k3s-01 control-plane',
   },
   {
     workloadClass: 'cicd_control',
@@ -64,7 +62,6 @@ export const PLACEMENT_RULES: PlacementRuleDef[] = [
     services: 'Gitea · ArgoCD · Registry',
     requiredSelector: 'kubernetes.io/arch=amd64',
     poolId: 'amd64_general',
-    plannedBinding: 'mini-pc-a',
   },
   {
     workloadClass: 'stg_runtime',
@@ -72,15 +69,13 @@ export const PLACEMENT_RULES: PlacementRuleDef[] = [
     services: '9 APIs · worker · socket · frontend',
     requiredSelector: 'kubernetes.io/arch=amd64',
     poolId: 'amd64_general',
-    plannedBinding: 'ubt-k3s-01 bootstrap',
   },
   {
     workloadClass: 'data',
     namespace: 'data',
     services: 'PostgreSQL · Redis · MinIO',
-    requiredSelector: 'node-role=postgres (planned)',
+    requiredSelector: 'node-role=postgres',
     poolId: 'amd64_general',
-    plannedBinding: 'mini-pc-b / mini-pc-a',
   },
   {
     workloadClass: 'nfs_storage',
@@ -88,7 +83,6 @@ export const PLACEMENT_RULES: PlacementRuleDef[] = [
     services: 'nfs-subdir-provisioner · NFS PVC mounts',
     requiredSelector: 'storage.nfs/client=true',
     poolId: 'nfs_client',
-    plannedBinding: 'ubt-k3s-01/02/04',
   },
   {
     workloadClass: 'monitoring',
@@ -96,7 +90,6 @@ export const PLACEMENT_RULES: PlacementRuleDef[] = [
     services: 'Prometheus · Loki · Grafana',
     requiredSelector: 'kubernetes.io/arch=amd64',
     poolId: 'amd64_general',
-    plannedBinding: 'mini-pc-c (second batch)',
   },
   {
     workloadClass: 'ai',
@@ -104,7 +97,6 @@ export const PLACEMENT_RULES: PlacementRuleDef[] = [
     services: 'Ollama · Open-WebUI',
     requiredSelector: 'workload=gpu',
     poolId: 'gpu',
-    plannedBinding: 'gpu-server',
   },
 ]
 
@@ -163,16 +155,14 @@ export function buildPlacementLlmPack(liveSummary?: {
   if (liveSummary?.rules != null && liveSummary.rules.length > 0) {
     for (const r of liveSummary.rules) {
       const gap = r.gap_reason != null && r.gap_reason !== '' ? ` · gap: ${r.gap_reason}` : ''
-      const binding =
-        r.planned_binding != null && r.planned_binding !== '' ? ` · target ${r.planned_binding}` : ''
       lines.push(
-        `- ${r.workload_class} · ns ${r.namespace}: ${r.required_selector} · pool ${r.pool_id}${binding} · ${r.satisfied ? 'OK' : 'Gap'}${gap}`,
+        `- ${r.workload_class} · ns ${r.namespace}: ${r.required_selector} · pool ${r.pool_id} · ${r.satisfied ? 'OK' : 'Gap'}${gap}`,
       )
     }
   } else {
     for (const r of PLACEMENT_RULES) {
       lines.push(
-        `- ${r.workloadClass} · ns ${r.namespace}: ${r.requiredSelector} · pool ${r.poolId} · target ${r.plannedBinding}`,
+        `- ${r.workloadClass} · ns ${r.namespace}: ${r.requiredSelector} · pool ${r.poolId}`,
       )
     }
   }

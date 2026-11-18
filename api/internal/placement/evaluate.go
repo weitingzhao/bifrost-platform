@@ -23,7 +23,6 @@ type ruleDef struct {
 	services         string
 	requiredSelector string
 	poolID           string
-	plannedBinding   string
 }
 
 var poolDefs = []poolDef{
@@ -40,7 +39,6 @@ var ruleDefs = []ruleDef{
 		services:         "Tekton Kaniko build tasks",
 		requiredSelector: "kubernetes.io/arch=amd64",
 		poolID:           "amd64_ci",
-		plannedBinding:   "mini-pc-a / ubt-k3s-01 control-plane",
 	},
 	{
 		workloadClass:    "cicd_control",
@@ -48,7 +46,6 @@ var ruleDefs = []ruleDef{
 		services:         "Gitea · ArgoCD · Registry",
 		requiredSelector: "kubernetes.io/arch=amd64",
 		poolID:           "amd64_general",
-		plannedBinding:   "mini-pc-a",
 	},
 	{
 		workloadClass:    "stg_runtime",
@@ -56,15 +53,13 @@ var ruleDefs = []ruleDef{
 		services:         "9 APIs · worker · socket · frontend",
 		requiredSelector: "kubernetes.io/arch=amd64",
 		poolID:           "amd64_general",
-		plannedBinding:   "ubt-k3s-01 bootstrap",
 	},
 	{
 		workloadClass:    "data",
 		namespace:        "data",
 		services:         "PostgreSQL · Redis · MinIO",
-		requiredSelector: "node-role=postgres (planned)",
+		requiredSelector: "node-role=postgres",
 		poolID:           "amd64_general",
-		plannedBinding:   "mini-pc-b / mini-pc-a",
 	},
 	{
 		workloadClass:    "nfs_storage",
@@ -72,7 +67,6 @@ var ruleDefs = []ruleDef{
 		services:         "nfs-subdir-provisioner · NFS PVC mounts",
 		requiredSelector: "storage.nfs/client=true",
 		poolID:           "nfs_client",
-		plannedBinding:   "ubt-k3s-01/02/04",
 	},
 	{
 		workloadClass:    "monitoring",
@@ -80,7 +74,6 @@ var ruleDefs = []ruleDef{
 		services:         "Prometheus · Loki · Grafana",
 		requiredSelector: "kubernetes.io/arch=amd64",
 		poolID:           "amd64_general",
-		plannedBinding:   "mini-pc-c (second batch)",
 	},
 	{
 		workloadClass:    "ai",
@@ -88,7 +81,6 @@ var ruleDefs = []ruleDef{
 		services:         "Ollama · Open-WebUI",
 		requiredSelector: "workload=gpu",
 		poolID:           "gpu",
-		plannedBinding:   "gpu-server",
 	},
 }
 
@@ -154,7 +146,6 @@ func evaluateRules(pools []PoolView) []RuleView {
 			Services:         def.services,
 			RequiredSelector: def.requiredSelector,
 			PoolID:           def.poolID,
-			PlannedBinding:   def.plannedBinding,
 		}
 		switch {
 		case pool.NodesReady > 0:

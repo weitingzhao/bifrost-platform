@@ -1438,7 +1438,6 @@
       "external_imports": [
         "@bifrost/ui",
         "lucide-react",
-        "react",
         "vitest"
       ],
       "source_inputs": [],
@@ -2811,21 +2810,16 @@
       "path": "console/src/lib/architecture",
       "files": [
         "console/src/lib/architecture/__tests__/consoleReadsApi.test.ts",
-        "console/src/lib/architecture/__tests__/dataHusbandryCatalog.test.ts",
         "console/src/lib/architecture/__tests__/mcpFocusBridges.test.ts",
         "console/src/lib/architecture/__tests__/mcpStdioParity.test.ts",
         "console/src/lib/architecture/__tests__/opsToolRackCatalog.test.ts",
         "console/src/lib/architecture/__tests__/tradeGatewayRoutesParity.test.ts",
-        "console/src/lib/architecture/dataHusbandryCatalog.ts",
         "console/src/lib/architecture/dataLayerCatalog.ts",
         "console/src/lib/architecture/dataLayerCatalogTypes.ts",
-        "console/src/lib/architecture/dualFlywheelVisionCatalog.ts",
         "console/src/lib/architecture/migrateWaves.generated.ts",
         "console/src/lib/architecture/opsToolRackCatalog.ts",
-        "console/src/lib/architecture/postQaOwnerGatePack.ts",
         "console/src/lib/architecture/researchEngineCatalog.ts",
         "console/src/lib/architecture/spineSemantics.ts",
-        "console/src/lib/architecture/standardsCatalog.ts",
         "console/src/lib/architecture/systemDomainCatalog.ts",
         "console/src/lib/architecture/tradeK8sNativeCatalogTypes.ts",
         "console/src/lib/architecture/waveProjection.ts",
@@ -3236,9 +3230,7 @@
         "console/src/api/satelliteBusTypes.ts",
         "console/src/components/market-data"
       ],
-      "test_imports": [
-        "console/src/lib/architecture"
-      ],
+      "test_imports": [],
       "external_imports": [
         "vitest"
       ],

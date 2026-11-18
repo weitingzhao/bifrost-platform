@@ -375,7 +375,7 @@ func redisLanAccessProbe(ctx context.Context, clientset kubernetes.Interface) []
 		view.Host = host
 		view.Endpoint = fmt.Sprintf("%s:%d", host, nodePort)
 		view.Reach = probe.ReachOK
-		view.Detail = "LAN-only · no password on phase-⑥ instances"
+		view.Detail = "LAN-only · no password on these instances"
 		out = append(out, view)
 	}
 

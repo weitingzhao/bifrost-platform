@@ -146,7 +146,7 @@ var capabilityDefs = []capabilityDef{
 	{
 		id: "postgres-role", label: "PostgreSQL host", category: "storage",
 		labelHint: "node-role=postgres",
-		requiredFor: "Dedicated data namespace PostgreSQL (planned)",
+		requiredFor: "Dedicated data namespace PostgreSQL",
 		match: func(labels map[string]string) (bool, string) {
 			if labels["node-role"] == "postgres" {
 				return true, "node-role=postgres"

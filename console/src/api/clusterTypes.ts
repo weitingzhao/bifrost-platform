@@ -397,7 +397,6 @@ export interface ClusterPlacementRule {
   satisfied: boolean
   reachability: Reachability
   gap_reason?: string
-  planned_binding?: string
 }
 
 export interface ClusterPlacementViolation {

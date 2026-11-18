@@ -233,9 +233,9 @@ const rows: ChecklistRow[] = [
     group: 'flat',
     description: 'Daily OHLCV across all US options as downloadable S3 flat file.',
     tierMin: 'starter',
-    verification: 'N/A — bulk download not yet integrated.',
+    verification: 'Not measured.',
     purpose: 'Bulk download of daily aggregates for all US options from S3. Alternative to REST per-contract aggregates.',
-    helpVerification: 'Not yet available in this project. See Massive documentation for S3 flat file access.',
+    helpVerification: 'See Massive documentation for S3 flat file access.',
   },
   {
     id: 'flat-file-minute-aggs',
@@ -243,9 +243,9 @@ const rows: ChecklistRow[] = [
     group: 'flat',
     description: 'Minute-level OHLCV across all US options as downloadable S3 flat file.',
     tierMin: 'starter',
-    verification: 'N/A — bulk download not yet integrated.',
+    verification: 'Not measured.',
     purpose: 'Bulk download of minute-level aggregates for all US options from S3.',
-    helpVerification: 'Not yet available in this project. See Massive documentation for S3 flat file access.',
+    helpVerification: 'See Massive documentation for S3 flat file access.',
   },
   {
     id: 'flat-file-quotes',
@@ -253,9 +253,9 @@ const rows: ChecklistRow[] = [
     group: 'flat',
     description: 'Top-of-book quotes with nanosecond timestamps as downloadable S3 flat file.',
     tierMin: 'starter',
-    verification: 'N/A — bulk download not yet integrated.',
+    verification: 'Not measured.',
     purpose: 'Bulk download of top-of-book option quotes from S3 for historical analysis.',
-    helpVerification: 'Not yet available in this project. See Massive documentation for S3 flat file access.',
+    helpVerification: 'See Massive documentation for S3 flat file access.',
   },
   {
     id: 'flat-file-trades',
@@ -263,9 +263,9 @@ const rows: ChecklistRow[] = [
     group: 'flat',
     description: 'Tick-level trades with nanosecond timestamps as downloadable S3 flat file. Requires Developer tier.',
     tierMin: 'developer',
-    verification: 'N/A — bulk download not yet integrated.',
+    verification: 'Not measured.',
     purpose: 'Bulk download of tick-level option trades from S3 for detailed historical analysis.',
-    helpVerification: 'Not yet available in this project. Requires Developer tier. See Massive documentation for S3 flat file access.',
+    helpVerification: 'Requires Developer tier. See Massive documentation for S3 flat file access.',
   },
 ]
 

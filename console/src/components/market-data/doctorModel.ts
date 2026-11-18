@@ -133,7 +133,7 @@ export function buildDoctorAgentReport(report: DoctorReport): string {
     'Without MCP: `curl -s http://127.0.0.1:8780/api/v1/plugins/market-data/api/market/doctor` and',
     '`curl -s -X POST -H "Authorization: Bearer $PLATFORM_OPERATOR_TOKEN" -H "Content-Type: application/json" -d \'{"dry_run":false}\' http://127.0.0.1:8780/api/v1/plugins/market-data/api/market/doctor/heal`',
     '',
-    'D10 BLOCKED: observe/data surfaces only — never scale daemon, never touch live trading.',
+    'Observe and data surfaces only: never scale daemon, never touch live trading.',
   )
   return lines.join('\n')
 }

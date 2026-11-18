@@ -100,7 +100,7 @@ function RedisLanAccessSection({ endpoints }: { endpoints: ClusterRedisStatusRes
           ))}
           <p className="m-0 text-dense-caption text-[var(--muted-foreground)]">
             {anyAvailable
-              ? 'No requirepass on phase-⑥ instances — leave Redis Insight password empty. LAN only; do not expose NodePorts to the public internet. Any Ready k3s node IP works if the listed host is unreachable.'
+              ? 'No requirepass on these instances — leave Redis Insight password empty. LAN only; do not expose NodePorts to the public internet. Any Ready k3s node IP works if the listed host is unreachable.'
               : 'NodePorts not resolved yet — once available, connect Redis Insight with the listed host/port (no password).'}
           </p>
         </div>

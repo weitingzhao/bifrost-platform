@@ -1,4 +1,4 @@
-> **Docs staging** — future plan only. Authoritative cluster actuation: Ops Console → Architecture → Standards · `bifrost-platform/console/src/lib/architecture/standardsCatalog.ts`
+> **Docs staging** — future plan only.
 
 # bifrost-platform agent (Phase B)
 

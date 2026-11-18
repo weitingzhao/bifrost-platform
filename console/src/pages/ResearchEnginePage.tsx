@@ -43,7 +43,6 @@ import {
   type OpsVerdictTagVariant,
 } from '@/components/layout/OpsVerdictStrip'
 import {
-  RESEARCH_DBT_MODEL_COUNT,
   RESEARCH_ENGINE_SUMMARY,
 } from '@/lib/architecture/researchEngineCatalog'
 import {
@@ -356,8 +355,7 @@ export function ResearchEnginePage({
         }
         meta={
           <span className="text-dense-meta text-muted-foreground">
-            NS {RESEARCH_ENGINE_SUMMARY.namespace} · :{RESEARCH_ENGINE_SUMMARY.apiPort} · D10
-            BLOCKED
+            NS {RESEARCH_ENGINE_SUMMARY.namespace} · :{RESEARCH_ENGINE_SUMMARY.apiPort}
           </span>
         }
       />
@@ -773,11 +771,6 @@ export function ResearchEnginePage({
                   (elementary?.mtime ? `mtime ${formatWhen(elementary.mtime)}` : 'GET /analytics/elementary')
                 }
               />
-              <Metric
-                label="dbt models"
-                value={String(RESEARCH_DBT_MODEL_COUNT)}
-                detail="Dagster dbt-sepa · catalog on dbt / Lineage"
-              />
             </div>
             {signalHealthErr ? (
               <p className="text-dense-meta text-destructive">{signalHealthErr}</p>
@@ -866,7 +859,7 @@ export function ResearchEnginePage({
       {tab === 'runs' && (
         <OpsSection
           title="Recent forecast sessions"
-          description="research.forecast_session — run management (Dagster UI linkage planned)"
+          description="research.forecast_session — run management"
           bodyPadding="none"
           overflow="visible"
           collapsible

@@ -1,11 +1,9 @@
-import { useMemo } from 'react'
-import { Button, DenseTag } from '@bifrost/ui'
+import { Button } from '@bifrost/ui'
 import { ExternalLink, GitBranch } from 'lucide-react'
 import { ELEMENTARY_REPORT_URL, type ElementaryStatus } from '@/api/researchEngine'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   RESEARCH_DBT_LINEAGE,
-  RESEARCH_DBT_MODELS,
   RESEARCH_ENGINE_SUMMARY,
 } from '@/lib/architecture/researchEngineCatalog'
 
@@ -25,15 +23,6 @@ export function ResearchDbtCatalogTab({
   elementary: ElementaryStatus | null
   elementaryErr: string | null
 }) {
-  const byLayer = useMemo(() => {
-    const m = new Map<string, typeof RESEARCH_DBT_MODELS>()
-    for (const row of RESEARCH_DBT_MODELS) {
-      const list = m.get(row.layer) ?? []
-      list.push(row)
-      m.set(row.layer, list)
-    }
-    return m
-  }, [])
 
   const reportReady = Boolean(elementary?.present)
 
@@ -89,32 +78,6 @@ export function ResearchDbtCatalogTab({
             </li>
           ))}
         </ol>
-      </OpsSection>
-
-      <OpsSection title="Model inventory" collapsible defaultCollapsed={false}>
-        <div className="flex flex-col gap-3">
-          {(['staging', 'intermediate', 'marts'] as const).map(layer => (
-            <div key={layer}>
-              <div className="mb-1 flex items-center gap-2">
-                <DenseTag variant="neutral">{layer}</DenseTag>
-                <span className="text-dense-meta text-muted-foreground">
-                  {(byLayer.get(layer) ?? []).length} models
-                </span>
-              </div>
-              <ul className="grid gap-1 sm:grid-cols-2">
-                {(byLayer.get(layer) ?? []).map(m => (
-                  <li
-                    key={m.name}
-                    className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1 text-dense-meta"
-                  >
-                    <span className="font-mono text-foreground">{m.name}</span>
-                    <span className="text-muted-foreground"> — {m.note}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
       </OpsSection>
 
       <OpsSection title="Data depth" collapsible defaultCollapsed>

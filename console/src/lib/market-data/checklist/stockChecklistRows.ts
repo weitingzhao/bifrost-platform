@@ -68,11 +68,11 @@ const rows: ChecklistRow[] = [
       'Real-time snapshots: All Tickers (universe-wide), Single Ticker, and Gainers/Losers. '
       + '15-minute delay on Starter tier.',
     tierMin: 'starter',
-    verification: 'N/A — not yet implemented.',
+    verification: 'Not measured.',
     purpose:
       'Quick current-state lookups for stocks. All Tickers snapshot enables screener inputs; Gainers/Losers for market movers.',
     helpVerification:
-      'Not yet implemented. Target endpoints: GET /v2/snapshot/locale/us/markets/stocks/tickers, '
+      'Endpoints: GET /v2/snapshot/locale/us/markets/stocks/tickers, '
       + 'GET /v2/snapshot/locale/us/markets/stocks/tickers/{ticker}, '
       + 'GET /v2/snapshot/locale/us/markets/stocks/{direction}.',
   },
@@ -83,11 +83,11 @@ const rows: ChecklistRow[] = [
     description:
       'Four REST endpoints: Historical Trades, Last Trade, Historical Quotes (NBBO), and Last Quote (NBBO).',
     tierMin: 'starter',
-    verification: 'N/A — not yet implemented.',
+    verification: 'Not measured.',
     purpose:
       'Query tick-level trade and quote data for stocks. Useful for spread analysis, trade tape replay, and real-time lookups.',
     helpVerification:
-      'Not yet implemented. Target endpoints: GET /v3/trades/{ticker}, GET /v2/last/trade/{ticker}, '
+      'Endpoints: GET /v3/trades/{ticker}, GET /v2/last/trade/{ticker}, '
       + 'GET /v3/quotes/{ticker}, GET /v2/last/nbbo/{ticker}.',
   },
   {
@@ -211,10 +211,10 @@ const rows: ChecklistRow[] = [
     group: 'ws',
     description: 'WebSocket per-second aggregate bars for stocks channel A.{ticker}.',
     tierMin: 'starter',
-    verification: 'N/A — not yet implemented.',
+    verification: 'Not measured.',
     purpose: 'Stream second-by-second OHLCV bars for a stock ticker in real time.',
     helpVerification:
-      'Not yet implemented. Target: wss://socket.polygon.io/stocks, subscribe to A.{ticker}.',
+      'Endpoint: wss://socket.polygon.io/stocks, subscribe to A.{ticker}.',
   },
   {
     id: 'stock-ws-aggregates-m',
@@ -222,10 +222,10 @@ const rows: ChecklistRow[] = [
     group: 'ws',
     description: 'WebSocket per-minute aggregate bars for stocks channel AM.{ticker}.',
     tierMin: 'starter',
-    verification: 'N/A — not yet implemented.',
+    verification: 'Not measured.',
     purpose: 'Stream minute-by-minute OHLCV bars for a stock ticker in real time.',
     helpVerification:
-      'Not yet implemented. Target: wss://socket.polygon.io/stocks, subscribe to AM.{ticker}.',
+      'Endpoint: wss://socket.polygon.io/stocks, subscribe to AM.{ticker}.',
   },
   {
     id: 'stock-ws-trades',
@@ -233,10 +233,10 @@ const rows: ChecklistRow[] = [
     group: 'ws',
     description: 'WebSocket tick-level trades for stocks channel T.{ticker}.',
     tierMin: 'starter',
-    verification: 'N/A — not yet implemented.',
+    verification: 'Not measured.',
     purpose: 'Stream tick-by-tick trade prints for a stock ticker.',
     helpVerification:
-      'Not yet implemented. Target: wss://socket.polygon.io/stocks, subscribe to T.{ticker}.',
+      'Endpoint: wss://socket.polygon.io/stocks, subscribe to T.{ticker}.',
   },
   {
     id: 'stock-ws-quotes',
@@ -244,10 +244,10 @@ const rows: ChecklistRow[] = [
     group: 'ws',
     description: 'WebSocket real-time NBBO quotes for stocks channel Q.{ticker}.',
     tierMin: 'starter',
-    verification: 'N/A — not yet implemented.',
+    verification: 'Not measured.',
     purpose: 'Stream top-of-book bid/ask updates for a stock ticker.',
     helpVerification:
-      'Not yet implemented. Target: wss://socket.polygon.io/stocks, subscribe to Q.{ticker}.',
+      'Endpoint: wss://socket.polygon.io/stocks, subscribe to Q.{ticker}.',
   },
   // ── Flat Files ─────────────────────────────────────────────────────────────
   {
@@ -256,9 +256,9 @@ const rows: ChecklistRow[] = [
     group: 'flat',
     description: 'Daily OHLCV across all US stocks as downloadable S3 flat file.',
     tierMin: 'starter',
-    verification: 'N/A — bulk download not yet integrated.',
+    verification: 'Not measured.',
     purpose: 'Bulk download of daily stock aggregates from S3.',
-    helpVerification: 'Not yet available. See Massive documentation for S3 flat file access.',
+    helpVerification: 'See Massive documentation for S3 flat file access.',
   },
   {
     id: 'stock-flat-file-minute-aggs',
@@ -266,9 +266,9 @@ const rows: ChecklistRow[] = [
     group: 'flat',
     description: 'Minute-level OHLCV across all US stocks as downloadable S3 flat file.',
     tierMin: 'starter',
-    verification: 'N/A — bulk download not yet integrated.',
+    verification: 'Not measured.',
     purpose: 'Bulk download of minute-level stock aggregates from S3.',
-    helpVerification: 'Not yet available. See Massive documentation for S3 flat file access.',
+    helpVerification: 'See Massive documentation for S3 flat file access.',
   },
   {
     id: 'stock-flat-file-trades',
@@ -276,9 +276,9 @@ const rows: ChecklistRow[] = [
     group: 'flat',
     description: 'Tick-level stock trades with nanosecond timestamps as downloadable S3 flat file. Requires Developer tier.',
     tierMin: 'developer',
-    verification: 'N/A — bulk download not yet integrated.',
+    verification: 'Not measured.',
     purpose: 'Bulk download of tick-level stock trades from S3.',
-    helpVerification: 'Not yet available. Requires Developer tier. See Massive documentation for S3 flat file access.',
+    helpVerification: 'Requires Developer tier. See Massive documentation for S3 flat file access.',
   },
   {
     id: 'stock-flat-file-quotes',
@@ -286,9 +286,9 @@ const rows: ChecklistRow[] = [
     group: 'flat',
     description: 'Top-of-book stock quotes with nanosecond timestamps as downloadable S3 flat file.',
     tierMin: 'starter',
-    verification: 'N/A — bulk download not yet integrated.',
+    verification: 'Not measured.',
     purpose: 'Bulk download of top-of-book stock quotes from S3.',
-    helpVerification: 'Not yet available. See Massive documentation for S3 flat file access.',
+    helpVerification: 'See Massive documentation for S3 flat file access.',
   },
 ]
 

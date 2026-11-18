@@ -53,7 +53,6 @@ type RuleView struct {
 	Satisfied        bool               `json:"satisfied"`
 	Reachability     probe.Reachability `json:"reachability"`
 	GapReason        string             `json:"gap_reason,omitempty"`
-	PlannedBinding   string             `json:"planned_binding,omitempty"`
 }
 
 type ViolationView struct {
