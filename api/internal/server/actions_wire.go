@@ -321,6 +321,11 @@ func (s *Server) bindActionExecutors() {
 		func(map[string]any) string { return "/api/v1/bus/regressions/fixed" },
 		nil, fields("repo", "introduced", "fixed"), s.handleRegressionWrite(true))
 
+	// The Owner's arrangement of the home's city (home_layout.go).
+	reg("save_home_layout", http.MethodPut,
+		func(map[string]any) string { return "/api/v1/home/layout" },
+		nil, fields("base_version", "layout"), s.handleHomeLayoutSave)
+
 	reg("release_window_hold", http.MethodPut,
 		func(map[string]any) string { return "/api/v1/delivery/release-window" },
 		nil, fields("what", "who", "reason", "ttl_minutes", "env"), s.delivery.HandlePutReleaseWindow)

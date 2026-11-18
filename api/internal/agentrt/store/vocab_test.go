@@ -16,6 +16,8 @@ import (
 	// link it for the same reason.
 	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actionrecord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	// home_layout_saved is declared by homelayout (2026-11-18, migration 0034): the same.
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/homelayout"
 )
 
 // The vocabulary a reader may filter by is the database's, not only the

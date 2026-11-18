@@ -184,6 +184,12 @@ export const WRITE_SPECS: readonly WriteMapping[] = [
     paramsFrom: (_m, body) => asRecord(body),
   },
   {
+    action: 'save_home_layout',
+    method: 'PUT',
+    pattern: /^\/api\/v1\/home\/layout$/,
+    paramsFrom: (_m, body) => asRecord(body),
+  },
+  {
     action: 'release_window_hold',
     method: 'PUT',
     pattern: /^\/api\/v1\/delivery\/release-window$/,

@@ -113,6 +113,8 @@ modules:
       api/internal/agentrt/evidence: ["api/internal/agentrt/evidence", "api/internal/bus/registry/ledger"]
       # 2026-11-17: TestNotedTypeIsRegistered reads the event register.
       api/internal/agentrt/externalwork: ["api/internal/agentrt/externalwork", "api/internal/bus/registry/ledger"]
+      # 2026-11-18: TestTheEventTypeIsRegisteredUnderOwner reads the event register.
+      api/internal/homelayout: ["api/internal/homelayout", "api/internal/bus/registry/ledger"]
       # 2026-11-17: TestTracedTypeIsRegistered reads the event register.
       api/internal/agentrt/actionrecord: ["api/internal/agentrt/actionrecord", "api/internal/bus/registry/ledger"]
       # 2026-11-17: TestPolicyAlertIsRegisteredUnderCoordination reads the event register.

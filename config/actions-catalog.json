@@ -37,6 +37,7 @@
     "rollout_restart_deployment",
     "run_agentrt_migration",
     "run_probe_pod",
+    "save_home_layout",
     "scale_deployment",
     "start_pipeline_run",
     "sweep_failed_backups",

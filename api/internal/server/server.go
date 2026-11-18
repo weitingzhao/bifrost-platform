@@ -345,6 +345,7 @@ func (s *Server) Router() http.Handler {
 		s.mountQuestions(r)
 		s.mountAgentRuntime(r)
 		s.mountBus(r)
+		s.mountHomeLayout(r)
 		// Each domain registers its own routes (mount_<domain>.go).
 		s.mountFoundation(r)
 		s.mountTenant(r)

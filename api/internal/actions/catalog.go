@@ -206,6 +206,15 @@ var catalog = []Action{
 		},
 	},
 	{
+		ID: "save_home_layout", Tier: TierB,
+		Description: "Save the Owner's arrangement of the Ops home's city as the next version (a preference: nothing acts on it). base_version is the version it started from; 409 when another save came first. Owner only.",
+		Method:      "PUT", Pattern: "/api/v1/home/layout",
+		Params: []Param{
+			{Name: "base_version", Type: "integer", Required: true, In: "body"},
+			{Name: "layout", Type: "object", Required: true, In: "body"},
+		},
+	},
+	{
 		ID: "delete_pipeline_run", Tier: TierB,
 		Description: "Delete a terminal Tekton PipelineRun. Tier B; call the endpoint directly.",
 		Method:      "DELETE", Pattern: "/api/v1/delivery/runs/{id}",

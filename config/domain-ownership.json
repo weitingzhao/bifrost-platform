@@ -359,6 +359,13 @@
       "status": "assigned",
       "basis": "Owner-domain charter and read-model extraction"
     },
+    "api/internal/homelayout": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 cockpit line: the Owner's own arrangement of the Ops home; the page itself is presentation"
+    },
     "api/internal/approvalhome": {
       "domains": [
         "owner"

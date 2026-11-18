@@ -258,3 +258,19 @@ func TestAMigrationThatCallsAHelperRollsBackWhole(t *testing.T) {
 		t.Fatalf("on an empty table: applied %v, %v", applied, err)
 	}
 }
+
+// Origin: 2026-11-18: the home layout's first design was a table with a GRANT,
+// which this class refuses; what replaced it has to stay a migration the
+// signed policy can run (OWNER_LAW 32).
+func TestHomeLayoutMigrationIsInTheClass(t *testing.T) {
+	files, err := migrate.Files()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) < 34 || files[33].ID != 34 {
+		t.Fatal("0034 is missing")
+	}
+	if ok, why := releasepolicy.ClassifyMigration(files[33].SQL); !ok {
+		t.Fatalf("0034 is not in the class: %s", why)
+	}
+}

@@ -44,6 +44,7 @@ types:
   - {type: deploy_seen, domain: foundation}
   - {type: external_work_noted, domain: lineage, note: "an external work's record on its stream; externalwork (migration 0032, was a note with external_work)"}
   - {type: full_ci_noted, domain: verification, note: "the daily full CI's runs started and each red run; evidence (migration 0031, was a note with full_ci)"}
+  - {type: home_layout_saved, domain: owner, note: "the Owner saved his arrangement of the Ops home; the artifact holds it, the seq is its version"}
   - {type: host_registered, domain: compute}
   - {type: host_retired, domain: compute}
   - {type: host_slots_set, domain: compute}
