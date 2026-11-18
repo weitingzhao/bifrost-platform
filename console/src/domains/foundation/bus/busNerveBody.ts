@@ -2,7 +2,7 @@ import type { AgentThreadStatus } from '@/api/agentThreads'
 import { QUIET_AFTER_H, isDeaf, STUCK_AFTER_MIN, seatLabel, seatState, shortSeconds, warmColor, type BusListening, type NerveModel, type ObserveLink, type ObserveSeat, type OrganTone } from './busNerve'
 import { CORE, domainOf } from './busNerveLayout'
 import type { GLink, GNode } from './BusNerveGraph'
-import { arcCurve, arcsOf, cubicAt, halosOf, layerPositions, median, tierRings, type DomainTier, type Route, type Vec } from './busNerveDirect'
+import { arcCurve, arcsOf, cubicAt, halosOf, layerPositions, median, type DomainTier, type Route, type Vec } from './busNerveDirect'
 
 /**
  * The observatory's own palette: a dark glass the body lives in, whatever the
@@ -196,17 +196,17 @@ export type DirectInput = BodyInput & {
 }
 
 /**
- * The direct view (the default): domains on their tier's floor, an arc for
+ * The direct view (the default): domains at their tier's height, in depth, an arc for
  * each pair of domains one's topics reach the other's readers by, and a halo
  * round a domain that sends what nobody takes. No bus node: the bus is the
  * bridge, shown only by the pulse that waits at an arc's middle. An opened
  * domain shows its parts around it, as in the bus view.
  */
-export function buildDirectBody(input: DirectInput): { nodes: GNode[]; links: GLink[]; arcs: GArc[]; rings: { y: number; radius: number }[] } {
+export function buildDirectBody(input: DirectInput): { nodes: GNode[]; links: GLink[]; arcs: GArc[] } {
   const bus = buildBody(input)
   const { domainOfType, listening, tiers, routes, roster, delays } = input
   const clusters = bus.nodes.filter(n => n.kind === 'cluster').map(n => n.id.slice(2))
-  // Every domain the table declares stands on its floor, with or without topics of its own.
+  // Every domain the table declares has its place in the volume, with or without topics of its own.
   const ids = [...new Set([...tiers.map(t => t.id), ...clusters])]
   const tierOf = new Map(tiers.map(t => [t.id, t.tier]))
   const positions = layerPositions(ids.map(id => ({ id, tier: tierOf.get(id) })))
@@ -263,5 +263,5 @@ export function buildDirectBody(input: DirectInput): { nodes: GNode[]; links: GL
   }
   // Parts of an opened domain hang on their domain; links to the bus are gone with it.
   const links = bus.links.filter(l => l.source !== CORE && l.target !== CORE)
-  return { nodes: all, links, arcs, rings: tierRings(positions) }
+  return { nodes: all, links, arcs }
 }

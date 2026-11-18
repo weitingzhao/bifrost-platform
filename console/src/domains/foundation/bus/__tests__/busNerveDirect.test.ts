@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { arcCurve, arcsOf, cubicAt, halosOf, layerPositions, median, routesOf, tierRings } from '../busNerveDirect'
+import { MIN_APART, alongAxis, arcCurve, arcsOf, cubicAt, halosOf, layerPositions, median, routesOf } from '../busNerveDirect'
 import type { BusContract } from '../busNextgen'
 import type { BusListening } from '../busNerve'
 
@@ -40,19 +40,31 @@ const listening: BusListening = {
 }
 
 describe('layerPositions', () => {
-  it('puts each tier on its own floor, in name order, the same every time', () => {
-    const p = layerPositions([{ id: 'owner', tier: 3 }, { id: 'foundation', tier: 0 }, { id: 'compute', tier: 0 }, { id: 'coordination', tier: 1 }])
-    expect(p.get('foundation')!.y).toBe(p.get('compute')!.y)
-    expect(p.get('coordination')!.y).toBeGreaterThan(p.get('foundation')!.y)
-    expect(p.get('owner')!.y).toBeGreaterThan(p.get('coordination')!.y)
-    // A lone domain on its floor stands in the middle.
-    expect(Math.hypot(p.get('owner')!.x, p.get('owner')!.z)).toBe(0)
-    expect(layerPositions([{ id: 'compute', tier: 0 }, { id: 'foundation', tier: 0 }]).get('compute')).toEqual(p.get('compute'))
-    expect(tierRings(p).length).toBe(3)
+  // 2026-11-17, the Owner on PROD: a disc in a circle read as a roulette
+  // wheel; then the big bang: the base is the core, the tiers open out from
+  // it as a cone, distance from the core is the tier; no two clouds run into
+  // one another (coordination and compute overlapped seen from the side).
+  const domains = [
+    { id: 'owner', tier: 3 }, { id: 'plan', tier: 3 }, { id: 'foundation', tier: 0 }, { id: 'compute', tier: 0 }, { id: 'coordination', tier: 1 },
+    { id: 'verification', tier: 2 }, { id: 'delivery', tier: 2 }, { id: 'lineage', tier: 2 }, { id: 'tenant', tier: 2 },
+  ]
+  it('puts the base at the core and each tier further out along the cone, every domain of it', () => {
+    const p = layerPositions(domains)
+    const out = (t: number) => domains.filter(d => d.tier === t).map(d => alongAxis(p.get(d.id)!))
+    for (const t of [1, 2, 3]) expect(Math.min(...out(t))).toBeGreaterThan(Math.max(...out(t - 1)))
+    for (const id of ['foundation', 'compute']) expect(Math.abs(alongAxis(p.get(id)!))).toBeLessThan(30)
   })
-  it('stands a domain with no declared tier above the declared ones, apart', () => {
+  it('keeps every two domains apart, and is the same for the same input', () => {
+    const p = layerPositions(domains)
+    const v = [...p.values()]
+    for (let i = 0; i < v.length; i++) for (let j = i + 1; j < v.length; j++) {
+      expect(Math.hypot(v[i].x - v[j].x, v[i].y - v[j].y, v[i].z - v[j].z)).toBeGreaterThanOrEqual(MIN_APART - 0.5)
+    }
+    expect(layerPositions([...domains].reverse())).toEqual(p)
+  })
+  it('stands a domain with no declared tier beyond the declared ones', () => {
     const p = layerPositions([{ id: 'a', tier: 0 }, { id: 'b', tier: 2 }, { id: 'new' }])
-    expect(p.get('new')!.y).toBeGreaterThan(p.get('b')!.y)
+    expect(alongAxis(p.get('new')!)).toBeGreaterThan(alongAxis(p.get('b')!))
   })
 })
 

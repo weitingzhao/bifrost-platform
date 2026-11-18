@@ -24,7 +24,7 @@ const BusNerveGraph = lazy(() => import('./BusNerveGraph'))
 const SEAT_HOURS = 24
 /** Milliseconds from a domain to its topic after the pulse left the publisher. */
 const SECOND_HOP_MS = 700
-/** The repository whose ownership table gives the domains' floors (this platform's own). */
+/** The repository whose ownership table gives the domains' tiers (this platform's own). */
 const TIER_REPO = 'bifrost-platform'
 /** Delays kept per arc for its median. */
 const DELAYS_KEPT = 200
@@ -173,7 +173,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
 
   // The body's nodes and links, rebuilt when a read changes; the renderer keeps known nodes where they are.
   // By default each domain is one node; an expanded domain shows its topics and their publishers.
-  const graph = useMemo((): { nodes: GNode[]; links: GLink[]; arcs?: GArc[]; rings?: { y: number; radius: number }[] } | null => {
+  const graph = useMemo((): { nodes: GNode[]; links: GLink[]; arcs?: GArc[] } | null => {
     if (!model) return null
     const input = { model, domainOfType, expanded, seats, beat, observed, teamLinks: team.data?.links ?? [], names, dustByDomain, listening: team.data?.listening, now: Date.now() }
     if (byBus) return buildBody(input)
@@ -396,15 +396,15 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
         unmeasured={[
           ...(team.data?.unmeasured ?? []),
           ...(team.data?.listening?.notes ?? []).map(n => ({ what: n.split(':')[0], why: n.includes(':') ? n.slice(n.indexOf(':') + 1).trim() : '' })),
-          ...(!byBus && domains.isError ? [{ what: 'floors', why: `the ownership table could not be read (${domains.error instanceof Error ? domains.error.message : 'request failed'}); every domain stands on one floor` }] : []),
-          ...(!byBus && domains.data && tiers.every(t => t.tier == null) ? [{ what: 'floors', why: 'the ownership table this platform serves declares no tiers yet; every domain stands on one floor' }] : []),
+          ...(!byBus && domains.isError ? [{ what: 'tiers', why: `the ownership table could not be read (${domains.error instanceof Error ? domains.error.message : 'request failed'}); every domain is untiered, at one height` }] : []),
+          ...(!byBus && domains.data && tiers.every(t => t.tier == null) ? [{ what: 'tiers', why: 'the ownership table this platform serves declares no tiers yet; every domain is untiered, at one height' }] : []),
           ...(!byBus ? [{ what: 'red near half', why: 'a sender that failed to publish is not reported to this page yet; the arc\'s near half is never red' }] : []),
         ]} onClose={() => setHelp(false)} />}
       {view === 'list'
         ? <div className="rounded-sm bg-[var(--card-fill)] p-2"><ContractGraph contract={contract.data} roster={roster} /></div>
         : (
           <Suspense fallback={<p className="m-0 font-mono text-xs" style={{ color: C.muted }}>loading the body…</p>}>
-            <BusNerveGraph nodes={graph.nodes} links={graph.links} arcs={graph.arcs} rings={graph.rings} flat={view === '2d'} spin={spin} onReady={a => { api.current = a }}
+            <BusNerveGraph nodes={graph.nodes} links={graph.links} arcs={graph.arcs} flat={view === '2d'} spin={spin} onReady={a => { api.current = a }}
               onNodeClick={id => {
                 if (!id.startsWith('d:')) return
                 const d = id.slice(2)
@@ -451,7 +451,7 @@ function HelpPanel({ unmeasured, onClose, byBus, onByBus }: { unmeasured: { what
         <Key mark={<span style={{ color: '#ffc46b' }}>✦</span>}>cloud = a domain</Key>
         {!byBus && (
           <>
-            <Key mark={<span style={{ color: '#8a6a58' }}>◯</span>}>floor = a tier: base below, owner on top</Key>
+            <Key mark={<span style={{ color: '#ffc46b' }}>↕</span>}>height = a tier: base below, owner on top</Key>
             <Key mark={<span style={{ color: '#ffc46b' }}>⌒</span>}>arc = one domain's topics taken by another's reader</Key>
             <Key mark={dot('#ffc46b')}>pulse waits mid-arc = in the bus, until the receipt</Key>
             <Key mark={<span style={{ color: C.red }}>⌒</span>}>far half red = no receipt in {LATE_AFTER_S}s</Key>

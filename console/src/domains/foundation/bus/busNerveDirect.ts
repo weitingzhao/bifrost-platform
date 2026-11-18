@@ -15,18 +15,52 @@ import type { BusListening } from './busNerve'
 
 export type Vec = { x: number; y: number; z: number }
 
-/** Height between tiers, and a tier disc's radius when it has more than one domain. */
-export const TIER_HEIGHT = 110
-export const TIER_RADIUS = 150
+/**
+ * The big bang (the Owner via the coordinator, 2026-11-17): the base is the
+ * core at the origin and the body opens forward from it into a cone. A
+ * domain's distance from the core along the cone's axis is its tier; the
+ * tiers' sections widen as they go out. Dependence runs from the core out:
+ * an arc going in calls a tier below, one going out reports up.
+ */
+export const AXIS: Vec = (() => { const l = Math.hypot(1, 0.45); return { x: 1 / l, y: 0.45 / l, z: 0 } })()
+/** Distance from the core between tiers, the cone's widening per unit out, and its waist at the core. */
+export const TIER_STEP = 100
+const CONE_SLOPE = 0.32
+const CONE_WAIST = 38
+/** How far a domain may sit off its tier's distance, along the axis: under half a step, so tiers never mix. */
+const TIER_JITTER = 0.3
+/** The least distance between two domains' centres (their clouds do not run into one another). */
+export const MIN_APART = 78
 
 /** A domain as the ownership table declares it; tier absent when the table gives none. */
 export type DomainTier = { id: string; tier?: number }
 
+/** A number in [0, 1) fixed by a name. */
+function hashUnit(name: string): number {
+  let h = 2166136261
+  for (let i = 0; i < name.length; i++) h = Math.imul(h ^ name.charCodeAt(i), 16777619)
+  h = Math.imul(h ^ (h >>> 13), 3266489909)
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296
+}
+
+/** Two unit vectors square to the axis and to each other: the plane of a cone's section. */
+const U: Vec = { x: -AXIS.y, y: AXIS.x, z: 0 }
+const V: Vec = { x: 0, y: 0, z: 1 }
+
+const add = (a: Vec, b: Vec, k = 1): Vec => ({ x: a.x + b.x * k, y: a.y + b.y * k, z: a.z + b.z * k })
+const dot = (a: Vec, b: Vec) => a.x * b.x + a.y * b.y + a.z * b.z
+
+/** How far out along the cone a place is (0 at the core). */
+export function alongAxis(p: Vec): number {
+  return dot(p, AXIS)
+}
+
 /**
- * Where each domain sits: y is its tier's height; on its tier's disc the
- * domains are spread evenly in name order (deterministic), a lone one at the
- * disc's centre. A domain with no tier stands on the tier just above the
- * highest declared, so it shows apart instead of being put somewhere wrong.
+ * Where each domain sits: out from the core by its tier, on its tier's
+ * section of the cone as on a sunflower (golden angle, in name order), a
+ * little nearer or further by its name; then pushed apart, only within
+ * their sections, until no two are closer than MIN_APART. Same input, same
+ * place. A domain with no tier stands one step beyond the furthest declared.
  */
 export function layerPositions(domains: readonly DomainTier[]): Map<string, Vec> {
   const declared = domains.filter(d => d.tier != null).map(d => d.tier as number)
@@ -36,26 +70,41 @@ export function layerPositions(domains: readonly DomainTier[]): Map<string, Vec>
     const t = d.tier ?? undeclared
     byTier.set(t, [...(byTier.get(t) ?? []), d.id])
   }
-  const out = new Map<string, Vec>()
-  const tiers = [...byTier.keys()].sort((a, b) => a - b)
-  for (const t of tiers) {
-    const ids = [...(byTier.get(t) ?? [])].sort()
-    // Each tier turned a little from the one below, so a domain does not sit straight over another.
-    const turn = t * 0.6
-    ids.forEach((id, i) => {
-      const r = ids.length === 1 ? 0 : TIER_RADIUS
-      const a = turn + (2 * Math.PI * i) / ids.length
-      out.set(id, { x: Math.cos(a) * r, y: t * TIER_HEIGHT, z: Math.sin(a) * r })
+  const golden = Math.PI * (3 - Math.sqrt(5))
+  const ids: string[] = []
+  const at: Vec[] = []
+  for (const t of [...byTier.keys()].sort((a, b) => a - b)) {
+    const list = [...(byTier.get(t) ?? [])].sort()
+    const d = t * TIER_STEP
+    const R = CONE_WAIST + d * CONE_SLOPE
+    list.forEach((id, i) => {
+      const a = t * 1.3 + i * golden
+      const r = list.length === 1 ? R * 0.2 : R * Math.sqrt((i + 0.5) / list.length)
+      const along = d + (hashUnit(`a:${id}`) - 0.5) * TIER_STEP * TIER_JITTER
+      ids.push(id)
+      at.push(add(add({ x: AXIS.x * along, y: AXIS.y * along, z: AXIS.z * along }, U, Math.cos(a) * r), V, Math.sin(a) * r))
     })
   }
-  return out
-}
-
-/** The tiers present, each with its height: the rings that show the floors. */
-export function tierRings(positions: Map<string, Vec>): { y: number; radius: number }[] {
-  const byY = new Map<number, number>()
-  for (const p of positions.values()) byY.set(p.y, Math.max(byY.get(p.y) ?? 0, Math.hypot(p.x, p.z)))
-  return [...byY.entries()].sort((a, b) => a[0] - b[0]).map(([y, r]) => ({ y, radius: Math.max(70, r + 60) }))
+  // Apart: push pairs that are too close away from each other within their sections (the tier's distance stays).
+  for (let pass = 0; pass < 80; pass++) {
+    let moved = false
+    for (let i = 0; i < at.length; i++) {
+      for (let j = i + 1; j < at.length; j++) {
+        let dv = add(at[j], at[i], -1)
+        dv = add(dv, AXIS, -dot(dv, AXIS))
+        let dist = Math.hypot(dv.x, dv.y, dv.z)
+        const full = Math.hypot(at[j].x - at[i].x, at[j].y - at[i].y, at[j].z - at[i].z)
+        if (full >= MIN_APART) continue
+        if (dist < 1e-6) { dv = { ...U }; dist = 1 }
+        const k = (MIN_APART - full) / 2 / dist + 0.001
+        at[i] = add(at[i], dv, -k)
+        at[j] = add(at[j], dv, k)
+        moved = true
+      }
+    }
+    if (!moved) break
+  }
+  return new Map(ids.map((id, i) => [id, at[i]]))
 }
 
 /**

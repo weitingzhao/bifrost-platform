@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { GArc } from './busNerveBody'
+import { AXIS } from './busNerveDirect'
 
 /**
  * The nerve map's renderer, loaded only on the Bus page (a chunk of its own).
@@ -28,7 +29,7 @@ export type GNode = {
   open?: boolean
   /** A part whose name always shows (a topic nobody listens to says so). */
   named?: boolean
-  /** Where the node stands, fixed (the direct view: a domain on its tier's floor, an arc's middle). */
+  /** Where the node stands, fixed (the direct view: a domain at its place in the volume, an arc's middle). */
   pin?: { x: number; y: number; z: number }
   /** A halo round a domain that sends what nobody takes: its strength, 0 to 1. */
   halo?: number
@@ -80,9 +81,10 @@ const RED_MS = 10_000
 const ARC_RED = '#ff4d5e'
 const ARC_GREY = '#3b4a52'
 const HALO_COLOR = '#ffb347'
-const FLOOR_COLOR = '#8a6a58'
-/** The direction home looks from: a little above the floors. */
-const HOME_DIR = [0, 0.48, 0.88] as const
+/** The direction home looks from: behind the core and to one side, a little above, so the core and the front show together. */
+const HOME_DIR = (() => { const v = [-0.6, 0.35, 0.72]; const l = Math.hypot(...v); return [v[0] / l, v[1] / l, v[2] / l] as const })()
+/** How far a day-old event's dust has drifted out along the cone. */
+const DUST_DRIFT = 55
 
 function idOf(end: string | SimNode): string {
   return typeof end === 'string' ? end : end.id
@@ -170,7 +172,7 @@ function homeStart(n: GNode, dims: 2 | 3): { x: number; y: number; z: number } {
   return { x: Math.cos(a) * r, y: Math.sin(a) * r, z: dims === 3 ? (rnd() - 0.5) * 20 : 0 }
 }
 
-/** A 3D place on the flat canvas: height up the screen, the floor's depth tilted into it. */
+/** A 3D place on the flat canvas: height up the screen, depth tilted into it. */
 function flatOf(p: { x: number; y: number; z: number }): { x: number; y: number; z: number } {
   return { x: p.x, y: -p.y * 1.3 + p.z * 0.3, z: 0 }
 }
@@ -204,8 +206,8 @@ function cloudSig(n: GNode): string {
   return n.cloud ? `${n.cloud.parts}:${n.cloud.dust.length}:${n.color}` : ''
 }
 
-export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], flat, spin, onReady, onNodeClick }: {
-  nodes: GNode[]; links: GLink[]; arcs?: GArc[]; rings?: { y: number; radius: number }[]
+export default function BusNerveGraph({ nodes, links, arcs = [], flat, spin, onReady, onNodeClick }: {
+  nodes: GNode[]; links: GLink[]; arcs?: GArc[]
   flat: boolean; spin: boolean; onReady: (api: NerveApi) => void; onNodeClick?: (id: string) => void
 }) {
   const host = useRef<HTMLDivElement>(null)
@@ -243,12 +245,10 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
   const focusedAt = useRef(0)
   /** Rebuilds a domain's cloud in place when its counts change (3D only). */
   const recloud = useRef<((n: SimNode) => void) | null>(null)
-  /** Redraws the arcs and the floors (3D only); set once the scene exists. */
-  const redrawArcs = useRef<((arcs: GArc[], rings: { y: number; radius: number }[]) => void) | null>(null)
+  /** Redraws the arcs (3D only); set once the scene exists. */
+  const redrawArcs = useRef<((arcs: GArc[]) => void) | null>(null)
   const arcsRef = useRef(arcs)
   arcsRef.current = arcs
-  const ringsRef = useRef(rings)
-  ringsRef.current = rings
   /** Moves the direct pulses each frame (3D only). */
   const flyRef = useRef<((now: number) => void) | null>(null)
   /** When each domain's halo last lit. */
@@ -443,11 +443,13 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
             const dc: number[] = []
             for (const age of n.cloud?.dust ?? []) {
               const b = Math.max(0.25, 1 - (0.75 * Math.min(24, age)) / 24)
-              dp.push(gauss(rnd) * R * 0.38, gauss(rnd) * R * 0.38, gauss(rnd) * R * 0.38)
+              // The big bang: each event's dust has drifted out along the cone by its age (older, further and dimmer).
+              const out = (Math.min(24, age) / 24) * DUST_DRIFT
+              dp.push(gauss(rnd) * R * 0.38 + AXIS.x * out, gauss(rnd) * R * 0.38 + AXIS.y * out, gauss(rnd) * R * 0.38 + AXIS.z * out)
               const c = base.clone().lerp(white, rnd() * 0.3).multiplyScalar(b * (0.6 + rnd() * 0.4))
               dc.push(c.r, c.g, c.b)
             }
-            group.add(pointsOf(pp, pc, 3.2).points)
+            group.add(pointsOf(pp, pc, 4.6).points)
             // A few larger stars, one per part: the parts themselves, brighter than their dust.
             const sp: number[] = []
             const sc: number[] = []
@@ -456,8 +458,8 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
               const c = base.clone().lerp(white, 0.75)
               sc.push(c.r, c.g, c.b)
             }
-            group.add(pointsOf(sp, sc, 7.5).points)
-            const d = pointsOf(dp, dc, 1.9)
+            group.add(pointsOf(sp, sc, 9.5).points)
+            const d = pointsOf(dp, dc, 2.6)
             group.add(d.points)
             return { group, dust: d.mat }
           }
@@ -499,7 +501,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
                 group.add(cloud)
                 // Seen from far, a cloud is one soft light; its points show as the camera comes near (bodies' tick).
                 glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: disc, color: n.color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }))
-                glow.scale.setScalar(cloudRadius(n) * 3)
+                glow.scale.setScalar(cloudRadius(n) * 4)
                 group.add(glow)
               }
               if (n.ring) {
@@ -511,7 +513,8 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
               if (n.kind === 'cluster') {
                 halo = new THREE.Mesh(new THREE.TorusGeometry(Math.max(16, cloudRadius(n) * 1.6), 0.8, 8, 64),
                   new THREE.MeshBasicMaterial({ color: HALO_COLOR, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }))
-                halo.rotation.x = Math.PI / 2
+                // Tilted, and turning on two axes below: an orbit round the cloud, not a plate under it.
+                halo.rotation.x = Math.PI / 3
                 group.add(halo)
               }
               // An arc's middle: a faint light, large enough to hover from home.
@@ -519,7 +522,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
               if (n.self) {
                 const inner = new THREE.Mesh(new THREE.TorusGeometry(Math.max(5, cloudRadius(n) * 0.55), 0.35, 6, 48),
                   new THREE.MeshBasicMaterial({ color: n.color, transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending }))
-                inner.rotation.x = Math.PI / 2
+                inner.rotation.set(Math.PI / 4, 0, Math.PI / 5)
                 group.add(inner)
               }
               if (n.kind === 'mid') (core.material as import('three').SpriteMaterial).opacity = 0.18
@@ -563,7 +566,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
             }
             b.sig = cloudSig(n)
           }
-          // The direct view: arcs between domains in two halves (sender to the bus, the bus to the reader), the floors as faint rings.
+          // The direct view: arcs between domains in two halves (sender to the bus, the bus to the reader), no floors: the tiers show by height (the Owner, 11-17).
           class Part extends THREE.Curve<import('three').Vector3> {
             constructor(private c: import('three').Curve<import('three').Vector3>, private a: number, private b: number) { super() }
             getPoint(t: number, target = new THREE.Vector3()) { return this.c.getPoint(this.a + (this.b - this.a) * t, target) }
@@ -575,7 +578,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
           g.scene().add(arcGroup)
           g.scene().add(flightGroup)
           const v3 = (p: { x: number; y: number; z: number }) => new THREE.Vector3(p.x, p.y, p.z)
-          redrawArcs.current = (list, floors) => {
+          redrawArcs.current = list => {
             const red = new Map([...arcDraws].map(([id, d]) => [id, d.redUntil]))
             for (const o of [...arcGroup.children]) {
               const m = o as import('three').Mesh
@@ -584,12 +587,6 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
               arcGroup.remove(o)
             }
             arcDraws.clear()
-            for (const f of floors) {
-              const pts: import('three').Vector3[] = []
-              for (let i = 0; i < 96; i++) pts.push(new THREE.Vector3(Math.cos((i / 96) * 2 * Math.PI) * f.radius, f.y, Math.sin((i / 96) * 2 * Math.PI) * f.radius))
-              arcGroup.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts),
-                new THREE.LineBasicMaterial({ color: FLOOR_COLOR, transparent: true, opacity: 0.16, depthWrite: false })))
-            }
             for (const a of list) {
               const curve = new THREE.CubicBezierCurve3(v3(a.curve[0]), v3(a.curve[1]), v3(a.curve[2]), v3(a.curve[3]))
               const half = (from: number, to: number, color: string) => {
@@ -602,7 +599,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
               arcDraws.set(a.id, { curve, back, to: a.to, color: a.color, lost: a.back === 'lost', redUntil: red.get(a.id) ?? 0 })
             }
           }
-          redrawArcs.current(arcsRef.current, ringsRef.current)
+          redrawArcs.current(arcsRef.current)
           type Flight = { sprite: import('three').Sprite; arc: string; phase: 'out' | 'wait' | 'in' | 'fail'; at: number; arrived: boolean; t: number }
           const flights = new Map<string, Flight>()
           const drop = (key: string) => {
@@ -666,7 +663,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
           flyRef.current = flyAll
           g.graphData(data.current)
           graph.current = g
-          // Home looks down a little on the floors, so several show at once.
+          // Home looks down a little, so the tiers show one over another.
           g.cameraPosition({ x: HOME_DIR[0] * 800, y: HOME_DIR[1] * 800, z: HOME_DIR[2] * 800 }, { x: 0, y: 0, z: 0 }, 0)
           // The bench (console/bench) looks at the instance; dev builds only.
           if (import.meta.env.DEV) Object.assign(window as unknown as Record<string, unknown>, { __nerve: g, __nerveApi: api })
@@ -715,7 +712,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
                 const near = Math.max(0, Math.min(1, (R * 16 - d) / (R * 9)))
                 // Far, the stars stay (the coordinator: keep their density); the glow only softens them.
                 for (const m of b.points) m.opacity = (0.85 + 0.15 * near) * (m === b.dust ? 0.8 * breath : 1)
-                // Far, the glow carries the cloud: bright enough to read as a nebula from home (the floors put clouds further off).
+                // Far, the glow carries the cloud: bright enough to read as a nebula from home (the tiers put clouds further off).
                 if (b.glow) (b.glow.material as import('three').SpriteMaterial).opacity = 0.35 * (1 - near) + (lit(n) ? 0.3 : 0)
                 b.cloud.scale.setScalar(breath * (lit(n) ? 1.06 : 1))
               }
@@ -723,7 +720,8 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
                 const since = performance.now() - (haloAt.current.get(n.id) ?? -1e9)
                 const m = b.halo.material as import('three').MeshBasicMaterial
                 m.opacity = n.halo ? 0.08 + 0.22 * n.halo + (since < FLASH_MS ? 0.55 * (1 - since / FLASH_MS) : 0) : 0
-                b.halo.rotation.z = t * 0.15
+                b.halo.rotation.y = t * 0.15
+                b.halo.rotation.z = t * 0.07
               }
             }
             raf = requestAnimationFrame(tick)
@@ -789,7 +787,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
     const next: SimNode[] = nodes.filter(n => !(two && n.kind === 'mid')).map(n => {
       const p = prev.get(n.id)
       const out: SimNode = p ? Object.assign(p, n) : { ...n, ...homeStart(n, two ? 2 : 3) }
-      // A pinned node stands where it is told: a domain on its floor, an arc's middle.
+      // A pinned node stands where it is told: a domain at its place, an arc's middle.
       if (n.pin) {
         const at = two ? flatOf(n.pin) : n.pin
         Object.assign(out, { x: at.x, y: at.y, z: at.z, fx: at.x, fy: at.y, fz: two ? undefined : at.z })
@@ -805,7 +803,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
         ...(two ? arcs.filter(a => ids.has(a.from) && ids.has(a.to)).map(a => ({ source: a.from, target: a.to, color: a.color, width: a.width, label: a.label, __arc: a.id })) : []),
       ],
     }
-    redrawArcs.current?.(arcs, rings)
+    redrawArcs.current?.(arcs)
     for (const n of next) {
       recloud.current?.(n)
       const div = labelsRef.current.get(n.id)
@@ -815,7 +813,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
     graph.current?.graphData(data.current)
     // A domain opened or folded: fit the body to the frame again once it has moved.
     if (graph.current && fitted.current !== -1 && fitted.current !== next.length && performance.now() - focusedAt.current > 3000) fitSoonRef.current()
-  }, [nodes, links, arcs, rings])
+  }, [nodes, links, arcs])
 
   // Fits the body to the frame, again and again while it settles. Kept in a ref: the effects call the latest one.
   const fitSoonRef = useRef(() => {})
@@ -823,7 +821,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
     for (const ms of FIT_TIMES_MS) window.setTimeout(() => fit(), ms)
   }
 
-  // Home: the whole body again, looked at from home's direction (a little above the floors).
+  // Home: the whole body again, looked at from home's direction (a little above the body).
   fitRef.current = () => fit(true)
   function fit(fromHome = false) {
     const g = graph.current
@@ -868,8 +866,8 @@ export default function BusNerveGraph({ nodes, links, arcs = [], rings = [], fla
         const d = sub([x, y, z], center)
         distance = Math.max(distance, Math.max(Math.abs(dot(d, up)) / Math.tan(vHalf), Math.abs(dot(d, right)) / Math.tan(hHalf)) + dot(d, back))
       }
-      // Fill about 80% of the frame, with a margin all round.
-      distance *= 1.1
+      // The body fills about 80% of the frame (the coordinator, 11-17: it was too sparse).
+      distance *= 0.95
       g.cameraPosition({ x: center[0] + back[0] * distance, y: center[1] + back[1] * distance, z: center[2] + back[2] * distance },
         { x: center[0], y: center[1], z: center[2] }, ms)
     }
