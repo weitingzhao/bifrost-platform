@@ -44,7 +44,7 @@ rows = [{'id': r['id'], 'on': r.get('on', r.get(True)),  # YAML 1.1 reads the ke
         for r in subs.get('subscriptions') or [] if r.get('by') == 'dispatcher']
 clients = [{'name': c['name'], 'kind': c['kind'], 'domain': c.get('domain', '')} for c in subs.get('clients') or []]
 own = json.load(open(os.path.join(repo, 'config/domain-ownership.json')))
-tiers = [{'id': d['id'], 'tier': d.get('tier')} for d in own['domains']]
+tiers = [{'id': d['id'], 'tier': d.get('tier'), 'facility': d.get('facility')} for d in own['domains']]
 
 types = ','.join("'%s'" % t['type'] for t in topics)
 events = [{'type': t, 'time': at} for t, at in q(
