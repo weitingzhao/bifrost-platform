@@ -88,10 +88,24 @@ func (f FullCI) body() map[string]any {
 	return b
 }
 
+// fullCINotedType is the event type of a full CI record (migration 0031,
+// 2026-11-17: one owning domain per event type; it was a note with a full_ci
+// field, and those rows are still read).
+const fullCINotedType = "full_ci_noted"
+
+func init() {
+	eventlog.Declare(eventlog.Vocabulary{
+		Types: []string{fullCINotedType},
+		Bodies: map[string][]eventlog.Field{
+			fullCINotedType: {{Name: "text", Kind: eventlog.Str}, {Name: "full_ci", Kind: eventlog.Any}},
+		},
+	})
+}
+
 // NoteFullCI records text and f on the controller's stream.
 func NoteFullCI(ctx context.Context, db eventlog.DB, text string, f FullCI) error {
 	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
-		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: ControllerStream, Type: "note", Actor: "controller",
+		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: ControllerStream, Type: fullCINotedType, Actor: "controller",
 			Body: map[string]any{"text": text, "full_ci": f.body()}})
 		return err
 	})
@@ -101,7 +115,7 @@ func NoteFullCI(ctx context.Context, db eventlog.DB, text string, f FullCI) erro
 func FullCIRedNoted(ctx context.Context, db eventlog.DB, run string) (bool, error) {
 	var noted bool
 	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
+		return tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_stream_id = $1 AND event_type IN ('full_ci_noted', 'note')
 		  AND actor_id = 'controller' AND body_json->'full_ci'->>'run' = $2)`, ControllerStream, run).Scan(&noted)
 	})
 	return noted, err
@@ -120,7 +134,7 @@ func FullCINotes(ctx context.Context, db eventlog.DB, limit int) ([]FullCINote, 
 	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		out = out[:0]
 		rows, err := tx.Query(ctx, `SELECT at, COALESCE(body_json->>'text', ''), body_json->'full_ci' FROM agentrt.event
-		  WHERE event_stream_id = $1 AND event_type = 'note' AND actor_id = 'controller' AND body_json ? 'full_ci'
+		  WHERE event_stream_id = $1 AND event_type IN ('full_ci_noted', 'note') AND actor_id = 'controller' AND body_json ? 'full_ci'
 		  ORDER BY seq DESC LIMIT $2`, ControllerStream, limit)
 		if err != nil {
 			return err

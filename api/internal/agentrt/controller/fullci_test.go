@@ -195,7 +195,7 @@ func missions(t *testing.T, pool *pgxpool.Pool) int {
 func redNotes(t *testing.T, pool *pgxpool.Pool, run string) (texts []string, bodies []map[string]any) {
 	t.Helper()
 	rows, err := pool.Query(ctx, `SELECT body_json->>'text', body_json->'full_ci' FROM agentrt.event WHERE event_stream_id = 'controller'
-	  AND event_type = 'note' AND body_json->'full_ci'->>'run' = $1 ORDER BY seq`, run)
+	  AND event_type = 'full_ci_noted' AND body_json->'full_ci'->>'run' = $1 ORDER BY seq`, run)
 	must(t, err)
 	defer rows.Close()
 	for rows.Next() {
