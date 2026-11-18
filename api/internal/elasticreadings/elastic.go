@@ -1,12 +1,3 @@
-// Package elasticreadings reads the elastic compute domains of service
-// readiness: GPU / AI and the data warehouse, whose nodes may be powered off
-// when nothing needs them. When that is standby and when it is missing
-// compute is the compute domain's reading; the cluster package gathers the
-// nodes and deployments and binds these (cluster.BindComputeReadings).
-//
-// The functions were cluster's until 2026-11-16 and are moved as they were:
-// the inputs come through resourceview.ElasticSnapshot instead of cluster's
-// private snapshot, and nothing else changes.
 package elasticreadings
 
 import (
@@ -60,6 +51,42 @@ func GPUDomain(snap resourceview.ElasticSnapshot) resourceview.ServiceDomainView
 	deps = append(deps, wl)
 	domain := snap.Finalize("gpu", "GPU / AI", deps, "Elastic compute on gpu-server")
 	return applyElasticDomainVerdict(domain, gpuNodes, demand, "Standby — no demand", "Compute needed but GPU node offline")
+}
+
+// WorkersDomain is the general workers domain of service readiness: standby
+// when the only gaps left are dependencies expected to be off.
+func WorkersDomain(snap resourceview.ElasticSnapshot) resourceview.ServiceDomainView {
+	deps := []resourceview.ServiceDependencyView{
+		snap.PoolDep("amd64_general", "amd64 general pool"),
+		snap.NodeCovDep("nfs-client", "NFS client nodes"),
+	}
+	if wl := snap.DaemonDep(); wl != nil {
+		deps = append(deps, *wl)
+	} else {
+		deps = append(deps, resourceview.ServiceDependencyView{
+			ID: "workload-daemon", Label: "Trading daemon",
+			Reachability: probe.ReachDegraded, Detail: "not deployed",
+		})
+	}
+	domain := snap.Finalize("workers", "General workers", deps, "Daemon · data pipelines")
+	if domain.Status == "partial" || domain.Status == "standby" {
+		onlyStandby := true
+		for _, d := range domain.Dependencies {
+			if d.Reachability == probe.ReachOK {
+				continue
+			}
+			if !snap.IsStandby(d) {
+				onlyStandby = false
+				break
+			}
+		}
+		if onlyStandby {
+			domain.Status = "standby"
+			domain.Reachability = probe.ReachOK
+			domain.Summary = "Worker pool ready · trading daemon scaled to zero (observe mode / D10)"
+		}
+	}
+	return domain
 }
 
 // WarehouseDomain is the data warehouse domain of service readiness.

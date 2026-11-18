@@ -29,6 +29,36 @@ func snapshot(mode, status string, replicas int32) resourceview.ElasticSnapshot 
 	}
 }
 
+// Origin: 2026-11-18, the general workers reading left cluster for this
+// package. A daemon scaled to zero is the one gap that leaves the domain
+// standby; the second case is its control: any other gap keeps it partial.
+func TestWorkersAreStandbyOnlyWhenTheDaemonIsTheGap(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		pool resourceview.ServiceDependencyView
+		want string
+	}{
+		{resourceview.ServiceDependencyView{Reachability: probe.ReachOK}, "standby"},
+		{resourceview.ServiceDependencyView{Reachability: probe.ReachFail, Detail: "no nodes"}, "partial"},
+	} {
+		snap := snapshot("", "Ready", 0)
+		snap.PoolDep = func(id, label string) resourceview.ServiceDependencyView { return c.pool }
+		snap.NodeCovDep = func(id, label string) resourceview.ServiceDependencyView {
+			return resourceview.ServiceDependencyView{Reachability: probe.ReachOK}
+		}
+		snap.DaemonDep = func() *resourceview.ServiceDependencyView {
+			return &resourceview.ServiceDependencyView{Reachability: probe.ReachDegraded, Detail: "scaled to zero"}
+		}
+		snap.IsStandby = func(d resourceview.ServiceDependencyView) bool { return d.Detail == "scaled to zero" }
+		snap.Finalize = func(id, label string, deps []resourceview.ServiceDependencyView, purpose string) resourceview.ServiceDomainView {
+			return resourceview.ServiceDomainView{ID: id, Status: "partial", Reachability: probe.ReachDegraded, Dependencies: deps}
+		}
+		if got := elasticreadings.WorkersDomain(snap); got.Status != c.want {
+			t.Errorf("pool %+v: status %s, want %s", c.pool, got.Status, c.want)
+		}
+	}
+}
+
 // Origin: 2026-11-16, the elastic readings left cluster for this package.
 // This is their contract from outside, the rule the functions exist for: a
 // node that is powered off is standby and ok while nothing needs it, and

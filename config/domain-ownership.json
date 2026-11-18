@@ -1166,7 +1166,7 @@
         "compute"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 cluster split, first block: the readings of the elastic compute domains of service readiness (GPU / AI, data warehouse) and the eight functions that decide standby against missing compute, moved from cluster as they were. cluster gathers the inputs and binds this package (cluster.BindComputeReadings); it imports only probe and resourceview."
+      "basis": "2026-11-18: the general workers reading moved here from cluster, and doc.go states the contract; the domain is compute, the code is maintained by the foundation decoupling line until compute has a seat that writes code. 2026-11-16 cluster split, first block: the readings of the elastic compute domains of service readiness (GPU / AI, data warehouse) and the eight functions that decide standby against missing compute, moved from cluster as they were. cluster gathers the inputs and binds this package (cluster.BindComputeReadings); it imports only probe and resourceview."
     },
     "api/internal/agentrt/strictjson": {
       "domains": [

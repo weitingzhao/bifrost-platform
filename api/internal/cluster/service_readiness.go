@@ -347,42 +347,16 @@ func elasticInput(snap readinessSnapshot) resourceview.ElasticSnapshot {
 		NodeCovDep:    func(id, label string) ServiceDependencyView { return nodeCovDep(snap, id, label) },
 		DeploymentDep: func(ns, name, label string) ServiceDependencyView { return deploymentDep(snap, ns, name, label) },
 		Finalize:      finalizeDomain,
+		DaemonDep:     func() *ServiceDependencyView { return firstReadyDeployment(snap, snap.appDeployRefs("daemon")) },
+		IsStandby:     dependencyIsStandby,
 	}
 }
 
 func evalWorkersDomain(snap readinessSnapshot) ServiceDomainView {
-	deps := []ServiceDependencyView{
-		poolDep(snap, "amd64_general", "amd64 general pool"),
-		nodeCovDep(snap, "nfs-client", "NFS client nodes"),
+	if computeReadings.WorkersDomain == nil {
+		return unboundDomain("workers", "General workers", "compute-readings", "Compute readings")
 	}
-	wl := firstReadyDeployment(snap, snap.appDeployRefs("daemon"))
-	if wl != nil {
-		deps = append(deps, *wl)
-	} else {
-		deps = append(deps, ServiceDependencyView{
-			ID: "workload-daemon", Label: "Trading daemon",
-			Reachability: probe.ReachDegraded, Detail: "not deployed",
-		})
-	}
-	domain := finalizeDomain("workers", "General workers", deps, "Daemon · data pipelines")
-	if domain.Status == "partial" || domain.Status == "standby" {
-		onlyStandby := true
-		for _, d := range domain.Dependencies {
-			if d.Reachability == probe.ReachOK {
-				continue
-			}
-			if !dependencyIsStandby(d) {
-				onlyStandby = false
-				break
-			}
-		}
-		if onlyStandby {
-			domain.Status = "standby"
-			domain.Reachability = probe.ReachOK
-			domain.Summary = "Worker pool ready · trading daemon scaled to zero (observe mode / D10)"
-		}
-	}
-	return domain
+	return computeReadings.WorkersDomain(elasticInput(snap))
 }
 
 func evalApplicationsDomain(snap readinessSnapshot) ServiceDomainView {

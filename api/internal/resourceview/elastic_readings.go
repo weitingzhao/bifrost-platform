@@ -27,7 +27,7 @@ type ElasticCoverage struct {
 }
 
 // ElasticSnapshot is what service readiness has gathered when it asks for an
-// elastic domain. The four functions are cluster's own dependency readings,
+// elastic domain. The functions are cluster's own dependency readings,
 // so a domain is assembled from the same pieces as the others.
 type ElasticSnapshot struct {
 	Nodes           []ElasticNode
@@ -37,6 +37,11 @@ type ElasticSnapshot struct {
 	NodeCovDep      func(id, label string) ServiceDependencyView
 	DeploymentDep   func(namespace, name, label string) ServiceDependencyView
 	Finalize        func(id, label string, deps []ServiceDependencyView, purpose string) ServiceDomainView
+	// DaemonDep is the trading daemon's Deployment in the first application
+	// environment that has one; nil when none has.
+	DaemonDep func() *ServiceDependencyView
+	// IsStandby is cluster's rule for a dependency that is expected to be off.
+	IsStandby func(ServiceDependencyView) bool
 }
 
 // ElasticNodeObservation is what the cluster package can observe of an

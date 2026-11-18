@@ -15,7 +15,7 @@ func init() { bindTenantReadings() }
 
 func bindTenantReadings() {
 	BindAppReadings(AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain})
-	BindComputeReadings(ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain, NodeMode: elasticreadings.NodeMode})
+	BindComputeReadings(ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain, WorkersDomain: elasticreadings.WorkersDomain, NodeMode: elasticreadings.NodeMode})
 }
 
 // Origin: 2026-11-16, the GPU and warehouse domains are read through
@@ -25,7 +25,7 @@ func bindTenantReadings() {
 func TestElasticDomainsAreUnavailableWithoutAReader(t *testing.T) {
 	BindComputeReadings(ComputeReadings{})
 	t.Cleanup(bindTenantReadings)
-	for _, d := range []ServiceDomainView{evalGPUDomain(readinessSnapshot{}), evalWarehouseDomain(readinessSnapshot{})} {
+	for _, d := range []ServiceDomainView{evalGPUDomain(readinessSnapshot{}), evalWarehouseDomain(readinessSnapshot{}), evalWorkersDomain(readinessSnapshot{})} {
 		if d.Reachability != probe.ReachFail || d.Status != "unavailable" {
 			t.Fatalf("unbound: %+v", d)
 		}
