@@ -115,14 +115,14 @@ channels:
   - {id: C03, class: K1, disposition: kept, step: "none", what: "Dock 开发会话面板：轮询 /dev-sessions 日志", by: "原因：面板只在本机 Console 显示，PROD 7 天 /dev-sessions 3 次，不值得接事件（解耦线 11-18 核对）"}
   - {id: X-A1, class: K2, disposition: merged, step: "1", what: "Gitea push webhook → EventListener bifrost-ci（9 个 CEL trigger；无 webhook 密钥，TD-435）", by: "留下并改造成「门·代码」的入口：加密钥、发 git.main.advanced/git.ready.pushed/git.tag.changed；EL 起 CI 的 trigger 不动", cut: {at: "2026-11-17", evidence: ["topic:git.main.advanced"]}}
   - {id: X-A2, class: K11, disposition: kept, step: "0", what: "github-sync CronJob：每 15 分钟对账 Gitea 与 GitHub 的 main 和 tag", by: "原因：对账兜底（兜 webhook 丢失）；登记为 git.* 主题的对账；差异宣布 reconcile.drift.found"}
-  - {id: X-A3, class: K3, disposition: replaced, step: "4", what: "land 任务等 CI 绿：每 15 秒读 PipelineRun（耐心期 3 分钟，上限 45 分钟）", by: "入户口子③（等 ci.verdict.changed，读 R05）"}
-  - {id: X-A4, class: K3, disposition: replaced, step: "4", what: "land 内部轮询 Gitea PR 是否可合、变基后新头", by: "门·代码+git.pr.changed（原料里没有这个主题，我补的）"}
+  - {id: X-A3, class: K3, disposition: kept, step: "none", what: "land 任务等 CI 绿：每 15 秒读 PipelineRun（耐心期 3 分钟，上限 45 分钟）", by: "原因：land 中位 202 秒，15 秒一读，全天约 1,800 个 GET；换事件省不到 4%，还要加等事件的小命令（CI 线 11-18）"}
+  - {id: X-A4, class: K3, disposition: kept, step: "none", what: "land 内部轮询 Gitea PR 是否可合、变基后新头", by: "原因：land 要的是 Gitea 当下的可合并状态和变基后的新头，事件只能提示，读还得读（CI 线 11-18）"}
   - {id: X-A5, class: K3, disposition: kept, step: "none", what: "release.sh 等 CI：每 20 秒 kubectl 读 PipelineRun", by: "原因：只服务 Trade/Research 发布，这些仓库近 14 天 0 提交（11-18 按解耦线核对和实际流量判）"}
   - {id: X-A6, class: K10, disposition: kept, step: "none", what: "push-main.sh 的 CI 门：kubectl+ci_gate.py → /evidence/ci", by: "原因：同 X-A5（11-18 按解耦线核对和实际流量判）"}
-  - {id: X-A7, class: K10, disposition: replaced, step: "4", what: "PROD 流水线里内嵌的 CI 门（ci_gate.py 拷贝，由 embed 脚本嵌入）", by: "调用 R05，不拷贝"}
+  - {id: X-A7, class: K10, disposition: kept, step: "none", what: "PROD 流水线里内嵌的 CI 门（ci_gate.py 拷贝，由 embed 脚本嵌入）", by: "原因：改调读口只去掉一份拷贝，运行时不省，还让 platform 的 PROD 发布依赖 platform 读口，平台坏时修复版发不出（CI 线 11-18）"}
   - {id: X-A8, class: K10, disposition: kept, step: "none", what: "CI 判范围：task 读 /units/scope，取不到退成全跑", by: "原因：已经是对读口的调用而不是拷贝；失败方向（退全跑）登记；返回里加版本"}
-  - {id: X-A9, class: K10, disposition: replaced, step: "4", what: "流水线读发布窗口 ConfigMap（window_decision.py 拷贝）", by: "调用 R10 读口（带版本）；拷贝删掉。风险：读口宕机时的失败方向（见第 4 节）"}
-  - {id: X-A10, class: K10, disposition: replaced, step: "4", what: "流水线读发布冻结 ConfigMap（读不到按冻结）", by: "调用读口，保持读不到按冻结；风险：平台宕机时平台自己的发布流水线也被冻（见第 4 节）"}
+  - {id: X-A9, class: K10, disposition: kept, step: "none", what: "流水线读发布窗口 ConfigMap（window_decision.py 拷贝）", by: "原因：这四条流水线近 2 天 0 次运行；读口挂了要么放行并发发布，要么全堵（CI 线 11-18）"}
+  - {id: X-A10, class: K10, disposition: kept, step: "none", what: "流水线读发布冻结 ConfigMap（读不到按冻结）", by: "原因：读不到按冻结是总闸；经平台读，平台挂了自己的修复发布也被冻（CI 线 11-18）"}
   - {id: X-A11, class: K9, disposition: kept, step: "none", what: "冻结 CRD 新办法（freeze_chain.py、墓碑 ConfigMap；仓库有、集群没有）", by: "原因：属发布的信任链（主统筹 11-18 定不删）"}
   - {id: X-A12, class: K9, disposition: kept, step: "none", what: "release.sh 经平台 API 占/续/放窗口 PUT/DELETE", by: "原因：锁的写路径，窗口只有这一个写入口；只改被占时怎么等（交给③）"}
   - {id: X-A13, class: K5, disposition: announced, step: "3", what: "镜像同步：POST mirrors/sync → Tekton task → Gitea，任务内每 4 秒轮询", by: "动作留在原处；结果以 git.mirror.settled 宣布，轮询换成订阅（lineage/mirrors.go 另一份实现并到同一处）", cut: {at: "2026-11-18", evidence: ["topic:git.mirror.settled"]}}
