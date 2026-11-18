@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 
 	corev1 "k8s.io/api/core/v1"
@@ -613,6 +615,37 @@ func TestAStartNamesTheEventThatCausedIt(t *testing.T) {
 		labels := createdContractRun(t, dyn).GetLabels()
 		if labels[LabelCause] != tc.want || labels[LabelCauseEnv] != tc.wantEnv {
 			t.Fatalf("cause %q env %q: labels %q %q, want %q %q", tc.id, tc.env, labels[LabelCause], labels[LabelCauseEnv], tc.want, tc.wantEnv)
+		}
+	}
+}
+
+// 2026-11-17, with the communication layer: a run started over HTTP names who
+// asked for it, the calling thread's actor from its X-Bifrost-Session header,
+// as an annotation (a thread actor does not fit a label value); a header that
+// is not a session id names nobody. Positive control: without the
+// WithRequester line in HandleStartPipelineRun the first run has no
+// annotation.
+func TestAStartOverHTTPNamesWhoAskedForIt(t *testing.T) {
+	pipe := infraPipelines(t)["bifrost-ci-platform"]
+	for _, tc := range []struct{ header, want string }{
+		{"local_7de640c4-4b19-4a71-a0ac-ced2ce5fc7ff", "thread:local_7de640c4-4b19-4a71-a0ac-ced2ce5fc7ff"},
+		{"two words", ""}, {"", ""},
+	} {
+		s, dyn, _ := contractService(t, pipe, "present")
+		h := NewHandlerForTest(s, nil)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/delivery/pipelines/bifrost-ci-platform/runs",
+			strings.NewReader(`{"revision":"`+factSHA1+`"}`))
+		req.Header.Set("X-Bifrost-Session", tc.header)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("name", "bifrost-ci-platform")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rec := httptest.NewRecorder()
+		h.HandleStartPipelineRun(rec, req)
+		if rec.Code != http.StatusOK && rec.Code != http.StatusCreated {
+			t.Fatalf("%q: %d %s", tc.header, rec.Code, rec.Body.String())
+		}
+		if got := createdContractRun(t, dyn).GetAnnotations()[AnnRequester]; got != tc.want {
+			t.Fatalf("header %q: requester %q, want %q", tc.header, got, tc.want)
 		}
 	}
 }

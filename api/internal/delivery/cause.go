@@ -43,3 +43,32 @@ func causeOf(ctx context.Context) (id, env string) {
 	c, _ := ctx.Value(causeKey{}).(cause)
 	return c.id, c.env
 }
+
+// AnnRequester names, on a PipelineRun started over HTTP, who asked for it:
+// the calling thread's actor ("thread:<session>", from its X-Bifrost-Session
+// header, as the questions and approvals routes take it). An annotation, not
+// a label: a thread actor has a colon and outgrows a label value. Gate-cluster
+// carries it into the run's ci.run.started, so a subscription can wake the one
+// who started a PROD release (2026-11-17, with the communication layer: main's
+// known regressions are pushed to whoever is releasing). Routing only; it
+// authorizes nothing.
+const AnnRequester = "bifrost.io/requester"
+
+// requesterSession is a thread's session id (actor.threadSession's pattern).
+var requesterSession = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
+
+type requesterKey struct{}
+
+// WithRequester marks the starts made with ctx as asked for by the thread
+// whose session id is session; anything else marks nothing.
+func WithRequester(ctx context.Context, session string) context.Context {
+	if !requesterSession.MatchString(session) {
+		return ctx
+	}
+	return context.WithValue(ctx, requesterKey{}, "thread:"+session)
+}
+
+func requesterOf(ctx context.Context) string {
+	r, _ := ctx.Value(requesterKey{}).(string)
+	return r
+}

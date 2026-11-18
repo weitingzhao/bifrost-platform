@@ -390,10 +390,13 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	if ciRepo != "" {
 		meta["labels"].(map[string]any)["bifrost.io/repo"] = ciRepo
 	}
-	if ann := actions.IdentityAnnotations(ctx); len(ann) > 0 {
-		raw := make(map[string]any, len(ann))
+	if ann := actions.IdentityAnnotations(ctx); len(ann) > 0 || requesterOf(ctx) != "" {
+		raw := make(map[string]any, len(ann)+1)
 		for k, v := range ann {
 			raw[k] = v
+		}
+		if r := requesterOf(ctx); r != "" {
+			raw[AnnRequester] = r
 		}
 		meta["annotations"] = raw
 	}

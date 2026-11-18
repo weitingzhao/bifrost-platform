@@ -88,7 +88,8 @@ func (h *Handler) HandleStartPipelineRun(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	resp, run, err := h.svc.StartPipelineRun(r.Context(), name, req.Revision, req.Tag, req.Who, req.Params)
+	ctx := WithRequester(r.Context(), strings.TrimSpace(r.Header.Get("X-Bifrost-Session")))
+	resp, run, err := h.svc.StartPipelineRun(ctx, name, req.Revision, req.Tag, req.Who, req.Params)
 	status := "ok"
 	if err != nil {
 		status = "failed"
