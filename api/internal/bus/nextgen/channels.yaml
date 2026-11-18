@@ -128,7 +128,7 @@ channels:
   - {id: X-A13, class: K5, disposition: announced, step: "3", what: "镜像同步：POST mirrors/sync → Tekton task → Gitea，任务内每 4 秒轮询", by: "动作留在原处；结果以 git.mirror.settled 宣布，轮询换成订阅（lineage/mirrors.go 另一份实现并到同一处）"}
   - {id: X-A14, class: K3, disposition: replaced, step: "4", what: "release.sh 等审批单：每 15 秒读单子状态", by: "入户口子③（等 approval.card.decided）"}
   - {id: X-A15, class: K3, disposition: replaced, step: "4", what: "release_tool.py wait：等 PipelineRun 离开 Unknown", by: "入户口子③（等 ci.run.finished）"}
-  - {id: X-A16, class: K5, disposition: announced, step: "4", what: "Argo pin-sync：patch Application 并每 2 秒轮询", by: "patch 动作留在原处；同步状态由门·集群 watch Application 宣布"}
+  - {id: X-A16, class: K5, disposition: announced, step: "4", what: "Argo pin-sync：patch Application 并每 2 秒轮询", by: "patch 动作留在原处；同步状态由门·集群 watch Application 宣布", cut: {at: "2026-11-18", evidence: ["reader:gitops-watch"]}}
   - {id: X-A17, class: K2, disposition: kept, step: "none", what: "Argo CD 拉 Gitea main（bifrost-prod/stg 手动同步，platform 两个自动）", by: "原因：部署引擎自带的拉取，不是我们的通道；变化经 X-A16 一行宣布"}
   - {id: X-A18, class: K10, disposition: merged, step: "4", what: "发布后核对四种（rollout status、digest 核对、集群内冒烟、PROD 读 STG/PROD /health）", by: "留下并改造成唯一一份核对；L05 并到它；结果 release.deploy.finished"}
   - {id: X-A19, class: K11, disposition: kept, step: "0", what: "PipelineRun 清理 CronJob（7 天前终态、1h/1d 前 Pod）", by: "原因：定时清理；注意它决定 Promote 门等读的记录能保多久，留存期要登记"}

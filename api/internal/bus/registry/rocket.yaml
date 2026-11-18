@@ -169,6 +169,8 @@ channels:
       reconcile: "Argo Application list"
       on_unread: stale
       retention: 30d
+      # For watching: nothing acts on it yet.
+      display_only: true
       consumers: [console]
       exports: []
       replaces: [L28]

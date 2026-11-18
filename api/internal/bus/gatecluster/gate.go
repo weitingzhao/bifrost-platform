@@ -64,6 +64,10 @@ type Gate struct {
 	// (taskruns.go). Only the process that serves those reads sets it.
 	WatchTasks bool
 
+	// apps is the last state said of each Argo application (gitops.go).
+	appMu sync.Mutex
+	apps  map[string]AppState
+
 	// The TaskRun cache: each kept TaskRun by its PipelineRun and name, and
 	// the PipelineRun of each name (taskruns.go).
 	taskMu      sync.RWMutex
@@ -111,6 +115,7 @@ func (g *Gate) backoff() time.Duration {
 func (g *Gate) init() {
 	g.initOnce.Do(func() {
 		g.runs = map[string]runFacts{}
+		g.apps = map[string]AppState{}
 		g.tasksByRun = map[string]map[string]TaskRun{}
 		g.taskRunOf = map[string]string{}
 		g.watching = make(chan struct{})
@@ -160,7 +165,8 @@ func (g *Gate) Run(ctx context.Context) {
 		return
 	}
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
+	safego.Go("bus-gate-cluster-apps", func() { defer wg.Done(); g.runApps(ctx) })
 	safego.Go("bus-gate-cluster-runs", func() { defer wg.Done(); g.runRuns(ctx) })
 	safego.Go("bus-gate-cluster-window", func() { defer wg.Done(); g.runWindow(ctx) })
 	wg.Wait()
