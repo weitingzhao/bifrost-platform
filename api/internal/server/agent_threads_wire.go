@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/ownernotice"
 	"path/filepath"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
@@ -68,7 +69,13 @@ func (s *Server) wireAgentThreads(dataDir string, role config.Role, titleStore *
 	s.agentThreads = agentthreads.NewHandler(rec, cfg, titles, s.audit)
 	if role.RunsWorkers() && agentthreads.WatchWanted() {
 		agentthreads.NewWatcher(store, cfg, func(ctx context.Context, title, body, kind, id string) error {
-			return approvalnotify.Notify(ctx, agentThreadNotice(title, body, kind, id))
+			if err := approvalnotify.Notify(ctx, agentThreadNotice(title, body, kind, id)); err != nil {
+				return err
+			}
+			if n, ok := ownernotice.Liveness(kind, id); ok {
+				s.sayOwnerNotice(ctx, n)
+			}
+			return nil
 		}, titles).Start(context.Background(), agentthreads.WatchInterval)
 	}
 }

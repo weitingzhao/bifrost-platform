@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/ownernotice"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -103,7 +104,12 @@ func (s *Server) wireReleasePolicy(releasesSvc *releases.Service, dataDir string
 	if runsWorkers && releasepolicy.RemindersWanted() {
 		releasepolicy.NewChecker(s.releasePolicy, func() int { return pendingReleases(s.approvals) },
 			func(ctx context.Context, title, message string) error {
-				return approvalnotify.Notify(ctx, releasePolicyNotice(title, message))
+				if err := approvalnotify.Notify(ctx, releasePolicyNotice(title, message)); err != nil {
+					return err
+				}
+				st := s.releasePolicy.Status(ctx)
+				s.sayOwnerNotice(ctx, ownernotice.Policy(st.PolicyID, st.Valid))
+				return nil
 			},
 			filepath.Join(dataDir, "release-policy-reminders"),
 		).Start(context.Background(), releasePolicyCheckInterval)

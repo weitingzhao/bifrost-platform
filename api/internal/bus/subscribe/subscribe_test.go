@@ -350,3 +350,29 @@ func TestReleaseStarterIsWokenWithOpenRegressions(t *testing.T) {
 		t.Fatalf("an event on nobody's behalf woke someone: %s %v", out, got)
 	}
 }
+
+// Origin: 2026-11-18, the notifier's side-by-side: the direct pushes stay until
+// the bus's path is proven, and the Owner's phone must not ring twice for one
+// thing, so a shadow row's push goes to the recorder and never to the relay.
+func TestAShadowRowNeverReachesThePhone(t *testing.T) {
+	row := registry.Subscription{ID: "r", On: []string{"x.y"}, Deliver: registry.DeliverNotify, To: registry.NotifyTo,
+		Shadow: true, Params: map[string]string{registry.ParamTitle: "t"}}
+	var sent, recorded int
+	send := func(context.Context, string, string, string, string) error { sent++; return nil }
+	record := func(context.Context, string, string, string, string) error { recorded++; return nil }
+	ev := Event{ID: "ev-1", Type: "x.y"}
+	if _, err := Notify(context.Background(), row, ev, NotifierFor(row, send, record)); err != nil {
+		t.Fatal(err)
+	}
+	if sent != 0 || recorded != 1 {
+		t.Fatalf("shadow: sent %d, recorded %d", sent, recorded)
+	}
+	// The positive control: the same row without shadow does send.
+	row.Shadow = false
+	if _, err := Notify(context.Background(), row, ev, NotifierFor(row, send, record)); err != nil {
+		t.Fatal(err)
+	}
+	if sent != 1 || recorded != 1 {
+		t.Fatalf("live: sent %d, recorded %d", sent, recorded)
+	}
+}

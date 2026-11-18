@@ -625,6 +625,12 @@ func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStrea
 		}
 		return err
 	}
+	// A shadow row says what it would have pushed; the direct push is still
+	// the one the Owner gets.
+	shadow := func(_ context.Context, key, title, _, _ string) error {
+		slog.Info("bus: notify shadow", "key", key, "title", title)
+		return nil
+	}
 	detail := s.busRunDetail()
 	known := func(ctx context.Context, addr string) (bool, error) {
 		var kind string
@@ -662,7 +668,7 @@ func (s *Server) consumeSubscriptions(ctx context.Context, js jetstream.JetStrea
 			var out subscribe.Outcome
 			var err error
 			if row.Deliver == registry.DeliverNotify {
-				out, err = subscribe.Notify(dctx, row, subscribe.FromEnvelope(e), notify)
+				out, err = subscribe.Notify(dctx, row, subscribe.FromEnvelope(e), subscribe.NotifierFor(row, notify, shadow))
 			} else {
 				out, err = subscribe.Deliver(dctx, row, subscribe.FromEnvelope(e), read, detail, send, known, subscribe.UndeliverableTo(subs, c.Tenant))
 			}

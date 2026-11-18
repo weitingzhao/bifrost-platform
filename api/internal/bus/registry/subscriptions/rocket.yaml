@@ -112,6 +112,42 @@ subscriptions:
     by: dispatcher
     envs: [prod]
 
+  # What the phone is told directly today, side by side (2026-11-18): each row
+  # records the push it would send ("bus: notify shadow" in the log) and sends
+  # none, so nothing reaches the Owner twice. Taking one over is removing its
+  # shadow line (and giving it its link) together with the direct push.
+  # PROD only, like the cards.
+  - id: question-asked-to-owner
+    on: [owner.question.asked]
+    deliver: notify
+    to: owner
+    shadow: true
+    params:
+      title: "Bus: question {subject} waits for you"
+    guarantee: durable
+    by: dispatcher
+    envs: [prod]
+  - id: policy-expiring-to-owner
+    on: [release.policy.expiring]
+    deliver: notify
+    to: owner
+    shadow: true
+    params:
+      title: "Bus: release policy {subject} {change}"
+    guarantee: durable
+    by: dispatcher
+    envs: [prod]
+  - id: liveness-to-owner
+    on: [seat.liveness.changed]
+    deliver: notify
+    to: owner
+    shadow: true
+    params:
+      title: "Bus: {subject} is {change}"
+    guarantee: durable
+    by: dispatcher
+    envs: [prod]
+
   # A PROD release starts while main has known regressions still open: the
   # seat that asked for it is woken with them (2026-11-17, the coordinator:
   # information, no gate; the run's requester annotation, which the start
