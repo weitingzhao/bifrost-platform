@@ -31,7 +31,7 @@
 channels:
   - {id: L01, class: K2, disposition: replaced, step: "3", what: "controller：审批/问题 statefile 每分钟转成 PG 事件", by: "门·平台库（卡的状态与事件同一事务写）+账"}
   - {id: L02, class: K2, disposition: replaced, step: "2", what: "controller：全部 PipelineRun 每 30 秒记成 pipeline_seen 并入证据账", by: "门·集群（watch 代替列表）；证据写入改为订阅 ci.run.finished 的服务端订阅者", cut: {at: "2026-11-17", evidence: ["reader:records"]}}
-  - {id: L03, class: K2, disposition: replaced, step: "2", what: "controller：TaskRun 每 30 秒记成 unit_run 与证据（模式非 off 时还会创建 TaskRun）", by: "门·集群观察部分；创建 TaskRun 的部分归 X-A29"}
+  - {id: L03, class: K2, disposition: replaced, step: "2", what: "controller：TaskRun 每 30 秒记成 unit_run 与证据（模式非 off 时还会创建 TaskRun）", by: "门·集群观察部分；创建 TaskRun 的部分归 X-A29", cut: {at: "2026-11-18", evidence: ["reader:unit-taskruns"]}}
   - {id: L04, class: K2, disposition: replaced, step: "1", what: "head-release：每 30 秒读 Gitea main 头+证据账+Tekton，可能起 STG 发布", by: "门·代码（git.main.advanced）+ci.verdict.changed 唤醒；判定逻辑留作订阅者（入户口子①）", cut: {at: "2026-11-17", evidence: ["reader:head-release"]}}
   - {id: L05, class: K10, disposition: replaced, step: "4", what: "post-release-check：run 结束 180 秒后核对（默认关）", by: "并到 X-A18 那一份核对（只留一份判定），结果以 release.deploy.finished 宣布"}
   - {id: L06, class: K2, disposition: replaced, step: "3", what: "plan-observations：每分钟读 Gitea 历史记成 plan_observation", by: "门·代码（git.main.advanced 后按事件读历史）+plan.fact.changed"}

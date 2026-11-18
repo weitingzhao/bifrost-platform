@@ -64,13 +64,14 @@ const (
 	RouteLandingFull = "landingci_full"
 	routeRunSteps    = "run_steps"
 	routeTimings     = "pipeline_timings"
+	routeUnitTasks   = "unit_taskruns"
 )
 
 var cacheRoutes = []string{routePipelineRuns, routeReleaseContext, routeSupplyChain,
 	releases.RouteCurrent, releases.RouteTick, RouteLandingFull, routeLastDeliver, routeProdArtifacts}
 
 // taskRoutes read the TaskRun cache (tasksOf), under the same trust rules.
-var taskRoutes = []string{routeRunSteps, routeTimings}
+var taskRoutes = []string{routeRunSteps, routeTimings, routeUnitTasks}
 
 // routeReader is each route's reader in the source switch (bus/nextgen
 // readers.yaml): a read answered from the cache is its run evidence.
@@ -85,6 +86,7 @@ var routeReader = map[string]string{
 	routeProdArtifacts:    "prod-artifacts-ready",
 	routeRunSteps:         "run-steps",
 	routeTimings:          "pipeline-timings",
+	routeUnitTasks:        "unit-taskruns",
 }
 
 // TaskRunCache is the part of the gate's cache that holds TaskRuns: the api

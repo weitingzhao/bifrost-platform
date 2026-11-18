@@ -63,6 +63,9 @@ type Gate struct {
 	// WatchTasks also keeps the namespace's TaskRuns for the display reads
 	// (taskruns.go). Only the process that serves those reads sets it.
 	WatchTasks bool
+	// UnitTaskLabel, when set, also keeps whole the TaskRuns carrying that
+	// label: the unit TaskRuns (unit_taskruns.go).
+	UnitTaskLabel string
 
 	// apps is the last state said of each Argo application (gitops.go).
 	appMu sync.Mutex
@@ -74,6 +77,9 @@ type Gate struct {
 	tasksByRun  map[string]map[string]TaskRun
 	taskRunOf   map[string]string
 	tasksSynced atomic.Bool
+	unitMu      sync.RWMutex
+	units       map[string]*unstructured.Unstructured
+	unitsSynced atomic.Bool
 
 	// runs is what the runs loop knows of each run; only that loop writes
 	// it, under mu; the cache's readers read it under mu (cache.go).
@@ -118,6 +124,7 @@ func (g *Gate) init() {
 		g.apps = map[string]AppState{}
 		g.tasksByRun = map[string]map[string]TaskRun{}
 		g.taskRunOf = map[string]string{}
+		g.units = map[string]*unstructured.Unstructured{}
 		g.watching = make(chan struct{})
 	})
 }
@@ -159,6 +166,9 @@ func (g *Gate) Run(ctx context.Context) {
 	g.init()
 	if g.WatchTasks {
 		safego.Go("bus-gate-cluster-tasks", func() { g.runTasks(ctx) })
+	}
+	if g.UnitTaskLabel != "" {
+		safego.Go("bus-gate-cluster-unit-tasks", func() { g.runUnitTasks(ctx) })
 	}
 	if g.CacheOnly {
 		g.runRuns(ctx)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -239,6 +240,18 @@ func (g *Gate) listTasks(ctx context.Context) (string, error) {
 // runTasks lists the TaskRuns and watches them from there, as runRuns does for
 // the runs; any failure marks the cache unsynced until a list succeeds.
 func (g *Gate) runTasks(ctx context.Context) {
+	g.followTaskRuns(ctx, "task runs", "", g.listTasks, func(t watch.EventType, obj *unstructured.Unstructured) {
+		if t == watch.Deleted {
+			g.dropTask(obj.GetName())
+			return
+		}
+		g.keepTask(TaskRunOf(obj))
+	}, &g.tasksSynced)
+}
+
+// followTaskRuns is the list-then-watch of TaskRuns under a label selector.
+func (g *Gate) followTaskRuns(ctx context.Context, what, selector string, listAll func(context.Context) (string, error),
+	observe func(watch.EventType, *unstructured.Unstructured), synced *atomic.Bool) {
 	resync := g.ResyncEvery
 	if resync <= 0 {
 		resync = 30 * time.Minute
@@ -246,39 +259,32 @@ func (g *Gate) runTasks(ctx context.Context) {
 	list := true
 	var rv string
 	var listed time.Time
-	observe := func(t watch.EventType, obj *unstructured.Unstructured) {
-		if t == watch.Deleted {
-			g.dropTask(obj.GetName())
-			return
-		}
-		g.keepTask(TaskRunOf(obj))
-	}
 	for ctx.Err() == nil {
 		if list {
-			v, err := g.listTasks(ctx)
+			v, err := listAll(ctx)
 			if err != nil {
-				g.tasksSynced.Store(false)
+				synced.Store(false)
 				metricErrors.Add(1)
-				g.logf("bus gate-cluster: list task runs: %v", err)
+				g.logf("bus gate-cluster: list %s: %v", what, err)
 				if !g.sleep(ctx) {
 					return
 				}
 				continue
 			}
 			rv, list, listed = v, false, g.now()
-			g.tasksSynced.Store(true)
+			synced.Store(true)
 		}
 		dyn, err := g.Dynamic()
 		var w watch.Interface
 		if err == nil {
 			w, err = dyn.Resource(TaskRunGVR).Namespace(g.Namespace).Watch(ctx, metav1.ListOptions{
-				ResourceVersion: rv, AllowWatchBookmarks: true, TimeoutSeconds: watchTimeout()})
+				LabelSelector: selector, ResourceVersion: rv, AllowWatchBookmarks: true, TimeoutSeconds: watchTimeout()})
 		}
 		if err != nil {
-			g.tasksSynced.Store(false)
+			synced.Store(false)
 			metricRestarts.Add(1)
 			if !apierrors.IsGone(err) {
-				g.logf("bus gate-cluster: watch task runs: %v", err)
+				g.logf("bus gate-cluster: watch %s: %v", what, err)
 			}
 			list = true
 			if !g.sleep(ctx) {
@@ -293,9 +299,9 @@ func (g *Gate) runTasks(ctx context.Context) {
 		metricRestarts.Add(1)
 		if err != nil {
 			if !errors.Is(err, errGone) {
-				g.logf("bus gate-cluster: watch task runs ended: %v", err)
+				g.logf("bus gate-cluster: watch %s ended: %v", what, err)
 			}
-			g.tasksSynced.Store(false)
+			synced.Store(false)
 			list = true
 		}
 		if g.now().Sub(listed) >= resync {

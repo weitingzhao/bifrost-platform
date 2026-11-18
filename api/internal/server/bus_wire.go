@@ -43,6 +43,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
+	"github.com/weitingzhao/bifrost-platform/api/internal/unitexec"
 )
 
 // The bus, step 1 (api/internal/bus/RULES.md): the ledger is agentrt's event
@@ -489,7 +490,7 @@ func (s *Server) startGateCluster(ctx context.Context, env string) {
 		ns = s.delivery.PipelinesNamespace()
 	}
 	g := &gatecluster.Gate{Ledger: &gatecluster.PGLedger{DB: s.bus.db}, Namespace: ns, Env: env, Logf: busLogf, OnFinished: s.bus.runFinished,
-		Dynamic: s.clusterDynamic}
+		UnitTaskLabel: unitexec.LabelPlan, Dynamic: s.clusterDynamic}
 	if s.delivery != nil {
 		s.delivery.SetRunCache(g, s.earnedReadRoutes(ctx))
 	}
@@ -525,7 +526,7 @@ func (s *Server) startRunCache(ctx context.Context) {
 		return
 	}
 	ns := s.delivery.PipelinesNamespace()
-	g := &gatecluster.Gate{CacheOnly: true, WatchTasks: true, Namespace: ns, Logf: busLogf, Dynamic: s.clusterDynamic}
+	g := &gatecluster.Gate{CacheOnly: true, WatchTasks: true, UnitTaskLabel: unitexec.LabelPlan, Namespace: ns, Logf: busLogf, Dynamic: s.clusterDynamic}
 	s.delivery.SetRunCache(g, s.earnedReadRoutes(ctx))
 	safego.Go("bus-run-cache", func() { g.Run(kubemetrics.WithSite(ctx, "bus.run-cache")) })
 	slog.Info("bus run cache: watching PipelineRuns for the display reads", "namespace", ns)
