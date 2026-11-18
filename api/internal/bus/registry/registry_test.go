@@ -90,8 +90,7 @@ func TestParseRefuses(t *testing.T) {
 // (platform-workers, platform-api, seat:*) on every topic, so "who reads this"
 // could not be read off it. It names only readers the code runs: headrelease
 // (its durable consumer, server/bus_wire.go headReleaseWakes) on the three
-// events it consumes, the post-release check (server/post_release.go
-// consumePostRelease) on ci.run.finished, the inbox waiters (bus/mailwake,
+// events it consumes, the inbox waiters (bus/mailwake,
 // 2026-11-18, channel W01) on seat.mail.arrived, the conclusions' consumers
 // (server consumeConclusions, 2026-11-18) on what ends a card or a
 // question, the window queue (server consumeWindowQueue, 2026-11-18) on the
@@ -116,10 +115,6 @@ func TestRegisterNamesRealReaders(t *testing.T) {
 				has = true
 			case "console":
 				console = true
-			case "postrelease":
-				if typ != "ci.run.finished" {
-					t.Errorf("%s: the post-release check reads only ci.run.finished", typ)
-				}
 			case "release-recorder":
 				if typ != "ci.run.finished" {
 					t.Errorf("%s: the release recorder reads only finished runs", typ)

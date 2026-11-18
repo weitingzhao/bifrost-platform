@@ -62,7 +62,6 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 		src.CINode = s.delivery.PublishCINode
 	}
 	src.HeadRelease = s.bus.serialHeadRelease(s.headReleaseSource())
-	src.PostRelease = s.postReleaseSource()
 	if s.delivery != nil {
 		src.RunEvidenced = s.unitScopeShadowSource()
 		src.CommitTree = giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second})

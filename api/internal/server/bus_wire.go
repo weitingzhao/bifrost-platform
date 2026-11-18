@@ -86,9 +86,6 @@ type busWiring struct {
 	// this process follows seat.mail.arrived.
 	mail     mailwake.Hub
 	mailLive atomic.Bool
-	// postPass is the post-release check's pass (postReleaseSource), which
-	// the bus starts too (consumePostRelease); nil while the check is off.
-	postPass atomic.Pointer[func(context.Context, string) error]
 }
 
 // noteWake keeps id as the newest event worth a head-release pass.
@@ -461,7 +458,6 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 		}
 		s.consumeSubscriptions(ctx, js, env, pool)
 		s.startRunHooks(ctx, js, env)
-		s.consumePostRelease(ctx, js, env)
 		s.consumeConclusions(ctx, js, env)
 		s.consumeWindowQueue(ctx, js, env)
 		s.consumeAlertLetters(ctx, js, env)

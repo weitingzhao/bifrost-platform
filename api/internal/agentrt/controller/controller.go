@@ -63,10 +63,6 @@ type Sources struct {
 	// HeadRelease takes each deliverable the platform releases by itself
 	// one step (server/head_release.go); nil when that is switched off.
 	HeadRelease func(ctx context.Context) error
-	// PostRelease judges the newest finished PROD release once it has
-	// settled and records the verdict (server/post_release.go); nil when
-	// that is switched off.
-	PostRelease func(ctx context.Context) error
 	Plan        planstore.PlanSources
 	Approval    func(ctx context.Context, number int64) (seenfacts.ApprovalFact, bool)
 	Question    func(ctx context.Context, id string) (q seenfacts.Question, ok bool)
@@ -395,11 +391,6 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		// Thirty seconds: the slow poll of Owner 2026-11-13 ("state is read
 		// from the source; events are only hints"). No event hints it yet.
 		c.every(ctx, &wg, "head-release", 30*time.Second, func() error { return c.Sources.HeadRelease(ctx) })
-	}
-	if c.Sources.PostRelease != nil {
-		// The same slow poll: a run is judged within thirty seconds of its
-		// settle time.
-		c.every(ctx, &wg, "post-release-check", 30*time.Second, func() error { return c.Sources.PostRelease(ctx) })
 	}
 	// Always: an Owner signoff's observation needs no Git reader.
 	c.every(ctx, &wg, "agentrt-plan-observations", PlanObserveEvery, func() error {

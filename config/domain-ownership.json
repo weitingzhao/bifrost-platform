@@ -315,13 +315,6 @@
       "status": "assigned",
       "basis": "CI charter and delivery read-model extraction"
     },
-    "api/internal/postrelease": {
-      "domains": [
-        "delivery"
-      ],
-      "status": "assigned",
-      "basis": "CI charter and delivery read-model extraction"
-    },
     "api/internal/agentrt/deliveryview": {
       "domains": [
         "delivery"
