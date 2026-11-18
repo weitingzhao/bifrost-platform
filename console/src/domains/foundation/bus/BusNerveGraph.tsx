@@ -468,7 +468,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], flat, spin, onR
             const big = n.kind === 'cluster' || n.kind === 'core'
             div.textContent = big || n.named || n.label.length <= 18 ? n.label : `${n.label.slice(0, 17)}…`
             div.style.cssText = `font: ${big ? 11 : 9}px ui-monospace, monospace; color: ${big ? '#f4e9df' : '#c9b6a8'}; white-space: nowrap; pointer-events: none;` +
-              ` letter-spacing: 0.04em; text-shadow: 0 0 2px #000, 0 0 4px #000; transform: translateY(${n.kind === 'cluster' ? -Math.round(cloudRadius(n) * 2.2) : -12}px);`
+              ' letter-spacing: 0.04em; text-shadow: 0 0 2px #000, 0 0 4px #000;'
             labelsRef.current.set(n.id, div)
             return new CSS2DObject(div)
           }
@@ -678,6 +678,9 @@ export default function BusNerveGraph({ nodes, links, arcs = [], flat, spin, onR
             const w = width()
             const h = height()
             const placed: { x: number; y: number; w: number }[] = []
+            // A name that would overlap one already placed moves above or below its cloud (a margin: the renderer owns the
+            // transform); only with no free place does it hide (the coordinator, 11-17: owner and tenant were drawn on each other).
+            const tries = [0, -16, 16, -30, 30]
             const named = data.current.nodes
               .filter(n => labelsRef.current.has(n.id) && n.kind !== 'topic')
               .sort((a, b) => (b.kind === 'cluster' ? cloudRadius(b) + 100 : b.size) - (a.kind === 'cluster' ? cloudRadius(a) + 100 : a.size))
@@ -688,10 +691,12 @@ export default function BusNerveGraph({ nodes, links, arcs = [], flat, spin, onR
               const y = ((1 - v.y) / 2) * h
               const lw = (div.textContent?.length ?? 0) * (n.kind === 'cluster' ? 7 : 6)
               const far = n.kind !== 'cluster' && n.kind !== 'core' && cam.position.distanceTo(v.set(n.x ?? 0, n.y ?? 0, n.z ?? 0)) > 220
-              const clash = far || placed.some(p => Math.abs(p.x - x) < (p.w + lw) / 2 + 4 && Math.abs(p.y - y) < 15)
+              const free = (dy: number) => !placed.some(p => Math.abs(p.x - x) < (p.w + lw) / 2 + 4 && Math.abs(p.y - (y + dy)) < 14)
+              const dy = far ? undefined : tries.find(free)
               // While something is hovered its card is read: the other names step back.
-              div.style.opacity = clash ? '0' : hovered.current && hovered.current !== n.id ? '0.15' : '1'
-              if (!clash) placed.push({ x, y, w: lw })
+              div.style.opacity = dy === undefined ? '0' : hovered.current && hovered.current !== n.id ? '0.15' : '1'
+              div.style.marginTop = `${dy ?? 0}px`
+              if (dy !== undefined) placed.push({ x, y: y + dy, w: lw })
             }
           }
           const tick = () => {
