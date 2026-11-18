@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
@@ -52,14 +53,14 @@ type RuleApprovalCheck struct {
 func (a RuleApproval) check() error {
 	switch {
 	case a.RuleID == "":
-		return invalid("rule_id is required")
+		return eventlog.Invalid("rule_id is required")
 	case a.Version < 2:
-		return invalid("rule_version is the next version of a rule in force, 2 or more")
+		return eventlog.Invalid("rule_version is the next version of a rule in force, 2 or more")
 	case !artifactIDRE.MatchString(a.TextArtifactID):
-		return invalid("text_artifact_id is the draft's artifact (sha256:<64 hex>), not %q", a.TextArtifactID)
+		return eventlog.Invalid("text_artifact_id is the draft's artifact (sha256:<64 hex>), not %q", a.TextArtifactID)
 	}
 	if _, _, err := rules.KindOf(a.RuleID); err != nil {
-		return invalid("%v", err)
+		return eventlog.Invalid("%v", err)
 	}
 	return nil
 }
@@ -74,12 +75,12 @@ func ruleDraft(ctx context.Context, tx pgx.Tx, a RuleApproval) (rules.Rule, []by
 		return rules.Rule{}, nil, err
 	}
 	if !proposed {
-		return rules.Rule{}, nil, invalid("no draft of rule %s v%d was proposed with artifact %s", a.RuleID, a.Version, a.TextArtifactID)
+		return rules.Rule{}, nil, eventlog.Invalid("no draft of rule %s v%d was proposed with artifact %s", a.RuleID, a.Version, a.TextArtifactID)
 	}
 	var text []byte
 	if err := tx.QueryRow(ctx, `SELECT body FROM agentrt.artifact_blob WHERE artifact_id = $1`, a.TextArtifactID).Scan(&text); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return rules.Rule{}, nil, invalid("artifact %s is not stored", a.TextArtifactID)
+			return rules.Rule{}, nil, eventlog.Invalid("artifact %s is not stored", a.TextArtifactID)
 		}
 		return rules.Rule{}, nil, err
 	}
@@ -88,7 +89,7 @@ func ruleDraft(ctx context.Context, tx pgx.Tx, a RuleApproval) (rules.Rule, []by
 		return rules.Rule{}, nil, err
 	}
 	if r.Version != a.Version {
-		return rules.Rule{}, nil, invalid("artifact %s is version %d of rule %s, not %d", a.TextArtifactID, r.Version, a.RuleID, a.Version)
+		return rules.Rule{}, nil, eventlog.Invalid("artifact %s is version %d of rule %s, not %d", a.TextArtifactID, r.Version, a.RuleID, a.Version)
 	}
 	return r, text, nil
 }
@@ -97,10 +98,10 @@ func ruleDraft(ctx context.Context, tx pgx.Tx, a RuleApproval) (rules.Rule, []by
 // rule that has one, changing only capacity fields.
 func approvable(prev *StoredRule, r rules.Rule) ([]rules.CapacityChange, error) {
 	if prev == nil {
-		return nil, invalid("rule %s has no version yet: its first version is signed", r.ID)
+		return nil, eventlog.Invalid("rule %s has no version yet: its first version is signed", r.ID)
 	}
 	if r.Version != prev.Version+1 {
-		return nil, invalid("rule %s is at version %d; the draft is version %d, not the next", r.ID, prev.Version, r.Version)
+		return nil, eventlog.Invalid("rule %s is at version %d; the draft is version %d, not the next", r.ID, prev.Version, r.Version)
 	}
 	if err := rules.CapacityOnly(prev.Rule, r); err != nil {
 		return nil, fmt.Errorf("%w: rule %s v%d is not a capacity change: %v", ErrUnsigned, r.ID, r.Version, err)
@@ -113,7 +114,7 @@ func approvable(prev *StoredRule, r rules.Rule) ([]rules.CapacityChange, error) 
 // a (agentrt_rule_approve's creation check): the draft was proposed, is the
 // next version of its rule and changes only capacity fields. It answers the
 // changes the card shows.
-func CheckRuleApproval(ctx context.Context, db DB, a RuleApproval) (RuleApprovalCheck, error) {
+func CheckRuleApproval(ctx context.Context, db eventlog.DB, a RuleApproval) (RuleApprovalCheck, error) {
 	if err := a.check(); err != nil {
 		return RuleApprovalCheck{}, err
 	}
@@ -144,12 +145,12 @@ func CheckRuleApproval(ctx context.Context, db DB, a RuleApproval) (RuleApproval
 // approval, the artifact and the changes. The same approval again (its
 // executor retried) answers what it wrote; another approval of a version
 // already written is refused.
-func ApproveRule(ctx context.Context, db DB, w Writer, a RuleApproval) (map[string]any, error) {
+func ApproveRule(ctx context.Context, db eventlog.DB, w actor.Writer, a RuleApproval) (map[string]any, error) {
 	if err := a.check(); err != nil {
 		return nil, err
 	}
 	if !approvalIDRE.MatchString(a.ID) {
-		return nil, invalid("a rule is approved by an approval (appr_<16 hex>), not %q", a.ID)
+		return nil, eventlog.Invalid("a rule is approved by an approval (appr_<16 hex>), not %q", a.ID)
 	}
 	var r rules.Rule
 	var text []byte

@@ -142,6 +142,18 @@ func Nullable(s string) any {
 	return s
 }
 
+// Lock order, everywhere: the writer of a route (its own lock and, when this
+// write registers it, the registration lock and the system stream; review
+// 176 A1), then the dependency graph, then steps, then attempts, then tasks
+// (verification, Conclude, takes a subject before its check), then mission,
+// then the event stream (Append): every write takes the row locks it needs
+// before it appends (review 149 B1). A batch of proposals never waits while
+// it holds a task lock: it takes steps and subjects NOWAIT and the tasks it
+// depends on FOR KEY SHARE, which no state change conflicts with (review 176
+// A2).
+// Task rows are locked FOR NO KEY UPDATE, which foreign key checks (KEY
+// SHARE) never wait for.
+
 // Append writes one event inside tx and names it as this transaction's event
 // (SET LOCAL agentrt.event_id), so the state rows written next in tx pass the
 // database's check. The stream is created on first use. Callers write their

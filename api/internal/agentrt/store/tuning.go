@@ -26,7 +26,7 @@ func tuningIn(ctx context.Context, tx pgx.Tx) (*rules.Tuning, error) {
 
 // ReadTuning is the tuning rule in force now, nil when none is: the
 // controller reads it once a pass.
-func ReadTuning(ctx context.Context, db DB) (*rules.Tuning, error) {
+func ReadTuning(ctx context.Context, db eventlog.DB) (*rules.Tuning, error) {
 	var t *rules.Tuning
 	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		var err error

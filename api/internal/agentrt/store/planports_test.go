@@ -59,7 +59,7 @@ func lastCard(t *testing.T, a *asker) planstore.Card {
 	return a.cards[len(a.cards)-1]
 }
 
-// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the rules' side binds the two rule ports at the package's start (envelope.go); this holds that binding in place and that each port answers what the rule store itself answers, with a rule in force and with none. 2026-11-18 (TD-582): read through what the rules decide in a proposal (the standing authorization and its "by", a card's ByRule), so the ports' functions need not be exported.
+// Origin: 2026-11-17, plan core wall (design duty/from-biz-2026-11-17-plan-core-wall.md): the rules' side binds the two rule ports at the package's start (rules.go); this holds that binding in place and that each port answers what the rule store itself answers, with a rule in force and with none. 2026-11-18 (TD-582): read through what the rules decide in a proposal (the standing authorization and its "by", a card's ByRule), so the ports' functions need not be exported.
 func TestRulePortsAreBoundToTheRuleStore(t *testing.T) {
 	t.Parallel()
 	direct := func(w *world) (plan, auto *store.StoredRule) {

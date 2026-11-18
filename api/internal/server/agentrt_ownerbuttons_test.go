@@ -153,7 +153,7 @@ func TestOwnerButtonPaths(t *testing.T) {
 	b.tx(func(tx pgx.Tx) error {
 		for _, m := range []string{"M-3", "M-4"} {
 			if _, err := storekit.CreateMission(ctx, tx, "controller", storekit.Mission{ID: m, Title: "goal " + m, Goal: "a goal",
-				Deadline: time.Now().Add(24 * time.Hour), Repos: []string{"bifrost-platform"}, Success: []string{store.GoalSuccess}}); err != nil {
+				Deadline: time.Now().Add(24 * time.Hour), Repos: []string{"bifrost-platform"}, Success: []string{"the goal's plan is accepted and every task it splits into is accepted"}}); err != nil {
 				return err
 			}
 			if err := storekit.MoveMission(ctx, tx, "controller", m, "active", "test"); err != nil {

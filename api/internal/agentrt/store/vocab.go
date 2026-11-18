@@ -91,7 +91,7 @@ func init() {
 		Types:  keysOf(eventTypes),
 		Bodies: declaredBodies(bodies),
 		Values: fieldValues,
-		Events: []func(eventlog.Event) error{retiredRecord},
+		Events: []func(eventlog.Event) error{eventlog.RetiredRecord},
 	})
 }
 

@@ -1,7 +1,11 @@
 package store_test
 
-import (
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
-)
+// tool is one executor a host can run, with the model it would use: what the
+// fixtures' host job rows are written from.
+type tool struct {
+	Executor string // actor id, e.g. exec:codex
+	Provider string // model provider
+	Model    string // may be empty until the executor starts
+}
 
-var deterministic = store.Tool{Executor: "exec:deterministic", Provider: "local"}
+var deterministic = tool{Executor: "exec:deterministic", Provider: "local"}

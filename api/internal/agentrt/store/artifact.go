@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // The artifact store (bodies, uploads, their search and scans) is package
@@ -13,6 +15,6 @@ import (
 
 // UploadArtifact is artifact.UploadArtifact. The name stays here for the
 // approvals' tests, which register a thread through this package.
-func UploadArtifact(ctx context.Context, db DB, w Writer, kind, mediaType string, body []byte) (string, bool, error) {
+func UploadArtifact(ctx context.Context, db eventlog.DB, w actor.Writer, kind, mediaType string, body []byte) (string, bool, error) {
 	return artifact.UploadArtifact(ctx, db, w, kind, mediaType, body)
 }

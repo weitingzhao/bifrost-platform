@@ -8,10 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 )
 
-func original_recorderCardBody(w Writer, cardKey, reason string, log recorderimport.Log, logID string) string {
+func original_recorderCardBody(w actor.Writer, cardKey, reason string, log recorderimport.Log, logID string) string {
 	types := log.Types()
 	names := make([]string, 0, len(types))
 	for t := range types {
@@ -44,7 +45,7 @@ func TestRecorderCardDisplayFrozenParity(t *testing.T) {
 	for _, reason := range []string{"", "why\nsecond", "<>&中文"} {
 		for _, records := range [][]recorderimport.Record{nil, {{Type: "z"}, {Type: "a", Masked: true}, {Type: "z"}}} {
 			log := recorderimport.Log{Source: recorderimport.Source{WorkID: "W-1", File: "log", SHA256: "hash"}, Records: records}
-			w := Writer{Actor: "actor"}
+			w := actor.Writer{Actor: "actor"}
 			if got, want := recorderimport.CardBody(w.Actor, "0123456789abcdef", reason, log, "id", "legacy:recorder:"+log.Source.WorkID), original_recorderCardBody(w, "0123456789abcdef", reason, log, "id"); got != want {
 				t.Fatalf("recorder differs: %q / %q", got, want)
 			}

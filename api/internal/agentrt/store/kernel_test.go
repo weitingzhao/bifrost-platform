@@ -17,9 +17,9 @@ import (
 )
 
 var (
-	codex  = store.Tool{Executor: "exec:codex", Provider: "openai", Model: "gpt-x"}
-	claude = store.Tool{Executor: "exec:claude", Provider: "anthropic", Model: "opus"}
-	cursor = store.Tool{Executor: "exec:cursor", Provider: "cursor-mix"}
+	codex  = tool{Executor: "exec:codex", Provider: "openai", Model: "gpt-x"}
+	claude = tool{Executor: "exec:claude", Provider: "anthropic", Model: "opus"}
+	cursor = tool{Executor: "exec:cursor", Provider: "cursor-mix"}
 )
 
 const (
@@ -45,9 +45,9 @@ func newKernelWorld(t *testing.T) *world {
 	// The seed's Owner facts as if he had signed capability-facts: core
 	// work needs its only facts to grant.
 	w.legacy(t, agentrttest.OwnerFactsRule, agentrttest.BindOwnerFacts)
-	w.jobs(t, "active", "*", codex, claude, cursor, deterministic, store.Tool{Executor: "exec:claude", Provider: "other"},
-		store.Tool{Executor: "exec:codex", Provider: "other"}, store.Tool{Executor: "exec:codex", Provider: "cursor-mix"},
-		store.Tool{Executor: "exec:claude", Provider: "cursor-mix"})
+	w.jobs(t, "active", "*", codex, claude, cursor, deterministic, tool{Executor: "exec:claude", Provider: "other"},
+		tool{Executor: "exec:codex", Provider: "other"}, tool{Executor: "exec:codex", Provider: "cursor-mix"},
+		tool{Executor: "exec:claude", Provider: "cursor-mix"})
 	return w
 }
 
@@ -55,7 +55,7 @@ func newKernelWorld(t *testing.T) *world {
 // the given status and model pattern. The Owner's signed initial rule writes
 // these (O19); a test writes them with the import event, under a rule of its
 // own.
-func (w *world) jobs(t *testing.T, status, pattern string, tools ...store.Tool) {
+func (w *world) jobs(t *testing.T, status, pattern string, tools ...tool) {
 	t.Helper()
 	ctx := ctxOf(t)
 	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {

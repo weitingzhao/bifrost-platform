@@ -1,3 +1,7 @@
+// Package store is the data access of the agent runtime. It opens no HTTP.
+// Every state change goes through eventlog.Append, the one path that writes
+// an event (package eventlog, the base this package and the other domains
+// write through).
 package store
 
 import (
@@ -11,11 +15,21 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
+)
+
+// DB and Writer are eventlog.DB and actor.Writer. Nothing in this package
+// needs the names: the approvals package's tests still write them, and that
+// package is changed on its own (a trust anchor), so they stay until it does.
+type (
+	DB     = eventlog.DB
+	Writer = actor.Writer
 )
 
 // The runtime's rules (design v5 §5.2 「规则」, Owner 2026-10-14 「规则 A」):
@@ -133,14 +147,14 @@ func effectiveRule(ctx context.Context, q interface {
 // ruleRequest parses a rule's text for the route that names id.
 func ruleRequest(id string, text []byte) (rules.Rule, error) {
 	if rules.Retired(id) {
-		return rules.Rule{}, invalid("rule %s is of a kind retired with the dispatch lane: it is no longer checked, proposed, signed or tightened", id)
+		return rules.Rule{}, eventlog.Invalid("rule %s is of a kind retired with the dispatch lane: it is no longer checked, proposed, signed or tightened", id)
 	}
 	r, err := rules.Parse(text)
 	if err != nil {
-		return rules.Rule{}, invalid("%v", err)
+		return rules.Rule{}, eventlog.Invalid("%v", err)
 	}
 	if r.ID != id {
-		return rules.Rule{}, invalid("the text is rule %s, not %s", r.ID, id)
+		return rules.Rule{}, eventlog.Invalid("the text is rule %s, not %s", r.ID, id)
 	}
 	return r, nil
 }
@@ -150,12 +164,12 @@ func ruleRequest(id string, text []byte) (rules.Rule, error) {
 func follows(prev *StoredRule, r rules.Rule) (tightens error, err error) {
 	if prev == nil {
 		if r.Version != 1 {
-			return nil, invalid("rule %s has no version yet; this is version %d", r.ID, r.Version)
+			return nil, eventlog.Invalid("rule %s has no version yet; this is version %d", r.ID, r.Version)
 		}
 		return errors.New("there is no version to tighten"), nil
 	}
 	if r.Version != prev.Version+1 {
-		return nil, invalid("rule %s is at version %d; this is version %d", r.ID, prev.Version, r.Version)
+		return nil, eventlog.Invalid("rule %s is at version %d; this is version %d", r.ID, prev.Version, r.Version)
 	}
 	return rules.Tightens(prev.Rule, r), nil
 }
@@ -163,7 +177,7 @@ func follows(prev *StoredRule, r rules.Rule) (tightens error, err error) {
 // CheckRule reads a rule's text as the sign and tighten routes would, writes
 // nothing, and says what it is: the body that would be stored, the version
 // before it, and whether it only tightens that one (so needs no signature).
-func CheckRule(ctx context.Context, db DB, id string, text []byte) (map[string]any, error) {
+func CheckRule(ctx context.Context, db eventlog.DB, id string, text []byte) (map[string]any, error) {
 	r, err := ruleRequest(id, text)
 	if err != nil {
 		return nil, err
@@ -206,7 +220,7 @@ func CheckRule(ctx context.Context, db DB, id string, text []byte) (map[string]a
 }
 
 // readOnly runs f in a read-only transaction.
-func readOnly(ctx context.Context, db DB, f func(pgx.Tx) error) error {
+func readOnly(ctx context.Context, db eventlog.DB, f func(pgx.Tx) error) error {
 	tx, err := db.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return err
@@ -221,7 +235,7 @@ func readOnly(ctx context.Context, db DB, f func(pgx.Tx) error) error {
 // next version, and a rule marked tighten really is one. The row, its event
 // and the rows the rule writes (jobs, candidates, capability facts) go in one
 // transaction.
-func SignRule(ctx context.Context, db DB, w Writer, id string, text []byte, signature, anchor string) (map[string]any, error) {
+func SignRule(ctx context.Context, db eventlog.DB, w actor.Writer, id string, text []byte, signature, anchor string) (map[string]any, error) {
 	r, err := ruleRequest(id, text)
 	if err != nil {
 		return nil, err
@@ -231,7 +245,7 @@ func SignRule(ctx context.Context, db DB, w Writer, id string, text []byte, sign
 	}
 	return writeRule(ctx, db, w, r, text, func(_ *StoredRule, why error) error {
 		if r.Direction == rules.Tighten && why != nil {
-			return invalid("the rule is marked tighten but %v", why)
+			return eventlog.Invalid("the rule is marked tighten but %v", why)
 		}
 		return nil
 	}, ruleRecord{signature: signature, signedBy: anchor})
@@ -240,7 +254,7 @@ func SignRule(ctx context.Context, db DB, w Writer, id string, text []byte, sign
 // TightenRule takes a rule without a signature: only a version that the
 // comparison with the one before shows grants nothing more, and that says so
 // (direction tighten). Anything else needs the Owner's signature.
-func TightenRule(ctx context.Context, db DB, w Writer, id string, text []byte) (map[string]any, error) {
+func TightenRule(ctx context.Context, db eventlog.DB, w actor.Writer, id string, text []byte) (map[string]any, error) {
 	r, err := ruleRequest(id, text)
 	if err != nil {
 		return nil, err
@@ -269,14 +283,14 @@ type ruleRecord struct {
 // version before and whether r only tightens it, lets it. For a card's
 // version (rec.approval) it asks first, under the same locks, whether that
 // approval already wrote it (its executor retried) and answers what it wrote.
-func writeRule(ctx context.Context, db DB, w Writer, r rules.Rule, text []byte, allow func(prev *StoredRule, why error) error,
+func writeRule(ctx context.Context, db eventlog.DB, w actor.Writer, r rules.Rule, text []byte, allow func(prev *StoredRule, why error) error,
 	rec ruleRecord) (map[string]any, error) {
 	var out map[string]any
 	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
-		if err := ensureWriter(ctx, tx, w, false); err != nil {
+		if err := actor.Ensure(ctx, tx, w, false); err != nil {
 			return err
 		}
-		hook("rule locked", r.ID)
+		actor.Hook("rule locked", r.ID)
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1, hashtext($2))`, ruleLock, r.ID); err != nil {
 			return err
 		}
@@ -304,7 +318,7 @@ func writeRule(ctx context.Context, db DB, w Writer, r rules.Rule, text []byte, 
 	return out, err
 }
 
-func insertRule(ctx context.Context, tx pgx.Tx, w Writer, r rules.Rule, text []byte, rec ruleRecord) (map[string]any, error) {
+func insertRule(ctx context.Context, tx pgx.Tx, w actor.Writer, r rules.Rule, text []byte, rec ruleRecord) (map[string]any, error) {
 	body, err := r.BodyJSON()
 	if err != nil {
 		return nil, err
@@ -331,7 +345,7 @@ func insertRule(ctx context.Context, tx pgx.Tx, w Writer, r rules.Rule, text []b
 	if approvalID == nil {
 		_, err = tx.Exec(ctx, `INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, signed_by, signature,
 		    effective_at, expires_at, proposed_by_actor_id) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10)`,
-			r.ID, r.Version, string(body), string(text), r.Direction, nullable(signedBy), nullable(signature), r.Effective, r.Expires, w.Actor)
+			r.ID, r.Version, string(body), string(text), r.Direction, eventlog.Nullable(signedBy), eventlog.Nullable(signature), r.Effective, r.Expires, w.Actor)
 	} else {
 		// Only a card's version names approval_id (0013): the signed and
 		// tighten routes write what they wrote before.
@@ -357,9 +371,9 @@ func insertRule(ctx context.Context, tx pgx.Tx, w Writer, r rules.Rule, text []b
 
 // RuleInForce is CurrentRule at the database's clock, in a read-only
 // transaction of its own.
-func RuleInForce(ctx context.Context, db DB, id string) (*StoredRule, error) {
+func RuleInForce(ctx context.Context, db eventlog.DB, id string) (*StoredRule, error) {
 	if rules.Retired(id) {
-		return nil, invalid("rule %s is of a kind retired with the dispatch lane; its signed versions stay in the record and nothing reads them", id)
+		return nil, eventlog.Invalid("rule %s is of a kind retired with the dispatch lane; its signed versions stay in the record and nothing reads them", id)
 	}
 	var out *StoredRule
 	err := readOnly(ctx, db, func(tx pgx.Tx) error {
@@ -377,20 +391,20 @@ func RuleInForce(ctx context.Context, db DB, id string) (*StoredRule, error) {
 // ProposeRule records a rule a seat or a thread drafts for the Owner
 // (rule_proposed): the text is kept as an artifact and nothing takes effect.
 // It says whether the text would need his signature.
-func ProposeRule(ctx context.Context, db DB, w Writer, key, id string, text []byte, reason string) (map[string]any, error) {
+func ProposeRule(ctx context.Context, db eventlog.DB, w actor.Writer, key, id string, text []byte, reason string) (map[string]any, error) {
 	if key == "" {
-		return nil, invalid("an idempotency key is required")
+		return nil, eventlog.Invalid("an idempotency key is required")
 	}
 	if strings.TrimSpace(reason) == "" {
-		return nil, invalid("a reason is required")
+		return nil, eventlog.Invalid("a reason is required")
 	}
 	r, err := ruleRequest(id, text)
 	if err != nil {
 		return nil, err
 	}
 	request := map[string]any{"rule_id": id, "text": string(text), "reason": reason}
-	return idempotentAs(ctx, db, w, "rules/proposals", key, request, nil, func(tx pgx.Tx) (map[string]any, error) {
-		if err := ensureWriter(ctx, tx, w, true); err != nil {
+	return actor.IdempotentAs(ctx, db, w, "rules/proposals", key, request, nil, func(tx pgx.Tx) (map[string]any, error) {
+		if err := actor.Ensure(ctx, tx, w, true); err != nil {
 			return nil, err
 		}
 		prev, err := latestRule(ctx, tx, id)
@@ -416,4 +430,53 @@ func ProposeRule(ctx context.Context, db DB, w Writer, key, id string, text []by
 		return map[string]any{"rule_id": id, "rule_version": r.Version, "text_artifact_id": art, "event_id": ev.EventID,
 			"needs_signature": why != nil}, nil
 	})
+}
+
+// The plan code reads the two rules it acts under through its ports
+// (planstore, planports.go): the rule in force of each kind, as far as the plan code
+// reads it. A rule that does not read counts as none there too (inForce).
+var planRulePorts = planstore.RulePorts{
+	PlanRuleInForce: func(ctx context.Context, tx pgx.Tx) (*planstore.PlanRule, error) {
+		r, err := inForce(ctx, tx, rules.KindPlan)
+		if err != nil || r == nil {
+			return nil, err
+		}
+		return &planstore.PlanRule{ID: r.ID, Version: r.Version, DoneRules: r.Plan.DoneRules}, nil
+	},
+	CardAutoKindsInForce: func(ctx context.Context, tx pgx.Tx) ([]string, error) {
+		r, err := inForce(ctx, tx, rules.KindCardAuto)
+		if err != nil || r == nil {
+			return nil, err
+		}
+		return r.CardAuto.Kinds, nil
+	},
+}
+
+func init() { planstore.BindPlanRules(planRulePorts) }
+
+// What only the rules know, registered with the actor package: the day's
+// limit of new threads where the tuning rule sets it. No holder of an
+// agent's token is registered, so the actor package refuses every agent.
+func init() {
+	actor.RegisterThreadLimit(func(ctx context.Context, tx pgx.Tx) (int, error) {
+		tune, err := tuningIn(ctx, tx)
+		if err != nil {
+			return 0, err
+		}
+		return tune.Int(rules.TuneThreadsPerDay), nil
+	})
+}
+
+// inForce is CurrentRule at the database's clock; a stored rule that does
+// not read counts as none.
+func inForce(ctx context.Context, tx pgx.Tx, id string) (*StoredRule, error) {
+	var now time.Time
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		return nil, err
+	}
+	r, err := CurrentRule(ctx, tx, id, now)
+	if errors.Is(err, errBadRule) {
+		return nil, nil
+	}
+	return r, err
 }

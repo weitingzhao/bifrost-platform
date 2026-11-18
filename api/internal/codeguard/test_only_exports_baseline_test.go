@@ -101,7 +101,6 @@ var exportedForOtherTests = []string{
 	"api/internal/agentrt/recorderimport.Source",
 	"api/internal/agentrt/rules.Header",
 	"api/internal/agentrt/seenfacts.ExternalStream",
-	"api/internal/agentrt/store.GoalSuccess",
 	"api/internal/agentrt/store.MissionStream",
 	"api/internal/agentrt/store.NewAttemptID",
 	"api/internal/agentrt/store.NewTaskID",

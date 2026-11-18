@@ -54,7 +54,7 @@ type RulePorts struct {
 var rulePorts atomic.Pointer[RulePorts]
 
 // BindPlanRules binds the rules' side. It is called once, from the init of
-// the rules' files (store's envelope.go).
+// the rules' files (store's rules.go).
 func BindPlanRules(p RulePorts) { rulePorts.Store(&p) }
 
 func planRuleInForce(ctx context.Context, tx pgx.Tx) (*PlanRule, error) {

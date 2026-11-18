@@ -14,6 +14,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/strictjson"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
@@ -24,13 +25,13 @@ import (
 // ports.go, provided by planstore), and the delivery read's port onto the
 // lineage (deliveryreadings' LineagePorts, provided by externalwork): this file is the store's wiring and not
 // the plan's, and it is the one place of the store that names both sides. A provider still in this package binds
-// its own port from its own file (envelope.go, recorderimport.go,
+// its own port from its own file (rules.go, recorderimport.go,
 // loopalert.go).
 
 var planExternalWorkPorts = planstore.ExternalWorkPorts{
 	CheckNote: func(record any) error {
 		var n externalwork.ExternalNote
-		if err := strictViewValue(record, &n); err != nil {
+		if err := strictjson.Value(record, &n); err != nil {
 			return err
 		}
 		return n.Validate()

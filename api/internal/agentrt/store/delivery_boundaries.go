@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
@@ -36,7 +37,7 @@ func boundaryRule(id string, current, latest *StoredRule, now time.Time) Boundar
 // ReadDeliveryBoundaries is a read-only projection, not a release preflight.
 // It calls the same CurrentRule parser and effective-value helpers as consumers.
 // Repeatable read keeps versions and their derived values in one DB snapshot.
-func ReadDeliveryBoundaries(ctx context.Context, db DB, diskFloor int64, availableSince time.Time) (DeliveryBoundaries, error) {
+func ReadDeliveryBoundaries(ctx context.Context, db eventlog.DB, diskFloor int64, availableSince time.Time) (DeliveryBoundaries, error) {
 	out := DeliveryBoundaries{Rules: []BoundaryRule{}, Tuning: []BoundaryValue{}, Landing: []map[string]any{}, Hosts: json.RawMessage("[]"), Pools: []map[string]any{}, DiskFloor: diskFloor,
 		Unknown: []string{
 			"This is a policy snapshot, not authorization for a particular task or release. Task-specific grants, checks and release windows remain authoritative.",

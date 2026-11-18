@@ -5,8 +5,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // The coordination domain (messages, controls, seats, the record of a text
@@ -19,21 +21,21 @@ import (
 
 func init() { coord.Register(artifact.PutArtifact, coord.AlertClaim) }
 
-func Unread(ctx context.Context, db DB, w Writer, limit int) ([]coord.Message, error) {
+func Unread(ctx context.Context, db eventlog.DB, w actor.Writer, limit int) ([]coord.Message, error) {
 	return coord.Unread(ctx, db, w, limit)
 }
 
-func AckMessages(ctx context.Context, db DB, w Writer, ids []string) ([]string, error) {
+func AckMessages(ctx context.Context, db eventlog.DB, w actor.Writer, ids []string) ([]string, error) {
 	return coord.AckMessages(ctx, db, w, ids)
 }
 
-func Thread(ctx context.Context, db DB, actor, with string, limit int) ([]coord.Message, error) {
+func Thread(ctx context.Context, db eventlog.DB, actor, with string, limit int) ([]coord.Message, error) {
 	return coord.Thread(ctx, db, actor, with, limit)
 }
 
 // PostConclusion is coord.PostConclusion. The name stays here for the
 // approvals' and questions' tests, which post through this package.
-func PostConclusion(ctx context.Context, db DB, key, to, body string) error {
+func PostConclusion(ctx context.Context, db eventlog.DB, key, to, body string) error {
 	return coord.PostConclusion(ctx, db, key, to, body)
 }
 
