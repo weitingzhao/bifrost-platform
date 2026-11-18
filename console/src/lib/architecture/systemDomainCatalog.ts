@@ -27,7 +27,6 @@ import {
   Satellite,
 } from 'lucide-react'
 
-export const SYSTEM_DOMAIN_VERSION = '2026-08-28'
 export const SYSTEM_DOMAIN_SOURCE = 'console/src/lib/architecture/systemDomainCatalog.ts'
 
 /** Kebab ids — stable for filters, maps, and LLM packs. */
@@ -313,7 +312,7 @@ export function patternToDomain(pattern: {
 export function buildSystemDomainLlmPack(): string {
   const lines: string[] = [
     '## System Domains (Apollo — Console sidebar)',
-    `# Source: ${SYSTEM_DOMAIN_SOURCE} v${SYSTEM_DOMAIN_VERSION}`,
+    `# Source: ${SYSTEM_DOMAIN_SOURCE}`,
     '',
     'Use these domains for Defects / Audit / Agent scope projection. Do not confuse with AgentTaskDomain (Operator|Platform|Trade|…).',
     '',

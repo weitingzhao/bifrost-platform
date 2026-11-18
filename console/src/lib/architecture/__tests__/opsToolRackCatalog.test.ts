@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   OPS_TOOLS,
   OPS_TOOL_RACK_RULES,
-  OPS_TOOL_RACK_VERSION,
+  OPS_TOOL_RACK_SOURCE,
   buildOpsToolRackLlmPack,
   opsToolById,
   resolveOpsToolUrl,
@@ -34,9 +34,9 @@ describe('opsToolRackCatalog', () => {
     expect(resolveOpsToolUrl('dagster')).toBe('http://192.168.10.73:30301')
   })
 
-  it('builds an LLM pack with version stamp', () => {
+  it('builds an LLM pack naming its source', () => {
     const pack = buildOpsToolRackLlmPack()
-    expect(pack).toContain(OPS_TOOL_RACK_VERSION)
+    expect(pack).toContain(OPS_TOOL_RACK_SOURCE)
     expect(pack).toContain('gitea')
     expect(pack).toContain('never iframe')
   })

@@ -5,7 +5,6 @@
  * Never iframe these apps into Console; open in a new tab.
  */
 
-export const OPS_TOOL_RACK_VERSION = '2026-08-30'
 export const OPS_TOOL_RACK_SOURCE =
   'console/src/lib/architecture/opsToolRackCatalog.ts'
 
@@ -86,7 +85,7 @@ export function dagsterSchedulesUrl(liveBase?: string | null): string {
 export function buildOpsToolRackLlmPack(): string {
   const lines = [
     '## Ops Tool Rack (external UIs)',
-    `Source: ${OPS_TOOL_RACK_SOURCE} · ${OPS_TOOL_RACK_VERSION}`,
+    `Source: ${OPS_TOOL_RACK_SOURCE}`,
     '',
     '### Tools',
     ...OPS_TOOLS.map(
