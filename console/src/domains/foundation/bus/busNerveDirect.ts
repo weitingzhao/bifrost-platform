@@ -108,6 +108,52 @@ export function layerPositions(domains: readonly DomainTier[]): Map<string, Vec>
 }
 
 /**
+ * The funnel round the body (the Owner, 2026-11-17: the big bang is a
+ * trumpet from a point, an outline over everything): from just behind the
+ * core out past the front, its radius widening as the square of the
+ * distance out, the least such trumpet that holds every domain with a
+ * margin. A ring marks each tier where its domains stand (their mean
+ * distance out). All of it from where the domains are; no size typed in.
+ */
+export type Funnel = { start: number; length: number; r0: number; flare: number; tiers: { tier: number; at: number }[] }
+
+/** The funnel's radius at a distance s out along the axis. */
+export function funnelRadius(f: Funnel, s: number): number {
+  const k = Math.max(0, (s - f.start) / f.length)
+  return f.r0 + f.flare * k * k
+}
+
+/** The distance of a place from the cone's axis. */
+export function offAxis(p: Vec): number {
+  const s = alongAxis(p)
+  return Math.hypot(p.x - AXIS.x * s, p.y - AXIS.y * s, p.z - AXIS.z * s)
+}
+
+export function funnelOf(positions: Map<string, Vec>, tierOf: Map<string, number | undefined>, margin = 32): Funnel | undefined {
+  const all = [...positions.entries()]
+  if (all.length === 0) return undefined
+  const along = all.map(([, p]) => alongAxis(p))
+  const start = Math.min(...along) - margin
+  const length = Math.max(...along) + margin - start
+  // The waist holds what stands nearest the core; the flare is the least that holds the rest.
+  const near = all.filter(([, p]) => alongAxis(p) - start <= margin * 1.5)
+  const r0 = Math.max(margin, ...near.map(([, p]) => offAxis(p) + margin))
+  let flare = r0 * 0.8
+  for (const [, p] of all) {
+    const k = (alongAxis(p) - start) / length
+    if (k > 0.05) flare = Math.max(flare, (offAxis(p) + margin - r0) / (k * k))
+  }
+  const byTier = new Map<number, number[]>()
+  for (const [id, p] of all) {
+    const t = tierOf.get(id)
+    if (t == null) continue
+    byTier.set(t, [...(byTier.get(t) ?? []), alongAxis(p)])
+  }
+  const tiers = [...byTier.entries()].sort((a, b) => a[0] - b[0]).map(([tier, xs]) => ({ tier, at: xs.reduce((a, b) => a + b, 0) / xs.length }))
+  return { start, length, r0, flare, tiers }
+}
+
+/**
  * One way a topic is taken: a reader the code runs (the register's
  * consumers, each declared with its domain in the clients' list) or a
  * subscription row (its consumer is sub-<row>, its domain the row's target).

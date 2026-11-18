@@ -108,7 +108,7 @@ function Bench({ snap }: { snap: Snapshot }) {
 
   return (
     <Suspense fallback={<p>loading…</p>}>
-      <BusNerveGraph nodes={body.nodes} links={body.links} arcs={'arcs' in body ? body.arcs : undefined} flat={q.get('view') === '2d'} spin={q.get('spin') !== '0'} onReady={a => { api.current = a }} />
+      <BusNerveGraph nodes={body.nodes} links={body.links} arcs={'arcs' in body ? body.arcs : undefined} funnel={'funnel' in body ? body.funnel : undefined} flat={q.get('view') === '2d'} spin={q.get('spin') !== '0'} onReady={a => { api.current = a }} />
     </Suspense>
   )
 }

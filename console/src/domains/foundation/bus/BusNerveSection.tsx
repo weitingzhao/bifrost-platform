@@ -12,7 +12,7 @@ import {
   isDeaf, seatMail,
 } from './busNerve'
 import { C, PULSE, buildBody, buildDirectBody, nameOf, type GArc } from './busNerveBody'
-import { arcId, halosOf, routesOf, type Route } from './busNerveDirect'
+import { arcId, halosOf, routesOf, type Funnel, type Route } from './busNerveDirect'
 import { CORE, domainOf } from './busNerveLayout'
 import { ContractGraph } from './BusContractSection'
 import type { GLink, GNode, NerveApi } from './BusNerveGraph'
@@ -173,7 +173,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
 
   // The body's nodes and links, rebuilt when a read changes; the renderer keeps known nodes where they are.
   // By default each domain is one node; an expanded domain shows its topics and their publishers.
-  const graph = useMemo((): { nodes: GNode[]; links: GLink[]; arcs?: GArc[] } | null => {
+  const graph = useMemo((): { nodes: GNode[]; links: GLink[]; arcs?: GArc[]; funnel?: Funnel } | null => {
     if (!model) return null
     const input = { model, domainOfType, expanded, seats, beat, observed, teamLinks: team.data?.links ?? [], names, dustByDomain, listening: team.data?.listening, now: Date.now() }
     if (byBus) return buildBody(input)
@@ -404,7 +404,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
         ? <div className="rounded-sm bg-[var(--card-fill)] p-2"><ContractGraph contract={contract.data} roster={roster} /></div>
         : (
           <Suspense fallback={<p className="m-0 font-mono text-xs" style={{ color: C.muted }}>loading the body…</p>}>
-            <BusNerveGraph nodes={graph.nodes} links={graph.links} arcs={graph.arcs} flat={view === '2d'} spin={spin} onReady={a => { api.current = a }}
+            <BusNerveGraph nodes={graph.nodes} links={graph.links} arcs={graph.arcs} funnel={graph.funnel} flat={view === '2d'} spin={spin} onReady={a => { api.current = a }}
               onNodeClick={id => {
                 if (!id.startsWith('d:')) return
                 const d = id.slice(2)
@@ -451,7 +451,8 @@ function HelpPanel({ unmeasured, onClose, byBus, onByBus }: { unmeasured: { what
         <Key mark={<span style={{ color: '#ffc46b' }}>✦</span>}>cloud = a domain</Key>
         {!byBus && (
           <>
-            <Key mark={<span style={{ color: '#ffc46b' }}>↕</span>}>height = a tier: base below, owner on top</Key>
+            <Key mark={<span style={{ color: '#c9a38a' }}>◠</span>}>funnel = the body opening out from its core, the base</Key>
+            <Key mark={<span style={{ color: '#c9a38a' }}>◯</span>}>brighter ring on it = a tier: 0 base and compute, 1 coordination, 2 the work (verification, delivery, lineage, tenant), 3 plan and the owner</Key>
             <Key mark={<span style={{ color: '#ffc46b' }}>⌒</span>}>arc = one domain's topics taken by another's reader</Key>
             <Key mark={dot('#ffc46b')}>pulse waits mid-arc = in the bus, until the receipt</Key>
             <Key mark={<span style={{ color: C.red }}>⌒</span>}>far half red = no receipt in {LATE_AFTER_S}s</Key>

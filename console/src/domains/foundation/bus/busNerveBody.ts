@@ -2,7 +2,7 @@ import type { AgentThreadStatus } from '@/api/agentThreads'
 import { QUIET_AFTER_H, isDeaf, STUCK_AFTER_MIN, seatLabel, seatState, shortSeconds, warmColor, type BusListening, type NerveModel, type ObserveLink, type ObserveSeat, type OrganTone } from './busNerve'
 import { CORE, domainOf } from './busNerveLayout'
 import type { GLink, GNode } from './BusNerveGraph'
-import { arcCurve, arcsOf, cubicAt, halosOf, layerPositions, median, type DomainTier, type Route, type Vec } from './busNerveDirect'
+import { arcCurve, arcsOf, cubicAt, funnelOf, halosOf, layerPositions, median, type DomainTier, type Funnel, type Route, type Vec } from './busNerveDirect'
 
 /**
  * The observatory's own palette: a dark glass the body lives in, whatever the
@@ -202,7 +202,7 @@ export type DirectInput = BodyInput & {
  * bridge, shown only by the pulse that waits at an arc's middle. An opened
  * domain shows its parts around it, as in the bus view.
  */
-export function buildDirectBody(input: DirectInput): { nodes: GNode[]; links: GLink[]; arcs: GArc[] } {
+export function buildDirectBody(input: DirectInput): { nodes: GNode[]; links: GLink[]; arcs: GArc[]; funnel?: Funnel } {
   const bus = buildBody(input)
   const { domainOfType, listening, tiers, routes, roster, delays } = input
   const clusters = bus.nodes.filter(n => n.kind === 'cluster').map(n => n.id.slice(2))
@@ -263,5 +263,5 @@ export function buildDirectBody(input: DirectInput): { nodes: GNode[]; links: GL
   }
   // Parts of an opened domain hang on their domain; links to the bus are gone with it.
   const links = bus.links.filter(l => l.source !== CORE && l.target !== CORE)
-  return { nodes: all, links, arcs }
+  return { nodes: all, links, arcs, funnel: funnelOf(positions, new Map(ids.map(id => [id, tierOf.get(id)]))) }
 }

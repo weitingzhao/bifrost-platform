@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MIN_APART, alongAxis, arcCurve, arcsOf, cubicAt, halosOf, layerPositions, median, routesOf } from '../busNerveDirect'
+import { MIN_APART, alongAxis, arcCurve, arcsOf, cubicAt, funnelOf, funnelRadius, halosOf, layerPositions, median, offAxis, routesOf } from '../busNerveDirect'
 import type { BusContract } from '../busNextgen'
 import type { BusListening } from '../busNerve'
 
@@ -61,6 +61,15 @@ describe('layerPositions', () => {
       expect(Math.hypot(v[i].x - v[j].x, v[i].y - v[j].y, v[i].z - v[j].z)).toBeGreaterThanOrEqual(MIN_APART - 0.5)
     }
     expect(layerPositions([...domains].reverse())).toEqual(p)
+  })
+  // 2026-11-17, the Owner: the big bang is a trumpet with an outline over everything, sized from where things are.
+  it('wraps every domain in a funnel that only widens going out, with a ring at each tier', () => {
+    const p = layerPositions(domains)
+    const f = funnelOf(p, new Map(domains.map(d => [d.id, d.tier])))!
+    for (const v of p.values()) expect(funnelRadius(f, alongAxis(v))).toBeGreaterThanOrEqual(offAxis(v) + 31)
+    for (let s = f.start; s < f.start + f.length; s += 10) expect(funnelRadius(f, s + 10)).toBeGreaterThanOrEqual(funnelRadius(f, s))
+    expect(funnelRadius(f, f.start + f.length)).toBeGreaterThan(funnelRadius(f, f.start) * 1.5)
+    expect(f.tiers.map(t => t.tier)).toEqual([0, 1, 2, 3])
   })
   it('stands a domain with no declared tier beyond the declared ones', () => {
     const p = layerPositions([{ id: 'a', tier: 0 }, { id: 'b', tier: 2 }, { id: 'new' }])

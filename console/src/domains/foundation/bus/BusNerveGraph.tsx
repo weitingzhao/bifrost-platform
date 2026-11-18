@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { GArc } from './busNerveBody'
-import { AXIS } from './busNerveDirect'
+import { AXIS, funnelRadius, type Funnel } from './busNerveDirect'
 
 /**
  * The nerve map's renderer, loaded only on the Bus page (a chunk of its own).
@@ -81,6 +81,7 @@ const RED_MS = 10_000
 const ARC_RED = '#ff4d5e'
 const ARC_GREY = '#3b4a52'
 const HALO_COLOR = '#ffb347'
+const FUNNEL_COLOR = '#c9a38a'
 /** The direction home looks from: behind the core and to one side, a little above, so the core and the front show together. */
 const HOME_DIR = (() => { const v = [-0.6, 0.35, 0.72]; const l = Math.hypot(...v); return [v[0] / l, v[1] / l, v[2] / l] as const })()
 /** How far a day-old event's dust has drifted out along the cone. */
@@ -206,8 +207,8 @@ function cloudSig(n: GNode): string {
   return n.cloud ? `${n.cloud.parts}:${n.cloud.dust.length}:${n.color}` : ''
 }
 
-export default function BusNerveGraph({ nodes, links, arcs = [], flat, spin, onReady, onNodeClick }: {
-  nodes: GNode[]; links: GLink[]; arcs?: GArc[]
+export default function BusNerveGraph({ nodes, links, arcs = [], funnel, flat, spin, onReady, onNodeClick }: {
+  nodes: GNode[]; links: GLink[]; arcs?: GArc[]; funnel?: Funnel
   flat: boolean; spin: boolean; onReady: (api: NerveApi) => void; onNodeClick?: (id: string) => void
 }) {
   const host = useRef<HTMLDivElement>(null)
@@ -246,9 +247,11 @@ export default function BusNerveGraph({ nodes, links, arcs = [], flat, spin, onR
   /** Rebuilds a domain's cloud in place when its counts change (3D only). */
   const recloud = useRef<((n: SimNode) => void) | null>(null)
   /** Redraws the arcs (3D only); set once the scene exists. */
-  const redrawArcs = useRef<((arcs: GArc[]) => void) | null>(null)
+  const redrawArcs = useRef<((arcs: GArc[], funnel?: Funnel) => void) | null>(null)
   const arcsRef = useRef(arcs)
   arcsRef.current = arcs
+  const funnelRef = useRef(funnel)
+  funnelRef.current = funnel
   /** Moves the direct pulses each frame (3D only). */
   const flyRef = useRef<((now: number) => void) | null>(null)
   /** When each domain's halo last lit. */
@@ -578,7 +581,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], flat, spin, onR
           g.scene().add(arcGroup)
           g.scene().add(flightGroup)
           const v3 = (p: { x: number; y: number; z: number }) => new THREE.Vector3(p.x, p.y, p.z)
-          redrawArcs.current = list => {
+          redrawArcs.current = (list, shell) => {
             const red = new Map([...arcDraws].map(([id, d]) => [id, d.redUntil]))
             for (const o of [...arcGroup.children]) {
               const m = o as import('three').Mesh
@@ -587,6 +590,36 @@ export default function BusNerveGraph({ nodes, links, arcs = [], flat, spin, onR
               arcGroup.remove(o)
             }
             arcDraws.clear()
+            // The funnel: sparse lines only (meridians and a few parallels), brighter at each tier, so nothing inside is hidden.
+            if (shell) {
+              const u = new THREE.Vector3(-AXIS.y, AXIS.x, 0).normalize()
+              const w = new THREE.Vector3(0, 0, 1)
+              const ax = new THREE.Vector3(AXIS.x, AXIS.y, AXIS.z)
+              const at = (sv: number, a: number) => {
+                const r = funnelRadius(shell, sv)
+                return ax.clone().multiplyScalar(sv).addScaledVector(u, Math.cos(a) * r).addScaledVector(w, Math.sin(a) * r)
+              }
+              const line = (pts: import('three').Vector3[], opacity: number, loop: boolean) => {
+                const geo = new THREE.BufferGeometry().setFromPoints(pts)
+                const mat = new THREE.LineBasicMaterial({ color: FUNNEL_COLOR, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending })
+                arcGroup.add(loop ? new THREE.LineLoop(geo, mat) : new THREE.Line(geo, mat))
+              }
+              const end = shell.start + shell.length
+              for (let m = 0; m < 16; m++) {
+                const a = (m / 16) * 2 * Math.PI
+                const pts: import('three').Vector3[] = []
+                for (let i = 0; i <= 40; i++) pts.push(at(shell.start + (shell.length * i) / 40, a))
+                line(pts, 0.07, false)
+              }
+              const ring = (sv: number, opacity: number) => {
+                const pts: import('three').Vector3[] = []
+                for (let i = 0; i < 72; i++) pts.push(at(sv, (i / 72) * 2 * Math.PI))
+                line(pts, opacity, true)
+              }
+              for (let i = 1; i <= 4; i++) ring(shell.start + (shell.length * i) / 5, 0.05)
+              ring(end, 0.12)
+              for (const t of shell.tiers) ring(t.at, 0.2)
+            }
             for (const a of list) {
               const curve = new THREE.CubicBezierCurve3(v3(a.curve[0]), v3(a.curve[1]), v3(a.curve[2]), v3(a.curve[3]))
               const half = (from: number, to: number, color: string) => {
@@ -599,7 +632,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], flat, spin, onR
               arcDraws.set(a.id, { curve, back, to: a.to, color: a.color, lost: a.back === 'lost', redUntil: red.get(a.id) ?? 0 })
             }
           }
-          redrawArcs.current(arcsRef.current)
+          redrawArcs.current(arcsRef.current, funnelRef.current)
           type Flight = { sprite: import('three').Sprite; arc: string; phase: 'out' | 'wait' | 'in' | 'fail'; at: number; arrived: boolean; t: number }
           const flights = new Map<string, Flight>()
           const drop = (key: string) => {
@@ -808,7 +841,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], flat, spin, onR
         ...(two ? arcs.filter(a => ids.has(a.from) && ids.has(a.to)).map(a => ({ source: a.from, target: a.to, color: a.color, width: a.width, label: a.label, __arc: a.id })) : []),
       ],
     }
-    redrawArcs.current?.(arcs)
+    redrawArcs.current?.(arcs, funnel)
     for (const n of next) {
       recloud.current?.(n)
       const div = labelsRef.current.get(n.id)
@@ -818,7 +851,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], flat, spin, onR
     graph.current?.graphData(data.current)
     // A domain opened or folded: fit the body to the frame again once it has moved.
     if (graph.current && fitted.current !== -1 && fitted.current !== next.length && performance.now() - focusedAt.current > 3000) fitSoonRef.current()
-  }, [nodes, links, arcs])
+  }, [nodes, links, arcs, funnel])
 
   // Fits the body to the frame, again and again while it settles. Kept in a ref: the effects call the latest one.
   const fitSoonRef = useRef(() => {})
@@ -851,6 +884,21 @@ export default function BusNerveGraph({ nodes, links, arcs = [], flat, spin, onR
         const p = [n.x ?? 0, n.y ?? 0, n.z ?? 0]
         min = min.map((v, i) => Math.min(v, p[i] - r))
         max = max.map((v, i) => Math.max(v, p[i] + r))
+      }
+      // Home shows the funnel's outline too: its mouth and its waist count as part of the body.
+      const shell = funnelRef.current
+      if (shell) {
+        const u = [-AXIS.y, AXIS.x, 0]
+        const ul = Math.hypot(u[0], u[1]) || 1
+        for (const sv of [shell.start, shell.start + shell.length]) {
+          const r = funnelRadius(shell, sv)
+          for (let i = 0; i < 8; i++) {
+            const a = (i / 8) * 2 * Math.PI
+            const p = [AXIS.x * sv + (u[0] / ul) * Math.cos(a) * r, AXIS.y * sv + (u[1] / ul) * Math.cos(a) * r, Math.sin(a) * r]
+            min = min.map((v, k) => Math.min(v, p[k]))
+            max = max.map((v, k) => Math.max(v, p[k]))
+          }
+        }
       }
       const center = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2]
       type V = [number, number, number]
