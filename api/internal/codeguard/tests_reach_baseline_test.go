@@ -295,7 +295,6 @@ var testFilesInShared = []string{
 	"api/internal/server/main_of_test.go",
 	"api/internal/server/metrics_test.go",
 	"api/internal/server/notice_door_test.go",
-	"api/internal/server/ops_facts_test.go",
 	"api/internal/server/outside_inputs_test.go",
 	"api/internal/server/owner_exec_flow_test.go",
 	"api/internal/server/prod_batch_shadow_test.go",

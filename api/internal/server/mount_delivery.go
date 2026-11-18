@@ -27,7 +27,6 @@ func (s *Server) mountDelivery(r chi.Router) {
 	// has the commit (head_release.go). Read-only; viewer and above.
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/delivery/released", s.handleReleased)
 	r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
-	r.Get("/delivery/dev/smoke", s.delivery.HandleDevSmoke)
 	r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/delivery/pipelines/{name}/timings", s.delivery.HandlePipelineTimings)
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/delivery/release-window", s.delivery.HandleGetReleaseWindow)

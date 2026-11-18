@@ -168,7 +168,6 @@ var exportedForOtherTests = []string{
 	"api/internal/opscontext.Meta",
 	"api/internal/opscontext.Milestone",
 	"api/internal/opscontext.Promotion",
-	"api/internal/opsfacts.Health",
 	"api/internal/outsideinput.Declare",
 	"api/internal/ownerexec.Action",
 	"api/internal/ownerexec.Card",

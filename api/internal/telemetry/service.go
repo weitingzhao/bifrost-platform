@@ -67,25 +67,6 @@ func (s *Service) Overview(ctx context.Context, namespace, group string) (Overvi
 	return resp, nil
 }
 
-func (s *Service) Query(ctx context.Context, queryID, namespace string) (QueryResponse, error) {
-	spec, ok := FindQuery(queryID)
-	if !ok {
-		return QueryResponse{}, ErrUnknownQuery
-	}
-	ns := ResolveNamespace(namespace)
-	promURL := s.prometheusURL()
-	if promURL == "" {
-		return QueryResponse{}, ErrPrometheusNotConfigured
-	}
-	client := NewClient(promURL)
-	metric := s.runQuery(ctx, client, spec, ns)
-	return QueryResponse{
-		Namespace: ns,
-		QueryID:   spec.ID,
-		Metric:    metric,
-	}, nil
-}
-
 func (s *Service) PromQL(ctx context.Context, promQL string) (PromQLResponse, error) {
 	q := strings.TrimSpace(promQL)
 	if q == "" {

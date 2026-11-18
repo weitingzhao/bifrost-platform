@@ -118,7 +118,6 @@ deny	GET /api/v1/context
 deny	GET /api/v1/data-husbandry
 deny	GET /api/v1/delivery/compare
 deny	GET /api/v1/delivery/context
-deny	GET /api/v1/delivery/dev/smoke
 deny	POST /api/v1/delivery/mirrors/sync
 deny	GET /api/v1/delivery/pipelines
 deny	GET /api/v1/delivery/pipelines/{name}/policy-check
@@ -175,7 +174,6 @@ deny	GET /api/v1/network/sla
 deny	GET /api/v1/network/status
 deny	GET /api/v1/network/zones
 deny	POST /api/v1/ops-agent/alertmanager
-deny	GET /api/v1/ops/facts/system
 deny	GET /api/v1/patrol/runs
 deny	GET /api/v1/patrol/skills
 deny	GET /api/v1/patrol/skills/{id}
@@ -219,7 +217,6 @@ deny	GET /api/v1/telemetry/alerts
 deny	POST /api/v1/telemetry/attention-mute
 deny	GET /api/v1/telemetry/overview
 deny	GET /api/v1/telemetry/promql
-deny	GET /api/v1/telemetry/query
 deny	GET /api/v1/telemetry/targets
 deny	GET /api/v1/topology
 deny	GET /api/v1/trade-agent/catalog

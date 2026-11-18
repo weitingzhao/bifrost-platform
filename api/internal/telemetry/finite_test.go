@@ -24,12 +24,10 @@ func TestOverviewWithANaNSampleStillHasABody(t *testing.T) {
 	t.Setenv("PLATFORM_PROMETHEUS_URL", srv.URL)
 	h := &Handler{svc: NewService(testConfigWithCluster(t))}
 
-	for _, target := range []string{"/telemetry/overview?ns=bifrost-stg", "/telemetry/overview?group=compute", "/telemetry/query?q=api_latency_p99", "/telemetry/promql?q=up"} {
+	for _, target := range []string{"/telemetry/overview?ns=bifrost-stg", "/telemetry/overview?group=compute", "/telemetry/promql?q=up"} {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, target, nil)
 		switch {
-		case req.URL.Path == "/telemetry/query":
-			h.HandleQuery(rec, req)
 		case req.URL.Path == "/telemetry/promql":
 			h.HandlePromQL(rec, req)
 		default:

@@ -849,13 +849,6 @@
       "status": "assigned",
       "basis": "2026-11-16 source and caller audit: generic infrastructure alert diagnosis and suggestions, not domain execution; implementation, authorization, refusal and dispatch behavior unchanged"
     },
-    "api/internal/opsfacts": {
-      "domains": [
-        "foundation"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: shared authoritative observation envelope and system projections without a second ledger; implementation, authorization, refusal and dispatch behavior unchanged"
-    },
     "api/internal/telemetry": {
       "domains": [
         "foundation"

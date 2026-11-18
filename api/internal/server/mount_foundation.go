@@ -19,11 +19,9 @@ import (
 // of Router until 2026-11-16, in one list ordered by who may call them; each
 // route keeps its path, its handler and the same gate.
 func (s *Server) mountFoundation(r chi.Router) {
-	r.With(s.auth.Require(actuation.RoleViewer)).Get("/ops/facts/system", s.handleOpsSystemFacts)
 	r.Get("/environments", s.handleEnvironments)
 	r.Get("/matrix", s.handleMatrix)
 	r.Get("/telemetry/overview", s.telemetry.HandleOverview)
-	r.Get("/telemetry/query", s.telemetry.HandleQuery)
 	r.Get("/telemetry/promql", s.telemetry.HandlePromQL)
 	r.Get("/telemetry/alerts", s.telemetry.HandleAlerts)
 	r.Get("/telemetry/targets", s.telemetry.HandleTargets)

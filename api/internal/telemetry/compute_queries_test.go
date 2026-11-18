@@ -35,9 +35,6 @@ func TestComputeQueriesAreNamedOnceAndSayWhatTheyAnswer(t *testing.T) {
 		if expr := q.Build("ignored"); !strings.Contains(expr, computeWindow) && q.ID != "compute_pods_evicted" {
 			t.Errorf("%s does not look back %s: %s", q.ID, computeWindow, expr)
 		}
-		if _, ok := FindQuery(q.ID); !ok {
-			t.Errorf("FindQuery does not know %s", q.ID)
-		}
 	}
 }
 

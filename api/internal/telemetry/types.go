@@ -29,12 +29,6 @@ type OverviewResponse struct {
 	GeneratedAt   time.Time      `json:"generated_at"`
 }
 
-type QueryResponse struct {
-	Namespace string       `json:"namespace"`
-	QueryID   string       `json:"query_id"`
-	Metric    MetricResult `json:"metric"`
-}
-
 type PromQLResponse struct {
 	PrometheusURL string        `json:"prometheus_url,omitempty"`
 	Query         string        `json:"query"`

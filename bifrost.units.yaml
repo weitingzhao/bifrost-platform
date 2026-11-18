@@ -200,7 +200,6 @@ modules:
       api/internal/opscontext: ["api/internal/opscontext", "config/ops-context.yaml"]
       # Its tests run scripts/ci/outside_inputs.sh and parse the test files under api/.
       api/internal/outsideinput: ["api", "scripts/ci", "bifrost-trade-infra:k8s/cicd", "bifrost-trade-infra:scripts/release"]
-      api/internal/opsfacts: ["api/internal/opsfacts"]
       api/internal/ownerexec: ["api/internal/ownerexec"]
       api/internal/ownerexec/mustrefuse: ["api/internal/ownerexec/mustrefuse"]
       api/internal/patrol: ["api/internal/patrol", "config/patrol-skills"]

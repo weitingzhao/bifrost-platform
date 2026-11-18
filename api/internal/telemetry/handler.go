@@ -36,23 +36,6 @@ func (h *Handler) HandleOverview(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (h *Handler) HandleQuery(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query().Get("q")
-	if q == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "missing query parameter q",
-		})
-		return
-	}
-	ns := r.URL.Query().Get("ns")
-	resp, err := h.svc.Query(r.Context(), q, ns)
-	if err != nil {
-		h.writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, resp)
-}
-
 func (h *Handler) HandlePromQL(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	resp, err := h.svc.PromQL(r.Context(), q)
@@ -116,10 +99,6 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
 			"error": err.Error(),
 			"hint":  "Set observability_urls.prometheus in clusters.yaml or PLATFORM_PROMETHEUS_URL",
-		})
-	case errors.Is(err, ErrUnknownQuery):
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": err.Error(),
 		})
 	case errors.Is(err, ErrMissingPromQL):
 		writeJSON(w, http.StatusBadRequest, map[string]string{

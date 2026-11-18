@@ -57,17 +57,6 @@ func TestVectorToPointsEmpty(t *testing.T) {
 	}
 }
 
-func TestFindQuery(t *testing.T) {
-	spec, ok := FindQuery("api_request_rate")
-	if !ok || spec.ID != "api_request_rate" {
-		t.Fatalf("find: %+v ok=%v", spec, ok)
-	}
-	_, ok = FindQuery("missing")
-	if ok {
-		t.Fatal("expected missing query to fail")
-	}
-}
-
 func TestResolveNamespace(t *testing.T) {
 	if ResolveNamespace("") != DefaultNamespace() {
 		t.Fatal("empty ns should default")
@@ -108,16 +97,6 @@ func TestHandlerOverviewPrometheusMissing(t *testing.T) {
 	}
 }
 
-func TestHandlerQueryMissingParam(t *testing.T) {
-	h := NewHandler(nil, nil)
-	req := httptest.NewRequest(http.MethodGet, "/telemetry/query?ns=bifrost-stg", nil)
-	rec := httptest.NewRecorder()
-	h.HandleQuery(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status: got %d want 400", rec.Code)
-	}
-}
-
 func TestRunQueryEmptySeries(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
@@ -125,7 +104,7 @@ func TestRunQueryEmptySeries(t *testing.T) {
 	defer srv.Close()
 
 	svc := &Service{}
-	spec, _ := FindQuery("api_request_rate")
+	spec := PresetQueries()[0]
 	metric := svc.runQuery(context.Background(), NewClient(srv.URL), spec, "bifrost-stg")
 	if metric.Status != "empty" {
 		t.Fatalf("status: got %s want empty", metric.Status)

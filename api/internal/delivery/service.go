@@ -1053,48 +1053,6 @@ func (s *Service) ProdSmoke(ctx context.Context) StgSmokeResponse {
 	return out
 }
 
-// DevSmoke HTTP probes for bifrost-dev via Traefik @ VIP :80 (Host dev.trader.bifrost.lan).
-func (s *Service) DevSmoke(ctx context.Context) StgSmokeResponse {
-	now := time.Now().UTC()
-	out := StgSmokeResponse{
-		ClusterID:    s.clusterID(),
-		Reachability: probe.ReachUnknown,
-		Detail:       "dev smoke probes not configured",
-		Targets:      []StgSmokeTargetView{},
-		GeneratedAt:  now,
-	}
-	if s.entry == nil {
-		out.Detail = "no cluster configured"
-		return out
-	}
-
-	gw := strings.TrimRight(s.entry.ResolvedDevGatewayURL(), "/")
-	if gw == "" {
-		out.Detail = "configure dev_smoke.gateway_url in clusters.yaml or PLATFORM_DEV_GATEWAY_URL"
-		return out
-	}
-	for _, domain := range s.entry.ResolvedStgAPIDomains() {
-		out.Targets = append(out.Targets, s.probeDevHTTP(ctx, "dev-api-"+domain, gw+stgAPIGatewayPath(domain)))
-	}
-	if len(out.Targets) == 0 {
-		return out
-	}
-	fail := 0
-	for _, t := range out.Targets {
-		if t.Reachability == probe.ReachFail {
-			fail++
-		}
-	}
-	if fail == 0 {
-		out.Reachability = probe.ReachOK
-		out.Detail = fmt.Sprintf("%d dev API domain(s) OK @ %s", len(out.Targets), gw)
-	} else {
-		out.Reachability = probe.ReachFail
-		out.Detail = fmt.Sprintf("%d failing dev API probe(s)", fail)
-	}
-	return out
-}
-
 func (s *Service) ClusterClient() (kubernetes.Interface, string, error) {
 	return s.cluster.KubernetesClient()
 }

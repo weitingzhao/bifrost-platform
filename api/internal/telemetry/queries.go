@@ -101,16 +101,6 @@ func PresetQueries() []QuerySpec {
 	}
 }
 
-func FindQuery(id string) (QuerySpec, bool) {
-	id = strings.TrimSpace(id)
-	for _, q := range append(PresetQueries(), ComputeQueries()...) {
-		if q.ID == id {
-			return q, true
-		}
-	}
-	return QuerySpec{}, false
-}
-
 func DefaultNamespace() string {
 	return "bifrost-stg"
 }

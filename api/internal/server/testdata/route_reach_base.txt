@@ -29,7 +29,6 @@
 -	GET /api/v1/context
 -	GET /api/v1/data-husbandry
 -	GET /api/v1/delivery/compare
--	GET /api/v1/delivery/dev/smoke
 -	GET /api/v1/delivery/pipelines
 -	GET /api/v1/delivery/pipelines/{name}/preflight
 -	GET /api/v1/delivery/pipelines/{name}/ref-preflight
@@ -83,7 +82,6 @@
 -	GET /api/v1/telemetry/alerts
 -	GET /api/v1/telemetry/overview
 -	GET /api/v1/telemetry/promql
--	GET /api/v1/telemetry/query
 -	GET /api/v1/telemetry/targets
 -	GET /api/v1/topology
 -	GET /api/v1/trade-agent/catalog
@@ -139,7 +137,6 @@ viewer	GET /api/v1/context
 viewer	GET /api/v1/data-husbandry
 viewer	GET /api/v1/delivery/compare
 viewer	GET /api/v1/delivery/context
-viewer	GET /api/v1/delivery/dev/smoke
 viewer	GET /api/v1/delivery/pipelines
 viewer	GET /api/v1/delivery/pipelines/{name}/preflight
 viewer	GET /api/v1/delivery/pipelines/{name}/ref-preflight
@@ -197,7 +194,6 @@ viewer	GET /api/v1/self-health
 viewer	GET /api/v1/telemetry/alerts
 viewer	GET /api/v1/telemetry/overview
 viewer	GET /api/v1/telemetry/promql
-viewer	GET /api/v1/telemetry/query
 viewer	GET /api/v1/telemetry/targets
 viewer	GET /api/v1/topology
 viewer	GET /api/v1/trade-agent/catalog
@@ -256,7 +252,6 @@ reporter	GET /api/v1/context
 reporter	GET /api/v1/data-husbandry
 reporter	GET /api/v1/delivery/compare
 reporter	GET /api/v1/delivery/context
-reporter	GET /api/v1/delivery/dev/smoke
 reporter	GET /api/v1/delivery/pipelines
 reporter	GET /api/v1/delivery/pipelines/{name}/preflight
 reporter	GET /api/v1/delivery/pipelines/{name}/ref-preflight
@@ -314,7 +309,6 @@ reporter	GET /api/v1/self-health
 reporter	GET /api/v1/telemetry/alerts
 reporter	GET /api/v1/telemetry/overview
 reporter	GET /api/v1/telemetry/promql
-reporter	GET /api/v1/telemetry/query
 reporter	GET /api/v1/telemetry/targets
 reporter	GET /api/v1/topology
 reporter	GET /api/v1/trade-agent/catalog
@@ -393,7 +387,6 @@ operator	GET /api/v1/context
 operator	GET /api/v1/data-husbandry
 operator	GET /api/v1/delivery/compare
 operator	GET /api/v1/delivery/context
-operator	GET /api/v1/delivery/dev/smoke
 operator	GET /api/v1/delivery/pipelines
 operator	GET /api/v1/delivery/pipelines/{name}/preflight
 operator	GET /api/v1/delivery/pipelines/{name}/ref-preflight
@@ -451,7 +444,6 @@ operator	GET /api/v1/self-health
 operator	GET /api/v1/telemetry/alerts
 operator	GET /api/v1/telemetry/overview
 operator	GET /api/v1/telemetry/promql
-operator	GET /api/v1/telemetry/query
 operator	GET /api/v1/telemetry/targets
 operator	GET /api/v1/topology
 operator	GET /api/v1/trade-agent/catalog
@@ -570,7 +562,6 @@ admin	GET /api/v1/context
 admin	GET /api/v1/data-husbandry
 admin	GET /api/v1/delivery/compare
 admin	GET /api/v1/delivery/context
-admin	GET /api/v1/delivery/dev/smoke
 admin	GET /api/v1/delivery/pipelines
 admin	GET /api/v1/delivery/pipelines/{name}/preflight
 admin	GET /api/v1/delivery/pipelines/{name}/ref-preflight
@@ -628,7 +619,6 @@ admin	GET /api/v1/self-health
 admin	GET /api/v1/telemetry/alerts
 admin	GET /api/v1/telemetry/overview
 admin	GET /api/v1/telemetry/promql
-admin	GET /api/v1/telemetry/query
 admin	GET /api/v1/telemetry/targets
 admin	GET /api/v1/topology
 admin	GET /api/v1/trade-agent/catalog
@@ -762,7 +752,6 @@ trade-satellite	GET /api/v1/context
 trade-satellite	GET /api/v1/data-husbandry
 trade-satellite	GET /api/v1/delivery/compare
 trade-satellite	GET /api/v1/delivery/context
-trade-satellite	GET /api/v1/delivery/dev/smoke
 trade-satellite	GET /api/v1/delivery/pipelines
 trade-satellite	GET /api/v1/delivery/pipelines/{name}/preflight
 trade-satellite	GET /api/v1/delivery/pipelines/{name}/ref-preflight
@@ -820,7 +809,6 @@ trade-satellite	GET /api/v1/self-health
 trade-satellite	GET /api/v1/telemetry/alerts
 trade-satellite	GET /api/v1/telemetry/overview
 trade-satellite	GET /api/v1/telemetry/promql
-trade-satellite	GET /api/v1/telemetry/query
 trade-satellite	GET /api/v1/telemetry/targets
 trade-satellite	GET /api/v1/topology
 trade-satellite	GET /api/v1/trade-agent/catalog
@@ -928,7 +916,6 @@ agentd:h1	GET /api/v1/code-health
 agentd:h1	GET /api/v1/context
 agentd:h1	GET /api/v1/data-husbandry
 agentd:h1	GET /api/v1/delivery/compare
-agentd:h1	GET /api/v1/delivery/dev/smoke
 agentd:h1	GET /api/v1/delivery/pipelines
 agentd:h1	GET /api/v1/delivery/pipelines/{name}/preflight
 agentd:h1	GET /api/v1/delivery/pipelines/{name}/ref-preflight
@@ -982,7 +969,6 @@ agentd:h1	GET /api/v1/self-health
 agentd:h1	GET /api/v1/telemetry/alerts
 agentd:h1	GET /api/v1/telemetry/overview
 agentd:h1	GET /api/v1/telemetry/promql
-agentd:h1	GET /api/v1/telemetry/query
 agentd:h1	GET /api/v1/telemetry/targets
 agentd:h1	GET /api/v1/topology
 agentd:h1	GET /api/v1/trade-agent/catalog
@@ -1025,7 +1011,6 @@ executor	GET /api/v1/code-health
 executor	GET /api/v1/context
 executor	GET /api/v1/data-husbandry
 executor	GET /api/v1/delivery/compare
-executor	GET /api/v1/delivery/dev/smoke
 executor	GET /api/v1/delivery/pipelines
 executor	GET /api/v1/delivery/pipelines/{name}/preflight
 executor	GET /api/v1/delivery/pipelines/{name}/ref-preflight
@@ -1079,7 +1064,6 @@ executor	GET /api/v1/self-health
 executor	GET /api/v1/telemetry/alerts
 executor	GET /api/v1/telemetry/overview
 executor	GET /api/v1/telemetry/promql
-executor	GET /api/v1/telemetry/query
 executor	GET /api/v1/telemetry/targets
 executor	GET /api/v1/topology
 executor	GET /api/v1/trade-agent/catalog
