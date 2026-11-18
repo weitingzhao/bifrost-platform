@@ -84,7 +84,7 @@ channels:
   - {id: W03, class: K3, disposition: replaced, step: "3", what: "wait_for_answer：每 2 秒读问题状态", by: "入户口子④订阅并等", cut: {at: "2026-11-18", evidence: ["reader:mcp-wait"]}, retired: {at: "2026-11-18", change: I45675cba9f3c8c9adb5db12d203c3cd601a03321, outside: "mcp/platform/src: busWait.ts and its test; the tools hold a bus long poll between reads"}}
   - {id: W04, class: K3, disposition: replaced, step: "3", what: "wait_for_pipeline_run：每 10 秒读流水线（每次服务端一次 Tekton 列表）", by: "入户口子④订阅并等 ci.run.finished", cut: {at: "2026-11-18", evidence: ["reader:mcp-wait"]}, retired: {at: "2026-11-18", change: I45675cba9f3c8c9adb5db12d203c3cd601a03321, outside: "mcp/platform/src: busWait.ts and its test; the tools hold a bus long poll between reads"}}
   - {id: W05, class: K3, disposition: merged, step: "3", what: "doorbell 命令行：后台长轮询，退出叫醒闲着的桌面会话", by: "留下并改造成「等 seat.mail.arrived」的叫醒方式（推断：材料里它是唯一验证过能叫醒空闲桌面会话的办法；设计没说怎么叫醒，见第 4 节）", cut: {at: "2026-11-18", evidence: ["reader:inbox-waiters"]}}
-  - {id: R01, class: K1, disposition: merged, step: "4", what: "读口组：平台/环境活着吗（每次请求实时探测，无缓存）", by: "留下并改造成带版本的读口；R12 并到它；探测改缓存+env.health.changed"}
+  - {id: R01, class: K1, disposition: kept, step: "none", what: "读口组：平台/环境活着吗（每次请求实时探测，无缓存）", by: "原因：PROD 7 天 /self-health 5.7 万次共 1383 秒（实测约 15 毫秒一次），/matrix 51 次共 352 秒；缓存加事件省不出，探测留实时（11-18 实测）"}
   - {id: R02, class: K1, disposition: merged, step: "2", what: "读口组：流水线、发布（实时读 Tekton/ConfigMap/PG）", by: "留下并改造：14 处列流水线运行都并到它，数据来自门·集群的缓存", cut: {at: "2026-11-17", evidence: ["reader:pipeline-runs-page", "reader:supply-chain-page", "reader:release-context"]}}
   - {id: R03, class: K1, disposition: merged, step: "3", what: "读口组：审批与问题状态（Console 8 处 3 种 key）", by: "留下并改造成带版本；Console 各处并到它"}
   - {id: R04, class: K1, disposition: merged, step: "1", what: "读口组：计划/运行时/事件（/agentrt/events 跨流游标，/progress 每次现算）", by: "留下并改造：事件读口就是「账」的读口，与 S05 同体"}
@@ -92,10 +92,10 @@ channels:
   - {id: R06, class: K1, disposition: kept, step: "none", what: "读口组：谁做了什么（/audit 最近 500 条、/records）", by: "原因：/audit 近 24 小时只被读 1 次，搬到账没有回报，还要把目标和详情永久写进账（11-18 按实际流量判）"}
   - {id: R07, class: K1, disposition: merged, step: "3", what: "读口组：线程、主机、进度、开发会话", by: "留下并改造成席位记录的读口；/agent/progress 那一半是死路（见 L20）"}
   - {id: R08, class: K1, disposition: kept, step: "none", what: "读口组：指标与告警（请求时转发 Prometheus）", by: "原因：Prometheus 是源头，这里只是转发；版本字段对它不适用（见第 4 节）"}
-  - {id: R09, class: K1, disposition: merged, step: "4", what: "读口组：数据插件状态（每次请求实时 HTTP 到插件，三份代理）", by: "留下并改造：三份代理并成一份，加缓存，变化 plugin.status.changed"}
+  - {id: R09, class: K1, disposition: kept, step: "none", what: "读口组：数据插件状态（每次请求实时 HTTP 到插件，三份代理）", by: "原因：PROD 7 天三个插件 status 共 112 次、8.2 秒，实测 20–45 毫秒一次；并代理、加缓存、发事件都省不出（11-18 实测）"}
   - {id: R10, class: K1, disposition: merged, step: "3", what: "读口组：发布窗口与发布策略", by: "留下并改造成带版本；X-A9、X-A10 的流水线直读并到它", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
   - {id: R11, class: K1, disposition: kept, step: "none", what: "读口组：Trade 总线深度（平台去拉 satellite-probe-bridge）", by: "原因：Trade 租户的只读健康口，租户边界；将来互通在登记表里声明"}
-  - {id: R12, class: K1, disposition: replaced, step: "4", what: "读口组：协作进程状态（git-bridge、操作面、probe-bridge 汇总进 /agent/bridge）", by: "并到 R01 的健康读口（env.health.changed）"}
+  - {id: R12, class: K1, disposition: kept, step: "none", what: "读口组：协作进程状态（git-bridge、操作面、probe-bridge 汇总进 /agent/bridge）", by: "原因：PROD 7 天 /agent/bridge 36 次共 120 秒；并进 R01 省不出，慢的 2 秒是等本机两个 bridge，PROD 连不上（11-18 实测）"}
   - {id: S01, class: K8, disposition: kept, step: "none", what: "statefile：每个 key 一个 ConfigMap（≤900 KiB）存各模块小 JSON", by: "原因：状态存放不是传输；但其中 approvals/questions/threads/progress/title 几个 key 的归宿设计没说（见第 4 节）"}
   - {id: S02, class: K8, disposition: announced, step: "3", what: "审计日志：最近 500 条，同时发一行 slog 到 Loki", by: "日志留在原处；每行以 audit.action.recorded 宣布（谁、做什么、结果）", cut: {at: "2026-11-18", evidence: ["topic:audit.action.recorded"]}}
   - {id: S03, class: K4, disposition: announced, step: "3", what: "审批记录（全文、租约、结果、deliveries[]）", by: "记录留在原处（卡本身就是记录）；状态变化以 approval.card.* 宣布", cut: {at: "2026-11-18", evidence: ["topic:approval.card.created"]}}
