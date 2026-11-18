@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 func TestUpgrade0016KeepsEvents(t *testing.T) {
@@ -21,7 +21,7 @@ func TestUpgrade0016KeepsEvents(t *testing.T) {
 	if _, err = migrate.RunFiles(ctx, conn, "dev", files[:15]); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.Seed(ctx, conn); err != nil {
+	if _, err = actor.Seed(ctx, conn); err != nil {
 		t.Fatal(err)
 	}
 	const query = `SELECT COALESCE(string_agg(to_jsonb(e)::text,E'\n' ORDER BY event_id),'') FROM agentrt.event e`

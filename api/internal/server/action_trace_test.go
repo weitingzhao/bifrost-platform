@@ -12,8 +12,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/headrelease"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
@@ -146,7 +146,7 @@ func TestTraceRuntimeRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer pool.Close()
-	if _, err = store.Seed(ctx, pool); err != nil {
+	if _, err = actor.Seed(ctx, pool); err != nil {
 		t.Fatal(err)
 	}
 	h := newPolicyHarness(t)

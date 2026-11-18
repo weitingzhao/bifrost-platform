@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // Origin: the Owner's redefinition of the card (2026-11-15). A direct call of
@@ -35,7 +35,7 @@ func TestADirectActionIsRecordedAndReadBackBySeat(t *testing.T) {
 	t.Setenv("AGENTRT_DSN", "")
 	srv := newTestServer(t, cfg)
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	srv.agentRuntime.api.DB = db.Pool(t, db.Runtime)

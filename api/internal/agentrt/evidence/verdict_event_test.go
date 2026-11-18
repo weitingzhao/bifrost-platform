@@ -10,9 +10,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor" // the controller seed and its vocabulary, in the test only
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // the controller seed and its vocabulary, in the test only
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 )
 
@@ -35,7 +35,7 @@ func verdictRun(t *testing.T, name, result, scope string, audit bool, at time.Ti
 func seededLedger(t *testing.T) eventlog.DB {
 	t.Helper()
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(context.Background(), db.Connect(t, db.Owner)); err != nil {
+	if _, err := actor.Seed(context.Background(), db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	return db.Pool(t, db.Runtime)

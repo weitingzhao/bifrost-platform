@@ -12,7 +12,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
@@ -29,7 +28,7 @@ func ok(t *testing.T, err error) {
 // the store's shared fixture. Importing the store is also what registers
 // the check of view artifacts, as in every binary that stores one.
 func seedOnly(ctx context.Context, owner *pgx.Conn) error {
-	seeded, err := store.Seed(ctx, owner)
+	seeded, err := actor.Seed(ctx, owner)
 	if err == nil && !seeded {
 		err = errors.New("seed did nothing on an empty database")
 	}

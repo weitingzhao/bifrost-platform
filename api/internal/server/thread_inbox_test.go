@@ -11,7 +11,8 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 )
 
@@ -81,12 +82,12 @@ func TestThreadInboxWiringRecoversPGAndRestart(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)
 	w := actor.Writer{Actor: "thread:local_wiring", Token: "fixture"}
-	if _, _, err := store.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register wiring thread")); err != nil {
+	if _, _, err := artifact.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register wiring thread")); err != nil {
 		t.Fatal(err)
 	}
 	var now time.Time
@@ -97,7 +98,7 @@ func TestThreadInboxWiringRecoversPGAndRestart(t *testing.T) {
 	retryServerThreadInbox(s) // the real sender returns errNotConnected
 	late.open(pool, now)
 	retryServerThreadInbox(s)
-	mail, err := store.Unread(ctx, pool, w, 100)
+	mail, err := coord.Unread(ctx, pool, w, 100)
 	if err != nil || len(mail) != 2 {
 		t.Fatalf("recovered inbox=%+v err=%v", mail, err)
 	}
@@ -110,13 +111,13 @@ func TestThreadInboxWiringRecoversPGAndRestart(t *testing.T) {
 	if !strings.Contains(bodies, "grant_id=grant_wiring") || !strings.Contains(bodies, "Answered by: owner") || strings.Contains(bodies, "must-not-deliver") {
 		t.Fatalf("incomplete or unsafe bodies: %s", bodies)
 	}
-	if _, err := store.AckMessages(ctx, pool, w, ids); err != nil {
+	if _, err := coord.AckMessages(ctx, pool, w, ids); err != nil {
 		t.Fatal(err)
 	}
 	restarted := &Server{approvals: approvals.New(paths[0], nil), questionRuntime: newQuestionRuntime(paths[1], nil)}
 	restarted.wireThreadInbox(db.Pool(t, db.Runtime))
 	retryServerThreadInbox(restarted)
-	history, err := store.Thread(ctx, pool, w.Actor, "controller", 100)
+	history, err := coord.Thread(ctx, pool, w.Actor, "controller", 100)
 	if err != nil || len(history) != 2 || history[0].AckedAt == nil || history[1].AckedAt == nil {
 		t.Fatalf("restart changed acknowledged inbox: %+v %v", history, err)
 	}

@@ -24,7 +24,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // The plan import end to end (CUT-plan-import-2026-10-19.md): a round of the
@@ -42,7 +41,7 @@ var fixtureStars = []string{"2.1-4", "2.3-1", "2.3-2", "2.4-2"}
 func seeded(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	db := agentrttest.Migrated(t)
-	_, err := store.Seed(ctx, db.Connect(t, db.Owner))
+	_, err := actor.Seed(ctx, db.Connect(t, db.Owner))
 	must(t, err)
 	return db.Pool(t, db.Runtime)
 }
@@ -275,7 +274,7 @@ func checkImport(t *testing.T, path, board string, stars []string) {
 	}
 
 	// The plan's stream is one unbroken chain.
-	if _, err := store.VerifyStream(ctx, pool, planstore.PlanStream("R2")); err != nil {
+	if _, err := eventlog.VerifyStream(ctx, pool, planstore.PlanStream("R2")); err != nil {
 		t.Fatal(err)
 	}
 }

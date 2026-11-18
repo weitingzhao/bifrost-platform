@@ -6,9 +6,9 @@ import (
 	"sort"
 	"testing"
 
+	agentactor "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor" // the actor_registered vocabulary and the seed, in the test only
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // the actor_registered vocabulary and the seed, in the test only
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gatecluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 )
@@ -57,7 +57,7 @@ func TestTheDatabaseTakesEveryRegisteredType(t *testing.T) {
 func TestPGLedgerWritesOncePerFact(t *testing.T) {
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := agentactor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)
@@ -89,7 +89,7 @@ func TestPGLedgerWritesOncePerFact(t *testing.T) {
 func TestPGLedgerDropsACauseItDoesNotHold(t *testing.T) {
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := agentactor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)

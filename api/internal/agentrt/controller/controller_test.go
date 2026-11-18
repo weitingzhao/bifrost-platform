@@ -17,7 +17,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
@@ -35,7 +34,7 @@ func must(t *testing.T, err error) {
 func setup(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	db := agentrttest.Migrated(t)
-	_, err := store.Seed(ctx, db.Connect(t, db.Owner))
+	_, err := actor.Seed(ctx, db.Connect(t, db.Owner))
 	must(t, err)
 	pool := db.Pool(t, db.Runtime)
 	_, err = pool.Exec(ctx, agentrttest.DispatchRules)

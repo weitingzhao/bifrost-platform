@@ -10,9 +10,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 func TestFilesAreNumberedWithoutGaps(t *testing.T) {
@@ -88,7 +88,7 @@ func TestUpgradeTo0005KeepsEvents(t *testing.T) {
 	if _, err = migrate.RunFiles(ctx, conn, "dev", files[:4]); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.Seed(ctx, conn); err != nil {
+	if _, err = actor.Seed(ctx, conn); err != nil {
 		t.Fatal(err)
 	}
 	// Every event, every column, in stream order (review 169 B2).
@@ -154,7 +154,7 @@ func TestUpgradeTo0006KeepsEvents(t *testing.T) {
 	if _, err = migrate.RunFiles(ctx, conn, "dev", files[:5]); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.Seed(ctx, conn); err != nil {
+	if _, err = actor.Seed(ctx, conn); err != nil {
 		t.Fatal(err)
 	}
 	var before, after int

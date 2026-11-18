@@ -13,9 +13,9 @@ import (
 	"strings"
 	"testing"
 
+	agentactor "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor" // the actor_registered vocabulary and the seed, in the test only
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // the actor_registered vocabulary and the seed, in the test only
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/hook"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 )
@@ -100,7 +100,7 @@ func TestHookIgnoresWhatIsNotMain(t *testing.T) {
 // (Gitea's redelivery, or the hook and the reconciliation both seeing it).
 func TestHookAppendsOncePerCommit(t *testing.T) {
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := agentactor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)

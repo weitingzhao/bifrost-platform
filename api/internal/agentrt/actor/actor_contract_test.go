@@ -10,7 +10,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // the vocabulary and the seed, in the test
 )
 
 // Origin: 2026-11-16, the review of the foundation code found the base's
@@ -24,7 +23,7 @@ func seeded(t *testing.T) eventlog.DB {
 	t.Helper()
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	return db.Pool(t, db.Runtime)

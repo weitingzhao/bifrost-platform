@@ -45,7 +45,7 @@ var ledgerSQL = map[string]int{
 	"agentrt/planreadings":     11,
 	"agentrt/planstore":        24,
 	"agentrt/seenfacts":        2,
-	"agentrt/store":            4,
+	"agentrt/store":            2,
 	"agentrt/workregistration": 5,
 	"assessmentreadings":       1,
 	"bus/relay":                1,
@@ -158,7 +158,6 @@ var ledgerWrite = regexp.MustCompile(`(?i)(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s
 // (eventlog.ReadShape).
 var ledgerWrites = map[string]int{
 	"agentrt/coord": 1,
-	"agentrt/store": 1,
 }
 
 func TestLedgerTablesAreWrittenByTheirPackagesOnly(t *testing.T) {

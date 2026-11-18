@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor" // the seed (the controller actor), in the test only
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // the seed (the controller actor), in the test only
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/drift"
 )
 
@@ -19,7 +19,7 @@ var ctx = context.Background()
 // is one event whose subject names the repository and the commit.
 func TestAnnounceWritesTheDriftOnce(t *testing.T) {
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)

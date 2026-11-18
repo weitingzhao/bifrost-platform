@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	busreleases "github.com/weitingzhao/bifrost-platform/api/internal/bus/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 )
@@ -24,7 +24,7 @@ import (
 func TestReleaseTableWritesTheRowWithItsAnnouncement(t *testing.T) {
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)
@@ -98,7 +98,7 @@ func TestReleaseTableWritesTheRowWithItsAnnouncement(t *testing.T) {
 func TestReleaseRowsBackfillWithoutAnnouncingAndReadBack(t *testing.T) {
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)
@@ -145,7 +145,7 @@ func TestReleaseRowsBackfillWithoutAnnouncingAndReadBack(t *testing.T) {
 func TestReleaseTableNamesTheCauseOfTheRun(t *testing.T) {
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)

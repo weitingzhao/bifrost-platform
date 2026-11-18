@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor" // the seed (the controller actor), in the test only
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // the seed (the controller actor), in the test only
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/alerts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 )
@@ -19,7 +19,7 @@ var ctx = context.Background()
 // so the owning seat can follow match=@cicd.
 func TestAnnounceWritesOneEventPerAlert(t *testing.T) {
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)

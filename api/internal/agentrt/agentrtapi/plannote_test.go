@@ -4,7 +4,7 @@ package agentrtapi_test
 
 import (
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"net/http"
 	"os"
 	"strings"
@@ -160,7 +160,7 @@ func TestArchTableThroughTheInterface(t *testing.T) {
 	if notes != 4 {
 		t.Fatalf("%d notes on the table; want 4", notes)
 	}
-	if _, err := store.VerifyStream(ctx, pool, "plan:ARCH"); err != nil {
+	if _, err := eventlog.VerifyStream(ctx, pool, "plan:ARCH"); err != nil {
 		t.Fatal(fmt.Errorf("plan:ARCH: %w", err))
 	}
 }

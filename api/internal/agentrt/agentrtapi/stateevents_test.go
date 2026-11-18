@@ -3,7 +3,7 @@ package agentrtapi_test
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"math"
 	"math/rand"
 	"net/http"
@@ -82,7 +82,7 @@ func TestRoutesMoveStateOnlyByEvents(t *testing.T) {
 				t.Logf("stage %q: seed %d, %d requests, %d answered, %d rows checked", st, seed, f.requests, f.answered, f.checked)
 				streams := f.ids(t, `SELECT event_stream_id FROM agentrt.event_stream ORDER BY 1`)
 				for _, id := range streams {
-					if _, err := store.VerifyStream(ctx, f.pool, id); err != nil {
+					if _, err := eventlog.VerifyStream(ctx, f.pool, id); err != nil {
 						t.Errorf("stage %q, seed %d: stream %s: %v", st, seed, id, err)
 					}
 				}
