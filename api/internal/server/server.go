@@ -290,6 +290,7 @@ func New(cfg *config.Config) (*Server, error) {
 		srv.delivery.StartRunWindowRecovery()
 	}
 	srv.wireSessionBindings()
+	srv.wireOpsEvents()
 	srv.bindActionExecutors()
 	srv.startApprovalLoop(role.RunsWorkers())
 	return srv, nil

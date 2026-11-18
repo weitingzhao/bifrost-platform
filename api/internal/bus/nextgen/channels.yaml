@@ -41,7 +41,7 @@ channels:
   - {id: L10, class: K11, disposition: kept, step: "0", what: "checklist prober：每 10 分钟轮询 platform-api 自己的 8 条 GET 路由", by: "原因：对账兜底；登记后保留，间隔放长（推断：可进一步改成进程内直读读口，不再走 HTTP 自己敲自己）"}
   - {id: L11, class: K5, disposition: announced, step: "5", what: "patrol autopilot：每 30 秒扫 skill 到期表，读平台 GET，可能 delete_pod，轮询 Cursor 云端 run", by: "动作与卡的分级不变（指令道只定规矩）；它读平台改读读口；delete_pod 等结果以 audit.action.recorded 宣布。Cursor 云端轮询部分若 Cursor 已删则是死路（推断，材料说 Cursor 一侧已删，代码仍在）"}
   - {id: L12, class: K5, disposition: announced, step: "3", what: "ib-gateway auto-repair：每 30 秒读 Redis 健康键，必要时发 reconnect_all 到 ib:operator:cmd 并每 2 秒读结果", by: "命令流本身不动（见 N08）；修复结果以 plugin.status.changed 宣布"}
-  - {id: L13, class: K11, disposition: announced, step: "3", what: "data-clone scheduler：每小时按调度触发数据克隆", by: "定时作业登记；结果 data.job.finished 宣布"}
+  - {id: L13, class: K11, disposition: announced, step: "3", what: "data-clone scheduler：每小时按调度触发数据克隆", by: "定时作业登记；结果 data.job.finished 宣布", cut: {at: "2026-11-18", evidence: ["topic:data.job.finished"]}}
   - {id: L14, class: K11, disposition: kept, step: "0", what: "failed-backup sweep：每 24 小时删 30 天前失败的 CNPG Backup CR", by: "原因：定时清理，不产生需要别人知道的变化；登记为定时作业"}
   - {id: L15, class: K4, disposition: announced, step: "3", what: "approvals 循环：每 15 秒重试被瞬时拒绝的批准、过期租约转 unknown、发提醒、补写信箱", by: "状态机与租约逻辑留在原处；转移结果以 approval.card.executed 宣布；提醒改走通知器，信箱补写改走 seat.mail.arrived", cut: {at: "2026-11-17", evidence: ["topic:approval.card.executed"]}}
   - {id: L16, class: K4, disposition: announced, step: "3", what: "questions sweep：每 15 秒过期问题、补写信箱", by: "过期转移留在原处，以 question.answered（结果=过期）宣布", cut: {at: "2026-11-18", evidence: ["topic:owner.question.answered"]}}
@@ -109,7 +109,7 @@ channels:
   - {id: S11, class: K13, disposition: merged, step: "3", what: "信箱存放：agentrt.message + artifact（正文 ≤8 KiB）", by: "随 N09 留下并改造：正文仍在这里，事件只带指针"}
   - {id: S12, class: K8, disposition: deleted, step: "any", what: "metric_reading：交付度量读数（无非测试写入者）", by: "死路（删前要连 baseline1109.go:37 的存在性检查一起改）"}
   - {id: S13, class: K2, disposition: deleted, step: "any", what: "同 N22：agentrt.outbox", by: "死路", retired: {at: "2026-11-17", change: Id818b64d36e851fb3e31d91e06f0dd08ae027a12, absent_text: ['FROM agentrt.outbox)', 'FROM agentrt.outbox`']}}
-  - {id: S14, class: K6, disposition: announced, step: "3", what: "maintainer 指标：8 个循环的成功时间戳与运行计数，给 Prometheus", by: "指标留给 Prometheus（对账兜底）；循环健康变化以 loop.health.changed 宣布，登记表要求每个循环都登记（现在 8/约 20）"}
+  - {id: S14, class: K6, disposition: announced, step: "3", what: "maintainer 指标：8 个循环的成功时间戳与运行计数，给 Prometheus", by: "指标留给 Prometheus（对账兜底）；循环健康变化以 loop.health.changed 宣布，登记表要求每个循环都登记（现在 8/约 20）", cut: {at: "2026-11-18", evidence: ["topic:loop.health.changed"]}}
   - {id: C01, class: K1, disposition: replaced, step: "4", what: "Console 每页各自 TanStack Query 轮询（约 215 处）", by: "入户口子②（共用一条事件流）+读口；剩下的轮询只许是登记过的对账"}
   - {id: C02, class: K2, disposition: replaced, step: "4", what: "Console 构建漂移检测：轮询自己的静态资源", by: "入户口子②收 release.deploy.finished（主体=console）"}
   - {id: C03, class: K1, disposition: replaced, step: "4", what: "Dock 开发会话面板：轮询 /dev-sessions 日志", by: "入户口子②+dev.session.changed"}
@@ -125,7 +125,7 @@ channels:
   - {id: X-A10, class: K10, disposition: replaced, step: "4", what: "流水线读发布冻结 ConfigMap（读不到按冻结）", by: "调用读口，保持读不到按冻结；风险：平台宕机时平台自己的发布流水线也被冻（见第 4 节）"}
   - {id: X-A11, class: K9, disposition: deleted, step: "any", what: "冻结 CRD 新办法（freeze_chain.py、墓碑 ConfigMap；仓库有、集群没有）", by: "死路（含一份没落地的防篡改设想，删前决定要不要保留设想）"}
   - {id: X-A12, class: K9, disposition: kept, step: "none", what: "release.sh 经平台 API 占/续/放窗口 PUT/DELETE", by: "原因：锁的写路径，窗口只有这一个写入口；只改被占时怎么等（交给③）"}
-  - {id: X-A13, class: K5, disposition: announced, step: "3", what: "镜像同步：POST mirrors/sync → Tekton task → Gitea，任务内每 4 秒轮询", by: "动作留在原处；结果以 git.mirror.settled 宣布，轮询换成订阅（lineage/mirrors.go 另一份实现并到同一处）"}
+  - {id: X-A13, class: K5, disposition: announced, step: "3", what: "镜像同步：POST mirrors/sync → Tekton task → Gitea，任务内每 4 秒轮询", by: "动作留在原处；结果以 git.mirror.settled 宣布，轮询换成订阅（lineage/mirrors.go 另一份实现并到同一处）", cut: {at: "2026-11-18", evidence: ["topic:git.mirror.settled"]}}
   - {id: X-A14, class: K3, disposition: replaced, step: "4", what: "release.sh 等审批单：每 15 秒读单子状态", by: "入户口子③（等 approval.card.decided）"}
   - {id: X-A15, class: K3, disposition: replaced, step: "4", what: "release_tool.py wait：等 PipelineRun 离开 Unknown", by: "入户口子③（等 ci.run.finished）"}
   - {id: X-A16, class: K5, disposition: announced, step: "4", what: "Argo pin-sync：patch Application 并每 2 秒轮询", by: "patch 动作留在原处；同步状态由门·集群 watch Application 宣布", cut: {at: "2026-11-18", evidence: ["reader:gitops-watch"]}}
@@ -138,7 +138,7 @@ channels:
   - {id: X-A23, class: K7, disposition: merged, step: "3", what: "平台 → relay 的审批通知（PROD platform-api → .50:8783）", by: "同 N01，由通知器接"}
   - {id: X-A24, class: K6, disposition: kept, step: "none", what: "BifrostAlertmanagerWebhookFailing：告警通道自己坏了的告警（Prometheus 规则）", by: "原因：独立于总线的报警路本身"}
   - {id: X-A25, class: K11, disposition: kept, step: "0", what: "maintainer-reconcile：每天对账 MAINTAINERS.yaml 与实际，差异为 0 才重建 ConfigMap", by: "原因：对账兜底；差异宣布 reconcile.drift.found"}
-  - {id: X-A26, class: K6, disposition: announced, step: "3", what: "平台后台循环存活指标（给 Prometheus）", by: "同 S14"}
+  - {id: X-A26, class: K6, disposition: announced, step: "3", what: "平台后台循环存活指标（给 Prometheus）", by: "同 S14", cut: {at: "2026-11-18", evidence: ["topic:loop.health.changed"]}}
   - {id: X-A27, class: K7, disposition: kept, step: "none", what: "Dagster 传感器 → Alertmanager（研究 run 失败/资产检查失败）", by: "原因：走告警路；research 代码没读（材料只在 MAINTAINERS.yaml 里描述）"}
   - {id: X-A28, class: K2, disposition: replaced, step: "1", what: "platform-workers 的 head_release 循环（infra 只放开关 HEAD_RELEASE=stg）", by: "同 L04", cut: {at: "2026-11-17", evidence: ["reader:head-release"]}}
   - {id: X-A29, class: K5, disposition: announced, step: "3", what: "单元任务影子派发 UNIT_DISPATCH=shadow（还没有门读这些行）", by: "留在原处；有门读之前不并排；结果 ci.verdict.changed"}

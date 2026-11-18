@@ -639,6 +639,22 @@ func normalizeCloneRequest(req *DataCloneRequest) {
 // Executor (aligned with clone-cnpg-prod-to-dev-stg.sh)
 // ---------------------------------------------------------------------------
 
+// OnCloneFinished is told how each data clone ended.
+func (s *Service) OnCloneFinished(fn func(ctx context.Context, jobID string, ok bool)) {
+	s.cloneFinished = fn
+}
+
+// OnCloneFinished is Service.OnCloneFinished, for wiring.
+func (h *Handler) OnCloneFinished(fn func(ctx context.Context, jobID string, ok bool)) {
+	h.svc.OnCloneFinished(fn)
+}
+
+func (s *Service) tellCloneFinished(ctx context.Context, jobID string, ok bool) {
+	if s.cloneFinished != nil {
+		s.cloneFinished(ctx, jobID, ok)
+	}
+}
+
 func (s *Service) runDataClone(ctx context.Context, jobID string) {
 	s.ensureCloneStores()
 	update := func(status, step, detail string, progress float64) {
@@ -657,6 +673,7 @@ func (s *Service) runDataClone(ctx context.Context, jobID string) {
 			j.Detail = detail
 			j.FinishedAt = &now
 		})
+		s.tellCloneFinished(ctx, jobID, false)
 	}
 
 	job, ok := s.cloneJobs.Get(jobID)
@@ -739,6 +756,7 @@ func (s *Service) runDataClone(ctx context.Context, jobID string) {
 		j.FinishedAt = &now
 		targets = append([]string{}, j.Targets...)
 	})
+	s.tellCloneFinished(ctx, jobID, true)
 	s.ensureCloneStores()
 	s.cloneLast.Record(jobID, targets, now)
 	sharedFreshnessCache.mu.Lock()

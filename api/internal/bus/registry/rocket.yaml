@@ -69,6 +69,8 @@ channels:
       reconcile: "mirror sync TaskRuns listed by gate-cluster"
       on_unread: stale
       retention: 30d
+      # For watching: nothing acts on it yet.
+      display_only: true
       consumers: [console]
       exports: []
       replaces: [X-A13]
@@ -102,8 +104,9 @@ channels:
       on_unread: stale
       # Display only (2026-11-17): the run's start is for watching; what
       # follows a run is ci.run.finished. Not counted in heard.
-      display_only: true
       retention: 30d
+      # For watching: nothing acts on it yet.
+      display_only: true
       consumers: [console]
       exports: []
       replaces: [L02]
@@ -431,6 +434,8 @@ channels:
       reconcile: "loop registry heartbeat"
       on_unread: stale
       retention: 30d
+      # For watching: nothing acts on it yet.
+      display_only: true
       consumers: [console]
       exports: []
       replaces: []
@@ -511,6 +516,8 @@ channels:
       reconcile: "Job list"
       on_unread: stale
       retention: 30d
+      # For watching: nothing acts on it yet.
+      display_only: true
       consumers: [console]
       exports: []
       replaces: []

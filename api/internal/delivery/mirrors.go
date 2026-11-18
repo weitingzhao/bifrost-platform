@@ -36,8 +36,18 @@ type MirrorSyncResult struct {
 // SetPolicy installs the allow-list. A nil policy rejects every sync.
 func (s *Service) SetPolicy(p *actuationpolicy.Policy) { s.policy = p }
 
+// OnMirrorSettled is told where each named commit stands after a sync.
+func (s *Service) OnMirrorSettled(fn func(ctx context.Context, repo, commit string, present bool)) {
+	s.mirrorSettled = fn
+}
+
 // SetPolicy installs the allow-list used by mirror sync.
 func (h *Handler) SetPolicy(p *actuationpolicy.Policy) { h.svc.SetPolicy(p) }
+
+// OnMirrorSettled is Service.OnMirrorSettled, for wiring.
+func (h *Handler) OnMirrorSettled(fn func(ctx context.Context, repo, commit string, present bool)) {
+	h.svc.OnMirrorSettled(fn)
+}
 
 // SyncOne fetches one repository and waits for commit. Handler method so the
 // plan path and the HTTP path share one implementation.
@@ -96,6 +106,9 @@ func (s *Service) SyncMirrors(ctx context.Context, repos []string, commits map[s
 		item := s.syncOneRepo(ctx, repo, strings.TrimSpace(commits[repo]), user, pass, deadline)
 		if !item.Present {
 			out.OK = false
+		}
+		if s.mirrorSettled != nil && item.Commit != "" {
+			s.mirrorSettled(ctx, item.Repo, item.Commit, item.Present)
 		}
 		out.Repos = append(out.Repos, item)
 	}

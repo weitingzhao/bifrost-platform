@@ -41,6 +41,8 @@ type Service struct {
 	cloneJobs  *DataCloneJobStore
 	cloneSched *DataCloneScheduleStore
 	cloneLast  *DataCloneLastStore
+
+	cloneFinished func(ctx context.Context, jobID string, ok bool)
 }
 
 // NewService reads the environments' gateways from entry and runs its

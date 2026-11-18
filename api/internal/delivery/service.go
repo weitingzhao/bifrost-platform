@@ -68,6 +68,7 @@ type Service struct {
 	dynamicFactory func() (dynamic.Interface, error)
 	httpClient     *http.Client
 	policy         *actuationpolicy.Policy
+	mirrorSettled  func(ctx context.Context, repo, commit string, present bool)
 	// giteaBase is a test hook; production leaves it empty.
 	giteaBase string
 	// readerCreds is the platform's read-only Gitea credential (gitea_reader.go):

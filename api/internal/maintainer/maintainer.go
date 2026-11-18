@@ -78,12 +78,23 @@ type sample struct {
 	lastSuccess int64
 	hasSuccess  bool
 	counts      map[string]uint64
+	last        string
 }
 
 var (
 	mu      sync.Mutex
 	samples = map[string]*sample{}
+	changed func(id string, healthy bool)
 )
+
+// OnHealthChange is told when a loop's passes turn from succeeding to failing
+// or back, and when a loop's first pass fails. It runs on the loop's goroutine
+// and must not block.
+func OnHealthChange(fn func(id string, healthy bool)) {
+	mu.Lock()
+	changed = fn
+	mu.Unlock()
+}
 
 // Success records one completed pass of maintainer id.
 func Success(id string) { Note(id, ResultSuccess) }
@@ -99,7 +110,6 @@ func Note(id, result string) {
 		return
 	}
 	mu.Lock()
-	defer mu.Unlock()
 	s := samples[id]
 	if s == nil {
 		s = &sample{counts: map[string]uint64{}}
@@ -112,6 +122,13 @@ func Note(id, result string) {
 	if result == ResultSuccess {
 		s.lastSuccess = now().Unix()
 		s.hasSuccess = true
+	}
+	turned := s.last != result && (s.last != "" || result == ResultFailure)
+	s.last = result
+	tell := changed
+	mu.Unlock()
+	if turned && tell != nil {
+		tell(id, result == ResultSuccess)
 	}
 }
 
