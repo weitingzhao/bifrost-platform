@@ -114,6 +114,7 @@ type Server struct {
 	research      *research.Handler
 	datahusbandry *datahusbandry.Handler
 	telemetry     *telemetry.Handler
+	nodeLatency   nodeLatencyCache
 	devSession    *devsession.Handler
 	auth          *actuation.AuthService
 	approvals     *approvals.Service

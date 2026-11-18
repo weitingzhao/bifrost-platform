@@ -57,6 +57,10 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 	}
 	src.UnitRuns = s.unitRunsSource()
 	src.UnitsDaily = s.unitsDailySource()
+	if s.delivery != nil && os.Getenv("AGENTRT_ENV") == "prod" {
+		// One platform chooses: PROD, as it is PROD that starts the deliveries.
+		src.CINode = s.delivery.PublishCINode
+	}
 	src.HeadRelease = s.bus.serialHeadRelease(s.headReleaseSource())
 	src.PostRelease = s.postReleaseSource()
 	if s.delivery != nil {

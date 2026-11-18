@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	dynfake "k8s.io/client-go/dynamic/fake"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
@@ -805,5 +806,60 @@ func TestJoinNodeMetricsKeepsOnlyCompleteNodes(t *testing.T) {
 	)
 	if len(got) != 1 || got["10.0.0.1"].WriteLatencySeconds != 0.007 || got["10.0.0.1"].MemoryAvailable != 0.6 {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+// 2026-11-18, the Owner: CI on 05 moves to 07, the slow disk only as a fallback.
+// A CI run is created by the webhook's trigger, so the platform writes the choice
+// into the binding it reads; only a change is written, and a binding that is not
+// there is no error. Positive control: writing on every pass fails the count of
+// patches; a choice left out of the patch fails the value checks.
+func TestPublishCINodeWritesTheChoiceWhenItChanges(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	binding := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "triggers.tekton.dev/v1beta1", "kind": "TriggerBinding",
+		"metadata": map[string]any{"name": ciNodeBinding, "namespace": "cicd"},
+		"spec":     map[string]any{"params": []any{map[string]any{"name": "ciNode", "value": ciNoNode}}}}}
+	dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{triggerBindingGVR: "TriggerBindingList"}, binding)
+	s := NewService(&config.ClusterEntry{ID: "test"})
+	s.SetClientsetForTest(k8sfake.NewSimpleClientset(placementNode("ubt-k3s-07", true, false, "16"), placementNode("ubt-k3s-05", true, false, "16")))
+	s.SetDynamicFactoryForTest(func() (dynamic.Interface, error) { return dyn, nil })
+	metrics := map[string]NodeMetrics{
+		"ip-ubt-k3s-07": {WriteLatencySeconds: 0.007, CPUBusy: 0.2, DiskBusy: 0.1, MemoryAvailable: 0.6},
+		"ip-ubt-k3s-05": {WriteLatencySeconds: 0.16, CPUBusy: 0.2, DiskBusy: 0.1, MemoryAvailable: 0.6},
+	}
+	s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) { return metrics, nil })
+	read := func(name string) string {
+		got, err := dyn.Resource(triggerBindingGVR).Namespace(s.PipelinesNamespace()).Get(ctx, ciNodeBinding, metav1.GetOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return boundParam(got.Object, name)
+	}
+	patches := func() (n int) {
+		for _, a := range dyn.Actions() {
+			if a.GetVerb() == "patch" {
+				n++
+			}
+		}
+		return n
+	}
+	for i := 0; i < 2; i++ {
+		if err := s.PublishCINode(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if read("ciNode") != "ubt-k3s-07" || read("ciNodeKey") != hostIDLabel || read("ciNodeValue") != "ubt-k3s-07" || patches() != 1 {
+		t.Fatalf("node %q key %q value %q patches %d", read("ciNode"), read("ciNodeKey"), read("ciNodeValue"), patches())
+	}
+	m := metrics["ip-ubt-k3s-07"]
+	m.CPUBusy = 0.9
+	metrics["ip-ubt-k3s-07"] = m
+	if err := s.PublishCINode(ctx); err != nil || read("ciNode") != "ubt-k3s-05" || !strings.Contains(read("ciNodeWhy"), "CPU 90% busy") {
+		t.Fatalf("%v node %q why %q", err, read("ciNode"), read("ciNodeWhy"))
+	}
+	metrics = map[string]NodeMetrics{}
+	if err := s.PublishCINode(ctx); err != nil || read("ciNode") != ciNoNode || read("ciNodeKey") != ciAnyNodeKey || read("ciNodeValue") != ciAnyNodeValue {
+		t.Fatalf("nothing fits leaves the run to the scheduler: %v %q", err, read("ciNode"))
 	}
 }

@@ -58,6 +58,8 @@ type Sources struct {
 	UnitRuns func(ctx context.Context) error
 	// UnitsDaily starts and reports the daily unit run of main; nil: none.
 	UnitsDaily func(ctx context.Context) error
+	// CINode keeps the node new CI runs go to current; nil: this platform does not.
+	CINode func(ctx context.Context) error
 	// HeadRelease takes each deliverable the platform releases by itself
 	// one step (server/head_release.go); nil when that is switched off.
 	HeadRelease func(ctx context.Context) error
@@ -382,6 +384,9 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 			every = DefaultPipelineEvery
 		}
 		c.every(ctx, &wg, "agentrt-unit-runs", every, func() error { return c.Sources.UnitRuns(ctx) })
+	}
+	if c.Sources.CINode != nil {
+		c.every(ctx, &wg, "agentrt-ci-node", time.Minute, func() error { return c.Sources.CINode(ctx) })
 	}
 	if c.Sources.UnitsDaily != nil {
 		c.every(ctx, &wg, "agentrt-units-daily", 5*time.Minute, func() error { return c.Sources.UnitsDaily(ctx) })
