@@ -55,9 +55,6 @@ type API struct {
 	// ProductionDelivery reads the current PROD release for GET /delivery;
 	// nil means not wired, and the PROD stages say so.
 	ProductionDelivery func(context.Context) deliveryview.DeliveryProduction
-	// PinReason is what an implement task pinned to the coordinator without
-	// a pin_reason gets (AGENTRT_PIN_REASON, store/pinreason.go); "" is warn.
-	PinReason store.PinReasonMode
 	// Back records when runtime routes became ready. Progress retains this
 	// input for compatibility but no longer computes dispatch host presence.
 	Back func() time.Time
@@ -207,24 +204,10 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusForbidden, "not_yours", err.Error())
 	case errors.Is(err, planstore.ErrNotOwner):
 		writeError(w, http.StatusForbidden, "not_owner", err.Error())
-	case errors.Is(err, store.ErrExternalHost):
-		writeError(w, http.StatusForbidden, "external_host", err.Error())
-	case errors.Is(err, store.ErrNotExternal):
-		writeError(w, http.StatusForbidden, "forbidden", err.Error())
 	case errors.Is(err, externalwork.ErrIdentityRequired):
 		writeError(w, http.StatusBadRequest, "identity_required", err.Error())
 	case errors.Is(err, externalwork.ErrIdentityMismatch):
 		writeError(w, http.StatusConflict, "identity_mismatch", err.Error())
-	case errors.Is(err, store.ErrNotPinned):
-		writeError(w, http.StatusForbidden, "not_pinned", err.Error())
-	case errors.Is(err, store.ErrNoLease):
-		writeError(w, http.StatusConflict, "no_lease", err.Error())
-	case errors.Is(err, store.ErrCoreMismatch):
-		writeError(w, http.StatusUnprocessableEntity, "core_mismatch", err.Error())
-	case errors.Is(err, store.ErrMixedSource):
-		writeError(w, http.StatusUnprocessableEntity, "mixed_source_not_supported", err.Error())
-	case errors.Is(err, store.ErrPinNotPermitted):
-		writeError(w, http.StatusUnprocessableEntity, "pin_not_permitted", err.Error())
 	case errors.Is(err, store.ErrInvalid):
 		writeError(w, http.StatusUnprocessableEntity, "invalid", err.Error())
 	case errors.Is(err, store.ErrUnsigned):
@@ -236,16 +219,10 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusServiceUnavailable, "busy", err.Error())
 	case errors.As(err, &pg) && constraintCodes[pg.Code]:
 		writeError(w, http.StatusUnprocessableEntity, "constraint", pg.Message)
-	case errors.Is(err, store.ErrFenced):
-		writeError(w, http.StatusConflict, "fenced", err.Error())
 	case errors.Is(err, store.ErrConflict):
 		writeError(w, http.StatusConflict, "key_conflict", err.Error())
-	case errors.Is(err, store.ErrInGrace):
-		writeError(w, http.StatusConflict, "in_grace", err.Error())
 	case errors.Is(err, store.ErrState):
 		writeError(w, http.StatusConflict, "state", err.Error())
-	case errors.Is(err, store.ErrNoHead):
-		writeError(w, http.StatusServiceUnavailable, "no_head_reader", err.Error())
 	case errors.Is(err, pgx.ErrNoRows):
 		writeError(w, http.StatusNotFound, "not_found", "no such record")
 	default:

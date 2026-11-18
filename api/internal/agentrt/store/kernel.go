@@ -1,9 +1,6 @@
 package store
 
 import (
-	"errors"
-	"time"
-
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
@@ -26,13 +23,8 @@ import (
 // SHARE) never wait for.
 
 var (
-	// ErrFenced: the caller does not hold this attempt (another host, an old
-	// epoch, an attempt that is no longer live, or past expiry plus grace).
-	ErrFenced = errors.New("store: this attempt's lease is not yours")
 	// ErrConflict: an idempotency key reused with a different request.
 	ErrConflict = actor.ErrConflict
-	// ErrInGrace: salvage refused because the lease may still be renewed.
-	ErrInGrace = errors.New("store: the attempt is still within its grace period")
 	// ErrState: the operation does not fit the current state.
 	ErrState = eventlog.ErrState
 )
@@ -51,30 +43,5 @@ func hook(point, arg string) {
 		(*f)(point, arg)
 	}
 }
-
-func timeText(t time.Time) string { return t.UTC().Truncate(time.Microsecond).Format(timeLayout) }
-
-// Tasks.
-
-// taskMoves is every task state change there is. The attempt routes below
-// make the moves into and out of leased, running and submitted; verification
-// makes the moves out of submitted and verifying; MoveTask makes the rest.
-var taskMoves = map[string][]string{
-	"proposed":       {"ready", "awaiting_owner", "blocked", "cancelled"},
-	"awaiting_owner": {"ready", "cancelled"},
-	"ready":          {"leased", "paused", "blocked", "cancelled"},
-	"leased":         {"running", "ready", "blocked"},
-	"running":        {"submitted", "ready", "blocked"},
-	"submitted":      {"verifying", "accepted", "blocked"}, // accepted: a verification or review task once its result is used
-	"verifying":      {"accepted", "rework", "rejected", "blocked"},
-	"rework":         {"ready", "cancelled"},
-	"blocked":        {"ready", "cancelled"},
-	"paused":         {"ready", "cancelled"},
-}
-
-// Hosts.
-
-// HostExternal is the kind of the external host.
-const HostExternal = "external"
 
 // Controls.

@@ -18,13 +18,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 )
 
-// The result check's Gitea half (design v5 §5.2: a result is persisted once
-// its branch is on Gitea and the platform has checked it). Agent branches go
-// to their own organization on Gitea, AGENTRT_GIT_ORG: the organization the
-// releases clone from mirrors GitHub, takes no push and drops branches GitHub
-// does not have. Unset, there is no reader and a pushed branch answers 503
-// (store.ErrNoHead), as before.
-
 // agentRuntimeMains reads the head of a repository's main where agentd clones
 // it from: the organization the releases clone from (the delivery service's
 // Gitea organization, what agentd's AGENTD_GIT_BASE names), the base of a
@@ -59,7 +52,7 @@ var (
 // reach it), an answer that is not an advertisement, or a Gitea it cannot
 // reach is an error of the platform, which agentd retries later, so no result
 // is lost to it.
-func giteaBranchHead(access func(context.Context) (delivery.GiteaAccess, error), org string, client *http.Client) store.BranchHead {
+func giteaBranchHead(access func(context.Context) (delivery.GiteaAccess, error), org string, client *http.Client) func(context.Context, string, string) (string, error) {
 	// A redirect would read another repository than the one asked for: it is
 	// an answer of its own, an error of the platform (review 194 A2).
 	c := *client

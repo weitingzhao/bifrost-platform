@@ -67,14 +67,12 @@ type agentRuntime struct {
 // The controller reads approvals, questions, CI verdicts and deployments from the
 // platform's own stores (agentRuntimeSources); a record it cannot read leaves
 // the rule atoms on it unknown, so nothing is judged done on facts it cannot
-// see. Pushed branches are checked on Gitea in the organization
-// AGENTRT_GIT_ORG (agentrt_heads.go); without it, persist and salvage of a
-// branch answer 503.
+// see.
 func (s *Server) wireAgentRuntime(role config.Role) {
 	rt := &agentRuntime{api: &agentrtapi.API{Logf: func(format string, args ...any) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
 	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint,
-		DiskFloor: diskFloorFromEnv(), PinReason: pinReasonFromEnv()}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
+		DiskFloor: diskFloorFromEnv()}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
 	s.agentRuntime = rt
 	rt.evidenceCI = s.wireEvidenceGate()
 	if s.releases != nil && s.releases.Service() != nil {
@@ -172,18 +170,6 @@ func agentRuntimeController(env string, db store.DB, src controller.Sources) *co
 	}, Infof: func(format string, args ...any) {
 		slog.Info("agentrt controller", "detail", fmt.Sprintf(format, args...))
 	}}
-}
-
-// pinReasonFromEnv is what an implement task pinned to the coordinator
-// without a pin_reason gets (store/pinreason.go), read once at start from
-// AGENTRT_PIN_REASON: warn (the default: accepted, counted as unexplained)
-// or refuse (422). Any other value is logged and warn is used.
-func pinReasonFromEnv() store.PinReasonMode {
-	m, err := store.ParsePinReason(os.Getenv("AGENTRT_PIN_REASON"))
-	if err != nil {
-		slog.Error("agentrt pin reason", "error", err, "using", m)
-	}
-	return m
 }
 
 // agentrtRetry is how long connectAgentRuntime waits between attempts at

@@ -155,10 +155,7 @@ func shaped(name string, re *regexp.Regexp) value { return eventlog.Shaped(name,
 
 var (
 	ulid        = `[0-9A-HJKMNP-TV-Z]{26}`
-	taskID      = shaped("a task id", regexp.MustCompile(`^t_`+ulid+`$`))
-	attemptID   = shaped("an attempt id", regexp.MustCompile(`^a_`+ulid+`$`))
 	messageID   = shaped("a message id", regexp.MustCompile(`^m_`+ulid+`$`))
-	verifyID    = shaped("a verification id", regexp.MustCompile(`^v_`+ulid+`$`))
 	artifactID  = shaped("an artifact id (sha256:<64 hex>)", regexp.MustCompile(`^sha256:[0-9a-f]{64}$`))
 	commit      = shaped("a commit (40 hex)", regexp.MustCompile(`^[0-9a-f]{40}$`))
 	fingerprint = shaped("a fingerprint (sha256:<64 hex>)", regexp.MustCompile(`^sha256:[0-9a-f]{64}$`))
@@ -174,10 +171,6 @@ var fieldValues = map[string]map[string]value{
 	"legacy_imported":  {"digest": fingerprint},
 }
 
-// waitRef is what a wait waits on: an attempt, a task or a message
-// (checkBody holds it to its wait).
-var waitRef = shaped("an attempt, task or message id", regexp.MustCompile(`^[atm]_`+ulid+`$`))
-
 // badValue is why v, of its field's kind already, is refused, or ""
 // (eventlog.BadValue).
 func badValue(eventType, name string, v any) string { return eventlog.BadValue(eventType, name, v) }
@@ -185,16 +178,13 @@ func badValue(eventType, name string, v any) string { return eventlog.BadValue(e
 // hex64 is a sha256 as 64 hex characters.
 var hex64 = shaped("a sha256 (64 hex)", regexp.MustCompile(`^[0-9a-f]{64}$`))
 
-// commitRE is a full commit id; artifactIDRE an artifact's id.
+// artifactIDRE is an artifact's id.
 var (
-	commitRE     = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	artifactIDRE = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 )
 
 var metricLabel = shaped("a metric label", regexp.MustCompile(`^(baseline|group):[A-Za-z0-9._-]{1,64}$`))
 var metricIDRE = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
-
-var ciRepo = shaped("a repository name", regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,99}$`))
 
 // approvalIDRE is the shape of an approval's id.
 var approvalIDRE = regexp.MustCompile(`^appr_[0-9a-f]{16}$`)

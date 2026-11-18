@@ -95,7 +95,7 @@ func (f *fakeGitea) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(body))
 }
 
-func headReader(t *testing.T, f *fakeGitea) store.BranchHead {
+func headReader(t *testing.T, f *fakeGitea) func(context.Context, string, string) (string, error) {
 	t.Helper()
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)

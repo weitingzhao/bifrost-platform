@@ -29,13 +29,7 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 	return eventlog.Append(ctx, tx, ev)
 }
 
-func lockStream(ctx context.Context, tx pgx.Tx, stream string) error {
-	return eventlog.LockStream(ctx, tx, stream)
-}
-
 func nullable(s string) any { return eventlog.Nullable(s) }
-
-func eventNow(ctx context.Context) time.Time { return eventlog.Now(ctx) }
 
 // WithEventClock, DecisionAt, VerifyStream and SetEventClock are the event
 // log's (eventlog).
