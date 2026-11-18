@@ -22,7 +22,7 @@ import (
 // read after the horizon taken before it, as an envelope of its type.
 func TestBusReadsTheLedgerThroughEventsAfter(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 75*time.Second)
 	defer cancel()
 	db := agentrttest.Migrated(t)
 	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
@@ -51,9 +51,14 @@ func TestBusReadsTheLedgerThroughEventsAfter(t *testing.T) {
 	}
 	// An event shows once every older transaction of the cluster has ended
 	// (eventlog.EventsAfter's horizon): other tests' databases share the server.
+	// Origin: 2026-11-18, ci-platform-2gvsm: 10 s was shorter than a transaction
+	// another package's test holds on purpose (migrate's
+	// TestUpgradeTo0010StatementTimeoutRollsBack ran 30.7 s beside it, with a 37 s
+	// statement timeout), so the event stayed behind the horizon and this failed.
+	// Reproduced by holding a transaction open on the server for 25 s.
 	var rows []relay.Row
 	var next relay.Cursor
-	for deadline := time.Now().Add(10 * time.Second); len(rows) == 0 && err == nil && time.Now().Before(deadline); {
+	for deadline := time.Now().Add(60 * time.Second); len(rows) == 0 && err == nil && time.Now().Before(deadline); {
 		if rows, next, err = ledger.After(ctx, from, 100, []string{bushook.Type}); len(rows) == 0 {
 			time.Sleep(50 * time.Millisecond)
 		}
