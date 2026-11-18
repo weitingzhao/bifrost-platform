@@ -1026,6 +1026,13 @@
       "status": "assigned",
       "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the checklist of the platform's daily operation and its signal store, read by patrol. The tenant's husbandry signals are bound from tenant/husbandry/checklistview since 2026-11-16 (SignalSource); this package no longer imports a tenant. Was default-maintainer."
     },
+    "api/internal/kubemetrics": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: counts the platform's own requests to the Kubernetes API by verb, resource and calling site, for cluster, delivery, statefile and server. Imports nothing of the platform."
+    },
     "api/internal/cluster": {
       "domains": [
         "foundation",
@@ -1097,6 +1104,83 @@
       ],
       "status": "assigned",
       "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): an entry or dispatcher of the bus (sub-domain 0.2 of foundation, built by the communication line); it imports only the ledger and the bus registry. It had no row."
+    },
+    "api/internal/bus/mailwake": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, wakes a waiting inbox read when the bus says mail reached its address; imports only bus/relay. Imports only foundation packages or none; the server wires it."
+    },
+    "api/internal/bus/nextgen": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, the channel table of the bus migration and what it summarizes; imports nothing of the platform. Imports only foundation packages or none; the server wires it."
+    },
+    "api/internal/bus/observe": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, the Bus page's picture of the team, computed from the platform's records. Imports only foundation packages or none; the server wires it."
+    },
+    "api/internal/bus/opsevents": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, says on the bus what the platform's own work has just done. Imports only foundation packages or none; the server wires it."
+    },
+    "api/internal/bus/ownernotice": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, says on the bus that an Owner notice went out. Imports only foundation packages or none; the server wires it."
+    },
+    "api/internal/bus/ownerq": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, writes the Owner's questions to the bus, asked and answered. Imports only foundation packages or none; the server wires it."
+    },
+    "api/internal/bus/readerseen": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, records in the process that a moved reader ran on its new source. Imports only foundation packages or none; the server wires it."
+    },
+    "api/internal/bus/regressions": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, the known regressions on main as bus records. Imports only foundation packages or none; the server wires it."
+    },
+    "api/internal/bus/releases": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, announces a finished release on the bus. Imports only foundation packages or none; the server wires it."
+    },
+    "api/internal/bus/runhooks": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, lets a reader of pipeline runs be woken by the bus. Imports only foundation packages or none; the server wires it."
+    },
+    "api/internal/bus/schemaevents": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, says on the bus that a migration reached the database. Imports only foundation packages or none; the server wires it."
     },
     "api/internal/releases": {
       "domains": [
