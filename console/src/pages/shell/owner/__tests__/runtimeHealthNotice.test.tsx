@@ -5,7 +5,7 @@ import schemaFixture from '@/api/__fixtures__/agentrt-progress-schema.testdb.jso
 import { parseRuntimeProgress } from '@/api/agentRuntime'
 import { RuntimeHealthNotice } from '../RuntimeHealthNotice'
 
-// TD-411. The fixture is GET /agentrt/progress from real rows (store TestProgressSaysTheSchemaAndTheFailingLoops,
+// TD-411. The fixture is GET /agentrt/progress from real rows (planstore TestProgressSaysTheSchemaAndTheFailingLoops,
 // written with CONSOLE_SCHEMA_FIXTURE_WRITE=1): on a database at 0006, and with the facts loop alerted as failing.
 const behind = parseRuntimeProgress(schemaFixture.behind)
 const failing = parseRuntimeProgress(schemaFixture.failing)
