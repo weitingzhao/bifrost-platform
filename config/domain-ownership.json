@@ -219,6 +219,13 @@
       "status": "assigned",
       "basis": "CI charter; configuration is read-only"
     },
+    "api/internal/unitwatch": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 the a25c27aa incident: says on the ledger when main's unit declaration stops reading and reads again; reads declarations through unitplan and writes bus/regressions; the server wires it."
+    },
     "api/internal/unitexec": {
       "domains": [
         "verification"

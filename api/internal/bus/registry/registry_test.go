@@ -124,6 +124,10 @@ func TestRegisterNamesRealReaders(t *testing.T) {
 				if typ != "release.window.changed" {
 					t.Errorf("%s: the window queue reads only the window's changes", typ)
 				}
+			case "unit-watch":
+				if typ != "git.main.advanced" {
+					t.Errorf("%s: the unit declaration watch reads only main's advances", typ)
+				}
 			case "card-conclusions":
 				if typ != "approval.card.decided" && typ != "approval.card.executed" {
 					t.Errorf("%s: the card conclusions read only a card's decision and result", typ)

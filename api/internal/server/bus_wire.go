@@ -14,6 +14,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
+	"github.com/weitingzhao/bifrost-platform/api/internal/unitwatch"
 	"log/slog"
 	"net/http"
 	"os"
@@ -472,6 +473,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 		s.consumePostRelease(ctx, js, env)
 		s.consumeConclusions(ctx, js, env)
 		s.consumeWindowQueue(ctx, js, env)
+		s.consumeUnitWatch(ctx, js, env)
 		r := &relay.Relay{Ledger: ledger, Out: &relay.JSOut{JS: js, Stream: relay.EventStreamName(relay.Tenant, env)},
 			Tenant: rocket, Env: env, Logf: busLogf}
 		r.Run(ctx, relay.Listen(ctx, pool, busLogf))
@@ -716,6 +718,34 @@ func (s *Server) consumeWindowQueue(ctx context.Context, js jetstream.JetStream,
 			slog.Warn("bus: window queue not advanced", "error", err)
 		}
 	})
+}
+
+// consumeUnitWatch reads main's unit declaration when main moves (2026-11-18,
+// unitwatch). The event only kicks the watch: a pass may read up to 100
+// trees, and an event is held for 15 seconds.
+func (s *Server) consumeUnitWatch(ctx context.Context, js jetstream.JetStream, env string) {
+	if s.delivery == nil {
+		return
+	}
+	kicks := make(chan struct{}, 1)
+	safego.Go("bus-unit-watch", func() { unitwatch.Run(ctx, kicks, unitWatchRetry, s.unitWatchPass) })
+	s.consumePasses(ctx, js, env, "unit-watch", []string{bushook.Type}, func(context.Context) {
+		select {
+		case kicks <- struct{}{}:
+		default:
+		}
+	})
+}
+
+// unitWatchRetry is how soon a pass that could not read main runs again.
+const unitWatchRetry = 5 * time.Minute
+
+func (s *Server) unitWatchPass(ctx context.Context) error {
+	db := s.bus.db()
+	if db == nil {
+		return errors.New("the ledger is not connected")
+	}
+	return unitwatch.Watch{DB: db, Head: s.giteaMainHead, Tree: s.unitTreesOf(), FirstParent: s.giteaFirstParent}.Pass(ctx)
 }
 
 // consumePasses runs pass for each event of a durable consumer and leaves a

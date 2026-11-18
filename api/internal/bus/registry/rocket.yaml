@@ -21,7 +21,7 @@ channels:
       reconcile: "gate-git compares Gitea branches/main every 5 min"
       on_unread: stale
       retention: 30d
-      consumers: [headrelease, console]
+      consumers: [headrelease, console, unit-watch]
       exports: []
       replaces: [L04, L06, X-A28]
   git.ready.pushed:

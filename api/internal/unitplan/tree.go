@@ -12,6 +12,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -31,6 +32,7 @@ type Tree struct {
 	entries  map[string]Entry
 	children map[string][]string // directory -> names directly under it, sorted
 	read     func(id string) ([]byte, error)
+	failed   atomic.Pointer[error] // the first error of read
 }
 
 // NewTree builds a Tree from the entries of a recursive listing (files and
@@ -86,7 +88,22 @@ func (t *Tree) ReadFile(p string) ([]byte, error) {
 	if t.read == nil {
 		return nil, errors.New("unitplan: this tree has no blob reader")
 	}
-	return t.read(e.ID)
+	b, err := t.read(e.ID)
+	if err != nil {
+		t.failed.CompareAndSwap(nil, &err)
+	}
+	return b, err
+}
+
+// ReadFailure is the first error the blob reader gave for this tree, nil when
+// it answered every time. go/build does not keep the cause of a file it could
+// not open, so a caller that must tell "this commit is wrong" from "the commit
+// could not be read" asks here.
+func (t *Tree) ReadFailure() error {
+	if p := t.failed.Load(); p != nil {
+		return *p
+	}
+	return nil
 }
 
 // Walk lists every file under dir (dir itself when it is a file), sorted.

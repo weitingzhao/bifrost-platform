@@ -31,6 +31,17 @@ subscriptions:
     to: commit.session
     guarantee: durable
     by: dispatcher
+  # A known regression on main wakes whoever made the commit that introduced
+  # it, recorded by a seat or by the unit declaration watch (2026-11-18:
+  # a25c27aa broke the declaration and no one was told for 34 commits). The
+  # subject names the commit, the ref the repository. A commit with no
+  # Claude-Session trailer wakes nobody.
+  - id: regression-to-introducer
+    on: [main.regression.known]
+    deliver: wake
+    to: commit.session
+    guarantee: durable
+    by: dispatcher
   # A landing that did not land wakes whoever pushed the commit
   # (2026-11-17, the CI line: refusals were seen only in a Pod's log, and a
   # seat found out by measuring). The landing run's finish is already on the
@@ -179,6 +190,11 @@ clients:
     lost_after: 168h
     domain: delivery
     note: moves the release window's queue on when the window changes, so the next in line is told at once; a periodic pass handles a hold that runs out
+  - name: unit-watch
+    kind: durable
+    lost_after: 168h
+    domain: verification
+    note: reads main's unit declaration on each advance of main; records a known regression when it stops reading and the fix when it reads again
   - name: card-conclusions
     kind: durable
     lost_after: 168h

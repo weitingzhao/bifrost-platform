@@ -83,6 +83,7 @@ modules:
         - "config/trust-overrides.yaml"
       # CI configuration read model, independent of HTTP wiring.
       api/internal/ciconfig: ["api/internal/ciconfig"]
+      api/internal/unitwatch: ["api/internal/unitwatch"]
       api/internal/cirunview: ["api/internal/cirunview"]
       api/internal/resourceview: ["api/internal/resourceview"]
       api/internal/tenant/appreadings: ["api/internal/tenant/appreadings"]
