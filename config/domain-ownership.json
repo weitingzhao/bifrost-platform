@@ -1245,6 +1245,13 @@
       "status": "assigned",
       "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the trust matrix of agent tasks, its overrides and the skill-run outcomes it is computed from: how far an agent is trusted is an Owner decision; only the server imports it. It had no row."
     },
+    "api/internal/instruments": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 Owner asked to audit the laws, Skills and MCP tools on Ops: a read model of OWNER_LAW.md, the SKILL.md files, .mcp.json and the platform MCP server's source at main, through Gitea; only the server imports it."
+    },
     "api/internal/patrol": {
       "domains": [
         "foundation"

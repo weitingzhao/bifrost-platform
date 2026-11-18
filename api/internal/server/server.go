@@ -40,6 +40,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/flexquery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ibgateway"
+	"github.com/weitingzhao/bifrost-platform/api/internal/instruments"
 	"github.com/weitingzhao/bifrost-platform/api/internal/lineage"
 	"github.com/weitingzhao/bifrost-platform/api/internal/marketdata"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
@@ -82,8 +83,11 @@ type Server struct {
 	ciScorecardKept ciScorecardCache
 	// ciDomainsKept keeps the CI page's domain graph and the files commits
 	// changed (ci_domains.go).
-	ciDomainsKept   ciDomainsCache
-	unitTreesOnce   sync.Once
+	ciDomainsKept ciDomainsCache
+	unitTreesOnce sync.Once
+	// instruments answers /governance/instruments (governance_instruments.go).
+	instruments     *instruments.Service
+	instrumentsOnce sync.Once
 	promote         *promote.Handler
 	tradeagent      *tradeagent.Handler
 	checklist       *checklist.Handler

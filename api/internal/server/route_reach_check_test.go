@@ -43,6 +43,9 @@ var intendedRouteAdditions = map[string][]string{
 	// the Owner's arrangement of the home's city; everyone reads, he alone saves.
 	"GET /api/v1/home/layout": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"PUT /api/v1/home/layout": {"admin"},
+	// 2026-11-18 (the Owner audits the laws, Skills and MCP tools on Ops):
+	// read from the source at main, read-only, for the console's readers.
+	"GET /api/v1/governance/instruments": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-17 (the Owner: "I ask for progress because Ops does not show
 	// it"): every seat's latest status message, for everyone who reads the
 	// runtime (read-only; a status is written with POST /messages).

@@ -7,6 +7,7 @@ import { GovernanceReferences } from '../progress/GovernanceReferences'
 import { canonicalQuery, scrollAfterShell } from '@/lib/shell/useHashSection'
 import { formatShellHash, type EntryRouteId } from '@/lib/shell/consoleRoutes'
 import { useWorkView } from '@/pages/shell/agents/workViewModel'
+import { CrewInstruments } from './CrewInstruments'
 import { OwnerData } from './OwnerData'
 import { Dot } from './OwnerParts'
 import { OwnerSystem } from './OwnerSystem'
@@ -67,6 +68,7 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
     {blocks.services && <><OwnerData data={data} /><DomainSection id="versions" label="Running versions"><ServiceVersions /></DomainSection><DomainSection id="applications" label="Applications"><SatelliteHealthPage lockToViewer /></DomainSection></>}
     {blocks.crew && <>
       <DomainSection id="capability-evidence" label="Capability evidence"><CapabilityEvidence /></DomainSection>
+      <DomainSection id="instruments" label="Laws, skills & tools"><CrewInstruments /></DomainSection>
       <GovernanceReferences />
     </>}
   </div>

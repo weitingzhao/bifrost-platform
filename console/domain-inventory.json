@@ -99,6 +99,7 @@
         "console/src/api/agentTypes.ts",
         "console/src/api/ciDomains.ts",
         "console/src/api/ciScorecard.ts",
+        "console/src/api/governanceInstruments.ts",
         "console/src/api/matrixTypes.ts",
         "console/src/api/regressions.ts",
         "console/src/api/seatStatus.ts"
@@ -4784,6 +4785,7 @@
     {
       "path": "console/src/pages/shell/owner",
       "files": [
+        "console/src/pages/shell/owner/CrewInstruments.tsx",
         "console/src/pages/shell/owner/LastRead.tsx",
         "console/src/pages/shell/owner/OwnerConsolePage.tsx",
         "console/src/pages/shell/owner/OwnerData.tsx",
@@ -4796,6 +4798,7 @@
         "console/src/pages/shell/owner/OwnerYou.tsx",
         "console/src/pages/shell/owner/RuntimeHealthNotice.tsx",
         "console/src/pages/shell/owner/__tests__/OwnerConsolePage.test.tsx",
+        "console/src/pages/shell/owner/__tests__/crewInstruments.test.tsx",
         "console/src/pages/shell/owner/__tests__/fixtures/pools-utc.json",
         "console/src/pages/shell/owner/__tests__/fixtures/standby-evidence.prod.json",
         "console/src/pages/shell/owner/__tests__/fixtures/telemetry-alerts.prod.json",
@@ -4823,6 +4826,7 @@
         "console/src/api/releases.ts",
         "console/src/api/researchEngine.ts",
         "console/src/api/telemetry.ts",
+        "console/src/components/layout",
         "console/src/components/market-data",
         "console/src/components/shell",
         "console/src/domains/foundation/backup",
@@ -4846,6 +4850,7 @@
         "console/src/api/approvalsApiFixture.ts",
         "console/src/api/clusterTypes.ts",
         "console/src/api/questions.ts",
+        "console/src/components/shell",
         "console/src/hooks/platformAuthContext.ts",
         "console/src/hooks/useFlexQueryLiveProbe.ts",
         "console/src/hooks/useIbGatewayLiveProbe.ts",

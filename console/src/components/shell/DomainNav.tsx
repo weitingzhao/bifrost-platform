@@ -4,7 +4,7 @@ import { resolveConsoleHash, type EntryRouteId } from '@/lib/shell/consoleRoutes
 
 const LINKS: Record<EntryRouteId, readonly [string, string][]> = {
   command: [['Inbox', '#command'], ['Decisions & questions', '#command?section=waiting'], ['History', '#records?tab=closed']],
-  crew: [['Capability evidence', '#crew?section=capability-evidence'], ['Rules & reference', '#crew?section=references']],
+  crew: [['Capability evidence', '#crew?section=capability-evidence'], ['Laws, skills & tools', '#crew?section=instruments'], ['Rules & reference', '#crew?section=references']],
   work: [['Activity', '#work?section=activity'], ['Plan', '#work?section=plan'], ['Releases', '#releases'], ['Delivery boundaries', '#work?section=delivery-boundaries'], ['CI', '#work?section=ci'], ['History', '#records?tab=work'], ['Code health', '#work?section=code-health'], ['Commit lineage', '#work?section=commit-lineage']],
   services: [['Overview', '#services'], ['Versions', '#services?section=versions'], ['Applications', '#services?section=applications'], ['Plugins', '#data?section=plugins'], ['Market data', '#data?section=market-data'], ['IB Flex', '#data?section=flex'], ['Research', '#data?section=research'], ['IB connectivity', '#ib']],
   system: [['Overview', '#system'], ['Status', '#status'], ['Cluster', '#infrastructure?section=cluster'], ['Network', '#infrastructure?section=network'], ['Hosts', '#infrastructure?section=hosts'], ['Storage & backup', '#infrastructure?section=backup'], ['Bus', '#bus'], ['Audit', '#records?tab=audit'], ['Patrol', '#records?tab=patrol']],

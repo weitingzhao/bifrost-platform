@@ -132,3 +132,43 @@ func TestUnitPlanFromGitea(t *testing.T) {
 		t.Fatal("a repository Gitea does not have was planned")
 	}
 }
+
+// 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
+// The instruments' reader lists a commit's files (no directories, no submodules) and returns a blob's bytes from Gitea.
+func TestInstrumentSourceReadsFilesAndBlobsFromGitea(t *testing.T) {
+	const commit = "0123456789012345678901234567890123456789"
+	entries, blobs := planRepo()
+	entries = append(entries, commitTreeEntry{Path: "vendored", Mode: "160000", Type: "commit", SHA: commit})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/v1/repos/bifrost/r/git/trees/"+commit:
+			_ = json.NewEncoder(w).Encode(map[string]any{"sha": commit, "page": 1, "total_count": len(entries), "truncated": false, "tree": entries})
+		case strings.HasPrefix(r.URL.Path, "/api/v1/repos/bifrost/r/git/blobs/"):
+			id := strings.TrimPrefix(r.URL.Path, "/api/v1/repos/bifrost/r/git/blobs/")
+			_ = json.NewEncoder(w).Encode(map[string]any{"sha": id, "encoding": "base64", "content": base64.StdEncoding.EncodeToString([]byte(blobs[id]))})
+		default:
+			http.Error(w, "no", http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	source := instrumentSource{trees: &giteaTrees{access: func(context.Context) (delivery.GiteaAccess, error) {
+		return delivery.GiteaAccess{Base: srv.URL, Org: "bifrost"}, nil
+	}, client: srv.Client()}}
+	files, err := source.Files(context.Background(), "r", commit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, ok := files["bifrost.units.yaml"]
+	if !ok {
+		t.Fatalf("the manifest is not among the files: %v", files)
+	}
+	for _, notFile := range []string{"vendored", "api", "api/a"} {
+		if _, listed := files[notFile]; listed {
+			t.Errorf("%s is listed as a file", notFile)
+		}
+	}
+	raw, err := source.Blob(context.Background(), "r", id)
+	if err != nil || string(raw) != unitsManifest {
+		t.Fatalf("blob = %q, %v", raw, err)
+	}
+}

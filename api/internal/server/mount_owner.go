@@ -29,6 +29,9 @@ func (s *Server) mountOwner(r chi.Router) {
 	// The action record (action_record.go): what was done, by whom, why and on
 	// which law, newest first, by seat, law, action and time. Read-only.
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/records", s.handleRecords)
+	// The laws, Skills and MCP tools the source at main declares, for the Crew
+	// page (governance_instruments.go). Read-only.
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/governance/instruments", s.handleInstruments)
 	r.Get("/actuation/manifests/plans/{id}", s.handlePlanGet)
 	// Recording a skill's own outcome is evidence, not actuation. It sits
 	// below operator on purpose: the workload that reports must not also be
