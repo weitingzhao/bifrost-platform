@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/alerts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/localpath"
 )
 
@@ -110,6 +111,9 @@ func alertClaimIn(ctx context.Context, tx pgx.Tx, ev eventlog.Event, cause int64
 		b[k] = v
 	}
 	ev.Type, ev.Actor, ev.Cause, ev.Body = "policy_alert", "controller", cause, b
-	_, err := eventlog.Append(ctx, tx, ev)
-	return err
+	rec, err := eventlog.Append(ctx, tx, ev)
+	if err != nil {
+		return err
+	}
+	return alerts.Fire(ctx, tx, alerts.ApprovalClaim(), rec.EventID)
 }

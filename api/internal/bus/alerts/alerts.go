@@ -94,7 +94,7 @@ func Announce(ctx context.Context, db eventlog.DB, list []Alert) error {
 			return err
 		}
 		for _, a := range list {
-			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: Stream(a.Name), Type: Type, Actor: actor, Body: Body(a)}); err != nil {
+			if err := Fire(ctx, tx, a, 0); err != nil {
 				return err
 			}
 		}

@@ -14,6 +14,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopreadings"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/alerts"
 )
 
 // A controller loop that keeps failing the same way (TD-411: STG's facts
@@ -50,9 +51,12 @@ func AlertFailingLoop(ctx context.Context, db eventlog.DB, loop string, n int, e
 		if err != nil {
 			return err
 		}
-		_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: ControllerStream, Type: failingType, Actor: "controller",
+		rec, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: ControllerStream, Type: failingType, Actor: "controller",
 			Body: map[string]any{"loop": loop, "failures": n, "artifact_id": art, "line_digest": lineDigest(loop)}})
-		return err
+		if err != nil {
+			return err
+		}
+		return alerts.Fire(ctx, tx, alerts.LoopFailing(true), rec.EventID)
 	})
 }
 
@@ -61,9 +65,12 @@ func AlertFailingLoop(ctx context.Context, db eventlog.DB, loop string, n int, e
 func NoteLoopPasses(ctx context.Context, db eventlog.DB, loop string, n int) error {
 	text := loopreadings.RecoveryText(loop, n, passesAgain)
 	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
-		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: ControllerStream, Type: recoveredType, Actor: "controller",
+		rec, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: ControllerStream, Type: recoveredType, Actor: "controller",
 			Body: map[string]any{"loop": loop, "failures": n, "line_digest": lineDigest(loop), "text": text}})
-		return err
+		if err != nil {
+			return err
+		}
+		return alerts.Fire(ctx, tx, alerts.LoopFailing(false), rec.EventID)
 	})
 }
 

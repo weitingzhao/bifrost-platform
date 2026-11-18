@@ -2,7 +2,10 @@ package alerts_test
 
 import (
 	"context"
+	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor" // the seed (the controller actor), in the test only
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
@@ -92,5 +95,70 @@ func TestNormalizeAndBody(t *testing.T) {
 func TestAlertsAgreeWithTheRegister(t *testing.T) {
 	if err := registry.Agree(alerts.Type); err != nil {
 		t.Error(err)
+	}
+}
+
+// 2026-11-18, the Owner's "first make problems visible": the Watchdog going
+// missing was known only to the relay on the Mac mini. The mirror says each
+// change once, and a blip of the relay's own plane says nothing.
+func TestRelayWatchSaysEachChangeOnce(t *testing.T) {
+	var w alerts.RelayWatch
+	ok := alerts.RelayReading{Reached: true, Enabled: true, HeartbeatOK: true}
+	names := func(l []alerts.Alert) (out []string) {
+		for _, a := range l {
+			out = append(out, a.Name+":"+a.Status)
+		}
+		return out
+	}
+	steps := []struct {
+		r    alerts.RelayReading
+		want string
+	}{
+		{ok, ""},
+		{alerts.RelayReading{}, ""}, {alerts.RelayReading{}, ""},
+		{ok, ""},
+		{alerts.RelayReading{}, ""}, {alerts.RelayReading{}, ""}, {alerts.RelayReading{}, alerts.NameRelayUnreachable + ":firing"}, {alerts.RelayReading{}, ""},
+		{alerts.RelayReading{Reached: true, Enabled: true}, alerts.NameRelayUnreachable + ":resolved," + alerts.NameHeartbeatMissing + ":firing"},
+		{alerts.RelayReading{Reached: true, Enabled: true}, ""},
+		{ok, alerts.NameHeartbeatMissing + ":resolved"},
+		{alerts.RelayReading{Reached: true}, ""},
+	}
+	for i, s := range steps {
+		if got := strings.Join(names(w.Step(s.r)), ","); got != s.want {
+			t.Fatalf("step %d: got %q, want %q", i, got, s.want)
+		}
+	}
+}
+
+// Same origin: a problem recorded in the ledger stayed under a type the bus does
+// not carry. Fire says it as an alert in the same transaction, naming the record.
+func TestFireNamesTheRecordItTellsOf(t *testing.T) {
+	db := agentrttest.Migrated(t)
+	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+		t.Fatal(err)
+	}
+	pool := db.Pool(t, db.Runtime)
+	var cause int64
+	if err := eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
+		if err := alerts.Fire(ctx, tx, alerts.ArtifactRefused(), 0); err != nil {
+			return err
+		}
+		r, _, err := eventlog.Last(ctx, tx, alerts.Stream(alerts.NameArtifactRefused))
+		cause = r.ID
+		if err != nil {
+			return err
+		}
+		return alerts.Fire(ctx, tx, alerts.LoopFailing(true), cause)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var got int64
+	var change, severity string
+	if err := pool.QueryRow(ctx, `SELECT cause_event_id, body_json->>'change', body_json->>'severity'
+	  FROM agentrt.event WHERE event_stream_id = $1`, alerts.Stream(alerts.NameLoopFailing)).Scan(&got, &change, &severity); err != nil {
+		t.Fatal(err)
+	}
+	if got != cause || change != "firing" || severity != "critical" {
+		t.Fatalf("cause %d (want %d), change %q, severity %q", got, cause, change, severity)
 	}
 }

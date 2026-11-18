@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/alerts"
 )
 
 // A report agentd uploads that the platform refuses (TD-382) is recorded on
@@ -70,9 +71,12 @@ func RecordRefusal(ctx context.Context, db eventlog.DB, hostID, kind, artifactID
 				return err
 			}
 		}
-		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: stream, Type: refusedType, Actor: "controller",
+		rec, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: stream, Type: refusedType, Actor: "controller",
 			Body: map[string]any{"rule": rule, "kind": kind, "artifact_id": artifactID}})
-		return err
+		if err != nil {
+			return err
+		}
+		return alerts.Fire(ctx, tx, alerts.ArtifactRefused(), rec.EventID)
 	})
 	return err == nil, err
 }

@@ -417,6 +417,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 	if !role.RunsWorkers() {
 		return
 	}
+	s.startAlertRelayWatch(ctx)
 	if (hookOn || natsOn) && s.delivery != nil {
 		rec := &bushook.Reconciler{DB: s.bus.db, Repos: bushook.ReposFromEnv(), Head: s.agentRuntimeMains(), Logf: busLogf}
 		safego.Go("bus-gate-git-reconcile", func() { rec.Run(ctx) })

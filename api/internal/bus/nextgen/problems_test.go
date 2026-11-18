@@ -1,6 +1,7 @@
 package nextgen
 
 import (
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -35,6 +36,11 @@ func TestProblemChannelsNameRealThings(t *testing.T) {
 			topics[c.Type] = true
 		}
 	}
+	src, err := os.ReadFile("../alerts/problems.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raised := string(src)
 	seen := map[string]bool{}
 	for _, p := range ps {
 		if seen[p.ID] {
@@ -57,6 +63,12 @@ func TestProblemChannelsNameRealThings(t *testing.T) {
 			t.Errorf("%s: no owner", p.ID)
 		}
 		for _, e := range p.Events {
+			if name, ok := strings.CutPrefix(e, "alert:"); ok {
+				if !strings.Contains(raised, `"`+name+`"`) {
+					t.Errorf("%s: %q is not an alert the platform raises", p.ID, e)
+				}
+				continue
+			}
 			if typ, ok := strings.CutPrefix(e, "topic:"); !ok || !topics[typ] {
 				t.Errorf("%s: event %q is not a registered topic", p.ID, e)
 			}

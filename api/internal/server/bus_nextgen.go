@@ -60,7 +60,7 @@ func (s *Server) handleBusNextgen(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	out.Problems = nextgen.SummarizeProblems(problems, evidence)
+	out.Problems = nextgen.SummarizeProblems(problems, s.problemEvidence(r.Context(), out.GeneratedAt, evidence))
 	for _, g := range groups {
 		ng := nextgenReaderGroup{ReaderGroup: g, Counts: map[string]int{}}
 		for i, rd := range g.Readers {
