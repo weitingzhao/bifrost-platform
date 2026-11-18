@@ -56,7 +56,7 @@ types:
   - {type: mission_amended, domain: plan}
   - {type: mission_proposed, domain: plan}
   - {type: mission_state_changed, domain: plan}
-  - {type: note, domain: foundation}
+  - {type: note, domain: plan, note: "a free note on a plan node or an architecture row; planstore (2026-11-17, TD-583: every other record that was a note has its own type)"}
   - {type: owner_signoff, domain: plan}
   - {type: owner_wait_closed, domain: owner}
   - {type: owner_wait_opened, domain: owner}
@@ -73,7 +73,7 @@ types:
   - {type: plan_observation_pass, domain: plan, note: "a plan verification pass; planstore (migration 0032, was a note with plan_observation_pass; writer moves later)"}
   - {type: plan_step_marked_done, domain: plan, note: "a step marked done by hand; planstore (migration 0032, was a note with manual; writer moves later)"}
   - {type: plan_view_adopted, domain: plan, note: "a plan view adopted; planstore (migration 0032, was a note with plan_view; writer moves later)"}
-  - {type: policy_alert, domain: foundation}
+  - {type: policy_alert, domain: coordination, note: "a text that claims the Owner's approval (a letter, a plan note); coord (2026-11-17, TD-583: the other rules have their own types or are retired)"}
   - {type: pool_cooldown_set, domain: compute}
   - {type: pool_measured, domain: compute}
   - {type: question_seen, domain: foundation}

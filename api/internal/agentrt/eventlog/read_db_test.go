@@ -29,13 +29,13 @@ func TestLedgerReads(t *testing.T) {
 			t.Fatalf("Last of an empty stream: ok=%v err=%v", ok, err)
 		}
 		for _, text := range []string{"first", "second"} {
-			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: stream, Type: "note", Actor: "controller",
+			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: stream, Type: "plan_step_marked_done", Actor: "controller",
 				Body: map[string]any{"text": text, "manual": "m"}}); err != nil {
 				return err
 			}
 		}
 		last, ok, err := eventlog.Last(ctx, tx, stream)
-		if err != nil || !ok || last.Type != "note" || last.Body["text"] != "second" || last.Seq != 2 || last.Actor != "controller" || last.ID == 0 {
+		if err != nil || !ok || last.Type != "plan_step_marked_done" || last.Body["text"] != "second" || last.Seq != 2 || last.Actor != "controller" || last.ID == 0 {
 			t.Fatalf("Last = %+v ok=%v err=%v", last, ok, err)
 		}
 		for _, c := range []struct {
@@ -43,14 +43,14 @@ func TestLedgerReads(t *testing.T) {
 			text              map[string]string
 			want              bool
 		}{
-			{"the text of an event of the stream", stream, "note", map[string]string{"text": "first"}, true},
+			{"the text of an event of the stream", stream, "plan_step_marked_done", map[string]string{"text": "first"}, true},
 			{"any type", stream, "", map[string]string{"text": "second"}, true},
-			{"no keys asked", stream, "note", nil, true},
-			{"another text", stream, "note", map[string]string{"text": "third"}, false},
-			{"one key apart", stream, "note", map[string]string{"text": "first", "manual": "x"}, false},
-			{"a key the body does not have", stream, "note", map[string]string{"missing": ""}, false},
+			{"no keys asked", stream, "plan_step_marked_done", nil, true},
+			{"another text", stream, "plan_step_marked_done", map[string]string{"text": "third"}, false},
+			{"one key apart", stream, "plan_step_marked_done", map[string]string{"text": "first", "manual": "x"}, false},
+			{"a key the body does not have", stream, "plan_step_marked_done", map[string]string{"missing": ""}, false},
 			{"another type", stream, "policy_alert", map[string]string{"text": "first"}, false},
-			{"another stream", "contract:other", "note", map[string]string{"text": "first"}, false},
+			{"another stream", "contract:other", "plan_step_marked_done", map[string]string{"text": "first"}, false},
 		} {
 			got, err := eventlog.Has(ctx, tx, c.stream, c.typ, c.text)
 			if err != nil || got != c.want {
@@ -62,10 +62,10 @@ func TestLedgerReads(t *testing.T) {
 			doc             map[string]any
 			want            bool
 		}{
-			{"a body that contains the document", "note", "", map[string]any{"text": "first", "manual": "m"}, true},
-			{"one key apart", "note", "", map[string]any{"text": "first", "manual": "x"}, false},
-			{"another value", "note", "", map[string]any{"text": "third"}, false},
-			{"a plan node the events are not of", "note", "R1", map[string]any{"text": "first"}, false},
+			{"a body that contains the document", "plan_step_marked_done", "", map[string]any{"text": "first", "manual": "m"}, true},
+			{"one key apart", "plan_step_marked_done", "", map[string]any{"text": "first", "manual": "x"}, false},
+			{"another value", "plan_step_marked_done", "", map[string]any{"text": "third"}, false},
+			{"a plan node the events are not of", "plan_step_marked_done", "R1", map[string]any{"text": "first"}, false},
 			{"another type", "policy_alert", "", map[string]any{"text": "first"}, false},
 		} {
 			got, err := eventlog.HasBody(ctx, tx, c.typ, c.node, c.doc)

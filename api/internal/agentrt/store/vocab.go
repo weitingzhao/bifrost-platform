@@ -1,16 +1,11 @@
 package store
 
 import (
-	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopalert"
 	"regexp"
 	"slices"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 )
 
 // The kinds, fields and value checks of the vocabulary are the event log's
@@ -59,8 +54,7 @@ var eventTypes = map[string]bool{"attempt_leased": true,
 	"artifact_put": true, "verification_recorded": true, "owner_wait_opened": true, "owner_wait_closed": true, "actor_registered": true, "host_registered": true, "host_state_changed": true,
 	"host_retired": true, "rule_proposed": true, "rule_signed": true,
 	"rule_tightened": true, "rule_expired": true, "rule_approved": true, "capability_scored": true, "candidate_status_changed": true,
-	"budget_charged": true, "pool_cooldown_set": true, "pool_measured": true,
-	"policy_alert": true, "note": true, "wait_limit_passed": true,
+	"budget_charged": true, "pool_cooldown_set": true, "pool_measured": true, "wait_limit_passed": true,
 	"legacy_imported":  true,
 	"host_slots_set":   true,
 	"metrics_computed": true, "metric_label_set": true, "ci_reused": true, "ci_red_classified": true,
@@ -79,36 +73,6 @@ var bodies = map[string][]field{
 
 	"actor_registered": {{"actors", kIDs, false}, {"capability_facts", kIDs, true}, {"note", kStr, true}, {"token", kStr, true}},
 	"artifact_put":     {{"artifact_id", kID, false}, {"artifact_kind", kStr, false}, {"size_bytes", kInt, false}, {"uploaded_by", kStr, false}},
-	// policy_alert: a text claiming the Owner's approval (approval_claim, from
-	// a task's spec or a message: the closed phrase it holds), or a line the
-	// chief of staff ended an answer or a plan with (seat_alert, the seat's
-	// protocol v2: its phrase is POLICY_ALERT and its words stay in the report
-	// the artifact names; line_digest tells one line from another), or the
-	// platform's refusal of a report agentd uploaded, on the host's stream
-	// (local_path, workspace_ref: the rule that refused it, source the
-	// report's kind, artifact_id the refused body's id, which is not
-	// stored), or an executor
-	// that failed a task failuresToStop times in a row (repeated_failure,
-	// source attempt, no artifact: the event's attempt is the last failure;
-	// TD-381, TD-382), or a controller loop that failed the same way
-	// FailuresToAlert times in a row (controller_failing, source controller,
-	// on the controller stream: line_digest names the loop, the artifact
-	// holds its error; TD-411, loopalert.go), or a host whose claim reported
-	// free disk below the floor (disk_low, source controller, on the host's
-	// stream: the artifact says how much and the floor; TD-415, hostdisk.go),
-	// or a host that stopped polling (host_offline, source controller, on the
-	// host's presence stream) or an executor that cannot take work now
-	// (executor_unavailable, source controller, on the executor's presence
-	// stream), or host presence that cannot be judged (presence_unjudged, on
-	// the presence:judging stream) or whose judgment is deferred
-	// (presence_deferred, on presence:deferred); the artifact says when and
-	// why (W-31 3.5, presencepass.go, presencejudge.go).
-	// Every rule but repeated_failure
-	// names its artifact (checkBody), but an approval claim in a plan note
-	// (source plan_note, review 489 B3), whose text is in the note it is
-	// caused by.
-	"policy_alert": {{"rule", kStr, false}, {"source", kStr, false}, {"phrase", kStr, false}, {"artifact_id", kID, true}, {"message_id", kID, true},
-		{"line_digest", kStr, true}},
 	// legacy_imported: the head of an import (source names what it came from,
 	// count how many it holds) or, on a recorder log's stream, one line of
 	// the log (source recorder; the line's seq, its original digest, the
@@ -122,50 +86,6 @@ var bodies = map[string][]field{
 	// changes with its old and new value.
 	"rule_approved": {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"approval_id", kID, false}, {"text_artifact_id", kID, false}, {"changes", kAny, false}},
 	"rule_proposed": {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"direction", kStr, false}, {"text_artifact_id", kID, false}, {"reason", kStr, false}, {"token", kStr, true}},
-	// note: landed, the commit an implementation's change first stood on main
-	// as, when the controller first saw it there, with landed_via (its
-	// route), matched_by (how main names it), landed_result (the pushed
-	// commit matched; none for a trailer), landed_repo and landed_tip (main's head);
-	// pruned, an attempt branch its host deleted; prune_refused, one Gitea
-	// would not let it delete; prune_failed, one it could not reach Gitea to
-	// delete (prune.go).
-	// On an item's assessment stream (assess.go, TD-391): assessment_requested,
-	// the Owner's opt-in naming the kind and id (TD-463); ask, the option
-	// keys and refs its spec gave; assessment, what the seat handed in, its
-	// refs resolved; unavailable, why there is none. On the exams stream,
-	// caused by a paper's issue (examvoid.go, TD-407): voided, the approval
-	// that voided the paper, which no run was handed in for.
-	"note": {{"text", kStr, false}, {"plan_observation", kAny, true}, {"plan_observation_pass", kAny, true}, {"manual", kStr, true}, {"evidence", kIDs, true}, {"landed", kStr, true},
-		{"landed_via", kStr, true}, {"matched_by", kStr, true}, {"landed_result", kStr, true}, {"landed_repo", kStr, true}, {"landed_tip", kStr, true},
-		{"pruned", kStr, true}, {"prune_refused", kStr, true}, {"prune_failed", kStr, true},
-		{"assessment_requested", kAny, true}, {"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}, {"voided", kStr, true},
-		// card: kept for the notes already written; business issues, which
-		// wrote it, were removed (0022).
-		{"card", kAny, true}, {"plan_view", kAny, true}, {"external_work", kAny, true},
-		{"leak_value", kAny, true},
-		// full_ci: on the controller's stream, the daily full CI runs started
-		// and how a red one was handled (agentrt/fullci).
-		{"full_ci", kAny, true},
-		// check_value: on the controller's stream, the goal proposed to
-		// delete a check or retry the check value table marked (checkvalue.go).
-		{"check_value", kAny, true},
-		// offered, disk_below: on a host's offers stream, what its claim
-		// offers (executor, provider, model each) and whether the free disk
-		// it reports is below the floor, when either changed (presence.go,
-		// W-31 3.5).
-		{"offered", kAny, true}, {"disk_below", kBool, true},
-		// agentd_build: on a host's build stream, the agentd build its
-		// claims report (commit, sha256, modified), when it changed
-		// (presence.go).
-		{"agentd_build", kAny, true},
-		// headroom: on a host's headroom stream, the load and memory its
-		// claim reports, integers only, when it moved or got old
-		// (slotsignals.go, R5 phase 2 step 3b).
-		{"headroom", kAny, true},
-		// prune_round: on a host's prune stream, a round of deleting the
-		// attempt branches it was handed, opened or closed (presencelive.go,
-		// review 526 A1).
-		{"prune_round", kStr, true}},
 	// owner_wait_opened, owner_wait_closed: their bodies and values are
 	// declared by package questioncards (blockedcard.go), which took them
 	// with the outcomes they name; the two type names stay in eventTypes.
@@ -183,15 +103,8 @@ func init() {
 		Types:  keysOf(eventTypes),
 		Bodies: declaredBodies(bodies),
 		Values: fieldValues,
-		WholeValues: map[string]map[string]func(any) string{
-			"note": {"assessment_requested": assessmentreadings.BadAssessmentRequest, "agentd_build": badAgentdBuild},
-		},
 		Before: map[string]func(map[string]any) error{
 			"metrics_computed": checkMetricDefinitions,
-			"note":             planstore.CheckViewNote,
-		},
-		After: map[string]func(map[string]any) error{
-			"policy_alert": checkPolicyAlert,
 		},
 		Events: []func(Event) error{retiredRecord},
 	})
@@ -209,14 +122,6 @@ func checkMetricDefinitions(body map[string]any) error {
 		if !metricIDRE.MatchString(d.ID) || d.Version < 1 || hex64(d.SHA256) != "" {
 			return invalid("invalid metric definition")
 		}
-	}
-	return nil
-}
-
-func checkPolicyAlert(body map[string]any) error {
-	if _, named := body["artifact_id"]; !named && body["rule"] != "repeated_failure" &&
-		(body["rule"] != "approval_claim" || body["source"] != "plan_note") {
-		return fmt.Errorf("store: policy_alert needs \"artifact_id\"")
 	}
 	return nil
 }
@@ -256,9 +161,7 @@ var (
 	verifyID    = shaped("a verification id", regexp.MustCompile(`^v_`+ulid+`$`))
 	artifactID  = shaped("an artifact id (sha256:<64 hex>)", regexp.MustCompile(`^sha256:[0-9a-f]{64}$`))
 	commit      = shaped("a commit (40 hex)", regexp.MustCompile(`^[0-9a-f]{40}$`))
-	agentBranch = shaped("an attempt branch (refs/heads/agent/<task>/a<n>)", regexp.MustCompile(`^refs/heads/agent/(t_[0-9A-HJKMNP-TV-Z]{26})/a([1-9][0-9]{0,5})$`))
 	fingerprint = shaped("a fingerprint (sha256:<64 hex>)", regexp.MustCompile(`^sha256:[0-9a-f]{64}$`))
-	executorID  = shaped("an executor (exec:<tool>)", regexp.MustCompile(`^exec:[a-z]+$`))
 	approvalRef = shaped("an approval (appr_<16 hex>)", approvalIDRE)
 )
 
@@ -266,20 +169,9 @@ var (
 var fieldValues = map[string]map[string]value{
 	"metrics_computed": {"source": oneOf("computed", "imported"), "label": metricLabel, "artifact_id": artifactID},
 	"artifact_put":     {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(artifact.ArtifactKinds)...)},
-	"policy_alert": {"rule": oneOf("approval_claim", "seat_alert", "local_path", "workspace_ref", "repeated_failure", "controller_failing", "disk_low",
-		"host_offline", "executor_unavailable", "presence_unjudged", "presence_deferred"),
-		"source": oneOf("task_spec", "message", "seat_answer", "seat_plan", "report", "verify", "review", "attempt", "controller",
-			"plan_note", "assessment"),
-		"phrase": oneOf(append(slices.Clone(coord.ApprovalClaims), seatAlertPhrase, localPathPhrase, workspaceRefPhrase, repeatedFailurePhrase,
-			loopalert.FailingPhrase, diskLowPhrase, hostOfflinePhrase, executorUnavailablePhrase, presenceUnjudgedPhrase, presenceDeferredPhrase)...),
-		"artifact_id": artifactID, "message_id": messageID,
-		"line_digest": fingerprint},
-	"rule_proposed": {"direction": oneOf("initial", "loosen", "tighten"), "text_artifact_id": artifactID},
-	"rule_approved": {"approval_id": approvalRef, "text_artifact_id": artifactID},
-	"note": {"landed": commit, "landed_tip": commit, "landed_via": oneOf(LandedViaLanding, LandedViaHarvest, LandedViaOwnerMerge),
-		"matched_by": oneOf(MatchedResult, MatchedCherryPick, MatchedTrailer), "landed_result": commit, "pruned": agentBranch, "prune_refused": agentBranch, "prune_failed": agentBranch, "voided": approvalRef,
-		"prune_round": oneOf("opened", "closed")},
-	"legacy_imported": {"digest": fingerprint},
+	"rule_proposed":    {"direction": oneOf("initial", "loosen", "tighten"), "text_artifact_id": artifactID},
+	"rule_approved":    {"approval_id": approvalRef, "text_artifact_id": artifactID},
+	"legacy_imported":  {"digest": fingerprint},
 }
 
 // waitRef is what a wait waits on: an attempt, a task or a message

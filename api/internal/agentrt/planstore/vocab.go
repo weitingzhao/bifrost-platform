@@ -26,6 +26,10 @@ var planTypes = []string{
 	// policy_alert split, 2026-11-17; migration 0032).
 	"plan_card_answered_by_rule", "plan_card_settled", "plan_observation", "plan_observation_pass",
 	"plan_step_marked_done", "plan_view_adopted",
+	// note: a free note on a plan node (plannote) or an architecture row's
+	// note (planimport). The plan's since 2026-11-17 (TD-583); every other
+	// record that was a note has its own type now, and their old rows stay.
+	"note",
 }
 
 // executorPins are the pins there are (0010 task_executor_pin_check).
@@ -60,6 +64,7 @@ var planBodies = map[string][]eventlog.Field{
 	"plan_observation":           {field("text", eventlog.Str, false), field("plan_observation", eventlog.Any, false)},
 	"plan_observation_pass":      {field("text", eventlog.Str, false), field("plan_observation_pass", eventlog.Any, false)},
 	"plan_view_adopted":          {field("text", eventlog.Str, false), field("plan_view", eventlog.Any, false)},
+	"note":                       {field("text", eventlog.Str, false), field("evidence", eventlog.IDs, true)},
 	// task_proposed: kept for migrate's 0010 trigger probe (runtime0010_test.go),
 	// the one writer left; nothing in production proposes a task since the
 	// dispatch lane ended. It goes with that probe and the task tables.
@@ -100,6 +105,7 @@ func init() {
 		// The observation, pass and view records are held to their shapes by
 		// the check the notes had (CheckViewNote picks the field present).
 		Before: map[string]func(map[string]any) error{
+			"note":             func(body map[string]any) error { s, _ := body["text"].(string); return checkNoteText(s) },
 			"plan_observation": CheckViewNote, "plan_observation_pass": CheckViewNote, "plan_view_adopted": CheckViewNote,
 		},
 		Events: []func(eventlog.Event) error{CheckPlanObservation},

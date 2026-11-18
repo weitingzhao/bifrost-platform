@@ -69,7 +69,7 @@ func pvCorruptView(t *testing.T, w *world, body []byte) {
 		}
 		adoption := parsed.(map[string]any)
 		adoption["artifact_id"] = artifact
-		_, err = store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream(corruptRoot), Type: "note", Actor: "controller", Body: map[string]any{"text": "Corrupt document fixture", "plan_view": adoption}})
+		_, err = store.Append(ctx, tx, store.Event{Stream: planstore.PlanStream(corruptRoot), Type: "plan_view_adopted", Actor: "controller", Body: map[string]any{"text": "Corrupt document fixture", "plan_view": adoption}})
 		return err
 	}))
 }

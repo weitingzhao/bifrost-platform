@@ -53,9 +53,8 @@ func TestRecordRefusalOncePerBody(t *testing.T) {
 	// A body recorded the old way stays recorded once.
 	old := w.artifact(t, "verify", "a verification report that named another workspace")
 	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "host:h2", Type: "policy_alert", Actor: "controller",
-			Body: map[string]any{"rule": "workspace_ref", "source": "verify", "phrase": "another task's workspace", "artifact_id": old}})
-		return err
+		return oldShapeRow(ctx, tx, "host:h2", "policy_alert", "controller", "",
+			map[string]any{"rule": "workspace_ref", "source": "verify", "phrase": "another task's workspace", "artifact_id": old})
 	}))
 	if _, err := artifact.RecordRefusal(ctx, w.rt, "h2", "verify", old, "workspace_ref"); err != nil {
 		t.Fatal(err)

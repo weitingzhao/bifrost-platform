@@ -2,6 +2,8 @@ package agentrtapi_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -500,12 +502,11 @@ func TestIdentityOnlyFromCollector(t *testing.T) {
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
 		now := time.Now().UTC().Format(time.RFC3339Nano)
 		digest := "sha256:" + strings.Repeat("0", 64)
-		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "external-work:" + legacy, Type: "note", Actor: "thread:collector@h1", PlanNode: "R2:1-1",
-			Body: map[string]any{"text": "External work registered", "external_work": map[string]any{"v": 1, "kind": "agentrt.external_work/v1",
+		return oldShapeRow(ctx, tx, "external-work:"+legacy, "note", "thread:collector@h1", "R2:1-1",
+			map[string]any{"text": "External work registered", "external_work": map[string]any{"v": 1, "kind": "agentrt.external_work/v1",
 				"external_work_id": legacy, "registrant": "thread:collector@h1", "root": "R2", "plan_node_id": "R2:1-1", "source_run_key": "before",
 				"artifact_id": spec, "seq": 0, "type": "registered", "state": "Registered", "request_digest": digest, "registration_digest": digest,
-				"registered_at": now, "heartbeat_at": now}}})
-		return err
+				"registered_at": now, "heartbeat_at": now}})
 	}))
 	if code, out := call(t, s, "collector:h1", "GET", "external-work/"+legacy, nil); code != http.StatusOK || out["external_work_id"] != legacy || out["registered_at"] == nil {
 		t.Fatalf("the note from before reads: %d %v", code, out)
@@ -608,4 +609,31 @@ func TestPlanViewSessionCoverage(t *testing.T) {
 			}
 		})
 	}
+}
+
+// oldShapeRow writes an event the way rows were written before the
+// vocabulary narrowed (TD-583: note and policy_alert took fields and rules
+// other domains wrote; each has its own type now): straight into
+// agentrt.event, chained to its stream's head as the database requires, its
+// sha256 the hash of its body and the head's. The current vocabulary is not
+// asked, so the test can hold a reader to an old row; the stream verifier is
+// not asked of these streams.
+func oldShapeRow(ctx context.Context, tx pgx.Tx, stream, typ, actor, planNode string, body map[string]any) error {
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO agentrt.event_stream (event_stream_id) VALUES ($1) ON CONFLICT DO NOTHING`, stream); err != nil {
+		return err
+	}
+	var seq int64
+	var prev string
+	if err = tx.QueryRow(ctx, `SELECT last_seq, last_sha256 FROM agentrt.event_stream WHERE event_stream_id = $1 FOR UPDATE`, stream).Scan(&seq, &prev); err != nil {
+		return err
+	}
+	sum := sha256.Sum256(append([]byte(prev), raw...))
+	_, err = tx.Exec(ctx, `INSERT INTO agentrt.event (event_stream_id, seq, event_type, actor_id, plan_node_id, body_json, prev_sha256, sha256, at)
+	  VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6::jsonb, $7, $8, clock_timestamp())`,
+		stream, seq+1, typ, actor, planNode, string(raw), prev, hex.EncodeToString(sum[:]))
+	return err
 }
