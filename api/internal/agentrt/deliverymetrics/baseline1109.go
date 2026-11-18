@@ -1,4 +1,4 @@
-package store
+package deliverymetrics
 
 import (
 	"context"
@@ -26,7 +26,7 @@ Source: Owner AM-5/AM-6 R6 group 0 brief, 2026-11-10.
 // ImportBaseline1109 imports the sealed aggregates once, atomically with their
 // evidence. The metrics stream serializes concurrent invocations. It deliberately
 // does not consult the current definition registry: raw data no longer exists.
-func ImportBaseline1109(ctx context.Context, db DB) (int, error) {
+func ImportBaseline1109(ctx context.Context, db eventlog.DB) (int, error) {
 	n := 0
 	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO agentrt.event_stream(event_stream_id) VALUES ('metrics') ON CONFLICT DO NOTHING`); err != nil {

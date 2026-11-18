@@ -102,6 +102,7 @@ modules:
         - "api/internal/agentrt/store"
         - "console/src/api/agentRuntime.ts"
       # Domain 4: delivery-stage read projection; no release authority.
+      api/internal/agentrt/deliverymetrics: ["api/internal/agentrt/deliverymetrics"]
       api/internal/agentrt/deliveryreadings: ["api/internal/agentrt/deliveryreadings"]
       api/internal/agentrt/loopreadings: ["api/internal/agentrt/loopreadings"]
       # 2026-11-17: TestLoopTypesAreRegistered reads the event register.

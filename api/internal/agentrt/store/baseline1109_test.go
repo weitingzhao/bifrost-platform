@@ -1,14 +1,14 @@
 package store_test
 
 import (
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliverymetrics"
 	"testing"
 )
 
 func TestBaseline1109Import(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	n, err := store.ImportBaseline1109(ctx, w.rt)
+	n, err := deliverymetrics.ImportBaseline1109(ctx, w.rt)
 	ok(t, err)
 	if n != 3 {
 		t.Fatalf("imported %d rows", n)
@@ -16,7 +16,7 @@ func TestBaseline1109Import(t *testing.T) {
 	var events, artifacts int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event`).Scan(&events))
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.artifact`).Scan(&artifacts))
-	n, err = store.ImportBaseline1109(ctx, w.rt)
+	n, err = deliverymetrics.ImportBaseline1109(ctx, w.rt)
 	ok(t, err)
 	if n != 0 {
 		t.Fatalf("second import wrote %d rows", n)

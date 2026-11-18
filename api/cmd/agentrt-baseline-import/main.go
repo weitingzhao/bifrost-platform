@@ -8,7 +8,8 @@ import (
 	"os"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliverymetrics"
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // registers the artifact check
 )
 
 func main() {
@@ -28,7 +29,7 @@ func run() error {
 		return fmt.Errorf("connect to runtime database failed")
 	}
 	defer conn.Close(ctx)
-	n, err := store.ImportBaseline1109(ctx, conn)
+	n, err := deliverymetrics.ImportBaseline1109(ctx, conn)
 	if err != nil {
 		return err
 	}

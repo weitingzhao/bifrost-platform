@@ -55,9 +55,9 @@ var eventTypes = map[string]bool{"attempt_leased": true,
 	"host_retired": true, "rule_proposed": true, "rule_signed": true,
 	"rule_tightened": true, "rule_expired": true, "rule_approved": true, "capability_scored": true, "candidate_status_changed": true,
 	"budget_charged": true, "pool_cooldown_set": true, "pool_measured": true, "wait_limit_passed": true,
-	"legacy_imported":  true,
-	"host_slots_set":   true,
-	"metrics_computed": true, "metric_label_set": true, "ci_reused": true, "ci_red_classified": true,
+	"legacy_imported": true,
+	"host_slots_set":  true,
+	"ci_reused":       true, "ci_red_classified": true,
 }
 
 // IsEventType says whether t is an event type of the closed vocabulary.
@@ -68,8 +68,6 @@ func IsEventType(t string) bool { return eventlog.IsEventType(t) }
 // no other field. The database checks the type against the full vocabulary;
 // a type with no body here is refused rather than written with a guessed shape.
 var bodies = map[string][]field{
-	// Delivery measurement records (0016); CI fact bodies arrive in wave M-b.
-	"metrics_computed": {{"source", kStr, false}, {"rows", kInt, false}, {"definitions", kAny, false}, {"windows", kAny, true}, {"label", kStr, true}, {"artifact_id", kID, true}, {"xmin", kInt, true}},
 
 	"actor_registered": {{"actors", kIDs, false}, {"capability_facts", kIDs, true}, {"note", kStr, true}, {"token", kStr, true}},
 	"artifact_put":     {{"artifact_id", kID, false}, {"artifact_kind", kStr, false}, {"size_bytes", kInt, false}, {"uploaded_by", kStr, false}},
@@ -103,27 +101,8 @@ func init() {
 		Types:  keysOf(eventTypes),
 		Bodies: declaredBodies(bodies),
 		Values: fieldValues,
-		Before: map[string]func(map[string]any) error{
-			"metrics_computed": checkMetricDefinitions,
-		},
 		Events: []func(eventlog.Event) error{retiredRecord},
 	})
-}
-
-func checkMetricDefinitions(body map[string]any) error {
-	var defs []MetricDefinition
-	if err := strictViewValue(body["definitions"], &defs); err != nil {
-		return invalid("metrics_computed definitions: %v", err)
-	}
-	if defs == nil {
-		return invalid("metrics_computed definitions must be an array")
-	}
-	for _, d := range defs {
-		if !metricIDRE.MatchString(d.ID) || d.Version < 1 || hex64(d.SHA256) != "" {
-			return invalid("invalid metric definition")
-		}
-	}
-	return nil
 }
 
 // Values (review 145 B6): what a field may hold beyond its kind. An enum's
@@ -164,27 +143,20 @@ var (
 
 // fieldValues are the checked fields, by event type and field.
 var fieldValues = map[string]map[string]value{
-	"metrics_computed": {"source": oneOf("computed", "imported"), "label": metricLabel, "artifact_id": artifactID},
-	"artifact_put":     {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(artifact.ArtifactKinds)...)},
-	"rule_proposed":    {"direction": oneOf("initial", "loosen", "tighten"), "text_artifact_id": artifactID},
-	"rule_approved":    {"approval_id": approvalRef, "text_artifact_id": artifactID},
-	"legacy_imported":  {"digest": fingerprint},
+	"artifact_put":    {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(artifact.ArtifactKinds)...)},
+	"rule_proposed":   {"direction": oneOf("initial", "loosen", "tighten"), "text_artifact_id": artifactID},
+	"rule_approved":   {"approval_id": approvalRef, "text_artifact_id": artifactID},
+	"legacy_imported": {"digest": fingerprint},
 }
 
 // badValue is why v, of its field's kind already, is refused, or ""
 // (eventlog.BadValue).
 func badValue(eventType, name string, v any) string { return eventlog.BadValue(eventType, name, v) }
 
-// hex64 is a sha256 as 64 hex characters.
-var hex64 = shaped("a sha256 (64 hex)", regexp.MustCompile(`^[0-9a-f]{64}$`))
-
 // artifactIDRE is an artifact's id.
 var (
 	artifactIDRE = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 )
-
-var metricLabel = shaped("a metric label", regexp.MustCompile(`^(baseline|group):[A-Za-z0-9._-]{1,64}$`))
-var metricIDRE = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 // approvalIDRE is the shape of an approval's id.
 var approvalIDRE = regexp.MustCompile(`^appr_[0-9a-f]{16}$`)
