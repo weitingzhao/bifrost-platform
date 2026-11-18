@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -863,5 +864,33 @@ func TestPublishCINodeWritesTheChoiceWhenItChanges(t *testing.T) {
 	metrics = map[string]NodeMetrics{}
 	if err := s.PublishCINode(ctx); err != nil || read("ciNode") != ciNoNode || read("ciNodeKey") != ciAnyNodeKey || read("ciNodeValue") != ciAnyNodeValue {
 		t.Fatalf("nothing fits leaves the run to the scheduler: %v %q", err, read("ciNode"))
+	}
+}
+
+// 2026-11-18, the compute line's reading after CI moved: one preferred node sent
+// 52% of CI pods to the slow disk while 02 and 04 idled. CI takes the least loaded
+// node off the slow disk, stays put within the margin, and never takes ubt-k3s-01.
+// Positive control: without the margin the third check moves to the quieter node;
+// without Exclude the first picks ubt-k3s-01.
+func TestCISpreadsOffTheSlowDiskAndKeepsOffTheExcludedNode(t *testing.T) {
+	node := func(host string, latency, cpu, disk float64) NodeProfile {
+		return NodeProfile{Host: host, Name: host, FreeCPU: 8, FreeMemory: 8 << 30, Metrics: NodeMetrics{WriteLatencySeconds: latency, CPUBusy: cpu, DiskBusy: disk, MemoryAvailable: 0.6}}
+	}
+	nodes := []NodeProfile{node("ubt-k3s-07", 0.007, 0.6, 0.5), node("ubt-k3s-05", 0.16, 0.1, 0.1), node("ubt-k3s-04", 0.001, 0.2, 0.1), node("ubt-k3s-02", 0.001, 0.3, 0.1)}
+	fallback := BuildPlacement{Node: "ubt-k3s-05"}
+	if p := spreadNode(CITask, nodes, "", fallback); p.Node != "ubt-k3s-04" {
+		t.Fatalf("least loaded off the slow disk: %+v", p)
+	}
+	if p := spreadNode(CITask, nodes, "ubt-k3s-07", fallback); p.Node != "ubt-k3s-04" {
+		t.Fatalf("far above the best it moves: %+v", p)
+	}
+	if p := spreadNode(CITask, nodes, "ubt-k3s-02", fallback); p.Node != "ubt-k3s-02" {
+		t.Fatalf("within the margin it stays: %+v", p)
+	}
+	if p := spreadNode(CITask, nodes[1:2], "", fallback); p.Node != "ubt-k3s-05" {
+		t.Fatalf("only the slow disk left: %+v", p)
+	}
+	if !slices.Contains(CITask.Exclude, "ubt-k3s-01") {
+		t.Fatal("ubt-k3s-01 is excluded")
 	}
 }

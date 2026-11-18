@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -40,6 +41,7 @@ const (
 	diskTierUsableSeconds = 0.020
 	busyLimit             = 0.85
 	memoryAvailableFloor  = 0.15
+	spreadMargin          = 0.15
 )
 
 // TaskProfile is what a kind of work needs from a node.
@@ -48,6 +50,10 @@ type TaskProfile struct {
 	MaxDiskTier int     // the slowest disk tier a disk-heavy task may go to
 	CPUCores    float64 // unrequested CPU the node must have
 	MemoryBytes float64 // unrequested memory the node must have
+	// Spread picks the least loaded node that is not on the slow disk, and may
+	// use nodes batch work is otherwise kept off, except Exclude (node names).
+	Spread  bool
+	Exclude []string
 }
 
 // placedBuildPipelines are the pipelines whose builds are placed. Others follow
@@ -97,6 +103,7 @@ func (h *Handler) SetNodeMetricsReader(r NodeMetricsReader) { h.svc.SetNodeMetri
 // NodeProfile is a candidate as the choice sees it.
 type NodeProfile struct {
 	Host       string
+	Name       string
 	Problem    string // not ready, cordoned or not measured; "" when it can be judged
 	Metrics    NodeMetrics
 	FreeCPU    float64 // allocatable minus the requests of unfinished pods
@@ -186,6 +193,35 @@ func chooseNode(task TaskProfile, nodes []NodeProfile) BuildPlacement {
 	return p
 }
 
+// spreadNode keeps many runs from piling onto the fastest disk (2026-11-18: with
+// one preferred node, 52% of CI pods went to the slow disk once 07 filled while 02
+// and 04 sat at 15% CPU): the fitting node off the slow disk with the lowest of
+// max(CPU, disk) busy, staying on current unless another is spreadMargin lower.
+// With none off the slow disk, fallback (chooseNode's answer) stands.
+func spreadNode(task TaskProfile, nodes []NodeProfile, current string, fallback BuildPlacement) BuildPlacement {
+	load := func(n NodeProfile) float64 { return max(n.Metrics.CPUBusy, n.Metrics.DiskBusy) }
+	var best, kept *NodeProfile
+	for i := range nodes {
+		n := &nodes[i]
+		if n.Problem != "" || nodeFull(task, *n) != "" || diskTier(n.Metrics.WriteLatencySeconds) >= 2 {
+			continue
+		}
+		if best == nil || load(*n) < load(*best) || (load(*n) == load(*best) && n.Host < best.Host) {
+			best = n
+		}
+		if n.Host == current {
+			kept = n
+		}
+	}
+	if best == nil {
+		return fallback
+	}
+	if kept != nil && load(*kept)-load(*best) < spreadMargin {
+		best = kept
+	}
+	return BuildPlacement{Node: best.Host, Why: fmt.Sprintf("%s least loaded: CPU %.0f%%, disk %.0f%% busy", best.Host, best.Metrics.CPUBusy*100, best.Metrics.DiskBusy*100)}
+}
+
 // placeBuild chooses the node of a placed pipeline's run and writes it into
 // spec; placed says the run's annotations should record the choice.
 func (s *Service) placeBuild(ctx context.Context, pipeline string, spec map[string]any) (BuildPlacement, bool) {
@@ -206,16 +242,23 @@ func (s *Service) placeBuild(ctx context.Context, pipeline string, spec map[stri
 // PlaceTask chooses the node for the task now; false when this platform reads
 // no node metrics. Node "" with a reason: nothing fits or nothing could be read.
 func (s *Service) PlaceTask(ctx context.Context, task TaskProfile) (BuildPlacement, bool) {
+	return s.placeTask(ctx, task, "")
+}
+
+func (s *Service) placeTask(ctx context.Context, task TaskProfile, current string) (BuildPlacement, bool) {
 	if s.nodeMetrics == nil {
 		return BuildPlacement{}, false
 	}
 	ctx, cancel := context.WithTimeout(kubemetrics.WithSite(ctx, "delivery.build-placement"), buildPlacementTimeout)
 	defer cancel()
 	var p BuildPlacement
-	if nodes, err := s.nodeProfiles(ctx); err != nil {
+	if nodes, err := s.nodeProfiles(ctx, task); err != nil {
 		p.Why = "not placed: " + err.Error()
 	} else {
 		p = chooseNode(task, nodes)
+		if task.Spread {
+			p = spreadNode(task, nodes, current, p)
+		}
 	}
 	if len(p.Why) > placementWhyLimit {
 		p.Why = p.Why[:placementWhyLimit]
@@ -230,7 +273,7 @@ func (h *Handler) PlaceTask(ctx context.Context, task TaskProfile) (BuildPlaceme
 
 // nodeProfiles reads the candidates: every node with a host id that batch work
 // is not kept off.
-func (s *Service) nodeProfiles(ctx context.Context) ([]NodeProfile, error) {
+func (s *Service) nodeProfiles(ctx context.Context, task TaskProfile) ([]NodeProfile, error) {
 	cs, _, err := s.cluster.KubernetesClient()
 	if err != nil {
 		return nil, fmt.Errorf("the cluster could not be read: %w", err)
@@ -239,19 +282,25 @@ func (s *Service) nodeProfiles(ctx context.Context) ([]NodeProfile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("the node metrics could not be read: %w", err)
 	}
-	list, err := cs.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: hostIDLabel + "," + batchLabel + "!=deny"})
+	selector := hostIDLabel + "," + batchLabel + "!=deny"
+	if task.Spread {
+		selector = hostIDLabel
+	}
+	list, err := cs.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: selector})
 	if err != nil {
 		return nil, fmt.Errorf("the nodes could not be read: %w", err)
 	}
 	nodes := make([]NodeProfile, 0, len(list.Items))
 	for i := range list.Items {
-		nodes = append(nodes, nodeProfile(ctx, cs, &list.Items[i], metrics))
+		if !slices.Contains(task.Exclude, list.Items[i].Name) {
+			nodes = append(nodes, nodeProfile(ctx, cs, &list.Items[i], metrics))
+		}
 	}
 	return nodes, nil
 }
 
 func nodeProfile(ctx context.Context, cs kubernetes.Interface, node *corev1.Node, metrics map[string]NodeMetrics) NodeProfile {
-	p := NodeProfile{Host: node.Labels[hostIDLabel]}
+	p := NodeProfile{Host: node.Labels[hostIDLabel], Name: node.Name}
 	if !nodeUsable(node) {
 		p.Problem = "not ready or cordoned"
 		return p

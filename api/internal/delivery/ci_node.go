@@ -28,9 +28,9 @@ const (
 
 var triggerBindingGVR = schema.GroupVersionResource{Group: "triggers.tekton.dev", Version: "v1beta1", Resource: "triggerbindings"}
 
-// CITask is a CI run: the fastest disk first, and the slow disk rather than
-// waiting (tests lose 10 to 16% there, builds more than half).
-var CITask = TaskProfile{DiskHeavy: true, MaxDiskTier: 2, CPUCores: 4, MemoryBytes: 4 << 30}
+// CITask is a CI run: the least loaded node off the slow disk, the slow disk
+// rather than waiting, and never ubt-k3s-01, whose etcd slowed under CI.
+var CITask = TaskProfile{DiskHeavy: true, MaxDiskTier: 2, CPUCores: 4, MemoryBytes: 4 << 30, Spread: true, Exclude: []string{"ubt-k3s-01"}}
 
 func ciNodeParams(p BuildPlacement) map[string]string {
 	out := map[string]string{"ciNodeKey": hostIDLabel, "ciNodeValue": p.Node, "ciNode": p.Node, "ciNodeWhy": p.Why}
@@ -47,8 +47,7 @@ func ciNodeParams(p BuildPlacement) map[string]string {
 // changed. A binding that is not there, or that this platform may not write, is
 // not an error: that is every platform but the one given it.
 func (s *Service) PublishCINode(ctx context.Context) error {
-	p, measured := s.PlaceTask(ctx, CITask)
-	if !measured {
+	if s.nodeMetrics == nil {
 		return nil
 	}
 	dyn, err := s.buildDynamicClient()
@@ -63,6 +62,7 @@ func (s *Service) PublishCINode(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", ciNodeBinding, err)
 	}
+	p, _ := s.placeTask(ctx, CITask, boundParam(current.Object, "ciNode"))
 	want := ciNodeParams(p)
 	if boundParam(current.Object, "ciNode") == want["ciNode"] {
 		return nil
