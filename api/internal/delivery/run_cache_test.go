@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -355,32 +356,45 @@ func TestEarnedRouteStartsTrustedSamplesAndLosesTrustOnDifference(t *testing.T) 
 	}
 }
 
-// 2026-11-18 (bus/RULES.md §10 R3): the promote checks read a delivery
-// pipeline's runs like the display routes: the list answers and is compared
-// until the route has its clean comparisons, then the cache answers and the
-// cluster is not listed.
+// 2026-11-18 (bus/RULES.md §10 R3): a gate reads a delivery pipeline's runs like
+// the display routes: the list answers and is compared until the route has its
+// clean comparisons, then the cache answers and the cluster is not listed.
 // Positive control: GateRuns calling listed every time keeps the list count
 // rising, and the last check fails.
-func TestPromoteReadsEarnTheCache(t *testing.T) {
+func TestGateRunsEarnTheCache(t *testing.T) {
 	t.Setenv(EnvReadersCompareN, "2")
 	ctx := context.Background()
 	const p = "bifrost-deliver-prod"
-	dyn, lists := listCounting(cacheRun("deliver-a", p, "True", "Succeeded", 0, true), cacheRun("deliver-b", p, "False", "Failed", time.Hour, true))
+	dyn, lists := listCounting(cacheRun("deliver-a", p, "True", "Succeeded", 0, true), cacheRun("deliver-b", p, "False", "Failed", 1, true))
 	s := cacheService(dyn)
 	s.SetRunCache(liveCache(t, dyn), nil)
-	before, mismatchBefore, _ := readerCounts(routeLastDeliver)
+	read := func() []unstructured.Unstructured {
+		t.Helper()
+		items, err := s.GateRuns(RouteLandingFull, []string{p}, nil, func() ([]unstructured.Unstructured, error) {
+			runs, err := dyn.Resource(pipelineRunGVR).Namespace(s.PipelinesNamespace()).List(ctx, metav1.ListOptions{LabelSelector: "tekton.dev/pipeline=" + p})
+			if err != nil {
+				return nil, err
+			}
+			return runs.Items, nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return items
+	}
+	before, mismatchBefore, _ := readerCounts(RouteLandingFull)
 	for i := 0; i < 2; i++ {
-		if run := s.lastDeliverRun(ctx, p); run == nil || run.Name != "deliver-b" {
-			t.Fatalf("last run = %+v", run)
+		if got := read(); len(got) != 2 {
+			t.Fatalf("runs = %d", len(got))
 		}
 	}
-	after, mismatch, _ := readerCounts(routeLastDeliver)
+	after, mismatch, _ := readerCounts(RouteLandingFull)
 	if after-before != 2 || mismatch != mismatchBefore {
 		t.Fatalf("compared %d, mismatches %d", after-before, mismatch-mismatchBefore)
 	}
 	n := lists.Load()
-	if run := s.lastDeliverSuccess(ctx, p); run == nil || run.Name != "deliver-a" {
-		t.Fatalf("last success = %+v", run)
+	if got := read(); len(got) != 2 {
+		t.Fatalf("cached runs = %d", len(got))
 	}
 	if lists.Load() != n {
 		t.Fatalf("a trusted route listed: %d -> %d", n, lists.Load())

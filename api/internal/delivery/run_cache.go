@@ -57,8 +57,6 @@ const (
 	routePipelineRuns   = "pipeline_runs"
 	routeSupplyChain    = "supply_chain"
 	routeReleaseContext = "release_context"
-	routeLastDeliver    = "last_deliver"
-	routeProdArtifacts  = "prod_artifacts"
 
 	// RouteLandingFull is the daily full CI's runs (landingci.Client.FullRuns).
 	RouteLandingFull = "landingci_full"
@@ -68,7 +66,7 @@ const (
 )
 
 var cacheRoutes = []string{routePipelineRuns, routeReleaseContext, routeSupplyChain,
-	releases.RouteCurrent, releases.RouteTick, RouteLandingFull, routeLastDeliver, routeProdArtifacts}
+	releases.RouteCurrent, releases.RouteTick, RouteLandingFull}
 
 // taskRoutes read the TaskRun cache (tasksOf), under the same trust rules.
 var taskRoutes = []string{routeRunSteps, routeTimings, routeUnitTasks}
@@ -82,8 +80,6 @@ var routeReader = map[string]string{
 	releases.RouteCurrent: "releases-current",
 	releases.RouteTick:    "releases-tick",
 	RouteLandingFull:      "landingci-full",
-	routeLastDeliver:      "last-deliver",
-	routeProdArtifacts:    "prod-artifacts-ready",
 	routeRunSteps:         "run-steps",
 	routeTimings:          "pipeline-timings",
 	routeUnitTasks:        "unit-taskruns",

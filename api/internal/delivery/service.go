@@ -1053,40 +1053,6 @@ func (s *Service) ProdSmoke(ctx context.Context) StgSmokeResponse {
 	return out
 }
 
-// ProdDeliverArtifactsReady is true when the latest deliver-prod PipelineRun completed build tasks
-// (rollout may have failed transiently while the cluster later recovered).
-func (s *Service) ProdDeliverArtifactsReady(ctx context.Context) (bool, string) {
-	dyn, err := s.buildDynamicClient()
-	if err != nil {
-		return false, err.Error()
-	}
-	ns := s.PipelinesNamespace()
-	const pipeline = "bifrost-deliver-prod"
-	items, listErr := s.GateRuns(routeProdArtifacts, []string{pipeline}, nil, func() ([]unstructured.Unstructured, error) {
-		return s.listPipelineRuns(ctx, pipeline)
-	})
-	if listErr != nil || len(items) == 0 {
-		return false, "no deliver-prod PipelineRun"
-	}
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].GetCreationTimestamp().After(items[j].GetCreationTimestamp().Time)
-	})
-	prName := items[0].GetName()
-	buildTasks := []string{"build-all-apis", "build-frontend", "build-worker-socket"}
-	for _, task := range buildTasks {
-		trName := prName + "-" + task
-		tr, trErr := dyn.Resource(taskRunGVR).Namespace(ns).Get(ctx, trName, metav1.GetOptions{})
-		if trErr != nil {
-			return false, trName + " missing"
-		}
-		view := taskRunSummaryFrom(*tr)
-		if !isTaskRunSucceededView(view) {
-			return false, trName + " not succeeded"
-		}
-	}
-	return true, prName + " build tasks succeeded"
-}
-
 func isTaskRunSucceededView(v SupplyChainTaskRunView) bool {
 	st := strings.ToLower(v.Status)
 	re := strings.ToLower(v.Reason)

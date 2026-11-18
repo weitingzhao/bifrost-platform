@@ -26,8 +26,8 @@ groups:
       - {id: releases-current, what: "full CI deployed → releases.Current (and agentrt.deployed)", status: moved, at: "2026-11-18", proof: {file: api/internal/releases/current.go, contains: "s.readRuns(ctx, dyn, RouteCurrent,"}, note: "records from the 0027 table, runs through the compared cache"}
       - {id: unit-taskruns, what: "unit TaskRuns (30 s)", status: moved, at: "2026-11-18", proof: {file: api/internal/delivery/unit_taskruns.go, contains: "readThrough(s, routeUnitTasks,"}, note: "own watch under the unit-plan label; compared with the list until 50 clean reads"}
       - {id: landingci-full, what: "landing CI full runs (1 min)", status: moved, at: "2026-11-18", proof: {file: api/internal/agentrt/landingci/full.go, contains: "c.GateRuns(pipeline,"}, note: "compared cache; a red run read by name for its results"}
-      - {id: last-deliver, what: "promote gate: last delivery run and success", status: moved, at: "2026-11-18", proof: {file: api/internal/delivery/supply_chain.go, contains: "s.GateRuns(routeLastDeliver,"}, note: "compared cache"}
-      - {id: prod-artifacts-ready, what: "promote gate: PROD artifacts ready", status: moved, at: "2026-11-18", proof: {file: api/internal/delivery/service.go, contains: "s.GateRuns(routeProdArtifacts,"}, note: "compared cache; the build TaskRuns are read by name"}
+      - {id: last-deliver, what: "promote gate: last delivery run and success", status: retired, at: "2026-11-18", absent_text: "lastDeliverRun"}
+      - {id: prod-artifacts-ready, what: "promote gate: PROD artifacts ready", status: retired, at: "2026-11-18", absent_text: "ProdDeliverArtifactsReady"}
       - {id: run-steps, what: "a run's steps (display)", status: moved, at: "2026-11-18", proof: {file: api/internal/delivery/pipeline_steps.go, contains: "s.tasksOf(routeRunSteps,"}}
       - {id: pipeline-timings, what: "pipeline timings (display)", status: moved, at: "2026-11-18", proof: {file: api/internal/delivery/pipeline_timings.go, contains: "s.tasksOf(routeTimings,"}}
   - id: main
