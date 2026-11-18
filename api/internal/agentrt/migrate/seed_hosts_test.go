@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // declares the event vocabulary
 )
 
 // Rows of the retired dispatch lane, written as it wrote them (store cut
@@ -41,7 +41,7 @@ func seedLease(ctx context.Context, tx pgx.Tx, actor, mission, task, executor, h
 		Body: map[string]any{"source": "test"}}); err != nil {
 		return "", 0, err
 	}
-	id := store.NewAttemptID()
+	id := "a_" + eventlog.NewULID(time.Now())
 	var epoch int64
 	err := tx.QueryRow(ctx, `INSERT INTO agentrt.attempt
  (attempt_id, task_id, attempt_no, executor_actor_id, host_id, lease_epoch, lease_expires_at, heartbeat_at, state)

@@ -159,17 +159,17 @@ func TestSeedAndFirstCreation(t *testing.T) {
 	}
 	// The row an event names must exist: a mission never created (a task's
 	// id is no longer checked, its table is gone since 0020).
-	before := w.lastSeq(t, store.MissionStream("M-1"))
+	before := w.lastSeq(t, "mission:M-1")
 	err = eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: store.MissionStream("M-1"), Type: "mission_state_changed", Actor: "controller",
+		_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: "mission:M-1", Type: "mission_state_changed", Actor: "controller",
 			MissionID: "M-99", Body: map[string]any{"from": "proposed", "to": "active"}})
 		return err
 	})
 	wantErr(t, err, "violates foreign key")
-	if after := w.lastSeq(t, store.MissionStream("M-1")); after != before {
+	if after := w.lastSeq(t, "mission:M-1"); after != before {
 		t.Fatalf("seq moved from %d to %d after a rolled-back event", before, after)
 	}
-	for _, s := range []string{"system", planstore.PlanStream(root), store.MissionStream("M-1"), store.MissionStream("M-2")} {
+	for _, s := range []string{"system", planstore.PlanStream(root), "mission:M-1", "mission:M-2"} {
 		if _, err := store.VerifyStream(ctx, w.rt, s); err != nil {
 			t.Fatalf("%s: %v", s, err)
 		}
@@ -208,7 +208,7 @@ func TestIdentitiesAndTheEventRule(t *testing.T) {
 	}), "was not written by this transaction")
 	// An event of this transaction about another mission.
 	wantErr(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: store.MissionStream("M-1"), Type: "mission_state_changed", Actor: "controller",
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "mission:M-1", Type: "mission_state_changed", Actor: "controller",
 			MissionID: "M-1", Body: map[string]any{"from": "proposed", "to": "active"}}); err != nil {
 			return err
 		}
@@ -217,7 +217,7 @@ func TestIdentitiesAndTheEventRule(t *testing.T) {
 	}), "mission_id")
 	// With its own event it goes through.
 	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: store.MissionStream("M-2"), Type: "mission_state_changed", Actor: "controller",
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "mission:M-2", Type: "mission_state_changed", Actor: "controller",
 			MissionID: "M-2", Body: map[string]any{"from": "proposed", "to": "active"}}); err != nil {
 			return err
 		}
@@ -258,12 +258,12 @@ func TestTamperIsDetected(t *testing.T) {
 		_, err := admin.Exec(ctx, q)
 		ok(t, err)
 	}
-	_, err := store.VerifyStream(ctx, w.rt, store.MissionStream("M-2"))
+	_, err := store.VerifyStream(ctx, w.rt, "mission:M-2")
 	var br *store.ChainBreak
 	if !errors.As(err, &br) || br.Seq != 1 {
 		t.Fatalf("verify = %v, want a break at seq 1", err)
 	}
-	if _, err := store.VerifyStream(ctx, w.rt, store.MissionStream("M-1")); err != nil {
+	if _, err := store.VerifyStream(ctx, w.rt, "mission:M-1"); err != nil {
 		t.Fatalf("untouched stream: %v", err)
 	}
 }

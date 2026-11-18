@@ -67,7 +67,7 @@ func database0009(t *testing.T) (*agentrttest.DB, *pgx.Conn, []migrate.File) {
 			return err
 		}
 		for _, state := range []string{"proposed", "running", "accepted"} {
-			task := store.NewTaskID()
+			task := "t_" + eventlog.NewULID(time.Now())
 			if _, err = tx.Exec(ctx, `INSERT INTO agentrt.task
 			  (task_id, mission_id, off_plan, off_plan_reason, role, task_class, title,
 			   spec_artifact_id, effect_class, state, hard_limit_s, created_by_actor_id)
@@ -87,7 +87,7 @@ func database0009(t *testing.T) (*agentrttest.DB, *pgx.Conn, []migrate.File) {
 			   heartbeat_at, state, started_at, ended_at)
 			  VALUES ($1, $2, 1, 'exec:codex', $3, nextval('agentrt.lease_epoch_seq'), now() + interval '1 hour',
 			   now(), $4, now(), CASE WHEN $4 = 'finished' THEN now() END)`,
-				store.NewAttemptID(), task, host, attemptState); err != nil {
+				"a_"+eventlog.NewULID(time.Now()), task, host, attemptState); err != nil {
 				return err
 			}
 		}

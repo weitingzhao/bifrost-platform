@@ -123,8 +123,7 @@ func CreateMission(ctx context.Context, tx pgx.Tx, actor string, m Mission) (eve
 	return ev, err
 }
 
-// missionStream names the event stream of a mission, as store.MissionStream
-// does.
+// missionStream names the event stream of a mission.
 func missionStream(missionID string) string { return "mission:" + missionID }
 
 // missionMoves is every mission state change there is: the table storekit

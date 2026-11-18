@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // declares the event vocabulary
 )
 
 // Check actual DML as the runtime role on the upgraded (not fresh) schema.
@@ -33,13 +33,13 @@ func checkRuntime0010(t *testing.T, db *agentrttest.DB) {
 		}
 	}
 	insert := func(eventPin, pin, role string) (string, error) {
-		id := store.NewTaskID()
+		id := "t_" + eventlog.NewULID(time.Now())
 		err := eventlog.InTx(ctx, rt, func(tx pgx.Tx) error {
 			body := map[string]any{"title": "pin probe", "role": role}
 			if eventPin != "" {
 				body["executor_pin"] = eventPin
 			}
-			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: store.MissionStream("M-1"), Type: "task_proposed", Actor: "controller",
+			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "mission:M-1", Type: "task_proposed", Actor: "controller",
 				MissionID: "M-1", TaskID: id, Body: body}); err != nil {
 				return err
 			}

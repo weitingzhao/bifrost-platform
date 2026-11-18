@@ -21,7 +21,7 @@ func historicalMissionCard(t *testing.T, w *world, id, question string) (string,
 		if _, err := storekit.CreateMission(ctx, tx, "controller", storekit.Mission{ID: id, Title: "historical mission", Goal: "g", Deadline: time.Now().Add(time.Hour)}); err != nil {
 			return err
 		}
-		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: store.MissionStream(id), Type: "mission_state_changed", Actor: "controller", MissionID: id,
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "mission:" + id, Type: "mission_state_changed", Actor: "controller", MissionID: id,
 			Body: map[string]any{"from": "proposed", "to": "awaiting_owner", "question_id": question, "reason": "historical card"}}); err != nil {
 			return err
 		}

@@ -89,7 +89,7 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 		return nil
 	})
 	// A task id no row answers to: the tasks' table is gone (0020).
-	return pool, store.NewTaskID()
+	return pool, "t_" + eventlog.NewULID(time.Now())
 }
 
 // Tokens of the fixture auth file, by caller name.

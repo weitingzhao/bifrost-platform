@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // declares the event vocabulary
 )
 
 func search(t *testing.T, w *world, q artifact.ArtifactQuery) ([]string, string) {
@@ -100,7 +100,7 @@ func TestSearchArtifacts(t *testing.T) {
 	if got, _ = search(t, w, artifact.ArtifactQuery{Mission: "M-2", Task: impl}); len(got) != 0 {
 		t.Fatalf("a task of M-1 within M-2: %v", got)
 	}
-	if got, _ = search(t, w, artifact.ArtifactQuery{Task: store.NewTaskID()}); len(got) != 0 {
+	if got, _ = search(t, w, artifact.ArtifactQuery{Task: "t_" + eventlog.NewULID(time.Now())}); len(got) != 0 {
 		t.Fatalf("a task that is not: %v", got)
 	}
 	// Since: an artifact stored now is listed, the earlier ones are not.

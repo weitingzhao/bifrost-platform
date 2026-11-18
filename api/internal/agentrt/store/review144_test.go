@@ -234,7 +234,7 @@ func TestFailedCommitLeavesNoEvent(t *testing.T) {
 	err := eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		// The row the event names does not exist: a mission never created (a
 		// task's id is no longer checked, its table is gone since 0020).
-		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: store.MissionStream("M-1"), Type: "mission_state_changed", Actor: "controller",
+		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "mission:M-1", Type: "mission_state_changed", Actor: "controller",
 			MissionID: "M-99", Body: map[string]any{"from": "proposed", "to": "active"}})
 		if err != nil {
 			return err
