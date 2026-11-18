@@ -33,7 +33,7 @@ channels:
   - {id: L02, class: K2, disposition: replaced, step: "2", what: "controller：全部 PipelineRun 每 30 秒记成 pipeline_seen 并入证据账", by: "门·集群（watch 代替列表）；证据写入改为订阅 ci.run.finished 的服务端订阅者", cut: {at: "2026-11-17", evidence: ["reader:records"]}, retired: {at: "2026-11-18", change: I0681d9f1832d2b297e4b5cedf6ce34f262a26f70, absent_text: ["PipelineLive", "recordsLive"]}}
   - {id: L03, class: K2, disposition: merged, step: "2", what: "controller：TaskRun 每 30 秒记成 unit_run 与证据（模式非 off 时还会创建 TaskRun）", by: "门·集群观察部分；创建 TaskRun 的部分归 X-A29", cut: {at: "2026-11-18", evidence: ["reader:unit-taskruns"]}}
   - {id: L04, class: K2, disposition: replaced, step: "1", what: "head-release：每 30 秒读 Gitea main 头+证据账+Tekton，可能起 STG 发布", by: "门·代码（git.main.advanced）+ci.verdict.changed 唤醒；判定逻辑留作订阅者（入户口子①）", cut: {at: "2026-11-17", evidence: ["reader:head-release"]}, retired: {at: "2026-11-18", change: I0681d9f1832d2b297e4b5cedf6ce34f262a26f70, absent_text: ["consumerLive"]}}
-  - {id: L05, class: K10, disposition: deleted, step: any, what: post-release-check：run 结束 180 秒后核对（默认关）, by: 待删：生产关着、STG 只观察；CI 线默认删}
+  - {id: L05, class: K10, disposition: deleted, step: any, what: post-release-check：run 结束 180 秒后核对（默认关）, by: 已删：没有代码读它的结果，PROD 一直关着, retired: {at: '2026-11-18', change: I75bb3198a3334172015f7c7d50b1997495d28b59, absent: [api/internal/postrelease/postrelease.go]}}
   - {id: L06, class: K2, disposition: kept, step: none, what: plan-observations：每分钟读 Gitea 历史记成 plan_observation, by: 在用：计划观察，不接总线：节点变化没有要知道的人}
   - {id: L07, class: K10, disposition: kept, step: '3', what: facts-rules：每 15 秒求值（部署记录、CI 判定、审批问题），写计划节点状态, by: 在用：计划规则求值，不接总线：同 L06}
   - {id: L08, class: K11, disposition: announced, step: "2", what: "full-ci：每天 03:00 起全量 CI（每分钟看时钟）", by: "门·集群看到它起的 run；登记为定时作业", cut: {at: "2026-11-18", evidence: ["topic:ci.run.started"]}}
@@ -49,7 +49,7 @@ channels:
   - {id: L18, class: K6, disposition: replaced, step: "3", what: "agent-thread watcher：每 30 秒扫线程/主机心跳，沉默则推手机", by: "席位记录里的「判死由一处做」+seat.liveness.changed+通知器"}
   - {id: L19, class: K12, disposition: kept, step: none, what: agentthreads recorder：每 10 秒把线程心跳缓冲合并落盘, by: 在用：`/agent/threads`（7 天 3.9 万次）；断了：线程在线状态和席位掉线判断失准}
   - {id: L20, class: K12, disposition: deleted, step: "any", what: "agentprogress recorder：每 10 秒把进度文档缓冲落盘（唯一发布方 N15/X-B9 已死）", by: "死路：随 N15、X-B9 一起删（推断：Console Progress 页是否还读 /agent/progress 材料互相矛盾，删前核）", retired: {at: "2026-11-17", change: Ic571bd2e1a39aaed29e8730ac81bcfaf84e2a664, absent: [api/internal/agentprogress], absent_text: ['api/internal/agentprogress"']}}
-  - {id: L21, class: K12, disposition: deleted, step: any, what: threadtitles sync：每 3 分钟扫本机转录写线程标题（集群内默认关）, by: 待删：无：集群内关着，标题走 Stop 钩子}
+  - {id: L21, class: K12, disposition: deleted, step: any, what: threadtitles sync：每 3 分钟扫本机转录写线程标题（集群内默认关）, by: 已删：集群内关着，标题走 Stop 钩子, retired: {at: '2026-11-18', change: I61b81f1363800d8fefb03d92dce91cdb2a1ec0ca, absent_text: [threadtitles.StartSync(]}}
   - {id: L22, class: K9, disposition: announced, step: "3", what: "run-window follower：每个被跟随 run 一个 20 秒循环续窗口", by: "锁和续期留在原处（锁的原语）；窗口变化由 门·集群 看 ConfigMap 宣布", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
   - {id: L23, class: K9, disposition: announced, step: "3", what: "run-window recovery+队列推进：每 20 秒（api 与 workers 都跑，靠 CAS 抢）", by: "推进逻辑留在原处；队头「轮到你」写 seat.mail.arrived", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
   - {id: L24, class: K2, disposition: replaced, step: "3", what: "窗口到期观察：每 15 秒读窗口 ConfigMap，到期发提醒信（写 PG 事件流 release-window:<ns> 那段已删，a6862d84，底座线 11-17；观察和提醒信还在）", by: "门·集群（watch ConfigMap，缺口由 watch 加重新列出补上）", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}, retired: {at: "2026-11-18", change: Id2ecfd767b02b81f897bdbca55636d10b1a17515, absent: [api/internal/server/agentrt_window.go], absent_text: ["ObserveWindowExpiry"]}}
@@ -105,14 +105,14 @@ channels:
   - {id: S07, class: K8, disposition: announced, step: "3", what: "action_record：一次直接调用一条（谁、做什么、为什么、怎么撤销）", by: "原因：与事件账互补（谁为什么做、怎么撤销）；加 cause 指回事件；落账后宣布 audit.action.recorded", cut: {at: "2026-11-18", evidence: ["topic:audit.action.recorded"]}}
   - {id: S08, class: K8, disposition: replaced, step: "3", what: "ConfigMap 发布记录（每个成功 run 一条，无清理）", by: "账（release.deploy.finished）；releases.Current 改读账"}
   - {id: S09, class: K9, disposition: announced, step: "3", what: "同 N12：窗口 ConfigMap 的存放", by: "同 N12", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
-  - {id: S10, class: K12, disposition: kept, step: none, what: 线程标题 ConfigMap（手改、转录扫描、上报三个来源）, by: 在用：Lineage、线程标题；断了：标题丢失}
+  - {id: S10, class: K12, disposition: kept, step: none, what: 线程标题 ConfigMap（手改、转录扫描、上报三个来源）, by: 在用：Lineage、线程标题；来源是手动命名和 Stop 钩子，转录扫描已删}
   - {id: S11, class: K13, disposition: merged, step: "3", what: "信箱存放：agentrt.message + artifact（正文 ≤8 KiB）", by: "随 N09 留下并改造：正文仍在这里，事件只带指针", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
   - {id: S12, class: K8, disposition: deleted, step: "any", what: "metric_reading：交付度量读数（无非测试写入者）", by: "代码已拆；表待删（Owner 定的清理原则，解耦线在办）"}
   - {id: S13, class: K2, disposition: deleted, step: "any", what: "同 N22：agentrt.outbox", by: "死路", retired: {at: "2026-11-17", change: Id818b64d36e851fb3e31d91e06f0dd08ae027a12, absent_text: ['FROM agentrt.outbox)', 'FROM agentrt.outbox`']}}
   - {id: S14, class: K6, disposition: announced, step: "3", what: "maintainer 指标：8 个循环的成功时间戳与运行计数，给 Prometheus", by: "指标留给 Prometheus（对账兜底）；循环健康变化以 loop.health.changed 宣布，登记表要求每个循环都登记（现在 8/约 20）", cut: {at: "2026-11-18", evidence: ["topic:loop.health.changed"]}}
   - {id: C01, class: K1, disposition: not-a-channel, step: none, what: Console 每页各自 TanStack Query 轮询（约 215 处）, by: 前端取数方式，不是模块间通道}
   - {id: C02, class: K2, disposition: not-a-channel, step: none, what: Console 构建漂移检测：轮询自己的静态资源, by: 浏览器读自己的静态资源，不经平台}
-  - {id: C03, class: K1, disposition: deleted, step: any, what: Dock 开发会话面板：轮询 /dev-sessions 日志, by: 待删：只有本机 Console，10 天 3 次}
+  - {id: C03, class: K1, disposition: deleted, step: any, what: Dock 开发会话面板：轮询 /dev-sessions 日志, by: 已删：只有本机 Console 用；MCP 的 list_dev_sessions 留着, retired: {at: '2026-11-18', change: I82e89433248cd80fc917390c7c742d04cce2ae40, absent: [console/src/components/agent/DockDevSessionsPanel.tsx]}}
   - {id: X-A1, class: K2, disposition: merged, step: "1", what: "Gitea push webhook → EventListener bifrost-ci（9 个 CEL trigger；无 webhook 密钥，TD-435）", by: "留下并改造成「门·代码」的入口：加密钥、发 git.main.advanced/git.ready.pushed/git.tag.changed；EL 起 CI 的 trigger 不动", cut: {at: "2026-11-17", evidence: ["topic:git.main.advanced"]}}
   - {id: X-A2, class: K11, disposition: kept, step: '0', what: github-sync CronJob：每 15 分钟对账 Gitea 与 GitHub 的 main 和 tag, by: 在用：Gitea 和 GitHub 对账；断了：公开仓库漂移没人发现}
   - {id: X-A3, class: K3, disposition: kept, step: none, what: land 任务等 CI 绿：每 15 秒读 PipelineRun（耐心期 3 分钟，上限 45 分钟）, by: 在用：land（2 天 297 次）；断了：合入停}
@@ -165,7 +165,7 @@ channels:
   - {id: X-B19, class: K5, disposition: kept, step: '4', what: release.sh 整体：窗口、策略、冻结、镜像同步、CI 等待、审批轮询、kubectl create, by: 例外：Trade/Research 发布；断了：缺演练证据}
   - {id: X-B20, class: K14, disposition: kept, step: none, what: Cursor 一侧残留（thread-heartbeat.js、preflight.js 里的适配代码）, by: 例外：Cursor 已退役，但适配代码在 preflight.js 里，那是硬边界，Agent 不改}
   - {id: X-C1, class: K12, disposition: deleted, step: any, what: '通讯录 directory.md：席位号、thread:local_… 地址（手抄）', by: 待删：无程序读，3 天没更新，手抄}
-  - {id: X-C2, class: K13, disposition: deleted, step: any, what: duty/ 的 from-/to-/hold-/draft- 文件（299 个，无程序读）, by: 待删：问题改发信箱，文件不再用来报问题}
+  - {id: X-C2, class: K13, disposition: deleted, step: any, what: duty/ 的 from-/to-/hold-/draft- 文件（299 个，无程序读）, by: 已停用, retired: {at: '2026-11-18', change: coordinator-notes, outside: duty 下的 from/to/hold 文件不再用来报问题，问题发平台信箱，门铃叫醒}}
   - {id: X-C3, class: K8, disposition: kept, step: none, what: duty/decisions.md：值班追加一行一个决定, by: 例外：人读文档，今天还在写}
   - {id: X-C4, class: K8, disposition: kept, step: none, what: daily-readings.md、owner-two-things-watch.md：每日读数与 Owner 要知道的两件事, by: 例外：人读文档}
   - {id: X-C5, class: K12, disposition: kept, step: none, what: 各线 state.md：现在停在哪、下一个动作（覆写，第一屏最新）, by: 例外：人读文档，各线在写}
@@ -175,9 +175,9 @@ channels:
   - {id: X-C9, class: K3, disposition: merged, step: "3", what: "门铃 doorbell.ts：后台命令退出即叫醒会话（实测 4–7 秒）", by: "同 W05", cut: {at: "2026-11-18", evidence: ["reader:inbox-waiters"]}}
   - {id: X-C10, class: K9, disposition: merged, step: "3", what: "窗口排队「轮到你了」（window.your_turn/missed/still_held/queue_timeout）", by: "同 N11"}
   - {id: X-C11, class: K1, disposition: merged, step: "2", what: "get_release_context：发布现场读口（席位 → 平台）", by: "同 R02 的 /context，并到那一组", cut: {at: "2026-11-17", evidence: ["reader:release-context"]}}
-  - {id: X-C12, class: K13, disposition: kept, step: none, what: 桌面应用跨会话消息 send_message（被「20 条」上限拦过）, by: 例外：目前唯一能叫醒空闲席位的路；问题同时发信箱留记录。撤销条件：空闲席位能被信箱叫醒}
+  - {id: X-C12, class: K13, disposition: kept, step: none, what: 桌面应用跨会话消息 send_message（被「20 条」上限拦过）, by: 在用：席位之间协作和指令；问题改发信箱，门铃叫醒（空闲叫醒已验证，例外撤销）}
   - {id: X-C13, class: K11, disposition: not-a-channel, step: none, what: 自查定时器：值班会话每 30 分钟叫自己（额度紧时 2 小时）, by: 值班自己的定时器，不是模块间通道}
-  - {id: X-C14, class: K13, disposition: deleted, step: any, what: ci-feedback.md：各线 → CI 线的问题收件箱（47 KB）, by: 待删：11-14 后没更新；问题改发信箱}
+  - {id: X-C14, class: K13, disposition: deleted, step: any, what: ci-feedback.md：各线 → CI 线的问题收件箱（47 KB）, by: 已停用, retired: {at: '2026-11-18', change: ci-line-notes, outside: 共享笔记 ci-feedback.md 已停用，问题改发 CI 线信箱，文件留作历史}}
   - {id: X-C15, class: K13, disposition: deleted, step: any, what: 章程两份（infra charters/ 与共享笔记，后者「不再是准的」）, by: 待删：共享笔记副本已过期，infra 那份留}
   - {id: X-C16, class: K13, disposition: kept, step: none, what: 接力页 RELAY.md / RELAY-BOOTSTRAP.md（换号、额度用完时交接）, by: 例外：人读文档，额度用完时交接}
   - {id: X-C17, class: K13, disposition: not-a-channel, step: none, what: 席位自动摘要塞进主线程（约 1000 条/天，转自 design-v1）, by: 桌面应用行为，平台管不到}

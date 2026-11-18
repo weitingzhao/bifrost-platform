@@ -107,13 +107,28 @@ func readAlertRelay(ctx context.Context, client *http.Client, url string) busale
 	return busalerts.RelayReading{Reached: true, Enabled: st.Enabled, HeartbeatOK: st.HeartbeatOK}
 }
 
-// problemEvidence is evidence for the problem channels: an "alert:<name>" is
-// proven by that alert's own stream, because alert.rule.fired is shared and its
-// traffic says nothing about one channel. Anything else goes to base.
+// problemEvidence is evidence for the problem channels. Some topics are shared,
+// and their traffic says nothing about one channel, so a channel can name its
+// own proof: "alert:<name>" and "stream:<id>" are the last event of a stream,
+// "source:<type>:<source>" the last event of that type from that source.
+// Anything else goes to base.
 func (s *Server) problemEvidence(ctx context.Context, now time.Time, base func(string) nextgen.Evidence) func(string) nextgen.Evidence {
 	return func(id string) nextgen.Evidence {
-		name, ok := strings.CutPrefix(id, "alert:")
-		if !ok {
+		kind, rest, _ := strings.Cut(id, ":")
+		var read func(tx pgx.Tx) (eventlog.Row, bool, error)
+		switch kind {
+		case "alert", "stream":
+			stream := rest
+			if kind == "alert" {
+				stream = busalerts.Stream(rest)
+			}
+			read = func(tx pgx.Tx) (eventlog.Row, bool, error) { return eventlog.Last(ctx, tx, stream) }
+		case "source":
+			typ, source, _ := strings.Cut(rest, ":")
+			read = func(tx pgx.Tx) (eventlog.Row, bool, error) {
+				return eventlog.LatestWithField(ctx, tx, typ, "source", source, now.Add(-nextgen.EvidenceWindow))
+			}
+		default:
 			return base(id)
 		}
 		db := s.bus.db()
@@ -122,7 +137,7 @@ func (s *Server) problemEvidence(ctx context.Context, now time.Time, base func(s
 		}
 		var last float64
 		err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
-			r, found, err := eventlog.Last(ctx, tx, busalerts.Stream(name))
+			r, found, err := read(tx)
 			if found {
 				last = float64(r.At.Unix())
 			}

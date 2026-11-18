@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -160,5 +161,19 @@ func TestFireNamesTheRecordItTellsOf(t *testing.T) {
 	}
 	if got != cause || change != "firing" || severity != "critical" {
 		t.Fatalf("cause %d (want %d), change %q, severity %q", got, cause, change, severity)
+	}
+	// The Bus page proves one channel of a shared topic by a field of its events.
+	if err := eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
+		r, ok, err := eventlog.LatestWithField(ctx, tx, alerts.Type, "severity", "critical", time.Now().Add(-time.Hour))
+		if err != nil || !ok || r.Stream != alerts.Stream(alerts.NameLoopFailing) {
+			t.Errorf("latest critical: %+v, %v, %v", r, ok, err)
+		}
+		_, ok, err = eventlog.LatestWithField(ctx, tx, alerts.Type, "severity", "none", time.Now().Add(-time.Hour))
+		if err != nil || ok {
+			t.Errorf("a value no event has was found: %v, %v", ok, err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }

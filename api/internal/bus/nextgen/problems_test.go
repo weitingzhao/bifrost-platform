@@ -69,6 +69,15 @@ func TestProblemChannelsNameRealThings(t *testing.T) {
 				}
 				continue
 			}
+			if strings.HasPrefix(e, "stream:") {
+				continue
+			}
+			if rest, ok := strings.CutPrefix(e, "source:"); ok {
+				if typ, source, _ := strings.Cut(rest, ":"); !topics[typ] || source == "" {
+					t.Errorf("%s: event %q names no registered topic and source", p.ID, e)
+				}
+				continue
+			}
 			if typ, ok := strings.CutPrefix(e, "topic:"); !ok || !topics[typ] {
 				t.Errorf("%s: event %q is not a registered topic", p.ID, e)
 			}

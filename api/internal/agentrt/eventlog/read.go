@@ -116,6 +116,26 @@ func LatestByActor(ctx context.Context, tx pgx.Tx, eventType string, since time.
 	return out, rows.Err()
 }
 
+// LatestWithField is the latest event of one type since a time whose body has
+// field = value; false when there is none.
+func LatestWithField(ctx context.Context, tx pgx.Tx, eventType, field, value string, since time.Time) (Row, bool, error) {
+	r := Row{Type: eventType}
+	var raw []byte
+	err := tx.QueryRow(ctx, `SELECT event_stream_id, event_id, seq, actor_id, at, body_json FROM agentrt.event
+	  WHERE event_type = $1 AND at >= $2 AND body_json->>$3 = $4 ORDER BY event_id DESC LIMIT 1`,
+		eventType, since, field, value).Scan(&r.Stream, &r.ID, &r.Seq, &r.Actor, &r.At, &raw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Row{}, false, nil
+	}
+	if err != nil {
+		return Row{}, false, err
+	}
+	if err := json.Unmarshal(raw, &r.Body); err != nil {
+		return Row{}, false, err
+	}
+	return r, true, nil
+}
+
 // EventBody is one event's type and body by its id.
 func EventBody(ctx context.Context, tx pgx.Tx, id int64) (string, map[string]any, error) {
 	var typ string

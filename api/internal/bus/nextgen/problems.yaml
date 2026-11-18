@@ -3,8 +3,8 @@
 # state: connected (an event on the bus, seen in one place, with a receiver),
 # todo (plan: connect, the default, or delete), deleted (done: no longer used to
 # report problems) or pending (being decided).
-# events: what proves it runs here: topic:<type> (the relay published it), or
-# alert:<name> when a topic is shared and only that alert proves this channel.
+# events: what proves it runs here: topic:<type> (the relay published it), or, when
+# a topic is shared, alert:<name>, stream:<id> or source:<type>:<source>.
 # id is a row of channels.yaml, or Y-n for a channel that table does not have.
 problems:
   - {id: N07, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "comm"}
@@ -41,19 +41,18 @@ problems:
   - {id: L13, state: connected, events: ["topic:data.job.finished"], to: "watchers", owner: "comm"}
   - {id: N06, state: connected, events: ["alert:AlertmanagerHeartbeatMissing"], to: "Owner phone and duty seat", owner: "comm"}
   - {id: L27, state: connected, events: ["alert:AlertmanagerHeartbeatMissing"], to: "Owner phone and duty seat", owner: "comm"}
-  - {id: N17, state: todo, events: [], to: "duty seat", owner: "comm, ci"}
-  - {id: L10, state: todo, events: [], to: "duty seat", owner: "decoupling"}
-  - {id: R01, state: todo, events: [], to: "duty seat", owner: "decoupling"}
-  - {id: R12, state: todo, events: [], to: "duty seat", owner: "decoupling"}
-  - {id: R11, state: todo, events: [], to: "duty seat", owner: "decoupling"}
-  - {id: R09, state: todo, events: [], to: "duty seat", owner: "decoupling"}
-  - {id: L12, state: todo, events: [], to: "duty seat", owner: "decoupling"}
-  - {id: L11, state: todo, events: [], to: "duty seat", owner: "decoupling"}
-  - {id: X-C2, state: todo, plan: delete, events: [], to: "", owner: "coordinator"}
-  - {id: X-C14, state: todo, plan: delete, events: [], to: "", owner: "ci"}
+  - {id: L10, state: connected, events: ["source:env.health.changed:checklist-prober"], to: "duty seat", owner: "decoupling"}
+  - {id: R01, state: connected, events: ["source:env.health.changed:checklist-prober"], to: "duty seat", owner: "decoupling"}
+  - {id: R12, state: connected, events: ["stream:ops:env.health.changed:prod/operator-plane"], to: "duty seat", owner: "decoupling"}
+  - {id: R11, state: connected, events: ["stream:ops:env.health.changed:prod/trade-bus"], to: "duty seat", owner: "decoupling"}
+  - {id: R09, state: connected, events: ["source:plugin.status.changed:checklist-prober"], to: "duty seat", owner: "decoupling"}
+  - {id: L12, state: connected, events: ["source:plugin.status.changed:ib-auto-repair"], to: "duty seat", owner: "decoupling"}
+  - {id: L11, state: connected, events: ["source:env.health.changed:patrol-autopilot"], to: "duty seat", owner: "decoupling"}
+  - {id: X-C2, state: deleted, events: [], to: "", owner: "coordinator"}
+  - {id: X-C14, state: deleted, events: [], to: "", owner: "ci"}
   - {id: X-C12, state: connected, events: ["topic:seat.mail.arrived"], to: "receiving seat", owner: "comm"}
-  - {id: L05, state: pending, events: [], to: "", owner: "ci"}
-  - {id: X-A29, state: pending, events: [], to: "", owner: "ci"}
+  - {id: L05, state: deleted, events: [], to: "", owner: "ci"}
+  - {id: X-A29, state: connected, events: ["topic:main.regression.known"], to: "the commit's session", owner: "ci"}
   - {id: Y-1, state: connected, what: "A text claiming the Owner's approval (ledger: policy_alert)", events: ["alert:ApprovalClaimInText"], to: "duty seat", owner: "comm"}
   - {id: Y-3, state: connected, what: "A controller loop failing the same way (ledger: controller_loop_failing)", events: ["alert:ControllerLoopFailing"], to: "duty seat", owner: "comm"}
   - {id: Y-4, state: connected, what: "A report the platform refused (ledger: artifact_refused)", events: ["alert:ArtifactRefused"], to: "duty seat", owner: "comm"}
