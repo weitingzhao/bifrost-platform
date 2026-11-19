@@ -37,8 +37,8 @@ func TestTheDatabaseTakesEveryRegisteredType(t *testing.T) {
 	}
 	sort.Strings(types)
 	// 36, and 2026-11-17 main.regression.known and .fixed (migration 0033): 38.
-	if len(types) != 38 {
-		t.Fatalf("the register has %d types, the migration was written for 38", len(types))
+	if len(types) != 28 {
+		t.Fatalf("the register has %d types, the migration was written for 28", len(types))
 	}
 	for _, typ := range types {
 		if _, err := conn.Exec(ctx, `INSERT INTO vocab VALUES ($1)`, typ); err != nil {

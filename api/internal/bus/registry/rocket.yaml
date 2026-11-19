@@ -24,38 +24,6 @@ channels:
       consumers: [headrelease, console, unit-watch]
       exports: []
       replaces: [L04, L06, X-A28]
-  git.ready.pushed:
-    address: ev.rocket.{env}.git.ready.pushed
-    x-bifrost:
-      version: 1
-      lane: event
-      guarantee: best-effort
-      subject: "<repo>:ready/<name>@<sha40>"
-      publisher: gate-git
-      domain: verification
-      ref: "/api/v1/delivery/context?repo={repo}"
-      reconcile: "gate-git lists ready/* branches every 5 min"
-      on_unread: stale
-      retention: 30d
-      consumers: [console]
-      exports: []
-      replaces: []
-  git.tag.changed:
-    address: ev.rocket.{env}.git.tag.changed
-    x-bifrost:
-      version: 1
-      lane: event
-      guarantee: best-effort
-      subject: "<repo>:<tag>"
-      publisher: gate-git
-      domain: lineage
-      ref: "/api/v1/delivery/revisions?repos={repo}"
-      reconcile: "gate-git lists tags every 30 min"
-      on_unread: stale
-      retention: 30d
-      consumers: [console]
-      exports: []
-      replaces: []
   git.mirror.settled:
     address: ev.rocket.{env}.git.mirror.settled
     x-bifrost:
@@ -74,22 +42,6 @@ channels:
       consumers: [console]
       exports: []
       replaces: [X-A13]
-  git.pr.changed:
-    address: ev.rocket.{env}.git.pr.changed
-    x-bifrost:
-      version: 1
-      lane: event
-      guarantee: best-effort
-      subject: "<repo>#<pr>"
-      publisher: gate-git
-      domain: verification
-      ref: "/api/v1/delivery/context?repo={repo}"
-      reconcile: "gate-git lists open PRs every 5 min"
-      on_unread: stale
-      retention: 30d
-      consumers: [console]
-      exports: []
-      replaces: [X-A4]
   ci.run.started:
     address: ev.rocket.{env}.ci.run.started
     x-bifrost:
@@ -194,22 +146,6 @@ channels:
       consumers: [headrelease, console, window-queue]
       exports: []
       replaces: [L24, N11, X-A9, X-C2, X-C10]
-  release.freeze.changed:
-    address: ev.rocket.{env}.release.freeze.changed
-    x-bifrost:
-      version: 1
-      lane: event
-      guarantee: durable
-      subject: "<scope>"
-      publisher: gate-cluster
-      domain: delivery
-      ref: "/api/v1/release-policy"
-      reconcile: "freeze ConfigMap is the truth"
-      on_unread: closed
-      retention: 30d
-      consumers: [console]
-      exports: []
-      replaces: [X-A10]
   release.policy.expiring:
     address: ev.rocket.{env}.release.policy.expiring
     x-bifrost:
@@ -368,22 +304,6 @@ channels:
       consumers: [console]
       exports: []
       replaces: [L18, N03, N14]
-  seat.work.changed:
-    address: ev.rocket.{env}.seat.work.changed
-    x-bifrost:
-      version: 1
-      lane: event
-      guarantee: best-effort
-      subject: "<external-work-id>"
-      publisher: gate-db
-      domain: coordination
-      ref: "/api/v1/agentrt/external-work/{id}"
-      reconcile: "external work records"
-      on_unread: stale
-      retention: 30d
-      consumers: [console]
-      exports: []
-      replaces: [N18, X-B4]
   seat.session.changed:
     address: ev.rocket.{env}.seat.session.changed
     x-bifrost:
@@ -416,22 +336,6 @@ channels:
       on_unread: stale
       retention: 30d
       consumers: [console, alert-letters]
-      exports: []
-      replaces: []
-  alert.channel.changed:
-    address: ev.rocket.{env}.alert.channel.changed
-    x-bifrost:
-      version: 1
-      lane: event
-      guarantee: best-effort
-      subject: "<channel>"
-      publisher: gate-db
-      domain: compute
-      ref: "/api/v1/telemetry/alerts"
-      reconcile: "Watchdog alert"
-      on_unread: stale
-      retention: 30d
-      consumers: [console]
       exports: []
       replaces: []
   loop.health.changed:
@@ -484,22 +388,6 @@ channels:
       consumers: [console]
       exports: []
       replaces: [C01]
-  cluster.workload.changed:
-    address: ev.rocket.{env}.cluster.workload.changed
-    x-bifrost:
-      version: 1
-      lane: event
-      guarantee: best-effort
-      subject: "<kind>/<ns>/<name>"
-      publisher: gate-cluster
-      domain: compute
-      ref: "/api/v1/cluster/summary"
-      reconcile: "cluster relist"
-      on_unread: stale
-      retention: 30d
-      consumers: [console]
-      exports: []
-      replaces: []
   schema.migration.applied:
     address: ev.rocket.{env}.schema.migration.applied
     x-bifrost:
@@ -554,55 +442,6 @@ channels:
       consumers: [console]
       exports: []
       replaces: [S02]
-  plan.fact.changed:
-    address: ev.rocket.{env}.plan.fact.changed
-    x-bifrost:
-      version: 1
-      lane: event
-      guarantee: ordered
-      key: node
-      subject: "<plan-node>"
-      publisher: gate-db
-      domain: plan
-      ref: "/api/v1/agentrt/plan/view"
-      reconcile: "plan facts snapshot"
-      on_unread: stale
-      retention: 30d
-      consumers: [console]
-      exports: []
-      replaces: [L06]
-  codehealth.report.published:
-    address: ev.rocket.{env}.codehealth.report.published
-    x-bifrost:
-      version: 1
-      lane: event
-      guarantee: best-effort
-      subject: "<repo>@<sha40>"
-      publisher: gate-db
-      domain: verification
-      ref: "/api/v1/code-health"
-      reconcile: "code-health report store"
-      on_unread: stale
-      retention: 30d
-      consumers: [console]
-      exports: []
-      replaces: []
-  dev.session.changed:
-    address: ev.rocket.{env}.dev.session.changed
-    x-bifrost:
-      version: 1
-      lane: event
-      guarantee: best-effort
-      subject: "<service>"
-      publisher: gate-db
-      domain: compute
-      ref: "/api/v1/dev-sessions"
-      reconcile: "bdev sessions.yaml (dev only, not on the bus)"
-      on_unread: stale
-      retention: 30d
-      consumers: [console]
-      exports: []
-      replaces: [C03]
   reconcile.drift.found:
     address: ev.rocket.{env}.reconcile.drift.found
     x-bifrost:

@@ -66,6 +66,12 @@ func (r Rule) LetterKey(eventID string, a Alert, at time.Time, days int) string 
 	if r.alwaysLetter(a) {
 		return "sub:" + r.Row + ":" + eventID
 	}
+	// An info alert says nothing is wrong yet: it stays on the bus and the Bus
+	// page and wakes nobody (2026-11-19, the duty seat judged CPUThrottlingHigh
+	// false; 83 of the week's 243 firings were info).
+	if a.Severity == "info" {
+		return ""
+	}
 	window := letterWindow
 	if days >= chronicDays {
 		window = chronicLetterWindow

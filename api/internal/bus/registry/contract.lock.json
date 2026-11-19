@@ -1,9 +1,5 @@
 {
   "rocket": {
-    "alert.channel.changed": {
-      "version": 1,
-      "hash": "22ce4f4056f6519a"
-    },
     "alert.rule.fired": {
       "version": 1,
       "hash": "4d683a5e3d4a2fcd"
@@ -36,21 +32,9 @@
       "version": 1,
       "hash": "32da46ba12d63395"
     },
-    "cluster.workload.changed": {
-      "version": 1,
-      "hash": "56fe9de31afd5550"
-    },
-    "codehealth.report.published": {
-      "version": 1,
-      "hash": "8315b2cac8d66849"
-    },
     "data.job.finished": {
       "version": 1,
       "hash": "560f303ba315699b"
-    },
-    "dev.session.changed": {
-      "version": 1,
-      "hash": "108b07dadaff952d"
     },
     "env.health.changed": {
       "version": 2,
@@ -63,18 +47,6 @@
     "git.mirror.settled": {
       "version": 1,
       "hash": "6b3b015e3c29c7d1"
-    },
-    "git.pr.changed": {
-      "version": 1,
-      "hash": "c19df9fda5f63a4b"
-    },
-    "git.ready.pushed": {
-      "version": 1,
-      "hash": "536aca3a25dd5de4"
-    },
-    "git.tag.changed": {
-      "version": 1,
-      "hash": "b8ac522e18637e75"
     },
     "loop.health.changed": {
       "version": 1,
@@ -96,10 +68,6 @@
       "version": 1,
       "hash": "67fb6c5e061f30b0"
     },
-    "plan.fact.changed": {
-      "version": 1,
-      "hash": "83ef006849abb484"
-    },
     "plugin.status.changed": {
       "version": 2,
       "hash": "69019e89acb7b32e"
@@ -111,10 +79,6 @@
     "release.deploy.finished": {
       "version": 1,
       "hash": "e0896a76b2532e1c"
-    },
-    "release.freeze.changed": {
-      "version": 1,
-      "hash": "fe4a9834ae797701"
     },
     "release.gitops.changed": {
       "version": 1,
@@ -147,10 +111,6 @@
     "seat.status.changed": {
       "version": 2,
       "hash": "409a9e171f00ec57"
-    },
-    "seat.work.changed": {
-      "version": 1,
-      "hash": "a20ce516f8cd54e1"
     }
   }
 }
