@@ -234,7 +234,7 @@ export class PlaceScene extends Phaser.Scene {
       const kind = k?.kind === 'room' || k?.kind === 'building' ? k.kind : 'district'
       const hue = HUES[Math.max(0, i) % HUES.length]
       const seed = hash(p.id) % 997
-      return { id: p.id, key: spriteKey(kind, p.size, hue, this.light, seed), make: () => spriteFor(kind, p.size, hue, this.light, seed) }
+      return { id: p.id, key: spriteKey(kind, p.w, p.h, hue, this.light, seed), make: () => spriteFor(kind, p.w, p.h, hue, this.light, seed) }
     })
   }
 
@@ -609,20 +609,20 @@ export class PlaceScene extends Phaser.Scene {
     g.lineStyle(2, this.tone.ink).strokePoints(ground, true)
     c.add(g)
     const byId = new Map(place.children.map(k => [k.id, k]))
-    const order = placed.filter(p => byId.has(p.id)).sort((a, b) => (a.x + a.y + a.size) - (b.x + b.y + b.size))
+    const order = placed.filter(p => byId.has(p.id)).sort((a, b) => (a.x + a.y + (a.w + a.h) / 2) - (b.x + b.y + (b.w + b.h) / 2))
     // Back to front, so nearer blocks cover farther ones.
     const look = new Map(this.looks(place, order).map(l => [l.id, l.key]))
     for (const p of order) for (const part of this.block(byId.get(p.id)!, p, look.get(p.id)!, o)) c.add(part)
     // Names on top of every block, so a nearer block never hides a farther one's name. The minimap has none: too small to read.
     if (o.interactive) for (const p of order) {
-      const foot = iso(p.x + p.size - setback(p.size), p.y + p.size - setback(p.size))
+      const sb = setback(Math.min(p.w, p.h)), foot = iso(p.x + p.w - sb, p.y + p.h - sb)
       c.add(this.plate(foot.x, foot.y + 4, byId.get(p.id)!.label, HUES[Math.max(0, place.children.findIndex(x => x.id === p.id)) % HUES.length]))
     }
     if (order.length === 0 && o.interactive) c.add(this.label(iso(GRID / 2, GRID / 2).x, iso(GRID / 2, GRID / 2).y, 'Nothing inside yet', { color: '#8a8478', fontSize: '14px' }).setOrigin(0.5))
     // What the fit frames: the blocks' corners up to their roofs, and their names below.
     const pts = order.length === 0 ? [iso(4, 4), iso(12, 12)] : order.flatMap(p => {
-      const h = heightOf(byId.get(p.id)!, p.size)
-      return [iso(p.x, p.y, h), iso(p.x + p.size, p.y), iso(p.x, p.y + p.size), iso(p.x + p.size, p.y + p.size).add(new Phaser.Math.Vector2(0, 30))]
+      const h = heightOf(byId.get(p.id)!, Math.min(p.w, p.h))
+      return [iso(p.x, p.y, h), iso(p.x + p.w, p.y), iso(p.x, p.y + p.h), iso(p.x + p.w, p.y + p.h).add(new Phaser.Math.Vector2(0, 30))]
     })
     const xs = pts.map(q => q.x), ys = pts.map(q => q.y)
     const box = { x: Math.min(...xs) - 40, y: Math.min(...ys) - 16, w: Math.max(...xs) - Math.min(...xs) + 80, h: Math.max(...ys) - Math.min(...ys) + 28 }
@@ -632,11 +632,11 @@ export class PlaceScene extends Phaser.Scene {
   /** One placed thing: its sprite, a ring on the ground when it is picked or the one you are inside, and its hit area. */
   private block(k: Place, at: Placed, key: string, o: { selected: string | null; inside: string | null; interactive: boolean; arranging: boolean }) {
     const parts: Phaser.GameObjects.GameObject[] = []
-    const h = heightOf(k, at.size)
+    const h = heightOf(k, Math.min(at.w, at.h))
     const ring = k.id === o.inside ? this.tone.inside : k.id === o.selected ? this.tone.pick : null
     if (ring != null) {
       const r = this.add.graphics()
-      const q = [iso(at.x, at.y), iso(at.x + at.size, at.y), iso(at.x + at.size, at.y + at.size), iso(at.x, at.y + at.size)]
+      const q = [iso(at.x, at.y), iso(at.x + at.w, at.y), iso(at.x + at.w, at.y + at.h), iso(at.x, at.y + at.h)]
       r.fillStyle(ring, 0.45).fillPoints(q, true).lineStyle(3, ring, 1).strokePoints(q, true)
       parts.push(r)
     }
@@ -648,8 +648,8 @@ export class PlaceScene extends Phaser.Scene {
     if (img) parts.push(img)
     if (o.interactive) {
       const g = this.add.graphics()
-      const sb = Math.max(0.2, setback(at.size) - 0.15)
-      const x0 = at.x + sb, y0 = at.y + sb, x1 = at.x + at.size - sb, y1 = at.y + at.size - sb
+      const sb = Math.max(0.2, setback(Math.min(at.w, at.h)) - 0.15)
+      const x0 = at.x + sb, y0 = at.y + sb, x1 = at.x + at.w - sb, y1 = at.y + at.h - sb
       const hit = new Phaser.Geom.Polygon([iso(x0, y0, h), iso(x1, y0, h), iso(x1, y0, 0), iso(x1, y1, 0), iso(x0, y1, 0), iso(x0, y1, h)])
       g.setInteractive(hit, Phaser.Geom.Polygon.Contains)
       g.input!.cursor = o.arranging ? 'grab' : 'pointer'

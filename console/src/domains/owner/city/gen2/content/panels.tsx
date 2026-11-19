@@ -24,7 +24,7 @@ function InsideTable({ place, open }: { place: Place; open: (child: Place) => vo
         <tr key={c.id}>
           <td><button className="g2-link" onClick={() => open(c)}>{c.label}</button></td>
           <td>{KIND_WORD[c.kind]}</td>
-          <td className="num">{c.size}×{c.size}</td>
+          <td className="num">{c.shape.replace('x', '×')}</td>
           <td className="g2-unknown">not wired</td>
         </tr>
       ))}

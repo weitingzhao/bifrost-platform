@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { assign, decodePlan, defaultPlan, encodePlan, fitsBudget, GRID, mergePlot, moveTo, plotAt, plotsOf, splitPlot, streetsOf, type Item, type Plan } from '../grid'
+import { assign, decodePlan, defaultPlan, encodePlan, fitsBudget, GRID, mergePlot, moveTo, planFor, plotAt, plotsOf, splitPlot, streetsOf, type Item, type Plan, type Shape } from '../grid'
 
 // 2026-11-19, the Owner: the ground is divided into plots he can cut and join (1×1, 2×2, 4×4, 4×8, 8×8…),
 // the streets follow the plots, and a thing stands in a plot of its own, not every plot a 4×4.
-const items = (...sizes: number[]): Item[] => sizes.map((s, i) => ({ id: `i${i}`, size: s as Item['size'] }))
+const items = (...shapes: (Shape | 1 | 2 | 4 | 8)[]): Item[] => shapes.map((s, i) => ({ id: `i${i}`, shape: typeof s === 'number' ? `${s}x${s}` as Shape : s }))
 const tiles = (plan: Plan) => plotsOf(plan).reduce((a, p) => a + p.w * p.h, 0)
 
 describe('plans', () => {
@@ -72,7 +72,7 @@ describe('things in plots', () => {
   })
   it('a small thing in a big plot stands in its middle', () => {
     const { placed } = assign(items(4), plotsOf(splitPlot(null, '')!))
-    expect(placed[0]).toMatchObject({ x: 2, y: 6 })
+    expect(placed[0]).toMatchObject({ x: 2, y: 6, w: 4, h: 4 })
   })
   it('a thing too big for every free plot is listed, not drawn', () => {
     const { placed, homeless } = assign(items(8), plots)
@@ -96,5 +96,29 @@ describe('things in plots', () => {
   it('the budget still caps what one ground holds', () => {
     expect(fitsBudget(items(8, 8, 8, 8))).toBe(true)
     expect(fitsBudget(items(8, 8, 8, 8, 1))).toBe(false)
+  })
+})
+
+// 2026-11-19, the Owner: a thing's footprint follows its weight — 1×1, 1×2, 2×2, 2×4, 4×8 … — not all the same.
+describe('oblong things', () => {
+  it('a 2×4 lies along its plot’s long side, and does not fit a 2×2', () => {
+    const plan = splitPlot(splitPlot(defaultPlan(), 'aaaa')!, 'aaaaa')!
+    const ps = plotsOf(plan)
+    const tall = ps.find(p => p.w === 2 && p.h === 4)!
+    expect(assign(items('2x4'), [tall]).placed[0]).toMatchObject({ x: tall.x, y: tall.y, w: 2, h: 4 })
+    const square = ps.find(p => p.w === 2 && p.h === 2)!
+    expect(assign(items('2x4'), [square]).homeless).toHaveLength(1)
+  })
+  it('the default plan is cut to fit what the place holds: every shape housed, each in a plot its own shape', () => {
+    const its = items('4x8', '4x4', '2x4', '2x2', '1x2', '1x1')
+    const plan = planFor(its)
+    const { placed, homeless } = assign(its, plotsOf(plan))
+    expect(homeless).toEqual([])
+    const byId = new Map(plotsOf(plan).map(p => [p.id, p]))
+    for (const p of placed) expect(byId.get(p.plot)!.w * byId.get(p.plot)!.h).toBe(p.w * p.h)
+    expect(plotsOf(plan).every(p => Math.max(p.w, p.h) <= 8)).toBe(true)
+  })
+  it('the ground left over is cut to 4×4, so the streets read the same on every page', () => {
+    expect(planFor([])).toEqual(defaultPlan())
   })
 })

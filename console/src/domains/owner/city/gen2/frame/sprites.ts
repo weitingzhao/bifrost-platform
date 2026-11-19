@@ -4,7 +4,7 @@ import { Draw, faces, hash, INK, type Sprite } from './kit'
 /**
  * The second generation's look (the Owner, 2026-11-19: keep the first generation's style — flat
  * pastel isometric, dark outlines, rows of windows, a hue band per place, rooftop units; refine it,
- * don't restart it). One sprite per kind of place, size, hue and light; drawn with the kit as SVG,
+ * don't restart it). One sprite per kind of place, footprint, hue and light; drawn with the kit as SVG,
  * turned into a texture by the scene.
  *
  * What the art says is fixed by what the place is: a district is a tall hall, a building a
@@ -48,11 +48,12 @@ const litBy = (light: Light, seed: number) => (r: number, c: number) =>
 export const setback = (n: number) => n >= 4 ? 0.88 : n === 2 ? 0.55 : 0.28
 
 /** A district: a tall hall on a plinth, a hue band under the parapet, rows of windows, a door, rooftop units. */
-export function districtHall(n: number, hue: string, light: Light, seed = 0): Sprite {
+export function districtHall(fw: number, fd: number, hue: string, light: Light, seed = 0): Sprite {
   const W = WALLS[light]
+  const n = Math.min(fw, fd)
   const h = 30 + n * 9
-  const g = new Draw(n, n, h + 30)
-  const i = setback(n), x0 = i, y0 = i, x1 = n - i, y1 = n - i, w = x1 - x0, d = y1 - y0
+  const g = new Draw(fw, fd, h + 30)
+  const i = setback(n), x0 = i, y0 = i, x1 = fw - i, y1 = fd - i, w = x1 - x0, d = y1 - y0
   g.shadow(x0, y0, w, d, 0.5)
   g.box(x0 - 0.12, y0 - 0.12, w + 0.24, d + 0.24, 4, W.plinth)
   g.box(x0, y0, w, d, h, faces(W.top, wash(hue, light, 'left'), wash(hue, light, 'right')), 4)
@@ -71,11 +72,12 @@ export function districtHall(n: number, hue: string, light: Light, seed = 0): Sp
 }
 
 /** A building: a workshop with a saw-tooth roof of hue-glazed skylights, windows and a roller door. */
-export function workshop(n: number, hue: string, light: Light, seed = 0): Sprite {
+export function workshop(fw: number, fd: number, hue: string, light: Light, seed = 0): Sprite {
   const W = WALLS[light]
+  const n = Math.min(fw, fd)
   const h = 22 + n * 5
-  const g = new Draw(n, n, h + 30)
-  const i = setback(n), x0 = i, y0 = i, x1 = n - i, y1 = n - i, w = x1 - x0, d = y1 - y0
+  const g = new Draw(fw, fd, h + 30)
+  const i = setback(n), x0 = i, y0 = i, x1 = fw - i, y1 = fd - i, w = x1 - x0, d = y1 - y0
   g.shadow(x0, y0, w, d, 0.4)
   g.box(x0 - 0.1, y0 - 0.1, w + 0.2, d + 0.2, 3, W.plinth)
   g.box(x0, y0, w, d, h, faces(W.top, wash(hue, light, 'left'), wash(hue, light, 'right')), 3)
@@ -99,10 +101,10 @@ export function workshop(n: number, hue: string, light: Light, seed = 0): Sprite
 }
 
 /** A room: a floor with low walls on its two back sides and a hue rug, so it reads as inside. */
-export function roomFloor(n: number, hue: string, light: Light): Sprite {
+export function roomFloor(fw: number, fd: number, hue: string, light: Light): Sprite {
   const W = WALLS[light]
-  const g = new Draw(n, n, 26)
-  const i = Math.max(0.18, setback(n) - 0.3), x0 = i, y0 = i, x1 = n - i, y1 = n - i, w = x1 - x0, d = y1 - y0
+  const g = new Draw(fw, fd, 26)
+  const i = Math.max(0.18, setback(Math.min(fw, fd)) - 0.3), x0 = i, y0 = i, x1 = fw - i, y1 = fd - i, w = x1 - x0, d = y1 - y0
   g.box(x0, y0, w, d, 4, faces(W.floor, W.left, W.right))
   const t = 0.1, hw = 14
   g.box(x0, y0, w, t, hw, faces(W.top, W.left, W.right), 4)
@@ -113,10 +115,10 @@ export function roomFloor(n: number, hue: string, light: Light): Sprite {
 }
 
 export type SpriteKey = string
-export const spriteKey = (kind: string, n: number, hue: string, light: Light, seed: number): SpriteKey => `g2:${kind}:${n}:${hue}:${light}:${seed}`
+export const spriteKey = (kind: string, w: number, d: number, hue: string, light: Light, seed: number): SpriteKey => `g2:${kind}:${w}x${d}:${hue}:${light}:${seed}`
 
-export function spriteFor(kind: 'district' | 'building' | 'room' | 'town', n: number, hue: string, light: Light, seed: number): Sprite {
-  return kind === 'room' ? roomFloor(n, hue, light) : kind === 'building' ? workshop(n, hue, light, seed) : districtHall(n, hue, light, seed)
+export function spriteFor(kind: 'district' | 'building' | 'room' | 'town', w: number, d: number, hue: string, light: Light, seed: number): Sprite {
+  return kind === 'room' ? roomFloor(w, d, hue, light) : kind === 'building' ? workshop(w, d, hue, light, seed) : districtHall(w, d, hue, light, seed)
 }
 
 export const spriteUrl = (s: Sprite) => `data:image/svg+xml;utf8,${encodeURIComponent(s.svg)}`

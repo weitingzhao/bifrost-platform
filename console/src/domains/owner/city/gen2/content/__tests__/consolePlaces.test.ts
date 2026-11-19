@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ENTRY_ROUTE_IDS } from '@/lib/shell/consoleRoutes'
-import { fitsBudget, TAPPABLE } from '../../frame/grid'
+import { fitsBudget, sidesOf, TAPPABLE } from '../../frame/grid'
 import { formatPath, here, parsePath, resolve, trail, type Place } from '../../frame/places'
 import { placeTree } from '../consolePlaces'
 
@@ -48,8 +48,12 @@ describe('density (the Owner, 2026-11-19: one 16×16 ground per page; too much g
   it('every place holds no more than its ground can', () => {
     for (const p of all(placeTree())) expect(fitsBudget(p.children), `${p.id} is over its ground`).toBe(true)
   })
-  it('everything you can tap is at least 2×2', () => {
-    for (const p of all(placeTree()).slice(1)) expect(p.size, p.id).toBeGreaterThanOrEqual(TAPPABLE)
+  // A door (a district or a building you walk into) must take a finger; a room may be a 1-wide marker, also listed in Inside.
+  it('every door is at least 2 wide', () => {
+    for (const p of all(placeTree()).slice(1).filter(p => p.kind !== 'room')) expect(sidesOf(p.shape).short, p.id).toBeGreaterThanOrEqual(TAPPABLE)
+  })
+  it('the sample shapes differ, so the rule shows', () => {
+    expect(new Set(placeTree().children.map(d => d.shape)).size).toBe(placeTree().children.length)
   })
 })
 

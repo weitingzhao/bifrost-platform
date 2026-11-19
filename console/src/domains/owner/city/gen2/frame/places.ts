@@ -1,4 +1,4 @@
-import type { Size } from './grid'
+import type { Shape } from './grid'
 
 /**
  * The shape of a place, as the frame knows it (the Owner, 2026-11-19: the frame is the skeleton,
@@ -12,8 +12,8 @@ export type Place = {
   /** The path segment: unique among its siblings. */
   id: string
   kind: PlaceKind
-  /** Its footprint on its parent's 16×16 ground: a design decision, made here, never on the page. */
-  size: Size
+  /** Its footprint on its parent's 16×16 ground (1×1 … 8×8): a design decision by its weight, made here, never on the page. */
+  shape: Shape
   label: string
   /** The business question the place answers. */
   question: string

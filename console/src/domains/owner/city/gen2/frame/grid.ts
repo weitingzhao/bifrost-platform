@@ -2,7 +2,9 @@
  * The ground of every place (the Owner, 2026-11-19): a square of 16 × 16 cells. It is divided into
  * plots, and the streets run along the plots' edges; each thing stands in a plot of its own.
  *
- *   things  squares of 1, 2, 4 or 8 cells a side. The size is the design's, set with the thing.
+ *   things  1×1, 1×2, 2×2, 2×4, 4×4, 4×8 or 8×8: a square or a 2 : 1 oblong, by how big and how
+ *           important the thing is (the Owner, 2026-11-19: not every thing the same). The shape is
+ *           the design's, set with the thing.
  *   plots   made by halving: the ground is cut in two, each half may be cut again, down to 1 × 1.
  *           A square is cut across x, an oblong across its long side, so every plot is a square
  *           or a 2 : 1 oblong with sides of 1, 2, 4, 8 or 16, and its edges always meet. The
@@ -11,7 +13,8 @@
  *           (the ground's first cut is the avenue, then streets, lanes between 2-wide plots,
  *           paths between 1-wide ones), and a ring road runs round the ground.
  *
- * A thing goes in a plot whose shorter side is at least its size, one thing to a plot, centred.
+ * A thing goes in a plot it fits (its long side along the plot's long side), one to a plot, centred.
+ * Until the Owner cuts the ground himself, the plan is cut to fit what the place holds (planFor).
  */
 
 export const GRID = 16
@@ -22,10 +25,17 @@ export type Size = (typeof SIZES)[number]
 export const TAPPABLE: Size = 2
 
 export type Cell = { x: number; y: number }
-export type Item = { id: string; size: Size }
-export type Placed = Item & Cell & { plot: string }
+export const SHAPES = ['1x1', '1x2', '2x2', '2x4', '4x4', '4x8', '8x8'] as const
+export type Shape = (typeof SHAPES)[number]
+/** A shape's short and long side. */
+export const sidesOf = (s: Shape) => { const [a, b] = s.split('x').map(Number) as [Size, Size]; return { short: a, long: b } }
+export const shapeArea = (s: Shape) => { const { short, long } = sidesOf(s); return short * long }
 
-export const area = (items: readonly Item[]) => items.reduce((a, i) => a + i.size * i.size, 0)
+export type Item = { id: string; shape: Shape }
+/** Where a thing stands: its back corner and its footprint along x (w) and y (h), turned to its plot. */
+export type Placed = Item & Cell & { plot: string; w: number; h: number }
+
+export const area = (items: readonly Item[]) => items.reduce((a, i) => a + shapeArea(i.shape), 0)
 export const fitsBudget = (items: readonly Item[]) => area(items) <= GRID * GRID
 
 // ---- the plan: a tree of halvings ----
@@ -136,8 +146,38 @@ export function streetsOf(plan: Plan): Street[] {
 
 // ---- things in plots ----
 
-export const fitsIn = (it: Item, p: Plot) => Math.min(p.w, p.h) >= it.size
-const centred = (it: Item, p: Plot): Placed => ({ ...it, plot: p.id, x: p.x + (p.w - it.size) / 2, y: p.y + (p.h - it.size) / 2 })
+export const fitsIn = (it: Item, p: Rect) => { const { short, long } = sidesOf(it.shape); return Math.min(p.w, p.h) >= short && Math.max(p.w, p.h) >= long }
+const centred = (it: Item, p: Plot): Placed => {
+  const { short, long } = sidesOf(it.shape)
+  const w = p.w >= p.h ? long : short, h = p.w >= p.h ? short : long
+  return { ...it, plot: p.id, w, h, x: p.x + (p.w - w) / 2, y: p.y + (p.h - h) / 2 }
+}
+
+const nearMiddle = (p: Rect) => (p.x + p.w / 2 - GRID / 2) ** 2 + (p.y + p.h / 2 - GRID / 2) ** 2
+
+/**
+ * The plan cut to fit a place's things: largest first, each takes the smallest free plot that fits,
+ * nearest the middle, cut in half while a half still fits it; the ground left over is cut to 4 × 4,
+ * so the streets read the same on every page. Things that do not fit are left for assign to list.
+ */
+export function planFor(items: readonly Item[]): Plan {
+  let plan: Plan = null
+  const taken = new Set<string>()
+  const order = [...items].sort((a, b) => shapeArea(b.shape) - shapeArea(a.shape))
+  for (const it of order) {
+    for (;;) {
+      const p = plotsOf(plan).filter(q => !taken.has(q.id) && fitsIn(it, q)).sort((a, b) => a.w * a.h - b.w * b.h || nearMiddle(a) - nearMiddle(b) || a.y - b.y || a.x - b.x)[0]
+      if (!p) break
+      if (halves(p).some(h => fitsIn(it, h))) { plan = replace(plan, p.id, [null, null]); continue }
+      taken.add(p.id); break
+    }
+  }
+  for (;;) {
+    const big = plotsOf(plan).find(q => !taken.has(q.id) && Math.max(q.w, q.h) > 4)
+    if (!big) return plan
+    plan = replace(plan, big.id, [null, null])
+  }
+}
 
 /** The Owner's choices for one place: how the ground is cut, and which plot each thing stands in. */
 export type Arrangement = { plan?: string; at?: Record<string, string> }
@@ -155,9 +195,8 @@ export function assign(items: readonly Item[], plots: readonly Plot[], chosen: R
     if (p && fitsIn(it, p) && !taken.has(p.id)) taken.set(p.id, it)
   }
   const housed = new Set([...taken.values()].map(it => it.id))
-  const c = GRID / 2
-  const d = (p: Plot) => (p.x + p.w / 2 - c) ** 2 + (p.y + p.h / 2 - c) ** 2
-  const order = items.map((it, i) => ({ it, i })).filter(({ it }) => !housed.has(it.id)).sort((a, b) => b.it.size - a.it.size || a.i - b.i)
+  const d = nearMiddle
+  const order = items.map((it, i) => ({ it, i })).filter(({ it }) => !housed.has(it.id)).sort((a, b) => shapeArea(b.it.shape) - shapeArea(a.it.shape) || a.i - b.i)
   const homeless: Item[] = []
   for (const { it } of order) {
     const p = plots.filter(q => !taken.has(q.id) && fitsIn(it, q)).sort((a, b) => a.w * a.h - b.w * b.h || d(a) - d(b) || a.y - b.y || a.x - b.x)[0]

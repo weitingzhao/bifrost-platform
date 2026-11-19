@@ -2,7 +2,7 @@ import * as Phaser from 'phaser'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { browserArrangements, type ArrangementStore } from './arrangementStore'
 import { KitRoot, Menu, type PanelSize } from './parts'
-import { assign, decodePlan, defaultPlan, encodePlan, mergePlot, moveTo, plotsOf, splitPlot, streetsOf, type Arrangement, type Item, type Plan } from './grid'
+import { assign, decodePlan, encodePlan, mergePlot, moveTo, planFor, plotsOf, splitPlot, streetsOf, type Arrangement, type Item, type Plan } from './grid'
 import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
 import type { CityContent, Panel } from './content'
 import { PlaceScene, type ArrangeTool, type Shown } from './placeScene'
@@ -59,9 +59,9 @@ const readLight = (): LightChoice => {
   try { const v = window.localStorage.getItem(LIGHT_KEY); return v && v in NEXT ? v as LightChoice : 'auto' } catch { return 'auto' }
 }
 
-/** A place's ground as the Owner left it: its plan (or the default), its plots and streets, and where each thing stands. */
+/** A place's ground as the Owner left it: its plan (or one cut to fit its things), its plots and streets, and where each thing stands. */
 function layoutOf(children: readonly Item[], a: Arrangement) {
-  const plan: Plan = (a.plan && decodePlan(a.plan)) || defaultPlan()
+  const plan: Plan = (a.plan && decodePlan(a.plan)) || planFor(children)
   const plots = plotsOf(plan)
   const { placed, homeless } = assign(children, plots, a.at ?? {})
   return { plan, plots, streets: streetsOf(plan), placed, homeless }
