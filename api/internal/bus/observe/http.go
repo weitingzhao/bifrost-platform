@@ -15,10 +15,13 @@ import (
 )
 
 // Handler is the route's dependencies, from the server's wiring: the
-// ledger's pool (nil while it is not connected), the ledger read over it,
-// the cursor of a time in it, and the bus gate (nil while it is off).
+// ledger's pool (nil while it is not connected), the letters between seats
+// and their latest status reports read over it (coordination's messages, so
+// coordination reads them: coord.ReadLetters), the ledger read over it, the
+// cursor of a time in it, and the bus gate (nil while it is off).
 type Handler struct {
 	Pool     func() *pgxpool.Pool
+	Letters  func(ctx context.Context, db Querier, since time.Time) ([]Letter, map[string]time.Time, error)
 	Ledger   func(*pgxpool.Pool) relay.Ledger
 	CursorAt func(*pgxpool.Pool) func(context.Context, time.Time) (relay.Cursor, error)
 	Gate     func() *gate.Gate
@@ -48,7 +51,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now()
 	since := now.Add(-time.Duration(hours) * time.Hour)
-	letters, status, err := ReadLetters(r.Context(), pool, since)
+	letters, status, err := h.Letters(r.Context(), pool, since)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

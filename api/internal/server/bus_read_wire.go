@@ -33,7 +33,8 @@ func (s *Server) busRegressions() regressions.API {
 
 func (s *Server) busObserve() observe.Handler {
 	return observe.Handler{
-		Pool: s.bus.pool.Load,
+		Pool:    s.bus.pool.Load,
+		Letters: coord.ReadLetters,
 		Ledger: func(pool *pgxpool.Pool) relay.Ledger {
 			return &relay.PGLedger{DB: func() relay.TxBeginner { return pool }, EventsAfter: busEventsAfter}
 		},
