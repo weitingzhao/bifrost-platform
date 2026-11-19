@@ -265,6 +265,7 @@ modules:
       - api/internal/approvals/handler.go
       - api/internal/mcp/catalog.go
       - api/internal/approvalhome/console_notification_contract.go
+      - api/internal/bus/registry/rocket.yaml
       # Measured 2026-11-14 by running the console's tests with every file
       # access recorded: beside the five above they read these. A replay of
       # 150 commits of main had found six that changed only mcp/ and would
