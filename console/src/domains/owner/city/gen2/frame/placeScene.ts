@@ -157,73 +157,69 @@ export class PlaceScene extends Phaser.Scene {
       if (key(prev) !== key(next)) void this.draw(next, prev.arranging !== next.arranging)
       return
     }
-    void this.change(next)
+    void this.change(next, prev)
   }
 
   /**
-   * Going from one place to another (the Owner, 2026-11-19: no pop and blur; the page you leave
-   * shrinks into the minimap). Down: the old page flies into the minimap corner, where its picture
-   * stays; the new page fades in under it. Up: the new page grows out of the minimap to fill the
-   * screen while the old one fades. A jump from the menu crossfades.
+   * Going from one place to another (the Owner, 2026-11-19: it must feel like zooming in and out, not
+   * a swap). Down: the camera dives into the thing you tapped — the page you leave grows about it and
+   * fades, while the place's own ground grows out of its footprint to fill the screen. Up: the reverse
+   * — the page you leave shrinks back into its footprint on the parent, which comes back from close
+   * up. The minimap fades in with its new picture. A jump from the menu (no footprint to go through)
+   * crossfades.
    */
-  private async change(next: Shown) {
+  private async change(next: Shown, prev: Shown | null) {
     const turn = ++this.turn
     const old = this.main
-    const oldBox = this.content
-    // Where the camera stood, so the old page can be held still on screen while the camera moves for the new one.
     const cam = this.cameras.main
     const was = { zoom: cam.zoom, mx: cam.scrollX + cam.width / 2, my: cam.scrollY + cam.height / 2 }
     this.main = undefined
-    // A change cut short by another leaves the minimap hidden; every change starts with it shown.
     this.mini?.setAlpha(1)
     await this.draw(next, true)
     if (turn !== this.turn) { old?.destroy(); return }
     const now = this.main as Phaser.GameObjects.Container | undefined
-    const MS = 420
     if (!now) { old?.destroy(); return }
     if (old) {
       // Hold the old page where it was on screen: undo the camera's change of zoom and centre.
       const k = was.zoom / cam.zoom
       old.setScale(k).setPosition(cam.scrollX + cam.width / 2 - k * was.mx, cam.scrollY + cam.height / 2 - k * was.my)
-    }
-    if (next.from === 'down' && old) {
-      // The old page's picture travels to the minimap; the minimap shows it once it lands.
-      this.mini?.setAlpha(0)
       this.mini?.ignore(old)
-      // Over the new page, so it is seen all the way into the corner.
-      this.children.bringToTop(old)
-      const to = this.toMini(oldBox)
-      this.tweens.add({ targets: old, x: to.x, y: to.y, scale: to.scale, alpha: 0.9, duration: MS, ease: 'Cubic.easeInOut',
-        onComplete: () => { old.destroy(); this.mini?.setAlpha(1) } })
-      now.setAlpha(0)
-      this.tweens.add({ targets: now, alpha: 1, duration: MS * 0.8, delay: MS * 0.3, ease: 'Sine.easeOut' })
-    } else if (next.from === 'up') {
-      // The new page starts as the minimap's picture and grows to fill the screen.
-      const from = this.toMini(this.content)
-      now.setPosition(from.x, from.y).setScale(from.scale).setAlpha(0.9)
-      this.tweens.add({ targets: now, x: 0, y: 0, scale: 1, alpha: 1, duration: MS, ease: 'Cubic.easeInOut' })
-      if (old) this.tweens.add({ targets: old, alpha: 0, duration: MS * 0.6, onComplete: () => old.destroy() })
-    } else {
+    }
+    // The footprint we go through: the child's on the parent's ground.
+    const through = next.from === 'down' ? prev?.placed.find(p => p.id === next.place.id)
+      : next.from === 'up' ? next.placed.find(p => p.id === prev?.place.id) : undefined
+    const MS = 640, ease = 'Cubic.easeInOut'
+    if (!old || !through) {
       now.setAlpha(0)
       this.tweens.add({ targets: now, alpha: 1, duration: 220 })
       if (old) this.tweens.add({ targets: old, alpha: 0, duration: 180, onComplete: () => old.destroy() })
+      return
     }
-  }
-
-  /**
-   * Where a level must stand (position and scale of its container, in the main camera's world) so
-   * that its content box sits inside the minimap's frame on screen.
-   */
-  private toMini(box: { x: number; y: number; w: number; h: number }) {
-    const cam = this.cameras.main
-    const { mini, miniTitle } = this.layout
-    const sw = mini.w - 12, sh = mini.h - miniTitle - 8
-    const scale = Math.min(sw / box.w, sh / box.h) / cam.zoom
-    // From the camera's own scroll and zoom: getWorldPoint reads a matrix that is only rebuilt at the next render.
-    const sx = mini.x + mini.w / 2, sy = mini.y + miniTitle + (mini.h - miniTitle) / 2
-    const target = { x: cam.scrollX + cam.width / 2 + (sx - cam.x - cam.width / 2) / cam.zoom, y: cam.scrollY + cam.height / 2 + (sy - cam.y - cam.height / 2) / cam.zoom }
-    const cx = box.x + box.w / 2, cy = box.y + box.h / 2
-    return { x: target.x - cx * scale, y: target.y - cy * scale, scale }
+    // A ground scaled by s about the footprint's centre fits the footprint; scaled by 1/s it is the parent seen from inside it.
+    const g = iso(GRID / 2, GRID / 2)
+    const c = iso(through.x + through.w / 2, through.y + through.h / 2)
+    const s = ((through.w + through.h) / 2) / (GRID + 2 * RIM)
+    const small = { x: c.x - g.x * s, y: c.y - g.y * s, scale: s }
+    const big = { x: g.x - c.x / s, y: g.y - c.y / s, scale: 1 / s }
+    this.mini?.setAlpha(0)
+    this.tweens.add({ targets: this.mini, alpha: 1, duration: 260, delay: MS * 0.75 })
+    if (next.from === 'down') {
+      // The parent dives in and fades; the child's ground grows out of the footprint, over it.
+      this.children.bringToTop(now)
+      this.tweens.add({ targets: old, ...big, duration: MS, ease })
+      this.tweens.add({ targets: old, alpha: 0, duration: MS * 0.55, delay: MS * 0.35, onComplete: () => old.destroy() })
+      now.setPosition(small.x, small.y).setScale(small.scale).setAlpha(0)
+      this.tweens.add({ targets: now, x: 0, y: 0, scale: 1, duration: MS, ease })
+      this.tweens.add({ targets: now, alpha: 1, duration: MS * 0.45, delay: MS * 0.15 })
+    } else {
+      // The child shrinks back into its footprint and fades; the parent comes back from close up, under it.
+      this.children.bringToTop(old)
+      this.tweens.add({ targets: old, ...small, duration: MS, ease })
+      this.tweens.add({ targets: old, alpha: 0, duration: MS * 0.45, delay: MS * 0.5, onComplete: () => old.destroy() })
+      now.setPosition(big.x, big.y).setScale(big.scale).setAlpha(0)
+      this.tweens.add({ targets: now, x: 0, y: 0, scale: 1, duration: MS, ease })
+      this.tweens.add({ targets: now, alpha: 1, duration: MS * 0.5, delay: MS * 0.1 })
+    }
   }
 
   /** The sprite each placed thing wears: its kind, size, a hue by its place in the list, a seed for its lit windows. */
