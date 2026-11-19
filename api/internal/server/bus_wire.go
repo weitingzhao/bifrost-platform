@@ -260,6 +260,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 		if !relay.EnsureEventStreamUntil(ctx, js, relay.Tenant, env) {
 			return
 		}
+		safego.Go("bus-stream-sizes", func() { relay.WatchStreamSizes(ctx, js, relay.Tenant, env) })
 		if headrelease.On() || headrelease.ProdShadowOn() {
 			s.bus.head.Consume(ctx, js, env)
 		}

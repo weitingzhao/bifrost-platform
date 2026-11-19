@@ -56,3 +56,16 @@ func TestADrillIsCountedUnderItsOwnStream(t *testing.T) {
 		t.Fatalf("a real alert counted as %q", got)
 	}
 }
+
+// Origin: 2026-11-19, the Owner: data that grows keeps a fixed size; the two
+// streams had limits but no reading of how full they are.
+func TestStreamSizesAreWritten(t *testing.T) {
+	recordStreamSize("EV_ROCKET_TEST", 2048, 7)
+	var b strings.Builder
+	writeStreamSizes(&b)
+	for _, want := range []string{`bifrost_bus_stream_bytes{stream="EV_ROCKET_TEST"} 2048`, `bifrost_bus_stream_messages{stream="EV_ROCKET_TEST"} 7`} {
+		if !strings.Contains(b.String(), want) {
+			t.Fatalf("no %q in %s", want, b.String())
+		}
+	}
+}
