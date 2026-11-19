@@ -1,4 +1,4 @@
-package agentrtapi
+package recordsapi
 
 import (
 	"errors"
@@ -13,21 +13,20 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 )
 
-// getArtifact is GET /artifacts/{id}. A collector reads only an artifact
+// HandleGetArtifact is GET /artifacts/{id}. A collector reads only an artifact
 // whose first upload was its own (R5:5.5-12 §1.3 记录级归属,
 // created_by_actor_id): another writer's, or none at all, is 403, and a
 // description someone else put first stays unread (it keeps its own copy).
-func (a *API) getArtifact(w http.ResponseWriter, r *http.Request) {
+func (rt Routes) HandleGetArtifact(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var media, kind, by string
 	var body []byte
 	var exam bool
 	p := actuation.PrincipalFromContext(r.Context())
 	host := p.Role == actuation.RoleAgentd
-	err := eventlog.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
+	err := eventlog.InTx(r.Context(), rt.Host.DB(), func(tx pgx.Tx) error {
 		// Whether the exams' stream names it is read for an Agent host only
 		// (review 412 C1: the stream is read by its id, then its bodies).
 		return tx.QueryRow(r.Context(), `SELECT a.media_type, a.artifact_kind, b.body,
@@ -39,12 +38,12 @@ func (a *API) getArtifact(w http.ResponseWriter, r *http.Request) {
 	if actuation.IsCollector(p) {
 		own, ok := actuation.CollectorActor(p)
 		if errors.Is(err, pgx.ErrNoRows) || err == nil && (!ok || by != own) {
-			a.fail(w, externalwork.ErrNotOwnRecord)
+			rt.Host.Fail(w, rt.Host.NotOwnRecord())
 			return
 		}
 	}
 	if err != nil {
-		a.fail(w, err)
+		rt.Host.Fail(w, err)
 		return
 	}
 	// An Agent host reads no exam artifact: an answer's id can be known to a
@@ -54,7 +53,7 @@ func (a *API) getArtifact(w http.ResponseWriter, r *http.Request) {
 	// bytes put earlier as "other", review 409 A1). agentd keeps the paper
 	// it was handed.
 	if host && (kind == "exam" || exam) {
-		writeError(w, http.StatusForbidden, "forbidden", "an agentd token does not read exam artifacts")
+		rt.Host.Error(w, http.StatusForbidden, "forbidden", "an agentd token does not read exam artifacts")
 		return
 	}
 	w.Header().Set("Content-Type", media)
@@ -86,31 +85,31 @@ func streamHidden(r *http.Request, stream string) bool {
 	return slices.ContainsFunc(hiddenPrefixes, func(p string) bool { return strings.HasPrefix(stream, p) })
 }
 
-// getEvents lists a stream's events after a sequence number, at most 500.
-func (a *API) getEvents(w http.ResponseWriter, r *http.Request) {
+// HandleGetEvents lists a stream's events after a sequence number, at most 500.
+func (rt Routes) HandleGetEvents(w http.ResponseWriter, r *http.Request) {
 	stream := r.URL.Query().Get("stream")
 	if stream == "" {
-		a.getRecentEvents(w, r)
+		rt.getRecentEvents(w, r)
 		return
 	}
 	if streamHidden(r, stream) {
-		writeError(w, http.StatusForbidden, "forbidden", "this token may not read stream "+stream)
+		rt.Host.Error(w, http.StatusForbidden, "forbidden", "this token may not read stream "+stream)
 		return
 	}
 	var after int64
 	if s := r.URL.Query().Get("after_seq"); s != "" {
 		if _, err := fmt.Sscan(s, &after); err != nil {
-			writeError(w, http.StatusBadRequest, "bad_request", "after_seq is a number")
+			rt.Host.Error(w, http.StatusBadRequest, "bad_request", "after_seq is a number")
 			return
 		}
 	}
 	var doc []byte
-	err := eventlog.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
+	err := eventlog.InTx(r.Context(), rt.Host.DB(), func(tx pgx.Tx) error {
 		return tx.QueryRow(r.Context(), `SELECT COALESCE(jsonb_agg(to_jsonb(e) ORDER BY e.seq), '[]') FROM (
 		  SELECT * FROM agentrt.event WHERE event_stream_id = $1 AND seq > $2 ORDER BY seq LIMIT 500) e`, stream, after).Scan(&doc)
 	})
 	if err != nil {
-		a.fail(w, err)
+		rt.Host.Fail(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

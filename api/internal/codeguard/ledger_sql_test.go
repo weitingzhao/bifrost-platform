@@ -35,9 +35,9 @@ var ledgerOwners = map[string]bool{"agentrt/eventlog": true, "agentrt/actor": tr
 // actor.Exists and actor.RegisterController) left 73, and the second (the
 // ledger's own Last, Has and HasBody) 67. 2026-11-19: three of agentrtapi's
 // five went with the plan's read routes to agentrt/planapi, unchanged; the
-// total is the same.
+// total is the same. 2026-11-19 later: its other two (the artifact and event
+// reads) went to agentrt/recordsapi, unchanged; the total is the same.
 var ledgerSQL = map[string]int{
-	"agentrt/agentrtapi":       2,
 	"agentrt/artifact":         2,
 	"agentrt/coord":            2,
 	"agentrt/deliveryreadings": 1,
@@ -47,6 +47,7 @@ var ledgerSQL = map[string]int{
 	"agentrt/planapi":          3,
 	"agentrt/planreadings":     11,
 	"agentrt/planstore":        24,
+	"agentrt/recordsapi":       2,
 	"agentrt/seenfacts":        2,
 	"agentrt/store":            2,
 	"agentrt/workregistration": 4,

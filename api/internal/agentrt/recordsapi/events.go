@@ -1,4 +1,4 @@
-package agentrtapi
+package recordsapi
 
 import (
 	"encoding/json"
@@ -33,17 +33,17 @@ const (
 	recentEventsMax     = 500
 )
 
-func (a *API) getRecentEvents(w http.ResponseWriter, r *http.Request) {
+func (rt Routes) getRecentEvents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if q.Get("after_seq") != "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "after_seq goes with stream; across streams the cursors are after and before_event_id")
+		rt.Host.Error(w, http.StatusBadRequest, "bad_request", "after_seq goes with stream; across streams the cursors are after and before_event_id")
 		return
 	}
 	limit := recentEventsDefault
 	if s := q.Get("limit"); s != "" {
 		n, err := strconv.Atoi(s)
 		if err != nil || n < 1 || n > recentEventsMax {
-			writeError(w, http.StatusBadRequest, "bad_request", "limit is 1 to 500")
+			rt.Host.Error(w, http.StatusBadRequest, "bad_request", "limit is 1 to 500")
 			return
 		}
 		limit = n
@@ -52,7 +52,7 @@ func (a *API) getRecentEvents(w http.ResponseWriter, r *http.Request) {
 	if s := q.Get("before_event_id"); s != "" {
 		n, err := strconv.ParseInt(s, 10, 64)
 		if err != nil || n < 1 {
-			writeError(w, http.StatusBadRequest, "bad_request", "before_event_id is an event id (a whole number from 1)")
+			rt.Host.Error(w, http.StatusBadRequest, "bad_request", "before_event_id is an event id (a whole number from 1)")
 			return
 		}
 		before = n
@@ -61,20 +61,20 @@ func (a *API) getRecentEvents(w http.ResponseWriter, r *http.Request) {
 	if s := q.Get("after"); s != "" {
 		c, ok := eventlog.ParseEventCursor(s)
 		if !ok {
-			writeError(w, http.StatusBadRequest, "bad_request", "after is a cursor a read gave as next (<txid>.<event_id>)")
+			rt.Host.Error(w, http.StatusBadRequest, "bad_request", "after is a cursor a read gave as next (<txid>.<event_id>)")
 			return
 		}
 		after = &c
 	}
 	if after != nil && before != 0 {
-		writeError(w, http.StatusBadRequest, "bad_request", "after or before_event_id, not both")
+		rt.Host.Error(w, http.StatusBadRequest, "bad_request", "after or before_event_id, not both")
 		return
 	}
 	var types []string
 	if s := q.Get("types"); s != "" {
 		for _, t := range strings.Split(s, ",") {
 			if !eventlog.IsEventType(t) {
-				writeError(w, http.StatusBadRequest, "bad_request", "types names event types of the vocabulary; "+strconv.Quote(t)+" is none")
+				rt.Host.Error(w, http.StatusBadRequest, "bad_request", "types names event types of the vocabulary; "+strconv.Quote(t)+" is none")
 				return
 			}
 			types = append(types, t)
@@ -83,7 +83,7 @@ func (a *API) getRecentEvents(w http.ResponseWriter, r *http.Request) {
 	filter := eventlog.EventFilter{Types: types, Hidden: hiddenFrom(r), HiddenPrefixes: hiddenPrefixes}
 	var doc []byte
 	var next eventlog.EventCursor
-	err := eventlog.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
+	err := eventlog.InTx(r.Context(), rt.Host.DB(), func(tx pgx.Tx) error {
 		var err error
 		if after == nil {
 			doc, next, err = eventlog.LatestEvents(r.Context(), tx, before, limit, filter)
@@ -93,8 +93,8 @@ func (a *API) getRecentEvents(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	if err != nil {
-		a.fail(w, err)
+		rt.Host.Fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"events": json.RawMessage(doc), "next": next.String()})
+	rt.Host.JSON(w, http.StatusOK, map[string]any{"events": json.RawMessage(doc), "next": next.String()})
 }

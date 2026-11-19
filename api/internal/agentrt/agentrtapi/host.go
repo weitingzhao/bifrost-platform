@@ -5,16 +5,23 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 )
 
-// host lends the domains' routes (planapi, coordapi) what every /agentrt route
-// shares, read from the API at each request: its database and wiring, who a
-// request is recorded as (writer, actorOf), the strict body readers, the
-// answers and the mapping of an error to a status (fail). It implements
-// planapi.Host, coordapi.Host and lineageapi.Host; nothing here is a domain's.
+// host lends the domains' routes what every /agentrt route shares, read from
+// the API at each request: its database and wiring, who a request is
+// recorded as (writer, actorOf), the strict body readers, the answers and
+// the mapping of an error to a status (fail). It implements planapi.Host,
+// coordapi.Host, lineageapi.Host, rulesapi.Host, deliveryapi.Host and
+// recordsapi.Host. Two of recordsapi's are the lineage's checks bound here
+// (ExternalDescription, NotOwnRecord); nothing else here is a domain's.
 type host struct{ a *API }
 
 func (h host) DB() eventlog.DB            { return h.a.DB }
@@ -52,3 +59,40 @@ func (h host) Error(w http.ResponseWriter, status int, code, msg string) {
 }
 
 func (h host) Fail(w http.ResponseWriter, err error) { h.a.fail(w, err) }
+
+func (h host) Anchor() string   { return h.a.Anchor }
+func (h host) DiskFloor() int64 { return h.a.DiskFloor }
+
+func (h host) ConfigurationBoundaries() func(context.Context, string, string, []map[string]any) (map[string]any, error) {
+	return h.a.ConfigurationBoundaries
+}
+
+func (h host) ProductionDelivery() func(context.Context) deliveryview.DeliveryProduction {
+	return h.a.ProductionDelivery
+}
+
+func (h host) LimitedReporter(p actuation.Principal) bool { return limitedReporter(p) }
+
+// ExternalDescription is the lineage's check of an external work
+// description, for recordsapi.
+func (h host) ExternalDescription(body []byte) error {
+	return externalwork.ValidateExternalDescription(body)
+}
+
+// NotOwnRecord is the lineage's error for a record that is not the
+// collector's own, for recordsapi.
+func (h host) NotOwnRecord() error { return externalwork.ErrNotOwnRecord }
+
+// recorderLogs binds the plan import's recorder logs (planapi.RecorderLogs)
+// to the lineage, which reads, checks and keeps a log (recorderimport,
+// externalwork); the plan proposes its import.
+type recorderLogs struct{}
+
+func (recorderLogs) Format() string { return recorderimport.Format }
+
+func (recorderLogs) Request() any { return &recorderimport.Request{} }
+
+func (recorderLogs) Prepare(request any) (planstore.RecorderLog, error) {
+	log, err := externalwork.PrepareRecorderImport(*request.(*recorderimport.Request))
+	return planstore.RecorderLog(log), err
+}

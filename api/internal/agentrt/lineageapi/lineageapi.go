@@ -7,8 +7,9 @@
 // (OWNER_LAW #28, 2026-11-19: a domain's routes sit in its own package, so
 // its contract can say what it offers). agentrtapi still mounts them, behind
 // the same abilities, and lends them what every /agentrt route shares (Host).
-// The plan import route stays in agentrtapi: it reads a plan as well as a
-// recorder log.
+// The plan import route went to planapi (2026-11-19); the recorder log it
+// may read reaches the lineage through the port planapi declares, which
+// agentrtapi binds.
 package lineageapi
 
 import (

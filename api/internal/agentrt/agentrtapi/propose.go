@@ -55,6 +55,3 @@ func writer(r *http.Request) (actor.Writer, error) {
 // /agentrt that writes the ledger as its caller (2026-11-17: the known
 // regressions on main, bus/regressions).
 func WriterOf(r *http.Request) (actor.Writer, error) { return writer(r) }
-
-// listLimit is the most rows a list answers.
-const listLimit = 500

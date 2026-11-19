@@ -3,7 +3,7 @@
 // (GET /agentrt/plan-view, /agentrt/plan-pace), the progress projection
 // (GET /agentrt/progress), and the writes a proposer or the Owner makes on
 // the plan (POST /agentrt/plan/proposals, /agentrt/plan/{id}/notes,
-// /agentrt/plan/{id}/signoff).
+// /agentrt/plan/{id}/signoff, /agentrt/plan/imports).
 //
 // The handlers were agentrtapi's (plan.go, planview.go, planpace.go) and are
 // the same code (OWNER_LAW #28, 2026-11-19: a domain's routes sit in its own
@@ -11,7 +11,8 @@
 // them, behind the same abilities, and lends them what every /agentrt route
 // shares (Host): who a request is recorded as, the strict body readers, the
 // answers and the mapping of an error to a status. The plan import route
-// stays in agentrtapi: it reads a recorder log (lineage) as well as a plan.
+// came too (2026-11-19); the recorder log it may read is the lineage's,
+// which the assembly binds (RecorderLogs).
 package planapi
 
 import (
@@ -65,4 +66,7 @@ type Routes struct {
 	// WorkSpans reads registered work for GET /plan-pace (lineage's reader,
 	// bound by the assembly).
 	WorkSpans planreadings.WorkSpans
+	// RecorderLogs reads a recorder log for POST /plan/imports (lineage's
+	// part, bound by the assembly).
+	RecorderLogs RecorderLogs
 }

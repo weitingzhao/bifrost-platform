@@ -1,23 +1,23 @@
 // Package agentrtapi mounts the agent runtime's routes (/api/v1/agentrt):
 // each route's ability, the identity a request writes as, the strict body
 // readers, the answers and the mapping of a store's error to a status. The
-// plan's and the coordination's handlers are in their domains' packages
-// (planapi, coordapi; 2026-11-19); the handlers still here are whoami, the
-// artifacts and the event reads (exam visibility, a collector's records),
-// external work (a collector's identity), the plan import (a plan or a
-// recorder log), the delivery read (bound to the rule store) and the rules
-// (signed rules). Dispatch claim, lease and result-handoff routes have been
-// retired.
+// handlers are in their domains' packages (2026-11-19): the plan's, its
+// import included, in planapi; the coordination's in coordapi; registered
+// work in lineageapi; the signed rules in rulesapi (verification); GET
+// /delivery in deliveryapi; the artifacts and the event reads in recordsapi
+// (foundation). The one handler still here is whoami (identity). What stays
+// binds one domain's port to another's code: the release gate's signature
+// check for the rules, the rule store for the delivery boundaries
+// (boundarysource.go), the lineage's recorder log for the plan import and
+// its record checks for the artifacts (host.go). Dispatch claim, lease and
+// result-handoff routes have been retired.
 package agentrtapi
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -28,8 +28,8 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coordapi"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
@@ -37,8 +37,11 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recordsapi"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rulesapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
+	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 )
 
 // API serves the routes. A nil DB means the platform has no agentrt
@@ -126,24 +129,28 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 	// when the database is not configured. Every route's parameters are read
 	// as the client meant them (pathParams).
 	cfg := func(next http.Handler) http.Handler { return a.configured(pathParams(next)) }
-	// The plan's and the coordination's handlers are in their domains'
-	// packages (2026-11-19, OWNER_LAW #28); their routes and abilities are
-	// here with every other.
-	plan, coordination := planapi.Routes{Host: host{a}, WorkSpans: workregistration.WorkSpans}, coordapi.Routes{Host: host{a}}
+	// The handlers are in their domains' packages (2026-11-19, OWNER_LAW
+	// #28); their routes and abilities are here with every other, and so are
+	// the bindings of one domain's port to another's code.
+	plan := planapi.Routes{Host: host{a}, WorkSpans: workregistration.WorkSpans, RecorderLogs: recorderLogs{}}
+	coordination := coordapi.Routes{Host: host{a}}
 	lineage := lineageapi.Routes{Host: host{a}}
+	rules := rulesapi.Routes{Host: host{a}, Verify: releasepolicy.VerifyAnchored}
+	delivery := deliveryapi.Routes{Host: host{a}, Boundaries: boundarySource}
+	records := recordsapi.Routes{Host: host{a}}
 	r.Route("/agentrt", func(r chi.Router) {
 		r.With(read, cfg).Get("/whoami", a.whoami)
-		r.With(upload, cfg).Put("/artifacts/{id}", a.putArtifact)
-		r.With(read, cfg).Get("/artifacts", a.searchArtifacts)
-		r.With(read, cfg).Get("/artifacts/{id}", a.getArtifact)
+		r.With(upload, cfg).Put("/artifacts/{id}", records.HandlePutArtifact)
+		r.With(read, cfg).Get("/artifacts", records.HandleSearchArtifacts)
+		r.With(read, cfg).Get("/artifacts/{id}", records.HandleGetArtifact)
 		r.With(propose, cfg).Post("/messages", coordination.HandleSendMessage)
 		r.With(read, cfg).Get("/messages", coordination.HandleReadMessages)
 		r.With(read, cfg).Get("/messages/thread", coordination.HandleThreadMessages)
 		r.With(propose, cfg).Post("/messages/ack", coordination.HandleAckMessages)
-		r.With(read, cfg).Get("/events", a.getEvents)
+		r.With(read, cfg).Get("/events", records.HandleGetEvents)
 		r.With(read, cfg).Get("/plan", plan.HandleGetPlan)
 		r.With(read, cfg).Get("/plan-view", plan.HandleGetPlanView)
-		r.With(read, cfg).Get("/delivery", a.getDelivery)
+		r.With(read, cfg).Get("/delivery", delivery.HandleGetDelivery)
 		r.With(read, cfg).Get("/plan-pace", plan.HandleGetPlanPace)
 		r.With(read, cfg).Get("/external-work/{id}", lineage.HandleGetExternalWork)
 		r.With(external, cfg).Post("/external-work", lineage.HandleRegisterExternalWork)
@@ -152,15 +159,15 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(propose, cfg).Post("/plan/proposals", plan.HandleProposePlanChange)
 		r.With(propose, cfg).Post("/plan/{id}/notes", plan.HandlePostPlanNote)
 		r.With(gate("signoff"), cfg).Post("/plan/{id}/signoff", plan.HandleSignOffStep)
-		r.With(propose, cfg).Post("/plan/imports", a.proposePlanImport)
+		r.With(propose, cfg).Post("/plan/imports", plan.HandleProposePlanImport)
 		r.With(read, cfg).Get("/controls", coordination.HandleListControls)
 		r.With(gate("stop"), cfg).Post("/controls", coordination.HandleSetControl)
 		r.With(gate("lift"), cfg).Delete("/controls/{id}", coordination.HandleLiftControl)
-		r.With(read, cfg).Get("/rules/{rule_id}", a.getRule)
-		r.With(read, cfg).Post("/rules/{rule_id}/check", a.checkRule)
-		r.With(propose, cfg).Post("/rules/{rule_id}/proposals", a.proposeRule)
-		r.With(propose, cfg).Post("/rules/{rule_id}/sign", a.signRule)
-		r.With(gate("stop"), cfg).Post("/rules/{rule_id}/tighten", a.tightenRule)
+		r.With(read, cfg).Get("/rules/{rule_id}", rules.HandleGetRule)
+		r.With(read, cfg).Post("/rules/{rule_id}/check", rules.HandleCheckRule)
+		r.With(propose, cfg).Post("/rules/{rule_id}/proposals", rules.HandleProposeRule)
+		r.With(propose, cfg).Post("/rules/{rule_id}/sign", rules.HandleSignRule)
+		r.With(gate("stop"), cfg).Post("/rules/{rule_id}/tighten", rules.HandleTightenRule)
 		r.With(read, cfg).Get("/progress", plan.HandleProgress)
 		r.With(read, cfg).Get("/seats", coordination.HandleSeatStatuses)
 	})
@@ -278,92 +285,6 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 		return false
 	}
 	return true
-}
-
-// The artifact kinds agentd may upload: results, not specs or plans.
-var agentdKinds = map[string]bool{"report": true, "verify": true, "review": true, "log_tail": true,
-	"checkpoint_patch": true, "handover": true, "other": true}
-
-// putArtifact stores a body under its sha256 (PUT /artifacts/{sha256}): the
-// id in the path must be the hash of the body; the kind comes in the
-// X-Artifact-Kind header and must be one the schema has; an artifact with a
-// local path in it is refused unless its kind is one H8 lets through
-// (artifact.LocalPath). The first upload of a body records artifact_put, as
-// the writer (agentd as its host, others as for proposals); uploading it
-// again is harmless.
-func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	p := actuation.PrincipalFromContext(r.Context())
-	host, isAgentd := actuation.AgentdHost(p)
-	kind := r.Header.Get("X-Artifact-Kind")
-	if limitedReporter(p) && kind != "other" {
-		writeError(w, http.StatusForbidden, "forbidden", "a reporter may only upload an external work description")
-		return
-	}
-	if p.Role == actuation.RoleAgentd && !isAgentd {
-		writeError(w, http.StatusForbidden, "forbidden", "an agentd token must be bound to a host")
-		return
-	}
-	if !artifact.ArtifactKinds[kind] {
-		writeError(w, http.StatusBadRequest, "kind", fmt.Sprintf("X-Artifact-Kind %q is not an artifact kind", kind))
-		return
-	}
-	if isAgentd && !agentdKinds[kind] {
-		writeError(w, http.StatusForbidden, "kind", "agentd may not upload artifacts of kind "+kind)
-		return
-	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
-	if err != nil {
-		writeError(w, http.StatusRequestEntityTooLarge, "too_large", "an artifact is at most 1 MiB")
-		return
-	}
-	if limitedReporter(p) {
-		if err := externalwork.ValidateExternalDescription(body); err != nil {
-			writeError(w, http.StatusForbidden, "forbidden", "a reporter may only upload an external work description")
-			return
-		}
-	}
-	sum := sha256.Sum256(body)
-	if id != "sha256:"+hex.EncodeToString(sum[:]) {
-		writeError(w, http.StatusBadRequest, "hash", "the path is not the sha256 of the body")
-		return
-	}
-	if p, found := artifact.LocalPath(kind, body); found {
-		a.refuse(w, r, host, kind, id, "local_path", "a local path in the artifact: "+p)
-		return
-	}
-	if ref, found := artifact.WorkspaceRef(kind, body); found {
-		a.refuse(w, r, host, kind, id, "workspace_ref", "the artifact refers to a task's workspace: "+ref)
-		return
-	}
-	media := r.Header.Get("Content-Type")
-	if media == "" {
-		media = "application/octet-stream"
-	}
-	who, err := actorOf(r)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	_, created, err := artifact.UploadArtifact(r.Context(), a.DB, who, kind, media, body)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"artifact_id": id, "created": created})
-}
-
-// refuse answers an artifact refused by rule (422). A report agentd uploads
-// is recorded as refused on its host's stream (artifact.RecordRefusal, TD-382),
-// and an attempt of the host that then ends without its result says so; the
-// answer is the refusal whatever the record does.
-func (a *API) refuse(w http.ResponseWriter, r *http.Request, host, kind, id, rule, message string) {
-	if host != "" {
-		if _, err := artifact.RecordRefusal(r.Context(), a.DB, host, kind, id, rule); err != nil {
-			a.logf("agentrt: the refusal of %s from host %s was not recorded: %v", id, host, err)
-		}
-	}
-	writeError(w, http.StatusUnprocessableEntity, rule, message)
 }
 
 // MainHead reads the commit the main branch of a repository points at. The
