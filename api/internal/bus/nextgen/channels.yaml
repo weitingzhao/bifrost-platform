@@ -107,7 +107,7 @@ channels:
   - {id: S09, class: K9, disposition: announced, step: "3", what: "同 N12：窗口 ConfigMap 的存放", by: "同 N12", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
   - {id: S10, class: K12, disposition: kept, step: none, what: 线程标题 ConfigMap（手改、转录扫描、上报三个来源）, by: 在用：Lineage、线程标题；来源是手动命名和 Stop 钩子，转录扫描已删}
   - {id: S11, class: K13, disposition: merged, step: "3", what: "信箱存放：agentrt.message + artifact（正文 ≤8 KiB）", by: "随 N09 留下并改造：正文仍在这里，事件只带指针", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
-  - {id: S12, class: K8, disposition: deleted, step: "any", what: "metric_reading：交付度量读数（无非测试写入者）", by: "代码已拆；表待删（Owner 定的清理原则，解耦线在办）"}
+  - {id: S12, class: K8, disposition: deleted, step: "any", what: "metric_reading：交付度量读数（无非测试写入者）", by: "已删：代码已拆，表由迁移 0036 删掉（PROD 上 to_regclass 为空，11-19 核）", retired: {at: "2026-11-18", change: Icac788420dcbe01af844123e8649f1f3efb45a68, absent_text: ["MetricReading"]}}
   - {id: S13, class: K2, disposition: deleted, step: "any", what: "同 N22：agentrt.outbox", by: "死路", retired: {at: "2026-11-17", change: Id818b64d36e851fb3e31d91e06f0dd08ae027a12, absent_text: ['FROM agentrt.outbox)', 'FROM agentrt.outbox`']}}
   - {id: S14, class: K6, disposition: announced, step: "3", what: "maintainer 指标：8 个循环的成功时间戳与运行计数，给 Prometheus", by: "指标留给 Prometheus（对账兜底）；循环健康变化以 loop.health.changed 宣布，登记表要求每个循环都登记（现在 8/约 20）", cut: {at: "2026-11-18", evidence: ["topic:loop.health.changed"]}}
   - {id: C01, class: K1, disposition: not-a-channel, step: none, what: Console 每页各自 TanStack Query 轮询（约 215 处）, by: 前端取数方式，不是模块间通道}
@@ -164,12 +164,12 @@ channels:
   - {id: X-B18, class: K1, disposition: kept, step: none, what: 'Mac mini 操作面 :8783（launchd 状态、relay 宿主）', by: 例外：手机中继的宿主；断了：独立报警路断}
   - {id: X-B19, class: K5, disposition: kept, step: '4', what: release.sh 整体：窗口、策略、冻结、镜像同步、CI 等待、审批轮询、kubectl create, by: 例外：Trade 和 Research 的发布入口，待恢复发布时验证，目前没有演练证据；要删归 Owner}
   - {id: X-B20, class: K14, disposition: kept, step: none, what: Cursor 一侧残留（thread-heartbeat.js、preflight.js 里的适配代码）, by: 例外：Cursor 已退役，但适配代码在 preflight.js 里，那是硬边界，Agent 不改}
-  - {id: X-C1, class: K12, disposition: deleted, step: any, what: '通讯录 directory.md：席位号、thread:local_… 地址（手抄）', by: 待删：无程序读，3 天没更新，手抄}
+  - {id: X-C1, class: K12, disposition: deleted, step: any, what: '通讯录 directory.md：席位号、thread:local_… 地址（手抄）', by: 已删：无程序读，手抄, retired: {at: '2026-11-19', change: comm-notes, outside: '共享笔记里的 directory.md 11-19 已删；章程 8-2 里那句随 infra 一起改；席位地址看桌面应用的关联会话列表'}}
   - {id: X-C2, class: K13, disposition: deleted, step: any, what: duty/ 的 from-/to-/hold-/draft- 文件（299 个，无程序读）, by: 已停用, retired: {at: '2026-11-18', change: coordinator-notes, outside: duty 下的 from/to/hold 文件不再用来报问题，问题发平台信箱，门铃叫醒}}
   - {id: X-C3, class: K8, disposition: kept, step: none, what: duty/decisions.md：值班追加一行一个决定, by: 例外：人读文档，今天还在写}
   - {id: X-C4, class: K8, disposition: kept, step: none, what: daily-readings.md、owner-two-things-watch.md：每日读数与 Owner 要知道的两件事, by: 例外：人读文档}
   - {id: X-C5, class: K12, disposition: kept, step: none, what: 各线 state.md：现在停在哪、下一个动作（覆写，第一屏最新）, by: 例外：人读文档，各线在写}
-  - {id: X-C6, class: K12, disposition: deleted, step: any, what: 席位台账 Artifact（手写数据生成）, by: 待删：手写席位台账，各线停止维护；已发布页面不删；compute/ledger 迁走后再停}
+  - {id: X-C6, class: K12, disposition: deleted, step: any, what: 席位台账 Artifact（手写数据生成）, by: 待删：手写席位台账，各线停止维护，已发布页面不删。沟通的 11-19 已停；只剩算力的 compute/ledger，等法 43 第 1 段读数规则落地、Cluster 页能读到实测记录和模块表后冻结（算力 11-19 定）}
   - {id: X-C7, class: K1, disposition: deleted, step: any, what: snapshot.sh：主统筹一次读出此刻事实（kubectl 读窗口 ConfigMap、git 读分支）, by: tools/snapshot.sh 已由主统筹删除, retired: {at: '2026-11-18', change: coordinator-notes, outside: 共享笔记里的工具，不在本仓库}}
   - {id: X-C8, class: K13, disposition: merged, step: "3", what: "平台收件箱+信封 type/topic/about/refs（席位 ↔ 席位）", by: "同 N09；信封词表两套（ask/answer/help/handover/note 与 fact/ask/decide/deliver/status/note）需收成一套", cut: {at: "2026-11-19", evidence: ["topic:seat.mail.arrived"]}}
   - {id: X-C9, class: K3, disposition: merged, step: "3", what: "门铃 doorbell.ts：后台命令退出即叫醒会话（实测 4–7 秒）", by: "同 W05", cut: {at: "2026-11-18", evidence: ["reader:inbox-waiters"]}}
