@@ -5,7 +5,10 @@
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { STAGES, stagesOf, unitRulesBroken, type Detail, type StageId, type UnitSpec } from '../src/domains/owner/city/gen2/frame/units/process'
-import { UNITS, UNIT_PLAN } from '../src/domains/owner/city/gen2/content/units/cpu'
+import { UNITS, UNIT_PLAN, cpuRoomReadings } from '../src/domains/owner/city/gen2/content/units/cpu'
+import { cpuRoom } from '../src/domains/owner/city/gen2/frame/units/cpuRoom'
+import { DICTIONARY, rowsDrawn } from '../src/domains/owner/city/gen2/frame/library/dictionary'
+import { spriteUrl } from '../src/domains/owner/city/gen2/frame/sprites'
 
 type Point = { labels: Record<string, string>; value: number }
 type Node = { id: string; label: string; host?: string }
@@ -72,6 +75,27 @@ function DetailsStage({ u, r }: { u: UnitSpec; r: Reads }) {
     {failed.length > 0 && <p className="warn">The platform did not answer for: {failed.map(d => d.label).join(', ')}.</p>}
     <p className="hint">Hover a detail for its query; hover a cell for every core, sensor or mode. Every machine of the district is a column; one nothing reads says “not read” (the two Windows hosts and the MacBook have no node exporter; the GPU box is asleep).</p>
   </>
+}
+
+/** The room drawn, for one machine at a time, from its readings; its key beside it. */
+function CpuRoomView({ r }: { r: Reads }) {
+  const nodes = r.topology ?? []
+  const [id, setId] = useState(() => nodes.find(n => n.id === 'ubt-k3s-04')?.id ?? nodes[0]?.id)
+  const n = nodes.find(x => x.id === id)
+  const read = cpuRoomReadings(r.reads.cpu as never, n?.host && n.host !== '127.0.0.1' ? n.host : undefined)
+  const { out: sprite, ids } = rowsDrawn(() => cpuRoom(read))
+  const rows = DICTIONARY.filter(m => ids.includes(m.id))
+  return <div className="room">
+    <div className="pick">{nodes.map(x => <button key={x.id} className={x.id === id ? 'on' : ''} onClick={() => setId(x.id)}>{x.id}</button>)}</div>
+    <div className="roomgrid">
+      <img src={spriteUrl(sprite)} alt={`CPU room of ${id}`} />
+      <ul className="key">
+        {rows.map(m => <li key={m.id}><b>{m.shows}</b><span>{m.meaning}</span></li>)}
+        {rows.length === 0 && <li><span>Nothing read on this machine, so nothing is drawn in its room.</span></li>}
+      </ul>
+    </div>
+    <p className="hint">{read.cores.length} cores · load {read.load.map(l => l == null ? '–' : l.toFixed(2)).join(' / ')} · waited {read.pressure == null ? 'not read' : `${(read.pressure * 100).toFixed(1)}%`} · {read.temps.length} sensors{read.temps.length ? `, hottest ${Math.round(Math.max(...read.temps.map(t => t.c)))} °C` : ''}</p>
+  </div>
 }
 
 /** The room drafted: each chosen detail as a piece of the facility's equipment, before it is drawn. */
@@ -143,6 +167,7 @@ function App() {
           </dl>
           {broken.length > 0 && <p className="warn">{broken.join(' · ')}</p>}
           {stageId === 'details' && (r ? <DetailsStage u={u} r={r} /> : <p className="warn">Nothing read.</p>)}
+          {stageId === 'inside' && u.id === 'cpu' && r && <CpuRoomView r={r} />}
           {stageId === 'inside' && u.inside && <InsideDraft u={u} />}
           {stageId !== 'details' && stages.find(s => s.id === stageId)!.state === 'waiting' && <p className="hint">Waits for {STAGES[STAGES.findIndex(s => s.id === stageId) - 1].name} to be confirmed.</p>}
           {stageId === open && <p className="ask">Now: {stage.confirms} Say it in the thread; it is recorded in the spec with your words, and the next stage opens.</p>}

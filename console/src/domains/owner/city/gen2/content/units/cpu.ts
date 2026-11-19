@@ -63,3 +63,25 @@ export const UNIT_PLAN = [
   { id: 'disk', name: 'Disk', metaphor: 'line-side racks (SSD), high-bay store (HDD), across the road (NAS) — proposed' },
   { id: 'gpu', name: 'GPU', metaphor: 'heavy production line (proposed)' },
 ] as const
+
+/** A read point, as the platform's PromQL proxy returns it. */
+export type ReadPoint = { labels: Record<string, string>; value: number }
+
+/**
+ * One machine's workshop readings, from the CPU details read across the district: its cores in
+ * order with how busy, how fast and how fast at most; its sensors; its load; how much work waited.
+ * A machine nothing reads has no cores and no needles — nothing is filled in.
+ */
+export function cpuRoomReadings(reads: Record<string, ReadPoint[] | null> | undefined, host: string | undefined) {
+  const of = (id: string) => host ? (reads?.[id] ?? []).filter(p => p.labels.instance?.split(':')[0] === host) : []
+  const byCore = (id: string) => new Map(of(id).map(p => [p.labels.cpu, p.value]))
+  const busy = byCore('busy.core'), freq = byCore('freq'), max = byCore('freq.max')
+  const ids = [...busy.keys()].sort((a, b) => Number(a) - Number(b))
+  const one = (id: string) => of(id)[0]?.value ?? null
+  return {
+    cores: ids.map(c => ({ busy: busy.get(c) ?? null, freq: freq.get(c) ?? null, max: max.get(c) ?? null })),
+    temps: of('temp').map(p => ({ name: `${p.labels.chip ?? ''} ${p.labels.sensor ?? ''}`.trim(), c: p.value })),
+    load: [one('load1'), one('load5'), one('load15')] as [number | null, number | null, number | null],
+    pressure: one('pressure'),
+  }
+}

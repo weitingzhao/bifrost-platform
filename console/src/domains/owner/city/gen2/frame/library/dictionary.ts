@@ -39,6 +39,14 @@ export const DICTIONARY: readonly Metaphor[] = [
   { id: 'pods', metric: 'pods running on a node', part: 'tallyBoard', shows: 'Board on the side wall', encoding: { kind: 'number' }, meaning: 'how many run on it now, written on its side board' },
   { id: 'identity', metric: 'which machine (from its node name)', part: 'roofNumber', shows: 'Number on the roof', encoding: { kind: 'number' }, meaning: 'its number painted on the roof, read from far off' },
   { id: 'purpose', metric: 'what it is for (workload pool, cluster role, topology role)', part: 'signBand', shows: 'Sign over the front', encoding: { kind: 'number' }, meaning: 'written on the sign over its front' },
+  // The CPU unit's room, the workshop (a computer is a factory, the Owner 2026-11-19).
+  { id: 'core.machines', metric: 'CPU cores', part: 'machine tool', shows: 'Machine tools', encoding: { kind: 'number' }, meaning: 'one machine tool per core; as many machines as it has cores' },
+  { id: 'core.busy', metric: 'a core busy, as a share', part: 'machine work light', shows: 'Work light on each machine', encoding: { kind: 'level' }, meaning: 'the light column stands as high as that core is busy; dark when idle' },
+  { id: 'core.freq', metric: 'a core’s clock, as a share of its top', part: 'speed dial', shows: 'Speed dial on each machine', encoding: { kind: 'level' }, meaning: 'the needle at how fast that core runs now, from stopped to its red line' },
+  { id: 'core.freq.max', metric: 'a core’s top clock', part: 'speed dial red line', shows: 'Red line on the speed dial', encoding: { kind: 'number' }, meaning: 'the end of the dial: the fastest that core can run' },
+  { id: 'sensor.temp', metric: 'a temperature sensor, °C', part: 'wall thermometer', shows: 'Thermometers on the wall', encoding: { kind: 'level' }, meaning: 'one per sensor, the column as high as it reads (0–100 °C); red from 80 °C' },
+  { id: 'load', metric: 'load (tasks running or waiting), against its cores', part: 'order dial', shows: 'Order dials, 1 · 5 · 15 min', encoding: { kind: 'level' }, meaning: 'the needle at the work asked of it; past the middle (as many as it has cores) into red, more is asked than it can do' },
+  { id: 'pressure', metric: 'share of time some work waited for a core', part: 'waiting line', shows: 'People waiting at the office', encoding: { kind: 'count', n: 10 }, meaning: 'as many in line as the share of time something waited; nobody when nothing waits' },
   { id: 'state', metric: 'how it stands: online, standby, down, unread', part: 'lights, beacon', shows: 'Lights and beacon', encoding: { kind: 'state' }, meaning: 'lit and running; cold and dark; a red beacon; grey and empty' },
 ]
 

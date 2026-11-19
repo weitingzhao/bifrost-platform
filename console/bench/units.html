@@ -45,6 +45,15 @@
       .matrix td .n { color: var(--mute); }
       .matrix tr.chosen th b::after { content: ' ✓'; color: var(--ok); }
       .matrix.draft td { white-space: normal; } .matrix.draft td.wrap { max-width: 520px; color: var(--ink); }
+.room { display: flex; flex-direction: column; gap: 10px; }
+      .pick { display: flex; flex-wrap: wrap; gap: 6px; }
+      .pick button { font: inherit; font-size: 11px; background: var(--chip); color: var(--ink); border: 1px solid transparent; border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+      .pick button.on { border-color: var(--now); }
+      .roomgrid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+      @media (max-width: 760px) { .roomgrid { grid-template-columns: 1fr; } }
+      .roomgrid img { width: 100%; height: auto; background: #f6f2ea; border-radius: 8px; }
+      .key { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 11.5px; }
+      .key b { display: block; } .key span { color: var(--mute); font-size: 11px; }
       .hint { color: var(--mute); font-size: 11px; margin: 0; }
       .warn { color: var(--warn); font-size: 11.5px; margin: 0; }
       .ask { margin: 0; font-size: 12px; background: var(--chip); border-radius: 8px; padding: 10px 12px; border-left: 3px solid var(--now); }
