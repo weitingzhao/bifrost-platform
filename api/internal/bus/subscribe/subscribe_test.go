@@ -350,3 +350,28 @@ func TestReleaseStarterIsWokenWithOpenRegressions(t *testing.T) {
 		t.Fatalf("an event on nobody's behalf woke someone: %s %v", out, got)
 	}
 }
+
+// 2026-11-18, OWNER_LAW #36: a letter of a row with params.ask_verdict ends
+// with the exact verdict message for its event, so nobody looks it up; a row
+// without the param (or with a word that is no kind) keeps its letter as it
+// was, and the letter still reads as a wake (the dispatcher's wake counts
+// depend on the "bus: " start).
+func TestWithAskOnlyOnRowsThatAsk(t *testing.T) {
+	ev := Event{ID: "ev-41", Type: "ci.run.finished", Subject: "bifrost-deliver-x-1@" + strings.Repeat("a", 40), Ref: "/api/v1/delivery/runs/x", Change: "failed"}
+	plain := registry.Subscription{ID: "deploy-failed-to-duty"}
+	asking := registry.Subscription{ID: "deploy-failed-to-duty", Params: map[string]string{"ask_verdict": "delivery"}}
+	letter := Body(plain, ev)
+	if got := WithAsk(plain, ev, letter); got != letter {
+		t.Errorf("a row that does not ask changed its letter: %q", got)
+	}
+	if got := WithAsk(registry.Subscription{Params: map[string]string{"ask_verdict": "maybe"}}, ev, letter); got != letter {
+		t.Errorf("a word that is no kind changed the letter: %q", got)
+	}
+	got := WithAsk(asking, ev, letter)
+	if !strings.HasPrefix(got, letter+"\n") || !strings.Contains(got, `\"event\":\"ev-41\"`) || !strings.HasPrefix(got, "bus: ") {
+		t.Errorf("the ask is not at the end of the letter: %q", got)
+	}
+	if len(got) > 1500 {
+		t.Errorf("the letter is %d bytes", len(got))
+	}
+}

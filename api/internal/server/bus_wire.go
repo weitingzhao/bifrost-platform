@@ -350,6 +350,8 @@ func (s *Server) mountBus(r chi.Router) {
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/stream", route((*gate.Gate).HandleStream))
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/trace", route((*gate.Gate).HandleTrace))
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/clients", route((*gate.Gate).HandleClients))
+	// The problem loop, computed when asked (agentrt/coord, OWNER_LAW #36).
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/problems", s.handleBusProblems)
 	// What the bus's work does, computed when asked (bus/effect).
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/effect", s.handleBusEffect)
 	// The known regressions on main (bus/regressions): a seat records one or its fix as itself.

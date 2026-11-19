@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/problemloop"
 )
 
 //go:embed subscriptions/*.yaml
@@ -228,6 +230,9 @@ func CheckSubscriptions(tenants map[string]Tenant, subs map[string]Subscriptions
 						bad("%s: params.detail reads a run's task result; %s names no run", at, typ)
 					}
 				}
+			}
+			if k, has := r.Params[problemloop.ParamAskVerdict]; has && !problemloop.KnownKind(k) {
+				bad("%s: params.%s %q is %s or %s", at, problemloop.ParamAskVerdict, k, problemloop.KindAlert, problemloop.KindDelivery)
 			}
 			switch r.Deliver {
 			case DeliverWake:

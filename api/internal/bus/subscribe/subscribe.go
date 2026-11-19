@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/problemloop"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
 )
@@ -178,6 +179,16 @@ func Body(row registry.Subscription, ev Event) string {
 	return fmt.Sprintf("bus: %s %s (change %s). Read %s. [subscription %s, event %s]", ev.Type, ev.Subject, ev.Change, ev.Ref, row.ID, ev.ID)
 }
 
+// WithAsk is a letter that ends, for a row with params.ask_verdict, with the
+// exact message the receiver sends to give its verdict on the event
+// (OWNER_LAW #36); any other row's letter is unchanged.
+func WithAsk(row registry.Subscription, ev Event, letter string) string {
+	if !problemloop.KnownKind(row.Params[problemloop.ParamAskVerdict]) {
+		return letter
+	}
+	return letter + problemloop.Ask(ev.ID)
+}
+
 // Key makes one message per row and event, however often it is delivered.
 func Key(row registry.Subscription, ev Event) string { return "sub:" + row.ID + ":" + ev.ID }
 
@@ -226,7 +237,7 @@ func Deliver(ctx context.Context, row registry.Subscription, ev Event, read Comm
 			return Rerouted, send(ctx, Key(row, ev)+":undeliverable", undeliverableTo, body, causeOf(ev))
 		}
 	}
-	return Delivered, send(ctx, Key(row, ev), to, withDetail(row, values, derr, Body(row, ev)), causeOf(ev))
+	return Delivered, send(ctx, Key(row, ev), to, WithAsk(row, ev, withDetail(row, values, derr, Body(row, ev))), causeOf(ev))
 }
 
 // Notifier pushes one notice to the Owner's phone (the platform's notice

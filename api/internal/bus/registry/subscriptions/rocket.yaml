@@ -110,6 +110,8 @@ subscriptions:
     change: "!succeeded"
     deliver: wake
     to: commit.session
+    params:
+      ask_verdict: delivery
     guarantee: durable
     by: dispatcher
   - id: deploy-failed-to-duty
@@ -118,6 +120,8 @@ subscriptions:
     change: "!succeeded"
     deliver: wake
     to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    params:
+      ask_verdict: delivery
     guarantee: durable
     by: dispatcher
   - id: build-failed-to-duty
@@ -126,6 +130,8 @@ subscriptions:
     change: "!succeeded"
     deliver: wake
     to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    params:
+      ask_verdict: delivery
     guarantee: durable
     by: dispatcher
   # 2026-11-17 (the coordinator, the same reading: alert.rule.fired heard by no
@@ -140,6 +146,7 @@ subscriptions:
     to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
     params:
       always_namespaces: "bifrost-platform-prod,bifrost-prod"
+      ask_verdict: alert
     guarantee: durable
     by: alert-letters
   # 2026-11-18 (the communication line's list of problem channels, L10, R01, R09,

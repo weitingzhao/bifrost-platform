@@ -1110,6 +1110,13 @@
       "status": "assigned",
       "basis": "2026-11-16 foundation wall: test fixtures of releasepolicy (keys and signed policies), imported by tests only; it had no row and fell to the default."
     },
+    "api/internal/bus/problemloop": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 (OWNER_LAW #36, the communication line): the words of the problem loop (the letter's ask for a verdict, the verdict's kinds and fields); it imports nothing, the runtime reads verdicts back in agentrt/coord."
+    },
     "api/internal/bus/alerts": {
       "domains": [
         "foundation"

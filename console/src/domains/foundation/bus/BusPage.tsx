@@ -18,6 +18,7 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { BUS_LIST_CAP, fetchBusClients, fetchBusTrace, useBusStream } from './useBusStream'
 import { EVENT_ID_PATTERN, clockTime, traceTimeline, type TimelineRow } from './busTrace'
 import { BusEffectSection } from './BusEffectSection'
+import { BusProblemsSection } from './BusProblemsSection'
 import { BusGenerationSection } from './BusGenerationSection'
 import { BusContractSection } from './BusContractSection'
 import { BusNervePanels, BusNerveSection } from './BusNerveSection'
@@ -135,6 +136,7 @@ export function BusPage() {
       <div className="min-w-0 lg:col-span-2"><BusSectionBoundary name="Nerves"><BusNerveSection stream={stream} onSelect={select} /></BusSectionBoundary></div>
       <div className="min-w-0 lg:col-span-2"><BusSectionBoundary name="Nerve panels"><BusNervePanels stream={stream} onSelect={select} /></BusSectionBoundary></div>
       <div className="min-w-0 lg:col-span-2"><BusSectionBoundary name="Generation"><BusGenerationSection /></BusSectionBoundary></div>
+      <div className="min-w-0 lg:col-span-2"><BusSectionBoundary name="Problem loop"><BusProblemsSection /></BusSectionBoundary></div>
       <div className="min-w-0 lg:col-span-2"><BusSectionBoundary name="Effect"><BusEffectSection /></BusSectionBoundary></div>
       <div className="min-w-0 lg:col-span-2"><BusSectionBoundary name="Contract"><BusContractSection /></BusSectionBoundary></div>
       <OpsSection

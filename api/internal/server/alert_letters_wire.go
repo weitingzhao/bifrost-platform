@@ -74,5 +74,5 @@ func (s *Server) writeAlertLetter(ctx context.Context, row registry.Subscription
 	if err != nil || key == "" {
 		return err
 	}
-	return coord.PostConclusionCaused(ctx, db, key, row.To, subscribe.Body(row, ev), n)
+	return coord.PostConclusionCaused(ctx, db, key, row.To, subscribe.WithAsk(row, ev, subscribe.Body(row, ev)), n)
 }
