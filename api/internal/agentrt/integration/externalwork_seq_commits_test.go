@@ -8,13 +8,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 )
 
 // externalSeqs are the seqs of a work's notes, in the order recorded.
@@ -33,40 +31,6 @@ func externalCommits(t *testing.T, w *world, id string) []string {
 	var out []string
 	ok(t, json.Unmarshal(raw, &out))
 	return out
-}
-
-// A work's span ends at its latest note's heartbeat, not its first note's.
-//
-// Origin: 2026-11-19, the read stopped sorting every note of every work.
-func TestWorkSpansReadTheLatestNote(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	who := wr("thread:latest-note")
-	out, err := externalwork.RegisterExternalWork(ctx, w.rt, who, externalwork.ExternalRegistration{Key: "reg", Root: root, Node: s1, RunKey: "latest-note", Artifact: externalSpec(t, w)})
-	ok(t, err)
-	id := out["external_work_id"].(string)
-	span := func() [2]time.Time {
-		t.Helper()
-		tx, err := w.rt.Begin(ctx)
-		ok(t, err)
-		defer func() { _ = tx.Rollback(ctx) }()
-		now := time.Now()
-		spans, err := workregistration.WorkSpans(ctx, tx, now.Add(-time.Hour), now.Add(time.Hour))
-		ok(t, err)
-		if len(spans) != 1 {
-			t.Fatalf("spans = %v; want the one work's", spans)
-		}
-		return spans[0]
-	}
-	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "start", Type: "started"})
-	ok(t, err)
-	first := span()
-	time.Sleep(20 * time.Millisecond)
-	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "beat", Type: "heartbeat"})
-	ok(t, err)
-	if later := span(); !later[1].After(first[1]) {
-		t.Fatalf("span ends %v after the heartbeat, %v before it", later[1], first[1])
-	}
 }
 
 // An event that names no seq gets the work's next one, and its answer says
