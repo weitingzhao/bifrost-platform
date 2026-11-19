@@ -2,6 +2,7 @@ import { Draw, faces, INK } from '../kit'
 import type { Light } from '../light'
 import type { State } from '../places'
 import { shade } from '../sprites'
+import { osMark, type MachineOs } from './landmarks'
 
 /**
  * The part library (the Owner, 2026-11-19: one way per kind of thing, everywhere in the city; build
@@ -19,6 +20,9 @@ import { shade } from '../sprites'
  *               crates stacked behind to how full it is
  *   dock        a loading dock along a face, its edge striped
  *   gatehouse   a small office, its windows lit by CPU
+ *   signBand    a plate across a face with a name on it
+ *   grille      a radiator grille low on a face
+ *   plaque      a system's mark on a face: Linux, Mac or Windows (the first generation's marks)
  */
 
 export { shade }
@@ -124,4 +128,29 @@ export function gatehouse(g: Draw, x: number, y: number, w: number, d: number, T
   const on = lit(cpu, 4)
   g.windows('left', x, y + d, w, 6, 16, 1, 4, { fill: T.glass, lit: (_r, c) => c < on, litFill: '#ffd76a' })
   g.windows('right', x + w, y, d, 6, 16, 1, 2, { fill: T.glass, lit: (_r, c) => c < on, litFill: '#ffd76a' })
+}
+
+/** Face units to a cell (kit.ts, Draw.face). */
+const U = 35.8
+const esc = (t: string) => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
+
+/** A plate across a face, from its corner (x, y) for `span` cells, at height z, with a name on it. */
+export function signBand(g: Draw, face: 'left' | 'right', x: number, y: number, span: number, z: number, text: string, h = 11) {
+  const W = span * U
+  const size = Math.min(8, (W - 10) / Math.max(4, text.length) * 1.6)
+  g.face(face, x, y, z, `<rect x="3" y="${-h}" width="${(W - 6).toFixed(1)}" height="${h}" rx="1.5" fill="#fbfaf6" stroke="${INK}" stroke-width="0.8"/>` +
+    `<text x="${(W / 2).toFixed(1)}" y="${(-h / 2 + size * 0.36).toFixed(1)}" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="${size.toFixed(1)}" font-weight="700" fill="${INK}">${esc(text)}</text>`)
+}
+
+/** A radiator grille low on a face, from its corner for `span` cells, between heights z0 and z1. */
+export function grille(g: Draw, face: 'left' | 'right', x: number, y: number, span: number, z0: number, z1: number) {
+  const W = span * U, h = z1 - z0
+  let s = `<rect x="4" y="${-h}" width="${(W - 8).toFixed(1)}" height="${h}" fill="#5b6070" stroke="${INK}" stroke-width="1"/>`
+  for (let u = 7; u < W - 6; u += 3.2) s += `<line x1="${u.toFixed(1)}" y1="${(-h + 2).toFixed(1)}" x2="${u.toFixed(1)}" y2="-2" stroke="#8d93a1" stroke-width="0.9"/>`
+  g.face(face, x, y, z0, s)
+}
+
+/** A system's mark on a plaque, `at` cells along the face from its corner, centred at height z. */
+export function plaque(g: Draw, face: 'left' | 'right', x: number, y: number, at: number, z: number, os: MachineOs, r = 8) {
+  g.face(face, x, y, z, osMark(os, at * U, 0, r))
 }

@@ -319,7 +319,7 @@ export class PlaceScene extends Phaser.Scene {
         const lv: Levels = { state: k.state ?? 'unread', cpu: frac(room('cpu')), mem: frac(room('memory')), disks: k.children.filter(c => c.id === 'disk' || c.id.startsWith('volume-')).map(frac),
           vols: vols.length ? vols.map(v => ({ f: frac(v), units: v.units ?? [] })) : undefined }
         const form = formOf(k.look, k.children.some(c => c.id === 'gpu'), /book/i.test(k.label))
-        return { id: p.id, key: deviceKey(form, p.w, p.h, hue, this.light, lv), make: () => deviceSprite(form, p.w, p.h, hue, this.light, lv) }
+        return { id: p.id, key: deviceKey(form, p.w, p.h, hue, this.light, lv, k.id), make: () => deviceSprite(form, p.w, p.h, hue, this.light, lv, k.id) }
       }
       const wings = kind === 'building' ? this.wingsOf(path, p.w, p.h) : []
       const sig = wings.map(w => `${w.x.toFixed(2)},${w.y.toFixed(2)},${w.w.toFixed(2)},${w.h.toFixed(2)},${w.hue}`).join(';')

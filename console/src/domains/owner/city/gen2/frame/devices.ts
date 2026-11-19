@@ -1,7 +1,8 @@
 import { Draw, faces, INK, type Sprite } from './kit'
 import type { Light } from './light'
 import type { Look, State } from './places'
-import { beacon, dock, doorRow, gatehouse, gauge, hall, shade, smoke, tank, toneOf, windowStrip, type Tone } from './library/parts'
+import { beacon, dock, doorRow, gatehouse, gauge, grille, hall, plaque, shade, signBand, smoke, tank, toneOf, windowStrip, type Tone } from './library/parts'
+import { OS_FACES, type MachineOs } from './library/landmarks'
 
 /**
  * Devices as city facilities (the Owner, 2026-11-19: this is a city; the hardware is its utilities.
@@ -31,7 +32,7 @@ export function formOf(look: Look, gpu: boolean, laptop: boolean): Form {
   return 'tower'
 }
 
-export function deviceSprite(form: Form, fw: number, fd: number, hue: string, light: Light, lv: Levels): Sprite {
+export function deviceSprite(form: Form, fw: number, fd: number, hue: string, light: Light, lv: Levels, name = ''): Sprite {
   const T = toneOf(hue, light, lv.state)
   const run = lv.state === 'online'
   const tall = form === 'station' ? 96 : form === 'plant' ? 84 : form === 'tower' ? 70 : 52
@@ -40,10 +41,14 @@ export function deviceSprite(form: Form, fw: number, fd: number, hue: string, li
   const disks = lv.disks.length ? lv.disks : [null]
   g.shadow(x0, y0, w, d, 0.4)
   const water = light === 'night' ? '#3f7fd6' : '#5aa9f0', fuel = '#c98a3a'
+  if (form === 'plant') {
+    powerPlant(g, x0, y0, w, d, T, lv, hue, light, name, 'linux')
+    return g.done()
+  }
 
-  if (form === 'plant' || form === 'station') {
-    // The turbine hall at the back, its windows lit by how busy the CPU is; the stack smokes when it runs.
-    const hw = form === 'station' ? w * 0.55 : w * 0.62, hd = d * 0.62, H = 32
+  if (form === 'station') {
+    // The turbine hall at the back, its windows lit by how busy the CPU is; the cooling tower steams when it runs.
+    const hw = w * 0.55, hd = d * 0.62, H = 32
     g.box(x0, y0, hw, hd, H, T.wall, 0, 1.4)
     g.poly(T.roof, [[x0, y0, H], [x0 + hw, y0, H], [x0 + hw, y0 + hd, H], [x0, y0 + hd, H]], 1)
     windowStrip(g, 'left', x0, y0 + hd, hw, 8, H - 6, Math.max(4, Math.round(hw * 2.4)), run ? lv.cpu : null, T)
@@ -52,22 +57,12 @@ export function deviceSprite(form: Form, fw: number, fd: number, hue: string, li
     const r = Math.min(13, 6 + Math.min(w, d) * 1.6)
     tank(g, x0 + hw * 0.3, y0 + d * 0.84, r, 26, lv.mem, water)
     tank(g, x0 + hw * 0.75, y0 + d * 0.84, r, 26, disks[0], fuel)
-    if (form === 'station') {
-      // The cooling tower: steam when it runs, cold on standby.
-      const cx = x0 + hw + (w - hw) / 2, cy = y0 + d * 0.35, R = Math.min(30, 10 + Math.min(w, d) * 4)
-      g.cylinder(cx, cy, R, 0, 70, T.metal.left, T.metal.right, T.metal.top)
-      g.cylinder(cx, cy, R * 0.82, 70, 72, '#9aa0b0', '#8a90a0', '#6a7080')
-      smoke(g, cx, cy, 72, lv.cpu ?? (run ? 0.6 : null), run)
-      beacon(g, cx, cy, 72, lv.state)
-      tank(g, cx, y0 + d * 0.84, r, 26, disks[1] ?? null, fuel)
-    } else {
-      // The stack.
-      const sx = x0 + hw + (w - hw) * 0.5, sy = y0 + d * 0.25
-      g.cylinder(sx, sy, 5, 0, 64, '#c9c3b8', '#a9a397', '#8a857b')
-      g.cylinder(sx, sy, 5.4, 56, 60, '#d9534f', '#b84440')
-      smoke(g, sx, sy, 64, lv.cpu, run)
-      beacon(g, sx, sy, 64, lv.state)
-    }
+    const cx = x0 + hw + (w - hw) / 2, cy = y0 + d * 0.35, R = Math.min(30, 10 + Math.min(w, d) * 4)
+    g.cylinder(cx, cy, R, 0, 70, T.metal.left, T.metal.right, T.metal.top)
+    g.cylinder(cx, cy, R * 0.82, 70, 72, '#9aa0b0', '#8a90a0', '#6a7080')
+    smoke(g, cx, cy, 72, lv.cpu ?? (run ? 0.6 : null), run)
+    beacon(g, cx, cy, 72, lv.state)
+    tank(g, cx, y0 + d * 0.84, r, 26, disks[1] ?? null, fuel)
   }
 
   if (form === 'warehouse' && lv.vols && lv.vols.length > 0) {
@@ -139,6 +134,50 @@ export function deviceSprite(form: Form, fw: number, fd: number, hue: string, li
 }
 
 /**
+ * A power plant (the Owner, 2026-11-19: a Linux node is a power plant; built on the first generation's
+ * machine room). Every Linux node is drawn by this one function from the same readings.
+ *   the turbine hall   in its system's colours (Linux orange) with the district's band under the eaves;
+ *                      its name on the sign; its row of tall windows lit as busy as it is (CPU)
+ *   the side wall      the radiator grille, and the system's mark on a plaque
+ *   the stacks         smoke by how busy (CPU); none when it is not running; a red beacon when down
+ *   the yard           the cooling water tank (memory) and the fuel tank (disk), filled to their levels
+ * Standby: cold, dark windows, no smoke. Unread: grey, every gauge empty.
+ */
+function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, T: Tone, lv: Levels, hue: string, light: Light, name: string, os: MachineOs) {
+  const run = lv.state === 'online', night = light === 'night'
+  const base = lv.state === 'unread' ? OS_FACES.unknown : OS_FACES[os]
+  const C = night ? faces(shade(base.top, -0.45), shade(base.left, -0.5), shade(base.right, -0.55)) : base
+  const band = night ? shade(hue, -0.35) : hue
+  // The plant's own ground: a concrete slab.
+  g.box(x0, y0, w, d, 4, faces(night ? '#4a4d58' : '#e9e6dd', night ? '#3e414c' : '#d2cec2', night ? '#34363f' : '#c1bcae'), 0, 1)
+  const Z = 4, H = 48
+  const hx = x0 + 0.18, hy = y0 + 0.18, hw = w * 0.6, hd = d * 0.56
+  g.shadow(hx, hy, hw, hd, 0.35)
+  g.box(hx, hy, hw, hd, H, C, Z, 1.4)
+  // The band under the eaves, in the district's hue; the name on its sign; the windows (CPU).
+  g.onLeft(hx, hy + hd, 0, hw, Z + H - 6, Z + H - 1, band, 0.8)
+  g.onRight(hx + hw, hy, 0, hd, Z + H - 6, Z + H - 1, band, 0.8)
+  if (name) signBand(g, 'left', hx, hy + hd, hw, Z + H - 8, name)
+  windowStrip(g, 'left', hx, hy + hd, hw, Z + 8, Z + H - 22, 8, run ? lv.cpu : null, T)
+  // The side wall: the radiator grille low, the system's mark above it.
+  grille(g, 'right', hx + hw, hy + hd, hd, Z + 4, Z + 16)
+  plaque(g, 'right', hx + hw, hy + hd, hd / 2, Z + H - 20, os, 8)
+  // A parapet round the roof.
+  g.poly(shade(C.top, -0.06), [[hx + 0.06, hy + 0.06, Z + H + 3], [hx + hw - 0.06, hy + 0.06, Z + H + 3], [hx + hw - 0.06, hy + hd - 0.06, Z + H + 3], [hx + 0.06, hy + hd - 0.06, Z + H + 3]], 0.8)
+  // The stacks at the back of the roof.
+  for (const k of [0.3, 0.68]) {
+    const sx = hx + hw * k, sy = hy + hd * 0.28, top = Z + H + 44
+    g.cylinder(sx, sy, 5.5, Z + H, top, '#9aa3b0', '#6d7584', '#59606b')
+    g.cylinder(sx, sy, 5.9, top - 10, top - 5, '#d9534f', '#b84440')
+    smoke(g, sx, sy, top, run ? lv.cpu : null, run)
+    if (k === 0.3) beacon(g, sx, sy, top, lv.state)
+  }
+  // The yard: the cooling water (memory) and the fuel (disk).
+  tank(g, x0 + w * 0.3, y0 + d * 0.84, 15, 34, run ? lv.mem : null, night ? '#3f7fd6' : '#5aa9f0')
+  tank(g, x0 + w * 0.84, y0 + d * 0.42, 15, 34, run ? lv.disks[0] ?? null : null, '#c98a3a')
+}
+
+/**
  * The NAS as a logistics park (the Owner, 2026-11-19: a warehouse, tall, its physical disks seen).
  * Along the park, back to front: a storage hall per volume, the biggest first, each with one roller
  * door per disk of its array (the lamp over the door: that disk's state) and crates stacked behind the
@@ -167,7 +206,7 @@ function warehousePark(g: Draw, x0: number, y0: number, w: number, d: number, T:
 }
 
 /** The key a facility's picture is kept under: its form, size, hue, light, state and every level to a tenth. */
-export const deviceKey = (form: Form, fw: number, fd: number, hue: string, light: Light, lv: Levels) => {
+export const deviceKey = (form: Form, fw: number, fd: number, hue: string, light: Light, lv: Levels, name = '') => {
   const q = (f: number | null) => f == null ? 'n' : String(Math.round(f * 10))
-  return `g2:fac:${form}:${fw}x${fd}:${hue}:${light}:${lv.state}:${q(lv.cpu)}:${q(lv.mem)}:${lv.disks.map(q).join('.')}:${(lv.vols ?? []).map(v => `${q(v.f)}${v.units.join('')}`).join('|')}`
+  return `g2:fac:${form}:${name}:${fw}x${fd}:${hue}:${light}:${lv.state}:${q(lv.cpu)}:${q(lv.mem)}:${lv.disks.map(q).join('.')}:${(lv.vols ?? []).map(v => `${q(v.f)}${v.units.join('')}`).join('|')}`
 }
