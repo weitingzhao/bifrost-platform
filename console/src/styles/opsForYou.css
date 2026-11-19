@@ -23,7 +23,7 @@
   justify-content: center; padding-inline: 18px;
 }
 #owner-console[data-entry='you'] [data-owner-action='secondary'] { background: var(--ops-control); box-shadow: var(--ops-raised); }
-#owner-console[data-entry='you'] [aria-label='Worth a look'] .ops-owner-row { background: transparent; border-bottom: 1px solid var(--table-rule); border-radius: 0; padding-inline: 0; }
+#owner-console[data-entry='you'] [aria-label='For your information'] .ops-owner-row { background: transparent; border-bottom: 1px solid var(--table-rule); border-radius: 0; padding-inline: 0; }
 #owner-console[data-entry='you'] [data-signoff-link] { color: var(--primary); }
 #owner-console[data-entry='you'] [aria-label='Stop all work'] button { align-self: flex-start; }
 .ops-waiting-detail { padding: 0; }

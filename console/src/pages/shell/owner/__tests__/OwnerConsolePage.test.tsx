@@ -132,7 +132,7 @@ describe('Owner Console entries', () => {
   it('keeps sign-offs separate from Yours and full waiting information available in Detail', async () => {
     stubRuntimeReads()
     show('#you')
-    const yours = screen.getByRole('region', { name: 'Yours' })
+    const yours = screen.getByRole('region', { name: 'To approve' })
     expect(yours.querySelector('[data-signoff-link]')).toBeNull()
     const signoffs = screen.getByRole('region', { name: 'Plan sign-offs' })
     expect(signoffs).toHaveTextContent('separate from Needs you')
@@ -196,7 +196,7 @@ describe('Owner Console entries', () => {
     expect(waiting).toHaveAttribute('id', 'waiting')
     expect(within(waiting).getByTestId('needs-you-page')).toBeInTheDocument()
     expect(within(waiting).getByRole('region', { name: 'Sign off' })).toBeInTheDocument()
-    expect(within(screen.getByRole('region', { name: 'Yours' })).getByRole('link', { name: /All waiting/ })).toHaveAttribute('href', '#command?section=waiting')
+    expect(within(screen.getByRole('region', { name: 'To approve' })).getByRole('link', { name: /All waiting/ })).toHaveAttribute('href', '#command?section=waiting')
     await waitFor(() => expect(scroll).toHaveBeenCalled())
     expect(scroll.mock.contexts.some(el => el === waiting)).toBe(true)
   })
@@ -209,14 +209,16 @@ describe('Owner Console entries', () => {
     expect(screen.queryByTestId('merged-progress')).toBeNull()
   })
 
-  it('lists what is his, then what is worth a look with whose it is', () => {
+  it('lists what he approves, what needs his hands, then what is for his information with whose it is', () => {
     show('#you')
-    const yours = screen.getByRole('region', { name: 'Yours' })
+    const yours = screen.getByRole('region', { name: 'To approve' })
     expect(within(yours).getAllByRole('listitem').map(li => li.querySelector('.font-semibold')?.textContent)).toEqual([
       'Look at the goal cards'])
     expect(yours).not.toHaveTextContent('✎')
     expect(yours).toHaveTextContent('No approvals, questions or agent cards waiting')
-    const worth = screen.getByRole('region', { name: 'Worth a look' })
+    // 2026-11-19, the Owner: what needs his hands outside the system is its own kind; the secondary slot is only a notice.
+    expect(screen.getByRole('region', { name: 'Needs your hands' })).toHaveTextContent('Nothing needs your hands right now.')
+    const worth = screen.getByRole('region', { name: 'For your information' })
     expect(within(worth).getAllByText('No goal yet')).toHaveLength(4)
     expect(worth).toHaveTextContent('6 DaemonSet alerts that fit gpu-server being on standby')
     expect(worth).toHaveTextContent('Likely the planned standby; not proven')
@@ -227,11 +229,11 @@ describe('Owner Console entries', () => {
     expect(worth).toHaveTextContent('The coordinator checks them')
   })
 
-  it('shows six rows worth a look, and the rest on request', () => {
+  it('shows six rows for his information, and the rest on request', () => {
     standbyKnown.value = false
     show('#you')
-    const worth = screen.getByRole('region', { name: 'Worth a look' })
-    const total = Number(/Worth a look · (\d+)/.exec(worth.textContent ?? '')?.[1])
+    const worth = screen.getByRole('region', { name: 'For your information' })
+    const total = Number(/For your information · (\d+)/.exec(worth.textContent ?? '')?.[1])
     expect(total).toBeGreaterThan(6)
     expect(within(worth).getAllByRole('listitem')).toHaveLength(6)
     fireEvent.click(within(worth).getByRole('button', { name: `Show ${total - 6} more` }))

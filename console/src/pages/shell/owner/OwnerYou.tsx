@@ -8,7 +8,7 @@ import { ActionLink, Card, Dot } from './OwnerParts'
 import { plural, waitingRow, type OwnerRow } from './ownerModel'
 import type { OwnerConsoleData } from './useOwnerConsole'
 
-/** Worth a look shows this many first; the rest open below it. */
+/** For your information shows this many first; the rest open below it. */
 const WORTH_SHOWN = 6
 
 function Row({ row }: { row: OwnerRow }) {
@@ -23,30 +23,34 @@ function Row({ row }: { row: OwnerRow }) {
   </li>
 }
 
-/** For you: what only the Owner can do, then what is worth a look and whose it is. */
+/**
+ * For you, in three kinds that are not mixed (the Owner, 2026-11-19): what he approves in the system
+ * (requests, questions, agent cards), what only his own hands can do outside it (log in to TWS on the
+ * Windows machine), and what is only for his information. The first two are his and counted.
+ */
 export function OwnerYou({ data }: { data: OwnerConsoleData }) {
   const [showAll, setShowAll] = useState(false)
   const { needsYou, alerts } = data
-  const yours: OwnerRow[] = [...(alerts?.yours ?? []), ...needsYou.decisionItems.map(waitingRow)]
+  const approve: OwnerRow[] = needsYou.decisionItems.map(waitingRow)
+  const hands: OwnerRow[] = alerts?.yours ?? []
   const silent = needsYou.silentItems.length
   const worth: OwnerRow[] = [...(alerts?.worth ?? []), ...(silent > 0 ? [{
     id: 'silent-threads', title: `${plural(silent, 'Claude thread')} went quiet mid-turn`, detail: 'Claude sessions, not system work',
     tone: 'muted' as const, whose: 'The coordinator checks them', href: NEEDS_YOU_HREF, action: 'See them',
   }] : [])]
-  // One count for the title, the verdict and the tab: Needs you's decisions and the alerts only he can clear.
+  // One count for the verdict and the tab: what he approves and what needs his hands.
   const count = data.yours
   const unknown = count.state === 'unknown' ? count.reason : null
-  const title = count.state === 'known' ? String(count.count) : count.state === 'unknown' ? 'Unknown' : '…'
   const recent = needsYou.recentCount.state === 'known' ? String(needsYou.recentCount.count) : needsYouCountText(needsYou.recentCount)
   return <section aria-label="For you" className="flex flex-col gap-3">
     <h2 className="sr-only">For you</h2>
     <div className="ops-you-grid">
       <div className="ops-you-primary">
-      <Card label="Yours" title={`Yours · ${title}`} accent={yours.length > 0 || count.state === 'unknown'} more={{ href: NEEDS_YOU_HREF, text: 'All waiting' }}>
-        {unknown && <p role="alert" className="m-0 text-sm">Not everything could be read, so this list may be short: {unknown}</p>}
-        {yours.length > 0
-          ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{yours.map(row => <Row key={row.id} row={row} />)}</ul>
-          : count.state === 'known' && <p className="m-0 text-sm">No request, question or alert is yours right now.</p>}
+      {unknown && <p role="alert" className="m-0 text-sm">Not everything could be read, so these lists may be short: {unknown}</p>}
+      <Card label="To approve" title={`To approve · ${needsYou.count.state === 'known' ? approve.length : needsYou.count.state === 'unknown' ? 'Unknown' : '…'}`} accent={approve.length > 0} more={{ href: NEEDS_YOU_HREF, text: 'All waiting' }}>
+        {approve.length > 0
+          ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{approve.map(row => <Row key={row.id} row={row} />)}</ul>
+          : needsYou.count.state === 'known' && <p className="m-0 text-sm">Nothing to approve in the system right now.</p>}
         <div className="flex flex-wrap justify-between gap-2 border-t border-[var(--table-rule)] pt-2 text-sm text-muted-foreground">
           <span>{needsYou.count.state !== 'known' ? 'Approvals, questions and agent cards: not all read'
             : needsYou.decide.length === 0 && needsYou.openQuestions.length === 0 && needsYou.runtimeItems.length === 0
@@ -56,14 +60,20 @@ export function OwnerYou({ data }: { data: OwnerConsoleData }) {
           <span>Handled recently: {recent} · <a href="#records">Records</a></span>
         </div>
       </Card>
+      <Card label="Needs your hands" title={`Needs your hands · ${alerts ? hands.length : data.alertsError ? 'Unknown' : '…'}`} accent={hands.length > 0}>
+        <p className="m-0 text-sm text-muted-foreground">Only you can do these, outside the system.</p>
+        {hands.length > 0
+          ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{hands.map(row => <Row key={row.id} row={row} />)}</ul>
+          : alerts && <p className="m-0 text-sm">Nothing needs your hands right now.</p>}
+      </Card>
       <Card label="Plan sign-offs" title="Plan sign-offs" more={{ href: SIGNOFF_SECTION_HREF, text: 'Review steps' }}>
         <p className="m-0 text-sm text-muted-foreground">Tracked in Work; separate from Needs you.</p>
         <SignoffWaitingLink />
       </Card>
       <OwnerStop controls={data.controls ?? []} readable={data.controlsReadable === true} />
       </div>
-      <Card label="Worth a look" title={`Worth a look · ${alerts ? worth.length : data.alertsError ? 'Unknown' : '…'}`} more={{ href: '#status', text: 'Status' }}>
-        <p className="m-0 text-sm text-muted-foreground">Not yours to fix.</p>
+      <Card label="For your information" title={`For your information · ${alerts ? worth.length : data.alertsError ? 'Unknown' : '…'}`} more={{ href: '#status', text: 'Status' }}>
+        <p className="m-0 text-sm text-muted-foreground">To know about; not yours to fix.</p>
         {data.alertsError && <p role="alert" className="m-0 text-sm">Alerts could not be read: {data.alertsError}</p>}
         {worth.length > 0
           ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{(showAll ? worth : worth.slice(0, WORTH_SHOWN)).map(row => <Row key={row.id} row={row} />)}</ul>

@@ -22,12 +22,23 @@ describe('alerts on the Owner Console (PROD, 2026-10-16 15:10 CDT)', () => {
   const split = splitAlerts(alerts, ev, NOW)
 
   // 2026-11-19, the Owner via the coordinator: an IB slot without TWS is a notice to see, not work waiting on him (the secondary slot he set aside 11-12).
-  it('shows the IB slot without TWS as a notice in Worth a look, not in Yours, and tells the IB plugin with it', () => {
+  it('shows the secondary IB slot without TWS as a notice, not his, and tells the IB plugin with it', () => {
     expect(split.yours).toEqual([])
     const notice = split.worth.find(r => r.title === 'IB secondary slot has no TWS session')!
     expect(notice).toMatchObject({ tone: 'warn', whose: 'A notice: nothing waits on you', href: '#ib' })
     expect(notice.goalDraft).toBeUndefined()
     expect(split.merged).toBe(1)
+  })
+
+  // 2026-11-19, the coordinator: the host slot is still his (only he can log in on the Windows machine; it went unnoticed ~50 h on 11-14..16).
+  it('keeps the host slot without TWS as needing his hands, and the compute line\'s secondary alert as a notice', () => {
+    const s2 = splitAlerts([
+      alert({ alertname: 'BifrostIBGatewayDisconnected', severity: 'critical', slot: 'host' }),
+      alert({ alertname: 'BifrostIBGatewaySecondaryDisconnected', slot: 'secondary' }),
+    ], ev, NOW)
+    expect(s2.yours.map(r => r.title)).toEqual(['Log in to TWS for the IB host slot'])
+    expect(s2.yours[0].detail).toContain('Outside the system')
+    expect(s2.worth.map(r => r.title)).toEqual(['IB secondary slot has no TWS session'])
   })
 
   it('lists the four real warnings, oldest first, and the standby-shaped DaemonSet alerts as one row', () => {
