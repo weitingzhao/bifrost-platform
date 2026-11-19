@@ -61,3 +61,4 @@ problems:
   - {id: Y-4, state: connected, what: "A report the platform refused (ledger: artifact_refused)", events: ["alert:ArtifactRefused"], drill: "drill:Y-4", to: "coordinator (duty)", owner: "comm"}
   - {id: Y-5, state: connected, what: "The phone relay itself cannot be reached", events: ["alert:AlertRelayUnreachable"], drill: "drill:Y-5", to: "coordinator (duty)", owner: "comm"}
   - {id: Y-6, state: connected, drill: "drill:Y-6", what: "Alert rules that stopped being loaded (a rule file Prometheus no longer selects)", events: ["alert:BifrostRuleGroupsMissing"], to: "coordinator (duty)", owner: "comm"}
+  - {id: Y-7, state: connected, what: "A compute pain reading crossing its line (law 43: ComputePainDbDiskFlush, ComputePainDbReplication, ComputePainProdThrottle; ComputePainDbGuestLoad is info and wakes no one; rules in #645)", events: ["topic:alert.rule.fired"], to: "compute seat (row alert-pain-to-compute)", owner: "compute"}
