@@ -581,3 +581,35 @@ func TestReportTitleEndpoint(t *testing.T) {
 		t.Fatalf("unconfigured = %d", rec.Code)
 	}
 }
+
+// Origin: 2026-11-19, BifrostAPIHighLatency (platform-api P99 about 6 s): a
+// request after the 5-minute cache expired waited for a cold build of every
+// repository (13.9 s measured). A stale build is now served at once and
+// rebuilt once in the background; one older than staleMax is still waited for.
+func TestStaleLineageIsServedWhileOneRebuildRuns(t *testing.T) {
+	s, _ := newTestService(t)
+	h := NewHandler(s)
+	old := Response{Days: 14, Reachability: "stale-marker"}
+	h.cache[14] = cached{resp: old, at: time.Now().Add(-cacheTTL - time.Minute)}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/lineage", nil)
+	if got := h.get(req, 14, false); got.Reachability != "stale-marker" {
+		t.Fatalf("stale build not served at once: %+v", got.Reachability)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		h.mu.Lock()
+		c := h.cache[14]
+		h.mu.Unlock()
+		if c.resp.Reachability != "stale-marker" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("background rebuild never replaced the stale build")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	h.cache[14] = cached{resp: old, at: time.Now().Add(-staleMax - time.Minute)}
+	if got := h.get(req, 14, false); got.Reachability == "stale-marker" {
+		t.Fatal("a build older than staleMax was served instead of rebuilt")
+	}
+}
