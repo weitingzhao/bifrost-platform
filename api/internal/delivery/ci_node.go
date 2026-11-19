@@ -33,15 +33,37 @@ var triggerBindingGVR = schema.GroupVersionResource{Group: "triggers.tekton.dev"
 // rather than waiting, and never ubt-k3s-01, whose etcd slowed under CI.
 var CITask = TaskProfile{DiskHeavy: true, MaxDiskTier: 2, CPUCores: 4, MemoryBytes: 4 << 30, Spread: true, Exclude: []string{"ubt-k3s-01"}}
 
-// CIRunTask is a whole CI run as the trigger starts it: CITask, and not on
-// ubt-k3s-02 either. Its test database lives in memory (2026-11-19), and 02, the
-// database primary with 15 GiB, has none to spare: 7.46 GiB at its lowest in seven
-// days against a 6 GiB floor (the compute line's figures).
+// ciRunExcludedNodes are never given a platform CI run, chosen or not: ubt-k3s-01
+// (see CITask), and ubt-k3s-02, the database primary with 15 GiB, which has no memory
+// for the test database a run keeps in memory since 2026-11-19 (7.46 GiB available
+// at its lowest in seven days, against the 6 GiB floor).
+var ciRunExcludedNodes = []string{"ubt-k3s-01", "ubt-k3s-02"}
+
+// ciRunMemoryFloor is the compute line's room for memory volumes turned into a
+// reading: a volume takes what it holds from the available memory, so a node stays
+// a candidate down to the 6 GiB floor plus 1 GiB for runs starting meanwhile.
+const ciRunMemoryFloor = 7 << 30
+
+// CIRunTask is a whole CI run as the trigger starts it. Image builds hold no test
+// database and stay CITask.
 var CIRunTask = func() TaskProfile {
 	t := CITask
-	t.Exclude = append(slices.Clone(CITask.Exclude), "ubt-k3s-02")
+	t.Exclude = ciRunExcludedNodes
+	t.MinAvailableMemory = ciRunMemoryFloor
 	return t
 }()
+
+// ciRunTaskRunTemplate is the pod template of a platform CI run the platform starts
+// itself: kept off the same nodes as one the trigger starts.
+func ciRunTaskRunTemplate() map[string]any {
+	t := amd64CITaskRunTemplate()
+	t["podTemplate"].(map[string]any)["affinity"] = map[string]any{"nodeAffinity": map[string]any{
+		"requiredDuringSchedulingIgnoredDuringExecution": map[string]any{"nodeSelectorTerms": []any{map[string]any{
+			"matchExpressions": []any{map[string]any{"key": "kubernetes.io/hostname", "operator": "NotIn", "values": slices.Clone(ciRunExcludedNodes)}},
+		}}},
+	}}
+	return t
+}
 
 func ciNodeParams(p BuildPlacement) map[string]string {
 	out := map[string]string{"ciNodeKey": hostIDLabel, "ciNodeValue": p.Node, "ciNode": p.Node, "ciNodeWhy": p.Why}

@@ -58,6 +58,9 @@ type TaskProfile struct {
 	MaxDiskTier int     // the slowest disk tier a disk-heavy task may go to
 	CPUCores    float64 // unrequested CPU the node must have
 	MemoryBytes float64 // unrequested memory the node must have
+	// MinAvailableMemory is the memory the node must really have available, in
+	// bytes; 0 asks nothing beyond the general floor.
+	MinAvailableMemory float64
 	// Spread picks the least loaded node that is not on the slow disk, and may
 	// use nodes batch work is otherwise kept off, except Exclude (node names).
 	Spread  bool
@@ -162,6 +165,8 @@ func nodeFull(task TaskProfile, n NodeProfile) string {
 		return fmt.Sprintf("disk %.0f%% busy", m.DiskBusy*100)
 	case m.MemoryAvailable < memoryAvailableFloor:
 		return fmt.Sprintf("memory %.0f%% available", m.MemoryAvailable*100)
+	case n.AvailableMemory < task.MinAvailableMemory:
+		return fmt.Sprintf("%.1fGi available", n.AvailableMemory/(1<<30))
 	case n.FreeCPU < task.CPUCores:
 		return fmt.Sprintf("%.1f CPU unrequested", n.FreeCPU)
 	case n.FreeMemory < task.MemoryBytes:

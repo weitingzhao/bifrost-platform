@@ -877,11 +877,48 @@ func TestACIRunStaysOffTheNodeWithoutMemoryToSpare(t *testing.T) {
 			"ip-ubt-k3s-04": {WriteLatencySeconds: 0.001, CPUBusy: 0.5, DiskBusy: 0.1, MemoryAvailable: 0.6},
 		}, nil
 	})
-	if p, _ := s.placeTask(context.Background(), CIRunTask, ""); p.Node != "ubt-k3s-04" {
+	ciRun := CIRunTask
+	ciRun.MinAvailableMemory = 0 // the fake nodes report little memory; the floor has its own test
+	if p, _ := s.placeTask(context.Background(), ciRun, ""); p.Node != "ubt-k3s-04" {
 		t.Fatalf("run: %+v", p)
 	}
 	if p, _ := s.placeTask(context.Background(), CITask, ""); p.Node != "ubt-k3s-02" {
 		t.Fatalf("build: %+v", p)
+	}
+}
+
+// Same origin: memory volumes take from the available memory, so a CI run needs
+// 7 GiB of it on any node, which is what bounds ubt-k3s-07's 3.3 GiB of room when
+// several runs share it. Positive control: at 7 GiB the quieter node is chosen.
+func TestACIRunNeedsAvailableMemoryOnEveryNode(t *testing.T) {
+	m := func(cpu float64) NodeMetrics {
+		return NodeMetrics{WriteLatencySeconds: 0.001, CPUBusy: cpu, DiskBusy: 0.1, MemoryAvailable: 0.4}
+	}
+	nodes := []NodeProfile{
+		{Host: "quiet", Name: "quiet", FreeCPU: 8, FreeMemory: 8 << 30, AvailableMemory: 7<<30 - 1, Metrics: m(0.1)},
+		{Host: "other", Name: "other", FreeCPU: 8, FreeMemory: 8 << 30, AvailableMemory: 12 << 30, Metrics: m(0.5)},
+	}
+	if p := spreadNode(CIRunTask, nodes, "", BuildPlacement{}); p.Node != "other" {
+		t.Fatalf("low memory: %+v", p)
+	}
+	nodes[0].AvailableMemory = 7 << 30
+	if p := spreadNode(CIRunTask, nodes, "", BuildPlacement{}); p.Node != "quiet" {
+		t.Fatalf("at the floor: %+v", p)
+	}
+}
+
+// Same origin: with no node chosen a run is left to the scheduler, so the nodes it
+// must avoid are a hard rule in the pod template too. Positive control: the plain
+// template has no affinity.
+func TestAPlatformCIRunIsKeptOffTheExcludedNodes(t *testing.T) {
+	if _, ok := amd64CITaskRunTemplate()["podTemplate"].(map[string]any)["affinity"]; ok {
+		t.Fatal("the plain template has an affinity")
+	}
+	got := fmt.Sprint(ciRunTaskRunTemplate()["podTemplate"].(map[string]any)["affinity"])
+	for _, want := range []string{"NotIn", "ubt-k3s-01", "ubt-k3s-02"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("%s not in %s", want, got)
+		}
 	}
 }
 

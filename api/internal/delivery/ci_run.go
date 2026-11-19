@@ -80,10 +80,14 @@ func ciRunSpec(name, revision, repo string) map[string]any {
 	if name == "bifrost-ci-frontend" {
 		size = "3Gi"
 	}
+	template := amd64CITaskRunTemplate()
+	if name == "bifrost-ci-platform" {
+		template = ciRunTaskRunTemplate()
+	}
 	return map[string]any{
 		"pipelineRef":     map[string]any{"name": name},
 		"params":          params,
-		"taskRunTemplate": amd64CITaskRunTemplate(),
+		"taskRunTemplate": template,
 		"workspaces": []map[string]any{{"name": "source", "volumeClaimTemplate": map[string]any{"spec": map[string]any{
 			"accessModes": []any{"ReadWriteOnce"}, "storageClassName": "local-path", "resources": map[string]any{"requests": map[string]any{"storage": size}},
 		}}}},
