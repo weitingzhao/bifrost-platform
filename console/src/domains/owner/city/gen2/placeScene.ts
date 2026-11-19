@@ -66,6 +66,11 @@ const heightOf = (p: Place, size: number) => p.kind === 'room' ? 18 : p.kind ===
 const RS = 3
 /** The slab's thickness under the ground, px: the earth shows on its two front sides. */
 const SLAB = 14
+/**
+ * The rim, in cells: the land outside the 16×16 plots that carries the ring road at full width, so
+ * the edge street is a road like any other, not half of one cut by the slab (the Owner, 2026-11-19).
+ */
+const RIM = 1.1
 
 export class PlaceScene extends Phaser.Scene {
   private events_: SceneEvents
@@ -265,7 +270,7 @@ export class PlaceScene extends Phaser.Scene {
 
   /** The whole ground's box with room for tall blocks behind and names in front. */
   private groundBox() {
-    const l = iso(0, GRID), r = iso(GRID, 0), t = iso(0, 0), b = iso(GRID, GRID)
+    const l = iso(-RIM, GRID + RIM), r = iso(GRID + RIM, -RIM), t = iso(-RIM, -RIM), b = iso(GRID + RIM, GRID + RIM)
     return { x: l.x - 20, y: t.y - 70, w: r.x - l.x + 40, h: b.y - t.y + 110 }
   }
 
@@ -456,32 +461,37 @@ export class PlaceScene extends Phaser.Scene {
   private level(place: Place, placed: Placed[], o: { at: number; selected: string | null; inside: string | null; interactive: boolean; arranging: boolean }) {
     const c = this.add.container(o.at, 0)
     const g = this.add.graphics()
-    const ground = [iso(0, 0), iso(GRID, 0), iso(GRID, GRID), iso(0, GRID)]
+    const lo = -RIM, hi = GRID + RIM
+    const ground = [iso(lo, lo), iso(hi, lo), iso(hi, hi), iso(lo, hi)]
     // The slab: earth on its two front sides, then the ground on top, all outlined in ink.
     const down = (v: Phaser.Math.Vector2) => new Phaser.Math.Vector2(v.x, v.y + SLAB)
-    const leftSide = [iso(0, GRID), iso(GRID, GRID), down(iso(GRID, GRID)), down(iso(0, GRID))]
-    const rightSide = [iso(GRID, 0), iso(GRID, GRID), down(iso(GRID, GRID)), down(iso(GRID, 0))]
+    const leftSide = [iso(lo, hi), iso(hi, hi), down(iso(hi, hi)), down(iso(lo, hi))]
+    const rightSide = [iso(hi, lo), iso(hi, hi), down(iso(hi, hi)), down(iso(hi, lo))]
     g.lineStyle(2, this.tone.ink)
     g.fillStyle(this.tone.earth).fillPoints(leftSide, true).strokePoints(leftSide, true)
     g.fillStyle(this.tone.earthShade).fillPoints(rightSide, true).strokePoints(rightSide, true)
     // A few strata in the earth.
     g.lineStyle(1, this.tone.earthShade, 0.8)
     for (const t of [0.4, 0.72]) {
-      g.lineBetween(iso(0, GRID).x, iso(0, GRID).y + SLAB * t, iso(GRID, GRID).x, iso(GRID, GRID).y + SLAB * t)
+      g.lineBetween(iso(lo, hi).x, iso(lo, hi).y + SLAB * t, iso(hi, hi).x, iso(hi, hi).y + SLAB * t)
     }
     // Outdoors (the town, a district) the ground is green belts crossed by streets; indoors (a building)
     // it is a floor crossed by corridors. Both run where grid.ts says, never through a thing.
     const indoors = place.kind === 'building'
     g.fillStyle(indoors ? this.tone.floor : this.tone.grass).fillPoints(ground, true)
-    const strip = (st: { along: 'x' | 'y'; at: number; from: number }, half: number) => {
-      const a0 = Math.max(0, st.at - half), a1 = Math.min(GRID, st.at + half)
-      const b0 = Math.max(0, st.from - half), b1 = Math.min(GRID, st.from + STREET + half)
+    // The ring road runs in the rim, at full width; the streets inside run on to meet it.
+    const ringAt = (at: number) => at === 0 ? -RIM / 2 : at === GRID ? GRID + RIM / 2 : at
+    const centre = (st: { at: number; edge: boolean }) => st.edge ? ringAt(st.at) : st.at
+    const strip = (st: { along: 'x' | 'y'; at: number; from: number; edge: boolean }, half: number) => {
+      const a = centre(st), a0 = a - half, a1 = a + half
+      const start = st.from === 0 ? ringAt(0) : st.from, end = st.from + STREET === GRID ? ringAt(GRID) : st.from + STREET
+      const b0 = start - half, b1 = end + half
       return st.along === 'y'
         ? [iso(a0, b0), iso(a1, b0), iso(a1, b1), iso(a0, b1)]
         : [iso(b0, a0), iso(b1, a0), iso(b1, a1), iso(b0, a1)]
     }
     const sts = streets(placed)
-    const half = (st: { avenue: boolean; edge: boolean }) => st.avenue ? 0.5 : st.edge ? 0.3 : 0.35
+    const half = (st: { avenue: boolean; edge: boolean }) => st.avenue ? 0.5 : 0.35
     if (indoors) {
       g.fillStyle(this.tone.corridor)
       for (const st of sts) g.fillPoints(strip(st, half(st) * 0.8), true)
@@ -490,13 +500,13 @@ export class PlaceScene extends Phaser.Scene {
       for (const st of sts) g.fillPoints(strip(st, half(st) + 0.1), true)
       g.fillStyle(this.tone.asphalt)
       for (const st of sts) g.fillPoints(strip(st, half(st)), true)
-      // Lane paint: dashes down the middle of every inner street, a double line down the avenue.
-      for (const st of sts.filter(x => !x.edge)) {
+      // Lane paint: dashes down the middle of every street and the ring road, a double line down the avenue.
+      for (const st of sts) {
         for (let k = 0; k < STREET; k += 1) {
           const p0 = st.from + k + 0.25, p1 = st.from + k + 0.65
           const offs = st.avenue ? [-0.06, 0.06] : [0]
           for (const o of offs) {
-            const a = st.at + o
+            const a = centre(st) + o
             g.lineStyle(st.avenue ? 1.2 : 1.4, this.tone.paint, 0.9)
             if (st.along === 'y') g.lineBetween(iso(a, p0).x, iso(a, p0).y, iso(a, p1).x, iso(a, p1).y)
             else g.lineBetween(iso(p0, a).x, iso(p0, a).y, iso(p1, a).x, iso(p1, a).y)
@@ -509,8 +519,9 @@ export class PlaceScene extends Phaser.Scene {
     for (let i = 1; i < GRID; i++) {
       if (!o.arranging) break
       const level = i % 8 === 0 ? 8 : i % 4 === 0 ? 4 : i % 2 === 0 ? 2 : 1
-      const w = { 8: 2.2, 4: 1.5, 2: 1, 1: 0.8 }[level], a = { 8: 1, 4: 0.85, 2: 0.6, 1: 0.45 }[level]
-      g.lineStyle(w, level >= 4 ? this.tone.line4 : this.tone.line, a)
+      // Ink at four strengths: readable over grass, asphalt and floor alike.
+      const w = { 8: 2.2, 4: 1.6, 2: 1.1, 1: 0.8 }[level], a = { 8: 0.55, 4: 0.4, 2: 0.28, 1: 0.18 }[level]
+      g.lineStyle(w, this.tone.ink, a)
       g.lineBetween(iso(i, 0).x, iso(i, 0).y, iso(i, GRID).x, iso(i, GRID).y)
       g.lineBetween(iso(0, i).x, iso(0, i).y, iso(GRID, i).x, iso(GRID, i).y)
     }
