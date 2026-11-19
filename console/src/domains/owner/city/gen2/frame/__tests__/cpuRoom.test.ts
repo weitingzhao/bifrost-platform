@@ -13,10 +13,10 @@ const asleep: CpuRoomReadings = { cores: [], temps: [] }
 
 describe('the CPU room', () => {
   it('a Linux node shows every part of the workshop', () => {
-    expect(rowsDrawn(() => cpuRoom(linux)).ids.sort()).toEqual(['core.busy', 'core.freq', 'core.freq.max', 'core.machines', 'sensor.temp'])
+    expect(rowsDrawn(() => cpuRoom(linux)).ids.sort()).toEqual(['core.busy', 'core.busy.all', 'core.freq', 'core.freq.max', 'core.machines', 'sensor.temp'])
   })
-  it('a Mac mini: no clock read, no speed dials; no sensors, no thermometer', () => {
-    expect(rowsDrawn(() => cpuRoom(mac)).ids.sort()).toEqual(['core.busy', 'core.machines'])
+  it('a Mac mini: no clock read, no CLOCK; no sensor, no CHIP TEMP', () => {
+    expect(rowsDrawn(() => cpuRoom(mac)).ids.sort()).toEqual(['core.busy', 'core.busy.all', 'core.machines'])
   })
   it('a machine nothing reads: no machines, no console', () => {
     const { out, ids } = rowsDrawn(() => cpuRoom(asleep))
@@ -68,10 +68,10 @@ describe('the CPU room', () => {
   // "Core N") stands on its own machine instead.
   it('a whole-chip temperature hangs once on the wall; a per-core one stands on its machine', () => {
     const whole = cpuRoom(linux).svg
-    expect(whole).toContain('69°')
+    expect(whole).toContain('69°C')
     const perCore: CpuRoomReadings = { ...linux, temps: linux.cores.map((_, k) => ({ name: `Core ${k}`, c: 50 + k, core: k })) }
     const svg = cpuRoom(perCore).svg
-    expect(svg).not.toContain('>50°')
+    expect(svg).not.toContain('CHIP TEMP')
     expect(svg).not.toBe(whole)
   })
   // The Owner, 2026-11-19: every colour stands for something. Machines were grey when idle and green
@@ -91,10 +91,14 @@ describe('the CPU room', () => {
     expect(at(0.5)).toContain('#ffc94d')
     expect(at(0.95)).toContain('#ff7a45')
   })
-  // The Owner, 2026-11-19: the console's percent repeated the load bars; the average is the summary
-  // passed up to the building, not a second showing inside. No sensor read, no console.
-  it('nothing in the room says a reading twice: no average of the bars; no console without a sensor', () => {
-    expect(cpuRoom(linux).svg).not.toMatch(/ALL CORES/)
-    expect(cpuRoom(mac).svg).not.toMatch(/CPU CONSOLE/)
+  // The Owner, 2026-11-19: the whole CPU's percent belongs on the console; what repeated the load bar was
+  // the half dial on each machine. Each instrument the standard one, in its slot, inside the desk.
+  it('a machine carries its load bar only; the console the whole CPU, one standard instrument each', () => {
+    const svg = cpuRoom(linux).svg
+    expect(svg).toContain('BUSY')
+    expect(svg).toContain('CLOCK')
+    expect(svg).toContain('2.0 GHz')
+    expect(svg).toContain('20%')
+    expect(cpuRoom(asleep).svg).not.toMatch(/CPU CONSOLE/)
   })
 })

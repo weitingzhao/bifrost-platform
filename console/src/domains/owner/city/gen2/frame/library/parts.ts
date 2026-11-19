@@ -177,3 +177,51 @@ export function tallyBoard(g: Draw, face: 'left' | 'right', x: number, y: number
   g.face(face, x, y, z, `<rect x="${(at * U - W / 2).toFixed(1)}" y="${(-h / 2).toFixed(1)}" width="${W.toFixed(1)}" height="${h}" rx="1.5" fill="#1d2230" stroke="${INK}" stroke-width="0.9"/>` +
     (text ? `<text x="${(at * U).toFixed(1)}" y="${(size * 0.36).toFixed(1)}" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="${size.toFixed(1)}" font-weight="700" fill="#7be08f">${esc(text)}</text>` : ''))
 }
+
+/**
+ * How a reading is written, everywhere in the city: one format per unit (the Owner, 2026-11-19: what
+ * can be shown is shown to one standard). A percent whole; a clock in GHz to a tenth; a temperature
+ * whole in °C; bytes in GB, or TB to a tenth; nothing read is a dash.
+ */
+export type ReadingUnit = 'share' | 'Hz' | '°C' | 'bytes' | 'count'
+export function readingText(v: number | null, unit: ReadingUnit): string {
+  if (v == null || !Number.isFinite(v)) return '—'
+  if (unit === 'share') return `${Math.round(v * 100)}%`
+  if (unit === 'Hz') return `${(v / 1e9).toFixed(1)} GHz`
+  if (unit === '°C') return `${Math.round(v)}°C`
+  if (unit === 'bytes') return v >= 1e12 ? `${(v / 1e12).toFixed(1)} TB` : `${Math.round(v / 1e9)} GB`
+  return String(Math.round(v))
+}
+
+/** A half dial in a face's plane, centred at u, its needle at share f of the sweep (none when not read); green to `redFrom`, red after. */
+export function halfDial(r: number, u: number, f: number | null, redFrom: number): string {
+  const arc = (a: number, b: number, c: string) => {
+    const p = (t: number) => [u + r * Math.cos(Math.PI * (1 - t)), -r * Math.sin(Math.PI * (1 - t))]
+    const [x0, y0] = p(a), [x1, y1] = p(b)
+    return `<path d="M${x0.toFixed(1)},${y0.toFixed(1)} A${r},${r} 0 0 1 ${x1.toFixed(1)},${y1.toFixed(1)}" fill="none" stroke="${c}" stroke-width="${(r * 0.28).toFixed(1)}"/>`
+  }
+  let s = `<path d="M${u - r - 1},0 A${r + 1},${r + 1} 0 0 1 ${u + r + 1},0 Z" fill="#fbfaf6" stroke="${INK}" stroke-width="0.8"/>`
+  s += arc(0.02, redFrom, '#9fcf9f') + arc(redFrom, 0.98, '#e27d6f')
+  if (f != null) {
+    const t = Math.max(0, Math.min(1, f)), a = Math.PI * (1 - t)
+    s += `<line x1="${u}" y1="0" x2="${(u + r * 0.92 * Math.cos(a)).toFixed(1)}" y2="${(-r * 0.92 * Math.sin(a)).toFixed(1)}" stroke="${INK}" stroke-width="1.2" stroke-linecap="round"/>`
+  }
+  return s + `<circle cx="${u}" cy="0" r="1.2" fill="${INK}"/>`
+}
+
+/**
+ * The standard instrument (one kind for every console in the city): a slot INSTRUMENT cells wide on a
+ * +y face, from height z up INSTRUMENT_H px. In its bezel, a half dial (needle at its share, red band
+ * from `redFrom`), the reading written beneath it to the standard (readingText), and its name plate.
+ * A console is as wide as its instruments; nothing on it stands outside its slot.
+ */
+export const INSTRUMENT = 0.8, INSTRUMENT_H = 28
+export function instrument(g: Draw, x: number, y: number, slot: number, z: number, o: { name: string; share: number | null; redFrom: number; reading: string }) {
+  const W = INSTRUMENT * U, u = (slot + 0.5) * W, bw = W - 4
+  const mono = `font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" text-anchor="middle" font-weight="700"`
+  g.face('left', x, y, z, `<rect x="${(u - bw / 2).toFixed(1)}" y="${-INSTRUMENT_H + 1}" width="${bw.toFixed(1)}" height="${INSTRUMENT_H - 9}" rx="2" fill="#1f242e" stroke="#9aa0ab" stroke-width="1.2"/>` +
+    `<g transform="translate(0 ${-INSTRUMENT_H + 12.5})">${halfDial(8, u, o.share, o.redFrom)}</g>` +
+    `<text x="${u.toFixed(1)}" y="${-INSTRUMENT_H + 18.6}" ${mono} font-size="5" fill="#f2f0e8">${esc(o.reading)}</text>` +
+    `<rect x="${(u - bw / 2).toFixed(1)}" y="-7" width="${bw.toFixed(1)}" height="6" rx="1" fill="#e8e2cf" stroke="${INK}" stroke-width="0.5"/>` +
+    `<text x="${u.toFixed(1)}" y="-2.4" ${mono} font-size="4.2" fill="${INK}">${esc(o.name)}</text>`)
+}
