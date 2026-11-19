@@ -180,7 +180,9 @@ describe('Owner Console entries', () => {
     show('#system')
     expect(headings()).toEqual(['System', 'Storage and copies'])
     expect(screen.queryByRole('region', { name: 'Release lane' })).toBeNull()
-    expect(screen.getByRole('region', { name: 'Health' })).toHaveTextContent('critical · yours')
+    // 2026-11-19: the IB slot without TWS is a notice, so its critical alert is no longer counted as his.
+    expect(screen.getByRole('region', { name: 'Health' })).toHaveTextContent('critical')
+    expect(screen.getByRole('region', { name: 'Health' })).not.toHaveTextContent('critical · yours')
     expect(screen.queryByRole('region', { name: 'Data' })).toBeNull()
   })
 
@@ -211,13 +213,16 @@ describe('Owner Console entries', () => {
     show('#you')
     const yours = screen.getByRole('region', { name: 'Yours' })
     expect(within(yours).getAllByRole('listitem').map(li => li.querySelector('.font-semibold')?.textContent)).toEqual([
-      'Log in to TWS for the IB secondary slot', 'Look at the goal cards'])
+      'Look at the goal cards'])
     expect(yours).not.toHaveTextContent('✎')
     expect(yours).toHaveTextContent('No approvals, questions or agent cards waiting')
     const worth = screen.getByRole('region', { name: 'Worth a look' })
     expect(within(worth).getAllByText('No goal yet')).toHaveLength(4)
     expect(worth).toHaveTextContent('6 DaemonSet alerts that fit gpu-server being on standby')
     expect(worth).toHaveTextContent('Likely the planned standby; not proven')
+    expect(worth).toHaveTextContent('IB secondary slot has no TWS session')
+    expect(worth).toHaveTextContent('A notice: nothing waits on you')
+    fireEvent.click(within(worth).getByRole('button', { name: /Show \d+ more/ }))
     expect(worth).toHaveTextContent('1 Claude thread went quiet mid-turn')
     expect(worth).toHaveTextContent('The coordinator checks them')
   })

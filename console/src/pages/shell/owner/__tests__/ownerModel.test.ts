@@ -21,10 +21,12 @@ const alert = (labels: Record<string, string>, value = '1') => ({ labels: { seve
 describe('alerts on the Owner Console (PROD, 2026-10-16 15:10 CDT)', () => {
   const split = splitAlerts(alerts, ev, NOW)
 
-  it('makes the TWS login the Owner\'s, and tells the IB plugin with it', () => {
-    expect(split.yours.map(r => r.title)).toEqual(['Log in to TWS for the IB secondary slot'])
-    expect(split.yours[0].tone).toBe('fail')
-    expect(split.yours[0].detail).toContain('Only you hold the TWS login')
+  // 2026-11-19, the Owner via the coordinator: an IB slot without TWS is a notice to see, not work waiting on him (the secondary slot he set aside 11-12).
+  it('shows the IB slot without TWS as a notice in Worth a look, not in Yours, and tells the IB plugin with it', () => {
+    expect(split.yours).toEqual([])
+    const notice = split.worth.find(r => r.title === 'IB secondary slot has no TWS session')!
+    expect(notice).toMatchObject({ tone: 'warn', whose: 'A notice: nothing waits on you', href: '#ib' })
+    expect(notice.goalDraft).toBeUndefined()
     expect(split.merged).toBe(1)
   })
 
@@ -35,9 +37,10 @@ describe('alerts on the Owner Console (PROD, 2026-10-16 15:10 CDT)', () => {
       '6 DaemonSet alerts that fit gpu-server being on standby',
       'PostgreSQL connection count high',
       'Bifrost API high P99 latency',
+      'IB secondary slot has no TWS session',
     ])
     expect(split.worth.filter(r => r.whose === 'No goal yet').length).toBe(4)
-    expect(split.worth.every(r => r.goalDraft?.includes('fix the cause'))).toBe(true)
+    expect(split.worth.filter(r => r.whose !== 'A notice: nothing waits on you').every(r => r.goalDraft?.includes('fix the cause'))).toBe(true)
     expect(split.worth[2]).toMatchObject({ whose: 'Likely the planned standby; not proven',
       detail: 'kube-prometheus-stack-prometheus-node-exporter, node-reboot-required, promtail, svclb-traefik-8df577f9 · since 6 days ago' })
     expect(split.worth[4].detail).toBe('warning · bifrost-platform-prod · since 15 h ago')

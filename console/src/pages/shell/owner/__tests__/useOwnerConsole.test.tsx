@@ -106,11 +106,13 @@ describe('useOwnerConsole', () => {
     expect(api.backup).not.toHaveBeenCalled()
   })
 
-  it('counts the TWS login as his once the alerts are read', async () => {
+  // 2026-11-19, the Owner via the coordinator: the IB slot without TWS is a notice, not work waiting on him.
+  it('does not count the IB slot without TWS as his once the alerts are read', async () => {
     api.alerts.mockResolvedValue({ alerts: alertsFixture.alerts })
     const { result } = run()
-    await waitFor(() => expect(result.current.verdict.headline).toBe('1 thing is yours'))
-    expect(yoursNavBadge(result.current.yours)).toMatchObject({ text: '1', tone: 'attention' })
+    await waitFor(() => expect(result.current.alerts?.worth.some(r => r.title === 'IB secondary slot has no TWS session')).toBe(true))
+    expect(result.current.yours).toEqual({ state: 'known', count: 0 })
+    expect(yoursNavBadge(result.current.yours)?.text ?? '').not.toBe('1')
   })
 
   it('a run list that cannot be read is reported, so the lane never says nothing is delivering (review 221 A6)', async () => {
