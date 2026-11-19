@@ -73,7 +73,7 @@ function poly(g: G, pts: XY[], fill: number, stroke = true) {
 type Spot = { tex: string; dx: number; dy: number }
 const SIDES = [[0, -1], [1, 0], [0, 1], [-1, 0]] as const
 
-type View = { part: Placed; sig: string; imgs: { img: Phaser.GameObjects.Image; layer: Layer }[]; tag: Phaser.GameObjects.Text; plate: Phaser.GameObjects.Text; num: Phaser.GameObjects.Text; fx: G }
+type View = { part: Placed; sig: string; imgs: { img: Phaser.GameObjects.Image; layer: Layer }[]; tag: Phaser.GameObjects.Text; plate: Phaser.GameObjects.Text; num: Phaser.GameObjects.Text; fx: G; win?: G; lv?: number[] }
 type Gesture =
   | { t: 'none' } | { t: 'pan'; x: number; y: number }
   | { t: 'stroke'; last: [number, number]; erase: boolean; x: number; y: number; started: boolean }
@@ -510,7 +510,7 @@ export class BuilderScene extends Phaser.Scene {
       const roof = p.kind === 'power' ? iso(p.x + 1.55, p.y + 2.75, 40) : iso(p.x + p.size / 2, p.y + p.size / 2, p.kind === 'genset' ? 42 : Math.min(kindOf(p.kind)?.height ?? 60, 120) * 0.5)
       v.num.setText(p.label ?? '').setPosition(roof.x, roof.y).setVisible(!!p.label && v.imgs[0]?.img.visible !== false)
     }
-    for (const [id, v] of this.views) if (!seen.has(id)) { v.imgs.forEach(i => i.img.destroy()); v.tag.destroy(); v.plate.destroy(); v.num.destroy(); v.fx.destroy(); this.views.delete(id) }
+    for (const [id, v] of this.views) if (!seen.has(id)) { v.imgs.forEach(i => i.img.destroy()); v.tag.destroy(); v.plate.destroy(); v.num.destroy(); v.win?.destroy(); v.fx.destroy(); this.views.delete(id) }
     if (this.selected && !seen.has(this.selected)) this.select(null)
     this.syncDecor(); this.drawMark(); this.relabel(); this.drawEffects(); this.drawSky(); this.drawWorkers()
   }
@@ -523,7 +523,7 @@ export class BuilderScene extends Phaser.Scene {
     depthOrder(items).forEach((it, i) => {
       const depth = 10 + i
       if (it.id.startsWith('d') && it.id.includes(',')) this.decor.get(it.id.slice(1))?.img.setDepth(depth)
-      else { const v = this.views.get(it.id); v?.imgs.forEach(({ img, layer }) => img.setDepth(depth + layer.order)); v?.fx.setDepth(depth + 0.8); v?.num.setDepth(depth + 0.9) }
+      else { const v = this.views.get(it.id); v?.imgs.forEach(({ img, layer }) => img.setDepth(depth + layer.order)); v?.fx.setDepth(depth + 0.8); v?.num.setDepth(depth + 0.9); v?.win?.setDepth(depth + 0.85) }
     })
   }
 
@@ -592,6 +592,52 @@ export class BuilderScene extends Phaser.Scene {
       g.strokeRect(box.x, box.y, w, h)
       g.lineBetween(Phaser.Math.Clamp(top.x, box.x + 3, box.right - 3), box.bottom, top.x, top.y)
       g.fillStyle(0xe0564f, 1); g.fillCircle(top.x, top.y, 2.4 * dpr / z)
+    }
+  }
+
+  /**
+   * The machines' front windows as live gauges (the Owner, 2026-11-19): the
+   * three windows on a generator set's face are power (CPU), cooling water
+   * (memory) and nitrogen (disk), each filled to what is used of what there
+   * is, easing to a new reading, a bright line sweeping up the fill; a window
+   * whose use is not read is hatched. Drawn on the face's own slant, every frame.
+   */
+  update(time: number) {
+    if (!this.ready) return
+    const W = 35.8, zoom = this.cameras.main.zoom
+    const cols = [0xf2b234, 0x5aa9ff, 0xb8c0cc] as const
+    for (const v of this.views.values()) {
+      const p = v.part
+      if (p.kind !== 'genset') { if (v.win) { v.win.destroy(); v.win = undefined } continue }
+      const r = p.binds ? this.s.readingOf(p.binds) : undefined
+      if (!v.win) { v.win = this.add.graphics(); v.win.setDepth((v.imgs[0]?.img.depth ?? 10) + 0.85) }
+      const g = v.win
+      g.clear()
+      if (!r?.meters || v.imgs[0]?.img.visible === false) continue
+      const os = this.s.variantOf?.(p.binds) ?? 'linux'
+      const [z0, z1] = os === 'mac' ? [10, 24] : [12, 32]
+      const m = [r.meters.power, r.meters.water, r.meters.gas]
+      const target = m.map(x => x.used != null && (x.of ?? x.reserved) ? Math.min(1, x.used / (x.of ?? x.reserved)!) : -1)
+      v.lv ??= target.map(t => Math.max(0, t))
+      const y = p.y + 1.6, at = (x: number, z: number) => iso(p.x + x, y, z)
+      target.forEach((t, i) => {
+        const a = 0.22 + (4 + i * 15) / W, b = a + 11 / W
+        const quad = (za: number, zb: number) => [at(a, za), at(b, za), at(b, zb), at(a, zb)] as Phaser.Math.Vector2[]
+        g.fillStyle(0x2f3446, 1); g.fillPoints(quad(z0, z1), true)
+        if (t < 0) {
+          g.lineStyle(1, 0x6d7288, 1)
+          for (let k = 0; k < 5; k++) { const za = z0 + k * (z1 - z0) / 5; const q = [at(a, za), at(b, Math.min(z1, za + (z1 - z0) / 5))]; g.lineBetween(q[0].x, q[0].y, q[1].x, q[1].y) }
+        } else {
+          v.lv![i] += (t - v.lv![i]) * 0.06
+          const top = z0 + Math.max(0.04, v.lv![i]) * (z1 - z0)
+          g.fillStyle(t >= 0.85 ? 0xef5b5b : cols[i], 1); g.fillPoints(quad(z0, top), true)
+          // The sweep: a light line climbing the fill, each window out of step with the next.
+          const sweep = z0 + (((time / 1600) + i * 0.33) % 1) * (top - z0)
+          const s0 = at(a, sweep), s1 = at(b, sweep)
+          g.lineStyle(1.2 / Math.max(0.6, zoom), 0xffffff, 0.75); g.lineBetween(s0.x, s0.y, s1.x, s1.y)
+        }
+        g.lineStyle(1, INK, 1); g.strokePoints(quad(z0, z1), true)
+      })
     }
   }
 
