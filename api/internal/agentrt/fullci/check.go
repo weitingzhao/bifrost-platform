@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -104,9 +105,22 @@ func Check(ctx context.Context, src CheckSources, repo, green, red, run string) 
 	return out, nil
 }
 
-// FirstParentsOfPage reads Gitea's page of main's commits (red first) and
+// FirstParentsFrom is CheckSources.FirstParents on get, a read of Gitea's API
+// (gitread.Trees.Get): it walks main's history from red back along first
+// parents until green.
+func FirstParentsFrom(get func(ctx context.Context, path string, limit int64) ([]byte, error)) func(ctx context.Context, repo, green, red string, max int) ([][2]string, error) {
+	return func(ctx context.Context, repo, green, red string, max int) ([][2]string, error) {
+		body, err := get(ctx, url.PathEscape(repo)+"/commits?sha="+red+"&limit=100&stat=false&verification=false&files=false", 8<<20)
+		if err != nil {
+			return nil, err
+		}
+		return firstParentsOfPage(body, repo, green, red, max)
+	}
+}
+
+// firstParentsOfPage reads Gitea's page of main's commits (red first) and
 // follows first parents from red until green (see firstParentsOf).
-func FirstParentsOfPage(body []byte, repo, green, red string, max int) ([][2]string, error) {
+func firstParentsOfPage(body []byte, repo, green, red string, max int) ([][2]string, error) {
 	var page []struct {
 		SHA     string `json:"sha"`
 		Parents []struct {

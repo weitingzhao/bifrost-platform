@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
@@ -14,7 +13,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/ciscore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/evidenceread"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -61,19 +59,9 @@ func (s *Server) handleUnitFullCICheck(w http.ResponseWriter, r *http.Request) {
 			}
 			s.unitTreesOf()
 			ci := s.landingCIClient()
-			return fullci.CheckSources{FirstParents: s.giteaFirstParents, RunModules: ci.RunModulesOf, FailedTasks: ci.FullRunFailedTasks}, true
+			return fullci.CheckSources{FirstParents: fullci.FirstParentsFrom(s.unitTrees.Get), RunModules: ci.RunModulesOf, FailedTasks: ci.FullRunFailedTasks}, true
 		},
 	}.ServeHTTP(w, r)
-}
-
-// giteaFirstParents walks main's history in Gitea from red back along first
-// parents until green.
-func (s *Server) giteaFirstParents(ctx context.Context, repo, green, red string, max int) ([][2]string, error) {
-	body, err := s.unitTrees.Get(ctx, url.PathEscape(repo)+"/commits?sha="+red+"&limit=100&stat=false&verification=false&files=false", 8<<20)
-	if err != nil {
-		return nil, err
-	}
-	return fullci.FirstParentsOfPage(body, repo, green, red, max)
 }
 
 func (s *Server) handleCIScorecard(w http.ResponseWriter, r *http.Request) {
@@ -99,13 +87,7 @@ func (s *Server) ciScoreSourceOf() ciscore.Source {
 			if err != nil {
 				return time.Time{}, err
 			}
-			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			defer cancel()
-			job, err := client.BatchV1().CronJobs(s.delivery.PipelinesNamespace()).Get(ctx, ciscore.CleanupJob, metav1.GetOptions{})
-			if err != nil || job.Status.LastSuccessfulTime == nil {
-				return time.Time{}, err
-			}
-			return job.Status.LastSuccessfulTime.Time, nil
+			return ciscore.LastCleanup(ctx, client, s.delivery.PipelinesNamespace())
 		},
 	}
 }
@@ -128,18 +110,8 @@ func (s *Server) handleCIChanges(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ciDomainsSourceOf() cidomains.Source {
-	return cidomains.Source{Head: s.mainHead, Tree: s.unitTreesOf(), Files: s.giteaChangedFiles, CommitOK: commitID.MatchString}
-}
-
-// giteaChangedFiles are the paths a commit changed against its first parent,
-// as Gitea lists them for the commit.
-func (s *Server) giteaChangedFiles(ctx context.Context, repo, commit string) ([]string, error) {
-	s.unitTreesOf()
-	body, err := s.unitTrees.Get(ctx, url.PathEscape(repo)+"/git/commits/"+commit+"?stat=false&verification=false&files=true", 8<<20)
-	if err != nil {
-		return nil, err
-	}
-	return cidomains.ChangedFilesOf(body, repo, commit)
+	tree := s.unitTreesOf()
+	return cidomains.Source{Head: s.mainHead, Tree: tree, Files: cidomains.ChangedFilesFrom(s.unitTrees.Get), CommitOK: commitID.MatchString}
 }
 
 // ciDomainsAhead reads the domain graph of each repository the scorecard knows

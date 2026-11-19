@@ -14,10 +14,12 @@ import (
 	"strings"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 )
 
 var pipelineRunGVR = schema.GroupVersionResource{Group: "tekton.dev", Version: "v1", Resource: "pipelineruns"}
@@ -40,11 +42,28 @@ type Client struct {
 	GateRuns func(pipeline string, keep func(*unstructured.Unstructured) bool, listed func() ([]unstructured.Unstructured, error)) ([]unstructured.Unstructured, error)
 }
 
+// DefaultNamespace is where the pipelines run when Namespace is empty.
+const DefaultNamespace = "cicd"
+
 func (c *Client) namespace() string {
 	if c.Namespace != "" {
 		return c.Namespace
 	}
-	return "cicd"
+	return DefaultNamespace
+}
+
+// PodLogs is Client.Logs on a cluster client: the last 200 lines of the
+// container's log, at most four times what a failure keeps of it.
+func PodLogs(kube func() (kubernetes.Interface, error), namespace string) func(ctx context.Context, pod, container string) (string, error) {
+	return func(ctx context.Context, pod, container string) (string, error) {
+		client, err := kube()
+		if err != nil {
+			return "", err
+		}
+		lines, limit := int64(200), int64(4*landing.CIFailureLogBytes)
+		b, err := client.CoreV1().Pods(namespace).GetLogs(pod, &corev1.PodLogOptions{Container: container, TailLines: &lines, LimitBytes: &limit}).DoRaw(ctx)
+		return string(b), err
+	}
 }
 func (c *Client) resource() (dynamic.ResourceInterface, error) {
 	if c.Dynamic == nil {

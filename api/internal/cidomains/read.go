@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -506,10 +507,23 @@ func (c *Cache) saveChanged(repo string, commits []string, results []changedKept
 	}
 }
 
-// ChangedFilesOf reads Gitea's listing of one commit (git's --first-parent
+// ChangedFilesFrom is Source.Files on get, a read of Gitea's API
+// (gitread.Trees.Get): the paths a commit changed against its first parent, as
+// Gitea lists them for the commit.
+func ChangedFilesFrom(get func(ctx context.Context, path string, limit int64) ([]byte, error)) func(ctx context.Context, repo, commit string) ([]string, error) {
+	return func(ctx context.Context, repo, commit string) ([]string, error) {
+		body, err := get(ctx, url.PathEscape(repo)+"/git/commits/"+commit+"?stat=false&verification=false&files=true", 8<<20)
+		if err != nil {
+			return nil, err
+		}
+		return changedFilesOf(body, repo, commit)
+	}
+}
+
+// changedFilesOf reads Gitea's listing of one commit (git's --first-parent
 // name status, renames as a removal and an addition) into the paths it
 // changed.
-func ChangedFilesOf(body []byte, repo, commit string) ([]string, error) {
+func changedFilesOf(body []byte, repo, commit string) ([]string, error) {
 	var doc struct {
 		SHA   string `json:"sha"`
 		Files *[]struct {

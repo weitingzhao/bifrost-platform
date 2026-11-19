@@ -12,7 +12,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/kubernetes"
 )
 
 // GET /api/v1/ci/scorecard is how each repository uses CI, and how CI serves
@@ -41,8 +43,20 @@ var Repos = []struct{ Repo, Pipeline string }{
 const (
 	landPipeline = "bifrost-land"
 	firstTask    = "clone"
-	CleanupJob   = "tekton-pipelinerun-ttl"
+	cleanupJob   = "tekton-pipelinerun-ttl"
 )
+
+// LastCleanup is Source.Cleanup on a cluster client: when the CronJob that
+// deletes finished runs last succeeded; zero when it never has.
+func LastCleanup(ctx context.Context, client kubernetes.Interface, namespace string) (time.Time, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	job, err := client.BatchV1().CronJobs(namespace).Get(ctx, cleanupJob, metav1.GetOptions{})
+	if err != nil || job.Status.LastSuccessfulTime == nil {
+		return time.Time{}, err
+	}
+	return job.Status.LastSuccessfulTime.Time, nil
+}
 
 // Source is what the scorecard reads.
 type Source struct {
