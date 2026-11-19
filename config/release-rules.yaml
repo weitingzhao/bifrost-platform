@@ -43,6 +43,11 @@ rules:
     lane: platform
     env: prod
     deploys: true
+    # PROD builds nothing: it promotes the digests STG built, which check-source reports
+    # (2026-11-19: without this, PROD records had no images since 2026-10-22).
+    images:
+      - { task: check-source, result: api-digest, image: platform-api }
+      - { task: check-source, result: console-digest, image: platform-console }
   # Research and plugins: image builds; a pin push + GitOps sync deploys them
   - match: { pipeline: bifrost-deliver-research }
     lane: research

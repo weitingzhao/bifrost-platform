@@ -241,6 +241,18 @@ func builtImage(tr *unstructured.Unstructured) (image, digest string, declared, 
 	return image, digest, declared, true
 }
 
+// taskResult is the trimmed value of a TaskRun's result, "" when it has none.
+func taskResult(tr *unstructured.Unstructured, name string) string {
+	results, _, _ := unstructured.NestedSlice(tr.Object, "status", "results")
+	for _, r := range results {
+		if m, _ := r.(map[string]any); m["name"] == name {
+			v, _ := m["value"].(string)
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
 // buildRecord assembles a Record from a finished run and its TaskRuns.
 func buildRecord(run *unstructured.Unstructured, rule Rule, taskRuns []unstructured.Unstructured, now time.Time) Record {
 	rec := Record{
@@ -268,6 +280,19 @@ func buildRecord(run *unstructured.Unstructured, rule Rule, taskRuns []unstructu
 		paramSHA = rec.Revision
 	}
 	for i := range taskRuns {
+		for _, pi := range rule.Images {
+			if taskRuns[i].GetLabels()["tekton.dev/pipelineTask"] != pi.Task {
+				continue
+			}
+			if d := taskResult(&taskRuns[i], pi.Result); digestRE.MatchString(d) {
+				if rec.Images == nil {
+					rec.Images = map[string]string{}
+				}
+				rec.Images[pi.Image] = d
+			} else {
+				rec.Missing = append(rec.Missing, pi.Task+" ("+pi.Result+")")
+			}
+		}
 		if image, digest, declared, ok := builtImage(&taskRuns[i]); ok {
 			switch {
 			case digest != "":
