@@ -46,6 +46,10 @@ const (
 	// is this free (the compute line's rollback line, 2026-11-18: they hold the
 	// databases).
 	protectedDiskBusy = 0.60
+	// And only while this much memory is available (the compute line, 2026-11-19:
+	// ubt-k3s-02 fell from 10.7 to 7.5 GiB as builds moved there; its rollback line
+	// is 5 GiB, and 15% of its 15 GiB would only stop at 2.3).
+	protectedMemoryFloor = 6 << 30
 )
 
 // TaskProfile is what a kind of work needs from a node.
@@ -128,6 +132,8 @@ type NodeProfile struct {
 	Metrics    NodeMetrics
 	FreeCPU    float64 // allocatable minus the requests of unfinished pods
 	FreeMemory float64
+	// AvailableMemory is the bytes the kernel reports available, not requests.
+	AvailableMemory float64
 }
 
 // BuildPlacement is where a run's builds go; Node "" leaves it to the scheduler.
@@ -224,7 +230,7 @@ func spreadNode(task TaskProfile, nodes []NodeProfile, current string, fallback 
 	for i := range nodes {
 		n := &nodes[i]
 		if n.Problem != "" || nodeFull(task, *n) != "" || diskTier(n.Metrics.WriteLatencySeconds) >= 2 ||
-			(n.Protected && n.Metrics.DiskBusy >= protectedDiskBusy) {
+			(n.Protected && (n.Metrics.DiskBusy >= protectedDiskBusy || n.AvailableMemory < protectedMemoryFloor)) {
 			continue
 		}
 		if best == nil || load(*n) < load(*best) || (load(*n) == load(*best) && n.Host < best.Host) {
@@ -332,6 +338,7 @@ func nodeProfile(ctx context.Context, cs kubernetes.Interface, node *corev1.Node
 		return p
 	}
 	p.Metrics = m
+	p.AvailableMemory = m.MemoryAvailable * node.Status.Allocatable.Memory().AsApproximateFloat64()
 	pods, err := cs.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{FieldSelector: "spec.nodeName=" + node.Name})
 	if err != nil {
 		p.Problem = "requests not read"

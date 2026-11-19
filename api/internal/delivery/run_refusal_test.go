@@ -914,11 +914,31 @@ func TestABusyProtectedNodeTakesNoSpreadWork(t *testing.T) {
 		return NodeMetrics{WriteLatencySeconds: 0.001, CPUBusy: cpu, DiskBusy: disk, MemoryAvailable: 0.6}
 	}
 	nodes := []NodeProfile{
-		{Host: "db", Name: "db", Protected: true, FreeCPU: 8, FreeMemory: 8 << 30, Metrics: m(0.61, 0.61)},
-		{Host: "other", Name: "other", Protected: true, FreeCPU: 8, FreeMemory: 8 << 30, Metrics: m(0.7, 0.2)},
+		{Host: "db", Name: "db", Protected: true, FreeCPU: 8, FreeMemory: 8 << 30, AvailableMemory: 8 << 30, Metrics: m(0.61, 0.61)},
+		{Host: "other", Name: "other", Protected: true, FreeCPU: 8, FreeMemory: 8 << 30, AvailableMemory: 8 << 30, Metrics: m(0.7, 0.2)},
 	}
 	if p := spreadNode(CITask, nodes, "", BuildPlacement{}); p.Node != "other" {
 		t.Fatalf("placement = %+v", p)
+	}
+}
+
+// 2026-11-19, the compute line: ubt-k3s-02 (15 GiB) fell to 7.5 GiB available as CI
+// moved there, towards its 5 GiB rollback line. Under 6 GiB a database node takes no
+// spread work. Positive control: at 6 GiB the quieter node is chosen again.
+func TestAProtectedNodeLowOnMemoryTakesNoSpreadWork(t *testing.T) {
+	m := func(cpu float64) NodeMetrics {
+		return NodeMetrics{WriteLatencySeconds: 0.001, CPUBusy: cpu, DiskBusy: 0.1, MemoryAvailable: 0.4}
+	}
+	nodes := []NodeProfile{
+		{Host: "small", Name: "small", Protected: true, FreeCPU: 8, FreeMemory: 8 << 30, AvailableMemory: 6<<30 - 1, Metrics: m(0.1)},
+		{Host: "other", Name: "other", Protected: true, FreeCPU: 8, FreeMemory: 8 << 30, AvailableMemory: 12 << 30, Metrics: m(0.5)},
+	}
+	if p := spreadNode(CITask, nodes, "", BuildPlacement{}); p.Node != "other" {
+		t.Fatalf("low memory: %+v", p)
+	}
+	nodes[0].AvailableMemory = 6 << 30
+	if p := spreadNode(CITask, nodes, "", BuildPlacement{}); p.Node != "small" {
+		t.Fatalf("at the floor: %+v", p)
 	}
 }
 
