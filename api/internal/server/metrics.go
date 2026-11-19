@@ -2,13 +2,13 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"net/http"
 	"strings"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gatecluster"
@@ -32,9 +32,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		s.writePluginMetrics(&b, r)
 	}
 	maintainer.Write(&b)
-	b.WriteString("# HELP bifrost_platform_auth_loaded Whether platform-auth.yaml loaded (1) or every gated route answers 401 (0)\n")
-	b.WriteString("# TYPE bifrost_platform_auth_loaded gauge\n")
-	fmt.Fprintf(&b, "bifrost_platform_auth_loaded %d\n", boolValue(s.authLoaded))
+	actuation.WriteAuthLoaded(&b, s.authLoaded)
 	if s.releasePolicy != nil {
 		ctx, cancel := context.WithTimeout(r.Context(), pluginmetrics.ProbeTimeout)
 		s.releasePolicy.Status(ctx)
@@ -83,11 +81,4 @@ func (s *Server) pluginProbeFns() []func(context.Context) probe.PluginHealth {
 
 func (s *Server) writePluginMetrics(b *strings.Builder, r *http.Request) {
 	pluginmetrics.Write(r.Context(), b, s.pluginProbeFns())
-}
-
-func boolValue(v bool) int {
-	if v {
-		return 1
-	}
-	return 0
 }

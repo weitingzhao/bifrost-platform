@@ -11,10 +11,13 @@ package opsevents
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -52,6 +55,16 @@ type Event struct {
 // EnvHealth is a probed service's new state; subject is <env>/<service>.
 func EnvHealth(subject, state, source, cause string) Event {
 	return Event{TypeEnv, subject, state, source, oneLine(cause)}
+}
+
+// Probed is what the checklist's prober found changed: a plugin's new state, or
+// a service's (subject <env>/<service>).
+func Probed(plugin bool, subject, state, cause string) Event {
+	const source = "checklist-prober"
+	if plugin {
+		return PluginStatus(subject, state, source, cause)
+	}
+	return EnvHealth(subject, state, source, cause)
 }
 
 // PluginStatus is a plugin's new state.
@@ -224,4 +237,27 @@ func AutoRepair(ok bool, message string) Event {
 // PatrolFix says how the patrol autopilot's fix of an item of env ended.
 func PatrolFix(env, item string, ok bool, detail string) Event {
 	return EnvHealth(env+"/"+item, okState(ok), "patrol-autopilot", detail)
+}
+
+// Speaker says events on the bus's database. DB is nil until it connects.
+type Speaker struct {
+	DB func() eventlog.DB
+}
+
+// Announce says e, within five seconds and whatever becomes of ctx.
+func (s Speaker) Announce(ctx context.Context, e Event) error {
+	db := s.DB()
+	if db == nil {
+		return errors.New("the bus's database is not connected yet")
+	}
+	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	return Announce(cctx, db, e)
+}
+
+// Say announces e and logs a failure: saying it never fails the work.
+func (s Speaker) Say(ctx context.Context, e Event) {
+	if err := s.Announce(ctx, e); err != nil {
+		slog.Warn("bus: ops event not said", "type", e.Type, "subject", e.Subject, "error", err)
+	}
 }

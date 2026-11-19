@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -54,15 +53,7 @@ func (s *Server) agentRuntimeMains() agentrtapi.MainHead {
 	if s.delivery == nil {
 		return nil
 	}
-	access := s.delivery.GiteaAccess
-	client := &http.Client{Timeout: 10 * time.Second}
-	return func(ctx context.Context, repo string) (string, error) {
-		acc, err := access(ctx)
-		if err != nil {
-			return "", fmt.Errorf("gitea access: %w", err)
-		}
-		return gitread.BranchHead(gitAccess(access), acc.Org, client)(ctx, repo, "refs/heads/main")
-	}
+	return gitread.MainHeads(gitAccess(s.delivery.GiteaAccess), &http.Client{Timeout: 10 * time.Second})
 }
 
 // The readers agentRuntimeSources takes; a nil one reads nothing.

@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -190,6 +191,21 @@ func AnnounceAudit(ctx context.Context, db eventlog.DB, who, action, status stri
 		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "audit:" + who, Type: TypeRecorded, Actor: busActor, Body: AuditBody(who, action, status)})
 		return err
 	})
+}
+
+// SayAudit says a line of the audit log on the bus, within five seconds. DB is
+// nil until the bus's database connects; a failure is logged, the log stays
+// what it is (S02).
+func SayAudit(db func() eventlog.DB, who, action, status string) {
+	d := db()
+	if d == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := AnnounceAudit(ctx, d, who, action, status); err != nil {
+		slog.Warn("bus: audit line not said", "action", action, "error", err)
+	}
 }
 
 func init() {

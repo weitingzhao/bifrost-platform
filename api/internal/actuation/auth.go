@@ -496,3 +496,14 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }
+
+// WriteAuthLoaded writes whether platform-auth.yaml loaded, for /metrics.
+func WriteAuthLoaded(b *strings.Builder, loaded bool) {
+	v := 0
+	if loaded {
+		v = 1
+	}
+	b.WriteString("# HELP bifrost_platform_auth_loaded Whether platform-auth.yaml loaded (1) or every gated route answers 401 (0)\n")
+	b.WriteString("# TYPE bifrost_platform_auth_loaded gauge\n")
+	fmt.Fprintf(b, "bifrost_platform_auth_loaded %d\n", v)
+}

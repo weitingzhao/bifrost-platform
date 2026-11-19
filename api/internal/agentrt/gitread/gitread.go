@@ -42,6 +42,19 @@ var (
 	CommitID = regexp.MustCompile(`^[0-9a-f]{40}$`)
 )
 
+// MainHeads reads the head of a repository's main in the organization access
+// names (for agentd, what AGENTD_GIT_BASE names: the base of a goal's task,
+// W-31 2.2b).
+func MainHeads(access func(context.Context) (Access, error), client *http.Client) func(context.Context, string) (string, error) {
+	return func(ctx context.Context, repo string) (string, error) {
+		acc, err := access(ctx)
+		if err != nil {
+			return "", fmt.Errorf("gitea access: %w", err)
+		}
+		return BranchHead(access, acc.Org, client)(ctx, repo, "refs/heads/main")
+	}
+}
+
 // BranchHead reads the commit a branch of <org>/<repo> points at, from
 // the refs git itself advertises over smart HTTP (info/refs, what ls-remote
 // reads): the view agentd's push had. Gitea's branches API answered 404 for a
