@@ -1,3 +1,4 @@
+import { useLiveInterval } from '@/domains/foundation/bus/liveRefresh'
 import { useQuery } from '@tanstack/react-query'
 import { fetchClusterNodes } from '@/api/cluster'
 import { fetchPromQL, fetchTelemetryAlerts, fetchTelemetryTargets } from '@/api/telemetry'
@@ -28,7 +29,9 @@ export function current<T>(q: { data: T | undefined; isError: boolean; isPaused:
  */
 export function useOwnerYours(now: number) {
   const needsYou = useNeedsYou()
-  const alertsQ = useQuery({ queryKey: ['telemetry', 'alerts'], queryFn: fetchTelemetryAlerts, refetchInterval: 30_000, retry: false })
+  // alert.rule.fired refreshes this one (step 4); the old pace while the bus stream is down.
+  const alertsInterval = useLiveInterval(30_000)
+  const alertsQ = useQuery({ queryKey: ['telemetry', 'alerts'], queryFn: fetchTelemetryAlerts, refetchInterval: alertsInterval, retry: false })
   const nodesQ = useQuery({ queryKey: ['cluster', 'nodes'], queryFn: fetchClusterNodes, refetchInterval: 30_000, retry: false })
 
   const nodes = current(nodesQ)?.nodes ?? []

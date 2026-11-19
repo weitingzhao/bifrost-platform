@@ -4,6 +4,7 @@ import { COORDINATOR_SIGN_IN, COORDINATOR_THREAD, fetchCoordinatorNote } from '@
 import { operatorToken } from '@/api/client'
 import { fetchActionRecords } from '@/api/actionRecords'
 import { fetchDataFreshness } from '@/api/cluster'
+import { useLiveInterval } from '@/domains/foundation/bus/liveRefresh'
 import { fetchClusterPostgresBackupStatus } from '@/domains/foundation/backup/api'
 import { fetchDeliveryPipelines, fetchPipelineRuns, fetchReleaseWindow } from '@/api/delivery'
 import { fetchCoverageDimensions } from '@/api/marketDataDimensions'
@@ -37,17 +38,19 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; servic
   const now = Date.now()
   const { needsYou, alertsQ, nodesQ, nodes, standby, alerts, alertsError, standbyEvidence, yours } = useOwnerYours(now)
   const hasToken = operatorToken() !== ''
+  // Reads the bus refreshes when it says they changed (step 4): slow polling while the stream is up, the old pace when it is down.
+  const live15 = useLiveInterval(15_000), live30 = useLiveInterval(30_000), live60 = useLiveInterval(60_000)
   // Done for you (law 46): the action record's last day, read with For you. The window's start is rounded to the
   // minute so the query key holds still between reads.
   const doneSince = new Date(Math.floor((now - DONE_WINDOW_HOURS * 3_600_000) / 60_000) * 60_000).toISOString()
-  const doneQ = useQuery({ queryKey: ['records', 'done-for-you'], queryFn: () => fetchActionRecords({ since: doneSince, limit: 500 }), refetchInterval: 60_000, retry: false })
-  const windowQ = useQuery({ queryKey: ['delivery', 'release-window'], queryFn: fetchReleaseWindow, enabled: hasToken, refetchInterval: 15_000 })
+  const doneQ = useQuery({ queryKey: ['records', 'done-for-you'], queryFn: () => fetchActionRecords({ since: doneSince, limit: 500 }), refetchInterval: live60, retry: false })
+  const windowQ = useQuery({ queryKey: ['delivery', 'release-window'], queryFn: fetchReleaseWindow, enabled: hasToken, refetchInterval: live15 })
   const recordsQ = useQuery({ queryKey: ['releases', 'records', RELEASE_RECORD_LIMIT], queryFn: () => fetchReleaseRecords(RELEASE_RECORD_LIMIT),
-    enabled: blocks.work, refetchInterval: 30_000 })
-  const pipelinesQ = useQuery({ queryKey: ['delivery', 'pipelines'], queryFn: fetchDeliveryPipelines, enabled: blocks.work, refetchInterval: 15_000 })
+    enabled: blocks.work, refetchInterval: live30 })
+  const pipelinesQ = useQuery({ queryKey: ['delivery', 'pipelines'], queryFn: fetchDeliveryPipelines, enabled: blocks.work, refetchInterval: live15 })
   const pipelineNames = (current(pipelinesQ)?.pipelines ?? []).map(p => p.name).filter(isReleasePipeline).sort()
   const runQs = useQueries({ queries: pipelineNames.map(name => ({ queryKey: ['delivery', 'runs', name], queryFn: () => fetchPipelineRuns(name),
-    enabled: blocks.work, refetchInterval: 15_000 })) })
+    enabled: blocks.work, refetchInterval: live15 })) })
 
   // Business probes belong to Services; infrastructure summaries belong to System.
   const tiles = blocks.services ?? false
