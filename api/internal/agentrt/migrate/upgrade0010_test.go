@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // registers the vocabulary and the artifact checks
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore" // declares the plan event vocabulary
 	"reflect"
 	"slices"
 	"testing"

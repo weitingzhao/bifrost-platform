@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // declares the event vocabulary
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore" // declares the plan event vocabulary
 )
 
 func search(t *testing.T, w *world, q artifact.ArtifactQuery) ([]string, string) {

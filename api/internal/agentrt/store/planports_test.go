@@ -130,7 +130,11 @@ func TestRulePortsAreBoundToTheRuleStore(t *testing.T) {
 		var kinds []string
 		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 			var err error
-			kinds, err = store.PlanRulePortsForTest.CardAutoKindsInForce(ctx, tx)
+			var r *store.StoredRule
+			r, err = store.InForceIn(ctx, tx, rules.KindCardAuto)
+			if r != nil {
+				kinds = r.CardAuto.Kinds
+			}
 			return err
 		}))
 		return kinds

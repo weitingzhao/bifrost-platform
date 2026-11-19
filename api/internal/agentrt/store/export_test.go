@@ -11,11 +11,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// The ports as the store binds them. What the plan never asks of a port (a
-// card kind it does not ask about, a verification function of another
-// caller's, text that is not JSON) can only be seen here.
-var PlanRulePortsForTest = planRulePorts
-
 // SetHook installs a test hook (see hook) and returns the function that
 // removes it.
 func SetHook(f func(point, arg string)) func() {

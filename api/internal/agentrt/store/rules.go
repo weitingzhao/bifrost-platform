@@ -19,7 +19,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 )
@@ -87,6 +86,29 @@ func readRule(id string, version int, direction string, effective, expires time.
 		s.SignedBy = *signedBy
 	}
 	return s, nil
+}
+
+// LatestRule is the newest recorded version of a kind, in force or not.
+func LatestRule(ctx context.Context, tx pgx.Tx, id string) (*StoredRule, error) {
+	return latestRule(ctx, tx, id)
+}
+
+// RuleIDs are the rule kinds on record, with the tuning kind always listed.
+func RuleIDs(ctx context.Context, tx pgx.Tx) ([]string, error) {
+	rows, err := tx.Query(ctx, "SELECT rule_id FROM agentrt.rule UNION SELECT 'tuning' ORDER BY rule_id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // latestRule is the last version of a rule, whether in force or not; nil
@@ -432,28 +454,6 @@ func ProposeRule(ctx context.Context, db eventlog.DB, w actor.Writer, key, id st
 	})
 }
 
-// The plan code reads the two rules it acts under through its ports
-// (planstore, planports.go): the rule in force of each kind, as far as the plan code
-// reads it. A rule that does not read counts as none there too (inForce).
-var planRulePorts = planstore.RulePorts{
-	PlanRuleInForce: func(ctx context.Context, tx pgx.Tx) (*planstore.PlanRule, error) {
-		r, err := inForce(ctx, tx, rules.KindPlan)
-		if err != nil || r == nil {
-			return nil, err
-		}
-		return &planstore.PlanRule{ID: r.ID, Version: r.Version, DoneRules: r.Plan.DoneRules}, nil
-	},
-	CardAutoKindsInForce: func(ctx context.Context, tx pgx.Tx) ([]string, error) {
-		r, err := inForce(ctx, tx, rules.KindCardAuto)
-		if err != nil || r == nil {
-			return nil, err
-		}
-		return r.CardAuto.Kinds, nil
-	},
-}
-
-func init() { planstore.BindPlanRules(planRulePorts) }
-
 // What only the rules know, registered with the actor package: the day's
 // limit of new threads where the tuning rule sets it. No holder of an
 // agent's token is registered, so the actor package refuses every agent.
@@ -469,6 +469,13 @@ func init() {
 
 // inForce is CurrentRule at the database's clock; a stored rule that does
 // not read counts as none.
+// InForceIn is the rule of a kind in force inside the caller's transaction; a
+// rule that does not read counts as none. The plan wiring reads the plan and
+// card-auto rules through it.
+func InForceIn(ctx context.Context, tx pgx.Tx, id string) (*StoredRule, error) {
+	return inForce(ctx, tx, id)
+}
+
 func inForce(ctx context.Context, tx pgx.Tx, id string) (*StoredRule, error) {
 	var now time.Time
 	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {

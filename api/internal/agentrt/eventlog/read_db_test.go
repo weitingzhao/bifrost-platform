@@ -9,7 +9,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // the vocabulary, in the test
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore" // declares the plan event vocabulary
 )
 
 // Origin: 2026-11-16, the ledger got reads of its own (Last, Has, HasBody)

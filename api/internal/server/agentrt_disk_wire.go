@@ -9,7 +9,7 @@ import (
 
 // diskFloorFromEnv is the free disk, in GiB, below which a host is given no
 // new work (AGENTRT_DISK_FLOOR_GIB; TD-415): unset, 0, or not a whole number
-// above 0 leaves the runtime's default (store.DefaultDiskFloor), and the log
+// above 0 leaves the runtime's default (15 GiB, in deliveryview), and the log
 // says which.
 func diskFloorFromEnv() int64 {
 	v := strings.TrimSpace(os.Getenv("AGENTRT_DISK_FLOOR_GIB"))

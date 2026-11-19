@@ -11,20 +11,24 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
 
 func TestAnsweredQuestionThreadInboxPG(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
+	// This test stores a message, not a view artifact: nothing here needs the
+	// plan code's check of view bodies, only that a check is registered.
+	artifact.RegisterCheck(func(string, []byte) error { return nil })
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)
 	w := actor.Writer{Actor: "thread:local_question", Token: "fixture"}
-	if _, _, err := store.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register")); err != nil {
+	if _, _, err := artifact.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register")); err != nil {
 		t.Fatal(err)
 	}
 	var now time.Time
@@ -57,17 +61,17 @@ func TestAnsweredQuestionThreadInboxPG(t *testing.T) {
 			t.Fatal(err)
 		}
 		svc.SetThreadInbox(func(ctx context.Context, key, to, body string) error {
-			return store.PostConclusion(ctx, pool, key, to, body)
+			return coord.PostConclusion(ctx, pool, key, to, body)
 		})
 		svc.RetryThreadInbox(ctx)
 		svc.RetryThreadInbox(ctx)
-		mail, err := store.Unread(ctx, pool, w, 100)
+		mail, err := coord.Unread(ctx, pool, w, 100)
 		if err != nil || len(mail) != 1 || !strings.Contains(mail[0].Body, id) ||
 			!strings.Contains(mail[0].Body, "An answer is not an approval.") ||
 			!strings.Contains(mail[0].Body, "Option: a — Proceed") || strings.Contains(mail[0].Body, "rule card-auto-answer") != ruled {
 			t.Fatalf("mail=%+v err=%v", mail, err)
 		}
-		if _, err := store.AckMessages(ctx, pool, w, []string{mail[0].ID}); err != nil {
+		if _, err := coord.AckMessages(ctx, pool, w, []string{mail[0].ID}); err != nil {
 			t.Fatal(err)
 		}
 		// Restore the same business bytes and recreate the service; only PG has a receipt.
@@ -76,10 +80,10 @@ func TestAnsweredQuestionThreadInboxPG(t *testing.T) {
 		}
 		svc = questions.New(path, nil)
 		svc.SetThreadInbox(func(ctx context.Context, key, to, body string) error {
-			return store.PostConclusion(ctx, pool, key, to, body)
+			return coord.PostConclusion(ctx, pool, key, to, body)
 		})
 		svc.RetryThreadInbox(ctx)
-		history, err := store.Thread(ctx, pool, w.Actor, "controller", 100)
+		history, err := coord.Thread(ctx, pool, w.Actor, "controller", 100)
 		if err != nil || len(history) != i+1 {
 			t.Fatalf("business replay duplicated history: %d %v", len(history), err)
 		}

@@ -22,10 +22,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/strictjson"
-	// The rule ports are bound by the rule store; linking this package links
-	// it, so every port of the plan code is bound when it is linked.
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
@@ -66,13 +65,36 @@ func ExternalWorkPorts() planstore.ExternalWorkPorts {
 	}
 }
 
-// Bind binds the plan code's ports that this package provides (the rule ports
-// are bound by agentrt/store). The API binary calls it at its start
+// rulePorts are the plan's ports onto the rule in force of each kind, as far
+// as the plan code reads it, read through the rule store. A rule that does
+// not read counts as none there too.
+func rulePorts() planstore.RulePorts {
+	return planstore.RulePorts{
+		PlanRuleInForce: func(ctx context.Context, tx pgx.Tx) (*planstore.PlanRule, error) {
+			r, err := store.InForceIn(ctx, tx, rules.KindPlan)
+			if err != nil || r == nil {
+				return nil, err
+			}
+			return &planstore.PlanRule{ID: r.ID, Version: r.Version, DoneRules: r.Plan.DoneRules}, nil
+		},
+		CardAutoKindsInForce: func(ctx context.Context, tx pgx.Tx) ([]string, error) {
+			r, err := store.InForceIn(ctx, tx, rules.KindCardAuto)
+			if err != nil || r == nil {
+				return nil, err
+			}
+			return r.CardAuto.Kinds, nil
+		},
+	}
+}
+
+// Bind binds the plan code's ports that this package provides (including the rule
+// ports, read through agentrt/store). The API binary calls it at its start
 // (server/agentrt_planwiring.go); a test that runs the plan code calls it from
 // its TestMain. Linking this package binds nothing any more (2026-11-18,
 // decoupling item 5: the planstore tests used to be bound only because they
 // linked it); an unbound port refuses. Binding twice is harmless.
 func Bind() {
+	planstore.BindPlanRules(rulePorts())
 	planstore.BindPlanExternalWork(ExternalWorkPorts())
 	externalwork.BindPlanTree(externalwork.PlanTreePorts{
 		LockTree: planstore.LockTree,
