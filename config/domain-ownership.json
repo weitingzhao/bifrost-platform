@@ -1414,6 +1414,13 @@
       "status": "assigned",
       "basis": "2026-11-16 complete Tenant ingest observation interpretation and DTOs extracted. Satellite retains original request, identity, shared aggregate and all monitor/auto fields; no execution or whole-satellite closure."
     },
+    "api/internal/tenant/assembly": {
+      "domains": [
+        "tenant"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the tenant's assembly, moved out of server unchanged: building the tenant's handlers (plugins, research, data clone, data husbandry, satellite, trade agent catalog) and mounting the tenant's /api/v1 routes (was mount_tenant.go) with the same paths, gates, handlers and order. server lends it the cluster's adapters (Kube), the gates and the topology answer. Imports tenant and foundation only."
+    },
     "api/internal/tenant/husbandry": {
       "domains": [
         "tenant"
