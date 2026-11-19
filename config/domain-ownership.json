@@ -552,6 +552,13 @@
       "status": "assigned",
       "basis": "planning charter and verified extraction; 2026-11-16 import/architecture proposal card text extracted, validation and import writes unchanged"
     },
+    "api/internal/agentrt/lineageapi": {
+      "domains": [
+        "lineage"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the lineage's HTTP for registered work, moved out of agentrtapi unchanged (externalwork.go): POST /agentrt/external-work, /agentrt/external-work/{id}/events and GET /agentrt/external-work/{id}, with the same paths, bodies, answers and error texts. agentrtapi still mounts them behind the same abilities and lends them identity, the canonical body reader, the answers and the error mapping through the Host interface the package declares. Imports lineage (externalwork) and foundation (actor, eventlog, actuation) only."
+    },
     "api/internal/agentrt/planapi": {
       "domains": [
         "plan"

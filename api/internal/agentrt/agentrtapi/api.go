@@ -33,6 +33,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/lineageapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -128,6 +129,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 	// packages (2026-11-19, OWNER_LAW #28); their routes and abilities are
 	// here with every other.
 	plan, coordination := planapi.Routes{Host: host{a}, WorkSpans: workregistration.WorkSpans}, coordapi.Routes{Host: host{a}}
+	lineage := lineageapi.Routes{Host: host{a}}
 	r.Route("/agentrt", func(r chi.Router) {
 		r.With(read, cfg).Get("/whoami", a.whoami)
 		r.With(upload, cfg).Put("/artifacts/{id}", a.putArtifact)
@@ -142,9 +144,9 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/plan-view", plan.HandleGetPlanView)
 		r.With(read, cfg).Get("/delivery", a.getDelivery)
 		r.With(read, cfg).Get("/plan-pace", plan.HandleGetPlanPace)
-		r.With(read, cfg).Get("/external-work/{id}", a.getExternalWork)
-		r.With(external, cfg).Post("/external-work", a.registerExternalWork)
-		r.With(external, cfg).Post("/external-work/{id}/events", a.postExternalEvent)
+		r.With(read, cfg).Get("/external-work/{id}", lineage.HandleGetExternalWork)
+		r.With(external, cfg).Post("/external-work", lineage.HandleRegisterExternalWork)
+		r.With(external, cfg).Post("/external-work/{id}/events", lineage.HandlePostExternalEvent)
 		r.With(read, cfg).Get("/plan/{id}", plan.HandleGetPlanNode)
 		r.With(propose, cfg).Post("/plan/proposals", plan.HandleProposePlanChange)
 		r.With(propose, cfg).Post("/plan/{id}/notes", plan.HandlePostPlanNote)

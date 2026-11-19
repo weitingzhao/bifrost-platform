@@ -14,7 +14,7 @@ import (
 // shares, read from the API at each request: its database and wiring, who a
 // request is recorded as (writer, actorOf), the strict body readers, the
 // answers and the mapping of an error to a status (fail). It implements
-// planapi.Host and coordapi.Host; nothing here is a domain's.
+// planapi.Host, coordapi.Host and lineageapi.Host; nothing here is a domain's.
 type host struct{ a *API }
 
 func (h host) DB() eventlog.DB            { return h.a.DB }
@@ -38,6 +38,11 @@ func (h host) DecodeCanonical(w http.ResponseWriter, r *http.Request, v any) boo
 
 func (h host) Document(w http.ResponseWriter, r *http.Request, q string, args ...any) {
 	h.a.document(w, r, q, args...)
+}
+
+// DecodeCanonicalRaw is DecodeCanonical giving the bytes it read too.
+func (h host) DecodeCanonicalRaw(w http.ResponseWriter, r *http.Request, v any) ([]byte, bool) {
+	return decodeViewRaw(w, r, v)
 }
 
 func (h host) JSON(w http.ResponseWriter, status int, v any) { writeJSON(w, status, v) }
