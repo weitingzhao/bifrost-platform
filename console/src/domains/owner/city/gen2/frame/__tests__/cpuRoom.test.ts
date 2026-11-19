@@ -2,24 +2,25 @@ import { describe, expect, it } from 'vitest'
 import { rowsDrawn, setRuler } from '../library/dictionary'
 import { cpuRoom, cpuRoomKey, cpuRoomLayout, cpuRoomShape, type CpuRoomReadings } from '../units/cpuRoom'
 
-// 2026-11-19, the CPU unit's room (the workshop). On the first draw a Mac mini, which reports no clock,
+// 2026-11-19, the CPU unit's room (the workshop). CPU only: load and waiting were drawn first and taken
+// out the same day — the scheduler counts them, the CPU as hardware does not know them (the Owner). On the first draw a Mac mini, which reports no clock,
 // got empty speed dials and their key rows, and the asleep GPU box got a waiting line in its key with
 // nothing waiting read: a row looked up is a row shown, so a part not read is not drawn or looked up.
 const core = (busy: number | null, freq: number | null = null, max: number | null = null) => ({ busy, freq, max })
-const linux: CpuRoomReadings = { cores: Array.from({ length: 16 }, () => core(0.2, 2e9, 4e9)), temps: [{ name: 'Tctl', c: 69 }], load: [0.6, 0.7, 1.7], pressure: 0.21 }
-const mac: CpuRoomReadings = { cores: Array.from({ length: 10 }, () => core(0.1)), temps: [], load: [1.1, 1.3, 1.3], pressure: null }
-const asleep: CpuRoomReadings = { cores: [], temps: [], load: [null, null, null], pressure: null }
+const linux: CpuRoomReadings = { cores: Array.from({ length: 16 }, () => core(0.2, 2e9, 4e9)), temps: [{ name: 'Tctl', c: 69 }] }
+const mac: CpuRoomReadings = { cores: Array.from({ length: 10 }, () => core(0.1)), temps: [] }
+const asleep: CpuRoomReadings = { cores: [], temps: [] }
 
 describe('the CPU room', () => {
   it('a Linux node shows every part of the workshop', () => {
-    expect(rowsDrawn(() => cpuRoom(linux)).ids.sort()).toEqual(['core.busy', 'core.freq', 'core.freq.max', 'core.machines', 'load', 'pressure', 'sensor.temp'])
+    expect(rowsDrawn(() => cpuRoom(linux)).ids.sort()).toEqual(['core.busy', 'core.busy.all', 'core.freq', 'core.freq.max', 'core.machines', 'sensor.temp'])
   })
-  it('a Mac mini: no clock read, no speed dials; no sensors, no thermometers; nothing waited read, nobody in line', () => {
-    expect(rowsDrawn(() => cpuRoom(mac)).ids.sort()).toEqual(['core.busy', 'core.machines', 'load'])
+  it('a Mac mini: no clock read, no speed dials; no sensors, no thermometer', () => {
+    expect(rowsDrawn(() => cpuRoom(mac)).ids.sort()).toEqual(['core.busy', 'core.busy.all', 'core.machines'])
   })
-  it('a machine nothing reads: no machines, only the empty office', () => {
+  it('a machine nothing reads: no machines, an empty console', () => {
     const { out, ids } = rowsDrawn(() => cpuRoom(asleep))
-    expect(ids).toEqual(['load'])
+    expect(ids).toEqual([])
     expect(out.svg).toContain('CORES NOT READ')
   })
   it('more busy, more light: the picture changes with the reading', () => {
@@ -67,10 +68,10 @@ describe('the CPU room', () => {
   // "Core N") stands on its own machine instead.
   it('a whole-chip temperature hangs once on the wall; a per-core one stands on its machine', () => {
     const whole = cpuRoom(linux).svg
-    expect(whole).toContain('CPU 69°')
+    expect(whole).toContain('69°')
     const perCore: CpuRoomReadings = { ...linux, temps: linux.cores.map((_, k) => ({ name: `Core ${k}`, c: 50 + k, core: k })) }
     const svg = cpuRoom(perCore).svg
-    expect(svg).not.toContain('CPU 5')
+    expect(svg).not.toContain('>50°')
     expect(svg).not.toBe(whole)
   })
 })

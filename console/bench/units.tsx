@@ -101,7 +101,7 @@ function CpuRoomView({ r }: { r: Reads }) {
         {rows.length === 0 && <li><span>Nothing read on this machine, so nothing is drawn in its room.</span></li>}
       </ul>
     </div>
-    <p className="hint">{read.cores.length} cores → {machinesOf(read)} machines → a {cpuRoomShape(machinesOf(read)).join('×')} room · load {read.load.map(l => l == null ? '–' : l.toFixed(2)).join(' / ')} · waited {read.pressure == null ? 'not read' : `${(read.pressure * 100).toFixed(1)}%`} · {read.temps.length} sensors{read.temps.length ? `, hottest ${Math.round(Math.max(...read.temps.map(t => t.c)))} °C` : ''}</p>
+    <p className="hint">{read.cores.length} cores → {machinesOf(read)} machines → a {cpuRoomShape(machinesOf(read)).join('×')} room · {read.temps.length} sensors{read.temps.length ? `, hottest ${Math.round(Math.max(...read.temps.map(t => t.c)))} °C` : ''}</p>
   </div>
 }
 

@@ -31,7 +31,7 @@ describe('the unit process', () => {
   it('the CPU unit: Details confirmed, the hardware only; Inside open, every chosen detail placed', () => {
     const cpu = UNITS.find(u => u.id === 'cpu')!
     expect(stagesOf(cpu).slice(0, 2)).toEqual([{ id: 'details', state: 'confirmed' }, { id: 'inside', state: 'open' }])
-    for (const use of ['busy.mode', 'running', 'blocked', 'switches', 'interrupts', 'guest']) expect(cpu.chosen).not.toContain(use)
+    for (const use of ['busy.mode', 'running', 'blocked', 'switches', 'interrupts', 'guest', 'load1', 'load5', 'load15', 'pressure']) expect(cpu.chosen).not.toContain(use)
     expect(new Set(cpu.inside!.map(i => i.detail))).toEqual(new Set(cpu.chosen))
     expect(STAGES.map(s => s.id)).toEqual(['details', 'inside', 'summary', 'outside', 'in-use'])
   })

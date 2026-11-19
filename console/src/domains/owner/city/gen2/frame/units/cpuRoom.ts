@@ -3,15 +3,12 @@ import { encode, metaphor, rulerOf, rulersKey } from '../library/dictionary'
 
 /**
  * The CPU unit's room, the workshop (a computer is a factory, the Owner 2026-11-19; RULES.md, 由内向外).
- * The hardware only — how many cores, how busy each, how fast, how hot, whether more is asked than it can do:
+ * The hardware only — how many cores, how busy each, how fast, how hot:
  *   the workshop floor   one machine tool per core, in rows: its work light as high as the core is busy,
  *                        its speed dial's needle at the core's clock, the dial's red line its top clock
- *   temperature          where it is measured: the whole chip's sensor a big thermometer on the left
- *                        wall; a core's own sensor a small one on its machine; red from 80 °C
- *   the production board three dials on the back wall (load over 1, 5 and 15 minutes against the cores:
- *                        past the middle into red, more is asked than it can do)
- *   the staging area     by the door, bins of work waiting for a free machine (as many as the share of
- *                        time something waited for a core)
+ *   the CPU console      at the front, for the whole CPU: a busy dial (all cores together) and the
+ *                        chip's thermometer
+ *   a core's own sensor  where one reports per core, a small thermometer on its machine
  * Everything is a reading; what is not read is not drawn (no machines when the cores are not read, no
  * needle on a dial nothing reads).
  */
@@ -21,8 +18,6 @@ export type CpuRoomReadings = {
   cores: { busy: number | null; freq: number | null; max: number | null }[]
   /** The CPU's own sensors: a sensor for one core carries its core (Intel's "Core N"); one without measures the whole chip (AMD's Tctl). */
   temps: { name: string; c: number; core?: number }[]
-  load: [number | null, number | null, number | null]
-  pressure: number | null
 }
 
 const U = 35.8
@@ -83,7 +78,7 @@ export const machinesOf = (r: CpuRoomReadings) => r.cores.length ? Math.ceil(enc
 export function cpuRoom(r: CpuRoomReadings): Sprite {
   const count = machinesOf(r), [fw, fd] = cpuRoomShape(count)
   const g = new Draw(fw, fd, 56)
-  // The floor: a workshop slab; the aisle painted between the machines and the staging area.
+  // The floor: a workshop slab; a line painted between the machines and the console at the front.
   g.box(0, 0, fw, fd, 3, faces('#d8d6cf', '#bdbab1', '#aaa79e'), 0, 1.2)
   const sy = fd - STAGING - 0.2
   g.floor(0, 0, 3, `<rect x="${(0.3 * U).toFixed(1)}" y="${((sy - 0.12) * U).toFixed(1)}" width="${((fw - 0.6) * U).toFixed(1)}" height="${(0.1 * U).toFixed(1)}" fill="#f2c94c"/>`)
@@ -91,40 +86,45 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
   g.box(0, 0, fw, 0.18, 46, WALL, 0, 1.2)
   g.box(0, 0.18, 0.18, fd - 0.18, 46, WALL, 0, 1.2)
 
-  // Temperature, drawn where it is measured: a sensor for the whole chip is one big thermometer on the
-  // workshop wall, labelled with the sensor; a sensor for one core stands on that core's machine.
+  // Temperature: a sensor for one core stands on that core's machine; a sensor for the whole chip is on
+  // the console. Readings for the whole CPU are on the console at the front, where nothing hides them
+  // (the Owner, 2026-11-19: on the back wall the machines hid them; a whole CPU's load belongs on a console).
   const chip = [...r.temps].filter(t => t.core == null).sort((a, b) => b.c - a.c)
   const perCore = new Map(r.temps.filter(t => t.core != null).map(t => [t.core!, t.c]))
   if (r.temps.length) metaphor('sensor.temp')
   const liquidOf = (c: number) => c >= 80 ? '#e0533d' : '#e88a3a'
-  chip.forEach((t, k) => {
-    const a = 0.7 + k * 1.1, b = a + 0.24, z0 = 10, z1 = 44
-    const f = encode('sensor.temp', t.c / 100)!
-    g.onRight(0.18, 0, a, b, z0, z1, '#fbfaf6', 0.9)
-    g.onRight(0.18, 0, a + 0.04, b - 0.04, z0, z0 + (z1 - z0) * f, liquidOf(t.c), 0)
-    for (const m of [0.25, 0.5, 0.75]) g.line([0.18, a + 0.17, z0 + (z1 - z0) * m], [0.18, b, z0 + (z1 - z0) * m], INK, 0.6)
-    g.face('right', 0.18, a + (b - a) / 2, z0 - 3, `<circle cx="0" cy="0" r="4.2" fill="${liquidOf(t.c)}" stroke="${INK}" stroke-width="0.8"/>`)
-    g.text('right', 0.18, b + 0.5, 30, `CPU ${Math.round(t.c)}°`, 6.5, INK, 700)
-    g.text('right', 0.18, b + 0.5, 22, esc(t.name).toUpperCase(), 5, '#8a857a')
-  })
-
-  // The production board on the back wall: three dials of the work asked of the workshop over 1, 5 and
-  // 15 minutes, against its cores (past the middle, into red, more is asked than it can do).
-  const bw = 2, bx = Math.max(0.4, fw - 0.3 - bw)
-  g.onLeft(0, 0.18, bx, bx + bw, 12, 44, '#26303d', 1)
-  g.text('left', bx + 0.12, 0.18, 36, 'LOAD', 6.5, '#f2f0e8', 700)
-  metaphor('load')
   const cores = r.cores.length
-  r.load.forEach((l, k) => {
-    const f = l == null || cores === 0 ? null : encode('load', (l / cores) / 2)
-    g.face('left', bx, 0.18, 22, dial(8, (0.2 + k * 0.3) * bw * U + 4, f, 0.5, ['1m', '5m', '15m'][k]))
-  })
-  // The staging area by the door, marked on the floor: work waiting for a free machine waits here.
-  const sx = 0.3, sw = fw - 0.6, sd = STAGING
-  g.floor(sx, sy, 3, `<rect x="0" y="0" width="${(sw * U).toFixed(1)}" height="${(sd * U).toFixed(1)}" fill="none" stroke="#f2c94c" stroke-width="2.5" stroke-dasharray="6 4"/>` +
-    `<text x="${(sw * U / 2).toFixed(1)}" y="${(sd * U - 6).toFixed(1)}" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="8" font-weight="700" fill="#c9a43a">WAITING</text>`)
+  const avgOf = (v: (number | null)[]) => { const k = v.filter((x): x is number => x != null); return k.length ? k.reduce((a, b) => a + b, 0) / k.length : null }
+  const all = avgOf(r.cores.map(c => c.busy))
 
-  // The machines and the waiting bins, drawn back to front.
+  // The console: a desk at the front with an upright panel, for the whole CPU: a busy dial (all cores
+  // together, the average of each machine's work light) and the chip's thermometer. Only what the CPU
+  // knows as hardware (the Owner, 2026-11-19: load and waiting are counted by the scheduler, not the CPU).
+  const cw = Math.min(2.2, fw - 0.6), cx = fw - 0.3 - cw, cy = sy + 0.3, cd = 0.6
+  const drawConsole = () => {
+    g.shadow(cx, cy, cw, cd, 0.3)
+    g.box(cx, cy, cw, cd, 14, faces('#e9e4d6', '#cfc8b6', '#bdb5a1'), 0, 1.2)
+    g.box(cx, cy, cw, 0.14, 28, faces('#3a4150', '#2b313d', '#232833'), 14, 1.1)
+    const P = cy + 0.14
+    if (cores > 0) {
+      metaphor('core.busy.all')
+      g.face('left', cx, P, 27, dial(11, 0.55 * U, encode('core.busy.all', all), 0.85))
+      g.text('left', cx + 0.12, P, 38.5, 'BUSY', 5.5, '#f2f0e8', 700)
+      if (all != null) g.text('left', cx + 0.33, P, 19, `${Math.round(all * 100)}%`, 6.5, '#f2f0e8', 700)
+    }
+    const t = chip[0]
+    if (t) {
+      const a = cw - 0.75, b = a + 0.14, z0 = 18, z1 = 39, f = encode('sensor.temp', t.c / 100)!
+      g.onLeft(cx, P, a, b, z0, z1, '#fbfaf6', 0.7)
+      g.onLeft(cx, P, a + 0.025, b - 0.025, z0, z0 + (z1 - z0) * f, liquidOf(t.c), 0)
+      g.face('left', cx + a + 0.07, P, z0 - 1.5, `<circle cx="0" cy="0" r="3" fill="${liquidOf(t.c)}" stroke="${INK}" stroke-width="0.7"/>`)
+      g.text('left', cx + b + 0.05, P, 33, `${Math.round(t.c)}°`, 6.5, '#f2f0e8', 700)
+      g.text('left', cx + b + 0.05, P, 26, esc(t.name).toUpperCase(), 4.5, '#aab0bd')
+    }
+    g.text('left', cx + 0.12, cy + cd, 9.5, 'CPU CONSOLE', 5.5, INK, 700)
+  }
+
+  // The machines, then the console in front of them, drawn back to front.
   type Thing = { at: number; draw: () => void }
   const things: Thing[] = []
   if (cores > 0) {
@@ -137,11 +137,10 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
     const cols = colsOf(fw, count), fits = cols * rowsOf(fd)
     const groups = Array.from({ length: Math.min(count, fits) }, (_, m) => r.cores.slice(m * per, (m + 1) * per))
     if (count > fits) g.text('left', 0.4, 0.18, 47, `${fits} OF ${count} MACHINES FIT — SET MORE CORES A MACHINE`, 5.5, '#b8433f', 700)
-    const avg = (v: (number | null)[]) => { const k = v.filter((x): x is number => x != null); return k.length ? k.reduce((a, b) => a + b, 0) / k.length : null }
     const MW = 0.52, md = 0.42
     groups.forEach((grp, i) => {
       const mw = Math.max(0.3, MW * grp.length / per)
-      const c = { busy: avg(grp.map(x => x.busy)), freq: avg(grp.map(x => x.freq)), max: grp.reduce<number | null>((a, x) => x.max == null ? a : Math.max(a ?? 0, x.max), null) }
+      const c = { busy: avgOf(grp.map(x => x.busy)), freq: avgOf(grp.map(x => x.freq)), max: grp.reduce<number | null>((a, x) => x.max == null ? a : Math.max(a ?? 0, x.max), null) }
       const col = i % cols, x = 0.35 + col * PITCH + Math.floor(col / 2) * GAP + (PITCH - MW) / 2, y = 0.55 + Math.floor(i / cols) * ROW + (ROW - md) / 2
       things.push({ at: x + y, draw: () => {
         const busy = encode('core.busy', c.busy)
@@ -153,7 +152,6 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
         g.box(kx, y, 0.2, 0.2, 22, faces('#5b5f6b', '#474a55', '#3a3d47'), 12, 0.9)
         g.onLeft(kx, y + 0.2, 0.03, 0.17, 14, 32, '#2a2c35', 0.5)
         if (busy != null && busy > 0.005) g.onLeft(kx, y + 0.2, 0.03, 0.17, 14, 14 + 18 * busy, busy > 0.85 ? '#ff7a45' : '#ffc94d', 0)
-        // The speed dial on its front: the needle at its clock, the red line at its top.
         // A core's own temperature, where its sensor reports one: a small thermometer on its cabinet.
         const hot = grp.map((_, k) => perCore.get(i * per + k)).filter((v): v is number => v != null)
         if (hot.length) {
@@ -161,23 +159,18 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
           g.onRight(kx + 0.2, y, 0.04, 0.16, 14, 32, '#fbfaf6', 0.5)
           g.onRight(kx + 0.2, y, 0.06, 0.14, 14, 14 + 18 * encode('sensor.temp', tc / 100)!, liquidOf(tc), 0)
         }
+        // The speed dial on its front: the needle at its clock, the red line at its top.
         if (c.max) g.face('left', x, y + md, 6, dial(Math.min(6, mw * U * 0.3), mw * U * 0.38, c.freq != null ? encode('core.freq', c.freq / c.max) : null, 0.92))
       } })
     })
   } else {
     g.text('left', 0.6, 0.18, 30, 'CORES NOT READ', 7, '#8a857a')
   }
-  // Bins of work waiting in the staging area, as many as the share of time something waited; only
-  // when the waiting is read (looking the row up is what marks it drawn).
-  const waiting = r.pressure == null ? 0 : encode('pressure', r.pressure)!
-  for (let k = 0; k < waiting; k++) {
-    const x = sx + 0.2 + k * 0.55, y = sy + 0.45
-    if (x < fw - 0.8) things.push({ at: x + y, draw: () => g.box(x, y, 0.36, 0.36, 8, faces('#8fb0dc', '#6b8fc0', '#56789f'), 0, 0.9) })
-  }
+  things.push({ at: cx + cy + 99, draw: drawConsole })
   things.sort((a, b) => a.at - b.at).forEach(t => t.draw())
   return g.done()
 }
 
 /** The key the room's picture is kept under: every reading to the step it is drawn at. */
 export const cpuRoomKey = (r: CpuRoomReadings) =>
-  `g2:cpuroom:${rulersKey()}:${r.cores.map(c => `${c.busy == null ? 'n' : Math.round(c.busy * 26)}.${c.freq == null || !c.max ? 'n' : Math.round(c.freq / c.max * 20)}`).join(',')}:${r.temps.map(t => Math.round(t.c)).join(',')}:${r.load.map(l => l == null ? 'n' : l.toFixed(1)).join(',')}:${r.pressure == null ? 'n' : Math.round(r.pressure * 10)}`
+  `g2:cpuroom:${rulersKey()}:${r.cores.map(c => `${c.busy == null ? 'n' : Math.round(c.busy * 26)}.${c.freq == null || !c.max ? 'n' : Math.round(c.freq / c.max * 20)}`).join(',')}:${r.temps.map(t => Math.round(t.c)).join(',')}`

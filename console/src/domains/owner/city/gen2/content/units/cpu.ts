@@ -38,24 +38,23 @@ export const CPU_UNIT: UnitSpec = {
   // day, narrowed to the hardware: a plant knows how much it generates, not what the power is used for.
   // What the work is (time by mode, tasks, switches, interrupts, guests) belongs to the districts that
   // use it, not to the plant.
-  chosen: ['cores', 'busy.core', 'freq', 'freq.max', 'temp', 'load1', 'load5', 'load15', 'pressure'],
+  // Narrowed again the same day: load and waiting (pressure) are counted by the operating system's
+  // scheduler — tasks asking for the CPU — not known by the CPU as hardware. The room is CPU only.
+  chosen: ['cores', 'busy.core', 'freq', 'freq.max', 'temp'],
   // Inside, drafted for the Owner to see before it is drawn (a computer is a factory, the Owner
   // 2026-11-19: CPU the workshop, memory the workbench, disk the warehouse). The CPU's room is the
   // workshop: the 16×16 floor holds the machine tools to the west, the order office to the east,
   // the thermometers on the walls.
   inside: [
-    { detail: 'cores', thing: 'Machine tools', shows: 'One machine tool per core, in rows; 16 cores, 16 machines.', where: 'workshop floor' },
+    { detail: 'cores', thing: 'Machine tools', shows: 'One machine tool per core, in pairs; 16 cores, 16 machines.', where: 'workshop floor' },
     { detail: 'busy.core', thing: 'Each machine’s work light', shows: 'The light column on each machine stands as high as that core is busy; an idle machine is dark.', where: 'workshop floor' },
     { detail: 'freq', thing: 'Each machine’s speed dial', shows: 'A dial on each machine: the needle at how fast the core runs now.', where: 'workshop floor' },
     { detail: 'freq.max', thing: 'The red line on each speed dial', shows: 'The red mark on the same dial: the fastest it can run.', where: 'workshop floor' },
-    { detail: 'temp', thing: 'Thermometer on the wall', shows: 'One thermometer per CPU sensor, its column as high as it reads; red near its limit.', where: 'along the walls' },
-    { detail: 'load1', thing: 'The order board, 1 minute', shows: 'Three dials of the work asked of the workshop; a needle past the number of machines means more is asked than it can do.', where: 'order office' },
-    { detail: 'load5', thing: 'The order board, 5 minutes', shows: 'The second of the three dials.', where: 'order office' },
-    { detail: 'load15', thing: 'The order board, 15 minutes', shows: 'The third of the three dials.', where: 'order office' },
-    { detail: 'pressure', thing: 'The waiting line', shows: 'Work waiting for a free machine: the line is as long as the share of time something waited.', where: 'order office' },
+    { detail: 'busy.core', thing: 'The console’s busy dial', shows: 'All the cores together: the needle at the average of how busy each is.', where: 'CPU console' },
+    { detail: 'temp', thing: 'The console’s thermometer', shows: 'The chip’s own temperature (one sensor for the whole chip); red from 80 °C. A sensor per core would stand on its machine.', where: 'CPU console' },
   ],
   confirmed: {
-    details: { on: '2026-11-19', words: '更多看到的是硬件层面相关的东西…你只是发电的…你不知道电是用来干什么的' },
+    details: { on: '2026-11-19', words: '更多看到的是硬件层面相关的东西…这里面的每一个东西都要有它真实的含义…它是 CPU only' },
   },
 }
 
@@ -74,7 +73,7 @@ export type ReadPoint = { labels: Record<string, string>; value: number }
 
 /**
  * One machine's workshop readings, from the CPU details read across the district: its cores in
- * order with how busy, how fast and how fast at most; its sensors; its load; how much work waited.
+ * order with how busy, how fast and how fast at most; the CPU's own sensors.
  * A machine nothing reads has no cores and no needles — nothing is filled in.
  */
 export function cpuRoomReadings(reads: Record<string, ReadPoint[] | null> | undefined, host: string | undefined) {
@@ -82,14 +81,11 @@ export function cpuRoomReadings(reads: Record<string, ReadPoint[] | null> | unde
   const byCore = (id: string) => new Map(of(id).map(p => [p.labels.cpu, p.value]))
   const busy = byCore('busy.core'), freq = byCore('freq'), max = byCore('freq.max')
   const ids = [...busy.keys()].sort((a, b) => Number(a) - Number(b))
-  const one = (id: string) => of(id)[0]?.value ?? null
   return {
     cores: ids.map(c => ({ busy: busy.get(c) ?? null, freq: freq.get(c) ?? null, max: max.get(c) ?? null })),
     temps: of('temp').map(p => {
       const core = /^Core (\d+)$/i.exec(p.labels.label ?? '')
       return { name: p.labels.label ?? `${p.labels.chip_name ?? ''} ${p.labels.sensor ?? ''}`.trim(), c: p.value, core: core ? Number(core[1]) : undefined }
     }),
-    load: [one('load1'), one('load5'), one('load15')] as [number | null, number | null, number | null],
-    pressure: one('pressure'),
   }
 }
