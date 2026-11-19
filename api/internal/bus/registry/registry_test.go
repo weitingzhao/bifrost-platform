@@ -74,6 +74,9 @@ func TestParseRefuses(t *testing.T) {
 		"no consumers":         {"consumers: [platform-workers]", "consumers: []"},
 		"bad retention":        {"retention: 30d", "retention: forever"},
 		"wrong file name":      {"x-bifrost-tenant: rocket", "x-bifrost-tenant: trade"},
+		// 2026-11-19: a ref the relay does not take as a platform read made
+		// every schema.migration.applied be passed over.
+		"ref not a platform read": {"ref: \"/api/v1/delivery/context?repo={repo}\"", "ref: \"/metrics\""},
 	}
 	for name, c := range cases {
 		doc := strings.Replace(good, c[0], c[1], 1)

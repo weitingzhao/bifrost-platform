@@ -267,3 +267,13 @@ func TestRelayReconcileFindsALostMessage(t *testing.T) {
 		t.Fatalf("published again: %d %v", n, err)
 	}
 }
+
+// 2026-11-19: schema.migration.applied names /health and every one of them was
+// passed over; /health is a platform read, anything outside the API is not.
+func TestAPlatformReadIsTheAPIOrHealth(t *testing.T) {
+	for ref, want := range map[string]bool{"/api/v1/x": true, "/health": true, "/metrics": false, "": false, "/healthz": false} {
+		if got := PlatformRead(ref); got != want {
+			t.Errorf("%q: %v, want %v", ref, got, want)
+		}
+	}
+}

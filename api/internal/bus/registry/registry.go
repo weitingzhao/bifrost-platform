@@ -126,6 +126,11 @@ func Parse(name string, data []byte) (Tenant, error) {
 				where("%s is empty", name)
 			}
 		}
+		// The relay passes over an event whose ref is not a platform read, so the
+		// register refuses one (relay.PlatformRead; the relay imports this package).
+		if ref := strings.TrimSpace(c.Ref); ref != "" && !strings.HasPrefix(ref, "/api/v1/") && ref != "/health" {
+			where("ref %q is not a platform read (/api/v1/... or /health)", ref)
+		}
 		if r := strings.TrimSpace(c.Reconcile); r == "none" || (strings.HasPrefix(r, "none") && !strings.HasPrefix(r, "none: ")) {
 			where("reconcile none needs its reason: \"none: <why>\"")
 		}
