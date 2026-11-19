@@ -258,7 +258,10 @@ func TestStepsMatchTheTableAndCutsNameTheirProof(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := Summarize(chs)
-	want := map[string]int{"0": 5, "1": 4, "2": 7, "3": 43, "4": 3, "5": 1, "any": 21, "none": 69}
+	// 2026-11-19, PROD read after cut-rest2: step 3 showed 42 of 43 cut; the
+	// 43rd, L07, is kept and does not join the bus (like L06), so it moves no
+	// traffic and its step is none.
+	want := map[string]int{"0": 5, "1": 4, "2": 7, "3": 42, "4": 3, "5": 1, "any": 21, "none": 70}
 	for _, st := range p.Steps {
 		if st.Total != want[st.Step] {
 			t.Errorf("step %s: %d rows, the table has %d", st.Step, st.Total, want[st.Step])
