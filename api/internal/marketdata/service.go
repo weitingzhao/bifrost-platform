@@ -11,13 +11,12 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
 type Service struct {
 	cfg     Config
-	cluster *cluster.Service
+	cluster Kube
 	client  *http.Client
 	// freshnessProbe overrides CNPG query in unit tests.
 	freshnessProbe func(ctx context.Context) ([]FreshnessInfo, probe.Reachability, string)
@@ -32,7 +31,7 @@ type Service struct {
 	deploymentsOverride []DeploymentInfo
 }
 
-func NewService(clusterSvc *cluster.Service) *Service {
+func NewService(clusterSvc Kube) *Service {
 	return &Service{
 		cfg:     ConfigFromEnv(),
 		cluster: clusterSvc,

@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 )
 
 // Handler is read-only: research status reads and the GET proxy. Platform no
@@ -17,7 +15,7 @@ type Handler struct {
 	svc *Service
 }
 
-func NewHandler(clusterSvc *cluster.Service) *Handler {
+func NewHandler(clusterSvc Kube) *Handler {
 	return &Handler{svc: NewService(clusterSvc)}
 }
 

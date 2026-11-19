@@ -7,15 +7,13 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 )
 
 type Handler struct {
 	svc *Service
 }
 
-func NewHandler(clusterSvc *cluster.Service) *Handler {
+func NewHandler(clusterSvc Kube) *Handler {
 	return &Handler{svc: NewService(clusterSvc)}
 }
 
