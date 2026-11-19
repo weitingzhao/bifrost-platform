@@ -1,6 +1,6 @@
 //bifrost:owner plan
 
-package store_test
+package integration_test
 
 import (
 	"errors"

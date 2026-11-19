@@ -1,4 +1,4 @@
-package store_test
+package integration_test
 
 import (
 	"errors"
@@ -10,7 +10,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 func note(tx pgx.Tx) error {
@@ -163,15 +162,15 @@ func TestTamperShapesAreFound(t *testing.T) {
 			ok(t, err)
 		}
 	}
-	verify := func() *store.ChainBreak {
-		_, err := store.VerifyStream(ctx, w.rt, "audit")
-		var br *store.ChainBreak
+	verify := func() *eventlog.ChainBreak {
+		_, err := eventlog.VerifyStream(ctx, w.rt, "audit")
+		var br *eventlog.ChainBreak
 		if !errors.As(err, &br) {
 			t.Fatalf("verify = %v, want a chain break", err)
 		}
 		return br
 	}
-	if _, err := store.VerifyStream(ctx, w.rt, "audit"); err != nil {
+	if _, err := eventlog.VerifyStream(ctx, w.rt, "audit"); err != nil {
 		t.Fatal(err)
 	}
 	tamper(`UPDATE agentrt.event_stream SET last_sha256 = repeat('0', 64) WHERE event_stream_id = 'audit'`)
@@ -267,7 +266,7 @@ func TestKilledConnectionKeepsTheChain(t *testing.T) {
 	if written < 200 {
 		t.Fatalf("only %d writes in 10 seconds after the kill", written)
 	}
-	n, err := store.VerifyStream(ctx, pool, "load")
+	n, err := eventlog.VerifyStream(ctx, pool, "load")
 	ok(t, err)
 	if n != int64(written) {
 		t.Fatalf("stream has %d events, %d writes succeeded", n, written)

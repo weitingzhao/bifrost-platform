@@ -1,4 +1,4 @@
-package store_test
+package integration_test
 
 import (
 	"context"
@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 func TestExternalFactsIdempotent(t *testing.T) {
@@ -62,11 +62,11 @@ func TestExternalFactsIdempotent(t *testing.T) {
 		t.Fatalf("external facts did not satisfy atoms: %s", got)
 	}
 	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		as, e := store.SeenCopiesForTest(ctx, tx, "approval_seen", "approval", []string{"16"})
+		as, e := SeenCopiesForTest(ctx, tx, "approval_seen", "approval", []string{"16"})
 		if e != nil {
 			return e
 		}
-		qs, e := store.SeenCopiesForTest(ctx, tx, "question_seen", "question", []string{q.ID})
+		qs, e := SeenCopiesForTest(ctx, tx, "question_seen", "question", []string{q.ID})
 		if e != nil {
 			return e
 		}

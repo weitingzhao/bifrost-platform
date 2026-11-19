@@ -1,6 +1,6 @@
 //bifrost:owner foundation
 
-package store_test
+package integration_test
 
 import (
 	"regexp"
@@ -16,13 +16,13 @@ import (
 	// link it for the same reason.
 	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actionrecord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	// home_layout_saved is declared by homelayout (2026-11-18, migration 0034): the same.
 	_ "github.com/weitingzhao/bifrost-platform/api/internal/homelayout"
 )
 
 // The vocabulary a reader may filter by is the database's, not only the
-// types the store writes (review 350 A1).
+// types the store writes (review 350 A1). It sits here because every domain
+// that declares an event type has to be linked into the binary (2026-11-18).
 func TestEventTypesAreTheDatabases(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
@@ -32,7 +32,7 @@ func TestEventTypesAreTheDatabases(t *testing.T) {
 	for _, m := range regexp.MustCompile(`'([a-z_]+)'`).FindAllStringSubmatch(def, -1) {
 		db = append(db, m[1])
 	}
-	vocabulary, written := store.EventTypesForTest()
+	vocabulary, written := eventlog.EventTypes()
 	// A bus type (a dotted name, bus/registry/rocket.yaml) is declared by its
 	// publisher's package and lands in this binary only when a test imports
 	// that package (evidence declares ci.verdict.changed, 2026-11-16); its

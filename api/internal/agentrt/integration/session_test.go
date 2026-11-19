@@ -1,9 +1,8 @@
-package store_test
+package integration_test
 
 import (
 	"context"
 	"errors"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -12,10 +11,10 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // checkWriter is the check whoami and every write make, without writing.
@@ -172,7 +171,7 @@ func pauseHeld(t *testing.T, actor string) (held chan struct{}, release chan str
 	t.Helper()
 	held, release = make(chan struct{}), make(chan struct{})
 	var first atomic.Bool // not a sync.Once: a second caller must not wait for the first
-	t.Cleanup(store.SetHook(func(point, arg string) {
+	t.Cleanup(SetHook(func(point, arg string) {
 		if point == "held" && arg == actor && first.CompareAndSwap(false, true) {
 			close(held)
 			<-release

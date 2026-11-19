@@ -8,6 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	// owner_wait_closed is declared by questioncards (2026-11-17, store cut
+	// O2): link it, so TestEventFieldValues still holds its values.
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 

@@ -15,7 +15,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -139,19 +138,6 @@ func TestThreadQuotaAtOnce(t *testing.T) {
 	if n := w.count(t, `SELECT count(*) FROM agentrt.actor WHERE actor_kind = 'thread'`); refused != 1 || n != threadsPerDay {
 		t.Fatalf("%d refused, %d threads; want 1 and %d", refused, n, threadsPerDay)
 	}
-}
-
-// Review 176 part 2 A1: a full day of registrations does not keep a new
-// session from stopping work; it still keeps it from proposing.
-func TestControlsPastThreadQuota(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	w.legacy(t, fmt.Sprintf(`INSERT INTO agentrt.actor (actor_id, actor_kind, display_name)
-	  SELECT 'thread:bulk' || i, 'thread', 'bulk' FROM generate_series(1, %d) i`, threadsPerDay))
-	_, err := coord.RequestControl(ctx, w.rt, wr("thread:late"), "k1", "global", "", "stop", "stop everything")
-	ok(t, err)
-	_, err = proposeForSession(ctx, w.rt, wr("thread:later"), "k1")
-	is(t, err, eventlog.ErrInvalid)
 }
 
 // Retired missions no longer register sessions. Exercise the same actor and

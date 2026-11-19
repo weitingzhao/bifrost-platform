@@ -3,50 +3,33 @@ package store_test
 import (
 	"context"
 	"errors"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
-	"strings"
+	"fmt"
+	"os"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
+// The fixtures the rule tests stand on. The cross-domain tests left for
+// agentrt/integration on 2026-11-18 and keep their own copy (world_test.go), so
+// that this package does not depend on that one.
+
 var ctx = context.Background()
 
-// A test that moves time has an event clock of its own (ownclock_test.go):
-// it starts with ctx := ownClock(t), which hides the ctx above, and freezes
-// with freezeClock(t, at). A helper that calls the store starts with
-// ctx := ctxOf(t): the test's own context when it has a clock, a plain one
-// when it has none.
-func ownClock(t testing.TB) context.Context {
-	t.Helper()
-	return store.OwnClock(t)
-}
-
 func ctxOf(t testing.TB) context.Context { return store.CtxOf(t) }
-
-func freezeClock(t testing.TB, at time.Time) func() {
-	t.Helper()
-	return store.FreezeClock(t, at)
-}
-
-func wantErr(t *testing.T, err error, contains string) {
-	t.Helper()
-	if err == nil {
-		t.Fatalf("succeeded; want an error containing %q", contains)
-	}
-	if !strings.Contains(err.Error(), contains) {
-		t.Fatalf("err = %v; want it to contain %q", err, contains)
-	}
-}
 
 func ok(t *testing.T, err error) {
 	t.Helper()
@@ -139,136 +122,6 @@ func newWorld(t *testing.T) *world {
 	return w
 }
 
-func (w *world) lastSeq(t *testing.T, stream string) int64 {
-	t.Helper()
-	ctx := ctxOf(t)
-	var n int64
-	ok(t, w.rt.QueryRow(ctx, `SELECT last_seq FROM agentrt.event_stream WHERE event_stream_id = $1`, stream).Scan(&n))
-	return n
-}
-
-// T19: the seed needs no disabled trigger; mission, plan nodes, task and
-// attempt are each first created in their own transaction; an event that
-// names a row never created makes the commit fail and leaves no trace.
-func TestSeedAndFirstCreation(t *testing.T) {
-	t.Parallel()
-	w := newWorld(t)
-	again, err := actor.Seed(ctx, w.db.Connect(t, w.db.Owner))
-	ok(t, err)
-	if again {
-		t.Fatal("seed ran twice")
-	}
-	// The row an event names must exist: a mission never created (a task's
-	// id is no longer checked, its table is gone since 0020).
-	before := w.lastSeq(t, "mission:M-1")
-	err = eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: "mission:M-1", Type: "mission_state_changed", Actor: "controller",
-			MissionID: "M-99", Body: map[string]any{"from": "proposed", "to": "active"}})
-		return err
-	})
-	wantErr(t, err, "violates foreign key")
-	if after := w.lastSeq(t, "mission:M-1"); after != before {
-		t.Fatalf("seq moved from %d to %d after a rolled-back event", before, after)
-	}
-	for _, s := range []string{"system", planstore.PlanStream(root), "mission:M-1", "mission:M-2"} {
-		if _, err := store.VerifyStream(ctx, w.rt, s); err != nil {
-			t.Fatalf("%s: %v", s, err)
-		}
-	}
-}
-
-// T19 and T25 (database half): what each identity can and cannot do.
-func TestIdentitiesAndTheEventRule(t *testing.T) {
-	t.Parallel()
-	w := newWorld(t)
-	var err error
-	// The state row of the examples below is a mission and the liveness row
-	// a host: the tasks' and attempts' tables are gone since 0020.
-	w.seeded(t, func(tx pgx.Tx) { seedHost(t, tx, "h1") })
-
-	exec := func(c *pgx.Conn, q string, args ...any) error { _, err = c.Exec(ctx, q, args...); return err }
-
-	// Append-only, for the runtime role and the owner alike (T23a).
-	owner := w.db.Connect(t, w.db.Owner)
-	for _, c := range []*pgx.Conn{w.rt, owner} {
-		wantErr(t, exec(c, `UPDATE agentrt.event SET body_json = '{}' WHERE event_id = 1`), "")
-		wantErr(t, exec(c, `DELETE FROM agentrt.event WHERE event_id = 1`), "")
-	}
-	wantErr(t, exec(owner, `UPDATE agentrt.event SET body_json = '{}' WHERE event_id = 1`), "append only")
-	wantErr(t, exec(owner, `TRUNCATE agentrt.event CASCADE`), "append only")
-	wantErr(t, exec(w.rt, `CREATE TABLE agentrt.x (a int)`), "permission denied")
-	wantErr(t, exec(w.rt, `DROP TABLE agentrt.event`), "must be owner")
-
-	// A state row without an event of this transaction.
-	wantErr(t, exec(w.rt, `UPDATE agentrt.mission SET state = 'active' WHERE mission_id = 'M-2'`), "needs SET LOCAL agentrt.event_id")
-	wantErr(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err = tx.Exec(ctx, `SELECT set_config('agentrt.event_id', '1', true)`)
-		ok(t, err)
-		_, err = tx.Exec(ctx, `UPDATE agentrt.mission SET state = 'active' WHERE mission_id = 'M-2'`)
-		return err
-	}), "was not written by this transaction")
-	// An event of this transaction about another mission.
-	wantErr(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "mission:M-1", Type: "mission_state_changed", Actor: "controller",
-			MissionID: "M-1", Body: map[string]any{"from": "proposed", "to": "active"}}); err != nil {
-			return err
-		}
-		_, err := tx.Exec(ctx, `UPDATE agentrt.mission SET state = 'active' WHERE mission_id = 'M-2'`)
-		return err
-	}), "mission_id")
-	// With its own event it goes through.
-	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "mission:M-2", Type: "mission_state_changed", Actor: "controller",
-			MissionID: "M-2", Body: map[string]any{"from": "proposed", "to": "active"}}); err != nil {
-			return err
-		}
-		_, err := tx.Exec(ctx, `UPDATE agentrt.mission SET state = 'active', version = version + 1 WHERE mission_id = 'M-2'`)
-		return err
-	}))
-
-	// Liveness columns: alone, without an event; together with another
-	// column, an event again.
-	ok(t, exec(w.rt, `UPDATE agentrt.host SET last_poll_at = clock_timestamp() WHERE host_id = 'h1'`))
-	wantErr(t, exec(w.rt, `UPDATE agentrt.host SET last_poll_at = clock_timestamp(), state = 'paused' WHERE host_id = 'h1'`), "needs SET LOCAL")
-
-	// The reader reads and does nothing else; another environment's identity
-	// does not get in.
-	reader := w.db.Connect(t, w.db.Reader)
-	var n int
-	ok(t, reader.QueryRow(ctx, `SELECT count(*) FROM agentrt.event`).Scan(&n))
-	wantErr(t, exec(reader, `INSERT INTO agentrt.control (control_id, scope, control_kind, reason, set_by_actor_id) VALUES ('c', 'global', 'stop', 'x', 'owner')`), "permission denied")
-	wantErr(t, exec(reader, `UPDATE agentrt.mission SET title = 'x'`), "permission denied")
-	if _, err := pgx.Connect(ctx, w.db.Foreign); err == nil {
-		t.Fatal("platform_agentrt_stg connected to a dev database")
-	} else if !strings.Contains(err.Error(), "permission denied") {
-		t.Fatalf("foreign identity: %v", err)
-	}
-}
-
-// T23b: a superuser edits an event body behind the triggers; the verifier
-// names the stream and seq.
-func TestTamperIsDetected(t *testing.T) {
-	t.Parallel()
-	w := newWorld(t)
-	admin := w.db.Connect(t, w.db.Admin)
-	for _, q := range []string{
-		`ALTER TABLE agentrt.event DISABLE TRIGGER event_append_only`,
-		`UPDATE agentrt.event SET body_json = '{"title":"edited"}' WHERE event_stream_id = 'mission:M-2' AND seq = 1`,
-		`ALTER TABLE agentrt.event ENABLE TRIGGER event_append_only`,
-	} {
-		_, err := admin.Exec(ctx, q)
-		ok(t, err)
-	}
-	_, err := store.VerifyStream(ctx, w.rt, "mission:M-2")
-	var br *store.ChainBreak
-	if !errors.As(err, &br) || br.Seq != 1 {
-		t.Fatalf("verify = %v, want a break at seq 1", err)
-	}
-	if _, err := store.VerifyStream(ctx, w.rt, "mission:M-1"); err != nil {
-		t.Fatalf("untouched stream: %v", err)
-	}
-}
-
 func planChange(w *world, fn func(tx pgx.Tx) error) error {
 	ctx := w.ctx
 	return eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
@@ -280,59 +133,208 @@ func planChange(w *world, fn func(tx pgx.Tx) error) error {
 	})
 }
 
-// T30: numbering never changes, nodes are never deleted.
-func TestPlanNumberingIsFixed(t *testing.T) {
-	t.Parallel()
+const noSuch = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+// newKernelWorld is a world with mission M-1 active and hosts h1–h8.
+func newKernelWorld(t *testing.T) *world {
+	t.Helper()
+	ctx := ctxOf(t)
 	w := newWorld(t)
-	for q, want := range map[string]string{
-		`UPDATE agentrt.plan_node SET ordinal = 9 WHERE plan_node_id = 'R2:2.1-1'`:                                "keeps its id",
-		`UPDATE agentrt.plan_node SET parent_plan_node_id = 'R2' WHERE plan_node_id = 'R2:2.1-1'`:                 "keeps its id",
-		`UPDATE agentrt.plan_node SET created_at = created_at - interval '1 day' WHERE plan_node_id = 'R2:2.1-1'`: "keeps its id",
-		`UPDATE agentrt.plan_node SET plan_node_id = 'R2:2.1-9' WHERE plan_node_id = 'R2:2.1-1'`:                  "never changes",
-	} {
-		wantErr(t, planChange(w, func(tx pgx.Tx) error { _, err := tx.Exec(ctx, q); return err }), want)
-	}
-	// The owner meets the deletion guard, not just a missing privilege.
-	_, err := w.db.Connect(t, w.db.Owner).Exec(ctx, `DELETE FROM agentrt.plan_node WHERE plan_node_id = 'R2:2.1-2'`)
-	wantErr(t, err, "not allowed")
-	wantErr(t, planChange(w, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `DELETE FROM agentrt.plan_node WHERE plan_node_id = 'R2:2.1-2'`)
-		return err
-	}), "")
-	// A step under a round, an item under an item.
-	wantErr(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "R2:x", Parent: root, Kind: "step", Label: "x", Title: "x", StepKind: "agent", Ordinal: 5, Root: root})
-		return err
-	}), "cannot sit under")
-	// State only with its own event type.
-	wantErr(t, planChange(w, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `UPDATE agentrt.plan_node SET state = 'done' WHERE plan_node_id = $1`, s2)
-		return err
-	}), "plan_node_state_changed")
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error { return storekit.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
+	w.seeded(t, func(tx pgx.Tx) {
+		for i := 1; i <= 8; i++ {
+			seedHost(t, tx, fmt.Sprintf("h%d", i))
+		}
+	})
+	_, err := w.rt.Exec(ctx, agentrttest.DispatchRules)
+	ok(t, err)
+	return w
 }
 
-// T32: the counting rule over steps read back from the database.
-func TestCountingFromTheDatabase(t *testing.T) {
-	t.Parallel()
-	w := newWorld(t)
+// Scenes of the retired dispatch lane, written as its rows (store cut 3b-2,
+// 2026-11-14). Nothing leases, runs or checks a task any more, but the plan's
+// bindings, the artifact search and the progress read still read the rows a
+// round left: the tasks, their attempts and the verifications. These
+// fixtures write those rows as an import does (a legacy_imported event of
+// the transaction), in the shape the lane left them.
+
+// seedHost makes host id exist: an attempt names the host it ran on.
+func seedHost(t *testing.T, tx pgx.Tx, id string) {
+	t.Helper()
+	_, err := tx.Exec(ctx, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name)
+ VALUES ('host:' || $1, 'host', 'Agent host ' || $1) ON CONFLICT DO NOTHING`, id)
+	ok(t, err)
+	_, err = tx.Exec(ctx, `INSERT INTO agentrt.host (host_id, actor_id, host_kind, state)
+ VALUES ($1, 'host:' || $1, 'dev', 'active') ON CONFLICT DO NOTHING`, id)
+	ok(t, err)
+}
+
+// seeded runs fn in a transaction that carries an import event, as a
+// fixture's rows need.
+func (w *world) seeded(t *testing.T, fn func(tx pgx.Tx)) {
+	t.Helper()
 	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := planstore.SetStepState(ctx, tx, "controller", root, s1, "done", "test"); err != nil {
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+			Body: map[string]any{"source": "test"}}); err != nil {
 			return err
 		}
-		_, err := planstore.SetStepState(ctx, tx, "controller", root, s2, "dropped", "test")
+		fn(tx)
+		return nil
+	}))
+}
+
+// Fixtures of the plan import, for the tests that start from an imported
+// plan; the import's results through the routes are in
+// agentrtapi/planimport_test.go.
+
+func importDB(t *testing.T) (*pgxpool.Pool, planimport.Request) {
+	t.Helper()
+	db := seededDB(t)
+	text, err := os.ReadFile("../planimport/testdata/ledger.md")
+	ok(t, err)
+	req, err := planimport.ParseLedger(string(text), 2, planimport.LedgerOptions{File: "WORK.md"})
+	ok(t, err)
+	return db.Pool(t, db.Runtime), req
+}
+
+// cardStore is a question store as the card-auto-answer rule sees it: cards
+// asked (with when, and the option they recommend), open until answered.
+type cardStore struct {
+	mu      sync.Mutex
+	cards   map[string]*storedCard
+	order   []string
+	answers int
+	acked   map[string]int
+	during  func(id string) // runs as an answer is written, before it lands
+	after   func(id string) // runs once an answer has landed, before the rule's caller hears so
+	ackErr  error           // what the next acknowledgement answers
+}
+
+type storedCard struct {
+	card                     planstore.RuntimeCard
+	status, option, by, text string
+	read                     bool
+}
+
+func (s *cardStore) put(c planstore.RuntimeCard) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cards == nil {
+		s.cards, s.acked = map[string]*storedCard{}, map[string]int{}
+	}
+	s.cards[c.ID] = &storedCard{card: c, status: "open"}
+	s.order = append(s.order, c.ID)
+}
+
+// ask makes a card asked now; created moves it back.
+func (s *cardStore) ask(_ context.Context, c planstore.Card) (string, error) {
+	id := "q_" + c.Key[:16]
+	s.mu.Lock()
+	_, have := s.cards[id]
+	s.mu.Unlock()
+	if !have {
+		rec := ""
+		if c.Recommended > 0 {
+			rec = string(rune('a' + c.Recommended - 1))
+		}
+		// The question store keys the options a, b, … in order.
+		var keys []string
+		for i := range c.Options {
+			keys = append(keys, string(rune('a'+i)))
+		}
+		s.put(planstore.RuntimeCard{ID: id, TaskID: c.TaskID, Recommended: rec, CreatedAt: time.Now(), Options: keys})
+	}
+	return id, nil
+}
+
+// asker is a fake question store: it records the cards and answers them
+// later, as the Owner would.
+type asker struct {
+	mu      sync.Mutex
+	cards   []planstore.Card
+	answers map[string]seenfacts.Question
+	acked   map[string]int
+}
+
+func (a *asker) ask(_ context.Context, c planstore.Card) (string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for i, prev := range a.cards {
+		if prev.Key == c.Key {
+			return "q_" + string(rune('a'+i)), nil
+		}
+	}
+	a.cards = append(a.cards, c)
+	return "q_" + string(rune('a'+len(a.cards)-1)), nil
+}
+
+func (a *asker) answer(id, status, option string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.answers == nil {
+		a.answers = map[string]seenfacts.Question{}
+	}
+	a.answers[id] = seenfacts.Question{ID: id, Status: status, Option: option, AnsweredBy: "owner", AnsweredAt: "2026-10-14T20:00:00Z"}
+}
+
+func (a *asker) question(_ context.Context, id string) (seenfacts.Question, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	q, ok := a.answers[id]
+	if !ok {
+		return seenfacts.Question{ID: id, Status: "open"}, true
+	}
+	return q, true
+}
+
+// rule sets a node's done rule and binds approvals or questions to it, as an
+// authorized plan change does.
+func (w *world) rule(t *testing.T, node, rule string, binds ...[2]string) {
+	t.Helper()
+	ctx := ctxOf(t)
+	ok(t, planChange(w, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `UPDATE agentrt.plan_node SET done_rule_json = $2::jsonb WHERE plan_node_id = $1`, node, rule); err != nil {
+			return err
+		}
+		for _, b := range binds {
+			if _, err := tx.Exec(ctx, `INSERT INTO agentrt.plan_node_binding (plan_node_id, bound_kind, bound_ref, event_id)
+			  VALUES ($1, $2, $3, current_setting('agentrt.event_id')::bigint)`, node, b[0], b[1]); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+}
+
+// step adds a step of M-1 under the item, with a done rule when rule is set.
+func (w *world) step(t *testing.T, id string, ordinal int, rule string, binds ...[2]string) {
+	t.Helper()
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: id, Parent: item, Kind: "step", Label: id, Title: id,
+			MissionID: "M-1", StepKind: "agent", Ordinal: ordinal, Root: root})
 		return err
 	}))
-	rows, err := w.rt.Query(ctx, `SELECT plan_node_id, state FROM agentrt.plan_node WHERE parent_plan_node_id = $1 ORDER BY ordinal`, item)
-	ok(t, err)
-	var steps []plan.Step
-	for rows.Next() {
-		var s plan.Step
-		ok(t, rows.Scan(&s.ID, &s.State))
-		steps = append(steps, s)
+	if rule != "" {
+		w.rule(t, id, rule, binds...)
 	}
-	ok(t, rows.Err())
-	got := plan.CountSteps(steps)
-	if got.Done != 1 || got.Total != 2 || got.State != plan.StateActive {
-		t.Fatalf("count = %+v", got)
+}
+
+// seenCards is a question store that keeps each card as the runtime asked
+// it, so a test can read it as the Owner sees it.
+type seenCards struct {
+	cardStore
+	asked map[string]planstore.Card
+}
+
+func (s *seenCards) ask(ctx context.Context, c planstore.Card) (string, error) {
+	id, err := s.cardStore.ask(ctx, c)
+	if err == nil {
+		s.mu.Lock()
+		if s.asked == nil {
+			s.asked = map[string]planstore.Card{}
+		}
+		s.asked[id] = c
+		s.mu.Unlock()
 	}
+	return id, err
 }

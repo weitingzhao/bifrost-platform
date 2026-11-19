@@ -1,4 +1,4 @@
-package store_test
+package integration_test
 
 import (
 	"encoding/json"
@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
@@ -43,6 +44,7 @@ func viewDoc(t *testing.T, w *world, version int) string {
 	}))
 	return id
 }
+
 func adoptView(t *testing.T, w *world, artifact string, version int) *asker {
 	t.Helper()
 	a := &asker{}
@@ -53,6 +55,7 @@ func adoptView(t *testing.T, w *world, artifact string, version int) *asker {
 	ok(t, err)
 	return a
 }
+
 func externalSpec(t *testing.T, w *world) string {
 	t.Helper()
 	ctx := ctxOf(t)
@@ -64,6 +67,7 @@ func externalSpec(t *testing.T, w *world) string {
 	}))
 	return id
 }
+
 func TestPlanViewAdoptionAndCAS(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -98,6 +102,7 @@ func TestPlanViewAdoptionAndCAS(t *testing.T) {
 		t.Fatalf("CAS wrote %d adoptions", n)
 	}
 }
+
 func TestExternalWorkLifecycle(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -174,6 +179,7 @@ func TestExternalWorkLifecycle(t *testing.T) {
 	}
 	w.chainHolds(t, "external-work:"+id)
 }
+
 func TestPlanViewLegacyAndMissing(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)

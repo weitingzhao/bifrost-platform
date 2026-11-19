@@ -547,6 +547,19 @@
       "status": "assigned",
       "basis": "2026-11-15 source and caller audit: db.go disposable PostgreSQL/Redis test infrastructure, no business state machine"
     },
+    "api/internal/agentrt/integration": {
+      "domains": [
+        "foundation",
+        "plan",
+        "lineage",
+        "verification",
+        "delivery",
+        "owner",
+        "coordination"
+      ],
+      "status": "mixed",
+      "basis": "2026-11-18 (decoupling item 5): tests only, no production code. The agent runtime's cross-domain tests, moved here from agentrt/store unchanged; they import plan (planstore, planview, plan, planwiring), lineage (externalwork, recorderimport, workregistration), verification (landing, controller), delivery (deliveryreadings, deliveryview), coordination (coord), owner (questions) and foundation packages."
+    },
     "api/internal/agentrt/storekit": {
       "domains": [
         "foundation"

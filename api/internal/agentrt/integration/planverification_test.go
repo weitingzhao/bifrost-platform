@@ -1,4 +1,4 @@
-package store_test
+package integration_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
@@ -41,9 +42,11 @@ func pvDocument(t *testing.T, version int) *planview.Document {
 	}
 	return d
 }
+
 func pvBinding(d *planview.Document, step, atom, source string) planview.Binding {
 	return planview.Binding{V: 1, Kind: planview.BindingKind, ID: step + "-" + atom, Version: d.Version, Tenant: "dev", Root: root, Node: "2.1", Step: step, Acceptance: d.Items[0].Acceptance[0].ID, AcceptanceSHA256: planview.AcceptanceDigest(d.Items[0].Acceptance[0]), Atom: atom, Source: source}
 }
+
 func pvArtifact(t *testing.T, w *world, d *planview.Document, bs ...planview.Binding) string {
 	t.Helper()
 	d.Items[0].Bindings = []json.RawMessage{}
@@ -62,11 +65,13 @@ func pvArtifact(t *testing.T, w *world, d *planview.Document, bs ...planview.Bin
 	}))
 	return id
 }
+
 func pvPoll(t *testing.T, w *world, src planstore.PlanSources) {
 	t.Helper()
 	_, err := planstore.CollectPlanObservations(ctx, w.rt, src)
 	ok(t, err)
 }
+
 func pvEvaluate(t *testing.T, w *world, step, want string) {
 	t.Helper()
 	_, err := planstore.EvaluateStep(ctx, w.rt, step, nil)
@@ -75,6 +80,7 @@ func pvEvaluate(t *testing.T, w *world, step, want string) {
 		t.Fatalf("step %s = %s; want %s", step, got, want)
 	}
 }
+
 func TestPV2MainFactsWithdrawAndReplay(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -153,6 +159,7 @@ func TestPV2MainFactsWithdrawAndReplay(t *testing.T) {
 	pvPoll(t, w, src)
 	pvEvaluate(t, w, s1, "done")
 }
+
 func TestPV2OwnerAcceptanceVersionAndAuthority(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -230,6 +237,7 @@ func TestPV2RetiredSourcesAreNotAdopted(t *testing.T) {
 		t.Fatalf("a git binding without a task was not adopted: %v", err)
 	}
 }
+
 func TestPV2DependencyReblocksActualSteps(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)

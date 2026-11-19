@@ -1,4 +1,4 @@
-package store_test
+package integration_test
 
 import (
 	"context"
@@ -20,7 +20,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // recorderLog seals events the way the recorder's events.py does and gives
@@ -159,7 +158,7 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 	if !chained {
 		t.Fatal("the records are not caused by the import's head")
 	}
-	if _, err = store.VerifyStream(ctx, pool, stream); err != nil {
+	if _, err = eventlog.VerifyStream(ctx, pool, stream); err != nil {
 		t.Fatal(err)
 	}
 	// Imported: the same log answers so; another log of the work is refused.
@@ -259,7 +258,7 @@ func TestRecorderImportTwoPassesAtOnce(t *testing.T) {
 	var mu sync.Mutex
 	arrived := 0
 	both := make(chan struct{})
-	defer store.SetHook(func(point, arg string) {
+	defer SetHook(func(point, arg string) {
 		if point != "plan change deciding" || arg != stream {
 			return
 		}
