@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent as RP } from 'react'
-import { emptyDoc, expand, fromTiled, LAND_MAX, toTiled, trim, type Doc, type Placed } from './builderDoc'
+import { emptyDoc, expand, fromTiled, LABEL_MAX, LAND_MAX, toTiled, trim, type Doc, type Placed } from './builderDoc'
 import { accepts, CATALOG, kindOf, showcaseLayers, spriteOf, spriteUrl, type CatalogKind, type SystemItem } from './catalog'
 import type { Armed, BuilderScene, Tool } from './builderScene'
 import type { Reading, Sky } from './cityReadings'
@@ -206,6 +206,8 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
   }
   const changed = () => { scene.current?.refresh(); touch() }
   const bind = (binds: string) => { if (part) { part.binds = binds; changed() } }
+  /** The number painted on it: only how it is shown. */
+  const setLabel = (v: string) => { if (!part) return; const t = v.trim().slice(0, LABEL_MAX); if ((part.label ?? '') === t) return; if (t) part.label = t; else delete part.label; changed() }
   const remove = () => { if (part) { d.parts.splice(d.parts.indexOf(part), 1); scene.current?.select(null); changed() } }
   const grow = () => { if (expand(d)) { scene.current?.refresh(true); touch() } }
   const shrink = () => { if (trim(d)) { scene.current?.select(null); scene.current?.selectZone(null); scene.current?.refresh(true); touch() } }
@@ -277,6 +279,7 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
         })()}
         {help && <div className="cb-help">
           <p>Road: drag on the land; corners and crossings form by themselves. Erase: drag over a road.</p>
+          <p>Number: pick a building and type the number painted on its roof (01, M1…); it is only how it is shown.</p>
           <p>Land −: trims the empty land around what stands on it; nothing moves relative to anything else.</p>
           <p>Zone: drag a rectangle to draw a district (launch site, town…); tap it to rename or remove it, drag it to move it. Where things stand is only how they are shown.</p>
           <p>Buildings: drag one onto the land, or tap it and tap the land. Drag a placed building to move it; tap it to choose what it stands for.</p>
@@ -304,6 +307,8 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
         {part && partKind && <section className={`cb-card${tab === 'selected' ? '' : ' off'}`} data-testid="selected">
           <div className="cb-h"><span>{partKind.name}</span></div>
           {partKind.accepts.length > 0 && <div style={{ marginBottom: 6 }}>{part.binds ? byBinds.get(part.binds)?.name ?? part.binds : 'Not assigned'}</div>}
+          <input key={`${part.id}:${part.label ?? ''}`} className="cb-input" style={{ marginTop: 0, marginBottom: 6 }} aria-label="Number on the building" placeholder="Number on the building (01, M1…)" defaultValue={part.label ?? ''} maxLength={LABEL_MAX}
+            onKeyDown={e => { if (e.key === 'Enter') setLabel(e.currentTarget.value) }} onBlur={e => setLabel(e.currentTarget.value)} />
           {canBind.slice(0, 12).map(i => <button key={i.binds} className="cb-item" onClick={() => bind(i.binds)}><span>{i.color && <i className="cb-dot" style={{ background: i.color }} />}{i.name}</span><small>assign</small></button>)}
           <div className="cb-row">{part.binds && <button className="cb-btn" onClick={() => bind('')}>Unassign</button>}<button className="cb-btn" onClick={remove}>Remove</button></div>
         </section>}

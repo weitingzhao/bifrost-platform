@@ -22,10 +22,15 @@ export type Placed = {
   size: PartSize
   /** What it stands for: `domain:<id>`, `lane:<pipeline>`, `plugin:<name>`, `law`; empty until bound. */
   binds: string
+  /** The number the Owner paints on it (01, M1…): only how it is shown, never what it stands for. */
+  label?: string
 }
 /** A district of the plan: a named rectangle of ground under its buildings, how the land is zoned (presentation only). */
 export type Zone = { name: string; x: number; y: number; w: number; h: number; tint: string }
 export type Doc = { width: number; height: number; roads: Set<string>; parts: Placed[]; zones?: Zone[] }
+
+/** The longest number a building can carry. */
+export const LABEL_MAX = 6
 
 export const LAND_START = 16
 export const LAND_STEP = 8
@@ -141,7 +146,7 @@ export function toTiled(d: Doc, tileW = 64, tileH = 32): TiledMap {
       { id: 1, type: 'tilelayer', name: 'roads', width: d.width, height: d.height, data, opacity: 1, visible: true, x: 0, y: 0 } as TiledLayer,
       { id: 2, type: 'objectgroup', name: 'parts', opacity: 1, visible: true, x: 0, y: 0, objects: d.parts.map((p, i) => ({
         id: i + 1, name: p.id, type: p.kind, x: p.x * tileH, y: p.y * tileH, width: p.size * tileH, height: p.size * tileH, rotation: 0, visible: true,
-        properties: [{ name: 'binds', type: 'string', value: p.binds }, { name: 'size', type: 'int', value: p.size }],
+        properties: [{ name: 'binds', type: 'string', value: p.binds }, { name: 'size', type: 'int', value: p.size }, ...(p.label ? [{ name: 'label', type: 'string', value: p.label }] : [])],
       })) } as TiledLayer,
       ...(d.zones?.length ? [{ id: 3, type: 'objectgroup', name: 'zones', opacity: 1, visible: true, x: 0, y: 0, objects: d.zones.map((z, i) => ({
         id: d.parts.length + i + 1, name: z.name, type: 'zone', x: z.x * tileH, y: z.y * tileH, width: z.w * tileH, height: z.h * tileH, rotation: 0, visible: true,
@@ -166,7 +171,8 @@ export function fromTiled(m: unknown): Doc | null {
     const x = Math.round(o.x / th), y = Math.round(o.y / th)
     if (![1, 2, 4, 8].includes(size) || !o.type || !canPlace(d, x, y, size)) continue
     const binds = o.properties?.find(p => p.name === 'binds')?.value
-    d.parts.push({ id: o.name || newPartId(d), kind: o.type, x, y, size: size as PartSize, binds: typeof binds === 'string' ? binds : '' })
+    const label = o.properties?.find(p => p.name === 'label')?.value
+    d.parts.push({ id: o.name || newPartId(d), kind: o.type, x, y, size: size as PartSize, binds: typeof binds === 'string' ? binds : '', ...(typeof label === 'string' && label.trim() ? { label: label.trim().slice(0, LABEL_MAX) } : {}) })
   }
   const zones = t.layers.find(l => l.type === 'objectgroup' && l.name === 'zones')
   for (const o of zones?.objects ?? []) {

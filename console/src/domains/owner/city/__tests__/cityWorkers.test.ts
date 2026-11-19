@@ -163,3 +163,17 @@ describe('the machines', () => {
     expect([coreTier(8), coreTier(16), coreTier(32), coreTier(64), coreTier(null)]).toEqual([0, 1, 2, 3, -1])
   })
 })
+
+// Origin: 2026-11-18, the Owner: a number on each unit (01, 02…), set by him like a position; only how it is shown.
+describe('the numbers on the buildings', () => {
+  it('are kept through a saved map, trimmed and capped, and absent when not set', () => {
+    const d = plannedCity()
+    expect(d.parts.find(p => p.binds === 'node:ubt-k3s-02')?.label).toBe('02')
+    expect(d.parts.find(p => p.binds === 'tenant:Trade')?.label).toBeUndefined()
+    d.parts[0].label = '  TRADE-A-LONG  '
+    const back = fromTiled(JSON.parse(JSON.stringify(toTiled(d))))!
+    expect(back.parts[0].label).toBe('TRADE-')
+    expect(back.parts.find(p => p.binds === 'node:mac-mini-1')?.label).toBe('M1')
+    expect('label' in back.parts.find(p => p.binds === 'law')!).toBe(false)
+  })
+})

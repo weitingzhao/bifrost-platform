@@ -73,7 +73,7 @@ function poly(g: G, pts: XY[], fill: number, stroke = true) {
 type Spot = { tex: string; dx: number; dy: number }
 const SIDES = [[0, -1], [1, 0], [0, 1], [-1, 0]] as const
 
-type View = { part: Placed; sig: string; imgs: { img: Phaser.GameObjects.Image; layer: Layer }[]; tag: Phaser.GameObjects.Text; plate: Phaser.GameObjects.Text; fx: G }
+type View = { part: Placed; sig: string; imgs: { img: Phaser.GameObjects.Image; layer: Layer }[]; tag: Phaser.GameObjects.Text; plate: Phaser.GameObjects.Text; num: Phaser.GameObjects.Text; fx: G }
 type Gesture =
   | { t: 'none' } | { t: 'pan'; x: number; y: number }
   | { t: 'stroke'; last: [number, number]; erase: boolean; x: number; y: number; started: boolean }
@@ -499,14 +499,18 @@ export class BuilderScene extends Phaser.Scene {
       if (!v) {
         const tag = this.add.text(0, 0, '', { fontFamily: 'JetBrains Mono, ui-monospace, Menlo, monospace', fontSize: `${11 * this.s.dpr}px`, color: '#2f2d3a', backgroundColor: '#fbfaf6', padding: { x: 5 * this.s.dpr, y: 3 * this.s.dpr } }).setOrigin(0.5, 1).setDepth(190001)
         const plate = this.add.text(0, 0, '', { fontFamily: 'JetBrains Mono, ui-monospace, Menlo, monospace', fontSize: `${9.5 * this.s.dpr}px`, color: '#2f2d3a', backgroundColor: 'rgba(251,250,246,0.85)', padding: { x: 3 * this.s.dpr, y: 1 * this.s.dpr } }).setOrigin(0, 0.5).setDepth(189000).setVisible(false)
-        v = { part: p, sig: '', imgs: [], tag, plate, fx: this.add.graphics() }
+        // The Owner's number, painted on the roof: world-sized, so it zooms with the city and buildings in front hide it.
+        const num = this.add.text(0, 0, '', { fontFamily: 'JetBrains Mono, ui-monospace, Menlo, monospace', fontSize: `${15 * this.s.dpr}px`, fontStyle: 'bold', color: '#2f2d3a', backgroundColor: '#fbfaf6', padding: { x: 3 * this.s.dpr, y: 0 } }).setOrigin(0.5, 1).setScale(1 / this.s.dpr).setVisible(false)
+        v = { part: p, sig: '', imgs: [], tag, plate, num, fx: this.add.graphics() }
         this.views.set(p.id, v)
       }
       v.part = p
       if (!v.sig) { v.imgs = ls.map(layer => ({ img: this.image(layer, o.x, o.y), layer })); v.sig = sig }
       for (const { img, layer } of v.imgs) img.setPosition(o.x + layer.dx, o.y + layer.dy)
+      const roof = p.kind === 'power' ? iso(p.x + 1.55, p.y + 2.75, 40) : iso(p.x + p.size / 2, p.y + p.size / 2, p.kind === 'genset' ? 42 : Math.min(kindOf(p.kind)?.height ?? 60, 120) * 0.5)
+      v.num.setText(p.label ?? '').setPosition(roof.x, roof.y).setVisible(!!p.label && v.imgs[0]?.img.visible !== false)
     }
-    for (const [id, v] of this.views) if (!seen.has(id)) { v.imgs.forEach(i => i.img.destroy()); v.tag.destroy(); v.plate.destroy(); v.fx.destroy(); this.views.delete(id) }
+    for (const [id, v] of this.views) if (!seen.has(id)) { v.imgs.forEach(i => i.img.destroy()); v.tag.destroy(); v.plate.destroy(); v.num.destroy(); v.fx.destroy(); this.views.delete(id) }
     if (this.selected && !seen.has(this.selected)) this.select(null)
     this.syncDecor(); this.drawMark(); this.relabel(); this.drawEffects(); this.drawSky(); this.drawWorkers()
   }
@@ -519,7 +523,7 @@ export class BuilderScene extends Phaser.Scene {
     depthOrder(items).forEach((it, i) => {
       const depth = 10 + i
       if (it.id.startsWith('d') && it.id.includes(',')) this.decor.get(it.id.slice(1))?.img.setDepth(depth)
-      else { const v = this.views.get(it.id); v?.imgs.forEach(({ img, layer }) => img.setDepth(depth + layer.order)); v?.fx.setDepth(depth + 0.8) }
+      else { const v = this.views.get(it.id); v?.imgs.forEach(({ img, layer }) => img.setDepth(depth + layer.order)); v?.fx.setDepth(depth + 0.8); v?.num.setDepth(depth + 0.9) }
     })
   }
 
@@ -968,7 +972,7 @@ export class BuilderScene extends Phaser.Scene {
       this.showGhost(this.armed.kind, this.armed.binds, ptr.x, ptr.y)
     } else if (g.t === 'press' && this.s.editing) {
       if (!g.moved && Math.hypot(ptr.x - g.x, ptr.y - g.y) < 8 * this.s.dpr) return
-      if (!g.moved) { g.moved = true; this.select(g.part.id); this.views.get(g.part.id)?.imgs.forEach(i => i.img.setVisible(false)); this.drawShade(); this.relabel() }
+      if (!g.moved) { g.moved = true; this.select(g.part.id); const mv = this.views.get(g.part.id); mv?.imgs.forEach(i => i.img.setVisible(false)); mv?.num.setVisible(false); this.drawShade(); this.relabel() }
       this.showGhost(g.part.kind, g.part.binds, ptr.x, ptr.y, g.part.id)
     }
   }
