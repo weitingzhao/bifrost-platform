@@ -219,3 +219,83 @@ func TestUnregisteredTypeIsRefused(t *testing.T) {
 		t.Fatalf("HTTP %d", rec.Code)
 	}
 }
+
+// 2026-11-19, bus step 4 (the Owner: "every page polling will poll you to
+// death"): before, each of N open streams read the ledger itself when an
+// event woke them, so reads grew with open Consoles. Twenty waiters woken by
+// one event now cost at most a few ledger reads, not twenty.
+func TestWaitersWokenTogetherShareOneRead(t *testing.T) {
+	l := &fakeLedger{horizon: 50}
+	g := newGate(t, l)
+	g.NATSUp = func() bool { return true }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go g.Follow(ctx)
+	for !g.shared.following.Load() {
+		time.Sleep(10 * time.Millisecond)
+	}
+	const n = 20
+	var wg sync.WaitGroup
+	got := make(chan int, n)
+	for range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			a, _ := get(t, g, "types=git.main.advanced&after=50.0&wait=10")
+			got <- len(a.Events)
+		}()
+	}
+	time.Sleep(300 * time.Millisecond) // all waiting, each after its first read
+	before := l.count()
+	l.add(gitRow(7, 60, "bifrost-platform"))
+	g.Wake.Notify()
+	wg.Wait()
+	close(got)
+	for k := range got {
+		if k != 1 {
+			t.Fatalf("a waiter got %d events, want 1", k)
+		}
+	}
+	if extra := l.count() - before; extra > 3 {
+		t.Errorf("one event cost %d ledger reads for %d waiters; want them shared", extra, n)
+	}
+}
+
+// 2026-11-19, bus step 4: an idle waiter re-read the ledger on its own timer
+// (every 2 s without NATS), so ten idle Consoles were ten readers. With the
+// follower each process reads once per poll, and an event is still found
+// without NATS.
+func TestIdleWaitersCostNoReadsAndTheFollowerWakesThem(t *testing.T) {
+	l := &fakeLedger{horizon: 50}
+	g := newGate(t, l)
+	g.NATSUp, g.Poll = nil, 100*time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go g.Follow(ctx)
+	for !g.shared.following.Load() {
+		time.Sleep(10 * time.Millisecond)
+	}
+	const n = 10
+	var wg sync.WaitGroup
+	for range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			get(t, g, "types=git.main.advanced&after=50.0&wait=1")
+		}()
+	}
+	wg.Wait()
+	// One second of 10 idle waiters: their first reads (shared or not) and
+	// the follower's ~10, not 10 waiters x 10 polls.
+	if c := l.count(); c > n+15 {
+		t.Errorf("%d ledger reads in a second of %d idle waiters", c, n)
+	}
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		l.add(gitRow(9, 60, "bifrost-platform")) // no NATS wake
+	}()
+	a, took := get(t, g, "types=git.main.advanced&after=50.0&wait=10")
+	if len(a.Events) != 1 || took > 3*time.Second {
+		t.Fatalf("without NATS the follower did not wake the waiter: after %s, %+v", took, a)
+	}
+}

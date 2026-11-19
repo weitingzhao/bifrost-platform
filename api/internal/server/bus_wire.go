@@ -223,6 +223,9 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 				context.AfterFunc(ctx, nc.Close)
 			}
 		}
+		// One follower per process wakes every waiter; waiters no longer
+		// re-read on their own timers (bus step 4, 2026-11-19).
+		safego.Go("bus-gate-follower", func() { g.Follow(ctx) })
 		s.bus.gate.Store(g)
 		slog.Info("bus gate: on", "env", env, "nats", natsOn)
 		if natsOn && !role.RunsWorkers() {

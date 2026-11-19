@@ -40,8 +40,16 @@ const (
 
 // Waker wakes everyone waiting at once.
 type Waker struct {
-	mu sync.Mutex
-	ch chan struct{}
+	mu  sync.Mutex
+	ch  chan struct{}
+	gen uint64
+}
+
+// Gen counts the wakes so far: answers read between two wakes may be shared.
+func (w *Waker) Gen() uint64 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.gen
 }
 
 // C is closed at the next Notify.
@@ -62,6 +70,7 @@ func (w *Waker) Notify() {
 		close(w.ch)
 	}
 	w.ch = make(chan struct{})
+	w.gen++
 }
 
 // Receipts records that a consumer was handed an event (relay.Receipts).
@@ -107,6 +116,7 @@ type Gate struct {
 	Clients        []registry.Client
 	TablesLoadedAt time.Time
 	seen           seenClients
+	shared         shared
 
 	// Poll is the re-read interval without NATS (2 s); Heartbeat the SSE
 	// comment interval (15 s). Zero is the default.
@@ -237,7 +247,7 @@ func (g *Gate) read(ctx context.Context, q query) ([]relay.Envelope, relay.Curso
 		if g.Wake != nil {
 			woken = g.Wake.C() // taken before reading: a wake during the read is not lost
 		}
-		rows, next, err := g.Ledger.After(ctx, cursor, q.limit, q.types)
+		rows, next, err := g.after(ctx, cursor, q.limit, q.types)
 		if err != nil {
 			return nil, cursor, err
 		}
@@ -269,13 +279,24 @@ func (g *Gate) read(ctx context.Context, q query) ([]relay.Envelope, relay.Curso
 		if left <= 0 {
 			return []relay.Envelope{}, cursor, nil
 		}
-		t := time.NewTimer(min(left, g.poll()))
+		// With the follower running it wakes us when the ledger has
+		// something new, so the timer only ends the wait: no re-read of our
+		// own (an idle waiter costs no read). Without it, re-read every poll.
+		following := g.shared.following.Load()
+		wait := left
+		if !following {
+			wait = min(left, g.poll())
+		}
+		t := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
 			t.Stop()
 			return []relay.Envelope{}, cursor, ctx.Err()
 		case <-woken:
 		case <-t.C:
+			if following {
+				return []relay.Envelope{}, cursor, nil
+			}
 		}
 		t.Stop()
 	}
