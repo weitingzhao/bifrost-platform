@@ -72,16 +72,6 @@ func TestProxyHTTPForwardsPathAndQuery(t *testing.T) {
 	}
 }
 
-// The status case of the former TestLegacyAnalyticsRedirectTarget; the
-// /plugins/analytics/api/* cases went with that route (2026-11-19, no traffic, no caller).
-func TestLegacyAnalyticsStatusRedirect(t *testing.T) {
-	rec := httptest.NewRecorder()
-	(&Handler{}).HandleLegacyAnalyticsRedirect(rec, httptest.NewRequest(http.MethodGet, "/api/v1/plugins/analytics/status", nil))
-	if got, want := rec.Header().Get("Location"), "/api/v1/research/analytics/elementary"; got != want {
-		t.Fatalf("Location=%q want %q", got, want)
-	}
-}
-
 func TestProxyHTTPHealthPath(t *testing.T) {
 	var sawPath string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

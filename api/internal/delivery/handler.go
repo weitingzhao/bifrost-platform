@@ -84,15 +84,6 @@ func (h *Handler) HandlePipelineRuns(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.PipelineRuns(r.Context(), name))
 }
 
-func (h *Handler) HandlePipelinePreflight(w http.ResponseWriter, r *http.Request) {
-	name := strings.TrimSpace(chi.URLParam(r, "name"))
-	if name == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "pipeline name required"})
-		return
-	}
-	writeJSON(w, http.StatusOK, h.svc.PipelinePreflight(r.Context(), name))
-}
-
 func (h *Handler) HandleStartPipelineRun(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(chi.URLParam(r, "name"))
 	if name == "" {

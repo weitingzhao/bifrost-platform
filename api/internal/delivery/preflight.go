@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
@@ -22,19 +20,6 @@ func (s *Service) ciNodeInputs(ctx context.Context) []placement.NodeInput {
 		}
 	}
 	return out
-}
-
-func (s *Service) PipelinePreflight(ctx context.Context, pipelineName string) PipelinePreflightResponse {
-	kaniko, unread := true, ""
-	dyn, err := s.buildDynamicClient()
-	if err != nil {
-		unread = "the pipeline definition was not read: " + err.Error()
-	} else if pipe, getErr := dyn.Resource(pipelineGVR).Namespace(s.PipelinesNamespace()).Get(ctx, pipelineName, metav1.GetOptions{}); getErr != nil {
-		unread = "the pipeline definition was not read: " + getErr.Error()
-	} else {
-		kaniko, unread = kanikoOf(pipe.Object, s.clusterTasks(ctx, dyn))
-	}
-	return s.buildPreflight(ctx, pipelineName, kaniko, unread)
 }
 
 // buildPreflight checks the amd64 CI pool for a kaniko pipeline (or one whose

@@ -16,9 +16,7 @@ func (s *Server) mountTenant(r chi.Router) {
 	r.Get("/plugins/ib-gateway/self-heal", s.ibgateway.HandleSelfHeal)
 	r.Get("/plugins/market-data/status", s.marketdata.HandleStatus)
 	r.Get("/plugins/flex-query/status", s.flexquery.HandleStatus)
-	r.Get("/plugins/analytics/status", s.research.HandleLegacyAnalyticsRedirect)
 	r.Get("/research/status", s.research.HandleStatus)
-	r.Get("/plugins/research/status", s.research.HandleStatus)
 	r.Get("/data-husbandry", s.datahusbandry.HandleSnapshot)
 	r.Get("/watchlist/union", s.marketdata.HandleWatchlistUnion)
 	// Read-only Plugin API proxy (coverage / analytics / ingest list / JSON probes).

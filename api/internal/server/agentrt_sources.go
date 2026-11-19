@@ -28,9 +28,6 @@ var (
 	commitID  = gitread.CommitID
 )
 
-// commitTreeEntry is one entry of a Gitea tree answer.
-type commitTreeEntry = gitread.TreeEntry
-
 // gitAccess is the delivery service's Gitea access as gitread reads it.
 func gitAccess(access func(context.Context) (delivery.GiteaAccess, error)) func(context.Context) (gitread.Access, error) {
 	return func(ctx context.Context) (gitread.Access, error) {

@@ -561,11 +561,14 @@ func TestAnUnreadDefinitionIsCheckedAndNamed(t *testing.T) {
 		"apiVersion": "tekton.dev/v1", "kind": "Pipeline",
 		"metadata": map[string]any{"name": "other", "namespace": "cicd"}, "spec": map[string]any{}}}, "present")
 	s.SetClientsetForTest(k8sfake.NewSimpleClientset())
-	pf := s.PipelinePreflight(context.Background(), "bifrost-not-installed")
-	if pf.BuildReady || !strings.Contains(pf.Reason, "definition was not read") {
+	// The check a run start makes (StartPipelineRun): the route that ran it on
+	// its own went on 2026-11-19 (no traffic, no caller).
+	pf := s.buildPreflight(context.Background(), "bifrost-unread", kaniko, unread)
+	if pf.BuildReady || !strings.Contains(pf.Reason, "not read") {
 		t.Fatalf("with no amd64 node an unread pipeline must be refused and say why: %+v", pf)
 	}
-	pf = s.PipelinePreflight(context.Background(), "other")
+	other, why := kanikoOf(map[string]any{"spec": map[string]any{}}, missing)
+	pf = s.buildPreflight(context.Background(), "other", other, why)
 	if !pf.BuildReady {
 		t.Fatalf("a pipeline that runs no kaniko is not held by the amd64 check: %+v", pf)
 	}

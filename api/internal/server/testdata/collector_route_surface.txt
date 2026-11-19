@@ -118,7 +118,6 @@ deny	GET /api/v1/delivery/context
 deny	POST /api/v1/delivery/mirrors/sync
 deny	GET /api/v1/delivery/pipelines
 deny	GET /api/v1/delivery/pipelines/{name}/policy-check
-deny	GET /api/v1/delivery/pipelines/{name}/preflight
 deny	GET /api/v1/delivery/pipelines/{name}/runs
 deny	GET /api/v1/delivery/pipelines/{name}/timings
 deny	POST /api/v1/delivery/pipelines/{name}/runs
@@ -174,7 +173,6 @@ deny	GET /api/v1/patrol/skills
 deny	PUT /api/v1/patrol/skills/{id}/enable
 deny	POST /api/v1/patrol/trigger/{id}
 deny	POST /api/v1/patrol/webhook/{event}
-deny	GET /api/v1/plugins/analytics/status
 deny	GET /api/v1/plugins/flex-query/api/*
 deny	POST /api/v1/plugins/flex-query/api/*
 deny	GET /api/v1/plugins/flex-query/status
@@ -186,7 +184,6 @@ deny	GET /api/v1/plugins/market-data/api/*
 deny	POST /api/v1/plugins/market-data/api/*
 deny	GET /api/v1/plugins/market-data/status
 deny	GET /api/v1/plugins/research/api/*
-deny	GET /api/v1/plugins/research/status
 deny	GET /api/v1/questions
 deny	POST /api/v1/questions
 deny	GET /api/v1/questions/{id}

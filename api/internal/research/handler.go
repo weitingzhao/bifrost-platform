@@ -27,13 +27,6 @@ func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.Status(r.Context()))
 }
 
-// HandleLegacyAnalyticsRedirect sends the retired Plugin → Analytics status URL to Research API.
-//
-//	GET /plugins/analytics/status → /api/v1/research/analytics/elementary
-func (h *Handler) HandleLegacyAnalyticsRedirect(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/api/v1/research/analytics/elementary", http.StatusPermanentRedirect)
-}
-
 // HandleAPIProxy proxies:
 //
 //	/api/v1/research/*              → Research API (:8795)/*
