@@ -28,6 +28,13 @@ type Service struct {
 	// Installed at startup; observers only copy execution materials, never authorize.
 	BeforeExecution func(context.Context, Approval) context.Context
 	AfterExecution  func(context.Context, any, error)
+	// FollowUp, installed at startup, waits for what an action started to end
+	// and returns the outcome the card should show (origin: #607, whose apply
+	// run failed while the card said "executed"). It is called after the
+	// action returned without error, while the lease is still renewed, with a
+	// context that ends at the card's deadline. nil: the card records the
+	// action's own answer, as before.
+	FollowUp func(context.Context, Approval, any) (any, error)
 	// Announce, installed at startup, hands every audited transition to the
 	// bus (approval.card.*): a seat waiting on its card is woken by the
 	// decision. Called after the state is stored and the audit written; it

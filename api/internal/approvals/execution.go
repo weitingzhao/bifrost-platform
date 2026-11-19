@@ -122,6 +122,14 @@ func (s *Service) runPlatform(ctx context.Context, rec Approval) (Approval, []ev
 		}
 		runCtx := actions.WithParamsHash(actions.WithCreateAttempt(ctx, rec.ID, attempt), rec.ParamsHash)
 		result, execErr = actions.Execute(runCtx, rec.Action, rec.Params)
+		if execErr == nil && s.FollowUp != nil {
+			fctx, cancel := runCtx, context.CancelFunc(func() {})
+			if rec.Execution != nil && !rec.Execution.Deadline.IsZero() {
+				fctx, cancel = context.WithDeadline(runCtx, rec.Execution.Deadline)
+			}
+			result, execErr = s.FollowUp(fctx, rec, result)
+			cancel()
+		}
 		close(stop)
 		<-done
 	}

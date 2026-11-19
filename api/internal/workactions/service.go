@@ -716,3 +716,35 @@ func condition(obj *unstructured.Unstructured, want string) bool {
 	}
 	return false
 }
+
+// ApplyRunOutcome reads an apply PipelineRun this service started: done is
+// false while it runs; when it is done, ok says it succeeded and why the
+// reason it did not (the condition's own words). A run that cannot be read is
+// an error, not "still running" (origin: #607, a card that said executed while
+// its apply run had failed because the commit was not reachable from main).
+func (s *Service) ApplyRunOutcome(ctx context.Context, name string) (done, ok bool, why string, err error) {
+	dyn, err := s.Clients.Dynamic()
+	if err != nil {
+		return false, false, "", err
+	}
+	obj, err := dyn.Resource(pipelineRunGVR).Namespace(s.Policy.Delivery.Namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return false, false, "", err
+	}
+	raw, _, _ := unstructured.NestedSlice(obj.Object, "status", "conditions")
+	for _, item := range raw {
+		m, _ := item.(map[string]any)
+		if t, _ := m["type"].(string); t != "Succeeded" {
+			continue
+		}
+		switch st, _ := m["status"].(string); st {
+		case "True":
+			return true, true, "", nil
+		case "False":
+			reason, _ := m["reason"].(string)
+			message, _ := m["message"].(string)
+			return true, false, strings.TrimSpace(reason + ": " + message), nil
+		}
+	}
+	return false, false, "", nil
+}

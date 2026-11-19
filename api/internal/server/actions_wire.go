@@ -17,6 +17,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/workactions"
@@ -223,6 +224,12 @@ func (s *Server) bindActionExecutors() {
 	if s.approvals != nil {
 		s.approvals.BeforeExecution = s.beginApprovalTrace
 		s.approvals.AfterExecution = s.endApprovalTrace
+		s.approvals.FollowUp = func(ctx context.Context, rec approvals.Approval, result any) (any, error) {
+			if s.work == nil || s.work.Svc == nil {
+				return result, nil
+			}
+			return approvals.FollowApplyRun(ctx, rec, result, s.work.Svc.ApplyRunOutcome, approvals.ApplyFollowEvery)
+		}
 	}
 	actions.RegisterExecutor("rolling_reboot", actions.ExecuteRollingReboot)
 	actions.RegisterExecutor("owner_run_command", actions.ExecuteOwnerRunCommand)
