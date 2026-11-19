@@ -3,7 +3,7 @@
 // The plan code (planstore) may not import lineage, delivery, coordination or
 // the Owner's questions, nor lineage the plan tree: each declares what it
 // needs as a port and this package, which names both sides, binds them when
-// it is linked. A binary or a test that runs the plan code links it; the
+// Bind is called. A binary or a test that runs the plan code calls it; the
 // rule ports are bound by agentrt/store, which keeps the rules and is linked
 // from here.
 package planwiring
@@ -66,7 +66,13 @@ func ExternalWorkPorts() planstore.ExternalWorkPorts {
 	}
 }
 
-func init() {
+// Bind binds the plan code's ports that this package provides (the rule ports
+// are bound by agentrt/store). The API binary calls it at its start
+// (server/agentrt_planwiring.go); a test that runs the plan code calls it from
+// its TestMain. Linking this package binds nothing any more (2026-11-18,
+// decoupling item 5: the planstore tests used to be bound only because they
+// linked it); an unbound port refuses. Binding twice is harmless.
+func Bind() {
 	planstore.BindPlanExternalWork(ExternalWorkPorts())
 	externalwork.BindPlanTree(externalwork.PlanTreePorts{
 		LockTree: planstore.LockTree,

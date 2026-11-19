@@ -3,6 +3,7 @@ package planstore_test
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 	"time"
 
@@ -13,8 +14,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planwiring" // binds the ports of the plan code
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planwiring"
 )
 
 // This test writes plan observations through the ledger, so it needs the
@@ -81,4 +82,12 @@ func TestPV2ObservationVersionsAndStaleness(t *testing.T) {
 	if e == nil {
 		t.Fatal("non-controller observation accepted")
 	}
+}
+
+// TestMain binds the plan code's ports by name: linking planwiring binds
+// nothing (decoupling item 5, 2026-11-18; the tests used to be bound only
+// because they linked it).
+func TestMain(m *testing.M) {
+	planwiring.Bind()
+	os.Exit(m.Run())
 }

@@ -27,7 +27,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planwiring" // binds the plan code's ports (agentrt/store did, until 2026-11-18)
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planwiring"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
@@ -304,4 +304,12 @@ func TestNotConnected(t *testing.T) {
 	if code, out := call(t, s, "viewer", "GET", "progress", nil); code != http.StatusServiceUnavailable || out["error"] != "not_connected" {
 		t.Fatalf("%d %v", code, out)
 	}
+}
+
+// TestMain binds the plan code's ports by name: linking planwiring binds
+// nothing (decoupling item 5, 2026-11-18; the tests used to be bound only
+// because they linked it).
+func TestMain(m *testing.M) {
+	planwiring.Bind()
+	os.Exit(m.Run())
 }

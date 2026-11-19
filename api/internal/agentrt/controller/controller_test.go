@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -16,7 +17,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planwiring" // binds the plan code's ports (agentrt/store did, until 2026-11-18)
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planwiring"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
@@ -267,4 +268,12 @@ func TestStartDecidesPlanChanges(t *testing.T) {
 			t.Fatal("the loops did not apply the answered change")
 		}
 	}
+}
+
+// TestMain binds the plan code's ports by name: linking planwiring binds
+// nothing (decoupling item 5, 2026-11-18; the tests used to be bound only
+// because they linked it).
+func TestMain(m *testing.M) {
+	planwiring.Bind()
+	os.Exit(m.Run())
 }

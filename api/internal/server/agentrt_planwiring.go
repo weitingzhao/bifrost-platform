@@ -6,8 +6,12 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planwiring"
 )
 
-// The runtime's start (decoupling item 5, S4, 2026-11-18): the plan's ports
-// onto the work records are bound here by name, where the API binary
-// assembles its parts. planwiring binds the same when it is linked, and all
-// its other ports; binding twice is harmless (an atomic store).
-func init() { planstore.BindPlanExternalWork(planwiring.ExternalWorkPorts()) }
+// The runtime's start (decoupling item 5, S4, 2026-11-18): the plan code's
+// ports are bound here by explicit calls, where the API binary assembles its
+// parts: the work-record ports by name, the rest by Bind (binding twice is
+// harmless: an atomic store). Linking planwiring binds nothing; a test that
+// runs the plan code calls planwiring.Bind from its TestMain.
+func init() {
+	planstore.BindPlanExternalWork(planwiring.ExternalWorkPorts())
+	planwiring.Bind()
+}

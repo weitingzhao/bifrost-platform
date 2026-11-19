@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planwiring"
 )
 
 // minParallel is how many tests of the package run at once when the command
@@ -57,6 +58,7 @@ func TestMain(m *testing.M) {
 		}
 		parallelAsked.want = fmt.Sprint(n)
 	}
+	planwiring.Bind() // the plan code's ports are bound by the test, not by linking
 	agentrttest.Warm(seededTemplate, seedTemplate)
 	os.Exit(m.Run())
 }
