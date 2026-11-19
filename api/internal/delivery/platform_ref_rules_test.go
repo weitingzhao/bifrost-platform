@@ -117,7 +117,10 @@ func TestPlatformNamesPollAfterSync(t *testing.T) {
 					params["uiRevision"] = ui
 				}
 				s, dyn, m := pinnedService(t, name, platformRefs(revision, ui), []string{"bifrost-platform", "bifrost-ui"}, mode)
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				// 20 s, not 5 (2026-11-19): ci-platform-dvcvs failed delayed commit at 5.20 s
+				// on a busy node while the same commit passed in ci-platform-xdcw5. The bound
+				// only stops a poll that never ends; the assertions below check the polling.
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 				defer cancel()
 				resp, _, err := s.StartPipelineRun(ctx, name, revision, "", "tester", params)
 				if err != nil || !resp.OK {
