@@ -4749,6 +4749,7 @@
         "console/src/api/governanceMcp.ts",
         "console/src/api/releases.ts",
         "console/src/components/layout",
+        "console/src/domains/foundation/bus",
         "console/src/lib/shell",
         "console/src/pages/CommitLineagePage.tsx",
         "console/src/pages/shell/owner",

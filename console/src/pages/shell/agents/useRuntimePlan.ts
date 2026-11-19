@@ -80,8 +80,9 @@ function requestedPlanRoot(): string | null {
  * it with; the request is content-addressed and read once, again only after a failed read.
  */
 export function useRuntimePlan(enabled = true): PlanRead {
+  const progressInterval = useLiveInterval(AGENT_RUNTIME_POLL_MS)
   const progressQ = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal),
-    enabled, refetchInterval: AGENT_RUNTIME_POLL_MS, retry: false })
+    enabled, refetchInterval: progressInterval, retry: false })
   const { data: progress, error: progressError, isError: progressFailed, isPaused: progressPaused } = progressQ
   const [requestedRoot, setRequestedRoot] = useState(requestedPlanRoot)
   useEffect(() => {
@@ -128,8 +129,9 @@ export function archRead(progress: Read<RuntimeProgress>): ArchRead {
 
 /** The architecture table for a pane, from GET /progress under the key Needs you and the plan read it with. */
 export function useRuntimeArch(enabled = true): ArchRead {
+  const progressInterval = useLiveInterval(AGENT_RUNTIME_POLL_MS)
   const progressQ = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal),
-    enabled, refetchInterval: AGENT_RUNTIME_POLL_MS, retry: false })
+    enabled, refetchInterval: progressInterval, retry: false })
   const { data, error, isError, isPaused, dataUpdatedAt } = progressQ
   const read = useMemo(() => archRead({ data, error, isError, isPaused }), [data, error, isError, isPaused])
   const readAt = wholeAt(dataUpdatedAt)
@@ -174,8 +176,9 @@ export type ProgressSource = 'poll' | 'cache'
 export type RoundScope = 'every' | { only: string | null }
 function useRoundPlans(enabled: boolean, source: ProgressSource = 'poll', scope: RoundScope = 'every'): RoundPlans {
   const every = scope === 'every'
+  const progressInterval = useLiveInterval(AGENT_RUNTIME_POLL_MS)
   const progressQ = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal),
-    enabled: enabled && every, retry: false, ...(source === 'cache' ? { staleTime: Infinity } : { refetchInterval: AGENT_RUNTIME_POLL_MS }) })
+    enabled: enabled && every, retry: false, ...(source === 'cache' ? { staleTime: Infinity } : { refetchInterval: progressInterval }) })
   const { data: progress, isError: progressFailed, isPaused: progressPaused } = progressQ
   const roundsKey = !every ? scope.only ?? ''
     : progress !== undefined ? planRounds(progress.plan).join(',') || PLAN_ROOT : progressFailed || progressPaused ? PLAN_ROOT : ''
