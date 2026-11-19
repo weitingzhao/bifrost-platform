@@ -3,7 +3,7 @@ import { fitsIn, GRID, plotAt, type Cell, type Placed, type Plot, type Street } 
 import type { Place } from './places'
 import { PALETTE, type Light, type Palette } from './light'
 import { hash } from './kit'
-import { HUES, PROPS, propKey, propSprite, setback, spriteFor, spriteKey, spriteUrl, type PropKind } from './sprites'
+import { HUES, setback, spriteFor, spriteKey, spriteUrl } from './sprites'
 import { frameOf, type Frame } from './viewport'
 
 /**
@@ -257,8 +257,7 @@ export class PlaceScene extends Phaser.Scene {
   /** Draw a place once its sprites are loaded; a newer draw wins. */
   private async draw(s: Shown, refit: boolean) {
     const id = ++this.drawId
-    const props = PROPS.map(kind => ({ key: propKey(kind, this.light), make: () => propSprite(kind, this.light) }))
-    await this.loadSprites([...this.looks(s.place, s.placed), ...(s.parent ? this.looks(s.parent, s.parentPlaced) : []), ...props])
+    await this.loadSprites([...this.looks(s.place, s.placed), ...(s.parent ? this.looks(s.parent, s.parentPlaced) : [])])
     if (id !== this.drawId) return
     this.build(s, refit)
   }
@@ -561,75 +560,6 @@ export class PlaceScene extends Phaser.Scene {
     quad(t.wallShade, [iso(d0 + 0.3, hi - 0.9), iso(d1 - 0.3, hi - 0.9), iso(d1 - 0.3, hi - 0.1), iso(d0 + 0.3, hi - 0.1)], 1)
   }
 
-  /**
-   * Where the small things go (the Owner, 2026-11-19, after Theme Hospital: a street has its trees, a
-   * corridor its seats). Outdoors: trees and lamps down both sides of every road, in the belt; a plot
-   * with nothing on it is a park, with trees and a bench. Indoors: seats, plants and a water cooler
-   * along the back walls, plants at the way in, and a plot with no room is a waiting area. Never on a
-   * road or inside a thing.
-   */
-  private propsFor(grade: 'highway' | 'street' | 'corridor', plots: Plot[], placed: Placed[], roads: Street[], lotInset: (p: Plot) => number, lo: number, hi: number) {
-    const out: { kind: PropKind; x: number; y: number }[] = []
-    const inThing = (x: number, y: number, pad = 0.15) => placed.some(p => x > p.x - pad && x < p.x + p.w + pad && y > p.y - pad && y < p.y + p.h + pad)
-    const put = (kind: PropKind, x: number, y: number) => { if (!inThing(x, y)) out.push({ kind, x, y }) }
-    const taken = new Set(placed.map(p => p.plot))
-    const free = plots.filter(p => !taken.has(p.id))
-    const rimmed = (v: number) => v === 0 ? -RIM / 2 : v === GRID ? GRID + RIM / 2 : v
-    if (grade !== 'corridor') {
-      // Down both sides of every road; never across another road; a lamp every third.
-      const lines = roads.map(r => {
-        const vertical = r.x0 === r.x1
-        return { r, vertical, at: rimmed(vertical ? r.x0 : r.y0), from: vertical ? r.y0 : r.x0, to: vertical ? r.y1 : r.x1 }
-      })
-      const onRoad = (x: number, y: number) => lines.some(l => {
-        const across = l.vertical ? x : y, along = l.vertical ? y : x
-        return Math.abs(across - l.at) < l.r.half + 0.3 && along > rimmed(l.from) - l.r.half - 0.3 && along < rimmed(l.to) + l.r.half + 0.3
-      })
-      let n = 0
-      for (const l of lines) {
-        const sides = l.r.kind === 'ring' ? [l.at < GRID / 2 ? 1 : -1] : [-1, 1]
-        for (const side of sides) for (let k = l.from + 0.5; k < l.to; k += 2) {
-          const across = l.at + side * (l.r.half + 0.24)
-          const x = l.vertical ? across : k, y = l.vertical ? k : across
-          if (x < 0 || y < 0 || x > GRID || y > GRID) continue
-          const others = lines.filter(m => m !== l)
-          if (others.some(m => { const a = m.vertical ? x : y, b = m.vertical ? y : x; return Math.abs(a - m.at) < m.r.half + 0.35 && b > m.from - 0.5 && b < m.to + 0.5 })) continue
-          put(n++ % 3 === 2 ? 'lamp' : 'tree', x, y)
-        }
-      }
-      // Parks: trees on a loose grid, a bench in the middle of a plot big enough.
-      for (const p of free) {
-        const e = lotInset(p) + 0.2, x0 = p.x + e, y0 = p.y + e, x1 = p.x + p.w - e, y1 = p.y + p.h - e
-        const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
-        if (Math.min(p.w, p.h) >= 2) put('bench', cx, cy)
-        const step = 1.25
-        for (let x = x0 + 0.2; x <= x1 - 0.2 + 1e-6; x += step) for (let y = y0 + 0.2; y <= y1 - 0.2 + 1e-6; y += step) {
-          if (Math.min(p.w, p.h) >= 2 && Math.hypot(x - cx, y - cy) < 0.8) continue
-          if (hash(`${p.id}:${x.toFixed(2)}:${y.toFixed(2)}`) % 5 === 0) continue
-          if (!onRoad(x, y)) put('tree', x, y)
-        }
-        if (x1 - x0 < 0.4) put('tree', cx, cy)
-      }
-    } else {
-      // Along the back walls: seats under the windows, a plant or the cooler between.
-      const along = lo + 0.62
-      let n = 0
-      for (let x = 0.6; x < GRID; x += 1.6) put((['seats', 'seats', 'plant', 'seats', 'cooler'] as const)[n++ % 5], x, along)
-      for (let y = 1.4; y < GRID; y += 3.2) put(n++ % 2 ? 'plant' : 'cooler', along, y)
-      // Plants either side of the way in.
-      put('plant', GRID / 2 - 1.5, hi - 0.6); put('plant', GRID / 2 + 1.5, hi - 0.6)
-      // A plot with no room: a small waiting area — a pair of seat rows in its middle and a plant.
-      for (const p of free) {
-        const cx = p.x + p.w / 2, cy = p.y + p.h / 2
-        if (Math.min(p.w, p.h) < 2) { put('plant', cx, cy); continue }
-        put('seats', cx - 0.5, cy - 0.3); put('seats', cx + 0.5, cy - 0.3)
-        put('seats', cx - 0.5, cy + 0.6); put('seats', cx + 0.5, cy + 0.6)
-        put('plant', cx + 1.3, cy - 0.3)
-      }
-    }
-    return out
-  }
-
   private level(place: Place, placed: Placed[], plots: Plot[], streets: Street[], o: { at: number; selected: string | null; inside: string | null; interactive: boolean; arranging: boolean }) {
     const c = this.add.container(o.at, 0)
     const g = this.add.graphics()
@@ -736,19 +666,9 @@ export class PlaceScene extends Phaser.Scene {
     c.add(g)
     const byId = new Map(place.children.map(k => [k.id, k]))
     const order = placed.filter(p => byId.has(p.id)).sort((a, b) => (a.x + a.y + (a.w + a.h) / 2) - (b.x + b.y + (b.w + b.h) / 2))
-    // Back to front, blocks and the small things between them alike, so nearer ones cover farther ones.
+    // Back to front, so nearer blocks cover farther ones.
     const look = new Map(this.looks(place, order).map(l => [l.id, l.key]))
-    const things = this.propsFor(grade, plots, placed, roads, lotInset, lo, hi)
-    const drawn = [
-      ...order.map(p => ({ k: p.x + p.y + (p.w + p.h) / 2, add: () => { for (const part of this.block(byId.get(p.id)!, p, look.get(p.id)!, o)) c.add(part) } })),
-      ...things.map(q => ({ k: q.x + q.y, add: () => {
-        const key = propKey(q.kind, this.light), a = this.anchors.get(key)
-        if (!this.textures.exists(key) || !a) return
-        const at = iso(q.x - 0.5, q.y - 0.5)
-        c.add(this.add.image(at.x, at.y, key).setOrigin(a.ax, a.ay).setScale(1 / RS))
-      } })),
-    ]
-    for (const d of drawn.sort((a, b) => a.k - b.k)) d.add()
+    for (const p of order) for (const part of this.block(byId.get(p.id)!, p, look.get(p.id)!, o)) c.add(part)
     // Names on top of every block, so a nearer block never hides a farther one's name. The minimap has none: too small to read.
     if (o.interactive) for (const p of order) {
       const sb = setback(Math.min(p.w, p.h)), foot = iso(p.x + p.w - sb, p.y + p.h - sb)
