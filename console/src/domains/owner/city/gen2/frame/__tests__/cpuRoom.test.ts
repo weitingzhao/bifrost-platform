@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { rowsDrawn, setRuler } from '../library/dictionary'
-import { cpuRoom, cpuRoomKey, cpuRoomLayout, cpuRoomShape, type CpuRoomReadings } from '../units/cpuRoom'
+import { COL_GAP_PX, cpuRoom, cpuRoomKey, cpuRoomLayout, cpuRoomShape, LATHE, ROW_GAP_PX, type CpuRoomReadings } from '../units/cpuRoom'
 
 // 2026-11-19, the CPU unit's room (the workshop). CPU only: load and waiting were drawn first and taken
 // out the same day — the scheduler counts them, the CPU as hardware does not know them (the Owner). On the first draw a Mac mini, which reports no clock,
@@ -76,7 +76,7 @@ describe('the CPU room', () => {
   })
   // The Owner, 2026-11-19: every colour stands for something. Machines were grey when idle and green
   // otherwise — the work light's reading said a second time, and not in the key.
-  it('a machine is one colour whatever its core does; only the load bar shows how busy', () => {
+  it('a machine is one colour whatever its core does; only its lit folds show how busy', () => {
     const idle = cpuRoom({ ...linux, cores: linux.cores.map(() => core(0, 2e9, 4e9)) }).svg
     const busy = cpuRoom({ ...linux, cores: linux.cores.map(() => core(0.5, 2e9, 4e9)) }).svg
     const bodies = (svg: string) => (svg.match(/fill="#94b3a1"/g) ?? []).length
@@ -85,7 +85,7 @@ describe('the CPU room', () => {
     expect(idle).not.toContain('#adb3ad')
   })
   // The Owner, 2026-11-19: the tall work light hid the machines behind it; the load lies on the top.
-  it('the load bar fills with the core: empty when idle, orange above 85%', () => {
+  it('the folds light with the core: none when idle, orange above 85%', () => {
     const at = (b: number) => cpuRoom({ ...linux, cores: linux.cores.map(() => core(b, 2e9, 4e9)) }).svg
     expect(at(0)).not.toContain('#ffc94d')
     expect(at(0.5)).toContain('#ffc94d')
@@ -100,5 +100,20 @@ describe('the CPU room', () => {
     expect(svg).toContain('2.0 GHz')
     expect(svg).toContain('20%')
     expect(cpuRoom(asleep).svg).not.toMatch(/CPU CONSOLE/)
+  })
+  // The Owner, 2026-11-19, three bounds: it looks like a machine tool; no machine hides another (2.5D);
+  // the load reads at a glance. The tall headstock hid the bar of the machine behind it.
+  // The first low lathe kept the rows clear but a pair's two lathes stood 0.08 cells apart: the right
+  // one's headstock covered the left one's tailstock. The same bound holds side to side.
+  it('no part of a lathe rises above its bed further than the gap to the row behind, or to its neighbour', () => {
+    expect(Math.max(LATHE.head, LATHE.tail)).toBeLessThanOrEqual(ROW_GAP_PX)
+    expect(Math.max(LATHE.head, LATHE.tail)).toBeLessThanOrEqual(COL_GAP_PX)
+  })
+  it('the load lights the folds: none idle, about half at 50%, all at 100% in orange', () => {
+    const at = (b: number) => cpuRoom({ ...linux, cores: [core(b, 2e9, 4e9), core(b, 2e9, 4e9)] }).svg
+    const amber = (svg: string) => (svg.match(/fill="#ffc94d"/g) ?? []).length
+    expect(amber(at(0))).toBe(0)
+    expect(amber(at(0.5))).toBe(2 * 2)
+    expect((at(1).match(/fill="#ff7a45"/g) ?? []).length).toBe(2 * 4)
   })
 })

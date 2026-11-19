@@ -7,7 +7,7 @@ import { INSTRUMENT, INSTRUMENT_H, instrument, readingText } from '../library/pa
  * The hardware only — how many cores, how busy each, how fast, how hot:
  *   the workshop floor   one machine tool per core, in pairs: a load bar across its top filled as far as
  *                        the core is busy — the only reading on a machine
- *   the CPU console      at the front, for the whole CPU, each on the standard instrument: how busy all
+ *   the CPU console      against the back wall, for the whole CPU, each on the standard instrument: how busy all
  *                        the cores are, how fast they run against their top, how hot the chip is
  *   a core's own sensor  where one reports per core, a small thermometer on its machine
  * Everything is a reading; what is not read is not drawn (no machines when the cores are not read, no
@@ -39,21 +39,32 @@ const WALL = faces('#efe9dc', '#e2dac8', '#cfc6b2')
  */
 // Cores come in pairs and powers of two, so machines stand in pairs, 2, 4 or 8 to a row, an aisle
 // between pairs, every row full (the Owner, 2026-11-19: three to a row, or one left over, looks wrong).
-// The staging area is a strip across the front, by the door; the machines fill the floor behind it,
-// a walkway between rows. A room holds 8, 24 or 48: 8 cores the small room, 16 the middle, 32 the large.
-const PITCH = 0.7, ROW = 1.0, GAP = 0.2, STAGING = 1.2, ROOMS: [number, number][] = [[4, 4], [4, 8], [8, 8]]
+// A strip along the back wall holds the console; the machines fill the floor in front of it, a walkway
+// between rows. A room holds 8, 24 or 48: 8 cores the small room, 16 the middle, 32 the large.
+const PITCH = 0.8, ROW = 1.0, GAP = 0.2, STAGING = 1.2, MD = 0.5, MW = 0.55, ROOMS: [number, number][] = [[4, 4], [4, 8], [8, 8]]
 const rowWidth = (cols: number) => cols * PITCH + Math.max(0, cols / 2 - 1) * GAP
 const rowsOf = (d: number) => Math.floor((d - 0.6 - STAGING) / ROW)
 /** The most machines to a row that a room this wide holds and that divide the machines evenly. */
 const colsOf = (w: number, machines: number) => {
   let best = 1
-  for (const c of [2, 4, 8]) if (rowWidth(c) <= w - 0.6 && (machines <= 1 || machines % c === 0)) best = c
+  for (const c of [2, 4, 8]) if (rowWidth(c) <= w - 0.6 + 1e-9 && (machines <= 1 || machines % c === 0)) best = c
   return best
 }
 const fitsIn = ([w, d]: [number, number], n: number) => Math.ceil(n / colsOf(w, n)) <= rowsOf(d)
 export function cpuRoomShape(machines: number): [number, number] {
   return ROOMS.find(s => fitsIn(s, machines)) ?? ROOMS[ROOMS.length - 1]
 }
+/**
+ * A lathe's heights (px above the floor): the bed's top, and how far its headstock and tailstock rise
+ * above it. Nothing may hide another machine (the Owner, 2026-11-19): a row stands ROW cells behind the
+ * next and a machine is MD deep, so the rows are (ROW − MD) × 16 px apart on screen; nothing on a machine
+ * may rise more than that above its bed, or it covers the bed of the machine behind.
+ */
+export const LATHE = { bed: 9, head: 4, tail: 3 }
+export const ROW_GAP_PX = (ROW - MD) * 16
+/** The same between neighbours in a row: (PITCH − MW) cells apart, so the same bound side to side. */
+export const COL_GAP_PX = (PITCH - MW) * 16
+
 /** How machines stand in a room: its shape, how many to a row, how many rows. */
 export function cpuRoomLayout(machines: number) {
   const shape = cpuRoomShape(machines), cols = colsOf(shape[0], machines)
@@ -67,7 +78,9 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
   const g = new Draw(fw, fd, 56)
   // The floor: a workshop slab.
   g.box(0, 0, fw, fd, 3, faces('#d8d6cf', '#bdbab1', '#aaa79e'), 0, 1.2)
-  const sy = fd - STAGING - 0.2
+  // The console stands against the back wall, nothing behind it to hide; the machines fill the floor in
+  // front of it (low, they cover at most its desk, never its instruments). Machines start at `fy`.
+  const fy = STAGING + 0.25
   // The back walls.
   g.box(0, 0, fw, 0.18, 46, WALL, 0, 1.2)
   g.box(0, 0.18, 0.18, fd - 0.18, 46, WALL, 0, 1.2)
@@ -82,7 +95,7 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
   const cores = r.cores.length
   const avgOf = (v: (number | null)[]) => { const k = v.filter((x): x is number => x != null); return k.length ? k.reduce((a, b) => a + b, 0) / k.length : null }
 
-  // The console: a control desk at the front for what is measured over the whole CPU, each on the
+  // The console: a control desk against the back wall for what is measured over the whole CPU, each on the
   // standard instrument (library/parts.ts), one slot each, the desk as wide as its instruments: how busy
   // all the cores are (the average of the load bars), how fast they run against their top, how hot the
   // chip is. Only instruments with a reading; no console when nothing is read. (The Owner, 2026-11-19:
@@ -96,7 +109,7 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
   if (cores > 0) gauges.push({ row: 'core.busy.all', name: 'BUSY', share: encode('core.busy.all', all), redFrom: 0.85, reading: readingText(all, 'share') })
   if (top) gauges.push({ row: 'core.freq', name: 'CLOCK', share: clock != null ? encode('core.freq', clock / top) : null, redFrom: 0.92, reading: readingText(clock, 'Hz') })
   if (t) gauges.push({ row: 'sensor.temp', name: 'CHIP TEMP', share: encode('sensor.temp', t.c / 100), redFrom: 0.8, reading: readingText(t.c, '°C') })
-  const cw = gauges.length * INSTRUMENT + 0.2, cx = fw - 0.3 - cw, cy = sy + 0.15, cd = 0.75, bank = 0.22
+  const cw = gauges.length * INSTRUMENT + 0.2, cx = fw - 0.3 - cw, cy = 0.22, cd = 0.75, bank = 0.22
   const STEEL = faces('#d9dbe0', '#bfc3cb', '#a9aeb8'), DARK = faces('#4a5263', '#353c4a', '#2b313d')
   const zb = 15, zf = 8, BANK_H = zb + INSTRUMENT_H + 4
   const drawConsole = () => {
@@ -127,40 +140,53 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
     const cols = colsOf(fw, count), fits = cols * rowsOf(fd)
     const groups = Array.from({ length: Math.min(count, fits) }, (_, m) => r.cores.slice(m * per, (m + 1) * per))
     if (count > fits) g.text('left', 0.4, 0.18, 47, `${fits} OF ${count} MACHINES FIT — SET MORE CORES A MACHINE`, 5.5, '#b8433f', 700)
-    const MW = 0.62, md = 0.5
+    const md = MD
     groups.forEach((grp, i) => {
       const mw = Math.max(0.3, MW * grp.length / per)
       const c = { busy: avgOf(grp.map(x => x.busy)) }
-      const col = i % cols, x = 0.35 + col * PITCH + Math.floor(col / 2) * GAP + (PITCH - MW) / 2, y = 0.55 + Math.floor(i / cols) * ROW + (ROW - md) / 2
+      // Spread over the floor (the Owner, 2026-11-19: crowded in a corner with the rest of the room empty is
+      // neither tidy nor needed): each pair centred in an equal share of the floor's width, each row in an
+      // equal share of its depth before the console. A machine keeps its size; only the spacing grows.
+      const col = i % cols, row = Math.floor(i / cols), pairs = Math.max(1, cols / 2)
+      const slotW = (fw - 0.7) / pairs, slotD = (fd - 0.3 - fy) / Math.ceil(groups.length / cols)
+      const inPair = cols === 1 ? 0 : (col % 2) * PITCH, pairW = cols === 1 ? MW : PITCH + MW
+      const x = 0.35 + Math.floor(col / 2) * slotW + (slotW - pairW) / 2 + inPair, y = fy + row * slotD + (slotD - md) / 2
       things.push({ at: x + y, draw: () => {
         const busy = encode('core.busy', c.busy)
-        // A lathe (the Owner, 2026-11-19: a box with a battery on it is not a machine tool): a long bed, the
-        // headstock at its left end with the chuck on its inner face, the tailstock at its right end. The
-        // load bar lies along the bed's ways between them, filled from the left as far as the core is busy;
-        // flat, so it hides nothing behind it.
-        const BED = 7, hw = Math.min(0.17, mw * 0.3)
+        // A lathe, low (the Owner, 2026-11-19: it must look like a machine tool, hide no other machine, and
+        // show its load at a glance): the bed; the headstock at the left with its chuck facing in; the
+        // tailstock at the right; between them, along the bed, the ways' bellows cover in four folds.
+        // The load lights the folds from the headstock on, as far as the core is busy (the last fold in
+        // part): amber, orange above 85%; dark when idle. It is the machine's own part, not a gauge on it.
+        const BED = LATHE.bed, hw = Math.min(0.13, mw * 0.25), tw = 0.08
         g.shadow(x, y, mw, md, 0.25)
         g.box(x, y, mw, md, BED, MACHINE, 0, 1.1)
-        g.box(x, y + 0.02, hw, md - 0.04, 11, HEAD, BED, 1)
-        const bx = x + hw + 0.03, bl = mw - hw - 0.15, bw = bl * U, bh = Math.min(0.26, md * 0.55) * U
-        const ticks = [0.25, 0.5, 0.75].map(t => `<line x1="${(bw * t).toFixed(1)}" y1="0" x2="${(bw * t).toFixed(1)}" y2="${bh.toFixed(1)}" stroke="#5a5e6a" stroke-width="0.5"/>`).join('')
-        g.floor(bx, y + md / 2 - bh / U / 2, BED, `<rect x="0" y="0" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="1" fill="#2a2c35" stroke="${INK}" stroke-width="0.6"/>` +
-          (busy != null && busy > 0.005 ? `<rect x="0.8" y="0.8" width="${Math.max(1.5, (bw - 1.6) * busy).toFixed(1)}" height="${(bh - 1.6).toFixed(1)}" rx="0.6" fill="${busy > 0.85 ? '#ff7a45' : '#ffc94d'}"/>` : '') + ticks)
-        g.face('right', x + hw, y + md / 2 + 0.07, BED + 6, `<circle cx="0" cy="0" r="4.2" fill="#c5cad3" stroke="${INK}" stroke-width="0.8"/><circle cx="0" cy="0" r="1.6" fill="#6b7280"/>`)
-        g.box(x + mw - 0.1, y + md * 0.3, 0.1, md * 0.4, 6, HEAD, BED, 0.9)
+        g.box(x, y + 0.03, hw, md - 0.06, LATHE.head, HEAD, BED, 1)
+        const fx = x + hw + 0.02, fl = mw - hw - tw - 0.04, FW = fl * U, FD = (md - 0.18) * U, N = 4
+        const lit = busy == null ? 0 : busy * N, glow = busy != null && busy > 0.85 ? '#ff7a45' : '#ffc94d'
+        let folds = ''
+        for (let k = 0; k < N; k++) {
+          const u0 = (k / N) * FW, w = FW / N
+          folds += `<rect x="${u0.toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${FD.toFixed(1)}" fill="${k % 2 ? '#4a564f' : '#55625a'}"/>`
+          const on = Math.max(0, Math.min(1, lit - k))
+          if (on > 0.02) folds += `<rect x="${u0.toFixed(1)}" y="0" width="${(w * on).toFixed(1)}" height="${FD.toFixed(1)}" fill="${glow}" opacity="${k % 2 ? 0.88 : 1}"/>`
+        }
+        g.floor(fx, y + 0.09, BED, folds + `<rect x="0" y="0" width="${FW.toFixed(1)}" height="${FD.toFixed(1)}" fill="none" stroke="${INK}" stroke-width="0.6"/>`)
+        g.face('right', x + hw, y + md / 2 + 0.06, BED + 2.2, `<circle cx="0" cy="0" r="2.6" fill="#c5cad3" stroke="${INK}" stroke-width="0.7"/><circle cx="0" cy="0" r="0.9" fill="#6b7280"/>`)
+        g.box(x + mw - tw, y + md * 0.3, tw, md * 0.4, LATHE.tail, HEAD, BED, 0.9)
         // A core's own temperature, where its sensor reports one: a small thermometer on its right side.
         const hot = grp.map((_, k) => perCore.get(i * per + k)).filter((v): v is number => v != null)
         if (hot.length) {
           const tc = Math.max(...hot)
-          g.onRight(x + mw, y, 0.04, 0.12, 1, 6, '#fbfaf6', 0.5)
-          g.onRight(x + mw, y, 0.05, 0.11, 1, 1 + 5 * encode('sensor.temp', tc / 100)!, liquidOf(tc), 0)
+          g.onRight(x + mw, y, 0.04, 0.12, 1, LATHE.bed - 1, '#fbfaf6', 0.5)
+          g.onRight(x + mw, y, 0.05, 0.11, 1, 1 + (LATHE.bed - 3) * encode('sensor.temp', tc / 100)!, liquidOf(tc), 0)
         }
       } })
     })
   } else {
     g.text('left', 0.6, 0.18, 30, 'CORES NOT READ', 7, '#8a857a')
   }
-  if (gauges.length) things.push({ at: cx + cy + 99, draw: drawConsole })
+  if (gauges.length) things.push({ at: -1, draw: drawConsole })
   things.sort((a, b) => a.at - b.at).forEach(t => t.draw())
   return g.done()
 }
