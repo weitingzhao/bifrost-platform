@@ -6,7 +6,7 @@ import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { STAGES, stagesOf, unitRulesBroken, type Detail, type StageId, type UnitSpec } from '../src/domains/owner/city/gen2/frame/units/process'
 import { UNITS, UNIT_PLAN, cpuRoomReadings } from '../src/domains/owner/city/gen2/content/units/cpu'
-import { cpuRoom } from '../src/domains/owner/city/gen2/frame/units/cpuRoom'
+import { cpuRoom, cpuRoomShape, machinesOf } from '../src/domains/owner/city/gen2/frame/units/cpuRoom'
 import { DICTIONARY, encode, rowsDrawn, rulerOf, setRuler, STANDARD_PARTS } from '../src/domains/owner/city/gen2/frame/library/dictionary'
 import { spriteUrl } from '../src/domains/owner/city/gen2/frame/sprites'
 
@@ -94,13 +94,14 @@ function CpuRoomView({ r }: { r: Reads }) {
     </div>
     <div className="pick">{nodes.map(x => <button key={x.id} className={x.id === id ? 'on' : ''} onClick={() => setId(x.id)}>{x.id}</button>)}</div>
     <div className="roomgrid">
-      <img src={spriteUrl(sprite)} alt={`CPU room of ${id}`} />
+      {/* Drawn at one scale for every machine, so a bigger CPU is a bigger room on the page too. */}
+      <img src={spriteUrl(sprite)} alt={`CPU room of ${id}`} style={{ width: `${Math.round(sprite.width * 1.3)}px` }} />
       <ul className="key">
         {rows.map(m => <li key={m.id}><b>{m.shows}</b><span>{m.meaning}</span>{m.encoding.kind === 'parts' && rulerOf(m.id) !== m.encoding.each && <em className="ruler">Ruler set here: one {m.part} = {rulerOf(m.id)} {m.encoding.unit === 'GB' ? 'bytes' : `${m.encoding.unit}s`} ({Math.ceil(encode(m.id, m.id === 'core.machines' ? read.cores.length : null) ?? 0)} drawn)</em>}</li>)}
         {rows.length === 0 && <li><span>Nothing read on this machine, so nothing is drawn in its room.</span></li>}
       </ul>
     </div>
-    <p className="hint">{read.cores.length} cores · load {read.load.map(l => l == null ? '–' : l.toFixed(2)).join(' / ')} · waited {read.pressure == null ? 'not read' : `${(read.pressure * 100).toFixed(1)}%`} · {read.temps.length} sensors{read.temps.length ? `, hottest ${Math.round(Math.max(...read.temps.map(t => t.c)))} °C` : ''}</p>
+    <p className="hint">{read.cores.length} cores → {machinesOf(read)} machines → a {cpuRoomShape(machinesOf(read)).join('×')} room · load {read.load.map(l => l == null ? '–' : l.toFixed(2)).join(' / ')} · waited {read.pressure == null ? 'not read' : `${(read.pressure * 100).toFixed(1)}%`} · {read.temps.length} sensors{read.temps.length ? `, hottest ${Math.round(Math.max(...read.temps.map(t => t.c)))} °C` : ''}</p>
   </div>
 }
 

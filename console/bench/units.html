@@ -51,7 +51,7 @@
       .pick button.on { border-color: var(--now); }
       .roomgrid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
       @media (max-width: 760px) { .roomgrid { grid-template-columns: 1fr; } }
-      .roomgrid img { width: 100%; height: auto; background: #f6f2ea; border-radius: 8px; }
+      .roomgrid img { max-width: 100%; height: auto; justify-self: start; background: #f6f2ea; border-radius: 8px; }
       .key { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 11.5px; }
       .key b { display: block; } .key em.ruler { display: block; font-style: normal; color: var(--now); font-size: 10.5px; } .key span { color: var(--mute); font-size: 11px; }
 .rulers { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }

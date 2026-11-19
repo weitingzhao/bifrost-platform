@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { rowsDrawn, setRuler } from '../library/dictionary'
-import { cpuRoom, cpuRoomKey, type CpuRoomReadings } from '../units/cpuRoom'
+import { cpuRoom, cpuRoomKey, cpuRoomShape, type CpuRoomReadings } from '../units/cpuRoom'
 
 // 2026-11-19, the CPU unit's room (the workshop). On the first draw a Mac mini, which reports no clock,
 // got empty speed dials and their key rows, and the asleep GPU box got a waiting line in its key with
@@ -36,5 +36,22 @@ describe('the CPU room', () => {
       expect(cpuRoomKey(linux)).not.toBe(k1)
       expect(linux.cores).toHaveLength(16)
     } finally { setRuler('core.machines', null) }
+  })
+  // The Owner, 2026-11-19: more cores, a bigger room; one design for every CPU, scaled out by its parts.
+  it('a machine keeps its size; the room grows with the machines, by the allowed shapes', () => {
+    // The first try had 8, 10 and 16 cores all in 32-cell rooms (4×8 and 8×4): the size said nothing.
+    expect(cpuRoomShape(8)).toEqual([4, 4])
+    expect(cpuRoomShape(10)).toEqual([4, 4])
+    expect(cpuRoomShape(16)).toEqual([4, 8])
+    expect(cpuRoomShape(32)).toEqual([8, 8])
+    expect(cpuRoomShape(64)).toEqual([8, 8])
+    const of = (n: number): CpuRoomReadings => ({ ...linux, cores: Array.from({ length: n }, () => core(0.2, 2e9, 4e9)) })
+    expect(cpuRoom(of(32)).width).toBeGreaterThan(cpuRoom(of(8)).width)
+  })
+  it('more machines than the largest room holds: it says so, and the ruler makes them fit', () => {
+    const big: CpuRoomReadings = { ...linux, cores: Array.from({ length: 128 }, () => core(0.2, 2e9, 4e9)) }
+    expect(cpuRoom(big).svg).toMatch(/OF 128 MACHINES FIT/)
+    setRuler('core.machines', 2)
+    try { expect(cpuRoom(big).svg).not.toMatch(/MACHINES FIT/) } finally { setRuler('core.machines', null) }
   })
 })
