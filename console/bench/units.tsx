@@ -74,6 +74,25 @@ function DetailsStage({ u, r }: { u: UnitSpec; r: Reads }) {
   </>
 }
 
+/** The room drafted: each chosen detail as a piece of the facility's equipment, before it is drawn. */
+function InsideDraft({ u }: { u: UnitSpec }) {
+  const label = (id: string) => u.details.find(d => d.id === id)?.label ?? id
+  const groups = [...new Set(u.inside!.map(i => i.where))]
+  return <>
+    <p className="hint">Drafted, not drawn yet: what each detail becomes in the room, and where it stands. Once you confirm the mapping, the room is drawn from it.</p>
+    <div className="scroll">
+      <table className="matrix draft">
+        <thead><tr><th>Where</th><th>Detail</th><th>Becomes</th><th>How the reading shows</th></tr></thead>
+        <tbody>
+          {groups.flatMap(g => u.inside!.filter(i => i.where === g).map((i, k) => (
+            <tr key={i.detail}>{k === 0 ? <td rowSpan={u.inside!.filter(x => x.where === g).length} className="per">{g}</td> : null}<td>{label(i.detail)}</td><td><b>{i.thing}</b></td><td className="wrap">{i.shows}</td></tr>
+          )))}
+        </tbody>
+      </table>
+    </div>
+  </>
+}
+
 const STATE_WORD = { confirmed: 'Confirmed', open: 'Making now', waiting: 'Waits' } as const
 
 function App() {
@@ -84,7 +103,7 @@ function App() {
   const u = UNITS.find(x => x.id === unitId)
   const stages = u ? stagesOf(u) : []
   const open = stages.find(s => s.state === 'open')?.id
-  const [stageId, setStageId] = useState<StageId>('details')
+  const [stageId, setStageId] = useState<StageId>(() => stagesOf(UNITS[0]).find(s => s.state === 'open')?.id ?? 'details')
   const stage = STAGES.find(s => s.id === stageId)!
   const broken = u ? unitRulesBroken(u) : []
 
@@ -124,6 +143,7 @@ function App() {
           </dl>
           {broken.length > 0 && <p className="warn">{broken.join(' · ')}</p>}
           {stageId === 'details' && (r ? <DetailsStage u={u} r={r} /> : <p className="warn">Nothing read.</p>)}
+          {stageId === 'inside' && u.inside && <InsideDraft u={u} />}
           {stageId !== 'details' && stages.find(s => s.id === stageId)!.state === 'waiting' && <p className="hint">Waits for {STAGES[STAGES.findIndex(s => s.id === stageId) - 1].name} to be confirmed.</p>}
           {stageId === open && <p className="ask">Now: {stage.confirms} Say it in the thread; it is recorded in the spec with your words, and the next stage opens.</p>}
         </div>

@@ -29,7 +29,30 @@ export const CPU_UNIT: UnitSpec = {
     { id: 'interrupts', label: 'Interrupts', meaning: 'How often devices interrupt the cores.', query: 'rate(node_intr_total[5m])', unit: 'per second', per: 'machine' },
     { id: 'guest', label: 'Lent to virtual machines', meaning: 'Time the cores spent running virtual machines.', query: 'sum by (instance) (rate(node_cpu_guest_seconds_total[5m])) / on (instance) ' + CORES, unit: 'share', per: 'machine' },
   ],
-  confirmed: {},
+  chosen: ['cores', 'busy.core', 'busy.mode', 'load1', 'load5', 'load15', 'running', 'blocked', 'pressure', 'freq', 'freq.max', 'temp', 'switches', 'interrupts', 'guest'],
+  // Inside, drafted 2026-11-19 for the Owner to see before it is drawn: the generator hall, each
+  // detail a piece of a power plant's own equipment. The 16×16 floor: the generator floor to the west,
+  // the control room to the north-east, the gate yard to the south-east, the thermometers on the walls.
+  inside: [
+    { detail: 'cores', thing: 'Generator sets', shows: 'One generator set per core, in rows; 16 cores, 16 sets.', where: 'generator floor' },
+    { detail: 'busy.core', thing: 'Each set’s output column', shows: 'The light column on each set’s control cabinet stands as high as that core is busy; an idle set is dark.', where: 'generator floor, on each set' },
+    { detail: 'freq', thing: 'Each set’s tachometer', shows: 'A dial on each set: the needle at how fast the core runs now.', where: 'generator floor, on each set' },
+    { detail: 'freq.max', thing: 'The red line on each tachometer', shows: 'The red mark on the same dial: the fastest it can run.', where: 'generator floor, on each set' },
+    { detail: 'busy.mode', thing: 'The distribution board', shows: 'Where the power went, as coloured bands: the city (user programs), the plant’s own use (system), waiting for fuel (iowait), the switchgear (interrupts), taken by the grid (steal).', where: 'control room' },
+    { detail: 'load1', thing: 'The demand dials, 1 minute', shows: 'Three dials of demand on the plant; a needle past the number of sets means more asked of it than it has.', where: 'control room' },
+    { detail: 'load5', thing: 'The demand dials, 5 minutes', shows: 'The second of the three dials.', where: 'control room' },
+    { detail: 'load15', thing: 'The demand dials, 15 minutes', shows: 'The third of the three dials.', where: 'control room' },
+    { detail: 'switches', thing: 'The switchboard', shows: 'A counter of switching operations per second, its lamps blinking faster as it climbs.', where: 'control room' },
+    { detail: 'interrupts', thing: 'The dispatch telephone', shows: 'A counter of calls per second from the devices outside.', where: 'control room' },
+    { detail: 'running', thing: 'Workers at the sets', shows: 'One worker standing at a set for each task running now.', where: 'generator floor' },
+    { detail: 'blocked', thing: 'Workers at the fuel door', shows: 'Workers stuck at the fuel door, waiting for a delivery (input or output).', where: 'gate yard' },
+    { detail: 'pressure', thing: 'The queue at the gate', shows: 'A line of workers waiting for a free set, as long as the share of time someone waited.', where: 'gate yard' },
+    { detail: 'temp', thing: 'Thermometers on the walls', shows: 'One thermometer per sensor, its column as high as it reads; red near its limit.', where: 'along the walls' },
+    { detail: 'guest', thing: 'Leased sets', shows: 'A share of the sets tagged “leased” (lent to virtual machines); none when nothing is lent.', where: 'generator floor' },
+  ],
+  confirmed: {
+    details: { on: '2026-11-19', words: '都到了这个细节了…这都到这个城市内部了嘛，肯定需要展示清楚啊' },
+  },
 }
 
 export const UNITS: UnitSpec[] = [CPU_UNIT]

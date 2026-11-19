@@ -58,6 +58,13 @@ export type Detail = {
   per: Per
 }
 
+/**
+ * Inside, drafted: what each chosen detail becomes in the room — a piece of the facility's own
+ * equipment — and how its reading shows on it. Drafted before it is drawn, so the Owner sees the
+ * mapping first; once drawn, each item is a row of the metaphor dictionary.
+ */
+export type InsideItem = { detail: string; thing: string; shows: string; where: string }
+
 export type Aggregate = 'average' | 'maximum' | 'total' | 'count' | 'worst state'
 
 export type SummaryItem = { id: string; label: string; from: string[]; how: Aggregate; row: string }
@@ -73,6 +80,7 @@ export type UnitSpec = {
   details: Detail[]
   /** The details the room shows; set when the Owner confirms Details. */
   chosen?: string[]
+  inside?: InsideItem[]
   summary?: SummaryItem[]
   confirmed: Partial<Record<StageId, Confirmed>>
 }
@@ -103,6 +111,8 @@ export function unitRulesBroken(u: UnitSpec): string[] {
   }
   if (u.confirmed.details && !u.chosen?.length) out.push(`${u.id}: Details is confirmed but no detail is chosen`)
   for (const c of u.chosen ?? []) if (!ids.has(c)) out.push(`${u.id}: chosen "${c}" is not a detail`)
+  for (const it of u.inside ?? []) if (!(u.chosen ?? []).includes(it.detail)) out.push(`${u.id}: the room draws "${it.detail}", which is not chosen`)
+  if (u.inside) for (const c of u.chosen ?? []) if (!u.inside.some(it => it.detail === c)) out.push(`${u.id}: chosen "${c}" has no place in the room`)
   for (const it of u.summary ?? []) {
     if (it.from.length === 0) out.push(`${u.id}.${it.id}: a summary item is made from no detail`)
     for (const f of it.from) if (!(u.chosen ?? []).includes(f)) out.push(`${u.id}.${it.id}: made from "${f}", which the room does not show`)
