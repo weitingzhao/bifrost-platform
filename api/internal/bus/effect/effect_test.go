@@ -1,5 +1,4 @@
-//bifrost:owner coordination
-package server
+package effect
 
 import (
 	"testing"

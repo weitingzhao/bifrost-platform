@@ -1,15 +1,14 @@
-package server
+package registry
 
 import (
+	"encoding/json"
 	"net/http"
 	"sort"
 	"strings"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 )
 
 // GET /api/v1/bus/contract: what the bus promises and to whom, read from
-// the registers compiled into the binary (bus/registry): every topic with
+// the registers compiled into the binary: every topic with
 // its version, publisher and who may read it; every subscription row; every
 // declared user. The Bus page draws it as publisher → topic → subscriber;
 // who is live or lost comes from /bus/clients beside it.
@@ -52,13 +51,14 @@ type busContract struct {
 	Clients       []contractClient `json:"clients"`
 }
 
-func (s *Server) handleBusContract(w http.ResponseWriter, _ *http.Request) {
-	tenants, err := registry.Load()
+// HandleContract is the route.
+func HandleContract(w http.ResponseWriter, _ *http.Request) {
+	tenants, err := Load()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	subs, err := registry.LoadSubscriptions()
+	subs, err := LoadSubscriptions()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -89,4 +89,10 @@ func (s *Server) handleBusContract(w http.ResponseWriter, _ *http.Request) {
 		return out.Clients[i].Tenant+out.Clients[i].Name < out.Clients[j].Tenant+out.Clients[j].Name
 	})
 	writeJSON(w, http.StatusOK, out)
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
 }

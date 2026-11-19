@@ -1,7 +1,8 @@
-package server
+package effect
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
 	"log/slog"
@@ -13,7 +14,6 @@ import (
 
 	bushook "github.com/weitingzhao/bifrost-platform/api/internal/bus/hook"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/nextgen"
-	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 )
 
 // GET /api/v1/bus/nextgen: the communication layer's change of generation,
@@ -41,7 +41,7 @@ type busNextgen struct {
 	Baselines   []nextgenBaseline       `json:"baselines"`
 }
 
-func (s *Server) handleBusNextgen(w http.ResponseWriter, r *http.Request) {
+func (s Deps) HandleNextgen(w http.ResponseWriter, r *http.Request) {
 	chs, err := nextgen.Channels()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -60,7 +60,7 @@ func (s *Server) handleBusNextgen(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	out.Problems = nextgen.SummarizeProblems(problems, s.problemEvidence(r.Context(), out.GeneratedAt, evidence))
+	out.Problems = nextgen.SummarizeProblems(problems, s.ProblemEvidence(r.Context(), out.GeneratedAt, evidence))
 	for _, g := range groups {
 		ng := nextgenReaderGroup{ReaderGroup: g, Counts: map[string]int{}}
 		for i, rd := range g.Readers {
@@ -92,12 +92,12 @@ func (s *Server) handleBusNextgen(w http.ResponseWriter, r *http.Request) {
 }
 
 // baselineValue queries a baseline at its time.
-func (s *Server) baselineValue(ctx context.Context, b nextgen.Baseline) (float64, error) {
+func (s Deps) baselineValue(ctx context.Context, b nextgen.Baseline) (float64, error) {
 	at, err := time.Parse(time.RFC3339, b.At)
 	if err != nil {
 		return 0, fmt.Errorf("%s: time %q", b.Key, b.At)
 	}
-	v, err := s.promql(ctx, strings.ReplaceAll(b.Query, "{{at}}", fmt.Sprint(at.Unix())))
+	v, err := s.Promql(ctx, strings.ReplaceAll(b.Query, "{{at}}", fmt.Sprint(at.Unix())))
 	if err != nil {
 		return 0, err
 	}
@@ -110,7 +110,7 @@ func (s *Server) baselineValue(ctx context.Context, b nextgen.Baseline) (float64
 
 // baselineInto sets a row's Before from the baseline of that key, when the
 // system has one and can read it.
-func (s *Server) baselineInto(ctx context.Context, row *effectRow, key string) {
+func (s Deps) baselineInto(ctx context.Context, row *effectRow, key string) {
 	bs, err := nextgen.Baselines()
 	if err != nil {
 		return
@@ -132,12 +132,12 @@ func (s *Server) baselineInto(ctx context.Context, row *effectRow, key string) {
 // one reader id, or for "reader:<id>" and "topic:<type>" (the relay publishing
 // that event). Prometheus not answering is "unmeasured", not a failure of
 // the reader.
-func (s *Server) readerEvidence(ctx context.Context, now time.Time) func(string) nextgen.Evidence {
+func (s Deps) readerEvidence(ctx context.Context, now time.Time) func(string) nextgen.Evidence {
 	env := strings.TrimSpace(os.Getenv("AGENTRT_ENV"))
 	ns := "bifrost-platform-" + env
 	window := fmt.Sprintf("%dd", int(nextgen.EvidenceWindow.Hours()/24))
 	read := func(q string, metric string) (map[string]float64, error) {
-		return s.promql(ctx, fmt.Sprintf(q, metric, ns, window))
+		return s.Promql(ctx, fmt.Sprintf(q, metric, ns, window))
 	}
 	const lastQ, runsQ = `max by (reader) (max_over_time(%s{namespace=%q}[%s]))`, `sum by (reader) (increase(%s{namespace=%q}[%s]))`
 	const lastT, runsT = `max by (type) (max_over_time(%s{namespace=%q}[%s]))`, `sum by (type) (increase(%s{namespace=%q}[%s]))`
@@ -226,23 +226,23 @@ func effectSwitchRows(evidence func(string) nextgen.Evidence, now time.Time) []e
 // least N clean comparisons with the list and not one difference
 // (bifrost_bus_readers_compared/mismatch_total, delivery's side by side).
 // Prometheus not answering earns nothing: the routes compare again.
-func (s *Server) earnedReadRoutes(ctx context.Context) map[string]bool {
+func (s Deps) EarnedReadRoutes(ctx context.Context, cacheRoutes []string, compareN int) map[string]bool {
 	env := strings.TrimSpace(os.Getenv("AGENTRT_ENV"))
-	if env == "" || s.telemetry == nil {
+	if env == "" || s.Promql == nil {
 		return nil
 	}
 	ns := "bifrost-platform-" + env
-	compared, err := s.promql(ctx, fmt.Sprintf(`sum by (route) (increase(bifrost_bus_readers_compared_total{namespace=%q}[7d]))`, ns))
+	compared, err := s.Promql(ctx, fmt.Sprintf(`sum by (route) (increase(bifrost_bus_readers_compared_total{namespace=%q}[7d]))`, ns))
 	if err != nil {
 		slog.Info("bus readers: earned trust not read; every route compares", "error", err)
 		return nil
 	}
-	mismatch, err := s.promql(ctx, fmt.Sprintf(`sum by (route) (increase(bifrost_bus_readers_mismatch_total{namespace=%q}[7d]))`, ns))
+	mismatch, err := s.Promql(ctx, fmt.Sprintf(`sum by (route) (increase(bifrost_bus_readers_mismatch_total{namespace=%q}[7d]))`, ns))
 	if err != nil {
 		slog.Info("bus readers: earned trust not read; every route compares", "error", err)
 		return nil
 	}
-	out := nextgen.EarnedRoutes(delivery.CacheRoutes(), compared, mismatch, delivery.ReadersCompareN())
+	out := nextgen.EarnedRoutes(cacheRoutes, compared, mismatch, compareN)
 	slog.Info("bus readers: trust from the readings", "earned", out, "compared", compared, "mismatch", mismatch)
 	return out
 }
@@ -259,4 +259,10 @@ func watchNote(rd nextgen.Reader) string {
 		state = "watched"
 	}
 	return strings.TrimSpace(fmt.Sprintf("%s (%s by gate-git: BUS_GIT_REPOS=%s)", rd.Note, rd.WatchRepo+" "+state, strings.Join(bushook.ReposFromEnv(), ",")))
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
 }

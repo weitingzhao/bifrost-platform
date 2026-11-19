@@ -1,4 +1,4 @@
-package server
+package effect
 
 import (
 	"context"
@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 )
 
 // GET /api/v1/bus/effect: what the bus's work does, each reading computed
@@ -47,7 +45,7 @@ type busEffect struct {
 	Rows        []effectRow `json:"rows"`
 }
 
-func (s *Server) handleBusEffect(w http.ResponseWriter, r *http.Request) {
+func (s Deps) HandleEffect(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	now := time.Now().UTC()
 	env := strings.TrimSpace(os.Getenv("AGENTRT_ENV"))
@@ -62,15 +60,15 @@ func (s *Server) handleBusEffect(w http.ResponseWriter, r *http.Request) {
 
 // effectMainToSTG: from a platform landing finished to the next STG delivery
 // created, over the last 24 hours and the 24 before, from the run cache.
-func (s *Server) effectMainToSTG(now time.Time) effectRow {
+func (s Deps) effectMainToSTG(now time.Time) effectRow {
 	row := effectRow{Key: "main_to_stg", Label: "Main moved → STG delivery started",
 		How: "Median seconds from a bifrost-platform landing (land-*) finishing to the next bifrost-deliver-platform run being created, last 24 h; read from the bus run cache. Minutes-long ones waited for the release window."}
-	if s.delivery == nil {
+	if s.CachedRuns == nil {
 		row.Unmeasured = "no delivery reader on this platform"
 		return row
 	}
-	lands, ok1 := s.delivery.CachedRunsOf("bifrost-land")
-	dels, ok2 := s.delivery.CachedRunsOf("bifrost-deliver-platform")
+	lands, ok1 := s.CachedRuns("bifrost-land")
+	dels, ok2 := s.CachedRuns("bifrost-deliver-platform")
 	if !ok1 || !ok2 {
 		row.Unmeasured = "the run cache is not synced in this process"
 		return row
@@ -170,43 +168,19 @@ func latencies(done, created []time.Time, from, to time.Time) (float64, int, int
 	return m, len(secs), fast
 }
 
-func (s *Server) promql(ctx context.Context, q string) (map[string]float64, error) {
-	if s.telemetry == nil {
-		return nil, fmt.Errorf("no Prometheus reader on this platform")
-	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	points, err := s.telemetry.PromQL(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-	out := map[string]float64{}
-	for _, p := range points {
-		key := ""
-		for _, k := range []string{"site", "route", "type", "reader", "__name__"} {
-			if v := p.Labels[k]; v != "" {
-				key = v
-				break
-			}
-		}
-		out[key] += p.Value
-	}
-	return out, nil
-}
-
 // effectListRuns: pipeline run lists per 10 minutes, the cluster's own count
 // beside this platform's by caller.
-func (s *Server) effectListRuns(ctx context.Context, env string) []effectRow {
+func (s Deps) effectListRuns(ctx context.Context, env string) []effectRow {
 	cluster := effectRow{Key: "list_cluster", Label: "Pipeline run lists, whole cluster",
 		How: "apiserver_request_total, LIST of pipelineruns, increase over 10 minutes (every client, not only the platform); beside it the runs created in the same 10 minutes and the runs kept, from the bus run cache. Two 10-minute windows differ by their edges: compare with the run counts."}
-	if v, err := s.promql(ctx, `sum(increase(apiserver_request_total{verb="LIST",resource="pipelineruns"}[10m]))`); err != nil {
+	if v, err := s.Promql(ctx, `sum(increase(apiserver_request_total{verb="LIST",resource="pipelineruns"}[10m]))`); err != nil {
 		cluster.Unmeasured = err.Error()
 	} else {
 		cluster.Value = fmt.Sprintf("%.0f per 10 min", v[""])
 		// Beside it, how busy CI was: runs created in the same 10 minutes
 		// and runs the cluster keeps (other clients list by what is kept).
-		if s.delivery != nil {
-			if runs, ok := s.delivery.CachedRunsOf(""); ok {
+		if s.CachedRuns != nil {
+			if runs, ok := s.CachedRuns(""); ok {
 				created, kept := runsCreatedSince(runs, time.Now().Add(-10*time.Minute)), len(runs)
 				cluster.Value += fmt.Sprintf(" · %d runs started in the same 10 min, %d kept", created, kept)
 			}
@@ -215,7 +189,7 @@ func (s *Server) effectListRuns(ctx context.Context, env string) []effectRow {
 	ns := "bifrost-platform-" + env
 	own := effectRow{Key: "list_platform", Label: "Pipeline run lists, this platform by caller",
 		How: "bifrost_kube_requests_total{site}, LIST of pipelineruns, increase over 10 minutes, namespace " + ns + "; the site is the calling reader."}
-	v, err := s.promql(ctx, fmt.Sprintf(`sum by (site) (increase(bifrost_kube_requests_total{verb="LIST",resource="pipelineruns",namespace=%q}[10m]))`, ns))
+	v, err := s.Promql(ctx, fmt.Sprintf(`sum by (site) (increase(bifrost_kube_requests_total{verb="LIST",resource="pipelineruns",namespace=%q}[10m]))`, ns))
 	if err != nil {
 		own.Unmeasured = err.Error()
 		s.baselineInto(ctx, &cluster, "list_cluster")
@@ -240,7 +214,7 @@ func (s *Server) effectListRuns(ctx context.Context, env string) []effectRow {
 	}
 	readers := effectRow{Key: "display_reads", Label: "Display pages reading runs",
 		How: "bifrost_bus_readers_*: reads answered from the run cache, sampled comparisons with a list, differences; since this process started."}
-	if r, err := s.promql(ctx, fmt.Sprintf(`sum by (__name__) ({__name__=~"bifrost_bus_readers_(cache_served|compared|mismatch)_total",namespace=%q})`, ns)); err != nil {
+	if r, err := s.Promql(ctx, fmt.Sprintf(`sum by (__name__) ({__name__=~"bifrost_bus_readers_(cache_served|compared|mismatch)_total",namespace=%q})`, ns)); err != nil {
 		readers.Unmeasured = err.Error()
 	} else {
 		readers.Value = fmt.Sprintf("%.0f from the cache, %.0f sampled, %.0f differences", r["bifrost_bus_readers_cache_served_total"], r["bifrost_bus_readers_compared_total"], r["bifrost_bus_readers_mismatch_total"])
@@ -250,15 +224,14 @@ func (s *Server) effectListRuns(ctx context.Context, env string) []effectRow {
 	return []effectRow{cluster, own, readers}
 }
 
-func (s *Server) effectWakes(ctx context.Context, now time.Time) effectRow {
+func (s Deps) effectWakes(ctx context.Context, now time.Time) effectRow {
 	row := effectRow{Key: "wakes", Label: "Seats woken by the bus (last 24 h)",
 		How: "The dispatcher's wake messages in the ledger: delivered to a seat's inbox, or sent to the duty seat because the recipient was unknown; seconds from the message to the seat acknowledging it (its doorbell wakes it, then it reads)."}
-	db := s.recordDB()
-	if db == nil {
+	if s.Wakes == nil {
 		row.Unmeasured = "the agent runtime database is not connected"
 		return row
 	}
-	w, err := coord.Wakes(ctx, db, now.Add(-24*time.Hour))
+	w, err := s.Wakes(ctx, now.Add(-24*time.Hour))
 	if err != nil {
 		row.Unmeasured = err.Error()
 		return row
@@ -275,16 +248,16 @@ func (s *Server) effectWakes(ctx context.Context, now time.Time) effectRow {
 	return row
 }
 
-func (s *Server) effectRelay(ctx context.Context, env string) []effectRow {
+func (s Deps) effectRelay(ctx context.Context, env string) []effectRow {
 	ns := "bifrost-platform-" + env
 	row := effectRow{Key: "relay", Label: "Bus health",
 		How: "bifrost_bus_relay_* since the workers started; seconds since the cluster gate's last event; per event type, how long ago the relay last published one (bifrost_bus_relay_last_published_timestamp_seconds). Who reads is in Clients below."}
-	v, err := s.promql(ctx, fmt.Sprintf(`sum by (__name__) ({__name__=~"bifrost_bus_relay_(published|errors|drift)_total",namespace=%q})`, ns))
+	v, err := s.Promql(ctx, fmt.Sprintf(`sum by (__name__) ({__name__=~"bifrost_bus_relay_(published|errors|drift)_total",namespace=%q})`, ns))
 	if err != nil {
 		row.Unmeasured = err.Error()
 		return []effectRow{row}
 	}
-	age, err := s.promql(ctx, fmt.Sprintf(`time() - max(bifrost_bus_gate_cluster_last_event_timestamp_seconds{namespace=%q})`, ns))
+	age, err := s.Promql(ctx, fmt.Sprintf(`time() - max(bifrost_bus_gate_cluster_last_event_timestamp_seconds{namespace=%q})`, ns))
 	last := "unknown"
 	if err == nil {
 		if a, ok := age[""]; ok {
@@ -292,7 +265,7 @@ func (s *Server) effectRelay(ctx context.Context, env string) []effectRow {
 		}
 	}
 	row.Value = fmt.Sprintf("%.0f relayed, %.0f errors, %.0f drift; last cluster event %s", v["bifrost_bus_relay_published_total"], v["bifrost_bus_relay_errors_total"], v["bifrost_bus_relay_drift_total"], last)
-	if ages, err := s.promql(ctx, fmt.Sprintf(`time() - max by (type) (bifrost_bus_relay_last_published_timestamp_seconds{namespace=%q})`, ns)); err == nil {
+	if ages, err := s.Promql(ctx, fmt.Sprintf(`time() - max by (type) (bifrost_bus_relay_last_published_timestamp_seconds{namespace=%q})`, ns)); err == nil {
 		types := make([]string, 0, len(ages))
 		for t := range ages {
 			if t != "" {

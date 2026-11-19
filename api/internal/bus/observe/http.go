@@ -1,16 +1,28 @@
-package server
+package observe
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gate"
-	"github.com/weitingzhao/bifrost-platform/api/internal/bus/observe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
 )
+
+// Handler is the route's dependencies, from the server's wiring: the
+// ledger's pool (nil while it is not connected), the ledger read over it,
+// the cursor of a time in it, and the bus gate (nil while it is off).
+type Handler struct {
+	Pool     func() *pgxpool.Pool
+	Ledger   func(*pgxpool.Pool) relay.Ledger
+	CursorAt func(*pgxpool.Pool) func(context.Context, time.Time) (relay.Cursor, error)
+	Gate     func() *gate.Gate
+}
 
 // observeCardTypes are the card events the picture reads from the ledger.
 var observeCardTypes = []string{"approval.card.created", "approval.card.decided"}
@@ -19,7 +31,7 @@ var observeCardTypes = []string{"approval.card.created", "approval.card.decided"
 // map (bus/observe): who wrote to whom and how fast it was taken, the seats'
 // last status reports, how long the cards waited, and what is not recorded.
 // Read when asked; the page reads it with its other once-a-minute reads.
-func (s *Server) handleBusObserve(w http.ResponseWriter, r *http.Request) {
+func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	hours := 24
 	if v := r.URL.Query().Get("hours"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -29,31 +41,31 @@ func (s *Server) handleBusObserve(w http.ResponseWriter, r *http.Request) {
 		}
 		hours = n
 	}
-	pool := s.bus.pool.Load()
+	pool := h.Pool()
 	if pool == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "the bus's database is not connected"})
 		return
 	}
 	now := time.Now()
 	since := now.Add(-time.Duration(hours) * time.Hour)
-	letters, status, err := observe.ReadLetters(r.Context(), pool, since)
+	letters, status, err := ReadLetters(r.Context(), pool, since)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	ledger := &relay.PGLedger{DB: func() relay.TxBeginner { return pool }, EventsAfter: busEventsAfter}
-	cards, err := observeCards(r.Context(), ledger, busCursorAt(pool), since)
+	ledger := h.Ledger(pool)
+	cards, err := observeCards(r.Context(), ledger, h.CursorAt(pool), since)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	p := observe.Build(now, hours, letters, status, cards)
+	p := Build(now, hours, letters, status, cards)
 	if tenants, err := registry.Load(); err == nil {
 		if t, ok := tenants[relay.Tenant]; ok {
-			if types, err := observeTypes(r.Context(), ledger, busCursorAt(pool), now.Add(-time.Hour), t.Types()); err == nil {
-				p.Rate = observe.NewRate(60, types)
+			if types, err := observeTypes(r.Context(), ledger, h.CursorAt(pool), now.Add(-time.Hour), t.Types()); err == nil {
+				p.Rate = NewRate(60, types)
 			}
-			if l, err := s.observeListening(r.Context(), ledger, busCursorAt(pool), now, t); err == nil {
+			if l, err := h.listening(r.Context(), ledger, h.CursorAt(pool), now, t); err == nil {
 				p.Listening = &l
 			}
 		}
@@ -70,21 +82,21 @@ const listenScan = 60000
 // observeListening reads whether anyone listens: the last day's bus events
 // (ledger), who took each (one scan of the receipt stream), and who may read
 // each topic (declared consumers and subscription rows).
-func (s *Server) observeListening(ctx context.Context, l relay.Ledger, at func(context.Context, time.Time) (relay.Cursor, error), now time.Time, t registry.Tenant) (observe.Listening, error) {
+func (h Handler) listening(ctx context.Context, l relay.Ledger, at func(context.Context, time.Time) (relay.Cursor, error), now time.Time, t registry.Tenant) (Listening, error) {
 	since := now.Add(-listenHours * time.Hour)
 	c, err := at(ctx, since)
 	if err != nil {
-		return observe.Listening{}, err
+		return Listening{}, err
 	}
-	var events []observe.ListenEvent
+	var events []ListenEvent
 	for page := 0; page < 200; page++ {
 		rows, next, err := l.After(ctx, c, 100, t.Types())
 		if err != nil {
-			return observe.Listening{}, err
+			return Listening{}, err
 		}
 		for _, row := range rows {
 			if !row.At.Before(since) {
-				events = append(events, observe.ListenEvent{ID: relay.EventID(row.EventID), Type: row.Type, Cause: row.Cause, N: row.EventID})
+				events = append(events, ListenEvent{ID: relay.EventID(row.EventID), Type: row.Type, Cause: row.Cause, N: row.EventID})
 			}
 		}
 		if len(rows) < 100 || next == c {
@@ -110,14 +122,14 @@ func (s *Server) observeListening(ctx context.Context, l relay.Ledger, at func(c
 	var receipts map[string][]string
 	read := false
 	var cut bool
-	if g := s.bus.gate.Load(); g != nil {
+	if g := h.Gate(); g != nil {
 		if j, ok := g.Journey.(*gate.JSJourney); ok {
 			if receipts, cut, err = j.ReceiptsByEvent(ctx, since, listenScan); err == nil {
 				read = true
 			}
 		}
 	}
-	out := observe.BuildListening(listenHours, events, receipts, read, readers, "gate:stream:console", display)
+	out := BuildListening(listenHours, events, receipts, read, readers, "gate:stream:console", display)
 	if cut {
 		out.Notes = append(out.Notes, "the receipt scan stopped at its limit: the heard share is a floor")
 	}
@@ -151,12 +163,12 @@ func observeTypes(ctx context.Context, l relay.Ledger, at func(context.Context, 
 
 // observeCards reads the cards' created and decided events since a time,
 // a page at a time (a week is some dozens).
-func observeCards(ctx context.Context, l relay.Ledger, at func(context.Context, time.Time) (relay.Cursor, error), since time.Time) ([]observe.Card, error) {
+func observeCards(ctx context.Context, l relay.Ledger, at func(context.Context, time.Time) (relay.Cursor, error), since time.Time) ([]Card, error) {
 	c, err := at(ctx, since)
 	if err != nil {
 		return nil, err
 	}
-	byID := map[string]*observe.Card{}
+	byID := map[string]*Card{}
 	var order []string
 	for page := 0; page < 50; page++ {
 		rows, next, err := l.After(ctx, c, 100, observeCardTypes)
@@ -170,7 +182,7 @@ func observeCards(ctx context.Context, l relay.Ledger, at func(context.Context, 
 			}
 			card, ok := byID[id]
 			if !ok {
-				card = &observe.Card{ID: id}
+				card = &Card{ID: id}
 				byID[id] = card
 				order = append(order, id)
 			}
@@ -186,11 +198,17 @@ func observeCards(ctx context.Context, l relay.Ledger, at func(context.Context, 
 		}
 		c = next
 	}
-	out := make([]observe.Card, 0, len(order))
+	out := make([]Card, 0, len(order))
 	for _, id := range order {
 		if card := byID[id]; !card.Created.IsZero() {
 			out = append(out, *card)
 		}
 	}
 	return out, nil
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
 }

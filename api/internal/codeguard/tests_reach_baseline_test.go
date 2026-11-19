@@ -271,7 +271,6 @@ var testFilesInShared = []string{
 	"api/internal/server/auth_routes_test.go",
 	"api/internal/server/auth_startup_test.go",
 	"api/internal/server/bus_detail_test.go",
-	"api/internal/server/bus_effect_test.go",
 	"api/internal/server/bus_wire_test.go",
 	"api/internal/server/ci_domains_test.go",
 	"api/internal/server/ci_scorecard_test.go",

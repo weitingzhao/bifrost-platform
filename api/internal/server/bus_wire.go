@@ -350,18 +350,18 @@ func (s *Server) mountBus(r chi.Router) {
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/stream", route((*gate.Gate).HandleStream))
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/trace", route((*gate.Gate).HandleTrace))
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/clients", route((*gate.Gate).HandleClients))
-	// What the bus's work does, computed when asked (bus_effect.go).
+	// What the bus's work does, computed when asked (bus/effect).
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/effect", s.handleBusEffect)
-	// The known regressions on main (bus_regressions.go): a seat records one or its fix as itself.
-	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/regressions", s.handleRegressions)
+	// The known regressions on main (bus/regressions): a seat records one or its fix as itself.
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/regressions", s.busRegressions().HandleList)
 	writers := s.auth.RequireAny(actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin)
 	r.With(writers).Post("/bus/regressions", s.guard("report_regression", s.handleRegressionWrite(false)))
 	r.With(writers).Post("/bus/regressions/fixed", s.guard("mark_regression_fixed", s.handleRegressionWrite(true)))
-	// The change of generation, from its registers (bus_nextgen.go).
+	// The change of generation, from its registers (bus/effect).
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/nextgen", s.handleBusNextgen)
-	// What the bus promises and to whom, from its registers (bus_contract.go).
-	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/contract", s.handleBusContract)
-	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/observe", s.handleBusObserve)
+	// What the bus promises and to whom, from its registers (bus/registry).
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/contract", registry.HandleContract)
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/observe", s.busObserve().ServeHTTP)
 }
 
 // startBus starts what this process runs of the bus, once the ledger's pool

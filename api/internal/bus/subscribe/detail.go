@@ -1,4 +1,4 @@
-package server
+package subscribe
 
 import (
 	"context"
@@ -7,29 +7,30 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
-	"github.com/weitingzhao/bifrost-platform/api/internal/bus/subscribe"
-	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 )
 
-// busRunDetail answers a subscription row's params.detail
+// RunDetail answers a subscription row's params.detail
 // (task-result:<task>/<name>[,<name>…]) from the TaskRun of that task in the
 // event's run: each name its result, else its param (a branch is a param).
 // One list by label, only for a row that asks, only when its event matched.
-func (s *Server) busRunDetail() subscribe.Detail {
-	return func(ctx context.Context, row registry.Subscription, ev subscribe.Event) (map[string]string, error) {
+//
+// open answers detail regressions:open; taskRuns lists the TaskRuns of a
+// run's task (nil: no delivery reader, so no detail).
+func RunDetail(open func(context.Context) (map[string]string, error),
+	taskRuns func(ctx context.Context, run, task string) ([]unstructured.Unstructured, error)) Detail {
+	return func(ctx context.Context, row registry.Subscription, ev Event) (map[string]string, error) {
 		if row.Params[registry.ParamDetail] == registry.DetailOpenRegressions {
-			return s.openRegressionsDetail(ctx)
+			return open(ctx)
 		}
-		if s.delivery == nil {
+		if taskRuns == nil {
 			return nil, nil
 		}
 		task, names, ok := registry.TaskResults(row.Params[registry.ParamDetail])
-		run := subscribe.RunOf(ev)
+		run := RunOf(ev)
 		if !ok || run == "" {
 			return nil, nil
 		}
-		trs, err := s.delivery.UnitTaskRuns(kubemetrics.WithSite(ctx, "bus.detail"), "",
-			"tekton.dev/pipelineRun="+run+",tekton.dev/pipelineTask="+task)
+		trs, err := taskRuns(ctx, run, task)
 		if err != nil {
 			return nil, err
 		}
