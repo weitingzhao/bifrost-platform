@@ -47,9 +47,10 @@ export type Frame = {
   levels: Rect & { row: number }
   /** The menu along the bottom: the Console's functions, a second way in beside the levels (the Owner, 2026-11-19). */
   menu: Rect
-  /** The trail as its own corner, or null when it sits inside the summary. */
-  trail: Rect | null
-  /** Alerts: a corner with words, or a round badge. */
+  /**
+   * Alerts: a row under the levels, where a game keeps its notices by the minimap (the Owner,
+   * 2026-11-19: not on the bottom edge). No trail: the levels say where you are and take you up.
+   */
   alerts: Rect & { badge: boolean }
   /**
    * Search and the tools beside it: a bar at the top centre where there is room (the convention of
@@ -105,25 +106,16 @@ export function frameOf(width: number, height: number, safe: Insets = NO_INSETS)
   const levelRow = device === 'desktop' ? 30 : flat ? 36 : 40
   const levels = { x: mini.x, y: mini.y + mini.h + gap, w: mini.w, h: levelRow * 3, row: levelRow }
 
-  const row = 36
-  // On a phone alerts are a round badge: beside the minimap in landscape, at the end of the trail's row in portrait.
-  const alertsBadge = phone
-  const alerts = flat
-    ? { x: mini.x - gap - tap, y: T, w: tap, h: tap, badge: true }
-    : phone
-      ? { x: R - tap, y: menu.y - gap - tap, w: tap, h: tap, badge: true }
-      : { x: R - 124, y: menu.y - gap - row, w: 124, h: row, badge: false }
-
-  const trail = flat ? null : { x: L, y: menu.y - gap - (alertsBadge ? tap : row), w: Math.min(alerts.x - gap - L, 520), h: alertsBadge ? tap : row }
+  const alerts = { x: levels.x, y: levels.y + levels.h + gap, w: levels.w, h: levelRow, badge: false }
 
   // Search: a bar at the top centre between the summary and the minimap; on a phone a round button.
   const searchIcon = phone
-  const iconSearch = flat ? { x: alerts.x - gap - tap, y: T, w: tap, h: tap } : { x: mini.x - gap - tap, y: T, w: tap, h: tap }
+  const iconSearch = { x: mini.x - gap - tap, y: T, w: tap, h: tap }
 
   const compact = phone
   // Room for the search: as a button beside the minimap when the bar would not fit (decided below, from the same numbers).
   const barFits = !searchIcon && Math.min(480, (mini.x - gap * 2) - (L + Math.min(device === 'desktop' ? 320 : 300, mini.x - gap - L) + gap * 2)) >= 440
-  const summaryRight = (searchIcon || !barFits ? iconSearch.x : flat ? alerts.x : mini.x) - gap
+  const summaryRight = (searchIcon || !barFits ? iconSearch.x : mini.x) - gap
   const summary = {
     x: L, y: T,
     w: Math.max(120, Math.min(device === 'desktop' ? 320 : 300, summaryRight - L)),
@@ -138,7 +130,7 @@ export function frameOf(width: number, height: number, safe: Insets = NO_INSETS)
     ? { ...iconSearch, mode: 'icon' as const }
     : { x: Math.round(Math.max(barL, Math.min(barR - barW, width / 2 - barW / 2))), y: T, w: barW, h: 44, mode: 'bar' as const }
 
-  const bottomRow = trail ? trail.y : menu.y
+  const bottomRow = menu.y
   const docked = device === 'desktop' || (device === 'tablet' && landscape)
   const peekH = 44
   const dockW = device === 'desktop' ? 330 : 280
@@ -146,7 +138,7 @@ export function frameOf(width: number, height: number, safe: Insets = NO_INSETS)
     ? (() => {
         const bottom = bottomRow - gap
         const lh = Math.min(380, bottom - (summary.y + summary.h + gap))
-        const rh = Math.min(380, bottom - (levels.y + levels.h + gap))
+        const rh = Math.min(380, bottom - (alerts.y + alerts.h + gap))
         return { left: { x: L, y: bottom - lh, w: dockW, h: lh }, right: { x: R - dockW, y: bottom - rh, w: dockW, h: rh } }
       })()
     : null
@@ -165,7 +157,7 @@ export function frameOf(width: number, height: number, safe: Insets = NO_INSETS)
   const fw = phone ? R - L : Math.min(920, R - L - 80), fh = phone ? bottomRow - gap - T : Math.min(660, bottomRow - gap - T - 40)
   const focus = { x: Math.round(width / 2 - fw / 2), y: phone ? T : Math.round(T + (bottomRow - gap - T) / 2 - fh / 2), w: fw, h: fh }
 
-  return { device, landscape, tap, summary, mini, miniTitle, levels, trail, alerts, menu, search, docks, rail, peek, focus, world }
+  return { device, landscape, tap, summary, mini, miniTitle, levels, alerts, menu, search, docks, rail, peek, focus, world }
 }
 
 export const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
@@ -186,8 +178,9 @@ export function swapRects(f: Frame, side: 'left' | 'right'): { map: Rect; panel:
   }
   const x = f.summary.x, w = f.mini.x + f.mini.w - f.summary.x
   const mh = Math.round(f.world.h * 0.4)
-  // A rectangle beside the levels (under the minimap) stops short of them; below them it runs full width.
-  const clear = (r: Rect): Rect => r.y < f.levels.y + f.levels.h + gap && r.y + r.h > f.levels.y ? { ...r, w: Math.min(r.w, f.levels.x - gap - r.x) } : r
+  // A rectangle beside the right column (levels, alerts under the minimap) stops short of it; below it runs full width.
+  const colBottom = f.alerts.y + f.alerts.h
+  const clear = (r: Rect): Rect => r.y < colBottom + gap && r.y + r.h > f.levels.y ? { ...r, w: Math.min(r.w, f.levels.x - gap - r.x) } : r
   const map = clear({ x, y: f.world.y, w, h: mh })
   return { map, panel: clear({ x, y: map.y + mh + gap, w, h: f.world.y + f.world.h - (map.y + mh + gap) }) }
 }

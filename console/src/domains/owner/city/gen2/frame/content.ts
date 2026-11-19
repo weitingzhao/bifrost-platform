@@ -9,6 +9,8 @@ import type { Place } from './places'
  *   tree    the places: town → districts → buildings → rooms, each with a name, a question and a size
  *   panels  the tables and charts beside a place (its dashboard sections), each docked left or right
  *   picked  the card of a picked room
+ *   functions  the content's functions, for the menu along the bottom: one way into the system,
+ *           beside the levels (by domain); picking one lights up what serves it
  *
  * Content never reaches into the frame's insides, and the frame never imports content: a test in
  * frame/__tests__ holds that line.
@@ -36,4 +38,5 @@ export type CityContent = {
   tree: Place
   panels: (place: Place, open: (child: Place) => void) => Panel[]
   picked: (item: Place) => Panel
+  functions?: { id: string; label: string }[]
 }

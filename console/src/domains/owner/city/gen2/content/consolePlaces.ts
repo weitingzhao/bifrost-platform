@@ -27,11 +27,17 @@ const BUILDING_SHAPES: readonly Shape[] = ['4x4', '2x4', '2x2', '4x8', '2x2', '2
 const GREYBOX_ROOMS = (owner: string): Place[] =>
   ROOM_SHAPES.map(([r, shape]) => ({ id: `room-${r.toLowerCase()}`, kind: 'room' as const, shape, label: `Room ${r}`, question: `A greybox room of ${owner}: what it holds is designed with the building.`, dashboard: null, children: [] }))
 
+/** The Console's functions: its menu entries. Each district and building serves the entry it sits under. */
+export const consoleFunctions = () => {
+  const nav = SHELL_NAV as readonly { id: ShellRouteId; label: string }[]
+  return ENTRY_ROUTE_IDS.map(id => ({ id, label: nav.find(x => x.id === id)!.label }))
+}
+
 export function placeTree(): Place {
   const nav = SHELL_NAV as readonly { id: ShellRouteId; label: string; question: string; group: string }[]
   const buildingsOf = (entry: string) =>
     nav.filter(n => n.group === 'detail' && n.id !== 'city' && entryOf({ kind: 'shell', id: n.id }) === entry)
-      .map((n, i) => ({ id: n.id, kind: 'building' as const, shape: BUILDING_SHAPES[i % BUILDING_SHAPES.length], label: n.label, question: n.question, dashboard: formatShellHash(n.id), children: GREYBOX_ROOMS(n.label) }))
+      .map((n, i) => ({ id: n.id, function: entry, kind: 'building' as const, shape: BUILDING_SHAPES[i % BUILDING_SHAPES.length], label: n.label, question: n.question, dashboard: formatShellHash(n.id), children: GREYBOX_ROOMS(n.label) }))
   return {
     id: TOWN_ID,
     kind: 'town',
@@ -41,7 +47,7 @@ export function placeTree(): Place {
     dashboard: formatShellHash('command'),
     children: ENTRY_ROUTE_IDS.map(id => {
       const n = nav.find(x => x.id === id)!
-      return { id, kind: 'district' as const, shape: DISTRICT_SHAPES[id] ?? '4x4', label: n.label, question: n.question, dashboard: formatShellHash(id), children: buildingsOf(id) }
+      return { id, function: id, kind: 'district' as const, shape: DISTRICT_SHAPES[id] ?? '4x4', label: n.label, question: n.question, dashboard: formatShellHash(id), children: buildingsOf(id) }
     }),
   }
 }

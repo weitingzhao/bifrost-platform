@@ -11,7 +11,7 @@ const SIZES: [string, number, number][] = [
 ]
 
 // 2026-11-19, the Owner: the three levels get a control of their own (under the minimap); it must clear every corner too.
-const corners = (f: Frame) => ({ summary: f.summary, mini: f.mini, levels: f.levels, alerts: f.alerts, menu: f.menu, search: f.search, ...(f.trail ? { trail: f.trail } : {}),
+const corners = (f: Frame) => ({ summary: f.summary, mini: f.mini, levels: f.levels, alerts: f.alerts, menu: f.menu, search: f.search,
   ...(f.docks ? { dockLeft: f.docks.left, dockRight: f.docks.right } : {}), ...(f.peek ? { peek: f.peek } : {}) })
 
 describe('frameOf', () => {
@@ -25,7 +25,6 @@ describe('frameOf', () => {
           expect(overlaps(all[i][1], all[j][1]), `${all[i][0]} overlaps ${all[j][0]}`).toBe(false)
       expect(inside(f.rail, w, h)).toBe(true)
       expect(overlaps(f.rail, f.menu)).toBe(false)
-      if (f.trail) expect(overlaps(f.rail, f.trail)).toBe(false)
       // The map never sits under the side rail or the drawer's handle.
       if (f.peek) expect(f.world.y + f.world.h).toBeLessThanOrEqual(f.peek.y)
       expect(inside(f.focus, w, h)).toBe(true)
@@ -65,10 +64,14 @@ describe('frameOf', () => {
     expect(overlaps({ x: 0, y: 0, w: 10, h: 10 }, { x: 10, y: 0, w: 10, h: 10 })).toBe(false)
   })
 
-  it('on a phone in landscape: trail moves into the summary, alerts become a badge', () => {
-    const f = frameOf(852, 393)
-    expect(f.trail).toBeNull()
-    expect(f.alerts.badge).toBe(true)
+  // 2026-11-19, the Owner: the trail repeated the levels and the minimap; notices go up by the minimap, as in a game.
+  it('keeps the right column in order: minimap, levels, alerts', () => {
+    for (const [, w, h] of SIZES) {
+      const f = frameOf(w, h)
+      expect(f.levels.y).toBeGreaterThan(f.mini.y + f.mini.h)
+      expect(f.alerts.y).toBeGreaterThan(f.levels.y + f.levels.h)
+      expect(f.alerts.x).toBe(f.levels.x)
+    }
   })
 
   it('keeps clear of the notch and the home bar', () => {
@@ -88,7 +91,7 @@ describe('swapRects', () => {
         const { map, panel } = swapRects(f, side)
         expect(inside(map, w, h) && inside(panel, w, h)).toBe(true)
         expect(overlaps(map, panel)).toBe(false)
-        for (const r of [f.summary, f.menu, f.levels, ...(f.trail ? [f.trail] : [])]) expect(overlaps(panel, r)).toBe(false)
+        for (const r of [f.summary, f.menu, f.levels, f.alerts]) expect(overlaps(panel, r)).toBe(false)
         expect(panel.w).toBeGreaterThan(Math.min(260, w * 0.5))
       }
     })

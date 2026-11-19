@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { ENTRY_ROUTE_IDS } from '@/lib/shell/consoleRoutes'
 import { fitsBudget, sidesOf, TAPPABLE } from '../../frame/grid'
-import { formatPath, here, parsePath, resolve, trail, type Place } from '../../frame/places'
-import { placeTree } from '../consolePlaces'
+import { formatPath, functionAt, here, parsePath, resolve, trail, type Place } from '../../frame/places'
+import { consoleFunctions, placeTree } from '../consolePlaces'
 
 // 2026-11-19, the Owner: the game look and the dashboard look are two styles of one Console,
 // so the city's places must be the Console's menu, read from its routes, not a second map.
@@ -65,5 +65,19 @@ describe('content is swappable', () => {
     const other = { ...c, tree: { ...c.tree, label: 'Family', children: c.tree.children.slice(0, 2).map(d => ({ ...d, label: `${d.label} (renamed)` })) } }
     expect(other.tree.children.map(d => d.label)).toEqual(['Command (renamed)', 'Crew (renamed)'])
     expect(other.panels(other.tree, () => {}).map(p => p.id)).toEqual(['inside', 'chart', 'parts'])
+  })
+})
+
+// 2026-11-19, the Owner: the menu is a second view, by function, beside the levels by domain; picking
+// a function lights up what serves it on every level.
+describe('functions', () => {
+  const tree = placeTree()
+  it('the menu is the Console’s functions, and every district serves one of them', () => {
+    const ids = consoleFunctions().map(f => f.id)
+    for (const d of tree.children) expect(ids).toContain(functionAt(tree, [d.id]))
+  })
+  it('a room serves what its building serves; a building what its entry is', () => {
+    expect(functionAt(tree, ['system', 'infrastructure'])).toBe('system')
+    expect(functionAt(tree, ['system', 'infrastructure', 'room-a'])).toBe('system')
   })
 })

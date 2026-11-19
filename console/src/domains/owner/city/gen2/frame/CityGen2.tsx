@@ -6,7 +6,7 @@ import { assign, decodePlan, encodePlan, mergePlot, moveTo, planFor, plotsOf, sp
 import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
 import type { CityContent, Panel } from './content'
 import { PlaceScene, type ArrangeTool, type Shown } from './placeScene'
-import { here, resolve, trail, type Path, type Place } from './places'
+import { functionAt, here, resolve, trail, type Path, type Place } from './places'
 import { frameOf, NO_INSETS, swapRects, type Insets, type Rect } from './viewport'
 import './cityGen2.css'
 
@@ -108,6 +108,12 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   // The Owner's positions for this place and its parent; bumped on every move so the page redraws.
   const [saved, setSaved] = useState<{ here: Arrangement; parent: Arrangement }>(() => ({ here: store.get(keyOf(path)), parent: store.get(keyOf(path.slice(0, -1))) }))
   const [tool, setTool] = useState<ArrangeTool>('move')
+  // The menu: the content's functions, a lens over the map (the Owner, 2026-11-19: by function beside
+  // the levels by domain). Picking one lights up what serves it, here and on every level; picking it again clears it.
+  const functions = content.functions ?? []
+  const [lens, setLens] = useState<string | null>(null)
+  const lensLabel = functions.find(fn => fn.id === lens)?.label
+  const lensHere = lens ? place.children.filter(c => functionAt(tree, [...path, c.id]) === lens).length : 0
   const lay = useMemo(() => layoutOf(place.children, saved.here), [place, saved.here])
   const layRef = useRef(lay)
   layRef.current = lay
@@ -196,7 +202,7 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   useEffect(() => {
     scene.current?.show(shown({ from: 'jump', selected: selected?.id ?? null, arranging, here: saved.here, parentA: saved.parent }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, arranging, saved, tool])
+  }, [selected?.id, arranging, saved, tool, lens])
 
   function shown(o: { from: Shown['from']; selected: string | null; arranging: boolean; here: Arrangement; parentA: Arrangement }): Shown {
     const h = layoutOf(place.children, o.here)
@@ -212,7 +218,7 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
       tree, path, layoutAt,
       place, placed: h.placed, plots: h.plots, streets: h.streets,
       parent, parentPlaced: p?.placed ?? [], parentPlots: p?.plots ?? [], parentStreets: p?.streets ?? [],
-      inside: path.at(-1) ?? null, selected: o.selected, from: o.from, arranging: o.arranging, tool,
+      inside: path.at(-1) ?? null, selected: o.selected, from: o.from, arranging: o.arranging, tool, lens,
     }
   }
 
@@ -329,12 +335,6 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
       <div className="g2-panelbody">{bodyOf(p, docked ? 'card' : 'drawer')}</div>
     </section>
   )
-  const trailLinks = steps.map((s, i) => (
-    <span key={s.id}>
-      {i > 0 && <span className="g2-sep">›</span>}
-      {i === steps.length - 1 ? <b>{s.label}</b> : <a href="#" onClick={e => { e.preventDefault(); go(path.slice(0, i)) }}>{s.label}</a>}
-    </span>
-  ))
 
   return (
     <div className="g2" ref={root} data-device={f.device} data-landscape={f.landscape || undefined} data-light={light}
@@ -350,7 +350,6 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
         <div className="g2-kicker">{KIND[place.kind]}<span className="g2-chip">greybox</span>{f.summary.compact && <span className="g2-more">{open ? '▴' : '▾'}</span>}</div>
         <h1>{place.label}</h1>
         {(!f.summary.compact || open) && <p>{place.question}</p>}
-        {!f.trail && steps.length > 1 && <nav className="g2-inline-trail" aria-label="Trail" onClick={e => e.stopPropagation()}>{trailLinks}</nav>}
         <dl>
           <div><dt>Inside</dt><dd>{place.children.length}</dd></div>
           <div><dt>Readings</dt><dd className="g2-unknown">not wired</dd></div>
@@ -358,6 +357,7 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
         {/* On a phone the tools live here (the top bar has no room); elsewhere they sit beside the search. */}
         {f.search.mode === 'icon' && (!f.summary.compact || open || arranging) && <div className="g2-actions" onClick={e => e.stopPropagation()}>{tools}</div>}
         {arranging && f.search.mode === 'icon' && <p className="g2-hint">{TOOL_HINT[tool]}</p>}
+        {lensLabel && <p className="g2-hint">Lit: <b>{lensLabel}</b> · {lensHere === 0 ? 'nothing here serves it' : `${lensHere} here`}</p>}
         {lay.homeless.length > 0 && <p className="g2-hint g2-warn">{lay.homeless.length === 1 ? 'One building finds' : `${lay.homeless.length} buildings find`} no plot big enough. Join plots to make room.</p>}
       </section>
 
@@ -368,7 +368,6 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
         </button>
       )}
 
-      {f.trail && <nav className="g2-corner g2-bl" aria-label="Trail" style={at(f.trail)}>{trailLinks}</nav>}
 
       <aside className={`g2-corner g2-br${f.alerts.badge ? ' badge' : ''}`} aria-label="Alerts: not wired" style={at(f.alerts)}>
         {f.alerts.badge ? <span title="Alerts: not wired">!</span> : <>Alerts <span className="g2-unknown">not wired</span></>}
@@ -386,8 +385,9 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
 
       {/* Two ways in, both kept (the Owner, 2026-11-19): the menu by function along the bottom, the levels by domain under the minimap. */}
       <nav className="g2-menu" aria-label="Functions" style={at(f.menu)}>
-        {tree.children.map(d => (
-          <button key={d.id} className={path[0] === d.id ? 'on' : ''} onClick={() => go([d.id])}>{d.label}</button>
+        {functions.map(fn => (
+          <button key={fn.id} className={lens === fn.id ? 'on' : ''} aria-pressed={lens === fn.id} onClick={() => setLens(l => l === fn.id ? null : fn.id)}
+            title={lens === fn.id ? `Stop lighting up ${fn.label}` : `Light up what serves ${fn.label}`}>{fn.label}</button>
         ))}
       </nav>
 

@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser'
 import { fitsIn, type Placed, type Plot, type Street } from './grid'
 import { geoOf, WAY, type Geo, type Rect } from './geo'
-import type { Place } from './places'
+import { functionAt, type Place } from './places'
 import { hueOf, terrainOf } from './theme'
 import { PALETTE, TERRAIN, type Light, type Palette } from './light'
 import { hash } from './kit'
@@ -81,6 +81,8 @@ export type Shown = {
   /** The whole tree and this place's path, for the themes (theme.ts). */
   tree: Place
   path: string[]
+  /** The function the menu lights up (content.ts), or null: what serves it is ringed, the rest fades. */
+  lens: string | null
   /** Any place's ground as the Owner left it, for the miniatures: a district seen from the town, a building's wings. */
   layoutAt: (path: string[]) => Layout | null
 }
@@ -170,7 +172,7 @@ export class PlaceScene extends Phaser.Scene {
     // Same page: redraw in place only if something on it changed (a redraw mid-change would cut the
     // change short); refit only when arranging starts or stops (the frame changes).
     if (same) {
-      const key = (x: Shown) => JSON.stringify([x.selected, x.arranging, x.tool, x.placed, x.plots, x.parentPlaced, x.inside])
+      const key = (x: Shown) => JSON.stringify([x.selected, x.arranging, x.tool, x.placed, x.plots, x.parentPlaced, x.inside, x.lens])
       if (key(prev) !== key(next)) void this.draw(next, prev.arranging !== next.arranging)
       return
     }
@@ -727,7 +729,10 @@ export class PlaceScene extends Phaser.Scene {
     // see from above is what you find inside), scaled into its footprint the way the zoom-through scales it.
     const lay = k.kind === 'district' ? this.shown?.layoutAt(path) : null
     const h = lay ? 34 : heightOf(k, Math.min(at.w, at.h))
-    const ring = k.id === o.inside ? this.tone.inside : k.id === o.selected ? this.tone.pick : null
+    // The menu's lens (interactive level only): what serves the function is ringed, the rest fades.
+    const lens = o.interactive && this.shown?.lens ? this.shown.lens : null
+    const lit = lens != null && this.shown != null && functionAt(this.shown.tree, path) === lens
+    const ring = k.id === o.inside ? this.tone.inside : k.id === o.selected || lit ? this.tone.pick : null
     if (ring != null) {
       const g = this.add.graphics()
       const q = quadOf(P, r)
@@ -796,6 +801,7 @@ export class PlaceScene extends Phaser.Scene {
       })
       parts.push(g)
     }
+    if (lens != null && !lit) for (const p of parts) (p as unknown as { setAlpha?: (a: number) => void }).setAlpha?.(0.28)
     return parts
   }
 
