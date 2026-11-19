@@ -2,9 +2,7 @@ package agentrtapi
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -12,45 +10,10 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
-
-func (a *API) getPlanView(w http.ResponseWriter, r *http.Request) {
-	root := r.URL.Query().Get("root")
-	if root == "" {
-		writeError(w, 400, "bad_request", "root is required")
-		return
-	}
-	out, err := planstore.PlanViewPage(r.Context(), a.DB, root, r.URL.Query().Get("recent_cursor"))
-	if err != nil {
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			writeError(w, 404, "not_found", "plan not found")
-		case errors.Is(err, eventlog.ErrInvalid):
-			a.fail(w, err)
-		default:
-			a.logf("plan view: %v", err)
-			writeError(w, 503, "unavailable", "plan snapshot unavailable")
-		}
-		return
-	}
-	a.sessionCoverage(r.Context(), out)
-	writeJSON(w, 200, out)
-}
-
-// sessionCoverage adds coverage.sessions (R5:5.5-12 §3.2): the agent
-// sessions of every host, not of this root alone, as its scope says. A
-// platform without the thread list, or one that cannot read it, leaves it out
-// and says so in the warnings; the rest of the view is as it was.
-func (a *API) sessionCoverage(ctx context.Context, out map[string]any) {
-	planreadings.AppendSessionCoverage(ctx, out, a.Sessions, a.logf)
-}
 
 func (a *API) registerExternalWork(w http.ResponseWriter, r *http.Request) {
 	var in externalwork.ExternalRegistration

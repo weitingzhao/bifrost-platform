@@ -1,16 +1,11 @@
-package agentrtapi
+package planapi
 
 import (
-	"bytes"
-	"encoding/json"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 )
 
 // The plan, read (v5 §5.2: GET /plan?root=R2, GET /plan/{plan_node_id}: the
@@ -36,18 +31,18 @@ const signoffs = `COALESCE((SELECT jsonb_build_object('signoffs', jsonb_agg(json
 	  'by', e.actor_id, 'at', e.at, 'event_id', e.event_id) ORDER BY e.event_id)) FROM agentrt.event e
 	  WHERE e.plan_node_id = n.plan_node_id AND e.event_type = 'owner_signoff' HAVING count(*) > 0), '{}'::jsonb)`
 
-// getPlan is GET /plan: without root, the roots (rounds and the architecture
+// HandleGetPlan is GET /plan: without root, the roots (rounds and the architecture
 // root); with root, that node and everything under it, depth first in
 // ordinal order, each with its depth, state event, task counts and sign-offs. A root
 // there is not is 404.
-func (a *API) getPlan(w http.ResponseWriter, r *http.Request) {
+func (rt Routes) HandleGetPlan(w http.ResponseWriter, r *http.Request) {
 	root := r.URL.Query().Get("root")
 	if root == "" {
-		a.list(w, r, `SELECT jsonb_build_object('roots', COALESCE(jsonb_agg(to_jsonb(n) ORDER BY n.node_kind, n.ordinal, n.plan_node_id),
+		rt.Host.Document(w, r, `SELECT jsonb_build_object('roots', COALESCE(jsonb_agg(to_jsonb(n) ORDER BY n.node_kind, n.ordinal, n.plan_node_id),
 		  '[]'::jsonb)) FROM agentrt.plan_node n WHERE n.parent_plan_node_id IS NULL`)
 		return
 	}
-	a.getRow(w, r, `WITH RECURSIVE tree AS (
+	rt.Host.Document(w, r, `WITH RECURSIVE tree AS (
 	    SELECT p.plan_node_id, ARRAY[p.ordinal] AS path, 0 AS depth FROM agentrt.plan_node p WHERE p.plan_node_id = $1
 	    UNION ALL
 	    SELECT c.plan_node_id, t.path || c.ordinal, t.depth + 1
@@ -58,10 +53,10 @@ func (a *API) getPlan(w http.ResponseWriter, r *http.Request) {
 	  HAVING count(*) > 0`, root)
 }
 
-// getPlanNode is GET /plan/{id}: the node with its state event, its
+// HandleGetPlanNode is GET /plan/{id}: the node with its state event, its
 // children, its tasks, what it is bound to, its sign-offs and its last 50 events.
-func (a *API) getPlanNode(w http.ResponseWriter, r *http.Request) {
-	a.getRow(w, r, `SELECT to_jsonb(n) || jsonb_build_object(
+func (rt Routes) HandleGetPlanNode(w http.ResponseWriter, r *http.Request) {
+	rt.Host.Document(w, r, `SELECT to_jsonb(n) || jsonb_build_object(
 	    'state_event', `+stateEvent+`,
 	    'task_counts', `+taskCounts+`,
 	    'children', COALESCE((SELECT jsonb_agg(jsonb_build_object('plan_node_id', c.plan_node_id, 'node_kind', c.node_kind,
@@ -83,25 +78,25 @@ type planProposalBody struct {
 	Changes        []planstore.PlanChange `json:"changes"`
 }
 
-// proposePlanChange is POST /plan/proposals: plan_change_proposed; within
+// HandleProposePlanChange is POST /plan/proposals: plan_change_proposed; within
 // the standing authorization decided and applied at once, otherwise tried,
 // rolled back, and put to the Owner as a decision card.
-func (a *API) proposePlanChange(w http.ResponseWriter, r *http.Request) {
+func (rt Routes) HandleProposePlanChange(w http.ResponseWriter, r *http.Request) {
 	var b planProposalBody
-	if !decodeView(w, r, &b) {
+	if !rt.Host.DecodeCanonical(w, r, &b) {
 		return
 	}
-	who, err := writer(r)
+	who, err := rt.Host.Writer(r)
 	if err != nil {
-		a.fail(w, err)
+		rt.Host.Fail(w, err)
 		return
 	}
-	out, err := planstore.ProposePlanChange(r.Context(), a.DB, who, b.IdempotencyKey, b.Root, b.Reason, b.Changes, a.Ask)
+	out, err := planstore.ProposePlanChange(r.Context(), rt.Host.DB(), who, b.IdempotencyKey, b.Root, b.Reason, b.Changes, rt.Host.Ask())
 	if err != nil {
-		a.fail(w, err)
+		rt.Host.Fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	rt.Host.JSON(w, http.StatusOK, out)
 }
 
 type planNoteBody struct {
@@ -109,28 +104,28 @@ type planNoteBody struct {
 	Text           string `json:"text"`
 }
 
-// postPlanNote is POST /plan/{id}/notes: what an architecture row actually
+// HandlePostPlanNote is POST /plan/{id}/notes: what an architecture row actually
 // is now, in words (W-31 2.5 G2 A), appended as a note event on the row;
 // GET /progress shows the latest beside the row's tick. Only an architecture
 // row takes one: a node there is not is 404, another kind 422. Who may
 // propose a plan change may write one, recorded as the proposer is; the key
 // is the writer's, as for proposals.
-func (a *API) postPlanNote(w http.ResponseWriter, r *http.Request) {
+func (rt Routes) HandlePostPlanNote(w http.ResponseWriter, r *http.Request) {
 	var b planNoteBody
-	if !decode(w, r, &b) {
+	if !rt.Host.Decode(w, r, &b) {
 		return
 	}
-	who, err := writer(r)
+	who, err := rt.Host.Writer(r)
 	if err != nil {
-		a.fail(w, err)
+		rt.Host.Fail(w, err)
 		return
 	}
-	out, err := planstore.PostPlanNote(r.Context(), a.DB, who, b.IdempotencyKey, chi.URLParam(r, "id"), b.Text)
+	out, err := planstore.PostPlanNote(r.Context(), rt.Host.DB(), who, b.IdempotencyKey, chi.URLParam(r, "id"), b.Text)
 	if err != nil {
-		a.fail(w, err)
+		rt.Host.Fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	rt.Host.JSON(w, http.StatusOK, out)
 }
 
 type signoffBody struct {
@@ -138,7 +133,7 @@ type signoffBody struct {
 	Ref      string   `json:"ref"`
 }
 
-// signOffStep is POST /plan/{id}/signoff: the Owner signs a step off (the
+// HandleSignOffStep is POST /plan/{id}/signoff: the Owner signs a step off (the
 // Owner 2026-10-21), the owner_signoff event its done rule's owner_signoff
 // atom waits for; the controller's next rules pass moves the step. The admin
 // role only (the "signoff" ability): the tokens agents hold (agentd, reporter,
@@ -146,100 +141,34 @@ type signoffBody struct {
 // The body may name the ref; it must when the
 // rule waits on more than one. A second press answers the first sign-off
 // (already_signed) and writes nothing.
-func (a *API) signOffStep(w http.ResponseWriter, r *http.Request) {
+func (rt Routes) HandleSignOffStep(w http.ResponseWriter, r *http.Request) {
 	var b signoffBody
-	if !decode(w, r, &b) {
+	if !rt.Host.Decode(w, r, &b) {
 		return
 	}
-	who, err := writer(r)
+	who, err := rt.Host.Writer(r)
 	if err != nil {
-		a.fail(w, err)
+		rt.Host.Fail(w, err)
 		return
 	}
-	out, err := planstore.SignOffStep(r.Context(), a.DB, who.Actor, chi.URLParam(r, "id"), b.Ref, b.Evidence...)
+	out, err := planstore.SignOffStep(r.Context(), rt.Host.DB(), who.Actor, chi.URLParam(r, "id"), b.Ref, b.Evidence...)
 	if err != nil {
-		a.fail(w, err)
+		rt.Host.Fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	rt.Host.JSON(w, http.StatusOK, out)
 }
 
-type planImportBody struct {
-	IdempotencyKey string          `json:"idempotency_key"`
-	Reason         string          `json:"reason"`
-	Request        json.RawMessage `json:"request"`
-}
-
-// proposePlanImport is POST /plan/imports: a plan's first import
-// (CUT-plan-import-2026-10-19.md §4 A), or a recorder log's
-// (agentrt.recorder_import/v1, CUT-gate-b-2026-10-19.md §2 item 3 A), by the
-// request's format; tried and rolled back, kept, and put to the Owner on one
-// decision card; the controller lands it once he answers Import.
-func (a *API) proposePlanImport(w http.ResponseWriter, r *http.Request) {
-	var b planImportBody
-	if !decode(w, r, &b) {
-		return
-	}
-	// The request is read whole before the writer, as when it was one type
-	// (review 402 C2).
-	var head struct {
-		Format string `json:"format"`
-	}
-	_ = json.Unmarshal(b.Request, &head)
-	var recorder recorderimport.Request
-	var plan planimport.Request
-	if head.Format == recorderimport.Format {
-		if !strictly(w, b.Request, &recorder) {
-			return
-		}
-	} else if !strictly(w, b.Request, &plan) {
-		return
-	}
-	who, err := writer(r)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	var out map[string]any
-	if head.Format == recorderimport.Format {
-		// The lineage reads, checks and keeps the log; the plan proposes its
-		// import (2026-11-17: it left the store along this line).
-		var log externalwork.PreparedRecorderLog
-		if log, err = externalwork.PrepareRecorderImport(recorder); err == nil {
-			out, err = planstore.ProposeRecorderImport(r.Context(), a.DB, who, b.IdempotencyKey, b.Reason, planstore.RecorderLog(log), a.Ask)
-		}
-	} else {
-		out, err = planstore.ProposePlanImport(r.Context(), a.DB, who, b.IdempotencyKey, b.Reason, plan, a.Ask)
-	}
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, out)
-}
-
-// strictly reads a request that came as raw JSON into v as decode reads a
-// body, with decode's answer: a field v does not have is refused (400).
-func strictly(w http.ResponseWriter, raw json.RawMessage, v any) bool {
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(v); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "body: "+err.Error())
-		return false
-	}
-	return true
-}
-
-// progress is GET /progress: the projection of
+// HandleProgress is GET /progress: the projection of
 // SPEC-agentrt-progress-2026-10-14.md, computed on every read. A read that
 // fails is 503, never an old copy (review 181 B1).
-func (a *API) progress(w http.ResponseWriter, r *http.Request) {
-	out, err := planstore.ProgressSince(r.Context(), a.DB, a.back())
+func (rt Routes) HandleProgress(w http.ResponseWriter, r *http.Request) {
+	out, err := planstore.ProgressSince(r.Context(), rt.Host.DB(), rt.Host.Back())
 	if err != nil {
 		// Unknown, never an old copy or half of one (SPEC §1).
-		a.logf("agentrt progress: %v", err)
-		writeError(w, http.StatusServiceUnavailable, "unavailable", "the runtime's state cannot be read now")
+		rt.Host.Logf("agentrt progress: %v", err)
+		rt.Host.Error(w, http.StatusServiceUnavailable, "unavailable", "the runtime's state cannot be read now")
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	rt.Host.JSON(w, http.StatusOK, out)
 }

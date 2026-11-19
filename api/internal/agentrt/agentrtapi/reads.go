@@ -61,17 +61,6 @@ func (a *API) getArtifact(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(body)
 }
 
-func (a *API) getRow(w http.ResponseWriter, r *http.Request, q, id string) {
-	var doc []byte
-	err := eventlog.InTx(r.Context(), a.DB, func(tx pgx.Tx) error { return tx.QueryRow(r.Context(), q, id).Scan(&doc) })
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write(doc)
-}
-
 // hiddenFrom are the streams a principal of a role may not read: an Agent
 // host's agentd does not read the exams' records (capability_exams: which
 // rules an answer failed). The cut keeps per-rule results off the host

@@ -96,8 +96,11 @@ modules:
       # 2026-11-17: its tests check each channel's and ledger type's domain against the
       # ownership table, and the register against the latest closed vocabulary migration.
       api/internal/bus/registry: ["api/internal/bus/registry", "config/domain-ownership.json", "api/internal/agentrt/migrations"]
+      # 2026-11-19: the fuzz reads request fields from the sources of planapi
+      # too, where the plan's handlers went.
       api/internal/agentrt/agentrtapi:
         - "api/internal/agentrt/agentrtapi"
+        - "api/internal/agentrt/planapi"
         - "api/internal/agentrt/planimport/testdata"
         - "api/internal/agentrt/planview/testdata"
         - "api/internal/agentrt/planstore"

@@ -100,7 +100,29 @@
       "id": "plan",
       "name": "Demand & planning",
       "tier": 3,
-      "source": "domains/1-plan/charter.md"
+      "source": "domains/1-plan/charter.md",
+      "contracts": {
+        "measured_at": "d8dc802c",
+        "request_response": [
+          {"method": "GET", "path": "/api/v1/agentrt/plan", "handler": "api/internal/agentrt/planapi.HandleGetPlan", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/agentrt/plan-pace", "handler": "api/internal/agentrt/planapi.HandleGetPlanPace", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/agentrt/plan-view", "handler": "api/internal/agentrt/planapi.HandleGetPlanView", "consumers": ["console", "mcp"]},
+          {"method": "POST", "path": "/api/v1/agentrt/plan/proposals", "handler": "api/internal/agentrt/planapi.HandleProposePlanChange", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/agentrt/plan/{id}", "handler": "api/internal/agentrt/planapi.HandleGetPlanNode", "consumers": ["console", "mcp"]},
+          {"method": "POST", "path": "/api/v1/agentrt/plan/{id}/notes", "handler": "api/internal/agentrt/planapi.HandlePostPlanNote", "consumers": ["mcp"]},
+          {"method": "POST", "path": "/api/v1/agentrt/plan/{id}/signoff", "handler": "api/internal/agentrt/planapi.HandleSignOffStep", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/agentrt/progress", "handler": "api/internal/agentrt/planapi.HandleProgress", "consumers": ["console", "trade-infra"]}
+        ],
+        "events": [],
+        "event_streams": [],
+        "commands": [
+          {"kind": "mcp_tool", "name": "get_plan", "routes": ["/api/v1/agentrt/plan", "/api/v1/agentrt/plan/{id}"]},
+          {"kind": "mcp_tool", "name": "get_plan_view", "routes": ["/api/v1/agentrt/plan-view"]},
+          {"kind": "mcp_tool", "name": "post_plan_note", "routes": ["/api/v1/agentrt/plan/{id}/notes"]},
+          {"kind": "mcp_tool", "name": "propose_plan_change", "routes": ["/api/v1/agentrt/plan/proposals"]}
+        ],
+        "shared_storage": []
+      }
     },
     {
       "id": "lineage",
@@ -501,6 +523,13 @@
       "status": "assigned",
       "basis": "planning charter and verified extraction; 2026-11-16 import/architecture proposal card text extracted, validation and import writes unchanged"
     },
+    "api/internal/agentrt/planapi": {
+      "domains": [
+        "plan"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the plan's HTTP handlers, moved out of agentrtapi unchanged (plan.go, planview.go, planpace.go): GET /agentrt/plan, /plan/{id}, /plan-view, /plan-pace, /progress and POST /agentrt/plan/proposals, /plan/{id}/notes, /plan/{id}/signoff, with the same paths, bodies, answers and error texts. agentrtapi still mounts them behind the same abilities and lends them identity, the strict body readers, the answers and the error mapping through the Host interface the package declares. Imports plan (planstore, planreadings) and foundation (actor, eventlog) only; the plan import route stayed in agentrtapi because it reads a recorder log (lineage)."
+    },
     "api/internal/lineage": {
       "domains": [
         "lineage"
@@ -830,11 +859,10 @@
         "lineage",
         "verification",
         "delivery",
-        "owner",
         "coordination"
       ],
       "status": "mixed",
-      "basis": "2026-11-16 Complete file/reader audit: retained shared HTTP adapters and domain service calls; identity, exam visibility, strict parsing, signed-rule and stop-control boundaries remain unchanged. Shared scope is explicit, not an unreviewed implementation backlog."
+      "basis": "2026-11-16 Complete file/reader audit: retained shared HTTP adapters and domain service calls; identity, exam visibility, strict parsing, signed-rule and stop-control boundaries remain unchanged. Shared scope is explicit, not an unreviewed implementation backlog. 2026-11-19 (OWNER_LAW #28): the plan's handlers went to agentrt/planapi, unchanged; Mount keeps every route and its ability, and lends them identity, the strict body readers, the answers and the error mapping (host.go). Owner left the list: its one route here, the Owner's sign-off of a step, is the plan's (planstore.SignOffStep) and went with it. What stays of the plan: the plan import route, which reads a plan or a recorder log (lineage), and the plan errors in fail."
     },
     "api/internal/agentrt/controller": {
       "domains": [
