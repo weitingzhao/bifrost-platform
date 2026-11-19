@@ -4,7 +4,7 @@ import { encode, metaphor, rulerOf, rulersKey } from '../library/dictionary'
 /**
  * The CPU unit's room, the workshop (a computer is a factory, the Owner 2026-11-19; RULES.md, 由内向外).
  * The hardware only — how many cores, how busy each, how fast, how hot:
- *   the workshop floor   one machine tool per core, in rows: its work light as high as the core is busy,
+ *   the workshop floor   one machine tool per core, in pairs: a load bar across its top filled as far as the core is busy,
  *                        its speed dial's needle at the core's clock, the dial's red line its top clock
  *   the CPU console      at the front, for the whole CPU: a busy dial (all cores together) and the
  *                        chip's thermometer
@@ -159,7 +159,7 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
     const cols = colsOf(fw, count), fits = cols * rowsOf(fd)
     const groups = Array.from({ length: Math.min(count, fits) }, (_, m) => r.cores.slice(m * per, (m + 1) * per))
     if (count > fits) g.text('left', 0.4, 0.18, 47, `${fits} OF ${count} MACHINES FIT — SET MORE CORES A MACHINE`, 5.5, '#b8433f', 700)
-    const MW = 0.52, md = 0.42
+    const MW = 0.58, md = 0.5, MH = 10
     groups.forEach((grp, i) => {
       const mw = Math.max(0.3, MW * grp.length / per)
       const c = { busy: avgOf(grp.map(x => x.busy)), freq: avgOf(grp.map(x => x.freq)), max: grp.reduce<number | null>((a, x) => x.max == null ? a : Math.max(a ?? 0, x.max), null) }
@@ -167,18 +167,20 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
       things.push({ at: x + y, draw: () => {
         const busy = encode('core.busy', c.busy)
         g.shadow(x, y, mw, md, 0.25)
-        g.box(x, y, mw, md, 12, MACHINE, 0, 1.1)
-        // The work light: a column on the cabinet at the machine's back corner.
-        const kx = x + mw - 0.2
-        g.box(kx, y, 0.2, 0.2, 22, faces('#5b5f6b', '#474a55', '#3a3d47'), 12, 0.9)
-        g.onLeft(kx, y + 0.2, 0.03, 0.17, 14, 32, '#2a2c35', 0.5)
-        if (busy != null && busy > 0.005) g.onLeft(kx, y + 0.2, 0.03, 0.17, 14, 14 + 18 * busy, busy > 0.85 ? '#ff7a45' : '#ffc94d', 0)
-        // A core's own temperature, where its sensor reports one: a small thermometer on its cabinet.
+        g.box(x, y, mw, md, MH, MACHINE, 0, 1.1)
+        // The load bar: flat across the machine's top, filled from the left as far as the core is busy
+        // (the Owner, 2026-11-19: the tall work light hid the machines behind it and was hard to see; lying
+        // on the top it hides nothing, and a top is what a view from above sees best).
+        const bw = (mw - 0.1) * U, bh = 0.26 * U
+        const ticks = [0.25, 0.5, 0.75].map(t => `<line x1="${(bw * t).toFixed(1)}" y1="0" x2="${(bw * t).toFixed(1)}" y2="${bh.toFixed(1)}" stroke="#5a5e6a" stroke-width="0.5"/>`).join('')
+        g.floor(x + 0.05, y + md / 2 - 0.13, MH, `<rect x="0" y="0" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="1" fill="#2a2c35" stroke="${INK}" stroke-width="0.6"/>` +
+          (busy != null && busy > 0.005 ? `<rect x="0.8" y="0.8" width="${Math.max(1.5, (bw - 1.6) * busy).toFixed(1)}" height="${(bh - 1.6).toFixed(1)}" rx="0.6" fill="${busy > 0.85 ? '#ff7a45' : '#ffc94d'}"/>` : '') + ticks)
+        // A core's own temperature, where its sensor reports one: a small thermometer on its right side.
         const hot = grp.map((_, k) => perCore.get(i * per + k)).filter((v): v is number => v != null)
         if (hot.length) {
           const tc = Math.max(...hot)
-          g.onRight(kx + 0.2, y, 0.04, 0.16, 14, 32, '#fbfaf6', 0.5)
-          g.onRight(kx + 0.2, y, 0.06, 0.14, 14, 14 + 18 * encode('sensor.temp', tc / 100)!, liquidOf(tc), 0)
+          g.onRight(x + mw, y, 0.12, 0.22, 1, MH - 1, '#fbfaf6', 0.5)
+          g.onRight(x + mw, y, 0.14, 0.2, 1, 1 + (MH - 2) * encode('sensor.temp', tc / 100)!, liquidOf(tc), 0)
         }
         // The speed dial on its front: the needle at its clock, the red line at its top.
         if (c.max) g.face('left', x, y + md, 6, dial(Math.min(6, mw * U * 0.3), mw * U * 0.38, c.freq != null ? encode('core.freq', c.freq / c.max) : null, 0.92))

@@ -29,7 +29,7 @@ describe('the CPU room', () => {
   })
   // The Owner, 2026-11-19: the ruler is adjustable; another ruler, another picture of the same machine.
   it('a ruler of two cores a machine draws half the machines, under another key; the readings are untouched', () => {
-    const machines = (svg: string) => (svg.match(/fill="#5b5f6b"/g) ?? []).length
+    const machines = (svg: string) => (svg.match(/fill="#94b3a1"/g) ?? []).length
     const one = cpuRoom(linux), k1 = cpuRoomKey(linux)
     setRuler('core.machines', 2)
     try {
@@ -76,12 +76,19 @@ describe('the CPU room', () => {
   })
   // The Owner, 2026-11-19: every colour stands for something. Machines were grey when idle and green
   // otherwise — the work light's reading said a second time, and not in the key.
-  it('a machine is one colour whatever its core does; only the work light shows how busy', () => {
+  it('a machine is one colour whatever its core does; only the load bar shows how busy', () => {
     const idle = cpuRoom({ ...linux, cores: linux.cores.map(() => core(0, 2e9, 4e9)) }).svg
     const busy = cpuRoom({ ...linux, cores: linux.cores.map(() => core(0.5, 2e9, 4e9)) }).svg
     const bodies = (svg: string) => (svg.match(/fill="#94b3a1"/g) ?? []).length
     expect(bodies(idle)).toBe(16)
     expect(bodies(busy)).toBe(16)
     expect(idle).not.toContain('#adb3ad')
+  })
+  // The Owner, 2026-11-19: the tall work light hid the machines behind it; the load lies on the top.
+  it('the load bar fills with the core: empty when idle, orange above 85%', () => {
+    const at = (b: number) => cpuRoom({ ...linux, cores: linux.cores.map(() => core(b, 2e9, 4e9)) }).svg
+    expect(at(0)).not.toContain('#ffc94d')
+    expect(at(0.5)).toContain('#ffc94d')
+    expect(at(0.95)).toContain('#ff7a45')
   })
 })
