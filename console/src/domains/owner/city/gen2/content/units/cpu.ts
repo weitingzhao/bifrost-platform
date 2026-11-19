@@ -74,7 +74,7 @@ export const UNITS: UnitSpec[] = [CPU_UNIT, MEMORY_UNIT]
 /** The units the hardware district is made of, in the order they are made (RULES.md, 由内向外). */
 export const UNIT_PLAN = [
   { id: 'cpu', name: 'CPU', metaphor: 'workshop: a machine per core' },
-  { id: 'memory', name: 'Memory', metaphor: 'workbench' },
+  { id: 'memory', name: 'Memory', metaphor: 'cold store: chest freezers' },
   { id: 'disk', name: 'Disk', metaphor: 'line-side racks (SSD), high-bay store (HDD), across the road (NAS) — proposed' },
   { id: 'gpu', name: 'GPU', metaphor: 'heavy production line (proposed)' },
 ] as const

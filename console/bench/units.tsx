@@ -8,7 +8,7 @@ import { STAGES, stagesOf, unitRulesBroken, type Detail, type StageId, type Unit
 import { ROOM_STANDARDS } from '../src/domains/owner/city/gen2/frame/units/standards'
 import { UNITS, UNIT_PLAN, cpuRoomReadings } from '../src/domains/owner/city/gen2/content/units/cpu'
 import { memoryRoomReadings } from '../src/domains/owner/city/gen2/content/units/memory'
-import { benchOf, memoryRoom, memoryRoomShape, sectionsOf } from '../src/domains/owner/city/gen2/frame/units/memoryRoom'
+import { freezersOf, memoryRoom, memoryRoomShape, sectionsOf } from '../src/domains/owner/city/gen2/frame/units/memoryRoom'
 import { cpuRoom, cpuRoomShape, cpuSummaryOf, machinesOf } from '../src/domains/owner/city/gen2/frame/units/cpuRoom'
 import { readingText } from '../src/domains/owner/city/gen2/frame/library/parts'
 import { DICTIONARY, encode, rowsDrawn, rulerOf, setRuler, STANDARD_PARTS } from '../src/domains/owner/city/gen2/frame/library/dictionary'
@@ -96,11 +96,11 @@ const ROOM_DRAW: Record<string, RoomDraw> = {
   memory: (r, host) => {
     const read = memoryRoomReadings(r.reads.memory as never, host)
     const { out, ids } = rowsDrawn(() => memoryRoom(read))
-    const bench = benchOf(read).map(s => `${s.id} ${readingText(s.bytes, 'bytes')}`).join(' · ')
-    return { sprite: out, ids, count: read.total ?? 0, hint: `${readingText(read.total, 'bytes')} → ${sectionsOf(read).toFixed(1)} sections → a ${memoryRoomShape(read).join('×')} room · ${bench || 'nothing read'} · swap ${readingText(read.swapUsed, 'bytes')} of ${readingText(read.swapTotal, 'bytes')}` }
+    const bench = freezersOf(read).map(s => `${s.id} ${readingText(s.bytes, 'bytes')}`).join(' · ')
+    return { sprite: out, ids, count: read.total ?? 0, hint: `${readingText(read.total, 'bytes')} → ${sectionsOf(read).toFixed(1)} freezers → a ${memoryRoomShape(read).join('×')} room · ${bench || 'nothing read'} · swap ${readingText(read.swapUsed, 'bytes')} of ${readingText(read.swapTotal, 'bytes')}` }
   },
 }
-const PLAN = [['cpu', 'Workshop', 'CPU'], ['memory', 'Workbench', 'Memory'], ['disk', 'Warehouse', 'Disk']] as const
+const PLAN = [['cpu', 'Workshop', 'CPU'], ['memory', 'Cold store', 'Memory'], ['disk', 'Warehouse', 'Disk']] as const
 
 /** A unit's room drawn for one machine at a time, from its readings; its key beside it. */
 function RoomView({ u, r }: { u: UnitSpec; r: Reads }) {

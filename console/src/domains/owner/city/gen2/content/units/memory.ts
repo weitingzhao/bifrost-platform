@@ -1,10 +1,10 @@
 import type { UnitSpec } from '../../frame/units/process'
 
 /**
- * The memory unit (the second through the unit process, 2026-11-19). City metaphor: the workbench of a
- * factory — room for what is being worked on now, cleared at the end of the day (memory empties when the
- * power goes); what can be cleared off at need is the cache; what does not fit goes to the corner of the
- * warehouse (swap), slow to fetch.
+ * The memory unit (the second through the unit process, 2026-11-19). City metaphor: the factory's cold store, a row of
+ * chest freezers (the Owner, 2026-11-19) — goods kept for now, lost when the power goes (memory empties
+ * as a freezer spoils); some can be cleared out at need (the cache); what does not fit goes to the
+ * overflow corner (swap), slow to fetch.
  *
  * Details: what node exporter reports about a machine's memory, after a read of every family it has
  * (2026-11-19 22:07Z): the Linux nodes report /proc/meminfo whole (about fifty), the pressure and paging
@@ -17,10 +17,11 @@ const TOTAL = '(node_memory_MemTotal_bytes or node_memory_total_bytes)'
 export const MEMORY_UNIT: UnitSpec = {
   id: 'memory',
   name: 'Memory',
-  what: 'The working memory of a machine: how much it has and how full it is. In the city, the workbench of a factory.',
+  what: 'The working memory of a machine: how much it has and how full it is. In the city, the factory’s cold store: chest freezers.',
   details: [
     { id: 'total', label: 'Installed', meaning: 'How much memory it has.', query: TOTAL, unit: 'bytes', per: 'unit', known: 'hardware' },
     { id: 'used', label: 'In use', meaning: 'Taken by what is being worked on and cannot be cleared. Linux: installed less available; macOS: active, wired and compressed.', query: '(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) or (node_memory_active_bytes + node_memory_wired_bytes + node_memory_compressed_bytes)', unit: 'bytes', per: 'unit', known: 'hardware' },
+    { id: 'available', label: 'Available', meaning: 'What could be given to work now without pushing anything out: empty, plus what can be cleared. Linux: MemAvailable; macOS: installed less in use.', query: 'node_memory_MemAvailable_bytes or (node_memory_total_bytes - (node_memory_active_bytes + node_memory_wired_bytes + node_memory_compressed_bytes))', unit: 'bytes', per: 'unit', known: 'hardware' },
     { id: 'free', label: 'Empty', meaning: 'Not holding anything at all.', query: 'node_memory_MemFree_bytes or node_memory_free_bytes', unit: 'bytes', per: 'unit', known: 'hardware' },
     { id: 'cache', label: 'Cache (can be cleared)', meaning: 'Holding copies of what is on disk, kept while there is room and cleared when the room is needed. Linux: page cache, buffers and reclaimable kernel caches; macOS: inactive and purgeable.', query: '(node_memory_Cached_bytes + node_memory_Buffers_bytes + node_memory_SReclaimable_bytes) or (node_memory_inactive_bytes + node_memory_purgeable_bytes)', unit: 'bytes', per: 'unit', known: 'hardware' },
     { id: 'compressed', label: 'Compressed', meaning: 'Packed tighter to make room (macOS compressor, Linux zswap).', query: 'node_memory_compressed_bytes or node_memory_Zswap_bytes', unit: 'bytes', per: 'unit', known: 'hardware' },
@@ -34,30 +35,28 @@ export const MEMORY_UNIT: UnitSpec = {
     { id: 'pressure', label: 'Waiting for memory', meaning: 'How much of the time some task waited because memory was short (pressure).', query: 'rate(node_pressure_memory_waiting_seconds_total[5m])', unit: 'share', per: 'unit', known: 'system' },
     { id: 'oom', label: 'Programs killed for memory', meaning: 'How many programs the system stopped because memory ran out, since it started.', query: 'node_vmstat_oom_kill', unit: 'count', per: 'unit', known: 'system' },
   ],
-  // Details confirmed 2026-11-19: the eleven the memory itself knows, as it is now. The three the system
-  // counts are out (room standard 1); the programs killed for memory is a count since boot, history,
-  // which belongs outside the room (room standard 12).
-  chosen: ['total', 'used', 'free', 'cache', 'compressed', 'kernel', 'dirty', 'swap.total', 'swap.used', 'swap.io', 'corrupted'],
-  // Inside, drafted for the Owner to see before it is drawn: the workbench room. The bench is laid out in
-  // standard parts (a section per 4 GB), its top showing what is on it now, side by side from the left:
-  // the system's own fixtures, the work in hand, the packed boxes, the copies that can be cleared off, the
-  // parts waiting to go to the warehouse, and the bare top. Flat on the tops, nothing hides anything.
+  // Details confirmed 2026-11-19, then narrowed the same day (the Owner: seven colours on the bench are
+  // noise unless each can be read apart and keyed; better plain). Three that add up to what is installed,
+  // read on Linux and macOS alike: in use (installed − available), can be cleared (available − empty),
+  // empty. Kernel, compressed and waiting-to-be-written are splits inside those three: out. Swap and
+  // hardware errors stay. Counts since boot are history (room standard 12): out.
+  chosen: ['total', 'available', 'free', 'swap.total', 'swap.used', 'swap.io', 'corrupted'],
+  // Inside: the cold store (the Owner, 2026-11-19: a chest freezer, not a wooden bench — memory empties
+  // when the power goes, as a freezer spoils). One chest freezer per 4 GB (the standard part), in pairs,
+  // low, its glass lid on top showing what is inside now: goods in use, goods that can be cleared, the
+  // empty cold floor. An overflow corner on the floor for swap; the room console.
   inside: [
-    { detail: 'total', thing: 'Bench sections', shows: 'One section per 4 GB (the standard part); 24 GB, six sections, in pairs.', where: 'workbench floor' },
-    { detail: 'kernel', thing: 'Fixtures bolted to the bench', shows: 'Kept by the system and never cleared: grey vices and clamps, first from the left.', where: 'workbench floor' },
-    { detail: 'used', thing: 'Work in hand', shows: 'What is being worked on: amber workpieces, next along the top.', where: 'workbench floor' },
-    { detail: 'compressed', thing: 'Packed boxes', shows: 'Packed tighter to make room: small blue boxes, next.', where: 'workbench floor' },
-    { detail: 'cache', thing: 'Copies that can be swept off', shows: 'Copies of what is in the warehouse, kept while there is room: pale sheets, next; they go first when room is needed.', where: 'workbench floor' },
-    { detail: 'dirty', thing: 'Parts waiting for the warehouse', shows: 'Changed and not yet put away: a few on a tray at the bench’s end.', where: 'workbench floor' },
-    { detail: 'free', thing: 'Bare bench top', shows: 'Nothing on it: the rest of the top, empty.', where: 'workbench floor' },
-    { detail: 'corrupted', thing: 'Taped-off section', shows: 'Damaged and out of use: a section crossed with red tape; none when nothing is damaged.', where: 'workbench floor' },
-    { detail: 'swap.total', thing: 'Overflow corner', shows: 'Floor marked off by the wall for what does not fit on the bench, as big as the swap (in the same 4 GB parts).', where: 'overflow corner' },
+    { detail: 'total', thing: 'Chest freezers', shows: 'One freezer per 4 GB (the standard part); 24 GB, six freezers, in pairs; the last as long as its part.', where: 'cold store floor' },
+    { detail: 'available', thing: 'Goods in use / goods that can be cleared', shows: 'Through the glass lid, from the left: goods in use (amber), as much as installed less available; then goods that can be cleared (pale), as much as available less empty.', where: 'cold store floor' },
+    { detail: 'free', thing: 'Empty cold floor', shows: 'The rest of the freezer: nothing in it.', where: 'cold store floor' },
+    { detail: 'corrupted', thing: 'Taped-off lid', shows: 'Damaged and out of use: red tape across the last freezers’ lids; none when nothing is damaged.', where: 'cold store floor' },
+    { detail: 'swap.total', thing: 'Overflow corner', shows: 'Floor marked off at the front for what does not fit in the freezers, as long as the swap in the same 4 GB parts.', where: 'overflow corner' },
     { detail: 'swap.used', thing: 'Crates in the corner', shows: 'What is pushed out there now: crates filling the marked floor.', where: 'overflow corner' },
-    { detail: 'swap.io', thing: 'TRAFFIC on the console', shows: 'How fast things move between the bench and the corner, on the standard instrument.', where: 'memory console' },
-    { detail: 'used', thing: 'IN USE on the console desk', shows: 'How full the bench is with work in hand, as a share: the same lit folds as the CPU console, the percent on its plate.', where: 'memory console' },
+    { detail: 'swap.io', thing: 'TRAFFIC on the console', shows: 'How fast things move between the freezers and the corner, on the standard instrument.', where: 'memory console' },
+    { detail: 'available', thing: 'IN USE on the console desk', shows: 'How full the freezers are with goods in use, as a share: the same lit folds as the CPU console, the percent on its plate.', where: 'memory console' },
   ],
   confirmed: {
-    details: { on: '2026-11-19', words: '我们这个房间的话，就是来去记录现在瞬时的内存的状态反应就可以了' },
+    details: { on: '2026-11-19', words: '这里有个图例…不然的话，你这光显示这东西，你这不知道什么玩意儿，什么是空的，什么用到的都不知道啊…就噪音' },
   },
 }
 
@@ -65,7 +64,7 @@ export const MEMORY_UNIT: UnitSpec = {
 export function memoryRoomReadings(reads: Record<string, { labels: Record<string, string>; value: number }[] | null> | undefined, host: string | undefined) {
   const one = (id: string) => host ? (reads?.[id] ?? []).find(p => p.labels.instance?.split(':')[0] === host)?.value ?? null : null
   return {
-    total: one('total'), used: one('used'), free: one('free'), cache: one('cache'), compressed: one('compressed'), kernel: one('kernel'),
-    dirty: one('dirty'), swapTotal: one('swap.total'), swapUsed: one('swap.used'), swapIO: one('swap.io'), corrupted: one('corrupted'),
+    total: one('total'), available: one('available'), free: one('free'),
+    swapTotal: one('swap.total'), swapUsed: one('swap.used'), swapIO: one('swap.io'), corrupted: one('corrupted'),
   }
 }
