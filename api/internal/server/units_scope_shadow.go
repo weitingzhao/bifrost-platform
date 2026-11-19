@@ -2,10 +2,8 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"time"
 
@@ -102,31 +100,9 @@ func (s *Server) unitScopeShadowSource() func(context.Context, seenfacts.Pipelin
 	return sh.Observe
 }
 
-// giteaFirstParent is the first parent of a commit as Gitea has it, "" for a
-// commit with none. It is the base a landing's commit is compared with: the
-// CI run's own changes task compares with the merge base of main, which for a
-// commit prepared on main's head is this parent, and has no base at all for a
-// commit already on main.
+// giteaFirstParent is the first parent of a commit as Gitea has it
+// (gitread.Trees.FirstParent).
 func (s *Server) giteaFirstParent(ctx context.Context, repo, commit string) (string, error) {
 	s.unitTreesOf()
-	body, err := s.unitTrees.get(ctx, url.PathEscape(repo)+"/git/commits/"+commit+"?stat=false&verification=false&files=false", 1<<20)
-	if err != nil {
-		return "", err
-	}
-	var doc struct {
-		SHA     string `json:"sha"`
-		Parents []struct {
-			SHA string `json:"sha"`
-		} `json:"parents"`
-	}
-	if err = json.Unmarshal(body, &doc); err != nil || doc.SHA != commit {
-		return "", fmt.Errorf("gitea: %s commit %s: not that commit (%v)", repo, commit, err)
-	}
-	if len(doc.Parents) == 0 {
-		return "", nil
-	}
-	if !commitID.MatchString(doc.Parents[0].SHA) {
-		return "", fmt.Errorf("gitea: %s commit %s: its parent is not a commit id", repo, commit)
-	}
-	return doc.Parents[0].SHA, nil
+	return s.unitTrees.FirstParent(ctx, repo, commit)
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"log/slog"
 	"net/http"
@@ -77,8 +78,8 @@ type Server struct {
 	mcp       *mcp.Handler
 	delivery  *delivery.Handler
 	// unitTrees reads commits' trees from Gitea for the unit plan
-	// (units_plan.go), keeping the blobs it read.
-	unitTrees *giteaTrees
+	// (gitread.Trees), keeping the blobs it read.
+	unitTrees *gitread.Trees
 	// unitRunsKept keeps the run view's answers a short while (units_runs.go).
 	unitRunsKept unitRunsCache
 	// ciScorecardKept keeps the CI scorecard a short while (ci_read_wire.go).

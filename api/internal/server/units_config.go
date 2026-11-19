@@ -2,10 +2,7 @@ package server
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -64,17 +61,5 @@ func (s *Server) mainHead(ctx context.Context, repo string) (string, error) {
 // giteaMainHead is the commit main of repo is at, as Gitea says.
 func (s *Server) giteaMainHead(ctx context.Context, repo string) (string, error) {
 	s.unitTreesOf()
-	body, err := s.unitTrees.get(ctx, url.PathEscape(repo)+"/branches/main", 1<<20)
-	var branch struct {
-		Commit struct {
-			ID string `json:"id"`
-		} `json:"commit"`
-	}
-	if err == nil {
-		err = json.Unmarshal(body, &branch)
-	}
-	if err != nil || !commitID.MatchString(branch.Commit.ID) {
-		return "", fmt.Errorf("gitea: main of %s could not be read", repo)
-	}
-	return branch.Commit.ID, nil
+	return s.unitTrees.MainHead(ctx, repo)
 }

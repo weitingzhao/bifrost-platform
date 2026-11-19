@@ -1,13 +1,11 @@
-//bifrost:owner verification
-
-package server
+package evidenceread
 
 import (
 	"context"
+	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,8 +15,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
-	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
-	"github.com/weitingzhao/bifrost-platform/api/internal/evidenceread"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
+	"github.com/weitingzhao/bifrost-platform/api/internal/unitexec"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 )
 
@@ -40,12 +38,12 @@ type unitPlanAnswer struct {
 	Counts map[string]int     `json:"counts"`
 }
 
-// unitPlan asks the plan route (evidenceread.PlanRoute) the way a request
+// unitPlan asks the plan route (PlanRoute) the way a request
 // does and reads its answer: the plan of a commit with the ledger's word on
 // each key.
-func unitPlan(ctx context.Context, db eventlog.DB, trees unitTreesFunc, repo, commit string, withInputs bool) (unitPlanAnswer, error) {
-	route := evidenceread.PlanRoute{RepoOK: giteaName.MatchString, CommitOK: commitID.MatchString,
-		Sources: func() (evidenceread.PlanSources, bool) { return evidenceread.PlanSources{DB: db, Trees: trees}, true }}
+func unitPlan(ctx context.Context, db eventlog.DB, trees unitexec.TreesFunc, repo, commit string, withInputs bool) (unitPlanAnswer, error) {
+	route := PlanRoute{RepoOK: gitread.Name.MatchString, CommitOK: gitread.CommitID.MatchString,
+		Sources: func() (PlanSources, bool) { return PlanSources{DB: db, Trees: trees}, true }}
 	q := url.Values{"repo": {repo}, "commit": {commit}}
 	if withInputs {
 		q.Set("inputs", "1")
@@ -72,7 +70,7 @@ modules:
 
 // planRepo is a small repository as Gitea serves it: every path with its
 // type and git object id, and the blobs by id.
-func planRepo() (entries []commitTreeEntry, blobs map[string]string) {
+func planRepo() (entries []gitread.TreeEntry, blobs map[string]string) {
 	files := map[string]string{
 		"bifrost.units.yaml": unitsManifest,
 		"api/go.mod":         "module example.com/m\n\ngo 1.25\n",
@@ -83,13 +81,13 @@ func planRepo() (entries []commitTreeEntry, blobs map[string]string) {
 	for p, body := range files {
 		id := gitBlobID(body)
 		blobs[id] = body
-		entries = append(entries, commitTreeEntry{Path: p, Mode: "100644", Type: "blob", SHA: id})
+		entries = append(entries, gitread.TreeEntry{Path: p, Mode: "100644", Type: "blob", SHA: id})
 	}
 	sub := func(dir string) string { // the id of a directory of blobs and the directories given
-		var list []commitTreeEntry
+		var list []gitread.TreeEntry
 		for _, e := range entries {
 			if rest, ok := strings.CutPrefix(e.Path, dir+"/"); ok && !strings.Contains(rest, "/") {
-				list = append(list, commitTreeEntry{Path: rest, Mode: e.Mode, Type: e.Type, SHA: e.SHA})
+				list = append(list, gitread.TreeEntry{Path: rest, Mode: e.Mode, Type: e.Type, SHA: e.SHA})
 			}
 		}
 		id, err := gitread.TreeID(list)
@@ -98,8 +96,8 @@ func planRepo() (entries []commitTreeEntry, blobs map[string]string) {
 		}
 		return id
 	}
-	entries = append(entries, commitTreeEntry{Path: "api/a", Mode: "040000", Type: "tree", SHA: sub("api/a")})
-	entries = append(entries, commitTreeEntry{Path: "api", Mode: "040000", Type: "tree", SHA: sub("api")})
+	entries = append(entries, gitread.TreeEntry{Path: "api/a", Mode: "040000", Type: "tree", SHA: sub("api/a")})
+	entries = append(entries, gitread.TreeEntry{Path: "api", Mode: "040000", Type: "tree", SHA: sub("api")})
 	return entries, blobs
 }
 
@@ -125,17 +123,17 @@ func TestUnitPlanFromGitea(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	g := &giteaTrees{access: func(context.Context) (delivery.GiteaAccess, error) {
-		return delivery.GiteaAccess{Base: srv.URL, Org: "bifrost"}, nil
-	}, client: srv.Client()}
+	g := unitexec.GiteaTrees(&gitread.Trees{Access: func(context.Context) (gitread.Access, error) {
+		return gitread.Access{Base: srv.URL, Org: "bifrost"}, nil
+	}, Client: srv.Client()})
 	db := agentrttest.Migrated(t)
 	pool := db.Pool(t, db.Runtime)
 
-	plan, err := unitPlan(ctx, pool, g.tree, "r", commit, true)
+	plan, err := unitPlan(ctx, pool, g, "r", commit, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var root []commitTreeEntry
+	var root []gitread.TreeEntry
 	for _, e := range entries {
 		if !strings.Contains(e.Path, "/") {
 			root = append(root, e)
@@ -161,7 +159,7 @@ func TestUnitPlanFromGitea(t *testing.T) {
 	  VALUES ('r','api/a','test',$1,'passed','full',$2::jsonb,'{}',$3,'unit-1','uid-1')`, test.Key, string(inputs), commit); err != nil {
 		t.Fatal(err)
 	}
-	if plan, err = unitPlan(ctx, pool, g.tree, "r", commit, false); err != nil || plan.ToRun != 1 || plan.Counts[evidence.EvidenceGreen] != 1 {
+	if plan, err = unitPlan(ctx, pool, g, "r", commit, false); err != nil || plan.ToRun != 1 || plan.Counts[evidence.EvidenceGreen] != 1 {
 		t.Fatalf("after a pass: %+v %v", plan, err)
 	}
 	if blobReads != reads {
@@ -170,47 +168,12 @@ func TestUnitPlanFromGitea(t *testing.T) {
 	if plan.Units[0].Inputs != nil {
 		t.Fatal("inputs given without being asked for")
 	}
-	if _, err = unitPlan(ctx, pool, g.tree, "other", commit, false); err == nil {
+	if _, err = unitPlan(ctx, pool, g, "other", commit, false); err == nil {
 		t.Fatal("a repository Gitea does not have was planned")
 	}
 }
 
-// 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
-// The instruments' reader lists a commit's files (no directories, no submodules) and returns a blob's bytes from Gitea.
-func TestInstrumentSourceReadsFilesAndBlobsFromGitea(t *testing.T) {
-	const commit = "0123456789012345678901234567890123456789"
-	entries, blobs := planRepo()
-	entries = append(entries, commitTreeEntry{Path: "vendored", Mode: "160000", Type: "commit", SHA: commit})
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/api/v1/repos/bifrost/r/git/trees/"+commit:
-			_ = json.NewEncoder(w).Encode(map[string]any{"sha": commit, "page": 1, "total_count": len(entries), "truncated": false, "tree": entries})
-		case strings.HasPrefix(r.URL.Path, "/api/v1/repos/bifrost/r/git/blobs/"):
-			id := strings.TrimPrefix(r.URL.Path, "/api/v1/repos/bifrost/r/git/blobs/")
-			_ = json.NewEncoder(w).Encode(map[string]any{"sha": id, "encoding": "base64", "content": base64.StdEncoding.EncodeToString([]byte(blobs[id]))})
-		default:
-			http.Error(w, "no", http.StatusNotFound)
-		}
-	}))
-	defer srv.Close()
-	source := instrumentSource{trees: &giteaTrees{access: func(context.Context) (delivery.GiteaAccess, error) {
-		return delivery.GiteaAccess{Base: srv.URL, Org: "bifrost"}, nil
-	}, client: srv.Client()}}
-	files, err := source.Files(context.Background(), "r", commit)
-	if err != nil {
-		t.Fatal(err)
-	}
-	id, ok := files["bifrost.units.yaml"]
-	if !ok {
-		t.Fatalf("the manifest is not among the files: %v", files)
-	}
-	for _, notFile := range []string{"vendored", "api", "api/a"} {
-		if _, listed := files[notFile]; listed {
-			t.Errorf("%s is listed as a file", notFile)
-		}
-	}
-	raw, err := source.Blob(context.Background(), "r", id)
-	if err != nil || string(raw) != unitsManifest {
-		t.Fatalf("blob = %q, %v", raw, err)
-	}
+// gitBlobID is the git object id of a file's content, as Gitea names blobs.
+func gitBlobID(content string) string {
+	return fmt.Sprintf("%x", sha1.Sum([]byte(fmt.Sprintf("blob %d\x00%s", len(content), content))))
 }

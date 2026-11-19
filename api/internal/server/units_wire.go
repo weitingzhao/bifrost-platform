@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitexec"
@@ -36,9 +37,9 @@ func (s *Server) unitClusterOf() unitexec.Cluster {
 
 func (s *Server) unitTreesOf() unitTreesFunc {
 	s.unitTreesOnce.Do(func() {
-		s.unitTrees = &giteaTrees{access: s.delivery.GiteaAccess, client: &http.Client{Timeout: 20 * time.Second}}
+		s.unitTrees = &gitread.Trees{Access: gitAccess(s.delivery.GiteaAccess), Client: &http.Client{Timeout: 20 * time.Second}}
 	})
-	return s.unitTrees.tree
+	return unitexec.GiteaTrees(s.unitTrees)
 }
 
 // placedUnitConfig is the dispatch configuration with the node the units go to

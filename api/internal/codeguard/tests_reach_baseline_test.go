@@ -284,11 +284,8 @@ var testFilesInShared = []string{
 	"api/internal/server/subscriptions_test.go",
 	"api/internal/server/thread_inbox_test.go",
 	"api/internal/server/transient_refusal_test.go",
-	"api/internal/server/units_blob_once_test.go",
 	"api/internal/server/units_contract_test.go",
 	"api/internal/server/units_full_ci_test.go",
-	"api/internal/server/units_plan_test.go",
-	"api/internal/server/units_prefetch_test.go",
 	"api/internal/server/units_scope_shadow_test.go",
 	"api/internal/server/units_scope_test.go",
 }

@@ -71,7 +71,7 @@ func (s *Server) handleUnitFullCICheck(w http.ResponseWriter, r *http.Request) {
 // giteaFirstParents walks main's history in Gitea from red back along first
 // parents until green.
 func (s *Server) giteaFirstParents(ctx context.Context, repo, green, red string, max int) ([][2]string, error) {
-	body, err := s.unitTrees.get(ctx, url.PathEscape(repo)+"/commits?sha="+red+"&limit=100&stat=false&verification=false&files=false", 8<<20)
+	body, err := s.unitTrees.Get(ctx, url.PathEscape(repo)+"/commits?sha="+red+"&limit=100&stat=false&verification=false&files=false", 8<<20)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +137,7 @@ func (s *Server) ciDomainsSourceOf() cidomains.Source {
 // as Gitea lists them for the commit.
 func (s *Server) giteaChangedFiles(ctx context.Context, repo, commit string) ([]string, error) {
 	s.unitTreesOf()
-	body, err := s.unitTrees.get(ctx, url.PathEscape(repo)+"/git/commits/"+commit+"?stat=false&verification=false&files=true", 8<<20)
+	body, err := s.unitTrees.Get(ctx, url.PathEscape(repo)+"/git/commits/"+commit+"?stat=false&verification=false&files=true", 8<<20)
 	if err != nil {
 		return nil, err
 	}

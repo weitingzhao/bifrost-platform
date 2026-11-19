@@ -1,4 +1,4 @@
-package server
+package gitread
 
 import (
 	"context"
@@ -10,8 +10,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 )
 
 // Origin: 2026-11-16 21:59 CST. The redesigned Work > CI page asks for
@@ -23,7 +21,7 @@ import (
 func TestABlobAskedForTogetherIsReadOnce(t *testing.T) {
 	t.Parallel()
 	const content = "package a\n"
-	id := gitBlobID(content)
+	id := blobID(content)
 	var reads atomic.Int32
 	release := make(chan struct{})
 	fail := atomic.Bool{}
@@ -41,9 +39,9 @@ func TestABlobAskedForTogetherIsReadOnce(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"sha": id, "encoding": "base64", "content": base64.StdEncoding.EncodeToString([]byte(content))})
 	}))
 	defer srv.Close()
-	g := &giteaTrees{access: func(context.Context) (delivery.GiteaAccess, error) {
-		return delivery.GiteaAccess{Base: srv.URL, Org: "bifrost"}, nil
-	}, client: srv.Client()}
+	g := &Trees{Access: func(context.Context) (Access, error) {
+		return Access{Base: srv.URL, Org: "bifrost"}, nil
+	}, Client: srv.Client()}
 	ask := func(n int) (ok, failed int32) {
 		var wg sync.WaitGroup
 		var good, bad atomic.Int32
@@ -51,7 +49,7 @@ func TestABlobAskedForTogetherIsReadOnce(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				if b, err := g.blob(context.Background(), "r", id); err == nil && string(b) == content {
+				if b, err := g.Blob(context.Background(), "r", id); err == nil && string(b) == content {
 					good.Add(1)
 				} else {
 					bad.Add(1)
@@ -84,7 +82,7 @@ func TestABlobAskedForTogetherIsReadOnce(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
 		wg.Add(1)
-		go func() { defer wg.Done(); _, _ = g.blob(context.Background(), "r", id) }()
+		go func() { defer wg.Done(); _, _ = g.Blob(context.Background(), "r", id) }()
 	}
 	wg.Wait()
 	if reads.Load() != 2 {
@@ -98,7 +96,7 @@ func TestABlobAskedForTogetherIsReadOnce(t *testing.T) {
 func TestTwentyAskersOfAColdBlobMakeOneRead(t *testing.T) {
 	t.Parallel()
 	const content = "package b\n"
-	id := gitBlobID(content)
+	id := blobID(content)
 	var reads atomic.Int32
 	arrived := make(chan struct{}, 1)
 	release := make(chan struct{})
@@ -112,9 +110,9 @@ func TestTwentyAskersOfAColdBlobMakeOneRead(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"sha": id, "encoding": "base64", "content": base64.StdEncoding.EncodeToString([]byte(content))})
 	}))
 	defer srv.Close()
-	g := &giteaTrees{access: func(context.Context) (delivery.GiteaAccess, error) {
-		return delivery.GiteaAccess{Base: srv.URL, Org: "bifrost"}, nil
-	}, client: srv.Client()}
+	g := &Trees{Access: func(context.Context) (Access, error) {
+		return Access{Base: srv.URL, Org: "bifrost"}, nil
+	}, Client: srv.Client()}
 	var wg sync.WaitGroup
 	var good atomic.Int32
 	first := make(chan struct{})
@@ -125,7 +123,7 @@ func TestTwentyAskersOfAColdBlobMakeOneRead(t *testing.T) {
 			if i > 0 {
 				<-first // the other nineteen start once the first read is at Gitea
 			}
-			if b, err := g.blob(context.Background(), "r", id); err == nil && string(b) == content {
+			if b, err := g.Blob(context.Background(), "r", id); err == nil && string(b) == content {
 				good.Add(1)
 			}
 		}(i)

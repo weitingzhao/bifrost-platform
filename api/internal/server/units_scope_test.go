@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	gitsha1 "crypto/sha1"
 	"fmt"
 	"sort"
 	"strings"
@@ -31,7 +32,10 @@ func scopeTrees(t *testing.T, commits map[string]map[string]string) unitTreesFun
 			}
 			dirs[""] = append(dirs[""], p+"="+body)
 		}
-		dirID := func(d string) string { sort.Strings(dirs[d]); return gitBlobID("tree:" + strings.Join(dirs[d], "\n")) }
+		dirID := func(d string) string {
+			sort.Strings(dirs[d])
+			return gitBlobID("tree:" + strings.Join(dirs[d], "\n"))
+		}
 		for d := range dirs {
 			if d != "" {
 				entries = append(entries, unitplan.Entry{Path: d, Dir: true, ID: dirID(d)})
@@ -87,4 +91,9 @@ modules:
 	if got, err = unitConfig(context.Background(), scopeTrees(t, map[string]map[string]string{c: files}), "r", c); err != nil || !got.Declared || len(got.Modules) != 0 || !strings.Contains(got.Note, "does not read") {
 		t.Errorf("a declaration that does not read: %+v %v", got, err)
 	}
+}
+
+// gitBlobID is the git object id of a file's content, as Gitea names blobs.
+func gitBlobID(content string) string {
+	return fmt.Sprintf("%x", gitsha1.Sum([]byte(fmt.Sprintf("blob %d\x00%s", len(content), content))))
 }
