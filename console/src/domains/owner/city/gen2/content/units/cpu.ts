@@ -50,7 +50,6 @@ export const CPU_UNIT: UnitSpec = {
     { detail: 'busy.core', thing: 'Each machine’s work light', shows: 'The light column on each machine stands as high as that core is busy; an idle machine is dark.', where: 'workshop floor' },
     { detail: 'freq', thing: 'Each machine’s speed dial', shows: 'A dial on each machine: the needle at how fast the core runs now.', where: 'workshop floor' },
     { detail: 'freq.max', thing: 'The red line on each speed dial', shows: 'The red mark on the same dial: the fastest it can run.', where: 'workshop floor' },
-    { detail: 'busy.core', thing: 'The console’s busy dial', shows: 'All the cores together: the needle at the average of how busy each is.', where: 'CPU console' },
     { detail: 'temp', thing: 'The console’s thermometer', shows: 'The chip’s own temperature (one sensor for the whole chip); red from 80 °C. A sensor per core would stand on its machine.', where: 'CPU console' },
   ],
   confirmed: {

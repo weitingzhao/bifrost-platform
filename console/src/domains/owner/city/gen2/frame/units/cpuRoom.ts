@@ -6,8 +6,7 @@ import { encode, metaphor, rulerOf, rulersKey } from '../library/dictionary'
  * The hardware only — how many cores, how busy each, how fast, how hot:
  *   the workshop floor   one machine tool per core, in pairs: a load bar across its top filled as far as the core is busy,
  *                        its speed dial's needle at the core's clock, the dial's red line its top clock
- *   the CPU console      at the front, for the whole CPU: a busy dial (all cores together) and the
- *                        chip's thermometer
+ *   the CPU console      at the front, for what is measured over the whole CPU: the chip's thermometer
  *   a core's own sensor  where one reports per core, a small thermometer on its machine
  * Everything is a reading; what is not read is not drawn (no machines when the cores are not read, no
  * needle on a dial nothing reads).
@@ -98,15 +97,16 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
   const liquidOf = (c: number) => c >= 80 ? '#e0533d' : '#e88a3a'
   const cores = r.cores.length
   const avgOf = (v: (number | null)[]) => { const k = v.filter((x): x is number => x != null); return k.length ? k.reduce((a, b) => a + b, 0) / k.length : null }
-  const all = avgOf(r.cores.map(c => c.busy))
 
-  // The console: a desk at the front with an upright panel, for the whole CPU: a busy dial (all cores
-  // together, the average of each machine's work light) and the chip's thermometer. Only what the CPU
-  // knows as hardware (the Owner, 2026-11-19: load and waiting are counted by the scheduler, not the CPU).
+  // The console: a desk at the front with an upright panel, for what is measured over the whole CPU and
+  // nowhere else: the chip's thermometer. Only what the CPU knows as hardware (the Owner, 2026-11-19: load
+  // and waiting are counted by the scheduler, not the CPU). The average of the cores' load bars stood here
+  // too and was taken out the same day: the bars already say it, one by one; the average is the summary
+  // the room passes up to its building (stage 3), not a second showing inside. No sensor read, no console.
   // Shaped as a plant's control desk (the Owner, 2026-11-19: it looked like a television): a sloped
   // desk, low at the front, and behind it an upright instrument bank under a hood; each instrument in its
   // bezel with a name plate. Nothing on it that is not a reading: no buttons or lamps for show.
-  const cw = Math.min(2.4, fw - 0.6), cx = fw - 0.3 - cw, cy = sy + 0.15, cd = 0.75, bank = 0.22
+  const cw = 1.5, cx = fw - 0.3 - cw, cy = sy + 0.15, cd = 0.75, bank = 0.22
   const STEEL = faces('#d9dbe0', '#bfc3cb', '#a9aeb8'), DARK = faces('#4a5263', '#353c4a', '#2b313d')
   const drawConsole = () => {
     g.shadow(cx, cy, cw, cd, 0.35)
@@ -122,21 +122,12 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
     g.poly(STEEL.top, [[cx, y0, zb], [cx + cw, y0, zb], [cx + cw, y1, zf], [cx, y1, zf]], 1.2)
     g.poly('#c9ccd3', [[cx + 0.1, y0 + 0.06, zb - 1], [cx + cw - 0.1, y0 + 0.06, zb - 1], [cx + cw - 0.1, y1 - 0.08, zf + 1], [cx + 0.1, y1 - 0.08, zf + 1]], 0.7)
     // A name plate on the desk's front edge.
-    g.sign('left', cx, y1, 0.12, 1.25, 1.5, 'CPU CONSOLE', '#f4efe2', 4.5)
-    // Instrument 1: the busy dial, all cores together, in a round bezel.
+    g.sign('left', cx, y1, 0.12, 1.3, 1.5, 'CPU CONSOLE', '#f4efe2', 4.5)
     const plate = (u: number, z: number, text: string) => g.face('left', cx, P, z, `<rect x="${(u - 24).toFixed(1)}" y="-3.5" width="48" height="6.5" rx="1" fill="#e8e2cf" stroke="${INK}" stroke-width="0.5"/><text x="${u.toFixed(1)}" y="1.6" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="4.2" font-weight="700" fill="${INK}">${text}</text>`)
-    if (cores > 0) {
-      metaphor('core.busy.all')
-      const u = 0.62 * U
-      g.face('left', cx, P, 31, `<circle cx="${u}" cy="0" r="10" fill="#1f242e" stroke="#9aa0ab" stroke-width="1.8"/>`)
-      g.face('left', cx, P, 30, dial(7.5, u, encode('core.busy.all', all), 0.85))
-      if (all != null) g.face('left', cx, P, 30, `<text x="${u}" y="6" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="5" font-weight="700" fill="#f2f0e8">${Math.round(all * 100)}%</text>`)
-      plate(u, 18, 'BUSY · ALL CORES')
-    }
-    // Instrument 2: the chip's thermometer, in a tall bezel.
+    // The chip's thermometer, in a tall bezel.
     const t = chip[0]
     if (t) {
-      const a = 1.5, b = a + 0.12, z0 = 24, z1 = 38, f = encode('sensor.temp', t.c / 100)!
+      const a = 0.45, b = a + 0.12, z0 = 24, z1 = 38, f = encode('sensor.temp', t.c / 100)!
       g.onLeft(cx, P, a - 0.1, b + 0.42, z0 - 4, z1 + 2, '#1f242e', 1)
       g.onLeft(cx, P, a, b, z0, z1, '#fbfaf6', 0.6)
       g.onLeft(cx, P, a + 0.02, b - 0.02, z0, z0 + (z1 - z0) * f, liquidOf(t.c), 0)
@@ -189,7 +180,7 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
   } else {
     g.text('left', 0.6, 0.18, 30, 'CORES NOT READ', 7, '#8a857a')
   }
-  things.push({ at: cx + cy + 99, draw: drawConsole })
+  if (chip.length) things.push({ at: cx + cy + 99, draw: drawConsole })
   things.sort((a, b) => a.at - b.at).forEach(t => t.draw())
   return g.done()
 }

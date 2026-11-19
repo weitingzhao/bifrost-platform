@@ -57,7 +57,6 @@ export const DICTIONARY: readonly Metaphor[] = [
   { id: 'core.freq', metric: 'a core’s clock, as a share of its top', part: 'speed dial', shows: 'Speed dial on each machine', encoding: { kind: 'level' }, meaning: 'the needle at how fast that core runs now, from stopped to its top; the green band is its range, the red band the last 8% before its top', scope: 'each core' },
   { id: 'core.freq.max', metric: 'a core’s top clock', part: 'speed dial red line', shows: 'Red line on the speed dial', encoding: { kind: 'number' }, meaning: 'the end of the dial: the fastest that core can run', scope: 'each core' },
   { id: 'sensor.temp', metric: 'a CPU temperature sensor, °C', part: 'thermometer', shows: 'Thermometer', encoding: { kind: 'level' }, meaning: 'the column as high as it reads (0–100 °C), red from 80 °C: a sensor for the whole chip is on the CPU console; a sensor per core stands on its machine', scope: 'as the sensor measures: whole CPU or each core' },
-  { id: 'core.busy.all', metric: 'all cores busy, the average of each core', part: 'console busy dial', shows: 'Busy dial on the console', encoding: { kind: 'level' }, meaning: 'the needle at how busy the cores are together (the average of every machine’s load bar), the percent beneath; into the red band above 85%', scope: 'whole CPU' },
   { id: 'state', metric: 'how it stands: online, standby, down, unread', part: 'lights, beacon', shows: 'Lights and beacon', encoding: { kind: 'state' }, meaning: 'lit and running; cold and dark; a red beacon; grey and empty' },
 ]
 
