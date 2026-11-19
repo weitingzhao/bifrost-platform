@@ -85,7 +85,7 @@ const RIM = 1.1
 /** Every road and corridor, on every level: its half-width (grid.ts), its kerb, and where a plot's lot begins. */
 const ROAD_HALF = STREET_HALF.street
 const KERB = 0.06
-const LOT_INSET = ROAD_HALF + KERB + 0.14
+const LOT_INSET = ROAD_HALF + KERB + 0.1
 
 export class PlaceScene extends Phaser.Scene {
   private events_: SceneEvents
@@ -620,6 +620,7 @@ export class PlaceScene extends Phaser.Scene {
     else {
       for (const p of plots) {
         const e = lotInset(p)
+        if (2 * e >= Math.min(p.w, p.h)) continue
         const q = [iso(p.x + e, p.y + e), iso(p.x + p.w - e, p.y + e), iso(p.x + p.w - e, p.y + p.h - e), iso(p.x + e, p.y + p.h - e)]
         g.fillStyle(this.tone.lot).fillPoints(q, true)
       }

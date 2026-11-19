@@ -125,7 +125,8 @@ export type StreetKind = 'ring' | 'avenue' | 'street' | 'lane' | 'path'
 export type Street = { kind: StreetKind; x0: number; y0: number; x1: number; y1: number; half: number }
 
 /** One width for every way between things, on every level (the Owner, 2026-11-19: regular, like pixel art). */
-const WAY_HALF = 0.3
+/** A whole cell wide: the ways carry the traffic between things, so they get room (the Owner, 2026-11-19). */
+const WAY_HALF = 0.5
 export const STREET_HALF: Record<StreetKind, number> = { ring: WAY_HALF, avenue: WAY_HALF, street: WAY_HALF, lane: WAY_HALF, path: WAY_HALF }
 
 /** Every cut is a street, as wide as the narrower side of the plots it divides allows; the ring runs round the ground. */
