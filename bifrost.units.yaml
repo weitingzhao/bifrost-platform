@@ -97,9 +97,11 @@ modules:
       # ownership table, and the register against the latest closed vocabulary migration.
       api/internal/bus/registry: ["api/internal/bus/registry", "config/domain-ownership.json", "api/internal/agentrt/migrations"]
       # 2026-11-19: the fuzz reads request fields from the sources of planapi
-      # too, where the plan's handlers went.
+      # and coordapi too, where the plan's and the coordination's
+      # handlers went.
       api/internal/agentrt/agentrtapi:
         - "api/internal/agentrt/agentrtapi"
+        - "api/internal/agentrt/coordapi"
         - "api/internal/agentrt/planapi"
         - "api/internal/agentrt/planimport/testdata"
         - "api/internal/agentrt/planview/testdata"

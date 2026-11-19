@@ -247,14 +247,14 @@ func (f *stateFuzz) pick(xs []string) string { return xs[f.r.Intn(len(xs))] }
 
 // requestFields is every JSON field name the package, the store and the plan
 // code that was the store's (planstore, 2026-11-17) declare, read from their
-// sources: what any route might read from a body. The plan's handlers,
-// with their bodies, left this package for planapi (2026-11-19); their
-// sources are read where they went.
+// sources: what any route might read from a body. The plan's and the
+// coordination's handlers, with their bodies, left this package for planapi
+// and coordapi (2026-11-19); their sources are read where they went.
 func requestFields(t *testing.T) []string {
 	t.Helper()
 	tag := regexp.MustCompile("json:\"([a-z_0-9]+)")
 	seen := map[string]bool{}
-	for _, pattern := range []string{"*.go", "../store/*.go", "../planstore/*.go", "../planapi/*.go"} {
+	for _, pattern := range []string{"*.go", "../store/*.go", "../planstore/*.go", "../planapi/*.go", "../coordapi/*.go"} {
 		files, err := filepath.Glob(pattern)
 		must(t, err)
 		for _, file := range files {

@@ -1,9 +1,13 @@
 // Package agentrtapi mounts the agent runtime's routes (/api/v1/agentrt):
 // each route's ability, the identity a request writes as, the strict body
 // readers, the answers and the mapping of a store's error to a status. The
-// plan's handlers are in its domain's package (planapi, 2026-11-19); the
-// plan import route stays here (a plan or a recorder log). Dispatch claim,
-// lease and result-handoff routes have been retired.
+// plan's and the coordination's handlers are in their domains' packages
+// (planapi, coordapi; 2026-11-19); the handlers still here are whoami, the
+// artifacts and the event reads (exam visibility, a collector's records),
+// external work (a collector's identity), the plan import (a plan or a
+// recorder log), the delivery read (bound to the rule store) and the rules
+// (signed rules). Dispatch claim, lease and result-handoff routes have been
+// retired.
 package agentrtapi
 
 import (
@@ -25,6 +29,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coordapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
@@ -118,18 +123,19 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 	// when the database is not configured. Every route's parameters are read
 	// as the client meant them (pathParams).
 	cfg := func(next http.Handler) http.Handler { return a.configured(pathParams(next)) }
-	// The plan's handlers are in its domain's package (2026-11-19, OWNER_LAW
-	// #28); their routes and abilities are here with every other.
-	plan := planapi.Routes{Host: host{a}}
+	// The plan's and the coordination's handlers are in their domains'
+	// packages (2026-11-19, OWNER_LAW #28); their routes and abilities are
+	// here with every other.
+	plan, coordination := planapi.Routes{Host: host{a}}, coordapi.Routes{Host: host{a}}
 	r.Route("/agentrt", func(r chi.Router) {
 		r.With(read, cfg).Get("/whoami", a.whoami)
 		r.With(upload, cfg).Put("/artifacts/{id}", a.putArtifact)
 		r.With(read, cfg).Get("/artifacts", a.searchArtifacts)
 		r.With(read, cfg).Get("/artifacts/{id}", a.getArtifact)
-		r.With(propose, cfg).Post("/messages", a.sendMessage)
-		r.With(read, cfg).Get("/messages", a.readMessages)
-		r.With(read, cfg).Get("/messages/thread", a.threadMessages)
-		r.With(propose, cfg).Post("/messages/ack", a.ackMessages)
+		r.With(propose, cfg).Post("/messages", coordination.HandleSendMessage)
+		r.With(read, cfg).Get("/messages", coordination.HandleReadMessages)
+		r.With(read, cfg).Get("/messages/thread", coordination.HandleThreadMessages)
+		r.With(propose, cfg).Post("/messages/ack", coordination.HandleAckMessages)
 		r.With(read, cfg).Get("/events", a.getEvents)
 		r.With(read, cfg).Get("/plan", plan.HandleGetPlan)
 		r.With(read, cfg).Get("/plan-view", plan.HandleGetPlanView)
@@ -143,16 +149,16 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(propose, cfg).Post("/plan/{id}/notes", plan.HandlePostPlanNote)
 		r.With(gate("signoff"), cfg).Post("/plan/{id}/signoff", plan.HandleSignOffStep)
 		r.With(propose, cfg).Post("/plan/imports", a.proposePlanImport)
-		r.With(read, cfg).Get("/controls", a.listControls)
-		r.With(gate("stop"), cfg).Post("/controls", a.setControl)
-		r.With(gate("lift"), cfg).Delete("/controls/{id}", a.liftControl)
+		r.With(read, cfg).Get("/controls", coordination.HandleListControls)
+		r.With(gate("stop"), cfg).Post("/controls", coordination.HandleSetControl)
+		r.With(gate("lift"), cfg).Delete("/controls/{id}", coordination.HandleLiftControl)
 		r.With(read, cfg).Get("/rules/{rule_id}", a.getRule)
 		r.With(read, cfg).Post("/rules/{rule_id}/check", a.checkRule)
 		r.With(propose, cfg).Post("/rules/{rule_id}/proposals", a.proposeRule)
 		r.With(propose, cfg).Post("/rules/{rule_id}/sign", a.signRule)
 		r.With(gate("stop"), cfg).Post("/rules/{rule_id}/tighten", a.tightenRule)
 		r.With(read, cfg).Get("/progress", plan.HandleProgress)
-		r.With(read, cfg).Get("/seats", a.seatStatuses)
+		r.With(read, cfg).Get("/seats", coordination.HandleSeatStatuses)
 	})
 }
 

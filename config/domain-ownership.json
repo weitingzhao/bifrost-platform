@@ -421,7 +421,36 @@
       "id": "coordination",
       "name": "Seats & communication",
       "tier": 1,
-      "source": "domains/8-2-comm-desk/charter.md"
+      "source": "domains/8-2-comm-desk/charter.md",
+      "contracts": {
+        "measured_at": "d8dc802c",
+        "request_response": [
+          {"method": "POST", "path": "/api/v1/agentrt/controls", "handler": "api/internal/agentrt/coordapi.HandleSetControl", "consumers": ["console", "mcp"]},
+          {"method": "DELETE", "path": "/api/v1/agentrt/controls/{id}", "handler": "api/internal/agentrt/coordapi.HandleLiftControl", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/agentrt/messages", "handler": "api/internal/agentrt/coordapi.HandleReadMessages", "consumers": ["mcp"]},
+          {"method": "POST", "path": "/api/v1/agentrt/messages", "handler": "api/internal/agentrt/coordapi.HandleSendMessage", "consumers": ["mcp"]},
+          {"method": "POST", "path": "/api/v1/agentrt/messages/ack", "handler": "api/internal/agentrt/coordapi.HandleAckMessages", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/agentrt/messages/thread", "handler": "api/internal/agentrt/coordapi.HandleThreadMessages", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/agentrt/seats", "handler": "api/internal/agentrt/coordapi.HandleSeatStatuses", "consumers": ["console"]}
+        ],
+        "events": [
+          {"type": "seat.liveness.changed", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.seat.liveness.changed", "consumers": ["console"]},
+          {"type": "seat.session.changed", "version": 2, "guarantee": "best-effort", "address": "ev.rocket.{env}.seat.session.changed", "consumers": ["console"]}
+        ],
+        "event_streams": [
+          {"type": "seat.mail.arrived", "version": 1, "guarantee": "ordered", "key": "seat", "retention": "30d", "address": "ev.rocket.{env}.seat.mail.arrived", "consumers": ["console", "inbox-waiters"]},
+          {"type": "seat.status.changed", "version": 2, "guarantee": "ordered", "key": "seat", "retention": "30d", "address": "ev.rocket.{env}.seat.status.changed", "consumers": ["console"]}
+        ],
+        "commands": [
+          {"kind": "mcp_tool", "name": "ack_messages", "routes": ["/api/v1/agentrt/messages/ack"]},
+          {"kind": "mcp_tool", "name": "read_message", "routes": ["/api/v1/agentrt/messages"]},
+          {"kind": "mcp_tool", "name": "report_status", "routes": ["/api/v1/agentrt/messages"]},
+          {"kind": "mcp_tool", "name": "request_stop", "routes": ["/api/v1/agentrt/controls"]},
+          {"kind": "mcp_tool", "name": "send_message", "routes": ["/api/v1/agentrt/messages"]},
+          {"kind": "mcp_tool", "name": "wait_for_messages", "routes": ["/api/v1/agentrt/messages"]}
+        ],
+        "shared_storage": []
+      }
     }
   ],
   "default": {
@@ -789,6 +818,13 @@
       "status": "assigned",
       "basis": "adopted coordination domain; foundation remains interim maintainer"
     },
+    "api/internal/agentrt/coordapi": {
+      "domains": [
+        "coordination"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the coordination's HTTP handlers under /agentrt, moved out of agentrtapi unchanged (messages.go, seats.go and the controls of controls.go): POST and GET /agentrt/messages, GET /messages/thread, POST /messages/ack, GET /seats, GET and POST /controls, DELETE /controls/{id}, with the same paths, bodies, answers and error texts. agentrtapi still mounts them behind the same abilities (stop, lift, propose, read) and lends them identity, the strict body reader, the answers and the error mapping through the Host interface the package declares; the stop-control calls (coord.RequestControl, coord.LiftControl) are as they were. A package apart from coord: in coord, six names coord exports (SendMessage, Unread, Thread, AckMessages, Message, RequestControl) would be used by no other package's production code, only by other packages' tests (codeguard exportedForOtherTests). Imports coordination (coord) and foundation (actor, eventlog, bus/readerseen) only."
+    },
     "api/internal/threadinbox": {
       "domains": [
         "coordination"
@@ -862,7 +898,7 @@
         "coordination"
       ],
       "status": "mixed",
-      "basis": "2026-11-16 Complete file/reader audit: retained shared HTTP adapters and domain service calls; identity, exam visibility, strict parsing, signed-rule and stop-control boundaries remain unchanged. Shared scope is explicit, not an unreviewed implementation backlog. 2026-11-19 (OWNER_LAW #28): the plan's handlers went to agentrt/planapi, unchanged; Mount keeps every route and its ability, and lends them identity, the strict body readers, the answers and the error mapping (host.go). Owner left the list: its one route here, the Owner's sign-off of a step, is the plan's (planstore.SignOffStep) and went with it. What stays of the plan: the plan import route, which reads a plan or a recorder log (lineage), and the plan errors in fail."
+      "basis": "2026-11-16 Complete file/reader audit: retained shared HTTP adapters and domain service calls; identity, exam visibility, strict parsing, signed-rule and stop-control boundaries remain unchanged. Shared scope is explicit, not an unreviewed implementation backlog. 2026-11-19 (OWNER_LAW #28): the plan's handlers went to agentrt/planapi and the coordination's (messages, seats, controls) to agentrt/coordapi, unchanged; Mount keeps every route and its ability, and lends them identity, the strict body readers, the answers and the error mapping (host.go). Owner left the list: its one route here, the Owner's sign-off of a step, is the plan's (planstore.SignOffStep) and went with it. What stays, by domain: plan (the plan import route, which reads a plan or a recorder log, and the plan errors in fail); lineage (external work, a collector's identity and record-level reads); verification (the rule routes, signed rules); delivery (GET /delivery, bound to the rule store, the landing waits and the release gate's cap); coordination (no handler: Mount wires its routes and its tests that go through Mount stay here, a move would make them reach across). Shared: whoami, the artifacts and event reads (exam visibility), writer and actorOf, decode, writeJSON, writeError, fail."
     },
     "api/internal/agentrt/controller": {
       "domains": [

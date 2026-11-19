@@ -10,21 +10,25 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
-// host lends the domains' routes (planapi) what every /agentrt route
+// host lends the domains' routes (planapi, coordapi) what every /agentrt route
 // shares, read from the API at each request: its database and wiring, who a
-// request is recorded as (writer), the strict body readers, the
+// request is recorded as (writer, actorOf), the strict body readers, the
 // answers and the mapping of an error to a status (fail). It implements
-// planapi.Host; nothing here is a domain's.
+// planapi.Host and coordapi.Host; nothing here is a domain's.
 type host struct{ a *API }
 
 func (h host) DB() eventlog.DB            { return h.a.DB }
 func (h host) Ask() planstore.Ask         { return h.a.Ask }
 func (h host) Back() time.Time            { return h.a.back() }
+func (h host) ClaimPoll() time.Duration   { return h.a.ClaimPoll }
 func (h host) Logf(f string, args ...any) { h.a.logf(f, args...) }
 
 func (h host) Sessions() func(context.Context) (any, error) { return h.a.Sessions }
 
-func (h host) Writer(r *http.Request) (actor.Writer, error) { return writer(r) }
+func (h host) MailWake() func(addr string) (<-chan struct{}, func()) { return h.a.MailWake }
+
+func (h host) Writer(r *http.Request) (actor.Writer, error)  { return writer(r) }
+func (h host) ActorOf(r *http.Request) (actor.Writer, error) { return actorOf(r) }
 
 func (h host) Decode(w http.ResponseWriter, r *http.Request, v any) bool { return decode(w, r, v) }
 
@@ -33,7 +37,7 @@ func (h host) DecodeCanonical(w http.ResponseWriter, r *http.Request, v any) boo
 }
 
 func (h host) Document(w http.ResponseWriter, r *http.Request, q string, args ...any) {
-	h.a.list(w, r, q, args...)
+	h.a.document(w, r, q, args...)
 }
 
 func (h host) JSON(w http.ResponseWriter, status int, v any) { writeJSON(w, status, v) }

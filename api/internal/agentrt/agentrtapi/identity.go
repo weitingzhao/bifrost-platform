@@ -6,12 +6,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
@@ -105,60 +103,8 @@ func abilitiesOf(p actuation.Principal) []string {
 	return out
 }
 
-type controlBody struct {
-	IdempotencyKey string `json:"idempotency_key"`
-	Scope          string `json:"scope"`
-	ScopeRef       string `json:"scope_ref"`
-	Kind           string `json:"kind"`
-	Reason         string `json:"reason"`
-}
-
-// setControl is POST /controls: control_set with a new id.
-func (a *API) setControl(w http.ResponseWriter, r *http.Request) {
-	var b controlBody
-	if !decode(w, r, &b) {
-		return
-	}
-	a.control(w, r, b)
-}
-
-func (a *API) control(w http.ResponseWriter, r *http.Request, b controlBody) {
-	who, err := actorOf(r)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	out, err := coord.RequestControl(r.Context(), a.DB, who, b.IdempotencyKey, b.Scope, b.ScopeRef, b.Kind, b.Reason)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, out)
-}
-
-// liftControl is DELETE /controls/{id}: control_cleared by the Owner.
-func (a *API) liftControl(w http.ResponseWriter, r *http.Request) {
-	out, err := coord.LiftControl(r.Context(), a.DB, "owner", chi.URLParam(r, "id"))
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, out)
-}
-
-// listControls is GET /controls: the controls in force, or with all=1 every
-// control, newest first, at most listLimit.
-func (a *API) listControls(w http.ResponseWriter, r *http.Request) {
-	all := r.URL.Query().Get("all") == "1"
-	a.list(w, r, `SELECT jsonb_build_object(
-	    'controls', COALESCE(jsonb_agg(to_jsonb(c) - 'n' ORDER BY c.n) FILTER (WHERE c.n <= $2), '[]'::jsonb),
-	    'truncated', COALESCE(max(c.n) > $2, false))
-	  FROM (SELECT x.*, row_number() OVER (ORDER BY x.set_at DESC, x.control_id) AS n FROM agentrt.control x
-	    WHERE $1 OR x.cleared_at IS NULL ORDER BY x.set_at DESC, x.control_id LIMIT $2 + 1) c`, all, listLimit)
-}
-
-// list answers the one JSON document a query returns.
-func (a *API) list(w http.ResponseWriter, r *http.Request, q string, args ...any) {
+// document answers the one JSON document a query returns.
+func (a *API) document(w http.ResponseWriter, r *http.Request, q string, args ...any) {
 	var doc []byte
 	err := eventlog.InTx(r.Context(), a.DB, func(tx pgx.Tx) error { return tx.QueryRow(r.Context(), q, args...).Scan(&doc) })
 	if err != nil {

@@ -1,4 +1,4 @@
-package agentrtapi
+package coordapi
 
 import (
 	"context"
@@ -16,24 +16,24 @@ type messageBody struct {
 	Body string `json:"body"`
 }
 
-// sendMessage records a message from the caller (as for proposals: the
+// HandleSendMessage records a message from the caller (as for proposals: the
 // Owner, a seat, or the thread its session header names) to another actor.
-func (a *API) sendMessage(w http.ResponseWriter, r *http.Request) {
+func (rt Routes) HandleSendMessage(w http.ResponseWriter, r *http.Request) {
 	var b messageBody
-	if !decode(w, r, &b) {
+	if !rt.Host.Decode(w, r, &b) {
 		return
 	}
-	who, err := writer(r)
+	who, err := rt.Host.Writer(r)
 	if err != nil {
-		a.fail(w, err)
+		rt.Host.Fail(w, err)
 		return
 	}
-	id, err := coord.SendMessage(r.Context(), a.DB, who, b.To, b.Kind, []byte(b.Body))
+	id, err := coord.SendMessage(r.Context(), rt.Host.DB(), who, b.To, b.Kind, []byte(b.Body))
 	if err != nil {
-		a.fail(w, err)
+		rt.Host.Fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"message_id": id, "from": who.Actor, "to": b.To})
+	rt.Host.JSON(w, http.StatusOK, map[string]any{"message_id": id, "from": who.Actor, "to": b.To})
 }
 
 // mailReconcile is how often a waiting reader re-reads its inbox without being
@@ -41,42 +41,42 @@ func (a *API) sendMessage(w http.ResponseWriter, r *http.Request) {
 // and this covers a wake that did not come.
 const mailReconcile = 5 * time.Second
 
-// readMessages is the caller's unread messages, oldest first (GET /messages):
+// HandleReadMessages is the caller's unread messages, oldest first (GET /messages):
 // wait= 0 to 25 seconds holds the request until one arrives, woken by the bus
 // (seat.mail.arrived through MailWake), limit= 1 to 100. A thread reads only
 // with the token its session is held to (coord.Unread, TD-370).
-func (a *API) readMessages(w http.ResponseWriter, r *http.Request) {
-	who, err := writer(r)
+func (rt Routes) HandleReadMessages(w http.ResponseWriter, r *http.Request) {
+	who, err := rt.Host.Writer(r)
 	if err != nil {
-		a.fail(w, err)
+		rt.Host.Fail(w, err)
 		return
 	}
 	q := r.URL.Query()
 	wait, limit := 0, 100
 	if s := q.Get("wait"); s != "" {
 		if wait, err = strconv.Atoi(s); err != nil || wait < 0 || wait > 25 {
-			writeError(w, http.StatusBadRequest, "bad_request", "wait is 0 to 25 seconds")
+			rt.Host.Error(w, http.StatusBadRequest, "bad_request", "wait is 0 to 25 seconds")
 			return
 		}
 	}
 	if s := q.Get("limit"); s != "" {
 		if limit, err = strconv.Atoi(s); err != nil || limit < 1 || limit > 100 {
-			writeError(w, http.StatusBadRequest, "bad_request", "limit is 1 to 100")
+			rt.Host.Error(w, http.StatusBadRequest, "bad_request", "limit is 1 to 100")
 			return
 		}
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(wait)*time.Second)
 	defer cancel()
-	poll := a.ClaimPoll
+	poll := rt.Host.ClaimPoll()
 	if poll <= 0 {
 		poll = mailReconcile
 	}
 	// Listen before the first read: mail landing between a read and the wait
 	// still wakes this request.
 	var woken <-chan struct{}
-	if wait > 0 && a.MailWake != nil {
+	if wait > 0 && rt.Host.MailWake() != nil {
 		var stop func()
-		woken, stop = a.MailWake(who.Actor)
+		woken, stop = rt.Host.MailWake()(who.Actor)
 		defer stop()
 	}
 	for {
@@ -84,33 +84,33 @@ func (a *API) readMessages(w http.ResponseWriter, r *http.Request) {
 		if wait > 0 {
 			qctx = ctx
 		}
-		ms, err := coord.Unread(qctx, a.DB, who, limit)
+		ms, err := coord.Unread(qctx, rt.Host.DB(), who, limit)
 		switch {
 		case err != nil && r.Context().Err() != nil:
 			return // the client went away
 		case err != nil && wait > 0 && ctx.Err() != nil:
 			ms = nil // the wait is over (review 264 B5)
 		case err != nil:
-			a.fail(w, err)
+			rt.Host.Fail(w, err)
 			return
 		}
 		if ctx.Err() != nil && wait > 0 {
 			if ms == nil {
 				ms = []coord.Message{}
 			}
-			writeJSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "messages": ms})
+			rt.Host.JSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "messages": ms})
 			return
 		}
 		if len(ms) > 0 || wait == 0 {
 			if ms == nil {
 				ms = []coord.Message{}
 			}
-			writeJSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "messages": ms})
+			rt.Host.JSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "messages": ms})
 			return
 		}
 		select {
 		case <-ctx.Done():
-			writeJSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "messages": []coord.Message{}})
+			rt.Host.JSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "messages": []coord.Message{}})
 			return
 		case <-woken:
 		case <-time.After(poll):
@@ -118,63 +118,63 @@ func (a *API) readMessages(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// threadMessages is the caller's conversation with another actor, both
+// HandleThreadMessages is the caller's conversation with another actor, both
 // directions, read or not (GET /messages/thread?with=…&limit=1..100), for the
 // Console's chief of staff page.
-func (a *API) threadMessages(w http.ResponseWriter, r *http.Request) {
-	who, err := writer(r)
+func (rt Routes) HandleThreadMessages(w http.ResponseWriter, r *http.Request) {
+	who, err := rt.Host.Writer(r)
 	if err != nil {
-		a.fail(w, err)
+		rt.Host.Fail(w, err)
 		return
 	}
 	// A thread's identity is the session header it sends, which no token
 	// binds: a conversation, read or not, is the Owner's or a seat's to read
 	// (review 269 B5).
 	if who.Actor != "owner" && !strings.HasPrefix(who.Actor, "seat:") {
-		writeError(w, http.StatusForbidden, "forbidden", "a conversation is read by the Owner or a seat")
+		rt.Host.Error(w, http.StatusForbidden, "forbidden", "a conversation is read by the Owner or a seat")
 		return
 	}
 	q := r.URL.Query()
 	limit := 50
 	if s := q.Get("limit"); s != "" {
 		if limit, err = strconv.Atoi(s); err != nil || limit < 1 || limit > 100 {
-			writeError(w, http.StatusBadRequest, "bad_request", "limit is 1 to 100")
+			rt.Host.Error(w, http.StatusBadRequest, "bad_request", "limit is 1 to 100")
 			return
 		}
 	}
-	ms, err := coord.Thread(r.Context(), a.DB, who.Actor, q.Get("with"), limit)
+	ms, err := coord.Thread(r.Context(), rt.Host.DB(), who.Actor, q.Get("with"), limit)
 	if err != nil {
-		a.fail(w, err)
+		rt.Host.Fail(w, err)
 		return
 	}
 	if ms == nil {
 		ms = []coord.Message{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "with": q.Get("with"), "messages": ms})
+	rt.Host.JSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "with": q.Get("with"), "messages": ms})
 }
 
 type ackBody struct {
 	MessageIDs []string `json:"message_ids"`
 }
 
-// ackMessages acknowledges the caller's own messages (POST /messages/ack).
-func (a *API) ackMessages(w http.ResponseWriter, r *http.Request) {
+// HandleAckMessages acknowledges the caller's own messages (POST /messages/ack).
+func (rt Routes) HandleAckMessages(w http.ResponseWriter, r *http.Request) {
 	var b ackBody
-	if !decode(w, r, &b) {
+	if !rt.Host.Decode(w, r, &b) {
 		return
 	}
-	who, err := writer(r)
+	who, err := rt.Host.Writer(r)
 	if err != nil {
-		a.fail(w, err)
+		rt.Host.Fail(w, err)
 		return
 	}
-	done, err := coord.AckMessages(r.Context(), a.DB, who, b.MessageIDs)
+	done, err := coord.AckMessages(r.Context(), rt.Host.DB(), who, b.MessageIDs)
 	if err != nil {
-		a.fail(w, err)
+		rt.Host.Fail(w, err)
 		return
 	}
 	if done == nil {
 		done = []string{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "acknowledged": done})
+	rt.Host.JSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "acknowledged": done})
 }
