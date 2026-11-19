@@ -60,8 +60,8 @@ func TestParseProblemVerdict(t *testing.T) {
 // controller sent for the rows that ask) and the verdicts (notes to the
 // board). Guards: a letter matches its verdict by the event id in its body;
 // the latest valid verdict wins and keeps who and when; an invalid one is
-// listed with its sender and counts for nothing; closed is only real+handled
-// or false+source_fixed; a drill's letter, an undeliverable notice and a row
+// listed with its sender and counts for nothing; closed is real+handled,
+// real+source_fixed or false+source_fixed; a drill's letter, an undeliverable notice and a row
 // that does not ask are not cases; the counts are computed from the cases.
 func TestProblemLoopPG(t *testing.T) {
 	t.Parallel()

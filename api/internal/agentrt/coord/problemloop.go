@@ -127,7 +127,7 @@ type InvalidVerdict struct {
 
 // ProblemCounts are computed from the cases: raised is the letters, seen the
 // acknowledged ones, judged those with a verdict, closed a real problem
-// handled or a false one fixed at the source, open the rest.
+// handled or fixed at the source, or a false one fixed at the source, open the rest.
 type ProblemCounts struct {
 	Raised               int      `json:"raised"`
 	Seen                 int      `json:"seen"`
@@ -276,7 +276,10 @@ func countProblems(cases []ProblemCase) ProblemCounts {
 		case problemloop.VerdictFalse:
 			n.False++
 		}
-		c.Closed = c.Verdict == problemloop.VerdictReal && c.Outcome == problemloop.OutcomeHandled ||
+		// A real problem is closed when handled or fixed at its source; a false
+		// one only when its source is fixed (2026-11-19: real+source_fixed was
+		// counted open, though fixing the source is the better end).
+		c.Closed = c.Verdict == problemloop.VerdictReal && (c.Outcome == problemloop.OutcomeHandled || c.Outcome == problemloop.OutcomeSourceFixed) ||
 			c.Verdict == problemloop.VerdictFalse && c.Outcome == problemloop.OutcomeSourceFixed
 		switch {
 		case c.Closed:
