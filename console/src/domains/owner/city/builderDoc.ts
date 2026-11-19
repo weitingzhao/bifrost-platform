@@ -181,44 +181,44 @@ export function placeCheck(d: Doc, x: number, y: number, size: number, ignoreId?
   return near ? 'tight' : 'ok'
 }
 
-export type Crawlerway = { cells: Set<string>; ends: { x: number; y: number }[]; served: Set<string> }
+export type Crawlerway = {
+  cells: Set<string>; ends: { x: number; y: number }[]; served: Set<string>
+  /** Each leg on its own, keyed '<from part id>><to part id>', so the leg a real run moves along can be lit. */
+  legs: Map<string, Set<string>>
+}
 
 const STEPS = [[0, -1], [1, 0], [0, 1], [-1, 0]] as const
 
 /**
- * The crawlerway: from the assembly building's great door to the front of
- * every launch pad (the Owner, 2026-11-17: the main axis, merge to CI to
- * release). It follows from where he put them, so it is worked out here and
- * never saved: cheapest way round the buildings, few turns, crossing his
- * roads rather than running along them, and pads share the trunk.
+ * The crawlerway (the Owner, 2026-11-18): the rocket's line runs from the
+ * horizontal hangar (CI) to the vertical assembly building (STG) and on to
+ * the pad (PROD); the satellites' line runs from their hangar to the same
+ * pad. It follows from where the buildings stand, so it is worked out here
+ * and never saved: cheapest way round the buildings, few turns, crossing roads
+ * rather than running along them, legs sharing what is already laid.
  */
 export function crawlerway(d: Doc): Crawlerway {
-  const out: Crawlerway = { cells: new Set(), ends: [], served: new Set() }
-  const hall = d.parts.find(p => p.kind === 'assembly')
-  if (!hall) return out
+  const out: Crawlerway = { cells: new Set(), ends: [], served: new Set(), legs: new Map() }
   const front = (p: Placed) => ({ x: p.x + Math.floor(p.size / 2) - 1, y: p.y + p.size })
   const open = (x: number, y: number) => inLand(d, x, y) && !partAt(d, x, y)
-  const start = front(hall)
-  if (!open(start.x, start.y)) return out
-  const pads = d.parts.filter(p => p.kind === 'pad').sort((a, b) => Math.abs(a.x - hall.x) + Math.abs(a.y - hall.y) - (Math.abs(b.x - hall.x) + Math.abs(b.y - hall.y)) || a.id.localeCompare(b.id))
   const W = d.width, id = (x: number, y: number, dir: number) => (y * W + x) * 4 + dir
-  for (const pad of pads) {
-    const goal = front(pad)
-    if (!open(goal.x, goal.y)) continue
-    const best = new Map<number, number>(), from = new Map<number, number>(), queue: { c: number; n: number }[] = []
-    const push = (n: number, c: number, prev?: number) => {
+  const leg = (from: Placed, to: Placed): boolean => {
+    const start = front(from), goal = front(to)
+    if (!open(start.x, start.y) || !open(goal.x, goal.y)) return false
+    const best = new Map<number, number>(), prev = new Map<number, number>(), queue: { c: number; n: number }[] = []
+    const push = (n: number, c: number, p?: number) => {
       if (c >= (best.get(n) ?? Infinity)) return
-      best.set(n, c); if (prev !== undefined) from.set(n, prev)
+      best.set(n, c); if (p !== undefined) prev.set(n, p)
       let i = queue.length; queue.push({ c, n })
       while (i > 0) { const up = (i - 1) >> 1; if (queue[up].c <= c) break; [queue[i], queue[up]] = [queue[up], queue[i]]; i = up }
     }
     const pop = () => {
-      const top = queue[0], last = queue.pop()!
+      const t = queue[0], last = queue.pop()!
       if (queue.length) {
         queue[0] = last
         for (let i = 0; ;) { let m = i; for (const k of [2 * i + 1, 2 * i + 2]) if (k < queue.length && queue[k].c < queue[m].c) m = k; if (m === i) break; [queue[i], queue[m]] = [queue[m], queue[i]]; i = m }
       }
-      return top
+      return t
     }
     push(id(start.x, start.y, 2), 0)
     let end = -1
@@ -234,10 +234,22 @@ export function crawlerway(d: Doc): Crawlerway {
         push(id(nx, ny, next), c + step + (next === dir ? 0 : 0.4), n)
       })
     }
-    if (end < 0) continue
-    for (let n: number | undefined = end; n !== undefined; n = from.get(n)) { const cell = (n - n % 4) / 4, x = cell % W; out.cells.add(key(x, (cell - x) / W)) }
-    out.ends.push(goal); out.served.add(pad.id)
+    if (end < 0) return false
+    const cells = new Set<string>()
+    for (let n: number | undefined = end; n !== undefined; n = prev.get(n)) { const cell = (n - n % 4) / 4, x = cell % W; cells.add(key(x, (cell - x) / W)) }
+    for (const c of cells) out.cells.add(c)
+    out.legs.set(`${from.id}>${to.id}`, cells)
+    for (const e of [start, goal]) if (!out.ends.some(o => o.x === e.x && o.y === e.y)) out.ends.push(e)
+    out.served.add(from.id); out.served.add(to.id)
+    return true
   }
-  if (out.served.size) { out.ends.push(start); out.served.add(hall.id) }
+  const near = (a: Placed) => (b: Placed, c: Placed) => Math.abs(b.x - a.x) + Math.abs(b.y - a.y) - (Math.abs(c.x - a.x) + Math.abs(c.y - a.y)) || b.id.localeCompare(c.id)
+  const vab = d.parts.find(p => p.kind === 'assembly')
+  const hif = d.parts.find(p => p.kind === 'hif')
+  const sat = d.parts.find(p => p.kind === 'satellites')
+  if (hif && vab) leg(hif, vab)
+  const pads = d.parts.filter(p => p.kind === 'pad')
+  if (vab) for (const pad of [...pads].sort(near(vab))) leg(vab, pad)
+  if (sat) for (const pad of [...pads].sort(near(sat))) leg(sat, pad)
   return out
 }

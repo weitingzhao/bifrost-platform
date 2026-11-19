@@ -5,7 +5,7 @@
  * meaning. The thresholds live here, versioned; no building is tiered by hand.
  */
 
-export const DICTIONARY_VERSION = 1
+export const DICTIONARY_VERSION = 2
 
 export type Tier = { name: string; enters: string }
 export type Entry = {
@@ -30,31 +30,46 @@ export const DICTIONARY: readonly Entry[] = [
     source: 'the saved layout', person: 'the Owner paves and erases roads',
   },
   {
-    id: 'crawlerway', metaphor: 'The crawlerway', means: 'the release path from CI to the launch pads',
-    tiers: [{ name: 'laid', enters: 'an assembly building and a pad both stand on the land' }],
-    source: 'worked out from where the buildings stand; never saved', person: '',
+    id: 'crawlerway', metaphor: 'The crawlerway', means: 'the release path: horizontal hangar to vertical assembly to pad, and satellite hangar to pad',
+    tiers: [{ name: 'still', enters: 'no run moves along a leg' }, { name: 'lit', enters: 'a run of that leg\'s step has not finished: rocket STG for hangar to assembly, rocket PROD for assembly to pad, a tenant\'s PROD for satellites to pad' }],
+    source: 'its legs from where the buildings stand (never saved); lit from GET /api/v1/delivery/context runs_in_flight', person: '',
   },
   {
-    id: 'pad', metaphor: 'A launch pad', means: 'a release lane: one delivery pipeline',
-    tiers: [
-      { name: 'launching', enters: 'a delivery run of this pipeline has not finished' },
-      { name: 'window held', enters: 'the release window is held for this lane\'s repository and no run of it is going' },
-      { name: 'quiet', enters: 'neither' },
-      { name: 'unknown', enters: 'the release context of its repository could not be read' },
-    ],
-    source: 'GET /api/v1/delivery/context?repo=<repository>: runs_in_flight, window, the last release of its environment',
-    person: 'none for the platform\'s rockets; Trade\'s production launch stays the Owner\'s, through the release page',
-  },
-  {
-    id: 'ci-queue', metaphor: 'Crates at the assembly building\'s door', means: 'CI and landing runs not finished',
+    id: 'hif', metaphor: 'Crates at the horizontal hangar', means: 'the rocket\'s CI: the platform\'s CI and landing runs not finished',
     tiers: [
       { name: 'clear', enters: 'no run in flight' },
       { name: 'busy', enters: '1 to 3 runs in flight' },
       { name: 'jammed', enters: '4 runs or more in flight' },
-      { name: 'unknown', enters: 'a release context could not be read' },
+      { name: 'unknown', enters: 'the platform\'s release context could not be read' },
     ],
-    source: 'GET /api/v1/delivery/context: runs_in_flight of bifrost-ci-* and bifrost-land, platform and Trade; whether a run waits or runs is not read',
+    source: 'GET /api/v1/delivery/context?repo=bifrost-platform runs_in_flight: bifrost-ci-platform, bifrost-ci-infra, bifrost-land; whether a run waits or runs is not read',
     person: '',
+  },
+  {
+    id: 'vab', metaphor: 'A rocket lit inside the vertical assembly building', means: 'the rocket\'s STG: a platform delivery to STG not finished',
+    tiers: [{ name: 'stacking', enters: 'a bifrost-deliver-platform run is in flight' }, { name: 'quiet', enters: 'none is' }, { name: 'unknown', enters: 'the platform\'s release context could not be read' }],
+    source: 'GET /api/v1/delivery/context?repo=bifrost-platform: runs_in_flight and what STG runs', person: '',
+  },
+  {
+    id: 'satellite-hangar', metaphor: 'The satellite hangar: crates at the factory, a lit test bay', means: 'the tenants\' CI (crates) and STG or image builds (the bay)',
+    tiers: [{ name: 'testing', enters: 'a tenant STG or build run is in flight' }, { name: 'in CI', enters: 'only tenant CI runs are' }, { name: 'quiet', enters: 'none' }, { name: 'unknown', enters: 'a tenant\'s release context could not be read' }],
+    source: 'GET /api/v1/delivery/context for each tenant repository: runs_in_flight', person: '',
+  },
+  {
+    id: 'pad', metaphor: 'The launch pad and its rocket', means: 'the platform, the one vehicle: its PROD release flies a new rocket; a tenant\'s PROD release rides the rocket in service',
+    tiers: [
+      { name: 'launching', enters: 'a platform or tenant PROD run is in flight (the payload band shows which tenant)' },
+      { name: 'window held', enters: 'the release window is held for the platform and nothing launches' },
+      { name: 'quiet', enters: 'neither' },
+      { name: 'unknown', enters: 'the platform\'s release context could not be read' },
+    ],
+    source: 'GET /api/v1/delivery/context: runs_in_flight, window, and the rocket in service (what PROD runs)',
+    person: 'none for the platform\'s rockets; Trade\'s production launch stays the Owner\'s, through the release page',
+  },
+  {
+    id: 'orbit', metaphor: 'A satellite in orbit', means: 'a tenant on PROD: Trade, research, the plugins; one each',
+    tiers: [{ name: 'in orbit', enters: 'its PROD version is read' }, { name: 'launching', enters: 'its PROD or image run is in flight' }, { name: 'unknown', enters: 'its PROD version is not read' }],
+    source: 'GET /api/v1/delivery/context?repo=<tenant>: what PROD runs and runs_in_flight; the tenants from GET /api/v1/delivery/pipelines', person: '',
   },
   {
     id: 'waiting', metaphor: 'Workers holding signs at mission control', means: 'requests and questions waiting for the Owner',

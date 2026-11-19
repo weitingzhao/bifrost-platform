@@ -16,6 +16,9 @@ const items: [string, JSX.Element, number, number][] = [
   ['court', <Img s={L.court()} />, L.court().width, L.court().height],
   ['power station', <Img s={L.powerStation()} />, L.powerStation().width, L.powerStation().height],
   ['archive', <Img s={L.archive()} />, L.archive().width, L.archive().height],
+  ['horizontal hangar', <Img s={L.horizontalHangar()} />, L.horizontalHangar().width, L.horizontalHangar().height],
+  ['satellite hangar', <Img s={L.satelliteHangar()} />, L.satelliteHangar().width, L.satelliteHangar().height],
+  ['satellite', <Img s={L.orbitSatellite('#ff8a5c')} />, L.orbitSatellite().width, L.orbitSatellite().height],
   ['water tower', <Img s={L.waterTower()} />, L.waterTower().width, L.waterTower().height],
 ]
 createRoot(document.getElementById('root')!).render(<div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, padding: 16, alignItems: 'flex-end' }}>

@@ -735,3 +735,110 @@ export function waterTower(): Sprite {
   g.add(`<path d="M${cx - 19},${base + 3} A19,8 0 0 0 ${cx + 19},${base + 3}" fill="none" stroke="${INK}" stroke-width="1"/>`)
   return g.done()
 }
+
+/* ------------------------------------------------------------------ */
+/* The horizontal hangar: the rocket's CI, a stage lying on its cradle. */
+/* ------------------------------------------------------------------ */
+
+export function horizontalHangar(): Sprite {
+  const n = 4
+  const g = new Draw(n, n, 120)
+  lot(g, n)
+  // The apron in front of the great door and the rails into it.
+  top(g, 0.7, 3.35, 3.3, 3.95, 0, '#ddd7c6', 0.9, '#a39c8b')
+  for (const k of [1.3, 2.7]) top(g, k, 3.35, k + 0.06, 3.95, 0, '#8c8574', 0)
+  const x0 = 0.3, x1 = 3.7, y0 = 0.55, y1 = 3.35, h = 58
+  g.shadow(x0, y0, x1 - x0, y1 - y0, 0.4)
+  g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#f3f6f9', '#e2e8ef', '#cdd5df'))
+  const W = (x1 - x0) * U, D = (y1 - y0) * U
+  // The front: the great door rolled up over a stage lying on its cradle.
+  const dl = 14, dr = W - 14, dh = 44
+  let f = `<rect x="${dl - 2}" y="${-dh - 2}" width="${dr - dl + 4}" height="${dh + 2}" fill="#9aa5b6" stroke="${INK}" stroke-width="1.3"/>`
+  f += `<rect x="${dl}" y="${-dh + 8}" width="${dr - dl}" height="${dh - 8}" fill="#3a4156"/>`
+  f += `<rect x="${dl}" y="${-dh}" width="${dr - dl}" height="8" fill="#d3dae4" stroke="#7f8a9c" stroke-width="0.8"/>`
+  for (let u = dl + 6; u < dr; u += 12) f += `<line x1="${n1(u)}" y1="${-dh}" x2="${n1(u)}" y2="${-dh + 8}" stroke="#7f8a9c" stroke-width="0.6"/>`
+  // The stage: a white cylinder on its side, a black interstage, engines at one end.
+  const sy = -16, sr = 8
+  f += `<rect x="${dl + 10}" y="${sy - sr}" width="${dr - dl - 26}" height="${sr * 2}" rx="2" fill="#f4f7fb" stroke="${INK}" stroke-width="1.1"/>`
+  f += `<rect x="${dl + 10}" y="${sy - sr}" width="10" height="${sr * 2}" fill="#3d424c"/>`
+  f += `<rect x="${n1(dr - 18)}" y="${sy - sr + 2}" width="6" height="${sr * 2 - 4}" fill="#59606b" stroke="${INK}" stroke-width="0.8"/>`
+  for (const u of [0.3, 0.55, 0.8]) f += `<line x1="${n1(dl + 10 + (dr - dl - 26) * u)}" y1="${sy - sr}" x2="${n1(dl + 10 + (dr - dl - 26) * u)}" y2="${sy + sr}" stroke="#a8b2c0" stroke-width="0.7"/>`
+  for (const u of [0.25, 0.7]) f += `<path d="M${n1(dl + 10 + (dr - dl - 26) * u)},${sy + sr} l-4,${8 - sr + 6} h12 l-4,${sr - 8 - 6} Z" fill="#f2b234" stroke="${INK}" stroke-width="0.8"/>`
+  f += `<rect x="${dl}" y="-3" width="${dr - dl}" height="3" fill="#f2b234"/>`
+  f += `<text x="${n1(W / 2)}" y="${-h + 9}" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="7" font-weight="700" fill="${INK}" letter-spacing="2">INTEGRATION</text>`
+  g.face('left', x0, y1, 0, f)
+  // The side: a band of clerestory windows, a man door, louvres.
+  let r = ''
+  for (let i = 0; i < 6; i++) r += `<rect x="${n1(6 + i * (D - 12) / 6)}" y="-50" width="${n1((D - 12) / 6 - 3)}" height="8" fill="#cfe3f7" stroke="${INK}" stroke-width="0.8"/>`
+  r += `<rect x="12" y="-16" width="8" height="16" fill="#7a8aa8" stroke="${INK}" stroke-width="0.9"/>`
+  for (let v = -30; v < -20; v += 3) r += `<line x1="${n1(D - 30)}" y1="${v}" x2="${n1(D - 12)}" y2="${v}" stroke="#7f8a9c" stroke-width="0.9"/>`
+  g.face('right', x1, y1, 0, r)
+  // The barrel roof, seen as ribs across, a crane rail along, vents.
+  top(g, x0 + 0.08, y0 + 0.08, x1 - 0.08, y1 - 0.08, h, '#e6ebf1', 0.9, '#9aa6b6')
+  for (let k = x0 + 0.4; k < x1 - 0.2; k += 0.42) g.line([k, y0 + 0.1, h], [k, y1 - 0.1, h], '#c3ccd8', 1)
+  for (let i = 0; i < 3; i++) g.unit(0.8 + i * 1.0, 1.3, h, 0.4)
+  g.box(2.9, 0.75, 0.45, 0.45, 12, faces('#dfe5ee', '#c5ced9', '#b3bdc9'), h, 1)
+  mast(g, 3.12, 0.97, h + 12, h + 44)
+  bush(g, 0.3, 3.7, 6)
+  floodlight(g, 3.6, 3.75, 0, 34)
+  return g.done()
+}
+
+/* ------------------------------------------------------------------ */
+/* The satellite hangar: the tenants' CI and STG, a clean room.         */
+/* ------------------------------------------------------------------ */
+
+export function satelliteHangar(): Sprite {
+  const n = 4
+  const g = new Draw(n, n, 150)
+  lot(g, n, '#e4e8ef')
+  top(g, 1.0, 3.35, 3.0, 3.95, 0, '#ebe7dc', 0.9, '#b5ae9e')
+  const x0 = 0.4, x1 = 3.6, y0 = 0.5, y1 = 3.3
+  // A low wing for the factory (CI), a tall high bay for testing (STG).
+  g.shadow(x0, y0, x1 - x0, y1 - y0, 0.45)
+  g.box(x0, y0, 1.6, y1 - y0, 40, faces('#f7f9fc', '#e8edf4', '#d3dbe6'))
+  g.box(2.0, y0, x1 - 2.0, y1 - y0, 92, faces('#ffffff', '#eef2f7', '#d9e0ea'))
+  // Factory wing front: a roller door and a row of windows.
+  let f = `<rect x="10" y="-24" width="30" height="24" fill="#b9c4d3" stroke="${INK}" stroke-width="1"/>`
+  for (let v = -20; v < 0; v += 4) f += `<line x1="10" y1="${v}" x2="40" y2="${v}" stroke="#8a96a8" stroke-width="0.7"/>`
+  for (let i = 0; i < 3; i++) f += `<rect x="${44 + i * 4.5}" y="-32" width="3.4" height="6" fill="#cfe3f7" stroke="${INK}" stroke-width="0.5"/>`
+  f += `<text x="6" y="-31" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="5.6" font-weight="700" fill="${INK}" letter-spacing="1">FACTORY</text>`
+  g.face('left', x0, y1, 0, f)
+  // High bay front: the tall clean-room door, a satellite on its stand behind the glass.
+  const W = (x1 - 2.0) * U
+  let b = `<rect x="7" y="-80" width="${n1(W - 14)}" height="80" fill="#dfeaf6" stroke="${INK}" stroke-width="1.2"/>`
+  b += `<rect x="9" y="-78" width="${n1(W - 18)}" height="76" fill="#eaf3fc"/>`
+  const cx = W / 2
+  b += `<rect x="${n1(cx - 3)}" y="-22" width="6" height="20" fill="#9aa3b0" stroke="${INK}" stroke-width="0.8"/>`
+  b += `<rect x="${n1(cx - 9)}" y="-44" width="18" height="22" rx="1.5" fill="#f2d27a" stroke="${INK}" stroke-width="1"/>`
+  b += `<path d="M${n1(cx - 9)},-38 h18 M${n1(cx - 9)},-30 h18" stroke="#c99a3a" stroke-width="0.8"/>`
+  for (const s of [-1, 1]) b += `<rect x="${n1(cx + s * 9 + (s < 0 ? -16 : 0))}" y="-38" width="16" height="9" fill="#4f6fb8" stroke="${INK}" stroke-width="0.8"/><path d="M${n1(cx + s * 9 + (s < 0 ? -8 : 8))},-38 v9" stroke="#cfe0ff" stroke-width="0.6"/>`
+  b += `<circle cx="${n1(cx)}" cy="-50" r="5" fill="#f6f8fb" stroke="${INK}" stroke-width="0.9"/><line x1="${n1(cx)}" y1="-45" x2="${n1(cx)}" y2="-44" stroke="${INK}"/>`
+  for (let u = 9 + (W - 18) / 4; u < W - 9; u += (W - 18) / 4) b += `<line x1="${n1(u)}" y1="-78" x2="${n1(u)}" y2="-2" stroke="#b9cde3" stroke-width="0.8"/>`
+  b += `<rect x="7" y="-88" width="${n1(W - 14)}" height="7" fill="#fbfaf6" stroke="${INK}" stroke-width="0.9"/><text x="${n1(W / 2)}" y="-82.6" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="5.6" font-weight="700" fill="${INK}" letter-spacing="1.4">SATELLITES</text>`
+  g.face('left', 2.0, y1, 0, b)
+  let r = ''
+  for (let row = 0; row < 3; row++) for (let i = 0; i < 4; i++) r += `<rect x="${n1(8 + i * 22)}" y="${-80 + row * 22}" width="12" height="10" fill="#d4e6f8" stroke="${INK}" stroke-width="0.8"/>`
+  g.face('right', x1, y1, 0, r)
+  // Roofs: units on the factory, a filter plant and a small dish on the high bay.
+  top(g, x0 + 0.08, y0 + 0.08, 1.92, y1 - 0.08, 40, '#eef2f7', 0.9, '#a9b3c1')
+  g.unit(0.7, 0.9, 40, 0.42); g.unit(0.7, 1.8, 40, 0.42)
+  top(g, 2.08, y0 + 0.08, x1 - 0.08, y1 - 0.08, 92, '#f4f7fb', 0.9, '#a9b3c1')
+  g.box(2.3, 0.8, 0.9, 0.6, 12, faces('#e6ebf1', '#cdd5df', '#b9c3cf'), 92, 1.1)
+  for (let k = 0; k < 4; k++) g.line([2.4 + k * 0.2, 1.4, 92], [2.4 + k * 0.2, 1.4, 104], '#9aa6b6', 0.8)
+  dish(g, 3.2, 2.4, 92, 10)
+  bush(g, 3.7, 3.6, 6)
+  tree(g, 0.3, 3.85, 0.8, 1)
+  return g.done()
+}
+
+/** A satellite in orbit, its panels in its tenant's colour. */
+export function orbitSatellite(color = '#f2d27a'): Sprite {
+  const g = new Draw(1, 1, 40, 4)
+  const [x, y] = g.p(0.5, 0.5, 18)
+  g.add(`<rect x="${x - 26}" y="${y - 5}" width="18" height="10" fill="#4f6fb8" stroke="${INK}" stroke-width="1"/><rect x="${x + 8}" y="${y - 5}" width="18" height="10" fill="#4f6fb8" stroke="${INK}" stroke-width="1"/>`)
+  g.add(`<path d="M${x - 17},${y - 5} v10 M${x + 17},${y - 5} v10" stroke="#cfe0ff" stroke-width="0.7"/><path d="M${x - 8},${y} h-0 M${x - 8},${y} H${x - 26} M${x + 8},${y} H${x + 26}" stroke="#cfe0ff" stroke-width="0.4"/>`)
+  g.add(`<rect x="${x - 8}" y="${y - 8}" width="16" height="16" rx="2" fill="${color}" stroke="${INK}" stroke-width="1.2"/><path d="M${x - 8},${y - 2} h16" stroke="${INK}" stroke-width="0.6" opacity="0.4"/>`)
+  g.add(`<line x1="${x}" y1="${y - 8}" x2="${x}" y2="${y - 15}" stroke="${INK}" stroke-width="1"/><circle cx="${x}" cy="${y - 16}" r="2.4" fill="#f6f8fb" stroke="${INK}" stroke-width="0.8"/>`)
+  return g.done()
+}

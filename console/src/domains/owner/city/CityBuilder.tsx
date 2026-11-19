@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import { emptyDoc, expand, fromTiled, LAND_MAX, toTiled, type Doc, type Placed } from './builderDoc'
 import { accepts, CATALOG, kindOf, showcaseLayers, spriteOf, spriteUrl, type CatalogKind, type SystemItem } from './catalog'
 import type { Armed, BuilderScene, Tool } from './builderScene'
-import type { Reading } from './cityReadings'
+import type { Reading, Sky } from './cityReadings'
 import { DICTIONARY, DICTIONARY_VERSION } from './worldDictionary'
 import { LAYOUT_FILE, layoutFileText, parseLayoutFile, type LayoutStore } from './layoutStore'
 
@@ -73,10 +73,12 @@ export type Glance = { text: string; tone: Reading['tone']; href?: string }
 
 const TONE_BG: Record<Reading['tone'], string> = { calm: '#dcf2e2', busy: '#ffe6a8', alert: '#ffc9c2', unknown: '#e6e4ee' }
 
-export default function CityBuilder({ items, store, startEditing = false, canBuild = true, initial, onOpen, readingOf, readingsKey = '', glance = [] }: {
+export default function CityBuilder({ items, store, startEditing = false, canBuild = true, initial, onOpen, readingOf, sky, readingsKey = '', glance = [] }: {
   items: readonly SystemItem[]; store: LayoutStore; startEditing?: boolean
   /** The real state of what a building stands for, and where it was read. */
   readingOf?: (binds: string) => CityReading | undefined
+  /** The satellites in orbit and the legs a real run moves along. */
+  sky?: Sky
   /** Changes whenever the readings do. */
   readingsKey?: string
   /** One line each for the questions a look should answer. */
@@ -100,6 +102,7 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
   useEffect(() => { scene.current?.refresh() }, [byBinds])
   const openRef = useRef(onOpen); openRef.current = onOpen
   const readRef = useRef(readingOf); readRef.current = readingOf
+  const skyRef = useRef(sky); skyRef.current = sky
   const [info, setInfo] = useState<Placed | null>(null)
   useEffect(() => { scene.current?.refreshReadings() }, [readingsKey])
   const side = useRef<HTMLDivElement>(null), picker = useRef<HTMLInputElement>(null)
@@ -127,6 +130,7 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
         onSelect: (id: string | null) => { setSelected(id); if (id) setTab('selected') },
         onPlaced: () => { setArmedS(null); setPendingBind(null); setToolS('select') },
         readingOf: (b: string) => readRef.current?.(b),
+        skyOf: () => skyRef.current,
         onOpen: (p: Placed) => setInfo(p),
         onReady: () => { scene.current = g.scene.getScene('builder') as BuilderScene; touch() },
       })
@@ -209,7 +213,7 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
   }
   const toggleEdit = (on: boolean) => { setEditing(on); scene.current?.setEditing(on); setArmedS(null); setPendingBind(null); setToolS('select'); scene.current?.setTool('select'); if (!on) setSelected(null) }
 
-  const groups = (['Domains', 'Release lanes', 'Suppliers', 'Law'] as const).map(g => [g, unplaced.filter(i => i.group === g)] as const).filter(([, l]) => l.length)
+  const groups = (['Stages', 'Domains', 'Release lanes', 'Suppliers', 'Law'] as const).map(g => [g, unplaced.filter(i => i.group === g)] as const).filter(([, l]) => l.length)
   const kindAccepted = (k: CatalogKind) => !pending || accepts(k, pending)
 
   return (

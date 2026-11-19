@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { plannedCity } from '../defaultLayout'
-import { ciReading, padReading, waitingReading, type ReleaseContext } from '../cityReadings'
+import { padReading, rocketCiReading, rocketStgReading, satellitesReading, skyReading, waitingReading, type ReleaseContext } from '../cityReadings'
 import { DICTIONARY, steady } from '../worldDictionary'
 import { addRoad, canPlace, crawlerway, depthOrder, emptyDoc, expand, fromTiled, key, placeCheck, roadMask, roadShape, strokeCells, toTiled, type Doc, type Placed } from '../builderDoc'
 import { accepts, CATALOG, displayName, kindOf, laneName, layersOf, systemItems } from '../catalog'
@@ -114,9 +114,12 @@ describe('the saved layout', () => {
 describe('the catalogue and the tray', () => {
   const items = systemItems([{ id: 'verification', name: 'Verification', facility: { kind: 'assembly-building', page: '#ci' } }, { id: 'compute', facility: { kind: 'server-hall', page: '#x' } }], [{ pipeline: 'bifrost-deliver-platform-prod', repos: ['bifrost-platform'] }, { pipeline: 'bifrost-deliver-stg', repos: ['bifrost-trade-api'] }], ['market-data'])
   const find = (b: string) => items.find(i => i.binds === b)!
-  it('a thing goes to the building that is it, and a lane only to a pad', () => {
+  // The Owner, 2026-11-18: one rocket, so one pad, for the platform's PROD lane; the tenants' lanes are satellites, not pads.
+  it('a thing goes to the building that is it, and only the rocket\'s PROD lane to a pad', () => {
     expect(find('domain:verification').natural).toBe('assembly'); expect(find('domain:compute').natural).toBeUndefined()
-    expect(CATALOG.filter(k => accepts(k, find('lane:bifrost-deliver-stg'))).map(k => k.kind)).toEqual(['pad'])
+    expect(CATALOG.filter(k => accepts(k, find('lane:bifrost-deliver-platform-prod'))).map(k => k.kind)).toEqual(['pad'])
+    expect(items.find(i => i.binds === 'lane:bifrost-deliver-stg')).toBeUndefined()
+    expect(find('stage:rocket-ci').natural).toBe('hif'); expect(find('stage:satellites').natural).toBe('satellites')
     expect(CATALOG.filter(k => accepts(k, find('plugin:market-data')))).toEqual([])
     expect(CATALOG.filter(k => accepts(k, find('law'))).map(k => k.kind)).toEqual(['court'])
   })
@@ -200,31 +203,49 @@ describe('the planned city', () => {
     const d = plannedCity()
     for (const p of d.parts) expect(placeCheck(d, p.x, p.y, p.size, p.id)).toBe('ok')
     const way = crawlerway(d)
-    for (const p of d.parts.filter(q => q.kind === 'pad' || q.kind === 'assembly')) expect(way.served.has(p.id)).toBe(true)
+    for (const p of d.parts.filter(q => ['pad', 'assembly', 'hif', 'satellites'].includes(q.kind))) expect(way.served.has(p.id)).toBe(true)
+    expect(way.legs.size).toBe(3)
     expect(fromTiled(toTiled(d))!.parts).toHaveLength(d.parts.length)
   })
 })
 
 // Origin: 2026-11-18, the Owner via the coordinator (charter 10 step 3): a look at the city answers what launches, where work queues and what waits for him; a read that fails is unknown, never green.
-describe('the three real states', () => {
-  const lane = { binds: 'lane:bifrost-deliver-platform-prod', name: 'Platform PROD', group: 'Release lanes' as const, type: 'lane' as const }
-  const ctx = (runs: unknown[] | null, held = false): ReleaseContext => ({ repo: 'bifrost-platform', facts: {
-    runs_in_flight: { value: runs as never }, window: { value: { held, who: 'w', what: 'bifrost-platform,bifrost-ui' } },
-    prod: { value: { commit: 'abcdef1234', run: 'r', completed_at: '2026-11-18T10:00:00Z' } },
+// The same day the Owner set the two lines: the rocket is the platform (hangar CI, assembly STG, pad PROD, one vehicle flown again and again), the satellites are the tenants, carried by the rocket in service.
+describe('the real states', () => {
+  const lanes = [
+    { pipeline: 'bifrost-ci-platform', repos: ['bifrost-platform', 'bifrost-trade-infra'] },
+    { pipeline: 'bifrost-land', repos: [] },
+    { pipeline: 'bifrost-deliver-platform', repos: ['bifrost-platform'] },
+    { pipeline: 'bifrost-deliver-platform-prod', repos: ['bifrost-platform'] },
+    { pipeline: 'bifrost-ci-python', repos: ['bifrost-trade-core'] },
+    { pipeline: 'bifrost-deliver-stg', repos: ['bifrost-trade-api'] },
+    { pipeline: 'bifrost-deliver-prod', repos: ['bifrost-trade-api'] },
+  ]
+  const rel = { commit: 'abcdef1234', run: 'r', completed_at: '2026-11-18T10:00:00Z' }
+  const ctx = (repo: string, runs: unknown[] | null, held = false): ReleaseContext => ({ repo, facts: {
+    runs_in_flight: { value: runs as never }, window: { value: { held, who: 'w', what: 'bifrost-platform,bifrost-ui' } }, prod: { value: rel }, stg: { value: rel },
   } })
+  const world = (platform: unknown[] | null, trade: unknown[] = []) => new Map<string, ReleaseContext | null>([['bifrost-platform', platform ? ctx('bifrost-platform', platform) : null], ['bifrost-trade-api', ctx('bifrost-trade-api', trade)]])
   const now = Date.parse('2026-11-18T12:00:00Z')
-  it('a pad launches only while its own delivery run is in flight', () => {
-    const m = (c: ReleaseContext | null) => new Map(c ? [['bifrost-platform', c]] : [])
-    expect(padReading(lane, m(ctx([{ name: 'x', pipeline: 'bifrost-deliver-platform-prod', delivery: true }])), ['bifrost-platform'], now).word).toBe('launching')
-    expect(padReading(lane, m(ctx([{ name: 'y', pipeline: 'bifrost-deliver-platform', delivery: true }], true)), ['bifrost-platform'], now).word).toBe('window held')
-    expect(padReading(lane, m(ctx([])), ['bifrost-platform'], now)).toMatchObject({ word: 'quiet', tone: 'calm' })
-    expect(padReading(lane, m(null), ['bifrost-platform'], now).tone).toBe('unknown')
+  it('the pad launches a new rocket for the platform, or carries the tenant whose PROD run is going', () => {
+    expect(padReading(world([{ name: 'x', pipeline: 'bifrost-deliver-platform-prod', delivery: true }]), lanes, now)).toMatchObject({ launching: true, word: 'launching the new rocket' })
+    const carried = padReading(world([], [{ name: 'y', pipeline: 'bifrost-deliver-prod', delivery: true }]), lanes, now)
+    expect(carried).toMatchObject({ launching: true, payload: { name: 'Trade' } })
+    expect(padReading(world([]), lanes, now)).toMatchObject({ word: 'quiet', tone: 'calm' })
+    expect(padReading(world(null), lanes, now).tone).toBe('unknown')
   })
-  it('CI crates count the CI and landing runs, and an unread context is unknown', () => {
-    const c = ctx([{ name: 'a', pipeline: 'bifrost-ci-platform' }, { name: 'b', pipeline: 'bifrost-land' }, { name: 'c', pipeline: 'bifrost-deliver-platform', delivery: true }])
-    expect(ciReading(new Map([['p', c]]))).toMatchObject({ word: 'busy', count: 2 })
-    expect(ciReading(new Map([['p', c], ['t', null]])).tone).toBe('unknown')
-    expect(ciReading(new Map([['p', ctx([])]])).word).toBe('clear')
+  it('the rocket\'s CI waits at the hangar, its STG lights the assembly building, and the tenants\' CI waits at theirs', () => {
+    const w = world([{ name: 'a', pipeline: 'bifrost-ci-platform' }, { name: 'b', pipeline: 'bifrost-land' }, { name: 'c', pipeline: 'bifrost-deliver-platform', delivery: true }], [{ name: 'd', pipeline: 'bifrost-ci-python' }])
+    expect(rocketCiReading(w, lanes)).toMatchObject({ count: 2, tone: 'busy' })
+    expect(rocketStgReading(w, lanes, now)).toMatchObject({ word: 'stacking', active: true })
+    expect(satellitesReading(w, lanes)).toMatchObject({ count: 1 })
+    expect(rocketCiReading(world(null), lanes).tone).toBe('unknown')
+  })
+  it('each tenant is one satellite in orbit at the version PROD runs, or launching', () => {
+    const sky = skyReading(world([], [{ name: 'y', pipeline: 'bifrost-deliver-prod', delivery: true }]), lanes, now)
+    expect(sky.satellites.map(s => [s.name, s.launching])).toEqual([['Trade', true]])
+    expect(sky.flow).toEqual({ rocketStg: false, rocketProd: false, satelliteProd: true })
+    expect(skyReading(world([]), lanes, now).satellites[0]).toMatchObject({ word: 'abcdef12', tone: 'calm' })
   })
   it('what waits for the Owner is requests plus questions, unknown when either is unread', () => {
     expect(waitingReading(1, 2)).toMatchObject({ count: 3, tone: 'busy' })

@@ -2,7 +2,7 @@ import * as Phaser from 'phaser'
 import { CH, CW } from './kit'
 import { addRoad, canPlace, cellOf, crawlerway, depthOrder, inLand, key, newPartId, partAt, placeCheck, roadMask, roadShape, strokeCells, type Crawlerway, type Doc, type PartSize, type Placed } from './builderDoc'
 import { baseTextures, kindOf, layersOf, spriteOf, spriteUrl, type Layer } from './catalog'
-import type { Reading } from './cityReadings'
+import type { Reading, Sky } from './cityReadings'
 
 /**
  * The city builder's scene: the land, the roads the Owner drags, and the
@@ -20,6 +20,8 @@ export type SceneInit = {
   colorOf: (binds: string) => string | undefined
   /** The building's real state, read; undefined when it has none. */
   readingOf: (binds: string) => Reading | undefined
+  /** The satellites in orbit and which legs of the crawlerway a real run moves along. */
+  skyOf: () => Sky | undefined
   onChange: () => void
   onSelect: (id: string | null) => void
   onPlaced: (p: Placed) => void
@@ -70,7 +72,10 @@ export class BuilderScene extends Phaser.Scene {
   private ghost: Phaser.GameObjects.Image[] = []
   private ghostAt: { x: number; y: number; ok: boolean; tight: boolean } | null = null
   private hint!: Phaser.GameObjects.Text
-  private crawl: Crawlerway = { cells: new Set(), ends: [], served: new Set() }
+  private crawl: Crawlerway = { cells: new Set(), ends: [], served: new Set(), legs: new Map() }
+  private skyG!: G
+  private skyImgs: Phaser.GameObjects.Image[] = []
+  private skyTags: Phaser.GameObjects.Text[] = []
   private tool: Tool = 'select'
   private armed: Armed = null
   private selected: string | null = null
@@ -90,6 +95,7 @@ export class BuilderScene extends Phaser.Scene {
     this.grid = this.add.graphics().setDepth(-20)
     this.mark = this.add.graphics().setDepth(-10)
     this.tags = this.add.graphics().setDepth(190000)
+    this.skyG = this.add.graphics().setDepth(95000)
     this.hint = this.add.text(0, 0, '', { fontFamily: 'JetBrains Mono, ui-monospace, Menlo, monospace', fontSize: `${11 * this.s.dpr}px`, color: '#2f2d3a', padding: { x: 5 * this.s.dpr, y: 3 * this.s.dpr } }).setOrigin(0.5, 1).setDepth(190002).setVisible(false)
     this.input.addPointer(1)
     this.input.mouse?.disableContextMenu()
@@ -174,7 +180,7 @@ export class BuilderScene extends Phaser.Scene {
   }
   private fit() {
     const d = this.s.doc, c = this.cameras.main, sw = this.scale.width, sh = this.scale.height, bar = 56 * this.s.dpr
-    const l = iso(0, d.height).x, r = iso(d.width, -SEA).x, t = iso(0, -SEA).y - 70, b = iso(d.width, d.height).y + SLAB + 16
+    const l = iso(0, d.height).x, r = iso(d.width, -SEA).x, t = iso(0, -SEA).y - 150, b = iso(d.width, d.height).y + SLAB + 16
     const whole = Math.min(sw / (r - l), (sh - bar) / (b - t)) * 0.97
     this.fitZoom = whole
     let zoom = whole, cx = (l + r) / 2
@@ -402,6 +408,16 @@ export class BuilderScene extends Phaser.Scene {
         } else { g.lineStyle(1.1, EDGE, 1); line(H, -H, H, H) }
       })
     }
+    // A leg a real run moves along now: lit from end to end.
+    const flow = this.s.skyOf()?.flow
+    if (!flow) return
+    const kind = (id: string) => this.s.doc.parts.find(p => p.id === id)?.kind
+    for (const [legKey, legCells] of this.crawl.legs) {
+      const [a, b] = legKey.split('>').map(kind)
+      const lit = (a === 'hif' && b === 'assembly' && flow.rocketStg) || (a === 'assembly' && b === 'pad' && flow.rocketProd) || (a === 'satellites' && b === 'pad' && flow.satelliteProd)
+      if (!lit) continue
+      for (const k of legCells) { const [x, y] = cellOf(k); quad(g, x + 0.12, y + 0.12, x + 0.88, y + 0.88, 0xffb020, 0.35) }
+    }
   }
 
   /* ---------------- the buildings ---------------- */
@@ -433,7 +449,7 @@ export class BuilderScene extends Phaser.Scene {
     }
     for (const [id, v] of this.views) if (!seen.has(id)) { v.imgs.forEach(i => i.img.destroy()); v.tag.destroy(); v.fx.destroy(); this.views.delete(id) }
     if (this.selected && !seen.has(this.selected)) this.select(null)
-    this.syncDecor(); this.drawMark(); this.relabel(); this.drawEffects()
+    this.syncDecor(); this.drawMark(); this.relabel(); this.drawEffects(); this.drawSky()
   }
 
   private sortDepth() {
@@ -449,6 +465,7 @@ export class BuilderScene extends Phaser.Scene {
   }
 
   private relabel() {
+    for (const t of this.skyTags) t.setScale(1 / this.cameras.main.zoom)
     const z = this.cameras.main.zoom, g = this.tags, dpr = this.s.dpr
     g.clear()
     // Tags go up their leader until they clear the billboards and each other.
@@ -489,7 +506,7 @@ export class BuilderScene extends Phaser.Scene {
   }
 
   /** The readings drawn: a rocket that launches, crates at the door, workers holding signs. Only what was read. */
-  refreshReadings() { if (this.ready) { this.relabel(); this.drawEffects() } }
+  refreshReadings() { if (this.ready) { this.relabel(); this.drawEffects(); this.drawSky(); this.drawShade() } }
 
   private drawEffects() {
     const box = (g: G, x: number, y: number, s: number, h: number, col: number) => {
@@ -512,8 +529,25 @@ export class BuilderScene extends Phaser.Scene {
         for (const [dx, dy, rr] of [[-18, 4, 9], [16, 6, 10], [-6, 10, 11], [8, 12, 8]]) { g.fillCircle(b.x + dx, b.y + dy, rr); g.strokeCircle(b.x + dx, b.y + dy, rr) }
       }
       const n = Math.min(r.count ?? 0, 6)
-      if (p.kind === 'assembly' && n > 0) {
+      if ((p.kind === 'hif' || p.kind === 'satellites' || p.kind === 'assembly') && n > 0) {
         for (let k = 0; k < n; k++) box(g, p.x + 1.15 + (k % 2) * 0.55, p.y + p.size + 0.25 + Math.floor(k / 2) * 0.55, 0.42, 14, r.tone === 'alert' ? 0xef7d6d : 0xd9a673)
+      }
+      if (r.active && (p.kind === 'assembly' || p.kind === 'satellites')) {
+        const face = (x0: number, x1: number, z0: number, z1: number) => [iso(p.x + x0, p.y + 3.3, z0), iso(p.x + x1, p.y + 3.3, z0), iso(p.x + x1, p.y + 3.3, z1), iso(p.x + x0, p.y + 3.3, z1)] as Phaser.Math.Vector2[]
+        g.fillStyle(0xffd66b, 0.5)
+        g.fillPoints(p.kind === 'assembly' ? face(1.3, 2.75, 48, 150) : face(2.2, 3.4, 6, 86), true)
+        if (p.kind === 'assembly') {
+          const c = iso(p.x + 2.03, p.y + 3.3, 48)
+          g.fillStyle(0xffffff, 1); g.lineStyle(1, INK, 1)
+          g.fillRect(c.x - 5, c.y - 86, 10, 86); g.strokeRect(c.x - 5, c.y - 86, 10, 86)
+          g.fillTriangle(c.x - 5, c.y - 86, c.x + 5, c.y - 86, c.x, c.y - 100); g.strokeTriangle(c.x - 5, c.y - 86, c.x + 5, c.y - 86, c.x, c.y - 100)
+        }
+      }
+      if (r.launching && r.payload && stack) {
+        const b = iso(p.x + 1.9, p.y + 2.15, 31 + 18)
+        const col = Phaser.Display.Color.HexStringToColor(r.payload.color).color
+        g.fillStyle(col, 1); g.lineStyle(1.2, INK, 1)
+        g.fillRect(b.x - 14, b.y - 214, 28, 9); g.strokeRect(b.x - 14, b.y - 214, 28, 9)
       }
       if (p.kind === 'control' && n > 0) {
         for (let k = 0; k < Math.min(n, 4); k++) {
@@ -528,6 +562,33 @@ export class BuilderScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  /** The satellites in orbit over the sea: one per tenant, its version on its tag; one launching rides the rocket instead. */
+  private drawSky() {
+    const sky = this.s.skyOf(), d = this.s.doc, z = this.cameras.main.zoom, dpr = this.s.dpr
+    this.skyG.clear()
+    const sats = sky?.satellites ?? []
+    while (this.skyImgs.length > sats.length) { this.skyImgs.pop()!.destroy(); this.skyTags.pop()!.destroy() }
+    if (!sats.length) return
+    const a = iso(d.width * 0.12, -SEA - 1, 170), b = iso(d.width * 0.95, -SEA - 1, 170)
+    this.skyG.lineStyle(1.2 * dpr / z, 0x9aa6b6, 0.6)
+    for (let i = 0; i < 40; i += 2) {
+      const t0 = i / 40, t1 = (i + 1) / 40
+      this.skyG.lineBetween(a.x + (b.x - a.x) * t0, a.y + (b.y - a.y) * t0 - Math.sin(t0 * Math.PI) * 30, a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1 - Math.sin(t1 * Math.PI) * 30)
+    }
+    sats.forEach((s, i) => {
+      const t = (i + 0.5) / sats.length, x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t - Math.sin(t * Math.PI) * 30
+      const tex = `sat:${s.color}`, sp = spriteOf(tex)
+      if (!this.skyImgs[i]) {
+        this.skyImgs[i] = this.add.image(0, 0, tex).setScale(1 / RS).setDepth(95001)
+        this.skyTags[i] = this.add.text(0, 0, '', { fontFamily: 'JetBrains Mono, ui-monospace, Menlo, monospace', fontSize: `${10 * dpr}px`, color: '#2f2d3a', backgroundColor: '#fbfaf6', padding: { x: 4 * dpr, y: 2 * dpr } }).setOrigin(0.5, 0).setDepth(95002)
+      }
+      if (this.textures.exists(tex)) this.skyImgs[i].setTexture(tex).setOrigin(sp.ax / sp.width, (sp.ay + 16) / sp.height)
+      this.skyImgs[i].setPosition(x, y).setAlpha(s.launching ? 0.35 : 1)
+      const tone = { calm: '#dcf2e2', busy: '#ffe6a8', alert: '#ffc9c2', unknown: '#e6e4ee' }[s.tone]
+      this.skyTags[i].setText(`${s.name} · ${s.word}`).setBackgroundColor(tone).setScale(1 / z).setOrigin(0.5, i % 2 ? 1 : 0).setPosition(x, y + (i % 2 ? -22 : 8) * dpr / z)
+    })
   }
 
   private footprint(g: G, x: number, y: number, s: number, fill: number, line: number) {
