@@ -31,6 +31,14 @@ describe('alerts on the Owner Console (PROD, 2026-10-16 15:10 CDT)', () => {
   })
 
   // 2026-11-19, the coordinator: the host slot is still his (only he can log in on the Windows machine; it went unnoticed ~50 h on 11-14..16).
+  // 2026-11-19, the coordination line: the two kinds that are his are counted apart in the headline.
+  it('tells what he approves and what needs his hands apart in the headline', () => {
+    const base = { approvals: 1, lane: 'Nothing delivering', nodes: null }
+    expect(ownerVerdict({ ...base, yours: { state: 'known', count: 2 }, kinds: { approve: 1, hands: 1 } }).headline).toBe('1 to approve · 1 needs your hands')
+    expect(ownerVerdict({ ...base, yours: { state: 'known', count: 2 }, kinds: { approve: 0, hands: 2 } }).headline).toBe('2 need your hands')
+    expect(ownerVerdict({ ...base, yours: { state: 'known', count: 2 } }).headline).toBe('2 things are yours')
+  })
+
   it('keeps the host slot without TWS as needing his hands, and the compute line\'s secondary alert as a notice', () => {
     const s2 = splitAlerts([
       alert({ alertname: 'BifrostIBGatewayDisconnected', severity: 'critical', slot: 'host' }),

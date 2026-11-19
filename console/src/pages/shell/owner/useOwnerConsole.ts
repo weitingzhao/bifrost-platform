@@ -76,7 +76,8 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; servic
   const runsError = runSources.map(q => (q.isError ? errorText(q.error) : q.isPaused ? 'offline' : null)).find(e => e != null) ?? null
   const runsLoading = blocks.work && !runsRead && runsError == null
 
-  const verdict = ownerVerdict({ yours, approvals: needsYou.openCount.state === 'known' ? needsYou.decide.length : null, lane: laneText, nodes: nodeCount ? { ready: nodeCount.ready, total: nodeCount.total } : null })
+  const kinds = needsYou.count.state === 'known' && alerts ? { approve: needsYou.decisionItems.length, hands: alerts.yours.length } : undefined
+  const verdict = ownerVerdict({ yours, kinds, approvals: needsYou.openCount.state === 'known' ? needsYou.decide.length : null, lane: laneText, nodes: nodeCount ? { ready: nodeCount.ready, total: nodeCount.total } : null })
 
   const marketData = current(marketQ)
   const marketItems = marketData != null && !isProxyError(marketData) && marketData.ok !== false ? marketData.freshness_summary ?? [] : undefined

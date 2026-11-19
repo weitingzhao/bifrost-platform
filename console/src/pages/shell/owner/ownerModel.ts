@@ -180,6 +180,8 @@ export function yoursCount(decisions: NeedsYouCount, ownerAlerts: NeedsYouCount)
 
 export function ownerVerdict(input: {
   yours: NeedsYouCount
+  /** The two kinds that are his, told apart in the headline (the Owner, 2026-11-19); absent while either is unread. */
+  kinds?: { approve: number; hands: number }
   approvals: number | null
   lane: string
   nodes: { ready: number; total: number } | null
@@ -196,6 +198,11 @@ export function ownerVerdict(input: {
   }
   const n = input.yours.count
   if (n === 0) return { tone: 'ok', headline: 'Nothing needs you', line }
+  const k = input.kinds
+  if (k && k.approve + k.hands === n) {
+    const parts = [k.approve > 0 ? `${k.approve} to approve` : '', k.hands > 0 ? `${k.hands} ${k.hands === 1 ? 'needs' : 'need'} your hands` : ''].filter(Boolean)
+    return { tone: 'attention', headline: parts.join(' · '), line }
+  }
   return { tone: 'attention', headline: `${plural(n, 'thing')} ${n === 1 ? 'is' : 'are'} yours`, line }
 }
 
