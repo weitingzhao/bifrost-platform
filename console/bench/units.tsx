@@ -86,6 +86,12 @@ function CpuRoomView({ r }: { r: Reads }) {
   const { out: sprite, ids } = rowsDrawn(() => cpuRoom(read))
   const rows = DICTIONARY.filter(m => ids.includes(m.id))
   return <div className="room">
+    <div className="plan" aria-label="Where this room is in the factory">
+      <div className="on"><b>Workshop</b><span>CPU · this room, drawn here</span></div>
+      <div><b>Workbench</b><span>Memory · the next unit, not drawn yet</span></div>
+      <div><b>Warehouse</b><span>Disk · after that, not drawn yet</span></div>
+      <p>A computer is a factory: these three rooms, each made on its own first, are put together into one building in stage 6 (In use).</p>
+    </div>
     <div className="pick">{nodes.map(x => <button key={x.id} className={x.id === id ? 'on' : ''} onClick={() => setId(x.id)}>{x.id}</button>)}</div>
     <div className="roomgrid">
       <img src={spriteUrl(sprite)} alt={`CPU room of ${id}`} />

@@ -7,9 +7,10 @@ import { encode, metaphor, rulerOf, rulersKey } from '../library/dictionary'
  *   the workshop floor   one machine tool per core, in rows: its work light as high as the core is busy,
  *                        its speed dial's needle at the core's clock, the dial's red line its top clock
  *   the back wall        one thermometer per sensor, red from 80 °C
- *   the order office     three order dials (load over 1, 5 and 15 minutes against the cores: past the
- *                        middle into red, more is asked than it can do); outside it, the waiting line
- *                        (as long as the share of time something waited for a core)
+ *   the production board three dials on the back wall (load over 1, 5 and 15 minutes against the cores:
+ *                        past the middle into red, more is asked than it can do)
+ *   the staging area     by the door, bins of work waiting for a free machine (as many as the share of
+ *                        time something waited for a core)
  * Everything is a reading; what is not read is not drawn (no machines when the cores are not read, no
  * needle on a dial nothing reads).
  */
@@ -24,7 +25,7 @@ export type CpuRoomReadings = {
 
 const U = 35.8
 const MACHINE = faces('#b7cfc0', '#94b3a1', '#7d9c8b'), IDLE = faces('#c9cec9', '#adb3ad', '#9aa09a')
-const WALL = faces('#efe9dc', '#e2dac8', '#cfc6b2'), OFFICE = faces('#f6f1e6', '#e8dfcb', '#d6ccb5')
+const WALL = faces('#efe9dc', '#e2dac8', '#cfc6b2')
 
 /** A half dial on a face, centred at u (face units), its needle at share f (0–1) of its sweep; none when not read. */
 function dial(r: number, u: number, f: number | null, redFrom: number, label = '') {
@@ -42,12 +43,6 @@ function dial(r: number, u: number, f: number | null, redFrom: number, label = '
   s += `<circle cx="${u}" cy="0" r="1.2" fill="${INK}"/>`
   if (label) s += `<text x="${u}" y="${(r * 0.55 + 4).toFixed(1)}" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="${Math.max(4.5, r * 0.55).toFixed(1)}" font-weight="700" fill="${INK}">${label}</text>`
   return s
-}
-
-function person(g: Draw, x: number, y: number) {
-  g.cylinder(x, y, 2.6, 0, 9, '#4a6fa5', '#36507a')
-  const [hx, hy] = g.p(x, y, 12.5)
-  g.add(`<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="2.6" fill="#f1c9a5" stroke="${INK}" stroke-width="0.8"/>`)
 }
 
 export function cpuRoom(r: CpuRoomReadings, fw = 8, fd = 8): Sprite {
@@ -72,16 +67,22 @@ export function cpuRoom(r: CpuRoomReadings, fw = 8, fd = 8): Sprite {
     g.text('left', a - 0.04, 0.18, 12, `${Math.round(t.c)}°`, 5.5)
   })
 
-  // The order office at the back right, its three order dials on its front.
-  const ox = 5.9, oy = 0.4, ow = Math.min(1.8, fw - 6.1), od = 2.3, oh = 28
-  g.box(ox, oy, ow, od, oh, OFFICE, 0, 1.3)
-  g.sign('left', ox, oy + od, ow * 0.1, ow * 0.9, oh - 9, 'ORDERS', '#fbfaf6', 6)
+  // The production board on the back wall, right of the thermometers: three dials of the work asked
+  // of the workshop over 1, 5 and 15 minutes, against its cores (past the middle, into red, more is
+  // asked than it can do). A factory hangs its load on the wall where everyone sees it.
+  const bx = 5.75, bw = Math.min(2, fw - 5.95)
+  g.onLeft(0, 0.18, bx, bx + bw, 12, 44, '#26303d', 1)
+  g.text('left', bx + 0.12, 0.18, 36, 'LOAD', 6.5, '#f2f0e8', 700)
   metaphor('load')
   const cores = r.cores.length
   r.load.forEach((l, k) => {
     const f = l == null || cores === 0 ? null : encode('load', (l / cores) / 2)
-    g.face('left', ox, oy + od, 7.5, dial(7, (0.2 + k * 0.3) * ow * U / 0.9 + 4, f, 0.5, ['1m', '5m', '15m'][k]))
+    g.face('left', bx, 0.18, 22, dial(8, (0.2 + k * 0.3) * bw * U + 4, f, 0.5, ['1m', '5m', '15m'][k]))
   })
+  // The staging area by the door, marked on the floor: work waiting for a free machine waits here.
+  const sx = 5.95, sy = 4.1, sw = fw - sx - 0.3, sd = fd - sy - 0.3
+  g.floor(sx, sy, 3, `<rect x="0" y="0" width="${(sw * U).toFixed(1)}" height="${(sd * U).toFixed(1)}" fill="none" stroke="#f2c94c" stroke-width="2.5" stroke-dasharray="6 4"/>` +
+    `<text x="${(sw * U / 2).toFixed(1)}" y="${(sd * U - 6).toFixed(1)}" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="9" font-weight="700" fill="#c9a43a">WAITING</text>`)
 
   // The machines, and the waiting line in front of the office, drawn back to front.
   type Thing = { at: number; draw: () => void }
@@ -120,11 +121,12 @@ export function cpuRoom(r: CpuRoomReadings, fw = 8, fd = 8): Sprite {
   } else {
     g.text('left', 1.2, 0.18, 30, 'CORES NOT READ', 7, '#8a857a')
   }
-  // The line only when the waiting is read (looking the row up is what marks it drawn).
+  // Bins of work waiting in the staging area, as many as the share of time something waited; only
+  // when the waiting is read (looking the row up is what marks it drawn).
   const waiting = r.pressure == null ? 0 : encode('pressure', r.pressure)!
   for (let k = 0; k < waiting; k++) {
-    const x = ox + ow * 0.5, y = oy + od + 0.45 + k * 0.42
-    if (y < fd - 0.2) things.push({ at: x + y, draw: () => person(g, x, y) })
+    const x = sx + 0.15 + (k % 3) * (sw / 3), y = sy + 0.2 + Math.floor(k / 3) * 0.55
+    things.push({ at: x + y, draw: () => g.box(x, y, 0.36, 0.36, 8, faces('#8fb0dc', '#6b8fc0', '#56789f'), 0, 0.9) })
   }
   things.sort((a, b) => a.at - b.at).forEach(t => t.draw())
   return g.done()

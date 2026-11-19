@@ -58,6 +58,11 @@
       .rulers h2 { margin: 0; } .rulers p { margin: 0; font-size: 10.5px; color: var(--mute); line-height: 1.5; }
       .rulers label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11px; }
       .rulers select { font: inherit; font-size: 11px; background: var(--chip); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 3px 4px; }
+.plan { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+      .plan div { border: 1.5px dashed var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+      .plan div.on { border: 1.5px solid var(--now); background: var(--chip); }
+      .plan b { font-size: 12px; } .plan span { font-size: 10.5px; color: var(--mute); }
+      .plan p { grid-column: 1 / -1; margin: 0; font-size: 11px; color: var(--mute); }
       .hint { color: var(--mute); font-size: 11px; margin: 0; }
       .warn { color: var(--warn); font-size: 11.5px; margin: 0; }
       .ask { margin: 0; font-size: 12px; background: var(--chip); border-radius: 8px; padding: 10px 12px; border-left: 3px solid var(--now); }
