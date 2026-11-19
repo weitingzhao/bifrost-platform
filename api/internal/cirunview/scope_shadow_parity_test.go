@@ -1,6 +1,4 @@
-//bifrost:owner verification
-
-package server
+package cirunview
 
 import (
 	"encoding/json"
@@ -127,12 +125,12 @@ func TestScopeShadowFrozenProjection(t *testing.T) {
 				p.FailedTests = append(p.FailedTests, fmt.Sprintf("example/%d/a.TestX/sub.TestY", i), "build failed", "example/b.FuzzX")
 			}
 			want := frozenShadowLine(p, "commit", scope)
-			got := shadowLine(p, "commit", scope)
+			got := ShadowLine(ShadowRun{Run: p.Run, Result: p.Result, Scope: p.Scope, FailedTests: p.FailedTests}, "commit", scope)
 			if !reflect.DeepEqual(want, got) {
 				t.Fatalf("%#v != %#v", want, got)
 			}
 			ws, wd := frozenShadowRecord(want)
-			gs, gd := shadowRecord(got)
+			gs, gd := ShadowRecord(got)
 			if ws != gs || wd != gd {
 				t.Fatalf("%s %s != %s %s", ws, wd, gs, gd)
 			}
@@ -140,7 +138,7 @@ func TestScopeShadowFrozenProjection(t *testing.T) {
 	}
 	for _, line := range [][]any{nil, {1, "skip", "missed", []string{"a"}, "odd"}, {"missed", "wrong-type"}, {"bad", func() {}}} {
 		ws, wd := frozenShadowRecord(line)
-		gs, gd := shadowRecord(line)
+		gs, gd := ShadowRecord(line)
 		if ws != gs || wd != gd {
 			t.Fatalf("record parity %s %s != %s %s", ws, wd, gs, gd)
 		}

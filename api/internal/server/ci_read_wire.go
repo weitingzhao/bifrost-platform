@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cidomains"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ciscore"
+	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/evidenceread"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
@@ -176,4 +178,49 @@ func (s *Server) ciDomainsAhead(ctx context.Context) {
 			}
 		}
 	})
+}
+
+// wireEvidenceGate makes the ledger the delivery service's CI reader and
+// returns it; nil when this process has no delivery service. The database is
+// read when asked: before it connects, or without one, the answer is an error.
+func (s *Server) wireEvidenceGate() delivery.CIReader {
+	if s.delivery == nil {
+		return nil
+	}
+	// Strict: this reader is the release policy's ci_succeeded.
+	reader := evidenceread.LedgerCIStrict(func() eventlog.DB {
+		if s.agentRuntime == nil || s.agentRuntime.api == nil {
+			return nil
+		}
+		return s.agentRuntime.api.DB
+	}, giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second}))
+	s.delivery.SetCIReader(reader)
+	slog.Info("evidence gate: CI is read from the evidence ledger")
+	return reader
+}
+
+func (s *Server) handleEvidenceCI(w http.ResponseWriter, r *http.Request) {
+	evidenceread.CIRoute{
+		RepoOK: giteaName.MatchString, CommitOK: commitID.MatchString,
+		Sources: func() (evidenceread.CISources, bool) {
+			if s.agentRuntime == nil || s.agentRuntime.api == nil || s.agentRuntime.api.DB == nil || s.delivery == nil {
+				return evidenceread.CISources{}, false
+			}
+			return evidenceread.CISources{DB: s.agentRuntime.api.DB, Tree: giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second})}, true
+		},
+	}.ServeHTTP(w, r)
+}
+
+func (s *Server) handleUnitScope(w http.ResponseWriter, r *http.Request) {
+	evidenceread.ScopeRoute{
+		RepoOK: giteaName.MatchString, CommitOK: commitID.MatchString,
+		Sources: func() (evidenceread.ScopeSources, bool) {
+			if s.agentRuntime == nil || s.agentRuntime.api == nil || s.agentRuntime.api.DB == nil || s.delivery == nil {
+				return evidenceread.ScopeSources{}, false
+			}
+			return evidenceread.ScopeSources{DB: s.agentRuntime.api.DB,
+				Tree:  giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second}),
+				Trees: s.unitTreesOf()}, true
+		},
+	}.ServeHTTP(w, r)
 }

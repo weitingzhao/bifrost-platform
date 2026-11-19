@@ -215,14 +215,14 @@
         "verification"
       ],
       "status": "assigned",
-      "basis": "2026-11-18 the a25c27aa incident: says on the ledger when main's unit declaration stops reading and reads again; reads declarations through unitplan and writes bus/regressions; the server wires it."
+      "basis": "2026-11-18 the a25c27aa incident: says on the ledger when main's unit declaration stops reading and reads again; reads declarations through unitplan and writes bus/regressions; the server wires it. 2026-11-18 (A3): also the daily unit run's source (dailysource.go), moved unchanged out of server/units_daily.go."
     },
     "api/internal/unitexec": {
       "domains": [
         "verification"
       ],
       "status": "assigned",
-      "basis": "CI charter; configuration is read-only"
+      "basis": "CI charter; configuration is read-only 2026-11-18 (A3): also the dispatch of a plan, the receiving pass and the evidence-request route (advance.go), moved unchanged out of server/units_dispatch.go."
     },
     "api/internal/testscope": {
       "domains": [
@@ -292,7 +292,7 @@
         "verification"
       ],
       "status": "assigned",
-      "basis": "2026-11-18, moved out of api/internal/server unchanged (evidence_commit.go, the plan answer of units_plan.go; decoupling item 5, A2): the two reads of the evidence ledger by commit, GET /api/v1/evidence/commit (is this commit green, and with what) and GET /api/v1/units/plan (CI's plan of one commit with the ledger's word on each key). Read-only; no CI or release decisions. Imports verification (evidence, unitplan) and foundation (eventlog) only; the server hands it the ledger, Gitea's tree and main reads and the names a request may carry."
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (evidence_commit.go, the plan answer of units_plan.go; decoupling item 5, A2): the two reads of the evidence ledger by commit, GET /api/v1/evidence/commit (is this commit green, and with what) and GET /api/v1/units/plan (CI's plan of one commit with the ledger's word on each key). Read-only; no CI or release decisions. Imports verification (evidence, unitplan) and foundation (eventlog) only; the server hands it the ledger, Gitea's tree and main reads and the names a request may carry. 2026-11-18 (A3): also GET /api/v1/evidence/ci (the ledger readers LedgerCI*, gate.go, and the verdict beside a commit) and GET /api/v1/units/scope (scope.go), moved unchanged out of server/evidence_gate.go and units_scope.go."
     },
     "api/internal/agentrt/schemawatch": {
       "domains": [
@@ -685,7 +685,7 @@
         "verification"
       ],
       "status": "assigned",
-      "basis": "CI charter; cached run, daily-full-note, metric and failure-list projection extracted from server; no CI or release decisions Complete task timing and shared Tekton observation decoders extracted from delivery; parameter exposure allowlist retained verbatim in delivery; phase priority and result serialization unchanged; no evidence/release decisions. Whole PipelineRun observation decoding and chronological key extracted with unchanged status/revision fields; all success predicates and release consumers unchanged. Complete pipeline phase catalogs and observed-task phase aggregation extracted; preflight task names are display labels only, no release decisions. 2026-11-16 scope-shadow log/audit projection consumes minimal recorded fields; switches, scope/evidence reads, queues and all decisions remain in server. 2026-11-17 the read of one run's steps (the PipelineRun and its TaskRuns, through a cluster client the caller supplies) extracted from delivery with its answer unchanged; delivery keeps the client, the namespace default and the route. Same day the Work > CI timings read, its answer and its 30 s cache extracted the same way: delivery supplies the client, its list of a pipeline's runs and the parameter exposure allowlist, which stays in delivery verbatim, and keeps the route. The paged, slimmed list of unit TaskRuns extracted likewise; creating a unit TaskRun stays in delivery."
+      "basis": "CI charter; cached run, daily-full-note, metric and failure-list projection extracted from server; no CI or release decisions Complete task timing and shared Tekton observation decoders extracted from delivery; parameter exposure allowlist retained verbatim in delivery; phase priority and result serialization unchanged; no evidence/release decisions. Whole PipelineRun observation decoding and chronological key extracted with unchanged status/revision fields; all success predicates and release consumers unchanged. Complete pipeline phase catalogs and observed-task phase aggregation extracted; preflight task names are display labels only, no release decisions. 2026-11-16 scope-shadow log/audit projection consumes minimal recorded fields; switches, scope/evidence reads, queues and all decisions remain in server. 2026-11-17 the read of one run's steps (the PipelineRun and its TaskRuns, through a cluster client the caller supplies) extracted from delivery with its answer unchanged; delivery keeps the client, the namespace default and the route. Same day the Work > CI timings read, its answer and its 30 s cache extracted the same way: delivery supplies the client, its list of a pipeline's runs and the parameter exposure allowlist, which stays in delivery verbatim, and keeps the route. The paged, slimmed list of unit TaskRuns extracted likewise; creating a unit TaskRun stays in delivery. 2026-11-18 (A3): also the unit scope shadow (scope_shadow_run.go), moved unchanged out of server/units_scope_shadow.go; the server wires its sources."
     },
     "api/internal/modtidy": {
       "domains": [
@@ -769,7 +769,7 @@
         "delivery"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: automatic main-head delivery orchestration consumed by server/head_release; all evidence and release decisions unchanged"
+      "basis": "2026-11-16 source and caller audit: automatic main-head delivery orchestration consumed by server/head_release; all evidence and release decisions unchanged 2026-11-18 (A3): also the loop's world, decision record and pass (live.go) and the PROD shadow's reads (prod_reads.go), moved unchanged out of server/head_release.go and prod_batch_shadow.go; the server hands them Gitea, the ledger, the cluster, the approvals and the audit log."
     },
     "api/internal/gitops": {
       "domains": [

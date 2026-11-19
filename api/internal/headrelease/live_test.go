@@ -1,0 +1,140 @@
+package headrelease
+
+import (
+	"context"
+	"strings"
+	"testing"
+	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+)
+
+func headRun(name, pipeline string, created time.Time, condition string, params map[string]string) unstructured.Unstructured {
+	var ps []any
+	for k, v := range params {
+		ps = append(ps, map[string]any{"name": k, "value": v})
+	}
+	u := unstructured.Unstructured{Object: map[string]any{
+		"metadata": map[string]any{"name": name},
+		"spec":     map[string]any{"pipelineRef": map[string]any{"name": pipeline}, "params": ps},
+	}}
+	u.SetCreationTimestamp(metav1.NewTime(created))
+	if condition != "" {
+		u.Object["status"] = map[string]any{"conditions": []any{map[string]any{"type": "Succeeded", "status": condition}}}
+	}
+	return u
+}
+
+// The cluster's runs as listed 2026-11-13 22:45Z: STG and PROD deliveries of
+// platform side by side, in no order. A deliverable reads only its own
+// pipeline's, newest first, and a run with no verdict yet (just created, or
+// Unknown while it runs) is running: a second delivery started beside it is
+// what failed three times that afternoon.
+func TestHeadRunsReadsOnePipelineNewestFirst(t *testing.T) {
+	at := time.Date(2026, 11, 13, 22, 0, 0, 0, time.UTC)
+	items := []unstructured.Unstructured{
+		headRun("bifrost-deliver-platform-1794608501", "bifrost-deliver-platform", at.Add(21*time.Minute), "True", map[string]string{"revision": "c53e"}),
+		headRun("bifrost-deliver-platform-prod-b5eac58d014a8f97-1", "bifrost-deliver-platform-prod", at.Add(45*time.Minute), "True", map[string]string{"revision": "776f"}),
+		headRun("bifrost-deliver-platform-1794609999", "bifrost-deliver-platform", at.Add(50*time.Minute), "", map[string]string{"revision": "aaaa"}),
+		headRun("bifrost-deliver-platform-1794609372", "bifrost-deliver-platform", at.Add(36*time.Minute), "True", map[string]string{"revision": "776f", "uiRevision": "c83f"}),
+		headRun("bifrost-deliver-platform-1794606777", "bifrost-deliver-platform", at.Add(-3*time.Minute), "False", map[string]string{"revision": "5f56"}),
+		headRun("bifrost-deliver-platform-1794609998", "bifrost-deliver-platform", at.Add(49*time.Minute), "Unknown", nil),
+	}
+	got := headRuns(items, "bifrost-deliver-platform")
+	want := []Run{
+		{Name: "bifrost-deliver-platform-1794609999", Status: RunRunning},
+		{Name: "bifrost-deliver-platform-1794609998", Status: RunRunning},
+		{Name: "bifrost-deliver-platform-1794609372", Status: RunSucceeded},
+		{Name: "bifrost-deliver-platform-1794608501", Status: RunSucceeded},
+		{Name: "bifrost-deliver-platform-1794606777", Status: RunFailed},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("%d runs: %+v", len(got), got)
+	}
+	for i := range want {
+		if got[i].Name != want[i].Name || got[i].Status != want[i].Status {
+			t.Errorf("run %d: %s %s, want %s %s", i, got[i].Name, got[i].Status, want[i].Name, want[i].Status)
+		}
+	}
+	if got[2].Params["revision"] != "776f" || got[2].Params["uiRevision"] != "c83f" {
+		t.Errorf("params: %v", got[2].Params)
+	}
+}
+
+// The parameter named revision is the pipeline's own revision and the others
+// go beside it (the start refuses a revision that differs from
+// params.revision). What stands in the way of a start is said in words that
+// reach the record: who holds the window (Codex review 2026-11-13, C1: the
+// holder was dropped), or the freeze (B3: while frozen nothing is started, so
+// no failed run is left to mark the head "failed once").
+func TestHeadWorldStartSplitsTheRevisionAndSaysWhyNotNow(t *testing.T) {
+	var gotRevision string
+	var gotExtra map[string]string
+	held, frozen, calls := "", false, 0
+	w := &Live{
+		start: func(_ context.Context, principal, pipeline, revision string, params map[string]string) (string, string, error) {
+			calls++
+			gotRevision, gotExtra = revision, params
+			if held != "" {
+				return "", held, nil
+			}
+			return pipeline + "-1", "", nil
+		},
+		frozen: func(context.Context) (bool, string) { return frozen, "incident 12" },
+	}
+	run, wait, err := w.Start(context.Background(), "bifrost-deliver-platform", map[string]string{"revision": "r", "uiRevision": "u", "infraRevision": "i"})
+	if err != nil || wait != "" || run != "bifrost-deliver-platform-1" || gotRevision != "r" || len(gotExtra) != 2 || gotExtra["uiRevision"] != "u" || gotExtra["infraRevision"] != "i" {
+		t.Fatalf("start: %q wait=%q %v; revision %q extra %v", run, wait, err, gotRevision, gotExtra)
+	}
+	held = "the release window is held by biz-align"
+	if run, wait, err := w.Start(context.Background(), "bifrost-deliver-platform", map[string]string{"revision": "r"}); err != nil || run != "" || !strings.Contains(wait, "biz-align") {
+		t.Fatalf("held: %q wait=%q %v", run, wait, err)
+	}
+	held, frozen, calls = "", true, 0
+	if run, wait, err := w.Start(context.Background(), "bifrost-deliver-platform", map[string]string{"revision": "r"}); err != nil || run != "" || wait != "releases are frozen: incident 12" || calls != 0 {
+		t.Fatalf("frozen: %q wait=%q %v, %d starts asked", run, wait, err, calls)
+	}
+}
+
+// Owner 2026-11-13: the loop asks nobody, so every decision leaves a record
+// that says what a start brings and whose it is. The message is the shape
+// lineage.sh leaves (platform main 688c63eb's own trailer block): the thread
+// is the Claude-Session trailer, and a commit without one (a merger's) is
+// listed with none rather than dropped.
+func TestHeadBroughtReadsEachCommitsThread(t *testing.T) {
+	var with, without listed
+	with.SHA = "688c63eb89a7e6d858d19079e6bcbd23a3deb3cd"
+	with.Commit.Message = "feat(delivery): the platform releases main's head to STG by itself (LANE-ci-w1)\n\nbody mentions Work: in a sentence\n\nCo-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>\nClaude-Session: local_7de640c4-4b19-4a71-a0ac-ced2ce5fc7ff\nClaude-Transcript: 2df547db-4e82-4e11-b33e-82bb6165ccac\nChange-Id: Ifa634ee165f537de54f67adc6568b63b4842f1d3\nWork: LANE-ci-w1\n"
+	without.SHA = "88c0ab27"
+	without.Commit.Message = "merge by hand"
+	got := broughtOf("bifrost-platform", []listed{with, without})
+	if len(got) != 2 {
+		t.Fatalf("%d commits", len(got))
+	}
+	if got[0].Session != "local_7de640c4-4b19-4a71-a0ac-ced2ce5fc7ff" || got[0].Work != "LANE-ci-w1" || got[0].Subject != "feat(delivery): the platform releases main's head to STG by itself (LANE-ci-w1)" || got[0].Repo != "bifrost-platform" {
+		t.Errorf("the commit with trailers: %+v", got[0])
+	}
+	if got[1].Session != "" || got[1].Subject != "merge by hand" {
+		t.Errorf("the commit without: %+v", got[1])
+	}
+}
+
+// 2026-11-17: head-release listed every run in cicd on each read (~470
+// pipelineruns LISTs in 10 minutes with the PROD shadow). It now asks for its
+// pipeline's runs only; a run of another pipeline returned anyway is still
+// left out.
+func TestHeadReleaseAsksForItsPipelineOnly(t *testing.T) {
+	var asked []string
+	run := func(name, pipeline string) unstructured.Unstructured {
+		return unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": name}, "spec": map[string]any{"pipelineRef": map[string]any{"name": pipeline}}}}
+	}
+	w := &Live{runs: func(_ context.Context, pipeline string) ([]unstructured.Unstructured, error) {
+		asked = append(asked, pipeline)
+		return []unstructured.Unstructured{run("a", "bifrost-deliver-platform"), run("b", "other")}, nil
+	}}
+	got, err := w.Runs(context.Background(), "bifrost-deliver-platform")
+	if err != nil || len(asked) != 1 || asked[0] != "bifrost-deliver-platform" || len(got) != 1 || got[0].Name != "a" {
+		t.Fatalf("asked %v, got %+v, err %v", asked, got, err)
+	}
+}

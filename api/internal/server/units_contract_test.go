@@ -211,7 +211,7 @@ modules:
 	b, c := strings.Repeat("b", 40), strings.Repeat("c", 40)
 	trees := scopeTrees(t, map[string]map[string]string{b: base, c: head})
 	passed := func(context.Context, string, string) (string, string, error) { return "Succeeded", "ci-1", nil }
-	got, err := unitScope(context.Background(), trees, passed, "r", c, b)
+	got, err := unitplan.ScopeOf(context.Background(), trees, passed, "r", c, b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ modules:
 	}
 	unitsContract(t, "scope.json", got)
 	// An unreadable base: every unit runs, with the reason.
-	whole, err := unitScope(context.Background(), scopeTrees(t, map[string]map[string]string{b: {"x": "1"}, c: head}), passed, "r", c, b)
+	whole, err := unitplan.ScopeOf(context.Background(), scopeTrees(t, map[string]map[string]string{b: {"x": "1"}, c: head}), passed, "r", c, b)
 	if err != nil || whole.Note == "" || strings.Join(whole.Modules[0].RunUnits, " ") != "svc/a svc/b svc/c svc/d" || len(whole.Modules[0].SameUnits) != 0 {
 		t.Fatalf("whole: %+v %v", whole, err)
 	}

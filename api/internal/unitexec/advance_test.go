@@ -1,34 +1,36 @@
-//bifrost:owner verification
-
-package server
+package unitexec
 
 import (
 	"context"
-	"encoding/base64"
+	"crypto/sha1" // #nosec G505 -- stands in for git's object ids in a test tree
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
-	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
-	"github.com/weitingzhao/bifrost-platform/api/internal/unitexec"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
+	"github.com/weitingzhao/bifrost-platform/api/internal/evidenceread"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 )
 
 // fakeUnitCluster keeps what was created, as the cluster would return it.
 type fakeUnitCluster struct {
-	runs map[string]*unitexec.TaskRun
+	runs map[string]*TaskRun
 	seq  int
 }
 
-func (f *fakeUnitCluster) List(_ context.Context, plan string) ([]unitexec.TaskRun, error) {
-	var out []unitexec.TaskRun
+func (f *fakeUnitCluster) List(_ context.Context, plan string) ([]TaskRun, error) {
+	var out []TaskRun
 	for _, tr := range f.runs {
-		if plan == "" || tr.Metadata.Labels[unitexec.LabelPlan] == plan {
+		if plan == "" || tr.Metadata.Labels[LabelPlan] == plan {
 			out = append(out, *tr)
 		}
 	}
@@ -37,7 +39,7 @@ func (f *fakeUnitCluster) List(_ context.Context, plan string) ([]unitexec.TaskR
 
 func (f *fakeUnitCluster) Create(_ context.Context, obj map[string]any) (bool, error) {
 	raw, _ := json.Marshal(obj)
-	var tr unitexec.TaskRun
+	var tr TaskRun
 	if err := json.Unmarshal(raw, &tr); err != nil {
 		return false, err
 	}
@@ -66,42 +68,83 @@ func (f *fakeUnitCluster) finish(t *testing.T, name, status, reason string, resu
 	now := time.Now()
 	tr.Status.CompletionTime = &now
 	for name, value := range results {
-		tr.Status.Results = append(tr.Status.Results, unitexec.NameValue{Name: name, Value: value})
+		tr.Status.Results = append(tr.Status.Results, NameValue{Name: name, Value: value})
 	}
 }
 
-func unitTestTrees(t *testing.T, commit string) unitTreesFunc {
+const unitsManifest = `version: 1
+modules:
+  - name: api
+    kind: go
+    root: api
+    tasks: {test: {per: package}}
+  - name: repo
+    root: .
+    tasks: {check: {}}
+`
+
+func blobID(content string) string {
+	return fmt.Sprintf("%x", sha1.Sum([]byte(fmt.Sprintf("blob %d\x00%s", len(content), content)))) // #nosec G401
+}
+
+// unitTestTrees serves every commit as one small repository, as unitplan
+// reads a tree: the api module as a dispatchable one (an image and a template;
+// the repository's own unit keeps none, as the real manifest's does today).
+func unitTestTrees(t *testing.T) TreesFunc {
 	t.Helper()
-	entries, blobs := planRepo()
-	// The api module as a dispatchable one: an image and a template. The
-	// repository's own unit keeps none, as the real manifest's does today.
 	withImage := strings.Replace(unitsManifest, "    root: api\n", "    root: api\n    image: docker.io/library/golang:1.25-bookworm\n    template: bifrost-unit-run\n", 1)
 	if withImage == unitsManifest {
 		t.Fatal("the test manifest has no api module to give an image")
 	}
-	for i, e := range entries {
-		if e.Path == "bifrost.units.yaml" {
-			id := gitBlobID(withImage)
-			blobs[id] = withImage
-			entries[i].SHA = id
+	files := map[string]string{
+		"bifrost.units.yaml": withImage,
+		"api/go.mod":         "module example.com/m\n\ngo 1.25\n",
+		"api/a/a.go":         "package a\n",
+		"api/a/a_test.go":    "package a\n",
+	}
+	blobs, dirs := map[string]string{}, map[string][]string{}
+	var entries []unitplan.Entry
+	for p, body := range files {
+		blobs[blobID(body)] = body
+		entries = append(entries, unitplan.Entry{Path: p, ID: blobID(body)})
+		for d := p; strings.Contains(d, "/"); {
+			d = d[:strings.LastIndex(d, "/")]
+			dirs[d] = append(dirs[d], p+"="+body)
+		}
+		dirs[""] = append(dirs[""], p+"="+body)
+	}
+	dirID := func(d string) string { sort.Strings(dirs[d]); return blobID("tree:" + strings.Join(dirs[d], "\n")) }
+	for d := range dirs {
+		if d != "" {
+			entries = append(entries, unitplan.Entry{Path: d, Dir: true, ID: dirID(d)})
 		}
 	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/api/v1/repos/bifrost/r/git/trees/"+commit:
-			_ = json.NewEncoder(w).Encode(map[string]any{"sha": commit, "page": 1, "total_count": len(entries), "truncated": false, "tree": entries})
-		case strings.HasPrefix(r.URL.Path, "/api/v1/repos/bifrost/r/git/blobs/"):
-			id := strings.TrimPrefix(r.URL.Path, "/api/v1/repos/bifrost/r/git/blobs/")
-			_ = json.NewEncoder(w).Encode(map[string]any{"sha": id, "encoding": "base64", "content": base64.StdEncoding.EncodeToString([]byte(blobs[id]))})
-		default:
-			http.Error(w, "no", http.StatusNotFound)
+	return func(_ context.Context, repo, _ string) (*unitplan.Tree, error) {
+		if repo != "r" {
+			return nil, fmt.Errorf("no %s", repo)
 		}
-	}))
-	t.Cleanup(srv.Close)
-	g := &giteaTrees{access: func(context.Context) (delivery.GiteaAccess, error) {
-		return delivery.GiteaAccess{Base: srv.URL, Org: "bifrost"}, nil
-	}, client: srv.Client()}
-	return g.tree
+		return unitplan.NewTree(dirID(""), entries, func(id string) ([]byte, error) { return []byte(blobs[id]), nil })
+	}
+}
+
+// unitPlan asks the plan route (evidenceread.PlanRoute) the way a request
+// does and reads its answer: the plan of a commit with the ledger's word on
+// each key.
+func unitPlan(ctx context.Context, db eventlog.DB, trees TreesFunc, repo, commit string) (unitPlanAnswer, error) {
+	route := evidenceread.PlanRoute{RepoOK: gitread.Name.MatchString, CommitOK: gitread.CommitID.MatchString,
+		Sources: func() (evidenceread.PlanSources, bool) { return evidenceread.PlanSources{DB: db, Trees: trees}, true }}
+	w := httptest.NewRecorder()
+	route.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/?"+url.Values{"repo": {repo}, "commit": {commit}}.Encode(), nil).WithContext(ctx))
+	var out unitPlanAnswer
+	if w.Code != http.StatusOK {
+		return out, fmt.Errorf("HTTP %d: %s", w.Code, w.Body.String())
+	}
+	return out, json.Unmarshal(w.Body.Bytes(), &out)
+}
+
+type unitPlanAnswer struct {
+	ToRun  int            `json:"to_run"`
+	Counts map[string]int `json:"counts"`
 }
 
 // A commit taken step by step: the task the ledger does not know is started
@@ -112,19 +155,19 @@ func TestUnitsAdvanceAndReceive(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	commit := strings.Repeat("c", 40)
-	trees := unitTestTrees(t, commit)
+	trees := unitTestTrees(t)
 	db := agentrttest.Migrated(t)
 	pool := db.Pool(t, db.Runtime)
-	cl := &fakeUnitCluster{runs: map[string]*unitexec.TaskRun{}}
-	cfg := unitDispatchConfig{Mode: "shadow", MaxRunning: 12, GiteaBase: "http://gitea.cicd.svc.cluster.local:3000/bifrost", Namespace: "cicd"}
+	cl := &fakeUnitCluster{runs: map[string]*TaskRun{}}
+	cfg := Config{Mode: "shadow", MaxRunning: 12, GiteaBase: "http://gitea.cicd.svc.cluster.local:3000/bifrost", Namespace: "cicd"}
 
 	off := cfg
 	off.Mode = "off"
-	if _, err := advanceUnits(ctx, pool, trees, cl, off, "r", commit, "branch"); err == nil || len(cl.runs) != 0 {
+	if _, err := Advance(ctx, pool, trees, cl, off, "r", commit, "branch"); err == nil || len(cl.runs) != 0 {
 		t.Fatalf("dispatch off started %d runs: %v", len(cl.runs), err)
 	}
 
-	first, err := advanceUnits(ctx, pool, trees, cl, cfg, "r", commit, "branch")
+	first, err := Advance(ctx, pool, trees, cl, cfg, "r", commit, "branch")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,23 +175,23 @@ func TestUnitsAdvanceAndReceive(t *testing.T) {
 		t.Fatalf("first step: %+v", first)
 	}
 	name := first.Created[0]
-	if again, err := advanceUnits(ctx, pool, trees, cl, cfg, "r", commit, "branch"); err != nil || len(again.Created) != 0 || again.Present != 1 || len(cl.runs) != 1 {
+	if again, err := Advance(ctx, pool, trees, cl, cfg, "r", commit, "branch"); err != nil || len(again.Created) != 0 || again.Present != 1 || len(cl.runs) != 1 {
 		t.Fatalf("the same step again: %+v %v", again, err)
 	}
 
-	recv := &unitReceiver{}
+	recv := &Receiver{}
 	advance := func(ctx context.Context, repo, commit, tier string) error {
-		_, err := advanceUnits(ctx, pool, trees, cl, cfg, repo, commit, tier)
+		_, err := Advance(ctx, pool, trees, cl, cfg, repo, commit, tier)
 		return err
 	}
-	if recorded, written, err := recv.receiveUnits(ctx, pool, trees, cl, advance, time.Now()); err != nil || recorded != 0 || written != 0 {
+	if recorded, written, err := recv.ReceiveUnits(ctx, pool, trees, cl, advance, time.Now()); err != nil || recorded != 0 || written != 0 {
 		t.Fatalf("a run still going was recorded: %d %d %v", recorded, written, err)
 	}
 
 	// The cluster loses the run; the receiving pass records it and has the
 	// commit advanced: the one retry starts.
 	cl.finish(t, name, "False", "TaskRunImagePullFailed", nil)
-	recorded, written, err := recv.receiveUnits(ctx, pool, trees, cl, advance, time.Now())
+	recorded, written, err := recv.ReceiveUnits(ctx, pool, trees, cl, advance, time.Now())
 	if err != nil || recorded != 1 || written != 0 {
 		t.Fatalf("after the lost run: %d %d %v", recorded, written, err)
 	}
@@ -160,15 +203,15 @@ func TestUnitsAdvanceAndReceive(t *testing.T) {
 	// The retry passes.
 	cl.finish(t, retry, "True", "Succeeded", map[string]string{"exit-code": "0", "duration-seconds": "3", "fail-class": "", "failed-tests": "",
 		"tests": "1 " + strings.Repeat("a", 64) + " 1 0"})
-	recorded, written, err = recv.receiveUnits(ctx, pool, trees, cl, advance, time.Now())
+	recorded, written, err = recv.ReceiveUnits(ctx, pool, trees, cl, advance, time.Now())
 	if err != nil || recorded != 1 || written != 1 {
 		t.Fatalf("after the pass: %d %d %v", recorded, written, err)
 	}
-	plan, err := unitPlan(ctx, pool, trees, "r", commit, false)
+	plan, err := unitPlan(ctx, pool, trees, "r", commit)
 	if err != nil || plan.Counts[evidence.EvidenceGreen] != 1 || plan.ToRun != 1 {
 		t.Fatalf("the ledger after the pass: %+v %v", plan.Counts, err)
 	}
-	if recorded, written, err = recv.receiveUnits(ctx, pool, trees, cl, advance, time.Now()); err != nil || recorded != 0 || written != 0 {
+	if recorded, written, err = recv.ReceiveUnits(ctx, pool, trees, cl, advance, time.Now()); err != nil || recorded != 0 || written != 0 {
 		t.Fatalf("the same runs seen again wrote %d %d: %v", recorded, written, err)
 	}
 	// While the commit's newest run is young the pass advances it (that is
@@ -178,10 +221,10 @@ func TestUnitsAdvanceAndReceive(t *testing.T) {
 		calls++
 		return advance(ctx, repo, commit, tier)
 	}
-	if _, _, err = recv.receiveUnits(ctx, pool, trees, cl, counting, time.Now()); err != nil || calls != 1 || len(cl.runs) != 2 {
+	if _, _, err = recv.ReceiveUnits(ctx, pool, trees, cl, counting, time.Now()); err != nil || calls != 1 || len(cl.runs) != 2 {
 		t.Fatalf("a young commit: advanced %d times, %d runs, %v", calls, len(cl.runs), err)
 	}
-	if _, _, err = recv.receiveUnits(ctx, pool, trees, cl, counting, time.Now().Add(unitContinueWindow+time.Minute)); err != nil || calls != 1 {
+	if _, _, err = recv.ReceiveUnits(ctx, pool, trees, cl, counting, time.Now().Add(ContinueWindow+time.Minute)); err != nil || calls != 1 {
 		t.Fatalf("an old commit was advanced: %d calls, %v", calls, err)
 	}
 	// A receiver that starts anew (a restart) sees the same runs and writes nothing.
@@ -192,10 +235,10 @@ func TestUnitsAdvanceAndReceive(t *testing.T) {
 		planReads++
 		return trees(ctx, repo, commit)
 	}
-	if recorded, written, err = (&unitReceiver{}).receiveUnits(ctx, pool, countingTrees, cl, nil, time.Now()); err != nil || recorded != 0 || written != 0 || planReads != 0 {
+	if recorded, written, err = (&Receiver{}).ReceiveUnits(ctx, pool, countingTrees, cl, nil, time.Now()); err != nil || recorded != 0 || written != 0 || planReads != 0 {
 		t.Fatalf("after a restart the same runs wrote %d %d and read %d trees: %v", recorded, written, planReads, err)
 	}
-	last, err := advanceUnits(ctx, pool, trees, cl, cfg, "r", commit, "branch")
+	last, err := Advance(ctx, pool, trees, cl, cfg, "r", commit, "branch")
 	if err != nil || last.ToRun != 1 || len(last.Created) != 0 || len(cl.runs) != 2 {
 		t.Fatalf("after the verdict: %+v %v", last, err)
 	}
@@ -208,22 +251,22 @@ func TestUnitsRedLostAndCapacity(t *testing.T) {
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)
 	pool := db.Pool(t, db.Runtime)
-	cfg := unitDispatchConfig{Mode: "on", MaxRunning: 12, GiteaBase: "http://gitea.cicd.svc.cluster.local:3000/bifrost", Namespace: "cicd"}
+	cfg := Config{Mode: "on", MaxRunning: 12, GiteaBase: "http://gitea.cicd.svc.cluster.local:3000/bifrost", Namespace: "cicd"}
 
 	red := strings.Repeat("d", 40)
-	trees := unitTestTrees(t, red)
-	cl := &fakeUnitCluster{runs: map[string]*unitexec.TaskRun{}}
-	step, err := advanceUnits(ctx, pool, trees, cl, cfg, "r", red, "branch")
+	trees := unitTestTrees(t)
+	cl := &fakeUnitCluster{runs: map[string]*TaskRun{}}
+	step, err := Advance(ctx, pool, trees, cl, cfg, "r", red, "branch")
 	if err != nil || len(step.Created) != 1 {
 		t.Fatalf("%+v %v", step, err)
 	}
 	cl.finish(t, step.Created[0], "False", "Failed", map[string]string{"exit-code": "1", "fail-class": "test", "failed-tests": "example.com/m/a.TestA",
 		"tests": "1 " + strings.Repeat("a", 64) + " 1 0"})
-	recv := &unitReceiver{}
-	if recorded, written, err := recv.receiveUnits(ctx, pool, trees, cl, nil, time.Now()); err != nil || recorded != 1 || written != 1 {
+	recv := &Receiver{}
+	if recorded, written, err := recv.ReceiveUnits(ctx, pool, trees, cl, nil, time.Now()); err != nil || recorded != 1 || written != 1 {
 		t.Fatalf("the red run: %d %d %v", recorded, written, err)
 	}
-	plan, err := unitPlan(ctx, pool, trees, "r", red, false)
+	plan, err := unitPlan(ctx, pool, trees, "r", red)
 	if err != nil || plan.Counts[evidence.EvidenceRed] != 1 {
 		t.Fatalf("the ledger after the red run: %+v %v", plan.Counts, err)
 	}
@@ -232,41 +275,41 @@ func TestUnitsRedLostAndCapacity(t *testing.T) {
 		!strings.Contains(statement, "example.com/m/a.TestA") || !strings.Contains(statement, `"fail_class": "test"`) {
 		t.Fatalf("the red row's statement: %s %v", statement, err)
 	}
-	if again, err := advanceUnits(ctx, pool, trees, cl, cfg, "r", red, "branch"); err != nil || len(again.Created)+len(again.Retried) != 0 {
+	if again, err := Advance(ctx, pool, trees, cl, cfg, "r", red, "branch"); err != nil || len(again.Created)+len(again.Retried) != 0 {
 		t.Fatalf("red content was run again: %+v %v", again, err)
 	}
 
 	// Lost twice: nothing more is started, and it is said.
-	lost := &fakeUnitCluster{runs: map[string]*unitexec.TaskRun{}}
+	lost := &fakeUnitCluster{runs: map[string]*TaskRun{}}
 	db2 := agentrttest.Migrated(t)
 	pool2 := db2.Pool(t, db2.Runtime)
-	step, _ = advanceUnits(ctx, pool2, trees, lost, cfg, "r", red, "branch")
+	step, _ = Advance(ctx, pool2, trees, lost, cfg, "r", red, "branch")
 	lost.finish(t, step.Created[0], "False", "TaskRunImagePullFailed", nil)
-	step2, _ := advanceUnits(ctx, pool2, trees, lost, cfg, "r", red, "branch")
+	step2, _ := Advance(ctx, pool2, trees, lost, cfg, "r", red, "branch")
 	if len(step2.Retried) != 1 {
 		t.Fatalf("the retry: %+v", step2)
 	}
 	lost.finish(t, step2.Retried[0], "False", "TaskRunTimeout", nil)
-	step3, err := advanceUnits(ctx, pool2, trees, lost, cfg, "r", red, "branch")
+	step3, err := Advance(ctx, pool2, trees, lost, cfg, "r", red, "branch")
 	if err != nil || len(step3.Lost) != 1 || len(lost.runs) != 2 {
 		t.Fatalf("lost twice: %+v %v", step3, err)
 	}
-	if recorded, written, err := (&unitReceiver{}).receiveUnits(ctx, pool2, trees, lost, nil, time.Now()); err != nil || recorded != 2 || written != 0 {
+	if recorded, written, err := (&Receiver{}).ReceiveUnits(ctx, pool2, trees, lost, nil, time.Now()); err != nil || recorded != 2 || written != 0 {
 		t.Fatalf("two lost runs: %d %d %v", recorded, written, err)
 	}
 
 	// Capacity: another commit's run is going and MaxRunning is 1.
-	full := &fakeUnitCluster{runs: map[string]*unitexec.TaskRun{}}
+	full := &fakeUnitCluster{runs: map[string]*TaskRun{}}
 	db3 := agentrttest.Migrated(t)
 	pool3 := db3.Pool(t, db3.Runtime)
 	busy := cfg
 	busy.MaxRunning = 1
 	now := time.Now()
-	going := unitexec.TaskRun{}
+	going := TaskRun{}
 	going.Metadata.Name, going.Metadata.CreationTimestamp = "unit-ffffffff-0", &now
-	going.Metadata.Labels = map[string]string{unitexec.LabelPlan: strings.Repeat("f", 16)}
+	going.Metadata.Labels = map[string]string{LabelPlan: strings.Repeat("f", 16)}
 	full.runs[going.Metadata.Name] = &going
-	held, err := advanceUnits(ctx, pool3, trees, full, busy, "r", red, "branch")
+	held, err := Advance(ctx, pool3, trees, full, busy, "r", red, "branch")
 	if err != nil || held.Deferred != 1 || len(held.Created) != 0 || len(full.runs) != 1 {
 		t.Fatalf("over capacity: %+v %v", held, err)
 	}
@@ -285,10 +328,10 @@ func TestUnitDispatchConfigFromEnv(t *testing.T) {
 		{"yes", "a=b,c=d", "0", "off", 0, 12},
 		{"on", "nokey", "many", "on", 0, 12},
 	} {
-		t.Setenv(unitDispatchEnv, tc.mode)
-		t.Setenv(unitNodeSelectorEnv, tc.selector)
-		t.Setenv(unitMaxRunningEnv, tc.max)
-		got := unitDispatchConfigFromEnv("cicd")
+		t.Setenv(DispatchEnv, tc.mode)
+		t.Setenv(NodeSelectorEnv, tc.selector)
+		t.Setenv(MaxRunningEnv, tc.max)
+		got := ConfigFromEnv("cicd")
 		if got.Mode != tc.wantMode || len(got.NodeSelector) != tc.wantSelector || got.MaxRunning != tc.wantMax || got.Namespace != "cicd" || got.GiteaBase == "" {
 			t.Errorf("%q %q %q: %+v", tc.mode, tc.selector, tc.max, got)
 		}
@@ -298,15 +341,17 @@ func TestUnitDispatchConfigFromEnv(t *testing.T) {
 // The route takes a repository and a full commit and nothing else, and says
 // so before it reads anything.
 func TestUnitEvidenceRequestRefusesWhatIsNotACommit(t *testing.T) {
+	route := EvidenceRoute{RepoOK: gitread.Name.MatchString, CommitOK: gitread.CommitID.MatchString,
+		Sources: func() (EvidenceSources, bool) { return EvidenceSources{}, false }}
 	for _, body := range []string{``, `{"repo":"bifrost-platform","commit":"main"}`, `{"repo":"../x","commit":"` + strings.Repeat("a", 40) + `"}`, `{"repo":"r.git","commit":"` + strings.Repeat("a", 40) + `"}`} {
 		w := httptest.NewRecorder()
-		(&Server{}).handleUnitEvidenceRequest(w, httptest.NewRequest(http.MethodPost, "/api/v1/units/evidence", strings.NewReader(body)))
+		route.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/units/evidence", strings.NewReader(body)))
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("%q: %d", body, w.Code)
 		}
 	}
 	w := httptest.NewRecorder()
-	(&Server{}).handleUnitEvidenceRequest(w, httptest.NewRequest(http.MethodPost, "/api/v1/units/evidence", strings.NewReader(`{"repo":"r","commit":"`+strings.Repeat("a", 40)+`"}`)))
+	route.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/units/evidence", strings.NewReader(`{"repo":"r","commit":"`+strings.Repeat("a", 40)+`"}`)))
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("a platform with no ledger answered %d", w.Code)
 	}

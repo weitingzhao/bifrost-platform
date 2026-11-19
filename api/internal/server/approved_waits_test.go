@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvalreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
-	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
+	"github.com/weitingzhao/bifrost-platform/api/internal/headrelease"
 )
 
 // #524, 2026-11-14 00:32Z: what an approved release is answered while another
@@ -49,20 +50,20 @@ func TestTheLoopGivesWayToAnApprovedRelease524(t *testing.T) {
 		"an approved CI run":                   {[]approvals.Approval{card(525, approvals.StatusApproved, "start_pipeline_run", "bifrost-ci-platform", hour)}, ""},
 		"another approved action":              {[]approvals.Approval{card(519, approvals.StatusApproved, "apply_manifest", "bifrost-deliver-platform-prod", hour)}, ""},
 	} {
-		if got := approvedReleaseWaiting(tc.items, now); got != tc.want {
+		if got := approvalreadings.ApprovedReleaseWaiting(tc.items, now); got != tc.want {
 			t.Errorf("%s: %q, want %q", name, got, tc.want)
 		}
 	}
 
 	starts := 0
 	waiting := "#524 bifrost-deliver-platform-prod"
-	w := &headWorld{
-		start: func(_ context.Context, _, pipeline, _ string, _ map[string]string) (delivery.PipelineRunView, string, error) {
+	w := headrelease.NewLive(headrelease.LiveDeps{
+		Start: func(_ context.Context, _, pipeline, _ string, _ map[string]string) (string, string, error) {
 			starts++
-			return delivery.PipelineRunView{Name: pipeline + "-1"}, "", nil
+			return pipeline + "-1", "", nil
 		},
-		approved: func() (string, error) { return waiting, nil },
-	}
+		Approved: func() (string, error) { return waiting, nil },
+	})
 	run, wait, err := w.Start(context.Background(), "bifrost-deliver-platform", map[string]string{"revision": "r"})
 	if err != nil || run != "" || wait != "an approved release goes first: #524 bifrost-deliver-platform-prod" || starts != 0 {
 		t.Fatalf("with 524 waiting: %q wait=%q %v, %d starts", run, wait, err, starts)
