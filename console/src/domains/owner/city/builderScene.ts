@@ -4,6 +4,7 @@ import { addRoad, canPlace, cellOf, crawlerway, depthOrder, doorOf, inLand, key,
 import { baseTextures, kindOf, layersOf, spriteOf, spriteUrl, type Layer } from './catalog'
 import type { Reading, Sky } from './cityReadings'
 import type { Worker } from './cityWorkers'
+import { nextZoneName, zoneTint } from './zones'
 
 type Gauge = { used: number | null; reserved: number | null; of: number | null }
 type Meters = { power: Gauge; water: Gauge; gas: Gauge }
@@ -16,7 +17,7 @@ type Meters = { power: Gauge; water: Gauge; gas: Gauge }
  * he placed.
  */
 
-export type Tool = 'select' | 'road' | 'erase'
+export type Tool = 'select' | 'road' | 'erase' | 'zone'
 export type Armed = { kind: string; binds: string } | null
 export type SceneInit = {
   doc: Doc; editing: boolean; dpr: number
@@ -30,6 +31,8 @@ export type SceneInit = {
   workersOf: () => readonly Worker[] | undefined
   onChange: () => void
   onSelect: (id: string | null) => void
+  /** A district picked with the zone tool (its index in the document), or none. */
+  onZoneSelect?: (i: number | null) => void
   onPlaced: (p: Placed) => void
   onOpen: (p: Placed) => void
   onReady: () => void
@@ -68,6 +71,7 @@ type Gesture =
   | { t: 'stroke'; last: [number, number]; erase: boolean; x: number; y: number; started: boolean }
   | { t: 'press'; part: Placed; x: number; y: number; moved: boolean }
   | { t: 'tap'; x: number; y: number }
+  | { t: 'zone'; from: [number, number]; to: [number, number]; move: number | null; orig?: { x: number; y: number }; x: number; y: number; started: boolean }
   | { t: 'pinch'; d: number; x: number; y: number }
 
 export class BuilderScene extends Phaser.Scene {
@@ -150,7 +154,16 @@ export class BuilderScene extends Phaser.Scene {
   /* ---------------- what React calls ---------------- */
 
   setEditing(on: boolean) { this.s.editing = on; this.clearGhost(); this.armed = null; if (!on) this.select(null); this.drawGrid() }
-  setTool(t: Tool) { this.tool = t; this.armed = null; this.clearGhost(); this.drawGrid() }
+  setTool(t: Tool) { this.tool = t; this.armed = null; this.clearGhost(); this.drawGrid(); if (t !== 'zone') this.selectZone(null) }
+  private zoneSel: number | null = null
+  selectZone(i: number | null) { this.zoneSel = i; this.drawMark(); this.s.onZoneSelect?.(i) }
+  /** The districts changed outside the scene (renamed, removed): draw the land again. */
+  zonesChanged() { if (this.zoneSel != null && !this.s.doc.zones?.[this.zoneSel]) this.zoneSel = null; this.redrawLand(); this.drawMark() }
+  private zoneAt(c: [number, number]): number | null {
+    const zs = this.s.doc.zones ?? []
+    for (let i = zs.length - 1; i >= 0; i--) { const z = zs[i]; if (c[0] >= z.x && c[0] < z.x + z.w && c[1] >= z.y && c[1] < z.y + z.h) return i }
+    return null
+  }
   setArmed(a: Armed) { this.armed = a; if (a) this.tool = 'select'; this.clearGhost(); this.drawGrid() }
   select(id: string | null) { if (this.selected === id) return; this.selected = id; this.drawMark(); this.relabel(); this.s.onSelect(id) }
   /** The document changed from outside the land (land size, a binding, a removal, a reload). */
@@ -741,6 +754,17 @@ export class BuilderScene extends Phaser.Scene {
     g.clear()
     const p = this.s.doc.parts.find(q => q.id === this.selected)
     if (p && this.s.editing && !this.movingId()) this.footprint(g, p.x, p.y, p.size, 0x5aa9ff, 0x2f6fd0)
+    if (this.s.editing && this.tool === 'zone') {
+      const z = this.zoneSel != null ? this.s.doc.zones?.[this.zoneSel] : undefined
+      const rect = (x0: number, y0: number, x1: number, y1: number, fill: number, line: number) => {
+        const pts = [iso(x0, y0), iso(x1, y0), iso(x1, y1), iso(x0, y1)] as Phaser.Math.Vector2[]
+        g.fillStyle(fill, 0.18); g.fillPoints(pts, true)
+        g.lineStyle(2.4 * this.s.dpr / this.cameras.main.zoom, line, 1); g.strokePoints(pts, true)
+      }
+      if (z) rect(z.x, z.y, z.x + z.w, z.y + z.h, 0x5aa9ff, 0x2f6fd0)
+      const gz = this.gesture
+      if (gz.t === 'zone' && gz.started && gz.move == null) rect(Math.min(gz.from[0], gz.to[0]), Math.min(gz.from[1], gz.to[1]), Math.max(gz.from[0], gz.to[0]) + 1, Math.max(gz.from[1], gz.to[1]) + 1, 0x5fce8a, 0x23925a)
+    }
     if (this.ghostAt && this.ghost.length) {
       const size = this.ghostSize
       const { ok, tight } = this.ghostAt
@@ -821,6 +845,13 @@ export class BuilderScene extends Phaser.Scene {
     }
     if (ptr.rightButtonDown() || ptr.middleButtonDown()) { this.gesture = { t: 'pan', x: ptr.x, y: ptr.y }; return }
     if (this.s.editing && this.armed) { this.gesture = { t: 'tap', x: ptr.x, y: ptr.y }; this.showGhost(this.armed.kind, this.armed.binds, ptr.x, ptr.y); return }
+    if (this.s.editing && this.tool === 'zone') {
+      const c = this.cellAt(ptr.x, ptr.y), hit = this.zoneAt(c)
+      const move = hit != null && hit === this.zoneSel ? hit : null
+      const z = move != null ? this.s.doc.zones![move] : undefined
+      this.gesture = { t: 'zone', from: c, to: c, move, orig: z ? { x: z.x, y: z.y } : undefined, x: ptr.x, y: ptr.y, started: false }
+      return
+    }
     if (this.s.editing && this.tool !== 'select') {
       const c = this.cellAt(ptr.x, ptr.y), erase = this.tool === 'erase', started = !ptr.wasTouch
       this.gesture = { t: 'stroke', last: c, erase, x: ptr.x, y: ptr.y, started }
@@ -861,6 +892,17 @@ export class BuilderScene extends Phaser.Scene {
       }
       const c = this.cellAt(ptr.x, ptr.y)
       if (c[0] !== g.last[0] || c[1] !== g.last[1]) { this.paint(c, g.erase, g.last); g.last = c }
+    } else if (g.t === 'zone') {
+      if (!g.started && Math.hypot(ptr.x - g.x, ptr.y - g.y) < 8 * this.s.dpr) return
+      g.started = true
+      const c = this.cellAt(ptr.x, ptr.y), d = this.s.doc
+      g.to = [Math.max(0, Math.min(d.width - 1, c[0])), Math.max(0, Math.min(d.height - 1, c[1]))]
+      if (g.move != null && g.orig) {
+        const z = d.zones![g.move]
+        z.x = Math.max(0, Math.min(d.width - z.w, g.orig.x + g.to[0] - g.from[0])); z.y = Math.max(0, Math.min(d.height - z.h, g.orig.y + g.to[1] - g.from[1]))
+        this.redrawLand()
+      }
+      this.drawMark()
     } else if (g.t === 'tap' && this.armed) {
       this.showGhost(this.armed.kind, this.armed.binds, ptr.x, ptr.y)
     } else if (g.t === 'press' && this.s.editing) {
@@ -882,6 +924,21 @@ export class BuilderScene extends Phaser.Scene {
   private onUp(ptr: Phaser.Input.Pointer) {
     const g = this.gesture
     if (g.t === 'stroke' && !g.started) this.paint(g.last, g.erase)
+    if (g.t === 'zone') {
+      const d = this.s.doc
+      if (!g.started) this.selectZone(this.zoneAt(g.from))
+      else if (g.move != null) { this.selectZone(g.move); this.s.onChange() }
+      else {
+        const x = Math.min(g.from[0], g.to[0]), y = Math.min(g.from[1], g.to[1]), w = Math.abs(g.to[0] - g.from[0]) + 1, h = Math.abs(g.to[1] - g.from[1]) + 1
+        if (w >= 2 && h >= 2) {
+          const zs = (d.zones ??= []), name = nextZoneName(zs)
+          zs.push({ name, x, y, w, h, tint: zoneTint(name) })
+          this.redrawLand(); this.selectZone(zs.length - 1); this.s.onChange()
+        }
+      }
+      this.gesture = { t: 'none' }; this.drawMark()
+      return
+    }
     if (g.t === 'press') {
       if (g.moved) { this.endMove(g.part, true); return }
       if (this.s.editing) this.select(g.part.id); else this.s.onOpen(g.part)

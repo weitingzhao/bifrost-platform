@@ -4,6 +4,7 @@ import { doorOf, fromTiled, targetPart, toTiled, walkPath } from '../builderDoc'
 import { bayReading, skyReading, type ReleaseContext } from '../cityReadings'
 import { plannedCity } from '../defaultLayout'
 import { pluginsOf, tenantsOf } from '../catalog'
+import { nextZoneName, zoneTint } from '../zones'
 
 // Origin: 2026-11-18, the Owner: seats are the workers; they live in dorms
 // and their real work shows. A worker stands at the building of the domain
@@ -75,5 +76,16 @@ describe('the payload works', () => {
   })
   it('keeps the districts through a saved Tiled map', () => {
     expect(fromTiled(JSON.parse(JSON.stringify(toTiled(plannedCity()))))?.zones).toEqual(plannedCity().zones)
+  })
+})
+
+// Origin: 2026-11-18, the Owner: he draws the districts himself; positions are only how things are shown.
+describe('districts the Owner draws', () => {
+  it('a new one takes the first usual name not on the land, its tint following the name', () => {
+    expect(nextZoneName([])).toBe('Launch site')
+    expect(nextZoneName(plannedCity().zones!)).toBe('District 5')
+    expect(zoneTint('Town')).toBe('#f1e8d6')
+    expect(zoneTint('Research campus')).toMatch(/^#[0-9a-f]{6}$/)
+    expect(zoneTint('Research campus')).toBe(zoneTint('Research campus'))
   })
 })

@@ -2148,7 +2148,8 @@
         "console/src/domains/owner/city/landmarks.ts",
         "console/src/domains/owner/city/layoutStore.ts",
         "console/src/domains/owner/city/platformLayoutStore.ts",
-        "console/src/domains/owner/city/worldDictionary.ts"
+        "console/src/domains/owner/city/worldDictionary.ts",
+        "console/src/domains/owner/city/zones.ts"
       ],
       "imports": [
         "console/src/api",

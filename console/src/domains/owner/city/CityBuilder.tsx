@@ -5,6 +5,7 @@ import type { Armed, BuilderScene, Tool } from './builderScene'
 import type { Reading, Sky } from './cityReadings'
 import type { Worker } from './cityWorkers'
 import { DICTIONARY, DICTIONARY_VERSION } from './worldDictionary'
+import { ZONE_NAMES, zoneTint } from './zones'
 import { LAYOUT_FILE, layoutFileText, parseLayoutFile, type LayoutStore } from './layoutStore'
 
 /**
@@ -54,6 +55,7 @@ const CSS = `
 .cb-item:disabled{color:${MUTED};background:transparent}
 .cb-dot{display:inline-block;width:9px;height:9px;border-radius:50%;border:1px solid ${INK};margin-right:6px}
 .cb-row{display:flex;gap:6px;margin-top:8px}.cb-row .cb-btn{flex:1}
+.cb-input{width:100%;box-sizing:border-box;min-height:40px;margin-top:8px;padding:0 8px;border:1.5px solid ${INK};background:${PAPER};font:inherit;color:${INK}}
 .cb-help{position:absolute;right:10px;top:62px;width:min(300px,calc(100% - 20px));background:${PAPER};border:1.5px solid ${INK};padding:10px;z-index:3}
 .cb-help p{margin:0 0 6px}
 .cb-float{position:fixed;z-index:50;pointer-events:none;width:72px;height:66px;transform:translate(-50%,-70%);opacity:.9}
@@ -98,6 +100,7 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
   const [, bump] = useState(0), touch = useCallback(() => bump(v => v + 1), [])
   const [loaded, setLoaded] = useState(false), [editing, setEditing] = useState(false), [tool, setToolS] = useState<Tool>('select')
   const [armed, setArmedS] = useState<Armed>(null), [pendingBind, setPendingBind] = useState<string | null>(null)
+  const [zoneSel, setZoneSel] = useState<number | null>(null)
   const [selected, setSelected] = useState<string | null>(null), [tab, setTab] = useState<Tab>('buildings'), [help, setHelp] = useState(false)
   const [saved, setSaved] = useState(''), [savedAt, setSavedAt] = useState<string | null>(null), [saveError, setSaveError] = useState('')
   const [carry, setCarry] = useState<{ a: Armable; x: number; y: number } | null>(null)
@@ -135,6 +138,7 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
         nameOf: (b: string) => itemsRef.current.get(b)?.name, colorOf: (b: string) => itemsRef.current.get(b)?.color,
         onChange: touch,
         onSelect: (id: string | null) => { setSelected(id); if (id) setTab('selected') },
+        onZoneSelect: (i: number | null) => { setZoneSel(i); if (i != null) setTab('selected') },
         onPlaced: () => { setArmedS(null); setPendingBind(null); setToolS('select') },
         readingOf: (b: string) => readRef.current?.(b) as never,
         skyOf: () => skyRef.current,
@@ -158,7 +162,11 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
   const pending = pendingBind ? byBinds.get(pendingBind) : undefined
 
   const arm = (a: Armed) => { setArmedS(a); scene.current?.setArmed(a); if (a) setToolS('select') }
-  const setTool = (t: Tool) => { setToolS(t); setArmedS(null); setPendingBind(null); scene.current?.setTool(t) }
+  const setTool = (t: Tool) => { setToolS(t); setArmedS(null); setPendingBind(null); scene.current?.setTool(t); if (t === 'zone') setTab('selected') }
+  const zone = zoneSel != null ? d.zones?.[zoneSel] : undefined
+  const zonesChanged = () => { scene.current?.zonesChanged(); touch() }
+  const renameZone = (name: string) => { if (zone && name.trim()) { zone.name = name.trim().slice(0, 32); zone.tint = zoneTint(zone.name); zonesChanged() } }
+  const removeZone = () => { if (zone && d.zones && zoneSel != null) { d.zones.splice(zoneSel, 1); scene.current?.selectZone(null); zonesChanged() } }
   const pickKind = (k: CatalogKind) => {
     const binds = pending && accepts(k, pending) ? pending.binds : ''
     if (armed?.kind === k.kind && armed.binds === binds) { arm(null); setPendingBind(null) } else arm({ kind: k.kind, binds })
@@ -231,7 +239,7 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
         <div ref={host} className="cb-canvas" data-testid="city-land" />
         <div className="cb-bar cb-tl">
           {editing ? <>
-            {(['select', 'road', 'erase'] as const).map(t => <button key={t} className="cb-btn" aria-pressed={tool === t && !armed} onClick={() => setTool(t)}>{t === 'select' ? 'Move' : t === 'road' ? 'Road' : 'Erase'}</button>)}
+            {(['select', 'road', 'erase', 'zone'] as const).map(t => <button key={t} className="cb-btn" aria-pressed={tool === t && !armed} onClick={() => setTool(t)}>{t === 'select' ? 'Move' : t === 'road' ? 'Road' : t === 'erase' ? 'Erase' : 'Zone'}</button>)}
             <button className="cb-btn" onClick={grow} disabled={d.width >= LAND_MAX}>Land +</button>
             <span className="cb-state">{d.width}×{d.height}</span>
           </> : <>
@@ -261,6 +269,7 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
         })()}
         {help && <div className="cb-help">
           <p>Road: drag on the land; corners and crossings form by themselves. Erase: drag over a road.</p>
+          <p>Zone: drag a rectangle to draw a district (launch site, town…); tap it to rename or remove it, drag it to move it. Where things stand is only how they are shown.</p>
           <p>Buildings: drag one onto the land, or tap it and tap the land. Drag a placed building to move it; tap it to choose what it stands for.</p>
           <p>Unplaced lists what exists in the system and is not on the land yet. Nothing is placed for you.</p>
           <p>Zoom with the wheel or two fingers; pan with a right-drag, or by dragging empty land in Move.</p>
@@ -289,7 +298,17 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
           {canBind.slice(0, 12).map(i => <button key={i.binds} className="cb-item" onClick={() => bind(i.binds)}><span>{i.color && <i className="cb-dot" style={{ background: i.color }} />}{i.name}</span><small>assign</small></button>)}
           <div className="cb-row">{part.binds && <button className="cb-btn" onClick={() => bind('')}>Unassign</button>}<button className="cb-btn" onClick={remove}>Remove</button></div>
         </section>}
-        {!part && <section className={`cb-card cb-none${tab === 'selected' ? '' : ' off'}`}><span style={{ color: MUTED }}>Nothing selected</span></section>}
+        {tool === 'zone' && <section className={`cb-card${tab === 'selected' ? '' : ' off'}`} data-testid="zone">
+          <div className="cb-h"><span>{zone ? 'District' : 'Zones'}</span><span>{d.zones?.length ?? 0}</span></div>
+          {!zone && <p style={{ color: MUTED, margin: '0 0 6px' }}>Drag on the land to draw a district. Tap one to pick it; drag a picked one to move it. Districts only change how the land looks.</p>}
+          {zone && <>
+            <div className="cb-row" style={{ flexWrap: 'wrap' }}>{ZONE_NAMES.map(n => <button key={n} className="cb-btn" aria-pressed={zone.name === n} onClick={() => renameZone(n)}>{n}</button>)}</div>
+            <input key={`${zoneSel}:${zone.name}`} className="cb-input" aria-label="District name" defaultValue={zone.name} maxLength={32} onKeyDown={e => { if (e.key === 'Enter') renameZone(e.currentTarget.value) }} onBlur={e => renameZone(e.currentTarget.value)} />
+            <div className="cb-src">{zone.w}×{zone.h} cells at {zone.x},{zone.y}</div>
+            <div className="cb-row"><button className="cb-btn" onClick={removeZone}>Remove district</button></div>
+          </>}
+        </section>}
+        {!part && tool !== 'zone' && <section className={`cb-card cb-none${tab === 'selected' ? '' : ' off'}`}><span style={{ color: MUTED }}>Nothing selected</span></section>}
         <section className={`cb-card${tab === 'buildings' ? '' : ' off'}`}>
           <div className="cb-h"><span>Buildings</span><span>{CATALOG.length}</span></div>
           <div className="cb-grid">
