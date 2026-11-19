@@ -2,6 +2,7 @@ package unitwatch
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
@@ -70,6 +71,10 @@ func DailySource(deps DailyDeps) func(context.Context) error {
 		d.DB = db
 		ctx, cancel := context.WithTimeout(ctx, DailyPassTimeout)
 		defer cancel()
-		return d.Pass(ctx)
+		// The day stays unmarked, so a later pass starts the run.
+		if err := d.Pass(ctx); err != nil && !errors.Is(err, unitexec.ErrNoNode) {
+			return err
+		}
+		return nil
 	}
 }

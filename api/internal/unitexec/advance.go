@@ -3,6 +3,7 @@ package unitexec
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -421,6 +422,12 @@ func (d FuncCluster) Create(ctx context.Context, obj map[string]any) (bool, erro
 	return d.CreateFn(ctx, obj)
 }
 
+// ErrNoNode says no node can take the units now. It is a wait, not a failure: unit
+// runs wait for a node, nothing depends on them, and since 2026-11-19 the database
+// nodes stop taking them after writing too much (the controller alerted on four
+// such passes in a row).
+var ErrNoNode = errors.New("no node for the units")
+
 // PlacedConfig is the dispatch configuration with the node the units go to
 // now, read from the node profiles; a slow disk is refused, not fallen back to
 // (two tasks timed out on ubt-k3s-05 on 2026-11-18). A platform without node
@@ -434,7 +441,7 @@ func PlacedConfig(ctx context.Context, namespace, hostLabel string, place func(c
 		return cfg, nil
 	}
 	if node == "" {
-		return cfg, fmt.Errorf("no node for the units: %s", why)
+		return cfg, fmt.Errorf("%w: %s", ErrNoNode, why)
 	}
 	cfg.NodeSelector = map[string]string{hostLabel: node}
 	return cfg, nil
@@ -468,6 +475,10 @@ func RunsSource(d RunsDeps) func(context.Context) error {
 		if cfg.Mode != "off" {
 			advance = func(ctx context.Context, repo, commit, tier string) error {
 				placed, err := d.Placed(ctx)
+				if errors.Is(err, ErrNoNode) {
+					slog.Info("units: waiting for a node", "repo", repo, "commit", commit, "why", err)
+					return nil
+				}
 				if err != nil {
 					return err
 				}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha1" // #nosec G505 -- stands in for git's object ids in a test tree
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -354,5 +355,21 @@ func TestUnitEvidenceRequestRefusesWhatIsNotACommit(t *testing.T) {
 	route.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/units/evidence", strings.NewReader(`{"repo":"r","commit":"`+strings.Repeat("a", 40)+`"}`)))
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("a platform with no ledger answered %d", w.Code)
+	}
+}
+
+// 2026-11-19: with the database nodes over their write limit and only slow disks
+// left, the unit loop failed every pass and the controller alerted, though waiting
+// is what it is meant to do. Positive control: a node gives a config and no error.
+func TestNoNodeForTheUnitsIsAWait(t *testing.T) {
+	place := func(node string) func(context.Context) (string, string, bool) {
+		return func(context.Context) (string, string, bool) { return node, "all full", true }
+	}
+	if _, err := PlacedConfig(context.Background(), "cicd", "host", place("")); !errors.Is(err, ErrNoNode) {
+		t.Fatalf("no node: %v", err)
+	}
+	cfg, err := PlacedConfig(context.Background(), "cicd", "host", place("n"))
+	if err != nil || cfg.NodeSelector["host"] != "n" {
+		t.Fatalf("%v %+v", err, cfg)
 	}
 }
