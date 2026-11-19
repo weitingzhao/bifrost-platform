@@ -1,3 +1,4 @@
+import { useLiveInterval } from '@/domains/foundation/bus/liveRefresh'
 import { useQueries, useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { resolveConsoleHash } from '@/lib/shell/consoleRoutes'
@@ -89,8 +90,10 @@ export function useRuntimePlan(enabled = true): PlanRead {
     return () => window.removeEventListener('hashchange', update)
   }, [])
   const root = requestedRoot ?? roundOf({ data: progress, error: progressError, isError: progressFailed, isPaused: progressPaused })
+  // plan.tree.changed refreshes the plan (step 4); the old pace while the bus stream is down.
+  const planInterval = useLiveInterval(AGENT_PROGRESS_POLL_MS)
   const planQ = useQuery({ queryKey: ['agent-runtime-plan', root], queryFn: ({ signal }) => fetchRuntimePlan(root ?? PLAN_ROOT, signal),
-    enabled: enabled && root !== null, refetchInterval: AGENT_PROGRESS_POLL_MS, retry: false })
+    enabled: enabled && root !== null, refetchInterval: planInterval, retry: false })
   const requestQ = useQuery({ queryKey: ['agent-runtime-plan-request', root], queryFn: ({ signal }) => fetchImportRequest(root ?? PLAN_ROOT, signal),
     enabled: enabled && root !== null && planQ.data?.found === true, staleTime: Infinity, retry: false,
     refetchInterval: q => q.state.status === 'error' ? AGENT_PROGRESS_POLL_MS : false })
@@ -199,9 +202,11 @@ function useRoundPlans(enabled: boolean, source: ProgressSource = 'poll', scope:
     const whole = trees()
     return whole ? { read: 'ok', ...whole } : { read: 'error' }
   }, [rounds])
+  // plan.tree.changed refreshes these too (step 4).
+  const roundsInterval = useLiveInterval(AGENT_PROGRESS_POLL_MS)
   return useQueries({
     queries: rounds.map(root => ({ queryKey: ['agent-runtime-plan', root], queryFn: ({ signal }: { signal: AbortSignal }) => fetchRuntimePlan(root, signal),
-      enabled, refetchInterval: AGENT_PROGRESS_POLL_MS, retry: false })),
+      enabled, refetchInterval: roundsInterval, retry: false })),
     combine,
   })
 }

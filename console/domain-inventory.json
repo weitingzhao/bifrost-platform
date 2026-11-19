@@ -4211,6 +4211,7 @@
         "console/src/api/planSnapshotSchema.ts",
         "console/src/components/layout",
         "console/src/domains/delivery/display",
+        "console/src/domains/foundation/bus",
         "console/src/domains/plan/display",
         "console/src/domains/plan/observations",
         "console/src/domains/plan/readings",
