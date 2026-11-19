@@ -39,13 +39,13 @@ channels:
   - {id: L08, class: K11, disposition: announced, step: "2", what: "full-ci：每天 03:00 起全量 CI（每分钟看时钟）", by: "门·集群看到它起的 run；登记为定时作业", cut: {at: "2026-11-18", evidence: ["topic:ci.run.started"]}}
   - {id: L09, class: K2, disposition: replaced, step: '2', what: release recorder：每 5 分钟（+Kick）把成功 run 记成 ConfigMap 发布记录, by: 门·集群+订阅者写发布事实进账（release.deploy.finished）, cut: {at: '2026-11-18', evidence: ['reader:releases-tick', 'reader:releases-current']}, retired: {at: '2026-11-18', change: I831aeff9551aec38c63e23a6ff078ced0e21b70a, outside: '发布记录写进表；PROD 8ff09ca4 上线后 4 条新记录，ConfigMap 停在 1,351'}}
   - {id: L10, class: K11, disposition: kept, step: '0', what: checklist prober：每 10 分钟轮询 platform-api 自己的 8 条 GET 路由, by: 要接入：Console 就绪页；问题渠道；断了：探针变红没人知道（已派解耦）}
-  - {id: L11, class: K5, disposition: announced, step: "5", what: "patrol autopilot：每 30 秒扫 skill 到期表，读平台 GET，可能 delete_pod，轮询 Cursor 云端 run", by: "动作与卡的分级不变（指令道只定规矩）；它读平台改读读口；delete_pod 等结果以 audit.action.recorded 宣布。Cursor 云端轮询部分若 Cursor 已删则是死路（推断，材料说 Cursor 一侧已删，代码仍在）"}
-  - {id: L12, class: K5, disposition: announced, step: "3", what: "ib-gateway auto-repair：每 30 秒读 Redis 健康键，必要时发 reconnect_all 到 ib:operator:cmd 并每 2 秒读结果", by: "命令流本身不动（见 N08）；修复结果以 plugin.status.changed 宣布"}
-  - {id: L13, class: K11, disposition: announced, step: "3", what: "data-clone scheduler：每小时按调度触发数据克隆", by: "定时作业登记；结果 data.job.finished 宣布"}
+  - {id: L11, class: K5, disposition: announced, step: "5", what: "patrol autopilot：每 30 秒扫 skill 到期表，读平台 GET，可能 delete_pod，轮询 Cursor 云端 run", by: "动作与卡的分级不变（指令道只定规矩）；它读平台改读读口；delete_pod 等结果以 audit.action.recorded 宣布。Cursor 云端轮询部分若 Cursor 已删则是死路（推断，材料说 Cursor 一侧已删，代码仍在）", cut: {at: "2026-11-19", evidence: ["topic:env.health.changed"]}}
+  - {id: L12, class: K5, disposition: announced, step: "3", what: "ib-gateway auto-repair：每 30 秒读 Redis 健康键，必要时发 reconnect_all 到 ib:operator:cmd 并每 2 秒读结果", by: "命令流本身不动（见 N08）；修复结果以 plugin.status.changed 宣布", cut: {at: "2026-11-19", evidence: ["topic:plugin.status.changed"]}}
+  - {id: L13, class: K11, disposition: announced, step: "3", what: "data-clone scheduler：每小时按调度触发数据克隆", by: "定时作业登记；结果 data.job.finished 宣布", cut: {at: "2026-11-19", evidence: ["topic:data.job.finished"]}}
   - {id: L14, class: K11, disposition: kept, step: '0', what: failed-backup sweep：每 24 小时删 30 天前失败的 CNPG Backup CR, by: 在用：备份清理失败走 KubeJobFailed；断了：失败备份 CR 堆积}
   - {id: L15, class: K4, disposition: announced, step: "3", what: "approvals 循环：每 15 秒重试被瞬时拒绝的批准、过期租约转 unknown、发提醒、补写信箱", by: "状态机与租约逻辑留在原处；转移结果以 approval.card.executed 宣布；提醒改走通知器，信箱补写改走 seat.mail.arrived", cut: {at: "2026-11-17", evidence: ["topic:approval.card.executed"]}}
   - {id: L16, class: K4, disposition: announced, step: "3", what: "questions sweep：每 15 秒过期问题、补写信箱", by: "过期转移留在原处，以 question.answered（结果=过期）宣布", cut: {at: "2026-11-18", evidence: ["topic:owner.question.answered"]}}
-  - {id: L17, class: K7, disposition: announced, step: "3", what: "release-policy 到期提醒：每小时一次推手机", by: "到期提醒的推送留在原处，推完以 release.policy.expiring 宣布；这几种推送量小、已在工作，改走总线省不出，还要冒漏推手机的风险（11-18）"}
+  - {id: L17, class: K7, disposition: announced, step: "3", what: "release-policy 到期提醒：每小时一次推手机", by: "到期提醒的推送留在原处，推完以 release.policy.expiring 宣布；这几种推送量小、已在工作，改走总线省不出，还要冒漏推手机的风险（11-18）", cut: {at: "2026-11-19", evidence: ["topic:release.policy.expiring"]}}
   - {id: L18, class: K6, disposition: announced, step: "3", what: "agent-thread watcher：每 30 秒扫线程/主机心跳，沉默则推手机", by: "判定和推送留在原处，推完以 seat.liveness.changed 宣布；这几种推送量小、已在工作，改走总线省不出，还要冒漏推手机的风险（11-18）", cut: {at: "2026-11-18", evidence: ["topic:seat.liveness.changed"]}}
   - {id: L19, class: K12, disposition: kept, step: none, what: agentthreads recorder：每 10 秒把线程心跳缓冲合并落盘, by: 在用：`/agent/threads`（7 天 3.9 万次）；断了：线程在线状态和席位掉线判断失准}
   - {id: L20, class: K12, disposition: deleted, step: "any", what: "agentprogress recorder：每 10 秒把进度文档缓冲落盘（唯一发布方 N15/X-B9 已死）", by: "死路：随 N15、X-B9 一起删（推断：Console Progress 页是否还读 /agent/progress 材料互相矛盾，删前核）", retired: {at: "2026-11-17", change: Ic571bd2e1a39aaed29e8730ac81bcfaf84e2a664, absent: [api/internal/agentprogress], absent_text: ['api/internal/agentprogress"']}}
@@ -57,17 +57,17 @@ channels:
   - {id: L26, class: K3, disposition: not-a-channel, step: none, what: agentrt 连接重试：PG 连不上时 2 秒起指数退避, by: 进程内重试，不是通道}
   - {id: L27, class: K6, disposition: kept, step: none, what: alertrelay 心跳检查：每分钟看 Mac mini 内存里的 Watchdog 时间戳，15 分钟没到发 CRITICAL, by: 例外：死人开关；断了：Alertmanager 死了没人知道}
   - {id: L28, class: K3, disposition: not-a-channel, step: none, what: 请求内等待一组：动作里等外部对象，各 2 秒（至少 5 份循环）, by: 请求内等待，不是通道}
-  - {id: N01, class: K7, disposition: merged, step: "3", what: "统一手机通知口 notice.Send → Mac mini relay → ntfy → 手机", by: "留下并改造成「通知器」（入户口子⑤）：发一次并记已发，其余四种各写各的并到它；第二条路径待 Owner 决定 3"}
-  - {id: N02, class: K7, disposition: announced, step: "3", what: "问题 ask_owner 创建时推手机", by: "创建问题时的推送留在原处，以 owner.question.asked 宣布；这几种推送量小、已在工作，改走总线省不出，还要冒漏推手机的风险（11-18）"}
+  - {id: N01, class: K7, disposition: kept, step: none, what: "统一手机通知口 notice.Send → Mac mini relay → ntfy → 手机", by: "在用：手机通知口，只发不记；改造成「通知器」判不做（11-19）：推送量小、已在工作，问题事件已镜像进总线，再改要冒漏推手机的风险；断了：Owner 手机收不到卡和告警"}
+  - {id: N02, class: K7, disposition: announced, step: "3", what: "问题 ask_owner 创建时推手机", by: "创建问题时的推送留在原处，以 owner.question.asked 宣布；这几种推送量小、已在工作，改走总线省不出，还要冒漏推手机的风险（11-18）", cut: {at: "2026-11-19", evidence: ["topic:owner.question.asked"]}}
   - {id: N03, class: K7, disposition: announced, step: "3", what: "线程沉默/主机丢失推手机（先认领再推）", by: "同 L18；这几种推送量小、已在工作，改走总线省不出，还要冒漏推手机的风险（11-18）", cut: {at: "2026-11-18", evidence: ["topic:seat.liveness.changed"]}}
-  - {id: N04, class: K7, disposition: announced, step: "3", what: "发布策略到期提醒推手机", by: "同 L17；这几种推送量小、已在工作，改走总线省不出，还要冒漏推手机的风险（11-18）"}
+  - {id: N04, class: K7, disposition: announced, step: "3", what: "发布策略到期提醒推手机", by: "同 L17；这几种推送量小、已在工作，改走总线省不出，还要冒漏推手机的风险（11-18）", cut: {at: "2026-11-19", evidence: ["topic:release.policy.expiring"]}}
   - {id: N05, class: K7, disposition: kept, step: none, what: Alertmanager → relay → ntfy（firing 与 resolved）, by: 例外：独立报警路，事件已镜像；断了：手机收不到告警}
   - {id: N06, class: K6, disposition: kept, step: none, what: Watchdog 死人开关：Alertmanager 永远触发的心跳到 relay, by: 例外：死人开关，镜像已写未上线；断了：告警链断了没人知道}
   - {id: N07, class: K7, disposition: announced, step: "3", what: "Alertmanager → platform-api /ops-agent/alertmanager，只写一条审计（无人读）", by: "留在原处作为 alert.fired 的入口（由门·平台库写账，不再只写 500 条审计）；只给观察和 Console，不推手机", cut: {at: "2026-11-18", evidence: ["topic:alert.rule.fired"]}}
   - {id: N08, class: K5, disposition: reserved, step: "none", what: "Redis stream ib:operator:cmd + 结果键（Daemon / IB operator 命令流）", by: "现在不接，位置已留：指令道（D10 冻结，Agent 不写，平台只发 reconnect_all）；将来靠登记接入"}
   - {id: N09, class: K13, disposition: merged, step: "3", what: "PG 信箱 agentrt.message（+事件流 mbox:<actor>）：写入与存放", by: "留下并改造成席位信箱（seat.mail.arrived，事件只带指针，正文仍在 artifact）；X-C2、X-C8、X-C12 并到它", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
   - {id: N10, class: K4, disposition: kept, step: none, what: '把审批/问题结论复制成信箱 note（approval:/question: 键去重）', by: 在用：提单席位收结论信；断了：席位不知道卡的结果}
-  - {id: N11, class: K9, disposition: merged, step: "3", what: "窗口排队通知：队首可上时写信箱 note", by: "seat.mail.arrived（收件人=队头席位）+release.window.changed"}
+  - {id: N11, class: K9, disposition: merged, step: "3", what: "窗口排队通知：队首可上时写信箱 note", by: "seat.mail.arrived（收件人=队头席位）+release.window.changed", cut: {at: "2026-11-19", evidence: ["topic:seat.mail.arrived", "topic:release.window.changed"]}}
   - {id: N12, class: K9, disposition: announced, step: "3", what: "发布窗口 ConfigMap cicd/bifrost-release-window（CAS，TTL 5 分钟，队列 100）", by: "锁的原语留在原处；变化由门·集群 watch 宣布", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
   - {id: N13, class: K5, disposition: announced, step: "3", what: "起 Tekton run：MCP、Console、head-release、full-ci、unit 四处各自创建", by: "动作与卡分级不变；起了什么由门·集群宣布（ci.run.started）。四处创建收成一个动作入口属动作层，设计没说（见第 4 节）", cut: {at: "2026-11-18", evidence: ["topic:ci.run.started"]}}
   - {id: N14, class: K6, disposition: kept, step: none, what: 线程/主机心跳 POST /agent/threads/heartbeat（共享 reporter 令牌，10 秒合并落盘）, by: 在用：心跳（10 天 3.8 万次）；断了：席位在线判断全失}
@@ -86,11 +86,11 @@ channels:
   - {id: W05, class: K3, disposition: merged, step: "3", what: "doorbell 命令行：后台长轮询，退出叫醒闲着的桌面会话", by: "留下并改造成「等 seat.mail.arrived」的叫醒方式（推断：材料里它是唯一验证过能叫醒空闲桌面会话的办法；设计没说怎么叫醒，见第 4 节）", cut: {at: "2026-11-18", evidence: ["reader:inbox-waiters"]}}
   - {id: R01, class: K1, disposition: kept, step: none, what: 读口组：平台/环境活着吗（每次请求实时探测，无缓存）, by: 要接入：Console self-health（7 天 5.7 万次）；断了：环境坏了没事件（已派解耦）}
   - {id: R02, class: K1, disposition: merged, step: "2", what: "读口组：流水线、发布（实时读 Tekton/ConfigMap/PG）", by: "留下并改造：14 处列流水线运行都并到它，数据来自门·集群的缓存", cut: {at: "2026-11-17", evidence: ["reader:pipeline-runs-page", "reader:supply-chain-page", "reader:release-context"]}}
-  - {id: R03, class: K1, disposition: merged, step: "3", what: "读口组：审批与问题状态（Console 8 处 3 种 key）", by: "留下并改造成带版本；Console 各处并到它"}
-  - {id: R04, class: K1, disposition: merged, step: "1", what: "读口组：计划/运行时/事件（/agentrt/events 跨流游标，/progress 每次现算）", by: "留下并改造：事件读口就是「账」的读口，与 S05 同体"}
-  - {id: R05, class: K1, disposition: merged, step: "3", what: "读口组：某提交的 CI/证据、单元范围（evidence/ci、units/scope）", by: "留下并改造成「判定逻辑只留一份」的那一份；X-A6/X-A7 的拷贝并到它"}
+  - {id: R03, class: K1, disposition: kept, step: none, what: "读口组：审批与问题状态（Console 8 处 3 种 key）", by: "在用：审批与问题读口；带版本改造判不做（11-19）：Console 轮询 10 分钟合计几秒（11-16 量），省不出；变化已以 approval.card.* 和 owner.question.* 上总线；断了：Console 看不到卡和问题"}
+  - {id: R04, class: K1, disposition: kept, step: none, what: "读口组：计划/运行时/事件（/agentrt/events 跨流游标，/progress 每次现算）", by: "在用：计划、运行时、事件读口，事件读口已是账的读口；再改造判不做（11-19），理由同 R03；断了：Console 计划页和事件页空"}
+  - {id: R05, class: K1, disposition: kept, step: none, what: "读口组：某提交的 CI/证据、单元范围（evidence/ci、units/scope）", by: "在用：某提交的 CI 和证据、单元范围；X-A6、X-A7 的拷贝在 Trade 发布路径（例外，见 X-A6）；并成一份判不做（11-19）：D10 期间 Trade 发布不动；断了：CI 判定和发布前检查读不到"}
   - {id: R06, class: K1, disposition: kept, step: none, what: 读口组：谁做了什么（/audit 最近 500 条、/records）, by: 在用：Audit 页、`get_audit_log`；写入已上总线；断了：审计查不到}
-  - {id: R07, class: K1, disposition: merged, step: "3", what: "读口组：线程、主机、进度、开发会话", by: "留下并改造成席位记录的读口；/agent/progress 那一半是死路（见 L20）"}
+  - {id: R07, class: K1, disposition: kept, step: none, what: "读口组：线程、主机、进度、开发会话", by: "在用：线程、主机、开发会话读口（/agent/progress 那半已随 L20 删）；改造成席位记录读口判不做（11-19）：席位身份方案已撤（11-18）；断了：席位在线状态看不到"}
   - {id: R08, class: K1, disposition: kept, step: none, what: 读口组：指标与告警（请求时转发 Prometheus）, by: 在用：`/telemetry/*`（10 天 22 万次）；断了：Console 的指标和告警页空白}
   - {id: R09, class: K1, disposition: kept, step: none, what: 读口组：数据插件状态（每次请求实时 HTTP 到插件，三份代理）, by: 要接入：Console 插件状态（7 天 112 次）；断了：插件坏了没事件（已派解耦）}
   - {id: R10, class: K1, disposition: merged, step: "3", what: "读口组：发布窗口与发布策略", by: "留下并改造成带版本；X-A9、X-A10 的流水线直读并到它", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
@@ -103,7 +103,7 @@ channels:
   - {id: S05, class: K8, disposition: merged, step: "1", what: "PG 事件日志 agentrt.event（哈希链、封闭词表、cause_event_id）", by: "留下并改造成「账」本体：永久、按序、带起因；审计与窗口事件并到它", cut: {at: "2026-11-17", evidence: ["topic:git.main.advanced"]}}
   - {id: S06, class: K8, disposition: announced, step: "3", what: "证据账 agentrt.evidence / unit_run（以 git tree 内容为键）", by: "原因：内容键证据账是唯一一本，闸门读它；留在原处，判定变化以 ci.verdict.changed 宣布", cut: {at: "2026-11-18", evidence: ["topic:ci.verdict.changed"]}}
   - {id: S07, class: K8, disposition: announced, step: "3", what: "action_record：一次直接调用一条（谁、做什么、为什么、怎么撤销）", by: "原因：与事件账互补（谁为什么做、怎么撤销）；加 cause 指回事件；落账后宣布 audit.action.recorded", cut: {at: "2026-11-18", evidence: ["topic:audit.action.recorded"]}}
-  - {id: S08, class: K8, disposition: replaced, step: '3', what: ConfigMap 发布记录（每个成功 run 一条，无清理）, by: 账（release.deploy.finished）；releases.Current 改读账, retired: {at: '2026-11-18', change: I831aeff9551aec38c63e23a6ff078ced0e21b70a, outside: '不再新增 ConfigMap；已有 1,351 个是否清理归 Owner'}}
+  - {id: S08, class: K8, disposition: replaced, step: '3', what: ConfigMap 发布记录（每个成功 run 一条，无清理）, by: 账（release.deploy.finished）；releases.Current 改读账, cut: {at: "2026-11-19", evidence: ["reader:releases-current"]}, retired: {at: '2026-11-18', change: I831aeff9551aec38c63e23a6ff078ced0e21b70a, outside: '不再新增 ConfigMap；已有 1,351 个是否清理归 Owner'}}
   - {id: S09, class: K9, disposition: announced, step: "3", what: "同 N12：窗口 ConfigMap 的存放", by: "同 N12", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
   - {id: S10, class: K12, disposition: kept, step: none, what: 线程标题 ConfigMap（手改、转录扫描、上报三个来源）, by: 在用：Lineage、线程标题；来源是手动命名和 Stop 钩子，转录扫描已删}
   - {id: S11, class: K13, disposition: merged, step: "3", what: "信箱存放：agentrt.message + artifact（正文 ≤8 KiB）", by: "随 N09 留下并改造：正文仍在这里，事件只带指针", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
@@ -130,7 +130,7 @@ channels:
   - {id: X-A15, class: K3, disposition: kept, step: none, what: release_tool.py wait：等 PipelineRun 离开 Unknown, by: 例外：Trade PROD 发布的现行路径，待 Trade 恢复发布时验证，目前没有演练证据；要删归 Owner}
   - {id: X-A16, class: K5, disposition: announced, step: "4", what: "Argo pin-sync：patch Application 并每 2 秒轮询", by: "patch 动作留在原处；同步状态由门·集群 watch Application 宣布", cut: {at: "2026-11-18", evidence: ["reader:gitops-watch"]}}
   - {id: X-A17, class: K2, disposition: not-a-channel, step: none, what: Argo CD 拉 Gitea main（bifrost-prod/stg 手动同步，platform 两个自动）, by: Argo 自带拉取，变化已有事件}
-  - {id: X-A18, class: K10, disposition: merged, step: "4", what: "发布后核对四种（rollout status、digest 核对、集群内冒烟、PROD 读 STG/PROD /health）", by: "留下并改造成唯一一份核对；L05 并到它；结果 release.deploy.finished"}
+  - {id: X-A18, class: K10, disposition: merged, step: "4", what: "发布后核对四种（rollout status、digest 核对、集群内冒烟、PROD 读 STG/PROD /health）", by: "留下并改造成唯一一份核对；L05 并到它；结果 release.deploy.finished", cut: {at: "2026-11-19", evidence: ["topic:release.deploy.finished"]}}
   - {id: X-A19, class: K11, disposition: kept, step: '0', what: PipelineRun 清理 CronJob（7 天前终态、1h/1d 前 Pod）, by: 在用：PipelineRun 清理；断了：集群堆满}
   - {id: X-A20, class: K1, disposition: kept, step: none, what: Prometheus 抓取与规则（我把它归 K1：需求文件 K1 清单没点它的名字，但 K1 条数 21 少这一条）, by: 在用：告警的源头；断了：没有告警}
   - {id: X-A21, class: K7, disposition: kept, step: none, what: Alertmanager → Mac mini .50 relay（critical 和备份类告警；Watchdog 单独）, by: 例外：独立报警路；断了：手机收不到告警}
@@ -141,7 +141,7 @@ channels:
   - {id: X-A26, class: K6, disposition: announced, step: "3", what: "平台后台循环存活指标（给 Prometheus）", by: "同 S14", cut: {at: "2026-11-18", evidence: ["topic:loop.health.changed"]}}
   - {id: X-A27, class: K7, disposition: kept, step: none, what: Dagster 传感器 → Alertmanager（研究 run 失败/资产检查失败）, by: 在用：Research 失败告警；断了：研究 run 失败没人知道}
   - {id: X-A28, class: K2, disposition: replaced, step: "1", what: "platform-workers 的 head_release 循环（infra 只放开关 HEAD_RELEASE=stg）", by: "同 L04", cut: {at: "2026-11-17", evidence: ["reader:head-release"]}, retired: {at: "2026-11-18", change: I0681d9f1832d2b297e4b5cedf6ce34f262a26f70, absent_text: ["consumerLive"]}}
-  - {id: X-A29, class: K5, disposition: announced, step: "3", what: "单元任务影子派发 UNIT_DISPATCH=shadow（还没有门读这些行）", by: "留在原处；有门读之前不并排；结果 ci.verdict.changed"}
+  - {id: X-A29, class: K5, disposition: announced, step: "3", what: "单元任务影子派发 UNIT_DISPATCH=shadow（还没有门读这些行）", by: "留在原处；有门读之前不并排；结果 ci.verdict.changed", cut: {at: "2026-11-19", evidence: ["topic:main.regression.known"]}}
   - {id: X-A30, class: K8, disposition: not-a-channel, step: none, what: Loki 步骤日志（promtail → Loki）, by: 日志存放，排障和审计长尾；删日志归 Owner}
   - {id: X-A31, class: K5, disposition: not-this-way, step: none, what: 执行卡执行口：owner_run_command 卡 → owner-exec（命令按指纹+一次性码）, by: 例外：同 N19；断了：执行卡不能执行}
   - {id: X-B1, class: K12, disposition: kept, step: none, what: 线程心跳钩子：13 个事件推 POST /agent/threads/heartbeat, by: 在用：心跳来源；断了：同 N14}
@@ -160,7 +160,7 @@ channels:
   - {id: X-B14, class: K1, disposition: kept, step: none, what: MCP 平台桥：8 个进程同一份程序，只靠 MCP_BRIDGE_FOCUS 区分, by: 在用：所有 Agent 的平台工具；断了：Agent 用不了平台}
   - {id: X-B15, class: K1, disposition: kept, step: none, what: MCP trade-api：只读 Trade 健康, by: 例外：Trade 只读；断了：Trade 健康看不到}
   - {id: X-B16, class: K3, disposition: replaced, step: "3", what: "MCP 长轮询工具 wait_for_*（W01–W04 的 MCP 面）", by: "入户口子④的一个通用「等某主题」工具", cut: {at: "2026-11-18", evidence: ["reader:mcp-wait"]}, retired: {at: "2026-11-18", change: I45675cba9f3c8c9adb5db12d203c3cd601a03321, outside: "mcp/platform/src: busWait.ts and its test; the tools hold a bus long poll between reads"}}
-  - {id: X-B17, class: K1, disposition: announced, step: "5", what: "bdev 本地服务事件日志（bdev events、get_dev_session_logs）", by: "文件留在原处（死因追查要的原始记录）；变化以 dev.session.changed 宣布（env=本机，本机怎么接总线设计没说）"}
+  - {id: X-B17, class: K1, disposition: kept, step: none, what: "bdev 本地服务事件日志（bdev events、get_dev_session_logs）", by: "在用：本机开发服务的死因记录，只给人查（bdev events、get_dev_session_logs）；不接总线（11-19）：本机没有总线入口，接了也没人收；断了：本机服务为什么重启查不到"}
   - {id: X-B18, class: K1, disposition: kept, step: none, what: 'Mac mini 操作面 :8783（launchd 状态、relay 宿主）', by: 例外：手机中继的宿主；断了：独立报警路断}
   - {id: X-B19, class: K5, disposition: kept, step: '4', what: release.sh 整体：窗口、策略、冻结、镜像同步、CI 等待、审批轮询、kubectl create, by: 例外：Trade 和 Research 的发布入口，待恢复发布时验证，目前没有演练证据；要删归 Owner}
   - {id: X-B20, class: K14, disposition: kept, step: none, what: Cursor 一侧残留（thread-heartbeat.js、preflight.js 里的适配代码）, by: 例外：Cursor 已退役，但适配代码在 preflight.js 里，那是硬边界，Agent 不改}
@@ -171,14 +171,14 @@ channels:
   - {id: X-C5, class: K12, disposition: kept, step: none, what: 各线 state.md：现在停在哪、下一个动作（覆写，第一屏最新）, by: 例外：人读文档，各线在写}
   - {id: X-C6, class: K12, disposition: deleted, step: any, what: 席位台账 Artifact（手写数据生成）, by: 待删：手写席位台账，各线停止维护；已发布页面不删；compute/ledger 迁走后再停}
   - {id: X-C7, class: K1, disposition: deleted, step: any, what: snapshot.sh：主统筹一次读出此刻事实（kubectl 读窗口 ConfigMap、git 读分支）, by: tools/snapshot.sh 已由主统筹删除, retired: {at: '2026-11-18', change: coordinator-notes, outside: 共享笔记里的工具，不在本仓库}}
-  - {id: X-C8, class: K13, disposition: merged, step: "3", what: "平台收件箱+信封 type/topic/about/refs（席位 ↔ 席位）", by: "同 N09；信封词表两套（ask/answer/help/handover/note 与 fact/ask/decide/deliver/status/note）需收成一套"}
+  - {id: X-C8, class: K13, disposition: merged, step: "3", what: "平台收件箱+信封 type/topic/about/refs（席位 ↔ 席位）", by: "同 N09；信封词表两套（ask/answer/help/handover/note 与 fact/ask/decide/deliver/status/note）需收成一套", cut: {at: "2026-11-19", evidence: ["topic:seat.mail.arrived"]}}
   - {id: X-C9, class: K3, disposition: merged, step: "3", what: "门铃 doorbell.ts：后台命令退出即叫醒会话（实测 4–7 秒）", by: "同 W05", cut: {at: "2026-11-18", evidence: ["reader:inbox-waiters"]}}
-  - {id: X-C10, class: K9, disposition: merged, step: "3", what: "窗口排队「轮到你了」（window.your_turn/missed/still_held/queue_timeout）", by: "同 N11"}
+  - {id: X-C10, class: K9, disposition: merged, step: "3", what: "窗口排队「轮到你了」（window.your_turn/missed/still_held/queue_timeout）", by: "同 N11", cut: {at: "2026-11-19", evidence: ["topic:seat.mail.arrived", "topic:release.window.changed"]}}
   - {id: X-C11, class: K1, disposition: merged, step: "2", what: "get_release_context：发布现场读口（席位 → 平台）", by: "同 R02 的 /context，并到那一组", cut: {at: "2026-11-17", evidence: ["reader:release-context"]}}
   - {id: X-C12, class: K13, disposition: kept, step: none, what: 桌面应用跨会话消息 send_message（被「20 条」上限拦过）, by: 在用：席位之间协作和指令；问题改发信箱，门铃叫醒（空闲叫醒已验证，例外撤销）}
   - {id: X-C13, class: K11, disposition: not-a-channel, step: none, what: 自查定时器：值班会话每 30 分钟叫自己（额度紧时 2 小时）, by: 值班自己的定时器，不是模块间通道}
   - {id: X-C14, class: K13, disposition: deleted, step: any, what: ci-feedback.md：各线 → CI 线的问题收件箱（47 KB）, by: 已停用, retired: {at: '2026-11-18', change: ci-line-notes, outside: 共享笔记 ci-feedback.md 已停用，问题改发 CI 线信箱，文件留作历史}}
-  - {id: X-C15, class: K13, disposition: deleted, step: any, what: 章程两份（infra charters/ 与共享笔记，后者「不再是准的」）, by: 待删：共享笔记副本已过期，infra 那份留}
+  - {id: X-C15, class: K13, disposition: deleted, step: any, what: 章程两份（infra charters/ 与共享笔记，后者「不再是准的」）, by: 已删：共享笔记副本已过期，infra 那份留, retired: {at: '2026-11-18', change: biz-align-notes, outside: '共享笔记里的章程副本 11-18 由解耦线打包进 biz-align/charter-note-copies-2026-11-18；domains/7-tenant/charter.md 是占位席位的工作笔记，不是章程副本'}}
   - {id: X-C16, class: K13, disposition: kept, step: none, what: 接力页 RELAY.md / RELAY-BOOTSTRAP.md（换号、额度用完时交接）, by: 例外：人读文档，额度用完时交接}
   - {id: X-C17, class: K13, disposition: not-a-channel, step: none, what: 席位自动摘要塞进主线程（约 1000 条/天，转自 design-v1）, by: 桌面应用行为，平台管不到}
   - {id: X-C18, class: K13, disposition: kept, step: none, what: 记忆索引 MEMORY.md：规矩、教训、Owner 定的法, by: 例外：人读文档}

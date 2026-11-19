@@ -65,7 +65,7 @@ func TestRetiredChannelsAreGone(t *testing.T) {
 	if len(chs) != 153 {
 		t.Fatalf("%d channels, the table has 153", len(chs))
 	}
-	want := map[string]int{"replaced": 12, "merged": 20, "kept": 56, "announced": 30, "deleted": 21, "not-this-way": 4, "not-a-channel": 9, "reserved": 1}
+	want := map[string]int{"replaced": 12, "merged": 15, "kept": 62, "announced": 29, "deleted": 21, "not-this-way": 4, "not-a-channel": 9, "reserved": 1}
 	got := map[string]int{}
 	seen := map[string]bool{}
 	for _, c := range chs {
@@ -258,7 +258,7 @@ func TestStepsMatchTheTableAndCutsNameTheirProof(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := Summarize(chs)
-	want := map[string]int{"0": 5, "1": 5, "2": 7, "3": 47, "4": 3, "5": 2, "any": 21, "none": 63}
+	want := map[string]int{"0": 5, "1": 4, "2": 7, "3": 43, "4": 3, "5": 1, "any": 21, "none": 69}
 	for _, st := range p.Steps {
 		if st.Total != want[st.Step] {
 			t.Errorf("step %s: %d rows, the table has %d", st.Step, st.Total, want[st.Step])
