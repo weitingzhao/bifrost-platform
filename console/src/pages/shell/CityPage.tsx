@@ -4,7 +4,8 @@ import { fetchApprovalList } from '@/api/approvals'
 import { fetchCiDomains } from '@/api/ciDomains'
 import { authedFetch } from '@/api/client'
 import { fetchQuestionList } from '@/api/questions'
-import { fetchDeliveryPipelines } from '@/domains/delivery/api/delivery'
+import { fetchDeliveryPipelines, fetchPipelineRuns } from '@/domains/delivery/api/delivery'
+import { FLIGHT_PIPELINES, flightLog, type Run } from '@/domains/owner/city/cityFlights'
 import { systemItems, type CityLane, pluginsOf } from '@/domains/owner/city/catalog'
 import CityBuilder, { type Glance } from '@/domains/owner/city/CityBuilder'
 import { skyReading, type ReleaseContext } from '@/domains/owner/city/cityReadings'
@@ -65,6 +66,11 @@ export default function CityPage() {
   const contexts = useMemo(() => new Map(repos.map((r, i) => [r, contextQueries[i]?.isError ? null : contextQueries[i]?.data ?? null] as const)), [repos, contextQueries])
   const contextKey = contextQueries.map(q => q.dataUpdatedAt).join(',')
   // Which namespaces a tenant runs in waits for the tenant domain's contract: until then the modules are unknown.
+  // Today's launches: each delivery pipeline's retained runs, read every five minutes.
+  const flightPipes = useMemo(() => FLIGHT_PIPELINES(lanes), [lanes])
+  const runQueries = useQueries({ queries: flightPipes.map(name => ({ queryKey: ['city', 'runs', name], queryFn: () => fetchPipelineRuns(name), refetchInterval: 5 * 60_000 })) })
+  const runsKey = runQueries.map(q => q.dataUpdatedAt).join(',')
+  const flights = useMemo(() => runQueries.every(q => q.data) ? flightLog(runQueries.flatMap(q => (q.data?.runs ?? []) as Run[]), lanes, Date.now()) : undefined, [runsKey, lanes]) // eslint-disable-line react-hooks/exhaustive-deps
   const camps = useMemo(() => campuses(lanes, contexts, deployments.data ?? null), [contextKey, lanes, deployments.data]) // eslint-disable-line react-hooks/exhaustive-deps
   const sky = useMemo(() => skyReading(contexts, lanes, Date.now()), [contextKey, lanes]) // eslint-disable-line react-hooks/exhaustive-deps
   const readings = useMemo(() => {
@@ -94,13 +100,13 @@ export default function CityPage() {
     ]
   }, [readings, util.data, workers])
 
-  const key = [...readings].map(([k, r]) => `${k}=${r.word}:${r.count ?? ''}:${r.lines[0] ?? ''}`).join('|') + sky.satellites.map(x => `${x.name}=${x.word}`).join('|') + JSON.stringify(sky.flow) + [...camps.values()].map(c => c.lines.join()).join('|') + (workers ?? []).map(w => `${w.seat}=${w.state}:${w.target.kind}:${w.bubble}`).join('|')
+  const key = String(flights?.flights.length ?? '') + [...readings].map(([k, r]) => `${k}=${r.word}:${r.count ?? ''}:${r.lines[0] ?? ''}`).join('|') + sky.satellites.map(x => `${x.name}=${x.word}`).join('|') + JSON.stringify(sky.flow) + [...camps.values()].map(c => c.lines.join()).join('|') + (workers ?? []).map(w => `${w.seat}=${w.state}:${w.target.kind}:${w.bubble}`).join('|')
   const store = useMemo(() => platformLayoutStore(), [])
   const chrome = layout === 'tabs' ? '11.5rem + env(safe-area-inset-bottom)' : '7.5rem'
   return (
     <div style={{ height: `calc(100dvh - ${chrome})`, minHeight: 480 }}>
       <CityBuilder items={items} store={store} canBuild={canAdmin && !capsError} initial={plannedCity}
-        readingOf={b => readings.get(b)} sky={sky} workers={workers} campusOf={b => camps.get(b.replace(/^tenant:/, ''))} readingsKey={key} glance={glance}
+        readingOf={b => readings.get(b)} sky={sky} workers={workers} campusOf={b => camps.get(b.replace(/^tenant:/, ''))} flights={flights} readingsKey={key} glance={glance}
         onOpen={() => undefined} />
     </div>
   )

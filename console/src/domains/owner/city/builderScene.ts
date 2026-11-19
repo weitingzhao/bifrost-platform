@@ -5,6 +5,7 @@ import { baseTextures, kindOf, layersOf, spriteOf, spriteUrl, type Layer } from 
 import type { Reading, Sky } from './cityReadings'
 import type { Worker } from './cityWorkers'
 import { campusPlan, type Campus } from './cityCampus'
+import type { Flight, Log } from './cityFlights'
 import { nextZoneName, zoneTint } from './zones'
 import { coreTier, diskTier, memTier } from './cityMachines'
 
@@ -31,6 +32,8 @@ export type SceneInit = {
   readingOf: (binds: string) => (Reading & { meters?: Meters }) | undefined
   /** The satellites in orbit and which legs of the crawlerway a real run moves along. */
   skyOf: () => Sky | undefined
+  /** Today's flight log and, while a replay runs, the day's clock and the flights in the air then. */
+  flightsOf?: () => { log?: Log; replay: { clock: number; active: Flight[] } | null }
   /** What stands inside a tenant's campus, read; undefined when it has none. */
   campusOf?: (binds: string) => Campus | undefined
   /** The seats that reported a status, each a worker; undefined when not read. */
@@ -496,7 +499,7 @@ export class BuilderScene extends Phaser.Scene {
     }
     for (const [id, v] of this.views) if (!seen.has(id)) { v.imgs.forEach(i => i.img.destroy()); v.tag.destroy(); v.plate.destroy(); v.num.destroy(); v.win?.destroy(); v.ship?.destroy(); v.fx.destroy(); this.views.delete(id) }
     if (this.selected && !seen.has(this.selected)) this.select(null)
-    this.syncDecor(); this.drawMark(); this.relabel(); this.drawEffects(); this.drawSky(); this.drawWorkers()
+    this.syncDecor(); this.drawMark(); this.relabel(); this.drawEffects(); this.drawSky(); this.drawWorkers(); this.drawBoards()
   }
 
   private sortDepth() {
@@ -582,6 +585,30 @@ export class BuilderScene extends Phaser.Scene {
   }
 
   /**
+   * The scoreboards (the Owner, 2026-11-19): beside the pad, today's PROD launches; beside the
+   * assembly building, today's STG stackings; counted from the delivery runs (ok, failed, going).
+   * During a replay the pad's board shows the replay's clock.
+   */
+  private boards = new Map<string, Phaser.GameObjects.Text>()
+  private drawBoards() {
+    const f = this.s.flightsOf?.(), seen = new Set<string>()
+    if (f?.log) for (const p of this.s.doc.parts) {
+      const kind = p.kind === 'pad' ? 'prod' : p.kind === 'assembly' ? 'stg' : null
+      if (!kind) continue
+      const t = f.log[kind], hhmm = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Chicago' })
+      const text = f.replay && kind === 'prod'
+        ? `REPLAY ${hhmm(f.replay.clock)}\n${f.log.flights.filter(x => x.kind === 'prod' && x.start <= f.replay!.clock).length} of ${t.total} launched`
+        : `${kind === 'prod' ? 'PROD' : 'STG'} TODAY ${t.total}\n✓${t.ok}  ✗${t.failed}${t.going ? `  ↑${t.going}` : ''}`
+      let b = this.boards.get(p.id)
+      if (!b) { b = this.add.text(0, 0, '', { fontFamily: 'JetBrains Mono, ui-monospace, Menlo, monospace', fontSize: `${11 * this.s.dpr}px`, fontStyle: 'bold', color: '#ffd76a', backgroundColor: '#2f3446', align: 'center', padding: { x: 5 * this.s.dpr, y: 3 * this.s.dpr } }).setOrigin(0.5, 1).setScale(1 / this.s.dpr); this.boards.set(p.id, b) }
+      const at = kind === 'prod' ? iso(p.x + p.size, p.y + p.size * 0.35, 60) : iso(p.x - 0.2, p.y + p.size, 70)
+      b.setText(text).setPosition(at.x, at.y).setColor(t.failed > 0 && !f.replay ? '#ff9d8a' : '#ffd76a').setDepth(180000).setVisible(!this.s.editing)
+      seen.add(p.id)
+    }
+    for (const [id, b] of this.boards) if (!seen.has(id)) { b.destroy(); this.boards.delete(id) }
+  }
+
+  /**
    * The machines' front windows as live gauges (the Owner, 2026-11-19): the
    * three windows on a generator set's face are power (CPU), cooling water
    * (memory) and nitrogen (disk), each filled to what is used of what there
@@ -637,7 +664,7 @@ export class BuilderScene extends Phaser.Scene {
   }
 
   /** The readings drawn: a rocket that launches, crates at the door, workers holding signs. Only what was read. */
-  refreshReadings() { if (this.ready) { this.syncParts(); this.sortDepth(); this.relabel(); this.drawEffects(); this.drawSky(); this.drawShade(); this.drawLinks(); this.drawWorkers() } }
+  refreshReadings() { if (this.ready) { this.syncParts(); this.sortDepth(); this.drawBoards(); this.relabel(); this.drawEffects(); this.drawSky(); this.drawShade(); this.drawLinks(); this.drawWorkers() } }
 
   private drawEffects() {
     const box = (g: G, x: number, y: number, s: number, h: number, col: number) => {

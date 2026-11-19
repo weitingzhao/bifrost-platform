@@ -13,6 +13,7 @@ import { skyReading, type ReleaseContext } from '../src/domains/owner/city/cityR
 import { cityReadings, utilityGlance } from '../src/domains/owner/city/cityState'
 import { workersGlance, workersOf } from '../src/domains/owner/city/cityWorkers'
 import { campuses, DEPLOYMENTS_QUERY } from '../src/domains/owner/city/cityCampus'
+import { FLIGHT_PIPELINES, flightLog, type Run } from '../src/domains/owner/city/cityFlights'
 import { readUtilities } from '../src/domains/owner/city/cityUtilities'
 import { machines, variantOf } from '../src/domains/owner/city/cityMachines'
 import { fetchPromQL } from '../src/api/telemetry'
@@ -26,8 +27,10 @@ const seed = q.get('seed')
 const store: LayoutStore = seed ? { ...browser, load: async () => await (await fetch(`./layout-${seed}.local.json`)).json() as TiledMap } : browser
 
 // The utilities are real: the dev server forwards /api to PLATFORM_API_TARGET and PromQL needs no sign-in.
-void Promise.all([fetch('./snapshot.local.json').then(r => r.json()), readUtilities(async query => (await fetchPromQL(query)).points).catch(() => null), fetchPromQL(DEPLOYMENTS_QUERY).then(r => r.points, () => null), fetch('/api/v1/topology?env=prod').then(r => r.ok ? r.json() : null).catch(() => null)]).then(([s, util, deployments, topo]) => {
+void Promise.all([fetch('./snapshot.local.json').then(r => r.json()), readUtilities(async query => (await fetchPromQL(query)).points).catch(() => null), fetchPromQL(DEPLOYMENTS_QUERY).then(r => r.points, () => null), fetch('/api/v1/topology?env=prod').then(r => r.ok ? r.json() : null).catch(() => null)]).then(async ([s, util, deployments, topo]) => {
   const lanes: CityLane[] = s.lanes ?? []
+  // The flight log is real: the pipelines' runs need no sign-in.
+  const runs = (await Promise.all(FLIGHT_PIPELINES(lanes).map(name => fetch(`/api/v1/delivery/pipelines/${name}/runs`).then(r => r.ok ? r.json() : { runs: [] }).catch(() => ({ runs: [] }))))).flatMap(b => (b.runs ?? []) as Run[])
   const ms = machines(util?.info ?? null, util?.capacity ?? null, topo?.nodes ?? null)
   const nodes = ms.map(m => ({ node: m.id, cores: m.cores, name: m.name, variant: variantOf(m), offGrid: m.offGrid }))
   const items = systemItems(s.tiers ?? [], lanes, pluginsOf(lanes), nodes)
@@ -62,5 +65,5 @@ void Promise.all([fetch('./snapshot.local.json').then(r => r.json()), readUtilit
     seat('a7', 'company-coordinator', ago(8), 'four lines in step'),
   ], now) : undefined
   createRoot(document.getElementById('root')!).render(<CityBuilder items={items} store={store} startEditing={q.has('edit')} initial={plannedCity}
-    readingOf={b => readings.get(b)} sky={sky} readingsKey={demo ? 'demo' : 'real'} workers={workers} campusOf={b => camps.get(b.replace(/^tenant:/, ''))} glance={[utilityGlance(util), workersGlance(workers)]} onOpen={(it, p) => { document.title = `open ${it?.page ?? p.binds}` }} />)
+    readingOf={b => readings.get(b)} sky={sky} readingsKey={demo ? 'demo' : 'real'} workers={workers} campusOf={b => camps.get(b.replace(/^tenant:/, ''))} flights={flightLog(runs, lanes, Date.now())} glance={[utilityGlance(util), workersGlance(workers)]} onOpen={(it, p) => { document.title = `open ${it?.page ?? p.binds}` }} />)
 })

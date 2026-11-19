@@ -5,6 +5,7 @@ import type { Armed, BuilderScene, Tool } from './builderScene'
 import type { Reading, Sky } from './cityReadings'
 import type { Worker } from './cityWorkers'
 import type { Campus } from './cityCampus'
+import { replayAt, type Flight, type Log } from './cityFlights'
 import { DICTIONARY, DICTIONARY_VERSION } from './worldDictionary'
 import { ZONE_NAMES, zoneTint } from './zones'
 import { LAYOUT_FILE, layoutFileText, parseLayoutFile, type LayoutStore } from './layoutStore'
@@ -79,7 +80,7 @@ export type Glance = { text: string; tone: Reading['tone']; href?: string }
 
 const TONE_BG: Record<Reading['tone'], string> = { calm: '#dcf2e2', busy: '#ffe6a8', alert: '#ffc9c2', unknown: '#e6e4ee' }
 
-export default function CityBuilder({ items, store, startEditing = false, canBuild = true, initial, onOpen, readingOf, sky, workers, campusOf, readingsKey = '', glance = [] }: {
+export default function CityBuilder({ items, store, startEditing = false, canBuild = true, initial, onOpen, readingOf, sky, workers, campusOf, flights, readingsKey = '', glance = [] }: {
   items: readonly SystemItem[]; store: LayoutStore; startEditing?: boolean
   /** The real state of what a building stands for, and where it was read. */
   readingOf?: (binds: string) => CityReading | undefined
@@ -89,6 +90,8 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
   workers?: readonly Worker[]
   /** What stands inside each tenant's campus, read. */
   campusOf?: (binds: string) => Campus | undefined
+  /** Today's launches and stackings, from the delivery runs. */
+  flights?: Log
   /** Changes whenever the readings do. */
   readingsKey?: string
   /** One line each for the questions a look should answer. */
@@ -113,6 +116,40 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
   useEffect(() => { scene.current?.refresh() }, [byBinds])
   const openRef = useRef(onOpen); openRef.current = onOpen
   const readRef = useRef(readingOf); readRef.current = readingOf
+  const flightsRef = useRef(flights); flightsRef.current = flights
+  /**
+   * Replay today (the Owner, 2026-11-19): the day's real launches squeezed into a minute, each shown
+   * as it flew; while it runs, the pad and the assembly building show the flights in the air then.
+   */
+  const REPLAY_MS = 60_000
+  const replayOver = useRef(new Map<string, CityReading>())
+  const replayInfo = useRef<{ clock: number; active: Flight[] } | null>(null)
+  const [replay, setReplay] = useState<{ startedAt: number } | null>(null)
+  useEffect(() => {
+    if (!replay || !flights) { replayOver.current.clear(); replayInfo.current = null; scene.current?.refreshReadings(); return }
+    const tick = () => {
+      const t = Date.now() - replay.startedAt
+      if (t > REPLAY_MS) { setReplay(null); return }
+      const at = replayAt(flights, Date.now(), t, REPLAY_MS)
+      replayInfo.current = at
+      const over = new Map<string, CityReading>()
+      const prod = at.active.find(f => f.kind === 'prod')
+      for (const it of items) if (it.binds.startsWith('lane:')) {
+        over.set(it.binds, prod
+          ? { word: prod.product ? `launching ${prod.product.name}` : 'launching the new rocket', tone: 'busy', launching: true, payload: prod.product ?? undefined, lines: [`replay: run ${prod.run}`], source: 'replay of today' }
+          : { word: 'quiet', tone: 'calm', lines: ['replay'], source: 'replay of today' })
+      }
+      const rocketStg = at.active.filter(f => f.kind === 'stg' && !f.product), satStg = at.active.filter(f => f.kind === 'stg' && f.product)
+      over.set('stage:rocket-stg', { word: rocketStg.length ? 'stacking' : 'quiet', tone: rocketStg.length ? 'busy' : 'calm', active: rocketStg.length > 0, lines: ['replay'], source: 'replay of today' })
+      over.set('stage:satellites', { word: satStg.length ? 'testing' : 'quiet', tone: satStg.length ? 'busy' : 'calm', active: satStg.length > 0, count: satStg.length, lines: ['replay'], source: 'replay of today' })
+      replayOver.current = over
+      scene.current?.refreshReadings()
+      bump(v => v + 1)
+    }
+    tick()
+    const id = window.setInterval(tick, 250)
+    return () => window.clearInterval(id)
+  }, [replay, flights, items])
   const skyRef = useRef(sky); skyRef.current = sky
   const workersRef = useRef(workers); workersRef.current = workers
   const campusRef = useRef(campusOf); campusRef.current = campusOf
@@ -144,7 +181,8 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
         onSelect: (id: string | null) => { setSelected(id); if (id) setTab('selected') },
         onZoneSelect: (i: number | null) => { setZoneSel(i); if (i != null) setTab('selected') },
         onPlaced: () => { setArmedS(null); setPendingBind(null); setToolS('select') },
-        readingOf: (b: string) => readRef.current?.(b) as never,
+        readingOf: (b: string) => (replayOver.current.get(b) ?? readRef.current?.(b)) as never,
+        flightsOf: () => ({ log: flightsRef.current, replay: replayInfo.current }),
         skyOf: () => skyRef.current,
         workersOf: () => workersRef.current,
         campusOf: (b: string) => campusRef.current?.(b),
@@ -254,6 +292,9 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
           </> : <>
             {canBuild && <button className="cb-btn go" onClick={() => toggleEdit(true)}>Build</button>}
             {glance.map(g => <a key={g.text} className="cb-glance" href={g.href} style={{ background: TONE_BG[g.tone] }}>{g.text}</a>)}
+            {flights && flights.flights.length > 0 && (replay
+              ? <button className="cb-btn" onClick={() => setReplay(null)}>Stop replay · {replayInfo.current ? new Date(replayInfo.current.clock).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Chicago' }) : ''}</button>
+              : <button className="cb-btn" onClick={() => setReplay({ startedAt: Date.now() })}>Replay today · {flights.flights.length}</button>)}
           </>}
         </div>
         <div className="cb-bar cb-tr">
