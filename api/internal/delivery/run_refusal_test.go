@@ -905,3 +905,19 @@ func TestWorseLatencyTakesTheHigherAverage(t *testing.T) {
 		t.Fatalf("quiet: %v", got)
 	}
 }
+
+// Same origin, the compute line's rollback line: a database node takes this work
+// only while its disk is under 60% busy. Positive control: without the check the
+// busy node, the least loaded by CPU, is chosen.
+func TestABusyProtectedNodeTakesNoSpreadWork(t *testing.T) {
+	m := func(cpu, disk float64) NodeMetrics {
+		return NodeMetrics{WriteLatencySeconds: 0.001, CPUBusy: cpu, DiskBusy: disk, MemoryAvailable: 0.6}
+	}
+	nodes := []NodeProfile{
+		{Host: "db", Name: "db", Protected: true, FreeCPU: 8, FreeMemory: 8 << 30, Metrics: m(0.61, 0.61)},
+		{Host: "other", Name: "other", Protected: true, FreeCPU: 8, FreeMemory: 8 << 30, Metrics: m(0.7, 0.2)},
+	}
+	if p := spreadNode(CITask, nodes, "", BuildPlacement{}); p.Node != "other" {
+		t.Fatalf("placement = %+v", p)
+	}
+}

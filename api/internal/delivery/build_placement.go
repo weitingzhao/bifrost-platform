@@ -42,6 +42,10 @@ const (
 	busyLimit             = 0.85
 	memoryAvailableFloor  = 0.15
 	spreadMargin          = 0.15
+	// Nodes kept for the cluster's own work take spread work only while their disk
+	// is this free (the compute line's rollback line, 2026-11-18: they hold the
+	// databases).
+	protectedDiskBusy = 0.60
 )
 
 // TaskProfile is what a kind of work needs from a node.
@@ -108,6 +112,7 @@ func (h *Handler) SetNodeMetricsReader(r NodeMetricsReader) { h.svc.SetNodeMetri
 type NodeProfile struct {
 	Host       string
 	Name       string
+	Protected  bool   // bifrost.io/batch=deny
 	Problem    string // not ready, cordoned or not measured; "" when it can be judged
 	Metrics    NodeMetrics
 	FreeCPU    float64 // allocatable minus the requests of unfinished pods
@@ -207,7 +212,8 @@ func spreadNode(task TaskProfile, nodes []NodeProfile, current string, fallback 
 	var best, kept *NodeProfile
 	for i := range nodes {
 		n := &nodes[i]
-		if n.Problem != "" || nodeFull(task, *n) != "" || diskTier(n.Metrics.WriteLatencySeconds) >= 2 {
+		if n.Problem != "" || nodeFull(task, *n) != "" || diskTier(n.Metrics.WriteLatencySeconds) >= 2 ||
+			(n.Protected && n.Metrics.DiskBusy >= protectedDiskBusy) {
 			continue
 		}
 		if best == nil || load(*n) < load(*best) || (load(*n) == load(*best) && n.Host < best.Host) {
@@ -304,7 +310,7 @@ func (s *Service) nodeProfiles(ctx context.Context, task TaskProfile) ([]NodePro
 }
 
 func nodeProfile(ctx context.Context, cs kubernetes.Interface, node *corev1.Node, metrics map[string]NodeMetrics) NodeProfile {
-	p := NodeProfile{Host: node.Labels[hostIDLabel], Name: node.Name}
+	p := NodeProfile{Host: node.Labels[hostIDLabel], Name: node.Name, Protected: node.Labels[batchLabel] == "deny"}
 	if !nodeUsable(node) {
 		p.Problem = "not ready or cordoned"
 		return p
