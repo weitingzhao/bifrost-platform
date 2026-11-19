@@ -7,7 +7,7 @@ import { createRoot } from 'react-dom/client'
 import { STAGES, stagesOf, unitRulesBroken, type Detail, type StageId, type UnitSpec } from '../src/domains/owner/city/gen2/frame/units/process'
 import { UNITS, UNIT_PLAN, cpuRoomReadings } from '../src/domains/owner/city/gen2/content/units/cpu'
 import { cpuRoom } from '../src/domains/owner/city/gen2/frame/units/cpuRoom'
-import { DICTIONARY, rowsDrawn } from '../src/domains/owner/city/gen2/frame/library/dictionary'
+import { DICTIONARY, encode, rowsDrawn, rulerOf, setRuler, STANDARD_PARTS } from '../src/domains/owner/city/gen2/frame/library/dictionary'
 import { spriteUrl } from '../src/domains/owner/city/gen2/frame/sprites'
 
 type Point = { labels: Record<string, string>; value: number }
@@ -90,7 +90,7 @@ function CpuRoomView({ r }: { r: Reads }) {
     <div className="roomgrid">
       <img src={spriteUrl(sprite)} alt={`CPU room of ${id}`} />
       <ul className="key">
-        {rows.map(m => <li key={m.id}><b>{m.shows}</b><span>{m.meaning}</span></li>)}
+        {rows.map(m => <li key={m.id}><b>{m.shows}</b><span>{m.meaning}</span>{m.encoding.kind === 'parts' && rulerOf(m.id) !== m.encoding.each && <em className="ruler">Ruler set here: one {m.part} = {rulerOf(m.id)} {m.encoding.unit === 'GB' ? 'bytes' : `${m.encoding.unit}s`} ({Math.ceil(encode(m.id, m.id === 'core.machines' ? read.cores.length : null) ?? 0)} drawn)</em>}</li>)}
         {rows.length === 0 && <li><span>Nothing read on this machine, so nothing is drawn in its room.</span></li>}
       </ul>
     </div>
@@ -117,12 +117,54 @@ function InsideDraft({ u }: { u: UnitSpec }) {
   </>
 }
 
+/**
+ * The rulers (the Owner, 2026-11-19): a standard part's size is how the city measures, so it can be
+ * adjusted here — the pictures redraw, the readings stay. Kept in this browser only (a way of
+ * looking, like a panel folded); the defaults are the dictionary's.
+ */
+const RULERS_KEY = 'bifrost.city.rulers.v1'
+const RULER_CHOICES: Record<string, { label: string; v: number }[]> = {
+  'core.machines': [1, 2, 4].map(n => ({ label: `${n} core${n > 1 ? 's' : ''}`, v: n })),
+  'mem.sections': [1, 2, 4, 8].map(n => ({ label: `${n} GB`, v: n * 1e9 })),
+  'disk.bays': [64, 128, 256, 512, 1024].map(n => ({ label: n >= 1024 ? '1 TB' : `${n} GB`, v: n * 1e9 })),
+}
+try {
+  const saved = JSON.parse(localStorage.getItem(RULERS_KEY) ?? '{}') as Record<string, number>
+  for (const [id, v] of Object.entries(saved)) { try { setRuler(id, v) } catch { /* a ruler the table no longer has */ } }
+} catch { /* storage unavailable: the defaults */ }
+
+function Rulers({ onChange }: { onChange: () => void }) {
+  const set = (id: string, v: number | null) => {
+    setRuler(id, v)
+    try {
+      const saved = JSON.parse(localStorage.getItem(RULERS_KEY) ?? '{}') as Record<string, number>
+      if (v == null) delete saved[id]; else saved[id] = v
+      localStorage.setItem(RULERS_KEY, JSON.stringify(saved))
+    } catch { /* not kept; still applied here */ }
+    onChange()
+  }
+  return <div className="rulers">
+    <h2>Rulers</h2>
+    <p>One standard part is this much. A different ruler draws a different picture of the same machine; what is read does not change.</p>
+    {STANDARD_PARTS().map(m => {
+      const e = m.encoding as { each: number }, now = rulerOf(m.id)
+      return <label key={m.id}>
+        <span>{m.part}</span>
+        <select value={now} onChange={ev => { const v = Number(ev.target.value); set(m.id, v === e.each ? null : v) }}>
+          {(RULER_CHOICES[m.id] ?? [{ label: String(e.each), v: e.each }]).map(c => <option key={c.v} value={c.v}>{c.label}{c.v === e.each ? ' (default)' : ''}</option>)}
+        </select>
+      </label>
+    })}
+  </div>
+}
+
 const STATE_WORD = { confirmed: 'Confirmed', open: 'Making now', waiting: 'Waits' } as const
 
 function App() {
   const [r, setR] = useState<Reads | null>(snap ?? null)
   const [live, setLive] = useState(false)
   const [unitId, setUnitId] = useState('cpu')
+  const [, setRulerTick] = useState(0)
   useEffect(() => { readLive().then(x => { if (x) { setR(x); setLive(true) } }) }, [])
   const u = UNITS.find(x => x.id === unitId)
   const stages = u ? stagesOf(u) : []
@@ -148,6 +190,7 @@ function App() {
             <i>{spec ? `${done} of ${STAGES.length} confirmed` : 'not started'}</i>
           </button>
         })}
+        <Rulers onChange={() => setRulerTick(t => t + 1)} />
       </nav>
       {u && <section>
         <h2>{u.name} <span className="what">{u.what}</span></h2>

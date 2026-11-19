@@ -93,9 +93,36 @@ export function encode(id: string, v: number | null): number | null {
     const t = (Math.log(v) - Math.log(e.from)) / (Math.log(e.to) - Math.log(e.from))
     return e.min + (e.max - e.min) * Math.max(0, Math.min(1, t))
   }
-  if (e.kind === 'parts') return v == null || v < 0 ? null : v / e.each
+  if (e.kind === 'parts') return v == null || v < 0 ? null : v / rulerOf(id)
   return v
 }
+
+/**
+ * The rulers (the Owner, 2026-11-19: because there is a standard, it can be adjusted — a different
+ * ruler draws a different picture of the same reality; this is what keeps the city maintainable and
+ * elastic). A standard part's size is how the city measures, not what the system is: a viewer may
+ * set another size for a while (the workshop's Rulers panel), and every drawing that counts that part
+ * redraws; the readings do not change. The table holds the defaults; an override lasts until reset.
+ */
+const rulers = new Map<string, number>()
+
+/** The size of one standard part now: the viewer's ruler if set, else the table's default. */
+export function rulerOf(id: string): number {
+  const e = metaphor(id).encoding
+  if (e.kind !== 'parts') throw new Error(`"${id}" is not a standard part`)
+  return rulers.get(id) ?? e.each
+}
+
+/** Set a ruler (a size above zero), or put it back to the table's default (null). */
+export function setRuler(id: string, each: number | null) {
+  rulerOf(id)
+  if (each == null) rulers.delete(id)
+  else if (!(each > 0)) throw new Error(`a ruler is a size above zero, not ${each}`)
+  else rulers.set(id, each)
+}
+
+/** The rulers as they stand, for the keys pictures are cached under: another ruler is another picture. */
+export const rulersKey = () => [...rulers.entries()].sort().map(([k, v]) => `${k}=${v}`).join(',')
 
 /** Every standard part, from the table: one size each, the same everywhere. */
 export const STANDARD_PARTS = () => DICTIONARY.filter(m => m.encoding.kind === 'parts')

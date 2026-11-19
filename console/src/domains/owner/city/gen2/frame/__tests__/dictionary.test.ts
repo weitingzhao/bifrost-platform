@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DICTIONARY, encode, metaphor, STANDARD_PARTS } from '../library/dictionary'
+import { DICTIONARY, encode, metaphor, rulerOf, rulersKey, setRuler, STANDARD_PARTS } from '../library/dictionary'
 import { deviceSprite, type Form, type Levels } from '../devices'
 
 // 2026-11-19, the Owner: the point is that metrics show naturally; which metaphor shows which metric
@@ -33,6 +33,18 @@ describe('the metaphor dictionary', () => {
     expect(encode('disk.bays', 512e9)).toBe(2)
     expect(encode('mem.sections', null)).toBeNull()
     expect(STANDARD_PARTS().map(m => m.id).sort()).toEqual(['core.machines', 'disk.bays', 'mem.sections'])
+  })
+  // The Owner, the same day: with a standard, the ruler can be adjusted — the picture changes, the
+  // reading does not; that is what keeps the city maintainable and elastic.
+  it('a ruler changes the count, never the reading; reset brings the default back', () => {
+    setRuler('mem.sections', 2e9)
+    expect(encode('mem.sections', 24e9)).toBe(12)
+    expect(rulersKey()).toContain('mem.sections=2000000000')
+    setRuler('mem.sections', null)
+    expect(rulerOf('mem.sections')).toBe(4e9)
+    expect(rulersKey()).toBe('')
+    expect(() => setRuler('mem.sections', 0)).toThrow()
+    expect(() => setRuler('cpu.busy', 2)).toThrow(/not a standard part/)
   })
   it('of two plants, the bigger machine is drawn bigger', () => {
     const lv = (cores: number, mem: number, disk: number): Levels => ({ state: 'online', cpu: 0.3, mem: 0.4, disks: [0.5], cap: { cores, mem, disk } })

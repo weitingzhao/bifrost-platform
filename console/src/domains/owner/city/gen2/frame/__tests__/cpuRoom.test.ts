@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { rowsDrawn } from '../library/dictionary'
-import { cpuRoom, type CpuRoomReadings } from '../units/cpuRoom'
+import { rowsDrawn, setRuler } from '../library/dictionary'
+import { cpuRoom, cpuRoomKey, type CpuRoomReadings } from '../units/cpuRoom'
 
 // 2026-11-19, the CPU unit's room (the workshop). On the first draw a Mac mini, which reports no clock,
 // got empty speed dials and their key rows, and the asleep GPU box got a waiting line in its key with
@@ -25,5 +25,16 @@ describe('the CPU room', () => {
   it('more busy, more light: the picture changes with the reading', () => {
     const busier = { ...linux, cores: linux.cores.map(() => core(0.9, 2e9, 4e9)) }
     expect(cpuRoom(busier).svg).not.toBe(cpuRoom(linux).svg)
+  })
+  // The Owner, 2026-11-19: the ruler is adjustable; another ruler, another picture of the same machine.
+  it('a ruler of two cores a machine draws half the machines, under another key; the readings are untouched', () => {
+    const machines = (svg: string) => (svg.match(/fill="#5b5f6b"/g) ?? []).length
+    const one = cpuRoom(linux), k1 = cpuRoomKey(linux)
+    setRuler('core.machines', 2)
+    try {
+      expect(machines(cpuRoom(linux).svg)).toBe(machines(one.svg) / 2)
+      expect(cpuRoomKey(linux)).not.toBe(k1)
+      expect(linux.cores).toHaveLength(16)
+    } finally { setRuler('core.machines', null) }
   })
 })

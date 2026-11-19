@@ -1,5 +1,5 @@
 import { Draw, faces, INK, type Sprite } from '../kit'
-import { encode, metaphor } from '../library/dictionary'
+import { encode, metaphor, rulerOf, rulersKey } from '../library/dictionary'
 
 /**
  * The CPU unit's room, the workshop (a computer is a factory, the Owner 2026-11-19; RULES.md, 由内向外).
@@ -87,14 +87,22 @@ export function cpuRoom(r: CpuRoomReadings, fw = 8, fd = 8): Sprite {
   type Thing = { at: number; draw: () => void }
   const things: Thing[] = []
   if (cores > 0) {
-    metaphor('core.machines'); metaphor('core.busy')
+    metaphor('core.busy')
     // A speed dial only where the top clock is read (the Mac minis report none): no dial is drawn to sit empty.
     if (r.cores.some(c => c.max)) { metaphor('core.freq'); metaphor('core.freq.max') }
-    const cols = Math.ceil(Math.sqrt(cores)), rows = Math.ceil(cores / cols)
+    // As many machines as the ruler counts (one per core by default; a viewer may set a machine to two
+    // cores or four): each machine stands for its group of cores, the last one narrower when not full.
+    const per = Math.max(1, Math.round(rulerOf('core.machines')))
+    const count = Math.ceil(encode('core.machines', cores)! - 1e-9)
+    const groups = Array.from({ length: count }, (_, m) => r.cores.slice(m * per, (m + 1) * per))
+    const avg = (v: (number | null)[]) => { const k = v.filter((x): x is number => x != null); return k.length ? k.reduce((a, b) => a + b, 0) / k.length : null }
+    const cols = Math.ceil(Math.sqrt(count)), rows = Math.ceil(count / cols)
     const W = 4.6, D = fd - 1.0, cw = W / cols, cd = D / rows
-    const mw = Math.min(cw * 0.6, 0.85), md = Math.min(cd * 0.42, 0.62)
-    r.cores.forEach((c, i) => {
-      const x = 0.55 + (i % cols) * cw + (cw - mw) / 2, y = 0.75 + Math.floor(i / cols) * cd + (cd - md) / 2
+    const mw0 = Math.min(cw * 0.6, 0.85), md = Math.min(cd * 0.42, 0.62)
+    groups.forEach((grp, i) => {
+      const part = grp.length / per, mw = Math.max(0.3, mw0 * part)
+      const c = { busy: avg(grp.map(x => x.busy)), freq: avg(grp.map(x => x.freq)), max: grp.reduce<number | null>((a, x) => x.max == null ? a : Math.max(a ?? 0, x.max), null) }
+      const x = 0.55 + (i % cols) * cw + (cw - mw0) / 2, y = 0.75 + Math.floor(i / cols) * cd + (cd - md) / 2
       things.push({ at: x + y, draw: () => {
         const busy = encode('core.busy', c.busy)
         const idle = busy == null || busy < 0.01
@@ -124,4 +132,4 @@ export function cpuRoom(r: CpuRoomReadings, fw = 8, fd = 8): Sprite {
 
 /** The key the room's picture is kept under: every reading to the step it is drawn at. */
 export const cpuRoomKey = (r: CpuRoomReadings, fw = 8, fd = 8) =>
-  `g2:cpuroom:${fw}x${fd}:${r.cores.map(c => `${c.busy == null ? 'n' : Math.round(c.busy * 26)}.${c.freq == null || !c.max ? 'n' : Math.round(c.freq / c.max * 20)}`).join(',')}:${r.temps.map(t => Math.round(t.c)).join(',')}:${r.load.map(l => l == null ? 'n' : l.toFixed(1)).join(',')}:${r.pressure == null ? 'n' : Math.round(r.pressure * 10)}`
+  `g2:cpuroom:${rulersKey()}:${fw}x${fd}:${r.cores.map(c => `${c.busy == null ? 'n' : Math.round(c.busy * 26)}.${c.freq == null || !c.max ? 'n' : Math.round(c.freq / c.max * 20)}`).join(',')}:${r.temps.map(t => Math.round(t.c)).join(',')}:${r.load.map(l => l == null ? 'n' : l.toFixed(1)).join(',')}:${r.pressure == null ? 'n' : Math.round(r.pressure * 10)}`

@@ -53,7 +53,11 @@
       @media (max-width: 760px) { .roomgrid { grid-template-columns: 1fr; } }
       .roomgrid img { width: 100%; height: auto; background: #f6f2ea; border-radius: 8px; }
       .key { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 11.5px; }
-      .key b { display: block; } .key span { color: var(--mute); font-size: 11px; }
+      .key b { display: block; } .key em.ruler { display: block; font-style: normal; color: var(--now); font-size: 10.5px; } .key span { color: var(--mute); font-size: 11px; }
+.rulers { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+      .rulers h2 { margin: 0; } .rulers p { margin: 0; font-size: 10.5px; color: var(--mute); line-height: 1.5; }
+      .rulers label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11px; }
+      .rulers select { font: inherit; font-size: 11px; background: var(--chip); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 3px 4px; }
       .hint { color: var(--mute); font-size: 11px; margin: 0; }
       .warn { color: var(--warn); font-size: 11.5px; margin: 0; }
       .ask { margin: 0; font-size: 12px; background: var(--chip); border-radius: 8px; padding: 10px 12px; border-left: 3px solid var(--now); }
