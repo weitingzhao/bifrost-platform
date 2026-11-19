@@ -4,11 +4,12 @@ import type { PromPoint } from './cityUtilities'
 /**
  * The machines (the Owner, 2026-11-18): every computer that supplies work is
  * a generator set; Mac, Windows and Linux look different; memory and disk
- * show as the sizes of its cooling-water and nitrogen tanks. The cluster's
+ * show as how tall its bars stand (the Owner, same day: bars beside the
+ * building read better than tanks inside it). The cluster's
  * nodes are read from kube-state-metrics (their OS image, their capacity);
  * the machines outside the cluster (the Macs, the Windows TWS hosts, the
  * NAS…) from the platform's topology, off the grid: their capacity is not
- * read, so their tanks are grey.
+ * read, so their bars are hatched.
  */
 
 export type Machine = { id: string; name: string; os: MachineOs; cores: number | null; memory: number | null; disk: number | null; offGrid: boolean; status?: string; roles: string[] }
@@ -20,6 +21,9 @@ export const MEM_TIERS = [20, 48, 96] as const
 export const DISK_TIERS = [750, 1500, 4000] as const
 
 const tier = (v: number | null, edges: readonly number[]): Tier => v == null ? -1 : (edges.findIndex(e => v < e) === -1 ? 3 : edges.findIndex(e => v < e)) as Tier
+/** Core tiers: 8 or fewer, 16 or fewer, 32 or fewer, more. */
+export const CORE_TIERS = [9, 17, 33] as const
+export const coreTier = (cores: number | null) => tier(cores, CORE_TIERS)
 export const memTier = (bytes: number | null) => tier(bytes == null ? null : bytes / G, MEM_TIERS)
 export const diskTier = (bytes: number | null) => tier(bytes == null ? null : bytes / 1e9, DISK_TIERS)
 
@@ -57,5 +61,5 @@ export function machines(info: PromPoint[] | null, capacity: PromPoint[] | null,
   return out
 }
 
-/** The variant a machine is drawn as: its OS and its two tank sizes. */
-export const variantOf = (m: Machine) => `${m.os}:${memTier(m.memory)}:${diskTier(m.disk)}`
+/** The variant a machine is drawn as: its OS. */
+export const variantOf = (m: Machine) => m.os

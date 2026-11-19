@@ -6,6 +6,7 @@ import type { Reading, Sky } from './cityReadings'
 import type { Worker } from './cityWorkers'
 import { campusPlan, type Campus } from './cityCampus'
 import { nextZoneName, zoneTint } from './zones'
+import { coreTier, diskTier, memTier } from './cityMachines'
 
 type Gauge = { used: number | null; reserved: number | null; of: number | null }
 type Meters = { power: Gauge; water: Gauge; gas: Gauge }
@@ -44,6 +45,7 @@ export type SceneInit = {
 }
 
 const INK = 0x2f2d3a, RS = 3
+const BAR_TIER = [0.5, 0.5, 0.68, 0.84, 1] as const
 const LAMP: Record<Reading['tone'], string> = { calm: '#3fbf6f', busy: '#f2b234', alert: '#e0564f', unknown: '#a9a6b8' }
 /** A tag's colour by the tone of its reading. */
 const TONE = { calm: '#dcf2e2', busy: '#ffe6a8', alert: '#ffc9c2', unknown: '#e6e4ee' } as const
@@ -71,7 +73,7 @@ function poly(g: G, pts: XY[], fill: number, stroke = true) {
 type Spot = { tex: string; dx: number; dy: number }
 const SIDES = [[0, -1], [1, 0], [0, 1], [-1, 0]] as const
 
-type View = { part: Placed; sig: string; imgs: { img: Phaser.GameObjects.Image; layer: Layer }[]; tag: Phaser.GameObjects.Text; fx: G }
+type View = { part: Placed; sig: string; imgs: { img: Phaser.GameObjects.Image; layer: Layer }[]; tag: Phaser.GameObjects.Text; plate: Phaser.GameObjects.Text; fx: G }
 type Gesture =
   | { t: 'none' } | { t: 'pan'; x: number; y: number }
   | { t: 'stroke'; last: [number, number]; erase: boolean; x: number; y: number; started: boolean }
@@ -496,14 +498,15 @@ export class BuilderScene extends Phaser.Scene {
       const o = iso(p.x, p.y)
       if (!v) {
         const tag = this.add.text(0, 0, '', { fontFamily: 'JetBrains Mono, ui-monospace, Menlo, monospace', fontSize: `${11 * this.s.dpr}px`, color: '#2f2d3a', backgroundColor: '#fbfaf6', padding: { x: 5 * this.s.dpr, y: 3 * this.s.dpr } }).setOrigin(0.5, 1).setDepth(190001)
-        v = { part: p, sig: '', imgs: [], tag, fx: this.add.graphics() }
+        const plate = this.add.text(0, 0, '', { fontFamily: 'JetBrains Mono, ui-monospace, Menlo, monospace', fontSize: `${9.5 * this.s.dpr}px`, color: '#2f2d3a', backgroundColor: 'rgba(251,250,246,0.85)', padding: { x: 3 * this.s.dpr, y: 1 * this.s.dpr } }).setOrigin(0, 0.5).setDepth(189000).setVisible(false)
+        v = { part: p, sig: '', imgs: [], tag, plate, fx: this.add.graphics() }
         this.views.set(p.id, v)
       }
       v.part = p
       if (!v.sig) { v.imgs = ls.map(layer => ({ img: this.image(layer, o.x, o.y), layer })); v.sig = sig }
       for (const { img, layer } of v.imgs) img.setPosition(o.x + layer.dx, o.y + layer.dy)
     }
-    for (const [id, v] of this.views) if (!seen.has(id)) { v.imgs.forEach(i => i.img.destroy()); v.tag.destroy(); v.fx.destroy(); this.views.delete(id) }
+    for (const [id, v] of this.views) if (!seen.has(id)) { v.imgs.forEach(i => i.img.destroy()); v.tag.destroy(); v.plate.destroy(); v.fx.destroy(); this.views.delete(id) }
     if (this.selected && !seen.has(this.selected)) this.select(null)
     this.syncDecor(); this.drawMark(); this.relabel(); this.drawEffects(); this.drawSky(); this.drawWorkers()
   }
@@ -531,12 +534,11 @@ export class BuilderScene extends Phaser.Scene {
      * come when it is pointed at or picked, when the city is zoomed in, while
      * building, or when its state is an alert.
      */
-    const close = z >= this.fitZoom * 1.6
-    const full = (p: Placed, r?: Reading) => this.s.editing || close || p.id === this.selected || p.id === this.hovered || r?.tone === 'alert'
+    const full = (p: Placed, r?: Reading) => this.s.editing || p.id === this.selected || p.id === this.hovered || r?.tone === 'alert'
     this.gaugeG?.clear()
     for (const v of this.views.values()) {
       const r = v.part.binds ? this.s.readingOf(v.part.binds) : undefined
-      if (r?.meters && v.imgs[0]?.img.visible !== false && full(v.part, r)) this.gauges(this.gaugeG, v.part, r.meters)
+      if (r?.meters && v.imgs[0]?.img.visible !== false) this.gauges(this.gaugeG, v.part, r.meters)
     }
     g.clear()
     // Tags go up their leader until they clear the billboards and each other.
@@ -557,15 +559,19 @@ export class BuilderScene extends Phaser.Scene {
       const roomy = z / dpr >= 0.55 || p.id === this.selected
       const shown = v.imgs[0]?.img.visible !== false
       v.tag.setScale(1 / z).setVisible(named && roomy && shown && full(p, r))
-      if (!v.tag.visible) {
-        // The lamp: a small light on the roof in the state's colour.
-        if (shown && p.binds && r) {
-          const col = Phaser.Display.Color.HexStringToColor(LAMP[r.tone]).color, rr = 4 * dpr / z
-          g.fillStyle(col, 1); g.lineStyle(1.2 * dpr / z, INK, 1)
-          g.fillCircle(top.x, top.y - rr, rr); g.strokeCircle(top.x, top.y - rr, rr)
-        }
-        continue
+      // The name plate: at the building's foot, its name and a dot in its state's colour; the tag takes its place when shown.
+      const plate = shown && named && !v.tag.visible && !!p.binds
+      v.plate.setVisible(plate)
+      if (plate) {
+        const label = this.s.nameOf(p.binds) ?? 'unknown'
+        if (v.plate.text !== label) v.plate.setText(label)
+        const foot = iso(p.x + p.size, p.y + p.size)
+        v.plate.setScale(1 / z).setPosition(foot.x + 5 * dpr / z, foot.y + 3 * dpr / z)
+        const b = v.plate.getBounds(), rr = 3.2 * dpr / z
+        g.fillStyle(Phaser.Display.Color.HexStringToColor(LAMP[r?.tone ?? 'unknown']).color, 1); g.lineStyle(1 * dpr / z, INK, 1)
+        g.fillCircle(b.x - rr - 2 * dpr / z, b.centerY, rr); g.strokeCircle(b.x - rr - 2 * dpr / z, b.centerY, rr)
       }
+      if (!v.tag.visible) continue
       const w = v.tag.displayWidth, h = v.tag.displayHeight
       // Up its leader, then to either side, until it is clear of tags, billboards and other buildings.
       const clear = (r: Phaser.Geom.Rectangle) => !taken.some(o => Phaser.Geom.Rectangle.Overlaps(o, r)) && !bodies.some(o => o.id !== p.id && Phaser.Geom.Rectangle.Overlaps(o.box, r))
@@ -666,9 +672,13 @@ export class BuilderScene extends Phaser.Scene {
   private gauges(g: G, p: Placed, m: Meters) {
     const k = kindOf(p.kind), top = iso(p.x + p.size, p.y + p.size / 2, Math.min(k?.height ?? 60, 90) * 0.55)
     // Sized for the screen, like the tags: a meter stays readable however far the city is zoomed out.
-    const u = this.s.dpr / this.cameras.main.zoom
-    const cols = [0xf2b234, 0x5aa9ff, 0xa9b1bf] as const, H = 26 * u, Wd = 7 * u
+    const u = Math.max(this.s.dpr / this.cameras.main.zoom, 0.9)
+    const cols = [0xf2b234, 0x5aa9ff, 0xa9b1bf] as const, Wd = 8 * u
+    // A machine's bars stand as tall as its capacity's tier (cores, memory, disk), so a big machine reads big.
+    const node = p.binds.startsWith('node:')
+    const tiers = node ? [coreTier(m.power.of), memTier(m.water.of), diskTier(m.gas.of)] : [1, 1, 1]
     ;[m.power, m.water, m.gas].forEach((gauge, i) => {
+      const H = 40 * u * BAR_TIER[tiers[i] + 1]
       const x = top.x + 6 * u + i * (Wd + 3 * u), y = top.y - H
       g.fillStyle(0xfbfaf6, 1); g.fillRect(x, y, Wd, H); g.lineStyle(1, INK, 1)
       const of = gauge.of ?? gauge.reserved

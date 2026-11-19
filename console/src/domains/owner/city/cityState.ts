@@ -57,8 +57,9 @@ export function cityReadings(i: CityInputs): Map<string, CityReading> {
   for (const m of i.offGrid ?? []) {
     out.set(`node:${m.id}`, {
       word: m.status === 'ok' ? 'off the grid' : 'off the grid · unknown', tone: m.status === 'ok' ? 'calm' : 'unknown',
-      lines: [`${m.os === 'unknown' ? 'system not told' : m.os} machine outside the cluster`, m.roles.length ? `roles: ${m.roles.join(', ')}` : 'roles not told', 'its capacity and use are not read (no monitoring reaches it): the tanks are grey'],
+      lines: [`${m.os === 'unknown' ? 'system not told' : m.os} machine outside the cluster`, m.roles.length ? `roles: ${m.roles.join(', ')}` : 'roles not told', 'its capacity and use are not read (no monitoring reaches it): its bars are hatched'],
       source: 'GET /api/v1/topology (status and roles)',
+      meters: { power: { used: null, reserved: null, of: null }, water: { used: null, reserved: null, of: null }, gas: { used: null, reserved: null, of: null } },
     })
   }
   return out

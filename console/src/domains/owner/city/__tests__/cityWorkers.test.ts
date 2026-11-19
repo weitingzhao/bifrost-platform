@@ -6,7 +6,7 @@ import { plannedCity } from '../defaultLayout'
 import { pluginsOf, tenantsOf } from '../catalog'
 import { nextZoneName, zoneTint } from '../zones'
 import { campuses, campusPlan, campusSize } from '../cityCampus'
-import { diskTier, machines, memTier, osOf, variantOf } from '../cityMachines'
+import { coreTier, diskTier, machines, memTier, osOf, variantOf } from '../cityMachines'
 import { layersOf } from '../catalog'
 
 // Origin: 2026-11-18, the Owner: seats are the workers; they live in dorms
@@ -142,7 +142,7 @@ describe('the machines', () => {
   const G = 2 ** 30
   const cap = (node: string, cpu: number, mem: number, disk: number) => [
     { labels: { node, resource: 'cpu' }, value: cpu }, { labels: { node, resource: 'memory' }, value: mem }, { labels: { node, resource: 'ephemeral_storage' }, value: disk }]
-  it('sizes memory and disk in four fixed tiers, unknown when not read', () => {
+  it('sizes cores, memory and disk in four fixed tiers, unknown when not read', () => {
     expect([memTier(16 * G), memTier(22.8 * G), memTier(64 * G), memTier(125 * G), memTier(null)]).toEqual([0, 1, 2, 3, -1])
     expect([diskTier(500e9), diskTier(1.2e12), diskTier(1.97e12), diskTier(8e12), diskTier(null)]).toEqual([0, 1, 2, 3, -1])
   })
@@ -155,10 +155,11 @@ describe('the machines', () => {
       { id: 'win11-host', label: 'Win11 Host', group: 'external', in_k3s_cluster: false },
     ])
     expect(ms.map(m => [m.id, m.name, m.os, m.offGrid])).toEqual([['ubt-k3s-02', 'node 02', 'linux', false], ['mac-mini-1', 'Mac Mini', 'mac', true], ['mac-mini-2', 'mac-mini-2', 'mac', true], ['win11-host', 'Win11 Host', 'win', true]])
-    expect(ms.map(variantOf)).toEqual(['linux:0:0', 'mac:-1:-1', 'mac:-1:-1', 'win:-1:-1'])
+    expect(ms.map(variantOf)).toEqual(['linux', 'mac', 'mac', 'win'])
   })
-  it('draws a set by its variant, and puts the tanks beside a power station', () => {
-    expect(layersOf('genset', 'node:x', undefined, 'mac:1:0').map(l => l.tex)).toEqual(['genset:mac:1:0'])
-    expect(layersOf('power', 'node:gpu-server', undefined, 'linux:3:2').map(l => l.tex)).toEqual(['power', 'tanks:3:2'])
+  it('draws a set by its system; its size shows in its bars, not in the sprite (the Owner: bars beside read better than tanks inside)', () => {
+    expect(layersOf('genset', 'node:x', undefined, 'mac').map(l => l.tex)).toEqual(['genset:mac'])
+    expect(layersOf('power', 'node:gpu-server', undefined, 'linux').map(l => l.tex)).toEqual(['power'])
+    expect([coreTier(8), coreTier(16), coreTier(32), coreTier(64), coreTier(null)]).toEqual([0, 1, 2, 3, -1])
   })
 })

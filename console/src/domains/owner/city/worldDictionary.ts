@@ -117,17 +117,17 @@ export const DICTIONARY: readonly Entry[] = [
     source: 'GET /api/v1/delivery/context?repo=<plugin repository>', person: 'none',
   },
   {
-    id: 'machine', metaphor: 'A generator set with two tanks: its body the machine\'s system, the blue tank cooling water, the grey tank nitrogen', means: 'a computer that supplies work: Linux the yellow diesel set, a Mac the white fuel-cell unit, Windows the blue battery cabinet; the tanks\' sizes are its memory and disk; off the grid when outside the cluster',
+    id: 'machine', metaphor: 'A generator set with three bars beside it (yellow power, blue cooling water, grey nitrogen)', means: 'a computer that supplies work: Linux the yellow diesel set, a Mac the white fuel-cell unit, Windows the blue battery cabinet; a bar fills with what is used, stands as tall as the capacity\'s tier (CPU, memory, disk); off the grid when outside the cluster',
     tiers: [
-      { name: 'small', enters: 'memory under 20 GiB; disk under 750 GB' },
-      { name: 'medium', enters: 'memory under 48 GiB; disk under 1.5 TB' },
-      { name: 'large', enters: 'memory under 96 GiB; disk under 4 TB' },
-      { name: 'very large', enters: 'more (grey and dashed when not read)' },
+      { name: 'small', enters: '8 cores or fewer; memory under 20 GiB; disk under 750 GB' },
+      { name: 'medium', enters: '16 cores or fewer; memory under 48 GiB; disk under 1.5 TB' },
+      { name: 'large', enters: '32 cores or fewer; memory under 96 GiB; disk under 4 TB' },
+      { name: 'very large', enters: 'more (hatched when not read)' },
     ],
     source: 'kube_node_info and kube_node_status_capacity (the cluster); GET /api/v1/topology (the machines outside it)', person: 'none',
   },
   {
-    id: 'lamp', metaphor: 'A lamp on a roof', means: 'the building\'s state at a glance (green calm, amber busy, red alert, grey unknown); its tag and meters show when pointed at, picked, zoomed in, or on alert',
+    id: 'lamp', metaphor: 'A name plate at a building\'s foot, with a coloured dot', means: 'the building\'s name and its state at a glance (green calm, amber busy, red alert, grey unknown); the full tag shows when pointed at, picked, or on alert',
     tiers: [{ name: 'calm', enters: 'green' }, { name: 'busy', enters: 'amber' }, { name: 'alert', enters: 'red, with its tag' }, { name: 'unknown', enters: 'grey' }],
     source: 'the building\'s own reading', person: 'none',
   },
