@@ -173,9 +173,9 @@ func New(cfg *config.Config) (*Server, error) {
 		// GET /audit is served here; the workers pod records the loops' actions
 		audit.AlsoList(filepath.Join(dataDir, "audit", "audit-workers.json"))
 	}
-	gitopsH := gitops.NewHandler(cfg, audit)
 	role := config.CurrentRole()
 	clusterH := cluster.NewHandler(cfg, audit)
+	gitopsH := gitops.NewHandler(cfg, audit, clusterH.Service())
 	bindClusterReadings(clusterH)
 	// The tenant's data clone runs its commands through cluster's PostgreSQL adapter.
 	dataH := dataclone.NewHandler(clusterH.Service().Entry(), audit, clusterH.Service())

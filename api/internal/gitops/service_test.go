@@ -26,7 +26,7 @@ func newTestService(
 	clientset kubernetes.Interface,
 	dyn dynamic.Interface,
 ) *Service {
-	svc := NewService(entry)
+	svc := NewService(entry, nil)
 	cs := cluster.NewService(entry)
 	cs.SetClientFactoryForTest(func() (kubernetes.Interface, string, error) {
 		return clientset, "fake", nil
