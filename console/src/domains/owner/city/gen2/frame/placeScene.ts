@@ -317,7 +317,8 @@ export class PlaceScene extends Phaser.Scene {
         const room = (id: string) => k.children.find(c => c.id === id)
         const vols = k.children.filter(c => c.id.startsWith('volume-'))
         const lv: Levels = { state: k.state ?? 'unread', cpu: frac(room('cpu')), mem: frac(room('memory')), disks: k.children.filter(c => c.id === 'disk' || c.id.startsWith('volume-')).map(frac),
-          vols: vols.length ? vols.map(v => ({ f: frac(v), units: v.units ?? [] })) : undefined }
+          vols: vols.length ? vols.map(v => ({ f: frac(v), units: v.units ?? [] })) : undefined,
+          cap: { cores: room('cpu')?.meter?.of ?? null, mem: room('memory')?.meter?.of ?? null, disk: room('disk')?.meter?.of ?? null } }
         const form = formOf(k.look, k.children.some(c => c.id === 'gpu'), /book/i.test(k.label))
         return { id: p.id, key: deviceKey(form, p.w, p.h, hue, this.light, lv, k.id, k.face), make: () => deviceSprite(form, p.w, p.h, hue, this.light, lv, k.id, k.face) }
       }

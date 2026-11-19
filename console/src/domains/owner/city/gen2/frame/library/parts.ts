@@ -3,6 +3,7 @@ import type { Light } from '../light'
 import type { State } from '../places'
 import { shade } from '../sprites'
 import { osMark, type MachineOs } from './landmarks'
+import { encode } from './dictionary'
 
 /**
  * The part library (the Owner, 2026-11-19: one way per kind of thing, everywhere in the city; build
@@ -56,7 +57,7 @@ export function tank(g: Draw, x: number, y: number, r: number, h: number, f: num
 /** Smoke from a stack: one puff for a quiet machine, up to three for a busy one; none when it is not running. */
 export function smoke(g: Draw, x: number, y: number, z: number, f: number | null, on: boolean) {
   if (!on || f == null) return
-  const n = Math.min(3, 1 + Math.floor(f * 3))
+  const n = Math.max(1, encode('cpu.smoke', f) ?? 1)
   for (let k = 0; k < n; k++) {
     const [cx, cy] = g.p(x + k * 0.12, y - k * 0.08, z + 8 + k * 9)
     g.add(`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(5 + k * 1.6).toFixed(1)}" fill="#ffffff" opacity="${(0.85 - k * 0.2).toFixed(2)}" stroke="#b8b8c0" stroke-width="0.8"/>`)

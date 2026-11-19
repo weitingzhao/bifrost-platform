@@ -3,6 +3,7 @@ import type { Light } from './light'
 import type { Look, Place, State } from './places'
 import { beacon, dock, doorRow, gatehouse, gauge, grille, hall, plaque, roofNumber, shade, signBand, smoke, tallyBoard, tank, toneOf, windowStrip, type Tone } from './library/parts'
 import { OS_FACES, type MachineOs } from './library/landmarks'
+import { encode, metaphor } from './library/dictionary'
 
 /**
  * Devices as city facilities (the Owner, 2026-11-19: this is a city; the hardware is its utilities.
@@ -21,7 +22,11 @@ import { OS_FACES, type MachineOs } from './library/landmarks'
  * How it stands: lit and running online; cold and dark on standby; a red beacon when down; grey when unread.
  */
 
-export type Levels = { state: State; cpu: number | null; mem: number | null; disks: (number | null)[]; vols?: { f: number | null; units: State[] }[] }
+export type Levels = {
+  state: State; cpu: number | null; mem: number | null; disks: (number | null)[]; vols?: { f: number | null; units: State[] }[]
+  /** How much it has (cores, memory bytes, disk bytes), for the sizes (dictionary: cores, mem.total, disk.total); null when not read. */
+  cap?: { cores: number | null; mem: number | null; disk: number | null }
+}
 export type Form = 'plant' | 'station' | 'warehouse' | 'exchange' | 'dispatch' | 'office' | 'tower'
 
 export function formOf(look: Look, gpu: boolean, laptop: boolean): Form {
@@ -47,22 +52,23 @@ export function deviceSprite(form: Form, fw: number, fd: number, hue: string, li
   }
 
   if (form === 'station') {
-    // The turbine hall at the back, its windows lit by how busy the CPU is; the cooling tower steams when it runs.
-    const hw = w * 0.55, hd = d * 0.62, H = 32
+    // The turbine hall at the back, as tall as it has cores, its windows lit by how busy the CPU is; the cooling tower steams when it runs.
+    const hw = w * 0.55, hd = d * 0.62, H = encode('cores', lv.cap?.cores ?? null)!
     g.box(x0, y0, hw, hd, H, T.wall, 0, 1.4)
     g.poly(T.roof, [[x0, y0, H], [x0 + hw, y0, H], [x0 + hw, y0 + hd, H], [x0, y0 + hd, H]], 1)
-    windowStrip(g, 'left', x0, y0 + hd, hw, 8, H - 6, Math.max(4, Math.round(hw * 2.4)), run ? lv.cpu : null, T)
-    windowStrip(g, 'right', x0 + hw, y0, hd, 8, H - 6, Math.max(3, Math.round(hd * 1.4)), run ? lv.cpu : null, T)
-    // Memory: the cooling water; disk: the fuel. Tanks in the yard in front of the hall.
-    const r = Math.min(13, 6 + Math.min(w, d) * 1.6)
+    const n = (metaphor('cpu.busy').encoding as { n: number }).n
+    windowStrip(g, 'left', x0, y0 + hd, hw, 8, H - 6, n, run ? lv.cpu : null, T)
+    windowStrip(g, 'right', x0 + hw, y0, hd, 8, H - 6, n, run ? lv.cpu : null, T)
+    // Memory: the cooling water; disk: the fuel. Each tank as big as what it holds, filled to its level.
+    const r = encode('mem.total', lv.cap?.mem ?? null)!, rf = encode('disk.total', lv.cap?.disk ?? null)!
     tank(g, x0 + hw * 0.3, y0 + d * 0.84, r, 26, lv.mem, water)
-    tank(g, x0 + hw * 0.75, y0 + d * 0.84, r, 26, disks[0], fuel)
+    tank(g, x0 + hw * 0.75, y0 + d * 0.84, rf, 26, disks[0], fuel)
     const cx = x0 + hw + (w - hw) / 2, cy = y0 + d * 0.35, R = Math.min(30, 10 + Math.min(w, d) * 4)
     g.cylinder(cx, cy, R, 0, 70, T.metal.left, T.metal.right, T.metal.top)
     g.cylinder(cx, cy, R * 0.82, 70, 72, '#9aa0b0', '#8a90a0', '#6a7080')
     smoke(g, cx, cy, 72, lv.cpu ?? (run ? 0.6 : null), run)
     beacon(g, cx, cy, 72, lv.state)
-    tank(g, cx, y0 + d * 0.84, r, 26, disks[1] ?? null, fuel)
+    tank(g, cx, y0 + d * 0.84, rf, 26, disks[1] ?? null, fuel)
   }
 
   if (form === 'warehouse' && lv.vols && lv.vols.length > 0) {
@@ -150,7 +156,8 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, T: To
   const band = night ? shade(hue, -0.35) : hue
   // The plant's own ground: a concrete slab.
   g.box(x0, y0, w, d, 4, faces(night ? '#4a4d58' : '#e9e6dd', night ? '#3e414c' : '#d2cec2', night ? '#34363f' : '#c1bcae'), 0, 1)
-  const Z = 4, H = 48
+  // The hall as tall as it has cores (dictionary: cores): of two plants, the bigger machine stands taller.
+  const Z = 4, H = encode('cores', lv.cap?.cores ?? null)!
   const hx = x0 + 0.18, hy = y0 + 0.18, hw = w * 0.6, hd = d * 0.56
   g.shadow(hx, hy, hw, hd, 0.35)
   g.box(hx, hy, hw, hd, H, C, Z, 1.4)
@@ -160,7 +167,7 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, T: To
   // The sign: what it is for (its pool or role, read); its name if nothing says.
   const sign = face?.sign ?? name
   if (sign) signBand(g, 'left', hx, hy + hd, hw, Z + H - 8, sign)
-  windowStrip(g, 'left', hx, hy + hd, hw, Z + 8, Z + H - 22, 8, run ? lv.cpu : null, T)
+  windowStrip(g, 'left', hx, hy + hd, hw, Z + 8, Z + H - 22, (metaphor('cpu.busy').encoding as { n: number }).n, run ? lv.cpu : null, T)
   // The side wall: the radiator grille low, the system's mark above it.
   grille(g, 'right', hx + hw, hy + hd, hd, Z + 4, Z + 16)
   plaque(g, 'right', hx + hw, hy + hd, hd * 0.75, Z + H - 20, os, 8)
@@ -178,9 +185,9 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, T: To
     smoke(g, sx, sy, top, run ? lv.cpu : null, run)
     if (k === 0.3) beacon(g, sx, sy, top, lv.state)
   }
-  // The yard: the cooling water (memory) and the fuel (disk).
-  tank(g, x0 + w * 0.3, y0 + d * 0.84, 15, 34, run ? lv.mem : null, night ? '#3f7fd6' : '#5aa9f0')
-  tank(g, x0 + w * 0.84, y0 + d * 0.42, 15, 34, run ? lv.disks[0] ?? null : null, '#c98a3a')
+  // The yard: the cooling water (memory) and the fuel (disk), each as big as what it holds, filled to its level.
+  tank(g, x0 + w * 0.3, y0 + d * 0.84, encode('mem.total', lv.cap?.mem ?? null)!, 34, run ? encode('mem.used', lv.mem) : null, night ? '#3f7fd6' : '#5aa9f0')
+  tank(g, x0 + w * 0.84, y0 + d * 0.42, encode('disk.total', lv.cap?.disk ?? null)!, 34, run ? encode('disk.used', lv.disks[0] ?? null) : null, '#c98a3a')
 }
 
 /**
@@ -214,5 +221,6 @@ function warehousePark(g: Draw, x0: number, y0: number, w: number, d: number, T:
 /** The key a facility's picture is kept under: its form, size, hue, light, state and every level to a tenth. */
 export const deviceKey = (form: Form, fw: number, fd: number, hue: string, light: Light, lv: Levels, name = '', face: Place['face'] = {}) => {
   const q = (f: number | null) => f == null ? 'n' : String(Math.round(f * 10))
-  return `g2:fac:${form}:${name}:${face?.roof ?? ''}:${face?.sign ?? ''}:${face?.tally?.n ?? ''}:${fw}x${fd}:${hue}:${light}:${lv.state}:${q(lv.cpu)}:${q(lv.mem)}:${lv.disks.map(q).join('.')}:${(lv.vols ?? []).map(v => `${q(v.f)}${v.units.join('')}`).join('|')}`
+  const c = (v: number | null | undefined) => v == null ? 'n' : String(Math.round(Math.log2(v) * 4))
+  return `g2:fac:${form}:${name}:${c(lv.cap?.cores)}.${c(lv.cap?.mem)}.${c(lv.cap?.disk)}:${face?.roof ?? ''}:${face?.sign ?? ''}:${face?.tally?.n ?? ''}:${fw}x${fd}:${hue}:${light}:${lv.state}:${q(lv.cpu)}:${q(lv.mem)}:${lv.disks.map(q).join('.')}:${(lv.vols ?? []).map(v => `${q(v.f)}${v.units.join('')}`).join('|')}`
 }

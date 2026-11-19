@@ -7,6 +7,7 @@ import { spriteUrl } from '../src/domains/owner/city/gen2/frame/sprites'
 import { beacon, dock, doorRow, gatehouse, grille, hall, plaque, roofNumber, signBand, smoke, tallyBoard, tank, toneOf, windowStrip } from '../src/domains/owner/city/gen2/frame/library/parts'
 import { deviceSprite, type Form, type Levels } from '../src/domains/owner/city/gen2/frame/devices'
 import * as L from '../src/domains/owner/city/gen2/frame/library/landmarks'
+import { DICTIONARY } from '../src/domains/owner/city/gen2/frame/library/dictionary'
 
 const HUE = '#f2d27a'
 type Item = { name: string; note: string; sprite: Sprite }
@@ -75,9 +76,19 @@ const shelf = (title: string, about: string, items: Item[]) => `
   <p>${about}</p>
   <div class="grid">${items.map(i => `<div class="card"><div class="art"><img alt="${i.name}" src="${spriteUrl(i.sprite)}"/></div><b>${i.name}</b><span>${i.note}</span></div>`).join('')}</div>`
 
+const encodingText = (e: (typeof DICTIONARY)[number]['encoding']) =>
+  e.kind === 'count' ? `count: lit of ${e.n}` : e.kind === 'size' ? `size: ${e.min}–${e.max} for ${e.from >= 1e9 ? `${e.from / 1e9} GB` : e.from}–${e.to >= 1e12 ? `${e.to / 1e12} TB` : e.to >= 1e9 ? `${e.to / 1e9} GB` : e.to} (log)` : e.kind
+const dictionary = `
+  <h2>Metaphor dictionary<span class="chip">${DICTIONARY.length}</span></h2>
+  <p>Which metaphor shows which metric, kept as data: facilities take their encodings from this table, and a metric not in it cannot be drawn. Changing the table changes the city.</p>
+  <table class="dict"><thead><tr><th>Metric</th><th>Part</th><th>Encoding</th><th>What you see</th></tr></thead><tbody>
+  ${DICTIONARY.map(m => `<tr><td>${m.metric}</td><td>${m.part}</td><td>${encodingText(m.encoding)}</td><td>${m.meaning}</td></tr>`).join('')}
+  </tbody></table>`
+
 document.getElementById('root')!.innerHTML = `
   <h1>City part library</h1>
   <p>One way per kind of thing, everywhere in the city: facilities and rooms are put together from these parts, so what is done well once serves everywhere. Levels on this page are examples to show what a part does; on the map every level comes from a reading.</p>
+  ${dictionary}
   ${shelf('Parts', 'Each part that shows a level takes it from a reading; with nothing read it stays empty.', parts)}
   ${shelf('Facilities', 'Put together from the parts. The NAS and the Linux power plant are designed; the others are next, one at a time.', facilities)}
   ${shelf('Landmarks from the first generation', 'Brought over as they were, in the same drawing kit, to picture the rest of the system: the release line, the court, the workshops.', landmarks)}
