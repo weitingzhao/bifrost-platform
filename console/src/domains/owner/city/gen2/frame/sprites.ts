@@ -45,7 +45,7 @@ const litBy = (light: Light, seed: number) => (r: number, c: number) =>
  * between neighbours). A 4×4 or 8×8 clears the street's half-width (0.35) and a belt beyond it; a
  * 2×2 less; a 1×1 is a marker.
  */
-export const setback = (n: number) => n >= 4 ? 0.72 : n === 2 ? 0.5 : 0.25
+export const setback = (n: number) => n >= 4 ? 0.88 : n === 2 ? 0.55 : 0.28
 
 /** A district: a tall hall on a plinth, a hue band under the parapet, rows of windows, a door, rooftop units. */
 export function districtHall(n: number, hue: string, light: Light, seed = 0): Sprite {

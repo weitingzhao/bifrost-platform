@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser'
-import { canStand, GRID, snap, STREET, streets, type Cell, type Placed } from './grid'
+import { fitsIn, GRID, plotAt, type Cell, type Placed, type Plot, type Street } from './grid'
 import type { Place } from './places'
 import { PALETTE, type Light, type Palette } from './light'
 import { hash } from './kit'
@@ -43,16 +43,27 @@ const INSET = 0.18
 export type SceneEvents = {
   enter: (child: Place) => void
   select: (child: Place | null) => void
-  /** The Owner dropped a thing on a cell where it fits. */
-  moved: (id: string, to: Cell) => void
+  /** The Owner dropped a thing on a plot where it fits (taking it, or swapping with what stood there). */
+  moved: (id: string, plot: string) => void
+  /** The Owner cut a plot in two, or joined it with its other half. */
+  plot: (op: 'split' | 'merge', plot: string) => void
 }
+
+/** What a tap does while arranging: move things between plots, cut plots, or join them. */
+export type ArrangeTool = 'move' | 'split' | 'merge'
 
 export type Shown = {
   place: Place
   /** Where the place's children stand (arranged by grid.ts). */
   placed: Placed[]
+  /** The place's plots and streets (grid.ts), and its parent's, for the minimap. */
+  plots: Plot[]
+  streets: Street[]
   parent: Place | null
   parentPlaced: Placed[]
+  parentPlots: Plot[]
+  parentStreets: Street[]
+  tool: ArrangeTool
   inside: string | null
   selected: string | null
   from: 'down' | 'up' | 'jump'
@@ -93,7 +104,7 @@ export class PlaceScene extends Phaser.Scene {
   private pinch: { d: number; zoom: number } | null = null
   private lastTap = 0
   /** A block being carried while arranging: which, and which cell of it the pointer holds. */
-  private carry: { p: Placed; grip: Cell; to: Cell | null } | null = null
+  private carry: { p: Placed; to: Plot | null } | null = null
 
   constructor(events: SceneEvents) {
     super('place')
@@ -142,7 +153,7 @@ export class PlaceScene extends Phaser.Scene {
     // Same page: redraw in place only if something on it changed (a redraw mid-change would cut the
     // change short); refit only when arranging starts or stops (the frame changes).
     if (same) {
-      const key = (x: Shown) => JSON.stringify([x.selected, x.arranging, x.placed, x.parentPlaced, x.inside])
+      const key = (x: Shown) => JSON.stringify([x.selected, x.arranging, x.tool, x.placed, x.plots, x.parentPlaced, x.inside])
       if (key(prev) !== key(next)) void this.draw(next, prev.arranging !== next.arranging)
       return
     }
@@ -260,7 +271,7 @@ export class PlaceScene extends Phaser.Scene {
     this.ghost?.destroy()
     this.carry = null
     this.labels = []
-    const m = this.level(s.place, s.placed, { at: 0, selected: s.selected, inside: null, interactive: true, arranging: s.arranging })
+    const m = this.level(s.place, s.placed, s.plots, s.streets, { at: 0, selected: s.selected, inside: null, interactive: true, arranging: s.arranging })
     this.main = m.c
     // The whole ground, ring road included, always fits (the Owner, 2026-11-19: no plot cut off at the
     // top or hidden under the menu); m.box (what stands on it) is no longer the frame.
@@ -268,7 +279,7 @@ export class PlaceScene extends Phaser.Scene {
     this.content = this.groundBox()
     this.ghost = this.add.graphics()
     this.main.add(this.ghost)
-    this.away = s.parent ? this.level(s.parent, s.parentPlaced, { at: AWAY, selected: null, inside: s.inside, interactive: false, arranging: false }).c : undefined
+    this.away = s.parent ? this.level(s.parent, s.parentPlaced, s.parentPlots, s.parentStreets, { at: AWAY, selected: null, inside: s.inside, interactive: false, arranging: false }).c : undefined
     this.frame(refit)
   }
 
@@ -389,6 +400,7 @@ export class PlaceScene extends Phaser.Scene {
       }
       this.pinch = null
       if (this.carry && p.isDown) { this.carryTo(p); return }
+      if (!p.isDown && this.shown?.arranging && this.shown.tool !== 'move') this.hoverPlot(p)
       if (!p.isDown || inMini(p) || this.moved(p) <= DRAG || !this.zoomedIn()) return
       cam.scrollX -= (p.x - p.prevPosition.x) / cam.zoom
       cam.scrollY -= (p.y - p.prevPosition.y) / cam.zoom
@@ -396,8 +408,15 @@ export class PlaceScene extends Phaser.Scene {
     })
     this.input.on('pointerup', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
       if (!this.input.pointer1.isDown && !this.input.pointer2.isDown) this.pinch = null
-      if (this.carry) { this.drop(); return }
-      if (over.length > 0 || inMini(p) || this.moved(p) > DRAG) return
+      if (this.carry) { this.drop(p); return }
+      if (inMini(p) || this.moved(p) > DRAG) return
+      // Arranging with the knife or the glue: a tap anywhere on the ground cuts or joins the plot under it.
+      if (this.shown?.arranging && this.shown.tool !== 'move') {
+        const plot = this.plotUnder(p)
+        if (plot) this.events_.plot(this.shown.tool, plot.id)
+        return
+      }
+      if (over.length > 0) return
       // A tap on empty ground closes the card; two quick taps zoom in there, or back to the whole page.
       const now = this.time.now
       if (now - this.lastTap < 320) {
@@ -434,29 +453,52 @@ export class PlaceScene extends Phaser.Scene {
     cam.pan(w.x, w.y, 220, 'Sine.easeOut', true)
   }
 
-  /** Arranging: the cell under the pointer, less the grip, is where the block would land; outline it green or red. */
-  private carryTo(p: Phaser.Input.Pointer) {
-    if (!this.carry || !this.ghost || !this.shown) return
+  /** The plot under the pointer, on the ground of the place on screen. */
+  private plotUnder(p: Phaser.Input.Pointer): Plot | undefined {
+    if (!this.shown) return undefined
     const w = this.cameras.main.getWorldPoint(p.x, p.y)
-    const c = cellAt(w.x, w.y)
-    // Snap to the thing's own lattice: a 4×4 only lands on the 4-lines.
-    const to = snap(this.carry.p.size, { x: c.x - this.carry.grip.x, y: c.y - this.carry.grip.y })
-    this.carry.to = to
-    const fits = canStand({ ...this.carry.p, ...to }, this.shown.placed)
-    const s = this.carry.p.size
-    const g = this.ghost
-    g.clear()
-    const quad = [iso(to.x, to.y), iso(to.x + s, to.y), iso(to.x + s, to.y + s), iso(to.x, to.y + s)]
-    g.fillStyle(fits ? this.tone.ok : this.tone.no, 0.25).lineStyle(2.5, fits ? this.tone.ok : this.tone.no).fillPoints(quad, true).strokePoints(quad, true)
+    return plotAt(this.shown.plots, cellAt(w.x, w.y))
   }
 
-  private drop() {
+  private outline(plot: Plot, colour: number, fill = 0.22) {
+    const g = this.ghost
+    if (!g) return
+    const q = [iso(plot.x, plot.y), iso(plot.x + plot.w, plot.y), iso(plot.x + plot.w, plot.y + plot.h), iso(plot.x, plot.y + plot.h)]
+    g.fillStyle(colour, fill).lineStyle(2.5, colour).fillPoints(q, true).strokePoints(q, true)
+  }
+
+  /** Cutting or joining: the plot the tap would act on, outlined. */
+  private hoverPlot(p: Phaser.Input.Pointer) {
+    this.ghost?.clear()
+    const plot = this.plotUnder(p)
+    if (plot) this.outline(plot, this.tone.inside, 0.15)
+  }
+
+  /** Moving: the plot under the pointer, green where the thing can go (free, or a swap that fits), red where not. */
+  private carryTo(p: Phaser.Input.Pointer) {
+    if (!this.carry || !this.ghost || !this.shown) return
+    const to = this.plotUnder(p) ?? null
+    this.carry.to = to
+    this.ghost.clear()
+    if (to) this.outline(to, this.canGo(this.carry.p, to) ? this.tone.ok : this.tone.no)
+  }
+
+  private canGo(it: Placed, to: Plot) {
+    if (!this.shown || !fitsIn(it, to)) return false
+    const other = this.shown.placed.find(q => q.plot === to.id && q.id !== it.id)
+    const from = this.shown.plots.find(q => q.id === it.plot)
+    return !other || (!!from && fitsIn(other, from))
+  }
+
+  /** Release: the plot under the finger where it lifts (not only the last one a move reported: a quick flick reports none). */
+  private drop(p: Phaser.Input.Pointer) {
     const c = this.carry
     this.carry = null
     this.ghost?.clear()
-    if (!c?.to || !this.shown) return
-    if (c.to.x === c.p.x && c.to.y === c.p.y) return
-    if (canStand({ ...c.p, ...c.to }, this.shown.placed)) this.events_.moved(c.p.id, c.to)
+    if (!c || !this.shown) return
+    const to = this.plotUnder(p) ?? c.to
+    if (!to || to.id === c.p.plot) return
+    if (this.canGo(c.p, to)) this.events_.moved(c.p.id, to.id)
   }
 
   /**
@@ -483,7 +525,7 @@ export class PlaceScene extends Phaser.Scene {
     return t
   }
 
-  private level(place: Place, placed: Placed[], o: { at: number; selected: string | null; inside: string | null; interactive: boolean; arranging: boolean }) {
+  private level(place: Place, placed: Placed[], plots: Plot[], streets: Street[], o: { at: number; selected: string | null; inside: string | null; interactive: boolean; arranging: boolean }) {
     const c = this.add.container(o.at, 0)
     const g = this.add.graphics()
     const lo = -RIM, hi = GRID + RIM
@@ -504,38 +546,47 @@ export class PlaceScene extends Phaser.Scene {
     // it is a floor crossed by corridors. Both run where grid.ts says, never through a thing.
     const indoors = place.kind === 'building'
     g.fillStyle(indoors ? this.tone.floor : this.tone.grass).fillPoints(ground, true)
-    // The ring road runs in the rim, at full width; the streets inside run on to meet it.
-    const ringAt = (at: number) => at === 0 ? -RIM / 2 : at === GRID ? GRID + RIM / 2 : at
-    const centre = (st: { at: number; edge: boolean }) => st.edge ? ringAt(st.at) : st.at
-    const strip = (st: { along: 'x' | 'y'; at: number; from: number; edge: boolean }, half: number) => {
-      const a = centre(st), a0 = a - half, a1 = a + half
-      const start = st.from === 0 ? ringAt(0) : st.from, end = st.from + STREET === GRID ? ringAt(GRID) : st.from + STREET
-      const b0 = start - half, b1 = end + half
-      return st.along === 'y'
-        ? [iso(a0, b0), iso(a1, b0), iso(a1, b1), iso(a0, b1)]
-        : [iso(b0, a0), iso(b1, a0), iso(b1, a1), iso(b0, a1)]
+    // Layers from the street in (the Owner, 2026-11-19: not straight from the road to the house): the
+    // street, its kerb, a green belt, then the plot's own lot, and the building set back on it.
+    // The ring road runs in the rim; streets that reach the edge run on to meet it.
+    const rim = (v: number) => v === 0 ? -RIM / 2 : v === GRID ? GRID + RIM / 2 : v
+    const strip = (st: Street, half: number) => {
+      const vertical = st.x0 === st.x1
+      const at = st.kind === 'ring' ? rim(vertical ? st.x0 : st.y0) : vertical ? st.x0 : st.y0
+      const from = rim(vertical ? st.y0 : st.x0), to = rim(vertical ? st.y1 : st.x1)
+      const a0 = at - half, a1 = at + half, b0 = from - half, b1 = to + half
+      return vertical ? [iso(a0, b0), iso(a1, b0), iso(a1, b1), iso(a0, b1)] : [iso(b0, a0), iso(b1, a0), iso(b1, a1), iso(b0, a1)]
     }
-    const sts = streets(placed)
-    const half = (st: { avenue: boolean; edge: boolean }) => st.avenue ? 0.5 : 0.35
+    const roads = streets.filter(st => st.kind !== 'lane' && st.kind !== 'path')
+    const ways = streets.filter(st => st.kind === 'lane' || st.kind === 'path')
+    // Each plot's lot: inset from its edges by the street's half, the kerb and a belt of grass.
+    const lotInset = (p: Plot) => { const side = Math.min(p.w, p.h); return side >= 4 ? 0.62 : side === 2 ? 0.4 : 0.22 }
     if (indoors) {
       g.fillStyle(this.tone.corridor)
-      for (const st of sts) g.fillPoints(strip(st, half(st) * 0.8), true)
+      for (const st of streets) g.fillPoints(strip(st, st.half * 0.8), true)
     } else {
+      for (const p of plots) {
+        const e = lotInset(p)
+        const q = [iso(p.x + e, p.y + e), iso(p.x + p.w - e, p.y + e), iso(p.x + p.w - e, p.y + p.h - e), iso(p.x + e, p.y + p.h - e)]
+        g.fillStyle(this.tone.lot).fillPoints(q, true)
+      }
       g.fillStyle(this.tone.kerb)
-      for (const st of sts) g.fillPoints(strip(st, half(st) + 0.1), true)
+      for (const st of roads) g.fillPoints(strip(st, st.half + 0.1), true)
       g.fillStyle(this.tone.asphalt)
-      for (const st of sts) g.fillPoints(strip(st, half(st)), true)
-      // Lane paint: dashes down the middle of every street and the ring road, a double line down the avenue.
-      for (const st of sts) {
-        for (let k = 0; k < STREET; k += 1) {
-          const p0 = st.from + k + 0.25, p1 = st.from + k + 0.65
-          const offs = st.avenue ? [-0.06, 0.06] : [0]
-          for (const o of offs) {
-            const a = centre(st) + o
-            g.lineStyle(st.avenue ? 1.2 : 1.4, this.tone.paint, 0.9)
-            if (st.along === 'y') g.lineBetween(iso(a, p0).x, iso(a, p0).y, iso(a, p1).x, iso(a, p1).y)
-            else g.lineBetween(iso(p0, a).x, iso(p0, a).y, iso(p1, a).x, iso(p1, a).y)
-          }
+      for (const st of roads) g.fillPoints(strip(st, st.half), true)
+      // Lanes and paths: paved, no kerb, no paint.
+      g.fillStyle(this.tone.kerb)
+      for (const st of ways) g.fillPoints(strip(st, st.half), true)
+      // Lane paint: dashes down every road and the ring, a double line down the avenue.
+      for (const st of roads) {
+        const vertical = st.x0 === st.x1
+        const at = st.kind === 'ring' ? rim(vertical ? st.x0 : st.y0) : vertical ? st.x0 : st.y0
+        const from = vertical ? st.y0 : st.x0, to = vertical ? st.y1 : st.x1
+        g.lineStyle(st.kind === 'avenue' ? 1.2 : 1.4, this.tone.paint, 0.9)
+        for (let k = from; k < to; k += 1) for (const o of st.kind === 'avenue' ? [-0.06, 0.06] : [0]) {
+          const a = at + o, p0 = k + 0.25, p1 = k + 0.65
+          if (vertical) g.lineBetween(iso(a, p0).x, iso(a, p0).y, iso(a, p1).x, iso(a, p1).y)
+          else g.lineBetween(iso(p0, a).x, iso(p0, a).y, iso(p1, a).x, iso(p1, a).y)
         }
       }
     }
@@ -549,6 +600,11 @@ export class PlaceScene extends Phaser.Scene {
       g.lineStyle(w, this.tone.ink, a)
       g.lineBetween(iso(i, 0).x, iso(i, 0).y, iso(i, GRID).x, iso(i, GRID).y)
       g.lineBetween(iso(0, i).x, iso(0, i).y, iso(GRID, i).x, iso(GRID, i).y)
+    }
+    // While arranging, every plot's edge in ink, so the cuts read clearly.
+    if (o.arranging) for (const p of plots) {
+      g.lineStyle(1.6, this.tone.ink, 0.6)
+      g.strokePoints([iso(p.x, p.y), iso(p.x + p.w, p.y), iso(p.x + p.w, p.y + p.h), iso(p.x, p.y + p.h)], true)
     }
     g.lineStyle(2, this.tone.ink).strokePoints(ground, true)
     c.add(g)
@@ -600,13 +656,9 @@ export class PlaceScene extends Phaser.Scene {
       // Hover only for a mouse: on a touch screen it would stay lit after the finger lifts.
       g.on('pointerover', (p: Phaser.Input.Pointer) => { if (!p.wasTouch) img?.setTint(this.tone.hover) })
       g.on('pointerout', () => img?.clearTint())
-      g.on('pointerdown', (p: Phaser.Input.Pointer) => {
-        if (!o.arranging) return
-        // Pick it up by the cell under the pointer, so it does not jump to the pointer's corner.
-        const w = this.cameras.main.getWorldPoint(p.x, p.y)
-        const c = cellAt(w.x, w.y + h)
-        // Where in the block the pointer holds it, so the block does not jump to the pointer's corner.
-        this.carry = { p: at, grip: { x: Phaser.Math.Clamp(c.x - at.x, 0, at.size), y: Phaser.Math.Clamp(c.y - at.y, 0, at.size) }, to: null }
+      // Moving: press on a thing to pick it up; it lands on the plot under the pointer when released.
+      g.on('pointerdown', () => {
+        if (o.arranging && this.shown?.tool === 'move') this.carry = { p: at, to: null }
       })
       // On release, and only if the press did not travel: a drag across a block is a pan, not a tap.
       g.on('pointerup', (p: Phaser.Input.Pointer) => {

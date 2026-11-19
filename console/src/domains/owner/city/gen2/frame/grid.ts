@@ -1,20 +1,17 @@
 /**
- * The ground of every place (the Owner, 2026-11-19): a square of 16 × 16
- * cells, and everything on it is a square of 1, 2, 4 or 8 cells a side. The
- * ground is the budget of one page: what does not fit is too much for this
- * level and goes one level down, or is drawn more abstractly here.
+ * The ground of every place (the Owner, 2026-11-19): a square of 16 × 16 cells. It is divided into
+ * plots, and the streets run along the plots' edges; each thing stands in a plot of its own.
  *
- * Who decides what:
- *   - the SIZE of a thing is a design decision, made in code with the thing
- *     (what it is, how much it holds); the page never changes it
- *   - the POSITION is the Owner's: he may drag things around; that changes
- *     nothing but where they are drawn
+ *   things  squares of 1, 2, 4 or 8 cells a side. The size is the design's, set with the thing.
+ *   plots   made by halving: the ground is cut in two, each half may be cut again, down to 1 × 1.
+ *           A square is cut across x, an oblong across its long side, so every plot is a square
+ *           or a 2 : 1 oblong with sides of 1, 2, 4, 8 or 16, and its edges always meet. The
+ *           Owner may cut and join plots (display only); the default cuts the ground into 4 × 4.
+ *   streets every cut is a street; the wider the plots on either side, the wider the street
+ *           (the ground's first cut is the avenue, then streets, lanes between 2-wide plots,
+ *           paths between 1-wide ones), and a ring road runs round the ground.
  *
- * Each size has its own lattice (the Owner, 2026-11-19): a thing of size s
- * stands only on multiples of s, so it always fills whole squares of the
- * lines drawn for its size. Because sizes are powers of two and the side is
- * 16, any set whose areas add up to 256 or less always packs: a place that
- * passes the budget can always be drawn.
+ * A thing goes in a plot whose shorter side is at least its size, one thing to a plot, centred.
  */
 
 export const GRID = 16
@@ -26,115 +23,168 @@ export const TAPPABLE: Size = 2
 
 export type Cell = { x: number; y: number }
 export type Item = { id: string; size: Size }
-export type Placed = Item & Cell
-/** The Owner's positions, by item id (display only). */
-export type Arrangement = Record<string, Cell>
+export type Placed = Item & Cell & { plot: string }
 
 export const area = (items: readonly Item[]) => items.reduce((a, i) => a + i.size * i.size, 0)
 export const fitsBudget = (items: readonly Item[]) => area(items) <= GRID * GRID
 
-const overlap = (a: Placed, b: Placed) => a.x < b.x + b.size && b.x < a.x + a.size && a.y < b.y + b.size && b.y < a.y + a.size
-const onGround = (p: Placed) => p.x >= 0 && p.y >= 0 && p.x + p.size <= GRID && p.y + p.size <= GRID
+// ---- the plan: a tree of halvings ----
 
-/** Is `p` on its own lattice: a thing of size s stands only on multiples of s (the Owner, 2026-11-19: snap). */
-export const aligned = (p: Placed) => p.x % p.size === 0 && p.y % p.size === 0
+/** A plan: a whole plot (null) or a plot cut in two halves, each a plan. */
+export type Plan = null | [Plan, Plan]
+/** A plot: its id is its path in the plan ('' the whole ground, then 'a'/'b' for each half). */
+export type Plot = { id: string; x: number; y: number; w: number; h: number }
+type Rect = Omit<Plot, 'id'>
 
-/** Can `p` stand where it is, given the others (itself excluded by id)? On its lattice, on the ground, on no one. */
-export function canStand(p: Placed, others: readonly Placed[]): boolean {
-  return Number.isInteger(p.x) && Number.isInteger(p.y) && aligned(p) && onGround(p) && others.every(o => o.id === p.id || !overlap(p, o))
+/** The two halves of a rectangle: a square is cut across x; an oblong across its long side. */
+function halves(r: Rect): [Rect, Rect] {
+  return r.w >= r.h
+    ? [{ x: r.x, y: r.y, w: r.w / 2, h: r.h }, { x: r.x + r.w / 2, y: r.y, w: r.w / 2, h: r.h }]
+    : [{ x: r.x, y: r.y, w: r.w, h: r.h / 2 }, { x: r.x, y: r.y + r.h / 2, w: r.w, h: r.h / 2 }]
 }
 
-/** The spots a thing of size s may take, nearest the ground's centre first (ties: back to front, left to right). */
-function spots(size: number): Cell[] {
-  const c = GRID / 2, out: Cell[] = []
-  for (let y = 0; y + size <= GRID; y += size) for (let x = 0; x + size <= GRID; x += size) out.push({ x, y })
-  const d = (p: Cell) => (p.x + size / 2 - c) ** 2 + (p.y + size / 2 - c) ** 2
-  return out.sort((a, b) => d(a) - d(b) || a.y - b.y || a.x - b.x)
-}
+const WHOLE: Rect = { x: 0, y: 0, w: GRID, h: GRID }
 
-/**
- * The default arrangement: largest first, each on the free spot of its own
- * lattice nearest the centre, so a place's things gather in the middle of its
- * ground. Keeps the given order among equals. Any set within the budget packs:
- * everything placed before is larger or equal and on a coarser lattice, so the
- * free room is always whole spots of the current size.
- */
-export function pack(items: readonly Item[], fixed: readonly Placed[] = []): Placed[] {
-  const out: Placed[] = [...fixed]
-  const order = items.map((it, i) => ({ it, i })).sort((a, b) => b.it.size - a.it.size || a.i - b.i)
-  for (const { it } of order) {
-    const at = spots(it.size).find(c => canStand({ ...it, ...c }, out))
-    if (!at) throw new Error(`no room for ${it.id} (${it.size}×${it.size}) on a ${GRID}×${GRID} ground`)
-    out.push({ ...it, ...at })
+/** Every plot of a plan (its leaves). */
+export function plotsOf(plan: Plan): Plot[] {
+  const out: Plot[] = []
+  const walk = (p: Plan, r: Rect, id: string) => {
+    if (p === null) { out.push({ id, ...r }); return }
+    const [a, b] = halves(r)
+    walk(p[0], a, id + 'a'); walk(p[1], b, id + 'b')
   }
-  return out.slice(fixed.length)
-}
-
-/**
- * Where everything stands: the Owner's positions where they are still valid
- * (the item exists, sits on its lattice and the ground, overlaps nothing kept
- * before it), the default packing for the rest. A saved position never breaks
- * the page: one that no longer fits falls back to packing.
- */
-export function arrange(items: readonly Item[], saved: Arrangement = {}): Placed[] {
-  const kept: Placed[] = []
-  for (const it of items) {
-    const at = saved[it.id]
-    if (!at) continue
-    const p = { ...it, x: at.x, y: at.y }
-    if (canStand(p, kept)) kept.push(p)
-  }
-  let all: Placed[]
-  try {
-    all = [...kept, ...pack(items.filter(it => !kept.some(k => k.id === it.id)), kept)]
-  } catch {
-    // The Owner's positions left the free room in pieces too small for a newcomer: start from the default.
-    all = pack(items)
-  }
-  const byId = new Map(all.map(p => [p.id, p]))
-  return items.map(it => byId.get(it.id)!)
-}
-
-/** The spot of its own lattice nearest a fractional cell: where a dragged thing snaps. */
-export const snap = (size: number, to: Cell): Cell => ({
-  x: Math.min(GRID - size, Math.max(0, Math.round(to.x / size) * size)),
-  y: Math.min(GRID - size, Math.max(0, Math.round(to.y / size) * size)),
-})
-
-/** Move one thing to a cell (snapped to its lattice), if it can stand there; the arrangement after, or null. */
-export function move(placed: readonly Placed[], id: string, to: Cell): Placed[] | null {
-  const it = placed.find(p => p.id === id)
-  if (!it) return null
-  const p = { ...it, ...snap(it.size, to) }
-  if (!canStand(p, placed)) return null
-  return placed.map(q => q.id === id ? p : q)
-}
-
-export const toArrangement = (placed: readonly Placed[]): Arrangement => Object.fromEntries(placed.map(p => [p.id, { x: p.x, y: p.y }]))
-
-/**
- * The streets (the Owner, 2026-11-19: a town has roads between its plots, and green belts; things
- * are not packed like a warehouse). Streets run along every 4-line and round the ground's edge; the
- * 8-line is the avenue. A street never runs through a thing: where an 8×8 covers a 4-line, that
- * stretch is left out. Things stand back from the streets (sprites.ts sets how far, by size).
- *
- * A segment is one stretch of a line between two 4-lattice points: on the line x = at (from y = from
- * to y = from + 4) when `along` is 'y', or on y = at when `along` is 'x'.
- */
-export type Street = { along: 'x' | 'y'; at: number; from: number; avenue: boolean; edge: boolean }
-
-export const STREET = 4
-
-export function streets(placed: readonly Placed[]): Street[] {
-  const out: Street[] = []
-  const covered = (along: 'x' | 'y', at: number, from: number) => placed.some(p => {
-    const [a0, a1, b0, b1] = along === 'y' ? [p.x, p.x + p.size, p.y, p.y + p.size] : [p.y, p.y + p.size, p.x, p.x + p.size]
-    return a0 < at && at < a1 && b0 <= from && from + STREET <= b1
-  })
-  for (const along of ['x', 'y'] as const)
-    for (let at = 0; at <= GRID; at += STREET)
-      for (let from = 0; from < GRID; from += STREET)
-        if (!covered(along, at, from)) out.push({ along, at, from, avenue: at === GRID / 2, edge: at === 0 || at === GRID })
+  walk(plan, WHOLE, '')
   return out
 }
 
+/** The plan cut until every plot is at most `max` a side: the default is 4 × 4 plots. */
+export function defaultPlan(max = 4): Plan {
+  const grow = (r: Rect): Plan => {
+    if (r.w <= max && r.h <= max) return null
+    const [a, b] = halves(r)
+    return [grow(a), grow(b)]
+  }
+  return grow(WHOLE)
+}
+
+const nodeAt = (plan: Plan, id: string): Plan | undefined => {
+  let p: Plan | undefined = plan
+  for (const c of id) { if (!p) return undefined; p = p[c === 'a' ? 0 : 1] }
+  return p
+}
+const replace = (plan: Plan, id: string, next: Plan): Plan => {
+  if (id === '') return next
+  if (plan === null) return plan
+  const [a, b] = plan
+  return id[0] === 'a' ? [replace(a, id.slice(1), next), b] : [a, replace(b, id.slice(1), next)]
+}
+
+/** Cut a plot in two; null if it is a single cell already or not a plot. */
+export function splitPlot(plan: Plan, id: string): Plan | null {
+  const p = plotsOf(plan).find(q => q.id === id)
+  if (!p || (p.w === 1 && p.h === 1)) return null
+  return replace(plan, id, [null, null])
+}
+
+/** Join a plot with its other half; null when the other half is cut further or it is the whole ground. */
+export function mergePlot(plan: Plan, id: string): Plan | null {
+  if (id === '') return null
+  const node = nodeAt(plan, id.slice(0, -1))
+  if (!node || node[0] !== null || node[1] !== null) return null
+  return replace(plan, id.slice(0, -1), null)
+}
+
+/** A plan as a short string, and back (for the browser to keep): 'L' a plot, 'S' a cut followed by its halves. */
+export const encodePlan = (plan: Plan): string => plan === null ? 'L' : 'S' + encodePlan(plan[0]) + encodePlan(plan[1])
+export function decodePlan(s: string): Plan | null {
+  let i = 0
+  const read = (depth: number): Plan => {
+    if (depth > 8 || i >= s.length) throw new Error('bad plan')
+    const c = s[i++]
+    if (c === 'L') return null
+    if (c !== 'S') throw new Error('bad plan')
+    return [read(depth + 1), read(depth + 1)]
+  }
+  try { const p = read(0); return i === s.length ? p : null } catch { return null }
+}
+
+// ---- streets ----
+
+export type StreetKind = 'ring' | 'avenue' | 'street' | 'lane' | 'path'
+/** A stretch of street along a line from (x0, y0) to (x1, y1), in cells, and half its width. */
+export type Street = { kind: StreetKind; x0: number; y0: number; x1: number; y1: number; half: number }
+
+export const STREET_HALF: Record<StreetKind, number> = { ring: 0.35, avenue: 0.5, street: 0.35, lane: 0.22, path: 0.12 }
+
+/** Every cut is a street, as wide as the narrower side of the plots it divides allows; the ring runs round the ground. */
+export function streetsOf(plan: Plan): Street[] {
+  const out: Street[] = []
+  const walk = (p: Plan, r: Rect, depth: number) => {
+    if (p === null) return
+    const [a, b] = halves(r)
+    const side = Math.min(a.w, a.h)
+    const kind: StreetKind = depth === 0 ? 'avenue' : side >= 4 ? 'street' : side === 2 ? 'lane' : 'path'
+    const line = a.w < r.w ? { x0: b.x, y0: r.y, x1: b.x, y1: r.y + r.h } : { x0: r.x, y0: b.y, x1: r.x + r.w, y1: b.y }
+    out.push({ kind, ...line, half: STREET_HALF[kind] })
+    walk(p[0], a, depth + 1); walk(p[1], b, depth + 1)
+  }
+  walk(plan, WHOLE, 0)
+  for (const e of [{ x0: 0, y0: 0, x1: GRID, y1: 0 }, { x0: 0, y0: GRID, x1: GRID, y1: GRID }, { x0: 0, y0: 0, x1: 0, y1: GRID }, { x0: GRID, y0: 0, x1: GRID, y1: GRID }])
+    out.push({ kind: 'ring', ...e, half: STREET_HALF.ring })
+  return out
+}
+
+// ---- things in plots ----
+
+export const fitsIn = (it: Item, p: Plot) => Math.min(p.w, p.h) >= it.size
+const centred = (it: Item, p: Plot): Placed => ({ ...it, plot: p.id, x: p.x + (p.w - it.size) / 2, y: p.y + (p.h - it.size) / 2 })
+
+/** The Owner's choices for one place: how the ground is cut, and which plot each thing stands in. */
+export type Arrangement = { plan?: string; at?: Record<string, string> }
+
+/**
+ * Where everything stands: the Owner's plot for a thing where it still fits and is free; for the
+ * rest, largest first, the smallest free plot that fits, nearest the centre. Things that find no
+ * plot are listed (the plan is cut too fine for them) and not drawn.
+ */
+export function assign(items: readonly Item[], plots: readonly Plot[], chosen: Record<string, string> = {}): { placed: Placed[]; homeless: Item[] } {
+  const taken = new Map<string, Item>()
+  const byId = new Map(plots.map(p => [p.id, p]))
+  for (const it of items) {
+    const p = byId.get(chosen[it.id] ?? '\u0000')
+    if (p && fitsIn(it, p) && !taken.has(p.id)) taken.set(p.id, it)
+  }
+  const housed = new Set([...taken.values()].map(it => it.id))
+  const c = GRID / 2
+  const d = (p: Plot) => (p.x + p.w / 2 - c) ** 2 + (p.y + p.h / 2 - c) ** 2
+  const order = items.map((it, i) => ({ it, i })).filter(({ it }) => !housed.has(it.id)).sort((a, b) => b.it.size - a.it.size || a.i - b.i)
+  const homeless: Item[] = []
+  for (const { it } of order) {
+    const p = plots.filter(q => !taken.has(q.id) && fitsIn(it, q)).sort((a, b) => a.w * a.h - b.w * b.h || d(a) - d(b) || a.y - b.y || a.x - b.x)[0]
+    if (p) taken.set(p.id, it); else homeless.push(it)
+  }
+  const placedById = new Map([...taken].map(([pid, it]) => [it.id, centred(it, byId.get(pid)!)]))
+  return { placed: items.map(it => placedById.get(it.id)).filter((p): p is Placed => !!p), homeless }
+}
+
+/**
+ * Put a thing in a plot. A free plot that fits takes it; a plot with another thing swaps them if each
+ * fits the other's plot. The choices after, or null if it cannot go there.
+ */
+export function moveTo(placed: readonly Placed[], plots: readonly Plot[], id: string, plotId: string): Record<string, string> | null {
+  const it = placed.find(p => p.id === id), to = plots.find(p => p.id === plotId)
+  if (!it || !to || !fitsIn(it, to)) return null
+  const now = Object.fromEntries(placed.map(p => [p.id, p.plot]))
+  if (it.plot === plotId) return now
+  const other = placed.find(p => p.plot === plotId)
+  if (other) {
+    const from = plots.find(p => p.id === it.plot)
+    if (!from || !fitsIn(other, from)) return null
+    now[other.id] = it.plot
+  }
+  now[id] = plotId
+  return now
+}
+
+/** The plot under a cell, if any. */
+export const plotAt = (plots: readonly Plot[], c: Cell) => plots.find(p => c.x >= p.x && c.x < p.x + p.w && c.y >= p.y && c.y < p.y + p.h)
