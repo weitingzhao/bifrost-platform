@@ -25,7 +25,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
@@ -156,7 +155,7 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 // valid request, in an order in which each finds what it needs.
 func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, caller, method, path string, body any, header ...string) map[string]any, key rptest.Key) {
 	t.Helper()
-	msg := ok("POST messages", "admin", "POST", "messages", map[string]any{"to": store.Seat, "kind": "ask", "body": "status?"})
+	msg := ok("POST messages", "admin", "POST", "messages", map[string]any{"to": "seat:chief_of_staff", "kind": "ask", "body": "status?"})
 	ok("POST messages/ack", "seat:chief_of_staff", "POST", "messages/ack", map[string]any{"message_ids": []any{msg["message_id"]}})
 	ctl := ok("POST controls", "operator", "POST", "controls", map[string]any{"idempotency_key": "v4", "scope": "mission", "scope_ref": "M-1",
 		"kind": "pause", "reason": "fuzz"})
@@ -473,7 +472,7 @@ func (f *stateFuzz) template(t *testing.T, rt fuzzRoute, caller, path string) ma
 	case rt.pattern == "goals":
 		return map[string]any{"idempotency_key": key, "goal": "do this", "repo": "bifrost-platform"}
 	case rt.pattern == "messages":
-		return map[string]any{"to": f.pick([]string{store.Seat, "owner"}), "kind": f.pick([]string{"ask", "note", "answer"}), "body": "hi"}
+		return map[string]any{"to": f.pick([]string{"seat:chief_of_staff", "owner"}), "kind": f.pick([]string{"ask", "note", "answer"}), "body": "hi"}
 	case rt.pattern == "messages/ack":
 		return map[string]any{"message_ids": f.ids(t, `SELECT message_id FROM agentrt.message ORDER BY 1`)}
 	case strings.HasPrefix(rt.pattern, "rules/"):

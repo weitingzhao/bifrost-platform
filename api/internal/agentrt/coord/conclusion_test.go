@@ -3,7 +3,9 @@ package coord_test
 import (
 	"context"
 	"errors"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // registers the vocabulary and the artifact checks
 	"strings"
 	"sync"
 	"testing"
@@ -14,7 +16,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
@@ -30,7 +31,7 @@ func ok(t *testing.T, err error) {
 // The seed (the actors a message names) and nothing else: no mission, plan
 // or artifact of the store's shared fixture.
 func seedOnly(ctx context.Context, owner *pgx.Conn) error {
-	seeded, err := store.Seed(ctx, owner)
+	seeded, err := actor.Seed(ctx, owner)
 	if err == nil && !seeded {
 		err = errors.New("seed did nothing on an empty database")
 	}
@@ -42,7 +43,7 @@ func conclusionDB(t *testing.T) (*agentrttest.DB, eventlog.DB, actor.Writer) {
 	db := agentrttest.MigratedWith(t, "seeded", seedOnly)
 	pool := db.Pool(t, db.Runtime)
 	w := actor.Writer{Actor: "thread:local_conclusion", Token: "fixture"}
-	_, _, err := store.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register the requesting thread"))
+	_, _, err := artifact.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register the requesting thread"))
 	ok(t, err)
 	return db, pool, w
 }
@@ -69,17 +70,17 @@ func TestConclusionConcurrentRestartAndAck(t *testing.T) {
 	for err := range errs {
 		ok(t, err)
 	}
-	mail, err := store.Unread(ctx, first, w, 100)
+	mail, err := coord.Unread(ctx, first, w, 100)
 	ok(t, err)
 	if len(mail) != 1 || mail[0].From != "controller" || mail[0].Kind != "note" {
 		t.Fatalf("mail=%+v", mail)
 	}
-	_, err = store.AckMessages(ctx, first, w, []string{mail[0].ID})
+	_, err = coord.AckMessages(ctx, first, w, []string{mail[0].ID})
 	ok(t, err)
 	// A fresh pool/process, changed body, and an acknowledged message still
 	// find the permanent receipt. The state is the identity, not the body.
 	ok(t, coord.PostConclusion(ctx, db.Pool(t, db.Runtime), "approval:appr_test:executed", w.Actor, "new summary"))
-	mail, err = store.Unread(ctx, second, w, 100)
+	mail, err = coord.Unread(ctx, second, w, 100)
 	ok(t, err)
 	if len(mail) != 0 {
 		t.Fatal("replay became unread again")
@@ -94,7 +95,7 @@ func TestConclusionConcurrentRestartAndAck(t *testing.T) {
 	}
 	// A second terminal state of the same approval is a different conclusion.
 	ok(t, coord.PostConclusion(ctx, first, "approval:appr_test:unknown", w.Actor, "unknown"))
-	mail, err = store.Unread(ctx, first, w, 100)
+	mail, err = coord.Unread(ctx, first, w, 100)
 	ok(t, err)
 	if len(mail) != 1 || mail[0].Body != "unknown" {
 		t.Fatalf("second state=%+v", mail)
@@ -131,7 +132,7 @@ func TestConclusionFailureRollsBackThenRetries(t *testing.T) {
 	}
 	ok(t, coord.PostConclusion(ctx, conn, "question:q_test:answered", w.Actor, "answer"))
 	ok(t, coord.PostConclusion(ctx, conn, "question:q_test:answered", w.Actor, "answer"))
-	mail, err := store.Unread(ctx, conn, w, 100)
+	mail, err := coord.Unread(ctx, conn, w, 100)
 	ok(t, err)
 	if len(mail) != 1 {
 		t.Fatalf("retry mail=%+v", mail)
@@ -167,7 +168,7 @@ func TestConclusionSkipsUndeliverableActors(t *testing.T) {
 	}
 	retire(false)
 	ok(t, coord.PostConclusion(ctx, conn, "approval:skipped:failed", w.Actor, "failed"))
-	mail, err := store.Unread(ctx, conn, w, 100)
+	mail, err := coord.Unread(ctx, conn, w, 100)
 	ok(t, err)
 	if len(mail) != 1 {
 		t.Fatal("successful control did not deliver")
@@ -183,7 +184,7 @@ func TestConclusionTakesTheDispatchersWake(t *testing.T) {
 	for range 2 {
 		ok(t, coord.PostConclusion(ctx, pool, "sub:drill:ev-65987", w.Actor, "bus: git.main.advanced"))
 	}
-	mail, err := store.Unread(ctx, pool, w, 100)
+	mail, err := coord.Unread(ctx, pool, w, 100)
 	ok(t, err)
 	if len(mail) != 1 || mail[0].From != "controller" {
 		t.Fatalf("mail=%+v, want one message from the controller", mail)
@@ -219,7 +220,7 @@ func TestConclusionCarriesItsCause(t *testing.T) {
 	if len(got) != 4 || got[0] != origin || got[1] != origin || got[2] != 0 || got[3] != 0 {
 		t.Fatalf("causes=%v, want [%d %d 0 0]", got, origin, origin)
 	}
-	mail, err := store.Unread(ctx, pool, w, 100)
+	mail, err := coord.Unread(ctx, pool, w, 100)
 	ok(t, err)
 	if len(mail) != 2 {
 		t.Fatalf("mail=%d, want both letters delivered", len(mail))

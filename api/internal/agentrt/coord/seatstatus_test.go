@@ -2,13 +2,13 @@ package coord_test
 
 import (
 	"encoding/json"
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // registers the vocabulary and the artifact checks
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 func statusBody(t *testing.T, summary string, text any) []byte {
@@ -105,7 +105,7 @@ func TestWakeReadingsPG(t *testing.T) {
 	ok2(t, coord.PostConclusion(ctx, pool, "sub:land-refused:ev-1", a.Actor, "bus: ci.run.finished land-x@abc (change failed). Read /x."))
 	ok2(t, coord.PostConclusion(ctx, pool, "sub:land-refused:ev-2:undeliverable", a.Actor, "bus: a wake could not be delivered: thread:local_gone is not a registered thread here."))
 	ok2(t, coord.PostConclusion(ctx, pool, "approval:appr_1:executed", a.Actor, "card #1 executed"))
-	unread, err := store.Unread(ctx, pool, a, 10)
+	unread, err := coord.Unread(ctx, pool, a, 10)
 	ok2(t, err)
 	var wake string
 	for _, m := range unread {
@@ -113,7 +113,7 @@ func TestWakeReadingsPG(t *testing.T) {
 			wake = m.ID
 		}
 	}
-	_, err = store.AckMessages(ctx, pool, a, []string{wake})
+	_, err = coord.AckMessages(ctx, pool, a, []string{wake})
 	ok2(t, err)
 	got, err := coord.Wakes(ctx, pool, since)
 	ok2(t, err)

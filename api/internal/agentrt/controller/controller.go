@@ -22,7 +22,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // Sources read the records the runtime does not own. ok is false when a
@@ -77,7 +76,7 @@ type Sources struct {
 	// takes back the cards of a plan's round that was refused; nil leaves
 	// them open.
 	Ask      planstore.Ask
-	Withdraw store.Withdraw
+	Withdraw planstore.Withdraw
 	CI       func(ctx context.Context, repo, commit string) (status, run string, ok bool)
 	Deployed seenfacts.Deployed
 }

@@ -177,11 +177,10 @@ func TestMessagesAndControlsNeedNoRedisOutbox(t *testing.T) {
 	var message string
 	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
-		message, err = coord.PostMessage(ctx, tx, "owner", store.Seat, "ask", []byte("status?"))
+		message, err = coord.PostMessage(ctx, tx, "owner", "seat:chief_of_staff", "ask", []byte("status?"))
 		return err
 	}))
-	control := "c_" + eventlog.NewULID(time.Now())
-	w.control(t, control, "mission", "M-1", "stop")
+	control := w.control(t, "mission", "M-1", "stop")
 	if n := w.count(t, `SELECT count(*) FROM agentrt.message m JOIN agentrt.event e ON e.event_id=m.event_id WHERE m.message_id=$1 AND e.event_type='message_posted'`, message); n != 1 {
 		t.Fatalf("message/event pairs: %d", n)
 	}

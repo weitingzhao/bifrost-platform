@@ -23,12 +23,13 @@ func note(tx pgx.Tx) error {
 func TestEventWritesOnlyWhatItNames(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if err := store.SetControl(ctx, tx, "controller", "c-1", "global", "", "pause", "x"); err != nil {
-			return err
-		}
-		return store.SetControl(ctx, tx, "controller", "c-2", "global", "", "stop", "y")
-	}))
+	// Two controls through the contract's own writer (RequestControl), the ids
+	// it minted standing in for the fixed ones the direct writes had.
+	c1, err := coord.RequestControl(ctx, w.rt, wr("controller"), "k-1", "global", "", "pause", "x")
+	ok(t, err)
+	c2, err := coord.RequestControl(ctx, w.rt, wr("controller"), "k-2", "global", "", "stop", "y")
+	ok(t, err)
+	id1, id2 := c1["control_id"].(string), c2["control_id"].(string)
 	var m1, m2 string
 	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		var err error
@@ -50,12 +51,12 @@ func TestEventWritesOnlyWhatItNames(t *testing.T) {
 	// control_cleared for c-1 also clears c-2: refused by name.
 	wantErr(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "control", Type: "control_cleared", Actor: "owner",
-			Body: map[string]any{"control_id": "c-1"}}); err != nil {
+			Body: map[string]any{"control_id": id1}}); err != nil {
 			return err
 		}
 		_, err := tx.Exec(ctx, `UPDATE agentrt.control SET cleared_at = clock_timestamp(), cleared_by_actor_id = 'owner' WHERE cleared_at IS NULL`)
 		return err
-	}), "does not name agentrt.control row c-2")
+	}), "does not name agentrt.control row "+id2)
 	// message_acked for m1 acks m2: refused by name.
 	wantErr(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "mbox:exec:codex", Type: "message_acked", Actor: "exec:codex",
@@ -75,12 +76,13 @@ func TestEventWritesOnlyWhatItNames(t *testing.T) {
 	}), "does not write agentrt.actor")
 	// The owner cannot delete or truncate state rows.
 	owner := w.db.Connect(t, w.db.Owner)
-	_, err := owner.Exec(ctx, `DELETE FROM agentrt.control WHERE control_id = 'c-2'`)
+	_, err = owner.Exec(ctx, `DELETE FROM agentrt.control WHERE control_id = $1`, id2)
 	wantErr(t, err, "end by state")
 	_, err = owner.Exec(ctx, `TRUNCATE agentrt.control`)
 	wantErr(t, err, "")
 	// The right event, the right row: goes through.
-	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.AckMessage(ctx, tx, "exec:codex", m2) }))
+	_, err = coord.AckMessages(ctx, w.rt, wr("exec:codex"), []string{m2})
+	ok(t, err)
 }
 
 // T23a for all eight append-only tables, by the owner (the runtime role is

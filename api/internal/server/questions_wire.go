@@ -20,7 +20,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
@@ -196,7 +195,7 @@ func (rt *questionRuntime) agentRuntimeAsk() planstore.Ask {
 			(strings.HasPrefix(msg, "already answered: ") || strings.HasPrefix(msg, "duplicate of ")):
 			// A planner's question the store holds under another key, open or
 			// answered (review 217 B2): the Owner has it; the plan goes on.
-			return "", fmt.Errorf("%w: %s", store.ErrAsked, msg)
+			return "", fmt.Errorf("%w: %s", planstore.ErrAsked, msg)
 		case card.SameByKey && res.Code == http.StatusConflict && msg == questions.KeyReused:
 			// A blocked card made by an earlier try whose transaction then
 			// failed, in words that have changed since (it says how long ago
@@ -322,7 +321,7 @@ const agentRuntimeRequester = questions.RuntimeSession
 // round was refused (W-31 2.2b, review 216 B2). A card that is no longer
 // open (answered, withdrawn) or gone needs nothing. nil without a question
 // store.
-func (rt *questionRuntime) agentRuntimeWithdraw() store.Withdraw {
+func (rt *questionRuntime) agentRuntimeWithdraw() planstore.Withdraw {
 	if rt == nil || rt.svc == nil {
 		return nil
 	}

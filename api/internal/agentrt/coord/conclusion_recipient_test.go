@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // registers the vocabulary and the artifact checks
 	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/threadinbox"
 )
 
@@ -67,14 +68,14 @@ func TestConclusionLongRegisteredThreadPG(t *testing.T) {
 			thread, err := actor.ThreadActor(id)
 			ok(t, err)
 			w := actor.Writer{Actor: thread, Token: "long-session"}
-			_, _, err = store.UploadArtifact(ctx, conn, w, "message", "text/plain", []byte("register"))
+			_, _, err = artifact.UploadArtifact(ctx, conn, w, "message", "text/plain", []byte("register"))
 			ok(t, err)
 			for _, key := range []string{"approval:appr_long:executed", "question:q_long:answered"} {
 				for _, label := range []string{id, thread, id + " (W-31)", thread + " (W-31)"} {
 					ok(t, coord.PostConclusion(ctx, conn, key, threadinbox.Recipient(label), key))
 				}
 			}
-			mail, err := store.Unread(ctx, conn, w, 100)
+			mail, err := coord.Unread(ctx, conn, w, 100)
 			ok(t, err)
 			if len(mail) != 2 || mail[0].Body != "approval:appr_long:executed" || mail[1].Body != "question:q_long:answered" {
 				t.Fatalf("long actor mailbox=%+v", mail)

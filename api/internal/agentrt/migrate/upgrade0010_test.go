@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // registers the vocabulary and the artifact checks
 	"reflect"
 	"slices"
 	"testing"
@@ -14,7 +16,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
@@ -43,7 +44,7 @@ func database0009(t *testing.T) (*agentrttest.DB, *pgx.Conn, []migrate.File) {
 	if !slices.Equal(applied, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}) {
 		t.Fatalf("0009 setup applied %v", applied)
 	}
-	_, err = store.Seed(ctx, conn)
+	_, err = actor.Seed(ctx, conn)
 	must0010(t, err)
 	rt := db.Connect(t, db.Runtime)
 	for host, kind := range map[string]string{"old-dev": "dev", "old-vm": "vm"} {

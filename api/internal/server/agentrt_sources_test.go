@@ -14,7 +14,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 )
@@ -376,7 +375,7 @@ func TestPlannerCardOnTheStore(t *testing.T) {
 		t.Fatalf("the card %+v %v %v", got, ok, err)
 	}
 	// Open, under another key: asked before.
-	if _, err = ask(ctx, card(strings.Repeat("b2", 16), "Document the Console too?")); !errors.Is(err, store.ErrAsked) || !strings.Contains(err.Error(), "duplicate of") {
+	if _, err = ask(ctx, card(strings.Repeat("b2", 16), "Document the Console too?")); !errors.Is(err, planstore.ErrAsked) || !strings.Contains(err.Error(), "duplicate of") {
 		t.Fatalf("an open duplicate: %v", err)
 	}
 	raw, _ := json.Marshal(map[string]any{"option": "b", "channel": "console"})
@@ -390,7 +389,7 @@ func TestPlannerCardOnTheStore(t *testing.T) {
 	if err = withdraw(ctx, id, "the plan was not used"); err != nil {
 		t.Fatalf("withdrawing an answered card: %v", err)
 	}
-	if _, err = ask(ctx, card(strings.Repeat("c3", 16), "Document the Console too?")); !errors.Is(err, store.ErrAsked) || !strings.Contains(err.Error(), "already answered") {
+	if _, err = ask(ctx, card(strings.Repeat("c3", 16), "Document the Console too?")); !errors.Is(err, planstore.ErrAsked) || !strings.Contains(err.Error(), "already answered") {
 		t.Fatalf("an answered duplicate: %v", err)
 	}
 	// An open card withdrawn; one that is gone needs nothing.
@@ -414,7 +413,7 @@ func TestPlannerCardOnTheStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	pc.Key = strings.Repeat("f6", 16)
-	if _, err = ask(ctx, pc); err == nil || errors.Is(err, store.ErrAsked) {
+	if _, err = ask(ctx, pc); err == nil || errors.Is(err, planstore.ErrAsked) {
 		t.Fatalf("a plan change's duplicate: %v", err)
 	}
 }

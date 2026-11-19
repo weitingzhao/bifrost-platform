@@ -85,7 +85,7 @@ func TestRuleApproveOnTheRealPath(t *testing.T) {
 	t.Setenv("AGENTRT_DSN", "")
 	srv := newTestServer(t, cfg)
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	conn := db.Connect(t, db.Runtime)

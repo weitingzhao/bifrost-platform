@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"errors"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"strings"
 	"testing"
 	"time"
@@ -91,7 +92,7 @@ func seededDB(t *testing.T) *agentrttest.DB {
 const seededTemplate = "seeded"
 
 func seedTemplate(ctx context.Context, owner *pgx.Conn) error {
-	seeded, err := store.Seed(ctx, owner)
+	seeded, err := actor.Seed(ctx, owner)
 	if err == nil && !seeded {
 		err = errors.New("seed did nothing on an empty database")
 	}
@@ -152,7 +153,7 @@ func (w *world) lastSeq(t *testing.T, stream string) int64 {
 func TestSeedAndFirstCreation(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	again, err := store.Seed(ctx, w.db.Connect(t, w.db.Owner))
+	again, err := actor.Seed(ctx, w.db.Connect(t, w.db.Owner))
 	ok(t, err)
 	if again {
 		t.Fatal("seed ran twice")

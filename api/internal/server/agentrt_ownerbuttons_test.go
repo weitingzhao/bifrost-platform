@@ -21,7 +21,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
@@ -121,7 +120,7 @@ func recorderLog(t *testing.T, work string) recorderimport.Request {
 func TestOwnerButtonPaths(t *testing.T) {
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	b := &buttonWorld{t: t, conn: db.Connect(t, db.Runtime), rt: newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)}

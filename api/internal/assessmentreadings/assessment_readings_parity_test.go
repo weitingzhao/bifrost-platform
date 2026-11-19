@@ -6,9 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // registers the vocabulary and the artifact checks
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 	"testing"
 )
@@ -16,7 +17,7 @@ import (
 func TestAssessmentRecordedQueryParityPG(t *testing.T) {
 	t.Parallel()
 	db := agentrttest.MigratedWith(t, "seeded", func(ctx context.Context, owner *pgx.Conn) error {
-		seeded, err := store.Seed(ctx, owner)
+		seeded, err := actor.Seed(ctx, owner)
 		if err == nil && !seeded {
 			err = errors.New("seed did nothing on an empty database")
 		}

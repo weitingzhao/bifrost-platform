@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"net/http"
 	"net/http/httptest"
@@ -26,7 +27,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
@@ -51,7 +51,7 @@ func must(t *testing.T, err error) {
 func world(t *testing.T) (*pgxpool.Pool, string) {
 	t.Helper()
 	db := agentrttest.Migrated(t)
-	_, err := store.Seed(ctx, db.Connect(t, db.Owner))
+	_, err := actor.Seed(ctx, db.Connect(t, db.Owner))
 	must(t, err)
 	pool := db.Pool(t, db.Runtime)
 	tx := func(fn func(pgx.Tx) error) { t.Helper(); must(t, eventlog.InTx(ctx, pool, fn)) }

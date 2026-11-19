@@ -2,13 +2,14 @@ package eventlog_test
 
 import (
 	"context"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // the vocabulary and the seed, in the test
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // the vocabulary, in the test
 )
 
 // Origin: 2026-11-16, the ledger got reads of its own (Last, Has, HasBody)
@@ -19,7 +20,7 @@ import (
 func TestLedgerReads(t *testing.T) {
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)
-	if _, err := store.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)

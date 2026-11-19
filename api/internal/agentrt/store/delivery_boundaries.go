@@ -115,3 +115,9 @@ func ReadDeliveryBoundaries(ctx context.Context, db eventlog.DB, diskFloor int64
 	}
 	return out, nil
 }
+
+// DefaultDiskFloor is the floor when the platform's configuration names none:
+// 15 GiB, below which a test database, a Go build or a clone can fail.
+// Historical dispatch disk value retained for event and boundary readers;
+// claims no longer allocate work or page the Owner on disk changes.
+const DefaultDiskFloor int64 = 15 << 30

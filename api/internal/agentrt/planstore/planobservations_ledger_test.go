@@ -13,8 +13,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // binds the ports of the plan code
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // This test writes plan observations through the ledger, so it needs the
@@ -28,7 +28,7 @@ func TestPV2ObservationVersionsAndStaleness(t *testing.T) {
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)
 	owner := db.Connect(t, db.Owner)
-	if _, err := store.Seed(ctx, owner); err != nil {
+	if _, err := actor.Seed(ctx, owner); err != nil {
 		t.Fatal(err)
 	}
 	rt := db.Connect(t, db.Runtime)

@@ -3,6 +3,7 @@ package store_test
 import (
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"reflect"
 	"testing"
 	"time"
@@ -76,9 +77,11 @@ func (w *world) artifact(t *testing.T, kind, body string) string {
 	return id
 }
 
-func (w *world) control(t *testing.T, id, scope, ref, kind string) {
+func (w *world) control(t *testing.T, scope, ref, kind string) string {
 	t.Helper()
-	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.SetControl(ctx, tx, "owner", id, scope, ref, kind, "test") }))
+	got, err := coord.RequestControl(ctx, w.rt, wr("owner"), "k-"+eventlog.NewULID(time.Now()), scope, ref, kind, "test")
+	ok(t, err)
+	return got["control_id"].(string)
 }
 
 func (w *world) chainHolds(t *testing.T, stream string) {

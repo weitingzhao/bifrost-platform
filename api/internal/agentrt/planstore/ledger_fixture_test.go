@@ -62,7 +62,7 @@ func wr(id string) actor.Writer { return actor.Writer{Actor: id, Token: "operato
 // seededTemplate names the template seedTemplate prepares.
 const seededTemplate = "seeded"
 
-// seedActors are the actors store.Seed writes (store/seed.go).
+// seedActors are the actors actor.Seed writes (store/seed.go).
 var seedActors = []struct{ id, kind, tool, name string }{
 	{"controller", "controller", "", "Runtime controller"},
 	{"owner", "owner", "", "Owner"},
@@ -73,7 +73,7 @@ var seedActors = []struct{ id, kind, tool, name string }{
 	{"seat:chief_of_staff", "seat", "", "Chief of staff seat"},
 }
 
-// seedTemplate writes what store.Seed writes on an empty database: the first
+// seedTemplate writes what actor.Seed writes on an empty database: the first
 // event and the actors that hang on it, in one transaction.
 func seedTemplate(ctx context.Context, owner *pgx.Conn) error {
 	ids := make([]any, 0, len(seedActors))

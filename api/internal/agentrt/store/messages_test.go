@@ -11,7 +11,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // Two batches of one inbox acknowledged at once, overlapping, never deadlock
@@ -37,7 +36,7 @@ func TestAcknowledgingTheSameInboxAtOnce(t *testing.T) {
 			wg.Add(1)
 			go func(i int, batch []string) {
 				defer wg.Done()
-				_, errs[i] = store.AckMessages(ctx, pool, seat, batch)
+				_, errs[i] = coord.AckMessages(ctx, pool, seat, batch)
 			}(i, batch)
 		}
 		wg.Wait()

@@ -10,7 +10,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // 2026-11-17, store split step F2: the artifact package validates view artifacts through a hook; an unbound hook must refuse.
@@ -25,7 +24,7 @@ func TestLinkingTheStoreRegistersTheViewArtifactCheck(t *testing.T) {
 	if errors.Is(err, artifact.ErrNoCheck) || !errors.Is(err, eventlog.ErrInvalid) || !strings.Contains(err.Error(), "plan view artifact:") {
 		t.Fatalf("a broken plan view: %v, want the plan view's refusal", err)
 	}
-	_, _, err = store.UploadArtifact(ctx, nil, wr("thread:check"), "other", "application/json", []byte(`{"kind":"agentrt.external_work/v1"}`))
+	_, _, err = artifact.UploadArtifact(ctx, nil, wr("thread:check"), "other", "application/json", []byte(`{"kind":"agentrt.external_work/v1"}`))
 	if errors.Is(err, artifact.ErrNoCheck) || !errors.Is(err, eventlog.ErrInvalid) {
 		t.Fatalf("a broken external work description: %v, want the description's refusal", err)
 	}

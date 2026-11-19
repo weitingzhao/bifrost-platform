@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"errors"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -37,7 +38,7 @@ func TestSessionHeldToItsToken(t *testing.T) {
 	second := actor.Writer{Actor: "thread:s", Token: "second"}
 	_, err := proposeForSession(ctx, w.rt, first, "k1")
 	ok(t, err)
-	_, _, err = store.UploadArtifact(ctx, w.rt, first, "task_spec", "text/plain", []byte("a spec"))
+	_, _, err = artifact.UploadArtifact(ctx, w.rt, first, "task_spec", "text/plain", []byte("a spec"))
 	ok(t, err)
 	var msg string
 	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
@@ -61,14 +62,14 @@ func TestSessionHeldToItsToken(t *testing.T) {
 			_, e := coord.SendMessage(ctx, w.rt, second, "owner", "note", []byte("hi"))
 			return e
 		},
-		"an acknowledgement": func() error { _, e := store.AckMessages(ctx, w.rt, second, []string{msg}); return e },
-		"a read of its mail": func() error { _, e := store.Unread(ctx, w.rt, second, 10); return e },
+		"an acknowledgement": func() error { _, e := coord.AckMessages(ctx, w.rt, second, []string{msg}); return e },
+		"a read of its mail": func() error { _, e := coord.Unread(ctx, w.rt, second, 10); return e },
 		"a new upload": func() error {
-			_, _, e := store.UploadArtifact(ctx, w.rt, second, "task_spec", "text/plain", []byte("another spec"))
+			_, _, e := artifact.UploadArtifact(ctx, w.rt, second, "task_spec", "text/plain", []byte("another spec"))
 			return e
 		},
 		"an upload it has": func() error {
-			_, _, e := store.UploadArtifact(ctx, w.rt, second, "task_spec", "text/plain", []byte("a spec"))
+			_, _, e := artifact.UploadArtifact(ctx, w.rt, second, "task_spec", "text/plain", []byte("a spec"))
 			return e
 		},
 		"a replay of its key": func() error { _, e := proposeForSession(ctx, w.rt, second, "k1"); return e },
@@ -84,12 +85,12 @@ func TestSessionHeldToItsToken(t *testing.T) {
 	if len(a.cards) != 0 {
 		t.Fatalf("a refused plan change asked the Owner")
 	}
-	ms, err := store.Unread(ctx, w.rt, first, 10)
+	ms, err := coord.Unread(ctx, w.rt, first, 10)
 	ok(t, err)
 	if len(ms) != 1 || ms[0].ID != msg {
 		t.Fatalf("the thread's own mail: %+v", ms)
 	}
-	done, err := store.AckMessages(ctx, w.rt, first, []string{msg})
+	done, err := coord.AckMessages(ctx, w.rt, first, []string{msg})
 	ok(t, err)
 	if len(done) != 1 {
 		t.Fatalf("acknowledged %v", done)
@@ -241,7 +242,7 @@ func TestSessionMailAcrossTheFirstWrite(t *testing.T) {
 	}
 	got := make(chan read, 1)
 	go func() {
-		ms, err := store.Unread(context.Background(), pool, second, 10)
+		ms, err := coord.Unread(context.Background(), pool, second, 10)
 		got <- read{ms, err}
 	}()
 	<-held

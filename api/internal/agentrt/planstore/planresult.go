@@ -1,4 +1,4 @@
-package store
+package planstore
 
 import (
 	"context"
@@ -36,9 +36,6 @@ import (
 // graph and steps (lockBatch, the planning task's step again), then the
 // streams. The graph lock comes before any event, as ProposeTasks over HTTP
 // takes it before its own (review 216 A2).
-
-// Seat is the actor a plan's records are written as.
-const Seat = "seat:chief_of_staff"
 
 // Withdraw withdraws a card the runtime asked, with a reason; a card that is
 // already answered, withdrawn or gone is not an error.
