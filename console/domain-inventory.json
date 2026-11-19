@@ -2133,6 +2133,7 @@
       "path": "console/src/domains/owner/city",
       "files": [
         "console/src/domains/owner/city/gen1/CityBuilder.tsx",
+        "console/src/domains/owner/city/gen1/README.md",
         "console/src/domains/owner/city/gen1/__tests__/cityBuilder.test.ts",
         "console/src/domains/owner/city/gen1/__tests__/cityFlights.test.ts",
         "console/src/domains/owner/city/gen1/__tests__/cityUtilities.test.ts",
@@ -2153,13 +2154,21 @@
         "console/src/domains/owner/city/gen1/layoutStore.ts",
         "console/src/domains/owner/city/gen1/platformLayoutStore.ts",
         "console/src/domains/owner/city/gen1/worldDictionary.ts",
-        "console/src/domains/owner/city/gen1/zones.ts"
+        "console/src/domains/owner/city/gen1/zones.ts",
+        "console/src/domains/owner/city/gen2/CityGen2.tsx",
+        "console/src/domains/owner/city/gen2/__tests__/places.test.ts",
+        "console/src/domains/owner/city/gen2/cityGen2.css",
+        "console/src/domains/owner/city/gen2/placeScene.ts",
+        "console/src/domains/owner/city/gen2/places.ts"
       ],
       "imports": [
         "console/src/api",
-        "console/src/api/client.ts"
+        "console/src/api/client.ts",
+        "console/src/lib/shell"
       ],
-      "test_imports": [],
+      "test_imports": [
+        "console/src/lib/shell"
+      ],
       "external_imports": [
         "phaser",
         "react",

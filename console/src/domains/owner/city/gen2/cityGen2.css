@@ -1,0 +1,48 @@
+/* City gen2 frame, greybox. The four corners, the menu and the card sit over the canvas. */
+.g2 { position: relative; width: 100%; height: 100%; min-height: 480px; overflow: hidden; background: #f3efe6;
+  font-family: system-ui, -apple-system, sans-serif; color: #2f2d3a; }
+.g2-canvas { position: absolute; inset: 0; }
+.g2-canvas canvas { display: block; }
+
+.g2-corner { box-sizing: border-box; position: absolute; z-index: 2; background: #fffffff0; border: 1px solid #d8d2c4; border-radius: 10px;
+  box-shadow: 0 2px 10px #0000000f; }
+.g2-tl { top: 14px; left: 14px; width: min(300px, calc(100% - 250px)); padding: 10px 12px; }
+.g2-tl h1 { margin: 2px 0 2px; font-size: 18px; }
+.g2-tl p { margin: 0 0 8px; font-size: 12.5px; color: #5d5868; line-height: 1.35; }
+.g2-tl dl, .g2-panel dl { margin: 0; display: flex; gap: 16px; font-size: 12px; }
+.g2-tl dt, .g2-panel dt { color: #8a8478; }
+.g2-tl dd, .g2-panel dd { margin: 0; font-weight: 600; }
+.g2-kicker { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #8a8478; display: flex; gap: 6px; align-items: center; }
+.g2-chip { text-transform: none; letter-spacing: 0; background: #ece7db; color: #6b6676; border-radius: 6px; padding: 0 5px; }
+.g2-unknown { color: #9a93a6; font-weight: 400 !important; font-style: italic; }
+.g2-swap { display: inline-block; margin-top: 8px; font-size: 12px; color: #3d6fd8; text-decoration: none; }
+
+/* The minimap: a frame over the second camera; transparent below its title so the camera shows through. */
+.g2-tr { position: absolute; background: transparent; padding: 0; cursor: pointer; text-align: left; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; font: inherit; color: inherit; }
+.g2-tr span { display: block; height: 22px; line-height: 22px; padding: 0 8px; font-size: 12px; font-weight: 600;
+  background: #fffffff0; border-bottom: 1px solid #d8d2c4; }
+.g2-tr:hover { border-color: #3d6fd8; }
+
+.g2-bl { bottom: 62px; left: 14px; padding: 6px 10px; font-size: 13px; max-width: calc(100vw - 180px); white-space: nowrap; overflow-x: auto; }
+.g2-bl a { color: #3d6fd8; text-decoration: none; }
+.g2-sep { margin: 0 6px; color: #a8a29a; }
+.g2-br { bottom: 62px; right: 14px; padding: 6px 10px; font-size: 12px; }
+
+.g2-menu { position: absolute; z-index: 2; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; gap: 4px;
+  padding: 4px; background: #2f2d3aee; border-radius: 12px; max-width: calc(100vw - 24px); overflow-x: auto; }
+.g2-menu button { border: 0; background: transparent; color: #e9e4d8; font-size: 13px; padding: 7px 12px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+.g2-menu button:hover { background: #ffffff1f; }
+.g2-menu button.on { background: #ffd36b; color: #2f2d3a; font-weight: 600; }
+
+.g2-panel { position: absolute; z-index: 3; top: 160px; right: 14px; width: min(280px, calc(100vw - 28px)); padding: 12px 14px;
+  background: #fff; border: 1px solid #d8d2c4; border-radius: 10px; box-shadow: 0 6px 24px #00000022; }
+.g2-panel h2 { margin: 2px 0 4px; font-size: 16px; }
+.g2-panel p { margin: 0 0 8px; font-size: 12.5px; color: #5d5868; }
+.g2-close { position: absolute; top: 6px; right: 8px; border: 0; background: none; font-size: 18px; cursor: pointer; color: #8a8478; }
+
+@media (max-width: 560px) {
+  .g2-tl { top: 10px; left: 10px; width: calc(100% - 10px - 142px - 8px); padding: 8px 10px; }
+  .g2-tl p { display: none; }
+  .g2-panel { top: auto; bottom: 110px; }
+}
