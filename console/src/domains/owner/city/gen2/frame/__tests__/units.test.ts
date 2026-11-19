@@ -26,10 +26,12 @@ describe('the unit process', () => {
     const u = { ...base, chosen: ['a'], summary: [{ id: 's', label: 'S', from: ['b'], how: 'average' as const, row: 'cpu.busy' }] }
     expect(unitRulesBroken(u).join()).toMatch(/does not show/)
   })
-  it('the CPU unit: Details confirmed with all 15 shown (the Owner, 2026-11-19); Inside open, every detail placed', () => {
+  // The Owner first said show all 15, then the same day: the plant generates, it does not know what the
+  // power is used for — the room shows the hardware only.
+  it('the CPU unit: Details confirmed, the hardware only; Inside open, every chosen detail placed', () => {
     const cpu = UNITS.find(u => u.id === 'cpu')!
     expect(stagesOf(cpu).slice(0, 2)).toEqual([{ id: 'details', state: 'confirmed' }, { id: 'inside', state: 'open' }])
-    expect(cpu.chosen).toHaveLength(cpu.details.length)
+    for (const use of ['busy.mode', 'running', 'blocked', 'switches', 'interrupts', 'guest']) expect(cpu.chosen).not.toContain(use)
     expect(new Set(cpu.inside!.map(i => i.detail))).toEqual(new Set(cpu.chosen))
     expect(STAGES.map(s => s.id)).toEqual(['details', 'inside', 'summary', 'outside', 'in-use'])
   })
