@@ -46,19 +46,23 @@ func TestRepeatsShareALetterAndUrgentOnesDoNot(t *testing.T) {
 	}
 }
 
-// 2026-11-19, the first false alarm the problem loop closed: CPUThrottlingHigh, an
-// info alert, woke the duty seat. Info gets no letter, unless the namespace or
-// the name is one that always does.
-func TestAnInfoAlertWritesNoLetter(t *testing.T) {
+// 2026-11-19: CPUThrottlingHigh, an info alert, was first judged false and its
+// letters stopped; the duty seat then found it real. Info keeps a letter, one a
+// day per alert; an always-letter namespace keeps one each time.
+func TestAnInfoAlertWritesOneLetterADay(t *testing.T) {
 	r := RuleOf("row", "always-ns")
 	at := time.Date(2026, 11, 19, 3, 0, 0, 0, time.UTC)
-	if k := r.LetterKey("ev-1", Alert{Name: "CPUThrottlingHigh", Namespace: "cicd", Severity: "info", Status: "firing"}, at, 1); k != "" {
-		t.Fatalf("info alert got letter %q", k)
+	info := Alert{Name: "CPUThrottlingHigh", Namespace: "cicd", Severity: "info", Status: "firing"}
+	first := r.LetterKey("ev-1", info, at, 1)
+	if first == "" || first != r.LetterKey("ev-2", info, at.Add(12*time.Hour), 1) {
+		t.Fatalf("info letters within a day: %q", first)
 	}
-	if k := r.LetterKey("ev-2", Alert{Name: "CPUThrottlingHigh", Namespace: "always-ns", Severity: "info", Status: "firing"}, at, 1); k == "" {
-		t.Fatal("an always-letter namespace lost its letter")
+	if first == r.LetterKey("ev-3", info, at.Add(25*time.Hour), 1) {
+		t.Fatal("a day later shares the old letter")
 	}
-	if k := r.LetterKey("ev-3", Alert{Name: "X", Namespace: "cicd", Severity: "warning", Status: "firing"}, at, 1); k == "" {
-		t.Fatal("a warning lost its letter")
+	always := info
+	always.Namespace = "always-ns"
+	if r.LetterKey("ev-4", always, at, 1) == r.LetterKey("ev-5", always, at, 1) {
+		t.Fatal("an always-letter namespace lost its letter each time")
 	}
 }
