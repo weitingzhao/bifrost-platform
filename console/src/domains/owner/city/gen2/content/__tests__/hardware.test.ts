@@ -54,6 +54,15 @@ describe('the hardware district, from one real read', () => {
     const vols = dev('UGREEN-NAS').children.filter(r => r.id.startsWith('volume-'))
     expect(vols.map(v => v.units)).toEqual([['online', 'online', 'online'], ['online', 'online']])
   })
+  // 2026-11-19, the Owner: every roof and wall shows something. The roof a number (who), the sign the
+  // workload pool or role (what for), a wall the pods running now (how busy) — all read.
+  it('surfaces show what is read: roof number, sign, pods running; none on what nothing reads', () => {
+    expect(dev('ubt-k3s-04').face).toMatchObject({ roof: '04', sign: 'DATA PRIMARY', tally: { what: 'pods' } })
+    expect(dev('mini-pc-c').face?.sign).toBe('CONTROL PLANE')
+    expect(dev('ubt-k3s-06').face?.sign).toBe('AGENT HOST')
+    expect(dev('gpu-server').face?.tally?.n).toBeNull()
+    expect(dev('win11-host').face).toEqual({})
+  })
   it('unread is not zero: nothing reading it means no number; asleep shows its size but no use', () => {
     for (const r of dev('win11-host').children) expect([r.meter?.used, r.meter?.of]).toEqual([null, null])
     const cpu = dev('gpu-server').children.find(r => r.id === 'cpu')!

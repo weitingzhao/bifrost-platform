@@ -26,6 +26,9 @@ export const HARDWARE_QUERIES = {
   diskSize: 'max by (instance, mountpoint) (node_filesystem_size_bytes{mountpoint=~"/|/volume[0-9]+",fstype!~"tmpfs|overlay"})',
   diskUsed: 'max by (instance, mountpoint) (node_filesystem_size_bytes{mountpoint=~"/|/volume[0-9]+",fstype!~"tmpfs|overlay"} - node_filesystem_avail_bytes{mountpoint=~"/|/volume[0-9]+",fstype!~"tmpfs|overlay"})',
   arraySize: 'max by (instance, device) (node_md_blocks)',
+  pool: 'max by (node, label_bifrost_io_workload_pool) (kube_node_labels)',
+  role: 'max by (node, role) (kube_node_role)',
+  pods: 'count by (node) (kube_pod_info{node!=""} * on (namespace, pod) group_left () (max by (namespace, pod) (kube_pod_status_phase{phase="Running"}) == 1))',
   arrayDisks: 'max by (instance, device, state) (node_md_disks)',
 } as const
 export type HardwareReads = { topology: TopoNode[] | null; prom: { [K in keyof typeof HARDWARE_QUERIES]: PromPoint[] | null } }
@@ -170,7 +173,17 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = ''): Pl
       if (gpu) rooms.push(room('gpu', 'GPU', meter('cores', null, null, 'no GPU exporter: not read')))
     }
     zones.set(n.id, zoneOf(n, look, gpu))
+    // Its surfaces (all read): the roof its number from its name; the sign what it is for — its workload
+    // pool, else its cluster role, else the role the topology gives it; a wall the pods running on it now.
+    const digits = (node ?? n.id).match(/(\d+)$/)?.[1]
+    const pool = node ? (P.pool ?? []).find(p => p.labels?.node === node)?.labels?.label_bifrost_io_workload_pool : undefined
+    const role = node ? (P.role ?? []).find(p => p.labels?.node === node && p.labels?.role === 'control-plane')?.labels?.role : undefined
+    const topoRole = (n.k3s_roles ?? []).find(r => !/^k3s_/.test(r))
+    const sign = (pool ?? role ?? topoRole ?? '').replace(/[-_]/g, ' ').toUpperCase()
+    const pods = node && state === 'online' ? at(P.pods, 'node', node) : null
+    const face: Place['face'] = { roof: digits ? digits.padStart(2, '0') : gpu ? 'GPU' : undefined, sign: sign || undefined, ...(node ? { tally: { n: pods, what: 'pods', source: HARDWARE_QUERIES.pods } } : {}) }
     const building: Place = {
+      face,
       // The topology names the box, the cluster its node: show both where they differ (mini-pc-a · ubt-k3s-02).
       id: n.id, kind: 'building', shape: shapeOf(look, cores, gpu), label: node && !(n.label ?? n.id).includes(node) ? `${n.label ?? n.id} · ${node}` : n.label ?? n.id, look, state,
       question: `${n.label ?? n.id}${ip ? ` (${ip})` : ''}: is it up, and how full is it?`, dashboard: null, children: rooms,

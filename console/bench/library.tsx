@@ -4,7 +4,7 @@
 // part does, said so; on the map every level comes from a reading.
 import { Draw, type Sprite } from '../src/domains/owner/city/gen2/frame/kit'
 import { spriteUrl } from '../src/domains/owner/city/gen2/frame/sprites'
-import { beacon, dock, doorRow, gatehouse, grille, hall, plaque, signBand, smoke, tank, toneOf, windowStrip } from '../src/domains/owner/city/gen2/frame/library/parts'
+import { beacon, dock, doorRow, gatehouse, grille, hall, plaque, roofNumber, signBand, smoke, tallyBoard, tank, toneOf, windowStrip } from '../src/domains/owner/city/gen2/frame/library/parts'
 import { deviceSprite, type Form, type Levels } from '../src/domains/owner/city/gen2/frame/devices'
 import * as L from '../src/domains/owner/city/gen2/frame/library/landmarks'
 
@@ -25,13 +25,16 @@ const parts: Item[] = [
   { name: 'gatehouse', note: 'A small office, its windows lit by CPU. Example: 50%.', sprite: draw(2, 2, 40, g => gatehouse(g, 0.3, 0.3, 1.4, 1.2, T, 0.5)) },
   { name: 'signBand', note: 'A plate across a face with a name on it.', sprite: draw(3, 1, 40, g => { g.box(0.2, 0.1, 2.6, 0.6, 30, T.wall); signBand(g, 'left', 0.2, 0.7, 2.6, 26, 'ubt-k3s-07') }) },
   { name: 'grille', note: 'A radiator grille low on a face.', sprite: draw(1, 3, 40, g => { g.box(0.1, 0.2, 0.7, 2.6, 30, T.wall); grille(g, 'right', 0.8, 2.8, 2.6, 2, 14) }) },
+  { name: 'roofNumber', note: 'A number painted large on a roof: who it is, from far off.', sprite: draw(3, 3, 40, g => { g.box(0.2, 0.2, 2.6, 2.6, 20, T.wall); roofNumber(g, 0.3, 0.3, 2.7, 2.7, 20, '04') }) },
+  { name: 'tallyBoard', note: 'How many it holds now (a reading); dark when nothing is read. Example: 38 pods.', sprite: draw(1, 3, 40, g => { g.box(0.1, 0.2, 0.7, 2.6, 30, T.wall); tallyBoard(g, 'right', 0.8, 2.8, 1.3, 18, 38, 'pods') }) },
   { name: 'plaque · linux / mac / win', note: 'A system’s mark on a face (the first generation’s marks).', sprite: draw(1, 3, 40, g => { g.box(0.1, 0.2, 0.7, 2.6, 30, T.wall); plaque(g, 'right', 0.8, 2.8, 0.5, 18, 'linux'); plaque(g, 'right', 0.8, 2.8, 1.3, 18, 'mac'); plaque(g, 'right', 0.8, 2.8, 2.1, 18, 'win') }) },
 ]
 
 const lv = (state: Levels['state'], cpu: number | null, mem: number | null, disk: number | null, vols?: Levels['vols']): Levels => ({ state, cpu, mem, disks: vols ? vols.map(v => v.f) : [disk], vols })
-const facility = (form: Form, w: number, d: number, note: string, levels: Levels): Item => ({ name: `${form} · ${levels.state}`, note, sprite: deviceSprite(form, w, d, HUE, 'day', levels, form === 'plant' ? 'ubt-k3s-04' : '') })
+const PLANT_FACE = { roof: '04', sign: 'DATA PRIMARY', tally: { n: 38, what: 'pods', source: 'example' } }
+const facility = (form: Form, w: number, d: number, note: string, levels: Levels): Item => ({ name: `${form} · ${levels.state}`, note, sprite: deviceSprite(form, w, d, HUE, 'day', levels, form === 'plant' ? 'ubt-k3s-04' : '', form === 'plant' ? PLANT_FACE : {}) })
 const facilities: Item[] = [
-  facility('plant', 4, 4, 'A Linux node, designed: its name on the sign, the Linux mark on the side, windows and smoke for CPU, the water tank for memory, the fuel tank for disk. Example: CPU 40%, memory 60%, disk 50%.', lv('online', 0.4, 0.6, 0.5)),
+  facility('plant', 4, 4, 'A Linux node, designed: its number on the roof, its pool on the sign, pods running on the side board, the Linux mark, windows and smoke for CPU, the water tank for memory, the fuel tank for disk. Example: CPU 40%, memory 60%, disk 50%.', lv('online', 0.4, 0.6, 0.5)),
   facility('plant', 4, 4, 'The same node on standby: cold, dark, no smoke.', lv('standby', null, null, null)),
   facility('plant', 4, 4, 'The same node down: the red beacon on its stack.', lv('down', null, null, null)),
   facility('station', 4, 8, 'The GPU box, asleep on purpose: cold, no steam.', lv('standby', null, null, null)),

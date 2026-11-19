@@ -23,6 +23,8 @@ import { osMark, type MachineOs } from './landmarks'
  *   signBand    a plate across a face with a name on it
  *   grille      a radiator grille low on a face
  *   plaque      a system's mark on a face: Linux, Mac or Windows (the first generation's marks)
+ *   roofNumber  a number painted large on a roof, read from far off (who it is)
+ *   tallyBoard  a board on a face counting what it holds now (a reading), dark when nothing is read
  */
 
 export { shade }
@@ -153,4 +155,20 @@ export function grille(g: Draw, face: 'left' | 'right', x: number, y: number, sp
 /** A system's mark on a plaque, `at` cells along the face from its corner, centred at height z. */
 export function plaque(g: Draw, face: 'left' | 'right', x: number, y: number, at: number, z: number, os: MachineOs, r = 8) {
   g.face(face, x, y, z, osMark(os, at * U, 0, r))
+}
+
+/** A number painted large on a roof (x0..x1, y0..y1 at height z), read from far off. */
+export function roofNumber(g: Draw, x0: number, y0: number, x1: number, y1: number, z: number, text: string, ink = INK) {
+  const w = (x1 - x0) * U, d = (y1 - y0) * U
+  const size = Math.min(d * 0.7, (w * 0.9) / Math.max(1, text.length) * 1.6)
+  g.floor(x0, y0, z, `<text x="${(w / 2).toFixed(1)}" y="${(d / 2 + size * 0.36).toFixed(1)}" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="${size.toFixed(1)}" font-weight="800" fill="${ink}" opacity="0.82" letter-spacing="1">${esc(text)}</text>`)
+}
+
+/** A board on a face, `at` cells along it, centred at height z: how many of something it holds now; dark and blank when nothing is read. */
+export function tallyBoard(g: Draw, face: 'left' | 'right', x: number, y: number, at: number, z: number, n: number | null, what: string, w = 1.1) {
+  const W = w * U, h = 13
+  const text = n == null ? '' : `${Math.round(n)} ${what.toUpperCase()}`
+  const size = Math.min(8.5, (W - 6) / Math.max(4, text.length) * 1.7)
+  g.face(face, x, y, z, `<rect x="${(at * U - W / 2).toFixed(1)}" y="${(-h / 2).toFixed(1)}" width="${W.toFixed(1)}" height="${h}" rx="1.5" fill="#1d2230" stroke="${INK}" stroke-width="0.9"/>` +
+    (text ? `<text x="${(at * U).toFixed(1)}" y="${(size * 0.36).toFixed(1)}" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="${size.toFixed(1)}" font-weight="700" fill="#7be08f">${esc(text)}</text>` : ''))
 }

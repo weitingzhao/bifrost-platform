@@ -53,4 +53,9 @@ describe('the frame holds its rules on any content', () => {
     room.meter = { used: null, of: null, unit: 'cores', source: 'no exporter: not read' }
     expect(rulesBroken({ tree: t })).toEqual([])
   })
+  it('a tally is a count read from a query, never written in', () => {
+    const t = good()
+    t.children[0].children[0].face = { tally: { n: 12, what: 'pods', source: 'counted by hand' } }
+    expect(rulesBroken({ tree: t }).join()).toMatch(/a tally is a count read/)
+  })
 })

@@ -1,7 +1,7 @@
 import { Draw, faces, INK, type Sprite } from './kit'
 import type { Light } from './light'
-import type { Look, State } from './places'
-import { beacon, dock, doorRow, gatehouse, gauge, grille, hall, plaque, shade, signBand, smoke, tank, toneOf, windowStrip, type Tone } from './library/parts'
+import type { Look, Place, State } from './places'
+import { beacon, dock, doorRow, gatehouse, gauge, grille, hall, plaque, roofNumber, shade, signBand, smoke, tallyBoard, tank, toneOf, windowStrip, type Tone } from './library/parts'
 import { OS_FACES, type MachineOs } from './library/landmarks'
 
 /**
@@ -32,7 +32,7 @@ export function formOf(look: Look, gpu: boolean, laptop: boolean): Form {
   return 'tower'
 }
 
-export function deviceSprite(form: Form, fw: number, fd: number, hue: string, light: Light, lv: Levels, name = ''): Sprite {
+export function deviceSprite(form: Form, fw: number, fd: number, hue: string, light: Light, lv: Levels, name = '', face: Place['face'] = {}): Sprite {
   const T = toneOf(hue, light, lv.state)
   const run = lv.state === 'online'
   const tall = form === 'station' ? 96 : form === 'plant' ? 84 : form === 'tower' ? 70 : 52
@@ -42,7 +42,7 @@ export function deviceSprite(form: Form, fw: number, fd: number, hue: string, li
   g.shadow(x0, y0, w, d, 0.4)
   const water = light === 'night' ? '#3f7fd6' : '#5aa9f0', fuel = '#c98a3a'
   if (form === 'plant') {
-    powerPlant(g, x0, y0, w, d, T, lv, hue, light, name, 'linux')
+    powerPlant(g, x0, y0, w, d, T, lv, hue, light, name, 'linux', face)
     return g.done()
   }
 
@@ -143,7 +143,7 @@ export function deviceSprite(form: Form, fw: number, fd: number, hue: string, li
  *   the yard           the cooling water tank (memory) and the fuel tank (disk), filled to their levels
  * Standby: cold, dark windows, no smoke. Unread: grey, every gauge empty.
  */
-function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, T: Tone, lv: Levels, hue: string, light: Light, name: string, os: MachineOs) {
+function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, T: Tone, lv: Levels, hue: string, light: Light, name: string, os: MachineOs, face: Place['face'] = {}) {
   const run = lv.state === 'online', night = light === 'night'
   const base = lv.state === 'unread' ? OS_FACES.unknown : OS_FACES[os]
   const C = night ? faces(shade(base.top, -0.45), shade(base.left, -0.5), shade(base.right, -0.55)) : base
@@ -157,13 +157,19 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, T: To
   // The band under the eaves, in the district's hue; the name on its sign; the windows (CPU).
   g.onLeft(hx, hy + hd, 0, hw, Z + H - 6, Z + H - 1, band, 0.8)
   g.onRight(hx + hw, hy, 0, hd, Z + H - 6, Z + H - 1, band, 0.8)
-  if (name) signBand(g, 'left', hx, hy + hd, hw, Z + H - 8, name)
+  // The sign: what it is for (its pool or role, read); its name if nothing says.
+  const sign = face?.sign ?? name
+  if (sign) signBand(g, 'left', hx, hy + hd, hw, Z + H - 8, sign)
   windowStrip(g, 'left', hx, hy + hd, hw, Z + 8, Z + H - 22, 8, run ? lv.cpu : null, T)
   // The side wall: the radiator grille low, the system's mark above it.
   grille(g, 'right', hx + hw, hy + hd, hd, Z + 4, Z + 16)
-  plaque(g, 'right', hx + hw, hy + hd, hd / 2, Z + H - 20, os, 8)
+  plaque(g, 'right', hx + hw, hy + hd, hd * 0.75, Z + H - 20, os, 8)
+  // The tally: how many pods run on it now (a reading; blank when nothing is read).
+  if (face?.tally) tallyBoard(g, 'right', hx + hw, hy + hd, hd * 0.32, Z + H - 20, run ? face.tally.n : null, face.tally.what)
   // A parapet round the roof.
   g.poly(shade(C.top, -0.06), [[hx + 0.06, hy + 0.06, Z + H + 3], [hx + hw - 0.06, hy + 0.06, Z + H + 3], [hx + hw - 0.06, hy + hd - 0.06, Z + H + 3], [hx + 0.06, hy + hd - 0.06, Z + H + 3]], 0.8)
+  // The roof: its number, painted large, seen from across the district (who it is).
+  if (face?.roof) roofNumber(g, hx + 0.1, hy + hd * 0.42, hx + hw - 0.1, hy + hd - 0.08, Z + H + 3, face.roof, night ? '#e6e3f2' : '#2f2d3a')
   // The stacks at the back of the roof.
   for (const k of [0.3, 0.68]) {
     const sx = hx + hw * k, sy = hy + hd * 0.28, top = Z + H + 44
@@ -206,7 +212,7 @@ function warehousePark(g: Draw, x0: number, y0: number, w: number, d: number, T:
 }
 
 /** The key a facility's picture is kept under: its form, size, hue, light, state and every level to a tenth. */
-export const deviceKey = (form: Form, fw: number, fd: number, hue: string, light: Light, lv: Levels, name = '') => {
+export const deviceKey = (form: Form, fw: number, fd: number, hue: string, light: Light, lv: Levels, name = '', face: Place['face'] = {}) => {
   const q = (f: number | null) => f == null ? 'n' : String(Math.round(f * 10))
-  return `g2:fac:${form}:${name}:${fw}x${fd}:${hue}:${light}:${lv.state}:${q(lv.cpu)}:${q(lv.mem)}:${lv.disks.map(q).join('.')}:${(lv.vols ?? []).map(v => `${q(v.f)}${v.units.join('')}`).join('|')}`
+  return `g2:fac:${form}:${name}:${face?.roof ?? ''}:${face?.sign ?? ''}:${face?.tally?.n ?? ''}:${fw}x${fd}:${hue}:${light}:${lv.state}:${q(lv.cpu)}:${q(lv.mem)}:${lv.disks.map(q).join('.')}:${(lv.vols ?? []).map(v => `${q(v.f)}${v.units.join('')}`).join('|')}`
 }
