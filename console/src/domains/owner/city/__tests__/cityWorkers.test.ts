@@ -5,6 +5,7 @@ import { bayReading, skyReading, type ReleaseContext } from '../cityReadings'
 import { plannedCity } from '../defaultLayout'
 import { pluginsOf, tenantsOf } from '../catalog'
 import { nextZoneName, zoneTint } from '../zones'
+import { campuses, campusPlan, campusSize } from '../cityCampus'
 
 // Origin: 2026-11-18, the Owner: seats are the workers; they live in dorms
 // and their real work shows. A worker stands at the building of the domain
@@ -41,13 +42,13 @@ describe('workers', () => {
 })
 
 describe('the zoned plan', () => {
-  it('keeps the launch site by the sea, the payload works, the town and the power yard apart', () => {
+  it('keeps the launch site by the sea, the satellite campuses, the town and the power yard apart', () => {
     const d = plannedCity(), at = (k: string) => d.parts.filter(p => p.kind === k)
     expect(at('pad')[0].y).toBe(1)
-    expect(d.zones?.map(z => z.name)).toEqual(["Payload works", "Launch site", "Town", "Power yard"])
-    expect(Math.min(...[...at('genset'), ...at('power')].map(p => p.x))).toBeGreaterThan(14)
-    expect(Math.max(...[...at('control'), ...at('court'), ...at('dorm'), ...at('archive')].map(p => p.x + p.size))).toBeLessThanOrEqual(14)
-    expect([...at("supplier"), ...at("bay")].every(p => p.y < 9)).toBe(true)
+    expect(d.zones?.map(z => z.name)).toEqual(["Satellite campuses", "Launch site", "Town", "Power yard"])
+    expect(Math.min(...[...at('genset'), ...at('power')].map(p => p.x))).toBeGreaterThan(17)
+    expect(Math.max(...[...at('control'), ...at('court'), ...at('dorm'), ...at('archive')].map(p => p.x + p.size))).toBeLessThanOrEqual(17)
+    expect([...at("supplier"), ...at("campus"), ...at("campus4")].every(p => p.y + p.size <= 16)).toBe(true)
   })
   it('reads the plugins from the repositories the lanes clone', () => {
     expect(pluginsOf([{ pipeline: 'bifrost-build-market-data', repos: ['bifrost-platform-plugin-market-data', 'bifrost-trade-infra'] }, { pipeline: 'bifrost-build-ib-gateway', repos: ['bifrost-platform-plugin'] }]))
@@ -87,5 +88,32 @@ describe('districts the Owner draws', () => {
     expect(zoneTint('Town')).toBe('#f1e8d6')
     expect(zoneTint('Research campus')).toMatch(/^#[0-9a-f]{6}$/)
     expect(zoneTint('Research campus')).toBe(zoneTint('Research campus'))
+  })
+})
+
+// Origin: 2026-11-18, the Owner: a satellite like Trade is a complex system, many factories joined to CI/CD.
+describe('a tenant campus', () => {
+  const lanes = [
+    { pipeline: 'bifrost-ci-python', repos: ['bifrost-trade-core', 'bifrost-trade-infra'] },
+    { pipeline: 'bifrost-deliver-prod', repos: ['bifrost-trade-api', 'bifrost-trade-core', 'bifrost-trade-frontend', 'bifrost-trade-infra', 'bifrost-trade-worker', 'bifrost-ui'] },
+    { pipeline: 'bifrost-ci-finance', repos: ['bifrost-finance'] },
+  ]
+  const run = new Map([['bifrost-trade-core', { repo: 'bifrost-trade-core', facts: { runs_in_flight: { value: [{ name: 'py-1', pipeline: 'bifrost-ci-python' }] } } }]])
+  const deps = [{ labels: { namespace: 'bifrost-prod', deployment: 'api-market' }, value: 1 }, { labels: { namespace: 'bifrost-prod', deployment: 'daemon' }, value: 2 }, { labels: { namespace: 'research', deployment: 'research-api' }, value: 1 }]
+  it('has a factory per repository of its own, smoking while a run of it is in flight', () => {
+    const t = campuses(lanes, run, deps).get('Trade')!
+    expect(t.factories.map(f => [f.name, f.busy])).toEqual([['api', false], ['core', true], ['frontend', false], ['worker', false]])
+    expect(campuses(lanes, new Map(), deps).get('Finance')!.factories.map(f => f.name)).toEqual(['finance'])
+  })
+  it('has its modules only where the tenant\'s namespaces are known, unknown otherwise', () => {
+    expect(campuses(lanes, run, deps).get('Trade')!.modules).toBeNull()
+    expect(campuses(lanes, run, deps, t => t === 'Trade' ? ['bifrost-prod'] : undefined).get('Trade')!.modules).toEqual([{ name: 'api-market', replicas: 1 }, { name: 'daemon', replicas: 2 }])
+  })
+  it('is big with three factories or more than four modules, and keeps everything inside', () => {
+    const t = campuses(lanes, run, deps).get('Trade')!, f = campuses(lanes, run, deps).get('Finance')!
+    expect(campusSize(t)).toBe(8); expect(campusSize(f)).toBe(4)
+    const p = campusPlan({ ...t, modules: Array.from({ length: 30 }, (_, i) => ({ name: `m${i}`, replicas: 1 })) }, 8)
+    expect(p.modules.every(m => m.x < 8 && m.y < 8)).toBe(true)
+    expect(p.more).toBe(30 - p.modules.length)
   })
 })

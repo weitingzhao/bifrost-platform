@@ -263,6 +263,8 @@ export function crawlerway(d: Doc): Crawlerway {
   const pads = d.parts.filter(p => p.kind === 'pad')
   if (vab) for (const pad of [...pads].sort(near(vab))) leg(vab, pad)
   if (sat) for (const pad of [...pads].sort(near(sat))) leg(sat, pad)
+  // Every tenant's campus sends its satellite to the hall (2026-11-18: many factories, one rocket).
+  if (sat) for (const c of d.parts.filter(p => p.kind === 'campus' || p.kind === 'campus4').sort(near(sat))) leg(c, sat)
   return out
 }
 

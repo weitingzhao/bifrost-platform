@@ -204,8 +204,9 @@ describe('the planned city', () => {
     const d = plannedCity()
     for (const p of d.parts) expect(placeCheck(d, p.x, p.y, p.size, p.id)).toBe('ok')
     const way = crawlerway(d)
-    for (const p of d.parts.filter(q => ['pad', 'assembly', 'hif', 'satellites'].includes(q.kind))) expect(way.served.has(p.id)).toBe(true)
-    expect(way.legs.size).toBe(3)
+    for (const p of d.parts.filter(q => ['pad', 'assembly', 'hif', 'satellites', 'campus', 'campus4'].includes(q.kind))) expect(way.served.has(p.id)).toBe(true)
+    // 2026-11-18: three legs of the lines, and one from each of the three campuses to the satellite hall.
+    expect(way.legs.size).toBe(6)
     expect(fromTiled(toTiled(d))!.parts).toHaveLength(d.parts.length)
   })
 })

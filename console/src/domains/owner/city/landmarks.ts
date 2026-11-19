@@ -946,3 +946,60 @@ export function payloadBay(color = '#f2d27a'): Sprite {
   g.line([x0 + 0.1, y0 + 1.0, h + 1], [x1 - 0.1, y0 + 1.0, h + 1], '#7f8a9c', 1.6)
   return g.done()
 }
+
+/* ------------------------------------------------------------------ */
+/* A tenant's campus: the fenced ground its factories and modules sit   */
+/* on (8×8 or 4×4); what stands inside is drawn from the readings.      */
+/* ------------------------------------------------------------------ */
+
+export function campusGround(n: 4 | 8, color = '#f2d27a'): Sprite {
+  const g = new Draw(n, n, 20)
+  top(g, 0.05, 0.05, n - 0.05, n - 0.05, 0, '#ece8f3', 1, '#a7a2b8')
+  top(g, 0.15, 0.15, n - 0.15, 0.32, 0, color, 0.6)
+  // The fence: posts along the two front edges, a gate on the front right.
+  for (let k = 0.3; k < n - 0.2; k += 0.5) {
+    if (Math.abs(k - (n - 1)) < 0.6) continue
+    g.line([k, n - 0.1, 0], [k, n - 0.1, 7], '#8c86a0', 1)
+    g.line([n - 0.1, k, 0], [n - 0.1, k, 7], '#8c86a0', 1)
+  }
+  g.line([0.3, n - 0.1, 5], [n - 1.6, n - 0.1, 5], '#8c86a0', 0.9)
+  g.line([n - 0.1, 0.3, 5], [n - 0.1, n - 0.3, 5], '#8c86a0', 0.9)
+  g.box(n - 1.75, n - 0.25, 0.15, 0.15, 12, faces('#fbfaf6', '#e2dfd6', '#cfcbc0'), 0, 0.8)
+  g.box(n - 0.35, n - 0.25, 0.15, 0.15, 12, faces('#fbfaf6', '#e2dfd6', '#cfcbc0'), 0, 0.8)
+  return g.done()
+}
+
+/** A code factory: one repository of a tenant, its CI the chimney; colour band the tenant's. */
+export function codeFactory(color = '#f2d27a'): Sprite {
+  const n = 2
+  const g = new Draw(n, n, 96)
+  const x0 = 0.2, x1 = 1.8, y0 = 0.25, y1 = 1.6, h = 34
+  g.shadow(x0, y0, x1 - x0, y1 - y0, 0.3)
+  g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#f6f4ef', '#e6e1d7', '#d1cbbf'))
+  const W = (x1 - x0) * U
+  let f = `<rect x="4" y="-30" width="${n1(W - 8)}" height="6" fill="${color}" stroke="${INK}" stroke-width="0.8"/>`
+  for (let i = 0; i < 4; i++) f += `<rect x="${n1(6 + i * 12.5)}" y="-20" width="8" height="10" fill="#d8ecfb" stroke="${INK}" stroke-width="0.8"/>`
+  f += `<rect x="${n1(W / 2 - 6)}" y="-9" width="12" height="9" fill="#9aa3b0" stroke="${INK}" stroke-width="0.8"/>`
+  g.face('left', x0, y1, 0, f)
+  for (let k = 0; k < 3; k++) {
+    const a = x0 + k * (x1 - x0) / 3, b = a + (x1 - x0) / 3
+    g.poly('#bfe0f5', [[b, y0, h + 9], [b, y1, h + 9], [b, y1, h], [b, y0, h]], 0.8)
+    g.poly('#efece5', [[a, y0, h], [b, y0, h + 9], [b, y1, h + 9], [a, y1, h]], 0.9)
+  }
+  g.cylinder(1.5, 0.55, 4, h, h + 34, '#c9c4b7', '#9a9488', '#6d6a62')
+  g.cylinder(1.5, 0.55, 4.2, h + 26, h + 30, '#e0564f', '#b83f39', '#e0564f')
+  return g.done()
+}
+
+/** A module: one service of a tenant running in its PROD, a small block with its windows. */
+export function moduleBlock(color = '#f2d27a'): Sprite {
+  const g = new Draw(1, 1, 54, 4)
+  const x0 = 0.15, x1 = 0.85, y0 = 0.15, y1 = 0.85, h = 26
+  g.shadow(x0, y0, x1 - x0, y1 - y0, 0.2)
+  g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#ffffff', '#eef0f6', '#d9dde8'))
+  g.onLeft(x0, y1, 0.05, 0.65, h - 6, h - 2, color, 0.7)
+  g.windows('left', x0, y1, 0.7, 4, h - 9, 2, 2, { lit: (r, c) => (r + c) % 2 === 0 })
+  g.windows('right', x1, y0, 0.7, 4, h - 9, 2, 2)
+  g.unit(x0 + 0.2, y0 + 0.2, h, 0.25)
+  return g.done()
+}

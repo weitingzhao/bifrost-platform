@@ -10,6 +10,7 @@ import CityBuilder, { type Glance } from '@/domains/owner/city/CityBuilder'
 import { skyReading, type ReleaseContext } from '@/domains/owner/city/cityReadings'
 import { cityReadings, utilityGlance } from '@/domains/owner/city/cityState'
 import { workersGlance, workersOf } from '@/domains/owner/city/cityWorkers'
+import { campuses, DEPLOYMENTS_QUERY } from '@/domains/owner/city/cityCampus'
 import { fetchSeatStatuses } from '@/api/seatStatus'
 import { readUtilities, supplies } from '@/domains/owner/city/cityUtilities'
 import { fetchPromQL } from '@/api/telemetry'
@@ -42,13 +43,14 @@ export default function CityPage() {
   const pipelines = useQuery({ queryKey: ['city', 'pipelines'], queryFn: fetchDeliveryPipelines, staleTime: 60_000 })
   const approvals = useQuery({ queryKey: ['city', 'approvals'], queryFn: () => fetchApprovalList('pending'), refetchInterval: EVERY })
   const questions = useQuery({ queryKey: ['city', 'questions'], queryFn: () => fetchQuestionList('open'), refetchInterval: EVERY })
+  const deployments = useQuery({ queryKey: ['city', 'deployments'], queryFn: async () => (await fetchPromQL(DEPLOYMENTS_QUERY)).points, refetchInterval: EVERY })
   const seats = useQuery({ queryKey: ['city', 'seats'], queryFn: fetchSeatStatuses, refetchInterval: EVERY })
   const workers = useMemo(() => seats.isError || !seats.data ? undefined : workersOf(seats.data, Date.now()), [seats.data, seats.isError])
   const util = useQuery({ queryKey: ['city', 'utilities'], queryFn: () => readUtilities(async q => (await fetchPromQL(q)).points), refetchInterval: EVERY })
   const nodes = useMemo(() => util.data ? supplies(util.data).map(x => ({ node: x.node, cores: x.cores })) : [], [util.data])
 
   const lanes: CityLane[] = useMemo(() => (pipelines.data?.pipelines ?? [])
-    .filter(p => /^bifrost-(deliver|build)-/.test(p.name))
+    .filter(p => /^bifrost-(deliver|build|ci)-/.test(p.name) && (p.repos?.length ?? 0) > 0)
     .map(p => ({ pipeline: p.name, repos: p.repos ?? [] })), [pipelines.data])
   const items = useMemo(() => systemItems(domains.data?.domains ?? [], lanes, pluginsOf(lanes), nodes), [domains.data, lanes, nodes])
   const repos = useMemo(() => [...new Set(['bifrost-platform', ...pluginsOf(lanes), ...lanes.map(l => primary(l.repos)).filter((r): r is string => !!r)])].sort(), [lanes])
@@ -58,6 +60,8 @@ export default function CityPage() {
   const held = useRef(new Map<string, { shown?: string; pending?: { tier: string; times: number } }>())
   const contexts = useMemo(() => new Map(repos.map((r, i) => [r, contextQueries[i]?.isError ? null : contextQueries[i]?.data ?? null] as const)), [repos, contextQueries])
   const contextKey = contextQueries.map(q => q.dataUpdatedAt).join(',')
+  // Which namespaces a tenant runs in waits for the tenant domain's contract: until then the modules are unknown.
+  const camps = useMemo(() => campuses(lanes, contexts, deployments.data ?? null), [contextKey, lanes, deployments.data]) // eslint-disable-line react-hooks/exhaustive-deps
   const sky = useMemo(() => skyReading(contexts, lanes, Date.now()), [contextKey, lanes]) // eslint-disable-line react-hooks/exhaustive-deps
   const readings = useMemo(() => {
     const raw = cityReadings({ contexts, lanes, items, util: util.data ?? null, now: Date.now(),
@@ -86,13 +90,13 @@ export default function CityPage() {
     ]
   }, [readings, util.data, workers])
 
-  const key = [...readings].map(([k, r]) => `${k}=${r.word}:${r.count ?? ''}:${r.lines[0] ?? ''}`).join('|') + sky.satellites.map(x => `${x.name}=${x.word}`).join('|') + JSON.stringify(sky.flow) + (workers ?? []).map(w => `${w.seat}=${w.state}:${w.target.kind}:${w.bubble}`).join('|')
+  const key = [...readings].map(([k, r]) => `${k}=${r.word}:${r.count ?? ''}:${r.lines[0] ?? ''}`).join('|') + sky.satellites.map(x => `${x.name}=${x.word}`).join('|') + JSON.stringify(sky.flow) + [...camps.values()].map(c => c.lines.join()).join('|') + (workers ?? []).map(w => `${w.seat}=${w.state}:${w.target.kind}:${w.bubble}`).join('|')
   const store = useMemo(() => platformLayoutStore(), [])
   const chrome = layout === 'tabs' ? '11.5rem + env(safe-area-inset-bottom)' : '7.5rem'
   return (
     <div style={{ height: `calc(100dvh - ${chrome})`, minHeight: 480 }}>
       <CityBuilder items={items} store={store} canBuild={canAdmin && !capsError} initial={plannedCity}
-        readingOf={b => readings.get(b)} sky={sky} workers={workers} readingsKey={key} glance={glance}
+        readingOf={b => readings.get(b)} sky={sky} workers={workers} campusOf={b => camps.get(b.replace(/^tenant:/, ''))} readingsKey={key} glance={glance}
         onOpen={() => undefined} />
     </div>
   )

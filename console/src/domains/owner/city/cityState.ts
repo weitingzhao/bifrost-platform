@@ -34,7 +34,7 @@ export function cityReadings(i: CityInputs): Map<string, CityReading> {
   const platform = draw({ namespaces: ['bifrost-platform-prod'], shared: PLATFORM_SHARED })
   for (const it of i.items) {
     if (it.binds.startsWith('lane:')) put(it.binds, padReading(i.contexts, i.lanes, i.now), 'pad', platform)
-    else if (it.type === 'payload') put(it.binds, bayReading(i.contexts, i.lanes, it.binds.slice('payload:'.length), i.now), 'bay')
+    else if (it.type === 'tenant') put(it.binds, bayReading(i.contexts, i.lanes, it.binds.slice('tenant:'.length), i.now), 'bay')
     else if (it.type === 'plugin') put(it.binds, supplierReading(i.contexts, it.binds.slice('plugin:'.length), i.now), 'supplier')
     else if (it.type === 'domain' && platform && it.binds !== 'domain:owner') put(it.binds, { word: platform.word, tone: platform.tone, lines: [] }, 'utilities', platform)
   }

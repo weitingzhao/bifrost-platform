@@ -22,7 +22,7 @@ function payloadOf(lane: CityLane): string {
   return lane.pipeline.replace(/^bifrost-/, '')
 }
 
-export type BindType = 'domain' | 'lane' | 'law' | 'stage' | 'node' | 'plugin' | 'payload'
+export type BindType = 'domain' | 'lane' | 'law' | 'stage' | 'node' | 'plugin' | 'tenant'
 export type CatalogKind = { kind: string; name: string; size: PartSize; height: number; accepts: BindType[] }
 
 export const CATALOG: readonly CatalogKind[] = [
@@ -37,17 +37,18 @@ export const CATALOG: readonly CatalogKind[] = [
   { kind: 'archive', name: 'Archive', size: 2, height: 88, accepts: ['domain'] },
   { kind: 'water', name: 'Water tower', size: 1, height: 88, accepts: [] },
   { kind: 'genset', name: 'Generator set', size: 2, height: 72, accepts: ['node'] },
-  { kind: 'bay', name: 'Payload bay', size: 2, height: 80, accepts: ['payload'] },
+  { kind: 'campus', name: 'Satellite campus', size: 8, height: 100, accepts: ['tenant'] },
+  { kind: 'campus4', name: 'Small campus', size: 4, height: 100, accepts: ['tenant'] },
   { kind: 'supplier', name: "Supplier's dock", size: 2, height: 60, accepts: ['plugin'] },
 ]
 export const kindOf = (kind: string) => CATALOG.find(c => c.kind === kind)
 
 const NATURAL: Record<string, string> = { 'assembly-building': 'assembly', 'mission-control': 'control', 'comms-tower': 'dorm', archive: 'archive' }
 const STARSHIP_LANE = 'lane:bifrost-deliver-platform-prod'
-const PAYLOAD: Record<string, string> = { platform: '#8a6cff', Trade: '#ff8a5c', research: '#41c7c7', 'research dagster': '#2fae9f', 'market-data': '#5aa9ff', 'flex-query': '#f0b429', 'ib-gateway': '#ff6f91' }
+const PAYLOAD: Record<string, string> = { platform: '#8a6cff', Trade: '#ff8a5c', research: '#41c7c7', 'research dagster': '#2fae9f', 'market-data': '#5aa9ff', 'flex-query': '#f0b429', 'ib-gateway': '#ff6f91', finance: '#5fbf7f' }
 
 export type SystemItem = {
-  binds: string; name: string; group: 'Stages' | 'Nodes' | 'Domains' | 'Release lanes' | 'Suppliers' | 'Law'
+  binds: string; name: string; group: 'Stages' | 'Nodes' | 'Domains' | 'Release lanes' | 'Tenants' | 'Suppliers' | 'Law'
   type: BindType | 'other'
   /** The building it naturally is, when that one is drawn. */
   natural?: string
@@ -82,6 +83,11 @@ export function tenantsOf(lanes: readonly CityLane[]): { name: string; color: st
   const m = new Map<string, { name: string; color: string }>()
   for (const l of lanes) { const t = tenantOf(l); if (t && !m.has(t.name)) m.set(t.name, t) }
   return [...m.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** How many repositories of its own a tenant's lanes build (infrastructure and the shared UI aside). */
+function ownRepos(lanes: readonly CityLane[], name: string): number {
+  return new Set(lanes.filter(l => tenantOf(l)?.name === name).flatMap(l => l.repos).filter(r => r !== 'bifrost-trade-infra' && r !== 'bifrost-ui')).size
 }
 
 /** The satellite a tenant lane carries: its payload's name and colour. */
@@ -123,7 +129,7 @@ export function systemItems(domains: readonly (CityDomain & { name?: string })[]
     ...(lanes.length ? STAGES.map((st): SystemItem => ({ binds: st.binds, name: st.name, group: 'Stages', type: 'stage', natural: st.natural, page: st.page })) : []),
     ...domains.map((d): SystemItem => ({ binds: `domain:${d.id}`, name: d.name ?? displayName(d.id), group: 'Domains', type: 'domain', natural: NATURAL[d.facility?.kind ?? ''], page: d.facility?.page })),
     ...rocketProd.map((l): SystemItem => ({ binds: `lane:${l.pipeline}`, name: laneName(l), group: 'Release lanes', type: 'lane', natural: 'pad', page: '#releases', color: PAYLOAD[payloadOf(l)] })),
-    ...tenantsOf(lanes).map((t): SystemItem => ({ binds: `payload:${t.name}`, name: `${t.name} payload`, group: 'Suppliers', type: 'payload', natural: 'bay', page: '#releases', color: t.color })),
+    ...tenantsOf(lanes).map((t): SystemItem => ({ binds: `tenant:${t.name}`, name: t.name, group: 'Tenants', type: 'tenant', natural: ownRepos(lanes, t.name) >= 3 ? 'campus' : 'campus4', page: '#releases', color: t.color })),
     ...plugins.map((p): SystemItem => ({ binds: `plugin:${p}`, name: displayName(pluginName(p)), group: 'Suppliers', type: 'plugin', natural: 'supplier', page: '#plugin-gallery', color: PAYLOAD[pluginName(p)] })),
     { binds: 'law', name: 'The law', group: 'Law', type: 'law', natural: 'court', page: '#crew?section=instruments' },
   ]
@@ -139,7 +145,7 @@ const iso = (x: number, y: number, z = 0) => ({ x: (x - y) * (CW / 2), y: (x + y
 export function layersOf(kind: string, binds: string, color?: string): Layer[] {
   const base = (tex: string, order = 0): Layer => ({ tex, dx: 0, dy: 0, stack: false, order })
   if (kind === 'supplier') return [base(`supplier:${color ?? '#5aa9ff'}`)]
-  if (kind === 'bay') return [base(`bay:${color ?? '#f2d27a'}`)]
+  if (kind === 'campus' || kind === 'campus4') return [base(`campus:${kind === 'campus' ? 8 : 4}:${color ?? '#f2d27a'}`)]
   if (kind !== 'pad') return [base(kind)]
   const at = iso(L.PAD_STACK.x, L.PAD_STACK.y, L.PAD_STACK.z)
   const vehicle = (tex: string): Layer => ({ tex, dx: at.x, dy: at.y, stack: true, order: 0.3 })
@@ -157,12 +163,12 @@ const make: Record<string, () => Sprite> = {
 }
 export function spriteOf(tex: string): Sprite {
   let s = cache.get(tex)
-  if (!s) { s = tex.startsWith('rocket:') ? L.rocket(tex.slice(7)) : tex.startsWith('sat:') ? L.orbitSatellite(tex.slice(4)) : tex.startsWith('supplier:') ? L.supplierDock(tex.slice(9)) : tex.startsWith('bay:') ? L.payloadBay(tex.slice(4)) : make[tex](); cache.set(tex, s) }
+  if (!s) { s = tex.startsWith('rocket:') ? L.rocket(tex.slice(7)) : tex.startsWith('sat:') ? L.orbitSatellite(tex.slice(4)) : tex.startsWith('supplier:') ? L.supplierDock(tex.slice(9)) : tex.startsWith('bay:') ? L.payloadBay(tex.slice(4)) : tex.startsWith('factory:') ? L.codeFactory(tex.slice(8)) : tex.startsWith('module:') ? L.moduleBlock(tex.slice(7)) : tex.startsWith('campus:') ? L.campusGround(Number(tex.split(':')[1]) as 4 | 8, tex.split(':')[2]) : make[tex](); cache.set(tex, s) }
   return s
 }
 export const spriteUrl = (s: Sprite) => `data:image/svg+xml;utf8,${encodeURIComponent(s.svg)}`
 /** The textures the scene needs before it can draw anything. */
-export const baseTextures = () => [...Object.keys(make), ...Object.values(PAYLOAD).map(c => `rocket:${c}`), 'rocket:#8a6cff', ...[...Object.values(PAYLOAD), '#f2d27a'].map(c => `sat:${c}`), ...[...Object.values(PAYLOAD), '#5aa9ff'].map(c => `supplier:${c}`), ...[...Object.values(PAYLOAD), '#f2d27a'].map(c => `bay:${c}`)]
+export const baseTextures = () => [...Object.keys(make), ...Object.values(PAYLOAD).map(c => `rocket:${c}`), 'rocket:#8a6cff', ...[...Object.values(PAYLOAD), '#f2d27a'].map(c => `sat:${c}`), ...[...Object.values(PAYLOAD), '#5aa9ff'].map(c => `supplier:${c}`), ...[...Object.values(PAYLOAD), '#f2d27a'].flatMap(c => [`bay:${c}`, `factory:${c}`, `module:${c}`, `campus:8:${c}`, `campus:4:${c}`])]
 
 /** How a kind looks at its best, for the catalogue's card. */
 export const showcaseLayers = (kind: string) => layersOf(kind, kind === 'pad' ? STARSHIP_LANE : '')

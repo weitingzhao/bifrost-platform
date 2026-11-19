@@ -2139,6 +2139,7 @@
         "console/src/domains/owner/city/builderDoc.ts",
         "console/src/domains/owner/city/builderScene.ts",
         "console/src/domains/owner/city/catalog.ts",
+        "console/src/domains/owner/city/cityCampus.ts",
         "console/src/domains/owner/city/cityReadings.ts",
         "console/src/domains/owner/city/cityState.ts",
         "console/src/domains/owner/city/cityUtilities.ts",

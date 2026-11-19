@@ -4,6 +4,7 @@ import { accepts, CATALOG, kindOf, showcaseLayers, spriteOf, spriteUrl, type Cat
 import type { Armed, BuilderScene, Tool } from './builderScene'
 import type { Reading, Sky } from './cityReadings'
 import type { Worker } from './cityWorkers'
+import type { Campus } from './cityCampus'
 import { DICTIONARY, DICTIONARY_VERSION } from './worldDictionary'
 import { ZONE_NAMES, zoneTint } from './zones'
 import { LAYOUT_FILE, layoutFileText, parseLayoutFile, type LayoutStore } from './layoutStore'
@@ -78,7 +79,7 @@ export type Glance = { text: string; tone: Reading['tone']; href?: string }
 
 const TONE_BG: Record<Reading['tone'], string> = { calm: '#dcf2e2', busy: '#ffe6a8', alert: '#ffc9c2', unknown: '#e6e4ee' }
 
-export default function CityBuilder({ items, store, startEditing = false, canBuild = true, initial, onOpen, readingOf, sky, workers, readingsKey = '', glance = [] }: {
+export default function CityBuilder({ items, store, startEditing = false, canBuild = true, initial, onOpen, readingOf, sky, workers, campusOf, readingsKey = '', glance = [] }: {
   items: readonly SystemItem[]; store: LayoutStore; startEditing?: boolean
   /** The real state of what a building stands for, and where it was read. */
   readingOf?: (binds: string) => CityReading | undefined
@@ -86,6 +87,8 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
   sky?: Sky
   /** Each seat that reported, a worker at its building; undefined when not read. */
   workers?: readonly Worker[]
+  /** What stands inside each tenant's campus, read. */
+  campusOf?: (binds: string) => Campus | undefined
   /** Changes whenever the readings do. */
   readingsKey?: string
   /** One line each for the questions a look should answer. */
@@ -112,6 +115,7 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
   const readRef = useRef(readingOf); readRef.current = readingOf
   const skyRef = useRef(sky); skyRef.current = sky
   const workersRef = useRef(workers); workersRef.current = workers
+  const campusRef = useRef(campusOf); campusRef.current = campusOf
   const [info, setInfo] = useState<Placed | null>(null)
   useEffect(() => { scene.current?.setLinks(info?.binds ? [info.binds, ...(readRef.current?.(info.binds)?.links ?? [])] : []) }, [info, readingsKey])
   useEffect(() => { scene.current?.refreshReadings() }, [readingsKey])
@@ -143,6 +147,7 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
         readingOf: (b: string) => readRef.current?.(b) as never,
         skyOf: () => skyRef.current,
         workersOf: () => workersRef.current,
+        campusOf: (b: string) => campusRef.current?.(b),
         onOpen: (p: Placed) => setInfo(p),
         onReady: () => { scene.current = g.scene.getScene('builder') as BuilderScene; touch() },
       })
@@ -229,7 +234,7 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
   }
   const toggleEdit = (on: boolean) => { setEditing(on); scene.current?.setEditing(on); setArmedS(null); setPendingBind(null); setToolS('select'); scene.current?.setTool('select'); if (!on) setSelected(null) }
 
-  const groups = (['Stages', 'Nodes', 'Domains', 'Release lanes', 'Suppliers', 'Law'] as const).map(g => [g, unplaced.filter(i => i.group === g)] as const).filter(([, l]) => l.length)
+  const groups = (['Stages', 'Nodes', 'Domains', 'Release lanes', 'Tenants', 'Suppliers', 'Law'] as const).map(g => [g, unplaced.filter(i => i.group === g)] as const).filter(([, l]) => l.length)
   const kindAccepted = (k: CatalogKind) => !pending || accepts(k, pending)
 
   return (
@@ -259,6 +264,7 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
             <h3>{info.binds ? it?.name ?? 'unknown' : 'Not assigned'} <span className="cb-src">{kindOf(info.kind)?.name}</span></h3>
             {r && <p><b style={{ background: TONE_BG[r.tone], padding: '0 4px' }}>{r.word}</b></p>}
             {r?.lines.map(l => <p key={l}>{l}</p>)}
+            {(campusOf?.(info.binds)?.lines ?? []).map(l => <p key={l}>{l}</p>)}
             {(workers ?? []).filter(w => w.target.binds && w.target.binds === info.binds || (!w.target.binds && w.target.kind === info.kind)).flatMap(w => w.lines).map(l => <p key={l}>{l}</p>)}
             {r && <p className="cb-src">{r.source}</p>}
             <div className="cb-row">

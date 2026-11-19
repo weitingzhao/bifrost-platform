@@ -12,6 +12,7 @@ import { pluginsOf, systemItems, type CityLane } from '../src/domains/owner/city
 import { skyReading, type ReleaseContext } from '../src/domains/owner/city/cityReadings'
 import { cityReadings, utilityGlance } from '../src/domains/owner/city/cityState'
 import { workersGlance, workersOf } from '../src/domains/owner/city/cityWorkers'
+import { campuses, DEPLOYMENTS_QUERY } from '../src/domains/owner/city/cityCampus'
 import { readUtilities, supplies } from '../src/domains/owner/city/cityUtilities'
 import { fetchPromQL } from '../src/api/telemetry'
 import { plannedCity } from '../src/domains/owner/city/defaultLayout'
@@ -24,7 +25,7 @@ const seed = q.get('seed')
 const store: LayoutStore = seed ? { ...browser, load: async () => await (await fetch(`./layout-${seed}.local.json`)).json() as TiledMap } : browser
 
 // The utilities are real: the dev server forwards /api to PLATFORM_API_TARGET and PromQL needs no sign-in.
-void Promise.all([fetch('./snapshot.local.json').then(r => r.json()), readUtilities(async query => (await fetchPromQL(query)).points).catch(() => null)]).then(([s, util]) => {
+void Promise.all([fetch('./snapshot.local.json').then(r => r.json()), readUtilities(async query => (await fetchPromQL(query)).points).catch(() => null), fetchPromQL(DEPLOYMENTS_QUERY).then(r => r.points, () => null)]).then(([s, util, deployments]) => {
   const lanes: CityLane[] = s.lanes ?? []
   const nodes = util ? supplies(util).map(x => ({ node: x.node, cores: x.cores })) : []
   const items = systemItems(s.tiers ?? [], lanes, pluginsOf(lanes), nodes)
@@ -35,12 +36,17 @@ void Promise.all([fetch('./snapshot.local.json').then(r => r.json()), readUtilit
     ['bifrost-platform', ctx('bifrost-platform', [{ name: 'ci-1', pipeline: 'bifrost-ci-platform' }, { name: 'ci-2', pipeline: 'bifrost-ci-platform' }, { name: 'land-1', pipeline: 'bifrost-land' }, { name: 'dp-1', pipeline: 'bifrost-deliver-platform', delivery: true }])],
     ['bifrost-trade-api', ctx('bifrost-trade-api', [{ name: 'prod-1', pipeline: 'bifrost-deliver-prod', delivery: true }, { name: 'py-1', pipeline: 'bifrost-ci-python' }])],
     ['bifrost-research', ctx('bifrost-research', [])],
+    ['bifrost-trade-core', ctx('bifrost-trade-core', [{ name: 'py-2', pipeline: 'bifrost-ci-python' }])],
+    ['bifrost-finance', ctx('bifrost-finance', [])],
     ['bifrost-platform-plugin-market-data', ctx('bifrost-platform-plugin-market-data', [{ name: 'md-1', pipeline: 'bifrost-build-market-data' }])],
     ['bifrost-platform-plugin', ctx('bifrost-platform-plugin', [])],
   ] : [])
   const now = Date.now()
   const readings = cityReadings({ contexts, lanes, items, util, approvals: demo ? 1 : null, questions: demo ? 1 : null, now })
   const sky = demo ? skyReading(contexts, lanes, now) : undefined
+  // Bench only: which namespaces each tenant runs in (the tenant domain's contract will say); the deployments are read for real.
+  const NS: Record<string, string[]> = { Trade: ['bifrost-prod'], Research: ['research'], Finance: ['finance-prod'] }
+  const camps = campuses(lanes, contexts, deployments, demo ? t => NS[t] : undefined)
   const ago = (m: number) => new Date(now - m * 60_000).toISOString()
   const seat = (id: string, charter: string, at: string, doing: string, waiting_on?: string) => ({ seat: `thread:local_${id}`, message_id: id, at, charter, goal: '', doing, percent: 50, percent_basis: 'steps', next: 'next step', waiting_on })
   // Bench only: the seats route needs a viewer token the bench does not hold.
@@ -54,5 +60,5 @@ void Promise.all([fetch('./snapshot.local.json').then(r => r.json()), readUtilit
     seat('a7', 'company-coordinator', ago(8), 'four lines in step'),
   ], now) : undefined
   createRoot(document.getElementById('root')!).render(<CityBuilder items={items} store={store} startEditing={q.has('edit')} initial={plannedCity}
-    readingOf={b => readings.get(b)} sky={sky} readingsKey={demo ? 'demo' : 'real'} workers={workers} glance={[utilityGlance(util), workersGlance(workers)]} onOpen={(it, p) => { document.title = `open ${it?.page ?? p.binds}` }} />)
+    readingOf={b => readings.get(b)} sky={sky} readingsKey={demo ? 'demo' : 'real'} workers={workers} campusOf={b => camps.get(b.replace(/^tenant:/, ''))} glance={[utilityGlance(util), workersGlance(workers)]} onOpen={(it, p) => { document.title = `open ${it?.page ?? p.binds}` }} />)
 })

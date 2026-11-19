@@ -4,6 +4,7 @@ import { addRoad, canPlace, cellOf, crawlerway, depthOrder, doorOf, inLand, key,
 import { baseTextures, kindOf, layersOf, spriteOf, spriteUrl, type Layer } from './catalog'
 import type { Reading, Sky } from './cityReadings'
 import type { Worker } from './cityWorkers'
+import { campusPlan, type Campus } from './cityCampus'
 import { nextZoneName, zoneTint } from './zones'
 
 type Gauge = { used: number | null; reserved: number | null; of: number | null }
@@ -27,6 +28,8 @@ export type SceneInit = {
   readingOf: (binds: string) => (Reading & { meters?: Meters }) | undefined
   /** The satellites in orbit and which legs of the crawlerway a real run moves along. */
   skyOf: () => Sky | undefined
+  /** What stands inside a tenant's campus, read; undefined when it has none. */
+  campusOf?: (binds: string) => Campus | undefined
   /** The seats that reported a status, each a worker; undefined when not read. */
   workersOf: () => readonly Worker[] | undefined
   onChange: () => void
@@ -461,7 +464,15 @@ export class BuilderScene extends Phaser.Scene {
 
   /* ---------------- the buildings ---------------- */
 
-  private layers(p: Placed) { return layersOf(p.kind, p.binds, this.s.colorOf(p.binds)) }
+  private layers(p: Placed): Layer[] {
+    const ls = layersOf(p.kind, p.binds, this.s.colorOf(p.binds))
+    const c = (p.kind === 'campus' || p.kind === 'campus4') && p.binds ? this.s.campusOf?.(p.binds) : undefined
+    if (!c) return ls
+    // Inside a campus: what was read, each at its cell; its order keeps the back ones behind.
+    const plan = campusPlan(c, p.size === 8 ? 8 : 4), at = (x: number, y: number) => iso(x, y)
+    const inner = (tex: string, x: number, y: number): Layer => ({ tex, dx: at(x, y).x, dy: at(x, y).y, stack: false, order: 0.05 + (x + y) / 40 })
+    return [...ls, ...plan.factories.map(f => inner(`factory:${c.color}`, f.x, f.y)), inner(`bay:${c.color}`, plan.bay.x, plan.bay.y), ...plan.modules.map(m => inner(`module:${c.color}`, m.x, m.y))]
+  }
   private movingId() { return this.gesture.t === 'press' && this.gesture.moved ? this.gesture.part.id : null }
 
   private image(l: Layer, wx: number, wy: number) {
@@ -552,7 +563,7 @@ export class BuilderScene extends Phaser.Scene {
   }
 
   /** The readings drawn: a rocket that launches, crates at the door, workers holding signs. Only what was read. */
-  refreshReadings() { if (this.ready) { this.relabel(); this.drawEffects(); this.drawSky(); this.drawShade(); this.drawLinks(); this.drawWorkers() } }
+  refreshReadings() { if (this.ready) { this.syncParts(); this.sortDepth(); this.relabel(); this.drawEffects(); this.drawSky(); this.drawShade(); this.drawLinks(); this.drawWorkers() } }
 
   private drawEffects() {
     const box = (g: G, x: number, y: number, s: number, h: number, col: number) => {
@@ -575,6 +586,19 @@ export class BuilderScene extends Phaser.Scene {
         for (const [dx, dy, rr] of [[-18, 4, 9], [16, 6, 10], [-6, 10, 11], [8, 12, 8]]) { g.fillCircle(b.x + dx, b.y + dy, rr); g.strokeCircle(b.x + dx, b.y + dy, rr) }
       }
       const n = Math.min(r.count ?? 0, 6)
+      const camp = (p.kind === 'campus' || p.kind === 'campus4') ? this.s.campusOf?.(p.binds) : undefined
+      if (camp) {
+        const plan = campusPlan(camp, p.size === 8 ? 8 : 4)
+        for (const f of plan.factories) if (f.f.busy) {
+          const c = iso(p.x + f.x + 1.5, p.y + f.y + 0.55, 34 + 34 + 6)
+          g.lineStyle(1, 0xaeb6c2, 1); g.fillStyle(0xffffff, 0.95)
+          for (const [dx, dy, rr] of [[0, 0, 5], [5, -8, 6.5], [11, -17, 8]]) { g.fillCircle(c.x + dx, c.y + dy, rr); g.strokeCircle(c.x + dx, c.y + dy, rr) }
+        }
+        // The conveyor from each factory's door to the bay.
+        g.lineStyle(2.2, 0x8c86a0, 0.9)
+        const bay = iso(p.x + plan.bay.x + 1, p.y + plan.bay.y + 0.1)
+        for (const f of plan.factories) { const a = iso(p.x + f.x + 1, p.y + f.y + 2.05); g.lineBetween(a.x, a.y, bay.x, bay.y) }
+      }
       if ((p.kind === 'hif' || p.kind === 'satellites' || p.kind === 'assembly') && n > 0) {
         for (let k = 0; k < n; k++) box(g, p.x + 1.15 + (k % 2) * 0.55, p.y + p.size + 0.25 + Math.floor(k / 2) * 0.55, 0.42, 14, r.tone === 'alert' ? 0xef7d6d : 0xd9a673)
       }

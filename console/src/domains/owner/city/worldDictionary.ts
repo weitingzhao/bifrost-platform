@@ -99,7 +99,7 @@ export const DICTIONARY: readonly Entry[] = [
     source: 'GET /api/v1/approvals?status=pending and GET /api/v1/questions?status=open', person: 'the Owner answers on the Command page',
   },
   {
-    id: 'bay', metaphor: 'A payload bay: a clean room with its tenant\'s satellite on the stand', means: 'a tenant (Trade, Research…): its own CI, STG and builds; the satellite in orbit is what its PROD runs',
+    id: 'bay', metaphor: 'A satellite campus: code factories (a repository each, smoking while its CI runs), a conveyor to the payload bay, and a block per module its PROD runs', means: 'a tenant (Trade, Research, Finance…), the payload the system exists to build; its size the Owner\'s, what stands inside read',
     tiers: [
       { name: 'building', enters: 'a run of one of its lanes is in flight (the bay lit)' },
       { name: 'ready', enters: 'nothing in flight' },
