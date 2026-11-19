@@ -1,4 +1,4 @@
-import { shapeByCount, type Shape } from '../frame/grid'
+import { encodePlan, fitsIn, plotsOf, shapeArea, shapeByCount, splitPlot, type Plan, type Shape } from '../frame/grid'
 import type { Look, Meter, Place, State } from '../frame/places'
 
 /**
@@ -50,12 +50,58 @@ export function lookOf(n: TopoNode): Look {
 
 const hasGpu = (n: TopoNode) => /gpu|4090/i.test(`${n.id} ${n.label ?? ''}`) || (n.k3s_roles ?? []).some(r => /gpu/.test(r))
 
-/** RULES.md §2.3: a device's size by its weight. */
+/**
+ * RULES.md §2.3: a device's size by its weight, large enough that what it shows reads at a glance
+ * (the Owner, 2026-11-19: use the ground): the GPU tower 4×8; a 16-core server, the NAS and a
+ * trading desk 4×4; the rest 2×2.
+ */
 export function shapeOf(look: Look, cores: number | null, gpu: boolean): Shape {
-  if (gpu || (cores ?? 0) >= 32) return '4x4'
-  if (look === 'storage') return '2x4'
-  if (look === 'linux' && (cores ?? 0) >= 16) return '2x4'
+  if (gpu || (cores ?? 0) >= 32) return '4x8'
+  if (look === 'storage' || look === 'windows') return '4x4'
+  if (look === 'linux' && (cores ?? 0) >= 16) return '4x4'
   return '2x2'
+}
+
+/**
+ * The district's zones (the Owner, 2026-11-19: lay it out by what things are for, not by chance):
+ * the west half is the machine room (the GPU tower and the cluster's nodes); in the east, trading
+ * (the TWS desks) and storage with the network at the top, operations and the office (the Mac minis,
+ * the agent host, the laptop) at the bottom.
+ */
+export type Zone = 'compute' | 'trading' | 'storage' | 'office'
+const ZONES: Record<Zone, string[]> = { compute: ['aa', 'ab'], trading: ['baa'], storage: ['bab'], office: ['bb'] }
+
+export function zoneOf(n: TopoNode, look: Look, gpu: boolean): Zone {
+  if (look === 'storage' || look === 'network') return 'storage'
+  if (look === 'windows') return 'trading'
+  if (look === 'linux' && (gpu || n.in_k3s_cluster)) return 'compute'
+  return 'office'
+}
+
+/** The ground cut into the zones, then each device given the smallest plot that fits it in its zone (or anywhere, if its zone is full). */
+export function zonedArrangement(items: { id: string; shape: Shape; zone: Zone }[]): { plan: string; at: Record<string, string> } {
+  let plan: Plan = null
+  for (const id of ['', 'a', 'b', 'ba']) plan = splitPlot(plan, id)!
+  const taken = new Set<string>(), at: Record<string, string> = {}
+  for (const it of [...items].sort((a, b) => shapeArea(b.shape) - shapeArea(a.shape) || a.id.localeCompare(b.id))) {
+    const put = (inside: (plot: string) => boolean): boolean => {
+      for (;;) {
+        const p = plotsOf(plan).filter(q => inside(q.id) && !taken.has(q.id) && fitsIn(it, q)).sort((a, b) => a.w * a.h - b.w * b.h || a.id.localeCompare(b.id))[0]
+        if (!p) return false
+        const next = splitPlot(plan, p.id)
+        if (next && plotsOf(next).some(q => q.id.length > p.id.length && q.id.startsWith(p.id) && fitsIn(it, q))) { plan = next; continue }
+        taken.add(p.id); at[it.id] = p.id
+        return true
+      }
+    }
+    if (!put(id => ZONES[it.zone].some(z => id.startsWith(z)))) put(() => true)
+  }
+  for (;;) {
+    const big = plotsOf(plan).find(q => !taken.has(q.id) && Math.max(q.w, q.h) > 4)
+    if (!big) break
+    plan = splitPlot(plan, big.id)
+  }
+  return { plan: encodePlan(plan), at }
 }
 
 const G = 1e9
@@ -72,6 +118,7 @@ const at = (pts: PromPoint[] | null, key: string, value: string) => pts?.find(p 
 export function hardwareDistrict(r: HardwareReads, fn = 'system', when = ''): Place {
   const P = r.prom
   const nodeOfIp = new Map((P.nodeIp ?? []).map(p => [p.labels?.internal_ip ?? '', p.labels?.node ?? '']))
+  const zones = new Map<string, Zone>()
   const devices = (r.topology ?? []).map(n => {
     const ip = n.host && n.host !== '127.0.0.1' ? n.host : null
     const node = ip ? nodeOfIp.get(ip) ?? null : null
@@ -108,6 +155,7 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = ''): Pl
       }
       if (gpu) rooms.push(room('gpu', 'GPU', meter('cores', null, null, 'no GPU exporter: not read')))
     }
+    zones.set(n.id, zoneOf(n, look, gpu))
     const building: Place = {
       // The topology names the box, the cluster its node: show both where they differ (mini-pc-a · ubt-k3s-02).
       id: n.id, kind: 'building', shape: shapeOf(look, cores, gpu), label: node && !(n.label ?? n.id).includes(node) ? `${n.label ?? n.id} · ${node}` : n.label ?? n.id, look, state,
@@ -115,7 +163,8 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = ''): Pl
     }
     return building
   })
-  return { id: 'utilities', kind: 'district', shape: shapeByCount(devices.length), function: fn, label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: devices }
+  const arrangement = zonedArrangement(devices.map(b => ({ id: b.id, shape: b.shape, zone: zones.get(b.id)! })))
+  return { id: 'utilities', kind: 'district', shape: shapeByCount(devices.length), function: fn, arrangement, label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: devices }
 }
 
 /**

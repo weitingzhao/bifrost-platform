@@ -43,6 +43,12 @@ export type Place = {
    * 2026-11-19: function and domain are two views of one system; the 2.5D shows both).
    */
   function?: string
+  /**
+   * The domain's own ground plan for what it holds (grid.ts: a plan string and which plot each thing
+   * stands in), used until the Owner arranges the place himself. It keeps the frame's cutting rules;
+   * the frame checks it (rules.ts).
+   */
+  arrangement?: { plan: string; at: Record<string, string> }
   /** Its state and reading, read from the system (optional: greybox places have none). */
   state?: State
   meter?: Meter

@@ -2175,6 +2175,7 @@
         "console/src/domains/owner/city/gen2/frame/arrangementStore.ts",
         "console/src/domains/owner/city/gen2/frame/cityGen2.css",
         "console/src/domains/owner/city/gen2/frame/content.ts",
+        "console/src/domains/owner/city/gen2/frame/devices.ts",
         "console/src/domains/owner/city/gen2/frame/geo.ts",
         "console/src/domains/owner/city/gen2/frame/grid.ts",
         "console/src/domains/owner/city/gen2/frame/kit.ts",

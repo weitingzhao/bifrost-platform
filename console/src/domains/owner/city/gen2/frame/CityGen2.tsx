@@ -83,10 +83,13 @@ const readLight = (): LightChoice => {
 }
 
 /** A place's ground as the Owner left it: its plan (or one cut to fit its things), its plots and streets, and where each thing stands. */
-function layoutOf(children: readonly Item[], a: Arrangement) {
-  const plan: Plan = (a.plan && decodePlan(a.plan)) || planFor(children)
+function layoutOf(place: Place, a: Arrangement) {
+  const children: readonly Item[] = place.children
+  // The Owner's own arrangement first; else the domain's (Place.arrangement); else one cut to fit.
+  const own = place.arrangement
+  const plan: Plan = (a.plan && decodePlan(a.plan)) || (own && decodePlan(own.plan)) || planFor(children)
   const plots = plotsOf(plan)
-  const { placed, homeless } = assign(children, plots, a.at ?? {})
+  const { placed, homeless } = assign(children, plots, a.at ?? (a.plan ? {} : own?.at ?? {}))
   return { plan, plots, streets: streetsOf(plan), placed, homeless }
 }
 
@@ -165,7 +168,7 @@ function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoo
   const [lens, setLens] = useState<string | null>(null)
   const lensLabel = functions.find(fn => fn.id === lens)?.label
   const lensHere = lens ? place.children.filter(c => functionAt(tree, [...path, c.id]) === lens).length : 0
-  const lay = useMemo(() => layoutOf(place.children, saved.here), [place, saved.here])
+  const lay = useMemo(() => layoutOf(place, saved.here), [place, saved.here])
   const layRef = useRef(lay)
   layRef.current = lay
   const root = useRef<HTMLDivElement>(null)
@@ -257,13 +260,13 @@ function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoo
   }, [selected?.id, arranging, saved, tool, lens, place, parent])
 
   function shown(o: { from: Shown['from']; selected: string | null; arranging: boolean; here: Arrangement; parentA: Arrangement }): Shown {
-    const h = layoutOf(place.children, o.here)
-    const p = parent ? layoutOf(parent.children, o.parentA) : null
+    const h = layoutOf(place, o.here)
+    const p = parent ? layoutOf(parent, o.parentA) : null
     // Any place's ground, for the miniatures (a district seen from the town, a building's wings).
     const layoutAt = (at: Path) => {
       const t = trail(tree, at)
       if (t.length !== at.length + 1) return null
-      const l = layoutOf(t[t.length - 1].children, store.get(keyOf(at)))
+      const l = layoutOf(t[t.length - 1], store.get(keyOf(at)))
       return { placed: l.placed, plots: l.plots, streets: l.streets }
     }
     return {

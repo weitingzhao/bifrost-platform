@@ -24,11 +24,21 @@ describe('the hardware district, from one real read', () => {
     expect(dev('mac-mini-1').state).toBe('online')
     expect(dev('UGREEN-NAS').state).toBe('online')
   })
-  it('sizes by weight: the GPU box largest, 16-core servers and the NAS long, the rest small', () => {
-    expect(dev('gpu-server').shape).toBe('4x4')
-    expect(dev('ubt-k3s-07').shape).toBe('2x4')
-    expect(dev('UGREEN-NAS').shape).toBe('2x4')
+  // 2026-11-19, the Owner, on the first try: tiny boxes huddled in the middle, the ground wasted. Sizes
+  // grew so what a device shows reads at a glance, and the ground is laid out by what things are for.
+  it('sizes by weight: the GPU tower largest; servers, the NAS and the desks 4×4; the rest small', () => {
+    expect(dev('gpu-server').shape).toBe('4x8')
+    expect(dev('UGREEN-NAS').shape).toBe('4x4')
+    expect(dev('ubt-k3s-07').shape).toBe('4x4')
+    expect(dev('win11-host').shape).toBe('4x4')
     expect(dev('mac-mini-2').shape).toBe('2x2')
+  })
+  it('laid out in zones: the machine room west, trading and storage north-east, the office south-east', () => {
+    const at = d.arrangement!.at
+    for (const id of ['gpu-server', 'mini-pc-a', 'mini-pc-c', 'ubt-k3s-04', 'ubt-k3s-05', 'ubt-k3s-07']) expect(at[id].startsWith('a')).toBe(true)
+    expect(at['win11-host'].startsWith('baa')).toBe(true)
+    expect(at['UGREEN-NAS'].startsWith('bab')).toBe(true)
+    for (const id of ['mac-mini-1', 'mac-mini-2', 'macbook', 'ubt-k3s-06']) expect(at[id].startsWith('bb')).toBe(true)
   })
   it('looks by kind', () => {
     expect([dev('win11-host').look, dev('macbook').look, dev('UGREEN-NAS').look, dev('ubt-k3s-05').look]).toEqual(['windows', 'mac', 'storage', 'linux'])

@@ -1,4 +1,4 @@
-import { area, GRID, sidesOf, SHAPES, TAPPABLE, type Shape } from './grid'
+import { area, assign, decodePlan, GRID, plotsOf, sidesOf, SHAPES, TAPPABLE, type Shape } from './grid'
 import { LOOKS, STATES, type Place, type PlaceKind } from './places'
 
 /**
@@ -16,6 +16,7 @@ import { LOOKS, STATES, type Place, type PlaceKind } from './places'
  *   states   a state is one of the four words; a look one of the five
  *   readings a meter says where it was read; numbers are not negative and used is not past its whole;
  *            an unread thing has no number (unread is not zero)
+ *   plan     a domain's own ground plan keeps the cutting rules, and everything it holds finds its plot
  *   made up  a number must come from a read: its source is a query or an API path, never words
  *            (the Owner, 2026-11-19: nothing on the screen is made up or written in once and left)
  */
@@ -43,6 +44,14 @@ export function rulesBroken(content: { tree: Place; functions?: { id: string }[]
       if (m.used != null && m.of != null && m.used > m.of * 1.05) out.push(`${where}: used ${m.used} is past its whole ${m.of}`)
       if (p.state === 'unread' && m.used != null) out.push(`${where}: an unread thing has no reading (unread is not zero)`)
       if ((m.used != null || m.of != null) && !READ_SOURCE.test(m.source)) out.push(`${where}: a number must come from a read (a query or an API path), not from "${m.source}"`)
+    }
+    if (p.arrangement) {
+      const plan = decodePlan(p.arrangement.plan)
+      if (plan === null) out.push(`${where}: its ground plan is not a plan of halvings`)
+      else {
+        const { homeless } = assign(p.children.filter(c => (SHAPES as readonly string[]).includes(c.shape)), plotsOf(plan), p.arrangement.at)
+        if (homeless.length) out.push(`${where}: its ground plan has no plot for ${homeless.map(h => h.id).join(', ')}`)
+      }
     }
     const want = CHILD[p.kind]
     const seen = new Set<string>()

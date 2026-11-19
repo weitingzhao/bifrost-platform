@@ -6,6 +6,7 @@ import { hueOf, terrainOf } from './theme'
 import { PALETTE, TERRAIN, type Light, type Palette } from './light'
 import { hash } from './kit'
 import { buildingWings, setback, spriteFor, spriteKey, spriteUrl, type Wing } from './sprites'
+import { deviceKey, deviceSprite, formOf, type Levels } from './devices'
 import { frameOf, type Frame } from './viewport'
 
 /**
@@ -310,6 +311,14 @@ export class PlaceScene extends Phaser.Scene {
       const hue = this.shown ? hueOf(this.shown.tree, path) : '#cccccc'
       const seed = hash(p.id) % 997
       const count = kind === 'district' ? k?.children.length ?? 0 : 0
+      // A device (a building with a look) is drawn as itself, its rooms' readings on it (devices.ts).
+      if (kind === 'building' && k?.look) {
+        const frac = (r?: Place) => r?.meter && r.meter.used != null && r.meter.of ? r.meter.used / r.meter.of : null
+        const room = (id: string) => k.children.find(c => c.id === id)
+        const lv: Levels = { state: k.state ?? 'unread', cpu: frac(room('cpu')), mem: frac(room('memory')), disks: k.children.filter(c => c.id === 'disk' || c.id.startsWith('volume-')).map(frac) }
+        const form = formOf(k.look, k.children.some(c => c.id === 'gpu'), /book/i.test(k.label))
+        return { id: p.id, key: deviceKey(form, p.w, p.h, hue, this.light, lv), make: () => deviceSprite(form, p.w, p.h, hue, this.light, lv) }
+      }
       const wings = kind === 'building' ? this.wingsOf(path, p.w, p.h) : []
       const sig = wings.map(w => `${w.x.toFixed(2)},${w.y.toFixed(2)},${w.w.toFixed(2)},${w.h.toFixed(2)},${w.hue}`).join(';')
       const key = spriteKey(kind, p.w, p.h, hue, this.light, seed, count) + (sig ? `:w${hash(sig)}` : '') + (k?.look ? `:${k.look}` : '')
