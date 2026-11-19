@@ -6,6 +6,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvalrules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ruleapprove"
 )
 
@@ -40,7 +41,7 @@ func (s *Server) ruleApproveRuntime() ruleapprove.Runtime {
 			return out, nil
 		},
 		Grant: func(ctx context.Context, params map[string]any) (string, error) {
-			rec, err := s.grantApproval(ctx, RuleApproveAction, params)
+			rec, err := approvalrules.GrantApproval(ctx, s.approvals, RuleApproveAction, params)
 			return rec.ID, err
 		},
 		Approve: func(ctx context.Context, r ruleapprove.Request) (any, error) {
@@ -61,5 +62,3 @@ func (s *Server) ruleApproveChanges(ctx context.Context, params map[string]any) 
 func (s *Server) ruleApprove(ctx context.Context, params map[string]any) (any, error) {
 	return s.ruleApproveRuntime().Execute(ctx, params)
 }
-
-var ruleApproveOpenKey = ruleapprove.OpenKey

@@ -17,22 +17,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// One open agentrt_rule_approve request per rule, whatever version it
-// names; landing grants keep their own key.
-func TestRuleApproveOpenKey(t *testing.T) {
-	a := approvalOpenKey(RuleApproveAction, map[string]any{"rule_id": "concurrency", "rule_version": 2})
-	b := approvalOpenKey(RuleApproveAction, map[string]any{"rule_id": "concurrency", "rule_version": 3})
-	if a == "" || a != b {
-		t.Fatalf("keys %q and %q", a, b)
-	}
-	if c := approvalOpenKey(RuleApproveAction, map[string]any{"rule_id": "budget:dev"}); c == a {
-		t.Fatal("two rules share a key")
-	}
-	if k := approvalOpenKey("mark_missions_no_merge", map[string]any{"rule_id": "concurrency"}); k != "" {
-		t.Fatalf("another action has key %q", k)
-	}
-}
-
 // The request binds to this platform: PROD only, a PROD runtime, exactly
 // its four parameters, a whole version.
 func TestRuleApproveRequestRefuses(t *testing.T) {

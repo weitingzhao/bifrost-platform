@@ -205,7 +205,7 @@ var testsWithoutOwner = map[string]int{
 	"api/internal/agentrt/integration": 40,
 	"api/internal/cluster":             32,
 	"api/internal/delivery":            12,
-	"api/internal/server":              58,
+	"api/internal/server":              54,
 }
 
 // isTestFunc reports whether a top-level declaration is a function "go test"

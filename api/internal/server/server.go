@@ -31,6 +31,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvalrules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cidomains"
@@ -281,7 +282,7 @@ func New(cfg *config.Config) (*Server, error) {
 	srv.approvals.SetCreateCheck(srv.approvalCreateCheck)
 	// One open landing grant request per operation (review 694 R-02), one
 	// open rule approval per rule and agentd deployment per host.
-	srv.approvals.SetOpenKey(approvalOpenKey)
+	srv.approvals.SetOpenKey(approvalrules.OpenKey)
 	actions.SetRuleChangeLookup(srv.ruleApproveChanges)
 	srv.wireQuestions(dataDir, role.RunsWorkers())
 	srv.wireReleasePolicy(releasesSvc, dataDir, role.RunsWorkers())
@@ -323,8 +324,8 @@ func (s *Server) Router() http.Handler {
 		})
 	})
 	// A request for an action the signed policy covers is run, not answered
-	// "call directly" (covered_request.go).
-	r.Use(coveredRequestRuns(r))
+	// "call directly" (approvalrules.CoveredRequestRuns).
+	r.Use(approvalrules.CoveredRequestRuns(r, readAndRestore))
 
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http://127.0.0.1:5180", "http://localhost:5180"},

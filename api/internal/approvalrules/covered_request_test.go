@@ -1,6 +1,7 @@
-package server
+package approvalrules
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -28,7 +29,7 @@ func coveredHarness(t *testing.T, approvalsAnswer func(w http.ResponseWriter)) (
 	var reached []string
 	var bodies []map[string]any
 	r := chi.NewRouter()
-	r.Use(coveredRequestRuns(r))
+	r.Use(CoveredRequestRuns(r, readAndRestore))
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Post("/approvals", func(w http.ResponseWriter, _ *http.Request) {
 			reached = append(reached, "approvals")
@@ -138,4 +139,18 @@ func TestRoutesOfRequestRunsDirectlyHaveNoPathParameter(t *testing.T) {
 			t.Errorf("%s: the catalog has %s %q, the list says POST %q", action, act.Method, act.Pattern, route)
 		}
 	}
+}
+
+// readAndRestore is what the server hands CoveredRequestRuns
+// (server/actions_wire.go).
+func readAndRestore(r *http.Request) ([]byte, error) {
+	if r.Body == nil {
+		return nil, nil
+	}
+	b, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+	r.Body = io.NopCloser(bytes.NewReader(b))
+	return b, nil
 }

@@ -1,4 +1,4 @@
-package server
+package approvalrules
 
 import (
 	"bytes"
@@ -28,8 +28,8 @@ import (
 // and the window holder in the body, and its callers have had the tool since
 // before the policy existed.
 var requestRunsDirectly = map[string]string{
-	"apply_manifest":  "/api/v1/actuation/manifests/apply",
-	migrationActionID: "/api/v1/agentrt/migrations/run",
+	"apply_manifest":        "/api/v1/actuation/manifests/apply",
+	"run_agentrt_migration": "/api/v1/agentrt/migrations/run",
 }
 
 // RanDirectlyHeader names the policy that covered a request which was run
@@ -46,21 +46,22 @@ func (b *bufferedResponse) Header() http.Header         { return b.header }
 func (b *bufferedResponse) WriteHeader(code int)        { b.code = code }
 func (b *bufferedResponse) Write(p []byte) (int, error) { return b.body.Write(p) }
 
-// coveredRequestRuns sits in front of the router. A POST /api/v1/approvals
+// CoveredRequestRuns sits in front of the router. A POST /api/v1/approvals
 // goes to the approval service as before; only when that answers 400 "call
 // directly" with the policy that covers it, for one of requestRunsDirectly,
 // the same caller's request is sent to the action's route (root), which
 // authenticates it, judges it on the policy again and audits it exactly as a
 // direct call. Nothing is stored either way. Every other answer, a drill
-// included, is passed on untouched.
-func coveredRequestRuns(root http.Handler) func(http.Handler) http.Handler {
+// included, is passed on untouched. readBody reads the request's body and
+// leaves it readable for the handler after it.
+func CoveredRequestRuns(root http.Handler, readBody func(*http.Request) ([]byte, error)) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodPost || strings.TrimRight(r.URL.Path, "/") != "/api/v1/approvals" {
 				next.ServeHTTP(w, r)
 				return
 			}
-			raw, err := readAndRestore(r)
+			raw, err := readBody(r)
 			var ask struct {
 				Action   string         `json:"action"`
 				Params   map[string]any `json:"params"`
@@ -116,4 +117,10 @@ func coveredRequestRuns(root http.Handler) func(http.Handler) http.Handler {
 			root.ServeHTTP(w, again)
 		})
 	}
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
 }
