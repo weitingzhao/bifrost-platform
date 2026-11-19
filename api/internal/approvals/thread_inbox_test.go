@@ -11,8 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	runtime "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
@@ -74,12 +76,12 @@ func TestThreadInboxTerminalStatesPG(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)
-	if _, err := runtime.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)
-	w := runtime.Writer{Actor: "thread:local_approval", Token: "test"}
-	if _, _, err := runtime.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register")); err != nil {
+	w := actor.Writer{Actor: "thread:local_approval", Token: "test"}
+	if _, _, err := artifact.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register")); err != nil {
 		t.Fatal(err)
 	}
 	var now time.Time
@@ -92,7 +94,7 @@ func TestThreadInboxTerminalStatesPG(t *testing.T) {
 			s := inboxFixture(t, now, status, "local_approval (TD-457)")
 			transitionInboxFixture(t, s, status)
 			s.SetThreadInbox(func(ctx context.Context, key, to, body string) error {
-				return runtime.PostConclusion(ctx, pool, key, to, body)
+				return coord.PostConclusion(ctx, pool, key, to, body)
 			})
 			s.RetryThreadInbox(ctx)
 			s.RetryThreadInbox(ctx)
@@ -100,11 +102,11 @@ func TestThreadInboxTerminalStatesPG(t *testing.T) {
 			restarted := New(s.store.path, nil)
 			restarted.SetThreadInbox(s.threadInbox)
 			restarted.RetryThreadInbox(ctx)
-			mail, err := runtime.Unread(ctx, pool, w, 100)
+			mail, err := coord.Unread(ctx, pool, w, 100)
 			if err != nil || len(mail) != 1 || !strings.Contains(mail[0].Body, "Conclusion: "+status) {
 				t.Fatalf("mail=%+v err=%v", mail, err)
 			}
-			if _, err := runtime.AckMessages(ctx, pool, w, []string{mail[0].ID}); err != nil {
+			if _, err := coord.AckMessages(ctx, pool, w, []string{mail[0].ID}); err != nil {
 				t.Fatal(err)
 			}
 		})

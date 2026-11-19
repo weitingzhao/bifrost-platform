@@ -8,8 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	runtime "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 )
 
 func TestThreadInboxRetainedSourcesAndLateResultPG(t *testing.T) {
@@ -28,12 +30,12 @@ func retainedSourcesAndLateResultPG(t *testing.T, state string, deliveredUnknown
 	t.Helper()
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)
-	if _, err := runtime.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)
-	w := runtime.Writer{Actor: "thread:local_approval", Token: "source-test"}
-	if _, _, err := runtime.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register")); err != nil {
+	w := actor.Writer{Actor: "thread:local_approval", Token: "source-test"}
+	if _, _, err := artifact.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register")); err != nil {
 		t.Fatal(err)
 	}
 	var now time.Time
@@ -55,7 +57,7 @@ func retainedSourcesAndLateResultPG(t *testing.T, state string, deliveredUnknown
 	}
 	if deliveredUnknown {
 		if err := s.retryThreadInbox(ctx, func(ctx context.Context, key, to, body string) error {
-			return runtime.PostConclusion(ctx, pool, key, to, body)
+			return coord.PostConclusion(ctx, pool, key, to, body)
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -68,7 +70,7 @@ func retainedSourcesAndLateResultPG(t *testing.T, state string, deliveredUnknown
 		t.Fatalf("late result=%+v", r)
 	}
 	if err := s.retryThreadInbox(ctx, func(ctx context.Context, key, to, body string) error {
-		if err := runtime.PostConclusion(ctx, pool, key, to, body); err != nil {
+		if err := coord.PostConclusion(ctx, pool, key, to, body); err != nil {
 			return err
 		}
 		return errors.New("lost reply after real PG commit")
@@ -77,14 +79,14 @@ func retainedSourcesAndLateResultPG(t *testing.T, state string, deliveredUnknown
 	}
 	restarted := New(s.store.path, nil)
 	send := func(ctx context.Context, key, to, body string) error {
-		return runtime.PostConclusion(ctx, pool, key, to, body)
+		return coord.PostConclusion(ctx, pool, key, to, body)
 	}
 	for i := 0; i < 2; i++ {
 		if err := restarted.retryThreadInbox(ctx, send); err != nil {
 			t.Fatal(err)
 		}
 	}
-	mail, err := runtime.Unread(ctx, pool, w, 100)
+	mail, err := coord.Unread(ctx, pool, w, 100)
 	if err != nil || len(mail) != 67 {
 		t.Fatalf("recovered mailbox=%d err=%v", len(mail), err)
 	}
@@ -104,7 +106,7 @@ func retainedSourcesAndLateResultPG(t *testing.T, state string, deliveredUnknown
 	if unknown < 0 || executed <= unknown {
 		t.Fatalf("superseded conclusion missing/out of order: unknown=%d executed=%d", unknown, executed)
 	}
-	if _, err := runtime.AckMessages(ctx, pool, w, ids); err != nil {
+	if _, err := coord.AckMessages(ctx, pool, w, ids); err != nil {
 		t.Fatal(err)
 	}
 	// The unchanged business record is always replayable; PG receipts suppress
@@ -113,7 +115,7 @@ func retainedSourcesAndLateResultPG(t *testing.T, state string, deliveredUnknown
 	if err := restarted.retryThreadInbox(ctx, send); err != nil {
 		t.Fatal(err)
 	}
-	history, err := runtime.Thread(ctx, pool, w.Actor, "controller", 100)
+	history, err := coord.Thread(ctx, pool, w.Actor, "controller", 100)
 	if err != nil || len(history) != 67 {
 		t.Fatalf("history=%d err=%v", len(history), err)
 	}

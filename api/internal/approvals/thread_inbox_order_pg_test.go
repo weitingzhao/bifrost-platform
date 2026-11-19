@@ -12,15 +12,18 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	runtime "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/threadinbox"
 )
 
 var errOrderReceipt = errors.New("conclusion receipt unavailable")
 
-type orderReceiptFailureDB struct{ runtime.DB }
+type orderReceiptFailureDB struct{ eventlog.DB }
 type orderReceiptFailureTx struct{ pgx.Tx }
 
 func (db orderReceiptFailureDB) BeginTx(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error) {
@@ -58,12 +61,12 @@ func lateConclusionOrderPG(t *testing.T, state, fault string, replicas int) {
 	t.Helper()
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)
-	if _, err := runtime.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
+	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)
-	w := runtime.Writer{Actor: "thread:local_approval", Token: "order-test"}
-	if _, _, err := runtime.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register")); err != nil {
+	w := actor.Writer{Actor: "thread:local_approval", Token: "order-test"}
+	if _, _, err := artifact.UploadArtifact(ctx, pool, w, "message", "text/plain", []byte("register")); err != nil {
 		t.Fatal(err)
 	}
 	var now time.Time
@@ -83,20 +86,20 @@ func lateConclusionOrderPG(t *testing.T, state, fault string, replicas int) {
 			if key == "approval:appr_unknown:unknown" && (first || fault == "persistent") {
 				first = false
 				if fault == "lost_reply" {
-					if err := runtime.PostConclusion(ctx, conn, key, to, body); err != nil {
+					if err := coord.PostConclusion(ctx, conn, key, to, body); err != nil {
 						return err
 					}
 					return errOrderReceipt // committed; only the caller lost its reply
 				}
-				return runtime.PostConclusion(ctx, orderReceiptFailureDB{conn}, key, to, body)
+				return coord.PostConclusion(ctx, orderReceiptFailureDB{conn}, key, to, body)
 			}
-			return runtime.PostConclusion(ctx, conn, key, to, body)
+			return coord.PostConclusion(ctx, conn, key, to, body)
 		}
 		if err := service.retryThreadInbox(ctx, senders[i]); !errors.Is(err, errOrderReceipt) {
 			t.Fatalf("replica %d fault not exercised: %v", i, err)
 		}
 	}
-	mail, err := runtime.Unread(ctx, pool, w, 100)
+	mail, err := coord.Unread(ctx, pool, w, 100)
 	wantInitial := 0
 	if fault == "lost_reply" {
 		wantInitial = 1
@@ -134,7 +137,7 @@ func lateConclusionOrderPG(t *testing.T, state, fault string, replicas int) {
 	if attempts != len(services)*2 {
 		t.Fatalf("replica stopped early: attempts=%d", attempts)
 	}
-	mail, err = runtime.Unread(ctx, pool, w, 100)
+	mail, err = coord.Unread(ctx, pool, w, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
