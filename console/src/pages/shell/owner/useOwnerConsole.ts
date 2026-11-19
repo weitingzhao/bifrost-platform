@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { COORDINATOR_SIGN_IN, COORDINATOR_THREAD, fetchCoordinatorNote } from '@/api/agentRuntimeBus'
 import { operatorToken } from '@/api/client'
+import { fetchActionRecords } from '@/api/actionRecords'
 import { fetchDataFreshness } from '@/api/cluster'
 import { fetchClusterPostgresBackupStatus } from '@/domains/foundation/backup/api'
 import { fetchDeliveryPipelines, fetchPipelineRuns, fetchReleaseWindow } from '@/api/delivery'
@@ -23,6 +24,7 @@ import {
   ownerVerdict,
 } from './ownerModel'
 import { current, errorText, useOwnerYours } from './useOwnerYours'
+import { DONE_WINDOW_HOURS, doneForYou } from './doneForYou'
 
 /**
  * Every read the Owner Console makes. Query keys are the ones the detail pages use, so a page
@@ -35,6 +37,10 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; servic
   const now = Date.now()
   const { needsYou, alertsQ, nodesQ, nodes, standby, alerts, alertsError, standbyEvidence, yours } = useOwnerYours(now)
   const hasToken = operatorToken() !== ''
+  // Done for you (law 46): the action record's last day, read with For you. The window's start is rounded to the
+  // minute so the query key holds still between reads.
+  const doneSince = new Date(Math.floor((now - DONE_WINDOW_HOURS * 3_600_000) / 60_000) * 60_000).toISOString()
+  const doneQ = useQuery({ queryKey: ['records', 'done-for-you'], queryFn: () => fetchActionRecords({ since: doneSince, limit: 500 }), refetchInterval: 60_000, retry: false })
   const windowQ = useQuery({ queryKey: ['delivery', 'release-window'], queryFn: fetchReleaseWindow, enabled: hasToken, refetchInterval: 15_000 })
   const recordsQ = useQuery({ queryKey: ['releases', 'records', RELEASE_RECORD_LIMIT], queryFn: () => fetchReleaseRecords(RELEASE_RECORD_LIMIT),
     enabled: blocks.work, refetchInterval: 30_000 })
@@ -108,6 +114,9 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; servic
     alerts,
     alertsError,
     standbyEvidence,
+    /** Done for you: null while unread, with the error when the read failed. */
+    done: current(doneQ) ? doneForYou(current(doneQ)!.records, now, current(doneQ)!.more) : null,
+    doneError: doneQ.isError ? errorText(doneQ.error) : doneQ.isPaused ? 'offline' : null,
     /** The runtime as last read, for what stops its controller (RuntimeHealthNotice, TD-411). */
     runtime,
     controls: runtime?.controls ?? [],
