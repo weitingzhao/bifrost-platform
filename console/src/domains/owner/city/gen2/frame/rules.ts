@@ -1,5 +1,5 @@
 import { area, GRID, sidesOf, SHAPES, TAPPABLE, type Shape } from './grid'
-import type { Place, PlaceKind } from './places'
+import { LOOKS, STATES, type Place, type PlaceKind } from './places'
 
 /**
  * The frame's rules, checked on the content it is given (the Owner, 2026-11-19: the ground, its
@@ -13,6 +13,9 @@ import type { Place, PlaceKind } from './places'
  *   ground   what a place holds fits its 16×16 ground
  *   names    ids are unique among siblings and safe in an address
  *   function a place's function, if it says one, is one of the content's functions
+ *   states   a state is one of the four words; a look one of the five
+ *   readings a meter says where it was read; numbers are not negative and used is not past its whole;
+ *            an unread thing has no number (unread is not zero)
  */
 
 const CHILD: Record<PlaceKind, PlaceKind | null> = { town: 'district', district: 'building', building: 'room', room: null }
@@ -25,6 +28,16 @@ export function rulesBroken(content: { tree: Place; functions?: { id: string }[]
     if (!(SHAPES as readonly string[]).includes(p.shape)) out.push(`${where}: shape ${String(p.shape)} is not one of ${SHAPES.join(', ')}`)
     else if ((p.kind === 'district' || p.kind === 'building') && sidesOf(p.shape as Shape).short < TAPPABLE) out.push(`${where}: a ${p.kind} is gone into, so it must be at least ${TAPPABLE} wide (it is ${p.shape})`)
     if (p.function && fns && !fns.has(p.function)) out.push(`${where}: function ${p.function} is not one of the content's functions`)
+    if (p.state && !(STATES as readonly string[]).includes(p.state)) out.push(`${where}: state ${p.state} is not one of ${STATES.join(', ')}`)
+    if (p.look && !(LOOKS as readonly string[]).includes(p.look)) out.push(`${where}: look ${p.look} is not one of ${LOOKS.join(', ')}`)
+    const m = p.meter
+    if (m) {
+      if (!m.source) out.push(`${where}: a reading must say where it was read`)
+      if (m.unit !== 'cores' && m.unit !== 'bytes') out.push(`${where}: unit ${String(m.unit)} is not cores or bytes`)
+      if ((m.used != null && m.used < 0) || (m.of != null && m.of < 0)) out.push(`${where}: a reading is not negative`)
+      if (m.used != null && m.of != null && m.used > m.of * 1.05) out.push(`${where}: used ${m.used} is past its whole ${m.of}`)
+      if (p.state === 'unread' && m.used != null) out.push(`${where}: an unread thing has no reading (unread is not zero)`)
+    }
     const want = CHILD[p.kind]
     const seen = new Set<string>()
     for (const c of p.children) {

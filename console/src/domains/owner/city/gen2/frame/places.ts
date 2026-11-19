@@ -8,6 +8,24 @@ import type { Shape } from './grid'
 
 export type PlaceKind = 'town' | 'district' | 'building' | 'room'
 
+/**
+ * How a thing stands: the only four words (RULES.md 13). City runs in reverse (rule 0): these come
+ * from the system, never from a person.
+ *   online   it is there and reporting
+ *   standby  it is off on purpose and can be woken (not a fault)
+ *   down     it should be there and is not
+ *   unread   it exists, but nothing reads it: say so, never guess
+ */
+export const STATES = ['online', 'standby', 'down', 'unread'] as const
+export type State = (typeof STATES)[number]
+
+/** A reading (RULES.md 12): how much is used of how much, in a unit, and where it was read. Null is not read, never zero. */
+export type Meter = { used: number | null; of: number | null; unit: 'cores' | 'bytes'; source: string }
+
+/** What a building looks like, for content with more than one kind of thing (hardware: RULES.md §2.4). */
+export const LOOKS = ['linux', 'windows', 'mac', 'storage', 'network'] as const
+export type Look = (typeof LOOKS)[number]
+
 export type Place = {
   /** The path segment: unique among its siblings. */
   id: string
@@ -25,6 +43,10 @@ export type Place = {
    * 2026-11-19: function and domain are two views of one system; the 2.5D shows both).
    */
   function?: string
+  /** Its state and reading, read from the system (optional: greybox places have none). */
+  state?: State
+  meter?: Meter
+  look?: Look
   children: Place[]
 }
 
@@ -63,3 +85,21 @@ export const here = (tree: Place, path: Path): Place => trail(tree, path).at(-1)
 /** `#/system/infrastructure` ⇄ ['system', 'infrastructure'] — every place has an address, so Back works and a link can be sent. */
 export const parsePath = (hash: string): Path => hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent)
 export const formatPath = (path: Path): string => `#/${path.map(encodeURIComponent).join('/')}`
+
+/** A meter in words: '21%  3.4 of 16 cores', '5.0 of 22.8 GB', or 'unread'. */
+export function meterText(m: Meter | undefined): string | null {
+  if (!m) return null
+  if (m.of == null && m.used == null) return 'unread'
+  const n = (v: number) => m.unit === 'cores' ? `${v < 10 ? v.toFixed(1) : Math.round(v)}` : bytes(v)
+  const unit = m.unit === 'cores' ? ' cores' : ''
+  if (m.used == null) return `— of ${n(m.of!)}${unit}`
+  if (m.of == null) return `${n(m.used)}${unit}`
+  return `${Math.round(100 * m.used / m.of)}%  ${n(m.used)} of ${n(m.of)}${unit}`
+}
+
+const bytes = (v: number) => {
+  const u = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+  let i = 0
+  while (v >= 1000 && i < u.length - 1) { v /= 1000; i++ }
+  return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${u[i]}`
+}

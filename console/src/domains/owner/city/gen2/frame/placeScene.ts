@@ -222,7 +222,9 @@ export class PlaceScene extends Phaser.Scene {
     // Same page: redraw in place only if something on it changed (a redraw mid-change would cut the
     // change short); refit only when arranging starts or stops (the frame changes).
     if (same) {
-      const key = (x: Shown) => JSON.stringify([x.selected, x.arranging, x.tool, x.placed, x.plots, x.parentPlaced, x.inside, x.lens])
+      // Readings change on their own (rule 0: the system drives the picture): a new state or number redraws too.
+      const read = (p: Place | null) => p?.children.map(c => [c.id, c.state, c.meter?.used, c.meter?.of, c.children.length])
+      const key = (x: Shown) => JSON.stringify([x.selected, x.arranging, x.tool, x.placed, x.plots, x.parentPlaced, x.inside, x.lens, read(x.place), read(x.parent)])
       if (key(prev) !== key(next)) void this.draw(next, prev.arranging !== next.arranging)
       return
     }
@@ -310,8 +312,8 @@ export class PlaceScene extends Phaser.Scene {
       const count = kind === 'district' ? k?.children.length ?? 0 : 0
       const wings = kind === 'building' ? this.wingsOf(path, p.w, p.h) : []
       const sig = wings.map(w => `${w.x.toFixed(2)},${w.y.toFixed(2)},${w.w.toFixed(2)},${w.h.toFixed(2)},${w.hue}`).join(';')
-      const key = spriteKey(kind, p.w, p.h, hue, this.light, seed, count) + (sig ? `:w${hash(sig)}` : '')
-      const make = () => kind === 'building' ? buildingWings(p.w, p.h, hue, this.light, seed, wings) : spriteFor(kind, p.w, p.h, hue, this.light, seed, count)
+      const key = spriteKey(kind, p.w, p.h, hue, this.light, seed, count) + (sig ? `:w${hash(sig)}` : '') + (k?.look ? `:${k.look}` : '')
+      const make = () => kind === 'building' ? buildingWings(p.w, p.h, hue, this.light, seed, wings, k?.look) : spriteFor(kind, p.w, p.h, hue, this.light, seed, count)
       return { id: p.id, key, make }
     })
   }
@@ -753,7 +755,12 @@ export class PlaceScene extends Phaser.Scene {
     // Names on top of every block, so a nearer block never hides a farther one's name. The minimap has none: too small to read.
     if (o.interactive) for (const { p, r } of order) {
       const sb = setback(Math.min(p.w, p.h)), foot = P(r.x + r.w - sb, r.y + r.h - sb)
-      c.add(this.plate(foot.x, foot.y + 4, byId.get(p.id)!.label, this.shown ? hueOf(this.shown.tree, [...at, p.id]) : '#cccccc'))
+      const k = byId.get(p.id)!
+      // A name says how it stands when it is not simply online, and a room its reading (rule 0: read, never set).
+      const pct = k.meter && k.meter.used != null && k.meter.of ? ` ${Math.round(100 * k.meter.used / k.meter.of)}%` : ''
+      const word = k.state && k.state !== 'online' ? ` · ${k.state}` : ''
+      const dot = k.state === 'down' ? '#d9534f' : k.state === 'standby' ? '#9aa0b0' : k.state === 'unread' ? '#d8d4cc' : this.shown ? hueOf(this.shown.tree, [...at, p.id]) : '#cccccc'
+      c.add(this.plate(foot.x, foot.y + 4, `${k.label}${pct}${word}`, dot))
     }
     if (order.length === 0 && o.interactive) c.add(this.label(P(W / 2, H / 2).x, P(W / 2, H / 2).y, 'Nothing inside yet', { color: '#8a8478', fontSize: '14px' }).setOrigin(0.5))
     // What the fit frames: the blocks' corners up to their roofs, and their names below.
@@ -853,6 +860,14 @@ export class PlaceScene extends Phaser.Scene {
       })
       parts.push(g)
     }
+    // How it stands (rule 0: from the system): a room fills to its reading; asleep or unread fades; down is ringed red.
+    if (k.meter && k.meter.used != null && k.meter.of) {
+      const f = Math.min(1, k.meter.used / k.meter.of), gl = this.add.graphics()
+      gl.fillStyle(f < 0.7 ? this.tone.ok : f < 0.9 ? this.tone.pick : this.tone.no, 0.42).fillPoints(quadOf(P, { x: r.x + 0.12, y: r.y + 0.12, w: r.w - 0.24, h: (r.h - 0.24) * f }, 4), true)
+      parts.push(gl)
+    }
+    if (k.state === 'standby' || k.state === 'unread') for (const p of parts) (p as unknown as { setAlpha?: (a: number) => void }).setAlpha?.(k.state === 'standby' ? 0.5 : 0.62)
+    if (k.state === 'down') { const gd = this.add.graphics(); gd.lineStyle(4, this.tone.no, 1).strokePoints(quadOf(P, r), true); parts.push(gd) }
     if (lens != null && !lit) for (const p of parts) (p as unknown as { setAlpha?: (a: number) => void }).setAlpha?.(0.28)
     if (k.id === o.inside && this.insideRing) parts.push(this.insideRing)
     return parts

@@ -1,14 +1,25 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import CityGen2 from '../src/domains/owner/city/gen2/frame/CityGen2'
 import { consoleContent } from '../src/domains/owner/city/gen2/content/console'
-import { formatPath, parsePath, type Path } from '../src/domains/owner/city/gen2/frame/places'
+import { formatPath, parsePath, type Path, type Place } from '../src/domains/owner/city/gen2/frame/places'
+import { hardwareDistrict, readHardware } from '../src/domains/owner/city/gen2/content/hardware'
 
 // The gen2 frame on its own: the address is the place (#/system/infrastructure), so Back works.
-// The content plug-in: today the Console's menu. The frame takes any other the same way.
-const CONTENT = consoleContent()
+// The content plug-in: the Console's menu, and the hardware district read live through the platform
+// (the bench's /api proxy: PLATFORM_API_TARGET), every 30 s.
+const getJson = (p: string) => fetch(p).then(r => (r.ok ? r.json() : Promise.reject(new Error(`${p}: HTTP ${r.status}`))))
 
 function Bench() {
+  const [hw, setHw] = useState<Place | null>(null)
+  useEffect(() => {
+    let on = true
+    const tick = () => readHardware(getJson).then(r => { if (on && r.topology) setHw(hardwareDistrict(r, 'system', `Live, read every 30 s (last ${new Date().toLocaleTimeString()}).`)) })
+    tick()
+    const t = setInterval(tick, 30_000)
+    return () => { on = false; clearInterval(t) }
+  }, [])
+  const CONTENT = useMemo(() => consoleContent(hw ? [hw] : []), [hw])
   const [path, setPath] = useState<Path>(() => parsePath(location.hash))
   useEffect(() => {
     const on = () => setPath(parsePath(location.hash))

@@ -6,7 +6,7 @@ import { assign, decodePlan, encodePlan, mergePlot, moveTo, planFor, plotsOf, sp
 import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
 import type { CityContent, Panel } from './content'
 import { PlaceScene, type ArrangeTool, type Shown } from './placeScene'
-import { functionAt, here, resolve, trail, type Path, type Place } from './places'
+import { functionAt, here, meterText, resolve, trail, type Path, type Place } from './places'
 import { rulesBroken } from './rules'
 import { frameOf, NO_INSETS, swapRects, type Insets, type Rect } from './viewport'
 import './cityGen2.css'
@@ -252,7 +252,7 @@ function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoo
   useEffect(() => {
     scene.current?.show(shown({ from: 'jump', selected: selected?.id ?? null, arranging, here: saved.here, parentA: saved.parent }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, arranging, saved, tool, lens])
+  }, [selected?.id, arranging, saved, tool, lens, place, parent])
 
   function shown(o: { from: Shown['from']; selected: string | null; arranging: boolean; here: Arrangement; parentA: Arrangement }): Shown {
     const h = layoutOf(place.children, o.here)
@@ -406,7 +406,7 @@ function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoo
         {(!f.summary.compact || open) && <p>{place.question}</p>}
         <dl>
           <div><dt>Inside</dt><dd>{place.children.length}</dd></div>
-          <div><dt>Readings</dt><dd className="g2-unknown">not wired</dd></div>
+          <div><dt>Readings</dt><dd className={place.state === 'online' ? '' : 'g2-unknown'}>{place.meter ? meterText(place.meter) : place.state ?? 'not wired'}</dd></div>
         </dl>
         {/* On a phone the tools live here (the top bar has no room); elsewhere they sit beside the search. */}
         {f.search.mode === 'icon' && (!f.summary.compact || open || arranging) && <div className="g2-actions" onClick={e => e.stopPropagation()}>{tools}</div>}

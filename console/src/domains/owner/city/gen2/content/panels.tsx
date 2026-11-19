@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Panel } from '../frame/content'
 import { Button, Dialog, Footer, Glance, Pager, pageOf, Scroll, Select, Tabs, Toolbar, useConfirm, type PanelSize } from '../frame/parts'
-import type { Place } from '../frame/places'
+import { meterText, type Place } from '../frame/places'
 
 /**
  * The panels beside the 2.5D middle (the Owner, 2026-11-19): the middle shows where things stand,
@@ -25,7 +25,9 @@ function InsideTable({ place, open }: { place: Place; open: (child: Place) => vo
           <td><button className="g2-link" onClick={() => open(c)}>{c.label}</button></td>
           <td>{KIND_WORD[c.kind]}</td>
           <td className="num">{c.shape.replace('x', '×')}</td>
-          <td className="g2-unknown">not wired</td>
+          <td className={c.meter || c.state ? (c.state === 'down' ? 'g2-warn' : c.state === 'online' ? '' : 'g2-unknown') : 'g2-unknown'}>
+            {c.meter ? meterText(c.meter) : c.state ?? 'not wired'}
+          </td>
         </tr>
       ))}
     </tbody>
