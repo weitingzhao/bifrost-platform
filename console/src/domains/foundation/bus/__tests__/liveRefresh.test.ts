@@ -67,11 +67,12 @@ describe('refresh batch', () => {
   // 2026-11-19, PROD Prometheus 18:15-18:45Z: /records was read 82 times in 30
   // minutes by refreshes on audit.action.recorded, 32 when it polled every 60 s.
   // Those settle for 30 s: a burst of recorded actions is one refresh.
-  it('lets recorded actions settle for half a minute', () => {
+  // 2026-11-19 20:4xZ: with 30 s PROD still read /records 43 times in 30 minutes; 60 s caps it at the old poll.
+  it('lets recorded actions settle for a minute', () => {
     vi.useFakeTimers()
     const done: QueryKey[] = []
     const b = new RefreshBatch(k => done.push(k), 1_000)
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 25; i++) {
       b.add('audit.action.recorded')
       vi.advanceTimersByTime(2_000)
     }

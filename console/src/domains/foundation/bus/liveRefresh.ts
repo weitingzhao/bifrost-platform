@@ -35,9 +35,10 @@ export const LIVE_REFRESH: LiveRefreshRow[] = [
   { types: ['release.deploy.finished', 'release.gitops.changed'], keys: [['releases'], ['gitops']] },
   { types: ['alert.rule.fired'], keys: [['telemetry', 'alerts']] },
   // Recorded actions come often (release window holds alone: 393 in two days), so
-  // they settle for 30 s: PROD 18:15-18:45Z read /records 82 times in 30 minutes
-  // against 32 when it polled every 60 s (Prometheus, 2026-11-19).
-  { types: ['audit.action.recorded'], keys: [['records'], ['audit']], settleMs: 30_000 },
+  // they settle for 60 s, never more often than the 60 s poll they replace:
+  // PROD read /records 82 times in 30 minutes with a 1 s settle and 43 with 30 s,
+  // against 12 to 32 when it polled (Prometheus, 2026-11-19).
+  { types: ['audit.action.recorded'], keys: [['records'], ['audit']], settleMs: 60_000 },
   { types: ['plan.tree.changed'], keys: [['agent-runtime-plan'], ['agent-runtime-plan-view'], ['agent-runtime-progress']] },
 ]
 
