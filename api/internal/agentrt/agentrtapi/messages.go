@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 type messageBody struct {
@@ -45,7 +44,7 @@ const mailReconcile = 5 * time.Second
 // readMessages is the caller's unread messages, oldest first (GET /messages):
 // wait= 0 to 25 seconds holds the request until one arrives, woken by the bus
 // (seat.mail.arrived through MailWake), limit= 1 to 100. A thread reads only
-// with the token its session is held to (store.Unread, TD-370).
+// with the token its session is held to (coord.Unread, TD-370).
 func (a *API) readMessages(w http.ResponseWriter, r *http.Request) {
 	who, err := writer(r)
 	if err != nil {
@@ -85,7 +84,7 @@ func (a *API) readMessages(w http.ResponseWriter, r *http.Request) {
 		if wait > 0 {
 			qctx = ctx
 		}
-		ms, err := store.Unread(qctx, a.DB, who, limit)
+		ms, err := coord.Unread(qctx, a.DB, who, limit)
 		switch {
 		case err != nil && r.Context().Err() != nil:
 			return // the client went away
@@ -143,7 +142,7 @@ func (a *API) threadMessages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	ms, err := store.Thread(r.Context(), a.DB, who.Actor, q.Get("with"), limit)
+	ms, err := coord.Thread(r.Context(), a.DB, who.Actor, q.Get("with"), limit)
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -169,7 +168,7 @@ func (a *API) ackMessages(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	done, err := store.AckMessages(r.Context(), a.DB, who, b.MessageIDs)
+	done, err := coord.AckMessages(r.Context(), a.DB, who, b.MessageIDs)
 	if err != nil {
 		a.fail(w, err)
 		return

@@ -9,8 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // agentrtDatabase is the state database of each environment (design v5
@@ -62,6 +62,6 @@ func migrateAndSeed(ctx context.Context, conn *pgx.Conn, env, wantDB string) ([]
 	if err != nil {
 		return applied, false, err
 	}
-	seeded, err := store.Seed(ctx, conn)
+	seeded, err := actor.Seed(ctx, conn)
 	return applied, seeded, err
 }

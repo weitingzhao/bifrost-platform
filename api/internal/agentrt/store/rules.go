@@ -23,14 +23,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 )
 
-// DB and Writer are eventlog.DB and actor.Writer. Nothing in this package
-// needs the names: the approvals package's tests still write them, and that
-// package is changed on its own (a trust anchor), so they stay until it does.
-type (
-	DB     = eventlog.DB
-	Writer = actor.Writer
-)
-
 // The runtime's rules (design v5 §5.2 「规则」, Owner 2026-10-14 「规则 A」):
 // rows of agentrt.rule, append only, one version after another. What a rule
 // says is what rules.Parse reads from the text stored with it; body_json is

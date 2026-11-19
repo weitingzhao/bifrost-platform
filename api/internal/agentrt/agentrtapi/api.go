@@ -327,7 +327,7 @@ func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	_, created, err := store.UploadArtifact(r.Context(), a.DB, who, kind, media, body)
+	_, created, err := artifact.UploadArtifact(r.Context(), a.DB, who, kind, media, body)
 	if err != nil {
 		a.fail(w, err)
 		return
