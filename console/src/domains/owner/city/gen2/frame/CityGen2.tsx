@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { browserArrangements, type ArrangementStore } from './arrangementStore'
+import { KitRoot, Menu, type PanelSize } from './parts'
 import { arrange, move, toArrangement, type Arrangement } from './grid'
 import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
 import type { CityContent, Panel } from './content'
@@ -94,6 +95,9 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   const placedRef = useRef(placed)
   placedRef.current = placed
   const root = useRef<HTMLDivElement>(null)
+  // Dialogs and menus open in the frame's root, so they take its colours and cover the whole frame.
+  const [rootEl, setRootEl] = useState<HTMLElement | null>(null)
+  useEffect(() => { setRootEl(root.current) }, [])
   const host = useRef<HTMLDivElement>(null)
   const probe = useRef<HTMLDivElement>(null)
   const scene = useRef<PlaceScene | null>(null)
@@ -252,16 +256,18 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
       ))}
     </ul>
   )
+  const bodyOf = (p: Panel, size: PanelSize) => typeof p.body === 'function' ? p.body({ size }) : p.body
   const card = (p: Panel, docked: boolean) => (
     <section key={p.id} className={`g2-panelbox${p.id.startsWith('picked-') ? ' picked' : ''}${docked ? ' docked' : ''}`} aria-label={p.title}>
       <header>
         <h3>{p.title}</h3>
         {p.sample && <span className="g2-chip">sample</span>}
         <span className="g2-grow" />
+        {p.menu && p.menu.length > 0 && <Menu items={p.menu} label={`More for ${p.title}`} />}
         <button className="g2-icon" onClick={() => { setDrawerOpen(false); setFocused(p.id) }} aria-label={`Put ${p.title} in the middle`} title="Put in the middle">⤢</button>
         {p.id.startsWith('picked-') && <button className="g2-icon" onClick={() => setSelected(null)} aria-label="Close">×</button>}
       </header>
-      <div className="g2-panelbody">{p.body}</div>
+      <div className="g2-panelbody">{bodyOf(p, docked ? 'card' : 'drawer')}</div>
     </section>
   )
   const trailLinks = steps.map((s, i) => (
@@ -274,6 +280,7 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   return (
     <div className="g2" ref={root} data-device={f.device} data-landscape={f.landscape || undefined} data-light={light}
       style={{ ...CORNERS[light], background: CORNERS[light]['--g2-sky'], color: CORNERS[light]['--g2-ink'] } as CSSProperties}>
+      <KitRoot value={rootEl}>
       <div className="g2-probe" ref={probe} aria-hidden />
       <div className="g2-canvas" ref={host} />
 
@@ -373,9 +380,10 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
               <h3>{focusedPanel.title}</h3>
               {focusedPanel.sample && <span className="g2-chip">sample</span>}
               <span className="g2-grow" />
+              {focusedPanel.menu && focusedPanel.menu.length > 0 && <Menu items={focusedPanel.menu} label={`More for ${focusedPanel.title}`} />}
               <button className="g2-icon" onClick={() => setFocused(null)} aria-label="Put the map back in the middle" title="Map to the middle">×</button>
             </header>
-            <div className="g2-focusbody">{focusedPanel.body}</div>
+            <div className="g2-focusbody">{bodyOf(focusedPanel, 'middle')}</div>
           </section>
           <div className="g2-mapcard" style={at(swap.map)} aria-label={`Map: ${place.label}`}>
             <header>
@@ -386,6 +394,7 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
           </div>
         </>
       )}
+      </KitRoot>
     </div>
   )
 }

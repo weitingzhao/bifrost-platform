@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { MenuItem, PanelSize } from './parts'
 import type { Place } from './places'
 
 /**
@@ -21,7 +22,14 @@ export type Panel = {
   sample?: boolean
   /** Which bottom corner it docks in on a wide screen: charts on the left, tables and cards on the right. */
   dock: 'left' | 'right'
-  body: ReactNode
+  /**
+   * What it shows. A function gets the size it is drawn at, so it can give its compact form in a card
+   * (tabs as a Select, fewer rows a page) and its full form in the middle. Use the frame's parts
+   * (parts.tsx) for tabs, drop-downs, buttons, dialogs, paging and scrolling.
+   */
+  body: ReactNode | ((at: { size: PanelSize }) => ReactNode)
+  /** Secondary actions, in the ⋯ menu at the right of the panel's header. */
+  menu?: MenuItem[]
 }
 
 export type CityContent = {

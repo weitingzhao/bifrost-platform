@@ -60,6 +60,6 @@ describe('content is swappable', () => {
     const c = consoleContent()
     const other = { ...c, tree: { ...c.tree, label: 'Family', children: c.tree.children.slice(0, 2).map(d => ({ ...d, label: `${d.label} (renamed)` })) } }
     expect(other.tree.children.map(d => d.label)).toEqual(['Command (renamed)', 'Crew (renamed)'])
-    expect(other.panels(other.tree, () => {}).map(p => p.id)).toEqual(['inside', 'chart'])
+    expect(other.panels(other.tree, () => {}).map(p => p.id)).toEqual(['inside', 'chart', 'parts'])
   })
 })

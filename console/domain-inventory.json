@@ -2163,6 +2163,7 @@
         "console/src/domains/owner/city/gen2/frame/__tests__/boundary.test.ts",
         "console/src/domains/owner/city/gen2/frame/__tests__/grid.test.ts",
         "console/src/domains/owner/city/gen2/frame/__tests__/light.test.ts",
+        "console/src/domains/owner/city/gen2/frame/__tests__/parts.test.tsx",
         "console/src/domains/owner/city/gen2/frame/__tests__/viewport.test.ts",
         "console/src/domains/owner/city/gen2/frame/arrangementStore.ts",
         "console/src/domains/owner/city/gen2/frame/cityGen2.css",
@@ -2170,6 +2171,7 @@
         "console/src/domains/owner/city/gen2/frame/grid.ts",
         "console/src/domains/owner/city/gen2/frame/kit.ts",
         "console/src/domains/owner/city/gen2/frame/light.ts",
+        "console/src/domains/owner/city/gen2/frame/parts.tsx",
         "console/src/domains/owner/city/gen2/frame/placeScene.ts",
         "console/src/domains/owner/city/gen2/frame/places.ts",
         "console/src/domains/owner/city/gen2/frame/sprites.ts",
@@ -2184,11 +2186,14 @@
         "console/src/lib/shell"
       ],
       "external_imports": [
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
         "node:fs",
         "node:path",
         "node:url",
         "phaser",
         "react",
+        "react-dom",
         "vitest"
       ],
       "source_inputs": [],
