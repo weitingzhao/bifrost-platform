@@ -12,8 +12,12 @@ import { createPortal } from 'react-dom'
  *   body     scrolls inside itself (Scroll); never pushes the panel past its slot
  *   footer   paging (Pager) and where the numbers came from
  * Dialogs: the primary action at the bottom right, Cancel to its left; anything that destroys or
- * resets asks first (useConfirm). In a card (medium) a panel shows its compact form: tabs become a
- * Select, a pager shows fewer rows; in the middle (large) its full form.
+ * resets asks first (useConfirm).
+ *
+ * A card is a glance, the middle is for work (the Owner, 2026-11-19: crowded cards feel oppressive).
+ * In a card (a corner) a panel shows only what to notice: a number or two and the latest few rows,
+ * no tabs, no toolbar, no pager; ⤢ takes it to the middle, where it shows its full form. In the
+ * drawer (phone) it shows the full form with fewer rows a page.
  */
 
 export type PanelSize = 'card' | 'middle' | 'drawer'
@@ -147,6 +151,11 @@ export function Toolbar({ left, right }: { left?: ReactNode; right?: ReactNode }
 /** A body that scrolls inside itself, with a fade where more is hidden. */
 export function Scroll({ children, max }: { children: ReactNode; max?: number }) {
   return <div className="k-scroll" style={max ? { maxHeight: max } : undefined}>{children}</div>
+}
+
+/** A card's glance: the one number to notice, with what it counts. */
+export function Glance({ value, label, note }: { value: ReactNode; label: string; note?: ReactNode }) {
+  return <div className="k-glance"><span><b>{value}</b> {label}</span>{note && <span>{note}</span>}</div>
 }
 
 /** Paging and where the numbers came from. */

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Panel } from '../frame/content'
-import { Button, Dialog, Footer, Pager, pageOf, Scroll, Select, Tabs, Toolbar, useConfirm, type PanelSize } from '../frame/parts'
+import { Button, Dialog, Footer, Glance, Pager, pageOf, Scroll, Select, Tabs, Toolbar, useConfirm, type PanelSize } from '../frame/parts'
 import type { Place } from '../frame/places'
 
 /**
@@ -77,16 +77,22 @@ function PartsSample({ size }: { size: PanelSize }) {
     return () => window.removeEventListener(ABOUT, on)
   }, [])
   const rows = SAMPLE_EVENTS.filter(e => kind === 'all' || e.kind === kind)
-  const per = size === 'card' ? 4 : size === 'drawer' ? 6 : 10
+  const per = size === 'drawer' ? 6 : 10
   const pg = pageOf(rows, page, per)
+  const list = (rs: typeof SAMPLE_EVENTS) => <ul className="k-rows">{rs.map(e => <li key={e.id}><i className="k-dot" style={{ background: DOT[e.kind] }} /><b>{e.kind}</b>{e.what}<span>{e.at}</span></li>)}</ul>
+  // A card is a glance: the count and the latest three; the filters, tabs and pages wait in the middle.
+  if (size === 'card') return <>
+    <Glance value={SAMPLE_EVENTS.length} label="events today" note={`${SAMPLE_EVENTS.filter(e => e.kind === 'alert').length} alerts`} />
+    {list(SAMPLE_EVENTS.slice(-3).reverse())}
+  </>
   return <>
-    <Tabs compact={size === 'card'} value={tab} onChange={setTab} tabs={[{ id: 'events', label: 'Events' }, { id: 'settings', label: 'Settings' }]} />
+    <Tabs value={tab} onChange={setTab} tabs={[{ id: 'events', label: 'Events' }, { id: 'settings', label: 'Settings' }]} />
     {tab === 'events' ? <>
       <Toolbar
         left={<Select label="Kind" value={kind} onChange={v => { setKind(v); setPage(1) }} options={[{ value: 'all', label: 'All kinds' }, ...KINDS.map(k => ({ value: k, label: k }))]} />}
         right={<Button kind="primary" onClick={() => setRefreshed(new Date().toLocaleTimeString())}>Refresh</Button>} />
       <Scroll max={size === 'middle' ? undefined : 200}>
-        <ul className="k-rows">{pg.rows.map(e => <li key={e.id}><i className="k-dot" style={{ background: DOT[e.kind] }} /><b>{e.kind}</b>{e.what}<span>{e.at}</span></li>)}</ul>
+        {list(pg.rows)}
       </Scroll>
       <Footer><span>Sample rows{refreshed ? ` · refreshed ${refreshed}` : ''}</span><Pager {...pg} onPage={setPage} /></Footer>
     </> : <>
