@@ -6,19 +6,19 @@
  * hangars, the lit legs, a launch and the satellites; the page reads the platform.
  */
 import { createRoot } from 'react-dom/client'
-import type { TiledMap } from '../src/domains/owner/city/builderDoc'
-import CityBuilder from '../src/domains/owner/city/CityBuilder'
-import { pluginsOf, systemItems, type CityLane } from '../src/domains/owner/city/catalog'
-import { skyReading, type ReleaseContext } from '../src/domains/owner/city/cityReadings'
-import { cityReadings, utilityGlance } from '../src/domains/owner/city/cityState'
-import { workersGlance, workersOf } from '../src/domains/owner/city/cityWorkers'
-import { campuses, DEPLOYMENTS_QUERY } from '../src/domains/owner/city/cityCampus'
-import { FLIGHT_PIPELINES, flightLog, type Run } from '../src/domains/owner/city/cityFlights'
-import { readUtilities } from '../src/domains/owner/city/cityUtilities'
-import { machines, variantOf } from '../src/domains/owner/city/cityMachines'
+import type { TiledMap } from '../src/domains/owner/city/gen1/builderDoc'
+import CityBuilder from '../src/domains/owner/city/gen1/CityBuilder'
+import { pluginsOf, systemItems, type CityLane } from '../src/domains/owner/city/gen1/catalog'
+import { skyReading, type ReleaseContext } from '../src/domains/owner/city/gen1/cityReadings'
+import { cityReadings, utilityGlance } from '../src/domains/owner/city/gen1/cityState'
+import { workersGlance, workersOf } from '../src/domains/owner/city/gen1/cityWorkers'
+import { campuses, DEPLOYMENTS_QUERY } from '../src/domains/owner/city/gen1/cityCampus'
+import { FLIGHT_PIPELINES, flightLog, type Run } from '../src/domains/owner/city/gen1/cityFlights'
+import { readUtilities } from '../src/domains/owner/city/gen1/cityUtilities'
+import { machines, variantOf } from '../src/domains/owner/city/gen1/cityMachines'
 import { fetchPromQL } from '../src/api/telemetry'
-import { plannedCity } from '../src/domains/owner/city/defaultLayout'
-import { browserLayoutStore, LAYOUT_KEY, type LayoutStore } from '../src/domains/owner/city/layoutStore'
+import { plannedCity } from '../src/domains/owner/city/gen1/defaultLayout'
+import { browserLayoutStore, LAYOUT_KEY, type LayoutStore } from '../src/domains/owner/city/gen1/layoutStore'
 
 const q = new URLSearchParams(location.search)
 if (q.has('fresh')) { try { localStorage.removeItem(LAYOUT_KEY) } catch { /* no storage: starts from the plan anyway */ } }
