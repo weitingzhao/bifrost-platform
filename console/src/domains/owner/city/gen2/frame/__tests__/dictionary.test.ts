@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DICTIONARY, encode, metaphor } from '../library/dictionary'
+import { DICTIONARY, encode, metaphor, STANDARD_PARTS } from '../library/dictionary'
 import { deviceSprite, type Form, type Levels } from '../devices'
 
 // 2026-11-19, the Owner: the point is that metrics show naturally; which metaphor shows which metric
@@ -23,6 +23,16 @@ describe('the metaphor dictionary', () => {
     expect(encode('cores', 32)!).toBeGreaterThan(encode('cores', 16)!)
     expect(encode('mem.total', 128e9)!).toBeGreaterThan(encode('mem.total', 24e9)!)
     expect(encode('disk.total', 2e12)!).toBeGreaterThan(encode('disk.total', 500e9)!)
+  })
+  // 2026-11-19, the Owner: capacity as standard parts, one size city-wide, so a glance compares
+  // machines — 16 cores against 32, 16 GB against 24, a node's disk against the NAS.
+  it('standard parts: counted in one fixed size each, whatever machine they are on', () => {
+    expect(encode('core.machines', 16)).toBe(16)
+    expect(encode('mem.sections', 24e9)).toBe(6)
+    expect(encode('mem.sections', 16e9)).toBe(4)
+    expect(encode('disk.bays', 512e9)).toBe(2)
+    expect(encode('mem.sections', null)).toBeNull()
+    expect(STANDARD_PARTS().map(m => m.id).sort()).toEqual(['core.machines', 'disk.bays', 'mem.sections'])
   })
   it('of two plants, the bigger machine is drawn bigger', () => {
     const lv = (cores: number, mem: number, disk: number): Levels => ({ state: 'online', cpu: 0.3, mem: 0.4, disks: [0.5], cap: { cores, mem, disk } })

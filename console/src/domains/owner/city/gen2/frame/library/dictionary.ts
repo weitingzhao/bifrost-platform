@@ -10,6 +10,10 @@
  *   level   filled to its share (a tank, crates)
  *   size    as big as its amount, on a log scale between two bounds (a hall's height, a tank's girth):
  *           of two of a kind, the bigger one looks bigger
+ *   parts   counted out in standard parts of one fixed size, the same everywhere in the city (the Owner,
+ *           2026-11-19: a standard part, aligned, so 16 GB and 24 GB, 16 cores and 32, read at a glance and
+ *           compare across machines): a machine per core, a bench section per 4 GB, a bay per 256 GB.
+ *           A part partly filled is drawn partly: 17.2 GB is four sections and a little.
  *   number  written out (a tally, a roof number), read, never set
  *   state   the four states as lights (lamps, beacons, dark windows)
  */
@@ -18,6 +22,7 @@ export type Encoding =
   | { kind: 'count'; n: number }
   | { kind: 'level' }
   | { kind: 'size'; from: number; to: number; min: number; max: number }
+  | { kind: 'parts'; each: number; unit: string; group?: { n: number; name: string } }
   | { kind: 'number' }
   | { kind: 'state' }
 
@@ -40,7 +45,13 @@ export const DICTIONARY: readonly Metaphor[] = [
   { id: 'identity', metric: 'which machine (from its node name)', part: 'roofNumber', shows: 'Number on the roof', encoding: { kind: 'number' }, meaning: 'its number painted on the roof, read from far off' },
   { id: 'purpose', metric: 'what it is for (workload pool, cluster role, topology role)', part: 'signBand', shows: 'Sign over the front', encoding: { kind: 'number' }, meaning: 'written on the sign over its front' },
   // The CPU unit's room, the workshop (a computer is a factory, the Owner 2026-11-19).
-  { id: 'core.machines', metric: 'CPU cores', part: 'machine tool', shows: 'Machine tools', encoding: { kind: 'number' }, meaning: 'one machine tool per core; as many machines as it has cores' },
+  { id: 'core.machines', metric: 'CPU cores', part: 'machine tool', shows: 'Machine tools', encoding: { kind: 'parts', each: 1, unit: 'core' }, meaning: 'the standard part of compute: one machine tool per core, the same in every factory' },
+  // The standard parts of memory and storage (proposed 2026-11-19, for the Owner to confirm; drawn when
+  // those units are made). Measured that day: the cluster nodes 24 GB (one 16, one 32) → 6 sections,
+  // the Mac minis 17.2 → 4.3, the NAS 7.8 → 1.9, the GPU box 134 → 33.5; disks 500 GB → 2 bays, the Mac
+  // minis 245 → 1, NAS volume 2 984 → 3.8, volume 1 24 TB → 94 bays (12 racks).
+  { id: 'mem.sections', metric: 'memory installed', part: 'workbench section', shows: 'Workbench sections', encoding: { kind: 'parts', each: 4e9, unit: 'GB' }, meaning: 'the standard part of memory: one bench section per 4 GB' },
+  { id: 'disk.bays', metric: 'disk size', part: 'rack bay', shows: 'Rack bays', encoding: { kind: 'parts', each: 256e9, unit: 'GB', group: { n: 8, name: 'rack' } }, meaning: 'the standard part of storage: one rack bay per 256 GB; eight bays make a rack (2 TB)' },
   { id: 'core.busy', metric: 'a core busy, as a share', part: 'machine work light', shows: 'Work light on each machine', encoding: { kind: 'level' }, meaning: 'the light column stands as high as that core is busy; dark when idle' },
   { id: 'core.freq', metric: 'a core’s clock, as a share of its top', part: 'speed dial', shows: 'Speed dial on each machine', encoding: { kind: 'level' }, meaning: 'the needle at how fast that core runs now, from stopped to its red line' },
   { id: 'core.freq.max', metric: 'a core’s top clock', part: 'speed dial red line', shows: 'Red line on the speed dial', encoding: { kind: 'number' }, meaning: 'the end of the dial: the fastest that core can run' },
@@ -82,5 +93,9 @@ export function encode(id: string, v: number | null): number | null {
     const t = (Math.log(v) - Math.log(e.from)) / (Math.log(e.to) - Math.log(e.from))
     return e.min + (e.max - e.min) * Math.max(0, Math.min(1, t))
   }
+  if (e.kind === 'parts') return v == null || v < 0 ? null : v / e.each
   return v
 }
+
+/** Every standard part, from the table: one size each, the same everywhere. */
+export const STANDARD_PARTS = () => DICTIONARY.filter(m => m.encoding.kind === 'parts')
