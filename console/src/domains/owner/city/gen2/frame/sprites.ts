@@ -42,11 +42,10 @@ const litBy = (light: Light, seed: number) => (r: number, c: number) =>
 
 /**
  * How far a thing stands back from its plot's edge (the Owner, 2026-11-19: streets and green belts
- * between neighbours). The same on every plot, as every street is one width: past the road's half
- * (0.5), its kerb and the belt. A 1-wide thing has no room left beside a whole-cell road: it is a
- * marker, 0.4 wide, and stands into the road's edge.
+ * between neighbours). The way and the buffer are outside the thing now (geo.ts), so it stands
+ * only a hair in from its own footprint, to show the lot's edge.
  */
-export const setback = (n: number) => n >= 2 ? 0.72 : 0.3
+export const setback = (n: number) => n >= 2 ? 0.14 : 0.08
 
 /** A district: a tall hall on a plinth, a hue band under the parapet, rows of windows, a door, rooftop units. */
 export function districtHall(fw: number, fd: number, hue: string, light: Light, seed = 0): Sprite {
@@ -109,9 +108,8 @@ export function workshop(fw: number, fd: number, hue: string, light: Light, seed
 export function roomFloor(fw: number, fd: number, hue: string, light: Light): Sprite {
   const W = WALLS[light]
   const g = new Draw(fw, fd, 34)
-  // Set back from its plot by half a corridor (the same width as a street, grid.ts), so two rooms side
-  // by side have a corridor between them (the Owner, 2026-11-19: never wall to wall).
-  const i = Math.min(0.5, (Math.min(fw, fd) - 0.4) / 2), x0 = i, y0 = i, x1 = fw - i, y1 = fd - i, w = x1 - x0, d = y1 - y0
+  // The room's walls stand on its own footprint; the corridor and the threshold are outside it (geo.ts).
+  const i = 0.06, x0 = i, y0 = i, x1 = fw - i, y1 = fd - i, w = x1 - x0, d = y1 - y0
   const t = 0.12, HIGH = 18, LOW = 5, wall = faces(W.top, W.left, W.right)
   const carpet = light === 'night' ? shade(hue, -0.5) : light === 'dusk' ? shade(hue, 0.3) : shade(hue, 0.6)
   g.box(x0, y0, w, d, 3, faces(carpet, W.left, W.right))
@@ -160,7 +158,7 @@ export function districtBlock(fw: number, fd: number, hue: string, light: Light,
   const i = setback(n), x0 = i, y0 = i, x1 = fw - i, y1 = fd - i, w = x1 - x0, d = y1 - y0
   const cols = Math.max(1, Math.round(Math.sqrt(count * w / d))), rows = Math.ceil(count / cols)
   // Between the buildings of a block, the same width as every way (the Owner, 2026-11-19).
-  const gap = Math.min(1, Math.min(w / cols, d / rows) * 0.45)
+  const gap = Math.min(0.8, Math.min(w / cols, d / rows) * 0.35)
   const cw = (w - gap * (cols - 1)) / cols, cd = (d - gap * (rows - 1)) / rows
   const top = 20 + n * 9
   const g = new Draw(fw, fd, top + 40)

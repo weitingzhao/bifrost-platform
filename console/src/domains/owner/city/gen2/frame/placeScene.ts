@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser'
-import { fitsIn, GRID, plotAt, STREET_HALF, type Cell, type Placed, type Plot, type Street } from './grid'
+import { fitsIn, type Placed, type Plot, type Street } from './grid'
+import { geoOf, WAY, type Geo, type Rect } from './geo'
 import type { Place } from './places'
 import { PALETTE, type Light, type Palette } from './light'
 import { hash } from './kit'
@@ -25,13 +26,21 @@ import { frameOf, type Frame } from './viewport'
 
 export const CW = 64
 export const CH = 32
-/** Cell (x, y) of the ground, height z, to world pixels; the ground's centre at the origin. */
-const iso = (x: number, y: number, z = 0) => new Phaser.Math.Vector2((x - y - 0) * (CW / 2), (x + y - GRID) * (CH / 2) - z)
-/** World pixels on the ground back to a cell position (fractional). */
-const cellAt = (wx: number, wy: number): Cell => {
-  const u = wx / (CW / 2), v = wy / (CH / 2) + GRID
+/** A point of a level's picture (geo.ts: cells and the gutters between them), height z, to world pixels. */
+type Proj = (x: number, y: number, z?: number) => Phaser.Math.Vector2
+/** The projection for a picture, its centre at the origin. */
+const projOf = (geo: Geo): Proj => {
+  const k = (geo.w + geo.h) / 2
+  return (x, y, z = 0) => new Phaser.Math.Vector2((x - y) * (CW / 2), (x + y - k) * (CH / 2) - z)
+}
+/** World pixels on the ground back to a point of the picture. */
+const pointOf = (geo: Geo, wx: number, wy: number) => {
+  const u = wx / (CW / 2), v = wy / (CH / 2) + (geo.w + geo.h) / 2
   return { x: (u + v) / 2, y: (v - u) / 2 }
 }
+
+/** A rectangle of the picture as its four corners on the ground. */
+const quadOf = (P: Proj, r: Rect, z = 0) => [P(r.x, r.y, z), P(r.x + r.w, r.y, z), P(r.x + r.w, r.y + r.h, z), P(r.x, r.y + r.h, z)]
 
 /** The parent level is drawn this far to the right, out of the main camera's sight. */
 const AWAY = 20000
@@ -77,15 +86,8 @@ const heightOf = (p: Place, size: number) => p.kind === 'room' ? 24 : p.kind ===
 const RS = 3
 /** The slab's thickness under the ground, px: the earth shows on its two front sides. */
 const SLAB = 14
-/**
- * The rim, in cells: the land outside the 16×16 plots that carries the ring road at full width, so
- * the edge street is a road like any other, not half of one cut by the slab (the Owner, 2026-11-19).
- */
-const RIM = 1.1
-/** Every road and corridor, on every level: its half-width (grid.ts), its kerb, and where a plot's lot begins. */
-const ROAD_HALF = STREET_HALF.street
+/** A road's kerb, each side, in cells. */
 const KERB = 0.06
-const LOT_INSET = ROAD_HALF + KERB + 0.1
 
 export class PlaceScene extends Phaser.Scene {
   private events_: SceneEvents
@@ -109,6 +111,9 @@ export class PlaceScene extends Phaser.Scene {
   private lastTap = 0
   /** A block being carried while arranging: which, and which cell of it the pointer holds. */
   private carry: { p: Placed; to: Plot | null } | null = null
+  /** The picture of the place on screen and of its parent in the minimap (geo.ts). */
+  private geo: Geo = geoOf([])
+  private awayGeo: Geo | null = null
 
   constructor(events: SceneEvents) {
     super('place')
@@ -200,9 +205,14 @@ export class PlaceScene extends Phaser.Scene {
       return
     }
     // A ground scaled by s about the footprint's centre fits the footprint; scaled by 1/s it is the parent seen from inside it.
-    const g = iso(GRID / 2, GRID / 2)
-    const c = iso(through.x + through.w / 2, through.y + through.h / 2)
-    const s = ((through.w + through.h) / 2) / (GRID + 2 * RIM)
+    const parent = next.from === 'down' ? prev! : next, child = next.from === 'down' ? next : prev!
+    const pg = geoOf(parent.plots), cg = geoOf(child.plots)
+    const home = parent.plots.find(p => p.id === through.plot)
+    if (!home) { old.destroy(); return }
+    const t = pg.thing(pg.plot(home), through.w, through.h)
+    const g = projOf(cg)(cg.w / 2, cg.h / 2)
+    const c = projOf(pg)(t.x + t.w / 2, t.y + t.h / 2)
+    const s = ((t.w + t.h) / 2) / ((cg.w + cg.h) / 2)
     const small = { x: c.x - g.x * s, y: c.y - g.y * s, scale: s }
     const big = { x: g.x - c.x / s, y: g.y - c.y / s, scale: 1 / s }
     this.mini?.setAlpha(0)
@@ -272,6 +282,8 @@ export class PlaceScene extends Phaser.Scene {
     this.ghost?.destroy()
     this.carry = null
     this.labels = []
+    this.geo = geoOf(s.plots)
+    this.awayGeo = s.parent ? geoOf(s.parentPlots) : null
     const m = this.level(s.place, s.placed, s.plots, s.streets, { at: 0, selected: s.selected, inside: null, interactive: true, arranging: s.arranging })
     this.main = m.c
     // The whole ground, ring road included, always fits (the Owner, 2026-11-19: no plot cut off at the
@@ -285,8 +297,9 @@ export class PlaceScene extends Phaser.Scene {
   }
 
   /** The whole ground's box with room for tall blocks behind and names in front. */
-  private groundBox() {
-    const l = iso(-RIM, GRID + RIM), r = iso(GRID + RIM, -RIM), t = iso(-RIM, -RIM), b = iso(GRID + RIM, GRID + RIM)
+  private groundBox(geo: Geo = this.geo) {
+    const P = projOf(geo)
+    const l = P(0, geo.h), r = P(geo.w, 0), t = P(0, 0), b = P(geo.w, geo.h)
     return { x: l.x - 20, y: t.y - 70, w: r.x - l.x + 40, h: b.y - t.y + 110 }
   }
 
@@ -367,7 +380,7 @@ export class PlaceScene extends Phaser.Scene {
     const { mini, miniTitle } = this.layout
     this.mini.setViewport(mini.x + 1, mini.y + miniTitle, mini.w - 2, mini.h - miniTitle - 1)
     this.mini.ignore(this.main)
-    const g = this.groundBox()
+    const g = this.groundBox(this.awayGeo ?? this.geo)
     this.mini.setZoom(Math.min((mini.w - 8) / g.w, (mini.h - miniTitle - 4) / g.h))
     this.mini.centerOn(AWAY + g.x + g.w / 2, g.y + g.h / 2)
   }
@@ -458,13 +471,14 @@ export class PlaceScene extends Phaser.Scene {
   private plotUnder(p: Phaser.Input.Pointer): Plot | undefined {
     if (!this.shown) return undefined
     const w = this.cameras.main.getWorldPoint(p.x, p.y)
-    return plotAt(this.shown.plots, cellAt(w.x, w.y))
+    const at = pointOf(this.geo, w.x, w.y)
+    return this.geo.plotAt(this.shown.plots, at.x, at.y)
   }
 
   private outline(plot: Plot, colour: number, fill = 0.22) {
     const g = this.ghost
     if (!g) return
-    const q = [iso(plot.x, plot.y), iso(plot.x + plot.w, plot.y), iso(plot.x + plot.w, plot.y + plot.h), iso(plot.x, plot.y + plot.h)]
+    const q = quadOf(projOf(this.geo), this.geo.plot(plot))
     g.fillStyle(colour, fill).lineStyle(2.5, colour).fillPoints(q, true).strokePoints(q, true)
   }
 
@@ -528,182 +542,154 @@ export class PlaceScene extends Phaser.Scene {
 
   /**
    * A storey seen cut away (the Owner, 2026-11-19: a floor must read as a floor of a building, not a
-   * big room): the corridor floor tiled, the two back outer walls at full height with windows, the
-   * two front ones cut down to their foot so you see in, and the way in through the front.
+   * big room): the two back outer walls at full height with windows, the two front ones cut down to
+   * their foot so you see in, and the way in through the front. The walls stand on the outer buffer.
    */
-  private storey(g: Phaser.GameObjects.Graphics, lo: number, hi: number) {
-    const T = 0.24, H = 46, LOW = 7, t = this.tone
+  private storey(g: Phaser.GameObjects.Graphics, P: Proj, W: number, H: number) {
+    const T = 0.24, TALL = 46, LOW = 7, t = this.tone
     const quad = (fill: number, q: Phaser.Math.Vector2[], stroke = 1.6) => g.fillStyle(fill).fillPoints(q, true).lineStyle(stroke, t.ink).strokePoints(q, true)
-    // Floor tiles: a faint cell grid.
-    g.lineStyle(1, t.ink, 0.07)
-    for (let i = Math.ceil(lo); i <= Math.floor(hi); i++) {
-      g.lineBetween(iso(i, lo).x, iso(i, lo).y, iso(i, hi).x, iso(i, hi).y)
-      g.lineBetween(iso(lo, i).x, iso(lo, i).y, iso(hi, i).x, iso(hi, i).y)
-    }
     // Back walls: inner faces, the end faces, then the caps.
-    quad(t.wall, [iso(lo + T, lo + T), iso(hi, lo + T), iso(hi, lo + T, H), iso(lo + T, lo + T, H)])
-    quad(t.wallShade, [iso(lo + T, lo + T), iso(lo + T, hi), iso(lo + T, hi, H), iso(lo + T, lo + T, H)])
-    quad(t.wallShade, [iso(hi, lo), iso(hi, lo + T), iso(hi, lo + T, H), iso(hi, lo, H)])
-    quad(t.wall, [iso(lo, hi), iso(lo + T, hi), iso(lo + T, hi, H), iso(lo, hi, H)])
-    quad(t.wallTop, [iso(lo, lo, H), iso(hi, lo, H), iso(hi, lo + T, H), iso(lo + T, lo + T, H), iso(lo + T, hi, H), iso(lo, hi, H)])
+    quad(t.wall, [P(T, T), P(W, T), P(W, T, TALL), P(T, T, TALL)])
+    quad(t.wallShade, [P(T, T), P(T, H), P(T, H, TALL), P(T, T, TALL)])
+    quad(t.wallShade, [P(W, 0), P(W, T), P(W, T, TALL), P(W, 0, TALL)])
+    quad(t.wall, [P(0, H), P(T, H), P(T, H, TALL), P(0, H, TALL)])
+    quad(t.wallTop, [P(0, 0, TALL), P(W, 0, TALL), P(W, T, TALL), P(T, T, TALL), P(T, H, TALL), P(0, H, TALL)])
     // Windows along both back walls, one every two cells.
-    for (let a = lo + 1.2; a + 1 <= hi - 0.6; a += 2) {
-      quad(t.glass, [iso(a, lo + T, 14), iso(a + 1, lo + T, 14), iso(a + 1, lo + T, 36), iso(a, lo + T, 36)], 1.1)
-      quad(t.glass, [iso(lo + T, a, 14), iso(lo + T, a + 1, 14), iso(lo + T, a + 1, 36), iso(lo + T, a, 36)], 1.1)
-    }
+    for (let a = 1.2; a + 1 <= W - 0.6; a += 2) quad(t.glass, [P(a, T, 14), P(a + 1, T, 14), P(a + 1, T, 36), P(a, T, 36)], 1.1)
+    for (let a = 1.2; a + 1 <= H - 0.6; a += 2) quad(t.glass, [P(T, a, 14), P(T, a + 1, 14), P(T, a + 1, 36), P(T, a, 36)], 1.1)
     // Front walls, cut down to their foot; the front-left one leaves the way in at its middle.
-    const d0 = GRID / 2 - 1, d1 = GRID / 2 + 1
-    quad(t.wallShade, [iso(hi, lo), iso(hi, hi), iso(hi, hi, LOW), iso(hi, lo, LOW)])
-    quad(t.wallTop, [iso(hi - T, lo, LOW), iso(hi, lo, LOW), iso(hi, hi, LOW), iso(hi - T, hi, LOW)])
-    for (const [a, b] of [[lo, d0], [d1, hi - T]]) {
-      quad(t.wall, [iso(a, hi), iso(b, hi), iso(b, hi, LOW), iso(a, hi, LOW)])
-      quad(t.wallShade, [iso(b, hi - T), iso(b, hi), iso(b, hi, LOW), iso(b, hi - T, LOW)])
-      quad(t.wallTop, [iso(a, hi - T, LOW), iso(b, hi - T, LOW), iso(b, hi, LOW), iso(a, hi, LOW)])
+    const d0 = W / 2 - 1, d1 = W / 2 + 1
+    quad(t.wallShade, [P(W, 0), P(W, H), P(W, H, LOW), P(W, 0, LOW)])
+    quad(t.wallTop, [P(W - T, 0, LOW), P(W, 0, LOW), P(W, H, LOW), P(W - T, H, LOW)])
+    for (const [a, b] of [[0, d0], [d1, W - T]]) {
+      quad(t.wall, [P(a, H), P(b, H), P(b, H, LOW), P(a, H, LOW)])
+      quad(t.wallShade, [P(b, H - T), P(b, H), P(b, H, LOW), P(b, H - T, LOW)])
+      quad(t.wallTop, [P(a, H - T, LOW), P(b, H - T, LOW), P(b, H, LOW), P(a, H, LOW)])
     }
-    // A mat at the way in.
-    quad(t.wallShade, [iso(d0 + 0.3, hi - 0.9), iso(d1 - 0.3, hi - 0.9), iso(d1 - 0.3, hi - 0.1), iso(d0 + 0.3, hi - 0.1)], 1)
   }
 
   private level(place: Place, placed: Placed[], plots: Plot[], streets: Street[], o: { at: number; selected: string | null; inside: string | null; interactive: boolean; arranging: boolean }) {
+    const geo = geoOf(plots), P = projOf(geo), W = geo.w, H = geo.h
     const c = this.add.container(o.at, 0)
     const g = this.add.graphics()
-    const lo = -RIM, hi = GRID + RIM
-    const ground = [iso(lo, lo), iso(hi, lo), iso(hi, hi), iso(lo, hi)]
+    const ground = [P(0, 0), P(W, 0), P(W, H), P(0, H)]
     // The slab: earth on its two front sides, then the ground on top, all outlined in ink.
     const down = (v: Phaser.Math.Vector2) => new Phaser.Math.Vector2(v.x, v.y + SLAB)
-    const leftSide = [iso(lo, hi), iso(hi, hi), down(iso(hi, hi)), down(iso(lo, hi))]
-    const rightSide = [iso(hi, lo), iso(hi, hi), down(iso(hi, hi)), down(iso(hi, lo))]
+    const leftSide = [P(0, H), P(W, H), down(P(W, H)), down(P(0, H))]
+    const rightSide = [P(W, 0), P(W, H), down(P(W, H)), down(P(W, 0))]
     // Outdoors the slab is earth; a building's storey stands on a concrete floor slab.
     const inside = place.kind === 'building'
     g.lineStyle(2, this.tone.ink)
     g.fillStyle(inside ? this.tone.slab : this.tone.earth).fillPoints(leftSide, true).strokePoints(leftSide, true)
     g.fillStyle(inside ? this.tone.slabShade : this.tone.earthShade).fillPoints(rightSide, true).strokePoints(rightSide, true)
-    // A few strata in the earth.
     if (!inside) {
       g.lineStyle(1, this.tone.earthShade, 0.8)
-      for (const t of [0.4, 0.72]) g.lineBetween(iso(lo, hi).x, iso(lo, hi).y + SLAB * t, iso(hi, hi).x, iso(hi, hi).y + SLAB * t)
+      for (const t of [0.4, 0.72]) g.lineBetween(P(0, H).x, P(0, H).y + SLAB * t, P(W, H).x, P(W, H).y + SLAB * t)
     }
     // What runs between the things on this ground (the Owner, 2026-11-19): blocks on the town's ground
     // are parted by highways, buildings in a block by ordinary streets, rooms in a building by
-    // corridors. All three run where grid.ts says, never through a thing.
+    // corridors — all one width (geo.ts), told apart by their marking.
     const grade: 'highway' | 'street' | 'corridor' = place.kind === 'town' ? 'highway' : place.kind === 'building' ? 'corridor' : 'street'
     const indoors = grade === 'corridor'
-    g.fillStyle(indoors ? this.tone.corridor : this.tone.grass).fillPoints(ground, true)
-    // Layers from the street in (the Owner, 2026-11-19: not straight from the road to the house): the
-    // street, its kerb, a green belt, then the plot's own lot, and the building set back on it.
-    // The ring road runs in the rim; streets that reach the edge run on to meet it.
-    const rim = (v: number) => v === 0 ? -RIM / 2 : v === GRID ? GRID + RIM / 2 : v
-    const strip = (st: Street, half: number, off = 0) => {
+    // From the way in (the Owner, 2026-11-19): the way, then a buffer — the ground itself, a green
+    // belt outdoors, a threshold indoors — then the plot, and the thing at its true size on it.
+    g.fillStyle(indoors ? this.tone.threshold : this.tone.grass).fillPoints(ground, true)
+    for (const p of plots) g.fillStyle(indoors ? this.tone.floor : this.tone.lot).fillPoints(quadOf(P, geo.plot(p)), true)
+    const lineOf = (st: Street) => {
       const vertical = st.x0 === st.x1
-      const at = (st.kind === 'ring' ? rim(vertical ? st.x0 : st.y0) : vertical ? st.x0 : st.y0) + off
-      const from = rim(vertical ? st.y0 : st.x0), to = rim(vertical ? st.y1 : st.x1)
-      const a0 = at - half, a1 = at + half, b0 = from - half, b1 = to + half
-      return vertical ? [iso(a0, b0), iso(a1, b0), iso(a1, b1), iso(a0, b1)] : [iso(b0, a0), iso(b1, a0), iso(b1, a1), iso(b0, a1)]
+      return { vertical, at: vertical ? geo.x(st.x0) : geo.y(st.y0), from: vertical ? geo.y(st.y0) : geo.x(st.x0), to: vertical ? geo.y(st.y1) : geo.x(st.x1) }
     }
-    const dashes = (st: Street, off: number) => {
-      const vertical = st.x0 === st.x1
-      const at = (st.kind === 'ring' ? rim(vertical ? st.x0 : st.y0) : vertical ? st.x0 : st.y0) + off
-      const from = vertical ? st.y0 : st.x0, to = vertical ? st.y1 : st.x1
-      for (let k = from; k < to; k += 1) {
+    const strip = (st: Street, half: number, off = 0, reach = half) => {
+      const l = lineOf(st), a0 = l.at + off - half, a1 = l.at + off + half, b0 = l.from - reach, b1 = l.to + reach
+      return l.vertical ? [P(a0, b0), P(a1, b0), P(a1, b1), P(a0, b1)] : [P(b0, a0), P(b1, a0), P(b1, a1), P(b0, a1)]
+    }
+    const solid = (st: Street, off: number) => { const q = strip(st, 0.001, off, 0), e = st.x0 === st.x1 ? q[3] : q[1]; g.lineBetween(q[0].x, q[0].y, e.x, e.y) }
+    const dashes = (st: Street) => {
+      const l = lineOf(st)
+      for (let k = l.from + WAY / 2; k < l.to - WAY / 2; k += 1) {
         const p0 = k + 0.25, p1 = k + 0.65
-        if (vertical) g.lineBetween(iso(at, p0).x, iso(at, p0).y, iso(at, p1).x, iso(at, p1).y)
-        else g.lineBetween(iso(p0, at).x, iso(p0, at).y, iso(p1, at).x, iso(p1, at).y)
+        const a = l.vertical ? P(l.at, p0) : P(p0, l.at), b = l.vertical ? P(l.at, p1) : P(p1, l.at)
+        g.lineBetween(a.x, a.y, b.x, b.y)
       }
     }
-    // Every way between things is one width on every level (the Owner, 2026-11-19: highway, street and
-    // corridor alike, so the picture stays regular): grid.ts gives them all the same half-width. The
-    // level tells them apart by their marking, not their width.
-    const roads = streets
-    // Each plot's lot: inset from its edges by the road's half, its kerb and a belt of grass — the same on every plot.
-    const lotInset = (p: Plot) => Math.min(p.w, p.h) >= 2 ? LOT_INSET : ROAD_HALF + KERB
-    if (indoors) this.storey(g, lo, hi)
-    else {
-      for (const p of plots) {
-        const e = lotInset(p)
-        if (2 * e >= Math.min(p.w, p.h)) continue
-        const q = [iso(p.x + e, p.y + e), iso(p.x + p.w - e, p.y + e), iso(p.x + p.w - e, p.y + p.h - e), iso(p.x + e, p.y + p.h - e)]
-        g.fillStyle(this.tone.lot).fillPoints(q, true)
-      }
+    if (indoors) {
+      // Corridors: a paler floor laid in tiles.
+      g.fillStyle(this.tone.corridor)
+      for (const st of streets) g.fillPoints(strip(st, WAY / 2), true)
+      g.lineStyle(1, this.tone.ink, 0.1)
+      for (const st of streets) g.strokePoints(strip(st, WAY / 2), true)
+      this.storey(g, P, W, H)
+    } else {
       g.fillStyle(this.tone.kerb)
-      for (const st of roads) g.fillPoints(strip(st, st.half + KERB), true)
+      for (const st of streets) g.fillPoints(strip(st, WAY / 2 + KERB), true)
       g.fillStyle(this.tone.asphalt)
-      for (const st of roads) g.fillPoints(strip(st, st.half), true)
+      for (const st of streets) g.fillPoints(strip(st, WAY / 2), true)
       if (grade === 'highway') {
         // A highway: darker, a solid double line down the middle and solid edge lines.
         g.fillStyle(this.tone.ink, 0.16)
-        for (const st of roads) g.fillPoints(strip(st, st.half), true)
-        const solid = (st: Street, off: number) => { const q = strip(st, 0.001, off), e = st.x0 === st.x1 ? q[3] : q[1]; g.lineBetween(q[0].x, q[0].y, e.x, e.y) }
+        for (const st of streets) g.fillPoints(strip(st, WAY / 2), true)
         g.lineStyle(1.1, this.tone.pick, 0.95)
-        for (const st of roads) for (const off of [-0.035, 0.035]) solid(st, off)
+        for (const st of streets) for (const off of [-0.04, 0.04]) solid(st, off)
         g.lineStyle(1, this.tone.paint, 0.75)
-        for (const st of roads) for (const off of [-st.half + 0.04, st.half - 0.04]) solid(st, off)
+        for (const st of streets) for (const off of [-WAY / 2 + 0.06, WAY / 2 - 0.06]) solid(st, off)
       } else {
         // A street: one dashed line down the middle.
         g.lineStyle(1.3, this.tone.paint, 0.9)
-        for (const st of roads) dashes(st, 0)
+        for (const st of streets) dashes(st)
       }
-    }
-    // While arranging, the lines in four weights matching the four sizes: the 8-line quarters the
-    // ground, then the 4-, 2- and 1-lines split it again; outside arranging the streets show the plots.
-    for (let i = 1; i < GRID; i++) {
-      if (!o.arranging) break
-      const level = i % 8 === 0 ? 8 : i % 4 === 0 ? 4 : i % 2 === 0 ? 2 : 1
-      // Ink at four strengths: readable over grass, asphalt and floor alike.
-      const w = { 8: 2.2, 4: 1.6, 2: 1.1, 1: 0.8 }[level], a = { 8: 0.55, 4: 0.4, 2: 0.28, 1: 0.18 }[level]
-      g.lineStyle(w, this.tone.ink, a)
-      g.lineBetween(iso(i, 0).x, iso(i, 0).y, iso(i, GRID).x, iso(i, GRID).y)
-      g.lineBetween(iso(0, i).x, iso(0, i).y, iso(GRID, i).x, iso(GRID, i).y)
     }
     // While arranging, every plot's edge in ink, so the cuts read clearly.
     if (o.arranging) for (const p of plots) {
       g.lineStyle(1.6, this.tone.ink, 0.6)
-      g.strokePoints([iso(p.x, p.y), iso(p.x + p.w, p.y), iso(p.x + p.w, p.y + p.h), iso(p.x, p.y + p.h)], true)
+      g.strokePoints(quadOf(P, geo.plot(p)), true)
     }
     g.lineStyle(2, this.tone.ink).strokePoints(ground, true)
     c.add(g)
     const byId = new Map(place.children.map(k => [k.id, k]))
-    const order = placed.filter(p => byId.has(p.id)).sort((a, b) => (a.x + a.y + (a.w + a.h) / 2) - (b.x + b.y + (b.w + b.h) / 2))
+    const plotById = new Map(plots.map(p => [p.id, p]))
+    const rectOf = (p: Placed): Rect => { const home = plotById.get(p.plot); return home ? geo.thing(geo.plot(home), p.w, p.h) : { x: p.x, y: p.y, w: p.w, h: p.h } }
+    const order = placed.filter(p => byId.has(p.id)).map(p => ({ p, r: rectOf(p) })).sort((a, b) => (a.r.x + a.r.y + (a.r.w + a.r.h) / 2) - (b.r.x + b.r.y + (b.r.w + b.r.h) / 2))
     // Back to front, so nearer blocks cover farther ones.
-    const look = new Map(this.looks(place, order).map(l => [l.id, l.key]))
-    for (const p of order) for (const part of this.block(byId.get(p.id)!, p, look.get(p.id)!, o)) c.add(part)
+    const look = new Map(this.looks(place, order.map(x => x.p)).map(l => [l.id, l.key]))
+    for (const { p, r } of order) for (const part of this.block(byId.get(p.id)!, p, r, P, look.get(p.id)!, o)) c.add(part)
     // Names on top of every block, so a nearer block never hides a farther one's name. The minimap has none: too small to read.
-    if (o.interactive) for (const p of order) {
-      const sb = setback(Math.min(p.w, p.h)), foot = iso(p.x + p.w - sb, p.y + p.h - sb)
+    if (o.interactive) for (const { p, r } of order) {
+      const sb = setback(Math.min(p.w, p.h)), foot = P(r.x + r.w - sb, r.y + r.h - sb)
       c.add(this.plate(foot.x, foot.y + 4, byId.get(p.id)!.label, HUES[Math.max(0, place.children.findIndex(x => x.id === p.id)) % HUES.length]))
     }
-    if (order.length === 0 && o.interactive) c.add(this.label(iso(GRID / 2, GRID / 2).x, iso(GRID / 2, GRID / 2).y, 'Nothing inside yet', { color: '#8a8478', fontSize: '14px' }).setOrigin(0.5))
+    if (order.length === 0 && o.interactive) c.add(this.label(P(W / 2, H / 2).x, P(W / 2, H / 2).y, 'Nothing inside yet', { color: '#8a8478', fontSize: '14px' }).setOrigin(0.5))
     // What the fit frames: the blocks' corners up to their roofs, and their names below.
-    const pts = order.length === 0 ? [iso(4, 4), iso(12, 12)] : order.flatMap(p => {
+    const pts = order.length === 0 ? [P(W / 4, H / 4), P(W * 3 / 4, H * 3 / 4)] : order.flatMap(({ p, r }) => {
       const h = heightOf(byId.get(p.id)!, Math.min(p.w, p.h))
-      return [iso(p.x, p.y, h), iso(p.x + p.w, p.y), iso(p.x, p.y + p.h), iso(p.x + p.w, p.y + p.h).add(new Phaser.Math.Vector2(0, 30))]
+      return [P(r.x, r.y, h), P(r.x + r.w, r.y), P(r.x, r.y + r.h), P(r.x + r.w, r.y + r.h).add(new Phaser.Math.Vector2(0, 30))]
     })
     const xs = pts.map(q => q.x), ys = pts.map(q => q.y)
     const box = { x: Math.min(...xs) - 40, y: Math.min(...ys) - 16, w: Math.max(...xs) - Math.min(...xs) + 80, h: Math.max(...ys) - Math.min(...ys) + 28 }
     return { c, box }
   }
 
-  /** One placed thing: its sprite, a ring on the ground when it is picked or the one you are inside, and its hit area. */
-  private block(k: Place, at: Placed, key: string, o: { selected: string | null; inside: string | null; interactive: boolean; arranging: boolean }) {
+  /** One placed thing at its spot in the picture (r): its sprite, a ring on the ground when it is picked or the one you are inside, and its hit area. */
+  private block(k: Place, at: Placed, r: Rect, P: Proj, key: string, o: { selected: string | null; inside: string | null; interactive: boolean; arranging: boolean }) {
     const parts: Phaser.GameObjects.GameObject[] = []
     const h = heightOf(k, Math.min(at.w, at.h))
     const ring = k.id === o.inside ? this.tone.inside : k.id === o.selected ? this.tone.pick : null
     if (ring != null) {
-      const r = this.add.graphics()
-      const q = [iso(at.x, at.y), iso(at.x + at.w, at.y), iso(at.x + at.w, at.y + at.h), iso(at.x, at.y + at.h)]
-      r.fillStyle(ring, 0.45).fillPoints(q, true).lineStyle(3, ring, 1).strokePoints(q, true)
-      parts.push(r)
+      const g = this.add.graphics()
+      const q = quadOf(P, r)
+      g.fillStyle(ring, 0.45).fillPoints(q, true).lineStyle(3, ring, 1).strokePoints(q, true)
+      parts.push(g)
     }
     const a = this.anchors.get(key)
-    const base = iso(at.x, at.y)
+    const base = P(r.x, r.y)
     const img = this.textures.exists(key) && a
       ? this.add.image(base.x, base.y, key).setOrigin(a.ax, a.ay).setScale(1 / RS)
       : null
     if (img) parts.push(img)
     if (o.interactive) {
       const g = this.add.graphics()
-      const sb = Math.max(0.2, setback(Math.min(at.w, at.h)) - 0.15)
-      const x0 = at.x + sb, y0 = at.y + sb, x1 = at.x + at.w - sb, y1 = at.y + at.h - sb
-      const hit = new Phaser.Geom.Polygon([iso(x0, y0, h), iso(x1, y0, h), iso(x1, y0, 0), iso(x1, y1, 0), iso(x0, y1, 0), iso(x0, y1, h)])
+      const sb = Math.min(0.2, Math.min(r.w, r.h) / 4)
+      const x0 = r.x + sb, y0 = r.y + sb, x1 = r.x + r.w - sb, y1 = r.y + r.h - sb
+      const hit = new Phaser.Geom.Polygon([P(x0, y0, h), P(x1, y0, h), P(x1, y0, 0), P(x1, y1, 0), P(x0, y1, 0), P(x0, y1, h)])
       g.setInteractive(hit, Phaser.Geom.Polygon.Contains)
       g.input!.cursor = o.arranging ? 'grab' : 'pointer'
       // Hover only for a mouse: on a touch screen it would stay lit after the finger lifts.
@@ -723,4 +709,5 @@ export class PlaceScene extends Phaser.Scene {
     }
     return parts
   }
+
 }
