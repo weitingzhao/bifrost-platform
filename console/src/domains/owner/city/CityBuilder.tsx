@@ -79,6 +79,8 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
   const [carry, setCarry] = useState<{ a: Armable; x: number; y: number } | null>(null)
   const byBinds = useMemo(() => new Map(items.map(i => [i.binds, i])), [items])
   const itemsRef = useRef(byBinds); itemsRef.current = byBinds
+  // The names and colours arrive after the city is drawn: draw its tags and rockets again when they do.
+  useEffect(() => { scene.current?.refresh() }, [byBinds])
   const openRef = useRef(onOpen); openRef.current = onOpen
   const side = useRef<HTMLDivElement>(null), picker = useRef<HTMLInputElement>(null)
   const [importError, setImportError] = useState(false)
