@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser'
 import { canStand, GRID, type Cell, type Placed } from './grid'
 import type { Place } from './places'
+import { PALETTE, type Light, type Palette } from './light'
 import { frameOf, type Frame } from './viewport'
 
 /**
@@ -56,11 +57,6 @@ export type Shown = {
   arranging: boolean
 }
 
-const TONE = {
-  ground: 0xe9e4d8, groundEdge: 0xcfc8b8, line: 0xd8d1c2, line4: 0xc9c1b0,
-  top: 0xf7f5f0, left: 0xd9d4ca, right: 0xc4beb2, edge: 0x6b6676,
-  hover: 0xfff3c4, pick: 0xffd36b, inside: 0x8fc1ff, ok: 0x5cb85c, no: 0xd9534f,
-}
 
 /** Block height by what it is and how big: a district stands tall, a room is a slab. */
 const heightOf = (p: Place, size: number) => ({ town: 60, district: 44, building: 30, room: 8 })[p.kind] * (0.6 + size / 10)
@@ -69,6 +65,7 @@ export class PlaceScene extends Phaser.Scene {
   private events_: SceneEvents
   private shown: Shown | null = null
   private layout: Frame = frameOf(1280, 800)
+  private tone: Palette = PALETTE.day
   private main?: Phaser.GameObjects.Container
   private away?: Phaser.GameObjects.Container
   private ghost?: Phaser.GameObjects.Graphics
@@ -95,11 +92,21 @@ export class PlaceScene extends Phaser.Scene {
     if (this.ready) this.frame(true)
   }
 
+  /** Day, dusk or night: recolour everything in place. */
+  setLight(light: Light) {
+    if (this.tone === PALETTE[light]) return
+    this.tone = PALETTE[light]
+    if (!this.ready) return
+    this.cameras.main.setBackgroundColor(this.tone.sky)
+    this.mini?.setBackgroundColor(this.tone.miniSky)
+    if (this.shown) this.draw(this.shown, false)
+  }
+
   create() {
     this.ready = true
     this.input.addPointer(1)
-    this.cameras.main.setBackgroundColor('#f3efe6')
-    this.mini = this.cameras.add(0, 0, 10, 10).setBackgroundColor('#fbfaf6').setName('mini')
+    this.cameras.main.setBackgroundColor(this.tone.sky)
+    this.mini = this.cameras.add(0, 0, 10, 10).setBackgroundColor(this.tone.miniSky).setName('mini')
     this.gestures()
     if (this.shown) this.draw(this.shown, true)
   }
@@ -282,7 +289,7 @@ export class PlaceScene extends Phaser.Scene {
     const g = this.ghost
     g.clear()
     const quad = [iso(to.x, to.y), iso(to.x + s, to.y), iso(to.x + s, to.y + s), iso(to.x, to.y + s)]
-    g.fillStyle(fits ? TONE.ok : TONE.no, 0.25).lineStyle(2.5, fits ? TONE.ok : TONE.no).fillPoints(quad, true).strokePoints(quad, true)
+    g.fillStyle(fits ? this.tone.ok : this.tone.no, 0.25).lineStyle(2.5, fits ? this.tone.ok : this.tone.no).fillPoints(quad, true).strokePoints(quad, true)
   }
 
   private drop() {
@@ -304,15 +311,15 @@ export class PlaceScene extends Phaser.Scene {
     const c = this.add.container(o.at, 0)
     const g = this.add.graphics()
     const ground = [iso(0, 0), iso(GRID, 0), iso(GRID, GRID), iso(0, GRID)]
-    g.fillStyle(TONE.ground).fillPoints(ground, true)
+    g.fillStyle(this.tone.ground).fillPoints(ground, true)
     // The cells: every fourth line always (the board), every line while arranging.
     for (let i = 1; i < GRID; i++) {
       if (!o.arranging && i % 4 !== 0) continue
-      g.lineStyle(1, i % 4 === 0 ? TONE.line4 : TONE.line, o.arranging ? 1 : 0.7)
+      g.lineStyle(1, i % 4 === 0 ? this.tone.line4 : this.tone.line, o.arranging ? 1 : 0.7)
       g.lineBetween(iso(i, 0).x, iso(i, 0).y, iso(i, GRID).x, iso(i, GRID).y)
       g.lineBetween(iso(0, i).x, iso(0, i).y, iso(GRID, i).x, iso(GRID, i).y)
     }
-    g.lineStyle(2, TONE.groundEdge).strokePoints(ground, true)
+    g.lineStyle(2, this.tone.groundEdge).strokePoints(ground, true)
     c.add(g)
     const byId = new Map(place.children.map(k => [k.id, k]))
     const order = placed.filter(p => byId.has(p.id)).sort((a, b) => (a.x + a.y + a.size) - (b.x + b.y + b.size))
@@ -321,7 +328,7 @@ export class PlaceScene extends Phaser.Scene {
     // Names on top of every block, so a nearer block never hides a farther one's name. The minimap has none: too small to read.
     if (o.interactive) for (const p of order) {
       const foot = iso(p.x + p.size - INSET, p.y + p.size - INSET)
-      c.add(this.label(foot.x, foot.y + 4, byId.get(p.id)!.label, { backgroundColor: '#ffffffe0', padding: { x: 5, y: 2 } }).setOrigin(0.5, 0))
+      c.add(this.label(foot.x, foot.y + 4, byId.get(p.id)!.label, { color: this.tone.label.color, backgroundColor: this.tone.label.background, padding: { x: 5, y: 2 } }).setOrigin(0.5, 0))
     }
     if (order.length === 0 && o.interactive) c.add(this.label(iso(GRID / 2, GRID / 2).x, iso(GRID / 2, GRID / 2).y, 'Nothing inside yet', { color: '#8a8478', fontSize: '14px' }).setOrigin(0.5))
     // What the fit frames: the blocks' corners up to their roofs, and their names below.
@@ -337,26 +344,39 @@ export class PlaceScene extends Phaser.Scene {
   private block(k: Place, at: Placed, o: { selected: string | null; inside: string | null; interactive: boolean; arranging: boolean }) {
     const g = this.add.graphics()
     const h = heightOf(k, at.size)
-    const lit = k.id === o.inside ? TONE.inside : k.id === o.selected ? TONE.pick : null
+    const lit = k.id === o.inside ? this.tone.inside : k.id === o.selected ? this.tone.pick : null
     const x0 = at.x + INSET, y0 = at.y + INSET, x1 = at.x + at.size - INSET, y1 = at.y + at.size - INSET
     const paint = (top: number) => {
       g.clear()
       const top4 = [iso(x0, y0, h), iso(x1, y0, h), iso(x1, y1, h), iso(x0, y1, h)]
       const left = [iso(x0, y1, h), iso(x1, y1, h), iso(x1, y1, 0), iso(x0, y1, 0)]
       const right = [iso(x1, y0, h), iso(x1, y1, h), iso(x1, y1, 0), iso(x1, y0, 0)]
-      g.lineStyle(1.5, TONE.edge)
-      g.fillStyle(TONE.left).fillPoints(left, true).strokePoints(left, true)
-      g.fillStyle(TONE.right).fillPoints(right, true).strokePoints(right, true)
+      g.lineStyle(1.5, this.tone.edge)
+      g.fillStyle(this.tone.left).fillPoints(left, true).strokePoints(left, true)
+      g.fillStyle(this.tone.right).fillPoints(right, true).strokePoints(right, true)
       g.fillStyle(top).fillPoints(top4, true).strokePoints(top4, true)
+      // At dusk and night, a building that has rooms shows lit windows: a row along each side.
+      const glow = this.tone.glow
+      if (glow != null && k.kind !== 'room' && h > 16) {
+        const n = Math.max(2, Math.round((x1 - x0) * 1.5))
+        const z0 = h * 0.35, z1 = h * 0.65
+        g.fillStyle(glow, 0.9)
+        for (let i = 0; i < n; i++) {
+          const a = x0 + (x1 - x0) * (i + 0.25) / n, b = x0 + (x1 - x0) * (i + 0.75) / n
+          g.fillPoints([iso(a, y1, z1), iso(b, y1, z1), iso(b, y1, z0), iso(a, y1, z0)], true)
+          const c = y0 + (y1 - y0) * (i + 0.25) / n, d = y0 + (y1 - y0) * (i + 0.75) / n
+          g.fillPoints([iso(x1, c, z1), iso(x1, d, z1), iso(x1, d, z0), iso(x1, c, z0)], true)
+        }
+      }
     }
-    paint(lit ?? TONE.top)
+    paint(lit ?? this.tone.top)
     if (o.interactive) {
       const hit = new Phaser.Geom.Polygon([iso(x0, y0, h), iso(x1, y0, h), iso(x1, y0, 0), iso(x1, y1, 0), iso(x0, y1, 0), iso(x0, y1, h)])
       g.setInteractive(hit, Phaser.Geom.Polygon.Contains)
       g.input!.cursor = o.arranging ? 'grab' : 'pointer'
       // Hover only for a mouse: on a touch screen it would stay lit after the finger lifts.
-      g.on('pointerover', (p: Phaser.Input.Pointer) => { if (!lit && !p.wasTouch) paint(TONE.hover) })
-      g.on('pointerout', () => paint(lit ?? TONE.top))
+      g.on('pointerover', (p: Phaser.Input.Pointer) => { if (!lit && !p.wasTouch) paint(this.tone.hover) })
+      g.on('pointerout', () => paint(lit ?? this.tone.top))
       g.on('pointerdown', (p: Phaser.Input.Pointer) => {
         if (!o.arranging) return
         // Pick it up by the cell under the pointer, so it does not jump to the pointer's corner.

@@ -2,6 +2,7 @@ import * as Phaser from 'phaser'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { browserArrangements, type ArrangementStore } from './arrangementStore'
 import { arrange, move, toArrangement, type Arrangement } from './grid'
+import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
 import { PlaceScene, type Shown } from './placeScene'
 import { here, placeTree, resolve, trail, type Path, type Place } from './places'
 import { frameOf, NO_INSETS, type Insets, type Rect } from './viewport'
@@ -47,6 +48,13 @@ function readInsets(probe: HTMLElement | null): Insets {
   return { top: n(s.paddingTop), right: n(s.paddingRight), bottom: n(s.paddingBottom), left: n(s.paddingLeft) }
 }
 
+const LIGHT_KEY = 'bifrost.city.gen2.light'
+const LIGHT_WORD: Record<LightChoice, string> = { auto: 'Auto', day: 'Day', dusk: 'Dusk', night: 'Night' }
+const LIGHT_ICON = { day: '☀', dusk: '◐', night: '☾' } as const
+const readLight = (): LightChoice => {
+  try { const v = window.localStorage.getItem(LIGHT_KEY); return v && v in NEXT ? v as LightChoice : 'auto' } catch { return 'auto' }
+}
+
 const keyOf = (path: Path) => path.length === 0 ? 'town' : path.join('/')
 
 export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashboard, timerLoop = false, arrangements }: Props) {
@@ -59,6 +67,16 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   const [selected, setSelected] = useState<Place | null>(null)
   const [open, setOpen] = useState(false)
   const [arranging, setArranging] = useState(false)
+  // Day, dusk or night: by the viewer's clock unless pinned; the clock is read every minute.
+  const [lightChoice, setLightChoice] = useState<LightChoice>(readLight)
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => { const t = window.setInterval(() => setNow(new Date()), 60_000); return () => window.clearInterval(t) }, [])
+  const light = lightOf(lightChoice, now)
+  const stepLight = () => {
+    const next = NEXT[lightChoice]
+    setLightChoice(next)
+    try { window.localStorage.setItem(LIGHT_KEY, next) } catch { /* kept for this page only */ }
+  }
   // The Owner's positions for this place and its parent; bumped on every move so the page redraws.
   const [saved, setSaved] = useState<{ here: Arrangement; parent: Arrangement }>(() => ({ here: store.get(keyOf(path)), parent: store.get(keyOf(path.slice(0, -1))) }))
   const placed = useMemo(() => arrange(place.children, saved.here), [place, saved.here])
@@ -88,6 +106,7 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   }, [])
 
   useEffect(() => { scene.current?.setLayout(f) }, [f])
+  useEffect(() => { scene.current?.setLight(light) }, [light])
 
   useEffect(() => {
     if (!host.current) return
@@ -103,6 +122,7 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
       },
     })
     s.setLayout(f)
+    s.setLight(light)
     scene.current = s
     const game = new Phaser.Game({
       type: Phaser.AUTO, parent: host.current, transparent: false, antialias: true,
@@ -169,7 +189,8 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   ))
 
   return (
-    <div className="g2" ref={root} data-device={f.device} data-landscape={f.landscape || undefined}>
+    <div className="g2" ref={root} data-device={f.device} data-landscape={f.landscape || undefined} data-light={light}
+      style={{ ...CORNERS[light], background: CORNERS[light]['--g2-sky'], color: CORNERS[light]['--g2-ink'] } as CSSProperties}>
       <div className="g2-probe" ref={probe} aria-hidden />
       <div className="g2-canvas" ref={host} />
 
@@ -195,6 +216,9 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
             ) : (
               <>
                 {place.children.length > 0 && <button className="g2-btn" onClick={() => { setSelected(null); setArranging(true) }}>Arrange</button>}
+                <button className="g2-btn" onClick={stepLight} aria-label={`Light: ${LIGHT_WORD[lightChoice]}`}>
+                  {LIGHT_ICON[light]} {lightChoice === 'auto' ? `Auto · ${LIGHT_WORD[light]}` : LIGHT_WORD[lightChoice]}
+                </button>
                 {dash && <a className="g2-swap" href={dash}>Dashboard view ↗</a>}
               </>
             )}
