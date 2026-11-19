@@ -2162,6 +2162,7 @@
         "console/src/domains/owner/city/gen2/__tests__/viewport.test.ts",
         "console/src/domains/owner/city/gen2/arrangementStore.ts",
         "console/src/domains/owner/city/gen2/cityGen2.css",
+        "console/src/domains/owner/city/gen2/content.ts",
         "console/src/domains/owner/city/gen2/grid.ts",
         "console/src/domains/owner/city/gen2/light.ts",
         "console/src/domains/owner/city/gen2/panels.tsx",

@@ -86,7 +86,7 @@
 .g2-table .num { text-align: right; }
 .g2-link { font: inherit; color: var(--g2-link); background: none; border: 0; padding: 0; min-height: 32px; cursor: pointer; text-align: left; }
 .g2[data-device='phone'] .g2-link, .g2[data-device='tablet'] .g2-link { min-height: 44px; }
-.g2-chart { width: 100%; height: auto; display: block; }
+.g2-chart { width: 100%; max-width: 420px; max-height: 170px; height: auto; display: block; }
 .g2-chart .grid { stroke: var(--g2-line); stroke-width: 1; }
 .g2-chart .tick { fill: var(--g2-mute); font-size: 9px; }
 .g2-chart .bar { fill: var(--g2-mute); opacity: .55; }

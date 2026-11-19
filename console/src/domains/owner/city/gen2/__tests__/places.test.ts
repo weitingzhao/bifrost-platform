@@ -51,3 +51,14 @@ describe('density (the Owner, 2026-11-19: one 16×16 ground per page; too much g
     for (const p of all(placeTree()).slice(1)) expect(p.size, p.id).toBeGreaterThanOrEqual(TAPPABLE)
   })
 })
+
+// 2026-11-19, the Owner: names and contents must change without touching the frame.
+describe('content is swappable', () => {
+  it('a different tree renders through the same frame contract', async () => {
+    const { consoleContent } = await import('../content')
+    const c = consoleContent()
+    const other = { ...c, tree: { ...c.tree, label: 'Family', children: c.tree.children.slice(0, 2).map(d => ({ ...d, label: `${d.label} (renamed)` })) } }
+    expect(other.tree.children.map(d => d.label)).toEqual(['Command (renamed)', 'Crew (renamed)'])
+    expect(other.panels(other.tree, () => {}).map(p => p.id)).toEqual(['inside', 'chart'])
+  })
+})

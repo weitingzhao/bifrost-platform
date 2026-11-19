@@ -3,9 +3,9 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { browserArrangements, type ArrangementStore } from './arrangementStore'
 import { arrange, move, toArrangement, type Arrangement } from './grid'
 import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
-import { panelsOf, pickedPanel } from './panels'
+import { consoleContent, type CityContent } from './content'
 import { PlaceScene, type Shown } from './placeScene'
-import { here, placeTree, resolve, trail, type Path, type Place } from './places'
+import { here, resolve, trail, type Path, type Place } from './places'
 import { frameOf, NO_INSETS, type Insets, type Rect } from './viewport'
 import './cityGen2.css'
 
@@ -35,6 +35,8 @@ type Props = {
   dashboardHref?: (place: Place) => string | null
   /** Drive frames by a timer instead of animation frames (the bench, in a hidden pane where animation frames stop). */
   timerLoop?: boolean
+  /** What the places are and hold; the frame never assumes it (default: the Console's menu). */
+  content?: CityContent
   /** Where the Owner's positions are kept (display only). */
   arrangements?: ArrangementStore
 }
@@ -58,9 +60,10 @@ const readLight = (): LightChoice => {
 
 const keyOf = (path: Path) => path.length === 0 ? 'town' : path.join('/')
 
-export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashboard, timerLoop = false, arrangements }: Props) {
+export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashboard, timerLoop = false, arrangements, content: given }: Props) {
   const store = useMemo(() => arrangements ?? browserArrangements(), [arrangements])
-  const tree = useMemo(() => placeTree(), [])
+  const content = useMemo(() => given ?? consoleContent(), [given])
+  const tree = content.tree
   const path = useMemo(() => resolve(tree, asked), [tree, asked])
   const steps = trail(tree, path)
   const place = here(tree, path)
@@ -261,7 +264,7 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
             ? { left: f.rail.x, bottom: size.h - (f.rail.y + f.rail.h), width: f.rail.w, height: f.rail.h }
             : at(f.rail)}>
           {f.rail.mode === 'drawer' && <button className="g2-grip-btn" onClick={() => { setDrawerOpen(false); setSelected(null) }} aria-label="Close tables and charts"><span /></button>}
-          {[...(selected ? [pickedPanel(selected)] : []), ...panelsOf(place, openChild)].map(p => (
+          {[...(selected ? [content.picked(selected)] : []), ...content.panels(place, openChild)].map(p => (
             <section key={p.id} className={`g2-panelbox${p.id.startsWith('picked-') ? ' picked' : ''}`} aria-label={p.title}>
               <header>
                 <h3>{p.title}</h3>
