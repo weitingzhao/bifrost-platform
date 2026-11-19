@@ -106,6 +106,18 @@
 .g2-picked dl { margin: 0; display: flex; gap: var(--s4); font-size: 12px; }
 .g2-picked dt { color: var(--g2-mute); }
 .g2-picked dd { margin: 0; }
+/* A facility's key: picture, what it is and means, what it shows now. */
+.g2-key { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 176px; overflow-y: auto; }
+.g2-key.full { max-height: none; gap: 10px; }
+.g2-key.full li { font-size: 13px; }
+.g2-key.full span { font-size: 12px; }
+.g2-key li { display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: var(--s2); font-size: 11.5px; }
+.g2-key li div { display: flex; flex-direction: column; min-width: 0; }
+.g2-key b { font-weight: 600; color: var(--g2-ink); }
+.g2-key span { color: var(--g2-mute); font-size: 11px; }
+.g2-key em { font-style: normal; font-variant-numeric: tabular-nums; color: var(--g2-ink); text-align: right; white-space: nowrap; }
+.g2-key em[title] { cursor: help; text-decoration: underline dotted var(--g2-line); }
+.g2-key-icon { flex: none; }
 
 /* Drawer */
 .g2-rail { position: absolute; z-index: 3; box-sizing: border-box; overflow-y: auto; display: flex; flex-direction: column; gap: var(--s5); padding: var(--s2) var(--s4) var(--s4);

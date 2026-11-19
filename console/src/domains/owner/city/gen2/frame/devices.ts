@@ -29,6 +29,19 @@ export type Levels = {
 }
 export type Form = 'plant' | 'station' | 'warehouse' | 'exchange' | 'dispatch' | 'office' | 'tower'
 
+/** A device's levels, read off its rooms' meters (the same for its picture and its key). */
+export function levelsOf(k: Place): Levels {
+  const frac = (r?: Place) => r?.meter && r.meter.used != null && r.meter.of ? r.meter.used / r.meter.of : null
+  const room = (id: string) => k.children.find(c => c.id === id)
+  const vols = k.children.filter(c => c.id.startsWith('volume-'))
+  return { state: k.state ?? 'unread', cpu: frac(room('cpu')), mem: frac(room('memory')), disks: k.children.filter(c => c.id === 'disk' || c.id.startsWith('volume-')).map(frac),
+    vols: vols.length ? vols.map(v => ({ f: frac(v), units: v.units ?? [] })) : undefined,
+    cap: { cores: room('cpu')?.meter?.of ?? null, mem: room('memory')?.meter?.of ?? null, disk: room('disk')?.meter?.of ?? null } }
+}
+
+/** A device's facility form, from its look and rooms. */
+export const formOfPlace = (k: Place): Form => formOf(k.look ?? 'network', k.children.some(c => c.id === 'gpu'), /book/i.test(k.label))
+
 export function formOf(look: Look, gpu: boolean, laptop: boolean): Form {
   if (look === 'linux') return gpu ? 'station' : 'plant'
   if (look === 'mac') return laptop ? 'office' : 'dispatch'
@@ -61,14 +74,14 @@ export function deviceSprite(form: Form, fw: number, fd: number, hue: string, li
     windowStrip(g, 'right', x0 + hw, y0, hd, 8, H - 6, n, run ? lv.cpu : null, T)
     // Memory: the cooling water; disk: the fuel. Each tank as big as what it holds, filled to its level.
     const r = encode('mem.total', lv.cap?.mem ?? null)!, rf = encode('disk.total', lv.cap?.disk ?? null)!
-    tank(g, x0 + hw * 0.3, y0 + d * 0.84, r, 26, lv.mem, water)
-    tank(g, x0 + hw * 0.75, y0 + d * 0.84, rf, 26, disks[0], fuel)
+    tank(g, x0 + hw * 0.3, y0 + d * 0.84, r, 26, run ? encode('mem.used', lv.mem) : null, water)
+    tank(g, x0 + hw * 0.75, y0 + d * 0.84, rf, 26, run ? encode('disk.used', disks[0]) : null, fuel)
     const cx = x0 + hw + (w - hw) / 2, cy = y0 + d * 0.35, R = Math.min(30, 10 + Math.min(w, d) * 4)
     g.cylinder(cx, cy, R, 0, 70, T.metal.left, T.metal.right, T.metal.top)
     g.cylinder(cx, cy, R * 0.82, 70, 72, '#9aa0b0', '#8a90a0', '#6a7080')
     smoke(g, cx, cy, 72, lv.cpu ?? (run ? 0.6 : null), run)
     beacon(g, cx, cy, 72, lv.state)
-    tank(g, cx, y0 + d * 0.84, rf, 26, disks[1] ?? null, fuel)
+    tank(g, cx, y0 + d * 0.84, rf, 26, run ? encode('disk.used', disks[1] ?? null) : null, fuel)
   }
 
   if (form === 'warehouse' && lv.vols && lv.vols.length > 0) {
@@ -166,16 +179,19 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, T: To
   g.onRight(hx + hw, hy, 0, hd, Z + H - 6, Z + H - 1, band, 0.8)
   // The sign: what it is for (its pool or role, read); its name if nothing says.
   const sign = face?.sign ?? name
+  if (sign) metaphor('purpose')
   if (sign) signBand(g, 'left', hx, hy + hd, hw, Z + H - 8, sign)
   windowStrip(g, 'left', hx, hy + hd, hw, Z + 8, Z + H - 22, (metaphor('cpu.busy').encoding as { n: number }).n, run ? lv.cpu : null, T)
   // The side wall: the radiator grille low, the system's mark above it.
   grille(g, 'right', hx + hw, hy + hd, hd, Z + 4, Z + 16)
   plaque(g, 'right', hx + hw, hy + hd, hd * 0.75, Z + H - 20, os, 8)
   // The tally: how many pods run on it now (a reading; blank when nothing is read).
+  if (face?.tally) metaphor('pods')
   if (face?.tally) tallyBoard(g, 'right', hx + hw, hy + hd, hd * 0.32, Z + H - 20, run ? face.tally.n : null, face.tally.what)
   // A parapet round the roof.
   g.poly(shade(C.top, -0.06), [[hx + 0.06, hy + 0.06, Z + H + 3], [hx + hw - 0.06, hy + 0.06, Z + H + 3], [hx + hw - 0.06, hy + hd - 0.06, Z + H + 3], [hx + 0.06, hy + hd - 0.06, Z + H + 3]], 0.8)
   // The roof: its number, painted large, seen from across the district (who it is).
+  if (face?.roof) metaphor('identity')
   if (face?.roof) roofNumber(g, hx + 0.1, hy + hd * 0.42, hx + hw - 0.1, hy + hd - 0.08, Z + H + 3, face.roof, night ? '#e6e3f2' : '#2f2d3a')
   // The stacks at the back of the roof.
   for (const k of [0.3, 0.68]) {
@@ -215,7 +231,7 @@ function warehousePark(g: Draw, x0: number, y0: number, w: number, d: number, T:
   })
   const gy = y0 + d - gate
   gatehouse(g, x0 + bw * 0.35, gy, bw * 0.65, gate, T, run ? lv.cpu : null)
-  tank(g, x0 + bw * 0.16, gy + gate * 0.55, 8, 22, run ? lv.mem : null, light === 'night' ? '#3f7fd6' : '#5aa9f0')
+  tank(g, x0 + bw * 0.16, gy + gate * 0.55, 8, 22, run ? encode('mem.used', lv.mem) : null, light === 'night' ? '#3f7fd6' : '#5aa9f0')
 }
 
 /** The key a facility's picture is kept under: its form, size, hue, light, state and every level to a tenth. */

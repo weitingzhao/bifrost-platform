@@ -3,7 +3,7 @@ import type { Light } from '../light'
 import type { State } from '../places'
 import { shade } from '../sprites'
 import { osMark, type MachineOs } from './landmarks'
-import { encode } from './dictionary'
+import { encode, metaphor } from './dictionary'
 
 /**
  * The part library (the Owner, 2026-11-19: one way per kind of thing, everywhere in the city; build
@@ -66,6 +66,7 @@ export function smoke(g: Draw, x: number, y: number, z: number, f: number | null
 
 /** A red beacon on top of whatever is down. */
 export const beacon = (g: Draw, x: number, y: number, z: number, state: State) => {
+  metaphor('state')
   if (state !== 'down') return
   const [cx, cy] = g.p(x, y, z + 4)
   g.add(`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="5" fill="#ff4d4d" stroke="${INK}" stroke-width="1"/><circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="10" fill="#ff4d4d" opacity="0.25"/>`)
@@ -73,6 +74,7 @@ export const beacon = (g: Draw, x: number, y: number, z: number, state: State) =
 
 /** A row of windows along a face: of n, how many are lit tells how busy it is (CPU). */
 export function windowStrip(g: Draw, face: 'left' | 'right', x: number, y: number, span: number, z0: number, z1: number, n: number, f: number | null, T: Tone) {
+  metaphor('cpu.busy')
   const on = lit(f, n)
   g.windows(face, x, y, span, z0, z1, 1, n, { fill: T.glass, lit: (_r, c) => c < on, litFill: '#ffd76a', tall: 0.7 })
 }
@@ -99,6 +101,7 @@ export function hall(g: Draw, x0: number, y: number, bw: number, len: number, H:
 
 /** Roller doors on the +x face of a hall, one per unit: its lamp in the unit's state, crates stacked behind to the level f. */
 export function doorRow(g: Draw, fx: number, y: number, len: number, H: number, units: State[], f: number | null, run: boolean, T: Tone) {
+  metaphor('volume.disks'); metaphor('volume.used')
   const n = Math.max(1, units.length), span = len / n, dh = Math.min(30, H - 14)
   for (let u = 0; u < n; u++) {
     const a = u * span + span * 0.16, b = (u + 1) * span - span * 0.16
@@ -128,6 +131,7 @@ export function dock(g: Draw, x: number, y: number, w: number, d: number, light:
 export function gatehouse(g: Draw, x: number, y: number, w: number, d: number, T: Tone, cpu: number | null) {
   g.box(x, y, w, d, 20, faces(T.wall.top, T.wall.left, T.wall.right), 0, 1.2)
   g.poly(T.roof, [[x, y, 20], [x + w, y, 20], [x + w, y + d, 20], [x, y + d, 20]], 1)
+  metaphor('cpu.busy')
   const on = lit(cpu, 4)
   g.windows('left', x, y + d, w, 6, 16, 1, 4, { fill: T.glass, lit: (_r, c) => c < on, litFill: '#ffd76a' })
   g.windows('right', x + w, y, d, 6, 16, 1, 2, { fill: T.glass, lit: (_r, c) => c < on, litFill: '#ffd76a' })

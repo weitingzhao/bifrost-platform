@@ -21,32 +21,42 @@ export type Encoding =
   | { kind: 'number' }
   | { kind: 'state' }
 
-export type Metaphor = { id: string; metric: string; part: string; encoding: Encoding; meaning: string }
+/** `shows`: the part as a viewer names it, for the key a facility shows when opened. */
+export type Metaphor = { id: string; metric: string; part: string; shows: string; encoding: Encoding; meaning: string }
 
 const GB = 1e9, TB = 1e12
 
 export const DICTIONARY: readonly Metaphor[] = [
-  { id: 'cpu.busy', metric: 'CPU busy, as a share of its cores', part: 'windowStrip', encoding: { kind: 'count', n: 8 }, meaning: 'as many windows lit as it is busy' },
-  { id: 'cpu.smoke', metric: 'CPU busy (the same metric, seen from far off)', part: 'smoke', encoding: { kind: 'count', n: 3 }, meaning: 'as many puffs from each stack as it is busy; none when it does not run' },
-  { id: 'cores', metric: 'CPU cores', part: 'hall (height, px)', encoding: { kind: 'size', from: 8, to: 64, min: 34, max: 72 }, meaning: 'the more cores, the taller the hall' },
-  { id: 'mem.used', metric: 'memory used, as a share', part: 'tank (cooling water)', encoding: { kind: 'level' }, meaning: 'the water stands as high as memory is used' },
-  { id: 'mem.total', metric: 'memory installed', part: 'tank (cooling water) girth, px', encoding: { kind: 'size', from: 8 * GB, to: 256 * GB, min: 10, max: 22 }, meaning: 'the more memory, the bigger the water tank' },
-  { id: 'disk.used', metric: 'disk used, as a share', part: 'tank (fuel)', encoding: { kind: 'level' }, meaning: 'the fuel stands as high as the disk is used' },
-  { id: 'disk.total', metric: 'disk size', part: 'tank (fuel) girth, px', encoding: { kind: 'size', from: 100 * GB, to: 32 * TB, min: 10, max: 22 }, meaning: 'the bigger the disk, the bigger the fuel tank' },
-  { id: 'volume.used', metric: 'a NAS volume used, as a share', part: 'doorRow (crates)', encoding: { kind: 'level' }, meaning: 'crates stacked behind its doors as high as it is used' },
-  { id: 'volume.disks', metric: 'the disks of a volume’s array and their states', part: 'doorRow (doors, lamps)', encoding: { kind: 'state' }, meaning: 'a door per disk, its lamp in the disk’s state' },
-  { id: 'pods', metric: 'pods running on a node', part: 'tallyBoard', encoding: { kind: 'number' }, meaning: 'how many run on it now, written on its side board' },
-  { id: 'identity', metric: 'which machine (from its node name)', part: 'roofNumber', encoding: { kind: 'number' }, meaning: 'its number painted on the roof, read from far off' },
-  { id: 'purpose', metric: 'what it is for (workload pool, cluster role, topology role)', part: 'signBand', encoding: { kind: 'number' }, meaning: 'written on the sign over its front' },
-  { id: 'state', metric: 'how it stands: online, standby, down, unread', part: 'lights, beacon', encoding: { kind: 'state' }, meaning: 'lit and running; cold and dark; a red beacon; grey and empty' },
+  { id: 'cpu.busy', metric: 'CPU busy, as a share of its cores', part: 'windowStrip', shows: 'Hall windows', encoding: { kind: 'count', n: 8 }, meaning: 'as many windows lit as it is busy' },
+  { id: 'cpu.smoke', metric: 'CPU busy (the same metric, seen from far off)', part: 'smoke', shows: 'Smoke from the stacks', encoding: { kind: 'count', n: 3 }, meaning: 'as many puffs from each stack as it is busy; none when it does not run' },
+  { id: 'cores', metric: 'CPU cores', part: 'hall (height, px)', shows: 'Height of the hall', encoding: { kind: 'size', from: 8, to: 64, min: 34, max: 72 }, meaning: 'the more cores, the taller the hall' },
+  { id: 'mem.used', metric: 'memory used, as a share', part: 'tank (cooling water)', shows: 'Water in the tank', encoding: { kind: 'level' }, meaning: 'the water stands as high as memory is used' },
+  { id: 'mem.total', metric: 'memory installed', part: 'tank (cooling water) girth, px', shows: 'Size of the water tank', encoding: { kind: 'size', from: 8 * GB, to: 256 * GB, min: 10, max: 22 }, meaning: 'the more memory, the bigger the water tank' },
+  { id: 'disk.used', metric: 'disk used, as a share', part: 'tank (fuel)', shows: 'Fuel in the tank', encoding: { kind: 'level' }, meaning: 'the fuel stands as high as the disk is used' },
+  { id: 'disk.total', metric: 'disk size', part: 'tank (fuel) girth, px', shows: 'Size of the fuel tank', encoding: { kind: 'size', from: 100 * GB, to: 32 * TB, min: 10, max: 22 }, meaning: 'the bigger the disk, the bigger the fuel tank' },
+  { id: 'volume.used', metric: 'a NAS volume used, as a share', part: 'doorRow (crates)', shows: 'Crates behind the doors', encoding: { kind: 'level' }, meaning: 'crates stacked behind its doors as high as it is used' },
+  { id: 'volume.disks', metric: 'the disks of a volume’s array and their states', part: 'doorRow (doors, lamps)', shows: 'Doors and their lamps', encoding: { kind: 'state' }, meaning: 'a door per disk, its lamp in the disk’s state' },
+  { id: 'pods', metric: 'pods running on a node', part: 'tallyBoard', shows: 'Board on the side wall', encoding: { kind: 'number' }, meaning: 'how many run on it now, written on its side board' },
+  { id: 'identity', metric: 'which machine (from its node name)', part: 'roofNumber', shows: 'Number on the roof', encoding: { kind: 'number' }, meaning: 'its number painted on the roof, read from far off' },
+  { id: 'purpose', metric: 'what it is for (workload pool, cluster role, topology role)', part: 'signBand', shows: 'Sign over the front', encoding: { kind: 'number' }, meaning: 'written on the sign over its front' },
+  { id: 'state', metric: 'how it stands: online, standby, down, unread', part: 'lights, beacon', shows: 'Lights and beacon', encoding: { kind: 'state' }, meaning: 'lit and running; cold and dark; a red beacon; grey and empty' },
 ]
 
 const byId = new Map(DICTIONARY.map(m => [m.id, m]))
+let seen: Set<string> | null = null
+
+/** What a drawing looked up in the table: the rows a facility really draws, for its key (and its test). */
+export function rowsDrawn<T>(draw: () => T): { out: T; ids: string[] } {
+  const before = seen
+  seen = new Set()
+  try { const out = draw(); return { out, ids: [...seen] } } finally { seen = before }
+}
 
 /** A metaphor by its metric; drawing a metric the dictionary does not have is an error. */
 export function metaphor(id: string): Metaphor {
   const m = byId.get(id)
   if (!m) throw new Error(`metaphor dictionary: no row for "${id}" — add it before drawing it`)
+  seen?.add(id)
   return m
 }
 

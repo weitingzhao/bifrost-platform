@@ -1,5 +1,7 @@
 import type { Panel } from '../frame/content'
 import { meterText, type Place } from '../frame/places'
+import { FORM_NAME, keyOf } from '../frame/library/key'
+import { KeyIcon } from '../frame/library/keyIcons'
 
 /**
  * The panels beside the 2.5D middle (the Owner, 2026-11-19): the middle shows where things stand,
@@ -32,9 +34,27 @@ function InsideTable({ place, open }: { place: Place; open: (child: Place) => vo
   </table>
 }
 
+/**
+ * A facility's key: each thing drawn on it, what it means, and what it shows now (frame/library/key.ts,
+ * from the metaphor dictionary). Hover a reading for where it was read.
+ */
+function KeyTable({ place, full }: { place: Place; full: boolean }) {
+  const { rows } = keyOf(place)
+  return <ul className={`g2-key${full ? ' full' : ''}`}>
+    {rows.map(r => (
+      <li key={r.id}>
+        <KeyIcon id={r.id} />
+        <div><b>{r.shows}</b><span>{r.meaning}</span></div>
+        <em title={r.source ? `Read from ${r.source}` : undefined}>{r.now}</em>
+      </li>
+    ))}
+  </ul>
+}
+
 /** `open` goes into a district or building and picks a room, as tapping its block does. */
 export function panelsOf(place: Place, open: (child: Place) => void): Panel[] {
-  return place.children.length > 0 ? [{ id: 'inside', title: `Inside ${place.label}`, dock: 'right', body: <InsideTable place={place} open={open} /> }] : []
+  const key: Panel[] = place.look ? [{ id: 'key', title: `Key · ${FORM_NAME[keyOf(place).form]}`, dock: 'left', body: ({ size }) => <KeyTable place={place} full={size !== 'card'} /> }] : []
+  return [...key, ...(place.children.length > 0 ? [{ id: 'inside', title: `Inside ${place.label}`, dock: 'right' as const, body: <InsideTable place={place} open={open} /> }] : [])]
 }
 
 /** The card of a picked room: its question, and its reading with where it was read. */
