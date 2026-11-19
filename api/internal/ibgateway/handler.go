@@ -9,7 +9,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 )
 
 type Handler struct {
@@ -17,7 +16,7 @@ type Handler struct {
 	audit *actuation.AuditLog
 }
 
-func NewHandler(clusterSvc *cluster.Service, audit *actuation.AuditLog) *Handler {
+func NewHandler(clusterSvc Kube, audit *actuation.AuditLog) *Handler {
 	svc := NewService(clusterSvc)
 	return &Handler{svc: svc, audit: audit}
 }

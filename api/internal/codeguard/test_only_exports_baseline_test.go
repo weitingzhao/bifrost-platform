@@ -108,8 +108,6 @@ var exportedForOtherTests = []string{
 	"api/internal/bus/registry.Agree",
 	"api/internal/bus/registry.CheckSubscriptions",
 	"api/internal/bus/releases.Type",
-	"api/internal/cluster.PoolDegraded",
-	"api/internal/cluster.PoolPlanned",
 	"api/internal/config.ClustersFile",
 	"api/internal/config.ComputeWorkloadSpec",
 	"api/internal/config.DefaultStgAPIDomains",

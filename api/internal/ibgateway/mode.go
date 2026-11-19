@@ -8,7 +8,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubeapi"
 )
 
 func patchGatewayYamlMode(yamlContent, mode string) string {
@@ -67,7 +67,7 @@ func (s *Service) SetMode(ctx context.Context, mode string) (ControlResponse, er
 			Autonomy: "L1", Message: updateErr.Error(), GeneratedAt: now,
 		}, updateErr
 	}
-	restart, err := s.cluster.RolloutRestart(ctx, cluster.RolloutRestartRequest{
+	restart, err := s.cluster.RolloutRestart(ctx, kubeapi.RolloutRestartRequest{
 		Namespace: dataNamespace,
 		Kind:      "Deployment",
 		Name:      gatewayDeployName,
@@ -84,8 +84,8 @@ func (s *Service) SetMode(ctx context.Context, mode string) (ControlResponse, er
 	}
 	return ControlResponse{
 		OK: true, Action: "ib-gateway.mode", Target: target,
-		Autonomy: "L1",
-		Message:  fmt.Sprintf("ib-gateway mode set to %s; deployment rollout requested", mode),
+		Autonomy:    "L1",
+		Message:     fmt.Sprintf("ib-gateway mode set to %s; deployment rollout requested", mode),
 		GeneratedAt: now,
 	}, nil
 }

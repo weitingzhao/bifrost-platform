@@ -13,19 +13,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubeapi"
 )
 
 const sessionDesiredReplicasAnnotation = "bifrost.dev/session-desired-replicas"
 
 // K8sProvider maps catalog Deployments to DevSession via the cluster client.
 type K8sProvider struct {
-	cluster *cluster.Service
+	cluster Kube
 	catalog *SessionsCatalog
 	env     string
 }
 
-func NewK8sProvider(clusterSvc *cluster.Service, catalog *SessionsCatalog, env string) *K8sProvider {
+func NewK8sProvider(clusterSvc Kube, catalog *SessionsCatalog, env string) *K8sProvider {
 	if catalog == nil {
 		catalog = &SessionsCatalog{Envs: map[string][]CatalogEntry{}}
 	}
@@ -122,7 +122,7 @@ func (p *K8sProvider) Control(ctx context.Context, name, action string) (*Contro
 			Message: "not applicable in cluster mode",
 		}, nil
 	case "restart":
-		resp, err := p.cluster.RolloutRestart(ctx, cluster.RolloutRestartRequest{
+		resp, err := p.cluster.RolloutRestart(ctx, kubeapi.RolloutRestartRequest{
 			Namespace: entry.Namespace,
 			Kind:      "Deployment",
 			Name:      entry.Deployment,
@@ -161,7 +161,7 @@ func (p *K8sProvider) scaleStop(ctx context.Context, entry *CatalogEntry, name s
 		deploy.Annotations[sessionDesiredReplicasAnnotation] = strconv.Itoa(int(current))
 		_, _ = clientset.AppsV1().Deployments(entry.Namespace).Update(ctx, deploy, metav1.UpdateOptions{})
 	}
-	resp, err := p.cluster.Scale(ctx, cluster.ScaleRequest{
+	resp, err := p.cluster.Scale(ctx, kubeapi.ScaleRequest{
 		Namespace: entry.Namespace,
 		Kind:      "Deployment",
 		Name:      entry.Deployment,
@@ -189,7 +189,7 @@ func (p *K8sProvider) scaleStart(ctx context.Context, entry *CatalogEntry, name 
 			}
 		}
 	}
-	resp, err := p.cluster.Scale(ctx, cluster.ScaleRequest{
+	resp, err := p.cluster.Scale(ctx, kubeapi.ScaleRequest{
 		Namespace: entry.Namespace,
 		Kind:      "Deployment",
 		Name:      entry.Deployment,

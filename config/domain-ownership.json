@@ -1472,6 +1472,13 @@
       "status": "mixed",
       "basis": "2026-11-16, corrected the same day after the CI line's audit of the ownership changes (duty/from-ci-w1-2026-11-16-ownership-changes-audit.md): the package is not one domain's. Foundation's on review: the Kubernetes adapter (client, nodes, workloads, pods, capabilities, actuation). Named by the review of that day and not ruled: the service readiness of GPU, warehouse and workers and the elastic node health, which compute reads. The PostgreSQL and Redis status reads left on 2026-11-18 for api/internal/datastore (foundation); PostgresStatus, RedisStatus and DatastoreSnapshot stay here as forwarders, and the PostgreSQL backup and WAL repair actions, which write, stay here. The data clone, data freshness and data probe (data_clone.go 1,093 lines and three more files), which served the tenant's databases, left on 2026-11-17 for api/internal/dataclone (tenant); what stays of it here is the adapter it runs its commands through (ResolveCNPGPrimary, ExecOnPrimary) and two forwarders that the trust-anchored action wiring names (HandleDataClone, HandleDataCloneSchedulePut, bound by the server). The node pools and the tenant's readings of applications are bound, not imported, since 2026-11-16. It stays mixed until the remaining blocks are split out or ruled."
     },
+    "api/internal/kubeapi": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19: the shapes of foundation's Kubernetes adapter that other domains pass through it (actuation request and answer, pod logs, client error, node pool shapes), moved from cluster unchanged; cluster aliases them. devsession, ibgateway and placement declare the interface they need with these types instead of importing cluster. Types only; imports only probe."
+    },
     "api/internal/datastore": {
       "domains": [
         "foundation"
