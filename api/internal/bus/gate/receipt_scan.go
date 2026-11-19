@@ -13,8 +13,10 @@ import (
 
 // The Bus page opens with two reads that each scanned a day of the receipt
 // stream: /bus/observe 1.8 s and /bus/clients 1.2 s (2026-11-19, the Owner:
-// performance problems are fixed when found). They now share one scan, kept for
-// receiptScanFor, which is shorter than either panel's refresh.
+// performance problems are fixed when found). They share one scan, kept for
+// receiptScanFor. Once a day is read, a refresh reads only what came after it
+// and drops what fell out of the day, and Warm keeps it fresh in the
+// background, so a cold page load no longer waits for a day's scan.
 const (
 	receiptScanFor   = time.Minute
 	receiptScanFloor = 24 * time.Hour
@@ -24,6 +26,7 @@ const (
 type receiptRow struct {
 	event, consumer string
 	at              time.Time
+	seq             uint64
 }
 
 type receiptScan struct {
@@ -41,7 +44,7 @@ func (j *JSJourney) scanReceipts(ctx context.Context, from time.Time, max int, r
 	}
 	return relay.ScanFrom(ctx, j.JS, relay.ReceiptStreamName(j.Tenant, j.Env), relay.ReceiptSubject(j.Tenant, j.Env),
 		from, time.Now().Add(time.Minute), max, func(m relay.StreamMsg) bool {
-			row(receiptRow{m.Header.Get(relay.ReceiptEventHeader), m.Header.Get(relay.ReceiptConsumerHeader), m.At})
+			row(receiptRow{m.Header.Get(relay.ReceiptEventHeader), m.Header.Get(relay.ReceiptConsumerHeader), m.At, m.Seq})
 			return false
 		})
 }
@@ -60,12 +63,33 @@ func (j *JSJourney) recentReceipts(ctx context.Context, from time.Time, limit in
 			start = floor
 		}
 		scanMax := max(limit, receiptScanMax)
+		// What is kept already covers start: read on from its last receipt.
+		incremental := !c.at.IsZero() && !start.Before(c.from) && scanMax <= c.max && len(c.rows) > 0
 		var rows []receiptRow
-		err := j.scanReceipts(ctx, start, scanMax, func(r receiptRow) { rows = append(rows, r) })
+		scanFrom, lastSeq := start, uint64(0)
+		if incremental {
+			last := c.rows[len(c.rows)-1]
+			scanFrom, lastSeq = last.at, last.seq
+			for _, r := range c.rows {
+				if !r.at.Before(start) {
+					rows = append(rows, r)
+				}
+			}
+		}
+		err := j.scanReceipts(ctx, scanFrom, scanMax, func(r receiptRow) {
+			if !incremental || r.seq > lastSeq {
+				rows = append(rows, r)
+			}
+		})
 		if err != nil && !errors.Is(err, jetstream.ErrStreamNotFound) {
 			return nil, false, err
 		}
-		c.at, c.from, c.max, c.rows = now, start, scanMax, rows
+		if !incremental || start.Before(c.from) {
+			c.from = start
+		} else if f := now.Add(-receiptScanFloor); f.After(c.from) {
+			c.from = f
+		}
+		c.at, c.max, c.rows = now, scanMax, rows
 	}
 	var out []receiptRow
 	for _, r := range c.rows {
@@ -78,4 +102,21 @@ func (j *JSJourney) recentReceipts(ctx context.Context, from time.Time, limit in
 		out = append(out, r)
 	}
 	return out, len(out) == limit, nil
+}
+
+// Warm keeps the last day of receipts read every receiptScanFor until ctx ends,
+// so the page's reads are answered from memory.
+func (j *JSJourney) Warm(ctx context.Context) {
+	t := time.NewTicker(receiptScanFor)
+	defer t.Stop()
+	for {
+		wctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		_, _, _ = j.recentReceipts(wctx, time.Now().Add(-receiptScanFloor), receiptScanMax)
+		cancel()
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }

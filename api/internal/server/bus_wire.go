@@ -213,7 +213,9 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 				if js, jerr := jetstream.New(nc); jerr == nil {
 					receipts := &relay.Receipts{JS: js, Tenant: relay.Tenant, Env: env}
 					g.Receipts = receipts
-					g.Journey = &gate.JSJourney{JS: js, Tenant: relay.Tenant, Env: env}
+					journey := &gate.JSJourney{JS: js, Tenant: relay.Tenant, Env: env}
+					g.Journey = journey
+					safego.Go("bus-receipts-warm", func() { journey.Warm(ctx) })
 					g.ReceiptFeed = &gate.ReceiptFeed{}
 					safego.Go("bus-gate-follow-receipts", func() { gate.FollowReceipts(ctx, js, relay.Tenant, env, g.ReceiptFeed, busLogf) })
 					s.followSeatMail(ctx, nc, receipts, env)
