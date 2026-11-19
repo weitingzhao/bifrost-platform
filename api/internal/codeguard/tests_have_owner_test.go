@@ -199,7 +199,6 @@ func ownerBaselineErrors(without, baseline map[string]int, pkgs map[string]bool)
 // when the package is split), or by its file becoming a declared flow test.
 var testsWithoutOwner = map[string]int{
 	"api/internal/agentrt/agentrtapi": 26,
-	"api/internal/agentrt/controller": 17,
 	// 2026-11-18: 40 of the store's 47 went with their files to the integration
 	// package; the store's others left this list when it became verification's.
 	"api/internal/agentrt/integration": 40,

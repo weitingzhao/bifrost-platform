@@ -1,5 +1,3 @@
-//bifrost:owner verification
-
 package controller_test
 
 import (
@@ -9,13 +7,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+	_ "time/tzdata" // the Owner's zone, whatever the machine carries
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
 )
 
 const (
@@ -41,7 +39,7 @@ type fullCI struct {
 }
 
 func (f *fullCI) controller(pool *pgxpool.Pool) *controller.Controller {
-	c := &controller.Controller{DB: pool, Now: func() time.Time { return f.now }}
+	c := &controller.Controller{DB: pool, Now: func() time.Time { return f.now }, FullCIZone: briefZone}
 	c.Sources.Deployed = func(_ context.Context, env string) (string, map[string]any, bool) {
 		if env != "stg" || f.stg == "" {
 			return "", nil, false
@@ -86,10 +84,14 @@ func (f *fullCI) controller(pool *pgxpool.Pool) *controller.Controller {
 	return c
 }
 
+// briefZone is the zone the server binds (planpace.BriefZone, the zone of
+// the briefs).
+const briefZone = "America/Chicago"
+
 // at is a time of the day in the controller's zone.
 func at(t *testing.T, day, hhmm string) time.Time {
 	t.Helper()
-	loc, err := time.LoadLocation(planpace.BriefZone)
+	loc, err := time.LoadLocation(briefZone)
 	must(t, err)
 	v, err := time.ParseInLocation("2006-01-02 15:04", day+" "+hhmm, loc)
 	must(t, err)

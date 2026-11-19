@@ -7,9 +7,9 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/approvalfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deploysource"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planloop"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -17,8 +17,8 @@ import (
 
 // What the agent runtime reads of the platform's stores lives in the
 // agentrt packages (deploysource, approvalfacts, runfacts, gitread, readslot);
-// this file names them for the rest of the server and builds the controller's
-// sources from them.
+// this file names them for the rest of the server and builds the plan loop's
+// sources from them (the controller's are agentrt_external_records.go's).
 
 // agentrtDeployRepo is the repository whose deployments the runtime reads.
 const agentrtDeployRepo = deploysource.Repo
@@ -66,10 +66,10 @@ type (
 // approvals and questions by Lookup (no sweep), the CI verdict from ci (the
 // evidence ledger's reader, wireEvidenceGate), and the deployment from the
 // release records. A record that cannot be read now is
-// ok=false: the controller records nothing for it, a fact seen before stays
+// ok=false: the plan loop records nothing for it, a fact seen before stays
 // seen, and gates_passed on the deployment is unknown.
-func agentRuntimeSources(ap approvalReader, question func(context.Context, string) (seenfacts.Question, bool), ci delivery.CIReader, rel currentDeployment) controller.Sources {
-	src := controller.Sources{
+func agentRuntimeSources(ap approvalReader, question func(context.Context, string) (seenfacts.Question, bool), ci delivery.CIReader, rel currentDeployment) planloop.Sources {
+	src := planloop.Sources{
 		Approval: func(context.Context, int64) (seenfacts.ApprovalFact, bool) { return seenfacts.ApprovalFact{}, false },
 		Question: func(context.Context, string) (seenfacts.Question, bool) { return seenfacts.Question{}, false },
 		CI:       func(context.Context, string, string) (string, string, bool) { return "", "", false },

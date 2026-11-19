@@ -4,8 +4,6 @@ import (
 	"context"
 	"sync"
 	"time"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // RunLoopForTest runs pass as the controller runs a loop named name, every d,
@@ -14,14 +12,6 @@ func (c *Controller) RunLoopForTest(ctx context.Context, name string, d time.Dur
 	var wg sync.WaitGroup
 	c.every(ctx, &wg, name, d, pass)
 	wg.Wait()
-}
-
-// SetTaskWaitForTest sets how AckUsedAnswers reads an answered card's task
-// and returns the function that restores it.
-func SetTaskWaitForTest(f func(ctx context.Context, db eventlog.DB, task string) (string, bool, bool, error)) func() {
-	old := taskWait
-	taskWait = f
-	return func() { taskWait = old }
 }
 
 // ReadTuningForTest reads the tuning rule as a pass does.

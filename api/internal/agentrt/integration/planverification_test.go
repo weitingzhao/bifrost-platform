@@ -11,9 +11,9 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planloop"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 )
@@ -93,7 +93,7 @@ func TestPV2MainFactsWithdrawAndReplay(t *testing.T) {
 	src := planstore.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
 		return landing.MainHistory{State: history, Commit: commitB}, nil
 	}}
-	ctl := controller.Controller{DB: w.rt, Sources: controller.Sources{Plan: src}}
+	ctl := planloop.Loop{DB: w.rt, Sources: planloop.Sources{Plan: src}}
 	if count, err := ctl.PlanObservations(ctx); err != nil || count < 1 {
 		t.Fatalf("controller plan observations: %d %v", count, err)
 	}
@@ -121,7 +121,7 @@ func TestPV2MainFactsWithdrawAndReplay(t *testing.T) {
 	history = landing.Reverted
 	pvPoll(t, w, src)
 	pvEvaluate(t, w, s1, "active")
-	c := controller.Controller{DB: w.rt}
+	c := planloop.Loop{DB: w.rt}
 	_, err := c.Rules(ctx)
 	ok(t, err)
 	pvEvaluate(t, w, s1, "active")

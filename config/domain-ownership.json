@@ -909,12 +909,24 @@
     },
     "api/internal/agentrt/controller": {
       "domains": [
-        "foundation",
-        "verification",
-        "coordination"
+        "verification"
       ],
-      "status": "mixed",
-      "basis": "2026-11-16 Complete file/reader audit: retain lifecycle composition, existing evidence/acknowledgment/automatic-CI decisions and communication-lane run-event wiring. Observation text is delegated and three unused historical presence constants were removed. The assessment source file is retained for the existing safety ratchet. Shared scope remains explicit. 2026-11-17: the automatic-CI decisions moved to api/internal/agentrt/fullci (verification); the controller keeps their loop and binds what a pass reads of it (fullci_loop.go). The external records (external_records.go) stay: their pipeline-run memo is shared field by field with the communication-lane run-event wiring (pipeline_events.go), and none of the file is lineage code (the card records are seenfacts', the run records and their evidence rows verification's). 2026-11-17: lineage removed from the list: after the full CI left, no file here holds lineage code or imports a lineage package (external_records.go records seen cards, pipeline records and evidence rows: foundation and verification). ackanswers.go (clearing a thread's inbox after the Owner's card is answered) may be the owner domain's; not ruled here."
+      "status": "assigned",
+      "basis": "2026-11-19 split to one domain: the plan passes (facts, plan decisions, done rules, plan observations) moved unchanged to api/internal/agentrt/planloop (plan) and the acknowledging of used answers to api/internal/agentrt/answerack (owner); the controller keeps the loop runner, its alerts and tuning, the external records, the pipeline records, events and evidence and the full CI's loop, runs the moved passes as the Steps and Loops the server binds (same names, intervals and order), takes the full CI's zone from the server (FullCIZone, planpace.BriefZone) and now imports only verification and foundation packages."
+    },
+    "api/internal/agentrt/planloop": {
+      "domains": [
+        "plan"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 moved out of api/internal/agentrt/controller unchanged: the plan tree's passes of the controller's loops (Facts, PlanDecisions, Rules, PlanObservations) over planstore and plan with their own source reads and per-read timeout; it imports only plan and foundation packages, and the server binds its passes as the controller's steps and loop."
+    },
+    "api/internal/agentrt/answerack": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 moved out of api/internal/agentrt/controller unchanged (its ackanswers.go, which the controller's row left to the owner domain): acknowledging the Owner's answered cards the runtime no longer waits on, over questioncards (owner) and ownercard (foundation); the server binds it as the controller's used-answers step."
     },
     "api/internal/delivery": {
       "domains": [

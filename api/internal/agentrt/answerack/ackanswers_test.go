@@ -1,4 +1,4 @@
-package controller_test
+package answerack_test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/answerack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
@@ -22,6 +22,15 @@ const (
 	ackThread = "thread-elsewhere"
 )
 
+var ctx = context.Background()
+
+func must(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 var ackAsked = time.Date(2026, 11, 6, 8, 0, 0, 0, time.UTC)
 
 // ackTaskState is a task as AckUsedAnswers reads it.
@@ -31,7 +40,7 @@ type ackTaskState struct {
 }
 
 // ackStore is a question store, the runtime's reach into it as the server
-// wires it, and the tasks the controller reads.
+// wires it, and the tasks the pass reads.
 type ackStore struct {
 	t     *testing.T
 	svc   *questions.Service
@@ -46,7 +55,7 @@ func newAckStore(t *testing.T) *ackStore {
 	t.Setenv("OPS_VIEWER_ENV", "prod") // where the question store takes questions
 	s := &ackStore{t: t, svc: questions.New(filepath.Join(t.TempDir(), "questions"), nil), now: ackAsked, tasks: map[string]ackTaskState{}}
 	s.svc.SetClock(func() time.Time { return s.now })
-	t.Cleanup(controller.SetTaskWaitForTest(func(_ context.Context, _ eventlog.DB, task string) (string, bool, bool, error) {
+	t.Cleanup(answerack.SetTaskWaitForTest(func(_ context.Context, _ eventlog.DB, task string) (string, bool, bool, error) {
 		st, ok := s.tasks[task]
 		return st.state, st.stopped, ok, nil
 	}))
@@ -93,11 +102,11 @@ func (s *ackStore) read(id string) (bool, string) {
 func (s *ackStore) pass(at time.Time) int {
 	s.t.Helper()
 	s.now = at
-	c := &controller.Controller{Now: func() time.Time { return at }, Infof: func(format string, args ...any) {
+	c := &answerack.Acker{Now: func() time.Time { return at }, Infof: func(format string, args ...any) {
 		s.logs = append(s.logs, fmt.Sprintf(format, args...))
 	}}
-	c.Sources.Unacked = questioncards.Unacked(s.svc)
-	c.Sources.Ack = func(ctx context.Context, id string) error {
+	c.Unacked = questioncards.Unacked(s.svc)
+	c.Ack = func(ctx context.Context, id string) error {
 		res := s.svc.Ack(ctx, questions.RuntimeSession, questions.RuntimeSession, "operator", id, nil)
 		if res.Code != http.StatusOK {
 			return fmt.Errorf("the question store answered %d: %v", res.Code, res.Body)

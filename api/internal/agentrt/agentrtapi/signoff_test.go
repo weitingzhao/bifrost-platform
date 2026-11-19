@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planloop"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
@@ -138,8 +138,9 @@ func TestOwnerSignsAStepOff(t *testing.T) {
 	fixture := map[string]json.RawMessage{"plan": get(t, s, "plan?root=R2")}
 	fixture["signed"], _ = json.Marshal(first)
 
-	// The controller's next pass moves the signed step, and only it.
-	c := &controller.Controller{DB: pool}
+	// The controller's next pass moves the signed step, and only it (its
+	// rules step, agentrt/planloop's).
+	c := &planloop.Loop{DB: pool}
 	if _, err := c.Rules(ctx); err != nil {
 		t.Fatal(err)
 	}

@@ -47,7 +47,7 @@ func TestFullCIGaugeAndNotesRoute(t *testing.T) {
 		{Name: green, Revision: strings.Repeat("4", 40), Status: "Succeeded", CreatedAt: now.Add(-50 * time.Hour)},
 		{Name: red, Revision: strings.Repeat("1", 40), Status: "Failed", CreatedAt: now.Add(-26 * time.Hour)},
 	}
-	c := &controller.Controller{DB: pool, Now: func() time.Time { return now }}
+	c := &controller.Controller{DB: pool, Now: func() time.Time { return now }, FullCIZone: planpace.BriefZone}
 	c.FullCI = &fullci.FullCI{
 		Runs:   func(context.Context, time.Time) ([]landingci.FullRun, error) { return runs, nil },
 		Ensure: func(context.Context, string, time.Time) (string, error) { return "", nil },

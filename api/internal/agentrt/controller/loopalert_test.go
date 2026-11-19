@@ -14,7 +14,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
 // TD-411 (STG 2026-10-20: the facts pass failed every 15 seconds on a check
@@ -66,13 +65,20 @@ func TestALoopFailingTheSameWayIsAlertedOnce(t *testing.T) {
 		}
 		return out
 	}
+	// What Progress lists as controller_alerts (planstore reads it through
+	// its port, bound to loopalert.FailingLoops).
 	failing := func() ([]string, error) {
-		doc, err := planstore.Progress(ctx, pool)
+		var alerts []map[string]any
+		err := eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
+			var err error
+			alerts, err = loopalert.FailingLoops(ctx, tx)
+			return err
+		})
 		if err != nil {
 			return nil, err
 		}
 		var loops []string
-		for _, a := range doc["controller_alerts"].([]map[string]any) {
+		for _, a := range alerts {
 			loops = append(loops, a["loop"].(string))
 		}
 		return loops, nil
@@ -195,9 +201,14 @@ func TestAnOpenAlertIsAnsweredOnceTheLoopPasses(t *testing.T) {
 			t.Errorf("%s: %d notes that it passes again, want %d", loop, got, want)
 		}
 	}
-	doc, err := planstore.Progress(ctx, pool)
-	must(t, err)
-	if alerts := doc["controller_alerts"].([]map[string]any); len(alerts) != 0 {
+	// What Progress lists as controller_alerts (loopalert.FailingLoops).
+	var alerts []map[string]any
+	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
+		var err error
+		alerts, err = loopalert.FailingLoops(ctx, tx)
+		return err
+	}))
+	if len(alerts) != 0 {
 		t.Fatalf("Progress lists %v", alerts)
 	}
 }
