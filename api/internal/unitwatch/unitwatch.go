@@ -16,6 +16,7 @@ package unitwatch
 import (
 	"context"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"log/slog"
 	"strings"
 	"time"
@@ -186,4 +187,29 @@ func Run(ctx context.Context, kicks <-chan struct{}, retry time.Duration, pass f
 			again = time.After(retry)
 		}
 	}
+}
+
+// retryAfter is how soon a pass that could not read main runs again.
+const retryAfter = 5 * time.Minute
+
+// OnMainMoved reads main's unit declaration when main moves (2026-11-18). The
+// event only kicks the watch: a pass may read up to 100 trees, and an event is
+// held for 15 seconds. consume runs its function for each event of the
+// consumer it names.
+//
+// PROD's watch speaks for main. STG restarts with every delivery, so its empty
+// cache read all of main's ~1,580 blobs from Gitea each time, about every ten
+// minutes (2026-11-18), for a verdict PROD already gives.
+func OnMainMoved(ctx context.Context, env string, pass func(context.Context) error, consume func(name string, each func(context.Context))) {
+	if env != "prod" {
+		return
+	}
+	kicks := make(chan struct{}, 1)
+	safego.Go("bus-unit-watch", func() { Run(ctx, kicks, retryAfter, pass) })
+	consume("unit-watch", func(context.Context) {
+		select {
+		case kicks <- struct{}{}:
+		default:
+		}
+	})
 }

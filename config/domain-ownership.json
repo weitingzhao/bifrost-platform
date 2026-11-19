@@ -1338,6 +1338,13 @@
       ],
       "status": "mixed",
       "basis": "2026-11-18 moved out of server (decoupling item 5, A5; the server's questions_wire.go, about 330 lines, unchanged in effect): how the agent runtime asks, reads, answers, withdraws and acknowledges the Owner's questions: the translation of a plan's card (planstore.Card) into a question with its idempotency and recommendation rules, the runtime's own session, the bounded reads, the card-auto-answer reads, and the announcement of the questions' transitions to the bus; it is mixed because it names the plan's ports on one side and the questions service on the other, the same shape as planwiring; the server only constructs it, mounts the routes and closes it"
+    },
+    "api/internal/bus/alertletters": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (alert_letters_wire.go; decoupling item 5): the duty seat's alert letters from the bus. Imports foundation only (bus/alerts, bus/subscribe, bus/relay, bus/registry, bus/readerseen, eventlog); the post into a seat's inbox is handed in by the server."
     }
   }
 }

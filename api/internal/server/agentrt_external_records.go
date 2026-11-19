@@ -52,7 +52,7 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 		// One platform chooses: PROD, as it is PROD that starts the deliveries.
 		src.CINode = s.delivery.PublishCINode
 	}
-	src.HeadRelease = s.bus.serialHeadRelease(s.headReleaseSource())
+	src.HeadRelease = s.bus.head.Serial(s.headReleaseSource())
 	if s.delivery != nil {
 		src.RunEvidenced = s.unitScopeShadowSource()
 		src.CommitTree = giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second})
@@ -119,7 +119,7 @@ func (s *Server) wirePipelineRecords(c *controller.Controller) {
 	c.PipelineEvery = pipelineRecordsDuration(pipelineRecordsEveryEnv)
 	c.PipelineFullEvery = pipelineRecordsDuration(pipelineRecordsFullEveryEnv)
 	// Bus step 2: gate-cluster names each finished run (startGateCluster).
-	c.PipelineFinished = s.bus.finishedRuns()
+	c.PipelineFinished = s.bus.finished.Queue()
 }
 
 // runFailure adapts delivery observations to the CI failure projection.

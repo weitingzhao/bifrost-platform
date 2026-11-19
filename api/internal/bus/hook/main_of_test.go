@@ -1,5 +1,4 @@
-//bifrost:owner coordination
-package server
+package hook
 
 import (
 	"context"
@@ -16,13 +15,13 @@ func TestLedgeredMain(t *testing.T) {
 	ledgerSHA := strings.Repeat("a", 40)
 	giteaSHA := strings.Repeat("b", 40)
 	gitea := func(context.Context, string) (string, error) { return giteaSHA, nil }
-	ledger := func(answer string, err error) mainReader {
+	ledger := func(answer string, err error) MainReader {
 		return func(context.Context, string) (string, error) { return answer, err }
 	}
 	watched := []string{"bifrost-platform"}
 	cases := []struct {
 		name string
-		last mainReader
+		last MainReader
 		repo string
 		want string
 	}{

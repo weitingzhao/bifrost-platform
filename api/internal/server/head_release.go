@@ -77,11 +77,10 @@ func (s *Server) headWorldOf() *headrelease.Live {
 // followed, no event carried a cause). A run started by the loop's own
 // reconciliation, with no wake since the last start, names none.
 func (s *Server) startHeadRelease(ctx context.Context, principal, pipeline, revision string, params map[string]string) (delivery.PipelineRunView, string, error) {
-	cause := s.bus.lastWake()
-	env, _ := s.bus.wakeEnv.Load().(string)
-	run, heldBy, err := s.delivery.StartDeliveryIfFree(delivery.WithCause(ctx, cause, env), principal, pipeline, revision, params)
+	cause := s.bus.head.LastWake()
+	run, heldBy, err := s.delivery.StartDeliveryIfFree(delivery.WithCause(ctx, cause, s.bus.head.WakeEnv()), principal, pipeline, revision, params)
 	if err == nil && run.Name != "" && cause != "" {
-		s.bus.clearWake(cause)
+		s.bus.head.ClearWake(cause)
 	}
 	return run, heldBy, err
 }

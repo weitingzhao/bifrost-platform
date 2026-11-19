@@ -25,6 +25,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
 )
 
 // Settings. The hook answers 503 and writes nothing without its secret.
@@ -299,5 +301,53 @@ func (c *Reconciler) Run(ctx context.Context) {
 			return
 		case <-t.C:
 		}
+	}
+}
+
+// MainReader answers where main of a repository is.
+type MainReader = func(ctx context.Context, repo string) (string, error)
+
+// MainOf is the one way display readers ask where main of repo is: the bus
+// ledger's last git.main.advanced when gate-git watches repo (the Gitea hook
+// records a push within seconds; the workers reconcile every 5 minutes), else
+// fallback (Gitea). Adding a repository to BUS_GIT_REPOS moves every reader of
+// it onto the ledger; nothing else changes. on says this environment keeps
+// git.main.advanced in the ledger; reader names the asker in the readers' count.
+//
+// Gates (release policy, head-release, migrations, the daily full CI) keep
+// asking Gitea: the ledger is a hint for them, the source is the authority
+// (nextgen/run-readers.md, the main-head table).
+func MainOf(on bool, ledger func() eventlog.DB, reader string, fallback MainReader) MainReader {
+	var last MainReader
+	if on {
+		last = func(ctx context.Context, repo string) (string, error) {
+			db := ledger()
+			if db == nil {
+				return "", nil
+			}
+			commit, err := LastCommit(ctx, db)(repo)
+			if err == nil && gitread.CommitID.MatchString(commit) {
+				readerseen.Saw(reader)
+			}
+			return commit, err
+		}
+	}
+	return ledgeredMain(ReposFromEnv(), last, fallback)
+}
+
+// ledgeredMain reads last for watched repositories and fallback for the
+// rest, and for a watched one the ledger has said nothing about (or could
+// not be read). A nil fallback answers "" (the caller asks Gitea itself).
+func ledgeredMain(watched []string, last, fallback MainReader) MainReader {
+	return func(ctx context.Context, repo string) (string, error) {
+		if last != nil && slices.Contains(watched, repo) {
+			if commit, err := last(ctx, repo); err == nil && gitread.CommitID.MatchString(commit) {
+				return commit, nil
+			}
+		}
+		if fallback == nil {
+			return "", nil
+		}
+		return fallback(ctx, repo)
 	}
 }

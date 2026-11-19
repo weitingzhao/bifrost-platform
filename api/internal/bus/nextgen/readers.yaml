@@ -16,7 +16,7 @@ groups:
   - id: runs
     title: Readers that listed pipeline runs
     readers:
-      - {id: records, what: "pipeline run records (30 s loop)", status: moved, at: "2026-11-16", proof: {file: api/internal/server/bus_wire.go, contains: 'readerseen.Saw("records")'}}
+      - {id: records, what: "pipeline run records (30 s loop)", status: moved, at: "2026-11-16", proof: {file: api/internal/bus/gatecluster/finished.go, contains: 'readerseen.Saw("records")'}}
       - {id: head-release, what: "head-release each pass", status: moved, at: "2026-11-17", proof: {file: api/internal/server/head_release.go, contains: "s.delivery.CachedRunsOf(pipeline)"}}
       - {id: pipeline-runs-page, what: "Console pipeline runs page", status: moved, at: "2026-11-16", proof: {file: api/internal/delivery/service.go, contains: "readThrough(s, routePipelineRuns,"}}
       - {id: supply-chain-page, what: "Console supply chain page", status: moved, at: "2026-11-16", proof: {file: api/internal/delivery/supply_chain.go, contains: "readThrough(s, routeSupplyChain,"}}

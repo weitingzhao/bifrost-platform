@@ -1,4 +1,5 @@
-package server
+// Package alertletters writes the duty seat its alert letters from the bus.
+package alertletters
 
 import (
 	"context"
@@ -7,7 +8,7 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	busalerts "github.com/weitingzhao/bifrost-platform/api/internal/bus/alerts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
@@ -20,9 +21,15 @@ const (
 	alertLettersRow      = "alert-firing-to-duty"
 )
 
-// consumeAlertLetters writes the duty seat its alert letters: the row in the
+// Consumer writes the duty seat its alert letters: the row in the
 // subscription table says who gets them, bus/alerts which firings share one.
-func (s *Server) consumeAlertLetters(ctx context.Context, js jetstream.JetStream, env string) {
+type Consumer struct {
+	DB   func() eventlog.DB
+	Post func(ctx context.Context, db eventlog.DB, key, to, body string, cause int64) error
+}
+
+// Consume runs the letters' durable consumer.
+func (l Consumer) Consume(ctx context.Context, js jetstream.JetStream, env string) {
 	subs, err := registry.LoadSubscriptions()
 	if err != nil {
 		slog.Error("bus: alert letters: the subscription table does not load", "error", err)
@@ -42,7 +49,7 @@ func (s *Server) consumeAlertLetters(ctx context.Context, js jetstream.JetStream
 	cc, err := relay.ConsumeDurable(ctx, js, relay.Tenant, env, alertLettersConsumer, row.On, func(e relay.Envelope) error {
 		dctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		defer cancel()
-		if err := s.writeAlertLetter(dctx, row, e); err != nil {
+		if err := l.write(dctx, row, e); err != nil {
 			slog.Warn("bus: alert letter; asked again", "event", e.ID, "error", err)
 			return err
 		}
@@ -59,9 +66,9 @@ func (s *Server) consumeAlertLetters(ctx context.Context, js jetstream.JetStream
 	context.AfterFunc(ctx, func() { cc.Stop() })
 }
 
-func (s *Server) writeAlertLetter(ctx context.Context, row registry.Subscription, e relay.Envelope) error {
+func (l Consumer) write(ctx context.Context, row registry.Subscription, e relay.Envelope) error {
 	ev := subscribe.FromEnvelope(e)
-	db := s.bus.db()
+	db := l.DB()
 	n, ok := relay.ParseEventID(e.ID)
 	if db == nil || !ok || !subscribe.Matches(row, ev) {
 		return nil
@@ -74,5 +81,5 @@ func (s *Server) writeAlertLetter(ctx context.Context, row registry.Subscription
 	if err != nil || key == "" {
 		return err
 	}
-	return coord.PostConclusionCaused(ctx, db, key, row.To, subscribe.WithAsk(row, ev, subscribe.Body(row, ev)), n)
+	return l.Post(ctx, db, key, row.To, subscribe.WithAsk(row, ev, subscribe.Body(row, ev)), n)
 }

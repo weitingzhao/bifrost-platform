@@ -13,6 +13,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/drill"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/effect"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/observe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/problemloop"
@@ -39,14 +40,14 @@ func (s *Server) busObserve() observe.Handler {
 			return &relay.PGLedger{DB: func() relay.TxBeginner { return pool }, EventsAfter: busEventsAfter}
 		},
 		CursorAt: func(pool *pgxpool.Pool) func(context.Context, time.Time) (relay.Cursor, error) {
-			return busCursorAt(pool)
+			return relay.CursorAt(pool)
 		},
 		Gate: s.bus.gate.Load,
 	}
 }
 
 func (s *Server) busEffect() effect.Deps {
-	d := effect.Deps{ProblemEvidence: s.problemEvidence, Promql: s.promql}
+	d := effect.Deps{ProblemEvidence: effect.ProblemEvidence(s.bus.db, drill.Stream), Promql: s.promql}
 	if s.delivery != nil {
 		d.CachedRuns = s.delivery.CachedRunsOf
 	}

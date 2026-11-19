@@ -11,14 +11,17 @@ package cards
 
 import (
 	"context"
+	"log/slog"
 	"regexp"
 	"strconv"
+	"time"
 
 	actors "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 const (
@@ -143,4 +146,26 @@ func init() {
 		v.After[t] = after
 	}
 	eventlog.Declare(v)
+}
+
+// AnnounceInBackground writes the valid cards of list to the bus without
+// holding up the approvals flow. A failed write is logged; the store stays
+// the truth.
+func AnnounceInBackground(db eventlog.DB, list []Card) {
+	valid := make([]Card, 0, len(list))
+	for _, c := range list {
+		if Valid(c) {
+			valid = append(valid, c)
+		}
+	}
+	if len(valid) == 0 {
+		return
+	}
+	safego.Go("bus.cards", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := Announce(ctx, db, valid); err != nil {
+			slog.Warn("bus: approval cards not announced", "error", err, "count", len(valid))
+		}
+	})
 }
