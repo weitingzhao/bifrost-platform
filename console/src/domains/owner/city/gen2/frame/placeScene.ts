@@ -315,7 +315,9 @@ export class PlaceScene extends Phaser.Scene {
       if (kind === 'building' && k?.look) {
         const frac = (r?: Place) => r?.meter && r.meter.used != null && r.meter.of ? r.meter.used / r.meter.of : null
         const room = (id: string) => k.children.find(c => c.id === id)
-        const lv: Levels = { state: k.state ?? 'unread', cpu: frac(room('cpu')), mem: frac(room('memory')), disks: k.children.filter(c => c.id === 'disk' || c.id.startsWith('volume-')).map(frac) }
+        const vols = k.children.filter(c => c.id.startsWith('volume-'))
+        const lv: Levels = { state: k.state ?? 'unread', cpu: frac(room('cpu')), mem: frac(room('memory')), disks: k.children.filter(c => c.id === 'disk' || c.id.startsWith('volume-')).map(frac),
+          vols: vols.length ? vols.map(v => ({ f: frac(v), units: v.units ?? [] })) : undefined }
         const form = formOf(k.look, k.children.some(c => c.id === 'gpu'), /book/i.test(k.label))
         return { id: p.id, key: deviceKey(form, p.w, p.h, hue, this.light, lv), make: () => deviceSprite(form, p.w, p.h, hue, this.light, lv) }
       }

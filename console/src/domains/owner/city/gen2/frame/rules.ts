@@ -36,6 +36,7 @@ export function rulesBroken(content: { tree: Place; functions?: { id: string }[]
     if (p.function && fns && !fns.has(p.function)) out.push(`${where}: function ${p.function} is not one of the content's functions`)
     if (p.state && !(STATES as readonly string[]).includes(p.state)) out.push(`${where}: state ${p.state} is not one of ${STATES.join(', ')}`)
     if (p.look && !(LOOKS as readonly string[]).includes(p.look)) out.push(`${where}: look ${p.look} is not one of ${LOOKS.join(', ')}`)
+    for (const u of p.units ?? []) if (!(STATES as readonly string[]).includes(u)) out.push(`${where}: a unit's state ${u} is not one of ${STATES.join(', ')}`)
     const m = p.meter
     if (m) {
       if (!m.source) out.push(`${where}: a reading must say where it was read`)

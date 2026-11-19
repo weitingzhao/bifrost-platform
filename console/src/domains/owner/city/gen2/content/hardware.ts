@@ -25,6 +25,8 @@ export const HARDWARE_QUERIES = {
   memUsed: 'max by (instance) ((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) or (node_memory_active_bytes + node_memory_wired_bytes + node_memory_compressed_bytes))',
   diskSize: 'max by (instance, mountpoint) (node_filesystem_size_bytes{mountpoint=~"/|/volume[0-9]+",fstype!~"tmpfs|overlay"})',
   diskUsed: 'max by (instance, mountpoint) (node_filesystem_size_bytes{mountpoint=~"/|/volume[0-9]+",fstype!~"tmpfs|overlay"} - node_filesystem_avail_bytes{mountpoint=~"/|/volume[0-9]+",fstype!~"tmpfs|overlay"})',
+  arraySize: 'max by (instance, device) (node_md_blocks)',
+  arrayDisks: 'max by (instance, device, state) (node_md_disks)',
 } as const
 export type HardwareReads = { topology: TopoNode[] | null; prom: { [K in keyof typeof HARDWARE_QUERIES]: PromPoint[] | null } }
 
@@ -52,12 +54,13 @@ const hasGpu = (n: TopoNode) => /gpu|4090/i.test(`${n.id} ${n.label ?? ''}`) || 
 
 /**
  * RULES.md §2.3: a device's size by its weight, large enough that what it shows reads at a glance
- * (the Owner, 2026-11-19: use the ground): the GPU tower 4×8; a 16-core server, the NAS and a
- * trading desk 4×4; the rest 2×2.
+ * (the Owner, 2026-11-19: use the ground): the GPU tower and the NAS (a logistics park, tens of
+ * terabytes) 4×8; a 16-core server and a trading desk 4×4; the rest 2×2.
  */
 export function shapeOf(look: Look, cores: number | null, gpu: boolean): Shape {
   if (gpu || (cores ?? 0) >= 32) return '4x8'
-  if (look === 'storage' || look === 'windows') return '4x4'
+  if (look === 'storage') return '4x8'
+  if (look === 'windows') return '4x4'
   if (look === 'linux' && (cores ?? 0) >= 16) return '4x4'
   return '2x2'
 }
@@ -151,7 +154,18 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = ''): Pl
         const size = (P.diskSize ?? []).find(p => p.labels?.instance === inst && p.labels?.mountpoint === v)?.value ?? (v === '/' ? cap('ephemeral_storage') : null)
         const used = (P.diskUsed ?? []).find(p => p.labels?.instance === inst && p.labels?.mountpoint === v)?.value ?? null
         const id = v === '/' ? 'disk' : `volume-${v.replace(/\D/g, '')}`
-        rooms.push(room(id, v === '/' ? 'Disk' : `Volume ${v.replace(/\D/g, '')}`, meter('bytes', used, size, HARDWARE_QUERIES.diskUsed)))
+        const r = room(id, v === '/' ? 'Disk' : `Volume ${v.replace(/\D/g, '')}`, meter('bytes', used, size, HARDWARE_QUERIES.diskUsed))
+        // A NAS volume's disks: the RAID array whose size is the volume's (within 3%), its disks by state —
+        // matched by what was read, never by the numbers in their names.
+        if (look === 'storage' && size != null) {
+          const arr = (P.arraySize ?? []).find(p => p.labels?.instance === inst && Math.abs(p.value * 1024 - size) / size < 0.03)?.labels?.device
+          if (arr) {
+            const count = (st: string) => (P.arrayDisks ?? []).find(p => p.labels?.instance === inst && p.labels?.device === arr && p.labels?.state === st)?.value ?? 0
+            r.units = [...Array(count('active')).fill('online'), ...Array(count('failed')).fill('down'), ...Array(count('spare')).fill('standby')] as State[]
+            r.label = `${r.label} · ${r.units.length} disks`
+          }
+        }
+        rooms.push(r)
       }
       if (gpu) rooms.push(room('gpu', 'GPU', meter('cores', null, null, 'no GPU exporter: not read')))
     }

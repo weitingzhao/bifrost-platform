@@ -52,6 +52,8 @@ export type Place = {
   /** Its state and reading, read from the system (optional: greybox places have none). */
   state?: State
   meter?: Meter
+  /** The physical units a thing is made of, each with how it stands (a NAS volume: the disks of its array). Read, never assumed. */
+  units?: State[]
   look?: Look
   children: Place[]
 }
