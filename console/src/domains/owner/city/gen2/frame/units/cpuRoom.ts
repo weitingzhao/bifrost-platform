@@ -26,7 +26,7 @@ const U = 35.8
 // only the readings' parts change colour, each change written in the key (the Owner, 2026-11-19: every
 // colour stands for something). Machines were grey when idle and green when not — the work light's
 // reading said twice, and not in the key: taken out.
-const MACHINE = faces('#b7cfc0', '#94b3a1', '#7d9c8b')
+const MACHINE = faces('#b7cfc0', '#94b3a1', '#7d9c8b'), HEAD = faces('#8eaa9a', '#6f8c7c', '#5d796a')
 const WALL = faces('#efe9dc', '#e2dac8', '#cfc6b2')
 
 
@@ -127,28 +127,33 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
     const cols = colsOf(fw, count), fits = cols * rowsOf(fd)
     const groups = Array.from({ length: Math.min(count, fits) }, (_, m) => r.cores.slice(m * per, (m + 1) * per))
     if (count > fits) g.text('left', 0.4, 0.18, 47, `${fits} OF ${count} MACHINES FIT — SET MORE CORES A MACHINE`, 5.5, '#b8433f', 700)
-    const MW = 0.58, md = 0.5, MH = 10
+    const MW = 0.62, md = 0.5
     groups.forEach((grp, i) => {
       const mw = Math.max(0.3, MW * grp.length / per)
       const c = { busy: avgOf(grp.map(x => x.busy)) }
       const col = i % cols, x = 0.35 + col * PITCH + Math.floor(col / 2) * GAP + (PITCH - MW) / 2, y = 0.55 + Math.floor(i / cols) * ROW + (ROW - md) / 2
       things.push({ at: x + y, draw: () => {
         const busy = encode('core.busy', c.busy)
+        // A lathe (the Owner, 2026-11-19: a box with a battery on it is not a machine tool): a long bed, the
+        // headstock at its left end with the chuck on its inner face, the tailstock at its right end. The
+        // load bar lies along the bed's ways between them, filled from the left as far as the core is busy;
+        // flat, so it hides nothing behind it.
+        const BED = 7, hw = Math.min(0.17, mw * 0.3)
         g.shadow(x, y, mw, md, 0.25)
-        g.box(x, y, mw, md, MH, MACHINE, 0, 1.1)
-        // The load bar: flat across the machine's top, filled from the left as far as the core is busy
-        // (the Owner, 2026-11-19: the tall work light hid the machines behind it and was hard to see; lying
-        // on the top it hides nothing, and a top is what a view from above sees best).
-        const bw = (mw - 0.1) * U, bh = 0.26 * U
+        g.box(x, y, mw, md, BED, MACHINE, 0, 1.1)
+        g.box(x, y + 0.02, hw, md - 0.04, 11, HEAD, BED, 1)
+        const bx = x + hw + 0.03, bl = mw - hw - 0.15, bw = bl * U, bh = Math.min(0.26, md * 0.55) * U
         const ticks = [0.25, 0.5, 0.75].map(t => `<line x1="${(bw * t).toFixed(1)}" y1="0" x2="${(bw * t).toFixed(1)}" y2="${bh.toFixed(1)}" stroke="#5a5e6a" stroke-width="0.5"/>`).join('')
-        g.floor(x + 0.05, y + md / 2 - 0.13, MH, `<rect x="0" y="0" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="1" fill="#2a2c35" stroke="${INK}" stroke-width="0.6"/>` +
+        g.floor(bx, y + md / 2 - bh / U / 2, BED, `<rect x="0" y="0" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="1" fill="#2a2c35" stroke="${INK}" stroke-width="0.6"/>` +
           (busy != null && busy > 0.005 ? `<rect x="0.8" y="0.8" width="${Math.max(1.5, (bw - 1.6) * busy).toFixed(1)}" height="${(bh - 1.6).toFixed(1)}" rx="0.6" fill="${busy > 0.85 ? '#ff7a45' : '#ffc94d'}"/>` : '') + ticks)
+        g.face('right', x + hw, y + md / 2 + 0.07, BED + 6, `<circle cx="0" cy="0" r="4.2" fill="#c5cad3" stroke="${INK}" stroke-width="0.8"/><circle cx="0" cy="0" r="1.6" fill="#6b7280"/>`)
+        g.box(x + mw - 0.1, y + md * 0.3, 0.1, md * 0.4, 6, HEAD, BED, 0.9)
         // A core's own temperature, where its sensor reports one: a small thermometer on its right side.
         const hot = grp.map((_, k) => perCore.get(i * per + k)).filter((v): v is number => v != null)
         if (hot.length) {
           const tc = Math.max(...hot)
-          g.onRight(x + mw, y, 0.12, 0.22, 1, MH - 1, '#fbfaf6', 0.5)
-          g.onRight(x + mw, y, 0.14, 0.2, 1, 1 + (MH - 2) * encode('sensor.temp', tc / 100)!, liquidOf(tc), 0)
+          g.onRight(x + mw, y, 0.04, 0.12, 1, 6, '#fbfaf6', 0.5)
+          g.onRight(x + mw, y, 0.05, 0.11, 1, 1 + 5 * encode('sensor.temp', tc / 100)!, liquidOf(tc), 0)
         }
       } })
     })
