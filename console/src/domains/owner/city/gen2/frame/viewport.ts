@@ -3,7 +3,7 @@
  * tablet and computer must each feel right before anything else is built;
  * changing this later breaks everything on top of it).
  *
- * One function decides every rectangle: the four corners, the levels, the card,
+ * One function decides every rectangle: the four corners, the menu, the levels, the card,
  * and the world area the map is fitted into. The page places its corners
  * from it and the canvas places its cameras from it, so the two never drift.
  *
@@ -45,6 +45,8 @@ export type Frame = {
    * own to move between them, not mixed into the district menu): three rows under the minimap.
    */
   levels: Rect & { row: number }
+  /** The menu along the bottom: the Console's functions, a second way in beside the levels (the Owner, 2026-11-19). */
+  menu: Rect
   /** The trail as its own corner, or null when it sits inside the summary. */
   trail: Rect | null
   /** Alerts: a corner with words, or a round badge. */
@@ -93,9 +95,9 @@ export function frameOf(width: number, height: number, safe: Insets = NO_INSETS)
   const tap = device === 'desktop' ? 28 : 44
   const L = safe.left + m, R = width - safe.right - m, T = safe.top + m, B = height - safe.bottom - (phone ? 8 : 12)
 
-  // No menu bar (the Owner, 2026-11-19: the city is the navigation — its three levels are the
-  // framework's, and what is in them is the content; a bar listing the districts would put the
-  // content back into the navigation). The bottom row is the trail and the alerts.
+  const menuH = flat ? 40 : 48
+  const menuW = phone ? R - L : Math.min(R - L, 620)
+  const menu = { x: phone ? L : Math.round((width - menuW) / 2), y: B - menuH, w: menuW, h: menuH }
 
   const mm = flat ? { w: 120, h: 80 } : MINI[device]
   const mini = { x: R - mm.w, y: T, w: mm.w, h: mm.h }
@@ -109,10 +111,10 @@ export function frameOf(width: number, height: number, safe: Insets = NO_INSETS)
   const alerts = flat
     ? { x: mini.x - gap - tap, y: T, w: tap, h: tap, badge: true }
     : phone
-      ? { x: R - tap, y: B - tap, w: tap, h: tap, badge: true }
-      : { x: R - 124, y: B - row, w: 124, h: row, badge: false }
+      ? { x: R - tap, y: menu.y - gap - tap, w: tap, h: tap, badge: true }
+      : { x: R - 124, y: menu.y - gap - row, w: 124, h: row, badge: false }
 
-  const trail = flat ? null : { x: L, y: B - (alertsBadge ? tap : row), w: Math.min(alerts.x - gap - L, 520), h: alertsBadge ? tap : row }
+  const trail = flat ? null : { x: L, y: menu.y - gap - (alertsBadge ? tap : row), w: Math.min(alerts.x - gap - L, 520), h: alertsBadge ? tap : row }
 
   // Search: a bar at the top centre between the summary and the minimap; on a phone a round button.
   const searchIcon = phone
@@ -136,7 +138,7 @@ export function frameOf(width: number, height: number, safe: Insets = NO_INSETS)
     ? { ...iconSearch, mode: 'icon' as const }
     : { x: Math.round(Math.max(barL, Math.min(barR - barW, width / 2 - barW / 2))), y: T, w: barW, h: 44, mode: 'bar' as const }
 
-  const bottomRow = trail ? trail.y : B + gap
+  const bottomRow = trail ? trail.y : menu.y
   const docked = device === 'desktop' || (device === 'tablet' && landscape)
   const peekH = 44
   const dockW = device === 'desktop' ? 330 : 280
@@ -163,7 +165,7 @@ export function frameOf(width: number, height: number, safe: Insets = NO_INSETS)
   const fw = phone ? R - L : Math.min(920, R - L - 80), fh = phone ? bottomRow - gap - T : Math.min(660, bottomRow - gap - T - 40)
   const focus = { x: Math.round(width / 2 - fw / 2), y: phone ? T : Math.round(T + (bottomRow - gap - T) / 2 - fh / 2), w: fw, h: fh }
 
-  return { device, landscape, tap, summary, mini, miniTitle, levels, trail, alerts, search, docks, rail, peek, focus, world }
+  return { device, landscape, tap, summary, mini, miniTitle, levels, trail, alerts, menu, search, docks, rail, peek, focus, world }
 }
 
 export const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h

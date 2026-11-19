@@ -14,8 +14,9 @@ import './cityGen2.css'
  * The second generation's frame, greybox (the Owner, 2026-11-19): the game
  * is laid out like the Console, so the two looks can swap.
  *
- *   Levels    → town, district, building: the framework's own control under the minimap (no district
- *               menu: the city is the navigation, the Owner 2026-11-19)
+ *   Menu      → the bar along the bottom: the Console's functions (one way in)
+ *   Levels    → town, district, building: the framework's own control under the minimap (the other
+ *               way in, by domain; both kept, the Owner 2026-11-19)
  *   Page      → the place on screen; entering a building is opening a page
  *   Summary   → the top-left corner (on a phone, one line; tap it for more)
  *   Section   → the blocks inside a place
@@ -383,7 +384,12 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
         ))}
       </nav>
 
-      {/* No district menu: the city itself is the navigation (the Owner, 2026-11-19); the levels move between its layers. */}
+      {/* Two ways in, both kept (the Owner, 2026-11-19): the menu by function along the bottom, the levels by domain under the minimap. */}
+      <nav className="g2-menu" aria-label="Functions" style={at(f.menu)}>
+        {tree.children.map(d => (
+          <button key={d.id} className={path[0] === d.id ? 'on' : ''} onClick={() => go([d.id])}>{d.label}</button>
+        ))}
+      </nav>
 
       {/* Search and tools: a bar at the top centre; on a phone a round button that opens the box over the top. */}
       {f.search.mode === 'bar' ? (

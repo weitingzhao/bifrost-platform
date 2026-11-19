@@ -11,7 +11,7 @@ const SIZES: [string, number, number][] = [
 ]
 
 // 2026-11-19, the Owner: the three levels get a control of their own (under the minimap); it must clear every corner too.
-const corners = (f: Frame) => ({ summary: f.summary, mini: f.mini, levels: f.levels, alerts: f.alerts, search: f.search, ...(f.trail ? { trail: f.trail } : {}),
+const corners = (f: Frame) => ({ summary: f.summary, mini: f.mini, levels: f.levels, alerts: f.alerts, menu: f.menu, search: f.search, ...(f.trail ? { trail: f.trail } : {}),
   ...(f.docks ? { dockLeft: f.docks.left, dockRight: f.docks.right } : {}), ...(f.peek ? { peek: f.peek } : {}) })
 
 describe('frameOf', () => {
@@ -24,11 +24,13 @@ describe('frameOf', () => {
         for (let j = i + 1; j < all.length; j++)
           expect(overlaps(all[i][1], all[j][1]), `${all[i][0]} overlaps ${all[j][0]}`).toBe(false)
       expect(inside(f.rail, w, h)).toBe(true)
+      expect(overlaps(f.rail, f.menu)).toBe(false)
       if (f.trail) expect(overlaps(f.rail, f.trail)).toBe(false)
       // The map never sits under the side rail or the drawer's handle.
       if (f.peek) expect(f.world.y + f.world.h).toBeLessThanOrEqual(f.peek.y)
       expect(inside(f.focus, w, h)).toBe(true)
       expect(f.world.h).toBeGreaterThanOrEqual(Math.min(200, h * 0.35))
+      expect(f.menu.h).toBeGreaterThanOrEqual(f.device === 'desktop' ? 28 : 40)
     })
   }
 
@@ -73,8 +75,7 @@ describe('frameOf', () => {
     const f = frameOf(393, 852, { top: 47, right: 0, bottom: 34, left: 0 })
     expect(f.summary.y).toBeGreaterThanOrEqual(47)
     expect(f.mini.y).toBeGreaterThanOrEqual(47)
-    expect(f.alerts.y + f.alerts.h).toBeLessThanOrEqual(852 - 34)
-    if (f.trail) expect(f.trail.y + f.trail.h).toBeLessThanOrEqual(852 - 34)
+    expect(f.menu.y + f.menu.h).toBeLessThanOrEqual(852 - 34)
   })
 })
 
@@ -87,7 +88,7 @@ describe('swapRects', () => {
         const { map, panel } = swapRects(f, side)
         expect(inside(map, w, h) && inside(panel, w, h)).toBe(true)
         expect(overlaps(map, panel)).toBe(false)
-        for (const r of [f.summary, f.levels, ...(f.trail ? [f.trail] : [])]) expect(overlaps(panel, r)).toBe(false)
+        for (const r of [f.summary, f.menu, f.levels, ...(f.trail ? [f.trail] : [])]) expect(overlaps(panel, r)).toBe(false)
         expect(panel.w).toBeGreaterThan(Math.min(260, w * 0.5))
       }
     })
