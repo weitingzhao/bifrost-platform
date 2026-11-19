@@ -133,12 +133,16 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
       const at = replayAt(flights, Date.now(), t, REPLAY_MS)
       replayInfo.current = at
       const over = new Map<string, CityReading>()
-      const prod = at.active.find(f => f.kind === 'prod')
+      // Each pad its own kind of flight: the booster alone on the booster pad, products' ships on the ship pad.
+      const boosterFlight = at.active.find(f => f.kind === 'prod' && !f.product), shipFlight = at.active.find(f => f.kind === 'prod' && f.product)
       for (const it of items) if (it.binds.startsWith('lane:')) {
-        over.set(it.binds, prod
-          ? { word: prod.product ? `launching ${prod.product.name}` : 'launching the new rocket', tone: 'busy', launching: true, payload: prod.product ?? undefined, lines: [`replay: run ${prod.run}`], source: 'replay of today' }
+        over.set(it.binds, boosterFlight
+          ? { word: 'booster test flight', tone: 'busy', launching: true, lines: [`replay: run ${boosterFlight.run}`], source: 'replay of today' }
           : { word: 'quiet', tone: 'calm', lines: ['replay'], source: 'replay of today' })
       }
+      over.set('stage:ship-pad', shipFlight
+        ? { word: `launching ${shipFlight.product!.name}`, tone: 'busy', launching: true, payload: shipFlight.product!, lines: [`replay: run ${shipFlight.run}`], source: 'replay of today' }
+        : { word: 'quiet', tone: 'calm', lines: ['replay'], source: 'replay of today' })
       const rocketStg = at.active.filter(f => f.kind === 'stg' && !f.product), satStg = at.active.filter(f => f.kind === 'stg' && f.product)
       over.set('stage:rocket-stg', { word: rocketStg.length ? 'stacking' : 'quiet', tone: rocketStg.length ? 'busy' : 'calm', active: rocketStg.length > 0, lines: ['replay'], source: 'replay of today' })
       over.set('stage:satellites', { word: satStg.length ? 'testing' : 'quiet', tone: satStg.length ? 'busy' : 'calm', active: satStg.length > 0, count: satStg.length, lines: ['replay'], source: 'replay of today' })

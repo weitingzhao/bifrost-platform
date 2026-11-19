@@ -291,9 +291,12 @@ export function crawlerway(d: Doc): Crawlerway {
   const hif = d.parts.find(p => p.kind === 'hif')
   const sat = d.parts.find(p => p.kind === 'satellites')
   if (hif && vab) leg(hif, vab)
+  // Two pads (2026-11-19): the assembly building's booster goes to the booster pad, the ship hall's ships to the ship pad;
+  // a pad not yet told which it is takes both.
   const pads = d.parts.filter(p => p.kind === 'pad')
-  if (vab) for (const pad of [...pads].sort(near(vab))) leg(vab, pad)
-  if (sat) for (const pad of [...pads].sort(near(sat))) leg(sat, pad)
+  const shipPad = (p: Placed) => p.binds === 'stage:ship-pad'
+  if (vab) for (const pad of [...pads].filter(p => !shipPad(p)).sort(near(vab))) leg(vab, pad)
+  if (sat) for (const pad of [...pads].filter(p => shipPad(p) || !p.binds).sort(near(sat))) leg(sat, pad)
   // Every tenant's campus sends its satellite to the hall (2026-11-18: many factories, one rocket).
   if (sat) for (const c of d.parts.filter(p => p.kind === 'campus' || p.kind === 'campus4').sort(near(sat))) leg(c, sat)
   return out

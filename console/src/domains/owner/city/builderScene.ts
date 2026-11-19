@@ -593,15 +593,17 @@ export class BuilderScene extends Phaser.Scene {
   private drawBoards() {
     const f = this.s.flightsOf?.(), seen = new Set<string>()
     if (f?.log) for (const p of this.s.doc.parts) {
-      const kind = p.kind === 'pad' ? 'prod' : p.kind === 'assembly' ? 'stg' : null
+      const kind = p.kind === 'pad' ? (p.binds === 'stage:ship-pad' ? 'ships' : 'booster') : p.kind === 'assembly' ? 'stg' : null
       if (!kind) continue
       const t = f.log[kind], hhmm = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Chicago' })
-      const text = f.replay && kind === 'prod'
-        ? `REPLAY ${hhmm(f.replay.clock)}\n${f.log.flights.filter(x => x.kind === 'prod' && x.start <= f.replay!.clock).length} of ${t.total} launched`
-        : `${kind === 'prod' ? 'PROD' : 'STG'} TODAY ${t.total}\n✓${t.ok}  ✗${t.failed}${t.going ? `  ↑${t.going}` : ''}`
+      const mine = (x: Flight) => kind === 'stg' ? x.kind === 'stg' : x.kind === 'prod' && (kind === 'ships') === !!x.product
+      const title = kind === 'ships' ? 'SHIPS' : kind === 'booster' ? 'BOOSTER' : 'STG'
+      const text = f.replay
+        ? `${title} ${hhmm(f.replay.clock)}\n${f.log.flights.filter(x => mine(x) && x.start <= f.replay!.clock).length} of ${t.total}`
+        : `${title} TODAY ${t.total}\n✓${t.ok}  ✗${t.failed}${t.going ? `  ↑${t.going}` : ''}`
       let b = this.boards.get(p.id)
       if (!b) { b = this.add.text(0, 0, '', { fontFamily: 'JetBrains Mono, ui-monospace, Menlo, monospace', fontSize: `${11 * this.s.dpr}px`, fontStyle: 'bold', color: '#ffd76a', backgroundColor: '#2f3446', align: 'center', padding: { x: 5 * this.s.dpr, y: 3 * this.s.dpr } }).setOrigin(0.5, 1).setScale(1 / this.s.dpr); this.boards.set(p.id, b) }
-      const at = kind === 'prod' ? iso(p.x + p.size, p.y + p.size * 0.35, 60) : iso(p.x - 0.2, p.y + p.size, 70)
+      const at = kind !== 'stg' ? iso(p.x + p.size, p.y + p.size * 0.35, 60) : iso(p.x - 0.2, p.y + p.size, 70)
       b.setText(text).setPosition(at.x, at.y).setColor(t.failed > 0 && !f.replay ? '#ff9d8a' : '#ffd76a').setDepth(180000).setVisible(!this.s.editing)
       seen.add(p.id)
     }

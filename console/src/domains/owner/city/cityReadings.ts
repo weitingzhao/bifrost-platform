@@ -99,17 +99,26 @@ export function padReading(contexts: Contexts, lanes: readonly CityLane[], now: 
   if (!ctx) return unknown(['the platform\'s release context was not read'])
   const { runs, at, unread } = inFlight(contexts, lanes)
   const rocket = ctx.facts.prod?.value
-  const tail = [rocket ? `the rocket in service: ${rocket.commit.slice(0, 8)}, flown ${ago(rocket.completed_at, now)}` : 'the rocket in service was not read']
+  const tail = [rocket ? `the booster in service: ${rocket.commit.slice(0, 8)}, flown ${ago(rocket.completed_at, now)}` : 'the booster in service was not read']
   const upgrade = runs.find(r => { const p = at(r); return p.line === 'rocket' && p.step === 'prod' })
-  if (upgrade) return { word: 'launching the new rocket', tone: 'busy', launching: true, lines: [`run ${upgrade.name}`, ...tail] }
+  if (upgrade) return { word: 'booster test flight', tone: 'busy', launching: true, lines: [`run ${upgrade.name}`, ...tail] }
+  const win = ctx.facts.window?.value
+  if (win?.held && win.what.split(',').includes('bifrost-platform')) return { word: 'window held', tone: 'busy', lines: [`window held by ${win.who}`, ...tail] }
+  if (unread.length) return { word: 'quiet', tone: 'unknown', lines: [`release context not read: ${unread.join(', ')}`, ...tail] }
+  return { word: 'quiet', tone: 'calm', lines: tail }
+}
+
+/** The ship pad: a product's PROD release, its ship on the booster in service. */
+export function shipPadReading(contexts: Contexts, lanes: readonly CityLane[], now: number): Reading {
+  const { runs, at, unread } = inFlight(contexts, lanes)
+  const rocket = contexts.get('bifrost-platform')?.facts.prod?.value
+  const tail = [rocket ? `on the booster in service: ${rocket.commit.slice(0, 8)}, flown ${ago(rocket.completed_at, now)}` : 'the booster in service was not read']
   const carried = runs.find(r => { const p = at(r); return p.line === 'satellite' && p.step === 'prod' })
   if (carried) {
     const lane = lanes.find(l => l.pipeline === carried.pipeline) ?? { pipeline: carried.pipeline, repos: [] }
-    const sat = satelliteOf(lane)
-    return { word: `launching ${sat.name}`, tone: 'busy', launching: true, payload: sat, lines: [`run ${carried.name}`, `${sat.name} rides the rocket in service`, ...tail] }
+    const sat = tenantOf(lane) ?? satelliteOf(lane)
+    return { word: `launching ${sat.name}`, tone: 'busy', launching: true, payload: sat, lines: [`run ${carried.name}`, `${sat.name}'s ship rides the booster`, ...tail] }
   }
-  const win = ctx.facts.window?.value
-  if (win?.held && win.what.split(',').includes('bifrost-platform')) return { word: 'window held', tone: 'busy', lines: [`window held by ${win.who}`, ...tail] }
   if (unread.length) return { word: 'quiet', tone: 'unknown', lines: [`release context not read: ${unread.join(', ')}`, ...tail] }
   return { word: 'quiet', tone: 'calm', lines: tail }
 }

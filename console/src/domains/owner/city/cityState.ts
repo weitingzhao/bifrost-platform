@@ -1,6 +1,6 @@
 import type { CityLane, SystemItem } from './catalog'
 import type { CityReading, Glance } from './CityBuilder'
-import { bayReading, gateReading, padReading, supplierReading, rocketCiReading, rocketStgReading, runsAt, satellitesReading, waitingReading, type Contexts, type Reading } from './cityReadings'
+import { bayReading, gateReading, padReading, shipPadReading, supplierReading, rocketCiReading, rocketStgReading, runsAt, satellitesReading, waitingReading, type Contexts, type Reading } from './cityReadings'
 import { conflicts, CONFLICT_WORD, demand, supplies, type Demand, type Reads } from './cityUtilities'
 import { DICTIONARY } from './worldDictionary'
 import type { Machine } from './cityMachines'
@@ -33,6 +33,7 @@ export function cityReadings(i: CityInputs): Map<string, CityReading> {
   const draw = (x: Parameters<typeof demand>[1]) => u ? demand(u, x) : undefined
   put('stage:rocket-ci', rocketCiReading(i.contexts, i.lanes), 'hif', draw({ runs: runsAt(i.contexts, i.lanes, 'rocket', ['ci']) }))
   put('stage:rocket-stg', rocketStgReading(i.contexts, i.lanes, i.now), 'vab', draw({ namespaces: ['bifrost-platform-stg'], runs: runsAt(i.contexts, i.lanes, 'rocket', ['stg']) }))
+  put('stage:ship-pad', shipPadReading(i.contexts, i.lanes, i.now), 'pad')
   put('stage:satellites', satellitesReading(i.contexts, i.lanes), 'satellite-hangar', draw({ runs: runsAt(i.contexts, i.lanes, 'satellite', ['ci', 'stg', 'build']) }))
   const platform = draw({ namespaces: ['bifrost-platform-prod'], shared: PLATFORM_SHARED })
   for (const it of i.items) {

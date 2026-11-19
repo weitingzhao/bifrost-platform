@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { plannedCity } from '../defaultLayout'
-import { padReading, rocketCiReading, rocketStgReading, satellitesReading, skyReading, waitingReading, type ReleaseContext } from '../cityReadings'
+import { padReading, shipPadReading, rocketCiReading, rocketStgReading, satellitesReading, skyReading, waitingReading, type ReleaseContext } from '../cityReadings'
 import { DICTIONARY, steady } from '../worldDictionary'
 import { addRoad, canPlace, crawlerway, depthOrder, emptyDoc, expand, fromTiled, key, placeCheck, roadMask, roadShape, strokeCells, toTiled, type Doc, type Placed } from '../builderDoc'
 import { accepts, CATALOG, displayName, kindOf, laneName, layersOf, systemItems } from '../catalog'
@@ -229,9 +229,11 @@ describe('the real states', () => {
   } })
   const world = (platform: unknown[] | null, trade: unknown[] = []) => new Map<string, ReleaseContext | null>([['bifrost-platform', platform ? ctx('bifrost-platform', platform) : null], ['bifrost-trade-api', ctx('bifrost-trade-api', trade)]])
   const now = Date.parse('2026-11-18T12:00:00Z')
-  it('the pad launches a new rocket for the platform, or carries the tenant whose PROD run is going', () => {
-    expect(padReading(world([{ name: 'x', pipeline: 'bifrost-deliver-platform-prod', delivery: true }]), lanes, now)).toMatchObject({ launching: true, word: 'launching the new rocket' })
-    const carried = padReading(world([], [{ name: 'y', pipeline: 'bifrost-deliver-prod', delivery: true }]), lanes, now)
+  // 2026-11-19, the Owner: two pads: the booster flies alone on its own pad; a product's ship rides it on the ship pad.
+  it('the booster pad flies the platform alone, the ship pad carries the product whose PROD run is going', () => {
+    expect(padReading(world([{ name: 'x', pipeline: 'bifrost-deliver-platform-prod', delivery: true }]), lanes, now)).toMatchObject({ launching: true, word: 'booster test flight' })
+    expect(padReading(world([], [{ name: 'y', pipeline: 'bifrost-deliver-prod', delivery: true }]), lanes, now)).toMatchObject({ word: 'quiet' })
+    const carried = shipPadReading(world([], [{ name: 'y', pipeline: 'bifrost-deliver-prod', delivery: true }]), lanes, now)
     expect(carried).toMatchObject({ launching: true, payload: { name: 'Trade' } })
     expect(padReading(world([]), lanes, now)).toMatchObject({ word: 'quiet', tone: 'calm' })
     expect(padReading(world(null), lanes, now).tone).toBe('unknown')

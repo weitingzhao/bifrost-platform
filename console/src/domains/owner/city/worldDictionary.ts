@@ -5,7 +5,7 @@
  * meaning. The thresholds live here, versioned; no building is tiered by hand.
  */
 
-export const DICTIONARY_VERSION = 7
+export const DICTIONARY_VERSION = 8
 
 export type Tier = { name: string; enters: string }
 export type Entry = {
@@ -56,7 +56,7 @@ export const DICTIONARY: readonly Entry[] = [
     source: 'GET /api/v1/delivery/context for each tenant repository: runs_in_flight', person: '',
   },
   {
-    id: 'pad', metaphor: 'The launch pad, its booster and, while a product launches, that product\'s ship stacked on it', means: 'the booster is the platform, one vehicle flown and caught again: a platform PROD release is the booster flying alone; a product\'s PROD release is the booster carrying that product\'s ship',
+    id: 'pad', metaphor: 'Two launch pads: the booster pad, and the ship pad where a product\'s ship is stacked on the booster while it launches', means: 'the booster is the platform, one vehicle flown and caught again: a platform PROD release is a booster test flight on the booster pad; a product\'s PROD release is the booster carrying that product\'s ship on the ship pad; one release window gates both (the shared traffic light)',
     tiers: [
       { name: 'launching', enters: 'a platform or tenant PROD run is in flight (the payload band shows which tenant)' },
       { name: 'window held', enters: 'the release window is held for the platform and nothing launches' },

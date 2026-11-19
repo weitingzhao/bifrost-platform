@@ -12,7 +12,7 @@ import { placeOf, tenantOf, type CityLane } from './catalog'
 export type Run = { name: string; pipeline: string; start_time?: string; completion_time?: string; reason?: string }
 export type Flight = { run: string; pipeline: string; kind: 'prod' | 'stg'; product: { name: string; color: string } | null; start: number; end: number | null; ok: boolean | null }
 export type Tally = { total: number; ok: number; failed: number; going: number }
-export type Log = { flights: Flight[]; prod: Tally; stg: Tally; from: number }
+export type Log = { flights: Flight[]; prod: Tally; booster: Tally; ships: Tally; stg: Tally; from: number }
 
 export const FLIGHT_PIPELINES = (lanes: readonly CityLane[]) =>
   lanes.filter(l => /^bifrost-deliver-/.test(l.pipeline) || /^bifrost-build-research-dagster$/.test(l.pipeline)).map(l => l.pipeline)
@@ -42,7 +42,8 @@ export function flightLog(runs: readonly Run[], lanes: readonly CityLane[], now:
     flights.push({ run: r.name, pipeline: r.pipeline, kind, product: at.line === 'rocket' ? null : tenantOf(lane) ?? null, start, end, ok })
   }
   flights.sort((a, b) => a.start - b.start)
-  return { flights, prod: tally(flights.filter(f => f.kind === 'prod')), stg: tally(flights.filter(f => f.kind === 'stg')), from }
+  const prod = flights.filter(f => f.kind === 'prod')
+  return { flights, prod: tally(prod), booster: tally(prod.filter(f => !f.product)), ships: tally(prod.filter(f => f.product)), stg: tally(flights.filter(f => f.kind === 'stg')), from }
 }
 
 /** Replay: today squeezed into `length` ms; which flights are in the air at replay time t (0..length), and the day's clock then. */

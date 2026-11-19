@@ -23,6 +23,7 @@ const PARTS: readonly [kind: string, x: number, y: number, size: PartSize, binds
   ['hif', 14, 5, 4, 'stage:rocket-ci'],
   ['assembly', 19, 0, 4, 'stage:rocket-stg'],
   ['pad', 24, 0, 4, 'lane:bifrost-deliver-platform-prod'],
+  ['pad', 24, 5, 4, 'stage:ship-pad'],
   // The middle band: the vendors' docks, then the town.
   ['supplier', 0, 11, 2, 'plugin:bifrost-platform-plugin'],
   ['supplier', 3, 11, 2, 'plugin:bifrost-platform-plugin-market-data'],

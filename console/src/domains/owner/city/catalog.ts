@@ -30,7 +30,7 @@ export const CATALOG: readonly CatalogKind[] = [
   { kind: 'assembly', name: 'Vertical assembly', size: 4, height: 215, accepts: ['stage', 'domain'] },
   { kind: 'satellites', name: 'Ship hall', size: 4, height: 130, accepts: ['stage', 'domain'] },
   { kind: 'control', name: 'Mission control', size: 4, height: 110, accepts: ['domain'] },
-  { kind: 'pad', name: 'Launch pad', size: 4, height: 250, accepts: ['lane'] },
+  { kind: 'pad', name: 'Launch pad', size: 4, height: 250, accepts: ['lane', 'stage'] },
   { kind: 'dorm', name: 'Dormitory', size: 2, height: 105, accepts: ['domain'] },
   { kind: 'court', name: 'Court', size: 4, height: 140, accepts: ['law'] },
   { kind: 'power', name: 'Power station', size: 4, height: 120, accepts: ['node', 'domain'] },
@@ -114,10 +114,14 @@ export function placeOf(l: CityLane): { line: Line; step: Step } {
 }
 
 /** The three stages the buildings of the lines stand for. */
+/** The ship pad: where the products' ships launch on the booster (the Owner, 2026-11-19: two pads, one for each kind of flight). */
+export const SHIP_PAD = 'stage:ship-pad'
+
 export const STAGES = [
   { binds: 'stage:rocket-ci', name: 'Rocket CI', natural: 'hif', page: '#work?section=ci' },
   { binds: 'stage:rocket-stg', name: 'Rocket STG', natural: 'assembly', page: '#releases' },
   { binds: 'stage:satellites', name: 'Satellites CI and STG', natural: 'satellites', page: '#releases' },
+  { binds: SHIP_PAD, name: 'Product launches', natural: 'pad', page: '#releases' },
 ] as const
 
 /** A node of the cluster: its name and cores, read. A big one (over 16 cores) is a power station, the others generator sets. */
@@ -155,7 +159,7 @@ export function layersOf(kind: string, binds: string, color?: string, variant?: 
   const at = iso(L.PAD_STACK.x, L.PAD_STACK.y, L.PAD_STACK.z)
   const vehicle = (tex: string): Layer => ({ tex, dx: at.x, dy: at.y, stack: true, order: 0.3 })
   // The booster is the platform; a product's ship is stacked on it by the scene only while that product launches.
-  if (binds === STARSHIP_LANE) return [base('pad:chopsticks'), vehicle('booster'), base('pad:front', 0.6)]
+  if (binds === STARSHIP_LANE || binds === SHIP_PAD) return [base('pad:chopsticks'), vehicle('booster'), base('pad:front', 0.6)]
   if (binds.startsWith('lane:')) return [base('pad:plain'), vehicle(`rocket:${color ?? '#8a6cff'}`)]
   return [base('pad:plain')]
 }
