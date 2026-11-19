@@ -128,8 +128,8 @@ describe('Needs you and Progress, now part of For you and Work (W-31 2.2b)', () 
     expect(isShellRouteId('progress')).toBe(false)
   })
 
-  it('a silent-thread push opens For you at everything waiting (api/internal/server ConsoleNeedsYou)', () => {
-    const wire = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../../api/internal/server/console_notification_contract.go'), 'utf8')
+  it('a silent-thread push opens For you at everything waiting (api/internal/approvalhome ConsoleNeedsYou)', () => {
+    const wire = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../../api/internal/approvalhome/console_notification_contract.go'), 'utf8')
     const url = /const ConsoleNeedsYou = "([^"]+)"/.exec(wire)?.[1] ?? ''
     expect(url).toBe('http://ops.bifrost.lan/#you?section=waiting')
     expect(resolveConsoleHash(url.split('#')[1] ?? '')).toEqual({ location: { kind: 'shell', id: 'command' }, canonical: NEEDS_YOU_HREF })

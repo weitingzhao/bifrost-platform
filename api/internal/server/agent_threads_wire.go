@@ -9,20 +9,20 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/threadtitles"
 )
 
-// LookFallback is the server-written title of a Look push whose composed
-// text contains a hidden character. It is the verb and the record, not the
-// session's own words. Thread silence and host loss use the same one.
-const LookFallback = "Look · thread"
-
+// agentThreadNotice fills the message type with the owner domain's link and
+// fallback. It stays here: agentthreads may not import approvalnotify, and
+// approvalhome may not either (questions imports approvalhome and must not
+// reach approvalnotify).
 func agentThreadNotice(title, body, kind, id string) approvalnotify.Message {
 	return approvalnotify.Message{
-		Title: title, Message: body, ClickURL: ConsoleNeedsYou,
-		Fallback: LookFallback, Kind: kind, ID: id,
+		Title: title, Message: body, ClickURL: approvalhome.ConsoleNeedsYou,
+		Fallback: approvalhome.LookFallback, Kind: kind, ID: id,
 	}
 }
 

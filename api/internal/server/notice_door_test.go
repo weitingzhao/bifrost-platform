@@ -9,16 +9,17 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 )
 
 func TestLookAndPolicyFallbacks(t *testing.T) {
-	if LookFallback != "Look · thread" || notice.HasHidden(LookFallback) {
-		t.Fatal(LookFallback)
+	if approvalhome.LookFallback != "Look · thread" || notice.HasHidden(approvalhome.LookFallback) {
+		t.Fatal(approvalhome.LookFallback)
 	}
 	msg := agentThreadNotice("Look · "+mark+"\u202e", "body "+mark, "thread", "claude/t")
-	if msg.Fallback != LookFallback || msg.ClickURL != ConsoleNeedsYou || msg.Kind != "thread" || msg.ID != "claude/t" {
+	if msg.Fallback != approvalhome.LookFallback || msg.ClickURL != approvalhome.ConsoleNeedsYou || msg.Kind != "thread" || msg.ID != "claude/t" {
 		t.Fatalf("%+v", msg)
 	}
 	policy := releasePolicyNotice("Release policy expires in 23h", "Sign a new one")
@@ -46,7 +47,7 @@ func TestLookAndPolicyFallbacks(t *testing.T) {
 	if err := json.Unmarshal(raw, &posted); err != nil {
 		t.Fatal(err)
 	}
-	if posted.Title != "Look · thread" || posted.Message != notice.WithheldBody || posted.ClickURL != ConsoleNeedsYou || strings.Contains(string(raw), mark) {
+	if posted.Title != "Look · thread" || posted.Message != notice.WithheldBody || posted.ClickURL != approvalhome.ConsoleNeedsYou || strings.Contains(string(raw), mark) {
 		t.Fatalf("look %q", raw)
 	}
 	hidden := releasePolicyNotice("Release \u202e policy", "Sign")
