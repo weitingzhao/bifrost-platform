@@ -23,6 +23,10 @@ const (
 	// deliver to the platform's webhook (X-A24): the platform says it on the bus
 	// from what Prometheus reports, as it does for the relay.
 	NameWebhookFailing = "BifrostAlertmanagerWebhookFailing"
+	// NameRuleGroupsMissing is fewer alert rule groups loaded than in the last
+	// day (Y-6): 2026-11-14 a rule file lost the label Prometheus selects on and
+	// its 71 rules were silent for 4.5 days, the standby marker among them.
+	NameRuleGroupsMissing = "BifrostRuleGroupsMissing"
 
 	// platformNamespace is the "namespace" of what the platform says of its
 	// own runtime; monitoringNamespace of the alert path itself.
@@ -71,14 +75,16 @@ type RelayReading struct {
 	// WebhookKnown is whether Prometheus answered; WebhookFailing what it said
 	// of NameWebhookFailing. A Prometheus that does not answer changes nothing.
 	WebhookKnown, WebhookFailing bool
+	// RulesKnown and RulesMissing: the same for loaded rule groups.
+	RulesKnown, RulesMissing bool
 }
 
 // RelayWatch mirrors the relay's own view onto the bus, and Prometheus's view of the webhook. The relay still pages
 // the phone by itself when the Watchdog stops: it shares nothing with the
 // cluster, and this watch is only the same fact where the rest can be seen.
 type RelayWatch struct {
-	Missing, Unreachable, Webhook bool
-	fails                         int
+	Missing, Unreachable, Webhook, Rules bool
+	fails                                int
 }
 
 // Step takes one reading and says what changed.
@@ -87,6 +93,10 @@ func (w *RelayWatch) Step(r RelayReading) []Alert {
 	if r.WebhookKnown && r.WebhookFailing != w.Webhook {
 		w.Webhook = r.WebhookFailing
 		out = append(out, relayAlert(NameWebhookFailing, w.Webhook))
+	}
+	if r.RulesKnown && r.RulesMissing != w.Rules {
+		w.Rules = r.RulesMissing
+		out = append(out, relayAlert(NameRuleGroupsMissing, w.Rules))
 	}
 	if !r.Reached {
 		if w.fails++; w.fails >= relayFailsToAlert && !w.Unreachable {

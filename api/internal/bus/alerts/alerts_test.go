@@ -210,3 +210,24 @@ func TestRelayWatchSaysTheWebhookOnlyWhenPrometheusAnswers(t *testing.T) {
 		t.Fatalf("resolved: %v", got)
 	}
 }
+
+// 2026-11-19: a PrometheusRule lost the label Prometheus selects on and its 71
+// rules were silent for 4.5 days; nothing said so. The watch says when fewer
+// rule groups are loaded than in the last day, and only when Prometheus answers.
+func TestRelayWatchSaysMissingRuleGroups(t *testing.T) {
+	var w alerts.RelayWatch
+	up := alerts.RelayReading{Reached: true, Enabled: true, HeartbeatOK: true}
+	missing := up
+	missing.RulesKnown, missing.RulesMissing = true, true
+	if got := w.Step(missing); len(got) != 1 || got[0].Name != alerts.NameRuleGroupsMissing || got[0].Status != "firing" {
+		t.Fatalf("missing rules: %v", got)
+	}
+	if got := w.Step(up); len(got) != 0 || !w.Rules {
+		t.Fatalf("Prometheus not answering must not change state: %v", got)
+	}
+	back := up
+	back.RulesKnown = true
+	if got := w.Step(back); len(got) != 1 || got[0].Status != "resolved" {
+		t.Fatalf("rules back: %v", got)
+	}
+}

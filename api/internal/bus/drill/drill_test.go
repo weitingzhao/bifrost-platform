@@ -62,8 +62,8 @@ func TestEveryDrillKeyOfTheRegisterHasADrillAndBack(t *testing.T) {
 			t.Errorf("%s: names a drill key but nothing is drilled", id)
 		}
 	}
-	if len(have) != 18 {
-		t.Errorf("%d drills, the register has 18 channels without a safe natural trigger", len(have))
+	if len(have) != 19 {
+		t.Errorf("%d drills, the register has 19 channels without a safe natural trigger", len(have))
 	}
 }
 

@@ -73,6 +73,7 @@ func drills() []drill {
 		{"Y-1", alerts.NameApprovalClaim},
 		{"Y-3", alerts.NameLoopFailing}, {"Y-4", alerts.NameArtifactRefused},
 		{"Y-5", alerts.NameRelayUnreachable}, {"X-A24", alerts.NameWebhookFailing},
+		{"Y-6", alerts.NameRuleGroupsMissing},
 	} {
 		if a, ok := alerts.Normalize(c.name, nspace, "", "resolved"); ok {
 			out = append(out, drill{c.id, alerts.Type, alerts.Body(a)})
