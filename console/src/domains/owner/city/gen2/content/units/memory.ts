@@ -34,5 +34,29 @@ export const MEMORY_UNIT: UnitSpec = {
     { id: 'pressure', label: 'Waiting for memory', meaning: 'How much of the time some task waited because memory was short (pressure).', query: 'rate(node_pressure_memory_waiting_seconds_total[5m])', unit: 'share', per: 'unit', known: 'system' },
     { id: 'oom', label: 'Programs killed for memory', meaning: 'How many programs the system stopped because memory ran out, since it started.', query: 'node_vmstat_oom_kill', unit: 'count', per: 'unit', known: 'system' },
   ],
-  confirmed: {},
+  // Details confirmed 2026-11-19: the eleven the memory itself knows, as it is now. The three the system
+  // counts are out (room standard 1); the programs killed for memory is a count since boot, history,
+  // which belongs outside the room (room standard 12).
+  chosen: ['total', 'used', 'free', 'cache', 'compressed', 'kernel', 'dirty', 'swap.total', 'swap.used', 'swap.io', 'corrupted'],
+  // Inside, drafted for the Owner to see before it is drawn: the workbench room. The bench is laid out in
+  // standard parts (a section per 4 GB), its top showing what is on it now, side by side from the left:
+  // the system's own fixtures, the work in hand, the packed boxes, the copies that can be cleared off, the
+  // parts waiting to go to the warehouse, and the bare top. Flat on the tops, nothing hides anything.
+  inside: [
+    { detail: 'total', thing: 'Bench sections', shows: 'One section per 4 GB (the standard part); 24 GB, six sections, in pairs.', where: 'workbench floor' },
+    { detail: 'kernel', thing: 'Fixtures bolted to the bench', shows: 'Kept by the system and never cleared: grey vices and clamps, first from the left.', where: 'workbench floor' },
+    { detail: 'used', thing: 'Work in hand', shows: 'What is being worked on: amber workpieces, next along the top.', where: 'workbench floor' },
+    { detail: 'compressed', thing: 'Packed boxes', shows: 'Packed tighter to make room: small blue boxes, next.', where: 'workbench floor' },
+    { detail: 'cache', thing: 'Copies that can be swept off', shows: 'Copies of what is in the warehouse, kept while there is room: pale sheets, next; they go first when room is needed.', where: 'workbench floor' },
+    { detail: 'dirty', thing: 'Parts waiting for the warehouse', shows: 'Changed and not yet put away: a few on a tray at the bench’s end.', where: 'workbench floor' },
+    { detail: 'free', thing: 'Bare bench top', shows: 'Nothing on it: the rest of the top, empty.', where: 'workbench floor' },
+    { detail: 'corrupted', thing: 'Taped-off section', shows: 'Damaged and out of use: a section crossed with red tape; none when nothing is damaged.', where: 'workbench floor' },
+    { detail: 'swap.total', thing: 'Overflow corner', shows: 'Floor marked off by the wall for what does not fit on the bench, as big as the swap (in the same 4 GB parts).', where: 'overflow corner' },
+    { detail: 'swap.used', thing: 'Crates in the corner', shows: 'What is pushed out there now: crates filling the marked floor.', where: 'overflow corner' },
+    { detail: 'swap.io', thing: 'TRAFFIC on the console', shows: 'How fast things move between the bench and the corner, on the standard instrument.', where: 'memory console' },
+    { detail: 'used', thing: 'IN USE on the console desk', shows: 'How full the bench is with work in hand, as a share: the same lit folds as the CPU console, the percent on its plate.', where: 'memory console' },
+  ],
+  confirmed: {
+    details: { on: '2026-11-19', words: '我们这个房间的话，就是来去记录现在瞬时的内存的状态反应就可以了' },
+  },
 }

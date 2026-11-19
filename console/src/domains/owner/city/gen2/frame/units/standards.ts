@@ -83,4 +83,10 @@ export const ROOM_STANDARDS: RoomStandard[] = [
     how: 'readingText: 7%, 2.4 GHz, 68°C, 500 GB, 24.0 TB; a dash when not read.',
     from: 'The Owner: what can be shown, shown to one standard.',
   },
+  {
+    id: 'now', check: 'eye',
+    rule: 'A room shows this moment.',
+    how: 'What the hardware is now: a reading taken now, or a rate over the last few minutes. History (how it was used over days, counts since boot) belongs outside the room, later.',
+    from: 'The Owner, choosing the memory room\'s details: the CPU and memory readings are the state now; their history is outside, not here.',
+  },
 ]
