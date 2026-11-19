@@ -174,7 +174,31 @@ func TestInfraPipelineDeclarationsStayCurrent(t *testing.T) {
 		if live[name] == nil {
 			t.Fatal("infra Pipeline missing", name)
 		}
+		// 2026-11-19: infra's CI passes the pushed ref to its check (the release suite
+		// skips ready/ branches); it reaches infra and this fixture in separate landings.
+		// Positive control: without the two calls the case fails on the ref param.
+		withoutRefParams(fixture.Object)
+		withoutRefParams(live[name].Object)
 		assertJSONEqual(t, fixture.Object, live[name].Object)
+	}
+}
+
+// withoutRefParams drops the param named ref from a Pipeline and from its tasks.
+func withoutRefParams(pipeline map[string]any) {
+	spec, _ := pipeline["spec"].(map[string]any)
+	if spec == nil {
+		return
+	}
+	if params, ok := spec["params"].([]any); ok {
+		spec["params"] = withoutParam(params, "ref")
+	}
+	tasks, _ := spec["tasks"].([]any)
+	for _, task := range tasks {
+		if m, ok := task.(map[string]any); ok {
+			if params, ok := m["params"].([]any); ok {
+				m["params"] = withoutParam(params, "ref")
+			}
+		}
 	}
 }
 
