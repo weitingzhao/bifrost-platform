@@ -42,10 +42,10 @@ const litBy = (light: Light, seed: number) => (r: number, c: number) =>
 
 /**
  * How far a thing stands back from its plot's edge (the Owner, 2026-11-19: streets and green belts
- * between neighbours). A 4×4 or 8×8 clears the street's half-width (0.35) and a belt beyond it; a
- * 2×2 less; a 1×1 is a marker.
+ * between neighbours). The same on every plot, as every street is one width: past the road's half
+ * (0.3), its kerb and the belt; a 1×1 is a marker and stands just past the kerb.
  */
-export const setback = (n: number) => n >= 4 ? 0.88 : n === 2 ? 0.55 : 0.28
+export const setback = (n: number) => n >= 2 ? 0.58 : 0.36
 
 /** A district: a tall hall on a plinth, a hue band under the parapet, rows of windows, a door, rooftop units. */
 export function districtHall(fw: number, fd: number, hue: string, light: Light, seed = 0): Sprite {
@@ -107,9 +107,10 @@ export function workshop(fw: number, fd: number, hue: string, light: Light, seed
  */
 export function roomFloor(fw: number, fd: number, hue: string, light: Light): Sprite {
   const W = WALLS[light]
-  const n = Math.min(fw, fd)
   const g = new Draw(fw, fd, 34)
-  const i = n >= 2 ? 0.3 : 0.12, x0 = i, y0 = i, x1 = fw - i, y1 = fd - i, w = x1 - x0, d = y1 - y0
+  // Set back from its plot by half a corridor (the same width as a street, grid.ts), so two rooms side
+  // by side have a corridor between them (the Owner, 2026-11-19: never wall to wall).
+  const i = 0.3, x0 = i, y0 = i, x1 = fw - i, y1 = fd - i, w = x1 - x0, d = y1 - y0
   const t = 0.12, HIGH = 18, LOW = 5, wall = faces(W.top, W.left, W.right)
   const carpet = light === 'night' ? shade(hue, -0.5) : light === 'dusk' ? shade(hue, 0.3) : shade(hue, 0.6)
   g.box(x0, y0, w, d, 3, faces(carpet, W.left, W.right))
@@ -157,7 +158,8 @@ export function districtBlock(fw: number, fd: number, hue: string, light: Light,
   const count = Math.max(holds, n >= 8 ? 6 : n >= 4 ? 4 : 2) + (fw !== fd ? 1 : 0)
   const i = setback(n), x0 = i, y0 = i, x1 = fw - i, y1 = fd - i, w = x1 - x0, d = y1 - y0
   const cols = Math.max(1, Math.round(Math.sqrt(count * w / d))), rows = Math.ceil(count / cols)
-  const gap = Math.min(0.4, Math.min(w / cols, d / rows) * 0.2)
+  // Between the buildings of a block, the same width as every way (the Owner, 2026-11-19).
+  const gap = Math.min(0.6, Math.min(w / cols, d / rows) * 0.4)
   const cw = (w - gap * (cols - 1)) / cols, cd = (d - gap * (rows - 1)) / rows
   const top = 20 + n * 9
   const g = new Draw(fw, fd, top + 40)

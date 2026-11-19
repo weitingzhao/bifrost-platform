@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser'
-import { fitsIn, GRID, plotAt, type Cell, type Placed, type Plot, type Street } from './grid'
+import { fitsIn, GRID, plotAt, STREET_HALF, type Cell, type Placed, type Plot, type Street } from './grid'
 import type { Place } from './places'
 import { PALETTE, type Light, type Palette } from './light'
 import { hash } from './kit'
@@ -82,6 +82,10 @@ const SLAB = 14
  * the edge street is a road like any other, not half of one cut by the slab (the Owner, 2026-11-19).
  */
 const RIM = 1.1
+/** Every road and corridor, on every level: its half-width (grid.ts), its kerb, and where a plot's lot begins. */
+const ROAD_HALF = STREET_HALF.street
+const KERB = 0.06
+const LOT_INSET = ROAD_HALF + KERB + 0.14
 
 export class PlaceScene extends Phaser.Scene {
   private events_: SceneEvents
@@ -606,12 +610,12 @@ export class PlaceScene extends Phaser.Scene {
         else g.lineBetween(iso(p0, at).x, iso(p0, at).y, iso(p1, at).x, iso(p1, at).y)
       }
     }
-    // A highway is wider than any street, all one width: two carriageways either side of a planted median.
-    const HIGHWAY_HALF = 0.6
-    const roads = streets.filter(st => st.kind !== 'lane' && st.kind !== 'path').map(st => grade === 'highway' ? { ...st, half: HIGHWAY_HALF } : st)
-    const ways = streets.filter(st => st.kind === 'lane' || st.kind === 'path')
-    // Each plot's lot: inset from its edges by the street's half, the kerb and a belt of grass.
-    const lotInset = (p: Plot) => { const side = Math.min(p.w, p.h); return (side >= 4 ? 0.62 : side === 2 ? 0.4 : 0.22) + (grade === 'highway' && side >= 4 ? 0.2 : 0) }
+    // Every way between things is one width on every level (the Owner, 2026-11-19: highway, street and
+    // corridor alike, so the picture stays regular): grid.ts gives them all the same half-width. The
+    // level tells them apart by their marking, not their width.
+    const roads = streets
+    // Each plot's lot: inset from its edges by the road's half, its kerb and a belt of grass — the same on every plot.
+    const lotInset = (p: Plot) => Math.min(p.w, p.h) >= 2 ? LOT_INSET : ROAD_HALF + KERB
     if (indoors) this.storey(g, lo, hi)
     else {
       for (const p of plots) {
@@ -620,30 +624,22 @@ export class PlaceScene extends Phaser.Scene {
         g.fillStyle(this.tone.lot).fillPoints(q, true)
       }
       g.fillStyle(this.tone.kerb)
-      for (const st of roads) g.fillPoints(strip(st, st.half + 0.1), true)
+      for (const st of roads) g.fillPoints(strip(st, st.half + KERB), true)
       g.fillStyle(this.tone.asphalt)
       for (const st of roads) g.fillPoints(strip(st, st.half), true)
-      // Lanes and paths: paved, no kerb, no paint.
-      g.fillStyle(this.tone.kerb)
-      for (const st of ways) g.fillPoints(strip(st, st.half), true)
       if (grade === 'highway') {
-        // The median: a kerbed strip of grass down the middle; a lane line down each carriageway.
+        // A highway: darker, a solid double line down the middle and solid edge lines.
         g.fillStyle(this.tone.ink, 0.16)
         for (const st of roads) g.fillPoints(strip(st, st.half), true)
-        for (const st of roads) {
-          g.fillStyle(this.tone.kerb).fillPoints(strip(st, 0.13), true)
-          g.fillStyle(this.tone.grass).fillPoints(strip(st, 0.08), true)
-        }
-        g.lineStyle(1.3, this.tone.paint, 0.9)
-        for (const st of roads) for (const off of [-0.37, 0.37]) dashes(st, off)
-        g.lineStyle(1, this.tone.paint, 0.7)
-        for (const st of roads) for (const off of [-st.half + 0.04, st.half - 0.04]) { const q = strip(st, 0.001, off), e = st.x0 === st.x1 ? q[3] : q[1]; g.lineBetween(q[0].x, q[0].y, e.x, e.y) }
+        const solid = (st: Street, off: number) => { const q = strip(st, 0.001, off), e = st.x0 === st.x1 ? q[3] : q[1]; g.lineBetween(q[0].x, q[0].y, e.x, e.y) }
+        g.lineStyle(1.1, this.tone.pick, 0.95)
+        for (const st of roads) for (const off of [-0.035, 0.035]) solid(st, off)
+        g.lineStyle(1, this.tone.paint, 0.75)
+        for (const st of roads) for (const off of [-st.half + 0.04, st.half - 0.04]) solid(st, off)
       } else {
-        // Lane paint: dashes down every road and the ring, a double line down the avenue.
-        for (const st of roads) {
-          g.lineStyle(st.kind === 'avenue' ? 1.2 : 1.4, this.tone.paint, 0.9)
-          for (const off of st.kind === 'avenue' ? [-0.06, 0.06] : [0]) dashes(st, off)
-        }
+        // A street: one dashed line down the middle.
+        g.lineStyle(1.3, this.tone.paint, 0.9)
+        for (const st of roads) dashes(st, 0)
       }
     }
     // While arranging, the lines in four weights matching the four sizes: the 8-line quarters the

@@ -9,9 +9,9 @@
  *           A square is cut across x, an oblong across its long side, so every plot is a square
  *           or a 2 : 1 oblong with sides of 1, 2, 4, 8 or 16, and its edges always meet. The
  *           Owner may cut and join plots (display only); the default cuts the ground into 4 × 4.
- *   streets every cut is a street; the wider the plots on either side, the wider the street
- *           (the ground's first cut is the avenue, then streets, lanes between 2-wide plots,
- *           paths between 1-wide ones), and a ring road runs round the ground.
+ *   streets every cut is a street, all one width on every level (named by where they run: the
+ *           first cut the avenue, then streets, lanes between 2-wide plots, paths between 1-wide
+ *           ones), and a ring road runs round the ground.
  *
  * A thing goes in a plot it fits (its long side along the plot's long side), one to a plot, centred.
  * Until the Owner cuts the ground himself, the plan is cut to fit what the place holds (planFor).
@@ -124,7 +124,9 @@ export type StreetKind = 'ring' | 'avenue' | 'street' | 'lane' | 'path'
 /** A stretch of street along a line from (x0, y0) to (x1, y1), in cells, and half its width. */
 export type Street = { kind: StreetKind; x0: number; y0: number; x1: number; y1: number; half: number }
 
-export const STREET_HALF: Record<StreetKind, number> = { ring: 0.35, avenue: 0.5, street: 0.35, lane: 0.22, path: 0.12 }
+/** One width for every way between things, on every level (the Owner, 2026-11-19: regular, like pixel art). */
+const WAY_HALF = 0.3
+export const STREET_HALF: Record<StreetKind, number> = { ring: WAY_HALF, avenue: WAY_HALF, street: WAY_HALF, lane: WAY_HALF, path: WAY_HALF }
 
 /** Every cut is a street, as wide as the narrower side of the plots it divides allows; the ring runs round the ground. */
 export function streetsOf(plan: Plan): Street[] {

@@ -44,14 +44,13 @@ describe('plans', () => {
 })
 
 describe('streets follow the plots', () => {
-  it('the first cut is the avenue; a ring runs round; finer plots get narrower streets', () => {
+  // 2026-11-19, the Owner: corridor, street and highway all one width, so the picture stays regular.
+  it('the first cut is the avenue; a ring runs round; every street is one width', () => {
     const s = streetsOf(splitPlot(splitPlot(defaultPlan(), 'aaaa')!, 'aaaaa')!)
     expect(s.filter(x => x.kind === 'avenue')).toHaveLength(1)
     expect(s.filter(x => x.kind === 'ring')).toHaveLength(4)
     expect(s.some(x => x.kind === 'lane')).toBe(true)
-    const half = (k: string) => s.find(x => x.kind === k)!.half
-    expect(half('avenue')).toBeGreaterThan(half('street'))
-    expect(half('street')).toBeGreaterThan(half('lane'))
+    expect(new Set(s.map(x => x.half)).size).toBe(1)
   })
   it('a plot never has a street through it', () => {
     const plan = splitPlot(defaultPlan(), 'abab')!
