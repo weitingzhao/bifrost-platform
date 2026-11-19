@@ -48,11 +48,11 @@ export type StageId = (typeof STAGES)[number]['id']
 
 /**
  * What a detail is measured over (the Owner, 2026-11-19: each reading drawn where it belongs, or the
- * picture is a concept drawing): the whole CPU (one value), each core, each sensor (a sensor says by
+ * picture is a concept drawing): the whole unit (one value), each core, each sensor (a sensor says by
  * its label whether it measures the whole chip or one core), or each mode of time. The room draws a
  * per-core reading on every machine and a whole-CPU reading once, on the workshop.
  */
-export type Per = 'cpu' | 'core' | 'sensor' | 'mode'
+export type Per = 'unit' | 'core' | 'sensor' | 'mode'
 
 export type Detail = {
   id: string
@@ -61,8 +61,13 @@ export type Detail = {
   meaning: string
   /** The PromQL that reads it, labelled by `instance` (node exporter). */
   query: string
-  unit: 'share' | 'count' | 'per second' | 'Hz' | '°C' | 'load'
+  unit: 'share' | 'count' | 'per second' | 'Hz' | '°C' | 'load' | 'bytes' | 'bytes per second'
   per: Per
+  /**
+   * Who knows it (room standard 1: only what the hardware itself knows goes in the room): the hardware's
+   * own state, or an event the operating system counts. The Owner picks at Details; this is the advice.
+   */
+  known?: 'hardware' | 'system'
 }
 
 /**

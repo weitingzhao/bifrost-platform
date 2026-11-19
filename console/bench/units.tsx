@@ -38,12 +38,14 @@ const fmt = (v: number, unit: Detail['unit']) =>
   : unit === '°C' ? `${Math.round(v)}°`
   : unit === 'per second' ? (v >= 1000 ? `${(v / 1000).toFixed(1)}k/s` : `${Math.round(v)}/s`)
   : unit === 'load' ? v.toFixed(2)
+  : unit === 'bytes' ? (v >= 1e12 ? `${(v / 1e12).toFixed(1)} TB` : v >= 1e9 ? `${(v / 1e9).toFixed(1)} GB` : `${Math.round(v / 1e6)} MB`)
+  : unit === 'bytes per second' ? (v >= 1e6 ? `${(v / 1e6).toFixed(1)} MB/s` : `${Math.round(v / 1e3)} kB/s`)
   : String(Math.round(v))
 
 /** One machine's reading of one detail, in a cell: a value, or many (per core, sensor, mode), or not read. */
 function Cell({ d, pts }: { d: Detail; pts: Point[] }) {
   if (pts.length === 0) return <td className="none">not read</td>
-  if (d.per === 'cpu') return <td>{fmt(pts[0].value, d.unit)}</td>
+  if (d.per === 'unit') return <td>{fmt(pts[0].value, d.unit)}</td>
   if (d.per === 'mode') {
     const by = [...pts].sort((a, b) => b.value - a.value).filter(p => p.value >= 0.0005)
     return <td title={pts.map(p => `${p.labels.mode} ${fmt(p.value, d.unit)}`).join('\n')}>{by.slice(0, 3).map(p => `${p.labels.mode} ${fmt(p.value, d.unit)}`).join(' · ') || 'all ~0'}</td>
@@ -62,12 +64,13 @@ function DetailsStage({ u, r }: { u: UnitSpec; r: Reads }) {
   return <>
     <div className="scroll">
       <table className="matrix">
-        <thead><tr><th>Detail</th><th>Per</th>{nodes.map(n => <th key={n.id} title={n.label}>{n.id}</th>)}</tr></thead>
+        <thead><tr><th>Detail</th><th>Per</th><th>Known by</th>{nodes.map(n => <th key={n.id} title={n.label}>{n.id}</th>)}</tr></thead>
         <tbody>
           {u.details.map(d => (
             <tr key={d.id} className={u.chosen?.includes(d.id) ? 'chosen' : ''}>
               <th title={`${d.meaning}\n\n${d.query}`}><b>{d.label}</b><span>{d.meaning}</span></th>
               <td className="per">{d.per}</td>
+              <td className={`per ${d.known === 'hardware' ? 'hw' : ''}`}>{d.known === 'hardware' ? 'the hardware' : d.known === 'system' ? 'the system' : ''}</td>
               {nodes.map(n => <Cell key={n.id} d={d} pts={of(d, n)} />)}
             </tr>
           ))}
@@ -75,7 +78,7 @@ function DetailsStage({ u, r }: { u: UnitSpec; r: Reads }) {
       </table>
     </div>
     {failed.length > 0 && <p className="warn">The platform did not answer for: {failed.map(d => d.label).join(', ')}.</p>}
-    <p className="hint">Hover a detail for its query; hover a cell for every core, sensor or mode. Every machine of the district is a column; one nothing reads says “not read” (the two Windows hosts and the MacBook have no node exporter; the GPU box is asleep).</p>
+    <p className="hint">Known by: room standard 1 puts in the room only what the hardware itself knows; “the system” marks an event the operating system counts — the advice; you choose. Hover a detail for its query; hover a cell for every core, sensor or mode. Every machine of the district is a column; one nothing reads says “not read” (the two Windows hosts and the MacBook have no node exporter; the GPU box is asleep).</p>
   </>
 }
 
@@ -107,7 +110,7 @@ function CpuRoomView({ r }: { r: Reads }) {
   </div>
 }
 
-const PER_WORD = { cpu: 'the whole CPU', core: 'each core', sensor: 'each sensor (whole chip or one core, by its label)', mode: 'each mode' } as const
+const PER_WORD = { unit: 'the whole unit', core: 'each core', sensor: 'each sensor (whole chip or one core, by its label)', mode: 'each mode' } as const
 
 /** The room drafted: each chosen detail as a piece of the facility's equipment, before it is drawn. */
 function InsideDraft({ u }: { u: UnitSpec }) {
@@ -120,7 +123,7 @@ function InsideDraft({ u }: { u: UnitSpec }) {
         <thead><tr><th>Where</th><th>Detail</th><th>Measured over</th><th>Becomes</th><th>How the reading shows</th></tr></thead>
         <tbody>
           {groups.flatMap(g => u.inside!.filter(i => i.where === g).map((i, k) => (
-            <tr key={i.detail}>{k === 0 ? <td rowSpan={u.inside!.filter(x => x.where === g).length} className="per">{g}</td> : null}<td>{label(i.detail)}</td><td className="per">{PER_WORD[u.details.find(d => d.id === i.detail)?.per ?? 'cpu']}</td><td><b>{i.thing}</b></td><td className="wrap">{i.shows}</td></tr>
+            <tr key={i.detail}>{k === 0 ? <td rowSpan={u.inside!.filter(x => x.where === g).length} className="per">{g}</td> : null}<td>{label(i.detail)}</td><td className="per">{PER_WORD[u.details.find(d => d.id === i.detail)?.per ?? 'unit']}</td><td><b>{i.thing}</b></td><td className="wrap">{i.shows}</td></tr>
           )))}
         </tbody>
       </table>
@@ -236,7 +239,7 @@ function App() {
         {UNIT_PLAN.map((p, i) => {
           const spec = UNITS.find(x => x.id === p.id)
           const done = spec ? stagesOf(spec).filter(s => s.state === 'confirmed').length : 0
-          return <button key={p.id} className={p.id === unitId ? 'on' : ''} disabled={!spec} onClick={() => setUnitId(p.id)}>
+          return <button key={p.id} className={p.id === unitId ? 'on' : ''} disabled={!spec} onClick={() => { setUnitId(p.id); setStageId(stagesOf(spec!).find(x => x.state === 'open')?.id ?? 'details') }}>
             <span>{i + 1}. {p.name}</span><em>{p.metaphor}</em>
             <i>{spec ? `${done} of ${STAGES.length} confirmed` : 'not started'}</i>
           </button>

@@ -15,4 +15,4 @@ for (const u of UNITS) {
 }
 const out = { read_at: new Date().toISOString(), topology, reads }
 fs.writeFileSync(path.join(import.meta.dirname, 'units.local.json'), JSON.stringify(out))
-console.log(`units.local.json at ${out.read_at}:`, Object.fromEntries(Object.entries(reads.cpu).map(([k, v]) => [k, Array.isArray(v) ? v.length : 'not read'])))
+for (const [u, r] of Object.entries(reads)) console.log(u, Object.fromEntries(Object.entries(r).map(([k, v]) => [k, Array.isArray(v) ? v.length : 'not read'])))

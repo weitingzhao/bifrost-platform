@@ -2165,6 +2165,7 @@
         "console/src/domains/owner/city/gen2/content/hardware.ts",
         "console/src/domains/owner/city/gen2/content/panels.tsx",
         "console/src/domains/owner/city/gen2/content/units/cpu.ts",
+        "console/src/domains/owner/city/gen2/content/units/memory.ts",
         "console/src/domains/owner/city/gen2/frame/CityGen2.tsx",
         "console/src/domains/owner/city/gen2/frame/__tests__/boundary.test.ts",
         "console/src/domains/owner/city/gen2/frame/__tests__/cpuRoom.test.ts",
