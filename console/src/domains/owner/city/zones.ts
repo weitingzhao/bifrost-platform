@@ -6,8 +6,8 @@ import type { Zone } from './builderDoc'
  * district is a named rectangle of tinted ground; the usual names come with
  * their tint, any other name is allowed.
  */
-export const ZONE_NAMES = ['Launch site', 'Satellite campuses', 'Town', 'Power yard'] as const
-const TINTS: Record<string, string> = { 'Launch site': '#e3e8ee', 'Satellite campuses': '#e7e1f1', Town: '#f1e8d6', 'Power yard': '#e9e6da' }
+export const ZONE_NAMES = ['Launch site', 'Satellite campuses', 'Suppliers', 'Town', 'Power yard'] as const
+const TINTS: Record<string, string> = { 'Launch site': '#e3e8ee', 'Satellite campuses': '#e7e1f1', Suppliers: '#e0edf0', Town: '#f1e8d6', 'Power yard': '#e9e6da' }
 const OTHER = ['#e2eedf', '#f3e2e2', '#e0edf0', '#efe9d0']
 
 export function zoneTint(name: string): string {

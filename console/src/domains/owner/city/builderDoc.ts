@@ -91,6 +91,31 @@ export function expand(d: Doc, step = LAND_STEP): boolean {
   return true
 }
 
+/**
+ * The land trimmed to what stands on it (2026-11-18, the Owner wants the city
+ * tight): buildings, roads and districts keep their places relative to each
+ * other, the empty border is cut to one cell. False when there is nothing to
+ * cut or nothing on the land.
+ */
+export function trim(d: Doc, margin = 1): boolean {
+  const xs: number[] = [], ys: number[] = []
+  for (const p of d.parts) { xs.push(p.x, p.x + p.size - 1); ys.push(p.y, p.y + p.size - 1) }
+  for (const k of d.roads) { const [x, y] = cellOf(k); xs.push(x); ys.push(y) }
+  if (!xs.length) return false
+  // Districts follow what stands in them; they do not hold land open by themselves.
+  const x0 = Math.max(0, Math.min(...xs) - margin), y0 = Math.max(0, Math.min(...ys) - margin)
+  const w = Math.min(d.width, Math.max(...xs) + 1 + margin) - x0, h = Math.min(d.height, Math.max(...ys) + 1 + margin) - y0
+  if (x0 === 0 && y0 === 0 && w === d.width && h === d.height) return false
+  for (const p of d.parts) { p.x -= x0; p.y -= y0 }
+  d.roads = new Set([...d.roads].map(k => { const [x, y] = cellOf(k); return key(x - x0, y - y0) }).filter(k => { const [x, y] = cellOf(k); return x < w && y < h }))
+  d.zones = d.zones?.map(z => {
+    const zx = Math.max(0, z.x - x0), zy = Math.max(0, z.y - y0)
+    return { ...z, x: zx, y: zy, w: Math.min(w, z.x - x0 + z.w) - zx, h: Math.min(h, z.y - y0 + z.h) - zy }
+  }).filter(z => z.w > 0 && z.h > 0)
+  d.width = w; d.height = h
+  return true
+}
+
 let seq = 0
 export function newPartId(d: Doc): string {
   let id: string

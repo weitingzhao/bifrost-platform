@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { targetOfCharter, workersGlance, workersOf } from '../cityWorkers'
-import { doorOf, fromTiled, targetPart, toTiled, walkPath } from '../builderDoc'
+import { addRoad, doorOf, emptyDoc, fromTiled, targetPart, toTiled, trim, walkPath } from '../builderDoc'
 import { bayReading, skyReading, type ReleaseContext } from '../cityReadings'
 import { plannedCity } from '../defaultLayout'
 import { pluginsOf, tenantsOf } from '../catalog'
@@ -42,13 +42,14 @@ describe('workers', () => {
 })
 
 describe('the zoned plan', () => {
-  it('keeps the launch site by the sea, the satellite campuses, the town and the power yard apart', () => {
-    const d = plannedCity(), at = (k: string) => d.parts.filter(p => p.kind === k)
-    expect(at('pad')[0].y).toBe(1)
-    expect(d.zones?.map(z => z.name)).toEqual(["Satellite campuses", "Launch site", "Town", "Power yard"])
-    expect(Math.min(...[...at('genset'), ...at('power')].map(p => p.x))).toBeGreaterThan(17)
-    expect(Math.max(...[...at('control'), ...at('court'), ...at('dorm'), ...at('archive')].map(p => p.x + p.size))).toBeLessThanOrEqual(17)
-    expect([...at("supplier"), ...at("campus"), ...at("campus4")].every(p => p.y + p.size <= 16)).toBe(true)
+  // 2026-11-18, the Owner: every entity stays, the plan is compact enough to take in at a glance.
+  it('is compact: every building inside a district, the pad by the sea, no empty band', () => {
+    const d = plannedCity()
+    expect(d.zones?.map(z => z.name)).toEqual(['Satellite campuses', 'Launch site', 'Suppliers', 'Town', 'Power yard'])
+    for (const p of d.parts) expect(d.zones!.some(z => p.x >= z.x && p.y >= z.y && p.x + p.size <= z.x + z.w && p.y + p.size <= z.y + z.h), p.binds || p.kind).toBe(true)
+    expect(d.parts.find(p => p.kind === 'pad')!.y).toBe(0)
+    expect(d.width * d.height).toBeLessThan(30 * 30)
+    expect(trim(d)).toBe(false)
   })
   it('reads the plugins from the repositories the lanes clone', () => {
     expect(pluginsOf([{ pipeline: 'bifrost-build-market-data', repos: ['bifrost-platform-plugin-market-data', 'bifrost-trade-infra'] }, { pipeline: 'bifrost-build-ib-gateway', repos: ['bifrost-platform-plugin'] }]))
@@ -84,7 +85,7 @@ describe('the payload works', () => {
 describe('districts the Owner draws', () => {
   it('a new one takes the first usual name not on the land, its tint following the name', () => {
     expect(nextZoneName([])).toBe('Launch site')
-    expect(nextZoneName(plannedCity().zones!)).toBe('District 5')
+    expect(nextZoneName(plannedCity().zones!)).toBe('District 6')
     expect(zoneTint('Town')).toBe('#f1e8d6')
     expect(zoneTint('Research campus')).toMatch(/^#[0-9a-f]{6}$/)
     expect(zoneTint('Research campus')).toBe(zoneTint('Research campus'))
@@ -115,5 +116,21 @@ describe('a tenant campus', () => {
     const p = campusPlan({ ...t, modules: Array.from({ length: 30 }, (_, i) => ({ name: `m${i}`, replicas: 1 })) }, 8)
     expect(p.modules.every(m => m.x < 8 && m.y < 8)).toBe(true)
     expect(p.more).toBe(30 - p.modules.length)
+  })
+})
+
+describe('trimming the land', () => {
+  it('cuts the empty border to one cell and moves nothing relative to anything else', () => {
+    const d = emptyDoc(32)
+    d.parts.push({ id: 'a', kind: 'dorm', x: 10, y: 12, size: 2, binds: '' })
+    addRoad(d, 14, 12)
+    d.zones = [{ name: 'Town', x: 9, y: 11, w: 8, h: 4, tint: '#f1e8d6' }]
+    expect(trim(d)).toBe(true)
+    expect([d.width, d.height]).toEqual([7, 4])
+    expect(d.parts[0]).toMatchObject({ x: 1, y: 1 })
+    expect(d.roads.has('5,1')).toBe(true)
+    expect(d.zones[0]).toMatchObject({ x: 0, y: 0, w: 7, h: 4 })
+    expect(trim(d)).toBe(false)
+    expect(trim(emptyDoc(16))).toBe(false)
   })
 })

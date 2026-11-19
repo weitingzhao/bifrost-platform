@@ -173,6 +173,8 @@ export class BuilderScene extends Phaser.Scene {
   refresh(refit = false) {
     if (!this.ready) return
     void this.loadTextures(this.s.doc.parts.flatMap(p => this.layers(p).map(l => l.tex))).then(() => {
+      // A new or trimmed land: the workers start again from the dorm rather than standing where the cells were.
+      if (refit) { for (const v of this.walkers.values()) { v.tween?.stop(); v.g.destroy(); v.bubble.destroy() } this.walkers.clear() }
       this.redrawLand(); this.drawRoads(); this.syncParts(); if (refit) this.fit()
     })
   }
