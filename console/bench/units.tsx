@@ -42,6 +42,8 @@ const fmt = (v: number, unit: Detail['unit']) =>
   : unit === 'load' ? v.toFixed(2)
   : unit === 'bytes' ? (v >= 1e12 ? `${(v / 1e12).toFixed(1)} TB` : v >= 1e9 ? `${(v / 1e9).toFixed(1)} GB` : `${Math.round(v / 1e6)} MB`)
   : unit === 'bytes per second' ? (v >= 1e6 ? `${(v / 1e6).toFixed(1)} MB/s` : `${Math.round(v / 1e3)} kB/s`)
+  : unit === 'seconds' ? (Number.isFinite(v) ? `${(v * 1000).toFixed(1)} ms` : '—')
+  : unit === 'rpm' ? `${Math.round(v)} rpm`
   : String(Math.round(v))
 
 /** One machine's reading of one detail, in a cell: a value, or many (per core, sensor, mode), or not read. */
@@ -52,8 +54,14 @@ function Cell({ d, pts }: { d: Detail; pts: Point[] }) {
     const by = [...pts].sort((a, b) => b.value - a.value).filter(p => p.value >= 0.0005)
     return <td title={pts.map(p => `${p.labels.mode} ${fmt(p.value, d.unit)}`).join('\n')}>{by.slice(0, 3).map(p => `${p.labels.mode} ${fmt(p.value, d.unit)}`).join(' · ') || 'all ~0'}</td>
   }
+  if (d.unit === 'kind') {
+    // A kind, not a number: drives by solid state or spinning, arrays by their state.
+    const kinds = d.id === 'drives' ? pts.map(p => p.labels.rotational === '1' ? 'HDD' : 'SSD') : pts.map(p => `${p.labels.device} ${p.labels.state}`)
+    const tally = [...new Set(kinds)].map(k => d.id === 'drives' ? `${kinds.filter(x => x === k).length} ${k}` : k).join(' · ')
+    return <td title={pts.map(p => `${p.labels.device}: ${p.labels.model ?? p.labels.state ?? ''}`).join('\n')}>{tally}</td>
+  }
   const vs = pts.map(p => p.value), lo = Math.min(...vs), hi = Math.max(...vs)
-  const name = (p: Point) => d.per === 'core' ? `core ${p.labels.cpu}` : `${p.labels.chip ?? ''} ${p.labels.sensor ?? ''}`.trim()
+  const name = (p: Point) => d.per === 'core' ? `core ${p.labels.cpu}` : p.labels.device ? `${p.labels.device}${p.labels.state ? ' ' + p.labels.state : ''}` : p.labels.mountpoint ?? `${p.labels.chip ?? ''} ${p.labels.sensor ?? ''}`.trim()
   return <td title={pts.map(p => `${name(p)}: ${fmt(p.value, d.unit)}`).join('\n')}>
     <span className="n">{pts.length}×</span> {lo === hi ? fmt(lo, d.unit) : `${fmt(lo, d.unit)}–${fmt(hi, d.unit)}`}
   </td>
@@ -127,7 +135,7 @@ function RoomView({ u, r }: { u: UnitSpec; r: Reads }) {
   </div>
 }
 
-const PER_WORD = { unit: 'the whole unit', core: 'each core', sensor: 'each sensor (whole chip or one core, by its label)', mode: 'each mode' } as const
+const PER_WORD = { unit: 'the whole unit', core: 'each core', sensor: 'each sensor (whole chip or one core, by its label)', mode: 'each mode', disk: 'each drive', volume: 'each volume', array: 'each array' } as const
 
 /** The room drafted: each chosen detail as a piece of the facility's equipment, before it is drawn. */
 function InsideDraft({ u }: { u: UnitSpec }) {

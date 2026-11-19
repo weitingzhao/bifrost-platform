@@ -1,5 +1,6 @@
 import type { UnitSpec } from '../../frame/units/process'
 import { MEMORY_UNIT } from './memory'
+import { DISK_UNIT } from './disk'
 
 /**
  * The CPU unit (the first through the unit process, 2026-11-19). City metaphor (the Owner, 2026-11-19): the workshop of a
@@ -69,7 +70,7 @@ export const CPU_UNIT: UnitSpec = {
   },
 }
 
-export const UNITS: UnitSpec[] = [CPU_UNIT, MEMORY_UNIT]
+export const UNITS: UnitSpec[] = [CPU_UNIT, MEMORY_UNIT, DISK_UNIT]
 
 /** The units the hardware district is made of, in the order they are made (RULES.md, 由内向外). */
 export const UNIT_PLAN = [

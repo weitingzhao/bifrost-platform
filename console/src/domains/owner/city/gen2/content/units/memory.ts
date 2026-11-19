@@ -62,6 +62,7 @@ export const MEMORY_UNIT: UnitSpec = {
   ],
   confirmed: {
     details: { on: '2026-11-19', words: '这里有个图例…不然的话，你这光显示这东西，你这不知道什么玩意儿，什么是空的，什么用到的都不知道啊…就噪音' },
+    inside: { on: '2026-11-19', words: '可以，做硬盘' },
   },
 }
 

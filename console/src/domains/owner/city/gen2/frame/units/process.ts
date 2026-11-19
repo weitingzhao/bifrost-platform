@@ -52,7 +52,7 @@ export type StageId = (typeof STAGES)[number]['id']
  * its label whether it measures the whole chip or one core), or each mode of time. The room draws a
  * per-core reading on every machine and a whole-CPU reading once, on the workshop.
  */
-export type Per = 'unit' | 'core' | 'sensor' | 'mode'
+export type Per = 'unit' | 'core' | 'sensor' | 'mode' | 'disk' | 'volume' | 'array'
 
 export type Detail = {
   id: string
@@ -61,7 +61,7 @@ export type Detail = {
   meaning: string
   /** The PromQL that reads it, labelled by `instance` (node exporter). */
   query: string
-  unit: 'share' | 'count' | 'per second' | 'Hz' | '°C' | 'load' | 'bytes' | 'bytes per second'
+  unit: 'share' | 'count' | 'per second' | 'Hz' | '°C' | 'load' | 'bytes' | 'bytes per second' | 'seconds' | 'rpm' | 'kind'
   per: Per
   /**
    * Who knows it (room standard 1: only what the hardware itself knows goes in the room): the hardware's
