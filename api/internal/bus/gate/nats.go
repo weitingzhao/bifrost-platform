@@ -24,6 +24,9 @@ func WakeOn(nc *nats.Conn, tenant, env string, w *Waker) (*nats.Subscription, er
 type JSJourney struct {
 	JS          jetstream.JetStream
 	Tenant, Env string
+
+	receipts receiptScan
+	scan     func(ctx context.Context, from time.Time, max int, row func(receiptRow)) error
 }
 
 // The window a journey is looked for in: from Lead before the event's time
@@ -130,20 +133,15 @@ func (j *JSJourney) ReceiptsOf(ctx context.Context, events []relay.Envelope) ([]
 // from a time to now (at most max messages): event id → consumers. The Bus
 // page's "is anyone listening" readings (2026-11-17).
 func (j *JSJourney) ReceiptsByEvent(ctx context.Context, from time.Time, max int) (map[string][]string, bool, error) {
-	out := map[string][]string{}
-	n := 0
-	err := relay.ScanFrom(ctx, j.JS, relay.ReceiptStreamName(j.Tenant, j.Env), relay.ReceiptSubject(j.Tenant, j.Env),
-		from, time.Now().Add(time.Minute), max,
-		func(m relay.StreamMsg) bool {
-			n++
-			id := m.Header.Get(relay.ReceiptEventHeader)
-			if id != "" {
-				out[id] = append(out[id], m.Header.Get(relay.ReceiptConsumerHeader))
-			}
-			return false
-		})
-	if errors.Is(err, jetstream.ErrStreamNotFound) {
-		return out, false, nil
+	rows, cut, err := j.recentReceipts(ctx, from, max)
+	if err != nil {
+		return nil, false, err
 	}
-	return out, n >= max, err
+	out := map[string][]string{}
+	for _, r := range rows {
+		if r.event != "" {
+			out[r.event] = append(out[r.event], r.consumer)
+		}
+	}
+	return out, cut, nil
 }

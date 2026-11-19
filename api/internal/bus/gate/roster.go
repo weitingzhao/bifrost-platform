@@ -2,17 +2,13 @@ package gate
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"sort"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/nats-io/nats.go/jetstream"
-
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
-	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
 )
 
 // The roster (2026-11-16, the Owner: the bus must recognise users coming and
@@ -80,22 +76,20 @@ type RosterSource interface {
 
 // ReceiptsSince groups the receipt stream's messages since since by consumer.
 func (j *JSJourney) ReceiptsSince(ctx context.Context, since time.Time, max int) (map[string]ReceiptCount, error) {
-	out := map[string]ReceiptCount{}
-	err := relay.ScanFrom(ctx, j.JS, relay.ReceiptStreamName(j.Tenant, j.Env), relay.ReceiptSubject(j.Tenant, j.Env),
-		since, time.Now().Add(time.Minute), max, func(m relay.StreamMsg) bool {
-			c := m.Header.Get(relay.ReceiptConsumerHeader)
-			r := out[c]
-			r.Count++
-			if m.At.After(r.Last) {
-				r.Last = m.At
-			}
-			out[c] = r
-			return false
-		})
-	if errors.Is(err, jetstream.ErrStreamNotFound) {
-		return out, nil
+	rows, _, err := j.recentReceipts(ctx, since, max)
+	if err != nil {
+		return nil, err
 	}
-	return out, err
+	out := map[string]ReceiptCount{}
+	for _, m := range rows {
+		r := out[m.consumer]
+		r.Count++
+		if m.at.After(r.Last) {
+			r.Last = m.at
+		}
+		out[m.consumer] = r
+	}
+	return out, nil
 }
 
 // Roster builds the list: declared clients first (active, lost or idle), then
