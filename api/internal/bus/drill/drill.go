@@ -42,8 +42,10 @@ const StreamPrefix = relay.DrillStreamPrefix
 func Stream(id string) string { return StreamPrefix + id }
 
 // Every is how often one channel is drilled at most; the stream's last event
-// says when it was, so a restart does not repeat one.
-const Every = 24 * time.Hour
+// says when it was, so a restart does not repeat one. It is short enough that a
+// drill published just before a rollout, whose count went with the old process
+// before anyone read it, is soon followed by one that is read (2026-11-19).
+const Every = 6 * time.Hour
 
 // checkEvery is how often the loop looks for a drill that is due.
 const checkEvery = 15 * time.Minute
