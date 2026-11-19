@@ -30,7 +30,6 @@ func TestAssessmentsCannotAnswer(t *testing.T) {
 		imports bool // may import the question store and the approvals, to read them
 	}{
 		{filepath.Join("..", "..", "assessmentreadings", "assess.go"), false},
-		{filepath.Join("..", "controller", "assess.go"), false},
 		{filepath.Join("..", "..", "server", "agentrt_assess.go"), true},
 	} {
 		file, err := parser.ParseFile(token.NewFileSet(), f.path, nil, 0)

@@ -942,34 +942,6 @@ func (s *Service) probeStgHTTP(ctx context.Context, id, url string) StgSmokeTarg
 	return StgSmokeTargetView{ID: id, URL: url, Reachability: reach, Detail: detail}
 }
 
-func (s *Service) probeDevHTTP(ctx context.Context, id, url string) StgSmokeTargetView {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return StgSmokeTargetView{
-			ID: id, URL: url, Reachability: probe.ReachFail,
-			Detail: "request error: " + err.Error(),
-		}
-	}
-	if s.entry != nil {
-		s.entry.ApplyDevGatewayHost(req)
-	}
-	client := s.httpClient
-	if client == nil {
-		client = &http.Client{Timeout: 8 * time.Second}
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return StgSmokeTargetView{
-			ID: id, URL: url, Reachability: probe.ReachFail,
-			Detail: err.Error(),
-		}
-	}
-	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, resp.Body)
-	reach, detail := smokeHTTPStatus(resp.StatusCode)
-	return StgSmokeTargetView{ID: id, URL: url, Reachability: reach, Detail: detail}
-}
-
 func (s *Service) probeProdHTTP(ctx context.Context, id, url string) StgSmokeTargetView {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -1056,12 +1028,6 @@ func (s *Service) ProdSmoke(ctx context.Context) StgSmokeResponse {
 
 	out.Reachability, out.Detail = aggregateFailCountSmoke(out.Targets, "prod")
 	return out
-}
-
-func isTaskRunSucceededView(v SupplyChainTaskRunView) bool {
-	st := strings.ToLower(v.Status)
-	re := strings.ToLower(v.Reason)
-	return st == "true" || st == "succeeded" || re == "succeeded" || re == "completed"
 }
 
 // unstructuredFrom JSON-round-trips obj so nested slices are []any.

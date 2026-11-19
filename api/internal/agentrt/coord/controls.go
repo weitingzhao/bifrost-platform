@@ -29,7 +29,7 @@ var scopeRows = map[string]string{
 	"mission": `SELECT 1 FROM agentrt.mission WHERE mission_id = $1`,
 }
 
-// RequestControl sets a control (SetControl) with a new id, after checking
+// RequestControl sets a control (setControl) with a new id, after checking
 // its scope, kind and reference. The idempotency key is the writer's: a
 // retry gets the same control.
 func RequestControl(ctx context.Context, db eventlog.DB, w writer.Writer, key, scope, ref, kind, reason string) (map[string]any, error) {
@@ -99,13 +99,8 @@ func LiftControl(ctx context.Context, db eventlog.DB, actor, id string) (map[str
 	return out, err
 }
 
-// SetControl records a stop, pause or drain with no token.
-func SetControl(ctx context.Context, tx pgx.Tx, actor, controlID, scope, scopeRef, kind, reason string) error {
-	return setControl(ctx, tx, actor, "", controlID, scope, scopeRef, kind, reason)
-}
-
-// setControl is SetControl recording the token that asked for it (the
-// routes; review 176 B2).
+// setControl records a stop, pause or drain and the token that asked for it
+// (the routes; review 176 B2).
 func setControl(ctx context.Context, tx pgx.Tx, actor, token, controlID, scope, scopeRef, kind, reason string) error {
 	lock := map[string]string{
 		"global":  `SELECT pg_advisory_xact_lock(742105) WHERE $1::text IS NOT NULL`,
