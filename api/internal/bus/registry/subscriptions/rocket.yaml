@@ -143,11 +143,29 @@ subscriptions:
   # (bus/alerts/letters.go).
   - id: alert-firing-to-duty
     on: [alert.rule.fired]
+    # Law 43's pain crossings wake the compute line alone (row below); the
+    # duty seat sees them on the Bus page's stream (compute, 2026-11-19).
+    except: ComputePain
     change: firing
     deliver: wake
     to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a
     params:
       always_namespaces: "bifrost-platform-prod,bifrost-prod"
+      ask_verdict: alert
+    guarantee: durable
+    by: alert-letters
+  # 2026-11-19, law 43 (compute's choice): a pain reading crossing its line
+  # (ComputePain* alerts, warning) wakes the compute seat alone, asked for a
+  # verdict; going back under stays on the bus. ComputePainDbGuestLoad is an
+  # info reading for the guest audit and wakes no one.
+  - id: alert-pain-to-compute
+    on: [alert.rule.fired]
+    match: ComputePain
+    except: ComputePainDbGuestLoad
+    change: firing
+    deliver: wake
+    to: thread:local_7dd39a39-1e0e-4878-b829-2e3f44d5589e
+    params:
       ask_verdict: alert
     guarantee: durable
     by: alert-letters

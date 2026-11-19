@@ -30,9 +30,13 @@ const ByDispatcher = "dispatcher"
 
 // Subscription is one row: which events, who is told, how.
 type Subscription struct {
-	ID        string            `yaml:"id"`
-	On        []string          `yaml:"on"`
-	Match     string            `yaml:"match"`
+	ID    string   `yaml:"id"`
+	On    []string `yaml:"on"`
+	Match string   `yaml:"match"`
+	// Except: an event whose subject holds it is not this row's, though it
+	// matches the rest (2026-11-19, law 43: a line's own alerts wake that
+	// line, not the duty row that hears every alert).
+	Except    string            `yaml:"except"`
 	Change    string            `yaml:"change"`
 	Deliver   string            `yaml:"deliver"`
 	To        string            `yaml:"to"`

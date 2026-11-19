@@ -375,3 +375,43 @@ func TestWithAskOnlyOnRowsThatAsk(t *testing.T) {
 		t.Errorf("the letter is %d bytes", len(got))
 	}
 }
+
+// 2026-11-19, law 43 (compute chose): a pain crossing wakes the compute seat
+// alone. The duty row hears every alert, so without except it would wake the
+// coordinator too; the guest-load reading is info and wakes no one.
+func TestPainAlertsWakeComputeAloneAndGuestLoadNoOne(t *testing.T) {
+	all, err := registry.LoadSubscriptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := map[string]registry.Subscription{}
+	for _, r := range all["rocket"].Rows {
+		rows[r.ID] = r
+	}
+	duty, pain := rows["alert-firing-to-duty"], rows["alert-pain-to-compute"]
+	if pain.ID == "" || duty.ID == "" {
+		t.Fatalf("rows missing: duty %q, pain %q", duty.ID, pain.ID)
+	}
+	fired := func(name string) Event {
+		return Event{Type: "alert.rule.fired", Subject: name + "@cluster", Change: "firing"}
+	}
+	for _, c := range []struct {
+		alert      string
+		duty, pain bool
+	}{
+		{"ComputePainDbDiskFlush", false, true},
+		{"ComputePainProdThrottle", false, true},
+		{"ComputePainDbGuestLoad", false, false},
+		{"KubePodNotReady", true, false}, // positive control: other alerts still reach duty
+	} {
+		if got := Matches(duty, fired(c.alert)); got != c.duty {
+			t.Errorf("%s to duty: %v, want %v", c.alert, got, c.duty)
+		}
+		if got := Matches(pain, fired(c.alert)); got != c.pain {
+			t.Errorf("%s to compute: %v, want %v", c.alert, got, c.pain)
+		}
+	}
+	if Matches(pain, Event{Type: "alert.rule.fired", Subject: "ComputePainDbDiskFlush@cluster", Change: "resolved"}) {
+		t.Error("going back under woke compute; it stays on the bus")
+	}
+}
