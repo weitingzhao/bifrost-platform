@@ -73,7 +73,7 @@ function poly(g: G, pts: XY[], fill: number, stroke = true) {
 type Spot = { tex: string; dx: number; dy: number }
 const SIDES = [[0, -1], [1, 0], [0, 1], [-1, 0]] as const
 
-type View = { part: Placed; sig: string; imgs: { img: Phaser.GameObjects.Image; layer: Layer }[]; tag: Phaser.GameObjects.Text; plate: Phaser.GameObjects.Text; num: Phaser.GameObjects.Text; fx: G; win?: G; lv?: number[] }
+type View = { part: Placed; sig: string; imgs: { img: Phaser.GameObjects.Image; layer: Layer }[]; tag: Phaser.GameObjects.Text; plate: Phaser.GameObjects.Text; num: Phaser.GameObjects.Text; fx: G; win?: G; lv?: number[]; ship?: Phaser.GameObjects.Image }
 type Gesture =
   | { t: 'none' } | { t: 'pan'; x: number; y: number }
   | { t: 'stroke'; last: [number, number]; erase: boolean; x: number; y: number; started: boolean }
@@ -494,7 +494,7 @@ export class BuilderScene extends Phaser.Scene {
       const painted = p.kind === 'genset' || p.kind === 'power'
       v.num.setText(p.label ?? '').setPosition(roof.x, roof.y).setVisible(!!p.label && !painted && v.imgs[0]?.img.visible !== false)
     }
-    for (const [id, v] of this.views) if (!seen.has(id)) { v.imgs.forEach(i => i.img.destroy()); v.tag.destroy(); v.plate.destroy(); v.num.destroy(); v.win?.destroy(); v.fx.destroy(); this.views.delete(id) }
+    for (const [id, v] of this.views) if (!seen.has(id)) { v.imgs.forEach(i => i.img.destroy()); v.tag.destroy(); v.plate.destroy(); v.num.destroy(); v.win?.destroy(); v.ship?.destroy(); v.fx.destroy(); this.views.delete(id) }
     if (this.selected && !seen.has(this.selected)) this.select(null)
     this.syncDecor(); this.drawMark(); this.relabel(); this.drawEffects(); this.drawSky(); this.drawWorkers()
   }
@@ -650,6 +650,7 @@ export class BuilderScene extends Phaser.Scene {
       const g = v.fx, p = v.part, r = p.binds ? this.s.readingOf(p.binds) : undefined
       g.clear()
       const stack = v.imgs.find(i => i.layer.stack)
+      v.ship?.setVisible(v.imgs[0]?.img.visible !== false)
       if (stack) stack.img.setY(iso(p.x, p.y).y + stack.layer.dy - (r?.launching ? 18 : 0))
       if (!r || v.imgs[0]?.img.visible === false) continue
       if (r.launching && stack) {
@@ -687,11 +688,12 @@ export class BuilderScene extends Phaser.Scene {
           g.fillTriangle(c.x - 5, c.y - 86, c.x + 5, c.y - 86, c.x, c.y - 100); g.strokeTriangle(c.x - 5, c.y - 86, c.x + 5, c.y - 86, c.x, c.y - 100)
         }
       }
-      if (r.launching && r.payload && stack) {
-        const b = iso(p.x + 1.9, p.y + 2.15, 31 + 18)
-        const col = Phaser.Display.Color.HexStringToColor(r.payload.color).color
-        g.fillStyle(col, 1); g.lineStyle(1.2, INK, 1)
-        g.fillRect(b.x - 14, b.y - 214, 28, 9); g.strokeRect(b.x - 14, b.y - 214, 28, 9)
+      // A product's release: its ship stacked on the booster, lifting with it (the Owner, 2026-11-19).
+      const shipTex = r.launching && r.payload && stack ? `ship:${r.payload.color}` : ''
+      if (v.ship && v.ship.texture.key !== shipTex) { v.ship.destroy(); v.ship = undefined }
+      if (shipTex && stack && this.textures.exists(shipTex)) {
+        v.ship ??= this.image({ tex: shipTex, dx: stack.layer.dx, dy: stack.layer.dy, stack: true, order: 0.31 }, iso(p.x, p.y).x, iso(p.x, p.y).y)
+        v.ship.setPosition(stack.img.x, stack.img.y).setDepth(stack.img.depth + 0.01)
       }
       if (p.kind === 'pad') {
         // The release gate: a signal where the crawlerway meets the pad. Red: the release window is held; amber: a launch is

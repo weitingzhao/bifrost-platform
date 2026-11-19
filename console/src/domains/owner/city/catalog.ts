@@ -28,7 +28,7 @@ export type CatalogKind = { kind: string; name: string; size: PartSize; height: 
 export const CATALOG: readonly CatalogKind[] = [
   { kind: 'hif', name: 'Horizontal hangar', size: 4, height: 100, accepts: ['stage', 'domain'] },
   { kind: 'assembly', name: 'Vertical assembly', size: 4, height: 215, accepts: ['stage', 'domain'] },
-  { kind: 'satellites', name: 'Satellite hangar', size: 4, height: 130, accepts: ['stage', 'domain'] },
+  { kind: 'satellites', name: 'Ship hall', size: 4, height: 130, accepts: ['stage', 'domain'] },
   { kind: 'control', name: 'Mission control', size: 4, height: 110, accepts: ['domain'] },
   { kind: 'pad', name: 'Launch pad', size: 4, height: 250, accepts: ['lane'] },
   { kind: 'dorm', name: 'Dormitory', size: 2, height: 105, accepts: ['domain'] },
@@ -36,7 +36,7 @@ export const CATALOG: readonly CatalogKind[] = [
   { kind: 'power', name: 'Power station', size: 4, height: 120, accepts: ['node', 'domain'] },
   { kind: 'archive', name: 'Archive', size: 2, height: 88, accepts: ['domain'] },
   { kind: 'genset', name: 'Generator set', size: 2, height: 72, accepts: ['node'] },
-  { kind: 'campus', name: 'Satellite campus', size: 8, height: 100, accepts: ['tenant'] },
+  { kind: 'campus', name: 'Ship campus', size: 8, height: 100, accepts: ['tenant'] },
   { kind: 'campus4', name: 'Small campus', size: 4, height: 100, accepts: ['tenant'] },
   { kind: 'supplier', name: "Supplier's dock", size: 2, height: 60, accepts: ['plugin'] },
 ]
@@ -154,7 +154,8 @@ export function layersOf(kind: string, binds: string, color?: string, variant?: 
   if (kind !== 'pad') return [base(kind)]
   const at = iso(L.PAD_STACK.x, L.PAD_STACK.y, L.PAD_STACK.z)
   const vehicle = (tex: string): Layer => ({ tex, dx: at.x, dy: at.y, stack: true, order: 0.3 })
-  if (binds === STARSHIP_LANE) return [base('pad:chopsticks'), vehicle('starship'), base('pad:front', 0.6)]
+  // The booster is the platform; a product's ship is stacked on it by the scene only while that product launches.
+  if (binds === STARSHIP_LANE) return [base('pad:chopsticks'), vehicle('booster'), base('pad:front', 0.6)]
   if (binds.startsWith('lane:')) return [base('pad:plain'), vehicle(`rocket:${color ?? '#8a6cff'}`)]
   return [base('pad:plain')]
 }
@@ -162,18 +163,18 @@ export function layersOf(kind: string, binds: string, color?: string, variant?: 
 const cache = new Map<string, Sprite>()
 const make: Record<string, () => Sprite> = {
   assembly: L.assembly, hif: L.horizontalHangar, satellites: L.satelliteHangar, genset: () => L.generatorSet('linux'), control: L.missionControl, dorm: () => L.dormitory(0), court: L.court, power: () => L.powerStation(), archive: L.archive, water: L.waterTower,
-  'pad:chopsticks': () => L.launchPad(true), 'pad:plain': () => L.launchPad(false), 'pad:front': L.launchPadFront, starship: L.starship,
+  'pad:chopsticks': () => L.launchPad(true), 'pad:plain': () => L.launchPad(false), 'pad:front': L.launchPadFront, starship: L.starship, booster: L.booster,
   'd:tree0': () => L.streetTree(0), 'd:tree1': () => L.streetTree(1), 'd:tree2': () => L.streetTree(2),
   'd:lamp': L.streetLamp, 'd:bench': L.parkBench, 'd:billboard': L.billboard, 'd:signal': L.trafficLight,
 }
 export function spriteOf(tex: string): Sprite {
   let s = cache.get(tex)
-  if (!s) { s = tex.startsWith('rocket:') ? L.rocket(tex.slice(7)) : tex.startsWith('sat:') ? L.orbitSatellite(tex.slice(4)) : tex.startsWith('supplier:') ? L.supplierDock(tex.slice(9)) : tex.startsWith('bay:') ? L.payloadBay(tex.slice(4)) : tex.startsWith('factory:') ? L.codeFactory(tex.slice(8)) : tex.startsWith('module:') ? L.moduleBlock(tex.slice(7)) : tex.startsWith('genset:') ? L.generatorSet(tex.split(':')[1] as L.MachineOs, decodeURIComponent(tex.split(':')[2] ?? ''), decodeURIComponent(tex.split(':')[3] ?? '')) : tex.startsWith('power:') ? L.powerStation(decodeURIComponent(tex.split(':')[1] ?? ''), decodeURIComponent(tex.split(':')[2] ?? '')) : tex.startsWith('campus:') ? L.campusGround(Number(tex.split(':')[1]) as 4 | 8, tex.split(':')[2]) : make[tex](); cache.set(tex, s) }
+  if (!s) { s = tex.startsWith('rocket:') ? L.rocket(tex.slice(7)) : tex.startsWith('ship:') ? L.ship(tex.slice(5)) : tex.startsWith('sat:') ? L.orbitSatellite(tex.slice(4)) : tex.startsWith('supplier:') ? L.supplierDock(tex.slice(9)) : tex.startsWith('bay:') ? L.payloadBay(tex.slice(4)) : tex.startsWith('factory:') ? L.codeFactory(tex.slice(8)) : tex.startsWith('module:') ? L.moduleBlock(tex.slice(7)) : tex.startsWith('genset:') ? L.generatorSet(tex.split(':')[1] as L.MachineOs, decodeURIComponent(tex.split(':')[2] ?? ''), decodeURIComponent(tex.split(':')[3] ?? '')) : tex.startsWith('power:') ? L.powerStation(decodeURIComponent(tex.split(':')[1] ?? ''), decodeURIComponent(tex.split(':')[2] ?? '')) : tex.startsWith('campus:') ? L.campusGround(Number(tex.split(':')[1]) as 4 | 8, tex.split(':')[2]) : make[tex](); cache.set(tex, s) }
   return s
 }
 export const spriteUrl = (s: Sprite) => `data:image/svg+xml;utf8,${encodeURIComponent(s.svg)}`
 /** The textures the scene needs before it can draw anything. */
-export const baseTextures = () => [...Object.keys(make), ...Object.values(PAYLOAD).map(c => `rocket:${c}`), 'rocket:#8a6cff', ...[...Object.values(PAYLOAD), '#f2d27a'].map(c => `sat:${c}`), ...[...Object.values(PAYLOAD), '#5aa9ff'].map(c => `supplier:${c}`), ...[...Object.values(PAYLOAD), '#f2d27a'].flatMap(c => [`bay:${c}`, `factory:${c}`, `module:${c}`, `campus:8:${c}`, `campus:4:${c}`])]
+export const baseTextures = () => [...Object.keys(make), ...Object.values(PAYLOAD).map(c => `rocket:${c}`), 'rocket:#8a6cff', ...[...Object.values(PAYLOAD), '#f2d27a'].flatMap(c => [`sat:${c}`, `ship:${c}`]), ...[...Object.values(PAYLOAD), '#5aa9ff'].map(c => `supplier:${c}`), ...[...Object.values(PAYLOAD), '#f2d27a'].flatMap(c => [`bay:${c}`, `factory:${c}`, `module:${c}`, `campus:8:${c}`, `campus:4:${c}`])]
 
 /** How a kind looks at its best, for the catalogue's card. */
 export const showcaseLayers = (kind: string) => layersOf(kind, kind === 'pad' ? STARSHIP_LANE : '')

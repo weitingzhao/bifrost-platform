@@ -5,7 +5,7 @@
  * meaning. The thresholds live here, versioned; no building is tiered by hand.
  */
 
-export const DICTIONARY_VERSION = 6
+export const DICTIONARY_VERSION = 7
 
 export type Tier = { name: string; enters: string }
 export type Entry = {
@@ -51,12 +51,12 @@ export const DICTIONARY: readonly Entry[] = [
     source: 'GET /api/v1/delivery/context?repo=bifrost-platform: runs_in_flight and what STG runs', person: '',
   },
   {
-    id: 'satellite-hangar', metaphor: 'The satellite hangar: crates at the factory, a lit test bay', means: 'the tenants\' CI (crates) and STG or image builds (the bay)',
+    id: 'satellite-hangar', metaphor: 'The ship hall: crates at the factory, a lit test bay', means: 'the products\' CI (crates) and STG or image builds (the bay), where every product\'s ship joins the crawlerway',
     tiers: [{ name: 'testing', enters: 'a tenant STG or build run is in flight' }, { name: 'in CI', enters: 'only tenant CI runs are' }, { name: 'quiet', enters: 'none' }, { name: 'unknown', enters: 'a tenant\'s release context could not be read' }],
     source: 'GET /api/v1/delivery/context for each tenant repository: runs_in_flight', person: '',
   },
   {
-    id: 'pad', metaphor: 'The launch pad and its rocket', means: 'the platform, the one vehicle: its PROD release flies a new rocket; a tenant\'s PROD release rides the rocket in service',
+    id: 'pad', metaphor: 'The launch pad, its booster and, while a product launches, that product\'s ship stacked on it', means: 'the booster is the platform, one vehicle flown and caught again: a platform PROD release is the booster flying alone; a product\'s PROD release is the booster carrying that product\'s ship',
     tiers: [
       { name: 'launching', enters: 'a platform or tenant PROD run is in flight (the payload band shows which tenant)' },
       { name: 'window held', enters: 'the release window is held for the platform and nothing launches' },
@@ -67,7 +67,7 @@ export const DICTIONARY: readonly Entry[] = [
     person: 'none for the platform\'s rockets; Trade\'s production launch stays the Owner\'s, through the release page',
   },
   {
-    id: 'orbit', metaphor: 'A satellite in orbit', means: 'a tenant on PROD (Trade, Research), one each; the plugins are vendors on the ground, their docks',
+    id: 'orbit', metaphor: 'A ship in orbit, in its product\'s colour', means: 'a product on PROD (Trade, Research), one ship each; the plugins are vendors on the ground, their docks',
     tiers: [{ name: 'in orbit', enters: 'its PROD version is read' }, { name: 'launching', enters: 'its PROD or image run is in flight' }, { name: 'unknown', enters: 'its PROD version is not read' }],
     source: 'GET /api/v1/delivery/context?repo=<tenant>: what PROD runs and runs_in_flight; the tenants from GET /api/v1/delivery/pipelines', person: '',
   },
@@ -99,7 +99,7 @@ export const DICTIONARY: readonly Entry[] = [
     source: 'GET /api/v1/approvals?status=pending and GET /api/v1/questions?status=open', person: 'the Owner answers on the Command page',
   },
   {
-    id: 'bay', metaphor: 'A satellite campus: code factories (a repository each, smoking while its CI runs), a conveyor to the payload bay, and a block per module its PROD runs', means: 'a tenant (Trade, Research, Finance…), the payload the system exists to build; its size the Owner\'s, what stands inside read',
+    id: 'bay', metaphor: 'A ship campus: code factories (a repository each, smoking while its CI runs), a conveyor to the bay where its ship stands, and a block per module its PROD runs', means: 'a tenant (Trade, Research, Finance…), the payload the system exists to build; its size the Owner\'s, what stands inside read',
     tiers: [
       { name: 'building', enters: 'a run of one of its lanes is in flight (the bay lit)' },
       { name: 'ready', enters: 'nothing in flight' },

@@ -125,7 +125,7 @@ describe('the catalogue and the tray', () => {
     expect(CATALOG.filter(k => accepts(k, find('law'))).map(k => k.kind)).toEqual(['court'])
   })
   it('only platform PROD gets the starship and the chopsticks; a pad with no lane stands empty', () => {
-    expect(layersOf('pad', 'lane:bifrost-deliver-platform-prod').map(l => l.tex)).toEqual(['pad:chopsticks', 'starship', 'pad:front'])
+    expect(layersOf('pad', 'lane:bifrost-deliver-platform-prod').map(l => l.tex)).toEqual(['pad:chopsticks', 'booster', 'pad:front'])
     expect(layersOf('pad', 'lane:bifrost-deliver-stg', '#ff8a5c').map(l => l.tex)).toEqual(['pad:plain', 'rocket:#ff8a5c'])
     expect(layersOf('pad', '').map(l => l.tex)).toEqual(['pad:plain']); expect(kindOf('pad')?.size).toBe(4)
   })

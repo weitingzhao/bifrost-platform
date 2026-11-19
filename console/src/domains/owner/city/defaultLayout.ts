@@ -49,7 +49,7 @@ const PARTS: readonly [kind: string, x: number, y: number, size: PartSize, binds
   ['genset', 25, 21, 2, 'node:UGREEN-NAS', 'NAS'],
 ]
 const ZONES: readonly Zone[] = [
-  { name: 'Satellite campuses', x: 0, y: 0, w: 13, h: 10, tint: '#e7e1f1' },
+  { name: 'Ship campuses', x: 0, y: 0, w: 13, h: 10, tint: '#e7e1f1' },
   { name: 'Launch site', x: 13, y: 0, w: 16, h: 10, tint: '#e3e8ee' },
   { name: 'Suppliers', x: 0, y: 11, w: 8, h: 5, tint: '#e0edf0' },
   { name: 'Town', x: 9, y: 11, w: 20, h: 5, tint: '#f1e8d6' },

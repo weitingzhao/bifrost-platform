@@ -48,7 +48,7 @@ describe('the zoned plan', () => {
   // 2026-11-18, the Owner: every entity stays, the plan is compact enough to take in at a glance.
   it('is compact: every building inside a district, the pad by the sea, no empty band', () => {
     const d = plannedCity()
-    expect(d.zones?.map(z => z.name)).toEqual(['Satellite campuses', 'Launch site', 'Suppliers', 'Town', 'Power yard', 'Off the grid'])
+    expect(d.zones?.map(z => z.name)).toEqual(['Ship campuses', 'Launch site', 'Suppliers', 'Town', 'Power yard', 'Off the grid'])
     for (const p of d.parts) expect(d.zones!.some(z => p.x >= z.x && p.y >= z.y && p.x + p.size <= z.x + z.w && p.y + p.size <= z.y + z.h), p.binds || p.kind).toBe(true)
     expect(d.parts.find(p => p.kind === 'pad')!.y).toBe(0)
     expect(d.width * d.height).toBeLessThan(30 * 30)

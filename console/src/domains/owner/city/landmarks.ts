@@ -378,6 +378,46 @@ export function launchPadFront(): Sprite {
 }
 
 /** The starship stack: booster and ship, drawn standing on its base. */
+/**
+ * The rocket in two (the Owner, 2026-11-19): the booster is the platform, one
+ * vehicle flown, caught and flown again; each product (Trade, Research…) is
+ * its own ship, the upper stage. A platform release is the booster flying
+ * alone; a product's release is the booster carrying that product's ship.
+ * Both are drawn in the same frame as the full stack, so they stack in place.
+ */
+export function booster(): Sprite {
+  const g = new Draw(1, 1, 228, 8)
+  const [x, y] = g.p(0.5, 0.5, 0)
+  const r = 13.5, ry = 5
+  const bt = y - 118
+  g.add(`<defs><linearGradient id="hullb" x1="0" x2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="0.4" stop-color="#eef1f5"/><stop offset="1" stop-color="#a8b2c0"/></linearGradient></defs>`)
+  g.add(`<path d="M${x - r},${bt} V${y - 4} A${r},${ry} 0 0 0 ${x + r},${y - 4} V${bt} Z" fill="url(#hullb)" stroke="${INK}" stroke-width="${STROKE}"/>`)
+  g.add(`<path d="M${x - r},${y - 17} A${r},${ry} 0 0 0 ${x + r},${y - 17} V${y - 4} A${r},${ry} 0 0 1 ${x - r},${y - 4} Z" fill="#3d424c" stroke="${INK}" stroke-width="1"/>`)
+  for (const k of [40, 62, 84, 104]) g.add(`<path d="M${x - r},${y - k} A${r},${ry} 0 0 0 ${x + r},${y - k}" fill="none" stroke="#98a3b3" stroke-width="0.7"/>`)
+  g.add(`<rect x="${x - r - 2.6}" y="${y - 58}" width="3.4" height="40" rx="1" fill="#cdd4de" stroke="${INK}" stroke-width="0.8"/><rect x="${x + r - 0.8}" y="${y - 58}" width="3.4" height="40" rx="1" fill="#98a3b3" stroke="${INK}" stroke-width="0.8"/>`)
+  for (const s of [-1, 1]) g.add(`<g transform="translate(${x + s * (r + 4.6)},${bt + 10})"><rect x="-4.6" y="-4" width="9.2" height="8" fill="#59606b" stroke="${INK}" stroke-width="0.9"/><path d="M-1.5,-4 v8 M1.5,-4 v8 M-4.6,0 h9.2" stroke="#aab2c0" stroke-width="0.6"/></g>`)
+  g.add(`<path d="M${x - r},${bt - 6} A${r},${ry} 0 0 0 ${x + r},${bt - 6} V${bt} A${r},${ry} 0 0 1 ${x - r},${bt} Z" fill="#59606b" stroke="${INK}" stroke-width="1"/>`)
+  for (let u = -10; u <= 10; u += 4) g.add(`<line x1="${x + u}" y1="${n1(bt - 1.4 + Math.sqrt(Math.max(0, 1 - (u / r) ** 2)) * ry)}" x2="${x + u}" y2="${n1(bt - 4.6 + Math.sqrt(Math.max(0, 1 - (u / r) ** 2)) * ry)}" stroke="#2b2f37" stroke-width="1.2"/>`)
+  g.add(`<path d="M${x - r},${bt - 6} A${r},${ry} 0 0 1 ${x + r},${bt - 6}" fill="#4a4f59" stroke="${INK}" stroke-width="0.8"/>`)
+  return g.done()
+}
+
+/** A product's ship, the upper stage, its band in the product's colour; drawn where it sits on the booster. */
+export function ship(color = '#f2d27a'): Sprite {
+  const g = new Draw(1, 1, 228, 8)
+  const [x, y] = g.p(0.5, 0.5, 0)
+  const r = 13.5, ry = 5
+  const bt = y - 118
+  const id = `s${color.replace('#', '')}`
+  g.add(`<defs><linearGradient id="hull${id}" x1="0" x2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="0.4" stop-color="#eef1f5"/><stop offset="1" stop-color="#a8b2c0"/></linearGradient><clipPath id="c${id}"><path d="M${x - r},${bt - 4} V${bt - 62} Q${x - r},${bt - 86} ${x},${bt - 96} Q${x + r},${bt - 86} ${x + r},${bt - 62} V${bt - 4} A${r},${ry} 0 0 1 ${x - r},${bt - 4} Z"/></clipPath></defs>`)
+  g.add(`<path d="M${x - r + 0.5},${bt - 36} l-10,24 v7 h10 Z" fill="#cdd4de" stroke="${INK}" stroke-width="1.1"/><path d="M${x + r - 0.5},${bt - 36} l10,24 v7 h-10 Z" fill="#3d424c" stroke="${INK}" stroke-width="1.1"/>`)
+  g.add(`<path d="M${x - r + 1.2},${bt - 80} l-6.5,13 l6,3.5 Z" fill="#cdd4de" stroke="${INK}" stroke-width="1"/><path d="M${x + r - 1.2},${bt - 80} l6.5,13 l-6,3.5 Z" fill="#3d424c" stroke="${INK}" stroke-width="1"/>`)
+  g.add(`<g clip-path="url(#c${id})"><rect x="${x - r - 1}" y="${bt - 100}" width="${r * 2 + 2}" height="104" fill="url(#hull${id})"/><path d="M${x + 1.5},${bt + 4} V${bt - 66} Q${x + 3},${bt - 88} ${x - 1},${bt - 98} H${x + r + 2} V${bt + 4} Z" fill="#33373f"/><rect x="${x - r - 1}" y="${bt - 46}" width="${r * 2 + 2}" height="10" fill="${color}"/></g>`)
+  g.add(`<path d="M${x - r},${bt - 4} V${bt - 62} Q${x - r},${bt - 86} ${x},${bt - 96} Q${x + r},${bt - 86} ${x + r},${bt - 62} V${bt - 4} A${r},${ry} 0 0 1 ${x - r},${bt - 4} Z" fill="none" stroke="${INK}" stroke-width="${STROKE}"/>`)
+  g.add(`<path d="M${x - r},${bt - 46} A${r},${ry} 0 0 0 ${x + r},${bt - 46} M${x - r},${bt - 36} A${r},${ry} 0 0 0 ${x + r},${bt - 36}" fill="none" stroke="${INK}" stroke-width="0.8"/>`)
+  return g.done()
+}
+
 export function starship(): Sprite {
   const g = new Draw(1, 1, 228, 8)
   const [x, y] = g.p(0.5, 0.5, 0)
@@ -401,6 +441,15 @@ export function starship(): Sprite {
   for (const k of [28, 52]) g.add(`<path d="M${x - r},${bt - k} A${r},${ry} 0 0 0 ${x + 1.5},${n1(bt - k + ry)}" fill="none" stroke="#98a3b3" stroke-width="0.7"/>`)
   g.add(`<rect x="${x - 9}" y="${bt - 47}" width="6.5" height="4.6" fill="#4f86d6" stroke="${INK}" stroke-width="0.6"/><circle cx="${x - 4.6}" cy="${bt - 68}" r="1.7" fill="#28344d"/>`)
   return g.done()
+}
+
+/** A ship standing on its stand, in a face's own plane: body, nose, flaps, the product's band; base at v=base. */
+function shipFigure(cx: number, base: number, h: number, w: number, color: string): string {
+  const top = base - h, r = w / 2
+  return `<rect x="${n1(cx - 3)}" y="${n1(base - 4)}" width="6" height="4" fill="#9aa3b0" stroke="${INK}" stroke-width="0.7"/>` +
+    `<path d="M${n1(cx - r - 3)},${n1(base - 4)} l3,-9 v9 Z M${n1(cx + r + 3)},${n1(base - 4)} l-3,-9 v9 Z" fill="#59606b" stroke="${INK}" stroke-width="0.7"/>` +
+    `<path d="M${n1(cx - r)},${n1(base - 4)} V${n1(top + h * 0.3)} Q${n1(cx - r)},${n1(top + 4)} ${n1(cx)},${n1(top)} Q${n1(cx + r)},${n1(top + 4)} ${n1(cx + r)},${n1(top + h * 0.3)} V${n1(base - 4)} Z" fill="#eef1f5" stroke="${INK}" stroke-width="0.9"/>` +
+    `<rect x="${n1(cx - r)}" y="${n1(base - h * 0.55)}" width="${n1(w)}" height="${n1(h * 0.12)}" fill="${color}" stroke="${INK}" stroke-width="0.6"/>`
 }
 
 /** A plain rocket for the other lanes, its payload's colour on the band and fins. */
@@ -709,18 +758,14 @@ export function satelliteHangar(): Sprite {
   for (let i = 0; i < 3; i++) f += `<rect x="${44 + i * 4.5}" y="-32" width="3.4" height="6" fill="#cfe3f7" stroke="${INK}" stroke-width="0.5"/>`
   f += `<text x="6" y="-31" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="5.6" font-weight="700" fill="${INK}" letter-spacing="1">FACTORY</text>`
   g.face('left', x0, y1, 0, f)
-  // High bay front: the tall clean-room door, a satellite on its stand behind the glass.
+  // High bay front: the tall clean-room door, a ship on its stand behind the glass.
   const W = (x1 - 2.0) * U
   let b = `<rect x="7" y="-80" width="${n1(W - 14)}" height="80" fill="#dfeaf6" stroke="${INK}" stroke-width="1.2"/>`
   b += `<rect x="9" y="-78" width="${n1(W - 18)}" height="76" fill="#eaf3fc"/>`
   const cx = W / 2
-  b += `<rect x="${n1(cx - 3)}" y="-22" width="6" height="20" fill="#9aa3b0" stroke="${INK}" stroke-width="0.8"/>`
-  b += `<rect x="${n1(cx - 9)}" y="-44" width="18" height="22" rx="1.5" fill="#f2d27a" stroke="${INK}" stroke-width="1"/>`
-  b += `<path d="M${n1(cx - 9)},-38 h18 M${n1(cx - 9)},-30 h18" stroke="#c99a3a" stroke-width="0.8"/>`
-  for (const s of [-1, 1]) b += `<rect x="${n1(cx + s * 9 + (s < 0 ? -16 : 0))}" y="-38" width="16" height="9" fill="#4f6fb8" stroke="${INK}" stroke-width="0.8"/><path d="M${n1(cx + s * 9 + (s < 0 ? -8 : 8))},-38 v9" stroke="#cfe0ff" stroke-width="0.6"/>`
-  b += `<circle cx="${n1(cx)}" cy="-50" r="5" fill="#f6f8fb" stroke="${INK}" stroke-width="0.9"/><line x1="${n1(cx)}" y1="-45" x2="${n1(cx)}" y2="-44" stroke="${INK}"/>`
+  b += shipFigure(cx, -2, 70, 14, '#f2d27a')
   for (let u = 9 + (W - 18) / 4; u < W - 9; u += (W - 18) / 4) b += `<line x1="${n1(u)}" y1="-78" x2="${n1(u)}" y2="-2" stroke="#b9cde3" stroke-width="0.8"/>`
-  b += `<rect x="7" y="-88" width="${n1(W - 14)}" height="7" fill="#fbfaf6" stroke="${INK}" stroke-width="0.9"/><text x="${n1(W / 2)}" y="-82.6" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="5.6" font-weight="700" fill="${INK}" letter-spacing="1.4">SATELLITES</text>`
+  b += `<rect x="7" y="-88" width="${n1(W - 14)}" height="7" fill="#fbfaf6" stroke="${INK}" stroke-width="0.9"/><text x="${n1(W / 2)}" y="-82.6" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="5.6" font-weight="700" fill="${INK}" letter-spacing="1.4">SHIPS</text>`
   g.face('left', 2.0, y1, 0, b)
   let r = ''
   for (let row = 0; row < 3; row++) for (let i = 0; i < 4; i++) r += `<rect x="${n1(8 + i * 22)}" y="${-80 + row * 22}" width="12" height="10" fill="#d4e6f8" stroke="${INK}" stroke-width="0.8"/>`
@@ -738,13 +783,11 @@ export function satelliteHangar(): Sprite {
 }
 
 /** A satellite in orbit, its panels in its tenant's colour. */
+/** A product's ship in orbit: what its PROD runs (the Owner, 2026-11-19: the ships are the products). */
 export function orbitSatellite(color = '#f2d27a'): Sprite {
-  const g = new Draw(1, 1, 40, 4)
-  const [x, y] = g.p(0.5, 0.5, 18)
-  g.add(`<rect x="${x - 26}" y="${y - 5}" width="18" height="10" fill="#4f6fb8" stroke="${INK}" stroke-width="1"/><rect x="${x + 8}" y="${y - 5}" width="18" height="10" fill="#4f6fb8" stroke="${INK}" stroke-width="1"/>`)
-  g.add(`<path d="M${x - 17},${y - 5} v10 M${x + 17},${y - 5} v10" stroke="#cfe0ff" stroke-width="0.7"/><path d="M${x - 8},${y} h-0 M${x - 8},${y} H${x - 26} M${x + 8},${y} H${x + 26}" stroke="#cfe0ff" stroke-width="0.4"/>`)
-  g.add(`<rect x="${x - 8}" y="${y - 8}" width="16" height="16" rx="2" fill="${color}" stroke="${INK}" stroke-width="1.2"/><path d="M${x - 8},${y - 2} h16" stroke="${INK}" stroke-width="0.6" opacity="0.4"/>`)
-  g.add(`<line x1="${x}" y1="${y - 8}" x2="${x}" y2="${y - 15}" stroke="${INK}" stroke-width="1"/><circle cx="${x}" cy="${y - 16}" r="2.4" fill="#f6f8fb" stroke="${INK}" stroke-width="0.8"/>`)
+  const g = new Draw(1, 1, 52, 4)
+  const [x, y] = g.p(0.5, 0.5, 30)
+  g.add(`<g transform="translate(${n1(x)},${n1(y)}) rotate(-35)">${shipFigure(0, 22, 40, 10, color)}</g>`)
   return g.done()
 }
 
@@ -885,13 +928,10 @@ export function payloadBay(color = '#f2d27a'): Sprite {
   g.shadow(x0, y0, x1 - x0, y1 - y0, 0.3)
   g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#ffffff', '#eef0f6', '#d9dde8'))
   const W = (x1 - x0) * U, D = (y1 - y0) * U
-  // The front: a tall glazed door onto the clean room, the satellite on its stand inside.
+  // The front: a tall glazed door onto the clean room, the product's ship on its stand inside.
   let f = `<rect x="8" y="-44" width="${n1(W - 16)}" height="44" fill="#dff0fb" stroke="${INK}" stroke-width="1.2"/>`
   const cx = W / 2
-  f += `<rect x="${n1(cx - 3)}" y="-8" width="6" height="8" fill="#9aa3b0" stroke="${INK}" stroke-width="0.8"/>`
-  f += `<rect x="${n1(cx - 9)}" y="-26" width="18" height="18" fill="${color}" stroke="${INK}" stroke-width="1"/><path d="M${n1(cx - 9)},-17 h18 M${n1(cx)},-26 v18" stroke="${INK}" stroke-width="0.6" opacity="0.6"/>`
-  f += `<rect x="${n1(cx - 25)}" y="-21" width="14" height="8" fill="#3b4f8f" stroke="${INK}" stroke-width="0.8"/><rect x="${n1(cx + 11)}" y="-21" width="14" height="8" fill="#3b4f8f" stroke="${INK}" stroke-width="0.8"/>`
-  f += `<path d="M${n1(cx - 25)},-17 h14 M${n1(cx + 11)},-17 h14" stroke="#8fb0ff" stroke-width="0.6"/><line x1="${n1(cx)}" y1="-26" x2="${n1(cx)}" y2="-33" stroke="${INK}" stroke-width="0.9"/><circle cx="${n1(cx)}" cy="-34" r="2" fill="#fbfaf6" stroke="${INK}" stroke-width="0.8"/>`
+  f += shipFigure(cx, 0, 38, 9, color)
   for (let u = 8 + (W - 16) / 3; u < W - 9; u += (W - 16) / 3) f += `<line x1="${n1(u)}" y1="-44" x2="${n1(u)}" y2="0" stroke="#9cc3dc" stroke-width="0.8"/>`
   g.face('left', x0, y1, 0, f)
   let r = `<rect x="6" y="-38" width="${n1(D - 12)}" height="7" fill="${color}" stroke="${INK}" stroke-width="0.8"/>`
