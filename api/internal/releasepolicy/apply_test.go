@@ -258,3 +258,41 @@ func TestAPolicyWithoutAnApplySectionCoversNoApply(t *testing.T) {
 		t.Fatalf("another action: %+v", other)
 	}
 }
+
+// OWNER_LAW 46 (2026-11-19): what can be undone is done and recorded, not
+// approved. A first creation of a kind the section lists is covered (the way
+// back is deleting it); 11-19 #636 and #637 waited five hours for a new Task
+// and Pipeline. Positive control: the same plan without first_creation_kinds
+// waits ("missing object: a first creation" in TestApplyWithOneThingWrongWaits).
+func TestFirstCreationOfAListedKindIsCovered(t *testing.T) {
+	listed := func(doc map[string]any) {
+		doc["apply"].(map[string]any)["first_creation_kinds"] = []string{"Task", "Pipeline"}
+	}
+	f := newApplyFixture(t, listed)
+	delete(f.live.Objects, "cicd/Pipeline/ci")
+	d := f.apply()
+	wantAuto(t, d)
+	if got, want := d.ClauseText(), "signature,unexpired,not_frozen,plan_passed,apply_namespaces,apply_kinds,apply_objects,apply_paths,previous_generation,first_creation"; got != want {
+		t.Fatalf("clauses = %s, want %s", got, want)
+	}
+	// An existing object still needs the applier's Apply entry: the list is
+	// about objects that do not exist, never about taking one over.
+	f.live.Objects["cicd/Pipeline/ci"] = []rptest.LiveManager{{Manager: "kubectl", Operation: "Apply"}}
+	if d := f.apply(); d.Auto || !strings.Contains(strings.Join(d.Reasons, " "), "the-applier has not applied it") {
+		t.Fatalf("taken over: %+v", d)
+	}
+	// A kind the list does not name waits as before.
+	g := newApplyFixture(t, func(doc map[string]any) {
+		doc["apply"].(map[string]any)["first_creation_kinds"] = []string{"Task"}
+	})
+	delete(g.live.Objects, "cicd/Pipeline/ci")
+	if d := g.apply(); d.Auto || !strings.Contains(strings.Join(d.Reasons, " "), "does not exist in the cluster") {
+		t.Fatalf("unlisted kind: %+v", d)
+	}
+	// An excluded object stays excluded, new or not.
+	h := newApplyFixture(t, listed)
+	h.editPlan(func(p *releasepolicy.ApplyPlan) { p.Objects[0].Name = "deliver-prod" })
+	if d := h.apply(); d.Auto {
+		t.Fatalf("excluded object created: %+v", d)
+	}
+}
