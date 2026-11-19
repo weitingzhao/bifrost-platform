@@ -17,11 +17,14 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 )
 
-// The names the tests pin by their text: the switch's variable and the start
-// of the engine's window reason (headrelease/prod_reads.go).
+// The names the tests pin by their text: the switch's variable, the start of
+// the engine's window reason (headrelease/prod_reads.go) and the two rows of
+// deliverables.yaml the shadow reads.
 const (
 	prodShadowEnv      = "PROD_HEAD_RELEASE"
 	policyWindowReason = "release window: "
+	prodRowName        = "platform-prod"
+	prodSourceName     = "platform-stg"
 )
 
 func shadowRowsOf(t *testing.T) (prod, source headrelease.Deliverable) {
@@ -32,9 +35,9 @@ func shadowRowsOf(t *testing.T) (prod, source headrelease.Deliverable) {
 	}
 	for _, d := range table.Deliverables {
 		switch d.Name {
-		case headrelease.ProdRowName:
+		case prodRowName:
 			prod = d
-		case headrelease.ProdSourceName:
+		case prodSourceName:
 			source = d
 		}
 	}
@@ -109,12 +112,18 @@ func TestProdShadowWiringCannotAct(t *testing.T) {
 	// The shadow's eyes moved to headrelease (decoupling item 5, A3): the same
 	// scan holds them.
 	eyes, eyeLiterals := sourceNames(t, "../headrelease/prod_reads.go")
+	// So did the switch, the rows, the pace and the record (decoupling item
+	// 5): the same scan holds them too.
+	built, builtLiterals := sourceNames(t, "../headrelease/prod_shadow_build.go")
 	for _, name := range forbidden {
 		if idents[name] > 0 {
 			t.Errorf("prod_batch_shadow.go names %s: the shadow reads and records, nothing else", name)
 		}
 		if eyes[name] > 0 {
 			t.Errorf("headrelease/prod_reads.go names %s: the shadow reads and records, nothing else", name)
+		}
+		if built[name] > 0 {
+			t.Errorf("headrelease/prod_shadow_build.go names %s: the shadow reads and records, nothing else", name)
 		}
 		for text := range literals {
 			if strings.Contains(text, name) && text != prodShadowAsksAbout {
@@ -126,6 +135,15 @@ func TestProdShadowWiringCannotAct(t *testing.T) {
 				t.Errorf("headrelease/prod_reads.go has the string %q", text)
 			}
 		}
+		for text := range builtLiterals {
+			if strings.Contains(text, name) {
+				t.Errorf("headrelease/prod_shadow_build.go has the string %q", text)
+			}
+		}
+	}
+	// Positive control of the added file: the scan does read it.
+	if built["ProdShadowLoop"] == 0 || builtLiterals["prod-shadow"] != 1 {
+		t.Errorf("the scan of headrelease/prod_shadow_build.go found neither the loop nor its site")
 	}
 	if literals[prodShadowAsksAbout] != 1 || idents["prodShadowAsksAbout"] != 3 {
 		t.Errorf("start_pipeline_run is written %d times and its constant named %d times; want once, and its definition plus two reads (the policy's question, the cards' filter)",

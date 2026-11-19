@@ -2,9 +2,7 @@ package server
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
@@ -12,33 +10,36 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/evidenceread"
 	"github.com/weitingzhao/bifrost-platform/api/internal/headrelease"
-	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 )
 
 // The shadow of "the platform releases PROD in batches": the judgement is in
-// headrelease/prod_shadow.go and what it reads is headrelease.ProdReads (each
-// one a read; the one thing it writes is the audit record below). The shadow
-// has no hands; this file hands ProdReads what it reads from.
+// headrelease/prod_shadow.go, when it runs in headrelease/prod_shadow_build.go
+// and what it reads is headrelease.ProdReads (each one a read; the one thing
+// it writes is the audit record). The shadow has no hands; this file hands it
+// what it reads from.
 
 // The policy is asked about this action and the cards are filtered by it;
 // the shadow never performs it.
 const prodShadowAsksAbout = "start_pipeline_run"
 
-// prodShadowOf builds the shadow, or nil: the switch is not shadow, the table
-// lacks one of its two rows, or this process has no delivery service.
+// prodShadowOf builds the shadow, or nil: this process has no delivery
+// service, or headrelease.NewProdShadow answers nil.
 func (s *Server) prodShadowOf(table headrelease.Table) *headrelease.ProdShadowLoop {
-	mode := headrelease.ProdShadowMode()
-	if mode != headrelease.ProdShadow || s.delivery == nil {
+	if s.delivery == nil {
 		return nil
 	}
-	prod, source := headrelease.ProdRows(table)
-	if prod == nil || source == nil {
-		slog.Error("prod batch shadow: the table lacks its rows; nothing is recorded", "prod", headrelease.ProdRowName, "source", headrelease.ProdSourceName)
-		return nil
-	}
-	soak := headrelease.Seconds(os.Getenv(headrelease.ProdSoakEnv), headrelease.DefaultProdSoak)
-	gap := headrelease.Seconds(os.Getenv(headrelease.ProdGapEnv), headrelease.DefaultProdGap)
+	return headrelease.NewProdShadow(table, headrelease.ProdShadowHands{
+		Reads: s.prodShadowReads,
+		Batch: s.prodShadowBatch,
+		Audit: func(target, result, detail string) {
+			s.audit.RecordDirect(headrelease.ProdShadowPrincipal, actuation.RoleOperator, headrelease.ProdRecordAction, target, result, detail)
+		},
+	})
+}
+
+// prodShadowReads joins the shadow's reads to this process's services.
+func (s *Server) prodShadowReads() headrelease.ProdReads {
 	facts := s.delivery.PolicyFacts()
 	db := func() eventlog.DB {
 		if s.agentRuntime == nil || s.agentRuntime.api == nil {
@@ -74,29 +75,7 @@ func (s *Server) prodShadowOf(table headrelease.Table) *headrelease.ProdShadowLo
 			return approvalreadings.OpenReleaseCards(items, prodShadowAsksAbout, pipeline), nil
 		}
 	}
-	repo := headrelease.ProdRepo(prod)
-	slog.Info("prod batch shadow: on (records only)", "deliverable", prod.Name, "candidate_from", source.Name, "soak", soak.String(), "gap", gap.String())
-	return &headrelease.ProdShadowLoop{
-		Mode: mode,
-		// Five minutes. Each judgement asks the release records what STG and
-		// what PROD run, and each of those answers lists every run of the
-		// pipelines' namespace a hundred a page: on 2026-11-17, with 2,058 runs
-		// kept, one judgement a minute was 327 LISTs in ten minutes under
-		// head-release's name (the communication line's count). The records
-		// move to a table next; until then the shadow asks less often, and a
-		// decision that is five minutes late is still a shadow's decision.
-		Every: 5 * time.Minute,
-		Gather: func(ctx context.Context) headrelease.ProdFacts {
-			return reads.Gather(kubemetrics.WithSite(ctx, "prod-shadow"), *prod, *source, soak, gap)
-		},
-		Batch: func(ctx context.Context, from, to string) headrelease.ProdBatch {
-			return s.prodShadowBatch(ctx, repo, from, to)
-		},
-		Record: func(result, detail string) {
-			slog.Info("prod batch shadow", "deliverable", prod.Name, "result", result, "record", detail)
-			s.audit.RecordDirect(headrelease.ProdShadowPrincipal, actuation.RoleOperator, headrelease.ProdRecordAction, "deliverable/"+prod.Name, result, detail)
-		},
-	}
+	return reads
 }
 
 // prodShadowBatch counts the commits to has and from lacks with the one
