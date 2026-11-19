@@ -37,7 +37,7 @@ channels:
   - {id: L06, class: K2, disposition: kept, step: none, what: plan-observations：每分钟读 Gitea 历史记成 plan_observation, by: 在用：计划观察，不接总线：节点变化没有要知道的人}
   - {id: L07, class: K10, disposition: kept, step: '3', what: facts-rules：每 15 秒求值（部署记录、CI 判定、审批问题），写计划节点状态, by: 在用：计划规则求值，不接总线：同 L06}
   - {id: L08, class: K11, disposition: announced, step: "2", what: "full-ci：每天 03:00 起全量 CI（每分钟看时钟）", by: "门·集群看到它起的 run；登记为定时作业", cut: {at: "2026-11-18", evidence: ["topic:ci.run.started"]}}
-  - {id: L09, class: K2, disposition: replaced, step: "2", what: "release recorder：每 5 分钟（+Kick）把成功 run 记成 ConfigMap 发布记录", by: "门·集群+订阅者写发布事实进账（release.deploy.finished）", cut: {at: "2026-11-18", evidence: ["reader:releases-tick", "reader:releases-current"]}}
+  - {id: L09, class: K2, disposition: replaced, step: '2', what: release recorder：每 5 分钟（+Kick）把成功 run 记成 ConfigMap 发布记录, by: 门·集群+订阅者写发布事实进账（release.deploy.finished）, cut: {at: '2026-11-18', evidence: ['reader:releases-tick', 'reader:releases-current']}, retired: {at: '2026-11-18', change: I831aeff9551aec38c63e23a6ff078ced0e21b70a, outside: '发布记录写进表；PROD 8ff09ca4 上线后 4 条新记录，ConfigMap 停在 1,351'}}
   - {id: L10, class: K11, disposition: kept, step: '0', what: checklist prober：每 10 分钟轮询 platform-api 自己的 8 条 GET 路由, by: 要接入：Console 就绪页；问题渠道；断了：探针变红没人知道（已派解耦）}
   - {id: L11, class: K5, disposition: announced, step: "5", what: "patrol autopilot：每 30 秒扫 skill 到期表，读平台 GET，可能 delete_pod，轮询 Cursor 云端 run", by: "动作与卡的分级不变（指令道只定规矩）；它读平台改读读口；delete_pod 等结果以 audit.action.recorded 宣布。Cursor 云端轮询部分若 Cursor 已删则是死路（推断，材料说 Cursor 一侧已删，代码仍在）"}
   - {id: L12, class: K5, disposition: announced, step: "3", what: "ib-gateway auto-repair：每 30 秒读 Redis 健康键，必要时发 reconnect_all 到 ib:operator:cmd 并每 2 秒读结果", by: "命令流本身不动（见 N08）；修复结果以 plugin.status.changed 宣布"}
@@ -73,7 +73,7 @@ channels:
   - {id: N14, class: K6, disposition: kept, step: none, what: 线程/主机心跳 POST /agent/threads/heartbeat（共享 reporter 令牌，10 秒合并落盘）, by: 在用：心跳（10 天 3.8 万次）；断了：席位在线判断全失}
   - {id: N15, class: K12, disposition: deleted, step: "any", what: "进度文档 PUT /agent/progress（已无发布方，TD-414 观察中）", by: "死路", retired: {at: "2026-11-17", change: Ic571bd2e1a39aaed29e8730ac81bcfaf84e2a664, absent: [api/internal/server/agent_progress_wire.go], absent_text: ['"/agent/progress"']}}
   - {id: N16, class: K12, disposition: kept, step: none, what: 线程标题上报 PUT /lineage/transcript-title, by: 在用：标题上报（10 天 77 次）；断了：Lineage 和线程没有标题}
-  - {id: N17, class: K8, disposition: kept, step: none, what: Trade 卫星/CI 上报：POST /audit/append、/code-health/report、/skill-runs, by: 待证：skill-runs 在用；code-health/report 由 CI 线核后连读口删；audit/append 属 Trade 路径不动}
+  - {id: N17, class: K8, disposition: kept, step: none, what: Trade 卫星/CI 上报：POST /audit/append、/code-health/report、/skill-runs, by: 在用：skill-runs；code-health/report 已删；audit/append 属 Trade 路径，不动}
   - {id: N18, class: K12, disposition: kept, step: none, what: '外部工作登记 POST /agentrt/external-work（collector:<host> 令牌）', by: '在用：外部工作登记（10 天 160 次，事件 3,420）；断了：外部 Agent 的工作看不到'}
   - {id: N19, class: K5, disposition: not-this-way, step: none, what: owner-exec 执行通道：领卡、20 秒心跳、交结果（命令按指纹+一次性码）, by: 例外：D 级命令和一次性码不上总线；结果有事件；断了：执行卡不能执行}
   - {id: N20, class: K3, disposition: deleted, step: "any", what: "审批 claim 长轮询 wait_seconds（本仓库唯一调用方不传）", by: "死路（其他仓库没查，删前核）", retired: {at: "2026-11-18", change: Ie32a1ac8615a55c7c9a64efe99707d7b604ff2d1, absent_text: ["in.WaitSeconds"]}}
@@ -103,7 +103,7 @@ channels:
   - {id: S05, class: K8, disposition: merged, step: "1", what: "PG 事件日志 agentrt.event（哈希链、封闭词表、cause_event_id）", by: "留下并改造成「账」本体：永久、按序、带起因；审计与窗口事件并到它", cut: {at: "2026-11-17", evidence: ["topic:git.main.advanced"]}}
   - {id: S06, class: K8, disposition: announced, step: "3", what: "证据账 agentrt.evidence / unit_run（以 git tree 内容为键）", by: "原因：内容键证据账是唯一一本，闸门读它；留在原处，判定变化以 ci.verdict.changed 宣布", cut: {at: "2026-11-18", evidence: ["topic:ci.verdict.changed"]}}
   - {id: S07, class: K8, disposition: announced, step: "3", what: "action_record：一次直接调用一条（谁、做什么、为什么、怎么撤销）", by: "原因：与事件账互补（谁为什么做、怎么撤销）；加 cause 指回事件；落账后宣布 audit.action.recorded", cut: {at: "2026-11-18", evidence: ["topic:audit.action.recorded"]}}
-  - {id: S08, class: K8, disposition: replaced, step: "3", what: "ConfigMap 发布记录（每个成功 run 一条，无清理）", by: "账（release.deploy.finished）；releases.Current 改读账"}
+  - {id: S08, class: K8, disposition: replaced, step: '3', what: ConfigMap 发布记录（每个成功 run 一条，无清理）, by: 账（release.deploy.finished）；releases.Current 改读账, retired: {at: '2026-11-18', change: I831aeff9551aec38c63e23a6ff078ced0e21b70a, outside: '不再新增 ConfigMap；已有 1,351 个是否清理归 Owner'}}
   - {id: S09, class: K9, disposition: announced, step: "3", what: "同 N12：窗口 ConfigMap 的存放", by: "同 N12", cut: {at: "2026-11-18", evidence: ["topic:release.window.changed"]}}
   - {id: S10, class: K12, disposition: kept, step: none, what: 线程标题 ConfigMap（手改、转录扫描、上报三个来源）, by: 在用：Lineage、线程标题；来源是手动命名和 Stop 钩子，转录扫描已删}
   - {id: S11, class: K13, disposition: merged, step: "3", what: "信箱存放：agentrt.message + artifact（正文 ≤8 KiB）", by: "随 N09 留下并改造：正文仍在这里，事件只带指针", cut: {at: "2026-11-18", evidence: ["topic:seat.mail.arrived"]}}
@@ -117,17 +117,17 @@ channels:
   - {id: X-A2, class: K11, disposition: kept, step: '0', what: github-sync CronJob：每 15 分钟对账 Gitea 与 GitHub 的 main 和 tag, by: 在用：Gitea 和 GitHub 对账；断了：公开仓库漂移没人发现}
   - {id: X-A3, class: K3, disposition: kept, step: none, what: land 任务等 CI 绿：每 15 秒读 PipelineRun（耐心期 3 分钟，上限 45 分钟）, by: 在用：land（2 天 297 次）；断了：合入停}
   - {id: X-A4, class: K3, disposition: kept, step: none, what: land 内部轮询 Gitea PR 是否可合、变基后新头, by: 在用：land；断了：合入停}
-  - {id: X-A5, class: K3, disposition: kept, step: none, what: release.sh 等 CI：每 20 秒 kubectl 读 PipelineRun, by: 例外：Trade/Research 发布路径，14 天 0 提交；断了：要发时发不了；缺演练证据}
-  - {id: X-A6, class: K10, disposition: kept, step: none, what: push-main.sh 的 CI 门：kubectl+ci_gate.py → /evidence/ci, by: 例外：同上；`/evidence/ci` 10 天 121 次；断了：同上}
+  - {id: X-A5, class: K3, disposition: kept, step: none, what: release.sh 等 CI：每 20 秒 kubectl 读 PipelineRun, by: 例外：Trade 发布路径，待 Trade 恢复发布时验证，目前没有演练证据；失败走 ci.run.finished}
+  - {id: X-A6, class: K10, disposition: kept, step: none, what: push-main.sh 的 CI 门：kubectl+ci_gate.py → /evidence/ci, by: 例外：Trade 发布路径，待 Trade 恢复发布时验证，目前没有演练证据}
   - {id: X-A7, class: K10, disposition: kept, step: none, what: PROD 流水线里内嵌的 CI 门（ci_gate.py 拷贝，由 embed 脚本嵌入）, by: 在用：PROD 发布（2 天 71 次）；断了：没有 CI 门}
   - {id: X-A8, class: K10, disposition: kept, step: none, what: CI 判范围：task 读 /units/scope，取不到退成全跑, by: 在用：CI 判范围（`/units/scope` 10 天 671 次）；断了：退回全跑，CI 变慢}
-  - {id: X-A9, class: K10, disposition: kept, step: none, what: 流水线读发布窗口 ConfigMap（window_decision.py 拷贝）, by: 例外：Research、插件发布的窗口；2 天 0 次，低频；断了：并发发布；缺演练证据}
-  - {id: X-A10, class: K10, disposition: kept, step: none, what: 流水线读发布冻结 ConfigMap（读不到按冻结）, by: 要接入：所有发布流水线读它；release.freeze.changed 接不接等 CI 线}
+  - {id: X-A9, class: K10, disposition: kept, step: none, what: 流水线读发布窗口 ConfigMap（window_decision.py 拷贝）, by: 在用：流水线的窗口判定，防并发发布（09-27、09-28 两次事故）；拦下时 run 失败，走同一条失败通知}
+  - {id: X-A10, class: K10, disposition: kept, step: none, what: 流水线读发布冻结 ConfigMap（读不到按冻结）, by: 在用：所有发布流水线读它；冻结时流水线失败，走 ci.run.finished 通知提交人和值班，不另发事件}
   - {id: X-A11, class: K9, disposition: kept, step: none, what: 冻结 CRD 新办法（freeze_chain.py、墓碑 ConfigMap；仓库有、集群没有）, by: 例外：发布信任链，`check-release-chain.py` 在用；断了：归 Owner；集群没有 freeze CRD}
   - {id: X-A12, class: K9, disposition: kept, step: none, what: release.sh 经平台 API 占/续/放窗口 PUT/DELETE, by: 在用：发布窗口唯一写入口；断了：窗口失效}
   - {id: X-A13, class: K5, disposition: announced, step: "3", what: "镜像同步：POST mirrors/sync → Tekton task → Gitea，任务内每 4 秒轮询", by: "动作留在原处；结果以 git.mirror.settled 宣布，轮询换成订阅（lineage/mirrors.go 另一份实现并到同一处）", cut: {at: "2026-11-18", evidence: ["topic:git.mirror.settled"]}}
-  - {id: X-A14, class: K3, disposition: kept, step: none, what: release.sh 等审批单：每 15 秒读单子状态, by: 例外：Trade 发布路径；断了：缺演练证据}
-  - {id: X-A15, class: K3, disposition: kept, step: none, what: release_tool.py wait：等 PipelineRun 离开 Unknown, by: 例外：Trade 发布路径；断了：缺演练证据}
+  - {id: X-A14, class: K3, disposition: kept, step: none, what: release.sh 等审批单：每 15 秒读单子状态, by: 例外：Trade PROD 发布的现行路径，待 Trade 恢复发布时验证，目前没有演练证据；要删归 Owner}
+  - {id: X-A15, class: K3, disposition: kept, step: none, what: release_tool.py wait：等 PipelineRun 离开 Unknown, by: 例外：Trade PROD 发布的现行路径，待 Trade 恢复发布时验证，目前没有演练证据；要删归 Owner}
   - {id: X-A16, class: K5, disposition: announced, step: "4", what: "Argo pin-sync：patch Application 并每 2 秒轮询", by: "patch 动作留在原处；同步状态由门·集群 watch Application 宣布", cut: {at: "2026-11-18", evidence: ["reader:gitops-watch"]}}
   - {id: X-A17, class: K2, disposition: not-a-channel, step: none, what: Argo CD 拉 Gitea main（bifrost-prod/stg 手动同步，platform 两个自动）, by: Argo 自带拉取，变化已有事件}
   - {id: X-A18, class: K10, disposition: merged, step: "4", what: "发布后核对四种（rollout status、digest 核对、集群内冒烟、PROD 读 STG/PROD /health）", by: "留下并改造成唯一一份核对；L05 并到它；结果 release.deploy.finished"}
@@ -162,7 +162,7 @@ channels:
   - {id: X-B16, class: K3, disposition: replaced, step: "3", what: "MCP 长轮询工具 wait_for_*（W01–W04 的 MCP 面）", by: "入户口子④的一个通用「等某主题」工具", cut: {at: "2026-11-18", evidence: ["reader:mcp-wait"]}, retired: {at: "2026-11-18", change: I45675cba9f3c8c9adb5db12d203c3cd601a03321, outside: "mcp/platform/src: busWait.ts and its test; the tools hold a bus long poll between reads"}}
   - {id: X-B17, class: K1, disposition: announced, step: "5", what: "bdev 本地服务事件日志（bdev events、get_dev_session_logs）", by: "文件留在原处（死因追查要的原始记录）；变化以 dev.session.changed 宣布（env=本机，本机怎么接总线设计没说）"}
   - {id: X-B18, class: K1, disposition: kept, step: none, what: 'Mac mini 操作面 :8783（launchd 状态、relay 宿主）', by: 例外：手机中继的宿主；断了：独立报警路断}
-  - {id: X-B19, class: K5, disposition: kept, step: '4', what: release.sh 整体：窗口、策略、冻结、镜像同步、CI 等待、审批轮询、kubectl create, by: 例外：Trade/Research 发布；断了：缺演练证据}
+  - {id: X-B19, class: K5, disposition: kept, step: '4', what: release.sh 整体：窗口、策略、冻结、镜像同步、CI 等待、审批轮询、kubectl create, by: 例外：Trade 和 Research 的发布入口，待恢复发布时验证，目前没有演练证据；要删归 Owner}
   - {id: X-B20, class: K14, disposition: kept, step: none, what: Cursor 一侧残留（thread-heartbeat.js、preflight.js 里的适配代码）, by: 例外：Cursor 已退役，但适配代码在 preflight.js 里，那是硬边界，Agent 不改}
   - {id: X-C1, class: K12, disposition: deleted, step: any, what: '通讯录 directory.md：席位号、thread:local_… 地址（手抄）', by: 待删：无程序读，3 天没更新，手抄}
   - {id: X-C2, class: K13, disposition: deleted, step: any, what: duty/ 的 from-/to-/hold-/draft- 文件（299 个，无程序读）, by: 已停用, retired: {at: '2026-11-18', change: coordinator-notes, outside: duty 下的 from/to/hold 文件不再用来报问题，问题发平台信箱，门铃叫醒}}
