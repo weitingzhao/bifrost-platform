@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/mainhistory"
 )
 
 // planGitea serves one repo's main in the delivery org "bifrost" and the
@@ -124,7 +124,7 @@ func TestPlanHistoryReader(t *testing.T) {
 
 	// PV2 review blocker: the replayed result exists only in the agent org.
 	h, err := r.History(ctx, "repo", task, a, "")
-	if err != nil || h.State != landing.Effective || h.Commit != landed || h.Snapshot != landed {
+	if err != nil || h.State != mainhistory.Effective || h.Commit != landed || h.Snapshot != landed {
 		t.Fatalf("first read: %+v %v", h, err)
 	}
 	if f.count("result-delivery") != 0 {
@@ -133,7 +133,7 @@ func TestPlanHistoryReader(t *testing.T) {
 	pages := f.count("page")
 
 	// The same pass, another binding: no Gitea request at all.
-	if h, err = r.History(ctx, "repo", task, a, ""); err != nil || h.State != landing.Effective {
+	if h, err = r.History(ctx, "repo", task, a, ""); err != nil || h.State != mainhistory.Effective {
 		t.Fatalf("second read: %+v %v", h, err)
 	}
 	if f.count("page") != pages || f.count("head") != 1 || f.count("result") != 1 {
@@ -144,7 +144,7 @@ func TestPlanHistoryReader(t *testing.T) {
 	revert := sha40("c")
 	f.add(revert, "Revert \"result\"\n\nThis reverts commit "+landed+".", landed)
 	now = now.Add(time.Minute)
-	if h, err = r.History(ctx, "repo", task, a, ""); err != nil || h.State != landing.Reverted {
+	if h, err = r.History(ctx, "repo", task, a, ""); err != nil || h.State != mainhistory.Reverted {
 		t.Fatalf("after revert: %+v %v", h, err)
 	}
 	if got := f.count("page") - pages; got != 1 {
@@ -156,7 +156,7 @@ func TestPlanHistoryReader(t *testing.T) {
 	f.mu.Lock()
 	f.dropped = base
 	f.mu.Unlock()
-	if h, err = fresh.History(ctx, "repo", task, a, ""); err == nil || h.State != landing.Unknown {
+	if h, err = fresh.History(ctx, "repo", task, a, ""); err == nil || h.State != mainhistory.Unknown {
 		t.Fatalf("truncated history became truth: %+v %v", h, err)
 	}
 
@@ -167,12 +167,12 @@ func TestPlanHistoryReader(t *testing.T) {
 	delete(f.results, a)
 	f.mu.Unlock()
 	gone := &PlanHistoryReader{Access: r.Access, Client: r.Client, MaxPages: 10, Now: r.Now}
-	if h, err = gone.History(ctx, "repo", task, a, ""); err != nil || h.State != landing.Reverted {
+	if h, err = gone.History(ctx, "repo", task, a, ""); err != nil || h.State != mainhistory.Reverted {
 		t.Fatalf("result gone from Gitea: %+v %v", h, err)
 	}
 
 	// No result anywhere: Unknown.
-	if h, err = fresh.History(ctx, "repo", task, sha40("e"), ""); err == nil || h.State != landing.Unknown {
+	if h, err = fresh.History(ctx, "repo", task, sha40("e"), ""); err == nil || h.State != mainhistory.Unknown {
 		t.Fatalf("missing result: %+v %v", h, err)
 	}
 }

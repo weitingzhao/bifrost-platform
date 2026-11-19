@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/mainhistory"
 )
 
 // Exercise the real HTTP reader with the existing Gitea handler, without
@@ -27,20 +27,20 @@ func TestPV2FallbackRequiresBoundIdentity(t *testing.T) {
 	trailers := "Agentrt-Task: " + task + "\nChange-Id: I" + b
 	for _, tt := range []struct {
 		name, task, message string
-		want                landing.History
+		want                mainhistory.History
 	}{
-		{"quoted body and no result", "", "documentation\n\nDo not use this old marker: " + line + "\n\nChange-Id: I" + b, landing.Unknown},
-		{"no bound task", "", "result\n\n" + trailers + "\n" + line, landing.Unknown},
-		{"missing task trailer", task, "result\n\nChange-Id: I" + b + "\n" + line, landing.Unknown},
-		{"wrong task", "other", "result\n\n" + trailers + "\n" + line, landing.Unknown},
-		{"duplicate task", task, "result\n\n" + trailers + "\nAgentrt-Task: " + task + "\n" + line, landing.Unknown},
-		{"malformed second task", task, "result\n\n" + trailers + "\nAgentrt-Task: two values\n" + line, landing.Unknown},
-		{"continued task", task, "result\n\nAgentrt-Task: " + task + "\n extra\nChange-Id: I" + b + "\n" + line, landing.Unknown},
-		{"quoted provenance with bound task", task, "result\n\nExample: " + line + "\n\n" + trailers, landing.Unknown},
-		{"duplicate provenance", task, "result\n\n" + trailers + "\n" + line + "\n" + line, landing.Unknown},
-		{"exact task and provenance", task, "result\n\n" + trailers + "\n" + line, landing.Effective},
-		{"bound task without Change-Id", task, "result\n\nAgentrt-Task: " + task + "\n" + line, landing.Effective},
-		{"separate provenance paragraph", task, "result\n\n" + trailers + "\n\n" + line, landing.Effective},
+		{"quoted body and no result", "", "documentation\n\nDo not use this old marker: " + line + "\n\nChange-Id: I" + b, mainhistory.Unknown},
+		{"no bound task", "", "result\n\n" + trailers + "\n" + line, mainhistory.Unknown},
+		{"missing task trailer", task, "result\n\nChange-Id: I" + b + "\n" + line, mainhistory.Unknown},
+		{"wrong task", "other", "result\n\n" + trailers + "\n" + line, mainhistory.Unknown},
+		{"duplicate task", task, "result\n\n" + trailers + "\nAgentrt-Task: " + task + "\n" + line, mainhistory.Unknown},
+		{"malformed second task", task, "result\n\n" + trailers + "\nAgentrt-Task: two values\n" + line, mainhistory.Unknown},
+		{"continued task", task, "result\n\nAgentrt-Task: " + task + "\n extra\nChange-Id: I" + b + "\n" + line, mainhistory.Unknown},
+		{"quoted provenance with bound task", task, "result\n\nExample: " + line + "\n\n" + trailers, mainhistory.Unknown},
+		{"duplicate provenance", task, "result\n\n" + trailers + "\n" + line + "\n" + line, mainhistory.Unknown},
+		{"exact task and provenance", task, "result\n\n" + trailers + "\n" + line, mainhistory.Effective},
+		{"bound task without Change-Id", task, "result\n\nAgentrt-Task: " + task + "\n" + line, mainhistory.Effective},
+		{"separate provenance paragraph", task, "result\n\n" + trailers + "\n\n" + line, mainhistory.Effective},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			f := &planGitea{commits: map[string]giteaCommit{}, results: map[string]string{}, requests: map[string]int{}, t: t}
@@ -50,7 +50,7 @@ func TestPV2FallbackRequiresBoundIdentity(t *testing.T) {
 				return Access{Base: "http://history.invalid", Org: "bifrost", AgentOrg: "agents"}, nil
 			}, Client: &http.Client{Transport: planHistoryTransport{f}}, MaxPages: 10}
 			h, err := r.History(context.Background(), "repo", tt.task, a, "")
-			if h.State != tt.want || (err != nil) != (tt.want == landing.Unknown) {
+			if h.State != tt.want || (err != nil) != (tt.want == mainhistory.Unknown) {
 				t.Fatalf("state=%s error=%v; want %s", h.State, err, tt.want)
 			}
 			if f.count("result") != 1 || f.count("result-delivery") != 1 {
@@ -75,7 +75,7 @@ func TestPV2FallbackDoesNotBorrowCandidateChangeID(t *testing.T) {
 		return Access{Base: "http://history.invalid", Org: "bifrost", AgentOrg: "agents"}, nil
 	}, Client: &http.Client{Transport: planHistoryTransport{f}}, MaxPages: 10}
 	h, err := r.History(context.Background(), "repo", task, a, "")
-	if err != nil || h.State != landing.Reverted || h.Commit != b {
+	if err != nil || h.State != mainhistory.Reverted || h.Commit != b {
 		t.Fatalf("fallback imported candidate identity: %+v %v", h, err)
 	}
 }

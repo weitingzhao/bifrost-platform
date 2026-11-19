@@ -41,8 +41,6 @@ var testsReachingAcross = map[string][]string{
 	"api/internal/devsession/outside_inputs_test.go":                     {"api/internal/outsideinput"},
 	"api/internal/devsession/provider_k8s_test.go":                       {"api/internal/cluster"},
 	"api/internal/gitops/service_test.go":                                {"api/internal/cluster"},
-	"api/internal/lineage/planhistory_regression_test.go":                {"api/internal/agentrt/landing"},
-	"api/internal/lineage/planhistory_test.go":                           {"api/internal/agentrt/landing"},
 	"api/internal/opscontext/outside_inputs_test.go":                     {"api/internal/outsideinput"},
 	"api/internal/patrol/outside_inputs_test.go":                         {"api/internal/outsideinput"},
 	"api/internal/placement/cluster_test.go":                             {"api/internal/cluster"},

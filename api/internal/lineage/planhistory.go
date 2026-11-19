@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/mainhistory"
 )
 
 // PlanHistoryReader answers, for the plan completion atoms, whether a task's
@@ -46,8 +46,8 @@ type repoMain struct {
 }
 
 // History implements store.PlanSources.History.
-func (r *PlanHistoryReader) History(ctx context.Context, repo, task, result, snapshot string) (landing.MainHistory, error) {
-	unknown := landing.MainHistory{State: landing.Unknown}
+func (r *PlanHistoryReader) History(ctx context.Context, repo, task, result, snapshot string) (mainhistory.MainHistory, error) {
+	unknown := mainhistory.MainHistory{State: mainhistory.Unknown}
 	if r.MaxPages < 1 {
 		return unknown, errors.New("history page budget missing")
 	}
