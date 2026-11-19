@@ -1,4 +1,4 @@
-package delivery
+package placement
 
 import (
 	"context"
@@ -10,7 +10,8 @@ import (
 )
 
 // The node metrics build placement reads (decoupling item 5, A5, 2026-11-18;
-// they were the server's build_node_metrics.go): what each node's disk
+// they were the server's build_node_metrics.go; moved from delivery to
+// placement on 2026-11-19 with the choice they feed): what each node's disk
 // latency, CPU, disk busy and free memory are, from Prometheus, joined by
 // JoinNodeMetrics. The server hands Read the Prometheus reader.
 

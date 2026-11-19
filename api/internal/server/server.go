@@ -49,6 +49,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/network"
 	"github.com/weitingzhao/bifrost-platform/api/internal/operatorplane"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
+	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
@@ -110,7 +111,7 @@ type Server struct {
 	// tenant is the tenant domain's assembly (tenant/assembly): its handlers and routes.
 	tenant      *tenantassembly.Tenant
 	telemetry   *telemetry.Handler
-	nodeLatency delivery.PromNodeMetrics
+	nodeLatency placement.PromNodeMetrics
 	devSession  *devsession.Handler
 	auth        *actuation.AuthService
 	approvals   *approvals.Service

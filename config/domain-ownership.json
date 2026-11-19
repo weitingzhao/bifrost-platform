@@ -1283,7 +1283,7 @@
         "compute"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: node-capability pools and workload placement observations consumed by cluster/delivery; compute charter owns placement, preflight decisions unchanged"
+      "basis": "2026-11-19: the choice of a node for a task moved in from delivery at the CI line's ask, semantics unchanged: TaskProfile (a task's needs: CPU, memory, disk tier, spread, and the node labels it excludes, since that day by label instead of node name), the node measurements and their Prometheus reader (PromNodeMetrics, JoinNodeMetrics, WorseLatency; delivery's node_metrics_read.go), and the choice itself (Placer.Place: node profiles, disk tiers, full nodes, spread); delivery keeps its task values (CITask, CIRunTask, UnitTask) and writes the chosen node into its runs, handing Placer the Kubernetes client and the metrics reader. Imports only foundation (kubemetrics, telemetry, probe, kubeapi). Earlier, 2026-11-16 source and caller audit: node-capability pools and workload placement observations consumed by cluster/delivery; compute charter owns placement, preflight decisions unchanged"
     },
     "api/cmd/platform-api": {
       "domains": [
