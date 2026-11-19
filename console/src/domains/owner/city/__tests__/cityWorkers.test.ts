@@ -158,12 +158,15 @@ describe('the machines', () => {
     expect(ms.map(variantOf)).toEqual(['linux', 'mac', 'mac', 'win'])
   })
   it('draws a set by its system; its size shows in its bars, not in the sprite (the Owner: bars beside read better than tanks inside)', () => {
-    expect(layersOf('genset', 'node:x', undefined, 'mac').map(l => l.tex)).toEqual(['genset:mac'])
+    expect(layersOf('genset', 'node:x', undefined, 'mac').map(l => l.tex)).toEqual(['genset:mac::'])
     expect(layersOf('power', 'node:gpu-server', undefined, 'linux').map(l => l.tex)).toEqual(['power'])
     // 2026-11-19, the Owner: a machine room's number is painted on it, so it is part of its texture.
-    expect(layersOf('genset', 'node:x', undefined, 'linux', '01').map(l => l.tex)).toEqual(['genset:linux:01'])
-    expect(layersOf('power', 'node:gpu-server', undefined, 'linux', 'GPU').map(l => l.tex)).toEqual(['power:GPU'])
-    expect(spriteOf('genset:linux:A%26B').svg).toContain('A&amp;B')
+    expect(layersOf('genset', 'node:x', undefined, 'linux', '01', 'node 01').map(l => l.tex)).toEqual(['genset:linux:01:node%2001'])
+    expect(layersOf('power', 'node:gpu-server', undefined, 'linux', 'GPU').map(l => l.tex)).toEqual(['power:GPU:'])
+    expect(spriteOf('genset:linux:A%26B:Mac%20Mini').svg).toContain('A&amp;B')
+    // 2026-11-19, the Owner: its name on its wall, its system's mark on its side.
+    expect(spriteOf('genset:mac::Mac%20Mini').svg).toContain('Mac Mini')
+    expect(spriteOf('genset:win::x').svg).toContain('#2f78d6')
     expect([coreTier(8), coreTier(16), coreTier(32), coreTier(64), coreTier(null)]).toEqual([0, 1, 2, 3, -1])
   })
 })

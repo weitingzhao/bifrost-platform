@@ -639,7 +639,7 @@ function coolingTower(g: Draw, x: number, y: number, h: number, id: string) {
   for (const [a, b, r] of [[-5, 10, 9], [8, 19, 11], [-3, 33, 13]] as const) g.add(`<circle cx="${cx + a}" cy="${cy - h - b}" r="${r}" fill="#ffffff"/>`)
 }
 
-export function powerStation(label = ''): Sprite {
+export function powerStation(label = '', name = ''): Sprite {
   const n = 4
   const g = new Draw(n, n, 190)
   lot(g, n, '#e3e0d6')
@@ -657,7 +657,7 @@ export function powerStation(label = ''): Sprite {
   let f = `<rect x="0" y="-7" width="${n1(W)}" height="7" fill="#cf9f55" stroke="${INK}" stroke-width="0.8"/>`
   for (let i = 0; i < 6; i++) { const u = 5 + i * 13.8; f += `<rect x="${n1(u)}" y="-27" width="10" height="15" fill="#d8ecfb" stroke="${INK}" stroke-width="0.9"/><path d="M${n1(u + 5)},-27 v15 M${n1(u)},-19.5 h10" stroke="${INK}" stroke-width="0.5"/>` }
   f += `<rect x="${n1(W - 19)}" y="-14" width="14" height="14" fill="#8a94a5" stroke="${INK}" stroke-width="0.9"/>`
-  f += `<text x="4" y="-1.5" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="5.6" font-weight="700" fill="${INK}" letter-spacing="1.6">POWER</text>`
+  f += `<text x="4" y="-1.5" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="5.6" font-weight="700" fill="${INK}" letter-spacing="1.6">${esc(name || 'POWER')}</text>`
   // The Owner's number, painted large on the hall's front (its sawtooth roof takes no paint).
   if (label) f += `<text x="${n1(W - 24)}" y="-29.5" text-anchor="end" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="9" font-weight="800" fill="${INK}" opacity="0.85">${esc(label)}</text>`
   g.face('left', x0, y1, 0, f)
@@ -861,54 +861,72 @@ function roofPaint(g: Draw, x: number, y: number, w: number, d: number, z: numbe
 export type Tier = -1 | 0 | 1 | 2 | 3
 export type MachineOs = 'linux' | 'mac' | 'win' | 'unknown'
 
+/** A system's mark, drawn in a face's own plane centred at (cx, cy), about 2r across. */
+function osMark(os: MachineOs, cx: number, cy: number, r: number): string {
+  if (os === 'linux') {
+    // Three friends round a ring.
+    const dots = [0, 120, 240].map(a => { const t = (a - 90) * Math.PI / 180; return `<circle cx="${n1(cx + Math.cos(t) * r * 0.82)}" cy="${n1(cy + Math.sin(t) * r * 0.82)}" r="${n1(r * 0.26)}" fill="#e95420" stroke="#ffffff" stroke-width="0.7"/>` }).join('')
+    return `<circle cx="${n1(cx)}" cy="${n1(cy)}" r="${n1(r * 1.15)}" fill="#ffffff" stroke="${INK}" stroke-width="0.8"/><circle cx="${n1(cx)}" cy="${n1(cy)}" r="${n1(r * 0.6)}" fill="none" stroke="#e95420" stroke-width="${n1(r * 0.28)}"/>${dots}`
+  }
+  if (os === 'mac') {
+    return `<circle cx="${n1(cx)}" cy="${n1(cy)}" r="${n1(r * 1.15)}" fill="#ffffff" stroke="${INK}" stroke-width="0.8"/><path d="M${n1(cx)},${n1(cy - r * 0.45)} C${n1(cx - r * 0.25)},${n1(cy - r * 0.62)} ${n1(cx - r * 0.85)},${n1(cy - r * 0.55)} ${n1(cx - r * 0.8)},${n1(cy + r * 0.05)} C${n1(cx - r * 0.75)},${n1(cy + r * 0.6)} ${n1(cx - r * 0.35)},${n1(cy + r * 0.85)} ${n1(cx)},${n1(cy + r * 0.62)} C${n1(cx + r * 0.35)},${n1(cy + r * 0.85)} ${n1(cx + r * 0.75)},${n1(cy + r * 0.6)} ${n1(cx + r * 0.8)},${n1(cy + r * 0.05)} C${n1(cx + r * 0.85)},${n1(cy - r * 0.55)} ${n1(cx + r * 0.25)},${n1(cy - r * 0.62)} ${n1(cx)},${n1(cy - r * 0.45)} Z" fill="#59606b"/><path d="M${n1(cx + r * 0.05)},${n1(cy - r * 0.55)} C${n1(cx + r * 0.1)},${n1(cy - r * 0.95)} ${n1(cx + r * 0.4)},${n1(cy - r * 1.0)} ${n1(cx + r * 0.45)},${n1(cy - r * 0.95)} C${n1(cx + r * 0.4)},${n1(cy - r * 0.7)} ${n1(cx + r * 0.25)},${n1(cy - r * 0.55)} ${n1(cx + r * 0.05)},${n1(cy - r * 0.55)} Z" fill="#59606b"/>`
+  }
+  if (os === 'win') {
+    const q = r * 0.62, gap = r * 0.12
+    return `<rect x="${n1(cx - r * 1.15)}" y="${n1(cy - r * 1.15)}" width="${n1(r * 2.3)}" height="${n1(r * 2.3)}" rx="2" fill="#ffffff" stroke="${INK}" stroke-width="0.8"/>` +
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sy]) => `<rect x="${n1(cx + (sx < 0 ? -q - gap / 2 : gap / 2))}" y="${n1(cy + (sy < 0 ? -q - gap / 2 : gap / 2))}" width="${n1(q)}" height="${n1(q)}" fill="#2f78d6"/>`).join('')
+  }
+  return `<circle cx="${n1(cx)}" cy="${n1(cy)}" r="${n1(r * 1.15)}" fill="#ffffff" stroke="${INK}" stroke-width="0.8"/><text x="${n1(cx)}" y="${n1(cy + r * 0.45)}" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="${n1(r * 1.3)}" font-weight="800" fill="#8d889b">?</text>`
+}
+
+/** The body colours of a machine room by its system. */
+const OS_FACES: Record<MachineOs, { top: string; left: string; right: string }> = {
+  linux: faces('#ffe2c2', '#f5a25d', '#df8640'),
+  mac: faces('#ffffff', '#e9ecf1', '#cfd5de'),
+  win: faces('#d8e8ff', '#4f86d6', '#3b6fb8'),
+  unknown: faces('#eceaf2', '#cfcbd9', '#bdb8c9'),
+}
+
 /**
- * A machine as a generator set (the Owner, 2026-11-18: nodes are the supply;
- * Mac, Windows and Linux look different; memory and disk show as tank
- * sizes, which the bars beside it show). Linux is the yellow diesel set, a
- * Mac a white rounded fuel-cell unit, Windows a blue battery cabinet.
+ * A machine room (the Owner, 2026-11-18/19): every computer that supplies work
+ * is a power plant with its stacks; its system shows in its colour and the
+ * mark on its side wall (Linux orange with three friends, a Mac silver with
+ * the apple, Windows blue with the four-pane window); its name runs along the
+ * front wall over the three windows, which are its gauges; its number is
+ * painted on the roof. The online lamp on its roof is drawn by the scene.
  */
-export function generatorSet(os: MachineOs = 'linux', label = ''): Sprite {
+export const PLANT = { x0: 0.22, x1: 1.78, y0: 0.3, y1: 1.6, h: 44 } as const
+export function generatorSet(os: MachineOs = 'linux', label = '', name = ''): Sprite {
   const n = 2
-  const g = new Draw(n, n, 96)
+  const g = new Draw(n, n, 118)
   lot(g, n, '#dedbd2')
   g.box(0.12, 0.2, 1.76, 1.5, 4, faces('#e9e6dd', '#d2cec2', '#c1bcae'), 0, 1)
-  const x0 = 0.22, x1 = 1.78, y0 = 0.3, y1 = 1.6, h = os === 'mac' ? 26 : 34
+  const { x0, x1, y0, y1, h } = PLANT
   g.shadow(x0, y0, x1 - x0, y1 - y0, 0.35)
+  const c = OS_FACES[os]
+  g.box(x0, y0, x1 - x0, y1 - y0, h, c, 4)
   const W = (x1 - x0) * U, D = (y1 - y0) * U
-  if (os === 'mac') {
-    g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#ffffff', '#eef0f3', '#d9dde3'), 4)
-    g.face('left', x0, y1, 4, `<rect x="5" y="${-h + 8}" width="${n1(W - 10)}" height="3" rx="1.5" fill="#9fd8ff"/><circle cx="${n1(W - 7)}" cy="${-h + 15}" r="1.3" fill="#7ef0c9"/>`)
-    g.face('right', x1, y1, 4, `<rect x="5" y="${-h + 6}" width="${n1(D - 10)}" height="${h - 12}" rx="5" fill="none" stroke="#c3c8d2" stroke-width="1"/>`)
-    top(g, x0 + 0.08, y0 + 0.08, x1 - 0.08, y1 - 0.08, h + 4, '#f7f8fa', 0.9, '#b9bec8')
-    if (label) roofPaint(g, x0 + 0.1, y0 + 0.1, x1 - x0 - 0.2, y1 - y0 - 0.2, h + 4, label)
-  } else if (os === 'win') {
-    g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#d8e8ff', '#4f86d6', '#3b6fb8'), 4)
-    let f = ''
-    for (let r = 0; r < 2; r++) for (let c = 0; c < 2; c++) f += `<rect x="${n1(5 + c * (W - 10) / 2)}" y="${n1(-h + 6 + r * 12)}" width="${n1((W - 14) / 2)}" height="10" fill="#9cc7ff" stroke="${INK}" stroke-width="0.7"/>`
-    g.face('left', x0, y1, 4, f)
-    let r2 = ''
-    for (let u = 5; u < D - 4; u += 6) r2 += `<rect x="${n1(u)}" y="${-h + 6}" width="3.6" height="${h - 12}" fill="#2f5c9e"/>`
-    g.face('right', x1, y1, 4, r2)
-    top(g, x0 + 0.06, y0 + 0.06, x1 - 0.06, y1 - 0.06, h + 4, '#e8f1ff', 0.9, '#3b6fb8')
-    if (label) roofPaint(g, x0 + 0.1, y0 + 0.1, x1 - x0 - 0.2, y1 - y0 - 0.2, h + 4, label)
-  } else {
-    const yellow = os === 'linux'
-    g.box(x0, y0, x1 - x0, y1 - y0, h, yellow ? faces('#ffe9a8', '#f7cf62', '#e9b843') : faces('#eceaf2', '#cfcbd9', '#bdb8c9'), 4)
-    let f = ''
-    for (let i = 0; i < 3; i++) f += `<rect x="${n1(4 + i * 15)}" y="-28" width="11" height="20" fill="${yellow ? '#e2b13f' : '#bdb8c9'}" stroke="${INK}" stroke-width="0.8"/>${[0, 1, 2, 3, 4].map(k => `<line x1="${n1(5 + i * 15)}" y1="${-25 + k * 4}" x2="${n1(14 + i * 15)}" y2="${-25 + k * 4}" stroke="${yellow ? '#a87b1d' : '#8d889b'}" stroke-width="0.8"/>`).join('')}`
-    f += `<rect x="${n1(W - 8)}" y="-26" width="5" height="18" fill="#59606b" stroke="${INK}" stroke-width="0.8"/><circle cx="${n1(W - 5.5)}" cy="-21" r="1.1" fill="#7ef0c9"/><circle cx="${n1(W - 5.5)}" cy="-16" r="1.1" fill="#ffd76a"/>`
-    g.face('left', x0, y1, 4, f)
-    let r = `<rect x="4" y="-30" width="${n1(D - 8)}" height="24" fill="#5b6070" stroke="${INK}" stroke-width="1"/>`
-    for (let u = 7; u < D - 6; u += 3.2) r += `<line x1="${n1(u)}" y1="-28" x2="${n1(u)}" y2="-8" stroke="#8d93a1" stroke-width="0.9"/>`
-    g.face('right', x1, y1, 4, r)
-    top(g, x0 + 0.06, y0 + 0.06, x1 - 0.06, y1 - 0.06, h + 4, yellow ? '#fff1c4' : '#f4f2f8', 0.9, yellow ? '#b48a2a' : '#8d889b')
-    // The Owner's number, painted flat on the roof's front half, under the stacks (2026-11-19).
-    if (label) roofPaint(g, x0 + 0.1, 0.98, x1 - x0 - 0.2, y1 - 1.06, h + 4, label)
-    for (const k of [0.6, 1.0]) {
-      g.cylinder(k, 0.75, 4, h + 4, h + 26, '#9aa3b0', '#6d7584', '#59606b')
-      const [ex, ey] = g.p(k, 0.75, h + 26)
-      g.add(`<ellipse cx="${n1(ex)}" cy="${n1(ey)}" rx="2.8" ry="1.4" fill="#2f2d3a"/>`)
-    }
+  // Front: three windows (the gauges), a door strip, the name band above.
+  let f = ''
+  for (let i = 0; i < 3; i++) f += `<rect x="${n1(4 + i * 15)}" y="-28" width="11" height="20" fill="#2f3446" stroke="${INK}" stroke-width="0.8"/>`
+  f += `<rect x="${n1(W - 8)}" y="-26" width="5" height="18" fill="#59606b" stroke="${INK}" stroke-width="0.8"/>`
+  f += `<rect x="3" y="${-h + 2}" width="${n1(W - 6)}" height="9" fill="#fbfaf6" stroke="${INK}" stroke-width="0.7"/>`
+  if (name) {
+    const size = Math.min(6.4, (W - 10) / Math.max(4, name.length) * 1.55)
+    f += `<text x="${n1(W / 2)}" y="${n1(-h + 8.6)}" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="${n1(size)}" font-weight="700" fill="${INK}">${esc(name)}</text>`
+  }
+  g.face('left', x0, y1, 4, f)
+  // Side: the radiator grille low, the system's mark on a plaque above it.
+  let r = `<rect x="4" y="-20" width="${n1(D - 8)}" height="14" fill="#5b6070" stroke="${INK}" stroke-width="1"/>`
+  for (let u = 7; u < D - 6; u += 3.2) r += `<line x1="${n1(u)}" y1="-18" x2="${n1(u)}" y2="-8" stroke="#8d93a1" stroke-width="0.9"/>`
+  r += osMark(os, D / 2, -h + 13, 7)
+  g.face('right', x1, y1, 4, r)
+  top(g, x0 + 0.06, y0 + 0.06, x1 - 0.06, y1 - 0.06, h + 4, c.top, 0.9, INK)
+  if (label) roofPaint(g, x0 + 0.1, 0.98, x1 - x0 - 0.2, y1 - 1.06, h + 4, label)
+  for (const k of [0.6, 1.0]) {
+    g.cylinder(k, 0.75, 4, h + 4, h + 26, '#9aa3b0', '#6d7584', '#59606b')
+    const [ex, ey] = g.p(k, 0.75, h + 26)
+    g.add(`<ellipse cx="${n1(ex)}" cy="${n1(ey)}" rx="2.8" ry="1.4" fill="#2f2d3a"/>`)
   }
   return g.done()
 }

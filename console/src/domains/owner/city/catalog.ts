@@ -144,11 +144,12 @@ export type Layer = { tex: string; dx: number; dy: number; stack: boolean; order
 
 const iso = (x: number, y: number, z = 0) => ({ x: (x - y) * (CW / 2), y: (x + y) * (CH / 2) - z })
 
-export function layersOf(kind: string, binds: string, color?: string, variant?: string, label?: string): Layer[] {
+export function layersOf(kind: string, binds: string, color?: string, variant?: string, label?: string, name?: string): Layer[] {
   const base = (tex: string, order = 0): Layer => ({ tex, dx: 0, dy: 0, stack: false, order })
   // A machine room carries its number in its own paint, so the number is part of its texture.
-  if (kind === 'genset') return [base(`genset:${variant ?? 'linux'}${label ? `:${encodeURIComponent(label)}` : ''}`)]
-  if (kind === 'power' && label) return [base(`power:${encodeURIComponent(label)}`)]
+  // A machine room carries its number and name in its own paint, so both are part of its texture.
+  if (kind === 'genset') return [base(`genset:${variant ?? 'linux'}:${encodeURIComponent(label ?? '')}:${encodeURIComponent(name ?? '')}`)]
+  if (kind === 'power' && (label || name)) return [base(`power:${encodeURIComponent(label ?? '')}:${encodeURIComponent(name ?? '')}`)]
   if (kind === 'supplier') return [base(`supplier:${color ?? '#5aa9ff'}`)]
   if (kind === 'campus' || kind === 'campus4') return [base(`campus:${kind === 'campus' ? 8 : 4}:${color ?? '#f2d27a'}`)]
   if (kind !== 'pad') return [base(kind)]
@@ -168,7 +169,7 @@ const make: Record<string, () => Sprite> = {
 }
 export function spriteOf(tex: string): Sprite {
   let s = cache.get(tex)
-  if (!s) { s = tex.startsWith('rocket:') ? L.rocket(tex.slice(7)) : tex.startsWith('sat:') ? L.orbitSatellite(tex.slice(4)) : tex.startsWith('supplier:') ? L.supplierDock(tex.slice(9)) : tex.startsWith('bay:') ? L.payloadBay(tex.slice(4)) : tex.startsWith('factory:') ? L.codeFactory(tex.slice(8)) : tex.startsWith('module:') ? L.moduleBlock(tex.slice(7)) : tex.startsWith('genset:') ? L.generatorSet(tex.split(':')[1] as L.MachineOs, decodeURIComponent(tex.split(':')[2] ?? '')) : tex.startsWith('power:') ? L.powerStation(decodeURIComponent(tex.slice(6))) : tex.startsWith('campus:') ? L.campusGround(Number(tex.split(':')[1]) as 4 | 8, tex.split(':')[2]) : make[tex](); cache.set(tex, s) }
+  if (!s) { s = tex.startsWith('rocket:') ? L.rocket(tex.slice(7)) : tex.startsWith('sat:') ? L.orbitSatellite(tex.slice(4)) : tex.startsWith('supplier:') ? L.supplierDock(tex.slice(9)) : tex.startsWith('bay:') ? L.payloadBay(tex.slice(4)) : tex.startsWith('factory:') ? L.codeFactory(tex.slice(8)) : tex.startsWith('module:') ? L.moduleBlock(tex.slice(7)) : tex.startsWith('genset:') ? L.generatorSet(tex.split(':')[1] as L.MachineOs, decodeURIComponent(tex.split(':')[2] ?? ''), decodeURIComponent(tex.split(':')[3] ?? '')) : tex.startsWith('power:') ? L.powerStation(decodeURIComponent(tex.split(':')[1] ?? ''), decodeURIComponent(tex.split(':')[2] ?? '')) : tex.startsWith('campus:') ? L.campusGround(Number(tex.split(':')[1]) as 4 | 8, tex.split(':')[2]) : make[tex](); cache.set(tex, s) }
   return s
 }
 export const spriteUrl = (s: Sprite) => `data:image/svg+xml;utf8,${encodeURIComponent(s.svg)}`

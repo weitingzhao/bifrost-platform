@@ -473,7 +473,8 @@ export class BuilderScene extends Phaser.Scene {
   /* ---------------- the buildings ---------------- */
 
   private layers(p: Placed): Layer[] {
-    const ls = layersOf(p.kind, p.binds, this.s.colorOf(p.binds), this.s.variantOf?.(p.binds), p.label)
+    const machine = p.kind === 'genset' || p.kind === 'power'
+    const ls = layersOf(p.kind, p.binds, this.s.colorOf(p.binds), this.s.variantOf?.(p.binds), p.label, machine && p.binds ? this.s.nameOf(p.binds) : undefined)
     const c = (p.kind === 'campus' || p.kind === 'campus4') && p.binds ? this.s.campusOf?.(p.binds) : undefined
     if (!c) return ls
     // Inside a campus: what was read, each at its cell; its order keeps the back ones behind.
@@ -567,7 +568,8 @@ export class BuilderScene extends Phaser.Scene {
       const shown = v.imgs[0]?.img.visible !== false
       v.tag.setScale(1 / z).setVisible(named && roomy && shown && full(p, r))
       // The name plate: at the building's foot, its name and a dot in its state's colour; the tag takes its place when shown.
-      const plate = shown && named && !v.tag.visible && !!p.binds
+      // A machine room wears its name on its wall and its state in its lamp: no plate.
+      const plate = shown && named && !v.tag.visible && !!p.binds && p.kind !== 'genset' && p.kind !== 'power'
       v.plate.setVisible(plate)
       if (plate) {
         const label = this.s.nameOf(p.binds) ?? 'unknown'
@@ -617,9 +619,8 @@ export class BuilderScene extends Phaser.Scene {
       const g = v.win
       g.clear()
       if (!r?.meters || v.imgs[0]?.img.visible === false) continue
-      const os = this.s.variantOf?.(p.binds) ?? 'linux'
       // Where the three windows are on the front face: the generator set's louvres, the power hall's first three windows.
-      const spec = p.kind === 'power' ? { face: 3.45, x0: 0.35, u0: 5, step: 13.8, w: 10, z: [12, 27] } : { face: 1.6, x0: 0.22, u0: 4, step: 15, w: 11, z: os === 'mac' ? [10, 24] : [12, 32] }
+      const spec = p.kind === 'power' ? { face: 3.45, x0: 0.35, u0: 5, step: 13.8, w: 10, z: [12, 27] } : { face: 1.6, x0: 0.22, u0: 4, step: 15, w: 11, z: [12, 32] }
       const [z0, z1] = spec.z
       const m = [r.meters.power, r.meters.water, r.meters.gas]
       const target = m.map(x => x.used != null && (x.of ?? x.reserved) ? Math.min(1, x.used / (x.of ?? x.reserved)!) : -1)
@@ -643,6 +644,14 @@ export class BuilderScene extends Phaser.Scene {
         }
         g.lineStyle(1, INK, 1); g.strokePoints(quad(z0, z1), true)
       })
+      // The online lamp on the roof's front corner: green online, red down, grey not known; it breathes.
+      const down = r.word === 'blackout', unknown = r.tone === 'unknown'
+      const col = down ? 0xe0564f : unknown ? 0xa9a6b8 : 0x3fbf6f
+      const base = p.kind === 'power' ? iso(p.x + 2.62, p.y + 3.3, 45) : iso(p.x + 1.66, p.y + 1.48, 48)
+      g.lineStyle(1.2, INK, 1); g.lineBetween(base.x, base.y, base.x, base.y - 9)
+      const pulse = unknown ? 0.9 : 0.55 + 0.45 * Math.abs(Math.sin(time / (down ? 260 : 900)))
+      g.fillStyle(col, 0.25 * pulse); g.fillCircle(base.x, base.y - 12, 7)
+      g.fillStyle(col, pulse); g.lineStyle(1, INK, 1); g.fillCircle(base.x, base.y - 12, 3.6); g.strokeCircle(base.x, base.y - 12, 3.6)
     }
   }
 
