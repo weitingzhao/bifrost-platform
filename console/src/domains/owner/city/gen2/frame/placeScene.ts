@@ -128,8 +128,9 @@ export class PlaceScene extends Phaser.Scene {
 
   update() {
     // Names keep one size on screen.
-    const z = this.cameras.main.zoom
-    for (const t of this.labels) if (t.active) t.setScale(1 / z)
+    // In the medium card they are smaller, so the plates do not cover the little map.
+    const z = this.cameras.main.zoom, k = this.stage ? 0.68 : 1
+    for (const t of this.labels) if (t.active) t.setScale(k / z)
   }
 
   /** Show a place; `parent` goes to the corner with the child we are inside lit. */
@@ -261,7 +262,10 @@ export class PlaceScene extends Phaser.Scene {
     this.labels = []
     const m = this.level(s.place, s.placed, { at: 0, selected: s.selected, inside: null, interactive: true, arranging: s.arranging })
     this.main = m.c
-    this.content = s.arranging ? this.groundBox() : m.box
+    // The whole ground, ring road included, always fits (the Owner, 2026-11-19: no plot cut off at the
+    // top or hidden under the menu); m.box (what stands on it) is no longer the frame.
+    void m.box
+    this.content = this.groundBox()
     this.ghost = this.add.graphics()
     this.main.add(this.ghost)
     this.away = s.parent ? this.level(s.parent, s.parentPlaced, { at: AWAY, selected: null, inside: s.inside, interactive: false, arranging: false }).c : undefined
@@ -274,11 +278,32 @@ export class PlaceScene extends Phaser.Scene {
     return { x: l.x - 20, y: t.y - 70, w: r.x - l.x + 40, h: b.y - t.y + 110 }
   }
 
-  /** The zoom that fits the place into the world area; never so small that a 2×2 is under a finger. */
+  /**
+   * Where the map is drawn: the whole screen with its fitting area (the world rectangle), or, when a
+   * panel has the middle, a rectangle of its own (the medium card) that it fills.
+   */
+  private stage: { x: number; y: number; w: number; h: number } | null = null
+
+  /** Draw the map inside a rectangle of the screen (a panel has the middle), or over the whole screen again (null). */
+  setStage(r: { x: number; y: number; w: number; h: number } | null) {
+    const same = (r && this.stage && r.x === this.stage.x && r.y === this.stage.y && r.w === this.stage.w && r.h === this.stage.h) || (!r && !this.stage)
+    this.stage = r
+    if (this.ready && !same) this.frame(true)
+  }
+
+  /** The area the map fits into, in the main camera's own coordinates, and the camera's size. */
+  private area() {
+    if (this.stage) return { x: 0, y: 0, w: this.stage.w, h: this.stage.h, vw: this.stage.w, vh: this.stage.h }
+    const { world } = this.layout
+    return { ...world, vw: this.scale.width, vh: this.scale.height }
+  }
+
+  /** The zoom that fits the whole ground into its area; on the full screen never so small that a 2×2 is under a finger. */
   private fit() {
-    const { world, tap } = this.layout
-    const fits = Math.min(world.w / this.content.w, world.h / this.content.h)
-    const touchable = tap / ((2 - 2 * INSET) * CW)
+    const a = this.area()
+    const fits = Math.min(a.w / this.content.w, a.h / this.content.h)
+    if (this.stage) return Phaser.Math.Clamp(fits, 0.05, 1.6)
+    const touchable = this.layout.tap / ((2 - 2 * INSET) * CW)
     return Phaser.Math.Clamp(Math.max(fits, touchable), 0.25, 1.6)
   }
 
@@ -299,17 +324,16 @@ export class PlaceScene extends Phaser.Scene {
 
   /** Where the camera's centre goes so the content's centre lands in the middle of the world area, at zoom z. */
   private aim(z: number) {
-    const { world } = this.layout
-    const { width, height } = this.scale
+    const a = this.area()
     const c = this.contentCentre()
-    return { x: c.x - (world.x + world.w / 2 - width / 2) / z, y: c.y - (world.y + world.h / 2 - height / 2) / z }
+    return { x: c.x - (a.x + a.w / 2 - a.vw / 2) / z, y: c.y - (a.y + a.h / 2 - a.vh / 2) / z }
   }
 
   /** Keep the ground on screen: panning can never lose the place. */
   private clamp() {
     const cam = this.cameras.main
     const g = this.groundBox()
-    const mid = cam.getWorldPoint(this.scale.width / 2, this.scale.height / 2)
+    const mid = cam.getWorldPoint(cam.x + cam.width / 2, cam.y + cam.height / 2)
     const x = Phaser.Math.Clamp(mid.x, g.x, g.x + g.w)
     const y = Phaser.Math.Clamp(mid.y, g.y, g.y + g.h)
     if (x !== mid.x || y !== mid.y) cam.centerOn(x, y)
@@ -319,7 +343,8 @@ export class PlaceScene extends Phaser.Scene {
   private frame(refit: boolean) {
     const { width, height } = this.scale
     const cam = this.cameras.main
-    cam.setViewport(0, 0, width, height)
+    if (this.stage) cam.setViewport(Math.round(this.stage.x), Math.round(this.stage.y), Math.round(this.stage.w), Math.round(this.stage.h))
+    else cam.setViewport(0, 0, width, height)
     if (this.main) {
       if (this.away) cam.ignore(this.away)
       if (refit) { const z = this.fit(); cam.setZoom(z); const a = this.aim(z); cam.centerOn(a.x, a.y) }

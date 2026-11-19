@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deviceOf, frameOf, inside, overlaps, type Frame } from '../viewport'
+import { deviceOf, frameOf, inside, overlaps, swapRects, type Frame } from '../viewport'
 
 // 2026-11-19, the Owner: the frame must feel right on phone, tablet and computer before anything is
 // built on it. On the first greybox the summary ran under the minimap at 375 px wide; these hold the
@@ -76,4 +76,20 @@ describe('frameOf', () => {
     expect(f.mini.y).toBeGreaterThanOrEqual(47)
     expect(f.menu.y + f.menu.h).toBeLessThanOrEqual(852 - 34)
   })
+})
+
+// 2026-11-19, the Owner: a panel may take the middle; the map then sits where the panel was.
+describe('swapRects', () => {
+  for (const [name, w, h] of SIZES) {
+    it(`${name}: the map and the panel stay on screen, apart, clear of the corners`, () => {
+      const f = frameOf(w, h)
+      for (const side of ['left', 'right'] as const) {
+        const { map, panel } = swapRects(f, side)
+        expect(inside(map, w, h) && inside(panel, w, h)).toBe(true)
+        expect(overlaps(map, panel)).toBe(false)
+        for (const r of [f.summary, f.menu, ...(f.trail ? [f.trail] : [])]) expect(overlaps(panel, r)).toBe(false)
+        expect(panel.w).toBeGreaterThan(Math.min(260, w * 0.5))
+      }
+    })
+  }
 })

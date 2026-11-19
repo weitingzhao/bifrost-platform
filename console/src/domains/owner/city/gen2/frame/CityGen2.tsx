@@ -6,7 +6,7 @@ import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
 import type { CityContent, Panel } from './content'
 import { PlaceScene, type Shown } from './placeScene'
 import { here, resolve, trail, type Path, type Place } from './places'
-import { frameOf, NO_INSETS, type Insets, type Rect } from './viewport'
+import { frameOf, NO_INSETS, swapRects, type Insets, type Rect } from './viewport'
 import './cityGen2.css'
 
 /**
@@ -72,7 +72,7 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   const [arranging, setArranging] = useState(false)
   // The drawer (phone, tablet upright): closed to its handle until opened or a room is picked.
   const [drawerOpen, setDrawerOpen] = useState(false)
-  // A card opened large in the middle (by its panel id), and the search box.
+  // The panel that has the middle (by its id; null: the map has it), and the search box.
   const [focused, setFocused] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
@@ -136,7 +136,8 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
     s.setLight(light)
     scene.current = s
     const game = new Phaser.Game({
-      type: Phaser.AUTO, parent: host.current, transparent: false, antialias: true,
+      // Transparent: when the map draws in its medium card, the page's own sky shows round it.
+      type: Phaser.AUTO, parent: host.current, transparent: true, antialias: true,
       scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' },
       scene: s, banner: false, fps: { forceSetTimeOut: timerLoop, target: 60 },
       input: { touch: { capture: true } },
@@ -206,6 +207,11 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   const dash = dashboardHref(place)
   const panels: Panel[] = [...(selected ? [content.picked(selected)] : []), ...content.panels(place, openChild)]
   const focusedPanel = panels.find(p => p.id === focused) ?? null
+  // When a panel has the middle, the map supports it from the panel's corner (or the top, on a phone).
+  const swap = focusedPanel ? swapRects(f, focusedPanel.dock) : null
+  // The map follows the middle: the whole screen, or its medium card while a panel has the middle.
+  const mapRect = swap ? swap.map : null
+  useEffect(() => { scene.current?.setStage(mapRect) }, [mapRect?.x, mapRect?.y, mapRect?.w, mapRect?.h]) // eslint-disable-line react-hooks/exhaustive-deps
   // Search: every place by its name or its question, with where it is.
   const index = useMemo(() => {
     const out: { path: Path; place: Place; where: string }[] = []
@@ -252,7 +258,7 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
         <h3>{p.title}</h3>
         {p.sample && <span className="g2-chip">sample</span>}
         <span className="g2-grow" />
-        <button className="g2-icon" onClick={() => setFocused(p.id)} aria-label={`Open ${p.title} large`}>⤢</button>
+        <button className="g2-icon" onClick={() => { setDrawerOpen(false); setFocused(p.id) }} aria-label={`Put ${p.title} in the middle`} title="Put in the middle">⤢</button>
         {p.id.startsWith('picked-') && <button className="g2-icon" onClick={() => setSelected(null)} aria-label="Close">×</button>}
       </header>
       <div className="g2-panelbody">{p.body}</div>
@@ -334,7 +340,9 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
 
       {/* The panels: small cards in the two bottom corners the diamond leaves empty (charts left, tables and a picked room right). */}
       {f.docks && (['left', 'right'] as const).map(side => {
-        const mine = panels.filter(p => p.dock === side)
+        // The dock the map moved into holds the map's card alone; the panel in the middle is not docked twice.
+        if (swap && focusedPanel?.dock === side) return null
+        const mine = panels.filter(p => p.dock === side && p.id !== focused)
         return mine.length > 0 && (
           <aside key={side} className={`g2-dock ${side}`} aria-label={side === 'left' ? 'Charts' : 'Tables'} style={at(f.docks![side])}>
             {mine.map(p => card(p, true))}
@@ -351,25 +359,32 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
         </aside>
       )}
 
-      {/* A card opened large: in the middle, over the dimmed stage; the backdrop or Esc closes it. */}
-      {focusedPanel && (
+      {f.peek && !drawerOpen && !focused && (
+        <button className="g2-corner g2-peek" style={at(f.peek)} onClick={() => setDrawerOpen(true)}>
+          Tables and charts <span aria-hidden>▴</span>
+        </button>
+      )}
+
+      {/* A panel in the middle, and the map as its medium card where the panel was; ⤢ on the map, or Esc, swaps back. */}
+      {focusedPanel && swap && (
         <>
-          <div className="g2-backdrop" onClick={() => setFocused(null)} />
-          <section className="g2-focus" aria-label={focusedPanel.title} style={at(f.focus)}>
+          <section className="g2-centre" aria-label={focusedPanel.title} style={at(swap.panel)}>
             <header>
               <h3>{focusedPanel.title}</h3>
               {focusedPanel.sample && <span className="g2-chip">sample</span>}
               <span className="g2-grow" />
-              <button className="g2-icon" onClick={() => setFocused(null)} aria-label="Close">×</button>
+              <button className="g2-icon" onClick={() => setFocused(null)} aria-label="Put the map back in the middle" title="Map to the middle">×</button>
             </header>
             <div className="g2-focusbody">{focusedPanel.body}</div>
           </section>
+          <div className="g2-mapcard" style={at(swap.map)} aria-label={`Map: ${place.label}`}>
+            <header>
+              <h3>Map · {place.label}</h3>
+              <span className="g2-grow" />
+              <button className="g2-icon" onClick={() => setFocused(null)} aria-label="Put the map in the middle" title="Map to the middle">⤢</button>
+            </header>
+          </div>
         </>
-      )}
-      {f.peek && !drawerOpen && (
-        <button className="g2-corner g2-peek" style={at(f.peek)} onClick={() => setDrawerOpen(true)}>
-          Tables and charts <span aria-hidden>▴</span>
-        </button>
       )}
     </div>
   )

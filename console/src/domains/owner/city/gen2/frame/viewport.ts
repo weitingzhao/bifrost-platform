@@ -162,3 +162,22 @@ export function frameOf(width: number, height: number, safe: Insets = NO_INSETS)
 
 export const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 export const inside = (a: Rect, w: number, h: number) => a.x >= 0 && a.y >= 0 && a.x + a.w <= w && a.y + a.h <= h
+
+/**
+ * The middle swaps (the Owner, 2026-11-19: the map is the lead and the panels support it, but any
+ * panel may take the middle, and then the map supports it). When a panel docked on `side` takes the
+ * middle, the map goes to that dock as a medium card and the panel fills the space between the docks.
+ * Without docks (phone, tablet upright) the map takes the top part of the stage and the panel the rest.
+ */
+export function swapRects(f: Frame, side: 'left' | 'right'): { map: Rect; panel: Rect } {
+  const gap = 8
+  if (f.docks) {
+    const map = f.docks[side]
+    const x0 = f.docks.left.x + f.docks.left.w + gap * 2, x1 = f.docks.right.x - gap * 2
+    return { map, panel: { x: x0, y: f.world.y, w: x1 - x0, h: f.world.h } }
+  }
+  const x = f.summary.x, w = f.mini.x + f.mini.w - f.summary.x
+  const mh = Math.round(f.world.h * 0.4)
+  const map = { x, y: f.world.y, w, h: mh }
+  return { map, panel: { x, y: map.y + mh + gap, w, h: f.world.y + f.world.h - (map.y + mh + gap) } }
+}
