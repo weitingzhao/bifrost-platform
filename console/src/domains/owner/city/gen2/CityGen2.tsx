@@ -1,6 +1,8 @@
 import * as Phaser from 'phaser'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { PlaceScene } from './placeScene'
+import { browserArrangements, type ArrangementStore } from './arrangementStore'
+import { arrange, move, toArrangement, type Arrangement } from './grid'
+import { PlaceScene, type Shown } from './placeScene'
 import { here, placeTree, resolve, trail, type Path, type Place } from './places'
 import { frameOf, NO_INSETS, type Insets, type Rect } from './viewport'
 import './cityGen2.css'
@@ -31,6 +33,8 @@ type Props = {
   dashboardHref?: (place: Place) => string | null
   /** Drive frames by a timer instead of animation frames (the bench, in a hidden pane where animation frames stop). */
   timerLoop?: boolean
+  /** Where the Owner's positions are kept (display only). */
+  arrangements?: ArrangementStore
 }
 
 const at = (r: Rect): CSSProperties => ({ left: r.x, top: r.y, width: r.w, height: r.h })
@@ -43,7 +47,10 @@ function readInsets(probe: HTMLElement | null): Insets {
   return { top: n(s.paddingTop), right: n(s.paddingRight), bottom: n(s.paddingBottom), left: n(s.paddingLeft) }
 }
 
-export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashboard, timerLoop = false }: Props) {
+const keyOf = (path: Path) => path.length === 0 ? 'town' : path.join('/')
+
+export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashboard, timerLoop = false, arrangements }: Props) {
+  const store = useMemo(() => arrangements ?? browserArrangements(), [arrangements])
   const tree = useMemo(() => placeTree(), [])
   const path = useMemo(() => resolve(tree, asked), [tree, asked])
   const steps = trail(tree, path)
@@ -51,6 +58,12 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   const parent = steps.length > 1 ? steps[steps.length - 2] : null
   const [selected, setSelected] = useState<Place | null>(null)
   const [open, setOpen] = useState(false)
+  const [arranging, setArranging] = useState(false)
+  // The Owner's positions for this place and its parent; bumped on every move so the page redraws.
+  const [saved, setSaved] = useState<{ here: Arrangement; parent: Arrangement }>(() => ({ here: store.get(keyOf(path)), parent: store.get(keyOf(path.slice(0, -1))) }))
+  const placed = useMemo(() => arrange(place.children, saved.here), [place, saved.here])
+  const placedRef = useRef(placed)
+  placedRef.current = placed
   const root = useRef<HTMLDivElement>(null)
   const host = useRef<HTMLDivElement>(null)
   const probe = useRef<HTMLDivElement>(null)
@@ -81,6 +94,13 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
     const s = new PlaceScene({
       enter: child => { setSelected(null); goRef.current([...pathRef.current, child.id]) },
       select: child => setSelected(child),
+      moved: (id, to) => {
+        const next = move(placedRef.current, id, to)
+        if (!next) return
+        const a = toArrangement(next)
+        store.set(keyOf(pathRef.current), a)
+        setSaved(s => ({ ...s, here: a }))
+      },
     })
     s.setLayout(f)
     scene.current = s
@@ -102,25 +122,42 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
       : path.length < prev.length && path.every((p, i) => prev[i] === p) ? 'up' : 'jump'
     setSelected(null)
     setOpen(false)
-    scene.current?.show({ place, parent, inside: path.at(-1) ?? null, selected: null, from })
+    setArranging(false)
+    const fresh = { here: store.get(keyOf(path)), parent: store.get(keyOf(path.slice(0, -1))) }
+    setSaved(fresh)
+    scene.current?.show(shown({ from, selected: null, arranging: false, here: fresh.here, parentA: fresh.parent }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path.join('/')])
 
+  // Same page, something changed on it: the pick, arranging, a move.
   useEffect(() => {
-    scene.current?.show({ place, parent, inside: path.at(-1) ?? null, selected: selected?.id ?? null, from: 'jump' })
+    scene.current?.show(shown({ from: 'jump', selected: selected?.id ?? null, arranging, here: saved.here, parentA: saved.parent }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id])
+  }, [selected?.id, arranging, saved])
+
+  function shown(o: { from: Shown['from']; selected: string | null; arranging: boolean; here: Arrangement; parentA: Arrangement }): Shown {
+    return {
+      place, placed: arrange(place.children, o.here), parent, parentPlaced: parent ? arrange(parent.children, o.parentA) : [],
+      inside: path.at(-1) ?? null, selected: o.selected, from: o.from, arranging: o.arranging,
+    }
+  }
+
+  const resetArrangement = () => {
+    store.set(keyOf(path), null)
+    setSaved(s => ({ ...s, here: {} }))
+  }
 
   // Esc: close the card, else go up one level.
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (selected) setSelected(null)
+      if (arranging) setArranging(false)
+      else if (selected) setSelected(null)
       else if (pathRef.current.length > 0) goRef.current(pathRef.current.slice(0, -1))
     }
     window.addEventListener('keydown', on)
     return () => window.removeEventListener('keydown', on)
-  }, [selected])
+  }, [selected, arranging])
 
   const district = path[0] ?? null
   const dash = dashboardHref(place)
@@ -148,7 +185,22 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
           <div><dt>Inside</dt><dd>{place.children.length}</dd></div>
           <div><dt>Readings</dt><dd className="g2-unknown">not wired</dd></div>
         </dl>
-        {dash && (!f.summary.compact || open) && <a className="g2-swap" href={dash} onClick={e => e.stopPropagation()}>Dashboard view ↗</a>}
+        {(!f.summary.compact || open || arranging) && (
+          <div className="g2-actions" onClick={e => e.stopPropagation()}>
+            {arranging ? (
+              <>
+                <button className="g2-btn primary" onClick={() => setArranging(false)}>Done</button>
+                <button className="g2-btn" onClick={resetArrangement} disabled={Object.keys(saved.here).length === 0}>Reset</button>
+              </>
+            ) : (
+              <>
+                {place.children.length > 0 && <button className="g2-btn" onClick={() => { setSelected(null); setArranging(true) }}>Arrange</button>}
+                {dash && <a className="g2-swap" href={dash}>Dashboard view ↗</a>}
+              </>
+            )}
+          </div>
+        )}
+        {arranging && <p className="g2-hint">Drag a block to move it. Where things stand is yours; how big they are is not.</p>}
       </section>
 
       {/* The minimap: where you came from, shrunk. Tapping it goes back up. */}

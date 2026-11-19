@@ -27,7 +27,13 @@
 .g2-kicker { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #8a8478; display: flex; gap: 6px; align-items: center; }
 .g2-chip { text-transform: none; letter-spacing: 0; background: #ece7db; color: #6b6676; border-radius: 6px; padding: 0 5px; }
 .g2-unknown { color: #9a93a6; font-weight: 400 !important; font-style: italic; }
-.g2-swap { display: inline-block; margin-top: 8px; font-size: 12px; color: #3d6fd8; text-decoration: none; padding: 4px 0; }
+.g2-actions { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.g2-btn { font: inherit; font-size: 12px; min-height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #cfc8b8; background: #fff; color: #2f2d3a; cursor: pointer; }
+.g2-btn.primary { background: #2f2d3a; color: #fff; border-color: #2f2d3a; }
+.g2-btn:disabled { opacity: .45; cursor: default; }
+.g2[data-device='phone'] .g2-btn, .g2[data-device='tablet'] .g2-btn { min-height: 44px; }
+.g2-hint { margin: 6px 0 0 !important; font-size: 11.5px !important; color: #6b6676 !important; }
+.g2-swap { display: inline-block; font-size: 12px; color: #3d6fd8; text-decoration: none; padding: 4px 0; }
 .g2-inline-trail { font-size: 12px; margin: 2px 0 4px; white-space: nowrap; overflow-x: auto; }
 .g2-inline-trail a, .g2-bl a { color: #3d6fd8; text-decoration: none; }
 

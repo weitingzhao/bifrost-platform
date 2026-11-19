@@ -1,3 +1,4 @@
+import type { Size } from './grid'
 import { ENTRY_ROUTE_IDS, SHELL_NAV, entryOf, formatShellHash, type ShellRouteId } from '@/lib/shell/consoleRoutes'
 
 /**
@@ -18,6 +19,8 @@ export type Place = {
   /** The path segment: a route id, or a room id inside a building. */
   id: string
   kind: PlaceKind
+  /** Its footprint on its parent's 16×16 ground: a design decision, made here, never on the page. */
+  size: Size
   label: string
   /** The business question the place answers (the Console's page question). */
   question: string
@@ -32,22 +35,26 @@ export const TOWN_ID = 'town'
 
 /** Rooms are the sections of a page; until a building is designed they are greybox, and say so. */
 const GREYBOX_ROOMS = (owner: string): Place[] =>
-  ['A', 'B', 'C'].map(r => ({ id: `room-${r.toLowerCase()}`, kind: 'room' as const, label: `Room ${r}`, question: `A greybox room of ${owner}: what it holds is designed with the building.`, dashboard: null, children: [] }))
+  ([['A', 4], ['B', 2], ['C', 2]] as const).map(([r, size]) => ({ id: `room-${r.toLowerCase()}`, kind: 'room' as const, size, label: `Room ${r}`, question: `A greybox room of ${owner}: what it holds is designed with the building.`, dashboard: null, children: [] }))
+
+/** Greybox sizes until each is designed: a district and a building take 4×4 of the ground above them. */
+const SIZE: Record<Exclude<PlaceKind, 'room'>, Size> = { town: 8, district: 4, building: 4 }
 
 export function placeTree(): Place {
   const nav = SHELL_NAV as readonly { id: ShellRouteId; label: string; question: string; group: string }[]
   const buildingsOf = (entry: string) =>
     nav.filter(n => n.group === 'detail' && n.id !== 'city' && entryOf({ kind: 'shell', id: n.id }) === entry)
-      .map(n => ({ id: n.id, kind: 'building' as const, label: n.label, question: n.question, dashboard: formatShellHash(n.id), children: GREYBOX_ROOMS(n.label) }))
+      .map(n => ({ id: n.id, kind: 'building' as const, size: SIZE.building, label: n.label, question: n.question, dashboard: formatShellHash(n.id), children: GREYBOX_ROOMS(n.label) }))
   return {
     id: TOWN_ID,
     kind: 'town',
+    size: SIZE.town,
     label: 'City',
     question: 'The whole system, one district per part of the Console.',
     dashboard: formatShellHash('command'),
     children: ENTRY_ROUTE_IDS.map(id => {
       const n = nav.find(x => x.id === id)!
-      return { id, kind: 'district' as const, label: n.label, question: n.question, dashboard: formatShellHash(id), children: buildingsOf(id) }
+      return { id, kind: 'district' as const, size: SIZE.district, label: n.label, question: n.question, dashboard: formatShellHash(id), children: buildingsOf(id) }
     }),
   }
 }
@@ -71,27 +78,3 @@ export const here = (tree: Place, path: Path): Place => trail(tree, path).at(-1)
 /** `#/system/infrastructure` ⇄ ['system', 'infrastructure'] — every place has an address, so Back works and a link can be sent. */
 export const parsePath = (hash: string): Path => hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent)
 export const formatPath = (path: Path): string => `#/${path.map(encodeURIComponent).join('/')}`
-
-/**
- * Where the children of a place stand on its ground, centred on the origin.
- * Wide screens: a square-ish grid on the ground. Tall screens (a phone held
- * upright): two columns as seen on screen, running down, so the place fills
- * the height instead of a band across the middle.
- */
-export function slots(n: number, tall = false, gap = 4): { x: number; y: number }[] {
-  if (tall && n > 2) {
-    const cols = 2, rows = Math.ceil(n / cols)
-    const U = 6, V = 9 // across and down the screen, in cells: room for a block, its height and its name
-    return Array.from({ length: n }, (_, i) => {
-      const u = ((i % cols) - (cols - 1) / 2) * U
-      const v = (Math.floor(i / cols) - (rows - 1) / 2) * V
-      return { x: (u + v) / 2, y: (v - u) / 2 }
-    })
-  }
-  const cols = Math.max(1, Math.ceil(Math.sqrt(n)))
-  const rows = Math.max(1, Math.ceil(n / cols))
-  return Array.from({ length: n }, (_, i) => ({
-    x: (i % cols - (cols - 1) / 2) * gap,
-    y: (Math.floor(i / cols) - (rows - 1) / 2) * gap,
-  }))
-}

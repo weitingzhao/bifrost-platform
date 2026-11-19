@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ENTRY_ROUTE_IDS } from '@/lib/shell/consoleRoutes'
-import { formatPath, here, parsePath, placeTree, resolve, slots, trail } from '../places'
+import { fitsBudget, TAPPABLE } from '../grid'
+import { formatPath, here, parsePath, placeTree, resolve, trail, type Place } from '../places'
 
 // 2026-11-19, the Owner: the game look and the dashboard look are two styles of one Console,
 // so the city's places must be the Console's menu, read from its routes, not a second map.
@@ -41,18 +42,12 @@ describe('addresses', () => {
   })
 })
 
-describe('slots', () => {
-  it('stand apart and centre on the origin', () => {
-    const s = slots(5)
-    expect(new Set(s.map(p => `${p.x},${p.y}`)).size).toBe(5)
-    expect(slots(4).reduce((a, p) => a + p.x + p.y, 0)).toBe(0)
+describe('density (the Owner, 2026-11-19: one 16×16 ground per page; too much goes a level down)', () => {
+  const all = (p: Place): Place[] => [p, ...p.children.flatMap(all)]
+  it('every place holds no more than its ground can', () => {
+    for (const p of all(placeTree())) expect(fitsBudget(p.children), `${p.id} is over its ground`).toBe(true)
   })
-  // 2026-11-19: on an upright phone the town's five blocks sat in a band across the middle, half the screen empty.
-  it('on a tall screen run down the screen rather than across', () => {
-    const across = (s: { x: number; y: number }[]) => Math.max(...s.map(p => p.x - p.y)) - Math.min(...s.map(p => p.x - p.y))
-    const down = (s: { x: number; y: number }[]) => Math.max(...s.map(p => p.x + p.y)) - Math.min(...s.map(p => p.x + p.y))
-    const tall = slots(5, true)
-    expect(down(tall) * 16).toBeGreaterThan(across(tall) * 32 * 0.8)
-    expect(down(slots(5)) * 16).toBeLessThan(across(slots(5)) * 32)
+  it('everything you can tap is at least 2×2', () => {
+    for (const p of all(placeTree()).slice(1)) expect(p.size, p.id).toBeGreaterThanOrEqual(TAPPABLE)
   })
 })
