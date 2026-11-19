@@ -5,7 +5,7 @@
  * meaning. The thresholds live here, versioned; no building is tiered by hand.
  */
 
-export const DICTIONARY_VERSION = 2
+export const DICTIONARY_VERSION = 4
 
 export type Tier = { name: string; enters: string }
 export type Entry = {
@@ -67,9 +67,26 @@ export const DICTIONARY: readonly Entry[] = [
     person: 'none for the platform\'s rockets; Trade\'s production launch stays the Owner\'s, through the release page',
   },
   {
-    id: 'orbit', metaphor: 'A satellite in orbit', means: 'a tenant on PROD: Trade, research, the plugins; one each',
+    id: 'orbit', metaphor: 'A satellite in orbit', means: 'a tenant on PROD (Trade, Research), one each; the plugins are vendors on the ground, their docks',
     tiers: [{ name: 'in orbit', enters: 'its PROD version is read' }, { name: 'launching', enters: 'its PROD or image run is in flight' }, { name: 'unknown', enters: 'its PROD version is not read' }],
     source: 'GET /api/v1/delivery/context?repo=<tenant>: what PROD runs and runs_in_flight; the tenants from GET /api/v1/delivery/pipelines', person: '',
+  },
+  {
+    id: 'genset', metaphor: 'A generator set (a big one is the power station)', means: 'a node of the cluster: the supply side',
+    tiers: [
+      { name: 'normal', enters: 'power (CPU) and water (memory) used are both under 60 % of capacity' },
+      { name: 'tight', enters: 'the worse of the two is 60 % to 85 %' },
+      { name: 'overloaded', enters: 'the worse of the two is above 85 %' },
+      { name: 'blackout', enters: 'the node is not Ready' },
+    ],
+    source: 'GET /api/v1/telemetry/promql: kube_node_status_capacity, kube_node_status_condition, container_cpu_usage_seconds_total, container_memory_working_set_bytes, live pods\' requests; unknown where not read',
+    person: '',
+  },
+  {
+    id: 'utilities', metaphor: 'Three meters by a roof, and cables to the sets', means: 'a building\'s demand: power is CPU, water is memory, gas is disk; fill is used against the limit, the tick what is reserved',
+    tiers: [{ name: 'drawing', enters: 'its pods run and stay under their limits' }, { name: 'near its limit', enters: 'power or water used is above 85 % of its limit' }, { name: 'idle', enters: 'no pod of it runs' }, { name: 'unknown', enters: 'the use is not read' }],
+    source: 'GET /api/v1/telemetry/promql by namespace and pod; the platform\'s domains share one meter (one process); no pod declares a disk need, so gas is unknown',
+    person: '',
   },
   {
     id: 'waiting', metaphor: 'Workers holding signs at mission control', means: 'requests and questions waiting for the Owner',
@@ -80,6 +97,33 @@ export const DICTIONARY: readonly Entry[] = [
       { name: 'many', enters: '4 or more wait' },
     ],
     source: 'GET /api/v1/approvals?status=pending and GET /api/v1/questions?status=open', person: 'the Owner answers on the Command page',
+  },
+  {
+    id: 'bay', metaphor: 'A payload bay: a clean room with its tenant\'s satellite on the stand', means: 'a tenant (Trade, Research…): its own CI, STG and builds; the satellite in orbit is what its PROD runs',
+    tiers: [
+      { name: 'building', enters: 'a run of one of its lanes is in flight (the bay lit)' },
+      { name: 'ready', enters: 'nothing in flight' },
+      { name: 'unknown', enters: 'its repositories\' release contexts were not read' },
+    ],
+    source: 'GET /api/v1/delivery/context?repo= (runs in flight, PROD release)', person: 'none',
+  },
+  {
+    id: 'supplier', metaphor: "A supplier's dock: a warehouse with a truck in the vendor's colour", means: 'a plugin, an outside vendor: its repository and the runs that deliver it',
+    tiers: [
+      { name: 'delivering', enters: 'a run of its repository is in flight' },
+      { name: 'quiet', enters: 'nothing in flight: its tag shows the version PROD runs' },
+      { name: 'unknown', enters: 'its release context was not read' },
+    ],
+    source: 'GET /api/v1/delivery/context?repo=<plugin repository>', person: 'none',
+  },
+  {
+    id: 'worker', metaphor: 'A coloured worker with a speech bubble, walking from the dorm to a building', means: 'a seat (an agent line) and its latest status: it stands at the building of the domain its charter names',
+    tiers: [
+      { name: 'working', enters: 'a status in the last 120 min, waiting on nothing' },
+      { name: 'waiting', enters: 'a status in the last 120 min that waits on something (yellow bubble)' },
+      { name: 'home', enters: 'no status in 120 min: grey, asleep in the dorm' },
+    ],
+    source: 'GET /api/v1/agentrt/seats (each seat\'s report_status)', person: 'none: seats report themselves',
   },
 ]
 

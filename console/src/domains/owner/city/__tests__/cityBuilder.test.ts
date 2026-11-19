@@ -120,7 +120,8 @@ describe('the catalogue and the tray', () => {
     expect(CATALOG.filter(k => accepts(k, find('lane:bifrost-deliver-platform-prod'))).map(k => k.kind)).toEqual(['pad'])
     expect(items.find(i => i.binds === 'lane:bifrost-deliver-stg')).toBeUndefined()
     expect(find('stage:rocket-ci').natural).toBe('hif'); expect(find('stage:satellites').natural).toBe('satellites')
-    expect(CATALOG.filter(k => accepts(k, find('plugin:market-data')))).toEqual([])
+    // 2026-11-18, the Owner: the plugins are outside vendors; each gets a supplier's dock in the payload works.
+    expect(CATALOG.filter(k => accepts(k, find('plugin:market-data'))).map(k => k.kind)).toEqual(['supplier'])
     expect(CATALOG.filter(k => accepts(k, find('law'))).map(k => k.kind)).toEqual(['court'])
   })
   it('only platform PROD gets the starship and the chopsticks; a pad with no lane stands empty', () => {

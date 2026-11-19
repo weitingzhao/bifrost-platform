@@ -1,4 +1,4 @@
-import { placeOf, satelliteOf, type CityLane } from './catalog'
+import { placeOf, satelliteOf, tenantOf, type CityLane } from './catalog'
 
 /**
  * The real states on the city (charter 10, step 3), each tiered from a read by
@@ -117,12 +117,11 @@ export function padReading(contexts: Contexts, lanes: readonly CityLane[], now: 
 /** The satellites in orbit: one per tenant that launches to PROD, with the version it flies, or launching now. */
 export function skyReading(contexts: Contexts, lanes: readonly CityLane[], now: number): Sky {
   const { runs, at } = inFlight(contexts, lanes)
-  const prod = lanes.filter(l => { const p = placeOf(l); return p.line === 'satellite' && (p.step === 'prod' || p.step === 'build') })
+  const prod = lanes.filter(l => { const p = placeOf(l); return tenantOf(l) && (p.step === 'prod' || p.step === 'build') })
   const byName = new Map<string, Satellite>()
   for (const l of prod) {
     // One satellite a tenant: the lanes of one repository (research and its Dagster image) are one satellite.
-    const own = satelliteOf(l)
-    const sat = own.name === 'Research dagster' ? { ...own, name: 'Research' } : own
+    const sat = tenantOf(l)!
     const going = runs.find(r => r.pipeline === l.pipeline && at(r).step !== 'ci')
     const repo = l.repos.find(r => contexts.has(r))
     const fact = repo ? contexts.get(repo)?.facts.prod : undefined
@@ -144,4 +143,36 @@ export function waitingReading(approvals: number | null, questions: number | nul
   const lines = [`${approvals} requests, ${questions} questions`]
   if (n === 0) return { word: 'none waiting', tone: 'calm', lines, count: 0 }
   return { word: `${n} waiting`, tone: n >= 4 ? 'alert' : 'busy', lines, count: n }
+}
+
+/** The names of the runs in flight on one line at some steps: what a hangar draws its power through. */
+export function runsAt(contexts: Contexts, lanes: readonly CityLane[], line: 'rocket' | 'satellite', steps: readonly string[]): string[] {
+  const { runs, at } = inFlight(contexts, lanes)
+  return runs.filter(r => { const p = at(r); return p.line === line && steps.includes(p.step) }).map(r => r.name)
+}
+
+/** A supplier's dock: the plugin's repository, delivering while a run of it is in flight, else the version PROD runs. */
+export function supplierReading(contexts: Contexts, repo: string, now: number): Reading {
+  if (!contexts.has(repo)) return unknown([`${repo}: its release context is not read`])
+  const ctx = contexts.get(repo)
+  const runs = ctx?.facts.runs_in_flight?.value
+  if (!ctx || !runs) return unknown([`${repo}: its release context could not be read`])
+  const prod = ctx.facts.prod?.value
+  const lines = [`${repo}: ${runs.length} run${runs.length === 1 ? '' : 's'} in flight${runs.length ? ` (${runs.map(r => r.pipeline).join(', ')})` : ''}`, prod ? `PROD runs ${prod.commit.slice(0, 7)}, released ${ago(prod.completed_at, now)}` : 'PROD version not read']
+  return runs.length ? { word: 'delivering', tone: 'busy', active: true, count: runs.length, lines } : { word: prod ? `v ${prod.commit.slice(0, 7)}` : 'quiet', tone: 'calm', lines }
+}
+
+/** A tenant's payload bay: building while any run of its lanes is in flight; else ready, with the version in orbit. */
+export function bayReading(contexts: Contexts, lanes: readonly CityLane[], name: string, now: number): Reading {
+  const { runs, unread } = inFlight(contexts, lanes)
+  const mine = lanes.filter(l => tenantOf(l)?.name === name)
+  if (!mine.length) return unknown([`no release lane builds ${name}`])
+  const own = new Set(mine.map(l => l.pipeline))
+  const going = runs.filter(r => own.has(r.pipeline))
+  const orbit = skyReading(contexts, lanes, now).satellites.find(s => s.name === name)
+  const lines = [`${going.length} run${going.length === 1 ? '' : 's'} in flight${going.length ? `: ${going.map(r => r.pipeline).join(', ')}` : ''}`, ...(orbit?.lines ?? [])]
+  if (going.length) return { word: 'building', tone: 'busy', active: true, count: going.length, lines }
+  const ownRepos = new Set(mine.flatMap(l => l.repos))
+  if (unread.some(r => ownRepos.has(r))) return unknown([...lines, `not read: ${unread.filter(r => ownRepos.has(r)).join(', ')}`])
+  return { word: 'ready', tone: 'calm', lines }
 }

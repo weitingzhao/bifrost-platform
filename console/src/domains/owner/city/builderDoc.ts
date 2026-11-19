@@ -23,7 +23,9 @@ export type Placed = {
   /** What it stands for: `domain:<id>`, `lane:<pipeline>`, `plugin:<name>`, `law`; empty until bound. */
   binds: string
 }
-export type Doc = { width: number; height: number; roads: Set<string>; parts: Placed[] }
+/** A district of the plan: a named rectangle of ground under its buildings, how the land is zoned (presentation only). */
+export type Zone = { name: string; x: number; y: number; w: number; h: number; tint: string }
+export type Doc = { width: number; height: number; roads: Set<string>; parts: Placed[]; zones?: Zone[] }
 
 export const LAND_START = 16
 export const LAND_STEP = 8
@@ -116,6 +118,10 @@ export function toTiled(d: Doc, tileW = 64, tileH = 32): TiledMap {
         id: i + 1, name: p.id, type: p.kind, x: p.x * tileH, y: p.y * tileH, width: p.size * tileH, height: p.size * tileH, rotation: 0, visible: true,
         properties: [{ name: 'binds', type: 'string', value: p.binds }, { name: 'size', type: 'int', value: p.size }],
       })) } as TiledLayer,
+      ...(d.zones?.length ? [{ id: 3, type: 'objectgroup', name: 'zones', opacity: 1, visible: true, x: 0, y: 0, objects: d.zones.map((z, i) => ({
+        id: d.parts.length + i + 1, name: z.name, type: 'zone', x: z.x * tileH, y: z.y * tileH, width: z.w * tileH, height: z.h * tileH, rotation: 0, visible: true,
+        properties: [{ name: 'tint', type: 'string', value: z.tint }],
+      })) } as TiledLayer] : []),
     ],
   }
 }
@@ -136,6 +142,12 @@ export function fromTiled(m: unknown): Doc | null {
     if (![1, 2, 4, 8].includes(size) || !o.type || !canPlace(d, x, y, size)) continue
     const binds = o.properties?.find(p => p.name === 'binds')?.value
     d.parts.push({ id: o.name || newPartId(d), kind: o.type, x, y, size: size as PartSize, binds: typeof binds === 'string' ? binds : '' })
+  }
+  const zones = t.layers.find(l => l.type === 'objectgroup' && l.name === 'zones')
+  for (const o of zones?.objects ?? []) {
+    const tint = o.properties?.find(p => p.name === 'tint')?.value
+    const z = { name: o.name, x: Math.round(o.x / th), y: Math.round(o.y / th), w: Math.round(o.width / th), h: Math.round(o.height / th), tint: typeof tint === 'string' && /^#[0-9a-f]{6}$/i.test(tint) ? tint : '#e8e4d8' }
+    if (z.name && z.w > 0 && z.h > 0 && inLand(d, z.x, z.y)) (d.zones ??= []).push(z)
   }
   return d
 }
@@ -251,5 +263,47 @@ export function crawlerway(d: Doc): Crawlerway {
   const pads = d.parts.filter(p => p.kind === 'pad')
   if (vab) for (const pad of [...pads].sort(near(vab))) leg(vab, pad)
   if (sat) for (const pad of [...pads].sort(near(sat))) leg(sat, pad)
+  return out
+}
+
+/** The building a worker goes to: the first of its kind, the one bound to `binds` first. */
+export function targetPart(d: Doc, t: { kind: string; binds?: string }): Placed | undefined {
+  const of = d.parts.filter(p => p.kind === t.kind)
+  return of.find(p => t.binds && p.binds === t.binds) ?? of[0]
+}
+
+/** The cell a worker stands on at a building: just in front of its door. */
+export function doorOf(p: Placed): { x: number; y: number } {
+  return { x: p.x + Math.floor(p.size / 2), y: p.y + p.size }
+}
+
+/**
+ * A worker's walk from one door to another, in order: along the roads where
+ * there are roads (a step on grass costs four on a road), round the
+ * buildings. Empty when there is no way.
+ */
+export function walkPath(d: Doc, from: { x: number; y: number }, to: { x: number; y: number }): { x: number; y: number }[] {
+  const open = (x: number, y: number) => inLand(d, x, y) && !partAt(d, x, y)
+  if (!open(from.x, from.y) || !open(to.x, to.y)) return []
+  const W = d.width, idx = (x: number, y: number) => y * W + x
+  const best = new Map<number, number>([[idx(from.x, from.y), 0]]), prev = new Map<number, number>()
+  const queue: { c: number; n: number }[] = [{ c: 0, n: idx(from.x, from.y) }]
+  while (queue.length) {
+    queue.sort((a, b) => a.c - b.c)
+    const { c, n } = queue.shift()!
+    if (c > (best.get(n) ?? Infinity)) continue
+    const x = n % W, y = (n - x) / W
+    if (x === to.x && y === to.y) break
+    for (const [dx, dy] of STEPS) {
+      const nx = x + dx, ny = y + dy
+      if (!open(nx, ny)) continue
+      const m = idx(nx, ny), nc = c + (d.roads.has(key(nx, ny)) ? 1 : 4)
+      if (nc < (best.get(m) ?? Infinity)) { best.set(m, nc); prev.set(m, n); queue.push({ c: nc, n: m }) }
+    }
+  }
+  const end = idx(to.x, to.y)
+  if (!best.has(end)) return []
+  const out: { x: number; y: number }[] = []
+  for (let n: number | undefined = end; n !== undefined; n = prev.get(n)) out.unshift({ x: n % W, y: (n - n % W) / W })
   return out
 }

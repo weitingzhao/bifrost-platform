@@ -2134,10 +2134,15 @@
       "files": [
         "console/src/domains/owner/city/CityBuilder.tsx",
         "console/src/domains/owner/city/__tests__/cityBuilder.test.ts",
+        "console/src/domains/owner/city/__tests__/cityUtilities.test.ts",
+        "console/src/domains/owner/city/__tests__/cityWorkers.test.ts",
         "console/src/domains/owner/city/builderDoc.ts",
         "console/src/domains/owner/city/builderScene.ts",
         "console/src/domains/owner/city/catalog.ts",
         "console/src/domains/owner/city/cityReadings.ts",
+        "console/src/domains/owner/city/cityState.ts",
+        "console/src/domains/owner/city/cityUtilities.ts",
+        "console/src/domains/owner/city/cityWorkers.ts",
         "console/src/domains/owner/city/defaultLayout.ts",
         "console/src/domains/owner/city/kit.ts",
         "console/src/domains/owner/city/landmarks.ts",
@@ -2146,6 +2151,7 @@
         "console/src/domains/owner/city/worldDictionary.ts"
       ],
       "imports": [
+        "console/src/api",
         "console/src/api/client.ts"
       ],
       "test_imports": [],
@@ -4109,6 +4115,7 @@
         "console/src/api/approvals.ts",
         "console/src/api/client.ts",
         "console/src/api/questions.ts",
+        "console/src/api/telemetry.ts",
         "console/src/domains/delivery/api",
         "console/src/domains/owner/city",
         "console/src/hooks/usePlatformAuth.ts",

@@ -842,3 +842,107 @@ export function orbitSatellite(color = '#f2d27a'): Sprite {
   g.add(`<line x1="${x}" y1="${y - 8}" x2="${x}" y2="${y - 15}" stroke="${INK}" stroke-width="1"/><circle cx="${x}" cy="${y - 16}" r="2.4" fill="#f6f8fb" stroke="${INK}" stroke-width="0.8"/>`)
   return g.done()
 }
+
+/* ------------------------------------------------------------------ */
+/* A generator set: one node of the cluster, the supply side.           */
+/* ------------------------------------------------------------------ */
+
+export function generatorSet(): Sprite {
+  const n = 2
+  const g = new Draw(n, n, 96)
+  lot(g, n, '#dedbd2')
+  // A concrete plinth, the enclosure, its radiator end and two exhaust stacks.
+  g.box(0.12, 0.2, 1.76, 1.5, 4, faces('#e9e6dd', '#d2cec2', '#c1bcae'), 0, 1)
+  const x0 = 0.22, x1 = 1.78, y0 = 0.3, y1 = 1.6, h = 34
+  g.shadow(x0, y0, x1 - x0, y1 - y0, 0.35)
+  g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#ffe9a8', '#f7cf62', '#e9b843'), 4)
+  const W = (x1 - x0) * U
+  let f = ''
+  for (let i = 0; i < 3; i++) f += `<rect x="${n1(4 + i * 15)}" y="-28" width="11" height="20" fill="#e2b13f" stroke="${INK}" stroke-width="0.8"/>${[0, 1, 2, 3, 4].map(k => `<line x1="${n1(5 + i * 15)}" y1="${-25 + k * 4}" x2="${n1(14 + i * 15)}" y2="${-25 + k * 4}" stroke="#a87b1d" stroke-width="0.8"/>`).join('')}`
+  f += `<rect x="${n1(W - 9)}" y="-26" width="6" height="18" fill="#59606b" stroke="${INK}" stroke-width="0.8"/><circle cx="${n1(W - 6)}" cy="-21" r="1.2" fill="#7ef0c9"/><circle cx="${n1(W - 6)}" cy="-16" r="1.2" fill="#ffd76a"/>`
+  f += `<path d="M0,-4 h${n1(W)}" stroke="#a87b1d" stroke-width="1.2"/><path d="M3,-33 l5,-0 M${n1(W - 8)},-33 l5,0" stroke="${INK}" stroke-width="0.8"/>`
+  g.face('left', x0, y1, 4, f)
+  let r = `<rect x="4" y="-30" width="${n1((y1 - y0) * U - 8)}" height="24" fill="#5b6070" stroke="${INK}" stroke-width="1"/>`
+  for (let u = 7; u < (y1 - y0) * U - 6; u += 3.2) r += `<line x1="${n1(u)}" y1="-28" x2="${n1(u)}" y2="-8" stroke="#8d93a1" stroke-width="0.9"/>`
+  r += `<circle cx="${n1((y1 - y0) * U / 2)}" cy="-18" r="8" fill="none" stroke="#c3c8d2" stroke-width="1.1"/>`
+  g.face('right', x1, y1, 4, r)
+  top(g, x0 + 0.06, y0 + 0.06, x1 - 0.06, y1 - 0.06, h + 4, '#fff1c4', 0.9, '#b48a2a')
+  for (const k of [0.6, 1.0]) {
+    g.cylinder(k, 0.75, 4.5, h + 4, h + 30, '#9aa3b0', '#6d7584', '#59606b')
+    const [ex, ey] = g.p(k, 0.75, h + 30)
+    g.add(`<ellipse cx="${n1(ex)}" cy="${n1(ey)}" rx="3.2" ry="1.6" fill="#2f2d3a"/>`)
+  }
+  // The cable tray out to the grid.
+  g.box(1.78, 0.9, 0.18, 0.12, 3, faces('#9aa3b0', '#7d8594', '#687080'), 14, 0.8)
+  g.box(1.96, 0.9, 0.04, 0.12, 14, faces('#9aa3b0', '#7d8594', '#687080'), 0, 0.6)
+  return g.done()
+}
+
+/* ------------------------------------------------------------------ */
+/* The supplier's dock: a plugin, an outside vendor delivering parts.   */
+/* ------------------------------------------------------------------ */
+
+export function supplierDock(color = '#5aa9ff'): Sprite {
+  const n = 2
+  const g = new Draw(n, n, 84)
+  lot(g, n, '#dcd8cc')
+  // The yard, the warehouse with its roll-up doors and loading dock, the vendor's sign.
+  top(g, 0.1, 1.2, 1.9, 1.9, 0, '#cfcabd', 0.8, '#a39c8b')
+  const x0 = 0.25, x1 = 1.55, y0 = 0.2, y1 = 1.15, h = 30
+  g.shadow(x0, y0, x1 - x0, y1 - y0, 0.3)
+  g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#f1efe8', '#dedad0', '#c9c4b7'))
+  g.box(x0, y1, x1 - x0, 0.14, 5, faces('#c3beb2', '#aaa497', '#9a9488'), 0, 0.9)
+  const W = (x1 - x0) * U
+  let f = ''
+  for (const u of [5, 25]) f += `<rect x="${u}" y="-24" width="15" height="19" fill="#9aa3b0" stroke="${INK}" stroke-width="0.9"/>${[0, 1, 2, 3].map(k => `<line x1="${u}" y1="${-20 + k * 4}" x2="${u + 15}" y2="${-20 + k * 4}" stroke="#6d7584" stroke-width="0.6"/>`).join('')}`
+  f += `<rect x="3" y="-30" width="${n1(W - 6)}" height="5" fill="${color}" stroke="${INK}" stroke-width="0.8"/>`
+  g.face('left', x0, y1, 0, f)
+  // A sawtooth roof line.
+  for (let k = 0; k < 3; k++) {
+    const a = x0 + k * (x1 - x0) / 3, b = a + (x1 - x0) / 3
+    g.poly('#e7e3d9', [[a, y0, h], [b, y0, h], [b, y0, h + 8], [a, y0, h]], 0.9)
+    g.poly('#bfe0f5', [[b, y0, h + 8], [b, y1, h + 8], [b, y1, h], [b, y0, h]], 0.8)
+    g.poly('#f6f4ee', [[a, y0, h], [b, y0, h + 8], [b, y1, h + 8], [a, y1, h]], 0.9)
+  }
+  // The delivery truck backed up to the dock, in the vendor's colour.
+  g.box(0.45, 1.35, 0.6, 0.32, 16, faces('#ffffff', color, color), 2, 1)
+  g.box(1.05, 1.38, 0.24, 0.26, 12, faces('#f4f7fb', '#e9edf3', '#d6dce6'), 2, 1)
+  g.onLeft(1.05, 1.64, 0.04, 0.2, 8, 13, '#bfe0f5', 0.7)
+  for (const k of [0.6, 0.95, 1.2]) { const [wx, wy] = g.p(k, 1.67, 2); g.add(`<ellipse cx="${n1(wx)}" cy="${n1(wy)}" rx="3" ry="2.6" fill="#2f2d3a"/>`) }
+  // The gate: a hut and its barrier arm.
+  g.box(1.62, 0.25, 0.25, 0.25, 14, faces('#fff3c9', '#ffe08a', '#f2c95a'), 0, 1)
+  g.line([1.75, 0.55, 9], [1.75, 1.15, 9], '#e0564f', 2.2)
+  g.line([1.75, 0.7, 9], [1.75, 0.8, 9], '#ffffff', 2.2)
+  return g.done()
+}
+
+/* ------------------------------------------------------------------ */
+/* The payload bay: a tenant's clean room, its satellite on the stand.  */
+/* ------------------------------------------------------------------ */
+
+export function payloadBay(color = '#f2d27a'): Sprite {
+  const n = 2
+  const g = new Draw(n, n, 104)
+  lot(g, n, '#e6e3ec')
+  const x0 = 0.2, x1 = 1.8, y0 = 0.2, y1 = 1.55, h = 50
+  g.shadow(x0, y0, x1 - x0, y1 - y0, 0.3)
+  g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#ffffff', '#eef0f6', '#d9dde8'))
+  const W = (x1 - x0) * U, D = (y1 - y0) * U
+  // The front: a tall glazed door onto the clean room, the satellite on its stand inside.
+  let f = `<rect x="8" y="-44" width="${n1(W - 16)}" height="44" fill="#dff0fb" stroke="${INK}" stroke-width="1.2"/>`
+  const cx = W / 2
+  f += `<rect x="${n1(cx - 3)}" y="-8" width="6" height="8" fill="#9aa3b0" stroke="${INK}" stroke-width="0.8"/>`
+  f += `<rect x="${n1(cx - 9)}" y="-26" width="18" height="18" fill="${color}" stroke="${INK}" stroke-width="1"/><path d="M${n1(cx - 9)},-17 h18 M${n1(cx)},-26 v18" stroke="${INK}" stroke-width="0.6" opacity="0.6"/>`
+  f += `<rect x="${n1(cx - 25)}" y="-21" width="14" height="8" fill="#3b4f8f" stroke="${INK}" stroke-width="0.8"/><rect x="${n1(cx + 11)}" y="-21" width="14" height="8" fill="#3b4f8f" stroke="${INK}" stroke-width="0.8"/>`
+  f += `<path d="M${n1(cx - 25)},-17 h14 M${n1(cx + 11)},-17 h14" stroke="#8fb0ff" stroke-width="0.6"/><line x1="${n1(cx)}" y1="-26" x2="${n1(cx)}" y2="-33" stroke="${INK}" stroke-width="0.9"/><circle cx="${n1(cx)}" cy="-34" r="2" fill="#fbfaf6" stroke="${INK}" stroke-width="0.8"/>`
+  for (let u = 8 + (W - 16) / 3; u < W - 9; u += (W - 16) / 3) f += `<line x1="${n1(u)}" y1="-44" x2="${n1(u)}" y2="0" stroke="#9cc3dc" stroke-width="0.8"/>`
+  g.face('left', x0, y1, 0, f)
+  let r = `<rect x="6" y="-38" width="${n1(D - 12)}" height="7" fill="${color}" stroke="${INK}" stroke-width="0.8"/>`
+  r += `<rect x="${n1(D / 2 - 6)}" y="-24" width="12" height="16" fill="#cfd5e2" stroke="${INK}" stroke-width="0.8"/><circle cx="${n1(D / 2)}" cy="-16" r="3.4" fill="none" stroke="#7f8a9c" stroke-width="0.9"/>`
+  g.face('right', x1, y1, 0, r)
+  // The roof: the clean air plant and the overhead crane's rail.
+  g.unit(0.45, 0.45, h, 0.45)
+  g.unit(1.1, 0.45, h, 0.45)
+  g.line([x0 + 0.1, y0 + 1.0, h + 1], [x1 - 0.1, y0 + 1.0, h + 1], '#7f8a9c', 1.6)
+  return g.done()
+}

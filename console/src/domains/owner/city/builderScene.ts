@@ -1,8 +1,12 @@
 import * as Phaser from 'phaser'
 import { CH, CW } from './kit'
-import { addRoad, canPlace, cellOf, crawlerway, depthOrder, inLand, key, newPartId, partAt, placeCheck, roadMask, roadShape, strokeCells, type Crawlerway, type Doc, type PartSize, type Placed } from './builderDoc'
+import { addRoad, canPlace, cellOf, crawlerway, depthOrder, doorOf, inLand, key, newPartId, partAt, placeCheck, roadMask, roadShape, strokeCells, targetPart, walkPath, type Crawlerway, type Doc, type PartSize, type Placed } from './builderDoc'
 import { baseTextures, kindOf, layersOf, spriteOf, spriteUrl, type Layer } from './catalog'
 import type { Reading, Sky } from './cityReadings'
+import type { Worker } from './cityWorkers'
+
+type Gauge = { used: number | null; reserved: number | null; of: number | null }
+type Meters = { power: Gauge; water: Gauge; gas: Gauge }
 
 /**
  * The city builder's scene: the land, the roads the Owner drags, and the
@@ -19,9 +23,11 @@ export type SceneInit = {
   nameOf: (binds: string) => string | undefined
   colorOf: (binds: string) => string | undefined
   /** The building's real state, read; undefined when it has none. */
-  readingOf: (binds: string) => Reading | undefined
+  readingOf: (binds: string) => (Reading & { meters?: Meters }) | undefined
   /** The satellites in orbit and which legs of the crawlerway a real run moves along. */
   skyOf: () => Sky | undefined
+  /** The seats that reported a status, each a worker; undefined when not read. */
+  workersOf: () => readonly Worker[] | undefined
   onChange: () => void
   onSelect: (id: string | null) => void
   onPlaced: (p: Placed) => void
@@ -74,8 +80,13 @@ export class BuilderScene extends Phaser.Scene {
   private hint!: Phaser.GameObjects.Text
   private crawl: Crawlerway = { cells: new Set(), ends: [], served: new Set(), legs: new Map() }
   private skyG!: G
+  private linkG!: G
+  private gaugeG!: G
+  private linked: string[] = []
   private skyImgs: Phaser.GameObjects.Image[] = []
   private skyTags: Phaser.GameObjects.Text[] = []
+  private zoneTags: Phaser.GameObjects.Text[] = []
+  private walkers = new Map<string, { g: G; bubble: Phaser.GameObjects.Text; at: { x: number; y: number }; goal: string; tween?: Phaser.Tweens.TweenChain | Phaser.Tweens.Tween; w: Worker }>()
   private tool: Tool = 'select'
   private armed: Armed = null
   private selected: string | null = null
@@ -96,6 +107,8 @@ export class BuilderScene extends Phaser.Scene {
     this.mark = this.add.graphics().setDepth(-10)
     this.tags = this.add.graphics().setDepth(190000)
     this.skyG = this.add.graphics().setDepth(95000)
+    this.linkG = this.add.graphics().setDepth(94000)
+    this.gaugeG = this.add.graphics().setDepth(150000)
     this.hint = this.add.text(0, 0, '', { fontFamily: 'JetBrains Mono, ui-monospace, Menlo, monospace', fontSize: `${11 * this.s.dpr}px`, color: '#2f2d3a', padding: { x: 5 * this.s.dpr, y: 3 * this.s.dpr } }).setOrigin(0.5, 1).setDepth(190002).setVisible(false)
     this.input.addPointer(1)
     this.input.mouse?.disableContextMenu()
@@ -241,6 +254,19 @@ export class BuilderScene extends Phaser.Scene {
       const p = iso(x + ((h >> 4) % 10) / 10, y + ((h >> 9) % 10) / 10)
       g.lineBetween(p.x - 2.5, p.y, p.x - 1, p.y - 3); g.lineBetween(p.x + 2.5, p.y, p.x + 1, p.y - 3)
     }
+    // The districts: a tinted plate of ground each, a dashed edge and its name at the front corner.
+    const zones = this.s.doc.zones ?? []
+    while (this.zoneTags.length > zones.length) this.zoneTags.pop()!.destroy()
+    zones.forEach((z, i) => {
+      const x1 = Math.min(W, z.x + z.w), y1 = Math.min(H, z.y + z.h)
+      quad(g, z.x + 0.15, z.y + 0.15, x1 - 0.15, y1 - 0.15, Phaser.Display.Color.HexStringToColor(z.tint).color)
+      g.lineStyle(1.4, 0x8d8a78, 0.8)
+      const edge: [number, number, number, number][] = [[z.x + 0.15, z.y + 0.15, x1 - 0.15, z.y + 0.15], [x1 - 0.15, z.y + 0.15, x1 - 0.15, y1 - 0.15], [x1 - 0.15, y1 - 0.15, z.x + 0.15, y1 - 0.15], [z.x + 0.15, y1 - 0.15, z.x + 0.15, z.y + 0.15]]
+      for (const [ax, ay, bx, by] of edge) { const n = Math.ceil(Math.hypot(bx - ax, by - ay) * 2); for (let k = 0; k < n; k += 2) seg(g, ax + (bx - ax) * k / n, ay + (by - ay) * k / n, ax + (bx - ax) * (k + 1) / n, ay + (by - ay) * (k + 1) / n) }
+      if (!this.zoneTags[i]) this.zoneTags[i] = this.add.text(0, 0, '', { fontFamily: 'JetBrains Mono, ui-monospace, Menlo, monospace', fontSize: `${12 * this.s.dpr}px`, fontStyle: 'bold', color: '#5d5a4c' }).setOrigin(0, 0.5).setDepth(-44).setAlpha(0.85)
+      const at = iso(z.x + 0.5, y1 - 0.6)
+      this.zoneTags[i].setText(z.name.toUpperCase()).setPosition(at.x, at.y).setRotation(Math.atan2(16, 32))
+    })
     g.lineStyle(1.7, INK, 1)
     g.strokePoints([iso(0, -SEA), iso(W, -SEA), iso(W, H), iso(0, H)] as Phaser.Math.Vector2[], true)
     this.drawGrid()
@@ -449,7 +475,7 @@ export class BuilderScene extends Phaser.Scene {
     }
     for (const [id, v] of this.views) if (!seen.has(id)) { v.imgs.forEach(i => i.img.destroy()); v.tag.destroy(); v.fx.destroy(); this.views.delete(id) }
     if (this.selected && !seen.has(this.selected)) this.select(null)
-    this.syncDecor(); this.drawMark(); this.relabel(); this.drawEffects(); this.drawSky()
+    this.syncDecor(); this.drawMark(); this.relabel(); this.drawEffects(); this.drawSky(); this.drawWorkers()
   }
 
   private sortDepth() {
@@ -466,6 +492,13 @@ export class BuilderScene extends Phaser.Scene {
 
   private relabel() {
     for (const t of this.skyTags) t.setScale(1 / this.cameras.main.zoom)
+    for (const t of this.zoneTags) t.setScale(Math.max(1, 1 / this.cameras.main.zoom))
+    for (const w of this.walkers.values()) this.placeWalker(w)
+    this.gaugeG?.clear()
+    for (const v of this.views.values()) {
+      const r = v.part.binds ? this.s.readingOf(v.part.binds) : undefined
+      if (r?.meters && v.imgs[0]?.img.visible !== false) this.gauges(this.gaugeG, v.part, r.meters)
+    }
     const z = this.cameras.main.zoom, g = this.tags, dpr = this.s.dpr
     g.clear()
     // Tags go up their leader until they clear the billboards and each other.
@@ -506,7 +539,7 @@ export class BuilderScene extends Phaser.Scene {
   }
 
   /** The readings drawn: a rocket that launches, crates at the door, workers holding signs. Only what was read. */
-  refreshReadings() { if (this.ready) { this.relabel(); this.drawEffects(); this.drawSky(); this.drawShade() } }
+  refreshReadings() { if (this.ready) { this.relabel(); this.drawEffects(); this.drawSky(); this.drawShade(); this.drawLinks(); this.drawWorkers() } }
 
   private drawEffects() {
     const box = (g: G, x: number, y: number, s: number, h: number, col: number) => {
@@ -562,6 +595,113 @@ export class BuilderScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  /**
+   * Three meters by the roof: power (CPU), water (memory), gas (disk). Each
+   * fills with what is used against the limit (or what is reserved, with no
+   * limit); a tick marks what is reserved; over the line it fills red; one not
+   * read is hatched.
+   */
+  private gauges(g: G, p: Placed, m: Meters) {
+    const k = kindOf(p.kind), top = iso(p.x + p.size, p.y + p.size / 2, Math.min(k?.height ?? 60, 90) * 0.55)
+    // Sized for the screen, like the tags: a meter stays readable however far the city is zoomed out.
+    const u = this.s.dpr / this.cameras.main.zoom
+    const cols = [0xf2b234, 0x5aa9ff, 0xa9b1bf] as const, H = 26 * u, Wd = 7 * u
+    ;[m.power, m.water, m.gas].forEach((gauge, i) => {
+      const x = top.x + 6 * u + i * (Wd + 3 * u), y = top.y - H
+      g.fillStyle(0xfbfaf6, 1); g.fillRect(x, y, Wd, H); g.lineStyle(1, INK, 1)
+      const of = gauge.of ?? gauge.reserved
+      if (gauge.used == null || !of) {
+        g.lineStyle(0.8 * u, 0xa9a6b8, 1)
+        for (let t = 0; t < H; t += 5 * u) g.lineBetween(x, Math.min(y + H, y + t + 5 * u), x + Wd, y + t)
+      } else {
+        const f = gauge.used / of
+        g.fillStyle(f > 1 ? 0xef5b5b : cols[i], 1)
+        const h = Math.min(1, f) * H
+        g.fillRect(x, y + H - h, Wd, h)
+        if (gauge.reserved != null && gauge.of) { const rr = Math.min(1, gauge.reserved / gauge.of); g.lineStyle(2 * u, INK, 1); g.lineBetween(x - 2 * u, y + H - rr * H, x + Wd + 2 * u, y + H - rr * H) }
+      }
+      g.lineStyle(1.2 * u, INK, 1); g.strokeRect(x, y, Wd, H)
+    })
+  }
+
+  /** The cables of one building: dashed lines to the buildings it is wired to, while it is open. */
+  setLinks(binds: string[]) { this.linked = binds; this.drawLinks() }
+  private drawLinks() {
+    const g = this.linkG
+    g.clear()
+    if (this.linked.length < 2) return
+    const at = (b: string) => this.s.doc.parts.find(p => p.binds === b)
+    const from = at(this.linked[0])
+    if (!from) return
+    const z = this.cameras.main.zoom, a = iso(from.x + from.size / 2, from.y + from.size / 2, 30)
+    g.lineStyle(2.2 * this.s.dpr / z, 0xf2a01e, 0.9)
+    for (const b of this.linked.slice(1)) {
+      const to = at(b)
+      if (!to) continue
+      const c = iso(to.x + to.size / 2, to.y + to.size / 2, 30), n = 18
+      for (let i = 0; i < n; i += 2) g.lineBetween(a.x + (c.x - a.x) * i / n, a.y + (c.y - a.y) * i / n, a.x + (c.x - a.x) * (i + 1) / n, a.y + (c.y - a.y) * (i + 1) / n)
+    }
+  }
+
+  /**
+   * The workers: one per seat that reported. Each stands at its building's
+   * door (side by side when several share one), walks there along the roads
+   * when its building changes, its bubble yellow when it waits (a sign is
+   * the Owner's waiting cards, one meaning each), and sleeps in the
+   * dorm when its status is stale. Only seats read are drawn.
+   */
+  private drawWorkers() {
+    const ws = this.s.workersOf() ?? [], d = this.s.doc, seen = new Set<string>()
+    const slot = new Map<string, number>()
+    for (const w of ws) {
+      const p = targetPart(d, w.target)
+      if (!p || this.s.editing) continue
+      const door = doorOf(p), n = slot.get(p.id) ?? 0
+      slot.set(p.id, n + 1)
+      const spot = { x: door.x - 0.95 + (n % 5) * 0.32, y: door.y + 0.6 + Math.floor(n / 5) * 0.3 }
+      const goal = `${p.id}:${n}`
+      seen.add(w.seat)
+      let v = this.walkers.get(w.seat)
+      if (!v) {
+        const home = targetPart(d, { kind: 'dorm', binds: 'domain:coordination' })
+        const start = home ? { x: doorOf(home).x - 0.5, y: doorOf(home).y + 0.1 } : spot
+        v = { g: this.add.graphics().setDepth(90000), bubble: this.add.text(0, 0, '', { fontFamily: 'JetBrains Mono, ui-monospace, Menlo, monospace', fontSize: `${9 * this.s.dpr}px`, color: '#2f2d3a', backgroundColor: '#fffbe8', padding: { x: 3 * this.s.dpr, y: 1.5 * this.s.dpr } }).setOrigin(0.5, 1).setDepth(90001), at: { ...start }, goal: '', w }
+        this.walkers.set(w.seat, v)
+      }
+      v.w = w
+      if (v.goal !== goal) {
+        v.goal = goal
+        v.tween?.stop()
+        const from = { x: Math.round(v.at.x + 0.5), y: Math.round(v.at.y) }
+        const path = walkPath(d, from, door).map(c => ({ x: c.x - 0.5, y: c.y + 0.1 }))
+        const legs = [...path.slice(1), spot]
+        const walker = v
+        v.tween = this.tweens.chain({
+          targets: v.at,
+          tweens: legs.map(c => ({ x: c.x, y: c.y, duration: 260, ease: 'Linear', onUpdate: () => this.placeWalker(walker) })),
+          onComplete: () => this.placeWalker(walker),
+        })
+      }
+      this.placeWalker(v)
+    }
+    for (const [seat, v] of this.walkers) if (!seen.has(seat)) { v.tween?.stop(); v.g.destroy(); v.bubble.destroy(); this.walkers.delete(seat) }
+  }
+
+  private placeWalker(v: { g: G; bubble: Phaser.GameObjects.Text; at: { x: number; y: number }; w: Worker }) {
+    const g = v.g, c = iso(v.at.x + 0.5, v.at.y + 0.5), w = v.w, z = this.cameras.main.zoom
+    const body = [0xff8a5c, 0x5aa9ff, 0x9b7cf0, 0x41c7c7, 0x5fce8a, 0xf2b234][hash(w.seat) % 6]
+    g.clear()
+    g.fillStyle(0x5a5880, 0.16); g.fillEllipse(c.x, c.y, 14, 6)
+    g.fillStyle(w.state === 'home' ? 0xc9c6d6 : body, 1); g.lineStyle(1, INK, 1)
+    g.fillRoundedRect(c.x - 6, c.y - 16, 12, 16, { tl: 6, tr: 6, bl: 2, br: 2 }); g.strokeRoundedRect(c.x - 6, c.y - 16, 12, 16, { tl: 6, tr: 6, bl: 2, br: 2 })
+    g.fillStyle(0xffffff, 1)
+    if (w.state === 'home') { g.lineBetween(c.x - 4, c.y - 10, c.x - 1, c.y - 10); g.lineBetween(c.x + 1, c.y - 10, c.x + 4, c.y - 10) }
+    else { g.fillCircle(c.x - 2.5, c.y - 10, 1.8); g.fillCircle(c.x + 2.5, c.y - 10, 1.8) }
+    const show = z >= this.fitZoom * 1.15
+    v.bubble.setText(w.bubble).setBackgroundColor(w.state === 'waiting' ? '#ffe6a8' : w.state === 'home' ? '#e6e4ee' : '#fbfaf6').setVisible(show).setScale(1 / z).setPosition(c.x, c.y - 20)
+    g.setVisible(!this.s.editing); if (this.s.editing) v.bubble.setVisible(false)
   }
 
   /** The satellites in orbit over the sea: one per tenant, its version on its tag; one launching rides the rocket instead. */

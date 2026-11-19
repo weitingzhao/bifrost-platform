@@ -3,6 +3,7 @@ import { emptyDoc, expand, fromTiled, LAND_MAX, toTiled, type Doc, type Placed }
 import { accepts, CATALOG, kindOf, showcaseLayers, spriteOf, spriteUrl, type CatalogKind, type SystemItem } from './catalog'
 import type { Armed, BuilderScene, Tool } from './builderScene'
 import type { Reading, Sky } from './cityReadings'
+import type { Worker } from './cityWorkers'
 import { DICTIONARY, DICTIONARY_VERSION } from './worldDictionary'
 import { LAYOUT_FILE, layoutFileText, parseLayoutFile, type LayoutStore } from './layoutStore'
 
@@ -68,17 +69,21 @@ function Thumb({ kind, box = 112 }: { kind: string; box?: number }) {
   return <div className="cb-thumb" style={{ width: box, height: H }}>{ls.map((i, n) => <img key={n} alt="" draggable={false} src={spriteUrl(i.s)} width={i.s.width * k} height={i.s.height * k} style={{ left: (i.left - x0) * k + (box - w * k) / 2, top: (i.top - y0) * k + (H - h * k) }} />)}</div>
 }
 
-export type CityReading = Reading & { source: string }
+export type CityMeter = { used: number | null; reserved: number | null; of: number | null }
+/** A building's reading, its source, its three utility meters and the buildings it is wired to (by what they stand for). */
+export type CityReading = Reading & { source: string; meters?: { power: CityMeter; water: CityMeter; gas: CityMeter }; links?: string[] }
 export type Glance = { text: string; tone: Reading['tone']; href?: string }
 
 const TONE_BG: Record<Reading['tone'], string> = { calm: '#dcf2e2', busy: '#ffe6a8', alert: '#ffc9c2', unknown: '#e6e4ee' }
 
-export default function CityBuilder({ items, store, startEditing = false, canBuild = true, initial, onOpen, readingOf, sky, readingsKey = '', glance = [] }: {
+export default function CityBuilder({ items, store, startEditing = false, canBuild = true, initial, onOpen, readingOf, sky, workers, readingsKey = '', glance = [] }: {
   items: readonly SystemItem[]; store: LayoutStore; startEditing?: boolean
   /** The real state of what a building stands for, and where it was read. */
   readingOf?: (binds: string) => CityReading | undefined
   /** The satellites in orbit and the legs a real run moves along. */
   sky?: Sky
+  /** Each seat that reported, a worker at its building; undefined when not read. */
+  workers?: readonly Worker[]
   /** Changes whenever the readings do. */
   readingsKey?: string
   /** One line each for the questions a look should answer. */
@@ -103,7 +108,9 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
   const openRef = useRef(onOpen); openRef.current = onOpen
   const readRef = useRef(readingOf); readRef.current = readingOf
   const skyRef = useRef(sky); skyRef.current = sky
+  const workersRef = useRef(workers); workersRef.current = workers
   const [info, setInfo] = useState<Placed | null>(null)
+  useEffect(() => { scene.current?.setLinks(info?.binds ? [info.binds, ...(readRef.current?.(info.binds)?.links ?? [])] : []) }, [info, readingsKey])
   useEffect(() => { scene.current?.refreshReadings() }, [readingsKey])
   const side = useRef<HTMLDivElement>(null), picker = useRef<HTMLInputElement>(null)
   const [importError, setImportError] = useState(false)
@@ -129,8 +136,9 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
         onChange: touch,
         onSelect: (id: string | null) => { setSelected(id); if (id) setTab('selected') },
         onPlaced: () => { setArmedS(null); setPendingBind(null); setToolS('select') },
-        readingOf: (b: string) => readRef.current?.(b),
+        readingOf: (b: string) => readRef.current?.(b) as never,
         skyOf: () => skyRef.current,
+        workersOf: () => workersRef.current,
         onOpen: (p: Placed) => setInfo(p),
         onReady: () => { scene.current = g.scene.getScene('builder') as BuilderScene; touch() },
       })
@@ -213,7 +221,7 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
   }
   const toggleEdit = (on: boolean) => { setEditing(on); scene.current?.setEditing(on); setArmedS(null); setPendingBind(null); setToolS('select'); scene.current?.setTool('select'); if (!on) setSelected(null) }
 
-  const groups = (['Stages', 'Domains', 'Release lanes', 'Suppliers', 'Law'] as const).map(g => [g, unplaced.filter(i => i.group === g)] as const).filter(([, l]) => l.length)
+  const groups = (['Stages', 'Nodes', 'Domains', 'Release lanes', 'Suppliers', 'Law'] as const).map(g => [g, unplaced.filter(i => i.group === g)] as const).filter(([, l]) => l.length)
   const kindAccepted = (k: CatalogKind) => !pending || accepts(k, pending)
 
   return (
@@ -243,6 +251,7 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
             <h3>{info.binds ? it?.name ?? 'unknown' : 'Not assigned'} <span className="cb-src">{kindOf(info.kind)?.name}</span></h3>
             {r && <p><b style={{ background: TONE_BG[r.tone], padding: '0 4px' }}>{r.word}</b></p>}
             {r?.lines.map(l => <p key={l}>{l}</p>)}
+            {(workers ?? []).filter(w => w.target.binds && w.target.binds === info.binds || (!w.target.binds && w.target.kind === info.kind)).flatMap(w => w.lines).map(l => <p key={l}>{l}</p>)}
             {r && <p className="cb-src">{r.source}</p>}
             <div className="cb-row">
               {it?.page && <a className="cb-btn" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', color: INK }} href={it.page} onClick={() => openRef.current?.(it, info)}>Open page</a>}

@@ -5,12 +5,17 @@ import { fetchCiDomains } from '@/api/ciDomains'
 import { authedFetch } from '@/api/client'
 import { fetchQuestionList } from '@/api/questions'
 import { fetchDeliveryPipelines } from '@/domains/delivery/api/delivery'
-import { systemItems, type CityLane } from '@/domains/owner/city/catalog'
-import CityBuilder, { type CityReading, type Glance } from '@/domains/owner/city/CityBuilder'
-import { padReading, rocketCiReading, rocketStgReading, satellitesReading, skyReading, waitingReading, type Reading, type ReleaseContext } from '@/domains/owner/city/cityReadings'
+import { systemItems, type CityLane, pluginsOf } from '@/domains/owner/city/catalog'
+import CityBuilder, { type Glance } from '@/domains/owner/city/CityBuilder'
+import { skyReading, type ReleaseContext } from '@/domains/owner/city/cityReadings'
+import { cityReadings, utilityGlance } from '@/domains/owner/city/cityState'
+import { workersGlance, workersOf } from '@/domains/owner/city/cityWorkers'
+import { fetchSeatStatuses } from '@/api/seatStatus'
+import { readUtilities, supplies } from '@/domains/owner/city/cityUtilities'
+import { fetchPromQL } from '@/api/telemetry'
 import { plannedCity } from '@/domains/owner/city/defaultLayout'
 import { platformLayoutStore } from '@/domains/owner/city/platformLayoutStore'
-import { DICTIONARY, steady } from '@/domains/owner/city/worldDictionary'
+import { steady } from '@/domains/owner/city/worldDictionary'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useShellLayout } from '@/lib/shell/useShellLayout'
 
@@ -29,7 +34,6 @@ async function fetchContext(repo: string, signal?: AbortSignal): Promise<Release
   return await (await authedFetch('release context', `/api/v1/delivery/context?repo=${encodeURIComponent(repo)}`, { signal })).json() as ReleaseContext
 }
 
-const source = (id: string) => DICTIONARY.find(e => e.id === id)?.source ?? ''
 
 export default function CityPage() {
   const { canAdmin, capsError } = usePlatformAuth()
@@ -38,12 +42,16 @@ export default function CityPage() {
   const pipelines = useQuery({ queryKey: ['city', 'pipelines'], queryFn: fetchDeliveryPipelines, staleTime: 60_000 })
   const approvals = useQuery({ queryKey: ['city', 'approvals'], queryFn: () => fetchApprovalList('pending'), refetchInterval: EVERY })
   const questions = useQuery({ queryKey: ['city', 'questions'], queryFn: () => fetchQuestionList('open'), refetchInterval: EVERY })
+  const seats = useQuery({ queryKey: ['city', 'seats'], queryFn: fetchSeatStatuses, refetchInterval: EVERY })
+  const workers = useMemo(() => seats.isError || !seats.data ? undefined : workersOf(seats.data, Date.now()), [seats.data, seats.isError])
+  const util = useQuery({ queryKey: ['city', 'utilities'], queryFn: () => readUtilities(async q => (await fetchPromQL(q)).points), refetchInterval: EVERY })
+  const nodes = useMemo(() => util.data ? supplies(util.data).map(x => ({ node: x.node, cores: x.cores })) : [], [util.data])
 
   const lanes: CityLane[] = useMemo(() => (pipelines.data?.pipelines ?? [])
     .filter(p => /^bifrost-(deliver|build)-/.test(p.name))
     .map(p => ({ pipeline: p.name, repos: p.repos ?? [] })), [pipelines.data])
-  const items = useMemo(() => systemItems(domains.data?.domains ?? [], lanes, []), [domains.data, lanes])
-  const repos = useMemo(() => [...new Set(['bifrost-platform', ...lanes.map(l => primary(l.repos)).filter((r): r is string => !!r)])].sort(), [lanes])
+  const items = useMemo(() => systemItems(domains.data?.domains ?? [], lanes, pluginsOf(lanes), nodes), [domains.data, lanes, nodes])
+  const repos = useMemo(() => [...new Set(['bifrost-platform', ...pluginsOf(lanes), ...lanes.map(l => primary(l.repos)).filter((r): r is string => !!r)])].sort(), [lanes])
   const contextQueries = useQueries({ queries: repos.map(repo => ({ queryKey: ['city', 'context', repo], queryFn: ({ signal }: { signal: AbortSignal }) => fetchContext(repo, signal), refetchInterval: EVERY })) })
 
   // Each reading tiered, then held steady: a tier changes after two reads agree.
@@ -52,21 +60,17 @@ export default function CityPage() {
   const contextKey = contextQueries.map(q => q.dataUpdatedAt).join(',')
   const sky = useMemo(() => skyReading(contexts, lanes, Date.now()), [contextKey, lanes]) // eslint-disable-line react-hooks/exhaustive-deps
   const readings = useMemo(() => {
-    const out = new Map<string, CityReading>()
-    const settle = (key: string, r: Reading, id: string) => {
+    const raw = cityReadings({ contexts, lanes, items, util: util.data ?? null, now: Date.now(),
+      approvals: approvals.isError ? null : approvals.data?.length ?? null, questions: questions.isError ? null : questions.data?.length ?? null })
+    // Each tier held steady: it changes after two reads agree.
+    for (const [key, r] of raw) {
       const h = held.current.get(key) ?? {}
       const next = steady(h.shown, h.pending, r.word)
       held.current.set(key, next)
-      out.set(key, { ...r, word: next.shown, source: source(id) })
+      raw.set(key, { ...r, word: next.shown })
     }
-    const now = Date.now()
-    settle('stage:rocket-ci', rocketCiReading(contexts, lanes), 'hif')
-    settle('stage:rocket-stg', rocketStgReading(contexts, lanes, now), 'vab')
-    settle('stage:satellites', satellitesReading(contexts, lanes), 'satellite-hangar')
-    for (const it of items.filter(i => i.binds.startsWith('lane:'))) settle(it.binds, padReading(contexts, lanes, now), 'pad')
-    settle('domain:owner', waitingReading(approvals.isError ? null : approvals.data?.length ?? null, questions.isError ? null : questions.data?.length ?? null), 'waiting')
-    return out
-  }, [contextKey, lanes, items, approvals.data, approvals.isError, questions.data, questions.isError]) // eslint-disable-line react-hooks/exhaustive-deps
+    return raw
+  }, [contextKey, lanes, items, util.data, approvals.data, approvals.isError, questions.data, questions.isError]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const glance: Glance[] = useMemo(() => {
     const pad = [...readings].find(([k]) => k.startsWith('lane:'))?.[1]
@@ -77,16 +81,18 @@ export default function CityPage() {
       { text: pad ? (pad.tone === 'unknown' ? 'Launches: unknown' : pad.launching ? pad.word[0].toUpperCase() + pad.word.slice(1) : 'Nothing launching') : 'Launches: unknown', tone: pad?.launching ? 'busy' : pad?.tone ?? 'unknown', href: '#releases' },
       { text: ciUnknown ? `CI: ${queued} in flight, some unread` : `CI: ${queued} in flight`, tone: ciUnknown ? 'unknown' : queued >= 4 ? 'alert' : queued ? 'busy' : 'calm', href: '#work?section=ci' },
       { text: wait ? (wait.tone === 'unknown' ? 'Waiting for you: unknown' : `Waiting for you: ${wait.count ?? 0}`) : 'Waiting for you: unknown', tone: wait?.tone ?? 'unknown', href: '#command?section=waiting' },
+      utilityGlance(util.data ?? null),
+      workersGlance(workers),
     ]
-  }, [readings])
+  }, [readings, util.data, workers])
 
-  const key = [...readings].map(([k, r]) => `${k}=${r.word}:${r.count ?? ''}:${r.lines[0] ?? ''}`).join('|') + sky.satellites.map(x => `${x.name}=${x.word}`).join('|') + JSON.stringify(sky.flow)
+  const key = [...readings].map(([k, r]) => `${k}=${r.word}:${r.count ?? ''}:${r.lines[0] ?? ''}`).join('|') + sky.satellites.map(x => `${x.name}=${x.word}`).join('|') + JSON.stringify(sky.flow) + (workers ?? []).map(w => `${w.seat}=${w.state}:${w.target.kind}:${w.bubble}`).join('|')
   const store = useMemo(() => platformLayoutStore(), [])
   const chrome = layout === 'tabs' ? '11.5rem + env(safe-area-inset-bottom)' : '7.5rem'
   return (
     <div style={{ height: `calc(100dvh - ${chrome})`, minHeight: 480 }}>
       <CityBuilder items={items} store={store} canBuild={canAdmin && !capsError} initial={plannedCity}
-        readingOf={b => readings.get(b)} sky={sky} readingsKey={key} glance={glance}
+        readingOf={b => readings.get(b)} sky={sky} workers={workers} readingsKey={key} glance={glance}
         onOpen={() => undefined} />
     </div>
   )

@@ -22,7 +22,7 @@ function payloadOf(lane: CityLane): string {
   return lane.pipeline.replace(/^bifrost-/, '')
 }
 
-export type BindType = 'domain' | 'lane' | 'law' | 'stage'
+export type BindType = 'domain' | 'lane' | 'law' | 'stage' | 'node' | 'plugin' | 'payload'
 export type CatalogKind = { kind: string; name: string; size: PartSize; height: number; accepts: BindType[] }
 
 export const CATALOG: readonly CatalogKind[] = [
@@ -33,18 +33,21 @@ export const CATALOG: readonly CatalogKind[] = [
   { kind: 'pad', name: 'Launch pad', size: 4, height: 250, accepts: ['lane'] },
   { kind: 'dorm', name: 'Dormitory', size: 2, height: 105, accepts: ['domain'] },
   { kind: 'court', name: 'Court', size: 4, height: 140, accepts: ['law'] },
-  { kind: 'power', name: 'Power station', size: 4, height: 120, accepts: ['domain'] },
+  { kind: 'power', name: 'Power station', size: 4, height: 120, accepts: ['node', 'domain'] },
   { kind: 'archive', name: 'Archive', size: 2, height: 88, accepts: ['domain'] },
   { kind: 'water', name: 'Water tower', size: 1, height: 88, accepts: [] },
+  { kind: 'genset', name: 'Generator set', size: 2, height: 72, accepts: ['node'] },
+  { kind: 'bay', name: 'Payload bay', size: 2, height: 80, accepts: ['payload'] },
+  { kind: 'supplier', name: "Supplier's dock", size: 2, height: 60, accepts: ['plugin'] },
 ]
 export const kindOf = (kind: string) => CATALOG.find(c => c.kind === kind)
 
-const NATURAL: Record<string, string> = { 'assembly-building': 'assembly', 'mission-control': 'control', 'comms-tower': 'dorm', 'ground-support': 'power', archive: 'archive' }
+const NATURAL: Record<string, string> = { 'assembly-building': 'assembly', 'mission-control': 'control', 'comms-tower': 'dorm', archive: 'archive' }
 const STARSHIP_LANE = 'lane:bifrost-deliver-platform-prod'
 const PAYLOAD: Record<string, string> = { platform: '#8a6cff', Trade: '#ff8a5c', research: '#41c7c7', 'research dagster': '#2fae9f', 'market-data': '#5aa9ff', 'flex-query': '#f0b429', 'ib-gateway': '#ff6f91' }
 
 export type SystemItem = {
-  binds: string; name: string; group: 'Stages' | 'Domains' | 'Release lanes' | 'Suppliers' | 'Law'
+  binds: string; name: string; group: 'Stages' | 'Nodes' | 'Domains' | 'Release lanes' | 'Suppliers' | 'Law'
   type: BindType | 'other'
   /** The building it naturally is, when that one is drawn. */
   natural?: string
@@ -55,6 +58,30 @@ export type SystemItem = {
 export function displayName(s: string): string {
   const t = s.replace(/-/g, ' ').replace(/^ib\b/i, 'IB')
   return t.charAt(0).toUpperCase() + t.slice(1)
+}
+
+/** A plugin's short name from its repository: bifrost-platform-plugin-market-data is market-data, the bare one the IB gateway. */
+export const pluginName = (repo: string) => repo.replace(/^bifrost-platform-plugin-?/, '') || 'ib-gateway'
+
+/** The plugins, an outside vendor each: the plugin repositories the release lanes clone. */
+export function pluginsOf(lanes: readonly CityLane[]): string[] {
+  return [...new Set(lanes.flatMap(l => l.repos).filter(r => /^bifrost-platform-plugin(-|$)/.test(r)))].sort()
+}
+
+const isPlugin = (l: CityLane) => l.repos.some(r => /^bifrost-platform-plugin(-|$)/.test(r))
+
+/** The tenant a satellite lane builds (research and its Dagster image are one); undefined for the rocket's lanes and the plugins (vendors, not satellites). */
+export function tenantOf(l: CityLane): { name: string; color: string } | undefined {
+  if (placeOf(l).line !== 'satellite' || isPlugin(l)) return undefined
+  const own = satelliteOf(l)
+  return own.name === 'Research dagster' ? { name: 'Research', color: PAYLOAD.research } : own
+}
+
+/** The tenants, one satellite each: what the payload bays and the orbit show. */
+export function tenantsOf(lanes: readonly CityLane[]): { name: string; color: string }[] {
+  const m = new Map<string, { name: string; color: string }>()
+  for (const l of lanes) { const t = tenantOf(l); if (t && !m.has(t.name)) m.set(t.name, t) }
+  return [...m.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
 
 /** The satellite a tenant lane carries: its payload's name and colour. */
@@ -86,13 +113,18 @@ export const STAGES = [
   { binds: 'stage:satellites', name: 'Satellites CI and STG', natural: 'satellites', page: '#releases' },
 ] as const
 
-export function systemItems(domains: readonly (CityDomain & { name?: string })[], lanes: readonly CityLane[], plugins: readonly string[]): SystemItem[] {
+/** A node of the cluster: its name and cores, read. A big one (over 16 cores) is a power station, the others generator sets. */
+export type CityNode = { node: string; cores: number | null }
+
+export function systemItems(domains: readonly (CityDomain & { name?: string })[], lanes: readonly CityLane[], plugins: readonly string[], nodes: readonly CityNode[] = []): SystemItem[] {
   const rocketProd = lanes.filter(l => { const at = placeOf(l); return at.line === 'rocket' && at.step === 'prod' })
   return [
+    ...nodes.map((n): SystemItem => ({ binds: `node:${n.node}`, name: n.node.replace(/^ubt-k3s-/, 'node '), group: 'Nodes', type: 'node', natural: (n.cores ?? 0) > 16 ? 'power' : 'genset', page: '#infrastructure?section=cluster' })),
     ...(lanes.length ? STAGES.map((st): SystemItem => ({ binds: st.binds, name: st.name, group: 'Stages', type: 'stage', natural: st.natural, page: st.page })) : []),
     ...domains.map((d): SystemItem => ({ binds: `domain:${d.id}`, name: d.name ?? displayName(d.id), group: 'Domains', type: 'domain', natural: NATURAL[d.facility?.kind ?? ''], page: d.facility?.page })),
     ...rocketProd.map((l): SystemItem => ({ binds: `lane:${l.pipeline}`, name: laneName(l), group: 'Release lanes', type: 'lane', natural: 'pad', page: '#releases', color: PAYLOAD[payloadOf(l)] })),
-    ...plugins.map((p): SystemItem => ({ binds: `plugin:${p}`, name: displayName(p), group: 'Suppliers', type: 'other' })),
+    ...tenantsOf(lanes).map((t): SystemItem => ({ binds: `payload:${t.name}`, name: `${t.name} payload`, group: 'Suppliers', type: 'payload', natural: 'bay', page: '#releases', color: t.color })),
+    ...plugins.map((p): SystemItem => ({ binds: `plugin:${p}`, name: displayName(pluginName(p)), group: 'Suppliers', type: 'plugin', natural: 'supplier', page: '#plugin-gallery', color: PAYLOAD[pluginName(p)] })),
     { binds: 'law', name: 'The law', group: 'Law', type: 'law', natural: 'court', page: '#crew?section=instruments' },
   ]
 }
@@ -106,6 +138,8 @@ const iso = (x: number, y: number, z = 0) => ({ x: (x - y) * (CW / 2), y: (x + y
 
 export function layersOf(kind: string, binds: string, color?: string): Layer[] {
   const base = (tex: string, order = 0): Layer => ({ tex, dx: 0, dy: 0, stack: false, order })
+  if (kind === 'supplier') return [base(`supplier:${color ?? '#5aa9ff'}`)]
+  if (kind === 'bay') return [base(`bay:${color ?? '#f2d27a'}`)]
   if (kind !== 'pad') return [base(kind)]
   const at = iso(L.PAD_STACK.x, L.PAD_STACK.y, L.PAD_STACK.z)
   const vehicle = (tex: string): Layer => ({ tex, dx: at.x, dy: at.y, stack: true, order: 0.3 })
@@ -116,19 +150,19 @@ export function layersOf(kind: string, binds: string, color?: string): Layer[] {
 
 const cache = new Map<string, Sprite>()
 const make: Record<string, () => Sprite> = {
-  assembly: L.assembly, hif: L.horizontalHangar, satellites: L.satelliteHangar, control: L.missionControl, dorm: () => L.dormitory(0), court: L.court, power: L.powerStation, archive: L.archive, water: L.waterTower,
+  assembly: L.assembly, hif: L.horizontalHangar, satellites: L.satelliteHangar, genset: L.generatorSet, control: L.missionControl, dorm: () => L.dormitory(0), court: L.court, power: L.powerStation, archive: L.archive, water: L.waterTower,
   'pad:chopsticks': () => L.launchPad(true), 'pad:plain': () => L.launchPad(false), 'pad:front': L.launchPadFront, starship: L.starship,
   'd:tree0': () => L.streetTree(0), 'd:tree1': () => L.streetTree(1), 'd:tree2': () => L.streetTree(2),
   'd:lamp': L.streetLamp, 'd:bench': L.parkBench, 'd:billboard': L.billboard, 'd:signal': L.trafficLight,
 }
 export function spriteOf(tex: string): Sprite {
   let s = cache.get(tex)
-  if (!s) { s = tex.startsWith('rocket:') ? L.rocket(tex.slice(7)) : tex.startsWith('sat:') ? L.orbitSatellite(tex.slice(4)) : make[tex](); cache.set(tex, s) }
+  if (!s) { s = tex.startsWith('rocket:') ? L.rocket(tex.slice(7)) : tex.startsWith('sat:') ? L.orbitSatellite(tex.slice(4)) : tex.startsWith('supplier:') ? L.supplierDock(tex.slice(9)) : tex.startsWith('bay:') ? L.payloadBay(tex.slice(4)) : make[tex](); cache.set(tex, s) }
   return s
 }
 export const spriteUrl = (s: Sprite) => `data:image/svg+xml;utf8,${encodeURIComponent(s.svg)}`
 /** The textures the scene needs before it can draw anything. */
-export const baseTextures = () => [...Object.keys(make), ...Object.values(PAYLOAD).map(c => `rocket:${c}`), 'rocket:#8a6cff', ...[...Object.values(PAYLOAD), '#f2d27a'].map(c => `sat:${c}`)]
+export const baseTextures = () => [...Object.keys(make), ...Object.values(PAYLOAD).map(c => `rocket:${c}`), 'rocket:#8a6cff', ...[...Object.values(PAYLOAD), '#f2d27a'].map(c => `sat:${c}`), ...[...Object.values(PAYLOAD), '#5aa9ff'].map(c => `supplier:${c}`), ...[...Object.values(PAYLOAD), '#f2d27a'].map(c => `bay:${c}`)]
 
 /** How a kind looks at its best, for the catalogue's card. */
 export const showcaseLayers = (kind: string) => layersOf(kind, kind === 'pad' ? STARSHIP_LANE : '')
