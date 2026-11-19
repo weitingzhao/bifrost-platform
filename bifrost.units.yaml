@@ -156,15 +156,9 @@ modules:
       # 2026-11-17: TestSeenFactsAreRegistered reads the event register.
       api/internal/agentrt/seenfacts: ["api/internal/agentrt/seenfacts", "api/internal/bus/registry/ledger"]
       api/internal/agentrt/rules: ["."]
-      # 2026-11-18: the rule tests; the three assess.go are what
-      # TestAssessmentsCannotAnswer parses.
-      api/internal/agentrt/store:
-        - "api/internal/agentrt/store"
-        - "api/internal/agentrt/controller/assess.go"
-        - "api/internal/agentrt/migrations"
-        - "api/internal/agentrt/planimport/testdata"
-        - "api/internal/assessmentreadings/assess.go"
-        - "api/internal/server/agentrt_assess.go"
+      # 2026-11-18: the rule tests read the migrations (their database) and
+      # nothing of another domain.
+      api/internal/agentrt/store: ["api/internal/agentrt/store", "api/internal/agentrt/migrations"]
       # 2026-11-18: the cross-domain tests that left the store. It reads the
       # store's test files too: TestTestsRunInParallel scans both packages. The
       # three assess.go are what TestAssessmentsCannotAnswer parses.

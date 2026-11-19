@@ -1,5 +1,3 @@
-//bifrost:owner foundation
-
 package store_test
 
 import (

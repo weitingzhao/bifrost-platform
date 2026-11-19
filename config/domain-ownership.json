@@ -478,16 +478,10 @@
     },
     "api/internal/agentrt/store": {
       "domains": [
-        "foundation",
-        "plan",
-        "lineage",
-        "verification",
-        "delivery",
-        "owner",
-        "coordination"
+        "verification"
       ],
-      "status": "mixed",
-      "basis": "2026-11-16 Complete file/reader audit: ordinary Plan, Lineage, Delivery and observation projections/queries are in their domains. Retain transaction/snapshot and persistence adapters plus original identity, evidence, signoff and rejection contracts. Five exported legacy declarations were refused for removal by approval review and remain unchanged; shared protected scope is not counted as extracted. 2026-11-17 (plan core wall step 6): the recorder import's landing (keeping the log, the trial import, the landing under the decision) left for agentrt/externalwork; store keeps the proposal (ProposeRecorderImport, a plan change with the Owner's card) and binds the plan's recorder import port. 2026-11-17 (plan core wall step 6): the external work writes (RegisterExternalWork, PostExternalEvent and helpers) left for agentrt/externalwork; store keeps only their binding onto the plan tree (portsbind.go)."
+      "status": "assigned",
+      "basis": "2026-11-18: the rule store (signed, tightened, proposed and approved rule versions), the same domain as agentrt/rules. What is left here came out of the shared runtime store as the plan, lineage, delivery, Owner and coordination code left for their own packages (2026-11-16 to 11-18). Evidence by go list: production imports are agentrt/{actor,artifact,canon,eventlog,legacyvocab} (foundation) and agentrt/rules (verification); TestImports add outsideinput (verification); XTestImports add agentrt/agentrttest (foundation) and agentrt/store itself. The import of releasepolicy (delivery) went when SignRule began to take its signature check from the caller, and the tests that need other domains moved to agentrt/integration."
     },
     "api/internal/server": {
       "domains": [
