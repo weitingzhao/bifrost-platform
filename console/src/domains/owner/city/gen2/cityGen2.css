@@ -14,9 +14,9 @@
 .g2-tl { padding: 10px 12px; }
 .g2-tl h1 { margin: 2px 0 2px; font-size: 18px; line-height: 1.2; }
 .g2-tl p { margin: 0 0 8px; font-size: 12.5px; color: var(--g2-soft); line-height: 1.35; }
-.g2-tl dl, .g2-panel dl { margin: 0; display: flex; gap: 16px; font-size: 12px; }
-.g2-tl dt, .g2-panel dt { color: var(--g2-mute); }
-.g2-tl dd, .g2-panel dd { margin: 0; font-weight: 600; }
+.g2-tl dl { margin: 0; display: flex; gap: 16px; font-size: 12px; }
+.g2-tl dt { color: var(--g2-mute); }
+.g2-tl dd { margin: 0; font-weight: 600; }
 .g2-tl.compact { padding: 7px 10px; cursor: pointer; }
 .g2-tl.compact h1 { font-size: 16px; display: inline; margin-right: 10px; }
 .g2-tl.compact dl { display: inline-flex; gap: 10px; }
@@ -60,13 +60,35 @@
 .g2-menu button.on { background: #ffd36b; color: #2f2d3a; font-weight: 600; }
 .g2[data-device='phone'] .g2-menu button { padding: 0 10px; min-width: 44px; }
 
-/* Card: a side panel, or a bottom sheet on a phone */
-.g2-panel { position: absolute; z-index: 3; box-sizing: border-box; overflow-y: auto; padding: 12px 14px; background: var(--g2-card);
-  border: 1px solid var(--g2-line); border-radius: 10px; box-shadow: 0 6px 24px #00000022; animation: g2-in .16s ease-out; }
-.g2-panel.sheet { border-radius: 14px; animation: g2-up .18s ease-out; }
-.g2-grip { width: 36px; height: 4px; border-radius: 2px; background: var(--g2-line); margin: -4px auto 8px; }
-.g2-panel h2 { margin: 2px 0 4px; font-size: 16px; }
-.g2-panel p { margin: 0 0 8px; font-size: 12.5px; color: var(--g2-soft); }
 .g2-close { position: absolute; top: 2px; right: 2px; width: 44px; height: 44px; border: 0; background: none; font-size: 20px; cursor: pointer; color: var(--g2-mute); }
 @keyframes g2-in { from { opacity: 0; transform: translateX(12px); } }
 @keyframes g2-up { from { opacity: 0; transform: translateY(24px); } }
+
+/* The panels: a rail on the right, or a drawer from the bottom (positions from viewport.ts). */
+.g2-rail { position: absolute; z-index: 3; box-sizing: border-box; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px;
+  background: var(--g2-card); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: 1px solid var(--g2-line); border-radius: 12px; box-shadow: 0 2px 10px #0000000f; overscroll-behavior: contain; touch-action: pan-y; }
+.g2-rail.drawer { border-radius: 16px 16px 12px 12px; box-shadow: 0 -6px 24px #00000026; animation: g2-up .18s ease-out; }
+.g2-grip-btn { align-self: stretch; height: 22px; margin: -6px 0 -2px; border: 0; background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex: none; }
+.g2-grip-btn span { width: 40px; height: 4px; border-radius: 2px; background: var(--g2-line); }
+.g2-panelbox { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.g2-panelbox + .g2-panelbox { border-top: 1px solid var(--g2-line); padding-top: 10px; }
+.g2-panelbox header { display: flex; align-items: center; gap: 6px; position: relative; }
+.g2-panelbox h3 { margin: 0; font-size: 13px; font-weight: 650; }
+.g2-panelbox.picked { background: var(--g2-chip); margin: -4px -4px 0; padding: 8px; border-radius: 8px; }
+.g2-panelbox .g2-close { position: static; margin-left: auto; width: 36px; height: 36px; }
+.g2-picked p { margin: 0 0 6px; font-size: 12.5px; color: var(--g2-soft); }
+.g2-picked dl { margin: 0; display: flex; gap: 12px; font-size: 12px; }
+.g2-picked dt { color: var(--g2-mute); }
+.g2-picked dd { margin: 0; }
+.g2-table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.g2-table th { text-align: left; font-weight: 600; color: var(--g2-mute); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding: 4px 6px; border-bottom: 1px solid var(--g2-line); }
+.g2-table td { padding: 2px 6px; border-bottom: 1px solid var(--g2-line); }
+.g2-table .num { text-align: right; }
+.g2-link { font: inherit; color: var(--g2-link); background: none; border: 0; padding: 0; min-height: 32px; cursor: pointer; text-align: left; }
+.g2[data-device='phone'] .g2-link, .g2[data-device='tablet'] .g2-link { min-height: 44px; }
+.g2-chart { width: 100%; height: auto; display: block; }
+.g2-chart .grid { stroke: var(--g2-line); stroke-width: 1; }
+.g2-chart .tick { fill: var(--g2-mute); font-size: 9px; }
+.g2-chart .bar { fill: var(--g2-mute); opacity: .55; }
+.g2-chart .bar.last { fill: var(--g2-link); opacity: 1; }
+.g2-peek { display: flex; align-items: center; justify-content: center; gap: 6px; font: inherit; font-size: 13px; font-weight: 600; color: var(--g2-ink); cursor: pointer; }

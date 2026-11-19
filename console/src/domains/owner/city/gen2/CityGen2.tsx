@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { browserArrangements, type ArrangementStore } from './arrangementStore'
 import { arrange, move, toArrangement, type Arrangement } from './grid'
 import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
+import { panelsOf, pickedPanel } from './panels'
 import { PlaceScene, type Shown } from './placeScene'
 import { here, placeTree, resolve, trail, type Path, type Place } from './places'
 import { frameOf, NO_INSETS, type Insets, type Rect } from './viewport'
@@ -67,6 +68,9 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   const [selected, setSelected] = useState<Place | null>(null)
   const [open, setOpen] = useState(false)
   const [arranging, setArranging] = useState(false)
+  // The drawer (phone, tablet upright): closed to its handle until opened or a room is picked.
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  useEffect(() => { if (selected) setDrawerOpen(true) }, [selected])
   // Day, dusk or night: by the viewer's clock unless pinned; the clock is read every minute.
   const [lightChoice, setLightChoice] = useState<LightChoice>(readLight)
   const [now, setNow] = useState(() => new Date())
@@ -143,6 +147,7 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
     setSelected(null)
     setOpen(false)
     setArranging(false)
+    setDrawerOpen(false)
     const fresh = { here: store.get(keyOf(path)), parent: store.get(keyOf(path.slice(0, -1))) }
     setSaved(fresh)
     scene.current?.show(shown({ from, selected: null, arranging: false, here: fresh.here, parentA: fresh.parent }))
@@ -180,6 +185,8 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   }, [selected, arranging])
 
   const district = path[0] ?? null
+  // A row in a table does what tapping its block does: a room opens its card, anything else is entered.
+  const openChild = (c: Place) => c.kind === 'room' ? setSelected(c) : go([...path, c.id])
   const dash = dashboardHref(place)
   const trailLinks = steps.map((s, i) => (
     <span key={s.id}>
@@ -247,18 +254,29 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
         ))}
       </nav>
 
-      {selected && (
-        <aside className={`g2-panel${f.card.sheet ? ' sheet' : ''}`} aria-label={selected.label} style={f.card.sheet
-            // A bottom sheet grows up from the row above the menu; a side panel hangs from below the minimap.
-            ? { left: f.card.x, bottom: size.h - (f.card.y + f.card.h), width: f.card.w, maxHeight: f.card.h }
-            : { left: f.card.x, top: f.card.y, width: f.card.w, maxHeight: f.card.h }}>
-          {f.card.sheet && <div className="g2-grip" aria-hidden />}
-          <button className="g2-close" onClick={() => setSelected(null)} aria-label="Close">×</button>
-          <div className="g2-kicker">Room<span className="g2-chip">greybox</span></div>
-          <h2>{selected.label}</h2>
-          <p>{selected.question}</p>
-          <dl><div><dt>Readings</dt><dd className="g2-unknown">not wired</dd></div></dl>
+      {/* The panels: tables and charts beside the middle, and a picked room's card first. A rail on wide screens, a drawer on upright ones. */}
+      {(f.rail.mode === 'side' || drawerOpen) && (
+        <aside className={`g2-rail ${f.rail.mode}`} aria-label="Tables and charts"
+          style={f.rail.mode === 'drawer'
+            ? { left: f.rail.x, bottom: size.h - (f.rail.y + f.rail.h), width: f.rail.w, height: f.rail.h }
+            : at(f.rail)}>
+          {f.rail.mode === 'drawer' && <button className="g2-grip-btn" onClick={() => { setDrawerOpen(false); setSelected(null) }} aria-label="Close tables and charts"><span /></button>}
+          {[...(selected ? [pickedPanel(selected)] : []), ...panelsOf(place, openChild)].map(p => (
+            <section key={p.id} className={`g2-panelbox${p.id.startsWith('picked-') ? ' picked' : ''}`} aria-label={p.title}>
+              <header>
+                <h3>{p.title}</h3>
+                {p.sample && <span className="g2-chip">sample</span>}
+                {p.id.startsWith('picked-') && <button className="g2-close" onClick={() => setSelected(null)} aria-label="Close">×</button>}
+              </header>
+              {p.body}
+            </section>
+          ))}
         </aside>
+      )}
+      {f.peek && !drawerOpen && (
+        <button className="g2-corner g2-peek" style={at(f.peek)} onClick={() => setDrawerOpen(true)}>
+          Tables and charts <span aria-hidden>▴</span>
+        </button>
       )}
     </div>
   )

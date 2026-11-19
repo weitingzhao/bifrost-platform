@@ -2164,6 +2164,7 @@
         "console/src/domains/owner/city/gen2/cityGen2.css",
         "console/src/domains/owner/city/gen2/grid.ts",
         "console/src/domains/owner/city/gen2/light.ts",
+        "console/src/domains/owner/city/gen2/panels.tsx",
         "console/src/domains/owner/city/gen2/placeScene.ts",
         "console/src/domains/owner/city/gen2/places.ts",
         "console/src/domains/owner/city/gen2/viewport.ts"

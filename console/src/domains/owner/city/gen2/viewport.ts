@@ -17,6 +17,13 @@
  *
  * Touch targets are at least 44 px on phone and tablet. Safe areas (notch,
  * home bar) are kept clear.
+ *
+ * The panels (the Owner, 2026-11-19: the 2.5D middle shows where things
+ * stand; tables and charts beside it say how much, and they are the
+ * dashboard's own sections): a rail on the right where the screen is wide
+ * (desktop, tablet held flat), a drawer pulled up from the bottom elsewhere
+ * (phone, tablet upright), shown closed as a handle. A picked thing's card
+ * opens in the same place.
  */
 
 export type Device = 'phone' | 'tablet' | 'desktop'
@@ -37,9 +44,11 @@ export type Frame = {
   /** Alerts: a corner with words, or a round badge. */
   alerts: Rect & { badge: boolean }
   menu: Rect
-  /** The card of a picked thing: a side panel, or a bottom sheet on a phone. */
-  card: Rect & { sheet: boolean }
-  /** Where the map is fitted: clear of the summary and the bottom rows. */
+  /** The panels (tables, charts) and a picked thing's card: a rail on the right, or a drawer from the bottom (its open size). */
+  rail: Rect & { mode: 'side' | 'drawer' }
+  /** The drawer's handle while it is closed; null for a side rail. */
+  peek: Rect | null
+  /** Where the map is fitted: clear of the summary, the rail or the drawer's handle, and the bottom rows. */
   world: Rect
 }
 
@@ -95,16 +104,20 @@ export function frameOf(width: number, height: number, safe: Insets = NO_INSETS)
   }
 
   const bottomRow = trail ? trail.y : menu.y
-  const sheet = phone
-  const card = sheet
-    ? (() => { const h = Math.min(260, Math.round((bottomRow - gap - T) * (flat ? 0.7 : 0.45))); return { x: L, y: bottomRow - gap - h, w: R - L, h, sheet } })()
-    : (() => { const y = mini.y + mini.h + 12; const w = device === 'desktop' ? 300 : 280; return { x: R - w, y, w, h: Math.max(120, Math.min(300, bottomRow - gap - y)), sheet } })()
+  const side = device === 'desktop' || (device === 'tablet' && landscape)
+  const peekH = 44
+  const rail = side
+    ? (() => { const y = mini.y + mini.h + 12; const w = device === 'desktop' ? 360 : 300; return { x: R - w, y, w, h: Math.max(160, bottomRow - gap - y), mode: 'side' as const } })()
+    : (() => { const h = Math.round((bottomRow - gap - T) * (flat ? 0.75 : phone ? 0.55 : 0.45)); return { x: L, y: bottomRow - gap - h, w: R - L, h, mode: 'drawer' as const } })()
+  const peek = side ? null : { x: L, y: bottomRow - gap - peekH, w: R - L, h: peekH }
 
   // The map: on a phone and a tablet in portrait it starts below the summary; elsewhere the corners float over its edges.
+  // It ends left of a side rail, or above the drawer's handle.
   const top = phone || (device === 'tablet' && !landscape) ? summary.y + summary.h + gap : T
-  const world = { x: safe.left, y: top, w: width - safe.left - safe.right, h: Math.max(80, bottomRow - gap - top) }
+  const bottom = peek ? peek.y - gap : bottomRow - gap
+  const world = { x: safe.left, y: top, w: (side ? rail.x - gap : width - safe.right) - safe.left, h: Math.max(80, bottom - top) }
 
-  return { device, landscape, tap, summary, mini, miniTitle, trail, alerts, menu, card, world }
+  return { device, landscape, tap, summary, mini, miniTitle, trail, alerts, menu, rail, peek, world }
 }
 
 export const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
