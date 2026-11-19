@@ -10,8 +10,8 @@ const SIZES: [string, number, number][] = [
   ['laptop', 1280, 800], ['desktop', 1440, 900], ['wide', 1920, 1080], ['narrow window', 700, 900],
 ]
 
-const corners = (f: Frame) => ({ summary: f.summary, mini: f.mini, alerts: f.alerts, menu: f.menu, ...(f.trail ? { trail: f.trail } : {}),
-  ...(f.rail.mode === 'side' ? { rail: f.rail } : {}), ...(f.peek ? { peek: f.peek } : {}) })
+const corners = (f: Frame) => ({ summary: f.summary, mini: f.mini, alerts: f.alerts, menu: f.menu, search: f.search, ...(f.trail ? { trail: f.trail } : {}),
+  ...(f.docks ? { dockLeft: f.docks.left, dockRight: f.docks.right } : {}), ...(f.peek ? { peek: f.peek } : {}) })
 
 describe('frameOf', () => {
   for (const [name, w, h] of SIZES) {
@@ -26,8 +26,8 @@ describe('frameOf', () => {
       expect(overlaps(f.rail, f.menu)).toBe(false)
       if (f.trail) expect(overlaps(f.rail, f.trail)).toBe(false)
       // The map never sits under the side rail or the drawer's handle.
-      if (f.rail.mode === 'side') expect(f.world.x + f.world.w).toBeLessThanOrEqual(f.rail.x)
       if (f.peek) expect(f.world.y + f.world.h).toBeLessThanOrEqual(f.peek.y)
+      expect(inside(f.focus, w, h)).toBe(true)
       expect(f.world.h).toBeGreaterThanOrEqual(Math.min(200, h * 0.35))
       expect(f.menu.h).toBeGreaterThanOrEqual(f.device === 'desktop' ? 28 : 40)
     })
@@ -41,9 +41,11 @@ describe('frameOf', () => {
   })
 
   // 2026-11-19, the Owner: tables and charts beside the 2.5D middle; a rail where the screen is wide, a drawer elsewhere.
-  it('puts the panels in a rail on wide screens and a drawer on upright ones', () => {
-    expect(frameOf(1440, 900).rail.mode).toBe('side')
-    expect(frameOf(1180, 820).rail.mode).toBe('side')
+  it('docks the panels in the bottom corners on wide screens and a drawer on upright ones', () => {
+    expect(frameOf(1440, 900).docks).not.toBeNull()
+    expect(frameOf(1180, 820).docks).not.toBeNull()
+    expect(frameOf(1440, 900).search.mode).toBe('bar')
+    expect(frameOf(393, 852).search.mode).toBe('icon')
     expect(frameOf(820, 1180).rail.mode).toBe('drawer')
     expect(frameOf(393, 852).rail.mode).toBe('drawer')
     expect(frameOf(852, 393).rail.mode).toBe('drawer')

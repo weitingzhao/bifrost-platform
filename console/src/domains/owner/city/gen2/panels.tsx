@@ -16,6 +16,8 @@ export type Panel = {
   title: string
   /** True while the panel shows sample numbers: said on the panel, never passed off as a reading. */
   sample?: boolean
+  /** Which bottom corner it docks in on a wide screen: charts on the left, tables and cards on the right. */
+  dock: 'left' | 'right'
   body: ReactNode
 }
 
@@ -60,15 +62,15 @@ function SampleChart() {
 /** `open` goes into a district or building and picks a room, as tapping its block does. */
 export function panelsOf(place: Place, open: (child: Place) => void): Panel[] {
   const panels: Panel[] = []
-  if (place.children.length > 0) panels.push({ id: 'inside', title: `Inside ${place.label}`, body: <InsideTable place={place} open={open} /> })
-  panels.push({ id: 'chart', title: 'Chart slot', sample: true, body: <SampleChart /> })
+  if (place.children.length > 0) panels.push({ id: 'inside', title: `Inside ${place.label}`, dock: 'right', body: <InsideTable place={place} open={open} /> })
+  panels.push({ id: 'chart', title: 'Chart slot', sample: true, dock: 'left', body: <SampleChart /> })
   return panels
 }
 
 /** The card of a picked room, as the rail's first panel. */
 export function pickedPanel(item: Place): Panel {
   return {
-    id: `picked-${item.id}`, title: item.label,
+    id: `picked-${item.id}`, title: item.label, dock: 'right',
     body: <div className="g2-picked"><p>{item.question}</p><dl><div><dt>Readings</dt><dd className="g2-unknown">not wired</dd></div></dl></div>,
   }
 }

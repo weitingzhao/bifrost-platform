@@ -40,12 +40,19 @@ const hueFor = (hue: string, light: Light) => light === 'night' ? shade(hue, -0.
 const litBy = (light: Light, seed: number) => (r: number, c: number) =>
   light === 'day' ? false : ((hash(`${seed}:${r}:${c}`) % 100) < (light === 'night' ? 72 : 35))
 
+/**
+ * How far a thing stands back from its plot's edge (the Owner, 2026-11-19: streets and green belts
+ * between neighbours). A 4×4 or 8×8 clears the street's half-width (0.35) and a belt beyond it; a
+ * 2×2 less; a 1×1 is a marker.
+ */
+export const setback = (n: number) => n >= 4 ? 0.72 : n === 2 ? 0.5 : 0.25
+
 /** A district: a tall hall on a plinth, a hue band under the parapet, rows of windows, a door, rooftop units. */
 export function districtHall(n: number, hue: string, light: Light, seed = 0): Sprite {
   const W = WALLS[light]
   const h = 30 + n * 9
   const g = new Draw(n, n, h + 30)
-  const i = 0.32, x0 = i, y0 = i, x1 = n - i, y1 = n - i, w = x1 - x0, d = y1 - y0
+  const i = setback(n), x0 = i, y0 = i, x1 = n - i, y1 = n - i, w = x1 - x0, d = y1 - y0
   g.shadow(x0, y0, w, d, 0.5)
   g.box(x0 - 0.12, y0 - 0.12, w + 0.24, d + 0.24, 4, W.plinth)
   g.box(x0, y0, w, d, h, faces(W.top, wash(hue, light, 'left'), wash(hue, light, 'right')), 4)
@@ -68,7 +75,7 @@ export function workshop(n: number, hue: string, light: Light, seed = 0): Sprite
   const W = WALLS[light]
   const h = 22 + n * 5
   const g = new Draw(n, n, h + 30)
-  const i = 0.3, x0 = i, y0 = i, x1 = n - i, y1 = n - i, w = x1 - x0, d = y1 - y0
+  const i = setback(n), x0 = i, y0 = i, x1 = n - i, y1 = n - i, w = x1 - x0, d = y1 - y0
   g.shadow(x0, y0, w, d, 0.4)
   g.box(x0 - 0.1, y0 - 0.1, w + 0.2, d + 0.2, 3, W.plinth)
   g.box(x0, y0, w, d, h, faces(W.top, wash(hue, light, 'left'), wash(hue, light, 'right')), 3)
@@ -95,7 +102,7 @@ export function workshop(n: number, hue: string, light: Light, seed = 0): Sprite
 export function roomFloor(n: number, hue: string, light: Light): Sprite {
   const W = WALLS[light]
   const g = new Draw(n, n, 26)
-  const i = 0.18, x0 = i, y0 = i, x1 = n - i, y1 = n - i, w = x1 - x0, d = y1 - y0
+  const i = Math.max(0.18, setback(n) - 0.3), x0 = i, y0 = i, x1 = n - i, y1 = n - i, w = x1 - x0, d = y1 - y0
   g.box(x0, y0, w, d, 4, faces(W.floor, W.left, W.right))
   const t = 0.1, hw = 14
   g.box(x0, y0, w, t, hw, faces(W.top, W.left, W.right), 4)

@@ -6,6 +6,7 @@ import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
 import { consoleContent, type CityContent } from './content'
 import { PlaceScene, type Shown } from './placeScene'
 import { here, resolve, trail, type Path, type Place } from './places'
+import type { Panel } from './panels'
 import { frameOf, NO_INSETS, type Insets, type Rect } from './viewport'
 import './cityGen2.css'
 
@@ -73,6 +74,11 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   const [arranging, setArranging] = useState(false)
   // The drawer (phone, tablet upright): closed to its handle until opened or a room is picked.
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // A card opened large in the middle (by its panel id), and the search box.
+  const [focused, setFocused] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [searching, setSearching] = useState(false)
+  const searchBox = useRef<HTMLInputElement>(null)
   useEffect(() => { if (selected) setDrawerOpen(true) }, [selected])
   // Day, dusk or night: by the viewer's clock unless pinned; the clock is read every minute.
   const [lightChoice, setLightChoice] = useState<LightChoice>(readLight)
@@ -153,6 +159,9 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
     setOpen(false)
     setArranging(false)
     setDrawerOpen(false)
+    setFocused(null)
+    setSearching(false)
+    setQuery('')
     const fresh = { here: store.get(keyOf(path)), parent: store.get(keyOf(path.slice(0, -1))) }
     setSaved(fresh)
     scene.current?.show(shown({ from, selected: null, arranging: false, here: fresh.here, parentA: fresh.parent }))
@@ -180,19 +189,77 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   // Esc: close the card, else go up one level.
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
+      const typing = e.target instanceof HTMLInputElement
+      if (e.key === '/' && !typing) { e.preventDefault(); setSearching(true); setTimeout(() => searchBox.current?.focus(), 0); return }
       if (e.key !== 'Escape') return
+      if (searching) { setSearching(false); setQuery(''); searchBox.current?.blur(); return }
+      if (focused) { setFocused(null); return }
       if (arranging) setArranging(false)
       else if (selected) setSelected(null)
       else if (pathRef.current.length > 0) goRef.current(pathRef.current.slice(0, -1))
     }
     window.addEventListener('keydown', on)
     return () => window.removeEventListener('keydown', on)
-  }, [selected, arranging])
+  }, [selected, arranging, focused, searching])
 
   const district = path[0] ?? null
   // A row in a table does what tapping its block does: a room opens its card, anything else is entered.
   const openChild = (c: Place) => c.kind === 'room' ? setSelected(c) : go([...path, c.id])
   const dash = dashboardHref(place)
+  const panels: Panel[] = [...(selected ? [content.picked(selected)] : []), ...content.panels(place, openChild)]
+  const focusedPanel = panels.find(p => p.id === focused) ?? null
+  // Search: every place by its name or its question, with where it is.
+  const index = useMemo(() => {
+    const out: { path: Path; place: Place; where: string }[] = []
+    const walk = (p: Place, at: Path, names: string[]) => p.children.forEach(c => {
+      out.push({ path: [...at, c.id], place: c, where: names.join(' › ') })
+      walk(c, [...at, c.id], [...names, c.label])
+    })
+    walk(tree, [], [tree.label])
+    return out
+  }, [tree])
+  const q = query.trim().toLowerCase()
+  const hits = q ? index.filter(h => h.place.label.toLowerCase().includes(q) || h.place.question.toLowerCase().includes(q)).slice(0, 8) : []
+  const goHit = (h: { path: Path; place: Place }) => {
+    setSearching(false); setQuery('')
+    // A room opens in its building with its card up; anything else is entered.
+    if (h.place.kind === 'room') { go(h.path.slice(0, -1)); setTimeout(() => setSelected(h.place), 0) } else go(h.path)
+  }
+  const tools = arranging ? (
+    <>
+      <button className="g2-btn primary" onClick={() => setArranging(false)}>Done</button>
+      <button className="g2-btn" onClick={resetArrangement} disabled={Object.keys(saved.here).length === 0}>Reset</button>
+    </>
+  ) : (
+    <>
+      {place.children.length > 0 && <button className="g2-btn" onClick={() => { setSelected(null); setArranging(true) }}>Arrange</button>}
+      <button className="g2-btn" onClick={stepLight} aria-label={`Light: ${LIGHT_WORD[lightChoice]}`}>
+        {LIGHT_ICON[light]} {lightChoice === 'auto' ? `Auto · ${LIGHT_WORD[light]}` : LIGHT_WORD[lightChoice]}
+      </button>
+      {dash && <a className="g2-btn g2-swap" href={dash}>Dashboard ↗</a>}
+    </>
+  )
+  const searchResults = (searching || q) && (
+    <ul className="g2-hits" role="listbox" aria-label="Places found">
+      {q && hits.length === 0 && <li className="g2-unknown">No place called “{query}”</li>}
+      {hits.map(h => (
+        <li key={h.path.join('/')}><button onMouseDown={e => e.preventDefault()} onClick={() => goHit(h)}>
+          <b>{h.place.label}</b><span>{KIND[h.place.kind]} · {h.where}</span></button></li>
+      ))}
+    </ul>
+  )
+  const card = (p: Panel, docked: boolean) => (
+    <section key={p.id} className={`g2-panelbox${p.id.startsWith('picked-') ? ' picked' : ''}${docked ? ' docked' : ''}`} aria-label={p.title}>
+      <header>
+        <h3>{p.title}</h3>
+        {p.sample && <span className="g2-chip">sample</span>}
+        <span className="g2-grow" />
+        <button className="g2-icon" onClick={() => setFocused(p.id)} aria-label={`Open ${p.title} large`}>⤢</button>
+        {p.id.startsWith('picked-') && <button className="g2-icon" onClick={() => setSelected(null)} aria-label="Close">×</button>}
+      </header>
+      <div className="g2-panelbody">{p.body}</div>
+    </section>
+  )
   const trailLinks = steps.map((s, i) => (
     <span key={s.id}>
       {i > 0 && <span className="g2-sep">›</span>}
@@ -218,25 +285,9 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
           <div><dt>Inside</dt><dd>{place.children.length}</dd></div>
           <div><dt>Readings</dt><dd className="g2-unknown">not wired</dd></div>
         </dl>
-        {(!f.summary.compact || open || arranging) && (
-          <div className="g2-actions" onClick={e => e.stopPropagation()}>
-            {arranging ? (
-              <>
-                <button className="g2-btn primary" onClick={() => setArranging(false)}>Done</button>
-                <button className="g2-btn" onClick={resetArrangement} disabled={Object.keys(saved.here).length === 0}>Reset</button>
-              </>
-            ) : (
-              <>
-                {place.children.length > 0 && <button className="g2-btn" onClick={() => { setSelected(null); setArranging(true) }}>Arrange</button>}
-                <button className="g2-btn" onClick={stepLight} aria-label={`Light: ${LIGHT_WORD[lightChoice]}`}>
-                  {LIGHT_ICON[light]} {lightChoice === 'auto' ? `Auto · ${LIGHT_WORD[light]}` : LIGHT_WORD[lightChoice]}
-                </button>
-                {dash && <a className="g2-swap" href={dash}>Dashboard view ↗</a>}
-              </>
-            )}
-          </div>
-        )}
-        {arranging && <p className="g2-hint">Drag a block to move it. Where things stand is yours; how big they are is not.</p>}
+        {/* On a phone the tools live here (the top bar has no room); elsewhere they sit beside the search. */}
+        {f.search.mode === 'icon' && (!f.summary.compact || open || arranging) && <div className="g2-actions" onClick={e => e.stopPropagation()}>{tools}</div>}
+        {arranging && f.search.mode === 'icon' && <p className="g2-hint">Drag a block to move it. Where things stand is yours; how big they are is not.</p>}
       </section>
 
       {/* The minimap: where you came from, shrunk. Tapping it goes back up. */}
@@ -259,24 +310,63 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
         ))}
       </nav>
 
-      {/* The panels: tables and charts beside the middle, and a picked room's card first. A rail on wide screens, a drawer on upright ones. */}
-      {(f.rail.mode === 'side' || drawerOpen) && (
-        <aside className={`g2-rail ${f.rail.mode}`} aria-label="Tables and charts"
-          style={f.rail.mode === 'drawer'
-            ? { left: f.rail.x, bottom: size.h - (f.rail.y + f.rail.h), width: f.rail.w, height: f.rail.h }
-            : at(f.rail)}>
-          {f.rail.mode === 'drawer' && <button className="g2-grip-btn" onClick={() => { setDrawerOpen(false); setSelected(null) }} aria-label="Close tables and charts"><span /></button>}
-          {[...(selected ? [content.picked(selected)] : []), ...content.panels(place, openChild)].map(p => (
-            <section key={p.id} className={`g2-panelbox${p.id.startsWith('picked-') ? ' picked' : ''}`} aria-label={p.title}>
-              <header>
-                <h3>{p.title}</h3>
-                {p.sample && <span className="g2-chip">sample</span>}
-                {p.id.startsWith('picked-') && <button className="g2-close" onClick={() => setSelected(null)} aria-label="Close">×</button>}
-              </header>
-              {p.body}
-            </section>
-          ))}
+      {/* Search and tools: a bar at the top centre; on a phone a round button that opens the box over the top. */}
+      {f.search.mode === 'bar' ? (
+        <div className="g2-corner g2-search" style={at(f.search)}>
+          {arranging
+            ? <span className="g2-hint-inline">Drag a block to move it. Where things stand is yours; how big they are is not.</span>
+            : <input ref={searchBox} value={query} onChange={e => setQuery(e.target.value)} onFocus={() => setSearching(true)} onBlur={() => setSearching(false)}
+                onKeyDown={e => { if (e.key === 'Enter' && hits[0]) goHit(hits[0]) }} placeholder="Search places   /" aria-label="Search places" />}
+          <div className="g2-tools">{tools}</div>
+          {searchResults}
+        </div>
+      ) : (
+        <>
+          <button className="g2-corner g2-searchicon" style={at(f.search)} onClick={() => { setSearching(true); setTimeout(() => searchBox.current?.focus(), 0) }} aria-label="Search places">⌕</button>
+          {searching && (
+            <div className="g2-corner g2-search phone" style={{ left: f.summary.x, top: f.summary.y, width: f.mini.x + f.mini.w - f.summary.x, height: 48 }}>
+              <input ref={searchBox} value={query} onChange={e => setQuery(e.target.value)} onBlur={() => setTimeout(() => setSearching(false), 150)}
+                onKeyDown={e => { if (e.key === 'Enter' && hits[0]) goHit(hits[0]) }} placeholder="Search places" aria-label="Search places" />
+              <button className="g2-icon" onClick={() => { setSearching(false); setQuery('') }} aria-label="Close search">×</button>
+              {searchResults}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* The panels: small cards in the two bottom corners the diamond leaves empty (charts left, tables and a picked room right). */}
+      {f.docks && (['left', 'right'] as const).map(side => {
+        const mine = panels.filter(p => p.dock === side)
+        return mine.length > 0 && (
+          <aside key={side} className={`g2-dock ${side}`} aria-label={side === 'left' ? 'Charts' : 'Tables'} style={at(f.docks![side])}>
+            {mine.map(p => card(p, true))}
+          </aside>
+        )
+      })}
+
+      {/* The drawer (phone, tablet upright): the same cards, pulled up from the bottom. */}
+      {!f.docks && drawerOpen && (
+        <aside className="g2-rail drawer" aria-label="Tables and charts"
+          style={{ left: f.rail.x, bottom: size.h - (f.rail.y + f.rail.h), width: f.rail.w, height: f.rail.h }}>
+          <button className="g2-grip-btn" onClick={() => { setDrawerOpen(false); setSelected(null) }} aria-label="Close tables and charts"><span /></button>
+          {panels.map(p => card(p, false))}
         </aside>
+      )}
+
+      {/* A card opened large: in the middle, over the dimmed stage; the backdrop or Esc closes it. */}
+      {focusedPanel && (
+        <>
+          <div className="g2-backdrop" onClick={() => setFocused(null)} />
+          <section className="g2-focus" aria-label={focusedPanel.title} style={at(f.focus)}>
+            <header>
+              <h3>{focusedPanel.title}</h3>
+              {focusedPanel.sample && <span className="g2-chip">sample</span>}
+              <span className="g2-grow" />
+              <button className="g2-icon" onClick={() => setFocused(null)} aria-label="Close">×</button>
+            </header>
+            <div className="g2-focusbody">{focusedPanel.body}</div>
+          </section>
+        </>
       )}
       {f.peek && !drawerOpen && (
         <button className="g2-corner g2-peek" style={at(f.peek)} onClick={() => setDrawerOpen(true)}>

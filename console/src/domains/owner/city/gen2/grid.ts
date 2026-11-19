@@ -111,3 +111,30 @@ export function move(placed: readonly Placed[], id: string, to: Cell): Placed[] 
 }
 
 export const toArrangement = (placed: readonly Placed[]): Arrangement => Object.fromEntries(placed.map(p => [p.id, { x: p.x, y: p.y }]))
+
+/**
+ * The streets (the Owner, 2026-11-19: a town has roads between its plots, and green belts; things
+ * are not packed like a warehouse). Streets run along every 4-line and round the ground's edge; the
+ * 8-line is the avenue. A street never runs through a thing: where an 8×8 covers a 4-line, that
+ * stretch is left out. Things stand back from the streets (sprites.ts sets how far, by size).
+ *
+ * A segment is one stretch of a line between two 4-lattice points: on the line x = at (from y = from
+ * to y = from + 4) when `along` is 'y', or on y = at when `along` is 'x'.
+ */
+export type Street = { along: 'x' | 'y'; at: number; from: number; avenue: boolean; edge: boolean }
+
+export const STREET = 4
+
+export function streets(placed: readonly Placed[]): Street[] {
+  const out: Street[] = []
+  const covered = (along: 'x' | 'y', at: number, from: number) => placed.some(p => {
+    const [a0, a1, b0, b1] = along === 'y' ? [p.x, p.x + p.size, p.y, p.y + p.size] : [p.y, p.y + p.size, p.x, p.x + p.size]
+    return a0 < at && at < a1 && b0 <= from && from + STREET <= b1
+  })
+  for (const along of ['x', 'y'] as const)
+    for (let at = 0; at <= GRID; at += STREET)
+      for (let from = 0; from < GRID; from += STREET)
+        if (!covered(along, at, from)) out.push({ along, at, from, avenue: at === GRID / 2, edge: at === 0 || at === GRID })
+  return out
+}
+

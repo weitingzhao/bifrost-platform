@@ -1,9 +1,9 @@
 import * as Phaser from 'phaser'
-import { canStand, GRID, snap, type Cell, type Placed } from './grid'
+import { canStand, GRID, snap, STREET, streets, type Cell, type Placed } from './grid'
 import type { Place } from './places'
 import { PALETTE, type Light, type Palette } from './light'
 import { hash } from './kit'
-import { HUES, spriteFor, spriteKey, spriteUrl } from './sprites'
+import { HUES, setback, spriteFor, spriteKey, spriteUrl } from './sprites'
 import { frameOf, type Frame } from './viewport'
 
 /**
@@ -469,12 +469,46 @@ export class PlaceScene extends Phaser.Scene {
     for (const t of [0.4, 0.72]) {
       g.lineBetween(iso(0, GRID).x, iso(0, GRID).y + SLAB * t, iso(GRID, GRID).x, iso(GRID, GRID).y + SLAB * t)
     }
-    g.fillStyle(this.tone.ground).fillPoints(ground, true)
-    // The lines, in four weights matching the four sizes (the Owner, 2026-11-19): the 8-line splits the
-    // ground in quarters, the 4-lines and 2-lines split those again, the 1-lines show only while arranging.
+    // Outdoors (the town, a district) the ground is green belts crossed by streets; indoors (a building)
+    // it is a floor crossed by corridors. Both run where grid.ts says, never through a thing.
+    const indoors = place.kind === 'building'
+    g.fillStyle(indoors ? this.tone.floor : this.tone.grass).fillPoints(ground, true)
+    const strip = (st: { along: 'x' | 'y'; at: number; from: number }, half: number) => {
+      const a0 = Math.max(0, st.at - half), a1 = Math.min(GRID, st.at + half)
+      const b0 = Math.max(0, st.from - half), b1 = Math.min(GRID, st.from + STREET + half)
+      return st.along === 'y'
+        ? [iso(a0, b0), iso(a1, b0), iso(a1, b1), iso(a0, b1)]
+        : [iso(b0, a0), iso(b1, a0), iso(b1, a1), iso(b0, a1)]
+    }
+    const sts = streets(placed)
+    const half = (st: { avenue: boolean; edge: boolean }) => st.avenue ? 0.5 : st.edge ? 0.3 : 0.35
+    if (indoors) {
+      g.fillStyle(this.tone.corridor)
+      for (const st of sts) g.fillPoints(strip(st, half(st) * 0.8), true)
+    } else {
+      g.fillStyle(this.tone.kerb)
+      for (const st of sts) g.fillPoints(strip(st, half(st) + 0.1), true)
+      g.fillStyle(this.tone.asphalt)
+      for (const st of sts) g.fillPoints(strip(st, half(st)), true)
+      // Lane paint: dashes down the middle of every inner street, a double line down the avenue.
+      for (const st of sts.filter(x => !x.edge)) {
+        for (let k = 0; k < STREET; k += 1) {
+          const p0 = st.from + k + 0.25, p1 = st.from + k + 0.65
+          const offs = st.avenue ? [-0.06, 0.06] : [0]
+          for (const o of offs) {
+            const a = st.at + o
+            g.lineStyle(st.avenue ? 1.2 : 1.4, this.tone.paint, 0.9)
+            if (st.along === 'y') g.lineBetween(iso(a, p0).x, iso(a, p0).y, iso(a, p1).x, iso(a, p1).y)
+            else g.lineBetween(iso(p0, a).x, iso(p0, a).y, iso(p1, a).x, iso(p1, a).y)
+          }
+        }
+      }
+    }
+    // While arranging, the lines in four weights matching the four sizes: the 8-line quarters the
+    // ground, then the 4-, 2- and 1-lines split it again; outside arranging the streets show the plots.
     for (let i = 1; i < GRID; i++) {
+      if (!o.arranging) break
       const level = i % 8 === 0 ? 8 : i % 4 === 0 ? 4 : i % 2 === 0 ? 2 : 1
-      if (level === 1 && !o.arranging) continue
       const w = { 8: 2.2, 4: 1.5, 2: 1, 1: 0.8 }[level], a = { 8: 1, 4: 0.85, 2: 0.6, 1: 0.45 }[level]
       g.lineStyle(w, level >= 4 ? this.tone.line4 : this.tone.line, a)
       g.lineBetween(iso(i, 0).x, iso(i, 0).y, iso(i, GRID).x, iso(i, GRID).y)
@@ -489,7 +523,7 @@ export class PlaceScene extends Phaser.Scene {
     for (const p of order) for (const part of this.block(byId.get(p.id)!, p, look.get(p.id)!, o)) c.add(part)
     // Names on top of every block, so a nearer block never hides a farther one's name. The minimap has none: too small to read.
     if (o.interactive) for (const p of order) {
-      const foot = iso(p.x + p.size - INSET, p.y + p.size - INSET)
+      const foot = iso(p.x + p.size - setback(p.size), p.y + p.size - setback(p.size))
       c.add(this.plate(foot.x, foot.y + 4, byId.get(p.id)!.label, HUES[Math.max(0, place.children.findIndex(x => x.id === p.id)) % HUES.length]))
     }
     if (order.length === 0 && o.interactive) c.add(this.label(iso(GRID / 2, GRID / 2).x, iso(GRID / 2, GRID / 2).y, 'Nothing inside yet', { color: '#8a8478', fontSize: '14px' }).setOrigin(0.5))
@@ -522,7 +556,8 @@ export class PlaceScene extends Phaser.Scene {
     if (img) parts.push(img)
     if (o.interactive) {
       const g = this.add.graphics()
-      const x0 = at.x + 0.2, y0 = at.y + 0.2, x1 = at.x + at.size - 0.2, y1 = at.y + at.size - 0.2
+      const sb = Math.max(0.2, setback(at.size) - 0.15)
+      const x0 = at.x + sb, y0 = at.y + sb, x1 = at.x + at.size - sb, y1 = at.y + at.size - sb
       const hit = new Phaser.Geom.Polygon([iso(x0, y0, h), iso(x1, y0, h), iso(x1, y0, 0), iso(x1, y1, 0), iso(x0, y1, 0), iso(x0, y1, h)])
       g.setInteractive(hit, Phaser.Geom.Polygon.Contains)
       g.input!.cursor = o.arranging ? 'grab' : 'pointer'

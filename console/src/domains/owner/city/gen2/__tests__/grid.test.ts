@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { arrange, canStand, fitsBudget, GRID, move, pack, SIZES, snap, type Item, type Placed } from '../grid'
+import { arrange, canStand, fitsBudget, GRID, move, pack, SIZES, snap, streets, type Item, type Placed } from '../grid'
 
 // 2026-11-19, the Owner: every place is a 16×16 ground; things on it are 1, 2, 4 or 8 cells square;
 // what does not fit goes a level down. He may drag positions; sizes are the design's.
@@ -100,5 +100,24 @@ describe('the browser keeps the Owner positions per place', () => {
     expect(s.get('system')).toEqual({})
     store.setItem('k', '{not json')
     expect(s.get('system')).toEqual({})
+  })
+})
+
+// 2026-11-19, the Owner: roads between plots and green belts, set by the frame, not left to each place.
+describe('streets', () => {
+  it('run along every 4-line and round the edge when nothing big stands', () => {
+    const s = streets([])
+    expect(s).toHaveLength(2 * 5 * 4)
+    expect(s.filter(x => x.avenue)).toHaveLength(8)
+    expect(s.filter(x => x.edge)).toHaveLength(16)
+  })
+  it('never run through an 8×8', () => {
+    const big: Placed = { id: 'b', size: 8, x: 0, y: 0 }
+    const s = streets([big])
+    const through = s.filter(x => x.at === 4 && x.from < 8)
+    expect(through).toHaveLength(0)
+    // The avenue and the edge round it stay.
+    expect(s.some(x => x.along === 'y' && x.at === 8 && x.from === 0)).toBe(true)
+    expect(s.some(x => x.along === 'y' && x.at === 0 && x.from === 0)).toBe(true)
   })
 })

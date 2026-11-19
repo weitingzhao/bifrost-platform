@@ -20,10 +20,11 @@
  *
  * The panels (the Owner, 2026-11-19: the 2.5D middle shows where things
  * stand; tables and charts beside it say how much, and they are the
- * dashboard's own sections): a rail on the right where the screen is wide
- * (desktop, tablet held flat), a drawer pulled up from the bottom elsewhere
- * (phone, tablet upright), shown closed as a handle. A picked thing's card
- * opens in the same place.
+ * dashboard's own sections; the empty corners of the diamond hold them, as
+ * map and city games do): small cards docked in the two bottom corners
+ * where the screen is wide (desktop, tablet held flat), a drawer pulled up
+ * from the bottom elsewhere (phone, tablet upright). Any card opens large in
+ * the middle. Search and the tools sit in a bar at the top centre.
  */
 
 export type Device = 'phone' | 'tablet' | 'desktop'
@@ -44,10 +45,23 @@ export type Frame = {
   /** Alerts: a corner with words, or a round badge. */
   alerts: Rect & { badge: boolean }
   menu: Rect
-  /** The panels (tables, charts) and a picked thing's card: a rail on the right, or a drawer from the bottom (its open size). */
-  rail: Rect & { mode: 'side' | 'drawer' }
-  /** The drawer's handle while it is closed; null for a side rail. */
+  /**
+   * Search and the tools beside it: a bar at the top centre where there is room (the convention of
+   * map and city games), a round button by the summary on a phone.
+   */
+  search: Rect & { mode: 'bar' | 'icon' }
+  /**
+   * The panels (tables, charts) as small cards in the two bottom corners, which the diamond of the
+   * ground leaves empty: charts on the left, tables and a picked room's card on the right. Null where
+   * the screen is upright and narrow: there they live in the drawer.
+   */
+  docks: { left: Rect; right: Rect } | null
+  /** The drawer (phone, tablet upright): its open size; unused where there are docks. */
+  rail: Rect & { mode: 'dock' | 'drawer' }
+  /** The drawer's handle while it is closed; null where there are docks. */
   peek: Rect | null
+  /** Where a card opens large: the middle of the screen, over the dimmed stage. */
+  focus: Rect
   /** Where the map is fitted: clear of the summary, the rail or the drawer's handle, and the bottom rows. */
   world: Rect
 }
@@ -94,8 +108,14 @@ export function frameOf(width: number, height: number, safe: Insets = NO_INSETS)
 
   const trail = flat ? null : { x: L, y: menu.y - gap - (alertsBadge ? tap : row), w: Math.min(alerts.x - gap - L, 520), h: alertsBadge ? tap : row }
 
+  // Search: a bar at the top centre between the summary and the minimap; on a phone a round button.
+  const searchIcon = phone
+  const iconSearch = flat ? { x: alerts.x - gap - tap, y: T, w: tap, h: tap } : { x: mini.x - gap - tap, y: T, w: tap, h: tap }
+
   const compact = phone
-  const summaryRight = (flat ? alerts.x : mini.x) - gap
+  // Room for the search: as a button beside the minimap when the bar would not fit (decided below, from the same numbers).
+  const barFits = !searchIcon && Math.min(480, (mini.x - gap * 2) - (L + Math.min(device === 'desktop' ? 320 : 300, mini.x - gap - L) + gap * 2)) >= 440
+  const summaryRight = (searchIcon || !barFits ? iconSearch.x : flat ? alerts.x : mini.x) - gap
   const summary = {
     x: L, y: T,
     w: Math.max(120, Math.min(device === 'desktop' ? 320 : 300, summaryRight - L)),
@@ -103,21 +123,41 @@ export function frameOf(width: number, height: number, safe: Insets = NO_INSETS)
     compact,
   }
 
+  const barL = summary.x + summary.w + gap * 2, barR = mini.x - gap * 2
+  const barW = Math.min(480, barR - barL)
+  // The bar holds the box and three tools: under 440 px it would squeeze one or the other, so it becomes a button.
+  const search = searchIcon || barW < 440
+    ? { ...iconSearch, mode: 'icon' as const }
+    : { x: Math.round(Math.max(barL, Math.min(barR - barW, width / 2 - barW / 2))), y: T, w: barW, h: 44, mode: 'bar' as const }
+
   const bottomRow = trail ? trail.y : menu.y
-  const side = device === 'desktop' || (device === 'tablet' && landscape)
+  const docked = device === 'desktop' || (device === 'tablet' && landscape)
   const peekH = 44
-  const rail = side
-    ? (() => { const y = mini.y + mini.h + 12; const w = device === 'desktop' ? 360 : 300; return { x: R - w, y, w, h: Math.max(160, bottomRow - gap - y), mode: 'side' as const } })()
+  const dockW = device === 'desktop' ? 330 : 280
+  const docks = docked
+    ? (() => {
+        const bottom = bottomRow - gap
+        const lh = Math.min(380, bottom - (summary.y + summary.h + gap))
+        const rh = Math.min(380, bottom - (mini.y + mini.h + gap))
+        return { left: { x: L, y: bottom - lh, w: dockW, h: lh }, right: { x: R - dockW, y: bottom - rh, w: dockW, h: rh } }
+      })()
+    : null
+  const rail = docks
+    ? { ...docks.right, mode: 'dock' as const }
     : (() => { const h = Math.round((bottomRow - gap - T) * (flat ? 0.75 : phone ? 0.55 : 0.45)); return { x: L, y: bottomRow - gap - h, w: R - L, h, mode: 'drawer' as const } })()
-  const peek = side ? null : { x: L, y: bottomRow - gap - peekH, w: R - L, h: peekH }
+  const peek = docks ? null : { x: L, y: bottomRow - gap - peekH, w: R - L, h: peekH }
 
   // The map: on a phone and a tablet in portrait it starts below the summary; elsewhere the corners float over its edges.
-  // It ends left of a side rail, or above the drawer's handle.
-  const top = phone || (device === 'tablet' && !landscape) ? summary.y + summary.h + gap : T
+  // It ends above the drawer's handle; the docks sit in the corners the diamond leaves empty.
+  const top = phone || (device === 'tablet' && !landscape) ? summary.y + summary.h + gap : docks ? search.y + search.h + gap : T
   const bottom = peek ? peek.y - gap : bottomRow - gap
-  const world = { x: safe.left, y: top, w: (side ? rail.x - gap : width - safe.right) - safe.left, h: Math.max(80, bottom - top) }
+  const world = { x: safe.left, y: top, w: width - safe.right - safe.left, h: Math.max(80, bottom - top) }
 
-  return { device, landscape, tap, summary, mini, miniTitle, trail, alerts, menu, rail, peek, world }
+  // A card opened large: centred, most of the screen on a computer, all of it on a phone.
+  const fw = phone ? R - L : Math.min(920, R - L - 80), fh = phone ? bottomRow - gap - T : Math.min(660, bottomRow - gap - T - 40)
+  const focus = { x: Math.round(width / 2 - fw / 2), y: phone ? T : Math.round(T + (bottomRow - gap - T) / 2 - fh / 2), w: fw, h: fh }
+
+  return { device, landscape, tap, summary, mini, miniTitle, trail, alerts, menu, search, docks, rail, peek, focus, world }
 }
 
 export const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
