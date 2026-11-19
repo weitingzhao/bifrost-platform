@@ -295,6 +295,12 @@ func (c *Controller) Rules(ctx context.Context) (int, error) {
 		if n.Kind != "step" {
 			continue
 		}
+		// A done step moves again only when a standing condition lapses. It
+		// is skipped here, before EvaluateStep locks its row: 131 of the 248
+		// ruled steps on PROD were locked each pass to do nothing (2026-11-19).
+		if n.State == "done" && !n.Rule.Standing() {
+			continue
+		}
 		to, err := planstore.EvaluateStep(ctx, c.DB, n.ID, c.boundedDeployed)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("step %s: %w", n.ID, err))
