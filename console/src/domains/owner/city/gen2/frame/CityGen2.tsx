@@ -3,10 +3,9 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { browserArrangements, type ArrangementStore } from './arrangementStore'
 import { arrange, move, toArrangement, type Arrangement } from './grid'
 import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
-import { consoleContent, type CityContent } from './content'
+import type { CityContent, Panel } from './content'
 import { PlaceScene, type Shown } from './placeScene'
 import { here, resolve, trail, type Path, type Place } from './places'
-import type { Panel } from './panels'
 import { frameOf, NO_INSETS, type Insets, type Rect } from './viewport'
 import './cityGen2.css'
 
@@ -36,8 +35,8 @@ type Props = {
   dashboardHref?: (place: Place) => string | null
   /** Drive frames by a timer instead of animation frames (the bench, in a hidden pane where animation frames stop). */
   timerLoop?: boolean
-  /** What the places are and hold; the frame never assumes it (default: the Console's menu). */
-  content?: CityContent
+  /** What the places are and hold: the plug-in. The frame assumes nothing about it. */
+  content: CityContent
   /** Where the Owner's positions are kept (display only). */
   arrangements?: ArrangementStore
 }
@@ -61,9 +60,8 @@ const readLight = (): LightChoice => {
 
 const keyOf = (path: Path) => path.length === 0 ? 'town' : path.join('/')
 
-export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashboard, timerLoop = false, arrangements, content: given }: Props) {
+export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashboard, timerLoop = false, arrangements, content }: Props) {
   const store = useMemo(() => arrangements ?? browserArrangements(), [arrangements])
-  const content = useMemo(() => given ?? consoleContent(), [given])
   const tree = content.tree
   const path = useMemo(() => resolve(tree, asked), [tree, asked])
   const steps = trail(tree, path)

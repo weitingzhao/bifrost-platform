@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import type { Place } from './places'
+import type { Panel } from '../frame/content'
+import type { Place } from '../frame/places'
 
 /**
  * The panels beside the 2.5D middle (the Owner, 2026-11-19): the middle shows where things stand,
@@ -11,15 +11,6 @@ import type { Place } from './places'
  * slot drawn with sample numbers, marked as such, until the building's own sections are designed.
  */
 
-export type Panel = {
-  id: string
-  title: string
-  /** True while the panel shows sample numbers: said on the panel, never passed off as a reading. */
-  sample?: boolean
-  /** Which bottom corner it docks in on a wide screen: charts on the left, tables and cards on the right. */
-  dock: 'left' | 'right'
-  body: ReactNode
-}
 
 const KIND_WORD = { town: 'Town', district: 'District', building: 'Building', room: 'Room' } as const
 
