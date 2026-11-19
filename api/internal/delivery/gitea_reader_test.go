@@ -162,7 +162,7 @@ func readAll(t *testing.T, s *Service) (RevisionsResponse, CompareResponse, RefP
 	defer cancel()
 	rev := s.Revisions(ctx, []string{"bifrost-platform"})
 	cmp := s.Compare(ctx, "bifrost-platform", "main", factSHA1)
-	pf := s.RefPreflight(ctx, "bifrost-deliver-platform", factSHA1)
+	pf := s.refPreflightForRepos(ctx, "bifrost-deliver-platform", factSHA1, reposForPipeline("bifrost-deliver-platform"))
 	_, accErr := s.GiteaAccess(ctx)
 	_, syncErr := s.SyncMirrors(ctx, []string{"bifrost-platform"}, nil)
 	_ = s.signedPresent(ctx, []string{"bifrost-platform"}, func(string) string { return factSHA1 })

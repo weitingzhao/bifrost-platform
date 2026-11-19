@@ -119,7 +119,6 @@ func planeRoutes() []route {
 func patrolRoutes() []route {
 	return []route{
 		{"GET", "/patrol/skills", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleListSkills }, false},
-		{"GET", "/patrol/skills/{id}", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleGetSkill }, false},
 		{"GET", "/patrol/runs", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleListRuns }, false},
 		{"PUT", "/patrol/skills/{id}/enable", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleEnable }, false},
 		{"POST", "/patrol/trigger/{id}", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleTrigger }, false},

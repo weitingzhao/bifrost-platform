@@ -61,10 +61,15 @@ func TestTradeRouteForMapsEveryNameToItsProcessPrefix(t *testing.T) {
 	}
 }
 
+// retiredTradeGatewayPrefixes are the alias prefixes TD-55 B2 removed from the gateway (without
+// /api/). "docs" and "ops" stay route IDs (routers inside api-monitor, at /api/monitor/...); only
+// their own prefixes are gone.
+var retiredTradeGatewayPrefixes = []string{"docs", "ops", "trading", "strategy", "portfolio"}
+
 // B2 removed the alias prefixes from the gateway (they answer the SPA), so no probe may use one.
 func TestNoProbeUsesARetiredPrefix(t *testing.T) {
 	retired := map[string]bool{}
-	for _, p := range RetiredTradeGatewayPrefixes() {
+	for _, p := range retiredTradeGatewayPrefixes {
 		retired[p] = true
 	}
 	if len(retired) != 5 {
@@ -111,7 +116,7 @@ func TestTradeRoutesMatchRegistry(t *testing.T) {
 	if len(reg.Aliases) != 0 {
 		t.Fatalf("registry still lists aliases (TD-55 B2 removed them): %+v", reg.Aliases)
 	}
-	retired := RetiredTradeGatewayPrefixes()
+	retired := retiredTradeGatewayPrefixes
 	if len(reg.RetiredPrefixes) != len(retired) {
 		t.Fatalf("registry retired_prefixes %v, catalog %v", reg.RetiredPrefixes, retired)
 	}

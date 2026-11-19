@@ -135,7 +135,6 @@ type Server struct {
 	landingHealth atomic.Value // map[string]any
 	authLoaded    bool
 	audit         *actuation.AuditLog
-	jobs          *actuation.JobStore
 	httpMetrics   *httpMetrics
 	// pluginProbes, when set, replaces the four plugin health calls on /metrics.
 	// Tests inject counters. Production leaves it nil.
@@ -174,7 +173,6 @@ func New(cfg *config.Config) (*Server, error) {
 		// GET /audit is served here; the workers pod records the loops' actions
 		audit.AlsoList(filepath.Join(dataDir, "audit", "audit-workers.json"))
 	}
-	jobs := actuation.NewJobStore()
 	gitopsH := gitops.NewHandler(cfg, audit)
 	role := config.CurrentRole()
 	clusterH := cluster.NewHandler(cfg, audit)
@@ -230,7 +228,6 @@ func New(cfg *config.Config) (*Server, error) {
 		auth:            auth,
 		authLoaded:      authLoaded,
 		audit:           audit,
-		jobs:            jobs,
 		httpMetrics:     newHTTPMetrics(),
 	}
 	mdH := srv.marketdata

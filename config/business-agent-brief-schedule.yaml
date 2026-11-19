@@ -25,5 +25,4 @@ schedules:
 
 data_sources:
   - GET /api/v1/matrix?env=stg
-  - GET /api/v1/trade-agent/domains
   - mcp-trade-api read tools per domain

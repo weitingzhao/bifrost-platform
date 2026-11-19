@@ -24,11 +24,9 @@ func (s *Server) mountTenant(r chi.Router) {
 	// Read-only Plugin API proxy (coverage / analytics / ingest list / JSON probes).
 	r.Get("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
 	r.Get("/plugins/flex-query/api/*", s.flexquery.HandleAPIProxy)
-	r.Get("/plugins/analytics/api/*", s.research.HandleLegacyAnalyticsRedirect)
 	// Research API (:8795) — preferred /research/* + plugin-style alias.
 	r.Get("/research/*", s.research.HandleAPIProxy)
 	r.Get("/plugins/research/api/*", s.research.HandleAPIProxy)
-	r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)
 	r.Get("/trade-agent/catalog", s.tradeagent.HandleCatalog)
 	r.Group(func(r chi.Router) {
 		r.Use(s.auth.Require(actuation.RoleOperator))

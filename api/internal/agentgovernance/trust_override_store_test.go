@@ -91,8 +91,7 @@ func TestTrustOverrideMissingOrBadFileIs200(t *testing.T) {
 func assertStoreError200(t *testing.T, h *Handler) {
 	t.Helper()
 	for name, handle := range map[string]http.HandlerFunc{
-		"trust-overrides": h.HandleTrustOverrides,
-		"trust-matrix":    h.HandleTrustMatrix,
+		"trust-matrix": h.HandleTrustMatrix,
 	} {
 		rec := httptest.NewRecorder()
 		handle(rec, httptest.NewRequest(http.MethodGet, "/", nil))

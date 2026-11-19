@@ -35,7 +35,6 @@ func (s *Server) mountFoundation(r chi.Router) {
 	r.Get("/context", s.handleContext)
 	r.Get("/auth/capabilities", s.auth.Capabilities)
 	r.Get("/audit", s.audit.HandleList)
-	r.Get("/jobs", s.jobs.HandleList)
 	r.Get("/mcp/tools", s.mcp.HandleTools)
 	r.Get("/mcp/status", s.mcp.HandleStatus)
 	r.Get("/network/status", s.network.HandleStatus)

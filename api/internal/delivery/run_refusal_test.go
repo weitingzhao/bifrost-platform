@@ -16,10 +16,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -424,34 +422,6 @@ func TestCIContradictoryInputsRefused(t *testing.T) {
 				}
 			})
 		}
-	}
-}
-
-func TestPythonCIRefPreflightResponse(t *testing.T) {
-	s := NewService(&config.ClusterEntry{ID: "test"})
-	before := time.Now().UTC()
-	resp := s.RefPreflight(context.Background(), "bifrost-ci-python", factSHA1)
-	if resp.Ready || resp.Reachability != probe.ReachFail || !strings.Contains(resp.Detail, "param repo") || resp.ClusterID != "test" {
-		t.Fatal(resp)
-	}
-	if resp.GeneratedAt.Before(before) || resp.GeneratedAt.After(time.Now().UTC()) {
-		t.Fatal("invalid timestamp", resp.GeneratedAt)
-	}
-	b, err := json.Marshal(resp)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var fields map[string]any
-	if err := json.Unmarshal(b, &fields); err != nil {
-		t.Fatal(err)
-	}
-	for _, key := range []string{"repos", "missing"} {
-		if list, ok := fields[key].([]any); !ok || len(list) != 0 {
-			t.Fatalf("%s must be an empty list: %s", key, b)
-		}
-	}
-	if fields["generated_at"] == "0001-01-01T00:00:00Z" {
-		t.Fatal(string(b))
 	}
 }
 

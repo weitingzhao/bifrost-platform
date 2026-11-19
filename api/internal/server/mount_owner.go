@@ -23,7 +23,6 @@ import (
 // route keeps its path, its handler and the same gate.
 func (s *Server) mountOwner(r chi.Router) {
 	r.Get("/agent/governance/trust-matrix", s.agentgovernance.HandleTrustMatrix)
-	r.Get("/agent/governance/trust-overrides", s.agentgovernance.HandleTrustOverrides)
 	// What the approval records say, counted by day and requester, each
 	// count with the request numbers behind it. Read-only; viewer and above.
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/readings/approvals", s.handleApprovalReadings)

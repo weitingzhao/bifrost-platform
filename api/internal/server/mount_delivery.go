@@ -19,7 +19,6 @@ func (s *Server) mountDelivery(r chi.Router) {
 	r.Get("/releases", s.releases.HandleList)
 	r.Get("/releases/running-images", s.releases.HandleRunningImages)
 	r.Get("/delivery/pipelines/{name}/preflight", s.delivery.HandlePipelinePreflight)
-	r.Get("/delivery/pipelines/{name}/ref-preflight", s.delivery.HandleRefPreflight)
 	// A trial of the release policy on one run request: read-only, but its
 	// reasons name the window holder and the records, so viewer and above.
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/delivery/pipelines/{name}/policy-check", s.handleReleasePolicyCheck)

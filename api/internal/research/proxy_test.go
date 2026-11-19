@@ -72,27 +72,13 @@ func TestProxyHTTPForwardsPathAndQuery(t *testing.T) {
 	}
 }
 
-func TestLegacyAnalyticsRedirectTarget(t *testing.T) {
-	cases := []struct {
-		in   string
-		want string
-	}{
-		{"/api/v1/plugins/analytics/status", "/api/v1/research/analytics/elementary"},
-		{
-			"/api/v1/plugins/analytics/api/elementary_report.html",
-			"/api/v1/research/analytics/elementary/files/elementary_report.html",
-		},
-		{
-			"/api/v1/plugins/analytics/api/static/app.js",
-			"/api/v1/research/analytics/elementary/files/static/app.js",
-		},
-		{"/api/v1/plugins/analytics/api", "/api/v1/research/analytics/elementary/files/elementary_report.html"},
-		{"/api/v1/plugins/analytics/api/", "/api/v1/research/analytics/elementary/files/elementary_report.html"},
-	}
-	for _, tc := range cases {
-		if got := legacyAnalyticsRedirectTarget(tc.in); got != tc.want {
-			t.Fatalf("legacyAnalyticsRedirectTarget(%q)=%q want %q", tc.in, got, tc.want)
-		}
+// The status case of the former TestLegacyAnalyticsRedirectTarget; the
+// /plugins/analytics/api/* cases went with that route (2026-11-19, no traffic, no caller).
+func TestLegacyAnalyticsStatusRedirect(t *testing.T) {
+	rec := httptest.NewRecorder()
+	(&Handler{}).HandleLegacyAnalyticsRedirect(rec, httptest.NewRequest(http.MethodGet, "/api/v1/plugins/analytics/status", nil))
+	if got, want := rec.Header().Get("Location"), "/api/v1/research/analytics/elementary"; got != want {
+		t.Fatalf("Location=%q want %q", got, want)
 	}
 }
 

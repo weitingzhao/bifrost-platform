@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"time"
-
 )
 
 type Handler struct {
@@ -46,16 +44,6 @@ func (h *Handler) HandleTrustMatrix(w http.ResponseWriter, r *http.Request) {
 	resp.OverrideStore = h.overrides.Location()
 	resp.StoreError = storeErr
 	writeJSON(w, http.StatusOK, resp)
-}
-
-func (h *Handler) HandleTrustOverrides(w http.ResponseWriter, r *http.Request) {
-	overrides, storeErr := h.listOverrides(r)
-	writeJSON(w, http.StatusOK, TrustOverridesResponse{
-		GeneratedAt: time.Now().UTC(),
-		Overrides:   overrides,
-		Store:       h.overrides.Location(),
-		StoreError:  storeErr,
-	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

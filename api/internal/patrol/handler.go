@@ -199,16 +199,6 @@ func (h *Handler) HandleListSkills(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, SkillsResponse{Skills: h.listSkills()})
 }
 
-func (h *Handler) HandleGetSkill(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	skill, ok := h.publicSkill(id)
-	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown patrol skill"})
-		return
-	}
-	writeJSON(w, http.StatusOK, skill)
-}
-
 func (h *Handler) HandleListRuns(w http.ResponseWriter, r *http.Request) {
 	limit := 50
 	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
