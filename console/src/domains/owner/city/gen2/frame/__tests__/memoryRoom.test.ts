@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { rowsDrawn, setRuler } from '../library/dictionary'
-import { freezersOf, memoryRoom, memoryRoomShape, sectionsOf, SECTION, type MemoryRoomReadings } from '../units/memoryRoom'
+import { freezersOf, inUseOf, memoryRoom, memoryRoomShape, sectionsOf, SECTION, type MemoryRoomReadings } from '../units/memoryRoom'
 import { ROOM_STANDARDS } from '../units/standards'
 
 // 2026-11-19, the memory unit's room, the workbench, drawn against the room standards the CPU room set
@@ -58,5 +58,13 @@ describe('the memory room', () => {
   it('the ruler counts the freezers: 2 GiB a freezer, twice the freezers, the same reading', () => {
     setRuler('mem.sections', 2 * 2 ** 30)
     try { expect(sectionsOf(node)).toBe(12) } finally { setRuler('mem.sections', null) }
+  })
+  // The Owner, 2026-11-19: if the kinds in use can be told apart, show them — on the console, as a bar.
+  it('in use by kind: system and compressed read exactly; the rest is programs and the rest; they add up to in use', () => {
+    const k = inUseOf({ ...mac, kernel: 1.7 * GB, compressed: 1.4 * GB })!
+    expect(k.map(x => x.id)).toEqual(['system', 'compressed', 'rest'])
+    expect(k.reduce((a, x) => a + x.bytes, 0)).toBeCloseTo(9.4 * GB)
+    expect(memoryRoom({ ...node, kernel: 0.74 * GB, compressed: 0 }).svg).toContain('IN USE BY KIND')
+    expect(inUseOf(node)).toBeNull()
   })
 })

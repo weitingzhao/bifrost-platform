@@ -13,12 +13,13 @@ import { CONSOLE_DEPTH, hasConsole, roomConsole, type ConsoleSpec } from './cons
  *                    off in red across the last lids.
  *   the overflow     a corner marked on the floor at the front, as long as the swap in the same parts;
  *                    crates in it as far as the swap is used
- *   the console      the room console: in use on the desk; the overflow traffic
+ *   the console      the room console: in use on the desk; in use by kind on a split bar (system,
+ *                    compressed, programs and the rest); the overflow traffic
  * Low and flat-topped: nothing hides anything.
  */
 
 export type MemoryRoomReadings = {
-  total: number | null; available: number | null; free: number | null
+  total: number | null; available: number | null; free: number | null; kernel?: number | null; compressed?: number | null
   swapTotal: number | null; swapUsed: number | null; swapIO: number | null; corrupted: number | null
 }
 
@@ -30,7 +31,21 @@ export function freezersOf(r: MemoryRoomReadings): Stretch[] {
   return ([{ id: 'held', bytes: r.total - avail }, { id: 'clearable', bytes: avail - empty }, { id: 'empty', bytes: empty }] as Stretch[]).filter(s => s.bytes > 0)
 }
 
+/**
+ * What is in use, by kind: what the system keeps and what is compressed, read exactly on Linux and macOS;
+ * programs and the rest is what remains of in use. The three add up to in use; null when nothing is read.
+ */
+export function inUseOf(r: MemoryRoomReadings): { id: 'system' | 'compressed' | 'rest'; bytes: number }[] | null {
+  if (!r.total || r.available == null || (r.kernel == null && r.compressed == null)) return null
+  const held = r.total - Math.max(0, Math.min(r.total, r.available))
+  const sys = Math.min(held, Math.max(0, r.kernel ?? 0)), cmp = Math.min(held - sys, Math.max(0, r.compressed ?? 0))
+  return [{ id: 'system', bytes: sys }, { id: 'compressed', bytes: cmp }, { id: 'rest', bytes: held - sys - cmp }]
+}
+
 const ROW_OF: Record<Stretch['id'], string> = { held: 'mem.held', clearable: 'mem.clearable', empty: 'mem.empty' }
+const KIND_LABEL = { system: 'SYSTEM', compressed: 'COMPRESSED', rest: 'PROGRAMS ETC' } as const
+const KIND_COLOUR = { system: '#a8650f', compressed: '#d98a1e', rest: '#f6c66a' } as const
+
 // Plain fills, three only (the Owner, 2026-11-19: the little blocks were noise; what makes it a freezer is
 // its body, not a pattern inside).
 const FILL: Record<Stretch['id'], string> = { held: '#f2b03d', clearable: '#9cc5da', empty: 'none' }
@@ -68,11 +83,12 @@ export function memoryRoom(r: MemoryRoomReadings): Sprite {
 
   // The console: what is in use, as a share of what is installed, on the desk; the overflow traffic.
   const share = r.total && r.available != null ? (r.total - Math.min(r.total, r.available)) / r.total : null
-  const io = r.swapIO
+  const io = r.swapIO, kinds = inUseOf(r)
   const spec: ConsoleSpec = {
     name: 'MEMORY CONSOLE',
     desk: share != null ? { row: 'mem.inuse', share: encode('mem.inuse', share), plate: `IN USE ${readingText(share, 'share')}` } : undefined,
     gauges: io != null && r.swapTotal ? [{ row: 'swap.io', name: 'TRAFFIC', share: encode('swap.io', io / 10e6), redFrom: 0.5, reading: readingText(io, 'bytes/s') }] : [],
+    splits: kinds ? [{ row: 'mem.kinds', name: 'IN USE BY KIND', parts: kinds.map(k => ({ label: `${KIND_LABEL[k.id]} ${readingText(k.bytes, 'bytes')}`, bytes: k.bytes, colour: KIND_COLOUR[k.id] })) }] : [],
   }
   if (hasConsole(spec)) roomConsole(g, fw, spec)
 

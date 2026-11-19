@@ -40,7 +40,10 @@ export const MEMORY_UNIT: UnitSpec = {
   // read on Linux and macOS alike: in use (installed − available), can be cleared (available − empty),
   // empty. Kernel, compressed and waiting-to-be-written are splits inside those three: out. Swap and
   // hardware errors stay. Counts since boot are history (room standard 12): out.
-  chosen: ['total', 'available', 'free', 'swap.total', 'swap.used', 'swap.io', 'corrupted'],
+  // Then two back (the Owner, same day: if the kinds in use can be told apart, show them — on the console):
+  // what the system keeps and what is compressed can be read exactly on both systems; the rest of what is
+  // in use is programs and the rest, not split further.
+  chosen: ['total', 'available', 'free', 'kernel', 'compressed', 'swap.total', 'swap.used', 'swap.io', 'corrupted'],
   // Inside: the cold store (the Owner, 2026-11-19: a chest freezer, not a wooden bench — memory empties
   // when the power goes, as a freezer spoils). One chest freezer per 4 GB (the standard part), in pairs,
   // low, its glass lid on top showing what is inside now: goods in use, goods that can be cleared, the
@@ -53,6 +56,8 @@ export const MEMORY_UNIT: UnitSpec = {
     { detail: 'swap.total', thing: 'Overflow corner', shows: 'Floor marked off at the front for what does not fit in the freezers, as long as the swap in the same 4 GB parts.', where: 'overflow corner' },
     { detail: 'swap.used', thing: 'Crates in the corner', shows: 'What is pushed out there now: crates filling the marked floor.', where: 'overflow corner' },
     { detail: 'swap.io', thing: 'TRAFFIC on the console', shows: 'How fast things move between the freezers and the corner, on the standard instrument.', where: 'memory console' },
+    { detail: 'kernel', thing: 'IN USE BY KIND on the console: system', shows: 'The darkest amber of the console’s split bar: what the system keeps and never clears.', where: 'memory console' },
+    { detail: 'compressed', thing: 'IN USE BY KIND on the console: compressed', shows: 'The middle amber: packed tighter to make room. The lightest is programs and the rest of what is in use.', where: 'memory console' },
     { detail: 'available', thing: 'IN USE on the console desk', shows: 'How full the freezers are with goods in use, as a share: the same lit folds as the CPU console, the percent on its plate.', where: 'memory console' },
   ],
   confirmed: {
@@ -64,7 +69,7 @@ export const MEMORY_UNIT: UnitSpec = {
 export function memoryRoomReadings(reads: Record<string, { labels: Record<string, string>; value: number }[] | null> | undefined, host: string | undefined) {
   const one = (id: string) => host ? (reads?.[id] ?? []).find(p => p.labels.instance?.split(':')[0] === host)?.value ?? null : null
   return {
-    total: one('total'), available: one('available'), free: one('free'),
+    total: one('total'), available: one('available'), free: one('free'), kernel: one('kernel'), compressed: one('compressed'),
     swapTotal: one('swap.total'), swapUsed: one('swap.used'), swapIO: one('swap.io'), corrupted: one('corrupted'),
   }
 }

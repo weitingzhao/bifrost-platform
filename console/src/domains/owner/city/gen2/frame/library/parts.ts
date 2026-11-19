@@ -216,7 +216,7 @@ export function halfDial(r: number, u: number, f: number | null, redFrom: number
  * from `redFrom`), the reading written beneath it to the standard (readingText), and its name plate.
  * A console is as wide as its instruments; nothing on it stands outside its slot.
  */
-export const INSTRUMENT = 0.8, INSTRUMENT_H = 28
+export const INSTRUMENT = 0.8, INSTRUMENT_H = 32
 export function instrument(g: Draw, x: number, y: number, slot: number, z: number, o: { name: string; share: number | null; redFrom: number; reading: string }) {
   const W = INSTRUMENT * U, u = (slot + 0.5) * W, bw = W - 4
   const mono = `font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" text-anchor="middle" font-weight="700"`
@@ -225,4 +225,33 @@ export function instrument(g: Draw, x: number, y: number, slot: number, z: numbe
     `<text x="${u.toFixed(1)}" y="${-INSTRUMENT_H + 18.6}" ${mono} font-size="5" fill="#f2f0e8">${esc(o.reading)}</text>` +
     `<rect x="${(u - bw / 2).toFixed(1)}" y="-7" width="${bw.toFixed(1)}" height="6" rx="1" fill="#e8e2cf" stroke="${INK}" stroke-width="0.5"/>` +
     `<text x="${u.toFixed(1)}" y="-2.4" ${mono} font-size="4.2" fill="${INK}">${esc(o.name)}</text>`)
+}
+
+/**
+ * The standard split bar (the second kind of standard instrument, 2026-11-19: a whole made of kinds, read
+ * at a glance — the Owner's "energy bar" on the console): `slots` instrument slots wide on a +y face, from
+ * height z up INSTRUMENT_H px. In its bezel, a bar split left to right in the kinds' shares, each kind's
+ * amount written beneath in its colour, and its name plate. The kinds add up to the whole.
+ */
+export function splitBar(g: Draw, x: number, y: number, slot: number, slots: number, z: number, o: { name: string; parts: { label: string; bytes: number; colour: string }[] }) {
+  const W = INSTRUMENT * U, u0 = slot * W + 2, bw = slots * W - 4
+  const total = o.parts.reduce((a, p) => a + p.bytes, 0)
+  const mono = `font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-weight="700"`
+  let s = `<rect x="${u0.toFixed(1)}" y="${-INSTRUMENT_H + 1}" width="${bw.toFixed(1)}" height="${INSTRUMENT_H - 9}" rx="2" fill="#1f242e" stroke="#9aa0ab" stroke-width="1.2"/>`
+  const bx = u0 + 4, by = -INSTRUMENT_H + 4, blen = bw - 8, bh = 4.5
+  s += `<rect x="${bx.toFixed(1)}" y="${by}" width="${blen.toFixed(1)}" height="${bh}" fill="#2b313d" stroke="#5d6573" stroke-width="0.6"/>`
+  let at = 0
+  o.parts.forEach(p => {
+    const w = total > 0 ? p.bytes / total * blen : 0
+    if (w > 0.2) s += `<rect x="${(bx + at).toFixed(1)}" y="${by}" width="${w.toFixed(1)}" height="${bh}" fill="${p.colour}"/>`
+    at += w
+  })
+  // Each kind on a line of its own beneath the bar: its colour, its name and amount.
+  o.parts.forEach((p, k) => {
+    const ty = by + bh + 2 + k * 4.3
+    s += `<rect x="${bx.toFixed(1)}" y="${ty.toFixed(1)}" width="3" height="3" fill="${p.colour}"/><text x="${(bx + 4.5).toFixed(1)}" y="${(ty + 2.9).toFixed(1)}" ${mono} font-size="3.6" fill="#f2f0e8">${esc(p.label)}</text>`
+  })
+  s += `<rect x="${u0.toFixed(1)}" y="-7" width="${bw.toFixed(1)}" height="6" rx="1" fill="#e8e2cf" stroke="${INK}" stroke-width="0.5"/>` +
+    `<text x="${(u0 + bw / 2).toFixed(1)}" y="-2.4" text-anchor="middle" ${mono} font-size="4.2" fill="${INK}">${esc(o.name)}</text>`
+  g.face('left', x, y, z, s)
 }

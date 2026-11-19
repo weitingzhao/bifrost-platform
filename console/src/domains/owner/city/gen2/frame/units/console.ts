@@ -1,6 +1,6 @@
 import { Draw, faces } from '../kit'
 import { encode, metaphor } from '../library/dictionary'
-import { INSTRUMENT, INSTRUMENT_H, instrument } from '../library/parts'
+import { INSTRUMENT, INSTRUMENT_H, instrument, splitBar } from '../library/parts'
 
 /**
  * The room console (room standard 4, the Owner 2026-11-19: every room has one, the whole unit at a
@@ -11,10 +11,13 @@ import { INSTRUMENT, INSTRUMENT_H, instrument } from '../library/parts'
  */
 
 export type ConsoleGauge = { row: string; name: string; share: number | null; redFrom: number; reading: string; also?: string[] }
+/** A split bar on the bank: a whole in its kinds (the second standard instrument), two slots wide. */
+export type ConsoleSplit = { row: string; name: string; parts: { label: string; bytes: number; colour: string }[]; also?: string[] }
 export type ConsoleSpec = {
   /** The share on the desk's slope: its dictionary row, the share (0–1, null not read), and the plate's text. */
   desk?: { row: string; share: number | null; plate: string }
   gauges: ConsoleGauge[]
+  splits?: ConsoleSplit[]
   /** The plate's text when there is no desk share. */
   name: string
 }
@@ -26,18 +29,20 @@ const STEEL = faces('#d9dbe0', '#bfc3cb', '#a9aeb8'), DARK = faces('#4a5263', '#
 const ZB = 15, ZF = 8, BANK_H = ZB + INSTRUMENT_H + 4
 
 /** Whether a console has anything to show; a room with nothing read has none. */
-export const hasConsole = (c: ConsoleSpec) => !!c.desk || c.gauges.length > 0
+export const hasConsole = (c: ConsoleSpec) => !!c.desk || c.gauges.length > 0 || (c.splits ?? []).length > 0
 
 export function roomConsole(g: Draw, fw: number, c: ConsoleSpec) {
-  const cw = Math.max(1.7, c.gauges.length * INSTRUMENT + 0.2), cx = fw - 0.3 - cw, cy = 0.22, cd = 0.75, bank = 0.22
+  const splits = c.splits ?? [], slots = c.gauges.length + splits.length * 2
+  const cw = Math.max(1.7, slots * INSTRUMENT + 0.2), cx = fw - 0.3 - cw, cy = 0.22, cd = 0.75, bank = 0.22
   g.shadow(cx, cy, cw, cd, 0.35)
-  if (c.gauges.length) {
+  if (slots) {
     g.box(cx, cy, cw, bank, BANK_H, DARK, 0, 1.2)
     g.box(cx - 0.06, cy - 0.04, cw + 0.12, bank + 0.16, 3, STEEL, BANK_H, 1)
     g.box(cx + cw - 0.04, cy, 0.08, bank + 0.06, BANK_H, STEEL, 0, 0.9)
   } else g.box(cx, cy, cw, bank, ZB, STEEL, 0, 1.1)
   const P = cy + bank
   c.gauges.forEach((m, k) => { metaphor(m.row); for (const a of m.also ?? []) metaphor(a); instrument(g, cx + 0.1, P, k, ZB + 2, m) })
+  splits.forEach((b, k) => { metaphor(b.row); for (const a of b.also ?? []) metaphor(a); splitBar(g, cx + 0.1, P, c.gauges.length + k * 2, 2, ZB + 2, b) })
   const y0 = P, y1 = cy + cd
   g.poly(STEEL.left, [[cx, y1, 0], [cx + cw, y1, 0], [cx + cw, y1, ZF], [cx, y1, ZF]], 1.2)
   g.poly(STEEL.right, [[cx + cw, y0, 0], [cx + cw, y1, 0], [cx + cw, y1, ZF], [cx + cw, y0, ZB]], 1.2)
