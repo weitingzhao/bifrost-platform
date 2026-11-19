@@ -1,6 +1,4 @@
-//bifrost:owner verification
-
-package server
+package evidenceread
 
 import (
 	"context"
@@ -10,9 +8,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
 
 // The answer for a commit follows the rows of the key it has now: none with
@@ -40,9 +36,9 @@ func TestCommitEvidence(t *testing.T) {
 		return "", errors.New("no such commit")
 	}
 	main := func(_ context.Context, repo string) (string, error) { return mains[repo], nil }
-	ask := func(commit, verdict string, taskRows, commitRows int) evidenceAnswer {
+	ask := func(commit, verdict string, taskRows, commitRows int) CommitAnswer {
 		t.Helper()
-		out, err := commitEvidence(ctx, pool, tree, main, "bifrost-platform", commit)
+		out, err := ForCommit(ctx, pool, tree, main, "bifrost-platform", commit)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -59,10 +55,10 @@ func TestCommitEvidence(t *testing.T) {
 	record := func(name, commit, result, reason, scope string) {
 		t.Helper()
 		at := time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC)
-		p := seenfacts.PipelineRun{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: reason, Repo: "bifrost-platform",
-			Scope: scope, CompletedAt: at, Inputs: []seenfacts.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: trees["bifrost-platform@"+commit]},
+		r := evidence.Run{Run: name, UID: "uid-" + name, Pipeline: "bifrost-ci-platform", Kind: "ci", Result: result, Reason: reason, Repo: "bifrost-platform",
+			Scope: scope, CompletedAt: at, Inputs: []evidence.RepoAt{{Repo: "bifrost-platform", Commit: commit, Tree: trees["bifrost-platform@"+commit]},
 				{Repo: "bifrost-ui", Commit: mains["bifrost-ui"], Tree: trees["bifrost-ui@"+mains["bifrost-ui"]]}}}
-		e, is, err := evidence.RunEvidence(controller.EvidenceRun(p))
+		e, is, err := evidence.RunEvidence(r)
 		if err != nil || !is {
 			t.Fatalf("run %s is no evidence: %v", name, err)
 		}
@@ -92,7 +88,7 @@ func TestCommitEvidence(t *testing.T) {
 	mains["bifrost-ui"] = h("3") // ui's main moved: the key changed, the commit's rows remain
 	ask(h("a"), evidence.EvidenceNone, 0, 2)
 
-	if _, err := commitEvidence(ctx, pool, tree, main, "bifrost-platform", h("5")); err == nil {
+	if _, err := ForCommit(ctx, pool, tree, main, "bifrost-platform", h("5")); err == nil {
 		t.Fatal("a commit Gitea does not have was answered")
 	}
 }

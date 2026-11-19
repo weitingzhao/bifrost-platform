@@ -35,7 +35,7 @@ groups:
     readers:
       - {id: plan-history, what: "plan history's main (1 min)", status: moved, at: "2026-11-17", proof: {file: api/internal/server/agentrt_planfacts.go, contains: 's.mainOf("plan-history", nil)'}}
       - {id: release-context-main, what: "release context's main", status: moved, at: "2026-11-17", proof: {file: api/internal/server/release_context_wire.go, contains: 's.mainOf("release-context-main", s.delivery.PolicyFacts().MainHead)'}}
-      - {id: evidence, what: "commit evidence and compare", status: moved, at: "2026-11-17", proof: {file: api/internal/server/evidence_commit.go, contains: 's.mainOf("evidence", m)'}}
+      - {id: evidence, what: "commit evidence and compare", status: moved, at: "2026-11-17", proof: {file: api/internal/server/ci_read_wire.go, contains: 's.mainOf("evidence", m)'}}
       - {id: units-config, what: "units/config, CI scorecard and domains", status: moved, at: "2026-11-17", proof: {file: api/internal/server/units_config.go, contains: 's.mainOf("units-config", s.giteaMainHead)'}}
       - {id: config-boundaries, what: "configuration boundaries (infra main)", status: moved, at: "2026-11-18", proof: {file: api/internal/server/agentrt_wire.go, contains: 's.mainOf("config-boundaries", gitea)'}, watch_repo: bifrost-trade-infra}
       - {id: head-release-main, what: "head-release reads main after a wake", status: kept, note: "a gate reads the source; the event only wakes it"}

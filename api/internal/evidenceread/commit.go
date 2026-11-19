@@ -1,11 +1,10 @@
-package server
+package evidenceread
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"net/http"
 	"sort"
 	"strings"
@@ -29,39 +28,42 @@ import (
 // commit that was green against an older main of a repository beside it
 // shows as that.
 
-type evidenceInput struct {
+// CommitInput is one repository at one commit and its tree.
+type CommitInput struct {
 	Repo   string `json:"repo"`
 	Commit string `json:"commit"`
 	Tree   string `json:"tree"`
 }
 
-type evidenceTask struct {
+// CommitTask is the verdict for one task of the repository.
+type CommitTask struct {
 	Task     string                 `json:"task"`
 	Verdict  string                 `json:"verdict"`
 	InputKey string                 `json:"input_key"`
 	Inputs   json.RawMessage        `json:"inputs"`
-	Beside   []evidenceInput        `json:"beside"`
+	Beside   []CommitInput          `json:"beside"`
 	Rows     []evidence.EvidenceRow `json:"rows"`
 }
 
-type evidenceAnswer struct {
-	Repo    string         `json:"repo"`
-	Commit  string         `json:"commit"`
-	Tree    string         `json:"tree"`
-	Unit    string         `json:"unit"`
-	Verdict string         `json:"verdict"`
-	Reason  string         `json:"reason"`
-	Tasks   []evidenceTask `json:"tasks"`
+// CommitAnswer is the answer of GET /api/v1/evidence/commit.
+type CommitAnswer struct {
+	Repo    string       `json:"repo"`
+	Commit  string       `json:"commit"`
+	Tree    string       `json:"tree"`
+	Unit    string       `json:"unit"`
+	Verdict string       `json:"verdict"`
+	Reason  string       `json:"reason"`
+	Tasks   []CommitTask `json:"tasks"`
 	// CommitRows is what was recorded for this commit, newest first, with
 	// the inputs each run had then.
 	CommitRows []evidence.EvidenceRow `json:"commit_rows"`
 }
 
-// commitEvidence reads the ledger for one commit. tree reads a commit's git
+// ForCommit reads the ledger for one commit. tree reads a commit's git
 // tree and main a repository's main head; both are Gitea's.
-func commitEvidence(ctx context.Context, db eventlog.DB, tree func(context.Context, string, string) (string, error),
-	main func(context.Context, string) (string, error), repo, commit string) (evidenceAnswer, error) {
-	out := evidenceAnswer{Repo: repo, Commit: commit, Unit: evidence.EvidenceUnitRepo, Verdict: evidence.EvidenceNone, Tasks: []evidenceTask{}}
+func ForCommit(ctx context.Context, db eventlog.DB, tree func(context.Context, string, string) (string, error),
+	main func(context.Context, string) (string, error), repo, commit string) (CommitAnswer, error) {
+	out := CommitAnswer{Repo: repo, Commit: commit, Unit: evidence.EvidenceUnitRepo, Verdict: evidence.EvidenceNone, Tasks: []CommitTask{}}
 	var err error
 	if out.Tree, err = tree(ctx, repo, commit); err != nil {
 		return out, err
@@ -77,7 +79,7 @@ func commitEvidence(ctx context.Context, db eventlog.DB, tree func(context.Conte
 		out.Reason = "the ledger has no evidence for " + repo + " yet"
 		return out, nil
 	}
-	heads := map[string]evidenceInput{}
+	heads := map[string]CommitInput{}
 	verdicts := map[string]int{}
 	for _, last := range tasks {
 		var doc struct {
@@ -86,7 +88,7 @@ func commitEvidence(ctx context.Context, db eventlog.DB, tree func(context.Conte
 		if err = json.Unmarshal(last.Inputs, &doc); err != nil {
 			return out, fmt.Errorf("evidence %d: inputs: %w", last.ID, err)
 		}
-		t := evidenceTask{Task: last.Task, Beside: []evidenceInput{}}
+		t := CommitTask{Task: last.Task, Beside: []CommitInput{}}
 		var beside []evidence.RepoAt
 		for name := range doc.Beside {
 			h, ok := heads[name]
@@ -132,30 +134,50 @@ func commitEvidence(ctx context.Context, db eventlog.DB, tree func(context.Conte
 	return out, nil
 }
 
-func (s *Server) handleEvidenceCommit(w http.ResponseWriter, r *http.Request) {
+// CommitSources is what one request of the route reads.
+type CommitSources struct {
+	DB eventlog.DB
+	// Tree reads a commit's git tree and Main a repository's main head; both
+	// are Gitea's.
+	Tree func(context.Context, string, string) (string, error)
+	Main func(context.Context, string) (string, error)
+}
+
+// CommitRoute is GET /api/v1/evidence/commit: the checks of a request's
+// names are the caller's, and Sources says, per request, what to read (ok
+// false: the evidence ledger is not available on this platform).
+type CommitRoute struct {
+	RepoOK, CommitOK func(string) bool
+	Sources          func() (CommitSources, bool)
+}
+
+func (c CommitRoute) writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func (c CommitRoute) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	repo, commit := strings.TrimSpace(r.URL.Query().Get("repo")), strings.TrimSpace(r.URL.Query().Get("commit"))
-	if !giteaName.MatchString(repo) || strings.HasSuffix(repo, ".git") || !commitID.MatchString(commit) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "repo is a repository name and commit a 40-character lowercase SHA"})
+	if !c.RepoOK(repo) || strings.HasSuffix(repo, ".git") || !c.CommitOK(commit) {
+		c.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "repo is a repository name and commit a 40-character lowercase SHA"})
 		return
 	}
-	main := agentrtapi.MainHead(nil)
-	if m := s.agentRuntimeMains(); m != nil {
-		main = s.mainOf("evidence", m)
-	}
-	if s.agentRuntime == nil || s.agentRuntime.api == nil || s.agentRuntime.api.DB == nil || s.delivery == nil || main == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "the evidence ledger is not available on this platform"})
+	src, ok := c.Sources()
+	if !ok {
+		c.writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "the evidence ledger is not available on this platform"})
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
-	out, err := commitEvidence(ctx, s.agentRuntime.api.DB, giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second}), main, repo, commit)
+	out, err := ForCommit(ctx, src.DB, src.Tree, src.Main, repo, commit)
 	if err != nil {
 		status := http.StatusBadGateway
 		if errors.Is(err, eventlog.ErrInvalid) {
 			status = http.StatusBadRequest
 		}
-		writeJSON(w, status, map[string]string{"error": err.Error()})
+		c.writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	c.writeJSON(w, http.StatusOK, out)
 }

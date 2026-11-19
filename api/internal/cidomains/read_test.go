@@ -1,21 +1,21 @@
-//bifrost:owner verification
-
-package server
+package cidomains
 
 import (
 	"context"
+	"crypto/sha1"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/cidomains"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 )
 
@@ -51,7 +51,37 @@ func ciDomainsFiles() map[string]string {
 	}
 }
 
-// memKept is a ciKept in memory: what one cache wrote, another reads.
+// treesOf serves commits of repository "r" by name from files by path, as
+// unitplan reads them (the same fixture the server's scope tests use).
+func treesOf(commits map[string]map[string]string) func(context.Context, string, string) (*unitplan.Tree, error) {
+	id := func(s string) string { return fmt.Sprintf("%x", sha1.Sum([]byte(s))) }
+	return func(_ context.Context, repo, commit string) (*unitplan.Tree, error) {
+		files, ok := commits[commit]
+		if !ok || repo != "r" {
+			return nil, fmt.Errorf("gitea: no %s@%s", repo, commit)
+		}
+		blobs, dirs := map[string]string{}, map[string][]string{}
+		var entries []unitplan.Entry
+		for p, body := range files {
+			blobs[id(body)] = body
+			entries = append(entries, unitplan.Entry{Path: p, ID: id(body)})
+			for d := p; strings.Contains(d, "/"); {
+				d = d[:strings.LastIndex(d, "/")]
+				dirs[d] = append(dirs[d], p+"="+body)
+			}
+			dirs[""] = append(dirs[""], p+"="+body)
+		}
+		dirID := func(d string) string { sort.Strings(dirs[d]); return id("tree:" + strings.Join(dirs[d], "\n")) }
+		for d := range dirs {
+			if d != "" {
+				entries = append(entries, unitplan.Entry{Path: d, Dir: true, ID: dirID(d)})
+			}
+		}
+		return unitplan.NewTree(dirID(""), entries, func(id string) ([]byte, error) { return []byte(blobs[id]), nil })
+	}
+}
+
+// memKept is a Kept in memory: what one cache wrote, another reads.
 type memKept struct {
 	mu   sync.Mutex
 	data map[string][]byte
@@ -73,17 +103,18 @@ func (m *memKept) Write(name string, raw []byte) error {
 	return nil
 }
 
-func ciDomainsSrc(t *testing.T, head *string, trees map[string]map[string]string, files func(ctx context.Context, repo, commit string) ([]string, error)) (ciDomainsSource, *atomic.Int32) {
+func ciDomainsSrc(t *testing.T, head *string, trees map[string]map[string]string, files func(ctx context.Context, repo, commit string) ([]string, error)) (Source, *atomic.Int32) {
 	t.Helper()
-	read := scopeTrees(t, trees)
+	read := treesOf(trees)
 	var treeReads atomic.Int32
-	return ciDomainsSource{
-		head: func(context.Context, string) (string, error) { return *head, nil },
-		tree: func(ctx context.Context, repo, commit string) (*unitplan.Tree, error) {
+	return Source{
+		Head: func(context.Context, string) (string, error) { return *head, nil },
+		Tree: func(ctx context.Context, repo, commit string) (*unitplan.Tree, error) {
 			treeReads.Add(1)
 			return read(ctx, repo, commit)
 		},
-		files: files,
+		Files:    files,
+		CommitOK: func(c string) bool { return len(c) == 40 },
 	}, &treeReads
 }
 
@@ -96,8 +127,8 @@ func TestCIDomainsReadsTheTreeAndKeepsItByCommit(t *testing.T) {
 	moved := ciDomainsFiles()
 	moved["api/internal/plan/plan.go"] = "package plan\n\nimport (\n\t_ \"example.com/p/api/internal/base\"\n\t_ \"example.com/p/api/internal/owner\"\n)\n"
 	src, reads := ciDomainsSrc(t, &head, map[string]map[string]string{"c1": ciDomainsFiles(), "c2": moved}, nil)
-	cache := ciDomainsCache{kept: &memKept{}}
-	got, err := cache.graph(context.Background(), src, "r")
+	cache := Cache{kept: &memKept{}}
+	got, err := cache.Graph(context.Background(), src, "r")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,10 +140,10 @@ func TestCIDomainsReadsTheTreeAndKeepsItByCommit(t *testing.T) {
 	if got.Version != 1 || !got.Measured || got.Commit != "c1" || got.Base != "foundation" || !reflect.DeepEqual(edges, want) || !reflect.DeepEqual(got.SharedPackages, []string{"api/internal/server"}) {
 		t.Fatalf("graph: %+v", got)
 	}
-	if !reflect.DeepEqual(got.Domains, []cidomains.Domain{{ID: "foundation", Packages: 2}, {ID: "plan", Packages: 1}, {ID: "owner", Packages: 1}}) {
+	if !reflect.DeepEqual(got.Domains, []Domain{{ID: "foundation", Packages: 2}, {ID: "plan", Packages: 1}, {ID: "owner", Packages: 1}}) {
 		t.Fatalf("domains: %+v", got.Domains)
 	}
-	if _, err = cache.graph(context.Background(), src, "r"); err != nil || reads.Load() != 1 {
+	if _, err = cache.Graph(context.Background(), src, "r"); err != nil || reads.Load() != 1 {
 		t.Fatalf("a second read at the same commit read the tree again: %d reads, %v", reads.Load(), err)
 	}
 	// Origin: 2026-11-16 22:5x, the Owner switched to By dependency and saw "loading" for a long
@@ -120,12 +151,12 @@ func TestCIDomainsReadsTheTreeAndKeepsItByCommit(t *testing.T) {
 	// every Go file. When main moves the last graph is answered at once, marked with the commit
 	// it is of and that a newer one is being read; the read happens away from the request.
 	head = "c2"
-	got, err = cache.graph(context.Background(), src, "r")
+	got, err = cache.Graph(context.Background(), src, "r")
 	if err != nil || got.Commit != "c1" || got.Head != "c2" || !got.Refreshing {
 		t.Fatalf("main moved, first answer: %+v, %v", got, err)
 	}
 	for deadline := time.Now().Add(5 * time.Second); ; {
-		got, err = cache.graph(context.Background(), src, "r")
+		got, err = cache.Graph(context.Background(), src, "r")
 		if err != nil || got.Commit == "c2" || time.Now().After(deadline) {
 			break
 		}
@@ -136,11 +167,11 @@ func TestCIDomainsReadsTheTreeAndKeepsItByCommit(t *testing.T) {
 	}
 	// A process that starts later (the platform restarts at every delivery) has the graph from
 	// what was kept, without a read.
-	restarted := ciDomainsCache{kept: cache.kept}
-	if again, err := restarted.graph(context.Background(), src, "r"); err != nil || again.Commit != "c2" || again.Refreshing || reads.Load() != 2 {
+	restarted := Cache{kept: cache.kept}
+	if again, err := restarted.Graph(context.Background(), src, "r"); err != nil || again.Commit != "c2" || again.Refreshing || reads.Load() != 2 {
 		t.Fatalf("after a restart: %d reads, %+v, %v", reads.Load(), again, err)
 	}
-	edge := func(e cidomains.Edge) string { return fmt.Sprintf("%s>%s %d %v", e.From, e.To, e.Imports, e.WrongWay) }
+	edge := func(e Edge) string { return fmt.Sprintf("%s>%s %d %v", e.From, e.To, e.Imports, e.WrongWay) }
 	if len(got.Edges) != 4 || edge(got.Edges[1]) != "plan>foundation 1 false" || edge(got.Edges[2]) != "plan>owner 1 false" || len(got.Edges[1].Pairs) != 1 {
 		t.Fatalf("edges after the move: %+v", got.Edges)
 	}
@@ -154,28 +185,28 @@ func TestCIDomainsWithoutATableIsUnmeasuredAndAFailedReadIsNotKept(t *testing.T)
 	head := "c1"
 	plain := map[string]string{"README.md": "x\n"}
 	src, _ := ciDomainsSrc(t, &head, map[string]map[string]string{"c1": plain}, nil)
-	var cache ciDomainsCache
-	got, err := cache.graph(context.Background(), src, "r")
+	var cache Cache
+	got, err := cache.Graph(context.Background(), src, "r")
 	if err != nil || got.Measured || !strings.Contains(got.Note, "config/domain-ownership.json") || got.Domains == nil || got.Edges == nil || got.SharedPackages == nil {
 		t.Fatalf("no table: %+v %v", got, err)
 	}
-	changes, err := cache.changes(context.Background(), src, time.Now(), "r", []string{strings.Repeat("a", 40)})
+	changes, err := cache.Changes(context.Background(), src, time.Now(), "r", []string{strings.Repeat("a", 40)})
 	if err != nil || changes.Measured || changes.Note == "" || len(changes.Changes) != 0 {
 		t.Fatalf("changes with no table: %+v %v", changes, err)
 	}
 	fail := true
-	src.tree = func(ctx context.Context, repo, commit string) (*unitplan.Tree, error) {
+	src.Tree = func(ctx context.Context, repo, commit string) (*unitplan.Tree, error) {
 		if fail {
 			return nil, errors.New("gitea: HTTP 502")
 		}
-		return scopeTrees(t, map[string]map[string]string{"c1": ciDomainsFiles()})(ctx, repo, commit)
+		return treesOf(map[string]map[string]string{"c1": ciDomainsFiles()})(ctx, repo, commit)
 	}
-	var second ciDomainsCache
-	if _, err = second.graph(context.Background(), src, "r"); err == nil {
+	var second Cache
+	if _, err = second.Graph(context.Background(), src, "r"); err == nil {
 		t.Fatal("a failed read answered")
 	}
 	fail = false
-	if got, err = second.graph(context.Background(), src, "r"); err != nil || !got.Measured {
+	if got, err = second.Graph(context.Background(), src, "r"); err != nil || !got.Measured {
 		t.Fatalf("after the failure: %+v %v", got, err)
 	}
 }
@@ -196,23 +227,23 @@ func TestCIDomainsTakesTheGraphAnotherProcessKept(t *testing.T) {
 	trees := map[string]map[string]string{"c1": ciDomainsFiles(), "c2": moved}
 	kept := &memKept{}
 	workersSrc, _ := ciDomainsSrc(t, &head, trees, nil)
-	workers := ciDomainsCache{kept: kept}
+	workers := Cache{kept: kept}
 	apiSrc, apiReads := ciDomainsSrc(t, &head, trees, nil)
-	api := ciDomainsCache{kept: kept}
-	if _, err := workers.graph(context.Background(), workersSrc, "r"); err != nil {
+	api := Cache{kept: kept}
+	if _, err := workers.Graph(context.Background(), workersSrc, "r"); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := api.graph(context.Background(), apiSrc, "r"); err != nil || got.Commit != "c1" || apiReads.Load() != 0 {
+	if got, err := api.Graph(context.Background(), apiSrc, "r"); err != nil || got.Commit != "c1" || apiReads.Load() != 0 {
 		t.Fatalf("the API at the first commit: %d reads, %+v, %v", apiReads.Load(), got, err)
 	}
 	// Main moves; nothing newer is kept yet: the old graph, marked.
 	head = "c2"
-	if got, err := api.graph(context.Background(), apiSrc, "r"); err != nil || got.Commit != "c1" || !got.Refreshing {
+	if got, err := api.Graph(context.Background(), apiSrc, "r"); err != nil || got.Commit != "c1" || !got.Refreshing {
 		t.Fatalf("control: %+v, %v", got, err)
 	}
 	// The workers read ahead and keep it.
 	for deadline := time.Now().Add(5 * time.Second); ; {
-		got, err := workers.graph(context.Background(), workersSrc, "r")
+		got, err := workers.Graph(context.Background(), workersSrc, "r")
 		if err != nil || got.Commit == "c2" || time.Now().After(deadline) {
 			break
 		}
@@ -221,7 +252,7 @@ func TestCIDomainsTakesTheGraphAnotherProcessKept(t *testing.T) {
 	api.graphMu.Lock()
 	api.looked = nil // the API looks at what is kept at most every five seconds
 	api.graphMu.Unlock()
-	if got, err := api.graph(context.Background(), apiSrc, "r"); err != nil || got.Commit != "c2" || got.Refreshing {
+	if got, err := api.Graph(context.Background(), apiSrc, "r"); err != nil || got.Commit != "c2" || got.Refreshing {
 		t.Fatalf("the API after the workers kept the new graph: %+v, %v", got, err)
 	}
 }
@@ -238,29 +269,29 @@ func TestCIChangesCountsByDomainAndKeepsWhatItRead(t *testing.T) {
 		return []string{"api/internal/plan/plan.go", "api/internal/plan/testdata/a.json", "api/internal/server/server.go", "api/internal/base/base.go", "console/src/a.ts", "Makefile"}, nil
 	}
 	src, _ := ciDomainsSrc(t, &head, map[string]map[string]string{"c1": ciDomainsFiles()}, files)
-	cache := ciDomainsCache{kept: &memKept{}}
+	cache := Cache{kept: &memKept{}}
 	now := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
-	got, err := cache.changes(context.Background(), src, now, "r", []string{a, b})
+	got, err := cache.Changes(context.Background(), src, now, "r", []string{a, b})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := cidomains.Changes{Version: 1, Repo: "r", Measured: true, Changes: []cidomains.Change{
+	want := Changes{Version: 1, Repo: "r", Measured: true, Changes: []Change{
 		{Commit: a, Read: true, Domains: map[string]int{"plan": 2, "shared": 1, "foundation": 1, "console": 1, "repo": 1}},
 		{Commit: b, Read: false, Domains: map[string]int{}},
 	}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("changes: %+v", got)
 	}
-	if _, err = cache.changes(context.Background(), src, now.Add(time.Minute), "r", []string{a, b}); err != nil || asked.Load() != 2 {
+	if _, err = cache.Changes(context.Background(), src, now.Add(time.Minute), "r", []string{a, b}); err != nil || asked.Load() != 2 {
 		t.Fatalf("a minute later: asked %d times, %v", asked.Load(), err)
 	}
-	if _, err = cache.changes(context.Background(), src, now.Add(ciChangesRetry+time.Second), "r", []string{a, b}); err != nil || asked.Load() != 3 {
+	if _, err = cache.Changes(context.Background(), src, now.Add(changesRetry+time.Second), "r", []string{a, b}); err != nil || asked.Load() != 3 {
 		t.Fatalf("after the retry time only the unread commit is asked again: asked %d times, %v", asked.Load(), err)
 	}
 	// 2026-11-16: after a restart the page asked Gitea again for every commit it shows. What was
 	// read is kept: a later process asks only for the commit that never read.
-	restarted := ciDomainsCache{kept: cache.kept}
-	again, err := restarted.changes(context.Background(), src, now.Add(time.Hour), "r", []string{a, b})
+	restarted := Cache{kept: cache.kept}
+	again, err := restarted.Changes(context.Background(), src, now.Add(time.Hour), "r", []string{a, b})
 	if err != nil || asked.Load() != 4 || !reflect.DeepEqual(again, want) {
 		t.Fatalf("after a restart: asked %d times (want 4: only the unread one), %+v, %v", asked.Load(), again, err)
 	}
@@ -269,19 +300,20 @@ func TestCIChangesCountsByDomainAndKeepsWhatItRead(t *testing.T) {
 // Origin: as above — guards the two routes' requests: a repository name and
 // full commit ids only, refused before anything is read.
 func TestCIDomainRoutesRefuseBadRequests(t *testing.T) {
-	s := &Server{}
+	name := regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+	rt := Route{Cache: &Cache{}, RepoOK: name.MatchString, Source: func() (Source, bool) { return Source{}, false }}
 	for _, c := range []struct {
 		handler http.HandlerFunc
 		query   string
 		status  int
 	}{
-		{s.handleCIDomains, "", http.StatusBadRequest},
-		{s.handleCIDomains, "repo=a/b", http.StatusBadRequest},
-		{s.handleCIDomains, "repo=r", http.StatusServiceUnavailable},
-		{s.handleCIChanges, "repo=r", http.StatusBadRequest},
-		{s.handleCIChanges, "repo=r&commits=abc", http.StatusBadRequest},
-		{s.handleCIChanges, "repo=x.git&commits=" + strings.Repeat("a", 40), http.StatusBadRequest},
-		{s.handleCIChanges, "repo=r&commits=" + strings.Repeat("a", 40), http.StatusServiceUnavailable},
+		{rt.HandleDomains, "", http.StatusBadRequest},
+		{rt.HandleDomains, "repo=a/b", http.StatusBadRequest},
+		{rt.HandleDomains, "repo=r", http.StatusServiceUnavailable},
+		{rt.HandleChanges, "repo=r", http.StatusBadRequest},
+		{rt.HandleChanges, "repo=r&commits=abc", http.StatusBadRequest},
+		{rt.HandleChanges, "repo=x.git&commits=" + strings.Repeat("a", 40), http.StatusBadRequest},
+		{rt.HandleChanges, "repo=r&commits=" + strings.Repeat("a", 40), http.StatusServiceUnavailable},
 	} {
 		w := httptest.NewRecorder()
 		c.handler(w, httptest.NewRequest(http.MethodGet, "/?"+c.query, nil))

@@ -1,6 +1,4 @@
-//bifrost:owner verification
-
-package server
+package ciscore
 
 import (
 	"context"
@@ -9,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/ciscore"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -59,7 +56,7 @@ func ciTaskObject(run, task, status string, started time.Time, results ...string
 	}}
 }
 
-func ciItem(t *testing.T, items []ciscore.Item, id string) ciscore.Item {
+func ciItem(t *testing.T, items []Item, id string) Item {
 	t.Helper()
 	for _, it := range items {
 		if it.ID == id {
@@ -67,7 +64,7 @@ func ciItem(t *testing.T, items []ciscore.Item, id string) ciscore.Item {
 		}
 	}
 	t.Fatalf("no item %s", id)
-	return ciscore.Item{}
+	return Item{}
 }
 
 // Origin: as the file's — the answer is computed from the objects' own
@@ -77,8 +74,8 @@ func ciItem(t *testing.T, items []ciscore.Item, id string) ciscore.Item {
 func TestCIScorecardReadsRunsAsTheClusterKeepsThem(t *testing.T) {
 	var asked []string
 	created := ciScoreNow.Add(-time.Hour - 102*time.Second)
-	src := ciScoreSource{
-		runs: func(_ context.Context, pipeline string) ([]unstructured.Unstructured, error) {
+	src := Source{
+		Runs: func(_ context.Context, pipeline string) ([]unstructured.Unstructured, error) {
 			asked = append(asked, "runs "+pipeline)
 			switch pipeline {
 			case "bifrost-ci-platform":
@@ -92,7 +89,7 @@ func TestCIScorecardReadsRunsAsTheClusterKeepsThem(t *testing.T) {
 			}
 			return []unstructured.Unstructured{ciRunObject("land-a", "", "True", 140, "outcome=landed"), ciRunObject("land-red", "", "False", 30)}, nil
 		},
-		tasks: func(_ context.Context, selector string) ([]unstructured.Unstructured, error) {
+		Tasks: func(_ context.Context, selector string) ([]unstructured.Unstructured, error) {
 			asked = append(asked, "tasks "+selector)
 			switch {
 			case strings.HasPrefix(selector, "tekton.dev/pipeline=bifrost-ci-platform,"):
@@ -108,12 +105,12 @@ func TestCIScorecardReadsRunsAsTheClusterKeepsThem(t *testing.T) {
 			}
 			return nil, nil
 		},
-		declaration: func(_ context.Context, repo string) ciscore.Declaration {
-			return ciscore.Declaration{Declared: repo == "bifrost-platform", Units: 12}
+		Declaration: func(_ context.Context, repo string) Declaration {
+			return Declaration{Declared: repo == "bifrost-platform", Units: 12}
 		},
-		cleanup: func(context.Context) (time.Time, error) { return ciScoreNow.Add(-30 * time.Minute), nil },
+		Cleanup: func(context.Context) (time.Time, error) { return ciScoreNow.Add(-30 * time.Minute), nil },
 	}
-	out, err := readCIScorecard(context.Background(), src, ciScoreNow)
+	out, err := ReadScorecard(context.Background(), src, ciScoreNow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,44 +166,44 @@ func TestCIScorecardReadsRunsAsTheClusterKeepsThem(t *testing.T) {
 // fail the answer, anything else that could not be read is unmeasured with
 // the reason, never a pass.
 func TestCIScorecardUnreadIsNotAVerdict(t *testing.T) {
-	src := ciScoreSource{
-		runs: func(context.Context, string) ([]unstructured.Unstructured, error) { return nil, nil },
-		tasks: func(context.Context, string) ([]unstructured.Unstructured, error) {
+	src := Source{
+		Runs: func(context.Context, string) ([]unstructured.Unstructured, error) { return nil, nil },
+		Tasks: func(context.Context, string) ([]unstructured.Unstructured, error) {
 			return nil, errors.New("taskruns is forbidden")
 		},
-		declaration: func(context.Context, string) ciscore.Declaration { return ciscore.Declaration{Err: "gitea: HTTP 502"} },
-		cleanup: func(context.Context) (time.Time, error) {
+		Declaration: func(context.Context, string) Declaration { return Declaration{Err: "gitea: HTTP 502"} },
+		Cleanup: func(context.Context) (time.Time, error) {
 			return time.Time{}, errors.New("cronjobs.batch is forbidden")
 		},
 	}
-	out, err := readCIScorecard(context.Background(), src, ciScoreNow)
+	out, err := ReadScorecard(context.Background(), src, ciScoreNow)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, it := range append(append([]ciscore.Item{}, out.Repos[0].Items...), out.Provider.Items...) {
-		if it.ID != "own_failures" && it.Verdict != ciscore.Unmeasured {
+	for _, it := range append(append([]Item{}, out.Repos[0].Items...), out.Provider.Items...) {
+		if it.ID != "own_failures" && it.Verdict != Unmeasured {
 			t.Errorf("%s = %s %q, want unmeasured", it.ID, it.Verdict, it.Value)
 		}
 	}
 	if it := ciItem(t, out.Provider.Items, "cleanup_keeps_up"); !strings.Contains(it.Value, "forbidden") {
 		t.Errorf("cleanup_keeps_up = %q, want the reason", it.Value)
 	}
-	if out.Repos[0].Tier != "none" || out.Provider.Overall != ciscore.Unmeasured {
+	if out.Repos[0].Tier != "none" || out.Provider.Overall != Unmeasured {
 		t.Errorf("tier %s, provider %s", out.Repos[0].Tier, out.Provider.Overall)
 	}
-	src.runs = func(context.Context, string) ([]unstructured.Unstructured, error) { return nil, errors.New("timeout") }
-	if _, err := readCIScorecard(context.Background(), src, ciScoreNow); err == nil || !strings.Contains(err.Error(), "runs of bifrost-ci-platform: timeout") {
+	src.Runs = func(context.Context, string) ([]unstructured.Unstructured, error) { return nil, errors.New("timeout") }
+	if _, err := ReadScorecard(context.Background(), src, ciScoreNow); err == nil || !strings.Contains(err.Error(), "runs of bifrost-ci-platform: timeout") {
 		t.Errorf("err = %v, want the failed read of the runs", err)
 	}
 }
 
 // Origin: as the file's, and incident #63 (2026-11-11, a page's reads starved
 // the platform) — the page asks on every visit; the cluster is read at most
-// once in ciScorecardKeep, and a failed read is not kept.
+// once in scorecardKeep, and a failed read is not kept.
 func TestCIScorecardIsKeptTenMinutes(t *testing.T) {
 	reads, fail := 0, true
-	src := ciScoreSource{
-		runs: func(_ context.Context, pipeline string) ([]unstructured.Unstructured, error) {
+	src := Source{
+		Runs: func(_ context.Context, pipeline string) ([]unstructured.Unstructured, error) {
 			if pipeline == "bifrost-ci-platform" {
 				reads++
 			}
@@ -215,17 +212,17 @@ func TestCIScorecardIsKeptTenMinutes(t *testing.T) {
 			}
 			return nil, nil
 		},
-		tasks:       func(context.Context, string) ([]unstructured.Unstructured, error) { return nil, nil },
-		declaration: func(context.Context, string) ciscore.Declaration { return ciscore.Declaration{} },
-		cleanup:     func(context.Context) (time.Time, error) { return time.Time{}, nil },
+		Tasks:       func(context.Context, string) ([]unstructured.Unstructured, error) { return nil, nil },
+		Declaration: func(context.Context, string) Declaration { return Declaration{} },
+		Cleanup:     func(context.Context) (time.Time, error) { return time.Time{}, nil },
 	}
-	var cache ciScorecardCache
-	if _, err := cache.read(context.Background(), src, ciScoreNow); err == nil {
+	var cache Cache
+	if _, err := cache.Read(context.Background(), src, ciScoreNow); err == nil {
 		t.Fatal("a failed read answered")
 	}
 	fail = false
 	for _, after := range []time.Duration{time.Second, 5 * time.Minute, 10 * time.Minute} {
-		out, err := cache.read(context.Background(), src, ciScoreNow.Add(after))
+		out, err := cache.Read(context.Background(), src, ciScoreNow.Add(after))
 		if err != nil || out.GeneratedAt != "2026-11-16T12:00:01Z" {
 			t.Fatalf("after %s: generated %s, %v", after, out.GeneratedAt, err)
 		}
@@ -233,7 +230,7 @@ func TestCIScorecardIsKeptTenMinutes(t *testing.T) {
 	if reads != 2 {
 		t.Errorf("read the cluster %d times, want 2 (the failed one and one kept)", reads)
 	}
-	if out, _ := cache.read(context.Background(), src, ciScoreNow.Add(10*time.Minute+2*time.Second)); out.GeneratedAt != "2026-11-16T12:10:02Z" || reads != 3 {
+	if out, _ := cache.Read(context.Background(), src, ciScoreNow.Add(10*time.Minute+2*time.Second)); out.GeneratedAt != "2026-11-16T12:10:02Z" || reads != 3 {
 		t.Errorf("after the keep: generated %s, %d reads", out.GeneratedAt, reads)
 	}
 }

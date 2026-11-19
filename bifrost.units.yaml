@@ -109,6 +109,8 @@ modules:
       api/internal/agentrt/loopalert: ["api/internal/agentrt/loopalert", "api/internal/bus/registry/ledger"]
       # 2026-11-17: TestRefusalTypeIsRegistered reads the event register.
       api/internal/agentrt/artifact: ["api/internal/agentrt/artifact", "api/internal/bus/registry/ledger"]
+      # 2026-11-18: the full-CI check's test compares its answer with the Console's contract file.
+      api/internal/agentrt/fullci: ["api/internal/agentrt/fullci", "api/internal/server/testdata/contract/units"]
       # 2026-11-17: TestFullCINotedIsRegistered reads the event register.
       api/internal/agentrt/evidence: ["api/internal/agentrt/evidence", "api/internal/bus/registry/ledger"]
       # 2026-11-17: TestNotedTypeIsRegistered reads the event register.

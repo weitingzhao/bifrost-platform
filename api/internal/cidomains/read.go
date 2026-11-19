@@ -1,4 +1,4 @@
-package server
+package cidomains
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,9 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/cidomains"
 	"github.com/weitingzhao/bifrost-platform/api/internal/domainscore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
@@ -26,7 +23,7 @@ import (
 
 // The two reads of the CI page (Work > CI) about domains (Owner 2026-11-16:
 // he could not tell from the page who depends on whom, or what a change pulls
-// in). Both are contracts, version cidomains.Version in the body; read-only;
+// in). Both are contracts, version Version in the body; read-only;
 // viewer and above.
 //
 //	GET /api/v1/ci/domains?repo=…            the domain graph of main's head
@@ -42,71 +39,74 @@ import (
 // tree reader, so the next commit reads only what it changed). A commit's
 // changed files never change and are kept until the process ends or the
 // store is full; a commit that could not be read is asked again after
-// ciChangesRetry.
+// changesRetry.
 
 const (
-	ciChangesKeep   = 4096
-	ciChangesRetry  = 10 * time.Minute
-	ciChangesAtOnce = 4
+	changesKeep   = 4096
+	changesRetry  = 10 * time.Minute
+	changesAtOnce = 4
 )
 
-// ciDomainsSource is what the two routes read; the server's is ciDomainsSourceOf.
-type ciDomainsSource struct {
-	head func(ctx context.Context, repo string) (string, error)
-	tree func(ctx context.Context, repo, commit string) (*unitplan.Tree, error)
-	// files are the paths a commit changed against its first parent.
-	files func(ctx context.Context, repo, commit string) ([]string, error)
+// Source is what the two routes read.
+type Source struct {
+	Head func(ctx context.Context, repo string) (string, error)
+	Tree func(ctx context.Context, repo, commit string) (*unitplan.Tree, error)
+	// Files are the paths a commit changed against its first parent.
+	Files func(ctx context.Context, repo, commit string) ([]string, error)
+	// CommitOK says whether a kept commit id is one (nil: every id is kept).
+	CommitOK func(string) bool
 }
 
-type ciDomainsCache struct {
+// Cache keeps the domain graphs and the files of commits.
+type Cache struct {
 	// graphMu guards graphs and reading. A graph is read in the background,
 	// once a commit; a request never waits for one when an earlier graph of
 	// the repository is known.
 	graphMu sync.Mutex
-	graphs  map[string]cidomains.Graph // by repo: the last graph read
-	reading map[string]*ciGraphRead    // by repo: the read under way
-	loaded  map[string]bool            // by repo: the kept file was looked at
-	looked  map[string]time.Time       // by repo: when the kept file was last looked at for a newer graph
+	graphs  map[string]Graph      // by repo: the last graph read
+	reading map[string]*graphRead // by repo: the read under way
+	loaded  map[string]bool       // by repo: the kept file was looked at
+	looked  map[string]time.Time  // by repo: when the kept file was last looked at for a newer graph
 
 	// kept is where the last graph and the files of commits outlive the
-	// process; nil is the platform's state store (ciKeptState).
-	kept ciKept
+	// process; nil is the platform's state store (StateKept).
+	kept Kept
 
 	mu      sync.Mutex
-	places  map[string]ciPlacesKept // by repo
-	changed map[string]ciChangedKept
+	places  map[string]placesKept // by repo
+	changed map[string]changedKept
 	// changedLoaded: by repo, the kept commits were read into changed.
 	changedLoaded map[string]bool
 }
 
-// ciGraphRead is one read of a graph under way.
-type ciGraphRead struct {
+// graphRead is one read of a graph under way.
+type graphRead struct {
 	commit string
 	done   chan struct{}
-	graph  cidomains.Graph
+	graph  Graph
 	err    error
 }
 
-// ciKept keeps small JSON by name across restarts. A missing name reads as
+// Kept keeps small JSON by name across restarts. A missing name reads as
 // nil, nil.
-type ciKept interface {
+type Kept interface {
 	Read(name string) ([]byte, error)
 	Write(name string, raw []byte) error
 }
 
-// ciKeptState is the platform's state store (statefile: ConfigMaps in the
+// StateKept is the platform's state store (statefile: ConfigMaps in the
 // cluster, files beside a local process), under ci/. With no data directory
 // nothing is kept and every process reads anew.
-type ciKeptState struct{}
+type StateKept struct{}
 
-func (ciKeptState) path(name string) string {
+func (StateKept) path(name string) string {
 	if dir := strings.TrimSpace(os.Getenv("PLATFORM_DATA_DIR")); dir != "" {
 		return filepath.Join(dir, "ci", name+".json")
 	}
 	return ""
 }
 
-func (k ciKeptState) Read(name string) ([]byte, error) {
+func (k StateKept) Read(name string) ([]byte, error) {
 	p := k.path(name)
 	if p == "" {
 		return nil, nil
@@ -118,7 +118,7 @@ func (k ciKeptState) Read(name string) ([]byte, error) {
 	return raw, err
 }
 
-func (k ciKeptState) Write(name string, raw []byte) error {
+func (k StateKept) Write(name string, raw []byte) error {
 	p := k.path(name)
 	if p == "" {
 		return nil
@@ -126,29 +126,29 @@ func (k ciKeptState) Write(name string, raw []byte) error {
 	return statefile.WriteFile(p, raw, 0o600)
 }
 
-func (c *ciDomainsCache) store() ciKept {
+func (c *Cache) store() Kept {
 	if c.kept != nil {
 		return c.kept
 	}
-	return ciKeptState{}
+	return StateKept{}
 }
 
-type ciPlacesKept struct {
+type placesKept struct {
 	commit   string
 	measured bool
 	note     string
-	places   cidomains.Places
+	places   Places
 }
 
-type ciChangedKept struct {
+type changedKept struct {
 	read  bool
 	files []string
 	at    time.Time
 }
 
-// ciGoRoots are the directories of the repository's Go modules: the ones its
+// goRoots are the directories of the repository's Go modules: the ones its
 // declaration names, else the ones the ownership table's rows are under.
-func ciGoRoots(t *unitplan.Tree, table cidomains.Table) []string {
+func goRoots(t *unitplan.Tree, table Table) []string {
 	var roots []string
 	if doc, err := t.ReadFile(unitplan.ManifestPath); err == nil {
 		if manifest, err := unitplan.ParseManifest(doc); err == nil {
@@ -170,51 +170,51 @@ func ciGoRoots(t *unitplan.Tree, table cidomains.Table) []string {
 	return roots
 }
 
-// ciTable reads the ownership table of a tree: ok false with a note for a
+// tableOf reads the ownership table of a tree: ok false with a note for a
 // repository that has none.
-func ciTable(t *unitplan.Tree) (table cidomains.Table, note string, err error) {
-	if _, ok := t.Lookup(cidomains.OwnershipPath); !ok {
-		return table, "this repository has no " + cidomains.OwnershipPath + ": its domains are not measured", nil
+func tableOf(t *unitplan.Tree) (table Table, note string, err error) {
+	if _, ok := t.Lookup(OwnershipPath); !ok {
+		return table, "this repository has no " + OwnershipPath + ": its domains are not measured", nil
 	}
-	raw, err := t.ReadFile(cidomains.OwnershipPath)
+	raw, err := t.ReadFile(OwnershipPath)
 	if err != nil {
 		return table, "", err
 	}
-	if table, err = cidomains.ParseTable(raw); err != nil {
-		return table, cidomains.OwnershipPath + ": " + err.Error(), nil
+	if table, err = ParseTable(raw); err != nil {
+		return table, OwnershipPath + ": " + err.Error(), nil
 	}
-	if _, ok := t.Lookup(cidomains.ConsolePath); !ok {
+	if _, ok := t.Lookup(ConsolePath); !ok {
 		return table, "", nil
 	}
-	if raw, err = t.ReadFile(cidomains.ConsolePath); err != nil {
+	if raw, err = t.ReadFile(ConsolePath); err != nil {
 		return table, "", err
 	}
 	if err = table.AddConsole(raw); err != nil {
-		return table, cidomains.ConsolePath + ": " + err.Error(), nil
+		return table, ConsolePath + ": " + err.Error(), nil
 	}
 	return table, "", nil
 }
 
-func readCIDomains(ctx context.Context, src ciDomainsSource, repo, commit string) (cidomains.Graph, error) {
-	t, err := src.tree(ctx, repo, commit)
+func readAt(ctx context.Context, src Source, repo, commit string) (Graph, error) {
+	t, err := src.Tree(ctx, repo, commit)
 	if err != nil {
-		return cidomains.Graph{}, err
+		return Graph{}, err
 	}
-	table, note, err := ciTable(t)
+	table, note, err := tableOf(t)
 	if err != nil {
-		return cidomains.Graph{}, err
+		return Graph{}, err
 	}
 	if note != "" {
-		return cidomains.Unmeasured(repo, commit, note), nil
+		return Unmeasured(repo, commit, note), nil
 	}
 	var packages []domainscore.Package
-	for _, root := range ciGoRoots(t, table) {
+	for _, root := range goRoots(t, table) {
 		if err = ctx.Err(); err != nil {
-			return cidomains.Graph{}, err
+			return Graph{}, err
 		}
 		mod, err := unitplan.ReadGoModule(t, root)
 		if err != nil {
-			return cidomains.Graph{}, err
+			return Graph{}, err
 		}
 		for _, p := range mod.Packages {
 			pkg := domainscore.Package{Path: p.Dir}
@@ -227,12 +227,12 @@ func readCIDomains(ctx context.Context, src ciDomainsSource, repo, commit string
 		}
 	}
 	if len(packages) == 0 {
-		return cidomains.Unmeasured(repo, commit, "no Go package was found under the directories the ownership table names"), nil
+		return Unmeasured(repo, commit, "no Go package was found under the directories the ownership table names"), nil
 	}
-	return table.WithTiers(cidomains.GraphOf(repo, commit, table.Ownership, packages)), nil
+	return table.WithTiers(GraphOf(repo, commit, table.Ownership, packages)), nil
 }
 
-// graph answers with the graph of main's head when it is known, and
+// Graph answers with the graph of main's head when it is known, and
 // otherwise with the last graph that was read, marked Refreshing, while the
 // head's is read in the background. Only a repository no graph was ever read
 // of makes the request wait.
@@ -243,10 +243,11 @@ func readCIDomains(ctx context.Context, src ciDomainsSource, repo, commit string
 // platform restarted at every delivery, so almost every look began a read of
 // every Go file. Now the last graph is kept in the platform's state and
 // shown at once, with the commit it is of.
-func (c *ciDomainsCache) graph(ctx context.Context, src ciDomainsSource, repo string) (cidomains.Graph, error) {
-	head, err := src.head(ctx, repo)
+// Graph is the domain graph (see above).
+func (c *Cache) Graph(ctx context.Context, src Source, repo string) (Graph, error) {
+	head, err := src.Head(ctx, repo)
 	if err != nil {
-		return cidomains.Graph{}, err
+		return Graph{}, err
 	}
 	c.graphMu.Lock()
 	if !c.loaded[repo] {
@@ -255,10 +256,10 @@ func (c *ciDomainsCache) graph(ctx context.Context, src ciDomainsSource, repo st
 		}
 		c.loaded[repo] = true
 		if raw, rerr := c.store().Read("domains-" + repo); rerr == nil && len(raw) > 0 {
-			var g cidomains.Graph
-			if json.Unmarshal(raw, &g) == nil && g.Version == cidomains.Version && g.Repo == repo && g.Commit != "" {
+			var g Graph
+			if json.Unmarshal(raw, &g) == nil && g.Version == Version && g.Repo == repo && g.Commit != "" {
 				if c.graphs == nil {
-					c.graphs = map[string]cidomains.Graph{}
+					c.graphs = map[string]Graph{}
 				}
 				if _, ok := c.graphs[repo]; !ok {
 					c.graphs[repo] = g
@@ -275,8 +276,8 @@ func (c *ciDomainsCache) graph(ctx context.Context, src ciDomainsSource, repo st
 		}
 		c.looked[repo] = time.Now()
 		if raw, rerr := c.store().Read("domains-" + repo); rerr == nil && len(raw) > 0 {
-			var g cidomains.Graph
-			if json.Unmarshal(raw, &g) == nil && g.Version == cidomains.Version && g.Repo == repo && g.Commit == head {
+			var g Graph
+			if json.Unmarshal(raw, &g) == nil && g.Version == Version && g.Repo == repo && g.Commit == head {
 				c.graphs[repo], last = g, g
 			}
 		}
@@ -288,9 +289,9 @@ func (c *ciDomainsCache) graph(ctx context.Context, src ciDomainsSource, repo st
 	}
 	read := c.reading[repo]
 	if read == nil || read.commit != head {
-		read = &ciGraphRead{commit: head, done: make(chan struct{})}
+		read = &graphRead{commit: head, done: make(chan struct{})}
 		if c.reading == nil {
-			c.reading = map[string]*ciGraphRead{}
+			c.reading = map[string]*graphRead{}
 		}
 		c.reading[repo] = read
 		safego.Go("ci-domains-read", func() { c.readGraph(src, repo, read) })
@@ -303,26 +304,26 @@ func (c *ciDomainsCache) graph(ctx context.Context, src ciDomainsSource, repo st
 	select {
 	case <-read.done:
 		if read.err != nil {
-			return cidomains.Graph{}, read.err
+			return Graph{}, read.err
 		}
 		out := read.graph
 		out.Head = head
 		return out, nil
 	case <-ctx.Done():
-		return cidomains.Graph{}, ctx.Err()
+		return Graph{}, ctx.Err()
 	}
 }
 
 // readGraph reads the graph of one commit away from any request, keeps it
 // and writes it to the platform's state.
-func (c *ciDomainsCache) readGraph(src ciDomainsSource, repo string, read *ciGraphRead) {
+func (c *Cache) readGraph(src Source, repo string, read *graphRead) {
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
 	defer cancel()
-	read.graph, read.err = readCIDomains(ctx, src, repo, read.commit)
+	read.graph, read.err = readAt(ctx, src, repo, read.commit)
 	c.graphMu.Lock()
 	if read.err == nil {
 		if c.graphs == nil || len(c.graphs) > 64 {
-			c.graphs = map[string]cidomains.Graph{}
+			c.graphs = map[string]Graph{}
 		}
 		c.graphs[repo] = read.graph
 	}
@@ -344,10 +345,10 @@ func (c *ciDomainsCache) readGraph(src ciDomainsSource, repo string, read *ciGra
 
 // placesOf is the ownership table and the package directories of main's head,
 // kept while main stays there. It reads the tree's listing and one file.
-func (c *ciDomainsCache) placesOf(ctx context.Context, src ciDomainsSource, repo string) (ciPlacesKept, error) {
-	head, err := src.head(ctx, repo)
+func (c *Cache) placesOf(ctx context.Context, src Source, repo string) (placesKept, error) {
+	head, err := src.Head(ctx, repo)
 	if err != nil {
-		return ciPlacesKept{}, err
+		return placesKept{}, err
 	}
 	c.mu.Lock()
 	kept, ok := c.places[repo]
@@ -355,15 +356,15 @@ func (c *ciDomainsCache) placesOf(ctx context.Context, src ciDomainsSource, repo
 	if ok && kept.commit == head {
 		return kept, nil
 	}
-	t, err := src.tree(ctx, repo, head)
+	t, err := src.Tree(ctx, repo, head)
 	if err != nil {
-		return ciPlacesKept{}, err
+		return placesKept{}, err
 	}
-	table, note, err := ciTable(t)
+	table, note, err := tableOf(t)
 	if err != nil {
-		return ciPlacesKept{}, err
+		return placesKept{}, err
 	}
-	kept = ciPlacesKept{commit: head, measured: note == "", note: note, places: cidomains.Places{Table: table, IsPackage: func(dir string) bool {
+	kept = placesKept{commit: head, measured: note == "", note: note, places: Places{Table: table, IsPackage: func(dir string) bool {
 		for _, name := range t.Names(dir) {
 			if strings.HasSuffix(name, ".go") {
 				if e, _ := t.Lookup(dir + "/" + name); !e.Dir {
@@ -376,32 +377,33 @@ func (c *ciDomainsCache) placesOf(ctx context.Context, src ciDomainsSource, repo
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.places == nil || len(c.places) > 64 {
-		c.places = map[string]ciPlacesKept{}
+		c.places = map[string]placesKept{}
 	}
 	c.places[repo] = kept
 	return kept, nil
 }
 
-func (c *ciDomainsCache) changes(ctx context.Context, src ciDomainsSource, now time.Time, repo string, commits []string) (cidomains.Changes, error) {
+// Changes counts, by domain, the files each commit changed.
+func (c *Cache) Changes(ctx context.Context, src Source, now time.Time, repo string, commits []string) (Changes, error) {
 	places, err := c.placesOf(ctx, src, repo)
 	if err != nil {
-		return cidomains.Changes{}, err
+		return Changes{}, err
 	}
 	if !places.measured {
-		return cidomains.Changes{Version: cidomains.Version, Repo: repo, Note: places.note, Changes: []cidomains.Change{}}, nil
+		return Changes{Version: Version, Repo: repo, Note: places.note, Changes: []Change{}}, nil
 	}
-	c.loadChanged(repo)
+	c.loadChanged(src, repo)
 	// What is not kept is read, a few commits at a time.
-	results := make([]ciChangedKept, len(commits))
+	results := make([]changedKept, len(commits))
 	var wg sync.WaitGroup
 	var readNow atomic.Bool
-	gate := make(chan struct{}, ciChangesAtOnce)
+	gate := make(chan struct{}, changesAtOnce)
 	for i, commit := range commits {
 		key := repo + "\x00" + commit
 		c.mu.Lock()
 		kept, ok := c.changed[key]
 		c.mu.Unlock()
-		if ok && (kept.read || now.Sub(kept.at) < ciChangesRetry) {
+		if ok && (kept.read || now.Sub(kept.at) < changesRetry) {
 			results[i] = kept
 			continue
 		}
@@ -411,8 +413,8 @@ func (c *ciDomainsCache) changes(ctx context.Context, src ciDomainsSource, now t
 			defer safego.Recover("ci-changes")
 			gate <- struct{}{}
 			defer func() { <-gate }()
-			files, err := src.files(ctx, repo, commit)
-			got := ciChangedKept{read: err == nil, files: files, at: now}
+			files, err := src.Files(ctx, repo, commit)
+			got := changedKept{read: err == nil, files: files, at: now}
 			results[i] = got
 			if got.read {
 				readNow.Store(true)
@@ -422,8 +424,8 @@ func (c *ciDomainsCache) changes(ctx context.Context, src ciDomainsSource, now t
 			}
 			c.mu.Lock()
 			defer c.mu.Unlock()
-			if c.changed == nil || len(c.changed) >= ciChangesKeep {
-				c.changed = map[string]ciChangedKept{} // start over rather than track ages
+			if c.changed == nil || len(c.changed) >= changesKeep {
+				c.changed = map[string]changedKept{} // start over rather than track ages
 			}
 			c.changed[key] = got
 		}()
@@ -432,9 +434,9 @@ func (c *ciDomainsCache) changes(ctx context.Context, src ciDomainsSource, now t
 	if readNow.Load() {
 		c.saveChanged(repo, commits, results)
 	}
-	out := cidomains.Changes{Version: cidomains.Version, Repo: repo, Measured: true, Changes: make([]cidomains.Change, 0, len(commits))}
+	out := Changes{Version: Version, Repo: repo, Measured: true, Changes: make([]Change, 0, len(commits))}
 	for i, commit := range commits {
-		change := cidomains.Change{Commit: commit, Read: results[i].read, Domains: map[string]int{}}
+		change := Change{Commit: commit, Read: results[i].read, Domains: map[string]int{}}
 		if change.Read {
 			change.Domains = places.places.Count(results[i].files)
 		}
@@ -445,15 +447,15 @@ func (c *ciDomainsCache) changes(ctx context.Context, src ciDomainsSource, now t
 
 // The files of commits outlive the process too: a commit never changes, and
 // after a restart the page asked Gitea again for every run it shows (some
-// hundred commits). ciChangesKeptCommits newest-asked commits are kept, each
-// with at most ciChangesKeptFiles paths (a larger commit is read again), so
+// hundred commits). changesKeptCommits newest-asked commits are kept, each
+// with at most changesKeptFiles paths (a larger commit is read again), so
 // the kept state stays far under a ConfigMap's megabyte.
 const (
-	ciChangesKeptCommits = 300
-	ciChangesKeptFiles   = 150
+	changesKeptCommits = 300
+	changesKeptFiles   = 150
 )
 
-func (c *ciDomainsCache) loadChanged(repo string) {
+func (c *Cache) loadChanged(src Source, repo string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.changedLoaded[repo] {
@@ -472,22 +474,22 @@ func (c *ciDomainsCache) loadChanged(repo string) {
 		return
 	}
 	if c.changed == nil {
-		c.changed = map[string]ciChangedKept{}
+		c.changed = map[string]changedKept{}
 	}
 	for commit, files := range kept {
-		if commitID.MatchString(commit) {
-			c.changed[repo+"\x00"+commit] = ciChangedKept{read: true, files: files}
+		if src.CommitOK == nil || src.CommitOK(commit) {
+			c.changed[repo+"\x00"+commit] = changedKept{read: true, files: files}
 		}
 	}
 }
 
 // saveChanged writes the commits just asked for, when one of them was read
 // from Gitea now: the ones asked for last are the ones a page shows.
-func (c *ciDomainsCache) saveChanged(repo string, commits []string, results []ciChangedKept) {
+func (c *Cache) saveChanged(repo string, commits []string, results []changedKept) {
 	kept := map[string][]string{}
 	for i, commit := range commits {
 		r := results[i]
-		if !r.read || len(r.files) > ciChangesKeptFiles || len(kept) >= ciChangesKeptCommits {
+		if !r.read || len(r.files) > changesKeptFiles || len(kept) >= changesKeptCommits {
 			continue
 		}
 		kept[commit] = r.files
@@ -504,62 +506,17 @@ func (c *ciDomainsCache) saveChanged(repo string, commits []string, results []ci
 	}
 }
 
-// ciDomainsAheadEvery is how often the workers look whether main moved.
-const ciDomainsAheadEvery = time.Minute
-
-// ciDomainsAhead reads the domain graph before anybody asks: once a minute,
-// in the workers, it asks for the graph of each repository the scorecard
-// knows, which starts the read of a new head and keeps the result in the
-// platform's state; the API then answers from what is kept.
-//
-// Owner 2026-11-16 22:5x, the coordinator's reading of it: the graph was
-// computed when he clicked, so he waited. A click should only read. This is
-// the plain form (a look a minute); waking on git.main.advanced instead is
-// the communication line's bus, and can replace the ticker.
-func (s *Server) ciDomainsAhead(ctx context.Context) {
-	if s.delivery == nil {
-		return
-	}
-	safego.Go("ci-domains-ahead", func() {
-		t := time.NewTicker(ciDomainsAheadEvery)
-		defer t.Stop()
-		for {
-			for _, r := range ciScoreRepos {
-				pass, cancel := context.WithTimeout(kubemetrics.WithSite(ctx, "ci-domains-ahead"), 20*time.Second)
-				if _, err := s.ciDomainsKept.graph(pass, s.ciDomainsSourceOf(), r.repo); err != nil && ctx.Err() == nil {
-					slog.Debug("ci domains ahead", "repo", r.repo, "error", err)
-				}
-				cancel()
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-			}
-		}
-	})
-}
-
-func (s *Server) ciDomainsSourceOf() ciDomainsSource {
-	return ciDomainsSource{head: s.mainHead, tree: s.unitTreesOf(), files: s.giteaChangedFiles}
-}
-
-// giteaChangedFiles are the paths a commit changed against its first parent,
-// as Gitea lists them for the commit (git's --first-parent name status,
-// renames as a removal and an addition).
-func (s *Server) giteaChangedFiles(ctx context.Context, repo, commit string) ([]string, error) {
-	s.unitTreesOf()
-	body, err := s.unitTrees.get(ctx, url.PathEscape(repo)+"/git/commits/"+commit+"?stat=false&verification=false&files=true", 8<<20)
-	if err != nil {
-		return nil, err
-	}
+// ChangedFilesOf reads Gitea's listing of one commit (git's --first-parent
+// name status, renames as a removal and an addition) into the paths it
+// changed.
+func ChangedFilesOf(body []byte, repo, commit string) ([]string, error) {
 	var doc struct {
 		SHA   string `json:"sha"`
 		Files *[]struct {
 			Filename string `json:"filename"`
 		} `json:"files"`
 	}
-	if err = json.Unmarshal(body, &doc); err != nil || doc.SHA != commit {
+	if err := json.Unmarshal(body, &doc); err != nil || doc.SHA != commit {
 		return nil, fmt.Errorf("gitea: %s commit %s: not that commit (%v)", repo, commit, err)
 	}
 	if doc.Files == nil {
@@ -572,55 +529,74 @@ func (s *Server) giteaChangedFiles(ctx context.Context, repo, commit string) ([]
 	return out, nil
 }
 
-func ciRepoParam(w http.ResponseWriter, r *http.Request) (string, bool) {
+// Route is the two routes about domains. RepoOK says whether a name is a
+// repository's; Source says, per request, what to read (ok false: this
+// platform does not read Gitea).
+type Route struct {
+	Cache  *Cache
+	RepoOK func(string) bool
+	Source func() (Source, bool)
+}
+
+func routeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func (rt Route) repoParam(w http.ResponseWriter, r *http.Request) (string, bool) {
 	repo := strings.TrimSpace(r.URL.Query().Get("repo"))
-	if !giteaName.MatchString(repo) || strings.HasSuffix(repo, ".git") {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "repo is a repository name"})
+	if !rt.RepoOK(repo) || strings.HasSuffix(repo, ".git") {
+		routeJSON(w, http.StatusBadRequest, map[string]string{"error": "repo is a repository name"})
 		return "", false
 	}
 	return repo, true
 }
 
-func (s *Server) handleCIDomains(w http.ResponseWriter, r *http.Request) {
-	repo, ok := ciRepoParam(w, r)
+// HandleDomains is GET /ci/domains.
+func (rt Route) HandleDomains(w http.ResponseWriter, r *http.Request) {
+	repo, ok := rt.repoParam(w, r)
 	if !ok {
 		return
 	}
-	if s.delivery == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "this platform does not read Gitea"})
+	src, ok := rt.Source()
+	if !ok {
+		routeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "this platform does not read Gitea"})
 		return
 	}
 	// As /units/config: a first read of a module is every Go file of it.
 	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
 	defer cancel()
-	out, err := s.ciDomainsKept.graph(ctx, s.ciDomainsSourceOf(), repo)
+	out, err := rt.Cache.Graph(ctx, src, repo)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		routeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	routeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) handleCIChanges(w http.ResponseWriter, r *http.Request) {
-	repo, ok := ciRepoParam(w, r)
+// HandleChanges is GET /ci/changes.
+func (rt Route) HandleChanges(w http.ResponseWriter, r *http.Request) {
+	repo, ok := rt.repoParam(w, r)
 	if !ok {
 		return
 	}
-	commits, err := cidomains.ParseCommits(r.URL.Query().Get("commits"))
+	commits, err := ParseCommits(r.URL.Query().Get("commits"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		routeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	if s.delivery == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "this platform does not read Gitea"})
+	src, ok := rt.Source()
+	if !ok {
+		routeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "this platform does not read Gitea"})
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
-	out, err := s.ciDomainsKept.changes(ctx, s.ciDomainsSourceOf(), time.Now(), repo, commits)
+	out, err := rt.Cache.Changes(ctx, src, time.Now(), repo, commits)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		routeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	routeJSON(w, http.StatusOK, out)
 }

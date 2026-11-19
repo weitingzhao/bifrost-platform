@@ -6,16 +6,57 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
+	"github.com/weitingzhao/bifrost-platform/api/internal/evidenceread"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 )
+
+type unitPlanTask struct {
+	Unit    string          `json:"unit"`
+	Task    string          `json:"task"`
+	Module  string          `json:"module"`
+	Key     string          `json:"input_key"`
+	Shards  int             `json:"shards,omitempty"`
+	Verdict string          `json:"verdict"`
+	Inputs  json.RawMessage `json:"inputs,omitempty"`
+}
+
+type unitPlanAnswer struct {
+	Tree   string             `json:"tree"`
+	Pins   []unitplan.PlanPin `json:"pins"`
+	Units  []unitPlanTask     `json:"units"`
+	ToRun  int                `json:"to_run"`
+	Counts map[string]int     `json:"counts"`
+}
+
+// unitPlan asks the plan route (evidenceread.PlanRoute) the way a request
+// does and reads its answer: the plan of a commit with the ledger's word on
+// each key.
+func unitPlan(ctx context.Context, db eventlog.DB, trees unitTreesFunc, repo, commit string, withInputs bool) (unitPlanAnswer, error) {
+	route := evidenceread.PlanRoute{RepoOK: giteaName.MatchString, CommitOK: commitID.MatchString,
+		Sources: func() (evidenceread.PlanSources, bool) { return evidenceread.PlanSources{DB: db, Trees: trees}, true }}
+	q := url.Values{"repo": {repo}, "commit": {commit}}
+	if withInputs {
+		q.Set("inputs", "1")
+	}
+	w := httptest.NewRecorder()
+	route.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/?"+q.Encode(), nil).WithContext(ctx))
+	var out unitPlanAnswer
+	if w.Code != http.StatusOK {
+		return out, fmt.Errorf("HTTP %d: %s", w.Code, w.Body.String())
+	}
+	return out, json.Unmarshal(w.Body.Bytes(), &out)
+}
 
 const unitsManifest = `version: 1
 modules:

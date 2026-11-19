@@ -31,6 +31,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
+	"github.com/weitingzhao/bifrost-platform/api/internal/cidomains"
+	"github.com/weitingzhao/bifrost-platform/api/internal/ciscore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/dataclone"
@@ -78,11 +80,11 @@ type Server struct {
 	unitTrees *giteaTrees
 	// unitRunsKept keeps the run view's answers a short while (units_runs.go).
 	unitRunsKept unitRunsCache
-	// ciScorecardKept keeps the CI scorecard a short while (ci_scorecard.go).
-	ciScorecardKept ciScorecardCache
+	// ciScorecardKept keeps the CI scorecard a short while (ci_read_wire.go).
+	ciScorecardKept ciscore.Cache
 	// ciDomainsKept keeps the CI page's domain graph and the files commits
-	// changed (ci_domains.go).
-	ciDomainsKept ciDomainsCache
+	// changed (ci_read_wire.go).
+	ciDomainsKept cidomains.Cache
 	unitTreesOnce sync.Once
 	// instruments answers /governance/instruments (governance_instruments.go).
 	instruments     *instruments.Service

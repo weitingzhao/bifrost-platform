@@ -1,11 +1,10 @@
-package server
+package fullci
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -22,9 +21,10 @@ import (
 // waiting for a red run, and it is the run view's "what each landing ran".
 // Read-only; viewer and above.
 
-const unitFullCICheckMax = 30 // as fullci.FullCILandingsMax
+const CheckMax = 30 // as FullCILandingsMax
 
-type unitCheckLanding struct {
+// CheckLanding is one landed commit of the check.
+type CheckLanding struct {
 	Commit  string `json:"commit"`
 	Subject string `json:"subject"`
 	// Run is the landing's own CI run and Modules its run-modules as written
@@ -36,13 +36,14 @@ type unitCheckLanding struct {
 	Suspect bool   `json:"suspect"`
 }
 
-type unitCheckAnswer struct {
-	Repo     string             `json:"repo"`
-	Green    string             `json:"green"`
-	Red      string             `json:"red"`
-	Landings []unitCheckLanding `json:"landings"`
-	Suspects int                `json:"suspects"`
-	Unread   int                `json:"unread"`
+// CheckAnswer is the answer of GET /api/v1/units/full-ci/check.
+type CheckAnswer struct {
+	Repo     string         `json:"repo"`
+	Green    string         `json:"green"`
+	Red      string         `json:"red"`
+	Landings []CheckLanding `json:"landings"`
+	Suspects int            `json:"suspects"`
+	Unread   int            `json:"unread"`
 	// Unreconciled says why the landings could not all be looked at.
 	Unreconciled string `json:"unreconciled,omitempty"`
 	// Run and FailedTasks: the pipeline tasks of the run asked about that failed.
@@ -50,28 +51,30 @@ type unitCheckAnswer struct {
 	FailedTasks []string `json:"failed_tasks,omitempty"`
 }
 
-// unitCheckSources is what the check reads.
-type unitCheckSources struct {
-	// firstParents lists the first-parent commits after green up to red,
+// CheckSources is what the check reads.
+type CheckSources struct {
+	// FirstParents lists the first-parent commits after green up to red,
 	// newest first, at most max+1 (one more says there are more).
-	firstParents func(ctx context.Context, repo, green, red string, max int) ([][2]string, error)
-	runModules   func(ctx context.Context, repo, revision string) (run, modules string, err error)
-	failedTasks  func(ctx context.Context, run string) ([]string, error)
+	FirstParents func(ctx context.Context, repo, green, red string, max int) ([][2]string, error)
+	RunModules   func(ctx context.Context, repo, revision string) (run, modules string, err error)
+	FailedTasks  func(ctx context.Context, run string) ([]string, error)
 }
 
-func unitFullCICheck(ctx context.Context, src unitCheckSources, repo, green, red, run string) (unitCheckAnswer, error) {
-	out := unitCheckAnswer{Repo: repo, Green: green, Red: red, Landings: []unitCheckLanding{}, Run: run}
-	commits, err := src.firstParents(ctx, repo, green, red, unitFullCICheckMax)
+// Check reads the landings of main between two commits and says which of them
+// left a module out of their own CI run.
+func Check(ctx context.Context, src CheckSources, repo, green, red, run string) (CheckAnswer, error) {
+	out := CheckAnswer{Repo: repo, Green: green, Red: red, Landings: []CheckLanding{}, Run: run}
+	commits, err := src.FirstParents(ctx, repo, green, red, CheckMax)
 	if err != nil {
 		return out, err
 	}
-	if len(commits) > unitFullCICheckMax {
-		commits = commits[:unitFullCICheckMax]
-		out.Unreconciled = fmt.Sprintf("more than %d commits landed after %s; only the newest %d were looked at", unitFullCICheckMax, green, unitFullCICheckMax)
+	if len(commits) > CheckMax {
+		commits = commits[:CheckMax]
+		out.Unreconciled = fmt.Sprintf("more than %d commits landed after %s; only the newest %d were looked at", CheckMax, green, CheckMax)
 	}
 	for _, c := range commits {
-		l := unitCheckLanding{Commit: c[0], Subject: c[1]}
-		r, modules, err := src.runModules(ctx, repo, c[0])
+		l := CheckLanding{Commit: c[0], Subject: c[1]}
+		r, modules, err := src.RunModules(ctx, repo, c[0])
 		switch {
 		case err != nil:
 			l.Read = "error"
@@ -89,7 +92,7 @@ func unitFullCICheck(ctx context.Context, src unitCheckSources, repo, green, red
 		out.Landings = append(out.Landings, l)
 	}
 	if run != "" {
-		tasks, err := src.failedTasks(ctx, run)
+		tasks, err := src.FailedTasks(ctx, run)
 		if err != nil {
 			return out, fmt.Errorf("run %s: %w", run, err)
 		}
@@ -101,13 +104,9 @@ func unitFullCICheck(ctx context.Context, src unitCheckSources, repo, green, red
 	return out, nil
 }
 
-// giteaFirstParents walks main's history in Gitea from red back along first
-// parents until green.
-func (s *Server) giteaFirstParents(ctx context.Context, repo, green, red string, max int) ([][2]string, error) {
-	body, err := s.unitTrees.get(ctx, url.PathEscape(repo)+"/commits?sha="+red+"&limit=100&stat=false&verification=false&files=false", 8<<20)
-	if err != nil {
-		return nil, err
-	}
+// FirstParentsOfPage reads Gitea's page of main's commits (red first) and
+// follows first parents from red until green (see firstParentsOf).
+func FirstParentsOfPage(body []byte, repo, green, red string, max int) ([][2]string, error) {
 	var page []struct {
 		SHA     string `json:"sha"`
 		Parents []struct {
@@ -117,7 +116,7 @@ func (s *Server) giteaFirstParents(ctx context.Context, repo, green, red string,
 			Message string `json:"message"`
 		} `json:"commit"`
 	}
-	if err = json.Unmarshal(body, &page); err != nil {
+	if err := json.Unmarshal(body, &page); err != nil {
 		return nil, fmt.Errorf("gitea: the commits of %s: %w", repo, err)
 	}
 	listed := make([]historyCommit, 0, len(page))
@@ -159,26 +158,39 @@ func firstParentsOf(listed []historyCommit, green, red string, max int) ([][2]st
 	return out, nil
 }
 
-func (s *Server) handleUnitFullCICheck(w http.ResponseWriter, r *http.Request) {
+// CheckRoute is GET /api/v1/units/full-ci/check: the checks of a request's
+// names are the caller's, and Sources says, per request, what to read (ok
+// false: this platform does not read the cluster and Gitea).
+type CheckRoute struct {
+	RepoOK, RunOK, CommitOK func(string) bool
+	Sources                 func() (CheckSources, bool)
+}
+
+func checkJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func (c CheckRoute) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	repo, green, red, run := strings.TrimSpace(q.Get("repo")), strings.TrimSpace(q.Get("green")), strings.TrimSpace(q.Get("red")), strings.TrimSpace(q.Get("run"))
-	if !giteaName.MatchString(repo) || strings.HasSuffix(repo, ".git") || !commitID.MatchString(green) || !commitID.MatchString(red) || green == red ||
-		(run != "" && !giteaName.MatchString(run)) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "repo is a repository name; green and red are two different 40-character lowercase SHAs; run, when given, a run's name"})
+	if !c.RepoOK(repo) || strings.HasSuffix(repo, ".git") || !c.CommitOK(green) || !c.CommitOK(red) || green == red ||
+		(run != "" && !c.RunOK(run)) {
+		checkJSON(w, http.StatusBadRequest, map[string]string{"error": "repo is a repository name; green and red are two different 40-character lowercase SHAs; run, when given, a run's name"})
 		return
 	}
-	if s.cluster == nil || s.delivery == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "this platform does not read the cluster and Gitea"})
+	src, ok := c.Sources()
+	if !ok {
+		checkJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "this platform does not read the cluster and Gitea"})
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
-	s.unitTreesOf()
-	ci := s.landingCIClient()
-	out, err := unitFullCICheck(ctx, unitCheckSources{firstParents: s.giteaFirstParents, runModules: ci.RunModulesOf, failedTasks: ci.FullRunFailedTasks}, repo, green, red, run)
+	out, err := Check(ctx, src, repo, green, red, run)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		checkJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	checkJSON(w, http.StatusOK, out)
 }

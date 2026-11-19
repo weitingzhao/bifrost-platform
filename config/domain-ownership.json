@@ -287,6 +287,13 @@
       "status": "assigned",
       "basis": "CI charter; 2026-11-16 scorecard of how each repository uses CI and of CI as their provider, computed from runs already read; a reading, no CI or release decisions"
     },
+    "api/internal/evidenceread": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (evidence_commit.go, the plan answer of units_plan.go; decoupling item 5, A2): the two reads of the evidence ledger by commit, GET /api/v1/evidence/commit (is this commit green, and with what) and GET /api/v1/units/plan (CI's plan of one commit with the ledger's word on each key). Read-only; no CI or release decisions. Imports verification (evidence, unitplan) and foundation (eventlog) only; the server hands it the ledger, Gitea's tree and main reads and the names a request may carry."
+    },
     "api/internal/cidomains": {
       "domains": [
         "verification"
