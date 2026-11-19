@@ -382,12 +382,26 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 	// are not watched and no assessment is asked for. What stays in this
 	// pass is what the plan tree and the rules need: the facts their rules
 	// read, plan decisions, the acknowledging of used answers, and the rules themselves.
+	// Each step that takes slowStepLog or more is logged on its own: PROD and
+	// STG passes took a steady 10 seconds on 2026-11-19 and the pass's one
+	// total did not say which step (the ten-second per-read timeout is the
+	// suspect).
 	c.every(ctx, &wg, "agentrt-facts-rules", facts, func() error {
+		step := time.Now()
 		c.readTuning(ctx)
+		c.slow(slowStepLog, step, "agentrt-facts-rules: tuning")
+		step = time.Now()
 		_, ferr := c.Facts(ctx)
+		c.slow(slowStepLog, step, "agentrt-facts-rules: facts")
+		step = time.Now()
 		_, perr := c.PlanDecisions(ctx)
+		c.slow(slowStepLog, step, "agentrt-facts-rules: plan decisions")
+		step = time.Now()
 		_, qerr := c.ackUsedAnswersDue(ctx)
+		c.slow(slowStepLog, step, "agentrt-facts-rules: used answers")
+		step = time.Now()
 		_, rerr := c.Rules(ctx)
+		c.slow(slowStepLog, step, "agentrt-facts-rules: rules")
 		return errors.Join(ferr, perr, qerr, rerr)
 	})
 	c.startFullCI(ctx, &wg)
