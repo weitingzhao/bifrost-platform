@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/runtimedb"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 )
 
-func threadInboxServer(t *testing.T, now time.Time) (*Server, *lateDB, []string) {
+func threadInboxServer(t *testing.T, now time.Time) (*Server, *runtimedb.Late, []string) {
 	t.Helper()
 	root := t.TempDir()
 	paths := []string{filepath.Join(root, "approvals"), filepath.Join(root, "questions")}
@@ -44,7 +45,7 @@ func threadInboxServer(t *testing.T, now time.Time) (*Server, *lateDB, []string)
 	s := &Server{approvals: approvals.New(paths[0], nil), questionRuntime: questionbridge.New(paths[1], nil)}
 	s.approvals.SetClock(func() time.Time { return now })
 	s.questionRuntime.Svc.SetClock(func() time.Time { return now })
-	late := &lateDB{}
+	late := &runtimedb.Late{}
 	s.wireThreadInbox(late)
 	return s, late, paths
 }
@@ -97,7 +98,7 @@ func TestThreadInboxWiringRecoversPGAndRestart(t *testing.T) {
 	}
 	s, late, paths := threadInboxServer(t, now)
 	retryServerThreadInbox(s) // the real sender returns errNotConnected
-	late.open(pool, now)
+	late.Open(pool, now)
 	retryServerThreadInbox(s)
 	mail, err := coord.Unread(ctx, pool, w, 100)
 	if err != nil || len(mail) != 2 {

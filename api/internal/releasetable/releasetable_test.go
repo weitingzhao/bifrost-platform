@@ -1,6 +1,4 @@
-//bifrost:owner delivery
-
-package server
+package releasetable
 
 import (
 	"context"
@@ -20,7 +18,7 @@ import (
 // announcement written in one transaction, the row naming its event. A
 // record whose revision no single repository built is a row without one
 // (event_id NULL). Positive control: with the Append call removed from
-// releaseTable the first row's event_id is NULL and the test fails.
+// Writer the first row's event_id is NULL and the test fails.
 func TestReleaseTableWritesTheRowWithItsAnnouncement(t *testing.T) {
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)
@@ -28,7 +26,7 @@ func TestReleaseTableWritesTheRowWithItsAnnouncement(t *testing.T) {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)
-	write := releaseTable(pool)
+	write := Writer(pool)
 	sha := strings.Repeat("a", 40)
 	at := time.Date(2026, 11, 17, 17, 20, 0, 0, time.UTC)
 	rec := releases.Record{
@@ -102,7 +100,7 @@ func TestReleaseRowsBackfillWithoutAnnouncingAndReadBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)
-	rows := releaseRows{pool: pool}
+	rows := Rows{Pool: pool}
 	sha := strings.Repeat("b", 40)
 	at := time.Date(2026, 11, 16, 9, 0, 0, 0, time.UTC)
 	old := releases.Record{
@@ -149,7 +147,7 @@ func TestReleaseTableNamesTheCauseOfTheRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	pool := db.Pool(t, db.Runtime)
-	write := releaseTable(pool)
+	write := Writer(pool)
 	sha := strings.Repeat("d", 40)
 	at := time.Date(2026, 11, 17, 22, 0, 0, 0, time.UTC)
 	base := releases.Record{

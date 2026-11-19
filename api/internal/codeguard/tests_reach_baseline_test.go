@@ -273,7 +273,6 @@ var testFilesInShared = []string{
 	"api/internal/server/release_policy_records_test.go",
 	"api/internal/server/release_policy_sources_test.go",
 	"api/internal/server/release_policy_test.go",
-	"api/internal/server/release_table_wire_test.go",
 	"api/internal/server/research_routes_test.go",
 	"api/internal/server/route_reach_check_test.go",
 	"api/internal/server/route_reach_test.go",

@@ -2,10 +2,11 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deploysource"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/runtimedb"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/schemawatch"
+	"github.com/weitingzhao/bifrost-platform/api/internal/releasetable"
 	"log/slog"
 	"os"
 	"strings"
@@ -13,8 +14,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
@@ -22,21 +21,12 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
-
-// agentrtDatabase is the state database of each environment (design v5
-// §5.1.1); the migrate subcommand keeps the same table.
-var agentrtDatabase = map[string]string{
-	"prod": "bifrost_platform",
-	"stg":  "bifrost_platform_stg",
-	"dev":  "bifrost_platform_dev",
-}
 
 // agentRuntime is the agent runtime as this process runs it.
 type agentRuntime struct {
@@ -52,7 +42,7 @@ type agentRuntime struct {
 	evidenceCI delivery.CIReader
 	// late is the runtime's database as it connects: its routes are ready
 	// once it is (/health says agentrt_ready); nil without AGENTRT_DSN.
-	late *lateDB
+	late *runtimedb.Late
 	// fullCI is the controller's daily full CI once the workers process
 	// has wired it (wireFullCI), for the gauge /metrics serves; nil in a
 	// process that runs no controller, or where the loop is off.
@@ -105,7 +95,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	// keeps connecting in the background, so a refusal at start (a new pod
 	// the network policy does not know yet, a database restarting) heals by
 	// itself instead of leaving the runtime off until the next restart.
-	late := &lateDB{}
+	late := &runtimedb.Late{}
 	rt.api.DB, rt.api.Back, rt.late = late, late.Back, late
 	s.wireThreadInbox(late)
 	s.wireWindowNotices(late)
@@ -120,16 +110,14 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	s.questionRuntime.TakeCardsByRule(env == "stg")
 	safego.Go("agentrt-connect", func() {
 		defer close(done)
-		pool := connectAgentRuntime(ctx, func(ctx context.Context) (*pgxpool.Pool, error) {
-			return openAgentRuntime(ctx, dsn, env)
-		}, agentrtRetry)
+		pool := runtimedb.Connect(ctx, dsn, env)
 		if pool == nil {
 			return
 		}
 		// The routes open, and /health says agentrt_ready, with the moment
 		// they did already recorded: the API's readers count a host's silence
 		// from no earlier (review 528 A1b).
-		late.open(pool, time.Now())
+		late.Open(pool, time.Now())
 		// The seats the token table names that the platform registers
 		// itself (coord.EnsureSeats): the coordinator's proposer seat.
 		if seats, err := coord.EnsureSeats(ctx, pool, s.auth.Seats()); err != nil {
@@ -142,8 +130,8 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		rt.schema.Announce = schemawatch.AnnounceMigrations(pool)
 		safego.Go("agentrt-schema", func() { rt.schema.Run(ctx, pool) })
 		if s.releases != nil {
-			s.releases.Service().SetTable(releaseTable(pool))
-			s.releases.Service().SetTableReader(releaseRows{pool: pool})
+			s.releases.Service().SetTable(releasetable.Writer(pool))
+			s.releases.Service().SetTableReader(releasetable.Rows{Pool: pool})
 		}
 		s.startBus(ctx, pool, env, role)
 		if !role.RunsWorkers() {
@@ -178,141 +166,6 @@ func agentRuntimeController(env string, db eventlog.DB, src controller.Sources) 
 	}, Infof: func(format string, args ...any) {
 		slog.Info("agentrt controller", "detail", fmt.Sprintf(format, args...))
 	}}
-}
-
-// agentrtRetry is how long connectAgentRuntime waits between attempts at
-// first, and at most.
-var agentrtRetry = [2]time.Duration{2 * time.Second, time.Minute}
-
-// connectAgentRuntime opens until it can (or ctx ends: nil), each attempt
-// with the start budget of review 156, waiting a little longer after each
-// failure, and saying so in the log once a minute at most.
-func connectAgentRuntime(ctx context.Context, open func(context.Context) (*pgxpool.Pool, error), retry [2]time.Duration) *pgxpool.Pool {
-	wait, logged := retry[0], time.Time{}
-	for attempt := 1; ; attempt++ {
-		openCtx, openCancel := context.WithTimeout(ctx, 15*time.Second)
-		pool, err := open(openCtx)
-		openCancel()
-		if err == nil {
-			if attempt > 1 {
-				slog.Info("agentrt: connected", "attempts", attempt)
-			}
-			return pool
-		}
-		if errors.Is(err, errMisconfigured) {
-			// Retrying cannot mend the environment, the connection string or
-			// the identity: the routes stay 503 until it is fixed and the
-			// platform restarted (review 191 B2).
-			slog.Error("agentrt: not connected and not retrying: the configuration is wrong; its routes answer 503", "err", err)
-			return nil
-		}
-		if time.Since(logged) >= time.Minute {
-			slog.Error("agentrt: not connected yet; its routes answer 503 and the platform keeps trying", "attempt", attempt, "err", err)
-			logged = time.Now()
-		}
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-time.After(wait):
-		}
-		wait = min(2*wait, retry[1])
-	}
-}
-
-// lateDB is the runtime's database before and after it is connected.
-type lateDB struct {
-	pool atomic.Pointer[pgxpool.Pool]
-	back atomic.Pointer[time.Time]
-}
-
-// open makes the routes ready on pool, at, the moment recorded first: no
-// reader sees them ready without it (review 528 A1b).
-func (l *lateDB) open(pool *pgxpool.Pool, at time.Time) {
-	l.back.Store(&at)
-	l.pool.Store(pool)
-}
-
-// Back is when the routes became ready; zero before.
-func (l *lateDB) Back() time.Time {
-	if t := l.back.Load(); t != nil {
-		return *t
-	}
-	return time.Time{}
-}
-
-// errNotConnected is a use of the database before it is connected (the
-// routes check Ready first).
-var errNotConnected = errors.New("agentrt: the database is not connected yet")
-
-// errMisconfigured is a failure no retry mends: an unknown environment, a
-// connection string that does not parse, the wrong role or database.
-var errMisconfigured = errors.New("agentrt: misconfigured")
-
-func (l *lateDB) Ready() bool { return l.pool.Load() != nil }
-
-func (l *lateDB) BeginTx(ctx context.Context, o pgx.TxOptions) (pgx.Tx, error) {
-	p := l.pool.Load()
-	if p == nil {
-		return nil, errNotConnected
-	}
-	return p.BeginTx(ctx, o)
-}
-
-// agentrtMaxConns bounds one process's pool. The environment's runtime role
-// allows 10 connections on PROD and 5 on STG and DEV (infra db-step
-// 2026-10-14-w31-agentrt-1-roles), shared by platform-api and
-// platform-workers; pgxpool's default is one per CPU, 16 on the cluster's
-// nodes, so the two processes sat at the limit at rest and a restarted one was
-// refused ("too many connections for role") for up to a minute on every
-// release (TD-392). Two processes at this size leave room under the limit.
-func agentrtMaxConns(env string) int32 {
-	if env == "prod" {
-		return 4
-	}
-	return 2
-}
-
-// openAgentRuntime opens the pool and refuses an identity or a database that
-// is not the environment's runtime ones.
-func openAgentRuntime(ctx context.Context, dsn, env string) (*pgxpool.Pool, error) {
-	if _, err := migrate.RuntimeRole(env); err != nil {
-		return nil, fmt.Errorf("%w: %v", errMisconfigured, err)
-	}
-	cfg, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errMisconfigured, err)
-	}
-	if pw := os.Getenv("AGENTRT_DB_PASSWORD"); pw != "" {
-		cfg.ConnConfig.Password = pw
-	}
-	cfg.MaxConns = agentrtMaxConns(env)
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	var user, db string
-	if err = pool.QueryRow(ctx, `SELECT current_user, current_database()`).Scan(&user, &db); err != nil {
-		pool.Close()
-		return nil, err
-	}
-	if err = identityFits(user, db, env); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("%w: %v", errMisconfigured, err)
-	}
-	return pool, nil
-}
-
-// identityFits accepts only the environment's runtime role on the
-// environment's database.
-func identityFits(user, db, env string) error {
-	want, err := migrate.RuntimeRole(env)
-	if err != nil {
-		return err
-	}
-	if user != want || db != agentrtDatabase[env] {
-		return fmt.Errorf("connected as %s to %s; want %s to %s", user, db, want, agentrtDatabase[env])
-	}
-	return nil
 }
 
 // agentRuntimeSources are the server's stores as the controller's sources.

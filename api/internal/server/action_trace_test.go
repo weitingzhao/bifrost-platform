@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/runtimedb"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -136,8 +137,8 @@ func TestTraceRuntimeRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := newPolicyHarness(t)
-	h.srv.agentRuntime = &agentRuntime{late: &lateDB{}}
-	h.srv.agentRuntime.late.open(pool, time.Now())
+	h.srv.agentRuntime = &agentRuntime{late: &runtimedb.Late{}}
+	h.srv.agentRuntime.late.Open(pool, time.Now())
 	t.Setenv("ACTION_TRACE_REQUIRED", "")
 	for _, name := range []string{stgPipeline, policyPipeline} {
 		rec := httptest.NewRecorder()

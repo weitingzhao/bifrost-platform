@@ -1352,6 +1352,20 @@
       ],
       "status": "assigned",
       "basis": "2026-11-18, moved out of api/internal/server unchanged (metrics.go; decoupling item 5): the plugins' reachability and gauges on /metrics. Imports foundation only (probe, telemetry, telemetry/probecollect)."
+    },
+    "api/internal/agentrt/runtimedb": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (agentrt_wire.go; decoupling item 5): the agent runtime's connection: the pool refused unless it is the environment's runtime role on its database, the retry, the size of a pool and the database as it connects. Imports migrate only."
+    },
+    "api/internal/releasetable": {
+      "domains": [
+        "delivery"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (release_table_wire.go; decoupling item 5): the release records' table, the row and its release.deploy.finished announcement in one transaction, and the reads the recorder takes. Imports releases (delivery) and foundation only (eventlog, bus/releases). releases itself is unchanged."
     }
   }
 }
