@@ -10,7 +10,7 @@ import { emptyDoc, key, type Doc, type PartSize, type Zone } from './builderDoc'
  *   rocket's line (horizontal hangar, vertical assembly, the pad);
  * - the suppliers' docks (the plugins) and the town (mission control, the
  *   court, the archive, the dorms);
- * - the power yard: the power station, cooling water, the generator sets.
+ * - the power yard: the power station and the generator sets (the machines).
  * The Owner moves, zones and trims it as he likes; names and states are read.
  */
 const W = 29, H = 24
@@ -34,7 +34,6 @@ const PARTS: readonly [kind: string, x: number, y: number, size: PartSize, binds
   ['dorm', 25, 11, 2, 'domain:coordination'],
   // The back band: the power yard.
   ['power', 0, 17, 4, 'node:gpu-server', 'GPU'],
-  ['water', 5, 18, 1, ''],
   ['genset', 7, 17, 2, 'node:ubt-k3s-01', '01'],
   ['genset', 10, 17, 2, 'node:ubt-k3s-02', '02'],
   ['genset', 13, 17, 2, 'node:ubt-k3s-04', '04'],

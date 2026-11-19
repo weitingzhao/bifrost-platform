@@ -1,6 +1,6 @@
 import type { CityLane, SystemItem } from './catalog'
 import type { CityReading, Glance } from './CityBuilder'
-import { bayReading, padReading, supplierReading, rocketCiReading, rocketStgReading, runsAt, satellitesReading, waitingReading, type Contexts, type Reading } from './cityReadings'
+import { bayReading, gateReading, padReading, supplierReading, rocketCiReading, rocketStgReading, runsAt, satellitesReading, waitingReading, type Contexts, type Reading } from './cityReadings'
 import { conflicts, CONFLICT_WORD, demand, supplies, type Demand, type Reads } from './cityUtilities'
 import { DICTIONARY } from './worldDictionary'
 import type { Machine } from './cityMachines'
@@ -42,6 +42,7 @@ export function cityReadings(i: CityInputs): Map<string, CityReading> {
     else if (it.type === 'domain' && platform && it.binds !== 'domain:owner') put(it.binds, { word: platform.word, tone: platform.tone, lines: [] }, 'utilities', platform)
   }
   put('domain:owner', waitingReading(i.approvals, i.questions), 'waiting', platform)
+  put('gate', gateReading(i.contexts, i.lanes), 'gate')
   if (u) {
     const drawn = [...out].filter(([, r]) => r.links?.length)
     const sets = supplies(u), found = conflicts(sets)

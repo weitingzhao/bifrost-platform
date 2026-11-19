@@ -176,3 +176,17 @@ export function bayReading(contexts: Contexts, lanes: readonly CityLane[], name:
   if (unread.some(r => ownRepos.has(r))) return unknown([...lines, `not read: ${unread.filter(r => ownRepos.has(r)).join(', ')}`])
   return { word: 'ready', tone: 'calm', lines }
 }
+
+/**
+ * The release gate (the Owner, 2026-11-19: a traffic light is a gate): red while anyone holds the
+ * one release window, amber while a launch is going, green when releases may go; unknown unread.
+ */
+export function gateReading(contexts: Contexts, lanes: readonly CityLane[]): Reading {
+  const win = [...contexts.values()].map(c => c?.facts.window?.value).find(w => w != null)
+  if (!win) return unknown(['the release window was not read'])
+  if (win.held) return { word: 'window held', tone: 'alert', lines: [`held by ${win.who || 'someone'} for ${win.what || 'a release'}`, 'no other release starts until it is let go'] }
+  const { runs, at } = inFlight(contexts, lanes)
+  const going = runs.find(r => at(r).step === 'prod')
+  if (going) return { word: 'launching', tone: 'busy', launching: true, lines: [`run ${going.name}`] }
+  return { word: 'open', tone: 'calm', lines: ['the release window is free'] }
+}

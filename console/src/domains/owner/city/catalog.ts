@@ -35,7 +35,6 @@ export const CATALOG: readonly CatalogKind[] = [
   { kind: 'court', name: 'Court', size: 4, height: 140, accepts: ['law'] },
   { kind: 'power', name: 'Power station', size: 4, height: 120, accepts: ['node', 'domain'] },
   { kind: 'archive', name: 'Archive', size: 2, height: 88, accepts: ['domain'] },
-  { kind: 'water', name: 'Water tower', size: 1, height: 88, accepts: [] },
   { kind: 'genset', name: 'Generator set', size: 2, height: 72, accepts: ['node'] },
   { kind: 'campus', name: 'Satellite campus', size: 8, height: 100, accepts: ['tenant'] },
   { kind: 'campus4', name: 'Small campus', size: 4, height: 100, accepts: ['tenant'] },

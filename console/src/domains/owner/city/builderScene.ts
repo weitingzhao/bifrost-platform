@@ -354,31 +354,12 @@ export class BuilderScene extends Phaser.Scene {
   }
 
   /** Free ground a building looks out over: kept clear so nothing stands in front of its door. */
-  private inFrontOfPart(x: number, y: number, reach = 2) {
-    return this.s.doc.parts.some(p => (x >= p.x - 1 && x <= p.x + p.size && y >= p.y + p.size && y < p.y + p.size + reach) || (y >= p.y - 1 && y <= p.y + p.size && x >= p.x + p.size && x < p.x + p.size + reach))
-  }
-
-  /** The street furniture: set out along each road at a steady rhythm; the same road always dresses the same way. */
+  /** The street furniture: none now (see below); kept so a layout's old pieces are cleared. */
   private syncDecor() {
     const d = this.s.doc, want = new Map<string, Spot>()
     this.crawl = crawlerway(d)
-    for (const k of d.roads) {
-      const [x, y] = cellOf(k)
-      if (this.isJunction(x, y)) continue
-      SIDES.forEach(([dx, dy], side) => {
-        const nx = x + dx, ny = y + dy, c = key(nx, ny)
-        if (want.has(c) || !inLand(d, nx, ny) || d.roads.has(c) || this.crawl.cells.has(c) || partAt(d, nx, ny) || this.inFrontOfPart(nx, ny)) return
-        const along = dx ? y : x, ax = dx ? 0 : 1, ay = dx ? 1 : 0
-        const nearJunction = this.isJunction(x + ax, y + ay) || this.isJunction(x - ax, y - ay)
-        const beat = (along + side) % 12
-        const tex = nearJunction ? ((nx + ny) % 2 ? '' : 'd:signal')
-          : (along + side) % 24 === 15 && !this.inFrontOfPart(nx, ny, 5) ? 'd:billboard'
-          : beat === 0 || beat === 6 ? `d:tree${(along + side) % 3}` : beat === 3 ? 'd:lamp' : beat === 9 ? 'd:bench' : ''
-        if (!tex) return
-        const reach = tex === 'd:billboard' ? 0 : tex === 'd:bench' ? 0.2 : 0.3
-        want.set(c, { tex, dx: -dx * reach, dy: -dy * reach })
-      })
-    }
+    // Street furniture only where it stands for something (the Owner, 2026-11-19): trees, lamps, benches and
+    // billboards meant nothing, so none are laid; the one signal is the release gate, drawn with the pad.
     for (const [c, e] of this.decor) { const w = want.get(c); if (!w || w.tex !== e.spot.tex || w.dx !== e.spot.dx || w.dy !== e.spot.dy) { e.img.destroy(); this.decor.delete(c) } }
     for (const [c, spot] of want) {
       if (this.decor.has(c)) continue
@@ -711,6 +692,16 @@ export class BuilderScene extends Phaser.Scene {
         const col = Phaser.Display.Color.HexStringToColor(r.payload.color).color
         g.fillStyle(col, 1); g.lineStyle(1.2, INK, 1)
         g.fillRect(b.x - 14, b.y - 214, 28, 9); g.strokeRect(b.x - 14, b.y - 214, 28, 9)
+      }
+      if (p.kind === 'pad') {
+        // The release gate: a signal where the crawlerway meets the pad. Red: the release window is held; amber: a launch is
+        // going; green: free to release; grey: not read.
+        const gate = this.s.readingOf('gate')
+        const lit = gate?.tone === 'alert' ? 0 : gate?.launching ? 1 : gate && gate.tone !== 'unknown' ? 2 : -1
+        const b = iso(p.x + 0.15, p.y + p.size + 0.25)
+        g.lineStyle(1.4, INK, 1); g.lineBetween(b.x, b.y, b.x, b.y - 30)
+        g.fillStyle(0x3a3f4f, 1); g.fillRoundedRect(b.x - 5, b.y - 52, 10, 24, 2); g.strokeRoundedRect(b.x - 5, b.y - 52, 10, 24, 2)
+        ;[0xe0564f, 0xf2b234, 0x3fbf6f].forEach((col, i) => { g.fillStyle(i === lit ? col : 0x5b6070, 1); g.fillCircle(b.x, b.y - 47 + i * 7, 2.6) })
       }
       if (p.kind === 'control' && n > 0) {
         for (let k = 0; k < Math.min(n, 4); k++) {

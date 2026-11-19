@@ -5,7 +5,7 @@
  * meaning. The thresholds live here, versioned; no building is tiered by hand.
  */
 
-export const DICTIONARY_VERSION = 5
+export const DICTIONARY_VERSION = 6
 
 export type Tier = { name: string; enters: string }
 export type Entry = {
@@ -117,7 +117,7 @@ export const DICTIONARY: readonly Entry[] = [
     source: 'GET /api/v1/delivery/context?repo=<plugin repository>', person: 'none',
   },
   {
-    id: 'machine', metaphor: 'A generator set with three bars beside it (yellow power, blue cooling water, grey nitrogen)', means: 'a computer that supplies work: Linux the yellow diesel set, a Mac the white fuel-cell unit, Windows the blue battery cabinet; a bar fills with what is used, stands as tall as the capacity\'s tier (CPU, memory, disk); off the grid when outside the cluster',
+    id: 'machine', metaphor: 'A power plant with its stacks: its colour and side mark its system, its name on the front wall, its number painted on the roof, three front windows its gauges (yellow power, blue cooling water, grey nitrogen), a lamp on its roof', means: 'a computer that supplies work: Linux orange, a Mac silver, Windows blue; a window fills with what is used of what there is; the lamp is green online, red down, grey not known; off the grid when outside the cluster',
     tiers: [
       { name: 'small', enters: '8 cores or fewer; memory under 20 GiB; disk under 750 GB' },
       { name: 'medium', enters: '16 cores or fewer; memory under 48 GiB; disk under 1.5 TB' },
@@ -130,6 +130,16 @@ export const DICTIONARY: readonly Entry[] = [
     id: 'lamp', metaphor: 'A name plate at a building\'s foot, with a coloured dot', means: 'the building\'s name and its state at a glance (green calm, amber busy, red alert, grey unknown); the full tag shows when pointed at, picked, or on alert',
     tiers: [{ name: 'calm', enters: 'green' }, { name: 'busy', enters: 'amber' }, { name: 'alert', enters: 'red, with its tag' }, { name: 'unknown', enters: 'grey' }],
     source: 'the building\'s own reading', person: 'none',
+  },
+  {
+    id: 'gate', metaphor: 'The traffic light where the crawlerway meets the pad', means: 'the one release window: whether a release may start',
+    tiers: [
+      { name: 'red', enters: 'someone holds the release window' },
+      { name: 'amber', enters: 'a launch is going' },
+      { name: 'green', enters: 'the window is free' },
+      { name: 'grey', enters: 'the window was not read' },
+    ],
+    source: 'GET /api/v1/delivery/context (window, runs_in_flight)', person: 'none',
   },
   {
     id: 'worker', metaphor: 'A coloured worker with a speech bubble, walking from the dorm to a building', means: 'a seat (an agent line) and its latest status: it stands at the building of the domain its charter names',

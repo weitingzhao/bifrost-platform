@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { targetOfCharter, workersGlance, workersOf } from '../cityWorkers'
 import { addRoad, doorOf, emptyDoc, fromTiled, targetPart, toTiled, trim, walkPath } from '../builderDoc'
-import { bayReading, skyReading, type ReleaseContext } from '../cityReadings'
+import { bayReading, gateReading, skyReading, type ReleaseContext } from '../cityReadings'
 import { plannedCity } from '../defaultLayout'
 import { pluginsOf, tenantsOf } from '../catalog'
 import { nextZoneName, zoneTint } from '../zones'
 import { campuses, campusPlan, campusSize } from '../cityCampus'
 import { coreTier, diskTier, machines, memTier, osOf, variantOf } from '../cityMachines'
-import { layersOf, spriteOf } from '../catalog'
+import { CATALOG, layersOf, spriteOf } from '../catalog'
+const CATALOG_KINDS = () => CATALOG.map(k => k.kind)
 
 // Origin: 2026-11-18, the Owner: seats are the workers; they live in dorms
 // and their real work shows. A worker stands at the building of the domain
@@ -182,5 +183,21 @@ describe('the numbers on the buildings', () => {
     expect(back.parts[0].label).toBe('TRADE-')
     expect(back.parts.find(p => p.binds === 'node:mac-mini-1')?.label).toBe('M1')
     expect('label' in back.parts.find(p => p.binds === 'law')!).toBe(false)
+  })
+})
+
+// Origin: 2026-11-19, the Owner: everything on the land stands for something; a traffic light is a gate.
+describe('the release gate', () => {
+  const lanes = [{ pipeline: 'bifrost-deliver-prod', repos: ['bifrost-trade-api'] }]
+  const ctx = (window: { held: boolean; who: string; what: string } | undefined, runs: { name: string; pipeline: string }[] = []) => new Map([['bifrost-trade-api', { repo: 'bifrost-trade-api', facts: { runs_in_flight: { value: runs }, ...(window ? { window: { value: window } } : {}) } }]])
+  it('is red while the window is held, amber while a launch goes, green when free, unknown unread', () => {
+    expect(gateReading(ctx({ held: true, who: 'ci-line', what: 'bifrost-platform' }), lanes)).toMatchObject({ word: 'window held', tone: 'alert' })
+    expect(gateReading(ctx({ held: false, who: '', what: '' }, [{ name: 'p-1', pipeline: 'bifrost-deliver-prod' }]), lanes)).toMatchObject({ word: 'launching', launching: true })
+    expect(gateReading(ctx({ held: false, who: '', what: '' }), lanes).word).toBe('open')
+    expect(gateReading(ctx(undefined), lanes).word).toBe('unknown')
+  })
+  it('lays no furniture that stands for nothing: no water tower in the catalogue or the plan', () => {
+    expect(CATALOG_KINDS()).not.toContain('water')
+    expect(plannedCity().parts.some(p => p.kind === 'water')).toBe(false)
   })
 })
