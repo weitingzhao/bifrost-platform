@@ -14,7 +14,8 @@ import './cityGen2.css'
  * The second generation's frame, greybox (the Owner, 2026-11-19): the game
  * is laid out like the Console, so the two looks can swap.
  *
- *   Menu      → the bar along the bottom: one button per district
+ *   Levels    → town, district, building: the framework's own control under the minimap (no district
+ *               menu: the city is the navigation, the Owner 2026-11-19)
  *   Page      → the place on screen; entering a building is opening a page
  *   Summary   → the top-left corner (on a phone, one line; tap it for more)
  *   Section   → the blocks inside a place
@@ -241,7 +242,23 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
     return () => window.removeEventListener('keydown', on)
   }, [selected, arranging, focused, searching])
 
-  const district = path[0] ?? null
+  // The levels (the Owner, 2026-11-19: three — town, district, building — moved between by a control
+  // of their own). Going up is always there; going down goes back to the district and building
+  // last visited, or is not there yet.
+  const [visited, setVisited] = useState<Record<string, string>>({})
+  useEffect(() => {
+    if (path.length === 0) return
+    setVisited(l => ({ ...l, '': path[0], ...(path.length > 1 ? { [path[0]]: path[1] } : {}) }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path.join('/')])
+  const depth = Math.min(path.length, 2)
+  const levelDistrict = tree.children.find(c => c.id === (path[0] ?? visited['']))
+  const levelBuilding = levelDistrict?.children.find(c => c.id === (path[1] ?? visited[levelDistrict.id]))
+  const levelRows: { name: string; label: string | null; to: Path | null }[] = [
+    { name: 'City', label: tree.label, to: [] },
+    { name: 'District', label: levelDistrict?.label ?? null, to: levelDistrict ? [levelDistrict.id] : null },
+    { name: 'Building', label: levelBuilding?.label ?? null, to: levelDistrict && levelBuilding ? [levelDistrict.id, levelBuilding.id] : null },
+  ]
   // A row in a table does what tapping its block does: a room opens its card, anything else is entered.
   const openChild = (c: Place) => c.kind === 'room' ? setSelected(c) : go([...path, c.id])
   const dash = dashboardHref(place)
@@ -356,12 +373,17 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
         {f.alerts.badge ? <span title="Alerts: not wired">!</span> : <>Alerts <span className="g2-unknown">not wired</span></>}
       </aside>
 
-      <nav className="g2-menu" aria-label="Districts" style={at(f.menu)}>
-        <button className={district == null ? 'on' : ''} onClick={() => go([])}>City</button>
-        {tree.children.map(d => (
-          <button key={d.id} className={district === d.id ? 'on' : ''} onClick={() => go([d.id])}>{d.label}</button>
+      <nav className="g2-corner g2-levels" aria-label="Levels" style={at(f.levels)}>
+        {levelRows.map((r, i) => (
+          <button key={r.name} className={i === depth ? 'on' : ''} style={{ height: f.levels.row }} disabled={!r.to || i === depth}
+            aria-current={i === depth ? 'location' : undefined} onClick={() => { if (r.to) go(r.to) }}
+            title={r.to ? `${r.name}: ${r.label}` : `${r.name}: none visited yet`}>
+            <span className="g2-lv-k">{r.name}</span><b>{r.label ?? '—'}</b>
+          </button>
         ))}
       </nav>
+
+      {/* No district menu: the city itself is the navigation (the Owner, 2026-11-19); the levels move between its layers. */}
 
       {/* Search and tools: a bar at the top centre; on a phone a round button that opens the box over the top. */}
       {f.search.mode === 'bar' ? (

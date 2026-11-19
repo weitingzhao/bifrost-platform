@@ -182,7 +182,7 @@ export class PlaceScene extends Phaser.Scene {
    * a swap). Down: the camera dives into the thing you tapped — the page you leave grows about it and
    * fades, while the place's own ground grows out of its footprint to fill the screen. Up: the reverse
    * — the page you leave shrinks back into its footprint on the parent, which comes back from close
-   * up. The minimap fades in with its new picture. A jump from the menu (no footprint to go through)
+   * up. The minimap fades in with its new picture. A jump (search, a link: no footprint to go through)
    * crossfades.
    */
   private async change(next: Shown, prev: Shown | null) {
@@ -337,7 +337,7 @@ export class PlaceScene extends Phaser.Scene {
     const m = this.level(s.place, s.path, s.placed, s.plots, s.streets, { at: 0, selected: s.selected, inside: null, interactive: true, arranging: s.arranging })
     this.main = m.c
     // The whole ground, ring road included, always fits (the Owner, 2026-11-19: no plot cut off at the
-    // top or hidden under the menu); m.box (what stands on it) is no longer the frame.
+    // top or hidden under the bottom row); m.box (what stands on it) is no longer the frame.
     void m.box
     this.content = this.groundBox()
     this.ghost = this.add.graphics()
