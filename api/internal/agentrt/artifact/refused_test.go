@@ -40,6 +40,11 @@ func TestRecordRefusalOncePerBody(t *testing.T) {
 	if n := count("host:h1", "artifact_refused"); n != 1 {
 		t.Fatalf("%d artifact_refused events for one body; want 1", n)
 	}
+	// 2026-11-19, the problem channels (Y-4): the refusal is also an alert, once,
+	// in the same transaction; until now only a drill proved the channel.
+	if n := count("alert:ArtifactRefused", "alert.rule.fired"); n != 1 {
+		t.Fatalf("%d ArtifactRefused alerts for one refused body; want 1", n)
+	}
 	var rule, kind string
 	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'rule', body_json->>'kind' FROM agentrt.event WHERE event_type = 'artifact_refused'`).Scan(&rule, &kind))
 	if rule != "local_path" || kind != "report" {
