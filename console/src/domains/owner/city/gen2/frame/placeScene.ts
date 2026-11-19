@@ -542,28 +542,45 @@ export class PlaceScene extends Phaser.Scene {
     for (const t of [0.4, 0.72]) {
       g.lineBetween(iso(lo, hi).x, iso(lo, hi).y + SLAB * t, iso(hi, hi).x, iso(hi, hi).y + SLAB * t)
     }
-    // Outdoors (the town, a district) the ground is green belts crossed by streets; indoors (a building)
-    // it is a floor crossed by corridors. Both run where grid.ts says, never through a thing.
-    const indoors = place.kind === 'building'
+    // What runs between the things on this ground (the Owner, 2026-11-19): blocks on the town's ground
+    // are parted by highways, buildings in a block by ordinary streets, rooms in a building by
+    // corridors. All three run where grid.ts says, never through a thing.
+    const grade: 'highway' | 'street' | 'corridor' = place.kind === 'town' ? 'highway' : place.kind === 'building' ? 'corridor' : 'street'
+    const indoors = grade === 'corridor'
     g.fillStyle(indoors ? this.tone.floor : this.tone.grass).fillPoints(ground, true)
     // Layers from the street in (the Owner, 2026-11-19: not straight from the road to the house): the
     // street, its kerb, a green belt, then the plot's own lot, and the building set back on it.
     // The ring road runs in the rim; streets that reach the edge run on to meet it.
     const rim = (v: number) => v === 0 ? -RIM / 2 : v === GRID ? GRID + RIM / 2 : v
-    const strip = (st: Street, half: number) => {
+    const strip = (st: Street, half: number, off = 0) => {
       const vertical = st.x0 === st.x1
-      const at = st.kind === 'ring' ? rim(vertical ? st.x0 : st.y0) : vertical ? st.x0 : st.y0
+      const at = (st.kind === 'ring' ? rim(vertical ? st.x0 : st.y0) : vertical ? st.x0 : st.y0) + off
       const from = rim(vertical ? st.y0 : st.x0), to = rim(vertical ? st.y1 : st.x1)
       const a0 = at - half, a1 = at + half, b0 = from - half, b1 = to + half
       return vertical ? [iso(a0, b0), iso(a1, b0), iso(a1, b1), iso(a0, b1)] : [iso(b0, a0), iso(b1, a0), iso(b1, a1), iso(b0, a1)]
     }
-    const roads = streets.filter(st => st.kind !== 'lane' && st.kind !== 'path')
+    const dashes = (st: Street, off: number) => {
+      const vertical = st.x0 === st.x1
+      const at = (st.kind === 'ring' ? rim(vertical ? st.x0 : st.y0) : vertical ? st.x0 : st.y0) + off
+      const from = vertical ? st.y0 : st.x0, to = vertical ? st.y1 : st.x1
+      for (let k = from; k < to; k += 1) {
+        const p0 = k + 0.25, p1 = k + 0.65
+        if (vertical) g.lineBetween(iso(at, p0).x, iso(at, p0).y, iso(at, p1).x, iso(at, p1).y)
+        else g.lineBetween(iso(p0, at).x, iso(p0, at).y, iso(p1, at).x, iso(p1, at).y)
+      }
+    }
+    // A highway is wider than any street, all one width: two carriageways either side of a planted median.
+    const HIGHWAY_HALF = 0.6
+    const roads = streets.filter(st => st.kind !== 'lane' && st.kind !== 'path').map(st => grade === 'highway' ? { ...st, half: HIGHWAY_HALF } : st)
     const ways = streets.filter(st => st.kind === 'lane' || st.kind === 'path')
     // Each plot's lot: inset from its edges by the street's half, the kerb and a belt of grass.
-    const lotInset = (p: Plot) => { const side = Math.min(p.w, p.h); return side >= 4 ? 0.62 : side === 2 ? 0.4 : 0.22 }
+    const lotInset = (p: Plot) => { const side = Math.min(p.w, p.h); return (side >= 4 ? 0.62 : side === 2 ? 0.4 : 0.22) + (grade === 'highway' && side >= 4 ? 0.2 : 0) }
     if (indoors) {
+      // Corridors: a paler floor, edged with a faint line where the rooms' walls would be.
       g.fillStyle(this.tone.corridor)
       for (const st of streets) g.fillPoints(strip(st, st.half * 0.8), true)
+      g.lineStyle(1, this.tone.ink, 0.18)
+      for (const st of streets) g.strokePoints(strip(st, st.half * 0.8), true)
     } else {
       for (const p of plots) {
         const e = lotInset(p)
@@ -577,16 +594,23 @@ export class PlaceScene extends Phaser.Scene {
       // Lanes and paths: paved, no kerb, no paint.
       g.fillStyle(this.tone.kerb)
       for (const st of ways) g.fillPoints(strip(st, st.half), true)
-      // Lane paint: dashes down every road and the ring, a double line down the avenue.
-      for (const st of roads) {
-        const vertical = st.x0 === st.x1
-        const at = st.kind === 'ring' ? rim(vertical ? st.x0 : st.y0) : vertical ? st.x0 : st.y0
-        const from = vertical ? st.y0 : st.x0, to = vertical ? st.y1 : st.x1
-        g.lineStyle(st.kind === 'avenue' ? 1.2 : 1.4, this.tone.paint, 0.9)
-        for (let k = from; k < to; k += 1) for (const o of st.kind === 'avenue' ? [-0.06, 0.06] : [0]) {
-          const a = at + o, p0 = k + 0.25, p1 = k + 0.65
-          if (vertical) g.lineBetween(iso(a, p0).x, iso(a, p0).y, iso(a, p1).x, iso(a, p1).y)
-          else g.lineBetween(iso(p0, a).x, iso(p0, a).y, iso(p1, a).x, iso(p1, a).y)
+      if (grade === 'highway') {
+        // The median: a kerbed strip of grass down the middle; a lane line down each carriageway.
+        g.fillStyle(this.tone.ink, 0.16)
+        for (const st of roads) g.fillPoints(strip(st, st.half), true)
+        for (const st of roads) {
+          g.fillStyle(this.tone.kerb).fillPoints(strip(st, 0.13), true)
+          g.fillStyle(this.tone.grass).fillPoints(strip(st, 0.08), true)
+        }
+        g.lineStyle(1.3, this.tone.paint, 0.9)
+        for (const st of roads) for (const off of [-0.37, 0.37]) dashes(st, off)
+        g.lineStyle(1, this.tone.paint, 0.7)
+        for (const st of roads) for (const off of [-st.half + 0.04, st.half - 0.04]) { const q = strip(st, 0.001, off), e = st.x0 === st.x1 ? q[3] : q[1]; g.lineBetween(q[0].x, q[0].y, e.x, e.y) }
+      } else {
+        // Lane paint: dashes down every road and the ring, a double line down the avenue.
+        for (const st of roads) {
+          g.lineStyle(st.kind === 'avenue' ? 1.2 : 1.4, this.tone.paint, 0.9)
+          for (const off of st.kind === 'avenue' ? [-0.06, 0.06] : [0]) dashes(st, off)
         }
       }
     }
