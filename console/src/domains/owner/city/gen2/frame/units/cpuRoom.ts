@@ -6,7 +6,8 @@ import { encode, metaphor, rulerOf, rulersKey } from '../library/dictionary'
  * The hardware only — how many cores, how busy each, how fast, how hot, whether more is asked than it can do:
  *   the workshop floor   one machine tool per core, in rows: its work light as high as the core is busy,
  *                        its speed dial's needle at the core's clock, the dial's red line its top clock
- *   the left wall        one thermometer per sensor, red from 80 °C
+ *   temperature          where it is measured: the whole chip's sensor a big thermometer on the left
+ *                        wall; a core's own sensor a small one on its machine; red from 80 °C
  *   the production board three dials on the back wall (load over 1, 5 and 15 minutes against the cores:
  *                        past the middle into red, more is asked than it can do)
  *   the staging area     by the door, bins of work waiting for a free machine (as many as the share of
@@ -18,12 +19,14 @@ import { encode, metaphor, rulerOf, rulersKey } from '../library/dictionary'
 export type CpuRoomReadings = {
   /** Per core, in core order: busy share, clock and top clock (Hz); null where not read. */
   cores: { busy: number | null; freq: number | null; max: number | null }[]
-  temps: { name: string; c: number }[]
+  /** The CPU's own sensors: a sensor for one core carries its core (Intel's "Core N"); one without measures the whole chip (AMD's Tctl). */
+  temps: { name: string; c: number; core?: number }[]
   load: [number | null, number | null, number | null]
   pressure: number | null
 }
 
 const U = 35.8
+const esc = (t: string) => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 const MACHINE = faces('#b7cfc0', '#94b3a1', '#7d9c8b'), IDLE = faces('#c9cec9', '#adb3ad', '#9aa09a')
 const WALL = faces('#efe9dc', '#e2dac8', '#cfc6b2')
 
@@ -88,17 +91,21 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
   g.box(0, 0, fw, 0.18, 46, WALL, 0, 1.2)
   g.box(0, 0.18, 0.18, fd - 0.18, 46, WALL, 0, 1.2)
 
-  // Thermometers on the left wall, one per sensor (the hottest first), red from 80 °C.
-  const temps = [...r.temps].sort((a, b) => b.c - a.c)
-  if (temps.length) metaphor('sensor.temp')
-  const span = (fd - 0.8) / Math.max(1, temps.length)
-  temps.forEach((t, k) => {
-    const a = 0.5 + k * span + span * 0.3, b = a + Math.min(0.14, span * 0.4), z0 = 20, z1 = 42
-    const f = encode('sensor.temp', t.c / 100)!, hot = t.c >= 80, liquid = hot ? '#e0533d' : '#e88a3a'
-    g.onRight(0.18, 0, a, b, z0, z1, '#fbfaf6', 0.7)
-    g.onRight(0.18, 0, a + 0.02, b - 0.02, z0, z0 + (z1 - z0) * f, liquid, 0)
-    g.face('right', 0.18, a + (b - a) / 2, z0 - 2, `<circle cx="0" cy="0" r="2.6" fill="${liquid}" stroke="${INK}" stroke-width="0.7"/>`)
-    g.text('right', 0.18, b + 0.06, 12, `${Math.round(t.c)}°`, 5.5)
+  // Temperature, drawn where it is measured: a sensor for the whole chip is one big thermometer on the
+  // workshop wall, labelled with the sensor; a sensor for one core stands on that core's machine.
+  const chip = [...r.temps].filter(t => t.core == null).sort((a, b) => b.c - a.c)
+  const perCore = new Map(r.temps.filter(t => t.core != null).map(t => [t.core!, t.c]))
+  if (r.temps.length) metaphor('sensor.temp')
+  const liquidOf = (c: number) => c >= 80 ? '#e0533d' : '#e88a3a'
+  chip.forEach((t, k) => {
+    const a = 0.7 + k * 1.1, b = a + 0.24, z0 = 10, z1 = 44
+    const f = encode('sensor.temp', t.c / 100)!
+    g.onRight(0.18, 0, a, b, z0, z1, '#fbfaf6', 0.9)
+    g.onRight(0.18, 0, a + 0.04, b - 0.04, z0, z0 + (z1 - z0) * f, liquidOf(t.c), 0)
+    for (const m of [0.25, 0.5, 0.75]) g.line([0.18, a + 0.17, z0 + (z1 - z0) * m], [0.18, b, z0 + (z1 - z0) * m], INK, 0.6)
+    g.face('right', 0.18, a + (b - a) / 2, z0 - 3, `<circle cx="0" cy="0" r="4.2" fill="${liquidOf(t.c)}" stroke="${INK}" stroke-width="0.8"/>`)
+    g.text('right', 0.18, b + 0.5, 30, `CPU ${Math.round(t.c)}°`, 6.5, INK, 700)
+    g.text('right', 0.18, b + 0.5, 22, esc(t.name).toUpperCase(), 5, '#8a857a')
   })
 
   // The production board on the back wall: three dials of the work asked of the workshop over 1, 5 and
@@ -147,6 +154,13 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
         g.onLeft(kx, y + 0.2, 0.03, 0.17, 14, 32, '#2a2c35', 0.5)
         if (busy != null && busy > 0.005) g.onLeft(kx, y + 0.2, 0.03, 0.17, 14, 14 + 18 * busy, busy > 0.85 ? '#ff7a45' : '#ffc94d', 0)
         // The speed dial on its front: the needle at its clock, the red line at its top.
+        // A core's own temperature, where its sensor reports one: a small thermometer on its cabinet.
+        const hot = grp.map((_, k) => perCore.get(i * per + k)).filter((v): v is number => v != null)
+        if (hot.length) {
+          const tc = Math.max(...hot)
+          g.onRight(kx + 0.2, y, 0.04, 0.16, 14, 32, '#fbfaf6', 0.5)
+          g.onRight(kx + 0.2, y, 0.06, 0.14, 14, 14 + 18 * encode('sensor.temp', tc / 100)!, liquidOf(tc), 0)
+        }
         if (c.max) g.face('left', x, y + md, 6, dial(Math.min(6, mw * U * 0.3), mw * U * 0.38, c.freq != null ? encode('core.freq', c.freq / c.max) : null, 0.92))
       } })
     })

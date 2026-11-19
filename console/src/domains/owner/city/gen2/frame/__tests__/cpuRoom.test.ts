@@ -6,7 +6,7 @@ import { cpuRoom, cpuRoomKey, cpuRoomLayout, cpuRoomShape, type CpuRoomReadings 
 // got empty speed dials and their key rows, and the asleep GPU box got a waiting line in its key with
 // nothing waiting read: a row looked up is a row shown, so a part not read is not drawn or looked up.
 const core = (busy: number | null, freq: number | null = null, max: number | null = null) => ({ busy, freq, max })
-const linux: CpuRoomReadings = { cores: Array.from({ length: 16 }, () => core(0.2, 2e9, 4e9)), temps: [{ name: 'k10temp Tctl', c: 69 }], load: [0.6, 0.7, 1.7], pressure: 0.21 }
+const linux: CpuRoomReadings = { cores: Array.from({ length: 16 }, () => core(0.2, 2e9, 4e9)), temps: [{ name: 'Tctl', c: 69 }], load: [0.6, 0.7, 1.7], pressure: 0.21 }
 const mac: CpuRoomReadings = { cores: Array.from({ length: 10 }, () => core(0.1)), temps: [], load: [1.1, 1.3, 1.3], pressure: null }
 const asleep: CpuRoomReadings = { cores: [], temps: [], load: [null, null, null], pressure: null }
 
@@ -61,5 +61,16 @@ describe('the CPU room', () => {
       expect([2, 4, 8]).toContain(cols)
       expect(rows * cols).toBe(n)
     }
+  })
+  // The Owner, 2026-11-19: each reading drawn where it is measured, or it is a concept drawing. Every
+  // machine that day reported one CPU sensor for the whole chip (AMD Tctl); a per-core sensor (Intel's
+  // "Core N") stands on its own machine instead.
+  it('a whole-chip temperature hangs once on the wall; a per-core one stands on its machine', () => {
+    const whole = cpuRoom(linux).svg
+    expect(whole).toContain('CPU 69°')
+    const perCore: CpuRoomReadings = { ...linux, temps: linux.cores.map((_, k) => ({ name: `Core ${k}`, c: 50 + k, core: k })) }
+    const svg = cpuRoom(perCore).svg
+    expect(svg).not.toContain('CPU 5')
+    expect(svg).not.toBe(whole)
   })
 })

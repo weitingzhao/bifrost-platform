@@ -44,8 +44,13 @@ export const STAGES = [
 
 export type StageId = (typeof STAGES)[number]['id']
 
-/** What a detail is per: one value per machine, or many (a core, a sensor, a mode of time). */
-export type Per = 'machine' | 'core' | 'sensor' | 'mode'
+/**
+ * What a detail is measured over (the Owner, 2026-11-19: each reading drawn where it belongs, or the
+ * picture is a concept drawing): the whole CPU (one value), each core, each sensor (a sensor says by
+ * its label whether it measures the whole chip or one core), or each mode of time. The room draws a
+ * per-core reading on every machine and a whole-CPU reading once, on the workshop.
+ */
+export type Per = 'cpu' | 'core' | 'sensor' | 'mode'
 
 export type Detail = {
   id: string

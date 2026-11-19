@@ -41,7 +41,7 @@ const fmt = (v: number, unit: Detail['unit']) =>
 /** One machine's reading of one detail, in a cell: a value, or many (per core, sensor, mode), or not read. */
 function Cell({ d, pts }: { d: Detail; pts: Point[] }) {
   if (pts.length === 0) return <td className="none">not read</td>
-  if (d.per === 'machine') return <td>{fmt(pts[0].value, d.unit)}</td>
+  if (d.per === 'cpu') return <td>{fmt(pts[0].value, d.unit)}</td>
   if (d.per === 'mode') {
     const by = [...pts].sort((a, b) => b.value - a.value).filter(p => p.value >= 0.0005)
     return <td title={pts.map(p => `${p.labels.mode} ${fmt(p.value, d.unit)}`).join('\n')}>{by.slice(0, 3).map(p => `${p.labels.mode} ${fmt(p.value, d.unit)}`).join(' · ') || 'all ~0'}</td>
@@ -97,13 +97,15 @@ function CpuRoomView({ r }: { r: Reads }) {
       {/* Drawn at one scale for every machine, so a bigger CPU is a bigger room on the page too. */}
       <img src={spriteUrl(sprite)} alt={`CPU room of ${id}`} style={{ width: `${Math.round(sprite.width * 1.3)}px` }} />
       <ul className="key">
-        {rows.map(m => <li key={m.id}><b>{m.shows}</b><span>{m.meaning}</span>{m.encoding.kind === 'parts' && rulerOf(m.id) !== m.encoding.each && <em className="ruler">Ruler set here: one {m.part} = {rulerOf(m.id)} {m.encoding.unit === 'GB' ? 'bytes' : `${m.encoding.unit}s`} ({Math.ceil(encode(m.id, m.id === 'core.machines' ? read.cores.length : null) ?? 0)} drawn)</em>}</li>)}
+        {rows.map(m => <li key={m.id}><b>{m.shows}{m.scope && <i className="scope">{m.scope}</i>}</b><span>{m.meaning}</span>{m.encoding.kind === 'parts' && rulerOf(m.id) !== m.encoding.each && <em className="ruler">Ruler set here: one {m.part} = {rulerOf(m.id)} {m.encoding.unit === 'GB' ? 'bytes' : `${m.encoding.unit}s`} ({Math.ceil(encode(m.id, m.id === 'core.machines' ? read.cores.length : null) ?? 0)} drawn)</em>}</li>)}
         {rows.length === 0 && <li><span>Nothing read on this machine, so nothing is drawn in its room.</span></li>}
       </ul>
     </div>
     <p className="hint">{read.cores.length} cores → {machinesOf(read)} machines → a {cpuRoomShape(machinesOf(read)).join('×')} room · load {read.load.map(l => l == null ? '–' : l.toFixed(2)).join(' / ')} · waited {read.pressure == null ? 'not read' : `${(read.pressure * 100).toFixed(1)}%`} · {read.temps.length} sensors{read.temps.length ? `, hottest ${Math.round(Math.max(...read.temps.map(t => t.c)))} °C` : ''}</p>
   </div>
 }
+
+const PER_WORD = { cpu: 'the whole CPU', core: 'each core', sensor: 'each sensor (whole chip or one core, by its label)', mode: 'each mode' } as const
 
 /** The room drafted: each chosen detail as a piece of the facility's equipment, before it is drawn. */
 function InsideDraft({ u }: { u: UnitSpec }) {
@@ -113,10 +115,10 @@ function InsideDraft({ u }: { u: UnitSpec }) {
     <p className="hint">Drafted, not drawn yet: what each detail becomes in the room, and where it stands. Once you confirm the mapping, the room is drawn from it.</p>
     <div className="scroll">
       <table className="matrix draft">
-        <thead><tr><th>Where</th><th>Detail</th><th>Becomes</th><th>How the reading shows</th></tr></thead>
+        <thead><tr><th>Where</th><th>Detail</th><th>Measured over</th><th>Becomes</th><th>How the reading shows</th></tr></thead>
         <tbody>
           {groups.flatMap(g => u.inside!.filter(i => i.where === g).map((i, k) => (
-            <tr key={i.detail}>{k === 0 ? <td rowSpan={u.inside!.filter(x => x.where === g).length} className="per">{g}</td> : null}<td>{label(i.detail)}</td><td><b>{i.thing}</b></td><td className="wrap">{i.shows}</td></tr>
+            <tr key={i.detail}>{k === 0 ? <td rowSpan={u.inside!.filter(x => x.where === g).length} className="per">{g}</td> : null}<td>{label(i.detail)}</td><td className="per">{PER_WORD[u.details.find(d => d.id === i.detail)?.per ?? 'cpu']}</td><td><b>{i.thing}</b></td><td className="wrap">{i.shows}</td></tr>
           )))}
         </tbody>
       </table>

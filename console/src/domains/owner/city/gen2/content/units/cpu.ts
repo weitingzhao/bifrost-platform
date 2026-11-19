@@ -13,24 +13,26 @@ export const CPU_UNIT: UnitSpec = {
   name: 'CPU',
   what: 'The processor of a machine: its cores and how hard they work. In the city, the workshop of a factory (proposed).',
   details: [
-    { id: 'cores', label: 'Cores', meaning: 'How many cores it has.', query: CORES, unit: 'count', per: 'machine' },
+    { id: 'cores', label: 'Cores', meaning: 'How many cores it has.', query: CORES, unit: 'count', per: 'cpu' },
     { id: 'busy.core', label: 'Busy, each core', meaning: 'How much of the last 5 minutes each core was not idle.', query: '1 - avg by (instance, cpu) (rate(node_cpu_seconds_total{mode="idle"}[5m]))', unit: 'share', per: 'core' },
     { id: 'busy.mode', label: 'Busy, by what', meaning: 'What the time went to, as a share of all cores: user programs, the system, waiting on disk (iowait), interrupts, taken by the host (steal).', query: `sum by (instance, mode) (rate(node_cpu_seconds_total{mode!="idle"}[5m])) / on (instance) group_left ${CORES}`, unit: 'share', per: 'mode' },
-    { id: 'load1', label: 'Load, 1 minute', meaning: 'How many tasks were running or waiting to run, on average over the last minute.', query: 'node_load1', unit: 'load', per: 'machine' },
-    { id: 'load5', label: 'Load, 5 minutes', meaning: 'The same, over 5 minutes.', query: 'node_load5', unit: 'load', per: 'machine' },
-    { id: 'load15', label: 'Load, 15 minutes', meaning: 'The same, over 15 minutes.', query: 'node_load15', unit: 'load', per: 'machine' },
-    { id: 'running', label: 'Running now', meaning: 'Tasks running at this moment.', query: 'node_procs_running', unit: 'count', per: 'machine' },
-    { id: 'blocked', label: 'Blocked now', meaning: 'Tasks stuck waiting on input or output at this moment.', query: 'node_procs_blocked', unit: 'count', per: 'machine' },
-    { id: 'pressure', label: 'Waiting for a core', meaning: 'How much of the time some task was ready but had to wait for a core (pressure).', query: 'rate(node_pressure_cpu_waiting_seconds_total[5m])', unit: 'share', per: 'machine' },
+    { id: 'load1', label: 'Load, 1 minute', meaning: 'How many tasks were running or waiting to run, on average over the last minute.', query: 'node_load1', unit: 'load', per: 'cpu' },
+    { id: 'load5', label: 'Load, 5 minutes', meaning: 'The same, over 5 minutes.', query: 'node_load5', unit: 'load', per: 'cpu' },
+    { id: 'load15', label: 'Load, 15 minutes', meaning: 'The same, over 15 minutes.', query: 'node_load15', unit: 'load', per: 'cpu' },
+    { id: 'running', label: 'Running now', meaning: 'Tasks running at this moment.', query: 'node_procs_running', unit: 'count', per: 'cpu' },
+    { id: 'blocked', label: 'Blocked now', meaning: 'Tasks stuck waiting on input or output at this moment.', query: 'node_procs_blocked', unit: 'count', per: 'cpu' },
+    { id: 'pressure', label: 'Waiting for a core', meaning: 'How much of the time some task was ready but had to wait for a core (pressure).', query: 'rate(node_pressure_cpu_waiting_seconds_total[5m])', unit: 'share', per: 'cpu' },
     { id: 'freq', label: 'Clock, each core', meaning: 'How fast each core runs now.', query: 'node_cpu_scaling_frequency_hertz', unit: 'Hz', per: 'core' },
     { id: 'freq.max', label: 'Clock, top', meaning: 'The fastest each core can run.', query: 'node_cpu_scaling_frequency_max_hertz', unit: 'Hz', per: 'core' },
+    // Measured 2026-11-19: every machine reports one, AMD's Tctl, for the whole chip; no machine has a
+    // sensor per core (Intel's would be labelled "Core 0", "Core 1"…, and drawn on each machine).
     // The CPU's own sensors only (the chip: k10temp on AMD, coretemp on Intel, cpu_thermal on ARM). On
     // 2026-11-19 the room hung all seven a node reports; one was the CPU — three were its NVMe disk, one
     // the integrated graphics, two the board. Those belong to their own units (the hardware shows itself).
-    { id: 'temp', label: 'CPU temperature', meaning: 'What the CPU chip’s own sensors read.', query: 'node_hwmon_temp_celsius * on (instance, chip) group_left (chip_name) node_hwmon_chip_names{chip_name=~"k10temp|coretemp|cpu_thermal|zenpower"}', unit: '°C', per: 'sensor' },
-    { id: 'switches', label: 'Context switches', meaning: 'How often the cores switch from one task to another.', query: 'rate(node_context_switches_total[5m])', unit: 'per second', per: 'machine' },
-    { id: 'interrupts', label: 'Interrupts', meaning: 'How often devices interrupt the cores.', query: 'rate(node_intr_total[5m])', unit: 'per second', per: 'machine' },
-    { id: 'guest', label: 'Lent to virtual machines', meaning: 'Time the cores spent running virtual machines.', query: 'sum by (instance) (rate(node_cpu_guest_seconds_total[5m])) / on (instance) ' + CORES, unit: 'share', per: 'machine' },
+    { id: 'temp', label: 'CPU temperature', meaning: 'What the CPU chip’s own sensors read.', query: 'node_hwmon_temp_celsius * on (instance, chip) group_left (chip_name) node_hwmon_chip_names{chip_name=~"k10temp|coretemp|cpu_thermal|zenpower"} * on (instance, chip, sensor) group_left (label) node_hwmon_sensor_label', unit: '°C', per: 'sensor' },
+    { id: 'switches', label: 'Context switches', meaning: 'How often the cores switch from one task to another.', query: 'rate(node_context_switches_total[5m])', unit: 'per second', per: 'cpu' },
+    { id: 'interrupts', label: 'Interrupts', meaning: 'How often devices interrupt the cores.', query: 'rate(node_intr_total[5m])', unit: 'per second', per: 'cpu' },
+    { id: 'guest', label: 'Lent to virtual machines', meaning: 'Time the cores spent running virtual machines.', query: 'sum by (instance) (rate(node_cpu_guest_seconds_total[5m])) / on (instance) ' + CORES, unit: 'share', per: 'cpu' },
   ],
   // Details confirmed twice on 2026-11-19: first all 15 ("at this depth, show it all"), then, the same
   // day, narrowed to the hardware: a plant knows how much it generates, not what the power is used for.
@@ -83,7 +85,10 @@ export function cpuRoomReadings(reads: Record<string, ReadPoint[] | null> | unde
   const one = (id: string) => of(id)[0]?.value ?? null
   return {
     cores: ids.map(c => ({ busy: busy.get(c) ?? null, freq: freq.get(c) ?? null, max: max.get(c) ?? null })),
-    temps: of('temp').map(p => ({ name: `${p.labels.chip_name ?? p.labels.chip ?? ''} ${p.labels.sensor ?? ''}`.trim(), c: p.value })),
+    temps: of('temp').map(p => {
+      const core = /^Core (\d+)$/i.exec(p.labels.label ?? '')
+      return { name: p.labels.label ?? `${p.labels.chip_name ?? ''} ${p.labels.sensor ?? ''}`.trim(), c: p.value, core: core ? Number(core[1]) : undefined }
+    }),
     load: [one('load1'), one('load5'), one('load15')] as [number | null, number | null, number | null],
     pressure: one('pressure'),
   }

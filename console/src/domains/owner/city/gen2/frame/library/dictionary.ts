@@ -27,7 +27,8 @@ export type Encoding =
   | { kind: 'state' }
 
 /** `shows`: the part as a viewer names it, for the key a facility shows when opened. */
-export type Metaphor = { id: string; metric: string; part: string; shows: string; encoding: Encoding; meaning: string }
+/** `scope`: what the reading is measured over, where that matters to where it is drawn (each core on every machine; the whole CPU once, on the workshop). */
+export type Metaphor = { id: string; metric: string; part: string; shows: string; encoding: Encoding; meaning: string; scope?: string }
 
 const GB = 1e9, TB = 1e12
 
@@ -45,19 +46,19 @@ export const DICTIONARY: readonly Metaphor[] = [
   { id: 'identity', metric: 'which machine (from its node name)', part: 'roofNumber', shows: 'Number on the roof', encoding: { kind: 'number' }, meaning: 'its number painted on the roof, read from far off' },
   { id: 'purpose', metric: 'what it is for (workload pool, cluster role, topology role)', part: 'signBand', shows: 'Sign over the front', encoding: { kind: 'number' }, meaning: 'written on the sign over its front' },
   // The CPU unit's room, the workshop (a computer is a factory, the Owner 2026-11-19).
-  { id: 'core.machines', metric: 'CPU cores', part: 'machine tool', shows: 'Machine tools', encoding: { kind: 'parts', each: 1, unit: 'core' }, meaning: 'the standard part of compute: one machine tool per core, the same in every factory' },
+  { id: 'core.machines', metric: 'CPU cores', part: 'machine tool', shows: 'Machine tools', encoding: { kind: 'parts', each: 1, unit: 'core' }, meaning: 'the standard part of compute: one machine tool per core, the same in every factory', scope: 'whole CPU' },
   // The standard parts of memory and storage (proposed 2026-11-19, for the Owner to confirm; drawn when
   // those units are made). Measured that day: the cluster nodes 24 GB (one 16, one 32) → 6 sections,
   // the Mac minis 17.2 → 4.3, the NAS 7.8 → 1.9, the GPU box 134 → 33.5; disks 500 GB → 2 bays, the Mac
   // minis 245 → 1, NAS volume 2 984 → 3.8, volume 1 24 TB → 94 bays (12 racks).
   { id: 'mem.sections', metric: 'memory installed', part: 'workbench section', shows: 'Workbench sections', encoding: { kind: 'parts', each: 4e9, unit: 'GB' }, meaning: 'the standard part of memory: one bench section per 4 GB' },
   { id: 'disk.bays', metric: 'disk size', part: 'rack bay', shows: 'Rack bays', encoding: { kind: 'parts', each: 256e9, unit: 'GB', group: { n: 8, name: 'rack' } }, meaning: 'the standard part of storage: one rack bay per 256 GB; eight bays make a rack (2 TB)' },
-  { id: 'core.busy', metric: 'a core busy, as a share', part: 'machine work light', shows: 'Work light on each machine', encoding: { kind: 'level' }, meaning: 'the light column stands as high as that core is busy; dark when idle' },
-  { id: 'core.freq', metric: 'a core’s clock, as a share of its top', part: 'speed dial', shows: 'Speed dial on each machine', encoding: { kind: 'level' }, meaning: 'the needle at how fast that core runs now, from stopped to its red line' },
-  { id: 'core.freq.max', metric: 'a core’s top clock', part: 'speed dial red line', shows: 'Red line on the speed dial', encoding: { kind: 'number' }, meaning: 'the end of the dial: the fastest that core can run' },
-  { id: 'sensor.temp', metric: 'a temperature sensor, °C', part: 'wall thermometer', shows: 'Thermometers on the wall', encoding: { kind: 'level' }, meaning: 'one per sensor, the column as high as it reads (0–100 °C); red from 80 °C' },
-  { id: 'load', metric: 'load (tasks running or waiting), against its cores', part: 'production board dial', shows: 'Production board, 1 · 5 · 15 min', encoding: { kind: 'level' }, meaning: 'the needle at the work asked of it; past the middle (as many as it has cores) into red, more is asked than it can do' },
-  { id: 'pressure', metric: 'share of time some work waited for a core', part: 'waiting bins', shows: 'Bins in the staging area', encoding: { kind: 'count', n: 9 }, meaning: 'work waiting for a free machine: as many bins as the share of time something waited; none when nothing waits' },
+  { id: 'core.busy', metric: 'a core busy, as a share', part: 'machine work light', shows: 'Work light on each machine', encoding: { kind: 'level' }, meaning: 'the light column stands as high as that core is busy; dark when idle', scope: 'each core' },
+  { id: 'core.freq', metric: 'a core’s clock, as a share of its top', part: 'speed dial', shows: 'Speed dial on each machine', encoding: { kind: 'level' }, meaning: 'the needle at how fast that core runs now, from stopped to its red line', scope: 'each core' },
+  { id: 'core.freq.max', metric: 'a core’s top clock', part: 'speed dial red line', shows: 'Red line on the speed dial', encoding: { kind: 'number' }, meaning: 'the end of the dial: the fastest that core can run', scope: 'each core' },
+  { id: 'sensor.temp', metric: 'a CPU temperature sensor, °C', part: 'thermometer', shows: 'Thermometer', encoding: { kind: 'level' }, meaning: 'the column as high as it reads (0–100 °C), red from 80 °C: a sensor for the whole chip hangs once on the workshop wall; a sensor per core stands on its machine', scope: 'as the sensor measures: whole CPU or each core' },
+  { id: 'load', metric: 'load (tasks running or waiting), against its cores', part: 'production board dial', shows: 'Production board, 1 · 5 · 15 min', encoding: { kind: 'level' }, meaning: 'the needle at the work asked of it; past the middle (as many as it has cores) into red, more is asked than it can do', scope: 'whole CPU' },
+  { id: 'pressure', metric: 'share of time some work waited for a core', part: 'waiting bins', shows: 'Bins in the staging area', encoding: { kind: 'count', n: 9 }, meaning: 'work waiting for a free machine: as many bins as the share of time something waited; none when nothing waits', scope: 'whole CPU' },
   { id: 'state', metric: 'how it stands: online, standby, down, unread', part: 'lights, beacon', shows: 'Lights and beacon', encoding: { kind: 'state' }, meaning: 'lit and running; cold and dark; a red beacon; grey and empty' },
 ]
 
