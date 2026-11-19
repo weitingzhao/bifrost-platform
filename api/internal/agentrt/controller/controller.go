@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
@@ -372,6 +373,15 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		// from the source; events are only hints"). No event hints it yet.
 		c.every(ctx, &wg, "head-release", 30*time.Second, func() error { return c.Sources.HeadRelease(ctx) })
 	}
+	// Expired idempotency keys go, a thousand at a time and at most ten
+	// thousand an hour (actor.PurgeExpiredKeys; OWNER_LAW 42, 2026-11-19).
+	c.every(ctx, &wg, "agentrt-key-purge", time.Hour, func() error {
+		n, err := actor.PurgeExpiredKeys(ctx, c.DB, 1000, 10)
+		if n > 0 {
+			c.logf("agentrt-key-purge: %d expired idempotency keys deleted", n)
+		}
+		return err
+	})
 	// Always: an Owner signoff's observation needs no Git reader.
 	c.every(ctx, &wg, "agentrt-plan-observations", PlanObserveEvery, func() error {
 		_, err := c.PlanObservations(ctx)

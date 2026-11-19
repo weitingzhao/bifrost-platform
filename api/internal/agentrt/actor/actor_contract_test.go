@@ -112,3 +112,31 @@ func TestCheckWriterHoldsANameToTheTable(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Expired keys go and live ones stay; a key that has not expired cannot be
+// deleted at all (the table's guard), so the purge never picks one.
+//
+// Origin: 2026-11-19, 14,182 of PROD's 18,152 idempotency keys had expired
+// and nothing deleted them (OWNER_LAW 42).
+func TestPurgeExpiredKeysLeavesLiveOnes(t *testing.T) {
+	ctx := context.Background()
+	db := agentrttest.Migrated(t)
+	owner := db.Connect(t, db.Owner)
+	if _, err := owner.Exec(ctx, `INSERT INTO agentrt.idempotency_key (idempotency_key_id, route, request_sha256, response_json, created_at, expires_at)
+	  SELECT 'old-' || i, 'r', repeat('a', 64), '{}'::jsonb, clock_timestamp() - interval '8 days', clock_timestamp() - interval '1 hour' FROM generate_series(1, 5) i
+	  UNION ALL SELECT 'live', 'r', repeat('a', 64), '{}'::jsonb, clock_timestamp(), clock_timestamp() + interval '7 days'`); err != nil {
+		t.Fatal(err)
+	}
+	n, err := actor.PurgeExpiredKeys(ctx, db.Pool(t, db.Runtime), 2, 10)
+	if err != nil || n != 5 {
+		t.Fatalf("purged %d, %v; want the 5 expired", n, err)
+	}
+	var left []string
+	rows, err := owner.Query(ctx, `SELECT idempotency_key_id FROM agentrt.idempotency_key ORDER BY 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if left, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil || len(left) != 1 || left[0] != "live" {
+		t.Fatalf("left %v, %v; want only the live key", left, err)
+	}
+}

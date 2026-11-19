@@ -365,6 +365,33 @@ func keyed(ctx context.Context, db eventlog.DB, id, route, sum string, holds fun
 	return out, err
 }
 
+// PurgeExpiredKeys deletes idempotency keys past their expiry, at most batch
+// rows a statement and batches statements, and says how many went. A key is
+// kept seven days (keyed) so a client's retry gets the first answer; after
+// that the database's own guard allows the delete and nothing reads it as a
+// replay any more (0002_guards.sql: "only expired ones are deleted").
+// 2026-11-19: 14,182 of PROD's 18,152 keys had expired; nothing deleted them.
+func PurgeExpiredKeys(ctx context.Context, db eventlog.DB, batch, batches int) (int, error) {
+	total := 0
+	for i := 0; i < batches; i++ {
+		n := 0
+		err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+			tag, err := tx.Exec(ctx, `DELETE FROM agentrt.idempotency_key WHERE idempotency_key_id IN (
+			  SELECT idempotency_key_id FROM agentrt.idempotency_key WHERE expires_at < clock_timestamp() LIMIT $1)`, batch)
+			n = int(tag.RowsAffected())
+			return err
+		})
+		if err != nil {
+			return total, err
+		}
+		total += n
+		if n < batch {
+			break
+		}
+	}
+	return total, nil
+}
+
 // response decodes a stored answer the same way on the first call and on a
 // retry, so both return identical values.
 func response(b []byte) (map[string]any, error) {
