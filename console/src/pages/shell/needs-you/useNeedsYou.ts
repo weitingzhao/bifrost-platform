@@ -49,7 +49,10 @@ function knownOrPending(
  */
 export function useNeedsYou() {
   const now = Date.now()
-  const runtimeQuery = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal), refetchInterval: AGENT_RUNTIME_POLL_MS, retry: false })
+  // plan.tree.changed and approval.card.* refresh it while the bus stream is up
+  // (the plan domain, 2026-11-19: nothing else it reads still changes).
+  const liveRuntime = useLiveInterval(AGENT_RUNTIME_POLL_MS)
+  const runtimeQuery = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal), refetchInterval: liveRuntime, retry: false })
   // approval.card.* and owner.question.* refresh these (step 4); the old pace while the bus stream is down.
   const liveNeedsYou = useLiveInterval(NEEDS_YOU_REFRESH_MS)
   const openQ = useQuery({

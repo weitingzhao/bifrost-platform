@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchChecklistSignals } from '@/api/checklist'
 import { fetchSelfHealth } from '@/api/core'
 import { fetchTelemetryAlerts } from '@/api/telemetry'
+import { useLiveInterval } from '@/domains/foundation/bus/liveRefresh'
 import { normalizeViewerEnv } from '@/lib/control-room/fleetSnapshot'
 import { shellViewerHealthy, systemVerdict, type SystemVerdict } from '@/lib/shell/shellStatusLine'
 
@@ -30,10 +31,12 @@ export function useSystemVerdict() {
     refetchInterval: 60_000,
     retry: false,
   })
+  // alert.rule.fired refreshes it while the bus stream is up (bus step 4).
+  const alertsInterval = useLiveInterval(30_000)
   const alerts = useQuery({
     queryKey: ['telemetry', 'alerts'],
     queryFn: fetchTelemetryAlerts,
-    refetchInterval: 30_000,
+    refetchInterval: alertsInterval,
     retry: false,
   })
   const verdict: SystemVerdict = systemVerdict({
