@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"sigs.k8s.io/yaml"
 )
@@ -41,6 +42,9 @@ type Deliverable struct {
 	Environment string   `json:"environment"`
 	Pipeline    string   `json:"pipeline"`
 	Commits     []Commit `json:"commits"`
+	// MinGapMinutes is how long after a delivery started the next may start;
+	// the commits landing meanwhile go out together. 0: as soon as one ends.
+	MinGapMinutes int `json:"min_gap_minutes,omitempty"`
 }
 
 // Table is deliverables.yaml.
@@ -113,6 +117,8 @@ type Run struct {
 	Params map[string]string
 	// Status is running, succeeded or failed.
 	Status string
+	// Age is how long ago the run was created.
+	Age time.Duration
 }
 
 const (
@@ -315,6 +321,12 @@ func judged(ctx context.Context, w World, d Deliverable) (Outcome, error) {
 			}
 			break
 		}
+	}
+	if gap := time.Duration(d.MinGapMinutes) * time.Minute; gap > 0 && len(runs) > 0 && runs[0].Age < gap {
+		out.Action, out.Run = Waiting, runs[0].Name
+		out.Why = fmt.Sprintf("the last delivery started %d minutes ago; deliveries are at least %d minutes apart",
+			int(runs[0].Age.Minutes()), d.MinGapMinutes)
+		return out, nil
 	}
 	return out, nil // Action "": start
 }

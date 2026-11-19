@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 // world is main, the ledger and the cluster as a test sets them.
@@ -290,6 +291,25 @@ func TestTheTableThatShips(t *testing.T) {
 // latest manual=b automatic=a"). The step reads main=a and no run; before it
 // starts, a person delivers b and main is b. The step must not release a
 // over b: it reads again before it starts.
+// 2026-11-19: STG took about seven deliveries an hour and their image builds were
+// 64% of CI's writes to the nodes' disks. A new head waits out the gap, and goes
+// with whatever lands meanwhile. Positive control: past the gap it starts.
+func TestDeliveriesKeepTheirGap(t *testing.T) {
+	d := platform
+	d.MinGapMinutes = 20
+	w := newWorld()
+	w.heads["bifrost-platform"] = "b"
+	w.green("b")
+	w.runs["bifrost-deliver-platform"] = []Run{{Name: "last", Params: map[string]string{"revision": "a"}, Status: RunSucceeded, Age: 19 * time.Minute}}
+	if step(t, w, d, Waiting); w.starts != 0 {
+		t.Fatalf("%d starts inside the gap", w.starts)
+	}
+	w.runs["bifrost-deliver-platform"][0].Age = 20 * time.Minute
+	if step(t, w, d, Started); w.starts != 1 {
+		t.Fatalf("%d starts after the gap", w.starts)
+	}
+}
+
 func TestAStepReadsAgainBeforeItStarts(t *testing.T) {
 	w := newWorld()
 	w.heads["bifrost-platform"] = "a"

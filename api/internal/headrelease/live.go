@@ -109,7 +109,7 @@ func headRuns(items []unstructured.Unstructured, pipeline string) []Run {
 	})
 	out := make([]Run, 0, len(picked))
 	for _, item := range picked {
-		r := Run{Name: item.GetName(), Params: map[string]string{}, Status: RunRunning}
+		r := Run{Name: item.GetName(), Params: map[string]string{}, Status: RunRunning, Age: time.Since(item.GetCreationTimestamp().Time)}
 		params, _, _ := unstructured.NestedSlice(item.Object, "spec", "params")
 		for _, value := range params {
 			p, _ := value.(map[string]any)

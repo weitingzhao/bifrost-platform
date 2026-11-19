@@ -29,6 +29,10 @@ deliverables:
     enabled: true
     environment: stg
     pipeline: bifrost-deliver-platform
+    # 2026-11-19: about seven deliveries an hour, one for nearly every landing, and
+    # their image builds were 64% of what CI wrote to the nodes' disks. A delivery
+    # that must go sooner is started by hand.
+    min_gap_minutes: 20
     commits:
       - { repo: bifrost-platform, param: revision }
       - { repo: bifrost-ui, param: uiRevision, tested_with: bifrost-platform }
