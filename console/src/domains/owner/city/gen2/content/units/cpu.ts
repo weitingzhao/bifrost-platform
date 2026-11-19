@@ -24,7 +24,10 @@ export const CPU_UNIT: UnitSpec = {
     { id: 'pressure', label: 'Waiting for a core', meaning: 'How much of the time some task was ready but had to wait for a core (pressure).', query: 'rate(node_pressure_cpu_waiting_seconds_total[5m])', unit: 'share', per: 'machine' },
     { id: 'freq', label: 'Clock, each core', meaning: 'How fast each core runs now.', query: 'node_cpu_scaling_frequency_hertz', unit: 'Hz', per: 'core' },
     { id: 'freq.max', label: 'Clock, top', meaning: 'The fastest each core can run.', query: 'node_cpu_scaling_frequency_max_hertz', unit: 'Hz', per: 'core' },
-    { id: 'temp', label: 'Temperature, each sensor', meaning: 'What its temperature sensors read (the chip, its cores, the board).', query: 'node_hwmon_temp_celsius', unit: '°C', per: 'sensor' },
+    // The CPU's own sensors only (the chip: k10temp on AMD, coretemp on Intel, cpu_thermal on ARM). On
+    // 2026-11-19 the room hung all seven a node reports; one was the CPU — three were its NVMe disk, one
+    // the integrated graphics, two the board. Those belong to their own units (the hardware shows itself).
+    { id: 'temp', label: 'CPU temperature', meaning: 'What the CPU chip’s own sensors read.', query: 'node_hwmon_temp_celsius * on (instance, chip) group_left (chip_name) node_hwmon_chip_names{chip_name=~"k10temp|coretemp|cpu_thermal|zenpower"}', unit: '°C', per: 'sensor' },
     { id: 'switches', label: 'Context switches', meaning: 'How often the cores switch from one task to another.', query: 'rate(node_context_switches_total[5m])', unit: 'per second', per: 'machine' },
     { id: 'interrupts', label: 'Interrupts', meaning: 'How often devices interrupt the cores.', query: 'rate(node_intr_total[5m])', unit: 'per second', per: 'machine' },
     { id: 'guest', label: 'Lent to virtual machines', meaning: 'Time the cores spent running virtual machines.', query: 'sum by (instance) (rate(node_cpu_guest_seconds_total[5m])) / on (instance) ' + CORES, unit: 'share', per: 'machine' },
@@ -43,7 +46,7 @@ export const CPU_UNIT: UnitSpec = {
     { detail: 'busy.core', thing: 'Each machine’s work light', shows: 'The light column on each machine stands as high as that core is busy; an idle machine is dark.', where: 'workshop floor' },
     { detail: 'freq', thing: 'Each machine’s speed dial', shows: 'A dial on each machine: the needle at how fast the core runs now.', where: 'workshop floor' },
     { detail: 'freq.max', thing: 'The red line on each speed dial', shows: 'The red mark on the same dial: the fastest it can run.', where: 'workshop floor' },
-    { detail: 'temp', thing: 'Thermometers on the walls', shows: 'One thermometer per sensor, its column as high as it reads; red near its limit.', where: 'along the walls' },
+    { detail: 'temp', thing: 'Thermometer on the wall', shows: 'One thermometer per CPU sensor, its column as high as it reads; red near its limit.', where: 'along the walls' },
     { detail: 'load1', thing: 'The order board, 1 minute', shows: 'Three dials of the work asked of the workshop; a needle past the number of machines means more is asked than it can do.', where: 'order office' },
     { detail: 'load5', thing: 'The order board, 5 minutes', shows: 'The second of the three dials.', where: 'order office' },
     { detail: 'load15', thing: 'The order board, 15 minutes', shows: 'The third of the three dials.', where: 'order office' },
@@ -80,7 +83,7 @@ export function cpuRoomReadings(reads: Record<string, ReadPoint[] | null> | unde
   const one = (id: string) => of(id)[0]?.value ?? null
   return {
     cores: ids.map(c => ({ busy: busy.get(c) ?? null, freq: freq.get(c) ?? null, max: max.get(c) ?? null })),
-    temps: of('temp').map(p => ({ name: `${p.labels.chip ?? ''} ${p.labels.sensor ?? ''}`.trim(), c: p.value })),
+    temps: of('temp').map(p => ({ name: `${p.labels.chip_name ?? p.labels.chip ?? ''} ${p.labels.sensor ?? ''}`.trim(), c: p.value })),
     load: [one('load1'), one('load5'), one('load15')] as [number | null, number | null, number | null],
     pressure: one('pressure'),
   }

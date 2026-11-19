@@ -48,15 +48,31 @@ function dial(r: number, u: number, f: number | null, redFrom: number, label = '
 /**
  * One design for every CPU, scaled out by its standard parts (the Owner, 2026-11-19: the more cores, the
  * bigger the room; however many, it is the same room, configured, so one design draws every CPU). A
- * machine keeps its size and its 1×1 cell; the room is the smallest of the allowed shapes that holds
- * them: a strip kept for the staging area by the door; one way round, so a room twice the size holds about twice the machines. A CPU of more machines than the largest room
+ * machine keeps its size and its cell; the room is the smallest of the allowed shapes that holds
+ * them, one way round, so a room twice the size holds about twice the machines. A CPU of more machines than the largest room
  * holds says so on its wall, and the ruler (more cores to a machine) is how it fits.
  */
-const PITCH = 0.75, STAGING = 1.3, ROOMS: [number, number][] = [[4, 4], [4, 8], [8, 8]]
-const colsOf = (w: number) => Math.floor((w - STAGING - 0.3) / PITCH), rowsOf = (d: number) => Math.floor((d - 0.9) / PITCH)
-const capacity = ([w, d]: [number, number]) => colsOf(w) * rowsOf(d)
+// Cores come in pairs and powers of two, so machines stand in pairs, 2, 4 or 8 to a row, an aisle
+// between pairs, every row full (the Owner, 2026-11-19: three to a row, or one left over, looks wrong).
+// The staging area is a strip across the front, by the door; the machines fill the floor behind it,
+// a walkway between rows. A room holds 8, 24 or 48: 8 cores the small room, 16 the middle, 32 the large.
+const PITCH = 0.7, ROW = 1.0, GAP = 0.2, STAGING = 1.2, ROOMS: [number, number][] = [[4, 4], [4, 8], [8, 8]]
+const rowWidth = (cols: number) => cols * PITCH + Math.max(0, cols / 2 - 1) * GAP
+const rowsOf = (d: number) => Math.floor((d - 0.6 - STAGING) / ROW)
+/** The most machines to a row that a room this wide holds and that divide the machines evenly. */
+const colsOf = (w: number, machines: number) => {
+  let best = 1
+  for (const c of [2, 4, 8]) if (rowWidth(c) <= w - 0.6 && (machines <= 1 || machines % c === 0)) best = c
+  return best
+}
+const fitsIn = ([w, d]: [number, number], n: number) => Math.ceil(n / colsOf(w, n)) <= rowsOf(d)
 export function cpuRoomShape(machines: number): [number, number] {
-  return ROOMS.find(s => capacity(s) >= machines) ?? ROOMS[ROOMS.length - 1]
+  return ROOMS.find(s => fitsIn(s, machines)) ?? ROOMS[ROOMS.length - 1]
+}
+/** How machines stand in a room: its shape, how many to a row, how many rows. */
+export function cpuRoomLayout(machines: number) {
+  const shape = cpuRoomShape(machines), cols = colsOf(shape[0], machines)
+  return { shape, cols, rows: Math.ceil(machines / cols) }
 }
 /** How many machines a CPU of these readings is drawn with, under the ruler as it stands. */
 export const machinesOf = (r: CpuRoomReadings) => r.cores.length ? Math.ceil(encode('core.machines', r.cores.length)! - 1e-9) : 0
@@ -66,8 +82,8 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
   const g = new Draw(fw, fd, 56)
   // The floor: a workshop slab; the aisle painted between the machines and the staging area.
   g.box(0, 0, fw, fd, 3, faces('#d8d6cf', '#bdbab1', '#aaa79e'), 0, 1.2)
-  const sx = fw - STAGING - 0.05
-  g.floor(0, 0, 3, `<rect x="${((sx - 0.12) * U).toFixed(1)}" y="${(0.3 * U).toFixed(1)}" width="${(0.1 * U).toFixed(1)}" height="${((fd - 0.6) * U).toFixed(1)}" fill="#f2c94c"/>`)
+  const sy = fd - STAGING - 0.2
+  g.floor(0, 0, 3, `<rect x="${(0.3 * U).toFixed(1)}" y="${((sy - 0.12) * U).toFixed(1)}" width="${((fw - 0.6) * U).toFixed(1)}" height="${(0.1 * U).toFixed(1)}" fill="#f2c94c"/>`)
   // The back walls.
   g.box(0, 0, fw, 0.18, 46, WALL, 0, 1.2)
   g.box(0, 0.18, 0.18, fd - 0.18, 46, WALL, 0, 1.2)
@@ -87,7 +103,7 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
 
   // The production board on the back wall: three dials of the work asked of the workshop over 1, 5 and
   // 15 minutes, against its cores (past the middle, into red, more is asked than it can do).
-  const bw = 2, bx = Math.max(0.4, sx - 0.3 - bw)
+  const bw = 2, bx = Math.max(0.4, fw - 0.3 - bw)
   g.onLeft(0, 0.18, bx, bx + bw, 12, 44, '#26303d', 1)
   g.text('left', bx + 0.12, 0.18, 36, 'LOAD', 6.5, '#f2f0e8', 700)
   metaphor('load')
@@ -97,7 +113,7 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
     g.face('left', bx, 0.18, 22, dial(8, (0.2 + k * 0.3) * bw * U + 4, f, 0.5, ['1m', '5m', '15m'][k]))
   })
   // The staging area by the door, marked on the floor: work waiting for a free machine waits here.
-  const sy = 0.6, sw = fw - sx - 0.2, sd = fd - sy - 0.3
+  const sx = 0.3, sw = fw - 0.6, sd = STAGING
   g.floor(sx, sy, 3, `<rect x="0" y="0" width="${(sw * U).toFixed(1)}" height="${(sd * U).toFixed(1)}" fill="none" stroke="#f2c94c" stroke-width="2.5" stroke-dasharray="6 4"/>` +
     `<text x="${(sw * U / 2).toFixed(1)}" y="${(sd * U - 6).toFixed(1)}" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="8" font-weight="700" fill="#c9a43a">WAITING</text>`)
 
@@ -111,7 +127,7 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
     // As many machines as the ruler counts (one per core by default): each stands for its group of
     // cores, the last one narrower when not full; every machine the same size in every room.
     const per = Math.max(1, Math.round(rulerOf('core.machines')))
-    const cols = colsOf(fw), fits = capacity([fw, fd])
+    const cols = colsOf(fw, count), fits = cols * rowsOf(fd)
     const groups = Array.from({ length: Math.min(count, fits) }, (_, m) => r.cores.slice(m * per, (m + 1) * per))
     if (count > fits) g.text('left', 0.4, 0.18, 47, `${fits} OF ${count} MACHINES FIT — SET MORE CORES A MACHINE`, 5.5, '#b8433f', 700)
     const avg = (v: (number | null)[]) => { const k = v.filter((x): x is number => x != null); return k.length ? k.reduce((a, b) => a + b, 0) / k.length : null }
@@ -119,7 +135,7 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
     groups.forEach((grp, i) => {
       const mw = Math.max(0.3, MW * grp.length / per)
       const c = { busy: avg(grp.map(x => x.busy)), freq: avg(grp.map(x => x.freq)), max: grp.reduce<number | null>((a, x) => x.max == null ? a : Math.max(a ?? 0, x.max), null) }
-      const x = 0.35 + (i % cols) * PITCH + (PITCH - MW) / 2, y = 0.6 + Math.floor(i / cols) * PITCH + (PITCH - md) / 2
+      const col = i % cols, x = 0.35 + col * PITCH + Math.floor(col / 2) * GAP + (PITCH - MW) / 2, y = 0.55 + Math.floor(i / cols) * ROW + (ROW - md) / 2
       things.push({ at: x + y, draw: () => {
         const busy = encode('core.busy', c.busy)
         const idle = busy == null || busy < 0.01
@@ -141,8 +157,8 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
   // when the waiting is read (looking the row up is what marks it drawn).
   const waiting = r.pressure == null ? 0 : encode('pressure', r.pressure)!
   for (let k = 0; k < waiting; k++) {
-    const x = sx + 0.12 + (k % 2) * 0.55, y = sy + 0.25 + Math.floor(k / 2) * 0.55
-    if (y < fd - 0.8) things.push({ at: x + y, draw: () => g.box(x, y, 0.36, 0.36, 8, faces('#8fb0dc', '#6b8fc0', '#56789f'), 0, 0.9) })
+    const x = sx + 0.2 + k * 0.55, y = sy + 0.45
+    if (x < fw - 0.8) things.push({ at: x + y, draw: () => g.box(x, y, 0.36, 0.36, 8, faces('#8fb0dc', '#6b8fc0', '#56789f'), 0, 0.9) })
   }
   things.sort((a, b) => a.at - b.at).forEach(t => t.draw())
   return g.done()
