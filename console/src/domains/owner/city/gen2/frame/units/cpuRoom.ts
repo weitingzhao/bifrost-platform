@@ -100,28 +100,47 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
   // The console: a desk at the front with an upright panel, for the whole CPU: a busy dial (all cores
   // together, the average of each machine's work light) and the chip's thermometer. Only what the CPU
   // knows as hardware (the Owner, 2026-11-19: load and waiting are counted by the scheduler, not the CPU).
-  const cw = Math.min(2.2, fw - 0.6), cx = fw - 0.3 - cw, cy = sy + 0.3, cd = 0.6
+  // Shaped as a plant's control desk (the Owner, 2026-11-19: it looked like a television): a sloped
+  // desk, low at the front, and behind it an upright instrument bank under a hood; each instrument in its
+  // bezel with a name plate. Nothing on it that is not a reading: no buttons or lamps for show.
+  const cw = Math.min(2.4, fw - 0.6), cx = fw - 0.3 - cw, cy = sy + 0.15, cd = 0.75, bank = 0.22
+  const STEEL = faces('#d9dbe0', '#bfc3cb', '#a9aeb8'), DARK = faces('#4a5263', '#353c4a', '#2b313d')
   const drawConsole = () => {
-    g.shadow(cx, cy, cw, cd, 0.3)
-    g.box(cx, cy, cw, cd, 14, faces('#e9e4d6', '#cfc8b6', '#bdb5a1'), 0, 1.2)
-    g.box(cx, cy, cw, 0.14, 28, faces('#3a4150', '#2b313d', '#232833'), 14, 1.1)
-    const P = cy + 0.14
+    g.shadow(cx, cy, cw, cd, 0.35)
+    // The instrument bank: upright behind the desk, a hood on top, cheeks at the ends.
+    g.box(cx, cy, cw, bank, 40, DARK, 0, 1.2)
+    g.box(cx - 0.06, cy - 0.04, cw + 0.12, bank + 0.16, 3, STEEL, 40, 1)
+    g.box(cx + cw - 0.04, cy, 0.08, bank + 0.06, 40, STEEL, 0, 0.9)
+    const P = cy + bank
+    // The desk: sloped, 15 px high at the bank, 8 at the front edge.
+    const y0 = P, y1 = cy + cd, zb = 15, zf = 8
+    g.poly(STEEL.left, [[cx, y1, 0], [cx + cw, y1, 0], [cx + cw, y1, zf], [cx, y1, zf]], 1.2)
+    g.poly(STEEL.right, [[cx + cw, y0, 0], [cx + cw, y1, 0], [cx + cw, y1, zf], [cx + cw, y0, zb]], 1.2)
+    g.poly(STEEL.top, [[cx, y0, zb], [cx + cw, y0, zb], [cx + cw, y1, zf], [cx, y1, zf]], 1.2)
+    g.poly('#c9ccd3', [[cx + 0.1, y0 + 0.06, zb - 1], [cx + cw - 0.1, y0 + 0.06, zb - 1], [cx + cw - 0.1, y1 - 0.08, zf + 1], [cx + 0.1, y1 - 0.08, zf + 1]], 0.7)
+    // A name plate on the desk's front edge.
+    g.sign('left', cx, y1, 0.12, 1.25, 1.5, 'CPU CONSOLE', '#f4efe2', 4.5)
+    // Instrument 1: the busy dial, all cores together, in a round bezel.
+    const plate = (u: number, z: number, text: string) => g.face('left', cx, P, z, `<rect x="${(u - 24).toFixed(1)}" y="-3.5" width="48" height="6.5" rx="1" fill="#e8e2cf" stroke="${INK}" stroke-width="0.5"/><text x="${u.toFixed(1)}" y="1.6" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="4.2" font-weight="700" fill="${INK}">${text}</text>`)
     if (cores > 0) {
       metaphor('core.busy.all')
-      g.face('left', cx, P, 27, dial(11, 0.55 * U, encode('core.busy.all', all), 0.85))
-      g.text('left', cx + 0.12, P, 38.5, 'BUSY', 5.5, '#f2f0e8', 700)
-      if (all != null) g.text('left', cx + 0.33, P, 19, `${Math.round(all * 100)}%`, 6.5, '#f2f0e8', 700)
+      const u = 0.62 * U
+      g.face('left', cx, P, 31, `<circle cx="${u}" cy="0" r="10" fill="#1f242e" stroke="#9aa0ab" stroke-width="1.8"/>`)
+      g.face('left', cx, P, 30, dial(7.5, u, encode('core.busy.all', all), 0.85))
+      if (all != null) g.face('left', cx, P, 30, `<text x="${u}" y="6" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="5" font-weight="700" fill="#f2f0e8">${Math.round(all * 100)}%</text>`)
+      plate(u, 18, 'BUSY · ALL CORES')
     }
+    // Instrument 2: the chip's thermometer, in a tall bezel.
     const t = chip[0]
     if (t) {
-      const a = cw - 0.75, b = a + 0.14, z0 = 18, z1 = 39, f = encode('sensor.temp', t.c / 100)!
-      g.onLeft(cx, P, a, b, z0, z1, '#fbfaf6', 0.7)
-      g.onLeft(cx, P, a + 0.025, b - 0.025, z0, z0 + (z1 - z0) * f, liquidOf(t.c), 0)
-      g.face('left', cx + a + 0.07, P, z0 - 1.5, `<circle cx="0" cy="0" r="3" fill="${liquidOf(t.c)}" stroke="${INK}" stroke-width="0.7"/>`)
-      g.text('left', cx + b + 0.05, P, 33, `${Math.round(t.c)}°`, 6.5, '#f2f0e8', 700)
-      g.text('left', cx + b + 0.05, P, 26, esc(t.name).toUpperCase(), 4.5, '#aab0bd')
+      const a = 1.5, b = a + 0.12, z0 = 24, z1 = 38, f = encode('sensor.temp', t.c / 100)!
+      g.onLeft(cx, P, a - 0.1, b + 0.42, z0 - 4, z1 + 2, '#1f242e', 1)
+      g.onLeft(cx, P, a, b, z0, z1, '#fbfaf6', 0.6)
+      g.onLeft(cx, P, a + 0.02, b - 0.02, z0, z0 + (z1 - z0) * f, liquidOf(t.c), 0)
+      g.face('left', cx + a + 0.06, P, z0 - 1, `<circle cx="0" cy="0" r="2.6" fill="${liquidOf(t.c)}" stroke="${INK}" stroke-width="0.6"/>`)
+      g.text('left', cx + b + 0.04, P, 31, `${Math.round(t.c)}°`, 6.5, '#f2f0e8', 700)
+      plate((a + 0.22) * U, 18, `CHIP · ${esc(t.name).toUpperCase()}`)
     }
-    g.text('left', cx + 0.12, cy + cd, 9.5, 'CPU CONSOLE', 5.5, INK, 700)
   }
 
   // The machines, then the console in front of them, drawn back to front.
