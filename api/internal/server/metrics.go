@@ -8,7 +8,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
@@ -19,28 +18,10 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/maintainer"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
-	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
-	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry/probecollect"
+	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry/pluginmetrics"
 )
 
-// Prometheus exposition for the plugins Trade runs on.
-//
-// The cluster has a full kube-prometheus-stack and nineteen Bifrost rules, but
-// every one of them watches infrastructure or the flex ingest. On 2026-09-07
-// the IB gateway could not reach TWS for seventeen hours: its pod never left
-// 1/1 Running because it retried in a loop, so no generic Kubernetes alert
-// could fire, and nothing exported the gateway's own health. The gateway had
-// been publishing that health to redis-ib the whole time and platform-api had
-// been reading it — it just never reached Prometheus.
-//
-// This exports what the status endpoints already compute, so a plugin gains
-// alerting by answering PluginHealth and nothing else.
-
-// Per plugin, not for the scrape as a whole. A single shared deadline made the
-// probes race each other: market-data is much the slowest (deployments, worker
-// pools, freshness) and would spend most of a shared budget, leaving the other
-// three a cancelled context and reporting them unreachable when they were fine.
-const pluginProbeTimeout = 8 * time.Second
+// /metrics is every part's own exposition, in order; each part writes itself.
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	var b strings.Builder
@@ -55,7 +36,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("# TYPE bifrost_platform_auth_loaded gauge\n")
 	fmt.Fprintf(&b, "bifrost_platform_auth_loaded %d\n", boolValue(s.authLoaded))
 	if s.releasePolicy != nil {
-		ctx, cancel := context.WithTimeout(r.Context(), pluginProbeTimeout)
+		ctx, cancel := context.WithTimeout(r.Context(), pluginmetrics.ProbeTimeout)
 		s.releasePolicy.Status(ctx)
 		cancel()
 	}
@@ -101,27 +82,7 @@ func (s *Server) pluginProbeFns() []func(context.Context) probe.PluginHealth {
 }
 
 func (s *Server) writePluginMetrics(b *strings.Builder, r *http.Request) {
-	healths := probecollect.Collect(r.Context(), pluginProbeTimeout, "server.metrics.pluginProbe", s.pluginProbeFns())
-
-	observations := make([]telemetry.ReachabilityObservation, 0, len(healths))
-	for _, h := range healths {
-		observations = append(observations, telemetry.ReachabilityObservation{Name: h.Name, Reachable: h.Reachable, State: string(h.Reachability)})
-	}
-	states := []string{string(probe.ReachOK), string(probe.ReachDegraded), string(probe.ReachFail), string(probe.ReachUnknown)}
-	telemetry.WriteReachability(b, observations, states)
-
-	writePluginGauges(b, healths)
-}
-
-// writePluginGauges adapts existing probe observations to generic telemetry exposition.
-func writePluginGauges(b *strings.Builder, healths []probe.PluginHealth) {
-	var gauges []telemetry.MetricGauge
-	for _, h := range healths {
-		for _, g := range h.Gauges {
-			gauges = append(gauges, telemetry.MetricGauge{Plugin: h.Name, Key: g.Key, Help: g.Help, Labels: g.Labels, Value: g.Value})
-		}
-	}
-	telemetry.WriteGauges(b, gauges)
+	pluginmetrics.Write(r.Context(), b, s.pluginProbeFns())
 }
 
 func boolValue(v bool) int {

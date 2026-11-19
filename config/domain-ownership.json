@@ -1345,6 +1345,13 @@
       ],
       "status": "assigned",
       "basis": "2026-11-18, moved out of api/internal/server unchanged (alert_letters_wire.go; decoupling item 5): the duty seat's alert letters from the bus. Imports foundation only (bus/alerts, bus/subscribe, bus/relay, bus/registry, bus/readerseen, eventlog); the post into a seat's inbox is handed in by the server."
+    },
+    "api/internal/telemetry/pluginmetrics": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (metrics.go; decoupling item 5): the plugins' reachability and gauges on /metrics. Imports foundation only (probe, telemetry, telemetry/probecollect)."
     }
   }
 }
