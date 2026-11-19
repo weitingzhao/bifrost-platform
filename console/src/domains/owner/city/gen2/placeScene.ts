@@ -133,24 +133,80 @@ export class PlaceScene extends Phaser.Scene {
     this.shown = next
     if (!this.ready) return
     const same = prev && prev.place.id === next.place.id && prev.parent?.id === next.parent?.id
-    // Same page: redraw in place; refit only when arranging starts or stops (the frame changes).
-    if (same) { void this.draw(next, prev.arranging !== next.arranging); return }
-    const cam = this.cameras.main
+    // Same page: redraw in place only if something on it changed (a redraw mid-change would cut the
+    // change short); refit only when arranging starts or stops (the frame changes).
+    if (same) {
+      const key = (x: Shown) => JSON.stringify([x.selected, x.arranging, x.placed, x.parentPlaced, x.inside])
+      if (key(prev) !== key(next)) void this.draw(next, prev.arranging !== next.arranging)
+      return
+    }
+    void this.change(next)
+  }
+
+  /**
+   * Going from one place to another (the Owner, 2026-11-19: no pop and blur; the page you leave
+   * shrinks into the minimap). Down: the old page flies into the minimap corner, where its picture
+   * stays; the new page fades in under it. Up: the new page grows out of the minimap to fill the
+   * screen while the old one fades. A jump from the menu crossfades.
+   */
+  private async change(next: Shown) {
     const turn = ++this.turn
-    // Entering zooms in; going up zooms out; the old page fades, the new one fades in.
-    // (Tweens and a timer: Phaser 4's camera fade did not report its end here.)
-    cam.zoomTo(cam.zoom * (next.from === 'up' ? 0.6 : 1.8), 220, 'Sine.easeIn', true)
-    if (this.main) this.tweens.add({ targets: this.main, alpha: 0, duration: 200 })
-    this.time.delayedCall(220, async () => {
-      if (turn !== this.turn) return
-      await this.draw(next, true)
-      if (turn !== this.turn) return
-      const f = this.fit()
-      cam.setZoom(f * (next.from === 'up' ? 1.25 : 0.85))
-      cam.zoomTo(f, 240, 'Sine.easeOut', true)
-      this.main?.setAlpha(0)
-      if (this.main) this.tweens.add({ targets: this.main, alpha: 1, duration: 240 })
-    })
+    const old = this.main
+    const oldBox = this.content
+    // Where the camera stood, so the old page can be held still on screen while the camera moves for the new one.
+    const cam = this.cameras.main
+    const was = { zoom: cam.zoom, mx: cam.scrollX + cam.width / 2, my: cam.scrollY + cam.height / 2 }
+    this.main = undefined
+    // A change cut short by another leaves the minimap hidden; every change starts with it shown.
+    this.mini?.setAlpha(1)
+    await this.draw(next, true)
+    if (turn !== this.turn) { old?.destroy(); return }
+    const now = this.main as Phaser.GameObjects.Container | undefined
+    const MS = 420
+    if (!now) { old?.destroy(); return }
+    if (old) {
+      // Hold the old page where it was on screen: undo the camera's change of zoom and centre.
+      const k = was.zoom / cam.zoom
+      old.setScale(k).setPosition(cam.scrollX + cam.width / 2 - k * was.mx, cam.scrollY + cam.height / 2 - k * was.my)
+    }
+    if (next.from === 'down' && old) {
+      // The old page's picture travels to the minimap; the minimap shows it once it lands.
+      this.mini?.setAlpha(0)
+      this.mini?.ignore(old)
+      // Over the new page, so it is seen all the way into the corner.
+      this.children.bringToTop(old)
+      const to = this.toMini(oldBox)
+      this.tweens.add({ targets: old, x: to.x, y: to.y, scale: to.scale, alpha: 0.9, duration: MS, ease: 'Cubic.easeInOut',
+        onComplete: () => { old.destroy(); this.mini?.setAlpha(1) } })
+      now.setAlpha(0)
+      this.tweens.add({ targets: now, alpha: 1, duration: MS * 0.8, delay: MS * 0.3, ease: 'Sine.easeOut' })
+    } else if (next.from === 'up') {
+      // The new page starts as the minimap's picture and grows to fill the screen.
+      const from = this.toMini(this.content)
+      now.setPosition(from.x, from.y).setScale(from.scale).setAlpha(0.9)
+      this.tweens.add({ targets: now, x: 0, y: 0, scale: 1, alpha: 1, duration: MS, ease: 'Cubic.easeInOut' })
+      if (old) this.tweens.add({ targets: old, alpha: 0, duration: MS * 0.6, onComplete: () => old.destroy() })
+    } else {
+      now.setAlpha(0)
+      this.tweens.add({ targets: now, alpha: 1, duration: 220 })
+      if (old) this.tweens.add({ targets: old, alpha: 0, duration: 180, onComplete: () => old.destroy() })
+    }
+  }
+
+  /**
+   * Where a level must stand (position and scale of its container, in the main camera's world) so
+   * that its content box sits inside the minimap's frame on screen.
+   */
+  private toMini(box: { x: number; y: number; w: number; h: number }) {
+    const cam = this.cameras.main
+    const { mini, miniTitle } = this.layout
+    const sw = mini.w - 12, sh = mini.h - miniTitle - 8
+    const scale = Math.min(sw / box.w, sh / box.h) / cam.zoom
+    // From the camera's own scroll and zoom: getWorldPoint reads a matrix that is only rebuilt at the next render.
+    const sx = mini.x + mini.w / 2, sy = mini.y + miniTitle + (mini.h - miniTitle) / 2
+    const target = { x: cam.scrollX + cam.width / 2 + (sx - cam.x - cam.width / 2) / cam.zoom, y: cam.scrollY + cam.height / 2 + (sy - cam.y - cam.height / 2) / cam.zoom }
+    const cx = box.x + box.w / 2, cy = box.y + box.h / 2
+    return { x: target.x - cx * scale, y: target.y - cy * scale, scale }
   }
 
   /** The sprite each placed thing wears: its kind, size, a hue by its place in the list, a seed for its lit windows. */
