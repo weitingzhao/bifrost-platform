@@ -35,9 +35,7 @@ export const LIVE_REFRESH: LiveRefreshRow[] = [
 ]
 
 /** Types in the table not on the bus yet (each names who adds it). */
-export const LIVE_REFRESH_COMING: Record<string, string> = {
-  'plan.tree.changed': 'decoupling line, plan domain (2026-11-19)',
-}
+export const LIVE_REFRESH_COMING: Record<string, string> = {}
 
 /** How often a query still polls while the stream is live: the safety net. */
 export const LIVE_FALLBACK_MS = 300_000
