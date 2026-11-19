@@ -183,6 +183,43 @@ export function districtBlock(fw: number, fd: number, hue: string, light: Light,
   return g.done()
 }
 
+/** One wing of a building: where one of its rooms is, in the building's own footprint, and the room's hue. */
+export type Wing = { x: number; y: number; w: number; h: number; hue: string }
+
+/**
+ * A building seen from its street (the Owner, 2026-11-19: what you see outside is what is inside):
+ * a low podium over its footprint, and on it one wing per room, where the room is and as big, in
+ * the room's hue; the gaps between wings are where the corridors run inside. A building with no
+ * rooms is a plain workshop.
+ */
+export function buildingWings(fw: number, fd: number, hue: string, light: Light, seed: number, wings: readonly Wing[]): Sprite {
+  if (wings.length === 0) return workshop(fw, fd, hue, light, seed)
+  const W = WALLS[light]
+  const n = Math.min(fw, fd)
+  const POD = 5
+  const tallest = 14 + n * 7
+  const g = new Draw(fw, fd, tallest + 30)
+  const i = setback(n)
+  g.shadow(i, i, fw - 2 * i, fd - 2 * i, 0.4)
+  // The podium: the building's ground floor in its own hue, a shade lighter than its wings.
+  const deck = light === 'night' ? shade(hue, -0.55) : light === 'dusk' ? shade(hue, 0.45) : shade(hue, 0.7)
+  g.box(i, i, fw - 2 * i, fd - 2 * i, POD, faces(deck, wash(hue, light, 'left'), wash(hue, light, 'right')), 0, 1.4)
+  const lit = litBy(light, seed)
+  const order = wings.map((w, k) => ({ ...w, k })).sort((a, b) => (a.x + a.y + (a.w + a.h) / 2) - (b.x + b.y + (b.w + b.h) / 2))
+  for (const w of order) {
+    const side = Math.min(w.w, w.h)
+    const h = Math.round(8 + n * 3 + Math.sqrt(w.w * w.h) * (n >= 4 ? 4 : 6))
+    g.box(w.x, w.y, w.w, w.h, h, faces(W.top, wash(w.hue, light, 'left'), wash(w.hue, light, 'right')), POD, 1.2)
+    g.onLeft(w.x, w.y + w.h, 0, w.w, POD + h - 4, POD + h, hueFor(w.hue, light), 0.8)
+    if (side > 0.35) {
+      const rows = Math.max(1, Math.floor((h - 8) / 9))
+      g.windows('left', w.x, w.y + w.h, w.w, POD + 4, POD + h - 6, rows, Math.max(1, Math.round(w.w * 2.6)), { fill: W.window, lit: (a, b) => lit(a + w.k * 7, b), litFill: W.lit })
+      g.windows('right', w.x + w.w, w.y, w.h, POD + 4, POD + h - 6, rows, Math.max(1, Math.round(w.h * 2.6)), { fill: W.window, lit: (a, b) => lit(a + w.k * 7 + 3, b), litFill: W.lit })
+    }
+  }
+  return g.done()
+}
+
 export type SpriteKey = string
 export const spriteKey = (kind: string, w: number, d: number, hue: string, light: Light, seed: number, count = 0): SpriteKey => `g2:${kind}:${w}x${d}:${hue}:${light}:${seed}:${count}`
 

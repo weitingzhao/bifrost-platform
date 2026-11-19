@@ -199,7 +199,15 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   function shown(o: { from: Shown['from']; selected: string | null; arranging: boolean; here: Arrangement; parentA: Arrangement }): Shown {
     const h = layoutOf(place.children, o.here)
     const p = parent ? layoutOf(parent.children, o.parentA) : null
+    // Any place's ground, for the miniatures (a district seen from the town, a building's wings).
+    const layoutAt = (at: Path) => {
+      const t = trail(tree, at)
+      if (t.length !== at.length + 1) return null
+      const l = layoutOf(t[t.length - 1].children, store.get(keyOf(at)))
+      return { placed: l.placed, plots: l.plots, streets: l.streets }
+    }
     return {
+      tree, path, layoutAt,
       place, placed: h.placed, plots: h.plots, streets: h.streets,
       parent, parentPlaced: p?.placed ?? [], parentPlots: p?.plots ?? [], parentStreets: p?.streets ?? [],
       inside: path.at(-1) ?? null, selected: o.selected, from: o.from, arranging: o.arranging, tool,
