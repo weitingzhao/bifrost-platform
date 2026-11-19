@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>City Part Library</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&display=swap" />
+    <style>
+      :root { --bg: #f3efe6; --card: #fffdf8; --ink: #2f2d3a; --mute: #7a7568; --line: #d8d2c4; --chip: #ece7db; }
+      @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1d2033; --card: #262a40; --ink: #e6e3f2; --mute: #9a97b0; --line: #3c4160; --chip: #353a58; } }
+      :root[data-theme="dark"] { --bg: #1d2033; --card: #262a40; --ink: #e6e3f2; --mute: #9a97b0; --line: #3c4160; --chip: #353a58; }
+      body { margin: 0; background: var(--bg); color: var(--ink); font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; }
+      main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+      h1 { font-size: 22px; margin: 0 0 6px; }
+      h2 { font-size: 15px; margin: 32px 0 4px; }
+      p { color: var(--mute); font-size: 12px; line-height: 1.6; margin: 0 0 12px; max-width: 760px; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+      .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+      .card .art { height: 150px; display: flex; align-items: flex-end; justify-content: center; background: #f6f2ea; border-radius: 6px; overflow: hidden; }
+      .card .art img { max-width: 100%; max-height: 100%; }
+      .card b { font-size: 12px; }
+      .card span { font-size: 11px; color: var(--mute); line-height: 1.4; }
+      .chip { display: inline-block; background: var(--chip); border-radius: 4px; padding: 1px 6px; font-size: 10px; margin-left: 6px; }
+    </style>
+  </head>
+  <body>
+    <main id="root"></main>
+    <script type="module" src="./library.tsx"></script>
+  </body>
+</html>

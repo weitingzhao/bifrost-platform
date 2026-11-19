@@ -2179,6 +2179,8 @@
         "console/src/domains/owner/city/gen2/frame/geo.ts",
         "console/src/domains/owner/city/gen2/frame/grid.ts",
         "console/src/domains/owner/city/gen2/frame/kit.ts",
+        "console/src/domains/owner/city/gen2/frame/library/landmarks.ts",
+        "console/src/domains/owner/city/gen2/frame/library/parts.ts",
         "console/src/domains/owner/city/gen2/frame/light.ts",
         "console/src/domains/owner/city/gen2/frame/parts.tsx",
         "console/src/domains/owner/city/gen2/frame/placeScene.ts",
