@@ -7,7 +7,8 @@ import { createRoot } from 'react-dom/client'
 import { STAGES, stagesOf, unitRulesBroken, type Detail, type StageId, type UnitSpec } from '../src/domains/owner/city/gen2/frame/units/process'
 import { ROOM_STANDARDS } from '../src/domains/owner/city/gen2/frame/units/standards'
 import { UNITS, UNIT_PLAN, cpuRoomReadings } from '../src/domains/owner/city/gen2/content/units/cpu'
-import { cpuRoom, cpuRoomShape, machinesOf } from '../src/domains/owner/city/gen2/frame/units/cpuRoom'
+import { cpuRoom, cpuRoomShape, cpuSummaryOf, machinesOf } from '../src/domains/owner/city/gen2/frame/units/cpuRoom'
+import { readingText } from '../src/domains/owner/city/gen2/frame/library/parts'
 import { DICTIONARY, encode, rowsDrawn, rulerOf, setRuler, STANDARD_PARTS } from '../src/domains/owner/city/gen2/frame/library/dictionary'
 import { spriteUrl } from '../src/domains/owner/city/gen2/frame/sprites'
 
@@ -168,6 +169,38 @@ function Rulers({ onChange }: { onChange: () => void }) {
   </div>
 }
 
+/**
+ * The summary (stage 3): each item, what it is made from and how, and its value on every machine — the
+ * same computation the console draws from, so this is what each building will show outside.
+ */
+function CpuSummaryView({ u, r }: { u: UnitSpec; r: Reads }) {
+  const nodes = r.topology ?? []
+  const label = (id: string) => u.details.find(d => d.id === id)?.label ?? id
+  const of = (n: Node) => cpuSummaryOf(cpuRoomReadings(r.reads.cpu as never, n.host && n.host !== '127.0.0.1' ? n.host : undefined))
+  const value = (id: string, s: ReturnType<typeof cpuSummaryOf>) =>
+    id === 'cores' ? (s.cores ? String(s.cores) : '—')
+    : id === 'busy' ? readingText(s.busy, 'share')
+    : id === 'clock' ? (s.clock == null ? '—' : `${readingText(s.clock, 'Hz')} / ${readingText(s.top, 'Hz')}`)
+    : readingText(s.temp?.c ?? null, '°C')
+  return <>
+    <p className="hint">The summary is what the console shows: the room sums itself up there, and the same goes outside to its building. One computation for both.</p>
+    <div className="scroll">
+      <table className="matrix">
+        <thead><tr><th>Item</th><th>Made from</th><th>How</th>{nodes.map(n => <th key={n.id}>{n.id}</th>)}</tr></thead>
+        <tbody>{u.summary!.map(it => {
+          const sums = nodes.map(of)
+          return <tr key={it.id}>
+            <th><b>{it.label}</b><span>shows through: {DICTIONARY.find(m => m.id === it.row)?.shows}</span></th>
+            <td className="per">{it.from.map(label).join(', ')}</td>
+            <td className="per">{it.how}</td>
+            {sums.map((s, k) => { const v = value(it.id, s); return <td key={nodes[k].id} className={v === '—' ? 'none' : ''}>{v}</td> })}
+          </tr>
+        })}</tbody>
+      </table>
+    </div>
+  </>
+}
+
 /** The room standards every room is held to (frame/units/standards.ts), drawn from the CPU room. */
 function Standards() {
   return <div className="standards">
@@ -229,6 +262,7 @@ function App() {
           {broken.length > 0 && <p className="warn">{broken.join(' · ')}</p>}
           {stageId === 'details' && (r ? <DetailsStage u={u} r={r} /> : <p className="warn">Nothing read.</p>)}
           {stageId === 'inside' && u.id === 'cpu' && r && <CpuRoomView r={r} />}
+          {stageId === 'summary' && u.id === 'cpu' && r && <CpuSummaryView u={u} r={r} />}
           {stageId === 'inside' && <Standards />}
           {stageId === 'inside' && u.inside && <InsideDraft u={u} />}
           {stageId !== 'details' && stages.find(s => s.id === stageId)!.state === 'waiting' && <p className="hint">Waits for {STAGES[STAGES.findIndex(s => s.id === stageId) - 1].name} to be confirmed.</p>}

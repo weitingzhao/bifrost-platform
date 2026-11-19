@@ -36,3 +36,25 @@ describe('the unit process', () => {
     expect(STAGES.map(s => s.id)).toEqual(['details', 'inside', 'summary', 'outside', 'in-use'])
   })
 })
+
+// 2026-11-19, stage 3 for the CPU: the summary is what the console shows; one computation for both.
+import { cpuSummaryOf } from '../units/cpuRoom'
+describe('the CPU summary', () => {
+  const cpu = UNITS.find(u => u.id === 'cpu')!
+  it('four items, each from chosen details, each through a dictionary row', () => {
+    expect(cpu.summary!.map(i => i.id)).toEqual(['cores', 'busy', 'clock', 'temp'])
+    expect(unitRulesBroken(cpu)).toEqual([])
+  })
+  it('a summary row the dictionary lacks is refused', () => {
+    const bad = { ...cpu, summary: [{ id: 'x', label: 'X', from: ['cores'], how: 'count' as const, row: 'no.such.row' }] }
+    expect(unitRulesBroken(bad).join()).toMatch(/does not have/)
+  })
+  it('computed from the room’s readings only: average busy and clock, the hottest chip sensor, null when not read', () => {
+    const s = cpuSummaryOf({ cores: [{ busy: 0.2, freq: 2e9, max: 4e9 }, { busy: 0.4, freq: 3e9, max: 4e9 }], temps: [{ name: 'Tctl', c: 60 }, { name: 'Core 0', c: 90, core: 0 }] })
+    expect(s.cores).toBe(2)
+    expect(s.busy).toBeCloseTo(0.3)
+    expect(s.clock).toBe(2.5e9)
+    expect(s.temp).toEqual({ c: 60, name: 'Tctl' })
+    expect(cpuSummaryOf({ cores: [], temps: [] })).toEqual({ cores: 0, busy: null, clock: null, top: null, temp: null })
+  })
+})

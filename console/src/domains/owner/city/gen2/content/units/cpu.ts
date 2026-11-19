@@ -11,7 +11,7 @@ const CORES = 'count by (instance) (count by (instance, cpu) (node_cpu_seconds_t
 export const CPU_UNIT: UnitSpec = {
   id: 'cpu',
   name: 'CPU',
-  what: 'The processor of a machine: its cores and how hard they work. In the city, the workshop of a factory (proposed).',
+  what: 'The processor of a machine: its cores and how hard they work. In the city, the workshop of a factory.',
   details: [
     { id: 'cores', label: 'Cores', meaning: 'How many cores it has.', query: CORES, unit: 'count', per: 'cpu' },
     { id: 'busy.core', label: 'Busy, each core', meaning: 'How much of the last 5 minutes each core was not idle.', query: '1 - avg by (instance, cpu) (rate(node_cpu_seconds_total{mode="idle"}[5m]))', unit: 'share', per: 'core' },
@@ -52,6 +52,15 @@ export const CPU_UNIT: UnitSpec = {
     { detail: 'freq', thing: 'CLOCK on the console', shows: 'How fast the cores run (their average), in GHz.', where: 'CPU console' },
     { detail: 'freq.max', thing: 'The CLOCK dial’s end', shows: 'The dial runs up to the fastest the cores can run.', where: 'CPU console' },
     { detail: 'temp', thing: 'CHIP TEMP on the console', shows: 'The chip’s own temperature (one sensor for the whole chip), in °C; red from 80 °C. A sensor per core would stand on its machine.', where: 'CPU console' },
+  ],
+  // The summary (stage 3): what the console shows, and what the CPU passes up to its building. Each item
+  // from chosen details only, how it is made, and the dictionary row it shows through; computed by
+  // cpuSummaryOf (frame/units/cpuRoom.ts), the same computation the console draws from.
+  summary: [
+    { id: 'cores', label: 'Cores', from: ['cores'], how: 'count', row: 'core.machines' },
+    { id: 'busy', label: 'Busy, all cores', from: ['busy.core'], how: 'average', row: 'core.busy.all' },
+    { id: 'clock', label: 'Clock, against its top', from: ['freq', 'freq.max'], how: 'average', row: 'core.freq' },
+    { id: 'temp', label: 'Chip temperature', from: ['temp'], how: 'maximum', row: 'sensor.temp' },
   ],
   confirmed: {
     details: { on: '2026-11-19', words: '更多看到的是硬件层面相关的东西…这里面的每一个东西都要有它真实的含义…它是 CPU only' },

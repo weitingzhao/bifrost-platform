@@ -9,6 +9,8 @@
  * confirms at each, and what the machine checks — the same for every unit.
  */
 
+import { DICTIONARY } from '../library/dictionary'
+
 export const STAGES = [
   {
     id: 'details', name: 'Details',
@@ -26,7 +28,7 @@ export const STAGES = [
     id: 'summary', name: 'Summary',
     makes: 'What the unit passes up to its building: each item made from which details, and how (average, maximum, total, count, or the worst state). It is what the room\'s console shows — the room sums itself up there, and the same goes outside.',
     confirms: 'Whether the summary keeps what matters.',
-    checks: ['every item is made from chosen details', 'every item says how it is made'],
+    checks: ['every item is made from chosen details', 'every item says how it is made', 'every item shows through a dictionary row'],
   },
   {
     id: 'outside', name: 'Outside',
@@ -121,6 +123,7 @@ export function unitRulesBroken(u: UnitSpec): string[] {
   for (const it of u.summary ?? []) {
     if (it.from.length === 0) out.push(`${u.id}.${it.id}: a summary item is made from no detail`)
     for (const f of it.from) if (!(u.chosen ?? []).includes(f)) out.push(`${u.id}.${it.id}: made from "${f}", which the room does not show`)
+    if (!DICTIONARY.some(m => m.id === it.row)) out.push(`${u.id}.${it.id}: shows through "${it.row}", which the metaphor dictionary does not have`)
   }
   return out
 }

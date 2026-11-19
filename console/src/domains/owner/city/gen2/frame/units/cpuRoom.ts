@@ -70,6 +70,20 @@ export function cpuRoomLayout(machines: number) {
   const shape = cpuRoomShape(machines), cols = colsOf(shape[0], machines)
   return { shape, cols, rows: Math.ceil(machines / cols) }
 }
+/**
+ * The CPU's summary: what its console shows and what it passes up to its building (stage 3; the console
+ * is the room summing itself up, so the two are one computation and cannot drift apart). Made from the
+ * room's readings only: how many cores (count); how busy all together (the average of each core); how
+ * fast (the average clock, against the average top); how hot (the hottest sensor for the whole chip).
+ * Nothing read, null — never a guess.
+ */
+export type CpuSummary = { cores: number; busy: number | null; clock: number | null; top: number | null; temp: { c: number; name: string } | null }
+export function cpuSummaryOf(r: CpuRoomReadings): CpuSummary {
+  const avg = (v: (number | null)[]) => { const k = v.filter((x): x is number => x != null); return k.length ? k.reduce((a, b) => a + b, 0) / k.length : null }
+  const chip = r.temps.filter(t => t.core == null).sort((a, b) => b.c - a.c)[0]
+  return { cores: r.cores.length, busy: avg(r.cores.map(c => c.busy)), clock: avg(r.cores.map(c => c.freq)), top: avg(r.cores.map(c => c.max)), temp: chip ? { c: chip.c, name: chip.name } : null }
+}
+
 /** How many machines a CPU of these readings is drawn with, under the ruler as it stands. */
 export const machinesOf = (r: CpuRoomReadings) => r.cores.length ? Math.ceil(encode('core.machines', r.cores.length)! - 1e-9) : 0
 
@@ -88,7 +102,6 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
   // Temperature: a sensor for one core stands on that core's machine; a sensor for the whole chip is on
   // the console. Readings for the whole CPU are on the console at the front, where nothing hides them
   // (the Owner, 2026-11-19: on the back wall the machines hid them; a whole CPU's load belongs on a console).
-  const chip = [...r.temps].filter(t => t.core == null).sort((a, b) => b.c - a.c)
   const perCore = new Map(r.temps.filter(t => t.core != null).map(t => [t.core!, t.c]))
   if (r.temps.length) metaphor('sensor.temp')
   const liquidOf = (c: number) => c >= 80 ? '#e0533d' : '#e88a3a'
@@ -100,9 +113,7 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
   // hot the chip is; and on the desk's slope, how busy all the cores are, in the lathes' own folds. Only instruments with a reading; no console when nothing is read. (The Owner, 2026-11-19:
   // the whole CPU's percent belongs here; each machine keeps its load bar and nothing that looks like a
   // second one; instruments stood outside the desk and must not.)
-  const all = avgOf(r.cores.map(c => c.busy))
-  const clock = avgOf(r.cores.map(c => c.freq)), top = avgOf(r.cores.map(c => c.max))
-  const t = chip[0]
+  const sum = cpuSummaryOf(r), all = sum.busy, clock = sum.clock, top = sum.top, t = sum.temp
   type Gauge = { row: string; name: string; share: number | null; redFrom: number; reading: string }
   const gauges: Gauge[] = []
   if (top) gauges.push({ row: 'core.freq', name: 'CLOCK', share: clock != null ? encode('core.freq', clock / top) : null, redFrom: 0.92, reading: readingText(clock, 'Hz') })
