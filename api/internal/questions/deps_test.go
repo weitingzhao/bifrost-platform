@@ -20,27 +20,35 @@ func TestDoesNotDependOnActionsOrApprovals(t *testing.T) {
 	}
 }
 
+// The questions are mounted by the owner's assembly (owner/assembly) since
+// 2026-11-19, which took the line from server's questions_wire.go: server
+// names the package nowhere, and the assembly in its one file.
 func TestServerNamesQuestionsOnlyInTheWireFile(t *testing.T) {
-	dir := filepath.Join("..", "server")
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var hits []string
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
-			continue
-		}
-		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
+	names := func(dir string) []string {
+		entries, err := os.ReadDir(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(string(raw), "questions.") {
-			hits = append(hits, e.Name())
+		var hits []string
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
+				continue
+			}
+			raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(raw), "questions.") {
+				hits = append(hits, e.Name())
+			}
 		}
+		return hits
 	}
-	if len(hits) != 1 || hits[0] != "questions_wire.go" {
-		t.Fatalf("files containing questions. = %v", hits)
+	if hits := names(filepath.Join("..", "server")); len(hits) != 0 {
+		t.Fatalf("server files containing questions. = %v", hits)
+	}
+	if hits := names(filepath.Join("..", "owner", "assembly")); len(hits) != 1 || hits[0] != "assembly.go" {
+		t.Fatalf("owner assembly files containing questions. = %v", hits)
 	}
 }
 

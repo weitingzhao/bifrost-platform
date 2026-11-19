@@ -587,6 +587,13 @@
       "status": "assigned",
       "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the plan's HTTP handlers, moved out of agentrtapi unchanged (plan.go, planview.go, planpace.go): GET /agentrt/plan, /plan/{id}, /plan-view, /plan-pace, /progress and POST /agentrt/plan/proposals, /plan/{id}/notes, /plan/{id}/signoff, with the same paths, bodies, answers and error texts. agentrtapi still mounts them behind the same abilities and lends them identity, the strict body readers, the answers and the error mapping through the Host interface the package declares. Imports plan (planstore, planreadings) and foundation (actor, eventlog) only; the plan import route stayed in agentrtapi because it reads a recorder log (lineage). 2026-11-19 later: POST /agentrt/plan/imports came too, unchanged (planimport.go of agentrtapi, behind propose); the plan import (planimport) is the plan's, and the recorder log it may read is the lineage's, reached through the RecorderLogs port the package declares (Format, Request, Prepare) that agentrtapi binds to recorderimport and externalwork.PrepareRecorderImport, so the package still imports plan and foundation only."
     },
+    "api/internal/lineage/assembly": {
+      "domains": [
+        "lineage"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the lineage's assembly, moved out of server unchanged: building the lineage handler around the thread titles and mounting the lineage's /api/v1 routes (was mount_lineage.go) with the same paths, gates, handlers and order. server lends it Gitea access and the release records (delivery's; the binding stays in server's lineage_wire.go) and the gates. Imports lineage (lineage, threadtitles) only."
+    },
     "api/internal/lineage": {
       "domains": [
         "lineage"
@@ -692,6 +699,13 @@
       "status": "assigned",
       "basis": "CI charter; configuration is read-only"
     },
+    "api/internal/verification/assembly": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the verification's assembly, moved out of server unchanged: mounting the verification's /api/v1 routes (was mount_verification.go: evidence, units, CI scorecard and domains, unit evidence requests) with the same paths, gates, handlers and order. The handlers stay in server (ci_read_wire.go, units_*.go), bound to other domains' reads, and are lent with the gates (verification_wire.go). Imports foundation (versionedread) only."
+    },
     "api/internal/ciscore": {
       "domains": [
         "verification"
@@ -796,6 +810,13 @@
       ],
       "status": "assigned",
       "basis": "Owner-domain charter and read-model extraction"
+    },
+    "api/internal/owner/assembly": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the owner's assembly, moved out of server unchanged: mounting the owner's /api/v1 routes (was mount_owner.go), building the question runtime and mounting the questions (was questions_wire.go), and wiring the action catalog and the generic write actions (was wireWorkActions), with the same paths, gates, handlers, order and log lines. server lends it the gates, the handlers it still answers with (actions_wire.go, trust-anchored, among them), the action record's database, the cluster's clients, and delivery's copy of the policy and mirror sync (that glue stays in server's owner_wire.go). Imports owner (actions, actuationpolicy, workactions, agentgovernance, questions, questionbridge) and foundation (actuation, actionrecord, eventlog) only."
     },
     "api/internal/questions": {
       "domains": [
@@ -948,6 +969,13 @@
       ],
       "status": "assigned",
       "basis": "2026-11-19 moved out of api/internal/agentrt/controller unchanged (its ackanswers.go, which the controller's row left to the owner domain): acknowledging the Owner's answered cards the runtime no longer waits on, over questioncards (owner) and ownercard (foundation); the server binds it as the controller's used-answers step."
+    },
+    "api/internal/delivery/assembly": {
+      "domains": [
+        "delivery"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the delivery's assembly, moved out of server unchanged: mounting the delivery's /api/v1 routes (was mount_delivery.go: release policy, Argo CD, pipelines and runs, release window, release records, supply chain, agentrt migrations) with the same paths, gates, handlers and order. It names what it uses of the pipelines' handler (package delivery, shared with coordination) as an interface; the release policy's handlers (release_policy_wire.go, trust-anchored) and the other answers server holds are lent with the gates (delivery_wire.go). Imports delivery (gitops, releases, migraterun) only."
     },
     "api/internal/delivery": {
       "domains": [
