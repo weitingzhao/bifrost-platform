@@ -5,6 +5,7 @@
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { STAGES, stagesOf, unitRulesBroken, type Detail, type StageId, type UnitSpec } from '../src/domains/owner/city/gen2/frame/units/process'
+import { ROOM_STANDARDS } from '../src/domains/owner/city/gen2/frame/units/standards'
 import { UNITS, UNIT_PLAN, cpuRoomReadings } from '../src/domains/owner/city/gen2/content/units/cpu'
 import { cpuRoom, cpuRoomShape, machinesOf } from '../src/domains/owner/city/gen2/frame/units/cpuRoom'
 import { DICTIONARY, encode, rowsDrawn, rulerOf, setRuler, STANDARD_PARTS } from '../src/domains/owner/city/gen2/frame/library/dictionary'
@@ -167,6 +168,14 @@ function Rulers({ onChange }: { onChange: () => void }) {
   </div>
 }
 
+/** The room standards every room is held to (frame/units/standards.ts), drawn from the CPU room. */
+function Standards() {
+  return <div className="standards">
+    <h3>Room standards</h3>
+    <ol>{ROOM_STANDARDS.map(r => <li key={r.id}><b>{r.rule}</b> <i className={`chk ${r.check}`}>{r.check === 'test' ? 'tested' : 'by eye'}</i><span>{r.how}</span><em>{r.from}</em></li>)}</ol>
+  </div>
+}
+
 const STATE_WORD = { confirmed: 'Confirmed', open: 'Making now', waiting: 'Waits' } as const
 
 function App() {
@@ -220,6 +229,7 @@ function App() {
           {broken.length > 0 && <p className="warn">{broken.join(' · ')}</p>}
           {stageId === 'details' && (r ? <DetailsStage u={u} r={r} /> : <p className="warn">Nothing read.</p>)}
           {stageId === 'inside' && u.id === 'cpu' && r && <CpuRoomView r={r} />}
+          {stageId === 'inside' && <Standards />}
           {stageId === 'inside' && u.inside && <InsideDraft u={u} />}
           {stageId !== 'details' && stages.find(s => s.id === stageId)!.state === 'waiting' && <p className="hint">Waits for {STAGES[STAGES.findIndex(s => s.id === stageId) - 1].name} to be confirmed.</p>}
           {stageId === open && <p className="ask">Now: {stage.confirms} Say it in the thread; it is recorded in the spec with your words, and the next stage opens.</p>}

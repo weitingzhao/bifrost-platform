@@ -2174,6 +2174,7 @@
         "console/src/domains/owner/city/gen2/frame/__tests__/light.test.ts",
         "console/src/domains/owner/city/gen2/frame/__tests__/parts.test.tsx",
         "console/src/domains/owner/city/gen2/frame/__tests__/rules.test.ts",
+        "console/src/domains/owner/city/gen2/frame/__tests__/standards.test.ts",
         "console/src/domains/owner/city/gen2/frame/__tests__/theme.test.ts",
         "console/src/domains/owner/city/gen2/frame/__tests__/units.test.ts",
         "console/src/domains/owner/city/gen2/frame/__tests__/viewport.test.ts",
@@ -2198,6 +2199,7 @@
         "console/src/domains/owner/city/gen2/frame/theme.ts",
         "console/src/domains/owner/city/gen2/frame/units/cpuRoom.ts",
         "console/src/domains/owner/city/gen2/frame/units/process.ts",
+        "console/src/domains/owner/city/gen2/frame/units/standards.ts",
         "console/src/domains/owner/city/gen2/frame/viewport.ts"
       ],
       "imports": [

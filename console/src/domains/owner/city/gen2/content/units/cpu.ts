@@ -55,6 +55,7 @@ export const CPU_UNIT: UnitSpec = {
   ],
   confirmed: {
     details: { on: '2026-11-19', words: '更多看到的是硬件层面相关的东西…这里面的每一个东西都要有它真实的含义…它是 CPU only' },
+    inside: { on: '2026-11-19', words: '挺好，我觉得这个就这么设计吧' },
   },
 }
 

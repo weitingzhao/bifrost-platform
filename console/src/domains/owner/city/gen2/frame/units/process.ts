@@ -18,13 +18,13 @@ export const STAGES = [
   },
   {
     id: 'inside', name: 'Inside',
-    makes: 'The room: every chosen detail drawn at full size, each through a row of the metaphor dictionary, with its key.',
+    makes: 'The room: every chosen detail drawn at full size, each through a row of the metaphor dictionary, with its key, held to the room standards (frame/units/standards.ts), its console among them.',
     confirms: 'Whether the room shows each detail naturally.',
-    checks: ['every chosen detail is drawn', 'every drawn thing has a dictionary row'],
+    checks: ['every chosen detail is drawn', 'every drawn thing has a dictionary row', 'the room standards marked tested'],
   },
   {
     id: 'summary', name: 'Summary',
-    makes: 'What the unit passes up to its building: each item made from which details, and how (average, maximum, total, count, or the worst state).',
+    makes: 'What the unit passes up to its building: each item made from which details, and how (average, maximum, total, count, or the worst state). It is what the room\'s console shows — the room sums itself up there, and the same goes outside.',
     confirms: 'Whether the summary keeps what matters.',
     checks: ['every item is made from chosen details', 'every item says how it is made'],
   },

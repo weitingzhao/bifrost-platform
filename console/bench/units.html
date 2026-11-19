@@ -63,6 +63,12 @@
       .plan div.on { border: 1.5px solid var(--now); background: var(--chip); }
       .plan b { font-size: 12px; } .plan span { font-size: 10.5px; color: var(--mute); }
       .plan p { grid-column: 1 / -1; margin: 0; font-size: 11px; color: var(--mute); }
+.standards h3 { font-size: 12.5px; margin: 0 0 6px; }
+      .standards ol { margin: 0; padding-left: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; font-size: 11px; line-height: 1.45; }
+      @media (max-width: 760px) { .standards ol { grid-template-columns: 1fr; } }
+      .standards b { font-weight: 600; } .standards span { display: block; color: var(--ink); opacity: .85; } .standards em { display: block; font-style: normal; color: var(--mute); font-size: 10.5px; }
+      .standards .chk { font-style: normal; font-size: 9.5px; border-radius: 4px; padding: 0 4px; margin-left: 4px; border: 1px solid var(--line); color: var(--mute); }
+      .standards .chk.test { color: var(--ok); border-color: var(--ok); }
       .hint { color: var(--mute); font-size: 11px; margin: 0; }
       .warn { color: var(--warn); font-size: 11.5px; margin: 0; }
       .ask { margin: 0; font-size: 12px; background: var(--chip); border-radius: 8px; padding: 10px 12px; border-left: 3px solid var(--now); }
