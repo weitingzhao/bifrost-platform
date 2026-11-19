@@ -639,7 +639,7 @@ function coolingTower(g: Draw, x: number, y: number, h: number, id: string) {
   for (const [a, b, r] of [[-5, 10, 9], [8, 19, 11], [-3, 33, 13]] as const) g.add(`<circle cx="${cx + a}" cy="${cy - h - b}" r="${r}" fill="#ffffff"/>`)
 }
 
-export function powerStation(): Sprite {
+export function powerStation(label = ''): Sprite {
   const n = 4
   const g = new Draw(n, n, 190)
   lot(g, n, '#e3e0d6')
@@ -658,6 +658,8 @@ export function powerStation(): Sprite {
   for (let i = 0; i < 6; i++) { const u = 5 + i * 13.8; f += `<rect x="${n1(u)}" y="-27" width="10" height="15" fill="#d8ecfb" stroke="${INK}" stroke-width="0.9"/><path d="M${n1(u + 5)},-27 v15 M${n1(u)},-19.5 h10" stroke="${INK}" stroke-width="0.5"/>` }
   f += `<rect x="${n1(W - 19)}" y="-14" width="14" height="14" fill="#8a94a5" stroke="${INK}" stroke-width="0.9"/>`
   f += `<text x="4" y="-1.5" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="5.6" font-weight="700" fill="${INK}" letter-spacing="1.6">POWER</text>`
+  // The Owner's number, painted large on the hall's front (its sawtooth roof takes no paint).
+  if (label) f += `<text x="${n1(W - 24)}" y="-29.5" text-anchor="end" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="9" font-weight="800" fill="${INK}" opacity="0.85">${esc(label)}</text>`
   g.face('left', x0, y1, 0, f)
   g.face('right', x1, y1, 0, `<rect x="0" y="-7" width="${n1((y1 - y0) * U)}" height="7" fill="#bd8e47" stroke="${INK}" stroke-width="0.8"/><rect x="11" y="-26" width="9" height="13" fill="#d8ecfb" stroke="${INK}" stroke-width="0.8"/><rect x="29" y="-26" width="9" height="13" fill="#d8ecfb" stroke="${INK}" stroke-width="0.8"/>`)
   for (let i = 0; i < 4; i++) {
@@ -847,6 +849,14 @@ export function orbitSatellite(color = '#f2d27a'): Sprite {
 /* A generator set: one node of the cluster, the supply side.           */
 /* ------------------------------------------------------------------ */
 
+const esc = (t: string) => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
+
+/** A number painted on a flat roof of w×d cells at height z, reading along the roof. */
+function roofPaint(g: Draw, x: number, y: number, w: number, d: number, z: number, label: string) {
+  const size = Math.min(20, (w * U * 1.5) / Math.max(2, label.length))
+  g.floor(x, y, z, `<text x="${n1(w * U / 2)}" y="${n1(d * U / 2 + size * 0.36)}" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="${n1(size)}" font-weight="800" fill="#2f2d3a" opacity="0.8" letter-spacing="1">${esc(label)}</text>`)
+}
+
 /** Capacity tiers (0–3); -1 when not read. */
 export type Tier = -1 | 0 | 1 | 2 | 3
 export type MachineOs = 'linux' | 'mac' | 'win' | 'unknown'
@@ -857,7 +867,7 @@ export type MachineOs = 'linux' | 'mac' | 'win' | 'unknown'
  * sizes, which the bars beside it show). Linux is the yellow diesel set, a
  * Mac a white rounded fuel-cell unit, Windows a blue battery cabinet.
  */
-export function generatorSet(os: MachineOs = 'linux'): Sprite {
+export function generatorSet(os: MachineOs = 'linux', label = ''): Sprite {
   const n = 2
   const g = new Draw(n, n, 96)
   lot(g, n, '#dedbd2')
@@ -870,6 +880,7 @@ export function generatorSet(os: MachineOs = 'linux'): Sprite {
     g.face('left', x0, y1, 4, `<rect x="5" y="${-h + 8}" width="${n1(W - 10)}" height="3" rx="1.5" fill="#9fd8ff"/><circle cx="${n1(W - 7)}" cy="${-h + 15}" r="1.3" fill="#7ef0c9"/>`)
     g.face('right', x1, y1, 4, `<rect x="5" y="${-h + 6}" width="${n1(D - 10)}" height="${h - 12}" rx="5" fill="none" stroke="#c3c8d2" stroke-width="1"/>`)
     top(g, x0 + 0.08, y0 + 0.08, x1 - 0.08, y1 - 0.08, h + 4, '#f7f8fa', 0.9, '#b9bec8')
+    if (label) roofPaint(g, x0 + 0.1, y0 + 0.1, x1 - x0 - 0.2, y1 - y0 - 0.2, h + 4, label)
   } else if (os === 'win') {
     g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#d8e8ff', '#4f86d6', '#3b6fb8'), 4)
     let f = ''
@@ -879,6 +890,7 @@ export function generatorSet(os: MachineOs = 'linux'): Sprite {
     for (let u = 5; u < D - 4; u += 6) r2 += `<rect x="${n1(u)}" y="${-h + 6}" width="3.6" height="${h - 12}" fill="#2f5c9e"/>`
     g.face('right', x1, y1, 4, r2)
     top(g, x0 + 0.06, y0 + 0.06, x1 - 0.06, y1 - 0.06, h + 4, '#e8f1ff', 0.9, '#3b6fb8')
+    if (label) roofPaint(g, x0 + 0.1, y0 + 0.1, x1 - x0 - 0.2, y1 - y0 - 0.2, h + 4, label)
   } else {
     const yellow = os === 'linux'
     g.box(x0, y0, x1 - x0, y1 - y0, h, yellow ? faces('#ffe9a8', '#f7cf62', '#e9b843') : faces('#eceaf2', '#cfcbd9', '#bdb8c9'), 4)
@@ -890,6 +902,8 @@ export function generatorSet(os: MachineOs = 'linux'): Sprite {
     for (let u = 7; u < D - 6; u += 3.2) r += `<line x1="${n1(u)}" y1="-28" x2="${n1(u)}" y2="-8" stroke="#8d93a1" stroke-width="0.9"/>`
     g.face('right', x1, y1, 4, r)
     top(g, x0 + 0.06, y0 + 0.06, x1 - 0.06, y1 - 0.06, h + 4, yellow ? '#fff1c4' : '#f4f2f8', 0.9, yellow ? '#b48a2a' : '#8d889b')
+    // The Owner's number, painted flat on the roof's front half, under the stacks (2026-11-19).
+    if (label) roofPaint(g, x0 + 0.1, 0.98, x1 - x0 - 0.2, y1 - 1.06, h + 4, label)
     for (const k of [0.6, 1.0]) {
       g.cylinder(k, 0.75, 4, h + 4, h + 26, '#9aa3b0', '#6d7584', '#59606b')
       const [ex, ey] = g.p(k, 0.75, h + 26)

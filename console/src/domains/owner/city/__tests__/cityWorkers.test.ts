@@ -7,7 +7,7 @@ import { pluginsOf, tenantsOf } from '../catalog'
 import { nextZoneName, zoneTint } from '../zones'
 import { campuses, campusPlan, campusSize } from '../cityCampus'
 import { coreTier, diskTier, machines, memTier, osOf, variantOf } from '../cityMachines'
-import { layersOf } from '../catalog'
+import { layersOf, spriteOf } from '../catalog'
 
 // Origin: 2026-11-18, the Owner: seats are the workers; they live in dorms
 // and their real work shows. A worker stands at the building of the domain
@@ -160,6 +160,10 @@ describe('the machines', () => {
   it('draws a set by its system; its size shows in its bars, not in the sprite (the Owner: bars beside read better than tanks inside)', () => {
     expect(layersOf('genset', 'node:x', undefined, 'mac').map(l => l.tex)).toEqual(['genset:mac'])
     expect(layersOf('power', 'node:gpu-server', undefined, 'linux').map(l => l.tex)).toEqual(['power'])
+    // 2026-11-19, the Owner: a machine room's number is painted on it, so it is part of its texture.
+    expect(layersOf('genset', 'node:x', undefined, 'linux', '01').map(l => l.tex)).toEqual(['genset:linux:01'])
+    expect(layersOf('power', 'node:gpu-server', undefined, 'linux', 'GPU').map(l => l.tex)).toEqual(['power:GPU'])
+    expect(spriteOf('genset:linux:A%26B').svg).toContain('A&amp;B')
     expect([coreTier(8), coreTier(16), coreTier(32), coreTier(64), coreTier(null)]).toEqual([0, 1, 2, 3, -1])
   })
 })

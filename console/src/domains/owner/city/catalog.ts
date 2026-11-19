@@ -144,9 +144,11 @@ export type Layer = { tex: string; dx: number; dy: number; stack: boolean; order
 
 const iso = (x: number, y: number, z = 0) => ({ x: (x - y) * (CW / 2), y: (x + y) * (CH / 2) - z })
 
-export function layersOf(kind: string, binds: string, color?: string, variant?: string): Layer[] {
+export function layersOf(kind: string, binds: string, color?: string, variant?: string, label?: string): Layer[] {
   const base = (tex: string, order = 0): Layer => ({ tex, dx: 0, dy: 0, stack: false, order })
-  if (kind === 'genset') return [base(`genset:${variant ?? 'linux'}`)]
+  // A machine room carries its number in its own paint, so the number is part of its texture.
+  if (kind === 'genset') return [base(`genset:${variant ?? 'linux'}${label ? `:${encodeURIComponent(label)}` : ''}`)]
+  if (kind === 'power' && label) return [base(`power:${encodeURIComponent(label)}`)]
   if (kind === 'supplier') return [base(`supplier:${color ?? '#5aa9ff'}`)]
   if (kind === 'campus' || kind === 'campus4') return [base(`campus:${kind === 'campus' ? 8 : 4}:${color ?? '#f2d27a'}`)]
   if (kind !== 'pad') return [base(kind)]
@@ -159,14 +161,14 @@ export function layersOf(kind: string, binds: string, color?: string, variant?: 
 
 const cache = new Map<string, Sprite>()
 const make: Record<string, () => Sprite> = {
-  assembly: L.assembly, hif: L.horizontalHangar, satellites: L.satelliteHangar, genset: () => L.generatorSet('linux'), control: L.missionControl, dorm: () => L.dormitory(0), court: L.court, power: L.powerStation, archive: L.archive, water: L.waterTower,
+  assembly: L.assembly, hif: L.horizontalHangar, satellites: L.satelliteHangar, genset: () => L.generatorSet('linux'), control: L.missionControl, dorm: () => L.dormitory(0), court: L.court, power: () => L.powerStation(), archive: L.archive, water: L.waterTower,
   'pad:chopsticks': () => L.launchPad(true), 'pad:plain': () => L.launchPad(false), 'pad:front': L.launchPadFront, starship: L.starship,
   'd:tree0': () => L.streetTree(0), 'd:tree1': () => L.streetTree(1), 'd:tree2': () => L.streetTree(2),
   'd:lamp': L.streetLamp, 'd:bench': L.parkBench, 'd:billboard': L.billboard, 'd:signal': L.trafficLight,
 }
 export function spriteOf(tex: string): Sprite {
   let s = cache.get(tex)
-  if (!s) { s = tex.startsWith('rocket:') ? L.rocket(tex.slice(7)) : tex.startsWith('sat:') ? L.orbitSatellite(tex.slice(4)) : tex.startsWith('supplier:') ? L.supplierDock(tex.slice(9)) : tex.startsWith('bay:') ? L.payloadBay(tex.slice(4)) : tex.startsWith('factory:') ? L.codeFactory(tex.slice(8)) : tex.startsWith('module:') ? L.moduleBlock(tex.slice(7)) : tex.startsWith('genset:') ? L.generatorSet(tex.slice(7) as L.MachineOs) : tex.startsWith('campus:') ? L.campusGround(Number(tex.split(':')[1]) as 4 | 8, tex.split(':')[2]) : make[tex](); cache.set(tex, s) }
+  if (!s) { s = tex.startsWith('rocket:') ? L.rocket(tex.slice(7)) : tex.startsWith('sat:') ? L.orbitSatellite(tex.slice(4)) : tex.startsWith('supplier:') ? L.supplierDock(tex.slice(9)) : tex.startsWith('bay:') ? L.payloadBay(tex.slice(4)) : tex.startsWith('factory:') ? L.codeFactory(tex.slice(8)) : tex.startsWith('module:') ? L.moduleBlock(tex.slice(7)) : tex.startsWith('genset:') ? L.generatorSet(tex.split(':')[1] as L.MachineOs, decodeURIComponent(tex.split(':')[2] ?? '')) : tex.startsWith('power:') ? L.powerStation(decodeURIComponent(tex.slice(6))) : tex.startsWith('campus:') ? L.campusGround(Number(tex.split(':')[1]) as 4 | 8, tex.split(':')[2]) : make[tex](); cache.set(tex, s) }
   return s
 }
 export const spriteUrl = (s: Sprite) => `data:image/svg+xml;utf8,${encodeURIComponent(s.svg)}`

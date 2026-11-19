@@ -473,7 +473,7 @@ export class BuilderScene extends Phaser.Scene {
   /* ---------------- the buildings ---------------- */
 
   private layers(p: Placed): Layer[] {
-    const ls = layersOf(p.kind, p.binds, this.s.colorOf(p.binds), this.s.variantOf?.(p.binds))
+    const ls = layersOf(p.kind, p.binds, this.s.colorOf(p.binds), this.s.variantOf?.(p.binds), p.label)
     const c = (p.kind === 'campus' || p.kind === 'campus4') && p.binds ? this.s.campusOf?.(p.binds) : undefined
     if (!c) return ls
     // Inside a campus: what was read, each at its cell; its order keeps the back ones behind.
@@ -508,7 +508,9 @@ export class BuilderScene extends Phaser.Scene {
       if (!v.sig) { v.imgs = ls.map(layer => ({ img: this.image(layer, o.x, o.y), layer })); v.sig = sig }
       for (const { img, layer } of v.imgs) img.setPosition(o.x + layer.dx, o.y + layer.dy)
       const roof = p.kind === 'power' ? iso(p.x + 1.55, p.y + 2.75, 40) : iso(p.x + p.size / 2, p.y + p.size / 2, p.kind === 'genset' ? 42 : Math.min(kindOf(p.kind)?.height ?? 60, 120) * 0.5)
-      v.num.setText(p.label ?? '').setPosition(roof.x, roof.y).setVisible(!!p.label && v.imgs[0]?.img.visible !== false)
+      // Machine rooms wear their number as paint in their own texture; the others carry a roof sign.
+      const painted = p.kind === 'genset' || p.kind === 'power'
+      v.num.setText(p.label ?? '').setPosition(roof.x, roof.y).setVisible(!!p.label && !painted && v.imgs[0]?.img.visible !== false)
     }
     for (const [id, v] of this.views) if (!seen.has(id)) { v.imgs.forEach(i => i.img.destroy()); v.tag.destroy(); v.plate.destroy(); v.num.destroy(); v.win?.destroy(); v.fx.destroy(); this.views.delete(id) }
     if (this.selected && !seen.has(this.selected)) this.select(null)
@@ -542,7 +544,8 @@ export class BuilderScene extends Phaser.Scene {
     this.gaugeG?.clear()
     for (const v of this.views.values()) {
       const r = v.part.binds ? this.s.readingOf(v.part.binds) : undefined
-      if (r?.meters && v.imgs[0]?.img.visible !== false) this.gauges(this.gaugeG, v.part, r.meters)
+      // A machine's windows are its gauges (the Owner, 2026-11-19): no bars beside it.
+      if (r?.meters && v.imgs[0]?.img.visible !== false && !v.part.binds.startsWith('node:')) this.gauges(this.gaugeG, v.part, r.meters)
     }
     g.clear()
     // Tags go up their leader until they clear the billboards and each other.
@@ -608,20 +611,22 @@ export class BuilderScene extends Phaser.Scene {
     const cols = [0xf2b234, 0x5aa9ff, 0xb8c0cc] as const
     for (const v of this.views.values()) {
       const p = v.part
-      if (p.kind !== 'genset') { if (v.win) { v.win.destroy(); v.win = undefined } continue }
+      if (p.kind !== 'genset' && p.kind !== 'power') { if (v.win) { v.win.destroy(); v.win = undefined } continue }
       const r = p.binds ? this.s.readingOf(p.binds) : undefined
       if (!v.win) { v.win = this.add.graphics(); v.win.setDepth((v.imgs[0]?.img.depth ?? 10) + 0.85) }
       const g = v.win
       g.clear()
       if (!r?.meters || v.imgs[0]?.img.visible === false) continue
       const os = this.s.variantOf?.(p.binds) ?? 'linux'
-      const [z0, z1] = os === 'mac' ? [10, 24] : [12, 32]
+      // Where the three windows are on the front face: the generator set's louvres, the power hall's first three windows.
+      const spec = p.kind === 'power' ? { face: 3.45, x0: 0.35, u0: 5, step: 13.8, w: 10, z: [12, 27] } : { face: 1.6, x0: 0.22, u0: 4, step: 15, w: 11, z: os === 'mac' ? [10, 24] : [12, 32] }
+      const [z0, z1] = spec.z
       const m = [r.meters.power, r.meters.water, r.meters.gas]
       const target = m.map(x => x.used != null && (x.of ?? x.reserved) ? Math.min(1, x.used / (x.of ?? x.reserved)!) : -1)
       v.lv ??= target.map(t => Math.max(0, t))
-      const y = p.y + 1.6, at = (x: number, z: number) => iso(p.x + x, y, z)
+      const y = p.y + spec.face, at = (x: number, z: number) => iso(p.x + x, y, z)
       target.forEach((t, i) => {
-        const a = 0.22 + (4 + i * 15) / W, b = a + 11 / W
+        const a = spec.x0 + (spec.u0 + i * spec.step) / W, b = a + spec.w / W
         const quad = (za: number, zb: number) => [at(a, za), at(b, za), at(b, zb), at(a, zb)] as Phaser.Math.Vector2[]
         g.fillStyle(0x2f3446, 1); g.fillPoints(quad(z0, z1), true)
         if (t < 0) {
