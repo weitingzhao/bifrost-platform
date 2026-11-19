@@ -50,7 +50,6 @@ func across(o ownership, imports map[string][]string) []string {
 // (config/quality-ruler.json), and the coordinator ruled the wall be extended
 // to every domain.
 var domainsAcross = []string{
-	"api/internal/agentrt/planreadings -> api/internal/agentrt/workregistration (plan -> lineage)",
 	"api/internal/approvals -> api/internal/threadinbox (owner -> coordination)",
 	"api/internal/lineage -> api/internal/agentrt/landinggit (lineage -> verification)",
 	"api/internal/questions -> api/internal/threadinbox (owner -> coordination)",

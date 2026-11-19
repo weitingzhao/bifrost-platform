@@ -36,6 +36,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 )
 
 // API serves the routes. A nil DB means the platform has no agentrt
@@ -126,7 +127,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 	// The plan's and the coordination's handlers are in their domains'
 	// packages (2026-11-19, OWNER_LAW #28); their routes and abilities are
 	// here with every other.
-	plan, coordination := planapi.Routes{Host: host{a}}, coordapi.Routes{Host: host{a}}
+	plan, coordination := planapi.Routes{Host: host{a}, WorkSpans: workregistration.WorkSpans}, coordapi.Routes{Host: host{a}}
 	r.Route("/agentrt", func(r chi.Router) {
 		r.With(read, cfg).Get("/whoami", a.whoami)
 		r.With(upload, cfg).Put("/artifacts/{id}", a.putArtifact)

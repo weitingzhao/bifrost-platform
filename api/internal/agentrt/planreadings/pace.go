@@ -4,18 +4,28 @@ package planreadings
 
 import (
 	"context"
+	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 	"time"
 )
 
 const planTree = `WITH RECURSIVE tree AS (SELECT plan_node_id FROM agentrt.plan_node WHERE plan_node_id=$1 UNION ALL SELECT n.plan_node_id FROM agentrt.plan_node n JOIN tree t ON n.parent_plan_node_id=t.plan_node_id) `
 
+// WorkSpans reads, within tx, each piece of registered work's span that
+// overlaps [from, to]. The plan does not read registered work itself: lineage
+// owns it (workregistration.WorkSpans) and the caller passes its reader in
+// (law 28), so this package does not import lineage's.
+type WorkSpans func(ctx context.Context, tx pgx.Tx, from, to time.Time) ([][2]time.Time, error)
+
 // Pace reads the selected plan's remaining steps, completion events and registered
-// activity without leaving tx. The caller supplies the established stream and zone.
-func Pace(ctx context.Context, tx pgx.Tx, root, stream string, now time.Time, loc *time.Location) (planpace.Pace, error) {
+// activity without leaving tx. The caller supplies the established stream and zone,
+// and the reader of registered work's spans; without one Pace refuses.
+func Pace(ctx context.Context, tx pgx.Tx, root, stream string, now time.Time, loc *time.Location, spansOf WorkSpans) (planpace.Pace, error) {
 	var out planpace.Pace
+	if spansOf == nil {
+		return out, errors.New("plan pace: no reader of registered work is bound")
+	}
 	var kind string
 	if err := tx.QueryRow(ctx, `SELECT node_kind FROM agentrt.plan_node WHERE plan_node_id = $1 AND parent_plan_node_id IS NULL`, root).Scan(&kind); err != nil {
 		return out, err
@@ -46,7 +56,7 @@ func Pace(ctx context.Context, tx pgx.Tx, root, stream string, now time.Time, lo
 		return out, err
 	}
 	out = planpace.Compute(root, remaining, moves, now, loc)
-	spans, err := workregistration.WorkSpans(ctx, tx, now.Add(-planpace.QuietWindow), now)
+	spans, err := spansOf(ctx, tx, now.Add(-planpace.QuietWindow), now)
 	if err != nil {
 		return out, err
 	}

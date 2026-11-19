@@ -21,6 +21,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
@@ -61,4 +62,7 @@ type Host interface {
 // Routes are the plan domain's handlers.
 type Routes struct {
 	Host Host
+	// WorkSpans reads registered work for GET /plan-pace (lineage's reader,
+	// bound by the assembly).
+	WorkSpans planreadings.WorkSpans
 }

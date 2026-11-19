@@ -21,7 +21,7 @@ func (rt Routes) HandleGetPlanPace(w http.ResponseWriter, r *http.Request) {
 		rt.Host.Error(w, 400, "bad_request", "root is required")
 		return
 	}
-	out, err := planreadings.PlanPace(r.Context(), rt.Host.DB(), root, time.Now())
+	out, err := planreadings.PlanPace(r.Context(), rt.Host.DB(), root, time.Now(), rt.WorkSpans)
 	if err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
