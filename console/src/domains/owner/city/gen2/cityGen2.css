@@ -1,5 +1,5 @@
 /* City gen2 frame, greybox. Positions come from viewport.ts (inline); this file is only the look. */
-.g2 { transition: background-color .6s; position: relative; width: 100%; height: 100%; min-height: 320px; overflow: hidden; background: var(--g2-sky);
+.g2 { --g2-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace; transition: background-color .6s; position: relative; width: 100%; height: 100%; min-height: 320px; overflow: hidden; background: var(--g2-sky);
   font-family: system-ui, -apple-system, sans-serif; color: var(--g2-ink); touch-action: none; user-select: none; -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent; }
 .g2-canvas { position: absolute; inset: 0; }
@@ -7,12 +7,12 @@
 .g2-probe { position: absolute; visibility: hidden; pointer-events: none;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 
-.g2-corner { box-sizing: border-box; position: absolute; z-index: 2; background: var(--g2-card); border: 1px solid var(--g2-line); border-radius: 10px;
-  box-shadow: 0 2px 10px #0000000f; }
+.g2-corner { box-sizing: border-box; position: absolute; z-index: 2; background: var(--g2-card); border: 2px solid var(--g2-ink-line); border-radius: 8px;
+  box-shadow: 3px 3px 0 var(--g2-ink-line); }
 
 /* Summary */
 .g2-tl { padding: 10px 12px; }
-.g2-tl h1 { margin: 2px 0 2px; font-size: 18px; line-height: 1.2; }
+.g2-tl h1 { margin: 2px 0 2px; font-family: var(--g2-mono); font-size: 18px; font-weight: 700; line-height: 1.2; letter-spacing: -.01em; }
 .g2-tl p { margin: 0 0 8px; font-size: 12.5px; color: var(--g2-soft); line-height: 1.35; }
 .g2-tl dl { margin: 0; display: flex; gap: 16px; font-size: 12px; }
 .g2-tl dt { color: var(--g2-mute); }
@@ -24,12 +24,13 @@
 .g2-tl.compact.open { z-index: 4; box-shadow: 0 8px 28px #00000026; }
 .g2-tl.compact.open h1 { display: block; }
 .g2-more { margin-left: auto; color: var(--g2-mute); }
-.g2-kicker { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--g2-mute); display: flex; gap: 6px; align-items: center; }
+.g2-kicker { font-family: var(--g2-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--g2-mute); display: flex; gap: 6px; align-items: center; }
 .g2-chip { text-transform: none; letter-spacing: 0; background: var(--g2-chip); color: var(--g2-soft); border-radius: 6px; padding: 0 5px; }
 .g2-unknown { color: var(--g2-mute); font-weight: 400 !important; font-style: italic; }
 .g2-actions { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
-.g2-btn { font: inherit; font-size: 12px; min-height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--g2-line); background: var(--g2-card); color: var(--g2-ink); cursor: pointer; }
-.g2-btn.primary { background: var(--g2-ink); color: var(--g2-sky); border-color: var(--g2-ink); }
+.g2-btn { font-family: var(--g2-mono); font-size: 12px; font-weight: 600; min-height: 32px; padding: 0 12px; border-radius: 6px; border: 2px solid var(--g2-ink-line); background: var(--g2-card); color: var(--g2-ink); cursor: pointer; box-shadow: 2px 2px 0 var(--g2-ink-line); }
+.g2-btn:active { transform: translate(2px, 2px); box-shadow: none; }
+.g2-btn.primary { background: #ffd36b; color: #2f2d3a; }
 .g2-btn:disabled { opacity: .45; cursor: default; }
 .g2[data-device='phone'] .g2-btn, .g2[data-device='tablet'] .g2-btn { min-height: 44px; }
 .g2-hint { margin: 6px 0 0 !important; font-size: 11.5px !important; color: var(--g2-soft) !important; }
@@ -40,7 +41,7 @@
 /* Minimap: a frame over the second camera; transparent below its title so the camera shows through. */
 .g2-tr { background: transparent; padding: 0; cursor: pointer; text-align: left; overflow: hidden;
   display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; font: inherit; color: inherit; }
-.g2-tr span { display: block; padding: 0 8px; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.g2-tr span { display: block; padding: 0 8px; font-family: var(--g2-mono); font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   background: var(--g2-card); border-bottom: 1px solid var(--g2-line); }
 .g2-tr:hover { border-color: var(--g2-link); }
 
@@ -52,12 +53,13 @@
 
 /* Menu */
 .g2-menu { position: absolute; z-index: 2; box-sizing: border-box; display: flex; gap: 4px; padding: 4px; background: var(--g2-menu);
-  border-radius: 12px; overflow-x: auto; scrollbar-width: none; }
+  border: 2px solid var(--g2-ink-line); box-shadow: 3px 3px 0 var(--g2-ink-line); font-family: var(--g2-mono);
+  border-radius: 10px; overflow-x: auto; scrollbar-width: none; }
 .g2-menu::-webkit-scrollbar { display: none; }
-.g2-menu button { flex: 1 0 auto; border: 0; background: transparent; color: var(--g2-menu-ink); font-size: 13px; padding: 0 12px; border-radius: 8px;
+.g2-menu button { flex: 1 0 auto; border: 0; background: transparent; color: var(--g2-menu-ink); font-family: inherit; font-size: 13px; font-weight: 600; padding: 0 12px; border-radius: 8px;
   cursor: pointer; white-space: nowrap; min-height: 100%; }
 .g2-menu button:hover { background: #ffffff1f; }
-.g2-menu button.on { background: #ffd36b; color: #2f2d3a; font-weight: 600; }
+.g2-menu button.on { background: #ffd36b; color: #2f2d3a; font-weight: 700; box-shadow: inset 0 0 0 2px #2f2d3a; }
 .g2[data-device='phone'] .g2-menu button { padding: 0 10px; min-width: 44px; }
 
 .g2-close { position: absolute; top: 2px; right: 2px; width: 44px; height: 44px; border: 0; background: none; font-size: 20px; cursor: pointer; color: var(--g2-mute); }
@@ -66,14 +68,14 @@
 
 /* The panels: a rail on the right, or a drawer from the bottom (positions from viewport.ts). */
 .g2-rail { position: absolute; z-index: 3; box-sizing: border-box; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px;
-  background: var(--g2-card); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: 1px solid var(--g2-line); border-radius: 12px; box-shadow: 0 2px 10px #0000000f; overscroll-behavior: contain; touch-action: pan-y; }
+  background: var(--g2-card); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: 2px solid var(--g2-ink-line); border-radius: 8px; box-shadow: 3px 3px 0 var(--g2-ink-line); overscroll-behavior: contain; touch-action: pan-y; }
 .g2-rail.drawer { border-radius: 16px 16px 12px 12px; box-shadow: 0 -6px 24px #00000026; animation: g2-up .18s ease-out; }
 .g2-grip-btn { align-self: stretch; height: 22px; margin: -6px 0 -2px; border: 0; background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex: none; }
 .g2-grip-btn span { width: 40px; height: 4px; border-radius: 2px; background: var(--g2-line); }
 .g2-panelbox { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .g2-panelbox + .g2-panelbox { border-top: 1px solid var(--g2-line); padding-top: 10px; }
 .g2-panelbox header { display: flex; align-items: center; gap: 6px; position: relative; }
-.g2-panelbox h3 { margin: 0; font-size: 13px; font-weight: 650; }
+.g2-panelbox h3 { margin: 0; font-family: var(--g2-mono); font-size: 13px; font-weight: 700; }
 .g2-panelbox.picked { background: var(--g2-chip); margin: -4px -4px 0; padding: 8px; border-radius: 8px; }
 .g2-panelbox .g2-close { position: static; margin-left: auto; width: 36px; height: 36px; }
 .g2-picked p { margin: 0 0 6px; font-size: 12.5px; color: var(--g2-soft); }
@@ -81,14 +83,14 @@
 .g2-picked dt { color: var(--g2-mute); }
 .g2-picked dd { margin: 0; }
 .g2-table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.g2-table th { text-align: left; font-weight: 600; color: var(--g2-mute); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding: 4px 6px; border-bottom: 1px solid var(--g2-line); }
+.g2-table th { text-align: left; font-family: var(--g2-mono); font-weight: 600; color: var(--g2-mute); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding: 4px 6px; border-bottom: 1px solid var(--g2-line); }
 .g2-table td { padding: 2px 6px; border-bottom: 1px solid var(--g2-line); }
 .g2-table .num { text-align: right; }
 .g2-link { font: inherit; color: var(--g2-link); background: none; border: 0; padding: 0; min-height: 32px; cursor: pointer; text-align: left; }
 .g2[data-device='phone'] .g2-link, .g2[data-device='tablet'] .g2-link { min-height: 44px; }
 .g2-chart { width: 100%; max-width: 420px; max-height: 170px; height: auto; display: block; }
 .g2-chart .grid { stroke: var(--g2-line); stroke-width: 1; }
-.g2-chart .tick { fill: var(--g2-mute); font-size: 9px; }
-.g2-chart .bar { fill: var(--g2-mute); opacity: .55; }
-.g2-chart .bar.last { fill: var(--g2-link); opacity: 1; }
-.g2-peek { display: flex; align-items: center; justify-content: center; gap: 6px; font: inherit; font-size: 13px; font-weight: 600; color: var(--g2-ink); cursor: pointer; }
+.g2-chart .tick { fill: var(--g2-mute); font-size: 9px; font-family: var(--g2-mono); }
+.g2-chart .bar { fill: var(--g2-chip); stroke: var(--g2-ink-line); stroke-width: 1.2; }
+.g2-chart .bar.last { fill: #ffd36b; }
+.g2-peek { display: flex; align-items: center; justify-content: center; gap: 6px; font: inherit; font-family: var(--g2-mono); font-size: 13px; font-weight: 600; color: var(--g2-ink); cursor: pointer; }

@@ -136,6 +136,8 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
       scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' },
       scene: s, banner: false, fps: { forceSetTimeOut: timerLoop, target: 60 },
       input: { touch: { capture: true } },
+      // Mipmaps: the town drawn small on a phone scales its sprites far down; without them the window rows shimmer.
+      render: { mipmapFilter: 'LINEAR_MIPMAP_LINEAR' },
     })
     return () => { game.destroy(true); scene.current = null }
     // One game for the life of the page: the loop kind is read once; the layout follows through setLayout.

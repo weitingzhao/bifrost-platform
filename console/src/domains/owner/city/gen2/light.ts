@@ -25,6 +25,8 @@ export const NEXT: Record<LightChoice, LightChoice> = { auto: 'day', day: 'dusk'
 
 export type Palette = {
   sky: number; ground: number; groundEdge: number; line: number; line4: number
+  /** The slab's earth sides and the ink of every outline. */
+  earth: number; earthShade: number; ink: number
   top: number; left: number; right: number; edge: number
   hover: number; pick: number; inside: number; ok: number; no: number
   /** Lit windows on a block's sides at night; null by day. */
@@ -35,19 +37,19 @@ export type Palette = {
 
 export const PALETTE: Record<Light, Palette> = {
   day: {
-    sky: 0xf3efe6, ground: 0xe9e4d8, groundEdge: 0xcfc8b8, line: 0xd8d1c2, line4: 0xc9c1b0,
+    sky: 0xf3efe6, ground: 0xe8e4ee, groundEdge: 0xcfc8b8, line: 0xd9d4e2, line4: 0xc8c2d4, earth: 0xc98a5a, earthShade: 0xa86c43, ink: 0x2f2d3a,
     top: 0xf7f5f0, left: 0xd9d4ca, right: 0xc4beb2, edge: 0x6b6676,
     hover: 0xfff3c4, pick: 0xffd36b, inside: 0x8fc1ff, ok: 0x5cb85c, no: 0xd9534f,
     glow: null, label: { color: '#3a3646', background: '#ffffffe0' }, miniSky: 0xfbfaf6,
   },
   dusk: {
-    sky: 0xf1d9c4, ground: 0xe3cdb8, groundEdge: 0xc7ab92, line: 0xd5bba3, line4: 0xc4a68c,
+    sky: 0xf1d9c4, ground: 0xe9d6c6, groundEdge: 0xc7ab92, line: 0xdcc4b0, line4: 0xcbb09a, earth: 0xb9774b, earthShade: 0x93593a, ink: 0x2f2d3a,
     top: 0xf6e3d0, left: 0xcfb29c, right: 0xb39580, edge: 0x5e4a52,
     hover: 0xffe7b8, pick: 0xffc46b, inside: 0x9bb8ff, ok: 0x5cb85c, no: 0xd9534f,
     glow: 0xffd48a, label: { color: '#3d2f36', background: '#fff6ecdd' }, miniSky: 0xf7e6d6,
   },
   night: {
-    sky: 0x1d2033, ground: 0x2a2e45, groundEdge: 0x3c4160, line: 0x343852, line4: 0x41466a,
+    sky: 0x1d2033, ground: 0x2c3049, groundEdge: 0x3c4160, line: 0x353a56, line4: 0x41466a, earth: 0x5a4030, earthShade: 0x46301f, ink: 0x0f111c,
     top: 0x3d4263, left: 0x2c3049, right: 0x23263b, edge: 0x10121e,
     hover: 0x56609a, pick: 0xd9a83a, inside: 0x4f7fd9, ok: 0x4caf6a, no: 0xd0544f,
     glow: 0xffd27a, label: { color: '#e6e3f2', background: '#1d2033dd' }, miniSky: 0x24283d,
@@ -56,7 +58,7 @@ export const PALETTE: Record<Light, Palette> = {
 
 /** CSS variables for the corners, per light. */
 export const CORNERS: Record<Light, Record<string, string>> = {
-  day: { '--g2-sky': '#f3efe6', '--g2-card': '#fffffff2', '--g2-line': '#d8d2c4', '--g2-ink': '#2f2d3a', '--g2-soft': '#5d5868', '--g2-mute': '#8a8478', '--g2-link': '#3d6fd8', '--g2-chip': '#ece7db', '--g2-menu': '#2f2d3aee', '--g2-menu-ink': '#e9e4d8' },
-  dusk: { '--g2-sky': '#f1d9c4', '--g2-card': '#fff7eef2', '--g2-line': '#dcc3ad', '--g2-ink': '#3d2f36', '--g2-soft': '#6b5560', '--g2-mute': '#94776a', '--g2-link': '#3a62c4', '--g2-chip': '#f0dccb', '--g2-menu': '#3d2f36ee', '--g2-menu-ink': '#f4e4d6' },
-  night: { '--g2-sky': '#1d2033', '--g2-card': '#262a40f2', '--g2-line': '#3c4160', '--g2-ink': '#e6e3f2', '--g2-soft': '#b4b1c8', '--g2-mute': '#8d8aa6', '--g2-link': '#8fb3ff', '--g2-chip': '#353a58', '--g2-menu': '#0f111ce8', '--g2-menu-ink': '#d9d6ea' },
+  day: { '--g2-sky': '#f3efe6', '--g2-card': '#fffffff2', '--g2-line': '#d8d2c4', '--g2-ink': '#2f2d3a', '--g2-soft': '#5d5868', '--g2-mute': '#8a8478', '--g2-link': '#3d6fd8', '--g2-chip': '#ece7db', '--g2-menu': '#2f2d3aee', '--g2-menu-ink': '#e9e4d8', '--g2-ink-line': '#2f2d3a' },
+  dusk: { '--g2-sky': '#f1d9c4', '--g2-card': '#fff7eef2', '--g2-line': '#dcc3ad', '--g2-ink': '#3d2f36', '--g2-soft': '#6b5560', '--g2-mute': '#94776a', '--g2-link': '#3a62c4', '--g2-chip': '#f0dccb', '--g2-menu': '#3d2f36ee', '--g2-menu-ink': '#f4e4d6', '--g2-ink-line': '#3d2f36' },
+  night: { '--g2-sky': '#1d2033', '--g2-card': '#262a40f2', '--g2-line': '#3c4160', '--g2-ink': '#e6e3f2', '--g2-soft': '#b4b1c8', '--g2-mute': '#8d8aa6', '--g2-link': '#8fb3ff', '--g2-chip': '#353a58', '--g2-menu': '#0f111ce8', '--g2-menu-ink': '#d9d6ea', '--g2-ink-line': '#0b0c16' },
 }
