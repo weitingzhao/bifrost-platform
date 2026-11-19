@@ -22,7 +22,11 @@ export type CpuRoomReadings = {
 
 const U = 35.8
 const esc = (t: string) => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
-const MACHINE = faces('#b7cfc0', '#94b3a1', '#7d9c8b'), IDLE = faces('#c9cec9', '#adb3ad', '#9aa09a')
+// Colours: structure is one colour each and never changes (walls, floor, machines, cabinets, the console);
+// only the readings' parts change colour, each change written in the key (the Owner, 2026-11-19: every
+// colour stands for something). Machines were grey when idle and green when not — the work light's
+// reading said twice, and not in the key: taken out.
+const MACHINE = faces('#b7cfc0', '#94b3a1', '#7d9c8b')
 const WALL = faces('#efe9dc', '#e2dac8', '#cfc6b2')
 
 /** A half dial on a face, centred at u (face units), its needle at share f (0–1) of its sweep; none when not read. */
@@ -78,10 +82,9 @@ export const machinesOf = (r: CpuRoomReadings) => r.cores.length ? Math.ceil(enc
 export function cpuRoom(r: CpuRoomReadings): Sprite {
   const count = machinesOf(r), [fw, fd] = cpuRoomShape(count)
   const g = new Draw(fw, fd, 56)
-  // The floor: a workshop slab; a line painted between the machines and the console at the front.
+  // The floor: a workshop slab.
   g.box(0, 0, fw, fd, 3, faces('#d8d6cf', '#bdbab1', '#aaa79e'), 0, 1.2)
   const sy = fd - STAGING - 0.2
-  g.floor(0, 0, 3, `<rect x="${(0.3 * U).toFixed(1)}" y="${((sy - 0.12) * U).toFixed(1)}" width="${((fw - 0.6) * U).toFixed(1)}" height="${(0.1 * U).toFixed(1)}" fill="#f2c94c"/>`)
   // The back walls.
   g.box(0, 0, fw, 0.18, 46, WALL, 0, 1.2)
   g.box(0, 0.18, 0.18, fd - 0.18, 46, WALL, 0, 1.2)
@@ -163,9 +166,8 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
       const col = i % cols, x = 0.35 + col * PITCH + Math.floor(col / 2) * GAP + (PITCH - MW) / 2, y = 0.55 + Math.floor(i / cols) * ROW + (ROW - md) / 2
       things.push({ at: x + y, draw: () => {
         const busy = encode('core.busy', c.busy)
-        const idle = busy == null || busy < 0.01
         g.shadow(x, y, mw, md, 0.25)
-        g.box(x, y, mw, md, 12, idle ? IDLE : MACHINE, 0, 1.1)
+        g.box(x, y, mw, md, 12, MACHINE, 0, 1.1)
         // The work light: a column on the cabinet at the machine's back corner.
         const kx = x + mw - 0.2
         g.box(kx, y, 0.2, 0.2, 22, faces('#5b5f6b', '#474a55', '#3a3d47'), 12, 0.9)

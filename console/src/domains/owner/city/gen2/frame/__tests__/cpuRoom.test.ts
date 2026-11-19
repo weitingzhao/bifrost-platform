@@ -74,4 +74,14 @@ describe('the CPU room', () => {
     expect(svg).not.toContain('>50°')
     expect(svg).not.toBe(whole)
   })
+  // The Owner, 2026-11-19: every colour stands for something. Machines were grey when idle and green
+  // otherwise — the work light's reading said a second time, and not in the key.
+  it('a machine is one colour whatever its core does; only the work light shows how busy', () => {
+    const idle = cpuRoom({ ...linux, cores: linux.cores.map(() => core(0, 2e9, 4e9)) }).svg
+    const busy = cpuRoom({ ...linux, cores: linux.cores.map(() => core(0.5, 2e9, 4e9)) }).svg
+    const bodies = (svg: string) => (svg.match(/fill="#94b3a1"/g) ?? []).length
+    expect(bodies(idle)).toBe(16)
+    expect(bodies(busy)).toBe(16)
+    expect(idle).not.toContain('#adb3ad')
+  })
 })
