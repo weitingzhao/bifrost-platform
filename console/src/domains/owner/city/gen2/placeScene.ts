@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser'
-import { canStand, GRID, type Cell, type Placed } from './grid'
+import { canStand, GRID, snap, type Cell, type Placed } from './grid'
 import type { Place } from './places'
 import { PALETTE, type Light, type Palette } from './light'
 import { hash } from './kit'
@@ -14,9 +14,9 @@ import { frameOf, type Frame } from './viewport'
  *
  * The same on every device (viewport.ts decides the rectangles):
  *   tap / click a block      → go in (a room: open its card)
- *   drag                     → pan; a drag never counts as a tap
- *   pinch / wheel            → zoom, about the fingers / the pointer
- *   double-tap empty ground  → fit the place again
+ *   pinch / wheel            → zoom in to read details; never smaller than the whole page
+ *   drag                     → pan, only while zoomed in; at the page's size the stage stays put
+ *   double-tap empty ground  → zoom in there, or back to the whole page, centred
  *   tap empty ground         → close the card
  * Arranging (the Owner's positions, display only): dragging a block moves it
  * cell by cell; it lands only where it fits, shown green, or goes back.
@@ -277,9 +277,15 @@ export class PlaceScene extends Phaser.Scene {
     return Phaser.Math.Clamp(Math.max(fits, touchable), 0.25, 1.6)
   }
 
+  /** Never smaller than the fitted page (the stage stays whole); up to three times closer to read details. */
   private zoomRange() {
     const f = this.fit()
-    return { lo: f * 0.6, hi: Math.max(f * 3, 2) }
+    return { lo: f, hi: Math.max(f * 3, 2) }
+  }
+
+  /** The stage is locked while it is at its fitted size; it moves only once zoomed in (the Owner, 2026-11-19: keep the centre). */
+  private zoomedIn() {
+    return this.cameras.main.zoom > this.fit() * 1.02
   }
 
   private contentCentre() {
@@ -329,6 +335,8 @@ export class PlaceScene extends Phaser.Scene {
     const { lo, hi } = this.zoomRange()
     const before = cam.getWorldPoint(sx, sy)
     cam.setZoom(Phaser.Math.Clamp(zoom, lo, hi))
+    // Back at the fitted size: back to the centre, not wherever the zoom left it.
+    if (!this.zoomedIn()) { const a = this.aim(cam.zoom); cam.centerOn(a.x, a.y); return }
     const after = cam.getWorldPoint(sx, sy)
     cam.scrollX += before.x - after.x
     cam.scrollY += before.y - after.y
@@ -351,7 +359,7 @@ export class PlaceScene extends Phaser.Scene {
       }
       this.pinch = null
       if (this.carry && p.isDown) { this.carryTo(p); return }
-      if (!p.isDown || inMini(p) || this.moved(p) <= DRAG) return
+      if (!p.isDown || inMini(p) || this.moved(p) <= DRAG || !this.zoomedIn()) return
       cam.scrollX -= (p.x - p.prevPosition.x) / cam.zoom
       cam.scrollY -= (p.y - p.prevPosition.y) / cam.zoom
       this.clamp()
@@ -360,9 +368,13 @@ export class PlaceScene extends Phaser.Scene {
       if (!this.input.pointer1.isDown && !this.input.pointer2.isDown) this.pinch = null
       if (this.carry) { this.drop(); return }
       if (over.length > 0 || inMini(p) || this.moved(p) > DRAG) return
-      // A tap on empty ground closes the card; two quick taps fit the place again.
+      // A tap on empty ground closes the card; two quick taps zoom in there, or back to the whole page.
       const now = this.time.now
-      if (now - this.lastTap < 320) { this.tweenFit(); this.lastTap = 0 } else this.lastTap = now
+      if (now - this.lastTap < 320) {
+        if (this.zoomedIn()) this.tweenFit()
+        else this.tweenZoomAt(p.x, p.y)
+        this.lastTap = 0
+      } else this.lastTap = now
       this.events_.select(null)
     })
     this.input.on('wheel', (p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
@@ -383,12 +395,22 @@ export class PlaceScene extends Phaser.Scene {
     cam.pan(a.x, a.y, 220, 'Sine.easeOut', true)
   }
 
+  /** Double-tap on the whole page: twice as close, centred where the finger was. */
+  private tweenZoomAt(sx: number, sy: number) {
+    const cam = this.cameras.main
+    const w = cam.getWorldPoint(sx, sy)
+    const z = Math.min(this.zoomRange().hi, cam.zoom * 2)
+    cam.zoomTo(z, 220, 'Sine.easeOut', true)
+    cam.pan(w.x, w.y, 220, 'Sine.easeOut', true)
+  }
+
   /** Arranging: the cell under the pointer, less the grip, is where the block would land; outline it green or red. */
   private carryTo(p: Phaser.Input.Pointer) {
     if (!this.carry || !this.ghost || !this.shown) return
     const w = this.cameras.main.getWorldPoint(p.x, p.y)
     const c = cellAt(w.x, w.y)
-    const to = { x: Math.round(c.x - this.carry.grip.x), y: Math.round(c.y - this.carry.grip.y) }
+    // Snap to the thing's own lattice: a 4×4 only lands on the 4-lines.
+    const to = snap(this.carry.p.size, { x: c.x - this.carry.grip.x, y: c.y - this.carry.grip.y })
     this.carry.to = to
     const fits = canStand({ ...this.carry.p, ...to }, this.shown.placed)
     const s = this.carry.p.size
@@ -448,10 +470,13 @@ export class PlaceScene extends Phaser.Scene {
       g.lineBetween(iso(0, GRID).x, iso(0, GRID).y + SLAB * t, iso(GRID, GRID).x, iso(GRID, GRID).y + SLAB * t)
     }
     g.fillStyle(this.tone.ground).fillPoints(ground, true)
-    // The cells: every fourth line always (the board), every line while arranging.
+    // The lines, in four weights matching the four sizes (the Owner, 2026-11-19): the 8-line splits the
+    // ground in quarters, the 4-lines and 2-lines split those again, the 1-lines show only while arranging.
     for (let i = 1; i < GRID; i++) {
-      if (!o.arranging && i % 4 !== 0) continue
-      g.lineStyle(1, i % 4 === 0 ? this.tone.line4 : this.tone.line, o.arranging ? 1 : 0.7)
+      const level = i % 8 === 0 ? 8 : i % 4 === 0 ? 4 : i % 2 === 0 ? 2 : 1
+      if (level === 1 && !o.arranging) continue
+      const w = { 8: 2.2, 4: 1.5, 2: 1, 1: 0.8 }[level], a = { 8: 1, 4: 0.85, 2: 0.6, 1: 0.45 }[level]
+      g.lineStyle(w, level >= 4 ? this.tone.line4 : this.tone.line, a)
       g.lineBetween(iso(i, 0).x, iso(i, 0).y, iso(i, GRID).x, iso(i, GRID).y)
       g.lineBetween(iso(0, i).x, iso(0, i).y, iso(GRID, i).x, iso(GRID, i).y)
     }
@@ -509,9 +534,8 @@ export class PlaceScene extends Phaser.Scene {
         // Pick it up by the cell under the pointer, so it does not jump to the pointer's corner.
         const w = this.cameras.main.getWorldPoint(p.x, p.y)
         const c = cellAt(w.x, w.y + h)
-        this.carry = { p: at, grip: { x: Math.floor(c.x) - at.x, y: Math.floor(c.y) - at.y }, to: null }
-        this.carry.grip.x = Phaser.Math.Clamp(this.carry.grip.x, 0, at.size - 1)
-        this.carry.grip.y = Phaser.Math.Clamp(this.carry.grip.y, 0, at.size - 1)
+        // Where in the block the pointer holds it, so the block does not jump to the pointer's corner.
+        this.carry = { p: at, grip: { x: Phaser.Math.Clamp(c.x - at.x, 0, at.size), y: Phaser.Math.Clamp(c.y - at.y, 0, at.size) }, to: null }
       })
       // On release, and only if the press did not travel: a drag across a block is a pan, not a tap.
       g.on('pointerup', (p: Phaser.Input.Pointer) => {

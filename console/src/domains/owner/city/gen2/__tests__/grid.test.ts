@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { arrange, canStand, fitsBudget, GRID, move, pack, SIZES, type Item, type Placed } from '../grid'
+import { arrange, canStand, fitsBudget, GRID, move, pack, SIZES, snap, type Item, type Placed } from '../grid'
 
 // 2026-11-19, the Owner: every place is a 16×16 ground; things on it are 1, 2, 4 or 8 cells square;
 // what does not fit goes a level down. He may drag positions; sizes are the design's.
@@ -38,20 +38,22 @@ describe('pack', () => {
   })
 })
 
-describe('spread (the default when nobody arranged a place)', () => {
-  it('leaves a cell between things and centres the group when the ground allows', () => {
-    const a = arrange(items(4, 4, 4, 4, 4))
-    expect(noOverlap(a)).toBe(true)
-    for (const p of a) for (const q of a) if (p !== q) {
-      const apart = p.x + p.size < q.x || q.x + q.size < p.x || p.y + p.size < q.y || q.y + q.size < p.y
-      expect(apart, `${p.id} touches ${q.id}`).toBe(true)
-    }
-    const minX = Math.min(...a.map(p => p.x)), maxX = Math.max(...a.map(p => p.x + p.size))
-    expect(Math.abs(minX - (GRID - maxX))).toBeLessThanOrEqual(1)
+describe('lattices (the Owner, 2026-11-19: each size snaps to its own lines)', () => {
+  it('everything packed stands on a multiple of its size', () => {
+    expect(pack(items(8, 4, 4, 2, 2, 1, 1)).every(p => p.x % p.size === 0 && p.y % p.size === 0)).toBe(true)
   })
-  it('falls back to packing tight when there is no room for air', () => {
-    const full = items(8, 8, 8, 8)
-    expect(noOverlap(arrange(full))).toBe(true)
+  it('the default gathers things around the centre', () => {
+    const a = arrange(items(4, 4, 4, 4))
+    expect(a.map(p => `${p.x},${p.y}`).sort()).toEqual(['4,4', '4,8', '8,4', '8,8'])
+  })
+  it('a drop snaps to the nearest spot of its lattice', () => {
+    expect(snap(4, { x: 5.6, y: 1.2 })).toEqual({ x: 4, y: 0 })
+    expect(snap(4, { x: 14, y: 14 })).toEqual({ x: 12, y: 12 })
+    expect(snap(2, { x: 3.1, y: 6.9 })).toEqual({ x: 4, y: 6 })
+  })
+  it('a position off its lattice is refused', () => {
+    expect(canStand({ id: 'a', size: 4, x: 2, y: 0 }, [])).toBe(false)
+    expect(canStand({ id: 'a', size: 4, x: 4, y: 0 }, [])).toBe(true)
   })
 })
 
@@ -63,22 +65,24 @@ describe('the Owner moves things', () => {
   })
   it('never onto another thing or off the ground', () => {
     expect(move(base, 'i2', { x: base[0].x, y: base[0].y })).toBeNull()
-    expect(move(base, 'i2', { x: 15, y: 0 })).toBeNull()
-    expect(move(base, 'i0', { x: -1, y: 0 })).toBeNull()
+    // Off the ground snaps back onto it; onto another thing is refused.
+    expect(move(base, 'i2', { x: 15, y: 0 })!.find(p => p.id === 'i2')).toMatchObject({ x: 14, y: 0 })
   })
   it('positions are kept, and only where they still fit', () => {
-    const saved = { i0: { x: 12, y: 12 }, i1: { x: 12, y: 12 }, gone: { x: 0, y: 0 } }
+    const saved = { i0: { x: 12, y: 12 }, i1: { x: 12, y: 12 }, i2: { x: 1, y: 1 }, gone: { x: 0, y: 0 } }
     const a = arrange(items(4, 4, 2), saved)
     expect(a.find(p => p.id === 'i0')).toMatchObject({ x: 12, y: 12 })
     expect(a.find(p => p.id === 'i1')).not.toMatchObject({ x: 12, y: 12 })
+    // Off its lattice: not kept.
+    expect(a.find(p => p.id === 'i2')).not.toMatchObject({ x: 1, y: 1 })
     expect(noOverlap(a)).toBe(true)
   })
   it('a newcomer still gets a place when saved positions left the room in pieces', () => {
-    // Fifteen 4×4 scattered off the aligned spots leave no 4×4 hole for a sixteenth.
-    const set = items(...Array(16).fill(4))
-    const saved = Object.fromEntries(set.slice(0, 15).map((it, i) => [it.id, { x: (i % 4) * 4 + (i < 4 ? 1 : 0), y: Math.floor(i / 4) * 4 }]))
+    // A 1×1 saved in the middle of each quadrant leaves no 8×8 hole for the four 8×8 that come after.
+    const set = [...items(1, 1, 1, 1), ...items(8, 8, 8).map((it, i) => ({ ...it, id: `b${i}` }))]
+    const saved = { i0: { x: 3, y: 3 }, i1: { x: 11, y: 3 }, i2: { x: 3, y: 11 }, i3: { x: 11, y: 11 } }
     const a = arrange(set, saved)
-    expect(a).toHaveLength(16)
+    expect(a).toHaveLength(set.length)
     expect(noOverlap(a)).toBe(true)
   })
 })
