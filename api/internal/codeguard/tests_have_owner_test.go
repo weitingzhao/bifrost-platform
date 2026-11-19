@@ -203,7 +203,7 @@ var testsWithoutOwner = map[string]int{
 	// 2026-11-18: 40 of the store's 47 went with their files to the integration
 	// package; the total does not change.
 	"api/internal/agentrt/integration": 40,
-	"api/internal/agentrt/store":       7,
+	"api/internal/agentrt/store":       4,
 	"api/internal/cluster":             32,
 	"api/internal/delivery":            12,
 	"api/internal/server":              58,

@@ -1,6 +1,6 @@
 //bifrost:owner foundation
 
-package store
+package integration_test
 
 import (
 	"errors"
@@ -8,12 +8,15 @@ import (
 	"strings"
 	"testing"
 
-	// owner_wait_closed is declared by questioncards (2026-11-17, store cut
-	// O2): link it, so TestEventFieldValues still holds its values.
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
-
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
+
+// These read the whole closed vocabulary, which every domain that declares an
+// event type adds to, so they sit where all of those are linked (they left
+// agentrt/store on 2026-11-18, with the link to questioncards they needed).
+
+// badValue is why a field's value is refused, "" when it is taken.
+func badValue(eventType, name string, v any) string { return eventlog.BadValue(eventType, name, v) }
 
 // Each checked field takes a value of its shape and refuses another, as the
 // request's error (review 145 B6).

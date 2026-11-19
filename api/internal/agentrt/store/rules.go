@@ -20,7 +20,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
-	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 )
 
 // The runtime's rules (design v5 §5.2 「规则」, Owner 2026-10-14 「规则 A」):
@@ -243,18 +242,28 @@ func readOnly(ctx context.Context, db eventlog.DB, f func(pgx.Tx) error) error {
 	return f(tx)
 }
 
+// SignatureCheck says whether armored is a signature over message, in
+// namespace, by the key anchor names; nil error means it is. The caller gives
+// it to SignRule, so that the rules do not depend on who implements signatures
+// (the route passes releasepolicy.VerifyAnchored).
+type SignatureCheck func(armored, message []byte, namespace, anchor string) error
+
 // SignRule takes a rule the Owner signed (`ssh-keygen -Y sign -n
-// bifrost-agentrt-rule`): the signature verifies against anchor (the
+// bifrost-agentrt-rule`): verify accepts the signature against anchor (the
 // compiled-in key) over the exact text, the text parses, its header is the
-// next version, and a rule marked tighten really is one. The row, its event
-// and the rows the rule writes (jobs, candidates, capability facts) go in one
-// transaction.
-func SignRule(ctx context.Context, db eventlog.DB, w actor.Writer, id string, text []byte, signature, anchor string) (map[string]any, error) {
+// next version, and a rule marked tighten really is one. With no verify
+// nothing has checked the signature, so the rule is refused as unsigned. The
+// row, its event and the rows the rule writes (jobs, candidates, capability
+// facts) go in one transaction.
+func SignRule(ctx context.Context, db eventlog.DB, w actor.Writer, id string, text []byte, signature, anchor string, verify SignatureCheck) (map[string]any, error) {
 	r, err := ruleRequest(id, text)
 	if err != nil {
 		return nil, err
 	}
-	if err := releasepolicy.VerifyAnchored([]byte(signature), text, rules.Namespace, anchor); err != nil {
+	if verify == nil {
+		return nil, fmt.Errorf("%w: no signature check was given", ErrUnsigned)
+	}
+	if err := verify([]byte(signature), text, rules.Namespace, anchor); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUnsigned, err)
 	}
 	return writeRule(ctx, db, w, r, text, func(_ *StoredRule, why error) error {

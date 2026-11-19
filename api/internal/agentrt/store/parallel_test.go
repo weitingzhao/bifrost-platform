@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planwiring"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 )
 
 // minParallel is how many tests of the package run at once when the command
@@ -51,7 +51,10 @@ func TestMain(m *testing.M) {
 		}
 		parallelAsked.want = fmt.Sprint(n)
 	}
-	planwiring.Bind() // the plan code's ports are bound by the test, not by linking
+	// The artifact store keeps nothing until someone checks its bodies; the
+	// check of view artifacts is the plan's, which these tests do not link, and
+	// a rule's text is not one.
+	artifact.RegisterCheck(func(string, []byte) error { return nil })
 	agentrttest.Warm(seededTemplate, seedTemplate)
 	os.Exit(m.Run())
 }

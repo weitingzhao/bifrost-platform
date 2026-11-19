@@ -1,9 +1,11 @@
 package store_test
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,8 +15,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
-	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
-	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
 
 // ruleText is a rule's text with its header.
@@ -38,16 +38,42 @@ func autoText(version int, direction, expires string, strictness int, kinds stri
 	return ruleText("card-auto-answer", version, direction, since, expires, fmt.Sprintf("after_seconds: %d\nkinds: [%s]\n", 3000+strictness*10, kinds))
 }
 
+// testKey stands for a signing key. Real signatures are what the caller's
+// check is about, and their tests are in agentrt/integration (TestRuleSet);
+// here a signature is what checkSignature recomputes, so that it still fails
+// unless the store hands the check this text, rules.Namespace and the anchor.
+type testKey struct{ Fingerprint string }
+
+var testKeys atomic.Int64
+
+func newKey() testKey { return testKey{fmt.Sprintf("SHA256:test-key-%d", testKeys.Add(1))} }
+
+func signatureOf(text []byte, namespace, anchor string) string {
+	return fmt.Sprintf("sig:%s:%s:%x", namespace, anchor, sha256.Sum256(text))
+}
+
+func (k testKey) Sign(text []byte, namespace string) string {
+	return signatureOf(text, namespace, k.Fingerprint)
+}
+
+// checkSignature is the store.SignatureCheck of these tests.
+func checkSignature(armored, message []byte, namespace, anchor string) error {
+	if anchor == "" || string(armored) != signatureOf(message, namespace, anchor) {
+		return errors.New("not signed by the anchor")
+	}
+	return nil
+}
+
 // signer signs rule texts with a key the test compiles in as the anchor.
 type signer struct {
 	t   *testing.T
-	key rptest.Key
+	key testKey
 }
 
 func (s signer) sign(w *world, text string) (map[string]any, error) {
 	ctx := ctxOf(s.t)
 	return store.SignRule(ctx, w.rt, actor.Writer{Actor: "owner", Token: "admin"}, idOf(text), []byte(text),
-		s.key.Sign(s.t, []byte(text), rules.Namespace), s.key.Fingerprint)
+		s.key.Sign([]byte(text), rules.Namespace), s.key.Fingerprint, checkSignature)
 }
 
 func idOf(text string) string {
@@ -75,106 +101,6 @@ func at(s string) time.Time {
 	return t
 }
 
-// T35: the rule set. v4's three (a loosening without a signature is refused,
-// a tightening takes effect at once, an expired rule gives way to the
-// strictest default) and v5's (body_json other than the text says, marked
-// tighten but loosening, signed in the release policy's namespace, a field
-// the parser does not know, no trust anchor).
-func TestRuleSet(t *testing.T) {
-	t.Parallel()
-	w := newKernelWorld(t)
-	s := signer{t, rptest.NewKey(t)}
-	now := at("2026-11-01T00:00:00Z")
-	if r := inForce(t, w, "card-auto-answer", now); r != nil {
-		t.Fatalf("a rule in force before any was signed: %+v", r)
-	}
-	v1 := autoText(1, rules.Initial, until, 20, "blocked, mission")
-	out, err := s.sign(w, v1)
-	ok(t, err)
-	if out["rule_version"] != 1 || out["signed"] != true {
-		t.Fatalf("signed %v", out)
-	}
-	if r := inForce(t, w, "card-auto-answer", now); r == nil || r.CardAuto.AfterSeconds != 3200 || r.SignedBy != s.key.Fingerprint {
-		t.Fatalf("in force after signing: %+v", r)
-	}
-	tighten := func(text string) error {
-		_, err := store.TightenRule(ctx, w.rt, wr("thread:s1"), idOf(text), []byte(text))
-		return err
-	}
-	// A loosening without a signature, whatever it calls itself.
-	for name, text := range map[string]string{
-		"marked tighten, a shorter wait": autoText(2, rules.Tighten, until, 19, "blocked, mission"),
-		"marked tighten, a new kind":     autoText(2, rules.Tighten, until, 20, "blocked, plan_change"),
-		"marked tighten, expiring later": autoText(2, rules.Tighten, "2027-03-01T00:00:00Z", 20, "blocked"),
-		"marked loosen":                  autoText(2, rules.Loosen, until, 40, "blocked"),
-	} {
-		if err := tighten(text); !errors.Is(err, store.ErrUnsigned) {
-			t.Errorf("%s: %v; want refused as unsigned", name, err)
-		}
-	}
-	// Signed, the label still has to be true.
-	if _, err := s.sign(w, autoText(2, rules.Tighten, until, 19, "blocked")); !errors.Is(err, eventlog.ErrInvalid) {
-		t.Errorf("signed, marked tighten, loosening: %v; want refused", err)
-	}
-	// A tightening takes effect at once, unsigned; it expires sooner, and
-	// once it has, the looser version before it does not come back.
-	ok(t, tighten(autoText(2, rules.Tighten, "2026-12-15T00:00:00Z", 40, "blocked")))
-	if r := inForce(t, w, "card-auto-answer", now); r == nil || r.Version != 2 || r.CardAuto.AfterSeconds != 3400 || r.SignedBy != "" {
-		t.Fatalf("in force after the tightening: %+v", r)
-	}
-	if r := inForce(t, w, "card-auto-answer", at("2026-12-20T00:00:00Z")); r != nil {
-		t.Fatalf("after the tightening expired, in force: v%d; want none (the strictest default)", r.Version)
-	}
-	// Versions follow one another.
-	for name, text := range map[string]string{
-		"a version skipped": autoText(4, rules.Tighten, "2026-12-15T00:00:00Z", 50, "blocked"),
-		"a version again":   autoText(2, rules.Tighten, "2026-12-15T00:00:00Z", 50, "blocked"),
-		"initial again":     autoText(1, rules.Initial, until, 50, "blocked"),
-	} {
-		if err := tighten(text); err == nil {
-			t.Errorf("%s: taken", name)
-		}
-	}
-	// Signatures that are not the Owner's for a rule.
-	v3 := autoText(3, rules.Loosen, until, 20, "blocked")
-	other := rptest.NewKey(t)
-	for name, c := range map[string]struct{ sig, anchor string }{
-		"the release policy's namespace": {s.key.Sign(t, []byte(v3), releasepolicy.NamespacePolicy), s.key.Fingerprint},
-		"the unfreeze namespace":         {s.key.Sign(t, []byte(v3), releasepolicy.NamespaceUnfreeze), s.key.Fingerprint},
-		"another key":                    {other.Sign(t, []byte(v3), rules.Namespace), s.key.Fingerprint},
-		"no trust anchor":                {s.key.Sign(t, []byte(v3), rules.Namespace), ""},
-		"over other text":                {s.key.Sign(t, []byte(v3+"\n"), rules.Namespace), s.key.Fingerprint},
-		"no signature":                   {"", s.key.Fingerprint},
-	} {
-		if _, err := store.SignRule(ctx, w.rt, actor.Writer{Actor: "owner", Token: "admin"}, "card-auto-answer", []byte(v3), c.sig, c.anchor); !errors.Is(err, store.ErrUnsigned) {
-			t.Errorf("%s: %v; want refused as unsigned", name, err)
-		}
-	}
-	// A field the parser does not know, signed or not.
-	odd := autoText(3, rules.Loosen, until, 20, "blocked") + "approve_releases: true\n"
-	if _, err := s.sign(w, odd); !errors.Is(err, eventlog.ErrInvalid) {
-		t.Errorf("an unknown field: %v; want refused", err)
-	}
-	// A kind of card the parser does not know.
-	if _, err := s.sign(w, autoText(3, rules.Loosen, until, 20, "blocked, no_such_kind")); !errors.Is(err, eventlog.ErrInvalid) {
-		t.Errorf("an unknown kind: %v; want refused", err)
-	}
-	ok(t, firstErr(s.sign(w, v3)))
-	if r := inForce(t, w, "card-auto-answer", now); r == nil || r.Version != 3 || r.Direction != rules.Loosen {
-		t.Fatalf("in force after the signed loosening: %+v", r)
-	}
-	// A row whose body_json is not what its text says is no rule.
-	bad := autoText(4, rules.Tighten, until, 30, "blocked")
-	w.legacy(t, fmt.Sprintf(`INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, effective_at, expires_at)
-	  VALUES ('card-auto-answer', 4, '{"after_seconds":1}', %s, 'tighten', '%s', '%s')`, quote(bad), since, until))
-	if err := eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		_, err := store.CurrentRule(ctx, tx, "card-auto-answer", now)
-		return err
-	}); err == nil {
-		t.Fatal("a rule whose body_json disagrees with its text was read")
-	}
-}
-
 func firstErr(_ map[string]any, err error) error { return err }
 
 func quote(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
@@ -184,7 +110,7 @@ func quote(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'
 func TestRuleCheckAndProposal(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
-	s := signer{t, rptest.NewKey(t)}
+	s := signer{t, newKey()}
 	ok(t, firstErr(s.sign(w, autoText(1, rules.Initial, until, 20, "blocked"))))
 	tighter := autoText(2, rules.Tighten, until, 40, "blocked")
 	looser := autoText(2, rules.Loosen, until, 0, "blocked")
@@ -206,4 +132,29 @@ func TestRuleCheckAndProposal(t *testing.T) {
 	if _, err := store.CheckRule(ctx, w.rt, "plan-standing", []byte(looser)); !errors.Is(err, eventlog.ErrInvalid) {
 		t.Errorf("a text for another rule id: %v; want refused", err)
 	}
+}
+
+// Origin: 2026-11-18, LANE-BIZ-ALIGN: SignRule stopped importing the release
+// policy's verifier and takes the check from its caller, so a caller can now
+// pass none. Nothing has then checked the signature, and a rule taken that way
+// would be an unsigned loosening. The second call is the positive control: the
+// same text and signature are taken once a check is given.
+func TestSignRuleWithoutACheckIsRefused(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	key := newKey()
+	text := autoText(1, rules.Initial, until, 20, "blocked")
+	sig := key.Sign([]byte(text), rules.Namespace)
+	owner := actor.Writer{Actor: "owner", Token: "admin"}
+	before := w.footprint(t)
+	if _, err := store.SignRule(ctx, w.rt, owner, "card-auto-answer", []byte(text), sig, key.Fingerprint, nil); !errors.Is(err, store.ErrUnsigned) {
+		t.Fatalf("no signature check: %v; want refused as unsigned", err)
+	}
+	if after := w.footprint(t); after != before {
+		t.Fatalf("the refusal left something: %s -> %s", before, after)
+	}
+	if r := inForce(t, w, "card-auto-answer", at("2026-11-01T00:00:00Z")); r != nil {
+		t.Fatalf("in force after the refusal: %+v", r)
+	}
+	ok(t, firstErr(store.SignRule(ctx, w.rt, owner, "card-auto-answer", []byte(text), sig, key.Fingerprint, checkSignature)))
 }

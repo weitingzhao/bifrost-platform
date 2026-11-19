@@ -10,7 +10,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
-	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
 
 // Regression tests for review 186.
@@ -30,17 +29,17 @@ func TestRuleRowsAndVersions(t *testing.T) {
 	if _, err := store.RuleInForce(ctx, w.rt, "plan-standing"); err == nil {
 		t.Fatal("a rule whose expires_at column is not its text's was read")
 	}
-	s := signer{t, rptest.NewKey(t)}
+	s := signer{t, newKey()}
 	pool := w.db.Pool(t, w.db.Runtime)
 	v1 := autoText(1, rules.Initial, until, 20, "blocked")
-	sig := s.key.Sign(t, []byte(v1), rules.Namespace)
+	sig := s.key.Sign([]byte(v1), rules.Namespace)
 	errs := make([]error, 2)
 	var wg sync.WaitGroup
 	for i := range errs {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			_, errs[i] = store.SignRule(ctx, pool, actor.Writer{Actor: "owner", Token: "admin"}, "card-auto-answer", []byte(v1), sig, s.key.Fingerprint)
+			_, errs[i] = store.SignRule(ctx, pool, actor.Writer{Actor: "owner", Token: "admin"}, "card-auto-answer", []byte(v1), sig, s.key.Fingerprint, checkSignature)
 		}(i)
 	}
 	wg.Wait()

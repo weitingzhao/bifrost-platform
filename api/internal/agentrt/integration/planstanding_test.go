@@ -1,4 +1,6 @@
-package store_test
+//bifrost:owner plan
+
+package integration_test
 
 import (
 	"fmt"

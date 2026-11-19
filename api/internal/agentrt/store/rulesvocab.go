@@ -54,5 +54,11 @@ var (
 )
 
 // badValue is why v, of its field's kind already, is refused, or ""
-// (eventlog.BadValue); the vocabulary's value tests ask it.
+// (eventlog.BadValue). Nothing calls it since the vocabulary's value tests left
+// for agentrt/integration (2026-11-18), where they call eventlog.BadValue. It
+// stays for the reason VerifyStream does (event.go): it is the only production
+// use of that name, without which TestNoNewNameIsExportedForAnotherPackagesTests
+// refuses those tests. It goes with them (TD-582).
+//
+//nolint:unused // see above
 func badValue(eventType, name string, v any) string { return eventlog.BadValue(eventType, name, v) }

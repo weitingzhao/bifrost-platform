@@ -166,13 +166,17 @@ modules:
         - "api/internal/assessmentreadings/assess.go"
         - "api/internal/server/agentrt_assess.go"
       # 2026-11-18: the cross-domain tests that left the store. It reads the
-      # store's test files too: TestTestsRunInParallel scans both packages.
+      # store's test files too: TestTestsRunInParallel scans both packages. The
+      # three assess.go are what TestAssessmentsCannotAnswer parses.
       api/internal/agentrt/integration:
         - "api/internal/agentrt/integration"
         - "api/internal/agentrt/store"
+        - "api/internal/agentrt/controller/assess.go"
         - "api/internal/agentrt/migrations"
         - "api/internal/agentrt/planimport/testdata"
         - "api/internal/agentrt/planview/testdata"
+        - "api/internal/assessmentreadings/assess.go"
+        - "api/internal/server/agentrt_assess.go"
       api/internal/agentthreads:
         - "api/internal/agentthreads"
         - "console/src/api/__fixtures__/agent-threads-sessions.generated.json"

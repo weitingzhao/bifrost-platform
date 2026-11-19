@@ -9,7 +9,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
-	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
 
 const ruleApproval = "appr_0123456789abcdef"
@@ -29,7 +28,7 @@ func tuningText(version int, direction, expires string, failures int) string {
 func TestApproveRule(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	s := signer{t, rptest.NewKey(t)}
+	s := signer{t, newKey()}
 	_, err := s.sign(w, tuningText(1, rules.Initial, until, 2))
 	ok(t, err)
 	propose := func(key, text string) string {

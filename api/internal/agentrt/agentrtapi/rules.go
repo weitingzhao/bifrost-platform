@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 )
 
 // The rule routes (design v5 §5.2): check reads a rule's text and says what
@@ -70,7 +71,7 @@ func (a *API) signRule(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	out, err := store.SignRule(r.Context(), a.DB, who, chi.URLParam(r, "rule_id"), []byte(b.Text), b.Signature, a.Anchor)
+	out, err := store.SignRule(r.Context(), a.DB, who, chi.URLParam(r, "rule_id"), []byte(b.Text), b.Signature, a.Anchor, releasepolicy.VerifyAnchored)
 	if err != nil {
 		a.fail(w, err)
 		return
