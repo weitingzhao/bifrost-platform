@@ -82,7 +82,8 @@ func (s *Server) guardUntraced(id string, next http.HandlerFunc) http.HandlerFun
 		// (action_record.go): done, refused or failed, with the law it rested on.
 		sc := &statusCapture{ResponseWriter: w}
 		law := "action catalog: tier " + string(tier)
-		defer func() { s.recordDirect(r, act, params, law, sc.status) }()
+		said := callerWords(raw)
+		defer func() { s.recordDirect(r, act, params, said, law, sc.status) }()
 		if !tier.NeedsApproval() {
 			if tier == actions.TierB && s.checkTierBRelease(sc, r, id, params) {
 				return
