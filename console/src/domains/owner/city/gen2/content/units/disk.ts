@@ -39,5 +39,33 @@ export const DISK_UNIT: UnitSpec = {
     { id: 'readonly', label: 'Read only', meaning: 'A volume the system could only mount read-only (often a sign of a failing drive).', query: vol('node_filesystem_readonly'), unit: 'count', per: 'volume', known: 'hardware' },
     { id: 'files', label: 'Files used', meaning: 'How many of a volume’s file slots are taken (a volume can be full of files before it is full of bytes).', query: `1 - ${vol('node_filesystem_files_free')} / ${vol('node_filesystem_files')}`, unit: 'share', per: 'volume', known: 'system' },
   ],
-  confirmed: {},
+  // Details confirmed 2026-11-19: the fifteen the drives and volumes themselves know; file slots are the
+  // file system's count (room standard 1), out.
+  chosen: ['drives', 'rpm', 'size', 'used', 'read', 'write', 'busy', 'ops', 'latency', 'temp', 'errors', 'array.state', 'array.disks', 'array.sync', 'readonly'],
+  // Inside (draft): the warehouse. Volumes are storage areas of standard rack bays (256 GB a bay, eight to a
+  // rack); the drives are the loading docks goods come in and go out by, one dock per drive on the wall of
+  // the area it serves; an array is the fence round its area and its docks. Per drive on its dock, per
+  // volume on its area, the whole on the console.
+  inside: [
+    { detail: 'size', thing: 'Rack bays', shows: 'One bay per 256 GB (the standard part), eight bays to a rack, low; a volume’s storage area is as many bays as it is big, the last as long as its part.', where: 'storage area' },
+    { detail: 'used', thing: 'Pallets on the bays', shows: 'Bays holding goods (amber) from the left, as much as is taken; the rest empty shelf.', where: 'storage area' },
+    { detail: 'readonly', thing: 'Chain across the area', shows: 'A volume that can only be read: a red chain across its entrance; none when it can be written.', where: 'storage area' },
+    { detail: 'drives', thing: 'Loading dock', shows: 'One dock per drive on its area’s wall. Solid state: a roller conveyor. Spinning: a turntable lift. The model on the dock’s plate.', where: 'dock wall' },
+    { detail: 'rpm', thing: 'Turntable plate', shows: 'A spinning drive’s speed on its turntable’s plate (7200 rpm); solid state docks have none.', where: 'dock wall' },
+    { detail: 'busy', thing: 'Dock folds', shows: 'How busy the drive is: the same lit folds as the lathes, along the dock’s edge.', where: 'dock wall' },
+    { detail: 'read', thing: 'OUT on the dock', shows: 'Goods going out: how fast the drive is read, on the dock’s plate.', where: 'dock wall' },
+    { detail: 'write', thing: 'IN on the dock', shows: 'Goods coming in: how fast the drive is written, on the dock’s plate.', where: 'dock wall' },
+    { detail: 'ops', thing: 'Loads a second', shows: 'How many reads and writes a second, on the dock’s plate.', where: 'dock wall' },
+    { detail: 'latency', thing: 'Time per load', shows: 'How long each read or write takes, on the dock’s plate (0.3 ms solid state, about 9 ms spinning).', where: 'dock wall' },
+    { detail: 'temp', thing: 'Dock thermometer', shows: 'The drive’s own temperature, the small thermometer the lathes carry; none where the drive reports none.', where: 'dock wall' },
+    { detail: 'errors', thing: 'Red tape on the dock', shows: 'Errors the drive has had: red tape across its dock with the count; none when there are none.', where: 'dock wall' },
+    { detail: 'array.state', thing: 'Fence and its sign', shows: 'An array: a fence round its area and docks, its sign in the array’s state — working, rebuilding, degraded (in the key).', where: 'array fence' },
+    { detail: 'array.disks', thing: 'Dock states', shows: 'Each dock in the fence by its drive’s state: working; failed (dark, crossed); spare (closed, SPARE).', where: 'array fence' },
+    { detail: 'array.sync', thing: 'Fence sign strip', shows: 'How far the array is in step: a strip on the fence sign, full at 100%.', where: 'array fence' },
+    { detail: 'used', thing: 'USED on the console desk', shows: 'How full all the volumes are together, as a share: the same lit folds, the percent on its plate.', where: 'disk console' },
+    { detail: 'busy', thing: 'BUSY on the console', shows: 'The drives’ average busy, on the standard instrument.', where: 'disk console' },
+  ],
+  confirmed: {
+    details: { on: '2026-11-19', words: '推荐的 15 项' },
+  },
 }
