@@ -8,6 +8,75 @@
       "tier": 0,
       "source": "domains/0-foundation-decouple/charter.md",
       "contracts": {
+        "measured_at": "2e93ae09",
+        "request_response": [
+          {"method": "POST", "path": "/api/v1/alerts/alertmanager", "handler": "api/internal/alertrelay.handleAlerts", "consumers": ["trade-infra"]},
+          {"method": "POST", "path": "/api/v1/alerts/heartbeat", "handler": "api/internal/alertrelay.handleHeartbeat", "consumers": ["trade-infra"]},
+          {"method": "POST", "path": "/api/v1/alerts/notify", "handler": "api/internal/alertrelay.handleNotify", "consumers": ["trade-infra"]},
+          {"method": "GET", "path": "/api/v1/alerts/relay", "handler": "api/internal/alertrelay.handleStatus", "consumers": ["agent-scripts", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/audit", "handler": "api/internal/actuation.HandleList", "consumers": ["console", "mcp", "trade-infra"]},
+          {"method": "POST", "path": "/api/v1/audit/append", "handler": "api/internal/actuation.HandleAppend", "consumers": ["trade-api"]},
+          {"method": "GET", "path": "/api/v1/auth/capabilities", "handler": "api/internal/actuation.Capabilities", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/bus/clients", "handler": "api/internal/bus/gate.HandleClients", "consumers": ["console", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/bus/contract", "handler": "api/internal/bus/registry.HandleContract", "consumers": ["console", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/bus/events", "handler": "api/internal/bus/gate.HandleEvents", "consumers": ["console", "mcp", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/bus/observe", "handler": "api/internal/bus/observe.ServeHTTP", "consumers": ["console", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/bus/regressions", "handler": "api/internal/bus/regressions.HandleList", "consumers": ["console", "mcp", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/bus/stream", "handler": "api/internal/bus/gate.HandleStream", "consumers": ["console", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/bus/trace", "handler": "api/internal/bus/gate.HandleTrace", "consumers": ["console", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/checklist/signals", "handler": "api/internal/checklist.HandleGetSignals", "consumers": ["agent-scripts", "console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/context", "handler": "api/internal/server.handleContext", "consumers": ["agent-scripts", "console", "mcp", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/environments", "handler": "api/internal/server.handleEnvironments", "consumers": ["agent-scripts", "mcp"]},
+          {"method": "GET", "path": "/api/v1/matrix", "handler": "api/internal/server.handleMatrix", "consumers": ["agent-scripts", "console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/mcp/status", "handler": "api/internal/mcp.HandleStatus", "consumers": ["agent-scripts"]},
+          {"method": "GET", "path": "/api/v1/mcp/tools", "handler": "api/internal/mcp.HandleTools", "consumers": ["agent-scripts", "console"]},
+          {"method": "GET", "path": "/api/v1/mission/verify-payload", "handler": "api/internal/server.handleVerifyPayload", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/mission/verify-snapshot", "handler": "api/internal/server.handleVerifyMissionSnapshot", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/network/anomalies", "handler": "api/internal/network.HandleAnomalies", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/network/audit", "handler": "api/internal/network.HandleAudit", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/network/bandwidth", "handler": "api/internal/network.HandleBandwidth", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/network/clients", "handler": "api/internal/network.HandleClients", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/network/devices", "handler": "api/internal/network.HandleDevices", "consumers": ["console", "mcp"]},
+          {"method": "POST", "path": "/api/v1/network/firewall/apply", "handler": "api/internal/network.HandleFirewallApply", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/network/health", "handler": "api/internal/network.HandleHealth", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/network/policies", "handler": "api/internal/network.HandlePolicies", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/network/sla", "handler": "api/internal/network.HandleSLA", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/network/status", "handler": "api/internal/network.HandleStatus", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/network/zones", "handler": "api/internal/network.HandleZones", "consumers": ["mcp"]},
+          {"method": "POST", "path": "/api/v1/ops-agent/alertmanager", "handler": "api/internal/opsagent.HandleAlertmanager", "consumers": ["trade-infra"]},
+          {"method": "GET", "path": "/api/v1/self-health", "handler": "api/internal/selfhealth.HandleSelfHealth", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/telemetry/alerts", "handler": "api/internal/telemetry.HandleAlerts", "consumers": ["console", "mcp"]},
+          {"method": "POST", "path": "/api/v1/telemetry/attention-mute", "handler": "api/internal/telemetry.HandleAttentionMute", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/telemetry/overview", "handler": "api/internal/telemetry.HandleOverview", "consumers": ["console", "mcp", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/telemetry/promql", "handler": "api/internal/telemetry.HandlePromQL", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/telemetry/targets", "handler": "api/internal/telemetry.HandleTargets", "consumers": ["console", "mcp"]}
+        ],
+        "events": [
+          {"type": "audit.action.recorded", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.audit.action.recorded", "consumers": ["console"]},
+          {"type": "loop.health.changed", "version": 1, "guarantee": "best-effort", "address": "ev.rocket.{env}.loop.health.changed", "consumers": ["console"]},
+          {"type": "reconcile.drift.found", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.reconcile.drift.found", "consumers": ["console"]},
+          {"type": "schema.migration.applied", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.schema.migration.applied", "consumers": ["console"]}
+        ],
+        "event_streams": [],
+        "commands": [
+          {"kind": "action", "id": "unifi_firewall_apply", "tier": "D", "route": "POST /api/v1/network/firewall/apply"},
+          {"kind": "mcp_tool", "name": "get_audit_log", "routes": ["/api/v1/audit"]},
+          {"kind": "mcp_tool", "name": "get_auth_capabilities", "routes": ["/api/v1/auth/capabilities"]},
+          {"kind": "mcp_tool", "name": "get_checklist_signals", "routes": ["/api/v1/checklist/signals"]},
+          {"kind": "mcp_tool", "name": "get_connectivity_matrix", "routes": ["/api/v1/matrix"]},
+          {"kind": "mcp_tool", "name": "get_ops_context", "routes": ["/api/v1/context"]},
+          {"kind": "mcp_tool", "name": "get_telemetry_alerts", "routes": ["/api/v1/telemetry/alerts"]},
+          {"kind": "mcp_tool", "name": "get_telemetry_overview", "routes": ["/api/v1/telemetry/overview"]},
+          {"kind": "mcp_tool", "name": "get_telemetry_targets", "routes": ["/api/v1/telemetry/targets"]},
+          {"kind": "mcp_tool", "name": "list_alerts", "routes": ["/api/v1/telemetry/alerts"]},
+          {"kind": "mcp_tool", "name": "list_environments", "routes": ["/api/v1/environments"]},
+          {"kind": "mcp_tool", "name": "list_regressions", "routes": ["/api/v1/bus/regressions"]},
+          {"kind": "mcp_tool", "name": "list_targets", "routes": ["/api/v1/telemetry/targets"]},
+          {"kind": "mcp_tool", "name": "query_prometheus", "routes": ["/api/v1/telemetry/promql"]},
+          {"kind": "mcp_tool", "name": "verify_mission_snapshot", "routes": ["/api/v1/mission/verify-snapshot"]},
+          {"kind": "mcp_tool", "name": "verify_payload", "routes": ["/api/v1/mission/verify-payload"]},
+          {"kind": "mcp_tool", "name": "wait_for_event", "routes": ["/api/v1/bus/events"]}
+        ],
         "shared_storage": [
           {
             "table": "agentrt.event",
@@ -21,7 +90,7 @@
           {
             "table": "agentrt.actor",
             "owner": "api/internal/agentrt/actor",
-            "write": "actor.Ensure and actor.RegisterController; two inserts remain outside (coord: a seat; store: the seed), counted by codeguard ledgerWrites",
+            "write": "actor.Ensure and actor.RegisterController; one insert remains outside (coord: a seat), counted by codeguard ledgerWrites",
             "read": "functions actor.Exists, ActorKind, CheckWriter; no read shape declared yet"
           }
         ]
@@ -37,37 +106,297 @@
       "id": "lineage",
       "name": "Work registration & lineage",
       "tier": 2,
-      "source": "domains/2-lineage/charter.md"
+      "source": "domains/2-lineage/charter.md",
+      "contracts": {
+        "measured_at": "2e93ae09",
+        "request_response": [
+          {"method": "GET", "path": "/api/v1/lineage", "handler": "api/internal/lineage.HandleGet", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/lineage/branches", "handler": "api/internal/lineage.HandleBranches", "consumers": ["console"]},
+          {"method": "PUT", "path": "/api/v1/lineage/thread-title", "handler": "api/internal/lineage.HandleSetTitle", "consumers": ["console"]},
+          {"method": "PUT", "path": "/api/v1/lineage/transcript-title", "handler": "api/internal/lineage.HandleReportTitle", "consumers": ["trade-infra"]}
+        ],
+        "events": [
+          {"type": "git.mirror.settled", "version": 1, "guarantee": "best-effort", "address": "ev.rocket.{env}.git.mirror.settled", "consumers": ["console"]}
+        ],
+        "event_streams": [
+          {"type": "git.main.advanced", "version": 1, "guarantee": "ordered", "key": "repo", "retention": "30d", "address": "ev.rocket.{env}.git.main.advanced", "consumers": ["headrelease", "console", "unit-watch"]}
+        ],
+        "commands": [
+          {"kind": "mcp_tool", "name": "get_commit_lineage", "routes": ["/api/v1/lineage"]}
+        ],
+        "shared_storage": []
+      }
     },
     {
       "id": "verification",
       "name": "Merge & verification",
       "tier": 2,
-      "source": "domains/3-4-verify-release-ci/charter.md"
+      "source": "domains/3-4-verify-release-ci/charter.md",
+      "contracts": {
+        "measured_at": "2e93ae09",
+        "request_response": [
+          {"method": "GET", "path": "/api/v1/ci/changes", "handler": "api/internal/server.handleCIChanges", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/ci/domains", "handler": "api/internal/server.handleCIDomains", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/ci/scorecard", "handler": "api/internal/server.handleCIScorecard", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/evidence/ci", "handler": "api/internal/server.handleEvidenceCI", "consumers": ["trade-infra"]},
+          {"method": "GET", "path": "/api/v1/evidence/commit", "handler": "api/internal/server.handleEvidenceCommit", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/units/config", "handler": "api/internal/server.handleUnitConfig", "consumers": ["console", "mcp"]},
+          {"method": "POST", "path": "/api/v1/units/evidence", "handler": "api/internal/server.handleUnitEvidenceRequest", "consumers": ["mcp", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/units/full-ci", "handler": "api/internal/server.handleUnitFullCI", "consumers": ["console", "mcp", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/units/full-ci/check", "handler": "api/internal/server.handleUnitFullCICheck", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/units/plan", "handler": "api/internal/server.handleUnitPlan", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/units/runs", "handler": "api/internal/server.handleUnitRuns", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/units/scope", "handler": "api/internal/server.handleUnitScope", "consumers": ["mcp", "trade-infra"]}
+        ],
+        "events": [
+          {"type": "ci.run.finished", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.ci.run.finished", "consumers": ["headrelease", "console", "release-recorder"]},
+          {"type": "ci.run.started", "version": 1, "guarantee": "best-effort", "address": "ev.rocket.{env}.ci.run.started", "consumers": ["console"]},
+          {"type": "main.regression.fixed", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.main.regression.fixed", "consumers": ["console"]},
+          {"type": "main.regression.known", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.main.regression.known", "consumers": ["console"]}
+        ],
+        "event_streams": [
+          {"type": "ci.verdict.changed", "version": 1, "guarantee": "ordered", "key": "tree", "retention": "30d", "address": "ev.rocket.{env}.ci.verdict.changed", "consumers": ["console"]}
+        ],
+        "commands": [
+          {"kind": "action", "id": "request_unit_evidence", "tier": "B", "route": "POST /api/v1/units/evidence"},
+          {"kind": "mcp_tool", "name": "check_full_ci_landings", "routes": ["/api/v1/units/full-ci/check"]},
+          {"kind": "mcp_tool", "name": "get_commit_evidence", "routes": ["/api/v1/evidence/commit"]},
+          {"kind": "mcp_tool", "name": "get_full_ci", "routes": ["/api/v1/units/full-ci"]},
+          {"kind": "mcp_tool", "name": "get_unit_config", "routes": ["/api/v1/units/config"]},
+          {"kind": "mcp_tool", "name": "get_unit_plan", "routes": ["/api/v1/units/plan"]},
+          {"kind": "mcp_tool", "name": "get_unit_runs", "routes": ["/api/v1/units/runs"]},
+          {"kind": "mcp_tool", "name": "get_unit_scope", "routes": ["/api/v1/units/scope"]},
+          {"kind": "mcp_tool", "name": "request_unit_evidence", "routes": ["/api/v1/units/evidence"]}
+        ],
+        "shared_storage": []
+      }
     },
     {
       "id": "delivery",
       "name": "Delivery",
       "tier": 2,
-      "source": "domains/3-4-verify-release-ci/charter.md"
+      "source": "domains/3-4-verify-release-ci/charter.md",
+      "contracts": {
+        "measured_at": "2e93ae09",
+        "request_response": [
+          {"method": "POST", "path": "/api/v1/agentrt/migrations/run", "handler": "api/internal/server.handleAgentrtMigration", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/delivery/compare", "handler": "api/internal/delivery.HandleCompare", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/delivery/context", "handler": "api/internal/server.handleReleaseContext", "consumers": ["mcp"]},
+          {"method": "POST", "path": "/api/v1/delivery/mirrors/sync", "handler": "api/internal/delivery.HandleSyncMirrors", "consumers": ["trade-infra"]},
+          {"method": "GET", "path": "/api/v1/delivery/pipelines", "handler": "api/internal/delivery.HandlePipelines", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/delivery/pipelines/{name}/policy-check", "handler": "api/internal/server.handleReleasePolicyCheck", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/delivery/pipelines/{name}/preflight", "handler": "api/internal/delivery.HandlePipelinePreflight", "consumers": ["trade-infra"]},
+          {"method": "GET", "path": "/api/v1/delivery/pipelines/{name}/runs", "handler": "api/internal/delivery.HandlePipelineRuns", "consumers": ["console", "mcp", "trade-infra"]},
+          {"method": "POST", "path": "/api/v1/delivery/pipelines/{name}/runs", "handler": "api/internal/delivery.HandleStartPipelineRun", "consumers": ["console", "mcp", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/delivery/pipelines/{name}/timings", "handler": "api/internal/delivery.HandlePipelineTimings", "consumers": ["console"]},
+          {"method": "DELETE", "path": "/api/v1/delivery/release-window", "handler": "api/internal/delivery.HandleDeleteReleaseWindow", "consumers": ["console", "mcp", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/delivery/release-window", "handler": "api/internal/delivery.HandleGetReleaseWindow", "consumers": ["console", "mcp", "trade-infra"]},
+          {"method": "PUT", "path": "/api/v1/delivery/release-window", "handler": "api/internal/delivery.HandlePutReleaseWindow", "consumers": ["console", "mcp", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/delivery/revisions", "handler": "api/internal/delivery.HandleRevisions", "consumers": ["mcp"]},
+          {"method": "DELETE", "path": "/api/v1/delivery/runs/{id}", "handler": "api/internal/delivery.HandleDeletePipelineRun", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/delivery/runs/{id}/logs", "handler": "api/internal/delivery.HandleRunLogs", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/delivery/runs/{id}/steps", "handler": "api/internal/delivery.HandleRunSteps", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/delivery/stg/smoke", "handler": "api/internal/delivery.HandleStgSmoke", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/delivery/supply-chain", "handler": "api/internal/delivery.HandleSupplyChain", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/gitops/apps", "handler": "api/internal/gitops.HandleApps", "consumers": ["console", "mcp"]},
+          {"method": "POST", "path": "/api/v1/gitops/apps/{name}/rollback", "handler": "api/internal/gitops.HandleRollbackApp", "consumers": ["console", "mcp"]},
+          {"method": "POST", "path": "/api/v1/gitops/apps/{name}/sync", "handler": "api/internal/gitops.HandleSyncApp", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/release-policy", "handler": "api/internal/server.handleReleasePolicy", "consumers": ["console", "trade-infra"]},
+          {"method": "PUT", "path": "/api/v1/release-policy", "handler": "api/internal/server.handleReleasePolicyInstall", "consumers": ["console", "trade-infra"]},
+          {"method": "PUT", "path": "/api/v1/release-policy/candidate", "handler": "api/internal/server.handleReleasePolicyStage", "consumers": ["trade-infra"]},
+          {"method": "POST", "path": "/api/v1/release-policy/freeze", "handler": "api/internal/server.handleReleaseFreeze", "consumers": ["trade-infra"]},
+          {"method": "POST", "path": "/api/v1/release-policy/unfreeze", "handler": "api/internal/server.handleReleaseUnfreeze", "consumers": ["trade-infra"]},
+          {"method": "GET", "path": "/api/v1/releases", "handler": "api/internal/releases.HandleList", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/releases/running-images", "handler": "api/internal/releases.HandleRunningImages", "consumers": ["console"]}
+        ],
+        "events": [
+          {"type": "release.deploy.finished", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.release.deploy.finished", "consumers": ["console"]},
+          {"type": "release.gitops.changed", "version": 1, "guarantee": "best-effort", "address": "ev.rocket.{env}.release.gitops.changed", "consumers": ["console"]},
+          {"type": "release.policy.expiring", "version": 1, "guarantee": "best-effort", "address": "ev.rocket.{env}.release.policy.expiring", "consumers": ["console"]}
+        ],
+        "event_streams": [
+          {"type": "release.window.changed", "version": 1, "guarantee": "ordered", "key": "window", "retention": "30d", "address": "ev.rocket.{env}.release.window.changed", "consumers": ["headrelease", "console", "window-queue"]}
+        ],
+        "commands": [
+          {"kind": "action", "id": "start_pipeline_run", "tier": "B", "route": "POST /api/v1/delivery/pipelines/{name}/runs"},
+          {"kind": "action", "id": "release_window_hold", "tier": "B", "route": "PUT /api/v1/delivery/release-window"},
+          {"kind": "action", "id": "release_window_release", "tier": "B", "route": "DELETE /api/v1/delivery/release-window"},
+          {"kind": "action", "id": "release_policy_install", "tier": "B", "route": "PUT /api/v1/release-policy"},
+          {"kind": "action", "id": "release_policy_stage", "tier": "B", "route": "PUT /api/v1/release-policy/candidate"},
+          {"kind": "action", "id": "release_freeze", "tier": "B", "route": "POST /api/v1/release-policy/freeze"},
+          {"kind": "action", "id": "release_unfreeze", "tier": "B", "route": "POST /api/v1/release-policy/unfreeze"},
+          {"kind": "action", "id": "sync_mirrors", "tier": "B", "route": "POST /api/v1/delivery/mirrors/sync"},
+          {"kind": "action", "id": "run_agentrt_migration", "tier": "C", "route": "POST /api/v1/agentrt/migrations/run"},
+          {"kind": "action", "id": "delete_pipeline_run", "tier": "B", "route": "DELETE /api/v1/delivery/runs/{id}"},
+          {"kind": "action", "id": "gitops_sync_app", "tier": "B", "route": "POST /api/v1/gitops/apps/{name}/sync"},
+          {"kind": "action", "id": "gitops_rollback_app", "tier": "B", "route": "POST /api/v1/gitops/apps/{name}/rollback"},
+          {"kind": "mcp_tool", "name": "check_release_policy", "routes": ["/api/v1/delivery/pipelines/{name}/policy-check"]},
+          {"kind": "mcp_tool", "name": "delete_pipeline_run", "routes": ["/api/v1/delivery/runs/{id}"]},
+          {"kind": "mcp_tool", "name": "get_delivery_pipelines", "routes": ["/api/v1/delivery/pipelines"]},
+          {"kind": "mcp_tool", "name": "get_delivery_revisions", "routes": ["/api/v1/delivery/revisions"]},
+          {"kind": "mcp_tool", "name": "get_delivery_run_logs", "routes": ["/api/v1/delivery/runs/{id}/logs"]},
+          {"kind": "mcp_tool", "name": "get_gitops_apps", "routes": ["/api/v1/gitops/apps"]},
+          {"kind": "mcp_tool", "name": "get_release_context", "routes": ["/api/v1/delivery/context"]},
+          {"kind": "mcp_tool", "name": "get_release_window", "routes": ["/api/v1/delivery/release-window"]},
+          {"kind": "mcp_tool", "name": "get_stg_smoke", "routes": ["/api/v1/delivery/stg/smoke"]},
+          {"kind": "mcp_tool", "name": "gitops_rollback_app", "routes": ["/api/v1/gitops/apps/{name}/rollback"]},
+          {"kind": "mcp_tool", "name": "gitops_sync_app", "routes": ["/api/v1/gitops/apps/{name}/sync"]},
+          {"kind": "mcp_tool", "name": "hold_release_window", "routes": ["/api/v1/delivery/release-window"]},
+          {"kind": "mcp_tool", "name": "run_agentrt_migration", "routes": ["/api/v1/agentrt/migrations/run"]},
+          {"kind": "mcp_tool", "name": "start_pipeline_run", "routes": ["/api/v1/delivery/pipelines/{name}/runs"]}
+        ],
+        "shared_storage": []
+      }
     },
     {
       "id": "owner",
       "name": "Owner decisions",
       "tier": 3,
-      "source": "domains/5-owner/charter.md"
+      "source": "domains/5-owner/charter.md",
+      "contracts": {
+        "measured_at": "2e93ae09",
+        "request_response": [
+          {"method": "GET", "path": "/api/v1/actions", "handler": "api/internal/actions.HandleList", "consumers": ["console"]},
+          {"method": "POST", "path": "/api/v1/actuation/jobs/delete-finished", "handler": "api/internal/server.handleDeleteFinished", "consumers": ["mcp"]},
+          {"method": "POST", "path": "/api/v1/actuation/jobs/from-cronjob", "handler": "api/internal/server.handleCreateJob", "consumers": ["mcp"]},
+          {"method": "POST", "path": "/api/v1/actuation/manifests/apply", "handler": "api/internal/server.handleApply", "consumers": ["mcp"]},
+          {"method": "POST", "path": "/api/v1/actuation/manifests/plan", "handler": "api/internal/server.handlePlan", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/actuation/manifests/plans/{id}", "handler": "api/internal/server.handlePlanGet", "consumers": ["console"]},
+          {"method": "POST", "path": "/api/v1/actuation/probes", "handler": "api/internal/server.handleProbe", "consumers": ["mcp"]},
+          {"method": "POST", "path": "/api/v1/agent/governance/skill-runs", "handler": "api/internal/agentgovernance.HandleRecordSkillRun", "consumers": ["research"]},
+          {"method": "GET", "path": "/api/v1/agent/governance/trust-matrix", "handler": "api/internal/agentgovernance.HandleTrustMatrix", "consumers": ["mcp", "research"]},
+          {"method": "GET", "path": "/api/v1/approvals", "handler": "api/internal/approvals.HandleList", "consumers": ["console", "mcp", "trade-infra"]},
+          {"method": "POST", "path": "/api/v1/approvals", "handler": "api/internal/approvals.HandleCreate", "consumers": ["console", "mcp", "trade-infra"]},
+          {"method": "POST", "path": "/api/v1/approvals/claim", "handler": "api/internal/approvals.HandleClaim", "consumers": ["console", "mcp", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/approvals/{id}", "handler": "api/internal/approvals.HandleGet", "consumers": ["console", "mcp", "trade-infra"]},
+          {"method": "POST", "path": "/api/v1/approvals/{id}/approve", "handler": "api/internal/approvals.HandleApprove", "consumers": ["console", "mcp"]},
+          {"method": "POST", "path": "/api/v1/approvals/{id}/heartbeat", "handler": "api/internal/approvals.HandleHeartbeat", "consumers": ["console", "trade-infra"]},
+          {"method": "POST", "path": "/api/v1/approvals/{id}/reject", "handler": "api/internal/approvals.HandleReject", "consumers": ["console", "mcp"]},
+          {"method": "POST", "path": "/api/v1/approvals/{id}/resolve", "handler": "api/internal/approvals.HandleResolve", "consumers": ["console"]},
+          {"method": "POST", "path": "/api/v1/approvals/{id}/result", "handler": "api/internal/approvals.HandleResult", "consumers": ["console", "trade-infra"]},
+          {"method": "POST", "path": "/api/v1/approvals/{id}/withdraw", "handler": "api/internal/approvals.HandleWithdraw", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/governance/instruments", "handler": "api/internal/server.handleInstruments", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/questions", "handler": "api/internal/questions.HandleList", "consumers": ["console", "mcp"]},
+          {"method": "POST", "path": "/api/v1/questions", "handler": "api/internal/questions.HandleCreate", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/questions/{id}", "handler": "api/internal/questions.HandleGet", "consumers": ["console", "mcp"]},
+          {"method": "POST", "path": "/api/v1/questions/{id}/ack", "handler": "api/internal/questions.HandleAck", "consumers": ["mcp"]},
+          {"method": "POST", "path": "/api/v1/questions/{id}/answer", "handler": "api/internal/questions.HandleAnswer", "consumers": ["console"]},
+          {"method": "POST", "path": "/api/v1/questions/{id}/withdraw", "handler": "api/internal/questions.HandleWithdraw", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/readings/approvals", "handler": "api/internal/server.handleApprovalReadings", "consumers": ["console"]}
+        ],
+        "events": [
+          {"type": "approval.card.created", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.approval.card.created", "consumers": ["console", "card-created-notice"]},
+          {"type": "approval.card.executed", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.approval.card.executed", "consumers": ["console", "card-conclusions"]},
+          {"type": "owner.question.answered", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.owner.question.answered", "consumers": ["console", "question-conclusions"]},
+          {"type": "owner.question.asked", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.owner.question.asked", "consumers": ["console"]}
+        ],
+        "event_streams": [
+          {"type": "approval.card.decided", "version": 1, "guarantee": "ordered", "key": "card", "retention": "30d", "address": "ev.rocket.{env}.approval.card.decided", "consumers": ["console", "card-conclusions"]}
+        ],
+        "commands": [
+          {"kind": "action", "id": "plan_manifest", "tier": "B", "route": "POST /api/v1/actuation/manifests/plan"},
+          {"kind": "action", "id": "apply_manifest", "tier": "C", "route": "POST /api/v1/actuation/manifests/apply"},
+          {"kind": "action", "id": "create_job_from_cronjob", "tier": "B", "route": "POST /api/v1/actuation/jobs/from-cronjob"},
+          {"kind": "action", "id": "delete_finished_jobs", "tier": "B", "route": "POST /api/v1/actuation/jobs/delete-finished"},
+          {"kind": "action", "id": "run_probe_pod", "tier": "B", "route": "POST /api/v1/actuation/probes"},
+          {"kind": "mcp_tool", "name": "apply_manifest", "routes": ["/api/v1/actuation/manifests/apply"]},
+          {"kind": "mcp_tool", "name": "create_job_from_cronjob", "routes": ["/api/v1/actuation/jobs/from-cronjob"]},
+          {"kind": "mcp_tool", "name": "delete_finished_jobs", "routes": ["/api/v1/actuation/jobs/delete-finished"]},
+          {"kind": "mcp_tool", "name": "get_question", "routes": ["/api/v1/questions/{id}"]},
+          {"kind": "mcp_tool", "name": "get_request", "routes": ["/api/v1/approvals/{id}"]},
+          {"kind": "mcp_tool", "name": "get_trust_matrix", "routes": ["/api/v1/agent/governance/trust-matrix"]},
+          {"kind": "mcp_tool", "name": "list_pending", "routes": ["/api/v1/approvals"]},
+          {"kind": "mcp_tool", "name": "list_questions", "routes": ["/api/v1/questions"]},
+          {"kind": "mcp_tool", "name": "list_requests", "routes": ["/api/v1/approvals"]},
+          {"kind": "mcp_tool", "name": "plan_manifest", "routes": ["/api/v1/actuation/manifests/plan"]},
+          {"kind": "mcp_tool", "name": "request_action", "routes": ["/api/v1/approvals"]},
+          {"kind": "mcp_tool", "name": "run_probe_pod", "routes": ["/api/v1/actuation/probes"]},
+          {"kind": "mcp_tool", "name": "withdraw_request", "routes": ["/api/v1/approvals/{id}/withdraw"]}
+        ],
+        "shared_storage": []
+      }
     },
     {
       "id": "compute",
       "name": "Compute",
       "tier": 0,
-      "source": "domains/6-compute/charter.md"
+      "source": "domains/6-compute/charter.md",
+      "contracts": {
+        "measured_at": "2e93ae09",
+        "request_response": [
+          {"method": "GET", "path": "/api/v1/dev-sessions/", "handler": "api/internal/devsession.HandleList", "consumers": ["mcp"]},
+          {"method": "POST", "path": "/api/v1/dev-sessions/{name}/control", "handler": "api/internal/devsession.HandleControl", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/dev-sessions/{name}/logs", "handler": "api/internal/devsession.HandleLogs", "consumers": ["mcp"]}
+        ],
+        "events": [
+          {"type": "alert.rule.fired", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.alert.rule.fired", "consumers": ["console", "alert-letters"]},
+          {"type": "env.health.changed", "version": 2, "guarantee": "best-effort", "address": "ev.rocket.{env}.env.health.changed", "consumers": ["console"]}
+        ],
+        "event_streams": [],
+        "commands": [
+          {"kind": "mcp_tool", "name": "get_dev_session_logs", "routes": ["/api/v1/dev-sessions/{name}/logs"]},
+          {"kind": "mcp_tool", "name": "list_dev_sessions", "routes": ["/api/v1/dev-sessions/"]},
+          {"kind": "mcp_tool", "name": "restart_dev_session", "routes": ["/api/v1/dev-sessions/{name}/control"]}
+        ],
+        "shared_storage": []
+      }
     },
     {
       "id": "tenant",
       "name": "Tenant integration",
       "tier": 2,
-      "source": "domains/7-tenant/charter.md"
+      "source": "domains/7-tenant/charter.md",
+      "contracts": {
+        "measured_at": "2e93ae09",
+        "request_response": [
+          {"method": "GET", "path": "/api/v1/cluster/data-clone", "handler": "api/internal/dataclone.HandleDataCloneList", "consumers": ["console", "mcp"]},
+          {"method": "POST", "path": "/api/v1/cluster/data-clone", "handler": "api/internal/dataclone.HandleDataClone", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/cluster/data-clone/schedule", "handler": "api/internal/dataclone.HandleDataCloneScheduleGet", "consumers": ["console", "mcp"]},
+          {"method": "PUT", "path": "/api/v1/cluster/data-clone/schedule", "handler": "api/internal/dataclone.HandleDataCloneSchedulePut", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/cluster/data-clone/{id}", "handler": "api/internal/dataclone.HandleDataCloneStatus", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/cluster/data-freshness", "handler": "api/internal/dataclone.HandleDataFreshness", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/data-husbandry", "handler": "api/internal/tenant/husbandry.HandleSnapshot", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/plugins/analytics/status", "handler": "api/internal/research.HandleLegacyAnalyticsRedirect", "consumers": ["trade-frontend", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/plugins/flex-query/api/*", "handler": "api/internal/flexquery.HandleAPIProxy", "consumers": ["console", "trade-frontend"]},
+          {"method": "POST", "path": "/api/v1/plugins/flex-query/api/*", "handler": "api/internal/flexquery.HandleAPIProxy", "consumers": ["console", "trade-frontend"]},
+          {"method": "GET", "path": "/api/v1/plugins/flex-query/status", "handler": "api/internal/flexquery.HandleStatus", "consumers": ["console", "trade-frontend", "trade-infra"]},
+          {"method": "POST", "path": "/api/v1/plugins/ib-gateway/control/{action}", "handler": "api/internal/ibgateway.HandleControl", "consumers": ["console", "platform-plugin"]},
+          {"method": "GET", "path": "/api/v1/plugins/ib-gateway/self-heal", "handler": "api/internal/ibgateway.HandleSelfHeal", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/plugins/ib-gateway/status", "handler": "api/internal/ibgateway.HandleStatus", "consumers": ["console", "platform-plugin", "trade-frontend", "trade-infra"]},
+          {"method": "DELETE", "path": "/api/v1/plugins/market-data/api/*", "handler": "api/internal/marketdata.HandleAPIProxy", "consumers": ["console", "mcp", "trade-frontend"]},
+          {"method": "GET", "path": "/api/v1/plugins/market-data/api/*", "handler": "api/internal/marketdata.HandleAPIProxy", "consumers": ["console", "mcp", "trade-frontend"]},
+          {"method": "POST", "path": "/api/v1/plugins/market-data/api/*", "handler": "api/internal/marketdata.HandleAPIProxy", "consumers": ["console", "mcp", "trade-frontend"]},
+          {"method": "GET", "path": "/api/v1/plugins/market-data/status", "handler": "api/internal/marketdata.HandleStatus", "consumers": ["console", "platform-plugin-market-data", "trade-frontend", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/plugins/research/api/*", "handler": "api/internal/research.HandleAPIProxy", "consumers": ["trade-frontend"]},
+          {"method": "GET", "path": "/api/v1/plugins/research/status", "handler": "api/internal/research.HandleStatus", "consumers": ["trade-frontend", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/research/*", "handler": "api/internal/research.HandleAPIProxy", "consumers": ["console", "trade-frontend"]},
+          {"method": "GET", "path": "/api/v1/research/status", "handler": "api/internal/research.HandleStatus", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/satellite/bus-deep", "handler": "api/internal/satellite.HandleBusDeep", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/topology", "handler": "api/internal/server.handleTopology", "consumers": ["agent-scripts", "console"]},
+          {"method": "GET", "path": "/api/v1/trade-agent/catalog", "handler": "api/internal/tradeagent.HandleCatalog", "consumers": ["trade-infra"]},
+          {"method": "GET", "path": "/api/v1/watchlist/union", "handler": "api/internal/marketdata.HandleWatchlistUnion", "consumers": ["platform-plugin-market-data", "trade-api", "trade-core"]}
+        ],
+        "events": [
+          {"type": "data.job.finished", "version": 1, "guarantee": "best-effort", "address": "ev.rocket.{env}.data.job.finished", "consumers": ["console"]},
+          {"type": "plugin.status.changed", "version": 2, "guarantee": "best-effort", "address": "ev.rocket.{env}.plugin.status.changed", "consumers": ["console"]}
+        ],
+        "event_streams": [],
+        "commands": [
+          {"kind": "action", "id": "trigger_data_clone", "tier": "C", "route": "POST /api/v1/cluster/data-clone"},
+          {"kind": "action", "id": "ib_reconnect", "tier": "B", "route": "POST /api/v1/plugins/ib-gateway/control/{action}"},
+          {"kind": "action", "id": "ib_mode", "tier": "C", "route": "POST /api/v1/plugins/ib-gateway/control/{action}"},
+          {"kind": "action", "id": "ib_maintenance", "tier": "C", "route": "POST /api/v1/plugins/ib-gateway/control/{action}"},
+          {"kind": "action", "id": "ib_self_heal", "tier": "B", "route": "POST /api/v1/plugins/ib-gateway/control/{action}"},
+          {"kind": "action", "id": "update_data_clone_schedule", "tier": "C", "route": "PUT /api/v1/cluster/data-clone/schedule"},
+          {"kind": "action", "id": "market_data_delete", "tier": "C", "route": "DELETE /api/v1/plugins/market-data/api/*"},
+          {"kind": "mcp_tool", "name": "get_data_clone_status", "routes": ["/api/v1/cluster/data-clone/schedule", "/api/v1/cluster/data-clone/{id}"]},
+          {"kind": "mcp_tool", "name": "get_data_freshness", "routes": ["/api/v1/cluster/data-freshness"]},
+          {"kind": "mcp_tool", "name": "market_data_doctor", "routes": ["/api/v1/plugins/market-data/api/*"]},
+          {"kind": "mcp_tool", "name": "market_data_heal", "routes": ["/api/v1/plugins/market-data/api/*"]},
+          {"kind": "mcp_tool", "name": "trigger_data_clone", "routes": ["/api/v1/cluster/data-clone"]}
+        ],
+        "shared_storage": []
+      }
     },
     {
       "id": "coordination",
