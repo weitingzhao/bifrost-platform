@@ -14,8 +14,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/ciscore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/evidenceread"
-	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
-	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -144,40 +142,17 @@ func (s *Server) giteaChangedFiles(ctx context.Context, repo, commit string) ([]
 	return cidomains.ChangedFilesOf(body, repo, commit)
 }
 
-// ciDomainsAheadEvery is how often the workers look whether main moved.
-const ciDomainsAheadEvery = time.Minute
-
-// ciDomainsAhead reads the domain graph before anybody asks: once a minute,
-// in the workers, it asks for the graph of each repository the scorecard
-// knows, which starts the read of a new head and keeps the result in the
-// platform's state; the API then answers from what is kept.
-//
-// Owner 2026-11-16 22:5x, the coordinator's reading of it: the graph was
-// computed when he clicked, so he waited. A click should only read. This is
-// the plain form (a look a minute); waking on git.main.advanced instead is
-// the communication line's bus, and can replace the ticker.
+// ciDomainsAhead reads the domain graph of each repository the scorecard knows
+// before anybody asks (cidomains.Cache.ReadAhead).
 func (s *Server) ciDomainsAhead(ctx context.Context) {
 	if s.delivery == nil {
 		return
 	}
-	safego.Go("ci-domains-ahead", func() {
-		t := time.NewTicker(ciDomainsAheadEvery)
-		defer t.Stop()
-		for {
-			for _, r := range ciscore.Repos {
-				pass, cancel := context.WithTimeout(kubemetrics.WithSite(ctx, "ci-domains-ahead"), 20*time.Second)
-				if _, err := s.ciDomainsKept.Graph(pass, s.ciDomainsSourceOf(), r.Repo); err != nil && ctx.Err() == nil {
-					slog.Debug("ci domains ahead", "repo", r.Repo, "error", err)
-				}
-				cancel()
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-			}
-		}
-	})
+	repos := make([]string, 0, len(ciscore.Repos))
+	for _, r := range ciscore.Repos {
+		repos = append(repos, r.Repo)
+	}
+	s.ciDomainsKept.ReadAhead(ctx, repos, s.ciDomainsSourceOf)
 }
 
 // wireEvidenceGate makes the ledger the delivery service's CI reader and

@@ -37,3 +37,7 @@ type Deps struct {
 	// Wakes reads the bus's wakes since a time.
 	Wakes func(ctx context.Context, since time.Time) (Wakes, error)
 }
+
+// PromqlLabels are the labels the readings key a query's series by, first that
+// a series has.
+var PromqlLabels = []string{"site", "route", "type", "reader", "__name__"}

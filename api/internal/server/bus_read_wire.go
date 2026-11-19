@@ -122,24 +122,7 @@ func (s *Server) promql(ctx context.Context, q string) (map[string]float64, erro
 	if s.telemetry == nil {
 		return nil, fmt.Errorf("no Prometheus reader on this platform")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	points, err := s.telemetry.PromQL(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-	out := map[string]float64{}
-	for _, p := range points {
-		key := ""
-		for _, k := range []string{"site", "route", "type", "reader", "__name__"} {
-			if v := p.Labels[k]; v != "" {
-				key = v
-				break
-			}
-		}
-		out[key] += p.Value
-	}
-	return out, nil
+	return s.telemetry.PromQLSum(ctx, q, effect.PromqlLabels)
 }
 
 // problemWindow is how far back the problem loop reads.

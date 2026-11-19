@@ -128,3 +128,26 @@ func (h *Handler) PromQL(ctx context.Context, promQL string) ([]SamplePoint, err
 	resp, err := h.svc.PromQL(ctx, promQL)
 	return resp.Points, err
 }
+
+// PromQLSum answers a query as one number per series key: the first of labels a
+// series has a value for ("" when none), series of one key added up.
+func (h *Handler) PromQLSum(ctx context.Context, promQL string, labels []string) (map[string]float64, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	points, err := h.PromQL(ctx, promQL)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]float64{}
+	for _, p := range points {
+		key := ""
+		for _, k := range labels {
+			if v := p.Labels[k]; v != "" {
+				key = v
+				break
+			}
+		}
+		out[key] += p.Value
+	}
+	return out, nil
+}
