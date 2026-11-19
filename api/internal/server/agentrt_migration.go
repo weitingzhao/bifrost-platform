@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -82,6 +83,32 @@ func (s *Server) runAgentrtMigration(ctx context.Context, params map[string]any)
 		return nil, err
 	}
 	return m.Run(ctx, text(params["commit"]))
+}
+
+// migrateBeforeProd runs a commit's pending migrations when a platform PROD
+// delivery is about to start, if the signed policy covers them (Law 32, Law 39,
+// 2026-11-18: the delivery's schema check refused and someone had to ask for the
+// same run by hand; 0035 held PROD for hours). Same judgement and same Job as
+// run_agentrt_migration. Anything else is left to that check, which refuses.
+func (s *Server) migrateBeforeProd(ctx context.Context, commit string) {
+	if s.releasePolicy == nil || !commitID.MatchString(commit) {
+		return
+	}
+	state, err := s.releasePolicy.PendingMigrations(ctx, commit)
+	if err != nil || len(state.Pending) == 0 {
+		return
+	}
+	params := map[string]any{"commit": commit}
+	if d := s.releasePolicy.Evaluate(ctx, migrationActionID, params); !d.Auto {
+		slog.Info("agentrt: pending migrations are not covered; the PROD delivery will refuse", "commit", commit, "reasons", d.Reasons)
+		return
+	}
+	out, err := s.runAgentrtMigration(ctx, params)
+	if err != nil {
+		slog.Warn("agentrt: migration before the PROD delivery failed", "commit", commit, "error", err)
+		return
+	}
+	slog.Info("agentrt: migrated before the PROD delivery", "commit", commit, "result", out)
 }
 
 // handleAgentrtMigration is POST /api/v1/agentrt/migrations/run {commit}

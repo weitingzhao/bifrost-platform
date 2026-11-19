@@ -921,3 +921,20 @@ func TestABusyProtectedNodeTakesNoSpreadWork(t *testing.T) {
 		t.Fatalf("placement = %+v", p)
 	}
 }
+
+// 2026-11-18 (Law 39): migration 0035 held every PROD delivery until someone asked
+// for the run by hand, though the signed policy covered it. The hook runs before a
+// platform PROD delivery and no other. Positive control: dropping the pipeline
+// check makes the second start call it.
+func TestOnlyAPlatformProdStartPrepares(t *testing.T) {
+	pipe := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "tekton.dev/v1", "kind": "Pipeline",
+		"metadata": map[string]any{"name": prodPlatformPipeline, "namespace": "cicd"}, "spec": map[string]any{}}}
+	s, _, _ := contractService(t, pipe, "present")
+	var got []string
+	s.SetProdPrepare(func(_ context.Context, revision string) { got = append(got, revision) })
+	_, _, _ = s.StartPipelineRun(context.Background(), prodPlatformPipeline, factSHA1, "", "", nil)
+	_, _, _ = s.StartPipelineRun(context.Background(), "bifrost-ci-platform", factSHA1, "", "", nil)
+	if len(got) != 1 || got[0] != factSHA1 {
+		t.Fatalf("prepared %v", got)
+	}
+}

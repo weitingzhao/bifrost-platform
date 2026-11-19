@@ -63,6 +63,8 @@ type Service struct {
 	windowRecorder WindowRecorder
 	// nodeMetrics feeds build placement (build_placement.go); unset, runs are not placed.
 	nodeMetrics NodeMetricsReader
+	// prepareProd runs before a platform PROD delivery starts (SetProdPrepare).
+	prepareProd func(ctx context.Context, revision string)
 	// ciReader answers PolicyFacts.CIRun (release_policy_facts.go); unset,
 	// CIRun has no verdict.
 	ciReader       CIReader
@@ -296,6 +298,9 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 			resp.Message = inputErr.Error()
 			return resp, empty, inputErr
 		}
+	}
+	if pipelineName == prodPlatformPipeline && s.prepareProd != nil {
+		s.prepareProd(ctx, revision)
 	}
 	if isPlatformDelivery(pipelineName) {
 		if err := platformRunInputs(revision, extra); err != nil {

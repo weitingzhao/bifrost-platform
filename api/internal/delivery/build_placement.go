@@ -86,6 +86,17 @@ type NodeMetrics struct {
 // NodeMetricsReader answers by node InternalIP.
 type NodeMetricsReader func(ctx context.Context) (map[string]NodeMetrics, error)
 
+const prodPlatformPipeline = "bifrost-deliver-platform-prod"
+
+// SetProdPrepare has fn run before a platform PROD delivery starts. It says
+// nothing back: the delivery's own schema check decides what a failure means.
+func (s *Service) SetProdPrepare(fn func(ctx context.Context, revision string)) { s.prepareProd = fn }
+
+// SetProdPrepare passes to the service.
+func (h *Handler) SetProdPrepare(fn func(ctx context.Context, revision string)) {
+	h.svc.SetProdPrepare(fn)
+}
+
 // JoinNodeMetrics keeps the nodes with all four readings, by address; NaN (a
 // disk that wrote nothing in the window) is no reading.
 func JoinNodeMetrics(latency, cpu, disk, memory map[string]float64) map[string]NodeMetrics {

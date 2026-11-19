@@ -260,6 +260,7 @@ func New(cfg *config.Config) (*Server, error) {
 	if srv.delivery != nil {
 		releasesSvc.SetRunReader(srv.delivery.GateRuns)
 		srv.delivery.SetNodeMetricsReader(srv.buildNodeMetrics)
+		srv.delivery.SetProdPrepare(srv.migrateBeforeProd)
 	}
 	titleStore := threadtitles.NewStore(releasesSvc.Status().Namespace, func() (kubernetes.Interface, error) {
 		core, _, err := clusterH.Service().KubernetesClient()
