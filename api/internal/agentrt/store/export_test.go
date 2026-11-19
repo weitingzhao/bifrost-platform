@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -18,27 +16,8 @@ func SetHook(f func(point, arg string)) func() {
 	return func() { testHook.Store(nil) }
 }
 
-// LimitPendingChangesForTest lowers the most plan changes needs_you lists,
-// and returns the function that restores it.
-func LimitPendingChangesForTest(n int) func() {
-	old := planstore.PendingChangeLimit
-	planstore.PendingChangeLimit = n
-	return func() { planstore.PendingChangeLimit = old }
-}
-
 // EventTypesForTest is the closed vocabulary and the types with a body.
 func EventTypesForTest() (vocabulary, written []string) { return eventlog.EventTypes() }
-
-// QuestionSeenBodyForTest is the question_seen body of q as read, checked
-// against the event's vocabulary.
-func QuestionSeenBodyForTest(id string, q seenfacts.Question) (map[string]any, error) {
-	q.ID = id
-	body, err := q.Body()
-	if err != nil {
-		return nil, err
-	}
-	return body, eventlog.CheckBody("question_seen", body)
-}
 
 // SeenCopy is an approval_seen or question_seen event as the external facts
 // test reads it back: Ref is the approval number or question id.

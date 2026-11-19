@@ -2,9 +2,13 @@ package store_test
 
 import (
 	"context"
+	"strings"
 	"sync"
+	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
@@ -113,4 +117,125 @@ func (a *asker) question(_ context.Context, id string) (seenfacts.Question, bool
 		return seenfacts.Question{ID: id, Status: "open"}, true
 	}
 	return q, true
+}
+
+// What the plan tests still in this package use of the helpers of those that
+// moved to planstore (TD-582); a small copy each, gone with the last of them.
+
+// answered is a full answer: option, who, when.
+func answered(id, option string) seenfacts.Question {
+	return seenfacts.Question{ID: id, Status: seenfacts.QuestionAnswered, Option: option, Text: "yes", AnsweredBy: "owner",
+		AnsweredAt: "2026-10-14T12:00:00Z"}
+}
+
+// Readers of outside records that always return the given value.
+func approvalIs(status string) func(context.Context) (seenfacts.ApprovalFact, bool) {
+	return func(context.Context) (seenfacts.ApprovalFact, bool) {
+		return seenfacts.ApprovalFact{Status: status, Action: "test", Tier: "test"}, true
+	}
+}
+
+func questionIs(q seenfacts.Question) func(context.Context) (seenfacts.Question, bool) {
+	return func(context.Context) (seenfacts.Question, bool) { return q, true }
+}
+
+// deployments is a fake delivery record: what each environment runs, or
+// that it cannot be read.
+type deployment struct {
+	commit string
+	ref    map[string]any
+}
+
+type deployments struct {
+	mu sync.Mutex
+	m  map[string]deployment
+}
+
+func (d *deployments) read(_ context.Context, env string) (string, map[string]any, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	x, ok := d.m[env]
+	return x.commit, x.ref, ok
+}
+
+func (w *world) evaluate(t *testing.T, step string, d *deployments) string {
+	t.Helper()
+	ctx := ctxOf(t)
+	moved, err := planstore.EvaluateStep(ctx, w.rt, step, d.read)
+	ok(t, err)
+	return moved
+}
+
+// rule sets a node's done rule and binds approvals or questions to it, as an
+// authorized plan change does.
+func (w *world) rule(t *testing.T, node, rule string, binds ...[2]string) {
+	t.Helper()
+	ctx := ctxOf(t)
+	ok(t, planChange(w, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `UPDATE agentrt.plan_node SET done_rule_json = $2::jsonb WHERE plan_node_id = $1`, node, rule); err != nil {
+			return err
+		}
+		for _, b := range binds {
+			if _, err := tx.Exec(ctx, `INSERT INTO agentrt.plan_node_binding (plan_node_id, bound_kind, bound_ref, event_id)
+			  VALUES ($1, $2, $3, current_setting('agentrt.event_id')::bigint)`, node, b[0], b[1]); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+}
+
+// step adds a step of M-1 under the item, with a done rule when rule is set.
+func (w *world) step(t *testing.T, id string, ordinal int, rule string, binds ...[2]string) {
+	t.Helper()
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: id, Parent: item, Kind: "step", Label: id, Title: id,
+			MissionID: "M-1", StepKind: "agent", Ordinal: ordinal, Root: root})
+		return err
+	}))
+	if rule != "" {
+		w.rule(t, id, rule, binds...)
+	}
+}
+
+func (w *world) stepState(t *testing.T, id string) string {
+	t.Helper()
+	ctx := ctxOf(t)
+	var s string
+	ok(t, w.rt.QueryRow(ctx, `SELECT state FROM agentrt.plan_node WHERE plan_node_id = $1`, id).Scan(&s))
+	return s
+}
+
+// arch makes the ARCH root and its rows in order, each [id, rule] with its
+// rule set by a plan change when there is one.
+func (w *world) arch(t *testing.T, rows ...[2]string) {
+	t.Helper()
+	ctx := ctxOf(t)
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "ARCH", Kind: "arch_root", Label: "ARCH", Title: "架构对照",
+			Root: "ARCH"}); err != nil {
+			return err
+		}
+		for i, r := range rows {
+			label := strings.TrimPrefix(r[0], "ARCH:")
+			if _, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: r[0], Parent: "ARCH", Kind: "arch_row", Label: label,
+				Title: label, Ordinal: i, Root: "ARCH"}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+	for _, r := range rows {
+		if r[1] == "" {
+			continue
+		}
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream("ARCH"), Type: "plan_changed", Actor: "controller",
+				Body: map[string]any{"change": "set_done_rule"}}); err != nil {
+				return err
+			}
+			_, err := tx.Exec(ctx, `UPDATE agentrt.plan_node SET done_rule_json = $2::jsonb WHERE plan_node_id = $1`, r[0], r[1])
+			return err
+		}))
+	}
 }

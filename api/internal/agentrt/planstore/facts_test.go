@@ -1,4 +1,4 @@
-package store_test
+package planstore_test
 
 import (
 	"context"
@@ -12,7 +12,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // step adds a step of M-1 under the item, with a done rule when rule is set.
@@ -68,10 +67,6 @@ func questionIs(q seenfacts.Question) func(context.Context) (seenfacts.Question,
 
 func ciIs(status, run string) func(context.Context) (string, string, bool) {
 	return func(context.Context) (string, string, bool) { return status, run, true }
-}
-
-func deployedIs(commit string, ref map[string]any) seenfacts.Deployed {
-	return func(context.Context, string) (string, map[string]any, bool) { return commit, ref, true }
 }
 
 // answered is a full answer: option, who, when.
@@ -163,7 +158,7 @@ func TestExternalFactsRecordChangesOnly(t *testing.T) {
 	pool := w.db.Pool(t, w.db.Runtime)
 	const n = 5
 	arrived := make(chan struct{}, n)
-	unhook := store.SetHook(func(point, _ string) {
+	unhook := setHook(func(point, _ string) {
 		if point != "seen" {
 			return
 		}

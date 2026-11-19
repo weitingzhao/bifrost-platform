@@ -1,17 +1,11 @@
-//bifrost:owner plan
-
-package store_test
+package planstore_test
 
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
-
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
@@ -64,39 +58,5 @@ func TestAPlanNoteClaimingApprovalIsAlerted(t *testing.T) {
 	if len(got) != 1 || got[0].source != "plan_note" || got[0].phrase != "Owner 已批准" || got[0].hasArtifact ||
 		fmt.Sprint(got[0].cause) != fmt.Sprint(note["event_id"]) || got[0].stream != planstore.PlanStream("ARCH") {
 		t.Fatalf("the alert %+v (note %v)", got, note)
-	}
-}
-
-// arch makes the ARCH root and its rows in order, each [id, rule] with its
-// rule set by a plan change when there is one.
-func (w *world) arch(t *testing.T, rows ...[2]string) {
-	t.Helper()
-	ctx := ctxOf(t)
-	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if _, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: "ARCH", Kind: "arch_root", Label: "ARCH", Title: "架构对照",
-			Root: "ARCH"}); err != nil {
-			return err
-		}
-		for i, r := range rows {
-			label := strings.TrimPrefix(r[0], "ARCH:")
-			if _, err := planstore.CreatePlanNode(ctx, tx, "controller", planstore.PlanNode{ID: r[0], Parent: "ARCH", Kind: "arch_row", Label: label,
-				Title: label, Ordinal: i, Root: "ARCH"}); err != nil {
-				return err
-			}
-		}
-		return nil
-	}))
-	for _, r := range rows {
-		if r[1] == "" {
-			continue
-		}
-		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream("ARCH"), Type: "plan_changed", Actor: "controller",
-				Body: map[string]any{"change": "set_done_rule"}}); err != nil {
-				return err
-			}
-			_, err := tx.Exec(ctx, `UPDATE agentrt.plan_node SET done_rule_json = $2::jsonb WHERE plan_node_id = $1`, r[0], r[1])
-			return err
-		}))
 	}
 }

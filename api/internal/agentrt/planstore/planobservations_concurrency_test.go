@@ -1,13 +1,11 @@
-//bifrost:owner plan
-
-package store_test
+package planstore_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/mainhistory"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
@@ -31,13 +29,13 @@ func TestPV2CollectorPostgresOutOfOrder(t *testing.T) {
 			if slow.PgConn().PID() == w.rt.PgConn().PID() {
 				t.Fatal("test requires two PostgreSQL backends")
 			}
-			source := func(state landing.History) planstore.PlanSources {
-				return planstore.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
-					return landing.MainHistory{State: state, Commit: commitA}, nil
+			source := func(state mainhistory.History) planstore.PlanSources {
+				return planstore.PlanSources{History: func(context.Context, string, string, string, string) (mainhistory.MainHistory, error) {
+					return mainhistory.MainHistory{State: state, Commit: commitA}, nil
 				}}
 			}
 			if prime {
-				pvPoll(t, w, source(landing.Effective))
+				pvPoll(t, w, source(mainhistory.Effective))
 			}
 			positions := func() [2]int64 {
 				var p [2]int64
@@ -57,13 +55,13 @@ func TestPV2CollectorPostgresOutOfOrder(t *testing.T) {
 			done := make(chan result, 1)
 			finished := false
 			go func() {
-				n, err := planstore.CollectPlanObservations(readctx, slow, planstore.PlanSources{History: func(ctx context.Context, _, _, _, _ string) (landing.MainHistory, error) {
+				n, err := planstore.CollectPlanObservations(readctx, slow, planstore.PlanSources{History: func(ctx context.Context, _, _, _, _ string) (mainhistory.MainHistory, error) {
 					close(started)
 					select {
 					case <-release:
-						return landing.MainHistory{State: landing.Effective, Commit: commitA}, nil
+						return mainhistory.MainHistory{State: mainhistory.Effective, Commit: commitA}, nil
 					case <-ctx.Done():
-						return landing.MainHistory{}, ctx.Err()
+						return mainhistory.MainHistory{}, ctx.Err()
 					}
 				}})
 				done <- result{n, err}
@@ -84,7 +82,7 @@ func TestPV2CollectorPostgresOutOfOrder(t *testing.T) {
 			case <-readctx.Done():
 				t.Fatal("older collector never reached remote read")
 			}
-			pvPoll(t, w, source(landing.Reverted))
+			pvPoll(t, w, source(mainhistory.Reverted))
 			committed := positions()
 			if prime && (committed[0] != before[0] || committed[1] != before[1]+1) {
 				t.Fatalf("expected only observation to advance: %v -> %v", before, committed)

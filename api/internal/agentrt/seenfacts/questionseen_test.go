@@ -1,12 +1,9 @@
-//bifrost:owner owner
-
-package store_test
+package seenfacts_test
 
 import (
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // question_seen keeps the option the card recommended when the reader gave
@@ -15,17 +12,17 @@ func TestQuestionSeenRecommendedBody(t *testing.T) {
 	t.Parallel()
 	q := answered("Q1", "a")
 	q.Recommended = "b"
-	body, err := store.QuestionSeenBodyForTest("Q1", q)
+	body, err := questionSeenBody("Q1", q)
 	ok(t, err)
 	if body["recommended"] != "b" || body["option"] != "a" {
 		t.Fatalf("body %v", body)
 	}
-	body, err = store.QuestionSeenBodyForTest("Q1", seenfacts.Question{ID: "Q1", Status: "open", Recommended: "a"})
+	body, err = questionSeenBody("Q1", seenfacts.Question{ID: "Q1", Status: "open", Recommended: "a"})
 	ok(t, err)
 	if body["recommended"] != "a" {
 		t.Fatalf("open body %v", body)
 	}
-	body, err = store.QuestionSeenBodyForTest("Q1", answered("Q1", "a"))
+	body, err = questionSeenBody("Q1", answered("Q1", "a"))
 	ok(t, err)
 	if _, has := body["recommended"]; has {
 		t.Fatalf("a card read without its recommendation kept one: %v", body)

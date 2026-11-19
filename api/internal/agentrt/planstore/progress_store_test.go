@@ -1,6 +1,4 @@
-//bifrost:owner plan
-
-package store_test
+package planstore_test
 
 import (
 	"context"
@@ -9,10 +7,9 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-type progressDoc struct {
+type limitProgressDoc struct {
 	AsOf     int64 `json:"as_of_event_id"`
 	NeedsYou struct {
 		Count     int              `json:"count"`
@@ -62,14 +59,14 @@ type progressDoc struct {
 	Hosts []map[string]any `json:"hosts"`
 }
 
-func (w *world) progress(t *testing.T) progressDoc {
+func (w *world) limitProgress(t *testing.T) limitProgressDoc {
 	t.Helper()
 	ctx := ctxOf(t)
 	out, err := planstore.Progress(ctx, w.rt)
 	ok(t, err)
 	raw, err := json.Marshal(out)
 	ok(t, err)
-	var doc progressDoc
+	var doc limitProgressDoc
 	ok(t, json.Unmarshal(raw, &doc))
 	return doc
 }
@@ -98,7 +95,7 @@ func TestNeedsYouOneItemPerCard(t *testing.T) {
 	if n, err := planstore.DecidePlanChanges(ctx, w.rt, refused, nil); err != nil || n != 1 {
 		t.Fatalf("decided %d (%v); want the one answered card", n, err)
 	}
-	doc := w.progress(t)
+	doc := w.limitProgress(t)
 	byID := map[any]map[string]any{}
 	for _, it := range doc.NeedsYou.Items {
 		byID[it["id"]] = it
@@ -109,8 +106,8 @@ func TestNeedsYouOneItemPerCard(t *testing.T) {
 	if refs, _ := byID["question:q_same"]["also_refs"].([]any); len(refs) != 1 {
 		t.Errorf("the shared card's other proposals %v; want one", byID["question:q_same"]["also_refs"])
 	}
-	defer store.LimitPendingChangesForTest(1)()
-	doc = w.progress(t)
+	defer limitPendingChanges(1)()
+	doc = w.limitProgress(t)
 	if doc.NeedsYou.Count != 1 || !doc.NeedsYou.Truncated {
 		t.Fatalf("needs you at a bound of 1: %d, truncated %v", doc.NeedsYou.Count, doc.NeedsYou.Truncated)
 	}

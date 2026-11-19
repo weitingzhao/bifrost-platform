@@ -1,6 +1,4 @@
-//bifrost:owner coordination
-
-package store_test
+package coord_test
 
 import (
 	"testing"

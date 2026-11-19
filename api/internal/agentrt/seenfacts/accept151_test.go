@@ -1,6 +1,4 @@
-//bifrost:owner owner
-
-package store_test
+package seenfacts_test
 
 import (
 	"context"

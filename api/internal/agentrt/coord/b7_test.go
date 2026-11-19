@@ -1,4 +1,4 @@
-package store_test
+package coord_test
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // Review 145 B7: the acceptance paths its table found without a test of
@@ -44,8 +43,8 @@ func TestTamperOnACleanStream(t *testing.T) {
 	}
 	found := func(stream string, seq int64) {
 		t.Helper()
-		_, err := store.VerifyStream(ctx, w.rt, stream)
-		var br *store.ChainBreak
+		_, err := eventlog.VerifyStream(ctx, w.rt, stream)
+		var br *eventlog.ChainBreak
 		if !errors.As(err, &br) || (seq != 0 && br.Seq != seq) {
 			t.Fatalf("%s: verify = %v, want a break at %d", stream, err, seq)
 		}
@@ -113,7 +112,7 @@ func TestKilledInsideATransaction(t *testing.T) {
 		t.Fatalf("after the kill: %d events, head at %d; want 2 and 2", events, lastSeq)
 	}
 	notes(t, w, "mid", 1)
-	if n, verr := store.VerifyStream(ctx, w.rt, "mid"); verr != nil || n != 3 {
+	if n, verr := eventlog.VerifyStream(ctx, w.rt, "mid"); verr != nil || n != 3 {
 		t.Fatalf("after the next write: %d %v", n, verr)
 	}
 
@@ -131,13 +130,13 @@ func TestKilledInsideATransaction(t *testing.T) {
 				return aerr
 			}))
 		}}
-		n, verr := store.VerifyStream(bctx, hooked, "busy")
+		n, verr := eventlog.VerifyStream(bctx, hooked, "busy")
 		cancel()
 		if verr != nil || n != int64(1+round) {
 			t.Fatalf("round %d: a write between the reads: %d events, %v; want %d and no break", round, n, verr, 1+round)
 		}
 	}
-	if n, verr := store.VerifyStream(ctx, pool, "busy"); verr != nil || n != 4 {
+	if n, verr := eventlog.VerifyStream(ctx, pool, "busy"); verr != nil || n != 4 {
 		t.Fatalf("after the writes: %d %v; want 4", n, verr)
 	}
 }

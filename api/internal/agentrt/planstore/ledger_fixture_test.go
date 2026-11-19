@@ -351,3 +351,43 @@ func rows(t *testing.T, pool *pgxpool.Pool) [6]int {
 	  (SELECT count(*) FROM agentrt.event_stream), (SELECT count(*) FROM agentrt.idempotency_key)`).Scan(&c[0], &c[1], &c[2], &c[3], &c[4], &c[5]))
 	return c
 }
+
+// setHook installs actor's test hook and returns the function that removes it
+// (store's SetHook, which the plan tests that moved here used). The hook is
+// process-wide: a test that sets it is serial and says so on a line of its
+// comment starting "Serial:", as in package store.
+func setHook(f func(point, arg string)) func() {
+	actor.TestHook.Store(&f)
+	return func() { actor.TestHook.Store(nil) }
+}
+
+// limitPendingChanges lowers the most plan changes needs_you lists and returns
+// the function that restores it (store's LimitPendingChangesForTest); it is
+// process-wide like setHook.
+func limitPendingChanges(n int) func() {
+	old := planstore.PendingChangeLimit
+	planstore.PendingChangeLimit = n
+	return func() { planstore.PendingChangeLimit = old }
+}
+
+func planChange(w *world, fn func(tx pgx.Tx) error) error {
+	ctx := w.ctx
+	return eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream(root), Type: "plan_changed", Actor: "controller",
+			Body: map[string]any{"change": "test"}}); err != nil {
+			return err
+		}
+		return fn(tx)
+	})
+}
+
+func adoptView(t *testing.T, w *world, artifact string, version int) *asker {
+	t.Helper()
+	a := &asker{}
+	_, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:pv"), fmt.Sprintf("adopt-%d", version), root, "view metadata", []planstore.PlanChange{{Op: "adopt_plan_view", Artifact: artifact, ExpectedVersion: &version}}, a.ask)
+	ok(t, err)
+	a.answer(a.lastID(), seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	_, err = planstore.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
+	ok(t, err)
+	return a
+}

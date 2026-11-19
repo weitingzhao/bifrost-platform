@@ -1,6 +1,4 @@
-//bifrost:owner lineage
-
-package store
+package recorderimport_test
 
 import (
 	"fmt"

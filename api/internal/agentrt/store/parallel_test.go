@@ -117,7 +117,7 @@ func TestTestsRunInParallel(t *testing.T) {
 		parsed = append(parsed, file)
 	}
 	tests, problems := parallelProblems(parsed)
-	if tests < 100 {
+	if tests < 60 {
 		t.Fatalf("read %d tests; the package has more (is the scan reading the files?)", tests)
 	}
 	for _, p := range problems {

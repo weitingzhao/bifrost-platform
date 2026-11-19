@@ -1,6 +1,4 @@
-//bifrost:owner plan
-
-package store_test
+package planstore_test
 
 import (
 	"context"
@@ -13,7 +11,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/mainhistory"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
@@ -84,8 +82,8 @@ func TestPV2CorruptViewIsolatesRoot(t *testing.T) {
 			goodBinding := pvBinding(d, s1, "main_effective", "git")
 			goodBinding.Repo, goodBinding.Result = "bifrost-platform", commitA
 			adoptView(t, w, pvArtifact(t, w, d, goodBinding), 0)
-			src := planstore.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
-				return landing.MainHistory{State: landing.Effective, Commit: commitA}, nil
+			src := planstore.PlanSources{History: func(context.Context, string, string, string, string) (mainhistory.MainHistory, error) {
+				return mainhistory.MainHistory{State: mainhistory.Effective, Commit: commitA}, nil
 			}}
 			pvPoll(t, w, src)
 			pvEvaluate(t, w, s1, "done")
@@ -143,8 +141,8 @@ func TestPV2CorruptDependencyKeepsGoodRootView(t *testing.T) {
 	b := pvBinding(d, s1, "main_effective", "git")
 	b.Repo, b.Result = "bifrost-platform", commitA
 	adoptView(t, w, pvArtifact(t, w, d, b), 0)
-	src := planstore.PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
-		return landing.MainHistory{State: landing.Effective, Commit: commitA}, nil
+	src := planstore.PlanSources{History: func(context.Context, string, string, string, string) (mainhistory.MainHistory, error) {
+		return mainhistory.MainHistory{State: mainhistory.Effective, Commit: commitA}, nil
 	}}
 	pvPoll(t, w, src)
 	pvEvaluate(t, w, s1, "done")

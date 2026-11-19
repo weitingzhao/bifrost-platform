@@ -1,42 +1,17 @@
-//bifrost:owner plan
-
-package store_test
+package planstore_test
 
 import (
 	"errors"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // The import's decision (planimportcard.go, the branch in plandecide.go):
 // nothing left when it fails half way (review 313 B1). It needs the process's
 // test hook, so it stays here; the rest of the decision's tests moved to
 // planstore/planimportdecide_test.go (TD-582).
-
-func proposeImport(t *testing.T, pool *pgxpool.Pool, req planimport.Request, a *asker) string {
-	t.Helper()
-	out, err := planstore.ProposePlanImport(ctx, pool, wr("thread:s1"), "k1", "round 2 into the runtime", req, a.ask)
-	ok(t, err)
-	q, _ := out["question_id"].(string)
-	if q == "" {
-		t.Fatalf("import proposal = %v", out)
-	}
-	return q
-}
-
-func importCounts(t *testing.T, pool *pgxpool.Pool) (nodes, heads, decided int) {
-	t.Helper()
-	ok(t, pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM agentrt.plan_node),
-	  (SELECT count(*) FROM agentrt.event WHERE event_type = 'legacy_imported'),
-	  (SELECT count(*) FROM agentrt.event WHERE event_type = 'plan_change_decided')`).Scan(&nodes, &heads, &decided))
-	return
-}
 
 // Serial: it holds the package's test hook (SetHook).
 func TestImportDecisionFailsHalfWay(t *testing.T) {
@@ -45,7 +20,7 @@ func TestImportDecisionFailsHalfWay(t *testing.T) {
 	q := proposeImport(t, pool, req, a)
 	a.answer(q, seenfacts.QuestionAnswered, planstore.CardApplyKey)
 	errFail := errors.New("fail here")
-	unhook := store.SetHook(func(point, arg string) {
+	unhook := setHook(func(point, arg string) {
 		if point == "plan import step" && arg == "R2:2.1-2" {
 			panic(errFail)
 		}

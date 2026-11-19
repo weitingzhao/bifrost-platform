@@ -1,4 +1,4 @@
-package store_test
+package planstore_test
 
 import (
 	"errors"
@@ -11,7 +11,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // waitsOnTheStep: some transaction waits for a plan node's row lock.
@@ -35,7 +34,7 @@ func TestSignOffStepOnceAtATime(t *testing.T) {
 	pool := w.db.Pool(t, w.db.Runtime)
 	first, release := make(chan struct{}), make(chan struct{})
 	var arrivals atomic.Int32
-	defer store.SetHook(func(point, arg string) {
+	defer setHook(func(point, arg string) {
 		if point == "signoff: unsigned" && arg == s1 && arrivals.Add(1) == 1 {
 			close(first)
 			<-release
@@ -168,7 +167,7 @@ func TestSignOffStepAndAChangeAtOnce(t *testing.T) {
 			pool := w.db.Pool(t, w.db.Runtime)
 			held, release := make(chan struct{}), make(chan struct{})
 			var arrivals atomic.Int32
-			defer store.SetHook(func(point, arg string) {
+			defer setHook(func(point, arg string) {
 				if point == "signoff: unsigned" && arg == s1 && arrivals.Add(1) == 1 {
 					close(held)
 					<-release

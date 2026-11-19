@@ -1,4 +1,4 @@
-package store
+package seenfacts_test
 
 import (
 	"testing"
