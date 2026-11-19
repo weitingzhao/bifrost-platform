@@ -236,3 +236,10 @@
 .g2[data-device='tablet'] .g2-tab, .g2[data-device='phone'] .g2-tab { min-height: 44px; }
 .g2-panels { font-size: 16px; color: var(--g2-mute); }
 .g2-panels.on { color: var(--g2-ink); background: var(--g2-chip); }
+
+/* Content that breaks the frame's rules is refused, with what it broke (rules.ts). */
+.g2-refused { display: flex; align-items: center; justify-content: center; padding: var(--s6, 24px); }
+.g2-refused .g2-corner { position: static; max-width: 720px; padding: var(--s5, 16px) var(--s6, 24px); }
+.g2-refused h1 { margin: 0 0 var(--s2); font-size: 18px; }
+.g2-refused ul { margin: var(--s3) 0 0; padding-left: var(--s5, 16px); }
+.g2-refused code { font-family: var(--g2-mono); font-size: 12px; }

@@ -57,6 +57,8 @@ export type SceneEvents = {
   moved: (id: string, plot: string) => void
   /** The Owner cut a plot in two, or joined it with its other half. */
   plot: (op: 'split' | 'merge', plot: string) => void
+  /** The view went closer than the whole page, or back: the minimap changes what it shows. */
+  zoomed?: (on: boolean) => void
 }
 
 /** What a tap does while arranging: move things between plots, cut plots, or join them. */
@@ -121,6 +123,14 @@ export class PlaceScene extends Phaser.Scene {
   private lastTap = 0
   /** A block being carried while arranging: which, and which cell of it the pointer holds. */
   private carry: { p: Placed; to: Plot | null } | null = null
+  /**
+   * The minimap (the Owner, 2026-11-19: it must show where you are): at the page's size it shows the
+   * level above with the place you are in blinking; zoomed in, it shows this level whole with the
+   * part on screen as a blinking frame.
+   */
+  private zoomedTold = false
+  private viewBox?: Phaser.GameObjects.Graphics
+  private insideRing?: Phaser.GameObjects.Graphics
   /** The picture of the place on screen and of its parent in the minimap (geo.ts). */
   private geo: Geo = geoOf([])
   private awayGeo: Geo | null = null
@@ -152,6 +162,8 @@ export class PlaceScene extends Phaser.Scene {
     this.input.addPointer(1)
     this.cameras.main.setBackgroundColor(this.tone.sky)
     this.mini = this.cameras.add(0, 0, 10, 10).setBackgroundColor(this.tone.miniSky).setName('mini')
+    this.viewBox = this.add.graphics().setDepth(1000)
+    this.cameras.main.ignore(this.viewBox)
     this.gestures()
     if (this.shown) void this.draw(this.shown, true)
   }
@@ -161,6 +173,44 @@ export class PlaceScene extends Phaser.Scene {
     // In the medium card they are smaller, so the plates do not cover the little map.
     const z = this.cameras.main.zoom, k = this.stage ? 0.68 : 1
     for (const t of this.labels) if (t.active) t.setScale(k / z)
+    if (!this.ready || !this.main) return
+    const zin = this.zoomedIn()
+    if (zin !== this.zoomedTold) { this.zoomedTold = zin; this.syncMini(); this.events_.zoomed?.(zin) }
+    const pulse = 0.55 + 0.45 * Math.sin(this.time.now / 220)
+    if (this.insideRing?.active) this.insideRing.setAlpha(pulse)
+    const vb = this.viewBox
+    if (vb) {
+      vb.clear()
+      if (zin) {
+        const v = this.cameras.main.worldView, w = 3 / (this.mini?.zoom || 1)
+        vb.fillStyle(this.tone.pick, 0.14 * pulse).fillRect(v.x, v.y, v.width, v.height)
+        vb.lineStyle(w, this.tone.pick, pulse).strokeRect(v.x, v.y, v.width, v.height)
+      }
+    }
+  }
+
+  /** Back to the whole page (the minimap's frame, tapped while zoomed in). */
+  fitAll() { this.tweenFit() }
+
+  /** What the minimap shows: the level above (the place you are in blinking), or, zoomed in, this level and the part on screen. */
+  private syncMini() {
+    const mini = this.mini
+    if (!mini) return
+    const zin = this.zoomedTold
+    const show = zin || !!this.away
+    mini.setVisible(show)
+    if (!show || !this.main) return
+    const { mini: r, miniTitle } = this.layout
+    mini.setViewport(r.x + 1, r.y + miniTitle, r.w - 2, r.h - miniTitle - 1)
+    const see = (o: Phaser.GameObjects.GameObject | undefined, on: boolean) => {
+      if (!o) return
+      const f = o as unknown as { cameraFilter: number }
+      f.cameraFilter = on ? f.cameraFilter & ~mini.id : f.cameraFilter | mini.id
+    }
+    see(this.main, zin); see(this.away, !zin); see(this.viewBox, zin)
+    const g = this.groundBox(zin ? this.geo : (this.awayGeo ?? this.geo))
+    mini.setZoom(Math.min((r.w - 8) / g.w, (r.h - miniTitle - 4) / g.h))
+    mini.centerOn((zin ? 0 : AWAY) + g.x + g.w / 2, g.y + g.h / 2)
   }
 
   /** Show a place; `parent` goes to the corner with the child we are inside lit. */
@@ -426,15 +476,9 @@ export class PlaceScene extends Phaser.Scene {
       if (this.away) cam.ignore(this.away)
       if (refit) { const z = this.fit(); cam.setZoom(z); const a = this.aim(z); cam.centerOn(a.x, a.y) }
     }
-    if (!this.mini) return
-    this.mini.setVisible(!!this.away)
-    if (!this.away || !this.main) return
-    const { mini, miniTitle } = this.layout
-    this.mini.setViewport(mini.x + 1, mini.y + miniTitle, mini.w - 2, mini.h - miniTitle - 1)
-    this.mini.ignore(this.main)
-    const g = this.groundBox(this.awayGeo ?? this.geo)
-    this.mini.setZoom(Math.min((mini.w - 8) / g.w, (mini.h - miniTitle - 4) / g.h))
-    this.mini.centerOn(AWAY + g.x + g.w / 2, g.y + g.h / 2)
+    this.zoomedTold = this.zoomedIn()
+    this.syncMini()
+    this.events_.zoomed?.(this.zoomedTold)
   }
 
   private zoomAbout(zoom: number, sx: number, sy: number) {
@@ -736,8 +780,16 @@ export class PlaceScene extends Phaser.Scene {
     if (ring != null) {
       const g = this.add.graphics()
       const q = quadOf(P, r)
-      g.fillStyle(ring, 0.45).fillPoints(q, true).lineStyle(3, ring, 1).strokePoints(q, true)
-      parts.push(g)
+      if (k.id === o.inside) {
+        // Where you are, in the minimap: an outline over the thing, not a fill under it, so a district's
+        // own buildings cannot hide it; it blinks (update()).
+        // Drawn to be seen at the minimap's scale (about a twentieth): a thick line and a light fill.
+        g.fillStyle(this.tone.pick, 0.35).fillPoints(q, true).lineStyle(44, this.tone.pick, 1).strokePoints(q, true)
+        this.insideRing = g
+      } else {
+        g.fillStyle(ring, 0.45).fillPoints(q, true).lineStyle(3, ring, 1).strokePoints(q, true)
+        parts.push(g)
+      }
     }
     let img: Phaser.GameObjects.Image | null = null
     const inner = lay ? this.extentOf(lay) : null
@@ -802,6 +854,7 @@ export class PlaceScene extends Phaser.Scene {
       parts.push(g)
     }
     if (lens != null && !lit) for (const p of parts) (p as unknown as { setAlpha?: (a: number) => void }).setAlpha?.(0.28)
+    if (k.id === o.inside && this.insideRing) parts.push(this.insideRing)
     return parts
   }
 

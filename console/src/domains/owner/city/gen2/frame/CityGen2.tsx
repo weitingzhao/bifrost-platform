@@ -7,6 +7,7 @@ import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
 import type { CityContent, Panel } from './content'
 import { PlaceScene, type ArrangeTool, type Shown } from './placeScene'
 import { functionAt, here, resolve, trail, type Path, type Place } from './places'
+import { rulesBroken } from './rules'
 import { frameOf, NO_INSETS, swapRects, type Insets, type Rect } from './viewport'
 import './cityGen2.css'
 
@@ -95,7 +96,26 @@ const TOOL_HINT: Record<ArrangeTool, string> = {
 
 const keyOf = (path: Path) => path.length === 0 ? 'town' : path.join('/')
 
-export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashboard, timerLoop = false, arrangements, content }: Props) {
+/**
+ * The frame's door: content is checked against the frame's rules (rules.ts) before anything is drawn.
+ * Content that breaks one is refused with what it broke (the Owner, 2026-11-19: a domain that uses
+ * this look keeps its rules; it cannot change them).
+ */
+export default function CityGen2(props: Props) {
+  const broken = useMemo(() => rulesBroken(props.content), [props.content])
+  if (broken.length > 0) return (
+    <div className="g2 g2-refused" role="alert" style={{ ...CORNERS.day, background: CORNERS.day['--g2-sky'], color: CORNERS.day['--g2-ink'] } as CSSProperties}>
+      <section className="g2-corner">
+        <h1>This content breaks the frame’s rules</h1>
+        <p>The frame draws only content that keeps its rules. Fix the content; the frame does not bend.</p>
+        <ul>{broken.map(b => <li key={b}><code>{b}</code></li>)}</ul>
+      </section>
+    </div>
+  )
+  return <CityFrame {...props} />
+}
+
+function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoop = false, arrangements, content }: Props) {
   const store = useMemo(() => arrangements ?? browserArrangements(), [arrangements])
   const tree = content.tree
   const path = useMemo(() => resolve(tree, asked), [tree, asked])
@@ -109,6 +129,8 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   const [drawerOpen, setDrawerOpen] = useState(false)
   // The panel that has the middle (by its id; null: the map has it), and the search box.
   const [focused, setFocused] = useState<string | null>(null)
+  // Zoomed closer than the whole page: the minimap shows this level and the part on screen.
+  const [zoomed, setZoomed] = useState(false)
   const [panelPrefs, setPanelPrefs] = useState<PanelPrefs>(readPanels)
   const keepPanels = (next: PanelPrefs) => {
     setPanelPrefs(next)
@@ -189,6 +211,7 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
         // A cut or a join changes the plots; things keep their plot where it still exists and fits.
         if (next !== null) keep({ plan: encodePlan(next), at: Object.fromEntries(L.placed.map(p => [p.id, p.plot])) })
       },
+      zoomed: on => setZoomed(on),
     })
     s.setLayout(f)
     s.setLight(light)
@@ -393,10 +416,14 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
       </section>
 
       {/* The minimap: where you came from, shrunk. Tapping it goes back up. */}
-      {parent && (
-        <button className="g2-corner g2-tr" style={at(f.mini)} onClick={() => go(path.slice(0, -1))} aria-label={`Back to ${parent.label}`}>
-          <span style={{ height: f.miniTitle, lineHeight: `${f.miniTitle}px` }}>↑ {parent.label}</span>
-        </button>
+      {(parent || zoomed) && (
+        zoomed
+          ? <button className="g2-corner g2-tr" style={at(f.mini)} onClick={() => scene.current?.fitAll()} aria-label={`Back to the whole of ${place.label}`}>
+              <span style={{ height: f.miniTitle, lineHeight: `${f.miniTitle}px` }}>◎ {place.label}</span>
+            </button>
+          : <button className="g2-corner g2-tr" style={at(f.mini)} onClick={() => go(path.slice(0, -1))} aria-label={`Back to ${parent!.label}`}>
+              <span style={{ height: f.miniTitle, lineHeight: `${f.miniTitle}px` }}>↑ {parent!.label}</span>
+            </button>
       )}
 
 
