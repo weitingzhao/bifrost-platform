@@ -15,6 +15,7 @@ import (
 	// action_traced is declared by actionrecord (2026-11-17, migration 0032):
 	// link it for the same reason.
 	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actionrecord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	// home_layout_saved is declared by homelayout (2026-11-18, migration 0034): the same.
 	_ "github.com/weitingzhao/bifrost-platform/api/internal/homelayout"
@@ -44,16 +45,16 @@ func TestEventTypesAreTheDatabases(t *testing.T) {
 		t.Fatalf("the database's vocabulary %v\nis not the store's %v", db, vocabulary)
 	}
 	for _, typ := range written {
-		if !store.IsEventType(typ) {
+		if !eventlog.IsEventType(typ) {
 			t.Errorf("%s has a body but is not in the vocabulary", typ)
 		}
 	}
 	for _, typ := range []string{"task_cancelled", "host_retired", "rule_expired", "attempt_progress"} {
-		if !store.IsEventType(typ) {
+		if !eventlog.IsEventType(typ) {
 			t.Errorf("%s, in the vocabulary with no body yet, is refused", typ)
 		}
 	}
-	if store.IsEventType("not_a_type") {
+	if eventlog.IsEventType("not_a_type") {
 		t.Error("a type outside the vocabulary is accepted")
 	}
 }

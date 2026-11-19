@@ -1243,12 +1243,30 @@
       "status": "assigned",
       "basis": "2026-11-17 moved out of store (plan core wall step 5, shared notes duty/from-biz-2026-11-17-plan-core-wall.md): store's strictview.go, 30 lines relocated unchanged: the reading of a JSON document into a struct that refuses a field the struct does not name (Value, JSON) and the shape of a 40- or 64-digit digest (SHAPattern); it knows no document and no domain, imports only canon and eventlog, and is read by the plan code (which may not import store), by store's vocabulary and by store's wiring of external work, for which store keeps the old names as aliases. Placed in foundation by the business-alignment lane; the foundation domain's owner has not ruled on the placement or the name"
     },
+    "api/internal/agentrt/legacyvocab": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18 moved out of store (decoupling item 5, S4), a foundation package by the business-alignment lane: store's vocab.go declared the closed event vocabulary's types that no domain declares (the attempt, host, budget, pool, capability and CI types, 28 names the database's event_type_closed constraint still lists) and registered eventlog.RetiredRecord, the check that refuses a write to a retired stream; it imports eventlog only, holds no body and no value, and is linked by the API binary (through server) and by the tests that read or write those types; the rule types, bodies and values stayed in store with the rules; the foundation domain's owner has not ruled on the placement or the name"
+    },
     "api/internal/agentrt/planstore": {
       "domains": [
         "plan"
       ],
       "status": "assigned",
       "basis": "2026-11-17 moved out of store (plan core wall step 5, shared notes duty/from-biz-2026-11-17-plan-core-wall.md): the plan domain's data access, the same code that was store's plan files: the plan tree and its changes (proposals, the Owner's card, decisions, imports, notes), the adopted plan view with its bindings and observations, a step's facts and sign-off, and the Progress projection; it imports foundation packages (eventlog, actor, canon, artifact, seenfacts, mainhistory, migrate, strictjson, localpath) and plan packages (plan, planimport, planpace, planreadings, planview) only and does not import store; what it needs of verification, lineage, coordination, the Owner's questions and the controller's loop alerts it declares as six ports (planports.go) that store binds at start, and an unbound port refuses; store's vocabulary still declares the event types and names this package's checks; registering external work, the recorder import and the delivery reads stay in store"
+    },
+    "api/internal/agentrt/planwiring": {
+      "domains": [
+        "plan",
+        "lineage",
+        "delivery",
+        "coordination",
+        "owner"
+      ],
+      "status": "mixed",
+      "basis": "2026-11-18 moved out of store (decoupling item 5, S4; store's portsbind.go, 79 lines, unchanged in effect): the binding of the plan code's ports to their providers (the external work checks and activity reads, the plan tree, the delivery read's lineage naming, the loop alerts, the recorder import decision, the coordination alert claim, the Owner's question limits); it is wiring only, holds no rule and no query, and is mixed because it names the plan on one side and lineage, delivery, coordination and the Owner's questions on the other, as the assembly of the plan code; it is linked by server and by the tests that run the plan code, and nothing but wiring may be added to it"
     }
   }
 }

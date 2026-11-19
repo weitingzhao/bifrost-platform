@@ -106,11 +106,11 @@ func TestEventFieldValues(t *testing.T) {
 		}
 	}
 	// Through checkBody: refused as the request's error, after the kind.
-	err := checkBody("mission_state_changed", map[string]any{"from": "proposed", "to": "stuck"})
+	err := eventlog.CheckBody("mission_state_changed", map[string]any{"from": "proposed", "to": "stuck"})
 	if !errors.Is(err, eventlog.ErrInvalid) || !strings.Contains(err.Error(), `field "to" is "stuck"`) {
 		t.Fatalf("a bad state: %v", err)
 	}
-	if err = checkBody("mission_state_changed", map[string]any{"from": "proposed", "to": "active"}); err != nil {
+	if err = eventlog.CheckBody("mission_state_changed", map[string]any{"from": "proposed", "to": "active"}); err != nil {
 		t.Fatalf("a good state: %v", err)
 	}
 }
@@ -150,7 +150,7 @@ func TestEventIntegersOnly(t *testing.T) {
 	t.Parallel()
 	// The kind itself is the event log's (eventlog TestOfKindIntegersOnly);
 	// here, through a body check.
-	if err := checkBody("artifact_put", map[string]any{"artifact_id": "sha256:" + strings.Repeat("a", 64), "artifact_kind": "other", "size_bytes": 2.0, "uploaded_by": "thread:s1"}); err == nil || !strings.Contains(err.Error(), "wrong kind") {
+	if err := eventlog.CheckBody("artifact_put", map[string]any{"artifact_id": "sha256:" + strings.Repeat("a", 64), "artifact_kind": "other", "size_bytes": 2.0, "uploaded_by": "thread:s1"}); err == nil || !strings.Contains(err.Error(), "wrong kind") {
 		t.Fatalf("a whole float: %v", err)
 	}
 }
@@ -158,16 +158,16 @@ func TestEventIntegersOnly(t *testing.T) {
 func TestMetricBodiesRejectInvalid(t *testing.T) {
 	t.Parallel()
 	for _, defs := range []any{nil, "definitions", []any{map[string]any{"id": "Bad", "version": 1, "sha256": strings.Repeat("a", 64)}}, []any{map[string]any{"id": "lead_time", "version": 0, "sha256": strings.Repeat("a", 64)}}, []any{map[string]any{"id": "lead_time", "version": 1, "sha256": "bad"}}} {
-		if err := checkBody("metrics_computed", map[string]any{"source": "computed", "rows": 0, "definitions": defs}); err == nil {
+		if err := eventlog.CheckBody("metrics_computed", map[string]any{"source": "computed", "rows": 0, "definitions": defs}); err == nil {
 			t.Errorf("accepted definitions %#v", defs)
 		}
 	}
 	for _, typ := range []string{"ci_red_classified"} {
-		if err := checkBody(typ, map[string]any{}); err == nil {
+		if err := eventlog.CheckBody(typ, map[string]any{}); err == nil {
 			t.Errorf("%s has a body before wave M-b", typ)
 		}
 	}
-	if err := checkBody("metrics_computed", map[string]any{"source": "imported", "rows": 0, "definitions": []any{map[string]any{"id": "lead_time", "version": 1, "sha256": strings.Repeat("a", 64)}}}); err != nil {
+	if err := eventlog.CheckBody("metrics_computed", map[string]any{"source": "imported", "rows": 0, "definitions": []any{map[string]any{"id": "lead_time", "version": 1, "sha256": strings.Repeat("a", 64)}}}); err != nil {
 		t.Fatal(err)
 	}
 }

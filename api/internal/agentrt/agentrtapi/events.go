@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // GET /events without a stream reads across every stream (2.5 G6,
@@ -74,7 +73,7 @@ func (a *API) getRecentEvents(w http.ResponseWriter, r *http.Request) {
 	var types []string
 	if s := q.Get("types"); s != "" {
 		for _, t := range strings.Split(s, ",") {
-			if !store.IsEventType(t) {
+			if !eventlog.IsEventType(t) {
 				writeError(w, http.StatusBadRequest, "bad_request", "types names event types of the vocabulary; "+strconv.Quote(t)+" is none")
 				return
 			}

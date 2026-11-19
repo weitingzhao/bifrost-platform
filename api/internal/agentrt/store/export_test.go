@@ -14,10 +14,7 @@ import (
 // The ports as the store binds them. What the plan never asks of a port (a
 // card kind it does not ask about, a verification function of another
 // caller's, text that is not JSON) can only be seen here.
-var (
-	PlanRulePortsForTest         = planRulePorts
-	PlanExternalWorkPortsForTest = planExternalWorkPorts
-)
+var PlanRulePortsForTest = planRulePorts
 
 // SetHook installs a test hook (see hook) and returns the function that
 // removes it.
@@ -45,7 +42,7 @@ func QuestionSeenBodyForTest(id string, q seenfacts.Question) (map[string]any, e
 	if err != nil {
 		return nil, err
 	}
-	return body, checkBody("question_seen", body)
+	return body, eventlog.CheckBody("question_seen", body)
 }
 
 // SeenCopy is an approval_seen or question_seen event as the external facts

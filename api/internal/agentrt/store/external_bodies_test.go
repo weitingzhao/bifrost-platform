@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
 
@@ -18,18 +19,18 @@ func TestExternalFactsBodies(t *testing.T) {
 		t.Fatal(err)
 	}
 	for kind, b := range map[string]map[string]any{"approval_seen": a.Body(), "question_seen": qb, "pipeline_seen": p.Body()} {
-		if err := checkBody(kind, b); err != nil {
+		if err := eventlog.CheckBody(kind, b); err != nil {
 			t.Fatalf("%s: %v", kind, err)
 		}
 		b["unknown"] = "secret"
-		if checkBody(kind, b) == nil {
+		if eventlog.CheckBody(kind, b) == nil {
 			t.Fatalf("%s accepted unknown field", kind)
 		}
 		delete(b, "unknown")
 		for _, field := range []string{"created_at", "decided_at", "answered_at", "withdrawn_at", "expired_at", "started_at", "completed_at"} {
 			if old, ok := b[field]; ok {
 				b[field] = "not an instant"
-				if checkBody(kind, b) == nil {
+				if eventlog.CheckBody(kind, b) == nil {
 					t.Fatalf("%s accepted %s", kind, field)
 				}
 				b[field] = old
@@ -41,7 +42,7 @@ func TestExternalFactsBodies(t *testing.T) {
 	}
 	b := p.Body()
 	b["reason"] = "two words"
-	if checkBody("pipeline_seen", b) == nil {
+	if eventlog.CheckBody("pipeline_seen", b) == nil {
 		t.Fatal("accepted multi-word reason")
 	}
 }

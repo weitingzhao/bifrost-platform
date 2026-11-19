@@ -13,7 +13,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // binds the ports of the plan code
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planwiring" // binds the ports of the plan code
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 )
 

@@ -22,6 +22,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopalert"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planwiring"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -222,7 +223,7 @@ func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 		// The port hands on the caller's verification function, whatever it
 		// answers. 2026-11-18, TD-582: the plan's own only ever says Unknown.
 		seen := func(id string) any { return "seen " + id }
-		working, _ := store.PlanExternalWorkPortsForTest.ActivityBuckets(want, now, seen)
+		working, _ := planwiring.ExternalWorkPorts().ActivityBuckets(want, now, seen)
 		if len(working) != 1 || working[0].(map[string]any)["verification"] != "seen "+id {
 			t.Errorf("the buckets port with another verification: %v", working)
 		}
@@ -231,7 +232,7 @@ func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 	// Origin: 2026-11-18, TD-582 (inventory §2.3): the plan stopped reading the work's records with SQL of its own; each read port must answer what the lineage answers, in the caller's transaction, and the plan view must show it. A heartbeat is recorded and never listed (the 2026-10-26 finding of TestPlanViewRecentSkipsHeartbeats).
 	_, err = externalwork.PostExternalEvent(ctx, w.rt, who, id, externalwork.ExternalEvent{Key: "beat", Seq: 2, Type: "heartbeat"})
 	ok(t, err)
-	ports := store.PlanExternalWorkPortsForTest
+	ports := planwiring.ExternalWorkPorts()
 	stream := "external-work:" + id
 	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		// Origin: 2026-11-18, the plan view went from 371 to 485 ms on PROD R2 after b6c6abc2 split one read into several scans; the streams, the page and the registrants now come from one read, which must answer as the separate ports did.
@@ -447,7 +448,7 @@ func TestExternalWorkPortsAreBoundToExternalWork(t *testing.T) {
 	if notJSON == nil {
 		t.Fatal("externalwork took a description that is not JSON: the comparison below shows nothing")
 	}
-	if got := store.PlanExternalWorkPortsForTest.CheckDescription([]byte(`not json`)); errText(got) != errText(notJSON) {
+	if got := planwiring.ExternalWorkPorts().CheckDescription([]byte(`not json`)); errText(got) != errText(notJSON) {
 		t.Fatalf("the description check port on text that is not JSON: %v; externalwork: %v", got, notJSON)
 	}
 }

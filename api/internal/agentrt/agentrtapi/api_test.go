@@ -27,6 +27,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planwiring" // binds the plan code's ports (agentrt/store did, until 2026-11-18)
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
