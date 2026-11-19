@@ -19,6 +19,7 @@ package drill
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -27,6 +28,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/alerts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/opsevents"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/ownernotice"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/ownerq"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -64,6 +67,7 @@ func drills() []drill {
 	var out []drill
 	for _, c := range []struct{ id, name string }{
 		{"N06", alerts.NameHeartbeatMissing}, {"L27", alerts.NameHeartbeatMissing},
+		{"Y-1", alerts.NameApprovalClaim},
 		{"Y-3", alerts.NameLoopFailing}, {"Y-4", alerts.NameArtifactRefused},
 		{"Y-5", alerts.NameRelayUnreachable}, {"X-A24", alerts.NameWebhookFailing},
 	} {
@@ -85,6 +89,23 @@ func drills() []drill {
 		if opsevents.Valid(e.ev) {
 			out = append(out, drill{e.id, e.ev.Type, opsevents.Body(e.ev)})
 		}
+	}
+	// A question id the store never issues (it is random), with a status of its own.
+	const question = "q_d000000000000000"
+	for _, q := range []struct {
+		id string
+		q  ownerq.Question
+	}{
+		{"N02", ownerq.Question{Type: ownerq.TypeAsked, ID: question, Status: source}},
+		{"L16", ownerq.Question{Type: ownerq.TypeAnswered, ID: question, Status: source}},
+	} {
+		if ownerq.Valid(q.q) {
+			out = append(out, drill{q.id, q.q.Type, ownerq.Body(q.q)})
+		}
+	}
+	for _, id := range []string{"L17", "N04"} {
+		n := ownernotice.Notice{Type: ownernotice.TypePolicy, Subject: "drill/" + strings.ToLower(id), Change: ownernotice.ChangeExpiring}
+		out = append(out, drill{id, n.Type, ownernotice.Body(n)})
 	}
 	return out
 }

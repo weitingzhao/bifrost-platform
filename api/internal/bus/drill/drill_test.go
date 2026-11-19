@@ -62,8 +62,8 @@ func TestEveryDrillKeyOfTheRegisterHasADrillAndBack(t *testing.T) {
 			t.Errorf("%s: names a drill key but nothing is drilled", id)
 		}
 	}
-	if len(have) != 12 {
-		t.Errorf("%d drills, the register has 12 channels that never fire", len(have))
+	if len(have) != 17 {
+		t.Errorf("%d drills, the register has 17 channels without a safe natural trigger", len(have))
 	}
 }
 
@@ -71,7 +71,8 @@ func TestEveryDrillKeyOfTheRegisterHasADrillAndBack(t *testing.T) {
 // "drill", so even a reader that saw one could not take it for a problem.
 func TestDrillsAreQuietAndNamedAsDrills(t *testing.T) {
 	for _, d := range drills() {
-		if !strings.Contains(str(d.body, "subject"), "drill") {
+		// A question's id has a fixed form; the store's are random, this one is not.
+		if !strings.Contains(str(d.body, "subject"), "drill") && str(d.body, "subject") != "q_d000000000000000" {
 			t.Errorf("%s: subject %q does not say drill", d.id, str(d.body, "subject"))
 		}
 		switch d.typ {
@@ -90,6 +91,14 @@ func TestDrillsAreQuietAndNamedAsDrills(t *testing.T) {
 		case "data.job.finished":
 			if str(d.body, "change") != "succeeded" {
 				t.Errorf("%s: job %v did not succeed", d.id, d.body)
+			}
+		case "owner.question.asked", "owner.question.answered":
+			if str(d.body, "status") != "drill" {
+				t.Errorf("%s: question %v does not say drill", d.id, d.body)
+			}
+		case "release.policy.expiring":
+			if !strings.HasPrefix(str(d.body, "subject"), "drill/") {
+				t.Errorf("%s: policy %v is not a drill", d.id, d.body)
 			}
 		default:
 			t.Errorf("%s: type %s is not one the drill is allowed to write", d.id, d.typ)
