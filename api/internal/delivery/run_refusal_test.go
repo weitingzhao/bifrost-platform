@@ -730,13 +730,10 @@ func TestBuildPlacementFollowsTheProfiles(t *testing.T) {
 			s := NewService(&config.ClusterEntry{ID: "test"})
 			s.SetClientsetForTest(k8sfake.NewSimpleClientset(c.objects...))
 			s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) { return c.metrics, nil })
-			spec := map[string]any{}
-			got, placed := s.placeBuild(context.Background(), "bifrost-deliver-platform", spec)
+			task := TaskProfile{DiskHeavy: true, MaxDiskTier: 2, CPUCores: 4, MemoryBytes: 4 << 30}
+			got, placed := s.PlaceTask(context.Background(), task)
 			if !placed || got.Node != c.want || !strings.Contains(got.Why, c.why) {
 				t.Fatalf("got %+v placed=%v, want node %q and a reason with %q", got, placed, c.want, c.why)
-			}
-			if c.want == "" && len(spec) != 0 {
-				t.Fatalf("an unplaced run was pinned: %v", spec)
 			}
 		})
 	}
@@ -892,5 +889,19 @@ func TestCISpreadsOffTheSlowDiskAndKeepsOffTheExcludedNode(t *testing.T) {
 	}
 	if !slices.Contains(CITask.Exclude, "ubt-k3s-01") {
 		t.Fatal("ubt-k3s-01 is excluded")
+	}
+}
+
+// 2026-11-18: ubt-k3s-07's disk answered in 799 ms while its 7-day average said
+// 15, and builds pinned there took twice as long. The worse figure counts; a quiet
+// slow disk keeps its long one. Positive control: returning recent alone fails the
+// second check, long alone the first.
+func TestWorseLatencyTakesTheHigherAverage(t *testing.T) {
+	got := WorseLatency(map[string]float64{"a": 0.015, "b": 0.16, "c": 0.002}, map[string]float64{"a": 0.8, "b": 0.006, "c": math.NaN()})
+	if got["a"] != 0.8 {
+		t.Fatalf("just gone slow: %v", got)
+	}
+	if got["b"] != 0.16 || got["c"] != 0.002 {
+		t.Fatalf("quiet: %v", got)
 	}
 }

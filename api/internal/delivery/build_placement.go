@@ -56,20 +56,24 @@ type TaskProfile struct {
 	Exclude []string
 }
 
-// placedBuildPipelines are the pipelines whose builds are placed. Others follow
-// once this one is measured. Room is what one kaniko step may reach.
+// placedBuildPipelines are the pipelines whose builds are placed. They choose as
+// CI does (2026-11-18: pinned to the fastest disk by its 7-day figure, builds on
+// ubt-k3s-07 took 365 s against 180 while its disk answered in 799 ms).
 var placedBuildPipelines = map[string]TaskProfile{
-	"bifrost-deliver-platform": {DiskHeavy: true, MaxDiskTier: 2, CPUCores: 4, MemoryBytes: 4 << 30},
+	"bifrost-deliver-platform": CITask,
 }
 
 // UnitTask is the unit runs: never on the slow disk, where two tasks timed out
 // on 2026-11-18; they wait for a node instead, nothing depends on them.
-var UnitTask = TaskProfile{DiskHeavy: true, MaxDiskTier: 1, CPUCores: 4, MemoryBytes: 4 << 30}
+var UnitTask = TaskProfile{DiskHeavy: true, MaxDiskTier: 1, CPUCores: 4, MemoryBytes: 4 << 30, Spread: true, Exclude: []string{"ubt-k3s-01"}}
 
 // NodeMetrics is one node's measurements. All four are present or the node is
 // absent from the reader's answer.
 type NodeMetrics struct {
-	WriteLatencySeconds float64 // average over days: a quiet slow disk looks fast in a short window
+	// WriteLatencySeconds is the worse of the 7-day and the last 15 minutes'
+	// averages: a quiet slow disk looks fast in a short window, and a disk that
+	// has just gone slow looks fine in a long one.
+	WriteLatencySeconds float64
 	CPUBusy             float64 // 0 to 1, last 5 minutes
 	DiskBusy            float64 // 0 to 1, last 5 minutes
 	MemoryAvailable     float64 // 0 to 1

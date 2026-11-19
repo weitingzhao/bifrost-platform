@@ -21,7 +21,11 @@ const (
 	nodeLatencyKeep = time.Hour
 )
 
-var nodeLatencyQuery = `sum by (instance) (rate(node_disk_write_time_seconds_total{` + nodeDisk + `}[7d])) / sum by (instance) (rate(node_disk_writes_completed_total{` + nodeDisk + `}[7d]))`
+func nodeLatencyOver(window string) string {
+	return `sum by (instance) (rate(node_disk_write_time_seconds_total{` + nodeDisk + `}[` + window + `])) / sum by (instance) (rate(node_disk_writes_completed_total{` + nodeDisk + `}[` + window + `]))`
+}
+
+var nodeLatencyQuery, nodeRecentLatencyQuery = nodeLatencyOver("7d"), nodeLatencyOver("15m")
 
 // PromNodeMetrics is the last answer of nodeLatencyQuery.
 type PromNodeMetrics struct {
@@ -30,9 +34,10 @@ type PromNodeMetrics struct {
 	values map[string]float64
 }
 
-// Read reads what build placement weighs, by node address. The
-// write latency is a 7-day average: ubt-k3s-05's slow disk reads 6.6 ms while
-// it writes little, so a short window would rank it level with a fast one.
+// Read reads what build placement weighs, by node address. The write latency is
+// the worse of two averages. Seven days: ubt-k3s-05's slow disk reads 6.6 ms while
+// it writes little. Fifteen minutes: on 2026-11-18 ubt-k3s-07 answered in 799 ms
+// while its 7-day figure still said 15.
 func (c *PromNodeMetrics) Read(ctx context.Context, promql func(context.Context, string) ([]telemetry.SamplePoint, error)) (map[string]NodeMetrics, error) {
 	read := func(q string) (map[string]float64, error) {
 		points, err := promql(ctx, q)
@@ -55,7 +60,11 @@ func (c *PromNodeMetrics) Read(ctx context.Context, promql func(context.Context,
 		}
 		c.values, c.at = latency, time.Now()
 	}
-	values := []map[string]float64{c.values, nil, nil, nil}
+	recent, err := read(nodeRecentLatencyQuery)
+	if err != nil {
+		return nil, err
+	}
+	values := []map[string]float64{WorseLatency(c.values, recent), nil, nil, nil}
 	for i, q := range []string{
 		`1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))`,
 		`max by (instance) (rate(node_disk_io_time_seconds_total{` + nodeDisk + `}[5m]))`,
@@ -68,4 +77,17 @@ func (c *PromNodeMetrics) Read(ctx context.Context, promql func(context.Context,
 		values[i+1] = v
 	}
 	return JoinNodeMetrics(values[0], values[1], values[2], values[3]), nil
+}
+
+// WorseLatency is, for each node of long, the higher of its two averages. A node
+// that wrote nothing lately has no recent figure (NaN or none), and keeps long's.
+func WorseLatency(long, recent map[string]float64) map[string]float64 {
+	out := make(map[string]float64, len(long))
+	for address, l := range long {
+		if r, ok := recent[address]; ok && r == r && r > l {
+			l = r
+		}
+		out[address] = l
+	}
+	return out
 }
