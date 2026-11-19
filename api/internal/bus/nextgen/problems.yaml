@@ -55,7 +55,7 @@ problems:
   - {id: X-C14, state: deleted, events: [], to: "", owner: "ci"}
   - {id: X-C12, state: connected, events: ["topic:seat.mail.arrived"], to: "receiving seat", owner: "comm"}
   - {id: L05, state: deleted, events: [], to: "", owner: "ci"}
-  - {id: X-A29, state: connected, events: ["topic:main.regression.known"], to: "the commit's session", owner: "ci"}
+  - {id: X-A29, state: connected, drill: "drill:X-A29", events: ["topic:main.regression.known"], to: "the commit's session", owner: "ci"}
   - {id: Y-1, state: connected, drill: "drill:Y-1", what: "A text claiming the Owner's approval (ledger: policy_alert)", events: ["alert:ApprovalClaimInText"], to: "duty seat", owner: "comm"}
   - {id: Y-3, state: connected, what: "A controller loop failing the same way (ledger: controller_loop_failing)", events: ["alert:ControllerLoopFailing"], drill: "drill:Y-3", to: "duty seat", owner: "comm"}
   - {id: Y-4, state: connected, what: "A report the platform refused (ledger: artifact_refused)", events: ["alert:ArtifactRefused"], drill: "drill:Y-4", to: "duty seat", owner: "comm"}

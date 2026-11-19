@@ -89,6 +89,14 @@ func body(typ, repo, introduced string) map[string]any {
 	return map[string]any{"repo": repo, "introduced": introduced, "subject": k, "key": k, "ref": Ref(repo), "change": change}
 }
 
+// FixedBody is the body of a main.regression.fixed event, for the bus's drill.
+func FixedBody(repo, introduced, fixed string) map[string]any {
+	b := body(TypeFixed, repo, introduced)
+	b["fixed"] = fixed
+	b["by"] = "drill"
+	return b
+}
+
 // Known records a known regression as w (a known reported again for the
 // same key is recorded again; the newest one counts).
 func Known(ctx context.Context, db eventlog.DB, w actor.Writer, repo, introduced, impact string) (int64, error) {

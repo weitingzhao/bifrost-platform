@@ -62,8 +62,8 @@ func TestEveryDrillKeyOfTheRegisterHasADrillAndBack(t *testing.T) {
 			t.Errorf("%s: names a drill key but nothing is drilled", id)
 		}
 	}
-	if len(have) != 17 {
-		t.Errorf("%d drills, the register has 17 channels without a safe natural trigger", len(have))
+	if len(have) != 18 {
+		t.Errorf("%d drills, the register has 18 channels without a safe natural trigger", len(have))
 	}
 }
 
@@ -95,6 +95,10 @@ func TestDrillsAreQuietAndNamedAsDrills(t *testing.T) {
 		case "owner.question.asked", "owner.question.answered":
 			if str(d.body, "status") != "drill" {
 				t.Errorf("%s: question %v does not say drill", d.id, d.body)
+			}
+		case "main.regression.fixed":
+			if !strings.HasPrefix(str(d.body, "subject"), "drill@") {
+				t.Errorf("%s: regression %v is not a drill", d.id, d.body)
 			}
 		case "release.policy.expiring":
 			if !strings.HasPrefix(str(d.body, "subject"), "drill/") {

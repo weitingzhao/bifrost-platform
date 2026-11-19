@@ -30,6 +30,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/opsevents"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/ownernotice"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/ownerq"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/regressions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -109,6 +110,9 @@ func drills() []drill {
 		n := ownernotice.Notice{Type: ownernotice.TypePolicy, Subject: "drill/" + strings.ToLower(id), Change: ownernotice.ChangeExpiring}
 		out = append(out, drill{id, n.Type, ownernotice.Body(n)})
 	}
+	// A fix, not a report: a known regression would wake the commit's session.
+	zero := strings.Repeat("0", 40)
+	out = append(out, drill{"X-A29", regressions.TypeFixed, regressions.FixedBody("drill", zero, zero)})
 	return out
 }
 
