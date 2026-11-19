@@ -2,6 +2,7 @@ import * as Phaser from 'phaser'
 import { CH, CW } from './kit'
 import { addRoad, canPlace, cellOf, crawlerway, depthOrder, inLand, key, newPartId, partAt, placeCheck, roadMask, roadShape, strokeCells, type Crawlerway, type Doc, type PartSize, type Placed } from './builderDoc'
 import { baseTextures, kindOf, layersOf, spriteOf, spriteUrl, type Layer } from './catalog'
+import type { Reading } from './cityReadings'
 
 /**
  * The city builder's scene: the land, the roads the Owner drags, and the
@@ -17,6 +18,8 @@ export type SceneInit = {
   doc: Doc; editing: boolean; dpr: number
   nameOf: (binds: string) => string | undefined
   colorOf: (binds: string) => string | undefined
+  /** The building's real state, read; undefined when it has none. */
+  readingOf: (binds: string) => Reading | undefined
   onChange: () => void
   onSelect: (id: string | null) => void
   onPlaced: (p: Placed) => void
@@ -25,6 +28,8 @@ export type SceneInit = {
 }
 
 const INK = 0x2f2d3a, RS = 3
+/** A tag's colour by the tone of its reading. */
+const TONE = { calm: '#dcf2e2', busy: '#ffe6a8', alert: '#ffc9c2', unknown: '#e6e4ee' } as const
 const SEA = 3, SLAB = 28
 const iso = (x: number, y: number, z = 0) => ({ x: (x - y) * (CW / 2), y: (x + y) * (CH / 2) - z })
 const hash = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0 }
@@ -49,7 +54,7 @@ function poly(g: G, pts: XY[], fill: number, stroke = true) {
 type Spot = { tex: string; dx: number; dy: number }
 const SIDES = [[0, -1], [1, 0], [0, 1], [-1, 0]] as const
 
-type View = { part: Placed; sig: string; imgs: { img: Phaser.GameObjects.Image; layer: Layer }[]; tag: Phaser.GameObjects.Text }
+type View = { part: Placed; sig: string; imgs: { img: Phaser.GameObjects.Image; layer: Layer }[]; tag: Phaser.GameObjects.Text; fx: G }
 type Gesture =
   | { t: 'none' } | { t: 'pan'; x: number; y: number }
   | { t: 'stroke'; last: [number, number]; erase: boolean; x: number; y: number; started: boolean }
@@ -419,16 +424,16 @@ export class BuilderScene extends Phaser.Scene {
       const o = iso(p.x, p.y)
       if (!v) {
         const tag = this.add.text(0, 0, '', { fontFamily: 'JetBrains Mono, ui-monospace, Menlo, monospace', fontSize: `${11 * this.s.dpr}px`, color: '#2f2d3a', backgroundColor: '#fbfaf6', padding: { x: 5 * this.s.dpr, y: 3 * this.s.dpr } }).setOrigin(0.5, 1).setDepth(190001)
-        v = { part: p, sig: '', imgs: [], tag }
+        v = { part: p, sig: '', imgs: [], tag, fx: this.add.graphics() }
         this.views.set(p.id, v)
       }
       v.part = p
       if (!v.sig) { v.imgs = ls.map(layer => ({ img: this.image(layer, o.x, o.y), layer })); v.sig = sig }
       for (const { img, layer } of v.imgs) img.setPosition(o.x + layer.dx, o.y + layer.dy)
     }
-    for (const [id, v] of this.views) if (!seen.has(id)) { v.imgs.forEach(i => i.img.destroy()); v.tag.destroy(); this.views.delete(id) }
+    for (const [id, v] of this.views) if (!seen.has(id)) { v.imgs.forEach(i => i.img.destroy()); v.tag.destroy(); v.fx.destroy(); this.views.delete(id) }
     if (this.selected && !seen.has(this.selected)) this.select(null)
-    this.syncDecor(); this.drawMark(); this.relabel()
+    this.syncDecor(); this.drawMark(); this.relabel(); this.drawEffects()
   }
 
   private sortDepth() {
@@ -439,7 +444,7 @@ export class BuilderScene extends Phaser.Scene {
     depthOrder(items).forEach((it, i) => {
       const depth = 10 + i
       if (it.id.startsWith('d') && it.id.includes(',')) this.decor.get(it.id.slice(1))?.img.setDepth(depth)
-      else this.views.get(it.id)?.imgs.forEach(({ img, layer }) => img.setDepth(depth + layer.order))
+      else { const v = this.views.get(it.id); v?.imgs.forEach(({ img, layer }) => img.setDepth(depth + layer.order)); v?.fx.setDepth(depth + 0.8) }
     })
   }
 
@@ -456,9 +461,10 @@ export class BuilderScene extends Phaser.Scene {
       .map(e => ({ ...e, top: iso(e.p.x + e.p.size / 2, e.p.y + e.p.size / 2, e.k?.height ?? 60) })).sort((a, b) => a.top.y - b.top.y)
     for (const { v, k, p, top } of views) {
       const named = !!p.binds || !!k?.accepts.length
-      const name = p.binds ? this.s.nameOf(p.binds) ?? 'unknown' : 'Not assigned'
+      const r = p.binds ? this.s.readingOf(p.binds) : undefined
+      const name = (p.binds ? this.s.nameOf(p.binds) ?? 'unknown' : 'Not assigned') + (r ? ` · ${r.word}` : '')
       if (v.tag.text !== name) v.tag.setText(name)
-      v.tag.setBackgroundColor(p.binds ? '#fbfaf6' : '#ffe6a8')
+      v.tag.setBackgroundColor(!p.binds ? '#ffe6a8' : r ? TONE[r.tone] : '#fbfaf6')
       // Names need room: small on screen (a phone before it zooms in), only the selected one keeps its tag.
       const roomy = z / dpr >= 0.55 || p.id === this.selected
       v.tag.setScale(1 / z).setVisible(named && roomy && v.imgs[0]?.img.visible !== false)
@@ -479,6 +485,48 @@ export class BuilderScene extends Phaser.Scene {
       g.strokeRect(box.x, box.y, w, h)
       g.lineBetween(Phaser.Math.Clamp(top.x, box.x + 3, box.right - 3), box.bottom, top.x, top.y)
       g.fillStyle(0xe0564f, 1); g.fillCircle(top.x, top.y, 2.4 * dpr / z)
+    }
+  }
+
+  /** The readings drawn: a rocket that launches, crates at the door, workers holding signs. Only what was read. */
+  refreshReadings() { if (this.ready) { this.relabel(); this.drawEffects() } }
+
+  private drawEffects() {
+    const box = (g: G, x: number, y: number, s: number, h: number, col: number) => {
+      g.lineStyle(1.1, INK, 1)
+      poly(g, [iso(x, y + s), iso(x + s, y + s), iso(x + s, y + s, h), iso(x, y + s, h)], col)
+      poly(g, [iso(x + s, y), iso(x + s, y + s), iso(x + s, y + s, h), iso(x + s, y, h)], Phaser.Display.Color.ValueToColor(col).darken(12).color)
+      poly(g, [iso(x, y, h), iso(x + s, y, h), iso(x + s, y + s, h), iso(x, y + s, h)], Phaser.Display.Color.ValueToColor(col).lighten(10).color)
+    }
+    for (const v of this.views.values()) {
+      const g = v.fx, p = v.part, r = p.binds ? this.s.readingOf(p.binds) : undefined
+      g.clear()
+      const stack = v.imgs.find(i => i.layer.stack)
+      if (stack) stack.img.setY(iso(p.x, p.y).y + stack.layer.dy - (r?.launching ? 18 : 0))
+      if (!r || v.imgs[0]?.img.visible === false) continue
+      if (r.launching && stack) {
+        const b = iso(p.x + 1.9, p.y + 2.15, 31)
+        g.fillStyle(0xffb020, 1); g.fillTriangle(b.x - 8, b.y - 16, b.x + 8, b.y - 16, b.x, b.y + 6)
+        g.fillStyle(0xfff1b8, 1); g.fillTriangle(b.x - 4, b.y - 16, b.x + 4, b.y - 16, b.x, b.y - 2)
+        g.lineStyle(1, 0xaeb6c2, 1); g.fillStyle(0xffffff, 0.95)
+        for (const [dx, dy, rr] of [[-18, 4, 9], [16, 6, 10], [-6, 10, 11], [8, 12, 8]]) { g.fillCircle(b.x + dx, b.y + dy, rr); g.strokeCircle(b.x + dx, b.y + dy, rr) }
+      }
+      const n = Math.min(r.count ?? 0, 6)
+      if (p.kind === 'assembly' && n > 0) {
+        for (let k = 0; k < n; k++) box(g, p.x + 1.15 + (k % 2) * 0.55, p.y + p.size + 0.25 + Math.floor(k / 2) * 0.55, 0.42, 14, r.tone === 'alert' ? 0xef7d6d : 0xd9a673)
+      }
+      if (p.kind === 'control' && n > 0) {
+        for (let k = 0; k < Math.min(n, 4); k++) {
+          const c = iso(p.x + 0.7 + k * 0.85, p.y + p.size + 0.45)
+          g.fillStyle(0x5a5880, 0.16); g.fillEllipse(c.x, c.y, 14, 6)
+          g.fillStyle([0xff8a5c, 0x5aa9ff, 0x9b7cf0, 0x41c7c7][k], 1); g.lineStyle(1, INK, 1)
+          g.fillRoundedRect(c.x - 6, c.y - 16, 12, 16, { tl: 6, tr: 6, bl: 2, br: 2 }); g.strokeRoundedRect(c.x - 6, c.y - 16, 12, 16, { tl: 6, tr: 6, bl: 2, br: 2 })
+          g.fillStyle(0xffffff, 1); g.fillCircle(c.x - 2.5, c.y - 10, 1.8); g.fillCircle(c.x + 2.5, c.y - 10, 1.8)
+          g.lineBetween(c.x + 6, c.y - 8, c.x + 9, c.y - 30)
+          g.fillStyle(0xfffbe8, 1); g.fillRect(c.x + 3, c.y - 42, 13, 12); g.strokeRect(c.x + 3, c.y - 42, 13, 12)
+          g.fillStyle(0xe0564f, 1); g.fillRect(c.x + 8.6, c.y - 40, 1.8, 5.5); g.fillCircle(c.x + 9.5, c.y - 32.6, 1)
+        }
+      }
     }
   }
 

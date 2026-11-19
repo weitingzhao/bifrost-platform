@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import { emptyDoc, expand, fromTiled, LAND_MAX, toTiled, type Doc, type Placed } from './builderDoc'
 import { accepts, CATALOG, kindOf, showcaseLayers, spriteOf, spriteUrl, type CatalogKind, type SystemItem } from './catalog'
 import type { Armed, BuilderScene, Tool } from './builderScene'
+import type { Reading } from './cityReadings'
+import { DICTIONARY, DICTIONARY_VERSION } from './worldDictionary'
 import { LAYOUT_FILE, layoutFileText, parseLayoutFile, type LayoutStore } from './layoutStore'
 
 /**
@@ -28,6 +30,10 @@ const CSS = `
 .cb-btn{min-height:44px;min-width:44px;padding:0 12px;border:1.5px solid ${INK};background:${PAPER}}
 .cb-btn[aria-pressed=true]{background:${INK};color:${PAPER}}
 .cb-btn.go{background:${HOT}}.cb-btn:disabled{opacity:.45;cursor:default}
+.cb-glance{display:inline-flex;align-items:center;min-height:32px;padding:0 10px;border:1.5px solid ${INK};color:${INK};text-decoration:none;font-weight:700}
+.cb-sheet{position:absolute;left:10px;bottom:10px;width:min(340px,calc(100% - 20px));background:${PAPER};border:1.5px solid ${INK};padding:10px;z-index:4}
+.cb-sheet h3{margin:0 0 6px;font-size:13px}.cb-sheet p{margin:0 0 4px}.cb-src{color:${MUTED};font-size:10.5px}
+.cb-dict summary{cursor:pointer;min-height:32px;display:flex;align-items:center}.cb-dict dl{margin:4px 0 0}.cb-dict dt{font-weight:700;margin-top:6px}.cb-dict dd{margin:0 0 2px}
 .cb-state{padding:0 6px;background:${PAPER};border:1px solid ${LINE};line-height:24px}
 .cb-side{display:flex;flex-direction:column;gap:12px;min-height:0;overflow:auto}
 .cb-card{background:${PAPER};border:1.5px solid ${INK};padding:10px}
@@ -62,8 +68,19 @@ function Thumb({ kind, box = 112 }: { kind: string; box?: number }) {
   return <div className="cb-thumb" style={{ width: box, height: H }}>{ls.map((i, n) => <img key={n} alt="" draggable={false} src={spriteUrl(i.s)} width={i.s.width * k} height={i.s.height * k} style={{ left: (i.left - x0) * k + (box - w * k) / 2, top: (i.top - y0) * k + (H - h * k) }} />)}</div>
 }
 
-export default function CityBuilder({ items, store, startEditing = false, canBuild = true, initial, onOpen }: {
+export type CityReading = Reading & { source: string }
+export type Glance = { text: string; tone: Reading['tone']; href?: string }
+
+const TONE_BG: Record<Reading['tone'], string> = { calm: '#dcf2e2', busy: '#ffe6a8', alert: '#ffc9c2', unknown: '#e6e4ee' }
+
+export default function CityBuilder({ items, store, startEditing = false, canBuild = true, initial, onOpen, readingOf, readingsKey = '', glance = [] }: {
   items: readonly SystemItem[]; store: LayoutStore; startEditing?: boolean
+  /** The real state of what a building stands for, and where it was read. */
+  readingOf?: (binds: string) => CityReading | undefined
+  /** Changes whenever the readings do. */
+  readingsKey?: string
+  /** One line each for the questions a look should answer. */
+  glance?: readonly Glance[]
   /** Whether this viewer may build; without it the city is only looked at. */
   canBuild?: boolean
   /** The arrangement shown until one has been saved. */
@@ -82,6 +99,9 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
   // The names and colours arrive after the city is drawn: draw its tags and rockets again when they do.
   useEffect(() => { scene.current?.refresh() }, [byBinds])
   const openRef = useRef(onOpen); openRef.current = onOpen
+  const readRef = useRef(readingOf); readRef.current = readingOf
+  const [info, setInfo] = useState<Placed | null>(null)
+  useEffect(() => { scene.current?.refreshReadings() }, [readingsKey])
   const side = useRef<HTMLDivElement>(null), picker = useRef<HTMLInputElement>(null)
   const [importError, setImportError] = useState(false)
   useEffect(() => { if (selected) side.current?.scrollTo({ top: 0 }) }, [selected])
@@ -106,7 +126,8 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
         onChange: touch,
         onSelect: (id: string | null) => { setSelected(id); if (id) setTab('selected') },
         onPlaced: () => { setArmedS(null); setPendingBind(null); setToolS('select') },
-        onOpen: (p: Placed) => openRef.current?.(itemsRef.current.get(p.binds), p),
+        readingOf: (b: string) => readRef.current?.(b),
+        onOpen: (p: Placed) => setInfo(p),
         onReady: () => { scene.current = g.scene.getScene('builder') as BuilderScene; touch() },
       })
       ro = new ResizeObserver(() => { if (el.clientWidth && el.clientHeight) g.scale.resize(el.clientWidth * dpr, el.clientHeight * dpr) })
@@ -201,7 +222,10 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
             {(['select', 'road', 'erase'] as const).map(t => <button key={t} className="cb-btn" aria-pressed={tool === t && !armed} onClick={() => setTool(t)}>{t === 'select' ? 'Move' : t === 'road' ? 'Road' : 'Erase'}</button>)}
             <button className="cb-btn" onClick={grow} disabled={d.width >= LAND_MAX}>Land +</button>
             <span className="cb-state">{d.width}×{d.height}</span>
-          </> : canBuild ? <button className="cb-btn go" onClick={() => toggleEdit(true)}>Build</button> : null}
+          </> : <>
+            {canBuild && <button className="cb-btn go" onClick={() => toggleEdit(true)}>Build</button>}
+            {glance.map(g => <a key={g.text} className="cb-glance" href={g.href} style={{ background: TONE_BG[g.tone] }}>{g.text}</a>)}
+          </>}
         </div>
         <div className="cb-bar cb-tr">
           {editing && <button className="cb-btn go" onClick={() => void save()} disabled={!dirty}>{saveError ? 'Retry' : dirty ? 'Save' : 'Saved'}</button>}
@@ -209,6 +233,19 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
           {editing && saveError && <span className="cb-state" role="alert">{saveError}</span>}
           <button className="cb-btn" aria-label="Help" aria-expanded={help} onClick={() => setHelp(h => !h)}>?</button>
         </div>
+        {info && !editing && (() => {
+          const it = byBinds.get(info.binds), r = info.binds ? readingOf?.(info.binds) : undefined
+          return <div className="cb-sheet" role="dialog" aria-label="Building">
+            <h3>{info.binds ? it?.name ?? 'unknown' : 'Not assigned'} <span className="cb-src">{kindOf(info.kind)?.name}</span></h3>
+            {r && <p><b style={{ background: TONE_BG[r.tone], padding: '0 4px' }}>{r.word}</b></p>}
+            {r?.lines.map(l => <p key={l}>{l}</p>)}
+            {r && <p className="cb-src">{r.source}</p>}
+            <div className="cb-row">
+              {it?.page && <a className="cb-btn" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', color: INK }} href={it.page} onClick={() => openRef.current?.(it, info)}>Open page</a>}
+              <button className="cb-btn" onClick={() => setInfo(null)}>Close</button>
+            </div>
+          </div>
+        })()}
         {help && <div className="cb-help">
           <p>Road: drag on the land; corners and crossings form by themselves. Erase: drag over a road.</p>
           <p>Buildings: drag one onto the land, or tap it and tap the land. Drag a placed building to move it; tap it to choose what it stands for.</p>
@@ -216,6 +253,9 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
           <p>Zoom with the wheel or two fingers; pan with a right-drag, or by dragging empty land in Move.</p>
           <p>Tap a building to open its page. Pinch or scroll to zoom.</p>
           {canBuild && <p>Export keeps the layout as a file; Import opens one.</p>}
+          <details className="cb-dict"><summary>What things mean (v{DICTIONARY_VERSION})</summary><dl>
+            {DICTIONARY.map(e => <div key={e.id}><dt>{e.metaphor}</dt><dd>{e.means}</dd><dd className="cb-src">{e.tiers.map(t => t.name).join(' · ')}</dd><dd className="cb-src">{e.source}</dd>{e.person && <dd className="cb-src">You: {e.person}</dd>}</div>)}
+          </dl></details>
           {savedAt && <p>Last saved {savedAt}.</p>}
           {importError && <p role="alert">That file is not a city layout.</p>}
           {canBuild && <div className="cb-row">

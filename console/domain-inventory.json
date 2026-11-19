@@ -2137,11 +2137,13 @@
         "console/src/domains/owner/city/builderDoc.ts",
         "console/src/domains/owner/city/builderScene.ts",
         "console/src/domains/owner/city/catalog.ts",
+        "console/src/domains/owner/city/cityReadings.ts",
         "console/src/domains/owner/city/defaultLayout.ts",
         "console/src/domains/owner/city/kit.ts",
         "console/src/domains/owner/city/landmarks.ts",
         "console/src/domains/owner/city/layoutStore.ts",
-        "console/src/domains/owner/city/platformLayoutStore.ts"
+        "console/src/domains/owner/city/platformLayoutStore.ts",
+        "console/src/domains/owner/city/worldDictionary.ts"
       ],
       "imports": [
         "console/src/api/client.ts"
@@ -4104,6 +4106,9 @@
       ],
       "imports": [
         "console/src/api",
+        "console/src/api/approvals.ts",
+        "console/src/api/client.ts",
+        "console/src/api/questions.ts",
         "console/src/domains/delivery/api",
         "console/src/domains/owner/city",
         "console/src/hooks/usePlatformAuth.ts",

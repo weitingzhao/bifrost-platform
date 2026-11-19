@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { plannedCity } from '../defaultLayout'
+import { ciReading, padReading, waitingReading, type ReleaseContext } from '../cityReadings'
+import { DICTIONARY, steady } from '../worldDictionary'
 import { addRoad, canPlace, crawlerway, depthOrder, emptyDoc, expand, fromTiled, key, placeCheck, roadMask, roadShape, strokeCells, toTiled, type Doc, type Placed } from '../builderDoc'
 import { accepts, CATALOG, displayName, kindOf, laneName, layersOf, systemItems } from '../catalog'
 import { browserLayoutStore, layoutFileText, parseLayoutFile } from '../layoutStore'
@@ -200,5 +202,42 @@ describe('the planned city', () => {
     const way = crawlerway(d)
     for (const p of d.parts.filter(q => q.kind === 'pad' || q.kind === 'assembly')) expect(way.served.has(p.id)).toBe(true)
     expect(fromTiled(toTiled(d))!.parts).toHaveLength(d.parts.length)
+  })
+})
+
+// Origin: 2026-11-18, the Owner via the coordinator (charter 10 step 3): a look at the city answers what launches, where work queues and what waits for him; a read that fails is unknown, never green.
+describe('the three real states', () => {
+  const lane = { binds: 'lane:bifrost-deliver-platform-prod', name: 'Platform PROD', group: 'Release lanes' as const, type: 'lane' as const }
+  const ctx = (runs: unknown[] | null, held = false): ReleaseContext => ({ repo: 'bifrost-platform', facts: {
+    runs_in_flight: { value: runs as never }, window: { value: { held, who: 'w', what: 'bifrost-platform,bifrost-ui' } },
+    prod: { value: { commit: 'abcdef1234', run: 'r', completed_at: '2026-11-18T10:00:00Z' } },
+  } })
+  const now = Date.parse('2026-11-18T12:00:00Z')
+  it('a pad launches only while its own delivery run is in flight', () => {
+    const m = (c: ReleaseContext | null) => new Map(c ? [['bifrost-platform', c]] : [])
+    expect(padReading(lane, m(ctx([{ name: 'x', pipeline: 'bifrost-deliver-platform-prod', delivery: true }])), ['bifrost-platform'], now).word).toBe('launching')
+    expect(padReading(lane, m(ctx([{ name: 'y', pipeline: 'bifrost-deliver-platform', delivery: true }], true)), ['bifrost-platform'], now).word).toBe('window held')
+    expect(padReading(lane, m(ctx([])), ['bifrost-platform'], now)).toMatchObject({ word: 'quiet', tone: 'calm' })
+    expect(padReading(lane, m(null), ['bifrost-platform'], now).tone).toBe('unknown')
+  })
+  it('CI crates count the CI and landing runs, and an unread context is unknown', () => {
+    const c = ctx([{ name: 'a', pipeline: 'bifrost-ci-platform' }, { name: 'b', pipeline: 'bifrost-land' }, { name: 'c', pipeline: 'bifrost-deliver-platform', delivery: true }])
+    expect(ciReading(new Map([['p', c]]))).toMatchObject({ word: 'busy', count: 2 })
+    expect(ciReading(new Map([['p', c], ['t', null]])).tone).toBe('unknown')
+    expect(ciReading(new Map([['p', ctx([])]])).word).toBe('clear')
+  })
+  it('what waits for the Owner is requests plus questions, unknown when either is unread', () => {
+    expect(waitingReading(1, 2)).toMatchObject({ count: 3, tone: 'busy' })
+    expect(waitingReading(0, 0).tone).toBe('calm')
+    expect(waitingReading(null, 0).tone).toBe('unknown')
+  })
+  it('a tier changes only after two reads agree', () => {
+    let s = steady<string | undefined>(undefined, undefined, 'quiet')
+    s = steady(s.shown, s.pending, 'launching'); expect(s.shown).toBe('quiet')
+    s = steady(s.shown, s.pending, 'launching'); expect(s.shown).toBe('launching')
+  })
+  it('every dictionary entry says what it means, its tiers (at most four for a state) and its source', () => {
+    for (const e of DICTIONARY) { expect(e.means && e.source).toBeTruthy(); expect(e.tiers.length).toBeGreaterThan(0); expect(e.tiers.length).toBeLessThanOrEqual(4) }
+    expect(new Set(DICTIONARY.map(e => e.metaphor)).size).toBe(DICTIONARY.length)
   })
 })
