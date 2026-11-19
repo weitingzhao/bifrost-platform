@@ -20,6 +20,8 @@ export interface LiveRefreshRow {
   types: string[]
   /** Query key prefixes made stale: ['approvals'] is every query whose key starts with 'approvals'. */
   keys: QueryKey[]
+  /** How long a burst of these settles before the refresh; LIVE_SETTLE_MS when absent. */
+  settleMs?: number
 }
 
 export const LIVE_REFRESH: LiveRefreshRow[] = [
@@ -32,7 +34,10 @@ export const LIVE_REFRESH: LiveRefreshRow[] = [
   { types: ['ci.run.', 'ci.verdict.changed'], keys: [['delivery', 'runs'], ['delivery', 'pipelines'], ['ci']] },
   { types: ['release.deploy.finished', 'release.gitops.changed'], keys: [['releases'], ['gitops']] },
   { types: ['alert.rule.fired'], keys: [['telemetry', 'alerts']] },
-  { types: ['audit.action.recorded'], keys: [['records'], ['audit']] },
+  // Recorded actions come often (release window holds alone: 393 in two days), so
+  // they settle for 30 s: PROD 18:15-18:45Z read /records 82 times in 30 minutes
+  // against 32 when it polled every 60 s (Prometheus, 2026-11-19).
+  { types: ['audit.action.recorded'], keys: [['records'], ['audit']], settleMs: 30_000 },
   { types: ['plan.tree.changed'], keys: [['agent-runtime-plan'], ['agent-runtime-plan-view'], ['agent-runtime-progress']] },
 ]
 
@@ -54,6 +59,17 @@ export function keysFor(type: string): QueryKey[] {
   const out: QueryKey[] = []
   for (const row of LIVE_REFRESH) {
     if (row.types.some(p => matches(p, type))) out.push(...row.keys)
+  }
+  return out
+}
+
+/** The keys an event makes stale, each with how long it settles. */
+export function staleFor(type: string): { key: QueryKey; settleMs: number }[] {
+  const out: { key: QueryKey; settleMs: number }[] = []
+  for (const row of LIVE_REFRESH) {
+    if (row.types.some(p => matches(p, type))) {
+      for (const key of row.keys) out.push({ key, settleMs: row.settleMs ?? LIVE_SETTLE_MS })
+    }
   }
   return out
 }
@@ -91,31 +107,37 @@ export function useLiveInterval(ownMs: number): number {
 
 // --- the stream ----------------------------------------------------------------
 
-/** Collects stale keys and refreshes them once the burst settles. */
+/** Collects stale keys and refreshes each once its burst settles (a key's own settle, from its row). */
 export class RefreshBatch {
-  private pending = new Map<string, QueryKey>()
-  private timer: ReturnType<typeof setTimeout> | undefined
+  private pending = new Map<string, { key: QueryKey; timer: ReturnType<typeof setTimeout> }>()
 
   constructor(private readonly refresh: (key: QueryKey) => void, private readonly settleMs = LIVE_SETTLE_MS) {}
 
   add(type: string): void {
-    for (const key of keysFor(type)) this.pending.set(JSON.stringify(key), key)
-    if (this.pending.size > 0 && this.timer === undefined) {
-      this.timer = setTimeout(() => this.flush(), this.settleMs)
+    for (const { key, settleMs } of staleFor(type)) {
+      const id = JSON.stringify(key)
+      if (this.pending.has(id)) continue
+      const wait = settleMs === LIVE_SETTLE_MS ? this.settleMs : settleMs
+      this.pending.set(id, { key, timer: setTimeout(() => this.fire(id), wait) })
     }
   }
 
+  private fire(id: string): void {
+    const p = this.pending.get(id)
+    if (p === undefined) return
+    this.pending.delete(id)
+    this.refresh(p.key)
+  }
+
   flush(): void {
-    if (this.timer !== undefined) clearTimeout(this.timer)
-    this.timer = undefined
-    const keys = [...this.pending.values()]
-    this.pending.clear()
-    for (const key of keys) this.refresh(key)
+    for (const id of [...this.pending.keys()]) {
+      clearTimeout(this.pending.get(id)!.timer)
+      this.fire(id)
+    }
   }
 
   stop(): void {
-    if (this.timer !== undefined) clearTimeout(this.timer)
-    this.timer = undefined
+    for (const p of this.pending.values()) clearTimeout(p.timer)
     this.pending.clear()
   }
 }

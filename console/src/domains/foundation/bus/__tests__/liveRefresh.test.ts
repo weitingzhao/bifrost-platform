@@ -63,4 +63,23 @@ describe('refresh batch', () => {
     vi.advanceTimersByTime(5_000)
     expect(done).toEqual([])
   })
+
+  // 2026-11-19, PROD Prometheus 18:15-18:45Z: /records was read 82 times in 30
+  // minutes by refreshes on audit.action.recorded, 32 when it polled every 60 s.
+  // Those settle for 30 s: a burst of recorded actions is one refresh.
+  it('lets recorded actions settle for half a minute', () => {
+    vi.useFakeTimers()
+    const done: QueryKey[] = []
+    const b = new RefreshBatch(k => done.push(k), 1_000)
+    for (let i = 0; i < 10; i++) {
+      b.add('audit.action.recorded')
+      vi.advanceTimersByTime(2_000)
+    }
+    expect(done).toEqual([])
+    vi.advanceTimersByTime(10_000)
+    expect(done).toEqual([['records'], ['audit']])
+    b.add('approval.card.created') // positive control: other rows keep their second
+    vi.advanceTimersByTime(1_000)
+    expect(done.slice(2)).toEqual([['approvals'], ['cockpit'], ['agent-runtime-progress']])
+  })
 })
