@@ -864,6 +864,27 @@ func TestPublishCINodeWritesTheChoiceWhenItChanges(t *testing.T) {
 	}
 }
 
+// 2026-11-19, the compute line: ubt-k3s-02 has no memory for the test database a CI
+// run now keeps in memory, so runs leave it even when it is the quietest. A build
+// holds no such database and may still go there. Positive control: the same nodes
+// under CITask choose 02.
+func TestACIRunStaysOffTheNodeWithoutMemoryToSpare(t *testing.T) {
+	s := NewService(&config.ClusterEntry{ID: "test"})
+	s.SetClientsetForTest(k8sfake.NewSimpleClientset(placementNode("ubt-k3s-02", true, false, "16"), placementNode("ubt-k3s-04", true, false, "16")))
+	s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) {
+		return map[string]NodeMetrics{
+			"ip-ubt-k3s-02": {WriteLatencySeconds: 0.001, CPUBusy: 0.05, DiskBusy: 0.05, MemoryAvailable: 0.6},
+			"ip-ubt-k3s-04": {WriteLatencySeconds: 0.001, CPUBusy: 0.5, DiskBusy: 0.1, MemoryAvailable: 0.6},
+		}, nil
+	})
+	if p, _ := s.placeTask(context.Background(), CIRunTask, ""); p.Node != "ubt-k3s-04" {
+		t.Fatalf("run: %+v", p)
+	}
+	if p, _ := s.placeTask(context.Background(), CITask, ""); p.Node != "ubt-k3s-02" {
+		t.Fatalf("build: %+v", p)
+	}
+}
+
 // 2026-11-18, the compute line's reading after CI moved: one preferred node sent
 // 52% of CI pods to the slow disk while 02 and 04 idled. CI takes the least loaded
 // node off the slow disk, stays put within the margin, and never takes ubt-k3s-01.

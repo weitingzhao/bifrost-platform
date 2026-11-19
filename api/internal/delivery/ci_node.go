@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,6 +32,16 @@ var triggerBindingGVR = schema.GroupVersionResource{Group: "triggers.tekton.dev"
 // CITask is a CI run: the least loaded node off the slow disk, the slow disk
 // rather than waiting, and never ubt-k3s-01, whose etcd slowed under CI.
 var CITask = TaskProfile{DiskHeavy: true, MaxDiskTier: 2, CPUCores: 4, MemoryBytes: 4 << 30, Spread: true, Exclude: []string{"ubt-k3s-01"}}
+
+// CIRunTask is a whole CI run as the trigger starts it: CITask, and not on
+// ubt-k3s-02 either. Its test database lives in memory (2026-11-19), and 02, the
+// database primary with 15 GiB, has none to spare: 7.46 GiB at its lowest in seven
+// days against a 6 GiB floor (the compute line's figures).
+var CIRunTask = func() TaskProfile {
+	t := CITask
+	t.Exclude = append(slices.Clone(CITask.Exclude), "ubt-k3s-02")
+	return t
+}()
 
 func ciNodeParams(p BuildPlacement) map[string]string {
 	out := map[string]string{"ciNodeKey": hostIDLabel, "ciNodeValue": p.Node, "ciNode": p.Node, "ciNodeWhy": p.Why}
@@ -62,7 +73,7 @@ func (s *Service) PublishCINode(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", ciNodeBinding, err)
 	}
-	p, _ := s.placeTask(ctx, CITask, boundParam(current.Object, "ciNode"))
+	p, _ := s.placeTask(ctx, CIRunTask, boundParam(current.Object, "ciNode"))
 	want := ciNodeParams(p)
 	if boundParam(current.Object, "ciNode") == want["ciNode"] {
 		return nil
