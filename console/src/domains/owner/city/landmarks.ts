@@ -23,52 +23,17 @@ function lot(g: Draw, n: number, fill = '#ebe7dc') {
   top(g, 0.05, 0.05, n - 0.05, n - 0.05, 0, fill, 0.9, '#b5ae9e')
 }
 
-function bush(g: Draw, x: number, y: number, r = 7, tone = 0) {
-  const [cx, cy] = g.p(x, y, 0)
-  const c = tone % 2 ? '#7fbb76' : '#93c987'
-  g.add(`<ellipse cx="${n1(cx + 2)}" cy="${n1(cy + 1)}" rx="${r + 2}" ry="${(r + 2) / 2.4}" fill="#5a5880" opacity="0.13"/>`)
-  g.add(`<circle cx="${n1(cx)}" cy="${n1(cy - r * 0.7)}" r="${r}" fill="${c}" stroke="${INK}" stroke-width="1.3"/>`)
-  g.add(`<path d="M${n1(cx - r * 0.45)},${n1(cy - r * 0.95)} q${n1(r * 0.3)},${n1(-r * 0.45)} ${n1(r * 0.75)},${n1(-r * 0.3)}" fill="none" stroke="#d6efc9" stroke-width="1.4" stroke-linecap="round"/>`)
-}
+/* Plants, as lawns and shrubs, stood for nothing (the Owner, 2026-11-19): every building leaves them out. */
+function bush(_g: Draw, _x: number, _y: number, _r = 7, _tone = 0) { /* nothing on the land without a meaning */ }
+function tree(_g: Draw, _x: number, _y: number, _s = 1, _tone = 0) { /* nothing on the land without a meaning */ }
 
-function tree(g: Draw, x: number, y: number, s = 1, tone = 0) {
-  const [cx, cy] = g.p(x, y, 0)
-  const c = tone % 2 ? '#79b56f' : '#8fc584'
-  g.add(`<ellipse cx="${n1(cx + 3)}" cy="${n1(cy + 1)}" rx="${11 * s}" ry="${4.5 * s}" fill="#5a5880" opacity="0.14"/>`)
-  g.add(`<rect x="${n1(cx - 1.8 * s)}" y="${n1(cy - 13 * s)}" width="${3.6 * s}" height="${13 * s}" fill="#a57a58" stroke="${INK}" stroke-width="1"/>`)
-  g.add(`<circle cx="${n1(cx)}" cy="${n1(cy - 20 * s)}" r="${10 * s}" fill="${c}" stroke="${INK}" stroke-width="1.4"/>`)
-  g.add(`<circle cx="${n1(cx - 5 * s)}" cy="${n1(cy - 15 * s)}" r="${5.5 * s}" fill="${c}" stroke="${INK}" stroke-width="1.2"/>`)
-  g.add(`<circle cx="${n1(cx - 1 * s)}" cy="${n1(cy - 19 * s)}" r="${8.6 * s}" fill="${c}"/>`)
-  g.add(`<path d="M${n1(cx - 5 * s)},${n1(cy - 24 * s)} q${n1(4 * s)},${n1(-5 * s)} ${n1(9 * s)},${n1(-2 * s)}" fill="none" stroke="#d6efc9" stroke-width="1.5" stroke-linecap="round"/>`)
-}
-
-/** A mast with red and white bands and a light on top, at grid (x, y) from z0 to z1. */
-function mast(g: Draw, x: number, y: number, z0: number, z1: number, w = 3) {
-  const [cx, cy0] = g.p(x, y, z0), [, cy1] = g.p(x, y, z1)
-  const seg = 9
-  for (let yy = cy0, i = 0; yy > cy1; yy -= seg, i++) {
-    const h = Math.min(seg, yy - cy1)
-    g.add(`<rect x="${n1(cx - w / 2)}" y="${n1(yy - h)}" width="${w}" height="${n1(h)}" fill="${i % 2 ? '#ffffff' : '#e0564f'}" stroke="${INK}" stroke-width="0.8"/>`)
-  }
-  g.add(`<circle cx="${n1(cx)}" cy="${n1(cy1 - 3)}" r="3" fill="#ff5a5f" stroke="${INK}" stroke-width="0.9"/>`)
-}
+function mast(_g: Draw, _x: number, _y: number, _z0: number, _z1: number, _w = 3) { /* 2026-11-19: masts, dishes and floodlights stood for nothing */ }
 
 /** A floodlight mast. */
-function floodlight(g: Draw, x: number, y: number, z0: number, h: number) {
-  const [cx, cy] = g.p(x, y, z0)
-  g.add(`<line x1="${n1(cx)}" y1="${n1(cy)}" x2="${n1(cx)}" y2="${n1(cy - h)}" stroke="${INK}" stroke-width="1.8"/>`)
-  g.add(`<rect x="${n1(cx - 7)}" y="${n1(cy - h - 7)}" width="14" height="7" rx="1" fill="#fff1b8" stroke="${INK}" stroke-width="1"/>`)
-  g.add(`<path d="M${n1(cx - 2.3)},${n1(cy - h - 7)} v7 M${n1(cx + 2.3)},${n1(cy - h - 7)} v7" stroke="${INK}" stroke-width="0.6"/>`)
-}
+function floodlight(_g: Draw, _x: number, _y: number, _z0: number, _h: number) { /* 2026-11-19: masts, dishes and floodlights stood for nothing */ }
 
 /** A dish aerial on a short pedestal standing at grid (x, y, z); r is its long radius. */
-function dish(g: Draw, x: number, y: number, z: number, r: number) {
-  const [cx, cy] = g.p(x, y, z)
-  const dx = cx - r * 0.15, dy = cy - r * 0.95
-  g.add(`<path d="M${n1(cx - 3)},${n1(cy)} L${n1(cx - 1.5)},${n1(cy - r * 0.5)} h3 L${n1(cx + 3)},${n1(cy)} Z" fill="#aab2c0" stroke="${INK}" stroke-width="1"/>`)
-  g.add(`<g transform="rotate(-28 ${n1(dx)} ${n1(dy)})"><ellipse cx="${n1(dx)}" cy="${n1(dy)}" rx="${r}" ry="${n1(r * 0.55)}" fill="#f6f8fb" stroke="${INK}" stroke-width="${STROKE}"/><ellipse cx="${n1(dx + 1)}" cy="${n1(dy + 1)}" rx="${n1(r * 0.68)}" ry="${n1(r * 0.34)}" fill="#dde4ee" stroke="#9aa6b6" stroke-width="0.7"/></g>`)
-  g.add(`<line x1="${n1(dx)}" y1="${n1(dy)}" x2="${n1(dx + r * 0.5)}" y2="${n1(dy - r * 0.8)}" stroke="${INK}" stroke-width="1.1"/><circle cx="${n1(dx + r * 0.5)}" cy="${n1(dy - r * 0.8)}" r="2" fill="#ffb020" stroke="${INK}" stroke-width="0.8"/>`)
-}
+function dish(_g: Draw, _x: number, _y: number, _z: number, _r: number) { /* 2026-11-19: masts, dishes and floodlights stood for nothing */ }
 
 /* ------------------------------------------------------------------ */
 /* The assembly building (CI: where the rocket is built).              */
@@ -236,15 +201,7 @@ export function missionControl(): Sprite {
   top(g, 1.74, ly1, 2.26, ly1 + 0.14, 0.4, '#f6f2e8', 0.8)
   top(g, 1.7, ly1 + 0.14, 2.3, ly1 + 0.3, 0.2, '#f6f2e8', 0.8)
 
-  // The lawn: two flags, the countdown board (blank: nothing here is a reading), shrubs.
-  for (const [fx, fy, col] of [[0.62, 3.25, '#e0564f'], [0.95, 3.5, '#4f86d6']] as const) {
-    const [px, py] = g.p(fx, fy, 0)
-    g.add(`<line x1="${n1(px)}" y1="${n1(py)}" x2="${n1(px)}" y2="${n1(py - 46)}" stroke="${INK}" stroke-width="1.3"/><path d="M${n1(px)},${n1(py - 46)} q5,-3 9,0 t9,0 v9 q-4,-3 -9,0 t-9,0 Z" fill="${col}" stroke="${INK}" stroke-width="0.9"/><circle cx="${n1(px)}" cy="${n1(py - 47.5)}" r="1.6" fill="#f2b234" stroke="${INK}" stroke-width="0.6"/>`)
-  }
-  g.line([3.02, 3.42, 0], [3.02, 3.42, 9], INK, 1.3)
-  g.line([3.72, 3.42, 0], [3.72, 3.42, 9], INK, 1.3)
-  g.box(2.95, 3.38, 0.84, 0.08, 15, faces('#3b4252', '#2f3542', '#252a35'), 8, 1.1)
-  g.face('left', 2.95, 3.46, 8, `<rect x="4" y="-9" width="4.5" height="2.2" fill="#ffb020"/><rect x="10" y="-9" width="4.5" height="2.2" fill="#ffb020"/><circle cx="16.4" cy="-9.6" r="0.8" fill="#ffb020"/><circle cx="16.4" cy="-6.6" r="0.8" fill="#ffb020"/><rect x="18.6" y="-9" width="4.5" height="2.2" fill="#ffb020"/><rect x="24.6" y="-9" width="4.5" height="2.2" fill="#ffb020"/>`)
+  // The lawn: bare (2026-11-19: the flags and the blank countdown board stood for nothing).
   bush(g, 0.32, 2.85, 7)
   bush(g, 1.05, 2.85, 6, 1)
   bush(g, 3.0, 2.82, 6)
@@ -284,32 +241,24 @@ export function dormitory(tone = 0): Sprite {
       f += `<line x1="${n1(u + 5.5)}" y1="${base - 13}" x2="${n1(u + 5.5)}" y2="${base - 2.5}" stroke="${INK}" stroke-width="0.5"/><rect x="${n1(u - 1)}" y="${base - 2.5}" width="13" height="1.6" fill="#ffffff" stroke="${INK}" stroke-width="0.6"/>`
     }
   }
-  // The ground floor: door, shop window, letter box.
+  // The ground floor: door, shop window.
   f += `<rect x="22" y="-15" width="11" height="15" rx="1" fill="#3fa7a0" stroke="${INK}" stroke-width="1"/><rect x="24.4" y="-12.6" width="6.2" height="5" fill="#cfeaff" stroke="${INK}" stroke-width="0.6"/><circle cx="31" cy="-6" r="0.8" fill="#ffd76a"/>`
   f += `<rect x="37" y="-14" width="14" height="9.5" fill="#cfeaff" stroke="${INK}" stroke-width="0.9"/><line x1="44" y1="-14" x2="44" y2="-4.5" stroke="${INK}" stroke-width="0.5"/>`
-  f += `<rect x="7" y="-11" width="7" height="5.5" rx="1" fill="#e0564f" stroke="${INK}" stroke-width="0.8"/><line x1="8.4" y1="-8.8" x2="12.6" y2="-8.8" stroke="${INK}" stroke-width="0.7"/><line x1="10.5" y1="-5.5" x2="10.5" y2="0" stroke="${INK}" stroke-width="1"/>`
   g.face('left', x0, y1, 0, f)
-  // Balconies on the first and third floors, a plant on each; washing on the second.
+  // Balconies on the first and third floors.
   for (const [fl, a, b] of [[0, 0.3, 1.2], [2, 0.78, 1.68]] as const) {
     const z = g0 + fl * fh + 1.5
     g.poly('#fbf8f2', [[a, y1, z], [b, y1, z], [b, y1 + 0.17, z], [a, y1 + 0.17, z]], 0.9)
     g.poly('#ffffff', [[a, y1 + 0.17, z], [b, y1 + 0.17, z], [b, y1 + 0.17, z + 6.5], [a, y1 + 0.17, z + 6.5]], 0.9)
     for (let k = a + 0.11; k < b - 0.02; k += 0.11) g.line([k, y1 + 0.17, z], [k, y1 + 0.17, z + 6.5], INK, 0.5)
     g.poly('#f3ede2', [[b, y1, z], [b, y1 + 0.17, z], [b, y1 + 0.17, z + 6.5], [b, y1, z + 6.5]], 0.9)
-    const [px, py] = g.p(b - 0.1, y1 + 0.09, z + 6.5)
-    g.add(`<circle cx="${n1(px)}" cy="${n1(py - 3)}" r="3.4" fill="#7fbb76" stroke="${INK}" stroke-width="0.8"/>`)
-  }
-  {
-    const z = g0 + fh + 1
-    g.line([0.34, y1 + 0.02, z + 1], [1.6, y1 + 0.02, z + 1], INK, 0.6)
-    ;['#ffffff', '#f4a6a0', '#9fd0f0', '#f7d488'].forEach((col, i) => g.face('left', 0.42 + i * 0.26, y1 + 0.02, z + 1, `<rect x="0" y="0" width="${i % 2 ? 4.5 : 6}" height="${i % 2 ? 6.5 : 5}" fill="${col}" stroke="${INK}" stroke-width="0.6"/>`))
   }
   // The awning over the door and window, in stripes.
   for (let i = 0, k = 0.72; k < 1.68; k += 0.12, i++) g.poly(i % 2 ? '#ffffff' : '#e0564f', [[k, y1, g0 + 1], [Math.min(k + 0.12, 1.68), y1, g0 + 1], [Math.min(k + 0.12, 1.68), y1 + 0.3, g0 - 5], [k, y1 + 0.3, g0 - 5]], 0.6)
   g.poly('#fbf1ec', [[0.72, y1 + 0.3, g0 - 5], [1.68, y1 + 0.3, g0 - 5], [1.68, y1 + 0.3, g0 - 7.5], [0.72, y1 + 0.3, g0 - 7.5]], 0.6)
   top(g, 0.76, y1, 1.16, y1 + 0.12, 0.4, '#f6f2e8', 0.7)
 
-  // The side face: shuttered windows, air conditioners, a drainpipe, a bicycle.
+  // The side face: shuttered windows, air conditioners, a drainpipe.
   let r = `<rect x="0" y="${-g0}" width="${n1(D)}" height="${g0}" fill="#ebe2d6" stroke="${INK}" stroke-width="0.9"/>`
   for (let fl = 0; fl < floors; fl++) {
     const base = -(g0 + fl * fh)
@@ -322,37 +271,18 @@ export function dormitory(tone = 0): Sprite {
   }
   r += `<rect x="9" y="-14" width="13" height="9" fill="#cfeaff" stroke="${INK}" stroke-width="0.9"/><rect x="29" y="-14" width="13" height="9" fill="#cfeaff" stroke="${INK}" stroke-width="0.9"/>`
   r += `<path d="M${n1(D - 3.5)},${-h + 2} V0" stroke="#9a8f84" stroke-width="1.6"/>`
-  r += `<g fill="none" stroke="${INK}" stroke-width="0.9"><circle cx="25" cy="-3.6" r="3.4"/><circle cx="35" cy="-3.6" r="3.4"/><path d="M25,-3.6 l4,-6 h5 l1,6 M29,-9.6 l1.6,6 M27.6,-10.6 h3" stroke="#e0564f"/></g>`
   g.face('right', x1, y1, 0, r)
 
-  // The roof: parapet, stair head, the water tank, a solar panel, the sign, an aerial.
+  // The roof: parapet, stair head, the sign.
   top(g, x0 + 0.1, y0 + 0.1, x1 - 0.1, y1 - 0.1, h, c.top === '#ffe7da' ? '#fff3ec' : '#f8f6ef', 0.9, '#b59c8c')
   g.box(0.32, 0.28, 0.46, 0.42, 13, faces('#fff7ef', '#f3dcc8', '#e6c7ae'), h, 1.1)
   g.onLeft(0, 0.7, 0.45, 0.62, h, h + 10, '#8a6b55', 0.8)
-  for (const [lx, ly] of [[1.18, 0.42], [1.52, 0.42], [1.18, 0.76], [1.52, 0.76]] as const) g.line([lx, ly, h], [lx, ly, h + 9], INK, 1.1)
-  g.cylinder(1.35, 0.59, 9.5, h + 8, h + 25, '#d19a66', '#a8703f', '#dba873')
-  {
-    const [tx, ty] = g.p(1.35, 0.59, h + 25)
-    g.add(`<path d="M${n1(tx - 10.5)},${n1(ty)} L${n1(tx)},${n1(ty - 12)} L${n1(tx + 10.5)},${n1(ty)} A10.5,5 0 0 1 ${n1(tx - 10.5)},${n1(ty)} Z" fill="#b9805a" stroke="${INK}" stroke-width="1.2"/>`)
-    g.add(`<path d="M${n1(tx - 9.5)},${n1(ty + 8)} A9.5,4.75 0 0 0 ${n1(tx + 9.5)},${n1(ty + 8)}" fill="none" stroke="${INK}" stroke-width="0.6"/>`)
-  }
-  g.poly('#4f6fb8', [[0.9, 0.95, h + 9], [1.5, 0.95, h + 9], [1.5, 1.38, h + 2], [0.9, 1.38, h + 2]], 1)
-  g.line([1.1, 0.95, h + 9], [1.1, 1.38, h + 2], '#cfe0ff', 0.6)
-  g.line([1.3, 0.95, h + 9], [1.3, 1.38, h + 2], '#cfe0ff', 0.6)
-  g.line([0.9, 1.165, h + 5.5], [1.5, 1.165, h + 5.5], '#cfe0ff', 0.6)
-  g.line([0.5, 1.2, h], [0.5, 1.2, h + 24], INK, 1)
-  {
-    const [px, py] = g.p(0.5, 1.2, h + 24)
-    g.add(`<path d="M${n1(px - 5)},${n1(py)} h10 M${n1(px - 3.5)},${n1(py + 4)} h7 M${n1(px - 2)},${n1(py + 8)} h4" stroke="${INK}" stroke-width="0.9"/>`)
-  }
   // The sign board on the roof's front edge.
   g.line([0.42, y1 - 0.08, h], [0.42, y1 - 0.08, h + 5], INK, 1.1)
   g.line([1.05, y1 - 0.08, h], [1.05, y1 - 0.08, h + 5], INK, 1.1)
   g.onLeft(0, y1 - 0.08, 0.3, 1.17, h + 4, h + 17, '#fbfaf6', 1.2)
   g.face('left', 0.3, y1 - 0.08, h + 4, `<text x="15.6" y="-3.4" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="8.6" font-weight="700" fill="${INK}" letter-spacing="1.4">DORM</text>`)
 
-  tree(g, 0.2, 1.93, 0.72)
-  g.box(1.28, 1.86, 0.4, 0.09, 3.2, faces('#c98f5f', '#a8703f', '#946035'), 0, 0.8)
   return g.done()
 }
 
@@ -428,34 +358,13 @@ export function launchPad(chopsticks = true): Sprite {
     g.line([3.2 + off, 1.2, z + 1], [3.2 + off, 2.0 + off, z + 1], col, 2.4)
     g.line([3.2 + off, 2.0 + off, z + 1], [cx + 0.4, 2.0 + off, z + 1], col, 2.4)
   }
-  // The sphere, the windsock, the tank farm, the water tower.
-  {
-    const [sx, sy] = g.p(2.95, 1.0, z)
-    g.add(`<path d="M${n1(sx - 8)},${n1(sy)} L${n1(sx - 5)},${n1(sy - 16)} M${n1(sx + 8)},${n1(sy)} L${n1(sx + 5)},${n1(sy - 16)} M${n1(sx)},${n1(sy + 3)} V${n1(sy - 14)}" stroke="${INK}" stroke-width="1.3"/>`)
-    g.add(`<defs><radialGradient id="sph" cx="0.35" cy="0.3" r="0.8"><stop offset="0" stop-color="#ffffff"/><stop offset="0.6" stop-color="#eef1f5"/><stop offset="1" stop-color="#bcc5d1"/></radialGradient></defs><circle cx="${n1(sx)}" cy="${n1(sy - 24)}" r="14" fill="url(#sph)" stroke="${INK}" stroke-width="${STROKE}"/><path d="M${n1(sx - 14)},${n1(sy - 24)} a14,4.5 0 0 0 28,0" fill="none" stroke="#4f86d6" stroke-width="2"/>`)
-  }
-  {
-    const [wx, wy] = g.p(3.7, 2.55, z)
-    g.add(`<line x1="${n1(wx)}" y1="${n1(wy)}" x2="${n1(wx)}" y2="${n1(wy - 38)}" stroke="${INK}" stroke-width="1.3"/><path d="M${n1(wx)},${n1(wy - 38)} l15,2.5 v4 l-15,3.5 Z" fill="#f08a4b" stroke="${INK}" stroke-width="0.9"/><path d="M${n1(wx + 5)},${n1(wy - 37.2)} v8.4 M${n1(wx + 10)},${n1(wy - 36.3)} v6.3" stroke="#ffffff" stroke-width="1.6"/>`)
-  }
+  // The tank farm (2026-11-19: the sphere, the windsock and the water tower stood for nothing).
   for (const [kx, ky, kr, kh] of [[3.3, 0.42, 10.5, 58], [3.66, 0.82, 10.5, 50], [3.3, 1.02, 9.5, 40]] as const) {
     g.cylinder(kx, ky, kr, z, z + kh, '#f7f8fa', '#c5ccd7', '#ffffff')
     const [px, py] = g.p(kx, ky, z + kh * 0.62)
     g.add(`<path d="M${n1(px - kr)},${n1(py)} a${kr},${kr / 2} 0 0 0 ${kr * 2},0 v6 a${kr},${kr / 2} 0 0 1 ${-kr * 2},0 Z" fill="#4f86d6" stroke="${INK}" stroke-width="0.8"/>`)
     g.add(`<path d="M${n1(px - kr + 2.5)},${n1(py + 12)} v${n1(kh * 0.3)}" stroke="#9aa6b6" stroke-width="0.8"/>`)
   }
-  {
-    const wx = 0.72, wy = 3.3
-    for (const [lx, ly] of [[wx - 0.2, wy - 0.2], [wx + 0.2, wy - 0.2], [wx - 0.2, wy + 0.2], [wx + 0.2, wy + 0.2]] as const) g.line([lx, ly, z], [lx * 0.5 + wx * 0.5, ly * 0.5 + wy * 0.5, z + 42], INK, 1.3)
-    g.line([wx - 0.2, wy + 0.2, z + 14], [wx + 0.2, wy + 0.2, z + 14], INK, 0.8)
-    g.cylinder(wx, wy, 13, z + 40, z + 58, '#ffffff', '#c5ccd7', '#ffffff')
-    const [px, py] = g.p(wx, wy, z + 58)
-    g.add(`<path d="M${n1(px - 14)},${n1(py)} L${n1(px)},${n1(py - 11)} L${n1(px + 14)},${n1(py)} A14,7 0 0 1 ${n1(px - 14)},${n1(py)} Z" fill="#e0564f" stroke="${INK}" stroke-width="1.2"/>`)
-    const [bx, by] = g.p(wx, wy, z + 46)
-    g.add(`<path d="M${n1(bx - 13)},${n1(by)} a13,6.5 0 0 0 26,0 v5 a13,6.5 0 0 1 -26,0 Z" fill="#e0564f" stroke="${INK}" stroke-width="0.8"/>`)
-  }
-  floodlight(g, 0.3, 2.3, z, 52)
-  floodlight(g, 3.62, 3.62, z, 46)
   return g.done()
 }
 
@@ -596,7 +505,6 @@ export function court(): Sprite {
   for (let u = -12; u <= 12; u += 6) g.add(`<rect x="${dx + u - 1.4}" y="${dy - 11 + Math.abs(u) * -0.1}" width="2.8" height="8" fill="#9fc8e8" stroke="${INK}" stroke-width="0.5"/>`)
   g.add(`<defs><linearGradient id="dome" x1="0" x2="1"><stop offset="0" stop-color="#8fc9b8"/><stop offset="1" stop-color="#5f9f90"/></linearGradient></defs><path d="M${dx - 17},${dy - 14} a17,20 0 0 1 34,0 a17,8 0 0 1 -34,0 Z" fill="url(#dome)" stroke="${INK}" stroke-width="${STROKE}"/>`)
   for (const u of [-8, 0, 8]) g.add(`<path d="M${dx + u},${dy - 8} Q${dx + u * 0.75},${dy - 26} ${dx},${dy - 34}" fill="none" stroke="#4d8678" stroke-width="0.8"/>`)
-  g.add(`<line x1="${dx}" y1="${dy - 34}" x2="${dx}" y2="${dy - 58}" stroke="${INK}" stroke-width="1.3"/><path d="M${dx},${dy - 58} q6,-3 11,0 t10,0 v9 q-5,-3 -10,0 t-11,0 Z" fill="#e0564f" stroke="${INK}" stroke-width="0.9"/>`)
   // The portico: its floor, a row of columns, the beam and the pediment.
   top(g, 0.62, y1, 3.38, 3.28, z, '#f3ead8', 1)
   g.face('left', x0, y1, z, `<rect x="33" y="-30" width="23" height="30" fill="#7c5f49" stroke="${INK}" stroke-width="1"/><path d="M44.5,-30 V0" stroke="${INK}" stroke-width="0.7"/><circle cx="41.5" cy="-14" r="1" fill="#ffd76a"/><circle cx="47.5" cy="-14" r="1" fill="#ffd76a"/>`)
@@ -701,7 +609,7 @@ export function archive(): Sprite {
   let r = `<rect x="0" y="-5" width="${n1(D)}" height="5" fill="#b8956d" stroke="${INK}" stroke-width="0.8"/>`
   for (let i = 0; i < 3; i++) { const u = 5.5 + i * 15.2; r += `<rect x="${n1(u)}" y="-33" width="10" height="25" fill="#fff6df" stroke="${INK}" stroke-width="0.9"/><path d="M${n1(u)},-25 h10 M${n1(u)},-17 h10" stroke="${INK}" stroke-width="0.6"/>${books(u, -25, 10, i)}${books(u, -17, 10, i + 3)}${books(u, -8, 10, i + 4)}` }
   g.face('right', x1, y1, 0, r)
-  // The copper hipped roof, its lantern and the front dormer clock.
+  // The copper hipped roof and its lantern.
   const R = faces('#8fcab7', '#73b3a0', '#5f9d8b'), rz = h + 18
   g.poly(R.left, [[x0 - 0.05, y1 + 0.05, h], [x1 + 0.05, y1 + 0.05, h], [x1 - 0.45, y1 - 0.45, rz], [x0 + 0.45, y1 - 0.45, rz]], 1.3)
   g.poly(R.right, [[x1 + 0.05, y1 + 0.05, h], [x1 + 0.05, y0 - 0.05, h], [x1 - 0.45, y0 + 0.45, rz], [x1 - 0.45, y1 - 0.45, rz]], 1.3)
@@ -709,11 +617,6 @@ export function archive(): Sprite {
   g.box(0.86, 0.75, 0.28, 0.28, 10, faces('#fff3c9', '#d8ecfb', '#b9d8f0'), rz, 1)
   g.poly('#5f9d8b', [[0.82, 1.07, rz + 10], [1.18, 1.07, rz + 10], [1, 0.89, rz + 18]], 0.9)
   g.poly(R.right, [[1.18, 1.07, rz + 10], [1.18, 0.71, rz + 10], [1, 0.89, rz + 18]], 0.9)
-  const [cx, cy] = g.p(1, 1.33, h + 8)
-  g.add(`<circle cx="${n1(cx)}" cy="${n1(cy)}" r="6" fill="#fffdf5" stroke="${INK}" stroke-width="1.1"/><path d="M${n1(cx)},${n1(cy)} v-3.8 M${n1(cx)},${n1(cy)} l2.7,1.6" stroke="${INK}" stroke-width="0.9"/>`)
-  // A book cart by the door.
-  g.box(1.32, 1.74, 0.3, 0.14, 6, faces('#c98f5f', '#a8703f', '#946035'), 1.5, 0.8)
-  for (let k = 0; k < 4; k++) g.box(1.35 + k * 0.065, 1.77, 0.05, 0.08, 4, faces(spines[k], spines[k], spines[k]), 7.5, 0.4)
   bush(g, 0.3, 1.78, 5)
   return g.done()
 }
