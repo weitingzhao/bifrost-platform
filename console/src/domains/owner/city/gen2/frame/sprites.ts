@@ -100,18 +100,48 @@ export function workshop(fw: number, fd: number, hue: string, light: Light, seed
   return g.done()
 }
 
-/** A room: a floor with low walls on its two back sides and a hue rug, so it reads as inside. */
+/**
+ * A room, cut away like the storey it is on (the Owner, 2026-11-19: a room has walls and doors): a
+ * floor in its hue, the two back walls up, the two front ones down to their foot with a door in each
+ * long enough, and a little furniture, so it reads as a room and not a rug.
+ */
 export function roomFloor(fw: number, fd: number, hue: string, light: Light): Sprite {
   const W = WALLS[light]
-  const g = new Draw(fw, fd, 26)
-  const i = Math.max(0.18, setback(Math.min(fw, fd)) - 0.3), x0 = i, y0 = i, x1 = fw - i, y1 = fd - i, w = x1 - x0, d = y1 - y0
-  g.box(x0, y0, w, d, 4, faces(W.floor, W.left, W.right))
-  const t = 0.1, hw = 14
-  g.box(x0, y0, w, t, hw, faces(W.top, W.left, W.right), 4)
-  g.box(x0, y0 + t, t, d - t, hw, faces(W.top, W.left, W.right), 4)
-  const rug = light === 'night' ? shade(hue, -0.25) : shade(hue, 0.35)
-  g.poly(rug, [[x0 + w * 0.22, y0 + d * 0.25, 4], [x1 - w * 0.15, y0 + d * 0.25, 4], [x1 - w * 0.15, y1 - d * 0.15, 4], [x0 + w * 0.22, y1 - d * 0.15, 4]], 1)
+  const n = Math.min(fw, fd)
+  const g = new Draw(fw, fd, 34)
+  const i = n >= 2 ? 0.3 : 0.12, x0 = i, y0 = i, x1 = fw - i, y1 = fd - i, w = x1 - x0, d = y1 - y0
+  const t = 0.12, HIGH = 18, LOW = 5, wall = faces(W.top, W.left, W.right)
+  const carpet = light === 'night' ? shade(hue, -0.5) : light === 'dusk' ? shade(hue, 0.3) : shade(hue, 0.6)
+  g.box(x0, y0, w, d, 3, faces(carpet, W.left, W.right))
+  g.box(x0, y0, w, t, HIGH, wall, 3)
+  g.box(x0, y0 + t, t, d - t, HIGH, wall, 3)
+  furniture(g, x0 + t, y0 + t, w - 2 * t, d - 2 * t, light)
+  const door = Math.min(0.7, Math.max(w, d) * 0.3)
+  // Front-right wall (along y at x1): a door in it when the room is deep enough.
+  if (d >= 1.5) {
+    const b0 = y0 + d * 0.55 - door / 2
+    g.box(x1 - t, y0 + t, t, b0 - y0 - t, LOW, wall, 3)
+    g.box(x1 - t, b0 + door, t, y1 - t - b0 - door, LOW, wall, 3)
+  } else g.box(x1 - t, y0 + t, t, d - 2 * t, LOW, wall, 3)
+  // Front-left wall (along x at y1): always a door.
+  const a0 = x0 + w * 0.45 - door / 2
+  g.box(x0, y1 - t, a0 - x0, t, LOW, wall, 3)
+  g.box(a0 + door, y1 - t, x1 - a0 - door, t, LOW, wall, 3)
   return g.done()
+}
+
+/** A desk and chair, and against the back wall a cabinet; a bigger room gets a second desk. */
+function furniture(g: Draw, x: number, y: number, w: number, d: number, light: Light) {
+  const wood = light === 'night' ? faces('#6b5a4a', '#55473a', '#463a30') : faces('#d9b48a', '#c09a70', '#a8845c')
+  const metal = light === 'night' ? faces('#4a4f6a', '#3c4058', '#30344a') : faces('#e4e2dc', '#c9c6be', '#b3afa6')
+  const desk = (dx: number, dy: number) => {
+    const dw = Math.min(0.9, w * 0.4), dd = Math.min(0.45, d * 0.35)
+    g.box(dx, dy, dw, dd, 7, wood, 3, 1)
+    g.box(dx + dw * 0.35, dy + dd + 0.08, 0.24, 0.22, 5, metal, 3, 1)
+  }
+  if (w >= 0.9 && d >= 0.9) desk(x + w * 0.3, y + d * 0.2)
+  if (w >= 1.6 && d >= 1.2) g.box(x + 0.04, y + d * 0.55, 0.28, Math.min(0.8, d * 0.3), 14, metal, 3, 1)
+  if (w >= 3 && d >= 2) desk(x + w * 0.62, y + d * 0.5)
 }
 
 export type SpriteKey = string

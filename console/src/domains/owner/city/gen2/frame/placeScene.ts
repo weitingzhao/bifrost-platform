@@ -72,7 +72,7 @@ export type Shown = {
 
 
 /** How tall a place's sprite stands (roof included), for its hit area and the fit: matches sprites.ts. */
-const heightOf = (p: Place, size: number) => p.kind === 'room' ? 18 : p.kind === 'building' ? 22 + size * 5 + 16 : 30 + size * 9 + 12
+const heightOf = (p: Place, size: number) => p.kind === 'room' ? 24 : p.kind === 'building' ? 22 + size * 5 + 16 : 30 + size * 9 + 12
 /** Sprites are drawn at this resolution, then shown at 1/RS, so they stay sharp when zoomed in. */
 const RS = 3
 /** The slab's thickness under the ground, px: the earth shows on its two front sides. */
@@ -521,6 +521,44 @@ export class PlaceScene extends Phaser.Scene {
     return t
   }
 
+  /**
+   * A storey seen cut away (the Owner, 2026-11-19: a floor must read as a floor of a building, not a
+   * big room): the corridor floor tiled, the two back outer walls at full height with windows, the
+   * two front ones cut down to their foot so you see in, and the way in through the front.
+   */
+  private storey(g: Phaser.GameObjects.Graphics, lo: number, hi: number) {
+    const T = 0.24, H = 46, LOW = 7, t = this.tone
+    const quad = (fill: number, q: Phaser.Math.Vector2[], stroke = 1.6) => g.fillStyle(fill).fillPoints(q, true).lineStyle(stroke, t.ink).strokePoints(q, true)
+    // Floor tiles: a faint cell grid.
+    g.lineStyle(1, t.ink, 0.07)
+    for (let i = Math.ceil(lo); i <= Math.floor(hi); i++) {
+      g.lineBetween(iso(i, lo).x, iso(i, lo).y, iso(i, hi).x, iso(i, hi).y)
+      g.lineBetween(iso(lo, i).x, iso(lo, i).y, iso(hi, i).x, iso(hi, i).y)
+    }
+    // Back walls: inner faces, the end faces, then the caps.
+    quad(t.wall, [iso(lo + T, lo + T), iso(hi, lo + T), iso(hi, lo + T, H), iso(lo + T, lo + T, H)])
+    quad(t.wallShade, [iso(lo + T, lo + T), iso(lo + T, hi), iso(lo + T, hi, H), iso(lo + T, lo + T, H)])
+    quad(t.wallShade, [iso(hi, lo), iso(hi, lo + T), iso(hi, lo + T, H), iso(hi, lo, H)])
+    quad(t.wall, [iso(lo, hi), iso(lo + T, hi), iso(lo + T, hi, H), iso(lo, hi, H)])
+    quad(t.wallTop, [iso(lo, lo, H), iso(hi, lo, H), iso(hi, lo + T, H), iso(lo + T, lo + T, H), iso(lo + T, hi, H), iso(lo, hi, H)])
+    // Windows along both back walls, one every two cells.
+    for (let a = lo + 1.2; a + 1 <= hi - 0.6; a += 2) {
+      quad(t.glass, [iso(a, lo + T, 14), iso(a + 1, lo + T, 14), iso(a + 1, lo + T, 36), iso(a, lo + T, 36)], 1.1)
+      quad(t.glass, [iso(lo + T, a, 14), iso(lo + T, a + 1, 14), iso(lo + T, a + 1, 36), iso(lo + T, a, 36)], 1.1)
+    }
+    // Front walls, cut down to their foot; the front-left one leaves the way in at its middle.
+    const d0 = GRID / 2 - 1, d1 = GRID / 2 + 1
+    quad(t.wallShade, [iso(hi, lo), iso(hi, hi), iso(hi, hi, LOW), iso(hi, lo, LOW)])
+    quad(t.wallTop, [iso(hi - T, lo, LOW), iso(hi, lo, LOW), iso(hi, hi, LOW), iso(hi - T, hi, LOW)])
+    for (const [a, b] of [[lo, d0], [d1, hi - T]]) {
+      quad(t.wall, [iso(a, hi), iso(b, hi), iso(b, hi, LOW), iso(a, hi, LOW)])
+      quad(t.wallShade, [iso(b, hi - T), iso(b, hi), iso(b, hi, LOW), iso(b, hi - T, LOW)])
+      quad(t.wallTop, [iso(a, hi - T, LOW), iso(b, hi - T, LOW), iso(b, hi, LOW), iso(a, hi, LOW)])
+    }
+    // A mat at the way in.
+    quad(t.wallShade, [iso(d0 + 0.3, hi - 0.9), iso(d1 - 0.3, hi - 0.9), iso(d1 - 0.3, hi - 0.1), iso(d0 + 0.3, hi - 0.1)], 1)
+  }
+
   private level(place: Place, placed: Placed[], plots: Plot[], streets: Street[], o: { at: number; selected: string | null; inside: string | null; interactive: boolean; arranging: boolean }) {
     const c = this.add.container(o.at, 0)
     const g = this.add.graphics()
@@ -530,20 +568,22 @@ export class PlaceScene extends Phaser.Scene {
     const down = (v: Phaser.Math.Vector2) => new Phaser.Math.Vector2(v.x, v.y + SLAB)
     const leftSide = [iso(lo, hi), iso(hi, hi), down(iso(hi, hi)), down(iso(lo, hi))]
     const rightSide = [iso(hi, lo), iso(hi, hi), down(iso(hi, hi)), down(iso(hi, lo))]
+    // Outdoors the slab is earth; a building's storey stands on a concrete floor slab.
+    const inside = place.kind === 'building'
     g.lineStyle(2, this.tone.ink)
-    g.fillStyle(this.tone.earth).fillPoints(leftSide, true).strokePoints(leftSide, true)
-    g.fillStyle(this.tone.earthShade).fillPoints(rightSide, true).strokePoints(rightSide, true)
+    g.fillStyle(inside ? this.tone.slab : this.tone.earth).fillPoints(leftSide, true).strokePoints(leftSide, true)
+    g.fillStyle(inside ? this.tone.slabShade : this.tone.earthShade).fillPoints(rightSide, true).strokePoints(rightSide, true)
     // A few strata in the earth.
-    g.lineStyle(1, this.tone.earthShade, 0.8)
-    for (const t of [0.4, 0.72]) {
-      g.lineBetween(iso(lo, hi).x, iso(lo, hi).y + SLAB * t, iso(hi, hi).x, iso(hi, hi).y + SLAB * t)
+    if (!inside) {
+      g.lineStyle(1, this.tone.earthShade, 0.8)
+      for (const t of [0.4, 0.72]) g.lineBetween(iso(lo, hi).x, iso(lo, hi).y + SLAB * t, iso(hi, hi).x, iso(hi, hi).y + SLAB * t)
     }
     // What runs between the things on this ground (the Owner, 2026-11-19): blocks on the town's ground
     // are parted by highways, buildings in a block by ordinary streets, rooms in a building by
     // corridors. All three run where grid.ts says, never through a thing.
     const grade: 'highway' | 'street' | 'corridor' = place.kind === 'town' ? 'highway' : place.kind === 'building' ? 'corridor' : 'street'
     const indoors = grade === 'corridor'
-    g.fillStyle(indoors ? this.tone.floor : this.tone.grass).fillPoints(ground, true)
+    g.fillStyle(indoors ? this.tone.corridor : this.tone.grass).fillPoints(ground, true)
     // Layers from the street in (the Owner, 2026-11-19: not straight from the road to the house): the
     // street, its kerb, a green belt, then the plot's own lot, and the building set back on it.
     // The ring road runs in the rim; streets that reach the edge run on to meet it.
@@ -571,13 +611,8 @@ export class PlaceScene extends Phaser.Scene {
     const ways = streets.filter(st => st.kind === 'lane' || st.kind === 'path')
     // Each plot's lot: inset from its edges by the street's half, the kerb and a belt of grass.
     const lotInset = (p: Plot) => { const side = Math.min(p.w, p.h); return (side >= 4 ? 0.62 : side === 2 ? 0.4 : 0.22) + (grade === 'highway' && side >= 4 ? 0.2 : 0) }
-    if (indoors) {
-      // Corridors: a paler floor, edged with a faint line where the rooms' walls would be.
-      g.fillStyle(this.tone.corridor)
-      for (const st of streets) g.fillPoints(strip(st, st.half * 0.8), true)
-      g.lineStyle(1, this.tone.ink, 0.18)
-      for (const st of streets) g.strokePoints(strip(st, st.half * 0.8), true)
-    } else {
+    if (indoors) this.storey(g, lo, hi)
+    else {
       for (const p of plots) {
         const e = lotInset(p)
         const q = [iso(p.x + e, p.y + e), iso(p.x + p.w - e, p.y + e), iso(p.x + p.w - e, p.y + p.h - e), iso(p.x + e, p.y + p.h - e)]
