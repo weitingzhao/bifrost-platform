@@ -72,7 +72,7 @@ func TestDomainOwnershipCatalog(t *testing.T) {
 // line of wiring.
 func TestServerBindsThePoolEvaluator(t *testing.T) {
 	t.Parallel()
-	// New calls bindClusterReadings, and that function holds the three lines.
+	// New calls bindClusterReadings, and that function holds the lines.
 	root, err := os.ReadFile("server.go")
 	if err != nil {
 		t.Fatal(err)
@@ -100,8 +100,13 @@ func TestServerBindsThePoolEvaluator(t *testing.T) {
 		t.Fatal("bindClusterReadings does not bind tenant/appreadings to the cluster package")
 	}
 	// And for compute's readings of the elastic domains (cluster.BindComputeReadings).
-	if !strings.Contains(string(src), "cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain, WorkersDomain: elasticreadings.WorkersDomain, NodeMode: elasticreadings.NodeMode, DisplayedHost: (&elasticreadings.HostReadings{}).Read})") {
+	if !strings.Contains(string(src), "cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain, WorkersDomain: elasticreadings.WorkersDomain})") {
 		t.Fatal("bindClusterReadings does not bind elasticreadings to the cluster package")
+	}
+	// And for compute's nodes (cluster.BindComputeNodes, 2026-11-19): unbound,
+	// every node counts as a core node and the power actions refuse.
+	if !strings.Contains(string(src), "cluster.BindComputeNodes(computenodes.New().ClusterPort())") {
+		t.Fatal("bindClusterReadings does not bind computenodes to the cluster package")
 	}
 }
 

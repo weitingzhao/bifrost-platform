@@ -1,27 +1,30 @@
-//bifrost:owner compute
-
-package cluster
+package computenodes
 
 import (
 	"testing"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/config"
-	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
+	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
+
+// Moved from cluster/node_power_test.go on 2026-11-19 with the code they test.
 
 func TestIsComputeManaged(t *testing.T) {
 	entry := &config.ClusterEntry{
 		ComputeNodes: []config.ComputeNodeSpec{{Name: "gpu-server"}},
 	}
-	svc := NewService(entry)
-	if !svc.isComputeManaged("gpu-server") {
+	svc := cluster.NewService(entry)
+	managed := New().ClusterPort().Managed
+	if !managed(svc, "gpu-server") {
 		t.Fatal("expected gpu-server managed")
 	}
-	if svc.isComputeManaged("other") {
+	if managed(svc, "other") {
 		t.Fatal("expected other not managed")
 	}
 }
@@ -54,12 +57,12 @@ func TestNodePowerManagedNode(t *testing.T) {
 			},
 		}},
 	}
-	svc := NewService(entry)
-	svc.clientFactory = func() (kubernetes.Interface, string, error) {
+	svc := cluster.NewService(entry)
+	svc.SetClientFactoryForTest(func() (kubernetes.Interface, string, error) {
 		return clientset, "fake", nil
-	}
+	})
 
-	resp, err := svc.NodePower(t.Context(), "gpu-server")
+	resp, err := NodePower(t.Context(), svc, "gpu-server")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,34 +78,9 @@ func TestNodePowerManagedNode(t *testing.T) {
 }
 
 func TestNodePowerUnknownNode(t *testing.T) {
-	svc := NewService(&config.ClusterEntry{ComputeNodes: []config.ComputeNodeSpec{{Name: "gpu-server"}}})
-	_, err := svc.NodePower(t.Context(), "worker-1")
+	svc := cluster.NewService(&config.ClusterEntry{ComputeNodes: []config.ComputeNodeSpec{{Name: "gpu-server"}}})
+	_, err := NodePower(t.Context(), svc, "worker-1")
 	if err == nil {
 		t.Fatal("expected error for unmanaged node")
-	}
-}
-
-func TestNodeReadyStatus(t *testing.T) {
-	node := &corev1.Node{
-		Status: corev1.NodeStatus{
-			Conditions: []corev1.NodeCondition{{
-				Type:   corev1.NodeReady,
-				Status: corev1.ConditionFalse,
-			}},
-		},
-	}
-	if got := nodeReadyStatus(node); got != "False" {
-		t.Fatalf("got %q want False", got)
-	}
-}
-
-func TestIsDaemonSetPod(t *testing.T) {
-	p := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			OwnerReferences: []metav1.OwnerReference{{Kind: "DaemonSet", Name: "cni"}},
-		},
-	}
-	if !isDaemonSetPod(p) {
-		t.Fatal("expected daemonset pod")
 	}
 }

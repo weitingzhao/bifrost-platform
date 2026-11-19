@@ -10,9 +10,9 @@ import (
 )
 
 type DrainNodeRequest struct {
-	Force        bool `json:"force"`
-	DeleteLocal  bool `json:"delete_local_data"`
-	GracePeriod  int  `json:"grace_period_seconds"`
+	Force       bool `json:"force"`
+	DeleteLocal bool `json:"delete_local_data"`
+	GracePeriod int  `json:"grace_period_seconds"`
 }
 
 func (s *Service) CordonNode(ctx context.Context, nodeName string) (ActuationResponse, error) {
@@ -120,7 +120,7 @@ func (s *Service) DrainNode(ctx context.Context, nodeName string, req DrainNodeR
 		return ActuationResponse{OK: false, Action: "cluster.node.drain", Target: target, Message: err.Error(), GeneratedAt: now}, err
 	}
 
-	if nodeReadyStatus(node) != "Ready" && !req.Force {
+	if NodeReadyStatus(node) != "Ready" && !req.Force {
 		return ActuationResponse{
 			OK:          false,
 			Action:      "cluster.node.drain",

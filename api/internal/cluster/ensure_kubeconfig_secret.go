@@ -26,7 +26,7 @@ type EnsureKubeconfigSecretRequest struct {
 // EnsureKubeconfigSecretResponse extends ActuationResponse with per-namespace detail.
 type EnsureKubeconfigSecretResponse struct {
 	ActuationResponse
-	SyncResult   *SyncResponse                    `json:"sync_result,omitempty"`
+	SyncResult   *SyncResponse                     `json:"sync_result,omitempty"`
 	SecretPath   string                            `json:"secret_path"`
 	PerNamespace []KubeconfigSecretNamespaceResult `json:"per_namespace"`
 }

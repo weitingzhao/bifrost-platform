@@ -1490,12 +1490,17 @@
     },
     "api/internal/cluster": {
       "domains": [
-        "foundation",
-        "tenant",
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19: foundation's alone, the Kubernetes adapter (client, nodes, workloads, pods, capabilities, actuation, the node rollup and service readiness gathering). The last compute block left that day for api/internal/computenodes (compute): the node power read, Wake-on-LAN wake and drain-and-power-off over SSH, which nodes are compute-managed, the elastic node classification and the host reachability probes (node_power.go and most of elastic_node_health.go). cluster declares the port (ComputeNodes, bound by the server) and keeps NodePower, WakeNode, PowerOffNode and their handlers as forwarders, since the trust-anchored action wiring names HandleWakeNode and HandlePowerOffNode; it keeps the Kubernetes-generic node helpers computenodes runs through (NodeReadyStatus, NodePodCounts, kubectl drain and uncordon). The GPU, data warehouse and workers readiness are compute's readings (elasticreadings) bound through ComputeReadings; cluster only gathers their inputs. What stays of the tenant holds no tenant logic: data_clone_forward.go forwards the two data clone write handlers the action wiring names (bound to api/internal/dataclone), app_readings.go declares the port the tenant's application reading is bound through, and placement.go the port compute's pool evaluator is bound through; ports and forwarders are the adapter's, so foundation's. Earlier: the PostgreSQL and Redis status reads left on 2026-11-18 for api/internal/datastore (foundation; PostgresStatus, RedisStatus and DatastoreSnapshot stay here as forwarders, the backup and WAL repair actions stay); the data clone, data freshness and data probe left on 2026-11-17 for api/internal/dataclone (tenant)."
+    },
+    "api/internal/computenodes": {
+      "domains": [
         "compute"
       ],
-      "status": "mixed",
-      "basis": "2026-11-16, corrected the same day after the CI line's audit of the ownership changes (duty/from-ci-w1-2026-11-16-ownership-changes-audit.md): the package is not one domain's. Foundation's on review: the Kubernetes adapter (client, nodes, workloads, pods, capabilities, actuation). Named by the review of that day and not ruled: the service readiness of GPU, warehouse and workers and the elastic node health, which compute reads. The PostgreSQL and Redis status reads left on 2026-11-18 for api/internal/datastore (foundation); PostgresStatus, RedisStatus and DatastoreSnapshot stay here as forwarders, and the PostgreSQL backup and WAL repair actions, which write, stay here. The data clone, data freshness and data probe (data_clone.go 1,093 lines and three more files), which served the tenant's databases, left on 2026-11-17 for api/internal/dataclone (tenant); what stays of it here is the adapter it runs its commands through (ResolveCNPGPrimary, ExecOnPrimary) and two forwarders that the trust-anchored action wiring names (HandleDataClone, HandleDataCloneSchedulePut, bound by the server). The node pools and the tenant's readings of applications are bound, not imported, since 2026-11-16. It stays mixed until the remaining blocks are split out or ruled."
+      "status": "assigned",
+      "basis": "2026-11-19 cluster split, last compute block: the compute charter's on-demand nodes (which nodes compute powers, their power read, Wake-on-LAN wake and drain-and-power-off over SSH, the elastic node classification through elasticreadings.NodeMode and the host reachability probes), moved from cluster unchanged in behaviour. It imports cluster (foundation) and elasticreadings (compute) and depends on Kubernetes through cluster without taking it over; the server binds it to cluster (cluster.BindComputeNodes)."
     },
     "api/internal/kubeapi": {
       "domains": [

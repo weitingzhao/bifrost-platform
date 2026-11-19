@@ -1,8 +1,10 @@
 // Package elasticreadings is the compute domain's reading of service
 // readiness and of on-demand nodes. It decides; it does not fetch. It imports
 // only foundation packages and does not import cluster: cluster gathers the
-// nodes and Deployments and the server binds these functions to it
-// (cluster.BindComputeReadings).
+// nodes and Deployments and the server binds the three domain readings to it
+// (cluster.BindComputeReadings). NodeMode and HostReadings are called by
+// package computenodes (compute), which gathers a node's observations and is
+// bound to cluster since 2026-11-19 (cluster.BindComputeNodes).
 //
 // Contract:
 //
@@ -22,8 +24,9 @@
 // trading daemon scaled to zero. The daemon is only observed here: nothing in
 // this package starts, scales or stops anything.
 //
-// When cluster has no reader bound, the domains report unavailable and on-demand
-// nodes report degraded, so an unbound reader never reads as ready or standby.
+// When cluster has no reader bound, the domains report unavailable, so an
+// unbound reader never reads as ready or standby. When computenodes is not
+// bound, no node is on demand: each counts as a core node.
 //
 // The domain is compute. The code is maintained by the foundation decoupling
 // line until compute has a seat that writes code. The functions moved from
