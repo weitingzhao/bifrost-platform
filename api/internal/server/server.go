@@ -342,8 +342,8 @@ func (s *Server) Router() http.Handler {
 	root := r
 	r.Route("/api/v1", func(r chi.Router) {
 		// One gate for a collector token, before every module mounts
-		// (R5:5.5-12 §1.3): it reaches collectorRoutes and nothing else.
-		r.Use(s.auth.ConfineCollectors(collectorAllowed(root)))
+		// (R5:5.5-12 §1.3): it reaches actuation.CollectorRoutes and nothing else.
+		r.Use(s.auth.ConfineCollectors(actuation.CollectorAllowed(root, actuation.CollectorRoutes())))
 		// L-1 surface. Served here for convenience while platform-api is healthy;
 		// cmd/operator-plane serves the same routes off-cluster for when it is not.
 		s.mountPlane(r)

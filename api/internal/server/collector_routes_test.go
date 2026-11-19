@@ -12,13 +12,15 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 )
 
 // The collector's route gate (R5:5.5-12 §1.3, S1-1).
 
 // collectorSurfaceFile classifies every route the platform serves for a
 // collector token, one "<class>\t<METHOD> <route>" line each: allow (in
-// collectorRoutes), deny (refused by the gate) or outside (not under
+// actuation.CollectorRoutes), deny (refused by the gate) or outside (not under
 // /api/v1, so before the gate: the anonymous /health and /metrics).
 const collectorSurfaceFile = "collector_route_surface.txt"
 
@@ -47,7 +49,7 @@ func readSurface(t *testing.T) map[string]string {
 
 // CollectorRouteSurface (§1.3, §1.5): every route the router serves, each
 // walked through its whole middleware chain with the collector's token on a
-// path that route serves. The collector reaches exactly collectorRoutes;
+// path that route serves. The collector reaches exactly actuation.CollectorRoutes;
 // every other route of /api/v1 refuses it 403 at the gate, before its own
 // gate; the classification file names every route, so a route added
 // without a line, or a line left for a route that is gone, fails here.
@@ -107,7 +109,7 @@ func TestCollectorRouteSurface(t *testing.T) {
 	}
 	sort.Strings(missing)
 	for _, key := range missing {
-		t.Errorf("unclassified route %s: add the line \"deny\\t%s\" to testdata/%s, or allow it in collectorRoutes and there (R5:5.5-12 §1.3)",
+		t.Errorf("unclassified route %s: add the line \"deny\\t%s\" to testdata/%s, or allow it in actuation.CollectorRoutes and there (R5:5.5-12 §1.3)",
 			key, key, collectorSurfaceFile)
 	}
 	for key := range surface {
@@ -122,7 +124,7 @@ func TestCollectorRouteSurface(t *testing.T) {
 			allowed = append(allowed, key)
 		}
 	}
-	for key := range collectorRoutes {
+	for key := range actuation.CollectorRoutes() {
 		table = append(table, key)
 	}
 	sort.Strings(allowed)

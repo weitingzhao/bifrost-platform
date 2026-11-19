@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 )
 
 // The full-route test of DESIGN-crew-intake §5.2 (B3), on every route the
@@ -197,7 +199,7 @@ func TestEveryRouteKeepsTheIntakeTokenToItsOwn(t *testing.T) {
 	// /api/v1 router's: /health and /metrics are before it); the old roles,
 	// below, are as they were with it configured beside them.
 	table := []string{"GET /health", "GET /metrics"}
-	for route := range collectorRoutes {
+	for route := range actuation.CollectorRoutes() {
 		table = append(table, route)
 	}
 	slices.Sort(table)

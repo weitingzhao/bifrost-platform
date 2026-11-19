@@ -1,4 +1,4 @@
-package server
+package actuation
 
 import (
 	"net/http"
@@ -13,8 +13,8 @@ import (
 // collector to is the route's own: its records only (agentrtapi), its host
 // only and no title (agentthreads).
 //
-// testdata/collector_route_surface.txt classifies every route the platform
-// serves; a route added without a line there fails
+// server/testdata/collector_route_surface.txt classifies every route the
+// platform serves; a route added without a line there fails
 // TestCollectorRouteSurface.
 var collectorRoutes = map[string]bool{
 	"POST /api/v1/agentrt/external-work":             true,
@@ -28,18 +28,29 @@ var collectorRoutes = map[string]bool{
 	"GET /api/v1/agent/threads":                      true,
 }
 
-// collectorAllowed says whether the request is one collectorRoutes admits.
+// CollectorRoutes is a copy of the table, for the server to hand
+// CollectorAllowed: nobody can change the table through it.
+func CollectorRoutes() map[string]bool {
+	out := make(map[string]bool, len(collectorRoutes))
+	for route, allowed := range collectorRoutes {
+		out[route] = allowed
+	}
+	return out
+}
+
+// CollectorAllowed says whether the request is one routes admits; the answer
+// ConfineCollectors asks for.
 // The route is the one chi will serve it with, found from the root router
 // as chi routes it (the escaped path when the client escaped it, the method
 // as sent), so no spelling of a path or method reaches another route than
 // the one checked here. A request chi serves no route for is not admitted.
-func collectorAllowed(root chi.Routes) func(*http.Request) bool {
+func CollectorAllowed(root chi.Routes, routes map[string]bool) func(*http.Request) bool {
 	return func(r *http.Request) bool {
 		path := r.URL.RawPath
 		if path == "" {
 			path = r.URL.Path
 		}
 		pattern := root.Find(chi.NewRouteContext(), r.Method, path)
-		return pattern != "" && collectorRoutes[r.Method+" "+pattern]
+		return pattern != "" && routes[r.Method+" "+pattern]
 	}
 }

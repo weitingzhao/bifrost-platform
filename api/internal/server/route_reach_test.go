@@ -135,7 +135,7 @@ func routeReach(t *testing.T, srv *Server) map[string][]string {
 
 // samplePath is a path the route serves: each parameter and a trailing
 // wildcard filled in. A gate that reads the route from the path (the
-// collector's, collectorAllowed) sees the route walked; no other gate reads
+// collector's, actuation.CollectorAllowed) sees the route walked; no other gate reads
 // the path, so the old roles' reach is the same as from "/".
 func samplePath(route string) string {
 	parts := strings.Split(route, "/")
