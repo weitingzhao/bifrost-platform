@@ -73,6 +73,11 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, p)
 }
 
+// observePage is how many ledger events one read takes: a day is a few
+// thousand, so a handful of reads instead of dozens (2026-11-19: /bus/observe
+// still took about a second once its receipt scan was warm).
+const observePage = 1000
+
 // listenHours is the window of the listening readings: the last day.
 const listenHours = 24
 
@@ -90,7 +95,7 @@ func (h Handler) listening(ctx context.Context, l relay.Ledger, at func(context.
 	}
 	var events []ListenEvent
 	for page := 0; page < 200; page++ {
-		rows, next, err := l.After(ctx, c, 100, t.Types())
+		rows, next, err := l.After(ctx, c, observePage, t.Types())
 		if err != nil {
 			return Listening{}, err
 		}
@@ -99,7 +104,7 @@ func (h Handler) listening(ctx context.Context, l relay.Ledger, at func(context.
 				events = append(events, ListenEvent{ID: relay.EventID(row.EventID), Type: row.Type, Cause: row.Cause, N: row.EventID})
 			}
 		}
-		if len(rows) < 100 || next == c {
+		if len(rows) < observePage || next == c {
 			break
 		}
 		c = next
@@ -144,7 +149,7 @@ func observeTypes(ctx context.Context, l relay.Ledger, at func(context.Context, 
 	}
 	var out []string
 	for page := 0; page < 50; page++ {
-		rows, next, err := l.After(ctx, c, 100, types)
+		rows, next, err := l.After(ctx, c, observePage, types)
 		if err != nil {
 			return nil, err
 		}
@@ -153,7 +158,7 @@ func observeTypes(ctx context.Context, l relay.Ledger, at func(context.Context, 
 				out = append(out, row.Type)
 			}
 		}
-		if len(rows) < 100 || next == c {
+		if len(rows) < observePage || next == c {
 			break
 		}
 		c = next
@@ -171,7 +176,7 @@ func observeCards(ctx context.Context, l relay.Ledger, at func(context.Context, 
 	byID := map[string]*Card{}
 	var order []string
 	for page := 0; page < 50; page++ {
-		rows, next, err := l.After(ctx, c, 100, observeCardTypes)
+		rows, next, err := l.After(ctx, c, observePage, observeCardTypes)
 		if err != nil {
 			return nil, err
 		}
@@ -193,7 +198,7 @@ func observeCards(ctx context.Context, l relay.Ledger, at func(context.Context, 
 				card.Decided = row.At
 			}
 		}
-		if len(rows) < 100 || next == c {
+		if len(rows) < observePage || next == c {
 			break
 		}
 		c = next
