@@ -55,6 +55,24 @@ function readInsets(probe: HTMLElement | null): Insets {
 }
 
 const LIGHT_KEY = 'bifrost.city.gen2.light'
+
+/**
+ * The panels' rules (the Owner, 2026-11-19: a framework must say how its windows come, go and come
+ * back). A panel is open (a card in its corner), folded (its title as a tab in the same corner) or in
+ * the middle. A card folds with –, goes to the middle with ⤢; a tab opens it again where it was; ×
+ * in the middle sends it back to its corner. Nothing is ever lost: only a picked room's card closes,
+ * and picking the room brings it back. Panels hides both corners at once (key H) and shows them again.
+ * Folds and the hide are kept in the browser, across places.
+ */
+const PANELS_KEY = 'bifrost.city.gen2.panels.v1'
+type PanelPrefs = { folded: Record<string, boolean>; hidden: boolean }
+function readPanels(): PanelPrefs {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(PANELS_KEY) ?? 'null')
+    if (v && typeof v === 'object' && typeof v.hidden === 'boolean' && v.folded && typeof v.folded === 'object') return v as PanelPrefs
+  } catch { /* fall through */ }
+  return { folded: {}, hidden: false }
+}
 const LIGHT_WORD: Record<LightChoice, string> = { auto: 'Auto', day: 'Day', dusk: 'Dusk', night: 'Night' }
 const LIGHT_ICON = { day: '☀', dusk: '◐', night: '☾' } as const
 const readLight = (): LightChoice => {
@@ -91,6 +109,15 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
   const [drawerOpen, setDrawerOpen] = useState(false)
   // The panel that has the middle (by its id; null: the map has it), and the search box.
   const [focused, setFocused] = useState<string | null>(null)
+  const [panelPrefs, setPanelPrefs] = useState<PanelPrefs>(readPanels)
+  const keepPanels = (next: PanelPrefs) => {
+    setPanelPrefs(next)
+    try { window.localStorage.setItem(PANELS_KEY, JSON.stringify(next)) } catch { /* kept for this page only */ }
+  }
+  const fold = (id: string, on: boolean) => keepPanels({ ...panelPrefs, folded: { ...panelPrefs.folded, [id]: on } })
+  const toggleHidden = () => keepPanels({ ...panelPrefs, hidden: !panelPrefs.hidden })
+  const toggleHiddenRef = useRef(toggleHidden)
+  toggleHiddenRef.current = toggleHidden
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const searchBox = useRef<HTMLInputElement>(null)
@@ -238,6 +265,7 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
     const on = (e: KeyboardEvent) => {
       const typing = e.target instanceof HTMLInputElement
       if (e.key === '/' && !typing) { e.preventDefault(); setSearching(true); setTimeout(() => searchBox.current?.focus(), 0); return }
+      if ((e.key === 'h' || e.key === 'H') && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) { toggleHiddenRef.current(); return }
       if (e.key !== 'Escape') return
       if (searching) { setSearching(false); setQuery(''); searchBox.current?.blur(); return }
       if (focused) { setFocused(null); return }
@@ -309,6 +337,8 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
       <button className="g2-btn" onClick={stepLight} aria-label={`Light: ${LIGHT_WORD[lightChoice]}`}>
         {LIGHT_ICON[light]} {lightChoice === 'auto' ? `Auto · ${LIGHT_WORD[light]}` : LIGHT_WORD[lightChoice]}
       </button>
+      {f.docks && <button className={`g2-icon g2-panels${panelPrefs.hidden ? '' : ' on'}`} onClick={toggleHidden} aria-pressed={!panelPrefs.hidden}
+        aria-label={panelPrefs.hidden ? 'Show the panels' : 'Hide the panels'} title={panelPrefs.hidden ? 'Show the panels (H)' : 'Hide the panels (H)'}>▤</button>}
       {dash && <a className="g2-btn g2-swap" href={dash}>Dashboard ↗</a>}
     </>
   )
@@ -329,6 +359,7 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
         {p.sample && <span className="g2-chip">sample</span>}
         <span className="g2-grow" />
         {p.menu && p.menu.length > 0 && <Menu items={p.menu} label={`More for ${p.title}`} />}
+        {!p.id.startsWith('picked-') && <button className="g2-icon" onClick={() => fold(p.id, true)} aria-label={`Fold ${p.title}`} title="Fold to a tab">–</button>}
         <button className="g2-icon" onClick={() => { setDrawerOpen(false); setFocused(p.id) }} aria-label={`Put ${p.title} in the middle`} title="Put in the middle">⤢</button>
         {p.id.startsWith('picked-') && <button className="g2-icon" onClick={() => setSelected(null)} aria-label="Close">×</button>}
       </header>
@@ -416,13 +447,20 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
       )}
 
       {/* The panels: small cards in the two bottom corners the diamond leaves empty (charts left, tables and a picked room right). */}
-      {f.docks && (['left', 'right'] as const).map(side => {
+      {f.docks && !panelPrefs.hidden && (['left', 'right'] as const).map(side => {
         // The dock the map moved into holds the map's card alone; the panel in the middle is not docked twice.
         if (swap && focusedPanel?.dock === side) return null
         const mine = panels.filter(p => p.dock === side && p.id !== focused)
+        const isFolded = (p: Panel) => !p.id.startsWith('picked-') && !!panelPrefs.folded[p.id]
+        const tabs = mine.filter(isFolded)
         return mine.length > 0 && (
           <aside key={side} className={`g2-dock ${side}`} aria-label={side === 'left' ? 'Charts' : 'Tables'} style={at(f.docks![side])}>
-            {mine.map(p => card(p, true))}
+            {mine.filter(p => !isFolded(p)).map(p => card(p, true))}
+            {tabs.length > 0 && (
+              <div className="g2-tabs" role="group" aria-label="Folded panels">
+                {tabs.map(p => <button key={p.id} className="g2-tab" onClick={() => fold(p.id, false)} title={`Open ${p.title}`}>{p.title} <span aria-hidden>▴</span></button>)}
+              </div>
+            )}
           </aside>
         )
       })}
@@ -432,7 +470,14 @@ export default function CityGen2({ path: asked, go, dashboardHref = p => p.dashb
         <aside className="g2-rail drawer" aria-label="Tables and charts"
           style={{ left: f.rail.x, bottom: size.h - (f.rail.y + f.rail.h), width: f.rail.w, height: f.rail.h }}>
           <button className="g2-grip-btn" onClick={() => { setDrawerOpen(false); setSelected(null) }} aria-label="Close tables and charts"><span /></button>
-          {panels.map(p => card(p, false))}
+          {panels.filter(p => p.id.startsWith('picked-') || !panelPrefs.folded[p.id]).map(p => card(p, false))}
+          {panels.some(p => !p.id.startsWith('picked-') && panelPrefs.folded[p.id]) && (
+            <div className="g2-tabs" role="group" aria-label="Folded panels">
+              {panels.filter(p => !p.id.startsWith('picked-') && panelPrefs.folded[p.id]).map(p => (
+                <button key={p.id} className="g2-tab" onClick={() => fold(p.id, false)} title={`Open ${p.title}`}>{p.title} <span aria-hidden>▴</span></button>
+              ))}
+            </div>
+          )}
         </aside>
       )}
 

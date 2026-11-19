@@ -226,3 +226,13 @@
 .g2-levels b { flex: 1 1 auto; min-width: 0; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .g2[data-device='phone'] .g2-levels .g2-lv-k { width: auto; }
 .g2[data-device='phone'] .g2-levels .g2-lv-k + b { display: none; }
+
+/* Folded panels: their titles as tabs in their own corner; a tab opens the card where it was (2026-11-19). */
+.g2-tabs { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.g2-dock.right .g2-tabs { justify-content: flex-end; }
+.g2-tab { border: var(--ink-outline); border-radius: 8px; background: var(--g2-card); box-shadow: var(--ink-shadow); color: var(--g2-ink);
+  font-family: var(--g2-mono); font-size: 12px; font-weight: 700; padding: 0 var(--s3); min-height: 30px; cursor: pointer; }
+.g2-tab:hover { border-color: var(--g2-link); }
+.g2[data-device='tablet'] .g2-tab, .g2[data-device='phone'] .g2-tab { min-height: 44px; }
+.g2-panels { font-size: 16px; color: var(--g2-mute); }
+.g2-panels.on { color: var(--g2-ink); background: var(--g2-chip); }
