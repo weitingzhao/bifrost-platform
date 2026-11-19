@@ -16,7 +16,9 @@
 tenant: rocket
 # A wake whose recipient is not a registered thread here goes to the duty
 # seat, naming the address (2026-11-16, the tenant drill).
-undeliverable_to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+undeliverable_to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a
+# 2026-11-19, the Owner: the coordinator also keeps the duty; the duty seat's
+# session is no longer used, so its rows and the undeliverable notices go there.
 subscriptions:
   - id: card-concluded-to-requester
     on: [approval.card.executed, approval.card.decided]
@@ -119,7 +121,7 @@ subscriptions:
     match: "bifrost-deliver-"
     change: "!succeeded"
     deliver: wake
-    to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a
     params:
       ask_verdict: delivery
     guarantee: durable
@@ -129,7 +131,7 @@ subscriptions:
     match: "bifrost-build-"
     change: "!succeeded"
     deliver: wake
-    to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a
     params:
       ask_verdict: delivery
     guarantee: durable
@@ -143,7 +145,7 @@ subscriptions:
     on: [alert.rule.fired]
     change: firing
     deliver: wake
-    to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a
     params:
       always_namespaces: "bifrost-platform-prod,bifrost-prod"
       ask_verdict: alert
@@ -156,14 +158,14 @@ subscriptions:
     on: [env.health.changed]
     change: fail
     deliver: wake
-    to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a
     guarantee: durable
     by: dispatcher
   - id: plugin-status-fail-to-duty
     on: [plugin.status.changed]
     change: fail
     deliver: wake
-    to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a
     guarantee: durable
     by: dispatcher
   # A new approval card pages the Owner's phone from this event (2026-11-18,

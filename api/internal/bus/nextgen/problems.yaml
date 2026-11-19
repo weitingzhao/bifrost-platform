@@ -10,17 +10,17 @@
 # from a real run, and a real run wins. events never name a drill stream.
 # id is a row of channels.yaml, or Y-n for a channel that table does not have.
 problems:
-  - {id: N07, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "comm"}
-  - {id: X-A22, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "comm"}
-  - {id: X-A20, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "comm"}
+  - {id: N07, state: connected, events: ["topic:alert.rule.fired"], to: "coordinator (duty)", owner: "comm"}
+  - {id: X-A22, state: connected, events: ["topic:alert.rule.fired"], to: "coordinator (duty)", owner: "comm"}
+  - {id: X-A20, state: connected, events: ["topic:alert.rule.fired"], to: "coordinator (duty)", owner: "comm"}
   - {id: N05, state: connected, events: ["topic:alert.rule.fired"], to: "Owner phone and duty seat", owner: "comm"}
   - {id: X-A21, state: connected, events: ["topic:alert.rule.fired"], to: "Owner phone and duty seat", owner: "comm"}
   - {id: X-A24, state: connected, events: ["alert:BifrostAlertmanagerWebhookFailing"], drill: "drill:X-A24", to: "Owner phone", owner: "comm"}
-  - {id: X-A27, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "research"}
-  - {id: L14, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "comm"}
-  - {id: X-A2, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "comm"}
-  - {id: X-A19, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "comm"}
-  - {id: X-A25, state: connected, events: ["topic:alert.rule.fired"], to: "duty seat", owner: "comm"}
+  - {id: X-A27, state: connected, events: ["topic:alert.rule.fired"], to: "coordinator (duty)", owner: "research"}
+  - {id: L14, state: connected, events: ["topic:alert.rule.fired"], to: "coordinator (duty)", owner: "comm"}
+  - {id: X-A2, state: connected, events: ["topic:alert.rule.fired"], to: "coordinator (duty)", owner: "comm"}
+  - {id: X-A19, state: connected, events: ["topic:alert.rule.fired"], to: "coordinator (duty)", owner: "comm"}
+  - {id: X-A25, state: connected, events: ["topic:alert.rule.fired"], to: "coordinator (duty)", owner: "comm"}
   - {id: L18, state: connected, events: ["topic:seat.liveness.changed"], to: "Owner phone", owner: "comm"}
   - {id: N03, state: connected, events: ["topic:seat.liveness.changed"], to: "Owner phone", owner: "comm"}
   - {id: N01, state: connected, events: ["topic:approval.card.created"], to: "Owner phone", owner: "comm"}
@@ -44,19 +44,19 @@ problems:
   - {id: L13, state: connected, events: ["topic:data.job.finished"], drill: "drill:L13", to: "watchers", owner: "comm"}
   - {id: N06, state: connected, events: ["alert:AlertmanagerHeartbeatMissing"], drill: "drill:N06", to: "Owner phone and duty seat", owner: "comm"}
   - {id: L27, state: connected, events: ["alert:AlertmanagerHeartbeatMissing"], drill: "drill:L27", to: "Owner phone and duty seat", owner: "comm"}
-  - {id: L10, state: connected, events: ["source:env.health.changed:checklist-prober"], to: "duty seat", owner: "decoupling"}
-  - {id: R01, state: connected, events: ["source:env.health.changed:checklist-prober"], to: "duty seat", owner: "decoupling"}
-  - {id: R12, state: connected, events: ["stream:ops:env.health.changed:prod/operator-plane"], drill: "drill:R12", to: "duty seat", owner: "decoupling"}
-  - {id: R11, state: connected, events: ["stream:ops:env.health.changed:prod/trade-bus"], to: "duty seat", owner: "decoupling"}
-  - {id: R09, state: connected, events: ["source:plugin.status.changed:checklist-prober"], to: "duty seat", owner: "decoupling"}
-  - {id: L12, state: connected, events: ["source:plugin.status.changed:ib-auto-repair"], drill: "drill:L12", to: "duty seat", owner: "decoupling"}
-  - {id: L11, state: connected, events: ["source:env.health.changed:patrol-autopilot"], drill: "drill:L11", to: "duty seat", owner: "decoupling"}
+  - {id: L10, state: connected, events: ["source:env.health.changed:checklist-prober"], to: "coordinator (duty)", owner: "decoupling"}
+  - {id: R01, state: connected, events: ["source:env.health.changed:checklist-prober"], to: "coordinator (duty)", owner: "decoupling"}
+  - {id: R12, state: connected, events: ["stream:ops:env.health.changed:prod/operator-plane"], drill: "drill:R12", to: "coordinator (duty)", owner: "decoupling"}
+  - {id: R11, state: connected, events: ["stream:ops:env.health.changed:prod/trade-bus"], to: "coordinator (duty)", owner: "decoupling"}
+  - {id: R09, state: connected, events: ["source:plugin.status.changed:checklist-prober"], to: "coordinator (duty)", owner: "decoupling"}
+  - {id: L12, state: connected, events: ["source:plugin.status.changed:ib-auto-repair"], drill: "drill:L12", to: "coordinator (duty)", owner: "decoupling"}
+  - {id: L11, state: connected, events: ["source:env.health.changed:patrol-autopilot"], drill: "drill:L11", to: "coordinator (duty)", owner: "decoupling"}
   - {id: X-C2, state: deleted, events: [], to: "", owner: "coordinator"}
   - {id: X-C14, state: deleted, events: [], to: "", owner: "ci"}
   - {id: X-C12, state: connected, events: ["topic:seat.mail.arrived"], to: "receiving seat", owner: "comm"}
   - {id: L05, state: deleted, events: [], to: "", owner: "ci"}
   - {id: X-A29, state: connected, drill: "drill:X-A29", events: ["topic:main.regression.known"], to: "the commit's session", owner: "ci"}
-  - {id: Y-1, state: connected, drill: "drill:Y-1", what: "A text claiming the Owner's approval (ledger: policy_alert)", events: ["alert:ApprovalClaimInText"], to: "duty seat", owner: "comm"}
-  - {id: Y-3, state: connected, what: "A controller loop failing the same way (ledger: controller_loop_failing)", events: ["alert:ControllerLoopFailing"], drill: "drill:Y-3", to: "duty seat", owner: "comm"}
-  - {id: Y-4, state: connected, what: "A report the platform refused (ledger: artifact_refused)", events: ["alert:ArtifactRefused"], drill: "drill:Y-4", to: "duty seat", owner: "comm"}
-  - {id: Y-5, state: connected, what: "The phone relay itself cannot be reached", events: ["alert:AlertRelayUnreachable"], drill: "drill:Y-5", to: "duty seat", owner: "comm"}
+  - {id: Y-1, state: connected, drill: "drill:Y-1", what: "A text claiming the Owner's approval (ledger: policy_alert)", events: ["alert:ApprovalClaimInText"], to: "coordinator (duty)", owner: "comm"}
+  - {id: Y-3, state: connected, what: "A controller loop failing the same way (ledger: controller_loop_failing)", events: ["alert:ControllerLoopFailing"], drill: "drill:Y-3", to: "coordinator (duty)", owner: "comm"}
+  - {id: Y-4, state: connected, what: "A report the platform refused (ledger: artifact_refused)", events: ["alert:ArtifactRefused"], drill: "drill:Y-4", to: "coordinator (duty)", owner: "comm"}
+  - {id: Y-5, state: connected, what: "The phone relay itself cannot be reached", events: ["alert:AlertRelayUnreachable"], drill: "drill:Y-5", to: "coordinator (duty)", owner: "comm"}
