@@ -5,6 +5,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -55,24 +56,24 @@ func TestHumanApprovalHomeOnRouter(t *testing.T) {
 
 func TestSTGRuleCardKeepsWorkingWithoutOwnerRequests(t *testing.T) {
 	t.Setenv("OPS_VIEWER_ENV", "stg")
-	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
-	rt.takeCardsByRule(true)
+	rt := questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil)
+	rt.TakeCardsByRule(true)
 	card := planstore.Card{Key: strings.Repeat("cd", 16), Title: "Blocked in M-3", Body: "test", Options: []string{questioncards.BlockedRetry, questioncards.BlockedDrop}, Recommended: 2, RecommendedWhy: "test", Meanwhile: "wait", OwnerDuty: "goal", ByRule: true}
 	ctx := context.Background()
-	id, err := rt.agentRuntimeAsk()(ctx, card)
+	id, err := rt.Ask()(ctx, card)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := rt.agentRuntimeRuleAnswer()(ctx, id, "b", "rule card-auto-answer v1", time.Now().Add(time.Hour), ""); err != nil {
+	if err := rt.RuleAnswer()(ctx, id, "b", "rule card-auto-answer v1", time.Now().Add(time.Hour), ""); err != nil {
 		t.Fatal(err)
 	}
-	q, ok := rt.agentRuntimeQuestion()(ctx, id)
+	q, ok := rt.Question()(ctx, id)
 	if !ok || q.Status != seenfacts.QuestionAnswered || q.Channel != "rule" {
 		t.Fatalf("rule result: %+v", q)
 	}
 	card.Key, card.ByRule = strings.Repeat("ef", 16), false
 	card.Title = "An Owner decision without a rule"
-	if _, err := rt.agentRuntimeAsk()(ctx, card); err == nil || !strings.Contains(err.Error(), "ops.bifrost.lan") {
+	if _, err := rt.Ask()(ctx, card); err == nil || !strings.Contains(err.Error(), "ops.bifrost.lan") {
 		t.Fatalf("human card: %v", err)
 	}
 }

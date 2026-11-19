@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,9 +28,9 @@ const consoleRuleAnsweredFixture = "../../../console/src/api/__fixtures__/questi
 // the runtime reads it back like the Owner's. Another requester's question
 // is not listed.
 func TestCardRuleOnTheStore(t *testing.T) {
-	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
+	rt := questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil)
 	ctx := context.Background()
-	ask, cards, answer, read := rt.agentRuntimeAsk(), rt.agentRuntimeCards(), rt.agentRuntimeRuleAnswer(), rt.agentRuntimeQuestion()
+	ask, cards, answer, read := rt.Ask(), rt.Cards(), rt.RuleAnswer(), rt.Question()
 	task := "t_01M5192P0JPMJAP63ZKRPXJ2VV"
 	id, err := ask(ctx, planstore.Card{Key: strings.Repeat("ab", 16), Title: "Blocked in M-3: STG walk", Body: "Recommended: Close mission M-3 — why",
 		Options: []string{questioncards.BlockedRetry, questioncards.BlockedDrop, "Close mission M-3"}, Recommended: 3, RecommendedWhy: "why",
@@ -39,7 +40,7 @@ func TestCardRuleOnTheStore(t *testing.T) {
 	}
 	thread, _ := json.Marshal(map[string]any{"idempotency_key": "thread-question-1", "title": "A thread asks", "urgency": "u", "meanwhile": "m",
 		"options": []map[string]string{{"label": "Yes"}, {"label": "No"}}, "recommended": 1})
-	if res := rt.svc.Create(ctx, "thread-a", "reporter", "reporter", thread); res.Code != 201 {
+	if res := rt.Svc.Create(ctx, "thread-a", "reporter", "reporter", thread); res.Code != 201 {
 		t.Fatalf("a thread's question: %d %v", res.Code, res.Body)
 	}
 	list, err := cards(ctx)
@@ -62,14 +63,14 @@ func TestCardRuleOnTheStore(t *testing.T) {
 	if list, err = cards(ctx); err != nil || len(list) != 1 || !list[0].Answered || list[0].By != "rule card-auto-answer v1" {
 		t.Fatalf("after the answer, before the runtime read it: %+v %v", list, err)
 	}
-	if err = rt.agentRuntimeAck()(ctx, id); err != nil {
+	if err = rt.Ack()(ctx, id); err != nil {
 		t.Fatal(err)
 	}
 	if list, err = cards(ctx); err != nil || len(list) != 0 {
 		t.Fatalf("after the runtime read it: %+v %v", list, err)
 	}
 	if os.Getenv("CONSOLE_QUESTION_FIXTURE_WRITE") == "1" {
-		res := rt.svc.Get(ctx, "owner-console", "admin", "admin", id)
+		res := rt.Svc.Get(ctx, "owner-console", "admin", "admin", id)
 		raw, err := json.MarshalIndent(map[string]any{"status": res.Code, "body": res.Body}, "", "  ")
 		if err != nil || res.Code != 200 {
 			t.Fatalf("the fixture: %d %v", res.Code, err)
@@ -92,17 +93,17 @@ func TestRuntimeCardsTheRuleAnswersSkipTheQuotas(t *testing.T) {
 			Options: []string{questioncards.BlockedRetry, questioncards.BlockedDrop}, OwnerDuty: "goal", TaskID: "t_01M5192P0JPMJAP63ZKRPXJ2VV",
 			Meanwhile: "m", ByRule: byRule}
 	}
-	stg := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
-	stg.takeCardsByRule(true)
+	stg := questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil)
+	stg.TakeCardsByRule(true)
 	for i := range 10 {
-		if _, err := stg.agentRuntimeAsk()(ctx, card(i, true)); err != nil {
+		if _, err := stg.Ask()(ctx, card(i, true)); err != nil {
 			t.Fatalf("STG, card %d the rule answers: %v", i, err)
 		}
 	}
-	held := func(rt *questionRuntime, byRule bool) int {
+	held := func(rt *questionbridge.Runtime, byRule bool) int {
 		t.Helper()
 		for i := range 25 {
-			if _, err := rt.agentRuntimeAsk()(ctx, card(100+i, byRule)); err != nil {
+			if _, err := rt.Ask()(ctx, card(100+i, byRule)); err != nil {
 				if !strings.Contains(err.Error(), "429") {
 					t.Fatalf("card %d: %v", i, err)
 				}
@@ -111,11 +112,11 @@ func TestRuntimeCardsTheRuleAnswersSkipTheQuotas(t *testing.T) {
 		}
 		return 25
 	}
-	if n := held(newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil), true); n != 20 {
+	if n := held(questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil), true); n != 20 {
 		t.Fatalf("PROD (no lift) took %d cards before the store was full; want 20", n)
 	}
-	lifted := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
-	lifted.takeCardsByRule(true)
+	lifted := questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil)
+	lifted.TakeCardsByRule(true)
 	if n := held(lifted, false); n != 20 {
 		t.Fatalf("STG took %d cards no rule answers before the store was full; want 20", n)
 	}

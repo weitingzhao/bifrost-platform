@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,9 +18,9 @@ import (
 // task and options; a plan change retried under its key with other content,
 // or a card naming another task or other options, stays a conflict.
 func TestOnlyTheSameCardIsTakenByItsKey(t *testing.T) {
-	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
+	rt := questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil)
 	ctx := context.Background()
-	ask := rt.agentRuntimeAsk()
+	ask := rt.Ask()
 	pc := planstore.Card{Key: strings.Repeat("ab", 16), Title: "Plan change to R2: a new item", Body: "A thread proposes P1"}
 	first, err := ask(ctx, pc)
 	if err != nil {

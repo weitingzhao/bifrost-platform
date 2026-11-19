@@ -117,27 +117,6 @@ func TestADirectActionIsRecordedAndReadBackBySeat(t *testing.T) {
 	}
 }
 
-// The record is built from what the caller sent and nothing else: a call that
-// gave a reason, a rollback and an unchecked list carries them; one that gave
-// none says so rather than making them up.
-func TestDirectRecordSaysWhatTheCallerLeftOut(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/x", nil)
-	req.Header.Set("X-Bifrost-Session", "local_s")
-	act := mustAction(t, "rollout_restart_deployment")
-	bare := directRecord(context.Background(), req, act, map[string]any{"namespace": "cicd", "kind": "Deployment", "name": "x"}, "action catalog: tier B", 200)
-	if bare.Reason != noReason || bare.RegretState != "undeclared" || bare.Outcome != "done" || bare.Seat != "local_s" {
-		t.Fatalf("bare = %+v", bare)
-	}
-	full := directRecord(context.Background(), req, act, map[string]any{"namespace": "cicd", "kind": "Deployment", "name": "x",
-		"reason": "reload cert", "rollback": "restart again", "unchecked": "none"}, "action catalog: tier B", 403)
-	if full.Reason != "reload cert" || full.RegretState != "declared" || full.Regret != "restart again" || full.NotVerified != "none" || full.Outcome != "refused" {
-		t.Fatalf("full = %+v", full)
-	}
-	if got := directRecord(context.Background(), req, act, map[string]any{}, "l", 500); got.Outcome != "failed" {
-		t.Fatalf("a 500 = %s", got.Outcome)
-	}
-}
-
 // A database without 0022 (the platform ran before the migration): the action
 // answers as it did, and the missing record is logged, not returned.
 func TestAnActionIsUnaffectedWhenTheRecordTableIsMissing(t *testing.T) {

@@ -74,7 +74,7 @@ type agentRuntime struct {
 func (s *Server) wireAgentRuntime(role config.Role) {
 	rt := &agentRuntime{api: &agentrtapi.API{Logf: func(format string, args ...any) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
-	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint,
+	}, Ask: s.questionRuntime.Ask(), Anchor: releasepolicy.OwnerKeyFingerprint,
 		DiskFloor: diskFloorFromEnv(), MailWake: s.mailWake}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
 	s.agentRuntime = rt
 	rt.evidenceCI = s.wireEvidenceGate()
@@ -117,7 +117,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	env := strings.TrimSpace(os.Getenv("AGENTRT_ENV"))
 	// STG's card-auto-answer rule answers the runtime's cards within
 	// seconds: there the question store takes them past its quotas (TD-393).
-	s.questionRuntime.takeCardsByRule(env == "stg")
+	s.questionRuntime.TakeCardsByRule(env == "stg")
 	safego.Go("agentrt-connect", func() {
 		defer close(done)
 		pool := connectAgentRuntime(ctx, func(ctx context.Context) (*pgxpool.Pool, error) {
@@ -332,12 +332,12 @@ func (s *Server) agentRuntimeSources() controller.Sources {
 	if s.releases != nil && s.releases.Service() != nil {
 		rel = s.releases.Service()
 	}
-	src := agentRuntimeSources(ap, s.questionRuntime.agentRuntimeQuestion(), ci, rel)
+	src := agentRuntimeSources(ap, s.questionRuntime.Question(), ci, rel)
 	s.wireExternalRecords(&src)
-	src.Ack = s.questionRuntime.agentRuntimeAck()
-	src.Unacked = s.questionRuntime.agentRuntimeUnacked()
-	src.Ask = s.questionRuntime.agentRuntimeAsk()
-	src.Withdraw = s.questionRuntime.agentRuntimeWithdraw()
+	src.Ack = s.questionRuntime.Ack()
+	src.Unacked = s.questionRuntime.Unacked()
+	src.Ask = s.questionRuntime.Ask()
+	src.Withdraw = s.questionRuntime.Withdraw()
 	src.Plan = s.agentRuntimePlanSources()
 	return src
 }

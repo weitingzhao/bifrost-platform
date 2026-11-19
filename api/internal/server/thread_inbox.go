@@ -14,5 +14,5 @@ func (s *Server) wireThreadInbox(db eventlog.DB) {
 		return coord.PostConclusion(ctx, db, key, to, body)
 	}
 	s.approvals.SetThreadInbox(send)
-	s.questionRuntime.svc.SetThreadInbox(send)
+	s.questionRuntime.Svc.SetThreadInbox(send)
 }

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -68,9 +69,9 @@ func TestAssessmentListsReturnWithinBudgetWhenDatabaseDoesNotRespond(t *testing.
 					s.approvals.Assessment = s.assessmentReader(kind)
 					handler = s.approvals.HandleList
 				} else {
-					s.questionRuntime = newQuestionRuntime(path, nil)
+					s.questionRuntime = questionbridge.New(path, nil)
 					s.wireQuestionAssessments()
-					handler = s.questionRuntime.svc.HandleList
+					handler = s.questionRuntime.Svc.HandleList
 				}
 				// A one-second outer deadline also bounds a regression's test runtime.
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second)

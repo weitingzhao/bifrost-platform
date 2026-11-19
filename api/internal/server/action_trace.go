@@ -2,8 +2,6 @@ package server
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actionrecord"
@@ -20,44 +18,20 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 )
 
-// Action traces copy materials already used by the executor. They never
-// authorize an action and a failed append must not change its result.
-type actionTrace struct {
-	Environment string              `json:"environment"`
-	Version     int                 `json:"version"`
-	Action      string              `json:"action"`
-	Mode        string              `json:"mode"`
-	At          time.Time           `json:"at"`
-	RequestHash string              `json:"request_hash"`
-	Object      any                 `json:"object"`
-	Initiator   any                 `json:"initiator"`
-	Reason      string              `json:"reason"`
-	Decision    any                 `json:"decision"`
-	Unchecked   string              `json:"unchecked"`
-	Rollback    string              `json:"rollback"`
-	Result      any                 `json:"result"`
-	Approval    *approvals.Approval `json:"approval,omitempty"`
-}
+// The trace envelope and what is redacted live in actionrecord (Trace); the
+// server's names for them are kept for the callers that wire them.
+type actionTrace = actionrecord.Trace
 
 type traceContextKey struct{}
 
-const traceMissing = "not_provided_by_caller"
-const traceUnavailable = "unavailable_at_this_step"
-const traceRequiredMessage = "reason, unchecked and rollback are required: reason explains why this action is needed; unchecked lists checks not performed (say none if all were performed); rollback explains how to revert"
-
-func traceValue(p map[string]any, key string) string {
-	v, _ := p[key].(string)
-	if strings.TrimSpace(v) == "" {
-		return traceMissing
-	}
-	return v
-}
+const (
+	traceMissing         = actionrecord.TraceMissing
+	traceUnavailable     = actionrecord.TraceUnavailable
+	traceRequiredMessage = actionrecord.TraceRequiredMessage
+)
 
 func newActionTrace(action, mode string, params map[string]any) *actionTrace {
-	raw, _ := json.Marshal(params)
-	hash := sha256.Sum256(raw)
-	return &actionTrace{Version: 1, Action: action, Mode: mode, At: time.Now().UTC(), RequestHash: hex.EncodeToString(hash[:]), Object: params,
-		Reason: traceValue(params, "reason"), Unchecked: traceValue(params, "unchecked"), Rollback: traceValue(params, "rollback"), Decision: traceUnavailable, Result: traceUnavailable}
+	return actionrecord.NewTrace(action, mode, params)
 }
 
 func traceFrom(ctx context.Context) *actionTrace {
@@ -97,7 +71,7 @@ func (s *Server) tracedAction(id string, next http.HandlerFunc) http.HandlerFunc
 		t := newActionTrace(id, "direct", p)
 		t.Initiator = map[string]any{"authenticated_principal": actuation.PrincipalFromContext(r.Context()), "authenticated_scope": "direct_request", "claimed_who": p["who"], "claimed_session": r.Header.Get("X-Bifrost-Session"), "claimed_agent_session": r.Header.Get("X-Agent-Session-ID")}
 		r = r.WithContext(context.WithValue(r.Context(), traceContextKey{}, t))
-		missing := t.Reason == traceMissing || t.Unchecked == traceMissing || t.Rollback == traceMissing
+		missing := t.Missing()
 		// Console and MCP can share an operator credential. Browser metadata is
 		// only a caller claim, never authorization or proof of a human identity.
 		// Internal approval/system paths are distinguished by Go context/calls.
@@ -159,48 +133,19 @@ func (s *Server) endApprovalTrace(ctx context.Context, result any, err error) {
 	s.recordActionTrace(ctx, t)
 }
 
-// Redact before serializing the final envelope, so newlines in secret shapes
-// remain visible to the existing redactor and the resulting JSON stays valid.
-func redactTrace(v any) any {
-	switch x := v.(type) {
-	case string:
-		return approvalnotify.Redact(x)
-	case map[string]any:
-		for k, value := range x {
-			if text := approvalnotify.Redact(k + "=trace-probe"); text != k+"=trace-probe" {
-				x[k] = "[redacted]"
-			} else {
-				x[k] = redactTrace(value)
-			}
-		}
-	case []any:
-		for i := range x {
-			x[i] = redactTrace(x[i])
-		}
-	}
-	return v
-}
-
 func (s *Server) recordActionTrace(ctx context.Context, t *actionTrace) {
-	t.Environment = traceUnavailable
+	env := traceUnavailable
 	if s.agentRuntime != nil {
-		t.Environment = s.agentRuntime.env
+		env = s.agentRuntime.env
 	}
-	raw, err := json.Marshal(t)
-	if err == nil {
-		var value any
-		err = json.Unmarshal(raw, &value)
-		if err == nil {
-			raw, err = json.Marshal(redactTrace(value))
-		}
-	}
+	raw, err := t.Seal(env, approvalnotify.Redact)
 	if err == nil {
 		if s.agentRuntime == nil || s.agentRuntime.late == nil {
 			err = errors.New("agent runtime event database unavailable")
 		} else {
 			ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
-			err = actionrecord.AppendTrace(ctx, s.agentRuntime.late, string(raw))
+			err = actionrecord.AppendTrace(ctx, s.agentRuntime.late, raw)
 		}
 	}
 	if err != nil {

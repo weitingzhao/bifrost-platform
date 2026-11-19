@@ -124,20 +124,6 @@ func TestTraceRequiredCompatibilityAndSources(t *testing.T) {
 	}
 }
 
-func TestTraceRedactsWithoutDamagingJSON(t *testing.T) {
-	value := map[string]any{"reason": "line one\nBearer abcdefghijklmnop\nline three", "params": map[string]any{"token": "private-value"}, "rollback": "revert commit"}
-	raw, err := json.Marshal(redactTrace(value))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), "abcdefghijklmnop") || strings.Contains(string(raw), "private-value") || !json.Valid(raw) {
-		t.Fatal(string(raw))
-	}
-	if value["rollback"] != "revert commit" {
-		t.Fatal(value)
-	}
-}
-
 func TestTraceRuntimeRecords(t *testing.T) {
 	db := agentrttest.Migrated(t)
 	ctx := context.Background()

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,7 +38,7 @@ const consoleQuestionCardsFixture = "../../../console/src/api/__fixtures__/quest
 type buttonWorld struct {
 	t    *testing.T
 	conn *pgx.Conn
-	rt   *questionRuntime
+	rt   *questionbridge.Runtime
 }
 
 func (b *buttonWorld) tx(fn func(pgx.Tx) error) {
@@ -56,7 +57,7 @@ func (b *buttonWorld) answer(id, option, text string) {
 		body["text"] = text
 	}
 	raw, _ := json.Marshal(body)
-	if res := b.rt.svc.Answer(context.Background(), "owner-console", "admin", "admin", id, raw); res.Code != 200 {
+	if res := b.rt.Svc.Answer(context.Background(), "owner-console", "admin", "admin", id, raw); res.Code != 200 {
 		b.t.Fatalf("answer %s with %s: %d %v", id, option, res.Code, res.Body)
 	}
 }
@@ -123,7 +124,7 @@ func TestOwnerButtonPaths(t *testing.T) {
 	if _, err := actor.Seed(ctx, db.Connect(t, db.Owner)); err != nil {
 		t.Fatal(err)
 	}
-	b := &buttonWorld{t: t, conn: db.Connect(t, db.Runtime), rt: newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)}
+	b := &buttonWorld{t: t, conn: db.Connect(t, db.Runtime), rt: questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil)}
 	if _, err := b.conn.Exec(ctx, agentrttest.DevBudgetRule); err != nil {
 		t.Fatal(err)
 	}
@@ -133,14 +134,14 @@ func TestOwnerButtonPaths(t *testing.T) {
 	var question func(context.Context, string) (seenfacts.Question, bool)
 	var ack func(context.Context, string) error
 	group := func() {
-		b.rt = newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
-		ask, question, ack = b.rt.agentRuntimeAsk(), b.rt.agentRuntimeQuestion(), b.rt.agentRuntimeAck()
+		b.rt = questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil)
+		ask, question, ack = b.rt.Ask(), b.rt.Question(), b.rt.Ack()
 	}
 	group()
 	thread := actor.Writer{Actor: "thread:buttons", Token: "t"}
 	fixture := map[string]any{}
 	keep := func(kind, id string) {
-		res := b.rt.svc.Get(ctx, "owner-console", "admin", "admin", id)
+		res := b.rt.Svc.Get(ctx, "owner-console", "admin", "admin", id)
 		if res.Code != 200 {
 			t.Fatalf("GET %s: %d %v", id, res.Code, res.Body)
 		}

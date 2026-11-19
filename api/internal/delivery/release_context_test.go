@@ -111,12 +111,24 @@ func fineSources() ReleaseContextSources {
 		},
 		Questions: func() ([]questions.Question, error) {
 			return []questions.Question{
-				{ID: "q1", Answer: &questions.Answer{By: "owner", At: ctxNow.Add(-20 * time.Minute), Channel: "phone"}},
+				answeredQuestion("q1", "owner", "phone", ctxNow.Add(-20*time.Minute)),
 				// A rule's answer is not the Owner's.
-				{ID: "q2", Answer: &questions.Answer{By: "rule", At: ctxNow.Add(-2 * time.Minute), Channel: questions.RuleChannel}},
+				answeredQuestion("q2", "rule", questions.RuleChannel, ctxNow.Add(-2*time.Minute)),
 			}, nil
 		},
 	}
+}
+
+// answeredQuestion is a question the given party answered, built through JSON
+// so the test names the card and not its answer type (the decoupling A5 move
+// left no production code outside questions naming that type).
+func answeredQuestion(id, by, channel string, at time.Time) questions.Question {
+	raw, _ := json.Marshal(map[string]any{"id": id, "answer": map[string]any{"by": by, "at": at, "channel": channel}})
+	var q questions.Question
+	if err := json.Unmarshal(raw, &q); err != nil {
+		panic(err)
+	}
+	return q
 }
 
 // 2026-11-15: duty asked for one read of the release situation; cards

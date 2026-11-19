@@ -780,8 +780,8 @@ func (s *Server) cardConclusionsPass(ctx context.Context) {
 }
 
 func (s *Server) questionConclusionsPass(ctx context.Context) {
-	if s.questionRuntime != nil && s.questionRuntime.svc != nil {
-		s.questionRuntime.svc.RetryThreadInbox(ctx)
+	if s.questionRuntime != nil && s.questionRuntime.Svc != nil {
+		s.questionRuntime.Svc.RetryThreadInbox(ctx)
 	}
 }
 

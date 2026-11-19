@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,8 +19,8 @@ import (
 // refused, as before.
 func TestPlanChangeCardRetryFindsItsCard(t *testing.T) {
 	ctx := context.Background()
-	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
-	ask := rt.agentRuntimeAsk()
+	rt := questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil)
+	ask := rt.Ask()
 	recommended := planstore.Card{Title: "Plan change to ARCH: the catalog's gates", Body: "A thread proposes to change plan ARCH.\n\n- a change",
 		Recommended: 1, RecommendedWhy: "it gives architecture rows their first gates, exactly the reviewed catalog's for stg"}
 	plain := recommended
@@ -35,7 +36,7 @@ func TestPlanChangeCardRetryFindsItsCard(t *testing.T) {
 		if again, err := ask(ctx, retry); err != nil || again != id {
 			t.Fatalf("try %d: the retry got %q (%v), want card %s", i, again, err, id)
 		}
-		q, ok, err := rt.svc.Lookup(id)
+		q, ok, err := rt.Svc.Lookup(id)
 		if err != nil || !ok || (q.Recommended == planstore.CardApplyKey) != (first.Recommended == 1) {
 			t.Fatalf("try %d: the card %+v %v %v", i, q, ok, err)
 		}

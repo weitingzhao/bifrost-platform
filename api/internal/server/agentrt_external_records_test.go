@@ -1,9 +1,7 @@
 package server
 
 import (
-	"context"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/runfacts"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -16,35 +14,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
-
-func TestExternalRecordQuestionObservationNeverReopensExpired(t *testing.T) {
-	t.Parallel()
-	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "cards"), nil)
-	raw := []byte(`{"idempotency_key":"0123456789abcdef","title":"Choose","urgency":"Now","meanwhile":"Wait"}`)
-	res := rt.svc.Create(context.Background(), "thread-a", "reporter", "reporter", raw)
-	if res.Code >= 300 {
-		t.Fatalf("create: %+v", res)
-	}
-	items, err := rt.svc.Observations()
-	if err != nil || len(items) != 1 {
-		t.Fatalf("observations: %+v %v", items, err)
-	}
-	q := items[0]
-	now := q.ExpiresAt.Add(time.Second)
-	q.Status = "expired"
-	terminal, ok := questionObservation(q, now)
-	if !ok || terminal.Status != "expired" {
-		t.Fatalf("terminal: %+v %v", terminal, ok)
-	}
-	q.Status = "open"
-	if _, ok := questionObservation(q, now); ok {
-		t.Fatal("stale open card could reverse terminal observation")
-	}
-	q.Status = "withdrawn"
-	if f, ok := questionObservation(q, now); !ok || f.Status != "withdrawn" {
-		t.Fatal("closed card lost")
-	}
-}
 
 func TestPipelineRecordsDurationFromEnv(t *testing.T) {
 	for _, name := range []string{pipelineRecordsEveryEnv, pipelineRecordsFullEveryEnv} {

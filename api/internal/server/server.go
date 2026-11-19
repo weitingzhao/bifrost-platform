@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"log/slog"
 	"net/http"
 	"os"
@@ -114,15 +115,15 @@ type Server struct {
 	research      *research.Handler
 	datahusbandry *datahusbandry.Handler
 	telemetry     *telemetry.Handler
-	nodeLatency   nodeLatencyCache
+	nodeLatency   delivery.PromNodeMetrics
 	devSession    *devsession.Handler
 	auth          *actuation.AuthService
 	approvals     *approvals.Service
 	// approvalsCancel stops this process's sole approval result loop.
 	approvalsCancel context.CancelFunc
-	// questionRuntime is the Owner-question record. The type lives next to
-	// Mount so this file does not name the questions package.
-	questionRuntime *questionRuntime
+	// questionRuntime is the Owner-question record; the type lives in
+	// agentrt/questionbridge.
+	questionRuntime *questionbridge.Runtime
 	releasePolicy   *releasepolicy.Engine
 	agentThreads    *agentthreads.Handler
 	agentRuntime    *agentRuntime

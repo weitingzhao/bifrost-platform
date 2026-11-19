@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,9 +41,9 @@ func threadInboxServer(t *testing.T, now time.Time) (*Server, *lateDB, []string)
 			t.Fatal(err)
 		}
 	}
-	s := &Server{approvals: approvals.New(paths[0], nil), questionRuntime: newQuestionRuntime(paths[1], nil)}
+	s := &Server{approvals: approvals.New(paths[0], nil), questionRuntime: questionbridge.New(paths[1], nil)}
 	s.approvals.SetClock(func() time.Time { return now })
-	s.questionRuntime.svc.SetClock(func() time.Time { return now })
+	s.questionRuntime.Svc.SetClock(func() time.Time { return now })
 	late := &lateDB{}
 	s.wireThreadInbox(late)
 	return s, late, paths
@@ -50,7 +51,7 @@ func threadInboxServer(t *testing.T, now time.Time) (*Server, *lateDB, []string)
 
 func retryServerThreadInbox(s *Server) {
 	s.approvals.RetryThreadInbox(context.Background())
-	s.questionRuntime.svc.RetryThreadInbox(context.Background())
+	s.questionRuntime.Svc.RetryThreadInbox(context.Background())
 }
 
 func TestThreadInboxWiringKeepsUnavailableRuntimePending(t *testing.T) {
@@ -73,7 +74,7 @@ func TestThreadInboxWiringKeepsUnavailableRuntimePending(t *testing.T) {
 	if a, found, err := s.approvals.Lookup("appr_wiring"); err != nil || !found || a.Status != approvals.StatusExecuted {
 		t.Fatalf("approval changed: %+v %v", a, err)
 	}
-	if q, found, err := s.questionRuntime.svc.Lookup("q_aaaaaaaaaaaaaaaa"); err != nil || !found || q.Status != "answered" {
+	if q, found, err := s.questionRuntime.Svc.Lookup("q_aaaaaaaaaaaaaaaa"); err != nil || !found || q.Status != "answered" {
 		t.Fatalf("answer changed: %+v %v", q, err)
 	}
 }
@@ -114,7 +115,7 @@ func TestThreadInboxWiringRecoversPGAndRestart(t *testing.T) {
 	if _, err := coord.AckMessages(ctx, pool, w, ids); err != nil {
 		t.Fatal(err)
 	}
-	restarted := &Server{approvals: approvals.New(paths[0], nil), questionRuntime: newQuestionRuntime(paths[1], nil)}
+	restarted := &Server{approvals: approvals.New(paths[0], nil), questionRuntime: questionbridge.New(paths[1], nil)}
 	restarted.wireThreadInbox(db.Pool(t, db.Runtime))
 	retryServerThreadInbox(restarted)
 	history, err := coord.Thread(ctx, pool, w.Actor, "controller", 100)

@@ -1323,6 +1323,14 @@
       ],
       "status": "mixed",
       "basis": "2026-11-18 moved out of store (decoupling item 5, S4; store's portsbind.go, 79 lines, unchanged in effect): the binding of the plan code's ports to their providers (the external work checks and activity reads, the plan tree, the delivery read's lineage naming, the loop alerts, the recorder import decision, the coordination alert claim, the Owner's question limits); it is wiring only, holds no rule and no query, and is mixed because it names the plan on one side and lineage, delivery, coordination and the Owner's questions on the other, as the assembly of the plan code; it is linked by server and by the tests that run the plan code, and nothing but wiring may be added to it"
+    },
+    "api/internal/agentrt/questionbridge": {
+      "domains": [
+        "owner",
+        "plan"
+      ],
+      "status": "mixed",
+      "basis": "2026-11-18 moved out of server (decoupling item 5, A5; the server's questions_wire.go, about 330 lines, unchanged in effect): how the agent runtime asks, reads, answers, withdraws and acknowledges the Owner's questions: the translation of a plan's card (planstore.Card) into a question with its idempotency and recommendation rules, the runtime's own session, the bounded reads, the card-auto-answer reads, and the announcement of the questions' transitions to the bus; it is mixed because it names the plan's ports on one side and the questions service on the other, the same shape as planwiring; the server only constructs it, mounts the routes and closes it"
     }
   }
 }

@@ -22,7 +22,7 @@ import (
 
 // wireExternalRecords supplies bounded, read-only lists for durable backfill.
 func (s *Server) wireExternalRecords(src *controller.Sources) {
-	src.Questions = s.questionRuntime.agentRuntimeQuestionObservations()
+	src.Questions = s.questionRuntime.Observations()
 	if s.approvals != nil {
 		reads := readslot.New(2)
 		src.Approvals = func(ctx context.Context) ([]seenfacts.ApprovalFact, error) {

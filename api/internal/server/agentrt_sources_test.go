@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,22 +28,18 @@ func (f fakeApprovals) Lookup(ref string) (approvals.Approval, bool, error) {
 	return a, ok, nil
 }
 
-// question answers as questions_wire.go's reader does, from plain fields.
+// question answers as the questionbridge reader does's reader does, from plain fields.
 func question(_ context.Context, id string) (seenfacts.Question, bool) {
-	at := time.Date(2026, 10, 14, 12, 0, 0, 0, time.FixedZone("CDT", -5*3600))
+	// What questioncards.Fact makes of each card (observation_test.go there
+	// holds the conversion); here the sources only have to hand it on.
+	at := "2026-10-14T17:00:00Z"
 	switch id {
 	case "q_open":
-		return questionAnswerFact(id, "open", false, "", "", "", time.Time{})
+		return seenfacts.Question{ID: id, Status: "open"}, true
 	case "q_done":
-		return questionAnswerFact(id, "answered", true, "a", "go", "owner", at)
+		return seenfacts.Question{ID: id, Status: "answered", Option: "a", Text: "go", AnsweredBy: "owner", AnsweredAt: at}, true
 	case "q_textual":
-		return questionAnswerFact(id, "answered", true, "", "just text", "owner", at)
-	case "q_empty":
-		return questionAnswerFact(id, "answered", true, "", "", "owner", at)
-	case "q_nobody":
-		return questionAnswerFact(id, "answered", true, "a", "", "", at)
-	case "q_untimed":
-		return questionAnswerFact(id, "answered", true, "a", "", "owner", time.Time{})
+		return seenfacts.Question{ID: id, Status: "answered", Option: "none", Text: "just text", AnsweredBy: "owner", AnsweredAt: at}, true
 	}
 	return seenfacts.Question{}, false
 }
@@ -198,19 +195,19 @@ func TestAgentRuntimeSources(t *testing.T) {
 // questions_wire.go's reader on a real question store: open, answered by
 // option, answered by text only, missing.
 func TestQuestionReaderOnTheStore(t *testing.T) {
-	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
+	rt := questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil)
 	ctx := context.Background()
 	ask := func(key string, allowText bool) {
 		t.Helper()
 		body, _ := json.Marshal(map[string]any{"idempotency_key": key, "title": "Which way?", "urgency": "Before tonight",
 			"meanwhile": "The line waits", "options": []any{map[string]any{"label": "Ship"}, map[string]any{"label": "Wait"}}, "allow_text": allowText})
-		if res := rt.svc.Create(ctx, agentRuntimeRequester, "reporter", "reporter", body); res.Code >= 300 {
+		if res := rt.Svc.Create(ctx, "agentrt", "reporter", "reporter", body); res.Code >= 300 {
 			t.Fatalf("create = %d %v", res.Code, res.Body)
 		}
 	}
 	ask("0123456789abcdef", false)
 	ask("fedcba9876543210", true)
-	read := rt.agentRuntimeQuestion()
+	read := rt.Question()
 	q1, ok := read(ctx, "1")
 	// TD-401 (review 460 B1): an open one says when it expires, which the
 	// store marks only at its next sweep.
@@ -220,7 +217,7 @@ func TestQuestionReaderOnTheStore(t *testing.T) {
 	answer := func(ref string, body map[string]any) {
 		t.Helper()
 		raw, _ := json.Marshal(body)
-		if res := rt.svc.Answer(ctx, "owner-console", "admin", "admin", ref, raw); res.Code >= 300 {
+		if res := rt.Svc.Answer(ctx, "owner-console", "admin", "admin", ref, raw); res.Code >= 300 {
 			t.Fatalf("answer %s = %d %v", ref, res.Code, res.Body)
 		}
 	}
@@ -237,8 +234,8 @@ func TestQuestionReaderOnTheStore(t *testing.T) {
 	if _, ok := read(ctx, "9"); ok {
 		t.Fatal("a missing question read")
 	}
-	var nilRuntime *questionRuntime
-	if nilRuntime.agentRuntimeQuestion() != nil {
+	var nilRuntime *questionbridge.Runtime
+	if nilRuntime.Question() != nil {
 		t.Fatal("no question store gave a reader")
 	}
 }
@@ -248,9 +245,9 @@ func TestQuestionReaderOnTheStore(t *testing.T) {
 // compares; the runtime acknowledges as the requester; a card the store
 // cannot take for its size is refused as invalid, not as unreachable.
 func TestPlanChangeCardOnTheStore(t *testing.T) {
-	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
+	rt := questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil)
 	ctx := context.Background()
-	ask, read, ack := rt.agentRuntimeAsk(), rt.agentRuntimeQuestion(), rt.agentRuntimeAck()
+	ask, read, ack := rt.Ask(), rt.Question(), rt.Ack()
 	id, err := ask(ctx, planstore.Card{Key: strings.Repeat("ab", 16), Title: "Plan change to R2: a new item", Body: "A thread proposes …"})
 	if err != nil {
 		t.Fatal(err)
@@ -263,7 +260,7 @@ func TestPlanChangeCardOnTheStore(t *testing.T) {
 		t.Fatal("acknowledged a card nobody answered")
 	}
 	raw, _ := json.Marshal(map[string]any{"option": "a", "channel": "console"})
-	if res := rt.svc.Answer(ctx, "owner-console", "admin", "admin", id, raw); res.Code >= 300 {
+	if res := rt.Svc.Answer(ctx, "owner-console", "admin", "admin", id, raw); res.Code >= 300 {
 		t.Fatalf("answer = %d %v", res.Code, res.Body)
 	}
 	q, ok := read(ctx, id)
@@ -275,8 +272,8 @@ func TestPlanChangeCardOnTheStore(t *testing.T) {
 			t.Fatalf("acknowledge: %v", err)
 		}
 	}
-	got, ok, err := rt.svc.Lookup(id)
-	if err != nil || !ok || got.Answer == nil || got.Answer.Read == nil || got.Answer.Read.Session != agentRuntimeRequester {
+	got, ok, err := rt.Svc.Lookup(id)
+	if err != nil || !ok || got.Answer == nil || got.Answer.Read == nil || got.Answer.Read.Session != "agentrt" {
 		t.Fatalf("the read receipt: %+v %v %v", got.Answer, ok, err)
 	}
 	// Review 182 B2: the store's own limits, counted its way (JSON with the
@@ -290,7 +287,7 @@ func TestPlanChangeCardOnTheStore(t *testing.T) {
 		t.Fatalf("a body of 3001 encoded bytes: %v", err)
 	}
 	// A fresh store for the titles: the runtime may have three cards open.
-	fresh := newQuestionRuntime(filepath.Join(t.TempDir(), "titles"), nil).agentRuntimeAsk()
+	fresh := questionbridge.New(filepath.Join(t.TempDir(), "titles"), nil).Ask()
 	for i, title := range []string{strings.Repeat("&", 298), strings.Repeat("a", 299), strings.Repeat("计", 150) + "\u0007tail"} {
 		if _, err = fresh(ctx, planstore.Card{Key: strings.Repeat(string(rune('g'+i)), 32), Title: title, Body: "b"}); err != nil {
 			t.Errorf("title %d: %v", i, err)
@@ -306,9 +303,9 @@ func TestPlanChangeCardOnTheStore(t *testing.T) {
 // another key, open or answered, comes back as asked before, not as an error
 // a plan would wait on forever. A plan change's card keeps its old answer.
 func TestPlannerCardOnTheStore(t *testing.T) {
-	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
+	rt := questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil)
 	ctx := context.Background()
-	ask, read, withdraw := rt.agentRuntimeAsk(), rt.agentRuntimeQuestion(), rt.agentRuntimeWithdraw()
+	ask, read, withdraw := rt.Ask(), rt.Question(), rt.Withdraw()
 	card := func(key, question string) planstore.Card {
 		return planstore.Card{Key: key, Title: question, Body: "why it matters", Options: []string{"Not now", "Yes"}, Recommended: 1,
 			Meanwhile: "the work goes on without it", OwnerDuty: "goal", TaskID: "t_01M5192P0JPMJAP63ZKRPXJ2VV"}
@@ -317,7 +314,7 @@ func TestPlannerCardOnTheStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, ok, err := rt.svc.Lookup(id)
+	got, ok, err := rt.Svc.Lookup(id)
 	if err != nil || !ok || len(got.Options) != 2 || got.Recommended != "a" || got.OwnerDuty != "goal" || got.TaskID == "" {
 		t.Fatalf("the card %+v %v %v", got, ok, err)
 	}
@@ -326,7 +323,7 @@ func TestPlannerCardOnTheStore(t *testing.T) {
 		t.Fatalf("an open duplicate: %v", err)
 	}
 	raw, _ := json.Marshal(map[string]any{"option": "b", "channel": "console"})
-	if res := rt.svc.Answer(ctx, "owner-console", "admin", "admin", id, raw); res.Code >= 300 {
+	if res := rt.Svc.Answer(ctx, "owner-console", "admin", "admin", id, raw); res.Code >= 300 {
 		t.Fatalf("answer = %d %v", res.Code, res.Body)
 	}
 	if q, ok := read(ctx, id); !ok || q.Status != seenfacts.QuestionAnswered {
@@ -347,7 +344,7 @@ func TestPlannerCardOnTheStore(t *testing.T) {
 	if err = withdraw(ctx, other, "the plan was not used"); err != nil {
 		t.Fatalf("withdraw: %v", err)
 	}
-	if got, ok, _ = rt.svc.Lookup(other); !ok || got.Status != "withdrawn" {
+	if got, ok, _ = rt.Svc.Lookup(other); !ok || got.Status != "withdrawn" {
 		t.Fatalf("after the withdrawal: %+v", got)
 	}
 	if err = withdraw(ctx, "q_not_there", "gone"); err != nil {
@@ -366,18 +363,18 @@ func TestPlannerCardOnTheStore(t *testing.T) {
 }
 func TestExternalQuestionDropsOtherSessionText(t *testing.T) {
 	t.Parallel()
-	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
+	rt := questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil)
 	ctx := context.Background()
 	raw, _ := json.Marshal(map[string]any{"idempotency_key": "abcdef0123456789", "title": "Which way?", "urgency": "Before tonight",
 		"meanwhile": "The line waits", "options": []any{map[string]any{"label": "Ship"}, map[string]any{"label": "Wait"}}, "allow_text": true})
-	if res := rt.svc.Create(ctx, "other-session", "reporter", "reporter", raw); res.Code >= 300 {
+	if res := rt.Svc.Create(ctx, "other-session", "reporter", "reporter", raw); res.Code >= 300 {
 		t.Fatalf("create = %d %v", res.Code, res.Body)
 	}
 	raw, _ = json.Marshal(map[string]any{"text": "private answer", "channel": "console"})
-	if res := rt.svc.Answer(ctx, "owner-console", "admin", "admin", "1", raw); res.Code >= 300 {
+	if res := rt.Svc.Answer(ctx, "owner-console", "admin", "admin", "1", raw); res.Code >= 300 {
 		t.Fatalf("answer = %d %v", res.Code, res.Body)
 	}
-	q, ok := rt.agentRuntimeQuestion()(ctx, "1")
+	q, ok := rt.Question()(ctx, "1")
 	if !ok || q.Text != "" || q.Option != "none" || q.Number != 1 || q.CreatedAt == "" || q.Channel != "console" {
 		t.Fatalf("fact = %+v, %v", q, ok)
 	}

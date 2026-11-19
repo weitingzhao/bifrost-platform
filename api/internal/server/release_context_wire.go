@@ -21,8 +21,8 @@ func (s *Server) handleReleaseContext(w http.ResponseWriter, r *http.Request) {
 		src.Waiting = s.approvals.Waiting
 		src.ApprovalHistory = s.approvals.Observations
 	}
-	if s.questionRuntime != nil && s.questionRuntime.svc != nil {
-		src.Questions = s.questionRuntime.svc.Observations
+	if s.questionRuntime != nil && s.questionRuntime.Svc != nil {
+		src.Questions = s.questionRuntime.Svc.Observations
 	}
 	src.OpenRegressions = s.openRegressions
 	// main is shown, not gated on: read it where the ledger has it.

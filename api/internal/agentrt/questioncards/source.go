@@ -84,3 +84,13 @@ func Fact(q questions.Question) (seenfacts.Question, bool) {
 	}
 	return f, true
 }
+
+// Observation reads a retained card as a seen fact without sweeping: an open
+// card past its expiry is not read as open again (the sweep has not closed it
+// yet; a terminal card is read as it is).
+func Observation(q questions.Question, now time.Time) (seenfacts.Question, bool) {
+	if q.Status == questions.StatusOpen && !q.ExpiresAt.IsZero() && !now.Before(q.ExpiresAt) {
+		return seenfacts.Question{}, false
+	}
+	return Fact(q)
+}

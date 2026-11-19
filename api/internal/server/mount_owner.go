@@ -12,6 +12,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuationpolicy"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actionrecord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/workactions"
@@ -28,7 +29,7 @@ func (s *Server) mountOwner(r chi.Router) {
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/readings/approvals", s.handleApprovalReadings)
 	// The action record (action_record.go): what was done, by whom, why and on
 	// which law, newest first, by seat, law, action and time. Read-only.
-	r.With(s.auth.Require(actuation.RoleViewer)).Get("/records", s.handleRecords)
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/records", actionrecord.ListHandler(s.recordDB))
 	// The laws, Skills and MCP tools the source at main declares, for the Crew
 	// page (governance_instruments.go). Read-only.
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/governance/instruments", s.handleInstruments)
