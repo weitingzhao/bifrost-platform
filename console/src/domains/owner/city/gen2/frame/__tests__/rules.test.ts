@@ -40,4 +40,17 @@ describe('the frame holds its rules on any content', () => {
     expect(all).toMatch(/share this id/)
     expect(all).toMatch(/function nope/)
   })
+  // 2026-11-19, the Owner: nothing on the screen is made up, nor written in once from a measurement and left.
+  it('a number with no read behind it is refused; an unread meter may say why in words', () => {
+    const t = good()
+    const room = t.children[0].children[0].children[0]
+    room.state = 'online'
+    room.meter = { used: 3, of: 16, unit: 'cores', source: 'measured by hand on Tuesday' }
+    expect(rulesBroken({ tree: t }).join()).toMatch(/must come from a read/)
+    room.meter = { used: 3, of: 16, unit: 'cores', source: 'sum by (instance) (rate(node_cpu_seconds_total[5m]))' }
+    expect(rulesBroken({ tree: t })).toEqual([])
+    room.state = 'unread'
+    room.meter = { used: null, of: null, unit: 'cores', source: 'no exporter: not read' }
+    expect(rulesBroken({ tree: t })).toEqual([])
+  })
 })

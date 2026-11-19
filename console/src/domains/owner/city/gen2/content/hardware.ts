@@ -1,4 +1,4 @@
-import type { Shape } from '../frame/grid'
+import { shapeByCount, type Shape } from '../frame/grid'
 import type { Look, Meter, Place, State } from '../frame/places'
 
 /**
@@ -115,7 +115,7 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = ''): Pl
     }
     return building
   })
-  return { id: 'utilities', kind: 'district', shape: '8x8', function: fn, label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: devices }
+  return { id: 'utilities', kind: 'district', shape: shapeByCount(devices.length), function: fn, label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: devices }
 }
 
 /**

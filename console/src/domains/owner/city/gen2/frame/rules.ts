@@ -16,7 +16,12 @@ import { LOOKS, STATES, type Place, type PlaceKind } from './places'
  *   states   a state is one of the four words; a look one of the five
  *   readings a meter says where it was read; numbers are not negative and used is not past its whole;
  *            an unread thing has no number (unread is not zero)
+ *   made up  a number must come from a read: its source is a query or an API path, never words
+ *            (the Owner, 2026-11-19: nothing on the screen is made up or written in once and left)
  */
+
+/** A source a number can come from: a PromQL query (a function or a selector) or a platform API path. */
+const READ_SOURCE = /^\/api\/|[a-z_:]+\s*\(|[a-z_:]+\{/i
 
 const CHILD: Record<PlaceKind, PlaceKind | null> = { town: 'district', district: 'building', building: 'room', room: null }
 
@@ -37,6 +42,7 @@ export function rulesBroken(content: { tree: Place; functions?: { id: string }[]
       if ((m.used != null && m.used < 0) || (m.of != null && m.of < 0)) out.push(`${where}: a reading is not negative`)
       if (m.used != null && m.of != null && m.used > m.of * 1.05) out.push(`${where}: used ${m.used} is past its whole ${m.of}`)
       if (p.state === 'unread' && m.used != null) out.push(`${where}: an unread thing has no reading (unread is not zero)`)
+      if ((m.used != null || m.of != null) && !READ_SOURCE.test(m.source)) out.push(`${where}: a number must come from a read (a query or an API path), not from "${m.source}"`)
     }
     const want = CHILD[p.kind]
     const seen = new Set<string>()

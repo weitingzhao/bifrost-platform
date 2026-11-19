@@ -20,8 +20,6 @@ import type { Place } from './places'
 export type Panel = {
   id: string
   title: string
-  /** True while the panel shows sample numbers: said on the panel, never passed off as a reading. */
-  sample?: boolean
   /** Which bottom corner it docks in on a wide screen: charts on the left, tables and cards on the right. */
   dock: 'left' | 'right'
   /**

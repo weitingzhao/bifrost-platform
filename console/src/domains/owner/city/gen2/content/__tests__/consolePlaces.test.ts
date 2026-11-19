@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ENTRY_ROUTE_IDS } from '@/lib/shell/consoleRoutes'
-import { fitsBudget, sidesOf, TAPPABLE } from '../../frame/grid'
+import { fitsBudget, shapeByCount, sidesOf, TAPPABLE } from '../../frame/grid'
 import { formatPath, functionAt, here, parsePath, resolve, trail, type Place } from '../../frame/places'
 import { consoleFunctions, placeTree } from '../consolePlaces'
 
@@ -52,8 +52,13 @@ describe('density (the Owner, 2026-11-19: one 16×16 ground per page; too much g
   it('every door is at least 2 wide', () => {
     for (const p of all(placeTree()).slice(1).filter(p => p.kind !== 'room')) expect(sidesOf(p.shape).short, p.id).toBeGreaterThanOrEqual(TAPPABLE)
   })
-  it('the sample shapes differ, so the rule shows', () => {
-    expect(new Set(placeTree().children.map(d => d.shape)).size).toBe(placeTree().children.length)
+  // 2026-11-19, the Owner: nothing made up. The sample sizes and the greybox rooms A–F were taken out;
+  // a district's size is now its page count, and a page has no rooms until its sections are read.
+  it('sizes come from counts, and no page has made-up rooms', () => {
+    for (const d of placeTree().children) {
+      expect(d.shape).toBe(shapeByCount(d.children.length))
+      for (const b of d.children) expect(b.children).toEqual([])
+    }
   })
 })
 
@@ -64,7 +69,8 @@ describe('content is swappable', () => {
     const c = consoleContent()
     const other = { ...c, tree: { ...c.tree, label: 'Family', children: c.tree.children.slice(0, 2).map(d => ({ ...d, label: `${d.label} (renamed)` })) } }
     expect(other.tree.children.map(d => d.label)).toEqual(['Command (renamed)', 'Crew (renamed)'])
-    expect(other.panels(other.tree, () => {}).map(p => p.id)).toEqual(['inside', 'chart', 'parts'])
+    // Only what the system says: the sample chart and the sample events are gone.
+    expect(other.panels(other.tree, () => {}).map(p => p.id)).toEqual(['inside'])
   })
 })
 
@@ -76,8 +82,7 @@ describe('functions', () => {
     const ids = consoleFunctions().map(f => f.id)
     for (const d of tree.children) expect(ids).toContain(functionAt(tree, [d.id]))
   })
-  it('a room serves what its building serves; a building what its entry is', () => {
+  it('a building serves what its entry is', () => {
     expect(functionAt(tree, ['system', 'infrastructure'])).toBe('system')
-    expect(functionAt(tree, ['system', 'infrastructure', 'room-a'])).toBe('system')
   })
 })

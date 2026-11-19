@@ -35,6 +35,13 @@ export type Item = { id: string; shape: Shape }
 /** Where a thing stands: its back corner and its footprint along x (w) and y (h), turned to its plot. */
 export type Placed = Item & Cell & { plot: string; w: number; h: number }
 
+/**
+ * A footprint by how many things a place holds (the Owner, 2026-11-19: nothing made up — a size is
+ * a weight only when it comes from something counted): more than 8 an 8×8, more than 4 a 4×8, more
+ * than 2 a 4×4, else a 2×4.
+ */
+export const shapeByCount = (n: number): Shape => n > 8 ? '8x8' : n > 4 ? '4x8' : n > 2 ? '4x4' : '2x4'
+
 export const area = (items: readonly Item[]) => items.reduce((a, i) => a + shapeArea(i.shape), 0)
 export const fitsBudget = (items: readonly Item[]) => area(items) <= GRID * GRID
 

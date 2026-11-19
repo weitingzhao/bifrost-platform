@@ -43,6 +43,8 @@ type Props = {
   content: CityContent
   /** Where the Owner's positions are kept (display only). */
   arrangements?: ArrangementStore
+  /** Said at the top of the summary, for a page that cannot read the system (rule: nothing made up, so it says so). */
+  notice?: string
 }
 
 const at = (r: Rect): CSSProperties => ({ left: r.x, top: r.y, width: r.w, height: r.h })
@@ -115,7 +117,7 @@ export default function CityGen2(props: Props) {
   return <CityFrame {...props} />
 }
 
-function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoop = false, arrangements, content }: Props) {
+function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoop = false, arrangements, content, notice }: Props) {
   const store = useMemo(() => arrangements ?? browserArrangements(), [arrangements])
   const tree = content.tree
   const path = useMemo(() => resolve(tree, asked), [tree, asked])
@@ -379,7 +381,6 @@ function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoo
     <section key={p.id} className={`g2-panelbox${p.id.startsWith('picked-') ? ' picked' : ''}${docked ? ' docked' : ''}`} aria-label={p.title}>
       <header>
         <h3>{p.title}</h3>
-        {p.sample && <span className="g2-chip">sample</span>}
         <span className="g2-grow" />
         {p.menu && p.menu.length > 0 && <Menu items={p.menu} label={`More for ${p.title}`} />}
         {!p.id.startsWith('picked-') && <button className="g2-icon" onClick={() => fold(p.id, true)} aria-label={`Fold ${p.title}`} title="Fold to a tab">–</button>}
@@ -401,7 +402,8 @@ function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoo
       <section className={`g2-corner g2-tl${f.summary.compact ? ' compact' : ''}${open ? ' open' : ''}`} aria-label="Summary"
         style={{ left: f.summary.x, top: f.summary.y, width: f.summary.w, minHeight: f.summary.h }}
         onClick={f.summary.compact ? () => setOpen(o => !o) : undefined}>
-        <div className="g2-kicker">{KIND[place.kind]}<span className="g2-chip">greybox</span>{f.summary.compact && <span className="g2-more">{open ? '▴' : '▾'}</span>}</div>
+        <div className="g2-kicker">{KIND[place.kind]}{!place.state && <span className="g2-chip">not wired</span>}{f.summary.compact && <span className="g2-more">{open ? '▴' : '▾'}</span>}</div>
+        {notice && <p className="g2-hint g2-warn" role="status">{notice}</p>}
         <h1>{place.label}</h1>
         {(!f.summary.compact || open) && <p>{place.question}</p>}
         <dl>
@@ -520,7 +522,6 @@ function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoo
           <section className="g2-centre" aria-label={focusedPanel.title} style={at(swap.panel)}>
             <header>
               <h3>{focusedPanel.title}</h3>
-              {focusedPanel.sample && <span className="g2-chip">sample</span>}
               <span className="g2-grow" />
               {focusedPanel.menu && focusedPanel.menu.length > 0 && <Menu items={focusedPanel.menu} label={`More for ${focusedPanel.title}`} />}
               <button className="g2-icon" onClick={() => setFocused(null)} aria-label="Put the map back in the middle" title="Map to the middle">×</button>
