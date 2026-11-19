@@ -27,7 +27,7 @@ describe('live refresh table', () => {
   })
 
   it('maps a type to its keys, a prefix to every type under it', () => {
-    expect(keysFor('approval.card.decided')).toEqual([['approvals'], ['cockpit']])
+    expect(keysFor('approval.card.decided')).toEqual([['approvals'], ['cockpit'], ['agent-runtime-progress']])
     expect(keysFor('owner.question.answered')).toEqual([['questions']])
     expect(keysFor('git.main.advanced')).toEqual([])
   })
@@ -52,7 +52,7 @@ describe('refresh batch', () => {
     b.add('owner.question.asked')
     expect(done).toEqual([])
     vi.advanceTimersByTime(1_000)
-    expect(done).toEqual([['approvals'], ['cockpit'], ['questions']])
+    expect(done).toEqual([['approvals'], ['cockpit'], ['agent-runtime-progress'], ['questions']])
   })
 
   it('ignores a type nothing reads', () => {

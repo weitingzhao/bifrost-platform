@@ -23,7 +23,9 @@ export interface LiveRefreshRow {
 }
 
 export const LIVE_REFRESH: LiveRefreshRow[] = [
-  { types: ['approval.card.'], keys: [['approvals'], ['cockpit']] },
+  // agent-runtime-progress: of what it reads only the plan and the cards still
+  // change (plan domain, 2026-11-19: tasks, attempts, missions last written 11-13).
+  { types: ['approval.card.'], keys: [['approvals'], ['cockpit'], ['agent-runtime-progress']] },
   { types: ['owner.question.'], keys: [['questions']] },
   { types: ['seat.liveness.changed', 'seat.status.changed', 'seat.session.changed'], keys: [['agent-threads'], ['seat-statuses']] },
   { types: ['release.window.changed'], keys: [['delivery', 'release-window'], ['ci', 'release-window']] },
@@ -31,7 +33,7 @@ export const LIVE_REFRESH: LiveRefreshRow[] = [
   { types: ['release.deploy.finished', 'release.gitops.changed'], keys: [['releases'], ['gitops']] },
   { types: ['alert.rule.fired'], keys: [['telemetry', 'alerts']] },
   { types: ['audit.action.recorded'], keys: [['records'], ['audit']] },
-  { types: ['plan.tree.changed'], keys: [['agent-runtime-plan'], ['agent-runtime-plan-view']] },
+  { types: ['plan.tree.changed'], keys: [['agent-runtime-plan'], ['agent-runtime-plan-view'], ['agent-runtime-progress']] },
 ]
 
 /** Types in the table not on the bus yet (each names who adds it). */
