@@ -60,3 +60,12 @@ export const MEMORY_UNIT: UnitSpec = {
     details: { on: '2026-11-19', words: '我们这个房间的话，就是来去记录现在瞬时的内存的状态反应就可以了' },
   },
 }
+
+/** One machine's memory readings, from the details read across the district; nothing read is null. */
+export function memoryRoomReadings(reads: Record<string, { labels: Record<string, string>; value: number }[] | null> | undefined, host: string | undefined) {
+  const one = (id: string) => host ? (reads?.[id] ?? []).find(p => p.labels.instance?.split(':')[0] === host)?.value ?? null : null
+  return {
+    total: one('total'), used: one('used'), free: one('free'), cache: one('cache'), compressed: one('compressed'), kernel: one('kernel'),
+    dirty: one('dirty'), swapTotal: one('swap.total'), swapUsed: one('swap.used'), swapIO: one('swap.io'), corrupted: one('corrupted'),
+  }
+}

@@ -2173,6 +2173,7 @@
         "console/src/domains/owner/city/gen2/frame/__tests__/geo.test.ts",
         "console/src/domains/owner/city/gen2/frame/__tests__/grid.test.ts",
         "console/src/domains/owner/city/gen2/frame/__tests__/light.test.ts",
+        "console/src/domains/owner/city/gen2/frame/__tests__/memoryRoom.test.ts",
         "console/src/domains/owner/city/gen2/frame/__tests__/parts.test.tsx",
         "console/src/domains/owner/city/gen2/frame/__tests__/rules.test.ts",
         "console/src/domains/owner/city/gen2/frame/__tests__/standards.test.ts",
@@ -2198,7 +2199,9 @@
         "console/src/domains/owner/city/gen2/frame/rules.ts",
         "console/src/domains/owner/city/gen2/frame/sprites.ts",
         "console/src/domains/owner/city/gen2/frame/theme.ts",
+        "console/src/domains/owner/city/gen2/frame/units/console.ts",
         "console/src/domains/owner/city/gen2/frame/units/cpuRoom.ts",
+        "console/src/domains/owner/city/gen2/frame/units/memoryRoom.ts",
         "console/src/domains/owner/city/gen2/frame/units/process.ts",
         "console/src/domains/owner/city/gen2/frame/units/standards.ts",
         "console/src/domains/owner/city/gen2/frame/viewport.ts"

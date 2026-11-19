@@ -7,6 +7,8 @@ import { createRoot } from 'react-dom/client'
 import { STAGES, stagesOf, unitRulesBroken, type Detail, type StageId, type UnitSpec } from '../src/domains/owner/city/gen2/frame/units/process'
 import { ROOM_STANDARDS } from '../src/domains/owner/city/gen2/frame/units/standards'
 import { UNITS, UNIT_PLAN, cpuRoomReadings } from '../src/domains/owner/city/gen2/content/units/cpu'
+import { memoryRoomReadings } from '../src/domains/owner/city/gen2/content/units/memory'
+import { benchOf, memoryRoom, memoryRoomShape, sectionsOf } from '../src/domains/owner/city/gen2/frame/units/memoryRoom'
 import { cpuRoom, cpuRoomShape, cpuSummaryOf, machinesOf } from '../src/domains/owner/city/gen2/frame/units/cpuRoom'
 import { readingText } from '../src/domains/owner/city/gen2/frame/library/parts'
 import { DICTIONARY, encode, rowsDrawn, rulerOf, setRuler, STANDARD_PARTS } from '../src/domains/owner/city/gen2/frame/library/dictionary'
@@ -83,30 +85,45 @@ function DetailsStage({ u, r }: { u: UnitSpec; r: Reads }) {
 }
 
 /** The room drawn, for one machine at a time, from its readings; its key beside it. */
-function CpuRoomView({ r }: { r: Reads }) {
+/** How a unit's room is drawn for one machine: the picture, and a line on what it holds. */
+type RoomDraw = (r: Reads, host: string | undefined) => { sprite: ReturnType<typeof cpuRoom>; ids: string[]; hint: string; count: number }
+const ROOM_DRAW: Record<string, RoomDraw> = {
+  cpu: (r, host) => {
+    const read = cpuRoomReadings(r.reads.cpu as never, host)
+    const { out, ids } = rowsDrawn(() => cpuRoom(read))
+    return { sprite: out, ids, count: read.cores.length, hint: `${read.cores.length} cores → ${machinesOf(read)} machines → a ${cpuRoomShape(machinesOf(read)).join('×')} room · ${read.temps.length} sensors${read.temps.length ? `, hottest ${Math.round(Math.max(...read.temps.map(t => t.c)))} °C` : ''}` }
+  },
+  memory: (r, host) => {
+    const read = memoryRoomReadings(r.reads.memory as never, host)
+    const { out, ids } = rowsDrawn(() => memoryRoom(read))
+    const bench = benchOf(read).map(s => `${s.id} ${readingText(s.bytes, 'bytes')}`).join(' · ')
+    return { sprite: out, ids, count: read.total ?? 0, hint: `${readingText(read.total, 'bytes')} → ${sectionsOf(read).toFixed(1)} sections → a ${memoryRoomShape(read).join('×')} room · ${bench || 'nothing read'} · swap ${readingText(read.swapUsed, 'bytes')} of ${readingText(read.swapTotal, 'bytes')}` }
+  },
+}
+const PLAN = [['cpu', 'Workshop', 'CPU'], ['memory', 'Workbench', 'Memory'], ['disk', 'Warehouse', 'Disk']] as const
+
+/** A unit's room drawn for one machine at a time, from its readings; its key beside it. */
+function RoomView({ u, r }: { u: UnitSpec; r: Reads }) {
   const nodes = r.topology ?? []
   const [id, setId] = useState(() => nodes.find(n => n.id === 'ubt-k3s-04')?.id ?? nodes[0]?.id)
   const n = nodes.find(x => x.id === id)
-  const read = cpuRoomReadings(r.reads.cpu as never, n?.host && n.host !== '127.0.0.1' ? n.host : undefined)
-  const { out: sprite, ids } = rowsDrawn(() => cpuRoom(read))
+  const { sprite, ids, hint, count } = ROOM_DRAW[u.id](r, n?.host && n.host !== '127.0.0.1' ? n.host : undefined)
   const rows = DICTIONARY.filter(m => ids.includes(m.id))
   return <div className="room">
     <div className="plan" aria-label="Where this room is in the factory">
-      <div className="on"><b>Workshop</b><span>CPU · this room, drawn here</span></div>
-      <div><b>Workbench</b><span>Memory · the next unit, not drawn yet</span></div>
-      <div><b>Warehouse</b><span>Disk · after that, not drawn yet</span></div>
-      <p>A computer is a factory: these three rooms, each made on its own first, are put together into one building in stage 6 (In use).</p>
+      {PLAN.map(([pid, room, what]) => <div key={pid} className={pid === u.id ? 'on' : ''}><b>{room}</b><span>{what} · {pid === u.id ? 'this room, drawn here' : ROOM_DRAW[pid] ? 'drawn' : 'not drawn yet'}</span></div>)}
+      <p>A computer is a factory: these rooms, each made on its own first, are put together into one building once every room is done.</p>
     </div>
     <div className="pick">{nodes.map(x => <button key={x.id} className={x.id === id ? 'on' : ''} onClick={() => setId(x.id)}>{x.id}</button>)}</div>
     <div className="roomgrid">
-      {/* Drawn at one scale for every machine, so a bigger CPU is a bigger room on the page too. */}
-      <img src={spriteUrl(sprite)} alt={`CPU room of ${id}`} style={{ width: `${Math.round(sprite.width * 1.3)}px` }} />
+      {/* Drawn at one scale for every machine, so a bigger unit is a bigger room on the page too. */}
+      <img src={spriteUrl(sprite)} alt={`${u.name} room of ${id}`} style={{ width: `${Math.round(sprite.width * 1.3)}px` }} />
       <ul className="key">
-        {rows.map(m => <li key={m.id}><b>{m.shows}{m.scope && <i className="scope">{m.scope}</i>}</b><span>{m.meaning}</span>{m.encoding.kind === 'parts' && rulerOf(m.id) !== m.encoding.each && <em className="ruler">Ruler set here: one {m.part} = {rulerOf(m.id)} {m.encoding.unit === 'GB' ? 'bytes' : `${m.encoding.unit}s`} ({Math.ceil(encode(m.id, m.id === 'core.machines' ? read.cores.length : null) ?? 0)} drawn)</em>}</li>)}
+        {rows.map(m => <li key={m.id}><b>{m.shows}{m.scope && <i className="scope">{m.scope}</i>}</b><span>{m.meaning}</span>{m.encoding.kind === 'parts' && rulerOf(m.id) !== m.encoding.each && <em className="ruler">Ruler set here: one {m.part} = {m.encoding.unit === 'GB' ? readingText(rulerOf(m.id), 'bytes') : `${rulerOf(m.id)} ${m.encoding.unit}s`} ({Math.ceil(encode(m.id, count) ?? 0)} drawn)</em>}</li>)}
         {rows.length === 0 && <li><span>Nothing read on this machine, so nothing is drawn in its room.</span></li>}
       </ul>
     </div>
-    <p className="hint">{read.cores.length} cores → {machinesOf(read)} machines → a {cpuRoomShape(machinesOf(read)).join('×')} room · {read.temps.length} sensors{read.temps.length ? `, hottest ${Math.round(Math.max(...read.temps.map(t => t.c)))} °C` : ''}</p>
+    <p className="hint">{hint}</p>
   </div>
 }
 
@@ -264,7 +281,7 @@ function App() {
           </dl>
           {broken.length > 0 && <p className="warn">{broken.join(' · ')}</p>}
           {stageId === 'details' && (r ? <DetailsStage u={u} r={r} /> : <p className="warn">Nothing read.</p>)}
-          {stageId === 'inside' && u.id === 'cpu' && r && <CpuRoomView r={r} />}
+          {stageId === 'inside' && ROOM_DRAW[u.id] && r && <RoomView key={u.id} u={u} r={r} />}
           {stageId === 'summary' && u.id === 'cpu' && r && <CpuSummaryView u={u} r={r} />}
           {stageId === 'inside' && <Standards />}
           {stageId === 'inside' && u.inside && <InsideDraft u={u} />}
