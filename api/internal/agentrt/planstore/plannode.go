@@ -27,7 +27,7 @@ func CreatePlanNode(ctx context.Context, tx pgx.Tx, actor string, n PlanNode) (e
 			return eventlog.Appended{}, err
 		}
 	}
-	ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(n.Root), Type: "plan_node_created", Actor: actor,
+	ev, err := appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(n.Root), Type: "plan_node_created", Actor: actor,
 		PlanNode: n.ID, MissionID: n.MissionID,
 		Body: map[string]any{"node_kind": n.Kind, "label": n.Label, "title": n.Title, "ordinal": n.Ordinal}})
 	if err != nil {
@@ -70,7 +70,7 @@ func SetStepState(ctx context.Context, tx pgx.Tx, actor, root, stepID, to, cause
 	if mission != nil {
 		m = *mission
 	}
-	ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_node_state_changed", Actor: actor,
+	ev, err := appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_node_state_changed", Actor: actor,
 		PlanNode: stepID, MissionID: m, Body: map[string]any{"from": from, "to": to, "cause": cause}})
 	if err != nil {
 		return ev, err

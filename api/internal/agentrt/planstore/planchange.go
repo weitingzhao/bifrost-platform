@@ -419,7 +419,7 @@ func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided in
 	if len(bindings) > 0 {
 		body["bindings"] = bindings
 	}
-	changed, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_changed", Actor: actor, Body: body})
+	changed, err := appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_changed", Actor: actor, Body: body})
 	if err != nil {
 		return nil, err
 	}
@@ -524,7 +524,7 @@ func dropStep(ctx context.Context, tx pgx.Tx, actor, root, step string, cause in
 	if mission != nil {
 		m = *mission
 	}
-	ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_node_state_changed", Actor: actor, PlanNode: step, MissionID: m,
+	ev, err := appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_node_state_changed", Actor: actor, PlanNode: step, MissionID: m,
 		Cause: cause, Body: map[string]any{"from": *state, "to": "dropped", "cause": "plan_changed"}})
 	if err != nil {
 		return err

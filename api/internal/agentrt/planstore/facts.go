@@ -43,7 +43,7 @@ func signOff(ctx context.Context, tx pgx.Tx, actor, stepID, ref string, evidence
 	if err != nil {
 		return eventlog.Appended{}, err
 	}
-	return eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "owner_signoff", Actor: actor, PlanNode: stepID, Body: body})
+	return appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "owner_signoff", Actor: actor, PlanNode: stepID, Body: body})
 }
 
 // RecordManual records a manual atom of a step as done: a note on the step
@@ -59,7 +59,7 @@ func RecordManual(ctx context.Context, tx pgx.Tx, actor, stepID, manual, text st
 	if err != nil {
 		return err
 	}
-	_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_step_marked_done", Actor: actor, PlanNode: stepID,
+	_, err = appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_step_marked_done", Actor: actor, PlanNode: stepID,
 		Body: map[string]any{"text": text, "manual": manual, "evidence": evidence}})
 	return err
 }

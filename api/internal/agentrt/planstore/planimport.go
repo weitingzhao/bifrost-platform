@@ -127,7 +127,7 @@ func importTree(ctx context.Context, tx pgx.Tx, who string, req planimport.Reque
 	if _, err := artifact.PutArtifact(ctx, tx, who, "other", "application/json", doc); err != nil {
 		return err
 	}
-	head, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "legacy_imported", Actor: who, Cause: cause,
+	head, err := appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "legacy_imported", Actor: who, Cause: cause,
 		Body: map[string]any{"source": planimport.ImportSource(reqID), "count": out.Nodes}})
 	if err != nil {
 		return err
@@ -189,7 +189,7 @@ func importTree(ctx context.Context, tx pgx.Tx, who string, req planimport.Reque
 // importNode writes one node with its plan_node_created event. A step the
 // ledger marks done starts with its manual rule.
 func importNode(ctx context.Context, tx pgx.Tx, actor, root string, head int64, n planimport.Node) error {
-	if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_node_created", Actor: actor, PlanNode: n.ID, Cause: head,
+	if _, err := appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_node_created", Actor: actor, PlanNode: n.ID, Cause: head,
 		Body: map[string]any{"node_kind": n.Kind, "label": n.Label, "title": n.Title, "ordinal": n.Ordinal}}); err != nil {
 		return err
 	}
@@ -229,7 +229,7 @@ func archNote(ctx context.Context, tx pgx.Tx, actor, root string, head int64, re
 	if err := checkNoteText(text); err != nil {
 		return err
 	}
-	_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "note", Actor: actor, PlanNode: n.ID, Cause: head,
+	_, err := appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "note", Actor: actor, PlanNode: n.ID, Cause: head,
 		Body: map[string]any{"text": text, "evidence": []string{reqID}}})
 	return err
 }

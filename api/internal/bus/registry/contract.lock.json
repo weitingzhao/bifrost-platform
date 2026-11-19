@@ -68,6 +68,10 @@
       "version": 1,
       "hash": "67fb6c5e061f30b0"
     },
+    "plan.tree.changed": {
+      "version": 1,
+      "hash": "8d99a5014fac872e"
+    },
     "plugin.status.changed": {
       "version": 2,
       "hash": "69019e89acb7b32e"

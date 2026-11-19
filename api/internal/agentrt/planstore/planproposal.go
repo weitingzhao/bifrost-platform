@@ -135,11 +135,11 @@ func proposePlanChange(ctx context.Context, db eventlog.DB, w actor.Writer, key,
 		}
 		body := map[string]any{"changes": doc, "reason": reason, "standing": within, "token": w.Token}
 		if within {
-			proposed, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_change_proposed", Actor: w.Actor, Body: body})
+			proposed, err := appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_change_proposed", Actor: w.Actor, Body: body})
 			if err != nil {
 				return nil, err
 			}
-			decided, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_change_decided", Actor: "controller",
+			decided, err := appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_change_decided", Actor: "controller",
 				Body: map[string]any{"proposal_event_id": proposed.EventID, "decision": "applied", "by": by}})
 			if err != nil {
 				return nil, err
@@ -183,7 +183,7 @@ func proposePlanChange(ctx context.Context, db eventlog.DB, w actor.Writer, key,
 			return nil, fmt.Errorf("%w: %v", ErrAsk, err)
 		}
 		body["question_id"] = q
-		proposed, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_change_proposed", Actor: w.Actor, Body: body})
+		proposed, err := appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_change_proposed", Actor: w.Actor, Body: body})
 		if err != nil {
 			return nil, err
 		}

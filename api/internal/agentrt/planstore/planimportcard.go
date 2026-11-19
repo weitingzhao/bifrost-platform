@@ -128,7 +128,7 @@ func ProposePlanImport(ctx context.Context, db eventlog.DB, w actor.Writer, key,
 		if err != nil {
 			return nil, err
 		}
-		proposed, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_change_proposed", Actor: w.Actor,
+		proposed, err := appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_change_proposed", Actor: w.Actor,
 			Body: map[string]any{"changes": changes, "reason": reason, "standing": false, "token": w.Token, "question_id": q}})
 		if err != nil {
 			return nil, err

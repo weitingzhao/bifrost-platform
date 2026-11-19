@@ -494,3 +494,22 @@ channels:
       consumers: [console]
       exports: []
       replaces: []
+  plan.tree.changed:
+    address: ev.rocket.{env}.plan.tree.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      key: "<root>"
+      subject: "<root>"
+      publisher: gate-db
+      domain: plan
+      ref: "/api/v1/agentrt/plan?root={root}"
+      reconcile: "the ledger is the truth; GET /api/v1/agentrt/plan?root= is the plan"
+      on_unread: stale
+      retention: 30d
+      # 2026-11-19: the Console reads the plan when told instead of every
+      # 15 seconds (30,831 reads in 24 hours; the plan last changed on 11-12).
+      consumers: [console]
+      exports: []
+      replaces: []
