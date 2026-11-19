@@ -47,4 +47,12 @@ describe('slots', () => {
     expect(new Set(s.map(p => `${p.x},${p.y}`)).size).toBe(5)
     expect(slots(4).reduce((a, p) => a + p.x + p.y, 0)).toBe(0)
   })
+  // 2026-11-19: on an upright phone the town's five blocks sat in a band across the middle, half the screen empty.
+  it('on a tall screen run down the screen rather than across', () => {
+    const across = (s: { x: number; y: number }[]) => Math.max(...s.map(p => p.x - p.y)) - Math.min(...s.map(p => p.x - p.y))
+    const down = (s: { x: number; y: number }[]) => Math.max(...s.map(p => p.x + p.y)) - Math.min(...s.map(p => p.x + p.y))
+    const tall = slots(5, true)
+    expect(down(tall) * 16).toBeGreaterThan(across(tall) * 32 * 0.8)
+    expect(down(slots(5)) * 16).toBeLessThan(across(slots(5)) * 32)
+  })
 })

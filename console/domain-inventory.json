@@ -2157,9 +2157,11 @@
         "console/src/domains/owner/city/gen1/zones.ts",
         "console/src/domains/owner/city/gen2/CityGen2.tsx",
         "console/src/domains/owner/city/gen2/__tests__/places.test.ts",
+        "console/src/domains/owner/city/gen2/__tests__/viewport.test.ts",
         "console/src/domains/owner/city/gen2/cityGen2.css",
         "console/src/domains/owner/city/gen2/placeScene.ts",
-        "console/src/domains/owner/city/gen2/places.ts"
+        "console/src/domains/owner/city/gen2/places.ts",
+        "console/src/domains/owner/city/gen2/viewport.ts"
       ],
       "imports": [
         "console/src/api",

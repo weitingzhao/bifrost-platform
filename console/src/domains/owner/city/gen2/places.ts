@@ -72,8 +72,22 @@ export const here = (tree: Place, path: Path): Place => trail(tree, path).at(-1)
 export const parsePath = (hash: string): Path => hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent)
 export const formatPath = (path: Path): string => `#/${path.map(encodeURIComponent).join('/')}`
 
-/** Where the children of a place stand on its ground: a square-ish grid, two cells apart, centred on the origin. */
-export function slots(n: number, gap = 4): { x: number; y: number }[] {
+/**
+ * Where the children of a place stand on its ground, centred on the origin.
+ * Wide screens: a square-ish grid on the ground. Tall screens (a phone held
+ * upright): two columns as seen on screen, running down, so the place fills
+ * the height instead of a band across the middle.
+ */
+export function slots(n: number, tall = false, gap = 4): { x: number; y: number }[] {
+  if (tall && n > 2) {
+    const cols = 2, rows = Math.ceil(n / cols)
+    const U = 6, V = 9 // across and down the screen, in cells: room for a block, its height and its name
+    return Array.from({ length: n }, (_, i) => {
+      const u = ((i % cols) - (cols - 1) / 2) * U
+      const v = (Math.floor(i / cols) - (rows - 1) / 2) * V
+      return { x: (u + v) / 2, y: (v - u) / 2 }
+    })
+  }
   const cols = Math.max(1, Math.ceil(Math.sqrt(n)))
   const rows = Math.max(1, Math.ceil(n / cols))
   return Array.from({ length: n }, (_, i) => ({

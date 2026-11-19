@@ -1,0 +1,63 @@
+import { describe, expect, it } from 'vitest'
+import { deviceOf, frameOf, inside, overlaps, type Frame } from '../viewport'
+
+// 2026-11-19, the Owner: the frame must feel right on phone, tablet and computer before anything is
+// built on it. On the first greybox the summary ran under the minimap at 375 px wide; these hold the
+// corners apart at every common size.
+const SIZES: [string, number, number][] = [
+  ['iPhone SE', 375, 667], ['iPhone 15', 393, 852], ['iPhone 15 landscape', 852, 393], ['small Android landscape', 640, 360],
+  ['iPad mini', 744, 1133], ['iPad', 820, 1180], ['iPad landscape', 1180, 820], ['iPad Pro', 1024, 1366],
+  ['laptop', 1280, 800], ['desktop', 1440, 900], ['wide', 1920, 1080], ['narrow window', 700, 900],
+]
+
+const corners = (f: Frame) => ({ summary: f.summary, mini: f.mini, alerts: f.alerts, menu: f.menu, ...(f.trail ? { trail: f.trail } : {}) })
+
+describe('frameOf', () => {
+  for (const [name, w, h] of SIZES) {
+    it(`${name} (${w}×${h}): corners stay on screen and apart, the map keeps room`, () => {
+      const f = frameOf(w, h)
+      const all = Object.entries(corners(f))
+      for (const [k, r] of all) expect(inside(r, w, h), `${k} off screen`).toBe(true)
+      for (let i = 0; i < all.length; i++)
+        for (let j = i + 1; j < all.length; j++)
+          expect(overlaps(all[i][1], all[j][1]), `${all[i][0]} overlaps ${all[j][0]}`).toBe(false)
+      expect(inside(f.card, w, h)).toBe(true)
+      expect(overlaps(f.card, f.menu)).toBe(false)
+      expect(f.world.h).toBeGreaterThanOrEqual(Math.min(200, h * 0.35))
+      expect(f.menu.h).toBeGreaterThanOrEqual(f.device === 'desktop' ? 28 : 40)
+    })
+  }
+
+  it('tells the devices apart by size', () => {
+    expect(deviceOf(375, 667)).toBe('phone')
+    expect(deviceOf(852, 393)).toBe('phone')
+    expect(deviceOf(820, 1180)).toBe('tablet')
+    expect(deviceOf(1440, 900)).toBe('desktop')
+  })
+
+  it('on a phone: compact summary, card as a bottom sheet, 44 px targets', () => {
+    const f = frameOf(375, 667)
+    expect(f.summary.compact).toBe(true)
+    expect(f.card.sheet).toBe(true)
+    expect(f.tap).toBe(44)
+    expect(f.world.y).toBeGreaterThanOrEqual(f.summary.y + f.summary.h)
+  })
+
+  it('the overlap check catches an overlap (positive control for the size sweep above)', () => {
+    expect(overlaps({ x: 0, y: 0, w: 10, h: 10 }, { x: 9, y: 9, w: 10, h: 10 })).toBe(true)
+    expect(overlaps({ x: 0, y: 0, w: 10, h: 10 }, { x: 10, y: 0, w: 10, h: 10 })).toBe(false)
+  })
+
+  it('on a phone in landscape: trail moves into the summary, alerts become a badge', () => {
+    const f = frameOf(852, 393)
+    expect(f.trail).toBeNull()
+    expect(f.alerts.badge).toBe(true)
+  })
+
+  it('keeps clear of the notch and the home bar', () => {
+    const f = frameOf(393, 852, { top: 47, right: 0, bottom: 34, left: 0 })
+    expect(f.summary.y).toBeGreaterThanOrEqual(47)
+    expect(f.mini.y).toBeGreaterThanOrEqual(47)
+    expect(f.menu.y + f.menu.h).toBeLessThanOrEqual(852 - 34)
+  })
+})
