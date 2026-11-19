@@ -128,7 +128,7 @@ func TestProblemLoopPG(t *testing.T) {
 		t.Errorf("ev-4: %+v", c)
 	}
 	n := got.Counts
-	if n.Raised != 3 || n.Seen != 1 || n.Judged != 2 || n.Real != 1 || n.False != 1 || n.Closed != 1 || n.Open != 2 || n.AckMedianMinutes == nil || n.VerdictMedianMinutes == nil {
+	if n.Raised != 3 || n.Seen != 1 || n.Judged != 2 || n.Real != 1 || n.False != 1 || n.Closed != 1 || n.Open != 2 || n.AckMedianMinutes == nil || n.VerdictMedianMinutes == nil || n.ClosedMedianMinutes == nil {
 		t.Errorf("counts = %+v", n)
 	}
 	if len(got.Invalid) != 1 || got.Invalid[0].Sender != b.Actor || !strings.Contains(got.Invalid[0].Problem, "verdict") {

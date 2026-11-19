@@ -9,14 +9,14 @@ const c = (event: string, letter_at: string, closed: boolean): ProblemCase => ({
 // 2026-11-18, OWNER_LAW #36: the Bus page's problem loop shows only what the
 // platform computed. Guards: closed cases are not in the open table, the
 // longest-waiting open case is first, a median that is not measured reads
-// "n/a" and not 0, and the counts line carries every count.
+// "unknown" and not 0, and the counts line carries every count.
 describe('problem loop section', () => {
   it('lists open cases oldest first and leaves closed ones out', () => {
     const got = openCases([c('ev-2', '2026-11-18T10:00:00Z', false), c('ev-1', '2026-11-18T09:00:00Z', false), c('ev-3', '2026-11-18T08:00:00Z', true)])
     expect(got.map(x => x.event)).toEqual(['ev-1', 'ev-2'])
   })
-  it('says a median that is not measured is n/a, not zero', () => {
-    expect(minutesText(null)).toBe('n/a')
+  it('says a median that is not measured is unknown, not zero', () => {
+    expect(minutesText(null)).toBe('unknown')
     expect(minutesText(0)).toBe('0m')
     expect(minutesText(90)).toBe('2h')
     expect(minutesText(60 * 72)).toBe('3d')
@@ -24,6 +24,6 @@ describe('problem loop section', () => {
   })
   it('puts every count in the line', () => {
     const line = countsLine({ raised: 5, seen: 4, judged: 3, real: 2, false: 1, closed: 1, open: 4, ack_median_minutes: 12, verdict_median_minutes: null })
-    expect(line).toBe('raised 5 · seen 4 · judged 3 · real 2 · false 1 · closed 1 · open 4 · median to seen 12m · to verdict n/a')
+    expect(line).toBe('raised 5 · seen 4 · judged 3 · real 2 · false 1 · closed 1 · open 4 · median to seen 12m · to verdict unknown · to closed unknown (1 case)')
   })
 })

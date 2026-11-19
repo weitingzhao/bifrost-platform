@@ -19,6 +19,7 @@ function Help() {
         <li>State: sent (not acknowledged), seen (acknowledged, no verdict), judged (a verdict, not closed), closed.</li>
         <li>A verdict is a note to the controller in the form the letter ends with. The latest valid one on an event wins. Closed is a real problem handled or fixed at its source, or a false one fixed at its source.</li>
         <li>A verdict that does not parse is not counted.</li>
+        <li>Medians, from the letter: to seen (acknowledged), to verdict (the latest verdict), to closed (the verdict that closed it, over the closed cases only; the count after it says how many). unknown when there is no case to measure.</li>
       </ul>
     </div>
   )
