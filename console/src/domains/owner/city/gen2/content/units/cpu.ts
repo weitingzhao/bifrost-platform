@@ -1,7 +1,7 @@
 import type { UnitSpec } from '../../frame/units/process'
 
 /**
- * The CPU unit (the first through the unit process, 2026-11-19). City metaphor (proposed): the workshop of a
+ * The CPU unit (the first through the unit process, 2026-11-19). City metaphor (the Owner, 2026-11-19): the workshop of a
  * factory — a computer is a factory, its CPU the machine tools, memory the workbench, disk the warehouse. Details: what node exporter reports about a machine's CPU, listed after a read of
  * every metric family it has (2026-11-19 20:40Z): the Linux nodes report all of these; the Mac minis
  * only the time per core and the load; the NAS has no thermal zone.
@@ -34,7 +34,7 @@ export const CPU_UNIT: UnitSpec = {
   // What the work is (time by mode, tasks, switches, interrupts, guests) belongs to the districts that
   // use it, not to the plant.
   chosen: ['cores', 'busy.core', 'freq', 'freq.max', 'temp', 'load1', 'load5', 'load15', 'pressure'],
-  // Inside, drafted for the Owner to see before it is drawn (a computer is a factory, proposed
+  // Inside, drafted for the Owner to see before it is drawn (a computer is a factory, the Owner
   // 2026-11-19: CPU the workshop, memory the workbench, disk the warehouse). The CPU's room is the
   // workshop: the 16×16 floor holds the machine tools to the west, the order office to the east,
   // the thermometers on the walls.
@@ -58,8 +58,8 @@ export const UNITS: UnitSpec[] = [CPU_UNIT]
 
 /** The units the hardware district is made of, in the order they are made (RULES.md, 由内向外). */
 export const UNIT_PLAN = [
-  { id: 'cpu', name: 'CPU', metaphor: 'workshop: a machine per core (proposed)' },
-  { id: 'memory', name: 'Memory', metaphor: 'workbench (proposed)' },
-  { id: 'disk', name: 'Disk', metaphor: 'warehouse (proposed); NAS volumes too' },
+  { id: 'cpu', name: 'CPU', metaphor: 'workshop: a machine per core' },
+  { id: 'memory', name: 'Memory', metaphor: 'workbench' },
+  { id: 'disk', name: 'Disk', metaphor: 'line-side racks (SSD), high-bay store (HDD), across the road (NAS) — proposed' },
   { id: 'gpu', name: 'GPU', metaphor: 'heavy production line (proposed)' },
 ] as const
