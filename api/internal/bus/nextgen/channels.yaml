@@ -145,8 +145,8 @@ channels:
   - {id: X-A30, class: K8, disposition: not-a-channel, step: none, what: Loki 步骤日志（promtail → Loki）, by: 日志存放，排障和审计长尾；删日志归 Owner}
   - {id: X-A31, class: K5, disposition: not-this-way, step: none, what: 执行卡执行口：owner_run_command 卡 → owner-exec（命令按指纹+一次性码）, by: 例外：同 N19；断了：执行卡不能执行}
   - {id: X-B1, class: K12, disposition: kept, step: none, what: 线程心跳钩子：13 个事件推 POST /agent/threads/heartbeat, by: 在用：心跳来源；断了：同 N14}
-  - {id: X-B2, class: K12, disposition: deleted, step: any, what: 无头 run 进度拍：进度文件变大才发（默认 120 秒）, by: 待删：仓库里没有调用 `thread-heartbeat.js run` 的地方}
-  - {id: X-B3, class: K12, disposition: deleted, step: any, what: 收集员模式：collector 令牌下多发 SessionStart 等事件, by: 待删：会话模式没启用；只删这条线，collector 令牌保留}
+  - {id: X-B2, class: K12, disposition: deleted, step: any, what: 无头 run 进度拍：进度文件变大才发（默认 120 秒）, by: 已删：两个仓库都没有调用 `thread-heartbeat.js run` 的地方, retired: {at: '2026-11-19', change: I503663b9e7f368755890a4d26840abd582e91c6a, outside: 'infra 的 thread-heartbeat.js 删掉 run 包装和进度拍（e0e303bb，净删 1,372 行）；平台 agentthreads 仍把 run- 线程号当后台运行，留着无害'}}
+  - {id: X-B3, class: K12, disposition: deleted, step: any, what: 收集员模式：collector 令牌下多发 SessionStart 等事件, by: 待删，暂不删（11-19）：会话模式从没开过，运行时不花任何东西；删它要连带改 agent-host 的几份测试和 register-claude-work.py event，还要改治理检查里「settings 必须接 SessionStart/PreCompact/SessionEnd/StopFailure」那条规则（改裁判规则要 Owner 定），回报只是少一些代码，不值得为此找 Owner}
   - {id: X-B4, class: K12, disposition: kept, step: none, what: 外部活登记+30 秒心跳（dispatch-codex/claude、register-claude-work）, by: 在用：同 N18；断了：同 N18}
   - {id: X-B5, class: K5, disposition: kept, step: none, what: agentd 取活：agent-06 上轮询领任务、心跳、交活（agentd.token）, by: 在用：agentd 领活（`/agentrt/claim` 10 天 2 万次）；断了：派活停}
   - {id: X-B6, class: K12, disposition: kept, step: none, what: 线程标题上报（Stop 钩子 report-thread-title.js）, by: 在用：同 N16；断了：同 N16}
