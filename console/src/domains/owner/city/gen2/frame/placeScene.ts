@@ -16,7 +16,8 @@ import { frameOf, type Frame } from './viewport'
  * corner: entering a building shrinks the town into that corner.
  *
  * The same on every device (viewport.ts decides the rectangles):
- *   tap / click a block      → go in (a room: open its card)
+ *   tap / click a block      → pick it: its card, seen from outside
+ *   double-tap a block       → go in (a room has no inside: its card)
  *   pinch / wheel            → zoom in to read details; never smaller than the whole page
  *   drag                     → pan, only while zoomed in; at the page's size the stage stays put
  *   double-tap empty ground  → zoom in there, or back to the whole page, centred
@@ -122,6 +123,7 @@ export class PlaceScene extends Phaser.Scene {
   private turn = 0
   private pinch: { d: number; zoom: number } | null = null
   private lastTap = 0
+  private lastPick: { id: string; t: number } | null = null
   /** A block being carried while arranging: which, and which cell of it the pointer holds. */
   private carry: { p: Placed; to: Plot | null } | null = null
   /**
@@ -861,8 +863,12 @@ export class PlaceScene extends Phaser.Scene {
       // On release, and only if the press did not travel: a drag across a block is a pan, not a tap.
       g.on('pointerup', (p: Phaser.Input.Pointer) => {
         if (o.arranging || this.moved(p) > DRAG || this.pinch) return
-        if (k.kind === 'room') this.events_.select(k)
-        else this.events_.enter(k)
+        // One tap picks it (its card says what it is, from outside); a second quick tap on it goes in.
+        // The Owner, 2026-11-19: a light tap that went in when he only meant to look from outside.
+        const now = this.time.now, again = this.lastPick?.id === k.id && now - this.lastPick.t < 320
+        this.lastPick = again ? null : { id: k.id, t: now }
+        if (again && k.kind !== 'room') this.events_.enter(k)
+        else this.events_.select(k)
       })
       parts.push(g)
     }

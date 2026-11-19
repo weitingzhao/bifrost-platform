@@ -57,16 +57,21 @@ export function panelsOf(place: Place, open: (child: Place) => void): Panel[] {
   return [...key, ...(place.children.length > 0 ? [{ id: 'inside', title: `Inside ${place.label}`, dock: 'right' as const, body: <InsideTable place={place} open={open} /> }] : [])]
 }
 
-/** The card of a picked room: its question, and its reading with where it was read. */
+/**
+ * The card of a picked thing: its question, and its reading with where it was read. A facility's card
+ * carries its key, so one tap from outside says what it is and how it stands; a double tap goes in.
+ */
 export function pickedPanel(item: Place): Panel {
   return {
     id: `picked-${item.id}`, title: item.label, dock: 'right',
-    body: <div className="g2-picked">
+    body: ({ size }) => <div className="g2-picked">
       <p>{item.question}</p>
-      <dl>
+      {item.look && <KeyTable place={item} full={size !== 'card'} />}
+      {item.kind !== 'room' && <p className="g2-hint">Double-click to go inside</p>}
+      {!item.look && <dl>
         <div><dt>Readings</dt><dd className={toneOf(item)}>{readingOf(item)}</dd></div>
         {item.meter && <div><dt>Read from</dt><dd><code>{item.meter.source}</code></dd></div>}
-      </dl>
+      </dl>}
     </div>,
   }
 }
