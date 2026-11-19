@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net/http"
 
 	"k8s.io/client-go/kubernetes"
@@ -18,7 +17,7 @@ import (
 // in agentrt/migraterun; this file hands it what it stands on and serves the
 // route.
 
-const migrationActionID = "run_agentrt_migration"
+const migrationActionID = migraterun.ActionID
 
 // ownMigrations is what the release policy reads of this platform's own
 // environment (migraterun.OwnSource), from the runtime and release records
@@ -83,30 +82,13 @@ func (s *Server) runAgentrtMigration(ctx context.Context, params map[string]any)
 	return m.Run(ctx, text(params["commit"]))
 }
 
-// migrateBeforeProd runs a commit's pending migrations when a platform PROD
-// delivery is about to start, if the signed policy covers them (Law 32, Law 39,
-// 2026-11-18: the delivery's schema check refused and someone had to ask for the
-// same run by hand; 0035 held PROD for hours). Same judgement and same Job as
-// run_agentrt_migration. Anything else is left to that check, which refuses.
+// migrateBeforeProd is the delivery's step before a platform PROD run
+// (migraterun.BeforeProd).
 func (s *Server) migrateBeforeProd(ctx context.Context, commit string) {
-	if s.releasePolicy == nil || !commitID.MatchString(commit) {
+	if s.releasePolicy == nil {
 		return
 	}
-	state, err := s.releasePolicy.PendingMigrations(ctx, commit)
-	if err != nil || len(state.Pending) == 0 {
-		return
-	}
-	params := map[string]any{"commit": commit}
-	if d := s.releasePolicy.Evaluate(ctx, migrationActionID, params); !d.Auto {
-		slog.Info("agentrt: pending migrations are not covered; the PROD delivery will refuse", "commit", commit, "reasons", d.Reasons)
-		return
-	}
-	out, err := s.runAgentrtMigration(ctx, params)
-	if err != nil {
-		slog.Warn("agentrt: migration before the PROD delivery failed", "commit", commit, "error", err)
-		return
-	}
-	slog.Info("agentrt: migrated before the PROD delivery", "commit", commit, "result", out)
+	migraterun.BeforeProd{Pending: s.releasePolicy.PendingMigrations, Evaluate: s.releasePolicy.Evaluate, Run: s.runAgentrtMigration}.Prepare(ctx, commit)
 }
 
 // handleAgentrtMigration is POST /api/v1/agentrt/migrations/run {commit}
