@@ -123,6 +123,8 @@ modules:
       # 2026-11-17: TestPolicyAlertIsRegisteredUnderCoordination reads the event register.
       api/internal/agentrt/coord: ["api/internal/agentrt/coord", "api/internal/bus/registry/ledger"]
       api/internal/agentrt/deliveryview: ["api/internal/agentrt/deliveryview"]
+      # 2026-11-18: the branch-head tests run the git on the machine in a temporary directory.
+      api/internal/agentrt/gitread: ["api/internal/agentrt/gitread"]
       api/internal/agentrt/canon: ["api/internal/agentrt/canon"]
       # drop0036_test reads the file ROLLBACK_0036 names, only when that is set by hand; it is outside the repository.
       api/internal/agentrt/migrate: ["api/internal/agentrt/migrate", "api/internal/agentrt/migrations"]

@@ -1,39 +1,30 @@
 package server
 
 import (
-	"bytes"
 	"context"
-	gitsha1 "crypto/sha1" // #nosec G505 -- git object ids are sha1
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
-	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
-	"regexp"
-	"sort"
 	"strings"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/approvalfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/readslot"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/runfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 )
 
 // wireExternalRecords supplies bounded, read-only lists for durable backfill.
 func (s *Server) wireExternalRecords(src *controller.Sources) {
 	src.Questions = s.questionRuntime.agentRuntimeQuestionObservations()
 	if s.approvals != nil {
-		reads := newBoundedReads(2)
+		reads := readslot.New(2)
 		src.Approvals = func(ctx context.Context) ([]seenfacts.ApprovalFact, error) {
 			items, ok, err := within(ctx, reads, func() ([]approvals.Approval, bool, error) {
 				items, err := s.approvals.Observations()
@@ -48,7 +39,7 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 			now := time.Now()
 			var out []seenfacts.ApprovalFact
 			for _, a := range items {
-				if f, ok := approvalObservation(a, now); ok {
+				if f, ok := approvalfacts.Observation(a, now); ok {
 					out = append(out, f)
 				}
 			}
@@ -78,7 +69,7 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 			if err != nil || !ok {
 				return seenfacts.PipelineRun{}, false, err
 			}
-			f, ok := pipelineRunFact(item)
+			f, ok := runfacts.PipelineRun(item)
 			return f, ok, nil
 		}
 		src.PipelineRuns = func(ctx context.Context) ([]seenfacts.PipelineRun, error) {
@@ -88,7 +79,7 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 			}
 			var out []seenfacts.PipelineRun
 			for _, item := range items {
-				if f, ok := pipelineRunFact(item); ok {
+				if f, ok := runfacts.PipelineRun(item); ok {
 					out = append(out, f)
 				}
 			}
@@ -129,260 +120,6 @@ func (s *Server) wirePipelineRecords(c *controller.Controller) {
 	c.PipelineFullEvery = pipelineRecordsDuration(pipelineRecordsFullEveryEnv)
 	// Bus step 2: gate-cluster names each finished run (startGateCluster).
 	c.PipelineFinished = s.bus.finishedRuns()
-}
-
-func approvalObservation(a approvals.Approval, now time.Time) (seenfacts.ApprovalFact, bool) {
-	// Leave time transitions to the sweeping writer, whose DecidedAt is
-	// the sweep time. A stale file must never reverse its terminal record.
-	if a.Status == approvals.StatusPending && now.After(a.ExpiresAt) {
-		return seenfacts.ApprovalFact{}, false
-	}
-	if a.Status == approvals.StatusApproved && a.Execution != nil && !a.Execution.Deadline.IsZero() && now.After(a.Execution.Deadline) {
-		return seenfacts.ApprovalFact{}, false
-	}
-	return approvalFact(a)
-}
-
-var pipelineReason = regexp.MustCompile("^[A-Za-z]{1,64}$")
-
-func pipelineRunFact(run unstructured.Unstructured) (seenfacts.PipelineRun, bool) {
-	f := seenfacts.PipelineRun{Run: run.GetName(), UID: string(run.GetUID()), Kind: "other", CreatedAt: run.GetCreationTimestamp().Time}
-	f.Pipeline, _, _ = unstructured.NestedString(run.Object, "spec", "pipelineRef", "name")
-	switch {
-	case strings.HasPrefix(f.Pipeline, "bifrost-ci-"):
-		f.Kind = "ci"
-	case strings.HasPrefix(f.Pipeline, "bifrost-deliver-"):
-		f.Kind = "delivery"
-	}
-	conditions, _, _ := unstructured.NestedSlice(run.Object, "status", "conditions")
-	for _, value := range conditions {
-		c, ok := value.(map[string]any)
-		if !ok || c["type"] != "Succeeded" {
-			continue
-		}
-		switch c["status"] {
-		case "True":
-			f.Result = "Succeeded"
-		case "False":
-			f.Result = "Failed"
-		default:
-			return seenfacts.PipelineRun{}, false
-		}
-		reason, _ := c["reason"].(string)
-		if pipelineReason.MatchString(reason) {
-			f.Reason = reason
-		}
-		break
-	}
-	if f.Result == "" {
-		return seenfacts.PipelineRun{}, false
-	}
-	readTime := func(key string) time.Time {
-		value, _, _ := unstructured.NestedString(run.Object, "status", key)
-		at, _ := time.Parse(time.RFC3339, value)
-		return at
-	}
-	f.StartedAt, f.CompletedAt = readTime("startTime"), readTime("completionTime")
-	if f.Result == "Failed" && f.StartedAt.IsZero() {
-		f.StartedAt = f.CreatedAt
-	}
-	f.Repo = run.GetLabels()["bifrost.io/repo"]
-	f.Audit = run.GetLabels()["bifrost.io/trigger"] == landingci.FullCITrigger
-	if f.Repo == "" {
-		f.Repo = map[string]string{
-			"bifrost-deliver-platform":      "bifrost-platform",
-			"bifrost-deliver-platform-prod": "bifrost-platform",
-		}[f.Pipeline]
-	}
-	params, _, _ := unstructured.NestedSlice(run.Object, "spec", "params")
-	for _, value := range params {
-		p, ok := value.(map[string]any)
-		if !ok {
-			continue
-		}
-		v, _ := p["value"].(string)
-		switch p["name"] {
-		case "revision":
-			f.Revision = v
-		}
-	}
-	results, _, _ := unstructured.NestedSlice(run.Object, "status", "results")
-	inputs, own := map[string]*seenfacts.RepoAt{}, map[string]*seenfacts.RepoAt{}
-	scopeSeen := false
-	for _, value := range results {
-		r, _ := value.(map[string]any)
-		v, _ := r["value"].(string)
-		name, _ := r["name"].(string)
-		if f.Pipeline == "bifrost-land" {
-			switch name {
-			case "commit":
-				f.LandedCommit = approvalnotify.Redact(v)
-			case "change-ids":
-				f.ChangeIDs = approvalnotify.Redact(v)
-			case "outcome":
-				f.Outcome = approvalnotify.Redact(v)
-			}
-		}
-		switch name {
-		case "platform-tree":
-			// The tree of the run's own repository: bifrost-ci-infra reports
-			// the platform checkout it used under the same name.
-			if f.Pipeline != "bifrost-ci-infra" {
-				f.Tree = v
-			}
-		case "tested-by":
-			f.TestedBy = v
-		case "base-commit":
-			// The word none (no base) and anything that is not a commit id
-			// name no base.
-			if f.Kind == "ci" && commitID.MatchString(v) && len(v) == 40 {
-				f.Base = v
-			}
-		case "api-scope":
-			// A pipeline that has no such result tests everything (the
-			// scope stays ""). One that has it must say a scope: an empty
-			// value, a value that is not a string, or the result named
-			// twice is not "everything" but a run nothing can be said of.
-			if _, isString := r["value"].(string); !isString || v == "" || scopeSeen {
-				f.Scope = evidence.EvidenceScopeUnknown
-			} else {
-				f.Scope = v
-			}
-			scopeSeen = true
-		}
-		// What a CI run tested, for the evidence ledger: <short>-commit and
-		// <short>-tree name a repository it used (ciResultRepos), source-* (or
-		// repo-*) the repository of the run itself, which wins when both name it.
-		short, field, _ := strings.Cut(name, "-")
-		repo, into := ciResultRepos[short], inputs
-		if short == "source" || short == "repo" {
-			repo, into = f.Repo, own
-		}
-		if f.Kind != "ci" || repo == "" || !commitID.MatchString(v) || (field != "commit" && field != "tree") {
-			continue
-		}
-		if into[repo] == nil {
-			into[repo] = &seenfacts.RepoAt{Repo: repo}
-		}
-		if field == "commit" {
-			into[repo].Commit = v
-		} else {
-			into[repo].Tree = v
-		}
-	}
-	for repo, in := range own {
-		inputs[repo] = in
-	}
-	for _, in := range inputs {
-		f.Inputs = append(f.Inputs, *in)
-	}
-	sort.Slice(f.Inputs, func(i, j int) bool { return f.Inputs[i].Repo < f.Inputs[j].Repo })
-	return f, true
-}
-
-// ciResultRepos is the repository a CI pipeline result names by its prefix
-// (ui-commit, infra-tree); a result with another prefix is not an input.
-var ciResultRepos = map[string]string{
-	"platform": "bifrost-platform", "ui": "bifrost-ui", "infra": "bifrost-trade-infra",
-	"core": "bifrost-trade-core", "api": "bifrost-trade-api", "worker": "bifrost-trade-worker",
-	"frontend": "bifrost-trade-frontend", "research": "bifrost-research",
-}
-
-// giteaCommitTree reads the git tree of a commit of <org>/<repo> from Gitea,
-// with the delivery service's read-only credential. Gitea names no tree id
-// for a commit (the tree sha of its commit and trees answers is the commit's
-// own id, seen on STG 2026-11-13), so the id is computed as git does, from
-// the entries of the commit's root tree.
-func giteaCommitTree(access func(context.Context) (delivery.GiteaAccess, error), client *http.Client) func(context.Context, string, string) (string, error) {
-	c := *client
-	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	return func(ctx context.Context, repo, commit string) (string, error) {
-		if !giteaName.MatchString(repo) || strings.HasSuffix(repo, ".git") || !commitID.MatchString(commit) {
-			return "", fmt.Errorf("gitea: %q of %q is not a commit of a repository", commit, repo)
-		}
-		acc, err := access(ctx)
-		if err != nil {
-			return "", fmt.Errorf("gitea access: %w", err)
-		}
-		base := strings.TrimRight(acc.Base, "/") + "/api/v1/repos/" + url.PathEscape(acc.Org) + "/" + url.PathEscape(repo) + "/git/trees/" + commit
-		var entries []commitTreeEntry
-		for page := 1; ; page++ {
-			req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s?per_page=1000&page=%d", base, page), nil)
-			if reqErr != nil {
-				return "", reqErr
-			}
-			if acc.User != "" || acc.Pass != "" {
-				req.SetBasicAuth(acc.User, acc.Pass)
-			}
-			var doc struct {
-				Total *int              `json:"total_count"`
-				Tree  []commitTreeEntry `json:"tree"`
-			}
-			err = func() error {
-				resp, doErr := c.Do(req)
-				if doErr != nil {
-					return doErr
-				}
-				defer func() { _ = resp.Body.Close() }()
-				if resp.StatusCode != http.StatusOK {
-					return fmt.Errorf("HTTP %d", resp.StatusCode)
-				}
-				return json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&doc)
-			}()
-			if err != nil || doc.Total == nil {
-				return "", fmt.Errorf("gitea: %s/%s tree of %s: %v", acc.Org, repo, commit, err)
-			}
-			entries = append(entries, doc.Tree...)
-			if len(entries) == *doc.Total {
-				break
-			}
-			if len(doc.Tree) == 0 || len(entries) > *doc.Total || page >= 100 {
-				return "", fmt.Errorf("gitea: %s/%s tree of %s: %d entries read of %d", acc.Org, repo, commit, len(entries), *doc.Total)
-			}
-		}
-		tree, err := gitTreeID(entries)
-		if err != nil {
-			return "", fmt.Errorf("gitea: %s/%s tree of %s: %w", acc.Org, repo, commit, err)
-		}
-		return tree, nil
-	}
-}
-
-// gitTreeID is the id git gives a tree with these entries (one directory,
-// not its subtrees): the sha1 of "tree <size>\0" and, for each entry in git's
-// order (by name, a directory as if its name ended in "/"), "<mode> <name>\0"
-// and the 20 bytes of its id.
-func gitTreeID(entries []commitTreeEntry) (string, error) {
-	type entry struct {
-		key, mode, name string
-		id              []byte
-	}
-	list := make([]entry, 0, len(entries))
-	seen := map[string]bool{}
-	for _, e := range entries {
-		id, err := hex.DecodeString(e.SHA)
-		mode := strings.TrimLeft(e.Mode, "0")
-		ok := map[string]bool{"blob 100644": true, "blob 100755": true, "blob 120000": true, "tree 40000": true, "commit 160000": true}[e.Type+" "+mode]
-		if err != nil || len(id) != 20 || !ok || e.Path == "" || strings.ContainsAny(e.Path, "/\x00") || seen[e.Path] {
-			return "", fmt.Errorf("invalid tree entry %q", e.Path)
-		}
-		seen[e.Path] = true
-		key := e.Path
-		if e.Type == "tree" {
-			key += "/"
-		}
-		list = append(list, entry{key, mode, e.Path, id})
-	}
-	sort.Slice(list, func(i, j int) bool { return list[i].key < list[j].key })
-	var body bytes.Buffer
-	for _, e := range list {
-		body.WriteString(e.mode + " " + e.name + "\x00")
-		body.Write(e.id)
-	}
-	h := gitsha1.New() // #nosec G401 -- git's object id, not a security hash
-	_, _ = fmt.Fprintf(h, "tree %d\x00", body.Len())
-	h.Write(body.Bytes())
-	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // runFailure adapts delivery observations to the CI failure projection.

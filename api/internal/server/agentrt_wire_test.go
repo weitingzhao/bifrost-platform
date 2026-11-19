@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/schemawatch"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -183,7 +184,7 @@ func TestTheRoutesOpenWithTheirMoment(t *testing.T) {
 	defer pool.Close()
 	srv := newTestServer(t, newTestConfig(t))
 	late := &lateDB{}
-	srv.agentRuntime = &agentRuntime{schema: &schemaWatch{}, late: late}
+	srv.agentRuntime = &agentRuntime{schema: &schemawatch.Watch{}, late: late}
 	ready := func() any {
 		t.Helper()
 		rec := httptest.NewRecorder()

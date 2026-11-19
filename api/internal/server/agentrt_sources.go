@@ -2,38 +2,78 @@ package server
 
 import (
 	"context"
-	"errors"
-	"reflect"
-	"regexp"
+	"fmt"
+	"net/http"
 	"strconv"
+	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/approvalfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deploysource"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/readslot"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
-	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
-	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
-	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
-// The delivery lane and repository whose deployments the runtime's standing
-// conditions (gates_passed) read. Round 2's work is the platform itself
-// (W-31); release records are per lane and per repository, and the rule atom
-// names only the environment. Trade joins when business work starts.
-const (
-	agentrtDeployLane = "platform"
-	agentrtDeployRepo = "bifrost-platform"
+// What the agent runtime reads of the platform's stores lives in the
+// agentrt packages (deploysource, approvalfacts, runfacts, gitread, readslot);
+// this file names them for the rest of the server and builds the controller's
+// sources from them.
+
+// agentrtDeployRepo is the repository whose deployments the runtime reads.
+const agentrtDeployRepo = deploysource.Repo
+
+var (
+	giteaName = gitread.Name
+	commitID  = gitread.CommitID
 )
 
-// agentrtWorkloads are the platform's own workloads, the container each
-// runs and the image the delivery built for it, as the delivery's rollout
-// check verifies them (bifrost-trade-infra task-rollout-verify-platform:
-// the workers run the API image). They live in bifrost-platform-<env>.
-var agentrtWorkloads = []struct{ deployment, container, image string }{
-	{"platform-api", "platform-api", "platform-api"},
-	{"platform-workers", "platform-api", "platform-api"},
-	{"platform-console", "platform-console", "platform-console"},
+// commitTreeEntry is one entry of a Gitea tree answer.
+type commitTreeEntry = gitread.TreeEntry
+
+// boundedReads caps the reads of one store in flight (readslot).
+type boundedReads = readslot.Slots
+
+func newBoundedReads(n int) *boundedReads { return readslot.New(n) }
+
+func within[T any](ctx context.Context, reads *boundedReads, read func() (T, bool, error)) (T, bool, error) {
+	return readslot.Within(ctx, reads, read)
+}
+
+// gitAccess is the delivery service's Gitea access as gitread reads it.
+func gitAccess(access func(context.Context) (delivery.GiteaAccess, error)) func(context.Context) (gitread.Access, error) {
+	return func(ctx context.Context) (gitread.Access, error) {
+		a, err := access(ctx)
+		return gitread.Access{Base: a.Base, Org: a.Org, User: a.User, Pass: a.Pass}, err
+	}
+}
+
+// giteaCommitTree reads the git tree of a commit of <org>/<repo> from Gitea
+// with the delivery service's read-only credential (gitread.CommitTree).
+func giteaCommitTree(access func(context.Context) (delivery.GiteaAccess, error), client *http.Client) func(context.Context, string, string) (string, error) {
+	return gitread.CommitTree(gitAccess(access), client)
+}
+
+// agentRuntimeMains reads the head of a repository's main where agentd clones
+// it from: the organization the releases clone from (the delivery service's
+// Gitea organization, what agentd's AGENTD_GIT_BASE names), the base of a
+// goal's task (W-31 2.2b). Without the delivery service there is none.
+func (s *Server) agentRuntimeMains() agentrtapi.MainHead {
+	if s.delivery == nil {
+		return nil
+	}
+	access := s.delivery.GiteaAccess
+	client := &http.Client{Timeout: 10 * time.Second}
+	return func(ctx context.Context, repo string) (string, error) {
+		acc, err := access(ctx)
+		if err != nil {
+			return "", fmt.Errorf("gitea access: %w", err)
+		}
+		return gitread.BranchHead(gitAccess(access), acc.Org, client)(ctx, repo, "refs/heads/main")
+	}
 }
 
 // The readers agentRuntimeSources takes; a nil one reads nothing.
@@ -41,10 +81,7 @@ type (
 	approvalReader interface {
 		Lookup(ref string) (approvals.Approval, bool, error)
 	}
-	currentDeployment interface {
-		Current(ctx context.Context, lane, env string) (releases.Record, error)
-		PodDigests(ctx context.Context, namespace, deployment, container string) ([]string, error)
-	}
+	currentDeployment = deploysource.Deployments
 )
 
 // agentRuntimeSources reads the records the runtime does not own from the
@@ -62,13 +99,13 @@ func agentRuntimeSources(ap approvalReader, question func(context.Context, strin
 		Deployed: func(context.Context, string) (string, map[string]any, bool) { return "", nil, false },
 	}
 	if ap != nil {
-		reads := newBoundedReads(2)
+		reads := readslot.New(2)
 		src.Approval = func(ctx context.Context, number int64) (seenfacts.ApprovalFact, bool) {
 			a, ok, err := within(ctx, reads, func() (approvals.Approval, bool, error) { return ap.Lookup(strconv.FormatInt(number, 10)) })
 			if err != nil || !ok || a.Status == "" {
 				return seenfacts.ApprovalFact{}, false
 			}
-			return approvalFact(a)
+			return approvalfacts.Fact(a)
 		}
 	}
 	if question != nil {
@@ -84,218 +121,7 @@ func agentRuntimeSources(ap approvalReader, question func(context.Context, strin
 		}
 	}
 	if rel != nil {
-		src.Deployed = func(ctx context.Context, env string) (string, map[string]any, bool) {
-			// The controller's facts and rules pass asks this every fifteen
-			// seconds for each deploy watch and step (SeeDeploy, EvaluateStep),
-			// and each answer lists the deploying pipeline's runs
-			// (releases.Current). It had no name: PROD, 2026-11-17 02:09 CST,
-			// counted 80 unnamed LISTs of PipelineRuns in ten minutes, which is
-			// one read a pass at two pages; the daily full CI's reads, taken
-			// for them, list only while a red run is first handled.
-			ctx = kubemetrics.WithSite(ctx, "agentrt.deployed")
-			rec, err := rel.Current(ctx, agentrtDeployLane, env)
-			if err != nil {
-				return "", nil, false
-			}
-			commit, ref, ok := deployedFrom(rec)
-			if !ok || !runsRecorded(ctx, rel, env, rec) {
-				return "", nil, false
-			}
-			return commit, ref, true
-		}
+		src.Deployed = deploysource.Deployed(rel)
 	}
 	return src
-}
-
-// deployedFrom is what the record says the environment runs: its
-// repository's commit, and as the reference the delivery run and the image
-// digests it built (TD-343), so a gate check records exactly what ran and
-// gates_passed compares it whole. A record without the digests of every
-// workload's image (one older than the digests, or a pipeline that reports
-// none) is not a known deployment.
-func deployedFrom(rec releases.Record) (string, map[string]any, bool) {
-	b, ok := rec.Repos[agentrtDeployRepo]
-	if !ok || len(b.SHA) != 40 || rec.Run == "" {
-		return "", nil, false
-	}
-	images := map[string]any{}
-	for _, w := range agentrtWorkloads {
-		d, has := rec.Images[w.image]
-		if !has || d == "" {
-			return "", nil, false
-		}
-		images[w.image] = d
-	}
-	return b.SHA, map[string]any{"delivery_run": rec.Run, "images": images}, true
-}
-
-// runsRecorded: every pod of every workload runs the digest the record says
-// was delivered. A pod that pulled another image under the same tag, a
-// rollout under way, or a pod that cannot be read makes the deployment not
-// known (TD-343; the Owner chose this on 2026-10-14).
-func runsRecorded(ctx context.Context, rel currentDeployment, env string, rec releases.Record) bool {
-	for _, w := range agentrtWorkloads {
-		digests, err := rel.PodDigests(ctx, "bifrost-platform-"+env, w.deployment, w.container)
-		if err != nil {
-			return false
-		}
-		for _, d := range digests {
-			if d != rec.Images[w.image] {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-// errBusy: as many reads of this store as allowed are still running.
-var errBusy = errors.New("agentrt source: earlier reads have not returned")
-
-// boundedReads caps the reads of one store in flight: a read that never
-// returns keeps its slot, so a stuck store holds a bounded number of
-// goroutines, and further reads answer unknown at once (review 161 B1).
-type boundedReads struct{ slots chan struct{} }
-
-func newBoundedReads(n int) *boundedReads { return &boundedReads{slots: make(chan struct{}, n)} }
-
-// within runs a read that does not take a context (the approval and question
-// stores read their files themselves) and gives up when ctx ends; the read's
-// slot is freed only when the read returns.
-func within[T any](ctx context.Context, reads *boundedReads, read func() (T, bool, error)) (T, bool, error) {
-	var zero T
-	select {
-	case reads.slots <- struct{}{}:
-	default:
-		return zero, false, errBusy
-	}
-	type result struct {
-		v   T
-		ok  bool
-		err error
-	}
-	out := make(chan result, 1)
-	safego.Go("agentrt-source-read", func() {
-		defer func() { <-reads.slots }()
-		v, ok, err := read()
-		out <- result{v, ok, err}
-	})
-	select {
-	case r := <-out:
-		return r.v, r.ok, r.err
-	case <-ctx.Done():
-		return zero, false, ctx.Err()
-	}
-}
-
-// productionDeliveryEvidence joins existing release records with live settled
-// workloads. It writes no legacy cycle or synthetic deployment event.
-func productionDeliveryEvidence(ctx context.Context, rel currentDeployment) deliveryview.DeliveryProduction {
-	unknown := func(reason string) deliveryview.DeliveryProduction {
-		return deliveryview.DeliveryProduction{Reason: reason}
-	}
-	prod, err := rel.Current(ctx, agentrtDeployLane, "prod")
-	if err != nil {
-		return unknown("current PROD release is unavailable or unsettled")
-	}
-	stg, err := rel.Current(ctx, agentrtDeployLane, "stg")
-	if err != nil {
-		return unknown("matching STG release is unavailable or unsettled")
-	}
-	sha := prod.Repos[agentrtDeployRepo].SHA
-	for env, rec := range map[string]releases.Record{"prod": prod, "stg": stg} {
-		pipeline := "bifrost-deliver-platform"
-		if env == "prod" {
-			pipeline += "-prod"
-		}
-		if rec.Run == "" || rec.Lane != agentrtDeployLane || rec.Env != env || !rec.Deploys || rec.Pipeline != pipeline ||
-			!regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(rec.Repos[agentrtDeployRepo].SHA) || rec.Revision != rec.Repos[agentrtDeployRepo].SHA ||
-			rec.StartedAt.IsZero() || rec.CompletedAt.IsZero() || rec.CompletedAt.Before(rec.StartedAt) {
-			return unknown("release identity or completion evidence is incomplete")
-		}
-	}
-	if stgSHA := stg.Repos[agentrtDeployRepo].SHA; stgSHA != sha {
-		// STG is ahead of the newest PROD record. The settled PROD workloads
-		// say whether its build already runs there (a PROD release whose
-		// record is not written yet) or does not (PROD waits for it).
-		out := unknown("current STG evidence does not match the promoted PROD revision")
-		switch runs, read := prodRunsBuild(ctx, rel, stg); {
-		case !read:
-		case runs:
-			out.Reason = "PROD workloads run the newest STG build, and no PROD release record names it yet"
-		default:
-			out.NotCommit = stgSHA
-		}
-		return out
-	}
-	if stg.CompletedAt.After(prod.StartedAt) {
-		return unknown("current STG evidence does not match the promoted PROD revision")
-	}
-	for _, w := range agentrtWorkloads {
-		expected := stg.Images[w.image]
-		if !regexp.MustCompile(`^sha256:[0-9a-f]{64}$`).MatchString(expected) {
-			return unknown("matching STG image digest is missing")
-		}
-		digests, err := rel.PodDigests(ctx, "bifrost-platform-prod", w.deployment, w.container)
-		if err != nil || len(digests) == 0 {
-			return unknown("PROD workloads are unavailable or unsettled")
-		}
-		for _, digest := range digests {
-			if digest != expected {
-				return unknown("PROD workload digest differs from the matching STG release")
-			}
-		}
-	}
-	// Refuse a read spanning a concurrent release, including same-commit rebuilds.
-	for env, before := range map[string]releases.Record{"prod": prod, "stg": stg} {
-		after, err := rel.Current(ctx, agentrtDeployLane, env)
-		if err != nil || !reflect.DeepEqual(before, after) {
-			return unknown("release evidence changed while checking PROD workloads")
-		}
-	}
-	return deliveryview.DeliveryProduction{Commit: sha, StartedAt: prod.StartedAt, CompletedAt: prod.CompletedAt}
-}
-
-// prodRunsBuild reports whether every settled PROD workload runs the image
-// the STG release rec built for it. read is false when a digest of rec or a
-// workload cannot be read: then nothing is said either way.
-func prodRunsBuild(ctx context.Context, rel currentDeployment, rec releases.Record) (runs, read bool) {
-	runs = true
-	for _, w := range agentrtWorkloads {
-		expected := rec.Images[w.image]
-		if !regexp.MustCompile(`^sha256:[0-9a-f]{64}$`).MatchString(expected) {
-			return false, false
-		}
-		digests, err := rel.PodDigests(ctx, "bifrost-platform-prod", w.deployment, w.container)
-		if err != nil || len(digests) == 0 {
-			return false, false
-		}
-		for _, digest := range digests {
-			if digest != expected {
-				runs = false
-			}
-		}
-	}
-	return runs, true
-}
-
-var approvalRepo = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,99}$`)
-var approvalTask = regexp.MustCompile(`^t_[0-9A-HJKMNP-TV-Z]{26}$`)
-var approvalOp = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,80}$`)
-
-func approvalFact(a approvals.Approval) (seenfacts.ApprovalFact, bool) {
-	if a.Number == 0 || a.Status == "" {
-		return seenfacts.ApprovalFact{}, false
-	}
-	get := func(key string, re *regexp.Regexp) string {
-		v, _ := a.Params[key].(string)
-		if re.MatchString(v) {
-			return v
-		}
-		return ""
-	}
-	task := get("task_id", approvalTask)
-	if task == "" {
-		task = get("task", approvalTask)
-	}
-	return seenfacts.ApprovalFact{Number: int64(a.Number), Status: a.Status, Action: a.Action, Tier: a.Tier, Env: a.Env, Repo: get("repo", approvalRepo), Task: task, Op: get("op", approvalOp), CreatedAt: a.CreatedAt, DecidedAt: a.DecidedAt, Expired: a.Status == approvals.StatusExpired}, true
 }

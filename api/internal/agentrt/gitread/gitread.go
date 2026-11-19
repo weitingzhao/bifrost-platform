@@ -1,48 +1,48 @@
-package server
+// Package gitread reads Gitea over HTTP for the agent runtime: the head of a
+// branch (what git itself advertises), and the tree id of a commit.
+package gitread
 
 import (
 	"bytes"
 	"context"
+	gitsha1 "crypto/sha1" // #nosec G505 -- git object ids are sha1
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 )
 
-// agentRuntimeMains reads the head of a repository's main where agentd clones
-// it from: the organization the releases clone from (the delivery service's
-// Gitea organization, what agentd's AGENTD_GIT_BASE names), the base of a
-// goal's task (W-31 2.2b). Without the delivery service there is none.
-func (s *Server) agentRuntimeMains() agentrtapi.MainHead {
-	if s.delivery == nil {
-		return nil
-	}
-	access := s.delivery.GiteaAccess
-	client := &http.Client{Timeout: 10 * time.Second}
-	return func(ctx context.Context, repo string) (string, error) {
-		acc, err := access(ctx)
-		if err != nil {
-			return "", fmt.Errorf("gitea access: %w", err)
-		}
-		return giteaBranchHead(access, acc.Org, client)(ctx, repo, "refs/heads/main")
-	}
+// Access is where Gitea is and the read-only credential to read it with.
+type Access struct {
+	Base string // e.g. http://gitea.cicd.svc.cluster.local:3000 (no /api/v1)
+	Org  string
+	User string
+	Pass string
+}
+
+// TreeEntry is one entry of a Gitea tree answer.
+type TreeEntry struct {
+	Path string `json:"path"`
+	Mode string `json:"mode"`
+	Type string `json:"type"`
+	SHA  string `json:"sha"`
 }
 
 var (
-	giteaName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
-	commitID  = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	Name     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+	CommitID = regexp.MustCompile(`^[0-9a-f]{40}$`)
 )
 
-// giteaBranchHead reads the commit a branch of <org>/<repo> points at, from
+// BranchHead reads the commit a branch of <org>/<repo> points at, from
 // the refs git itself advertises over smart HTTP (info/refs, what ls-remote
 // reads): the view agentd's push had. Gitea's branches API answered 404 for a
 // branch pushed the same second (10-15 on STG, attempt a1 of M-1's task), and
@@ -52,7 +52,7 @@ var (
 // reach it), an answer that is not an advertisement, or a Gitea it cannot
 // reach is an error of the platform, which agentd retries later, so no result
 // is lost to it.
-func giteaBranchHead(access func(context.Context) (delivery.GiteaAccess, error), org string, client *http.Client) func(context.Context, string, string) (string, error) {
+func BranchHead(access func(context.Context) (Access, error), org string, client *http.Client) func(context.Context, string, string) (string, error) {
 	// A redirect would read another repository than the one asked for: it is
 	// an answer of its own, an error of the platform (review 194 A2).
 	c := *client
@@ -60,7 +60,7 @@ func giteaBranchHead(access func(context.Context) (delivery.GiteaAccess, error),
 	client = &c
 	return func(ctx context.Context, repo, ref string) (string, error) {
 		branch, ok := strings.CutPrefix(ref, "refs/heads/")
-		if !ok || branch == "" || !giteaName.MatchString(repo) || strings.HasSuffix(repo, ".git") {
+		if !ok || branch == "" || !Name.MatchString(repo) || strings.HasSuffix(repo, ".git") {
 			return "", fmt.Errorf("%w: %q of %q is not a branch of a repository", eventlog.ErrState, ref, repo)
 		}
 		for _, seg := range strings.Split(branch, "/") {
@@ -85,7 +85,7 @@ func giteaBranchHead(access func(context.Context) (delivery.GiteaAccess, error),
 
 // readAdvertisement is <org>/<repo>'s smart-HTTP advertisement of
 // git-upload-pack (info/refs), whole. client must not follow redirects.
-func readAdvertisement(ctx context.Context, access func(context.Context) (delivery.GiteaAccess, error), org, repo string,
+func readAdvertisement(ctx context.Context, access func(context.Context) (Access, error), org, repo string,
 	client *http.Client) ([]byte, error) {
 	acc, err := access(ctx)
 	if err != nil {
@@ -185,7 +185,7 @@ func advertisedRefs(body []byte) (map[string]string, error) {
 		}
 		oid, name, ok := strings.Cut(text, " ")
 		// An empty repository's line is its only one (review 206 A2).
-		if !ok || !commitID.MatchString(oid) || !advertisedName(name, oid, n) || seen[name] || empty {
+		if !ok || !CommitID.MatchString(oid) || !advertisedName(name, oid, n) || seen[name] || empty {
 			return nil, fmt.Errorf("not a ref line: %q", line)
 		}
 		// git writes a peeled line right after the ref it peels.
@@ -261,4 +261,101 @@ func pktLine(r io.Reader) ([]byte, bool, error) {
 		return nil, false, fmt.Errorf("the advertisement is cut off: %w", err)
 	}
 	return payload, false, nil
+}
+
+// CommitTree reads the git tree of a commit of <org>/<repo> from Gitea,
+// with the delivery service's read-only credential. Gitea names no tree id
+// for a commit (the tree sha of its commit and trees answers is the commit's
+// own id, seen on STG 2026-11-13), so the id is computed as git does, from
+// the entries of the commit's root tree.
+func CommitTree(access func(context.Context) (Access, error), client *http.Client) func(context.Context, string, string) (string, error) {
+	c := *client
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return func(ctx context.Context, repo, commit string) (string, error) {
+		if !Name.MatchString(repo) || strings.HasSuffix(repo, ".git") || !CommitID.MatchString(commit) {
+			return "", fmt.Errorf("gitea: %q of %q is not a commit of a repository", commit, repo)
+		}
+		acc, err := access(ctx)
+		if err != nil {
+			return "", fmt.Errorf("gitea access: %w", err)
+		}
+		base := strings.TrimRight(acc.Base, "/") + "/api/v1/repos/" + url.PathEscape(acc.Org) + "/" + url.PathEscape(repo) + "/git/trees/" + commit
+		var entries []TreeEntry
+		for page := 1; ; page++ {
+			req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s?per_page=1000&page=%d", base, page), nil)
+			if reqErr != nil {
+				return "", reqErr
+			}
+			if acc.User != "" || acc.Pass != "" {
+				req.SetBasicAuth(acc.User, acc.Pass)
+			}
+			var doc struct {
+				Total *int        `json:"total_count"`
+				Tree  []TreeEntry `json:"tree"`
+			}
+			err = func() error {
+				resp, doErr := c.Do(req)
+				if doErr != nil {
+					return doErr
+				}
+				defer func() { _ = resp.Body.Close() }()
+				if resp.StatusCode != http.StatusOK {
+					return fmt.Errorf("HTTP %d", resp.StatusCode)
+				}
+				return json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&doc)
+			}()
+			if err != nil || doc.Total == nil {
+				return "", fmt.Errorf("gitea: %s/%s tree of %s: %v", acc.Org, repo, commit, err)
+			}
+			entries = append(entries, doc.Tree...)
+			if len(entries) == *doc.Total {
+				break
+			}
+			if len(doc.Tree) == 0 || len(entries) > *doc.Total || page >= 100 {
+				return "", fmt.Errorf("gitea: %s/%s tree of %s: %d entries read of %d", acc.Org, repo, commit, len(entries), *doc.Total)
+			}
+		}
+		tree, err := TreeID(entries)
+		if err != nil {
+			return "", fmt.Errorf("gitea: %s/%s tree of %s: %w", acc.Org, repo, commit, err)
+		}
+		return tree, nil
+	}
+}
+
+// TreeID is the id git gives a tree with these entries (one directory,
+// not its subtrees): the sha1 of "tree <size>\0" and, for each entry in git's
+// order (by name, a directory as if its name ended in "/"), "<mode> <name>\0"
+// and the 20 bytes of its id.
+func TreeID(entries []TreeEntry) (string, error) {
+	type entry struct {
+		key, mode, name string
+		id              []byte
+	}
+	list := make([]entry, 0, len(entries))
+	seen := map[string]bool{}
+	for _, e := range entries {
+		id, err := hex.DecodeString(e.SHA)
+		mode := strings.TrimLeft(e.Mode, "0")
+		ok := map[string]bool{"blob 100644": true, "blob 100755": true, "blob 120000": true, "tree 40000": true, "commit 160000": true}[e.Type+" "+mode]
+		if err != nil || len(id) != 20 || !ok || e.Path == "" || strings.ContainsAny(e.Path, "/\x00") || seen[e.Path] {
+			return "", fmt.Errorf("invalid tree entry %q", e.Path)
+		}
+		seen[e.Path] = true
+		key := e.Path
+		if e.Type == "tree" {
+			key += "/"
+		}
+		list = append(list, entry{key, mode, e.Path, id})
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].key < list[j].key })
+	var body bytes.Buffer
+	for _, e := range list {
+		body.WriteString(e.mode + " " + e.name + "\x00")
+		body.Write(e.id)
+	}
+	h := gitsha1.New() // #nosec G401 -- git's object id, not a security hash
+	_, _ = fmt.Fprintf(h, "tree %d\x00", body.Len())
+	h.Write(body.Bytes())
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

@@ -294,6 +294,55 @@
       "status": "assigned",
       "basis": "2026-11-18, moved out of api/internal/server unchanged (evidence_commit.go, the plan answer of units_plan.go; decoupling item 5, A2): the two reads of the evidence ledger by commit, GET /api/v1/evidence/commit (is this commit green, and with what) and GET /api/v1/units/plan (CI's plan of one commit with the ledger's word on each key). Read-only; no CI or release decisions. Imports verification (evidence, unitplan) and foundation (eventlog) only; the server hands it the ledger, Gitea's tree and main reads and the names a request may carry."
     },
+    "api/internal/agentrt/schemawatch": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (agentrt_schema.go; decoupling item 5, A4): what platform-api reads of the agentrt schema (which migrations the database applied), said in /health, the log and on the bus. Imports foundation only (migrate, eventlog, bus/readerseen, bus/schemaevents)."
+    },
+    "api/internal/agentrt/readslot": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (agentrt_sources.go; decoupling item 5, A4): the cap on reads of one store that take no context, so a stuck store holds a bounded number of goroutines. Imports safego only."
+    },
+    "api/internal/agentrt/gitread": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (agentrt_heads.go, giteaCommitTree and gitTreeID of agentrt_external_records.go; decoupling item 5, A4): Gitea read over HTTP, the head of a branch from what git advertises and the tree id of a commit. Imports eventlog (ErrState) only; the server hands it the credential."
+    },
+    "api/internal/agentrt/approvalfacts": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (agentrt_sources.go, agentrt_external_records.go; decoupling item 5, A4): the fields of an approval the agent runtime may record (seenfacts.ApprovalFact), and when a read approval is not yet a record. Imports owner (approvals) and foundation (seenfacts) only."
+    },
+    "api/internal/agentrt/runfacts": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (agentrt_external_records.go; decoupling item 5, A4): a finished Tekton PipelineRun as the facts the runtime records (result, repository, revision, what a CI run tested, a land run's outcome). Imports verification (evidence, landingci) and foundation (seenfacts, notice) only."
+    },
+    "api/internal/agentrt/deploysource": {
+      "domains": [
+        "delivery"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (agentrt_sources.go; decoupling item 5, A4): the platform's own deployment as the release records and running pods say it, for the runtime's standing conditions (commit and image digests) and the PROD delivery evidence. Imports delivery (releases, deliveryview) and foundation only."
+    },
+    "api/internal/agentrt/migraterun": {
+      "domains": [
+        "delivery"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (agentrt_migration.go; decoupling item 5, A4): the action run_agentrt_migration's execution: the environment's migration Job from the manifest at infra main with the api image the source environment delivered, its wait and what its log says it applied; and what the release policy reads of this platform's own migrations. The signed rules stay in releasepolicy. Imports delivery (releasepolicy, releases, deploysource) and foundation only; the owner domain's error classes and identity are handed in by the server."
+    },
     "api/internal/cidomains": {
       "domains": [
         "verification"

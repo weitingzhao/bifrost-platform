@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -91,7 +92,7 @@ func planRepo() (entries []commitTreeEntry, blobs map[string]string) {
 				list = append(list, commitTreeEntry{Path: rest, Mode: e.Mode, Type: e.Type, SHA: e.SHA})
 			}
 		}
-		id, err := gitTreeID(list)
+		id, err := gitread.TreeID(list)
 		if err != nil {
 			panic(err)
 		}
@@ -140,7 +141,7 @@ func TestUnitPlanFromGitea(t *testing.T) {
 			root = append(root, e)
 		}
 	}
-	wantRoot, _ := gitTreeID(root)
+	wantRoot, _ := gitread.TreeID(root)
 	if plan.Tree != wantRoot || len(plan.Units) != 2 || plan.ToRun != 2 || plan.Counts[evidence.EvidenceNone] != 2 {
 		t.Fatalf("plan: tree %s (want %s), %+v", plan.Tree, wantRoot, plan)
 	}

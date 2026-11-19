@@ -1,6 +1,4 @@
-//bifrost:owner foundation
-
-package server
+package schemawatch
 
 import (
 	"context"
@@ -8,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
-	"net/http/httptest"
 	"slices"
 	"sync"
 	"testing"
@@ -39,7 +35,7 @@ func TestHealthSaysTheSchemaIsBehind(t *testing.T) {
 	}
 	var mu sync.Mutex
 	var lines []string
-	w := &schemaWatch{log: func(level slog.Level, msg string, args ...any) {
+	w := &Watch{log: func(level slog.Level, msg string, args ...any) {
 		mu.Lock()
 		defer mu.Unlock()
 		lines = append(lines, level.String()+" "+msg+" "+fmt.Sprint(args...))
@@ -48,24 +44,22 @@ func TestHealthSaysTheSchemaIsBehind(t *testing.T) {
 	w.check(ctx, runtime)
 	w.check(ctx, runtime)
 
-	srv := newTestServer(t, newTestConfig(t))
 	health := func() map[string]any {
 		t.Helper()
-		rec := httptest.NewRecorder()
-		srv.Router().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+		// The shape /health serves: the map is encoded as it is.
 		var body map[string]any
-		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &body) != nil {
-			t.Fatalf("health %d %s", rec.Code, rec.Body.String())
+		raw, _ := json.Marshal(w.Health())
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatal(err)
 		}
 		return body
 	}
-	if off := health(); off["agentrt_schema"] != "off" || off["status"] != "ok" {
+	if off := (*Watch)(nil).Health(); off["agentrt_schema"] != "off" {
 		t.Fatalf("without the runtime: %v", off)
 	}
-	srv.agentRuntime = &agentRuntime{schema: w}
 	behind := health()
 	missing, _ := behind["agentrt_schema_missing"].([]any)
-	if behind["status"] != "ok" || behind["agentrt_schema"] != migrate.SchemaBehind || len(missing) != len(files)-6 ||
+	if behind["agentrt_schema"] != migrate.SchemaBehind || len(missing) != len(files)-6 ||
 		missing[0] != "0007_gate_tasks" || missing[1] != "0008_attempt_prepare_failed" || missing[2] != "0009_issues" {
 		t.Fatalf("behind: %v", behind)
 	}
@@ -125,4 +119,27 @@ type unreadable struct{}
 
 func (unreadable) Query(context.Context, string, ...any) (pgx.Rows, error) {
 	return nil, errors.New("connection refused")
+}
+
+// Owner 2026-11-15: what the release policy reads of this platform is the
+// migrations the database applied at the last read, by number and sha256; a
+// platform that has read nothing, or whose last read failed, answers none.
+func TestAppliedIsWhatTheLastReadSaid(t *testing.T) {
+	var nilWatch *Watch
+	if _, ok := nilWatch.Applied(); ok {
+		t.Fatal("no watch answered")
+	}
+	w := &Watch{}
+	if _, ok := w.Applied(); ok {
+		t.Fatal("an unread schema answered")
+	}
+	w.status = &migrate.SchemaStatus{State: migrate.SchemaCurrent, Applied: []migrate.Applied{{ID: 1, SHA256: "a"}, {ID: 2, SHA256: "b"}}}
+	applied, ok := w.Applied()
+	if !ok || len(applied) != 2 || applied[2] != "b" {
+		t.Fatalf("applied = %v, %v", applied, ok)
+	}
+	w.err = "connection refused"
+	if _, ok := w.Applied(); ok {
+		t.Fatal("a failed read still answered")
+	}
 }

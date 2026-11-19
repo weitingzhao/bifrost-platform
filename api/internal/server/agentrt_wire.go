@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deploysource"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/schemawatch"
 	"log/slog"
 	"os"
 	"strings"
@@ -43,8 +45,8 @@ type agentRuntime struct {
 	// env is AGENTRT_ENV: whose runtime this platform runs.
 	env string
 	// schema is what the platform last read of the database's agentrt
-	// schema (TD-411, agentrt_schema.go); nil without AGENTRT_DSN.
-	schema *schemaWatch
+	// schema (TD-411, agentrt/schemawatch); nil without AGENTRT_DSN.
+	schema *schemawatch.Watch
 	// evidenceCI is the ledger answering "did CI pass" (evidence_gate.go);
 	// nil in a process with no delivery service: then CI is not read.
 	evidenceCI delivery.CIReader
@@ -78,7 +80,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	rt.evidenceCI = s.wireEvidenceGate()
 	if s.releases != nil && s.releases.Service() != nil {
 		rt.api.ProductionDelivery = func(ctx context.Context) deliveryview.DeliveryProduction {
-			return productionDeliveryEvidence(ctx, s.releases.Service())
+			return deploysource.ProductionEvidence(ctx, s.releases.Service())
 		}
 	}
 	if s.delivery != nil {
@@ -98,7 +100,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		slog.Info("agentrt: AGENTRT_DSN is not set; its routes answer 503")
 		return
 	}
-	rt.schema = &schemaWatch{}
+	rt.schema = &schemawatch.Watch{}
 	// The routes answer 503 until the database is connected; the platform
 	// keeps connecting in the background, so a refusal at start (a new pod
 	// the network policy does not know yet, a database restarting) heals by
@@ -137,8 +139,8 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		}
 		// Both processes say whether the database has this binary's
 		// migrations (TD-411), in their health and their log.
-		rt.schema.announce = announceMigrations(pool)
-		safego.Go("agentrt-schema", func() { rt.schema.run(ctx, pool) })
+		rt.schema.Announce = schemawatch.AnnounceMigrations(pool)
+		safego.Go("agentrt-schema", func() { rt.schema.Run(ctx, pool) })
 		if s.releases != nil {
 			s.releases.Service().SetTable(releaseTable(pool))
 			s.releases.Service().SetTableReader(releaseRows{pool: pool})
@@ -351,4 +353,12 @@ func (s *Server) closeAgentRuntime() {
 	if s.agentRuntime != nil && s.agentRuntime.stop != nil {
 		s.agentRuntime.stop()
 	}
+}
+
+// agentRuntimeSchema is the health of the agent runtime's schema.
+func (s *Server) agentRuntimeSchema() map[string]any {
+	if s.agentRuntime == nil {
+		return (*schemawatch.Watch)(nil).Health()
+	}
+	return s.agentRuntime.schema.Health()
 }

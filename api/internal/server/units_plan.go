@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"io"
 	"net/http"
@@ -90,7 +91,7 @@ func (g *giteaTrees) tree(ctx context.Context, repo, commit string) (*unitplan.T
 		}
 		entries = append(entries, unitplan.Entry{Path: p, Dir: e.Type == "tree", ID: e.SHA})
 	}
-	rootID, err := gitTreeID(root)
+	rootID, err := gitread.TreeID(root)
 	if err != nil {
 		return nil, err
 	}

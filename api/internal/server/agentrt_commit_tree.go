@@ -7,13 +7,6 @@ import (
 	"strings"
 )
 
-type commitTreeEntry struct {
-	Path string `json:"path"`
-	Mode string `json:"mode"`
-	Type string `json:"type"`
-	SHA  string `json:"sha"`
-}
-
 // Read the independently generated, paged tree, pinned by commit SHA.
 // Gitea 1.21 sets truncated even on the final nonempty page when the total
 // exceeds per_page. Completion therefore requires total_count distinct entries;

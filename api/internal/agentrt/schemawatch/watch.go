@@ -1,4 +1,6 @@
-package server
+// Package schemawatch is what platform-api reads of the agentrt schema: which
+// migrations the database applied, said in /health and the log, and on the bus.
+package schemawatch
 
 import (
 	"context"
@@ -27,21 +29,21 @@ import (
 // schemaEvery is how often the schema is read again.
 const schemaEvery = time.Minute
 
-// schemaWatch is the schema last read; the zero value has read nothing.
-type schemaWatch struct {
+// Watch is the schema last read; the zero value has read nothing.
+type Watch struct {
 	mu     sync.Mutex
 	status *migrate.SchemaStatus
 	err    string
 	// log writes a line at a level; nil writes it with slog.
 	log func(level slog.Level, msg string, args ...any)
-	// announce, when set, says the applied migrations on the bus; said is the
+	// Announce, when set, says the applied migrations on the bus; said is the
 	// newest this process has seen said.
-	announce func(ctx context.Context, applied []migrate.Applied) error
+	Announce func(ctx context.Context, applied []migrate.Applied) error
 	said     int
 }
 
-// run reads the schema now and every schemaEvery until ctx ends.
-func (w *schemaWatch) run(ctx context.Context, q migrate.Querier) {
+// Run reads the schema now and every schemaEvery until ctx ends.
+func (w *Watch) Run(ctx context.Context, q migrate.Querier) {
 	t := time.NewTicker(schemaEvery)
 	defer t.Stop()
 	for {
@@ -55,7 +57,7 @@ func (w *schemaWatch) run(ctx context.Context, q migrate.Querier) {
 }
 
 // check reads the schema once and logs a change from the last read.
-func (w *schemaWatch) check(ctx context.Context, q migrate.Querier) {
+func (w *Watch) check(ctx context.Context, q migrate.Querier) {
 	rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	st, err := migrate.Check(rctx, q)
 	cancel()
@@ -91,8 +93,8 @@ func (w *schemaWatch) check(ctx context.Context, q migrate.Querier) {
 
 // say hands the applied migrations to the bus when a newer one is there; a
 // failure is said again at the next read.
-func (w *schemaWatch) say(ctx context.Context, applied []migrate.Applied) {
-	if w.announce == nil {
+func (w *Watch) say(ctx context.Context, applied []migrate.Applied) {
+	if w.Announce == nil {
 		return
 	}
 	readerseen.Saw("schema-watch")
@@ -105,7 +107,7 @@ func (w *schemaWatch) say(ctx context.Context, applied []migrate.Applied) {
 	}
 	actx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	if err := w.announce(actx, applied); err != nil {
+	if err := w.Announce(actx, applied); err != nil {
 		w.logf(slog.LevelWarn, "agentrt: the applied migrations were not said on the bus", "err", err)
 		return
 	}
@@ -116,7 +118,7 @@ func sameSchema(a, b migrate.SchemaStatus) bool {
 	return a.State == b.State && slices.Equal(a.Missing, b.Missing) && slices.Equal(a.Edited, b.Edited) && slices.Equal(a.Unknown, b.Unknown)
 }
 
-func (w *schemaWatch) logf(level slog.Level, msg string, args ...any) {
+func (w *Watch) logf(level slog.Level, msg string, args ...any) {
 	if w.log != nil {
 		w.log(level, msg, args...)
 		return
@@ -124,13 +126,13 @@ func (w *schemaWatch) logf(level slog.Level, msg string, args ...any) {
 	slog.Log(context.Background(), level, msg, args...)
 }
 
-// health is what /health says of the schema: agentrt_schema is off without
+// Health is what /health says of the schema: agentrt_schema is off without
 // the runtime, unknown until it is read (or when the read failed), else the
 // state, with the migrations missing, edited or unknown named, and every
 // migration the database has applied (agentrt_schema_applied, number and
 // sha256), which the PROD deliver pipeline checks the next build's
 // migrations against before it rolls out (TD-411).
-func (w *schemaWatch) health() map[string]any {
+func (w *Watch) Health() map[string]any {
 	if w == nil {
 		return map[string]any{"agentrt_schema": "off"}
 	}
@@ -152,16 +154,27 @@ func (w *schemaWatch) health() map[string]any {
 	return out
 }
 
-// agentRuntimeSchema is the health of the agent runtime's schema.
-func (s *Server) agentRuntimeSchema() map[string]any {
-	if s.agentRuntime == nil {
-		return (*schemaWatch)(nil).health()
+// Applied is the migrations the database had applied at the last read
+// (number -> sha256); ok is false when no read has succeeded or the last
+// one failed.
+func (w *Watch) Applied() (map[int]string, bool) {
+	if w == nil {
+		return nil, false
 	}
-	return s.agentRuntime.schema.health()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.status == nil || w.err != "" {
+		return nil, false
+	}
+	out := make(map[int]string, len(w.status.Applied))
+	for _, a := range w.status.Applied {
+		out[a.ID] = a.SHA256
+	}
+	return out, true
 }
 
-// announceMigrations says the applied migrations through db (bus/schemaevents).
-func announceMigrations(db eventlog.DB) func(context.Context, []migrate.Applied) error {
+// AnnounceMigrations says the applied migrations through db (bus/schemaevents).
+func AnnounceMigrations(db eventlog.DB) func(context.Context, []migrate.Applied) error {
 	return func(ctx context.Context, applied []migrate.Applied) error {
 		ms := make([]schemaevents.Migration, 0, len(applied))
 		for _, a := range applied {
