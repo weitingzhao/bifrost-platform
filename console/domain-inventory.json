@@ -2164,6 +2164,7 @@
         "console/src/domains/owner/city/gen2/content/consolePlaces.ts",
         "console/src/domains/owner/city/gen2/content/hardware.ts",
         "console/src/domains/owner/city/gen2/content/panels.tsx",
+        "console/src/domains/owner/city/gen2/content/units/cpu.ts",
         "console/src/domains/owner/city/gen2/frame/CityGen2.tsx",
         "console/src/domains/owner/city/gen2/frame/__tests__/boundary.test.ts",
         "console/src/domains/owner/city/gen2/frame/__tests__/dictionary.test.ts",
@@ -2173,6 +2174,7 @@
         "console/src/domains/owner/city/gen2/frame/__tests__/parts.test.tsx",
         "console/src/domains/owner/city/gen2/frame/__tests__/rules.test.ts",
         "console/src/domains/owner/city/gen2/frame/__tests__/theme.test.ts",
+        "console/src/domains/owner/city/gen2/frame/__tests__/units.test.ts",
         "console/src/domains/owner/city/gen2/frame/__tests__/viewport.test.ts",
         "console/src/domains/owner/city/gen2/frame/arrangementStore.ts",
         "console/src/domains/owner/city/gen2/frame/cityGen2.css",
@@ -2193,6 +2195,7 @@
         "console/src/domains/owner/city/gen2/frame/rules.ts",
         "console/src/domains/owner/city/gen2/frame/sprites.ts",
         "console/src/domains/owner/city/gen2/frame/theme.ts",
+        "console/src/domains/owner/city/gen2/frame/units/process.ts",
         "console/src/domains/owner/city/gen2/frame/viewport.ts"
       ],
       "imports": [
