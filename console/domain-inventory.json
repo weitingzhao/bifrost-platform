@@ -2125,6 +2125,7 @@
         "console/src/api/checklist.ts",
         "console/src/api/core.ts",
         "console/src/api/telemetry.ts",
+        "console/src/domains/foundation/bus",
         "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/shell"
       ],
