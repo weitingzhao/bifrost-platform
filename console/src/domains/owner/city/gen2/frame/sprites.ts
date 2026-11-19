@@ -144,11 +144,108 @@ function furniture(g: Draw, x: number, y: number, w: number, d: number, light: L
   if (w >= 3 && d >= 2) desk(x + w * 0.62, y + d * 0.5)
 }
 
-export type SpriteKey = string
-export const spriteKey = (kind: string, w: number, d: number, hue: string, light: Light, seed: number): SpriteKey => `g2:${kind}:${w}x${d}:${hue}:${light}:${seed}`
+/**
+ * A district seen from the town (the Owner, 2026-11-19: a block of a city is many buildings, never
+ * one): as many buildings as the district holds, and never fewer than its footprint calls for (2 on
+ * a 2-wide block, 4 on a 4-wide one, 6 on an 8-wide one), on its paved block, a tree where a lot is
+ * left over.
+ */
+export function districtBlock(fw: number, fd: number, hue: string, light: Light, seed: number, holds: number): Sprite {
+  const W = WALLS[light]
+  const n = Math.min(fw, fd)
+  if (n < 2) return districtHall(fw, fd, hue, light, seed)
+  const count = Math.max(holds, n >= 8 ? 6 : n >= 4 ? 4 : 2) + (fw !== fd ? 1 : 0)
+  const i = setback(n), x0 = i, y0 = i, x1 = fw - i, y1 = fd - i, w = x1 - x0, d = y1 - y0
+  const cols = Math.max(1, Math.round(Math.sqrt(count * w / d))), rows = Math.ceil(count / cols)
+  const gap = Math.min(0.4, Math.min(w / cols, d / rows) * 0.2)
+  const cw = (w - gap * (cols - 1)) / cols, cd = (d - gap * (rows - 1)) / rows
+  const top = 20 + n * 9
+  const g = new Draw(fw, fd, top + 40)
+  const paving = light === 'night' ? '#3a3e5c' : light === 'dusk' ? '#e6d2c0' : '#ebe6dc'
+  g.poly(paving, [[x0 - 0.12, y0 - 0.12, 0], [x1 + 0.12, y0 - 0.12, 0], [x1 + 0.12, y1 + 0.12, 0], [x0 - 0.12, y1 + 0.12, 0]], 1.2)
+  const lots: { r: number; c: number; k: number }[] = []
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) lots.push({ r, c, k: r * cols + c })
+  lots.sort((a, b) => (a.r + a.c) - (b.r + b.c))
+  const band = hueFor(hue, light), lit = litBy(light, seed)
+  for (const { r, c, k } of lots) {
+    const bx = x0 + c * (cw + gap), by = y0 + r * (cd + gap)
+    if (k >= count) { tree(g, bx + cw / 2, by + cd / 2, Math.min(1.2, Math.min(cw, cd)), light); continue }
+    const h = Math.round(16 + n * 3 + (hash(`${seed}:${k}`) % 5) * n * 1.7)
+    g.shadow(bx, by, cw, cd, 0.35)
+    g.box(bx, by, cw, cd, h, faces(W.top, wash(hue, light, 'left'), wash(hue, light, 'right')), 0, 1.4)
+    g.onLeft(bx, by + cd, 0, cw, h - 5, h, band, 0.8)
+    const rws = Math.max(1, Math.floor((h - 14) / 11))
+    g.windows('left', bx, by + cd, cw, 8, h - 8, rws, Math.max(1, Math.round(cw * 2.4)), { fill: W.window, lit: (a, b) => lit(a + k * 5, b), litFill: W.lit })
+    g.windows('right', bx + cw, by, cd, 8, h - 8, rws, Math.max(1, Math.round(cd * 2.4)), { fill: W.window, lit: (a, b) => lit(a + k * 5 + 3, b), litFill: W.lit })
+    if (cw > 0.9 && cd > 0.9) g.unit(bx + cw * 0.3, by + cd * 0.3, h, Math.min(0.45, cw * 0.3))
+  }
+  return g.done()
+}
 
-export function spriteFor(kind: 'district' | 'building' | 'room' | 'town', w: number, d: number, hue: string, light: Light, seed: number): Sprite {
-  return kind === 'room' ? roomFloor(w, d, hue, light) : kind === 'building' ? workshop(w, d, hue, light, seed) : districtHall(w, d, hue, light, seed)
+const LEAF: Record<Light, [string, string]> = { day: ['#8cc56d', '#b3dc8f'], dusk: ['#8f9f5c', '#adbb76'], night: ['#2f5a3e', '#3e7050'] }
+
+/** A tree at grid (x, y) of a sprite: a trunk, a round crown and its light side; s scales it. */
+function tree(g: Draw, x: number, y: number, s: number, light: Light) {
+  const [leaf, hi] = LEAF[light]
+  const [gx, gy] = g.p(x, y, 0)
+  g.add(`<ellipse cx="${gx.toFixed(1)}" cy="${gy.toFixed(1)}" rx="${(9 * s).toFixed(1)}" ry="${(4.5 * s).toFixed(1)}" fill="#5a5880" opacity="0.12"/>`)
+  g.line([x, y, 0], [x, y, 12 * s], INK, 2.6 * s)
+  g.line([x, y, 0], [x, y, 12 * s], '#8a6a4a', 1.4 * s)
+  const [cx, cy] = g.p(x, y, 19 * s)
+  g.add(`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(9.5 * s).toFixed(1)}" fill="${leaf}" stroke="${INK}" stroke-width="${(1.4 * s).toFixed(2)}"/>`)
+  g.add(`<circle cx="${(cx - 3 * s).toFixed(1)}" cy="${(cy - 3 * s).toFixed(1)}" r="${(3.6 * s).toFixed(1)}" fill="${hi}"/>`)
+}
+
+/**
+ * The small things that make a place read as lived in (the Owner, 2026-11-19, after Theme Hospital):
+ * outdoors trees, street lamps and park benches; indoors waiting seats, plants and a water cooler.
+ * Each is drawn in one cell, centred, so the scene places it by its middle.
+ */
+export type PropKind = 'tree' | 'lamp' | 'bench' | 'seats' | 'plant' | 'cooler'
+export const PROPS: readonly PropKind[] = ['tree', 'lamp', 'bench', 'seats', 'plant', 'cooler']
+
+export function propSprite(kind: PropKind, light: Light): Sprite {
+  const g = new Draw(1, 1, 40)
+  const night = light === 'night'
+  const metal = night ? faces('#4a4f6a', '#3c4058', '#30344a') : faces('#e4e2dc', '#c9c6be', '#b3afa6')
+  const wood = night ? faces('#6b5a4a', '#55473a', '#463a30') : faces('#d9b48a', '#c09a70', '#a8845c')
+  if (kind === 'tree') tree(g, 0.5, 0.5, 1, light)
+  if (kind === 'lamp') {
+    if (light !== 'day') { const [gx, gy] = g.p(0.5, 0.5, 0); g.add(`<ellipse cx="${gx}" cy="${gy}" rx="16" ry="8" fill="#ffd27a" opacity="${night ? 0.32 : 0.18}"/>`) }
+    g.line([0.5, 0.5, 0], [0.5, 0.5, 30], INK, 2.4)
+    g.line([0.5, 0.5, 0], [0.5, 0.5, 30], night ? '#5a5f7a' : '#8a8798', 1.2)
+    g.box(0.42, 0.42, 0.16, 0.16, 4, light === 'day' ? metal : faces('#ffe39a', '#ffd27a', '#f2c25a'), 29, 1)
+  }
+  if (kind === 'bench') {
+    g.box(0.18, 0.42, 0.64, 0.18, 4, wood, 0, 1)
+    g.box(0.18, 0.38, 0.64, 0.05, 7, wood, 4, 0.9)
+  }
+  if (kind === 'seats') {
+    const seat = night ? faces('#5b6aa0', '#4a5788', '#3d4872') : faces('#9cc0f0', '#7fa6dc', '#6a91c8')
+    for (const x of [0.12, 0.4, 0.68]) {
+      g.box(x, 0.3, 0.22, 0.06, 9, seat, 0, 0.9)
+      g.box(x, 0.36, 0.22, 0.24, 4, seat, 0, 0.9)
+    }
+  }
+  if (kind === 'plant') {
+    g.cylinder(0.5, 0.5, 5, 0, 7, '#d98a5a', '#b86e42')
+    const [leaf, hi] = LEAF[light]
+    const [cx, cy] = g.p(0.5, 0.5, 14)
+    g.add(`<circle cx="${cx}" cy="${cy}" r="7.5" fill="${leaf}" stroke="${INK}" stroke-width="1.3"/><circle cx="${cx - 2}" cy="${cy - 2.5}" r="2.6" fill="${hi}"/>`)
+  }
+  if (kind === 'cooler') {
+    g.box(0.32, 0.32, 0.36, 0.36, 14, metal, 0, 1.1)
+    g.cylinder(0.5, 0.5, 4.5, 14, 23, night ? '#5a7fb0' : '#bfe0fb', night ? '#46689a' : '#93c4ee')
+  }
+  return g.done()
+}
+export const propKey = (kind: PropKind, light: Light) => `g2:prop:${kind}:${light}`
+
+export type SpriteKey = string
+export const spriteKey = (kind: string, w: number, d: number, hue: string, light: Light, seed: number, count = 0): SpriteKey => `g2:${kind}:${w}x${d}:${hue}:${light}:${seed}:${count}`
+
+export function spriteFor(kind: 'district' | 'building' | 'room' | 'town', w: number, d: number, hue: string, light: Light, seed: number, count = 0): Sprite {
+  return kind === 'room' ? roomFloor(w, d, hue, light) : kind === 'building' ? workshop(w, d, hue, light, seed) : districtBlock(w, d, hue, light, seed, count)
 }
 
 export const spriteUrl = (s: Sprite) => `data:image/svg+xml;utf8,${encodeURIComponent(s.svg)}`
