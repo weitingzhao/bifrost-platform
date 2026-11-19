@@ -1686,6 +1686,7 @@
         "console/src/domains/foundation/bus/__tests__/busProblems.test.ts",
         "console/src/domains/foundation/bus/__tests__/busStatus.test.tsx",
         "console/src/domains/foundation/bus/__tests__/liveRefresh.test.ts",
+        "console/src/domains/foundation/bus/__tests__/liveRefreshWatchdog.test.tsx",
         "console/src/domains/foundation/bus/busEffect.ts",
         "console/src/domains/foundation/bus/busNerve.ts",
         "console/src/domains/foundation/bus/busNerveBody.ts",

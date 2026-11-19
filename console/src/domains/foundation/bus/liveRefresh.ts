@@ -147,6 +147,35 @@ const CLIENT = 'console-live'
 const RETRY_MS = 2_000
 const OFF_RETRY_MS = 30_000
 
+/**
+ * A stream that says nothing this long is given up and reopened. The server
+ * writes a heartbeat every 15 s, so three missed beats mean the connection is
+ * dead, not quiet. 2026-11-19 23:27-23:50Z: a tablet on PROD came back from a
+ * network change with its stream hung on a dead connection: no error, no end,
+ * so it never reconnected and polled at its own pace (plan 187, progress 107
+ * reads in 10 minutes) until the page was reloaded.
+ */
+export const LIVE_IDLE_MS = 45_000
+
+/** Calls onIdle once if poke() is not called for ms. */
+export class IdleWatch {
+  private timer: ReturnType<typeof setTimeout> | undefined
+
+  constructor(private readonly ms: number, private readonly onIdle: () => void) {
+    this.poke()
+  }
+
+  poke(): void {
+    if (this.timer !== undefined) clearTimeout(this.timer)
+    this.timer = setTimeout(() => { this.timer = undefined; this.onIdle() }, this.ms)
+  }
+
+  stop(): void {
+    if (this.timer !== undefined) clearTimeout(this.timer)
+    this.timer = undefined
+  }
+}
+
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise(resolve => {
     const t = setTimeout(resolve, ms)
@@ -173,11 +202,17 @@ export function useLiveRefresh(queryClient: QueryClient): void {
     const run = async () => {
       while (!signal.aborted) {
         let wait = retry
+        // Each attempt has its own abort, so a silent connection (connect or
+        // read) is dropped and reopened; leaving the page aborts it too.
+        const attempt = new AbortController()
+        const leave = () => attempt.abort()
+        signal.addEventListener('abort', leave, { once: true })
+        const idle = new IdleWatch(LIVE_IDLE_MS, () => attempt.abort())
         try {
           const headers = authHeaders()
           headers.set('Accept', 'text/event-stream')
           if (cursor) headers.set('Last-Event-ID', cursor)
-          const r = await serverFetch(`/api/v1/bus/stream?client=${CLIENT}`, { headers, signal, cache: 'no-store' })
+          const r = await serverFetch(`/api/v1/bus/stream?client=${CLIENT}`, { headers, signal: attempt.signal, cache: 'no-store' })
           if (!r.ok || r.body == null) {
             // 401/403 without a token, 404/503 without the bus: poll as before.
             wait = r.status === 401 || r.status === 403 || r.status === 404 || r.status === 503 ? OFF_RETRY_MS : retry
@@ -194,6 +229,7 @@ export function useLiveRefresh(queryClient: QueryClient): void {
             for (;;) {
               const { value, done } = await reader.read()
               if (done) break
+              idle.poke()
               const got = parser.push(decoder.decode(value, { stream: true }))
               if (got.retry != null) retry = got.retry
               for (const m of got.messages) {
@@ -209,6 +245,9 @@ export function useLiveRefresh(queryClient: QueryClient): void {
           }
         } catch {
           if (signal.aborted) break
+        } finally {
+          idle.stop()
+          signal.removeEventListener('abort', leave)
         }
         setLive(false)
         await sleep(wait, signal)
