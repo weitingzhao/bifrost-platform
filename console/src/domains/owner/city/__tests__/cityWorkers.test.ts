@@ -6,6 +6,8 @@ import { plannedCity } from '../defaultLayout'
 import { pluginsOf, tenantsOf } from '../catalog'
 import { nextZoneName, zoneTint } from '../zones'
 import { campuses, campusPlan, campusSize } from '../cityCampus'
+import { diskTier, machines, memTier, osOf, variantOf } from '../cityMachines'
+import { layersOf } from '../catalog'
 
 // Origin: 2026-11-18, the Owner: seats are the workers; they live in dorms
 // and their real work shows. A worker stands at the building of the domain
@@ -45,7 +47,7 @@ describe('the zoned plan', () => {
   // 2026-11-18, the Owner: every entity stays, the plan is compact enough to take in at a glance.
   it('is compact: every building inside a district, the pad by the sea, no empty band', () => {
     const d = plannedCity()
-    expect(d.zones?.map(z => z.name)).toEqual(['Satellite campuses', 'Launch site', 'Suppliers', 'Town', 'Power yard'])
+    expect(d.zones?.map(z => z.name)).toEqual(['Satellite campuses', 'Launch site', 'Suppliers', 'Town', 'Power yard', 'Off the grid'])
     for (const p of d.parts) expect(d.zones!.some(z => p.x >= z.x && p.y >= z.y && p.x + p.size <= z.x + z.w && p.y + p.size <= z.y + z.h), p.binds || p.kind).toBe(true)
     expect(d.parts.find(p => p.kind === 'pad')!.y).toBe(0)
     expect(d.width * d.height).toBeLessThan(30 * 30)
@@ -85,7 +87,7 @@ describe('the payload works', () => {
 describe('districts the Owner draws', () => {
   it('a new one takes the first usual name not on the land, its tint following the name', () => {
     expect(nextZoneName([])).toBe('Launch site')
-    expect(nextZoneName(plannedCity().zones!)).toBe('District 6')
+    expect(nextZoneName(plannedCity().zones!)).toBe('District 7')
     expect(zoneTint('Town')).toBe('#f1e8d6')
     expect(zoneTint('Research campus')).toMatch(/^#[0-9a-f]{6}$/)
     expect(zoneTint('Research campus')).toBe(zoneTint('Research campus'))
@@ -132,5 +134,31 @@ describe('trimming the land', () => {
     expect(d.zones[0]).toMatchObject({ x: 0, y: 0, w: 7, h: 4 })
     expect(trim(d)).toBe(false)
     expect(trim(emptyDoc(16))).toBe(false)
+  })
+})
+
+// Origin: 2026-11-18, the Owner polishing the power yard: Mac, Windows and Linux look different; memory and disk show as sizes; tags cover the picture.
+describe('the machines', () => {
+  const G = 2 ** 30
+  const cap = (node: string, cpu: number, mem: number, disk: number) => [
+    { labels: { node, resource: 'cpu' }, value: cpu }, { labels: { node, resource: 'memory' }, value: mem }, { labels: { node, resource: 'ephemeral_storage' }, value: disk }]
+  it('sizes memory and disk in four fixed tiers, unknown when not read', () => {
+    expect([memTier(16 * G), memTier(22.8 * G), memTier(64 * G), memTier(125 * G), memTier(null)]).toEqual([0, 1, 2, 3, -1])
+    expect([diskTier(500e9), diskTier(1.2e12), diskTier(1.97e12), diskTier(8e12), diskTier(null)]).toEqual([0, 1, 2, 3, -1])
+  })
+  it('tells the system from the OS image, and the machines outside the cluster from the topology', () => {
+    expect([osOf('Ubuntu 24.04.5 LTS'), osOf('Windows Server 2022'), osOf('Darwin 25'), osOf(''), osOf('Plan 9')]).toEqual(['linux', 'win', 'mac', 'unknown', 'unknown'])
+    const ms = machines([{ labels: { node: 'ubt-k3s-02', os_image: 'Ubuntu 24.04.5 LTS' }, value: 1 }], cap('ubt-k3s-02', 16, 16 * G, 500e9), [
+      { id: 'mini-pc-a', host: '192.168.10.70', group: 'linux', in_k3s_cluster: true },
+      { id: 'mac-mini-1', label: 'Mac Mini', group: 'mac', in_k3s_cluster: false, status: 'ok' },
+      { id: 'mac-mini-2', label: 'Mac Mini', group: 'mac', in_k3s_cluster: false },
+      { id: 'win11-host', label: 'Win11 Host', group: 'external', in_k3s_cluster: false },
+    ])
+    expect(ms.map(m => [m.id, m.name, m.os, m.offGrid])).toEqual([['ubt-k3s-02', 'node 02', 'linux', false], ['mac-mini-1', 'Mac Mini', 'mac', true], ['mac-mini-2', 'mac-mini-2', 'mac', true], ['win11-host', 'Win11 Host', 'win', true]])
+    expect(ms.map(variantOf)).toEqual(['linux:0:0', 'mac:-1:-1', 'mac:-1:-1', 'win:-1:-1'])
+  })
+  it('draws a set by its variant, and puts the tanks beside a power station', () => {
+    expect(layersOf('genset', 'node:x', undefined, 'mac:1:0').map(l => l.tex)).toEqual(['genset:mac:1:0'])
+    expect(layersOf('power', 'node:gpu-server', undefined, 'linux:3:2').map(l => l.tex)).toEqual(['power', 'tanks:3:2'])
   })
 })

@@ -24,6 +24,8 @@ export type SceneInit = {
   doc: Doc; editing: boolean; dpr: number
   nameOf: (binds: string) => string | undefined
   colorOf: (binds: string) => string | undefined
+  /** How a thing is drawn within its kind (a machine's OS and tank sizes). */
+  variantOf?: (binds: string) => string | undefined
   /** The building's real state, read; undefined when it has none. */
   readingOf: (binds: string) => (Reading & { meters?: Meters }) | undefined
   /** The satellites in orbit and which legs of the crawlerway a real run moves along. */
@@ -42,6 +44,7 @@ export type SceneInit = {
 }
 
 const INK = 0x2f2d3a, RS = 3
+const LAMP: Record<Reading['tone'], string> = { calm: '#3fbf6f', busy: '#f2b234', alert: '#e0564f', unknown: '#a9a6b8' }
 /** A tag's colour by the tone of its reading. */
 const TONE = { calm: '#dcf2e2', busy: '#ffe6a8', alert: '#ffc9c2', unknown: '#e6e4ee' } as const
 const SEA = 3, SLAB = 28
@@ -97,6 +100,7 @@ export class BuilderScene extends Phaser.Scene {
   private tool: Tool = 'select'
   private armed: Armed = null
   private selected: string | null = null
+  private hovered: string | null = null
   private gesture: Gesture = { t: 'none' }
   private fitZoom = 1
   private moved = false
@@ -467,7 +471,7 @@ export class BuilderScene extends Phaser.Scene {
   /* ---------------- the buildings ---------------- */
 
   private layers(p: Placed): Layer[] {
-    const ls = layersOf(p.kind, p.binds, this.s.colorOf(p.binds))
+    const ls = layersOf(p.kind, p.binds, this.s.colorOf(p.binds), this.s.variantOf?.(p.binds))
     const c = (p.kind === 'campus' || p.kind === 'campus4') && p.binds ? this.s.campusOf?.(p.binds) : undefined
     if (!c) return ls
     // Inside a campus: what was read, each at its cell; its order keeps the back ones behind.
@@ -520,12 +524,20 @@ export class BuilderScene extends Phaser.Scene {
     for (const t of this.skyTags) t.setScale(1 / this.cameras.main.zoom)
     for (const t of this.zoneTags) t.setScale(Math.max(1, 1 / this.cameras.main.zoom))
     for (const w of this.walkers.values()) this.placeWalker(w)
+    const z = this.cameras.main.zoom, g = this.tags, dpr = this.s.dpr
+    /**
+     * Tags cover the picture (the Owner, 2026-11-18): at a glance each building
+     * shows only a lamp on its roof in its state's colour; its tag and meters
+     * come when it is pointed at or picked, when the city is zoomed in, while
+     * building, or when its state is an alert.
+     */
+    const close = z >= this.fitZoom * 1.6
+    const full = (p: Placed, r?: Reading) => this.s.editing || close || p.id === this.selected || p.id === this.hovered || r?.tone === 'alert'
     this.gaugeG?.clear()
     for (const v of this.views.values()) {
       const r = v.part.binds ? this.s.readingOf(v.part.binds) : undefined
-      if (r?.meters && v.imgs[0]?.img.visible !== false) this.gauges(this.gaugeG, v.part, r.meters)
+      if (r?.meters && v.imgs[0]?.img.visible !== false && full(v.part, r)) this.gauges(this.gaugeG, v.part, r.meters)
     }
-    const z = this.cameras.main.zoom, g = this.tags, dpr = this.s.dpr
     g.clear()
     // Tags go up their leader until they clear the billboards and each other.
     const taken: Phaser.Geom.Rectangle[] = [...this.decor.values()].filter(e => e.spot.tex === 'd:billboard').map(e => e.img.getBounds())
@@ -543,8 +555,17 @@ export class BuilderScene extends Phaser.Scene {
       v.tag.setBackgroundColor(!p.binds ? '#ffe6a8' : r ? TONE[r.tone] : '#fbfaf6')
       // Names need room: small on screen (a phone before it zooms in), only the selected one keeps its tag.
       const roomy = z / dpr >= 0.55 || p.id === this.selected
-      v.tag.setScale(1 / z).setVisible(named && roomy && v.imgs[0]?.img.visible !== false)
-      if (!v.tag.visible) continue
+      const shown = v.imgs[0]?.img.visible !== false
+      v.tag.setScale(1 / z).setVisible(named && roomy && shown && full(p, r))
+      if (!v.tag.visible) {
+        // The lamp: a small light on the roof in the state's colour.
+        if (shown && p.binds && r) {
+          const col = Phaser.Display.Color.HexStringToColor(LAMP[r.tone]).color, rr = 4 * dpr / z
+          g.fillStyle(col, 1); g.lineStyle(1.2 * dpr / z, INK, 1)
+          g.fillCircle(top.x, top.y - rr, rr); g.strokeCircle(top.x, top.y - rr, rr)
+        }
+        continue
+      }
       const w = v.tag.displayWidth, h = v.tag.displayHeight
       // Up its leader, then to either side, until it is clear of tags, billboards and other buildings.
       const clear = (r: Phaser.Geom.Rectangle) => !taken.some(o => Phaser.Geom.Rectangle.Overlaps(o, r)) && !bodies.some(o => o.id !== p.id && Phaser.Geom.Rectangle.Overlaps(o.box, r))
@@ -810,7 +831,7 @@ export class BuilderScene extends Phaser.Scene {
     const k = kindOf(kind)
     if (!k) return
     const c = this.cornerFor(k.size, px, py), check = placeCheck(this.s.doc, c.x, c.y, k.size, ignore), ok = check !== 'blocked', tight = check === 'tight'
-    const ls = layersOf(kind, binds, this.s.colorOf(binds)), sig = ls.map(l => l.tex).join('|'), o = iso(c.x, c.y)
+    const ls = layersOf(kind, binds, this.s.colorOf(binds), this.s.variantOf?.(binds)), sig = ls.map(l => l.tex).join('|'), o = iso(c.x, c.y)
     if (sig !== this.ghostSig) {
       this.ghost.forEach(i => i.destroy())
       this.ghost = ls.filter(l => this.textures.exists(l.tex)).map(l => this.image(l, o.x, o.y).setAlpha(0.82).setDepth(100000 + l.order))
@@ -905,7 +926,11 @@ export class BuilderScene extends Phaser.Scene {
       this.gesture = { t: 'pinch', d: dist, x: mx, y: my }
       return
     }
-    if (g.t === 'none') { if (this.s.editing && this.armed && ptr.wasTouch === false) this.showGhost(this.armed.kind, this.armed.binds, ptr.x, ptr.y); return }
+    if (g.t === 'none') {
+      if (this.s.editing && this.armed && ptr.wasTouch === false) this.showGhost(this.armed.kind, this.armed.binds, ptr.x, ptr.y)
+      if (!ptr.wasTouch) { const h = this.partUnder(ptr.x, ptr.y)?.id ?? null; if (h !== this.hovered) { this.hovered = h; this.relabel() } }
+      return
+    }
     if (!ptr.isDown) return
     if (g.t === 'pan') {
       const c = this.cameras.main

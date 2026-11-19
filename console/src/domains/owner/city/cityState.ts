@@ -3,6 +3,7 @@ import type { CityReading, Glance } from './CityBuilder'
 import { bayReading, padReading, supplierReading, rocketCiReading, rocketStgReading, runsAt, satellitesReading, waitingReading, type Contexts, type Reading } from './cityReadings'
 import { conflicts, CONFLICT_WORD, demand, supplies, type Demand, type Reads } from './cityUtilities'
 import { DICTIONARY } from './worldDictionary'
+import type { Machine } from './cityMachines'
 
 /**
  * Every building's reading from the reads the page made: the release lines,
@@ -16,6 +17,8 @@ const PLATFORM_SHARED = 'platform-api runs the platform\'s domains in one proces
 export type CityInputs = {
   contexts: Contexts; lanes: readonly CityLane[]; items: readonly SystemItem[]
   util: Reads | null; approvals: number | null; questions: number | null; now: number
+  /** The machines outside the cluster, from the topology: off the grid. */
+  offGrid?: readonly Machine[]
 }
 
 export function cityReadings(i: CityInputs): Map<string, CityReading> {
@@ -50,6 +53,13 @@ export function cityReadings(i: CityInputs): Map<string, CityReading> {
         links: drawn.filter(([, r]) => r.links!.includes(`node:${s.node}`)).map(([b]) => b),
       })
     }
+  }
+  for (const m of i.offGrid ?? []) {
+    out.set(`node:${m.id}`, {
+      word: m.status === 'ok' ? 'off the grid' : 'off the grid · unknown', tone: m.status === 'ok' ? 'calm' : 'unknown',
+      lines: [`${m.os === 'unknown' ? 'system not told' : m.os} machine outside the cluster`, m.roles.length ? `roles: ${m.roles.join(', ')}` : 'roles not told', 'its capacity and use are not read (no monitoring reaches it): the tanks are grey'],
+      source: 'GET /api/v1/topology (status and roles)',
+    })
   }
   return out
 }

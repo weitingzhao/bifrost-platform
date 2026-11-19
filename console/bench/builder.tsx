@@ -13,7 +13,8 @@ import { skyReading, type ReleaseContext } from '../src/domains/owner/city/cityR
 import { cityReadings, utilityGlance } from '../src/domains/owner/city/cityState'
 import { workersGlance, workersOf } from '../src/domains/owner/city/cityWorkers'
 import { campuses, DEPLOYMENTS_QUERY } from '../src/domains/owner/city/cityCampus'
-import { readUtilities, supplies } from '../src/domains/owner/city/cityUtilities'
+import { readUtilities } from '../src/domains/owner/city/cityUtilities'
+import { machines, variantOf } from '../src/domains/owner/city/cityMachines'
 import { fetchPromQL } from '../src/api/telemetry'
 import { plannedCity } from '../src/domains/owner/city/defaultLayout'
 import { browserLayoutStore, LAYOUT_KEY, type LayoutStore } from '../src/domains/owner/city/layoutStore'
@@ -25,9 +26,10 @@ const seed = q.get('seed')
 const store: LayoutStore = seed ? { ...browser, load: async () => await (await fetch(`./layout-${seed}.local.json`)).json() as TiledMap } : browser
 
 // The utilities are real: the dev server forwards /api to PLATFORM_API_TARGET and PromQL needs no sign-in.
-void Promise.all([fetch('./snapshot.local.json').then(r => r.json()), readUtilities(async query => (await fetchPromQL(query)).points).catch(() => null), fetchPromQL(DEPLOYMENTS_QUERY).then(r => r.points, () => null)]).then(([s, util, deployments]) => {
+void Promise.all([fetch('./snapshot.local.json').then(r => r.json()), readUtilities(async query => (await fetchPromQL(query)).points).catch(() => null), fetchPromQL(DEPLOYMENTS_QUERY).then(r => r.points, () => null), fetch('/api/v1/topology?env=prod').then(r => r.ok ? r.json() : null).catch(() => null)]).then(([s, util, deployments, topo]) => {
   const lanes: CityLane[] = s.lanes ?? []
-  const nodes = util ? supplies(util).map(x => ({ node: x.node, cores: x.cores })) : []
+  const ms = machines(util?.info ?? null, util?.capacity ?? null, topo?.nodes ?? null)
+  const nodes = ms.map(m => ({ node: m.id, cores: m.cores, name: m.name, variant: variantOf(m), offGrid: m.offGrid }))
   const items = systemItems(s.tiers ?? [], lanes, pluginsOf(lanes), nodes)
   const rel = { commit: 'f6815367aa', run: 'r', completed_at: new Date(Date.now() - 3 * 3600_000).toISOString() }
   const ctx = (repo: string, runs: unknown[]): ReleaseContext => ({ repo, facts: { runs_in_flight: { value: runs as never }, prod: { value: rel }, stg: { value: rel }, window: { value: { held: false, who: '', what: '' } } } })
@@ -42,7 +44,7 @@ void Promise.all([fetch('./snapshot.local.json').then(r => r.json()), readUtilit
     ['bifrost-platform-plugin', ctx('bifrost-platform-plugin', [])],
   ] : [])
   const now = Date.now()
-  const readings = cityReadings({ contexts, lanes, items, util, approvals: demo ? 1 : null, questions: demo ? 1 : null, now })
+  const readings = cityReadings({ contexts, lanes, items, util, offGrid: ms.filter(m => m.offGrid), approvals: demo ? 1 : null, questions: demo ? 1 : null, now })
   const sky = demo ? skyReading(contexts, lanes, now) : undefined
   // Bench only: which namespaces each tenant runs in (the tenant domain's contract will say); the deployments are read for real.
   const NS: Record<string, string[]> = { Trade: ['bifrost-prod'], Research: ['research'], Finance: ['finance-prod'] }

@@ -13,7 +13,7 @@ import { emptyDoc, key, type Doc, type PartSize, type Zone } from './builderDoc'
  * - the power yard: the power station, cooling water, the generator sets.
  * The Owner moves, zones and trims it as he likes; names and states are read.
  */
-const W = 29, H = 22
+const W = 29, H = 24
 const PARTS: readonly [kind: string, x: number, y: number, size: PartSize, binds: string][] = [
   // Along the coast: the tenants' campuses, the hall where their satellites meet, the rocket's line to the pad.
   ['campus', 0, 0, 8, 'tenant:Trade'],
@@ -40,13 +40,22 @@ const PARTS: readonly [kind: string, x: number, y: number, size: PartSize, binds
   ['genset', 13, 17, 2, 'node:ubt-k3s-04'],
   ['genset', 16, 17, 2, 'node:ubt-k3s-05'],
   ['genset', 19, 17, 2, 'node:ubt-k3s-07'],
+  // Off the grid: machines outside the cluster (the Macs, the Windows TWS hosts, the agent host, the NAS).
+  ['genset', 7, 21, 2, 'node:mac-mini-1'],
+  ['genset', 10, 21, 2, 'node:mac-mini-2'],
+  ['genset', 13, 21, 2, 'node:macbook'],
+  ['genset', 16, 21, 2, 'node:win11-host'],
+  ['genset', 19, 21, 2, 'node:win11-secondary'],
+  ['genset', 22, 21, 2, 'node:ubt-k3s-06'],
+  ['genset', 25, 21, 2, 'node:UGREEN-NAS'],
 ]
 const ZONES: readonly Zone[] = [
   { name: 'Satellite campuses', x: 0, y: 0, w: 13, h: 10, tint: '#e7e1f1' },
   { name: 'Launch site', x: 13, y: 0, w: 16, h: 10, tint: '#e3e8ee' },
   { name: 'Suppliers', x: 0, y: 11, w: 8, h: 5, tint: '#e0edf0' },
   { name: 'Town', x: 9, y: 11, w: 20, h: 5, tint: '#f1e8d6' },
-  { name: 'Power yard', x: 0, y: 17, w: 29, h: 5, tint: '#e9e6da' },
+  { name: 'Power yard', x: 0, y: 17, w: 29, h: 7, tint: '#e9e6da' },
+  { name: 'Off the grid', x: 6, y: 21, w: 23, h: 3, tint: '#e2e0e8' },
 ]
 
 export function plannedCity(): Doc {

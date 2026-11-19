@@ -847,34 +847,79 @@ export function orbitSatellite(color = '#f2d27a'): Sprite {
 /* A generator set: one node of the cluster, the supply side.           */
 /* ------------------------------------------------------------------ */
 
-export function generatorSet(): Sprite {
+/** Capacity tiers drawn as tank sizes (0–3); -1 when not read. */
+export type Tier = -1 | 0 | 1 | 2 | 3
+export type MachineOs = 'linux' | 'mac' | 'win' | 'unknown'
+
+/**
+ * The tanks beside a machine: cooling water (memory) and nitrogen (disk), each
+ * one of four fixed sizes; grey and dashed when the capacity was not read.
+ */
+function tanks(g: Draw, x: number, y: number, mem: Tier, disk: Tier) {
+  const R = [3.6, 5, 6.6, 8.4], Hh = [14, 22, 30, 40]
+  const one = (tx: number, ty: number, t: Tier, fill: string, shade: string, cap: string) => {
+    if (t < 0) { g.cylinder(tx, ty, 4.5, 0, 16, '#e3e1ea', '#c4c1cf', '#d6d3df'); return }
+    g.cylinder(tx, ty, R[t], 0, Hh[t], fill, shade, cap)
+    const [cx, cy] = g.p(tx, ty, Hh[t] * 0.55)
+    g.add(`<path d="M${n1(cx - R[t])},${n1(cy)} A${R[t]},${n1(R[t] / 2)} 0 0 0 ${n1(cx + R[t])},${n1(cy)}" fill="none" stroke="${INK}" stroke-width="0.6" opacity="0.5"/>`)
+  }
+  one(x, y, mem, '#cfe9ff', '#8fc3ec', '#e6f4ff')
+  one(x + 0.02, y + 0.42, disk, '#e4e7ec', '#a9b0bb', '#f3f5f8')
+}
+
+/**
+ * A machine as a generator set (the Owner, 2026-11-18: nodes are the supply;
+ * Mac, Windows and Linux look different; memory and disk show as tank
+ * sizes). Linux is the yellow diesel set, a Mac a white rounded fuel-cell
+ * unit, Windows a blue battery cabinet; the tanks stand on the right.
+ */
+export function generatorSet(os: MachineOs = 'linux', mem: Tier = -1, disk: Tier = -1): Sprite {
   const n = 2
   const g = new Draw(n, n, 96)
   lot(g, n, '#dedbd2')
-  // A concrete plinth, the enclosure, its radiator end and two exhaust stacks.
-  g.box(0.12, 0.2, 1.76, 1.5, 4, faces('#e9e6dd', '#d2cec2', '#c1bcae'), 0, 1)
-  const x0 = 0.22, x1 = 1.78, y0 = 0.3, y1 = 1.6, h = 34
+  g.box(0.12, 0.2, 1.3, 1.5, 4, faces('#e9e6dd', '#d2cec2', '#c1bcae'), 0, 1)
+  const x0 = 0.2, x1 = 1.32, y0 = 0.3, y1 = 1.6, h = os === 'mac' ? 26 : 34
   g.shadow(x0, y0, x1 - x0, y1 - y0, 0.35)
-  g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#ffe9a8', '#f7cf62', '#e9b843'), 4)
-  const W = (x1 - x0) * U
-  let f = ''
-  for (let i = 0; i < 3; i++) f += `<rect x="${n1(4 + i * 15)}" y="-28" width="11" height="20" fill="#e2b13f" stroke="${INK}" stroke-width="0.8"/>${[0, 1, 2, 3, 4].map(k => `<line x1="${n1(5 + i * 15)}" y1="${-25 + k * 4}" x2="${n1(14 + i * 15)}" y2="${-25 + k * 4}" stroke="#a87b1d" stroke-width="0.8"/>`).join('')}`
-  f += `<rect x="${n1(W - 9)}" y="-26" width="6" height="18" fill="#59606b" stroke="${INK}" stroke-width="0.8"/><circle cx="${n1(W - 6)}" cy="-21" r="1.2" fill="#7ef0c9"/><circle cx="${n1(W - 6)}" cy="-16" r="1.2" fill="#ffd76a"/>`
-  f += `<path d="M0,-4 h${n1(W)}" stroke="#a87b1d" stroke-width="1.2"/><path d="M3,-33 l5,-0 M${n1(W - 8)},-33 l5,0" stroke="${INK}" stroke-width="0.8"/>`
-  g.face('left', x0, y1, 4, f)
-  let r = `<rect x="4" y="-30" width="${n1((y1 - y0) * U - 8)}" height="24" fill="#5b6070" stroke="${INK}" stroke-width="1"/>`
-  for (let u = 7; u < (y1 - y0) * U - 6; u += 3.2) r += `<line x1="${n1(u)}" y1="-28" x2="${n1(u)}" y2="-8" stroke="#8d93a1" stroke-width="0.9"/>`
-  r += `<circle cx="${n1((y1 - y0) * U / 2)}" cy="-18" r="8" fill="none" stroke="#c3c8d2" stroke-width="1.1"/>`
-  g.face('right', x1, y1, 4, r)
-  top(g, x0 + 0.06, y0 + 0.06, x1 - 0.06, y1 - 0.06, h + 4, '#fff1c4', 0.9, '#b48a2a')
-  for (const k of [0.6, 1.0]) {
-    g.cylinder(k, 0.75, 4.5, h + 4, h + 30, '#9aa3b0', '#6d7584', '#59606b')
-    const [ex, ey] = g.p(k, 0.75, h + 30)
-    g.add(`<ellipse cx="${n1(ex)}" cy="${n1(ey)}" rx="3.2" ry="1.6" fill="#2f2d3a"/>`)
+  const W = (x1 - x0) * U, D = (y1 - y0) * U
+  if (os === 'mac') {
+    g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#ffffff', '#eef0f3', '#d9dde3'), 4)
+    g.face('left', x0, y1, 4, `<rect x="5" y="${-h + 8}" width="${n1(W - 10)}" height="3" rx="1.5" fill="#9fd8ff"/><circle cx="${n1(W - 7)}" cy="${-h + 15}" r="1.3" fill="#7ef0c9"/>`)
+    g.face('right', x1, y1, 4, `<rect x="5" y="${-h + 6}" width="${n1(D - 10)}" height="${h - 12}" rx="5" fill="none" stroke="#c3c8d2" stroke-width="1"/>`)
+    top(g, x0 + 0.08, y0 + 0.08, x1 - 0.08, y1 - 0.08, h + 4, '#f7f8fa', 0.9, '#b9bec8')
+  } else if (os === 'win') {
+    g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#d8e8ff', '#4f86d6', '#3b6fb8'), 4)
+    let f = ''
+    for (let r = 0; r < 2; r++) for (let c = 0; c < 2; c++) f += `<rect x="${n1(5 + c * (W - 10) / 2)}" y="${n1(-h + 6 + r * 12)}" width="${n1((W - 14) / 2)}" height="10" fill="#9cc7ff" stroke="${INK}" stroke-width="0.7"/>`
+    g.face('left', x0, y1, 4, f)
+    let r2 = ''
+    for (let u = 5; u < D - 4; u += 6) r2 += `<rect x="${n1(u)}" y="${-h + 6}" width="3.6" height="${h - 12}" fill="#2f5c9e"/>`
+    g.face('right', x1, y1, 4, r2)
+    top(g, x0 + 0.06, y0 + 0.06, x1 - 0.06, y1 - 0.06, h + 4, '#e8f1ff', 0.9, '#3b6fb8')
+  } else {
+    const yellow = os === 'linux'
+    g.box(x0, y0, x1 - x0, y1 - y0, h, yellow ? faces('#ffe9a8', '#f7cf62', '#e9b843') : faces('#eceaf2', '#cfcbd9', '#bdb8c9'), 4)
+    let f = ''
+    for (let i = 0; i < 2; i++) f += `<rect x="${n1(4 + i * 15)}" y="-28" width="11" height="20" fill="${yellow ? '#e2b13f' : '#bdb8c9'}" stroke="${INK}" stroke-width="0.8"/>${[0, 1, 2, 3, 4].map(k => `<line x1="${n1(5 + i * 15)}" y1="${-25 + k * 4}" x2="${n1(14 + i * 15)}" y2="${-25 + k * 4}" stroke="${yellow ? '#a87b1d' : '#8d889b'}" stroke-width="0.8"/>`).join('')}`
+    f += `<rect x="${n1(W - 8)}" y="-26" width="5" height="18" fill="#59606b" stroke="${INK}" stroke-width="0.8"/><circle cx="${n1(W - 5.5)}" cy="-21" r="1.1" fill="#7ef0c9"/><circle cx="${n1(W - 5.5)}" cy="-16" r="1.1" fill="#ffd76a"/>`
+    g.face('left', x0, y1, 4, f)
+    let r = `<rect x="4" y="-30" width="${n1(D - 8)}" height="24" fill="#5b6070" stroke="${INK}" stroke-width="1"/>`
+    for (let u = 7; u < D - 6; u += 3.2) r += `<line x1="${n1(u)}" y1="-28" x2="${n1(u)}" y2="-8" stroke="#8d93a1" stroke-width="0.9"/>`
+    g.face('right', x1, y1, 4, r)
+    top(g, x0 + 0.06, y0 + 0.06, x1 - 0.06, y1 - 0.06, h + 4, yellow ? '#fff1c4' : '#f4f2f8', 0.9, yellow ? '#b48a2a' : '#8d889b')
+    for (const k of [0.5, 0.85]) {
+      g.cylinder(k, 0.75, 4, h + 4, h + 26, '#9aa3b0', '#6d7584', '#59606b')
+      const [ex, ey] = g.p(k, 0.75, h + 26)
+      g.add(`<ellipse cx="${n1(ex)}" cy="${n1(ey)}" rx="2.8" ry="1.4" fill="#2f2d3a"/>`)
+    }
   }
-  // The cable tray out to the grid.
-  g.box(1.78, 0.9, 0.18, 0.12, 3, faces('#9aa3b0', '#7d8594', '#687080'), 14, 0.8)
-  g.box(1.96, 0.9, 0.04, 0.12, 14, faces('#9aa3b0', '#7d8594', '#687080'), 0, 0.6)
+  tanks(g, 1.62, 0.62, mem, disk)
+  return g.done()
+}
+
+/** The tanks alone, for a machine drawn as a power station: one cell. */
+export function tankPair(mem: Tier, disk: Tier): Sprite {
+  const g = new Draw(1, 1, 60, 4)
+  tanks(g, 0.45, 0.25, mem, disk)
   return g.done()
 }
 

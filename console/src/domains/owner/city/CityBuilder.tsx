@@ -139,7 +139,7 @@ export default function CityBuilder({ items, store, startEditing = false, canBui
       game = g
       g.scene.add('builder', Scene, true, {
         doc: d, editing: blank, dpr,
-        nameOf: (b: string) => itemsRef.current.get(b)?.name, colorOf: (b: string) => itemsRef.current.get(b)?.color,
+        nameOf: (b: string) => itemsRef.current.get(b)?.name, colorOf: (b: string) => itemsRef.current.get(b)?.color, variantOf: (b: string) => itemsRef.current.get(b)?.variant,
         onChange: touch,
         onSelect: (id: string | null) => { setSelected(id); if (id) setTab('selected') },
         onZoneSelect: (i: number | null) => { setZoneSel(i); if (i != null) setTab('selected') },

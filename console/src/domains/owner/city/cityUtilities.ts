@@ -17,6 +17,7 @@ const NS = 'cicd|bifrost-platform-prod|bifrost-platform-stg|bifrost-prod|bifrost
 export const QUERIES = {
   capacity: 'sum by (node, resource) (kube_node_status_capacity{resource=~"cpu|memory|ephemeral_storage"})',
   ready: 'max by (node) (kube_node_status_condition{condition="Ready",status="true"})',
+  info: 'max by (node, os_image) (kube_node_info)',
   cpu: 'sum by (node) (rate(container_cpu_usage_seconds_total{container!=""}[5m]))',
   memory: 'sum by (node) (container_memory_working_set_bytes{container!=""})',
   diskWrite: 'sum by (node) (rate(container_fs_writes_bytes_total{container!=""}[5m]))',

@@ -53,6 +53,8 @@ export type SystemItem = {
   /** The building it naturally is, when that one is drawn. */
   natural?: string
   page?: string; color?: string
+  /** How it is drawn within its kind (a machine's OS and tank sizes). */
+  variant?: string
 }
 
 /** A name as the page shows it: sentence case, words apart, IB and environments in capitals. */
@@ -120,12 +122,12 @@ export const STAGES = [
 ] as const
 
 /** A node of the cluster: its name and cores, read. A big one (over 16 cores) is a power station, the others generator sets. */
-export type CityNode = { node: string; cores: number | null }
+export type CityNode = { node: string; cores: number | null; name?: string; variant?: string; offGrid?: boolean }
 
 export function systemItems(domains: readonly (CityDomain & { name?: string })[], lanes: readonly CityLane[], plugins: readonly string[], nodes: readonly CityNode[] = []): SystemItem[] {
   const rocketProd = lanes.filter(l => { const at = placeOf(l); return at.line === 'rocket' && at.step === 'prod' })
   return [
-    ...nodes.map((n): SystemItem => ({ binds: `node:${n.node}`, name: n.node.replace(/^ubt-k3s-/, 'node '), group: 'Nodes', type: 'node', natural: (n.cores ?? 0) > 16 ? 'power' : 'genset', page: '#infrastructure?section=cluster' })),
+    ...nodes.map((n): SystemItem => ({ binds: `node:${n.node}`, name: n.name ?? n.node.replace(/^ubt-k3s-/, 'node '), group: 'Nodes', type: 'node', natural: (n.cores ?? 0) > 16 ? 'power' : 'genset', page: '#infrastructure?section=cluster', variant: n.variant })),
     ...(lanes.length ? STAGES.map((st): SystemItem => ({ binds: st.binds, name: st.name, group: 'Stages', type: 'stage', natural: st.natural, page: st.page })) : []),
     ...domains.map((d): SystemItem => ({ binds: `domain:${d.id}`, name: d.name ?? displayName(d.id), group: 'Domains', type: 'domain', natural: NATURAL[d.facility?.kind ?? ''], page: d.facility?.page })),
     ...rocketProd.map((l): SystemItem => ({ binds: `lane:${l.pipeline}`, name: laneName(l), group: 'Release lanes', type: 'lane', natural: 'pad', page: '#releases', color: PAYLOAD[payloadOf(l)] })),
@@ -142,8 +144,10 @@ export type Layer = { tex: string; dx: number; dy: number; stack: boolean; order
 
 const iso = (x: number, y: number, z = 0) => ({ x: (x - y) * (CW / 2), y: (x + y) * (CH / 2) - z })
 
-export function layersOf(kind: string, binds: string, color?: string): Layer[] {
+export function layersOf(kind: string, binds: string, color?: string, variant?: string): Layer[] {
   const base = (tex: string, order = 0): Layer => ({ tex, dx: 0, dy: 0, stack: false, order })
+  if (kind === 'genset') return [base(`genset:${variant ?? 'linux:-1:-1'}`)]
+  if (kind === 'power' && variant) { const [, m, dk] = variant.split(':'); const at = iso(0, 3); return [base('power'), { tex: `tanks:${m}:${dk}`, dx: at.x, dy: at.y, stack: false, order: 0.4 }] }
   if (kind === 'supplier') return [base(`supplier:${color ?? '#5aa9ff'}`)]
   if (kind === 'campus' || kind === 'campus4') return [base(`campus:${kind === 'campus' ? 8 : 4}:${color ?? '#f2d27a'}`)]
   if (kind !== 'pad') return [base(kind)]
@@ -156,14 +160,14 @@ export function layersOf(kind: string, binds: string, color?: string): Layer[] {
 
 const cache = new Map<string, Sprite>()
 const make: Record<string, () => Sprite> = {
-  assembly: L.assembly, hif: L.horizontalHangar, satellites: L.satelliteHangar, genset: L.generatorSet, control: L.missionControl, dorm: () => L.dormitory(0), court: L.court, power: L.powerStation, archive: L.archive, water: L.waterTower,
+  assembly: L.assembly, hif: L.horizontalHangar, satellites: L.satelliteHangar, genset: () => L.generatorSet('linux', 1, 0), control: L.missionControl, dorm: () => L.dormitory(0), court: L.court, power: L.powerStation, archive: L.archive, water: L.waterTower,
   'pad:chopsticks': () => L.launchPad(true), 'pad:plain': () => L.launchPad(false), 'pad:front': L.launchPadFront, starship: L.starship,
   'd:tree0': () => L.streetTree(0), 'd:tree1': () => L.streetTree(1), 'd:tree2': () => L.streetTree(2),
   'd:lamp': L.streetLamp, 'd:bench': L.parkBench, 'd:billboard': L.billboard, 'd:signal': L.trafficLight,
 }
 export function spriteOf(tex: string): Sprite {
   let s = cache.get(tex)
-  if (!s) { s = tex.startsWith('rocket:') ? L.rocket(tex.slice(7)) : tex.startsWith('sat:') ? L.orbitSatellite(tex.slice(4)) : tex.startsWith('supplier:') ? L.supplierDock(tex.slice(9)) : tex.startsWith('bay:') ? L.payloadBay(tex.slice(4)) : tex.startsWith('factory:') ? L.codeFactory(tex.slice(8)) : tex.startsWith('module:') ? L.moduleBlock(tex.slice(7)) : tex.startsWith('campus:') ? L.campusGround(Number(tex.split(':')[1]) as 4 | 8, tex.split(':')[2]) : make[tex](); cache.set(tex, s) }
+  if (!s) { s = tex.startsWith('rocket:') ? L.rocket(tex.slice(7)) : tex.startsWith('sat:') ? L.orbitSatellite(tex.slice(4)) : tex.startsWith('supplier:') ? L.supplierDock(tex.slice(9)) : tex.startsWith('bay:') ? L.payloadBay(tex.slice(4)) : tex.startsWith('factory:') ? L.codeFactory(tex.slice(8)) : tex.startsWith('module:') ? L.moduleBlock(tex.slice(7)) : tex.startsWith('genset:') ? L.generatorSet(tex.split(':')[1] as L.MachineOs, Number(tex.split(':')[2]) as L.Tier, Number(tex.split(':')[3]) as L.Tier) : tex.startsWith('tanks:') ? L.tankPair(Number(tex.split(':')[1]) as L.Tier, Number(tex.split(':')[2]) as L.Tier) : tex.startsWith('campus:') ? L.campusGround(Number(tex.split(':')[1]) as 4 | 8, tex.split(':')[2]) : make[tex](); cache.set(tex, s) }
   return s
 }
 export const spriteUrl = (s: Sprite) => `data:image/svg+xml;utf8,${encodeURIComponent(s.svg)}`

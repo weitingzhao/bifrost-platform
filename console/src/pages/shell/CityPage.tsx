@@ -11,8 +11,10 @@ import { skyReading, type ReleaseContext } from '@/domains/owner/city/cityReadin
 import { cityReadings, utilityGlance } from '@/domains/owner/city/cityState'
 import { workersGlance, workersOf } from '@/domains/owner/city/cityWorkers'
 import { campuses, DEPLOYMENTS_QUERY } from '@/domains/owner/city/cityCampus'
+import { machines, variantOf } from '@/domains/owner/city/cityMachines'
+import { fetchTopology } from '@/api/core'
 import { fetchSeatStatuses } from '@/api/seatStatus'
-import { readUtilities, supplies } from '@/domains/owner/city/cityUtilities'
+import { readUtilities } from '@/domains/owner/city/cityUtilities'
 import { fetchPromQL } from '@/api/telemetry'
 import { plannedCity } from '@/domains/owner/city/defaultLayout'
 import { platformLayoutStore } from '@/domains/owner/city/platformLayoutStore'
@@ -47,7 +49,9 @@ export default function CityPage() {
   const seats = useQuery({ queryKey: ['city', 'seats'], queryFn: fetchSeatStatuses, refetchInterval: EVERY })
   const workers = useMemo(() => seats.isError || !seats.data ? undefined : workersOf(seats.data, Date.now()), [seats.data, seats.isError])
   const util = useQuery({ queryKey: ['city', 'utilities'], queryFn: () => readUtilities(async q => (await fetchPromQL(q)).points), refetchInterval: EVERY })
-  const nodes = useMemo(() => util.data ? supplies(util.data).map(x => ({ node: x.node, cores: x.cores })) : [], [util.data])
+  const topology = useQuery({ queryKey: ['city', 'topology'], queryFn: () => fetchTopology('prod'), staleTime: 5 * 60_000 })
+  const machineList = useMemo(() => machines(util.data?.info ?? null, util.data?.capacity ?? null, topology.data?.nodes ?? null), [util.data, topology.data])
+  const nodes = useMemo(() => machineList.map(m => ({ node: m.id, cores: m.cores, name: m.name, variant: variantOf(m), offGrid: m.offGrid })), [machineList])
 
   const lanes: CityLane[] = useMemo(() => (pipelines.data?.pipelines ?? [])
     .filter(p => /^bifrost-(deliver|build|ci)-/.test(p.name) && (p.repos?.length ?? 0) > 0)
@@ -64,7 +68,7 @@ export default function CityPage() {
   const camps = useMemo(() => campuses(lanes, contexts, deployments.data ?? null), [contextKey, lanes, deployments.data]) // eslint-disable-line react-hooks/exhaustive-deps
   const sky = useMemo(() => skyReading(contexts, lanes, Date.now()), [contextKey, lanes]) // eslint-disable-line react-hooks/exhaustive-deps
   const readings = useMemo(() => {
-    const raw = cityReadings({ contexts, lanes, items, util: util.data ?? null, now: Date.now(),
+    const raw = cityReadings({ contexts, lanes, items, util: util.data ?? null, now: Date.now(), offGrid: machineList.filter(m => m.offGrid),
       approvals: approvals.isError ? null : approvals.data?.length ?? null, questions: questions.isError ? null : questions.data?.length ?? null })
     // Each tier held steady: it changes after two reads agree.
     for (const [key, r] of raw) {
@@ -74,7 +78,7 @@ export default function CityPage() {
       raw.set(key, { ...r, word: next.shown })
     }
     return raw
-  }, [contextKey, lanes, items, util.data, approvals.data, approvals.isError, questions.data, questions.isError]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [contextKey, lanes, items, util.data, machineList, approvals.data, approvals.isError, questions.data, questions.isError]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const glance: Glance[] = useMemo(() => {
     const pad = [...readings].find(([k]) => k.startsWith('lane:'))?.[1]
