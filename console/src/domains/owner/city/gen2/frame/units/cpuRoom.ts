@@ -113,9 +113,12 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
   const drawConsole = () => {
     g.shadow(cx, cy, cw, cd, 0.35)
     // The instrument bank: upright behind the desk, a hood on top, a cheek at the end.
-    g.box(cx, cy, cw, bank, BANK_H, DARK, 0, 1.2)
-    g.box(cx - 0.06, cy - 0.04, cw + 0.12, bank + 0.16, 3, STEEL, BANK_H, 1)
-    g.box(cx + cw - 0.04, cy, 0.08, bank + 0.06, BANK_H, STEEL, 0, 0.9)
+    // No instrument read (the Mac minis report no clock and no sensor): no bank standing empty, the desk alone.
+    if (gauges.length) {
+      g.box(cx, cy, cw, bank, BANK_H, DARK, 0, 1.2)
+      g.box(cx - 0.06, cy - 0.04, cw + 0.12, bank + 0.16, 3, STEEL, BANK_H, 1)
+      g.box(cx + cw - 0.04, cy, 0.08, bank + 0.06, BANK_H, STEEL, 0, 0.9)
+    } else g.box(cx, cy, cw, bank, zb, STEEL, 0, 1.1)
     const P = cy + bank
     gauges.forEach((m, k) => { metaphor(m.row); if (m.row === 'core.freq') metaphor('core.freq.max'); instrument(g, cx + 0.1, P, k, zb + 2, m) })
     // The desk: sloped, high at the bank, low at the front edge; its name plate on the front edge.
@@ -160,9 +163,12 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
       // neither tidy nor needed): each pair centred in an equal share of the floor's width, each row in an
       // equal share of its depth before the console. A machine keeps its size; only the spacing grows.
       const col = i % cols, row = Math.floor(i / cols), pairs = Math.max(1, cols / 2)
-      const slotW = (fw - 0.7) / pairs, slotD = (fd - 0.3 - fy) / Math.ceil(groups.length / cols)
+      const slotW = (fw - 0.7) / pairs, rowsN = Math.ceil(groups.length / cols), slotD = Math.min(1.25, (fd - 0.3 - fy) / rowsN)
+      // Rows no further apart than 1.25 cells (the Owner, 2026-11-19: across the room the rows stood too far
+      // apart): the block of rows centred in the floor's depth.
+      const y0 = fy + ((fd - 0.3 - fy) - rowsN * slotD) / 2
       const inPair = cols === 1 ? 0 : (col % 2) * PITCH, pairW = cols === 1 ? MW : PITCH + MW
-      const x = 0.35 + Math.floor(col / 2) * slotW + (slotW - pairW) / 2 + inPair, y = fy + row * slotD + (slotD - md) / 2
+      const x = 0.35 + Math.floor(col / 2) * slotW + (slotW - pairW) / 2 + inPair, y = y0 + row * slotD + (slotD - md) / 2
       things.push({ at: x + y, draw: () => {
         const busy = encode('core.busy', c.busy)
         // A lathe, low (the Owner, 2026-11-19: it must look like a machine tool, hide no other machine, and

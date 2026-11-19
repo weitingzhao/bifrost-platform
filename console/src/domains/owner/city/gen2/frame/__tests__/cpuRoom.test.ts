@@ -116,4 +116,9 @@ describe('the CPU room', () => {
     expect(amber(at(0.5))).toBe(2 * 2 + 4)
     expect((at(1).match(/fill="#ff7a45"/g) ?? []).length).toBe(2 * 4 + 8)
   })
+  // 2026-11-19: the Mac minis' console stood with an empty instrument bank — a structure that shows nothing.
+  it('no instrument read, no instrument bank: the desk alone', () => {
+    expect(cpuRoom(mac).svg).not.toContain('#353c4a')
+    expect(cpuRoom(linux).svg).toContain('#353c4a')
+  })
 })
