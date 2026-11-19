@@ -207,3 +207,21 @@ func init() {
 	}
 	eventlog.Declare(v)
 }
+
+// okState is the state a finished piece of work says.
+func okState(ok bool) string {
+	if ok {
+		return "ok"
+	}
+	return "fail"
+}
+
+// AutoRepair says how the IB gateway's automatic repair ended.
+func AutoRepair(ok bool, message string) Event {
+	return PluginStatus("ib-gateway", okState(ok), "ib-auto-repair", message)
+}
+
+// PatrolFix says how the patrol autopilot's fix of an item of env ended.
+func PatrolFix(env, item string, ok bool, detail string) Event {
+	return EnvHealth(env+"/"+item, okState(ok), "patrol-autopilot", detail)
+}

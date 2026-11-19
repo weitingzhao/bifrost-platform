@@ -1,27 +1,18 @@
 package server
 
 import (
+	"net/http"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalreadings"
-	"net/http"
-	"time"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 )
 
-// The HTTP adapter keeps the existing record source, timezone and error responses.
+// The approval readings (approvalreadings.Route), in the plan's brief zone.
 func (s *Server) handleApprovalReadings(w http.ResponseWriter, r *http.Request) {
-	if s.approvals == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "this platform keeps no approval records"})
-		return
+	var records func() ([]approvals.Approval, error)
+	if s.approvals != nil {
+		records = s.approvals.Observations
 	}
-	loc, err := time.LoadLocation(planpace.BriefZone)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	items, err := s.approvals.Observations()
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "the approval records could not be read: " + err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, approvalreadings.Compute(items, loc, time.Now()))
+	approvalreadings.Route{Zone: planpace.BriefZone, Records: records}.ServeHTTP(w, r)
 }

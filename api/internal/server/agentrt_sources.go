@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
@@ -12,7 +11,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deploysource"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/readslot"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -33,15 +31,6 @@ var (
 
 // commitTreeEntry is one entry of a Gitea tree answer.
 type commitTreeEntry = gitread.TreeEntry
-
-// boundedReads caps the reads of one store in flight (readslot).
-type boundedReads = readslot.Slots
-
-func newBoundedReads(n int) *boundedReads { return readslot.New(n) }
-
-func within[T any](ctx context.Context, reads *boundedReads, read func() (T, bool, error)) (T, bool, error) {
-	return readslot.Within(ctx, reads, read)
-}
 
 // gitAccess is the delivery service's Gitea access as gitread reads it.
 func gitAccess(access func(context.Context) (delivery.GiteaAccess, error)) func(context.Context) (gitread.Access, error) {
@@ -99,14 +88,7 @@ func agentRuntimeSources(ap approvalReader, question func(context.Context, strin
 		Deployed: func(context.Context, string) (string, map[string]any, bool) { return "", nil, false },
 	}
 	if ap != nil {
-		reads := readslot.New(2)
-		src.Approval = func(ctx context.Context, number int64) (seenfacts.ApprovalFact, bool) {
-			a, ok, err := within(ctx, reads, func() (approvals.Approval, bool, error) { return ap.Lookup(strconv.FormatInt(number, 10)) })
-			if err != nil || !ok || a.Status == "" {
-				return seenfacts.ApprovalFact{}, false
-			}
-			return approvalfacts.Fact(a)
-		}
+		src.Approval = approvalfacts.ByNumber(ap.Lookup)
 	}
 	if question != nil {
 		src.Question = question

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
@@ -124,47 +123,10 @@ func (s *Server) headBrought(ctx context.Context, repo, from, to string) ([]head
 	return headrelease.Brought(ctx, gitAccess(s.delivery.GiteaAccess), repo, from, to)
 }
 
-// GET /api/v1/delivery/released?repo=…&commit=… says, for every deliverable
-// of headrelease/deliverables.yaml that holds the repository, what its environment
-// runs and whether that has the commit: so a line asks "is my commit
-// released" instead of guessing a run's name (ci-feedback 2026-11-13).
-// Read-only; viewer and above.
+// handleReleased is GET /api/v1/delivery/released (headrelease.ReleasedRoute).
 func (s *Server) handleReleased(w http.ResponseWriter, r *http.Request) {
-	repo, commit := strings.TrimSpace(r.URL.Query().Get("repo")), strings.TrimSpace(r.URL.Query().Get("commit"))
-	if !giteaName.MatchString(repo) || strings.HasSuffix(repo, ".git") || !commitID.MatchString(commit) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "repo is a repository name, commit a 40-character lowercase SHA"})
-		return
-	}
-	world := s.headWorldOf()
-	if world == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "the delivery service or the evidence ledger is not connected"})
-		return
-	}
-	table, _, err := headrelease.LoadTable()
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	facts := s.delivery.PolicyFacts()
-	within := func(ctx context.Context, repo, ancestor, commit string) (bool, error) {
-		if ancestor == commit {
-			return true, nil
-		}
-		// ChangedFiles fails when ancestor is not in commit's history, and
-		// when it cannot tell (the mirror is down, the walk is too long):
-		// neither is "released".
-		_, diffErr := facts.ChangedFiles(ctx, repo, ancestor, commit)
-		return diffErr == nil, nil
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-	released, err := headrelease.WhereReleased(ctx, world, table, repo, commit, within)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-		return
-	}
-	if released == nil {
-		released = []headrelease.Released{}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"repo": repo, "commit": commit, "head_release": headrelease.On(), "released": released})
+	headrelease.ReleasedRoute{RepoOK: giteaName.MatchString, CommitOK: commitID.MatchString, World: s.headWorldOf,
+		ChangedFiles: func(ctx context.Context, repo, from, to string) ([]string, error) {
+			return s.delivery.PolicyFacts().ChangedFiles(ctx, repo, from, to)
+		}}.ServeHTTP(w, r)
 }

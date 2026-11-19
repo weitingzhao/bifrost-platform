@@ -32,15 +32,7 @@ func (s *Server) prodShadowOf(table headrelease.Table) *headrelease.ProdShadowLo
 	if mode != headrelease.ProdShadow || s.delivery == nil {
 		return nil
 	}
-	var prod, source *headrelease.Deliverable
-	for i := range table.Deliverables {
-		switch table.Deliverables[i].Name {
-		case headrelease.ProdRowName:
-			prod = &table.Deliverables[i]
-		case headrelease.ProdSourceName:
-			source = &table.Deliverables[i]
-		}
-	}
+	prod, source := headrelease.ProdRows(table)
 	if prod == nil || source == nil {
 		slog.Error("prod batch shadow: the table lacks its rows; nothing is recorded", "prod", headrelease.ProdRowName, "source", headrelease.ProdSourceName)
 		return nil
@@ -82,12 +74,7 @@ func (s *Server) prodShadowOf(table headrelease.Table) *headrelease.ProdShadowLo
 			return approvalreadings.OpenReleaseCards(items, prodShadowAsksAbout, pipeline), nil
 		}
 	}
-	repo := ""
-	for _, c := range prod.Commits {
-		if c.TestedWith == "" && repo == "" {
-			repo = c.Repo
-		}
-	}
+	repo := headrelease.ProdRepo(prod)
 	slog.Info("prod batch shadow: on (records only)", "deliverable", prod.Name, "candidate_from", source.Name, "soak", soak.String(), "gap", gap.String())
 	return &headrelease.ProdShadowLoop{
 		Mode: mode,

@@ -2,17 +2,14 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	busdrift "github.com/weitingzhao/bifrost-platform/api/internal/bus/drift"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/evidenceread"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
@@ -35,7 +32,8 @@ func (s *Server) unitScopeShadowSource() func(context.Context, seenfacts.Pipelin
 		}
 		return s.agentRuntime.api.DB
 	}
-	baseCI := evidenceread.LedgerCIScoped(db, giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second}), false)
+	tree := giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second})
+	baseCI := evidenceread.LedgerCIScoped(db, tree, false)
 	sh := &cirunview.ScopeShadow{
 		Repo: agentrtDeployRepo, Pipeline: rules.LandingRepositories[agentrtDeployRepo].CIPipeline,
 		Scope: func(ctx context.Context, repo, commit string) (unitplan.Scope, error) {
@@ -45,57 +43,16 @@ func (s *Server) unitScopeShadowSource() func(context.Context, seenfacts.Pipelin
 			}
 			return unitplan.ScopeOf(ctx, s.unitTreesOf(), unitplan.BaseCIFunc(baseCI), repo, commit, base)
 		},
-		Known: func(ctx context.Context, repo, commit, uid string) (bool, error) {
-			d := db()
-			if d == nil {
-				return false, fmt.Errorf("the evidence ledger is not connected")
-			}
-			rows, err := evidence.EvidenceCIByCommit(ctx, d, repo, commit, 50)
-			for _, r := range rows {
-				if r.RunUID == uid {
-					return true, err
-				}
-			}
-			return false, err
-		},
+		Known: cirunview.LedgerKnown(db),
 		Start: func(fn func()) { safego.Go("unit-scope-shadow", fn) },
 		Record: func(run, status, detail string) {
 			s.audit.RecordDirect(cirunview.ScopeShadowPrincipal, actuation.RoleOperator, cirunview.ScopeShadowAction, "run/"+run, status, detail)
 		},
-		Incremental: func(ctx context.Context, repo, commit string) (string, error) {
-			d := db()
-			if d == nil {
-				return "", fmt.Errorf("the evidence ledger is not connected")
-			}
-			rows, err := evidence.EvidenceCIByCommit(ctx, d, repo, commit, 50)
-			if err != nil {
-				return "", err
-			}
-			if tree, terr := giteaCommitTree(s.delivery.GiteaAccess, &http.Client{Timeout: 10 * time.Second})(ctx, repo, commit); terr == nil {
-				more, err := evidence.EvidenceByTree(ctx, d, repo, tree, 50)
-				if err != nil {
-					return "", err
-				}
-				rows = append(rows, more...)
-			}
-			for _, r := range rows {
-				if evidence.IncrementalBase(r) != "" {
-					return r.RunName, nil
-				}
-			}
-			return "", nil
-		},
+		Incremental: cirunview.LedgerIncremental(db, tree),
 		Reconcile: func(run, status, detail string) {
 			s.audit.RecordDirect(cirunview.ScopeShadowPrincipal, actuation.RoleOperator, cirunview.CIReconcileAction, "run/"+run, status, detail)
 		},
-		Drift: func(ctx context.Context, repo, commit, passed, contradicts string) error {
-			d := db()
-			if d == nil {
-				return fmt.Errorf("the ledger is not connected")
-			}
-			_, err := busdrift.Announce(ctx, d, busdrift.Found{Repo: repo, Commit: commit, Kind: busdrift.FullVsIncremental, Passed: passed, Contradicts: contradicts})
-			return err
-		},
+		Drift: cirunview.AnnounceDrift(db),
 	}
 	return sh.Observe
 }

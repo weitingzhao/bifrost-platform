@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,10 +10,8 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/approvalfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/readslot"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/runfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
@@ -24,27 +21,7 @@ import (
 func (s *Server) wireExternalRecords(src *controller.Sources) {
 	src.Questions = s.questionRuntime.Observations()
 	if s.approvals != nil {
-		reads := readslot.New(2)
-		src.Approvals = func(ctx context.Context) ([]seenfacts.ApprovalFact, error) {
-			items, ok, err := within(ctx, reads, func() ([]approvals.Approval, bool, error) {
-				items, err := s.approvals.Observations()
-				return items, true, err
-			})
-			if err != nil {
-				return nil, err
-			}
-			if !ok {
-				return nil, fmt.Errorf("approval observations unavailable")
-			}
-			now := time.Now()
-			var out []seenfacts.ApprovalFact
-			for _, a := range items {
-				if f, ok := approvalfacts.Observation(a, now); ok {
-					out = append(out, f)
-				}
-			}
-			return out, nil
-		}
+		src.Approvals = approvalfacts.Backfill(s.approvals.Observations)
 	}
 	src.UnitRuns = s.unitRunsSource()
 	src.UnitsDaily = s.unitsDailySource()

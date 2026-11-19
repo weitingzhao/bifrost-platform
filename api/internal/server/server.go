@@ -80,7 +80,7 @@ type Server struct {
 	// unitTrees reads commits' trees from Gitea for the unit plan
 	// (gitread.Trees), keeping the blobs it read.
 	unitTrees *gitread.Trees
-	// unitRunsKept keeps the run view's answers a short while (units_runs.go).
+	// unitRunsKept keeps the run view's answers a short while (cirunview.Cache).
 	unitRunsKept unitRunsCache
 	// ciScorecardKept keeps the CI scorecard a short while (ci_read_wire.go).
 	ciScorecardKept ciscore.Cache
@@ -402,47 +402,17 @@ func (s *Server) operatorPlaneMode() string {
 	return "in-process"
 }
 
-func (s *Server) handleEnvironments(w http.ResponseWriter, _ *http.Request) {
-	envs := make([]map[string]string, 0, len(s.cfg.Environments))
-	for _, e := range s.cfg.Environments {
-		envs = append(envs, map[string]string{
-			"id":    e.ID,
-			"label": e.Label,
-		})
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"environments": envs})
+// probeRoutes are the connectivity reads (probe.Routes).
+func (s *Server) probeRoutes() probe.Routes {
+	return probe.Routes{Cfg: s.cfg, Prober: s.prober, Snapshot: s.datastoreSnapshot}
+}
+
+func (s *Server) handleEnvironments(w http.ResponseWriter, r *http.Request) {
+	s.probeRoutes().HandleEnvironments(w, r)
 }
 
 func (s *Server) handleMatrix(w http.ResponseWriter, r *http.Request) {
-	envID := r.URL.Query().Get("env")
-	ctx := r.Context()
-	ds := s.datastoreSnapshot(ctx)
-
-	if envID != "" {
-		env, ok := s.cfg.GetEnvironment(envID)
-		if !ok {
-			writeJSON(w, http.StatusNotFound, map[string]string{
-				"error": "unknown environment: " + envID,
-			})
-			return
-		}
-		writeJSON(w, http.StatusOK, s.prober.ProbeEnvironmentWithDatastore(ctx, *env, ds))
-		return
-	}
-
-	results := make([]probe.MatrixResponse, len(s.cfg.Environments))
-	var wg sync.WaitGroup
-	for i, env := range s.cfg.Environments {
-		wg.Add(1)
-		go func(idx int, e config.Environment) {
-			defer safego.Recover("server.probeEnvironment")
-			defer wg.Done()
-			results[idx] = s.prober.ProbeEnvironmentWithDatastore(ctx, e, ds)
-		}(i, env)
-	}
-	wg.Wait()
-
-	writeJSON(w, http.StatusOK, map[string]any{"matrices": results})
+	s.probeRoutes().HandleMatrix(w, r)
 }
 
 func (s *Server) datastoreSnapshot(ctx context.Context) *probe.DatastoreSnapshot {
@@ -454,56 +424,18 @@ func (s *Server) datastoreSnapshot(ctx context.Context) *probe.DatastoreSnapshot
 }
 
 func (s *Server) handleVerifyPayload(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	matrices, dsSnap := s.probeMissionMatrices(ctx)
-	writeJSON(w, http.StatusOK, probe.VerifyPayload(s.cfg.Environments, matrices, dsSnap))
+	s.probeRoutes().HandleVerifyPayload(w, r)
 }
 
 func (s *Server) handleVerifyMissionSnapshot(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	matrices, dsSnap := s.probeMissionMatrices(ctx)
-	writeJSON(w, http.StatusOK, probe.VerifyMissionSnapshot(s.cfg.Environments, matrices, dsSnap))
-}
-
-func (s *Server) probeMissionMatrices(ctx context.Context) ([]probe.MatrixResponse, probe.DatastoreSnapshot) {
-	dsSnap := probe.DatastoreSnapshot{}
-	if snap := s.datastoreSnapshot(ctx); snap != nil {
-		dsSnap = *snap
-	}
-	matrices := make([]probe.MatrixResponse, 0, len(s.cfg.Environments))
-	for _, env := range s.cfg.Environments {
-		matrices = append(matrices, s.prober.ProbeEnvironmentWithDatastore(ctx, env, &dsSnap))
-	}
-	return matrices, dsSnap
+	s.probeRoutes().HandleVerifyMissionSnapshot(w, r)
 }
 
 func (s *Server) handleTopology(w http.ResponseWriter, r *http.Request) {
-	if s.cfg.Topology == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "topology not loaded",
-		})
-		return
-	}
-
-	envID := r.URL.Query().Get("env")
-	if envID == "" {
-		envID = "prod"
-		if len(s.cfg.Environments) > 0 {
-			envID = s.cfg.Environments[0].ID
-		}
-	}
-
-	env, ok := s.cfg.GetEnvironment(envID)
-	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{
-			"error": "unknown environment: " + envID,
-		})
-		return
-	}
-
-	matrix := s.prober.ProbeEnvironmentWithDatastore(r.Context(), *env, s.datastoreSnapshot(r.Context()))
-	resp := topology.Build(s.cfg.Topology, *env, matrix, s.liveHosts(r.Context()))
-	writeJSON(w, http.StatusOK, resp)
+	topology.Route{Cfg: s.cfg, Live: s.liveHosts,
+		Matrix: func(ctx context.Context, env config.Environment) probe.MatrixResponse {
+			return s.prober.ProbeEnvironmentWithDatastore(ctx, env, s.datastoreSnapshot(ctx))
+		}}.ServeHTTP(w, r)
 }
 
 // liveHosts reads which machines are cluster nodes and which hosts Prometheus
@@ -528,15 +460,8 @@ func (s *Server) liveHosts(ctx context.Context) topology.Live {
 	return live
 }
 
-func (s *Server) handleContext(w http.ResponseWriter, _ *http.Request) {
-	if s.cfg.OpsContext == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "ops context not loaded",
-		})
-		return
-	}
-	ctx := promote.OverlayContext(s.cfg.OpsContext, s.promote.Store())
-	writeJSON(w, http.StatusOK, ctx)
+func (s *Server) handleContext(w http.ResponseWriter, r *http.Request) {
+	s.promote.HandleOpsContext(s.cfg.OpsContext)(w, r)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

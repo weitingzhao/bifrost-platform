@@ -1366,6 +1366,20 @@
       ],
       "status": "assigned",
       "basis": "2026-11-18, moved out of api/internal/server unchanged (release_table_wire.go; decoupling item 5): the release records' table, the row and its release.deploy.finished announcement in one transaction, and the reads the recorder takes. Imports releases (delivery) and foundation only (eventlog, bus/releases). releases itself is unchanged."
+    },
+    "api/internal/ruleapprove": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (agentrt_ruleapprove.go; decoupling item 5): the action agentrt_rule_approve: the request bound to PROD, the create check, the card's view of a draft, the executor and the one-open-card key. Imports owner (actions, approvalhome) and foundation (canon) only; the runtime's store and the approval's read-back are handed in by the server, which keeps grantApproval."
+    },
+    "api/internal/agentrt/windownotice": {
+      "domains": [
+        "coordination"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (window_notify.go; decoupling item 5): the release window's queue notice into a thread's inbox, through coord's public message path. Imports coordination (coord, threadinbox) and foundation (actor, eventlog) only."
     }
   }
 }

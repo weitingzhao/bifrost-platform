@@ -26,18 +26,10 @@ func (s *Server) wireOpsEvents() {
 	})
 	s.checklist.OnFlip(s.sayChecklistFlip)
 	s.ibgateway.OnAutoRepair(func(ctx context.Context, ok bool, message string) {
-		state := "fail"
-		if ok {
-			state = "ok"
-		}
-		s.sayOpsEvent(ctx, opsevents.PluginStatus("ib-gateway", state, "ib-auto-repair", message))
+		s.sayOpsEvent(ctx, opsevents.AutoRepair(ok, message))
 	})
 	patrol.OnFix(func(ctx context.Context, item string, ok bool, detail string) {
-		state := "fail"
-		if ok {
-			state = "ok"
-		}
-		s.sayOpsEvent(ctx, opsevents.EnvHealth(checklist.ViewerEnv()+"/"+item, state, "patrol-autopilot", detail))
+		s.sayOpsEvent(ctx, opsevents.PatrolFix(checklist.ViewerEnv(), item, ok, detail))
 	})
 	if s.delivery != nil {
 		s.delivery.OnMirrorSettled(func(ctx context.Context, repo, commit string, present bool) {
