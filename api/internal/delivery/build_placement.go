@@ -50,6 +50,11 @@ const (
 	// ubt-k3s-02 fell from 10.7 to 7.5 GiB as builds moved there; its rollback line
 	// is 5 GiB, and 15% of its 15 GiB would only stop at 2.3).
 	protectedMemoryFloor = 6 << 30
+	// And only while they have written less than this in two hours (the compute
+	// line, 2026-11-19): ubt-k3s-07's disk slowed after about 36 GB an hour for six
+	// hours, and 02 and 04 were at 70 GB an hour. Better a run waits or goes to a
+	// slower disk than a database's disk slows.
+	protectedWrittenBytes2h = 75e9
 )
 
 // TaskProfile is what a kind of work needs from a node.
@@ -88,6 +93,7 @@ type NodeMetrics struct {
 	CPUBusy             float64 // 0 to 1, last 5 minutes
 	DiskBusy            float64 // 0 to 1, last 5 minutes
 	MemoryAvailable     float64 // 0 to 1
+	WrittenBytes2h      float64 // written to the node's disks in the last two hours
 }
 
 // NodeMetricsReader answers by node InternalIP.
@@ -159,6 +165,12 @@ func diskTier(latencySeconds float64) int {
 func nodeFull(task TaskProfile, n NodeProfile) string {
 	m := n.Metrics
 	switch {
+	case n.Protected && m.DiskBusy >= protectedDiskBusy:
+		return fmt.Sprintf("database node, disk %.0f%% busy", m.DiskBusy*100)
+	case n.Protected && n.AvailableMemory < protectedMemoryFloor:
+		return fmt.Sprintf("database node, %.1fGi available", n.AvailableMemory/(1<<30))
+	case n.Protected && m.WrittenBytes2h > protectedWrittenBytes2h:
+		return fmt.Sprintf("database node, %.0f GB written in 2 h", m.WrittenBytes2h/1e9)
 	case m.CPUBusy >= busyLimit:
 		return fmt.Sprintf("CPU %.0f%% busy", m.CPUBusy*100)
 	case task.DiskHeavy && m.DiskBusy >= busyLimit:
@@ -234,8 +246,7 @@ func spreadNode(task TaskProfile, nodes []NodeProfile, current string, fallback 
 	var best, kept *NodeProfile
 	for i := range nodes {
 		n := &nodes[i]
-		if n.Problem != "" || nodeFull(task, *n) != "" || diskTier(n.Metrics.WriteLatencySeconds) >= 2 ||
-			(n.Protected && (n.Metrics.DiskBusy >= protectedDiskBusy || n.AvailableMemory < protectedMemoryFloor)) {
+		if n.Problem != "" || nodeFull(task, *n) != "" || diskTier(n.Metrics.WriteLatencySeconds) >= 2 {
 			continue
 		}
 		if best == nil || load(*n) < load(*best) || (load(*n) == load(*best) && n.Host < best.Host) {

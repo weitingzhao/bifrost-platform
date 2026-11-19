@@ -980,6 +980,22 @@ func TestABusyProtectedNodeTakesNoSpreadWork(t *testing.T) {
 	}
 }
 
+// 2026-11-19, the compute line: 02 and 04 wrote about 70 GB an hour, and ubt-k3s-07's
+// disk slowed after 36 GB an hour for six hours. A database node over 75 GB in two
+// hours takes no more of this work, not even as the fallback when nothing else fits.
+// Positive control: at the limit it is chosen again.
+func TestADatabaseNodeThatWroteTooMuchTakesNoWork(t *testing.T) {
+	node := NodeProfile{Host: "db", Name: "db", Protected: true, FreeCPU: 8, FreeMemory: 8 << 30, AvailableMemory: 12 << 30,
+		Metrics: NodeMetrics{WriteLatencySeconds: 0.001, CPUBusy: 0.1, DiskBusy: 0.1, MemoryAvailable: 0.6, WrittenBytes2h: 75e9 + 1}}
+	if p := spreadNode(UnitTask, []NodeProfile{node}, "", chooseNode(UnitTask, []NodeProfile{node})); p.Node != "" {
+		t.Fatalf("over the limit: %+v", p)
+	}
+	node.Metrics.WrittenBytes2h = 75e9
+	if p := spreadNode(UnitTask, []NodeProfile{node}, "", BuildPlacement{}); p.Node != "db" {
+		t.Fatalf("at the limit: %+v", p)
+	}
+}
+
 // 2026-11-19, the compute line: ubt-k3s-02 (15 GiB) fell to 7.5 GiB available as CI
 // moved there, towards its 5 GiB rollback line. Under 6 GiB a database node takes no
 // spread work. Positive control: at 6 GiB the quieter node is chosen again.

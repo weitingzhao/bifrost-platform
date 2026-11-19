@@ -76,7 +76,16 @@ func (c *PromNodeMetrics) Read(ctx context.Context, promql func(context.Context,
 		}
 		values[i+1] = v
 	}
-	return JoinNodeMetrics(values[0], values[1], values[2], values[3]), nil
+	written, err := read(`sum by (instance) (increase(node_disk_written_bytes_total{` + nodeDisk + `}[2h]))`)
+	if err != nil {
+		return nil, err
+	}
+	out := JoinNodeMetrics(values[0], values[1], values[2], values[3])
+	for address, m := range out {
+		m.WrittenBytes2h = written[address]
+		out[address] = m
+	}
+	return out, nil
 }
 
 // WorseLatency is, for each node of long, the higher of its two averages. A node
