@@ -11,13 +11,21 @@ const mac: MemoryRoomReadings = { total: 17.2 * GB, available: 7.8 * GB, free: 0
 const none: MemoryRoomReadings = { total: null, available: null, free: null, swapTotal: null, swapUsed: null, swapIO: null, corrupted: null }
 
 describe('the memory room', () => {
-  it('the bench is laid in 4 GB sections, the last as long as its part; the room the smallest that holds them', () => {
-    expect(sectionsOf(node)).toBeCloseTo(6.1)
+  // The Owner, 2026-11-19: a freezer cannot be half. Modules come in GiB and the system reports a little
+  // less than installed, so whole freezers, rounded up to the modules; contents fill them in proportion.
+  it('whole freezers only, one per 4 GiB of modules: 24 GB six, 16 GB four, 8 GB two, 128 GB thirty-two', () => {
+    expect(sectionsOf(node)).toBe(6)
+    expect(sectionsOf({ ...node, total: 16156614656 })).toBe(4)
+    expect(sectionsOf({ ...node, total: 17179869184 })).toBe(4)
+    expect(sectionsOf({ ...node, total: 7754600448 })).toBe(2)
+    expect(sectionsOf({ ...node, total: 134225948672 })).toBe(32)
     // The first draw put 24 GB in a 4×8 room, half of it empty: rows were spaced like the lathes' though a
-    // bench is low. A room holds its parts snugly, neither crowded nor empty.
+    // freezer is low. A room holds its parts snugly, neither crowded nor empty.
     expect(memoryRoomShape(node)).toEqual([4, 4])
-    expect(memoryRoomShape({ ...node, total: 7.8 * GB })).toEqual([4, 4])
-    expect(memoryRoomShape({ ...node, total: 134 * GB })).toEqual([8, 8])
+    expect(memoryRoomShape({ ...node, total: 134225948672 })).toEqual([8, 8])
+  })
+  it('inside, plain fills only: no patterned blocks', () => {
+    expect(memoryRoom(node).svg).not.toContain('<pattern')
   })
   // The Owner, 2026-11-19: seven kinds on the bench were noise; three, each readable apart and keyed.
   it('three kinds, in order, adding up to what is installed: in use, can be cleared, empty', () => {
@@ -47,8 +55,8 @@ describe('the memory room', () => {
   it('nothing hides anything: one height for every bench, what lies on it flat, crates lower still', () => {
     expect(3 + 4).toBeLessThan(SECTION.height)
   })
-  it('the ruler counts the sections: 2 GB a section, twice the sections, the same reading', () => {
-    setRuler('mem.sections', 2e9)
-    try { expect(sectionsOf(node)).toBeCloseTo(12.2) } finally { setRuler('mem.sections', null) }
+  it('the ruler counts the freezers: 2 GiB a freezer, twice the freezers, the same reading', () => {
+    setRuler('mem.sections', 2 * 2 ** 30)
+    try { expect(sectionsOf(node)).toBe(12) } finally { setRuler('mem.sections', null) }
   })
 })

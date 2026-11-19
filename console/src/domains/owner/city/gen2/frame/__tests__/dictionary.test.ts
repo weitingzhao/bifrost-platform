@@ -28,8 +28,8 @@ describe('the metaphor dictionary', () => {
   // machines — 16 cores against 32, 16 GB against 24, a node's disk against the NAS.
   it('standard parts: counted in one fixed size each, whatever machine they are on', () => {
     expect(encode('core.machines', 16)).toBe(16)
-    expect(encode('mem.sections', 24e9)).toBe(6)
-    expect(encode('mem.sections', 16e9)).toBe(4)
+    expect(encode('mem.sections', 24 * 2 ** 30)).toBe(6)
+    expect(encode('mem.sections', 16 * 2 ** 30)).toBe(4)
     expect(encode('disk.bays', 512e9)).toBe(2)
     expect(encode('mem.sections', null)).toBeNull()
     expect(STANDARD_PARTS().map(m => m.id).sort()).toEqual(['core.machines', 'disk.bays', 'mem.sections'])
@@ -37,11 +37,11 @@ describe('the metaphor dictionary', () => {
   // The Owner, the same day: with a standard, the ruler can be adjusted — the picture changes, the
   // reading does not; that is what keeps the city maintainable and elastic.
   it('a ruler changes the count, never the reading; reset brings the default back', () => {
-    setRuler('mem.sections', 2e9)
-    expect(encode('mem.sections', 24e9)).toBe(12)
-    expect(rulersKey()).toContain('mem.sections=2000000000')
+    setRuler('mem.sections', 2 * 2 ** 30)
+    expect(encode('mem.sections', 24 * 2 ** 30)).toBe(12)
+    expect(rulersKey()).toContain('mem.sections=2147483648')
     setRuler('mem.sections', null)
-    expect(rulerOf('mem.sections')).toBe(4e9)
+    expect(rulerOf('mem.sections')).toBe(4 * 2 ** 30)
     expect(rulersKey()).toBe('')
     expect(() => setRuler('mem.sections', 0)).toThrow()
     expect(() => setRuler('cpu.busy', 2)).toThrow(/not a standard part/)

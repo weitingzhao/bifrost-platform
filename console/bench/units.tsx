@@ -97,7 +97,7 @@ const ROOM_DRAW: Record<string, RoomDraw> = {
     const read = memoryRoomReadings(r.reads.memory as never, host)
     const { out, ids } = rowsDrawn(() => memoryRoom(read))
     const bench = freezersOf(read).map(s => `${s.id} ${readingText(s.bytes, 'bytes')}`).join(' · ')
-    return { sprite: out, ids, count: read.total ?? 0, hint: `${readingText(read.total, 'bytes')} → ${sectionsOf(read).toFixed(1)} freezers → a ${memoryRoomShape(read).join('×')} room · ${bench || 'nothing read'} · swap ${readingText(read.swapUsed, 'bytes')} of ${readingText(read.swapTotal, 'bytes')}` }
+    return { sprite: out, ids, count: read.total ?? 0, hint: `${readingText(read.total, 'bytes')} → ${sectionsOf(read)} freezers → a ${memoryRoomShape(read).join('×')} room · ${bench || 'nothing read'} · swap ${readingText(read.swapUsed, 'bytes')} of ${readingText(read.swapTotal, 'bytes')}` }
   },
 }
 const PLAN = [['cpu', 'Workshop', 'CPU'], ['memory', 'Cold store', 'Memory'], ['disk', 'Warehouse', 'Disk']] as const
@@ -156,7 +156,7 @@ function InsideDraft({ u }: { u: UnitSpec }) {
 const RULERS_KEY = 'bifrost.city.rulers.v1'
 const RULER_CHOICES: Record<string, { label: string; v: number }[]> = {
   'core.machines': [1, 2, 4].map(n => ({ label: `${n} core${n > 1 ? 's' : ''}`, v: n })),
-  'mem.sections': [1, 2, 4, 8].map(n => ({ label: `${n} GB`, v: n * 1e9 })),
+  'mem.sections': [1, 2, 4, 8].map(n => ({ label: `${n} GiB`, v: n * 2 ** 30 })),
   'disk.bays': [64, 128, 256, 512, 1024].map(n => ({ label: n >= 1024 ? '1 TB' : `${n} GB`, v: n * 1e9 })),
 }
 try {
