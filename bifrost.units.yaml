@@ -16,7 +16,7 @@ version: 1
 # of its pipelines in api/internal/delivery/testdata in the same commit).
 pins:
   bifrost-ui: {commit: c83f40b40e65e52f8592ec6b73c5f6987c116e93, advance: manual}
-  bifrost-trade-infra: {commit: 7361ee69a5b250999a43b7c6bded374a57e4b007, advance: manual}
+  bifrost-trade-infra: {commit: 05fcba3821b4b85688ccefe5c1a3ef81d61e7b51, advance: manual}
 
 modules:
   - name: api
