@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
@@ -62,7 +63,7 @@ func TestPlanStandingDoneRules(t *testing.T) {
 	if out["decision"] != "" {
 		t.Fatalf("a rule binding something new within the standing authorization: %v", out)
 	}
-	a.answer(out["question_id"].(string), seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	a.answer(out["question_id"].(string), seenfacts.QuestionAnswered, ownercard.CardApplyKey)
 	_, err := planstore.DecidePlanChanges(ctx, w.rt, a.question, nil)
 	ok(t, err)
 

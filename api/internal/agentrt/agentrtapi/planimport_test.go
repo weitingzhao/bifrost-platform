@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -393,7 +394,7 @@ func TestPlanImportNumberingContinues(t *testing.T) {
 	}
 	// An item is outside the standing authorization: the Owner's card, his
 	// Apply, the controller's decision pass.
-	ask := func(context.Context, planstore.Card) (string, error) { return "q_1", nil }
+	ask := func(context.Context, ownercard.Card) (string, error) { return "q_1", nil }
 	out, err = planstore.ProposePlanChange(ctx, pool, actor.Writer{Actor: "thread:local_test", Token: "reporter"}, "k2", "R2", "one more item",
 		[]planstore.PlanChange{{Op: "add_node", Parent: "R2", Kind: "item", Title: "new item"}}, ask)
 	must(t, err)
@@ -401,7 +402,7 @@ func TestPlanImportNumberingContinues(t *testing.T) {
 		t.Fatalf("item proposal = %v", out)
 	}
 	answered := func(_ context.Context, id string) (seenfacts.Question, bool) {
-		return seenfacts.Question{ID: id, Status: seenfacts.QuestionAnswered, Option: planstore.CardApplyKey}, true
+		return seenfacts.Question{ID: id, Status: seenfacts.QuestionAnswered, Option: ownercard.CardApplyKey}, true
 	}
 	n, err := planstore.DecidePlanChanges(ctx, pool, answered, nil)
 	must(t, err)

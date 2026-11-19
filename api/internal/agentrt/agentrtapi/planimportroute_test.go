@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
@@ -99,7 +100,7 @@ func TestPlanImportThroughTheCard(t *testing.T) {
 
 	// He answers Import: the controller lands it, its head caused by the
 	// decision.
-	n, err := planstore.DecidePlanChanges(ctx, pool, answer(planstore.CardApplyKey), nil)
+	n, err := planstore.DecidePlanChanges(ctx, pool, answer(ownercard.CardApplyKey), nil)
 	must(t, err)
 	if n != 1 {
 		t.Fatalf("%d decided", n)
@@ -144,7 +145,7 @@ func TestPlanImportRefusedAndFailed(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("import proposal = %d %v", code, out)
 	}
-	n, err := planstore.DecidePlanChanges(ctx, pool, answer(planstore.CardRefuseKey), nil)
+	n, err := planstore.DecidePlanChanges(ctx, pool, answer(ownercard.CardRefuseKey), nil)
 	must(t, err)
 	if n != 1 {
 		t.Fatalf("%d decided", n)
@@ -165,7 +166,7 @@ func TestPlanImportRefusedAndFailed(t *testing.T) {
 	other.Nodes[1].Title += "（改）"
 	_, err = planstore.ImportPlan(ctx, pool, "controller", other)
 	must(t, err)
-	_, err = planstore.DecidePlanChanges(ctx, pool, answer(planstore.CardApplyKey), nil)
+	_, err = planstore.DecidePlanChanges(ctx, pool, answer(ownercard.CardApplyKey), nil)
 	must(t, err)
 	var decision, why string
 	must(t, pool.QueryRow(ctx, `SELECT body_json->>'decision', COALESCE(body_json->>'error', '') FROM agentrt.event

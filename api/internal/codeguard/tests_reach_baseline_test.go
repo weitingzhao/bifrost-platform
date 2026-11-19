@@ -205,8 +205,6 @@ var testFilesInShared = []string{
 	"api/internal/delivery/window_events_test.go",
 	"api/internal/delivery/window_queue_test.go",
 	"api/internal/delivery/window_store_test.go",
-	"api/internal/operatorplane/plane_test.go",
-	"api/internal/operatorplane/route_table_test.go",
 	"api/internal/server/action_record_test.go",
 	"api/internal/server/action_trace_test.go",
 	"api/internal/server/actions_executor_coverage_test.go",

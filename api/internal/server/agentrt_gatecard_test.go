@@ -4,12 +4,11 @@ package server
 
 import (
 	"context"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
 // Review td397-rec-1 A1: a plan change's card made by a try whose
@@ -21,11 +20,11 @@ func TestPlanChangeCardRetryFindsItsCard(t *testing.T) {
 	ctx := context.Background()
 	rt := questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil)
 	ask := rt.Ask()
-	recommended := planstore.Card{Title: "Plan change to ARCH: the catalog's gates", Body: "A thread proposes to change plan ARCH.\n\n- a change",
+	recommended := ownercard.Card{Title: "Plan change to ARCH: the catalog's gates", Body: "A thread proposes to change plan ARCH.\n\n- a change",
 		Recommended: 1, RecommendedWhy: "it gives architecture rows their first gates, exactly the reviewed catalog's for stg"}
 	plain := recommended
 	plain.Recommended, plain.RecommendedWhy = 0, ""
-	for i, tries := range [][2]planstore.Card{{recommended, plain}, {plain, recommended}} {
+	for i, tries := range [][2]ownercard.Card{{recommended, plain}, {plain, recommended}} {
 		first, retry := tries[0], tries[1]
 		first.Key = strings.Repeat(string(rune('a'+i)), 32)
 		retry.Key = first.Key
@@ -37,7 +36,7 @@ func TestPlanChangeCardRetryFindsItsCard(t *testing.T) {
 			t.Fatalf("try %d: the retry got %q (%v), want card %s", i, again, err, id)
 		}
 		q, ok, err := rt.Svc.Lookup(id)
-		if err != nil || !ok || (q.Recommended == planstore.CardApplyKey) != (first.Recommended == 1) {
+		if err != nil || !ok || (q.Recommended == ownercard.CardApplyKey) != (first.Recommended == 1) {
 			t.Fatalf("try %d: the card %+v %v %v", i, q, ok, err)
 		}
 		other := retry

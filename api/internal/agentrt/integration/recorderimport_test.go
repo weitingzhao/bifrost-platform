@@ -17,6 +17,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
@@ -102,7 +103,7 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 		t.Fatalf("needs_you action %v, blocks %v", action, blocks)
 	}
 
-	a.answer(q, seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	a.answer(q, seenfacts.QuestionAnswered, ownercard.CardApplyKey)
 	// Two passes at once decide it once (review 402 B3).
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -253,7 +254,7 @@ func TestRecorderImportTwoPassesAtOnce(t *testing.T) {
 	out, err := proposeRecorder(ctx, pool, wr("thread:s1"), "k1", "retire the recorder", tdLog(t), a.ask)
 	ok(t, err)
 	q := out["question_id"].(string)
-	a.answer(q, seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	a.answer(q, seenfacts.QuestionAnswered, ownercard.CardApplyKey)
 	stream := "legacy:recorder:" + "td-336"
 	var mu sync.Mutex
 	arrived := 0
@@ -301,7 +302,7 @@ func TestRecorderImportTwoPassesAtOnce(t *testing.T) {
 // proposeRecorder is POST /plan/imports for a recorder log, as agentrtapi
 // does it: the lineage prepares the log, the plan proposes its import
 // (2026-11-17, the proposal left the store).
-func proposeRecorder(ctx context.Context, db eventlog.DB, w actor.Writer, key, reason string, req recorderimport.Request, ask planstore.Ask) (map[string]any, error) {
+func proposeRecorder(ctx context.Context, db eventlog.DB, w actor.Writer, key, reason string, req recorderimport.Request, ask ownercard.Ask) (map[string]any, error) {
 	log, err := externalwork.PrepareRecorderImport(req)
 	if err != nil {
 		return nil, err

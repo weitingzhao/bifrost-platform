@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"os"
 	"strings"
 	"sync"
@@ -246,12 +247,12 @@ func TestStartDecidesPlanChanges(t *testing.T) {
 	pool := setup(t)
 	out, err := planstore.ProposePlanChange(ctx, pool, actor.Writer{Actor: "thread:s1", Token: "operator"}, "k1", "R2", "a new item",
 		[]planstore.PlanChange{{Op: "add_node", Parent: "R2", Kind: "item", Title: "second"}},
-		func(context.Context, planstore.Card) (string, error) { return "q_9", nil })
+		func(context.Context, ownercard.Card) (string, error) { return "q_9", nil })
 	must(t, err)
 	if out["question_id"] != "q_9" {
 		t.Fatalf("proposal: %v", out)
 	}
-	w := &world{questions: map[string]seenfacts.Question{"q_9": {ID: "q_9", Status: seenfacts.QuestionAnswered, Option: planstore.CardApplyKey,
+	w := &world{questions: map[string]seenfacts.Question{"q_9": {ID: "q_9", Status: seenfacts.QuestionAnswered, Option: ownercard.CardApplyKey,
 		AnsweredBy: "owner", AnsweredAt: "2026-10-14T20:00:00Z"}}}
 	c := &controller.Controller{DB: pool, Sources: w.sources(), LeaseEvery: time.Hour, FactsEvery: 20 * time.Millisecond}
 	run, cancel := context.WithCancel(ctx)

@@ -1240,11 +1240,10 @@
     },
     "api/internal/operatorplane": {
       "domains": [
-        "foundation",
         "compute"
       ],
-      "status": "mixed",
-      "basis": "2026-11-16 foundation wall: an assembly root inside internal/ (the out-of-band process and the server both mount it); it wires compute's agentbridge, agentdeploy and launchd beside foundation services, as the server wires every domain. Implementation, authorization, refusal and dispatch unchanged."
+      "status": "assigned",
+      "basis": "2026-11-16 foundation wall: an assembly root inside internal/ (the out-of-band process and the server both mount it). 2026-11-19, by its imports (decoupling milestone 1: one domain per package): it is the out-of-band operator plane on the Mac minis, and what it serves is compute's (agentbridge, agentdeploy, launchd) beside foundation's patrol and auth, which every domain may use; it imports no other domain, so it is compute's, as the compute seat was told on 2026-11-19. Implementation, authorization, refusal and dispatch unchanged."
     },
     "api/internal/maintainer": {
       "domains": [
@@ -1749,13 +1748,19 @@
       "status": "mixed",
       "basis": "2026-11-18 moved out of store (decoupling item 5, S4; store's portsbind.go, 79 lines, unchanged in effect): the binding of the plan code's ports to their providers (the external work checks and activity reads, the plan tree, the delivery read's lineage naming, the loop alerts, the recorder import decision, the coordination alert claim, the Owner's question limits); it is wiring only, holds no rule and no query, and is mixed because it names the plan on one side and lineage, delivery, coordination and the Owner's questions on the other, as the assembly of the plan code; it is linked by server and by the tests that run the plan code, and nothing but wiring may be added to it"
     },
+    "api/internal/agentrt/ownercard": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 moved out of planstore unchanged (Card, RuntimeCard, Ask, Withdraw, the plan change card's options and keys, ErrAsked, ErrQuestionGone; planstore names them by alias): the contract between the plan code and the Owner's questions, a foundation package by the ruling of the foundation domain's seat (0.1 decoupling) on 2026-11-19, as seenfacts is; it holds types, constants and sentinel errors only, judges nothing and imports nothing of this module; its importers are planstore (plan) and questionbridge (owner), so neither imports the other"
+    },
     "api/internal/agentrt/questionbridge": {
       "domains": [
-        "owner",
-        "plan"
+        "owner"
       ],
-      "status": "mixed",
-      "basis": "2026-11-18 moved out of server (decoupling item 5, A5; the server's questions_wire.go, about 330 lines, unchanged in effect): how the agent runtime asks, reads, answers, withdraws and acknowledges the Owner's questions: the translation of a plan's card (planstore.Card) into a question with its idempotency and recommendation rules, the runtime's own session, the bounded reads, the card-auto-answer reads, and the announcement of the questions' transitions to the bus; it is mixed because it names the plan's ports on one side and the questions service on the other, the same shape as planwiring; the server only constructs it, mounts the routes and closes it"
+      "status": "assigned",
+      "basis": "2026-11-18 moved out of server (decoupling item 5, A5; the server's questions_wire.go, about 330 lines, unchanged in effect): how the agent runtime asks, reads, answers, withdraws and acknowledges the Owner's questions: the translation of a runtime card (ownercard.Card) into a question with its idempotency and recommendation rules, the runtime's own session, the bounded reads, the card-auto-answer reads, and the announcement of the questions' transitions to the bus. Mixed (owner and plan) until 2026-11-19, when the plan's card types moved into the contract ownercard: it now imports the questions service, questioncards and foundation only, and implements the plan's ports without naming the plan; the server only constructs it, mounts the routes and closes it"
     },
     "api/internal/bus/alertletters": {
       "domains": [

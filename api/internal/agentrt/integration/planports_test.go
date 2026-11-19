@@ -23,6 +23,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopalert"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planwiring"
@@ -55,7 +56,7 @@ func preparedLog(work, body string) planstore.RecorderLog {
 }
 
 // lastCard is the card the asker was last asked.
-func lastCard(t *testing.T, a *asker) planstore.Card {
+func lastCard(t *testing.T, a *asker) ownercard.Card {
 	t.Helper()
 	if len(a.cards) == 0 {
 		t.Fatal("no card was asked")
@@ -365,7 +366,7 @@ func TestRecorderImportPortsAreBoundToTheRecorderImport(t *testing.T) {
 	// import's own words, and the decision records them.
 	out, err = planstore.ProposeRecorderImport(ctx, pool, wr("thread:s1"), "absent", "retire", preparedLog("absent", "a body"), a.ask)
 	ok(t, err)
-	a.answer(out["question_id"].(string), seenfacts.QuestionAnswered, planstore.CardApplyKey)
+	a.answer(out["question_id"].(string), seenfacts.QuestionAnswered, ownercard.CardApplyKey)
 	_, err = planstore.DecidePlanChanges(ctx, pool, a.question, nil)
 	ok(t, err)
 	var want error

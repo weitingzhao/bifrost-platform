@@ -5,6 +5,7 @@ package agentrtapi_test
 import (
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"net/http"
 	"os"
 	"strings"
@@ -47,7 +48,7 @@ func TestArchTableThroughTheInterface(t *testing.T) {
 		if code, out := call(t, s, "proposer", "POST", "plan/imports", importBody(key, req), session, "s1"); code != 200 || out["question_id"] == nil {
 			t.Fatalf("import %s = %d %v", req.Root.ID, code, out)
 		}
-		if n, err := planstore.DecidePlanChanges(ctx, pool, answer(planstore.CardApplyKey), nil); err != nil || n != 1 {
+		if n, err := planstore.DecidePlanChanges(ctx, pool, answer(ownercard.CardApplyKey), nil); err != nil || n != 1 {
 			t.Fatalf("decide %s: %d %v", req.Root.ID, n, err)
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"path/filepath"
 	"strings"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
@@ -248,11 +248,11 @@ func TestPlanChangeCardOnTheStore(t *testing.T) {
 	rt := questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil)
 	ctx := context.Background()
 	ask, read, ack := rt.Ask(), rt.Question(), rt.Ack()
-	id, err := ask(ctx, planstore.Card{Key: strings.Repeat("ab", 16), Title: "Plan change to R2: a new item", Body: "A thread proposes …"})
+	id, err := ask(ctx, ownercard.Card{Key: strings.Repeat("ab", 16), Title: "Plan change to R2: a new item", Body: "A thread proposes …"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	again, err := ask(ctx, planstore.Card{Key: strings.Repeat("ab", 16), Title: "Plan change to R2: a new item", Body: "A thread proposes …"})
+	again, err := ask(ctx, ownercard.Card{Key: strings.Repeat("ab", 16), Title: "Plan change to R2: a new item", Body: "A thread proposes …"})
 	if err != nil || again != id {
 		t.Fatalf("a retry of the card: %s %v; want %s", again, err, id)
 	}
@@ -264,8 +264,8 @@ func TestPlanChangeCardOnTheStore(t *testing.T) {
 		t.Fatalf("answer = %d %v", res.Code, res.Body)
 	}
 	q, ok := read(ctx, id)
-	if !ok || q.Status != seenfacts.QuestionAnswered || q.Option != planstore.CardApplyKey {
-		t.Fatalf("the answer reads %+v; want option %q", q, planstore.CardApplyKey)
+	if !ok || q.Status != seenfacts.QuestionAnswered || q.Option != ownercard.CardApplyKey {
+		t.Fatalf("the answer reads %+v; want option %q", q, ownercard.CardApplyKey)
 	}
 	for range 2 {
 		if err = ack(ctx, id); err != nil {
@@ -279,21 +279,21 @@ func TestPlanChangeCardOnTheStore(t *testing.T) {
 	// Review 182 B2: the store's own limits, counted its way (JSON with the
 	// quotes, HTML not escaped): a body of 2998 characters fits, 2999 does
 	// not; a title is cut to fit, whatever it holds.
-	if _, err = ask(ctx, planstore.Card{Key: strings.Repeat("cd", 16), Title: "Plan change", Body: strings.Repeat("<", 2998)}); err != nil {
+	if _, err = ask(ctx, ownercard.Card{Key: strings.Repeat("cd", 16), Title: "Plan change", Body: strings.Repeat("<", 2998)}); err != nil {
 		t.Fatalf("a body of 3000 encoded bytes: %v", err)
 	}
-	_, err = ask(ctx, planstore.Card{Key: strings.Repeat("ef", 16), Title: "Plan change", Body: strings.Repeat("x", 2999)})
+	_, err = ask(ctx, ownercard.Card{Key: strings.Repeat("ef", 16), Title: "Plan change", Body: strings.Repeat("x", 2999)})
 	if !errors.Is(err, eventlog.ErrInvalid) {
 		t.Fatalf("a body of 3001 encoded bytes: %v", err)
 	}
 	// A fresh store for the titles: the runtime may have three cards open.
 	fresh := questionbridge.New(filepath.Join(t.TempDir(), "titles"), nil).Ask()
 	for i, title := range []string{strings.Repeat("&", 298), strings.Repeat("a", 299), strings.Repeat("计", 150) + "\u0007tail"} {
-		if _, err = fresh(ctx, planstore.Card{Key: strings.Repeat(string(rune('g'+i)), 32), Title: title, Body: "b"}); err != nil {
+		if _, err = fresh(ctx, ownercard.Card{Key: strings.Repeat(string(rune('g'+i)), 32), Title: title, Body: "b"}); err != nil {
 			t.Errorf("title %d: %v", i, err)
 		}
 	}
-	if err = ack(ctx, "q_not_there"); !errors.Is(err, planstore.ErrQuestionGone) {
+	if err = ack(ctx, "q_not_there"); !errors.Is(err, ownercard.ErrQuestionGone) {
 		t.Errorf("acknowledging a card the store dropped: %v", err)
 	}
 }
@@ -306,8 +306,8 @@ func TestPlannerCardOnTheStore(t *testing.T) {
 	rt := questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil)
 	ctx := context.Background()
 	ask, read, withdraw := rt.Ask(), rt.Question(), rt.Withdraw()
-	card := func(key, question string) planstore.Card {
-		return planstore.Card{Key: key, Title: question, Body: "why it matters", Options: []string{"Not now", "Yes"}, Recommended: 1,
+	card := func(key, question string) ownercard.Card {
+		return ownercard.Card{Key: key, Title: question, Body: "why it matters", Options: []string{"Not now", "Yes"}, Recommended: 1,
 			Meanwhile: "the work goes on without it", OwnerDuty: "goal", TaskID: "t_01M5192P0JPMJAP63ZKRPXJ2VV"}
 	}
 	id, err := ask(ctx, card(strings.Repeat("a1", 16), "Document the Console too?"))
@@ -319,7 +319,7 @@ func TestPlannerCardOnTheStore(t *testing.T) {
 		t.Fatalf("the card %+v %v %v", got, ok, err)
 	}
 	// Open, under another key: asked before.
-	if _, err = ask(ctx, card(strings.Repeat("b2", 16), "Document the Console too?")); !errors.Is(err, planstore.ErrAsked) || !strings.Contains(err.Error(), "duplicate of") {
+	if _, err = ask(ctx, card(strings.Repeat("b2", 16), "Document the Console too?")); !errors.Is(err, ownercard.ErrAsked) || !strings.Contains(err.Error(), "duplicate of") {
 		t.Fatalf("an open duplicate: %v", err)
 	}
 	raw, _ := json.Marshal(map[string]any{"option": "b", "channel": "console"})
@@ -333,7 +333,7 @@ func TestPlannerCardOnTheStore(t *testing.T) {
 	if err = withdraw(ctx, id, "the plan was not used"); err != nil {
 		t.Fatalf("withdrawing an answered card: %v", err)
 	}
-	if _, err = ask(ctx, card(strings.Repeat("c3", 16), "Document the Console too?")); !errors.Is(err, planstore.ErrAsked) || !strings.Contains(err.Error(), "already answered") {
+	if _, err = ask(ctx, card(strings.Repeat("c3", 16), "Document the Console too?")); !errors.Is(err, ownercard.ErrAsked) || !strings.Contains(err.Error(), "already answered") {
 		t.Fatalf("an answered duplicate: %v", err)
 	}
 	// An open card withdrawn; one that is gone needs nothing.
@@ -352,12 +352,12 @@ func TestPlannerCardOnTheStore(t *testing.T) {
 	}
 	// A plan change's card, the same question twice under two keys: as before,
 	// an error, not asked before.
-	pc := planstore.Card{Key: strings.Repeat("e5", 16), Title: "Plan change to R2: a new item", Body: "A thread proposes …"}
+	pc := ownercard.Card{Key: strings.Repeat("e5", 16), Title: "Plan change to R2: a new item", Body: "A thread proposes …"}
 	if _, err = ask(ctx, pc); err != nil {
 		t.Fatal(err)
 	}
 	pc.Key = strings.Repeat("f6", 16)
-	if _, err = ask(ctx, pc); err == nil || errors.Is(err, planstore.ErrAsked) {
+	if _, err = ask(ctx, pc); err == nil || errors.Is(err, ownercard.ErrAsked) {
 		t.Fatalf("a plan change's duplicate: %v", err)
 	}
 }

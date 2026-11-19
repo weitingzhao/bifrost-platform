@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"os"
 	"path/filepath"
@@ -130,7 +131,7 @@ func TestOwnerButtonPaths(t *testing.T) {
 	}
 	// One question store a group of cards: the store takes six cards an
 	// hour from the runtime.
-	var ask planstore.Ask
+	var ask ownercard.Ask
 	var question func(context.Context, string) (seenfacts.Question, bool)
 	var ack func(context.Context, string) error
 	group := func() {

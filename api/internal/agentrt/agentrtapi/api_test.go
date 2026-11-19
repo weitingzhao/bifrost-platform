@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -94,7 +95,7 @@ var recordMu sync.Mutex
 // the next asks fail, as a full question store would; anchor is the key a
 // signed rule must verify against.
 var (
-	cards    []planstore.Card
+	cards    []ownercard.Card
 	askFails bool
 	anchor   string
 )
@@ -161,7 +162,7 @@ intake_tokens:
 	// A claim reads and parses the rules it acts on; under a whole suite's
 	// load one pass can take longer than a few hundred milliseconds.
 	api := &agentrtapi.API{DB: db, ClaimPoll: 50 * time.Millisecond,
-		Ask: func(_ context.Context, c planstore.Card) (string, error) {
+		Ask: func(_ context.Context, c ownercard.Card) (string, error) {
 			if askFails {
 				return "", fmt.Errorf("store full")
 			}

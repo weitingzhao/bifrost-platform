@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 )
 
@@ -63,7 +63,7 @@ func (c *Controller) AckUsedAnswers(ctx context.Context) (int, error) {
 			continue
 		}
 		if err := ack(ctx, q.ID); err != nil {
-			if !errors.Is(err, planstore.ErrQuestionGone) {
+			if !errors.Is(err, ownercard.ErrQuestionGone) {
 				errs = append(errs, fmt.Errorf("acknowledging Q%d: %w", q.Number, err))
 			}
 			continue

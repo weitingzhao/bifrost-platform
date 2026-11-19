@@ -18,6 +18,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
@@ -76,8 +77,8 @@ type Sources struct {
 	// leaves a plan with questions submitted until there is one. Withdraw
 	// takes back the cards of a plan's round that was refused; nil leaves
 	// them open.
-	Ask      planstore.Ask
-	Withdraw planstore.Withdraw
+	Ask      ownercard.Ask
+	Withdraw ownercard.Withdraw
 	CI       func(ctx context.Context, repo, commit string) (status, run string, ok bool)
 	Deployed seenfacts.Deployed
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
@@ -23,7 +24,7 @@ func TestEscapedPathsNameTheSameRows(t *testing.T) {
 	if code, out := call(t, s, "proposer", "POST", "plan/imports", importBody("r2", ledger(t, fixtureLedger)), session, "s1"); code != 200 || out["question_id"] == nil {
 		t.Fatalf("import = %d %v", code, out)
 	}
-	if n, err := planstore.DecidePlanChanges(ctx, pool, answer(planstore.CardApplyKey), nil); err != nil || n != 1 {
+	if n, err := planstore.DecidePlanChanges(ctx, pool, answer(ownercard.CardApplyKey), nil); err != nil || n != 1 {
 		t.Fatalf("decide the import: %d %v", n, err)
 	}
 	escape := func(id string) string { return strings.ReplaceAll(id, ":", "%3A") }

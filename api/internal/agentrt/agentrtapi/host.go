@@ -7,7 +7,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 )
 
 // host lends the domains' routes (planapi, coordapi) what every /agentrt route
@@ -18,7 +18,7 @@ import (
 type host struct{ a *API }
 
 func (h host) DB() eventlog.DB            { return h.a.DB }
-func (h host) Ask() planstore.Ask         { return h.a.Ask }
+func (h host) Ask() ownercard.Ask         { return h.a.Ask }
 func (h host) Back() time.Time            { return h.a.back() }
 func (h host) ClaimPoll() time.Duration   { return h.a.ClaimPoll }
 func (h host) Logf(f string, args ...any) { h.a.logf(f, args...) }

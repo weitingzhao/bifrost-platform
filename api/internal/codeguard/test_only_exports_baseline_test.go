@@ -65,8 +65,6 @@ var exportedForOtherTests = []string{
 	"api/internal/agentrt/planimport.FromPlanWithRequest",
 	"api/internal/agentrt/planimport.ImportHead",
 	"api/internal/agentrt/planstore.Binding",
-	"api/internal/agentrt/planstore.CardApplyKey",
-	"api/internal/agentrt/planstore.CardRefuseKey",
 	"api/internal/agentrt/planstore.CreatePlanNode",
 	"api/internal/agentrt/planstore.ImportApply",
 	"api/internal/agentrt/planstore.ImportPlan",

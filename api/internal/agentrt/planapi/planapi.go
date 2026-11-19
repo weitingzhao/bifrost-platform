@@ -21,8 +21,8 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
 // Host is what the agent runtime's HTTP layer lends the plan routes. Each
@@ -33,7 +33,7 @@ type Host interface {
 	DB() eventlog.DB
 	// Ask creates the Owner's decision card for a plan change outside the
 	// standing authorization.
-	Ask() planstore.Ask
+	Ask() ownercard.Ask
 	// Sessions counts the retained agent sessions for the plan view's
 	// coverage.sessions; nil leaves it out.
 	Sessions() func(context.Context) (any, error)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"os"
 	"path/filepath"
@@ -11,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
@@ -32,7 +32,7 @@ func TestCardRuleOnTheStore(t *testing.T) {
 	ctx := context.Background()
 	ask, cards, answer, read := rt.Ask(), rt.Cards(), rt.RuleAnswer(), rt.Question()
 	task := "t_01M5192P0JPMJAP63ZKRPXJ2VV"
-	id, err := ask(ctx, planstore.Card{Key: strings.Repeat("ab", 16), Title: "Blocked in M-3: STG walk", Body: "Recommended: Close mission M-3 — why",
+	id, err := ask(ctx, ownercard.Card{Key: strings.Repeat("ab", 16), Title: "Blocked in M-3: STG walk", Body: "Recommended: Close mission M-3 — why",
 		Options: []string{questioncards.BlockedRetry, questioncards.BlockedDrop, "Close mission M-3"}, Recommended: 3, RecommendedWhy: "why",
 		Meanwhile: "the task stays blocked", OwnerDuty: "goal", TaskID: task, Urgency: "when you can", SameByKey: true})
 	if err != nil {
@@ -88,8 +88,8 @@ func TestCardRuleOnTheStore(t *testing.T) {
 // the per-requester quota of 3 went in cleanup wave 1, 2026-11-11).
 func TestRuntimeCardsTheRuleAnswersSkipTheQuotas(t *testing.T) {
 	ctx := context.Background()
-	card := func(i int, byRule bool) planstore.Card {
-		return planstore.Card{Key: fmt.Sprintf("%032x", i), Title: fmt.Sprintf("Blocked in M-%d: a task", i), Body: "b",
+	card := func(i int, byRule bool) ownercard.Card {
+		return ownercard.Card{Key: fmt.Sprintf("%032x", i), Title: fmt.Sprintf("Blocked in M-%d: a task", i), Body: "b",
 			Options: []string{questioncards.BlockedRetry, questioncards.BlockedDrop}, OwnerDuty: "goal", TaskID: "t_01M5192P0JPMJAP63ZKRPXJ2VV",
 			Meanwhile: "m", ByRule: byRule}
 	}

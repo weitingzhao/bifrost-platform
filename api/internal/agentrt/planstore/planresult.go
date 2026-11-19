@@ -1,9 +1,6 @@
 package planstore
 
-import (
-	"context"
-	"errors"
-)
+import "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 
 // Using a plan (W-31 2.2b, the thin chief of staff, slice 3). The acceptance
 // pass reads a submitted plan (planparse.go) and, when it passes, records it
@@ -37,12 +34,8 @@ import (
 // streams. The graph lock comes before any event, as ProposeTasks over HTTP
 // takes it before its own (review 216 A2).
 
-// Withdraw withdraws a card the runtime asked, with a reason; a card that is
-// already answered, withdrawn or gone is not an error.
-type Withdraw func(ctx context.Context, questionID, reason string) error
+// Withdraw withdraws a card the runtime asked (ownercard.Withdraw).
+type Withdraw = ownercard.Withdraw
 
-// ErrAsked: the question store holds this question already, open or
-// answered, under another key (a card of an earlier round, or another plan's).
-// The Owner has been asked; a plan goes on with its default and does not
-// count the card as its own (review 217 B2).
-var ErrAsked = errors.New("store: the Owner was already asked this question")
+// ErrAsked: the Owner has been asked this question already (ownercard.ErrAsked).
+var ErrAsked = ownercard.ErrAsked

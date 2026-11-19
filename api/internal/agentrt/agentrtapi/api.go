@@ -34,6 +34,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/lineageapi"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -59,7 +60,7 @@ type API struct {
 	// Ask creates the Owner's decision card for a plan change outside the
 	// standing authorization (nil answers such a proposal 503) and for a
 	// mission outside the standing envelope (nil leaves it proposed).
-	Ask planstore.Ask
+	Ask ownercard.Ask
 	// Anchor is the fingerprint of the Owner's signing key a signed rule must
 	// verify against (releasepolicy.OwnerKeyFingerprint); empty refuses every
 	// signed rule.

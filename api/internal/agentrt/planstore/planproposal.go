@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 
 	"github.com/jackc/pgx/v5"
@@ -16,52 +17,23 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
-// Ask creates the Owner's decision card for a plan change and returns its
-// question id. key makes a retry find the card it created.
-type Ask func(ctx context.Context, card Card) (string, error)
+// Ask creates the Owner's decision card for a plan change (ownercard.Ask:
+// the contract with the Owner's questions, 2026-11-19).
+type Ask = ownercard.Ask
 
 // ErrAsk: the Owner could not be asked (no question store, or it refused
 // the card: full, or over its hourly bound); nothing was written.
 var ErrAsk = errors.New("store: the Owner cannot be asked now")
 
-// Card is a decision card for the Owner. A plan change's names its key,
-// title and body only, and gets the two options below; a planner's names its
-// own options, the one it goes with when nobody answers (1-based), what
-// happens meanwhile, which of the Owner's duties it is and the task that asks
-// (planresult.go); a mission's (missiondecide.go) names its options, what
-// happens meanwhile, the duty and how soon (Urgency), with no default; a
-// blocked task's (blockedcard.go) names its options, the one its rules
-// recommend (1-based, nothing done on it unanswered) and why (the
-// recommended option's detail in the question store), what happens
-// meanwhile, the duty, the task and how soon. Its body may change between a
-// try that made it and a retry (it says how long ago its mission started):
-// SameByKey lets the store's card under its key stand for it when that card
-// names the same task and options (review 439 A3: no other card's
-// retry may take a card made for other content).
-type Card struct {
-	Key, Title, Body             string
-	Options                      []string
-	Recommended                  int
-	RecommendedWhy               string
-	Meanwhile, OwnerDuty, TaskID string
-	Urgency                      string
-	SameByKey                    bool
-	// ByRule: a card-auto-answer rule in force answers a card of its kind
-	// (RuleAnswers, TD-393), so the question store may take it past its
-	// quotas: the rule, not the Owner, answers it within seconds.
-	ByRule bool
-	// WorkID is a business issue's number (BI-<n>); Link, LinkText its page (issuecard.go).
-	WorkID, Link, LinkText string
-}
+// Card is a decision card for the Owner (ownercard.Card).
+type Card = ownercard.Card
 
-// Options of a plan change's card, as the Owner reads them, and the keys
-// the question store gives them in order, which an answer carries (review
-// 180 A1): the controller applies the change on the first.
+// Options of a plan change's card and their keys (ownercard).
 const (
-	CardApply     = "Apply the change"
-	CardRefuse    = "Do not apply it"
-	CardApplyKey  = "a"
-	CardRefuseKey = "b"
+	CardApply     = ownercard.CardApply
+	CardRefuse    = ownercard.CardRefuse
+	CardApplyKey  = ownercard.CardApplyKey
+	CardRefuseKey = ownercard.CardRefuseKey
 )
 
 // ProposePlanChange records a proposal and, within the standing
