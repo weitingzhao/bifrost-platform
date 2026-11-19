@@ -16,8 +16,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/drill"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/effect"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/observe"
-	"github.com/weitingzhao/bifrost-platform/api/internal/bus/problemloop"
-	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/regressions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/subscribe"
@@ -125,33 +123,7 @@ func (s *Server) promql(ctx context.Context, q string) (map[string]float64, erro
 	return s.telemetry.PromQLSum(ctx, q, effect.PromqlLabels)
 }
 
-// problemWindow is how far back the problem loop reads.
-const problemWindow = 7 * 24 * time.Hour
-
-// handleBusProblems answers GET /api/v1/bus/problems: the letters of the rows
-// that ask for a verdict, and the verdicts given (OWNER_LAW #36), read from
-// the messages when asked.
+// handleBusProblems is GET /api/v1/bus/problems (coord.ProblemsRoute).
 func (s *Server) handleBusProblems(w http.ResponseWriter, r *http.Request) {
-	db := s.recordDB()
-	if db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "the agent runtime database is not connected"})
-		return
-	}
-	subs, err := registry.LoadSubscriptions()
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	kinds := map[string]string{}
-	for _, row := range subs[relay.Tenant].Rows {
-		if k := row.Params[problemloop.ParamAskVerdict]; problemloop.KnownKind(k) {
-			kinds[row.ID] = k
-		}
-	}
-	out, err := coord.ProblemLoop(r.Context(), db, time.Now().Add(-problemWindow), kinds)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, out)
+	coord.ProblemsRoute{DB: s.recordDB}.ServeHTTP(w, r)
 }
