@@ -11,6 +11,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -20,6 +21,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
@@ -80,7 +82,15 @@ func newFrom(t testing.TB, template string) *DB {
 		fmt.Sprintf(`GRANT CONNECT ON DATABASE %s TO agentrt_owner_dev, platform_agentrt_dev, agent_reader`, name),
 		asyncCommit(name),
 	} {
-		if _, err := admin.Exec(ctx, q); err != nil {
+		_, err := admin.Exec(ctx, q)
+		// The server refuses to copy a template a backend is still on, and the
+		// connection that migrated it, or autovacuum, can outlast its 5-second
+		// wait on a busy CI node (ci-platform-cmms6, 2026-11-19).
+		for template != "" && q == create && templateBusy(err) && ctx.Err() == nil {
+			time.Sleep(200 * time.Millisecond)
+			_, err = admin.Exec(ctx, q)
+		}
+		if err != nil {
 			t.Fatalf("%s: %v", q, err)
 		}
 	}
@@ -105,6 +115,12 @@ func newFrom(t testing.TB, template string) *DB {
 		Reader:  fmt.Sprintf("%s dbname=%s user=agent_reader", b, name),
 		Foreign: fmt.Sprintf("%s dbname=%s user=platform_agentrt_stg", b, name),
 	}
+}
+
+// templateBusy says err is the server's refusal to copy a database in use.
+func templateBusy(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "55006"
 }
 
 // asyncCommit lets every session of a throwaway database commit without
