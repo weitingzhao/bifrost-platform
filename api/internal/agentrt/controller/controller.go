@@ -235,17 +235,28 @@ func (c *Controller) see(ctx context.Context, w plan.Watch) (bool, error) {
 			return x.q, x.ok
 		})
 	case plan.WatchCI:
+		// Read before the record's transaction, not inside it: the CI
+		// verdict comes from the evidence ledger, through the same pool,
+		// and a pool of two (STG) with one connection listening has none
+		// left while the transaction holds the other (see WatchDeploy).
 		repo, commit, _ := strings.Cut(w.ID, "@")
-		return seenfacts.SeeCI(ctx, c.DB, repo, commit, func(ctx context.Context) (string, string, bool) {
-			type r struct {
-				s, run string
-				ok     bool
-			}
-			x := bounded(c, ctx, func(ctx context.Context) r { s, run, ok := c.Sources.CI(ctx, repo, commit); return r{s, run, ok} })
-			return x.s, x.run, x.ok
-		})
+		type r struct {
+			s, run string
+			ok     bool
+		}
+		x := bounded(c, ctx, func(ctx context.Context) r { s, run, ok := c.Sources.CI(ctx, repo, commit); return r{s, run, ok} })
+		return seenfacts.SeeCI(ctx, c.DB, repo, commit, func(context.Context) (string, string, bool) { return x.s, x.run, x.ok })
 	case plan.WatchDeploy:
-		return seenfacts.SeeDeploy(ctx, c.DB, w.ID, c.boundedDeployed)
+		// The deployment is read before the record's transaction opens.
+		// Read inside it, the read asked the pool for a second connection
+		// while the transaction held one; STG's pool is two, one of them
+		// held by the bus listener, so every pass waited the full read
+		// timeout and the deployment was never recorded (2026-11-19: the
+		// facts step took 10.004-10.009 s each pass). One controller runs
+		// (platform-workers), so reading first does not reorder two
+		// readers; the lock still orders the recording.
+		commit, ref, ok := c.boundedDeployed(ctx, w.ID)
+		return seenfacts.SeeDeploy(ctx, c.DB, w.ID, func(context.Context, string) (string, map[string]any, bool) { return commit, ref, ok })
 	}
 	return false, nil
 }

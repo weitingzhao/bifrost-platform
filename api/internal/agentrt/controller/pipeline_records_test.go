@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
@@ -199,5 +200,39 @@ func TestRulesLeavesASettledStepUnlocked(t *testing.T) {
 	must(t, err)
 	if moved != 0 {
 		t.Fatalf("moved %d steps", moved)
+	}
+}
+
+// A deployment read that needs the runtime's pool of its own still works when
+// the pool has a single connection: the read happens before the record's
+// transaction takes it, so the deployment is recorded at once instead of
+// after the read timeout, with nothing recorded.
+//
+// Origin: 2026-11-19, STG's facts step took 10.004-10.009 s each pass: its
+// pool of two had one connection on the bus listener and the record's
+// transaction held the other while the deployment read asked for a third.
+func TestDeployReadDoesNotWaitForTheRecordsConnection(t *testing.T) {
+	pool := setup(t)
+	setRule(t, pool, "R2:1-1", `{"gates_passed":[{"test":"T19","spec_sha256":"`+strings.Repeat("ab", 32)+`"}],"env":"stg"}`)
+	cfg, err := pgxpool.ParseConfig(pool.Config().ConnString())
+	must(t, err)
+	cfg.MaxConns = 1
+	one, err := pgxpool.NewWithConfig(ctx, cfg)
+	must(t, err)
+	defer one.Close()
+	c := &controller.Controller{DB: one, ReadTimeout: 2 * time.Second, Sources: controller.Sources{
+		Deployed: func(ctx context.Context, _ string) (string, map[string]any, bool) {
+			var n int
+			if err := one.QueryRow(ctx, `SELECT 1`).Scan(&n); err != nil {
+				return "", nil, false
+			}
+			return strings.Repeat("c", 40), map[string]any{"delivery_run": "run-1"}, true
+		},
+	}}
+	start := time.Now()
+	n, err := c.Facts(ctx)
+	must(t, err)
+	if n != 1 || time.Since(start) > time.Second {
+		t.Fatalf("recorded %d after %v; want the deployment at once", n, time.Since(start))
 	}
 }
