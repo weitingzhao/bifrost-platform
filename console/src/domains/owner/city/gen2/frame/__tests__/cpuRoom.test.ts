@@ -95,10 +95,9 @@ describe('the CPU room', () => {
   // the half dial on each machine. Each instrument the standard one, in its slot, inside the desk.
   it('a machine carries its load bar only; the console the whole CPU, one standard instrument each', () => {
     const svg = cpuRoom(linux).svg
-    expect(svg).toContain('BUSY')
+    expect(svg).toContain('CPU BUSY 20%')
     expect(svg).toContain('CLOCK')
     expect(svg).toContain('2.0 GHz')
-    expect(svg).toContain('20%')
     expect(cpuRoom(asleep).svg).not.toMatch(/CPU CONSOLE/)
   })
   // The Owner, 2026-11-19, three bounds: it looks like a machine tool; no machine hides another (2.5D);
@@ -109,11 +108,12 @@ describe('the CPU room', () => {
     expect(Math.max(LATHE.head, LATHE.tail)).toBeLessThanOrEqual(ROW_GAP_PX)
     expect(Math.max(LATHE.head, LATHE.tail)).toBeLessThanOrEqual(COL_GAP_PX)
   })
+  // Each lathe's four folds, and the console desk's eight for all the cores together (the same folds).
   it('the load lights the folds: none idle, about half at 50%, all at 100% in orange', () => {
     const at = (b: number) => cpuRoom({ ...linux, cores: [core(b, 2e9, 4e9), core(b, 2e9, 4e9)] }).svg
     const amber = (svg: string) => (svg.match(/fill="#ffc94d"/g) ?? []).length
     expect(amber(at(0))).toBe(0)
-    expect(amber(at(0.5))).toBe(2 * 2)
-    expect((at(1).match(/fill="#ff7a45"/g) ?? []).length).toBe(2 * 4)
+    expect(amber(at(0.5))).toBe(2 * 2 + 4)
+    expect((at(1).match(/fill="#ff7a45"/g) ?? []).length).toBe(2 * 4 + 8)
   })
 })

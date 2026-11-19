@@ -48,7 +48,7 @@ export const CPU_UNIT: UnitSpec = {
   inside: [
     { detail: 'cores', thing: 'Machine tools', shows: 'One machine tool per core, in pairs; 16 cores, 16 machines.', where: 'workshop floor' },
     { detail: 'busy.core', thing: 'Each machine’s load bar', shows: 'A bar across each machine’s top, filled as far as that core is busy.', where: 'workshop floor' },
-    { detail: 'busy.core', thing: 'BUSY on the console', shows: 'All the cores together: the average of the load bars, on the standard instrument.', where: 'CPU console' },
+    { detail: 'busy.core', thing: 'Lit folds on the console desk', shows: 'All the cores together: the average, in the same folds as each lathe, with the percent on the plate.', where: 'CPU console' },
     { detail: 'freq', thing: 'CLOCK on the console', shows: 'How fast the cores run (their average), in GHz.', where: 'CPU console' },
     { detail: 'freq.max', thing: 'The CLOCK dial’s end', shows: 'The dial runs up to the fastest the cores can run.', where: 'CPU console' },
     { detail: 'temp', thing: 'CHIP TEMP on the console', shows: 'The chip’s own temperature (one sensor for the whole chip), in °C; red from 80 °C. A sensor per core would stand on its machine.', where: 'CPU console' },

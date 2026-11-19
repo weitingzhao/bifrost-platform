@@ -96,9 +96,8 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
   const avgOf = (v: (number | null)[]) => { const k = v.filter((x): x is number => x != null); return k.length ? k.reduce((a, b) => a + b, 0) / k.length : null }
 
   // The console: a control desk against the back wall for what is measured over the whole CPU, each on the
-  // standard instrument (library/parts.ts), one slot each, the desk as wide as its instruments: how busy
-  // all the cores are (the average of the load bars), how fast they run against their top, how hot the
-  // chip is. Only instruments with a reading; no console when nothing is read. (The Owner, 2026-11-19:
+  // standard instrument (library/parts.ts), one slot each: how fast the cores run against their top, how
+  // hot the chip is; and on the desk's slope, how busy all the cores are, in the lathes' own folds. Only instruments with a reading; no console when nothing is read. (The Owner, 2026-11-19:
   // the whole CPU's percent belongs here; each machine keeps its load bar and nothing that looks like a
   // second one; instruments stood outside the desk and must not.)
   const all = avgOf(r.cores.map(c => c.busy))
@@ -106,10 +105,9 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
   const t = chip[0]
   type Gauge = { row: string; name: string; share: number | null; redFrom: number; reading: string }
   const gauges: Gauge[] = []
-  if (cores > 0) gauges.push({ row: 'core.busy.all', name: 'BUSY', share: encode('core.busy.all', all), redFrom: 0.85, reading: readingText(all, 'share') })
   if (top) gauges.push({ row: 'core.freq', name: 'CLOCK', share: clock != null ? encode('core.freq', clock / top) : null, redFrom: 0.92, reading: readingText(clock, 'Hz') })
   if (t) gauges.push({ row: 'sensor.temp', name: 'CHIP TEMP', share: encode('sensor.temp', t.c / 100), redFrom: 0.8, reading: readingText(t.c, '°C') })
-  const cw = gauges.length * INSTRUMENT + 0.2, cx = fw - 0.3 - cw, cy = 0.22, cd = 0.75, bank = 0.22
+  const cw = Math.max(1.7, gauges.length * INSTRUMENT + 0.2), cx = fw - 0.3 - cw, cy = 0.22, cd = 0.75, bank = 0.22
   const STEEL = faces('#d9dbe0', '#bfc3cb', '#a9aeb8'), DARK = faces('#4a5263', '#353c4a', '#2b313d')
   const zb = 15, zf = 8, BANK_H = zb + INSTRUMENT_H + 4
   const drawConsole = () => {
@@ -125,8 +123,22 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
     g.poly(STEEL.left, [[cx, y1, 0], [cx + cw, y1, 0], [cx + cw, y1, zf], [cx, y1, zf]], 1.2)
     g.poly(STEEL.right, [[cx + cw, y0, 0], [cx + cw, y1, 0], [cx + cw, y1, zf], [cx + cw, y0, zb]], 1.2)
     g.poly(STEEL.top, [[cx, y0, zb], [cx + cw, y0, zb], [cx + cw, y1, zf], [cx, y1, zf]], 1.2)
-    g.poly('#c9ccd3', [[cx + 0.1, y0 + 0.06, zb - 1], [cx + cw - 0.1, y0 + 0.06, zb - 1], [cx + cw - 0.1, y1 - 0.08, zf + 1], [cx + 0.1, y1 - 0.08, zf + 1]], 0.7)
-    g.sign('left', cx, y1, 0.1, Math.min(cw - 0.1, 1.3), 1.5, 'CPU CONSOLE', '#f4efe2', 4.5)
+    // On the desk's slope, the whole CPU's load in the same folds as every lathe's (the Owner, 2026-11-19:
+    // like each machine's, so it reads the same way): eight folds lit from the left as far as all the
+    // cores are busy together, the last in part; its reading on the plate at the front edge.
+    if (cores > 0) {
+      metaphor('core.busy.all')
+      const N = 8, lit = (encode('core.busy.all', all) ?? 0) * N, glow = all != null && all > 0.85 ? '#ff7a45' : '#ffc94d'
+      const a0 = cx + 0.1, span = cw - 0.2, za = zb - 1, zz = zf + 1, ya = y0 + 0.06, yz = y1 - 0.08
+      for (let k = 0; k < N; k++) {
+        const u0 = a0 + (k / N) * span, u1 = a0 + ((k + 1) / N) * span
+        g.poly(k % 2 ? '#4a564f' : '#55625a', [[u0, ya, za], [u1, ya, za], [u1, yz, zz], [u0, yz, zz]], 0.4)
+        const on = Math.max(0, Math.min(1, lit - k))
+        if (on > 0.02) { const um = u0 + (u1 - u0) * on; g.poly(glow, [[u0, ya, za], [um, ya, za], [um, yz, zz], [u0, yz, zz]], 0) }
+      }
+      g.poly('none', [[a0, ya, za], [a0 + span, ya, za], [a0 + span, yz, zz], [a0, yz, zz]], 0.6)
+    }
+    g.sign('left', cx, y1, 0.1, Math.min(cw - 0.1, 1.5), 1.5, cores > 0 ? `CPU BUSY ${readingText(all, 'share')}` : 'CPU CONSOLE', '#f4efe2', 4.5)
   }
 
   // The machines, then the console in front of them, drawn back to front.
@@ -186,7 +198,7 @@ export function cpuRoom(r: CpuRoomReadings): Sprite {
   } else {
     g.text('left', 0.6, 0.18, 30, 'CORES NOT READ', 7, '#8a857a')
   }
-  if (gauges.length) things.push({ at: -1, draw: drawConsole })
+  if (gauges.length || cores > 0) things.push({ at: -1, draw: drawConsole })
   things.sort((a, b) => a.at - b.at).forEach(t => t.draw())
   return g.done()
 }
