@@ -225,6 +225,8 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
       },
       zoomed: on => setZoomed(on),
       up: () => { if (pathRef.current.length > 0) { setSelected(null); goRef.current(pathRef.current.slice(0, -1)) } },
+      // A neighbour's icon on the edge (a district it talks to): straight there.
+      go: to => { setSelected(null); goRef.current(to) },
     })
     s.setLayout(f)
     s.setLight(light)

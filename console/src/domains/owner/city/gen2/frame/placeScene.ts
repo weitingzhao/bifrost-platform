@@ -70,6 +70,8 @@ export type SceneEvents = {
   zoomed?: (on: boolean) => void
   /** Up to the level above (the wheel turned on outwards past the whole page). */
   up?: () => void
+  /** Straight to another place (a neighbour's icon on a district's edge). */
+  go?: (path: string[]) => void
 }
 
 /** What a tap does while arranging: move things between plots, cut plots, or join them. */
@@ -890,7 +892,8 @@ export class PlaceScene extends Phaser.Scene {
     // Routes on the streets are off for now (the Owner, 2026-11-20: first the edge of each small world); the code stays.
     if (ROUTES_ON_STREETS && o.interactive && this.shown?.links && !o.arranging) for (const part of this.ways(this.shown.links, geo, P, plots, placed, W, H)) c.add(part)
     // A district's ground: a crossing on its edge for each district it talks to, on the side that district lies.
-    if (place.kind === 'district' && o.interactive && this.shown?.links && !o.arranging) for (const part of this.borders(this.shown.links, at, P, W, H)) c.add(part)
+    const edgePts: Phaser.Math.Vector2[] = []
+    if (place.kind === 'district' && o.interactive && this.shown?.links && !o.arranging) for (const part of this.borders(this.shown.links, at, P, W, H, edgePts)) c.add(part)
     const byId = new Map(place.children.map(k => [k.id, k]))
     const plotById = new Map(plots.map(p => [p.id, p]))
     const rectOf = (p: Placed): Rect => { const home = plotById.get(p.plot); return home ? geo.thing(geo.plot(home), p.w, p.h) : { x: p.x, y: p.y, w: p.w, h: p.h } }
@@ -924,6 +927,8 @@ export class PlaceScene extends Phaser.Scene {
       const h = heightOf(byId.get(p.id)!, Math.min(p.w, p.h))
       return [P(r.x, r.y, h), P(r.x + r.w, r.y), P(r.x, r.y + r.h), P(r.x + r.w, r.y + r.h).add(new Phaser.Math.Vector2(0, 30))]
     })
+    // The neighbours on the edge are framed too, their signs below them.
+    pts.push(...edgePts)
     const xs = pts.map(q => q.x), ys = pts.map(q => q.y)
     const box = { x: Math.min(...xs) - 40, y: Math.min(...ys) - 16, w: Math.max(...xs) - Math.min(...xs) + 80, h: Math.max(...ys) - Math.min(...ys) + 28 }
     return { c, box }
@@ -1165,7 +1170,7 @@ export class PlaceScene extends Phaser.Scene {
    * lies in the town (so the edge reads like the map), its road running on off the ground. The crossing's
    * sign says who it is and what passes: bus (messages) and metrics (readings), in, out or both ways.
    */
-  private borders(lk: LevelLinks, at: string[], P: Proj, W: number, H: number) {
+  private borders(lk: LevelLinks, at: string[], P: Proj, W: number, H: number, framed: Phaser.Math.Vector2[]) {
     const out: Phaser.GameObjects.GameObject[] = []
     const town = this.shown?.layoutAt([])
     const plots = new Map((town?.plots ?? []).map(p => [p.id, p]))
@@ -1227,10 +1232,29 @@ export class PlaceScene extends Phaser.Scene {
       const b0 = pt(0.05, -ROAD / 2 - 0.16, H1), b1 = pt(0.05, ROAD / 2 + 0.16, H1)
       g.lineStyle(7, this.tone.ink, 1).lineBetween(b0.x, b0.y, b1.x, b1.y)
       g.lineStyle(5, hue, 1).lineBetween(b0.x, b0.y, b1.x, b1.y)
-      // Its sign, past the crossing: who, and what passes each way.
       const say = (w: string, v: { in: number; out: number }) => !v.in && !v.out ? '' : ` · ${w}${v.in ? ` in ${v.in}` : ''}${v.out ? ` out ${v.out}` : ''}`
-      const sign = pt(REACH * 0.55, 0)
-      out.push(this.plate(sign.x, sign.y + 4, `${sp.pass.label}${say('bus', sp.pass.bus)}${say('metrics', sp.pass.metric)}`, hueOf(this.shown!.tree, [sp.pass.id])))
+
+      // The neighbour itself at the road's end, a small block in its colour: a tap goes there (the Owner,
+      // 2026-11-20: from a district see who it deals with, one hop, and go straight to them).
+      const ic = this.add.graphics()
+      const c0 = REACH + 0.55, s0 = 0.45, hh = 16
+      const col = Phaser.Display.Color.ValueToColor(hue)
+      const box = (a: number, b: number, z: number) => pt(c0 + a, b, z)
+      const topF = [box(-s0, -s0, hh), box(s0, -s0, hh), box(s0, s0, hh), box(-s0, s0, hh)]
+      const sides = [[box(s0, -s0, 0), box(s0, s0, 0), box(s0, s0, hh), box(s0, -s0, hh)], [box(-s0, s0, 0), box(s0, s0, 0), box(s0, s0, hh), box(-s0, s0, hh)]]
+      ic.lineStyle(1.6, this.tone.ink, 1)
+      sides.forEach((q, k) => ic.fillStyle(col.clone().darken(k ? 18 : 10).color, 1).fillPoints(q, true).strokePoints(q, true))
+      ic.fillStyle(col.clone().lighten(12).color, 1).fillPoints(topF, true).strokePoints(topF, true)
+      const hit = new Phaser.Geom.Polygon([box(-s0, -s0, hh), box(s0, -s0, hh), box(s0, -s0, 0), box(s0, s0, 0), box(-s0, s0, 0), box(-s0, s0, hh)])
+      ic.setInteractive(hit, Phaser.Geom.Polygon.Contains)
+      ic.input!.cursor = 'pointer'
+      ic.on('pointerover', () => ic.setAlpha(0.75)).on('pointerout', () => ic.setAlpha(1))
+      ic.on('pointerup', (p: Phaser.Input.Pointer) => { if (this.moved(p) <= DRAG) this.events_.go?.([sp.pass.id]) })
+      out.push(ic)
+      // Its sign under it: who, and what passes each way.
+      const sign = pt(REACH + 0.55, 0)
+      framed.push(pt(c0, 0, hh + 10), new Phaser.Math.Vector2(sign.x - 90, sign.y + 40), new Phaser.Math.Vector2(sign.x + 90, sign.y + 40))
+      out.push(this.plate(sign.x, sign.y + 14, `${sp.pass.label}${say('bus', sp.pass.bus)}${say('metrics', sp.pass.metric)}`, hueOf(this.shown!.tree, [sp.pass.id])))
     }
     return out
   }
