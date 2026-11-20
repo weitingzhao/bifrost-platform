@@ -268,13 +268,29 @@ func (s *Scanner) lastOwners(repo string) (*Owners, error) {
 	return &o, nil
 }
 
-// Run scans every repository now and then every Every until ctx ends.
-func (s *Scanner) Run(ctx context.Context, repos []string) {
+// Repos lists the repositories to scan. The platform hands it the Gitea
+// organization's listing, so no repository name is written into this code;
+// on an error the last list read is scanned again.
+type Repos func(ctx context.Context) ([]string, error)
+
+// Run scans every repository repos lists now and then every Every until ctx
+// ends. fallback is scanned while no listing has been read.
+func (s *Scanner) Run(ctx context.Context, repos Repos, fallback []string) {
 	safego.Go("catalog-scan", func() {
 		tick := time.NewTicker(Every)
 		defer tick.Stop()
+		last := fallback
 		for {
-			for _, repo := range repos {
+			if repos != nil {
+				c, cancel := context.WithTimeout(ctx, 30*time.Second)
+				if got, err := repos(c); err != nil {
+					slog.Warn("catalog: list repositories", "err", err)
+				} else if len(got) > 0 {
+					last = got
+				}
+				cancel()
+			}
+			for _, repo := range last {
 				c, cancel := context.WithTimeout(ctx, 2*time.Minute)
 				if _, err := s.ScanOnce(c, repo); err != nil {
 					slog.Warn("catalog: scan", "repo", repo, "err", err)

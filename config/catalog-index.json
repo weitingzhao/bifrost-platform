@@ -16,7 +16,7 @@
     {"class": "dev-session", "what": "the local dev services (bdev)", "sources": ["config/sessions-catalog.yaml"], "reader": "api/internal/devsession"},
     {"class": "trade-api-domain", "what": "the Trade API's route groups the probes read", "sources": ["config/trade-api-domains.yaml"], "reader": "api/internal/probe"},
     {"class": "seat", "what": "the lines (seats) and what each runs", "sources": [], "also": ["bifrost-trade-infra:agent-config/charters/", "shared notes brain/company-map.md"], "note": "no machine-readable source yet"},
-    {"class": "repository", "what": "the repositories of the system", "sources": [], "also": ["AGENT_FACTS.md (workspace root)"], "note": "no machine-readable source yet; the scan covers the CI scorecard's repositories"},
+    {"class": "repository", "what": "the repositories of the system", "sources": [], "also": ["AGENT_FACTS.md (workspace root)"], "note": "no table: the scan reads the Gitea organization's own listing (non-archived, non-empty repositories) each round, so the list is the machine's, not typed"},
     {"class": "data-table", "what": "database tables and who writes them", "sources": [], "also": ["config/domain-ownership.json contracts.shared_storage (shared tables only)"], "note": "no full list yet"},
     {"class": "workload", "what": "what runs in the cluster (namespace/workload)", "sources": [], "also": ["bifrost-trade-infra:k8s/ (manifests)"], "note": "no list keyed to domains yet; run keys <namespace>/<workload>, node/<name>, host/<name> are agreed with the metrics line"}
   ]

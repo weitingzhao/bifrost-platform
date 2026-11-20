@@ -194,3 +194,21 @@ func TestPathRowsCoverDirectoriesFilesAndTheRoot(t *testing.T) {
 		t.Fatalf("root owner = %+v", a)
 	}
 }
+
+// 2026-11-20 (0.2 map line): the scan covered only the CI scorecard's two
+// repositories; it now follows the organization's own listing, so no
+// repository name is written into the platform (two flywheels).
+func TestRunScansWhatTheListingNames(t *testing.T) {
+	seen := make(chan string, 8)
+	s := &Scanner{Kept: memKept{}, Source: func(_ context.Context, repo string) (Tree, error) {
+		seen <- repo
+		return Tree{Commit: "c", Read: func(string) ([]byte, bool, error) { return nil, false, nil }}, nil
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.Run(ctx, func(context.Context) ([]string, error) { return []string{"a", "b"}, nil }, []string{"fallback"})
+	got := map[string]bool{<-seen: true, <-seen: true}
+	if !got["a"] || !got["b"] {
+		t.Fatalf("scanned %v, want a and b from the listing", got)
+	}
+}
