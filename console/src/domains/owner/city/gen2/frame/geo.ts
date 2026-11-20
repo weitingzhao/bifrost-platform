@@ -14,10 +14,13 @@ export const WAY = 1
 /**
  * One lane, the same width on every level and in every view (the Owner, 2026-11-20: roads must be real roads,
  * and one day cars will drive them, the same size everywhere). A highway (the town's ways, a district's ring)
- * has two lanes each way; a local street (the ways inside a district or a building's grounds) one each way.
+ * has two lanes each way either side of a central reservation; a local street (the ways inside a district or a
+ * building's grounds) one each way, a dashed line between.
  */
 export const LANE = 0.2
-export const HIGHWAY_HALF = 2 * LANE
+/** A highway's central reservation, between its two directions (no paint: a kerbed strip of grass). */
+export const MEDIAN = 0.12
+export const HIGHWAY_HALF = 2 * LANE + MEDIAN / 2
 export const LOCAL_HALF = LANE
 /** The pavement either side of the asphalt. */
 export const PAVEMENT = 0.12

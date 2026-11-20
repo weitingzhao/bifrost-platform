@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser'
 import { defaultPlan, fitsIn, plotsOf, type Placed, type Plot, type Street } from './grid'
-import { BUFFER, geoOf, GUTTER, HIGHWAY_HALF, LANE, LOCAL_HALF, PAVEMENT, WAY, type Geo, type Rect } from './geo'
+import { BUFFER, geoOf, GUTTER, HIGHWAY_HALF, LANE, LOCAL_HALF, MEDIAN, PAVEMENT, WAY, type Geo, type Rect } from './geo'
 import { functionAt, isWired, type Place } from './places'
 import { hueOf, terrainOf, tintOf } from './theme'
 import { PALETTE, TERRAIN, type Light, type Palette } from './light'
@@ -911,7 +911,7 @@ export class PlaceScene extends Phaser.Scene {
       this.storey(g, P, W, H)
     } else {
       // Highways and local streets (geo.ts LANE): the town's ways and a district's ring are highways, two
-      // lanes each way, a double yellow line down the middle and dashed lane lines; the streets inside a district
+      // lanes each way either side of a central reservation; the streets inside a district
       // are local, one lane each way, a dashed centre line. Pavement either side, a kerb line at the asphalt.
       const isHighway = (st: Street) => grade === 'highway' || st.kind === 'ring'
       const half = (st: Street) => (isHighway(st) ? HIGHWAY_HALF : LOCAL_HALF)
@@ -933,10 +933,20 @@ export class PlaceScene extends Phaser.Scene {
           if (along2 > h.from - WAY / 2 && along2 < h.to + WAY / 2) for (let u = h.at - h.h + 0.04; u < h.at + h.h - 0.05; u += 0.09) g.fillPoints(quadOf(P, { x: Math.min(along2, along2 + dir * 0.2), y: u, w: 0.2, h: 0.05 }), true)
         }
       }
-      g.lineStyle(1.1, 0xf0c95e, 0.95)
-      for (const st of streets) if (isHighway(st)) for (const off of [-0.03, 0.03]) solid(st, off)
+      // A highway's central reservation: a kerbed strip of grass between its two directions, no paint; a
+      // dashed white line between its two lanes each way.
+      g.fillStyle(ter.grass, 1)
+      for (const st of streets) if (isHighway(st)) g.fillPoints(strip(st, MEDIAN / 2, 0, Math.max(half(st), WAY / 2) - 0.02), true)
+      g.lineStyle(1, this.tone.curb, 1)
+      for (const st of streets) if (isHighway(st)) for (const off of [-MEDIAN / 2, MEDIAN / 2]) solid(st, off)
       g.lineStyle(1, this.tone.paint, 0.85)
-      for (const st of streets) if (isHighway(st)) for (const off of [-LANE, LANE]) dashesAt(st, off)
+      for (const st of streets) if (isHighway(st)) for (const off of [-(MEDIAN / 2 + LANE), MEDIAN / 2 + LANE]) dashesAt(st, off)
+      // Where two ways cross, the box is open asphalt: the reservations and lane lines stop at it.
+      g.fillStyle(this.tone.asphalt, 1)
+      for (const v of vs) for (const h of hs) {
+        if (h.at < v.from - 0.01 || h.at > v.to + 0.01 || v.at < h.from - 0.01 || v.at > h.to + 0.01) continue
+        g.fillPoints(quadOf(P, { x: v.at - v.h, y: h.at - h.h, w: 2 * v.h, h: 2 * h.h }), true)
+      }
       g.lineStyle(1.2, this.tone.paint, 0.9)
       for (const st of streets) if (!isHighway(st)) dashesAt(st, 0)
     }
@@ -1038,13 +1048,15 @@ export class PlaceScene extends Phaser.Scene {
       // its hall stands as, else its largest building, on its plate, filling the footprint. Its ports are its
       // streets out to the highway. The same picture stands in a port.
       const ter = TERRAIN[terrainOf(this.shown.tree, path)][this.light]
+      // On the town the plate stands in from its plot, so its streets out have room to reach the highway.
+      const plate = o.bare ? r : { x: r.x + 0.45, y: r.y + 0.45, w: r.w - 0.9, h: r.h - 0.9 }
       const g = this.add.graphics()
-      g.fillStyle(tintOf(this.shown.tree, path, this.light, ter.lot)).fillPoints(quadOf(P, r), true)
-      g.lineStyle(1.4, this.tone.ink).strokePoints(quadOf(P, r), true)
+      g.fillStyle(tintOf(this.shown.tree, path, this.light, ter.lot)).fillPoints(quadOf(P, plate), true)
+      g.lineStyle(1.4, this.tone.ink).strokePoints(quadOf(P, plate), true)
       parts.push(g)
       if (!o.bare && o.interactive && this.shown.allLinks && path.length === 1) {
         stubG = this.add.graphics()
-        this.exits(stubG, k, at, r, P, (fx, fy) => ({ x: r.x + r.w * fx, y: r.y + r.h * fy }))
+        this.exits(stubG, k, at, plate, P, (fx, fy) => ({ x: plate.x + plate.w * fx, y: plate.y + plate.h * fy }))
       }
       const looks = new Map(this.looks(k, lay.placed, path).map(l => [l.id, l.key]))
       const icon = (k.icon ? lay.placed.find(p => p.id === k.icon) : undefined)
@@ -1054,8 +1066,8 @@ export class PlaceScene extends Phaser.Scene {
       if (icon && key && an && this.textures.exists(key)) {
         // The landmark on a lot inset in its plate, at its own size scaled to the footprint.
         // A token, not the building at full size: its long side fits two thirds of the plate, centred.
-        const side = Math.min(r.w, r.h) * 0.66, fit = side / Math.max(icon.w, icon.h)
-        const q = { x: r.x + (r.w - icon.w * fit) / 2, y: r.y + (r.h - icon.h * fit) / 2 }
+        const side = Math.min(plate.w, plate.h) * 0.75, fit = side / Math.max(icon.w, icon.h)
+        const q = { x: plate.x + (plate.w - icon.w * fit) / 2, y: plate.y + (plate.h - icon.h * fit) / 2 }
         const base = P(q.x, q.y)
         parts.push(this.add.image(base.x, base.y, key).setOrigin(an.ax, an.ay).setScale(fit * this.spriteFit(key, Math.min(icon.w, icon.h)) / RS))
       }
@@ -1225,28 +1237,32 @@ export class PlaceScene extends Phaser.Scene {
     // A local street, one lane each way, the same as the block's own.
     const HALF = LOCAL_HALF + 0.04, FLARE = 0.18
     // A street from a point on the block's ring (x, y) out along (dx, dy) to the highway's near kerb.
-    const street = (x: number, y: number, dx: number, dy: number) => {
+    const street = (x: number, y: number, dx: number, dy: number, used: boolean) => {
+      const A = used ? 1 : 0.4
       const len = dx ? ground.x + ground.w + BUFFER - x : ground.y + ground.h + BUFFER - y
       const ux = -dy, uy = dx
       const pt = (a: number, b: number) => P(x + dx * a + ux * b, y + dy * a + uy * b)
       const outline = (h: number, f: number) => [pt(0, -h), pt(len - FLARE, -h), pt(len, -h - f), pt(len, h + f), pt(len - FLARE, h), pt(0, h)]
-      g.fillStyle(this.tone.kerb, 1).fillPoints(outline(HALF + 0.06, FLARE), true)
-      g.fillStyle(this.tone.asphalt, 1).fillPoints(outline(HALF - 0.04, FLARE), true)
-      g.lineStyle(1, this.tone.curb, 1)
+      g.fillStyle(this.tone.kerb, A).fillPoints(outline(HALF + 0.06, FLARE), true)
+      g.fillStyle(this.tone.asphalt, A).fillPoints(outline(HALF - 0.04, FLARE), true)
+      g.lineStyle(1, this.tone.curb, A)
       for (const side of [-1, 1]) { const p0 = pt(0, side * (HALF - 0.04)), p1 = pt(len - FLARE, side * (HALF - 0.04)), p2 = pt(len, side * (HALF - 0.04 + FLARE)); g.lineBetween(p0.x, p0.y, p1.x, p1.y).lineBetween(p1.x, p1.y, p2.x, p2.y) }
       // The mouth: a zebra across the street, a stop line behind it.
-      g.fillStyle(this.tone.paint, 1)
+      g.fillStyle(this.tone.paint, A)
       for (let v = -HALF + 0.06; v < HALF - 0.05; v += 0.09) g.fillPoints([pt(len - 0.3, v), pt(len - 0.12, v), pt(len - 0.12, v + 0.045), pt(len - 0.3, v + 0.045)], true)
       const s0 = pt(len - 0.38, -HALF + 0.05), s1 = pt(len - 0.38, HALF - 0.05)
-      g.lineStyle(1.4, this.tone.paint, 1).lineBetween(s0.x, s0.y, s1.x, s1.y)
+      g.lineStyle(1.4, this.tone.paint, A).lineBetween(s0.x, s0.y, s1.x, s1.y)
       // The centre line carried on from inside.
       const c0 = pt(0, 0), c1 = pt(len - 0.42, 0)
-      g.lineStyle(0.8, this.tone.paint, 0.8).lineBetween(c0.x, c0.y, c1.x, c1.y)
+      g.lineStyle(0.8, this.tone.paint, 0.8 * A).lineBetween(c0.x, c0.y, c1.x, c1.y)
     }
+    // Every port is a way out of the block, so the entrances read before anything uses them: a used one
+    // solid, an open one faint (the Owner, 2026-11-20: the entrances must show).
     for (let i = 0; i < PORTS; i++) {
       const f = portAt(i, PORTS)
-      if (slots.in.named[i]) { const p = sheetAt(f, 1); street(p.x, p.y, 0, 1) }
-      if (slots.out.named[i]) { const p = sheetAt(1, f); street(p.x, p.y, 1, 0) }
+      const pi = sheetAt(f, 1), po = sheetAt(1, f)
+      street(pi.x, pi.y, 0, 1, !!slots.in.named[i])
+      street(po.x, po.y, 1, 0, !!slots.out.named[i])
     }
     // A small box on the block: bottom at z 0, top at h.
     const box = (x: number, y: number, w: number, h: number, col: number) => {
