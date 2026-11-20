@@ -51,6 +51,14 @@ func TestPanicLeavesZeroAndOtherProbeCompletes(t *testing.T) {
 	if !reflect.DeepEqual(got, []int{0, 7}) {
 		t.Fatalf("got %v", got)
 	}
+	// 2026-11-20: the guard's deferred wg.Done runs before its deferred
+	// safego.Recover counts the panic, so Wait can return a moment before the
+	// count moves (failed 1 in 300 runs on main 17e582e4, and in a full -p 4
+	// run after the fold). Wait for the count instead of reading it once.
+	deadline := time.Now().Add(time.Second)
+	for safego.Contained() != before+1 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
 	if safego.Contained() != before+1 {
 		t.Fatal("panic not counted")
 	}
