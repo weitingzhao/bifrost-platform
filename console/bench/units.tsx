@@ -8,6 +8,8 @@ import { STAGES, stagesOf, unitRulesBroken, type Detail, type StageId, type Unit
 import { ROOM_STANDARDS } from '../src/domains/owner/city/gen2/frame/units/standards'
 import { UNITS, UNIT_PLAN, cpuRoomReadings } from '../src/domains/owner/city/gen2/content/units/cpu'
 import { memoryRoomReadings } from '../src/domains/owner/city/gen2/content/units/memory'
+import { diskRoomReadings } from '../src/domains/owner/city/gen2/content/units/disk'
+import { baysOf, diskRoom, diskRoomShape } from '../src/domains/owner/city/gen2/frame/units/diskRoom'
 import { freezersOf, memoryRoom, memoryRoomShape, sectionsOf } from '../src/domains/owner/city/gen2/frame/units/memoryRoom'
 import { cpuRoom, cpuRoomShape, cpuSummaryOf, machinesOf } from '../src/domains/owner/city/gen2/frame/units/cpuRoom'
 import { readingText } from '../src/domains/owner/city/gen2/frame/library/parts'
@@ -106,6 +108,12 @@ const ROOM_DRAW: Record<string, RoomDraw> = {
     const { out, ids } = rowsDrawn(() => memoryRoom(read))
     const bench = freezersOf(read).map(s => `${s.id} ${readingText(s.bytes, 'bytes')}`).join(' · ')
     return { sprite: out, ids, count: read.total ?? 0, hint: `${readingText(read.total, 'bytes')} → ${sectionsOf(read)} freezers → a ${memoryRoomShape(read).join('×')} room · ${bench || 'nothing read'} · swap ${readingText(read.swapUsed, 'bytes')} of ${readingText(read.swapTotal, 'bytes')}` }
+  },
+  disk: (r, host) => {
+    const read = diskRoomReadings(r.reads.disk as never, host)
+    const { out, ids } = rowsDrawn(() => diskRoom(read))
+    const vols = read.volumes.map(v => `${v.name} ${readingText(v.size, 'bytes')} → ${baysOf(v)} bays`).join(' · ')
+    return { sprite: out, ids, count: read.drives.length + read.volumes.length, hint: `${read.drives.length} drives → ${read.drives.length} docks · ${vols || 'no volumes read'} · ${read.arrays.length} arrays → a ${diskRoomShape(read).join('×')} room` }
   },
 }
 const PLAN = [['cpu', 'Workshop', 'CPU'], ['memory', 'Cold store', 'Memory'], ['disk', 'Warehouse', 'Disk']] as const

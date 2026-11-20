@@ -183,7 +183,7 @@ export function tallyBoard(g: Draw, face: 'left' | 'right', x: number, y: number
  * can be shown is shown to one standard). A percent whole; a clock in GHz to a tenth; a temperature
  * whole in °C; bytes in MB, GB or TB (a tenth above a GB); a rate in kB/s or MB/s; nothing read is a dash.
  */
-export type ReadingUnit = 'share' | 'Hz' | '°C' | 'bytes' | 'bytes/s' | 'count'
+export type ReadingUnit = 'share' | 'Hz' | '°C' | 'bytes' | 'bytes/s' | 'count' | 'seconds' | 'per second'
 export function readingText(v: number | null, unit: ReadingUnit): string {
   if (v == null || !Number.isFinite(v)) return '—'
   if (unit === 'share') return `${Math.round(v * 100)}%`
@@ -191,6 +191,8 @@ export function readingText(v: number | null, unit: ReadingUnit): string {
   if (unit === '°C') return `${Math.round(v)}°C`
   if (unit === 'bytes') return v >= 1e12 ? `${(v / 1e12).toFixed(1)} TB` : v >= 1e9 ? `${(v / 1e9).toFixed(1)} GB` : `${Math.round(v / 1e6)} MB`
   if (unit === 'bytes/s') return v >= 1e6 ? `${(v / 1e6).toFixed(1)} MB/s` : `${Math.round(v / 1e3)} kB/s`
+  if (unit === 'seconds') return v >= 1 ? `${v.toFixed(1)} s` : v >= 0.01 ? `${Math.round(v * 1e3)} ms` : `${(v * 1e3).toFixed(1)} ms`
+  if (unit === 'per second') return `${v >= 10 ? Math.round(v) : v.toFixed(1)}/s`
   return String(Math.round(v))
 }
 
