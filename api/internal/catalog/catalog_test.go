@@ -122,8 +122,14 @@ func TestFirstSeenSurvivesScansAndAFailedRead(t *testing.T) {
 }
 
 func TestReviewsAttachAndOnlyDeleteOrUnknownStay(t *testing.T) {
-	if _, err := ParseReviews([]byte(`{"reviews":{"mcp/x":{"verdict":"claim"}}}`)); err == nil {
-		t.Fatal("a claim verdict must be refused: a claimed entry becomes a row")
+	if _, err := ParseReviews([]byte(`{"reviews":{"mcp/x":{"verdict":"claim","reason":"r"}}}`)); err == nil {
+		t.Fatal("a claim with no domain must be refused: a claim names who should own it")
+	}
+	if _, err := ParseReviews([]byte(`{"reviews":{"mcp/x":{"verdict":"delete"}}}`)); err == nil {
+		t.Fatal("a verdict with no reason must be refused: every entry is looked at, and the look is written down")
+	}
+	if _, err := ParseReviews([]byte(`{"reviews":{"mcp/x":{"verdict":"claim","domain":"tenant","reason":"r"}}}`)); err != nil {
+		t.Fatal(err)
 	}
 	tr := tree("mcp/x/a.ts")
 	tr.Files = append(tr.Files, ReviewPath)
@@ -164,5 +170,27 @@ func TestRouteReadsOnlyWhatWasKept(t *testing.T) {
 	Route{Scanner: s}.ServeHTTP(w, httptest.NewRequest("GET", "/catalog/unperceived?repo=a/b", nil))
 	if w.Code != 400 {
 		t.Fatalf("bad repo: code %d", w.Code)
+	}
+}
+
+// 2026-11-20 (0.2 map line, segment 1 entry format): code outside the Go
+// packages and the console's groups (mcp/, agent/, scripts/, root files) had
+// no row form at all, so it could never leave the pool; path rows give it one.
+func TestPathRowsCoverDirectoriesFilesAndTheRoot(t *testing.T) {
+	own := `{"packages":{"api/internal/a":{"domains":["plan"]}},"paths":{"mcp/trade":{"domains":["tenant"]},".":{"domains":["foundation"]},"scripts/x.sh":{"domains":["compute"]}}}`
+	tab, err := ParseTable([]byte(own), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := paths(Scan(tab, []string{"mcp/trade/src/i.ts", "Makefile", "scripts/x.sh", "scripts/y.sh", "mcp/platform/a.ts"}, nil))
+	if len(got) != 2 || got["scripts"] == "" || got["mcp/platform"] == "" {
+		t.Fatalf("pool = %v, want only scripts (y.sh) and mcp/platform", got)
+	}
+	o := ownersOf("r", "c", tab, time.Time{})
+	if a := OwnerOf(&o, nil, "mcp/trade/src/i.ts"); !a.Perceived || a.By != "path mcp/trade" || a.Domains[0] != "tenant" {
+		t.Fatalf("owner = %+v", a)
+	}
+	if a := OwnerOf(&o, nil, "Makefile"); !a.Perceived || a.By != "path ." {
+		t.Fatalf("root owner = %+v", a)
 	}
 }

@@ -24,6 +24,7 @@ type Owners struct {
 	Console   string              `json:"console"`
 	Packages  map[string][]string `json:"packages"`
 	Groups    map[string][]string `json:"groups"`
+	Paths     map[string][]string `json:"paths,omitempty"`
 }
 
 func ownersOf(repo, commit string, t Table, now time.Time) Owners {
@@ -34,6 +35,12 @@ func ownersOf(repo, commit string, t Table, now time.Time) Owners {
 	}
 	for _, g := range t.Groups {
 		o.Groups[g] = t.Domains[g]
+	}
+	if len(t.Paths) > 0 {
+		o.Paths = map[string][]string{}
+		for _, p := range t.Paths {
+			o.Paths[p] = t.Domains[p]
+		}
 	}
 	return o
 }
@@ -86,6 +93,24 @@ func OwnerOf(o *Owners, pool *Pool, p string) Owner {
 					return covered(out, d, "package "+dir)
 				}
 			}
+		}
+	}
+	if o.HasTable {
+		paths := make([]string, 0, len(o.Paths))
+		for k := range o.Paths {
+			paths = append(paths, k)
+		}
+		sortLongestFirst(paths)
+		inPool := false
+		if pool != nil {
+			for _, e := range pool.Entries {
+				if e.Kind == "go-package" && (p == e.Path || strings.HasPrefix(p, e.Path+"/")) {
+					inPool = true
+				}
+			}
+		}
+		if row := PathRow(paths, p); row != "" && !inPool {
+			return covered(out, o.Paths[row], "path "+row)
 		}
 	}
 	if pool != nil {

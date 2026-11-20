@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "about": "Reviews of the map's unperceived pool for this repository (0.2 map line). claim: the domain that should own it; the entry leaves the pool when that domain adds its row. delete: to be deleted (who uses it was measured first). unknown: cannot be measured. Every review has a reason.",
+  "reviews": {
+    ".husky": {
+      "verdict": "claim",
+      "reason": "git hooks that run the commit checks and trailers: CI and verification",
+      "by": "seat:catalog",
+      "on": "2026-11-20",
+      "domain": "verification"
+    },
+    "agent/deploy": {
+      "verdict": "claim",
+      "reason": "launchd plists and installers for agentd, operator-plane and the peer watchdog on the Mac mini (operator-plane is compute's)",
+      "by": "seat:catalog",
+      "on": "2026-11-20",
+      "domain": "compute"
+    },
+    "agent/git-bridge": {
+      "verdict": "claim",
+      "reason": "the local git-bridge service (bdev session git-bridge :8785); dev sessions are compute's (api/internal/devsession)",
+      "by": "seat:catalog",
+      "on": "2026-11-20",
+      "domain": "compute"
+    },
+    "agent/satellite-probe-bridge": {
+      "verdict": "claim",
+      "reason": "the probe bridge to the Trade satellite (bdev session probe-bridge :8786): tenant integration",
+      "by": "seat:catalog",
+      "on": "2026-11-20",
+      "domain": "tenant"
+    },
+    "config/build_gates": {
+      "verdict": "claim",
+      "reason": "P6 build gate and sign-off records: release gates",
+      "by": "seat:catalog",
+      "on": "2026-11-20",
+      "domain": "verification"
+    },
+    "console/bench": {
+      "verdict": "claim",
+      "reason": "console bench and builder; last change was the City page (LANE-COCKPIT, 2026-11-18)",
+      "by": "seat:catalog",
+      "on": "2026-11-20",
+      "domain": "owner"
+    },
+    "mcp/trade": {
+      "verdict": "claim",
+      "reason": "the Trade MCP server: tenant integration",
+      "by": "seat:catalog",
+      "on": "2026-11-20",
+      "domain": "tenant"
+    },
+    "scripts/agent": {
+      "verdict": "claim",
+      "reason": "host bootstrap and Mac mini deploy scripts",
+      "by": "seat:catalog",
+      "on": "2026-11-20",
+      "domain": "compute"
+    },
+    "scripts/ci": {
+      "verdict": "claim",
+      "reason": "the CI scripts the pipelines run",
+      "by": "seat:catalog",
+      "on": "2026-11-20",
+      "domain": "verification"
+    },
+    "site": {
+      "verdict": "delete",
+      "reason": "built output of a retired static docs site (sitemap, assets); last change 2026-08-17; nothing in the repository, the images or the pipelines references site/ (git grep, 2026-11-20); code, no data: deleting it is reversible from git",
+      "by": "seat:catalog",
+      "on": "2026-11-20"
+    },
+    "site/ARCHITECTURE": {
+      "verdict": "delete",
+      "reason": "built output of a retired static docs site (sitemap, assets); last change 2026-08-17; nothing in the repository, the images or the pipelines references site/ (git grep, 2026-11-20); code, no data: deleting it is reversible from git",
+      "by": "seat:catalog",
+      "on": "2026-11-20"
+    },
+    "site/TRADE_CONTRACT": {
+      "verdict": "delete",
+      "reason": "built output of a retired static docs site (sitemap, assets); last change 2026-08-17; nothing in the repository, the images or the pipelines references site/ (git grep, 2026-11-20); code, no data: deleting it is reversible from git",
+      "by": "seat:catalog",
+      "on": "2026-11-20"
+    },
+    "site/agent": {
+      "verdict": "delete",
+      "reason": "built output of a retired static docs site (sitemap, assets); last change 2026-08-17; nothing in the repository, the images or the pipelines references site/ (git grep, 2026-11-20); code, no data: deleting it is reversible from git",
+      "by": "seat:catalog",
+      "on": "2026-11-20"
+    },
+    "site/assets": {
+      "verdict": "delete",
+      "reason": "built output of a retired static docs site (sitemap, assets); last change 2026-08-17; nothing in the repository, the images or the pipelines references site/ (git grep, 2026-11-20); code, no data: deleting it is reversible from git",
+      "by": "seat:catalog",
+      "on": "2026-11-20"
+    },
+    "site/mcp": {
+      "verdict": "delete",
+      "reason": "built output of a retired static docs site (sitemap, assets); last change 2026-08-17; nothing in the repository, the images or the pipelines references site/ (git grep, 2026-11-20); code, no data: deleting it is reversible from git",
+      "by": "seat:catalog",
+      "on": "2026-11-20"
+    },
+    "site/overview": {
+      "verdict": "delete",
+      "reason": "built output of a retired static docs site (sitemap, assets); last change 2026-08-17; nothing in the repository, the images or the pipelines references site/ (git grep, 2026-11-20); code, no data: deleting it is reversible from git",
+      "by": "seat:catalog",
+      "on": "2026-11-20"
+    },
+    "site/search": {
+      "verdict": "delete",
+      "reason": "built output of a retired static docs site (sitemap, assets); last change 2026-08-17; nothing in the repository, the images or the pipelines references site/ (git grep, 2026-11-20); code, no data: deleting it is reversible from git",
+      "by": "seat:catalog",
+      "on": "2026-11-20"
+    }
+  }
+}

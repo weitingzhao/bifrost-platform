@@ -4,8 +4,9 @@
   "classes": [
     {"class": "domain", "what": "the domains, their tier and contracts", "sources": ["config/domain-ownership.json"], "reader": "api/internal/catalog", "also": ["bifrost-trade-infra:agent-config/charters/", "shared notes brain/company-map.md"]},
     {"class": "go-package", "what": "who owns each Go package of the platform", "sources": ["config/domain-ownership.json"], "reader": "api/internal/catalog"},
+    {"class": "code-path", "what": "who owns code outside the Go packages and the console groups (mcp/, agent/, scripts/, config files, root files)", "sources": ["config/domain-ownership.json"], "reader": "api/internal/catalog", "note": "the paths section; a Go package is covered only by its package row"},
     {"class": "console-group", "what": "who owns each front-end directory of the console", "sources": ["console/domain-ownership.json"], "reader": "api/internal/catalog"},
-    {"class": "unperceived", "what": "what no row covers, with first-seen time and review", "sources": ["config/catalog-review.json"], "reader": "api/internal/catalog", "note": "the pool itself is kept by the scan (statefile catalog/unperceived-<repo>); the file holds only the delete and unknown verdicts"},
+    {"class": "unperceived", "what": "what no row covers, with first-seen time and review", "sources": ["config/catalog-review.json"], "reader": "api/internal/catalog", "note": "the pool itself is kept by the scan (statefile catalog/unperceived-<repo>); the file holds the claim (with the proposed domain), delete and unknown verdicts, each with a reason"},
     {"class": "event", "what": "the event types on the bus and who subscribes", "sources": ["api/internal/bus/registry/rocket.yaml"], "reader": "api/internal/bus/registry"},
     {"class": "action", "what": "the catalogued actions and their tiers", "sources": ["config/actions-catalog.json"], "reader": "api/internal/actions", "also": ["mcp/platform/src/actionTiers.ts"]},
     {"class": "node", "what": "the machines of the cluster and their roles", "sources": ["config/topology.yaml"], "reader": "api/internal/config", "also": ["compute line's home table (outside this repository)"]},

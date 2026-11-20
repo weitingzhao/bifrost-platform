@@ -33,8 +33,11 @@ const (
 	ReviewPath = "config/catalog-review.json"
 )
 
-// The verdicts a review may give an entry that stays in the pool.
+// The verdicts a review may give an entry. A claim names the domain it
+// proposes and stays a review until that domain's row is in the table (the
+// domain fills its own row; the map line does not).
 const (
+	VerdictClaim   = "claim"
 	VerdictDelete  = "delete"
 	VerdictUnknown = "unknown"
 )
@@ -46,7 +49,11 @@ type Table struct {
 	Groups   []string        // front-end group prefixes, longest first
 	GoRoots  []string        // top directories of the package rows
 	Console  string          // top directory of the front end, "" for none
-	// Domains are the domains each package row and each group names.
+	// Paths are the table's path rows (paths): directories or files outside
+	// the Go packages and the front end's groups, longest first; "." is the
+	// files at the repository's root.
+	Paths []string
+	// Domains are the domains each package row, group and path row names.
 	Domains map[string][]string
 }
 
@@ -58,6 +65,7 @@ type row struct {
 func ParseTable(own, console []byte) (Table, error) {
 	var o struct {
 		Packages map[string]row `json:"packages"`
+		Paths    map[string]row `json:"paths"`
 	}
 	if err := json.Unmarshal(own, &o); err != nil {
 		return Table{}, fmt.Errorf("%s does not parse: %w", OwnershipPath, err)
@@ -71,6 +79,15 @@ func ParseTable(own, console []byte) (Table, error) {
 			roots[r] = true
 		}
 	}
+	for p, r := range o.Paths {
+		p = strings.Trim(p, "/")
+		if p == "" {
+			p = "."
+		}
+		t.Paths = append(t.Paths, p)
+		t.Domains[p] = r.Domains
+	}
+	sortLongestFirst(t.Paths)
 	for r := range roots {
 		t.GoRoots = append(t.GoRoots, r)
 	}
@@ -91,22 +108,39 @@ func ParseTable(own, console []byte) (Table, error) {
 			t.Groups = append(t.Groups, g)
 			t.Domains[g] = r.Domains
 		}
-		sort.Slice(t.Groups, func(i, j int) bool {
-			if len(t.Groups[i]) != len(t.Groups[j]) {
-				return len(t.Groups[i]) > len(t.Groups[j])
-			}
-			return t.Groups[i] < t.Groups[j]
-		})
+		sortLongestFirst(t.Groups)
 	}
 	return t, nil
+}
+
+func sortLongestFirst(s []string) {
+	sort.Slice(s, func(i, j int) bool {
+		if len(s[i]) != len(s[j]) {
+			return len(s[i]) > len(s[j])
+		}
+		return s[i] < s[j]
+	})
+}
+
+// PathRow is the path row that covers f, "" for none.
+func PathRow(paths []string, f string) string {
+	for _, p := range paths {
+		if (p == "." && !strings.Contains(f, "/")) || f == p || strings.HasPrefix(f, p+"/") {
+			return p
+		}
+	}
+	return ""
 }
 
 // Review is one line of ReviewPath.
 type Review struct {
 	Verdict string `json:"verdict"`
-	Reason  string `json:"reason"`
-	By      string `json:"by"`
-	On      string `json:"on"`
+	// Domain is the domain a claim proposes; the entry leaves the pool when
+	// that domain's row is in the table.
+	Domain string `json:"domain,omitempty"`
+	Reason string `json:"reason"`
+	By     string `json:"by"`
+	On     string `json:"on"`
 }
 
 // ParseReviews reads ReviewPath; an empty file is no review.
@@ -121,8 +155,13 @@ func ParseReviews(raw []byte) (map[string]Review, error) {
 		return nil, fmt.Errorf("%s does not parse: %w", ReviewPath, err)
 	}
 	for p, v := range r.Reviews {
-		if v.Verdict != VerdictDelete && v.Verdict != VerdictUnknown {
-			return nil, fmt.Errorf("%s: %s has verdict %q; only %q and %q stay in the pool (a claimed entry becomes a row)", ReviewPath, p, v.Verdict, VerdictDelete, VerdictUnknown)
+		switch {
+		case v.Verdict == VerdictClaim && v.Domain == "":
+			return nil, fmt.Errorf("%s: %s is claimed for no domain", ReviewPath, p)
+		case v.Verdict != VerdictClaim && v.Verdict != VerdictDelete && v.Verdict != VerdictUnknown:
+			return nil, fmt.Errorf("%s: %s has verdict %q; a verdict is %q (with a domain), %q or %q", ReviewPath, p, v.Verdict, VerdictClaim, VerdictDelete, VerdictUnknown)
+		case strings.TrimSpace(v.Reason) == "":
+			return nil, fmt.Errorf("%s: %s has no reason", ReviewPath, p)
 		}
 	}
 	if r.Reviews == nil {
@@ -173,8 +212,15 @@ func Scan(t Table, files []string, isPackage func(dir string) bool) []Entry {
 }
 
 // place is the pool entry a file falls in (ok true: the map covers it).
+// A Go package is covered only by its package row: a path row never covers
+// a package (the domain walls read package rows, and the map must not say
+// more than they do).
 func (t Table) place(f string, isPackage func(string) bool) (entry, kind string, covered bool) {
+	byPath := PathRow(t.Paths, f) != ""
 	if !strings.Contains(f, "/") {
+		if byPath {
+			return "", "", true
+		}
 		return ".", "root", false
 	}
 	top, _, _ := strings.Cut(f, "/")
@@ -183,6 +229,9 @@ func (t Table) place(f string, isPackage func(string) bool) (entry, kind string,
 			if f == g || strings.HasPrefix(f, g+"/") {
 				return "", "", true
 			}
+		}
+		if byPath {
+			return "", "", true
 		}
 		return twoLevels(f), "console", false
 	}
@@ -200,7 +249,13 @@ func (t Table) place(f string, isPackage func(string) bool) (entry, kind string,
 		if isPackage != nil && isPackage(dir) {
 			return dir, "go-package", false
 		}
+		if byPath {
+			return "", "", true
+		}
 		return dir, top, false
+	}
+	if byPath {
+		return "", "", true
 	}
 	return twoLevels(f), top, false
 }
