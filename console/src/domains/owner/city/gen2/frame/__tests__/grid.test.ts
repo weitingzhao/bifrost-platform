@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assign, decodePlan, defaultPlan, encodePlan, fitsBudget, GRID, mergePlot, moveTo, planFor, plotAt, plotsOf, splitPlot, streetsOf, type Item, type Plan, type Shape } from '../grid'
+import { assign, decodePlan, defaultPlan, encodePlan, fitsBudget, GRID, mergePlot, moveTo, planFor, plotAt, plotsOf, splitPlot, streetsOf, turnPlot, type Item, type Plan, type Shape } from '../grid'
 
 // 2026-11-19, the Owner: the ground is divided into plots he can cut and join (1×1, 2×2, 4×4, 4×8, 8×8…),
 // the streets follow the plots, and a thing stands in a plot of its own, not every plot a 4×4.
@@ -117,5 +117,28 @@ describe('oblong things', () => {
   })
   it('the ground left over is cut to 4×4, so the streets read the same on every page', () => {
     expect(planFor([])).toEqual(defaultPlan())
+  })
+})
+
+// 2026-11-20, the Owner: a 4×8 has a direction, lengthwise or across; and the land comes first: a building goes
+// only onto a plot that fits it (the auto-join on drop tried the same day was taken out at his word).
+describe('a long plot lies either way', () => {
+  it('refuses a building on a plot too small for it: the land is made first, the map never reshapes it', () => {
+    const plan = defaultPlan(4)
+    const plots = plotsOf(plan)
+    const placed = assign([{ id: 'big', shape: '4x8' }], plotsOf(splitPlot(defaultPlan(8), plotsOf(defaultPlan(8))[0].id)!)).placed
+    expect(moveTo(placed, plots, 'big', plots[0].id)).toBeNull()
+  })
+  it('turns a 4×8 plot across, its block cut the other way, and keeps the turn through the saved string', () => {
+    const plan = defaultPlan(8)
+    const p8 = plotsOf(plan).find(p => p.w === 8 && p.h === 8)!
+    const cut = splitPlot(plan, p8.id)!
+    const long = plotsOf(cut).find(p => p.id === p8.id + 'a')!
+    expect([long.w, long.h]).toEqual([4, 8])
+    const turnedPlan = turnPlot(cut, long.id)!
+    const across = plotsOf(turnedPlan).find(p => p.id === long.id)!
+    expect([across.w, across.h]).toEqual([8, 4])
+    expect(decodePlan(encodePlan(turnedPlan))).toEqual(turnedPlan)
+    expect(turnPlot(turnedPlan, long.id)).toEqual(cut)
   })
 })

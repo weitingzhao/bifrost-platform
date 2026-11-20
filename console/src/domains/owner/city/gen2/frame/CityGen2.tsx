@@ -2,7 +2,7 @@ import * as Phaser from 'phaser'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { browserArrangements, type ArrangementStore } from './arrangementStore'
 import { KitRoot, Menu, type PanelSize } from './parts'
-import { assign, decodePlan, encodePlan, mergePlot, moveTo, planFor, plotsOf, splitPlot, streetsOf, type Arrangement, type Item, type Plan } from './grid'
+import { assign, decodePlan, encodePlan, mergePlot, moveTo, planFor, plotsOf, splitPlot, streetsOf, turnPlot, type Arrangement, type Item, type Plan } from './grid'
 import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
 import { LABEL_MODES, type LabelMode } from './labels'
 import type { CityContent, Panel } from './content'
@@ -114,9 +114,10 @@ function layoutOf(place: Place, a: Arrangement) {
 }
 
 const TOOL_HINT: Record<ArrangeTool, string> = {
-  move: 'Drag a building onto a plot. Onto a taken plot, the two swap.',
+  move: 'Drag a building onto a plot that fits it; onto a taken one, the two swap. Make the land first: Cut, Join, Turn.',
   split: 'Tap a plot to cut it in two. The streets follow.',
   merge: 'Tap a plot to join it with its other half.',
+  turn: 'Tap a long plot to turn its land a quarter: lengthwise or across. Then move a building onto it.',
 }
 
 const keyOf = (path: Path) => path.length === 0 ? 'town' : path.join('/')
@@ -257,7 +258,7 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
       },
       plot: (op, plotId) => {
         const L = layRef.current
-        const next = op === 'split' ? splitPlot(L.plan, plotId) : mergePlot(L.plan, plotId)
+        const next = op === 'split' ? splitPlot(L.plan, plotId) : op === 'turn' ? turnPlot(L.plan, plotId) : mergePlot(L.plan, plotId)
         // A cut or a join changes the plots; things keep their plot where it still exists and fits.
         if (next !== null) keep({ plan: encodePlan(next), at: Object.fromEntries(L.placed.map(p => [p.id, p.plot])) })
       },
@@ -412,8 +413,8 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
   const tools = arranging ? (
     <>
       <div className="k-seg" role="group" aria-label="Arrange">
-        {(['move', 'split', 'merge'] as const).map(t => (
-          <button key={t} className={tool === t ? 'on' : ''} aria-pressed={tool === t} onClick={() => setTool(t)}>{{ move: 'Move', split: 'Cut', merge: 'Join' }[t]}</button>
+        {(['move', 'split', 'merge', 'turn'] as const).map(t => (
+          <button key={t} className={tool === t ? 'on' : ''} aria-pressed={tool === t} onClick={() => setTool(t)}>{{ move: 'Move', split: 'Cut', merge: 'Join', turn: 'Turn' }[t]}</button>
         ))}
       </div>
       <button className="g2-btn" onClick={resetArrangement} disabled={!saved.here.plan && !saved.here.at}>Reset</button>

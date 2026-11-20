@@ -48,15 +48,20 @@ export const fitsBudget = (items: readonly Item[], g: Ground = FULL) => area(ite
 
 // ---- the plan: a tree of halvings ----
 
-/** A plan: a whole plot (null) or a plot cut in two halves, each a plan. */
-export type Plan = null | [Plan, Plan]
+/**
+ * A plan: a whole plot (null) or a plot cut in two halves, each a plan. A square cut is across x (left and
+ * right halves) unless it is turned (a third element, 1): then across y (back and front). So an oblong plot
+ * can lie either way (the Owner, 2026-11-20: a 4×8 has a direction, lengthwise or across).
+ */
+export type Plan = null | [Plan, Plan] | [Plan, Plan, 1]
+const turned = (p: Plan) => p !== null && p.length === 3
 /** A plot: its id is its path in the plan ('' the whole ground, then 'a'/'b' for each half). */
 export type Plot = { id: string; x: number; y: number; w: number; h: number }
 type Rect = Omit<Plot, 'id'>
 
-/** The two halves of a rectangle: a square is cut across x; an oblong across its long side. */
-function halves(r: Rect): [Rect, Rect] {
-  return r.w >= r.h
+/** The two halves of a rectangle: a square across x, or across y when turned; an oblong across its long side. */
+function halves(r: Rect, turn = false): [Rect, Rect] {
+  return (r.w === r.h ? !turn : r.w > r.h)
     ? [{ x: r.x, y: r.y, w: r.w / 2, h: r.h }, { x: r.x + r.w / 2, y: r.y, w: r.w / 2, h: r.h }]
     : [{ x: r.x, y: r.y, w: r.w, h: r.h / 2 }, { x: r.x, y: r.y + r.h / 2, w: r.w, h: r.h / 2 }]
 }
@@ -87,7 +92,7 @@ export function plotsOf(plan: Plan, g: Ground = FULL): Plot[] {
   const out: Plot[] = []
   const walk = (p: Plan, r: Rect, id: string) => {
     if (p === null) { out.push({ id, ...r }); return }
-    const [a, b] = halves(r)
+    const [a, b] = halves(r, turned(p))
     walk(p[0], a, id + 'a'); walk(p[1], b, id + 'b')
   }
   walk(plan, whole(g), '')
@@ -113,7 +118,8 @@ const replace = (plan: Plan, id: string, next: Plan): Plan => {
   if (id === '') return next
   if (plan === null) return plan
   const [a, b] = plan
-  return id[0] === 'a' ? [replace(a, id.slice(1), next), b] : [a, replace(b, id.slice(1), next)]
+  const kids: [Plan, Plan] = id[0] === 'a' ? [replace(a, id.slice(1), next), b] : [a, replace(b, id.slice(1), next)]
+  return turned(plan) ? [kids[0], kids[1], 1] : kids
 }
 
 /** Cut a plot in two; null if it is a single cell already or not a plot. */
@@ -132,16 +138,44 @@ export function mergePlot(plan: Plan, id: string): Plan | null {
   return replace(plan, id.slice(0, -1), null)
 }
 
+/** The rectangle of a node of the plan (a plot or a block of plots), by its id. */
+function rectOf(plan: Plan, id: string, g: Ground = FULL): Rect | null {
+  let p: Plan | undefined = plan, r = whole(g)
+  for (const c of id) {
+    if (!p) return null
+    const [a, b] = halves(r, turned(p))
+    r = c === 'a' ? a : b
+    p = p[c === 'a' ? 0 : 1]
+  }
+  return r
+}
+
+/**
+ * Turn a plot a quarter (the Owner, 2026-11-20: which way a 4×8 lies): the nearest square block it is part of
+ * is cut the other way, so its halves, and what stands on them, lie across instead of lengthwise. Null when no
+ * square block holds it (the whole ground cut into halves that are not square has none) or it is the whole ground.
+ */
+export function turnPlot(plan: Plan, id: string, g: Ground = FULL): Plan | null {
+  for (let k = id.length - 1; k >= 0; k--) {
+    const at = id.slice(0, k), node = nodeAt(plan, at), r = rectOf(plan, at, g)
+    if (!node || !r || r.w !== r.h) continue
+    const flipped: Plan = turned(node) ? [node[0], node[1]] : [node[0], node[1], 1]
+    return replace(plan, at, flipped)
+  }
+  return null
+}
+
 /** A plan as a short string, and back (for the browser to keep): 'L' a plot, 'S' a cut followed by its halves. */
-export const encodePlan = (plan: Plan): string => plan === null ? 'L' : 'S' + encodePlan(plan[0]) + encodePlan(plan[1])
+export const encodePlan = (plan: Plan): string => plan === null ? 'L' : (turned(plan) ? 'T' : 'S') + encodePlan(plan[0]) + encodePlan(plan[1])
 export function decodePlan(s: string): Plan | null {
   let i = 0
   const read = (depth: number): Plan => {
     if (depth > 8 || i >= s.length) throw new Error('bad plan')
     const c = s[i++]
     if (c === 'L') return null
-    if (c !== 'S') throw new Error('bad plan')
-    return [read(depth + 1), read(depth + 1)]
+    if (c !== 'S' && c !== 'T') throw new Error('bad plan')
+    const a = read(depth + 1), b = read(depth + 1)
+    return c === 'T' ? [a, b, 1] : [a, b]
   }
   try { const p = read(0); return i === s.length ? p : null } catch { return null }
 }
@@ -162,7 +196,7 @@ export function streetsOf(plan: Plan, g: Ground = FULL): Street[] {
   const out: Street[] = []
   const walk = (p: Plan, r: Rect, depth: number) => {
     if (p === null) return
-    const [a, b] = halves(r)
+    const [a, b] = halves(r, turned(p))
     const side = Math.min(a.w, a.h)
     const kind: StreetKind = depth === 0 ? 'avenue' : side >= 4 ? 'street' : side === 2 ? 'lane' : 'path'
     const line = a.w < r.w ? { x0: b.x, y0: r.y, x1: b.x, y1: r.y + r.h } : { x0: r.x, y0: b.y, x1: r.x + r.w, y1: b.y }

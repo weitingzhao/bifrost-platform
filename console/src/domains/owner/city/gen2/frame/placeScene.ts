@@ -72,7 +72,7 @@ export type SceneEvents = {
   /** The Owner dropped a thing on a plot where it fits (taking it, or swapping with what stood there). */
   moved: (id: string, plot: string) => void
   /** The Owner cut a plot in two, or joined it with its other half. */
-  plot: (op: 'split' | 'merge', plot: string) => void
+  plot: (op: 'split' | 'merge' | 'turn', plot: string) => void
   /** The view went closer than the whole page, or back: the minimap changes what it shows. */
   zoomed?: (on: boolean) => void
   /** Up to the level above (the wheel turned on outwards past the whole page). */
@@ -82,7 +82,7 @@ export type SceneEvents = {
 }
 
 /** What a tap does while arranging: move things between plots, cut plots, or join them. */
-export type ArrangeTool = 'move' | 'split' | 'merge'
+export type ArrangeTool = 'move' | 'split' | 'merge' | 'turn'
 
 export type Shown = {
   place: Place
@@ -872,6 +872,8 @@ export class PlaceScene extends Phaser.Scene {
     const to = this.plotUnder(p) ?? null
     this.carry.to = to
     this.ghost.clear()
+    // The land comes first (the Owner, 2026-11-20): a building goes only onto a plot that already fits it; the
+    // map never reshapes the land to take it. Too small shows red: cut, join or turn the land first.
     if (to) this.outline(to, this.canGo(this.carry.p, to) ? this.tone.ok : this.tone.no)
   }
 
@@ -1116,6 +1118,14 @@ export class PlaceScene extends Phaser.Scene {
     if (o.arranging) for (const p of plots) {
       g.lineStyle(1.6, this.tone.ink, 0.6)
       g.strokePoints(quadOf(P, geo.plot(p)), true)
+      // An oblong plot shows which way it lies (the Owner, 2026-11-20): a double arrow along its long side.
+      if (p.w !== p.h) {
+        const q = geo.plot(p), along = p.w > p.h, cx = q.x + q.w / 2, cy = q.y + q.h / 2, half = (along ? q.w : q.h) * 0.3
+        const a = along ? P(cx - half, cy) : P(cx, cy - half), b = along ? P(cx + half, cy) : P(cx, cy + half)
+        const ux = (b.x - a.x) / Math.hypot(b.x - a.x, b.y - a.y), uy = (b.y - a.y) / Math.hypot(b.x - a.x, b.y - a.y)
+        g.lineStyle(3, this.tone.ink, 0.55).lineBetween(a.x, a.y, b.x, b.y)
+        for (const [t, k] of [[b, 1], [a, -1]] as const) g.fillStyle(this.tone.ink, 0.55).fillTriangle(t.x, t.y, t.x - k * (ux * 12 - uy * 6), t.y - k * (uy * 12 + ux * 6), t.x - k * (ux * 12 + uy * 6), t.y - k * (uy * 12 - ux * 6))
+      }
     }
     g.lineStyle(2, this.tone.ink).strokePoints(ground, true)
     c.add(g)
