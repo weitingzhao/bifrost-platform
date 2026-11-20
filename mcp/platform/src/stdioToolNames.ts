@@ -61,6 +61,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'report_regression',
   'mark_regression_fixed',
   'list_regressions',
+  'get_bus_states',
   'list_records',
   'get_evaluation_readings',
   'get_full_ci',

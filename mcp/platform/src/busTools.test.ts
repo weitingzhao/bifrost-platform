@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { busEventsPath, regressionsPath } from './busTools.js'
+import { busEventsPath, busStatesPath, regressionsPath } from './busTools.js'
 import { PLATFORM_STDIO_TOOL_NAMES } from './stdioToolNames.js'
 
 // Origin: 2026-11-16, the bus's step 1 (api/internal/bus/RULES.md §8 item 4):
@@ -40,4 +40,11 @@ test('wait_for_event can read back with since and limit', () => {
     busEventsPath({ types: 'plan.tree.changed', since: '2026-11-20T00:00:00Z', limit: 5, wait_seconds: 0 }),
     '/api/v1/bus/events?types=plan.tree.changed&since=2026-11-20T00%3A00%3A00Z&limit=5&wait=0&client=mcp',
   )
+})
+
+// 2026-11-20: /api/v1/bus/states needs a viewer token; seats have none in hand, so they read it through this tool.
+test('get_bus_states is on the full server and reads the states route', () => {
+  assert.ok(new Set<string>(PLATFORM_STDIO_TOOL_NAMES).has('get_bus_states'))
+  assert.equal(busStatesPath({ type: 'cluster.workload.changed' }), '/api/v1/bus/states?type=cluster.workload.changed')
+  assert.equal(busStatesPath({ type: 'cluster.node.changed', tenant: 'rocket' }), '/api/v1/bus/states?type=cluster.node.changed&tenant=rocket')
 })

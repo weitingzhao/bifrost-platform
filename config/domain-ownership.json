@@ -63,6 +63,7 @@
         "event_streams": [],
         "commands": [
           {"kind": "action", "id": "unifi_firewall_apply", "tier": "D", "route": "POST /api/v1/network/firewall/apply"},
+          {"kind": "mcp_tool", "name": "get_bus_states", "routes": ["/api/v1/bus/states"]},
           {"kind": "mcp_tool", "name": "get_audit_log", "routes": ["/api/v1/audit"]},
           {"kind": "mcp_tool", "name": "get_auth_capabilities", "routes": ["/api/v1/auth/capabilities"]},
           {"kind": "mcp_tool", "name": "get_checklist_signals", "routes": ["/api/v1/checklist/signals"]},

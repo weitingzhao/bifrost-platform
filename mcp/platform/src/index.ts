@@ -46,7 +46,7 @@ import { presenceSkip, registerPresence } from './presence.js'
 import { registerPlanImportTools } from './registerPlanImport.js'
 import { CATALOG_INDEX_PATH, GET_CATALOG_INDEX_DESCRIPTION, GET_OWNER_DESCRIPTION, GET_UNPERCEIVED_DESCRIPTION, ownerPath, unperceivedPath } from './catalogTools.js'
 import { FULL_CI_PATH, fullCICheckPath, unitConfigPath, unitRunsPath, unitScopePath } from './unitsTools.js'
-import { BUS_WAIT_MAX_SECONDS, LIST_REGRESSIONS_DESCRIPTION, MARK_REGRESSION_FIXED_DESCRIPTION, REPORT_REGRESSION_DESCRIPTION, WAIT_FOR_EVENT_DESCRIPTION, busEventsPath, regressionsPath } from './busTools.js'
+import { BUS_WAIT_MAX_SECONDS, GET_BUS_STATES_DESCRIPTION, LIST_REGRESSIONS_DESCRIPTION, MARK_REGRESSION_FIXED_DESCRIPTION, REPORT_REGRESSION_DESCRIPTION, WAIT_FOR_EVENT_DESCRIPTION, busEventsPath, busStatesPath, regressionsPath } from './busTools.js'
 
 const SERVER_NAME = 'mcp-server-platform'
 const SERVER_VERSION = '0.1.0'
@@ -636,6 +636,16 @@ reg(
     client: z.string().regex(/^[\x21-\x7e]{1,40}$/).optional().describe('Who waits, for the receipts; default mcp'),
   },
   async (args) => jsonResult(await platformGet(busEventsPath(args))),
+)
+
+reg(
+  'get_bus_states',
+  GET_BUS_STATES_DESCRIPTION,
+  {
+    type: z.string().regex(/^[a-z]+\.[a-z]+\.[a-z]+$/).describe('A registered state type, e.g. cluster.workload.changed'),
+    tenant: z.string().regex(/^[a-z][a-z0-9-]{0,39}$/).optional().describe('Default rocket'),
+  },
+  async (args) => jsonResult(await platformGet(busStatesPath(args))),
 )
 
 const sha40 = z.string().regex(/^[0-9a-f]{40}$/)

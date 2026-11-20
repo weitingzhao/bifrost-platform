@@ -52,3 +52,18 @@ export const regressionsPath = (a: { repo?: string; open?: boolean }): string =>
   const s = q.toString()
   return '/api/v1/bus/regressions' + (s ? '?' + s : '')
 }
+
+/**
+ * get_bus_states (2026-11-20, the Owner: every module's state changes reach
+ * the bus): GET /api/v1/bus/states, each subject's latest change for one
+ * registered state type. A type qualifies by its register entry alone.
+ */
+export const GET_BUS_STATES_DESCRIPTION =
+  'Each module\'s latest state for one registered state type (read-only), from the bus ledger: e.g. cluster.workload.changed (keyed namespace/name) or cluster.node.changed (keyed by node name). Returns {type, tenant, key, fields, ref, since, note, states: [{subject, state, at, event}]}. Only subjects that changed within the type\'s retention (at most 30 days) are listed; ref is the route with the full current list. A type that is not a state type (its register entry has no subject_from and change_from) is refused with 400.'
+
+export const busStatesPath = (a: { type: string; tenant?: string }): string => {
+  const q = new URLSearchParams()
+  q.set('type', a.type)
+  if (a.tenant !== undefined && a.tenant !== '') q.set('tenant', a.tenant)
+  return '/api/v1/bus/states?' + q.toString()
+}
