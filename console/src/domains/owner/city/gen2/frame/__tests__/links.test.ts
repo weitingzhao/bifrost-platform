@@ -4,7 +4,7 @@ import type { Place } from '../places'
 
 // Origin: the Owner, 2026-11-20 ("框架提供交互方式，系统来配；Bus 和指标两种足够；每层的显示要有规范，
 // 太多乱、太少抽象"). These pin the grain each level shows a connection at, and the budget.
-const P = (id: string, kind: Place['kind'], children: Place[] = []): Place => ({ id, kind, shape: '2x2', label: id.toUpperCase(), question: '', dashboard: null, children })
+const P = (id: string, kind: Place['kind'], children: Place[] = []): Place => ({ id, kind, shape: '4x4', label: id.toUpperCase(), question: '', dashboard: null, children })
 const tree = P('town', 'town', [
   P('work', 'district', [P('releases', 'building'), P('hall', 'building')]),
   P('command', 'district', [P('hall', 'building'), P('records', 'building')]),

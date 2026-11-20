@@ -21,7 +21,7 @@ import { ENTRY_ROUTE_IDS, SHELL_NAV, entryOf, formatShellHash, type ShellRouteId
  * until its sections are read from something real. The sample sizes and the greybox rooms A–F that
  * stood here were taken out the day that rule was set.
  */
-const PAGE: Shape = '2x2'
+const PAGE: Shape = '4x4'
 
 /**
  * The pages that stand as a first-generation landmark (the Owner, 2026-11-20: bring its buildings over),

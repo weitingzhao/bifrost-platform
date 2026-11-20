@@ -146,19 +146,19 @@ export function linkRulesBroken(tree: Place, links: readonly Link[]): string[] {
 /** What passes one crossing: whom it leads to, and how many things go through, by way. */
 export type Pass = { id: string; label: string; bus: number; metric: number; n: number; who: string[] }
 
-/** How many named ports each side of a 2×2 has (the Owner, 2026-11-20: a few fixed ports a side, then Other). */
+/** How many named ports each side of a small place has (the Owner, 2026-11-20: a few fixed ports a side, then Other). */
 export const PORTS = 3
 
 /**
  * Ports a side by a place's size class (the Owner, 2026-11-20, like a chip: a bigger die has more pins, but
- * fewer than its area would give): small (2×2) 3, medium (2×4) 4, large (4×4) 5; smaller things 2. Other and
+ * fewer than its area would give): small (4×4) 3, medium (4×8) 4, large (8×8) 5; anything smaller 2. Other and
  * Orphan stay one each whatever the size.
  */
 export function portsFor(shape: string): number {
   const [a, b] = shape.split('x').map(Number)
   if (!a || !b) return PORTS
   const area = a * b
-  return area >= 16 ? 5 : area >= 8 ? 4 : area >= 4 ? 3 : 2
+  return area >= 64 ? 5 : area >= 32 ? 4 : area >= 16 ? 3 : 2
 }
 
 export type Edge = { named: Pass[]; other: Pass | null }

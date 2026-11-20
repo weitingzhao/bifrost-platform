@@ -7,7 +7,7 @@ import { rulesBroken } from '../rules'
 // second domain could have been drawn broken.
 const p = (id: string, kind: Place['kind'], shape: string, children: Place[] = [], fn?: string): Place =>
   ({ id, kind, shape: shape as Place['shape'], label: id, question: '', dashboard: null, children, ...(fn ? { function: fn } : {}) })
-const good = () => p('town', 'town', '8x8', [p('a', 'district', '4x4', [p('b', 'building', '2x4', [p('r', 'room', '2x2')])], 'fa')])
+const good = () => p('town', 'town', '8x8', [p('a', 'district', '8x8', [p('b', 'building', '4x8', [p('r', 'room', '4x4')])], 'fa')])
 
 describe('the frame holds its rules on any content', () => {
   it('good content passes', () => {
@@ -21,12 +21,10 @@ describe('the frame holds its rules on any content', () => {
     const t = good(); t.children[0].shape = '3x3' as Place['shape']
     expect(rulesBroken({ tree: t }).join()).toMatch(/3x3 is not one of/)
   })
-  // 2026-11-20, the Owner: the smallest thing is 2×2 (no 1×1 or 1×2), so a room under it is refused too.
-  it('a door under 2 wide is refused, and so is any thing under 2×2', () => {
-    const t = good(); t.children[0].children[0].shape = '1x2'
-    expect(rulesBroken({ tree: t }).join()).toMatch(/smallest thing is 2×2/)
-    const u = good(); u.children[0].children[0].children[0].shape = '1x1'
-    expect(rulesBroken({ tree: u }).join()).toMatch(/smallest thing is 2×2/)
+  // 2026-11-20, the Owner: the unit is 4×4; nothing is smaller.
+  it('any thing under one unit is refused', () => {
+    const u = good(); u.children[0].children[0].children[0].shape = '2x2'
+    expect(rulesBroken({ tree: u }).join()).toMatch(/smallest thing is 4×4/)
   })
   it('more than the ground holds is refused', () => {
     const t = good(); t.children = Array.from({ length: 5 }, (_, i) => p(`d${i}`, 'district', '8x8'))

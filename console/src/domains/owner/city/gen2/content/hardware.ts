@@ -59,14 +59,13 @@ const hasGpu = (n: TopoNode) => /gpu|4090/i.test(`${n.id} ${n.label ?? ''}`) || 
 /**
  * RULES.md §2.3: a device's size by its weight, large enough that what it shows reads at a glance
  * (the Owner, 2026-11-19: use the ground): the GPU tower and the NAS (a logistics park, tens of
- * terabytes), a 16-core server and a trading desk large (4×4: the three classes, 2026-11-20); the rest 2×2.
+ * terabytes) medium (4×8, two units); every other device small (4×4, one unit): the three classes, 2026-11-20.
  */
 export function shapeOf(look: Look, cores: number | null, gpu: boolean): Shape {
-  if (gpu || (cores ?? 0) >= 32) return '4x4'
-  if (look === 'storage') return '4x4'
-  if (look === 'windows') return '4x4'
-  if (look === 'linux' && (cores ?? 0) >= 16) return '4x4'
-  return '2x2'
+  // One unit each (4×4); the GPU tower and the NAS two (4×8): thirteen devices, fifteen units of a sheet's sixteen.
+  if (gpu || (cores ?? 0) >= 32) return '4x8'
+  if (look === 'storage') return '4x8'
+  return '4x4'
 }
 
 /**
@@ -114,10 +113,10 @@ export function zonedArrangement(items: { id: string; shape: Shape; zone: Zone }
 const G = 1e9
 /** A room's size by how much it holds: cores, or bytes. */
 const roomShape = (unit: 'cores' | 'bytes', of: number | null): Shape => {
-  // The smallest thing is 2×2 (the Owner, 2026-11-20: no 1×1 or 1×2; a sheet is 8 × 8 of 2×2 units).
-  if (of == null) return '2x2'
-  if (unit === 'cores') return of > 16 ? '2x4' : '2x2'
-  return of > 4000 * G ? '4x4' : of > 96 * G ? '2x4' : '2x2'
+  // The smallest thing is one unit, 4×4 (the Owner, 2026-11-20: sixteen units to a sheet).
+  if (of == null) return '4x4'
+  if (unit === 'cores') return of > 16 ? '4x8' : '4x4'
+  return of > 4000 * G ? '8x8' : of > 96 * G ? '4x8' : '4x4'
 }
 
 const at = (pts: PromPoint[] | null, key: string, value: string) => pts?.find(p => p.labels?.[key] === value)?.value ?? null

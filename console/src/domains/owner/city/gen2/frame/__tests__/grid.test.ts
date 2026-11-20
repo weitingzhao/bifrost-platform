@@ -23,21 +23,20 @@ describe('plans', () => {
     for (const p of plotsOf(plan)) expect([1, 2]).toContain(Math.max(p.w, p.h) / Math.min(p.w, p.h))
     expect(tiles(plan)).toBe(GRID * GRID)
   })
-  // 2026-11-20, the Owner: the unit is 2×2; no plot is cut smaller.
-  it('cuts down to 2×2 and no further', () => {
-    const fine = defaultPlan(2)
-    expect(plotsOf(fine)).toHaveLength(64)
-    expect(splitPlot(fine, plotsOf(fine)[0].id)).toBeNull()
+  // 2026-11-20, the Owner: the unit is 4×4, sixteen to a sheet; no plot is cut smaller.
+  it('cuts down to 4×4 and no further', () => {
+    expect(splitPlot(defaultPlan(), plotsOf(defaultPlan())[0].id)).toBeNull()
     expect(splitPlot(defaultPlan(), 'nowhere')).toBeNull()
   })
   it('joins a plot with its other half, but not across a half cut further', () => {
-    const plan = splitPlot(defaultPlan(), 'aaaa')!
-    expect(mergePlot(plan, 'aaaaa')).toEqual(defaultPlan())
-    expect(mergePlot(plan, 'aaab')).toBeNull()
-    expect(mergePlot(defaultPlan(), '')).toBeNull()
+    const coarse = defaultPlan(8)
+    const plan = splitPlot(coarse, 'aa')!
+    expect(mergePlot(plan, 'aaa')).toEqual(coarse)
+    expect(mergePlot(plan, 'ab')).toBeNull()
+    expect(mergePlot(coarse, '')).toBeNull()
   })
   it('round-trips through its string; a damaged string reads as nothing', () => {
-    const plan = splitPlot(defaultPlan(), 'abab')!
+    const plan = splitPlot(defaultPlan(8), 'ab')!
     expect(decodePlan(encodePlan(plan))).toEqual(plan)
     expect(decodePlan('SSL')).toBeNull()
     expect(decodePlan('X')).toBeNull()
@@ -47,14 +46,13 @@ describe('plans', () => {
 describe('streets follow the plots', () => {
   // 2026-11-19, the Owner: corridor, street and highway all one width, so the picture stays regular.
   it('the first cut is the avenue; a ring runs round; every street is one width', () => {
-    const s = streetsOf(splitPlot(splitPlot(defaultPlan(), 'aaaa')!, 'aaaaa')!)
+    const s = streetsOf(defaultPlan())
     expect(s.filter(x => x.kind === 'avenue')).toHaveLength(1)
     expect(s.filter(x => x.kind === 'ring')).toHaveLength(4)
-    expect(s.some(x => x.kind === 'lane')).toBe(true)
     expect(new Set(s.map(x => x.half)).size).toBe(1)
   })
   it('a plot never has a street through it', () => {
-    const plan = splitPlot(defaultPlan(), 'abab')!
+    const plan = splitPlot(defaultPlan(8), 'ab')!
     for (const st of streetsOf(plan)) for (const p of plotsOf(plan)) {
       if (st.x0 === st.x1) expect(p.x < st.x0 && st.x0 < p.x + p.w && Math.max(p.y, st.y0) < Math.min(p.y + p.h, st.y1)).toBe(false)
       else expect(p.y < st.y0 && st.y0 < p.y + p.h && Math.max(p.x, st.x0) < Math.min(p.x + p.w, st.x1)).toBe(false)
@@ -99,24 +97,23 @@ describe('things in plots', () => {
   })
 })
 
-// 2026-11-19, the Owner: a thing's footprint follows its weight — 1×1, 1×2, 2×2, 2×4, 4×8 … — not all the same.
+// 2026-11-20, the Owner: three sizes, small 4×4, medium 4×8, large 8×8.
 describe('oblong things', () => {
-  it('a 2×4 lies along its plot’s long side, and does not fit a 2×2', () => {
-    const plan = splitPlot(splitPlot(defaultPlan(), 'aaaa')!, 'aaaaa')!
+  it('a 4×8 lies along its plot’s long side, and does not fit a 4×4', () => {
+    const plan = splitPlot(defaultPlan(8), 'aa')!
     const ps = plotsOf(plan)
-    const tall = ps.find(p => p.w === 2 && p.h === 4)!
-    expect(assign(items('2x4'), [tall]).placed[0]).toMatchObject({ x: tall.x, y: tall.y, w: 2, h: 4 })
-    const square = ps.find(p => p.w === 2 && p.h === 2)!
-    expect(assign(items('2x4'), [square]).homeless).toHaveLength(1)
+    const long = ps.find(p => p.w * p.h === 32)!
+    expect(assign(items('4x8'), [long]).placed[0]).toMatchObject({ x: long.x, y: long.y, w: long.w, h: long.h })
+    const square = plotsOf(defaultPlan())[0]
+    expect(assign(items('4x8'), [square]).homeless).toHaveLength(1)
   })
   it('the default plan is cut to fit what the place holds: every shape housed, each in a plot its own shape', () => {
-    const its = items('4x8', '4x4', '2x4', '2x2', '1x2', '1x1')
+    const its = items('8x8', '4x8', '4x4', '4x4')
     const plan = planFor(its)
     const { placed, homeless } = assign(its, plotsOf(plan))
     expect(homeless).toEqual([])
     const byId = new Map(plotsOf(plan).map(p => [p.id, p]))
     for (const p of placed) expect(byId.get(p.plot)!.w * byId.get(p.plot)!.h).toBe(p.w * p.h)
-    expect(plotsOf(plan).every(p => Math.max(p.w, p.h) <= 8)).toBe(true)
   })
   it('the ground left over is cut to 4×4, so the streets read the same on every page', () => {
     expect(planFor([])).toEqual(defaultPlan())

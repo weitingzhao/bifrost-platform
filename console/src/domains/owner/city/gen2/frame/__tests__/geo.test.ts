@@ -16,14 +16,6 @@ describe('the picture: true sizes, gutters between plots', () => {
     expect(b.x - (a.x + a.w)).toBeCloseTo(GUTTER)
     expect(a.x).toBeCloseTo(GUTTER)
   })
-  it('a plot spanning a cut made elsewhere is wider by that gutter, and its thing stands in its middle', () => {
-    const fine = plotsOf(splitPlot(defaultPlan(), 'aaaa')!)
-    const g = geoOf(fine)
-    const whole = fine.find(p => p.x === 0 && p.y === 4 && p.w === 4)!
-    const r = g.plot(whole)
-    expect(r.w).toBeCloseTo(4 + GUTTER)
-    expect(g.thing(r, 4, 4).x).toBeCloseTo(r.x + GUTTER / 2)
-  })
   it('finds the plot under a point, gutters split between the two sides', () => {
     const a = plots.find(p => p.x === 0 && p.y === 0)!
     const r = geo.plot(a)

@@ -1,6 +1,6 @@
 /**
  * The ground of every place (the Owner, 2026-11-19): a square of 16 × 16 cells, the same sheet on every
- * level (2026-11-20), its unit 2 × 2. It is divided into
+ * level (2026-11-20), its unit 4 × 4 (sixteen to a sheet). It is divided into
  * plots, and the streets run along the plots' edges; each thing stands in a plot of its own.
  *
  *   things  1×1, 1×2, 2×2, 2×4, 4×4, 4×8 or 8×8: a square or a 2 : 1 oblong, by how big and how
@@ -39,9 +39,9 @@ export type Placed = Item & Cell & { plot: string; w: number; h: number }
 /**
  * A footprint by how many things a place holds (the Owner, 2026-11-19: nothing made up — a size is
  * a weight only when it comes from something counted), in the three classes (2026-11-20): more than 4
- * large (4×4), more than 2 medium (2×4), else small (2×2).
+ * large (8×8, four units), more than 2 medium (4×8, two), else small (4×4, one).
  */
-export const shapeByCount = (n: number): Shape => n > 4 ? '4x4' : n > 2 ? '2x4' : '2x2'
+export const shapeByCount = (n: number): Shape => n > 4 ? '8x8' : n > 2 ? '4x8' : '4x4'
 
 export const area = (items: readonly Item[]) => items.reduce((a, i) => a + shapeArea(i.shape), 0)
 export const fitsBudget = (items: readonly Item[], g: Ground = FULL) => area(items) <= g.w * g.h
@@ -71,14 +71,15 @@ export const FULL: Ground = { w: GRID, h: GRID }
 const whole = (g: Ground): Rect => ({ x: 0, y: 0, w: g.w, h: g.h })
 
 /**
- * The smallest thing is 2×2 (the Owner, 2026-11-20): a sheet is drawn 16 × 16 so the pictures can be fine,
- * but its unit is 2 × 2, so it is 8 × 8 units: nothing 1×1 or 1×2, and at most 16 things on any level.
+ * The unit is 4 × 4 cells (the Owner, 2026-11-20: four to a row, sixteen to a sheet): a sheet is drawn
+ * 16 × 16 so the pictures can be fine, but it holds 4 × 4 units; nothing smaller than one unit, and at most
+ * 16 things on any level.
  */
-export const UNIT = 2
+export const UNIT = 4
 export const MAX_THINGS = 16
 
-/** A district's or a building's size: small, medium or large, its weight, not how much it holds (the Owner, 2026-11-20). */
-export const CLASSES = ['2x2', '2x4', '4x4'] as const
+/** A district's or a building's size: small (one unit), medium (two) or large (four): its weight, not how much it holds (the Owner, 2026-11-20). */
+export const CLASSES = ['4x4', '4x8', '8x8'] as const
 
 
 /** Every plot of a plan (its leaves). */
