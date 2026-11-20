@@ -76,7 +76,7 @@ export const UNITS: UnitSpec[] = [CPU_UNIT, MEMORY_UNIT, DISK_UNIT]
 export const UNIT_PLAN = [
   { id: 'cpu', name: 'CPU', metaphor: 'workshop: a machine per core' },
   { id: 'memory', name: 'Memory', metaphor: 'cold store: chest freezers' },
-  { id: 'disk', name: 'Disk', metaphor: 'warehouse: a shelf per drive, flow rack (SSD), carousel (HDD)' },
+  { id: 'disk', name: 'Disk', metaphor: 'warehouse: high-bay racks (HDD), line-side racks (SSD)' },
   { id: 'gpu', name: 'GPU', metaphor: 'heavy production line (proposed)' },
 ] as const
 

@@ -2,8 +2,8 @@ import type { UnitSpec } from '../../frame/units/process'
 import type { ArrayReading, DiskRoomReadings, DriveReading, VolumeReading } from '../../frame/units/diskRoom'
 
 /**
- * The disk unit (the third through the unit process, 2026-11-19). City metaphor: the warehouse, a shelf per
- * drive in its kind's form (flow rack SSD, horizontal carousel HDD), the Owner's word at Inside the same day.
+ * The disk unit (the third through the unit process, 2026-11-19). City metaphor: the factory's warehouse, a rack
+ * per drive in its kind's form (high-bay HDD, line-side SSD), the Owner's word at Inside the same day.
  *
  * Details: what node exporter reports about a machine's disks, after a read of every family it has
  * (2026-11-19 22:36Z). Three scopes: each physical drive (its kind, traffic, how busy, errors), each volume
@@ -42,24 +42,23 @@ export const DISK_UNIT: UnitSpec = {
   // Details confirmed 2026-11-19: the fifteen the drives and volumes themselves know; file slots are the
   // file system's count (room standard 1), out.
   chosen: ['drives', 'rpm', 'size', 'used', 'read', 'write', 'busy', 'ops', 'latency', 'temp', 'errors', 'array.state', 'array.disks', 'array.sync', 'readonly'],
-  // Inside: the warehouse (shelves the Owner's word 2026-11-19). A shelf per drive, its form its kind; the
-  // bays (256 GB, two deep) on it, goods as far as the volume is used. Where a machine has several drives,
-  // which volume lies on which is not reported: the volumes' bays on a staging floor, not a guessed shelf.
-  // An array a board apart (membership not reported). Per drive on its shelf and end plate, per volume
-  // beneath its bays, the whole on the console.
+  // Inside: the factory's warehouse (the Owner 2026-11-19: drawn with a factory warehouse's own racks, goods
+  // stacked). A rack per drive, its form its kind; a pallet place per 256 GB, cartons stacked as far as the
+  // volume is used. Where a machine has several drives, which volume lies on which is not reported: the
+  // volumes' pallets wait on the receiving floor, not on a guessed rack. An array a board apart.
   inside: [
-    { detail: 'drives', thing: 'Shelf', shows: 'One shelf per drive, its form its kind. Solid state: a flow rack, rollers sloping to the pick face, goods slide down, no waiting. Spinning: a horizontal carousel, bins on a loop that must come round to the window. Plain when the kind is not read. The model (or the device) on its end plate.', where: 'shelves' },
-    { detail: 'size', thing: 'Bays', shows: 'One bay per 256 GB (the standard part), two deep; a volume is as many whole bays as it is big: on its drive’s shelf, or on the staging floor where its drive is not reported.', where: 'shelves' },
-    { detail: 'used', thing: 'Goods on the bays', shows: 'Bays holding goods (amber) in the shelf’s order (a flow rack fills its pick face first, a carousel round its loop), as much as is taken; the rest bare.', where: 'shelves' },
-    { detail: 'readonly', thing: 'Chain across the bays', shows: 'A volume that can only be read: a red chain across its bays and READ ONLY beneath; none when it can be written.', where: 'shelves' },
-    { detail: 'errors', thing: 'Red tape on the bays', shows: 'Errors the file system counted on a volume (btrfs counts them per volume): red tape across its bays with the count; none when there are none.', where: 'shelves' },
-    { detail: 'rpm', thing: 'RPM on the carousel', shows: 'A spinning drive’s speed written on its carousel’s front; flow racks have none.', where: 'shelves' },
-    { detail: 'busy', thing: 'Folds on the end plate', shows: 'How busy the drive is: the same lit folds as the lathes, on the shelf’s end plate.', where: 'end plates' },
+    { detail: 'drives', thing: 'Rack', shows: 'One rack per drive, its form its kind. Spinning: high-bay pallet racking along the wall, five levels, a stacker crane on its rail (a load waits for the crane to drive over and climb). Solid state: a low line-side rack of blue parts bins by the line, reached by hand. A plain low pallet rack when the kind is not read. The model (or the device) on its end plate.', where: 'racks' },
+    { detail: 'size', thing: 'Pallet places', shows: 'One pallet place (or bin) per 256 GB, the standard part; a volume is as many whole places as it is big: on its drive’s rack, or on the receiving floor where its drive is not reported.', where: 'racks' },
+    { detail: 'used', thing: 'Cartons stacked', shows: 'Cartons (amber) stacked on the places from the bottom level up, as much as is taken; a part-full place a lower stack, a bin its parts up its open front; the rest empty.', where: 'racks' },
+    { detail: 'readonly', thing: 'Chain across the rack', shows: 'A volume that can only be read: a red chain across its rack and READ ONLY beneath; none when it can be written.', where: 'racks' },
+    { detail: 'errors', thing: 'Red tape on the rack', shows: 'Errors the file system counted on a volume (btrfs counts them per volume): red tape across its rack and the count beneath; none when there are none.', where: 'racks' },
+    { detail: 'rpm', thing: 'RPM on the plate', shows: 'A spinning drive’s speed after its model on the end plate.', where: 'end plates' },
+    { detail: 'busy', thing: 'Folds on the end plate', shows: 'How busy the drive is: the same lit folds as the lathes, on the rack’s end plate.', where: 'end plates' },
     { detail: 'read', thing: 'OUT on the plate', shows: 'Goods going out: how fast the drive is read.', where: 'end plates' },
     { detail: 'write', thing: 'IN on the plate', shows: 'Goods coming in: how fast the drive is written.', where: 'end plates' },
     { detail: 'ops', thing: 'Loads a second', shows: 'How many reads and writes a second.', where: 'end plates' },
     { detail: 'latency', thing: 'Time per load', shows: 'How long each read or write takes.', where: 'end plates' },
-    { detail: 'temp', thing: 'Shelf thermometer', shows: 'The drive’s own temperature, the small thermometer the lathes carry, on the shelf’s end; none where the drive reports none.', where: 'shelves' },
+    { detail: 'temp', thing: 'Rack thermometer', shows: 'The drive’s own temperature, the small thermometer the lathes carry, on the rack’s upright; none where the drive reports none.', where: 'racks' },
     { detail: 'array.state', thing: 'Array board', shows: 'A low board per array at the back, its state written on it (ACTIVE; anything else in red). Which drives and volumes an array holds is not reported, so the board stands apart rather than fencing them.', where: 'array boards' },
     { detail: 'array.disks', thing: 'Lamps on the board', shows: 'A lamp per drive of the array: green active, red failed, grey spare.', where: 'array boards' },
     { detail: 'array.sync', thing: 'Strip on the board', shows: 'How far the array is in step: a strip filling to 100%.', where: 'array boards' },

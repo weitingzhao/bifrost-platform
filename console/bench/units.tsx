@@ -113,7 +113,7 @@ const ROOM_DRAW: Record<string, RoomDraw> = {
     const read = diskRoomReadings(r.reads.disk as never, host)
     const { out, ids } = rowsDrawn(() => diskRoom(read))
     const vols = read.volumes.map(v => `${v.name} ${readingText(v.size, 'bytes')} → ${baysOf(v)} bays`).join(' · ')
-    return { sprite: out, ids, count: read.drives.length + read.volumes.length, hint: `${read.drives.length} drives → ${read.drives.length} shelves · ${vols || 'no volumes read'} · ${read.arrays.length} arrays → a ${diskRoomShape(read).join('×')} room` }
+    return { sprite: out, ids, count: read.drives.length + read.volumes.length, hint: `${read.drives.length} drives → ${read.drives.length} racks · ${vols || 'no volumes read'} · ${read.arrays.length} arrays → a ${diskRoomShape(read).join('×')} room` }
   },
 }
 const PLAN = [['cpu', 'Workshop', 'CPU'], ['memory', 'Cold store', 'Memory'], ['disk', 'Warehouse', 'Disk']] as const

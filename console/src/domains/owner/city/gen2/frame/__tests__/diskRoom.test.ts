@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { rowsDrawn, setRuler } from '../library/dictionary'
-import { baysOf, FORM_HEIGHT, SHELF, diskRoom, diskRoomShape, diskSummaryOf, volumeName, type DiskRoomReadings } from '../units/diskRoom'
+import { baysOf, LOW_RACK, diskRoom, diskRoomShape, diskSummaryOf, volumeName, type DiskRoomReadings } from '../units/diskRoom'
 import { diskRoomReadings } from '../../content/units/disk'
 
 // 2026-11-19, the disk unit's room, the warehouse (shelves the Owner's word the same day), drawn against the room standards. The readings are one
@@ -29,7 +29,7 @@ describe('the disk room', () => {
     expect(diskRoomShape(nas)).toEqual([8, 8])
     expect(diskRoom(nas).svg).not.toContain('DO NOT FIT')
   })
-  it('a shelf per drive, its kind its form; the spinning speed on the carousel; not read, not drawn', () => {
+  it('a rack per drive, its kind its form; the spinning speed on its plate; not read, not drawn', () => {
     const n = rowsDrawn(() => diskRoom(nas))
     expect(n.ids).toEqual(expect.arrayContaining(['drive.shelf', 'drive.rpm', 'drive.busy', 'drive.traffic', 'array.state', 'array.disks', 'array.sync', 'vol.used', 'disk.used.all', 'drive.busy.all']))
     expect(n.out.svg).toContain('7200 RPM')
@@ -59,9 +59,10 @@ describe('the disk room', () => {
     expect(ids).toEqual([])
     expect(out.svg).toContain('DISK NOT READ')
   })
-  // Room standard 5: no shelf rises above the line written beneath the shelf behind it.
-  it('nothing hides anything: no shelf higher than the gap between rows', () => {
-    for (const [back] of Object.values(FORM_HEIGHT)) expect(back).toBeLessThanOrEqual((SHELF.row - SHELF.depth - SHELF.label) * 16)
+  // Room standard 5: no low rack rises above the line written beneath the rack behind it (the high-bay racks
+  // stand against the wall, nothing behind them).
+  it('nothing hides anything: no low rack higher than the gap between rows', () => {
+    for (const k of ['line', 'plain'] as const) expect(1 + LOW_RACK[k].levels * LOW_RACK[k].level).toBeLessThanOrEqual((LOW_RACK.row - LOW_RACK.depth - LOW_RACK.label) * 16)
   })
   // 2026-11-19: which NAS volume lies on which drive is not reported (node_exporter has no md membership);
   // goods on a guessed shelf would be made up (room standard: nothing made up).
