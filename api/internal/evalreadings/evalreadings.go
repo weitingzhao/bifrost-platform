@@ -31,6 +31,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actionrecord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 // DefinitionVersion is the version of every definition in this file. Raise it
@@ -193,10 +194,10 @@ func promGroups(ctx context.Context, prom Prom, w Window) []Reading {
 	var wg sync.WaitGroup
 	for i, g := range groups {
 		wg.Add(1)
-		go func(i int, g func(context.Context, Prom, Window) []Reading) {
+		safego.Go("evalreadings.prom", func() {
 			defer wg.Done()
 			res[i] = g(ctx, prom, w)
-		}(i, g)
+		})
 	}
 	wg.Wait()
 	var out []Reading
