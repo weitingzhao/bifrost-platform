@@ -90,6 +90,8 @@ type Server struct {
 	// catalog is the map's pool scanner (catalog_wire.go).
 	catalog     *catalog.Scanner
 	catalogOnce sync.Once
+	// catalogHealth is the cluster scan's last replicas (map[string]catalog.Health).
+	catalogHealth atomic.Value
 	// instruments answers /governance/instruments (governance_instruments.go).
 	instruments     *instruments.Service
 	instrumentsOnce sync.Once

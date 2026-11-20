@@ -226,3 +226,4 @@ deny	GET /api/v1/agentrt/delivery
 deny	GET /api/v1/catalog/unperceived
 deny	GET /api/v1/catalog/owner
 deny	GET /api/v1/catalog/index
+deny	GET /api/v1/catalog/status

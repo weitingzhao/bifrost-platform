@@ -20,6 +20,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/catalog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ciscore"
+	"github.com/weitingzhao/bifrost-platform/api/internal/statefile/k8sstate"
 )
 
 // The map's pool of what it cannot perceive (catalog, 0.2 map line,
@@ -30,6 +31,7 @@ import (
 func (s *Server) catalogScanner() *catalog.Scanner {
 	s.catalogOnce.Do(func() {
 		s.catalog = &catalog.Scanner{Source: s.catalogSource}
+		s.catalog.AfterRound = func(ctx context.Context) { s.catalog.KeepStatus(ctx, s.catalogStatusInputs()) }
 	})
 	return s.catalog
 }
@@ -105,7 +107,11 @@ func (s *Server) catalogClusterTree(ctx context.Context) (catalog.Tree, error) {
 		return catalog.Tree{}, err
 	}
 	seen := map[string]bool{}
+	health := map[string]catalog.Health{}
 	add := func(ns, name, kind string) { seen[ns+"/"+name+"/"+kind] = true }
+	judge := func(ns, name string, desired, ready int) {
+		health[ns+"/"+name] = catalog.Health{Desired: desired, Ready: ready, Judged: true}
+	}
 	opts := metav1.ListOptions{}
 	deps, err := kube.AppsV1().Deployments("").List(ctx, opts)
 	if err != nil {
@@ -113,6 +119,7 @@ func (s *Server) catalogClusterTree(ctx context.Context) (catalog.Tree, error) {
 	}
 	for _, o := range deps.Items {
 		add(o.Namespace, o.Name, "deployment")
+		judge(o.Namespace, o.Name, replicasOf(o.Spec.Replicas), int(o.Status.ReadyReplicas))
 	}
 	sts, err := kube.AppsV1().StatefulSets("").List(ctx, opts)
 	if err != nil {
@@ -120,6 +127,7 @@ func (s *Server) catalogClusterTree(ctx context.Context) (catalog.Tree, error) {
 	}
 	for _, o := range sts.Items {
 		add(o.Namespace, o.Name, "statefulset")
+		judge(o.Namespace, o.Name, replicasOf(o.Spec.Replicas), int(o.Status.ReadyReplicas))
 	}
 	dss, err := kube.AppsV1().DaemonSets("").List(ctx, opts)
 	if err != nil {
@@ -127,6 +135,7 @@ func (s *Server) catalogClusterTree(ctx context.Context) (catalog.Tree, error) {
 	}
 	for _, o := range dss.Items {
 		add(o.Namespace, o.Name, "daemonset")
+		judge(o.Namespace, o.Name, int(o.Status.DesiredNumberScheduled), int(o.Status.NumberReady))
 	}
 	cjs, err := kube.BatchV1().CronJobs("").List(ctx, opts)
 	if err != nil {
@@ -134,7 +143,11 @@ func (s *Server) catalogClusterTree(ctx context.Context) (catalog.Tree, error) {
 	}
 	for _, o := range cjs.Items {
 		add(o.Namespace, o.Name, "cronjob")
+		if _, ok := health[o.Namespace+"/"+o.Name]; !ok {
+			health[o.Namespace+"/"+o.Name] = catalog.Health{}
+		}
 	}
+	s.catalogHealth.Store(health)
 	keys := make([]string, 0, len(seen))
 	for k := range seen {
 		keys = append(keys, k)
@@ -198,4 +211,65 @@ func (s *Server) mountCatalog(r chi.Router) {
 	viewer.Method(http.MethodGet, "/catalog/unperceived", catalog.Route{Scanner: s.catalogScanner()})
 	viewer.Method(http.MethodGet, "/catalog/owner", catalog.OwnerRoute{Scanner: s.catalogScanner()})
 	viewer.Method(http.MethodGet, "/catalog/index", catalog.IndexRoute{Scanner: s.catalogScanner()})
+	viewer.Method(http.MethodGet, "/catalog/status", catalog.StatusRoute{Scanner: s.catalogScanner()})
+}
+
+func replicasOf(n *int32) int {
+	if n == nil {
+		return 1 // the API's default
+	}
+	return int(*n)
+}
+
+// catalogStatusInputs lends the map's status the cluster scan's replicas,
+// the request counts Prometheus keeps of this platform's routes, and the
+// domain graph the CI page keeps.
+func (s *Server) catalogStatusInputs() catalog.StatusInputs {
+	in := catalog.StatusInputs{Window: time.Hour}
+	in.Health = func() map[string]catalog.Health {
+		h, _ := s.catalogHealth.Load().(map[string]catalog.Health)
+		return h
+	}
+	if prom := s.evalProm(); prom != nil {
+		ns := k8sstate.Namespace()
+		in.Requests = func(ctx context.Context, routes []string) (map[string]catalog.RouteCount, error) {
+			want := map[string]bool{}
+			for _, r := range routes {
+				want[r] = true
+			}
+			expr := fmt.Sprintf(`sum by (handler, status) (increase(http_requests_total{namespace=%q}[1h]))`, ns)
+			samples, err := prom(ctx, expr)
+			if err != nil {
+				return nil, err
+			}
+			out := map[string]catalog.RouteCount{}
+			for _, sm := range samples {
+				h := sm.Labels["handler"]
+				if !want[h] {
+					continue
+				}
+				c := out[h]
+				c.Total += sm.Value
+				if sm.Labels["status"] == "5xx" {
+					c.Errors += sm.Value
+				}
+				out[h] = c
+			}
+			return out, nil
+		}
+	}
+	if s.delivery != nil {
+		in.Boundary = func(ctx context.Context, repo string) ([]catalog.Edge, bool, error) {
+			g, err := s.ciDomainsKept.Graph(ctx, s.ciDomainsSourceOf(), repo)
+			if err != nil {
+				return nil, false, err
+			}
+			edges := make([]catalog.Edge, 0, len(g.Edges))
+			for _, e := range g.Edges {
+				edges = append(edges, catalog.Edge{From: e.From, To: e.To, Imports: e.Imports, WrongWay: e.WrongWay})
+			}
+			return edges, g.Measured, nil
+		}
+	}
+	return in
 }

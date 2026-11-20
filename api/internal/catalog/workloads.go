@@ -41,33 +41,45 @@ func WorkloadTree(commit string, files []string, rows []byte) (Tree, error) {
 }
 
 type keptRows struct {
-	Commit string          `json:"commit"`
-	Rows   json.RawMessage `json:"rows"`
+	Repo    string          `json:"repo"`
+	Commit  string          `json:"commit"`
+	Rows    json.RawMessage `json:"rows"`
+	Domains json.RawMessage `json:"domains,omitempty"`
 }
 
-// keepWorkloads keeps the "workloads" section of own (a no-op without one).
-func (s *Scanner) keepWorkloads(commit string, own []byte) {
+// keepWorkloads keeps the "workloads" section of own (a no-op without one),
+// with the table's domains (their contracts name the routes the status reads).
+func (s *Scanner) keepWorkloads(repo, commit string, own []byte) {
 	var o struct {
 		Workloads json.RawMessage `json:"workloads"`
+		Domains   json.RawMessage `json:"domains"`
 	}
 	if json.Unmarshal(own, &o) != nil || len(o.Workloads) == 0 {
 		return
 	}
-	if raw, err := json.Marshal(keptRows{Commit: commit, Rows: o.Workloads}); err == nil {
+	if raw, err := json.Marshal(keptRows{Repo: repo, Commit: commit, Rows: o.Workloads, Domains: o.Domains}); err == nil {
 		_ = s.kept().Write(keptWorkloads, raw)
 	}
+}
+
+func (s *Scanner) keptSections() (keptRows, bool) {
+	raw, err := s.kept().Read(keptWorkloads)
+	if err != nil || raw == nil {
+		return keptRows{}, false
+	}
+	var k keptRows
+	if json.Unmarshal(raw, &k) != nil {
+		return keptRows{}, false
+	}
+	return k, true
 }
 
 // WorkloadRows is the kept "workloads" section and the commit it was read at
 // (nil before any scan read one). It does not take the scan lock: a Source
 // calls it during a scan.
 func (s *Scanner) WorkloadRows() ([]byte, string) {
-	raw, err := s.kept().Read(keptWorkloads)
-	if err != nil || raw == nil {
-		return nil, ""
-	}
-	var k keptRows
-	if json.Unmarshal(raw, &k) != nil {
+	k, ok := s.keptSections()
+	if !ok {
 		return nil, ""
 	}
 	return k.Rows, k.Commit

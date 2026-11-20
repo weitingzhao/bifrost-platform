@@ -57,6 +57,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_unperceived',
   'get_owner',
   'get_catalog_index',
+  'get_domain_status',
   'wait_for_event',
   'report_regression',
   'mark_regression_fixed',

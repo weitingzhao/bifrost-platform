@@ -131,6 +131,9 @@ type Scanner struct {
 	Source Source
 	Kept   Kept // nil: StateKept
 	Now    func() time.Time
+	// AfterRound runs after each round of Run (the status, kept from what
+	// the round scanned).
+	AfterRound func(context.Context)
 
 	mu sync.Mutex // one scan at a time
 }
@@ -255,7 +258,7 @@ func (s *Scanner) keepOthers(from string, others map[string]map[string]Review) {
 // failure to keep them is logged; the pool is kept either way.
 func (s *Scanner) keepTables(repo string, t Tree, table *Table, now time.Time) {
 	if own, ok, err := t.Read(OwnershipPath); err == nil && ok && repo != ClusterRepo {
-		s.keepWorkloads(t.Commit, own)
+		s.keepWorkloads(repo, t.Commit, own)
 	}
 	o := Owners{Repo: repo, Commit: t.Commit, ScannedAt: now, Packages: map[string][]string{}, Groups: map[string][]string{}}
 	if table != nil {
@@ -336,6 +339,11 @@ func (s *Scanner) Run(ctx context.Context, repos Repos, fallback []string) {
 				if _, err := s.ScanOnce(c, repo); err != nil {
 					slog.Warn("catalog: scan", "repo", repo, "err", err)
 				}
+				cancel()
+			}
+			if s.AfterRound != nil {
+				c, cancel := context.WithTimeout(ctx, 2*time.Minute)
+				s.AfterRound(c)
 				cancel()
 			}
 			select {
