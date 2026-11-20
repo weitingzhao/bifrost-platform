@@ -956,6 +956,13 @@ export class PlaceScene extends Phaser.Scene {
     // How the children talk, on the streets, and the stations to what lies outside (links.ts).
     // Routes on the streets are off for now (the Owner, 2026-11-20: first the edge of each small world); the code stays.
     if (ROUTES_ON_STREETS && o.interactive && this.shown?.links && !o.arranging) for (const part of this.ways(this.shown.links, geo, P, plots, placed, W, H)) c.add(part)
+    // On the town, a picked district shows its routes on the highways to the districts it deals with (default
+    // 2026-11-20, the city line's call, the Owner may overrule: the ports alone did not show that they connect;
+    // routes only for the picked one, so the map is not covered in lines).
+    else if (place.kind === 'town' && o.interactive && o.selected && this.shown?.links && !o.arranging) {
+      const mine = this.shown.links.lines.filter(l => l.a === o.selected || l.b === o.selected)
+      if (mine.length) for (const part of this.ways({ lines: mine, gates: [], more: { lines: 0, gates: 0 } }, geo, P, plots, placed, W, H)) c.add(part)
+    }
     // A district's ground: a crossing on its edge for each district it talks to, on the side that district lies.
     const edgePts: Phaser.Math.Vector2[] = []
     const nbs = new Map<string, { c: Phaser.GameObjects.Container; at: Phaser.Math.Vector2 }>()
