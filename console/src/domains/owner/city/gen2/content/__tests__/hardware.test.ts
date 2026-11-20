@@ -26,9 +26,10 @@ describe('the hardware district, from one real read', () => {
   })
   // 2026-11-19, the Owner, on the first try: tiny boxes huddled in the middle, the ground wasted. Sizes
   // grew so what a device shows reads at a glance, and the ground is laid out by what things are for.
-  it('sizes by weight: the GPU tower and the NAS park 4×8; servers and the desks 4×4; the rest small', () => {
-    expect(dev('gpu-server').shape).toBe('4x8')
-    expect(dev('UGREEN-NAS').shape).toBe('4x8')
+  // 2026-11-20, the Owner: a building is small, medium or large; the GPU tower and the NAS went from 4×8 to large.
+  it('sizes by weight: the GPU tower, the NAS park, servers and the desks large; the rest small', () => {
+    expect(dev('gpu-server').shape).toBe('4x4')
+    expect(dev('UGREEN-NAS').shape).toBe('4x4')
     expect(dev('ubt-k3s-07').shape).toBe('4x4')
     expect(dev('win11-host').shape).toBe('4x4')
     expect(dev('mac-mini-2').shape).toBe('2x2')

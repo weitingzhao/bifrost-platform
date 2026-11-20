@@ -59,11 +59,11 @@ const hasGpu = (n: TopoNode) => /gpu|4090/i.test(`${n.id} ${n.label ?? ''}`) || 
 /**
  * RULES.md §2.3: a device's size by its weight, large enough that what it shows reads at a glance
  * (the Owner, 2026-11-19: use the ground): the GPU tower and the NAS (a logistics park, tens of
- * terabytes) 4×8; a 16-core server and a trading desk 4×4; the rest 2×2.
+ * terabytes), a 16-core server and a trading desk large (4×4: the three classes, 2026-11-20); the rest 2×2.
  */
 export function shapeOf(look: Look, cores: number | null, gpu: boolean): Shape {
-  if (gpu || (cores ?? 0) >= 32) return '4x8'
-  if (look === 'storage') return '4x8'
+  if (gpu || (cores ?? 0) >= 32) return '4x4'
+  if (look === 'storage') return '4x4'
   if (look === 'windows') return '4x4'
   if (look === 'linux' && (cores ?? 0) >= 16) return '4x4'
   return '2x2'

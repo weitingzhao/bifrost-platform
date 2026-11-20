@@ -38,10 +38,10 @@ export type Placed = Item & Cell & { plot: string; w: number; h: number }
 
 /**
  * A footprint by how many things a place holds (the Owner, 2026-11-19: nothing made up — a size is
- * a weight only when it comes from something counted): more than 8 an 8×8, more than 4 a 4×8, more
- * than 2 a 4×4, else a 2×4.
+ * a weight only when it comes from something counted), in the three classes (2026-11-20): more than 4
+ * large (4×4), more than 2 medium (2×4), else small (2×2).
  */
-export const shapeByCount = (n: number): Shape => n > 8 ? '8x8' : n > 4 ? '4x8' : n > 2 ? '4x4' : '2x4'
+export const shapeByCount = (n: number): Shape => n > 4 ? '4x4' : n > 2 ? '2x4' : '2x2'
 
 export const area = (items: readonly Item[]) => items.reduce((a, i) => a + shapeArea(i.shape), 0)
 export const fitsBudget = (items: readonly Item[], g: Ground = FULL) => area(items) <= g.w * g.h
@@ -62,28 +62,23 @@ function halves(r: Rect): [Rect, Rect] {
 }
 
 /**
- * A place's ground (the Owner, 2026-11-20: going in is a true zoom). One cell of the parent becomes 2 × 2
- * cells inside, so a 2×4 district is a 4 × 8 ground, an 8×8 one the full 16 × 16; the town is always the
- * full ground. Its long side runs along x. 16 × 16 is the most any ground has.
+ * A place's ground (the Owner, 2026-11-20, simplified the same day): every level is the same sheet of
+ * 16 × 16; going in opens a new sheet, it is not a geometric zoom. A person learns one page and it holds on
+ * every level. What a place holds is limited by count (MAX_THINGS) and its size by three classes (CLASSES).
  */
 export type Ground = { w: number; h: number }
 export const FULL: Ground = { w: GRID, h: GRID }
-export const SCALE = 2
 const whole = (g: Ground): Rect => ({ x: 0, y: 0, w: g.w, h: g.h })
 
-/**
- * The ground of a place of this kind and shape holding these things: its footprint times SCALE; if what it
- * holds does not fit, the ground grows (its short side first) until it does, up to the full ground, and
- * `over` says so: the place holds more than its size on the map, which is shown, not hidden.
- */
-export function groundOf(kind: string, shape: string, items: readonly Item[]): Ground & { over: boolean } {
-  if (kind === 'town' || !(SHAPES as readonly string[]).includes(shape)) return { ...FULL, over: false }
-  const { short, long } = sidesOf(shape as Shape)
-  let g: Ground = { w: Math.min(GRID, long * SCALE), h: Math.min(GRID, short * SCALE) }
-  const base = g
-  const fits = (q: Ground) => area(items) <= q.w * q.h && items.every(it => fitsIn(it, { x: 0, y: 0, ...q }))
-  while (!fits(g) && (g.w < GRID || g.h < GRID)) g = g.h < g.w ? { w: g.w, h: g.h * 2 } : { w: Math.min(GRID, g.w * 2), h: g.h }
-  return { ...g, over: g.w !== base.w || g.h !== base.h }
+/** At most this many things on any level (the Owner, 2026-11-20: 16, the sixteen 4 × 4 plots of a sheet). */
+export const MAX_THINGS = 16
+
+/** A district's or a building's size: small, medium or large, its weight, not how much it holds (the Owner, 2026-11-20). */
+export const CLASSES = ['2x2', '2x4', '4x4'] as const
+
+/** Every place's ground is the full sheet (kept as a function so the callers stay one way). */
+export function groundOf(_kind: string, _shape: string, _items: readonly Item[]): Ground & { over: boolean } {
+  return { ...FULL, over: false }
 }
 
 /** Every plot of a plan (its leaves). */

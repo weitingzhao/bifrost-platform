@@ -151,14 +151,15 @@ export type Pass = { id: string; label: string; bus: number; metric: number; n: 
 export const PORTS = 3
 
 /**
- * Ports a side by a place's size (the Owner, 2026-11-20, like a chip: a bigger die has more pins, but its pins
- * grow slower than its area, Rent's rule at its modular end): 2 + log4(area), down. 1×1 and 1×2 have 2, 2×2 and
- * 2×4 3, 4×4 and 4×8 4, 8×8 5. Other and Orphan stay one each whatever the size.
+ * Ports a side by a place's size class (the Owner, 2026-11-20, like a chip: a bigger die has more pins, but
+ * fewer than its area would give): small (2×2) 3, medium (2×4) 4, large (4×4) 5; smaller things 2. Other and
+ * Orphan stay one each whatever the size.
  */
 export function portsFor(shape: string): number {
   const [a, b] = shape.split('x').map(Number)
   if (!a || !b) return PORTS
-  return 2 + Math.floor(Math.log(a * b) / Math.log(4) + 1e-9)
+  const area = a * b
+  return area >= 16 ? 5 : area >= 8 ? 4 : area >= 4 ? 3 : 2
 }
 
 export type Edge = { named: Pass[]; other: Pass | null }

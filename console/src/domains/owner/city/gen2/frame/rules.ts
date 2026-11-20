@@ -1,4 +1,4 @@
-import { area, assign, decodePlan, GRID, groundOf, plotsOf, sidesOf, SHAPES, TAPPABLE, type Shape } from './grid'
+import { area, assign, CLASSES, decodePlan, GRID, groundOf, MAX_THINGS, plotsOf, sidesOf, SHAPES, TAPPABLE, type Shape } from './grid'
 import { LOOKS, STATES, type Place, type PlaceKind } from './places'
 import { linkRulesBroken, type Link } from './links'
 
@@ -11,8 +11,8 @@ import { linkRulesBroken, type Link } from './links'
  *   levels   a town holds districts, a district buildings, a building rooms; nothing below a room
  *   shapes   every place is one of the frame's shapes: 1×1, 1×2, 2×2, 2×4, 4×4, 4×8 or 8×8
  *   doors    a place you go into (a district, a building) is at least 2 wide, for a finger
- *   ground   what a place holds fits the full 16×16 ground (a place's own ground is sized by its footprint
- *            and grows, flagged, when what it holds needs more: grid.ts groundOf)
+ *   ground   every level is the same 16×16 sheet; what a place holds fits it, at most 16 things, and a
+ *            district or a building is small, medium or large (grid.ts MAX_THINGS, CLASSES)
  *   names    ids are unique among siblings and safe in an address
  *   function a place's function, if it says one, is one of the content's functions
  *   states   a state is one of the four words; a look one of the five
@@ -70,6 +70,9 @@ export function rulesBroken(content: { tree: Place; functions?: { id: string }[]
       if (want === null) out.push(`${at}: a room holds nothing; there is no level below it`)
       else if (c.kind !== want) out.push(`${at}: a ${p.kind} holds ${want}s, not a ${c.kind}`)
     }
+    // A sheet holds at most MAX_THINGS; a district or a building is small, medium or large (the Owner, 2026-11-20).
+    if (p.children.length > MAX_THINGS) out.push(`${where}: holds ${p.children.length} things; a level holds at most ${MAX_THINGS}`)
+    for (const c of p.children) if ((c.kind === 'district' || c.kind === 'building') && !(CLASSES as readonly string[]).includes(c.shape)) out.push(`${where}/${c.id}: a ${c.kind} is small, medium or large (${CLASSES.join(', ')}), not ${c.shape}`)
     const valid = p.children.filter(c => (SHAPES as readonly string[]).includes(c.shape))
     if (area(valid) > GRID * GRID) out.push(`${where}: what it holds takes ${area(valid)} cells; its ground has ${GRID * GRID}`)
     for (const c of p.children) walk(c, `${where}/${c.id}`)
