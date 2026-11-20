@@ -1434,7 +1434,7 @@
         "tenant"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 foundation wall: this package only plugs the tenant adapter (tenanttopology) into the generic projection (topologyview), so it is the tenant's composition; the generic projection stays foundation's. No code moved."
+      "basis": "2026-11-16 foundation wall: this package only plugs the tenant adapter (tenanttopology) into the generic projection (topologyview), so it is the tenant's composition; the generic projection stays foundation's. No code moved. 2026-11-20: tenanttopology folded in (its only user): the tenant display adapter is tenant_adapter.go here, unchanged."
     },
     "api/internal/topologyview": {
       "domains": [
@@ -1442,13 +1442,6 @@
       ],
       "status": "assigned",
       "basis": "2026-11-16 Owner-approved domain split. Complete Build/Live projection extracted: generic node/edge aggregation, datastore host matching and discovered-machine ordering; tenant display rules supplied through an adapter."
-    },
-    "api/internal/tenanttopology": {
-      "domains": [
-        "tenant"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 Owner-approved domain split. Read-only tenant/deployment target-to-node and IB edge-display mapping physically extracted from topology, with pre-extraction JSON parity evidence. No probes or execution."
     },
     "api/internal/tenant/husbandry/checklistview": {
       "domains": [
