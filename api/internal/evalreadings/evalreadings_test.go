@@ -97,7 +97,7 @@ func itoa(n int64) string { b, _ := json.Marshal(n); return string(b) }
 // Without the ledger every ledger reading is still listed, as unmeasured with
 // the reason (law 47: "读口里没有的数写没量"), and the days parameter is checked.
 func TestHandlerWithoutLedger(t *testing.T) {
-	h := Handler(nil, nil, func() time.Time { return time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC) })
+	h := Handler(nil, nil, nil, func() time.Time { return time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC) })
 	rec := httptest.NewRecorder()
 	h(rec, httptest.NewRequest(http.MethodGet, "/api/v1/readings/evaluation", nil))
 	if rec.Code != http.StatusOK {

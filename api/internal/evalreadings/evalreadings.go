@@ -161,10 +161,10 @@ func def(source, rule string) Definition {
 
 // Compute returns every reading of the window. db nil leaves the ledger
 // readings unmeasured; prom nil leaves the Prometheus readings unmeasured.
-func Compute(ctx context.Context, db eventlog.DB, prom Prom, w Window) ([]Reading, error) {
+func Compute(ctx context.Context, db eventlog.DB, prom Prom, tasks FailedTasks, w Window) ([]Reading, error) {
 	var out []Reading
 	if db != nil {
-		rs, err := ledgerReadings(ctx, db, w)
+		rs, err := ledgerReadings(ctx, db, tasks, w)
 		if err != nil {
 			return nil, err
 		}
@@ -174,7 +174,7 @@ func Compute(ctx context.Context, db eventlog.DB, prom Prom, w Window) ([]Readin
 		}
 		out = append(out, agentActionReadings(ctx, list, w)...)
 	} else {
-		for _, name := range []string{"ci_run_p50_seconds", "delivery_success_ratio", "owner_actions", "owner_wait_p50_seconds", "prod_deploys", "main_to_prod_p50_seconds", "agent_actions", "action_rollback_declared_ratio"} {
+		for _, name := range []string{"ci_run_p50_seconds", "delivery_success_ratio", "owner_actions", "owner_wait_p50_seconds", "prod_deploys", "main_to_prod_p50_seconds", "agent_actions", "action_rollback_declared_ratio", "ci_failures"} {
 			out = append(out, finish(Reading{Name: name, Window: w, Note: "the event ledger is not connected on this platform"}, false))
 		}
 	}

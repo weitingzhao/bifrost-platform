@@ -15,7 +15,7 @@ import (
 // (LatestByKey, OfType): this package writes no SQL on it, and the medians
 // and ratios are computed here.
 
-func ledgerReadings(ctx context.Context, db eventlog.DB, w Window) ([]Reading, error) {
+func ledgerReadings(ctx context.Context, db eventlog.DB, tasks FailedTasks, w Window) ([]Reading, error) {
 	tx, err := db.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly, IsoLevel: pgx.RepeatableRead})
 	if err != nil {
 		return nil, err
@@ -29,6 +29,9 @@ func ledgerReadings(ctx context.Context, db eventlog.DB, w Window) ([]Reading, e
 			return eventlog.OfType(ctx, tx, typ, from, to)
 		},
 	}
+	if tasks != nil {
+		src.tasks = func(repo, commit, run string) ([]string, error) { return tasks(ctx, repo, commit, run) }
+	}
 	return src.readings(w)
 }
 
@@ -36,6 +39,9 @@ func ledgerReadings(ctx context.Context, db eventlog.DB, w Window) ([]Reading, e
 type ledgerSource struct {
 	latestByKey func(typ, key string, since time.Time) ([]eventlog.Row, error)
 	ofType      func(typ string, from, to time.Time) ([]eventlog.Row, error)
+	// tasks reads a failed run's tasks for the CI failure reading; nil leaves
+	// every failed run's task unrecorded.
+	tasks func(repo, commit, run string) ([]string, error)
 }
 
 func (s ledgerSource) readings(w Window) ([]Reading, error) {
@@ -45,6 +51,7 @@ func (s ledgerSource) readings(w Window) ([]Reading, error) {
 		return nil, fmt.Errorf("pipeline_seen: %w", err)
 	}
 	out = append(out, ciReadings(runs, w)...)
+	out = append(out, ciFailureReadings(runs, s.tasks, w)...)
 	out = append(out, deliveryReading(runs, w))
 	owner, err := s.ownerReadings(w)
 	if err != nil {

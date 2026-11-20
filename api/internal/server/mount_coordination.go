@@ -23,5 +23,5 @@ func (s *Server) mountCoordination(r chi.Router) {
 	// The evaluation readout (law 47, the metrics line): each number from kept
 	// records over a closed window, with its definition version, window,
 	// sample count and source. Read-only; viewer and above.
-	r.With(s.auth.Require(actuation.RoleViewer)).Get("/readings/evaluation", evalreadings.Handler(s.recordDB, s.evalProm, nil))
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/readings/evaluation", evalreadings.Handler(s.recordDB, s.evalProm, s.evalFailedTasks, nil))
 }

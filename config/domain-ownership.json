@@ -1770,7 +1770,7 @@
         "coordination"
       ],
       "status": "assigned",
-      "basis": "2026-11-20: the evaluation readout (law 47), GET /api/v1/readings/evaluation; the coordinator gave it to the metrics line (coordination). Reads the event ledger only through eventlog.LatestByKey and OfType and Prometheus through a query lent by server; writes nothing."
+      "basis": "2026-11-20: the evaluation readout (law 47), GET /api/v1/readings/evaluation; the coordinator gave it to the metrics line (coordination). Reads the event ledger only through eventlog.LatestByKey and OfType, Prometheus through a query lent by server, and a failed CI run's failed tasks through a lookup lent by server (evidence.EvidenceByCommit, verification); writes nothing."
     },
     "api/internal/elasticreadings": {
       "domains": [

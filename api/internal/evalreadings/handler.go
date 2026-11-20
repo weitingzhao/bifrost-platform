@@ -14,8 +14,9 @@ import (
 //
 // days is the window: the last `days` whole days in the Owner's zone that have
 // ended (1 to 31, default 7). name keeps only the readings of that name. db
-// and prom are read per request; nil leaves their readings unmeasured.
-func Handler(db func() eventlog.DB, prom func() Prom, now func() time.Time) http.HandlerFunc {
+// and prom are read per request; nil leaves their readings unmeasured. tasks
+// names a failed CI run's failed tasks; nil leaves them unrecorded.
+func Handler(db func() eventlog.DB, prom func() Prom, tasks FailedTasks, now func() time.Time) http.HandlerFunc {
 	if now == nil {
 		now = time.Now
 	}
@@ -41,7 +42,7 @@ func Handler(db func() eventlog.DB, prom func() Prom, now func() time.Time) http
 		if prom != nil {
 			p = prom()
 		}
-		list, err := Compute(ctx, d, p, win)
+		list, err := Compute(ctx, d, p, tasks, win)
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 			return
