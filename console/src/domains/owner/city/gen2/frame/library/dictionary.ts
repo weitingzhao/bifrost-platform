@@ -142,12 +142,17 @@ export function rulerOf(id: string): number {
   return rulers.get(id) ?? e.each
 }
 
+const listeners = new Set<() => void>()
+/** Be told when a viewer changes a ruler (the pictures that count that part redraw). */
+export function onRulers(fn: () => void): () => void { listeners.add(fn); return () => { listeners.delete(fn) } }
+
 /** Set a ruler (a size above zero), or put it back to the table's default (null). */
 export function setRuler(id: string, each: number | null) {
   rulerOf(id)
   if (each == null) rulers.delete(id)
   else if (!(each > 0)) throw new Error(`a ruler is a size above zero, not ${each}`)
   else rulers.set(id, each)
+  for (const fn of listeners) fn()
 }
 
 /**

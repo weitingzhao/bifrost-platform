@@ -6,6 +6,7 @@ import { formatPath, parsePath, type Path, type Place } from '../src/domains/own
 import { hardwareDistrict, readHardware } from '../src/domains/owner/city/gen2/content/hardware'
 import { readUnits } from '../src/domains/owner/city/gen2/content/unitRooms'
 import type { Link, Partners } from '../src/domains/owner/city/gen2/frame/links'
+import { useRulersTick } from '../src/domains/owner/city/gen2/frame/rulers'
 
 // The gen2 frame on its own: the address is the place (#/system/infrastructure), so Back works.
 // The content plug-in: the Console's menu, and the hardware district read live through the platform
@@ -43,19 +44,23 @@ const SAMPLE_PARTNERS: Record<string, Partners> = {
 const withPartners = (p: Place): Place => ({ ...p, partners: SAMPLE_PARTNERS[p.id] ?? p.partners, children: p.kind === 'town' ? p.children.map(withPartners) : p.children })
 
 function Bench() {
-  const [hw, setHw] = useState<Place | null>(null)
+  const [reads, setReads] = useState<{ r: Awaited<ReturnType<typeof readHardware>>; u: Awaited<ReturnType<typeof readUnits>>; at: string } | null>(null)
   useEffect(() => {
     let on = true
     // The hardware, and every unit's details for the rooms drawn by their modules (CPU, memory, disk).
-    const tick = () => Promise.all([readHardware(getJson), readUnits(getJson)]).then(([r, u]) => { if (on && r.topology) setHw(hardwareDistrict(r, 'system', `Live, read every 30 s (last ${new Date().toLocaleTimeString()}).`, u)) })
+    const tick = () => Promise.all([readHardware(getJson), readUnits(getJson)]).then(([r, u]) => { if (on && r.topology) setReads({ r, u, at: new Date().toLocaleTimeString() }) })
     tick()
     const t = setInterval(tick, 30_000)
     return () => { on = false; clearInterval(t) }
   }, [])
+  const rulers = useRulersTick()
   const CONTENT = useMemo(() => {
+    void rulers
+    // The rooms are drawn under the rulers as they stand, so the district is built again when one changes.
+    const hw: Place | null = reads ? hardwareDistrict(reads.r, 'system', `Live, read every 30 s (last ${reads.at}).`, reads.u) : null
     const c = consoleContent(hw ? [hw] : [])
     return new URLSearchParams(location.search).has('links') ? { ...c, tree: withPartners(c.tree), links: SAMPLE_LINKS } : c
-  }, [hw])
+  }, [reads, rulers])
   const [path, setPath] = useState<Path>(() => parsePath(location.hash))
   useEffect(() => {
     const on = () => setPath(parsePath(location.hash))

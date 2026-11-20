@@ -265,3 +265,9 @@
    real ones stand out. */
 .g2 .g2-ghost { opacity: 0.45; border-style: dashed !important; box-shadow: none !important; }
 .g2 .g2-ghost-row td { opacity: 0.45; }
+
+/* The rulers (rulers.tsx): one row a part, its name then its size. */
+.g2-rulers { display: flex; flex-direction: column; gap: 8px; }
+.g2-rulers .g2-mute { margin: 0; }
+.g2-ruler { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.g2-ruler select { min-height: 28px; }

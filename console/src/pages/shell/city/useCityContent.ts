@@ -5,6 +5,7 @@ import { consoleContent } from '@/domains/owner/city/gen2/content/console'
 import { hardwareDistrict, readHardware } from '@/domains/owner/city/gen2/content/hardware'
 import { readUnits } from '@/domains/owner/city/gen2/content/unitRooms'
 import type { CityContent } from '@/domains/owner/city/gen2/frame/content'
+import { useRulersTick } from '@/domains/owner/city/gen2/frame/rulers'
 
 const EVERY = 30_000
 const getJson = async (path: string): Promise<unknown> => (await authedFetch('city', path)).json()
@@ -23,11 +24,14 @@ export function useCityContent(): CityContent {
     },
     refetchInterval: EVERY,
   })
+  // A viewer's new ruler redraws the rooms that count that part (frame/rulers.tsx).
+  const rulers = useRulersTick()
   return useMemo(() => {
+    void rulers
     const d = reads.data
     const hw = d?.hardware.topology
       ? hardwareDistrict(d.hardware, 'system', `Live, read every 30 s (last ${new Date(d.at).toLocaleTimeString()}).`, d.units)
       : null
     return consoleContent(hw ? [hw] : [])
-  }, [reads.data])
+  }, [reads.data, rulers])
 }

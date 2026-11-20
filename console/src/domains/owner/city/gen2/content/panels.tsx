@@ -1,3 +1,4 @@
+import { RulersPanel } from '../frame/rulers'
 import type { Panel } from '../frame/content'
 import { isWired, meterText, type Place } from '../frame/places'
 import { FORM_NAME, keyOf } from '../frame/library/key'
@@ -55,6 +56,8 @@ function KeyTable({ place, full }: { place: Place; full: boolean }) {
 /** `open` goes into a district or building and picks a room, as tapping its block does. */
 export function panelsOf(place: Place, open: (child: Place) => void): Panel[] {
   const key: Panel[] = place.look ? [{ id: 'key', title: `Key · ${FORM_NAME[keyOf(place).form]}`, dock: 'left', body: ({ size }) => <KeyTable place={place} full={size !== 'card'} /> }] : []
+  // A computer's rooms count standard parts: how much one part stands for is adjustable here (2026-11-20).
+  if (place.look) key.push({ id: 'rulers', title: 'Rulers', dock: 'left', body: <RulersPanel /> })
   return [...key, ...(place.children.length > 0 ? [{ id: 'inside', title: `Inside ${place.label}`, dock: 'right' as const, body: <InsideTable place={place} open={open} /> }] : [])]
 }
 

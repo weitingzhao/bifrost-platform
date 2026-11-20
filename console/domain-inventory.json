@@ -2185,6 +2185,7 @@
         "console/src/domains/owner/city/gen2/frame/parts.tsx",
         "console/src/domains/owner/city/gen2/frame/placeScene.ts",
         "console/src/domains/owner/city/gen2/frame/places.ts",
+        "console/src/domains/owner/city/gen2/frame/rulers.tsx",
         "console/src/domains/owner/city/gen2/frame/rules.ts",
         "console/src/domains/owner/city/gen2/frame/sprites.ts",
         "console/src/domains/owner/city/gen2/frame/theme.ts",
