@@ -1,5 +1,6 @@
 import { shapeByCount, type Shape } from '../frame/grid'
 import { TOWN_ID, type Place } from '../frame/places'
+import type { LandmarkId } from '../frame/library/landmarkLooks'
 import { ENTRY_ROUTE_IDS, SHELL_NAV, entryOf, formatShellHash, type ShellRouteId } from '@/lib/shell/consoleRoutes'
 
 /**
@@ -22,6 +23,20 @@ import { ENTRY_ROUTE_IDS, SHELL_NAV, entryOf, formatShellHash, type ShellRouteId
  */
 const PAGE: Shape = '2x2'
 
+/**
+ * The pages that stand as a first-generation landmark (the Owner, 2026-11-20: bring its buildings over),
+ * each because the landmark already meant that thing there: the launch pad is where releases fly from
+ * (empty until a run in flight is read onto it); the archive keeps history; mission control's wall of
+ * screens answers "is everything okay right now"; the supplier's dock is an outside vendor delivering,
+ * as IB delivers the market. Pages with no landmark of their meaning stay plain until one is drawn.
+ */
+const PAGE_LANDMARK: Partial<Record<ShellRouteId, LandmarkId>> = {
+  releases: 'launchPad',
+  records: 'archive',
+  status: 'missionControl',
+  ib: 'supplierDock',
+}
+
 /** The Console's functions: its menu entries. Each district and building serves the entry it sits under. */
 export const consoleFunctions = () => {
   const nav = SHELL_NAV as readonly { id: ShellRouteId; label: string }[]
@@ -32,7 +47,7 @@ export function placeTree(): Place {
   const nav = SHELL_NAV as readonly { id: ShellRouteId; label: string; question: string; group: string }[]
   const buildingsOf = (entry: string) =>
     nav.filter(n => n.group === 'detail' && n.id !== 'city' && entryOf({ kind: 'shell', id: n.id }) === entry)
-      .map(n => ({ id: n.id, function: entry, kind: 'building' as const, shape: PAGE, label: n.label, question: n.question, dashboard: formatShellHash(n.id), children: [] }))
+      .map(n => ({ id: n.id, function: entry, kind: 'building' as const, shape: PAGE, label: n.label, question: n.question, dashboard: formatShellHash(n.id), landmark: PAGE_LANDMARK[n.id], children: [] }))
   return {
     id: TOWN_ID,
     kind: 'town',

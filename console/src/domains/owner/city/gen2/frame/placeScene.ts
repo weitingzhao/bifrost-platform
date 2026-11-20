@@ -2,12 +2,13 @@ import * as Phaser from 'phaser'
 import { fitsIn, type Placed, type Plot, type Street } from './grid'
 import { geoOf, WAY, type Geo, type Rect } from './geo'
 import { functionAt, isWired, type Place } from './places'
-import { hueOf, terrainOf } from './theme'
+import { hueOf, terrainOf, tintOf } from './theme'
 import { PALETTE, TERRAIN, type Light, type Palette } from './light'
 import { hash } from './kit'
 import { buildingWings, setback, spriteFor, spriteKey, spriteUrl, type Wing } from './sprites'
 import { deviceKey, deviceSprite, formOfPlace, levelsOf } from './devices'
 import { frameOf, type Frame } from './viewport'
+import { LANDMARKS } from './library/landmarkLooks'
 
 /**
  * One scene draws one place (a page): its 16×16 ground and the things on it,
@@ -102,13 +103,15 @@ export type Layout = { placed: Placed[]; plots: Plot[]; streets: Street[] }
 
 
 /** How tall a place's sprite stands (roof included), for its hit area and the fit: matches sprites.ts. */
-const heightOf = (p: Place, size: number) => p.kind === 'room' ? 24 : p.kind === 'building' ? 22 + size * 5 + 16 : 30 + size * 9 + 12
+const heightOf = (p: Place, size: number) => p.landmark ? LANDMARKS[p.landmark].height * size / LANDMARKS[p.landmark].n : p.kind === 'room' ? 24 : p.kind === 'building' ? 22 + size * 5 + 16 : 30 + size * 9 + 12
 /** Sprites are drawn at this resolution, then shown at 1/RS, so they stay sharp when zoomed in. */
 const RS = 3
 /** The slab's thickness under the ground, px: the earth shows on its two front sides. */
 const SLAB = 14
 /** A road's kerb, each side, in cells. */
 const KERB = 0.06
+/** The pavement inside the way's width, each side, in cells: the asphalt is the rest. */
+const WALK = 0.14
 
 export class PlaceScene extends Phaser.Scene {
   private events_: SceneEvents
@@ -331,6 +334,12 @@ export class PlaceScene extends Phaser.Scene {
       const hue = this.shown ? hueOf(this.shown.tree, path) : '#cccccc'
       const seed = hash(p.id) % 997
       const count = kind === 'district' ? k?.children.length ?? 0 : 0
+      // A first-generation landmark, scaled into the footprint (block() reads its cells from `cells`).
+      if (k?.landmark) {
+        const lm = LANDMARKS[k.landmark], key = `g2:lm:${k.landmark}`
+        this.cells.set(key, lm.n)
+        return { id: p.id, key, make: lm.make }
+      }
       // A device (a building with a look) is drawn as itself, its rooms' readings on it (devices.ts).
       if (kind === 'building' && k?.look) {
         const lv = levelsOf(k), form = formOfPlace(k)
@@ -402,6 +411,10 @@ export class PlaceScene extends Phaser.Scene {
 
   /** Where a sprite's anchor (the back corner of its footprint) sits in its texture, as a fraction. */
   private anchors = new Map<string, { ax: number; ay: number }>()
+  /** A sprite drawn for a footprint of its own (a landmark, n×n): how many cells across it was drawn. */
+  private cells = new Map<string, number>()
+  /** How much a sprite drawn for `cells` is scaled to stand in a footprint `size` across. */
+  private spriteFit(key: string, size: number) { const n = this.cells.get(key); return n ? size / n : 1 }
 
   /** Draw a place once its sprites are loaded; a newer draw wins. */
   private async draw(s: Shown, refit: boolean) {
@@ -730,10 +743,26 @@ export class PlaceScene extends Phaser.Scene {
     const c = this.add.container(o.at, 0)
     const g = this.add.graphics()
     const ground = [P(0, 0), P(W, 0), P(W, H), P(0, H)]
+    const tree = this.shown?.tree
+    // The town stands at the sea (the first generation's land, the Owner 2026-11-20): open water behind
+    // its far edge, a strip of sand, clouds in the sky either side. Only the town: it is the whole map.
+    const shore = place.kind === 'town' && o.interactive
+    const SEA = shore ? 3 : 0
+    if (shore) {
+      const mid = (P(W, -SEA).x + P(0, H).x) / 2, span = (P(W, -SEA).x - P(0, H).x) / 2, sky = P(0, -SEA).y
+      const cl = this.add.graphics()
+      for (const [cx, cy, k] of [[mid - span * 0.72, sky + 8, 1.4], [mid + span * 0.78, sky - 4, 1.8]] as const) {
+        cl.lineStyle(1.3, this.tone.ink, 0.55).fillStyle(this.tone.cloud, 1)
+        for (const [dx, dy, r] of [[-22, 3, 9], [-8, -3, 14], [10, -1, 11], [24, 4, 7]]) { cl.fillCircle(cx + dx * k, cy + dy * k, r * k); cl.strokeCircle(cx + dx * k, cy + dy * k, r * k) }
+        cl.fillRect(cx - 30 * k, cy + 2 * k, 60 * k, 9 * k)
+        cl.lineBetween(cx - 30 * k, cy + 11 * k, cx + 30 * k, cy + 11 * k)
+      }
+      c.add(cl)
+    }
     // The slab: earth on its two front sides, then the ground on top, all outlined in ink.
     const down = (v: Phaser.Math.Vector2) => new Phaser.Math.Vector2(v.x, v.y + SLAB)
     const leftSide = [P(0, H), P(W, H), down(P(W, H)), down(P(0, H))]
-    const rightSide = [P(W, 0), P(W, H), down(P(W, H)), down(P(W, 0))]
+    const rightSide = [P(W, -SEA), P(W, H), down(P(W, H)), down(P(W, -SEA))]
     // Outdoors the slab is earth; a building's storey stands on a concrete floor slab.
     const inside = place.kind === 'building'
     g.lineStyle(2, this.tone.ink)
@@ -741,7 +770,20 @@ export class PlaceScene extends Phaser.Scene {
     g.fillStyle(inside ? this.tone.slabShade : ter.earthShade).fillPoints(rightSide, true).strokePoints(rightSide, true)
     if (!inside) {
       g.lineStyle(1, ter.earthShade, 0.8)
-      for (const t of [0.4, 0.72]) g.lineBetween(P(0, H).x, P(0, H).y + SLAB * t, P(W, H).x, P(W, H).y + SLAB * t)
+      for (const t of [0.4, 0.72]) {
+        g.lineBetween(P(0, H).x, P(0, H).y + SLAB * t, P(W, H).x, P(W, H).y + SLAB * t)
+        g.lineBetween(P(W, H).x, P(W, H).y + SLAB * t, P(W, -SEA).x, P(W, -SEA).y + SLAB * t)
+      }
+    }
+    if (shore) {
+      const sea = [P(0, -SEA), P(W, -SEA), P(W, 0), P(0, 0)]
+      g.lineStyle(2, this.tone.ink).fillStyle(this.tone.sea).fillPoints(sea, true).strokePoints(sea, true)
+      g.lineStyle(1.3, this.tone.wave, 1)
+      for (let i = 0; i < W * 1.4; i++) {
+        const h = hash(`w${i}`), x = (h % Math.floor(W * 10)) / 10, y = -0.4 - ((h >> 8) % Math.floor(SEA * 8)) / 10
+        const a = P(x, y), b = P(Math.min(W, x + 0.7), y)
+        g.lineBetween(a.x, a.y, b.x, b.y)
+      }
     }
     // What runs between the things on this ground (the Owner, 2026-11-19): blocks on the town's ground
     // are parted by highways, buildings in a block by ordinary streets, rooms in a building by
@@ -751,7 +793,31 @@ export class PlaceScene extends Phaser.Scene {
     // From the way in (the Owner, 2026-11-19): the way, then a buffer — the ground itself, a green
     // belt outdoors, a threshold indoors — then the plot, and the thing at its true size on it.
     g.fillStyle(indoors ? this.tone.threshold : ter.grass).fillPoints(ground, true)
-    for (const p of plots) g.fillStyle(indoors ? this.tone.floor : ter.lot).fillPoints(quadOf(P, geo.plot(p)), true)
+    if (!indoors) {
+      // The grass in a broad checker, a tuft here and there (the first generation's lawn).
+      // The checker's darker squares: a shade of this ground's own grass (the day meadow's is the first generation's).
+      const alt = ter.grass === this.tone.grass ? this.tone.grassAlt : Phaser.Display.Color.ValueToColor(ter.grass).darken(4).color
+      g.fillStyle(alt)
+      for (let y = 0; y < H; y += 4) for (let x = 0; x < W; x += 4) if (((x + y) / 4) % 2) g.fillPoints(quadOf(P, { x, y, w: Math.min(4, W - x), h: Math.min(4, H - y) }), true)
+      if (shore) g.fillStyle(this.tone.sand).fillPoints(quadOf(P, { x: 0, y: 0, w: W, h: 0.42 }), true)
+      g.lineStyle(1, Phaser.Display.Color.ValueToColor(ter.grass).darken(14).color, 1)
+      for (let y = 1; y < H; y++) for (let x = 0; x < W; x++) {
+        const h = hash(`t${x},${y}`)
+        if (h % 5) continue
+        const q = P(x + ((h >> 4) % 10) / 10, y + ((h >> 9) % 10) / 10)
+        g.lineBetween(q.x - 2.5, q.y, q.x - 1, q.y - 3); g.lineBetween(q.x + 2.5, q.y, q.x + 1, q.y - 3)
+      }
+    }
+    // A plot's ground: on the town, the tint of the district standing on it; in a district, the district's own.
+    const onPlot = new Map(placed.map(p => [p.plot, p.id]))
+    const lotOf = (p: Plot) => {
+      if (indoors) return this.tone.floor
+      if (!tree) return ter.lot
+      const who = place.kind === 'town' ? onPlot.get(p.id) : null
+      return place.kind === 'town' ? (who ? tintOf(tree, [who], this.light, ter.lot) : ter.lot) : tintOf(tree, at, this.light, ter.lot)
+    }
+    // An empty plot outdoors is lawn: nothing stands there, so no lot is laid (the first generation had no bare lots).
+    for (const p of plots) if (indoors || onPlot.has(p.id)) g.fillStyle(lotOf(p)).fillPoints(quadOf(P, geo.plot(p)), true)
     const lineOf = (st: Street) => {
       const vertical = st.x0 === st.x1
       return { vertical, at: vertical ? geo.x(st.x0) : geo.y(st.y0), from: vertical ? geo.y(st.y0) : geo.x(st.x0), to: vertical ? geo.y(st.y1) : geo.x(st.x1) }
@@ -777,18 +843,31 @@ export class PlaceScene extends Phaser.Scene {
       for (const st of streets) g.strokePoints(strip(st, WAY / 2), true)
       this.storey(g, P, W, H)
     } else {
+      // The pavement either side, laid in slabs, a kerb line where it meets the asphalt (the first generation's roads).
       g.fillStyle(this.tone.kerb)
       for (const st of streets) g.fillPoints(strip(st, WAY / 2 + KERB), true)
       g.fillStyle(this.tone.asphalt)
-      for (const st of streets) g.fillPoints(strip(st, WAY / 2), true)
+      for (const st of streets) g.fillPoints(strip(st, WAY / 2 - WALK), true)
+      g.lineStyle(1.2, this.tone.curb, 1)
+      for (const st of streets) for (const off of [-(WAY / 2 - WALK), WAY / 2 - WALK]) solid(st, off)
+      // Where two ways cross: a zebra across each arm, just short of the crossing.
+      const ls = streets.map(lineOf), vs = ls.filter(l => l.vertical), hs = ls.filter(l => !l.vertical)
+      g.fillStyle(this.tone.paint, 0.95)
+      for (const v of vs) for (const h of hs) {
+        if (h.at < v.from - 0.01 || h.at > v.to + 0.01 || v.at < h.from - 0.01 || v.at > h.to + 0.01) continue
+        const half = WAY / 2 - WALK
+        for (const dir of [-1, 1]) {
+          // On the vertical way, above and below the crossing; on the horizontal, either side.
+          const along = h.at + dir * (WAY / 2 + 0.12), across0 = v.at - half + 0.05
+          if (along > v.from - WAY / 2 && along < v.to + WAY / 2) for (let u = across0; u < v.at + half - 0.06; u += 0.1) g.fillPoints(quadOf(P, { x: u, y: Math.min(along, along + dir * 0.22), w: 0.055, h: 0.22 }), true)
+          const along2 = v.at + dir * (WAY / 2 + 0.12), across1 = h.at - half + 0.05
+          if (along2 > h.from - WAY / 2 && along2 < h.to + WAY / 2) for (let u = across1; u < h.at + half - 0.06; u += 0.1) g.fillPoints(quadOf(P, { x: Math.min(along2, along2 + dir * 0.22), y: u, w: 0.22, h: 0.055 }), true)
+        }
+      }
       if (grade === 'highway') {
-        // A highway: darker, a solid double line down the middle and solid edge lines.
-        g.fillStyle(this.tone.ink, 0.16)
-        for (const st of streets) g.fillPoints(strip(st, WAY / 2), true)
-        g.lineStyle(1.1, this.tone.pick, 0.95)
-        for (const st of streets) for (const off of [-0.04, 0.04]) solid(st, off)
-        g.lineStyle(1, this.tone.paint, 0.75)
-        for (const st of streets) for (const off of [-WAY / 2 + 0.06, WAY / 2 - 0.06]) solid(st, off)
+        // A highway: a solid double line down the middle, in the crossings' yellow.
+        g.lineStyle(1.1, 0xf0c95e, 0.95)
+        for (const st of streets) for (const off of [-0.035, 0.035]) solid(st, off)
       } else {
         // A street: one dashed line down the middle.
         g.lineStyle(1.3, this.tone.paint, 0.9)
@@ -806,6 +885,16 @@ export class PlaceScene extends Phaser.Scene {
     const plotById = new Map(plots.map(p => [p.id, p]))
     const rectOf = (p: Placed): Rect => { const home = plotById.get(p.plot); return home ? geo.thing(geo.plot(home), p.w, p.h) : { x: p.x, y: p.y, w: p.w, h: p.h } }
     const order = placed.filter(p => byId.has(p.id)).map(p => ({ p, r: rectOf(p) })).sort((a, b) => (a.r.x + a.r.y + (a.r.w + a.r.h) / 2) - (b.r.x + b.r.y + (b.r.w + b.r.h) / 2))
+    // One soft shadow cast to the front right by every block outdoors, the taller the longer (the first generation's).
+    if (!indoors) {
+      const sh = this.add.graphics().fillStyle(this.tone.shadow, this.light === 'night' ? 0.25 : 0.14)
+      for (const { p, r } of order) {
+        const tall = heightOf(byId.get(p.id)!, Math.min(p.w, p.h)), reach = Math.min(1.1, tall / 120), k = reach * 0.25
+        const X = (v: number) => Math.min(W, v), Y = (v: number) => Math.min(H, v)
+        sh.fillPoints([P(r.x + r.w, r.y), P(X(r.x + r.w + reach), Y(r.y + k)), P(X(r.x + r.w + reach), Y(r.y + r.h + k)), P(X(r.x + reach), Y(r.y + r.h + k)), P(r.x, r.y + r.h), P(r.x + r.w, r.y + r.h)], true)
+      }
+      c.add(sh)
+    }
     // Back to front, so nearer blocks cover farther ones.
     const look = new Map(this.looks(place, order.map(x => x.p), at).map(l => [l.id, l.key]))
     for (const { p, r } of order) for (const part of this.block(byId.get(p.id)!, p, r, P, look.get(p.id)!, o, [...at, p.id])) c.add(part)
@@ -864,8 +953,8 @@ export class PlaceScene extends Phaser.Scene {
       // standard street surface, under each its lot in the district's terrain.
       const ter = TERRAIN[terrainOf(this.shown.tree, path)][this.light]
       const g = this.add.graphics()
-      g.fillStyle(this.tone.kerb).fillPoints(quadOf(P, r), true)
-      g.fillStyle(this.tone.asphalt).fillPoints(quadOf(P, { x: r.x + 0.08, y: r.y + 0.08, w: r.w - 0.16, h: r.h - 0.16 }), true)
+      // The district's plate in its tint (the first generation's districts), its buildings on paved lots.
+      g.fillStyle(tintOf(this.shown.tree, path, this.light, ter.lot)).fillPoints(quadOf(P, r), true)
       g.lineStyle(1.4, this.tone.ink).strokePoints(quadOf(P, r), true)
       parts.push(g)
       const m = 0.35
@@ -877,24 +966,24 @@ export class PlaceScene extends Phaser.Scene {
       for (const t of placedAt) {
         const lot = this.add.graphics()
         const e = 0.12 * kk
-        lot.fillStyle(ter.lot).fillPoints(quadOf(P, { x: t.q.x - e, y: t.q.y - e, w: t.q.w + 2 * e, h: t.q.h + 2 * e }), true)
+        lot.fillStyle(this.tone.kerb).lineStyle(1, this.tone.curb, 0.6).fillPoints(quadOf(P, { x: t.q.x - e, y: t.q.y - e, w: t.q.w + 2 * e, h: t.q.h + 2 * e }), true)
         parts.push(lot)
         const key = looks.get(t.p.id), a = key ? this.anchors.get(key) : undefined
         if (key && a && this.textures.exists(key)) {
           const base = P(t.q.x, t.q.y)
-          parts.push(this.add.image(base.x, base.y, key).setOrigin(a.ax, a.ay).setScale(kk / RS))
+          parts.push(this.add.image(base.x, base.y, key).setOrigin(a.ax, a.ay).setScale(kk * this.spriteFit(key, Math.min(t.r.w, t.r.h)) / RS))
         }
       }
     } else if (lay && this.shown) {
       // A district with nothing in it yet: its empty block in its terrain, no stand-in buildings.
       const ter = TERRAIN[terrainOf(this.shown.tree, path)][this.light]
       const g = this.add.graphics()
-      g.fillStyle(ter.lot).fillPoints(quadOf(P, r), true).lineStyle(1.4, this.tone.ink).strokePoints(quadOf(P, r), true)
+      g.fillStyle(tintOf(this.shown.tree, path, this.light, ter.lot)).fillPoints(quadOf(P, r), true).lineStyle(1.4, this.tone.ink).strokePoints(quadOf(P, r), true)
       parts.push(g)
     } else {
       const a = this.anchors.get(key)
       const base = P(r.x, r.y)
-      img = this.textures.exists(key) && a ? this.add.image(base.x, base.y, key).setOrigin(a.ax, a.ay).setScale(1 / RS) : null
+      img = this.textures.exists(key) && a ? this.add.image(base.x, base.y, key).setOrigin(a.ax, a.ay).setScale(this.spriteFit(key, Math.min(r.w, r.h)) / RS) : null
       if (img) parts.push(img)
     }
     if (o.interactive) {

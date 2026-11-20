@@ -34,3 +34,22 @@ export function terrainOf(tree: Place, path: Path): Terrain {
   const i = Math.max(0, tree.children.findIndex(c => c.id === path[0]))
   return TERRAINS[i % TERRAINS.length]
 }
+
+/**
+ * A district's ground tint, the first generation's (the Owner, 2026-11-20: its districts' colours were
+ * beautiful): a pale plate under its plots, one per district by its place in the town. By day as it was;
+ * at dusk half-way to dusk's own lot; at night the terrain's lot alone.
+ */
+export const TINTS = [0xe3e8ee, 0xe7e1f1, 0xe0edf0, 0xf1e8d6, 0xe9e6da, 0xe2e0e8, 0xe2eedf, 0xf3e2e2] as const
+
+const mix = (a: number, b: number, t: number) => {
+  const ch = (s: number) => Math.round(((a >> s) & 255) * (1 - t) + ((b >> s) & 255) * t) << s
+  return ch(16) | ch(8) | ch(0)
+}
+
+export function tintOf(tree: Place, path: Path, light: 'day' | 'dusk' | 'night', lot: number): number {
+  if (path.length === 0 || light === 'night') return lot
+  const i = Math.max(0, tree.children.findIndex(c => c.id === path[0]))
+  const t = TINTS[i % TINTS.length]
+  return light === 'day' ? t : mix(t, lot, 0.5)
+}

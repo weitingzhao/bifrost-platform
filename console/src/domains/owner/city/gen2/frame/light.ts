@@ -31,6 +31,10 @@ export type Palette = {
   grass: number; asphalt: number; kerb: number; paint: number; floor: number; corridor: number
   /** A plot's own lot, inside its green belt. */
   lot: number
+  /** The first generation's land (the Owner, 2026-11-20: its ground and colours were the beautiful part):
+   * the grass's checker, the kerb line between asphalt and pavement, the sea and its sand behind the town,
+   * the clouds, and the soft shadow every block casts. */
+  grassAlt: number; curb: number; sea: number; wave: number; sand: number; cloud: number; shadow: number
   /** Indoors: the storey's outer walls (inner face, its shaded face, the cap), their glass, and the floor slab's sides. */
   wall: number; wallShade: number; wallTop: number; glass: number; slab: number; slabShade: number
   /** Indoors: the buffer between a corridor and a room's plot. */
@@ -47,8 +51,9 @@ export type Palette = {
 
 export const PALETTE: Record<Light, Palette> = {
   day: {
-    sky: 0xf3efe6, ground: 0xe8e4ee, groundEdge: 0xcfc8b8, line: 0xd9d4e2, line4: 0xc8c2d4, earth: 0xc98a5a, earthShade: 0xa86c43, ink: 0x2f2d3a,
-    grass: 0xbcdba0, lot: 0xe3efd5, asphalt: 0x9a98a8, kerb: 0xe8e4ee, paint: 0xfbfaf6, floor: 0xece6da, corridor: 0xf7f3ea,
+    sky: 0xf3efe6, ground: 0xe8e4ee, groundEdge: 0xcfc8b8, line: 0xd9d4e2, line4: 0xc8c2d4, earth: 0xcf9f6c, earthShade: 0xab7c4e, ink: 0x2f2d3a,
+    grass: 0xd6e8c1, lot: 0xe3efd5, asphalt: 0xb9bad1, kerb: 0xf2eee5, paint: 0xffffff,
+    grassAlt: 0xcfe3b8, curb: 0x85829f, sea: 0x9fd6f2, wave: 0xe6f6ff, sand: 0xf3e3b8, cloud: 0xfbfaf6, shadow: 0x7d74d6, floor: 0xece6da, corridor: 0xf7f3ea,
     wall: 0xf1ece2, wallShade: 0xdcd5c7, wallTop: 0xfbf9f4, glass: 0xcfe6f7, slab: 0xd6cfc1, slabShade: 0xc0b8a8, threshold: 0xdcd3c1,
     top: 0xf7f5f0, left: 0xd9d4ca, right: 0xc4beb2, edge: 0x6b6676,
     hover: 0xfff3c4, pick: 0xffd36b, inside: 0x8fc1ff, ok: 0x5cb85c, no: 0xd9534f, dim: 0xa8a8a8,
@@ -56,7 +61,8 @@ export const PALETTE: Record<Light, Palette> = {
   },
   dusk: {
     sky: 0xf1d9c4, ground: 0xe9d6c6, groundEdge: 0xc7ab92, line: 0xdcc4b0, line4: 0xcbb09a, earth: 0xb9774b, earthShade: 0x93593a, ink: 0x2f2d3a,
-    grass: 0xb9c48c, lot: 0xdde0b8, asphalt: 0x8a7a86, kerb: 0xe9d6c6, paint: 0xfff0d8, floor: 0xead8c6, corridor: 0xf5e6d6,
+    grass: 0xc9cf9c, lot: 0xdde0b8, asphalt: 0xa898a8, kerb: 0xf0dccb, paint: 0xfff0d8,
+    grassAlt: 0xc1c893, curb: 0x7a6676, sea: 0x8fb4cf, wave: 0xf3dccb, sand: 0xedcfa4, cloud: 0xfbe7d6, shadow: 0x6a4c78, floor: 0xead8c6, corridor: 0xf5e6d6,
     wall: 0xefdac8, wallShade: 0xd8bea8, wallTop: 0xf8eadc, glass: 0x7d6f8c, slab: 0xd1b8a2, slabShade: 0xb89f89, threshold: 0xd9c2ac,
     top: 0xf6e3d0, left: 0xcfb29c, right: 0xb39580, edge: 0x5e4a52,
     hover: 0xffe7b8, pick: 0xffc46b, inside: 0x9bb8ff, ok: 0x5cb85c, no: 0xd9534f, dim: 0x9a9a9a,
@@ -64,7 +70,8 @@ export const PALETTE: Record<Light, Palette> = {
   },
   night: {
     sky: 0x1d2033, ground: 0x2c3049, groundEdge: 0x3c4160, line: 0x353a56, line4: 0x41466a, earth: 0x5a4030, earthShade: 0x46301f, ink: 0x0f111c,
-    grass: 0x2a4232, lot: 0x33503e, asphalt: 0x1f2234, kerb: 0x3a3e5c, paint: 0xd8c86a, floor: 0x2c3049, corridor: 0x363b58,
+    grass: 0x2a4232, lot: 0x33503e, asphalt: 0x262a40, kerb: 0x3a3e5c, paint: 0xd8c86a,
+    grassAlt: 0x263c2d, curb: 0x14162a, sea: 0x1d3550, wave: 0x3c5a7c, sand: 0x4a4636, cloud: 0x3a3f5e, shadow: 0x05060c, floor: 0x2c3049, corridor: 0x363b58,
     wall: 0x3d4263, wallShade: 0x30344e, wallTop: 0x4a4f72, glass: 0xffd27a, slab: 0x30344e, slabShade: 0x262a40, threshold: 0x262a40,
     top: 0x3d4263, left: 0x2c3049, right: 0x23263b, edge: 0x10121e,
     hover: 0x56609a, pick: 0xd9a83a, inside: 0x4f7fd9, ok: 0x4caf6a, no: 0xd0544f, dim: 0x6a6a7a,
@@ -79,7 +86,7 @@ export const PALETTE: Record<Light, Palette> = {
 export type TerrainTone = { grass: number; lot: number; earth: number; earthShade: number }
 export const TERRAIN: Record<'meadow' | 'shore' | 'upland' | 'forest', Record<Light, TerrainTone>> = {
   meadow: {
-    day: { grass: 0xbcdba0, lot: 0xe3efd5, earth: 0xc98a5a, earthShade: 0xa86c43 },
+    day: { grass: 0xd6e8c1, lot: 0xe3efd5, earth: 0xcf9f6c, earthShade: 0xab7c4e },
     dusk: { grass: 0xb9c48c, lot: 0xdde0b8, earth: 0xb9774b, earthShade: 0x93593a },
     night: { grass: 0x2a4232, lot: 0x33503e, earth: 0x5a4030, earthShade: 0x46301f },
   },
@@ -89,12 +96,12 @@ export const TERRAIN: Record<'meadow' | 'shore' | 'upland' | 'forest', Record<Li
     night: { grass: 0x4a4a3e, lot: 0x56564a, earth: 0x23455c, earthShade: 0x1a3547 },
   },
   upland: {
-    day: { grass: 0xcfc6a0, lot: 0xebe5cc, earth: 0x9c8a74, earthShade: 0x7f6e5a },
+    day: { grass: 0xe2dfc4, lot: 0xebe5cc, earth: 0x9c8a74, earthShade: 0x7f6e5a },
     dusk: { grass: 0xc7b68e, lot: 0xe4d7ba, earth: 0x907a62, earthShade: 0x74604c },
     night: { grass: 0x3c4034, lot: 0x494d40, earth: 0x4a4036, earthShade: 0x3a3129 },
   },
   forest: {
-    day: { grass: 0x9fcb8a, lot: 0xd6e8c8, earth: 0x7c6a52, earthShade: 0x5f503d },
+    day: { grass: 0xc9e2b3, lot: 0xd6e8c8, earth: 0x7c6a52, earthShade: 0x5f503d },
     dusk: { grass: 0x99b37c, lot: 0xd2dcb4, earth: 0x6e5c46, earthShade: 0x544634 },
     night: { grass: 0x22382a, lot: 0x2c4636, earth: 0x3a3028, earthShade: 0x2c241e },
   },

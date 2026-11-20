@@ -1,3 +1,4 @@
+import type { LandmarkId } from './library/landmarkLooks'
 import type { Shape } from './grid'
 import type { Sprite } from './kit'
 
@@ -56,6 +57,8 @@ export type Place = {
   /** The physical units a thing is made of, each with how it stands (a NAS volume: the disks of its array). Read, never assumed. */
   units?: State[]
   look?: Look
+  /** A first-generation landmark it stands as (library/landmarkLooks.ts); content says which, and why. */
+  landmark?: LandmarkId
   /**
    * What its surfaces show (the Owner, 2026-11-19: every roof and wall is a place to show something;
    * waste none): the roof its number, seen from far off; the front its sign, what it is for; a wall
