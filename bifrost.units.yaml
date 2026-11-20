@@ -181,6 +181,9 @@ modules:
       # The drill's tests read the problem register and the subscription tables, and
       # scan the Go files that import it or read the ledger for the bus.
       api/internal/bus/drill: ["api"]
+      # The real review file and index parse (2026-11-20: a review file of the
+      # wrong shape reached STG and dropped every verdict).
+      api/internal/catalog: ["api/internal/catalog", "config/catalog-review.json", "config/catalog-index.json"]
       api/internal/codeguard: ["api", "config/domain-ownership.json", "bifrost-trade-infra:agent-config/release-policy/paths.json"]
       api/internal/config: ["api/internal/config", "config/environments.yaml"]
       api/internal/delivery: ["api/internal/delivery", "bifrost-trade-infra:k8s/cicd"]

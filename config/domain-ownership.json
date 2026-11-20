@@ -478,6 +478,13 @@
       "status": "assigned",
       "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: a bus drill (sub-domain 0.2 of foundation); it had no row and was held by the default"
     },
+    "api/internal/bus/states": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-20 0.2 map line: the map's pool found it the scan after it landed (357cca37, LANE-C, GET /api/v1/bus/states, already in foundation's contract with get_bus_states); every bus package is foundation's"
+    },
     "api/internal/versionedread": {
       "domains": [
         "foundation"
