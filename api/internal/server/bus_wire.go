@@ -112,7 +112,26 @@ func (s *Server) announceAlerts(ctx context.Context, facts []opsagent.AlertFact)
 			list = append(list, a)
 		}
 	}
-	return busalerts.Announce(ctx, db, list)
+	fired, err := busalerts.Announce(ctx, db, list)
+	if err != nil || len(fired) == 0 {
+		return err
+	}
+	// Rows marked by: webhook are delivered here, without the bus (TD-588):
+	// an alarm about the bus must reach its seat while the bus is down.
+	subs, serr := registry.LoadSubscriptions()
+	if serr != nil {
+		slog.Warn("bus: direct alert delivery: the subscription table does not load", "error", serr)
+		return nil
+	}
+	d := subscribe.Dispatcher{DB: db, Send: func(ctx context.Context, key, to, body string, cause int64) error {
+		return coord.PostConclusionCaused(ctx, db, key, to, body, cause)
+	}}
+	for _, f := range fired {
+		ev := subscribe.Event{ID: relay.EventID(f.EventID), Type: busalerts.Type, Subject: busalerts.Subject(f.Name, f.Namespace),
+			Ref: busalerts.Ref, Change: f.Status}
+		d.DeliverDirect(ctx, subs, relay.Tenant, ev)
+	}
+	return nil
 }
 
 func busLogf(format string, args ...any) { slog.Info(fmt.Sprintf(format, args...)) }

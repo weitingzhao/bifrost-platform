@@ -88,7 +88,7 @@ func StartRelayWatch(ctx context.Context, db func() eventlog.DB, prom func(conte
 			reading.WebhookFailing, reading.WebhookKnown = prom(ctx, WebhookQuery)
 			reading.RulesMissing, reading.RulesKnown = prom(ctx, RulesQuery)
 			if list := w.Step(reading); len(list) > 0 {
-				if err := Announce(ctx, d, list); err != nil {
+				if _, err := Announce(ctx, d, list); err != nil {
 					slog.Warn("bus: alert relay change not said", "error", err)
 					w = prev // said on the next look
 				}

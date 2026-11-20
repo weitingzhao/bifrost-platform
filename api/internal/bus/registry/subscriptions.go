@@ -29,6 +29,12 @@ const (
 // names hand-written code that delivers it until it is switched.
 const ByDispatcher = "dispatcher"
 
+// ByWebhook marks a row the alert webhook delivers itself, in the request
+// that wrote the alert, without the bus (2026-11-20, TD-588): an alarm about
+// the bus must not ride the bus, or it is lost exactly when it matters. Only
+// alert.rule.fired rows may say it.
+const ByWebhook = "webhook"
+
 // Subscription is one row: which events, who is told, how.
 type Subscription struct {
 	ID    string   `yaml:"id"`
@@ -222,6 +228,9 @@ func CheckSubscriptions(tenants map[string]Tenant, subs map[string]Subscriptions
 			}
 			if r.By == "" {
 				bad("%s: by names who delivers it (dispatcher, or the hand-written code that still does)", at)
+			}
+			if r.By == ByWebhook && (len(r.On) != 1 || r.On[0] != "alert.rule.fired" || r.Deliver != DeliverWake) {
+				bad("%s: by webhook is only for a wake on alert.rule.fired (the alert webhook delivers it)", at)
 			}
 			if d := r.Params[ParamDetail]; d != "" {
 				names, ok := DetailNames(d)

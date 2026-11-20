@@ -83,23 +83,36 @@ func Normalize(name, namespace, severity, status string) (Alert, bool) {
 	return a, true
 }
 
-// Announce appends one event per alert in one transaction. A ledger without
-// the controller (a database the platform has not seeded) announces nothing.
-func Announce(ctx context.Context, db eventlog.DB, list []Alert) error {
+// Fired is one alert the ledger now holds, with its event id.
+type Fired struct {
+	Alert
+	EventID int64
+}
+
+// Announce appends one event per alert in one transaction and says each
+// event's id (the webhook's own deliveries name the event they are for). A
+// ledger without the controller (a database the platform has not seeded)
+// announces nothing.
+func Announce(ctx context.Context, db eventlog.DB, list []Alert) ([]Fired, error) {
 	if db == nil || len(list) == 0 {
-		return nil
+		return nil, nil
 	}
-	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+	var out []Fired
+	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+		out = out[:0]
 		if seeded, err := actors.Exists(ctx, tx, actor); err != nil || !seeded {
 			return err
 		}
 		for _, a := range list {
-			if err := Fire(ctx, tx, a, 0); err != nil {
+			ap, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: Stream(a.Name), Type: Type, Actor: actor, Body: Body(a)})
+			if err != nil {
 				return err
 			}
+			out = append(out, Fired{Alert: a, EventID: ap.EventID})
 		}
 		return nil
 	})
+	return out, err
 }
 
 func init() {

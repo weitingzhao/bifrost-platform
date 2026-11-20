@@ -46,6 +46,9 @@ type Dispatcher struct {
 	Read   CommitMessage // nil without a delivery service
 	Detail Detail
 	Send   Sender
+	// Known, when set, says who can receive a wake instead of asking the
+	// ledger's actors (tests).
+	Known Known
 }
 
 // notifyPush is a notify row's push: the same relay as the approvals' own
@@ -130,4 +133,33 @@ func (d Dispatcher) Run(ctx context.Context, js jetstream.JetStream, env string)
 		context.AfterFunc(ctx, func() { cc.Stop() })
 		slog.Info("bus: subscription dispatched", "tenant", c.Tenant, "row", row.ID, "consumer", name, "on", row.On, "deliver", row.Deliver)
 	}
+}
+
+// DeliverDirect delivers ev to the tenant's rows marked by: webhook, now, in
+// the caller's request (2026-11-20, TD-588): the alert webhook calls it for
+// each alert it wrote, so an alarm about the bus reaches its seat while the
+// bus is down. Those rows have no durable consumer; the bus never delivers
+// them a second time. Each row's outcome is returned; an error stops nothing
+// else (the alert is already in the ledger).
+func (d Dispatcher) DeliverDirect(ctx context.Context, subs map[string]registry.Subscriptions, tenant string, ev Event) []error {
+	var errs []error
+	known := Known(d.knownThread)
+	if d.Known != nil {
+		known = d.Known
+	}
+	for _, row := range subs[tenant].Rows {
+		if row.By != registry.ByWebhook {
+			continue
+		}
+		out, err := Deliver(ctx, row, ev, d.Read, d.Detail, d.Send, known, UndeliverableTo(subs, tenant))
+		if err != nil {
+			errs = append(errs, err)
+			slog.Warn("bus: direct delivery failed", "row", row.ID, "event", ev.ID, "error", err)
+			continue
+		}
+		if out != Skipped {
+			slog.Info("bus: delivered without the bus", "row", row.ID, "event", ev.ID, "outcome", out)
+		}
+	}
+	return errs
 }

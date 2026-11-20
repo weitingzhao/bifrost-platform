@@ -453,3 +453,67 @@ func TestBusAlertsWakeTheCommunicationLine(t *testing.T) {
 		t.Error("a resolved alert woke the communication line")
 	}
 }
+
+// 2026-11-20, TD-588: an alarm about the bus must not ride the bus. The two
+// bus alerts are delivered by the alert webhook itself (by: webhook), so the
+// dispatcher runs no durable consumer for them (no second letter), and
+// DeliverDirect writes the wake with no NATS at all.
+func TestBusAlertsAreDeliveredWithoutTheBus(t *testing.T) {
+	all, err := registry.LoadSubscriptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range Rows(all, "rocket") {
+		if r.ID == "alert-bus-relay-to-comm" || r.ID == "alert-nats-to-comm" {
+			t.Errorf("%s has a bus consumer: it would be delivered twice, and not while the bus is down", r.ID)
+		}
+	}
+	var sent []string
+	d := Dispatcher{
+		Send: func(_ context.Context, key, to, body string, _ int64) error {
+			sent = append(sent, to+" "+key)
+			return nil
+		},
+		Known: func(context.Context, string) (bool, error) { return true, nil },
+	}
+	ev := Event{ID: "ev-77", Type: "alert.rule.fired", Subject: "BifrostBusRelayErrors@bifrost-platform-prod", Change: "firing"}
+	if errs := d.DeliverDirect(context.Background(), all, "rocket", ev); len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	want := "thread:local_ab850773-fe26-40fa-ac01-b3b590b73164 sub:alert-bus-relay-to-comm:ev-77"
+	if len(sent) != 1 || sent[0] != want {
+		t.Fatalf("sent %v, want [%s]", sent, want)
+	}
+	// Positive control: an alert no webhook row takes sends nothing.
+	sent = nil
+	d.DeliverDirect(context.Background(), all, "rocket", Event{ID: "ev-78", Type: "alert.rule.fired", Subject: "KubePodNotReady@data", Change: "firing"})
+	if len(sent) != 0 {
+		t.Fatalf("an unrelated alert was delivered directly: %v", sent)
+	}
+}
+
+// 2026-11-20: the compute seat's pain row (law 43, 11-19) said by:
+// alert-letters, whose consumer delivers the duty row only, so no pain alert
+// ever woke compute. Every alert row other than duty's must be delivered by
+// someone: the dispatcher, or the webhook.
+func TestEveryAlertRowHasADeliverer(t *testing.T) {
+	all, err := registry.LoadSubscriptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range all["rocket"].Rows {
+		if len(r.On) != 1 || r.On[0] != "alert.rule.fired" || r.ID == "alert-firing-to-duty" {
+			continue
+		}
+		if r.By != registry.ByDispatcher && r.By != registry.ByWebhook {
+			t.Errorf("%s says by: %s, and no code delivers that row", r.ID, r.By)
+		}
+	}
+	pain := false
+	for _, r := range Rows(all, "rocket") {
+		pain = pain || r.ID == "alert-pain-to-compute"
+	}
+	if !pain {
+		t.Error("the pain row is not dispatched")
+	}
+}

@@ -32,7 +32,7 @@ func TestAnnounceWritesOneEventPerAlert(t *testing.T) {
 	if !ok || !ok2 {
 		t.Fatal("normalize refused a well-formed alert")
 	}
-	if err := alerts.Announce(ctx, pool, []alerts.Alert{a, b}); err != nil {
+	if _, err := alerts.Announce(ctx, pool, []alerts.Alert{a, b}); err != nil {
 		t.Fatal(err)
 	}
 	rows, err := pool.Query(ctx, `SELECT body_json->>'subject', body_json->>'key', body_json->>'change' FROM agentrt.event WHERE event_type = $1 ORDER BY event_id`, alerts.Type)
@@ -62,7 +62,7 @@ func TestAnnounceWithoutControllerWritesNothing(t *testing.T) {
 	db := agentrttest.Migrated(t)
 	pool := db.Pool(t, db.Runtime)
 	a, _ := alerts.Normalize("X", "cicd", "warning", "firing")
-	if err := alerts.Announce(ctx, pool, []alerts.Alert{a}); err != nil {
+	if _, err := alerts.Announce(ctx, pool, []alerts.Alert{a}); err != nil {
 		t.Fatal(err)
 	}
 	var n int

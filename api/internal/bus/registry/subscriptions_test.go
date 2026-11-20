@@ -78,3 +78,29 @@ func TestCheckSubscriptionsRefuses(t *testing.T) {
 		t.Error("demo subscribed to rocket's ci.run.finished, which rocket does not export to it")
 	}
 }
+
+// by: webhook is only for a wake on alert.rule.fired (TD-588, 2026-11-20):
+// the alert webhook delivers those rows itself; nothing else would.
+func TestWebhookRowsAreAlertWakesOnly(t *testing.T) {
+	tenants, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tier := func(string) (string, bool) { return "", false }
+	one := func(r Subscription) map[string]Subscriptions {
+		r.Guarantee, r.By = "durable", ByWebhook
+		return map[string]Subscriptions{"rocket": {Tenant: "rocket", Rows: []Subscription{r}}}
+	}
+	// Positive control: an alert wake by the webhook is taken.
+	if err := CheckSubscriptions(tenants, one(Subscription{ID: "w", On: []string{"alert.rule.fired"}, Deliver: DeliverWake, To: "seat:ci"}), tier); err != nil {
+		t.Fatalf("an alert wake by webhook was refused: %v", err)
+	}
+	for name, r := range map[string]Subscription{
+		"another topic": {ID: "w", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci"},
+		"a notify":      {ID: "w", On: []string{"alert.rule.fired"}, Deliver: DeliverNotify, To: NotifyTo, Params: map[string]string{"title": "t"}},
+	} {
+		if err := CheckSubscriptions(tenants, one(r), tier); err == nil || !strings.Contains(err.Error(), "by webhook") {
+			t.Errorf("%s by webhook: err = %v", name, err)
+		}
+	}
+}
