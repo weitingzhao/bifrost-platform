@@ -165,6 +165,51 @@ export function turnPlot(plan: Plan, id: string, g: Ground = FULL): Plan | null 
   return null
 }
 
+/**
+ * Join two plots side by side, whichever way (the Owner, 2026-11-20: not only the fixed other half; left, right,
+ * back or front): two plots of one size, touching along a whole side, become one, the road between them gone. If
+ * they are not each other's other half but share a square block cut the other way, that block is cut anew (the
+ * plots in it keep their places on the ground). The plan after, and where each old plot now is (the two joined
+ * map to the new one), or null when they cannot be joined.
+ */
+export function joinPlots(plan: Plan, aId: string, bId: string, g: Ground = FULL): { plan: Plan; moved: Record<string, string> } | null {
+  const before = plotsOf(plan, g)
+  const a = before.find(p => p.id === aId), b = before.find(p => p.id === bId)
+  if (!a || !b || a.id === b.id || a.w !== b.w || a.h !== b.h) return null
+  const touch = (a.x === b.x && a.w === b.w && (a.y + a.h === b.y || b.y + b.h === a.y)) || (a.y === b.y && a.h === b.h && (a.x + a.w === b.x || b.x + b.w === a.x))
+  if (!touch) return null
+  const same = (p: Plot, q: Plot) => p.x === q.x && p.y === q.y && p.w === q.w && p.h === q.h
+  const remap = (from: Plan) => {
+    const after = plotsOf(from, g), moved: Record<string, string> = {}
+    for (const p of before) { const q = after.find(r => same(r, p)); if (q) moved[p.id] = q.id }
+    return { after, moved }
+  }
+  // Each other's other half: join them.
+  if (aId.slice(0, -1) === bId.slice(0, -1) && aId.length === bId.length) {
+    const next = mergePlot(plan, aId)
+    if (!next) return null
+    const { moved } = remap(next)
+    moved[aId] = moved[bId] = aId.slice(0, -1)
+    return { plan: next, moved }
+  }
+  // In one square block cut the other way: cut it anew, then they are each other's other half.
+  let k = 0
+  while (k < aId.length && aId[k] === bId[k]) k++
+  const block = aId.slice(0, k), node = nodeAt(plan, block), r = rectOf(plan, block, g)
+  if (!node || !r || r.w !== r.h || aId.length !== block.length + 2 || bId.length !== block.length + 2) return null
+  const turnedPlan = replace(plan, block, turned(node) ? [node[0], node[1]] : [node[0], node[1], 1])
+  const { after, moved } = remap(turnedPlan)
+  const a2 = moved[aId], b2 = moved[bId]
+  if (!a2 || !b2 || !after.some(p => p.id === a2)) return null
+  if (a2.slice(0, -1) !== b2.slice(0, -1)) return null
+  const next = mergePlot(turnedPlan, a2)
+  if (!next) return null
+  const out = remap(next).moved
+  for (const id of Object.keys(moved)) if (out[id] === undefined && moved[id] !== a2 && moved[id] !== b2) out[id] = moved[id]
+  out[aId] = out[bId] = a2.slice(0, -1)
+  return { plan: next, moved: out }
+}
+
 /** A plan as a short string, and back (for the browser to keep): 'L' a plot, 'S' a cut followed by its halves. */
 export const encodePlan = (plan: Plan): string => plan === null ? 'L' : (turned(plan) ? 'T' : 'S') + encodePlan(plan[0]) + encodePlan(plan[1])
 export function decodePlan(s: string): Plan | null {

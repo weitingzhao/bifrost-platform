@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser'
-import { defaultPlan, fitsIn, plotsOf, type Placed, type Plot, type Street } from './grid'
+import { defaultPlan, fitsIn, joinPlots, plotsOf, UNIT, type Placed, type Plan, type Plot, type Street } from './grid'
 import { BUFFER, geoOf, GUTTER, HIGHWAY_HALF, LANE, LOCAL_HALF, MEDIAN, PAVEMENT, WAY, type Geo, type Rect } from './geo'
 import { functionAt, isWired, sheetCount, type Place } from './places'
 import { hueOf, tintOf } from './theme'
@@ -72,7 +72,8 @@ export type SceneEvents = {
   /** The Owner dropped a thing on a plot where it fits (taking it, or swapping with what stood there). */
   moved: (id: string, plot: string) => void
   /** The Owner cut a plot in two, or joined it with its other half. */
-  plot: (op: 'split' | 'merge' | 'turn', plot: string) => void
+  /** A plot cut, turned, or joined (with `other`, the plot beside it, whichever way). */
+  plot: (op: 'split' | 'merge' | 'turn', plot: string, other?: string) => void
   /** A building was dropped on a plot too small for it: refused (the land comes first). */
   refused?: () => void
   /** The view went closer than the whole page, or back: the minimap changes what it shows. */
@@ -88,8 +89,9 @@ export type ArrangeTool = 'move' | 'split' | 'merge' | 'turn'
 
 export type Shown = {
   place: Place
-  /** Where the place's children stand (arranged by grid.ts). */
+  /** Where the place's children stand (arranged by grid.ts), and the plan they stand on. */
   placed: Placed[]
+  plan?: Plan
   /** The place's plots and streets (grid.ts), and its parent's, for the minimap. */
   plots: Plot[]
   streets: Street[]
@@ -651,6 +653,10 @@ export class PlaceScene extends Phaser.Scene {
     this.content = { x: cx - w / 2, y: cy - h / 2, w, h }
     this.ghost = this.add.graphics()
     this.main.add(this.ghost)
+    this.landTools = this.add.container(0, 0)
+    this.main.add(this.landTools)
+    if (!s.arranging) this.landPick = null
+    this.showLandTools()
     this.away = s.parent ? this.level(s.parent, s.path.slice(0, -1), s.parentPlaced, s.parentPlots, s.parentStreets, { at: AWAY, selected: null, inside: s.inside, interactive: false, arranging: false }).c : undefined
     this.frame(refit)
   }
@@ -767,7 +773,6 @@ export class PlaceScene extends Phaser.Scene {
       }
       this.pinch = null
       if (this.carry && p.isDown) { this.carryTo(p); return }
-      if (!p.isDown && this.shown?.arranging && this.shown.tool !== 'move') this.hoverPlot(p)
       if (!p.isDown || inMini(p) || this.moved(p) <= DRAG || !this.zoomedIn()) return
       cam.scrollX -= (p.x - p.prevPosition.x) / cam.zoom
       cam.scrollY -= (p.y - p.prevPosition.y) / cam.zoom
@@ -775,12 +780,17 @@ export class PlaceScene extends Phaser.Scene {
     })
     this.input.on('pointerup', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
       if (!this.input.pointer1.isDown && !this.input.pointer2.isDown) this.pinch = null
-      if (this.carry) { this.drop(p); return }
+      // A press on a building that did not travel is a tap: it picks the land it stands on, not a move.
+      if (this.carry && this.moved(p) > DRAG) { this.drop(p); return }
+      if (this.carry) { this.carry = null; this.ghost?.clear() }
       if (inMini(p) || this.moved(p) > DRAG) return
-      // Arranging with the knife or the glue: a tap anywhere on the ground cuts or joins the plot under it.
-      if (this.shown?.arranging && this.shown.tool !== 'move') {
+      // Arranging: a tap picks the plot under it, and its tools come up on it (the Owner, 2026-11-20: the tools
+      // where the land is, not modes on the toolbar). A tap on a tool acts; a tap on the picked plot puts it down.
+      if (this.shown?.arranging) {
+        if (this.toolHit) { this.toolHit = false; return }
         const plot = this.plotUnder(p)
-        if (plot) this.events_.plot(this.shown.tool, plot.id)
+        this.landPick = plot && plot.id !== this.landPick ? plot.id : null
+        this.showLandTools()
         return
       }
       if (over.length > 0) return
@@ -847,6 +857,61 @@ export class PlaceScene extends Phaser.Scene {
   }
 
   /** The plot under the pointer, on the ground of the place on screen. */
+  /** The plot picked while arranging, its tools on it. */
+  private landPick: string | null = null
+  private landTools?: Phaser.GameObjects.Container
+  /** A tool took this tap (so the ground under it does not take it too). */
+  private toolHit = false
+
+  /**
+   * The picked plot's tools, on the plot itself: a + at each side where a plot of its size lies beside it and
+   * the two can be joined (grid.ts joinPlots), a turn in the middle of a long plot, a cut where it is bigger
+   * than one unit. Each acts on a tap.
+   */
+  private showLandTools() {
+    const box = this.landTools, s = this.shown
+    if (!box || !box.active) return
+    box.removeAll(true)
+    this.ghost?.clear()
+    if (!s || !s.arranging || !this.landPick) return
+    const plot = s.plots.find(q => q.id === this.landPick)
+    if (!plot) { this.landPick = null; return }
+    this.outline(plot, this.tone.inside, 0.18)
+    const P = projOf(this.geo), q = this.geo.plot(plot)
+    const chip = (x: number, y: number, glyph: string, title: string, act: () => void) => {
+      const c = this.add.container(x, y)
+      const g = this.add.graphics()
+      g.fillStyle(0xfbfaf6, 1).fillCircle(0, 0, 14).lineStyle(2, this.tone.ink, 1).strokeCircle(0, 0, 14)
+      const t = this.add.text(0, 0, glyph, { fontFamily: 'system-ui, sans-serif', fontSize: '17px', fontStyle: 'bold', color: '#2f2d3a' }).setOrigin(0.5).setResolution(3)
+      c.add([g, t])
+      c.setSize(30, 30).setInteractive({ useHandCursor: true })
+      c.on('pointerdown', () => { this.toolHit = true })
+      c.on('pointerup', () => { this.toolHit = true; this.landPick = null; act() })
+      c.setData('title', title)
+      box.add(c)
+      this.labels.push(c)
+    }
+    // Join, toward each side where a plot of its size touches it along the whole side.
+    if (s.plan !== undefined) {
+      const sides: [number, number, (o: Plot) => boolean][] = [
+        [q.x, q.y + q.h / 2, o => o.x + o.w === plot.x && o.y === plot.y],
+        [q.x + q.w, q.y + q.h / 2, o => o.x === plot.x + plot.w && o.y === plot.y],
+        [q.x + q.w / 2, q.y, o => o.y + o.h === plot.y && o.x === plot.x],
+        [q.x + q.w / 2, q.y + q.h, o => o.y === plot.y + plot.h && o.x === plot.x],
+      ]
+      for (const [sx, sy, by] of sides) {
+        const other = s.plots.find(o => o.id !== plot.id && o.w === plot.w && o.h === plot.h && by(o))
+        if (!other || !joinPlots(s.plan, plot.id, other.id)) continue
+        const at = P(sx, sy, 6)
+        chip(at.x, at.y, '+', 'Join with the plot beside', () => this.events_.plot('merge', plot.id, other.id))
+      }
+    }
+    const mid = P(q.x + q.w / 2, q.y + q.h / 2, 30)
+    const long = plot.w !== plot.h, big = plot.w > UNIT || plot.h > UNIT
+    if (long) chip(mid.x - (big ? 18 : 0), mid.y, '⟳', 'Turn: lengthwise or across', () => this.events_.plot('turn', plot.id))
+    if (big) chip(mid.x + (long ? 18 : 0), mid.y, '✂', 'Cut in two', () => this.events_.plot('split', plot.id))
+  }
+
   private plotUnder(p: Phaser.Input.Pointer): Plot | undefined {
     if (!this.shown) return undefined
     const w = this.cameras.main.getWorldPoint(p.x, p.y)
@@ -859,13 +924,6 @@ export class PlaceScene extends Phaser.Scene {
     if (!g) return
     const q = quadOf(projOf(this.geo), this.geo.plot(plot))
     g.fillStyle(colour, fill).lineStyle(2.5, colour).fillPoints(q, true).strokePoints(q, true)
-  }
-
-  /** Cutting or joining: the plot the tap would act on, outlined. */
-  private hoverPlot(p: Phaser.Input.Pointer) {
-    this.ghost?.clear()
-    const plot = this.plotUnder(p)
-    if (plot) this.outline(plot, this.tone.inside, 0.15)
   }
 
   /** Moving: the plot under the pointer, green where the thing can go (free, or a swap that fits), red where not. */

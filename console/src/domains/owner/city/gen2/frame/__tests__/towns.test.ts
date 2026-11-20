@@ -11,6 +11,8 @@ describe('a district’s town grows with its size', () => {
     const at = (shape: string, w: number, d: number) => cellsOf(shape, w, d).map(c => c.map(v => Math.round(v * 10) / 10))
     expect(at('4x4', 4, 4)).toEqual([[0, 0]])
     expect(at('4x8', 4, 9.2)).toEqual([[0, 0], [0, 5.2]])
+    // Lying across (2026-11-20: its second cell was drawn over its first): the cells go along x.
+    expect(at('4x8', 9.2, 4)).toEqual([[0, 0], [5.2, 0]])
     expect(at('8x8', 9.2, 9.2)).toEqual([[0, 0], [0, 5.2], [5.2, 0], [5.2, 5.2]])
   })
   it('puts a gate pair of posts at every port its size has on each front side', () => {

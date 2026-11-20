@@ -57,8 +57,11 @@ export function modulesOf(k: Place, hue: string, light: Light): Module[] {
  * far edges, back to front.
  */
 export function cellsOf(shape: string, w: number, d: number): [number, number][] {
+  // Which way it lies is its ground's, not its shape's (a 4×8 may lie across): cells go along the long sides.
   const [sw, sd] = shape.split('x').map(Number)
-  const xs = sw > 4 ? [0, w - 4] : [0], ys = sd > 4 ? [0, d - 4] : [0]
+  const cells = Math.round((sw * sd) / 16)
+  const wide = w > d ? true : w < d ? false : sw >= sd
+  const xs = cells === 4 || (cells === 2 && wide) ? [0, w - 4] : [0], ys = cells === 4 || (cells === 2 && !wide) ? [0, d - 4] : [0]
   const out: [number, number][] = []
   for (const x of xs) for (const y of ys) out.push([x, y])
   return out.sort((a, b) => a[0] + a[1] - (b[0] + b[1]) || a[0] - b[0])

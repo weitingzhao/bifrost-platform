@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assign, decodePlan, defaultPlan, encodePlan, fitsBudget, GRID, mergePlot, moveTo, planFor, plotAt, plotsOf, splitPlot, streetsOf, turnPlot, type Item, type Plan, type Shape } from '../grid'
+import { assign, decodePlan, defaultPlan, encodePlan, fitsBudget, GRID, mergePlot, moveTo, planFor, plotAt, plotsOf, splitPlot, streetsOf, turnPlot, joinPlots, type Item, type Plan, type Shape } from '../grid'
 
 // 2026-11-19, the Owner: the ground is divided into plots he can cut and join (1×1, 2×2, 4×4, 4×8, 8×8…),
 // the streets follow the plots, and a thing stands in a plot of its own, not every plot a 4×4.
@@ -123,6 +123,24 @@ describe('oblong things', () => {
 // 2026-11-20, the Owner: a 4×8 has a direction, lengthwise or across; and the land comes first: a building goes
 // only onto a plot that fits it (the auto-join on drop tried the same day was taken out at his word).
 describe('a long plot lies either way', () => {
+  // The Owner, later the same day: join any two plots side by side, left, right, back or front, from the land itself.
+  it('joins two plots side by side either way, the others keeping their places on the ground', () => {
+    const plan = defaultPlan(4), plots = plotsOf(plan)
+    const p = plots.find(q => q.x === 0 && q.y === 0)!
+    const right = plots.find(q => q.x === 4 && q.y === 0)!, below = plots.find(q => q.x === 0 && q.y === 4)!
+    for (const other of [right, below]) {
+      const j = joinPlots(plan, p.id, other.id)!
+      const merged = plotsOf(j.plan).find(q => q.id === j.moved[p.id])!
+      expect(merged.w * merged.h).toBe(32)
+      expect(j.moved[other.id]).toBe(j.moved[p.id])
+      for (const q of plots.filter(q => q.id !== p.id && q.id !== other.id)) {
+        const now = plotsOf(j.plan).find(r => r.id === j.moved[q.id])
+        if (now) expect([now.x, now.y, now.w, now.h]).toEqual([q.x, q.y, q.w, q.h])
+      }
+    }
+    const far = plots.find(q => q.x === 8 && q.y === 8)!
+    expect(joinPlots(plan, p.id, far.id)).toBeNull()
+  })
   it('refuses a building on a plot too small for it: the land is made first, the map never reshapes it', () => {
     const plan = defaultPlan(4)
     const plots = plotsOf(plan)

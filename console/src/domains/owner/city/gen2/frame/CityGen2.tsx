@@ -2,7 +2,7 @@ import * as Phaser from 'phaser'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { browserArrangements, type ArrangementStore } from './arrangementStore'
 import { KitRoot, Menu, type PanelSize } from './parts'
-import { assign, decodePlan, encodePlan, mergePlot, moveTo, planFor, plotsOf, splitPlot, streetsOf, turnPlot, type Arrangement, type Item, type Plan } from './grid'
+import { assign, decodePlan, encodePlan, joinPlots, mergePlot, moveTo, planFor, plotsOf, splitPlot, streetsOf, turnPlot, type Arrangement, type Item, type Plan } from './grid'
 import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
 import { LABEL_MODES, type LabelMode } from './labels'
 import { PRINCIPLE } from './principle'
@@ -134,7 +134,7 @@ function layoutOf(place: Place, a: Arrangement) {
 }
 
 const TOOL_HINT: Record<ArrangeTool, string> = {
-  move: 'Drag a building onto a plot that fits it; onto a taken one, the two swap. Make the land first: Cut, Join, Turn.',
+  move: 'Tap a plot for its tools: + join with the plot beside it, ⟳ turn, ✂ cut. Drag a building onto a plot that fits it.',
   split: 'Tap a plot to cut it in two. The streets follow.',
   merge: 'Tap a plot to join it with its other half.',
   turn: 'Tap a long plot to turn its land a quarter: lengthwise or across. Then move a building onto it.',
@@ -285,8 +285,20 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
         const at = moveTo(L.placed, L.plots, id, plotId)
         if (at) keep({ plan: encodePlan(L.plan), at })
       },
-      plot: (op, plotId) => {
+      plot: (op, plotId, other) => {
         const L = layRef.current
+        // Joined with the plot beside it, whichever way: the plots move with the plan, the two become one; what
+        // stood on the picked plot stays on it (if both were taken, the other one finds another plot).
+        if (op === 'merge' && other) {
+          const j = joinPlots(L.plan, plotId, other)
+          if (!j) return
+          const merged = j.moved[plotId]
+          const keeper = L.placed.find(p => p.plot === plotId) ?? L.placed.find(p => p.plot === other)
+          const at: Record<string, string> = {}
+          for (const p of L.placed) { const to = j.moved[p.plot]; if (to === merged && p.id !== keeper?.id) continue; at[p.id] = to ?? p.plot }
+          keep({ plan: encodePlan(j.plan), at })
+          return
+        }
         const next = op === 'split' ? splitPlot(L.plan, plotId) : op === 'turn' ? turnPlot(L.plan, plotId) : mergePlot(L.plan, plotId)
         // A cut or a join changes the plots; things keep their plot where it still exists and fits. A join
         // keeps what stood on the tapped half on the joined plot (else what stood on the other half).
@@ -363,7 +375,7 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
     }
     return {
       tree, path, layoutAt,
-      place: v, placed: h.placed, plots: h.plots, streets: h.streets,
+      place: v, placed: h.placed, plan: h.plan, plots: h.plots, streets: h.streets,
       parent, parentPlaced: p?.placed ?? [], parentPlots: p?.plots ?? [], parentStreets: p?.streets ?? [],
       inside: path.at(-1) ?? null, selected: o.selected, from: o.from, arranging: o.arranging, tool, lens,
       links: onlyOn(linksAt(tree, path, content.links ?? []), v),
@@ -449,11 +461,6 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
   }
   const tools = arranging ? (
     <>
-      <div className="k-seg" role="group" aria-label="Arrange">
-        {(['move', 'split', 'merge', 'turn'] as const).map(t => (
-          <button key={t} className={tool === t ? 'on' : ''} aria-pressed={tool === t} onClick={() => setTool(t)}>{{ move: 'Move', split: 'Cut', merge: 'Join', turn: 'Turn' }[t]}</button>
-        ))}
-      </div>
       <button className="g2-btn" onClick={resetArrangement} disabled={!saved.here.plan && !saved.here.at}>Reset</button>
       <button className="g2-btn primary" onClick={() => { setArranging(false); setTool('move') }}>Done</button>
     </>

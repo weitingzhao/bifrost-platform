@@ -17,12 +17,12 @@ export const PRINCIPLE = {
   rules: [
     `A ground is ${GRID}×${GRID} and holds at most ${MAX_THINGS} things.`,
     `Each side has ${PORTS} named ports, the busiest partners of what stands there; the rest go through Other.`,
-    'The land comes first: Cut, Join or Turn the plots, then move a building onto one that fits it.',
+    'The land comes first: tap a plot to join it with the one beside it, turn it or cut it, then move a building onto a plot that fits it.',
     'Each level sums up the one below. A bigger district has more sheets; step between them with [ and ].',
     `A label is one line of at most ${LABEL_CHARS} characters; the look of a building says what it is.`,
   ],
   /** What to do when something does not fit. */
   remedy: 'Give it a bigger boundary (a larger district, more sheets), or show it coarser (a ruler, a summary).',
   /** A building dropped on a plot too small for it. */
-  noFit: 'Does not fit this plot. The land comes first: Cut, Join or Turn it, then move the building.',
+  noFit: 'Does not fit this plot. The land comes first: tap a plot to join, turn or cut it, then move the building.',
 } as const
