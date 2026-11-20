@@ -97,7 +97,7 @@ function plan(r: DiskRoomReadings, [w, d]: [number, number]): Plan {
     if (y + len > limit + 1e-9) { cut++; continue }
     racks.push({ form: 'high', drive: h.drive, volume: h.volume, bays: n, from: 0, cols, x: HIGH_BAY.x, y, plate: one ? firstPlate : true, labelled: !!h.volume })
     firstPlate = false
-    y += len + 0.12
+    y += len + 0.4
   }
   const hbEnd = y
   const xs = high.length ? PLATE_X + PLATE.w + 0.3 : LEFT
@@ -213,7 +213,7 @@ export function diskRoom(r: DiskRoomReadings): Sprite {
   for (const rk of p.racks) {
     metaphor('drive.shelf')
     const v = rk.volume
-    if (v) metaphor('disk.bays')
+    if (v) { metaphor('disk.bays'); metaphor('vol.redzone') }
     const share = v && v.used != null ? encode('vol.used', v.used / v.size) : null
     if (share != null) metaphor('vol.used')
     if (v?.readonly) metaphor('vol.readonly')
@@ -223,11 +223,11 @@ export function diskRoom(r: DiskRoomReadings): Sprite {
     const n = rk.bays != null ? Math.min(rk.cols * levelsOf(rk.form), rk.bays - rk.from) : null
     const len = rk.cols * bayOf(rk.form)
     if (rk.form === 'high') {
-      things.push({ at: rk.x + rk.y, draw: () => highBay(g, rk.y, rk.cols, n, filled, rk.drive, v) })
+      things.push({ at: rk.x + rk.y, draw: () => highBay(g, rk.y, rk.cols, n, filled, rk.from, rk.bays, rk.drive, v) })
       if (rk.plate && rk.drive) { const d = rk.drive; things.push({ at: PLATE_X + rk.y, draw: () => drawPlate(g, PLATE_X, rk.y, d) }) }
       if (v && rk.labelled) things.push({ at: PLATE_X + rk.y + 0.7, draw: () => volumeLine(g, PLATE_X, rk.y + PLATE.d + 0.05, v) })
     } else {
-      things.push({ at: rk.x + rk.y, draw: () => lowRack(g, rk.x, rk.y, rk.cols, rk.form as 'line' | 'plain', n, filled, rk.drive, v) })
+      things.push({ at: rk.x + rk.y, draw: () => lowRack(g, rk.x, rk.y, rk.cols, rk.form as 'line' | 'plain', n, filled, rk.from, rk.bays, rk.drive, v) })
       if (rk.plate && rk.drive) { const d = rk.drive, px = rk.x + len + PLATE.gap; things.push({ at: px + rk.y, draw: () => drawPlate(g, px, rk.y - (PLATE.d - LOW_RACK.depth), d) }) }
       if (v && rk.labelled) things.push({ at: rk.x + rk.y + 0.6, draw: () => volumeLine(g, rk.x, rk.y + LOW_RACK.depth + 0.1, v) })
     }
@@ -241,15 +241,16 @@ export function diskRoom(r: DiskRoomReadings): Sprite {
   const C = Math.max(1, Math.floor((fw - p.xs - 0.2) / CELL))
   for (const s of p.staged) {
     const v = s.volume, bays = baysOf(v)
-    metaphor('disk.bays')
+    metaphor('disk.bays'); metaphor('vol.redzone')
     const share = v.used != null ? encode('vol.used', v.used / v.size) : null
     if (share != null) metaphor('vol.used')
     const filled = (share ?? 0) * bays, rows = Math.ceil(bays / C)
     for (let b = 0; b < bays; b++) {
       const cx = p.xs + (b % C) * CELL, cy = s.y + Math.floor(b / C) * CELL, on = clamp(filled - b)
+      const red = inRed(b, bays)
       things.push({ at: cx + cy, draw: () => {
-        g.box(cx + 0.02, cy + 0.02, CELL - 0.04, CELL - 0.04, 1, WOOD, 0, 0.5)
-        if (on > 0.02) g.box(cx + 0.04, cy + 0.04, CELL - 0.08, CELL - 0.08, 1 + 4 * on, CARTON, 1, 0.5)
+        g.box(cx + 0.02, cy + 0.02, CELL - 0.04, CELL - 0.04, 1, red ? faces('#e58b7e', '#c9604f', '#b0503f') : WOOD, 0, 0.5)
+        if (on > 0.02) g.box(cx + 0.04, cy + 0.04, CELL - 0.08, CELL - 0.08, 1 + 4 * on, red ? CARTON_RED : CARTON, 1, 0.5)
       } })
     }
     const W = Math.min(bays, C) * CELL
@@ -280,83 +281,94 @@ function volumeLine(g: Draw, x: number, y: number, v: VolumeReading) {
   g.floor(x, y, 3, svg)
 }
 
-/** A stack of goods on a bay: a pallet and cartons as high as the bay is full (a bin with parts on a line-side rack). */
-function goods(g: Draw, x: number, y: number, w: number, d: number, z: number, room: number, on: number, bin: boolean) {
+/** The red zone: the last places of a volume, past 85% of it, red, so a filling disk shows where it gets dangerous. */
+export const WARN_FROM = 0.85
+const inRed = (b: number, total: number) => (b + 1) / total > WARN_FROM + 1e-9
+const HOLE = '#353a45', HOLE_RED = '#6b2a2a', BARE = '#565d6a', NO_PLACE = '#9aa3b0'
+const CARTON_RED = faces('#f39a84', '#e0533d', '#c4432f')
+
+/**
+ * One place seen from the front, as a cell of the rack's face: dark where it is empty, a pallet and cartons
+ * stacked as high as it is full; in the red zone a red hole and red cartons. A bin (line-side) is always
+ * there, blue (red in the red zone), its parts rising up its front.
+ */
+type Place = { exists: boolean; placed: boolean; on: number; red: boolean }
+function placeFace(face: (a: number, b: number, z0: number, z1: number, fill: string, sw?: number) => void, a: number, b: number, z0: number, z1: number, pl: Place, bin: boolean) {
+  if (!pl.exists) { face(a, b, z0, z1, NO_PLACE, 0.3); return }
+  if (!pl.placed) { face(a, b, z0, z1, BARE, 0.3); return }
   if (bin) {
-    // A blue parts bin, open-topped; its parts (amber) rise inside as far as it is full.
-    const bh = room * 0.75
-    g.box(x, y, w, d, bh, BINF, z, 0.5)
-    // Its open picking front shows the parts, as high as it is full (the deck above hides its top).
-    if (on > 0.02) g.onLeft(x, y + d, 0.015, w - 0.015, z + 0.4, z + 0.4 + (bh - 0.8) * on, CARTON.left, 0.3)
-    if (on > 0.02) g.poly(CARTON.top, [[x + 0.02, y + 0.02, z + room * 0.75 * on], [x + w - 0.02, y + 0.02, z + room * 0.75 * on], [x + w - 0.02, y + d - 0.02, z + room * 0.75 * on], [x + 0.02, y + d - 0.02, z + room * 0.75 * on]], 0.4)
+    face(a, b, z0, z1, pl.red ? '#c94a3a' : BINF.left, 0.4)
+    face(a + (b - a) * 0.12, b - (b - a) * 0.12, z0 + 0.5, z1 - 0.8, pl.red ? '#5a2020' : '#22406b', 0.3)
+    if (pl.on > 0.02) face(a + (b - a) * 0.12, b - (b - a) * 0.12, z0 + 0.5, z0 + 0.5 + (z1 - z0 - 1.3) * pl.on, pl.red ? CARTON_RED.left : CARTON.left, 0.3)
     return
   }
-  g.box(x, y, w, d, 0.8, WOOD, z, 0.5)
-  if (on <= 0.02) return
-  const h = (room - 1.6) * on
-  g.box(x + 0.02, y + 0.02, w - 0.04, d - 0.04, h, CARTON, z + 0.8, 0.5)
-  // The cartons' seams: a stack, not a block.
-  if (h > 2.5) g.line([x + 0.02, y + d - 0.02, z + 0.8 + h / 2], [x + w - 0.02, y + d - 0.02, z + 0.8 + h / 2], '#a8650f', 0.5)
-  g.line([x + w / 2, y + 0.02, z + 0.8 + h], [x + w / 2, y + d - 0.02, z + 0.8 + h], '#a8650f', 0.5)
+  face(a, b, z0, z1, pl.red ? HOLE_RED : HOLE, 0.3)
+  face(a, b, z0, z0 + 0.8, pl.red ? '#c9604f' : WOOD.right, 0.3)
+  if (pl.on > 0.02) {
+    const top = z0 + 0.8 + (z1 - z0 - 1.2) * pl.on, c = pl.red ? CARTON_RED : CARTON
+    face(a + (b - a) * 0.06, b - (b - a) * 0.06, z0 + 0.8, top, c.left, 0.4)
+    // The cartons' seams: a stack, not a block.
+    face(a + (b - a) * 0.49, a + (b - a) * 0.51, z0 + 0.8, top, c.right, 0)
+    if (top - z0 > 4) face(a + (b - a) * 0.06, b - (b - a) * 0.06, (z0 + 0.8 + top) / 2 - 0.15, (z0 + 0.8 + top) / 2 + 0.15, c.right, 0)
+  }
 }
 
-/** A section of high-bay racking along the left wall: five levels of pallet places, the stacker crane in front. */
-function highBay(g: Draw, y0: number, cols: number, n: number | null, filled: number, d: DriveReading | null, v: VolumeReading | null) {
-  const { x: x0, depth: D, bay: B, levels, level, base } = HIGH_BAY, L = cols * B
+/** Place b of a rack holding `n` places from `from` of a volume's `total`, `filled` of its own full. */
+const placeOn = (b: number, n: number | null, from: number, total: number | null, filled: number): Place =>
+  n == null ? { exists: true, placed: false, on: 0, red: false }
+    : b >= n ? { exists: false, placed: false, on: 0, red: false }
+      : { exists: true, placed: true, on: clamp(filled - b), red: total != null && inRed(from + b, total) }
+
+/**
+ * A section of high-bay racking along the left wall, seen from the front: levels of pallet places, every place
+ * a cell to count (bottom level first), the red zone at the top; the stacker crane on its rail in front.
+ */
+function highBay(g: Draw, y0: number, cols: number, n: number | null, filled: number, from: number, total: number | null, d: DriveReading | null, v: VolumeReading | null) {
+  const { x: x0, depth: D, bay: B, levels, level, base } = HIGH_BAY, L = cols * B, fx = x0 + D
   g.shadow(x0, y0, D, L, 0.3)
-  // The back uprights against the wall.
-  for (let c = 0; c <= cols; c++) g.box(x0, y0 + c * B - (c === cols ? 0.04 : 0), 0.05, 0.04, HB_H, UPRIGHT, 0, 0.5)
-  for (let k = 0; k < levels; k++) {
+  g.box(x0, y0, D, L, HB_H, faces(BEAM.top, UPRIGHT.left, HOLE), 0, 0.8)
+  const face = (a: number, b: number, z0: number, z1: number, fill: string, sw = 0.3) => g.onRight(fx, y0, a, b, z0, z1, fill, sw)
+  for (let k = 0; k < levels; k++) for (let c = 0; c < cols; c++) {
     const z = base + k * level
-    g.box(x0, y0, D, L, 0.9, BEAM, z - 0.9, 0.6)
-    for (let c = 0; c < cols; c++) {
-      const b = k * cols + c
-      if (n == null || b >= n) continue
-      goods(g, x0 + 0.06, y0 + c * B + 0.04, D - 0.12, B - 0.08, z, level, clamp(filled - b), false)
-    }
+    placeFace(face, c * B + 0.03, (c + 1) * B - 0.03, z, z + level - 0.9, placeOn(k * cols + c, n, from, total, filled), false)
   }
-  g.box(x0, y0, D, L, 0.9, BEAM, base + levels * level - 0.9, 0.6)
-  // The front uprights.
-  for (let c = 0; c <= cols; c++) g.box(x0 + D - 0.05, y0 + c * B - (c === cols ? 0.04 : 0), 0.05, 0.04, HB_H, UPRIGHT, 0, 0.5)
+  // The frame over the face: orange beams under each level, blue uprights between the places.
+  for (let k = 0; k <= levels; k++) { const z = base + k * level; face(0, L, z - 0.9, z, BEAM.left, 0.4) }
+  for (let c = 0; c <= cols; c++) face(Math.max(0, c * B - 0.025), Math.min(L, c * B + 0.025), 0, HB_H, UPRIGHT.right, 0.4)
   // Read-only: a red chain across its face; errors: red tape.
-  const fx = x0 + D + 0.01
-  if (v?.readonly) g.line([fx, y0, HB_H * 0.55], [fx, y0 + L, HB_H * 0.55], RED, 1.8, 'stroke-dasharray="3 2"')
-  if (v?.errors) g.line([fx, y0, HB_H - 2], [fx, y0 + L, 2], RED, 3, 'opacity="0.85"')
-  // The drive's own temperature: the lathes' small thermometer on the front upright.
+  if (v?.readonly) g.line([fx + 0.01, y0, HB_H * 0.55], [fx + 0.01, y0 + L, HB_H * 0.55], RED, 1.8, 'stroke-dasharray="3 2"')
+  if (v?.errors) g.line([fx + 0.01, y0, HB_H - 2], [fx + 0.01, y0 + L, 2], RED, 3, 'opacity="0.85"')
+  // The drive's own temperature: the lathes' small thermometer on the first upright.
   if (d?.temp != null) {
     metaphor('drive.temp')
     const t = d.temp
-    g.onRight(fx, y0, 0.06, 0.12, 4, HB_H - 4, '#fbfaf6', 0.5)
-    g.onRight(fx, y0, 0.07, 0.11, 4, 4 + (HB_H - 8) * encode('drive.temp', t / 100)!, t >= 80 ? '#e0533d' : '#e88a3a', 0)
+    g.onRight(fx + 0.01, y0, 0.0, 0.06, 4, HB_H - 4, '#fbfaf6', 0.5)
+    g.onRight(fx + 0.01, y0, 0.01, 0.05, 4, 4 + (HB_H - 8) * encode('drive.temp', t / 100)!, t >= 80 ? '#e0533d' : '#e88a3a', 0)
   }
   // The stacker crane on its rail: a load waits for it to drive over and climb.
-  const rx = x0 + D + 0.1
-  g.box(rx, y0, 0.06, L, 0.6, faces('#8f9bab', '#6b7280', '#5d6878'), 0, 0.5)
-  const cy = y0 + L / 2 - 0.08
+  const rx = fx + 0.12
+  // Parked at the rail's end, past the rack, so it hides no place.
+  g.box(rx, y0, 0.06, L + 0.3, 0.6, faces('#8f9bab', '#6b7280', '#5d6878'), 0, 0.5)
+  const cy = y0 + L + 0.08
   g.box(rx - 0.02, cy, 0.1, 0.16, 1.6, CRANE, 0.6, 0.6)
   g.box(rx + 0.01, cy + 0.05, 0.04, 0.06, HB_H + 1, CRANE, 2.2, 0.6)
   g.box(rx - 0.06, cy - 0.02, 0.14, 0.2, 1.4, CRANE, 2.2 + level * 1.2, 0.6)
 }
 
-/** A low rack at the front: a few levels of parts bins (line-side) or pallets (plain). */
-function lowRack(g: Draw, x0: number, y0: number, cols: number, k: 'line' | 'plain', n: number | null, filled: number, d: DriveReading | null, v: VolumeReading | null) {
-  const { depth: D, bay: B } = LOW_RACK, { levels, level } = LOW_RACK[k], L = cols * B, H = lowH(k)
+/** A low rack at the front, seen from the front: a few levels of parts bins (line-side) or pallets (plain), each place a cell. */
+function lowRack(g: Draw, x0: number, y0: number, cols: number, k: 'line' | 'plain', n: number | null, filled: number, from: number, total: number | null, d: DriveReading | null, v: VolumeReading | null) {
+  const { depth: D, bay: B } = LOW_RACK, { levels, level } = LOW_RACK[k], L = cols * B, H = lowH(k), fy = y0 + D
   g.shadow(x0, y0, L, D, 0.25)
-  for (let c = 0; c <= cols; c++) g.box(x0 + c * B - (c === cols ? 0.04 : 0), y0, 0.04, 0.05, H, UPRIGHT, 0, 0.5)
-  for (let lv = 0; lv < levels; lv++) {
+  g.box(x0, y0, L, D, H, faces(BEAM.top, HOLE, UPRIGHT.right), 0, 0.8)
+  const face = (a: number, b: number, z0: number, z1: number, fill: string, sw = 0.3) => g.onLeft(x0, fy, a, b, z0, z1, fill, sw)
+  for (let lv = 0; lv < levels; lv++) for (let c = 0; c < cols; c++) {
     const z = 1 + lv * level
-    g.box(x0, y0, L, D, 0.7, BEAM, z - 0.7, 0.5)
-    for (let c = 0; c < cols; c++) {
-      const b = lv * cols + c
-      if (n == null || b >= n) continue
-      goods(g, x0 + c * B + 0.04, y0 + 0.06, B - 0.08, D - 0.12, z, level, clamp(filled - b), k === 'line')
-    }
+    placeFace(face, c * B + 0.03, (c + 1) * B - 0.03, z, z + level - 0.7, placeOn(lv * cols + c, n, from, total, filled), k === 'line')
   }
-  g.box(x0, y0, L, D, 0.7, BEAM, H - 0.7, 0.5)
-  for (let c = 0; c <= cols; c++) g.box(x0 + c * B - (c === cols ? 0.04 : 0), y0 + D - 0.05, 0.04, 0.05, H, UPRIGHT, 0, 0.5)
-  const fy = y0 + D + 0.01
-  if (v?.readonly) g.line([x0, fy, H * 0.55], [x0 + L, fy, H * 0.55], RED, 1.6, 'stroke-dasharray="3 2"')
-  if (v?.errors) g.line([x0, fy, H - 1], [x0 + L, fy, 1], RED, 3, 'opacity="0.85"')
+  for (let lv = 0; lv <= levels; lv++) { const z = 1 + lv * level; face(0, L, z - 0.7, z, BEAM.left, 0.4) }
+  for (let c = 0; c <= cols; c++) face(Math.max(0, c * B - 0.02), Math.min(L, c * B + 0.02), 0, H, UPRIGHT.left, 0.4)
+  if (v?.readonly) g.line([x0, fy + 0.01, H * 0.55], [x0 + L, fy + 0.01, H * 0.55], RED, 1.6, 'stroke-dasharray="3 2"')
+  if (v?.errors) g.line([x0, fy + 0.01, H - 1], [x0 + L, fy + 0.01, 1], RED, 3, 'opacity="0.85"')
   if (d?.temp != null) {
     metaphor('drive.temp')
     const t = d.temp

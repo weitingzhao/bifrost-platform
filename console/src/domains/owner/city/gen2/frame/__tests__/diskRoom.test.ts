@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { rowsDrawn, setRuler } from '../library/dictionary'
-import { baysOf, LOW_RACK, diskRoom, diskRoomShape, diskSummaryOf, volumeName, type DiskRoomReadings } from '../units/diskRoom'
+import { baysOf, LOW_RACK, WARN_FROM, diskRoom, diskRoomShape, diskSummaryOf, volumeName, type DiskRoomReadings } from '../units/diskRoom'
 import { diskRoomReadings } from '../../content/units/disk'
 
 // 2026-11-19, the disk unit's room, the warehouse (shelves the Owner's word the same day), drawn against the room standards. The readings are one
@@ -53,6 +53,14 @@ describe('the disk room', () => {
     expect(b.ids).toEqual(expect.arrayContaining(['vol.readonly', 'vol.errors']))
     expect(b.out.svg).toContain('READ ONLY')
     expect(b.out.svg).toContain('3 ERRORS')
+  })
+  // 2026-11-19, the Owner: the stack must be countable, and the last places red, "警戒区…硬盘快满了".
+  it('the last places past 85% of a volume are red; a nearly full disk has red cartons', () => {
+    expect(WARN_FROM).toBe(0.85)
+    expect(rowsDrawn(() => diskRoom(node)).ids).toContain('vol.redzone')
+    const full: DiskRoomReadings = { ...node, volumes: [{ ...node.volumes[0], size: 4 * TB, used: 3.6 * TB }] }
+    expect(diskRoom(full).svg).toContain('#e0533d')
+    expect(diskRoom(node).svg).not.toContain('#e0533d')
   })
   it('nothing read, nothing drawn but the word', () => {
     const { ids, out } = rowsDrawn(() => diskRoom({ drives: [], volumes: [], arrays: [] }))
