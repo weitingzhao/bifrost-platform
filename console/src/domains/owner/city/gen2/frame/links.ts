@@ -38,7 +38,7 @@ export const GATES = 8
 /** A line between two children of the place on screen. */
 export type Line = { way: Way; a: string; b: string; both: boolean; carries: string[] }
 /** A station on the edge: the outside place it leads to, which child it serves, and which way traffic goes. */
-export type Gate = { way: Way; outside: Path; label: string; child: string; dir: 'in' | 'out' | 'both'; carries: string[] }
+export type Gate = { way: Way; outside: Path; label: string; child: string; dir: 'in' | 'out' | 'both'; carries: string[]; ins: number; outs: number }
 
 export type LevelLinks = { lines: Line[]; gates: Gate[]; more: { lines: number; gates: number } }
 
@@ -73,9 +73,10 @@ export function linksAt(tree: Place, at: Path, links: readonly Link[]): LevelLin
       const outside = outsideOf(outer, at)
       const child = inner[d]
       const k = `${l.way}|${outside.join('/')}|${child}`
-      const g = gates.get(k) ?? { way: l.way, outside, label: trail(tree, outside).at(-1)?.label ?? outside.at(-1) ?? '', child, dir: fi ? 'out' : 'in', carries: [] }
+      const g = gates.get(k) ?? { way: l.way, outside, label: trail(tree, outside).at(-1)?.label ?? outside.at(-1) ?? '', child, dir: fi ? 'out' : 'in', carries: [], ins: 0, outs: 0 }
       if ((g.dir === 'out' && !fi) || (g.dir === 'in' && fi)) g.dir = 'both'
       g.carries.push(l.what)
+      if (fi) g.outs++; else g.ins++
       gates.set(k, g)
     }
   }

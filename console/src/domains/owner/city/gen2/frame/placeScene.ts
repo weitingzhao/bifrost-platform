@@ -111,6 +111,8 @@ const heightOf = (p: Place, size: number) => p.landmark ? LANDMARKS[p.landmark].
 const RS = 3
 /** The slab's thickness under the ground, px: the earth shows on its two front sides. */
 const SLAB = 14
+/** Bus lines and railways drawn on the streets between children (links.ts): off for now, kept for later. */
+const ROUTES_ON_STREETS = false
 /** A road's kerb, each side, in cells. */
 const KERB = 0.06
 /** The pavement inside the way's width, each side, in cells: the asphalt is the rest. */
@@ -885,7 +887,10 @@ export class PlaceScene extends Phaser.Scene {
     g.lineStyle(2, this.tone.ink).strokePoints(ground, true)
     c.add(g)
     // How the children talk, on the streets, and the stations to what lies outside (links.ts).
-    if (o.interactive && this.shown?.links && !o.arranging) for (const part of this.ways(this.shown.links, geo, P, plots, placed, W, H)) c.add(part)
+    // Routes on the streets are off for now (the Owner, 2026-11-20: first the edge of each small world); the code stays.
+    if (ROUTES_ON_STREETS && o.interactive && this.shown?.links && !o.arranging) for (const part of this.ways(this.shown.links, geo, P, plots, placed, W, H)) c.add(part)
+    // A district's ground: a crossing on its edge for each district it talks to, on the side that district lies.
+    if (place.kind === 'district' && o.interactive && this.shown?.links && !o.arranging) for (const part of this.borders(this.shown.links, at, P, W, H)) c.add(part)
     const byId = new Map(place.children.map(k => [k.id, k]))
     const plotById = new Map(plots.map(p => [p.id, p]))
     const rectOf = (p: Placed): Rect => { const home = plotById.get(p.plot); return home ? geo.thing(geo.plot(home), p.w, p.h) : { x: p.x, y: p.y, w: p.w, h: p.h } }
@@ -1149,6 +1154,83 @@ export class PlaceScene extends Phaser.Scene {
     if (lk.more.lines || lk.more.gates) {
       const p = P(W / 2, H + 2.4)
       out.push(this.label(p.x, p.y, `+${lk.more.lines + lk.more.gates} more, listed in the ledger`, { color: '#8a8478', fontSize: '12px' }).setOrigin(0.5))
+    }
+    return out
+  }
+
+  /**
+   * The edge of a district's small world (the Owner, 2026-11-20: each district is a small world; what it
+   * exchanges with the other districts comes in and goes out over its edge, as the first city's river
+   * ran in from beyond the 16×16). One crossing per district it talks to, on the side where that district
+   * lies in the town (so the edge reads like the map), its road running on off the ground. The crossing's
+   * sign says who it is and what passes: bus (messages) and metrics (readings), in, out or both ways.
+   */
+  private borders(lk: LevelLinks, at: string[], P: Proj, W: number, H: number) {
+    const out: Phaser.GameObjects.GameObject[] = []
+    const town = this.shown?.layoutAt([])
+    const plots = new Map((town?.plots ?? []).map(p => [p.id, p]))
+    const centre = (id: string) => { const pl = town?.placed.find(p => p.id === id), q = pl ? plots.get(pl.plot) : null; return q ? { x: q.x + q.w / 2, y: q.y + q.h / 2 } : null }
+    const me = centre(at[0])
+    if (!me) return out
+    // One crossing per neighbour: what passes each way, by way.
+    type Pass = { label: string; id: string; bus: { in: number; out: number }; metric: { in: number; out: number } }
+    const by = new Map<string, Pass>()
+    for (const gt of lk.gates) {
+      const id = gt.outside[0]
+      const p = by.get(id) ?? { label: gt.label, id, bus: { in: 0, out: 0 }, metric: { in: 0, out: 0 } }
+      p[gt.way].in += gt.ins; p[gt.way].out += gt.outs
+      by.set(id, p)
+    }
+    // Its side and place along it: toward the neighbour's centre in the town, the larger difference deciding the side.
+    type Spot = { pass: Pass; edge: 'x0' | 'x1' | 'y0' | 'y1'; t: number }
+    const spots: Spot[] = []
+    for (const pass of by.values()) {
+      const c = centre(pass.id)
+      if (!c) continue
+      const dx = c.x - me.x, dy = c.y - me.y
+      const edge = Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? 'x1' : 'x0') : (dy >= 0 ? 'y1' : 'y0')
+      // Along the edge, where the neighbour sits across it (16 is the town's ground), kept off the corners.
+      const along = edge[0] === 'x' ? c.y : c.x
+      spots.push({ pass, edge, t: Math.min(0.85, Math.max(0.15, along / 16)) })
+    }
+    // Crossings on one side stay apart.
+    for (const e of ['x0', 'x1', 'y0', 'y1'] as const) {
+      const on = spots.filter(s => s.edge === e).sort((a, b) => a.t - b.t)
+      const gap = 0.16
+      for (let i = 1; i < on.length; i++) if (on[i].t - on[i - 1].t < gap) on[i].t = Math.min(0.92, on[i - 1].t + gap)
+    }
+    const g = this.add.graphics()
+    out.push(g)
+    const ROAD = 1.0, REACH = 2.2
+    for (const sp of spots) {
+      // The point on the edge, the way out (n) and along the edge (u).
+      const e = sp.edge
+      const at0 = e === 'x0' ? { x: 0, y: sp.t * H } : e === 'x1' ? { x: W, y: sp.t * H } : e === 'y0' ? { x: sp.t * W, y: 0 } : { x: sp.t * W, y: H }
+      const n = e === 'x0' ? { x: -1, y: 0 } : e === 'x1' ? { x: 1, y: 0 } : e === 'y0' ? { x: 0, y: -1 } : { x: 0, y: 1 }
+      const u = { x: n.y, y: n.x }
+      const pt = (a: number, b: number, z = 0) => P(at0.x + n.x * a + u.x * b, at0.y + n.y * a + u.y * b, z)
+      // The road out: kerb, asphalt, a centre line, fading as it goes.
+      for (let k = 0; k < 6; k++) {
+        const a0 = REACH * k / 6, a1 = REACH * (k + 1) / 6, fade = 1 - k / 6
+        g.fillStyle(this.tone.kerb, fade).fillPoints([pt(a0, -ROAD / 2 - 0.08), pt(a1, -ROAD / 2 - 0.08), pt(a1, ROAD / 2 + 0.08), pt(a0, ROAD / 2 + 0.08)], true)
+        g.fillStyle(this.tone.asphalt, fade).fillPoints([pt(a0, -ROAD / 2 + 0.12), pt(a1, -ROAD / 2 + 0.12), pt(a1, ROAD / 2 - 0.12), pt(a0, ROAD / 2 - 0.12)], true)
+        if (k % 2 === 0) { const m0 = pt(a0 + 0.08, 0), m1 = pt(a1 - 0.08, 0); g.lineStyle(1.3, this.tone.paint, fade).lineBetween(m0.x, m0.y, m1.x, m1.y) }
+      }
+      // The crossing: two posts either side of the road on the edge, a beam across, in the neighbour's colour.
+      const hue = this.shown ? Phaser.Display.Color.HexStringToColor(hueOf(this.shown.tree, [sp.pass.id])).color : this.tone.pick
+      const H1 = 30
+      for (const b of [-ROAD / 2 - 0.1, ROAD / 2 + 0.1]) {
+        const f = pt(0.05, b), t = pt(0.05, b, H1)
+        g.lineStyle(4, this.tone.ink, 1).lineBetween(f.x, f.y, t.x, t.y)
+        g.lineStyle(2.4, 0xfbfaf6, 1).lineBetween(f.x, f.y - 1, t.x, t.y + 1)
+      }
+      const b0 = pt(0.05, -ROAD / 2 - 0.16, H1), b1 = pt(0.05, ROAD / 2 + 0.16, H1)
+      g.lineStyle(7, this.tone.ink, 1).lineBetween(b0.x, b0.y, b1.x, b1.y)
+      g.lineStyle(5, hue, 1).lineBetween(b0.x, b0.y, b1.x, b1.y)
+      // Its sign, past the crossing: who, and what passes each way.
+      const say = (w: string, v: { in: number; out: number }) => !v.in && !v.out ? '' : ` · ${w}${v.in ? ` in ${v.in}` : ''}${v.out ? ` out ${v.out}` : ''}`
+      const sign = pt(REACH * 0.55, 0)
+      out.push(this.plate(sign.x, sign.y + 4, `${sp.pass.label}${say('bus', sp.pass.bus)}${say('metrics', sp.pass.metric)}`, hueOf(this.shown!.tree, [sp.pass.id])))
     }
     return out
   }

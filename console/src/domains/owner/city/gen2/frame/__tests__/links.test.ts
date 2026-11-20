@@ -33,6 +33,7 @@ describe('a connection at each level’s grain', () => {
     const bus = w.gates.find(g => g.way === 'bus' && g.child === 'releases')!
     expect(bus).toMatchObject({ outside: ['command'], label: 'COMMAND', dir: 'both' })
     expect(bus.carries).toHaveLength(3)
+    expect([bus.ins, bus.outs]).toEqual([1, 2])
     expect(w.gates.find(g => g.way === 'metric')).toMatchObject({ child: 'hall', dir: 'out' })
   })
   it('a level shows at most its budget, heaviest first, and counts the rest', () => {
