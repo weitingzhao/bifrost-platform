@@ -35,9 +35,11 @@ describe('a facility’s key', () => {
     expect(rows.find(r => r.id === 'cores')!.now).toMatch(/^\d+ cores$/)
     expect(rows.find(r => r.id === 'mem.used')!.source).toBeTruthy()
   })
-  it('a machine nothing reads says so rather than a number', () => {
+  // 2026-11-20, the Owner: every computer is one kind of building, so an unread Windows box keeps the same
+  // gauges as a plant that runs; each says it is not read (the old test expected only its state row).
+  it('a machine nothing reads keeps its gauges, each saying not read rather than a number', () => {
     const rows = keyOf(dev('win11-host')).rows
-    expect(rows.map(r => r.id)).toEqual(['state'])
-    expect(rows[0].now).toBe('unread')
+    expect(rows.find(r => r.id === 'state')!.now).toBe('unread')
+    for (const r of rows.filter(r => ['cpu.busy', 'cpu.smoke', 'mem.used', 'disk.used', 'cores'].includes(r.id))) expect(r.now).toBe('not read')
   })
 })

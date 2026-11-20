@@ -6,7 +6,7 @@ import { hueOf, tintOf } from './theme'
 import { PALETTE, TERRAIN, type Light, type Palette } from './light'
 import { hash } from './kit'
 import { buildingWings, setback, spriteFor, spriteKey, spriteUrl, type Wing } from './sprites'
-import { deviceKey, deviceSprite, formOfPlace, levelsOf } from './devices'
+import { deviceKey, deviceSprite, formOfPlace, levelsOf, osOfPlace } from './devices'
 import { frameOf, type Frame } from './viewport'
 import { LANDMARKS, type LandmarkId } from './library/landmarkLooks'
 import { edgeSlots, linksAt, portAt, portsFor, slotsFor, type LevelLinks, type Link, type Slot } from './links'
@@ -385,8 +385,8 @@ export class PlaceScene extends Phaser.Scene {
       }
       // A device (a building with a look) is drawn as itself, its rooms' readings on it (devices.ts).
       if (kind === 'building' && k?.look) {
-        const lv = levelsOf(k), form = formOfPlace(k)
-        return { id: p.id, key: deviceKey(form, p.w, p.h, hue, this.light, lv, k.id, k.face), make: () => deviceSprite(form, p.w, p.h, hue, this.light, lv, k.id, k.face) }
+        const lv = levelsOf(k), form = formOfPlace(k), os = osOfPlace(k)
+        return { id: p.id, key: deviceKey(form, p.w, p.h, hue, this.light, lv, k.id, k.face, os), make: () => deviceSprite(form, p.w, p.h, hue, this.light, lv, k.id, k.face, os) }
       }
       // A room its content draws (its own module), where it stands as the module drew it; else the plain room.
       if (kind === 'room' && k?.picture && k.picture.w === p.w && k.picture.d === p.h) {

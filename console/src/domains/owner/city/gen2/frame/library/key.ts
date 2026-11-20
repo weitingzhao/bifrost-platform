@@ -1,5 +1,5 @@
 import type { Place } from '../places'
-import { deviceSprite, formOfPlace, levelsOf, type Form } from '../devices'
+import { deviceSprite, formOfPlace, levelsOf, osOfPlace, type Form } from '../devices'
 import { DICTIONARY, encode, metaphor, rowsDrawn } from './dictionary'
 
 /**
@@ -24,7 +24,7 @@ const bytes = (v: number | null | undefined) => v == null ? 'not read' : v >= 1e
 export function partsOf(k: Place): string[] {
   const lv = levelsOf(k), some = (f: number | null) => f ?? 0.5
   const running = { ...lv, state: 'online' as const, cpu: some(lv.cpu), mem: some(lv.mem), disks: lv.disks.map(some), vols: lv.vols?.map(v => ({ ...v, f: some(v.f) })) }
-  return rowsDrawn(() => deviceSprite(formOfPlace(k), 4, 4, '#cccccc', 'day', running, k.id, k.face)).ids
+  return rowsDrawn(() => deviceSprite(formOfPlace(k), 4, 4, '#cccccc', 'day', running, k.id, k.face, osOfPlace(k))).ids
 }
 
 export function keyOf(k: Place): { form: Form; rows: KeyRow[] } {
@@ -64,6 +64,5 @@ export function keyOf(k: Place): { form: Form; rows: KeyRow[] } {
 
 /** A facility's name as the city calls it. */
 export const FORM_NAME: Record<Form, string> = {
-  plant: 'Power plant', station: 'Power station', warehouse: 'Logistics park', exchange: 'Exchange',
-  dispatch: 'Dispatch centre', office: 'Office', tower: 'Telecom tower',
+  plant: 'Power plant', station: 'Power station', tower: 'Telecom tower',
 }

@@ -54,7 +54,7 @@ describe('the metaphor dictionary', () => {
     expect(big.height).toBeGreaterThanOrEqual(small.height)
   })
   it('every facility draws from the table without a missing row', () => {
-    const forms: Form[] = ['plant', 'station', 'warehouse', 'exchange', 'dispatch', 'office', 'tower']
+    const forms: Form[] = ['plant', 'station', 'tower']
     const lv: Levels = { state: 'online', cpu: 0.5, mem: 0.5, disks: [0.5], vols: [{ f: 0.5, units: ['online'] }], cap: { cores: 16, mem: 24e9, disk: 500e9 } }
     for (const f of forms) expect(() => deviceSprite(f, 4, 8, '#f2d27a', 'day', lv)).not.toThrow()
   })
