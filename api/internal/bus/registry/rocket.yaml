@@ -372,6 +372,26 @@ channels:
       consumers: [console]
       exports: []
       replaces: [R12, C01]
+  cluster.node.changed:
+    address: ev.rocket.{env}.cluster.node.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<node>"
+      publisher: gate-cluster
+      domain: compute
+      ref: "/api/v1/cluster/nodes"
+      reconcile: "gate-cluster relists the nodes every 30 min"
+      on_unread: stale
+      retention: 30d
+      # A node turned ready or not ready, or was cordoned or uncordoned
+      # (2026-11-20: ubt-k3s-05 was drained and the bus's NATS on it sat
+      # Pending an hour while nothing said so). The Console refreshes its
+      # node reads on it.
+      consumers: [console]
+      exports: []
+      replaces: []
   plugin.status.changed:
     address: ev.rocket.{env}.plugin.status.changed
     x-bifrost:

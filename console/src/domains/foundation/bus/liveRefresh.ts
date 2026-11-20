@@ -34,6 +34,9 @@ export const LIVE_REFRESH: LiveRefreshRow[] = [
   { types: ['ci.run.', 'ci.verdict.changed'], keys: [['delivery', 'runs'], ['delivery', 'pipelines'], ['ci']] },
   { types: ['release.deploy.finished', 'release.gitops.changed'], keys: [['releases'], ['gitops']] },
   { types: ['alert.rule.fired'], keys: [['telemetry', 'alerts']] },
+  // A node turned ready, not ready, cordoned or uncordoned (2026-11-20). The node reads keep
+  // their own 30 s poll: they also carry CPU and memory use, which no event says.
+  { types: ['cluster.node.changed'], keys: [['cluster', 'nodes'], ['cluster', 'governance']] },
   // Recorded actions come often (release window holds alone: 393 in two days), so
   // they settle for 60 s, never more often than the 60 s poll they replace:
   // PROD read /records 82 times in 30 minutes with a 1 s settle and 43 with 30 s,

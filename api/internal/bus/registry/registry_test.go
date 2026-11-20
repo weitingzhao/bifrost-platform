@@ -19,9 +19,10 @@ func TestRegisteredTenantsPass(t *testing.T) {
 	// 36 = the 38 types proposed in the 2026-11-16 disposition table less the
 	// two with no source to publish them (RULES.md §4 item 1); and 2026-11-17
 	// main.regression.known and .fixed (known regressions on main): 38; later
-	// ten unpublished left (0037): 28; 2026-11-19 plan.tree.changed: 29.
-	if n := len(rocket.Channels); n != 29 {
-		t.Fatalf("rocket registers %d types, want 29", n)
+	// ten unpublished left (0037): 28; 2026-11-19 plan.tree.changed: 29;
+	// 2026-11-20 cluster.node.changed (a node changed; 05 drained, NATS stuck): 30.
+	if n := len(rocket.Channels); n != 30 {
+		t.Fatalf("rocket registers %d types, want 30", n)
 	}
 	for _, typ := range []string{"git.main.advanced", "release.window.changed", "seat.mail.arrived"} {
 		if _, ok := rocket.Channels[typ]; !ok {
