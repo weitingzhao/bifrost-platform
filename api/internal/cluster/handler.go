@@ -41,9 +41,10 @@ func (h *Handler) HandleNodes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.NodesForDisplay(r.Context()))
 }
 
-// ClusterNodes exposes node inventory for other packages (e.g. console SSH host row).
+// ClusterNodes exposes node inventory for other packages (the topology's live
+// host names). It is the display read: nothing may act on it.
 func (h *Handler) ClusterNodes(ctx context.Context) NodesResponse {
-	return h.svc.Nodes(ctx)
+	return h.svc.NodesForDisplay(ctx)
 }
 
 func (h *Handler) HandlePlacement(w http.ResponseWriter, r *http.Request) {

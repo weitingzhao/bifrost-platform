@@ -58,8 +58,14 @@ func capabilityIDsFromView(n NodeView) []string {
 	return ids
 }
 
+// Placement is the pool evaluation, a read for pages and readiness: nodes come
+// from NodesForDisplay, so a powered-off elastic host does not cost every read
+// an SSH timeout.
 func (s *Service) Placement(ctx context.Context) PoolEvaluation {
-	nodesResp := s.Nodes(ctx)
+	return s.placementFrom(s.NodesForDisplay(ctx))
+}
+
+func (s *Service) placementFrom(nodesResp NodesResponse) PoolEvaluation {
 	if s.pools == nil {
 		return PoolEvaluation{Body: map[string]any{"cluster_id": nodesResp.ClusterID, "reachability": probe.ReachUnknown,
 			"detail": "no pool evaluator is bound", "pools": []any{}, "rules": []any{}, "violations": []any{}}}

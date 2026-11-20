@@ -170,3 +170,27 @@ func TestNodesProbesEveryCallAndDisplayDoesNot(t *testing.T) {
 		t.Fatalf("elastic mode: shown %q live %q want standby", shown.Nodes[0].ElasticMode, live.Nodes[0].ElasticMode)
 	}
 }
+
+// Origin: 2026-11-19, BifrostAPIHighLatency: /api/v1/matrix (6.3 s) and
+// /api/v1/topology (9.4 s) waited out one 3-second SSH timeout to the
+// powered-off gpu-server per live Nodes call, and the readiness snapshot made
+// two (Nodes, then Placement's own). These reads only show; they use the kept
+// reading. TestNodesProbesEveryCallAndDisplayDoesNot is the positive control.
+func TestDisplayReadsDoNotProbeHostsLive(t *testing.T) {
+	n := New()
+	var calls atomic.Int32
+	n.liveProbe = func(context.Context, string) bool { calls.Add(1); return false }
+	bind(t, n)
+	svc := fakeService(&config.ClusterEntry{ComputeNodes: []config.ComputeNodeSpec{{
+		Name: "gpu-server", SSHHost: "gpu",
+	}}}, notReadyNode("gpu-server"))
+
+	_ = svc.NodesForDisplay(t.Context()) // the one probe that fills the kept reading
+	_ = svc.Placement(t.Context())
+	_ = svc.Governance(t.Context())
+	_ = svc.ServiceReadiness(t.Context())
+	_ = svc.DatastoreSnapshot(t.Context())
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("live host probes from display reads: got %d want 1", got)
+	}
+}

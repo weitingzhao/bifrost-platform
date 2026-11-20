@@ -71,10 +71,12 @@ func (s *Service) ServiceReadiness(ctx context.Context) ServiceReadinessResponse
 }
 
 func (s *Service) buildReadinessSnapshot(ctx context.Context) (readinessSnapshot, error) {
-	nodesResp := s.Nodes(ctx)
+	// One display read of the nodes serves coverage and placement; nothing acts
+	// on this snapshot (service readiness, the matrix's datastore view).
+	nodesResp := s.NodesForDisplay(ctx)
 	clusterCaps, _, _ := s.probeClusterCapabilities(ctx)
 	coverage := buildNodeCoverage(nodesResp.Nodes, NodeCapabilityCatalog())
-	placementResp := s.Placement(ctx)
+	placementResp := s.placementFrom(nodesResp)
 
 	capMap := make(map[string]ClusterCapabilityView, len(clusterCaps))
 	for _, c := range clusterCaps {
