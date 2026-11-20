@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actionrecord"
@@ -176,13 +177,33 @@ func Compute(ctx context.Context, db eventlog.DB, prom Prom, w Window) ([]Readin
 			out = append(out, finish(Reading{Name: name, Window: w, Note: "the event ledger is not connected on this platform"}, false))
 		}
 	}
-	out = append(out, promReadings(ctx, prom, w)...)
-	out = append(out, ciQueueReadings(ctx, prom, w)...)
-	out = append(out, busEventReadings(ctx, prom, w)...)
-	out = append(out, busOutageReadings(ctx, prom, w)...)
-	out = append(out, alertActivationReadings(ctx, prom, w)...)
+	out = append(out, promGroups(ctx, prom, w)...)
 	out = append(out, unmeasured(w)...)
 	return out, nil
+}
+
+// promGroups runs the Prometheus-backed readings at the same time and keeps
+// their order. Run one after another, a 7-day window's queries took most of
+// the handler's 15 seconds (2026-11-20: eight subqueries over 7 days each).
+func promGroups(ctx context.Context, prom Prom, w Window) []Reading {
+	groups := []func(context.Context, Prom, Window) []Reading{
+		promReadings, ciQueueReadings, busEventReadings, busOutageReadings, alertActivationReadings,
+	}
+	res := make([][]Reading, len(groups))
+	var wg sync.WaitGroup
+	for i, g := range groups {
+		wg.Add(1)
+		go func(i int, g func(context.Context, Prom, Window) []Reading) {
+			defer wg.Done()
+			res[i] = g(ctx, prom, w)
+		}(i, g)
+	}
+	wg.Wait()
+	var out []Reading
+	for _, r := range res {
+		out = append(out, r...)
+	}
+	return out
 }
 
 // unmeasured are the readings the first version names but has no records for.
