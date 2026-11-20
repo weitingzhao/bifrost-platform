@@ -75,12 +75,11 @@ describe('a place’s two sides: its declared partners, Other, Orphan', () => {
   it('an orphan’s far end need not be a place; a declared partner must be a place beside it', () => {
     expect(linkRulesBroken(town, links)).toEqual(['me: partner z is not a place beside it'])
   })
-  // The Owner, 2026-11-20: the front edges are what is clean, the back edges what is yet to be cleared.
-  it('the frame sets nine places outside: three in at the front left, three out at the front right, the two Others at the back left, Orphan at the back right', () => {
+  // The Owner, 2026-11-20: the front edges are what is clean; what is yet to be cleared stands in a row on the back left.
+  it('the frame sets nine places outside: three in at the front left, three out at the front right, Other in, Other out and Orphan on the back left', () => {
     expect(SLOTS.filter(s => s.edge === 'y1').map(s => s.side)).toEqual(['in', 'in', 'in'])
     expect(SLOTS.filter(s => s.edge === 'x1').map(s => s.side)).toEqual(['out', 'out', 'out'])
-    expect(SLOTS.filter(s => s.edge === 'x0').map(s => [s.side, s.i])).toEqual([['in', PORTS], ['out', PORTS]])
-    expect(SLOTS.filter(s => s.edge === 'y0').map(s => s.side)).toEqual(['orphan'])
+    expect(SLOTS.filter(s => s.edge === 'x0').map(s => s.side)).toEqual(['in', 'out', 'orphan'])
   })
 })
 

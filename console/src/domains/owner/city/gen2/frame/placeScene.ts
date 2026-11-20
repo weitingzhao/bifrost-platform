@@ -1184,7 +1184,7 @@ export class PlaceScene extends Phaser.Scene {
       if (!b) return null
       const i = (b.k.partners?.[side] ?? []).slice(0, b.n).indexOf(partner)
       const front = b.ground.y + b.ground.h + G
-      if (i < 0) return { x: b.ground.x - G, y: b.r.y + b.r.h * (side === 'in' ? 0.25 : 0.75), on: 'v', front }
+      if (i < 0) return { x: b.ground.x - G, y: b.r.y + b.r.h * (side === 'in' ? 0.25 : 0.5), on: 'v', front }
       const f = portAt(i, b.n)
       return side === 'in' ? { x: b.r.x + b.r.w * f, y: front, on: 'h', front } : { x: b.ground.x + b.ground.w + G, y: b.r.y + b.r.h * f, on: 'v', front }
     }
@@ -1241,7 +1241,7 @@ export class PlaceScene extends Phaser.Scene {
    * ramps): a used port is the district's own street at that port (links.ts portAt) carried straight out of
    * its block, across the green belt, into the highway, at the street's width, its kerbs flared where it
    * meets the highway, a zebra across its mouth and a stop line. An open port is a street that ends at the
-   * block. Other is a small pile under tarpaulins on the back-left corner, Orphan a small site on the back-right.
+   * block. Other is a small pile under tarpaulins and Orphan a small site, both on the back-left.
    */
   private exits(g: Phaser.GameObjects.Graphics, k: Place, at: Placed, r: Rect, P: Proj, sheetAt: (fx: number, fy: number) => { x: number; y: number }) {
     const s = this.shown!
@@ -1308,12 +1308,13 @@ export class PlaceScene extends Phaser.Scene {
       g.fillStyle(c.clone().darken(8).color).fillPoints(left, true).strokePoints(left, true)
       g.fillStyle(col).fillPoints(top, true).strokePoints(top, true)
     }
+    // All on the back-left, as inside: the Others towards the back, the yard towards the front.
     if (slots.in.other || slots.out.other) {
-      const x = r.x + 0.18, y = r.y + r.h * 0.55
+      const x = r.x + 0.15, y = r.y + r.h * 0.2
       box(x, y, 0.22, 6, 0x6f8fb3); box(x + 0.26, y + 0.05, 0.2, 5, 0x6f8fb3); box(x + 0.08, y + 0.28, 0.18, 4, 0x6f8fb3)
     }
     if (slots.orphan) {
-      const x = r.x + r.w * 0.55, y = r.y + 0.15, w = 0.55
+      const x = r.x + 0.15, y = r.y + r.h * 0.62, w = 0.55
       const lot = [P(x, y), P(x + w, y), P(x + w, y + w), P(x, y + w)]
       g.fillStyle(0xc9a77a, 1).fillPoints(lot, true)
       for (let k2 = 0; k2 < 4; k2++) { const p0 = P(x + w * k2 / 4, y + w), p1 = P(x + w * (k2 + 1) / 4, y + w); g.fillStyle(k2 % 2 ? 0xffffff : 0xf08a4b, 1).fillPoints([p0, p1, new Phaser.Math.Vector2(p1.x, p1.y - 4), new Phaser.Math.Vector2(p0.x, p0.y - 4)], true) }
@@ -1350,19 +1351,18 @@ export class PlaceScene extends Phaser.Scene {
     const pos: Record<Slot['edge'], number[]> = {
       y1: Array.from({ length: PORTS }, (_, i) => geo.x(portAt(i, PORTS) * GW)),
       x1: Array.from({ length: PORTS }, (_, i) => geo.y(portAt(i, PORTS) * GH)),
-      // The two Others on the back-left edge's outer streets (a quarter and three quarters), so their roads run on.
-      x0: [0.25, 0.75].map(f => geo.y(f * GH)),
-      y0: [geo.x(GW / 2)],
+      // The back-left edge holds what is yet to be cleared, one to each of its streets: Other in, Other out, Orphan.
+      x0: [0.25, 0.5, 0.75].map(f => geo.y(f * GH)),
     }
     for (const sl of slotsFor(PORTS)) {
       const edge = sl.side === 'in' ? slots.in : sl.side === 'out' ? slots.out : null
       const pass = sl.side === 'orphan' ? slots.orphan : sl.i < PORTS ? edge!.named[sl.i] ?? null : edge!.other
       const kind: 'named' | 'other' | 'orphan' = sl.side === 'orphan' ? 'orphan' : sl.i < PORTS ? 'named' : 'other'
       // The point on the edge, the way out (n) and along the edge (u); the corner looks out diagonally.
-      const k0 = sl.edge === 'x0' ? (sl.side === 'in' ? 0 : 1) : sl.edge === 'y0' ? 0 : sl.i
+      const k0 = sl.edge === 'x0' ? (sl.side === 'in' ? 0 : sl.side === 'out' ? 1 : 2) : sl.i
       const v = pos[sl.edge][k0]
-      const at0 = sl.edge === 'x1' ? { x: W, y: v } : sl.edge === 'y1' ? { x: v, y: H } : sl.edge === 'x0' ? { x: 0, y: v } : { x: v, y: 0 }
-      const n = sl.edge === 'x1' ? { x: 1, y: 0 } : sl.edge === 'y1' ? { x: 0, y: 1 } : sl.edge === 'x0' ? { x: -1, y: 0 } : { x: 0, y: -1 }
+      const at0 = sl.edge === 'x1' ? { x: W, y: v } : sl.edge === 'y1' ? { x: v, y: H } : { x: 0, y: v }
+      const n = sl.edge === 'x1' ? { x: 1, y: 0 } : sl.edge === 'y1' ? { x: 0, y: 1 } : { x: -1, y: 0 }
       const u = { x: -n.y, y: n.x }
       const pt = (a: number, b: number, z = 0) => P(at0.x + n.x * a + u.x * b, at0.y + n.y * a + u.y * b, z)
       const REACH_ = REACH, NB_AT_ = REACH_ + 1.15
@@ -1487,8 +1487,10 @@ export class PlaceScene extends Phaser.Scene {
       }
       out.push(sg)
       const who = kind === 'other' && pass.who.length ? ` (${pass.who.slice(0, 2).join(', ')}${pass.who.length > 2 ? '…' : ''})` : ''
-      out.push(this.plate(sign.x, sign.y + 30, `${pass.label} · ${pass.n} · ${Math.round(share * 100)}%${who}`, '#f08a4b'))
-      framed.push(new Phaser.Math.Vector2(sign.x, sign.y + 54))
+      // On the back edge its sign stands behind it, clear of the road and its arrow.
+      const signY = sl.edge === 'x0' ? sign.y - 62 : sign.y + 30
+      out.push(this.plate(sign.x, signY, `${pass.label} · ${pass.n} · ${Math.round(share * 100)}%${who}`, '#f08a4b'))
+      framed.push(new Phaser.Math.Vector2(sign.x, signY - 10), new Phaser.Math.Vector2(sign.x, signY + 24))
     }
     return out
   }

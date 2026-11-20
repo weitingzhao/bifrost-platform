@@ -197,11 +197,11 @@ export function edgeSlots(gates: readonly Gate[], partners: Partners | undefined
  * The fixed places outside a district's ground (the Owner, 2026-11-20: as the plots inside, the frame sets
  * them first and they wait to be filled). The two front edges are what is clean: the front-left edge the way
  * in, PORTS named ports; the front-right edge the way out, the same. The two back edges are what is yet to be
- * cleared: the back-left edge holds the two Others (in, then out), the back-right edge the place's own yard,
- * Orphan. So everything at the back is work to do, and an empty back is the goal. Every slot sits on a street,
+ * cleared: the back-left edge holds them all, side by side on its three streets: Other in, Other out, then the
+ * place's own yard, Orphan (the Owner, 2026-11-20: three more roads, set out in a row). So everything at the back is work to do, and an empty back is the goal. Every slot sits on a street,
  * so its road carries that street straight out.
  */
-export type Slot = { side: 'in' | 'out' | 'orphan'; i: number; edge: 'y1' | 'x1' | 'x0' | 'y0' }
+export type Slot = { side: 'in' | 'out' | 'orphan'; i: number; edge: 'y1' | 'x1' | 'x0' }
 /** The fixed places outside a place with `ports` a side: that many in, that many out, the two Others, Orphan. */
 export function slotsFor(ports: number): Slot[] {
   return [
@@ -209,7 +209,7 @@ export function slotsFor(ports: number): Slot[] {
     ...Array.from({ length: ports }, (_, i) => ({ side: 'out' as const, i, edge: 'x1' as const })),
     { side: 'in', i: ports, edge: 'x0' },
     { side: 'out', i: ports, edge: 'x0' },
-    { side: 'orphan', i: 0, edge: 'y0' },
+    { side: 'orphan', i: 0, edge: 'x0' },
   ]
 }
 export const SLOTS: readonly Slot[] = slotsFor(PORTS)
