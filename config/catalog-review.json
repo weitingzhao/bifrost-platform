@@ -38,11 +38,10 @@
       "domain": "verification"
     },
     "console/bench": {
-      "verdict": "claim",
-      "reason": "console bench and builder; last change was the City page (LANE-COCKPIT, 2026-11-18)",
+      "verdict": "unknown",
+      "reason": "console bench and builder; its last change came from the cockpit line (City page, LANE-COCKPIT, 2026-11-18), but whose it is was not measured: a last author is not an owner. The owner and verification domains are asked to claim it",
       "by": "seat:catalog",
-      "on": "2026-11-20",
-      "domain": "owner"
+      "on": "2026-11-20"
     },
     "mcp/trade": {
       "verdict": "claim",
@@ -64,54 +63,6 @@
       "by": "seat:catalog",
       "on": "2026-11-20",
       "domain": "verification"
-    },
-    "site": {
-      "verdict": "delete",
-      "reason": "built output of a retired static docs site (sitemap, assets); last change 2026-08-17; nothing in the repository, the images or the pipelines references site/ (git grep, 2026-11-20); code, no data: deleting it is reversible from git",
-      "by": "seat:catalog",
-      "on": "2026-11-20"
-    },
-    "site/ARCHITECTURE": {
-      "verdict": "delete",
-      "reason": "built output of a retired static docs site (sitemap, assets); last change 2026-08-17; nothing in the repository, the images or the pipelines references site/ (git grep, 2026-11-20); code, no data: deleting it is reversible from git",
-      "by": "seat:catalog",
-      "on": "2026-11-20"
-    },
-    "site/TRADE_CONTRACT": {
-      "verdict": "delete",
-      "reason": "built output of a retired static docs site (sitemap, assets); last change 2026-08-17; nothing in the repository, the images or the pipelines references site/ (git grep, 2026-11-20); code, no data: deleting it is reversible from git",
-      "by": "seat:catalog",
-      "on": "2026-11-20"
-    },
-    "site/agent": {
-      "verdict": "delete",
-      "reason": "built output of a retired static docs site (sitemap, assets); last change 2026-08-17; nothing in the repository, the images or the pipelines references site/ (git grep, 2026-11-20); code, no data: deleting it is reversible from git",
-      "by": "seat:catalog",
-      "on": "2026-11-20"
-    },
-    "site/assets": {
-      "verdict": "delete",
-      "reason": "built output of a retired static docs site (sitemap, assets); last change 2026-08-17; nothing in the repository, the images or the pipelines references site/ (git grep, 2026-11-20); code, no data: deleting it is reversible from git",
-      "by": "seat:catalog",
-      "on": "2026-11-20"
-    },
-    "site/mcp": {
-      "verdict": "delete",
-      "reason": "built output of a retired static docs site (sitemap, assets); last change 2026-08-17; nothing in the repository, the images or the pipelines references site/ (git grep, 2026-11-20); code, no data: deleting it is reversible from git",
-      "by": "seat:catalog",
-      "on": "2026-11-20"
-    },
-    "site/overview": {
-      "verdict": "delete",
-      "reason": "built output of a retired static docs site (sitemap, assets); last change 2026-08-17; nothing in the repository, the images or the pipelines references site/ (git grep, 2026-11-20); code, no data: deleting it is reversible from git",
-      "by": "seat:catalog",
-      "on": "2026-11-20"
-    },
-    "site/search": {
-      "verdict": "delete",
-      "reason": "built output of a retired static docs site (sitemap, assets); last change 2026-08-17; nothing in the repository, the images or the pipelines references site/ (git grep, 2026-11-20); code, no data: deleting it is reversible from git",
-      "by": "seat:catalog",
-      "on": "2026-11-20"
     }
   }
 }
