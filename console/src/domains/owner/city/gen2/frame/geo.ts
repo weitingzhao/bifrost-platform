@@ -11,6 +11,16 @@ import { GRID, type Plot } from './grid'
  * runs the whole ground) is wider by that gutter; its thing stands in its middle at its true size.
  */
 export const WAY = 1
+/**
+ * One lane, the same width on every level and in every view (the Owner, 2026-11-20: roads must be real roads,
+ * and one day cars will drive them, the same size everywhere). A highway (the town's ways, a district's ring)
+ * has two lanes each way; a local street (the ways inside a district or a building's grounds) one each way.
+ */
+export const LANE = 0.2
+export const HIGHWAY_HALF = 2 * LANE
+export const LOCAL_HALF = LANE
+/** The pavement either side of the asphalt. */
+export const PAVEMENT = 0.12
 export const BUFFER = 0.3
 export const GUTTER = WAY + 2 * BUFFER
 

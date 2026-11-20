@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser'
 import { defaultPlan, fitsIn, GRID, plotsOf, type Placed, type Plot, type Street } from './grid'
-import { BUFFER, geoOf, GUTTER, WAY, type Geo, type Rect } from './geo'
+import { BUFFER, geoOf, GUTTER, HIGHWAY_HALF, LANE, LOCAL_HALF, PAVEMENT, WAY, type Geo, type Rect } from './geo'
 import { functionAt, isWired, type Place } from './places'
 import { hueOf, terrainOf, tintOf } from './theme'
 import { PALETTE, TERRAIN, type Light, type Palette } from './light'
@@ -115,10 +115,6 @@ const heightOf = (p: Place, size: number) => p.landmark ? LANDMARKS[p.landmark].
 const RS = 3
 /** The slab's thickness under the ground, px: the earth shows on its two front sides. */
 const SLAB = 14
-/** A road's kerb, each side, in cells. */
-const KERB = 0.06
-/** The pavement inside the way's width, each side, in cells: the asphalt is the rest. */
-const WALK = 0.14
 
 export class PlaceScene extends Phaser.Scene {
   private events_: SceneEvents
@@ -898,11 +894,11 @@ export class PlaceScene extends Phaser.Scene {
       return l.vertical ? [P(a0, b0), P(a1, b0), P(a1, b1), P(a0, b1)] : [P(b0, a0), P(b1, a0), P(b1, a1), P(b0, a1)]
     }
     const solid = (st: Street, off: number) => { const q = strip(st, 0.001, off, 0), e = st.x0 === st.x1 ? q[3] : q[1]; g.lineBetween(q[0].x, q[0].y, e.x, e.y) }
-    const dashes = (st: Street) => {
-      const l = lineOf(st)
-      for (let k = l.from + WAY / 2; k < l.to - WAY / 2; k += 1) {
-        const p0 = k + 0.25, p1 = k + 0.65
-        const a = l.vertical ? P(l.at, p0) : P(p0, l.at), b = l.vertical ? P(l.at, p1) : P(p1, l.at)
+    const dashesAt = (st: Street, off: number) => {
+      const l = lineOf(st), at = l.at + off
+      for (let k = l.from + WAY / 2; k < l.to - WAY / 2; k += 0.8) {
+        const p0 = k + 0.2, p1 = k + 0.5
+        const a = l.vertical ? P(at, p0) : P(p0, at), b = l.vertical ? P(at, p1) : P(p1, at)
         g.lineBetween(a.x, a.y, b.x, b.y)
       }
     }
@@ -914,35 +910,35 @@ export class PlaceScene extends Phaser.Scene {
       for (const st of streets) g.strokePoints(strip(st, WAY / 2), true)
       this.storey(g, P, W, H)
     } else {
-      // The pavement either side, laid in slabs, a kerb line where it meets the asphalt (the first generation's roads).
+      // Highways and local streets (geo.ts LANE): the town's ways and a district's ring are highways, two
+      // lanes each way, a double yellow line down the middle and dashed lane lines; the streets inside a district
+      // are local, one lane each way, a dashed centre line. Pavement either side, a kerb line at the asphalt.
+      const isHighway = (st: Street) => grade === 'highway' || st.kind === 'ring'
+      const half = (st: Street) => (isHighway(st) ? HIGHWAY_HALF : LOCAL_HALF)
       g.fillStyle(this.tone.kerb)
-      for (const st of streets) g.fillPoints(strip(st, WAY / 2 + KERB), true)
+      for (const st of streets) g.fillPoints(strip(st, half(st) + PAVEMENT, 0, Math.max(half(st), WAY / 2) + PAVEMENT), true)
       g.fillStyle(this.tone.asphalt)
-      for (const st of streets) g.fillPoints(strip(st, WAY / 2 - WALK), true)
+      for (const st of streets) g.fillPoints(strip(st, half(st), 0, Math.max(half(st), WAY / 2)), true)
       g.lineStyle(1.2, this.tone.curb, 1)
-      for (const st of streets) for (const off of [-(WAY / 2 - WALK), WAY / 2 - WALK]) solid(st, off)
+      for (const st of streets) for (const off of [-half(st), half(st)]) solid(st, off)
       // Where two ways cross: a zebra across each arm, just short of the crossing.
-      const ls = streets.map(lineOf), vs = ls.filter(l => l.vertical), hs = ls.filter(l => !l.vertical)
+      const ls = streets.map(st => ({ ...lineOf(st), h: half(st) })), vs = ls.filter(l => l.vertical), hs = ls.filter(l => !l.vertical)
       g.fillStyle(this.tone.paint, 0.95)
       for (const v of vs) for (const h of hs) {
         if (h.at < v.from - 0.01 || h.at > v.to + 0.01 || v.at < h.from - 0.01 || v.at > h.to + 0.01) continue
-        const half = WAY / 2 - WALK
         for (const dir of [-1, 1]) {
-          // On the vertical way, above and below the crossing; on the horizontal, either side.
-          const along = h.at + dir * (WAY / 2 + 0.12), across0 = v.at - half + 0.05
-          if (along > v.from - WAY / 2 && along < v.to + WAY / 2) for (let u = across0; u < v.at + half - 0.06; u += 0.1) g.fillPoints(quadOf(P, { x: u, y: Math.min(along, along + dir * 0.22), w: 0.055, h: 0.22 }), true)
-          const along2 = v.at + dir * (WAY / 2 + 0.12), across1 = h.at - half + 0.05
-          if (along2 > h.from - WAY / 2 && along2 < h.to + WAY / 2) for (let u = across1; u < h.at + half - 0.06; u += 0.1) g.fillPoints(quadOf(P, { x: Math.min(along2, along2 + dir * 0.22), y: u, w: 0.22, h: 0.055 }), true)
+          const along = h.at + dir * (h.h + PAVEMENT + 0.1)
+          if (along > v.from - WAY / 2 && along < v.to + WAY / 2) for (let u = v.at - v.h + 0.04; u < v.at + v.h - 0.05; u += 0.09) g.fillPoints(quadOf(P, { x: u, y: Math.min(along, along + dir * 0.2), w: 0.05, h: 0.2 }), true)
+          const along2 = v.at + dir * (v.h + PAVEMENT + 0.1)
+          if (along2 > h.from - WAY / 2 && along2 < h.to + WAY / 2) for (let u = h.at - h.h + 0.04; u < h.at + h.h - 0.05; u += 0.09) g.fillPoints(quadOf(P, { x: Math.min(along2, along2 + dir * 0.2), y: u, w: 0.2, h: 0.05 }), true)
         }
       }
-      // A highway: a solid double line down the middle, in the crossings' yellow. A district's ring is the
-      // town's highway round its block, the same road seen closer (the Owner, 2026-11-20: going in, the roads
-      // must carry on), so it keeps the highway's marking; the streets inside have one dashed line.
-      const isHighway = (st: Street) => grade === 'highway' || (place.kind === 'district' && st.kind === 'ring')
       g.lineStyle(1.1, 0xf0c95e, 0.95)
-      for (const st of streets) if (isHighway(st)) for (const off of [-0.035, 0.035]) solid(st, off)
-      g.lineStyle(1.3, this.tone.paint, 0.9)
-      for (const st of streets) if (!isHighway(st)) dashes(st)
+      for (const st of streets) if (isHighway(st)) for (const off of [-0.03, 0.03]) solid(st, off)
+      g.lineStyle(1, this.tone.paint, 0.85)
+      for (const st of streets) if (isHighway(st)) for (const off of [-LANE, LANE]) dashesAt(st, off)
+      g.lineStyle(1.2, this.tone.paint, 0.9)
+      for (const st of streets) if (!isHighway(st)) dashesAt(st, 0)
     }
     // While arranging, every plot's edge in ink, so the cuts read clearly.
     if (o.arranging) for (const p of plots) {
@@ -1064,18 +1060,21 @@ export class PlaceScene extends Phaser.Scene {
             ? quadOf(P, { x: a.x - e, y: Math.min(a.y, b.y) - e, w: 2 * e, h: Math.abs(b.y - a.y) + 2 * e })
             : quadOf(P, { x: Math.min(a.x, b.x) - e, y: a.y - e, w: Math.abs(b.x - a.x) + 2 * e, h: 2 * e })
         }
+        // Its local streets at the town's own lane width (one lane each way: a car is the same size here as on
+        // the highway); its ring is the town's highway round the block, already drawn.
+        const local = lay.streets.filter(st => st.kind !== 'ring')
         g.fillStyle(this.tone.kerb, 1)
-        for (const st of lay.streets) g.fillPoints(strip(st, (WAY / 2 + KERB) * kk), true)
+        for (const st of local) g.fillPoints(strip(st, LOCAL_HALF + PAVEMENT), true)
         g.fillStyle(this.tone.asphalt, 1)
-        for (const st of lay.streets) g.fillPoints(strip(st, (WAY / 2 - WALK) * kk), true)
-        g.lineStyle(0.8, this.tone.paint, 0.8)
-        for (const st of lay.streets) { const a = at_(lg.x(st.x0), lg.y(st.y0)), b = at_(lg.x(st.x1), lg.y(st.y1)), p0 = P(a.x, a.y), p1 = P(b.x, b.y); g.lineBetween(p0.x, p0.y, p1.x, p1.y) }
+        for (const st of local) g.fillPoints(strip(st, LOCAL_HALF), true)
+        g.lineStyle(0.9, this.tone.paint, 0.85)
+        for (const st of local) { const a = at_(lg.x(st.x0), lg.y(st.y0)), b = at_(lg.x(st.x1), lg.y(st.y1)); const n = Math.max(1, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 0.5)); for (let i = 0; i < n; i += 2) { const p0 = P(a.x + (b.x - a.x) * i / n, a.y + (b.y - a.y) * i / n), p1 = P(a.x + (b.x - a.x) * (i + 1) / n, a.y + (b.y - a.y) * (i + 1) / n); g.lineBetween(p0.x, p0.y, p1.x, p1.y) } }
         // Seen from the town, its ports already show, where they are inside: each used port is its own street
         // carried out across the green belt to the highway, a crossing at the mouth (portAt). Other and Orphan
         // are small on the block's back corners.
         if (o.interactive && this.shown.allLinks && path.length === 1) {
           stubG = this.add.graphics()
-          this.exits(stubG, k, at, r, P, (fx, fy) => at_(lg.x(fx * GRID), lg.y(fy * GRID)), WAY * kk)
+          this.exits(stubG, k, at, r, P, (fx, fy) => at_(lg.x(fx * GRID), lg.y(fy * GRID)))
         }
       }
       const looks = new Map(this.looks(k, lay.placed, path).map(l => [l.id, l.key]))
@@ -1249,13 +1248,14 @@ export class PlaceScene extends Phaser.Scene {
    * meets the highway, a zebra across its mouth and a stop line. An open port is a street that ends at the
    * block. Other is a small pile under tarpaulins on the back-left corner, Orphan a small site on the back-right.
    */
-  private exits(g: Phaser.GameObjects.Graphics, k: Place, at: Placed, r: Rect, P: Proj, sheetAt: (fx: number, fy: number) => { x: number; y: number }, width: number) {
+  private exits(g: Phaser.GameObjects.Graphics, k: Place, at: Placed, r: Rect, P: Proj, sheetAt: (fx: number, fy: number) => { x: number; y: number }) {
     const s = this.shown!
     const PORTS = portsFor(k.shape)
     const slots = edgeSlots(linksAt(s.tree, [k.id], s.allLinks ?? []).gates, k.partners, id => id, PORTS)
     const plot = s.plots.find(q => q.id === at.plot)
     const ground = plot ? geoOf(s.plots).plot(plot) : { x: r.x - 0.5, y: r.y - 0.5, w: r.w + 1, h: r.h + 1 }
-    const HALF = Math.max(0.16, width / 2), FLARE = 0.18
+    // A local street, one lane each way, the same as the block's own.
+    const HALF = LOCAL_HALF + 0.04, FLARE = 0.18
     // A street from a point on the block's ring (x, y) out along (dx, dy) to the highway's near kerb.
     const street = (x: number, y: number, dx: number, dy: number) => {
       const len = dx ? ground.x + ground.w + BUFFER - x : ground.y + ground.h + BUFFER - y
@@ -1357,10 +1357,11 @@ export class PlaceScene extends Phaser.Scene {
         const a0 = START + (REACH_ - START) * k / 5, a1 = START + (REACH_ - START) * (k + 1) / 5, fade = k < 2 ? 1 : 1 - (k - 1) / 6
         // The same street as inside, carried on to every slot alike: the ground is laid out first, what
         // stands on it comes later (the Owner, 2026-11-20).
-        g.fillStyle(this.tone.kerb, fade).fillPoints([pt(a0, -WAY / 2 - KERB), pt(a1, -WAY / 2 - KERB), pt(a1, WAY / 2 + KERB), pt(a0, WAY / 2 + KERB)], true)
-        g.fillStyle(this.tone.asphalt, fade).fillPoints([pt(a0, -WAY / 2 + WALK), pt(a1, -WAY / 2 + WALK), pt(a1, WAY / 2 - WALK), pt(a0, WAY / 2 - WALK)], true)
+        g.fillStyle(this.tone.kerb, fade).fillPoints([pt(a0, -LOCAL_HALF - PAVEMENT), pt(a1, -LOCAL_HALF - PAVEMENT), pt(a1, LOCAL_HALF + PAVEMENT), pt(a0, LOCAL_HALF + PAVEMENT)], true)
+        g.fillStyle(this.tone.asphalt, fade).fillPoints([pt(a0, -LOCAL_HALF), pt(a1, -LOCAL_HALF), pt(a1, LOCAL_HALF), pt(a0, LOCAL_HALF)], true)
         g.lineStyle(1.2, this.tone.curb, fade)
-        for (const side of [-1, 1]) { const e0 = pt(a0, side * (WAY / 2 - WALK)), e1 = pt(a1, side * (WAY / 2 - WALK)); g.lineBetween(e0.x, e0.y, e1.x, e1.y) }
+        for (const side of [-1, 1]) { const e0 = pt(a0, side * LOCAL_HALF), e1 = pt(a1, side * LOCAL_HALF); g.lineBetween(e0.x, e0.y, e1.x, e1.y) }
+        if (k % 2 === 0) { const c0 = pt(a0 + 0.05, 0), c1 = pt(a1 - 0.05, 0); g.lineStyle(1, this.tone.paint, fade).lineBetween(c0.x, c0.y, c1.x, c1.y) }
       }
       // Which way it goes, painted on the road (the Owner, 2026-11-20: an arrow says in or out, no words);
       // laid even where nothing passes yet, the yard has none: nothing passes through it.
