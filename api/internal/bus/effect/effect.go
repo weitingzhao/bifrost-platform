@@ -62,7 +62,7 @@ func (s Deps) HandleEffect(w http.ResponseWriter, r *http.Request) {
 // created, over the last 24 hours and the 24 before, from the run cache.
 func (s Deps) effectMainToSTG(now time.Time) effectRow {
 	row := effectRow{Key: "main_to_stg", Label: "Main moved → STG delivery started",
-		How: "Median seconds from a bifrost-platform landing (land-*) finishing to the next bifrost-deliver-platform run being created, last 24 h; read from the bus run cache. Minutes-long ones waited for the release window."}
+		How: "Median seconds from a bifrost-platform landing (land-*) finishing to the next bifrost-deliver-platform run being created, last 24 h; read from the bus run cache. Minutes-long ones waited for the minimum gap head_release keeps between automatic STG deliveries (min_gap_minutes in api/internal/headrelease/deliverables.yaml)."}
 	if s.CachedRuns == nil {
 		row.Unmeasured = "no delivery reader on this platform"
 		return row
