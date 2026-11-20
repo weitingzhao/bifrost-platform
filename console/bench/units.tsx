@@ -250,13 +250,16 @@ const STATE_WORD = { confirmed: 'Confirmed', open: 'Making now', waiting: 'Waits
 function App() {
   const [r, setR] = useState<Reads | null>(snap ?? null)
   const [live, setLive] = useState(false)
-  const [unitId, setUnitId] = useState('cpu')
+  // Open on the room being made: rooms come before summaries (the Owner, 2026-11-19), so the first unit
+  // still at Details or Inside; once every room is done, the first unit.
+  const working = UNITS.find(u => ['details', 'inside'].includes(stagesOf(u).find(s => s.state === 'open')?.id ?? '')) ?? UNITS[0]
+  const [unitId, setUnitId] = useState(working.id)
   const [, setRulerTick] = useState(0)
   useEffect(() => { readLive().then(x => { if (x) { setR(x); setLive(true) } }) }, [])
   const u = UNITS.find(x => x.id === unitId)
   const stages = u ? stagesOf(u) : []
   const open = stages.find(s => s.state === 'open')?.id
-  const [stageId, setStageId] = useState<StageId>(() => stagesOf(UNITS[0]).find(s => s.state === 'open')?.id ?? 'details')
+  const [stageId, setStageId] = useState<StageId>(() => stagesOf(working).find(s => s.state === 'open')?.id ?? 'details')
   const stage = STAGES.find(s => s.id === stageId)!
   const broken = u ? unitRulesBroken(u) : []
 
