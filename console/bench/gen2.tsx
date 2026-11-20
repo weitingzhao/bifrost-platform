@@ -27,6 +27,10 @@ const SAMPLE_LINKS: Link[] = [
   { way: 'metric', from: ['services', 'data'], to: ['system', 'status'], what: 'ingest_rows_total', source: SAMPLE },
   { way: 'metric', from: ['services', 'ib'], to: ['system', 'status'], what: 'ib_connected', source: SAMPLE },
   { way: 'metric', from: ['crew', 'crew'], to: ['system', 'status'], what: 'seat_heartbeat', source: SAMPLE },
+  { way: 'bus', from: ['system', 'status'], to: ['command', 'records'], what: 'status.changed', source: SAMPLE },
+  { way: 'metric', from: ['system', 'infrastructure'], to: ['utilities'], what: 'node_cpu_seconds_total', source: SAMPLE },
+  { way: 'bus', from: ['system', 'bus'], to: ['command', 'command'], what: 'loop.health.changed', source: SAMPLE, clarity: 'unclear' },
+  ...['network', 'telemetry', 'alertrelay', 'selfhealth', 'catalog', 'checklist', 'mcp'].map((what): Link => ({ way: 'bus', from: ['system', 'infrastructure'], to: [], what, source: SAMPLE, clarity: 'orphan' })),
 ]
 
 function Bench() {

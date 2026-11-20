@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { GATES, LINES, linksAt, linkRulesBroken, type Link } from '../links'
+import { CROSSINGS, GATES, LINES, edgeSlots, linksAt, linkRulesBroken, type Link } from '../links'
 import type { Place } from '../places'
 
 // Origin: the Owner, 2026-11-20 ("框架提供交互方式，系统来配；Bus 和指标两种足够；每层的显示要有规范，
@@ -53,5 +53,27 @@ describe('a content’s connections keep the frame’s rules', () => {
     expect(linkRulesBroken(tree, [L('bus', 'work/releases', 'command/hall', 'x')])).toEqual([])
     const bad = linkRulesBroken(tree, [{ way: 'boat' as Link['way'], from: ['work', 'nowhere'], to: ['command'], what: 'x', source: 'I drew it' }])
     expect(bad).toHaveLength(3)
+  })
+})
+
+// Origin: the Owner, 2026-11-20 ("固定格子 + Other + Orphan；乱的不藏，量出多大"). These pin that the edge keeps
+// CROSSINGS named crossings, puts the unclear and the rest into Other, the unowned into Orphan, and counts all.
+describe('a district’s edge: named crossings, Other, Orphan', () => {
+  const town: Place = P('town', 'town', ['me', 'a', 'b', 'c', 'd', 'e'].map(id => P(id, 'district', [P('x', 'building')])))
+  const links: Link[] = [
+    ...['a', 'a', 'a', 'b', 'b', 'c', 'd', 'e'].map((to, i) => L('bus', 'me/x', `${to}/x`, `e${i}`)),
+    { ...L('bus', 'me/x', 'a/x', 'fuzzy'), clarity: 'unclear' },
+    { way: 'bus', from: ['me', 'x'], to: [], what: 'unowned', source: '/api/v1/bus/contract', clarity: 'orphan' },
+  ]
+  it('keeps the heaviest named, the rest with the unclear in Other, the unowned in Orphan', () => {
+    const s = edgeSlots(linksAt(town, ['me'], links).gates)
+    expect(s.named.map(p => p.id)).toHaveLength(CROSSINGS)
+    expect(s.named[0]).toMatchObject({ id: 'a', n: 3 })
+    expect(s.other).toMatchObject({ n: 2 })
+    expect(s.orphan).toMatchObject({ n: 1 })
+    expect(s.total).toBe(10)
+  })
+  it('an orphan’s far end need not be a place, and nothing is dropped', () => {
+    expect(linkRulesBroken(town, links)).toEqual([])
   })
 })
