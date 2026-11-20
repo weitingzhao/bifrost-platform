@@ -37,13 +37,15 @@ var ledgerOwners = map[string]bool{"agentrt/eventlog": true, "agentrt/actor": tr
 // five went with the plan's read routes to agentrt/planapi, unchanged; the
 // total is the same. 2026-11-19 later: its other two (the artifact and event
 // reads) went to agentrt/recordsapi, unchanged; the total is the same.
+// 2026-11-20: loopreadings' one was folded into agentrt/loopalert,
+// unchanged; the total is the same.
 var ledgerSQL = map[string]int{
 	"agentrt/artifact":         2,
 	"agentrt/coord":            2,
 	"agentrt/deliveryreadings": 1,
 	"agentrt/evidence":         2,
 	"agentrt/externalwork":     4,
-	"agentrt/loopreadings":     1,
+	"agentrt/loopalert":        1,
 	"agentrt/planapi":          3,
 	"agentrt/planreadings":     11,
 	"agentrt/planstore":        24,

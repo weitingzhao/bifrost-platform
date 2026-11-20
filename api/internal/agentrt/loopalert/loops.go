@@ -1,5 +1,8 @@
-// Package loopreadings projects recorded loop failures without starting loops or writing alerts.
-package loopreadings
+package loopalert
+
+// The reads of the records (folded in from agentrt/loopreadings 2026-11-20,
+// unchanged) project recorded loop failures without starting loops or writing
+// alerts.
 
 import (
 	"context"

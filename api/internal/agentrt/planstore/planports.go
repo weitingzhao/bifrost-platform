@@ -327,7 +327,7 @@ func cardBodyFits(body string) (n, limit int, err error) {
 const ruleAnswerChannel = "rule"
 
 // LoopPorts is what the plan code needs of the controller's loop alerts (the
-// store's loopalert.go, over foundation's loopreadings): the loops failing
+// store's loopalert.go, now in foundation's agentrt/loopalert): the loops failing
 // now, which Progress says of the platform itself.
 type LoopPorts struct {
 	// Failing lists the controller loops whose latest record is an alert no

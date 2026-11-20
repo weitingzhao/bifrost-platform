@@ -1,4 +1,4 @@
-package loopreadings
+package loopalert
 
 import (
 	"context"

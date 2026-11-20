@@ -1426,14 +1426,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-17: the controller loops' failure alerts and recovery notes, moved out of agentrt/store unchanged; the reads of those records are loopreadings' (foundation)"
-    },
-    "api/internal/agentrt/loopreadings": {
-      "domains": [
-        "foundation"
-      ],
-      "status": "assigned",
-      "basis": "foundation charter; recorded controller-loop observations and error display, not alert writers or loop policy; 2026-11-16 complete failure/recovery text projection extracted with caller-owned size bound and write transaction"
+      "basis": "2026-11-17: the controller loops' failure alerts and recovery notes, moved out of agentrt/store unchanged; the reads of those records are loopreadings' (foundation). 2026-11-20: agentrt/loopreadings folded in (it had no other user); the reads of those records are now here (loops.go, alert_text.go)."
     },
     "api/internal/topology": {
       "domains": [
