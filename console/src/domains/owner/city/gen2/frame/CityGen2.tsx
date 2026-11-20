@@ -2,7 +2,7 @@ import * as Phaser from 'phaser'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { browserArrangements, type ArrangementStore } from './arrangementStore'
 import { KitRoot, Menu, type PanelSize } from './parts'
-import { assign, decodePlan, encodePlan, mergePlot, moveTo, planFor, plotsOf, splitPlot, streetsOf, type Arrangement, type Item, type Plan } from './grid'
+import { assign, decodePlan, encodePlan, mergePlot, moveTo, planFor, plotsOf, splitPlot, streetsOf, type Arrangement, type Item, type Plan, groundOf } from './grid'
 import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
 import type { CityContent, Panel } from './content'
 import { PlaceScene, type ArrangeTool, type Shown } from './placeScene'
@@ -94,10 +94,12 @@ function layoutOf(place: Place, a: Arrangement) {
   const children: readonly Item[] = place.children
   // The Owner's own arrangement first; else the domain's (Place.arrangement); else one cut to fit.
   const own = place.arrangement
-  const plan: Plan = (a.plan && decodePlan(a.plan)) || (own && decodePlan(own.plan)) || planFor(children)
-  const plots = plotsOf(plan)
+  // Its ground by its footprint (grid.ts groundOf): going in is a true zoom.
+  const g = groundOf(place.kind, place.shape, children)
+  const plan: Plan = (a.plan && decodePlan(a.plan)) || (own && decodePlan(own.plan)) || planFor(children, g)
+  const plots = plotsOf(plan, g)
   const { placed, homeless } = assign(children, plots, a.at ?? (a.plan ? {} : own?.at ?? {}))
-  return { plan, plots, streets: streetsOf(plan), placed, homeless }
+  return { plan, plots, streets: streetsOf(plan, g), placed, homeless, ground: g }
 }
 
 const TOOL_HINT: Record<ArrangeTool, string> = {

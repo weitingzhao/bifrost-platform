@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser'
-import { fitsIn, type Placed, type Plot, type Street } from './grid'
+import { defaultPlan, fitsIn, plotsOf, type Placed, type Plot, type Street } from './grid'
 import { BUFFER, geoOf, GUTTER, WAY, type Geo, type Rect } from './geo'
 import { functionAt, isWired, type Place } from './places'
 import { hueOf, terrainOf, tintOf } from './theme'
@@ -9,7 +9,7 @@ import { buildingWings, setback, spriteFor, spriteKey, spriteUrl, type Wing } fr
 import { deviceKey, deviceSprite, formOfPlace, levelsOf } from './devices'
 import { frameOf, type Frame } from './viewport'
 import { LANDMARKS } from './library/landmarkLooks'
-import { edgeSlots, linksAt, PORTS, SLOTS, type Gate, type LevelLinks, type Line, type Link, type Slot } from './links'
+import { edgeSlots, linksAt, portsFor, slotsFor, type Gate, type LevelLinks, type Line, type Link, type Slot } from './links'
 
 /**
  * One scene draws one place (a page): its 16×16 ground and the things on it,
@@ -131,6 +131,8 @@ export class PlaceScene extends Phaser.Scene {
   /** Counts draws, so a draw that waited for its sprites does nothing if a newer one started. */
   private drawId = 0
   private main?: Phaser.GameObjects.Container
+  /** The parent, faint, round the place on screen, at the place's true scale. */
+  private backdrop?: Phaser.GameObjects.Container
   private away?: Phaser.GameObjects.Container
   private ghost?: Phaser.GameObjects.Graphics
   private labels: (Phaser.GameObjects.Text | Phaser.GameObjects.Container)[] = []
@@ -351,6 +353,19 @@ export class PlaceScene extends Phaser.Scene {
     }
   }
 
+  /** Where the parent stands, seen from inside a child at true scale: the transform that puts the child's footprint on its ground. */
+  private bigOf(parentPlots: Plot[], parentPlaced: Placed[], childPlots: Plot[], childId: string) {
+    const through = parentPlaced.find(p => p.id === childId)
+    const home = through ? parentPlots.find(p => p.id === through.plot) : undefined
+    if (!through || !home) return null
+    const pg = geoOf(parentPlots), cg = geoOf(childPlots)
+    const t = pg.thing(pg.plot(home), through.w, through.h)
+    const g = projOf(cg)(cg.w / 2, cg.h / 2)
+    const c = projOf(pg)(t.x + t.w / 2, t.y + t.h / 2)
+    const sc = ((t.w + t.h) / 2) / ((cg.w + cg.h) / 2)
+    return { x: g.x - c.x / sc, y: g.y - c.y / sc, scale: 1 / sc }
+  }
+
   /**
    * The sprite each placed thing wears: its kind and size, its hue from its theme (theme.ts), a seed
    * for its lit windows; a building's wings are its rooms (what you see outside is what is inside).
@@ -465,6 +480,17 @@ export class PlaceScene extends Phaser.Scene {
     this.main = m.c
     // The neighbours standing in its ports, for the way in and out (change()).
     m.c.setData('nbs', m.nbs)
+    // True scale: the place sits where it is in its parent, the parent faint round it (the Owner, 2026-11-20).
+    this.backdrop?.destroy()
+    this.backdrop = undefined
+    const big = s.parent ? this.bigOf(s.parentPlots, s.parentPlaced, s.plots, s.place.id) : null
+    if (s.parent && big) {
+      const bd = this.level(s.parent, s.path.slice(0, -1), s.parentPlaced, s.parentPlots, s.parentStreets, { at: 0, selected: null, inside: null, interactive: false, arranging: false }).c
+      bd.setPosition(big.x, big.y).setScale(big.scale).setAlpha(0.16)
+      this.children.sendToBack(bd)
+      this.mini?.ignore(bd)
+      this.backdrop = bd
+    }
     // The whole ground, ring road included, always fits (the Owner, 2026-11-19: no plot cut off at the
     // top or hidden under the bottom row); m.box (what stands on it) is no longer the frame.
     void m.box
@@ -478,6 +504,13 @@ export class PlaceScene extends Phaser.Scene {
       // The whole (ground, the two sides and the yard) is what is centred, not the ground alone.
       this.content = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
     } else this.content = gb
+    // True scale (the Owner, 2026-11-20): a small place is not blown up to fill the screen. The frame is never
+    // smaller than a full 16 × 16 ground's, centred on this one, so a cell is the same size on every page and a
+    // small district shows small, the town faint round it.
+    const ref = this.groundBox(geoOf(plotsOf(defaultPlan())))
+    const cx = this.content.x + this.content.w / 2, cy = this.content.y + this.content.h / 2
+    const w = Math.max(this.content.w, ref.w), h = Math.max(this.content.h, ref.h)
+    this.content = { x: cx - w / 2, y: cy - h / 2, w, h }
     this.ghost = this.add.graphics()
     this.main.add(this.ghost)
     this.away = s.parent ? this.level(s.parent, s.path.slice(0, -1), s.parentPlaced, s.parentPlots, s.parentStreets, { at: AWAY, selected: null, inside: s.inside, interactive: false, arranging: false }).c : undefined
@@ -1216,7 +1249,8 @@ export class PlaceScene extends Phaser.Scene {
    */
   private stubs(g: Phaser.GameObjects.Graphics, k: Place, at: Placed, r: Rect, P: Proj) {
     const s = this.shown!
-    const slots = edgeSlots(linksAt(s.tree, [k.id], s.allLinks ?? []).gates, k.partners, id => id)
+    const PORTS = portsFor(k.shape)
+    const slots = edgeSlots(linksAt(s.tree, [k.id], s.allLinks ?? []).gates, k.partners, id => id, PORTS)
     const plot = s.plots.find(q => q.id === at.plot)
     const ground = plot ? geoOf(s.plots).plot(plot) : { x: r.x - 0.5, y: r.y - 0.5, w: r.w + 1, h: r.h + 1 }
     const HALF = 0.2, FLARE = 0.16
@@ -1277,7 +1311,9 @@ export class PlaceScene extends Phaser.Scene {
     const out: Phaser.GameObjects.GameObject[] = []
     // A partner's name: the place beside this one.
     const labelOf = (id: string) => this.shown?.tree.children.find(c => c.id === id)?.label ?? id
-    const slots = edgeSlots(lk.gates, place.partners, labelOf)
+    // Ports a side by its size (links.ts portsFor).
+    const PORTS = portsFor(place.shape)
+    const slots = edgeSlots(lk.gates, place.partners, labelOf, PORTS)
     const g = this.add.graphics()
     out.push(g)
     const ROAD = WAY, REACH = 1.0, DIRT = 0xc9a77a, BARRIER = 0xf08a4b
@@ -1287,10 +1323,12 @@ export class PlaceScene extends Phaser.Scene {
     // straight on (the Owner, 2026-11-20: the roads join up); where the edge has fewer streets than ports,
     // evenly along it, joining the ring road.
     // The streets that actually reach each edge (not every cut has one), in the picture's units.
-    const reach = (edge: Slot['edge']) => streets.filter(st => edge === 'y1' ? st.x0 === st.x1 && Math.max(st.y0, st.y1) >= 16 && st.x0 > 0 && st.x0 < 16
-      : edge === 'y0' ? st.x0 === st.x1 && Math.min(st.y0, st.y1) <= 0 && st.x0 > 0 && st.x0 < 16
-      : edge === 'x1' ? st.y0 === st.y1 && Math.max(st.x0, st.x1) >= 16 && st.y0 > 0 && st.y0 < 16
-      : st.y0 === st.y1 && Math.min(st.x0, st.x1) <= 0 && st.y0 > 0 && st.y0 < 16).map(st => edge[0] === 'y' ? geo.x(st.x0) : geo.y(st.y0))
+    // The ground's size in cells (grid.ts groundOf): the ring runs round it.
+    const GW = Math.max(...streets.map(st => Math.max(st.x0, st.x1))), GH = Math.max(...streets.map(st => Math.max(st.y0, st.y1)))
+    const reach = (edge: Slot['edge']) => streets.filter(st => edge === 'y1' ? st.x0 === st.x1 && Math.max(st.y0, st.y1) >= GH && st.x0 > 0 && st.x0 < GW
+      : edge === 'y0' ? st.x0 === st.x1 && Math.min(st.y0, st.y1) <= 0 && st.x0 > 0 && st.x0 < GW
+      : edge === 'x1' ? st.y0 === st.y1 && Math.max(st.x0, st.x1) >= GW && st.y0 > 0 && st.y0 < GH
+      : st.y0 === st.y1 && Math.min(st.x0, st.x1) <= 0 && st.y0 > 0 && st.y0 < GH).map(st => edge[0] === 'y' ? geo.x(st.x0) : geo.y(st.y0))
     const along = (edge: Slot['edge'], len: number, want: number) => {
       const inner = [...new Set(reach(edge))].sort((a, b) => a - b)
       if (inner.length >= want) return Array.from({ length: want }, (_, i) => inner[Math.round((i + 0.5) * inner.length / want - 0.5)])
@@ -1298,7 +1336,7 @@ export class PlaceScene extends Phaser.Scene {
     }
     // Front: the named ports. Back-left: Other in, Other out. Back-right: the yard.
     const pos: Record<Slot['edge'], number[]> = { y1: along('y1', W, PORTS), x1: along('x1', H, PORTS), x0: along('x0', H, 2), y0: along('y0', W, 1) }
-    for (const sl of SLOTS) {
+    for (const sl of slotsFor(PORTS)) {
       const edge = sl.side === 'in' ? slots.in : sl.side === 'out' ? slots.out : null
       const pass = sl.side === 'orphan' ? slots.orphan : sl.i < PORTS ? edge!.named[sl.i] ?? null : edge!.other
       const kind: 'named' | 'other' | 'orphan' = sl.side === 'orphan' ? 'orphan' : sl.i < PORTS ? 'named' : 'other'

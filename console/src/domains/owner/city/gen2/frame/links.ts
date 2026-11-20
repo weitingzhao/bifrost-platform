@@ -133,7 +133,8 @@ export function linkRulesBroken(tree: Place, links: readonly Link[]): string[] {
   const walk = (p: Place, at: Path, siblings: Set<string>) => {
     for (const side of ['in', 'out'] as const) {
       const ids = p.partners?.[side] ?? []
-      if (ids.length > PORTS) out.push(`${at.join('/') || p.id}: declares ${ids.length} partners ${side}; a side has ${PORTS} ports`)
+      const n = portsFor(p.shape)
+      if (ids.length > n) out.push(`${at.join('/') || p.id}: declares ${ids.length} partners ${side}; a ${p.shape} has ${n} ports a side`)
       for (const id of ids) if (!siblings.has(id)) out.push(`${at.join('/') || p.id}: partner ${id} is not a place beside it`)
     }
     const kids = new Set(p.children.map(c => c.id))
@@ -146,8 +147,19 @@ export function linkRulesBroken(tree: Place, links: readonly Link[]): string[] {
 /** What passes one crossing: whom it leads to, and how many things go through, by way. */
 export type Pass = { id: string; label: string; bus: number; metric: number; n: number; who: string[] }
 
-/** How many named ports each side has (the Owner, 2026-11-20: a few fixed ports a side, then Other). */
+/** How many named ports each side of a 2×2 has (the Owner, 2026-11-20: a few fixed ports a side, then Other). */
 export const PORTS = 3
+
+/**
+ * Ports a side by a place's size (the Owner, 2026-11-20, like a chip: a bigger die has more pins, but its pins
+ * grow slower than its area, Rent's rule at its modular end): 2 + log4(area), down. 1×1 and 1×2 have 2, 2×2 and
+ * 2×4 3, 4×4 and 4×8 4, 8×8 5. Other and Orphan stay one each whatever the size.
+ */
+export function portsFor(shape: string): number {
+  const [a, b] = shape.split('x').map(Number)
+  if (!a || !b) return PORTS
+  return 2 + Math.floor(Math.log(a * b) / Math.log(4) + 1e-9)
+}
 
 export type Edge = { named: Pass[]; other: Pass | null }
 
@@ -158,11 +170,11 @@ export type Edge = { named: Pass[]; other: Pass | null }
  * with anyone undeclared, and anything unclear, passes through that side's Other; what belongs to no one
  * through Orphan. `labelOf` names a declared partner nothing passes to yet.
  */
-export function edgeSlots(gates: readonly Gate[], partners: Partners | undefined, labelOf: (id: string) => string): { in: Edge; out: Edge; orphan: Pass | null; total: number } {
+export function edgeSlots(gates: readonly Gate[], partners: Partners | undefined, labelOf: (id: string) => string, ports = PORTS): { in: Edge; out: Edge; orphan: Pass | null; total: number } {
   const fresh = (id: string, label: string): Pass => ({ id, label, bus: 0, metric: 0, n: 0, who: [] })
   const orphan = fresh(ORPHAN, 'Orphan')
   const side = (dir: 'in' | 'out'): Edge => {
-    const declared = (partners?.[dir] ?? []).slice(0, PORTS)
+    const declared = (partners?.[dir] ?? []).slice(0, ports)
     const named = new Map(declared.map(id => [id, fresh(id, labelOf(id))]))
     const other = fresh(OTHER, 'Other')
     for (const g of gates) {
@@ -190,10 +202,14 @@ export function edgeSlots(gates: readonly Gate[], partners: Partners | undefined
  * so its road carries that street straight out.
  */
 export type Slot = { side: 'in' | 'out' | 'orphan'; i: number; edge: 'y1' | 'x1' | 'x0' | 'y0' }
-export const SLOTS: readonly Slot[] = [
-  ...[0, 1, 2].map(i => ({ side: 'in' as const, i, edge: 'y1' as const })),
-  ...[0, 1, 2].map(i => ({ side: 'out' as const, i, edge: 'x1' as const })),
-  { side: 'in', i: PORTS, edge: 'x0' },
-  { side: 'out', i: PORTS, edge: 'x0' },
-  { side: 'orphan', i: 0, edge: 'y0' },
-]
+/** The fixed places outside a place with `ports` a side: that many in, that many out, the two Others, Orphan. */
+export function slotsFor(ports: number): Slot[] {
+  return [
+    ...Array.from({ length: ports }, (_, i) => ({ side: 'in' as const, i, edge: 'y1' as const })),
+    ...Array.from({ length: ports }, (_, i) => ({ side: 'out' as const, i, edge: 'x1' as const })),
+    { side: 'in', i: ports, edge: 'x0' },
+    { side: 'out', i: ports, edge: 'x0' },
+    { side: 'orphan', i: 0, edge: 'y0' },
+  ]
+}
+export const SLOTS: readonly Slot[] = slotsFor(PORTS)

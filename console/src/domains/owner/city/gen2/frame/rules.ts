@@ -1,4 +1,4 @@
-import { area, assign, decodePlan, GRID, plotsOf, sidesOf, SHAPES, TAPPABLE, type Shape } from './grid'
+import { area, assign, decodePlan, GRID, groundOf, plotsOf, sidesOf, SHAPES, TAPPABLE, type Shape } from './grid'
 import { LOOKS, STATES, type Place, type PlaceKind } from './places'
 import { linkRulesBroken, type Link } from './links'
 
@@ -11,7 +11,8 @@ import { linkRulesBroken, type Link } from './links'
  *   levels   a town holds districts, a district buildings, a building rooms; nothing below a room
  *   shapes   every place is one of the frame's shapes: 1×1, 1×2, 2×2, 2×4, 4×4, 4×8 or 8×8
  *   doors    a place you go into (a district, a building) is at least 2 wide, for a finger
- *   ground   what a place holds fits its 16×16 ground
+ *   ground   what a place holds fits the full 16×16 ground (a place's own ground is sized by its footprint
+ *            and grows, flagged, when what it holds needs more: grid.ts groundOf)
  *   names    ids are unique among siblings and safe in an address
  *   function a place's function, if it says one, is one of the content's functions
  *   states   a state is one of the four words; a look one of the five
@@ -55,7 +56,7 @@ export function rulesBroken(content: { tree: Place; functions?: { id: string }[]
       const plan = decodePlan(p.arrangement.plan)
       if (plan === null) out.push(`${where}: its ground plan is not a plan of halvings`)
       else {
-        const { homeless } = assign(p.children.filter(c => (SHAPES as readonly string[]).includes(c.shape)), plotsOf(plan), p.arrangement.at)
+        const { homeless } = assign(p.children.filter(c => (SHAPES as readonly string[]).includes(c.shape)), plotsOf(plan, groundOf(p.kind, p.shape, p.children.filter(c => (SHAPES as readonly string[]).includes(c.shape)))), p.arrangement.at)
         if (homeless.length) out.push(`${where}: its ground plan has no plot for ${homeless.map(h => h.id).join(', ')}`)
       }
     }

@@ -32,8 +32,10 @@ export type Geo = {
 }
 
 export function geoOf(plots: readonly Plot[]): Geo {
-  const cuts = (edges: (p: Plot) => number[]) => [...new Set([0, GRID, ...plots.flatMap(edges)])].sort((a, b) => a - b)
-  const xs = cuts(p => [p.x, p.x + p.w]), ys = cuts(p => [p.y, p.y + p.h])
+  // The ground the plots tile (groundOf in grid.ts): at most 16 × 16.
+  const GW = plots.length ? Math.max(...plots.map(p => p.x + p.w)) : GRID, GH = plots.length ? Math.max(...plots.map(p => p.y + p.h)) : GRID
+  const cuts = (edges: (p: Plot) => number[], end: number) => [...new Set([0, end, ...plots.flatMap(edges)])].sort((a, b) => a - b)
+  const xs = cuts(p => [p.x, p.x + p.w], GW), ys = cuts(p => [p.y, p.y + p.h], GH)
   const map = (cs: number[]) => (v: number) => {
     let before = 0
     for (const c of cs) if (c < v) before++
@@ -46,5 +48,5 @@ export function geoOf(plots: readonly Plot[]): Geo {
     const r = plot(p), g = GUTTER / 2
     return px >= r.x - g && px < r.x + r.w + g && py >= r.y - g && py < r.y + r.h + g
   })
-  return { x, y, w: GRID + GUTTER * xs.length, h: GRID + GUTTER * ys.length, plot, thing, plotAt }
+  return { x, y, w: GW + GUTTER * xs.length, h: GH + GUTTER * ys.length, plot, thing, plotAt }
 }

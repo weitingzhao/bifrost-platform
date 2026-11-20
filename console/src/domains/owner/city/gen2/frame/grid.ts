@@ -1,5 +1,6 @@
 /**
- * The ground of every place (the Owner, 2026-11-19): a square of 16 × 16 cells. It is divided into
+ * The ground of every place (the Owner, 2026-11-19): at most a square of 16 × 16 cells, sized by the place's
+ * footprint (groundOf, 2026-11-20). It is divided into
  * plots, and the streets run along the plots' edges; each thing stands in a plot of its own.
  *
  *   things  1×1, 1×2, 2×2, 2×4, 4×4, 4×8 or 8×8: a square or a 2 : 1 oblong, by how big and how
@@ -43,7 +44,7 @@ export type Placed = Item & Cell & { plot: string; w: number; h: number }
 export const shapeByCount = (n: number): Shape => n > 8 ? '8x8' : n > 4 ? '4x8' : n > 2 ? '4x4' : '2x4'
 
 export const area = (items: readonly Item[]) => items.reduce((a, i) => a + shapeArea(i.shape), 0)
-export const fitsBudget = (items: readonly Item[]) => area(items) <= GRID * GRID
+export const fitsBudget = (items: readonly Item[], g: Ground = FULL) => area(items) <= g.w * g.h
 
 // ---- the plan: a tree of halvings ----
 
@@ -60,28 +61,51 @@ function halves(r: Rect): [Rect, Rect] {
     : [{ x: r.x, y: r.y, w: r.w, h: r.h / 2 }, { x: r.x, y: r.y + r.h / 2, w: r.w, h: r.h / 2 }]
 }
 
-const WHOLE: Rect = { x: 0, y: 0, w: GRID, h: GRID }
+/**
+ * A place's ground (the Owner, 2026-11-20: going in is a true zoom). One cell of the parent becomes 2 × 2
+ * cells inside, so a 2×4 district is a 4 × 8 ground, an 8×8 one the full 16 × 16; the town is always the
+ * full ground. Its long side runs along x. 16 × 16 is the most any ground has.
+ */
+export type Ground = { w: number; h: number }
+export const FULL: Ground = { w: GRID, h: GRID }
+export const SCALE = 2
+const whole = (g: Ground): Rect => ({ x: 0, y: 0, w: g.w, h: g.h })
+
+/**
+ * The ground of a place of this kind and shape holding these things: its footprint times SCALE; if what it
+ * holds does not fit, the ground grows (its short side first) until it does, up to the full ground, and
+ * `over` says so: the place holds more than its size on the map, which is shown, not hidden.
+ */
+export function groundOf(kind: string, shape: string, items: readonly Item[]): Ground & { over: boolean } {
+  if (kind === 'town' || !(SHAPES as readonly string[]).includes(shape)) return { ...FULL, over: false }
+  const { short, long } = sidesOf(shape as Shape)
+  let g: Ground = { w: Math.min(GRID, long * SCALE), h: Math.min(GRID, short * SCALE) }
+  const base = g
+  const fits = (q: Ground) => area(items) <= q.w * q.h && items.every(it => fitsIn(it, { x: 0, y: 0, ...q }))
+  while (!fits(g) && (g.w < GRID || g.h < GRID)) g = g.h < g.w ? { w: g.w, h: g.h * 2 } : { w: Math.min(GRID, g.w * 2), h: g.h }
+  return { ...g, over: g.w !== base.w || g.h !== base.h }
+}
 
 /** Every plot of a plan (its leaves). */
-export function plotsOf(plan: Plan): Plot[] {
+export function plotsOf(plan: Plan, g: Ground = FULL): Plot[] {
   const out: Plot[] = []
   const walk = (p: Plan, r: Rect, id: string) => {
     if (p === null) { out.push({ id, ...r }); return }
     const [a, b] = halves(r)
     walk(p[0], a, id + 'a'); walk(p[1], b, id + 'b')
   }
-  walk(plan, WHOLE, '')
+  walk(plan, whole(g), '')
   return out
 }
 
 /** The plan cut until every plot is at most `max` a side: the default is 4 × 4 plots. */
-export function defaultPlan(max = 4): Plan {
+export function defaultPlan(max = 4, g: Ground = FULL): Plan {
   const grow = (r: Rect): Plan => {
     if (r.w <= max && r.h <= max) return null
     const [a, b] = halves(r)
     return [grow(a), grow(b)]
   }
-  return grow(WHOLE)
+  return grow(whole(g))
 }
 
 const nodeAt = (plan: Plan, id: string): Plan | undefined => {
@@ -97,8 +121,8 @@ const replace = (plan: Plan, id: string, next: Plan): Plan => {
 }
 
 /** Cut a plot in two; null if it is a single cell already or not a plot. */
-export function splitPlot(plan: Plan, id: string): Plan | null {
-  const p = plotsOf(plan).find(q => q.id === id)
+export function splitPlot(plan: Plan, id: string, g: Ground = FULL): Plan | null {
+  const p = plotsOf(plan, g).find(q => q.id === id)
   if (!p || (p.w === 1 && p.h === 1)) return null
   return replace(plan, id, [null, null])
 }
@@ -137,7 +161,7 @@ const WAY_HALF = 0.5
 export const STREET_HALF: Record<StreetKind, number> = { ring: WAY_HALF, avenue: WAY_HALF, street: WAY_HALF, lane: WAY_HALF, path: WAY_HALF }
 
 /** Every cut is a street, as wide as the narrower side of the plots it divides allows; the ring runs round the ground. */
-export function streetsOf(plan: Plan): Street[] {
+export function streetsOf(plan: Plan, g: Ground = FULL): Street[] {
   const out: Street[] = []
   const walk = (p: Plan, r: Rect, depth: number) => {
     if (p === null) return
@@ -148,8 +172,8 @@ export function streetsOf(plan: Plan): Street[] {
     out.push({ kind, ...line, half: STREET_HALF[kind] })
     walk(p[0], a, depth + 1); walk(p[1], b, depth + 1)
   }
-  walk(plan, WHOLE, 0)
-  for (const e of [{ x0: 0, y0: 0, x1: GRID, y1: 0 }, { x0: 0, y0: GRID, x1: GRID, y1: GRID }, { x0: 0, y0: 0, x1: 0, y1: GRID }, { x0: GRID, y0: 0, x1: GRID, y1: GRID }])
+  walk(plan, whole(g), 0)
+  for (const e of [{ x0: 0, y0: 0, x1: g.w, y1: 0 }, { x0: 0, y0: g.h, x1: g.w, y1: g.h }, { x0: 0, y0: 0, x1: 0, y1: g.h }, { x0: g.w, y0: 0, x1: g.w, y1: g.h }])
     out.push({ kind: 'ring', ...e, half: STREET_HALF.ring })
   return out
 }
@@ -163,27 +187,29 @@ const centred = (it: Item, p: Plot): Placed => {
   return { ...it, plot: p.id, w, h, x: p.x + (p.w - w) / 2, y: p.y + (p.h - h) / 2 }
 }
 
-const nearMiddle = (p: Rect) => (p.x + p.w / 2 - GRID / 2) ** 2 + (p.y + p.h / 2 - GRID / 2) ** 2
+const nearMiddle = (p: Rect, g: Ground = FULL) => (p.x + p.w / 2 - g.w / 2) ** 2 + (p.y + p.h / 2 - g.h / 2) ** 2
+/** The ground a set of plots tiles. */
+const groundOfPlots = (plots: readonly Plot[]): Ground => plots.length ? { w: Math.max(...plots.map(p => p.x + p.w)), h: Math.max(...plots.map(p => p.y + p.h)) } : FULL
 
 /**
  * The plan cut to fit a place's things: largest first, each takes the smallest free plot that fits,
  * nearest the middle, cut in half while a half still fits it; the ground left over is cut to 4 × 4,
  * so the streets read the same on every page. Things that do not fit are left for assign to list.
  */
-export function planFor(items: readonly Item[]): Plan {
+export function planFor(items: readonly Item[], g: Ground = FULL): Plan {
   let plan: Plan = null
   const taken = new Set<string>()
   const order = [...items].sort((a, b) => shapeArea(b.shape) - shapeArea(a.shape))
   for (const it of order) {
     for (;;) {
-      const p = plotsOf(plan).filter(q => !taken.has(q.id) && fitsIn(it, q)).sort((a, b) => a.w * a.h - b.w * b.h || nearMiddle(a) - nearMiddle(b) || a.y - b.y || a.x - b.x)[0]
+      const p = plotsOf(plan, g).filter(q => !taken.has(q.id) && fitsIn(it, q)).sort((a, b) => a.w * a.h - b.w * b.h || nearMiddle(a, g) - nearMiddle(b, g) || a.y - b.y || a.x - b.x)[0]
       if (!p) break
       if (halves(p).some(h => fitsIn(it, h))) { plan = replace(plan, p.id, [null, null]); continue }
       taken.add(p.id); break
     }
   }
   for (;;) {
-    const big = plotsOf(plan).find(q => !taken.has(q.id) && Math.max(q.w, q.h) > 4)
+    const big = plotsOf(plan, g).find(q => !taken.has(q.id) && Math.max(q.w, q.h) > 4)
     if (!big) return plan
     plan = replace(plan, big.id, [null, null])
   }
@@ -205,7 +231,7 @@ export function assign(items: readonly Item[], plots: readonly Plot[], chosen: R
     if (p && fitsIn(it, p) && !taken.has(p.id)) taken.set(p.id, it)
   }
   const housed = new Set([...taken.values()].map(it => it.id))
-  const d = nearMiddle
+  const g = groundOfPlots(plots), d = (p: Rect) => nearMiddle(p, g)
   const order = items.map((it, i) => ({ it, i })).filter(({ it }) => !housed.has(it.id)).sort((a, b) => shapeArea(b.it.shape) - shapeArea(a.it.shape) || a.i - b.i)
   const homeless: Item[] = []
   for (const { it } of order) {
