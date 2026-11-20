@@ -173,15 +173,17 @@ func Compute(ctx context.Context, db eventlog.DB, prom Prom, w Window) ([]Readin
 }
 
 // unmeasured are the readings the first version names but has no records for.
+// plan_nodes_done: the coordinator said on 2026-11-20 to report it unmeasured.
 func unmeasured(w Window) []Reading {
 	return []Reading{
 		finish(Reading{Name: "post_release_fixes", Unit: "count", Window: w, Definition: def("none", "no record says that a release was fixed afterwards"),
 			Note: "no raw record yet; main.regression.* is regressions on main, not fixes after a release"}, false),
 		finish(Reading{Name: "plan_nodes_done", Unit: "count", Window: w, Definition: def("none", "plan.tree.changed is registered but has no events"),
-			Note: "no events yet (coordinator 2026-11-20: report unmeasured)"}, false),
+			Note: "no events of plan.tree.changed yet"}, false),
 	}
 }
 
+// The coverage record started on 2026-11-20 (#659); before that there are no samples.
 // promReadings are the Prometheus recording rules that are archived readings.
 // Prometheus keeps 10 days, so a window longer than that is unmeasured.
 func promReadings(ctx context.Context, prom Prom, w Window) []Reading {
@@ -207,7 +209,7 @@ func promReadings(ctx context.Context, prom Prom, w Window) []Reading {
 		n[s.Labels["scope"]] = int(s.Value)
 	}
 	if len(vals) == 0 {
-		return []Reading{finish(Reading{Name: name, Window: w, Definition: d, Note: "no samples of the record in the window (it started 2026-11-20)"}, false)}
+		return []Reading{finish(Reading{Name: name, Window: w, Definition: d, Note: "no samples of the record in the window"}, false)}
 	}
 	sort.Slice(vals, func(i, j int) bool { return vals[i].Labels["scope"] < vals[j].Labels["scope"] })
 	var out []Reading
