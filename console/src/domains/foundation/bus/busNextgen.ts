@@ -119,3 +119,41 @@ export function contractGraph(c: BusContract): ContractGraphModel {
   }
   return { publishers: [...pubs].sort(), topics: [...topics].sort(), subscribers: [...subs].sort(), edges }
 }
+
+/** One reading of the evaluation readout (GET /api/v1/readings/evaluation), as much of it as the Bus page uses. */
+export type EvalReading = { name: string; labels?: Record<string, string>; value: number | null; status: string }
+export type WeekCounts = { counts: Map<string, number>; window?: { from: string; to: string } }
+
+/**
+ * The metrics line's bus_events readings (law 47: the number comes from the
+ * system's readout, not from this page): events the relay published per
+ * type in the last closed 7 days. A missing reading is not a zero.
+ */
+export async function fetchBusWeekCounts(env = 'prod'): Promise<WeekCounts> {
+  const r = await authedFetch('bus events, 7 days', '/api/v1/readings/evaluation?days=7&name=bus_events')
+  const b = (await r.json()) as { readings?: EvalReading[]; window?: { from: string; to: string } }
+  return { counts: weekCounts(b.readings ?? [], env), window: b.window }
+}
+
+/** type → count for one environment, from bus_events readings that have a value. */
+export function weekCounts(readings: readonly EvalReading[], env: string): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const r of readings) {
+    const type = r.labels?.type
+    if (r.name !== 'bus_events' || !type || r.labels?.env !== env || r.value == null) continue
+    out.set(type, r.value)
+  }
+  return out
+}
+
+/**
+ * A topic's state on the Bus page: flowing (events in the window), silent
+ * (registered, a measured zero or no series at all in the window), or
+ * unknown (the readout could not be read). A type the relay only publishes
+ * at start-up can read silent: the counter misses events before the first
+ * scrape (2026-11-20, schema.migration.applied).
+ */
+export function topicState(type: string, counts: Map<string, number> | undefined): 'flowing' | 'silent' | 'unknown' {
+  if (!counts) return 'unknown'
+  return (counts.get(type) ?? 0) > 0 ? 'flowing' : 'silent'
+}

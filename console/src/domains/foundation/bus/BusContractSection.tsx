@@ -3,11 +3,11 @@ import { useQuery } from '@tanstack/react-query'
 import { Handle, MarkerType, Position, ReactFlow, type Edge, type Node, type NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { contractGraph, fetchBusContract, type BusContract } from './busNextgen'
+import { contractGraph, fetchBusContract, fetchBusWeekCounts, topicState, type BusContract } from './busNextgen'
 import { fetchBusClients } from './useBusStream'
 
 type Col = 'publisher' | 'topic' | 'subscriber'
-type BoxData = { label: string; col: Col; tone: 'live' | 'lost' | 'plain'; dim: boolean; sub?: string }
+type BoxData = { label: string; col: Col; tone: 'live' | 'lost' | 'plain' | 'silent'; dim: boolean; sub?: string }
 type BoxNode = Node<BoxData, 'box'>
 
 const W = 210
@@ -17,9 +17,9 @@ const X: Record<Col, number> = { publisher: 0, topic: 300, subscriber: 600 }
 const hidden = { opacity: 0, width: 1, height: 1, minWidth: 0, minHeight: 0, border: 0 }
 
 function BoxView({ data }: NodeProps<BoxNode>) {
-  const border = data.tone === 'lost' ? 'var(--color-lamp-red)' : data.tone === 'live' ? 'var(--color-lamp-green)' : 'var(--muted-foreground)'
+  const border = data.tone === 'lost' ? 'var(--color-lamp-red)' : data.tone === 'live' ? 'var(--color-lamp-green)' : data.tone === 'silent' ? 'var(--color-lamp-yellow)' : 'var(--muted-foreground)'
   return (
-    <div className="flex items-center rounded border bg-[var(--card-fill)] px-2" style={{ width: W, height: H, borderColor: border, opacity: data.dim ? 0.3 : 1 }}
+    <div className="flex items-center rounded border bg-[var(--card-fill)] px-2" style={{ width: W, height: H, borderColor: border, borderStyle: data.tone === 'silent' ? 'dashed' : 'solid', opacity: data.dim ? 0.3 : 1 }}
       title={data.sub ? `${data.label} · ${data.sub}` : data.label}>
       <span className="min-w-0 truncate font-mono-tabular text-[11px] text-[var(--foreground)]">{data.label}</span>
       <Handle type="target" position={Position.Left} isConnectable={false} style={hidden} />
@@ -37,7 +37,7 @@ function toneOf(name: string, roster: Map<string, string>): BoxData['tone'] {
   return 'plain'
 }
 
-export function ContractGraph({ contract, roster }: { contract: BusContract; roster: Map<string, string> }) {
+export function ContractGraph({ contract, roster, week }: { contract: BusContract; roster: Map<string, string>; week?: Map<string, number> }) {
   const [focus, setFocus] = useState<string | null>(null)
   const model = useMemo(() => contractGraph(contract), [contract])
   const { nodes, edges, height } = useMemo(() => {
@@ -49,12 +49,17 @@ export function ContractGraph({ contract, roster }: { contract: BusContract; ros
         if (e.to === focus) near.add(e.from)
       }
     }
+    const toneFor = (id: string, c: Col): BoxData['tone'] => {
+      if (c === 'subscriber') return toneOf(id, roster)
+      if (c === 'topic') return topicState(id, week) === 'flowing' ? 'live' : topicState(id, week) === 'silent' ? 'silent' : 'plain'
+      return 'plain'
+    }
     const col = (ids: string[], c: Col, prefix: string, sub?: (id: string) => string | undefined): BoxNode[] =>
       ids.map((id, i) => ({
         id: `${prefix}:${id}`, type: 'box', position: { x: X[c], y: i * (H + GAP) }, draggable: false,
-        data: { label: id, col: c, tone: c === 'subscriber' ? toneOf(id, roster) : 'plain', dim: focus != null && !near.has(`${prefix}:${id}`), sub: sub?.(id) },
+        data: { label: id, col: c, tone: toneFor(id, c), dim: focus != null && !near.has(`${prefix}:${id}`), sub: sub?.(id) },
       }))
-    const versions = new Map(contract.topics.map(t => [t.type, `v${t.version} · ${t.guarantee}`]))
+    const versions = new Map(contract.topics.map(t => [t.type, `v${t.version} · ${t.guarantee}${week ? ` · PROD 7d ${week.get(t.type) ?? 0}` : ''}`]))
     const ns = [...col(model.publishers, 'publisher', 'p'), ...col(model.topics, 'topic', 't', id => versions.get(id)), ...col(model.subscribers, 'subscriber', 's')]
     const es: Edge[] = model.edges.map((e, i) => {
       const hot = focus != null && (e.from === focus || e.to === focus)
@@ -66,13 +71,13 @@ export function ContractGraph({ contract, roster }: { contract: BusContract; ros
     })
     const rows = Math.max(model.publishers.length, model.topics.length, model.subscribers.length)
     return { nodes: ns, edges: es, height: Math.min(640, Math.max(240, rows * (H + GAP) * 0.6)) }
-  }, [model, contract, roster, focus])
+  }, [model, contract, roster, focus, week])
   return (
     <div className="flex w-full min-w-0 flex-col gap-1">
       <div className="flex gap-6 text-xs text-muted-foreground">
         <span style={{ width: W }}>Publishers ({model.publishers.length})</span>
-        <span style={{ width: W }}>Topics ({model.topics.length})</span>
-        <span>Subscribers ({model.subscribers.length}) · green live, red lost, blue arrow a wake</span>
+        <span style={{ width: W }}>Topics ({model.topics.length}){week ? ` · ${[...model.topics].filter(t => topicState(t, week) === 'silent').length} silent 7d` : ''}</span>
+        <span>Subscribers ({model.subscribers.length}) · green live, red lost, blue arrow a wake; a topic green has PROD events in the last 7 days, dashed yellow none</span>
       </div>
       <div className="w-full rounded border border-[var(--card-border)]" style={{ height }} data-testid="bus-contract-graph">
         <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView minZoom={0.2} nodesConnectable={false} nodesDraggable={false}
@@ -92,15 +97,17 @@ export function BusContractSection() {
   const contract = useQuery({ queryKey: ['bus-contract'], queryFn: fetchBusContract, staleTime: 300_000, retry: false })
   const clients = useQuery({ queryKey: ['bus', 'clients'], queryFn: fetchBusClients, refetchInterval: 60_000 })
   const roster = useMemo(() => new Map((clients.data?.clients ?? []).map(c => [c.name, c.status])), [clients.data])
+  const week = useQuery({ queryKey: ['bus', 'week-counts'], queryFn: () => fetchBusWeekCounts('prod'), staleTime: 3_600_000, retry: false })
   const c = contract.data
   let body
   if (contract.isError) body = <p className="m-0 text-sm text-muted-foreground">{`Could not read the contract: ${contract.error instanceof Error ? contract.error.message : 'request failed'}`}</p>
   else if (!c) body = <p className="m-0 text-sm text-muted-foreground">Loading…</p>
   else body = (
     <div className="flex w-full min-w-0 flex-col gap-2">
-      <ContractGraph contract={c} roster={roster} />
+      <ContractGraph contract={c} roster={roster} week={week.data?.counts} />
       <p className="m-0 text-xs text-muted-foreground">
         {c.topics.length} topics, {c.subscriptions.length} subscription rows, {c.clients.length} declared users, read from the registers compiled into the platform (bus/registry). Who is live or lost: Clients below.
+        {week.data ? ` Topic counts: the metrics line's bus_events reading (evaluation readout), PROD, ${week.data.window ? `${week.data.window.from.slice(0, 10)} to ${week.data.window.to.slice(0, 10)}` : 'last closed 7 days'}; a type sent only at start-up can read 0.` : week.isError ? ' Topic counts: the evaluation readout could not be read; topics are not coloured.' : ''}
       </p>
     </div>
   )
