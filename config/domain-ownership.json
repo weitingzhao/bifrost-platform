@@ -1505,13 +1505,6 @@
       "status": "assigned",
       "basis": "2026-11-16 safe extraction from probe and checklist, which remain mixed. HTTP drain/status, TCP dial-close, streaming JSON observation and non-draining close transport; callers retain identity, signal classification, request targets, client/timeout and retry policy."
     },
-    "api/internal/datastoreobservations": {
-      "domains": [
-        "foundation"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 safe extraction from probe, which remains mixed. Read-only cluster-health projection and original ordered LAN/config TCP fallbacks, through observation callbacks without identity/database access."
-    },
     "api/internal/tenant/appreadings": {
       "domains": [
         "tenant"
@@ -1573,7 +1566,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): reachability probing and the connectivity matrix, read by eighteen packages of every domain. Its trade_routes file names Trade routes from configuration and is counted by the Trade vocabulary budget. Was default-maintainer."
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): reachability probing and the connectivity matrix, read by eighteen packages of every domain. Its trade_routes file names Trade routes from configuration and is counted by the Trade vocabulary budget. Was default-maintainer. 2026-11-20: datastoreobservations folded in (it had no other user; datastore_projection.go, its names unexported): the datastore health projection and its ordered TCP fallbacks."
     },
     "api/internal/satellite": {
       "domains": [

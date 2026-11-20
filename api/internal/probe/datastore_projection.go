@@ -1,16 +1,19 @@
-// Package datastoreobservations projects already-read health and ordered TCP fallbacks.
-// It has no database, identity, authorization or environment configuration access.
-package datastoreobservations
+package probe
+
+// The datastore projection (folded in from datastoreobservations 2026-11-20,
+// unchanged but for unexported names) projects already-read health and ordered
+// TCP fallbacks. It has no database, identity, authorization or environment
+// configuration access.
 
 import (
 	"context"
 	"strings"
 )
 
-type Row struct{ Reach, Detail, LAN string }
-type Observation struct{ Reach, Detail, URL string }
+type datastoreRow struct{ Reach, Detail, LAN string }
+type datastoreReading struct{ Reach, Detail, URL string }
 
-func Project(ctx context.Context, envID, cfgAddr, id string, read func() (Row, bool), observeTCP func(context.Context, string, string, string) Observation) Observation {
+func projectDatastore(ctx context.Context, envID, cfgAddr, id string, read func() (datastoreRow, bool), observeTCP func(context.Context, string, string, string) datastoreReading) datastoreReading {
 	const category = "datastore"
 	if row, ok := read(); ok && row.Reach != "" {
 		reach := row.Reach
@@ -21,7 +24,7 @@ func Project(ctx context.Context, envID, cfgAddr, id string, read func() (Row, b
 			if reach != "ok" {
 				tcp := observeTCP(ctx, id, category, row.LAN)
 				if tcp.Reach == "ok" {
-					return Observation{
+					return datastoreReading{
 						Reach:  "ok",
 						Detail: detail + " · tcp_lan verified", URL: url,
 					}
@@ -30,7 +33,7 @@ func Project(ctx context.Context, envID, cfgAddr, id string, read func() (Row, b
 			}
 		}
 		if reach == "ok" || reach == "degraded" {
-			return Observation{
+			return datastoreReading{
 				Reach:  reach,
 				Detail: detail, URL: url,
 			}

@@ -1,4 +1,4 @@
-package datastoreobservations
+package probe
 
 import (
 	"context"
@@ -25,7 +25,9 @@ func TestFallbackCallSequenceIsPreserved(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var calls []string
-			got := Project(context.Background(), "env", "config.svc.cluster.local", "postgres", func() (Row, bool) { return Row{Reach: c.reach, Detail: "cluster", LAN: c.lan}, c.present }, func(_ context.Context, id, category, addr string) Observation {
+			got := projectDatastore(context.Background(), "env", "config.svc.cluster.local", "postgres", func() (datastoreRow, bool) {
+				return datastoreRow{Reach: c.reach, Detail: "cluster", LAN: c.lan}, c.present
+			}, func(_ context.Context, id, category, addr string) datastoreReading {
 				if id != "postgres" || category != "datastore" {
 					t.Fatal("caller metadata changed")
 				}
@@ -33,7 +35,7 @@ func TestFallbackCallSequenceIsPreserved(t *testing.T) {
 				if len(calls) > len(c.replies) {
 					t.Fatal("extra fallback")
 				}
-				return Observation{Reach: c.replies[len(calls)-1], Detail: "tcp", URL: "tcp://" + addr}
+				return datastoreReading{Reach: c.replies[len(calls)-1], Detail: "tcp", URL: "tcp://" + addr}
 			})
 			if !reflect.DeepEqual(calls, c.wantCalls) || got.Reach != c.wantReach || got.Detail != c.wantDetail {
 				t.Fatalf("got calls=%v result=%+v", calls, got)
