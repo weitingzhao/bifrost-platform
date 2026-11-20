@@ -44,6 +44,7 @@ import { registerMessageTools } from './registerMessages.js'
 import { getReleaseWindow, holdReleaseWindow, releaseReleaseWindow } from './windowTools.js'
 import { presenceSkip, registerPresence } from './presence.js'
 import { registerPlanImportTools } from './registerPlanImport.js'
+import { GET_UNPERCEIVED_DESCRIPTION, unperceivedPath } from './catalogTools.js'
 import { FULL_CI_PATH, fullCICheckPath, unitConfigPath, unitRunsPath, unitScopePath } from './unitsTools.js'
 import { BUS_WAIT_MAX_SECONDS, LIST_REGRESSIONS_DESCRIPTION, MARK_REGRESSION_FIXED_DESCRIPTION, REPORT_REGRESSION_DESCRIPTION, WAIT_FOR_EVENT_DESCRIPTION, busEventsPath, regressionsPath } from './busTools.js'
 
@@ -559,6 +560,14 @@ reg(
   { repo: REPO, limit: z.number().int().min(1).max(100).optional().describe('Default 30') },
   async ({ repo, limit }) =>
     jsonResult(await platformGet(unitRunsPath(repo, limit))),
+)
+
+reg(
+  'get_unperceived',
+  GET_UNPERCEIVED_DESCRIPTION,
+  { repo: REPO },
+  async ({ repo }) =>
+    jsonResult(await platformGet(unperceivedPath(repo))),
 )
 
 reg(

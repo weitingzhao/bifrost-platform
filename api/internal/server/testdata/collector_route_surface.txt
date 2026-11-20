@@ -221,3 +221,4 @@ deny	GET /api/v1/watchlist/union
 outside	GET /health
 outside	GET /metrics
 deny	GET /api/v1/agentrt/delivery
+deny	GET /api/v1/catalog/unperceived

@@ -105,6 +105,9 @@ var intendedRouteAdditions = map[string][]string{
 	// changed by domain, like /ci/scorecard (read-only; contracts v1).
 	"GET /api/v1/ci/domains": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/ci/changes": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// 2026-11-20 (0.2 map line): the map's pool of what it cannot perceive,
+	// as kept by the workers' scan (read-only; contract v1).
+	"GET /api/v1/catalog/unperceived": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-14: the approval records counted, for the Ops page (read-only).
 	"GET /api/v1/readings/approvals": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/units/evidence":    {"operator", "admin", "trade-satellite"},

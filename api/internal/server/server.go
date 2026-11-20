@@ -32,6 +32,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalrules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
+	"github.com/weitingzhao/bifrost-platform/api/internal/catalog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cidomains"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ciscore"
@@ -86,6 +87,9 @@ type Server struct {
 	// changed (ci_read_wire.go).
 	ciDomainsKept cidomains.Cache
 	unitTreesOnce sync.Once
+	// catalog is the map's pool scanner (catalog_wire.go).
+	catalog     *catalog.Scanner
+	catalogOnce sync.Once
 	// instruments answers /governance/instruments (governance_instruments.go).
 	instruments     *instruments.Service
 	instrumentsOnce sync.Once
@@ -275,6 +279,8 @@ func New(cfg *config.Config) (*Server, error) {
 	if role.RunsWorkers() {
 		// The CI page's domain graph is read ahead of any request (ci_domains.go).
 		srv.ciDomainsAhead(context.Background())
+		// The map's pool of what it cannot perceive (catalog_wire.go).
+		srv.catalogScanAhead(context.Background())
 	}
 	if role.RunsAPI() || role.RunsWorkers() {
 		srv.delivery.StartRunWindowRecovery()
@@ -338,6 +344,7 @@ func (s *Server) Router() http.Handler {
 		s.mountHomeLayout(r)
 		// Each domain registers its own routes (mount_<domain>.go).
 		s.mountFoundation(r)
+		s.mountCatalog(r)
 		s.tenant.Mount(r, tenantassembly.Gates{Operator: s.auth.Require(actuation.RoleOperator), Guard: s.guard, GuardIB: s.guardIB, Topology: s.handleTopology})
 		s.mountVerification(r)
 		s.mountDelivery(r)

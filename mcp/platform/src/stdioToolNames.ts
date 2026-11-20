@@ -54,6 +54,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_unit_scope',
   'get_unit_config',
   'get_unit_runs',
+  'get_unperceived',
   'wait_for_event',
   'report_regression',
   'mark_regression_fixed',
