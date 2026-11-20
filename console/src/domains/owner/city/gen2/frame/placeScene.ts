@@ -764,13 +764,13 @@ export class PlaceScene extends Phaser.Scene {
    * the place's hue; one size on screen whatever the zoom (scaled in update()).
    */
   private plate(x: number, y: number, text: string, hue: string) {
-    const t = this.add.text(0, 0, text, { fontFamily: "'JetBrains Mono', ui-monospace, Menlo, monospace", fontSize: '12px', fontStyle: '600', color: this.tone.label.color }).setResolution(3).setOrigin(0, 0.5)
-    const padX = 6, dot = 7, w = Math.ceil(t.width) + padX * 2 + dot + 5, h = 20
+    const t = this.add.text(0, 0, text, { fontFamily: "'JetBrains Mono', ui-monospace, Menlo, monospace", fontSize: '12px', fontStyle: '600', color: this.tone.label.color, lineSpacing: 2 }).setResolution(3).setOrigin(0, 0.5)
+    const padX = 6, dot = 7, w = Math.ceil(t.width) + padX * 2 + dot + 5, h = Math.max(20, Math.ceil(t.height) + 6)
     const g = this.add.graphics()
     g.fillStyle(this.tone.ink, 0.9).fillRoundedRect(-w / 2 + 2, 2, w, h, 4)
     g.fillStyle(Phaser.Display.Color.HexStringToColor(this.tone.label.background.slice(0, 7)).color, 1).fillRoundedRect(-w / 2, 0, w, h, 4)
     g.lineStyle(1.5, this.tone.ink).strokeRoundedRect(-w / 2, 0, w, h, 4)
-    g.fillStyle(Phaser.Display.Color.HexStringToColor(hue).color).fillCircle(-w / 2 + padX + dot / 2, h / 2, dot / 2).lineStyle(1, this.tone.ink).strokeCircle(-w / 2 + padX + dot / 2, h / 2, dot / 2)
+    g.fillStyle(Phaser.Display.Color.HexStringToColor(hue).color).fillCircle(-w / 2 + padX + dot / 2, 10, dot / 2).lineStyle(1, this.tone.ink).strokeCircle(-w / 2 + padX + dot / 2, 10, dot / 2)
     t.setPosition(-w / 2 + padX + dot + 5, h / 2)
     const c = this.add.container(x, y, [g, t])
     this.labels.push(c)
@@ -1012,7 +1012,8 @@ export class PlaceScene extends Phaser.Scene {
     for (const { p, r } of order) for (const part of this.block(byId.get(p.id)!, p, r, P, look.get(p.id)!, o, [...at, p.id])) c.add(part)
     // Names on top of every block, so a nearer block never hides a farther one's name. The minimap has none: too small to read.
     if (o.interactive) for (const { p, r } of order) {
-      const sb = setback(Math.min(p.w, p.h)), foot = P(r.x + r.w - sb, r.y + r.h - sb)
+      // The plate stands out in the street before its front corner (the Owner, 2026-11-20: on the picture it hid what was in front).
+      const foot = P(r.x + r.w + 0.12, r.y + r.h + 0.12)
       const k = byId.get(p.id)!
       // A name says how it stands when it is not simply online, and a room its reading (rule 0: read, never set).
       const pct = k.meter && k.meter.used != null && k.meter.of ? ` ${Math.round(100 * k.meter.used / k.meter.of)}%` : ''
@@ -1021,8 +1022,8 @@ export class PlaceScene extends Phaser.Scene {
       const word = k.state && k.state !== 'online' ? ` · ${k.state}` : ''
       const dot = k.state === 'down' ? '#d9534f' : k.state === 'standby' ? '#9aa0b0' : k.state === 'unread' ? '#d8d4cc' : this.shown ? hueOf(this.shown.tree, [...at, p.id]) : '#cccccc'
       // Its words (what it is for, how many run on it) on the plate, outside its picture (the Owner, 2026-11-20).
-      const said = [k.face?.sign ? k.face.sign.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase()) : '', k.state === 'online' && k.face?.tally?.n != null ? `${k.face.tally.n} ${k.face.tally.what}` : ''].filter(Boolean).map(t => ` · ${t}`).join('')
-      c.add(this.plate(foot.x, foot.y + 4, `${k.label}${said}${pct}${word}${scale}`, dot))
+      const said = [k.face?.sign ? k.face.sign.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase()) : '', k.state === 'online' && k.face?.tally?.n != null ? `${k.face.tally.n} ${k.face.tally.what}` : ''].filter(Boolean).join(' · ')
+      c.add(this.plate(foot.x, foot.y + 4, `${k.label}${pct}${word}${scale}${said ? `\n${said}` : ''}`, dot))
     }
     if (order.length === 0 && o.interactive) c.add(this.label(P(W / 2, H / 2).x, P(W / 2, H / 2).y, 'Nothing inside yet', { color: '#8a8478', fontSize: '14px' }).setOrigin(0.5))
     // What the fit frames: the blocks' corners up to their roofs, and their names below.

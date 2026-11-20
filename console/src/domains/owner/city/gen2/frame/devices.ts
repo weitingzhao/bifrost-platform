@@ -2,6 +2,9 @@ import { Draw, faces, INK, type Sprite } from './kit'
 
 /** Face units to a cell (see Draw.face). */
 const U = 35.8
+
+/** Each system's colour, for the band under a facility's eaves: Ubuntu's orange, a Mac's silver-white, Windows' blue. */
+const OS_BAND: Record<MachineOs, string> = { linux: '#e95420', mac: '#dfe3ea', win: '#0078d4', unknown: '#b9b6c4' }
 import type { Light } from './light'
 import type { Look, Place, State } from './places'
 import { beacon, dock, doorRow, gatehouse, gauge, hall, lit, plaque, shade, smoke, tank, toneOf, windowStrip, type Tone } from './library/parts'
@@ -158,12 +161,12 @@ export function deviceSprite(form: Form, fw: number, fd: number, hue: string, li
 /**
  * A power plant (the Owner, 2026-11-19: a Linux node is a power plant). Redrawn 2026-11-20 to the drawing
  * floor (RULES.md「画法」; the Owner: the orange box with two pipes and two jars looked like a toy): a typical
- * thermal plant in the first generation's palette, off-white with one band in the district's colour.
+ * thermal plant in the first generation's palette, off-white with one band in its system's colour.
  *   the turbine hall   as tall as it has cores; its row of tall windows lit as busy as it is (CPU);
  *                      a roller door, louvres and the system's small mark on the side
  *   the chimney        red and white, smoke by how busy (CPU); none when it is not running; a red light when down
- *   the tanks          steel, as big as what they hold; a sight glass up each shows its level:
- *                      cooling water (memory) and fuel (disk)
+ *   the tanks          steel, in one row before the hall, memory then disk, each as big as what it
+ *                      holds, its name stencilled on it, its cap in its colour, a gauge up its front at its level
  * Its words (what it is for, the pods on it, its name) are on its name plate outside the drawing (the
  * Owner, 2026-11-20: the readings go outside the picture). Standby: dark windows, no smoke. Unread: grey,
  * every gauge empty.
@@ -181,7 +184,9 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: T
   const Z = 4, H = encode('cores', lv.cap?.cores ?? null)!
   const hx = x0 + 0.14, hy = y0 + 0.16, hw = w * 0.6, hd = d * 0.5
   const wall = unread ? faces('#eeedf2', '#d9d7e0', '#c6c3cf') : faces(S('#f7f8fa', -0.45), S('#e4e9ef', -0.5), S('#cdd5df', -0.55))
-  const band = unread ? '#b9b6c4' : S(hue, -0.35)
+  // The band in the system's own colour (the Owner, 2026-11-20: Ubuntu is orange, a Mac white, Windows blue); the walls stay off-white.
+  const band = unread ? '#b9b6c4' : S(OS_BAND[os], -0.35)
+  void hue
 
   // The chimney behind the hall, from the ground: red and white, a gallery, the light on top.
   { const sx = hx + hw + 0.22, sy = hy + 0.2, top = Z + H + 62
@@ -231,28 +236,28 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: T
   g.unit(hx + hw * 0.66, hy + hd * 0.2, Z + H, Math.min(0.42, hd * 0.3))
   g.unit(hx + hw * 0.3, hy + hd * 0.12, Z + H, Math.min(0.32, hd * 0.24))
 
-  // The yard: two steel tanks, each as big as what it holds, its sight glass filled to its level.
-  const steel = (tx: number, ty: number, r: number, h: number, f: number | null, liquid: string) => {
-    g.cylinder(tx, ty, r, Z, Z + h, S('#f4f6f9', -0.45), S('#aab4c1', -0.45), S('#e6ebf1', -0.45))
+  // The yard: two steel tanks in one row before the hall, always memory then disk, each as big as what it
+  // holds; its name stencilled on it, its cap in its colour, a wide gauge up its front filled to its level.
+  const steel = (tx: number, ty: number, r: number, h: number, f: number | null, liquid: string, word: string) => {
+    g.cylinder(tx, ty, r, Z, Z + h, S('#f4f6f9', -0.45), S('#aab4c1', -0.45), unread ? '#d9d7e0' : S(liquid, -0.3))
     const [cx, cy] = g.p(tx, ty, Z)
-    // Rings round the shell.
-    for (const k of [0.33, 0.66]) g.add(`<path d="M${n1(cx - r)},${n1(cy - h * k)} A${r},${r / 2} 0 0 0 ${n1(cx + r)},${n1(cy - h * k)}" fill="none" stroke="${S('#c3ccd8', -0.4)}" stroke-width="0.8"/>`)
-    // The sight glass on the front of the shell, and the liquid in it.
-    const gx = cx - r * 0.35, gy = cy + r * 0.47, gh = h - 8
-    g.add(`<rect x="${n1(gx - 2.2)}" y="${n1(gy - 4 - gh)}" width="4.4" height="${n1(gh)}" rx="1.5" fill="${night ? '#2a3044' : '#ffffff'}" stroke="${INK}" stroke-width="0.8"/>`)
-    if (f != null && f > 0.005) { const lh = Math.max(1.5, (gh - 1.6) * Math.min(1, f)); g.add(`<rect x="${n1(gx - 1.4)}" y="${n1(gy - 4.8 - lh)}" width="2.8" height="${n1(lh)}" rx="1" fill="${liquid}"/>`) }
-    // A ladder up the right of the shell, a railing on the top.
-    const lx = cx + r * 0.62
-    g.add(`<path d="M${n1(lx)},${n1(cy + r * 0.38)} V${n1(cy + r * 0.38 - h)} M${n1(lx + 3)},${n1(cy + r * 0.32)} V${n1(cy + r * 0.32 - h)}" stroke="${INK}" stroke-width="0.6"/>`)
-    for (let v = 4; v < h; v += 4) g.add(`<line x1="${n1(lx)}" y1="${n1(cy + r * 0.38 - v)}" x2="${n1(lx + 3)}" y2="${n1(cy + r * 0.32 - v)}" stroke="${INK}" stroke-width="0.5"/>`)
-    g.add(`<path d="M${n1(cx - r)},${n1(cy - h - 3)} A${r},${r / 2} 0 0 0 ${n1(cx + r)},${n1(cy - h - 3)}" fill="none" stroke="${S('#7f8a9c', -0.2)}" stroke-width="0.8"/>`)
+    // A ring round the shell near the top.
+    g.add(`<path d="M${n1(cx - r)},${n1(cy - h + 6)} A${r},${r / 2} 0 0 0 ${n1(cx + r)},${n1(cy - h + 6)}" fill="none" stroke="${S('#c3ccd8', -0.4)}" stroke-width="0.9"/>`)
+    // The gauge on the front of the shell, ticks at a quarter, a half, three quarters, and what is in it.
+    const gx = cx - r * 0.55, base = cy + r / 2 - 4, gh = h - 12, gw = 6
+    g.add(`<rect x="${n1(gx - gw / 2)}" y="${n1(base - gh)}" width="${gw}" height="${n1(gh)}" rx="1.5" fill="${night ? '#2a3044' : '#ffffff'}" stroke="${INK}" stroke-width="0.8"/>`)
+    if (f != null && f > 0.005) { const lh = Math.max(1.5, (gh - 1.6) * Math.min(1, f)); g.add(`<rect x="${n1(gx - gw / 2 + 0.8)}" y="${n1(base - 0.8 - lh)}" width="${gw - 1.6}" height="${n1(lh)}" rx="1" fill="${liquid}"/>`) }
+    for (const q of [0.25, 0.5, 0.75]) g.add(`<line x1="${n1(gx + gw / 2)}" y1="${n1(base - gh * q)}" x2="${n1(gx + gw / 2 + 2.5)}" y2="${n1(base - gh * q)}" stroke="${INK}" stroke-width="0.6"/>`)
+    // The stencil, across the shell beside the gauge.
+    const sx = cx + r * 0.28, fs = Math.min(6.4, r * 0.4)
+    g.add(`<text x="${n1(sx)}" y="${n1(base - gh * 0.55)}" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="${n1(fs)}" font-weight="800" fill="${unread ? '#a4a8b2' : S(liquid, -0.3)}">${word}</text>`)
   }
   const mr = encode('mem.total', lv.cap?.mem ?? null)!, dr = encode('disk.total', lv.cap?.disk ?? null)!
-  // A pipe rack from the tanks to the hall.
-  g.line([x0 + w * 0.28, y0 + d * 0.82, Z + 14], [x0 + w * 0.28, hy + hd, Z + 14], S('#8d97a6', -0.3), 2.2)
-  g.line([x0 + w * 0.84, y0 + d * 0.5, Z + 12], [hx + hw, y0 + d * 0.5, Z + 12], S('#8d97a6', -0.3), 2.2)
-  steel(x0 + w * 0.84, y0 + d * 0.5, dr, 36, run ? encode('disk.used', lv.disks[0] ?? null) : null, '#d98f2b')
-  steel(x0 + w * 0.28, y0 + d * 0.82, mr, 34, run ? encode('mem.used', lv.mem) : null, night ? '#3f7fd6' : '#3b8fe0')
+  const ty = hy + hd + (y0 + d - hy - hd) * 0.55
+  // A pipe from each tank back to the hall.
+  for (const k of [0.28, 0.6]) g.line([x0 + w * k, ty, Z + 10], [x0 + w * k, hy + hd, Z + 10], S('#8d97a6', -0.3), 2.2)
+  steel(x0 + w * 0.28, ty, mr, 34, run ? encode('mem.used', lv.mem) : null, night ? '#3f7fd6' : '#3b8fe0', 'MEM')
+  steel(x0 + w * 0.6, ty, dr, 34, run ? encode('disk.used', lv.disks[0] ?? null) : null, '#d98f2b', 'DISK')
 }
 
 /**
