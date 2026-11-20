@@ -243,7 +243,8 @@ export class PlaceScene extends Phaser.Scene {
     // change short); refit only when arranging starts or stops (the frame changes).
     if (same) {
       // Readings change on their own (rule 0: the system drives the picture): a new state or number redraws too.
-      const read = (p: Place | null) => p?.children.map(c => [c.id, c.state, c.meter?.used, c.meter?.of, c.children.length])
+      // A room its module draws changes with every reading drawn in it (its picture's key), not only its headline number.
+      const read = (p: Place | null) => p?.children.map(c => [c.id, c.state, c.meter?.used, c.meter?.of, c.children.length, c.picture?.key])
       const key = (x: Shown) => JSON.stringify([x.selected, x.arranging, x.tool, x.placed, x.plots, x.parentPlaced, x.inside, x.lens, read(x.place), read(x.parent)])
       if (key(prev) !== key(next)) void this.draw(next, prev.arranging !== next.arranging)
       return
