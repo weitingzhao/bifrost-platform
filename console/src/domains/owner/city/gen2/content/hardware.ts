@@ -114,9 +114,10 @@ export function zonedArrangement(items: { id: string; shape: Shape; zone: Zone }
 const G = 1e9
 /** A room's size by how much it holds: cores, or bytes. */
 const roomShape = (unit: 'cores' | 'bytes', of: number | null): Shape => {
-  if (of == null) return '1x2'
-  if (unit === 'cores') return of > 16 ? '2x4' : of > 8 ? '2x2' : '1x2'
-  return of > 4000 * G ? '4x4' : of > 96 * G ? '2x4' : of > 20 * G ? '2x2' : '1x2'
+  // The smallest thing is 2×2 (the Owner, 2026-11-20: no 1×1 or 1×2; a sheet is 8 × 8 of 2×2 units).
+  if (of == null) return '2x2'
+  if (unit === 'cores') return of > 16 ? '2x4' : '2x2'
+  return of > 4000 * G ? '4x4' : of > 96 * G ? '2x4' : '2x2'
 }
 
 const at = (pts: PromPoint[] | null, key: string, value: string) => pts?.find(p => p.labels?.[key] === value)?.value ?? null

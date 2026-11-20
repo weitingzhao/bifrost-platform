@@ -70,7 +70,11 @@ export type Ground = { w: number; h: number }
 export const FULL: Ground = { w: GRID, h: GRID }
 const whole = (g: Ground): Rect => ({ x: 0, y: 0, w: g.w, h: g.h })
 
-/** At most this many things on any level (the Owner, 2026-11-20: 16, the sixteen 4 × 4 plots of a sheet). */
+/**
+ * The smallest thing is 2×2 (the Owner, 2026-11-20): a sheet is drawn 16 × 16 so the pictures can be fine,
+ * but its unit is 2 × 2, so it is 8 × 8 units: nothing 1×1 or 1×2, and at most 16 things on any level.
+ */
+export const UNIT = 2
 export const MAX_THINGS = 16
 
 /** A district's or a building's size: small, medium or large, its weight, not how much it holds (the Owner, 2026-11-20). */
@@ -118,7 +122,8 @@ const replace = (plan: Plan, id: string, next: Plan): Plan => {
 /** Cut a plot in two; null if it is a single cell already or not a plot. */
 export function splitPlot(plan: Plan, id: string, g: Ground = FULL): Plan | null {
   const p = plotsOf(plan, g).find(q => q.id === id)
-  if (!p || (p.w === 1 && p.h === 1)) return null
+  // No plot smaller than the unit.
+  if (!p || (p.w <= UNIT && p.h <= UNIT)) return null
   return replace(plan, id, [null, null])
 }
 

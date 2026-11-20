@@ -1,4 +1,4 @@
-import { area, assign, CLASSES, decodePlan, GRID, groundOf, MAX_THINGS, plotsOf, sidesOf, SHAPES, TAPPABLE, type Shape } from './grid'
+import { area, assign, CLASSES, decodePlan, GRID, groundOf, MAX_THINGS, plotsOf, sidesOf, SHAPES, TAPPABLE, UNIT, type Shape } from './grid'
 import { LOOKS, STATES, type Place, type PlaceKind } from './places'
 import { linkRulesBroken, type Link } from './links'
 
@@ -36,6 +36,7 @@ export function rulesBroken(content: { tree: Place; functions?: { id: string }[]
   if (content.tree.kind !== 'town') out.push(`the top place must be a town, not a ${content.tree.kind}`)
   const walk = (p: Place, where: string) => {
     if (!(SHAPES as readonly string[]).includes(p.shape)) out.push(`${where}: shape ${String(p.shape)} is not one of ${SHAPES.join(', ')}`)
+    else if (p.kind !== 'town' && sidesOf(p.shape as Shape).short < UNIT) out.push(`${where}: the smallest thing is ${UNIT}×${UNIT}, not ${p.shape}`)
     else if ((p.kind === 'district' || p.kind === 'building') && sidesOf(p.shape as Shape).short < TAPPABLE) out.push(`${where}: a ${p.kind} is gone into, so it must be at least ${TAPPABLE} wide (it is ${p.shape})`)
     if (p.function && fns && !fns.has(p.function)) out.push(`${where}: function ${p.function} is not one of the content's functions`)
     if (p.state && !(STATES as readonly string[]).includes(p.state)) out.push(`${where}: state ${p.state} is not one of ${STATES.join(', ')}`)
