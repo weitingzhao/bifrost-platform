@@ -6,11 +6,14 @@
       "path": "console/src",
       "files": [
         "console/src/App.tsx",
+        "console/src/domains/foundation/catalog/api/domainStatus.ts",
         "console/src/index.css",
         "console/src/main.tsx",
         "console/src/vite-env.d.ts"
       ],
       "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/serverContact.ts",
         "console/src/domains/foundation/bus",
         "console/src/hooks/PlatformAuthProvider.tsx",
         "console/src/pages/ConsolePage.tsx",
@@ -4889,12 +4892,15 @@
       "files": [
         "console/src/pages/shell/status/AgentThreadsInProgress.tsx",
         "console/src/pages/shell/status/ChecklistSignalsSummary.tsx",
+        "console/src/pages/shell/status/DomainStatusSummary.tsx",
         "console/src/pages/shell/status/LinesNow.tsx",
         "console/src/pages/shell/status/StatusPage.tsx",
         "console/src/pages/shell/status/__tests__/AgentThreadsInProgress.test.tsx",
+        "console/src/pages/shell/status/__tests__/DomainStatusSummary.test.tsx",
         "console/src/pages/shell/status/__tests__/StatusPage.test.tsx"
       ],
       "imports": [
+        "console/src",
         "console/src/api",
         "console/src/api/agentThreads.ts",
         "console/src/api/approvals.ts",
