@@ -115,6 +115,8 @@ const heightOf = (p: Place, size: number) => p.landmark ? LANDMARKS[p.landmark].
 const RS = 3
 /** The slab's thickness under the ground, px: the earth shows on its two front sides. */
 const SLAB = 14
+/** The land round a district's ground where its ports and neighbours stand, in cells. */
+const APRON = 3.6
 
 export class PlaceScene extends Phaser.Scene {
   private events_: SceneEvents
@@ -826,10 +828,13 @@ export class PlaceScene extends Phaser.Scene {
       }
       c.add(cl)
     }
+    // A district's ports stand on land round its ground (the Owner, 2026-11-20: the roads out must not break
+    // off in the air): an apron of the town's ground, its slab under it all.
+    const A = place.kind === 'district' && o.interactive && !!this.shown?.links && !o.arranging ? APRON : 0
     // The slab: earth on its two front sides, then the ground on top, all outlined in ink.
     const down = (v: Phaser.Math.Vector2) => new Phaser.Math.Vector2(v.x, v.y + SLAB)
-    const leftSide = [P(0, H), P(W, H), down(P(W, H)), down(P(0, H))]
-    const rightSide = [P(W, -SEA), P(W, H), down(P(W, H)), down(P(W, -SEA))]
+    const leftSide = [P(-A, H + A), P(W + A, H + A), down(P(W + A, H + A)), down(P(-A, H + A))]
+    const rightSide = [P(W + A, -SEA - A), P(W + A, H + A), down(P(W + A, H + A)), down(P(W + A, -SEA - A))]
     // Outdoors the slab is earth; a building's storey stands on a concrete floor slab.
     const inside = place.kind === 'building'
     g.lineStyle(2, this.tone.ink)
@@ -838,9 +843,17 @@ export class PlaceScene extends Phaser.Scene {
     if (!inside) {
       g.lineStyle(1, ter.earthShade, 0.8)
       for (const t of [0.4, 0.72]) {
-        g.lineBetween(P(0, H).x, P(0, H).y + SLAB * t, P(W, H).x, P(W, H).y + SLAB * t)
-        g.lineBetween(P(W, H).x, P(W, H).y + SLAB * t, P(W, -SEA).x, P(W, -SEA).y + SLAB * t)
+        g.lineBetween(P(-A, H + A).x, P(-A, H + A).y + SLAB * t, P(W + A, H + A).x, P(W + A, H + A).y + SLAB * t)
+        g.lineBetween(P(W + A, H + A).x, P(W + A, H + A).y + SLAB * t, P(W + A, -SEA - A).x, P(W + A, -SEA - A).y + SLAB * t)
       }
+    }
+    if (A) {
+      // The apron: the town's grass round the district's own ground, outlined; the ground sits on it.
+      const apron = [P(-A, -A), P(W + A, -A), P(W + A, H + A), P(-A, H + A)]
+      g.fillStyle(this.tone.grass, 1).fillPoints(apron, true)
+      g.fillStyle(this.tone.grassAlt, 1)
+      for (let y = -A; y < H + A; y += 4) for (let x = -A; x < W + A; x += 4) if (Math.round((x + y + 2 * A) / 4) % 2) g.fillPoints(quadOf(P, { x, y, w: Math.min(4, W + A - x), h: Math.min(4, H + A - y) }), true)
+      g.lineStyle(2, this.tone.ink).strokePoints(apron, true)
     }
     if (shore) {
       const sea = [P(0, -SEA), P(W, -SEA), P(W, 0), P(0, 0)]
@@ -1355,8 +1368,10 @@ export class PlaceScene extends Phaser.Scene {
       // The road out to it: paved to a neighbour, a dirt track to Other and Orphan, fading as it goes.
       // From the ring road's middle, over the green belt and the edge, out to the port (to the yard a track).
       const START = -GUTTER / 2
+      // On the apron the road runs whole, to the neighbour's lot.
+      const END = REACH_ + 0.2
       for (let k = 0; k < 5; k++) {
-        const a0 = START + (REACH_ - START) * k / 5, a1 = START + (REACH_ - START) * (k + 1) / 5, fade = k < 2 ? 1 : 1 - (k - 1) / 6
+        const a0 = START + (END - START) * k / 5, a1 = START + (END - START) * (k + 1) / 5, fade = 1
         // The same street as inside, carried on to every slot alike: the ground is laid out first, what
         // stands on it comes later (the Owner, 2026-11-20).
         g.fillStyle(this.tone.kerb, fade).fillPoints([pt(a0, -LOCAL_HALF - PAVEMENT), pt(a1, -LOCAL_HALF - PAVEMENT), pt(a1, LOCAL_HALF + PAVEMENT), pt(a0, LOCAL_HALF + PAVEMENT)], true)
