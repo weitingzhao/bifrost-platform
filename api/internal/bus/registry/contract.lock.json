@@ -16,6 +16,10 @@
       "version": 1,
       "hash": "37d0e0709e81b7a1"
     },
+    "approval.card.notified": {
+      "version": 1,
+      "hash": "87a07e47b6c9bb10"
+    },
     "audit.action.recorded": {
       "version": 1,
       "hash": "ba76373feab91722"

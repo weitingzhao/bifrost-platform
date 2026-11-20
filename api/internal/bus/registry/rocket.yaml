@@ -222,6 +222,23 @@ channels:
       exports: []
       replaces: [L28, W02]
       console_keys: [[approvals], [cockpit], [agent-runtime-progress]]
+  approval.card.notified:
+    address: ev.rocket.{env}.approval.card.notified
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "#<number>"
+      publisher: gate-db
+      domain: owner
+      ref: "/api/v1/approvals/{id}"
+      reconcile: "approval store is the truth"
+      on_unread: stale
+      retention: 30d
+      consumers: [console]
+      exports: []
+      replaces: []
+      console_keys: [[approvals]]
   owner.question.asked:
     address: ev.rocket.{env}.owner.question.asked
     x-bifrost:

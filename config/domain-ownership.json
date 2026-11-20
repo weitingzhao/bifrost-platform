@@ -315,6 +315,7 @@
         "events": [
           {"type": "approval.card.created", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.approval.card.created", "consumers": ["console", "card-created-notice"]},
           {"type": "approval.card.executed", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.approval.card.executed", "consumers": ["console", "card-conclusions"]},
+          {"type": "approval.card.notified", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.approval.card.notified", "consumers": ["console"]},
           {"type": "owner.question.answered", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.owner.question.answered", "consumers": ["console", "question-conclusions"]},
           {"type": "owner.question.asked", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.owner.question.asked", "consumers": ["console"]}
         ],

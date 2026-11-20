@@ -94,7 +94,11 @@ func (s *Server) announceCards(ts []approvals.Transition) {
 	}
 	list := make([]buscards.Card, 0, len(ts))
 	for _, t := range ts {
-		list = append(list, buscards.Card{Type: buscards.TypeOf(t.AuditAction), ID: t.ID, Action: t.Action, Status: t.Status, Number: t.Number})
+		c := buscards.Card{Type: buscards.TypeOf(t.AuditAction), ID: t.ID, Action: t.Action, Status: t.Status, Number: t.Number}
+		if c.Type == buscards.TypeNotified {
+			c.Kind, c.Channel = buscards.ParseNotice(t.Detail)
+		}
+		list = append(list, c)
 	}
 	buscards.AnnounceInBackground(db, list)
 }

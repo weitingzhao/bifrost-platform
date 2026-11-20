@@ -768,6 +768,9 @@ func (s *Service) record(r *http.Request, evs []event) {
 type Transition struct {
 	AuditAction, ID, Action, Status string
 	Number                          int
+	// Detail is set for approval.notify only: the audit detail naming the push
+	// (kind=… channel=…), which the bus keeps (bus/cards).
+	Detail string
 }
 
 func (s *Service) announce(evs []event) {
@@ -780,7 +783,11 @@ func (s *Service) announce(evs []event) {
 		if !ok {
 			continue
 		}
-		out = append(out, Transition{AuditAction: e.action, ID: rec.ID, Action: rec.Action, Status: e.status, Number: rec.Number})
+		t := Transition{AuditAction: e.action, ID: rec.ID, Action: rec.Action, Status: e.status, Number: rec.Number}
+		if e.action == "approval.notify" {
+			t.Detail = e.detail
+		}
+		out = append(out, t)
 	}
 	if len(out) > 0 {
 		s.Announce(out)
