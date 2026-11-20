@@ -1449,13 +1449,6 @@
       "status": "assigned",
       "basis": "2026-11-16 Owner-approved domain split. Read-only tenant/deployment target-to-node and IB edge-display mapping physically extracted from topology, with pre-extraction JSON parity evidence. No probes or execution."
     },
-    "api/internal/telemetry/probecollect": {
-      "domains": [
-        "foundation"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 extracted generic concurrent observation collection from server metrics; independent deadlines, input order and panic containment preserved. Server retains plugin selection and all role/auth/release policy wiring."
-    },
     "api/internal/tenant/husbandry/checklistview": {
       "domains": [
         "tenant"
@@ -1822,7 +1815,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-18, moved out of api/internal/server unchanged (metrics.go; decoupling item 5): the plugins' reachability and gauges on /metrics. Imports foundation only (probe, telemetry, telemetry/probecollect)."
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (metrics.go; decoupling item 5): the plugins' reachability and gauges on /metrics. Imports foundation only (probe, telemetry, telemetry/probecollect). 2026-11-20: telemetry/probecollect folded in (it had no other user; collect.go, Collect unexported as collectProbes), so the imports are now probe, telemetry and safego."
     },
     "api/internal/agentrt/runtimedb": {
       "domains": [

@@ -20,7 +20,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
-	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry/probecollect"
 )
 
 // ProbeTimeout is per plugin, not for the scrape as a whole. A single shared
@@ -32,7 +31,7 @@ const ProbeTimeout = 8 * time.Second
 
 // Write probes the plugins and writes their reachability and gauges.
 func Write(ctx context.Context, b *strings.Builder, probes []func(context.Context) probe.PluginHealth) {
-	healths := probecollect.Collect(ctx, ProbeTimeout, "server.metrics.pluginProbe", probes)
+	healths := collectProbes(ctx, ProbeTimeout, "server.metrics.pluginProbe", probes)
 
 	observations := make([]telemetry.ReachabilityObservation, 0, len(healths))
 	for _, h := range healths {

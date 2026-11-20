@@ -1,5 +1,8 @@
-// Package probecollect gathers independent read-only observations without knowing their domains.
-package probecollect
+package pluginmetrics
+
+// collectProbes gathers independent read-only observations without knowing
+// their domains (folded in from telemetry/probecollect 2026-11-20, unchanged
+// but for its unexported name).
 
 import (
 	"context"
@@ -8,10 +11,10 @@ import (
 	"time"
 )
 
-// Collect runs each observation with its own timeout and preserves input order.
+// collectProbes runs each observation with its own timeout and preserves input order.
 // A contained panic leaves the observation's zero value, as the original scrape did.
 // Cancellation remains cooperative: observation functions must respect their context.
-func Collect[T any](parent context.Context, timeout time.Duration, recoveryName string, probes []func(context.Context) T) []T {
+func collectProbes[T any](parent context.Context, timeout time.Duration, recoveryName string, probes []func(context.Context) T) []T {
 	healths := make([]T, len(probes))
 	var wg sync.WaitGroup
 	for i, fn := range probes {

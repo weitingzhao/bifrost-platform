@@ -1,4 +1,4 @@
-package probecollect
+package pluginmetrics
 
 import (
 	"context"
@@ -15,7 +15,7 @@ func TestConcurrentOrderAndIndependentCancellation(t *testing.T) {
 	parent, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
-		result <- Collect(parent, 8*time.Second, "test.collect", []func(context.Context) int{
+		result <- collectProbes(parent, 8*time.Second, "test.collect", []func(context.Context) int{
 			func(ctx context.Context) int { started <- ctx; <-ctx.Done(); return 1 },
 			func(ctx context.Context) int { started <- ctx; <-release; return 2 },
 		})
@@ -44,7 +44,7 @@ func TestConcurrentOrderAndIndependentCancellation(t *testing.T) {
 
 func TestPanicLeavesZeroAndOtherProbeCompletes(t *testing.T) {
 	before := safego.Contained()
-	got := Collect(context.Background(), time.Second, "test.collect", []func(context.Context) int{
+	got := collectProbes(context.Background(), time.Second, "test.collect", []func(context.Context) int{
 		func(context.Context) int { panic("single observation failed") },
 		func(context.Context) int { return 7 },
 	})
@@ -57,7 +57,7 @@ func TestPanicLeavesZeroAndOtherProbeCompletes(t *testing.T) {
 }
 
 func TestDeadlineIsDeliveredToObservation(t *testing.T) {
-	got := Collect(context.Background(), time.Millisecond, "test.collect", []func(context.Context) error{
+	got := collectProbes(context.Background(), time.Millisecond, "test.collect", []func(context.Context) error{
 		func(ctx context.Context) error { <-ctx.Done(); return ctx.Err() },
 	})
 	if got[0] != context.DeadlineExceeded {
