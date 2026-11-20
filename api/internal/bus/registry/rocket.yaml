@@ -464,6 +464,37 @@ channels:
       subject_from: workload
       change_from: [ready]
       console_keys: [[cluster, workloads]]
+  cluster.database.changed:
+    address: ev.rocket.{env}.cluster.database.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<namespace>/<name>"
+      publisher: gate-cluster
+      domain: compute
+      ref: "/api/v1/cluster/postgres"
+      reconcile: "gate-cluster relists every 30 min"
+      on_unread: stale
+      retention: 30d
+      # A CloudNativePG cluster lost or regained a ready instance, or its
+      # primary moved (a failover or switchover). Written by the watch row
+      # "postgres" (watches/rocket.yaml); no Go. Origin: 2026-11-20 the
+      # Owner asked that the database's state reach the bus like every
+      # module's; until now only a backup's age was read, on a poll.
+      consumers: [console]
+      exports: []
+      replaces: []
+      body:
+        - {name: database, kind: str, pattern: '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?/[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$'}
+        - {name: ready, kind: str, pattern: '^(ready|notready)$'}
+        - {name: primary, kind: str, pattern: '^([a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?)?$'}
+        - {name: subject, kind: str}
+        - {name: ref, kind: str}
+        - {name: change, kind: str}
+      subject_from: database
+      change_from: [ready, primary]
+      console_keys: [[cluster, postgres]]
   plugin.status.changed:
     address: ev.rocket.{env}.plugin.status.changed
     x-bifrost:

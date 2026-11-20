@@ -36,6 +36,10 @@
       "version": 1,
       "hash": "32da46ba12d63395"
     },
+    "cluster.database.changed": {
+      "version": 1,
+      "hash": "68e7dfa1475b4912"
+    },
     "cluster.node.changed": {
       "version": 1,
       "hash": "f0f0c1256da07945"
