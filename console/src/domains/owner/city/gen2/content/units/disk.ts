@@ -2,9 +2,8 @@ import type { UnitSpec } from '../../frame/units/process'
 import type { ArrayReading, DiskRoomReadings, DriveReading, VolumeReading } from '../../frame/units/diskRoom'
 
 /**
- * The disk unit (the third through the unit process, 2026-11-19). City metaphor, proposed: storage by how
- * far from the machine it is — a local SSD the line-side racks, a spinning disk a high-bay store, the NAS a
- * logistics park across the road; arrays laid out as they are built (RULES.md, 存放分层). Settled at Inside.
+ * The disk unit (the third through the unit process, 2026-11-19). City metaphor: the warehouse, a shelf per
+ * drive in its kind's form (flow rack SSD, horizontal carousel HDD), the Owner's word at Inside the same day.
  *
  * Details: what node exporter reports about a machine's disks, after a read of every family it has
  * (2026-11-19 22:36Z). Three scopes: each physical drive (its kind, traffic, how busy, errors), each volume
