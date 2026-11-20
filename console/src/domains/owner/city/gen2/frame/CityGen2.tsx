@@ -287,6 +287,7 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
       parent, parentPlaced: p?.placed ?? [], parentPlots: p?.plots ?? [], parentStreets: p?.streets ?? [],
       inside: path.at(-1) ?? null, selected: o.selected, from: o.from, arranging: o.arranging, tool, lens,
       links: linksAt(tree, path, content.links ?? []),
+      allLinks: content.links ?? [],
     }
   }
 

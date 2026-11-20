@@ -9,7 +9,7 @@ import { buildingWings, setback, spriteFor, spriteKey, spriteUrl, type Wing } fr
 import { deviceKey, deviceSprite, formOfPlace, levelsOf } from './devices'
 import { frameOf, type Frame } from './viewport'
 import { LANDMARKS } from './library/landmarkLooks'
-import { edgeSlots, PORTS, SLOTS, type Gate, type LevelLinks, type Line, type Slot } from './links'
+import { edgeSlots, linksAt, PORTS, SLOTS, type Gate, type LevelLinks, type Line, type Link, type Slot } from './links'
 
 /**
  * One scene draws one place (a page): its 16×16 ground and the things on it,
@@ -102,6 +102,8 @@ export type Shown = {
   layoutAt: (path: string[]) => Layout | null
   /** The connections at this level's grain (links.ts): lines between children, stations on the edge. */
   links?: LevelLinks
+  /** Every connection the content declares, for the ports a district shows on the town (its stubs). */
+  allLinks?: Link[]
 }
 
 export type Layout = { placed: Placed[]; plots: Plot[]; streets: Street[] }
@@ -310,6 +312,26 @@ export class PlaceScene extends Phaser.Scene {
     const big = { x: g.x - c.x / s, y: g.y - c.y / s, scale: 1 / s }
     this.mini?.setAlpha(0)
     this.tweens.add({ targets: this.mini, alpha: 1, duration: 260, delay: MS * 0.75 })
+    // The neighbours in the district's ports travel between where they stand in the town and their port
+    // (the Owner, 2026-11-20: you see Services come round to its port, not appear there). In the child's own
+    // frame, where a town point p lies at the start of the way in (or the end of the way out) is (p - small)/s.
+    const nbs = ((next.from === 'down' ? now : old).getData('nbs') ?? new Map()) as Map<string, { c: Phaser.GameObjects.Container; at: Phaser.Math.Vector2 }>
+    const P0 = projOf(pg)
+    const fromTown = (id: string) => {
+      const pl = parent.placed.find(p => p.id === id), plot = pl ? parent.plots.find(q => q.id === pl.plot) : undefined
+      if (!pl || !plot) return null
+      const r = pg.thing(pg.plot(plot), pl.w, pl.h), p = P0(r.x + r.w / 2, r.y + r.h / 2)
+      return { x: (p.x - small.x) / s, y: (p.y - small.y) / s }
+    }
+    for (const [id, nb] of nbs) {
+      const p = fromTown(id)
+      if (!p) continue
+      const off = { x: p.x - nb.at.x, y: p.y - nb.at.y }
+      if (next.from === 'down') {
+        nb.c.setPosition(off.x, off.y)
+        this.tweens.add({ targets: nb.c, x: 0, y: 0, duration: MS * 1.15, ease: 'Cubic.easeOut' })
+      } else this.tweens.add({ targets: nb.c, x: off.x, y: off.y, duration: MS, ease: 'Cubic.easeIn' })
+    }
     if (next.from === 'down') {
       // The parent dives in and fades; the child's ground grows out of the footprint, over it.
       this.children.bringToTop(now)
@@ -441,6 +463,8 @@ export class PlaceScene extends Phaser.Scene {
     this.awayGeo = s.parent ? geoOf(s.parentPlots) : null
     const m = this.level(s.place, s.path, s.placed, s.plots, s.streets, { at: 0, selected: s.selected, inside: null, interactive: true, arranging: s.arranging })
     this.main = m.c
+    // The neighbours standing in its ports, for the way in and out (change()).
+    m.c.setData('nbs', m.nbs)
     // The whole ground, ring road included, always fits (the Owner, 2026-11-19: no plot cut off at the
     // top or hidden under the bottom row); m.box (what stands on it) is no longer the frame.
     void m.box
@@ -880,15 +904,14 @@ export class PlaceScene extends Phaser.Scene {
           if (along2 > h.from - WAY / 2 && along2 < h.to + WAY / 2) for (let u = across1; u < h.at + half - 0.06; u += 0.1) g.fillPoints(quadOf(P, { x: Math.min(along2, along2 + dir * 0.22), y: u, w: 0.22, h: 0.055 }), true)
         }
       }
-      if (grade === 'highway') {
-        // A highway: a solid double line down the middle, in the crossings' yellow.
-        g.lineStyle(1.1, 0xf0c95e, 0.95)
-        for (const st of streets) for (const off of [-0.035, 0.035]) solid(st, off)
-      } else {
-        // A street: one dashed line down the middle.
-        g.lineStyle(1.3, this.tone.paint, 0.9)
-        for (const st of streets) dashes(st)
-      }
+      // A highway: a solid double line down the middle, in the crossings' yellow. A district's ring is the
+      // town's highway round its block, the same road seen closer (the Owner, 2026-11-20: going in, the roads
+      // must carry on), so it keeps the highway's marking; the streets inside have one dashed line.
+      const isHighway = (st: Street) => grade === 'highway' || (place.kind === 'district' && st.kind === 'ring')
+      g.lineStyle(1.1, 0xf0c95e, 0.95)
+      for (const st of streets) if (isHighway(st)) for (const off of [-0.035, 0.035]) solid(st, off)
+      g.lineStyle(1.3, this.tone.paint, 0.9)
+      for (const st of streets) if (!isHighway(st)) dashes(st)
     }
     // While arranging, every plot's edge in ink, so the cuts read clearly.
     if (o.arranging) for (const p of plots) {
@@ -902,8 +925,9 @@ export class PlaceScene extends Phaser.Scene {
     if (ROUTES_ON_STREETS && o.interactive && this.shown?.links && !o.arranging) for (const part of this.ways(this.shown.links, geo, P, plots, placed, W, H)) c.add(part)
     // A district's ground: a crossing on its edge for each district it talks to, on the side that district lies.
     const edgePts: Phaser.Math.Vector2[] = []
+    const nbs = new Map<string, { c: Phaser.GameObjects.Container; at: Phaser.Math.Vector2 }>()
     // A district's edge; the town has none (the Owner, 2026-11-20: it is the whole system, nothing is outside it).
-    if (place.kind === 'district' && o.interactive && this.shown?.links && !o.arranging) for (const part of this.borders(this.shown.links, place, P, W, H, edgePts, geo, streets)) c.add(part)
+    if (place.kind === 'district' && o.interactive && this.shown?.links && !o.arranging) for (const part of this.borders(this.shown.links, place, P, W, H, edgePts, geo, streets, nbs)) c.add(part)
     const byId = new Map(place.children.map(k => [k.id, k]))
     const plotById = new Map(plots.map(p => [p.id, p]))
     const rectOf = (p: Placed): Rect => { const home = plotById.get(p.plot); return home ? geo.thing(geo.plot(home), p.w, p.h) : { x: p.x, y: p.y, w: p.w, h: p.h } }
@@ -941,7 +965,7 @@ export class PlaceScene extends Phaser.Scene {
     pts.push(...edgePts)
     const xs = pts.map(q => q.x), ys = pts.map(q => q.y)
     const box = { x: Math.min(...xs) - 40, y: Math.min(...ys) - 16, w: Math.max(...xs) - Math.min(...xs) + 80, h: Math.max(...ys) - Math.min(...ys) + 28 }
-    return { c, box, ports: edgePts }
+    return { c, box, ports: edgePts, nbs }
   }
 
   /** One placed thing at its spot in the picture (r): its sprite, a ring on the ground when it is picked or the one you are inside, and its hit area. */
@@ -972,6 +996,7 @@ export class PlaceScene extends Phaser.Scene {
       }
     }
     let img: Phaser.GameObjects.Image | null = null
+    let stubG: Phaser.GameObjects.Graphics | null = null
     const inner = lay ? this.extentOf(lay) : null
     if (lay && inner && this.shown) {
       // Its own buildings, as they stand to one another, filling its footprint; between them the
@@ -982,6 +1007,10 @@ export class PlaceScene extends Phaser.Scene {
       g.fillStyle(tintOf(this.shown.tree, path, this.light, ter.lot)).fillPoints(quadOf(P, r), true)
       g.lineStyle(1.4, this.tone.ink).strokePoints(quadOf(P, r), true)
       parts.push(g)
+      // Seen from the town, its ports already show (the Owner, 2026-11-20: going in, they are there before
+      // and after): a stub of road on each front port, solid where a partner is, faint where open; a blue
+      // patch at the back left for Other, an orange one at the back right for Orphan, when there is any.
+      if (o.interactive && !o.bare && this.shown.allLinks && path.length === 1) { stubG = this.add.graphics(); this.stubs(stubG, k, r, P) }
       // Bare (a neighbour in a port, the Owner 2026-11-20): only what stands there, filling the footprint;
       // the town's margin of road and green belt round it is left out.
       const m = o.bare ? 0.06 : 0.35
@@ -1068,6 +1097,8 @@ export class PlaceScene extends Phaser.Scene {
       parts.push(gg)
     }
     if (k.id === o.inside && this.insideRing) parts.push(this.insideRing)
+    // The ports are the frame's, not the district's state: drawn after the ghosting, never faded with it.
+    if (stubG) parts.push(stubG)
     return parts
   }
 
@@ -1175,6 +1206,30 @@ export class PlaceScene extends Phaser.Scene {
     return out
   }
 
+  /** A district's ports on its block in the town: the same nine places as inside, in small. */
+  private stubs(g: Phaser.GameObjects.Graphics, k: Place, r: Rect, P: Proj) {
+    const s = this.shown!
+    const slots = edgeSlots(linksAt(s.tree, [k.id], s.allLinks ?? []).gates, k.partners, id => id)
+    const L = 0.45, Wd = 0.3
+    const stub = (x: number, y: number, dx: number, dy: number, on: boolean) => {
+      const ux = -dy, uy = dx
+      const q = [P(x + ux * Wd / 2, y + uy * Wd / 2), P(x + ux * Wd / 2 + dx * L, y + uy * Wd / 2 + dy * L), P(x - ux * Wd / 2 + dx * L, y - uy * Wd / 2 + dy * L), P(x - ux * Wd / 2, y - uy * Wd / 2)]
+      g.fillStyle(on ? this.tone.asphalt : this.tone.kerb, on ? 1 : 0.6).fillPoints(q, true)
+      g.lineStyle(1, this.tone.ink, on ? 0.8 : 0.3).strokePoints(q, true)
+    }
+    const patch = (x: number, y: number, col: number) => {
+      const q = [P(x - 0.22, y - 0.22), P(x + 0.22, y - 0.22), P(x + 0.22, y + 0.22), P(x - 0.22, y + 0.22)]
+      g.fillStyle(col, 1).fillPoints(q, true).lineStyle(1, this.tone.ink, 0.8).strokePoints(q, true)
+    }
+    for (let i = 0; i < PORTS; i++) {
+      const t = (i + 0.5) / PORTS
+      stub(r.x + r.w * t, r.y + r.h, 0, 1, !!slots.in.named[i])
+      stub(r.x + r.w, r.y + r.h * t, 1, 0, !!slots.out.named[i])
+    }
+    if (slots.in.other || slots.out.other) patch(r.x - 0.35, r.y + r.h * 0.5, 0x6f8fb3)
+    if (slots.orphan) patch(r.x + r.w * 0.5, r.y - 0.35, 0xf08a4b)
+  }
+
   /**
    * The edge of a district's small world (the Owner, 2026-11-20): two sides only, the way in along the
    * front-left edge and the way out along the front-right, each with PORTS named ports and an Other, and
@@ -1183,7 +1238,7 @@ export class PlaceScene extends Phaser.Scene {
    * its neighbour, a small block in its colour that a tap opens; Other is a heap on a dirt track, Orphan a
    * fenced building site; both grow with their share of everything that passes.
    */
-  private borders(lk: LevelLinks, place: Place, P: Proj, W: number, H: number, framed: Phaser.Math.Vector2[], geo: Geo, streets: Street[]) {
+  private borders(lk: LevelLinks, place: Place, P: Proj, W: number, H: number, framed: Phaser.Math.Vector2[], geo: Geo, streets: Street[], nbs: Map<string, { c: Phaser.GameObjects.Container; at: Phaser.Math.Vector2 }>) {
     const out: Phaser.GameObjects.GameObject[] = []
     // A partner's name: the place beside this one.
     const labelOf = (id: string) => this.shown?.tree.children.find(c => c.id === id)?.label ?? id
@@ -1278,17 +1333,21 @@ export class PlaceScene extends Phaser.Scene {
         const nb = this.shown?.tree.children.find(d => d.id === pass.id)
         const cg = { x: at0.x + n.x * NB_AT_, y: at0.y + n.y * NB_AT_ }
         const r: Rect = { x: cg.x - NB / 2, y: cg.y - NB / 2, w: NB, h: NB }
-        if (nb) for (const part of this.block(nb, { id: nb.id, plot: '', x: 0, y: 0, w: NB, h: NB } as unknown as Placed, r, P, '', { selected: null, inside: null, interactive: false, arranging: false, bare: true }, [nb.id])) out.push(part)
+        // Its parts in one container, so on the way in it can travel from where it stands in the town.
+        const nbc = this.add.container(0, 0)
+        out.push(nbc)
+        nbs.set(pass.id, { c: nbc, at: P(r.x + r.w / 2, r.y + r.h / 2) })
+        if (nb) for (const part of this.block(nb, { id: nb.id, plot: '', x: 0, y: 0, w: NB, h: NB } as unknown as Placed, r, P, '', { selected: null, inside: null, interactive: false, arranging: false, bare: true }, [nb.id])) nbc.add(part)
         const hg = this.add.graphics()
         const hit = new Phaser.Geom.Polygon([P(r.x, r.y, 34), P(r.x + r.w, r.y, 34), P(r.x + r.w, r.y, 0), P(r.x + r.w, r.y + r.h, 0), P(r.x, r.y + r.h, 0), P(r.x, r.y + r.h, 34)])
         hg.setInteractive(hit, Phaser.Geom.Polygon.Contains)
         hg.input!.cursor = 'pointer'
         hg.on('pointerup', (p: Phaser.Input.Pointer) => { if (nb && this.moved(p) <= DRAG) this.events_.go?.([pass.id]) })
-        out.push(hg)
+        nbc.add(hg)
         // Ports stand a street apart, so neighbouring signs take turns below and above their block.
         const low = P(r.x + r.w, r.y + r.h), high = P(r.x, r.y, 46)
         const below = sl.i % 2 === 0 ? low : new Phaser.Math.Vector2(high.x, high.y - 26)
-        out.push(this.plate(below.x, below.y + 6, `${pass.label} · ${ways}`, (nb ? hueOf(this.shown!.tree, [pass.id]) : '#9aa0b0')))
+        nbc.add(this.plate(below.x, below.y + 6, `${pass.label} · ${ways}`, (nb ? hueOf(this.shown!.tree, [pass.id]) : '#9aa0b0')))
         framed.push(new Phaser.Math.Vector2(below.x, below.y + 30))
         continue
       }
