@@ -35,23 +35,58 @@ const shapeOf = ([w, d]: [number, number]) => (w <= d ? `${w}x${d}` : `${d}x${w}
 
 export type UnitRoom = { shape: Shape; picture: NonNullable<Place['picture']> }
 
+/** The parts a ruler can count, with how its scale is said. */
+const PARTS = {
+  cpu: { id: 'core.machines', each: 1, unit: 'cores', part: 'machine' },
+  memory: { id: 'mem.sections', each: 2 ** 30, unit: 'GiB', part: 'freezer' },
+  disk: { id: 'disk.bays', each: 1e9, unit: 'GB', part: 'pallet' },
+} as const
+export type CityRulers = { cpu: number; memory: number; disk: number }
+
+/** The smallest ruler each room of this computer needs to hold its parts in its largest size. */
+function neededRulers(reads: UnitReads, host: string): CityRulers {
+  const cpu = cpuRoomReadings(reads.cpu as never, host)
+  const mem = memoryRoomReadings(reads.memory as never, host)
+  const disk = diskRoomReadings(reads.disk as never, host)
+  return {
+    cpu: cpu.cores.length ? rulerToFit(PARTS.cpu.id, () => cpuRoomFits(machinesOf(cpu))) : rulerOf(PARTS.cpu.id),
+    memory: mem.total ? rulerToFit(PARTS.memory.id, () => memoryRoomFits(mem)) : rulerOf(PARTS.memory.id),
+    disk: disk.drives.length || disk.volumes.length ? rulerToFit(PARTS.disk.id, () => diskRoomFits(disk)) : rulerOf(PARTS.disk.id),
+  }
+}
+
+/**
+ * One measurement for the whole city (the Owner, 2026-11-20: the measurement is the same everywhere, like the
+ * real world; if one machine stands for more cores, it does in every room): for each part, the coarsest ruler
+ * any computer needs, so every room counts alike and two machines' rooms compare at a glance.
+ */
+export function cityRulers(hosts: { reads: UnitReads; host: string }[]): CityRulers {
+  const out: CityRulers = { cpu: rulerOf(PARTS.cpu.id), memory: rulerOf(PARTS.memory.id), disk: rulerOf(PARTS.disk.id) }
+  for (const h of hosts) {
+    const n = neededRulers(h.reads, h.host)
+    out.cpu = Math.max(out.cpu, n.cpu); out.memory = Math.max(out.memory, n.memory); out.disk = Math.max(out.disk, n.disk)
+  }
+  return out
+}
+
 /** A computer's three rooms, drawn by their modules from its own readings; null where its unit read nothing. */
-export function unitRoomsOf(reads: UnitReads, host: string): { cpu: UnitRoom | null; memory: UnitRoom | null; disk: UnitRoom | null } {
+export function unitRoomsOf(reads: UnitReads, host: string, common?: CityRulers): { cpu: UnitRoom | null; memory: UnitRoom | null; disk: UnitRoom | null } {
   const cpu = cpuRoomReadings(reads.cpu as never, host)
   const mem = memoryRoomReadings(reads.memory as never, host)
   const disk = diskRoomReadings(reads.disk as never, host)
   const room = (s: [number, number], key: string, make: () => ReturnType<typeof cpuRoom>, scale?: string): UnitRoom => ({ shape: shapeOf(s), picture: { key: `${host}:${key}`, w: s[0], d: s[1], make, ...(scale ? { scale } : {}) } })
-  // The room grows to its largest first; if its parts still do not fit, one part stands for more (the
-  // Owner, 2026-11-20: detail needs room, or it blurs), and the room's name says so.
-  const fitted = (id: string, fits: () => boolean, each: number, unit: string, part: string, build: (scale?: string) => UnitRoom): UnitRoom => {
-    const r = rulerToFit(id, fits)
+  // The room grows to its largest first; where a room somewhere in the city still cannot hold its parts,
+  // one part stands for more in every room alike (cityRulers), and each room's name says so.
+  const fitted = (kind: keyof typeof PARTS, build: (scale?: string) => UnitRoom): UnitRoom => {
+    const { id, each, unit, part } = PARTS[kind]
+    const r = common?.[kind] ?? rulerOf(id)
     if (r === rulerOf(id)) return build()
     const scale = `1 ${part} = ${fmt(r / each)} ${unit}`
     return withRuler(id, r, () => { const u = build(scale); const make = u.picture.make; return { ...u, picture: { ...u.picture, key: `${u.picture.key}:r${r}`, make: () => withRuler(id, r, make) } } })
   }
   return {
-    cpu: cpu.cores.length ? fitted('core.machines', () => cpuRoomFits(machinesOf(cpu)), 1, 'cores', 'machine', sc => room(cpuRoomShape(machinesOf(cpu)), cpuRoomKey(cpu), () => cpuRoom(cpu), sc)) : null,
-    memory: mem.total ? fitted('mem.sections', () => memoryRoomFits(mem), 2 ** 30, 'GiB', 'freezer', sc => room(memoryRoomShape(mem), memoryRoomKey(mem), () => memoryRoom(mem), sc)) : null,
-    disk: disk.drives.length || disk.volumes.length ? fitted('disk.bays', () => diskRoomFits(disk), 1e9, 'GB', 'pallet', sc => room(diskRoomShape(disk), diskRoomKey(disk), () => diskRoom(disk), sc)) : null,
+    cpu: cpu.cores.length ? fitted('cpu', sc => room(cpuRoomShape(machinesOf(cpu)), cpuRoomKey(cpu), () => cpuRoom(cpu), sc)) : null,
+    memory: mem.total ? fitted('memory', sc => room(memoryRoomShape(mem), memoryRoomKey(mem), () => memoryRoom(mem), sc)) : null,
+    disk: disk.drives.length || disk.volumes.length ? fitted('disk', sc => room(diskRoomShape(disk), diskRoomKey(disk), () => diskRoom(disk), sc)) : null,
   }
 }

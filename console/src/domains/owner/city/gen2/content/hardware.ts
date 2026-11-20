@@ -1,4 +1,4 @@
-import { unitRoomsOf, type UnitReads } from './unitRooms'
+import { cityRulers, unitRoomsOf, type UnitReads } from './unitRooms'
 import { encodePlan, fitsIn, plotsOf, shapeArea, shapeByCount, splitPlot, type Plan, type Shape } from '../frame/grid'
 import type { Look, Meter, Place, State } from '../frame/places'
 
@@ -127,6 +127,9 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', uni
   const P = r.prom
   const nodeOfIp = new Map((P.nodeIp ?? []).map(p => [p.labels?.internal_ip ?? '', p.labels?.node ?? '']))
   const zones = new Map<string, Zone>()
+  // One measurement for every computer's rooms (unitRooms.ts cityRulers).
+  const hostOf = (n: TopoNode) => (n.host && n.host !== '127.0.0.1' ? n.host : null)
+  const common = units ? cityRulers((r.topology ?? []).flatMap(n => { const h = hostOf(n); return h ? [{ reads: units, host: h }] : [] })) : undefined
   const devices = (r.topology ?? []).map(n => {
     const ip = n.host && n.host !== '127.0.0.1' ? n.host : null
     const node = ip ? nodeOfIp.get(ip) ?? null : null
@@ -176,7 +179,7 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', uni
       // The units' rooms in use (content/unitRooms.ts): each drawn by its module from the machine's own
       // readings. The disk is one warehouse holding every volume (its volumes are inside it).
       if (units && ip) {
-        const u = unitRoomsOf(units, ip)
+        const u = unitRoomsOf(units, ip, common)
         const put = (r: Place | undefined, x: ReturnType<typeof unitRoomsOf>['cpu']) => { if (r && x) { r.shape = x.shape; r.picture = x.picture } }
         put(rooms.find(x => x.id === 'cpu'), u.cpu)
         put(rooms.find(x => x.id === 'memory'), u.memory)
