@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser'
-import { defaultPlan, fitsIn, plotsOf, type Placed, type Plot, type Street } from './grid'
+import { defaultPlan, fitsIn, GRID, plotsOf, type Placed, type Plot, type Street } from './grid'
 import { BUFFER, geoOf, GUTTER, WAY, type Geo, type Rect } from './geo'
 import { functionAt, isWired, type Place } from './places'
 import { hueOf, terrainOf, tintOf } from './theme'
@@ -1045,17 +1045,41 @@ export class PlaceScene extends Phaser.Scene {
       g.fillStyle(tintOf(this.shown.tree, path, this.light, ter.lot)).fillPoints(quadOf(P, r), true)
       g.lineStyle(1.4, this.tone.ink).strokePoints(quadOf(P, r), true)
       parts.push(g)
-      // Seen from the town, its ports already show (the Owner, 2026-11-20: going in, they are there before
-      // and after): a stub of road on each front port, solid where a partner is, faint where open; a blue
-      // patch at the back left for Other, an orange one at the back right for Orphan, when there is any.
-      if (o.interactive && !o.bare && this.shown.allLinks && path.length === 1) { stubG = this.add.graphics(); this.stubs(stubG, k, at, r, P) }
-      // Bare (a neighbour in a port, the Owner 2026-11-20): only what stands there, filling the footprint;
-      // the town's margin of road and green belt round it is left out.
-      const m = o.bare ? 0.06 : 0.35
-      const kk = Math.min((r.w - 2 * m) / inner.box.w, (r.h - 2 * m) / inner.box.h)
-      const ox = r.x + (r.w - inner.box.w * kk) / 2, oy = r.y + (r.h - inner.box.h * kk) / 2
+      // From the town a district is a city block seen from above (the Owner, 2026-11-20: the roads must look
+      // like roads): its own sheet in small, its streets where they run inside, its buildings where they stand.
+      // A bare one (a neighbour in a port) is only what stands there, filling its footprint.
+      const sheet = !o.bare
+      const lg = geoOf(lay.plots)
+      const m = o.bare ? 0.06 : 0
+      const kk = sheet ? Math.min(r.w / lg.w, r.h / lg.h) : Math.min((r.w - 2 * m) / inner.box.w, (r.h - 2 * m) / inner.box.h)
+      const ox = sheet ? r.x + (r.w - lg.w * kk) / 2 : r.x + (r.w - inner.box.w * kk) / 2
+      const oy = sheet ? r.y + (r.h - lg.h * kk) / 2 : r.y + (r.h - inner.box.h * kk) / 2
+      const bx = sheet ? 0 : inner.box.x, by = sheet ? 0 : inner.box.y
+      if (sheet) {
+        // Its streets, the same pavement as the town's, at its scale: kerbs, asphalt, a centre line.
+        const at_ = (x: number, y: number) => ({ x: ox + x * kk, y: oy + y * kk })
+        const strip = (st: Street, half: number) => {
+          const a = at_(lg.x(st.x0), lg.y(st.y0)), b = at_(lg.x(st.x1), lg.y(st.y1)), e = half
+          return st.x0 === st.x1
+            ? quadOf(P, { x: a.x - e, y: Math.min(a.y, b.y) - e, w: 2 * e, h: Math.abs(b.y - a.y) + 2 * e })
+            : quadOf(P, { x: Math.min(a.x, b.x) - e, y: a.y - e, w: Math.abs(b.x - a.x) + 2 * e, h: 2 * e })
+        }
+        g.fillStyle(this.tone.kerb, 1)
+        for (const st of lay.streets) g.fillPoints(strip(st, (WAY / 2 + KERB) * kk), true)
+        g.fillStyle(this.tone.asphalt, 1)
+        for (const st of lay.streets) g.fillPoints(strip(st, (WAY / 2 - WALK) * kk), true)
+        g.lineStyle(0.8, this.tone.paint, 0.8)
+        for (const st of lay.streets) { const a = at_(lg.x(st.x0), lg.y(st.y0)), b = at_(lg.x(st.x1), lg.y(st.y1)), p0 = P(a.x, a.y), p1 = P(b.x, b.y); g.lineBetween(p0.x, p0.y, p1.x, p1.y) }
+        // Seen from the town, its ports already show, where they are inside: each used port is its own street
+        // carried out across the green belt to the highway, a crossing at the mouth (portAt). Other and Orphan
+        // are small on the block's back corners.
+        if (o.interactive && this.shown.allLinks && path.length === 1) {
+          stubG = this.add.graphics()
+          this.exits(stubG, k, at, r, P, (fx, fy) => at_(lg.x(fx * GRID), lg.y(fy * GRID)), WAY * kk)
+        }
+      }
       const looks = new Map(this.looks(k, lay.placed, path).map(l => [l.id, l.key]))
-      const placedAt = inner.things.map(t => ({ ...t, q: { x: ox + (t.r.x - inner.box.x) * kk, y: oy + (t.r.y - inner.box.y) * kk, w: t.r.w * kk, h: t.r.h * kk } }))
+      const placedAt = inner.things.map(t => ({ ...t, q: { x: ox + (t.r.x - bx) * kk, y: oy + (t.r.y - by) * kk, w: t.r.w * kk, h: t.r.h * kk } }))
         .sort((a, b) => (a.q.x + a.q.y) - (b.q.x + b.q.y))
       for (const t of placedAt) {
         const lot = this.add.graphics()
@@ -1219,40 +1243,42 @@ export class PlaceScene extends Phaser.Scene {
   }
 
   /**
-   * A district's ports on its block in the town (the Owner, 2026-11-20: not patches stuck on; a proper way
-   * in, as a town would build it). Each declared partner's port is a driveway: a short paved road from the
-   * block's edge across its green belt to the highway, the same pavement and kerb lines as the streets, its
-   * mouth flared where it meets the highway and a stop line across it. Empty ports are not drawn here (they
-   * show inside). Other and Orphan are on the block itself, at its back corners, in small: goods under a
-   * tarpaulin, a fenced site with a crane.
+   * A district's ports on its block in the town (the Owner, 2026-11-20: like a real city, not stuck-on
+   * ramps): a used port is the district's own street at that port (links.ts portAt) carried straight out of
+   * its block, across the green belt, into the highway, at the street's width, its kerbs flared where it
+   * meets the highway, a zebra across its mouth and a stop line. An open port is a street that ends at the
+   * block. Other is a small pile under tarpaulins on the back-left corner, Orphan a small site on the back-right.
    */
-  private stubs(g: Phaser.GameObjects.Graphics, k: Place, at: Placed, r: Rect, P: Proj) {
+  private exits(g: Phaser.GameObjects.Graphics, k: Place, at: Placed, r: Rect, P: Proj, sheetAt: (fx: number, fy: number) => { x: number; y: number }, width: number) {
     const s = this.shown!
     const PORTS = portsFor(k.shape)
     const slots = edgeSlots(linksAt(s.tree, [k.id], s.allLinks ?? []).gates, k.partners, id => id, PORTS)
     const plot = s.plots.find(q => q.id === at.plot)
     const ground = plot ? geoOf(s.plots).plot(plot) : { x: r.x - 0.5, y: r.y - 0.5, w: r.w + 1, h: r.h + 1 }
-    const HALF = 0.2, FLARE = 0.16
-    // A driveway along direction (dx, dy) from (x, y) on the block's edge to the highway's kerb.
-    const drive = (x: number, y: number, dx: number, dy: number, used: boolean) => {
-      const a = used ? 1 : 0.35
+    const HALF = Math.max(0.16, width / 2), FLARE = 0.18
+    // A street from a point on the block's ring (x, y) out along (dx, dy) to the highway's near kerb.
+    const street = (x: number, y: number, dx: number, dy: number) => {
       const len = dx ? ground.x + ground.w + BUFFER - x : ground.y + ground.h + BUFFER - y
       const ux = -dy, uy = dx
-      const at_ = (a: number, b: number) => P(x + dx * a + ux * b, y + dy * a + uy * b)
-      const kerb = [at_(0, -HALF - 0.06), at_(len - FLARE, -HALF - 0.06), at_(len, -HALF - 0.06 - FLARE), at_(len, HALF + 0.06 + FLARE), at_(len - FLARE, HALF + 0.06), at_(0, HALF + 0.06)]
-      const road = [at_(0, -HALF + 0.05), at_(len - FLARE, -HALF + 0.05), at_(len, -HALF + 0.05 - FLARE), at_(len, HALF - 0.05 + FLARE), at_(len - FLARE, HALF - 0.05), at_(0, HALF - 0.05)]
-      g.fillStyle(this.tone.kerb, a).fillPoints(kerb, true)
-      g.fillStyle(this.tone.asphalt, a).fillPoints(road, true)
-      g.lineStyle(1, this.tone.curb, a)
-      for (const side of [-1, 1]) { const p0 = at_(0, side * (HALF - 0.05)), p1 = at_(len - FLARE, side * (HALF - 0.05)), p2 = at_(len, side * (HALF - 0.05 + FLARE)); g.lineBetween(p0.x, p0.y, p1.x, p1.y).lineBetween(p1.x, p1.y, p2.x, p2.y) }
-      const s0 = at_(len - FLARE - 0.04, -HALF + 0.08), s1 = at_(len - FLARE - 0.04, HALF - 0.08)
-      g.lineStyle(1.6, this.tone.paint, a).lineBetween(s0.x, s0.y, s1.x, s1.y)
+      const pt = (a: number, b: number) => P(x + dx * a + ux * b, y + dy * a + uy * b)
+      const outline = (h: number, f: number) => [pt(0, -h), pt(len - FLARE, -h), pt(len, -h - f), pt(len, h + f), pt(len - FLARE, h), pt(0, h)]
+      g.fillStyle(this.tone.kerb, 1).fillPoints(outline(HALF + 0.06, FLARE), true)
+      g.fillStyle(this.tone.asphalt, 1).fillPoints(outline(HALF - 0.04, FLARE), true)
+      g.lineStyle(1, this.tone.curb, 1)
+      for (const side of [-1, 1]) { const p0 = pt(0, side * (HALF - 0.04)), p1 = pt(len - FLARE, side * (HALF - 0.04)), p2 = pt(len, side * (HALF - 0.04 + FLARE)); g.lineBetween(p0.x, p0.y, p1.x, p1.y).lineBetween(p1.x, p1.y, p2.x, p2.y) }
+      // The mouth: a zebra across the street, a stop line behind it.
+      g.fillStyle(this.tone.paint, 1)
+      for (let v = -HALF + 0.06; v < HALF - 0.05; v += 0.09) g.fillPoints([pt(len - 0.3, v), pt(len - 0.12, v), pt(len - 0.12, v + 0.045), pt(len - 0.3, v + 0.045)], true)
+      const s0 = pt(len - 0.38, -HALF + 0.05), s1 = pt(len - 0.38, HALF - 0.05)
+      g.lineStyle(1.4, this.tone.paint, 1).lineBetween(s0.x, s0.y, s1.x, s1.y)
+      // The centre line carried on from inside.
+      const c0 = pt(0, 0), c1 = pt(len - 0.42, 0)
+      g.lineStyle(0.8, this.tone.paint, 0.8).lineBetween(c0.x, c0.y, c1.x, c1.y)
     }
-    // Every port, where it stands inside too (links.ts portAt): a partner's solid, an open one faint.
     for (let i = 0; i < PORTS; i++) {
-      const t = portAt(i, PORTS)
-      drive(r.x + r.w * t, r.y + r.h, 0, 1, !!slots.in.named[i])
-      drive(r.x + r.w, r.y + r.h * t, 1, 0, !!slots.out.named[i])
+      const f = portAt(i, PORTS)
+      if (slots.in.named[i]) { const p = sheetAt(f, 1); street(p.x, p.y, 0, 1) }
+      if (slots.out.named[i]) { const p = sheetAt(1, f); street(p.x, p.y, 1, 0) }
     }
     // A small box on the block: bottom at z 0, top at h.
     const box = (x: number, y: number, w: number, h: number, col: number) => {
