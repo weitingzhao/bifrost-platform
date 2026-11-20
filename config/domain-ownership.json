@@ -1462,14 +1462,7 @@
         "tenant"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 Owner-confirmed split: Complete Market/Flex/Research read-only husbandry interpretation; original thresholds, paths, failure explanations and ordering preserved."
-    },
-    "api/internal/proxyjson": {
-      "domains": [
-        "foundation"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 Owner-confirmed split: Generic GET proxy transport, bounded response reading and JSON decoding; caller owns status-error representation and proxy policy."
+      "basis": "2026-11-16 Owner-confirmed split: Complete Market/Flex/Research read-only husbandry interpretation; original thresholds, paths, failure explanations and ordering preserved. 2026-11-20: proxyjson (foundation) moved here (its only user): the bounded GET-and-decode through the caller's proxy is proxy_get.go (proxyGet), unchanged; the caller still owns the status-error representation and proxy policy."
     },
     "api/internal/resourceview": {
       "domains": [

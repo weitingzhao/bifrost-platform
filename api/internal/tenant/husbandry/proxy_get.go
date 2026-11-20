@@ -1,5 +1,7 @@
-// Package proxyjson supplies bounded JSON reads through an existing HTTP proxy.
-package proxyjson
+// Bounded JSON reads through an existing HTTP proxy (was package proxyjson,
+// moved here 2026-11-20: husbandry was its only user).
+
+package datahusbandry
 
 import (
 	"context"
@@ -8,8 +10,8 @@ import (
 	"net/http"
 )
 
-// Get retains the caller's status-error representation and does not own proxy policy.
-func Get(ctx context.Context, proxy func(*http.Request, string) (*http.Response, error), path string, dest any, statusError func(string) error) error {
+// proxyGet retains the caller's status-error representation and does not own proxy policy.
+func proxyGet(ctx context.Context, proxy func(*http.Request, string) (*http.Response, error), path string, dest any, statusError func(string) error) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://platform.local"+path, nil)
 	if err != nil {
 		return err
