@@ -96,18 +96,6 @@ modules:
       # 2026-11-17: its tests check each channel's and ledger type's domain against the
       # ownership table, and the register against the latest closed vocabulary migration.
       api/internal/bus/registry: ["api/internal/bus/registry", "config/domain-ownership.json", "api/internal/agentrt/migrations"]
-      # 2026-11-19: the fuzz reads request fields from the sources of planapi
-      # and coordapi too, where the plan's and the coordination's
-      # handlers went.
-      api/internal/agentrt/agentrtapi:
-        - "api/internal/agentrt/agentrtapi"
-        - "api/internal/agentrt/coordapi"
-        - "api/internal/agentrt/planapi"
-        - "api/internal/agentrt/planimport/testdata"
-        - "api/internal/agentrt/planview/testdata"
-        - "api/internal/agentrt/planstore"
-        - "api/internal/agentrt/store"
-        - "console/src/api/agentRuntime.ts"
       # Domain 4: delivery-stage read projection; no release authority.
       api/internal/agentrt/deliveryreadings: ["api/internal/agentrt/deliveryreadings"]
       # 2026-11-17: TestLoopTypesAreRegistered reads the event register.
@@ -231,7 +219,9 @@ modules:
       api/internal/selfhealth: ["api/internal/selfhealth", "config/clusters.yaml"]
       # Read-only Owner statistics share the exact Console contract, not the server tree.
       api/internal/approvalreadings: ["api/internal/approvalreadings", "api/internal/server/testdata/contract/readings"]
-      api/internal/server: ["api", "config/agent-tasks.yaml", "config/domain-ownership.json"]
+      # 2026-11-20: agentrt/agentrtapi folded in; its fuzz reads the console's
+      # agentRuntime.ts (the rest it read is under api).
+      api/internal/server: ["api", "config/agent-tasks.yaml", "config/domain-ownership.json", "console/src/api/agentRuntime.ts"]
       api/internal/statefile: ["api/internal/statefile"]
       api/internal/storedurability: ["api"]
       api/internal/testscope: ["api"]

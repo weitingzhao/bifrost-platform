@@ -937,18 +937,7 @@
         "coordination"
       ],
       "status": "mixed",
-      "basis": "2026-11-16 Complete file/reader audit: ordinary observations and scope-shadow report projection are in owning domains. Retain HTTP/lifecycle wiring, original identity/evidence/integrity/refusal and release decisions, plus communication-lane Bus wiring. Source dependencies remain explicit; shared protected scope is not claimed as isolated."
-    },
-    "api/internal/agentrt/agentrtapi": {
-      "domains": [
-        "plan",
-        "lineage",
-        "verification",
-        "delivery",
-        "coordination"
-      ],
-      "status": "mixed",
-      "basis": "2026-11-16 Complete file/reader audit: retained shared HTTP adapters and domain service calls; identity, exam visibility, strict parsing, signed-rule and stop-control boundaries remain unchanged. Shared scope is explicit, not an unreviewed implementation backlog. 2026-11-19 (OWNER_LAW #28): the plan's handlers went to agentrt/planapi and the coordination's (messages, seats, controls) to agentrt/coordapi, unchanged; Mount keeps every route and its ability, and lends them identity, the strict body readers, the answers and the error mapping (host.go). Owner left the list: its one route here, the Owner's sign-off of a step, is the plan's (planstore.SignOffStep) and went with it. What stays, by domain: plan (the plan import route, which reads a plan or a recorder log, and the plan errors in fail); lineage (external work, a collector's identity and record-level reads); verification (the rule routes, signed rules); delivery (GET /delivery, bound to the rule store, the landing waits and the release gate's cap); coordination (no handler: Mount wires its routes and its tests that go through Mount stay here, a move would make them reach across). Shared: whoami, the artifacts and event reads (exam visibility), writer and actorOf, decode, writeJSON, writeError, fail. 2026-11-19 later (OWNER_LAW #28): what the line above left here by domain went too, unchanged: the plan import to agentrt/planapi (plan), the rule routes to agentrt/rulesapi (verification), GET /delivery to agentrt/deliveryapi (delivery), and the artifacts and event reads to agentrt/recordsapi (foundation; read as foundation's, not lineage's: they serve the artifact store and the ledger). No handler of a domain is left: Mount keeps every route and its ability; whoami, writer and actorOf (identity), decode and decodeView, writeJSON, writeError and fail stay as the shared plumbing host.go lends; what else stays is binding one domain's port to another's code: the release gate's signature check for rulesapi (releasepolicy.VerifyAnchored), the boundaries view's source over the rule store, rule registry and landing waits for deliveryapi (boundarysource.go, BoundaryRuleFrom), the lineage's recorder log for planapi (recorderLogs) and its description check and record ownership error for recordsapi (host.go). Still mixed by its imports; its final classification is the Owner's."
+      "basis": "2026-11-16 Complete file/reader audit: ordinary observations and scope-shadow report projection are in owning domains. Retain HTTP/lifecycle wiring, original identity/evidence/integrity/refusal and release decisions, plus communication-lane Bus wiring. Source dependencies remain explicit; shared protected scope is not claimed as isolated. 2026-11-20: agentrt/agentrtapi folded in (its only user was server); mixed 5 -> 4."
     },
     "api/internal/agentrt/controller": {
       "domains": [

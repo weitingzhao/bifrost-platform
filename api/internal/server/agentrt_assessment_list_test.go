@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 )
@@ -37,7 +36,7 @@ func TestAssessmentListsReturnWithinBudgetWhenDatabaseDoesNotRespond(t *testing.
 		for _, count := range []int{8, 32} {
 			t.Run(fmt.Sprintf("%s/%d", kind, count), func(t *testing.T) {
 				db := &unresponsiveAssessmentDB{}
-				s := &Server{agentRuntime: &agentRuntime{api: &agentrtapi.API{DB: db}}}
+				s := &Server{agentRuntime: &agentRuntime{api: &agentrtAPI{DB: db}}}
 				key := "approvals"
 				if kind == assessmentreadings.AssessCard {
 					key = "questions"

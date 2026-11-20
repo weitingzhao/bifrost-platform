@@ -15,7 +15,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/answerack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
@@ -33,7 +32,7 @@ import (
 
 // agentRuntime is the agent runtime as this process runs it.
 type agentRuntime struct {
-	api  *agentrtapi.API
+	api  *agentrtAPI
 	stop func()
 	// env is AGENTRT_ENV: whose runtime this platform runs.
 	env string
@@ -65,7 +64,7 @@ type agentRuntime struct {
 // the rule atoms on it unknown, so nothing is judged done on facts it cannot
 // see.
 func (s *Server) wireAgentRuntime(role config.Role) {
-	rt := &agentRuntime{api: &agentrtapi.API{Logf: func(format string, args ...any) {
+	rt := &agentRuntime{api: &agentrtAPI{Logf: func(format string, args ...any) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
 	}, Ask: s.questionRuntime.Ask(), Anchor: releasepolicy.OwnerKeyFingerprint,
 		DiskFloor: deliveryview.DiskFloorFromEnv(), MailWake: s.mailWake}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
@@ -224,7 +223,7 @@ func (s *Server) mountAgentRuntime(r chi.Router) {
 	if s.agentRuntime == nil {
 		return
 	}
-	agentrtapi.Mount(r, s.auth, s.agentRuntime.api)
+	mountAgentrt(r, s.auth, s.agentRuntime.api)
 }
 
 func (s *Server) closeAgentRuntime() {

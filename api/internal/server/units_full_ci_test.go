@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
@@ -91,7 +90,7 @@ func TestFullCIGaugeAndNotesRoute(t *testing.T) {
 		t.Fatal("without the database:", code)
 	}
 	// A controller whose loop has not passed yet, or is off: still none.
-	srv.agentRuntime = &agentRuntime{api: &agentrtapi.API{DB: pool}}
+	srv.agentRuntime = &agentRuntime{api: &agentrtAPI{DB: pool}}
 	if body := scrape(); strings.Contains(body, "bifrost_full_ci_red") {
 		t.Fatalf("the gauge before any pass:\n%s", body)
 	}

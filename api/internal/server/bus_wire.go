@@ -355,7 +355,7 @@ func (s *Server) followSeatMail(ctx context.Context, nc *nats.Conn, receipts *re
 	slog.Info("bus: inbox waiters woken by seat.mail.arrived", "env", env)
 }
 
-// mailWake is the inbox read's wake (agentrtapi.API.MailWake): none until this
+// mailWake is the inbox read's wake (agentrtAPI.MailWake): none until this
 // process follows seat.mail.arrived.
 func (s *Server) mailWake(addr string) (<-chan struct{}, func()) {
 	if !s.bus.mailLive.Load() {

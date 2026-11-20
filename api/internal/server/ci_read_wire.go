@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cidomains"
@@ -26,7 +25,7 @@ func (s *Server) handleEvidenceCommit(w http.ResponseWriter, r *http.Request) {
 	evidenceread.CommitRoute{
 		RepoOK: giteaName.MatchString, CommitOK: commitID.MatchString,
 		Sources: func() (evidenceread.CommitSources, bool) {
-			main := agentrtapi.MainHead(nil)
+			main := mainHead(nil)
 			if m := s.agentRuntimeMains(); m != nil {
 				main = s.mainOf("evidence", m)
 			}

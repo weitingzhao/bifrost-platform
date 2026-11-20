@@ -1,6 +1,6 @@
-package agentrtapi_test
+package server
 
-// Copy into api/internal/agentrt/agentrtapi temporarily; run TestCapturePlanView
+// Copy into api/internal/server temporarily; run TestCapturePlanView
 // with AGENTRT_TEST_PG pointing to a disposable local test PostgreSQL.
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 func TestCapturePlanView(t *testing.T) {
 	pool, task := world(t)
 	s := server(t, pool)
-	raw, err := os.ReadFile("../planview/testdata/r4-v1.json")
+	raw, err := os.ReadFile("../agentrt/planview/testdata/r4-v1.json")
 	must(t, err)
 	doc, err := planview.Parse(raw)
 	must(t, err)
@@ -128,7 +128,7 @@ func TestCapturePlanView(t *testing.T) {
 	if out["plan_version"] != float64(1) {
 		t.Fatalf("adoption failed %v", out)
 	}
-	dir := "../../../../console/src/api/__fixtures__"
+	dir := "../../../console/src/api/__fixtures__"
 	save := func(name string, doc any) {
 		b, e := json.MarshalIndent(doc, "", "  ")
 		must(t, e)

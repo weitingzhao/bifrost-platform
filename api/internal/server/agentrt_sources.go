@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/approvalfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deploysource"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
@@ -46,7 +45,7 @@ func giteaCommitTree(access func(context.Context) (delivery.GiteaAccess, error),
 // it from: the organization the releases clone from (the delivery service's
 // Gitea organization, what agentd's AGENTD_GIT_BASE names), the base of a
 // goal's task (W-31 2.2b). Without the delivery service there is none.
-func (s *Server) agentRuntimeMains() agentrtapi.MainHead {
+func (s *Server) agentRuntimeMains() mainHead {
 	if s.delivery == nil {
 		return nil
 	}
