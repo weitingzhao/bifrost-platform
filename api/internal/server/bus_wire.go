@@ -38,6 +38,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/ownerq"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/states"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitexec"
@@ -178,6 +179,8 @@ func (s *Server) mountBus(r chi.Router) {
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/clients", route((*gate.Gate).HandleClients))
 	// The problem loop, computed when asked (agentrt/coord, OWNER_LAW #36).
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/problems", s.handleBusProblems)
+	// Each subject's latest state for a registered state type (2026-11-20).
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/states", states.Deps{DB: s.bus.db}.Handle)
 	// What the bus's work does, computed when asked (bus/effect).
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/effect", s.handleBusEffect)
 	// The known regressions on main (bus/regressions): a seat records one or its fix as itself.

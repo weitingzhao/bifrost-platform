@@ -27,6 +27,7 @@ deny	GET /api/v1/agentrt/seats
 deny	GET /api/v1/bus/effect
 deny	GET /api/v1/bus/nextgen
 deny	GET /api/v1/bus/problems
+deny	GET /api/v1/bus/states
 deny	GET /api/v1/bus/contract
 deny	GET /api/v1/bus/observe
 deny	GET /api/v1/bus/regressions
