@@ -486,6 +486,8 @@ export class PlaceScene extends Phaser.Scene {
 
   /** The port signs on the level on screen: they stay where they stand, the names give way to them. */
   private signs: Phaser.GameObjects.Container[] = []
+  /** The edge's small words (open, Other · 0, Orphan · 0): shown as the plates are. */
+  private marks: Phaser.GameObjects.Text[] = []
   /**
    * No plate over another (the Owner, 2026-11-20: names and port signs on top of one another read as a mess).
    * The port signs keep their places (the district's edge, its contract); each block's name, nearest the viewer
@@ -507,7 +509,7 @@ export class PlaceScene extends Phaser.Scene {
   private wholePlate: Phaser.GameObjects.Container | null = null
   private labelMode: LabelMode = 'all'
 
-  /** All the plates, dimmed, or only on hover (the Owner, 2026-11-20); the port signs always show. */
+  /** Every plate on the level opaque, see-through, or hidden (the Owner, 2026-11-20). */
   setLabels(mode: LabelMode) {
     if (this.labelMode === mode) return
     this.labelMode = mode
@@ -529,14 +531,17 @@ export class PlaceScene extends Phaser.Scene {
     const order = [...names].sort((a, b) => b.y - a.y)
     const where = placeLabels(pl.fixed.filter(p => p.active && p.getData('box')).map(p => boxOf(p)), order.map(p => boxOf(p)), 3 * sc)
     pl.lines.clear()
+    // The port signs and the edge's small words follow the mode too (they keep their places).
+    const signAlpha = this.labelMode === 'dim' ? 0.5 : 1, shown = this.labelMode !== 'none'
+    for (const sg of [...pl.fixed, ...this.marks]) if (sg.active) (sg as unknown as { setAlpha: (a: number) => { setVisible: (v: boolean) => void } }).setAlpha(signAlpha).setVisible(shown)
     order.forEach((p, i) => {
       const { dy, free } = where[i], y0 = p.y, h = boxOf(p).h
       // No free place within reach: it stays, see-through, so what it covers still shows.
       const base = (free ? 1 : 0.6) * (this.labelMode === 'dim' ? 0.5 : 1)
-      p.setData('alpha', base).setAlpha(base).setVisible(this.labelMode !== 'hover')
+      p.setData('alpha', base).setAlpha(base).setVisible(this.labelMode !== 'none')
       if (!dy) return
       p.y += dy
-      if (this.labelMode === 'hover') return
+      if (this.labelMode === 'none') return
       pl.lines.lineStyle(1.2 * sc, this.tone.ink, 0.6 * base).lineBetween(p.x, y0, p.x, dy > 0 ? p.y : p.y + h)
       pl.lines.fillStyle(this.tone.ink, 0.7 * base).fillCircle(p.x, y0, 2 * sc)
     })
@@ -547,7 +552,7 @@ export class PlaceScene extends Phaser.Scene {
     const p = this.namePlates.get(id)
     this.wholePlate?.destroy(); this.wholePlate = null
     if (!p || !p.active) return
-    if (!on) { p.setVisible(this.labelMode !== 'hover').setAlpha((p.getData('alpha') as number | undefined) ?? 1); return }
+    if (!on) { p.setVisible(this.labelMode !== 'none').setAlpha((p.getData('alpha') as number | undefined) ?? 1); return }
     p.setVisible(true).setAlpha(1)
     p.parentContainer?.bringToTop(p)
     if (p.getData('cut')) {
@@ -1118,7 +1123,7 @@ export class PlaceScene extends Phaser.Scene {
     const edgePts: Phaser.Math.Vector2[] = []
     const nbs = new Map<string, { c: Phaser.GameObjects.Container; at: Phaser.Math.Vector2 }>()
     // A district's edge; the town has none (the Owner, 2026-11-20: it is the whole system, nothing is outside it).
-    if (o.interactive) this.signs = []
+    if (o.interactive) { this.signs = []; this.marks = [] }
     if (place.kind === 'district' && o.interactive && this.shown?.links && !o.arranging) for (const part of this.borders(this.shown.links, place, P, W, H, edgePts, geo, streets, nbs)) c.add(part)
     const byId = new Map(place.children.map(k => [k.id, k]))
     const plotById = new Map(plots.map(p => [p.id, p]))
@@ -1605,7 +1610,9 @@ export class PlaceScene extends Phaser.Scene {
         eg.lineStyle(1.2, this.tone.dim, 0.9)
         for (let i = 0; i < 4; i++) { const p0 = corners[i], p1 = corners[(i + 1) % 4]; for (let k = 0; k < 8; k += 2) eg.lineBetween(p0.x + (p1.x - p0.x) * k / 8, p0.y + (p1.y - p0.y) * k / 8, p0.x + (p1.x - p0.x) * (k + 1) / 8, p0.y + (p1.y - p0.y) * (k + 1) / 8) }
         const m = pt(c1, 0)
-        out.push(eg, this.label(m.x, m.y, kind === 'named' ? 'open' : kind === 'other' ? 'Other · 0' : 'Orphan · 0', { color: '#8a8478', fontSize: '11px' }).setOrigin(0.5))
+        const mark = this.label(m.x, m.y, kind === 'named' ? 'open' : kind === 'other' ? 'Other · 0' : 'Orphan · 0', { color: '#8a8478', fontSize: '11px' }).setOrigin(0.5)
+        this.marks.push(mark)
+        out.push(eg, mark)
         framed.push(new Phaser.Math.Vector2(m.x, m.y + 26))
         continue
       }

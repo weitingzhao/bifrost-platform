@@ -66,9 +66,9 @@ function readInsets(probe: HTMLElement | null): Insets {
 }
 
 const LIGHT_KEY = 'bifrost.city.gen2.light'
-/** How the plates show, kept for this viewer (the Owner, 2026-11-20: all, dimmed, or only on hover). */
+/** How every label on the map shows, kept for this viewer (the Owner, 2026-11-20: opaque, see-through, or hidden). */
 const LABELS_KEY = 'bifrost.city.gen2.labels'
-const LABELS_WORD: Record<LabelMode, string> = { all: 'Labels', dim: 'Labels · dim', hover: 'Labels · hover' }
+const LABELS_WORD: Record<LabelMode, string> = { all: 'Labels', dim: 'Labels · dim', none: 'Labels · off' }
 function readLabels(): LabelMode {
   try { const v = window.localStorage.getItem(LABELS_KEY); return (LABEL_MODES as readonly string[]).includes(v ?? '') ? v as LabelMode : 'all' } catch { return 'all' }
 }
@@ -391,7 +391,7 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
   ) : (
     <>
       {place.children.length > 0 && <button className="g2-btn" onClick={() => { setSelected(null); setArranging(true) }}>Arrange</button>}
-      <button className="g2-btn" onClick={stepLabels} aria-label={`Plates: ${labels}`} title="Plates: all, dimmed, or only on hover">{LABELS_WORD[labels]}</button>
+      <button className="g2-btn" onClick={stepLabels} aria-label={`Plates: ${labels}`} title="Labels: opaque, see-through, or hidden (hover a building for its name)">{LABELS_WORD[labels]}</button>
       <button className="g2-btn" onClick={stepLight} aria-label={`Light: ${LIGHT_WORD[lightChoice]}`}>
         {LIGHT_ICON[light]} {lightChoice === 'auto' ? `Auto · ${LIGHT_WORD[light]}` : LIGHT_WORD[lightChoice]}
       </button>

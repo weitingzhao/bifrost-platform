@@ -40,6 +40,9 @@ export function clampLabel(text: string, chars = LABEL_CHARS, lines = LABEL_LINE
   return { text: out, full: text, cut: out !== text }
 }
 
-/** How plates show (the Owner, 2026-11-20): all of them; dimmed, so the city shows through; or only on hover. */
-export type LabelMode = 'all' | 'dim' | 'hover'
-export const LABEL_MODES: readonly LabelMode[] = ['all', 'dim', 'hover']
+/**
+ * How every plate on the level shows, names and port signs alike (the Owner, 2026-11-20: opaque, see-through,
+ * or not at all, to cut the noise): all, dim (half), none (only the block under the pointer shows its name).
+ */
+export type LabelMode = 'all' | 'dim' | 'none'
+export const LABEL_MODES: readonly LabelMode[] = ['all', 'dim', 'none']
