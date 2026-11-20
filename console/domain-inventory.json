@@ -2160,9 +2160,11 @@
         "console/src/domains/owner/city/gen2/content/__tests__/hardware.fixture.json",
         "console/src/domains/owner/city/gen2/content/__tests__/hardware.test.ts",
         "console/src/domains/owner/city/gen2/content/__tests__/key.test.ts",
+        "console/src/domains/owner/city/gen2/content/__tests__/looks.test.ts",
         "console/src/domains/owner/city/gen2/content/console.ts",
         "console/src/domains/owner/city/gen2/content/consolePlaces.ts",
         "console/src/domains/owner/city/gen2/content/hardware.ts",
+        "console/src/domains/owner/city/gen2/content/looks.ts",
         "console/src/domains/owner/city/gen2/content/panels.tsx",
         "console/src/domains/owner/city/gen2/content/unitRooms.ts",
         "console/src/domains/owner/city/gen2/content/units/cpu.ts",
@@ -3683,6 +3685,7 @@
         "console/src/components/shell",
         "console/src/domains/foundation/bus",
         "console/src/domains/foundation/shell",
+        "console/src/domains/owner/city",
         "console/src/lib/shell",
         "console/src/pages/ApprovalsPage.tsx",
         "console/src/pages/QuestionPage.tsx",
@@ -4177,6 +4180,9 @@
       "path": "console/src/pages/shell",
       "files": [
         "console/src/pages/shell/CityPage.tsx",
+        "console/src/pages/shell/city/CityLedger.tsx",
+        "console/src/pages/shell/city/CityScreen.tsx",
+        "console/src/pages/shell/city/useCityContent.ts",
         "console/src/pages/shell/shellPages.tsx"
       ],
       "imports": [
@@ -4202,6 +4208,7 @@
       ],
       "test_imports": [],
       "external_imports": [
+        "@bifrost/ui",
         "@tanstack/react-query",
         "react"
       ],

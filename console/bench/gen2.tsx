@@ -29,7 +29,7 @@ function Bench() {
     return () => removeEventListener('hashchange', on)
   }, [])
   // The dashboard look of a place is the Console itself, at the same place.
-  return <CityGen2 content={CONTENT} path={path} go={p => { location.hash = formatPath(p) }} dashboardHref={p => p.dashboard && `/${p.dashboard}`} timerLoop={new URLSearchParams(location.search).has('timer')} />
+  return <CityGen2 content={CONTENT} path={path} go={p => { location.hash = formatPath(p) }} consoleHref={p => p.dashboard && `/${p.dashboard}`} timerLoop={new URLSearchParams(location.search).has('timer')} />
 }
 
 createRoot(document.getElementById('root')!).render(<Bench />)

@@ -165,7 +165,6 @@
 .g2-btn.k-ghost { background: transparent; border-color: transparent; color: var(--g2-soft); }
 .g2-btn.k-ghost:hover { background: var(--g2-chip); }
 .g2-btn.k-danger { background: #f9d3cc; color: #7a2418; border-color: #efb3a7; }
-.g2-swap.g2-btn { color: var(--g2-link); }
 .g2[data-device='phone'] .g2-btn, .g2[data-device='tablet'] .g2-btn { min-height: 44px; }
 .g2-btn:focus-visible, .k-tabs button:focus-visible, .k-select select:focus-visible, .g2-icon:focus-visible { outline: 2px solid var(--g2-link); outline-offset: 2px; }
 
@@ -224,6 +223,11 @@
   padding: 0 var(--s3); min-height: 30px; cursor: pointer; }
 .k-seg button + button { border-left: 1px solid var(--g2-line); }
 .k-seg button.on { background: var(--g2-ink); color: var(--g2-card); }
+/* The looks: City | Console, the same place in either (the Owner, 2026-11-19). The Console half is a link. */
+.k-seg.g2-looks a { display: inline-flex; align-items: center; background: var(--g2-card); font-family: var(--g2-mono); font-size: 12px; font-weight: 600;
+  color: var(--g2-soft); padding: 0 var(--s3); min-height: 30px; text-decoration: none; border-left: 1px solid var(--g2-line); }
+.k-seg.g2-looks a:hover { color: var(--g2-ink); }
+.g2[data-device='phone'] .k-seg.g2-looks a, .g2[data-device='tablet'] .k-seg.g2-looks a { min-height: 44px; }
 .g2[data-device='phone'] .k-seg button, .g2[data-device='tablet'] .k-seg button { min-height: 44px; }
 .g2-warn { color: #b0442f !important; }
 

@@ -1,6 +1,7 @@
 import { PageShell, SidebarInset, SidebarProvider, TooltipProvider, cn } from '@bifrost/ui'
 import { Suspense, lazy, useCallback, useEffect, useState, type ComponentType } from 'react'
-import { ConsoleHeader, type HeaderBack } from '@/components/ConsoleHeader'
+import { ConsoleHeader, type HeaderBack, type HeaderLooks } from '@/components/ConsoleHeader'
+import { cityHref, ledgerHref, readCityQuery } from '@/domains/owner/city/gen2/content/looks'
 import { ConsoleSidebar } from '@/components/ConsoleSidebar'
 import { EntryRail, EntryTabBar, type EntryNavProps } from '@/components/shell/EntryNav'
 import { DomainNav } from '@/components/shell/DomainNav'
@@ -45,8 +46,10 @@ import { useShellLayout } from '@/lib/shell/useShellLayout'
 type DetailRouteId = Exclude<ShellRouteId, EntryRouteId>
 
 // Its own chunk, with Phaser behind it: nothing of the city loads until this page opens.
-const CityPage = lazy(() => import('@/pages/shell/CityPage'))
-const CityRoute = () => <Suspense fallback={null}><CityPage /></Suspense>
+const CityScreen = lazy(() => import('@/pages/shell/city/CityScreen'))
+// The Console's ledger of the same places: rows, no Phaser.
+const CityLedger = lazy(() => import('@/pages/shell/city/CityLedger'))
+const CityRoute = () => <Suspense fallback={null}><CityLedger /></Suspense>
 
 const DETAIL_PAGES: Record<DetailRouteId, ComponentType> = {
   status: StatusPage,
@@ -90,6 +93,23 @@ function backFor(location: ConsoleLocation): HeaderBack | undefined {
   if (location.kind !== 'shell' || isEntryRoute(location.id)) return undefined
   const entry = entryOf(location, window.location.hash.split('?')[1])
   return entry == null ? undefined : { label: shellNavEntry(entry).label, href: formatShellHash(entry) }
+}
+
+/**
+ * The looks of the place a Console page shows (the Owner, 2026-11-19: the city and the Console are peers).
+ * Every Console page is a place in the city: an entry is a district, a detail page a building in its
+ * entry's district. On the `#city` route the Console shows the ledger of the place in the address.
+ */
+function looksFor(location: ConsoleLocation): HeaderLooks | undefined {
+  if (location.kind !== 'shell') return undefined
+  const query = window.location.hash.split('?')[1] ?? ''
+  if (location.id === 'city') {
+    const { path, sel } = readCityQuery(query)
+    const last = path.at(-1)
+    return { on: 'ledger', city: cityHref(path, sel), ledger: ledgerHref(path, sel), page: last != null && isShellRouteId(last) && last !== 'city' ? formatShellHash(last) : null }
+  }
+  const path = isEntryRoute(location.id) ? [location.id] : [entryOf({ kind: 'shell', id: location.id }) ?? 'system', location.id]
+  return { on: 'page', city: cityHref(path), ledger: ledgerHref(path), page: formatShellHash(location.id) }
 }
 
 function ShellBuildBanner() {
@@ -144,6 +164,8 @@ function ConsolePageInner() {
   const yoursBadge = yoursNavBadge(yours)
   const back = layout === 'side' ? undefined : backFor(location)
   const domain = entryOf(location, window.location.hash.split('?')[1])
+  // The city look takes the whole screen, outside this frame: the Console does not hold it.
+  const cityLook = location.kind === 'shell' && location.id === 'city' && readCityQuery(window.location.hash.split('?')[1] ?? '').look === 'city'
   const nav: EntryNavProps = {
     active: domain,
     onSelect: select,
@@ -152,6 +174,7 @@ function ConsolePageInner() {
     systemLine: status.statusLine,
   }
 
+  if (cityLook) return <Suspense fallback={null}><CityScreen /></Suspense>
   return (
     <TooltipProvider>
       <SidebarProvider>
@@ -187,6 +210,7 @@ function ConsolePageInner() {
               layout={layout}
               back={back}
               moreHref={undefined}
+              looks={looksFor(location)}
             />
             {layout !== 'side' && domain && <DomainNav entry={domain} />}
           </div>

@@ -18,6 +18,27 @@ import { ToolsMenu } from '@/components/ToolsMenu'
 import type { ShellLayout } from '@/lib/shell/useShellLayout'
 import { VERDICT_DOT_COLOR, type VerdictTone } from '@/lib/shell/shellStatusLine'
 
+/**
+ * The looks of the place on screen (the Owner, 2026-11-19): City | Console, peers, at the same spot as
+ * the city's own switch; inside the Console, Page | Ledger. Each half is a link to the same place.
+ */
+export type HeaderLooks = { on: 'page' | 'ledger'; city: string; ledger: string; page: string | null }
+
+function LookSwitch({ label, items }: { label: string; items: { text: string; href: string | null; on: boolean }[] }) {
+  return (
+    <div role="group" aria-label={label} className="inline-flex shrink-0 overflow-hidden rounded-md border border-[var(--table-rule)]">
+      {items.filter(i => i.href != null).map((i, n) => (
+        <a key={i.text} href={i.href!} aria-current={i.on ? 'page' : undefined}
+          className={cn('inline-flex min-h-7 items-center px-2 text-[var(--text-dense-caption)] font-medium no-underline',
+            n > 0 && 'border-l border-[var(--table-rule)]',
+            i.on ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground')}>
+          {i.text}
+        </a>
+      ))}
+    </div>
+  )
+}
+
 /** The environment is identity, not severity: drawn neutral, never red (design system v2 §10.6). */
 function ViewerEnvChip({
   viewerEnv,
@@ -65,6 +86,7 @@ export function ConsoleHeader({
   layout = 'side',
   back,
   moreHref,
+  looks,
 }: {
   pageTitle: string
   pageDescription?: string
@@ -77,6 +99,7 @@ export function ConsoleHeader({
   layout?: ShellLayout
   back?: HeaderBack
   moreHref?: string
+  looks?: HeaderLooks
 }) {
   const side = layout === 'side'
   return (
@@ -139,6 +162,19 @@ export function ConsoleHeader({
           {statusLine}
         </a>
       </p>
+
+      {looks != null && looks.page != null && (
+        <LookSwitch label="Console look" items={[
+          { text: 'Page', href: looks.page, on: looks.on === 'page' },
+          { text: 'Ledger', href: looks.ledger, on: looks.on === 'ledger' },
+        ]} />
+      )}
+      {looks != null && (
+        <LookSwitch label="Look" items={[
+          { text: 'City', href: looks.city, on: false },
+          { text: 'Console', href: looks.on === 'page' ? looks.page : looks.ledger, on: true },
+        ]} />
+      )}
 
       <ViewerEnvChip viewerEnv={viewerEnv} isLoading={viewerEnvLoading} />
 

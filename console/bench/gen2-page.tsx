@@ -28,7 +28,7 @@ function Page() {
     addEventListener('hashchange', on)
     return () => removeEventListener('hashchange', on)
   }, [])
-  return <CityGen2 content={CONTENT} path={path} go={p => { location.hash = format(p) }} dashboardHref={() => null} notice={NOTICE} />
+  return <CityGen2 content={CONTENT} path={path} go={p => { location.hash = format(p) }} consoleHref={() => null} notice={NOTICE} />
 }
 
 createRoot(document.getElementById('root')!).render(<Page />)

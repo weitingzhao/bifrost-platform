@@ -35,8 +35,14 @@ const KIND = { town: 'Town', district: 'District', building: 'Building', room: '
 type Props = {
   path: Path
   go: (path: Path) => void
-  /** Open the same place in the dashboard style. */
-  dashboardHref?: (place: Place) => string | null
+  /**
+   * The same place in the Console (the Owner, 2026-11-19: the city and the Console are two looks of one
+   * system, side by side; neither holds the other). The switch City | Console sits top right; the link
+   * carries the place and the picked room, so the Console opens at the same spot.
+   */
+  consoleHref?: (place: Place, path: Path, picked: Place | null) => string | null
+  /** A room to have picked when the page opens at this place (coming back from the Console). */
+  picked?: string
   /** Drive frames by a timer instead of animation frames (the bench, in a hidden pane where animation frames stop). */
   timerLoop?: boolean
   /** What the places are and hold: the plug-in. The frame assumes nothing about it. */
@@ -120,7 +126,7 @@ export default function CityGen2(props: Props) {
   return <CityFrame {...props} />
 }
 
-function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoop = false, arrangements, content, notice }: Props) {
+function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, timerLoop = false, arrangements, content, notice }: Props) {
   const store = useMemo(() => arrangements ?? browserArrangements(), [arrangements])
   const tree = content.tree
   const path = useMemo(() => resolve(tree, asked), [tree, asked])
@@ -241,7 +247,9 @@ function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoo
     last.current = path
     const from = path.length > prev.length && prev.every((p, i) => path[i] === p) ? 'down'
       : path.length < prev.length && path.every((p, i) => prev[i] === p) ? 'up' : 'jump'
-    setSelected(null)
+    // Back from the Console with a room picked there: picked here too (the address carries it).
+    const pick = place.children.find(x => x.id === picked && x.kind === 'room') ?? null
+    setSelected(pick)
     setOpen(false)
     setArranging(false)
     setDrawerOpen(false)
@@ -250,7 +258,7 @@ function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoo
     setQuery('')
     const fresh = { here: store.get(keyOf(path)), parent: store.get(keyOf(path.slice(0, -1))) }
     setSaved(fresh)
-    scene.current?.show(shown({ from, selected: null, arranging: false, here: fresh.here, parentA: fresh.parent }))
+    scene.current?.show(shown({ from, selected: pick?.id ?? null, arranging: false, here: fresh.here, parentA: fresh.parent }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path.join('/')])
 
@@ -325,7 +333,7 @@ function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoo
   ]
   // A row in a table does what tapping its block does: a room opens its card, anything else is entered.
   const openChild = (c: Place) => c.kind === 'room' ? setSelected(c) : go([...path, c.id])
-  const dash = dashboardHref(place)
+  const dash = consoleHref(place, path, selected)
   const panels: Panel[] = [...(selected ? [content.picked(selected)] : []), ...content.panels(place, openChild)]
   const focusedPanel = panels.find(p => p.id === focused) ?? null
   // When a panel has the middle, the map supports it from the panel's corner (or the top, on a phone).
@@ -368,7 +376,10 @@ function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoo
       </button>
       {f.docks && <button className={`g2-icon g2-panels${panelPrefs.hidden ? '' : ' on'}`} onClick={toggleHidden} aria-pressed={!panelPrefs.hidden}
         aria-label={panelPrefs.hidden ? 'Show the panels' : 'Hide the panels'} title={panelPrefs.hidden ? 'Show the panels (H)' : 'Hide the panels (H)'}>▤</button>}
-      {dash && <a className="g2-btn g2-swap" href={dash}>Dashboard ↗</a>}
+      {dash && <div className="k-seg g2-looks" role="group" aria-label="Look">
+        <button className="on" aria-pressed>City</button>
+        <a href={dash} title="The same place in the Console">Console</a>
+      </div>}
     </>
   )
   const searchResults = (searching || q) && (
