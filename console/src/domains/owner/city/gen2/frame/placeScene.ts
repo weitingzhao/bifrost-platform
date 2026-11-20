@@ -318,6 +318,11 @@ export class PlaceScene extends Phaser.Scene {
         const lv = levelsOf(k), form = formOfPlace(k)
         return { id: p.id, key: deviceKey(form, p.w, p.h, hue, this.light, lv, k.id, k.face), make: () => deviceSprite(form, p.w, p.h, hue, this.light, lv, k.id, k.face) }
       }
+      // A room its content draws (its own module), where it stands as the module drew it; else the plain room.
+      if (kind === 'room' && k?.picture && k.picture.w === p.w && k.picture.d === p.h) {
+        const pic = k.picture
+        return { id: p.id, key: `g2:pic:${pic.key}`, make: pic.make }
+      }
       const wings = kind === 'building' ? this.wingsOf(path, p.w, p.h) : []
       const sig = wings.map(w => `${w.x.toFixed(2)},${w.y.toFixed(2)},${w.w.toFixed(2)},${w.h.toFixed(2)},${w.hue}`).join(';')
       const key = spriteKey(kind, p.w, p.h, hue, this.light, seed, count) + (sig ? `:w${hash(sig)}` : '') + (k?.look ? `:${k.look}` : '')

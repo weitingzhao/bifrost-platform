@@ -83,3 +83,32 @@ describe('the hardware district, from one real read', () => {
     expect(hardwareRulesBroken(bad).join()).toMatch(/CPU, Memory, then its disk/)
   })
 })
+
+// 2026-11-19, the Owner: put the units' rooms into use ("可以把这些东西放到这个房间里面去了"), each its
+// own module. With the units read, a computer's rooms carry their module's picture and its shape, and the
+// disk is one warehouse holding every volume; without them, the plain rooms as before.
+describe('the units’ rooms in use', () => {
+  const ip = '192.168.10.20', i = `${ip}:9100`
+  const p = (labels: Record<string, string>, value: number) => ({ labels: { instance: i, ...labels }, value })
+  const units = {
+    cpu: {}, memory: {},
+    disk: {
+      drives: [p({ device: 'sda', rotational: '1', model: 'S' }, 1), p({ device: 'sdb', rotational: '1', model: 'S' }, 1)],
+      size: [p({ mountpoint: '/volume1', device: '/dev/x1' }, 24e12), p({ mountpoint: '/volume2', device: '/dev/x2' }, 984e9)],
+      used: [p({ mountpoint: '/volume1' }, 668e9), p({ mountpoint: '/volume2' }, 464e9)],
+    },
+  }
+  const withUnits = hardwareDistrict(reads, 'system', '', units)
+  const nas = withUnits.children.find(b => b.id === 'UGREEN-NAS')!
+  it('the NAS’s volumes are one disk room, drawn by the warehouse module', () => {
+    expect(nas.children.map(r => r.id)).toEqual(['cpu', 'memory', 'disk'])
+    const disk = nas.children.find(r => r.id === 'disk')!
+    expect(disk.picture?.make().svg).toContain('SHELF NOT REPORTED')
+    expect(disk.shape).toBe('8x8')
+    expect(hardwareRulesBroken(withUnits)).toEqual([])
+  })
+  it('a unit that read nothing keeps the plain room', () => {
+    expect(nas.children.find(r => r.id === 'cpu')!.picture).toBeUndefined()
+    expect(dev('UGREEN-NAS').children.every(r => !r.picture)).toBe(true)
+  })
+})

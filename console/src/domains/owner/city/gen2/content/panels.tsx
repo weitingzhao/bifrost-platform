@@ -2,6 +2,7 @@ import type { Panel } from '../frame/content'
 import { meterText, type Place } from '../frame/places'
 import { FORM_NAME, keyOf } from '../frame/library/key'
 import { KeyIcon } from '../frame/library/keyIcons'
+import { spriteUrl } from '../frame/sprites'
 
 /**
  * The panels beside the 2.5D middle (the Owner, 2026-11-19): the middle shows where things stand,
@@ -66,6 +67,8 @@ export function pickedPanel(item: Place): Panel {
     id: `picked-${item.id}`, title: item.label, dock: 'right',
     body: ({ size }) => <div className="g2-picked">
       <p>{item.question}</p>
+      {/* A room its module draws: the room itself, large, as it stands now. */}
+      {item.picture && <img className="g2-room-picture" src={spriteUrl(item.picture.make())} alt={`${item.label} room`} style={{ width: '100%', height: 'auto', display: 'block' }} />}
       {item.look && <KeyTable place={item} full={size !== 'card'} />}
       {item.kind !== 'room' && <p className="g2-hint">Double-click to go inside</p>}
       {!item.look && <dl>

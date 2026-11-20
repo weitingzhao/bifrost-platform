@@ -1,3 +1,4 @@
+import { unitRoomsOf, type UnitReads } from './unitRooms'
 import { encodePlan, fitsIn, plotsOf, shapeArea, shapeByCount, splitPlot, type Plan, type Shape } from '../frame/grid'
 import type { Look, Meter, Place, State } from '../frame/places'
 
@@ -121,7 +122,7 @@ const roomShape = (unit: 'cores' | 'bytes', of: number | null): Shape => {
 const at = (pts: PromPoint[] | null, key: string, value: string) => pts?.find(p => p.labels?.[key] === value)?.value ?? null
 
 /** The district from what was read. A device the topology does not list is not drawn (RULES.md §2.2). */
-export function hardwareDistrict(r: HardwareReads, fn = 'system', when = ''): Place {
+export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', units?: UnitReads): Place {
   const P = r.prom
   const nodeOfIp = new Map((P.nodeIp ?? []).map(p => [p.labels?.internal_ip ?? '', p.labels?.node ?? '']))
   const zones = new Map<string, Zone>()
@@ -171,6 +172,21 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = ''): Pl
         rooms.push(r)
       }
       if (gpu) rooms.push(room('gpu', 'GPU', meter('cores', null, null, 'no GPU exporter: not read')))
+      // The units' rooms in use (content/unitRooms.ts): each drawn by its module from the machine's own
+      // readings. The disk is one warehouse holding every volume (its volumes are inside it).
+      if (units && ip) {
+        const u = unitRoomsOf(units, ip)
+        const put = (r: Place | undefined, x: ReturnType<typeof unitRoomsOf>['cpu']) => { if (r && x) { r.shape = x.shape; r.picture = x.picture } }
+        put(rooms.find(x => x.id === 'cpu'), u.cpu)
+        put(rooms.find(x => x.id === 'memory'), u.memory)
+        if (u.disk) {
+          const vols = rooms.filter(x => x.id === 'disk' || x.id.startsWith('volume-'))
+          const sum = (f: (m: Meter) => number | null) => vols.every(v => v.meter && f(v.meter) != null) ? vols.reduce((a, v) => a + f(v.meter!)!, 0) : null
+          const disk = room('disk', 'Disk', meter('bytes', sum(m => m.used), sum(m => m.of), HARDWARE_QUERIES.diskUsed))
+          put(disk, u.disk)
+          rooms.splice(rooms.indexOf(vols[0]), vols.length, disk)
+        }
+      }
     }
     zones.set(n.id, zoneOf(n, look, gpu))
     // Its surfaces (all read): the roof its number from its name; the sign what it is for — its workload

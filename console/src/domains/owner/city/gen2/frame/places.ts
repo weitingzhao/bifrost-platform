@@ -1,4 +1,5 @@
 import type { Shape } from './grid'
+import type { Sprite } from './kit'
 
 /**
  * The shape of a place, as the frame knows it (the Owner, 2026-11-19: the frame is the skeleton,
@@ -61,6 +62,13 @@ export type Place = {
    * a tally, how many of something it holds now (a reading, with its source). All read, none set.
    */
   face?: { roof?: string; sign?: string; tally?: { n: number | null; what: string; source: string } }
+  /**
+   * What it looks like inside, when its content draws it (a room's own module: the CPU's workshop, the
+   * memory's cold store, the disk's warehouse; the Owner, 2026-11-19: put the rooms into use, refine them
+   * later, one module at a time). `key` changes whenever the picture would; `make` draws it for the
+   * footprint it stands in. Without one, the frame draws its plain room.
+   */
+  picture?: { key: string; w: number; d: number; make: () => Sprite }
   children: Place[]
 }
 
