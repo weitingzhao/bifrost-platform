@@ -86,6 +86,18 @@ export function functionAt(tree: Place, path: Path): string | undefined {
   return found
 }
 
+/**
+ * Whether a place is wired to the system (the Owner, 2026-11-19: what is real is drawn solid; what is not
+ * there yet, see-through, "虚空", so it is plain which is which). A room is real when it shows a reading
+ * (its module's picture, or a reading read); anything else when the system told its state, or something
+ * inside it is real. A place with nothing read in it is a ghost: its name stands, nothing more.
+ */
+export function isWired(p: Place): boolean {
+  if (p.kind === 'room') return !!p.picture || (p.meter?.used != null)
+  if (p.state && p.state !== 'unread') return true
+  return p.children.some(isWired)
+}
+
 export const TOWN_ID = 'town'
 
 /** The places along a path, town first; stops at the first segment that is not there. */

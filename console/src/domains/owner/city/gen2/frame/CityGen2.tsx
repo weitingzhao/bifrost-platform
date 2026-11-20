@@ -6,7 +6,7 @@ import { assign, decodePlan, encodePlan, mergePlot, moveTo, planFor, plotsOf, sp
 import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
 import type { CityContent, Panel } from './content'
 import { PlaceScene, type ArrangeTool, type Shown } from './placeScene'
-import { functionAt, here, meterText, resolve, trail, type Path, type Place } from './places'
+import { functionAt, here, isWired, meterText, resolve, trail, type Path, type Place } from './places'
 import { rulesBroken } from './rules'
 import { frameOf, NO_INSETS, swapRects, type Insets, type Rect } from './viewport'
 import './cityGen2.css'
@@ -406,13 +406,13 @@ function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoo
       <section className={`g2-corner g2-tl${f.summary.compact ? ' compact' : ''}${open ? ' open' : ''}`} aria-label="Summary"
         style={{ left: f.summary.x, top: f.summary.y, width: f.summary.w, minHeight: f.summary.h }}
         onClick={f.summary.compact ? () => setOpen(o => !o) : undefined}>
-        <div className="g2-kicker">{KIND[place.kind]}{!place.state && <span className="g2-chip">not wired</span>}{f.summary.compact && <span className="g2-more">{open ? '▴' : '▾'}</span>}</div>
+        <div className="g2-kicker">{KIND[place.kind]}{!isWired(place) && <span className="g2-chip">not wired</span>}{f.summary.compact && <span className="g2-more">{open ? '▴' : '▾'}</span>}</div>
         {notice && <p className="g2-hint g2-warn" role="status">{notice}</p>}
         <h1>{place.label}</h1>
         {(!f.summary.compact || open) && <p>{place.question}</p>}
         <dl>
           <div><dt>Inside</dt><dd>{place.children.length}</dd></div>
-          <div><dt>Readings</dt><dd className={place.state === 'online' ? '' : 'g2-unknown'}>{place.meter ? meterText(place.meter) : place.state ?? 'not wired'}</dd></div>
+          <div><dt>Readings</dt><dd className={place.state === 'online' || (!place.state && isWired(place)) ? '' : 'g2-unknown'}>{place.meter ? meterText(place.meter) : place.state ?? (isWired(place) ? 'read inside' : 'not wired')}</dd></div>
         </dl>
         {/* On a phone the tools live here (the top bar has no room); elsewhere they sit beside the search. */}
         {f.search.mode === 'icon' && (!f.summary.compact || open || arranging) && <div className="g2-actions" onClick={e => e.stopPropagation()}>{tools}</div>}
@@ -433,7 +433,7 @@ function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoo
       )}
 
 
-      <aside className={`g2-corner g2-br${f.alerts.badge ? ' badge' : ''}`} aria-label="Alerts: not wired" style={at(f.alerts)}>
+      <aside className={`g2-corner g2-br g2-ghost${f.alerts.badge ? ' badge' : ''}`} aria-label="Alerts: not wired" style={at(f.alerts)}>
         {f.alerts.badge ? <span title="Alerts: not wired">!</span> : <>Alerts <span className="g2-unknown">not wired</span></>}
       </aside>
 

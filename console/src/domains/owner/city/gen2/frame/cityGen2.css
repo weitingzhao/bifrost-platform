@@ -256,3 +256,8 @@
 .g2-refused h1 { margin: 0 0 var(--s2); font-size: 18px; }
 .g2-refused ul { margin: var(--s3) 0 0; padding-left: var(--s5, 16px); }
 .g2-refused code { font-family: var(--g2-mono); font-size: 12px; }
+
+/* Not wired yet (the Owner, 2026-11-19): a panel with nothing behind it is see-through and dashed, so the
+   real ones stand out. */
+.g2 .g2-ghost { opacity: 0.45; border-style: dashed !important; box-shadow: none !important; }
+.g2 .g2-ghost-row td { opacity: 0.45; }

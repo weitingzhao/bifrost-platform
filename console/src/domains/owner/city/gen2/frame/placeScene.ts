@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser'
 import { fitsIn, type Placed, type Plot, type Street } from './grid'
 import { geoOf, WAY, type Geo, type Rect } from './geo'
-import { functionAt, type Place } from './places'
+import { functionAt, isWired, type Place } from './places'
 import { hueOf, terrainOf } from './theme'
 import { PALETTE, TERRAIN, type Light, type Palette } from './light'
 import { hash } from './kit'
@@ -930,13 +930,25 @@ export class PlaceScene extends Phaser.Scene {
       gl.fillStyle(f < 0.7 ? this.tone.ok : f < 0.9 ? this.tone.pick : this.tone.no, 0.42).fillPoints(quadOf(P, { x: r.x + 0.12, y: r.y + 0.12, w: r.w - 0.24, h: (r.h - 0.24) * f }, 4), true)
       parts.push(gl)
     }
-    if (k.state === 'standby' || k.state === 'unread') for (const p of parts) (p as unknown as { setAlpha?: (a: number) => void }).setAlpha?.(k.state === 'standby' ? 0.5 : 0.62)
+    if (k.state === 'standby') for (const p of parts) (p as unknown as { setAlpha?: (a: number) => void }).setAlpha?.(0.5)
     if (k.state === 'down') { const gd = this.add.graphics(); gd.lineStyle(4, this.tone.no, 1).strokePoints(quadOf(P, r), true); parts.push(gd) }
     // The rest steps back in grey but stays solid: a see-through fade let the ground show through and
     // made the map foggy (the Owner, 2026-11-19).
     if (anyLit && !lit) for (const p of parts) {
       const q = p as unknown as { setTint?: (c: number) => void; setAlpha?: (a: number) => void }
       if (q.setTint) q.setTint(this.tone.dim); else q.setAlpha?.(0.35)
+    }
+    // Not wired yet: a ghost, see-through, its footprint dashed (the Owner, 2026-11-19: what is not there
+    // yet looks empty, so the real stands out).
+    if (!isWired(k)) {
+      for (const p of parts) (p as unknown as { setAlpha?: (a: number) => void }).setAlpha?.(0.22)
+      const gg = this.add.graphics(), q = quadOf(P, r)
+      gg.lineStyle(1.5, this.tone.dim, 0.9)
+      for (let i = 0; i < q.length; i++) {
+        const a = q[i], b = q[(i + 1) % q.length], n = Math.max(2, Math.round(Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y) / 10))
+        for (let j = 0; j < n; j += 2) gg.lineBetween(a.x + (b.x - a.x) * j / n, a.y + (b.y - a.y) * j / n, a.x + (b.x - a.x) * (j + 1) / n, a.y + (b.y - a.y) * (j + 1) / n)
+      }
+      parts.push(gg)
     }
     if (k.id === o.inside && this.insideRing) parts.push(this.insideRing)
     return parts

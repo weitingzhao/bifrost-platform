@@ -1,5 +1,5 @@
 import type { Panel } from '../frame/content'
-import { meterText, type Place } from '../frame/places'
+import { isWired, meterText, type Place } from '../frame/places'
 import { FORM_NAME, keyOf } from '../frame/library/key'
 import { KeyIcon } from '../frame/library/keyIcons'
 import { spriteUrl } from '../frame/sprites'
@@ -16,7 +16,7 @@ import { spriteUrl } from '../frame/sprites'
 const KIND_WORD = { town: 'Town', district: 'District', building: 'Building', room: 'Room' } as const
 
 /** A thing's reading in words, or how it stands, or that nothing reads it yet. */
-const readingOf = (c: Place) => c.meter ? meterText(c.meter) : c.state ?? 'not wired'
+const readingOf = (c: Place) => c.meter ? meterText(c.meter) : c.state ?? (isWired(c) ? 'read inside' : 'not wired')
 const toneOf = (c: Place) => c.state === 'down' ? 'g2-warn' : c.state === 'online' ? '' : 'g2-unknown'
 
 function InsideTable({ place, open }: { place: Place; open: (child: Place) => void }) {
@@ -24,7 +24,7 @@ function InsideTable({ place, open }: { place: Place; open: (child: Place) => vo
     <thead><tr><th>Name</th><th>Kind</th><th className="num">Size</th><th>Readings</th></tr></thead>
     <tbody>
       {place.children.map(c => (
-        <tr key={c.id}>
+        <tr key={c.id} className={isWired(c) ? undefined : 'g2-ghost-row'}>
           <td><button className="g2-link" onClick={() => open(c)}>{c.label}</button></td>
           <td>{KIND_WORD[c.kind]}</td>
           <td className="num">{c.shape.replace('x', '×')}</td>
