@@ -630,6 +630,8 @@ reg(
     types: z.string().min(1).max(400).describe('Comma list of registered event types, e.g. git.main.advanced'),
     match: z.string().max(200).optional().describe("A substring of the event's subject, e.g. bifrost-platform@"),
     after: z.string().regex(/^[0-9]+\.[0-9]+$/).optional().describe('The next cursor of the previous call; left out: from now'),
+    since: z.string().refine(isRFC3339, 'an RFC 3339 date and time, as 2026-11-20T00:00:00Z').optional().describe('Read back from this RFC 3339 time (at most 24 hours); not with after'),
+    limit: z.number().int().min(1).max(100).optional().describe('At most this many events per call (1 to 100)'),
     wait_seconds: z.number().int().min(0).max(BUS_WAIT_MAX_SECONDS).optional().describe('Default 25'),
     client: z.string().regex(/^[\x21-\x7e]{1,40}$/).optional().describe('Who waits, for the receipts; default mcp'),
   },

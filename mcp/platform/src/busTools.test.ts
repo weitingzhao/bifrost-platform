@@ -31,3 +31,13 @@ test('the regression tools are on the full server and read the bus route', () =>
   assert.equal(regressionsPath({}), '/api/v1/bus/regressions?open=1')
   assert.equal(regressionsPath({ repo: 'bifrost-platform', open: false }), '/api/v1/bus/regressions?repo=bifrost-platform')
 })
+
+// 2026-11-20: the decoupling line could not check whether plan.tree.changed
+// ever happened on PROD: the tool only waited from now, while the gate reads
+// back 24 hours with since. Wrong before: since and limit were dropped.
+test('wait_for_event can read back with since and limit', () => {
+  assert.equal(
+    busEventsPath({ types: 'plan.tree.changed', since: '2026-11-20T00:00:00Z', limit: 5, wait_seconds: 0 }),
+    '/api/v1/bus/events?types=plan.tree.changed&since=2026-11-20T00%3A00%3A00Z&limit=5&wait=0&client=mcp',
+  )
+})
