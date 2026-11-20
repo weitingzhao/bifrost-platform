@@ -1240,8 +1240,12 @@ export class PlaceScene extends Phaser.Scene {
     // highway (the Owner, 2026-11-20: no ramp, no flare: a T-junction, the way a grid city joins its streets):
     // its pavement stops at the highway's kerb, its asphalt runs on to the highway's, and the highway's
     // reservation opens where it meets it. A zebra across its mouth, a stop line behind.
+    // The streets are as real as the district (the Owner, 2026-11-20: road and block fade together, or neither):
+    // solid for a wired district, as faint as its ghost for one not wired yet. An open port is a street closed
+    // at its mouth by a barrier; a used one has its crossing and the reservation open.
+    const ghost = !isWired(k)
     const street = (x: number, y: number, dx: number, dy: number, used: boolean) => {
-      const A = used ? 1 : 0.4
+      const A = ghost ? 0.22 : 1
       const kerbAt = dx ? ground.x + ground.w + BUFFER : ground.y + ground.h + BUFFER
       const len = kerbAt - (dx ? x : y)
       const ux = -dy, uy = dx
@@ -1254,7 +1258,14 @@ export class PlaceScene extends Phaser.Scene {
       g.lineStyle(1, this.tone.curb, A)
       for (const side of [-1, 1]) { const p0 = pt(0, side * HALF), p1 = pt(len, side * HALF); g.lineBetween(p0.x, p0.y, p1.x, p1.y) }
       // The reservation opens across the street's width, so a car can turn either way.
-      if (used) g.fillStyle(this.tone.asphalt, 1).fillPoints(band(len + GUTTER / 2 - BUFFER - MEDIAN / 2 - 0.01, len + GUTTER / 2 - BUFFER + MEDIAN / 2 + 0.01, HALF), true)
+      if (used) g.fillStyle(this.tone.asphalt, A).fillPoints(band(len + GUTTER / 2 - BUFFER - MEDIAN / 2 - 0.01, len + GUTTER / 2 - BUFFER + MEDIAN / 2 + 0.01, HALF), true)
+      if (!used) {
+        // Open: a barrier across the mouth, red and white; no crossing, the reservation unbroken.
+        const b0 = pt(len - 0.08, -HALF), b1 = pt(len - 0.08, HALF)
+        g.lineStyle(4, this.tone.ink, A).lineBetween(b0.x, b0.y, b1.x, b1.y)
+        for (let k = 0; k < 4; k++) { const q0 = pt(len - 0.08, -HALF + (2 * HALF) * k / 4), q1 = pt(len - 0.08, -HALF + (2 * HALF) * (k + 1) / 4); g.lineStyle(2.6, k % 2 ? 0xffffff : 0xd9534f, A).lineBetween(q0.x, q0.y, q1.x, q1.y) }
+        return
+      }
       // The mouth: a zebra across the street, a stop line behind it; the centre line dashed on from inside.
       g.fillStyle(this.tone.paint, A)
       for (let v = -HALF + 0.04; v < HALF - 0.04; v += 0.08) g.fillPoints([pt(len - 0.26, v), pt(len - 0.08, v), pt(len - 0.08, v + 0.04), pt(len - 0.26, v + 0.04)], true)
