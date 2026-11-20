@@ -43,23 +43,24 @@ export const DISK_UNIT: UnitSpec = {
   // Details confirmed 2026-11-19: the fifteen the drives and volumes themselves know; file slots are the
   // file system's count (room standard 1), out.
   chosen: ['drives', 'rpm', 'size', 'used', 'read', 'write', 'busy', 'ops', 'latency', 'temp', 'errors', 'array.state', 'array.disks', 'array.sync', 'readonly'],
-  // Inside: the warehouse. Volumes are storage areas of standard rack bays (256 GB a bay, eight to a rack);
-  // the drives are the loading docks goods come in and go out by, one per drive along the front; an array a
-  // board (which drives and volumes it holds is not reported, so no fence: drawn 2026-11-19). Per drive on
-  // its dock, per volume on its area, the whole on the console.
+  // Inside: the warehouse (shelves the Owner's word 2026-11-19). A shelf per drive, its form its kind; the
+  // bays (256 GB, two deep) on it, goods as far as the volume is used. Where a machine has several drives,
+  // which volume lies on which is not reported: the volumes' bays on a staging floor, not a guessed shelf.
+  // An array a board apart (membership not reported). Per drive on its shelf and end plate, per volume
+  // beneath its bays, the whole on the console.
   inside: [
-    { detail: 'size', thing: 'Rack bays', shows: 'One bay per 256 GB (the standard part), eight to a low rack, four along and two back to back; a volume’s storage area is as many whole bays as it is big.', where: 'storage area' },
-    { detail: 'used', thing: 'Pallets on the bays', shows: 'Bays holding goods (amber) from the left, as much as is taken; the rest empty shelf.', where: 'storage area' },
-    { detail: 'readonly', thing: 'Chain across the area', shows: 'A volume that can only be read: a red chain across its entrance; none when it can be written.', where: 'storage area' },
-    { detail: 'drives', thing: 'Loading dock', shows: 'One dock per drive, along the front. Solid state: a roller conveyor. Spinning: a turntable. Plain when the kind is not read. The model (or the device) on the dock’s plate.', where: 'dock wall' },
-    { detail: 'rpm', thing: 'Turntable plate', shows: 'A spinning drive’s speed written on its turntable; solid state docks have none.', where: 'dock wall' },
-    { detail: 'busy', thing: 'Dock folds', shows: 'How busy the drive is: the same lit folds as the lathes, along the dock’s edge.', where: 'dock wall' },
-    { detail: 'read', thing: 'OUT on the dock', shows: 'Goods going out: how fast the drive is read, on the dock’s plate.', where: 'dock wall' },
-    { detail: 'write', thing: 'IN on the dock', shows: 'Goods coming in: how fast the drive is written, on the dock’s plate.', where: 'dock wall' },
-    { detail: 'ops', thing: 'Loads a second', shows: 'How many reads and writes a second, on the dock’s plate.', where: 'dock wall' },
-    { detail: 'latency', thing: 'Time per load', shows: 'How long each read or write takes, on the dock’s plate.', where: 'dock wall' },
-    { detail: 'temp', thing: 'Dock thermometer', shows: 'The drive’s own temperature, the small thermometer the lathes carry; none where the drive reports none.', where: 'dock wall' },
-    { detail: 'errors', thing: 'Red tape on the area', shows: 'Errors the file system counted on a volume (btrfs counts them per volume): red tape across its area with the count; none when there are none.', where: 'storage area' },
+    { detail: 'drives', thing: 'Shelf', shows: 'One shelf per drive, its form its kind. Solid state: a flow rack, rollers sloping to the pick face, goods slide down, no waiting. Spinning: a horizontal carousel, bins on a loop that must come round to the window. Plain when the kind is not read. The model (or the device) on its end plate.', where: 'shelves' },
+    { detail: 'size', thing: 'Bays', shows: 'One bay per 256 GB (the standard part), two deep; a volume is as many whole bays as it is big: on its drive’s shelf, or on the staging floor where its drive is not reported.', where: 'shelves' },
+    { detail: 'used', thing: 'Goods on the bays', shows: 'Bays holding goods (amber) in the shelf’s order (a flow rack fills its pick face first, a carousel round its loop), as much as is taken; the rest bare.', where: 'shelves' },
+    { detail: 'readonly', thing: 'Chain across the bays', shows: 'A volume that can only be read: a red chain across its bays and READ ONLY beneath; none when it can be written.', where: 'shelves' },
+    { detail: 'errors', thing: 'Red tape on the bays', shows: 'Errors the file system counted on a volume (btrfs counts them per volume): red tape across its bays with the count; none when there are none.', where: 'shelves' },
+    { detail: 'rpm', thing: 'RPM on the carousel', shows: 'A spinning drive’s speed written on its carousel’s front; flow racks have none.', where: 'shelves' },
+    { detail: 'busy', thing: 'Folds on the end plate', shows: 'How busy the drive is: the same lit folds as the lathes, on the shelf’s end plate.', where: 'end plates' },
+    { detail: 'read', thing: 'OUT on the plate', shows: 'Goods going out: how fast the drive is read.', where: 'end plates' },
+    { detail: 'write', thing: 'IN on the plate', shows: 'Goods coming in: how fast the drive is written.', where: 'end plates' },
+    { detail: 'ops', thing: 'Loads a second', shows: 'How many reads and writes a second.', where: 'end plates' },
+    { detail: 'latency', thing: 'Time per load', shows: 'How long each read or write takes.', where: 'end plates' },
+    { detail: 'temp', thing: 'Shelf thermometer', shows: 'The drive’s own temperature, the small thermometer the lathes carry, on the shelf’s end; none where the drive reports none.', where: 'shelves' },
     { detail: 'array.state', thing: 'Array board', shows: 'A low board per array at the back, its state written on it (ACTIVE; anything else in red). Which drives and volumes an array holds is not reported, so the board stands apart rather than fencing them.', where: 'array boards' },
     { detail: 'array.disks', thing: 'Lamps on the board', shows: 'A lamp per drive of the array: green active, red failed, grey spare.', where: 'array boards' },
     { detail: 'array.sync', thing: 'Strip on the board', shows: 'How far the array is in step: a strip filling to 100%.', where: 'array boards' },

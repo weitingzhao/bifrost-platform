@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { rowsDrawn, setRuler } from '../library/dictionary'
-import { BAY, baysOf, diskRoom, diskRoomShape, diskSummaryOf, volumeName, type DiskRoomReadings } from '../units/diskRoom'
+import { baysOf, FORM_HEIGHT, SHELF, diskRoom, diskRoomShape, diskSummaryOf, volumeName, type DiskRoomReadings } from '../units/diskRoom'
 import { diskRoomReadings } from '../../content/units/disk'
 
-// 2026-11-19, the disk unit's room, the warehouse, drawn against the room standards. The readings are one
+// 2026-11-19, the disk unit's room, the warehouse (shelves the Owner's word the same day), drawn against the room standards. The readings are one
 // real read of that day (a cluster node, the NAS, a Mac mini).
 const GB = 1e9, TB = 1e12
 const ssd = { kind: 'ssd' as const, model: 'G-BONG X300 512GB', rpm: null, read: 819, write: 136e3, busy: 0.021, ops: 20.5, latency: 0.00136, temp: 44.9 }
@@ -17,21 +17,21 @@ const nas: DiskRoomReadings = {
 const mac: DiskRoomReadings = { drives: [{ device: 'disk0', kind: null, model: null, rpm: null, read: 19.2e3, write: 247e3, busy: null, ops: 18.1, latency: 0.00007, temp: null }], volumes: [{ name: '/System/Volumes/Data', size: 245 * GB, used: 128 * GB, readonly: false, errors: null }], arrays: [] }
 
 describe('the disk room', () => {
-  it('whole bays, one per 256 GB: 500 GB two, 245 GB one, 984 GB four, 24 TB ninety-four (twelve racks)', () => {
+  it('whole bays, one per 256 GB: 500 GB two, 245 GB one, 984 GB four, 24 TB ninety-four', () => {
     expect(nas.volumes.map(baysOf)).toEqual([94, 4])
     expect(baysOf(node.volumes[0])).toBe(2)
     expect(baysOf(mac.volumes[0])).toBe(1)
   })
   // Rooms grow with their parts: a node's 500 GB in the smallest room, the NAS's 25 TB in the largest.
-  it('the room is the smallest that holds its bays and docks', () => {
+  it('the room is the smallest that holds its shelves and bays', () => {
     expect(diskRoomShape(node)).toEqual([4, 4])
     expect(diskRoomShape(mac)).toEqual([4, 4])
     expect(diskRoomShape(nas)).toEqual([8, 8])
     expect(diskRoom(nas).svg).not.toContain('DO NOT FIT')
   })
-  it('a dock per drive, its kind in its shape; the spinning speed on the turntable; not read, not drawn', () => {
+  it('a shelf per drive, its kind its form; the spinning speed on the carousel; not read, not drawn', () => {
     const n = rowsDrawn(() => diskRoom(nas))
-    expect(n.ids).toEqual(expect.arrayContaining(['drive.dock', 'drive.rpm', 'drive.busy', 'drive.traffic', 'array.state', 'array.disks', 'array.sync', 'vol.used', 'disk.used.all', 'drive.busy.all']))
+    expect(n.ids).toEqual(expect.arrayContaining(['drive.shelf', 'drive.rpm', 'drive.busy', 'drive.traffic', 'array.state', 'array.disks', 'array.sync', 'vol.used', 'disk.used.all', 'drive.busy.all']))
     expect(n.out.svg).toContain('7200 RPM')
     const m = rowsDrawn(() => diskRoom(mac))
     // The Mac reports no busy, no kind, no temperature: no folds, no BUSY instrument, no thermometer.
@@ -59,9 +59,17 @@ describe('the disk room', () => {
     expect(ids).toEqual([])
     expect(out.svg).toContain('DISK NOT READ')
   })
-  // Room standard 5: no rack rises above the gap to the row behind it.
-  it('nothing hides anything: a rack no higher than the gap between rows', () => {
-    expect(BAY.height).toBeLessThanOrEqual((BAY.row - BAY.depth) * 16)
+  // Room standard 5: no shelf rises above the line written beneath the shelf behind it.
+  it('nothing hides anything: no shelf higher than the gap between rows', () => {
+    for (const [back] of Object.values(FORM_HEIGHT)) expect(back).toBeLessThanOrEqual((SHELF.row - SHELF.depth - SHELF.label) * 16)
+  })
+  // 2026-11-19: which NAS volume lies on which drive is not reported (node_exporter has no md membership);
+  // goods on a guessed shelf would be made up (room standard: nothing made up).
+  it('one drive: its volumes on its shelf; several drives: the volumes on the staging floor, not a guessed shelf', () => {
+    expect(diskRoom(node).svg).not.toContain('SHELF NOT REPORTED')
+    expect(diskRoom(node).svg).toContain('ROOT')
+    expect(diskRoom(nas).svg).toContain('SHELF NOT REPORTED')
+    expect(diskRoom(nas).svg).toContain('VOLUME1')
   })
   it('the ruler counts the bays: 1 TB a bay, a quarter of the bays, the same reading', () => {
     setRuler('disk.bays', 1e12)

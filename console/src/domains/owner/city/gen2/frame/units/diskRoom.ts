@@ -4,20 +4,25 @@ import { readingText } from '../library/parts'
 import { CONSOLE_DEPTH, hasConsole, roomConsole, type ConsoleGauge, type ConsoleSpec } from './console'
 
 /**
- * The disk unit's room, the warehouse (2026-11-19; details the Owner's fifteen). The drives and volumes as
- * they are now, held to the room standards (frame/units/standards.ts):
- *   storage areas   one per volume: low steel racks of standard bays (256 GB a bay, eight to a rack), whole
- *                   bays; pallets on them from the left as far as the volume is used. Written beneath: its
- *                   name, used and size. Read-only: a red chain across it; file system errors: red tape.
- *   loading docks   one per drive, along the front: a roller conveyor for solid state, a turntable for a
- *                   spinning drive (its speed written on it), plain when the kind is not read. Along its
- *                   front the lathes' four folds, lit as far as it is busy; on its plate the model, goods out
- *                   (read) and in (written) a second, loads a second and time per load; the drive's own
- *                   thermometer on its right side.
- *   array boards    one per RAID array, low at the back left: its state, a lamp per drive (active, failed,
- *                   spare) and a strip as far as it is in step. Which drives and volumes an array holds is not
- *                   reported, so a board stands apart from the docks and areas rather than fencing them.
- *   the console     how full all the volumes are together on the desk; the drives' average busy.
+ * The disk unit's room, the warehouse (2026-11-19; details the Owner's fifteen; shelves the Owner's word the
+ * same day: "改成这个货架…尽量往上面靠"). The drives and volumes as they are now, held to the room standards
+ * (frame/units/standards.ts):
+ *   a shelf per drive   its form is its kind. Solid state: a flow rack, low lanes of rollers sloping to the
+ *                       front, goods sliding down to the pick face (no waiting). Spinning: a horizontal
+ *                       carousel, bins on a loop that must come round to the window (the platter turning; its
+ *                       speed on its front). Kind not read: a plain shelf.
+ *   bays and goods      the shelf's bays are the standard part (256 GB a bay, two deep), whole bays; goods
+ *                       (amber) on them as far as the volume is used. Written beneath: the volume's name, used
+ *                       and size; read-only a red chain, file system errors red tape.
+ *   the end plate       beside each shelf: the model, the lathes' four folds lit as far as it is busy, goods
+ *                       out (read) and in (written) a second, loads a second and time per load; the drive's own
+ *                       thermometer on the shelf's end.
+ *   staging floor       where a machine has several drives, which volume lies on which drive is not reported:
+ *                       the shelves stand empty of goods and the volumes' bays lie on a marked floor at the
+ *                       front, "SHELF NOT REPORTED", rather than on a guessed shelf.
+ *   array boards        one per RAID array, low at the back left: its state, a lamp per drive, a strip as far
+ *                       as it is in step; apart from the shelves, membership not being reported.
+ *   the console         how full all the volumes are together on the desk; the drives' average busy.
  * Low and flat-topped: nothing hides anything.
  */
 
@@ -32,38 +37,84 @@ export type DiskRoomReadings = { drives: DriveReading[]; volumes: VolumeReading[
 const U = 35.8
 const MONO = `font-family="'JetBrains Mono',ui-monospace,Menlo,monospace"`
 const WALL = faces('#efe9dc', '#e2dac8', '#cfc6b2')
-const RACK = faces('#c4ccd6', '#8f9bab', '#7a8697')
-const CONCRETE = faces('#d4d0c6', '#b3aea3', '#9f9a8f')
+const FRAME = faces('#c4ccd6', '#8f9bab', '#7a8697')
 const BOARD = faces('#e6e8ec', '#c8ccd3', '#b3b8c0')
-const PALLET = '#f2b03d', SHELF = '#dde3ea', RED = '#d83a32'
+const PALLET = '#f2b03d', PALLET_EDGE = '#a8650f', RED = '#d83a32', LANE = '#b9c0c9', ROLLER = '#6b7280', BIN = '#d7dce2'
 const LAMP = { active: '#4caf62', failed: RED, spare: '#9aa5b1' } as const
 
-/** A bay's length along its rack; a rack's depth (two bays back to back) and height; the rows' pitch; the line written under an area. */
-export const BAY = { len: 0.3, depth: 0.6, height: 6, row: 1.0, label: 0.3 }
-/** A dock's footprint and height (a loading dock stands at a truck's bed, higher than a rack). */
-export const DOCK = { w: 1.3, d: 1.2, h: 7, gap: 0.15 }
+/**
+ * A bay column's length along the shelf (two bays deep); the shelf's depth; the rows' pitch, which holds the
+ * shelf, the line written beneath and the next row's rise (no shelf hides the line or the row behind).
+ */
+export const SHELF = { col: 0.4, depth: 0.6, label: 0.3, row: 1.35 }
+/** Heights by form: back and front (a flow rack slopes to its pick face). */
+export const FORM_HEIGHT = { flow: [7, 4], carousel: [5, 5], plain: [7, 7] } as const
+/** The end plate beside each shelf; a shelf's length where its goods are not placed on it. */
+export const PLATE = { w: 1.6, gap: 0.15, h: 3 }
+const BARE_COLS = 3
+/** A bay on the staging floor. */
+const CELL = 0.25
 const ROOMS: [number, number][] = [[4, 4], [4, 8], [8, 8]]
-const FLOOR_TOP = CONSOLE_DEPTH + 0.15, RACK_GAP = 0.2
+const FLOOR_TOP = CONSOLE_DEPTH + 0.15, LEFT = 0.35
 
-const rackLen = () => 4 * BAY.len
-/** Racks a row: pairs and powers of two, as many as the width holds. */
-export const racksPerRow = (w: number) => { let n = 1; while ((n * 2) * rackLen() + (n * 2 - 1) * RACK_GAP <= w - 0.7 + 1e-9) n *= 2; return n }
-const docksPerRow = (w: number) => Math.max(1, Math.floor((w - 0.6 + DOCK.gap) / (DOCK.w + DOCK.gap)))
+type Form = keyof typeof FORM_HEIGHT
+const formOf = (d: DriveReading | null): Form => d?.kind === 'ssd' ? 'flow' : d?.kind === 'hdd' ? 'carousel' : 'plain'
 
-/** Whole bays for a volume, under the ruler as it stands (a shelf is whole; what is on it fills it in proportion). */
+/** Whole bays for a volume, under the ruler as it stands (a bay is whole; what is on it fills it in proportion). */
 export const baysOf = (v: VolumeReading) => v.size > 0 ? Math.max(1, Math.ceil(encode('disk.bays', v.size)! - 0.02)) : 0
-const rowsOfVolume = (v: VolumeReading, w: number) => Math.ceil(Math.ceil(baysOf(v) / 8) / racksPerRow(w))
-/** An area's depth: its rows (the last needs only its rack), and the line written beneath. */
-const areaDepth = (rows: number) => (rows - 1) * BAY.row + BAY.depth + BAY.label
+const colsPerRow = (w: number) => Math.max(1, Math.floor((w - LEFT - 0.15 - PLATE.w - PLATE.gap) / SHELF.col))
+const unitW = BARE_COLS * SHELF.col + PLATE.gap + PLATE.w
+const unitsPerRow = (w: number) => Math.max(1, Math.floor((w - LEFT - 0.15 + 0.3) / (unitW + 0.3)))
+const cellsPerRow = (w: number) => Math.max(1, Math.floor((w - LEFT - 0.2) / CELL))
+const stagingDepth = (v: VolumeReading, w: number) => Math.ceil(baysOf(v) / cellsPerRow(w)) * CELL + SHELF.label + 0.1
 
-function depthNeeded(r: DiskRoomReadings, [w]: [number, number]) {
-  const areas = r.volumes.reduce((a, v) => a + areaDepth(rowsOfVolume(v, w)) + 0.1, 0)
-  const docks = r.drives.length ? Math.ceil(r.drives.length / docksPerRow(w)) * (DOCK.d + DOCK.gap) : 0
-  return FLOOR_TOP + areas + docks + 0.25
+/** One drive with its goods on its shelf: a row piece per run of bay columns. */
+type Piece = { y: number; drive: DriveReading | null; cols: number; volume: VolumeReading | null; from: number; plate: boolean; x: number; labelled: boolean }
+type Staged = { y: number; volume: VolumeReading }
+type Plan = { pieces: Piece[]; staged: Staged[]; stagingTop: number | null; cut: number; depth: number }
+
+function plan(r: DiskRoomReadings, [w, d]: [number, number]): Plan {
+  const pieces: Piece[] = [], staged: Staged[] = []
+  let y = FLOOR_TOP, cut = 0, stagingTop: number | null = null
+  const limit = d - 0.2
+  if (r.drives.length === 1 && r.volumes.length > 0) {
+    // One drive: every volume read is on it. Its goods go on its shelf, in rows of whole bay columns.
+    const K = colsPerRow(w)
+    let first = true
+    for (const v of r.volumes) {
+      const cols = Math.ceil(baysOf(v) / 2), rows = Math.ceil(cols / K)
+      if (y + rows * SHELF.row > limit + 1e-9) { cut++; continue }
+      for (let k = 0; k < rows; k++) {
+        // Its name is written under the last row of its bays.
+        pieces.push({ y, drive: r.drives[0], cols: Math.min(K, cols - k * K), volume: v, from: k * K * 2, plate: first, x: LEFT, labelled: k === rows - 1 })
+        first = false
+        y += SHELF.row
+      }
+    }
+  } else {
+    // Several drives (or none read): the shelves bare of goods, the volumes on the staging floor.
+    const P = unitsPerRow(w)
+    r.drives.forEach((dr, i) => {
+      const row = Math.floor(i / P)
+      pieces.push({ y: y + row * SHELF.row, drive: dr, cols: BARE_COLS, volume: null, from: 0, plate: true, x: LEFT + (i % P) * (unitW + 0.3), labelled: false })
+    })
+    if (r.drives.length) y += Math.ceil(r.drives.length / P) * SHELF.row
+    if (r.volumes.length) {
+      stagingTop = y
+      y += 0.3
+      for (const v of r.volumes) {
+        const sd = stagingDepth(v, w)
+        if (y + sd > limit + 1e-9) { cut++; continue }
+        staged.push({ y, volume: v })
+        y += sd
+      }
+    }
+  }
+  return { pieces, staged, stagingTop, cut, depth: y + 0.2 }
 }
 
 export function diskRoomShape(r: DiskRoomReadings): [number, number] {
-  return ROOMS.find(s => depthNeeded(r, s) <= s[1] + 1e-9) ?? ROOMS[ROOMS.length - 1]
+  return ROOMS.find(s => { const p = plan(r, s); return p.cut === 0 && p.depth <= s[1] + 1e-9 }) ?? ROOMS[ROOMS.length - 1]
 }
 
 const avg = (v: (number | null)[]) => { const k = v.filter((x): x is number => x != null); return k.length ? k.reduce((a, b) => a + b, 0) / k.length : null }
@@ -79,6 +130,7 @@ export function diskSummaryOf(r: DiskRoomReadings) {
 export const volumeName = (mount: string) => (mount.split('/').filter(Boolean).pop() ?? 'root').toUpperCase()
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+const clamp = (v: number) => Math.max(0, Math.min(1, v))
 
 export function diskRoom(r: DiskRoomReadings): Sprite {
   const [fw, fd] = diskRoomShape(r)
@@ -118,119 +170,180 @@ export function diskRoom(r: DiskRoomReadings): Sprite {
       if (a.active != null) { metaphor('array.disks'); lamps.forEach((c, i) => { svg += `<circle cx="${(5 + i * 6).toFixed(1)}" cy="12.5" r="2.2" fill="${c}" stroke="${INK}" stroke-width="0.5"/>` }) }
       if (a.sync != null) {
         metaphor('array.sync')
-        const sw = W - 5, f = encode('array.sync', a.sync)!
+        const sw = W - 19, f = encode('array.sync', a.sync)!
         svg += `<rect x="2.5" y="${(D - 6).toFixed(1)}" width="${sw.toFixed(1)}" height="3" fill="#fbfaf6" stroke="${INK}" stroke-width="0.5"/><rect x="2.5" y="${(D - 6).toFixed(1)}" width="${(sw * f).toFixed(1)}" height="3" fill="#4caf62"/>`
-        svg += `<text x="${(W - 2.5).toFixed(1)}" y="12.8" text-anchor="end" ${MONO} font-size="4.6" fill="${INK}">IN STEP ${readingText(a.sync, 'share')}</text>`
+        svg += `<text x="${(W - 2.5).toFixed(1)}" y="${(D - 3.2).toFixed(1)}" text-anchor="end" ${MONO} font-size="4.4" font-weight="600" fill="${INK}">${readingText(a.sync, 'share')}</text>`
       }
       g.floor(x, y, 3, svg)
     } })
   })
 
-  // The storage areas, one per volume, biggest first, each in rows of racks.
-  const K = racksPerRow(fw)
-  let y = FLOOR_TOP
-  const docksTop = fd - 0.25 - (r.drives.length ? Math.ceil(r.drives.length / docksPerRow(fw)) * (DOCK.d + DOCK.gap) : 0)
-  let cut = 0
-  for (const v of r.volumes) {
-    const bays = baysOf(v), rows = rowsOfVolume(v, fw)
-    if (y + areaDepth(rows) > docksTop + 1e-9) { cut++; continue }
+  const p = plan(r, [fw, fd])
+
+  // The shelves: one per drive (a row piece per run of bay columns when its goods are on it).
+  for (const pc of p.pieces) {
+    metaphor('drive.shelf')
+    const v = pc.volume
+    if (v) metaphor('disk.bays')
+    const bays = v ? baysOf(v) : 0
+    const share = v && v.used != null ? encode('vol.used', v.used / v.size) : null
+    if (share != null) metaphor('vol.used')
+    const filled = (share ?? 0) * bays - pc.from
+    const n = v ? Math.min(pc.cols * 2, bays - pc.from) : null
+    const L = pc.cols * SHELF.col
+    things.push({ at: pc.x + pc.y, draw: () => drawShelf(g, pc.x, pc.y, pc.cols, formOf(pc.drive), n, filled, pc.drive) })
+    if (pc.plate && pc.drive) { const d = pc.drive, px = pc.x + L + PLATE.gap; things.push({ at: px + pc.y, draw: () => drawPlate(g, px, pc.y, d) }) }
+    if (v && pc.labelled) {
+      const ly = pc.y + SHELF.depth + 0.06
+      things.push({ at: pc.x + ly + 0.5, draw: () => volumeLine(g, pc.x, ly, v) })
+    }
+    if (v?.readonly) { metaphor('vol.readonly'); things.push({ at: pc.x + pc.y + 0.6, draw: () => g.floor(pc.x - 0.05, pc.y, FORM_HEIGHT[formOf(pc.drive)][0] + 0.3, `<path d="M0 ${(SHELF.depth * U).toFixed(1)} L${((L + 0.1) * U).toFixed(1)} 0" stroke="${RED}" stroke-width="1.6" stroke-dasharray="3 2"/>`) }) }
+    if (v?.errors) { metaphor('vol.errors'); things.push({ at: pc.x + pc.y + 0.6, draw: () => g.floor(pc.x - 0.05, pc.y, FORM_HEIGHT[formOf(pc.drive)][0] + 0.3, `<path d="M0 0 L${((L + 0.1) * U).toFixed(1)} ${(SHELF.depth * U).toFixed(1)}" stroke="${RED}" stroke-width="3" opacity="0.85"/>`) }) }
+  }
+
+  // The staging floor: volumes whose drive is not reported, their bays laid out on a marked floor.
+  if (p.stagingTop != null) {
+    const top = p.stagingTop
+    things.push({ at: top, draw: () => g.floor(LEFT, top, 3, `<text x="0" y="6" ${MONO} font-size="5.2" font-weight="700" fill="#8a857a">VOLUMES · SHELF NOT REPORTED</text>`) })
+  }
+  const C = cellsPerRow(fw)
+  for (const s of p.staged) {
+    const v = s.volume, bays = baysOf(v)
     metaphor('disk.bays')
     const share = v.used != null ? encode('vol.used', v.used / v.size) : null
     if (share != null) metaphor('vol.used')
-    const filled = (share ?? 0) * bays, rowW = K * rackLen() + (K - 1) * RACK_GAP, x0 = (fw - rowW) / 2 + 0.05
-    const racks = Math.ceil(bays / 8)
-    for (let k = 0; k < racks; k++) {
-      const n = Math.min(8, bays - k * 8), len = Math.ceil(n / 2) * BAY.len
-      const x = x0 + (k % K) * (rackLen() + RACK_GAP), ry = y + Math.floor(k / K) * BAY.row
-      things.push({ at: x + ry, draw: () => {
-        // A low steel rack: its frame, the uprights at its ends, the shelf on top with its bays; pallets on them.
-        g.shadow(x, ry, len, BAY.depth, 0.2)
-        g.box(x, ry, len, BAY.depth, BAY.height, RACK, 0, 1)
-        g.onLeft(x, ry + BAY.depth, 0, 0.03, 0, BAY.height, '#5d6878', 0)
-        g.onLeft(x, ry + BAY.depth, len - 0.03, len, 0, BAY.height, '#5d6878', 0)
-        const bw = BAY.len * U, D = BAY.depth * U
-        let svg = `<rect x="0" y="0" width="${(len * U).toFixed(1)}" height="${D.toFixed(1)}" fill="${SHELF}"/>`
-        // Eight bays a rack, four along and two back to back; filled a column at a time from the left.
-        const h = D / 2
-        for (let b = 0; b < n; b++) {
-          const c = Math.floor(b / 2), side = b % 2, on = Math.max(0, Math.min(1, filled - (k * 8 + b)))
-          svg += `<rect x="${(c * bw + 0.5).toFixed(1)}" y="${(side * h + 0.5).toFixed(1)}" width="${(bw - 1).toFixed(1)}" height="${(h - 1).toFixed(1)}" fill="none" stroke="#7a8697" stroke-width="0.5"/>`
-          if (on > 0.02) svg += `<rect x="${(c * bw + 1.6).toFixed(1)}" y="${(side * h + 1.6).toFixed(1)}" width="${((bw - 3.2) * on).toFixed(1)}" height="${(h - 3.2).toFixed(1)}" fill="${PALLET}" stroke="#a8650f" stroke-width="0.5"/>`
-        }
-        svg += `<rect x="0" y="0" width="${(len * U).toFixed(1)}" height="${D.toFixed(1)}" fill="none" stroke="${INK}" stroke-width="0.6"/>`
-        g.floor(x, ry, BAY.height, svg)
-      } })
+    const filled = (share ?? 0) * bays, rows = Math.ceil(bays / C), c = CELL * U
+    let svg = ''
+    for (let b = 0; b < bays; b++) {
+      const cx = (b % C) * c, cy = Math.floor(b / C) * c, on = clamp(filled - b)
+      svg += `<rect x="${(cx + 0.5).toFixed(1)}" y="${(cy + 0.5).toFixed(1)}" width="${(c - 1).toFixed(1)}" height="${(c - 1).toFixed(1)}" fill="#e9e6de" stroke="#9f9a8f" stroke-width="0.5" stroke-dasharray="1.5 1"/>`
+      if (on > 0.02) svg += `<rect x="${(cx + 1.4).toFixed(1)}" y="${(cy + 1.4).toFixed(1)}" width="${((c - 2.8) * on).toFixed(1)}" height="${(c - 2.8).toFixed(1)}" fill="${PALLET}" stroke="${PALLET_EDGE}" stroke-width="0.5"/>`
     }
-    // Written beneath the area: its name, used and size; a red chain if read-only; red tape if it has errors.
-    const ah = areaDepth(rows) - BAY.label, ly = y + ah + 0.1, aw = rowW
-    const line = `${esc(volumeName(v.name))}  ${readingText(v.used, 'bytes')} OF ${readingText(v.size, 'bytes')}`
-    let svg = `<text x="0" y="7" ${MONO} font-size="5.6" font-weight="700" fill="#5d5a52">${line}</text>`
-    if (v.readonly) { metaphor('vol.readonly'); svg += `<text x="${(aw * U).toFixed(1)}" y="7" text-anchor="end" ${MONO} font-size="5.6" font-weight="700" fill="${RED}">READ ONLY</text>` }
-    if (v.errors) { metaphor('vol.errors'); svg += `<text x="${(aw * U * (v.readonly ? 0.62 : 1)).toFixed(1)}" y="7" text-anchor="end" ${MONO} font-size="5.6" font-weight="700" fill="${RED}">${Math.round(v.errors)} ERRORS</text>` }
-    things.push({ at: x0 + aw + ly, draw: () => g.floor(x0, ly, 3, svg) })
-    if (v.readonly) g.floor(x0 - 0.05, y, 3.2, `<path d="M0 ${(ah * U).toFixed(1)} L${((aw + 0.1) * U).toFixed(1)} ${(ah * U).toFixed(1)}" stroke="${RED}" stroke-width="1.6" stroke-dasharray="3 2"/>`)
-    if (v.errors) things.push({ at: x0 + aw + y + ah, draw: () => g.floor(x0 - 0.05, y, BAY.height + 0.2, `<path d="M0 0 L${((aw + 0.1) * U).toFixed(1)} ${(ah * U).toFixed(1)}" stroke="${RED}" stroke-width="3" opacity="0.85"/>`) })
-    y += areaDepth(rows) + 0.1
+    const W = Math.min(bays, C) * CELL, ly = s.y + rows * CELL + 0.04
+    if (v.readonly) { metaphor('vol.readonly'); svg += `<path d="M0 ${(rows * c).toFixed(1)} L${(W * U).toFixed(1)} 0" stroke="${RED}" stroke-width="1.6" stroke-dasharray="3 2"/>` }
+    if (v.errors) { metaphor('vol.errors'); svg += `<path d="M0 0 L${(W * U).toFixed(1)} ${(rows * c).toFixed(1)}" stroke="${RED}" stroke-width="3" opacity="0.85"/>` }
+    things.push({ at: s.y, draw: () => { g.floor(LEFT, s.y, 3.4, svg); volumeLine(g, LEFT, ly, v) } })
   }
-  if (cut) g.text('left', 0.4, 0.18, 47, `${cut} VOLUME${cut > 1 ? 'S' : ''} DO NOT FIT — SET MORE GB A BAY`, 5.5, '#b8433f', 700)
-
-  // The loading docks along the front, one per drive.
-  const P = docksPerRow(fw)
-  r.drives.forEach((d, i) => {
-    metaphor('drive.dock')
-    const inRow = Math.min(P, r.drives.length - Math.floor(i / P) * P), span = inRow * DOCK.w + (inRow - 1) * DOCK.gap
-    const x = (fw - span) / 2 + 0.05 + (i % P) * (DOCK.w + DOCK.gap), dy = docksTop + Math.floor(i / P) * (DOCK.d + DOCK.gap)
-    things.push({ at: x + dy, draw: () => drawDock(g, x, dy, d) })
-  })
+  if (p.cut) g.text('left', 0.4, 0.18, 47, `${p.cut} VOLUME${p.cut > 1 ? 'S' : ''} DO NOT FIT — SET MORE GB A BAY`, 5.5, '#b8433f', 700)
 
   things.sort((a, b) => a.at - b.at).forEach(t => t.draw())
   return g.done()
 }
 
-function drawDock(g: Draw, x: number, y: number, d: DriveReading) {
-  const W = DOCK.w * U, D = DOCK.d * U
-  g.shadow(x, y, DOCK.w, DOCK.d, 0.25)
-  g.box(x, y, DOCK.w, DOCK.d, DOCK.h, CONCRETE, 0, 1.1)
-  // The bumper along its front.
-  g.onLeft(x, y + DOCK.d, 0.1, DOCK.w - 0.1, DOCK.h - 2.2, DOCK.h - 0.6, '#3b3f48', 0.5)
-  let svg = ''
-  // What it is: a roller conveyor (solid state), a turntable (spinning), nothing when not read.
-  if (d.kind === 'ssd') {
-    svg += `<rect x="3" y="2.5" width="${(W - 6).toFixed(1)}" height="7" fill="#b9c0c9" stroke="${INK}" stroke-width="0.5"/>`
-    for (let k = 1; k * 3.2 < W - 6; k++) svg += `<line x1="${(3 + k * 3.2).toFixed(1)}" y1="2.5" x2="${(3 + k * 3.2).toFixed(1)}" y2="9.5" stroke="#6b7280" stroke-width="0.7"/>`
-  } else if (d.kind === 'hdd') {
-    svg += `<circle cx="9" cy="6.5" r="4.8" fill="#b9c0c9" stroke="${INK}" stroke-width="0.6"/><circle cx="9" cy="6.5" r="1" fill="#6b7280"/>`
-    for (let k = 0; k < 4; k++) { const a = k * Math.PI / 4; svg += `<line x1="${(9 - 4.3 * Math.cos(a)).toFixed(1)}" y1="${(6.5 - 4.3 * Math.sin(a)).toFixed(1)}" x2="${(9 + 4.3 * Math.cos(a)).toFixed(1)}" y2="${(6.5 + 4.3 * Math.sin(a)).toFixed(1)}" stroke="#6b7280" stroke-width="0.5"/>` }
-    if (d.rpm != null) { metaphor('drive.rpm'); svg += `<text x="16" y="8.3" ${MONO} font-size="4.6" font-weight="700" fill="${INK}">${Math.round(d.rpm)} RPM</text>` }
+/** Written beneath a volume's bays: its name, used and size; READ ONLY and the error count in red. */
+function volumeLine(g: Draw, x: number, y: number, v: VolumeReading) {
+  const line = `${volumeName(v.name)}  ${readingText(v.used, 'bytes')} OF ${readingText(v.size, 'bytes')}`
+  let svg = `<text x="0" y="7" ${MONO} font-size="5.6" font-weight="700" fill="#5d5a52">${esc(line)}</text>`
+  // Red tags right after the line (a mono character is 0.6 of the size wide).
+  const tags = [v.readonly ? 'READ ONLY' : null, v.errors ? `${Math.round(v.errors)} ERRORS` : null].filter(Boolean)
+  if (tags.length) svg += `<text x="${((line.length + 2) * 5.6 * 0.6).toFixed(1)}" y="7" ${MONO} font-size="5.6" font-weight="700" fill="${RED}">${tags.join(' · ')}</text>`
+  g.floor(x, y, 3, svg)
+}
+
+/**
+ * A shelf of `cols` bay columns, two bays deep, in its form. `n` bays on it (null: the shelf drawn bare, its
+ * goods not placed on it), `filled` of them holding goods in the form's order.
+ */
+function drawShelf(g: Draw, x: number, y: number, cols: number, form: Form, n: number | null, filled: number, d: DriveReading | null) {
+  const L = cols * SHELF.col, D = SHELF.depth, [zb, zf] = FORM_HEIGHT[form]
+  const z = (yy: number) => zb + (zf - zb) * (yy - y) / D
+  const quad = (x0: number, x1: number, y0: number, y1: number, fill: string, sw = 0.5, stroke = INK, lift = 0) =>
+    g.poly(fill, [[x0, y0, z(y0) + lift], [x1, y0, z(y0) + lift], [x1, y1, z(y1) + lift], [x0, y1, z(y1) + lift]], sw, stroke)
+  g.shadow(x, y, L, D, 0.2)
+  // The frame: front face, end (a trapezoid where it slopes), top.
+  g.poly(FRAME.left, [[x, y + D, 0], [x + L, y + D, 0], [x + L, y + D, zf], [x, y + D, zf]], 1)
+  g.poly(FRAME.right, [[x + L, y, 0], [x + L, y + D, 0], [x + L, y + D, zf], [x + L, y, zb]], 1)
+  g.poly(form === 'carousel' ? '#cdd3da' : FRAME.top, [[x, y, zb], [x + L, y, zb], [x + L, y + D, zf], [x, y + D, zf]], 1)
+  // Where bay b sits: its column and its slot (0 back, 1 front), in the order goods fill it.
+  const at = (b: number): [number, number] => {
+    if (form === 'flow') return [Math.floor(b / 2), b % 2 === 0 ? 1 : 0] // slid to the pick face first
+    return [Math.floor(b / 2), b % 2]
   }
+  const slotY = (s: number): [number, number] => s === 0 ? [y + 0.04, y + D / 2 - 0.02] : [y + D / 2 + 0.02, y + D - 0.04]
+  if (form === 'flow') {
+    // Lanes of rollers from back to front, one per bay column.
+    for (let c = 0; c < cols; c++) {
+      const xa = x + c * SHELF.col + 0.04, xb = x + (c + 1) * SHELF.col - 0.04
+      quad(xa, xb, y + 0.02, y + D - 0.02, LANE, 0.5)
+      for (let yy = y + 0.07; yy < y + D - 0.03; yy += 0.07) g.line([xa, yy, z(yy)], [xb, yy, z(yy)], ROLLER, 0.6)
+    }
+  } else if (form === 'carousel') {
+    // The loop: a track round the shelf (a ring with rounded ends), the bins riding on it in a ring, filled
+    // round the loop; the window they come round to at the front middle.
+    const rc = Math.max(0.06, Math.min(D, L) / 2 - 0.15), cx0 = x + Math.max(D / 2, L / 2 > D / 2 ? D / 2 : L / 2), cx1 = x + L - (cx0 - x), my = y + D / 2
+    const stadium = (r: number) => {
+      const q: [number, number, number][] = []
+      for (let k = 0; k <= 12; k++) { const t = -Math.PI / 2 + Math.PI * k / 12; q.push([cx1 + r * Math.cos(t), my + r * Math.sin(t), zb]) }
+      for (let k = 0; k <= 12; k++) { const t = Math.PI / 2 + Math.PI * k / 12; q.push([cx0 + r * Math.cos(t), my + r * Math.sin(t), zb]) }
+      return q
+    }
+    g.poly('#7d8794', stadium(rc + 0.1), 0.6)
+    g.poly('#cdd3da', stadium(Math.max(0.01, rc - 0.1)), 0.5)
+    const straight = cx1 - cx0, P = 2 * straight + 2 * Math.PI * rc
+    const along = (sd: number): [number, number] => {
+      if (sd < straight) return [cx0 + sd, my - rc]
+      sd -= straight
+      if (sd < Math.PI * rc) { const t = -Math.PI / 2 + sd / rc; return [cx1 + rc * Math.cos(t), my + rc * Math.sin(t)] }
+      sd -= Math.PI * rc
+      if (sd < straight) return [cx1 - sd, my + rc]
+      sd -= straight
+      const t = Math.PI / 2 + sd / rc; return [cx0 + rc * Math.cos(t), my + rc * Math.sin(t)]
+    }
+    const N = n ?? 2 * cols + 2, hs = Math.min(0.075, P / N / 2.6)
+    for (let k = 0; k < N; k++) {
+      const [bx, by] = along((k + 0.5) * P / N)
+      g.poly(BIN, [[bx - hs, by - hs, zb + 0.3], [bx + hs, by - hs, zb + 0.3], [bx + hs, by + hs, zb + 0.3], [bx - hs, by + hs, zb + 0.3]], 0.5, n == null ? '#9aa5b1' : '#5d6878')
+      const on = n == null ? 0 : clamp(filled - k)
+      if (on > 0.02) g.poly(PALLET, [[bx - hs + 0.015, by - hs + 0.015, zb + 1.6], [bx - hs + 0.015 + (2 * hs - 0.03) * on, by - hs + 0.015, zb + 1.6], [bx - hs + 0.015 + (2 * hs - 0.03) * on, by + hs - 0.015, zb + 1.6], [bx - hs + 0.015, by + hs - 0.015, zb + 1.6]], 0.5, PALLET_EDGE)
+    }
+    // The window at the front middle, where a bin must come round to be picked.
+    g.poly('#3b3f48', [[x + L / 2 - 0.06, y + D - 0.015, zb], [x + L / 2 + 0.06, y + D - 0.015, zb], [x + L / 2 + 0.06, y + D - 0.015, zb + 2.5], [x + L / 2 - 0.06, y + D - 0.015, zb + 2.5]], 0.5)
+  }
+  // The bays and their goods (a carousel's ride on its loop, above).
+  const N = form === 'carousel' ? 0 : n ?? (form === 'flow' ? 0 : cols * 2)
+  for (let b = 0; b < N; b++) {
+    const [c, s] = at(b), [ya, yb] = slotY(s)
+    const xa = x + c * SHELF.col + 0.05, xb = x + (c + 1) * SHELF.col - 0.05
+    if (form !== 'flow') quad(xa, xb, ya, yb, '#dde3ea', 0.5, n == null ? '#9aa5b1' : '#7a8697', 0.2)
+    const on = n == null ? 0 : clamp(filled - b)
+    if (on > 0.02) quad(xa + 0.02, xa + 0.02 + (xb - xa - 0.04) * on, ya + 0.02, yb - 0.02, PALLET, 0.5, PALLET_EDGE, 1.5)
+  }
+  // A spinning drive's speed on the carousel's front.
+  if (form === 'carousel' && d?.rpm != null && L >= 0.8) { metaphor('drive.rpm'); g.text('left', x + 0.06, y + D, 0.6, `${Math.round(d.rpm)} RPM`, 3.6, '#fbfaf6', 700) }
+  // The drive's own temperature: the lathes' small thermometer on the shelf's end.
+  if (d?.temp != null) {
+    metaphor('drive.temp')
+    const t = d.temp, top = zb - 1
+    g.onRight(x + L, y, 0.05, 0.13, 0.8, top, '#fbfaf6', 0.5)
+    g.onRight(x + L, y, 0.06, 0.12, 0.8, 0.8 + (top - 0.8) * encode('drive.temp', t / 100)!, t >= 80 ? '#e0533d' : '#e88a3a', 0)
+  }
+}
+
+/** The end plate beside a shelf: the model (and a spinning drive's speed), how busy, goods out and in, loads a second and time per load. */
+function drawPlate(g: Draw, x: number, y: number, d: DriveReading) {
+  const W = PLATE.w * U
+  g.shadow(x, y, PLATE.w, SHELF.depth, 0.15)
+  g.box(x, y, PLATE.w, SHELF.depth, PLATE.h, BOARD, 0, 1)
+  const name = (d.model ?? d.device).toUpperCase(), short = name.length > 20 ? name.slice(0, 19) + '…' : name
+  let svg = `<text x="2.5" y="5.4" ${MONO} font-size="4" font-weight="700" fill="${INK}">${esc(short)}</text>`
   // How busy: the lathes' four folds, lit from the left.
   if (d.busy != null) {
     metaphor('drive.busy')
-    const b = encode('drive.busy', d.busy)!, N = 4, lit = b * N, glow = b > 0.85 ? '#ff7a45' : '#ffc94d', fw = W - 6
+    const b = encode('drive.busy', d.busy)!, N = 4, lit = b * N, glow = b > 0.85 ? '#ff7a45' : '#ffc94d', fw = W - 5
     for (let k = 0; k < N; k++) {
-      const u0 = 3 + (k / N) * fw, w = fw / N, on = Math.max(0, Math.min(1, lit - k))
-      svg += `<rect x="${u0.toFixed(1)}" y="11" width="${w.toFixed(1)}" height="3.5" fill="${k % 2 ? '#4a564f' : '#55625a'}"/>`
-      if (on > 0.02) svg += `<rect x="${u0.toFixed(1)}" y="11" width="${(w * on).toFixed(1)}" height="3.5" fill="${glow}"/>`
+      const u0 = 2.5 + (k / N) * fw, w = fw / N, on = clamp(lit - k)
+      svg += `<rect x="${u0.toFixed(1)}" y="7.2" width="${w.toFixed(1)}" height="3" fill="${k % 2 ? '#4a564f' : '#55625a'}"/>`
+      if (on > 0.02) svg += `<rect x="${u0.toFixed(1)}" y="7.2" width="${(w * on).toFixed(1)}" height="3" fill="${glow}"/>`
     }
-    svg += `<rect x="3" y="11" width="${fw.toFixed(1)}" height="3.5" fill="none" stroke="${INK}" stroke-width="0.5"/>`
+    svg += `<rect x="2.5" y="7.2" width="${fw.toFixed(1)}" height="3" fill="none" stroke="${INK}" stroke-width="0.5"/>`
   }
-  // The plate: the model, goods out and in, loads a second and time per load.
-  const name = (d.model ?? d.device).toUpperCase(), short = name.length > 18 ? name.slice(0, 17) + '…' : name
-  const lines = [short]
-  if (d.read != null || d.write != null) { metaphor('drive.traffic'); lines.push(`OUT ${readingText(d.read, 'bytes/s')}`, `IN ${readingText(d.write, 'bytes/s')}`) }
+  const lines: string[] = []
+  if (d.read != null || d.write != null) { metaphor('drive.traffic'); lines.push(`OUT ${readingText(d.read, 'bytes/s')} · IN ${readingText(d.write, 'bytes/s')}`) }
   const ops = d.ops != null ? (metaphor('drive.ops'), readingText(d.ops, 'per second')) : null
   const lat = d.latency != null ? (metaphor('drive.latency'), readingText(d.latency, 'seconds')) : null
   if (ops || lat) lines.push([ops, lat].filter(Boolean).join(' · '))
-  svg += `<rect x="2" y="16" width="${(W - 4).toFixed(1)}" height="${(D - 17.5).toFixed(1)}" fill="#fbfaf6" stroke="${INK}" stroke-width="0.5"/>`
-  lines.forEach((l, k) => { svg += `<text x="3.5" y="${(21.5 + k * 5.6).toFixed(1)}" ${MONO} font-size="${k ? 4.2 : 4.3}" font-weight="${k ? 600 : 700}" fill="${INK}">${esc(l)}</text>` })
-  g.floor(x, y, DOCK.h, svg)
-  // The drive's own temperature: the lathes' small thermometer, on the dock's right side.
-  if (d.temp != null) {
-    metaphor('drive.temp')
-    const t = d.temp
-    g.onRight(x + DOCK.w, y, 0.04, 0.12, 1, DOCK.h - 1, '#fbfaf6', 0.5)
-    g.onRight(x + DOCK.w, y, 0.05, 0.11, 1, 1 + (DOCK.h - 3) * encode('drive.temp', t / 100)!, t >= 80 ? '#e0533d' : '#e88a3a', 0)
-  }
+  lines.forEach((l, k) => { svg += `<text x="2.5" y="${(14.6 + k * 4.8).toFixed(1)}" ${MONO} font-size="3.6" font-weight="600" fill="${INK}">${esc(l)}</text>` })
+  g.floor(x, y, PLATE.h, svg)
 }
 
 /** The key the room's picture is kept under: every reading to the step it is drawn at. */
