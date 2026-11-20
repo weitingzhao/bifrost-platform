@@ -4,6 +4,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/evalreadings"
 )
 
 // mountCoordination registers the coordination domain's routes under /api/v1. They were lines
@@ -19,4 +20,8 @@ func (s *Server) mountCoordination(r chi.Router) {
 	})
 	// Titles and host names: viewer and above.
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/agent/threads", s.agentThreads.HandleList)
+	// The evaluation readout (law 47, the metrics line): each number from kept
+	// records over a closed window, with its definition version, window,
+	// sample count and source. Read-only; viewer and above.
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/readings/evaluation", evalreadings.Handler(s.recordDB, s.evalProm, nil))
 }

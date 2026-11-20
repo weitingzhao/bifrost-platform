@@ -1714,6 +1714,13 @@
       "status": "assigned",
       "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the platform's own patrol: it reads the checklist signals and repairs the platform and the cluster through platform routes. It serves no one domain; its tenant items are read through signals a tenant binds. It had no row."
     },
+    "api/internal/evalreadings": {
+      "domains": [
+        "coordination"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-20: the evaluation readout (law 47), GET /api/v1/readings/evaluation; the coordinator gave it to the metrics line (coordination). Reads the event ledger only through eventlog.LatestByKey and OfType and Prometheus through a query lent by server; writes nothing."
+    },
     "api/internal/elasticreadings": {
       "domains": [
         "compute"
