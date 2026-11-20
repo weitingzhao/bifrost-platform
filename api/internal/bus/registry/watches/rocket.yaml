@@ -1,0 +1,24 @@
+# What gate-cluster watches in the cluster and says on the bus when its state
+# changes (2026-11-20, the Owner: a module that joins or leaves must not mean
+# a code change). A row here plus its topic's entry (with body) in
+# ../rocket.yaml is all a new kind of object needs. Checked by watches_test.go.
+tenant: rocket
+watches:
+  # A node turned ready or not ready, or was cordoned or uncordoned. Origin:
+  # 2026-11-20 02:50Z ubt-k3s-05 was drained and the bus's NATS on it sat
+  # Pending an hour while nothing on the bus said so.
+  - id: nodes
+    group: ""
+    version: v1
+    resource: nodes
+    type: cluster.node.changed
+    stream: node
+    subject: "{metadata.name}"
+    subject_field: node
+    state:
+      - name: ready
+        path: status.conditions[type=Ready].status
+        map: {"True": ready, "False": notready, "*": unknown}
+      - name: schedule
+        path: spec.unschedulable
+        map: {"true": cordoned, "*": schedulable}

@@ -12,6 +12,7 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import type { QueryClient, QueryKey } from '@tanstack/react-query'
 import { authHeaders } from '@/api/client'
+import { fetchBusContract } from './busNextgen'
 import { serverFetch } from '@/api/serverContact'
 import { SseParser } from './sseParser'
 
@@ -34,9 +35,6 @@ export const LIVE_REFRESH: LiveRefreshRow[] = [
   { types: ['ci.run.', 'ci.verdict.changed'], keys: [['delivery', 'runs'], ['delivery', 'pipelines'], ['ci']] },
   { types: ['release.deploy.finished', 'release.gitops.changed'], keys: [['releases'], ['gitops']] },
   { types: ['alert.rule.fired'], keys: [['telemetry', 'alerts']] },
-  // A node turned ready, not ready, cordoned or uncordoned (2026-11-20). The node reads keep
-  // their own 30 s poll: they also carry CPU and memory use, which no event says.
-  { types: ['cluster.node.changed'], keys: [['cluster', 'nodes'], ['cluster', 'governance']] },
   // Recorded actions come often (release window holds alone: 393 in two days), so
   // they settle for 60 s, never more often than the 60 s poll they replace:
   // PROD read /records 82 times in 30 minutes with a 1 s settle and 43 with 30 s,
@@ -44,6 +42,40 @@ export const LIVE_REFRESH: LiveRefreshRow[] = [
   { types: ['audit.action.recorded'], keys: [['records'], ['audit']], settleMs: 60_000 },
   { types: ['plan.tree.changed'], keys: [['agent-runtime-plan'], ['agent-runtime-plan-view'], ['agent-runtime-progress']] },
 ]
+
+// --- the register's rows (2026-11-20) -----------------------------------------
+// The Owner: a module that joins or leaves must not mean a code change. Which
+// queries an event makes stale is written in the bus register (console_keys,
+// console_settle_ms) and read from /api/v1/bus/contract when the stream starts;
+// LIVE_REFRESH above is only the fallback until it has been read, and a new
+// topic is added to the register alone (its test holds the fallback to it).
+
+export interface RegisteredTopic {
+  type: string
+  console_keys?: string[][]
+  console_settle_ms?: number
+}
+
+let registeredRows: LiveRefreshRow[] | null = null
+
+/** The rows in force: the register's once read, else the fallback table. */
+export function activeRows(): LiveRefreshRow[] {
+  return registeredRows ?? LIVE_REFRESH
+}
+
+/** Takes the register's rows from the contract's topics (null goes back to the fallback). */
+export function setRegisteredRefresh(topics: RegisteredTopic[] | null): void {
+  if (topics == null) {
+    registeredRows = null
+    return
+  }
+  const rows: LiveRefreshRow[] = []
+  for (const t of topics) {
+    if (!t.console_keys || t.console_keys.length === 0) continue
+    rows.push({ types: [t.type], keys: t.console_keys, ...(t.console_settle_ms ? { settleMs: t.console_settle_ms } : {}) })
+  }
+  registeredRows = rows.length > 0 ? rows : null
+}
 
 /** Types in the table not on the bus yet (each names who adds it). */
 export const LIVE_REFRESH_COMING: Record<string, string> = {}
@@ -61,7 +93,7 @@ function matches(pattern: string, type: string): boolean {
 /** The query key prefixes an event of this type makes stale. */
 export function keysFor(type: string): QueryKey[] {
   const out: QueryKey[] = []
-  for (const row of LIVE_REFRESH) {
+  for (const row of activeRows()) {
     if (row.types.some(p => matches(p, type))) out.push(...row.keys)
   }
   return out
@@ -70,7 +102,7 @@ export function keysFor(type: string): QueryKey[] {
 /** The keys an event makes stale, each with how long it settles. */
 export function staleFor(type: string): { key: QueryKey; settleMs: number }[] {
   const out: { key: QueryKey; settleMs: number }[] = []
-  for (const row of LIVE_REFRESH) {
+  for (const row of activeRows()) {
     if (row.types.some(p => matches(p, type))) {
       for (const key of row.keys) out.push({ key, settleMs: row.settleMs ?? LIVE_SETTLE_MS })
     }
@@ -201,6 +233,8 @@ export function useLiveRefresh(queryClient: QueryClient): void {
     let cursor: string | undefined
     let retry = RETRY_MS
     let wasLive = false
+    // Which queries each event makes stale, from the register (the fallback table until read).
+    void fetchBusContract().then(c => { if (!signal.aborted) setRegisteredRefresh(c.topics) }).catch(() => { /* the fallback table stands */ })
 
     const run = async () => {
       while (!signal.aborted) {
@@ -223,7 +257,7 @@ export function useLiveRefresh(queryClient: QueryClient): void {
             setLive(true)
             if (wasLive) {
               // Back after a gap: what changed meanwhile was not heard.
-              for (const row of LIVE_REFRESH) for (const key of row.keys) void queryClient.invalidateQueries({ queryKey: key })
+              for (const row of activeRows()) for (const key of row.keys) void queryClient.invalidateQueries({ queryKey: key })
             }
             wasLive = true
             const parser = new SseParser()

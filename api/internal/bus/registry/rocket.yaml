@@ -62,6 +62,7 @@ channels:
       consumers: [console]
       exports: []
       replaces: [L02]
+      console_keys: [[delivery, runs], [delivery, pipelines], [ci]]
   ci.run.finished:
     address: ev.rocket.{env}.ci.run.finished
     x-bifrost:
@@ -78,6 +79,7 @@ channels:
       consumers: [headrelease, console, release-recorder]
       exports: []
       replaces: [L02, L28, N21, W04, C01, X-A15, X-B16]
+      console_keys: [[delivery, runs], [delivery, pipelines], [ci]]
   ci.verdict.changed:
     address: ev.rocket.{env}.ci.verdict.changed
     x-bifrost:
@@ -95,6 +97,7 @@ channels:
       consumers: [console]
       exports: []
       replaces: [L03, X-A3, X-A5, X-A6, X-A7]
+      console_keys: [[delivery, runs], [delivery, pipelines], [ci]]
   release.deploy.finished:
     address: ev.rocket.{env}.release.deploy.finished
     x-bifrost:
@@ -111,6 +114,7 @@ channels:
       consumers: [console]
       exports: []
       replaces: [L05, L09, S08, C02]
+      console_keys: [[releases], [gitops]]
   release.gitops.changed:
     address: ev.rocket.{env}.release.gitops.changed
     x-bifrost:
@@ -129,6 +133,7 @@ channels:
       consumers: [console]
       exports: []
       replaces: [L28]
+      console_keys: [[releases], [gitops]]
   release.window.changed:
     address: ev.rocket.{env}.release.window.changed
     x-bifrost:
@@ -146,6 +151,7 @@ channels:
       consumers: [headrelease, console, window-queue]
       exports: []
       replaces: [L24, N11, X-A9, X-C2, X-C10]
+      console_keys: [[delivery, release-window], [ci, release-window]]
   release.policy.expiring:
     address: ev.rocket.{env}.release.policy.expiring
     x-bifrost:
@@ -180,6 +186,7 @@ channels:
       consumers: [console, card-created-notice]
       exports: []
       replaces: [L01, C01]
+      console_keys: [[approvals], [cockpit], [agent-runtime-progress]]
   approval.card.decided:
     address: ev.rocket.{env}.approval.card.decided
     x-bifrost:
@@ -197,6 +204,7 @@ channels:
       consumers: [console, card-conclusions]
       exports: []
       replaces: [L01, N10, W02, X-A14, X-B16]
+      console_keys: [[approvals], [cockpit], [agent-runtime-progress]]
   approval.card.executed:
     address: ev.rocket.{env}.approval.card.executed
     x-bifrost:
@@ -213,6 +221,7 @@ channels:
       consumers: [console, card-conclusions]
       exports: []
       replaces: [L28, W02]
+      console_keys: [[approvals], [cockpit], [agent-runtime-progress]]
   owner.question.asked:
     address: ev.rocket.{env}.owner.question.asked
     x-bifrost:
@@ -231,6 +240,7 @@ channels:
       consumers: [console]
       exports: []
       replaces: [L01, N02]
+      console_keys: [[questions]]
   owner.question.answered:
     address: ev.rocket.{env}.owner.question.answered
     x-bifrost:
@@ -247,6 +257,7 @@ channels:
       consumers: [console, question-conclusions]
       exports: []
       replaces: [L01, N10, W03, X-B16]
+      console_keys: [[questions]]
   seat.mail.arrived:
     address: ev.rocket.{env}.seat.mail.arrived
     x-bifrost:
@@ -286,6 +297,7 @@ channels:
       consumers: [console]
       exports: []
       replaces: [L19, L21, N14, N16, S10, C01, X-B1, X-B2, X-B6, X-C1, X-C5, X-C6, X-C17]
+      console_keys: [[agent-threads], [seat-statuses]]
   seat.liveness.changed:
     address: ev.rocket.{env}.seat.liveness.changed
     x-bifrost:
@@ -304,6 +316,7 @@ channels:
       consumers: [console]
       exports: []
       replaces: [L18, N03, N14]
+      console_keys: [[agent-threads], [seat-statuses]]
   seat.session.changed:
     address: ev.rocket.{env}.seat.session.changed
     x-bifrost:
@@ -322,6 +335,7 @@ channels:
       consumers: [console]
       exports: []
       replaces: [X-B3]
+      console_keys: [[agent-threads], [seat-statuses]]
   alert.rule.fired:
     address: ev.rocket.{env}.alert.rule.fired
     x-bifrost:
@@ -338,6 +352,7 @@ channels:
       consumers: [console, alert-letters]
       exports: []
       replaces: []
+      console_keys: [[telemetry, alerts]]
   loop.health.changed:
     address: ev.rocket.{env}.loop.health.changed
     x-bifrost:
@@ -387,11 +402,21 @@ channels:
       retention: 30d
       # A node turned ready or not ready, or was cordoned or uncordoned
       # (2026-11-20: ubt-k3s-05 was drained and the bus's NATS on it sat
-      # Pending an hour while nothing said so). The Console refreshes its
-      # node reads on it.
+      # Pending an hour while nothing said so). Written by the watch row
+      # "nodes" (watches/rocket.yaml); its body is declared from here.
       consumers: [console]
       exports: []
       replaces: []
+      body:
+        - {name: node, kind: str, pattern: '^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$'}
+        - {name: ready, kind: str, pattern: '^(ready|notready|unknown)$'}
+        - {name: schedule, kind: str, pattern: '^(schedulable|cordoned)$'}
+        - {name: subject, kind: str}
+        - {name: ref, kind: str}
+        - {name: change, kind: str}
+      subject_from: node
+      change_from: [ready, schedule]
+      console_keys: [[cluster, nodes], [cluster, governance]]
   plugin.status.changed:
     address: ev.rocket.{env}.plugin.status.changed
     x-bifrost:
@@ -462,6 +487,9 @@ channels:
       consumers: [console]
       exports: []
       replaces: [S02]
+      console_keys: [[records], [audit]]
+      # Recorded actions come in bursts; 60 s keeps their refresh at or under the old 60 s poll (11-19).
+      console_settle_ms: 60000
   reconcile.drift.found:
     address: ev.rocket.{env}.reconcile.drift.found
     x-bifrost:
@@ -533,3 +561,4 @@ channels:
       consumers: [console]
       exports: []
       replaces: []
+      console_keys: [[agent-runtime-plan], [agent-runtime-plan-view], [agent-runtime-progress]]

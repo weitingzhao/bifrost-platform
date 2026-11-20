@@ -3,6 +3,7 @@ package registry
 import (
 	"embed"
 	"fmt"
+	"io/fs"
 	"regexp"
 	"slices"
 	"sort"
@@ -130,13 +131,14 @@ var (
 
 // LoadSubscriptions reads every tenant's table compiled into the binary.
 func LoadSubscriptions() (map[string]Subscriptions, error) {
-	entries, err := subFiles.ReadDir("subscriptions")
+	subSrc := source(subFiles, "subscriptions")
+	entries, err := fs.ReadDir(subSrc, "subscriptions")
 	if err != nil {
 		return nil, err
 	}
 	out := map[string]Subscriptions{}
 	for _, e := range entries {
-		data, err := subFiles.ReadFile("subscriptions/" + e.Name())
+		data, err := fs.ReadFile(subSrc, "subscriptions/"+e.Name())
 		if err != nil {
 			return nil, err
 		}

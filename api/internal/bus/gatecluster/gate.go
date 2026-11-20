@@ -66,13 +66,17 @@ type Gate struct {
 	// UnitTaskLabel, when set, also keeps whole the TaskRuns carrying that
 	// label: the unit TaskRuns (unit_taskruns.go).
 	UnitTaskLabel string
+	// Watches are the watch rows (registry/watches): each kind of object
+	// whose state changes are said on the bus.
+	Watches []WatchSpec
 
 	// apps is the last state said of each Argo application (gitops.go).
 	appMu sync.Mutex
 	apps  map[string]AppState
-	// nodes is the last state said of each node (nodes.go).
-	nodeMu sync.Mutex
-	nodes  map[string]NodeState
+	// watched is the last state said of each watched object, by its
+	// stream (watch.go).
+	watchMu sync.Mutex
+	watched map[string]string
 
 	// The TaskRun cache: each kept TaskRun by its PipelineRun and name, and
 	// the PipelineRun of each name (taskruns.go).
@@ -125,7 +129,7 @@ func (g *Gate) init() {
 	g.initOnce.Do(func() {
 		g.runs = map[string]runFacts{}
 		g.apps = map[string]AppState{}
-		g.nodes = map[string]NodeState{}
+		g.watched = map[string]string{}
 		g.tasksByRun = map[string]map[string]TaskRun{}
 		g.taskRunOf = map[string]string{}
 		g.units = map[string]*unstructured.Unstructured{}
@@ -179,9 +183,18 @@ func (g *Gate) Run(ctx context.Context) {
 		return
 	}
 	var wg sync.WaitGroup
-	wg.Add(4)
+	wg.Add(3)
+	for _, w := range g.Watches {
+		namespaces := w.Namespaces
+		if len(namespaces) == 0 {
+			namespaces = []string{""}
+		}
+		for _, ns := range namespaces {
+			wg.Add(1)
+			safego.Go("bus-gate-cluster-watch-"+w.ID, func() { defer wg.Done(); g.runWatch(ctx, w, ns) })
+		}
+	}
 	safego.Go("bus-gate-cluster-apps", func() { defer wg.Done(); g.runApps(ctx) })
-	safego.Go("bus-gate-cluster-nodes", func() { defer wg.Done(); g.runNodes(ctx) })
 	safego.Go("bus-gate-cluster-runs", func() { defer wg.Done(); g.runRuns(ctx) })
 	safego.Go("bus-gate-cluster-window", func() { defer wg.Done(); g.runWindow(ctx) })
 	wg.Wait()

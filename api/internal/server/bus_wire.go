@@ -293,7 +293,7 @@ func (s *Server) startGateCluster(ctx context.Context, env string) {
 		ns = s.delivery.PipelinesNamespace()
 	}
 	g := &gatecluster.Gate{Ledger: &gatecluster.PGLedger{DB: s.bus.db}, Namespace: ns, Env: env, Logf: busLogf, OnFinished: s.bus.finished.Add,
-		UnitTaskLabel: unitexec.LabelPlan, Dynamic: s.clusterDynamic}
+		UnitTaskLabel: unitexec.LabelPlan, Dynamic: s.clusterDynamic, Watches: watchSpecs("rocket")}
 	if s.delivery != nil {
 		s.delivery.SetRunCache(g, s.earnedReadRoutes(ctx))
 	}
@@ -423,4 +423,26 @@ func (s *Server) questionConclusionsPass(ctx context.Context) {
 	if s.questionRuntime != nil && s.questionRuntime.Svc != nil {
 		s.questionRuntime.Svc.RetryThreadInbox(ctx)
 	}
+}
+
+// watchSpecs are a tenant's watch rows (bus/registry/watches) with the ref
+// of each row's topic: what gate-cluster says of the cluster's objects. A
+// row that does not parse leaves the gate without watches and says so; the
+// register's tests refuse such a file before it ships.
+func watchSpecs(tenant string) []gatecluster.WatchSpec {
+	rows, err := registry.Watches()
+	if err != nil {
+		busLogf("bus gate-cluster: no watches: %v", err)
+		return nil
+	}
+	tenants, err := registry.Load()
+	if err != nil {
+		busLogf("bus gate-cluster: no watches: %v", err)
+		return nil
+	}
+	out := make([]gatecluster.WatchSpec, 0, len(rows[tenant]))
+	for _, w := range rows[tenant] {
+		out = append(out, gatecluster.WatchSpec{Watch: w, Ref: tenants[tenant].Channels[w.Type].Ref})
+	}
+	return out
 }

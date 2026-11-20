@@ -10,7 +10,9 @@ const calls: AbortSignal[] = []
 let respond: (signal: AbortSignal) => Promise<Response>
 
 vi.mock('@/api/serverContact', () => ({
-  serverFetch: (_input: unknown, init: RequestInit) => {
+  // The stream's requests are counted; the register's contract (read once) answers empty.
+  serverFetch: (input: unknown, init: RequestInit) => {
+    if (!String(input).includes('/bus/stream')) return Promise.resolve(new Response('{"topics":[]}', { status: 200 }))
     calls.push(init.signal as AbortSignal)
     return respond(init.signal as AbortSignal)
   },
