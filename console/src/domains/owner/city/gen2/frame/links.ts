@@ -42,17 +42,10 @@ export const OTHER = 'other'
 export const ORPHAN = 'orphan'
 
 /**
- * The world outside the town (the Owner, 2026-11-20): who uses the system from outside it (a console, an
- * agent's tools, a tenant, a plugin) is not one of its places, but it is where most of the traffic goes. Its
- * parties are declared by the content; a connection's end outside the town is [OUTSIDE, party]. On the town's
- * own edge each party is a port; inside the town, everything from outside comes through one port, Outside.
- */
-export const OUTSIDE = '~'
-export type Party = { id: string; label: string }
-
-/**
  * Whom a place deals with on purpose (the Owner, 2026-11-20: the rules first): up to PORTS a side, in its
- * declared order, each an id as a port names it (a sibling's id, OUTSIDE, or OUTSIDE/party on the town).
+ * declared order, each a sibling's id. The town has no outside (the Owner, 2026-11-20: it is the whole
+ * system; who uses it, a console, agent tools, a tenant, is a domain inside it), so only what is inside it
+ * declares partners.
  * Traffic with anyone it has not declared is undeclared coupling and passes through Other; a place that
  * declares no one sends everything through Other.
  */
@@ -69,20 +62,18 @@ export type Gate = { way: Way; outside: Path; label: string; child: string; dir:
 
 export type LevelLinks = { lines: Line[]; gates: Gate[]; more: { lines: number; gates: number } }
 
-const under = (p: Path, at: Path) => p[0] !== OUTSIDE && at.length <= p.length && at.every((s, i) => p[i] === s)
+const under = (p: Path, at: Path) => at.length <= p.length && at.every((s, i) => p[i] === s)
 
 /** The outside end named at the level beside this one: the town's district, else this place's sibling or what it sits in. */
 function outsideOf(end: Path, at: Path): Path {
-  if (end[0] === OUTSIDE) return at.length === 0 ? end.slice(0, 2) : [OUTSIDE]
   let i = 0
   while (i < end.length && i < at.length && end[i] === at[i]) i++
   return end.slice(0, i + 1)
 }
 
-export function linksAt(tree: Place, at: Path, links: readonly Link[], outside: readonly Party[] = []): LevelLinks {
+export function linksAt(tree: Place, at: Path, links: readonly Link[]): LevelLinks {
   const lines = new Map<string, { line: Line; dirs: Set<boolean> }>()
   const gates = new Map<string, Gate>()
-  const outside_ = new Map(outside.map(p => [p.id, p.label]))
   const d = at.length
   for (const l of links) {
     const fi = under(l.from, at) && l.from.length > d, ti = under(l.to, at) && l.to.length > d
@@ -112,8 +103,7 @@ export function linksAt(tree: Place, at: Path, links: readonly Link[], outside: 
       const outside = outsideOf(outer, at)
       const child = inner[d]
       const k = `${l.way}|${outside.join('/')}|${child}|${clarity}`
-      // A party outside on the town's edge by its name; inside the town, all of outside as one.
-      const label = outside[0] === OUTSIDE ? (outside[1] ? outside_.get(outside[1]) ?? outside[1] : 'Outside') : trail(tree, outside).at(-1)?.label ?? outside.at(-1) ?? ''
+      const label = trail(tree, outside).at(-1)?.label ?? outside.at(-1) ?? ''
       const g = gates.get(k) ?? { way: l.way, outside, label, child, dir: fi ? 'out' : 'in', carries: [], ins: 0, outs: 0, clarity }
       if ((g.dir === 'out' && !fi) || (g.dir === 'in' && fi)) g.dir = 'both'
       g.carries.push(l.what)
@@ -129,10 +119,9 @@ export function linksAt(tree: Place, at: Path, links: readonly Link[], outside: 
 }
 
 /** The rules a content's connections keep (rules.ts lists them with the rest). */
-export function linkRulesBroken(tree: Place, links: readonly Link[], outside: readonly Party[] = []): string[] {
+export function linkRulesBroken(tree: Place, links: readonly Link[]): string[] {
   const out: string[] = []
-  const parties = new Set(outside.map(p => p.id))
-  const exists = (p: Path) => p[0] === OUTSIDE ? p.length === 2 && parties.has(p[1]) : p.length > 0 && trail(tree, p).length === p.length + 1
+  const exists = (p: Path) => p.length > 0 && trail(tree, p).length === p.length + 1
   for (const l of links) {
     const name = `${l.way} ${l.what}`
     if (!(WAYS as readonly string[]).includes(l.way)) out.push(`${name}: the way must be one of ${WAYS.join(', ')}`)
@@ -145,12 +134,12 @@ export function linkRulesBroken(tree: Place, links: readonly Link[], outside: re
     for (const side of ['in', 'out'] as const) {
       const ids = p.partners?.[side] ?? []
       if (ids.length > PORTS) out.push(`${at.join('/') || p.id}: declares ${ids.length} partners ${side}; a side has ${PORTS} ports`)
-      for (const id of ids) if (!siblings.has(id) && id !== OUTSIDE && !(id.startsWith(`${OUTSIDE}/`) && parties.has(id.slice(2)))) out.push(`${at.join('/') || p.id}: partner ${id} is not a place beside it nor the world outside`)
+      for (const id of ids) if (!siblings.has(id)) out.push(`${at.join('/') || p.id}: partner ${id} is not a place beside it`)
     }
     const kids = new Set(p.children.map(c => c.id))
     for (const c of p.children) walk(c, [...at, c.id], kids)
   }
-  walk(tree, [], new Set(outside.map(p => `${OUTSIDE}/${p.id}`)))
+  walk(tree, [], new Set())
   return out
 }
 

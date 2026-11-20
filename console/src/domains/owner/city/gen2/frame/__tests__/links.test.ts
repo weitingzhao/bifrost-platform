@@ -83,7 +83,7 @@ describe('a place’s two sides: its declared partners, Other, Orphan', () => {
     expect(s.out.other).toMatchObject({ n: 9 })
   })
   it('an orphan’s far end need not be a place; a declared partner must be a place beside it', () => {
-    expect(linkRulesBroken(town, links)).toEqual(['me: partner z is not a place beside it nor the world outside'])
+    expect(linkRulesBroken(town, links)).toEqual(['me: partner z is not a place beside it'])
   })
   // The Owner, 2026-11-20: the front edges are what is clean, the back edges what is yet to be cleared.
   it('the frame sets nine places outside: three in at the front left, three out at the front right, the two Others at the back left, Orphan at the back right', () => {
@@ -94,22 +94,11 @@ describe('a place’s two sides: its declared partners, Other, Orphan', () => {
   })
 })
 
-// Origin: the Owner, 2026-11-20 ("先做第一条和第二条"): most traffic is with users outside the system, which
-// are not places; they need a place to show. These pin how the outside world shows on the town and inside it.
-describe('the world outside the town', () => {
-  const town: Place = P('town', 'town', [P('a', 'district', [P('x', 'building')]), P('b', 'district', [P('x', 'building')])])
-  const parties = [{ id: 'console', label: 'Console' }, { id: 'mcp', label: 'MCP' }]
-  const links: Link[] = [L('bus', '~/console', 'a/x', 'asked'), L('bus', '~/mcp', 'a/x', 'called'), L('metric', 'b/x', '~/console', 'read')]
-  it('on the town’s edge each party is its own port', () => {
-    const g = linksAt(town, [], links, parties).gates
-    expect(g.map(x => [x.outside.join('/'), x.label, x.ins, x.outs]).sort()).toEqual([['~/console', 'Console', 0, 1], ['~/console', 'Console', 1, 0], ['~/mcp', 'MCP', 1, 0]])
-  })
-  it('inside the town all of outside comes through one port', () => {
-    const g = linksAt(town, ['a'], links, parties).gates
-    expect(new Set(g.map(x => x.outside.join('/')))).toEqual(new Set(['~']))
-    expect(g.reduce((t, x) => t + x.ins, 0)).toBe(2)
-  })
-  it('an end outside must be a declared party', () => {
-    expect(linkRulesBroken(town, [L('bus', '~/nobody', 'a/x', 'x')], parties)).toEqual(['bus x: its start ~/nobody is not a place'])
+// Origin: the Owner, 2026-11-20 ("city 就是整个系统，外面没有东西了"). This pins that the town has no outside:
+// an end that is not a place is refused, and no partner can be declared outside.
+describe('the town is the whole system', () => {
+  const town: Place = P('town', 'town', [P('a', 'district', [P('x', 'building')])])
+  it('an end outside the town is refused', () => {
+    expect(linkRulesBroken(town, [L('bus', '~/console', 'a/x', 'x')])).toEqual(['bus x: its start ~/console is not a place'])
   })
 })

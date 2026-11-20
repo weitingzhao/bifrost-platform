@@ -9,7 +9,7 @@ import { buildingWings, setback, spriteFor, spriteKey, spriteUrl, type Wing } fr
 import { deviceKey, deviceSprite, formOfPlace, levelsOf } from './devices'
 import { frameOf, type Frame } from './viewport'
 import { LANDMARKS } from './library/landmarkLooks'
-import { edgeSlots, OUTSIDE, PORTS, SLOTS, type Gate, type LevelLinks, type Line, type Party, type Slot } from './links'
+import { edgeSlots, PORTS, SLOTS, type Gate, type LevelLinks, type Line, type Slot } from './links'
 
 /**
  * One scene draws one place (a page): its 16×16 ground and the things on it,
@@ -102,8 +102,6 @@ export type Shown = {
   layoutAt: (path: string[]) => Layout | null
   /** The connections at this level's grain (links.ts): lines between children, stations on the edge. */
   links?: LevelLinks
-  /** Who uses the system from outside the town, by name (links.ts OUTSIDE). */
-  outside?: Party[]
 }
 
 export type Layout = { placed: Placed[]; plots: Plot[]; streets: Street[] }
@@ -904,8 +902,8 @@ export class PlaceScene extends Phaser.Scene {
     if (ROUTES_ON_STREETS && o.interactive && this.shown?.links && !o.arranging) for (const part of this.ways(this.shown.links, geo, P, plots, placed, W, H)) c.add(part)
     // A district's ground: a crossing on its edge for each district it talks to, on the side that district lies.
     const edgePts: Phaser.Math.Vector2[] = []
-    // The town has the same edge (the Owner, 2026-11-20): its ports are the parties outside; its yard lies over the sea.
-    if ((place.kind === 'district' || place.kind === 'town') && o.interactive && this.shown?.links && !o.arranging) for (const part of this.borders(this.shown.links, place, P, W, H, edgePts, geo, streets, SEA)) c.add(part)
+    // A district's edge; the town has none (the Owner, 2026-11-20: it is the whole system, nothing is outside it).
+    if (place.kind === 'district' && o.interactive && this.shown?.links && !o.arranging) for (const part of this.borders(this.shown.links, place, P, W, H, edgePts, geo, streets)) c.add(part)
     const byId = new Map(place.children.map(k => [k.id, k]))
     const plotById = new Map(plots.map(p => [p.id, p]))
     const rectOf = (p: Placed): Rect => { const home = plotById.get(p.plot); return home ? geo.thing(geo.plot(home), p.w, p.h) : { x: p.x, y: p.y, w: p.w, h: p.h } }
@@ -1177,20 +1175,6 @@ export class PlaceScene extends Phaser.Scene {
     return out
   }
 
-  /** A party from outside the town on a port's 2×2: a plain gatehouse, grey, with a flat roof. */
-  private gatehouse(r: Rect, P: Proj) {
-    const g = this.add.graphics(), m = 0.35, h = 22
-    const x0 = r.x + m, y0 = r.y + m, x1 = r.x + r.w - m, y1 = r.y + r.h - m
-    const top = [P(x0, y0, h), P(x1, y0, h), P(x1, y1, h), P(x0, y1, h)]
-    const right = [P(x1, y0, 0), P(x1, y1, 0), P(x1, y1, h), P(x1, y0, h)]
-    const left = [P(x0, y1, 0), P(x1, y1, 0), P(x1, y1, h), P(x0, y1, h)]
-    g.lineStyle(1.5, this.tone.ink, 1)
-    g.fillStyle(0xb9bdc8).fillPoints(right, true).strokePoints(right, true)
-    g.fillStyle(0xd3d6de).fillPoints(left, true).strokePoints(left, true)
-    g.fillStyle(0xeceef2).fillPoints(top, true).strokePoints(top, true)
-    return g
-  }
-
   /**
    * The edge of a district's small world (the Owner, 2026-11-20): two sides only, the way in along the
    * front-left edge and the way out along the front-right, each with PORTS named ports and an Other, and
@@ -1199,11 +1183,10 @@ export class PlaceScene extends Phaser.Scene {
    * its neighbour, a small block in its colour that a tap opens; Other is a heap on a dirt track, Orphan a
    * fenced building site; both grow with their share of everything that passes.
    */
-  private borders(lk: LevelLinks, place: Place, P: Proj, W: number, H: number, framed: Phaser.Math.Vector2[], geo: Geo, streets: Street[], seaBack: number) {
+  private borders(lk: LevelLinks, place: Place, P: Proj, W: number, H: number, framed: Phaser.Math.Vector2[], geo: Geo, streets: Street[]) {
     const out: Phaser.GameObjects.GameObject[] = []
-    // A partner's name: a party outside, all of outside, or a place beside this one.
-    const parties = new Map((this.shown?.outside ?? []).map(p => [p.id, p.label]))
-    const labelOf = (id: string) => id === OUTSIDE ? 'Outside' : id.startsWith(`${OUTSIDE}/`) ? parties.get(id.slice(2)) ?? id.slice(2) : this.shown?.tree.children.find(c => c.id === id)?.label ?? id
+    // A partner's name: the place beside this one.
+    const labelOf = (id: string) => this.shown?.tree.children.find(c => c.id === id)?.label ?? id
     const slots = edgeSlots(lk.gates, place.partners, labelOf)
     const g = this.add.graphics()
     out.push(g)
@@ -1236,8 +1219,7 @@ export class PlaceScene extends Phaser.Scene {
       const n = sl.edge === 'x1' ? { x: 1, y: 0 } : sl.edge === 'y1' ? { x: 0, y: 1 } : sl.edge === 'x0' ? { x: -1, y: 0 } : { x: 0, y: -1 }
       const u = { x: -n.y, y: n.x }
       const pt = (a: number, b: number, z = 0) => P(at0.x + n.x * a + u.x * b, at0.y + n.y * a + u.y * b, z)
-      // Over the sea behind the town, the road is a bridge and the yard lies on the far side.
-      const REACH_ = REACH + (sl.edge === 'y0' ? seaBack : 0), NB_AT_ = REACH_ + 1.15
+      const REACH_ = REACH, NB_AT_ = REACH_ + 1.15
       const c1 = NB_AT_
       const named = kind === 'named'
       // The road out to it: paved to a neighbour, a dirt track to Other and Orphan, fading as it goes.
@@ -1296,8 +1278,6 @@ export class PlaceScene extends Phaser.Scene {
         const nb = this.shown?.tree.children.find(d => d.id === pass.id)
         const cg = { x: at0.x + n.x * NB_AT_, y: at0.y + n.y * NB_AT_ }
         const r: Rect = { x: cg.x - NB / 2, y: cg.y - NB / 2, w: NB, h: NB }
-        // A party outside (or all of outside) is not a place here: a plain gatehouse in grey stands for it.
-        if (!nb) out.push(this.gatehouse(r, P))
         if (nb) for (const part of this.block(nb, { id: nb.id, plot: '', x: 0, y: 0, w: NB, h: NB } as unknown as Placed, r, P, '', { selected: null, inside: null, interactive: false, arranging: false, bare: true }, [nb.id])) out.push(part)
         const hg = this.add.graphics()
         const hit = new Phaser.Geom.Polygon([P(r.x, r.y, 34), P(r.x + r.w, r.y, 34), P(r.x + r.w, r.y, 0), P(r.x + r.w, r.y + r.h, 0), P(r.x, r.y + r.h, 0), P(r.x, r.y + r.h, 34)])

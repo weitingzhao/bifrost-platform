@@ -7,35 +7,102 @@
     "bifrost-platform/api/internal/bus/registry/rocket.yaml (event publisher domain and consumers)",
     "bifrost-platform/api/internal/bus/registry/subscriptions/rocket.yaml (each bus client's domain)"
   ],
-  "direction": "in: others come to it (they call its API or tool, or it receives their event); out: it goes to others (it publishes an event they receive, or calls theirs). Inside the town all outside users are one partner, \"~\"; on the town's own edge each outside party is its own port, \"~/<party>\".",
-  "outside": [
-    { "id": "console", "label": "Console", "is": "the Owner's console" },
-    { "id": "mcp", "label": "MCP", "is": "the agents' tools" },
-    { "id": "trade", "label": "Trade", "is": "trade-infra, trade-api, trade-frontend, trade-core" },
-    { "id": "research", "label": "Research", "is": "bifrost-research" },
-    { "id": "plugins", "label": "Plugins", "is": "platform-plugin, platform-plugin-market-data" },
-    { "id": "scripts", "label": "Scripts", "is": "agent-scripts" }
-  ],
-  "town": {
-    "in": ["~/console", "~/mcp", "~/trade"],
-    "out": [],
-    "into_other": ["~/research (owner, 2 uses)", "~/plugins (tenant, 4 uses)", "~/scripts (foundation 7, tenant 1)"],
-    "note": "Console and MCP use every domain; Trade uses six. Research, the plugins and the scripts are undeclared, so they show in the town's Other in. Nothing measured goes out of the system to a party outside."
-  },
+  "direction": "in: others come to it (they call its API or tool, or it receives their event); out: it goes to others (it publishes an event they receive, or calls theirs). The town has no outside (the Owner, 2026-11-20: it is the whole system), so every user is a domain inside it.",
   "domains": {
-    "foundation": { "in": ["~"], "out": [], "note": "65 contracts, all used from outside; most are the unclaimed default bucket (network, telemetry, alerts, bus, MCP), not the foundation itself. Calls no other domain." },
-    "plan": { "in": ["~"], "out": [], "note": "Used only from outside (Console, MCP, Trade)." },
-    "lineage": { "in": ["~"], "out": ["delivery", "verification"], "note": "Publishes git.main.advanced; headrelease (delivery) and unit-watch (verification) receive it." },
-    "verification": { "in": ["lineage", "~"], "out": ["delivery"], "note": "Receives lineage's main advance; publishes CI results that delivery's release recorder receives." },
-    "delivery": { "in": ["lineage", "verification", "~"], "out": [], "note": "Three partners in: the most connected domain inside the town. One more and the next goes to Other." },
-    "owner": { "in": ["~"], "out": [], "note": "Its own bus clients (card notices, conclusions) receive its own events: inside itself, not a partner." },
-    "compute": { "in": ["~"], "out": ["coordination"], "note": "Publishes alerts; coordination's alert letters receive them." },
-    "tenant": { "in": ["~"], "out": [], "note": "Nine outside users (Console, MCP, four Trade repos, two plugins, scripts): one port inside the town, but the widest use from outside; one module alone serves seven." },
-    "coordination": { "in": ["compute", "~"], "out": [], "note": "Receives compute's alerts and the seats' mail." }
+    "foundation": {
+      "in": [
+        "owner",
+        "coordination",
+        "tenant"
+      ],
+      "out": [],
+      "note": "Used by every kind of caller; its 65 contracts are mostly the unclaimed default bucket (network, telemetry, alerts, bus, MCP), not the foundation itself."
+    },
+    "plan": {
+      "in": [
+        "owner",
+        "coordination",
+        "tenant"
+      ],
+      "out": []
+    },
+    "lineage": {
+      "in": [
+        "owner",
+        "coordination",
+        "tenant"
+      ],
+      "out": [
+        "delivery",
+        "verification"
+      ],
+      "note": "Three callers in (the console, the agents' tools, Trade); its main-advanced event goes out to delivery and verification."
+    },
+    "verification": {
+      "in": [
+        "lineage",
+        "owner",
+        "coordination"
+      ],
+      "out": [
+        "delivery"
+      ],
+      "note": "Trade (tenant) also reads it: undeclared, so Other in."
+    },
+    "delivery": {
+      "in": [
+        "lineage",
+        "verification",
+        "owner"
+      ],
+      "out": [],
+      "note": "Five want in (lineage, verification, owner, coordination, tenant): two go to Other. The most connected domain."
+    },
+    "owner": {
+      "in": [
+        "coordination",
+        "tenant"
+      ],
+      "out": [],
+      "note": "The console is itself. Research (tenant) asks it questions."
+    },
+    "compute": {
+      "in": [
+        "coordination"
+      ],
+      "out": [
+        "coordination"
+      ],
+      "note": "Its alerts go to coordination's alert letters; MCP reads it."
+    },
+    "tenant": {
+      "in": [
+        "owner",
+        "coordination"
+      ],
+      "out": [],
+      "note": "Its users are its own satellites (Trade, Research, plugins): inside it, a black box each. Seven callers on one module."
+    },
+    "coordination": {
+      "in": [
+        "compute",
+        "owner"
+      ],
+      "out": [],
+      "note": "Receives compute's alerts and the seats' mail; the console reads it."
+    }
   },
   "gaps": [
     "Direct references from one domain's code into another's insides are not measured yet (CLAUDE.md §1, 2026-11-16); this draft sees only declared contracts and the bus.",
     "Who reads whose metrics is not declared anywhere yet; the metric way has no rows here.",
-    "Commands (MCP tools, actions) carry no consumers in the ownership table, so they are not counted."
-  ]
+    "Commands (MCP tools, actions) carry no consumers in the ownership table, so they are not counted.",
+    "Where the console and the agents' tools belong (owner, coordination) is a proposal; if they are a domain of their own, the rows change."
+  ],
+  "users_inside": {
+    "why": "The Owner, 2026-11-20: the town is the whole system; Trade, Finance and the other payloads are inside it, each a satellite of the tenant domain, a black box to us that opens onto its own world. So the callers the ownership table names are mapped to the domain they belong to. PROPOSED: each line confirms.",
+    "console": "owner (the Owner's console: his decisions and his view)",
+    "mcp": "coordination (the agents' tool counter: the seats)",
+    "trade-infra, trade-api, trade-frontend, trade-core, research, platform-plugin, platform-plugin-market-data": "tenant (the payloads and the plugins; each tenant a satellite, a black box)",
+    "agent-scripts": "coordination (the seats' own scripts)"
+  }
 }
