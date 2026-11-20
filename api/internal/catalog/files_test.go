@@ -21,8 +21,9 @@ func TestTheRepositorysOwnMapFilesParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(own) == 0 || len(others) == 0 {
-		t.Fatalf("%s: %d reviews of its own and %d repositories reviewed; both are written", ReviewPath, len(own), len(others))
+	// own may be empty: the platform's pool can be all on the map.
+	if len(others) == 0 {
+		t.Fatalf("%s: %d reviews of its own and no repository reviewed; the repositories with no table are", ReviewPath, len(own))
 	}
 	if raw, err = os.ReadFile(filepath.Join(root, IndexPath)); err != nil {
 		t.Fatal(err)
