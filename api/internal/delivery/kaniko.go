@@ -105,11 +105,24 @@ func specRunsKaniko(ts map[string]any) bool {
 }
 
 // clusterTasks reads Tasks from the pipelines namespace, each at most once.
+// The first lookup lists them all in one call: a Get per Task went through the
+// client's rate limit (5 a second after a burst of 10), and the pipeline list
+// spent 2.8 s of every request waiting on it (PROD, 2026-11-20). A name the
+// list did not have is still read on its own, so a missing Task fails as before.
 func (s *Service) clusterTasks(ctx context.Context, dyn dynamic.Interface) taskGetter {
 	ns := s.PipelinesNamespace()
 	seen := map[string]map[string]any{}
 	failed := map[string]error{}
+	listed := false
 	return func(name string) (map[string]any, error) {
+		if !listed {
+			listed = true
+			if list, err := dyn.Resource(taskGVR).Namespace(ns).List(ctx, metav1.ListOptions{}); err == nil {
+				for i := range list.Items {
+					seen[list.Items[i].GetName()] = list.Items[i].Object
+				}
+			}
+		}
 		if obj, ok := seen[name]; ok {
 			return obj, nil
 		}

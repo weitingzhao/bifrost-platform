@@ -893,3 +893,40 @@ func TestThePipelineListReadsTheNodesOnce(t *testing.T) {
 		t.Fatalf("a pipeline that runs no kaniko read the nodes %d times: %+v", calls, v)
 	}
 }
+
+// 2026-11-20: after the nodes fix the pipeline list still took 2.8 s on PROD,
+// every request: one Get per Task, through the client's rate limit. The Tasks
+// are listed once; a name the list lacks is still read alone.
+func TestTheTaskReaderListsOnce(t *testing.T) {
+	task := func(name string) *unstructured.Unstructured {
+		return &unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "tekton.dev/v1", "kind": "Task",
+			"metadata": map[string]any{"name": name, "namespace": "cicd"}, "spec": map[string]any{}}}
+	}
+	dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{taskGVR: "TaskList"}, task("a"), task("b"), task("c"))
+	s, _, _ := contractService(t, &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "tekton.dev/v1", "kind": "Pipeline",
+		"metadata": map[string]any{"name": "p", "namespace": "cicd"}, "spec": map[string]any{}}}, "present")
+	get := s.clusterTasks(context.Background(), dyn)
+	for _, n := range []string{"a", "b", "c", "a"} {
+		if obj, err := get(n); err != nil || obj == nil {
+			t.Fatalf("%s: %v", n, err)
+		}
+	}
+	if _, err := get("missing"); err == nil {
+		t.Fatal("a Task that does not exist must still fail")
+	}
+	lists, gets := 0, 0
+	for _, a := range dyn.Actions() {
+		switch a.GetVerb() {
+		case "list":
+			lists++
+		case "get":
+			gets++
+		}
+	}
+	if lists != 1 || gets != 1 {
+		t.Fatalf("lists=%d gets=%d, want 1 list and 1 get (the missing name)", lists, gets)
+	}
+}
