@@ -145,29 +145,56 @@ type Review struct {
 
 // ParseReviews reads ReviewPath; an empty file is no review.
 func ParseReviews(raw []byte) (map[string]Review, error) {
+	own, _, err := ParseReviewFile(raw)
+	return own, err
+}
+
+// ParseReviewFile reads ReviewPath: the reviews of this repository's entries,
+// and under "repositories" the reviews of other repositories' entries
+// (repository name, then entry path). A repository with no table has no
+// review file of its own; the map reviews it from where the map lives.
+func ParseReviewFile(raw []byte) (own map[string]Review, others map[string]map[string]Review, err error) {
+	own, others = map[string]Review{}, map[string]map[string]Review{}
 	if len(strings.TrimSpace(string(raw))) == 0 {
-		return map[string]Review{}, nil
+		return own, others, nil
 	}
 	var r struct {
-		Reviews map[string]Review `json:"reviews"`
+		Reviews      map[string]Review            `json:"reviews"`
+		Repositories map[string]map[string]Review `json:"repositories"`
 	}
 	if err := json.Unmarshal(raw, &r); err != nil {
-		return nil, fmt.Errorf("%s does not parse: %w", ReviewPath, err)
+		return nil, nil, fmt.Errorf("%s does not parse: %w", ReviewPath, err)
+	}
+	if err := checkReviews("", r.Reviews); err != nil {
+		return nil, nil, err
+	}
+	for repo, rs := range r.Repositories {
+		if !repoName.MatchString(repo) {
+			return nil, nil, fmt.Errorf("%s: %q is not a repository name", ReviewPath, repo)
+		}
+		if err := checkReviews(repo+":", rs); err != nil {
+			return nil, nil, err
+		}
+		others[repo] = rs
 	}
 	for p, v := range r.Reviews {
+		own[p] = v
+	}
+	return own, others, nil
+}
+
+func checkReviews(prefix string, rs map[string]Review) error {
+	for p, v := range rs {
 		switch {
 		case v.Verdict == VerdictClaim && v.Domain == "":
-			return nil, fmt.Errorf("%s: %s is claimed for no domain", ReviewPath, p)
+			return fmt.Errorf("%s: %s%s is claimed for no domain", ReviewPath, prefix, p)
 		case v.Verdict != VerdictClaim && v.Verdict != VerdictDelete && v.Verdict != VerdictUnknown:
-			return nil, fmt.Errorf("%s: %s has verdict %q; a verdict is %q (with a domain), %q or %q", ReviewPath, p, v.Verdict, VerdictClaim, VerdictDelete, VerdictUnknown)
+			return fmt.Errorf("%s: %s%s has verdict %q; a verdict is %q (with a domain), %q or %q", ReviewPath, prefix, p, v.Verdict, VerdictClaim, VerdictDelete, VerdictUnknown)
 		case strings.TrimSpace(v.Reason) == "":
-			return nil, fmt.Errorf("%s: %s has no reason", ReviewPath, p)
+			return fmt.Errorf("%s: %s%s has no reason", ReviewPath, prefix, p)
 		}
 	}
-	if r.Reviews == nil {
-		r.Reviews = map[string]Review{}
-	}
-	return r.Reviews, nil
+	return nil
 }
 
 // Entry is one thing the map cannot perceive: a directory (or, for files at

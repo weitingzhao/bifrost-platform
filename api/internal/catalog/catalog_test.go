@@ -155,6 +155,44 @@ func TestReviewsAttachAndOnlyDeleteOrUnknownStay(t *testing.T) {
 	}
 }
 
+// Origin: 0.2 map line, 2026-11-20, first review of the 13 repositories with
+// no table (one whole-repository entry each): they have no review file of
+// their own, so the map reviews them from the file where it lives.
+func TestARepositoryWithNoTableIsReviewedFromWhereTheMapLives(t *testing.T) {
+	home := tree("api/internal/a/a.go")
+	home.Files = append(home.Files, ReviewPath)
+	read := home.Read
+	home.Read = func(p string) ([]byte, bool, error) {
+		if p == ReviewPath {
+			return []byte(`{"reviews":{},"repositories":{"other":{".":{"verdict":"claim","domain":"tenant","reason":"r","by":"seat","on":"2026-11-20"}}}}`), true, nil
+		}
+		return read(p)
+	}
+	bare := Tree{Commit: "c2", Files: []string{"x.go", "y/z.ts"}, Read: func(string) ([]byte, bool, error) { return nil, false, nil }}
+	s := &Scanner{Kept: memKept{}, Source: func(_ context.Context, repo string) (Tree, error) {
+		if repo == "home" {
+			return home, nil
+		}
+		return bare, nil
+	}}
+	if _, err := s.ScanOnce(context.Background(), "home"); err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.ScanOnce(context.Background(), "other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Count != 1 || p.Unreviewed != 0 || p.Entries[0].Review == nil || p.Entries[0].Review.Domain != "tenant" {
+		t.Fatalf("other = %+v", p)
+	}
+	if _, _, err := ParseReviewFile([]byte(`{"repositories":{"a/b":{}}}`)); err == nil {
+		t.Fatal("a repository key that is not a repository name must be refused")
+	}
+	if _, _, err := ParseReviewFile([]byte(`{"repositories":{"r":{".":{"verdict":"delete"}}}}`)); err == nil {
+		t.Fatal("a review of another repository with no reason must be refused like any review")
+	}
+}
+
 func TestRouteReadsOnlyWhatWasKept(t *testing.T) {
 	s := &Scanner{Kept: memKept{}, Source: func(context.Context, string) (Tree, error) {
 		t.Fatal("the route must not read the source")

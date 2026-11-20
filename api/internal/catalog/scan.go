@@ -79,6 +79,10 @@ func keptName(repo string) string { return "unperceived-" + repo }
 
 func keptOwners(repo string) string { return "owners-" + repo }
 
+// keptOthers are the reviews of other repositories' entries, as the last
+// scan of a repository whose review file has them read them.
+const keptOthers = "reviews-repositories"
+
 // keptIndex is the index as the last scan of a repository that has one read it.
 const keptIndex = "index"
 
@@ -186,9 +190,15 @@ func (s *Scanner) ScanOnce(ctx context.Context, repo string) (Pool, error) {
 	p.ScannedAt = now
 	reviews := map[string]Review{}
 	if err == nil && p.Measured {
+		for path, r := range s.reviewsFromElsewhere(repo) {
+			reviews[path] = r
+		}
 		if raw, ok, rerr := t.Read(ReviewPath); rerr == nil && ok {
-			if r, perr := ParseReviews(raw); perr == nil {
-				reviews = r
+			if own, others, perr := ParseReviewFile(raw); perr == nil {
+				for path, r := range own {
+					reviews[path] = r
+				}
+				s.keepOthers(repo, others)
 			} else {
 				p.Note = strings.TrimSpace(p.Note + " " + perr.Error())
 			}
@@ -211,6 +221,34 @@ func (s *Scanner) ScanOnce(ctx context.Context, repo string) (Pool, error) {
 		return p, merr
 	}
 	return p, s.kept().Write(keptName(repo), raw)
+}
+
+// reviewsFromElsewhere are repo's reviews written in another repository's
+// review file (kept by that repository's last scan).
+func (s *Scanner) reviewsFromElsewhere(repo string) map[string]Review {
+	raw, err := s.kept().Read(keptOthers)
+	if err != nil || raw == nil {
+		return nil
+	}
+	var all map[string]map[string]Review
+	if json.Unmarshal(raw, &all) != nil {
+		return nil
+	}
+	return all[repo]
+}
+
+func (s *Scanner) keepOthers(from string, others map[string]map[string]Review) {
+	if len(others) == 0 {
+		return
+	}
+	delete(others, from) // a repository's own entries are reviewed in "reviews"
+	raw, err := json.Marshal(others)
+	if err != nil {
+		return
+	}
+	if err := s.kept().Write(keptOthers, raw); err != nil {
+		slog.Warn("catalog: keep reviews of other repositories", "from", from, "err", err)
+	}
 }
 
 // keepTables keeps what "who owns X" and the index are answered from. A
