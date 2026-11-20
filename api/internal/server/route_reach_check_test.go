@@ -119,6 +119,7 @@ var intendedRouteAdditions = map[string][]string{
 	"GET /api/v1/catalog/owner":  {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/catalog/index":  {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/catalog/status": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"GET /api/v1/catalog/domain": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-14: the approval records counted, for the Ops page (read-only).
 	"GET /api/v1/readings/approvals": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/units/evidence":    {"operator", "admin", "trade-satellite"},

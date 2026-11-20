@@ -212,6 +212,7 @@ func (s *Server) mountCatalog(r chi.Router) {
 	viewer.Method(http.MethodGet, "/catalog/owner", catalog.OwnerRoute{Scanner: s.catalogScanner()})
 	viewer.Method(http.MethodGet, "/catalog/index", catalog.IndexRoute{Scanner: s.catalogScanner()})
 	viewer.Method(http.MethodGet, "/catalog/status", catalog.StatusRoute{Scanner: s.catalogScanner()})
+	viewer.Method(http.MethodGet, "/catalog/domain", catalog.DomainRoute{Scanner: s.catalogScanner()})
 }
 
 func replicasOf(n *int32) int {
