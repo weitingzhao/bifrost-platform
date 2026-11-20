@@ -1235,26 +1235,33 @@ export class PlaceScene extends Phaser.Scene {
     const plot = s.plots.find(q => q.id === at.plot)
     const ground = plot ? geoOf(s.plots).plot(plot) : { x: r.x - 0.5, y: r.y - 0.5, w: r.w + 1, h: r.h + 1 }
     // A local street, one lane each way, the same as the block's own.
-    const HALF = LOCAL_HALF + 0.04, FLARE = 0.18
-    // A street from a point on the block's ring (x, y) out along (dx, dy) to the highway's near kerb.
+    const HALF = LOCAL_HALF
+    // A local street from a point on the block's edge (x, y) out along (dx, dy), straight and square into the
+    // highway (the Owner, 2026-11-20: no ramp, no flare: a T-junction, the way a grid city joins its streets):
+    // its pavement stops at the highway's kerb, its asphalt runs on to the highway's, and the highway's
+    // reservation opens where it meets it. A zebra across its mouth, a stop line behind.
     const street = (x: number, y: number, dx: number, dy: number, used: boolean) => {
       const A = used ? 1 : 0.4
-      const len = dx ? ground.x + ground.w + BUFFER - x : ground.y + ground.h + BUFFER - y
+      const kerbAt = dx ? ground.x + ground.w + BUFFER : ground.y + ground.h + BUFFER
+      const len = kerbAt - (dx ? x : y)
       const ux = -dy, uy = dx
       const pt = (a: number, b: number) => P(x + dx * a + ux * b, y + dy * a + uy * b)
-      const outline = (h: number, f: number) => [pt(0, -h), pt(len - FLARE, -h), pt(len, -h - f), pt(len, h + f), pt(len - FLARE, h), pt(0, h)]
-      g.fillStyle(this.tone.kerb, A).fillPoints(outline(HALF + 0.06, FLARE), true)
-      g.fillStyle(this.tone.asphalt, A).fillPoints(outline(HALF - 0.04, FLARE), true)
+      const band = (a0: number, a1: number, h: number) => [pt(a0, -h), pt(a1, -h), pt(a1, h), pt(a0, h)]
+      g.fillStyle(this.tone.kerb, A).fillPoints(band(0, len, HALF + PAVEMENT), true)
+      // The asphalt on into the highway's near carriageway, to its edge.
+      const into = GUTTER / 2 - HIGHWAY_HALF - BUFFER + 0.02
+      g.fillStyle(this.tone.asphalt, A).fillPoints(band(0, len + into, HALF), true)
       g.lineStyle(1, this.tone.curb, A)
-      for (const side of [-1, 1]) { const p0 = pt(0, side * (HALF - 0.04)), p1 = pt(len - FLARE, side * (HALF - 0.04)), p2 = pt(len, side * (HALF - 0.04 + FLARE)); g.lineBetween(p0.x, p0.y, p1.x, p1.y).lineBetween(p1.x, p1.y, p2.x, p2.y) }
-      // The mouth: a zebra across the street, a stop line behind it.
+      for (const side of [-1, 1]) { const p0 = pt(0, side * HALF), p1 = pt(len, side * HALF); g.lineBetween(p0.x, p0.y, p1.x, p1.y) }
+      // The reservation opens across the street's width, so a car can turn either way.
+      if (used) g.fillStyle(this.tone.asphalt, 1).fillPoints(band(len + GUTTER / 2 - BUFFER - MEDIAN / 2 - 0.01, len + GUTTER / 2 - BUFFER + MEDIAN / 2 + 0.01, HALF), true)
+      // The mouth: a zebra across the street, a stop line behind it; the centre line dashed on from inside.
       g.fillStyle(this.tone.paint, A)
-      for (let v = -HALF + 0.06; v < HALF - 0.05; v += 0.09) g.fillPoints([pt(len - 0.3, v), pt(len - 0.12, v), pt(len - 0.12, v + 0.045), pt(len - 0.3, v + 0.045)], true)
-      const s0 = pt(len - 0.38, -HALF + 0.05), s1 = pt(len - 0.38, HALF - 0.05)
+      for (let v = -HALF + 0.04; v < HALF - 0.04; v += 0.08) g.fillPoints([pt(len - 0.26, v), pt(len - 0.08, v), pt(len - 0.08, v + 0.04), pt(len - 0.26, v + 0.04)], true)
+      const s0 = pt(len - 0.33, -HALF + 0.02), s1 = pt(len - 0.33, -0.01)
       g.lineStyle(1.4, this.tone.paint, A).lineBetween(s0.x, s0.y, s1.x, s1.y)
-      // The centre line carried on from inside.
-      const c0 = pt(0, 0), c1 = pt(len - 0.42, 0)
-      g.lineStyle(0.8, this.tone.paint, 0.8 * A).lineBetween(c0.x, c0.y, c1.x, c1.y)
+      g.lineStyle(0.9, this.tone.paint, 0.85 * A)
+      for (let a = 0.05; a < len - 0.4; a += 0.3) { const c0 = pt(a, 0), c1 = pt(Math.min(a + 0.15, len - 0.4), 0); g.lineBetween(c0.x, c0.y, c1.x, c1.y) }
     }
     // Every port is a way out of the block, so the entrances read before anything uses them: a used one
     // solid, an open one faint (the Owner, 2026-11-20: the entrances must show).
