@@ -60,10 +60,10 @@ export type Place = {
   look?: Look
   /**
    * A district's character on the town (the Owner, 2026-11-20: each district its own kind of city; the hardware
-   * is an industrial town, not a tech park): campus (offices round a courtyard, the default) or industrial
-   * (factory sheds round a yard, chimneys, a works office in the middle).
+   * is the town's power, drawn as a fusion works, not a tech park): campus (offices round a courtyard, the
+   * default) or power (a tokamak in its hall, a solar field, white halls with glowing seams).
    */
-  style?: 'campus' | 'industrial'
+  style?: 'campus' | 'power'
   /** Whom it deals with on purpose, up to three a side (links.ts Partners); the rest is undeclared and goes to Other. */
   partners?: Partners
   /** A first-generation landmark it stands as (library/landmarkLooks.ts); content says which, and why. */

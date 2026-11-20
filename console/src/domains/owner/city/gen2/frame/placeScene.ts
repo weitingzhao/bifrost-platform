@@ -1239,18 +1239,19 @@ export class PlaceScene extends Phaser.Scene {
    * low wall with a gate wherever a street comes in (a quarter, a half and three quarters along); in the open
    * yard between, the building whose screen will carry the district's few readings, facing the viewer.
    *   campus      an office slab and a wing in the district's colour, glass bands, a hedge for a wall, a tower
-   *   industrial  a saw-tooth factory hall and a warehouse in brick, two chimneys smoking, storage tanks, a works
-   *               office, a concrete wall
+   *   power       a fusion works (the Owner, 2026-11-20: sci-fi, not smoking chimneys): a white reactor hall with a
+   *               glowing seam, a substation wing, a tokamak in the yard, its plasma ring alight, a field of solar
+   *               panels, a control pod, a pale wall
    */
-  private campus(sq: Rect, P: Proj, hue: string, _ghost: boolean, style: 'campus' | 'industrial') {
+  private campus(sq: Rect, P: Proj, hue: string, _ghost: boolean, style: 'campus' | 'power') {
     const g = this.add.graphics()
-    const works = style === 'industrial'
+    const works = style === 'power'
     const n = Math.min(sq.w, sq.h), x0 = sq.x + (sq.w - n) / 2, y0 = sq.y + (sq.h - n) / 2
     const m = n * 0.05, lo = m, hi = n - m, gates = [0.25, 0.5, 0.75].map(f => f * n), GATE = n * 0.13
     const C = (hex: string) => Phaser.Display.Color.HexStringToColor(hex)
-    const tone = works ? C('#c46f52') : C(hue)
-    const main = { top: works ? 0xb5b8bf : tone.clone().lighten(26).color, left: tone.clone().lighten(10).color, right: tone.clone().darken(8).color }
-    const wing = works ? { top: 0xa9adb5, left: 0xd8cfc0, right: 0xbfb5a5 } : { top: tone.clone().lighten(30).color, left: 0xf4f1ea, right: 0xdcd7cc }
+    const tone = works ? C('#e9eef3') : C(hue)
+    const main = works ? { top: 0xf6f8fa, left: 0xe4e9ef, right: 0xc9d1db } : { top: tone.clone().lighten(26).color, left: tone.clone().lighten(10).color, right: tone.clone().darken(8).color }
+    const wing = works ? { top: 0xdfe5ec, left: 0xc9d2dd, right: 0xaeb9c7 } : { top: tone.clone().lighten(30).color, left: 0xf4f1ea, right: 0xdcd7cc }
     const box = (x: number, y: number, w: number, d: number, z: number, h: number, c: { top: number; left: number; right: number }) => {
       const left = [P(x, y + d, z), P(x + w, y + d, z), P(x + w, y + d, z + h), P(x, y + d, z + h)]
       const right = [P(x + w, y, z), P(x + w, y + d, z), P(x + w, y + d, z + h), P(x + w, y, z + h)]
@@ -1262,7 +1263,7 @@ export class PlaceScene extends Phaser.Scene {
     }
     // Rows of windows (offices) or a high strip of factory glazing on a visible face.
     const glaze = (x: number, y: number, w: number, d: number, z0: number, h: number, rows: number) => {
-      g.lineStyle(works ? 2.4 : 1.8, works ? 0x8fa6bd : 0xbfdff4, 1)
+      g.lineStyle(works ? 2.4 : 1.8, works ? 0x3fd6ff : 0xbfdff4, 1)
       for (let r = 0; r < rows; r++) {
         const z = z0 + h * (rows === 1 ? 0.72 : (r + 0.6) / rows)
         const l0 = P(x + 0.08, y + d, z), l1 = P(x + w - 0.08, y + d, z), r0 = P(x + w, y + 0.08, z), r1 = P(x + w, y + d - 0.08, z)
@@ -1271,19 +1272,16 @@ export class PlaceScene extends Phaser.Scene {
     }
     // The yard.
     const yard = [P(x0 + lo, y0 + lo), P(x0 + hi, y0 + lo), P(x0 + hi, y0 + hi), P(x0 + lo, y0 + hi)]
-    g.fillStyle(works ? 0xd9d6cf : this.tone.kerb, 1).fillPoints(yard, true)
+    g.fillStyle(works ? 0xe6eaee : this.tone.kerb, 1).fillPoints(yard, true)
     const D = n * 0.26
     // Back right: the main building, the whole width.
     const mainH = works ? 30 : 46
     box(x0 + lo, y0 + lo, hi - lo, D, 0, mainH, main)
     if (works) {
-      // Saw-tooth north lights across the hall's roof.
-      g.lineStyle(1.2, this.tone.ink, 0.7)
-      for (let t = lo + 0.25; t < hi - 0.1; t += 0.28) {
-        const a = P(x0 + t, y0 + lo, mainH), b = P(x0 + t, y0 + lo + D, mainH)
-        g.fillStyle(0x9fb4c8, 1).fillPoints([a, b, new Phaser.Math.Vector2(b.x, b.y - 5), new Phaser.Math.Vector2(a.x, a.y - 5)], true)
-        g.lineBetween(a.x, a.y - 5, b.x, b.y - 5)
-      }
+      // Roof plant on the reactor hall: a row of white heat exchangers, a cyan seam along its ridge.
+      for (let t = lo + 0.3; t < hi - 0.3; t += 0.55) box(x0 + t, y0 + lo + D * 0.3, 0.3, D * 0.4, mainH, 5, { top: 0xffffff, left: 0xe3e8ee, right: 0xc7cfd9 })
+      const r0 = P(x0 + lo + 0.05, y0 + lo + D * 0.15, mainH + 0.5), r1 = P(x0 + hi - 0.05, y0 + lo + D * 0.15, mainH + 0.5)
+      g.lineStyle(2, 0x3fd6ff, 1).lineBetween(r0.x, r0.y, r1.x, r1.y)
     }
     glaze(x0 + lo, y0 + lo, hi - lo, D, 0, mainH, works ? 1 : 3)
     // Back left: the wing (a warehouse), from the main building to the front wall.
@@ -1291,27 +1289,37 @@ export class PlaceScene extends Phaser.Scene {
     box(x0 + lo, y0 + lo + D, D * 0.8, hi - lo - D - m, 0, wingH, wing)
     glaze(x0 + lo, y0 + lo + D, D * 0.8, hi - lo - D - m, 0, wingH, works ? 1 : 2)
     if (works) {
-      // Chimneys behind the hall, smoking; tanks in the yard's back corner.
-      for (const cx of [x0 + lo + 0.35, x0 + lo + 0.75]) {
-        box(cx, y0 + lo + 0.12, 0.13, 0.13, mainH, 34, { top: 0x5f5a56, left: 0xb35a43, right: 0x944632 })
-        const top = P(cx + 0.06, y0 + lo + 0.18, mainH + 34)
-        g.fillStyle(0xeceae5, 0.9).fillCircle(top.x + 4, top.y - 7, 5).fillCircle(top.x + 11, top.y - 13, 6).fillCircle(top.x + 19, top.y - 18, 4)
+      // A field of solar panels in the yard's front-left, tilted rows of blue cells.
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 2; c++) {
+        const px = x0 + lo + D * 0.8 + 0.2 + c * 0.55, py = y0 + n * 0.62 + r * 0.32
+        const q = [P(px, py, 4), P(px + 0.45, py, 4), P(px + 0.45, py + 0.18, 0.5), P(px, py + 0.18, 0.5)]
+        g.fillStyle(0x2c5aa0, 1).fillPoints(q, true).lineStyle(1, this.tone.ink, 1).strokePoints(q, true)
+        g.lineStyle(0.6, 0x8fc3ff, 1)
+        for (let k2 = 1; k2 < 3; k2++) { const a2 = P(px + 0.45 * k2 / 3, py, 4), b2 = P(px + 0.45 * k2 / 3, py + 0.18, 0.5); g.lineBetween(a2.x, a2.y, b2.x, b2.y) }
       }
-      for (const [tx, ty] of [[x0 + lo + D * 0.8 + 0.35, y0 + lo + D + 0.3], [x0 + lo + D * 0.8 + 0.75, y0 + lo + D + 0.3]] as const) {
-        const b0 = P(tx, ty), r = 9
-        g.fillStyle(0xdfe3e8, 1).fillRect(b0.x - r, b0.y - 16, 2 * r, 16).lineStyle(1.2, this.tone.ink, 1).strokeRect(b0.x - r, b0.y - 16, 2 * r, 16)
-        g.fillStyle(0xf2f4f6, 1).fillEllipse(b0.x, b0.y - 16, 2 * r, r).strokeEllipse(b0.x, b0.y - 16, 2 * r, r)
-      }
+      // The tokamak: a torus on a plinth in the yard, its plasma ring glowing through the top.
+      const tc = P(x0 + n * 0.62, y0 + n * 0.42), R = n * 7.6, ry = R / 2, h = 20, hole = 0.48
+      g.fillStyle(0xc9d1db, 1).fillEllipse(tc.x, tc.y, 2 * R * 1.12, 2 * ry * 1.12).lineStyle(1.2, this.tone.ink, 1).strokeEllipse(tc.x, tc.y, 2 * R * 1.12, 2 * ry * 1.12)
+      g.fillStyle(0xdfe5ec, 1).fillRect(tc.x - R, tc.y - h, 2 * R, h).fillEllipse(tc.x, tc.y, 2 * R, 2 * ry)
+      g.lineStyle(1.2, this.tone.ink, 1).strokeEllipse(tc.x, tc.y, 2 * R, 2 * ry).lineBetween(tc.x - R, tc.y, tc.x - R, tc.y - h).lineBetween(tc.x + R, tc.y, tc.x + R, tc.y - h)
+      // Field coils round its side.
+      g.lineStyle(2, 0x8a96a8, 1)
+      for (let k2 = -4; k2 <= 4; k2++) { const xx = tc.x + (R * k2) / 5, yy = tc.y + ry * Math.sqrt(Math.max(0, 1 - (k2 / 5) ** 2)); g.lineBetween(xx, yy - 1, xx, yy - h + 1) }
+      g.fillStyle(0xf6f8fa, 1).fillEllipse(tc.x, tc.y - h, 2 * R, 2 * ry).lineStyle(1.2, this.tone.ink, 1).strokeEllipse(tc.x, tc.y - h, 2 * R, 2 * ry)
+      g.fillStyle(0x1b2340, 1).fillEllipse(tc.x, tc.y - h, 2 * R * hole, 2 * ry * hole)
+      g.lineStyle(9, 0xc86bff, 0.25).strokeEllipse(tc.x, tc.y - h, 2 * R * 0.72, 2 * ry * 0.72)
+      g.lineStyle(4, 0xc86bff, 0.9).strokeEllipse(tc.x, tc.y - h, 2 * R * 0.72, 2 * ry * 0.72)
+      g.lineStyle(1.6, 0x7ff3ff, 1).strokeEllipse(tc.x, tc.y - h, 2 * R * 0.72, 2 * ry * 0.72)
     }
     // The middle: the building whose screen carries the district's readings, its screen to the front.
-    const tw = n * 0.2, tx = x0 + n * 0.5, ty = y0 + n * 0.5
-    const midH = works ? 26 : 58
-    box(tx, ty, tw, tw, 0, midH, works ? { top: 0x9ea2aa, left: 0xe2e4e7, right: 0xc6c9ce } : { top: main.top, left: 0xf7f5f0, right: 0xe0dcd3 })
+    const tw = n * 0.2, tx = works ? x0 + n * 0.58 : x0 + n * 0.5, ty = works ? y0 + n * 0.66 : y0 + n * 0.5
+    const midH = works ? 22 : 58
+    box(tx, ty, tw, tw, 0, midH, works ? { top: 0xf6f8fa, left: 0xe4e9ef, right: 0xc9d1db } : { top: main.top, left: 0xf7f5f0, right: 0xe0dcd3 })
     const s0 = midH * 0.3, s1 = midH * 0.85
     const sc = [P(tx + tw * 0.15, ty + tw, s0), P(tx + tw * 0.85, ty + tw, s0), P(tx + tw * 0.85, ty + tw, s1), P(tx + tw * 0.15, ty + tw, s1)]
     g.fillStyle(0x2f3a4f, 1).fillPoints(sc, true).lineStyle(1, this.tone.ink, 1).strokePoints(sc, true)
     // The front wall, low, with a gate wherever a street comes in.
-    const wallC = works ? { top: 0xbdbab3, left: 0xa8a49b, right: 0x96928a } : { top: 0x9fcb8a, left: 0x86b672, right: 0x74a362 }
+    const wallC = works ? { top: 0xf1f4f7, left: 0xd5dce4, right: 0xbcc6d1 } : { top: 0x9fcb8a, left: 0x86b672, right: 0x74a362 }
     const runs = (a: number, b: number) => {
       const out: [number, number][] = []
       let s1_ = a

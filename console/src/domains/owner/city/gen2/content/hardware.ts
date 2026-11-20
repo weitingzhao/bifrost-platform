@@ -210,8 +210,8 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', uni
     return building
   })
   const arrangement = zonedArrangement(devices.map(b => ({ id: b.id, shape: b.shape, zone: zones.get(b.id)! })))
-  // The hardware is an industrial town on the map (the Owner, 2026-11-20).
-  return { id: 'utilities', kind: 'district', shape: DISTRICT, style: 'industrial', function: fn, arrangement, label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: devices }
+  // The hardware is the town's power on the map: a fusion works (the Owner, 2026-11-20: sci-fi, not smoking chimneys).
+  return { id: 'utilities', kind: 'district', shape: DISTRICT, style: 'power', function: fn, arrangement, label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: devices }
 }
 
 /**
