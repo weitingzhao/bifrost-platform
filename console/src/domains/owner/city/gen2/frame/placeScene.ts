@@ -896,11 +896,14 @@ export class PlaceScene extends Phaser.Scene {
       }
     }
     if (A) {
-      // The apron: the town's grass round the district's own ground, outlined; the ground sits on it.
+      // The apron: what lies outside the district's boundary, where its ports meet its neighbours. Paved, not
+      // grass (the Owner, 2026-11-20: a ring of green round the ground read as empty land, grass being the
+      // colour of an empty plot, and hid where the district ends); its joints every two cells.
       const apron = [P(-A, -A), P(W + A, -A), P(W + A, H + A), P(-A, H + A)]
-      g.fillStyle(this.tone.grass, 1).fillPoints(apron, true)
-      g.fillStyle(this.tone.grassAlt, 1)
-      for (let y = -A; y < H + A; y += 4) for (let x = -A; x < W + A; x += 4) if (Math.round((x + y + 2 * A) / 4) % 2) g.fillPoints(quadOf(P, { x, y, w: Math.min(4, W + A - x), h: Math.min(4, H + A - y) }), true)
+      g.fillStyle(this.tone.kerb, 1).fillPoints(apron, true)
+      g.lineStyle(1, Phaser.Display.Color.IntegerToColor(this.tone.kerb).darken(7).color, 1)
+      for (let x = -A + 2; x < W + A; x += 2) if (x < 0 || x > W) { const a = P(x, -A), b = P(x, H + A); g.lineBetween(a.x, a.y, b.x, b.y) } else { for (const [y0, y1] of [[-A, 0], [H, H + A]]) { const a = P(x, y0), b = P(x, y1); g.lineBetween(a.x, a.y, b.x, b.y) } }
+      for (let y = -A + 2; y < H + A; y += 2) if (y < 0 || y > H) { const a = P(-A, y), b = P(W + A, y); g.lineBetween(a.x, a.y, b.x, b.y) } else { for (const [x0, x1] of [[-A, 0], [W, W + A]]) { const a = P(x0, y), b = P(x1, y); g.lineBetween(a.x, a.y, b.x, b.y) } }
       g.lineStyle(2, this.tone.ink).strokePoints(apron, true)
     }
     if (shore) {
