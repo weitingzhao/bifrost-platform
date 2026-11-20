@@ -942,7 +942,7 @@ export class PlaceScene extends Phaser.Scene {
   }
 
   /** One placed thing at its spot in the picture (r): its sprite, a ring on the ground when it is picked or the one you are inside, and its hit area. */
-  private block(k: Place, at: Placed, r: Rect, P: Proj, key: string, o: { selected: string | null; inside: string | null; interactive: boolean; arranging: boolean }, path: string[]) {
+  private block(k: Place, at: Placed, r: Rect, P: Proj, key: string, o: { selected: string | null; inside: string | null; interactive: boolean; arranging: boolean; bare?: boolean }, path: string[]) {
     const parts: Phaser.GameObjects.GameObject[] = []
     // A district seen from the town is its own ground in miniature (the Owner, 2026-11-19: what you
     // see from above is what you find inside), scaled into its footprint the way the zoom-through scales it.
@@ -979,7 +979,9 @@ export class PlaceScene extends Phaser.Scene {
       g.fillStyle(tintOf(this.shown.tree, path, this.light, ter.lot)).fillPoints(quadOf(P, r), true)
       g.lineStyle(1.4, this.tone.ink).strokePoints(quadOf(P, r), true)
       parts.push(g)
-      const m = 0.35
+      // Bare (a neighbour in a port, the Owner 2026-11-20): only what stands there, filling the footprint;
+      // the town's margin of road and green belt round it is left out.
+      const m = o.bare ? 0.06 : 0.35
       const kk = Math.min((r.w - 2 * m) / inner.box.w, (r.h - 2 * m) / inner.box.h)
       const ox = r.x + (r.w - inner.box.w * kk) / 2, oy = r.y + (r.h - inner.box.h * kk) / 2
       const looks = new Map(this.looks(k, lay.placed, path).map(l => [l.id, l.key]))
@@ -1241,7 +1243,7 @@ export class PlaceScene extends Phaser.Scene {
         const nb = this.shown?.tree.children.find(d => d.id === pass.id)
         const cg = { x: at0.x + n.x * NB_AT, y: at0.y + n.y * NB_AT }
         const r: Rect = { x: cg.x - NB / 2, y: cg.y - NB / 2, w: NB, h: NB }
-        if (nb) for (const part of this.block(nb, { id: nb.id, plot: '', x: 0, y: 0, w: NB, h: NB } as unknown as Placed, r, P, '', { selected: null, inside: null, interactive: false, arranging: false }, [nb.id])) out.push(part)
+        if (nb) for (const part of this.block(nb, { id: nb.id, plot: '', x: 0, y: 0, w: NB, h: NB } as unknown as Placed, r, P, '', { selected: null, inside: null, interactive: false, arranging: false, bare: true }, [nb.id])) out.push(part)
         const hg = this.add.graphics()
         const hit = new Phaser.Geom.Polygon([P(r.x, r.y, 34), P(r.x + r.w, r.y, 34), P(r.x + r.w, r.y, 0), P(r.x + r.w, r.y + r.h, 0), P(r.x, r.y + r.h, 0), P(r.x, r.y + r.h, 34)])
         hg.setInteractive(hit, Phaser.Geom.Polygon.Contains)
