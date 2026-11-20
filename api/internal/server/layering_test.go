@@ -20,12 +20,12 @@ import (
 // enough to lose it silently, so it is asserted rather than remembered.
 //
 // Authority: console/src/lib/architecture/cicdBootstrapCatalog.ts, layer L-1.
+// agentbridge, agentdeploy and launchd moved into operatorplane on 2026-11-20
+// (their only user), so operatorplane itself is checked now.
 var operatorPlanePackages = []string{
-	"agentbridge",
 	"alertrelay",
-	"agentdeploy",
 	"agentgovernance",
-	"launchd",
+	"operatorplane",
 	"patrol",
 }
 

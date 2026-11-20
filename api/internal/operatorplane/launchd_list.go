@@ -1,9 +1,9 @@
-// Package launchd lists this machine's com.bifrost.* launchd agents.
+// launchd_list.go lists this machine's com.bifrost.* launchd agents.
 //
 // The operator plane on each Mac mini serves the result at
 // GET /api/v1/agent/launchd. The nightly maintainer reconcile reads it.
 // Nothing here talks to the cluster.
-package launchd
+package operatorplane
 
 import (
 	"bytes"
@@ -16,9 +16,9 @@ import (
 	"strings"
 )
 
-// Service is one com.bifrost.* agent. Running is false when launchctl has
+// LaunchdService is one com.bifrost.* agent. Running is false when launchctl has
 // no PID, which is normal for a StartInterval job between runs.
-type Service struct {
+type LaunchdService struct {
 	Label    string `json:"label"`
 	PID      int    `json:"pid"`
 	LastExit int    `json:"last_exit"`
@@ -27,7 +27,7 @@ type Service struct {
 }
 
 // List reads launchctl and ~/Library/LaunchAgents. Only com.bifrost.* labels.
-func List() ([]Service, error) {
+func ListLaunchdServices() ([]LaunchdService, error) {
 	out, err := exec.Command("launchctl", "list").Output()
 	if err != nil {
 		return nil, fmt.Errorf("launchctl list: %w", err)
@@ -42,13 +42,13 @@ func List() ([]Service, error) {
 		plist.WriteString(m)
 		plist.WriteByte('\n')
 	}
-	return Parse(string(out), plist.String()), nil
+	return ParseLaunchd(string(out), plist.String()), nil
 }
 
 // Parse merges launchctl list text with a plist path listing.
 // last_exit is -1 when launchctl did not report a status.
-func Parse(listText, plistText string) []Service {
-	byLabel := map[string]*Service{}
+func ParseLaunchd(listText, plistText string) []LaunchdService {
+	byLabel := map[string]*LaunchdService{}
 	for _, line := range strings.Split(listText, "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 3 {
@@ -72,7 +72,7 @@ func Parse(listText, plistText string) []Service {
 		if n, err := strconv.Atoi(fields[1]); err == nil {
 			last = n
 		}
-		byLabel[label] = &Service{Label: label, PID: pid, LastExit: last, Running: running}
+		byLabel[label] = &LaunchdService{Label: label, PID: pid, LastExit: last, Running: running}
 	}
 	for _, line := range strings.Split(plistText, "\n") {
 		base := filepath.Base(strings.TrimSpace(line))
@@ -84,9 +84,9 @@ func Parse(listText, plistText string) []Service {
 			s.Plist = true
 			continue
 		}
-		byLabel[label] = &Service{Label: label, LastExit: -1, Plist: true}
+		byLabel[label] = &LaunchdService{Label: label, LastExit: -1, Plist: true}
 	}
-	out := make([]Service, 0, len(byLabel))
+	out := make([]LaunchdService, 0, len(byLabel))
 	for _, s := range byLabel {
 		out = append(out, *s)
 	}

@@ -1285,13 +1285,6 @@
       "status": "assigned",
       "basis": "2026-11-16 source and caller audit: managed local and cluster service lifecycle, logs and deployment provider; compute charter owns host-resident services, lifecycle and allowlists unchanged"
     },
-    "api/internal/launchd": {
-      "domains": [
-        "compute"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: Mac host-resident service inventory consumed by operatorplane and maintainer; compute charter owns host-resident services, no process operation changed"
-    },
     "api/internal/selfhealth": {
       "domains": [
         "foundation"
@@ -1389,20 +1382,6 @@
       ],
       "status": "assigned",
       "basis": "2026-11-16 source and caller audit: shared Prometheus observation client used across compute and system views; implementation, authorization, refusal and dispatch behavior unchanged; 2026-11-16 generic log timestamp projection and elapsed-log formatting extracted with original output and threshold behavior"
-    },
-    "api/internal/agentbridge": {
-      "domains": [
-        "compute"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: host and bridge service inventory; implementation, authorization, refusal and dispatch behavior unchanged"
-    },
-    "api/internal/agentdeploy": {
-      "domains": [
-        "compute"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: agent host deployment inventory and HTTP adapter; implementation, authorization, refusal and dispatch behavior unchanged"
     },
     "api/internal/agentrt/mainhistory": {
       "domains": [

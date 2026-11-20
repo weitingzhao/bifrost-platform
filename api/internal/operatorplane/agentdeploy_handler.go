@@ -1,4 +1,4 @@
-package agentdeploy
+package operatorplane
 
 import (
 	"encoding/json"
@@ -27,14 +27,14 @@ type DeployTarget struct {
 	PeerURL string `json:"peer_url,omitempty"`
 }
 
-// Handler runs deploy_mac_mini.sh from platform-api host (Mac Pro) over SSH to agent Mini.
-type Handler struct {
+// AgentDeployHandler runs deploy_mac_mini.sh from platform-api host (Mac Pro) over SSH to agent Mini.
+type AgentDeployHandler struct {
 	audit *actuation.AuditLog
 	store *Store
 }
 
-func NewHandler(audit *actuation.AuditLog) *Handler {
-	return &Handler{
+func NewAgentDeployHandler(audit *actuation.AuditLog) *AgentDeployHandler {
+	return &AgentDeployHandler{
 		audit: audit,
 		store: NewStore(),
 	}
@@ -50,9 +50,9 @@ type StatusResponse struct {
 	Last       *Job           `json:"last,omitempty"`
 }
 
-func (h *Handler) HandleStatus(w http.ResponseWriter, _ *http.Request) {
+func (h *AgentDeployHandler) HandleStatus(w http.ResponseWriter, _ *http.Request) {
 	enabled, script, hint := deployConfig()
-	writeJSON(w, http.StatusOK, StatusResponse{
+	deployWriteJSON(w, http.StatusOK, StatusResponse{
 		Enabled:    enabled,
 		Remote:     defaultRemoteTarget(),
 		Targets:    deployTargets(),
@@ -196,7 +196,7 @@ func resolveDeployScript() string {
 
 var writeJSONMu sync.Mutex
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
+func deployWriteJSON(w http.ResponseWriter, status int, v any) {
 	writeJSONMu.Lock()
 	defer writeJSONMu.Unlock()
 	w.Header().Set("Content-Type", "application/json")

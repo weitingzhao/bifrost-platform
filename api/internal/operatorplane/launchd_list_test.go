@@ -1,4 +1,4 @@
-package launchd
+package operatorplane
 
 import "testing"
 
@@ -11,7 +11,7 @@ func TestParseKeepsOnlyBifrostLabels(t *testing.T) {
 		"not-a-row\n"
 	plists := "/Users/vision/Library/LaunchAgents/com.bifrost.remediation-runner.plist\n" + // 已退役 fixture
 		"/Users/vision/Library/LaunchAgents/com.bifrost.operator-plane.plist\n"
-	got := Parse(list, plists)
+	got := ParseLaunchd(list, plists)
 	if len(got) != 3 {
 		t.Fatalf("len = %d, want 3: %+v", len(got), got)
 	}

@@ -1,4 +1,4 @@
-package agentdeploy
+package operatorplane
 
 import (
 	"os"

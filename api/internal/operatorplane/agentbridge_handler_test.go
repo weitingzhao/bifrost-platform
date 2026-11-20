@@ -1,4 +1,4 @@
-package agentbridge
+package operatorplane
 
 import (
 	"encoding/json"
@@ -28,7 +28,7 @@ func TestHandleBridgeReturnsRunnerAndPlatformMcp(t *testing.T) {
 	t.Cleanup(runner.Close)
 	t.Setenv("PLANE_HEALTH_URLS", runner.URL)
 
-	h := NewHandler()
+	h := NewAgentBridgeHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent-bridge/bridge", nil)
 	rec := httptest.NewRecorder()
 	h.HandleBridge(rec, req)

@@ -1,4 +1,4 @@
-package agentbridge
+package operatorplane
 
 import (
 	"context"
@@ -11,13 +11,13 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
 )
 
-// Handler aggregates autonomous agent host + MCP bridge status for Console.
-type Handler struct {
+// AgentBridgeHandler aggregates autonomous agent host + MCP bridge status for Console.
+type AgentBridgeHandler struct {
 	httpClient *http.Client
 }
 
-func NewHandler() *Handler {
-	return &Handler{
+func NewAgentBridgeHandler() *AgentBridgeHandler {
+	return &AgentBridgeHandler{
 		httpClient: &http.Client{Timeout: 5 * time.Second},
 	}
 }
@@ -50,7 +50,7 @@ type PlatformMcpStatus struct {
 	ScriptPath       string `json:"script_path"`
 }
 
-func (h *Handler) HandleBridge(w http.ResponseWriter, r *http.Request) {
+func (h *AgentBridgeHandler) HandleBridge(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	now := time.Now().UTC()
 

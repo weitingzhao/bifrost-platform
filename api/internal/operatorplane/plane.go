@@ -34,9 +34,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentbridge"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
-	"github.com/weitingzhao/bifrost-platform/api/internal/launchd"
 	"github.com/weitingzhao/bifrost-platform/api/internal/patrol"
 )
 
@@ -46,19 +43,19 @@ type Deps struct {
 	Auth      *actuation.AuthService
 	Audit     *actuation.AuditLog
 	ConfigDir string
-	// ListLaunchd reads this machine's launchd agents. Nil means launchd.List,
+	// ListLaunchd reads this machine's launchd agents. Nil means ListLaunchdServices,
 	// which shells out to launchctl; tests pass a stub so they run on Linux CI.
-	ListLaunchd func() ([]launchd.Service, error)
+	ListLaunchd func() ([]LaunchdService, error)
 }
 
 // Plane owns the L-1 handlers and the patrol autopilot loop.
 type Plane struct {
 	auth *actuation.AuthService
 
-	agentBridge *agentbridge.Handler
-	agentDeploy *agentdeploy.Handler
+	agentBridge *AgentBridgeHandler
+	agentDeploy *AgentDeployHandler
 	patrol      *patrol.Handler
-	listLaunchd func() ([]launchd.Service, error)
+	listLaunchd func() ([]LaunchdService, error)
 }
 
 func New(d Deps) (*Plane, error) {
@@ -68,12 +65,12 @@ func New(d Deps) (*Plane, error) {
 	}
 	listLaunchd := d.ListLaunchd
 	if listLaunchd == nil {
-		listLaunchd = launchd.List
+		listLaunchd = ListLaunchdServices
 	}
 	return &Plane{
 		auth:        d.Auth,
-		agentBridge: agentbridge.NewHandler(),
-		agentDeploy: agentdeploy.NewHandler(d.Audit),
+		agentBridge: NewAgentBridgeHandler(),
+		agentDeploy: NewAgentDeployHandler(d.Audit),
 		patrol:      patrolH,
 		listLaunchd: listLaunchd,
 	}, nil
