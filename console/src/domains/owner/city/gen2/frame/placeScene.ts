@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser'
 import { fitsIn, type Placed, type Plot, type Street } from './grid'
-import { geoOf, GUTTER, WAY, type Geo, type Rect } from './geo'
+import { BUFFER, geoOf, GUTTER, WAY, type Geo, type Rect } from './geo'
 import { functionAt, isWired, type Place } from './places'
 import { hueOf, terrainOf, tintOf } from './theme'
 import { PALETTE, TERRAIN, type Light, type Palette } from './light'
@@ -1010,7 +1010,7 @@ export class PlaceScene extends Phaser.Scene {
       // Seen from the town, its ports already show (the Owner, 2026-11-20: going in, they are there before
       // and after): a stub of road on each front port, solid where a partner is, faint where open; a blue
       // patch at the back left for Other, an orange one at the back right for Orphan, when there is any.
-      if (o.interactive && !o.bare && this.shown.allLinks && path.length === 1) { stubG = this.add.graphics(); this.stubs(stubG, k, r, P) }
+      if (o.interactive && !o.bare && this.shown.allLinks && path.length === 1) { stubG = this.add.graphics(); this.stubs(stubG, k, at, r, P) }
       // Bare (a neighbour in a port, the Owner 2026-11-20): only what stands there, filling the footprint;
       // the town's margin of road and green belt round it is left out.
       const m = o.bare ? 0.06 : 0.35
@@ -1206,28 +1206,63 @@ export class PlaceScene extends Phaser.Scene {
     return out
   }
 
-  /** A district's ports on its block in the town: the same nine places as inside, in small. */
-  private stubs(g: Phaser.GameObjects.Graphics, k: Place, r: Rect, P: Proj) {
+  /**
+   * A district's ports on its block in the town (the Owner, 2026-11-20: not patches stuck on; a proper way
+   * in, as a town would build it). Each declared partner's port is a driveway: a short paved road from the
+   * block's edge across its green belt to the highway, the same pavement and kerb lines as the streets, its
+   * mouth flared where it meets the highway and a stop line across it. Empty ports are not drawn here (they
+   * show inside). Other and Orphan are on the block itself, at its back corners, in small: goods under a
+   * tarpaulin, a fenced site with a crane.
+   */
+  private stubs(g: Phaser.GameObjects.Graphics, k: Place, at: Placed, r: Rect, P: Proj) {
     const s = this.shown!
     const slots = edgeSlots(linksAt(s.tree, [k.id], s.allLinks ?? []).gates, k.partners, id => id)
-    const L = 0.45, Wd = 0.3
-    const stub = (x: number, y: number, dx: number, dy: number, on: boolean) => {
+    const plot = s.plots.find(q => q.id === at.plot)
+    const ground = plot ? geoOf(s.plots).plot(plot) : { x: r.x - 0.5, y: r.y - 0.5, w: r.w + 1, h: r.h + 1 }
+    const HALF = 0.2, FLARE = 0.16
+    // A driveway along direction (dx, dy) from (x, y) on the block's edge to the highway's kerb.
+    const drive = (x: number, y: number, dx: number, dy: number) => {
+      const len = dx ? ground.x + ground.w + BUFFER - x : ground.y + ground.h + BUFFER - y
       const ux = -dy, uy = dx
-      const q = [P(x + ux * Wd / 2, y + uy * Wd / 2), P(x + ux * Wd / 2 + dx * L, y + uy * Wd / 2 + dy * L), P(x - ux * Wd / 2 + dx * L, y - uy * Wd / 2 + dy * L), P(x - ux * Wd / 2, y - uy * Wd / 2)]
-      g.fillStyle(on ? this.tone.asphalt : this.tone.kerb, on ? 1 : 0.6).fillPoints(q, true)
-      g.lineStyle(1, this.tone.ink, on ? 0.8 : 0.3).strokePoints(q, true)
-    }
-    const patch = (x: number, y: number, col: number) => {
-      const q = [P(x - 0.22, y - 0.22), P(x + 0.22, y - 0.22), P(x + 0.22, y + 0.22), P(x - 0.22, y + 0.22)]
-      g.fillStyle(col, 1).fillPoints(q, true).lineStyle(1, this.tone.ink, 0.8).strokePoints(q, true)
+      const at_ = (a: number, b: number) => P(x + dx * a + ux * b, y + dy * a + uy * b)
+      const kerb = [at_(0, -HALF - 0.06), at_(len - FLARE, -HALF - 0.06), at_(len, -HALF - 0.06 - FLARE), at_(len, HALF + 0.06 + FLARE), at_(len - FLARE, HALF + 0.06), at_(0, HALF + 0.06)]
+      const road = [at_(0, -HALF + 0.05), at_(len - FLARE, -HALF + 0.05), at_(len, -HALF + 0.05 - FLARE), at_(len, HALF - 0.05 + FLARE), at_(len - FLARE, HALF - 0.05), at_(0, HALF - 0.05)]
+      g.fillStyle(this.tone.kerb, 1).fillPoints(kerb, true)
+      g.fillStyle(this.tone.asphalt, 1).fillPoints(road, true)
+      g.lineStyle(1, this.tone.curb, 1)
+      for (const side of [-1, 1]) { const p0 = at_(0, side * (HALF - 0.05)), p1 = at_(len - FLARE, side * (HALF - 0.05)), p2 = at_(len, side * (HALF - 0.05 + FLARE)); g.lineBetween(p0.x, p0.y, p1.x, p1.y).lineBetween(p1.x, p1.y, p2.x, p2.y) }
+      const s0 = at_(len - FLARE - 0.04, -HALF + 0.08), s1 = at_(len - FLARE - 0.04, HALF - 0.08)
+      g.lineStyle(1.6, this.tone.paint, 1).lineBetween(s0.x, s0.y, s1.x, s1.y)
     }
     for (let i = 0; i < PORTS; i++) {
       const t = (i + 0.5) / PORTS
-      stub(r.x + r.w * t, r.y + r.h, 0, 1, !!slots.in.named[i])
-      stub(r.x + r.w, r.y + r.h * t, 1, 0, !!slots.out.named[i])
+      if (slots.in.named[i]) drive(r.x + r.w * t, r.y + r.h, 0, 1)
+      if (slots.out.named[i]) drive(r.x + r.w, r.y + r.h * t, 1, 0)
     }
-    if (slots.in.other || slots.out.other) patch(r.x - 0.35, r.y + r.h * 0.5, 0x6f8fb3)
-    if (slots.orphan) patch(r.x + r.w * 0.5, r.y - 0.35, 0xf08a4b)
+    // A small box on the block: bottom at z 0, top at h.
+    const box = (x: number, y: number, w: number, h: number, col: number) => {
+      const c = Phaser.Display.Color.ValueToColor(col)
+      const top = [P(x, y, h), P(x + w, y, h), P(x + w, y + w, h), P(x, y + w, h)]
+      const right = [P(x + w, y, 0), P(x + w, y + w, 0), P(x + w, y + w, h), P(x + w, y, h)]
+      const left = [P(x, y + w, 0), P(x + w, y + w, 0), P(x + w, y + w, h), P(x, y + w, h)]
+      g.lineStyle(0.8, this.tone.ink, 1)
+      g.fillStyle(c.clone().darken(18).color).fillPoints(right, true).strokePoints(right, true)
+      g.fillStyle(c.clone().darken(8).color).fillPoints(left, true).strokePoints(left, true)
+      g.fillStyle(col).fillPoints(top, true).strokePoints(top, true)
+    }
+    if (slots.in.other || slots.out.other) {
+      const x = r.x + 0.18, y = r.y + r.h * 0.55
+      box(x, y, 0.22, 6, 0x6f8fb3); box(x + 0.26, y + 0.05, 0.2, 5, 0x6f8fb3); box(x + 0.08, y + 0.28, 0.18, 4, 0x6f8fb3)
+    }
+    if (slots.orphan) {
+      const x = r.x + r.w * 0.55, y = r.y + 0.15, w = 0.55
+      const lot = [P(x, y), P(x + w, y), P(x + w, y + w), P(x, y + w)]
+      g.fillStyle(0xc9a77a, 1).fillPoints(lot, true)
+      for (let k2 = 0; k2 < 4; k2++) { const p0 = P(x + w * k2 / 4, y + w), p1 = P(x + w * (k2 + 1) / 4, y + w); g.fillStyle(k2 % 2 ? 0xffffff : 0xf08a4b, 1).fillPoints([p0, p1, new Phaser.Math.Vector2(p1.x, p1.y - 4), new Phaser.Math.Vector2(p0.x, p0.y - 4)], true) }
+      const m0 = P(x + 0.12, y + 0.12), m1 = P(x + 0.12, y + 0.12, 22), j1 = P(x + w, y + 0.12, 22)
+      g.lineStyle(2, this.tone.ink, 1).lineBetween(m0.x, m0.y, m1.x, m1.y).lineBetween(m1.x, m1.y, j1.x, j1.y)
+      g.lineStyle(1.1, 0xf2b234, 1).lineBetween(m0.x, m0.y, m1.x, m1.y).lineBetween(m1.x, m1.y, j1.x, j1.y)
+    }
   }
 
   /**
