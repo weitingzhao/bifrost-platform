@@ -1183,7 +1183,9 @@ export class PlaceScene extends Phaser.Scene {
     const slots = edgeSlots(lk.gates)
     const g = this.add.graphics()
     out.push(g)
-    const ROAD = 0.8, REACH = 1.6, DIRT = 0xc9a77a, BARRIER = 0xf08a4b
+    const ROAD = 0.8, REACH = 1.0, DIRT = 0xc9a77a, BARRIER = 0xf08a4b
+    // A neighbour stands on a fixed 2×2 (the smallest door, grid.ts), its centre this far out.
+    const NB = 2, NB_AT = REACH + 1.15
     for (const sl of SLOTS) {
       const edge = sl.side === 'in' ? slots.in : sl.side === 'out' ? slots.out : null
       const pass = sl.side === 'orphan' ? slots.orphan : sl.i < PORTS ? edge!.named[sl.i] ?? null : edge!.other
@@ -1193,9 +1195,9 @@ export class PlaceScene extends Phaser.Scene {
       const n = sl.edge === 'x1' ? { x: 1, y: 0 } : sl.edge === 'y1' ? { x: 0, y: 1 } : { x: Math.SQRT1_2, y: Math.SQRT1_2 }
       const u = { x: -n.y, y: n.x }
       const pt = (a: number, b: number, z = 0) => P(at0.x + n.x * a + u.x * b, at0.y + n.y * a + u.y * b, z)
-      const c1 = REACH + 0.7
+      const c1 = NB_AT
       if (!pass) {
-        const eg = this.add.graphics(), r = 0.6
+        const eg = this.add.graphics(), r = NB / 2
         const corners = [pt(c1 - r, -r), pt(c1 + r, -r), pt(c1 + r, r), pt(c1 - r, r)]
         eg.fillStyle(this.tone.kerb, 0.35).fillPoints(corners, true)
         eg.lineStyle(1.2, this.tone.dim, 0.9)
@@ -1234,33 +1236,32 @@ export class PlaceScene extends Phaser.Scene {
       const ways = [pass.bus ? `bus ${pass.bus}` : '', pass.metric ? `metrics ${pass.metric}` : ''].filter(Boolean).join(' · ')
       const sign = pt(c1, 0)
       if (named) {
-        // The neighbour at the road's end, a small block in its colour: a tap goes there.
-        const ic = this.add.graphics(), s0 = 0.42, hh = 15
-        const col = Phaser.Display.Color.ValueToColor(hue)
-        const box = (a: number, b: number, z: number) => pt(c1 + a, b, z)
-        const topF = [box(-s0, -s0, hh), box(s0, -s0, hh), box(s0, s0, hh), box(-s0, s0, hh)]
-        const sides = [[box(s0, -s0, 0), box(s0, s0, 0), box(s0, s0, hh), box(s0, -s0, hh)], [box(-s0, s0, 0), box(s0, s0, 0), box(s0, s0, hh), box(-s0, s0, hh)]]
-        ic.lineStyle(1.5, this.tone.ink, 1)
-        sides.forEach((q, k) => ic.fillStyle(col.clone().darken(k ? 18 : 10).color, 1).fillPoints(q, true).strokePoints(q, true))
-        ic.fillStyle(col.clone().lighten(12).color, 1).fillPoints(topF, true).strokePoints(topF, true)
-        const hit = new Phaser.Geom.Polygon([box(-s0, -s0, hh), box(s0, -s0, hh), box(s0, -s0, 0), box(s0, s0, 0), box(-s0, s0, 0), box(-s0, s0, hh)])
-        ic.setInteractive(hit, Phaser.Geom.Polygon.Contains)
-        ic.input!.cursor = 'pointer'
-        ic.on('pointerover', () => ic.setAlpha(0.75)).on('pointerout', () => ic.setAlpha(1))
-        ic.on('pointerup', (p: Phaser.Input.Pointer) => { if (this.moved(p) <= DRAG) this.events_.go?.([pass.id]) })
-        out.push(ic)
-        out.push(this.plate(sign.x, sign.y + 12, `${sl.side === 'in' ? 'from' : 'to'} ${pass.label} · ${ways}`, hueOf(this.shown!.tree, [pass.id])))
-        framed.push(new Phaser.Math.Vector2(sign.x, sign.y + 36))
+        // The neighbour at the road's end, as itself: its own ground in miniature on a 2×2, drawn the way
+        // the town draws it (one way per class), so what changes there shows here too. A tap goes there.
+        const nb = this.shown?.tree.children.find(d => d.id === pass.id)
+        const cg = { x: at0.x + n.x * NB_AT, y: at0.y + n.y * NB_AT }
+        const r: Rect = { x: cg.x - NB / 2, y: cg.y - NB / 2, w: NB, h: NB }
+        if (nb) for (const part of this.block(nb, { id: nb.id, plot: '', x: 0, y: 0, w: NB, h: NB } as unknown as Placed, r, P, '', { selected: null, inside: null, interactive: false, arranging: false }, [nb.id])) out.push(part)
+        const hg = this.add.graphics()
+        const hit = new Phaser.Geom.Polygon([P(r.x, r.y, 34), P(r.x + r.w, r.y, 34), P(r.x + r.w, r.y, 0), P(r.x + r.w, r.y + r.h, 0), P(r.x, r.y + r.h, 0), P(r.x, r.y + r.h, 34)])
+        hg.setInteractive(hit, Phaser.Geom.Polygon.Contains)
+        hg.input!.cursor = 'pointer'
+        hg.on('pointerup', (p: Phaser.Input.Pointer) => { if (this.moved(p) <= DRAG) this.events_.go?.([pass.id]) })
+        out.push(hg)
+        const below = P(r.x + r.w, r.y + r.h)
+        out.push(this.plate(below.x, below.y + 6, `${sl.side === 'in' ? 'from' : 'to'} ${pass.label} · ${ways}`, hueOf(this.shown!.tree, [pass.id])))
+        framed.push(new Phaser.Math.Vector2(below.x, below.y + 30))
         continue
       }
       // Other: a heap; Orphan: a fenced building site with a crane. Both grow with their share.
-      const sg = this.add.graphics(), r = 0.4 + 0.8 * share
+      // On the same fixed 2×2; what grows with the share is what is on it (more junk, a taller crane).
+      const sg = this.add.graphics(), r = NB / 2
       const q = (a: number, b: number, z = 0) => pt(c1 + a, b, z)
       if (kind === 'other') {
         const heap = [q(-r, -r), q(r, -r), q(r, r), q(-r, r)]
         sg.fillStyle(DIRT, 1).fillPoints(heap, true).lineStyle(1.2, this.tone.ink, 0.8).strokePoints(heap, true)
-        for (let j = 0; j < 6 + Math.round(share * 12); j++) {
-          const h = hash(`heap${sl.side}${j}`), x = ((h % 100) / 100 - 0.5) * r * 1.4, y = (((h >> 7) % 100) / 100 - 0.5) * r * 1.4, z = (h >> 14) % 3 * 5
+        for (let j = 0; j < 4 + Math.round(share * 30); j++) {
+          const h = hash(`heap${sl.side}${j}`), x = ((h % 100) / 100 - 0.5) * r * 1.5, y = (((h >> 7) % 100) / 100 - 0.5) * r * 1.5, z = (h >> 14) % 3 * 5
           const c = [0xb7b2a6, 0xd9c7a3, 0x8f8a80, 0xc9a77a][h % 4], k = 0.12
           const top = [q(x - k, y - k, z + 7), q(x + k, y - k, z + 7), q(x + k, y + k, z + 7), q(x - k, y + k, z + 7)]
           const side = [q(x + k, y - k, z), q(x + k, y + k, z), q(x + k, y + k, z + 7), q(x + k, y - k, z + 7)]
@@ -1282,8 +1283,8 @@ export class PlaceScene extends Phaser.Scene {
       }
       out.push(sg)
       const who = kind === 'other' && pass.who.length ? ` (${pass.who.slice(0, 2).join(', ')}${pass.who.length > 2 ? '…' : ''})` : ''
-      out.push(this.plate(sign.x, sign.y + 12 + r * 14, `${pass.label} · ${pass.n} · ${Math.round(share * 100)}%${who}`, '#f08a4b'))
-      framed.push(new Phaser.Math.Vector2(sign.x, sign.y + 36 + r * 14))
+      out.push(this.plate(sign.x, sign.y + 30, `${pass.label} · ${pass.n} · ${Math.round(share * 100)}%${who}`, '#f08a4b'))
+      framed.push(new Phaser.Math.Vector2(sign.x, sign.y + 54))
     }
     return out
   }
