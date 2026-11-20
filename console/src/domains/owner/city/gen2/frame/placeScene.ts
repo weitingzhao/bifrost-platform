@@ -803,6 +803,9 @@ export class PlaceScene extends Phaser.Scene {
     // are parted by highways, buildings in a block by ordinary streets, rooms in a building by
     // corridors — all one width (geo.ts), told apart by their marking.
     const grade: 'highway' | 'street' | 'corridor' = place.kind === 'town' ? 'highway' : place.kind === 'building' ? 'corridor' : 'street'
+    // A district's back two edges carry nothing (the Owner, 2026-11-20: its ways in and out are the front
+    // two sides), so the ring road is not laid along them.
+    if (place.kind === 'district') streets = streets.filter(st => !(st.x0 === 0 && st.x1 === 0) && !(st.y0 === 0 && st.y1 === 0))
     const indoors = grade === 'corridor'
     // From the way in (the Owner, 2026-11-19): the way, then a buffer — the ground itself, a green
     // belt outdoors, a threshold indoors — then the plot, and the thing at its true size on it.
@@ -900,7 +903,7 @@ export class PlaceScene extends Phaser.Scene {
     if (ROUTES_ON_STREETS && o.interactive && this.shown?.links && !o.arranging) for (const part of this.ways(this.shown.links, geo, P, plots, placed, W, H)) c.add(part)
     // A district's ground: a crossing on its edge for each district it talks to, on the side that district lies.
     const edgePts: Phaser.Math.Vector2[] = []
-    if (place.kind === 'district' && o.interactive && this.shown?.links && !o.arranging) for (const part of this.borders(this.shown.links, P, W, H, edgePts)) c.add(part)
+    if (place.kind === 'district' && o.interactive && this.shown?.links && !o.arranging) for (const part of this.borders(this.shown.links, P, W, H, edgePts, geo, plots)) c.add(part)
     const byId = new Map(place.children.map(k => [k.id, k]))
     const plotById = new Map(plots.map(p => [p.id, p]))
     const rectOf = (p: Placed): Rect => { const home = plotById.get(p.plot); return home ? geo.thing(geo.plot(home), p.w, p.h) : { x: p.x, y: p.y, w: p.w, h: p.h } }
@@ -1180,20 +1183,31 @@ export class PlaceScene extends Phaser.Scene {
    * its neighbour, a small block in its colour that a tap opens; Other is a heap on a dirt track, Orphan a
    * fenced building site; both grow with their share of everything that passes.
    */
-  private borders(lk: LevelLinks, P: Proj, W: number, H: number, framed: Phaser.Math.Vector2[]) {
+  private borders(lk: LevelLinks, P: Proj, W: number, H: number, framed: Phaser.Math.Vector2[], geo: Geo, plots: Plot[]) {
     const out: Phaser.GameObjects.GameObject[] = []
     const slots = edgeSlots(lk.gates)
     const g = this.add.graphics()
     out.push(g)
-    const ROAD = 0.8, REACH = 1.0, DIRT = 0xc9a77a, BARRIER = 0xf08a4b
+    const ROAD = WAY, REACH = 1.0, DIRT = 0xc9a77a, BARRIER = 0xf08a4b
     // A neighbour stands on a fixed 2×2 (the smallest door, grid.ts), its centre this far out.
     const NB = 2, NB_AT = REACH + 1.15
+    // Where each side's ports stand: on the streets that reach that edge, so a port's road carries a street
+    // straight on (the Owner, 2026-11-20: the roads join up); where the edge has fewer streets than ports,
+    // evenly along it, joining the ring road.
+    const along = (cuts: number[], len: number, toPic: (v: number) => number) => {
+      const inner = [...new Set(cuts)].filter(v => v > 0 && v < 16).sort((a, b) => a - b).map(toPic)
+      const want = PORTS + 1
+      if (inner.length >= want) return Array.from({ length: want }, (_, i) => inner[Math.round(i * (inner.length - 1) / (want - 1))])
+      return Array.from({ length: want }, (_, i) => (0.14 + i * 0.21) * len)
+    }
+    const posIn = along(plots.flatMap(p => [p.x, p.x + p.w]), W, geo.x)
+    const posOut = along(plots.flatMap(p => [p.y, p.y + p.h]), H, geo.y)
     for (const sl of SLOTS) {
       const edge = sl.side === 'in' ? slots.in : sl.side === 'out' ? slots.out : null
       const pass = sl.side === 'orphan' ? slots.orphan : sl.i < PORTS ? edge!.named[sl.i] ?? null : edge!.other
       const kind: 'named' | 'other' | 'orphan' = sl.side === 'orphan' ? 'orphan' : sl.i < PORTS ? 'named' : 'other'
       // The point on the edge, the way out (n) and along the edge (u); the corner looks out diagonally.
-      const at0 = sl.edge === 'x1' ? { x: W, y: sl.t * H } : sl.edge === 'y1' ? { x: sl.t * W, y: H } : { x: W, y: H }
+      const at0 = sl.edge === 'x1' ? { x: W, y: posOut[sl.i] } : sl.edge === 'y1' ? { x: posIn[sl.i], y: H } : { x: W, y: H }
       const n = sl.edge === 'x1' ? { x: 1, y: 0 } : sl.edge === 'y1' ? { x: 0, y: 1 } : { x: Math.SQRT1_2, y: Math.SQRT1_2 }
       const u = { x: -n.y, y: n.x }
       const pt = (a: number, b: number, z = 0) => P(at0.x + n.x * a + u.x * b, at0.y + n.y * a + u.y * b, z)
@@ -1212,11 +1226,16 @@ export class PlaceScene extends Phaser.Scene {
       const named = kind === 'named'
       const share = slots.total ? pass.n / slots.total : 0
       // The road out to it: paved to a neighbour, a dirt track to Other and Orphan, fading as it goes.
+      // From the ring road's middle, over the green belt and the edge, out to the port.
+      const START = -GUTTER / 2
       for (let k = 0; k < 5; k++) {
-        const a0 = REACH * k / 5, a1 = REACH * (k + 1) / 5, fade = 1 - k / 6
+        const a0 = START + (REACH - START) * k / 5, a1 = START + (REACH - START) * (k + 1) / 5, fade = k < 2 ? 1 : 1 - (k - 1) / 6
         if (named) {
-          g.fillStyle(this.tone.kerb, fade).fillPoints([pt(a0, -ROAD / 2 - 0.07), pt(a1, -ROAD / 2 - 0.07), pt(a1, ROAD / 2 + 0.07), pt(a0, ROAD / 2 + 0.07)], true)
-          g.fillStyle(this.tone.asphalt, fade).fillPoints([pt(a0, -ROAD / 2 + 0.1), pt(a1, -ROAD / 2 + 0.1), pt(a1, ROAD / 2 - 0.1), pt(a0, ROAD / 2 - 0.1)], true)
+          // The same street as inside, carried on: its pavement, kerb line and asphalt.
+          g.fillStyle(this.tone.kerb, fade).fillPoints([pt(a0, -WAY / 2 - KERB), pt(a1, -WAY / 2 - KERB), pt(a1, WAY / 2 + KERB), pt(a0, WAY / 2 + KERB)], true)
+          g.fillStyle(this.tone.asphalt, fade).fillPoints([pt(a0, -WAY / 2 + WALK), pt(a1, -WAY / 2 + WALK), pt(a1, WAY / 2 - WALK), pt(a0, WAY / 2 - WALK)], true)
+          g.lineStyle(1.2, this.tone.curb, fade)
+          for (const side of [-1, 1]) { const e0 = pt(a0, side * (WAY / 2 - WALK)), e1 = pt(a1, side * (WAY / 2 - WALK)); g.lineBetween(e0.x, e0.y, e1.x, e1.y) }
           if (k % 2 === 0) { const m0 = pt(a0 + 0.06, 0), m1 = pt(a1 - 0.06, 0); g.lineStyle(1.2, this.tone.paint, fade).lineBetween(m0.x, m0.y, m1.x, m1.y) }
         } else {
           g.fillStyle(DIRT, fade).fillPoints([pt(a0, -ROAD / 2 + 0.04), pt(a1, -ROAD / 2 + 0.04), pt(a1, ROAD / 2 - 0.04), pt(a0, ROAD / 2 - 0.04)], true)
@@ -1250,7 +1269,9 @@ export class PlaceScene extends Phaser.Scene {
         hg.input!.cursor = 'pointer'
         hg.on('pointerup', (p: Phaser.Input.Pointer) => { if (this.moved(p) <= DRAG) this.events_.go?.([pass.id]) })
         out.push(hg)
-        const below = P(r.x + r.w, r.y + r.h)
+        // Ports stand a street apart, so neighbouring signs take turns below and above their block.
+        const low = P(r.x + r.w, r.y + r.h), high = P(r.x, r.y, 46)
+        const below = sl.i % 2 === 0 ? low : new Phaser.Math.Vector2(high.x, high.y - 26)
         out.push(this.plate(below.x, below.y + 6, `${sl.side === 'in' ? 'from' : 'to'} ${pass.label} · ${ways}`, hueOf(this.shown!.tree, [pass.id])))
         framed.push(new Phaser.Math.Vector2(below.x, below.y + 30))
         continue
