@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/mainhistory"
 )
 
@@ -33,10 +32,38 @@ type PlanHistoryReader struct {
 	// Main, when set, answers main's head first (the bus ledger, for the
 	// repositories gate-git watches); "" or an error falls back to Gitea.
 	Main func(ctx context.Context, repo string) (string, error)
+	// Rules reads a history and a commit's trailers (verification's rules,
+	// bound by the assembly); a reader without them answers Unknown.
+	Rules HistoryRules
 
 	mu      sync.Mutex
 	repos   map[string]*repoMain
 	results map[string]string // repo@sha → message; a commit's message never changes
+}
+
+// HistoryCommit is one commit of main's history as the reader hands it to
+// Rules: Parents first parent first.
+type HistoryCommit struct {
+	SHA, Message string
+	Parents      []string
+}
+
+// HistoryRules is what the reader needs of the rules that judge a landing
+// (OWNER_LAW #28: lineage reads git, verification judges it; the assembly
+// binds verification's landinggit here, lineage does not import it).
+//
+//   - Evaluate: the state of the accepted result (task, result, its message)
+//     on the history (tip first) and whether that history is complete.
+//   - CherryPickSource: the commit a message says it was picked from, or "".
+//   - HasTaskTrailer: whether a message carries exactly the task's trailer.
+type HistoryRules struct {
+	Evaluate         func(task, result, message string, commits []HistoryCommit, complete bool) (mainhistory.MainHistory, error)
+	CherryPickSource func(message string) string
+	HasTaskTrailer   func(message, task string) bool
+}
+
+func (h HistoryRules) bound() bool {
+	return h.Evaluate != nil && h.CherryPickSource != nil && h.HasTaskTrailer != nil
 }
 
 type repoMain struct {
@@ -50,6 +77,9 @@ func (r *PlanHistoryReader) History(ctx context.Context, repo, task, result, sna
 	unknown := mainhistory.MainHistory{State: mainhistory.Unknown}
 	if r.MaxPages < 1 {
 		return unknown, errors.New("history page budget missing")
+	}
+	if !r.Rules.bound() {
+		return unknown, errors.New("history rules not bound")
 	}
 	acc, err := r.Access(ctx)
 	if err != nil {
@@ -96,11 +126,11 @@ func (r *PlanHistoryReader) History(ctx context.Context, repo, task, result, sna
 		// collected later. Recovery requires provenance and the independently
 		// bound task; a candidate's own Change-Id cannot prove its identity.
 		var ok bool
-		if msg, ok = pickedResult(history, task, result); !ok {
+		if msg, ok = pickedResult(r.Rules, history, task, result); !ok {
 			return unknown, err
 		}
 	}
-	h, err := landinggit.EvaluateHistory(task, result, msg, history, complete)
+	h, err := r.Rules.Evaluate(task, result, msg, history, complete)
 	h.Snapshot = snapshot
 	return h, err
 }
@@ -185,16 +215,16 @@ func (r *PlanHistoryReader) result(ctx context.Context, acc Access, repo, sha st
 
 // pickedResult recovers only the independently bound task. Never borrow a
 // candidate's Change-Id and then match that candidate against itself.
-func pickedResult(history []landinggit.HistoryCommit, task, result string) (string, bool) {
+func pickedResult(rules HistoryRules, history []HistoryCommit, task, result string) (string, bool) {
 	if task == "" {
 		return "", false
 	}
 	msg, found := "", false
 	for _, c := range history {
-		if landinggit.CherryPickSource(c.Message) != result {
+		if rules.CherryPickSource(c.Message) != result {
 			continue
 		}
-		if !landinggit.HasTaskTrailer(c.Message, task) {
+		if !rules.HasTaskTrailer(c.Message, task) {
 			return "", false
 		}
 		if found && c.Message != msg {
@@ -208,11 +238,11 @@ func pickedResult(history []landinggit.HistoryCommit, task, result string) (stri
 // ancestry is the commits reachable from tip, tip first, and whether every
 // parent on the way is held and the history has exactly one root (a reader
 // that dropped parents would otherwise look complete).
-func ancestry(commits map[string]giteaCommit, tip string) ([]landinggit.HistoryCommit, bool) {
+func ancestry(commits map[string]giteaCommit, tip string) ([]HistoryCommit, bool) {
 	if _, ok := commits[tip]; !ok {
 		return nil, false
 	}
-	out := []landinggit.HistoryCommit{}
+	out := []HistoryCommit{}
 	seen := map[string]bool{tip: true}
 	queue := []string{tip}
 	roots := 0
@@ -223,7 +253,7 @@ func ancestry(commits map[string]giteaCommit, tip string) ([]landinggit.HistoryC
 		if !ok {
 			return out, false
 		}
-		out = append(out, landinggit.HistoryCommit{SHA: c.SHA, Message: c.Msg, Parents: c.Parents})
+		out = append(out, HistoryCommit{SHA: c.SHA, Message: c.Msg, Parents: c.Parents})
 		if len(c.Parents) == 0 {
 			roots++
 		}
