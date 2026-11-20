@@ -19,6 +19,9 @@ import { frameOf, type Frame } from './viewport'
  *   tap / click a block      → pick it: its card, seen from outside
  *   double-tap a block       → go in (a room has no inside: its card)
  *   pinch / wheel            → zoom in to read details; never smaller than the whole page
+ *   wheel on past the ends   → in: into the block under the pointer (or the picked one; a room opens
+ *                              its card); out: up to the level above (the Owner, 2026-11-19: the wheel
+ *                              goes in and out, a lit block is where it goes)
  *   drag                     → pan, only while zoomed in; at the page's size the stage stays put
  *   double-tap empty ground  → zoom in there, or back to the whole page, centred
  *   tap empty ground         → close the card
@@ -28,6 +31,8 @@ import { frameOf, type Frame } from './viewport'
  */
 
 export const CW = 64
+/** How far the wheel turns on past the end of the zoom before it goes in or up (about one and a half notches). */
+const WHEEL_ON = 150
 export const CH = 32
 /** A point of a level's picture (geo.ts: cells and the gutters between them), height z, to world pixels. */
 type Proj = (x: number, y: number, z?: number) => Phaser.Math.Vector2
@@ -61,6 +66,8 @@ export type SceneEvents = {
   plot: (op: 'split' | 'merge', plot: string) => void
   /** The view went closer than the whole page, or back: the minimap changes what it shows. */
   zoomed?: (on: boolean) => void
+  /** Up to the level above (the wheel turned on outwards past the whole page). */
+  up?: () => void
 }
 
 /** What a tap does while arranging: move things between plots, cut plots, or join them. */
@@ -124,6 +131,14 @@ export class PlaceScene extends Phaser.Scene {
   private pinch: { d: number; zoom: number } | null = null
   private lastTap = 0
   private lastPick: { id: string; t: number } | null = null
+  /** The block under the mouse, lit: where the wheel goes in. */
+  private hovered: Place | null = null
+  /** How far the wheel has turned on past the end of the zoom, and which way. */
+  private push = { dir: 0, sum: 0, t: 0 }
+  /** The block a turn of the wheel inwards started over: kept while it turns, though the zoom slides it from under the mouse. */
+  private aimed: { k: Place; t: number } | null = null
+  /** After going in or up, the rest of that turn of the wheel is let go: one turn, one level. */
+  private wheelQuiet = 0
   /** A block being carried while arranging: which, and which cell of it the pointer holds. */
   private carry: { p: Placed; to: Plot | null } | null = null
   /**
@@ -222,6 +237,8 @@ export class PlaceScene extends Phaser.Scene {
     this.shown = next
     if (!this.ready) return
     const same = prev && prev.place.id === next.place.id && prev.parent?.id === next.parent?.id
+    // Another page: what was lit under the mouse was on the old one.
+    if (!same) { this.hovered = null; this.aimed = null; this.push = { dir: 0, sum: 0, t: 0 } }
     // Same page: redraw in place only if something on it changed (a redraw mid-change would cut the
     // change short); refit only when arranging starts or stops (the frame changes).
     if (same) {
@@ -552,8 +569,34 @@ export class PlaceScene extends Phaser.Scene {
       this.events_.select(null)
     })
     this.input.on('wheel', (p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
-      if (inMini(p)) return
-      this.zoomAbout(cam.zoom * Math.exp(-dy * 0.0015), p.x, p.y)
+      if (inMini(p) || dy === 0) return
+      const dir = Math.sign(dy), now = this.time.now
+      if (now < this.wheelQuiet) { this.wheelQuiet = now + 250; return }
+      if (!this.shown?.arranging) {
+        // Past the end of the zoom the wheel keeps going: in, into the lit block (or the picked one); out,
+        // up a level. A short turn on past the end, so a flick that only meant to zoom does not leave.
+        const { hi } = this.zoomRange()
+        if (dir < 0 && this.hovered) this.aimed = { k: this.hovered, t: now }
+        const aimed = this.aimed && dir < 0 && now - this.aimed.t < 800 ? this.aimed.k : null
+        if (aimed) this.aimed!.t = now
+        const target = this.hovered ?? aimed ?? this.shown?.place.children.find(c => c.id === this.shown?.selected) ?? null
+        const goIn = dir < 0 && target && cam.zoom >= hi * 0.995
+        const goUp = dir > 0 && !this.zoomedIn() && !!this.events_.up && (this.shown?.path.length ?? 0) > 0
+        if (goIn || goUp) {
+          if (this.push.dir !== dir || now - this.push.t > 450) this.push = { dir, sum: 0, t: now }
+          this.push.sum += Math.abs(dy); this.push.t = now
+          if (this.push.sum < WHEEL_ON) return
+          this.push = { dir: 0, sum: 0, t: 0 }
+          this.wheelQuiet = now + 700
+          if (goIn) { const t = target!; this.hovered = null; this.aimed = null; if (t.kind === 'room') this.events_.select(t); else this.events_.enter(t) }
+          else this.events_.up!()
+          return
+        }
+      }
+      this.push = { dir: 0, sum: 0, t: 0 }
+      // Over a block, in goes faster: it is where you are heading.
+      const rate = dir < 0 && (this.hovered || this.aimed) ? 0.003 : 0.0015
+      this.zoomAbout(cam.zoom * Math.exp(-dy * rate), p.x, p.y)
     })
   }
 
@@ -859,8 +902,8 @@ export class PlaceScene extends Phaser.Scene {
       g.setInteractive(hit, Phaser.Geom.Polygon.Contains)
       g.input!.cursor = o.arranging ? 'grab' : 'pointer'
       // Hover only for a mouse: on a touch screen it would stay lit after the finger lifts.
-      g.on('pointerover', (p: Phaser.Input.Pointer) => { if (!p.wasTouch) img?.setTint(this.tone.hover) })
-      g.on('pointerout', () => img?.clearTint())
+      g.on('pointerover', (p: Phaser.Input.Pointer) => { if (!p.wasTouch) { img?.setTint(this.tone.hover); if (!o.arranging) this.hovered = k } })
+      g.on('pointerout', () => { img?.clearTint(); if (this.hovered?.id === k.id) this.hovered = null })
       // Moving: press on a thing to pick it up; it lands on the plot under the pointer when released.
       g.on('pointerdown', () => {
         if (o.arranging && this.shown?.tool === 'move') this.carry = { p: at, to: null }

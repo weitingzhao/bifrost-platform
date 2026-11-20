@@ -70,7 +70,7 @@ export function pickedPanel(item: Place): Panel {
       {/* A room its module draws: the room itself, large, as it stands now. */}
       {item.picture && <img className="g2-room-picture" src={spriteUrl(item.picture.make())} alt={`${item.label} room`} style={{ width: '100%', height: 'auto', display: 'block' }} />}
       {item.look && <KeyTable place={item} full={size !== 'card'} />}
-      {item.kind !== 'room' && <p className="g2-hint">Double-click to go inside</p>}
+      {item.kind !== 'room' && <p className="g2-hint">Double-click, or scroll in, to go inside</p>}
       {!item.look && <dl>
         <div><dt>Readings</dt><dd className={toneOf(item)}>{readingOf(item)}</dd></div>
         {item.meter && <div><dt>Read from</dt><dd><code>{item.meter.source}</code></dd></div>}

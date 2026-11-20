@@ -217,6 +217,7 @@ function CityFrame({ path: asked, go, dashboardHref = p => p.dashboard, timerLoo
         if (next !== null) keep({ plan: encodePlan(next), at: Object.fromEntries(L.placed.map(p => [p.id, p.plot])) })
       },
       zoomed: on => setZoomed(on),
+      up: () => { if (pathRef.current.length > 0) { setSelected(null); goRef.current(pathRef.current.slice(0, -1)) } },
     })
     s.setLayout(f)
     s.setLight(light)
