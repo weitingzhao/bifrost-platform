@@ -141,8 +141,9 @@ func (s *Service) Pipelines(ctx context.Context) PipelinesResponse {
 
 	views := make([]PipelineView, 0, len(list.Items))
 	getTask := s.clusterTasks(ctx, dyn)
+	nodes := s.displayNodeInputs(ctx)
 	for _, item := range list.Items {
-		view := s.enrichPipelineView(ctx, item.GetName(), item.GetNamespace(), item.Object, getTask)
+		view := s.enrichPipelineView(item.GetName(), item.GetNamespace(), item.Object, getTask, nodes)
 		view.Repos, view.RevisionRepo = pipelineClones(item.Object)
 		views = append(views, view)
 	}

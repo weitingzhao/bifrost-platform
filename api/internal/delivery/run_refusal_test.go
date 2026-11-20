@@ -859,3 +859,37 @@ func TestOnlyAPlatformProdStartPrepares(t *testing.T) {
 		t.Fatalf("prepared %v", got)
 	}
 }
+
+// 2026-11-20: GET /api/v1/delivery/pipelines took 19–22 s on PROD (BifrostAPIHighLatency
+// on platform-workers): every kaniko pipeline in the list read the nodes live,
+// each waiting out the SSH probe to the powered-off gpu-server. The list reads
+// the nodes once, from the kept reading; a pipeline that runs no kaniko reads none.
+func TestThePipelineListReadsTheNodesOnce(t *testing.T) {
+	s, _, _ := contractService(t, &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "tekton.dev/v1", "kind": "Pipeline",
+		"metadata": map[string]any{"name": "other", "namespace": "cicd"}, "spec": map[string]any{}}}, "present")
+	cs := k8sfake.NewSimpleClientset()
+	s.SetClientsetForTest(cs)
+	missing := func(string) (map[string]any, error) { return nil, fmt.Errorf("forbidden") }
+	unreadPipe := map[string]any{"spec": map[string]any{"tasks": []any{map[string]any{"name": "b", "taskRef": map[string]any{"name": "x"}}}}}
+	nodes := s.displayNodeInputs(context.Background())
+	for _, name := range []string{"a", "b", "c"} {
+		if v := s.enrichPipelineView(name, "cicd", unreadPipe, missing, nodes); v.BuildReady == nil {
+			t.Fatalf("%s: a kaniko pipeline must carry a build badge", name)
+		}
+	}
+	lists := 0
+	for _, a := range cs.Actions() {
+		if a.GetVerb() == "list" && a.GetResource().Resource == "nodes" {
+			lists++
+		}
+	}
+	if lists != 1 {
+		t.Fatalf("three kaniko pipelines listed the nodes %d times, want 1", lists)
+	}
+	calls := 0
+	count := func() []placement.NodeInput { calls++; return nil }
+	if v := s.enrichPipelineView("plain", "cicd", map[string]any{"spec": map[string]any{}}, missing, count); v.BuildReady != nil || calls != 0 {
+		t.Fatalf("a pipeline that runs no kaniko read the nodes %d times: %+v", calls, v)
+	}
+}
