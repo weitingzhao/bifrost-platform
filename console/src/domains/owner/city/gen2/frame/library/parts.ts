@@ -141,42 +141,14 @@ export function gatehouse(g: Draw, x: number, y: number, w: number, d: number, T
 const U = 35.8
 const esc = (t: string) => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 
-/** A plate across a face, from its corner (x, y) for `span` cells, at height z, with a name on it. */
-export function signBand(g: Draw, face: 'left' | 'right', x: number, y: number, span: number, z: number, text: string, h = 11) {
-  const W = span * U
-  const size = Math.min(8, (W - 10) / Math.max(4, text.length) * 1.6)
-  g.face(face, x, y, z, `<rect x="3" y="${-h}" width="${(W - 6).toFixed(1)}" height="${h}" rx="1.5" fill="#fbfaf6" stroke="${INK}" stroke-width="0.8"/>` +
-    `<text x="${(W / 2).toFixed(1)}" y="${(-h / 2 + size * 0.36).toFixed(1)}" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="${size.toFixed(1)}" font-weight="700" fill="${INK}">${esc(text)}</text>`)
-}
 
-/** A radiator grille low on a face, from its corner for `span` cells, between heights z0 and z1. */
-export function grille(g: Draw, face: 'left' | 'right', x: number, y: number, span: number, z0: number, z1: number) {
-  const W = span * U, h = z1 - z0
-  let s = `<rect x="4" y="${-h}" width="${(W - 8).toFixed(1)}" height="${h}" fill="#5b6070" stroke="${INK}" stroke-width="1"/>`
-  for (let u = 7; u < W - 6; u += 3.2) s += `<line x1="${u.toFixed(1)}" y1="${(-h + 2).toFixed(1)}" x2="${u.toFixed(1)}" y2="-2" stroke="#8d93a1" stroke-width="0.9"/>`
-  g.face(face, x, y, z0, s)
-}
 
 /** A system's mark on a plaque, `at` cells along the face from its corner, centred at height z. */
 export function plaque(g: Draw, face: 'left' | 'right', x: number, y: number, at: number, z: number, os: MachineOs, r = 8) {
   g.face(face, x, y, z, osMark(os, at * U, 0, r))
 }
 
-/** A number painted large on a roof (x0..x1, y0..y1 at height z), read from far off. */
-export function roofNumber(g: Draw, x0: number, y0: number, x1: number, y1: number, z: number, text: string, ink = INK) {
-  const w = (x1 - x0) * U, d = (y1 - y0) * U
-  const size = Math.min(d * 0.7, (w * 0.9) / Math.max(1, text.length) * 1.6)
-  g.floor(x0, y0, z, `<text x="${(w / 2).toFixed(1)}" y="${(d / 2 + size * 0.36).toFixed(1)}" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="${size.toFixed(1)}" font-weight="800" fill="${ink}" opacity="0.82" letter-spacing="1">${esc(text)}</text>`)
-}
 
-/** A board on a face, `at` cells along it, centred at height z: how many of something it holds now; dark and blank when nothing is read. */
-export function tallyBoard(g: Draw, face: 'left' | 'right', x: number, y: number, at: number, z: number, n: number | null, what: string, w = 1.1) {
-  const W = w * U, h = 13
-  const text = n == null ? '' : `${Math.round(n)} ${what.toUpperCase()}`
-  const size = Math.min(8.5, (W - 6) / Math.max(4, text.length) * 1.7)
-  g.face(face, x, y, z, `<rect x="${(at * U - W / 2).toFixed(1)}" y="${(-h / 2).toFixed(1)}" width="${W.toFixed(1)}" height="${h}" rx="1.5" fill="#1d2230" stroke="${INK}" stroke-width="0.9"/>` +
-    (text ? `<text x="${(at * U).toFixed(1)}" y="${(size * 0.36).toFixed(1)}" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="${size.toFixed(1)}" font-weight="700" fill="#7be08f">${esc(text)}</text>` : ''))
-}
 
 /**
  * How a reading is written, everywhere in the city: one format per unit (the Owner, 2026-11-19: what

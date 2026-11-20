@@ -42,9 +42,9 @@ export const DICTIONARY: readonly Metaphor[] = [
   { id: 'disk.total', metric: 'disk size', part: 'tank (fuel) girth, px', shows: 'Size of the fuel tank', encoding: { kind: 'size', from: 100 * GB, to: 32 * TB, min: 10, max: 22 }, meaning: 'the bigger the disk, the bigger the fuel tank' },
   { id: 'volume.used', metric: 'a NAS volume used, as a share', part: 'doorRow (crates)', shows: 'Crates behind the doors', encoding: { kind: 'level' }, meaning: 'crates stacked behind its doors as high as it is used' },
   { id: 'volume.disks', metric: 'the disks of a volume’s array and their states', part: 'doorRow (doors, lamps)', shows: 'Doors and their lamps', encoding: { kind: 'state' }, meaning: 'a door per disk, its lamp in the disk’s state' },
-  { id: 'pods', metric: 'pods running on a node', part: 'tallyBoard', shows: 'Board on the side wall', encoding: { kind: 'number' }, meaning: 'how many run on it now, written on its side board' },
-  { id: 'identity', metric: 'which machine (from its node name)', part: 'roofNumber', shows: 'Number on the roof', encoding: { kind: 'number' }, meaning: 'its number painted on the roof, read from far off' },
-  { id: 'purpose', metric: 'what it is for (workload pool, cluster role, topology role)', part: 'signBand', shows: 'Sign over the front', encoding: { kind: 'number' }, meaning: 'written on the sign over its front' },
+  { id: 'pods', metric: 'pods running on a node', part: 'name plate', shows: 'On its name plate', encoding: { kind: 'number' }, meaning: 'how many run on it now, written on its name plate outside the picture' },
+  { id: 'identity', metric: 'which machine (from its node name)', part: 'name plate', shows: 'Its name on the plate', encoding: { kind: 'number' }, meaning: 'its name on its plate outside the picture' },
+  { id: 'purpose', metric: 'what it is for (workload pool, cluster role, topology role)', part: 'name plate', shows: 'On its name plate', encoding: { kind: 'number' }, meaning: 'what it is for, written on its name plate outside the picture' },
   // The CPU unit's room, the workshop (a computer is a factory, the Owner 2026-11-19).
   { id: 'core.machines', metric: 'CPU cores', part: 'machine tool', shows: 'Lathes', encoding: { kind: 'parts', each: 1, unit: 'core' }, meaning: 'the standard part of compute: one lathe per core (bed, headstock and chuck, tailstock), the same in every factory', scope: 'whole CPU' },
   // The standard parts of memory and storage (proposed 2026-11-19, for the Owner to confirm; drawn when

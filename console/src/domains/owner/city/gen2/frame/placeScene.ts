@@ -1020,7 +1020,9 @@ export class PlaceScene extends Phaser.Scene {
       const scale = k.picture?.scale ? ` · ${k.picture.scale}` : ''
       const word = k.state && k.state !== 'online' ? ` · ${k.state}` : ''
       const dot = k.state === 'down' ? '#d9534f' : k.state === 'standby' ? '#9aa0b0' : k.state === 'unread' ? '#d8d4cc' : this.shown ? hueOf(this.shown.tree, [...at, p.id]) : '#cccccc'
-      c.add(this.plate(foot.x, foot.y + 4, `${k.label}${pct}${word}${scale}`, dot))
+      // Its words (what it is for, how many run on it) on the plate, outside its picture (the Owner, 2026-11-20).
+      const said = [k.face?.sign ? k.face.sign.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase()) : '', k.state === 'online' && k.face?.tally?.n != null ? `${k.face.tally.n} ${k.face.tally.what}` : ''].filter(Boolean).map(t => ` · ${t}`).join('')
+      c.add(this.plate(foot.x, foot.y + 4, `${k.label}${said}${pct}${word}${scale}`, dot))
     }
     if (order.length === 0 && o.interactive) c.add(this.label(P(W / 2, H / 2).x, P(W / 2, H / 2).y, 'Nothing inside yet', { color: '#8a8478', fontSize: '14px' }).setOrigin(0.5))
     // What the fit frames: the blocks' corners up to their roofs, and their names below.
