@@ -1216,19 +1216,7 @@ export class PlaceScene extends Phaser.Scene {
       const u = { x: -n.y, y: n.x }
       const pt = (a: number, b: number, z = 0) => P(at0.x + n.x * a + u.x * b, at0.y + n.y * a + u.y * b, z)
       const c1 = NB_AT
-      if (!pass) {
-        const eg = this.add.graphics(), r = NB / 2
-        const corners = [pt(c1 - r, -r), pt(c1 + r, -r), pt(c1 + r, r), pt(c1 - r, r)]
-        eg.fillStyle(this.tone.kerb, 0.35).fillPoints(corners, true)
-        eg.lineStyle(1.2, this.tone.dim, 0.9)
-        for (let i = 0; i < 4; i++) { const p0 = corners[i], p1 = corners[(i + 1) % 4]; for (let k = 0; k < 8; k += 2) eg.lineBetween(p0.x + (p1.x - p0.x) * k / 8, p0.y + (p1.y - p0.y) * k / 8, p0.x + (p1.x - p0.x) * (k + 1) / 8, p0.y + (p1.y - p0.y) * (k + 1) / 8) }
-        const m = pt(c1, 0)
-        out.push(eg, this.label(m.x, m.y, kind === 'named' ? 'open' : kind === 'other' ? `Other ${sl.side} · 0` : 'Orphan · 0', { color: '#8a8478', fontSize: '11px' }).setOrigin(0.5))
-        framed.push(new Phaser.Math.Vector2(m.x, m.y + 26))
-        continue
-      }
       const named = kind === 'named'
-      const share = slots.total ? pass.n / slots.total : 0
       // The road out to it: paved to a neighbour, a dirt track to Other and Orphan, fading as it goes.
       // From the ring road's middle, over the green belt and the edge, out to the port (to the yard a track).
       const START = -GUTTER / 2
@@ -1246,6 +1234,28 @@ export class PlaceScene extends Phaser.Scene {
           for (let j = 0; j < 3; j++) { const h = hash(`${kind}${sl.side}${k}${j}`), q = pt(a0 + (h % 10) / 10 * (a1 - a0), ((h >> 4) % 10) / 10 * 0.6 - 0.3); g.fillStyle(0x9c7a52, fade * 0.8).fillCircle(q.x, q.y, 1.5) }
         }
       }
+      // Which way it goes, painted on the road (the Owner, 2026-11-20: an arrow says in or out, no words);
+      // laid even where nothing passes yet, the yard has none: nothing passes through it.
+      if (kind !== 'orphan') {
+        const inward = sl.side === 'in'
+        const at = REACH * 0.35
+        const tail = inward ? at + 0.55 : at - 0.55, head = inward ? at - 0.55 : at + 0.55, back = inward ? head + 0.34 : head - 0.34
+        const s0 = pt(tail, 0), s1 = pt(back, 0)
+        g.lineStyle(4, 0xffffff, pass ? 1 : 0.7).lineBetween(s0.x, s0.y, s1.x, s1.y)
+        g.fillStyle(0xffffff, pass ? 1 : 0.7).fillPoints([pt(head, 0), pt(back, -0.3), pt(back, 0.3)], true)
+      }
+      if (!pass) {
+        const eg = this.add.graphics(), r = NB / 2
+        const corners = [pt(c1 - r, -r), pt(c1 + r, -r), pt(c1 + r, r), pt(c1 - r, r)]
+        eg.fillStyle(this.tone.kerb, 0.35).fillPoints(corners, true)
+        eg.lineStyle(1.2, this.tone.dim, 0.9)
+        for (let i = 0; i < 4; i++) { const p0 = corners[i], p1 = corners[(i + 1) % 4]; for (let k = 0; k < 8; k += 2) eg.lineBetween(p0.x + (p1.x - p0.x) * k / 8, p0.y + (p1.y - p0.y) * k / 8, p0.x + (p1.x - p0.x) * (k + 1) / 8, p0.y + (p1.y - p0.y) * (k + 1) / 8) }
+        const m = pt(c1, 0)
+        out.push(eg, this.label(m.x, m.y, kind === 'named' ? 'open' : kind === 'other' ? 'Other · 0' : 'Orphan · 0', { color: '#8a8478', fontSize: '11px' }).setOrigin(0.5))
+        framed.push(new Phaser.Math.Vector2(m.x, m.y + 26))
+        continue
+      }
+      const share = slots.total ? pass.n / slots.total : 0
       // The port itself on the edge: two posts and a beam, in the neighbour's colour; a striped barrier to Other and Orphan.
       const hue = named && this.shown ? Phaser.Display.Color.HexStringToColor(hueOf(this.shown.tree, [pass.id])).color : BARRIER
       const H1 = 26
@@ -1276,7 +1286,7 @@ export class PlaceScene extends Phaser.Scene {
         // Ports stand a street apart, so neighbouring signs take turns below and above their block.
         const low = P(r.x + r.w, r.y + r.h), high = P(r.x, r.y, 46)
         const below = sl.i % 2 === 0 ? low : new Phaser.Math.Vector2(high.x, high.y - 26)
-        out.push(this.plate(below.x, below.y + 6, `${sl.side === 'in' ? 'from' : 'to'} ${pass.label} · ${ways}`, hueOf(this.shown!.tree, [pass.id])))
+        out.push(this.plate(below.x, below.y + 6, `${pass.label} · ${ways}`, hueOf(this.shown!.tree, [pass.id])))
         framed.push(new Phaser.Math.Vector2(below.x, below.y + 30))
         continue
       }
@@ -1285,16 +1295,28 @@ export class PlaceScene extends Phaser.Scene {
       const sg = this.add.graphics(), r = NB / 2
       const q = (a: number, b: number, z = 0) => pt(c1 + a, b, z)
       if (kind === 'other') {
-        const heap = [q(-r, -r), q(r, -r), q(r, r), q(-r, r)]
-        sg.fillStyle(DIRT, 1).fillPoints(heap, true).lineStyle(1.2, this.tone.ink, 0.8).strokePoints(heap, true)
-        for (let j = 0; j < 4 + Math.round(share * 30); j++) {
-          const h = hash(`heap${sl.side}${j}`), x = ((h % 100) / 100 - 0.5) * r * 1.5, y = (((h >> 7) % 100) / 100 - 0.5) * r * 1.5, z = (h >> 14) % 3 * 5
-          const c = [0xb7b2a6, 0xd9c7a3, 0x8f8a80, 0xc9a77a][h % 4], k = 0.12
-          const top = [q(x - k, y - k, z + 7), q(x + k, y - k, z + 7), q(x + k, y + k, z + 7), q(x - k, y + k, z + 7)]
-          const side = [q(x + k, y - k, z), q(x + k, y + k, z), q(x + k, y + k, z + 7), q(x + k, y - k, z + 7)]
-          sg.lineStyle(1, this.tone.ink, 1).fillStyle(Phaser.Display.Color.ValueToColor(c).darken(15).color).fillPoints(side, true).strokePoints(side, true)
-          sg.fillStyle(c).fillPoints(top, true).strokePoints(top, true)
+        // Other: something is there, but what is not known yet: goods under tarpaulins on a paved yard, a
+        // question mark on its post (the Owner, 2026-11-20: unlike Orphan's building site). More with its share.
+        const yard = [q(-r, -r), q(r, -r), q(r, r), q(-r, r)]
+        sg.fillStyle(this.tone.kerb, 1).fillPoints(yard, true).lineStyle(1.2, this.tone.ink, 0.8).strokePoints(yard, true)
+        const n = 2 + Math.round(share * 10), TARP = 0x6f8fb3
+        for (let j = 0; j < n; j++) {
+          const h = hash(`tarp${sl.side}${j}`), x = ((j % 3) - 1) * r * 0.6 + ((h % 10) / 10 - 0.5) * 0.15, y = (Math.floor(j / 3) % 3 - 1) * r * 0.6
+          const k = 0.24, z = 10 + (h % 3) * 3
+          const top = [q(x - k, y - k, z), q(x + k, y - k, z), q(x + k, y + k, z), q(x - k, y + k, z)]
+          const right = [q(x + k, y - k, 0), q(x + k, y + k, 0), q(x + k, y + k, z), q(x + k, y - k, z)]
+          const left = [q(x - k, y + k, 0), q(x + k, y + k, 0), q(x + k, y + k, z), q(x - k, y + k, z)]
+          sg.lineStyle(1, this.tone.ink, 1)
+          sg.fillStyle(Phaser.Display.Color.ValueToColor(TARP).darken(18).color).fillPoints(right, true).strokePoints(right, true)
+          sg.fillStyle(Phaser.Display.Color.ValueToColor(TARP).darken(8).color).fillPoints(left, true).strokePoints(left, true)
+          sg.fillStyle(TARP).fillPoints(top, true).strokePoints(top, true)
+          const r0 = q(x - k, y, z), r1 = q(x + k, y, z)
+          sg.lineStyle(1, 0xe9e2c9, 1).lineBetween(r0.x, r0.y, r1.x, r1.y)
         }
+        const post = q(-r * 0.85, r * 0.85), top2 = q(-r * 0.85, r * 0.85, 30)
+        sg.lineStyle(2, this.tone.ink, 1).lineBetween(post.x, post.y, top2.x, top2.y)
+        sg.fillStyle(0xfbfaf6, 1).fillCircle(top2.x, top2.y - 6, 7).lineStyle(1.2, this.tone.ink, 1).strokeCircle(top2.x, top2.y - 6, 7)
+        out.push(this.label(top2.x, top2.y - 6, '?', { color: '#2f2d3a', fontSize: '11px', fontStyle: 'bold' }).setOrigin(0.5))
       } else {
         const lot = [q(-r, -r), q(r, -r), q(r, r), q(-r, r)]
         sg.fillStyle(DIRT, 1).fillPoints(lot, true)
@@ -1310,7 +1332,7 @@ export class PlaceScene extends Phaser.Scene {
       }
       out.push(sg)
       const who = kind === 'other' && pass.who.length ? ` (${pass.who.slice(0, 2).join(', ')}${pass.who.length > 2 ? '…' : ''})` : ''
-      out.push(this.plate(sign.x, sign.y + 30, `${kind === 'other' ? `Other ${sl.side}` : pass.label} · ${pass.n} · ${Math.round(share * 100)}%${who}`, '#f08a4b'))
+      out.push(this.plate(sign.x, sign.y + 30, `${pass.label} · ${pass.n} · ${Math.round(share * 100)}%${who}`, '#f08a4b'))
       framed.push(new Phaser.Math.Vector2(sign.x, sign.y + 54))
     }
     return out
