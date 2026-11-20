@@ -12,9 +12,12 @@ import (
 const (
 	// hostReadingFresh is how long a reading is served without a new probe.
 	hostReadingFresh = 20 * time.Second
-	// hostReadingMaxAge is the oldest reading a page is shown. Between the
-	// two the reading is served and a probe runs behind it.
-	hostReadingMaxAge = 2 * time.Minute
+	// hostReadingMaxAge is the oldest reading a page is shown. 15 min (was 2,
+	// 2026-11-20): /api/v1/cluster is opened about every 8 min (7 calls in 1 h,
+	// P50 3.26 s), so a 2 min keep made nearly every call pay the 3 s probe of
+	// the powered-off host. Display only; nothing that acts reads this.
+	// Between the two the reading is served and a probe runs behind it.
+	hostReadingMaxAge = 15 * time.Minute
 	// hostRefreshTimeout bounds a probe no request is waiting on.
 	hostRefreshTimeout = 5 * time.Second
 )
