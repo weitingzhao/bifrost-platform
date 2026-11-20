@@ -210,6 +210,19 @@ export function joinPlots(plan: Plan, aId: string, bId: string, g: Ground = FULL
   return { plan: next, moved: out }
 }
 
+/**
+ * The land is shaped empty (the Owner, 2026-11-20: the land first, then the building; never the land bent to a
+ * building): a change of the plan may go ahead only if every plot a thing stands on is still there, the same
+ * plot on the same ground, after it. A cut, a turn or a join that would touch built land is refused.
+ */
+export function leavesBuiltLand(plan: Plan, placed: readonly Placed[], plots: readonly Plot[], g: Ground = FULL): boolean {
+  const after = plotsOf(plan, g)
+  return placed.every(it => {
+    const was = plots.find(p => p.id === it.plot)
+    return !!was && after.some(q => q.x === was.x && q.y === was.y && q.w === was.w && q.h === was.h)
+  })
+}
+
 /** A plan as a short string, and back (for the browser to keep): 'L' a plot, 'S' a cut followed by its halves. */
 export const encodePlan = (plan: Plan): string => plan === null ? 'L' : (turned(plan) ? 'T' : 'S') + encodePlan(plan[0]) + encodePlan(plan[1])
 export function decodePlan(s: string): Plan | null {

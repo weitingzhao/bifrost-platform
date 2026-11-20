@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assign, decodePlan, defaultPlan, encodePlan, fitsBudget, GRID, mergePlot, moveTo, planFor, plotAt, plotsOf, splitPlot, streetsOf, turnPlot, joinPlots, type Item, type Plan, type Shape } from '../grid'
+import { assign, decodePlan, defaultPlan, encodePlan, fitsBudget, GRID, mergePlot, moveTo, planFor, plotAt, plotsOf, splitPlot, streetsOf, turnPlot, joinPlots, leavesBuiltLand, type Item, type Placed, type Plan, type Shape } from '../grid'
 
 // 2026-11-19, the Owner: the ground is divided into plots he can cut and join (1×1, 2×2, 4×4, 4×8, 8×8…),
 // the streets follow the plots, and a thing stands in a plot of its own, not every plot a 4×4.
@@ -123,6 +123,16 @@ describe('oblong things', () => {
 // 2026-11-20, the Owner: a 4×8 has a direction, lengthwise or across; and the land comes first: a building goes
 // only onto a plot that fits it (the auto-join on drop tried the same day was taken out at his word).
 describe('a long plot lies either way', () => {
+  // The Owner, the same day: the land is shaped empty; turning or joining must never bend built land to a building.
+  it('refuses a change that would move or reshape any plot a building stands on', () => {
+    const plan = splitPlot(defaultPlan(8), plotsOf(defaultPlan(8))[0].id)!
+    const plots = plotsOf(plan)
+    const long = plots.find(p => p.w === 4 && p.h === 8)!, sibling = plots.find(p => p.id !== long.id && p.id.slice(0, -1) === long.id.slice(0, -1))!
+    const onSibling: Placed[] = [{ id: 'b', shape: '4x8', plot: sibling.id, x: 0, y: 0, w: 4, h: 8 }]
+    expect(leavesBuiltLand(turnPlot(plan, long.id)!, onSibling, plots)).toBe(false)
+    const elsewhere = plots.find(p => !p.id.startsWith(long.id.slice(0, -1)))!
+    expect(leavesBuiltLand(turnPlot(plan, long.id)!, [{ id: 'c', shape: '4x4', plot: elsewhere.id, x: 0, y: 0, w: 4, h: 4 }], plots)).toBe(true)
+  })
   // The Owner, later the same day: join any two plots side by side, left, right, back or front, from the land itself.
   it('joins two plots side by side either way, the others keeping their places on the ground', () => {
     const plan = defaultPlan(4), plots = plotsOf(plan)

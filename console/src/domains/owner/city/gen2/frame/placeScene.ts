@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser'
-import { defaultPlan, fitsIn, joinPlots, plotsOf, UNIT, type Placed, type Plan, type Plot, type Street } from './grid'
+import { defaultPlan, fitsIn, joinPlots, leavesBuiltLand, plotsOf, splitPlot, turnPlot, UNIT, type Placed, type Plan, type Plot, type Street } from './grid'
 import { BUFFER, geoOf, GUTTER, HIGHWAY_HALF, LANE, LOCAL_HALF, MEDIAN, PAVEMENT, WAY, type Geo, type Rect } from './geo'
 import { functionAt, isWired, sheetCount, type Place } from './places'
 import { hueOf, tintOf } from './theme'
@@ -75,7 +75,8 @@ export type SceneEvents = {
   /** A plot cut, turned, or joined (with `other`, the plot beside it, whichever way). */
   plot: (op: 'split' | 'merge' | 'turn', plot: string, other?: string) => void
   /** A building was dropped on a plot too small for it: refused (the land comes first). */
-  refused?: () => void
+  /** Something was refused: a building on a plot too small for it ('fit'), or built land picked to reshape ('built'). */
+  refused?: (why?: 'fit' | 'built') => void
   /** The view went closer than the whole page, or back: the minimap changes what it shows. */
   zoomed?: (on: boolean) => void
   /** Up to the level above (the wheel turned on outwards past the whole page). */
@@ -877,6 +878,10 @@ export class PlaceScene extends Phaser.Scene {
     const plot = s.plots.find(q => q.id === this.landPick)
     if (!plot) { this.landPick = null; return }
     this.outline(plot, this.tone.inside, 0.18)
+    // Built land is not reshaped: a plot with a building on it gets no tools, only the word why.
+    if (s.placed.some(it => it.plot === plot.id)) { this.events_.refused?.('built'); return }
+    // A tool shows only where its change leaves every built plot as it is (grid.ts leavesBuiltLand).
+    const ok = (next: Plan | null) => next !== null && leavesBuiltLand(next, s.placed, s.plots)
     const P = projOf(this.geo), q = this.geo.plot(plot)
     const chip = (x: number, y: number, glyph: string, title: string, act: () => void) => {
       const c = this.add.container(x, y)
@@ -901,13 +906,14 @@ export class PlaceScene extends Phaser.Scene {
       ]
       for (const [sx, sy, by] of sides) {
         const other = s.plots.find(o => o.id !== plot.id && o.w === plot.w && o.h === plot.h && by(o))
-        if (!other || !joinPlots(s.plan, plot.id, other.id)) continue
+        const j = other ? joinPlots(s.plan, plot.id, other.id) : null
+        if (!other || !j || s.placed.some(it => it.plot === other.id) || !ok(j.plan)) continue
         const at = P(sx, sy, 6)
         chip(at.x, at.y, '+', 'Join with the plot beside', () => this.events_.plot('merge', plot.id, other.id))
       }
     }
     const mid = P(q.x + q.w / 2, q.y + q.h / 2, 30)
-    const long = plot.w !== plot.h, big = plot.w > UNIT || plot.h > UNIT
+    const long = plot.w !== plot.h && s.plan !== undefined && ok(turnPlot(s.plan, plot.id)), big = (plot.w > UNIT || plot.h > UNIT) && s.plan !== undefined && ok(splitPlot(s.plan, plot.id))
     if (long) chip(mid.x - (big ? 18 : 0), mid.y, '⟳', 'Turn: lengthwise or across', () => this.events_.plot('turn', plot.id))
     if (big) chip(mid.x + (long ? 18 : 0), mid.y, '✂', 'Cut in two', () => this.events_.plot('split', plot.id))
   }
@@ -953,7 +959,7 @@ export class PlaceScene extends Phaser.Scene {
     const to = this.plotUnder(p) ?? c.to
     if (!to || to.id === c.p.plot) return
     if (this.canGo(c.p, to)) this.events_.moved(c.p.id, to.id)
-    else this.events_.refused?.()
+    else this.events_.refused?.('fit')
   }
 
   /**

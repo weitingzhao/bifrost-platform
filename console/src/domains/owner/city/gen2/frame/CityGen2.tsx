@@ -308,7 +308,7 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
         const at = Object.fromEntries(L.placed.map(p => [p.id, keeper && p.id === keeper.id ? joined! : p.plot]))
         if (next !== null) keep({ plan: encodePlan(next), at })
       },
-      refused: () => setRefusal(PRINCIPLE.noFit),
+      refused: why => setRefusal(why === 'built' ? PRINCIPLE.builtLand : PRINCIPLE.noFit),
       zoomed: on => setZoomed(on),
       up: () => { if (pathRef.current.length > 0) { setSelected(null); goRef.current(pathRef.current.slice(0, -1)) } },
       // A neighbour's icon on the edge (a district it talks to): straight there.
