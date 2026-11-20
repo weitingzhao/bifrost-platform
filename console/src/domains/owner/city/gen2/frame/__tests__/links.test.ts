@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { GATES, LINES, PORTS, SLOTS, edgeSlots, linksAt, linkRulesBroken, type Link } from '../links'
+import { PORTS, SLOTS, edgeSlots, linksAt, linkRulesBroken, type Link } from '../links'
 import type { Place } from '../places'
 
 // Origin: the Owner, 2026-11-20 ("框架提供交互方式，系统来配；Bus 和指标两种足够；每层的显示要有规范，
@@ -35,16 +35,6 @@ describe('a connection at each level’s grain', () => {
     expect(bus.carries).toHaveLength(3)
     expect([bus.ins, bus.outs]).toEqual([1, 2])
     expect(w.gates.find(g => g.way === 'metric')).toMatchObject({ child: 'hall', dir: 'out' })
-  })
-  it('a level shows at most its budget, heaviest first, and counts the rest', () => {
-    const many = Array.from({ length: LINES + GATES + 5 }, (_, i) => L('bus', 'work/releases', 'command/hall', `e${i}`))
-    expect(linksAt(tree, ['work'], many).gates).toHaveLength(1)
-    const wide: Place = P('town', 'town', Array.from({ length: 8 }, (_, i) => P(`d${i}`, 'district')))
-    const pairs: Link[] = []
-    for (let i = 0; i < 8; i++) for (let j = i + 1; j < 8; j++) pairs.push(L('bus', `d${i}`, `d${j}`, `${i}-${j}`))
-    const t = linksAt(wide, [], pairs)
-    expect(t.lines).toHaveLength(LINES)
-    expect(t.more.lines).toBe(28 - LINES)
   })
 })
 

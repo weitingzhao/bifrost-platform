@@ -1,4 +1,4 @@
-import { area, assign, CLASSES, decodePlan, GRID, groundOf, MAX_THINGS, plotsOf, sidesOf, SHAPES, TAPPABLE, UNIT, type Shape } from './grid'
+import { area, assign, CLASSES, decodePlan, GRID, MAX_THINGS, plotsOf, sidesOf, SHAPES, TAPPABLE, UNIT, type Shape } from './grid'
 import { LOOKS, STATES, type Place, type PlaceKind } from './places'
 import { linkRulesBroken, type Link } from './links'
 
@@ -57,7 +57,7 @@ export function rulesBroken(content: { tree: Place; functions?: { id: string }[]
       const plan = decodePlan(p.arrangement.plan)
       if (plan === null) out.push(`${where}: its ground plan is not a plan of halvings`)
       else {
-        const { homeless } = assign(p.children.filter(c => (SHAPES as readonly string[]).includes(c.shape)), plotsOf(plan, groundOf(p.kind, p.shape, p.children.filter(c => (SHAPES as readonly string[]).includes(c.shape)))), p.arrangement.at)
+        const { homeless } = assign(p.children.filter(c => (SHAPES as readonly string[]).includes(c.shape)), plotsOf(plan), p.arrangement.at)
         if (homeless.length) out.push(`${where}: its ground plan has no plot for ${homeless.map(h => h.id).join(', ')}`)
       }
     }

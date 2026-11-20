@@ -32,7 +32,7 @@ export type Geo = {
 }
 
 export function geoOf(plots: readonly Plot[]): Geo {
-  // The ground the plots tile (groundOf in grid.ts): at most 16 × 16.
+  // The ground the plots tile: the 16 × 16 sheet.
   const GW = plots.length ? Math.max(...plots.map(p => p.x + p.w)) : GRID, GH = plots.length ? Math.max(...plots.map(p => p.y + p.h)) : GRID
   const cuts = (edges: (p: Plot) => number[], end: number) => [...new Set([0, end, ...plots.flatMap(edges)])].sort((a, b) => a - b)
   const xs = cuts(p => [p.x, p.x + p.w], GW), ys = cuts(p => [p.y, p.y + p.h], GH)

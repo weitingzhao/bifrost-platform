@@ -23,9 +23,10 @@ describe('plans', () => {
     for (const p of plotsOf(plan)) expect([1, 2]).toContain(Math.max(p.w, p.h) / Math.min(p.w, p.h))
     expect(tiles(plan)).toBe(GRID * GRID)
   })
-  it('cuts down to 1×1 and no further', () => {
-    const fine = defaultPlan(1)
-    expect(plotsOf(fine)).toHaveLength(256)
+  // 2026-11-20, the Owner: the unit is 2×2; no plot is cut smaller.
+  it('cuts down to 2×2 and no further', () => {
+    const fine = defaultPlan(2)
+    expect(plotsOf(fine)).toHaveLength(64)
     expect(splitPlot(fine, plotsOf(fine)[0].id)).toBeNull()
     expect(splitPlot(defaultPlan(), 'nowhere')).toBeNull()
   })

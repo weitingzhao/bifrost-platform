@@ -1,6 +1,6 @@
 /**
- * The ground of every place (the Owner, 2026-11-19): at most a square of 16 × 16 cells, sized by the place's
- * footprint (groundOf, 2026-11-20). It is divided into
+ * The ground of every place (the Owner, 2026-11-19): a square of 16 × 16 cells, the same sheet on every
+ * level (2026-11-20), its unit 2 × 2. It is divided into
  * plots, and the streets run along the plots' edges; each thing stands in a plot of its own.
  *
  *   things  1×1, 1×2, 2×2, 2×4, 4×4, 4×8 or 8×8: a square or a 2 : 1 oblong, by how big and how
@@ -80,10 +80,6 @@ export const MAX_THINGS = 16
 /** A district's or a building's size: small, medium or large, its weight, not how much it holds (the Owner, 2026-11-20). */
 export const CLASSES = ['2x2', '2x4', '4x4'] as const
 
-/** Every place's ground is the full sheet (kept as a function so the callers stay one way). */
-export function groundOf(_kind: string, _shape: string, _items: readonly Item[]): Ground & { over: boolean } {
-  return { ...FULL, over: false }
-}
 
 /** Every plot of a plan (its leaves). */
 export function plotsOf(plan: Plan, g: Ground = FULL): Plot[] {

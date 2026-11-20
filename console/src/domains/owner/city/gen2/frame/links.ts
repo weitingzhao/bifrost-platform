@@ -51,16 +51,15 @@ export const ORPHAN = 'orphan'
  */
 export type Partners = { in: string[]; out: string[] }
 
-/** The budget of a level. */
+/** The most lines a level draws (a picked district's routes on the town). */
 export const LINES = 12
-export const GATES = 8
 
 /** A line between two children of the place on screen. */
 export type Line = { way: Way; a: string; b: string; both: boolean; carries: string[] }
 /** A station on the edge: the outside place it leads to, which child it serves, and which way traffic goes. */
 export type Gate = { way: Way; outside: Path; label: string; child: string; dir: 'in' | 'out' | 'both'; carries: string[]; ins: number; outs: number; clarity: 'clear' | 'unclear' | 'orphan' }
 
-export type LevelLinks = { lines: Line[]; gates: Gate[]; more: { lines: number; gates: number } }
+export type LevelLinks = { lines: Line[]; gates: Gate[]; more: { lines: number } }
 
 const under = (p: Path, at: Path) => at.length <= p.length && at.every((s, i) => p[i] === s)
 
@@ -115,7 +114,7 @@ export function linksAt(tree: Place, at: Path, links: readonly Link[]): LevelLin
   const ls = heavy([...lines.values()].map(e => e.line))
   const gs = heavy([...gates.values()])
   // Lines past the budget are counted; every gate is kept, for the edge puts what is past its named crossings into Other.
-  return { lines: ls.slice(0, LINES), gates: gs, more: { lines: Math.max(0, ls.length - LINES), gates: Math.max(0, gs.length - GATES) } }
+  return { lines: ls.slice(0, LINES), gates: gs, more: { lines: Math.max(0, ls.length - LINES) } }
 }
 
 /** The rules a content's connections keep (rules.ts lists them with the rest). */

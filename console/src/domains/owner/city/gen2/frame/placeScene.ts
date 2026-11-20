@@ -115,8 +115,6 @@ const heightOf = (p: Place, size: number) => p.landmark ? LANDMARKS[p.landmark].
 const RS = 3
 /** The slab's thickness under the ground, px: the earth shows on its two front sides. */
 const SLAB = 14
-/** Bus lines and railways drawn on the streets between children (links.ts): off for now, kept for later. */
-const ROUTES_ON_STREETS = false
 /** A road's kerb, each side, in cells. */
 const KERB = 0.06
 /** The pavement inside the way's width, each side, in cells: the asphalt is the rest. */
@@ -955,13 +953,12 @@ export class PlaceScene extends Phaser.Scene {
     c.add(g)
     // How the children talk, on the streets, and the stations to what lies outside (links.ts).
     // Routes on the streets are off for now (the Owner, 2026-11-20: first the edge of each small world); the code stays.
-    if (ROUTES_ON_STREETS && o.interactive && this.shown?.links && !o.arranging) for (const part of this.ways(this.shown.links, geo, P, plots, placed, W, H)) c.add(part)
     // On the town, a picked district shows its routes on the highways to the districts it deals with (default
     // 2026-11-20, the city line's call, the Owner may overrule: the ports alone did not show that they connect;
     // routes only for the picked one, so the map is not covered in lines).
-    else if (place.kind === 'town' && o.interactive && o.selected && this.shown?.links && !o.arranging) {
+    if (place.kind === 'town' && o.interactive && o.selected && this.shown?.links && !o.arranging) {
       const mine = this.shown.links.lines.filter(l => l.a === o.selected || l.b === o.selected)
-      if (mine.length) for (const part of this.ways({ lines: mine, gates: [], more: { lines: 0, gates: 0 } }, geo, P, plots, placed, W, H)) c.add(part)
+      if (mine.length) for (const part of this.ways({ lines: mine, gates: [], more: { lines: 0 } }, geo, P, plots, placed, W, H)) c.add(part)
     }
     // A district's ground: a crossing on its edge for each district it talks to, on the side that district lies.
     const edgePts: Phaser.Math.Vector2[] = []
@@ -1241,9 +1238,9 @@ export class PlaceScene extends Phaser.Scene {
       const out_ = P(beyond.x, beyond.y)
       out.push(this.plate(out_.x, out_.y + 6, `${gt.dir === 'both' ? '⇄' : leftEdge ? '←' : '→'} ${gt.label} · ${gt.carries.length}`, gt.way === 'bus' ? '#d85a30' : '#5f5e5a'))
     })
-    if (lk.more.lines || lk.more.gates) {
+    if (lk.more.lines) {
       const p = P(W / 2, H + 2.4)
-      out.push(this.label(p.x, p.y, `+${lk.more.lines + lk.more.gates} more, listed in the ledger`, { color: '#8a8478', fontSize: '12px' }).setOrigin(0.5))
+      out.push(this.label(p.x, p.y, `+${lk.more.lines} more, listed in the ledger`, { color: '#8a8478', fontSize: '12px' }).setOrigin(0.5))
     }
     return out
   }
@@ -1332,7 +1329,7 @@ export class PlaceScene extends Phaser.Scene {
     // straight on (the Owner, 2026-11-20: the roads join up); where the edge has fewer streets than ports,
     // evenly along it, joining the ring road.
     // The streets that actually reach each edge (not every cut has one), in the picture's units.
-    // The ground's size in cells (grid.ts groundOf): the ring runs round it.
+    // The ground's size in cells: the ring runs round it.
     const GW = Math.max(...streets.map(st => Math.max(st.x0, st.x1))), GH = Math.max(...streets.map(st => Math.max(st.y0, st.y1)))
     const reach = (edge: Slot['edge']) => streets.filter(st => edge === 'y1' ? st.x0 === st.x1 && Math.max(st.y0, st.y1) >= GH && st.x0 > 0 && st.x0 < GW
       : edge === 'y0' ? st.x0 === st.x1 && Math.min(st.y0, st.y1) <= 0 && st.x0 > 0 && st.x0 < GW
