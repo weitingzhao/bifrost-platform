@@ -813,10 +813,10 @@
     },
     "api/internal/agentrt/readslot": {
       "domains": [
-        "foundation"
+        "owner"
       ],
       "status": "assigned",
-      "basis": "2026-11-18, moved out of api/internal/server unchanged (agentrt_sources.go; decoupling item 5, A4): the cap on reads of one store that take no context, so a stuck store holds a bounded number of goroutines. Imports safego only."
+      "basis": "2026-11-20 decoupling line: moved from foundation to owner; its only users are agentrt/approvalfacts and agentrt/questionbridge (owner), besides the assembly root api/internal/server (go list on main 2737a064). A module that serves one domain is part of it. Before: 2026-11-18, moved out of api/internal/server unchanged (agentrt_sources.go; decoupling item 5, A4): the cap on reads of one store that take no context, so a stuck store holds a bounded number of goroutines. Imports safego only."
     },
     "api/internal/agentrt/gitread": {
       "domains": [
@@ -1153,10 +1153,10 @@
     },
     "api/internal/assessmentview": {
       "domains": [
-        "foundation"
+        "owner"
       ],
       "status": "assigned",
-      "basis": "2026-11-15 source and caller audit: list.go bounded generic optional-advice read scheduling via injected reader"
+      "basis": "2026-11-20 decoupling line: moved from foundation to owner; its only users are approvals and questions (owner), besides the assembly root api/internal/server (go list on main 2737a064). A module that serves one domain is part of it. Before: 2026-11-15 source and caller audit: list.go bounded generic optional-advice read scheduling via injected reader"
     },
     "api/internal/threadtitles": {
       "domains": [
@@ -1342,10 +1342,10 @@
     },
     "api/internal/selfhealth": {
       "domains": [
-        "foundation"
+        "compute"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: shared platform API/Console/Argo health observations and viewer-environment resolution; no tenant business logic or runtime behavior changed"
+      "basis": "2026-11-20 decoupling line: moved from foundation to compute; its only user is devsession (compute), besides the assembly root api/internal/server (go list on main 2737a064). A module that serves one domain is part of it. Before: 2026-11-16 source and caller audit: shared platform API/Console/Argo health observations and viewer-environment resolution; no tenant business logic or runtime behavior changed"
     },
     "api/internal/placement": {
       "domains": [
@@ -1398,10 +1398,10 @@
     },
     "api/internal/mcp": {
       "domains": [
-        "foundation"
+        "compute"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: Go cross-domain discovery catalog and HTTP transport; distinct from communication-owned TypeScript message tools; implementation, authorization, refusal and dispatch behavior unchanged"
+      "basis": "2026-11-20 decoupling line: moved from foundation to compute; its only users are operatorplane and patrol (compute), besides the assembly root api/internal/server (go list on main 2737a064). A module that serves one domain is part of it. Before: 2026-11-16 source and caller audit: Go cross-domain discovery catalog and HTTP transport; distinct from communication-owned TypeScript message tools; implementation, authorization, refusal and dispatch behavior unchanged"
     },
     "api/internal/agentrt/actionrecord": {
       "domains": [
@@ -1762,10 +1762,10 @@
     },
     "api/internal/patrol": {
       "domains": [
-        "foundation"
+        "compute"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the platform's own patrol: it reads the checklist signals and repairs the platform and the cluster through platform routes. It serves no one domain; its tenant items are read through signals a tenant binds. It had no row."
+      "basis": "2026-11-20 decoupling line: moved from foundation to compute; its only user is operatorplane (compute), besides the assembly root api/internal/server (go list on main 2737a064). A module that serves one domain is part of it. Before: 2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the platform's own patrol: it reads the checklist signals and repairs the platform and the cluster through platform routes. It serves no one domain; its tenant items are read through signals a tenant binds. It had no row."
     },
     "api/internal/evalreadings": {
       "domains": [
