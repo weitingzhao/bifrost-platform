@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { MenuItem, PanelSize } from './parts'
 import type { Place } from './places'
+import type { Link } from './links'
 
 /**
  * The contract between the frame and its content (the Owner, 2026-11-19: the frame is a framework,
@@ -37,4 +38,6 @@ export type CityContent = {
   panels: (place: Place, open: (child: Place) => void) => Panel[]
   picked: (item: Place) => Panel
   functions?: { id: string; label: string }[]
+  /** How its places talk to one another, and by which way (links.ts): the frame draws it at each level's grain. */
+  links?: Link[]
 }

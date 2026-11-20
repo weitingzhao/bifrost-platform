@@ -1,5 +1,6 @@
 import { area, assign, decodePlan, GRID, plotsOf, sidesOf, SHAPES, TAPPABLE, type Shape } from './grid'
 import { LOOKS, STATES, type Place, type PlaceKind } from './places'
+import { linkRulesBroken, type Link } from './links'
 
 /**
  * The frame's rules, checked on the content it is given (the Owner, 2026-11-19: the ground, its
@@ -17,6 +18,8 @@ import { LOOKS, STATES, type Place, type PlaceKind } from './places'
  *   readings a meter says where it was read; numbers are not negative and used is not past its whole;
  *            an unread thing has no number (unread is not zero)
  *   plan     a domain's own ground plan keeps the cutting rules, and everything it holds finds its plot
+ *   links    a connection takes one of the frame's ways, both its ends are places, and it is read from
+ *            an API path or a registry file (links.ts)
  *   made up  a number must come from a read: its source is a query or an API path, never words
  *            (the Owner, 2026-11-19: nothing on the screen is made up or written in once and left)
  */
@@ -26,8 +29,8 @@ const READ_SOURCE = /^\/api\/|[a-z_:]+\s*\(|[a-z_:]+\{/i
 
 const CHILD: Record<PlaceKind, PlaceKind | null> = { town: 'district', district: 'building', building: 'room', room: null }
 
-export function rulesBroken(content: { tree: Place; functions?: { id: string }[] }): string[] {
-  const out: string[] = []
+export function rulesBroken(content: { tree: Place; functions?: { id: string }[]; links?: Link[] }): string[] {
+  const out: string[] = linkRulesBroken(content.tree, content.links ?? [])
   const fns = content.functions ? new Set(content.functions.map(f => f.id)) : null
   if (content.tree.kind !== 'town') out.push(`the top place must be a town, not a ${content.tree.kind}`)
   const walk = (p: Place, where: string) => {

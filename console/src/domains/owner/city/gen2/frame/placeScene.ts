@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser'
 import { fitsIn, type Placed, type Plot, type Street } from './grid'
-import { geoOf, WAY, type Geo, type Rect } from './geo'
+import { geoOf, GUTTER, WAY, type Geo, type Rect } from './geo'
 import { functionAt, isWired, type Place } from './places'
 import { hueOf, terrainOf, tintOf } from './theme'
 import { PALETTE, TERRAIN, type Light, type Palette } from './light'
@@ -9,6 +9,7 @@ import { buildingWings, setback, spriteFor, spriteKey, spriteUrl, type Wing } fr
 import { deviceKey, deviceSprite, formOfPlace, levelsOf } from './devices'
 import { frameOf, type Frame } from './viewport'
 import { LANDMARKS } from './library/landmarkLooks'
+import type { Gate, LevelLinks, Line } from './links'
 
 /**
  * One scene draws one place (a page): its 16×16 ground and the things on it,
@@ -97,6 +98,8 @@ export type Shown = {
   lens: string | null
   /** Any place's ground as the Owner left it, for the miniatures: a district seen from the town, a building's wings. */
   layoutAt: (path: string[]) => Layout | null
+  /** The connections at this level's grain (links.ts): lines between children, stations on the edge. */
+  links?: LevelLinks
 }
 
 export type Layout = { placed: Placed[]; plots: Plot[]; streets: Street[] }
@@ -881,6 +884,8 @@ export class PlaceScene extends Phaser.Scene {
     }
     g.lineStyle(2, this.tone.ink).strokePoints(ground, true)
     c.add(g)
+    // How the children talk, on the streets, and the stations to what lies outside (links.ts).
+    if (o.interactive && this.shown?.links && !o.arranging) for (const part of this.ways(this.shown.links, geo, P, plots, placed, W, H)) c.add(part)
     const byId = new Map(place.children.map(k => [k.id, k]))
     const plotById = new Map(plots.map(p => [p.id, p]))
     const rectOf = (p: Placed): Rect => { const home = plotById.get(p.plot); return home ? geo.thing(geo.plot(home), p.w, p.h) : { x: p.x, y: p.y, w: p.w, h: p.h } }
@@ -1044,4 +1049,107 @@ export class PlaceScene extends Phaser.Scene {
     return parts
   }
 
+
+  /**
+   * The two ways (links.ts) drawn on this level's streets: a bus line in its lane with a stop at each end,
+   * chevrons pointing where the traffic goes; a railway, rails on sleepers, a platform at each end. A
+   * station on the ground's front edges leads outside: arrivals on the left edge, departures on the right,
+   * the way running on past the edge to the place it names. How many each carries is on its plate.
+   */
+  private ways(lk: LevelLinks, geo: Geo, P: Proj, plots: Plot[], placed: Placed[], W: number, H: number) {
+    const out: Phaser.GameObjects.GameObject[] = []
+    const g = this.add.graphics()
+    out.push(g)
+    const plotOf = new Map(placed.map(p => [p.id, plots.find(q => q.id === p.plot)]))
+    const rectOf = (id: string) => { const q = plotOf.get(id); return q ? geo.plot(q) : null }
+    const half = GUTTER / 2
+    const BUS = 0xd85a30, RAIL = 0x5f5e5a, SLEEPER = 0xa2805c
+    // Each way keeps to its side of the road; lines of one way that share a street sit side by side.
+    const lane = (way: Line['way'], i: number) => (way === 'bus' ? -1 : 1) * (0.12 + 0.12 * (i % 2))
+    type Pt = { x: number; y: number }
+    const draw = (way: Line['way'], pts: Pt[], o: number, dir: 'fwd' | 'back' | 'both') => {
+      const q = pts.map(p => P(p.x + o, p.y + o))
+      if (way === 'bus') {
+        g.lineStyle(3.2, BUS, 0.9)
+        for (let i = 1; i < q.length; i++) g.lineBetween(q[i - 1].x, q[i - 1].y, q[i].x, q[i].y)
+        if (dir !== 'both') for (let i = 1; i < pts.length; i++) {
+          const a = pts[i - 1], b = pts[i], len = Math.hypot(b.x - a.x, b.y - a.y)
+          for (let t = 0.7; t < len - 0.3; t += 1.4) {
+            const f = t / len, m = { x: a.x + (b.x - a.x) * f + o, y: a.y + (b.y - a.y) * f + o }
+            const ux = (b.x - a.x) / len * (dir === 'fwd' ? 1 : -1), uy = (b.y - a.y) / len * (dir === 'fwd' ? 1 : -1)
+            const tip = P(m.x + ux * 0.14, m.y + uy * 0.14), l = P(m.x - uy * 0.1, m.y + ux * 0.1), r = P(m.x + uy * 0.1, m.y - ux * 0.1)
+            g.lineStyle(1.6, 0xffffff, 1).lineBetween(l.x, l.y, tip.x, tip.y).lineBetween(r.x, r.y, tip.x, tip.y)
+          }
+        }
+      } else {
+        for (let i = 1; i < pts.length; i++) {
+          const a = pts[i - 1], b = pts[i], len = Math.hypot(b.x - a.x, b.y - a.y)
+          if (len === 0) continue
+          const nx = -(b.y - a.y) / len, ny = (b.x - a.x) / len
+          g.lineStyle(1.6, SLEEPER, 1)
+          for (let t = 0; t <= len; t += 0.22) { const m = { x: a.x + (b.x - a.x) * t / len + o, y: a.y + (b.y - a.y) * t / len + o }, s0 = P(m.x - nx * 0.09, m.y - ny * 0.09), s1 = P(m.x + nx * 0.09, m.y + ny * 0.09); g.lineBetween(s0.x, s0.y, s1.x, s1.y) }
+          g.lineStyle(1.1, RAIL, 1)
+          for (const side of [-0.055, 0.055]) { const s0 = P(a.x + o + nx * side, a.y + o + ny * side), s1 = P(b.x + o + nx * side, b.y + o + ny * side); g.lineBetween(s0.x, s0.y, s1.x, s1.y) }
+        }
+      }
+    }
+    /** A stop (bus: a pole and sign) or a platform (rail) at a point of the picture. */
+    const stop = (way: Line['way'], at: Pt) => {
+      const b = P(at.x, at.y)
+      if (way === 'bus') {
+        g.lineStyle(1.4, this.tone.ink, 1).lineBetween(b.x, b.y, b.x, b.y - 14)
+        g.fillStyle(BUS, 1).fillRect(b.x - 4, b.y - 19, 8, 6).lineStyle(1, this.tone.ink).strokeRect(b.x - 4, b.y - 19, 8, 6)
+      } else {
+        const q = [P(at.x - 0.18, at.y - 0.18), P(at.x + 0.18, at.y - 0.18), P(at.x + 0.18, at.y + 0.18), P(at.x - 0.18, at.y + 0.18)]
+        g.fillStyle(0xe9e6da, 1).fillPoints(q, true).lineStyle(1, this.tone.ink).strokePoints(q, true)
+      }
+    }
+    const count = (at: Pt, n: number, way: Line['way']) => { const p = P(at.x, at.y); out.push(this.plate(p.x, p.y - 8, `${way === 'bus' ? 'bus' : 'metrics'} ${n}`, way === 'bus' ? '#d85a30' : '#5f5e5a')) }
+    // Where a child meets its front street: the middle of its plot's near edge.
+    const door = (r: Rect): Pt => ({ x: r.x + r.w / 2, y: r.y + r.h + half })
+    const nth = { bus: 0, metric: 0 }
+    let plated = 0
+    lk.lines.forEach(ln => {
+      const i = nth[ln.way]++
+      const ra = rectOf(ln.a), rb = rectOf(ln.b)
+      if (!ra || !rb) return
+      const a = door(ra), b = door(rb)
+      const xv = b.x >= a.x ? ra.x + ra.w + half : ra.x - half
+      const pts = [a, { x: xv, y: a.y }, { x: xv, y: b.y }, b]
+      draw(ln.way, pts, lane(ln.way, i), ln.both ? 'both' : 'fwd')
+      stop(ln.way, a); stop(ln.way, b)
+      // Its plate on its longest stretch, where it is easiest to tell apart; lines sharing a street put theirs at different points along it.
+      const segs = pts.slice(1).map((q, k) => ({ p: pts[k], q, len: Math.hypot(q.x - pts[k].x, q.y - pts[k].y) })).sort((u, v) => v.len - u.len)[0]
+      const f = [0.3, 0.7, 0.5][plated++ % 3]
+      count({ x: segs.p.x + (segs.q.x - segs.p.x) * f + lane(ln.way, i), y: segs.p.y + (segs.q.y - segs.p.y) * f + lane(ln.way, i) }, ln.carries.length, ln.way)
+    })
+    // The stations: arrivals on the left front edge (y = H), departures on the right (x = W), each on a street of its own.
+    const xs = [...new Set(plots.flatMap(p => [p.x, p.x + p.w]))].map(v => geo.x(v)).sort((p, q) => p - q)
+    const ys = [...new Set(plots.flatMap(p => [p.y, p.y + p.h]))].map(v => geo.y(v)).sort((p, q) => p - q)
+    const used = { left: new Set<number>(), right: new Set<number>() }
+    const nearest = (slots: number[], want: number, taken: Set<number>) => slots.filter(s => !taken.has(s)).sort((p, q) => Math.abs(p - want) - Math.abs(q - want))[0]
+    lk.gates.forEach((gt: Gate, i) => {
+      const r = rectOf(gt.child)
+      if (!r) return
+      const leftEdge = gt.dir !== 'out'
+      const d = door(r)
+      const slot = leftEdge ? nearest(xs, d.x, used.left) : nearest(ys, d.y, used.right)
+      if (slot == null) return
+      ;(leftEdge ? used.left : used.right).add(slot)
+      const edge: Pt = leftEdge ? { x: slot, y: H - half } : { x: W - half, y: slot }
+      const beyond: Pt = leftEdge ? { x: slot, y: H + 1.4 } : { x: W + 1.4, y: slot }
+      // An arrival comes in over the left edge up its street to the child's; a departure leaves along the
+      // child's own street to the right edge's ring road, then runs on outside.
+      const route = leftEdge ? [beyond, edge, { x: slot, y: d.y }, d] : [d, { x: W - half, y: d.y }, edge, beyond]
+      draw(gt.way, route, lane(gt.way, i), gt.dir === 'both' ? 'both' : 'fwd')
+      stop(gt.way, d)
+      const out_ = P(beyond.x, beyond.y)
+      out.push(this.plate(out_.x, out_.y + 6, `${gt.dir === 'both' ? '⇄' : leftEdge ? '←' : '→'} ${gt.label} · ${gt.carries.length}`, gt.way === 'bus' ? '#d85a30' : '#5f5e5a'))
+    })
+    if (lk.more.lines || lk.more.gates) {
+      const p = P(W / 2, H + 2.4)
+      out.push(this.label(p.x, p.y, `+${lk.more.lines + lk.more.gates} more, listed in the ledger`, { color: '#8a8478', fontSize: '12px' }).setOrigin(0.5))
+    }
+    return out
+  }
 }

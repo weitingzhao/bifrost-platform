@@ -5,11 +5,29 @@ import { consoleContent } from '../src/domains/owner/city/gen2/content/console'
 import { formatPath, parsePath, type Path, type Place } from '../src/domains/owner/city/gen2/frame/places'
 import { hardwareDistrict, readHardware } from '../src/domains/owner/city/gen2/content/hardware'
 import { readUnits } from '../src/domains/owner/city/gen2/content/unitRooms'
+import type { Link } from '../src/domains/owner/city/gen2/frame/links'
 
 // The gen2 frame on its own: the address is the place (#/system/infrastructure), so Back works.
 // The content plug-in: the Console's menu, and the hardware district read live through the platform
 // (the bench's /api proxy: PLATFORM_API_TARGET), every 30 s.
 const getJson = (p: string) => fetch(p).then(r => (r.ok ? r.json() : Promise.reject(new Error(`${p}: HTTP ${r.status}`))))
+
+/**
+ * Bench only, ?links=1: made-up connections between the Console's districts, to look at the two ways
+ * (links.ts) before the real ones are read from the domains' contracts. Never in the Console.
+ */
+const SAMPLE = 'bench-sample-links.json'
+const SAMPLE_LINKS: Link[] = [
+  { way: 'bus', from: ['work', 'releases'], to: ['command', 'command'], what: 'release.finished', source: SAMPLE },
+  { way: 'bus', from: ['work', 'releases'], to: ['command', 'records'], what: 'release.recorded', source: SAMPLE },
+  { way: 'bus', from: ['command', 'command'], to: ['work', 'releases'], what: 'approval.granted', source: SAMPLE },
+  { way: 'bus', from: ['services', 'ib'], to: ['services', 'data'], what: 'quotes.arrived', source: SAMPLE },
+  { way: 'bus', from: ['system', 'bus'], to: ['work', 'work'], what: 'ci.run.finished', source: SAMPLE },
+  { way: 'bus', from: ['work', 'work'], to: ['work', 'releases'], what: 'ci.passed', source: SAMPLE },
+  { way: 'metric', from: ['services', 'data'], to: ['system', 'status'], what: 'ingest_rows_total', source: SAMPLE },
+  { way: 'metric', from: ['services', 'ib'], to: ['system', 'status'], what: 'ib_connected', source: SAMPLE },
+  { way: 'metric', from: ['crew', 'crew'], to: ['system', 'status'], what: 'seat_heartbeat', source: SAMPLE },
+]
 
 function Bench() {
   const [hw, setHw] = useState<Place | null>(null)
@@ -21,7 +39,10 @@ function Bench() {
     const t = setInterval(tick, 30_000)
     return () => { on = false; clearInterval(t) }
   }, [])
-  const CONTENT = useMemo(() => consoleContent(hw ? [hw] : []), [hw])
+  const CONTENT = useMemo(() => {
+    const c = consoleContent(hw ? [hw] : [])
+    return new URLSearchParams(location.search).has('links') ? { ...c, links: SAMPLE_LINKS } : c
+  }, [hw])
   const [path, setPath] = useState<Path>(() => parsePath(location.hash))
   useEffect(() => {
     const on = () => setPath(parsePath(location.hash))

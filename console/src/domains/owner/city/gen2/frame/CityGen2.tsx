@@ -8,6 +8,7 @@ import type { CityContent, Panel } from './content'
 import { PlaceScene, type ArrangeTool, type Shown } from './placeScene'
 import { functionAt, here, isWired, meterText, resolve, trail, type Path, type Place } from './places'
 import { rulesBroken } from './rules'
+import { linksAt } from './links'
 import { frameOf, NO_INSETS, swapRects, type Insets, type Rect } from './viewport'
 import './cityGen2.css'
 
@@ -283,6 +284,7 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
       place, placed: h.placed, plots: h.plots, streets: h.streets,
       parent, parentPlaced: p?.placed ?? [], parentPlots: p?.plots ?? [], parentStreets: p?.streets ?? [],
       inside: path.at(-1) ?? null, selected: o.selected, from: o.from, arranging: o.arranging, tool, lens,
+      links: linksAt(tree, path, content.links ?? []),
     }
   }
 
