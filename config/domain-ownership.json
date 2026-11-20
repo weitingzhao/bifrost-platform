@@ -84,7 +84,7 @@
             "table": "agentrt.event",
             "owner": "api/internal/agentrt/eventlog",
             "write": "eventlog.Append only; codeguard TestLedgerTablesAreWrittenByTheirPackagesOnly",
-            "read": "functions eventlog.Last, Has, HasBody; projections may name the columns of eventlog.ReadShape and no others",
+            "read": "functions eventlog.Last, Exists, Has, HasBody, LatestByActor, LatestWithField, EventBody, DaysWithSubject, LatestByKey, OfType (api/internal/agentrt/eventlog/read.go; the last two added 2026-11-20 for the evaluation readout); projections may name the columns of eventlog.ReadShape and no others",
             "read_shape": "eventlog.ReadShape",
             "read_shape_version": 1,
             "held_by": "eventlog TestReadShapeIsTheTable (declaration equals the table), TestReadShapeChangesOnlyWithItsVersion (fingerprint lock); codeguard ledgerSQL lists the readers"
