@@ -1639,13 +1639,6 @@
       "status": "assigned",
       "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, the known regressions on main as bus records. Imports only foundation packages or none; the server wires it."
     },
-    "api/internal/bus/releases": {
-      "domains": [
-        "foundation"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, announces a finished release on the bus. Imports only foundation packages or none; the server wires it."
-    },
     "api/internal/bus/runhooks": {
       "domains": [
         "foundation"
@@ -1802,7 +1795,7 @@
         "delivery"
       ],
       "status": "assigned",
-      "basis": "2026-11-18, moved out of api/internal/server unchanged (release_table_wire.go; decoupling item 5): the release records' table, the row and its release.deploy.finished announcement in one transaction, and the reads the recorder takes. Imports releases (delivery) and foundation only (eventlog, bus/releases). releases itself is unchanged."
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (release_table_wire.go; decoupling item 5): the release records' table, the row and its release.deploy.finished announcement in one transaction, and the reads the recorder takes. Imports releases (delivery) and foundation only (eventlog). releases itself is unchanged. 2026-11-20: bus/releases (foundation) moved here (its only user): the release.deploy.finished announcement (its body, checks and vocabulary, appended in the record's transaction) is announce.go, unchanged; the event was already delivery's in the register."
     },
     "api/internal/ruleapprove": {
       "domains": [

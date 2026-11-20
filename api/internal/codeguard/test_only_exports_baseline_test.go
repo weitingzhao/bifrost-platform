@@ -105,7 +105,6 @@ var exportedForOtherTests = []string{
 	"api/internal/bus/hook.ChangePushed",
 	"api/internal/bus/registry.Agree",
 	"api/internal/bus/registry.CheckSubscriptions",
-	"api/internal/bus/releases.Type",
 	"api/internal/config.ClustersFile",
 	"api/internal/config.ComputeWorkloadSpec",
 	"api/internal/config.DefaultStgAPIDomains",
