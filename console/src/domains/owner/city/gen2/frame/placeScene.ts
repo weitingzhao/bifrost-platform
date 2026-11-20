@@ -1072,9 +1072,11 @@ export class PlaceScene extends Phaser.Scene {
       g.fillStyle(tintOf(this.shown.tree, path, this.light, ter.lot)).fillPoints(quadOf(P, plate), true)
       g.lineStyle(1.4, this.tone.ink).strokePoints(quadOf(P, plate), true)
       parts.push(g)
+      // Its streets in, under the town it stands on (they reach its gates; they never run over its buildings).
       if (!o.bare && o.interactive && this.shown.allLinks && path.length === 1) {
-        stubG = this.add.graphics()
-        this.exits(stubG, k, at, plate, P, (fx, fy) => ({ x: plate.x + plate.w * fx, y: plate.y + plate.h * fy }))
+        const sg = this.add.graphics()
+        this.exits(sg, k, at, plate, P, (fx, fy) => ({ x: plate.x + plate.w * fx, y: plate.y + plate.h * fy }))
+        parts.push(sg)
       }
       // The district as a campus (the Owner, 2026-11-20: what a castle was to a medieval town, for a technical
       // one): a ring of low buildings round a courtyard, a gate in the ring wherever a street comes in (the
@@ -1232,81 +1234,97 @@ export class PlaceScene extends Phaser.Scene {
   }
 
   /**
-   * A campus on a square (picture units): a ring of two-storey buildings round a courtyard, gaps for gates at
-   * a quarter, a half and three quarters along the front-left, front-right and back-left sides (where the
-   * streets come in), a tower in the courtyard with a blank screen on its front (where the district's few
-   * readings will go). Drawn back to front so nearer walls cover farther ones.
+   * A district's town on its square (the Owner, 2026-11-20: what a castle was to a medieval town; each district
+   * its kind): its big buildings along the back two sides, where they hide nothing; across the front two sides a
+   * low wall with a gate wherever a street comes in (a quarter, a half and three quarters along); in the open
+   * yard between, the building whose screen will carry the district's few readings, facing the viewer.
+   *   campus      an office slab and a wing in the district's colour, glass bands, a hedge for a wall, a tower
+   *   industrial  a saw-tooth factory hall and a warehouse in brick, two chimneys smoking, storage tanks, a works
+   *               office, a concrete wall
    */
-  private campus(sq: Rect, P: Proj, hue: string, ghost: boolean, style: 'campus' | 'industrial') {
+  private campus(sq: Rect, P: Proj, hue: string, _ghost: boolean, style: 'campus' | 'industrial') {
     const g = this.add.graphics()
-    const A = ghost ? 0.22 : 1
-    const n = Math.min(sq.w, sq.h), x0 = sq.x + (sq.w - n) / 2, y0 = sq.y + (sq.h - n) / 2
-    const m = n * 0.06, T = n * 0.16, Hh = 24, GATE = n * 0.12, F = [0.25, 0.5, 0.75]
     const works = style === 'industrial'
-    // An industrial town is brick and concrete whatever its hue; a campus wears its district's colour.
-    const base = works ? Phaser.Display.Color.HexStringToColor('#c9785a') : Phaser.Display.Color.HexStringToColor(hue)
-    const col = { top: works ? 0xb9bcc4 : base.clone().lighten(22).color, left: base.clone().lighten(8).color, right: base.clone().darken(6).color }
-    const box = (x: number, y: number, w: number, d: number, z: number, h: number, c = col) => {
+    const n = Math.min(sq.w, sq.h), x0 = sq.x + (sq.w - n) / 2, y0 = sq.y + (sq.h - n) / 2
+    const m = n * 0.05, lo = m, hi = n - m, gates = [0.25, 0.5, 0.75].map(f => f * n), GATE = n * 0.13
+    const C = (hex: string) => Phaser.Display.Color.HexStringToColor(hex)
+    const tone = works ? C('#c46f52') : C(hue)
+    const main = { top: works ? 0xb5b8bf : tone.clone().lighten(26).color, left: tone.clone().lighten(10).color, right: tone.clone().darken(8).color }
+    const wing = works ? { top: 0xa9adb5, left: 0xd8cfc0, right: 0xbfb5a5 } : { top: tone.clone().lighten(30).color, left: 0xf4f1ea, right: 0xdcd7cc }
+    const box = (x: number, y: number, w: number, d: number, z: number, h: number, c: { top: number; left: number; right: number }) => {
       const left = [P(x, y + d, z), P(x + w, y + d, z), P(x + w, y + d, z + h), P(x, y + d, z + h)]
       const right = [P(x + w, y, z), P(x + w, y + d, z), P(x + w, y + d, z + h), P(x + w, y, z + h)]
       const top = [P(x, y, z + h), P(x + w, y, z + h), P(x + w, y + d, z + h), P(x, y + d, z + h)]
-      g.lineStyle(1.2, this.tone.ink, A)
-      g.fillStyle(c.left, A).fillPoints(left, true).strokePoints(left, true)
-      g.fillStyle(c.right, A).fillPoints(right, true).strokePoints(right, true)
-      g.fillStyle(c.top, A).fillPoints(top, true).strokePoints(top, true)
-      // A factory shed's roof is saw-toothed: north lights across its top.
-      if (works && c === col && h < 40) {
-        g.lineStyle(1, this.tone.ink, 0.6 * A)
-        const along = w >= d
-        const span = along ? w : d, k = Math.max(2, Math.round(span / 0.25))
-        for (let i = 1; i < k; i++) {
-          const t = i / k
-          const a0 = along ? P(x + w * t, y, z + h) : P(x, y + d * t, z + h), a1 = along ? P(x + w * t, y + d, z + h) : P(x + w, y + d * t, z + h)
-          g.lineBetween(a0.x, a0.y - 3, a1.x, a1.y - 3).lineBetween(a0.x, a0.y - 3, a0.x, a0.y)
-        }
-      }
-      // A glass band along each visible face: the floors' windows (a shed's high strip of factory glazing).
-      g.lineStyle(2.2, works ? 0x9fb4c8 : 0xcfe6f7, A)
-      for (const z1 of [z + h * 0.35, z + h * 0.75]) {
-        const l0 = P(x + 0.06, y + d, z1), l1 = P(x + w - 0.06, y + d, z1), r0 = P(x + w, y + 0.06, z1), r1 = P(x + w, y + d - 0.06, z1)
-        if (w > 0.15) g.lineBetween(l0.x, l0.y, l1.x, l1.y)
-        if (d > 0.15) g.lineBetween(r0.x, r0.y, r1.x, r1.y)
+      g.lineStyle(1.2, this.tone.ink, 1)
+      g.fillStyle(c.left, 1).fillPoints(left, true).strokePoints(left, true)
+      g.fillStyle(c.right, 1).fillPoints(right, true).strokePoints(right, true)
+      g.fillStyle(c.top, 1).fillPoints(top, true).strokePoints(top, true)
+    }
+    // Rows of windows (offices) or a high strip of factory glazing on a visible face.
+    const glaze = (x: number, y: number, w: number, d: number, z0: number, h: number, rows: number) => {
+      g.lineStyle(works ? 2.4 : 1.8, works ? 0x8fa6bd : 0xbfdff4, 1)
+      for (let r = 0; r < rows; r++) {
+        const z = z0 + h * (rows === 1 ? 0.72 : (r + 0.6) / rows)
+        const l0 = P(x + 0.08, y + d, z), l1 = P(x + w - 0.08, y + d, z), r0 = P(x + w, y + 0.08, z), r1 = P(x + w, y + d - 0.08, z)
+        g.lineBetween(l0.x, l0.y, l1.x, l1.y).lineBetween(r0.x, r0.y, r1.x, r1.y)
       }
     }
-    // A run of the ring from a to b along one side, broken by the gates whose centres lie in it.
-    const runs = (a: number, b: number, gates: number[]) => {
+    // The yard.
+    const yard = [P(x0 + lo, y0 + lo), P(x0 + hi, y0 + lo), P(x0 + hi, y0 + hi), P(x0 + lo, y0 + hi)]
+    g.fillStyle(works ? 0xd9d6cf : this.tone.kerb, 1).fillPoints(yard, true)
+    const D = n * 0.26
+    // Back right: the main building, the whole width.
+    const mainH = works ? 30 : 46
+    box(x0 + lo, y0 + lo, hi - lo, D, 0, mainH, main)
+    if (works) {
+      // Saw-tooth north lights across the hall's roof.
+      g.lineStyle(1.2, this.tone.ink, 0.7)
+      for (let t = lo + 0.25; t < hi - 0.1; t += 0.28) {
+        const a = P(x0 + t, y0 + lo, mainH), b = P(x0 + t, y0 + lo + D, mainH)
+        g.fillStyle(0x9fb4c8, 1).fillPoints([a, b, new Phaser.Math.Vector2(b.x, b.y - 5), new Phaser.Math.Vector2(a.x, a.y - 5)], true)
+        g.lineBetween(a.x, a.y - 5, b.x, b.y - 5)
+      }
+    }
+    glaze(x0 + lo, y0 + lo, hi - lo, D, 0, mainH, works ? 1 : 3)
+    // Back left: the wing (a warehouse), from the main building to the front wall.
+    const wingH = works ? 22 : 30
+    box(x0 + lo, y0 + lo + D, D * 0.8, hi - lo - D - m, 0, wingH, wing)
+    glaze(x0 + lo, y0 + lo + D, D * 0.8, hi - lo - D - m, 0, wingH, works ? 1 : 2)
+    if (works) {
+      // Chimneys behind the hall, smoking; tanks in the yard's back corner.
+      for (const cx of [x0 + lo + 0.35, x0 + lo + 0.75]) {
+        box(cx, y0 + lo + 0.12, 0.13, 0.13, mainH, 34, { top: 0x5f5a56, left: 0xb35a43, right: 0x944632 })
+        const top = P(cx + 0.06, y0 + lo + 0.18, mainH + 34)
+        g.fillStyle(0xeceae5, 0.9).fillCircle(top.x + 4, top.y - 7, 5).fillCircle(top.x + 11, top.y - 13, 6).fillCircle(top.x + 19, top.y - 18, 4)
+      }
+      for (const [tx, ty] of [[x0 + lo + D * 0.8 + 0.35, y0 + lo + D + 0.3], [x0 + lo + D * 0.8 + 0.75, y0 + lo + D + 0.3]] as const) {
+        const b0 = P(tx, ty), r = 9
+        g.fillStyle(0xdfe3e8, 1).fillRect(b0.x - r, b0.y - 16, 2 * r, 16).lineStyle(1.2, this.tone.ink, 1).strokeRect(b0.x - r, b0.y - 16, 2 * r, 16)
+        g.fillStyle(0xf2f4f6, 1).fillEllipse(b0.x, b0.y - 16, 2 * r, r).strokeEllipse(b0.x, b0.y - 16, 2 * r, r)
+      }
+    }
+    // The middle: the building whose screen carries the district's readings, its screen to the front.
+    const tw = n * 0.2, tx = x0 + n * 0.5, ty = y0 + n * 0.5
+    const midH = works ? 26 : 58
+    box(tx, ty, tw, tw, 0, midH, works ? { top: 0x9ea2aa, left: 0xe2e4e7, right: 0xc6c9ce } : { top: main.top, left: 0xf7f5f0, right: 0xe0dcd3 })
+    const s0 = midH * 0.3, s1 = midH * 0.85
+    const sc = [P(tx + tw * 0.15, ty + tw, s0), P(tx + tw * 0.85, ty + tw, s0), P(tx + tw * 0.85, ty + tw, s1), P(tx + tw * 0.15, ty + tw, s1)]
+    g.fillStyle(0x2f3a4f, 1).fillPoints(sc, true).lineStyle(1, this.tone.ink, 1).strokePoints(sc, true)
+    // The front wall, low, with a gate wherever a street comes in.
+    const wallC = works ? { top: 0xbdbab3, left: 0xa8a49b, right: 0x96928a } : { top: 0x9fcb8a, left: 0x86b672, right: 0x74a362 }
+    const runs = (a: number, b: number) => {
       const out: [number, number][] = []
-      let s0 = a
-      for (const c of gates.filter(c => c > a && c < b).sort((p, q) => p - q)) { if (c - GATE / 2 > s0) out.push([s0, c - GATE / 2]); s0 = c + GATE / 2 }
-      if (b > s0) out.push([s0, b])
+      let s1_ = a
+      for (const c of gates) { if (c - GATE / 2 > s1_) out.push([s1_, c - GATE / 2]); s1_ = c + GATE / 2 }
+      if (b > s1_) out.push([s1_, b])
       return out
     }
-    const lo = m, hi = n - m, gates = F.map(f => f * n)
-    // The courtyard: paved, inside the ring.
-    const yard = [P(x0 + lo, y0 + lo), P(x0 + hi, y0 + lo), P(x0 + hi, y0 + hi), P(x0 + lo, y0 + hi)]
-    g.fillStyle(this.tone.kerb, A).fillPoints(yard, true)
-    // Back right (no gates), back left (gated), the tower, front right and front left (gated).
-    box(x0 + lo, y0 + lo, hi - lo, T, 0, Hh)
-    for (const [a, b] of runs(lo + T, hi - T, gates)) box(x0 + lo, y0 + a, T, b - a, 0, Hh)
-    const tw = n * 0.16, tx = x0 + n / 2 - tw / 2, ty = y0 + n / 2 - tw / 2
-    if (works) {
-      // Chimneys at the back corners of the yard, smoke over them.
-      for (const [cx, cy] of [[x0 + lo + T * 0.5, y0 + lo + T * 0.5], [x0 + hi - T * 0.5, y0 + lo + T * 0.5]] as const) {
-        box(cx - 0.08, cy - 0.08, 0.16, 0.16, Hh, Hh * 2.2, { top: 0x6f6a66, left: 0xb75a44, right: 0x9a4a37 })
-        const top = P(cx, cy, Hh * 3.2)
-        g.fillStyle(0xe9e6e1, 0.85 * A).fillCircle(top.x + 3, top.y - 6, 5).fillCircle(top.x + 9, top.y - 12, 4)
-      }
-    }
-    // The middle: a tower (a campus) or the works office (an industrial town), with the screen for its readings.
-    box(tx, ty, tw, tw, 0, Hh * (works ? 1.8 : 2.6), works ? { top: 0x9ea2aa, left: 0xd7d9dd, right: 0xbfc2c8 } : { top: col.top, left: 0xf4f2ee, right: 0xdedad2 })
-    // Its screen, blank until the district's readings are wired to it.
-    const s0 = works ? Hh * 0.8 : Hh * 1.3, s1 = works ? Hh * 1.6 : Hh * 2.4
-    const sc = [P(tx + tw * 0.15, ty + tw, s0), P(tx + tw * 0.85, ty + tw, s0), P(tx + tw * 0.85, ty + tw, s1), P(tx + tw * 0.15, ty + tw, s1)]
-    g.fillStyle(0x2f3a4f, A).fillPoints(sc, true).lineStyle(1, this.tone.ink, A).strokePoints(sc, true)
-    for (const [a, b] of runs(lo + T, hi - T, gates)) box(x0 + hi - T, y0 + a, T, b - a, 0, Hh)
-    for (const [a, b] of runs(lo, hi, gates)) box(x0 + a, y0 + hi - T, b - a, T, 0, Hh)
+    const WT = 0.1, WH = works ? 7 : 6
+    for (const [a, b] of runs(lo, hi)) box(x0 + hi - WT, y0 + a, WT, b - a, 0, WH, wallC)
+    for (const [a, b] of runs(lo, hi)) box(x0 + a, y0 + hi - WT, b - a, WT, 0, WH, wallC)
     return g
   }
+
 
   /**
    * A district's ports on its block in the town (the Owner, 2026-11-20: like a real city, not stuck-on
@@ -1331,17 +1349,16 @@ export class PlaceScene extends Phaser.Scene {
     // solid for a wired district, as faint as its ghost for one not wired yet. A used way has its crossing, the
     // reservation open and an arrow painted the way traffic goes (in towards the block, out towards the
     // highway); an open one is just the street, built, nothing painted (no barrier: it read as broken).
-    const ghost = !isWired(k)
     type Dir = 'in' | 'out' | 'none'
     const street = (x: number, y: number, dx: number, dy: number, used: boolean, dir: Dir) => {
-      const A = ghost ? 0.22 : 1
+      const A = 1
       const len = dx > 0 ? ground.x + ground.w + BUFFER - x : dx < 0 ? x - (ground.x - BUFFER) : ground.y + ground.h + BUFFER - y
       const ux = -dy, uy = dx
       const pt = (a: number, b: number) => P(x + dx * a + ux * b, y + dy * a + uy * b)
       const band = (a0: number, a1: number, h: number) => [pt(a0, -h), pt(a1, -h), pt(a1, h), pt(a0, h)]
       g.fillStyle(this.tone.kerb, A).fillPoints(band(0, len, HALF + PAVEMENT), true)
-      // On into the square a little way, so the street plainly enters it.
-      g.fillStyle(this.tone.asphalt, A).fillPoints(band(-0.55, 0, HALF), true)
+      // In through the gate into the yard (drawn under the town, so its buildings stand over it).
+      g.fillStyle(this.tone.asphalt, A).fillPoints(band(-0.6, 0, HALF), true)
       // The asphalt on into the highway's near carriageway, to its edge.
       const into = GUTTER / 2 - HIGHWAY_HALF - BUFFER + 0.02
       g.fillStyle(this.tone.asphalt, A).fillPoints(band(0, len + into, HALF), true)
@@ -1373,33 +1390,8 @@ export class PlaceScene extends Phaser.Scene {
       street(pi.x, pi.y, 0, 1, !!slots.in.named[i], 'in')
       street(po.x, po.y, 1, 0, !!slots.out.named[i], 'out')
     }
-    const back: [number, boolean, Dir][] = [[0.25, !!slots.in.other, 'in'], [0.5, !!slots.out.other, 'out'], [0.75, !!slots.orphan, 'none']]
-    for (const [f, used, dir] of back) { const p = sheetAt(0, f); street(p.x, p.y, -1, 0, used, dir) }
-    // A small box on the block: bottom at z 0, top at h.
-    const box = (x: number, y: number, w: number, h: number, col: number) => {
-      const c = Phaser.Display.Color.ValueToColor(col)
-      const top = [P(x, y, h), P(x + w, y, h), P(x + w, y + w, h), P(x, y + w, h)]
-      const right = [P(x + w, y, 0), P(x + w, y + w, 0), P(x + w, y + w, h), P(x + w, y, h)]
-      const left = [P(x, y + w, 0), P(x + w, y + w, 0), P(x + w, y + w, h), P(x, y + w, h)]
-      g.lineStyle(0.8, this.tone.ink, 1)
-      g.fillStyle(c.clone().darken(18).color).fillPoints(right, true).strokePoints(right, true)
-      g.fillStyle(c.clone().darken(8).color).fillPoints(left, true).strokePoints(left, true)
-      g.fillStyle(col).fillPoints(top, true).strokePoints(top, true)
-    }
-    // All on the back-left, as inside: the Others towards the back, the yard towards the front.
-    if (slots.in.other || slots.out.other) {
-      const x = r.x + 0.15, y = r.y + r.h * 0.2
-      box(x, y, 0.22, 6, 0x6f8fb3); box(x + 0.26, y + 0.05, 0.2, 5, 0x6f8fb3); box(x + 0.08, y + 0.28, 0.18, 4, 0x6f8fb3)
-    }
-    if (slots.orphan) {
-      const x = r.x + 0.15, y = r.y + r.h * 0.62, w = 0.55
-      const lot = [P(x, y), P(x + w, y), P(x + w, y + w), P(x, y + w)]
-      g.fillStyle(0xc9a77a, 1).fillPoints(lot, true)
-      for (let k2 = 0; k2 < 4; k2++) { const p0 = P(x + w * k2 / 4, y + w), p1 = P(x + w * (k2 + 1) / 4, y + w); g.fillStyle(k2 % 2 ? 0xffffff : 0xf08a4b, 1).fillPoints([p0, p1, new Phaser.Math.Vector2(p1.x, p1.y - 4), new Phaser.Math.Vector2(p0.x, p0.y - 4)], true) }
-      const m0 = P(x + 0.12, y + 0.12), m1 = P(x + 0.12, y + 0.12, 22), j1 = P(x + w, y + 0.12, 22)
-      g.lineStyle(2, this.tone.ink, 1).lineBetween(m0.x, m0.y, m1.x, m1.y).lineBetween(m1.x, m1.y, j1.x, j1.y)
-      g.lineStyle(1.1, 0xf2b234, 1).lineBetween(m0.x, m0.y, m1.x, m1.y).lineBetween(m1.x, m1.y, j1.x, j1.y)
-    }
+    // The back edges' streets would be hidden behind the town: on the town only the front two are drawn (the
+    // Owner, 2026-11-20); the Others and the yard show inside.
   }
 
   /**
