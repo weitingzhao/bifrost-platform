@@ -902,7 +902,7 @@ export class PlaceScene extends Phaser.Scene {
     if (ROUTES_ON_STREETS && o.interactive && this.shown?.links && !o.arranging) for (const part of this.ways(this.shown.links, geo, P, plots, placed, W, H)) c.add(part)
     // A district's ground: a crossing on its edge for each district it talks to, on the side that district lies.
     const edgePts: Phaser.Math.Vector2[] = []
-    if (place.kind === 'district' && o.interactive && this.shown?.links && !o.arranging) for (const part of this.borders(this.shown.links, P, W, H, edgePts, geo, plots)) c.add(part)
+    if (place.kind === 'district' && o.interactive && this.shown?.links && !o.arranging) for (const part of this.borders(this.shown.links, P, W, H, edgePts, geo, streets)) c.add(part)
     const byId = new Map(place.children.map(k => [k.id, k]))
     const plotById = new Map(plots.map(p => [p.id, p]))
     const rectOf = (p: Placed): Rect => { const home = plotById.get(p.plot); return home ? geo.thing(geo.plot(home), p.w, p.h) : { x: p.x, y: p.y, w: p.w, h: p.h } }
@@ -1182,7 +1182,7 @@ export class PlaceScene extends Phaser.Scene {
    * its neighbour, a small block in its colour that a tap opens; Other is a heap on a dirt track, Orphan a
    * fenced building site; both grow with their share of everything that passes.
    */
-  private borders(lk: LevelLinks, P: Proj, W: number, H: number, framed: Phaser.Math.Vector2[], geo: Geo, plots: Plot[]) {
+  private borders(lk: LevelLinks, P: Proj, W: number, H: number, framed: Phaser.Math.Vector2[], geo: Geo, streets: Street[]) {
     const out: Phaser.GameObjects.GameObject[] = []
     const slots = edgeSlots(lk.gates)
     const g = this.add.graphics()
@@ -1193,17 +1193,18 @@ export class PlaceScene extends Phaser.Scene {
     // Where each side's ports stand: on the streets that reach that edge, so a port's road carries a street
     // straight on (the Owner, 2026-11-20: the roads join up); where the edge has fewer streets than ports,
     // evenly along it, joining the ring road.
-    const along = (cuts: number[], len: number, toPic: (v: number) => number, want: number) => {
-      const inner = [...new Set(cuts)].filter(v => v > 0 && v < 16).sort((a, b) => a - b).map(toPic)
+    // The streets that actually reach each edge (not every cut has one), in the picture's units.
+    const reach = (edge: Slot['edge']) => streets.filter(st => edge === 'y1' ? st.x0 === st.x1 && Math.max(st.y0, st.y1) >= 16 && st.x0 > 0 && st.x0 < 16
+      : edge === 'y0' ? st.x0 === st.x1 && Math.min(st.y0, st.y1) <= 0 && st.x0 > 0 && st.x0 < 16
+      : edge === 'x1' ? st.y0 === st.y1 && Math.max(st.x0, st.x1) >= 16 && st.y0 > 0 && st.y0 < 16
+      : st.y0 === st.y1 && Math.min(st.x0, st.x1) <= 0 && st.y0 > 0 && st.y0 < 16).map(st => edge[0] === 'y' ? geo.x(st.x0) : geo.y(st.y0))
+    const along = (edge: Slot['edge'], len: number, want: number) => {
+      const inner = [...new Set(reach(edge))].sort((a, b) => a - b)
       if (inner.length >= want) return Array.from({ length: want }, (_, i) => inner[Math.round((i + 0.5) * inner.length / want - 0.5)])
       return Array.from({ length: want }, (_, i) => (i + 0.5) / want * len)
     }
-    const xcuts = plots.flatMap(p => [p.x, p.x + p.w]), ycuts = plots.flatMap(p => [p.y, p.y + p.h])
     // Front: the named ports. Back-left: Other in, Other out. Back-right: the yard.
-    const pos: Record<Slot['edge'], number[]> = {
-      y1: along(xcuts, W, geo.x, PORTS), x1: along(ycuts, H, geo.y, PORTS),
-      x0: along(ycuts, H, geo.y, 2), y0: along(xcuts, W, geo.x, 1),
-    }
+    const pos: Record<Slot['edge'], number[]> = { y1: along('y1', W, PORTS), x1: along('x1', H, PORTS), x0: along('x0', H, 2), y0: along('y0', W, 1) }
     for (const sl of SLOTS) {
       const edge = sl.side === 'in' ? slots.in : sl.side === 'out' ? slots.out : null
       const pass = sl.side === 'orphan' ? slots.orphan : sl.i < PORTS ? edge!.named[sl.i] ?? null : edge!.other
@@ -1222,24 +1223,20 @@ export class PlaceScene extends Phaser.Scene {
       const START = -GUTTER / 2
       for (let k = 0; k < 5; k++) {
         const a0 = START + (REACH - START) * k / 5, a1 = START + (REACH - START) * (k + 1) / 5, fade = k < 2 ? 1 : 1 - (k - 1) / 6
-        if (named) {
-          // The same street as inside, carried on: its pavement, kerb line and asphalt.
-          g.fillStyle(this.tone.kerb, fade).fillPoints([pt(a0, -WAY / 2 - KERB), pt(a1, -WAY / 2 - KERB), pt(a1, WAY / 2 + KERB), pt(a0, WAY / 2 + KERB)], true)
-          g.fillStyle(this.tone.asphalt, fade).fillPoints([pt(a0, -WAY / 2 + WALK), pt(a1, -WAY / 2 + WALK), pt(a1, WAY / 2 - WALK), pt(a0, WAY / 2 - WALK)], true)
-          g.lineStyle(1.2, this.tone.curb, fade)
-          for (const side of [-1, 1]) { const e0 = pt(a0, side * (WAY / 2 - WALK)), e1 = pt(a1, side * (WAY / 2 - WALK)); g.lineBetween(e0.x, e0.y, e1.x, e1.y) }
-          if (k % 2 === 0) { const m0 = pt(a0 + 0.06, 0), m1 = pt(a1 - 0.06, 0); g.lineStyle(1.2, this.tone.paint, fade).lineBetween(m0.x, m0.y, m1.x, m1.y) }
-        } else {
-          g.fillStyle(DIRT, fade).fillPoints([pt(a0, -ROAD / 2 + 0.04), pt(a1, -ROAD / 2 + 0.04), pt(a1, ROAD / 2 - 0.04), pt(a0, ROAD / 2 - 0.04)], true)
-          for (let j = 0; j < 3; j++) { const h = hash(`${kind}${sl.side}${k}${j}`), q = pt(a0 + (h % 10) / 10 * (a1 - a0), ((h >> 4) % 10) / 10 * 0.6 - 0.3); g.fillStyle(0x9c7a52, fade * 0.8).fillCircle(q.x, q.y, 1.5) }
-        }
+        // The same street as inside, carried on to every slot alike: the ground is laid out first, what
+        // stands on it comes later (the Owner, 2026-11-20).
+        g.fillStyle(this.tone.kerb, fade).fillPoints([pt(a0, -WAY / 2 - KERB), pt(a1, -WAY / 2 - KERB), pt(a1, WAY / 2 + KERB), pt(a0, WAY / 2 + KERB)], true)
+        g.fillStyle(this.tone.asphalt, fade).fillPoints([pt(a0, -WAY / 2 + WALK), pt(a1, -WAY / 2 + WALK), pt(a1, WAY / 2 - WALK), pt(a0, WAY / 2 - WALK)], true)
+        g.lineStyle(1.2, this.tone.curb, fade)
+        for (const side of [-1, 1]) { const e0 = pt(a0, side * (WAY / 2 - WALK)), e1 = pt(a1, side * (WAY / 2 - WALK)); g.lineBetween(e0.x, e0.y, e1.x, e1.y) }
       }
       // Which way it goes, painted on the road (the Owner, 2026-11-20: an arrow says in or out, no words);
       // laid even where nothing passes yet, the yard has none: nothing passes through it.
       if (kind !== 'orphan') {
         const inward = sl.side === 'in'
-        const at = REACH * 0.35
-        const tail = inward ? at + 0.55 : at - 0.55, head = inward ? at - 0.55 : at + 0.55, back = inward ? head + 0.34 : head - 0.34
+        // At the edge itself, clear of whatever will stand at the road's end.
+        const at = -0.1
+        const tail = inward ? at + 0.45 : at - 0.45, head = inward ? at - 0.45 : at + 0.45, back = inward ? head + 0.3 : head - 0.3
         const s0 = pt(tail, 0), s1 = pt(back, 0)
         g.lineStyle(4, 0xffffff, pass ? 1 : 0.7).lineBetween(s0.x, s0.y, s1.x, s1.y)
         g.fillStyle(0xffffff, pass ? 1 : 0.7).fillPoints([pt(head, 0), pt(back, -0.3), pt(back, 0.3)], true)
