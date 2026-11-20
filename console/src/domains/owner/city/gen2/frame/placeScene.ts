@@ -8,11 +8,13 @@ import { hash } from './kit'
 import { buildingWings, setback, spriteFor, spriteKey, spriteUrl, type Wing } from './sprites'
 import { deviceKey, deviceSprite, formOfPlace, levelsOf, osOfPlace } from './devices'
 import { frameOf, type Frame } from './viewport'
-import { LANDMARKS, type LandmarkId } from './library/landmarkLooks'
+import { LANDMARKS } from './library/landmarkLooks'
+import { nuclearCore } from './library/landmarks'
+import { modulesOf, townKey, townSprite } from './library/towns'
 import { edgeSlots, linksAt, portAt, portsFor, slotsFor, type LevelLinks, type Link, type Slot } from './links'
 
-/** The district styles drawn as a landmark town of their own; the rest use the campus. */
-const TOWN_SPRITE: Partial<Record<string, LandmarkId>> = { power: 'nuclearPlant' }
+/** The district styles drawn as a town of their own: the landmark in its back corner (towns.ts builds the rest by its size); the rest use the campus. */
+const TOWN_CORE: Partial<Record<string, () => import('./kit').Sprite>> = { power: nuclearCore }
 
 /**
  * One scene draws one place (a page): its 16×16 ground and the things on it,
@@ -433,8 +435,18 @@ export class PlaceScene extends Phaser.Scene {
       const lay = k?.kind === 'district' ? this.shown?.layoutAt([...at, p.id]) : null
       if (k && lay) out.push(...this.looks(k, lay.placed, [...at, p.id]))
       // A district that stands as a drawn town of its own (style), seen from the town.
-      const town = k?.style ? TOWN_SPRITE[k.style] : undefined
-      if (town) { const lm = LANDMARKS[town]; this.cells.set(`g2:lm:${town}`, lm.n); out.push({ id: p.id, key: `g2:lm:${town}`, make: lm.make }) }
+      const core = k?.style ? TOWN_CORE[k.style] : undefined
+      if (k && core) {
+        const hue = this.shown ? hueOf(this.shown.tree, [...at, p.id]) : '#cccccc'
+        // Drawn on its plot as it stands on the city (a big district's plot runs over the streets it covers), one cell to a cell.
+        const plot = at.length === 0 && this.shown ? this.shown.plots.find(q => q.id === p.plot) : undefined
+        const rect = plot && this.shown ? geoOf(this.shown.plots).plot(plot) : null
+        const [sw, sd] = k.shape.split('x').map(Number)
+        const w = Math.round((rect?.w ?? sw) * 100) / 100, d = Math.round((rect?.h ?? sd) * 100) / 100
+        const mods = modulesOf(k, hue, this.light), key = townKey(k.id, k.shape, k.style!, mods, w, d)
+        this.cells.set(key, Math.min(w, d)); this.townKeys.set(k.id, key)
+        out.push({ id: p.id, key, make: () => townSprite(k.shape, w, d, core, mods) })
+      }
     }
     return out
   }
@@ -459,8 +471,32 @@ export class PlaceScene extends Phaser.Scene {
   private anchors = new Map<string, { ax: number; ay: number }>()
   /** A sprite drawn for a footprint of its own (a landmark, n×n): how many cells across it was drawn. */
   private cells = new Map<string, number>()
+  /** Each district's town sprite, by its id (its key carries its size and what it sums). */
+  private townKeys = new Map<string, string>()
   /** How much a sprite drawn for `cells` is scaled to stand in a footprint `size` across. */
   private spriteFit(key: string, size: number) { const n = this.cells.get(key); return n ? size / n : 1 }
+
+  /** What stands on the ground on screen, each with its footprint and the pieces it was drawn with. */
+  private drawn: { id: string; r: Rect; parts: Phaser.GameObjects.GameObject[] }[] = []
+  /**
+   * See through to what the pointer is on (the Owner, 2026-11-20: a big district hides what stands behind it):
+   * whatever stands in front of it, nearer the viewer and over it on screen, fades to a third; back again when
+   * the pointer leaves.
+   */
+  private seeThrough(id: string | null, r: Rect) {
+    for (const d of this.drawn) {
+      // On screen a footprint spans x - (y + h) .. (x + w) - y across; in front means deeper (x + y) and over it, and near enough to reach up over it.
+      const span = (q: Rect) => [q.x - q.y - q.h, q.x + q.w - q.y]
+      const [a0, a1] = span(r), [b0, b1] = span(d.r)
+      const front = id != null && d.id !== id && d.r.x + d.r.y > r.x + r.y && Math.min(a1, b1) - Math.max(a0, b0) > 2 && d.r.x + d.r.y - (r.x + r.w + r.y + r.h) < 3 && (d.r.x >= r.x + r.w - 0.01 || d.r.y >= r.y + r.h - 0.01)
+      for (const part of d.parts) {
+        const a = part as unknown as { alpha?: number; setAlpha?: (v: number) => void; __base?: number }
+        if (a.setAlpha == null || a.alpha == null) continue
+        if (front) { if (a.__base == null) a.__base = a.alpha; a.setAlpha(a.__base * 0.3) }
+        else if (a.__base != null) { a.setAlpha(a.__base); a.__base = undefined }
+      }
+    }
+  }
 
   /** Draw a place once its sprites are loaded; a newer draw wins. */
   private async draw(s: Shown, refit: boolean) {
@@ -1009,7 +1045,8 @@ export class PlaceScene extends Phaser.Scene {
     }
     // Back to front, so nearer blocks cover farther ones.
     const look = new Map(this.looks(place, order.map(x => x.p), at).map(l => [l.id, l.key]))
-    for (const { p, r } of order) for (const part of this.block(byId.get(p.id)!, p, r, P, look.get(p.id)!, o, [...at, p.id])) c.add(part)
+    if (o.interactive) this.drawn = []
+    for (const { p, r } of order) { const parts = this.block(byId.get(p.id)!, p, r, P, look.get(p.id)!, o, [...at, p.id]); for (const part of parts) c.add(part); if (o.interactive) this.drawn.push({ id: p.id, r, parts }) }
     // Names on top of every block, so a nearer block never hides a farther one's name. The minimap has none: too small to read.
     if (o.interactive) for (const { p, r } of order) {
       // The plate stands out in the street before its front corner (the Owner, 2026-11-20: on the picture it hid what was in front).
@@ -1091,7 +1128,7 @@ export class PlaceScene extends Phaser.Scene {
       // one): a ring of low buildings round a courtyard, a gate in the ring wherever a street comes in (the
       // same places as its ports), and in the courtyard one tower whose face will carry the district's few
       // readings. Its colour is the district's.
-      const town = k.style ? TOWN_SPRITE[k.style] : undefined, tkey = town ? `g2:lm:${town}` : ''
+      const tkey = this.townKeys.get(k.id) ?? '', town = !!tkey
       const ta = tkey ? this.anchors.get(tkey) : undefined
       if (town && ta && this.textures.exists(tkey)) {
         // Drawn as a landmark, in the kit, at the first generation's detail (the Owner, 2026-11-20: the
@@ -1119,8 +1156,8 @@ export class PlaceScene extends Phaser.Scene {
       g.setInteractive(hit, Phaser.Geom.Polygon.Contains)
       g.input!.cursor = o.arranging ? 'grab' : 'pointer'
       // Hover only for a mouse: on a touch screen it would stay lit after the finger lifts.
-      g.on('pointerover', (p: Phaser.Input.Pointer) => { if (!p.wasTouch) { img?.setTint(this.tone.hover); if (!o.arranging) this.hovered = k } })
-      g.on('pointerout', () => { img?.clearTint(); if (anyLit && !lit) img?.setTint(this.tone.dim); if (this.hovered?.id === k.id) this.hovered = null })
+      g.on('pointerover', (p: Phaser.Input.Pointer) => { if (!p.wasTouch) { img?.setTint(this.tone.hover); if (!o.arranging) this.hovered = k; this.seeThrough(k.id, r) } })
+      g.on('pointerout', () => { img?.clearTint(); if (anyLit && !lit) img?.setTint(this.tone.dim); if (this.hovered?.id === k.id) this.hovered = null; this.seeThrough(null, r) })
       // Moving: press on a thing to pick it up; it lands on the plot under the pointer when released.
       g.on('pointerdown', () => {
         if (o.arranging && this.shown?.tool === 'move') this.carry = { p: at, to: null }
@@ -1255,7 +1292,7 @@ export class PlaceScene extends Phaser.Scene {
    * low wall with a gate wherever a street comes in (a quarter, a half and three quarters along); in the open
    * yard between, the building whose screen will carry the district's few readings, facing the viewer.
    *   campus      an office slab and a wing in the district's colour, glass bands, a hedge for a wall, a tower
-   *   (a style with a drawn town of its own, TOWN_SPRITE, wears that instead: power is nuclearPlant)
+   *   (a style with a drawn town of its own, TOWN_CORE, wears that instead, built by towns.ts: power is nuclearCore)
    */
   private campus(sq: Rect, P: Proj, hue: string, _ghost: boolean, _style: string) {
     const g = this.add.graphics()

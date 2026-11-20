@@ -663,29 +663,43 @@ export function screenHouse(g: Draw, x0: number, y0: number, x1: number, y1: num
 }
 
 /** The lanes from a town's gates (a quarter, a half, three quarters along its front sides) into its yard. Drawn first, on the ground. */
-export function frontLanes(g: Draw, n: number, from = 3.1) {
-  for (const k of [1, 2, 3]) {
-    top(g, k - 0.09, from, k + 0.09, n - 0.05, 0, '#d2cfc6', 0)
-    top(g, from, k - 0.09, n - 0.05, k + 0.09, 0, '#d2cfc6', 0)
-  }
+export function frontLanes(g: Draw, n: number, from = 3.1, fd = n, nx = 3, ny = 3) {
+  const reach = n - from
+  for (let i = 0; i < nx; i++) { const k = (i + 1) / (nx + 1) * n
+    top(g, k - 0.09, fd - reach, k + 0.09, fd - 0.05, 0, '#d2cfc6', 0) }
+  for (let i = 0; i < ny; i++) { const k = (i + 1) / (ny + 1) * fd
+    top(g, n - reach, k - 0.09, n - 0.05, k + 0.09, 0, '#d2cfc6', 0) }
 }
 
-/** The low wall on a town's two front sides, a gate at each port. Drawn last, in front of everything. */
-export function frontWall(g: Draw, n: number) {
+/**
+ * The low wall on a town's two front sides, a gate at each port. Drawn last, in front of everything. A town
+ * n by fd (cells) has nx ports on its +y side and ny on its +x side, each where portAt puts it.
+ */
+export function frontWall(g: Draw, n: number, fd = n, nx = 3, ny = 3) {
   const WALL = faces('#e9e6de', '#d6d1c5', '#c2bcae'), POST = faces('#f2b234', '#d6d1c5', '#c2bcae')
   const gap = 0.15
   for (const side of ['y', 'x'] as const) {
-    const stops = [0.06, ...[1, 2, 3].flatMap(k => [k - gap, k + gap]), n - 0.06]
+    const len = side === 'y' ? n : fd, ports = side === 'y' ? nx : ny
+    const at = Array.from({ length: ports }, (_, i) => (i + 1) / (ports + 1) * len)
+    const stops = [0.06, ...at.flatMap(k => [k - gap, k + gap]), len - 0.06]
     for (let i = 0; i < stops.length; i += 2) {
       const a = stops[i], b = stops[i + 1]
-      if (side === 'y') g.box(a, n - 0.12, b - a, 0.06, 4, WALL, 0, 0.7)
+      if (side === 'y') g.box(a, fd - 0.12, b - a, 0.06, 4, WALL, 0, 0.7)
       else g.box(n - 0.12, a, 0.06, b - a, 4, WALL, 0, 0.7)
     }
-    for (const k of [1, 2, 3]) for (const e of [k - gap - 0.04, k + gap]) {
-      if (side === 'y') g.box(e, n - 0.13, 0.04, 0.08, 9, POST, 0, 0.7)
+    for (const k of at) for (const e of [k - gap - 0.04, k + gap]) {
+      if (side === 'y') g.box(e, fd - 0.13, 0.04, 0.08, 9, POST, 0, 0.7)
       else g.box(n - 0.13, e, 0.08, 0.04, 9, POST, 0, 0.7)
     }
   }
+}
+
+/** Another sprite drawn into this one, its footprint's back corner at grid (x, y), scaled by s. */
+export function inset(g: Draw, sp: Sprite, x: number, y: number, s = 1) {
+  const [px, py] = g.p(x, y, 0)
+  const head = sp.svg.match(/^<svg[^>]*>/)![0]
+  const inner = sp.svg.slice(head.length, -'</svg>'.length)
+  g.add(`<svg x="${n1(px - sp.ax * s)}" y="${n1(py - sp.ay * s)}" width="${n1(sp.width * s)}" height="${n1(sp.height * s)}" viewBox="0 0 ${sp.width} ${sp.height}" overflow="visible">${inner}</svg>`)
 }
 
 
@@ -700,12 +714,14 @@ export function frontWall(g: Draw, n: number) {
  * whose dark screen will carry the district's few readings (empty until it has them). A low wall on the two
  * front sides with a gate at each port (a quarter, a half, three quarters).
  */
-export function nuclearPlant(): Sprite {
-  const n = 4
-  const g = new Draw(n, n, 230)
-  lot(g, n, '#e4e2db')
-  // Service lanes from the gates in.
-  frontLanes(g, n)
+/** The plant's buildings alone, on no ground and inside no wall: its town (towns.ts) sets them in its back corner at any size. */
+export function nuclearCore(): Sprite {
+  const g = new Draw(4, 4, 230)
+  nuclearParts(g)
+  return g.done()
+}
+
+function nuclearParts(g: Draw) {
 
   // The containment: a concrete drum on a plinth, its dome, a ring of buttresses, the equipment hatch.
   { const DX = 1.15, DY = 1.15
@@ -773,8 +789,7 @@ export function nuclearPlant(): Sprite {
     for (let k = 0; k <= 8; k++) { const a = xa + (xb - xa) * k / 8; g.line([a, yb, 0], [a, yb, 7], '#7f8794', 0.7); const b = ya + (yb - ya) * k / 8; g.line([xb, b, 0], [xb, b, 7], '#7f8794', 0.7) }
     g.line([xa, yb, 7], [xb, yb, 7], '#7f8794', 0.9); g.line([xb, ya, 7], [xb, yb, 7], '#7f8794', 0.9) }
 
-  frontWall(g, n)
-  return g.done()
+
 }
 
 /* ------------------------------------------------------------------ */

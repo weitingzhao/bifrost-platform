@@ -58,6 +58,9 @@ function Bench() {
     void rulers
     // The rooms are drawn under the rulers as they stand, so the district is built again when one changes.
     const hw: Place | null = reads ? hardwareDistrict(reads.r, 'system', `Live, read every 30 s (last ${reads.at}).`, reads.u) : null
+    // Bench only, ?util=4x8 or 8x8: Utilities at another size, to look at how a district's town grows (2026-11-20).
+    const util = new URLSearchParams(location.search).get('util')
+    if (hw && util && ['4x4', '4x8', '8x8'].includes(util)) hw.shape = util as Place['shape']
     const c = consoleContent(hw ? [hw] : [])
     return new URLSearchParams(location.search).has('links') ? { ...c, tree: withPartners(c.tree), links: SAMPLE_LINKS } : c
   }, [reads, rulers])
