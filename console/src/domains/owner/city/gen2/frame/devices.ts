@@ -115,61 +115,173 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: T
   // The plant's own ground: a concrete slab.
   g.box(x0, y0, w, d, 4, faces(S('#ebe8e0', -0.45), S('#d6d2c7', -0.5), S('#c4bfb2', -0.55)), 0, 1)
   const Z = 4, H = encode('cores', lv.cap?.cores ?? null)!
-  const hx = x0 + 0.14, hy = y0 + 0.16, hw = w * 0.6, hd = d * 0.5
-  const wall = unread ? faces('#eeedf2', '#d9d7e0', '#c6c3cf') : faces(S('#f7f8fa', -0.45), S('#e4e9ef', -0.5), S('#cdd5df', -0.55))
-  // The band in the system's own colour (the Owner, 2026-11-20: Ubuntu is orange, a Mac white, Windows blue); the walls stay off-white.
   const band = unread ? '#b9b6c4' : S(OS_BAND[os], -0.35)
   void hue
-
-  // The chimney behind the hall, from the ground: red and white, a gallery, the light on top.
-  if (kind === 'plant') { const sx = hx + hw + 0.22, sy = hy + 0.2, top = Z + H + 62
-    const [cx, cy] = g.p(sx, sy, Z), r = 6.5, bands = 6, step = (top - Z) / bands
+  // One family, each in its own style (the Owner, 2026-11-20: all of them computers, yet tell them apart at
+  // a glance). What every one shares, so it reads as a computer: the MEM and DISK tanks in the front row, the
+  // CPU as lit panes and as exhaust. What differs is the building, by its system and what it is for:
+  //   Linux     a factory: a sawtooth roof with north lights, the red and white chimney
+  //   Mac       the agents' studio: a low white pavilion, glass from end to end, a thin aluminium flue
+  //   Windows   the trading desk: a blue glass office tower, a ticker strip round its foot
+  //   storage   the warehouse: a gabled shed, a roller door per disk with its lamp, crates by how full
+  //   GPU       the server hall: windowless, louvred, a field of fans on the roof, a cooling tower beside
+  const style = kind === 'station' ? 'servers' : os === 'linux' ? 'factory' : os === 'mac' ? 'studio' : os === 'win' ? 'tower' : 'warehouse'
+  const n = (metaphor('cpu.busy').encoding as { n: number }).n, on = run ? lit(lv.cpu, n) : 0
+  const pane = (i: number, off = night ? '#3a4158' : '#cfe3f7') => i < on ? '#ffd76a' : unread ? '#dcdbe3' : off
+  const greyed = (c: ReturnType<typeof faces>) => unread ? faces('#eeedf2', '#d9d7e0', '#c6c3cf') : faces(S(c.top, -0.45), S(c.left, -0.5), S(c.right, -0.55))
+  // A stack standing from the ground at (sx, sy), its smoke the CPU, its light the state.
+  const stack = (sx: number, sy: number, top: number, r: number, striped: boolean) => {
+    const [cx, cy] = g.p(sx, sy, Z), bands = striped ? 6 : 1, step = (top - Z) / bands
     for (let i = 0; i < bands; i++) {
-      const yb = cy - i * step, yt = yb - step
-      g.add(`<rect x="${n1(cx - r)}" y="${n1(yt)}" width="${2 * r}" height="${n1(step)}" fill="${i % 2 ? S('#ffffff', -0.45) : unread ? '#c9c6d2' : S('#e0564f', -0.4)}" stroke="${INK}" stroke-width="1.1"/>`)
+      const yb = cy - i * step
+      const fill = !striped ? (unread ? '#d9d7e0' : S('#c9cfd8', -0.4)) : i % 2 ? S('#ffffff', -0.45) : unread ? '#c9c6d2' : S('#e0564f', -0.4)
+      g.add(`<rect x="${n1(cx - r)}" y="${n1(yb - step)}" width="${2 * r}" height="${n1(step)}" fill="${fill}" stroke="${INK}" stroke-width="1.1"/>`)
     }
-    const ty = cy - (top - Z)
-    g.add(`<rect x="${n1(cx - r - 2)}" y="${n1(ty + step * 1.15)}" width="${2 * r + 4}" height="2.6" fill="#59606b" stroke="${INK}" stroke-width="0.7"/>`)
-    g.add(`<rect x="${n1(cx - r - 1.6)}" y="${n1(ty - 3)}" width="${2 * r + 3.2}" height="4" fill="#59606b" stroke="${INK}" stroke-width="1"/>`)
+    if (!striped) g.add(`<rect x="${n1(cx - r + 1.2)}" y="${n1(cy - (top - Z))}" width="1.6" height="${n1(top - Z)}" fill="#ffffff" opacity="0.6"/>`)
+    g.add(`<rect x="${n1(cx - r - 1.6)}" y="${n1(cy - (top - Z) - 3)}" width="${2 * r + 3.2}" height="4" fill="#59606b" stroke="${INK}" stroke-width="1"/>`)
     smoke(g, sx, sy, top, run ? lv.cpu : null, run)
-    beacon(g, sx, sy, top, lv.state) }
+    beacon(g, sx, sy, top, lv.state)
+  }
+  let hx = x0 + 0.14, hy = y0 + 0.16, hw = w * 0.6, hd = d * 0.5
 
-  // The turbine hall.
-  g.shadow(hx, hy, hw, hd, 0.35)
-  g.box(hx, hy, hw, hd, H, wall, Z, 1.4)
-  const W = hw * U, D = hd * U
-  { // Front (+y): the band under the eaves, the tall windows (CPU), a plinth, the roller door.
-    const n = (metaphor('cpu.busy').encoding as { n: number }).n, on = run ? lit(lv.cpu, n) : 0
-    const door = Math.min(22, W * 0.22), span = W - door - 12, cw = span / n
-    let f = `<rect x="0" y="${-H + 3}" width="${n1(W)}" height="5" fill="${band}" stroke="${INK}" stroke-width="0.8"/>`
-    f += `<rect x="0" y="-5" width="${n1(W)}" height="5" fill="${S('#c3ccd8', -0.5)}" stroke="${INK}" stroke-width="0.6"/>`
-    const wy = -H + 13, wh = H - 25
-    for (let i = 0; i < n; i++) {
-      const u = 4 + i * cw, ww = cw * 0.62
-      const fill = i < on ? '#ffd76a' : unread ? '#dcdbe3' : night ? '#3a4158' : '#cfe3f7'
-      f += `<rect x="${n1(u)}" y="${n1(wy)}" width="${n1(ww)}" height="${n1(wh)}" fill="${fill}" stroke="${INK}" stroke-width="0.7"/>`
-      f += `<line x1="${n1(u + ww / 2)}" y1="${n1(wy)}" x2="${n1(u + ww / 2)}" y2="${n1(wy + wh)}" stroke="${INK}" stroke-width="0.4"/><line x1="${n1(u)}" y1="${n1(wy + wh * 0.5)}" x2="${n1(u + ww)}" y2="${n1(wy + wh * 0.5)}" stroke="${INK}" stroke-width="0.4"/>`
-    }
+  if (style === 'factory') {
+    stack(hx + hw + 0.22, hy + 0.2, Z + H + 62, 6.5, true)
+    const wall = greyed(faces('#fdf6ea', '#f3e6cf', '#e2d0b0'))
+    g.shadow(hx, hy, hw, hd, 0.35)
+    g.box(hx, hy, hw, hd, H, wall, Z, 1.4)
+    const W = hw * U, D = hd * U
+    let f = `<rect x="0" y="${-H + 3}" width="${n1(W)}" height="5" fill="${band}" stroke="${INK}" stroke-width="0.8"/><rect x="0" y="-5" width="${n1(W)}" height="5" fill="${S('#d8c6a4', -0.5)}" stroke="${INK}" stroke-width="0.6"/>`
+    const door = Math.min(22, W * 0.22), cw = (W - door - 12) / n, wy = -H + 13, wh = H - 25
+    for (let i = 0; i < n; i++) { const u = 4 + i * cw, ww = cw * 0.62
+      f += `<rect x="${n1(u)}" y="${n1(wy)}" width="${n1(ww)}" height="${n1(wh)}" rx="${n1(ww / 2)}" fill="${pane(i)}" stroke="${INK}" stroke-width="0.7"/><line x1="${n1(u + ww / 2)}" y1="${n1(wy + 2)}" x2="${n1(u + ww / 2)}" y2="${n1(wy + wh)}" stroke="${INK}" stroke-width="0.4"/>` }
     const dx = W - door - 4, dh = Math.min(22, H - 14)
-    f += `<rect x="${n1(dx)}" y="${-dh}" width="${n1(door)}" height="${dh}" fill="${S('#aab4c3', -0.5)}" stroke="${INK}" stroke-width="0.9"/>`
-    for (let v = -dh + 3; v < 0; v += 3) f += `<line x1="${n1(dx)}" y1="${v}" x2="${n1(dx + door)}" y2="${v}" stroke="${S('#7f8a9c', -0.4)}" stroke-width="0.5"/>`
-    f += `<rect x="${n1(dx)}" y="${-dh - 2.5}" width="${n1(door)}" height="2.5" fill="#f2b234" stroke="${INK}" stroke-width="0.6"/>`
-    g.face('left', hx, hy + hd, Z, f) }
-  { // Side (+x): the band, louvres, the system's small mark.
-    let r = `<rect x="0" y="${-H + 3}" width="${n1(D)}" height="5" fill="${band}" stroke="${INK}" stroke-width="0.8"/>`
-    r += `<rect x="0" y="-5" width="${n1(D)}" height="5" fill="${S('#c3ccd8', -0.5)}" stroke="${INK}" stroke-width="0.6"/>`
-    const lw = Math.min(16, D * 0.35), lx = 5, lh = Math.min(20, H - 24)
-    r += `<rect x="${lx}" y="${-10 - lh}" width="${n1(lw)}" height="${n1(lh)}" fill="${S('#c3ccd8', -0.5)}" stroke="${INK}" stroke-width="0.8"/>`
-    for (let v = -10 - lh + 3; v < -10; v += 3) r += `<line x1="${lx}" y1="${n1(v)}" x2="${n1(lx + lw)}" y2="${n1(v)}" stroke="${S('#eef1f5', -0.4)}" stroke-width="0.9"/>`
+    f += `<rect x="${n1(dx)}" y="${-dh}" width="${n1(door)}" height="${dh}" fill="${S('#9aa3ae', -0.5)}" stroke="${INK}" stroke-width="0.9"/>`
+    for (let v = -dh + 3; v < 0; v += 3) f += `<line x1="${n1(dx)}" y1="${v}" x2="${n1(dx + door)}" y2="${v}" stroke="${S('#6f7884', -0.4)}" stroke-width="0.5"/>`
+    g.face('left', hx, hy + hd, Z, f)
+    let r = `<rect x="0" y="${-H + 3}" width="${n1(D)}" height="5" fill="${band}" stroke="${INK}" stroke-width="0.8"/><rect x="0" y="-5" width="${n1(D)}" height="5" fill="${S('#d8c6a4', -0.5)}" stroke="${INK}" stroke-width="0.6"/>`
+    for (let u = 6; u < D * 0.55; u += 9) r += `<rect x="${n1(u)}" y="${-H + 13}" width="5" height="${H - 25}" rx="2.5" fill="${pane(n)}" stroke="${INK}" stroke-width="0.6"/>`
     g.face('right', hx + hw, hy + hd, Z, r)
-    if (os !== 'unknown') plaque(g, 'right', hx + hw, hy + hd, hd * 0.72, Z + H - 18, os, 6) }
-  // The roof: a parapet, a skylight, the air handlers.
-  g.poly(S('#eef1f5', -0.45), [[hx + 0.07, hy + 0.07, Z + H], [hx + hw - 0.07, hy + 0.07, Z + H], [hx + hw - 0.07, hy + hd - 0.07, Z + H], [hx + 0.07, hy + hd - 0.07, Z + H]], 0.8, S('#9aa6b6', -0.3))
-  g.poly(night ? '#3a4158' : '#bfe0f7', [[hx + 0.2, hy + hd * 0.42, Z + H], [hx + hw * 0.55, hy + hd * 0.42, Z + H], [hx + hw * 0.55, hy + hd * 0.62, Z + H], [hx + 0.2, hy + hd * 0.62, Z + H]], 0.8)
-  g.unit(hx + hw * 0.66, hy + hd * 0.2, Z + H, Math.min(0.42, hd * 0.3))
-  g.unit(hx + hw * 0.3, hy + hd * 0.12, Z + H, Math.min(0.32, hd * 0.24))
-  // The GPU box is a power station: a cooling tower beside the hall (drawn after it: it stands in front of its side), steaming as busy as it is (CPU), its light on top when down.
-  if (kind === 'station') {
+    plaque(g, 'right', hx + hw, hy + hd, hd * 0.78, Z + H - 18, os, 6)
+    // The sawtooth: north lights facing back, slopes to the front.
+    const teeth = 4, tw = hw / teeth
+    for (let i = 0; i < teeth; i++) { const a = hx + i * tw, b = a + tw
+      g.poly(night ? '#3a4a6a' : '#bfe0f7', [[a, hy, Z + H], [a, hy + hd, Z + H], [a, hy + hd, Z + H + 11], [a, hy, Z + H + 11]], 0.8)
+      g.poly(S(i % 2 ? '#eadcc0' : '#f0e4cc', -0.45), [[a, hy, Z + H + 11], [a, hy + hd, Z + H + 11], [b, hy + hd, Z + H], [b, hy, Z + H]], 1)
+      g.poly(wall.left, [[a, hy + hd, Z + H], [a, hy + hd, Z + H + 11], [b, hy + hd, Z + H]], 1) }
+    g.poly(wall.right, [[hx + hw, hy, Z + H], [hx + hw, hy + hd, Z + H], [hx + hw, hy + hd, Z + H], [hx + hw, hy, Z + H]], 0.6)
+  }
+
+  if (style === 'studio') {
+    const Hm = Math.max(26, Math.round(H * 0.62))
+    hw = w * 0.66
+    stack(hx + hw + 0.2, hy + 0.25, Z + Hm + 44, 4, false)
+    const wall = greyed(faces('#ffffff', '#f2f4f7', '#dde2e9'))
+    g.shadow(hx, hy, hw, hd, 0.3)
+    g.box(hx, hy, hw, hd, Hm, wall, Z, 1.3)
+    const W = hw * U, D = hd * U, cw = (W - 8) / n
+    let f = ''
+    for (let i = 0; i < n; i++) f += `<rect x="${n1(4 + i * cw)}" y="${-Hm + 7}" width="${n1(cw)}" height="${Hm - 10}" fill="${pane(i, night ? '#33405a' : '#d7e9f8')}" stroke="${INK}" stroke-width="0.6"/>`
+    f += `<path d="M${n1(W * 0.2)},${-Hm + 7} l9,0 l-${n1(Hm * 0.45)},${Hm - 10} l-9,0 Z" fill="#ffffff" opacity="0.4"/>`
+    f += `<rect x="0" y="${-Hm + 1}" width="${n1(W)}" height="4" fill="${band}" stroke="${INK}" stroke-width="0.6"/>`
+    g.face('left', hx, hy + hd, Z, f)
+    g.face('right', hx + hw, hy + hd, Z, `<rect x="0" y="${-Hm + 1}" width="${n1(D)}" height="4" fill="${band}" stroke="${INK}" stroke-width="0.6"/><rect x="5" y="${-Hm + 10}" width="${n1(D * 0.3)}" height="${Hm - 16}" fill="${pane(n, night ? '#33405a' : '#d7e9f8')}" stroke="${INK}" stroke-width="0.6"/>`)
+    plaque(g, 'right', hx + hw, hy + hd, hd * 0.68, Z + Hm / 2, os, 9)
+    // The thin roof slab overhanging all round.
+    g.box(hx - 0.07, hy - 0.07, hw + 0.14, hd + 0.14, 3, greyed(faces('#ffffff', '#e9edf2', '#d3d9e1')), Z + Hm, 1)
+  }
+
+  if (style === 'tower') {
+    const Ht = H + 44
+    hx = x0 + 0.3; hy = y0 + 0.22; hw = w * 0.42; hd = d * 0.42
+    const glass = unread ? faces('#eeedf2', '#d9d7e0', '#c6c3cf') : faces(S('#dce8f6', -0.45), S('#5b8fd0', -0.4), S('#3f6fb0', -0.45))
+    g.shadow(hx, hy, hw, hd, 0.5)
+    g.box(hx, hy, hw, hd, Ht, glass, Z, 1.4)
+    const W = hw * U, D = hd * U, rows = Math.floor((Ht - 26) / 9), cols = 4
+    const cells = rows * cols, lot = run ? Math.round(cells * on / n) : 0
+    const grid = (span: number, k0: number) => { let s2 = ''
+      for (let rr = 0; rr < rows; rr++) for (let c = 0; c < cols; c++) { const k = k0 + (rows - 1 - rr) * cols + c
+        s2 += `<rect x="${n1(3 + c * (span - 6) / cols)}" y="${n1(-Ht + 14 + rr * 9)}" width="${n1((span - 6) / cols - 2)}" height="6.5" fill="${k < lot ? '#ffd76a' : unread ? '#dcdbe3' : night ? '#22355a' : '#9cc3ee'}" stroke="${S('#1f3f73', -0.2)}" stroke-width="0.5"/>` }
+      return s2 }
+    const crown = (span: number) => `<rect x="0" y="${-Ht}" width="${n1(span)}" height="9" fill="${unread ? '#b9b6c4' : S('#1f3f73', -0.2)}" stroke="${INK}" stroke-width="0.8"/>`
+    // The ticker strip round its foot (the trading desk), lit while it is read.
+    const ticker = (span: number) => { let t = `<rect x="0" y="-9" width="${n1(span)}" height="6" fill="#1d2230" stroke="${INK}" stroke-width="0.7"/>`
+      if (run) for (let u = 2; u < span - 4; u += 6) t += `<rect x="${n1(u)}" y="-7.5" width="3.5" height="3" fill="${Math.round(u) % 18 < 6 ? '#f29b8f' : '#7be08f'}"/>`
+      return t }
+    g.face('left', hx, hy + hd, Z, crown(W) + grid(W, 0) + ticker(W) + `<rect x="${n1(W / 2 - 5)}" y="-3" width="10" height="3" fill="${S('#1f3f73', -0.2)}"/>`)
+    g.face('right', hx + hw, hy + hd, Z, crown(D) + grid(D, 0) + ticker(D))
+    plaque(g, 'left', hx, hy + hd, hw * 0.5, Z + Ht - 4.5, os, 3.4)
+    g.poly(S('#cfd9e6', -0.45), [[hx + 0.05, hy + 0.05, Z + Ht], [hx + hw - 0.05, hy + 0.05, Z + Ht], [hx + hw - 0.05, hy + hd - 0.05, Z + Ht], [hx + 0.05, hy + hd - 0.05, Z + Ht]], 0.8)
+    // Its exhaust: two vents on the roof, the smoke the CPU.
+    for (const k of [0.3, 0.7]) g.cylinder(hx + hw * k, hy + hd * 0.4, 3.2, Z + Ht, Z + Ht + 10, S('#c9cfd8', -0.4), S('#8d97a6', -0.4), '#59606b')
+    smoke(g, hx + hw * 0.3, hy + hd * 0.4, Z + Ht + 10, run ? lv.cpu : null, run)
+    beacon(g, hx + hw * 0.7, hy + hd * 0.4, Z + Ht + 10, lv.state)
+    hx = x0 + 0.14; hy = y0 + 0.16; hd = d * 0.5
+  }
+
+  if (style === 'warehouse') {
+    const Hs = Math.max(30, Math.round(H * 0.7)), ridge = 13
+    hw = w * 0.78; hd = d * 0.52
+    const wall = greyed(faces('#f7f8fa', '#e4e9ef', '#cdd5df'))
+    g.shadow(hx, hy, hw, hd, 0.35)
+    g.box(hx, hy, hw, hd, Hs, wall, Z, 1.4)
+    const W = hw * U, D = hd * U
+    // Its doors: one per disk, grouped by volume; each lamp the disk's state, the crates its volume's use.
+    const vols = lv.vols && lv.vols.length ? lv.vols : [{ f: lv.disks[0] ?? null, units: (lv.disks.length ? lv.disks : [null]).map(() => lv.state) }]
+    if (lv.vols?.length) { metaphor('volume.disks'); metaphor('volume.used') }
+    const doors = vols.flatMap(v => (v.units.length ? v.units : [lv.state]).map(u => ({ u, f: v.f })))
+    const span = (W - 10) / doors.length, dh = Math.min(24, Hs - 12)
+    let f = `<rect x="0" y="${-Hs + 3}" width="${n1(W)}" height="5" fill="${band}" stroke="${INK}" stroke-width="0.8"/>`
+    for (let u = 3; u < W; u += 4) f += `<line x1="${n1(u)}" y1="${-Hs + 9}" x2="${n1(u)}" y2="-1" stroke="${S('#d3dae3', -0.4)}" stroke-width="0.5"/>`
+    doors.forEach((dr, k) => { const a = 5 + k * span + span * 0.12, dw = span * 0.76
+      f += `<rect x="${n1(a)}" y="${-dh}" width="${n1(dw)}" height="${dh}" fill="#2c2e38" stroke="${INK}" stroke-width="0.8"/>`
+      if (run && dr.f != null && dr.f > 0.002) { const rowsC = Math.max(1, Math.round(Math.min(1, dr.f) * 5)), ch = (dh - 4) / 5
+        for (let q = 0; q < rowsC; q++) f += `<rect x="${n1(a + 1.5)}" y="${n1(-2 - (q + 1) * ch)}" width="${n1(dw / 2 - 2)}" height="${n1(ch - 0.8)}" fill="#e0a24e" stroke="${INK}" stroke-width="0.5"/><rect x="${n1(a + dw / 2 + 0.5)}" y="${n1(-2 - (q + 1) * ch)}" width="${n1(dw / 2 - 2)}" height="${n1(ch - 0.8)}" fill="#d08f3c" stroke="${INK}" stroke-width="0.5"/>` }
+      f += `<rect x="${n1(a + dw / 2 - 3)}" y="${-dh - 6}" width="6" height="4" rx="1" fill="${UNIT[dr.u ?? 'unread']}" stroke="${INK}" stroke-width="0.7"/>` })
+    g.face('left', hx, hy + hd, Z, f)
+    // The office at the side, its windows the CPU.
+    let r = `<rect x="0" y="${-Hs + 3}" width="${n1(D)}" height="5" fill="${band}" stroke="${INK}" stroke-width="0.8"/>`
+    const ow = (D - 10) / 4
+    for (let i = 0; i < 4; i++) r += `<rect x="${n1(5 + i * ow)}" y="-17" width="${n1(ow - 3)}" height="9" fill="${pane(Math.floor(i * n / 4))}" stroke="${INK}" stroke-width="0.6"/>`
+    g.face('right', hx + hw, hy + hd, Z, r)
+    // The gabled metal roof, its ridge along the shed, a vent on it with the CPU's exhaust.
+    const mid = hy + hd / 2
+    g.poly(S('#dfe5ec', -0.45), [[hx, hy, Z + Hs], [hx + hw, hy, Z + Hs], [hx + hw, mid, Z + Hs + ridge], [hx, mid, Z + Hs + ridge]], 1.1)
+    g.poly(S('#c3ccd7', -0.5), [[hx, mid, Z + Hs + ridge], [hx + hw, mid, Z + Hs + ridge], [hx + hw, hy + hd, Z + Hs], [hx, hy + hd, Z + Hs]], 1.1)
+    for (let k = 1; k < 10; k++) { const x = hx + hw * k / 10; g.line([x, mid, Z + Hs + ridge], [x, hy + hd, Z + Hs], S('#a9b3c0', -0.3), 0.6) }
+    g.poly(wall.right, [[hx + hw, hy, Z + Hs], [hx + hw, hy + hd, Z + Hs], [hx + hw, mid, Z + Hs + ridge]], 1.1)
+    g.cylinder(hx + hw * 0.7, mid, 3.4, Z + Hs + ridge - 2, Z + Hs + ridge + 8, S('#c9cfd8', -0.4), S('#8d97a6', -0.4), '#59606b')
+    smoke(g, hx + hw * 0.7, mid, Z + Hs + ridge + 8, run ? lv.cpu : null, run)
+    beacon(g, hx + hw * 0.4, mid, Z + Hs + ridge, lv.state)
+  }
+
+  if (style === 'servers') {
+    const wall = greyed(faces('#6a7080', '#4f5564', '#41464f'))
+    g.shadow(hx, hy, hw, hd, 0.35)
+    g.box(hx, hy, hw, hd, H, wall, Z, 1.4)
+    const W = hw * U, D = hd * U
+    // Louvred walls; a strip of status lights, as many lit as the CPU is busy; the GPU's name on its band.
+    const louvres = (span: number) => { let l = ''
+      for (let u = 4; u < span - 6; u += 11) { l += `<rect x="${n1(u)}" y="${-H + 14}" width="7" height="${H - 26}" fill="${S('#3a3f4a', -0.3)}" stroke="${INK}" stroke-width="0.6"/>`
+        for (let v = -H + 17; v < -13; v += 3) l += `<line x1="${n1(u)}" y1="${v}" x2="${n1(u + 7)}" y2="${v}" stroke="${S('#7d8494', -0.3)}" stroke-width="0.6"/>` }
+      return l }
+    let f = `<rect x="0" y="${-H + 3}" width="${n1(W)}" height="7" fill="${S('#2b2f38', -0.2)}" stroke="${INK}" stroke-width="0.8"/><text x="5" y="${-H + 8.6}" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="5.4" font-weight="800" fill="#76e08f" letter-spacing="1.4">GPU</text>`
+    f += louvres(W)
+    const lw = (W - 30) / n
+    for (let i = 0; i < n; i++) f += `<rect x="${n1(26 + i * lw)}" y="${-H + 5}" width="${n1(lw - 2)}" height="3" fill="${i < on ? '#76e08f' : '#20242c'}"/>`
+    f += `<rect x="${n1(W - 16)}" y="-16" width="11" height="16" fill="${S('#2b2f38', -0.2)}" stroke="${INK}" stroke-width="0.8"/>`
+    g.face('left', hx, hy + hd, Z, f)
+    g.face('right', hx + hw, hy + hd, Z, `<rect x="0" y="${-H + 3}" width="${n1(D)}" height="7" fill="${S('#2b2f38', -0.2)}" stroke="${INK}" stroke-width="0.8"/>` + louvres(D))
+    plaque(g, 'right', hx + hw, hy + hd, hd * 0.88, Z + H - 18, os, 5)
+    // The roof: a field of fans.
+    g.poly(S('#7a8090', -0.4), [[hx + 0.06, hy + 0.06, Z + H], [hx + hw - 0.06, hy + 0.06, Z + H], [hx + hw - 0.06, hy + hd - 0.06, Z + H], [hx + 0.06, hy + hd - 0.06, Z + H]], 0.8)
+    const fc = Math.max(2, Math.floor(hw / 0.55)), fr = Math.max(2, Math.floor(hd / 0.55))
+    for (let i = 0; i < fc; i++) for (let j = 0; j < fr; j++) {
+      const fx = hx + (i + 0.5) * hw / fc, fy = hy + (j + 0.5) * hd / fr
+      g.box(fx - 0.2, fy - 0.2, 0.4, 0.4, 4, faces(S('#9aa1af', -0.4), S('#7d8494', -0.4), S('#6a7080', -0.4)), Z + H, 0.8)
+      const [cx, cy] = g.p(fx, fy, Z + H + 4)
+      g.add(`<ellipse cx="${n1(cx)}" cy="${n1(cy)}" rx="9" ry="4.5" fill="#2b2f38" stroke="${INK}" stroke-width="0.7"/><path d="M${n1(cx - 7)},${n1(cy)} L${n1(cx + 7)},${n1(cy)} M${n1(cx)},${n1(cy - 3.5)} L${n1(cx)},${n1(cy + 3.5)}" stroke="#8d95a3" stroke-width="1.2"/>`)
+    }
+    // The cooling tower beside the hall, steaming as busy as it is.
     const tx = hx + hw + (x0 + w - hx - hw) / 2, ty = hy + hd * 0.55, th = H + 56
     coolingTower(g, tx, ty, th, `ct-${hash(_name) % 9973}`, Math.min(1.15, (x0 + w - hx - hw) * 0.75), false)
     smoke(g, tx, ty, Z + th, run ? lv.cpu : null, run)
@@ -195,21 +307,14 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: T
   // Memory first, then each disk it has (none read: one empty disk tank), evenly along the row.
   const tanks = [
     { r: encode('mem.total', lv.cap?.mem ?? null)!, f: run ? encode('mem.used', lv.mem) : null, c: night ? '#3f7fd6' : '#3b8fe0', word: 'MEM' },
-    ...(lv.disks.length ? lv.disks : [null]).map((f, k, all) => ({ r: encode('disk.total', lv.cap?.disk ?? null)!, f: run ? encode('disk.used', f) : null, c: '#d98f2b',
-      word: lv.vols ? `VOL${k + 1}` : all.length > 1 ? `DISK${k + 1}` : 'DISK', units: lv.vols?.[k]?.units })),
-  ] as { r: number; f: number | null; c: string; word: string; units?: State[] }[]
+    ...(style === 'warehouse' ? [] : lv.disks.length ? lv.disks : [null]).map((f, k, all) => ({ r: encode('disk.total', lv.cap?.disk ?? null)!, f: run ? encode('disk.used', f) : null, c: '#d98f2b',
+      word: all.length > 1 ? `DISK${k + 1}` : 'DISK' })),
+  ]
   const ty = hy + hd + (y0 + d - hy - hd) * 0.55
   tanks.forEach((t, k) => {
     const tx = x0 + w * (0.28 + k * Math.min(0.32, 0.55 / Math.max(1, tanks.length - 1)))
     g.line([tx, ty, Z + 10], [tx, hy + hd, Z + 10], S('#8d97a6', -0.3), 2.2)
     steel(tx, ty, t.r, 34, t.f, t.c, t.word)
-    // A volume's disks: a lamp each round the tank's foot, in that disk's state.
-    if (t.units?.length) {
-      metaphor('volume.disks'); metaphor('volume.used')
-      const [cx, cy] = g.p(tx, ty, Z)
-      t.units.forEach((u, i) => { const a = Math.PI * (0.15 + 0.7 * (t.units!.length === 1 ? 0.5 : i / (t.units!.length - 1))), lx = cx - Math.cos(a) * (t.r + 4), ly = cy + Math.sin(a) * (t.r + 4) / 2
-        g.add(`<circle cx="${n1(lx)}" cy="${n1(ly)}" r="2.6" fill="${UNIT[u]}" stroke="${INK}" stroke-width="0.8"/>`) })
-    }
   })
 }
 
