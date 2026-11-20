@@ -33,6 +33,13 @@ const SAMPLE_LINKS: Link[] = [
   { way: 'bus', from: ['system', 'bus'], to: ['command', 'command'], what: 'loop.health.changed', source: SAMPLE, clarity: 'unclear' },
   ...['network', 'telemetry', 'alertrelay', 'selfhealth', 'catalog', 'checklist', 'mcp'].map((what): Link => ({ way: 'bus', from: ['system', 'infrastructure'], to: [], what, source: SAMPLE, clarity: 'orphan' })),
   { way: 'bus', from: ['crew', 'crew'], to: ['work', 'releases'], what: 'release.requested', source: SAMPLE },
+  // Bench only: traffic in and out of Utilities through its named ports and its Other (2026-11-20).
+  { way: 'metric', from: ['utilities', 'ubt-k3s-04'], to: ['system', 'status'], what: 'node_load1', source: SAMPLE },
+  { way: 'metric', from: ['utilities', 'mini-pc-a'], to: ['command', 'command'], what: 'node_memory_used', source: SAMPLE },
+  { way: 'bus', from: ['utilities', 'gpu-server'], to: ['work', 'work'], what: 'gpu.idle', source: SAMPLE },
+  { way: 'bus', from: ['work', 'releases'], to: ['utilities', 'mini-pc-c'], what: 'deploy.started', source: SAMPLE },
+  { way: 'bus', from: ['services', 'ib'], to: ['utilities', 'UGREEN-NAS'], what: 'snapshot.written', source: SAMPLE },
+  { way: 'bus', from: ['crew', 'crew'], to: ['utilities', 'ubt-k3s-06'], what: 'agent.started', source: SAMPLE },
 ]
 /** Bench only: whom each place declares as partners (the content's rules), so the edge has named ports. */
 const SAMPLE_PARTNERS: Record<string, Partners> = {
@@ -40,6 +47,8 @@ const SAMPLE_PARTNERS: Record<string, Partners> = {
   system: { in: ['crew', 'services'], out: ['work', 'command', 'utilities'] },
   command: { in: ['work'], out: ['work'] },
   services: { in: [], out: ['system'] },
+  // Up to four a side, so a 4×8 Utilities (?util=4x8) shows every port it has named (2026-11-20).
+  utilities: { in: ['system', 'work', 'services', 'crew'], out: ['system', 'command', 'work', 'services'] },
 }
 const withPartners = (p: Place): Place => ({ ...p, partners: SAMPLE_PARTNERS[p.id] ?? p.partners, children: p.kind === 'town' ? p.children.map(withPartners) : p.children })
 

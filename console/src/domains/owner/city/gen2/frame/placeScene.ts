@@ -10,7 +10,7 @@ import { deviceKey, deviceSprite, formOfPlace, levelsOf, osOfPlace } from './dev
 import { frameOf, type Frame } from './viewport'
 import { LANDMARKS } from './library/landmarkLooks'
 import { nuclearCore } from './library/landmarks'
-import { modulesOf, townKey, townSprite } from './library/towns'
+import { cellsOf, modulesOf, townKey, townSprite } from './library/towns'
 import { edgeSlots, linksAt, portAt, portsFor, slotsFor, type LevelLinks, type Link, type Slot } from './links'
 
 /** The district styles drawn as a town of their own: the landmark in its back corner (towns.ts builds the rest by its size); the rest use the campus. */
@@ -326,8 +326,8 @@ export class PlaceScene extends Phaser.Scene {
       const r = pg.thing(pg.plot(plot), pl.w, pl.h), p = P0(r.x + r.w / 2, r.y + r.h / 2)
       return { x: (p.x - small.x) / s, y: (p.y - small.y) / s }
     }
-    for (const [id, nb] of nbs) {
-      const p = fromTown(id)
+    for (const [key, nb] of nbs) {
+      const p = fromTown(key.slice(key.indexOf(':') + 1))
       if (!p) continue
       const off = { x: p.x - nb.at.x, y: p.y - nb.at.y }
       if (next.from === 'down') {
@@ -445,6 +445,8 @@ export class PlaceScene extends Phaser.Scene {
         const w = Math.round((rect?.w ?? sw) * 100) / 100, d = Math.round((rect?.h ?? sd) * 100) / 100
         const mods = modulesOf(k, hue, this.light), key = townKey(k.id, k.shape, k.style!, mods, w, d)
         this.cells.set(key, Math.min(w, d)); this.townKeys.set(k.id, key)
+        // The kinds it holds that its cells cannot show, counted on its name (the mess shown, never hidden).
+        this.townLeft.set(k.id, Math.max(0, mods.length - (cellsOf(k.shape, w, d).length - 1)))
         out.push({ id: p.id, key, make: () => townSprite(k.shape, w, d, core, mods) })
       }
     }
@@ -473,6 +475,8 @@ export class PlaceScene extends Phaser.Scene {
   private cells = new Map<string, number>()
   /** Each district's town sprite, by its id (its key carries its size and what it sums). */
   private townKeys = new Map<string, string>()
+  /** How many kinds of what a district holds its town has no cell for. */
+  private townLeft = new Map<string, number>()
   /** How much a sprite drawn for `cells` is scaled to stand in a footprint `size` across. */
   private spriteFit(key: string, size: number) { const n = this.cells.get(key); return n ? size / n : 1 }
 
@@ -1060,8 +1064,13 @@ export class PlaceScene extends Phaser.Scene {
       const dot = k.state === 'down' ? '#d9534f' : k.state === 'standby' ? '#9aa0b0' : k.state === 'unread' ? '#d8d4cc' : this.shown ? hueOf(this.shown.tree, [...at, p.id]) : '#cccccc'
       // Its words (what it is for, how many run on it) on the plate, outside its picture (the Owner, 2026-11-20).
       const said = [k.face?.sign ? k.face.sign.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase()) : '', k.state === 'online' && k.face?.tally?.n != null ? `${k.face.tally.n} ${k.face.tally.what}` : ''].filter(Boolean).join(' · ')
-      c.add(this.plate(foot.x, foot.y + 4, `${k.label}${pct}${word}${scale}${said ? `\n${said}` : ''}`, dot))
+      const left = this.townLeft.get(k.id) ?? 0
+      const more = [said, left ? `+${left} ${left === 1 ? 'kind' : 'kinds'} not shown` : ''].filter(Boolean).join(' · ')
+      c.add(this.plate(foot.x, foot.y + 4, `${k.label}${pct}${word}${scale}${more ? `\n${more}` : ''}`, dot))
     }
+    // The ports' signs over the names of the blocks along the edge: they stand outside the ground, so a name
+    // hanging out into the street must not cover them (2026-11-20, a 4×8 Utilities: "Crew" under "Mac Mini").
+    for (const nb of nbs.values()) if (nb.c.parentContainer === c) c.bringToTop(nb.c)
     if (order.length === 0 && o.interactive) c.add(this.label(P(W / 2, H / 2).x, P(W / 2, H / 2).y, 'Nothing inside yet', { color: '#8a8478', fontSize: '14px' }).setOrigin(0.5))
     // What the fit frames: the blocks' corners up to their roofs, and their names below.
     const pts = order.length === 0 ? [P(W / 4, H / 4), P(W * 3 / 4, H * 3 / 4)] : order.flatMap(({ p, r }) => {
@@ -1529,7 +1538,8 @@ export class PlaceScene extends Phaser.Scene {
         // Its parts in one container, so on the way in it can travel from where it stands in the town.
         const nbc = this.add.container(0, 0)
         out.push(nbc)
-        nbs.set(pass.id, { c: nbc, at: P(r.x + r.w / 2, r.y + r.h / 2) })
+        // Keyed by side as well: a partner both ways stands at two ports, each its own (2026-11-20: the in-side one was lost).
+        nbs.set(`${sl.side}:${pass.id}`, { c: nbc, at: P(r.x + r.w / 2, r.y + r.h / 2) })
         if (nb) for (const part of this.block(nb, { id: nb.id, plot: '', x: 0, y: 0, w: NB, h: NB } as unknown as Placed, r, P, '', { selected: null, inside: null, interactive: false, arranging: false, bare: true }, [nb.id])) nbc.add(part)
         const hg = this.add.graphics()
         const hit = new Phaser.Geom.Polygon([P(r.x, r.y, 34), P(r.x + r.w, r.y, 34), P(r.x + r.w, r.y, 0), P(r.x + r.w, r.y + r.h, 0), P(r.x, r.y + r.h, 0), P(r.x, r.y + r.h, 34)])
@@ -1540,7 +1550,7 @@ export class PlaceScene extends Phaser.Scene {
         // Ports stand a street apart, so neighbouring signs take turns below and above their block.
         const low = P(r.x + r.w, r.y + r.h), high = P(r.x, r.y, 46)
         const below = sl.i % 2 === 0 ? low : new Phaser.Math.Vector2(high.x, high.y - 26)
-        nbc.add(this.plate(below.x, below.y + 6, `${pass.label} · ${ways}`, (nb ? hueOf(this.shown!.tree, [pass.id]) : '#9aa0b0')))
+        nbc.add(this.plate(below.x, below.y + 6, ways ? `${pass.label} · ${ways}` : pass.label, (nb ? hueOf(this.shown!.tree, [pass.id]) : '#9aa0b0')))
         framed.push(new Phaser.Math.Vector2(below.x, below.y + 30))
         continue
       }
