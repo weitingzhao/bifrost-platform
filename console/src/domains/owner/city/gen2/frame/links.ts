@@ -160,12 +160,14 @@ export function edgeSlots(gates: readonly Gate[]): { in: Edge; out: Edge; orphan
 /**
  * The fixed places outside a district's ground (the Owner, 2026-11-20: as the plots inside, the frame sets
  * them first and they wait to be filled): along the front-left edge the way in, PORTS named ports then Other;
- * along the front-right edge the way out, the same; Orphan at the front corner where the two meet. `t` is
+ * along the front-right edge the way out, the same; Orphan in the place's own yard behind its back corner,
+ * the same on every level (the Owner, 2026-11-20: a place's own junk, wish list and unowned things are its
+ * own area, one design everywhere, apart from what goes in and out). `t` is
  * how far along its edge from the back, 0..1.
  */
-export type Slot = { side: 'in' | 'out' | 'orphan'; i: number; edge: 'y1' | 'x1' | 'corner'; t: number }
+export type Slot = { side: 'in' | 'out' | 'orphan'; i: number; edge: 'y1' | 'x1' | 'back'; t: number }
 export const SLOTS: readonly Slot[] = [
   ...[0, 1, 2, 3].map(i => ({ side: 'in' as const, i, edge: 'y1' as const, t: 0.14 + i * 0.21 })),
   ...[0, 1, 2, 3].map(i => ({ side: 'out' as const, i, edge: 'x1' as const, t: 0.14 + i * 0.21 })),
-  { side: 'orphan', i: 0, edge: 'corner', t: 1 },
+  { side: 'orphan', i: 0, edge: 'back', t: 0 },
 ]

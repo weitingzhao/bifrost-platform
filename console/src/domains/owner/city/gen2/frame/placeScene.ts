@@ -449,8 +449,10 @@ export class PlaceScene extends Phaser.Scene {
     const gb = this.groundBox()
     if (m.ports.length) {
       const xs = m.ports.map(p => p.x), ys = m.ports.map(p => p.y)
-      const x0 = Math.min(gb.x, Math.min(...xs) - 90), x1 = Math.max(gb.x + gb.w, Math.max(...xs) + 90), y1 = Math.max(gb.y + gb.h, Math.max(...ys) + 10)
-      this.content = { x: x0, y: gb.y, w: x1 - x0, h: y1 - gb.y }
+      const x0 = Math.min(gb.x, Math.min(...xs) - 90), x1 = Math.max(gb.x + gb.w, Math.max(...xs) + 90)
+      const y0 = Math.min(gb.y, Math.min(...ys) - 70), y1 = Math.max(gb.y + gb.h, Math.max(...ys) + 10)
+      // The whole (ground, the two sides and the yard) is what is centred, not the ground alone.
+      this.content = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
     } else this.content = gb
     this.ghost = this.add.graphics()
     this.main.add(this.ghost)
@@ -805,7 +807,9 @@ export class PlaceScene extends Phaser.Scene {
     const grade: 'highway' | 'street' | 'corridor' = place.kind === 'town' ? 'highway' : place.kind === 'building' ? 'corridor' : 'street'
     // A district's back two edges carry nothing (the Owner, 2026-11-20: its ways in and out are the front
     // two sides), so the ring road is not laid along them.
-    if (place.kind === 'district') streets = streets.filter(st => !(st.x0 === 0 && st.x1 === 0) && !(st.y0 === 0 && st.y1 === 0))
+    // They get a narrow lane instead, so the ground still reads as a whole (the Owner: bare, it looked unfinished).
+    const back = place.kind === 'district' ? streets.filter(st => (st.x0 === 0 && st.x1 === 0) || (st.y0 === 0 && st.y1 === 0)) : []
+    if (back.length) streets = streets.filter(st => !back.includes(st))
     const indoors = grade === 'corridor'
     // From the way in (the Owner, 2026-11-19): the way, then a buffer — the ground itself, a green
     // belt outdoors, a threshold indoors — then the plot, and the thing at its true size on it.
@@ -890,6 +894,12 @@ export class PlaceScene extends Phaser.Scene {
         g.lineStyle(1.3, this.tone.paint, 0.9)
         for (const st of streets) dashes(st)
       }
+    }
+    if (back.length) {
+      g.fillStyle(this.tone.kerb)
+      for (const st of back) g.fillPoints(strip(st, 0.22, 0, WAY / 2), true)
+      g.fillStyle(this.tone.asphalt)
+      for (const st of back) g.fillPoints(strip(st, 0.14, 0, WAY / 2), true)
     }
     // While arranging, every plot's edge in ink, so the cuts read clearly.
     if (o.arranging) for (const p of plots) {
@@ -1207,11 +1217,11 @@ export class PlaceScene extends Phaser.Scene {
       const pass = sl.side === 'orphan' ? slots.orphan : sl.i < PORTS ? edge!.named[sl.i] ?? null : edge!.other
       const kind: 'named' | 'other' | 'orphan' = sl.side === 'orphan' ? 'orphan' : sl.i < PORTS ? 'named' : 'other'
       // The point on the edge, the way out (n) and along the edge (u); the corner looks out diagonally.
-      const at0 = sl.edge === 'x1' ? { x: W, y: posOut[sl.i] } : sl.edge === 'y1' ? { x: posIn[sl.i], y: H } : { x: W, y: H }
-      const n = sl.edge === 'x1' ? { x: 1, y: 0 } : sl.edge === 'y1' ? { x: 0, y: 1 } : { x: Math.SQRT1_2, y: Math.SQRT1_2 }
+      const at0 = sl.edge === 'x1' ? { x: W, y: posOut[sl.i] } : sl.edge === 'y1' ? { x: posIn[sl.i], y: H } : { x: 0, y: 0 }
+      const n = sl.edge === 'x1' ? { x: 1, y: 0 } : sl.edge === 'y1' ? { x: 0, y: 1 } : { x: -Math.SQRT1_2, y: -Math.SQRT1_2 }
       const u = { x: -n.y, y: n.x }
       const pt = (a: number, b: number, z = 0) => P(at0.x + n.x * a + u.x * b, at0.y + n.y * a + u.y * b, z)
-      const c1 = NB_AT
+      const c1 = kind === 'orphan' ? NB / 2 + 0.9 : NB_AT
       if (!pass) {
         const eg = this.add.graphics(), r = NB / 2
         const corners = [pt(c1 - r, -r), pt(c1 + r, -r), pt(c1 + r, r), pt(c1 - r, r)]
@@ -1226,9 +1236,10 @@ export class PlaceScene extends Phaser.Scene {
       const named = kind === 'named'
       const share = slots.total ? pass.n / slots.total : 0
       // The road out to it: paved to a neighbour, a dirt track to Other and Orphan, fading as it goes.
-      // From the ring road's middle, over the green belt and the edge, out to the port.
+      // From the ring road's middle, over the green belt and the edge, out to the port. The yard behind
+      // the back corner has no road: nothing passes through it, it is the place's own.
       const START = -GUTTER / 2
-      for (let k = 0; k < 5; k++) {
+      if (kind !== 'orphan') for (let k = 0; k < 5; k++) {
         const a0 = START + (REACH - START) * k / 5, a1 = START + (REACH - START) * (k + 1) / 5, fade = k < 2 ? 1 : 1 - (k - 1) / 6
         if (named) {
           // The same street as inside, carried on: its pavement, kerb line and asphalt.
@@ -1244,16 +1255,16 @@ export class PlaceScene extends Phaser.Scene {
       }
       // The port itself on the edge: two posts and a beam, in the neighbour's colour; a striped barrier to Other and Orphan.
       const hue = named && this.shown ? Phaser.Display.Color.HexStringToColor(hueOf(this.shown.tree, [pass.id])).color : BARRIER
-      const H1 = 26
-      for (const b of [-ROAD / 2 - 0.08, ROAD / 2 + 0.08]) {
+      const H1 = kind === 'orphan' ? 0 : 26
+      if (H1) for (const b of [-ROAD / 2 - 0.08, ROAD / 2 + 0.08]) {
         const f = pt(0.04, b), t = pt(0.04, b, H1)
         g.lineStyle(4, this.tone.ink, 1).lineBetween(f.x, f.y, t.x, t.y)
         g.lineStyle(2.2, 0xfbfaf6, 1).lineBetween(f.x, f.y - 1, t.x, t.y + 1)
       }
       const b0 = pt(0.04, -ROAD / 2 - 0.14, H1), b1 = pt(0.04, ROAD / 2 + 0.14, H1)
-      g.lineStyle(7, this.tone.ink, 1).lineBetween(b0.x, b0.y, b1.x, b1.y)
-      g.lineStyle(5, hue, 1).lineBetween(b0.x, b0.y, b1.x, b1.y)
-      if (!named) for (let k = 1; k < 6; k += 2) g.lineStyle(5, 0xffffff, 1).lineBetween(b0.x + (b1.x - b0.x) * k / 6, b0.y + (b1.y - b0.y) * k / 6, b0.x + (b1.x - b0.x) * (k + 1) / 6, b0.y + (b1.y - b0.y) * (k + 1) / 6)
+      if (H1) g.lineStyle(7, this.tone.ink, 1).lineBetween(b0.x, b0.y, b1.x, b1.y)
+      if (H1) g.lineStyle(5, hue, 1).lineBetween(b0.x, b0.y, b1.x, b1.y)
+      if (!named && H1) for (let k = 1; k < 6; k += 2) g.lineStyle(5, 0xffffff, 1).lineBetween(b0.x + (b1.x - b0.x) * k / 6, b0.y + (b1.y - b0.y) * k / 6, b0.x + (b1.x - b0.x) * (k + 1) / 6, b0.y + (b1.y - b0.y) * (k + 1) / 6)
       const ways = [pass.bus ? `bus ${pass.bus}` : '', pass.metric ? `metrics ${pass.metric}` : ''].filter(Boolean).join(' · ')
       const sign = pt(c1, 0)
       if (named) {
