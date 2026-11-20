@@ -143,6 +143,11 @@ function plan(r: DiskRoomReadings, [w, d]: [number, number]): Plan {
   return { racks, staged, stagingTop, xs, cut, fits }
 }
 
+/** Whether the largest room holds this storage's racks, under the ruler as it stands. */
+export function diskRoomFits(r: DiskRoomReadings): boolean {
+  const p = plan(r, ROOMS[ROOMS.length - 1])
+  return p.cut === 0 && p.fits
+}
 export function diskRoomShape(r: DiskRoomReadings): [number, number] {
   return ROOMS.find(s => { const p = plan(r, s); return p.cut === 0 && p.fits }) ?? ROOMS[ROOMS.length - 1]
 }

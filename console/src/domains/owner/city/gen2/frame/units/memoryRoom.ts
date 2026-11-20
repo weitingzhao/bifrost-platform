@@ -69,6 +69,11 @@ const rowsFit = (d: number, corner: boolean) => Math.floor((d - CONSOLE_DEPTH - 
  */
 export const sectionsOf = (r: MemoryRoomReadings) => r.total ? Math.max(1, Math.ceil(encode('mem.sections', r.total)! - 0.02)) : 0
 
+/** Whether the largest room holds this memory's freezers, under the ruler as it stands. */
+export function memoryRoomFits(r: MemoryRoomReadings): boolean {
+  const n = sectionsOf(r), [w, d] = ROOMS[ROOMS.length - 1]
+  return Math.ceil(n / perRow(w)) <= rowsFit(d, !!r.swapTotal)
+}
 export function memoryRoomShape(r: MemoryRoomReadings): [number, number] {
   const n = sectionsOf(r), corner = !!r.swapTotal
   return ROOMS.find(([w, d]) => Math.ceil(n / perRow(w)) <= rowsFit(d, corner)) ?? ROOMS[ROOMS.length - 1]

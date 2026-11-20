@@ -72,9 +72,10 @@ export type Place = {
    * What it looks like inside, when its content draws it (a room's own module: the CPU's workshop, the
    * memory's cold store, the disk's warehouse; the Owner, 2026-11-19: put the rooms into use, refine them
    * later, one module at a time). `key` changes whenever the picture would; `make` draws it for the
-   * footprint it stands in. Without one, the frame draws its plain room.
+   * footprint it stands in. Without one, the frame draws its plain room. `scale` says the ruler it is drawn
+   * at when that is coarser than the standard (one machine for 2 cores): shown on its name, never hidden.
    */
-  picture?: { key: string; w: number; d: number; make: () => Sprite }
+  picture?: { key: string; w: number; d: number; make: () => Sprite; scale?: string }
   children: Place[]
 }
 

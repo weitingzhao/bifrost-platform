@@ -150,6 +150,27 @@ export function setRuler(id: string, each: number | null) {
   else rulers.set(id, each)
 }
 
+/**
+ * Draw with a ruler for a while (synchronously), then put the previous one back: how one room uses a
+ * coarser ruler of its own without changing the viewer's.
+ */
+export function withRuler<T>(id: string, each: number, draw: () => T): T {
+  const before = rulers.get(id)
+  rulers.set(id, each)
+  try { return draw() } finally { if (before == null) rulers.delete(id); else rulers.set(id, before) }
+}
+
+/**
+ * The ruler a room needs (the Owner, 2026-11-20: to show detail you need the room for it, or the detail
+ * blurs): the ruler as it stands if the room's largest size holds its parts; else the smallest whole multiple
+ * of it that does (one machine for 2, 3, 4… cores), up to 64. The room grows first, the ruler only after.
+ */
+export function rulerToFit(id: string, fits: () => boolean): number {
+  const base = rulerOf(id)
+  for (let k = 1; k <= 64; k++) if (withRuler(id, base * k, fits)) return base * k
+  return base * 64
+}
+
 /** The rulers as they stand, for the keys pictures are cached under: another ruler is another picture. */
 export const rulersKey = () => [...rulers.entries()].sort().map(([k, v]) => `${k}=${v}`).join(',')
 

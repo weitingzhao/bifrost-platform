@@ -52,6 +52,8 @@ const colsOf = (w: number, machines: number) => {
   return best
 }
 const fitsIn = ([w, d]: [number, number], n: number) => Math.ceil(n / colsOf(w, n)) <= rowsOf(d)
+/** Whether the largest room holds this many machines. */
+export const cpuRoomFits = (machines: number) => fitsIn(ROOMS[ROOMS.length - 1], machines)
 export function cpuRoomShape(machines: number): [number, number] {
   return ROOMS.find(s => fitsIn(s, machines)) ?? ROOMS[ROOMS.length - 1]
 }

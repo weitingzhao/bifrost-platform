@@ -991,9 +991,11 @@ export class PlaceScene extends Phaser.Scene {
       const k = byId.get(p.id)!
       // A name says how it stands when it is not simply online, and a room its reading (rule 0: read, never set).
       const pct = k.meter && k.meter.used != null && k.meter.of ? ` ${Math.round(100 * k.meter.used / k.meter.of)}%` : ''
+      // A room drawn at a coarser ruler says so on its name (one part stands for more: the detail is blurred, not hidden).
+      const scale = k.picture?.scale ? ` · ${k.picture.scale}` : ''
       const word = k.state && k.state !== 'online' ? ` · ${k.state}` : ''
       const dot = k.state === 'down' ? '#d9534f' : k.state === 'standby' ? '#9aa0b0' : k.state === 'unread' ? '#d8d4cc' : this.shown ? hueOf(this.shown.tree, [...at, p.id]) : '#cccccc'
-      c.add(this.plate(foot.x, foot.y + 4, `${k.label}${pct}${word}`, dot))
+      c.add(this.plate(foot.x, foot.y + 4, `${k.label}${pct}${word}${scale}`, dot))
     }
     if (order.length === 0 && o.interactive) c.add(this.label(P(W / 2, H / 2).x, P(W / 2, H / 2).y, 'Nothing inside yet', { color: '#8a8478', fontSize: '14px' }).setOrigin(0.5))
     // What the fit frames: the blocks' corners up to their roofs, and their names below.
