@@ -62,7 +62,19 @@ describe('the hardware district, from one real read', () => {
     expect(dev('mini-pc-c').face?.sign).toBe('CONTROL PLANE')
     expect(dev('ubt-k3s-06').face?.sign).toBe('AGENT HOST')
     expect(dev('gpu-server').face?.tally?.n).toBeNull()
-    expect(dev('win11-host').face).toEqual({})
+    // Nothing read on it: no sign, no count; only its house number (2026-11-20, below).
+    expect(dev('win11-host').face?.sign).toBeUndefined()
+    expect(dev('win11-host').face?.tally).toBeUndefined()
+  })
+  // 2026-11-20, the Owner: every device carries a two-digit number on itself; its look says the kind, the
+  // number which one. Servers keep their node's number (01–09), the rest take free numbers from 10 by id.
+  it('numbers every device with two digits, servers by their node, the rest from 10, none twice', () => {
+    expect(dev('ubt-k3s-04').face?.roof).toBe('04')
+    expect(dev('mini-pc-c').face?.roof).toBe('01')
+    const nums = d.children.map(b => b.face?.roof)
+    for (const n of nums) expect(n).toMatch(/^\d\d$/)
+    expect(new Set(nums).size).toBe(nums.length)
+    for (const b of d.children.filter(b => !/^ubt-k3s|^mini-pc/.test(b.id) && !(b.label.includes('ubt-k3s')))) expect(Number(b.face?.roof)).toBeGreaterThanOrEqual(10)
   })
   it('unread is not zero: nothing reading it means no number; asleep shows its size but no use', () => {
     for (const r of dev('win11-host').children) expect([r.meter?.used, r.meter?.of]).toEqual([null, null])

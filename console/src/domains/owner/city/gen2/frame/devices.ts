@@ -143,6 +143,8 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: T
     beacon(g, sx, sy, top, lv.state)
   }
   let hx = x0 + 0.14, hy = y0 + 0.16, hw = w * 0.6, hd = d * 0.5
+  // Where its number stands: on the eave at the front-left corner of its main building, whatever its style.
+  let numberAt: [number, number, number] | null = null
 
   if (style === 'factory') {
     stack(hx + hw + 0.22, hy + 0.2, Z + H + 62, 6.5, true)
@@ -169,6 +171,7 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: T
       g.poly(S(i % 2 ? '#eadcc0' : '#f0e4cc', -0.45), [[a, hy, Z + H + 11], [a, hy + hd, Z + H + 11], [b, hy + hd, Z + H], [b, hy, Z + H]], 1)
       g.poly(wall.left, [[a, hy + hd, Z + H], [a, hy + hd, Z + H + 11], [b, hy + hd, Z + H]], 1) }
     g.poly(wall.right, [[hx + hw, hy, Z + H], [hx + hw, hy + hd, Z + H], [hx + hw, hy + hd, Z + H], [hx + hw, hy, Z + H]], 0.6)
+    numberAt = [hx, hy + hd, Z + H]
   }
 
   if (style === 'studio') {
@@ -188,6 +191,7 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: T
     plaque(g, 'right', hx + hw, hy + hd, hd * 0.68, Z + Hm / 2, os, 9)
     // The thin roof slab overhanging all round.
     g.box(hx - 0.07, hy - 0.07, hw + 0.14, hd + 0.14, 3, greyed(faces('#ffffff', '#e9edf2', '#d3d9e1')), Z + Hm, 1)
+    numberAt = [hx - 0.07, hy + hd + 0.07, Z + Hm + 3]
   }
 
   if (style === 'tower') {
@@ -215,6 +219,7 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: T
     for (const k of [0.3, 0.7]) g.cylinder(hx + hw * k, hy + hd * 0.4, 3.2, Z + Ht, Z + Ht + 10, S('#c9cfd8', -0.4), S('#8d97a6', -0.4), '#59606b')
     smoke(g, hx + hw * 0.3, hy + hd * 0.4, Z + Ht + 10, run ? lv.cpu : null, run)
     beacon(g, hx + hw * 0.7, hy + hd * 0.4, Z + Ht + 10, lv.state)
+    numberAt = [hx, hy + hd, Z + Ht]
     hx = x0 + 0.14; hy = y0 + 0.16; hd = d * 0.5
   }
 
@@ -252,6 +257,7 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: T
     g.cylinder(hx + hw * 0.7, mid, 3.4, Z + Hs + ridge - 2, Z + Hs + ridge + 8, S('#c9cfd8', -0.4), S('#8d97a6', -0.4), '#59606b')
     smoke(g, hx + hw * 0.7, mid, Z + Hs + ridge + 8, run ? lv.cpu : null, run)
     beacon(g, hx + hw * 0.4, mid, Z + Hs + ridge, lv.state)
+    numberAt = [hx, hy + hd, Z + Hs]
   }
 
   if (style === 'servers') {
@@ -281,11 +287,18 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: T
       const [cx, cy] = g.p(fx, fy, Z + H + 4)
       g.add(`<ellipse cx="${n1(cx)}" cy="${n1(cy)}" rx="9" ry="4.5" fill="#2b2f38" stroke="${INK}" stroke-width="0.7"/><path d="M${n1(cx - 7)},${n1(cy)} L${n1(cx + 7)},${n1(cy)} M${n1(cx)},${n1(cy - 3.5)} L${n1(cx)},${n1(cy + 3.5)}" stroke="#8d95a3" stroke-width="1.2"/>`)
     }
+    numberAt = [hx, hy + hd, Z + H]
     // The cooling tower beside the hall, steaming as busy as it is.
     const tx = hx + hw + (x0 + w - hx - hw) / 2, ty = hy + hd * 0.55, th = H + 56
     coolingTower(g, tx, ty, th, `ct-${hash(_name) % 9973}`, Math.min(1.15, (x0 + w - hx - hw) * 0.75), false)
     smoke(g, tx, ty, Z + th, run ? lv.cpu : null, run)
     beacon(g, tx, ty, Z + th, lv.state)
+  }
+
+  // Its number on its own building, two digits, read from across the district (who it is; its kind is its look).
+  if (face?.roof && numberAt) {
+    const [nx, ny, nz] = numberAt
+    g.face('left', nx + 0.06, ny, nz, `<rect x="0" y="-13" width="19" height="12.5" rx="2" fill="${night ? '#e6e3f2' : '#fbfaf6'}" stroke="${INK}" stroke-width="1"/><text x="9.5" y="-3.6" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="9.5" font-weight="800" fill="${INK}">${face.roof}</text>`)
   }
 
   // The yard: two steel tanks in one row before the hall, always memory then disk, each as big as what it

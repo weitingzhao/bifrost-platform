@@ -200,7 +200,8 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', uni
     const topoRole = (n.k3s_roles ?? []).find(r => !/^k3s_/.test(r))
     const sign = (pool ?? role ?? topoRole ?? '').replace(/[-_]/g, ' ').toUpperCase()
     const pods = node && state === 'online' ? at(P.pods, 'node', node) : null
-    const face: Place['face'] = { roof: digits ? digits.padStart(2, '0') : gpu ? 'GPU' : undefined, sign: sign || undefined, ...(node ? { tally: { n: pods, what: 'pods', source: HARDWARE_QUERIES.pods } } : {}) }
+    // Its number: a server keeps its node's (01–09); every other device gets one below (numberDevices).
+    const face: Place['face'] = { roof: node && digits ? digits.padStart(2, '0') : undefined, sign: sign || undefined, ...(node ? { tally: { n: pods, what: 'pods', source: HARDWARE_QUERIES.pods } } : {}) }
     const building: Place = {
       face,
       // The topology names the box, the cluster its node: show both where they differ (mini-pc-a · ubt-k3s-02).
@@ -209,8 +210,9 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', uni
     }
     return building
   })
+  numberDevices(devices)
   const arrangement = zonedArrangement(devices.map(b => ({ id: b.id, shape: b.shape, zone: zones.get(b.id)! })))
-  // The hardware is the town's power on the map: a fusion works (the Owner, 2026-11-20: sci-fi, not smoking chimneys).
+  // The hardware is the town's power on the map: a nuclear plant (the Owner, 2026-11-20).
   return { id: 'utilities', kind: 'district', shape: DISTRICT, style: 'power', function: fn, arrangement, label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: devices }
 }
 
@@ -232,4 +234,21 @@ export function hardwareRulesBroken(d: Place): string[] {
     for (const r of b.children) if (!r.meter?.source) out.push(`${w}/${r.id}: a room says where its reading comes from`)
   }
   return out
+}
+
+/**
+ * Every device carries a two-digit number on itself (the Owner, 2026-11-20: the building's look says what kind
+ * it is, its number which one; two digits are enough). A server keeps its node's number (ubt-k3s-04 is 04,
+ * 01–09); every other device takes the next free number from 10, in the order of its id, so it keeps the same
+ * number from one read to the next. The numbering is the city's own (a house number), not a reading.
+ */
+export function numberDevices(devices: Place[]) {
+  const taken = new Set(devices.map(d => d.face?.roof).filter((v): v is string => !!v && /^\d\d$/.test(v)))
+  let next = 10
+  for (const d of [...devices].filter(d => !d.face?.roof || !/^\d\d$/.test(d.face.roof)).sort((a, b) => a.id.localeCompare(b.id))) {
+    while (taken.has(String(next).padStart(2, '0')) && next < 99) next++
+    const n = String(next).padStart(2, '0')
+    taken.add(n)
+    d.face = { ...d.face, roof: n }
+  }
 }

@@ -507,7 +507,7 @@ export class PlaceScene extends Phaser.Scene {
   /** Each block's name plate on the level on screen, by the block's id; and the whole text shown on hover. */
   private namePlates = new Map<string, Phaser.GameObjects.Container>()
   private wholePlate: Phaser.GameObjects.Container | null = null
-  private labelMode: LabelMode = 'all'
+  private labelMode: LabelMode = 'none'
 
   /** Every plate on the level opaque, see-through, or hidden (the Owner, 2026-11-20). */
   setLabels(mode: LabelMode) {

@@ -70,7 +70,7 @@ const LIGHT_KEY = 'bifrost.city.gen2.light'
 const LABELS_KEY = 'bifrost.city.gen2.labels'
 const LABELS_WORD: Record<LabelMode, string> = { all: 'Labels', dim: 'Labels · dim', none: 'Labels · off' }
 function readLabels(): LabelMode {
-  try { const v = window.localStorage.getItem(LABELS_KEY); return (LABEL_MODES as readonly string[]).includes(v ?? '') ? v as LabelMode : 'all' } catch { return 'all' }
+  try { const v = window.localStorage.getItem(LABELS_KEY); return (LABEL_MODES as readonly string[]).includes(v ?? '') ? v as LabelMode : 'none' } catch { return 'none' }
 }
 
 /**
