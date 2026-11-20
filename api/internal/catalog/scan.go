@@ -254,6 +254,9 @@ func (s *Scanner) keepOthers(from string, others map[string]map[string]Review) {
 // keepTables keeps what "who owns X" and the index are answered from. A
 // failure to keep them is logged; the pool is kept either way.
 func (s *Scanner) keepTables(repo string, t Tree, table *Table, now time.Time) {
+	if own, ok, err := t.Read(OwnershipPath); err == nil && ok && repo != ClusterRepo {
+		s.keepWorkloads(t.Commit, own)
+	}
 	o := Owners{Repo: repo, Commit: t.Commit, ScannedAt: now, Packages: map[string][]string{}, Groups: map[string][]string{}}
 	if table != nil {
 		o = ownersOf(repo, t.Commit, *table, now)

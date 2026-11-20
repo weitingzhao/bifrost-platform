@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/catalog"
@@ -34,6 +35,9 @@ func (s *Server) catalogScanner() *catalog.Scanner {
 }
 
 func (s *Server) catalogSource(ctx context.Context, repo string) (catalog.Tree, error) {
+	if repo == catalog.ClusterRepo {
+		return s.catalogClusterTree(ctx)
+	}
 	if s.delivery == nil {
 		return catalog.Tree{}, errors.New("this platform does not read Gitea")
 	}
@@ -72,7 +76,71 @@ func (s *Server) catalogScanAhead(ctx context.Context) {
 	for _, r := range ciscore.Repos {
 		fallback = append(fallback, r.Repo)
 	}
-	s.catalogScanner().Run(ctx, s.catalogRepos, fallback)
+	fallback = append(fallback, catalog.ClusterRepo)
+	s.catalogScanner().Run(ctx, func(ctx context.Context) ([]string, error) {
+		repos, err := s.catalogRepos(ctx)
+		if err != nil {
+			return nil, err
+		}
+		// The cluster is scanned last: its rows are the platform table's,
+		// kept by that repository's scan earlier in the same round.
+		return append(repos, catalog.ClusterRepo), nil
+	}, fallback)
+}
+
+// catalogClusterTree lists what runs in the cluster (Deployments,
+// StatefulSets, DaemonSets, CronJobs of every namespace, with the platform's
+// cluster-wide read) as "<namespace>/<name>/<kind>" files, against the kept
+// "workloads" rows.
+func (s *Server) catalogClusterTree(ctx context.Context) (catalog.Tree, error) {
+	if s.cluster == nil {
+		return catalog.Tree{}, errors.New("this platform does not read a cluster")
+	}
+	rows, commit := s.catalogScanner().WorkloadRows()
+	if rows == nil {
+		return catalog.Tree{}, errors.New("no repository scanned yet has a workloads section")
+	}
+	kube, _, err := s.cluster.Service().KubernetesClient()
+	if err != nil {
+		return catalog.Tree{}, err
+	}
+	seen := map[string]bool{}
+	add := func(ns, name, kind string) { seen[ns+"/"+name+"/"+kind] = true }
+	opts := metav1.ListOptions{}
+	deps, err := kube.AppsV1().Deployments("").List(ctx, opts)
+	if err != nil {
+		return catalog.Tree{}, err
+	}
+	for _, o := range deps.Items {
+		add(o.Namespace, o.Name, "deployment")
+	}
+	sts, err := kube.AppsV1().StatefulSets("").List(ctx, opts)
+	if err != nil {
+		return catalog.Tree{}, err
+	}
+	for _, o := range sts.Items {
+		add(o.Namespace, o.Name, "statefulset")
+	}
+	dss, err := kube.AppsV1().DaemonSets("").List(ctx, opts)
+	if err != nil {
+		return catalog.Tree{}, err
+	}
+	for _, o := range dss.Items {
+		add(o.Namespace, o.Name, "daemonset")
+	}
+	cjs, err := kube.BatchV1().CronJobs("").List(ctx, opts)
+	if err != nil {
+		return catalog.Tree{}, err
+	}
+	for _, o := range cjs.Items {
+		add(o.Namespace, o.Name, "cronjob")
+	}
+	keys := make([]string, 0, len(seen))
+	for k := range seen {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return catalog.WorkloadTree(commit, keys, rows)
 }
 
 // catalogRepos lists the organization's repositories that are neither

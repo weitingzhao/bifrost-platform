@@ -144,8 +144,12 @@ type Class struct {
 	What    string   `json:"what"`
 	Sources []string `json:"sources"`
 	Reader  string   `json:"reader,omitempty"`
-	Also    []string `json:"also,omitempty"`
-	Note    string   `json:"note,omitempty"`
+	// Live is a list the reader reads from the running system each round
+	// (the Gitea organization's repositories, the cluster's workloads) when
+	// the class has no file of its own; it counts as a source.
+	Live string   `json:"live,omitempty"`
+	Also []string `json:"also,omitempty"`
+	Note string   `json:"note,omitempty"`
 }
 
 // Index is IndexPath, and what the scan found about it.
@@ -156,7 +160,9 @@ type Index struct {
 	// Domain is each class's domain: its reader's row in the ownership table
 	// ("" with no reader or no row).
 	Domain map[string][]string `json:"domain"`
-	// Missing are sources the index names that the commit does not have.
+	// Missing are sources the index names that the commit does not have
+	// ("<repository>:<path>" sources are in another repository and are not
+	// checked here).
 	Missing []string `json:"missing"`
 	// Measured counts classes with a source; Unmeasured those with none;
 	// Duplicated those with a second place that says the same class.
@@ -180,14 +186,14 @@ func ParseIndex(raw []byte, commit string, has func(string) bool, t Table) (Inde
 		}
 		seen[c.Class] = true
 		for _, s := range c.Sources {
-			if has != nil && !has(strings.TrimSuffix(s, "/")) {
+			if has != nil && !strings.Contains(s, ":") && !has(strings.TrimSuffix(s, "/")) {
 				ix.Missing = append(ix.Missing, s)
 			}
 		}
 		if c.Reader != "" {
 			ix.Domain[c.Class] = t.Domains[c.Reader]
 		}
-		if len(c.Sources) == 0 {
+		if len(c.Sources) == 0 && c.Live == "" {
 			ix.Unmeasured++
 		} else {
 			ix.Measured++
