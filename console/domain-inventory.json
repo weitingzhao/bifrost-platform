@@ -2143,6 +2143,7 @@
         "console/src/domains/owner/city/gen2/content/hardware.ts",
         "console/src/domains/owner/city/gen2/content/looks.ts",
         "console/src/domains/owner/city/gen2/content/panels.tsx",
+        "console/src/domains/owner/city/gen2/content/partners.draft.json",
         "console/src/domains/owner/city/gen2/content/unitRooms.ts",
         "console/src/domains/owner/city/gen2/content/units/cpu.ts",
         "console/src/domains/owner/city/gen2/content/units/disk.ts",

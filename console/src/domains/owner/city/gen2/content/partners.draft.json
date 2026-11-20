@@ -1,0 +1,41 @@
+{
+  "what": "Draft: whom each domain declares as its partners, up to 3 in and 3 out (frame/links.ts Partners). A draft for the evaluation to come; not wired into the city yet (the city's districts are still the Console's menu).",
+  "why": "The Owner, 2026-11-20: the rules first; detect before judging. The named ports are the partners a domain declares; traffic with anyone undeclared goes to Other. This draft is read from what exists, so the gap between it and what each domain says it wants is the first thing to judge.",
+  "drafted_by": "the city line (cockpit), 2026-11-20, for the Owner; each domain's line confirms or changes its own row",
+  "read_from": [
+    "bifrost-platform/config/domain-ownership.json (contracts and their consumers, measured_at 2e93ae09 / d8dc802c)",
+    "bifrost-platform/api/internal/bus/registry/rocket.yaml (event publisher domain and consumers)",
+    "bifrost-platform/api/internal/bus/registry/subscriptions/rocket.yaml (each bus client's domain)"
+  ],
+  "direction": "in: others come to it (they call its API or tool, or it receives their event); out: it goes to others (it publishes an event they receive, or calls theirs). Inside the town all outside users are one partner, \"~\"; on the town's own edge each outside party is its own port, \"~/<party>\".",
+  "outside": [
+    { "id": "console", "label": "Console", "is": "the Owner's console" },
+    { "id": "mcp", "label": "MCP", "is": "the agents' tools" },
+    { "id": "trade", "label": "Trade", "is": "trade-infra, trade-api, trade-frontend, trade-core" },
+    { "id": "research", "label": "Research", "is": "bifrost-research" },
+    { "id": "plugins", "label": "Plugins", "is": "platform-plugin, platform-plugin-market-data" },
+    { "id": "scripts", "label": "Scripts", "is": "agent-scripts" }
+  ],
+  "town": {
+    "in": ["~/console", "~/mcp", "~/trade"],
+    "out": [],
+    "into_other": ["~/research (owner, 2 uses)", "~/plugins (tenant, 4 uses)", "~/scripts (foundation 7, tenant 1)"],
+    "note": "Console and MCP use every domain; Trade uses six. Research, the plugins and the scripts are undeclared, so they show in the town's Other in. Nothing measured goes out of the system to a party outside."
+  },
+  "domains": {
+    "foundation": { "in": ["~"], "out": [], "note": "65 contracts, all used from outside; most are the unclaimed default bucket (network, telemetry, alerts, bus, MCP), not the foundation itself. Calls no other domain." },
+    "plan": { "in": ["~"], "out": [], "note": "Used only from outside (Console, MCP, Trade)." },
+    "lineage": { "in": ["~"], "out": ["delivery", "verification"], "note": "Publishes git.main.advanced; headrelease (delivery) and unit-watch (verification) receive it." },
+    "verification": { "in": ["lineage", "~"], "out": ["delivery"], "note": "Receives lineage's main advance; publishes CI results that delivery's release recorder receives." },
+    "delivery": { "in": ["lineage", "verification", "~"], "out": [], "note": "Three partners in: the most connected domain inside the town. One more and the next goes to Other." },
+    "owner": { "in": ["~"], "out": [], "note": "Its own bus clients (card notices, conclusions) receive its own events: inside itself, not a partner." },
+    "compute": { "in": ["~"], "out": ["coordination"], "note": "Publishes alerts; coordination's alert letters receive them." },
+    "tenant": { "in": ["~"], "out": [], "note": "Nine outside users (Console, MCP, four Trade repos, two plugins, scripts): one port inside the town, but the widest use from outside; one module alone serves seven." },
+    "coordination": { "in": ["compute", "~"], "out": [], "note": "Receives compute's alerts and the seats' mail." }
+  },
+  "gaps": [
+    "Direct references from one domain's code into another's insides are not measured yet (CLAUDE.md §1, 2026-11-16); this draft sees only declared contracts and the bus.",
+    "Who reads whose metrics is not declared anywhere yet; the metric way has no rows here.",
+    "Commands (MCP tools, actions) carry no consumers in the ownership table, so they are not counted."
+  ]
+}
