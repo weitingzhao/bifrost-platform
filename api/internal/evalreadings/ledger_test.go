@@ -90,7 +90,12 @@ func TestLedgerReadingsFromRows(t *testing.T) {
 		}
 	}
 	check("ci_run_p50_seconds", 105.5, 12) // 100..111, median of 12 values
-	check("ci_queue_p50_seconds", 10, 12)
+	// 2026-11-20, the CI line: queue is created_at -> first_step_at; the runs
+	// here carry none, so the queue is unmeasured, never 0 (version 1 read 0
+	// seconds on PROD). TestQueueFromFirstStep is its positive control.
+	if r := got["ci_queue_p50_seconds"]; r.Status != StatusUnmeasured || r.Value != nil || r.Definition.Version != "2" {
+		t.Errorf("queue without first_step_at: %+v", r)
+	}
 	check("ci_success_ratio", 0.917, 12) // 11/12 rounded to 3 places
 	check("delivery_success_ratio", 1, 1)
 	check("owner_actions", 3, 3) // approvals 1, 2 and question q1; 3 is before the window, 4 pending
@@ -104,5 +109,31 @@ func TestLedgerReadingsFromRows(t *testing.T) {
 	}
 	if got["prod_deploys"].Labels["bifrost-platform"] != "3" {
 		t.Errorf("per-repo label: %+v", got["prod_deploys"].Labels)
+	}
+}
+
+// Positive control for the queue without first_step_at above: runs that carry
+// it give created_at -> first_step_at (2026-11-20, the CI line's definition).
+func TestQueueFromFirstStep(t *testing.T) {
+	w := ClosedWindow(time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC), 7)
+	mid := w.From.Add(48 * time.Hour)
+	var rows []eventlog.Row
+	for i := 0; i < 11; i++ {
+		c := mid.Add(time.Duration(i) * time.Minute)
+		b := map[string]any{"kind": "ci", "pipeline": "bifrost-ci-infra", "result": "Succeeded",
+			"created_at": ts(c), "started_at": ts(c), "completed_at": ts(c.Add(5 * time.Minute))}
+		if i < 10 {
+			b["first_step_at"] = ts(c.Add(time.Duration(20+i) * time.Second))
+		}
+		rows = append(rows, row("pipeline_seen", c, b))
+	}
+	var q Reading
+	for _, r := range ciReadings(rows, w) {
+		if r.Name == "ci_queue_p50_seconds" {
+			q = r
+		}
+	}
+	if q.Status != StatusOK || q.Samples != 10 || q.Value == nil || *q.Value != 24.5 {
+		t.Fatalf("queue from first_step_at: %+v", q)
 	}
 }
