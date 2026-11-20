@@ -1450,13 +1450,6 @@
       "status": "assigned",
       "basis": "2026-11-16 complete Tenant husbandry-to-checklist observation projection extracted. Old overlay, dispatch catalog, persistence and execution remain unchanged; no whole-checklist closure claimed."
     },
-    "api/internal/tenant/ingestview": {
-      "domains": [
-        "tenant"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 complete Tenant ingest observation interpretation and DTOs extracted. Satellite retains original request, identity, shared aggregate and all monitor/auto fields; no execution or whole-satellite closure."
-    },
     "api/internal/tenant/assembly": {
       "domains": [
         "tenant"
@@ -1553,7 +1546,7 @@
         "tenant"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 foundation wall and review of unclaimed packages: this package reads the Trade satellite's bus, monitor and ingest (Trade routes, IB and auto_status contracts), which is the tenant's integration, not the base; only the server imports it. It was foundation's by default (overlap ruling), never by review. Bus and communication contracts inside it stay with the communication line. No code moved."
+      "basis": "2026-11-16 foundation wall and review of unclaimed packages: this package reads the Trade satellite's bus, monitor and ingest (Trade routes, IB and auto_status contracts), which is the tenant's integration, not the base; only the server imports it. It was foundation's by default (overlap ruling), never by review. Bus and communication contracts inside it stay with the communication line. No code moved. 2026-11-20: tenant/ingestview folded in (its only user): the ingest observation interpretation and its DTOs (IngestDeep, IngestServiceDeep) are ingest_projection.go here, unchanged."
     },
     "api/internal/releasepolicy/rptest": {
       "domains": [

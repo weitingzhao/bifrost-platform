@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/ingestview"
 	"io"
 	"net/http"
 	"strings"
@@ -292,7 +291,7 @@ type monitorStatusRaw struct {
 		Trading      map[string]any `json:"trading"`
 		Heartbeat    map[string]any `json:"heartbeat"`
 	} `json:"daemon"`
-	Socket map[string]any `json:"socket"`
+	Socket            map[string]any `json:"socket"`
 	AccountSyncDaemon *struct {
 		Heartbeat map[string]any `json:"heartbeat"`
 	} `json:"account_sync_daemon"`
@@ -385,7 +384,7 @@ func buildMonitorDeepFromRaw(raw monitorStatusRaw) MonitorDeep {
 			Reachability: daemonReach,
 			AutoStatus:   mapFromAny(raw.Daemon.Trading["auto_status"]),
 		},
-		Socket: socket,
+		Socket:      socket,
 		AccountSync: accountSync,
 	}
 }
@@ -399,7 +398,7 @@ func (s *Service) fetchMonitorDeep(ctx context.Context, env config.Environment, 
 }
 
 func buildIngestDeepFromRaw(services []map[string]any) IngestDeep {
-	return ingestview.Project(services, aggregateReach)
+	return projectIngest(services, aggregateReach)
 }
 
 func (s *Service) fetchOpsDeep(ctx context.Context, env config.Environment, url string) OpsDeep {

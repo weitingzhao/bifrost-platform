@@ -1,5 +1,7 @@
-// Package ingestview projects Tenant ingest observations without executing or probing them.
-package ingestview
+// Tenant ingest observations projected without executing or probing them (was
+// package tenant/ingestview, folded in 2026-11-20: satellite was its only user).
+
+package satellite
 
 import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -25,7 +27,7 @@ type IngestServiceDeep struct {
 	Detail                   string             `json:"detail"`
 }
 
-func Project(services []map[string]any, aggregateReach func(...probe.Reachability) probe.Reachability) IngestDeep {
+func projectIngest(services []map[string]any, aggregateReach func(...probe.Reachability) probe.Reachability) IngestDeep {
 	out := make([]IngestServiceDeep, 0, len(services))
 	reaches := make([]probe.Reachability, 0, len(services))
 	for _, item := range services {
