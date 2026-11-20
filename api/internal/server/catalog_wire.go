@@ -68,5 +68,8 @@ func (s *Server) catalogScanAhead(ctx context.Context) {
 // mountCatalog: the pool is read-only and names repositories and paths, so
 // viewer and above.
 func (s *Server) mountCatalog(r chi.Router) {
-	r.With(s.auth.Require(actuation.RoleViewer)).Method(http.MethodGet, "/catalog/unperceived", catalog.Route{Scanner: s.catalogScanner()})
+	viewer := r.With(s.auth.Require(actuation.RoleViewer))
+	viewer.Method(http.MethodGet, "/catalog/unperceived", catalog.Route{Scanner: s.catalogScanner()})
+	viewer.Method(http.MethodGet, "/catalog/owner", catalog.OwnerRoute{Scanner: s.catalogScanner()})
+	viewer.Method(http.MethodGet, "/catalog/index", catalog.IndexRoute{Scanner: s.catalogScanner()})
 }

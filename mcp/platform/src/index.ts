@@ -44,7 +44,7 @@ import { registerMessageTools } from './registerMessages.js'
 import { getReleaseWindow, holdReleaseWindow, releaseReleaseWindow } from './windowTools.js'
 import { presenceSkip, registerPresence } from './presence.js'
 import { registerPlanImportTools } from './registerPlanImport.js'
-import { GET_UNPERCEIVED_DESCRIPTION, unperceivedPath } from './catalogTools.js'
+import { CATALOG_INDEX_PATH, GET_CATALOG_INDEX_DESCRIPTION, GET_OWNER_DESCRIPTION, GET_UNPERCEIVED_DESCRIPTION, ownerPath, unperceivedPath } from './catalogTools.js'
 import { FULL_CI_PATH, fullCICheckPath, unitConfigPath, unitRunsPath, unitScopePath } from './unitsTools.js'
 import { BUS_WAIT_MAX_SECONDS, LIST_REGRESSIONS_DESCRIPTION, MARK_REGRESSION_FIXED_DESCRIPTION, REPORT_REGRESSION_DESCRIPTION, WAIT_FOR_EVENT_DESCRIPTION, busEventsPath, regressionsPath } from './busTools.js'
 
@@ -568,6 +568,22 @@ reg(
   { repo: REPO },
   async ({ repo }) =>
     jsonResult(await platformGet(unperceivedPath(repo))),
+)
+
+reg(
+  'get_owner',
+  GET_OWNER_DESCRIPTION,
+  { repo: REPO, path: z.string().min(1).max(1024).describe('A path from the repository root, e.g. api/internal/catalog/scan.go') },
+  async ({ repo, path }) =>
+    jsonResult(await platformGet(ownerPath(repo, path))),
+)
+
+reg(
+  'get_catalog_index',
+  GET_CATALOG_INDEX_DESCRIPTION,
+  {},
+  async () =>
+    jsonResult(await platformGet(CATALOG_INDEX_PATH)),
 )
 
 reg(

@@ -77,29 +77,40 @@ var repoName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 
 func keptName(repo string) string { return "unperceived-" + repo }
 
+func keptOwners(repo string) string { return "owners-" + repo }
+
+// keptIndex is the index as the last scan of a repository that has one read it.
+const keptIndex = "index"
+
 // PoolOf scans one tree: a repository with no ownership table is one entry,
 // the whole repository.
 func PoolOf(repo string, t Tree) Pool {
+	p, _ := poolAndTable(repo, t)
+	return p
+}
+
+// poolAndTable is PoolOf and the table it read (nil: none read).
+func poolAndTable(repo string, t Tree) (Pool, *Table) {
 	p := Pool{Version: Version, Repo: repo, Commit: t.Commit, Measured: true, Entries: []Entry{}}
 	own, ok, err := t.Read(OwnershipPath)
 	if err != nil {
 		p.Measured, p.Note = false, err.Error()
-		return p
+		return p, nil
 	}
 	if !ok {
 		p.Note = "this repository has no " + OwnershipPath + ": the map perceives none of it"
 		p.Entries = []Entry{{Path: ".", Kind: "repository", Files: len(t.Files)}}
-		return p
+		return p, nil
 	}
 	console, _, err := t.Read(ConsolePath)
 	if err != nil {
 		p.Measured, p.Note = false, err.Error()
-		return p
+		return p, nil
 	}
 	table, err := ParseTable(own, console)
 	if err != nil {
 		p.Measured, p.Note = false, err.Error()
-		return p
+		return p, nil
 	}
 	goDirs := map[string]bool{}
 	for _, f := range t.Files {
@@ -108,7 +119,7 @@ func PoolOf(repo string, t Tree) Pool {
 		}
 	}
 	p.Entries = Scan(table, t.Files, func(dir string) bool { return goDirs[dir] })
-	return p
+	return p, &table
 }
 
 // Scanner scans repositories and keeps each one's last pool.
@@ -163,9 +174,13 @@ func (s *Scanner) ScanOnce(ctx context.Context, repo string) (Pool, error) {
 			p.Commit, p.Entries = before.Commit, before.Entries
 		}
 	} else {
-		p = PoolOf(repo, t)
+		var table *Table
+		p, table = poolAndTable(repo, t)
 		if !p.Measured && before != nil {
 			p.Entries = before.Entries
+		}
+		if p.Measured {
+			s.keepTables(repo, t, table, now)
 		}
 	}
 	p.ScannedAt = now
@@ -196,6 +211,61 @@ func (s *Scanner) ScanOnce(ctx context.Context, repo string) (Pool, error) {
 		return p, merr
 	}
 	return p, s.kept().Write(keptName(repo), raw)
+}
+
+// keepTables keeps what "who owns X" and the index are answered from. A
+// failure to keep them is logged; the pool is kept either way.
+func (s *Scanner) keepTables(repo string, t Tree, table *Table, now time.Time) {
+	o := Owners{Repo: repo, Commit: t.Commit, ScannedAt: now, Packages: map[string][]string{}, Groups: map[string][]string{}}
+	if table != nil {
+		o = ownersOf(repo, t.Commit, *table, now)
+	}
+	if raw, err := json.Marshal(o); err == nil {
+		if err := s.kept().Write(keptOwners(repo), raw); err != nil {
+			slog.Warn("catalog: keep owners", "repo", repo, "err", err)
+		}
+	}
+	if table == nil {
+		return
+	}
+	raw, ok, err := t.Read(IndexPath)
+	if err != nil || !ok {
+		return
+	}
+	files := map[string]bool{}
+	for _, f := range t.Files {
+		files[f] = true
+		for d := path.Dir(f); d != "." && !files[d]; d = path.Dir(d) {
+			files[d] = true
+		}
+	}
+	ix, err := ParseIndex(raw, t.Commit, func(p string) bool {
+		if strings.Contains(p, ":") || strings.Contains(p, " ") {
+			return true // another repository or a place outside any: not checked here
+		}
+		return files[p]
+	}, *table)
+	if err != nil {
+		slog.Warn("catalog: index", "repo", repo, "err", err)
+		return
+	}
+	if out, err := json.Marshal(ix); err == nil {
+		if err := s.kept().Write(keptIndex, out); err != nil {
+			slog.Warn("catalog: keep index", "err", err)
+		}
+	}
+}
+
+func (s *Scanner) lastOwners(repo string) (*Owners, error) {
+	raw, err := s.kept().Read(keptOwners(repo))
+	if err != nil || raw == nil {
+		return nil, err
+	}
+	var o Owners
+	if err := json.Unmarshal(raw, &o); err != nil {
+		return nil, err
+	}
+	return &o, nil
 }
 
 // Run scans every repository now and then every Every until ctx ends.

@@ -111,6 +111,10 @@ var intendedRouteAdditions = map[string][]string{
 	// 2026-11-20 (0.2 map line): the map's pool of what it cannot perceive,
 	// as kept by the workers' scan (read-only; contract v1).
 	"GET /api/v1/catalog/unperceived": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// 2026-11-20 (0.2 map line): who owns a path, and the map's table of
+	// contents, from what the scan kept (read-only; contract v1).
+	"GET /api/v1/catalog/owner": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"GET /api/v1/catalog/index": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-14: the approval records counted, for the Ops page (read-only).
 	"GET /api/v1/readings/approvals": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/units/evidence":    {"operator", "admin", "trade-satellite"},

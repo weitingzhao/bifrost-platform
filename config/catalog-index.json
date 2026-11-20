@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "about": "The map's table of contents (0.2 map line, 2026-11-20): every class of thing in the system and the one table that is its source. 'reader' is the package that loads the source; the class belongs to that package's domain in config/domain-ownership.json. 'also' are other places that say the same class: each is a second source to merge into the first or to generate from it. A class with no source is 'unmeasured', not empty.",
+  "classes": [
+    {"class": "domain", "what": "the domains, their tier and contracts", "sources": ["config/domain-ownership.json"], "reader": "api/internal/catalog", "also": ["bifrost-trade-infra:agent-config/charters/", "shared notes brain/company-map.md"]},
+    {"class": "go-package", "what": "who owns each Go package of the platform", "sources": ["config/domain-ownership.json"], "reader": "api/internal/catalog"},
+    {"class": "console-group", "what": "who owns each front-end directory of the console", "sources": ["console/domain-ownership.json"], "reader": "api/internal/catalog"},
+    {"class": "unperceived", "what": "what no row covers, with first-seen time and review", "sources": ["config/catalog-review.json"], "reader": "api/internal/catalog", "note": "the pool itself is kept by the scan (statefile catalog/unperceived-<repo>); the file holds only the delete and unknown verdicts"},
+    {"class": "event", "what": "the event types on the bus and who subscribes", "sources": ["api/internal/bus/registry/rocket.yaml"], "reader": "api/internal/bus/registry"},
+    {"class": "action", "what": "the catalogued actions and their tiers", "sources": ["config/actions-catalog.json"], "reader": "api/internal/actions", "also": ["mcp/platform/src/actionTiers.ts"]},
+    {"class": "node", "what": "the machines of the cluster and their roles", "sources": ["config/topology.yaml"], "reader": "api/internal/config", "also": ["compute line's home table (outside this repository)"]},
+    {"class": "environment", "what": "dev, stg, prod and how to reach them", "sources": ["config/environments.yaml"], "reader": "api/internal/config"},
+    {"class": "cluster", "what": "the clusters the platform reads", "sources": ["config/clusters.yaml"], "reader": "api/internal/config"},
+    {"class": "running-image", "what": "which image runs where", "sources": ["config/running-images.yaml"], "reader": "api/internal/releases"},
+    {"class": "dev-session", "what": "the local dev services (bdev)", "sources": ["config/sessions-catalog.yaml"], "reader": "api/internal/devsession"},
+    {"class": "trade-api-domain", "what": "the Trade API's route groups the probes read", "sources": ["config/trade-api-domains.yaml"], "reader": "api/internal/probe"},
+    {"class": "seat", "what": "the lines (seats) and what each runs", "sources": [], "also": ["bifrost-trade-infra:agent-config/charters/", "shared notes brain/company-map.md"], "note": "no machine-readable source yet"},
+    {"class": "repository", "what": "the repositories of the system", "sources": [], "also": ["AGENT_FACTS.md (workspace root)"], "note": "no machine-readable source yet; the scan covers the CI scorecard's repositories"},
+    {"class": "data-table", "what": "database tables and who writes them", "sources": [], "also": ["config/domain-ownership.json contracts.shared_storage (shared tables only)"], "note": "no full list yet"},
+    {"class": "workload", "what": "what runs in the cluster (namespace/workload)", "sources": [], "also": ["bifrost-trade-infra:k8s/ (manifests)"], "note": "no list keyed to domains yet; run keys <namespace>/<workload>, node/<name>, host/<name> are agreed with the metrics line"}
+  ]
+}

@@ -5,5 +5,16 @@
 export const unperceivedPath = (repo: string): string =>
   '/api/v1/catalog/unperceived?repo=' + encodeURIComponent(repo)
 
+export const ownerPath = (repo: string, path: string): string =>
+  '/api/v1/catalog/owner?repo=' + encodeURIComponent(repo) + '&path=' + encodeURIComponent(path)
+
+export const CATALOG_INDEX_PATH = '/api/v1/catalog/index'
+
+export const GET_OWNER_DESCRIPTION =
+  'Who owns one path of a repository, by the map (read-only; answered from the tables the platform\'s workers keep each scan, never Gitea). Returns {version, repo, path, commit, perceived, domains, by, entry?, note}. perceived true: a row or a group covers it; domains are its domains (two or more: a shared row, counted debt, the note says so) and by names the row ("package api/internal/x") or front-end group ("group console/src/y"). perceived false: the map cannot perceive it; entry is the pool entry it falls in (see get_unperceived) — a Go package with no row is in the pool even though the domain walls count it as foundation\'s by the table\'s default. note "not scanned yet" before the first scan of that repository.'
+
+export const GET_CATALOG_INDEX_DESCRIPTION =
+  'The map\'s table of contents (read-only): every class of thing in the system (domain, Go package, console group, event, action, node, environment, cluster, running image, dev session, Trade API domain, seat, repository, data table, workload) and the one table that is its source (config/catalog-index.json, as the last scan of bifrost-platform read it). Returns {version, commit, classes: [{class, what, sources, reader?, also?, note?}], domain, missing, measured, unmeasured, duplicated}. domain is each class\'s domain, from its reader package\'s row; also lists second places that say the same class (to merge or generate from the first); a class with no sources is unmeasured, not empty; missing are named sources the commit does not have.'
+
 export const GET_UNPERCEIVED_DESCRIPTION =
   'What the map cannot perceive in one repository (read-only): the directories whose files no row of the ownership table covers (config/domain-ownership.json, console/domain-ownership.json). Not perceived does not mean not there: each entry is a defect to review — claim it into the map (it becomes a row and leaves the pool), delete it, or mark it unknown (config/catalog-review.json holds the delete and unknown verdicts). The platform\'s workers scan main every 10 minutes and keep the pool; this reads what was kept and never Gitea. Returns {version, repo, commit, measured, note, scanned_at, entries: [{path, kind, files, first_seen, review?}], count, files, unreviewed, oldest_days?}. kind: "go-package" a Go package with no row (the domain walls still count it as foundation\'s by the table\'s default), "console" front-end files in no group, "repository" a repository with no ownership table (the whole of it), "root" files at the root, otherwise the top directory. measured false: the last scan could not read main (note says why; entries are the last ones read); "not scanned yet" before the first scan. An empty entries list with measured true means everything is on the map.'

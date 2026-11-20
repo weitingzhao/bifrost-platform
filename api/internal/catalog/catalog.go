@@ -46,20 +46,27 @@ type Table struct {
 	Groups   []string        // front-end group prefixes, longest first
 	GoRoots  []string        // top directories of the package rows
 	Console  string          // top directory of the front end, "" for none
+	// Domains are the domains each package row and each group names.
+	Domains map[string][]string
+}
+
+type row struct {
+	Domains []string `json:"domains"`
 }
 
 // ParseTable reads the ownership table and, when present, the console's.
 func ParseTable(own, console []byte) (Table, error) {
 	var o struct {
-		Packages map[string]json.RawMessage `json:"packages"`
+		Packages map[string]row `json:"packages"`
 	}
 	if err := json.Unmarshal(own, &o); err != nil {
 		return Table{}, fmt.Errorf("%s does not parse: %w", OwnershipPath, err)
 	}
-	t := Table{Packages: map[string]bool{}}
+	t := Table{Packages: map[string]bool{}, Domains: map[string][]string{}}
 	roots := map[string]bool{}
-	for p := range o.Packages {
+	for p, r := range o.Packages {
 		t.Packages[p] = true
+		t.Domains[p] = r.Domains
 		if r, _, _ := strings.Cut(p, "/"); r != "" {
 			roots[r] = true
 		}
@@ -71,16 +78,18 @@ func ParseTable(own, console []byte) (Table, error) {
 	if len(console) > 0 {
 		var c struct {
 			Frontend struct {
-				Root   string                     `json:"root"`
-				Groups map[string]json.RawMessage `json:"groups"`
+				Root   string         `json:"root"`
+				Groups map[string]row `json:"groups"`
 			} `json:"frontend"`
 		}
 		if err := json.Unmarshal(console, &c); err != nil {
 			return Table{}, fmt.Errorf("%s does not parse: %w", ConsolePath, err)
 		}
 		t.Console, _, _ = strings.Cut(strings.Trim(c.Frontend.Root, "/"), "/")
-		for g := range c.Frontend.Groups {
-			t.Groups = append(t.Groups, strings.Trim(g, "/"))
+		for g, r := range c.Frontend.Groups {
+			g = strings.Trim(g, "/")
+			t.Groups = append(t.Groups, g)
+			t.Domains[g] = r.Domains
 		}
 		sort.Slice(t.Groups, func(i, j int) bool {
 			if len(t.Groups[i]) != len(t.Groups[j]) {
