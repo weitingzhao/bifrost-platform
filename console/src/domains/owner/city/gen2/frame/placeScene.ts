@@ -923,10 +923,12 @@ export class PlaceScene extends Phaser.Scene {
       for (const st of streets) g.strokePoints(strip(st, WAY / 2), true)
       this.storey(g, P, W, H)
     } else {
-      // Highways and local streets (geo.ts LANE): the town's ways and a district's ring are highways, two
+      // Highways and local streets (geo.ts LANE): the town's ways are highways, two
       // lanes each way either side of a central reservation; the streets inside a district
       // are local, one lane each way, a dashed centre line. Pavement either side, a kerb line at the asphalt.
-      const isHighway = (st: Street) => grade === 'highway' || st.kind === 'ring'
+      // Only the town's ways are highways; inside a district every way, its ring too, is a local street (the
+      // Owner, 2026-11-20: once in, every road is two lanes).
+      const isHighway = (_st: Street) => grade === 'highway'
       const half = (st: Street) => (isHighway(st) ? HIGHWAY_HALF : LOCAL_HALF)
       g.fillStyle(this.tone.kerb)
       for (const st of streets) g.fillPoints(strip(st, half(st) + PAVEMENT, 0, Math.max(half(st), WAY / 2) + PAVEMENT), true)
@@ -1182,7 +1184,7 @@ export class PlaceScene extends Phaser.Scene {
       if (!b) return null
       const i = (b.k.partners?.[side] ?? []).slice(0, b.n).indexOf(partner)
       const front = b.ground.y + b.ground.h + G
-      if (i < 0) return { x: b.ground.x - G, y: b.r.y + b.r.h * portAt(side === 'in' ? 0 : 1, 2), on: 'v', front }
+      if (i < 0) return { x: b.ground.x - G, y: b.r.y + b.r.h * (side === 'in' ? 0.25 : 0.75), on: 'v', front }
       const f = portAt(i, b.n)
       return side === 'in' ? { x: b.r.x + b.r.w * f, y: front, on: 'h', front } : { x: b.ground.x + b.ground.w + G, y: b.r.y + b.r.h * f, on: 'v', front }
     }
@@ -1348,7 +1350,8 @@ export class PlaceScene extends Phaser.Scene {
     const pos: Record<Slot['edge'], number[]> = {
       y1: Array.from({ length: PORTS }, (_, i) => geo.x(portAt(i, PORTS) * GW)),
       x1: Array.from({ length: PORTS }, (_, i) => geo.y(portAt(i, PORTS) * GH)),
-      x0: [0, 1].map(i => geo.y(portAt(i, 2) * GH)),
+      // The two Others on the back-left edge's outer streets (a quarter and three quarters), so their roads run on.
+      x0: [0.25, 0.75].map(f => geo.y(f * GH)),
       y0: [geo.x(GW / 2)],
     }
     for (const sl of slotsFor(PORTS)) {
