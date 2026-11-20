@@ -35,6 +35,14 @@ const PAGE_LANDMARK: Partial<Record<ShellRouteId, LandmarkId>> = {
   records: 'archive',
   status: 'missionControl',
   ib: 'supplierDock',
+  // Each district's hall, its entry page (2026-11-20): Command is the Owner's docket, so the court;
+  // Crew is where the seats live and set out from, the dormitory; Work is where the vehicle is built
+  // before it flies, the assembly building; Services are the products running, each in its clean room.
+  // System has none of its meaning (the power station was turned down for the machines, 2026-11-19).
+  command: 'court',
+  crew: 'dormitory',
+  work: 'assembly',
+  services: 'payloadBay',
 }
 
 /** The Console's functions: its menu entries. Each district and building serves the entry it sits under. */
@@ -45,8 +53,9 @@ export const consoleFunctions = () => {
 
 export function placeTree(): Place {
   const nav = SHELL_NAV as readonly { id: ShellRouteId; label: string; question: string; group: string }[]
+  // A district holds its own entry page as its hall, first, then the detail pages the Console puts under it.
   const buildingsOf = (entry: string) =>
-    nav.filter(n => n.group === 'detail' && n.id !== 'city' && entryOf({ kind: 'shell', id: n.id }) === entry)
+    nav.filter(n => n.id === entry || (n.group === 'detail' && n.id !== 'city' && entryOf({ kind: 'shell', id: n.id }) === entry))
       .map(n => ({ id: n.id, function: entry, kind: 'building' as const, shape: PAGE, label: n.label, question: n.question, dashboard: formatShellHash(n.id), landmark: PAGE_LANDMARK[n.id], children: [] }))
   return {
     id: TOWN_ID,

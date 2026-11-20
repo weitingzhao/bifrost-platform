@@ -1,5 +1,6 @@
 /**
- * Copied from gen1/kit.ts (2026-11-19: the second generation keeps the first one's look; gen1 stays frozen).
+ * Copied from the first generation's kit (2026-11-19: the second generation keeps its look; the first was
+ * retired 2026-11-20 once its land, colours and buildings were here — it is in git history before that).
  *
  * The drawing kit of the city's sprites (2026-11-17, the Owner: each kind of
  * facility its own recognisable building, detail like the reference, flat

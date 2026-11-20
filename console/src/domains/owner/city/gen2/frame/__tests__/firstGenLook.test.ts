@@ -17,9 +17,19 @@ describe('the first generation’s look in gen2', () => {
     expect(tintOf(t, ['b'], 'night', 0x123456)).toBe(0x123456)
   })
 
-  it('the pages that stand as a landmark are releases, records, status and ib, each one the library draws', () => {
+  it('the pages that stand as a landmark, halls included, each one the library draws', () => {
     const marked = placeTree().children.flatMap(d => d.children).filter(b => b.landmark)
-    expect(marked.map(b => [b.id, b.landmark]).sort()).toEqual([['ib', 'supplierDock'], ['records', 'archive'], ['releases', 'launchPad'], ['status', 'missionControl']])
+    expect(marked.map(b => [b.id, b.landmark]).sort()).toEqual([['command', 'court'], ['crew', 'dormitory'], ['ib', 'supplierDock'], ['records', 'archive'], ['releases', 'launchPad'], ['services', 'payloadBay'], ['status', 'missionControl'], ['work', 'assembly']])
     for (const b of marked) expect(LANDMARKS[b.landmark!].make().svg).toContain('<svg')
+  })
+})
+
+// Origin: 2026-11-20, the Owner chose to move the rest of gen1's buildings: a district holds its entry page as its hall.
+describe('every district holds its own page as its hall', () => {
+  it('the hall comes first and opens the entry page', () => {
+    for (const d of placeTree().children) {
+      expect(d.children[0].id).toBe(d.id)
+      expect(d.children[0].dashboard).toBe(`#${d.id}`)
+    }
   })
 })

@@ -1,8 +1,8 @@
 /**
  * Landmarks brought over from the first generation (the Owner, 2026-11-19: much of it is beautiful —
  * the rocket, the starship, the launch pad, the workshops, the court — take it and use it; these are
- * what the system will be pictured as). Moved here as they were, in the same kit; gen1 stays frozen
- * and goes once gen2 takes over. A landmark is art: when it stands for something, its parts are driven
+ * what the system will be pictured as). Moved here as they were, in the same kit; the first generation
+ * was retired on 2026-11-20 once these were here. A landmark is art: when it stands for something, its parts are driven
  * by readings through the part library (parts.ts), never drawn as a fixed number.
  */
 

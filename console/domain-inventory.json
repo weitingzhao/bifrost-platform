@@ -2132,29 +2132,6 @@
     {
       "path": "console/src/domains/owner/city",
       "files": [
-        "console/src/domains/owner/city/gen1/CityBuilder.tsx",
-        "console/src/domains/owner/city/gen1/README.md",
-        "console/src/domains/owner/city/gen1/__tests__/cityBuilder.test.ts",
-        "console/src/domains/owner/city/gen1/__tests__/cityFlights.test.ts",
-        "console/src/domains/owner/city/gen1/__tests__/cityUtilities.test.ts",
-        "console/src/domains/owner/city/gen1/__tests__/cityWorkers.test.ts",
-        "console/src/domains/owner/city/gen1/builderDoc.ts",
-        "console/src/domains/owner/city/gen1/builderScene.ts",
-        "console/src/domains/owner/city/gen1/catalog.ts",
-        "console/src/domains/owner/city/gen1/cityCampus.ts",
-        "console/src/domains/owner/city/gen1/cityFlights.ts",
-        "console/src/domains/owner/city/gen1/cityMachines.ts",
-        "console/src/domains/owner/city/gen1/cityReadings.ts",
-        "console/src/domains/owner/city/gen1/cityState.ts",
-        "console/src/domains/owner/city/gen1/cityUtilities.ts",
-        "console/src/domains/owner/city/gen1/cityWorkers.ts",
-        "console/src/domains/owner/city/gen1/defaultLayout.ts",
-        "console/src/domains/owner/city/gen1/kit.ts",
-        "console/src/domains/owner/city/gen1/landmarks.ts",
-        "console/src/domains/owner/city/gen1/layoutStore.ts",
-        "console/src/domains/owner/city/gen1/platformLayoutStore.ts",
-        "console/src/domains/owner/city/gen1/worldDictionary.ts",
-        "console/src/domains/owner/city/gen1/zones.ts",
         "console/src/domains/owner/city/gen2/RULES.md",
         "console/src/domains/owner/city/gen2/content/__tests__/consolePlaces.test.ts",
         "console/src/domains/owner/city/gen2/content/__tests__/hardware.fixture.json",
@@ -2215,8 +2192,6 @@
         "console/src/domains/owner/city/gen2/frame/viewport.ts"
       ],
       "imports": [
-        "console/src/api",
-        "console/src/api/client.ts",
         "console/src/lib/shell"
       ],
       "test_imports": [
@@ -4181,23 +4156,14 @@
     {
       "path": "console/src/pages/shell",
       "files": [
-        "console/src/pages/shell/CityPage.tsx",
         "console/src/pages/shell/city/CityLedger.tsx",
         "console/src/pages/shell/city/CityScreen.tsx",
         "console/src/pages/shell/city/useCityContent.ts",
         "console/src/pages/shell/shellPages.tsx"
       ],
       "imports": [
-        "console/src/api",
-        "console/src/api/approvals.ts",
         "console/src/api/client.ts",
-        "console/src/api/core.ts",
-        "console/src/api/questions.ts",
-        "console/src/api/telemetry.ts",
-        "console/src/domains/delivery/api",
         "console/src/domains/owner/city",
-        "console/src/hooks/usePlatformAuth.ts",
-        "console/src/lib/shell",
         "console/src/pages/shell/data",
         "console/src/pages/shell/ib",
         "console/src/pages/shell/infrastructure",
