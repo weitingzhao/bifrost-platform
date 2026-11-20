@@ -415,3 +415,41 @@ func TestPainAlertsWakeComputeAloneAndGuestLoadNoOne(t *testing.T) {
 		t.Error("going back under woke compute; it stays on the bus")
 	}
 }
+
+// 2026-11-20, TD-588: the bus stopped for about 75 minutes (NATS stuck on a
+// drained node) and no alert fired. The metrics line's two rules wake the
+// communication line, which owns the bus; duty still hears them.
+func TestBusAlertsWakeTheCommunicationLine(t *testing.T) {
+	all, err := registry.LoadSubscriptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := map[string]registry.Subscription{}
+	for _, r := range all["rocket"].Rows {
+		rows[r.ID] = r
+	}
+	relay, nats := rows["alert-bus-relay-to-comm"], rows["alert-nats-to-comm"]
+	if relay.ID == "" || nats.ID == "" {
+		t.Fatalf("rows missing: relay %q, nats %q", relay.ID, nats.ID)
+	}
+	const comm = "thread:local_ab850773-fe26-40fa-ac01-b3b590b73164"
+	if relay.To != comm || nats.To != comm {
+		t.Fatalf("the bus alerts go to %q and %q, not the communication line", relay.To, nats.To)
+	}
+	fired := func(name, ns string) Event {
+		return Event{Type: "alert.rule.fired", Subject: name + "@" + ns, Change: "firing"}
+	}
+	if !Matches(relay, fired("BifrostBusRelayErrors", "bifrost-platform-prod")) {
+		t.Error("relay errors did not wake the communication line")
+	}
+	if !Matches(nats, fired("BifrostNatsUnavailable", "data")) {
+		t.Error("NATS unavailable did not wake the communication line")
+	}
+	// Positive control: another alert does not.
+	if Matches(relay, fired("KubePodNotReady", "data")) || Matches(nats, fired("KubePodNotReady", "data")) {
+		t.Error("an unrelated alert woke the communication line")
+	}
+	if Matches(relay, Event{Type: "alert.rule.fired", Subject: "BifrostBusRelayErrors@bifrost-platform-prod", Change: "resolved"}) {
+		t.Error("a resolved alert woke the communication line")
+	}
+}

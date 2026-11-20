@@ -169,6 +169,29 @@ subscriptions:
       ask_verdict: alert
     guarantee: durable
     by: alert-letters
+  # The bus itself stopped (2026-11-20 02:55-04:10Z: NATS stuck with its node
+  # drained, no alert fired; TD-588). The metrics line writes the two rules;
+  # the communication line, which owns the bus, is woken by them and judges.
+  - id: alert-bus-relay-to-comm
+    on: [alert.rule.fired]
+    match: BifrostBusRelayErrors
+    change: firing
+    deliver: wake
+    to: thread:local_ab850773-fe26-40fa-ac01-b3b590b73164
+    params:
+      ask_verdict: alert
+    guarantee: durable
+    by: alert-letters
+  - id: alert-nats-to-comm
+    on: [alert.rule.fired]
+    match: BifrostNatsUnavailable
+    change: firing
+    deliver: wake
+    to: thread:local_ab850773-fe26-40fa-ac01-b3b590b73164
+    params:
+      ask_verdict: alert
+    guarantee: durable
+    by: alert-letters
   # 2026-11-18 (the communication line's list of problem channels, L10, R01, R09,
   # R11, R12): a probed service or plugin that turns to fail wakes the duty seat
   # once; degraded and recovery stay on the bus.
