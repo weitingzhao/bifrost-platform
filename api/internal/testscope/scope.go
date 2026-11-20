@@ -320,12 +320,14 @@ func guards(g *graph) (map[string]*guard, error) {
 		if e != nil {
 			return nil, e
 		}
+		var files []*ast.File
 		for _, v := range entries {
 			if strings.HasSuffix(v.Name(), "_test.go") {
 				f, e := parser.ParseFile(token.NewFileSet(), filepath.Join(p.Dir, v.Name()), nil, 0)
 				if e != nil {
 					return nil, e
 				}
+				files = append(files, f)
 				if walks(f) {
 					if out[name] == nil {
 						out[name] = &guard{}
@@ -338,8 +340,85 @@ func guards(g *graph) (map[string]*guard, error) {
 				}
 			}
 		}
+		if more := walkingTests(files); len(more) > 0 {
+			if out[name] == nil {
+				out[name] = &guard{}
+			}
+			out[name].names = appendNew(out[name].names, more...)
+		}
 	}
 	return out, nil
+}
+
+// walkingTests names the package's tests that walk the tree through a helper
+// in another test file. 2026-11-20 (decoupling acceptance item 8, landing
+// 66c73531): codeguard's TestTestsReachIntoOtherDomainsOnlyAsMuchAsTheyDid
+// walks through readTestFiles, which lives in tests_have_owner_test.go; the
+// scan above looks one file at a time, did not see it, and an incremental run
+// that added a test file under server left it out (its full run went red).
+// A function walks when it calls filepath.Walk or WalkDir, or a function of
+// the package's test files that walks.
+func walkingTests(files []*ast.File) []string {
+	walker := map[string]bool{}
+	calls := map[string][]string{}
+	var tests []string
+	for _, f := range files {
+		single := &ast.File{Imports: f.Imports}
+		for _, d := range f.Decls {
+			fn, ok := d.(*ast.FuncDecl)
+			if !ok || fn.Body == nil || fn.Recv != nil {
+				continue
+			}
+			single.Decls = []ast.Decl{fn}
+			if walks(single) {
+				walker[fn.Name.Name] = true
+			}
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				if c, ok := n.(*ast.CallExpr); ok {
+					if id, ok := c.Fun.(*ast.Ident); ok {
+						calls[fn.Name.Name] = append(calls[fn.Name.Name], id.Name)
+					}
+				}
+				return true
+			})
+		}
+		tests = append(tests, testNames(f)...)
+	}
+	for changed := true; changed; {
+		changed = false
+		for fn, callees := range calls {
+			if walker[fn] {
+				continue
+			}
+			for _, c := range callees {
+				if walker[c] {
+					walker[fn], changed = true, true
+					break
+				}
+			}
+		}
+	}
+	var out []string
+	for _, t := range tests {
+		if walker[t] {
+			out = append(out, t)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func appendNew(list []string, more ...string) []string {
+	have := map[string]bool{}
+	for _, s := range list {
+		have[s] = true
+	}
+	for _, s := range more {
+		if !have[s] {
+			list, have[s] = append(list, s), true
+		}
+	}
+	return list
 }
 func SelectChanges(module string, r io.Reader) (result Result) {
 	defer func() {

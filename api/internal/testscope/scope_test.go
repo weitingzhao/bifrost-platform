@@ -2,6 +2,7 @@ package testscope
 
 import (
 	"fmt"
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
@@ -233,5 +234,31 @@ func (x T) TestMethod(){}
 	}
 	if got := strings.Join(testNames(f), ","); got != "Test,TestA" {
 		t.Fatal(got)
+	}
+}
+
+// 2026-11-20 (decoupling acceptance item 8, 66c73531): a test that walks the
+// tree through a helper in another test file is a guard too. Positive control:
+// the test that calls no walker is not named.
+func TestATestThatWalksThroughAHelperIsAGuard(t *testing.T) {
+	parse := func(src string) *ast.File {
+		f, err := parser.ParseFile(token.NewFileSet(), "x_test.go", src, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+	helper := parse(`package p
+import ("io/fs"; "path/filepath"; "testing")
+func readAll(t *testing.T) { _ = filepath.WalkDir(".", func(string, fs.DirEntry, error) error { return nil }) }
+func TestOwners(t *testing.T) { readAll(t) }`)
+	user := parse(`package p
+import "testing"
+func files(t *testing.T) { readAll(t) }
+func TestReach(t *testing.T) { files(t) }
+func TestPlain(t *testing.T) {}`)
+	got := walkingTests([]*ast.File{helper, user})
+	if strings.Join(got, ",") != "TestOwners,TestReach" {
+		t.Fatalf("walking tests = %v, want TestOwners and TestReach (not TestPlain)", got)
 	}
 }
