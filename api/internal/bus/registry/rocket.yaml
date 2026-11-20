@@ -238,7 +238,7 @@ channels:
       consumers: [console]
       exports: []
       replaces: []
-      console_keys: [[approvals]]
+      console_keys: [[approvals], [cockpit], [agent-runtime-progress]]
   owner.question.asked:
     address: ev.rocket.{env}.owner.question.asked
     x-bifrost:
