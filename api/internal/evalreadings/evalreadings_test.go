@@ -63,13 +63,19 @@ func TestPromReadings(t *testing.T) {
 	prom := func(_ context.Context, expr string) ([]Sample, error) {
 		asked = append(asked, expr)
 		if strings.HasPrefix(expr, "count_over_time") {
-			return []Sample{{Labels: map[string]string{"scope": "bifrost"}, Value: 288}, {Labels: map[string]string{"scope": "infra"}, Value: 288}}, nil
+			return []Sample{{Labels: map[string]string{"scope": "bifrost"}, Value: 2016}, {Labels: map[string]string{"scope": "infra"}, Value: 1}}, nil
 		}
 		return []Sample{{Labels: map[string]string{"scope": "infra"}, Value: 0.263}, {Labels: map[string]string{"scope": "bifrost"}, Value: 0.565}}, nil
 	}
 	rs := promReadings(context.Background(), prom, w)
-	if len(rs) != 2 || rs[0].Labels["scope"] != "bifrost" || rs[0].Status != StatusOK || *rs[0].Value != 0.565 || rs[0].Samples != 288 {
+	if len(rs) != 2 || rs[0].Labels["scope"] != "bifrost" || rs[0].Status != StatusOK || *rs[0].Value != 0.565 || rs[0].Samples != 2016 {
 		t.Fatalf("readings: %+v", rs)
+	}
+	// 2026-11-20, the first PROD read: 1 sample in a 7-day window (the record
+	// started that morning) must not pass as the window's average. bifrost
+	// above is its positive control (a full window, 7 days x 288 a day).
+	if rs[1].Labels["scope"] != "infra" || rs[1].Status != StatusTooFew || rs[1].Value != nil || rs[1].Samples != 1 || rs[1].MinSamples != 1814 {
+		t.Fatalf("a record covering part of the window must be too_few: %+v", rs[1])
 	}
 	if !strings.Contains(asked[0], "@ "+itoa(w.To.Unix())) {
 		t.Fatalf("query is not pinned to the window end: %s", asked[0])

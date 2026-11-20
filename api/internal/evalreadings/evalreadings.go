@@ -101,6 +101,10 @@ type Sample struct {
 // from this platform; the Prometheus readings are then unmeasured.
 type Prom func(ctx context.Context, expr string) ([]Sample, error)
 
+// coverageInterval is how often bifrost_metrics:coverage_ratio is recorded
+// (interval: 5m in k8s/monitoring/bifrost-metrics-coverage-rules.yaml).
+const coverageInterval = 5 * time.Minute
+
 // MinSamples is the floor under which a median is not given.
 const MinSamples = 10
 
@@ -212,11 +216,22 @@ func promReadings(ctx context.Context, prom Prom, w Window) []Reading {
 		return []Reading{finish(Reading{Name: name, Window: w, Definition: d, Note: "no samples of the record in the window"}, false)}
 	}
 	sort.Slice(vals, func(i, j int) bool { return vals[i].Labels["scope"] < vals[j].Labels["scope"] })
+	// An average over a window the record covers only in part is not the
+	// window's: below 90% of the samples the 5-minute record gives over the
+	// window, the reading is too_few (2026-11-20: the first read had 1 sample
+	// in a 7-day window, because the record started that morning).
+	floor := int(0.9 * float64(span) / coverageInterval.Seconds())
 	var out []Reading
 	for _, s := range vals {
 		v := s.Value
 		scope := s.Labels["scope"]
-		out = append(out, finish(Reading{Name: name, Labels: map[string]string{"scope": scope}, Value: &v, Unit: "ratio", Samples: n[scope], Window: w, Definition: d}, false))
+		r := Reading{Name: name, Labels: map[string]string{"scope": scope}, Value: &v, Unit: "ratio", Samples: n[scope], MinSamples: floor, Window: w, Definition: d}
+		r = finish(r, false)
+		if r.Status == StatusOK && r.Samples < floor {
+			r.Status, r.Value = StatusTooFew, nil
+			r.Note = "the record covers too little of the window"
+		}
+		out = append(out, r)
 	}
 	return out
 }
