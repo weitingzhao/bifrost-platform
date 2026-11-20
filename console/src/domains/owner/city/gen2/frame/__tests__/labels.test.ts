@@ -43,12 +43,15 @@ describe('a plate has a ceiling on its size', () => {
     expect(t.text.endsWith('…')).toBe(true)
     expect(t.full).toBe('mini-pc-a · ubt-k3s-02 · something very long')
   })
-  it('keeps at most two lines, folding the rest into the second', () => {
+  // The Owner, later that day: one line is enough, 16 or 18 characters.
+  it('keeps one line, folding the rest into it, within the limit', () => {
     const t = clampLabel('Utilities\nProd Pool · 21 pods\n+2 kinds not shown')
-    expect(t.text.split('\n')).toHaveLength(LABEL_LINES)
-    for (const l of t.text.split('\n')) expect(l.length).toBeLessThanOrEqual(LABEL_CHARS)
+    expect(LABEL_LINES).toBe(1)
+    expect(t.text.split('\n')).toHaveLength(1)
+    expect(t.text.length).toBeLessThanOrEqual(LABEL_CHARS)
+    expect(t.text.startsWith('Utilities · ')).toBe(true)
   })
   it('leaves a short plate as it is', () => {
-    expect(clampLabel('ubt-k3s-07\nGeneral · 20 pods')).toEqual({ text: 'ubt-k3s-07\nGeneral · 20 pods', full: 'ubt-k3s-07\nGeneral · 20 pods', cut: false })
+    expect(clampLabel('ubt-k3s-07')).toEqual({ text: 'ubt-k3s-07', full: 'ubt-k3s-07', cut: false })
   })
 })

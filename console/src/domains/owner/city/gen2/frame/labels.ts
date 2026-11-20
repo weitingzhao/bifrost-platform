@@ -26,11 +26,11 @@ export function placeLabels(fixed: readonly Box[], movable: readonly Box[], gap 
 
 /**
  * A plate's size has a ceiling (the Owner, 2026-11-20: however well placed, a plate too long covers a whole
- * stretch): at most LABEL_LINES lines of LABEL_CHARS characters; what is cut ends in "…", and the whole text
- * is there on hover. A third line or more is folded into the second.
+ * stretch): one line of at most LABEL_CHARS characters (the Owner, the same day: one line is enough, 16 or 18
+ * characters); further lines are folded into it, what is cut ends in "…", and the whole text is there on hover.
  */
-export const LABEL_CHARS = 24
-export const LABEL_LINES = 2
+export const LABEL_CHARS = 18
+export const LABEL_LINES = 1
 export type LabelText = { text: string; full: string; cut: boolean }
 export function clampLabel(text: string, chars = LABEL_CHARS, lines = LABEL_LINES): LabelText {
   const raw = text.split('\n')
