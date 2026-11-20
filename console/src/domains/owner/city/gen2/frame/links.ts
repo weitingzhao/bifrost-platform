@@ -153,3 +153,33 @@ export function edgeSlots(gates: readonly Gate[]): { named: Pass[]; other: Pass 
   const total = gates.reduce((t, g) => t + g.carries.length, 0)
   return { named: ranked.slice(0, CROSSINGS), other: other.n ? other : null, orphan: orphan.n ? orphan : null, total }
 }
+
+/** A fixed place outside a district's ground (the Owner, 2026-11-20: like the plots inside, the frame sets
+ * the places outside first; they may stand empty until something comes to fill them). One named slot on each
+ * side's middle, Other and Orphan toward the front corner. `t` is how far along its edge, 0..1. */
+export type Slot = { id: 'x0' | 'x1' | 'y0' | 'y1' | typeof OTHER | typeof ORPHAN; edge: 'x0' | 'x1' | 'y0' | 'y1'; t: number }
+export const SLOTS: readonly Slot[] = [
+  { id: 'y0', edge: 'y0', t: 0.5 }, { id: 'x1', edge: 'x1', t: 0.4 }, { id: 'y1', edge: 'y1', t: 0.4 }, { id: 'x0', edge: 'x0', t: 0.5 },
+  { id: OTHER, edge: 'y1', t: 0.86 }, { id: ORPHAN, edge: 'x1', t: 0.86 },
+]
+
+/**
+ * Which slot each named neighbour takes: the side facing it in the town if free, else the free side
+ * nearest that way; the heaviest choose first. `toward` gives each neighbour's direction from here.
+ */
+export function seat(named: readonly Pass[], toward: (id: string) => { dx: number; dy: number } | null): Map<string, Slot['id']> {
+  const sides = ['x1', 'y1', 'x0', 'y0'] as const
+  const angle: Record<(typeof sides)[number], number> = { x1: 0, y1: Math.PI / 2, x0: Math.PI, y0: -Math.PI / 2 }
+  const free = new Set<(typeof sides)[number]>(sides)
+  const out = new Map<string, Slot['id']>()
+  for (const p of named) {
+    const d = toward(p.id)
+    const a = d ? Math.atan2(d.dy, d.dx) : 0
+    const gap = (s: (typeof sides)[number]) => { const x = Math.abs(a - angle[s]) % (2 * Math.PI); return Math.min(x, 2 * Math.PI - x) }
+    const pick = [...free].sort((u, v) => gap(u) - gap(v))[0]
+    if (!pick) break
+    free.delete(pick)
+    out.set(p.id, pick)
+  }
+  return out
+}

@@ -9,7 +9,7 @@ import { buildingWings, setback, spriteFor, spriteKey, spriteUrl, type Wing } fr
 import { deviceKey, deviceSprite, formOfPlace, levelsOf } from './devices'
 import { frameOf, type Frame } from './viewport'
 import { LANDMARKS } from './library/landmarkLooks'
-import { edgeSlots, type Gate, type LevelLinks, type Line, type Pass } from './links'
+import { edgeSlots, ORPHAN, OTHER, seat, SLOTS, type Gate, type LevelLinks, type Line, type Pass } from './links'
 
 /**
  * One scene draws one place (a page): its 16×16 ground and the things on it,
@@ -1179,27 +1179,14 @@ export class PlaceScene extends Phaser.Scene {
     if (!me) return out
     // The edge's fixed crossings (links.ts): the named ones, then Other and Orphan, each with what passes.
     const slots = edgeSlots(lk.gates)
-    type Spot = { pass: Pass; kind: 'named' | 'other' | 'orphan'; edge: 'x0' | 'x1' | 'y0' | 'y1'; t: number }
-    const spots: Spot[] = []
-    // A named crossing's side and place along it: toward the neighbour's centre in the town, the larger difference deciding the side.
-    for (const pass of slots.named) {
-      const c = centre(pass.id)
-      if (!c) continue
-      const dx = c.x - me.x, dy = c.y - me.y
-      const edge = Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? 'x1' : 'x0') : (dy >= 0 ? 'y1' : 'y0')
-      // Along the edge, where the neighbour sits across it (16 is the town's ground), kept off the corners.
-      const along = edge[0] === 'x' ? c.y : c.x
-      spots.push({ pass, kind: 'named', edge, t: Math.min(0.85, Math.max(0.15, along / 16)) })
-    }
-    // Other and Orphan lie toward the front corner, in plain sight: they are where the work is.
-    if (slots.other) spots.push({ pass: slots.other, kind: 'other', edge: 'y1', t: 0.88 })
-    if (slots.orphan) spots.push({ pass: slots.orphan, kind: 'orphan', edge: 'x1', t: 0.88 })
-    // Crossings on one side stay apart.
-    for (const e of ['x0', 'x1', 'y0', 'y1'] as const) {
-      const on = spots.filter(s => s.edge === e).sort((a, b) => a.t - b.t)
-      const gap = 0.16
-      for (let i = 1; i < on.length; i++) if (on[i].t - on[i - 1].t < gap) on[i].t = Math.min(0.92, on[i - 1].t + gap)
-    }
+    type Spot = { pass: Pass | null; kind: 'named' | 'other' | 'orphan'; edge: 'x0' | 'x1' | 'y0' | 'y1'; t: number }
+    // The fixed slots outside (links.ts SLOTS), all drawn; a neighbour takes the side facing it in the town.
+    const taken = seat(slots.named, id => { const c = centre(id); return c ? { dx: c.x - me.x, dy: c.y - me.y } : null })
+    const holder = new Map([...taken].map(([id, slot]) => [slot, slots.named.find(p => p.id === id)!]))
+    const spots: Spot[] = SLOTS.map(sl => ({
+      pass: sl.id === OTHER ? slots.other : sl.id === ORPHAN ? slots.orphan : holder.get(sl.id) ?? null,
+      kind: sl.id === OTHER ? 'other' : sl.id === ORPHAN ? 'orphan' : 'named', edge: sl.edge, t: sl.t,
+    }))
     const g = this.add.graphics()
     out.push(g)
     const ROAD = 1.0, REACH = 2.2, DIRT = 0xc9a77a, BARRIER = 0xf08a4b
@@ -1211,7 +1198,20 @@ export class PlaceScene extends Phaser.Scene {
       const u = { x: n.y, y: n.x }
       const pt = (a: number, b: number, z = 0) => P(at0.x + n.x * a + u.x * b, at0.y + n.y * a + u.y * b, z)
       const named = sp.kind === 'named'
-      const share = slots.total ? sp.pass.n / slots.total : 0
+      // An empty slot: its pad outlined, waiting (the frame sets the places; content fills them, or not yet).
+      if (!sp.pass) {
+        const eg = this.add.graphics(), c1 = REACH + 0.6, r = 0.75
+        const corners = [pt(c1 - r, -r), pt(c1 + r, -r), pt(c1 + r, r), pt(c1 - r, r)]
+        eg.fillStyle(this.tone.kerb, 0.35).fillPoints(corners, true)
+        eg.lineStyle(1.3, this.tone.dim, 0.9)
+        for (let i = 0; i < 4; i++) { const p0 = corners[i], p1 = corners[(i + 1) % 4]; for (let k = 0; k < 8; k += 2) eg.lineBetween(p0.x + (p1.x - p0.x) * k / 8, p0.y + (p1.y - p0.y) * k / 8, p0.x + (p1.x - p0.x) * (k + 1) / 8, p0.y + (p1.y - p0.y) * (k + 1) / 8) }
+        const m = pt(c1, 0)
+        out.push(eg, this.label(m.x, m.y, sp.kind === 'named' ? 'open' : sp.kind === 'other' ? 'Other · 0' : 'Orphan · 0', { color: '#8a8478', fontSize: '11px' }).setOrigin(0.5))
+        framed.push(pt(c1, 0, 20), new Phaser.Math.Vector2(m.x - 40, m.y + 30), new Phaser.Math.Vector2(m.x + 40, m.y + 30))
+        continue
+      }
+      const pass = sp.pass
+      const share = slots.total ? pass.n / slots.total : 0
       // The road out: kerb, asphalt, a centre line, fading as it goes; to Other and Orphan a dirt track.
       if (!named) for (let k = 0; k < 6; k++) {
         const a0 = REACH * k / 6, a1 = REACH * (k + 1) / 6, fade = 1 - k / 6
@@ -1226,7 +1226,7 @@ export class PlaceScene extends Phaser.Scene {
       }
       // The crossing: two posts either side of the road on the edge, a beam across, in the neighbour's colour;
       // to Other and Orphan a temporary barrier, striped.
-      const hue = named && this.shown ? Phaser.Display.Color.HexStringToColor(hueOf(this.shown.tree, [sp.pass.id])).color : BARRIER
+      const hue = named && this.shown ? Phaser.Display.Color.HexStringToColor(hueOf(this.shown.tree, [pass.id])).color : BARRIER
       const H1 = 30
       for (const b of [-ROAD / 2 - 0.1, ROAD / 2 + 0.1]) {
         const f = pt(0.05, b), t = pt(0.05, b, H1)
@@ -1273,8 +1273,8 @@ export class PlaceScene extends Phaser.Scene {
         out.push(sg)
         const sign = pt(c1, 0)
         framed.push(pt(c1, 0, 60), new Phaser.Math.Vector2(sign.x - 90, sign.y + 50), new Phaser.Math.Vector2(sign.x + 90, sign.y + 50))
-        const who = sp.kind === 'other' && sp.pass.who.length ? ` (${sp.pass.who.slice(0, 2).join(', ')}${sp.pass.who.length > 2 ? '…' : ''})` : ''
-        out.push(this.plate(sign.x, sign.y + 14 + r * 14, `${sp.pass.label} · ${sp.pass.n} · ${Math.round(share * 100)}%${who}`, '#f08a4b'))
+        const who = sp.kind === 'other' && pass.who.length ? ` (${pass.who.slice(0, 2).join(', ')}${pass.who.length > 2 ? '…' : ''})` : ''
+        out.push(this.plate(sign.x, sign.y + 14 + r * 14, `${pass.label} · ${pass.n} · ${Math.round(share * 100)}%${who}`, '#f08a4b'))
         continue
       }
       // The neighbour itself at the road's end, a small block in its colour: a tap goes there (the Owner,
@@ -1292,12 +1292,12 @@ export class PlaceScene extends Phaser.Scene {
       ic.setInteractive(hit, Phaser.Geom.Polygon.Contains)
       ic.input!.cursor = 'pointer'
       ic.on('pointerover', () => ic.setAlpha(0.75)).on('pointerout', () => ic.setAlpha(1))
-      ic.on('pointerup', (p: Phaser.Input.Pointer) => { if (this.moved(p) <= DRAG) this.events_.go?.([sp.pass.id]) })
+      ic.on('pointerup', (p: Phaser.Input.Pointer) => { if (this.moved(p) <= DRAG) this.events_.go?.([pass.id]) })
       out.push(ic)
       // Its sign under it: who, and what passes each way.
       const sign = pt(REACH + 0.55, 0)
       framed.push(pt(c0, 0, hh + 10), new Phaser.Math.Vector2(sign.x - 90, sign.y + 40), new Phaser.Math.Vector2(sign.x + 90, sign.y + 40))
-      out.push(this.plate(sign.x, sign.y + 14, `${sp.pass.label}${say('bus', sp.pass.bus)}${say('metrics', sp.pass.metric)}`, hueOf(this.shown!.tree, [sp.pass.id])))
+      out.push(this.plate(sign.x, sign.y + 14, `${pass.label}${say('bus', pass.bus)}${say('metrics', pass.metric)}`, hueOf(this.shown!.tree, [pass.id])))
     }
     return out
   }
