@@ -173,6 +173,8 @@ func Compute(ctx context.Context, db eventlog.DB, prom Prom, w Window) ([]Readin
 	}
 	out = append(out, promReadings(ctx, prom, w)...)
 	out = append(out, ciQueueReadings(ctx, prom, w)...)
+	out = append(out, busEventReadings(ctx, prom, w)...)
+	out = append(out, busOutageReadings(ctx, prom, w)...)
 	out = append(out, unmeasured(w)...)
 	return out, nil
 }
