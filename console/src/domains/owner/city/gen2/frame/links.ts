@@ -213,3 +213,10 @@ export function slotsFor(ports: number): Slot[] {
   ]
 }
 export const SLOTS: readonly Slot[] = slotsFor(PORTS)
+
+/**
+ * Where port i of n stands along its edge, as a share of the edge (the Owner, 2026-11-20: the ports seen on
+ * the town and inside the district are the same ports, in the same places): evenly, never at a corner. For a
+ * small place (3) that is a quarter, a half, three quarters: on the sheet's own streets.
+ */
+export const portAt = (i: number, n: number) => (i + 1) / (n + 1)
