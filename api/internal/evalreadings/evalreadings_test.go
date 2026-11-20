@@ -137,3 +137,36 @@ func TestHandlerWithoutLedger(t *testing.T) {
 		t.Fatalf("name filter: %+v", body.Readings)
 	}
 }
+
+// 2026-11-20, the CI line: the queue is the pods' creation-to-start wait from
+// kube-state-metrics, longest per run, median per run prefix; the PipelineRun's
+// created_at -> started_at read 0 seconds and was not a queue. The fake gives
+// what PROD gave that morning for one day (ci-platform 197 runs, median 4 s)
+// and a series with no prefix, which is dropped.
+func TestCIQueueFromPods(t *testing.T) {
+	w := ClosedWindow(time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC), 7)
+	var asked []string
+	prom := func(_ context.Context, expr string) ([]Sample, error) {
+		asked = append(asked, expr)
+		if strings.HasPrefix(expr, "count") {
+			return []Sample{{Labels: map[string]string{"prefix": "ci-platform"}, Value: 197}, {Labels: map[string]string{"prefix": "land"}, Value: 3}}, nil
+		}
+		return []Sample{{Labels: map[string]string{"prefix": "land"}, Value: 0}, {Labels: map[string]string{}, Value: 113}, {Labels: map[string]string{"prefix": "ci-platform"}, Value: 4}}, nil
+	}
+	rs := ciQueueReadings(context.Background(), prom, w)
+	if len(rs) != 2 {
+		t.Fatalf("readings: %+v", rs)
+	}
+	if r := rs[0]; r.Labels["run_prefix"] != "ci-platform" || r.Status != StatusOK || *r.Value != 4 || r.Samples != 197 || r.Definition.Version != QueueDefinitionVersion {
+		t.Fatalf("ci-platform: %+v", r)
+	}
+	if r := rs[1]; r.Labels["run_prefix"] != "land" || r.Status != StatusTooFew || r.Samples != 3 {
+		t.Fatalf("3 runs must be too_few: %+v", r)
+	}
+	if !strings.Contains(asked[0], "@ "+itoa(w.To.Unix())) || !strings.Contains(asked[0], `namespace="cicd"`) {
+		t.Fatalf("query: %s", asked[0])
+	}
+	if rs := ciQueueReadings(context.Background(), nil, w); rs[0].Status != StatusUnmeasured {
+		t.Fatalf("no Prometheus: %+v", rs[0])
+	}
+}

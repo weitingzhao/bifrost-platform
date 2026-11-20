@@ -172,6 +172,7 @@ func Compute(ctx context.Context, db eventlog.DB, prom Prom, w Window) ([]Readin
 		}
 	}
 	out = append(out, promReadings(ctx, prom, w)...)
+	out = append(out, ciQueueReadings(ctx, prom, w)...)
 	out = append(out, unmeasured(w)...)
 	return out, nil
 }
@@ -232,6 +233,64 @@ func promReadings(ctx context.Context, prom Prom, w Window) []Reading {
 			r.Note = "the record covers too little of the window"
 		}
 		out = append(out, r)
+	}
+	return out
+}
+
+// QueueDefinitionVersion is the CI queue reading's own version. 2 (the CI line,
+// 2026-11-20): the wait between a pod's creation and its start (scheduling,
+// node, image pull) from kube-state-metrics, a run's queue being the longest
+// wait of its pods. Version 1, created_at -> started_at of the PipelineRun,
+// was only the controller taking the run and read 0 seconds on PROD.
+const QueueDefinitionVersion = "2"
+
+// ciQueueRuns is each run's queue: a pod's creation and start times are
+// constant gauges, so their max_over_time over the window gives every pod the
+// window saw without a subquery (a 7-day subquery timed out on PROD,
+// 2026-11-20). A pod is named <run>-<task>-pod, a run <prefix>-<5 characters>.
+func ciQueueRuns(span int, at int64) string {
+	sel := `{namespace="cicd",pod=~"(ci-[a-z]+|land)-.*"}`
+	wait := fmt.Sprintf("max_over_time(kube_pod_start_time%s[%ds] @ %d) - on(namespace,pod) max_over_time(kube_pod_created%s[%ds] @ %d)", sel, span, at, sel, span, at)
+	return fmt.Sprintf(`max by (prefix, run) (label_replace(label_replace(%s, "run", "$1", "pod", "((ci-[a-z]+|land)-[a-z0-9]{5}).*"), "prefix", "$1", "pod", "(ci-[a-z]+|land)-.*"))`, wait)
+}
+
+// ciQueueReadings: the median of the runs' queues by run prefix (ci-platform,
+// ci-infra, land, ...). The wait a landing spends behind the one before it is
+// inside its steps and not counted. Prometheus keeps 10 days.
+func ciQueueReadings(ctx context.Context, prom Prom, w Window) []Reading {
+	const name = "ci_queue_p50_seconds"
+	d := def("Prometheus kube-state-metrics kube_pod_start_time - kube_pod_created, namespace cicd, pods of ci-* and land-* runs",
+		"median over the window's runs of (the longest pod creation-to-start wait of the run), by run prefix")
+	d.Version = QueueDefinitionVersion
+	if prom == nil {
+		return []Reading{finish(Reading{Name: name, Unit: "seconds", Window: w, Definition: d, Note: "Prometheus is not reachable from this platform"}, true)}
+	}
+	if w.Days > 10 {
+		return []Reading{finish(Reading{Name: name, Unit: "seconds", Window: w, Definition: d, Note: "Prometheus keeps 10 days"}, true)}
+	}
+	span := int(w.To.Sub(w.From).Seconds())
+	runs := ciQueueRuns(span, w.To.Unix())
+	meds, err := prom(ctx, "quantile by (prefix) (0.5, "+runs+")")
+	if err != nil {
+		return []Reading{finish(Reading{Name: name, Unit: "seconds", Window: w, Definition: d, Note: "Prometheus query failed: " + err.Error()}, true)}
+	}
+	counts, _ := prom(ctx, "count by (prefix) ("+runs+")")
+	n := map[string]int{}
+	for _, c := range counts {
+		n[c.Labels["prefix"]] = int(c.Value)
+	}
+	sort.Slice(meds, func(i, j int) bool { return meds[i].Labels["prefix"] < meds[j].Labels["prefix"] })
+	var out []Reading
+	for _, m := range meds {
+		p := m.Labels["prefix"]
+		if p == "" {
+			continue
+		}
+		v := m.Value
+		out = append(out, finish(Reading{Name: name, Labels: map[string]string{"run_prefix": p}, Value: &v, Unit: "seconds", Samples: n[p], Window: w, Definition: d}, true))
+	}
+	if len(out) == 0 {
+		return []Reading{finish(Reading{Name: name, Unit: "seconds", Window: w, Definition: d, Note: "no CI pod in the window"}, true)}
 	}
 	return out
 }

@@ -93,8 +93,8 @@ func median(xs []float64) *float64 {
 }
 
 type runStats struct {
-	runs, ok   int
-	run, queue []float64
+	runs, ok int
+	run      []float64
 }
 
 // completedRuns groups the runs of a kind that completed in the window by
@@ -106,10 +106,9 @@ func completedRuns(rows []eventlog.Row, kind string, w Window) map[string]*runSt
 		if str(b, "kind") != kind {
 			continue
 		}
-		created, ok1 := instant(b, "created_at")
 		started, ok2 := instant(b, "started_at")
 		done, ok3 := instant(b, "completed_at")
-		if !ok1 || !ok2 || !ok3 || !in(done, w) {
+		if !ok2 || !ok3 || !in(done, w) {
 			continue
 		}
 		p := str(b, "pipeline")
@@ -123,21 +122,13 @@ func completedRuns(rows []eventlog.Row, kind string, w Window) map[string]*runSt
 			st.ok++
 		}
 		st.run = append(st.run, done.Sub(started).Seconds())
-		// Queue (definition 2, the CI line 2026-11-20): created_at to the first
-		// step container's start across the run's TaskRuns (scheduling, node,
-		// image pull). created_at to started_at is only the controller taking
-		// the run (0 seconds on PROD), so a run without first_step_at gives no
-		// queue sample.
-		if first, ok := instant(b, "first_step_at"); ok && !first.Before(created) {
-			st.queue = append(st.queue, first.Sub(created).Seconds())
-		}
 	}
 	return by
 }
 
 // ciReadings: kind=ci runs (ci-* and land-*, the CI line confirmed
 // 2026-11-20), one set per pipeline. Run time is started_at to completed_at,
-// queue time created_at to first_step_at (definition 2).
+// The queue is read from Prometheus (promReadings, ciQueueReadings).
 func ciReadings(rows []eventlog.Row, w Window) []Reading {
 	src := "event ledger pipeline_seen kind=ci, latest fact per run uid, completed in window"
 	by := completedRuns(rows, "ci", w)
@@ -155,7 +146,6 @@ func ciReadings(rows []eventlog.Row, w Window) []Reading {
 		l := map[string]string{"pipeline": p}
 		out = append(out,
 			finish(Reading{Name: "ci_run_p50_seconds", Labels: l, Value: median(st.run), Unit: "seconds", Samples: st.runs, Window: w, Definition: def(src, "median of completed_at - started_at")}, true),
-			queueReading(l, st, w, src),
 			finish(Reading{Name: "ci_success_ratio", Labels: l, Value: ratio(st.ok, st.runs), Unit: "ratio", Samples: st.runs, Window: w, Definition: def(src, "runs with result Succeeded / runs")}, false),
 		)
 	}
@@ -274,19 +264,4 @@ func (s ledgerSource) deployReadings(w Window) ([]Reading, error) {
 		Definition: def("event ledger git.main.advanced and "+src, "median of (first prod deploy of a commit) - (commit reached main), deployed commits only, main looked up 30 days back"),
 		Note:       "version 1 times only the commit a deploy names; the commits it carries along are not traced"}, true)
 	return []Reading{deploys, lead}, nil
-}
-
-// QueueDefinitionVersion is the queue reading's own version: 2 since the CI
-// line set it to created_at -> first_step_at (2026-11-20); version 1
-// (created_at -> started_at) read 0 seconds and was never right.
-const QueueDefinitionVersion = "2"
-
-func queueReading(l map[string]string, st *runStats, w Window, src string) Reading {
-	d := def(src, "median of first_step_at - created_at over runs that carry first_step_at")
-	d.Version = QueueDefinitionVersion
-	r := finish(Reading{Name: "ci_queue_p50_seconds", Labels: l, Value: median(st.queue), Unit: "seconds", Samples: len(st.queue), Window: w, Definition: d}, true)
-	if len(st.queue) == 0 {
-		r.Note = "no run in the window carries first_step_at yet"
-	}
-	return r
 }
