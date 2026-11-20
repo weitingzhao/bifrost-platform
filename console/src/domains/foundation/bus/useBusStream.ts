@@ -3,6 +3,7 @@ import { authedFetch, authHeaders } from '@/api/client'
 import { serverFetch } from '@/api/serverContact'
 import type { BusEnvelope, BusTraceResponse } from './busTrace'
 import { SseParser } from './sseParser'
+import { IdleWatch, LIVE_IDLE_MS } from './liveRefresh'
 import type { BusReceipt } from './busNerve'
 
 /** Events kept in memory, newest first. */
@@ -72,11 +73,17 @@ export function useBusStream(): BusStreamState {
     const run = async () => {
       while (!signal.aborted) {
         let wait = retry
+        // Its own abort per attempt: a stream silent for LIVE_IDLE_MS (three missed
+        // heartbeats) is dropped and reopened, as the Console's live refresh does.
+        const attempt = new AbortController()
+        const leave = () => attempt.abort()
+        signal.addEventListener('abort', leave, { once: true })
+        const idle = new IdleWatch(LIVE_IDLE_MS, () => attempt.abort())
         try {
           const headers = authHeaders()
           headers.set('Accept', 'text/event-stream')
           if (cursor) headers.set('Last-Event-ID', cursor)
-          const r = await serverFetch(`/api/v1/bus/stream?client=${CLIENT}&receipts=1`, { headers, signal, cache: 'no-store' })
+          const r = await serverFetch(`/api/v1/bus/stream?client=${CLIENT}&receipts=1`, { headers, signal: attempt.signal, cache: 'no-store' })
           if (r.status === 503 || r.status === 404 || r.status === 502) {
             const detail = r.status === 404 ? 'this platform-api has no bus routes' : await errorText(r)
             setState(s => ({ ...s, connection: 'off', detail }))
@@ -96,6 +103,7 @@ export function useBusStream(): BusStreamState {
             for (;;) {
               const { value, done } = await reader.read()
               if (done) break
+              idle.poke()
               const batch = parser.push(decoder.decode(value, { stream: true }))
               if (batch.retry != null) retry = batch.retry
               const error = batch.comments.find(c => c.startsWith('error '))
@@ -127,8 +135,11 @@ export function useBusStream(): BusStreamState {
         } catch (error) {
           if (signal.aborted) return
           // A fetch failure names the URL, never the request's headers.
-          const detail = error instanceof Error ? error.message : 'stream failed'
+          const detail = attempt.signal.aborted ? `no data for ${LIVE_IDLE_MS / 1000} s; reopening` : error instanceof Error ? error.message : 'stream failed'
           setState(s => ({ ...s, connection: 'reconnecting', detail }))
+        } finally {
+          idle.stop()
+          signal.removeEventListener('abort', leave)
         }
         await sleep(wait, signal)
         if (!signal.aborted) setState(s => (s.connection === 'live' ? { ...s, connection: 'reconnecting' } : s))
