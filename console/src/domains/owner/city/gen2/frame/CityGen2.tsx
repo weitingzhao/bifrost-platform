@@ -97,6 +97,25 @@ const readLight = (): LightChoice => {
   try { const v = window.localStorage.getItem(LIGHT_KEY); return v && v in NEXT ? v as LightChoice : 'auto' } catch { return 'auto' }
 }
 
+/**
+ * The tree with each district as big as its plot on the city (the Owner, 2026-11-20: how much room a district
+ * has is the Owner's to give; the more room, the finer what it shows): 4×4, 4×8 or 8×8, never past 8×8; which
+ * way a 4×8 lies is its plot's. A district on no plot keeps the size its content gave it.
+ */
+function sizedByLand(tree: Place, a: Arrangement): Place {
+  if (tree.kind !== 'town') return tree
+  const lay = layoutOf(tree, a)
+  const plots = new Map(lay.plots.map(p => [p.id, p]))
+  const children = tree.children.map(c => {
+    const at = lay.placed.find(p => p.id === c.id), plot = at ? plots.get(at.plot) : undefined
+    if (c.kind !== 'district' || !plot) return c
+    const short = Math.min(8, Math.min(plot.w, plot.h)), long = Math.min(8, Math.max(plot.w, plot.h))
+    const shape = `${short}x${long}` as Place['shape']
+    return shape === c.shape || !['4x4', '4x8', '8x8'].includes(shape) ? c : { ...c, shape }
+  })
+  return { ...tree, children }
+}
+
 /** A level's connections cut to the children on the ground shown (one sheet of a district). */
 function onlyOn(lk: LevelLinks, v: Place): LevelLinks {
   const ids = new Set(v.children.map(c => c.id))
@@ -145,7 +164,11 @@ export default function CityGen2(props: Props) {
 
 function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, timerLoop = false, arrangements, content, notice }: Props) {
   const store = useMemo(() => arrangements ?? browserArrangements(), [arrangements])
-  const tree = content.tree
+  // A district is as big as the land the Owner gives it on the city (RULES.md: the land first): its plot there
+  // sets its size, and so its sheets. Read from the city's arrangement, so it holds from one visit to the next.
+  const [townVer, setTownVer] = useState(0)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const tree = useMemo(() => sizedByLand(content.tree, store.get('town')), [content.tree, townVer, store])
   const path = useMemo(() => resolve(tree, asked), [tree, asked])
   const steps = trail(tree, path)
   const place = here(tree, path)
@@ -265,8 +288,13 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
       plot: (op, plotId) => {
         const L = layRef.current
         const next = op === 'split' ? splitPlot(L.plan, plotId) : op === 'turn' ? turnPlot(L.plan, plotId) : mergePlot(L.plan, plotId)
-        // A cut or a join changes the plots; things keep their plot where it still exists and fits.
-        if (next !== null) keep({ plan: encodePlan(next), at: Object.fromEntries(L.placed.map(p => [p.id, p.plot])) })
+        // A cut or a join changes the plots; things keep their plot where it still exists and fits. A join
+        // keeps what stood on the tapped half on the joined plot (else what stood on the other half).
+        const joined = op === 'merge' ? plotId.slice(0, -1) : null
+        const halves = joined === null ? [] : L.placed.filter(p => p.plot.startsWith(joined) && p.plot.length === joined.length + 1)
+        const keeper = halves.find(p => p.plot === plotId) ?? halves[0]
+        const at = Object.fromEntries(L.placed.map(p => [p.id, keeper && p.id === keeper.id ? joined! : p.plot]))
+        if (next !== null) keep({ plan: encodePlan(next), at })
       },
       refused: () => setRefusal(PRINCIPLE.noFit),
       zoomed: on => setZoomed(on),
@@ -346,11 +374,13 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
   /** Keep the Owner's plan and plots for this place (display only). */
   function keep(a: Arrangement) {
     store.set(hereKey(pathRef.current), a)
+    if (pathRef.current.length === 0) setTownVer(v => v + 1)
     setSaved(s => ({ ...s, here: a }))
   }
 
   const resetArrangement = () => {
     store.set(hereKey(path), null)
+    if (path.length === 0) setTownVer(v => v + 1)
     setSaved(s => ({ ...s, here: {} }))
   }
 
