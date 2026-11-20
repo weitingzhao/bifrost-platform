@@ -81,12 +81,12 @@ func (s *Server) guardUntraced(id string, next http.HandlerFunc) http.HandlerFun
 		}
 		// From here the call is the caller's own and is recorded when it ends
 		// (action_record.go): done, refused or failed, with the law it rested on.
-		sc := &statusCapture{ResponseWriter: w}
+		sc := &statusCapture{ResponseWriter: w, keepBody: id == "apply_manifest"}
 		law := "action catalog: tier " + string(tier)
 		said := actionrecord.CallerWords(raw)
 		defer func() {
 			if sc.Header().Get(actions.NotRecordedHeader) == "" {
-				s.recordDirect(r, act, params, said, law, sc.status)
+				s.recordDirect(r, act, params, said, law, sc.status, sc.keep)
 			}
 		}()
 		if !tier.NeedsApproval() {
