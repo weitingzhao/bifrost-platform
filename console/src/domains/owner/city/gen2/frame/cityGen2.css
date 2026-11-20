@@ -271,3 +271,14 @@
 .g2-rulers .g2-mute { margin: 0; }
 .g2-ruler { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .g2-ruler select { min-height: 28px; }
+
+/* The frame's core idea on a card (principle.ts), and a refused drop said in the hint. */
+.g2-about { left: 50%; top: 64px; transform: translateX(-50%); width: min(520px, calc(100% - 32px)); padding: var(--s4, 12px) var(--s5, 16px); z-index: 5; font-size: 13px; line-height: 1.5; }
+.g2-about header { display: flex; align-items: center; justify-content: space-between; gap: var(--s3, 8px); }
+.g2-about h2 { margin: 0; font-size: 15px; }
+.g2-about p { margin: var(--s2, 6px) 0; }
+.g2-about ul { margin: var(--s2, 6px) 0; padding-left: var(--s5, 16px); }
+.g2-about li { margin: 2px 0; }
+.g2-about-remedy { color: var(--g2-soft); }
+.g2-refusal { color: #c2410c !important; font-weight: 600; }
+.g2-principle-line { margin-top: var(--s4, 12px) !important; font-size: 13px; color: var(--g2-soft); }

@@ -5,6 +5,7 @@ import { KitRoot, Menu, type PanelSize } from './parts'
 import { assign, decodePlan, encodePlan, mergePlot, moveTo, planFor, plotsOf, splitPlot, streetsOf, turnPlot, type Arrangement, type Item, type Plan } from './grid'
 import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
 import { LABEL_MODES, type LabelMode } from './labels'
+import { PRINCIPLE } from './principle'
 import type { CityContent, Panel } from './content'
 import { PlaceScene, type ArrangeTool, type Shown } from './placeScene'
 import { functionAt, here, isWired, meterText, onSheet, resolve, sheetCount, trail, type Path, type Place } from './places'
@@ -135,6 +136,7 @@ export default function CityGen2(props: Props) {
         <h1>This content breaks the frame’s rules</h1>
         <p>The frame draws only content that keeps its rules. Fix the content; the frame does not bend.</p>
         <ul>{broken.map(b => <li key={b}><code>{b}</code></li>)}</ul>
+        <p className="g2-principle-line"><b>{PRINCIPLE.title}.</b> {PRINCIPLE.idea} {PRINCIPLE.remedy}</p>
       </section>
     </div>
   )
@@ -173,6 +175,10 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
   // Day, dusk or night: by the viewer's clock unless pinned; the clock is read every minute.
   const [lightChoice, setLightChoice] = useState<LightChoice>(readLight)
   const [labels, setLabels] = useState<LabelMode>(readLabels)
+  // The frame's core idea, on a card the "?" opens (principle.ts); and a refused drop said for a moment.
+  const [aboutOpen, setAboutOpen] = useState(false)
+  const [refusal, setRefusal] = useState<string | null>(null)
+  useEffect(() => { if (!refusal) return; const t = window.setTimeout(() => setRefusal(null), 4000); return () => window.clearTimeout(t) }, [refusal])
   const stepLabels = () => {
     const next = LABEL_MODES[(LABEL_MODES.indexOf(labels) + 1) % LABEL_MODES.length]
     setLabels(next)
@@ -262,6 +268,7 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
         // A cut or a join changes the plots; things keep their plot where it still exists and fits.
         if (next !== null) keep({ plan: encodePlan(next), at: Object.fromEntries(L.placed.map(p => [p.id, p.plot])) })
       },
+      refused: () => setRefusal(PRINCIPLE.noFit),
       zoomed: on => setZoomed(on),
       up: () => { if (pathRef.current.length > 0) { setSelected(null); goRef.current(pathRef.current.slice(0, -1)) } },
       // A neighbour's icon on the edge (a district it talks to): straight there.
@@ -426,6 +433,7 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
       {sheets > 1 && <div className="k-seg g2-sheets" role="group" aria-label="Sheet">
         {Array.from({ length: sheets }, (_, i) => <button key={i} className={`g2-btn${i === sheet ? ' on' : ''}`} aria-pressed={i === sheet} onClick={() => setSheet(i)} title={`Sheet ${i + 1} of ${sheets} ([ and ] to step)`}>{i + 1}</button>)}
       </div>}
+      <button className="g2-icon" onClick={() => setAboutOpen(o => !o)} aria-pressed={aboutOpen} aria-label={PRINCIPLE.title} title={`${PRINCIPLE.title}: how this map works`}>?</button>
       <button className="g2-btn" onClick={stepLabels} aria-label={`Plates: ${labels}`} title="Labels: opaque, see-through, or hidden (hover a building for its name)">{LABELS_WORD[labels]}</button>
       <button className="g2-btn" onClick={stepLight} aria-label={`Light: ${LIGHT_WORD[lightChoice]}`}>
         {LIGHT_ICON[light]} {lightChoice === 'auto' ? `Auto · ${LIGHT_WORD[light]}` : LIGHT_WORD[lightChoice]}
@@ -469,6 +477,14 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
       <div className="g2-probe" ref={probe} aria-hidden />
       <div className="g2-canvas" ref={host} />
 
+      {/* The frame's core idea, where it is used (principle.ts): opened by the "?" on the toolbar. */}
+      {aboutOpen && <section className="g2-corner g2-about" role="dialog" aria-label={PRINCIPLE.title}>
+        <header><h2>{PRINCIPLE.title}</h2><button className="g2-icon" onClick={() => setAboutOpen(false)} aria-label="Close">×</button></header>
+        <p>{PRINCIPLE.idea}</p>
+        <ul>{PRINCIPLE.rules.map(r => <li key={r}>{r}</li>)}</ul>
+        <p className="g2-about-remedy"><b>When something does not fit:</b> {PRINCIPLE.remedy}</p>
+      </section>}
+
       {/* Summary. On a phone one line; tap it to read the question. */}
       <section className={`g2-corner g2-tl${f.summary.compact ? ' compact' : ''}${open ? ' open' : ''}`} aria-label="Summary"
         style={{ left: f.summary.x, top: f.summary.y, width: f.summary.w, minHeight: f.summary.h }}
@@ -483,7 +499,7 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
         </dl>
         {/* On a phone the tools live here (the top bar has no room); elsewhere they sit beside the search. */}
         {f.search.mode === 'icon' && (!f.summary.compact || open || arranging) && <div className="g2-actions" onClick={e => e.stopPropagation()}>{tools}</div>}
-        {arranging && f.search.mode === 'icon' && <p className="g2-hint">{TOOL_HINT[tool]}</p>}
+        {arranging && f.search.mode === 'icon' && <p className={`g2-hint${refusal ? ' g2-refusal' : ''}`}>{refusal ?? TOOL_HINT[tool]}</p>}
         {lensLabel && <p className="g2-hint">Lit: <b>{lensLabel}</b> · {lensHere === 0 ? 'nothing here serves it' : `${lensHere} here`}</p>}
         {lay.homeless.length > 0 && <p className="g2-hint g2-warn">{lay.homeless.length === 1 ? 'One building finds' : `${lay.homeless.length} buildings find`} no plot big enough. Join plots to make room.</p>}
       </section>
@@ -526,7 +542,7 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
       {f.search.mode === 'bar' ? (
         <div className="g2-corner g2-search" style={at(f.search)}>
           {arranging
-            ? <span className="g2-hint-inline">{TOOL_HINT[tool]}</span>
+            ? <span className={`g2-hint-inline${refusal ? ' g2-refusal' : ''}`}>{refusal ?? TOOL_HINT[tool]}</span>
             : <input ref={searchBox} value={query} onChange={e => setQuery(e.target.value)} onFocus={() => setSearching(true)} onBlur={() => setSearching(false)}
                 onKeyDown={e => { if (e.key === 'Enter' && hits[0]) goHit(hits[0]) }} placeholder="Search places   /" aria-label="Search places" />}
           <div className="g2-tools">{tools}</div>

@@ -73,6 +73,8 @@ export type SceneEvents = {
   moved: (id: string, plot: string) => void
   /** The Owner cut a plot in two, or joined it with its other half. */
   plot: (op: 'split' | 'merge' | 'turn', plot: string) => void
+  /** A building was dropped on a plot too small for it: refused (the land comes first). */
+  refused?: () => void
   /** The view went closer than the whole page, or back: the minimap changes what it shows. */
   zoomed?: (on: boolean) => void
   /** Up to the level above (the wheel turned on outwards past the whole page). */
@@ -893,6 +895,7 @@ export class PlaceScene extends Phaser.Scene {
     const to = this.plotUnder(p) ?? c.to
     if (!to || to.id === c.p.plot) return
     if (this.canGo(c.p, to)) this.events_.moved(c.p.id, to.id)
+    else this.events_.refused?.()
   }
 
   /**
