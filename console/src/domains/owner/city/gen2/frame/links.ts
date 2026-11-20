@@ -16,7 +16,7 @@ import { trail, type Path, type Place } from './places'
  *           place outside at the level beside this one, and a line from it to the child it serves
  *   hidden  both ends under the same child: that child's own business, shown when you go in
  * At most LINES lines a level, the heaviest first; the rest are counted. A district's edge takes its stations
- * through edgeSlots: CROSSINGS named crossings, the rest and the unclear in Other, the unowned in Orphan.
+ * through edgeSlots: one side in, one side out, PORTS named ports and Other each, the unowned in Orphan.
  */
 
 export type Way = 'bus' | 'metric'
@@ -38,8 +38,6 @@ export type Link = {
   clarity?: 'clear' | 'unclear' | 'orphan'
 }
 
-/** The fixed crossings of a district's edge: this many named ones, then Other and Orphan (the Owner, 2026-11-20). */
-export const CROSSINGS = 4
 export const OTHER = 'other'
 export const ORPHAN = 'orphan'
 
@@ -123,63 +121,51 @@ export function linkRulesBroken(tree: Place, links: readonly Link[]): string[] {
   return out
 }
 
-/** What passes one crossing: whom it leads to, and how many things go in and out, by way. */
-export type Pass = { id: string; label: string; bus: { in: number; out: number }; metric: { in: number; out: number }; n: number; who: string[] }
+/** What passes one crossing: whom it leads to, and how many things go through, by way. */
+export type Pass = { id: string; label: string; bus: number; metric: number; n: number; who: string[] }
+
+/** How many named ports each side has (the Owner, 2026-11-20: a few fixed ports a side, then Other). */
+export const PORTS = 3
+
+export type Edge = { named: Pass[]; other: Pass | null }
 
 /**
- * A district's edge (the Owner, 2026-11-20: a fixed number of crossings, plus Other and Orphan, so the mess
- * shows and its size is counted): one named crossing per district it deals with clearly, the heaviest
- * CROSSINGS of them; everything unclear and every district past those goes through Other; whatever belongs
- * to no one through Orphan. `total` is every thing passing, so Other's and Orphan's share can be told.
+ * A district's two sides (the Owner, 2026-11-20: not every direction; one side in, one side out, a few
+ * fixed ports each, then Other; the mess shown and counted). In: what others send or give it; out: what it
+ * sends or gives. A neighbour it deals with both ways takes a port on each side. The heaviest PORTS a side
+ * are named; the rest and the unclear pass through that side's Other; what belongs to no one through Orphan.
  */
-export function edgeSlots(gates: readonly Gate[]): { named: Pass[]; other: Pass | null; orphan: Pass | null; total: number } {
-  const add = (p: Pass, g: Gate) => { p[g.way].in += g.ins; p[g.way].out += g.outs; p.n += g.carries.length }
-  const fresh = (id: string, label: string): Pass => ({ id, label, bus: { in: 0, out: 0 }, metric: { in: 0, out: 0 }, n: 0, who: [] })
-  const clear = new Map<string, Pass>()
-  const other = fresh(OTHER, 'Other'), orphan = fresh(ORPHAN, 'Orphan')
-  for (const g of gates) {
-    if (g.clarity === 'orphan') { add(orphan, g); continue }
-    if (g.clarity === 'unclear') { add(other, g); if (!other.who.includes(g.label)) other.who.push(g.label); continue }
-    const id = g.outside[0]
-    const p = clear.get(id) ?? fresh(id, g.label)
-    add(p, g)
-    clear.set(id, p)
+export function edgeSlots(gates: readonly Gate[]): { in: Edge; out: Edge; orphan: Pass | null; total: number } {
+  const fresh = (id: string, label: string): Pass => ({ id, label, bus: 0, metric: 0, n: 0, who: [] })
+  const orphan = fresh(ORPHAN, 'Orphan')
+  const side = (dir: 'in' | 'out'): Edge => {
+    const clear = new Map<string, Pass>()
+    const other = fresh(OTHER, 'Other')
+    for (const g of gates) {
+      const k = dir === 'in' ? g.ins : g.outs
+      if (!k || g.clarity === 'orphan') continue
+      const p = g.clarity === 'unclear' ? other : clear.get(g.outside[0]) ?? fresh(g.outside[0], g.label)
+      p[g.way] += k; p.n += k
+      if (g.clarity === 'unclear') { if (!other.who.includes(g.label)) other.who.push(g.label) } else clear.set(g.outside[0], p)
+    }
+    const ranked = [...clear.values()].sort((a, b) => b.n - a.n)
+    for (const p of ranked.slice(PORTS)) { other.bus += p.bus; other.metric += p.metric; other.n += p.n; other.who.push(p.label) }
+    return { named: ranked.slice(0, PORTS), other: other.n ? other : null }
   }
-  const ranked = [...clear.values()].sort((a, b) => b.n - a.n)
-  for (const p of ranked.slice(CROSSINGS)) {
-    other.bus.in += p.bus.in; other.bus.out += p.bus.out; other.metric.in += p.metric.in; other.metric.out += p.metric.out
-    other.n += p.n; other.who.push(p.label)
-  }
+  for (const g of gates) if (g.clarity === 'orphan') { orphan[g.way] += g.carries.length; orphan.n += g.carries.length }
   const total = gates.reduce((t, g) => t + g.carries.length, 0)
-  return { named: ranked.slice(0, CROSSINGS), other: other.n ? other : null, orphan: orphan.n ? orphan : null, total }
+  return { in: side('in'), out: side('out'), orphan: orphan.n ? orphan : null, total }
 }
-
-/** A fixed place outside a district's ground (the Owner, 2026-11-20: like the plots inside, the frame sets
- * the places outside first; they may stand empty until something comes to fill them). One named slot on each
- * side's middle, Other and Orphan toward the front corner. `t` is how far along its edge, 0..1. */
-export type Slot = { id: 'x0' | 'x1' | 'y0' | 'y1' | typeof OTHER | typeof ORPHAN; edge: 'x0' | 'x1' | 'y0' | 'y1'; t: number }
-export const SLOTS: readonly Slot[] = [
-  { id: 'y0', edge: 'y0', t: 0.5 }, { id: 'x1', edge: 'x1', t: 0.4 }, { id: 'y1', edge: 'y1', t: 0.4 }, { id: 'x0', edge: 'x0', t: 0.5 },
-  { id: OTHER, edge: 'y1', t: 0.86 }, { id: ORPHAN, edge: 'x1', t: 0.86 },
-]
 
 /**
- * Which slot each named neighbour takes: the side facing it in the town if free, else the free side
- * nearest that way; the heaviest choose first. `toward` gives each neighbour's direction from here.
+ * The fixed places outside a district's ground (the Owner, 2026-11-20: as the plots inside, the frame sets
+ * them first and they wait to be filled): along the front-left edge the way in, PORTS named ports then Other;
+ * along the front-right edge the way out, the same; Orphan at the front corner where the two meet. `t` is
+ * how far along its edge from the back, 0..1.
  */
-export function seat(named: readonly Pass[], toward: (id: string) => { dx: number; dy: number } | null): Map<string, Slot['id']> {
-  const sides = ['x1', 'y1', 'x0', 'y0'] as const
-  const angle: Record<(typeof sides)[number], number> = { x1: 0, y1: Math.PI / 2, x0: Math.PI, y0: -Math.PI / 2 }
-  const free = new Set<(typeof sides)[number]>(sides)
-  const out = new Map<string, Slot['id']>()
-  for (const p of named) {
-    const d = toward(p.id)
-    const a = d ? Math.atan2(d.dy, d.dx) : 0
-    const gap = (s: (typeof sides)[number]) => { const x = Math.abs(a - angle[s]) % (2 * Math.PI); return Math.min(x, 2 * Math.PI - x) }
-    const pick = [...free].sort((u, v) => gap(u) - gap(v))[0]
-    if (!pick) break
-    free.delete(pick)
-    out.set(p.id, pick)
-  }
-  return out
-}
+export type Slot = { side: 'in' | 'out' | 'orphan'; i: number; edge: 'y1' | 'x1' | 'corner'; t: number }
+export const SLOTS: readonly Slot[] = [
+  ...[0, 1, 2, 3].map(i => ({ side: 'in' as const, i, edge: 'y1' as const, t: 0.14 + i * 0.21 })),
+  ...[0, 1, 2, 3].map(i => ({ side: 'out' as const, i, edge: 'x1' as const, t: 0.14 + i * 0.21 })),
+  { side: 'orphan', i: 0, edge: 'corner', t: 1 },
+]

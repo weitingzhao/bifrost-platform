@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CROSSINGS, GATES, LINES, SLOTS, edgeSlots, linksAt, linkRulesBroken, seat, type Link } from '../links'
+import { GATES, LINES, PORTS, SLOTS, edgeSlots, linksAt, linkRulesBroken, type Link } from '../links'
 import type { Place } from '../places'
 
 // Origin: the Owner, 2026-11-20 ("框架提供交互方式，系统来配；Bus 和指标两种足够；每层的显示要有规范，
@@ -56,40 +56,32 @@ describe('a content’s connections keep the frame’s rules', () => {
   })
 })
 
-// Origin: the Owner, 2026-11-20 ("固定格子 + Other + Orphan；乱的不藏，量出多大"). These pin that the edge keeps
-// CROSSINGS named crossings, puts the unclear and the rest into Other, the unowned into Orphan, and counts all.
-describe('a district’s edge: named crossings, Other, Orphan', () => {
+// Origin: the Owner, 2026-11-20 ("两边就够：一边进一边出，每边 3 个口子加 Other，再加一个 Orphan；乱的不藏，量出多大").
+// These pin the two sides, the fixed ports and that nothing is dropped.
+describe('a district’s two sides: in and out, three ports and Other each, one Orphan', () => {
   const town: Place = P('town', 'town', ['me', 'a', 'b', 'c', 'd', 'e'].map(id => P(id, 'district', [P('x', 'building')])))
   const links: Link[] = [
     ...['a', 'a', 'a', 'b', 'b', 'c', 'd', 'e'].map((to, i) => L('bus', 'me/x', `${to}/x`, `e${i}`)),
+    L('metric', 'a/x', 'me/x', 'reading'),
     { ...L('bus', 'me/x', 'a/x', 'fuzzy'), clarity: 'unclear' },
     { way: 'bus', from: ['me', 'x'], to: [], what: 'unowned', source: '/api/v1/bus/contract', clarity: 'orphan' },
   ]
-  it('keeps the heaviest named, the rest with the unclear in Other, the unowned in Orphan', () => {
+  it('out keeps the heaviest three named, the rest with the unclear in Other; in has its own; the unowned in Orphan', () => {
     const s = edgeSlots(linksAt(town, ['me'], links).gates)
-    expect(s.named.map(p => p.id)).toHaveLength(CROSSINGS)
-    expect(s.named[0]).toMatchObject({ id: 'a', n: 3 })
-    expect(s.other).toMatchObject({ n: 2 })
+    expect(s.out.named.map(p => p.id)).toEqual(['a', 'b', expect.any(String)])
+    expect(s.out.named).toHaveLength(PORTS)
+    expect(s.out.other).toMatchObject({ n: 3 })
+    expect(s.in.named).toEqual([expect.objectContaining({ id: 'a', metric: 1, n: 1 })])
+    expect(s.in.other).toBeNull()
     expect(s.orphan).toMatchObject({ n: 1 })
-    expect(s.total).toBe(10)
+    expect(s.total).toBe(11)
   })
-  it('an orphan’s far end need not be a place, and nothing is dropped', () => {
+  it('an orphan’s far end need not be a place', () => {
     expect(linkRulesBroken(town, links)).toEqual([])
   })
-})
-
-// Origin: the Owner, 2026-11-20 ("格子之外预设固定的格子，现在没有就空着，将来填满；边界和规则先定死"). These pin
-// the fixed slots outside a district and how a neighbour takes the side facing it.
-describe('the fixed slots outside a district', () => {
-  const pass = (id: string) => ({ id, label: id, bus: { in: 0, out: 0 }, metric: { in: 0, out: 0 }, n: 1, who: [] })
-  it('are six: one named on each side, then Other and Orphan', () => {
-    expect(SLOTS.map(s => s.id).sort()).toEqual(['orphan', 'other', 'x0', 'x1', 'y0', 'y1'])
-  })
-  it('a neighbour takes the side facing it; when that is taken, the free side nearest that way', () => {
-    const dir: Record<string, { dx: number; dy: number }> = { east: { dx: 5, dy: 0 }, east2: { dx: 4, dy: 1 }, north: { dx: 0, dy: -3 } }
-    const s = seat([pass('east'), pass('east2'), pass('north')], id => dir[id])
-    expect(s.get('east')).toBe('x1')
-    expect(s.get('east2')).toBe('y1')
-    expect(s.get('north')).toBe('y0')
+  it('the frame sets nine places outside: four in, four out, one Orphan', () => {
+    expect(SLOTS.filter(s => s.side === 'in')).toHaveLength(PORTS + 1)
+    expect(SLOTS.filter(s => s.side === 'out')).toHaveLength(PORTS + 1)
+    expect(SLOTS.filter(s => s.side === 'orphan')).toHaveLength(1)
   })
 })
