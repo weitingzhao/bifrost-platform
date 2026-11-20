@@ -124,3 +124,69 @@ func TestFieldPathsReadListsByKeyAndScalars(t *testing.T) {
 		}
 	}
 }
+
+func workloadRow(t *testing.T, id string) WatchSpec {
+	t.Helper()
+	rows, err := registry.Watches()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenants, err := registry.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range rows["rocket"] {
+		if w.ID == id {
+			return WatchSpec{Watch: w, Ref: tenants["rocket"].Channels[w.Type].Ref}
+		}
+	}
+	t.Fatalf("no %s row", id)
+	return WatchSpec{}
+}
+
+// 2026-11-20: NATS (a StatefulSet) sat Pending an hour and nothing on the bus
+// said so. A workload is ready when its ready replicas equal its replicas;
+// one scaled to 0 is ready with none (the API leaves readyReplicas out).
+func TestAWorkloadIsReadyWhenItsReplicasAreReady(t *testing.T) {
+	w := workloadRow(t, "statefulsets")
+	obj := func(replicas int64, ready any) *unstructured.Unstructured {
+		status := map[string]any{}
+		if ready != nil {
+			status["readyReplicas"] = ready
+		}
+		return &unstructured.Unstructured{Object: map[string]any{
+			"metadata": map[string]any{"name": "nats", "namespace": "data"},
+			"spec":     map[string]any{"replicas": replicas},
+			"status":   status,
+		}}
+	}
+	for _, c := range []struct {
+		replicas int64
+		ready    any
+		want     string
+	}{
+		{1, int64(1), "ready"},
+		{1, nil, "notready"}, // Pending: no ready pod, the field left out
+		{3, int64(2), "notready"},
+		{0, nil, "ready"}, // scaled to 0 (STG daemon)
+	} {
+		subject, values := stateOf(w.Watch, obj(c.replicas, c.ready).Object)
+		if subject != "data/nats" || values[0] != c.want {
+			t.Errorf("replicas %d ready %v: got %s %v, want %s", c.replicas, c.ready, subject, values, c.want)
+		}
+		if err := eventlog.CheckBody(w.Type, watchBody(w, subject, values)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Positive control: one Pending after ready writes two events, a repeat none.
+	l := &memLedger{}
+	g := &Gate{Ledger: l, Logf: func(string, ...any) {}}
+	g.init()
+	ctx := context.Background()
+	g.observeWatched(ctx, w, obj(1, int64(1)))
+	g.observeWatched(ctx, w, obj(1, nil))
+	g.observeWatched(ctx, w, obj(1, nil))
+	if n := len(l.events("sts:data/nats")); n != 2 {
+		t.Fatalf("%d events, want 2", n)
+	}
+}

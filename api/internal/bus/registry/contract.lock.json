@@ -36,6 +36,10 @@
       "version": 1,
       "hash": "f0f0c1256da07945"
     },
+    "cluster.workload.changed": {
+      "version": 1,
+      "hash": "3896228c84053aa7"
+    },
     "data.job.finished": {
       "version": 1,
       "hash": "560f303ba315699b"

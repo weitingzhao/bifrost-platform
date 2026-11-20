@@ -49,11 +49,16 @@ type Watch struct {
 // WatchState is one state field: where it is read (a dot path; a list is
 // picked by [key=value]) and how a raw value becomes the said value (map;
 // "*" is the default, also for a missing field; without a map the raw value
-// is said as it is, "" when missing).
+// is said as it is, "" when missing). With compare_to, the raw value is
+// "true" when the field at path equals the field at compare_to, else
+// "false"; a missing field at path counts as 0 (a count the API leaves out),
+// a missing compare_to is never equal. A workload is ready when its ready
+// replicas equal its replicas, which no single field says.
 type WatchState struct {
-	Name string            `yaml:"name"`
-	Path string            `yaml:"path"`
-	Map  map[string]string `yaml:"map"`
+	Name      string            `yaml:"name"`
+	Path      string            `yaml:"path"`
+	CompareTo string            `yaml:"compare_to"`
+	Map       map[string]string `yaml:"map"`
 }
 
 type watchFile struct {
@@ -156,6 +161,9 @@ func ParseWatches(name string, data []byte, tenants map[string]Tenant) ([]Watch,
 			}
 			if !pathRE.MatchString(s.Path) {
 				where("state %q: path %q is not a field path", s.Name, s.Path)
+			}
+			if s.CompareTo != "" && !pathRE.MatchString(s.CompareTo) {
+				where("state %q: compare_to %q is not a field path", s.Name, s.CompareTo)
 			}
 		}
 		if len(names) == 0 {

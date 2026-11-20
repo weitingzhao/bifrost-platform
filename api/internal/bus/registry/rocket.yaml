@@ -417,6 +417,36 @@ channels:
       subject_from: node
       change_from: [ready, schedule]
       console_keys: [[cluster, nodes], [cluster, governance]]
+  cluster.workload.changed:
+    address: ev.rocket.{env}.cluster.workload.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: best-effort
+      subject: "<namespace>/<name>"
+      publisher: gate-cluster
+      domain: compute
+      ref: "/api/v1/cluster/workloads"
+      reconcile: "gate-cluster relists every 30 min"
+      on_unread: stale
+      retention: 30d
+      # A Deployment or StatefulSet came up (ready replicas equal replicas) or
+      # went down (2026-11-20: NATS sat Pending an hour and nothing on the bus
+      # said so). Written by the watch rows "deployments" and "statefulsets"
+      # (watches/rocket.yaml); its body is declared from here. Every namespace:
+      # the Owner asked that every module's state reach the bus.
+      consumers: [console]
+      exports: []
+      replaces: []
+      body:
+        - {name: workload, kind: str, pattern: '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?/[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$'}
+        - {name: ready, kind: str, pattern: '^(ready|notready)$'}
+        - {name: subject, kind: str}
+        - {name: ref, kind: str}
+        - {name: change, kind: str}
+      subject_from: workload
+      change_from: [ready]
+      console_keys: [[cluster, workloads]]
   plugin.status.changed:
     address: ev.rocket.{env}.plugin.status.changed
     x-bifrost:

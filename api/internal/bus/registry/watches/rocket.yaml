@@ -22,3 +22,33 @@ watches:
       - name: schedule
         path: spec.unschedulable
         map: {"true": cordoned, "*": schedulable}
+  # A Deployment or StatefulSet came up or went down, in every namespace:
+  # ready when its ready replicas equal its replicas (a workload scaled to 0
+  # is ready with none). Origin: 2026-11-20 NATS (a StatefulSet) sat Pending
+  # an hour and nothing on the bus said so.
+  - id: deployments
+    group: apps
+    version: v1
+    resource: deployments
+    type: cluster.workload.changed
+    stream: deploy
+    subject: "{metadata.namespace}/{metadata.name}"
+    subject_field: workload
+    state:
+      - name: ready
+        path: status.readyReplicas
+        compare_to: spec.replicas
+        map: {"true": ready, "*": notready}
+  - id: statefulsets
+    group: apps
+    version: v1
+    resource: statefulsets
+    type: cluster.workload.changed
+    stream: sts
+    subject: "{metadata.namespace}/{metadata.name}"
+    subject_field: workload
+    state:
+      - name: ready
+        path: status.readyReplicas
+        compare_to: spec.replicas
+        map: {"true": ready, "*": notready}

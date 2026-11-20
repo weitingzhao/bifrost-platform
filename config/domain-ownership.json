@@ -354,7 +354,8 @@
         "events": [
           {"type": "alert.rule.fired", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.alert.rule.fired", "consumers": ["console", "alert-letters"]},
           {"type": "env.health.changed", "version": 2, "guarantee": "best-effort", "address": "ev.rocket.{env}.env.health.changed", "consumers": ["console"]},
-          {"type": "cluster.node.changed", "version": 1, "guarantee": "best-effort", "address": "ev.rocket.{env}.cluster.node.changed", "consumers": ["console"]}
+          {"type": "cluster.node.changed", "version": 1, "guarantee": "best-effort", "address": "ev.rocket.{env}.cluster.node.changed", "consumers": ["console"]},
+          {"type": "cluster.workload.changed", "version": 1, "guarantee": "best-effort", "address": "ev.rocket.{env}.cluster.workload.changed", "consumers": ["console"]}
         ],
         "event_streams": [],
         "commands": [

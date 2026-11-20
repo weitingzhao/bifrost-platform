@@ -86,6 +86,16 @@ func stateOf(w registry.Watch, obj map[string]any) (subject string, values []str
 	values = make([]string, len(w.State))
 	for i, s := range w.State {
 		raw, ok := fieldAt(obj, s.Path)
+		if s.CompareTo != "" {
+			// A count the API leaves out is 0 (status.readyReplicas of a
+			// workload scaled to 0, or with no ready pod); the field compared
+			// to must be there.
+			if !ok {
+				raw = "0"
+			}
+			other, ok2 := fieldAt(obj, s.CompareTo)
+			raw, ok = fmt.Sprint(ok2 && raw == other), true
+		}
 		v := raw
 		if s.Map != nil {
 			mapped, hit := s.Map[raw]

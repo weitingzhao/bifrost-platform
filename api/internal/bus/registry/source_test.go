@@ -17,8 +17,8 @@ func TestANewWatchedTopicIsConfigurationOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	topic := `  cluster.workload.changed:
-    address: ev.rocket.{env}.cluster.workload.changed
+	topic := `  cluster.sample.changed:
+    address: ev.rocket.{env}.cluster.sample.changed
     x-bifrost:
       version: 1
       lane: event
@@ -41,7 +41,7 @@ func TestANewWatchedTopicIsConfigurationOnly(t *testing.T) {
         - {name: change, kind: str}
       subject_from: workload
       change_from: [ready]
-      console_keys: [[cluster, workloads]]
+      console_keys: [[cluster, samples]]
 `
 	text := strings.Replace(string(src), "\nchannels:\n", "\nchannels:\n"+topic, 1)
 	if err := os.WriteFile(filepath.Join(dir, "rocket.yaml"), []byte(text), 0o644); err != nil {
@@ -52,12 +52,12 @@ func TestANewWatchedTopicIsConfigurationOnly(t *testing.T) {
 	}
 	row := `tenant: rocket
 watches:
-  - id: statefulsets
+  - id: samples
     group: apps
     version: v1
     resource: statefulsets
     namespaces: [data]
-    type: cluster.workload.changed
+    type: cluster.sample.changed
     stream: workload
     subject: "{metadata.namespace}/{metadata.name}"
     subject_field: workload
@@ -74,8 +74,8 @@ watches:
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, ok := tenants["rocket"].Channels["cluster.workload.changed"]
-	if !ok || len(c.Body) != 5 || c.ConsoleKeys[0][1] != "workloads" {
+	c, ok := tenants["rocket"].Channels["cluster.sample.changed"]
+	if !ok || len(c.Body) != 5 || c.ConsoleKeys[0][1] != "samples" {
 		t.Fatalf("the new topic was not read from the override: %+v", c)
 	}
 	if _, ok := Vocabulary(c); !ok {
@@ -85,7 +85,7 @@ watches:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rows["rocket"]) != 1 || rows["rocket"][0].ID != "statefulsets" {
+	if len(rows["rocket"]) != 1 || rows["rocket"][0].ID != "samples" {
 		t.Fatalf("the watch rows were not read from the override: %+v", rows["rocket"])
 	}
 	// Subscriptions were not overridden: the compiled ones still answer.
