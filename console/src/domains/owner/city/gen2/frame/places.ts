@@ -58,6 +58,8 @@ export type Place = {
   /** The physical units a thing is made of, each with how it stands (a NAS volume: the disks of its array). Read, never assumed. */
   units?: State[]
   look?: Look
+  /** A district: which of its things stands for it on the town (its landmark); else its hall's landmark, else its largest. */
+  icon?: string
   /** Whom it deals with on purpose, up to three a side (links.ts Partners); the rest is undeclared and goes to Other. */
   partners?: Partners
   /** A first-generation landmark it stands as (library/landmarkLooks.ts); content says which, and why. */

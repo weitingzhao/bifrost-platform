@@ -210,7 +210,10 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', uni
     return building
   })
   const arrangement = zonedArrangement(devices.map(b => ({ id: b.id, shape: b.shape, zone: zones.get(b.id)! })))
-  return { id: 'utilities', kind: 'district', shape: DISTRICT, function: fn, arrangement, label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: devices }
+  // On the town the hardware stands as a factory (a computer is a factory, 2026-11-19): the cluster node with
+  // the most cores. Default 2026-11-20, the city line's call; the Owner may overrule.
+  const factory = [...devices].filter(d => d.look === 'linux').sort((a, b) => (b.children.find(c => c.id === 'cpu')?.meter?.of ?? 0) - (a.children.find(c => c.id === 'cpu')?.meter?.of ?? 0))[0]
+  return { id: 'utilities', kind: 'district', shape: DISTRICT, ...(factory ? { icon: factory.id } : {}), function: fn, arrangement, label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: devices }
 }
 
 /**

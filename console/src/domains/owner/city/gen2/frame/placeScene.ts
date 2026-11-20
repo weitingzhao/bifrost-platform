@@ -1047,7 +1047,8 @@ export class PlaceScene extends Phaser.Scene {
         this.exits(stubG, k, at, r, P, (fx, fy) => ({ x: r.x + r.w * fx, y: r.y + r.h * fy }))
       }
       const looks = new Map(this.looks(k, lay.placed, path).map(l => [l.id, l.key]))
-      const icon = lay.placed.find(p => k.children.find(c => c.id === p.id)?.landmark)
+      const icon = (k.icon ? lay.placed.find(p => p.id === k.icon) : undefined)
+        ?? lay.placed.find(p => k.children.find(c => c.id === p.id)?.landmark)
         ?? [...lay.placed].sort((x, y) => y.w * y.h - x.w * x.h)[0]
       const key = icon ? looks.get(icon.id) : undefined, an = key ? this.anchors.get(key) : undefined
       if (icon && key && an && this.textures.exists(key)) {
