@@ -9,7 +9,7 @@ import { buildingWings, setback, spriteFor, spriteKey, spriteUrl, type Wing } fr
 import { deviceKey, deviceSprite, formOfPlace, levelsOf } from './devices'
 import { frameOf, type Frame } from './viewport'
 import { LANDMARKS } from './library/landmarkLooks'
-import { edgeSlots, PORTS, SLOTS, type Gate, type LevelLinks, type Line } from './links'
+import { edgeSlots, PORTS, SLOTS, type Gate, type LevelLinks, type Line, type Slot } from './links'
 
 /**
  * One scene draws one place (a page): its 16×16 ground and the things on it,
@@ -1193,24 +1193,26 @@ export class PlaceScene extends Phaser.Scene {
     // Where each side's ports stand: on the streets that reach that edge, so a port's road carries a street
     // straight on (the Owner, 2026-11-20: the roads join up); where the edge has fewer streets than ports,
     // evenly along it, joining the ring road.
-    const along = (cuts: number[], len: number, toPic: (v: number) => number) => {
+    const along = (cuts: number[], len: number, toPic: (v: number) => number, want: number) => {
       const inner = [...new Set(cuts)].filter(v => v > 0 && v < 16).sort((a, b) => a - b).map(toPic)
-      const want = PORTS + 1
-      if (inner.length >= want) return Array.from({ length: want }, (_, i) => inner[Math.round(i * (inner.length - 1) / (want - 1))])
-      return Array.from({ length: want }, (_, i) => (0.14 + i * 0.21) * len)
+      if (inner.length >= want) return Array.from({ length: want }, (_, i) => inner[Math.round((i + 0.5) * inner.length / want - 0.5)])
+      return Array.from({ length: want }, (_, i) => (i + 0.5) / want * len)
     }
-    const posIn = along(plots.flatMap(p => [p.x, p.x + p.w]), W, geo.x)
-    const posOut = along(plots.flatMap(p => [p.y, p.y + p.h]), H, geo.y)
-    // The yard: off the back-left edge, on the street nearest that edge's middle.
-    const ycuts = [...new Set(plots.flatMap(p => [p.y, p.y + p.h]))].filter(v => v > 0 && v < 16).map(geo.y)
-    const posYard = ycuts.length ? ycuts.sort((a, b) => Math.abs(a - H / 2) - Math.abs(b - H / 2))[0] : H / 2
+    const xcuts = plots.flatMap(p => [p.x, p.x + p.w]), ycuts = plots.flatMap(p => [p.y, p.y + p.h])
+    // Front: the named ports. Back-left: Other in, Other out. Back-right: the yard.
+    const pos: Record<Slot['edge'], number[]> = {
+      y1: along(xcuts, W, geo.x, PORTS), x1: along(ycuts, H, geo.y, PORTS),
+      x0: along(ycuts, H, geo.y, 2), y0: along(xcuts, W, geo.x, 1),
+    }
     for (const sl of SLOTS) {
       const edge = sl.side === 'in' ? slots.in : sl.side === 'out' ? slots.out : null
       const pass = sl.side === 'orphan' ? slots.orphan : sl.i < PORTS ? edge!.named[sl.i] ?? null : edge!.other
       const kind: 'named' | 'other' | 'orphan' = sl.side === 'orphan' ? 'orphan' : sl.i < PORTS ? 'named' : 'other'
       // The point on the edge, the way out (n) and along the edge (u); the corner looks out diagonally.
-      const at0 = sl.edge === 'x1' ? { x: W, y: posOut[sl.i] } : sl.edge === 'y1' ? { x: posIn[sl.i], y: H } : { x: 0, y: posYard }
-      const n = sl.edge === 'x1' ? { x: 1, y: 0 } : sl.edge === 'y1' ? { x: 0, y: 1 } : { x: -1, y: 0 }
+      const k0 = sl.edge === 'x0' ? (sl.side === 'in' ? 0 : 1) : sl.edge === 'y0' ? 0 : sl.i
+      const v = pos[sl.edge][k0]
+      const at0 = sl.edge === 'x1' ? { x: W, y: v } : sl.edge === 'y1' ? { x: v, y: H } : sl.edge === 'x0' ? { x: 0, y: v } : { x: v, y: 0 }
+      const n = sl.edge === 'x1' ? { x: 1, y: 0 } : sl.edge === 'y1' ? { x: 0, y: 1 } : sl.edge === 'x0' ? { x: -1, y: 0 } : { x: 0, y: -1 }
       const u = { x: -n.y, y: n.x }
       const pt = (a: number, b: number, z = 0) => P(at0.x + n.x * a + u.x * b, at0.y + n.y * a + u.y * b, z)
       const c1 = NB_AT
@@ -1221,7 +1223,7 @@ export class PlaceScene extends Phaser.Scene {
         eg.lineStyle(1.2, this.tone.dim, 0.9)
         for (let i = 0; i < 4; i++) { const p0 = corners[i], p1 = corners[(i + 1) % 4]; for (let k = 0; k < 8; k += 2) eg.lineBetween(p0.x + (p1.x - p0.x) * k / 8, p0.y + (p1.y - p0.y) * k / 8, p0.x + (p1.x - p0.x) * (k + 1) / 8, p0.y + (p1.y - p0.y) * (k + 1) / 8) }
         const m = pt(c1, 0)
-        out.push(eg, this.label(m.x, m.y, kind === 'named' ? 'open' : kind === 'other' ? 'Other · 0' : 'Orphan · 0', { color: '#8a8478', fontSize: '11px' }).setOrigin(0.5))
+        out.push(eg, this.label(m.x, m.y, kind === 'named' ? 'open' : kind === 'other' ? `Other ${sl.side} · 0` : 'Orphan · 0', { color: '#8a8478', fontSize: '11px' }).setOrigin(0.5))
         framed.push(new Phaser.Math.Vector2(m.x, m.y + 26))
         continue
       }
@@ -1308,7 +1310,7 @@ export class PlaceScene extends Phaser.Scene {
       }
       out.push(sg)
       const who = kind === 'other' && pass.who.length ? ` (${pass.who.slice(0, 2).join(', ')}${pass.who.length > 2 ? '…' : ''})` : ''
-      out.push(this.plate(sign.x, sign.y + 30, `${pass.label} · ${pass.n} · ${Math.round(share * 100)}%${who}`, '#f08a4b'))
+      out.push(this.plate(sign.x, sign.y + 30, `${kind === 'other' ? `Other ${sl.side}` : pass.label} · ${pass.n} · ${Math.round(share * 100)}%${who}`, '#f08a4b'))
       framed.push(new Phaser.Math.Vector2(sign.x, sign.y + 54))
     }
     return out

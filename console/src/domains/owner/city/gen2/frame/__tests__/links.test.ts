@@ -79,9 +79,11 @@ describe('a district’s two sides: in and out, three ports and Other each, one 
   it('an orphan’s far end need not be a place', () => {
     expect(linkRulesBroken(town, links)).toEqual([])
   })
-  it('the frame sets nine places outside: four in, four out, one Orphan', () => {
-    expect(SLOTS.filter(s => s.side === 'in')).toHaveLength(PORTS + 1)
-    expect(SLOTS.filter(s => s.side === 'out')).toHaveLength(PORTS + 1)
-    expect(SLOTS.filter(s => s.side === 'orphan')).toHaveLength(1)
+  // The Owner, 2026-11-20: the front edges are what is clean, the back edges what is yet to be cleared.
+  it('the frame sets nine places outside: three in at the front left, three out at the front right, the two Others at the back left, Orphan at the back right', () => {
+    expect(SLOTS.filter(s => s.edge === 'y1').map(s => s.side)).toEqual(['in', 'in', 'in'])
+    expect(SLOTS.filter(s => s.edge === 'x1').map(s => s.side)).toEqual(['out', 'out', 'out'])
+    expect(SLOTS.filter(s => s.edge === 'x0').map(s => [s.side, s.i])).toEqual([['in', PORTS], ['out', PORTS]])
+    expect(SLOTS.filter(s => s.edge === 'y0').map(s => s.side)).toEqual(['orphan'])
   })
 })
