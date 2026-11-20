@@ -9,8 +9,8 @@ func TestParseKeepsOnlyBifrostLabels(t *testing.T) {
 		"-\t0\tcom.bifrost.peer-watchdog\n" +
 		"7\t0\tcom.apple.something\n" +
 		"not-a-row\n"
-	plists := "/Users/vision/Library/LaunchAgents/com.bifrost.remediation-runner.plist\n" + // 已退役 fixture
-		"/Users/vision/Library/LaunchAgents/com.bifrost.operator-plane.plist\n"
+	plists := "/home/agent/Library/LaunchAgents/com.bifrost.remediation-runner.plist\n" + // 已退役 fixture
+		"/home/agent/Library/LaunchAgents/com.bifrost.operator-plane.plist\n"
 	got := ParseLaunchd(list, plists)
 	if len(got) != 3 {
 		t.Fatalf("len = %d, want 3: %+v", len(got), got)
