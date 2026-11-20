@@ -31,7 +31,7 @@ import './cityGen2.css'
  * the canvas uses for its cameras. Every place has an address.
  */
 
-const KIND = { town: 'Town', district: 'District', building: 'Building', room: 'Room' } as const
+const KIND = { town: 'City', district: 'District', building: 'Building', room: 'Room' } as const
 
 type Props = {
   path: Path

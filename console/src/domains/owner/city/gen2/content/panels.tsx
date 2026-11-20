@@ -14,7 +14,7 @@ import { spriteUrl } from '../frame/sprites'
  * a chart comes back when a place has a real series to draw.
  */
 
-const KIND_WORD = { town: 'Town', district: 'District', building: 'Building', room: 'Room' } as const
+const KIND_WORD = { town: 'City', district: 'District', building: 'Building', room: 'Room' } as const
 
 /** A thing's reading in words, or how it stands, or that nothing reads it yet. */
 const readingOf = (c: Place) => c.meter ? meterText(c.meter) : c.state ?? (isWired(c) ? 'read inside' : 'not wired')

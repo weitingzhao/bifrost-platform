@@ -4,7 +4,7 @@ import { ledgerHref, readCityQuery } from '@/domains/owner/city/gen2/content/loo
 import { isWired, meterText, resolve, trail, type Path, type Place } from '@/domains/owner/city/gen2/frame/places'
 import { useCityContent } from './useCityContent'
 
-const KIND: Record<Place['kind'], string> = { town: 'Town', district: 'District', building: 'Building', room: 'Room' }
+const KIND: Record<Place['kind'], string> = { town: 'City', district: 'District', building: 'Building', room: 'Room' }
 const queryOf = () => window.location.hash.split('?')[1] ?? ''
 
 /** What a place reads now: its meter, its state, or that it is read inside or not wired (nothing made up). */

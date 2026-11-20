@@ -1076,18 +1076,11 @@ export class PlaceScene extends Phaser.Scene {
         stubG = this.add.graphics()
         this.exits(stubG, k, at, plate, P, (fx, fy) => ({ x: plate.x + plate.w * fx, y: plate.y + plate.h * fy }))
       }
-      const looks = new Map(this.looks(k, lay.placed, path).map(l => [l.id, l.key]))
-      const icon = (k.icon ? lay.placed.find(p => p.id === k.icon) : undefined)
-        ?? lay.placed.find(p => k.children.find(c => c.id === p.id)?.landmark)
-        ?? [...lay.placed].sort((x, y) => y.w * y.h - x.w * x.h)[0]
-      const key = icon ? looks.get(icon.id) : undefined, an = key ? this.anchors.get(key) : undefined
-      if (icon && key && an && this.textures.exists(key)) {
-        // It stands in the middle of its square, its long side most of the square's.
-        const side = Math.min(plate.w, plate.h) * 0.62, fit = side / Math.max(icon.w, icon.h)
-        const q = { x: plate.x + (plate.w - icon.w * fit) / 2, y: plate.y + (plate.h - icon.h * fit) / 2 }
-        const base = P(q.x, q.y)
-        parts.push(this.add.image(base.x, base.y, key).setOrigin(an.ax, an.ay).setScale(fit * this.spriteFit(key, Math.min(icon.w, icon.h)) / RS))
-      }
+      // The district as a campus (the Owner, 2026-11-20: what a castle was to a medieval town, for a technical
+      // one): a ring of low buildings round a courtyard, a gate in the ring wherever a street comes in (the
+      // same places as its ports), and in the courtyard one tower whose face will carry the district's few
+      // readings. Its colour is the district's.
+      parts.push(this.campus(plate, P, hueOf(this.shown.tree, path), !isWired(k), k.style ?? 'campus'))
     } else if (lay && this.shown) {
       // A district with nothing in it yet: its empty block in its terrain, no stand-in buildings.
       const ter = TERRAIN.meadow[this.light]
@@ -1236,6 +1229,83 @@ export class PlaceScene extends Phaser.Scene {
       out.push(this.plate(m.x, m.y - 8, `${run.way === 'bus' ? 'bus' : 'metrics'} ${run.n}`, run.way === 'bus' ? '#d85a30' : '#5f5e5a'))
     }
     return out
+  }
+
+  /**
+   * A campus on a square (picture units): a ring of two-storey buildings round a courtyard, gaps for gates at
+   * a quarter, a half and three quarters along the front-left, front-right and back-left sides (where the
+   * streets come in), a tower in the courtyard with a blank screen on its front (where the district's few
+   * readings will go). Drawn back to front so nearer walls cover farther ones.
+   */
+  private campus(sq: Rect, P: Proj, hue: string, ghost: boolean, style: 'campus' | 'industrial') {
+    const g = this.add.graphics()
+    const A = ghost ? 0.22 : 1
+    const n = Math.min(sq.w, sq.h), x0 = sq.x + (sq.w - n) / 2, y0 = sq.y + (sq.h - n) / 2
+    const m = n * 0.06, T = n * 0.16, Hh = 24, GATE = n * 0.12, F = [0.25, 0.5, 0.75]
+    const works = style === 'industrial'
+    // An industrial town is brick and concrete whatever its hue; a campus wears its district's colour.
+    const base = works ? Phaser.Display.Color.HexStringToColor('#c9785a') : Phaser.Display.Color.HexStringToColor(hue)
+    const col = { top: works ? 0xb9bcc4 : base.clone().lighten(22).color, left: base.clone().lighten(8).color, right: base.clone().darken(6).color }
+    const box = (x: number, y: number, w: number, d: number, z: number, h: number, c = col) => {
+      const left = [P(x, y + d, z), P(x + w, y + d, z), P(x + w, y + d, z + h), P(x, y + d, z + h)]
+      const right = [P(x + w, y, z), P(x + w, y + d, z), P(x + w, y + d, z + h), P(x + w, y, z + h)]
+      const top = [P(x, y, z + h), P(x + w, y, z + h), P(x + w, y + d, z + h), P(x, y + d, z + h)]
+      g.lineStyle(1.2, this.tone.ink, A)
+      g.fillStyle(c.left, A).fillPoints(left, true).strokePoints(left, true)
+      g.fillStyle(c.right, A).fillPoints(right, true).strokePoints(right, true)
+      g.fillStyle(c.top, A).fillPoints(top, true).strokePoints(top, true)
+      // A factory shed's roof is saw-toothed: north lights across its top.
+      if (works && c === col && h < 40) {
+        g.lineStyle(1, this.tone.ink, 0.6 * A)
+        const along = w >= d
+        const span = along ? w : d, k = Math.max(2, Math.round(span / 0.25))
+        for (let i = 1; i < k; i++) {
+          const t = i / k
+          const a0 = along ? P(x + w * t, y, z + h) : P(x, y + d * t, z + h), a1 = along ? P(x + w * t, y + d, z + h) : P(x + w, y + d * t, z + h)
+          g.lineBetween(a0.x, a0.y - 3, a1.x, a1.y - 3).lineBetween(a0.x, a0.y - 3, a0.x, a0.y)
+        }
+      }
+      // A glass band along each visible face: the floors' windows (a shed's high strip of factory glazing).
+      g.lineStyle(2.2, works ? 0x9fb4c8 : 0xcfe6f7, A)
+      for (const z1 of [z + h * 0.35, z + h * 0.75]) {
+        const l0 = P(x + 0.06, y + d, z1), l1 = P(x + w - 0.06, y + d, z1), r0 = P(x + w, y + 0.06, z1), r1 = P(x + w, y + d - 0.06, z1)
+        if (w > 0.15) g.lineBetween(l0.x, l0.y, l1.x, l1.y)
+        if (d > 0.15) g.lineBetween(r0.x, r0.y, r1.x, r1.y)
+      }
+    }
+    // A run of the ring from a to b along one side, broken by the gates whose centres lie in it.
+    const runs = (a: number, b: number, gates: number[]) => {
+      const out: [number, number][] = []
+      let s0 = a
+      for (const c of gates.filter(c => c > a && c < b).sort((p, q) => p - q)) { if (c - GATE / 2 > s0) out.push([s0, c - GATE / 2]); s0 = c + GATE / 2 }
+      if (b > s0) out.push([s0, b])
+      return out
+    }
+    const lo = m, hi = n - m, gates = F.map(f => f * n)
+    // The courtyard: paved, inside the ring.
+    const yard = [P(x0 + lo, y0 + lo), P(x0 + hi, y0 + lo), P(x0 + hi, y0 + hi), P(x0 + lo, y0 + hi)]
+    g.fillStyle(this.tone.kerb, A).fillPoints(yard, true)
+    // Back right (no gates), back left (gated), the tower, front right and front left (gated).
+    box(x0 + lo, y0 + lo, hi - lo, T, 0, Hh)
+    for (const [a, b] of runs(lo + T, hi - T, gates)) box(x0 + lo, y0 + a, T, b - a, 0, Hh)
+    const tw = n * 0.16, tx = x0 + n / 2 - tw / 2, ty = y0 + n / 2 - tw / 2
+    if (works) {
+      // Chimneys at the back corners of the yard, smoke over them.
+      for (const [cx, cy] of [[x0 + lo + T * 0.5, y0 + lo + T * 0.5], [x0 + hi - T * 0.5, y0 + lo + T * 0.5]] as const) {
+        box(cx - 0.08, cy - 0.08, 0.16, 0.16, Hh, Hh * 2.2, { top: 0x6f6a66, left: 0xb75a44, right: 0x9a4a37 })
+        const top = P(cx, cy, Hh * 3.2)
+        g.fillStyle(0xe9e6e1, 0.85 * A).fillCircle(top.x + 3, top.y - 6, 5).fillCircle(top.x + 9, top.y - 12, 4)
+      }
+    }
+    // The middle: a tower (a campus) or the works office (an industrial town), with the screen for its readings.
+    box(tx, ty, tw, tw, 0, Hh * (works ? 1.8 : 2.6), works ? { top: 0x9ea2aa, left: 0xd7d9dd, right: 0xbfc2c8 } : { top: col.top, left: 0xf4f2ee, right: 0xdedad2 })
+    // Its screen, blank until the district's readings are wired to it.
+    const s0 = works ? Hh * 0.8 : Hh * 1.3, s1 = works ? Hh * 1.6 : Hh * 2.4
+    const sc = [P(tx + tw * 0.15, ty + tw, s0), P(tx + tw * 0.85, ty + tw, s0), P(tx + tw * 0.85, ty + tw, s1), P(tx + tw * 0.15, ty + tw, s1)]
+    g.fillStyle(0x2f3a4f, A).fillPoints(sc, true).lineStyle(1, this.tone.ink, A).strokePoints(sc, true)
+    for (const [a, b] of runs(lo + T, hi - T, gates)) box(x0 + hi - T, y0 + a, T, b - a, 0, Hh)
+    for (const [a, b] of runs(lo, hi, gates)) box(x0 + a, y0 + hi - T, b - a, T, 0, Hh)
+    return g
   }
 
   /**
