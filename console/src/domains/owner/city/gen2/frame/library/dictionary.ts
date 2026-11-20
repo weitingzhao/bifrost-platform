@@ -33,7 +33,7 @@ export type Metaphor = { id: string; metric: string; part: string; shows: string
 const GB = 1e9, TB = 1e12
 
 export const DICTIONARY: readonly Metaphor[] = [
-  { id: 'cpu.busy', metric: 'CPU busy, as a share of its cores', part: 'windowStrip', shows: 'Hall windows', encoding: { kind: 'count', n: 8 }, meaning: 'as many windows lit as it is busy' },
+  { id: 'cpu.busy', metric: 'CPU busy, as a share of its cores', part: 'hall windows (devices.ts)', shows: 'Hall windows', encoding: { kind: 'count', n: 8 }, meaning: 'as many windows lit as it is busy' },
   { id: 'cpu.smoke', metric: 'CPU busy (the same metric, seen from far off)', part: 'smoke', shows: 'Smoke from the stacks', encoding: { kind: 'count', n: 3 }, meaning: 'as many puffs from each stack as it is busy; none when it does not run' },
   { id: 'cores', metric: 'CPU cores', part: 'hall (height, px)', shows: 'Height of the hall', encoding: { kind: 'size', from: 8, to: 64, min: 34, max: 72 }, meaning: 'the more cores, the taller the hall' },
   { id: 'mem.used', metric: 'memory used, as a share', part: 'tank (cooling water)', shows: 'Water in the tank', encoding: { kind: 'level' }, meaning: 'the water stands as high as memory is used' },

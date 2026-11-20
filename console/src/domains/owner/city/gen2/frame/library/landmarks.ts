@@ -593,7 +593,8 @@ export function court(): Sprite {
 /* The power station (the ground the rest stands on).                   */
 /* ------------------------------------------------------------------ */
 
-function coolingTower(g: Draw, x: number, y: number, h: number, id: string, k = 1) {
+/** A hyperbolic cooling tower at grid (x, y), h tall, k its girth; steam over it unless it is cold. */
+export function coolingTower(g: Draw, x: number, y: number, h: number, id: string, k = 1, steam = true) {
   const [cx, cy] = g.p(x, y, 0), rb = 27 * k, rw = 17 * k, rt = 20 * k
   g.add(`<defs><linearGradient id="${id}" x1="0" x2="1"><stop offset="0" stop-color="#fbfcfd"/><stop offset="0.55" stop-color="#eef1f4"/><stop offset="1" stop-color="#bcc5cf"/></linearGradient></defs>`)
   g.add(`<path d="M${cx - rb},${cy} Q${cx - rw},${cy - h * 0.62} ${cx - rt},${cy - h} L${cx + rt},${cy - h} Q${cx + rw},${cy - h * 0.62} ${cx + rb},${cy} A${rb},${rb / 2} 0 0 1 ${cx - rb},${cy} Z" fill="url(#${id})" stroke="${INK}" stroke-width="${STROKE}"/>`)
@@ -602,8 +603,8 @@ function coolingTower(g: Draw, x: number, y: number, h: number, id: string, k = 
   g.add(`<path d="M${n1(cx - bw)},${bz} A${n1(bw)},${n1(bw / 2)} 0 0 0 ${n1(cx + bw)},${bz} v${n1(bh)} A${n1(bw)},${n1(bw / 2)} 0 0 1 ${n1(cx - bw)},${n1(cy - h * 0.8 + bh)} Z" fill="#e0564f" stroke="${INK}" stroke-width="0.7"/>`)
   for (let i = 0; i < 7; i++) { const a = (-24 + i * 8) * k; g.add(`<line x1="${n1(cx + a)}" y1="${n1(cy + Math.sqrt(1 - (a / rb) ** 2) * rb / 2)}" x2="${n1(cx + a * 0.96)}" y2="${n1(cy - 8 * k + Math.sqrt(1 - (a / rb) ** 2) * rb / 2)}" stroke="#8f98a5" stroke-width="1"/>`) }
   g.add(`<ellipse cx="${cx}" cy="${cy - h}" rx="${rt}" ry="${rt / 2}" fill="#59606b" stroke="${INK}" stroke-width="${STROKE}"/><path d="M${n1(cx - rt + 3)},${cy - h + 1} A${n1(rt - 3)},${n1((rt - 3) / 2)} 0 0 1 ${n1(cx + rt - 3)},${cy - h + 1}" fill="none" stroke="#878f9c" stroke-width="1"/>`)
-  for (const [a, b, r] of [[-5, 10, 11], [8, 19, 13], [-3, 33, 15], [12, 45, 11]] as const) g.add(`<circle cx="${n1(cx + a * k)}" cy="${n1(cy - h - b * k)}" r="${n1(r * k)}" fill="#ffffff" stroke="#aeb6c2" stroke-width="1"/>`)
-  for (const [a, b, r] of [[-5, 10, 9], [8, 19, 11], [-3, 33, 13]] as const) g.add(`<circle cx="${n1(cx + a * k)}" cy="${n1(cy - h - b * k)}" r="${n1(r * k)}" fill="#ffffff"/>`)
+  if (steam) for (const [a, b, r] of [[-5, 10, 11], [8, 19, 13], [-3, 33, 15], [12, 45, 11]] as const) g.add(`<circle cx="${n1(cx + a * k)}" cy="${n1(cy - h - b * k)}" r="${n1(r * k)}" fill="#ffffff" stroke="#aeb6c2" stroke-width="1"/>`)
+  if (steam) for (const [a, b, r] of [[-5, 10, 9], [8, 19, 11], [-3, 33, 13]] as const) g.add(`<circle cx="${n1(cx + a * k)}" cy="${n1(cy - h - b * k)}" r="${n1(r * k)}" fill="#ffffff"/>`)
 }
 
 export function powerStation(label = '', name = ''): Sprite {

@@ -1,4 +1,4 @@
-import { Draw, faces, INK, type Sprite } from './kit'
+import { Draw, faces, hash, INK, type Sprite } from './kit'
 
 /** Face units to a cell (see Draw.face). */
 const U = 35.8
@@ -7,8 +7,8 @@ const U = 35.8
 const OS_BAND: Record<MachineOs, string> = { linux: '#e95420', mac: '#dfe3ea', win: '#0078d4', unknown: '#b9b6c4' }
 import type { Light } from './light'
 import type { Look, Place, State } from './places'
-import { beacon, dock, doorRow, gatehouse, gauge, hall, lit, plaque, shade, smoke, tank, toneOf, windowStrip, type Tone } from './library/parts'
-import type { MachineOs } from './library/landmarks'
+import { beacon, dock, doorRow, gatehouse, hall, lit, plaque, shade, smoke, tank, toneOf, type Tone } from './library/parts'
+import { coolingTower, type MachineOs } from './library/landmarks'
 import { encode, metaphor } from './library/dictionary'
 
 /**
@@ -57,94 +57,41 @@ export function formOf(look: Look, gpu: boolean, laptop: boolean): Form {
 }
 
 export function deviceSprite(form: Form, fw: number, fd: number, hue: string, light: Light, lv: Levels, name = '', face: Place['face'] = {}): Sprite {
-  const T = toneOf(hue, light, lv.state)
+  const T0 = toneOf(hue, light, lv.state)
+  // Every facility here stands in off-white with a grey roof (2026-11-20, the drawing floor: the hue tinted
+  // whole buildings); colour is kept for bands and marks.
+  const T: Tone = lv.state === 'unread' ? T0 : { ...T0, wall: light === 'night' ? faces(shade('#f7f8fa', -0.45), shade('#e4e9ef', -0.5), shade('#cdd5df', -0.55)) : faces('#f7f8fa', '#e4e9ef', '#cdd5df'), roof: light === 'night' ? shade('#d3dae3', -0.4) : '#d3dae3' }
   const run = lv.state === 'online'
   const tall = form === 'station' ? 96 : form === 'plant' ? 84 : form === 'tower' ? 70 : 52
   const g = new Draw(fw, fd, tall + 24)
   const i = 0.24, x0 = i, y0 = i, w = fw - 2 * i, d = fd - 2 * i
   const disks = lv.disks.length ? lv.disks : [null]
   g.shadow(x0, y0, w, d, 0.4)
-  const water = light === 'night' ? '#3f7fd6' : '#5aa9f0', fuel = '#c98a3a'
   if (form === 'plant') {
     powerPlant(g, x0, y0, w, d, T, lv, hue, light, name, 'linux', face)
     return g.done()
   }
 
   if (form === 'station') {
-    // The turbine hall at the back, as tall as it has cores, its windows lit by how busy the CPU is; the cooling tower steams when it runs.
-    const hw = w * 0.55, hd = d * 0.62, H = encode('cores', lv.cap?.cores ?? null)!
-    g.box(x0, y0, hw, hd, H, T.wall, 0, 1.4)
-    g.poly(T.roof, [[x0, y0, H], [x0 + hw, y0, H], [x0 + hw, y0 + hd, H], [x0, y0 + hd, H]], 1)
-    const n = (metaphor('cpu.busy').encoding as { n: number }).n
-    windowStrip(g, 'left', x0, y0 + hd, hw, 8, H - 6, n, run ? lv.cpu : null, T)
-    windowStrip(g, 'right', x0 + hw, y0, hd, 8, H - 6, n, run ? lv.cpu : null, T)
-    // Memory: the cooling water; disk: the fuel. Each tank as big as what it holds, filled to its level.
-    const r = encode('mem.total', lv.cap?.mem ?? null)!, rf = encode('disk.total', lv.cap?.disk ?? null)!
-    tank(g, x0 + hw * 0.3, y0 + d * 0.84, r, 26, run ? encode('mem.used', lv.mem) : null, water)
-    tank(g, x0 + hw * 0.75, y0 + d * 0.84, rf, 26, run ? encode('disk.used', disks[0]) : null, fuel)
-    const cx = x0 + hw + (w - hw) / 2, cy = y0 + d * 0.35, R = Math.min(30, 10 + Math.min(w, d) * 4)
-    g.cylinder(cx, cy, R, 0, 70, T.metal.left, T.metal.right, T.metal.top)
-    g.cylinder(cx, cy, R * 0.82, 70, 72, '#9aa0b0', '#8a90a0', '#6a7080')
-    smoke(g, cx, cy, 72, lv.cpu ?? (run ? 0.6 : null), run)
-    beacon(g, cx, cy, 72, lv.state)
-    tank(g, cx, y0 + d * 0.84, rf, 26, run ? encode('disk.used', disks[1] ?? null) : null, fuel)
-  }
-
-  if (form === 'warehouse' && lv.vols && lv.vols.length > 0) {
-    warehousePark(g, x0, y0, w, d, T, lv, hue, light)
+    powerPlant(g, x0, y0, w, d, T, lv, hue, light, name, 'linux', face, 'station')
     return g.done()
   }
 
   if (form === 'warehouse') {
-    // A long shed with a pitched roof; one loading door per volume, the crates behind it stacked to how full it is.
-    const H = 24, mid = y0 + d / 2
-    g.box(x0, y0, w, d, H, T.wall, 0, 1.4)
-    g.poly(shade(T.roof, -0.05), [[x0, y0, H], [x0 + w, y0, H], [x0 + w, mid, H + 14], [x0, mid, H + 14]], 1.2)
-    g.poly(shade(T.roof, -0.15), [[x0, mid, H + 14], [x0 + w, mid, H + 14], [x0 + w, y0 + d, H], [x0, y0 + d, H]], 1.2)
-    g.poly(T.wall.right, [[x0 + w, y0, H], [x0 + w, mid, H + 14], [x0 + w, y0 + d, H]], 1.2)
-    const doors = [...disks, ...Array(Math.max(0, 3 - disks.length)).fill(null)]
-    const span = w / doors.length
-    doors.forEach((f, k) => {
-      const a = k * span + span * 0.14, b = (k + 1) * span - span * 0.14
-      g.onLeft(x0, y0 + d, a, b, 0, 18, '#3a3d48', 1)
-      if (f != null && f > 0.005) {
-        const rows = Math.max(1, Math.round(Math.min(1, f) * 4))
-        for (let q = 0; q < rows; q++) g.onLeft(x0, y0 + d, a + 0.04, b - 0.04, 1 + q * 4.2, 4.6 + q * 4.2, q === rows - 1 ? gauge(f) : '#c98a3a', 0.6)
-      }
-    })
-    beacon(g, x0 + w * 0.5, mid, H + 14, lv.state)
+    // With no arrays read, its disks stand as one volume (each disk a door, in the box's own state).
+    const vols = lv.vols && lv.vols.length > 0 ? lv.vols : [{ f: disks[0] ?? null, units: disks.map(() => lv.state) }]
+    warehousePark(g, x0, y0, w, d, T, { ...lv, vols }, hue, light)
+    return g.done()
   }
 
   if (form === 'exchange') {
-    // The exchange (the gateway to the market): columns and a pediment; its ticker board is lit when read.
-    const H = 30, fy = y0 + d * 0.85
-    g.box(x0, y0 + d * 0.15, w, d * 0.7, H, T.wall, 0, 1.4)
-    g.poly(T.roof, [[x0, fy, H], [x0 + w, fy, H], [x0 + w / 2, fy, H + 14]], 1.2)
-    for (let k = 1; k < 6; k++) g.line([x0 + w * k / 6, fy, 2], [x0 + w * k / 6, fy, H - 8], T.wall.right, 3)
-    g.onLeft(x0, fy, w * 0.08, w * 0.92, H - 7, H - 1, run ? '#1d2a3a' : '#5a5d66', 1)
-    if (run) for (let k = 0; k < 5; k++) g.onLeft(x0, fy, w * (0.12 + k * 0.16), w * (0.2 + k * 0.16), H - 5, H - 3, k % 2 ? '#7be08f' : '#f29b8f', 0.4)
-    beacon(g, x0 + w / 2, fy, H + 14, lv.state)
+    exchange(g, x0, y0, w, d, lv, light)
+    return g.done()
   }
 
-  if (form === 'dispatch') {
-    // The dispatch centre: a low block, a glass control room on top lit when it runs, a radar dish.
-    const H = 16
-    g.box(x0 + w * 0.1, y0 + d * 0.1, w * 0.8, d * 0.8, H, T.wall, 0, 1.3)
-    g.box(x0 + w * 0.25, y0 + d * 0.25, w * 0.5, d * 0.5, 10, faces(T.roof, T.glassLit, shade(T.glassLit, -0.15)), H, 1.1)
-    const [cx, cy] = g.p(x0 + w * 0.5, y0 + d * 0.5, H + 18)
-    g.line([x0 + w * 0.5, y0 + d * 0.5, H + 10], [x0 + w * 0.5, y0 + d * 0.5, H + 16], INK, 2)
-    g.add(`<ellipse cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" rx="9" ry="4" fill="${T.metal.top}" stroke="${INK}" stroke-width="1.1" transform="rotate(-20 ${cx.toFixed(1)} ${cy.toFixed(1)})"/>`)
-    beacon(g, x0 + w * 0.5, y0 + d * 0.5, H + 20, lv.state)
-  }
-
-  if (form === 'office') {
-    // A small office with a pitched roof: its windows are lit when anything reads it.
-    const H = 18, mid = y0 + d / 2
-    g.box(x0 + w * 0.12, y0 + d * 0.12, w * 0.76, d * 0.76, H, T.wall, 0, 1.3)
-    g.poly(T.roof, [[x0 + w * 0.12, y0 + d * 0.12, H], [x0 + w * 0.88, y0 + d * 0.12, H], [x0 + w * 0.88, mid, H + 10], [x0 + w * 0.12, mid, H + 10]], 1.1)
-    g.poly(shade(T.roof, -0.12), [[x0 + w * 0.12, mid, H + 10], [x0 + w * 0.88, mid, H + 10], [x0 + w * 0.88, y0 + d * 0.88, H], [x0 + w * 0.12, y0 + d * 0.88, H]], 1.1)
-    g.windows('left', x0 + w * 0.12, y0 + d * 0.88, w * 0.76, 4, H - 4, 1, 3, { fill: T.glass, lit: () => run, litFill: '#ffd76a' })
-    beacon(g, x0 + w * 0.5, mid, H + 10, lv.state)
+  if (form === 'dispatch' || form === 'office') {
+    macHouse(g, x0, y0, w, d, lv, light, form === 'office')
+    return g.done()
   }
 
   if (form === 'tower') {
@@ -171,12 +118,14 @@ export function deviceSprite(form: Form, fw: number, fd: number, hue: string, li
  * Owner, 2026-11-20: the readings go outside the picture). Standby: dark windows, no smoke. Unread: grey,
  * every gauge empty.
  */
-function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: Tone, lv: Levels, hue: string, light: Light, _name: string, os: MachineOs, face: Place['face'] = {}) {
+function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: Tone, lv: Levels, hue: string, light: Light, _name: string, os: MachineOs, face: Place['face'] = {}, kind: 'plant' | 'station' = 'plant') {
   const run = lv.state === 'online', night = light === 'night', unread = lv.state === 'unread'
   const S = (c: string, k: number) => night ? shade(c, k) : c
   const n1 = (v: number) => v.toFixed(1)
   // The words go on the name plate (placeScene); the dictionary still lists them for this facility's key.
   metaphor('identity')
+  // Its gauges are in its key whatever its state: dark when it does not run, never left out.
+  metaphor('cpu.smoke'); metaphor('mem.used'); metaphor('disk.used')
   if (face?.sign) metaphor('purpose')
   if (face?.tally) metaphor('pods')
   // The plant's own ground: a concrete slab.
@@ -189,7 +138,7 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: T
   void hue
 
   // The chimney behind the hall, from the ground: red and white, a gallery, the light on top.
-  { const sx = hx + hw + 0.22, sy = hy + 0.2, top = Z + H + 62
+  if (kind === 'plant') { const sx = hx + hw + 0.22, sy = hy + 0.2, top = Z + H + 62
     const [cx, cy] = g.p(sx, sy, Z), r = 6.5, bands = 6, step = (top - Z) / bands
     for (let i = 0; i < bands; i++) {
       const yb = cy - i * step, yt = yb - step
@@ -235,6 +184,13 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: T
   g.poly(night ? '#3a4158' : '#bfe0f7', [[hx + 0.2, hy + hd * 0.42, Z + H], [hx + hw * 0.55, hy + hd * 0.42, Z + H], [hx + hw * 0.55, hy + hd * 0.62, Z + H], [hx + 0.2, hy + hd * 0.62, Z + H]], 0.8)
   g.unit(hx + hw * 0.66, hy + hd * 0.2, Z + H, Math.min(0.42, hd * 0.3))
   g.unit(hx + hw * 0.3, hy + hd * 0.12, Z + H, Math.min(0.32, hd * 0.24))
+  // The GPU box is a power station: a cooling tower beside the hall (drawn after it: it stands in front of its side), steaming as busy as it is (CPU), its light on top when down.
+  if (kind === 'station') {
+    const tx = hx + hw + (x0 + w - hx - hw) / 2, ty = hy + hd * 0.55, th = H + 56
+    coolingTower(g, tx, ty, th, `ct-${hash(_name) % 9973}`, Math.min(1.15, (x0 + w - hx - hw) * 0.75), false)
+    smoke(g, tx, ty, Z + th, run ? lv.cpu : null, run)
+    beacon(g, tx, ty, Z + th, lv.state)
+  }
 
   // The yard: two steel tanks in one row before the hall, always memory then disk, each as big as what it
   // holds; its name stencilled on it, its cap in its colour, a wide gauge up its front filled to its level.
@@ -252,12 +208,115 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: T
     const sx = cx + r * 0.28, fs = Math.min(6.4, r * 0.4)
     g.add(`<text x="${n1(sx)}" y="${n1(base - gh * 0.55)}" text-anchor="middle" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="${n1(fs)}" font-weight="800" fill="${unread ? '#a4a8b2' : S(liquid, -0.3)}">${word}</text>`)
   }
-  const mr = encode('mem.total', lv.cap?.mem ?? null)!, dr = encode('disk.total', lv.cap?.disk ?? null)!
+  // Memory first, then each disk it has (none read: one empty disk tank), evenly along the row.
+  const tanks = [
+    { r: encode('mem.total', lv.cap?.mem ?? null)!, f: run ? encode('mem.used', lv.mem) : null, c: night ? '#3f7fd6' : '#3b8fe0', word: 'MEM' },
+    ...(lv.disks.length ? lv.disks : [null]).map((f, k, all) => ({ r: encode('disk.total', lv.cap?.disk ?? null)!, f: run ? encode('disk.used', f) : null, c: '#d98f2b', word: all.length > 1 ? `DISK${k + 1}` : 'DISK' })),
+  ]
   const ty = hy + hd + (y0 + d - hy - hd) * 0.55
-  // A pipe from each tank back to the hall.
-  for (const k of [0.28, 0.6]) g.line([x0 + w * k, ty, Z + 10], [x0 + w * k, hy + hd, Z + 10], S('#8d97a6', -0.3), 2.2)
-  steel(x0 + w * 0.28, ty, mr, 34, run ? encode('mem.used', lv.mem) : null, night ? '#3f7fd6' : '#3b8fe0', 'MEM')
-  steel(x0 + w * 0.6, ty, dr, 34, run ? encode('disk.used', lv.disks[0] ?? null) : null, '#d98f2b', 'DISK')
+  tanks.forEach((t, k) => {
+    const tx = x0 + w * (0.28 + k * Math.min(0.32, 0.55 / Math.max(1, tanks.length - 1)))
+    g.line([tx, ty, Z + 10], [tx, hy + hd, Z + 10], S('#8d97a6', -0.3), 2.2)
+    steel(tx, ty, t.r, 34, t.f, t.c, t.word)
+  })
+}
+
+/** Shared by the facilities below: a colour darkened at night, a number to one place. */
+const nightly = (light: Light) => (c: string, k: number) => light === 'night' ? shade(c, k) : c
+const f1 = (v: number) => v.toFixed(1)
+
+/**
+ * The exchange (a Windows host running TWS: the gateway to the market), redrawn 2026-11-20 to the drawing
+ * floor: a stone hall behind a portico of six columns under a pediment, steps up to it, the system's blue on
+ * the entablature, its windows and the ticker board over the door lit while it is read (dark when not).
+ */
+function exchange(g: Draw, x0: number, y0: number, w: number, d: number, lv: Levels, light: Light) {
+  const run = lv.state === 'online', unread = lv.state === 'unread', S = nightly(light)
+  const stone = faces(S('#f8f1e1', -0.45), S('#eee2ca', -0.5), S('#dccdb0', -0.55))
+  const blue = unread ? '#b9b6c4' : S(OS_BAND.win, -0.35)
+  const glass = run ? '#ffd76a' : light === 'night' ? '#3a4158' : '#cfe3f7'
+  // The plinth and the steps across the front.
+  g.box(x0, y0, w, d, 5, faces(S('#ebe4d2', -0.45), S('#d9cfb8', -0.5), S('#c8bc9f', -0.55)), 0, 1)
+  for (let k = 0; k < 3; k++) g.box(x0 + w * 0.12 + k * 0.05, y0 + d - 0.42 + k * 0.12, w * 0.76 - k * 0.1, 0.12, 5 - k * 1.6, stone, 0, 0.6)
+  // The hall.
+  const bx = x0 + 0.15, by = y0 + 0.18, bw = w - 0.3, bd = d * 0.6, H = 46
+  g.shadow(bx, by, bw, bd, 0.35)
+  g.box(bx, by, bw, bd, H, stone, 5, 1.4)
+  const W = bw * U, D = bd * U
+  let f = `<rect x="0" y="${-H + 2}" width="${f1(W)}" height="6" fill="${S('#e6dbc2', -0.5)}" stroke="${INK}" stroke-width="0.7"/>`
+  // The ticker board over the door and the door.
+  f += `<rect x="${f1(W * 0.2)}" y="${-H + 12}" width="${f1(W * 0.6)}" height="8" rx="1" fill="#1d2230" stroke="${INK}" stroke-width="0.9"/>`
+  if (run) for (let k = 0; k < 7; k++) f += `<rect x="${f1(W * 0.23 + k * W * 0.078)}" y="${-H + 14.5}" width="${f1(W * 0.05)}" height="3" fill="${k % 3 === 1 ? '#f29b8f' : '#7be08f'}"/>`
+  f += `<rect x="${f1(W / 2 - 7)}" y="-20" width="14" height="20" fill="${S('#8a6a48', -0.4)}" stroke="${INK}" stroke-width="0.9"/><line x1="${f1(W / 2)}" y1="-20" x2="${f1(W / 2)}" y2="0" stroke="${INK}" stroke-width="0.6"/>`
+  for (const u of [0.1, 0.72]) f += `<rect x="${f1(W * u)}" y="${-H + 24}" width="${f1(W * 0.16)}" height="16" fill="${glass}" stroke="${INK}" stroke-width="0.7"/><line x1="${f1(W * (u + 0.08))}" y1="${-H + 24}" x2="${f1(W * (u + 0.08))}" y2="${-H + 40}" stroke="${INK}" stroke-width="0.4"/>`
+  g.face('left', bx, by + bd, 5, f)
+  let r = `<rect x="0" y="${-H + 2}" width="${f1(D)}" height="6" fill="${S('#e6dbc2', -0.5)}" stroke="${INK}" stroke-width="0.7"/>`
+  const n = Math.max(2, Math.floor(D / 14))
+  for (let k = 0; k < n; k++) { const u = 5 + k * (D - 10) / n; r += `<rect x="${f1(u)}" y="${-H + 14}" width="${f1((D - 10) / n - 5)}" height="22" rx="${f1(((D - 10) / n - 5) / 2)}" fill="${glass}" stroke="${INK}" stroke-width="0.7"/>` }
+  g.face('right', bx + bw, by + bd, 5, r)
+  plaque(g, 'right', bx + bw, by + bd, bd * 0.85, 5 + H - 30, 'win', 5)
+  // The roof: a parapet and an air handler.
+  g.poly(S('#efe6d2', -0.45), [[bx + 0.07, by + 0.07, 5 + H], [bx + bw - 0.07, by + 0.07, 5 + H], [bx + bw - 0.07, by + bd - 0.07, 5 + H], [bx + 0.07, by + bd - 0.07, 5 + H]], 0.8)
+  g.unit(bx + bw * 0.62, by + bd * 0.2, 5 + H, Math.min(0.4, bd * 0.3))
+  // The portico: six columns, the entablature in the system's blue, the pediment.
+  const py = by + bd + 0.42, pz = 5, ph = H - 10, px0 = bx + bw * 0.1, px1 = bx + bw * 0.9
+  for (let k = 0; k < 6; k++) {
+    const cx = px0 + (px1 - px0) * k / 5
+    g.cylinder(cx, py - 0.08, 3.4, pz, pz + ph, S('#fbf7ee', -0.45), S('#d6c9ad', -0.5), S('#efe6d2', -0.45))
+  }
+  g.box(px0 - 0.12, by + bd, px1 - px0 + 0.24, 0.5, 7, faces(S('#f3ead6', -0.45), blue, shade(blue, -0.15)), pz + ph, 1)
+  const ez = pz + ph + 7
+  g.poly(S('#f8f1e1', -0.45), [[px0 - 0.12, py + 0.08, ez], [px1 + 0.12, py + 0.08, ez], [(px0 + px1) / 2, py + 0.08, ez + 16]], 1.2)
+  g.poly(S('#e9ddc2', -0.5), [[px0 + 0.15, py + 0.08, ez + 2], [px1 - 0.15, py + 0.08, ez + 2], [(px0 + px1) / 2, py + 0.08, ez + 12]], 0.6)
+  g.poly(S('#dccdb0', -0.55), [[px1 + 0.12, by + bd, ez], [px1 + 0.12, py + 0.08, ez], [(px0 + px1) / 2, py + 0.08, ez + 16], [(px0 + px1) / 2, by + bd, ez + 16]], 1)
+  beacon(g, (px0 + px1) / 2, py, ez + 16, lv.state)
+}
+
+/**
+ * A Mac (the Owner, 2026-11-20: a Mac is white), redrawn to the drawing floor. A Mac mini is the dispatch
+ * centre: a white pavilion, a glass curtain wall across its front, a glass control room on the roof; a
+ * laptop is a small white office under a pitched roof. Their glass is lit while they are read, dark when not.
+ */
+function macHouse(g: Draw, x0: number, y0: number, w: number, d: number, lv: Levels, light: Light, laptop: boolean) {
+  const run = lv.state === 'online', unread = lv.state === 'unread', S = nightly(light)
+  const white = unread ? faces('#eeedf2', '#d9d7e0', '#c6c3cf') : faces(S('#ffffff', -0.45), S('#eef1f5', -0.5), S('#d8dee6', -0.55))
+  const silver = unread ? '#b9b6c4' : S('#9aa3ae', -0.3)
+  const glass = run ? (light === 'night' ? '#ffd76a' : '#fff0c2') : light === 'night' ? '#3a4158' : '#cfe3f7'
+  g.box(x0, y0, w, d, 3, faces(S('#ebe8e0', -0.45), S('#d6d2c7', -0.5), S('#c4bfb2', -0.55)), 0, 1)
+  const bx = x0 + w * 0.14, by = y0 + d * 0.14, bw = w * 0.72, bd = d * 0.66, H = laptop ? 22 : 26, Z = 3
+  g.shadow(bx, by, bw, bd, 0.3)
+  g.box(bx, by, bw, bd, H, white, Z, 1.3)
+  const W = bw * U, D = bd * U
+  let f = `<rect x="0" y="-4" width="${f1(W)}" height="4" fill="${silver}" stroke="${INK}" stroke-width="0.6"/>`
+  if (laptop) {
+    for (const u of [0.1, 0.4, 0.7]) f += `<rect x="${f1(W * u)}" y="${-H + 6}" width="${f1(W * 0.2)}" height="10" fill="${glass}" stroke="${INK}" stroke-width="0.7"/><line x1="${f1(W * (u + 0.1))}" y1="${-H + 6}" x2="${f1(W * (u + 0.1))}" y2="${-H + 16}" stroke="${INK}" stroke-width="0.4"/>`
+  } else {
+    f += `<rect x="4" y="${-H + 4}" width="${f1(W - 8)}" height="${H - 9}" fill="${glass}" stroke="${INK}" stroke-width="0.9"/>`
+    for (let u = 4 + (W - 8) / 5; u < W - 5; u += (W - 8) / 5) f += `<line x1="${f1(u)}" y1="${-H + 4}" x2="${f1(u)}" y2="-5" stroke="${INK}" stroke-width="0.6"/>`
+    f += `<line x1="4" y1="${f1(-H / 2)}" x2="${f1(W - 4)}" y2="${f1(-H / 2)}" stroke="${INK}" stroke-width="0.5"/>`
+    f += `<path d="M${f1(W * 0.18)},${-H + 5} l10,0 l-${f1(H * 0.5)},${f1(H - 11)} l-10,0 Z" fill="#ffffff" opacity="0.35"/>`
+  }
+  f += `<rect x="${f1(W * 0.45)}" y="-12" width="9" height="12" fill="${S('#59606b', -0.3)}" stroke="${INK}" stroke-width="0.8"/>`
+  g.face('left', bx, by + bd, Z, f)
+  g.face('right', bx + bw, by + bd, Z, `<rect x="0" y="-4" width="${f1(D)}" height="4" fill="${silver}" stroke="${INK}" stroke-width="0.6"/><rect x="${f1(D * 0.15)}" y="${-H + 6}" width="${f1(D * 0.3)}" height="9" fill="${glass}" stroke="${INK}" stroke-width="0.7"/>`)
+  plaque(g, 'right', bx + bw, by + bd, bd * 0.72, Z + H - 10, 'mac', 5)
+  if (laptop) {
+    const mid = by + bd / 2
+    g.poly(S('#e3e8ef', -0.45), [[bx, by, Z + H], [bx + bw, by, Z + H], [bx + bw, mid, Z + H + 12], [bx, mid, Z + H + 12]], 1)
+    g.poly(S('#c9d1db', -0.5), [[bx, mid, Z + H + 12], [bx + bw, mid, Z + H + 12], [bx + bw, by + bd, Z + H], [bx, by + bd, Z + H]], 1)
+    g.poly(white.right, [[bx + bw, by, Z + H], [bx + bw, by + bd, Z + H], [bx + bw, mid, Z + H + 12]], 1)
+    beacon(g, bx + bw / 2, mid, Z + H + 12, lv.state)
+    return
+  }
+  g.poly(S('#f4f6f9', -0.45), [[bx + 0.06, by + 0.06, Z + H], [bx + bw - 0.06, by + 0.06, Z + H], [bx + bw - 0.06, by + bd - 0.06, Z + H], [bx + 0.06, by + bd - 0.06, Z + H]], 0.8)
+  // The control room on the roof, all glass.
+  const cx = bx + bw * 0.3, cy = by + bd * 0.25, cw = bw * 0.45, cd = bd * 0.5
+  g.box(cx, cy, cw, cd, 12, faces(S('#f4f6f9', -0.45), glass, shade(glass, -0.12)), Z + H, 1.1)
+  const mull = (span: number) => { let m = ''; for (let u = span / 4; u < span - 1; u += span / 4) m += `<line x1="${f1(u)}" y1="-12" x2="${f1(u)}" y2="0" stroke="${INK}" stroke-width="0.6"/>`; return m + `<line x1="0" y1="-2" x2="${f1(span)}" y2="-2" stroke="${INK}" stroke-width="0.5"/>` }
+  g.face('left', cx, cy + cd, Z + H, mull(cw * U))
+  g.face('right', cx + cw, cy + cd, Z + H, mull(cd * U))
+  g.poly(silver, [[cx, cy + cd, Z + H + 12], [cx + cw, cy + cd, Z + H + 12], [cx + cw, cy + cd, Z + H + 10], [cx, cy + cd, Z + H + 10]], 0.6)
+  beacon(g, cx + cw / 2, cy + cd / 2, Z + H + 12, lv.state)
 }
 
 /**

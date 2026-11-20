@@ -15,7 +15,6 @@ import { encode, metaphor } from './dictionary'
  *   tank        a vertical tank filled to its level (memory: the cooling water; disk: the fuel)
  *   smoke       puffs from a stack, by how busy it is; none when it is not running
  *   beacon      the red light on whatever is down
- *   windowStrip a row of windows, as many lit as it is busy (CPU)
  *   hall        a hall: walls, ribbed siding, the band in the hue, a gable roof with skylights
  *   doorRow     roller doors along a face, one per unit, each with its lamp in the unit's state,
  *               crates stacked behind to how full it is
@@ -30,7 +29,6 @@ import { encode, metaphor } from './dictionary'
 
 export { shade }
 
-export const gauge = (f: number) => f < 0.7 ? '#5cc06c' : f < 0.9 ? '#f2b84b' : '#e5534b'
 export const EMPTY = '#d9d5cc'
 export const lit = (f: number | null, n: number) => f == null ? 0 : Math.max(f > 0.005 ? 1 : 0, Math.round(f * n))
 
@@ -72,12 +70,6 @@ export const beacon = (g: Draw, x: number, y: number, z: number, state: State) =
   g.add(`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="5" fill="#ff4d4d" stroke="${INK}" stroke-width="1"/><circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="10" fill="#ff4d4d" opacity="0.25"/>`)
 }
 
-/** A row of windows along a face: of n, how many are lit tells how busy it is (CPU). */
-export function windowStrip(g: Draw, face: 'left' | 'right', x: number, y: number, span: number, z0: number, z1: number, n: number, f: number | null, T: Tone) {
-  metaphor('cpu.busy')
-  const on = lit(f, n)
-  g.windows(face, x, y, span, z0, z1, 1, n, { fill: T.glass, lit: (_r, c) => c < on, litFill: '#ffd76a', tall: 0.7 })
-}
 
 
 export const UNIT: Record<State, string> = { online: '#5ce07a', standby: '#f2b84b', down: '#ff4d4d', unread: '#a4a8b2' }

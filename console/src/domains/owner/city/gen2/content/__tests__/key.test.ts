@@ -35,11 +35,6 @@ describe('a facility’s key', () => {
     expect(rows.find(r => r.id === 'cores')!.now).toMatch(/^\d+ cores$/)
     expect(rows.find(r => r.id === 'mem.used')!.source).toBeTruthy()
   })
-  it('the GPU power station, today, shows fewer rows: no roof number, sign or board — the gap to design', () => {
-    const ids = keyOf(dev('gpu-server')).rows.map(r => r.id)
-    expect(ids).not.toContain('identity')
-    expect(ids).not.toContain('pods')
-  })
   it('a machine nothing reads says so rather than a number', () => {
     const rows = keyOf(dev('win11-host')).rows
     expect(rows.map(r => r.id)).toEqual(['state'])
