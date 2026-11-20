@@ -26,6 +26,11 @@ type Action struct {
 	Effect string
 }
 
+// NotRecordedHeader is set by a handler on a call that only keeps going what
+// was already recorded (a release window renewal, every minute while a
+// release runs); the action record leaves that call out.
+const NotRecordedHeader = "Bifrost-Not-Recorded"
+
 // Effect values on GET /api/v1/actions. A page that lists what was done for
 // the Owner leaves out effect "none"; the audit still records every call.
 const (

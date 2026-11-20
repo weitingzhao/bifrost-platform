@@ -3,6 +3,7 @@
 package delivery
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -27,6 +28,7 @@ import (
 	dynfake "k8s.io/client-go/dynamic/fake"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 )
@@ -928,5 +930,26 @@ func TestTheTaskReaderListsOnce(t *testing.T) {
 	}
 	if lists != 1 || gets != 1 {
 		t.Fatalf("lists=%d gets=%d, want 1 list and 1 get (the missing name)", lists, gets)
+	}
+}
+
+// 2026-11-20: the Command page's "Done for you" showed 46 window holds in a day,
+// one per minute's renewal, each "no reason given / No undo written". The hold
+// is recorded when it is taken; the renewals say so, and the record skips them.
+func TestARenewalIsMarkedNotRecorded(t *testing.T) {
+	h, _ := queueHandler(t)
+	put := func() *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.HandlePutReleaseWindow(rec, httptest.NewRequest(http.MethodPut, "/delivery/release-window",
+			bytes.NewBufferString(`{"what":"bifrost-platform","who":"ci-w1.abc","reason":"ship x","env":"hold"}`)))
+		return rec
+	}
+	first := put()
+	if first.Code != http.StatusOK || first.Header().Get(actions.NotRecordedHeader) != "" {
+		t.Fatalf("taking the window must be recorded: %d %q", first.Code, first.Header().Get(actions.NotRecordedHeader))
+	}
+	again := put()
+	if again.Code != http.StatusOK || again.Header().Get(actions.NotRecordedHeader) != "renewal" {
+		t.Fatalf("a renewal must be marked: %d %q %s", again.Code, again.Header().Get(actions.NotRecordedHeader), again.Body)
 	}
 }

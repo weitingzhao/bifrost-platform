@@ -84,7 +84,11 @@ func (s *Server) guardUntraced(id string, next http.HandlerFunc) http.HandlerFun
 		sc := &statusCapture{ResponseWriter: w}
 		law := "action catalog: tier " + string(tier)
 		said := actionrecord.CallerWords(raw)
-		defer func() { s.recordDirect(r, act, params, said, law, sc.status) }()
+		defer func() {
+			if sc.Header().Get(actions.NotRecordedHeader) == "" {
+				s.recordDirect(r, act, params, said, law, sc.status)
+			}
+		}()
 		if !tier.NeedsApproval() {
 			if tier == actions.TierB && s.checkTierBRelease(sc, r, id, params) {
 				return
