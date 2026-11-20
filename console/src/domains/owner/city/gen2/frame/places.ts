@@ -75,6 +75,11 @@ export type Place = {
    */
   face?: { roof?: string; sign?: string; tally?: { n: number | null; what: string; source: string } }
   /**
+   * Which of its district's sheets it stands on, when the district has more than one (the content's hint;
+   * clamped to the sheets there are). Without hints the frame shares the children out in their order.
+   */
+  sheet?: number
+  /**
    * What it looks like inside, when its content draws it (a room's own module: the CPU's workshop, the
    * memory's cold store, the disk's warehouse; the Owner, 2026-11-19: put the rooms into use, refine them
    * later, one module at a time). `key` changes whenever the picture would; `make` draws it for the
@@ -112,6 +117,35 @@ export function isWired(p: Place): boolean {
 }
 
 export const TOWN_ID = 'town'
+
+/**
+ * A district's sheets (the Owner, 2026-11-20): each a 16×16 ground of at most 16 things; a 4×4 district has
+ * one, a 4×8 two, an 8×8 four, and each 4×4 cell of its town on the city stands for one. Anything else has one.
+ */
+export function sheetCount(p: Place): number {
+  if (p.kind !== 'district') return 1
+  const [a, b] = p.shape.split('x').map(Number)
+  return a && b ? Math.max(1, Math.round((a / 4) * (b / 4))) : 1
+}
+
+/** The children on each sheet: by their hint (clamped), else shared out evenly in their order. */
+export function sheetsOf(p: Place): Place[][] {
+  const n = sheetCount(p)
+  if (n === 1) return [p.children]
+  const out: Place[][] = Array.from({ length: n }, () => [])
+  const hinted = p.children.some(c => c.sheet != null)
+  const per = Math.ceil(p.children.length / n)
+  p.children.forEach((c, i) => out[hinted ? Math.min(n - 1, Math.max(0, c.sheet ?? 0)) : Math.min(n - 1, Math.floor(i / per))].push(c))
+  return out
+}
+
+/** A district seen one sheet at a time: the same place, its children those on the sheet, its ground one 16×16. */
+export function onSheet(p: Place, sheet: number): Place {
+  const sheets = sheetsOf(p)
+  if (sheets.length === 1) return p
+  // Its own ground for its own things: the district's arrangement was for all of them, so each sheet is cut anew.
+  return { ...p, shape: '4x4', arrangement: undefined, children: sheets[Math.min(sheets.length - 1, Math.max(0, sheet))] }
+}
 
 /** The places along a path, town first; stops at the first segment that is not there. */
 export function trail(tree: Place, path: Path): Place[] {

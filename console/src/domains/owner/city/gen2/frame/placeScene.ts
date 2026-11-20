@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser'
 import { defaultPlan, fitsIn, plotsOf, type Placed, type Plot, type Street } from './grid'
 import { BUFFER, geoOf, GUTTER, HIGHWAY_HALF, LANE, LOCAL_HALF, MEDIAN, PAVEMENT, WAY, type Geo, type Rect } from './geo'
-import { functionAt, isWired, type Place } from './places'
+import { functionAt, isWired, sheetCount, type Place } from './places'
 import { hueOf, tintOf } from './theme'
 import { PALETTE, TERRAIN, type Light, type Palette } from './light'
 import { hash } from './kit'
@@ -66,7 +66,8 @@ const DRAG = 8
 const INSET = 0.18
 
 export type SceneEvents = {
-  enter: (child: Place) => void
+  /** Into a child; onto one of its sheets when a cell of a district's town was picked on the city. */
+  enter: (child: Place, sheet?: number) => void
   select: (child: Place | null) => void
   /** The Owner dropped a thing on a plot where it fits (taking it, or swapping with what stood there). */
   moved: (id: string, plot: string) => void
@@ -448,9 +449,6 @@ export class PlaceScene extends Phaser.Scene {
         const mods = modulesOf(k, hue, this.light), key = townKey(k.id, k.shape, k.style!, mods, w, d)
         this.cells.set(key, Math.min(w, d)); this.townKeys.set(k.id, key)
         // The kinds it holds that its cells cannot show, counted on its name (the mess shown, never hidden).
-        const room = cellsOf(k.shape, w, d).length - 1
-        // A 4×4 town has no module cells: its landmark stands for all it holds, so nothing is left out.
-        this.townLeft.set(k.id, room > 0 ? Math.max(0, mods.length - room) : 0)
         out.push({ id: p.id, key, make: () => townSprite(k.shape, w, d, core, mods) })
       }
     }
@@ -479,8 +477,6 @@ export class PlaceScene extends Phaser.Scene {
   private cells = new Map<string, number>()
   /** Each district's town sprite, by its id (its key carries its size and what it sums). */
   private townKeys = new Map<string, string>()
-  /** How many kinds of what a district holds its town has no cell for. */
-  private townLeft = new Map<string, number>()
   /** How much a sprite drawn for `cells` is scaled to stand in a footprint `size` across. */
   private spriteFit(key: string, size: number) { const n = this.cells.get(key); return n ? size / n : 1 }
 
@@ -565,6 +561,18 @@ export class PlaceScene extends Phaser.Scene {
   }
 
 
+
+  /** On the city, which of a district's sheets the pointer is over: the cell of its town nearest the pointer. */
+  private sheetUnder(k: Place, r: Rect, p: Phaser.Input.Pointer, g: Phaser.GameObjects.GameObject): number | undefined {
+    if (sheetCount(k) < 2 || !this.shown || this.shown.path.length !== 0) return undefined
+    const P = projOf(geoOf(this.shown.plots))
+    const plot = this.shown.plots.find(q => q.id === this.shown!.placed.find(x => x.id === k.id)?.plot)
+    const plate = plot ? geoOf(this.shown.plots).plot(plot) : r
+    const box = g.parentContainer, px = p.worldX - (box?.x ?? 0), py = p.worldY - (box?.y ?? 0)
+    let best = 0, bd = Infinity
+    cellsOf(k.shape, plate.w, plate.h).forEach(([cx, cy], i) => { const c = P(plate.x + cx + 2, plate.y + cy + 2); const dd = (c.x - px) ** 2 + (c.y - py) ** 2; if (dd < bd) { bd = dd; best = i } })
+    return best
+  }
 
   /** What stands on the ground on screen, each with its footprint and the pieces it was drawn with. */
   private drawn: { id: string; r: Rect; parts: Phaser.GameObjects.GameObject[] }[] = []
@@ -1158,8 +1166,7 @@ export class PlaceScene extends Phaser.Scene {
       const dot = k.state === 'down' ? '#d9534f' : k.state === 'standby' ? '#9aa0b0' : k.state === 'unread' ? '#d8d4cc' : this.shown ? hueOf(this.shown.tree, [...at, p.id]) : '#cccccc'
       // Its words (what it is for, how many run on it) on the plate, outside its picture (the Owner, 2026-11-20).
       const said = [k.face?.sign ? k.face.sign.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase()) : '', k.state === 'online' && k.face?.tally?.n != null ? `${k.face.tally.n} ${k.face.tally.what}` : ''].filter(Boolean).join(' · ')
-      const left = this.townLeft.get(k.id) ?? 0
-      const more = [said, left ? `+${left} ${left === 1 ? 'kind' : 'kinds'} not shown` : ''].filter(Boolean).join(' · ')
+      const more = said
       const name = this.plate(foot.x, foot.y + 4, `${k.label}${pct}${word}${scale}${more ? `\n${more}` : ''}`, dot)
       names.push(name)
       this.namePlates.set(p.id, name)
@@ -1279,7 +1286,7 @@ export class PlaceScene extends Phaser.Scene {
         // The Owner, 2026-11-19: a light tap that went in when he only meant to look from outside.
         const now = this.time.now, again = this.lastPick?.id === k.id && now - this.lastPick.t < 320
         this.lastPick = again ? null : { id: k.id, t: now }
-        if (again && k.kind !== 'room') this.events_.enter(k)
+        if (again && k.kind !== 'room') this.events_.enter(k, this.sheetUnder(k, r, p, g))
         else this.events_.select(k)
       })
       parts.push(g)
@@ -1629,7 +1636,8 @@ export class PlaceScene extends Phaser.Scene {
       const b0 = pt(0.04, -ROAD / 2 - 0.14, H1), b1 = pt(0.04, ROAD / 2 + 0.14, H1)
       if (H1) g.lineStyle(7, this.tone.ink, 1).lineBetween(b0.x, b0.y, b1.x, b1.y)
       if (H1) g.lineStyle(5, hue, 1).lineBetween(b0.x, b0.y, b1.x, b1.y)
-      if (!named && H1) for (let k = 1; k < 6; k += 2) g.lineStyle(5, 0xffffff, 1).lineBetween(b0.x + (b1.x - b0.x) * k / 6, b0.y + (b1.y - b0.y) * k / 6, b0.x + (b1.x - b0.x) * (k + 1) / 6, b0.y + (b1.y - b0.y) * (k + 1) / 6)
+      // Other and Orphan, and a partner never declared that won a port by its traffic, take a striped beam.
+      if ((!named || pass.declared === false) && H1) for (let k = 1; k < 6; k += 2) g.lineStyle(5, 0xffffff, 1).lineBetween(b0.x + (b1.x - b0.x) * k / 6, b0.y + (b1.y - b0.y) * k / 6, b0.x + (b1.x - b0.x) * (k + 1) / 6, b0.y + (b1.y - b0.y) * (k + 1) / 6)
       const ways = [pass.bus ? `bus ${pass.bus}` : '', pass.metric ? `metrics ${pass.metric}` : ''].filter(Boolean).join(' · ')
       const sign = pt(c1, 0)
       if (named) {
@@ -1653,7 +1661,9 @@ export class PlaceScene extends Phaser.Scene {
         // Ports stand a street apart, so neighbouring signs take turns below and above their block.
         const low = P(r.x + r.w, r.y + r.h), high = P(r.x, r.y, 46)
         const below = sl.i % 2 === 0 ? low : new Phaser.Math.Vector2(high.x, high.y - 26)
-        const signPlate = this.plate(below.x, below.y + 6, ways ? `${pass.label} · ${ways}` : pass.label, (nb ? hueOf(this.shown!.tree, [pass.id]) : '#9aa0b0'))
+        // An undeclared partner's name carries a star (RULES.md: it may win a port, the gap in the contract shows).
+        const who = pass.declared === false ? `${pass.label}*` : pass.label
+        const signPlate = this.plate(below.x, below.y + 6, ways ? `${who} · ${ways}` : who, (nb ? hueOf(this.shown!.tree, [pass.id]) : '#9aa0b0'))
         this.signs.push(signPlate)
         nbc.add(signPlate)
         framed.push(new Phaser.Math.Vector2(below.x, below.y + 30))

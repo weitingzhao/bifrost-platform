@@ -144,7 +144,7 @@ export function linkRulesBroken(tree: Place, links: readonly Link[]): string[] {
 }
 
 /** What passes one crossing: whom it leads to, and how many things go through, by way. */
-export type Pass = { id: string; label: string; bus: number; metric: number; n: number; who: string[] }
+export type Pass = { id: string; label: string; bus: number; metric: number; n: number; who: string[]; declared?: boolean }
 
 /** How many named ports each side of a small place has (the Owner, 2026-11-20: a few fixed ports a side, then Other). */
 export const PORTS = 3
@@ -164,29 +164,37 @@ export function portsFor(shape: string): number {
 export type Edge = { named: Pass[]; other: Pass | null }
 
 /**
- * A place's two sides (the Owner, 2026-11-20: one side in, one side out, PORTS fixed ports each, then
- * Other; the mess shown and counted). In: what others send or give it; out: what it sends or gives. The
- * named ports are its declared partners, in their order, each shown even when nothing passes yet; traffic
- * with anyone undeclared, and anything unclear, passes through that side's Other; what belongs to no one
- * through Orphan. `labelOf` names a declared partner nothing passes to yet.
+ * A place's two sides (the Owner, 2026-11-20): one side in, one side out, `ports` named ports each, then
+ * Other; the mess shown and counted. In: what others send or give it; out: what it sends or gives.
+ * Which partners get the named ports (the Owner, the same day: ranked by what is inside the ground shown): the
+ * ones with the most connections to what stands here, declared or not; ties go by the declared order, then by
+ * name. A declared partner nothing passes to yet keeps a port if one is left over (its contract is still shown).
+ * A partner it never declared may win a port by its traffic, but is marked undeclared, so the gap in the
+ * contract still shows. Everything past the ports, and anything unclear, passes through that side's Other;
+ * what belongs to no one through Orphan. `labelOf` names a partner by its id.
  */
 export function edgeSlots(gates: readonly Gate[], partners: Partners | undefined, labelOf: (id: string) => string, ports = PORTS): { in: Edge; out: Edge; orphan: Pass | null; total: number } {
-  const fresh = (id: string, label: string): Pass => ({ id, label, bus: 0, metric: 0, n: 0, who: [] })
+  const fresh = (id: string, label: string, declared = false): Pass => ({ id, label, bus: 0, metric: 0, n: 0, who: [], declared })
   const orphan = fresh(ORPHAN, 'Orphan')
   const side = (dir: 'in' | 'out'): Edge => {
-    const declared = (partners?.[dir] ?? []).slice(0, ports)
-    const named = new Map(declared.map(id => [id, fresh(id, labelOf(id))]))
+    const declared = partners?.[dir] ?? []
+    const by = new Map<string, Pass>()
     const other = fresh(OTHER, 'Other')
     for (const g of gates) {
       const k = dir === 'in' ? g.ins : g.outs
       if (!k || g.clarity === 'orphan') continue
+      if (g.clarity === 'unclear') { other[g.way] += k; other.n += k; if (!other.who.includes(g.label)) other.who.push(g.label); continue }
       const id = g.outside.join('/')
-      const p = g.clarity !== 'unclear' ? named.get(id) : undefined
-      const into = p ?? other
-      into[g.way] += k; into.n += k
-      if (!p && !other.who.includes(g.label)) other.who.push(g.label)
+      const p = by.get(id) ?? fresh(id, g.label, declared.includes(id))
+      p[g.way] += k; p.n += k
+      by.set(id, p)
     }
-    return { named: declared.map(id => named.get(id)!), other: other.n ? other : null }
+    const rank = (id: string) => { const i = declared.indexOf(id); return i < 0 ? declared.length : i }
+    const busy = [...by.values()].sort((a, b) => b.n - a.n || rank(a.id) - rank(b.id) || a.label.localeCompare(b.label))
+    const named = busy.slice(0, ports)
+    for (const id of declared) if (named.length < ports && !named.some(p => p.id === id)) named.push(fresh(id, labelOf(id), true))
+    for (const p of busy.slice(ports)) { other.bus += p.bus; other.metric += p.metric; other.n += p.n; if (!other.who.includes(p.label)) other.who.push(p.label) }
+    return { named, other: other.n ? other : null }
   }
   for (const g of gates) if (g.clarity === 'orphan') { orphan[g.way] += g.carries.length; orphan.n += g.carries.length }
   const total = gates.reduce((t, g) => t + g.carries.length, 0)

@@ -211,6 +211,9 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', uni
     return building
   })
   numberDevices(devices)
+  // Its sheets, when the district grows past one (RULES.md: a district's sheets): by zone, computing first.
+  const ZONE_SHEET: Record<Zone, number> = { compute: 0, trading: 1, storage: 2, office: 3 }
+  for (const b of devices) { const z = zones.get(b.id); if (z) b.sheet = ZONE_SHEET[z] }
   const arrangement = zonedArrangement(devices.map(b => ({ id: b.id, shape: b.shape, zone: zones.get(b.id)! })))
   // The hardware is the town's power on the map: a nuclear plant (the Owner, 2026-11-20).
   return { id: 'utilities', kind: 'district', shape: DISTRICT, style: 'power', function: fn, arrangement, label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: devices }

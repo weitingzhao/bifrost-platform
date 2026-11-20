@@ -7,9 +7,9 @@ import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
 import { LABEL_MODES, type LabelMode } from './labels'
 import type { CityContent, Panel } from './content'
 import { PlaceScene, type ArrangeTool, type Shown } from './placeScene'
-import { functionAt, here, isWired, meterText, resolve, trail, type Path, type Place } from './places'
+import { functionAt, here, isWired, meterText, onSheet, resolve, sheetCount, trail, type Path, type Place } from './places'
 import { rulesBroken } from './rules'
-import { linksAt } from './links'
+import { linksAt, type LevelLinks } from './links'
 import { frameOf, NO_INSETS, swapRects, type Insets, type Rect } from './viewport'
 import './cityGen2.css'
 
@@ -96,6 +96,12 @@ const readLight = (): LightChoice => {
   try { const v = window.localStorage.getItem(LIGHT_KEY); return v && v in NEXT ? v as LightChoice : 'auto' } catch { return 'auto' }
 }
 
+/** A level's connections cut to the children on the ground shown (one sheet of a district). */
+function onlyOn(lk: LevelLinks, v: Place): LevelLinks {
+  const ids = new Set(v.children.map(c => c.id))
+  return { ...lk, gates: lk.gates.filter(g => ids.has(g.child)), lines: lk.lines.filter(l => ids.has(l.a) && ids.has(l.b)) }
+}
+
 /** A place's ground as the Owner left it: its plan (or one cut to fit its things), its plots and streets, and where each thing stands. */
 function layoutOf(place: Place, a: Arrangement) {
   const children: readonly Item[] = place.children
@@ -180,7 +186,25 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
     try { window.localStorage.setItem(LIGHT_KEY, next) } catch { /* kept for this page only */ }
   }
   // The Owner's positions for this place and its parent; bumped on every move so the page redraws.
-  const [saved, setSaved] = useState<{ here: Arrangement; parent: Arrangement }>(() => ({ here: store.get(keyOf(path)), parent: store.get(keyOf(path.slice(0, -1))) }))
+  // Which sheet of a district is shown (RULES.md: a district's sheets), and the one to land on when going in.
+  const [sheet, setSheetState] = useState(0)
+  const sheetRef = useRef(0)
+  const nextSheet = useRef<number | null>(null)
+  const sheets = sheetCount(place)
+  const view = useMemo(() => onSheet(place, sheet), [place, sheet])
+  // The Owner's arrangement is kept per sheet.
+  const hereKey = (at: Path) => keyOf(at) + (sheetCount(here(tree, at)) > 1 ? `@${sheetRef.current}` : '')
+  const [saved, setSaved] = useState<{ here: Arrangement; parent: Arrangement }>(() => ({ here: store.get(hereKey(path)), parent: store.get(keyOf(path.slice(0, -1))) }))
+  const setSheet = (n: number) => {
+    const k = Math.max(0, Math.min(sheetCount(here(tree, pathRef.current)) - 1, n))
+    if (k === sheetRef.current) return
+    sheetRef.current = k
+    setSheetState(k)
+    setSelected(null)
+    setSaved(sv => ({ ...sv, here: store.get(hereKey(pathRef.current)) }))
+  }
+  const setSheetRef = useRef(setSheet)
+  setSheetRef.current = setSheet
   const [tool, setTool] = useState<ArrangeTool>('move')
   // The menu: the content's functions, a lens over the map (the Owner, 2026-11-19: by function beside
   // the levels by domain). Picking one lights up what serves it, here and on every level; picking it again clears it.
@@ -188,7 +212,7 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
   const [lens, setLens] = useState<string | null>(null)
   const lensLabel = functions.find(fn => fn.id === lens)?.label
   const lensHere = lens ? place.children.filter(c => functionAt(tree, [...path, c.id]) === lens).length : 0
-  const lay = useMemo(() => layoutOf(place, saved.here), [place, saved.here])
+  const lay = useMemo(() => layoutOf(view, saved.here), [view, saved.here])
   const layRef = useRef(lay)
   layRef.current = lay
   const root = useRef<HTMLDivElement>(null)
@@ -224,7 +248,7 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
   useEffect(() => {
     if (!host.current) return
     const s = new PlaceScene({
-      enter: child => { setSelected(null); goRef.current([...pathRef.current, child.id]) },
+      enter: (child, onto) => { setSelected(null); nextSheet.current = onto ?? null; goRef.current([...pathRef.current, child.id]) },
       select: child => setSelected(child),
       moved: (id, plotId) => {
         const L = layRef.current
@@ -274,7 +298,11 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
     setFocused(null)
     setSearching(false)
     setQuery('')
-    const fresh = { here: store.get(keyOf(path)), parent: store.get(keyOf(path.slice(0, -1))) }
+    // Into a district: onto the sheet whose cell was picked on the city, else its first.
+    sheetRef.current = nextSheet.current ?? 0
+    nextSheet.current = null
+    setSheetState(sheetRef.current)
+    const fresh = { here: store.get(hereKey(path)), parent: store.get(keyOf(path.slice(0, -1))) }
     setSaved(fresh)
     scene.current?.show(shown({ from, selected: pick?.id ?? null, arranging: false, here: fresh.here, parentA: fresh.parent }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -284,10 +312,11 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
   useEffect(() => {
     scene.current?.show(shown({ from: 'jump', selected: selected?.id ?? null, arranging, here: saved.here, parentA: saved.parent }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, arranging, saved, tool, lens, place, parent])
+  }, [selected?.id, arranging, saved, tool, lens, place, parent, sheet])
 
   function shown(o: { from: Shown['from']; selected: string | null; arranging: boolean; here: Arrangement; parentA: Arrangement }): Shown {
-    const h = layoutOf(place, o.here)
+    const v = onSheet(place, sheetRef.current)
+    const h = layoutOf(v, o.here)
     const p = parent ? layoutOf(parent, o.parentA) : null
     // Any place's ground, for the miniatures (a district seen from the town, a building's wings).
     const layoutAt = (at: Path) => {
@@ -298,22 +327,22 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
     }
     return {
       tree, path, layoutAt,
-      place, placed: h.placed, plots: h.plots, streets: h.streets,
+      place: v, placed: h.placed, plots: h.plots, streets: h.streets,
       parent, parentPlaced: p?.placed ?? [], parentPlots: p?.plots ?? [], parentStreets: p?.streets ?? [],
       inside: path.at(-1) ?? null, selected: o.selected, from: o.from, arranging: o.arranging, tool, lens,
-      links: linksAt(tree, path, content.links ?? []),
+      links: onlyOn(linksAt(tree, path, content.links ?? []), v),
       allLinks: content.links ?? [],
     }
   }
 
   /** Keep the Owner's plan and plots for this place (display only). */
   function keep(a: Arrangement) {
-    store.set(keyOf(pathRef.current), a)
+    store.set(hereKey(pathRef.current), a)
     setSaved(s => ({ ...s, here: a }))
   }
 
   const resetArrangement = () => {
-    store.set(keyOf(path), null)
+    store.set(hereKey(path), null)
     setSaved(s => ({ ...s, here: {} }))
   }
 
@@ -323,6 +352,8 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
       const typing = e.target instanceof HTMLInputElement
       if (e.key === '/' && !typing) { e.preventDefault(); setSearching(true); setTimeout(() => searchBox.current?.focus(), 0); return }
       if ((e.key === 'h' || e.key === 'H') && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) { toggleHiddenRef.current(); return }
+      // [ and ]: the sheet before or after, without going out (the Owner, 2026-11-20).
+      if ((e.key === '[' || e.key === ']') && !typing) { setSheetRef.current(sheetRef.current + (e.key === ']' ? 1 : -1)); return }
       if (e.key !== 'Escape') return
       if (searching) { setSearching(false); setQuery(''); searchBox.current?.blur(); return }
       if (focused) { setFocused(null); return }
@@ -391,6 +422,9 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
   ) : (
     <>
       {place.children.length > 0 && <button className="g2-btn" onClick={() => { setSelected(null); setArranging(true) }}>Arrange</button>}
+      {sheets > 1 && <div className="k-seg g2-sheets" role="group" aria-label="Sheet">
+        {Array.from({ length: sheets }, (_, i) => <button key={i} className={`g2-btn${i === sheet ? ' on' : ''}`} aria-pressed={i === sheet} onClick={() => setSheet(i)} title={`Sheet ${i + 1} of ${sheets} ([ and ] to step)`}>{i + 1}</button>)}
+      </div>}
       <button className="g2-btn" onClick={stepLabels} aria-label={`Plates: ${labels}`} title="Labels: opaque, see-through, or hidden (hover a building for its name)">{LABELS_WORD[labels]}</button>
       <button className="g2-btn" onClick={stepLight} aria-label={`Light: ${LIGHT_WORD[lightChoice]}`}>
         {LIGHT_ICON[light]} {lightChoice === 'auto' ? `Auto · ${LIGHT_WORD[light]}` : LIGHT_WORD[lightChoice]}

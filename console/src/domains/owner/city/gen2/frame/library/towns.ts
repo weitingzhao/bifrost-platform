@@ -1,5 +1,5 @@
 import { Draw, faces, hash, type Sprite } from '../kit'
-import type { Place } from '../places'
+import { sheetsOf, type Place } from '../places'
 import type { Light } from '../light'
 import { portsFor } from '../links'
 import { deviceKey, deviceSprite, formOfPlace, levelsOf, osOfPlace, type Levels } from '../devices'
@@ -11,41 +11,44 @@ import { frontLanes, frontWall, inset } from './landmarks'
  *   the frame    its ground, and on its two front sides the wall with a gate at every port (how many a side
  *                its size gives, each where portAt puts it, so the streets meet it), the lanes in
  *   the landmark who it is, drawn once at 4×4 and never scaled (one standard part), in the back corner
- *   the modules  every other 4×4 cell holds one: what is inside the district, summed by kind (each level
- *                sums up the one below), the biggest kinds first; a cell with nothing to sum stays empty ground
+ *   the modules  every other 4×4 cell stands for one of the district's sheets: what is on it summed into one
+ *                building (each level sums up the one below); a cell whose sheet is empty stays bare ground
  * Back to front: the landmark, then the modules by depth, then the wall.
  */
 
-/** One kind of what a district holds, summed: its facility as one building, its readings the kind's totals. */
-export type Module = { key: string; make: () => Sprite }
+/** One cell's summary: what stands on its sheet, as one building, its readings the sheet's totals; null: an empty sheet. */
+export type Module = { key: string; make: () => Sprite } | null
 
-/** Sum the district's devices by kind (their facility and system): the counts, capacities, and use weighted by them. */
+/**
+ * Each cell past the landmark's stands for one sheet of the district (RULES.md: a district's sheets): what is on
+ * that sheet summed into one building, the facility most of it is, its counts and capacities added and its use
+ * weighted by them. The landmark's cell stands for the first sheet (and the district as a whole).
+ */
 export function modulesOf(k: Place, hue: string, light: Light): Module[] {
-  const groups = new Map<string, Place[]>()
-  for (const c of k.children) if (c.look) {
-    const id = `${formOfPlace(c)}:${osOfPlace(c)}`
-    groups.set(id, [...(groups.get(id) ?? []), c])
-  }
   const sum = (xs: (number | null | undefined)[]) => { const v = xs.filter((x): x is number => x != null); return v.length ? v.reduce((a, b) => a + b, 0) : null }
   const weighted = (pairs: [number | null, number | null | undefined][]) => {
     const ok = pairs.filter((p): p is [number, number] => p[0] != null && p[1] != null && p[1] > 0)
     const tot = ok.reduce((a, [, w]) => a + w, 0)
     return tot ? ok.reduce((a, [f, w]) => a + f * w, 0) / tot : null
   }
-  return [...groups.values()]
-    .sort((a, b) => b.length - a.length || (sum(b.map(c => levelsOf(c).cap?.cores)) ?? 0) - (sum(a.map(c => levelsOf(c).cap?.cores)) ?? 0))
-    .map(kids => {
-      const ls = kids.map(levelsOf), on = ls.filter(l => l.state === 'online')
-      const lv: Levels = {
-        state: on.length ? 'online' : ls.some(l => l.state === 'down') ? 'down' : ls.some(l => l.state === 'standby') ? 'standby' : 'unread',
-        cpu: weighted(on.map(l => [l.cpu, l.cap?.cores])),
-        mem: weighted(on.map(l => [l.mem, l.cap?.mem])),
-        disks: [weighted(on.map(l => [l.disks[0] ?? null, l.cap?.disk]))],
-        cap: { cores: sum(ls.map(l => l.cap?.cores)), mem: sum(ls.map(l => l.cap?.mem)), disk: sum(ls.map(l => l.cap?.disk)) },
-      }
-      const first = kids[0], form = formOfPlace(first), os = osOfPlace(first), name = `${k.id}:${form}:${os}:${kids.length}`
-      return { key: deviceKey(form, 4, 4, hue, light, lv, name, {}, os), make: () => deviceSprite(form, 4, 4, hue, light, lv, name, {}, os) }
-    })
+  return sheetsOf(k).slice(1).map((sheet, i) => {
+    const kids = sheet.filter(c => c.look)
+    if (!kids.length) return null
+    const count = new Map<string, number>()
+    for (const c of kids) { const id = `${formOfPlace(c)}:${osOfPlace(c)}`; count.set(id, (count.get(id) ?? 0) + 1) }
+    const top = [...count.entries()].sort((a, b) => b[1] - a[1])[0][0]
+    const first = kids.find(c => `${formOfPlace(c)}:${osOfPlace(c)}` === top)!
+    const ls = kids.map(levelsOf), on = ls.filter(l => l.state === 'online')
+    const lv: Levels = {
+      state: on.length ? 'online' : ls.some(l => l.state === 'down') ? 'down' : ls.some(l => l.state === 'standby') ? 'standby' : 'unread',
+      cpu: weighted(on.map(l => [l.cpu, l.cap?.cores])),
+      mem: weighted(on.map(l => [l.mem, l.cap?.mem])),
+      disks: [weighted(on.map(l => [l.disks[0] ?? null, l.cap?.disk]))],
+      cap: { cores: sum(ls.map(l => l.cap?.cores)), mem: sum(ls.map(l => l.cap?.mem)), disk: sum(ls.map(l => l.cap?.disk)) },
+    }
+    const form = formOfPlace(first), os = osOfPlace(first), name = `${k.id}:sheet${i + 1}`
+    return { key: deviceKey(form, 4, 4, hue, light, lv, name, {}, os), make: () => deviceSprite(form, 4, 4, hue, light, lv, name, {}, os) }
+  })
 }
 
 /**
@@ -62,7 +65,7 @@ export function cellsOf(shape: string, w: number, d: number): [number, number][]
 }
 
 export function townKey(id: string, shape: string, landmark: string, modules: Module[], w: number, d: number) {
-  return `g2:town:${id}:${shape}:${w.toFixed(2)}x${d.toFixed(2)}:${landmark}:${hash(modules.map(m => m.key).join('|'))}`
+  return `g2:town:${id}:${shape}:${w.toFixed(2)}x${d.toFixed(2)}:${landmark}:${hash(modules.map(m => m?.key ?? '-').join('|'))}`
 }
 
 /** The town of a district of `shape` on its ground w by d cells (its plot on the city). */

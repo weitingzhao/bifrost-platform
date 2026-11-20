@@ -46,9 +46,9 @@ describe('a content’s connections keep the frame’s rules', () => {
   })
 })
 
-// Origin: the Owner, 2026-11-20 ("两边就够：一边进一边出，每边 3 个口子加 Other，再加一个 Orphan"; then "先立规矩":
-// the named ports are the partners a place declares, not the busiest). These pin the sides, the declared
-// ports, that undeclared traffic goes to Other, and that nothing is dropped.
+// Origin: the Owner, 2026-11-20 ("两边就够：一边进一边出，每边 3 个口子加 Other，再加一个 Orphan"; later the
+// same day the named ports went to the busiest partners of what stands on the ground shown, declared or not,
+// the undeclared marked, replacing "only the declared"). These pin the sides, the ranking, and that nothing is dropped.
 describe('a place’s two sides: its declared partners, Other, Orphan', () => {
   const town: Place = P('town', 'town', ['me', 'a', 'b', 'c', 'd', 'e'].map(id => P(id, 'district', [P('x', 'building')])))
   town.children[0].partners = { in: ['a'], out: ['a', 'b', 'z'] }
@@ -59,18 +59,23 @@ describe('a place’s two sides: its declared partners, Other, Orphan', () => {
     { way: 'bus', from: ['me', 'x'], to: [], what: 'unowned', source: '/api/v1/bus/contract', clarity: 'orphan' },
   ]
   const label = (id: string) => id.toUpperCase()
-  it('the declared are the named ports in their order, even with nothing passing; the undeclared and the unclear go to Other', () => {
+  it('the busiest partners get the named ports, ties by declared order then name; the undeclared are marked; the rest and the unclear go to Other', () => {
     const s = edgeSlots(linksAt(town, ['me'], links).gates, town.children[0].partners, label)
-    expect(s.out.named.map(p => [p.id, p.n])).toEqual([['a', 3], ['b', 2], ['z', 0]])
-    expect(s.out.other).toMatchObject({ n: 4 })
-    expect(s.in.named).toEqual([expect.objectContaining({ id: 'a', metric: 1, n: 1 })])
+    expect(s.out.named.map(p => [p.id, p.n, p.declared])).toEqual([['a', 3, true], ['b', 2, true], ['c', 1, false]])
+    expect(s.out.other).toMatchObject({ n: 3 })
+    expect(s.in.named).toEqual([expect.objectContaining({ id: 'a', metric: 1, n: 1, declared: true })])
     expect(s.orphan).toMatchObject({ n: 1 })
     expect(s.total).toBe(11)
   })
-  it('a place that declares no one sends everything through Other', () => {
+  it('a declared partner nothing passes to keeps a port when one is left over', () => {
+    const quiet: Link[] = [L('bus', 'me/x', 'a/x', 'only')]
+    const s = edgeSlots(linksAt(town, ['me'], quiet).gates, town.children[0].partners, label)
+    expect(s.out.named.map(p => [p.id, p.n])).toEqual([['a', 1], ['b', 0], ['z', 0]])
+  })
+  it('a place that declares no one still shows its busiest partners, each marked undeclared', () => {
     const s = edgeSlots(linksAt(town, ['me'], links).gates, undefined, label)
-    expect(s.out.named).toEqual([])
-    expect(s.out.other).toMatchObject({ n: 9 })
+    expect(s.out.named.map(p => [p.id, p.declared])).toEqual([['a', false], ['b', false], ['c', false]])
+    expect(s.out.other).toMatchObject({ n: 3 })
   })
   it('an orphan’s far end need not be a place; a declared partner must be a place beside it', () => {
     expect(linkRulesBroken(town, links)).toEqual(['me: partner z is not a place beside it'])
