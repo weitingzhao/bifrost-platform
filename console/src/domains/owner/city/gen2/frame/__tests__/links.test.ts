@@ -56,28 +56,34 @@ describe('a content’s connections keep the frame’s rules', () => {
   })
 })
 
-// Origin: the Owner, 2026-11-20 ("两边就够：一边进一边出，每边 3 个口子加 Other，再加一个 Orphan；乱的不藏，量出多大").
-// These pin the two sides, the fixed ports and that nothing is dropped.
-describe('a district’s two sides: in and out, three ports and Other each, one Orphan', () => {
+// Origin: the Owner, 2026-11-20 ("两边就够：一边进一边出，每边 3 个口子加 Other，再加一个 Orphan"; then "先立规矩":
+// the named ports are the partners a place declares, not the busiest). These pin the sides, the declared
+// ports, that undeclared traffic goes to Other, and that nothing is dropped.
+describe('a place’s two sides: its declared partners, Other, Orphan', () => {
   const town: Place = P('town', 'town', ['me', 'a', 'b', 'c', 'd', 'e'].map(id => P(id, 'district', [P('x', 'building')])))
+  town.children[0].partners = { in: ['a'], out: ['a', 'b', 'z'] }
   const links: Link[] = [
     ...['a', 'a', 'a', 'b', 'b', 'c', 'd', 'e'].map((to, i) => L('bus', 'me/x', `${to}/x`, `e${i}`)),
     L('metric', 'a/x', 'me/x', 'reading'),
     { ...L('bus', 'me/x', 'a/x', 'fuzzy'), clarity: 'unclear' },
     { way: 'bus', from: ['me', 'x'], to: [], what: 'unowned', source: '/api/v1/bus/contract', clarity: 'orphan' },
   ]
-  it('out keeps the heaviest three named, the rest with the unclear in Other; in has its own; the unowned in Orphan', () => {
-    const s = edgeSlots(linksAt(town, ['me'], links).gates)
-    expect(s.out.named.map(p => p.id)).toEqual(['a', 'b', expect.any(String)])
-    expect(s.out.named).toHaveLength(PORTS)
-    expect(s.out.other).toMatchObject({ n: 3 })
+  const label = (id: string) => id.toUpperCase()
+  it('the declared are the named ports in their order, even with nothing passing; the undeclared and the unclear go to Other', () => {
+    const s = edgeSlots(linksAt(town, ['me'], links).gates, town.children[0].partners, label)
+    expect(s.out.named.map(p => [p.id, p.n])).toEqual([['a', 3], ['b', 2], ['z', 0]])
+    expect(s.out.other).toMatchObject({ n: 4 })
     expect(s.in.named).toEqual([expect.objectContaining({ id: 'a', metric: 1, n: 1 })])
-    expect(s.in.other).toBeNull()
     expect(s.orphan).toMatchObject({ n: 1 })
     expect(s.total).toBe(11)
   })
-  it('an orphan’s far end need not be a place', () => {
-    expect(linkRulesBroken(town, links)).toEqual([])
+  it('a place that declares no one sends everything through Other', () => {
+    const s = edgeSlots(linksAt(town, ['me'], links).gates, undefined, label)
+    expect(s.out.named).toEqual([])
+    expect(s.out.other).toMatchObject({ n: 9 })
+  })
+  it('an orphan’s far end need not be a place; a declared partner must be a place beside it', () => {
+    expect(linkRulesBroken(town, links)).toEqual(['me: partner z is not a place beside it nor the world outside'])
   })
   // The Owner, 2026-11-20: the front edges are what is clean, the back edges what is yet to be cleared.
   it('the frame sets nine places outside: three in at the front left, three out at the front right, the two Others at the back left, Orphan at the back right', () => {
@@ -85,5 +91,25 @@ describe('a district’s two sides: in and out, three ports and Other each, one 
     expect(SLOTS.filter(s => s.edge === 'x1').map(s => s.side)).toEqual(['out', 'out', 'out'])
     expect(SLOTS.filter(s => s.edge === 'x0').map(s => [s.side, s.i])).toEqual([['in', PORTS], ['out', PORTS]])
     expect(SLOTS.filter(s => s.edge === 'y0').map(s => s.side)).toEqual(['orphan'])
+  })
+})
+
+// Origin: the Owner, 2026-11-20 ("先做第一条和第二条"): most traffic is with users outside the system, which
+// are not places; they need a place to show. These pin how the outside world shows on the town and inside it.
+describe('the world outside the town', () => {
+  const town: Place = P('town', 'town', [P('a', 'district', [P('x', 'building')]), P('b', 'district', [P('x', 'building')])])
+  const parties = [{ id: 'console', label: 'Console' }, { id: 'mcp', label: 'MCP' }]
+  const links: Link[] = [L('bus', '~/console', 'a/x', 'asked'), L('bus', '~/mcp', 'a/x', 'called'), L('metric', 'b/x', '~/console', 'read')]
+  it('on the town’s edge each party is its own port', () => {
+    const g = linksAt(town, [], links, parties).gates
+    expect(g.map(x => [x.outside.join('/'), x.label, x.ins, x.outs]).sort()).toEqual([['~/console', 'Console', 0, 1], ['~/console', 'Console', 1, 0], ['~/mcp', 'MCP', 1, 0]])
+  })
+  it('inside the town all of outside comes through one port', () => {
+    const g = linksAt(town, ['a'], links, parties).gates
+    expect(new Set(g.map(x => x.outside.join('/')))).toEqual(new Set(['~']))
+    expect(g.reduce((t, x) => t + x.ins, 0)).toBe(2)
+  })
+  it('an end outside must be a declared party', () => {
+    expect(linkRulesBroken(town, [L('bus', '~/nobody', 'a/x', 'x')], parties)).toEqual(['bus x: its start ~/nobody is not a place'])
   })
 })

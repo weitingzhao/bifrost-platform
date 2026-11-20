@@ -1,6 +1,6 @@
 import { area, assign, decodePlan, GRID, plotsOf, sidesOf, SHAPES, TAPPABLE, type Shape } from './grid'
 import { LOOKS, STATES, type Place, type PlaceKind } from './places'
-import { linkRulesBroken, type Link } from './links'
+import { linkRulesBroken, type Link, type Party } from './links'
 
 /**
  * The frame's rules, checked on the content it is given (the Owner, 2026-11-19: the ground, its
@@ -29,8 +29,8 @@ const READ_SOURCE = /^\/api\/|[a-z_:]+\s*\(|[a-z_:]+\{/i
 
 const CHILD: Record<PlaceKind, PlaceKind | null> = { town: 'district', district: 'building', building: 'room', room: null }
 
-export function rulesBroken(content: { tree: Place; functions?: { id: string }[]; links?: Link[] }): string[] {
-  const out: string[] = linkRulesBroken(content.tree, content.links ?? [])
+export function rulesBroken(content: { tree: Place; functions?: { id: string }[]; links?: Link[]; outside?: Party[] }): string[] {
+  const out: string[] = linkRulesBroken(content.tree, content.links ?? [], content.outside ?? [])
   const fns = content.functions ? new Set(content.functions.map(f => f.id)) : null
   if (content.tree.kind !== 'town') out.push(`the top place must be a town, not a ${content.tree.kind}`)
   const walk = (p: Place, where: string) => {

@@ -5,7 +5,7 @@ import { consoleContent } from '../src/domains/owner/city/gen2/content/console'
 import { formatPath, parsePath, type Path, type Place } from '../src/domains/owner/city/gen2/frame/places'
 import { hardwareDistrict, readHardware } from '../src/domains/owner/city/gen2/content/hardware'
 import { readUnits } from '../src/domains/owner/city/gen2/content/unitRooms'
-import type { Link } from '../src/domains/owner/city/gen2/frame/links'
+import { OUTSIDE, type Link, type Partners } from '../src/domains/owner/city/gen2/frame/links'
 
 // The gen2 frame on its own: the address is the place (#/system/infrastructure), so Back works.
 // The content plug-in: the Console's menu, and the hardware district read live through the platform
@@ -31,7 +31,21 @@ const SAMPLE_LINKS: Link[] = [
   { way: 'metric', from: ['system', 'infrastructure'], to: ['utilities'], what: 'node_cpu_seconds_total', source: SAMPLE },
   { way: 'bus', from: ['system', 'bus'], to: ['command', 'command'], what: 'loop.health.changed', source: SAMPLE, clarity: 'unclear' },
   ...['network', 'telemetry', 'alertrelay', 'selfhealth', 'catalog', 'checklist', 'mcp'].map((what): Link => ({ way: 'bus', from: ['system', 'infrastructure'], to: [], what, source: SAMPLE, clarity: 'orphan' })),
+  { way: 'bus', from: [OUTSIDE, 'console'], to: ['command', 'command'], what: 'decision.made', source: SAMPLE },
+  { way: 'bus', from: [OUTSIDE, 'mcp'], to: ['work', 'releases'], what: 'release.requested', source: SAMPLE },
+  { way: 'metric', from: ['system', 'status'], to: [OUTSIDE, 'console'], what: 'status_up', source: SAMPLE },
+  { way: 'bus', from: [OUTSIDE, 'trade'], to: ['services', 'ib'], what: 'order.intent', source: SAMPLE },
 ]
+const SAMPLE_OUTSIDE = [{ id: 'console', label: 'Console' }, { id: 'mcp', label: 'MCP' }, { id: 'trade', label: 'Trade' }]
+/** Bench only: whom each place declares as partners (the content's rules), so the edge has named ports. */
+const SAMPLE_PARTNERS: Record<string, Partners> = {
+  town: { in: ['~/console', '~/mcp', '~/trade'], out: ['~/console'] },
+  work: { in: ['command', 'system', '~'], out: ['command'] },
+  system: { in: ['crew', 'services'], out: ['work', 'command', 'utilities'] },
+  command: { in: ['work', '~'], out: ['work'] },
+  services: { in: ['~'], out: ['system'] },
+}
+const withPartners = (p: Place): Place => ({ ...p, partners: SAMPLE_PARTNERS[p.id] ?? p.partners, children: p.kind === 'town' ? p.children.map(withPartners) : p.children })
 
 function Bench() {
   const [hw, setHw] = useState<Place | null>(null)
@@ -45,7 +59,7 @@ function Bench() {
   }, [])
   const CONTENT = useMemo(() => {
     const c = consoleContent(hw ? [hw] : [])
-    return new URLSearchParams(location.search).has('links') ? { ...c, links: SAMPLE_LINKS } : c
+    return new URLSearchParams(location.search).has('links') ? { ...c, tree: withPartners(c.tree), links: SAMPLE_LINKS, outside: SAMPLE_OUTSIDE } : c
   }, [hw])
   const [path, setPath] = useState<Path>(() => parsePath(location.hash))
   useEffect(() => {

@@ -16,7 +16,7 @@ import { trail, type Path, type Place } from './places'
  *           place outside at the level beside this one, and a line from it to the child it serves
  *   hidden  both ends under the same child: that child's own business, shown when you go in
  * At most LINES lines a level, the heaviest first; the rest are counted. A district's edge takes its stations
- * through edgeSlots: one side in, one side out, PORTS named ports and Other each, the unowned in Orphan.
+ * through edgeSlots: one side in, one side out, its declared partners and Other each, the unowned in Orphan.
  */
 
 export type Way = 'bus' | 'metric'
@@ -41,6 +41,23 @@ export type Link = {
 export const OTHER = 'other'
 export const ORPHAN = 'orphan'
 
+/**
+ * The world outside the town (the Owner, 2026-11-20): who uses the system from outside it (a console, an
+ * agent's tools, a tenant, a plugin) is not one of its places, but it is where most of the traffic goes. Its
+ * parties are declared by the content; a connection's end outside the town is [OUTSIDE, party]. On the town's
+ * own edge each party is a port; inside the town, everything from outside comes through one port, Outside.
+ */
+export const OUTSIDE = '~'
+export type Party = { id: string; label: string }
+
+/**
+ * Whom a place deals with on purpose (the Owner, 2026-11-20: the rules first): up to PORTS a side, in its
+ * declared order, each an id as a port names it (a sibling's id, OUTSIDE, or OUTSIDE/party on the town).
+ * Traffic with anyone it has not declared is undeclared coupling and passes through Other; a place that
+ * declares no one sends everything through Other.
+ */
+export type Partners = { in: string[]; out: string[] }
+
 /** The budget of a level. */
 export const LINES = 12
 export const GATES = 8
@@ -52,18 +69,20 @@ export type Gate = { way: Way; outside: Path; label: string; child: string; dir:
 
 export type LevelLinks = { lines: Line[]; gates: Gate[]; more: { lines: number; gates: number } }
 
-const under = (p: Path, at: Path) => at.length <= p.length && at.every((s, i) => p[i] === s)
+const under = (p: Path, at: Path) => p[0] !== OUTSIDE && at.length <= p.length && at.every((s, i) => p[i] === s)
 
 /** The outside end named at the level beside this one: the town's district, else this place's sibling or what it sits in. */
 function outsideOf(end: Path, at: Path): Path {
+  if (end[0] === OUTSIDE) return at.length === 0 ? end.slice(0, 2) : [OUTSIDE]
   let i = 0
   while (i < end.length && i < at.length && end[i] === at[i]) i++
   return end.slice(0, i + 1)
 }
 
-export function linksAt(tree: Place, at: Path, links: readonly Link[]): LevelLinks {
+export function linksAt(tree: Place, at: Path, links: readonly Link[], outside: readonly Party[] = []): LevelLinks {
   const lines = new Map<string, { line: Line; dirs: Set<boolean> }>()
   const gates = new Map<string, Gate>()
+  const outside_ = new Map(outside.map(p => [p.id, p.label]))
   const d = at.length
   for (const l of links) {
     const fi = under(l.from, at) && l.from.length > d, ti = under(l.to, at) && l.to.length > d
@@ -93,7 +112,9 @@ export function linksAt(tree: Place, at: Path, links: readonly Link[]): LevelLin
       const outside = outsideOf(outer, at)
       const child = inner[d]
       const k = `${l.way}|${outside.join('/')}|${child}|${clarity}`
-      const g = gates.get(k) ?? { way: l.way, outside, label: trail(tree, outside).at(-1)?.label ?? outside.at(-1) ?? '', child, dir: fi ? 'out' : 'in', carries: [], ins: 0, outs: 0, clarity }
+      // A party outside on the town's edge by its name; inside the town, all of outside as one.
+      const label = outside[0] === OUTSIDE ? (outside[1] ? outside_.get(outside[1]) ?? outside[1] : 'Outside') : trail(tree, outside).at(-1)?.label ?? outside.at(-1) ?? ''
+      const g = gates.get(k) ?? { way: l.way, outside, label, child, dir: fi ? 'out' : 'in', carries: [], ins: 0, outs: 0, clarity }
       if ((g.dir === 'out' && !fi) || (g.dir === 'in' && fi)) g.dir = 'both'
       g.carries.push(l.what)
       if (fi) g.outs++; else g.ins++
@@ -108,9 +129,10 @@ export function linksAt(tree: Place, at: Path, links: readonly Link[]): LevelLin
 }
 
 /** The rules a content's connections keep (rules.ts lists them with the rest). */
-export function linkRulesBroken(tree: Place, links: readonly Link[]): string[] {
+export function linkRulesBroken(tree: Place, links: readonly Link[], outside: readonly Party[] = []): string[] {
   const out: string[] = []
-  const exists = (p: Path) => p.length > 0 && trail(tree, p).length === p.length + 1
+  const parties = new Set(outside.map(p => p.id))
+  const exists = (p: Path) => p[0] === OUTSIDE ? p.length === 2 && parties.has(p[1]) : p.length > 0 && trail(tree, p).length === p.length + 1
   for (const l of links) {
     const name = `${l.way} ${l.what}`
     if (!(WAYS as readonly string[]).includes(l.way)) out.push(`${name}: the way must be one of ${WAYS.join(', ')}`)
@@ -118,6 +140,17 @@ export function linkRulesBroken(tree: Place, links: readonly Link[]): string[] {
     if (l.clarity !== 'orphan' && !exists(l.to)) out.push(`${name}: its end ${l.to.join('/')} is not a place`)
     if (!/^\/api\/|\.(ya?ml|json)$/.test(l.source)) out.push(`${name}: a connection is read from an API path or a registry file, not "${l.source}"`)
   }
+  // Declared partners: no more than the ports, each one a place beside it or the world outside.
+  const walk = (p: Place, at: Path, siblings: Set<string>) => {
+    for (const side of ['in', 'out'] as const) {
+      const ids = p.partners?.[side] ?? []
+      if (ids.length > PORTS) out.push(`${at.join('/') || p.id}: declares ${ids.length} partners ${side}; a side has ${PORTS} ports`)
+      for (const id of ids) if (!siblings.has(id) && id !== OUTSIDE && !(id.startsWith(`${OUTSIDE}/`) && parties.has(id.slice(2)))) out.push(`${at.join('/') || p.id}: partner ${id} is not a place beside it nor the world outside`)
+    }
+    const kids = new Set(p.children.map(c => c.id))
+    for (const c of p.children) walk(c, [...at, c.id], kids)
+  }
+  walk(tree, [], new Set(outside.map(p => `${OUTSIDE}/${p.id}`)))
   return out
 }
 
@@ -130,27 +163,29 @@ export const PORTS = 3
 export type Edge = { named: Pass[]; other: Pass | null }
 
 /**
- * A district's two sides (the Owner, 2026-11-20: not every direction; one side in, one side out, a few
- * fixed ports each, then Other; the mess shown and counted). In: what others send or give it; out: what it
- * sends or gives. A neighbour it deals with both ways takes a port on each side. The heaviest PORTS a side
- * are named; the rest and the unclear pass through that side's Other; what belongs to no one through Orphan.
+ * A place's two sides (the Owner, 2026-11-20: one side in, one side out, PORTS fixed ports each, then
+ * Other; the mess shown and counted). In: what others send or give it; out: what it sends or gives. The
+ * named ports are its declared partners, in their order, each shown even when nothing passes yet; traffic
+ * with anyone undeclared, and anything unclear, passes through that side's Other; what belongs to no one
+ * through Orphan. `labelOf` names a declared partner nothing passes to yet.
  */
-export function edgeSlots(gates: readonly Gate[]): { in: Edge; out: Edge; orphan: Pass | null; total: number } {
+export function edgeSlots(gates: readonly Gate[], partners: Partners | undefined, labelOf: (id: string) => string): { in: Edge; out: Edge; orphan: Pass | null; total: number } {
   const fresh = (id: string, label: string): Pass => ({ id, label, bus: 0, metric: 0, n: 0, who: [] })
   const orphan = fresh(ORPHAN, 'Orphan')
   const side = (dir: 'in' | 'out'): Edge => {
-    const clear = new Map<string, Pass>()
+    const declared = (partners?.[dir] ?? []).slice(0, PORTS)
+    const named = new Map(declared.map(id => [id, fresh(id, labelOf(id))]))
     const other = fresh(OTHER, 'Other')
     for (const g of gates) {
       const k = dir === 'in' ? g.ins : g.outs
       if (!k || g.clarity === 'orphan') continue
-      const p = g.clarity === 'unclear' ? other : clear.get(g.outside[0]) ?? fresh(g.outside[0], g.label)
-      p[g.way] += k; p.n += k
-      if (g.clarity === 'unclear') { if (!other.who.includes(g.label)) other.who.push(g.label) } else clear.set(g.outside[0], p)
+      const id = g.outside.join('/')
+      const p = g.clarity !== 'unclear' ? named.get(id) : undefined
+      const into = p ?? other
+      into[g.way] += k; into.n += k
+      if (!p && !other.who.includes(g.label)) other.who.push(g.label)
     }
-    const ranked = [...clear.values()].sort((a, b) => b.n - a.n)
-    for (const p of ranked.slice(PORTS)) { other.bus += p.bus; other.metric += p.metric; other.n += p.n; other.who.push(p.label) }
-    return { named: ranked.slice(0, PORTS), other: other.n ? other : null }
+    return { named: declared.map(id => named.get(id)!), other: other.n ? other : null }
   }
   for (const g of gates) if (g.clarity === 'orphan') { orphan[g.way] += g.carries.length; orphan.n += g.carries.length }
   const total = gates.reduce((t, g) => t + g.carries.length, 0)
