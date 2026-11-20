@@ -646,6 +646,48 @@ export function powerStation(label = '', name = ''): Sprite {
   return g.done()
 }
 
+/**
+ * The house whose long dark screen faces the town (the Owner, 2026-11-20): every district's town has one,
+ * the screen kept for the district's few readings, empty until it has them.
+ */
+export function screenHouse(g: Draw, x0: number, y0: number, x1: number, y1: number, h: number) {
+  g.shadow(x0, y0, x1 - x0, y1 - y0, 0.3)
+  g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#fdf3e3', '#f5e3c6', '#e7d1ae'))
+  const W = (x1 - x0) * U, D = (y1 - y0) * U
+  g.face('left', x0, y1, 0, `<rect x="3" y="${n1(-h + 5)}" width="${n1(W - 6)}" height="${n1(h * 0.5)}" fill="#1d2433" stroke="${INK}" stroke-width="1.1"/><rect x="${n1(W / 2 - 3.5)}" y="-9" width="7" height="9" fill="#3fa7a0" stroke="${INK}" stroke-width="0.8"/>`)
+  let r = ''
+  for (let i = 0; i < 3; i++) r += `<rect x="${n1(4 + i * (D - 8) / 3)}" y="${n1(-h + 8)}" width="${n1((D - 8) / 3 - 3)}" height="9" fill="${i === 1 ? '#ffd76a' : '#cfe3f7'}" stroke="${INK}" stroke-width="0.8"/>`
+  g.face('right', x1, y1, 0, r)
+  g.unit(x1 - 0.35, y0 + 0.15, h, 0.28)
+}
+
+/** The lanes from a town's gates (a quarter, a half, three quarters along its front sides) into its yard. Drawn first, on the ground. */
+export function frontLanes(g: Draw, n: number, from = 3.1) {
+  for (const k of [1, 2, 3]) {
+    top(g, k - 0.09, from, k + 0.09, n - 0.05, 0, '#d2cfc6', 0)
+    top(g, from, k - 0.09, n - 0.05, k + 0.09, 0, '#d2cfc6', 0)
+  }
+}
+
+/** The low wall on a town's two front sides, a gate at each port. Drawn last, in front of everything. */
+export function frontWall(g: Draw, n: number) {
+  const WALL = faces('#e9e6de', '#d6d1c5', '#c2bcae'), POST = faces('#f2b234', '#d6d1c5', '#c2bcae')
+  const gap = 0.15
+  for (const side of ['y', 'x'] as const) {
+    const stops = [0.06, ...[1, 2, 3].flatMap(k => [k - gap, k + gap]), n - 0.06]
+    for (let i = 0; i < stops.length; i += 2) {
+      const a = stops[i], b = stops[i + 1]
+      if (side === 'y') g.box(a, n - 0.12, b - a, 0.06, 4, WALL, 0, 0.7)
+      else g.box(n - 0.12, a, 0.06, b - a, 4, WALL, 0, 0.7)
+    }
+    for (const k of [1, 2, 3]) for (const e of [k - gap - 0.04, k + gap]) {
+      if (side === 'y') g.box(e, n - 0.13, 0.04, 0.08, 9, POST, 0, 0.7)
+      else g.box(n - 0.13, e, 0.08, 0.04, 9, POST, 0, 0.7)
+    }
+  }
+}
+
+
 /* ------------------------------------------------------------------ */
 /* The nuclear plant (Utilities seen from the town).                    */
 /* ------------------------------------------------------------------ */
@@ -662,10 +704,7 @@ export function nuclearPlant(): Sprite {
   const g = new Draw(n, n, 230)
   lot(g, n, '#e4e2db')
   // Service lanes from the gates in.
-  for (const k of [1, 2, 3]) {
-    top(g, k - 0.09, 3.1, k + 0.09, n - 0.05, 0, '#d2cfc6', 0)
-    top(g, 3.1, k - 0.09, n - 0.05, k + 0.09, 0, '#d2cfc6', 0)
-  }
+  frontLanes(g, n)
 
   // The containment: a concrete drum on a plinth, its dome, a ring of buttresses, the equipment hatch.
   { const DX = 1.15, DY = 1.15
@@ -718,15 +757,7 @@ export function nuclearPlant(): Sprite {
   g.box(1.75, 1.55, 0.12, 0.7, 6, faces('#c9cfd8', '#aab3bf', '#97a1ae'), 14, 0.8)
 
   // The control house, front middle: its long dark screen faces the town.
-  { const x0 = 2.0, x1 = 2.8, y0 = 2.45, y1 = 3.2, h = 32
-    g.shadow(x0, y0, x1 - x0, y1 - y0, 0.3)
-    g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#fdf3e3', '#f5e3c6', '#e7d1ae'))
-    const W = (x1 - x0) * U, D = (y1 - y0) * U
-    g.face('left', x0, y1, 0, `<rect x="3" y="-27" width="${n1(W - 6)}" height="16" fill="#1d2433" stroke="${INK}" stroke-width="1.1"/><rect x="${n1(W / 2 - 3.5)}" y="-9" width="7" height="9" fill="#3fa7a0" stroke="${INK}" stroke-width="0.8"/>`)
-    let r = ''
-    for (let i = 0; i < 3; i++) r += `<rect x="${n1(4 + i * (D - 8) / 3)}" y="-24" width="${n1((D - 8) / 3 - 3)}" height="9" fill="${i === 1 ? '#ffd76a' : '#cfe3f7'}" stroke="${INK}" stroke-width="0.8"/>`
-    g.face('right', x1, y1, 0, r)
-    g.unit(2.45, 2.6, h, 0.28) }
+  screenHouse(g, 2.0, 2.45, 2.8, 3.2, 32)
 
   // The substation, front right: a fenced yard, transformers, insulators, a gantry.
   { const xa = 2.98, xb = 3.82, ya = 2.0, yb = 3.62
@@ -741,21 +772,7 @@ export function nuclearPlant(): Sprite {
     for (let k = 0; k <= 8; k++) { const a = xa + (xb - xa) * k / 8; g.line([a, yb, 0], [a, yb, 7], '#7f8794', 0.7); const b = ya + (yb - ya) * k / 8; g.line([xb, b, 0], [xb, b, 7], '#7f8794', 0.7) }
     g.line([xa, yb, 7], [xb, yb, 7], '#7f8794', 0.9); g.line([xb, ya, 7], [xb, yb, 7], '#7f8794', 0.9) }
 
-  // The low wall on the two front sides, a gate at each port.
-  const WALL = faces('#e9e6de', '#d6d1c5', '#c2bcae'), POST = faces('#f2b234', '#d6d1c5', '#c2bcae')
-  const gap = 0.15
-  for (const side of ['y', 'x'] as const) {
-    const stops = [0.06, ...[1, 2, 3].flatMap(k => [k - gap, k + gap]), n - 0.06]
-    for (let i = 0; i < stops.length; i += 2) {
-      const a = stops[i], b = stops[i + 1]
-      if (side === 'y') g.box(a, n - 0.12, b - a, 0.06, 4, WALL, 0, 0.7)
-      else g.box(n - 0.12, a, 0.06, b - a, 4, WALL, 0, 0.7)
-    }
-    for (const k of [1, 2, 3]) for (const e of [k - gap - 0.04, k + gap]) {
-      if (side === 'y') g.box(e, n - 0.13, 0.04, 0.08, 9, POST, 0, 0.7)
-      else g.box(n - 0.13, e, 0.08, 0.04, 9, POST, 0, 0.7)
-    }
-  }
+  frontWall(g, n)
   return g.done()
 }
 
