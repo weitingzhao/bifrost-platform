@@ -58,9 +58,17 @@ type Edge struct {
 type StatusInputs struct {
 	// Health is the workloads' replicas, keyed "<namespace>/<name>".
 	Health func() map[string]Health
-	// Requests answers routes (chi patterns) with their counts over Window.
-	Requests func(ctx context.Context, routes []string) (map[string]RouteCount, error)
-	Window   time.Duration
+	// Requests answers routes (chi patterns) with their counts over window.
+	Requests func(ctx context.Context, routes []string, window time.Duration) (map[string]RouteCount, error)
+	// Windows are read shortest first; a domain with fewer than MinRequests
+	// in one is judged on the next (2026-11-20: on PROD, lineage had 1
+	// request in an hour and about 570 in a day).
+	Windows []time.Duration
+	// Hosts are the workloads ("<namespace>/<name>") that run this
+	// platform's own binaries. A domain with no workload of its own whose Go
+	// packages are in the table's repository runs inside them, and its alive
+	// light reads them.
+	Hosts []string
 	// Boundary is the domain graph of the repository whose table names the
 	// domains: its edges, and false when it was not measured.
 	Boundary func(ctx context.Context, repo string) ([]Edge, bool, error)
@@ -119,7 +127,7 @@ func (s *Scanner) ComputeStatus(ctx context.Context, in StatusInputs) Status {
 	}
 	st.Commit = k.Commit
 	fresh := s.freshLight(k.Repo, now)
-	alive := s.aliveLights(domains, in)
+	alive := s.aliveLights(k.Repo, domains, in)
 	ifaces := interfaceLights(ctx, domains, in)
 	bound := boundaryLights(ctx, k.Repo, domains, in)
 	for _, d := range domains {
@@ -166,7 +174,7 @@ func (s *Scanner) freshLight(repo string, now time.Time) Light {
 	return Light{Value: value, Why: joinWhy(parts)}
 }
 
-func (s *Scanner) aliveLights(domains []contractDomain, in StatusInputs) map[string]Light {
+func (s *Scanner) aliveLights(repo string, domains []contractDomain, in StatusInputs) map[string]Light {
 	out := map[string]Light{}
 	if in.Health == nil {
 		for _, d := range domains {
@@ -177,7 +185,8 @@ func (s *Scanner) aliveLights(domains []contractDomain, in StatusInputs) map[str
 	owners, _ := s.lastOwners(ClusterRepo)
 	type tally struct{ judged, down, degraded, cron int }
 	t := map[string]*tally{}
-	for key, h := range in.Health() {
+	health := in.Health()
+	for key, h := range health {
 		o := OwnerOf(owners, nil, key)
 		if !o.Perceived || len(o.Domains) != 1 {
 			continue
@@ -202,9 +211,12 @@ func (s *Scanner) aliveLights(domains []contractDomain, in StatusInputs) map[str
 			c.degraded++
 		}
 	}
+	coded := s.domainsWithPackages(repo)
 	for _, d := range domains {
 		c := t[d.ID]
 		switch {
+		case (c == nil || c.judged == 0) && coded[d.ID] && len(in.Hosts) > 0:
+			out[d.ID] = hostedLight(in.Hosts, health)
 		case c == nil || c.judged == 0:
 			why := "no running workload of it on the map"
 			if c != nil && c.cron > 0 {
@@ -222,6 +234,52 @@ func (s *Scanner) aliveLights(domains []contractDomain, in StatusInputs) map[str
 	return out
 }
 
+// domainsWithPackages: the domains a package row of repo's table names.
+func (s *Scanner) domainsWithPackages(repo string) map[string]bool {
+	out := map[string]bool{}
+	o, _ := s.lastOwners(repo)
+	if o == nil {
+		return out
+	}
+	for _, ds := range o.Packages {
+		for _, d := range ds {
+			out[d] = true
+		}
+	}
+	return out
+}
+
+// hostedLight judges the workloads that run the platform's binaries.
+func hostedLight(hosts []string, health map[string]Health) Light {
+	var parts []string
+	judged, down, degraded := 0, 0, 0
+	for _, k := range hosts {
+		h, ok := health[k]
+		if !ok || !h.Judged || h.Desired == 0 {
+			parts = append(parts, k+" not read")
+			continue
+		}
+		judged++
+		switch {
+		case h.Ready == 0:
+			down++
+		case h.Ready < h.Desired:
+			degraded++
+		}
+		parts = append(parts, fmt.Sprintf("%s %d/%d ready", k, h.Ready, h.Desired))
+	}
+	why := "no workload of its own; runs inside " + joinWhy(parts)
+	switch {
+	case judged == 0:
+		return Light{Value: Unknown, Why: why}
+	case down == judged:
+		return Light{Value: Bad, Why: why}
+	case down > 0 || degraded > 0 || judged < len(hosts):
+		return Light{Value: Problem, Why: why}
+	}
+	return Light{Value: Good, Why: why}
+}
+
 func interfaceLights(ctx context.Context, domains []contractDomain, in StatusInputs) map[string]Light {
 	out := map[string]Light{}
 	var all []string
@@ -230,12 +288,19 @@ func interfaceLights(ctx context.Context, domains []contractDomain, in StatusInp
 			all = append(all, r.Path)
 		}
 	}
-	var counts map[string]RouteCount
+	windows := in.Windows
+	if len(windows) == 0 {
+		windows = []time.Duration{time.Hour}
+	}
+	counts := make([]map[string]RouteCount, len(windows))
 	var err error
 	if in.Requests != nil && len(all) > 0 {
-		counts, err = in.Requests(ctx, all)
+		for i, w := range windows {
+			if counts[i], err = in.Requests(ctx, all, w); err != nil {
+				break
+			}
+		}
 	}
-	window := fmt.Sprintf("%.0fh", in.Window.Hours())
 	for _, d := range domains {
 		if len(d.Contracts.RequestResponse) == 0 {
 			out[d.ID] = Light{Value: Unknown, Why: "its contract names no interface"}
@@ -250,16 +315,23 @@ func interfaceLights(ctx context.Context, domains []contractDomain, in StatusInp
 			continue
 		}
 		var total, errs float64
-		seen := map[string]bool{}
-		for _, r := range d.Contracts.RequestResponse {
-			if seen[r.Path] {
-				continue // one count per route, whatever the methods
+		var why string
+		for i, w := range windows {
+			total, errs = 0, 0
+			seen := map[string]bool{}
+			for _, r := range d.Contracts.RequestResponse {
+				if seen[r.Path] {
+					continue // one count per route, whatever the methods
+				}
+				seen[r.Path] = true
+				total += counts[i][r.Path].Total
+				errs += counts[i][r.Path].Errors
 			}
-			seen[r.Path] = true
-			total += counts[r.Path].Total
-			errs += counts[r.Path].Errors
+			why = fmt.Sprintf("%.0f requests in %.0fh to its %d routes, %.0f 5xx", total, w.Hours(), len(seen), errs)
+			if total >= MinRequests {
+				break
+			}
 		}
-		why := fmt.Sprintf("%.0f requests in %s to its %d routes, %.0f 5xx", total, window, len(seen), errs)
 		switch {
 		case total < MinRequests:
 			out[d.ID] = Light{Value: Unknown, Why: "too few samples: " + why}

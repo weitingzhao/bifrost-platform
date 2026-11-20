@@ -225,19 +225,22 @@ func replicasOf(n *int32) int {
 // the request counts Prometheus keeps of this platform's routes, and the
 // domain graph the CI page keeps.
 func (s *Server) catalogStatusInputs() catalog.StatusInputs {
-	in := catalog.StatusInputs{Window: time.Hour}
+	ns := k8sstate.Namespace()
+	in := catalog.StatusInputs{
+		Windows: []time.Duration{time.Hour, 24 * time.Hour},
+		Hosts:   []string{ns + "/platform-api", ns + "/platform-workers"},
+	}
 	in.Health = func() map[string]catalog.Health {
 		h, _ := s.catalogHealth.Load().(map[string]catalog.Health)
 		return h
 	}
 	if prom := s.evalProm(); prom != nil {
-		ns := k8sstate.Namespace()
-		in.Requests = func(ctx context.Context, routes []string) (map[string]catalog.RouteCount, error) {
+		in.Requests = func(ctx context.Context, routes []string, window time.Duration) (map[string]catalog.RouteCount, error) {
 			want := map[string]bool{}
 			for _, r := range routes {
 				want[r] = true
 			}
-			expr := fmt.Sprintf(`sum by (handler, status) (increase(http_requests_total{namespace=%q}[1h]))`, ns)
+			expr := fmt.Sprintf(`sum by (handler, status) (increase(http_requests_total{namespace=%q}[%dh]))`, ns, int(window.Hours()))
 			samples, err := prom(ctx, expr)
 			if err != nil {
 				return nil, err
