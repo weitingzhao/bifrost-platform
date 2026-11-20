@@ -1060,13 +1060,14 @@ export class PlaceScene extends Phaser.Scene {
     let stubG: Phaser.GameObjects.Graphics | null = null
     const inner = lay ? this.extentOf(lay) : null
     if (lay && inner && this.shown) {
-      // Seen from further off, a district is one landmark of what it is, not its every building (the Owner,
-      // 2026-11-20: from above a whole downtown is a dot; a factory district reads as a factory): the building
-      // its hall stands as, else its largest building, on its plate, filling the footprint. Its ports are its
-      // streets out to the highway. The same picture stands in a port.
+      // Each level sums up the one below (the Owner, 2026-11-20: a level is a step of aggregation, not a
+      // thumbnail; a district with a hundred readings shows the town the few that matter). So from the town a
+      // district is one building standing for all of it, on a paved square that fills its plot to the highway's
+      // kerb, and the town's streets run straight into the square. What it says (its few readings) goes on that
+      // building's surfaces, as a computer's go on its walls; the detail is inside. The same in a port.
       const ter = TERRAIN.meadow[this.light]
-      // On the town the plate stands in from its plot, so its streets out have room to reach the highway.
-      const plate = o.bare ? r : { x: r.x + 0.45, y: r.y + 0.45, w: r.w - 0.9, h: r.h - 0.9 }
+      const plot = !o.bare && path.length === 1 ? this.shown.plots.find(q => q.id === at.plot) : undefined
+      const plate = plot ? geoOf(this.shown.plots).plot(plot) : r
       const g = this.add.graphics()
       g.fillStyle(tintOf(this.shown.tree, path, this.light, ter.lot)).fillPoints(quadOf(P, plate), true)
       g.lineStyle(1.4, this.tone.ink).strokePoints(quadOf(P, plate), true)
@@ -1081,9 +1082,8 @@ export class PlaceScene extends Phaser.Scene {
         ?? [...lay.placed].sort((x, y) => y.w * y.h - x.w * x.h)[0]
       const key = icon ? looks.get(icon.id) : undefined, an = key ? this.anchors.get(key) : undefined
       if (icon && key && an && this.textures.exists(key)) {
-        // The landmark on a lot inset in its plate, at its own size scaled to the footprint.
-        // A token, not the building at full size: its long side fits two thirds of the plate, centred.
-        const side = Math.min(plate.w, plate.h) * 0.75, fit = side / Math.max(icon.w, icon.h)
+        // It stands in the middle of its square, its long side most of the square's.
+        const side = Math.min(plate.w, plate.h) * 0.62, fit = side / Math.max(icon.w, icon.h)
         const q = { x: plate.x + (plate.w - icon.w * fit) / 2, y: plate.y + (plate.h - icon.h * fit) / 2 }
         const base = P(q.x, q.y)
         parts.push(this.add.image(base.x, base.y, key).setOrigin(an.ax, an.ay).setScale(fit * this.spriteFit(key, Math.min(icon.w, icon.h)) / RS))
@@ -1270,6 +1270,8 @@ export class PlaceScene extends Phaser.Scene {
       const pt = (a: number, b: number) => P(x + dx * a + ux * b, y + dy * a + uy * b)
       const band = (a0: number, a1: number, h: number) => [pt(a0, -h), pt(a1, -h), pt(a1, h), pt(a0, h)]
       g.fillStyle(this.tone.kerb, A).fillPoints(band(0, len, HALF + PAVEMENT), true)
+      // On into the square a little way, so the street plainly enters it.
+      g.fillStyle(this.tone.asphalt, A).fillPoints(band(-0.55, 0, HALF), true)
       // The asphalt on into the highway's near carriageway, to its edge.
       const into = GUTTER / 2 - HIGHWAY_HALF - BUFFER + 0.02
       g.fillStyle(this.tone.asphalt, A).fillPoints(band(0, len + into, HALF), true)
