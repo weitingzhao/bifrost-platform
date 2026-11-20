@@ -11,7 +11,7 @@ import { frameOf, type Frame } from './viewport'
 import { LANDMARKS } from './library/landmarkLooks'
 import { nuclearCore } from './library/landmarks'
 import { cellsOf, modulesOf, townKey, townSprite } from './library/towns'
-import { placeLabels, type Box } from './labels'
+import { clampLabel, placeLabels, type Box, type LabelMode } from './labels'
 import { edgeSlots, linksAt, portAt, portsFor, slotsFor, type LevelLinks, type Link, type Slot } from './links'
 
 /** The district styles drawn as a town of their own: the landmark in its back corner (towns.ts builds the rest by its size); the rest use the campus. */
@@ -207,6 +207,7 @@ export class PlaceScene extends Phaser.Scene {
     // In the medium card they are smaller, so the plates do not cover the little map.
     const z = this.cameras.main.zoom, k = this.stage ? 0.68 : 1
     for (const t of this.labels) if (t.active) t.setScale(k / z)
+    if (this.placing && this.placedAt && Math.abs(z - this.placedAt) / this.placedAt > 0.05) this.place()
     if (!this.ready || !this.main) return
     const zin = this.zoomedIn()
     if (zin !== this.zoomedTold) { this.zoomedTold = zin; this.syncMini(); this.events_.zoomed?.(zin) }
@@ -492,23 +493,72 @@ export class PlaceScene extends Phaser.Scene {
    * back to where it belongs when it moved. When no place is free it stays and overlaps (shown, not hidden).
    */
   private declutter(c: Phaser.GameObjects.Container, fixed: Phaser.GameObjects.Container[], names: Phaser.GameObjects.Container[]) {
-    const boxOf = (p: Phaser.GameObjects.Container): Box => { const b = p.getData('box') as { w: number; h: number }; return { x: p.x - b.w / 2, y: p.y, w: b.w, h: b.h } }
+    this.placing = { c, fixed, names, lines: this.add.graphics() }
+    c.add(this.placing.lines)
+    for (const n of names) { n.setData('y0', n.y); c.bringToTop(n) }
+    this.place()
+  }
+
+  /** The plates' last placement, run again when the zoom changes their size against the ground. */
+  private placing: { c: Phaser.GameObjects.Container; fixed: Phaser.GameObjects.Container[]; names: Phaser.GameObjects.Container[]; lines: Phaser.GameObjects.Graphics } | null = null
+  private placedAt = 0
+  /** Each block's name plate on the level on screen, by the block's id; and the whole text shown on hover. */
+  private namePlates = new Map<string, Phaser.GameObjects.Container>()
+  private wholePlate: Phaser.GameObjects.Container | null = null
+  private labelMode: LabelMode = 'all'
+
+  /** All the plates, dimmed, or only on hover (the Owner, 2026-11-20); the port signs always show. */
+  setLabels(mode: LabelMode) {
+    if (this.labelMode === mode) return
+    this.labelMode = mode
+    this.place()
+  }
+
+  /**
+   * Place the names among the signs at the plates' size on screen now (they keep one size on screen, so
+   * their size on the ground changes with the zoom), and show them as the mode says.
+   */
+  private place() {
+    const pl = this.placing
+    if (!pl || !pl.c.active) return
+    const z = this.cameras.main.zoom, sc = (this.stage ? 0.68 : 1) / z
+    this.placedAt = z
+    const boxOf = (p: Phaser.GameObjects.Container, y = p.y): Box => { const b = p.getData('box') as { w: number; h: number }; return { x: p.x - b.w * sc / 2, y, w: b.w * sc, h: b.h * sc } }
+    const names = pl.names.filter(n => n.active)
+    for (const n of names) n.y = n.getData('y0') as number
     const order = [...names].sort((a, b) => b.y - a.y)
-    const where = placeLabels(fixed.filter(p => p.getData('box')).map(boxOf), order.map(boxOf))
-    const lines = this.add.graphics()
+    const where = placeLabels(pl.fixed.filter(p => p.active && p.getData('box')).map(p => boxOf(p)), order.map(p => boxOf(p)), 3 * sc)
+    pl.lines.clear()
     order.forEach((p, i) => {
       const { dy, free } = where[i], y0 = p.y, h = boxOf(p).h
       // No free place within reach: it stays, see-through, so what it covers still shows.
-      if (!free) p.setAlpha(0.6)
+      const base = (free ? 1 : 0.6) * (this.labelMode === 'dim' ? 0.5 : 1)
+      p.setData('alpha', base).setAlpha(base).setVisible(this.labelMode !== 'hover')
       if (!dy) return
       p.y += dy
-      lines.lineStyle(1.2, this.tone.ink, 0.6).lineBetween(p.x, y0, p.x, dy > 0 ? p.y : p.y + h)
-      lines.fillStyle(this.tone.ink, 0.7).fillCircle(p.x, y0, 2)
+      if (this.labelMode === 'hover') return
+      pl.lines.lineStyle(1.2 * sc, this.tone.ink, 0.6 * base).lineBetween(p.x, y0, p.x, dy > 0 ? p.y : p.y + h)
+      pl.lines.fillStyle(this.tone.ink, 0.7 * base).fillCircle(p.x, y0, 2 * sc)
     })
-    // The lines over the pictures, the plates over the lines.
-    c.add(lines)
-    for (const n of names) c.bringToTop(n)
   }
+
+  /** On hover a block's name shows, whole, over everything; back as it was when the pointer leaves. */
+  private reveal(id: string, on: boolean) {
+    const p = this.namePlates.get(id)
+    this.wholePlate?.destroy(); this.wholePlate = null
+    if (!p || !p.active) return
+    if (!on) { p.setVisible(this.labelMode !== 'hover').setAlpha((p.getData('alpha') as number | undefined) ?? 1); return }
+    p.setVisible(true).setAlpha(1)
+    p.parentContainer?.bringToTop(p)
+    if (p.getData('cut')) {
+      const w = this.plate(p.x, p.y, p.getData('full') as string, p.getData('hue') as string, true)
+      w.setScale(p.scaleX)
+      p.parentContainer?.add(w)
+      p.setVisible(false)
+      this.wholePlate = w
+    }
+  }
+
 
 
   /** What stands on the ground on screen, each with its footprint and the pieces it was drawn with. */
@@ -834,8 +884,9 @@ export class PlaceScene extends Phaser.Scene {
    * A name plate in the first generation's style: monospace on a plate with an ink border, a dot of
    * the place's hue; one size on screen whatever the zoom (scaled in update()).
    */
-  private plate(x: number, y: number, text: string, hue: string) {
-    const t = this.add.text(0, 0, text, { fontFamily: "'JetBrains Mono', ui-monospace, Menlo, monospace", fontSize: '12px', fontStyle: '600', color: this.tone.label.color, lineSpacing: 2 }).setResolution(3).setOrigin(0, 0.5)
+  private plate(x: number, y: number, text: string, hue: string, whole = false) {
+    const said = whole ? { text, full: text, cut: false } : clampLabel(text)
+    const t = this.add.text(0, 0, said.text, { fontFamily: "'JetBrains Mono', ui-monospace, Menlo, monospace", fontSize: '12px', fontStyle: '600', color: this.tone.label.color, lineSpacing: 2 }).setResolution(3).setOrigin(0, 0.5)
     const padX = 6, dot = 7, w = Math.ceil(t.width) + padX * 2 + dot + 5, h = Math.max(20, Math.ceil(t.height) + 6)
     const g = this.add.graphics()
     g.fillStyle(this.tone.ink, 0.9).fillRoundedRect(-w / 2 + 2, 2, w, h, 4)
@@ -844,7 +895,7 @@ export class PlaceScene extends Phaser.Scene {
     g.fillStyle(Phaser.Display.Color.HexStringToColor(hue).color).fillCircle(-w / 2 + padX + dot / 2, 10, dot / 2).lineStyle(1, this.tone.ink).strokeCircle(-w / 2 + padX + dot / 2, 10, dot / 2)
     t.setPosition(-w / 2 + padX + dot + 5, h / 2)
     const c = this.add.container(x, y, [g, t])
-    c.setData('box', { w, h })
+    c.setData('box', { w, h }); c.setData('full', said.full); c.setData('cut', said.cut); c.setData('hue', hue)
     this.labels.push(c)
     return c
   }
@@ -1089,6 +1140,7 @@ export class PlaceScene extends Phaser.Scene {
     for (const { p, r } of order) { const parts = this.block(byId.get(p.id)!, p, r, P, look.get(p.id)!, o, [...at, p.id]); for (const part of parts) c.add(part); if (o.interactive) this.drawn.push({ id: p.id, r, parts }) }
     // Names on top of every block, so a nearer block never hides a farther one's name. The minimap has none: too small to read.
     const names: Phaser.GameObjects.Container[] = []
+    if (o.interactive) this.namePlates.clear()
     if (o.interactive) for (const { p, r } of order) {
       // The plate stands out in the street before its front corner (the Owner, 2026-11-20: on the picture it hid what was in front).
       const foot = P(r.x + r.w + 0.12, r.y + r.h + 0.12)
@@ -1105,6 +1157,7 @@ export class PlaceScene extends Phaser.Scene {
       const more = [said, left ? `+${left} ${left === 1 ? 'kind' : 'kinds'} not shown` : ''].filter(Boolean).join(' · ')
       const name = this.plate(foot.x, foot.y + 4, `${k.label}${pct}${word}${scale}${more ? `\n${more}` : ''}`, dot)
       names.push(name)
+      this.namePlates.set(p.id, name)
       c.add(name)
     }
     // The ports' signs over the names of the blocks along the edge: they stand outside the ground, so a name
@@ -1208,8 +1261,8 @@ export class PlaceScene extends Phaser.Scene {
       g.setInteractive(hit, Phaser.Geom.Polygon.Contains)
       g.input!.cursor = o.arranging ? 'grab' : 'pointer'
       // Hover only for a mouse: on a touch screen it would stay lit after the finger lifts.
-      g.on('pointerover', (p: Phaser.Input.Pointer) => { if (!p.wasTouch) { img?.setTint(this.tone.hover); if (!o.arranging) this.hovered = k; this.seeThrough(k.id, r) } })
-      g.on('pointerout', () => { img?.clearTint(); if (anyLit && !lit) img?.setTint(this.tone.dim); if (this.hovered?.id === k.id) this.hovered = null; this.seeThrough(null, r) })
+      g.on('pointerover', (p: Phaser.Input.Pointer) => { if (!p.wasTouch) { img?.setTint(this.tone.hover); if (!o.arranging) this.hovered = k; this.seeThrough(k.id, r); this.reveal(k.id, true) } })
+      g.on('pointerout', () => { img?.clearTint(); if (anyLit && !lit) img?.setTint(this.tone.dim); if (this.hovered?.id === k.id) this.hovered = null; this.seeThrough(null, r); this.reveal(k.id, false) })
       // Moving: press on a thing to pick it up; it lands on the plot under the pointer when released.
       g.on('pointerdown', () => {
         if (o.arranging && this.shown?.tool === 'move') this.carry = { p: at, to: null }

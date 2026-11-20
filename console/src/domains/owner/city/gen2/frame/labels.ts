@@ -23,3 +23,23 @@ export function placeLabels(fixed: readonly Box[], movable: readonly Box[], gap 
     return { dy: 0, free: false }
   })
 }
+
+/**
+ * A plate's size has a ceiling (the Owner, 2026-11-20: however well placed, a plate too long covers a whole
+ * stretch): at most LABEL_LINES lines of LABEL_CHARS characters; what is cut ends in "…", and the whole text
+ * is there on hover. A third line or more is folded into the second.
+ */
+export const LABEL_CHARS = 24
+export const LABEL_LINES = 2
+export type LabelText = { text: string; full: string; cut: boolean }
+export function clampLabel(text: string, chars = LABEL_CHARS, lines = LABEL_LINES): LabelText {
+  const raw = text.split('\n')
+  const kept = [...raw.slice(0, lines - 1), raw.slice(lines - 1).join(' · ')].filter((l, i) => l !== '' || i === 0)
+  const fit = (l: string) => l.length > chars ? `${l.slice(0, chars - 1).trimEnd()}…` : l
+  const out = kept.map(fit).join('\n')
+  return { text: out, full: text, cut: out !== text }
+}
+
+/** How plates show (the Owner, 2026-11-20): all of them; dimmed, so the city shows through; or only on hover. */
+export type LabelMode = 'all' | 'dim' | 'hover'
+export const LABEL_MODES: readonly LabelMode[] = ['all', 'dim', 'hover']

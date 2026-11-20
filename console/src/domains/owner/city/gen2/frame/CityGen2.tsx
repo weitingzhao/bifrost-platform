@@ -4,6 +4,7 @@ import { browserArrangements, type ArrangementStore } from './arrangementStore'
 import { KitRoot, Menu, type PanelSize } from './parts'
 import { assign, decodePlan, encodePlan, mergePlot, moveTo, planFor, plotsOf, splitPlot, streetsOf, type Arrangement, type Item, type Plan } from './grid'
 import { CORNERS, lightOf, NEXT, type LightChoice } from './light'
+import { LABEL_MODES, type LabelMode } from './labels'
 import type { CityContent, Panel } from './content'
 import { PlaceScene, type ArrangeTool, type Shown } from './placeScene'
 import { functionAt, here, isWired, meterText, resolve, trail, type Path, type Place } from './places'
@@ -65,6 +66,12 @@ function readInsets(probe: HTMLElement | null): Insets {
 }
 
 const LIGHT_KEY = 'bifrost.city.gen2.light'
+/** How the plates show, kept for this viewer (the Owner, 2026-11-20: all, dimmed, or only on hover). */
+const LABELS_KEY = 'bifrost.city.gen2.labels'
+const LABELS_WORD: Record<LabelMode, string> = { all: 'Labels', dim: 'Labels · dim', hover: 'Labels · hover' }
+function readLabels(): LabelMode {
+  try { const v = window.localStorage.getItem(LABELS_KEY); return (LABEL_MODES as readonly string[]).includes(v ?? '') ? v as LabelMode : 'all' } catch { return 'all' }
+}
 
 /**
  * The panels' rules (the Owner, 2026-11-19: a framework must say how its windows come, go and come
@@ -158,6 +165,12 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
   useEffect(() => { if (selected) setDrawerOpen(true) }, [selected])
   // Day, dusk or night: by the viewer's clock unless pinned; the clock is read every minute.
   const [lightChoice, setLightChoice] = useState<LightChoice>(readLight)
+  const [labels, setLabels] = useState<LabelMode>(readLabels)
+  const stepLabels = () => {
+    const next = LABEL_MODES[(LABEL_MODES.indexOf(labels) + 1) % LABEL_MODES.length]
+    setLabels(next)
+    try { window.localStorage.setItem(LABELS_KEY, next) } catch { /* kept for this page only */ }
+  }
   const [now, setNow] = useState(() => new Date())
   useEffect(() => { const t = window.setInterval(() => setNow(new Date()), 60_000); return () => window.clearInterval(t) }, [])
   const light = lightOf(lightChoice, now)
@@ -206,6 +219,7 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
 
   useEffect(() => { scene.current?.setLayout(f) }, [f])
   useEffect(() => { scene.current?.setLight(light) }, [light])
+  useEffect(() => { scene.current?.setLabels(labels) }, [labels])
 
   useEffect(() => {
     if (!host.current) return
@@ -230,6 +244,7 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
     })
     s.setLayout(f)
     s.setLight(light)
+    s.setLabels(labels)
     scene.current = s
     const game = new Phaser.Game({
       // Transparent: when the map draws in its medium card, the page's own sky shows round it.
@@ -376,6 +391,7 @@ function CityFrame({ path: asked, go, consoleHref = p => p.dashboard, picked, ti
   ) : (
     <>
       {place.children.length > 0 && <button className="g2-btn" onClick={() => { setSelected(null); setArranging(true) }}>Arrange</button>}
+      <button className="g2-btn" onClick={stepLabels} aria-label={`Plates: ${labels}`} title="Plates: all, dimmed, or only on hover">{LABELS_WORD[labels]}</button>
       <button className="g2-btn" onClick={stepLight} aria-label={`Light: ${LIGHT_WORD[lightChoice]}`}>
         {LIGHT_ICON[light]} {lightChoice === 'auto' ? `Auto · ${LIGHT_WORD[light]}` : LIGHT_WORD[lightChoice]}
       </button>

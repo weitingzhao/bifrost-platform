@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { placeLabels, type Box } from '../labels'
+import { clampLabel, LABEL_CHARS, LABEL_LINES, placeLabels, type Box } from '../labels'
 
 // 2026-11-20, the Owner: in a 4×8 Utilities the names and the port signs lay on top of one another ("System"
 // over "Work · bus 1" over "ubt-k3s-05"); it must be the program that keeps them apart, whatever moves.
@@ -31,5 +31,24 @@ describe('plates give way to one another', () => {
     const wall = Array.from({ length: 9 }, (_, i) => ({ x: 0, y: (i - 4) * 23, w: 100, h: 20 }))
     const [p] = placeLabels(wall, [{ x: 10, y: 0, w: 50, h: 20 }])
     expect(p).toEqual({ dy: 0, free: false })
+  })
+})
+
+// 2026-11-20, the Owner: a plate must have a ceiling on its size, or no placement can keep it from covering a stretch.
+describe('a plate has a ceiling on its size', () => {
+  it('cuts a long line at the limit with an ellipsis and keeps the whole text', () => {
+    const t = clampLabel('mini-pc-a · ubt-k3s-02 · something very long')
+    expect(t.cut).toBe(true)
+    expect(t.text.length).toBeLessThanOrEqual(LABEL_CHARS)
+    expect(t.text.endsWith('…')).toBe(true)
+    expect(t.full).toBe('mini-pc-a · ubt-k3s-02 · something very long')
+  })
+  it('keeps at most two lines, folding the rest into the second', () => {
+    const t = clampLabel('Utilities\nProd Pool · 21 pods\n+2 kinds not shown')
+    expect(t.text.split('\n')).toHaveLength(LABEL_LINES)
+    for (const l of t.text.split('\n')) expect(l.length).toBeLessThanOrEqual(LABEL_CHARS)
+  })
+  it('leaves a short plate as it is', () => {
+    expect(clampLabel('ubt-k3s-07\nGeneral · 20 pods')).toEqual({ text: 'ubt-k3s-07\nGeneral · 20 pods', full: 'ubt-k3s-07\nGeneral · 20 pods', cut: false })
   })
 })
