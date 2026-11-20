@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ENTRY_ROUTE_IDS } from '@/lib/shell/consoleRoutes'
-import { fitsBudget, shapeByCount, sidesOf, TAPPABLE } from '../../frame/grid'
+import { DISTRICT, fitsBudget, sidesOf, TAPPABLE } from '../../frame/grid'
 import { formatPath, functionAt, here, parsePath, resolve, trail, type Place } from '../../frame/places'
 import { consoleFunctions, placeTree } from '../consolePlaces'
 
@@ -56,7 +56,7 @@ describe('density (the Owner, 2026-11-19: one 16×16 ground per page; too much g
   // a district's size is now its page count, and a page has no rooms until its sections are read.
   it('sizes come from counts, and no page has made-up rooms', () => {
     for (const d of placeTree().children) {
-      expect(d.shape).toBe(shapeByCount(d.children.length))
+      expect(d.shape).toBe(DISTRICT)
       for (const b of d.children) expect(b.children).toEqual([])
     }
   })

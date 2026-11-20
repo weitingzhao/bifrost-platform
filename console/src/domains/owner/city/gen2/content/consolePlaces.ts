@@ -1,4 +1,4 @@
-import { shapeByCount, type Shape } from '../frame/grid'
+import { DISTRICT, type Shape } from '../frame/grid'
 import { TOWN_ID, type Place } from '../frame/places'
 import type { LandmarkId } from '../frame/library/landmarkLooks'
 import { ENTRY_ROUTE_IDS, SHELL_NAV, entryOf, formatShellHash, type ShellRouteId } from '@/lib/shell/consoleRoutes'
@@ -67,7 +67,7 @@ export function placeTree(): Place {
     children: ENTRY_ROUTE_IDS.map(id => {
       const n = nav.find(x => x.id === id)!
       const pages = buildingsOf(id)
-      return { id, function: id, kind: 'district' as const, shape: shapeByCount(pages.length), label: n.label, question: n.question, dashboard: formatShellHash(id), children: pages }
+      return { id, function: id, kind: 'district' as const, shape: DISTRICT, label: n.label, question: n.question, dashboard: formatShellHash(id), children: pages }
     }),
   }
 }

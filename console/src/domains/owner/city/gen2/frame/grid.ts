@@ -37,11 +37,11 @@ export type Item = { id: string; shape: Shape }
 export type Placed = Item & Cell & { plot: string; w: number; h: number }
 
 /**
- * A footprint by how many things a place holds (the Owner, 2026-11-19: nothing made up — a size is
- * a weight only when it comes from something counted), in the three classes (2026-11-20): more than 4
- * large (8×8, four units), more than 2 medium (4×8, two), else small (4×4, one).
+ * A district's footprint on the town (the Owner, 2026-11-20): one unit. Whatever it holds lives on its own
+ * sheet inside (up to 16 things), so holding more does not make it bigger on the town; a medium or large
+ * footprint is for a later reason (a district whose things themselves grow), not for a count.
  */
-export const shapeByCount = (n: number): Shape => n > 4 ? '8x8' : n > 2 ? '4x8' : '4x4'
+export const DISTRICT: Shape = '4x4'
 
 export const area = (items: readonly Item[]) => items.reduce((a, i) => a + shapeArea(i.shape), 0)
 export const fitsBudget = (items: readonly Item[], g: Ground = FULL) => area(items) <= g.w * g.h

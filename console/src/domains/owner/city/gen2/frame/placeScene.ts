@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser'
-import { defaultPlan, fitsIn, GRID, plotsOf, type Placed, type Plot, type Street } from './grid'
+import { defaultPlan, fitsIn, plotsOf, type Placed, type Plot, type Street } from './grid'
 import { BUFFER, geoOf, GUTTER, HIGHWAY_HALF, LANE, LOCAL_HALF, PAVEMENT, WAY, type Geo, type Rect } from './geo'
 import { functionAt, isWired, type Place } from './places'
 import { hueOf, terrainOf, tintOf } from './theme'
@@ -1033,63 +1033,30 @@ export class PlaceScene extends Phaser.Scene {
     let stubG: Phaser.GameObjects.Graphics | null = null
     const inner = lay ? this.extentOf(lay) : null
     if (lay && inner && this.shown) {
-      // Its own buildings, as they stand to one another, filling its footprint; between them the
-      // standard street surface, under each its lot in the district's terrain.
+      // Seen from further off, a district is one landmark of what it is, not its every building (the Owner,
+      // 2026-11-20: from above a whole downtown is a dot; a factory district reads as a factory): the building
+      // its hall stands as, else its largest building, on its plate, filling the footprint. Its ports are its
+      // streets out to the highway. The same picture stands in a port.
       const ter = TERRAIN[terrainOf(this.shown.tree, path)][this.light]
       const g = this.add.graphics()
-      // The district's plate in its tint (the first generation's districts), its buildings on paved lots.
       g.fillStyle(tintOf(this.shown.tree, path, this.light, ter.lot)).fillPoints(quadOf(P, r), true)
       g.lineStyle(1.4, this.tone.ink).strokePoints(quadOf(P, r), true)
       parts.push(g)
-      // From the town a district is a city block seen from above (the Owner, 2026-11-20: the roads must look
-      // like roads): its own sheet in small, its streets where they run inside, its buildings where they stand.
-      // A bare one (a neighbour in a port) is only what stands there, filling its footprint.
-      const sheet = !o.bare
-      const lg = geoOf(lay.plots)
-      const m = o.bare ? 0.06 : 0
-      const kk = sheet ? Math.min(r.w / lg.w, r.h / lg.h) : Math.min((r.w - 2 * m) / inner.box.w, (r.h - 2 * m) / inner.box.h)
-      const ox = sheet ? r.x + (r.w - lg.w * kk) / 2 : r.x + (r.w - inner.box.w * kk) / 2
-      const oy = sheet ? r.y + (r.h - lg.h * kk) / 2 : r.y + (r.h - inner.box.h * kk) / 2
-      const bx = sheet ? 0 : inner.box.x, by = sheet ? 0 : inner.box.y
-      if (sheet) {
-        // Its streets, the same pavement as the town's, at its scale: kerbs, asphalt, a centre line.
-        const at_ = (x: number, y: number) => ({ x: ox + x * kk, y: oy + y * kk })
-        const strip = (st: Street, half: number) => {
-          const a = at_(lg.x(st.x0), lg.y(st.y0)), b = at_(lg.x(st.x1), lg.y(st.y1)), e = half
-          return st.x0 === st.x1
-            ? quadOf(P, { x: a.x - e, y: Math.min(a.y, b.y) - e, w: 2 * e, h: Math.abs(b.y - a.y) + 2 * e })
-            : quadOf(P, { x: Math.min(a.x, b.x) - e, y: a.y - e, w: Math.abs(b.x - a.x) + 2 * e, h: 2 * e })
-        }
-        // Its local streets at the town's own lane width (one lane each way: a car is the same size here as on
-        // the highway); its ring is the town's highway round the block, already drawn.
-        const local = lay.streets.filter(st => st.kind !== 'ring')
-        g.fillStyle(this.tone.kerb, 1)
-        for (const st of local) g.fillPoints(strip(st, LOCAL_HALF + PAVEMENT), true)
-        g.fillStyle(this.tone.asphalt, 1)
-        for (const st of local) g.fillPoints(strip(st, LOCAL_HALF), true)
-        g.lineStyle(0.9, this.tone.paint, 0.85)
-        for (const st of local) { const a = at_(lg.x(st.x0), lg.y(st.y0)), b = at_(lg.x(st.x1), lg.y(st.y1)); const n = Math.max(1, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 0.5)); for (let i = 0; i < n; i += 2) { const p0 = P(a.x + (b.x - a.x) * i / n, a.y + (b.y - a.y) * i / n), p1 = P(a.x + (b.x - a.x) * (i + 1) / n, a.y + (b.y - a.y) * (i + 1) / n); g.lineBetween(p0.x, p0.y, p1.x, p1.y) } }
-        // Seen from the town, its ports already show, where they are inside: each used port is its own street
-        // carried out across the green belt to the highway, a crossing at the mouth (portAt). Other and Orphan
-        // are small on the block's back corners.
-        if (o.interactive && this.shown.allLinks && path.length === 1) {
-          stubG = this.add.graphics()
-          this.exits(stubG, k, at, r, P, (fx, fy) => at_(lg.x(fx * GRID), lg.y(fy * GRID)))
-        }
+      if (!o.bare && o.interactive && this.shown.allLinks && path.length === 1) {
+        stubG = this.add.graphics()
+        this.exits(stubG, k, at, r, P, (fx, fy) => ({ x: r.x + r.w * fx, y: r.y + r.h * fy }))
       }
       const looks = new Map(this.looks(k, lay.placed, path).map(l => [l.id, l.key]))
-      const placedAt = inner.things.map(t => ({ ...t, q: { x: ox + (t.r.x - bx) * kk, y: oy + (t.r.y - by) * kk, w: t.r.w * kk, h: t.r.h * kk } }))
-        .sort((a, b) => (a.q.x + a.q.y) - (b.q.x + b.q.y))
-      for (const t of placedAt) {
-        const lot = this.add.graphics()
-        const e = 0.12 * kk
-        lot.fillStyle(this.tone.kerb).lineStyle(1, this.tone.curb, 0.6).fillPoints(quadOf(P, { x: t.q.x - e, y: t.q.y - e, w: t.q.w + 2 * e, h: t.q.h + 2 * e }), true)
-        parts.push(lot)
-        const key = looks.get(t.p.id), a = key ? this.anchors.get(key) : undefined
-        if (key && a && this.textures.exists(key)) {
-          const base = P(t.q.x, t.q.y)
-          parts.push(this.add.image(base.x, base.y, key).setOrigin(a.ax, a.ay).setScale(kk * this.spriteFit(key, Math.min(t.r.w, t.r.h)) / RS))
-        }
+      const icon = lay.placed.find(p => k.children.find(c => c.id === p.id)?.landmark)
+        ?? [...lay.placed].sort((x, y) => y.w * y.h - x.w * x.h)[0]
+      const key = icon ? looks.get(icon.id) : undefined, an = key ? this.anchors.get(key) : undefined
+      if (icon && key && an && this.textures.exists(key)) {
+        // The landmark on a lot inset in its plate, at its own size scaled to the footprint.
+        // A token, not the building at full size: its long side fits two thirds of the plate, centred.
+        const side = Math.min(r.w, r.h) * 0.66, fit = side / Math.max(icon.w, icon.h)
+        const q = { x: r.x + (r.w - icon.w * fit) / 2, y: r.y + (r.h - icon.h * fit) / 2 }
+        const base = P(q.x, q.y)
+        parts.push(this.add.image(base.x, base.y, key).setOrigin(an.ax, an.ay).setScale(fit * this.spriteFit(key, Math.min(icon.w, icon.h)) / RS))
       }
     } else if (lay && this.shown) {
       // A district with nothing in it yet: its empty block in its terrain, no stand-in buildings.

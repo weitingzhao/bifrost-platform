@@ -1,5 +1,5 @@
 import { cityRulers, unitRoomsOf, type UnitReads } from './unitRooms'
-import { encodePlan, fitsIn, plotsOf, shapeArea, shapeByCount, splitPlot, type Plan, type Shape } from '../frame/grid'
+import { DISTRICT, encodePlan, fitsIn, plotsOf, shapeArea, splitPlot, type Plan, type Shape } from '../frame/grid'
 import type { Look, Meter, Place, State } from '../frame/places'
 
 /**
@@ -210,7 +210,7 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', uni
     return building
   })
   const arrangement = zonedArrangement(devices.map(b => ({ id: b.id, shape: b.shape, zone: zones.get(b.id)! })))
-  return { id: 'utilities', kind: 'district', shape: shapeByCount(devices.length), function: fn, arrangement, label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: devices }
+  return { id: 'utilities', kind: 'district', shape: DISTRICT, function: fn, arrangement, label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: devices }
 }
 
 /**
