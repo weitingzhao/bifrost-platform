@@ -11,6 +11,7 @@ import { frameOf, type Frame } from './viewport'
 import { LANDMARKS } from './library/landmarkLooks'
 import { nuclearCore } from './library/landmarks'
 import { cellsOf, modulesOf, townKey, townSprite } from './library/towns'
+import { placeLabels, type Box } from './labels'
 import { edgeSlots, linksAt, portAt, portsFor, slotsFor, type LevelLinks, type Link, type Slot } from './links'
 
 /** The district styles drawn as a town of their own: the landmark in its back corner (towns.ts builds the rest by its size); the rest use the campus. */
@@ -446,7 +447,9 @@ export class PlaceScene extends Phaser.Scene {
         const mods = modulesOf(k, hue, this.light), key = townKey(k.id, k.shape, k.style!, mods, w, d)
         this.cells.set(key, Math.min(w, d)); this.townKeys.set(k.id, key)
         // The kinds it holds that its cells cannot show, counted on its name (the mess shown, never hidden).
-        this.townLeft.set(k.id, Math.max(0, mods.length - (cellsOf(k.shape, w, d).length - 1)))
+        const room = cellsOf(k.shape, w, d).length - 1
+        // A 4×4 town has no module cells: its landmark stands for all it holds, so nothing is left out.
+        this.townLeft.set(k.id, room > 0 ? Math.max(0, mods.length - room) : 0)
         out.push({ id: p.id, key, make: () => townSprite(k.shape, w, d, core, mods) })
       }
     }
@@ -479,6 +482,34 @@ export class PlaceScene extends Phaser.Scene {
   private townLeft = new Map<string, number>()
   /** How much a sprite drawn for `cells` is scaled to stand in a footprint `size` across. */
   private spriteFit(key: string, size: number) { const n = this.cells.get(key); return n ? size / n : 1 }
+
+  /** The port signs on the level on screen: they stay where they stand, the names give way to them. */
+  private signs: Phaser.GameObjects.Container[] = []
+  /**
+   * No plate over another (the Owner, 2026-11-20: names and port signs on top of one another read as a mess).
+   * The port signs keep their places (the district's edge, its contract); each block's name, nearest the viewer
+   * first, takes the first free place up or down its own column, a few rows at most, and a thin line ties it
+   * back to where it belongs when it moved. When no place is free it stays and overlaps (shown, not hidden).
+   */
+  private declutter(c: Phaser.GameObjects.Container, fixed: Phaser.GameObjects.Container[], names: Phaser.GameObjects.Container[]) {
+    const boxOf = (p: Phaser.GameObjects.Container): Box => { const b = p.getData('box') as { w: number; h: number }; return { x: p.x - b.w / 2, y: p.y, w: b.w, h: b.h } }
+    const order = [...names].sort((a, b) => b.y - a.y)
+    const where = placeLabels(fixed.filter(p => p.getData('box')).map(boxOf), order.map(boxOf))
+    const lines = this.add.graphics()
+    order.forEach((p, i) => {
+      const { dy, free } = where[i], y0 = p.y, h = boxOf(p).h
+      // No free place within reach: it stays, see-through, so what it covers still shows.
+      if (!free) p.setAlpha(0.6)
+      if (!dy) return
+      p.y += dy
+      lines.lineStyle(1.2, this.tone.ink, 0.6).lineBetween(p.x, y0, p.x, dy > 0 ? p.y : p.y + h)
+      lines.fillStyle(this.tone.ink, 0.7).fillCircle(p.x, y0, 2)
+    })
+    // The lines over the pictures, the plates over the lines.
+    c.add(lines)
+    for (const n of names) c.bringToTop(n)
+  }
+
 
   /** What stands on the ground on screen, each with its footprint and the pieces it was drawn with. */
   private drawn: { id: string; r: Rect; parts: Phaser.GameObjects.GameObject[] }[] = []
@@ -813,6 +844,7 @@ export class PlaceScene extends Phaser.Scene {
     g.fillStyle(Phaser.Display.Color.HexStringToColor(hue).color).fillCircle(-w / 2 + padX + dot / 2, 10, dot / 2).lineStyle(1, this.tone.ink).strokeCircle(-w / 2 + padX + dot / 2, 10, dot / 2)
     t.setPosition(-w / 2 + padX + dot + 5, h / 2)
     const c = this.add.container(x, y, [g, t])
+    c.setData('box', { w, h })
     this.labels.push(c)
     return c
   }
@@ -1035,6 +1067,7 @@ export class PlaceScene extends Phaser.Scene {
     const edgePts: Phaser.Math.Vector2[] = []
     const nbs = new Map<string, { c: Phaser.GameObjects.Container; at: Phaser.Math.Vector2 }>()
     // A district's edge; the town has none (the Owner, 2026-11-20: it is the whole system, nothing is outside it).
+    if (o.interactive) this.signs = []
     if (place.kind === 'district' && o.interactive && this.shown?.links && !o.arranging) for (const part of this.borders(this.shown.links, place, P, W, H, edgePts, geo, streets, nbs)) c.add(part)
     const byId = new Map(place.children.map(k => [k.id, k]))
     const plotById = new Map(plots.map(p => [p.id, p]))
@@ -1055,6 +1088,7 @@ export class PlaceScene extends Phaser.Scene {
     if (o.interactive) this.drawn = []
     for (const { p, r } of order) { const parts = this.block(byId.get(p.id)!, p, r, P, look.get(p.id)!, o, [...at, p.id]); for (const part of parts) c.add(part); if (o.interactive) this.drawn.push({ id: p.id, r, parts }) }
     // Names on top of every block, so a nearer block never hides a farther one's name. The minimap has none: too small to read.
+    const names: Phaser.GameObjects.Container[] = []
     if (o.interactive) for (const { p, r } of order) {
       // The plate stands out in the street before its front corner (the Owner, 2026-11-20: on the picture it hid what was in front).
       const foot = P(r.x + r.w + 0.12, r.y + r.h + 0.12)
@@ -1069,11 +1103,17 @@ export class PlaceScene extends Phaser.Scene {
       const said = [k.face?.sign ? k.face.sign.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase()) : '', k.state === 'online' && k.face?.tally?.n != null ? `${k.face.tally.n} ${k.face.tally.what}` : ''].filter(Boolean).join(' · ')
       const left = this.townLeft.get(k.id) ?? 0
       const more = [said, left ? `+${left} ${left === 1 ? 'kind' : 'kinds'} not shown` : ''].filter(Boolean).join(' · ')
-      c.add(this.plate(foot.x, foot.y + 4, `${k.label}${pct}${word}${scale}${more ? `\n${more}` : ''}`, dot))
+      const name = this.plate(foot.x, foot.y + 4, `${k.label}${pct}${word}${scale}${more ? `\n${more}` : ''}`, dot)
+      names.push(name)
+      c.add(name)
     }
     // The ports' signs over the names of the blocks along the edge: they stand outside the ground, so a name
     // hanging out into the street must not cover them (2026-11-20, a 4×8 Utilities: "Crew" under "Mac Mini").
+    // Layers: the pictures, then the neighbours at the ports with their signs, then the plates over all. The
+    // plates give way to one another (declutter), so on top they cover no sign, and no miniature covers them.
     for (const nb of nbs.values()) if (nb.c.parentContainer === c) c.bringToTop(nb.c)
+    for (const sg of this.signs) if (sg.parentContainer === c) c.bringToTop(sg)
+    if (o.interactive) this.declutter(c, this.signs, names)
     if (order.length === 0 && o.interactive) c.add(this.label(P(W / 2, H / 2).x, P(W / 2, H / 2).y, 'Nothing inside yet', { color: '#8a8478', fontSize: '14px' }).setOrigin(0.5))
     // What the fit frames: the blocks' corners up to their roofs, and their names below.
     const pts = order.length === 0 ? [P(W / 4, H / 4), P(W * 3 / 4, H * 3 / 4)] : order.flatMap(({ p, r }) => {
@@ -1553,7 +1593,9 @@ export class PlaceScene extends Phaser.Scene {
         // Ports stand a street apart, so neighbouring signs take turns below and above their block.
         const low = P(r.x + r.w, r.y + r.h), high = P(r.x, r.y, 46)
         const below = sl.i % 2 === 0 ? low : new Phaser.Math.Vector2(high.x, high.y - 26)
-        nbc.add(this.plate(below.x, below.y + 6, ways ? `${pass.label} · ${ways}` : pass.label, (nb ? hueOf(this.shown!.tree, [pass.id]) : '#9aa0b0')))
+        const signPlate = this.plate(below.x, below.y + 6, ways ? `${pass.label} · ${ways}` : pass.label, (nb ? hueOf(this.shown!.tree, [pass.id]) : '#9aa0b0'))
+        this.signs.push(signPlate)
+        nbc.add(signPlate)
         framed.push(new Phaser.Math.Vector2(below.x, below.y + 30))
         continue
       }
@@ -1601,7 +1643,9 @@ export class PlaceScene extends Phaser.Scene {
       const who = kind === 'other' && pass.who.length ? ` (${pass.who.slice(0, 2).join(', ')}${pass.who.length > 2 ? '…' : ''})` : ''
       // On the back edge its sign stands behind it, clear of the road and its arrow.
       const signY = sl.edge === 'x0' ? sign.y - 62 : sign.y + 30
-      out.push(this.plate(sign.x, signY, `${pass.label} · ${pass.n} · ${Math.round(share * 100)}%${who}`, '#f08a4b'))
+      const otherPlate = this.plate(sign.x, signY, `${pass.label} · ${pass.n} · ${Math.round(share * 100)}%${who}`, '#f08a4b')
+      this.signs.push(otherPlate)
+      out.push(otherPlate)
       framed.push(new Phaser.Math.Vector2(sign.x, signY - 10), new Phaser.Math.Vector2(sign.x, signY + 24))
     }
     return out

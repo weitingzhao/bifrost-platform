@@ -5,7 +5,7 @@ import { consoleContent } from '../src/domains/owner/city/gen2/content/console'
 import { formatPath, parsePath, type Path, type Place } from '../src/domains/owner/city/gen2/frame/places'
 import { hardwareDistrict, readHardware } from '../src/domains/owner/city/gen2/content/hardware'
 import { readUnits } from '../src/domains/owner/city/gen2/content/unitRooms'
-import type { Link, Partners } from '../src/domains/owner/city/gen2/frame/links'
+import { portsFor, type Link, type Partners } from '../src/domains/owner/city/gen2/frame/links'
 import { useRulersTick } from '../src/domains/owner/city/gen2/frame/rulers'
 
 // The gen2 frame on its own: the address is the place (#/system/infrastructure), so Back works.
@@ -50,7 +50,11 @@ const SAMPLE_PARTNERS: Record<string, Partners> = {
   // Up to four a side, so a 4×8 Utilities (?util=4x8) shows every port it has named (2026-11-20).
   utilities: { in: ['system', 'work', 'services', 'crew'], out: ['system', 'command', 'work', 'services'] },
 }
-const withPartners = (p: Place): Place => ({ ...p, partners: SAMPLE_PARTNERS[p.id] ?? p.partners, children: p.kind === 'town' ? p.children.map(withPartners) : p.children })
+// No more partners than the place has ports a side (the frame's rule): the sample is cut to the size shown.
+const withPartners = (p: Place): Place => {
+  const d = SAMPLE_PARTNERS[p.id], n = portsFor(p.shape)
+  return { ...p, partners: d ? { in: d.in.slice(0, n), out: d.out.slice(0, n) } : p.partners, children: p.kind === 'town' ? p.children.map(withPartners) : p.children }
+}
 
 function Bench() {
   const [reads, setReads] = useState<{ r: Awaited<ReturnType<typeof readHardware>>; u: Awaited<ReturnType<typeof readUnits>>; at: string } | null>(null)
