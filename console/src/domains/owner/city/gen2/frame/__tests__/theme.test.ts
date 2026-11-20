@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Place } from '../places'
 import { HUES } from '../sprites'
-import { hueOf, terrainOf } from '../theme'
+import { hueOf } from '../theme'
 
 // 2026-11-19, the Owner: things differ and their look passes down (a district's theme to its
 // buildings, a building's to its rooms); the ways between them are one standard.
@@ -21,10 +21,5 @@ describe('themes pass down', () => {
   it('rooms are shades of their building', () => {
     expect(hueOf(tree, ['a', 'a1', 'r1'])).toBe(hueOf(tree, ['a', 'a1']))
     expect(hueOf(tree, ['a', 'a1', 'r2'])).not.toBe(hueOf(tree, ['a', 'a1']))
-  })
-  it('a place takes its district’s terrain; districts differ', () => {
-    expect(terrainOf(tree, ['a', 'a1', 'r1'])).toBe(terrainOf(tree, ['a']))
-    expect(terrainOf(tree, ['b'])).not.toBe(terrainOf(tree, ['a']))
-    expect(terrainOf(tree, [])).toBe('meadow')
   })
 })

@@ -2,7 +2,7 @@ import * as Phaser from 'phaser'
 import { defaultPlan, fitsIn, plotsOf, type Placed, type Plot, type Street } from './grid'
 import { BUFFER, geoOf, GUTTER, HIGHWAY_HALF, LANE, LOCAL_HALF, MEDIAN, PAVEMENT, WAY, type Geo, type Rect } from './geo'
 import { functionAt, isWired, type Place } from './places'
-import { hueOf, terrainOf, tintOf } from './theme'
+import { hueOf, tintOf } from './theme'
 import { PALETTE, TERRAIN, type Light, type Palette } from './light'
 import { hash } from './kit'
 import { buildingWings, setback, spriteFor, spriteKey, spriteUrl, type Wing } from './sprites'
@@ -808,7 +808,9 @@ export class PlaceScene extends Phaser.Scene {
   private level(place: Place, at: string[], placed: Placed[], plots: Plot[], streets: Street[], o: { at: number; selected: string | null; inside: string | null; interactive: boolean; arranging: boolean }) {
     const geo = geoOf(plots), P = projOf(geo), W = geo.w, H = geo.h
     // The ground's own colours come from its district's terrain (theme.ts); the ways take none.
-    const ter = TERRAIN[this.shown ? terrainOf(this.shown.tree, at) : 'meadow'][this.light]
+    // One ground for every place (the Owner, 2026-11-20): grass where nothing stands, on every level; what stands
+    // there brings its own colour.
+    const ter = TERRAIN.meadow[this.light]
     const c = this.add.container(o.at, 0)
     const g = this.add.graphics()
     const ground = [P(0, 0), P(W, 0), P(W, H), P(0, H)]
@@ -1062,7 +1064,7 @@ export class PlaceScene extends Phaser.Scene {
       // 2026-11-20: from above a whole downtown is a dot; a factory district reads as a factory): the building
       // its hall stands as, else its largest building, on its plate, filling the footprint. Its ports are its
       // streets out to the highway. The same picture stands in a port.
-      const ter = TERRAIN[terrainOf(this.shown.tree, path)][this.light]
+      const ter = TERRAIN.meadow[this.light]
       // On the town the plate stands in from its plot, so its streets out have room to reach the highway.
       const plate = o.bare ? r : { x: r.x + 0.45, y: r.y + 0.45, w: r.w - 0.9, h: r.h - 0.9 }
       const g = this.add.graphics()
@@ -1088,7 +1090,7 @@ export class PlaceScene extends Phaser.Scene {
       }
     } else if (lay && this.shown) {
       // A district with nothing in it yet: its empty block in its terrain, no stand-in buildings.
-      const ter = TERRAIN[terrainOf(this.shown.tree, path)][this.light]
+      const ter = TERRAIN.meadow[this.light]
       const g = this.add.graphics()
       g.fillStyle(tintOf(this.shown.tree, path, this.light, ter.lot)).fillPoints(quadOf(P, r), true).lineStyle(1.4, this.tone.ink).strokePoints(quadOf(P, r), true)
       parts.push(g)

@@ -80,30 +80,15 @@ export const PALETTE: Record<Light, Palette> = {
 }
 
 /**
- * A district's terrain (theme.ts): the colours of its own ground — the belt (grass), a plot's lot
- * and the slab's sides. A shore stands in water, an upland on rock, a forest on dark loam.
+ * The ground's colours (the Owner, 2026-11-20: one ground everywhere; grass is empty, colour is something
+ * standing there): the belt (grass), a plot's lot and the slab's sides.
  */
 export type TerrainTone = { grass: number; lot: number; earth: number; earthShade: number }
-export const TERRAIN: Record<'meadow' | 'shore' | 'upland' | 'forest', Record<Light, TerrainTone>> = {
+export const TERRAIN: Record<'meadow', Record<Light, TerrainTone>> = {
   meadow: {
     day: { grass: 0xd6e8c1, lot: 0xe3efd5, earth: 0xcf9f6c, earthShade: 0xab7c4e },
     dusk: { grass: 0xb9c48c, lot: 0xdde0b8, earth: 0xb9774b, earthShade: 0x93593a },
     night: { grass: 0x2a4232, lot: 0x33503e, earth: 0x5a4030, earthShade: 0x46301f },
-  },
-  shore: {
-    day: { grass: 0xeadcb4, lot: 0xf5eedb, earth: 0x6fb3c9, earthShade: 0x5299b0 },
-    dusk: { grass: 0xe3cfab, lot: 0xefe2ca, earth: 0x6a9fb8, earthShade: 0x4f86a0 },
-    night: { grass: 0x4a4a3e, lot: 0x56564a, earth: 0x23455c, earthShade: 0x1a3547 },
-  },
-  upland: {
-    day: { grass: 0xe2dfc4, lot: 0xebe5cc, earth: 0x9c8a74, earthShade: 0x7f6e5a },
-    dusk: { grass: 0xc7b68e, lot: 0xe4d7ba, earth: 0x907a62, earthShade: 0x74604c },
-    night: { grass: 0x3c4034, lot: 0x494d40, earth: 0x4a4036, earthShade: 0x3a3129 },
-  },
-  forest: {
-    day: { grass: 0xc9e2b3, lot: 0xd6e8c8, earth: 0x7c6a52, earthShade: 0x5f503d },
-    dusk: { grass: 0x99b37c, lot: 0xd2dcb4, earth: 0x6e5c46, earthShade: 0x544634 },
-    night: { grass: 0x22382a, lot: 0x2c4636, earth: 0x3a3028, earthShade: 0x2c241e },
   },
 }
 
