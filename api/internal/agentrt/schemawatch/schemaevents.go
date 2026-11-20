@@ -1,9 +1,11 @@
-// Package schemaevents says on the bus that a migration reached the platform's
-// database (schema.migration.applied; channel L25, 2026-11-18). The schema
-// watch stays where it is and reads the applied migrations every minute; this
-// writes an event for each it has not said yet. The first time, with nothing
-// said before, it says only the newest: the rest is history, not news.
-package schemaevents
+package schemawatch
+
+// This file says on the bus that a migration reached the platform's database
+// (schema.migration.applied; channel L25, 2026-11-18). The schema watch reads
+// the applied migrations every minute; this writes an event for each it has
+// not said yet. The first time, with nothing said before, it says only the
+// newest: the rest is history, not news. Folded in from bus/schemaevents
+// 2026-11-20, unchanged.
 
 import (
 	"context"

@@ -725,7 +725,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-18, moved out of api/internal/server unchanged (agentrt_schema.go; decoupling item 5, A4): what platform-api reads of the agentrt schema (which migrations the database applied), said in /health, the log and on the bus. Imports foundation only (migrate, eventlog, bus/readerseen, bus/schemaevents)."
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (agentrt_schema.go; decoupling item 5, A4): what platform-api reads of the agentrt schema (which migrations the database applied), said in /health, the log and on the bus. Imports foundation only (migrate, eventlog, bus/readerseen, bus/schemaevents). 2026-11-20: bus/schemaevents folded in (it had no other user; schemaevents.go): the schema.migration.applied announcement, so the imports are now migrate, eventlog, actor and bus/readerseen."
     },
     "api/internal/agentrt/readslot": {
       "domains": [
@@ -1693,13 +1693,6 @@
       ],
       "status": "assigned",
       "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, lets a reader of pipeline runs be woken by the bus. Imports only foundation packages or none; the server wires it."
-    },
-    "api/internal/bus/schemaevents": {
-      "domains": [
-        "foundation"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, says on the bus that a migration reached the database. Imports only foundation packages or none; the server wires it."
     },
     "api/internal/releases": {
       "domains": [

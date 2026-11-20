@@ -1,4 +1,4 @@
-package schemaevents
+package schemawatch
 
 import (
 	"strings"
