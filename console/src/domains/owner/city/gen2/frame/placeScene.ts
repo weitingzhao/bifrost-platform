@@ -1258,13 +1258,14 @@ export class PlaceScene extends Phaser.Scene {
     // its pavement stops at the highway's kerb, its asphalt runs on to the highway's, and the highway's
     // reservation opens where it meets it. A zebra across its mouth, a stop line behind.
     // The streets are as real as the district (the Owner, 2026-11-20: road and block fade together, or neither):
-    // solid for a wired district, as faint as its ghost for one not wired yet. An open port is a street closed
-    // at its mouth by a barrier; a used one has its crossing and the reservation open.
+    // solid for a wired district, as faint as its ghost for one not wired yet. A used way has its crossing, the
+    // reservation open and an arrow painted the way traffic goes (in towards the block, out towards the
+    // highway); an open one is just the street, built, nothing painted (no barrier: it read as broken).
     const ghost = !isWired(k)
-    const street = (x: number, y: number, dx: number, dy: number, used: boolean) => {
+    type Dir = 'in' | 'out' | 'none'
+    const street = (x: number, y: number, dx: number, dy: number, used: boolean, dir: Dir) => {
       const A = ghost ? 0.22 : 1
-      const kerbAt = dx ? ground.x + ground.w + BUFFER : ground.y + ground.h + BUFFER
-      const len = kerbAt - (dx ? x : y)
+      const len = dx > 0 ? ground.x + ground.w + BUFFER - x : dx < 0 ? x - (ground.x - BUFFER) : ground.y + ground.h + BUFFER - y
       const ux = -dy, uy = dx
       const pt = (a: number, b: number) => P(x + dx * a + ux * b, y + dy * a + uy * b)
       const band = (a0: number, a1: number, h: number) => [pt(a0, -h), pt(a1, -h), pt(a1, h), pt(a0, h)]
@@ -1274,31 +1275,34 @@ export class PlaceScene extends Phaser.Scene {
       g.fillStyle(this.tone.asphalt, A).fillPoints(band(0, len + into, HALF), true)
       g.lineStyle(1, this.tone.curb, A)
       for (const side of [-1, 1]) { const p0 = pt(0, side * HALF), p1 = pt(len, side * HALF); g.lineBetween(p0.x, p0.y, p1.x, p1.y) }
+      g.lineStyle(0.9, this.tone.paint, 0.85 * A)
+      for (let a = 0.05; a < len - 0.4; a += 0.3) { const c0 = pt(a, 0), c1 = pt(Math.min(a + 0.15, len - 0.4), 0); g.lineBetween(c0.x, c0.y, c1.x, c1.y) }
+      if (!used) return
       // The reservation opens across the street's width, so a car can turn either way.
-      if (used) g.fillStyle(this.tone.asphalt, A).fillPoints(band(len + GUTTER / 2 - BUFFER - MEDIAN / 2 - 0.01, len + GUTTER / 2 - BUFFER + MEDIAN / 2 + 0.01, HALF), true)
-      if (!used) {
-        // Open: a barrier across the mouth, red and white; no crossing, the reservation unbroken.
-        const b0 = pt(len - 0.08, -HALF), b1 = pt(len - 0.08, HALF)
-        g.lineStyle(4, this.tone.ink, A).lineBetween(b0.x, b0.y, b1.x, b1.y)
-        for (let k = 0; k < 4; k++) { const q0 = pt(len - 0.08, -HALF + (2 * HALF) * k / 4), q1 = pt(len - 0.08, -HALF + (2 * HALF) * (k + 1) / 4); g.lineStyle(2.6, k % 2 ? 0xffffff : 0xd9534f, A).lineBetween(q0.x, q0.y, q1.x, q1.y) }
-        return
-      }
-      // The mouth: a zebra across the street, a stop line behind it; the centre line dashed on from inside.
+      g.fillStyle(this.tone.asphalt, A).fillPoints(band(len + GUTTER / 2 - BUFFER - MEDIAN / 2 - 0.01, len + GUTTER / 2 - BUFFER + MEDIAN / 2 + 0.01, HALF), true)
+      // The mouth: a zebra across the street, a stop line behind it.
       g.fillStyle(this.tone.paint, A)
       for (let v = -HALF + 0.04; v < HALF - 0.04; v += 0.08) g.fillPoints([pt(len - 0.26, v), pt(len - 0.08, v), pt(len - 0.08, v + 0.04), pt(len - 0.26, v + 0.04)], true)
       const s0 = pt(len - 0.33, -HALF + 0.02), s1 = pt(len - 0.33, -0.01)
       g.lineStyle(1.4, this.tone.paint, A).lineBetween(s0.x, s0.y, s1.x, s1.y)
-      g.lineStyle(0.9, this.tone.paint, 0.85 * A)
-      for (let a = 0.05; a < len - 0.4; a += 0.3) { const c0 = pt(a, 0), c1 = pt(Math.min(a + 0.15, len - 0.4), 0); g.lineBetween(c0.x, c0.y, c1.x, c1.y) }
+      // Which way it goes, painted on the street: a white arrow, in towards the block or out to the highway.
+      if (dir !== 'none') {
+        const m = len * 0.45, head = dir === 'out' ? m + 0.22 : m - 0.22, tail = dir === 'out' ? m - 0.22 : m + 0.22, back = dir === 'out' ? head - 0.14 : head + 0.14
+        const t0 = pt(tail, 0), t1 = pt(back, 0)
+        g.lineStyle(2.6, 0xffffff, A).lineBetween(t0.x, t0.y, t1.x, t1.y)
+        g.fillStyle(0xffffff, A).fillPoints([pt(head, 0), pt(back, -0.13), pt(back, 0.13)], true)
+      }
     }
-    // Every port is a way out of the block, so the entrances read before anything uses them: a used one
-    // solid, an open one faint (the Owner, 2026-11-20: the entrances must show).
+    // Every way out of the block, as inside: the ports in front, used solid with their arrow; on the back
+    // left, Other in, Other out and the yard on its three streets (a quarter, a half, three quarters).
     for (let i = 0; i < PORTS; i++) {
       const f = portAt(i, PORTS)
       const pi = sheetAt(f, 1), po = sheetAt(1, f)
-      street(pi.x, pi.y, 0, 1, !!slots.in.named[i])
-      street(po.x, po.y, 1, 0, !!slots.out.named[i])
+      street(pi.x, pi.y, 0, 1, !!slots.in.named[i], 'in')
+      street(po.x, po.y, 1, 0, !!slots.out.named[i], 'out')
     }
+    const back: [number, boolean, Dir][] = [[0.25, !!slots.in.other, 'in'], [0.5, !!slots.out.other, 'out'], [0.75, !!slots.orphan, 'none']]
+    for (const [f, used, dir] of back) { const p = sheetAt(0, f); street(p.x, p.y, -1, 0, used, dir) }
     // A small box on the block: bottom at z 0, top at h.
     const box = (x: number, y: number, w: number, h: number, col: number) => {
       const c = Phaser.Display.Color.ValueToColor(col)
