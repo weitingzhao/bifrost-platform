@@ -839,6 +839,8 @@ export class PlaceScene extends Phaser.Scene {
     // The menu's lens (interactive level only): what serves the function is ringed, the rest fades.
     const lens = o.interactive && this.shown?.lens ? this.shown.lens : null
     const lit = lens != null && this.shown != null && functionAt(this.shown.tree, path) === lens
+    // Nothing on this level serves it: nothing to tell apart, so nothing fades.
+    const anyLit = lens != null && this.shown != null && this.shown.place.children.some(c => functionAt(this.shown!.tree, [...path.slice(0, -1), c.id]) === lens)
     const ring = k.id === o.inside ? this.tone.inside : k.id === o.selected || lit ? this.tone.pick : null
     if (ring != null) {
       const g = this.add.graphics()
@@ -903,7 +905,7 @@ export class PlaceScene extends Phaser.Scene {
       g.input!.cursor = o.arranging ? 'grab' : 'pointer'
       // Hover only for a mouse: on a touch screen it would stay lit after the finger lifts.
       g.on('pointerover', (p: Phaser.Input.Pointer) => { if (!p.wasTouch) { img?.setTint(this.tone.hover); if (!o.arranging) this.hovered = k } })
-      g.on('pointerout', () => { img?.clearTint(); if (this.hovered?.id === k.id) this.hovered = null })
+      g.on('pointerout', () => { img?.clearTint(); if (anyLit && !lit) img?.setTint(this.tone.dim); if (this.hovered?.id === k.id) this.hovered = null })
       // Moving: press on a thing to pick it up; it lands on the plot under the pointer when released.
       g.on('pointerdown', () => {
         if (o.arranging && this.shown?.tool === 'move') this.carry = { p: at, to: null }
@@ -921,14 +923,21 @@ export class PlaceScene extends Phaser.Scene {
       parts.push(g)
     }
     // How it stands (rule 0: from the system): a room fills to its reading; asleep or unread fades; down is ringed red.
-    if (k.meter && k.meter.used != null && k.meter.of) {
+    // A room its module draws shows its own readings: no wash over it (the Owner, 2026-11-19: a green
+    // layer over the rooms, foggy).
+    if (k.meter && k.meter.used != null && k.meter.of && !k.picture) {
       const f = Math.min(1, k.meter.used / k.meter.of), gl = this.add.graphics()
       gl.fillStyle(f < 0.7 ? this.tone.ok : f < 0.9 ? this.tone.pick : this.tone.no, 0.42).fillPoints(quadOf(P, { x: r.x + 0.12, y: r.y + 0.12, w: r.w - 0.24, h: (r.h - 0.24) * f }, 4), true)
       parts.push(gl)
     }
     if (k.state === 'standby' || k.state === 'unread') for (const p of parts) (p as unknown as { setAlpha?: (a: number) => void }).setAlpha?.(k.state === 'standby' ? 0.5 : 0.62)
     if (k.state === 'down') { const gd = this.add.graphics(); gd.lineStyle(4, this.tone.no, 1).strokePoints(quadOf(P, r), true); parts.push(gd) }
-    if (lens != null && !lit) for (const p of parts) (p as unknown as { setAlpha?: (a: number) => void }).setAlpha?.(0.28)
+    // The rest steps back in grey but stays solid: a see-through fade let the ground show through and
+    // made the map foggy (the Owner, 2026-11-19).
+    if (anyLit && !lit) for (const p of parts) {
+      const q = p as unknown as { setTint?: (c: number) => void; setAlpha?: (a: number) => void }
+      if (q.setTint) q.setTint(this.tone.dim); else q.setAlpha?.(0.35)
+    }
     if (k.id === o.inside && this.insideRing) parts.push(this.insideRing)
     return parts
   }
