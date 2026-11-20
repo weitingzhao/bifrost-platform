@@ -1,4 +1,4 @@
-package nextgen
+package effect
 
 import (
 	"os"

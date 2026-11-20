@@ -1,12 +1,13 @@
-// Package nextgen is the communication layer's own record of its change of
+// The communication layer's own record of its change of
 // generation: every channel of the old layer and where it goes
 // (channels.yaml), the platform readers moved off the cluster and Gitea
 // (readers.yaml), and the baselines its readings are compared with
 // (baselines.yaml). The Bus page shows them; nothing on it is typed in by
 // hand beyond these files, and their tests hold them to the code (the Owner,
 // 2026-11-17: nothing in Ops may be kept by hand; what it shows is computed
-// from the source).
-package nextgen
+// from the source). Folded in from bus/nextgen 2026-11-20, unchanged.
+
+package effect
 
 import (
 	_ "embed"

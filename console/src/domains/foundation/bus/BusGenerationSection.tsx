@@ -77,7 +77,7 @@ function ProblemLine({ p }: { p: NonNullable<BusNextgen['problems']> }) {
 
 /**
  * Bus → Generation: the communication layer's change of generation, from its
- * registers (bus/nextgen): channels left of the old 153 toward 64, by
+ * registers (bus/effect): channels left of the old 153 toward 64, by
  * disposition; the latest retired; the source switch; the baselines, each
  * taken by the system at its time.
  */
@@ -125,7 +125,7 @@ export function BusGenerationSection() {
         </div>
       </div>
       <p className="m-0 text-xs text-muted-foreground">
-        Read {new Date(d.generated_at).toLocaleTimeString()} from the registers in bus/nextgen; their tests check every retired channel is gone from the code and every moved reader's code is there.
+        Read {new Date(d.generated_at).toLocaleTimeString()} from the registers in bus/effect; their tests check every retired channel is gone from the code and every moved reader's code is there.
       </p>
     </div>
   )

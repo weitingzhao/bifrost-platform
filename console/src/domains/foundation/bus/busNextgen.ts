@@ -3,7 +3,7 @@ import { authedFetch } from '@/api/client'
 /**
  * GET /api/v1/bus/nextgen and /api/v1/bus/contract: the communication
  * layer's change of generation and its contract, both read from the
- * registers compiled into the platform (bus/nextgen, bus/registry), whose
+ * registers compiled into the platform (bus/effect, bus/registry), whose
  * tests hold them to the code. Nothing here is typed in on the page.
  */
 

@@ -29,7 +29,7 @@ type effectRow struct {
 	Label string `json:"label"`
 	Value string `json:"value"`
 	// Before is what the value is compared with, computed too: a
-	// baseline the system took at a time (bus/nextgen baselines.yaml,
+	// baseline the system took at a time (bus/effect baselines.yaml,
 	// queried at that time) or the same reading over the previous window.
 	// Empty when the system has none.
 	Before     string       `json:"before,omitempty"`

@@ -191,7 +191,8 @@ modules:
       # The communication layer's registers of its change of generation: their
       # tests check every retired channel is gone from the Go code and every
       # moved reader's code is there, so they read the whole module.
-      api/internal/bus/nextgen: ["api"]
+      # bus/effect holds them since 2026-11-20 (bus/nextgen folded in).
+      api/internal/bus/effect: ["api"]
       # The drill's tests read the problem register and the subscription tables, and
       # scan the Go files that import it or read the ledger for the bus.
       api/internal/bus/drill: ["api"]

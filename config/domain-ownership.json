@@ -1631,12 +1631,12 @@
       "status": "assigned",
       "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, wakes a waiting inbox read when the bus says mail reached its address; imports only bus/relay. Imports only foundation packages or none; the server wires it."
     },
-    "api/internal/bus/nextgen": {
+    "api/internal/bus/effect": {
       "domains": [
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, the channel table of the bus migration and what it summarizes; imports nothing of the platform. Imports only foundation packages or none; the server wires it."
+      "basis": "2026-11-20: bus/nextgen folded in (it had no other user): the Bus page's computed readings (GET /api/v1/bus/effect, /bus/nextgen) and the communication layer's registers of its change of generation (channels, readers, baselines and problems yaml, embedded). It was held by the default row until then. Imports only foundation packages; the server wires it."
     },
     "api/internal/bus/observe": {
       "domains": [

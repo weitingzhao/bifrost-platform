@@ -1,4 +1,4 @@
-package nextgen
+package effect
 
 import (
 	"io/fs"
@@ -22,7 +22,15 @@ func root(t *testing.T) string {
 	return r
 }
 
-// goFiles is every Go file of the module but this package's own.
+// registersOwnFiles are the files that were package nextgen (folded into
+// effect 2026-11-20).
+var registersOwnFiles = map[string]bool{
+	"nextgen_registers.go":      true,
+	"nextgen_registers_test.go": true,
+	"nextgen_problems_test.go":  true,
+}
+
+// goFiles is every Go file of the module but the registers' own.
 func goFiles(t *testing.T, r string) map[string]string {
 	t.Helper()
 	out := map[string]string{}
@@ -32,9 +40,11 @@ func goFiles(t *testing.T, r string) map[string]string {
 			return err
 		}
 		if d.IsDir() {
-			if p == self {
-				return filepath.SkipDir
-			}
+			return nil
+		}
+		// The registers were package nextgen until 2026-11-20; the scan
+		// still skips just their own files, as it skipped that directory.
+		if filepath.Dir(p) == self && registersOwnFiles[filepath.Base(p)] {
 			return nil
 		}
 		if strings.HasSuffix(p, ".go") {

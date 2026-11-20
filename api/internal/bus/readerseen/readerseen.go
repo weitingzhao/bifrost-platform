@@ -1,5 +1,5 @@
 // Package readerseen records, in the process doing it, that a reader the
-// source switch calls moved (bus/nextgen readers.yaml) really answered from
+// source switch calls moved (bus/effect readers.yaml) really answered from
 // its new source: the run cache, or the ledger's main. The readings go out as
 // metrics, so the Bus page can show when each last did it in this environment
 // (2026-11-18, the coordinator: "moved" was proven only by text in the code,
