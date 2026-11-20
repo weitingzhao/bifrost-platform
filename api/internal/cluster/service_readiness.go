@@ -15,7 +15,6 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
-	"github.com/weitingzhao/bifrost-platform/api/internal/datastore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
@@ -247,10 +246,10 @@ func evalRedisDomain(snap readinessSnapshot) ServiceDomainView {
 		clusterCapDep(snap, "storage-class-nfs-hot", "StorageClass nfs-hot (RDB backup)"),
 	}
 	stores := snap.datastoreSnapshot()
-	targets := datastore.RedisTargetDependencies(stores)
+	targets := RedisTargetDependencies(stores)
 	deps = append(deps, targets...)
 	for _, env := range snap.appEnvs {
-		if dep := datastore.EmbeddedRedisDependency(stores, env.Namespace); dep != nil {
+		if dep := EmbeddedRedisDependency(stores, env.Namespace); dep != nil {
 			deps = append(deps, *dep)
 		}
 	}

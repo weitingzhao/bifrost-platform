@@ -1,6 +1,9 @@
-// Package datastore reads the status of the platform's PostgreSQL
-// (CloudNativePG) and Redis from Kubernetes. It is a foundation package and
-// does not import cluster: cluster holds the connection and calls in.
+// The datastore status reads (postgres_status.go, redis_status.go,
+// matrix_datastore.go, datastore_source.go) read the status of the platform's
+// PostgreSQL (CloudNativePG) and Redis from Kubernetes. They were package
+// datastore from 2026-11-18 and are folded back into cluster, their only user,
+// on 2026-11-20, unchanged; Source and Snapshot remain the line between them
+// and the rest of cluster, which holds the connection and calls in.
 //
 // Contract:
 //
@@ -32,6 +35,7 @@
 // a cluster that was not read leaves it unknown, never ok. A resource that is
 // missing is reported as degraded with a detail that says so.
 //
-// Read only: this package issues get and list calls and nothing else. Actions
+// Read only: these reads issue get and list calls and nothing else. Actions
 // on these datastores (backups, WAL repair, pod exec) are not here.
-package datastore
+
+package cluster

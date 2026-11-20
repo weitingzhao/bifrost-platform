@@ -1,20 +1,15 @@
-package datastore
+package cluster
 
 import (
 	"context"
 
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
-	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 )
-
-// ServiceDependencyView is one dependency line of a status answer.
-type ServiceDependencyView = resourceview.ServiceDependencyView
 
 // Source is what a read needs from whoever holds the cluster connection. All
 // fields are required. Client is called first and Snapshot only when it
@@ -46,12 +41,4 @@ type Snapshot struct {
 	PostgresRole    ServiceDependencyView // nodes that can host PostgreSQL
 	DeploymentReach func(*appsv1.Deployment) (probe.Reachability, string)
 	DeploymentDep   func(namespace, name, label string) ServiceDependencyView
-}
-
-func stringFromUnstructured(obj *unstructured.Unstructured, fields ...string) string {
-	v, found, _ := unstructured.NestedString(obj.Object, fields...)
-	if !found {
-		return ""
-	}
-	return v
 }
