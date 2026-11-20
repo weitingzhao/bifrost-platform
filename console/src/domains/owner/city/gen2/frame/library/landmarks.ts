@@ -593,15 +593,17 @@ export function court(): Sprite {
 /* The power station (the ground the rest stands on).                   */
 /* ------------------------------------------------------------------ */
 
-function coolingTower(g: Draw, x: number, y: number, h: number, id: string) {
-  const [cx, cy] = g.p(x, y, 0), rb = 27, rw = 17, rt = 20
+function coolingTower(g: Draw, x: number, y: number, h: number, id: string, k = 1) {
+  const [cx, cy] = g.p(x, y, 0), rb = 27 * k, rw = 17 * k, rt = 20 * k
   g.add(`<defs><linearGradient id="${id}" x1="0" x2="1"><stop offset="0" stop-color="#fbfcfd"/><stop offset="0.55" stop-color="#eef1f4"/><stop offset="1" stop-color="#bcc5cf"/></linearGradient></defs>`)
   g.add(`<path d="M${cx - rb},${cy} Q${cx - rw},${cy - h * 0.62} ${cx - rt},${cy - h} L${cx + rt},${cy - h} Q${cx + rw},${cy - h * 0.62} ${cx + rb},${cy} A${rb},${rb / 2} 0 0 1 ${cx - rb},${cy} Z" fill="url(#${id})" stroke="${INK}" stroke-width="${STROKE}"/>`)
-  g.add(`<path d="M${cx - 18.6},${n1(cy - h * 0.8)} A18.6,9 0 0 0 ${cx + 18.6},${n1(cy - h * 0.8)} v4 A18,9 0 0 1 ${cx - 18},${n1(cy - h * 0.8 + 4)} Z" fill="#e0564f" stroke="${INK}" stroke-width="0.7"/>`)
-  for (let i = 0; i < 7; i++) { const a = -24 + i * 8; g.add(`<line x1="${cx + a}" y1="${n1(cy + Math.sqrt(1 - (a / rb) ** 2) * rb / 2)}" x2="${cx + a * 0.96}" y2="${n1(cy - 8 + Math.sqrt(1 - (a / rb) ** 2) * rb / 2)}" stroke="#8f98a5" stroke-width="1"/>`) }
-  g.add(`<ellipse cx="${cx}" cy="${cy - h}" rx="${rt}" ry="${rt / 2}" fill="#59606b" stroke="${INK}" stroke-width="${STROKE}"/><path d="M${cx - rt + 3},${cy - h + 1} A${rt - 3},${(rt - 3) / 2} 0 0 1 ${cx + rt - 3},${cy - h + 1}" fill="none" stroke="#878f9c" stroke-width="1"/>`)
-  for (const [a, b, r] of [[-5, 10, 11], [8, 19, 13], [-3, 33, 15], [12, 45, 11]] as const) g.add(`<circle cx="${cx + a}" cy="${cy - h - b}" r="${r}" fill="#ffffff" stroke="#aeb6c2" stroke-width="1"/>`)
-  for (const [a, b, r] of [[-5, 10, 9], [8, 19, 11], [-3, 33, 13]] as const) g.add(`<circle cx="${cx + a}" cy="${cy - h - b}" r="${r}" fill="#ffffff"/>`)
+  // The band near the top, following the shell's waist there.
+  const bw = 18.6 * k, bz = n1(cy - h * 0.8), bh = 4 * k
+  g.add(`<path d="M${n1(cx - bw)},${bz} A${n1(bw)},${n1(bw / 2)} 0 0 0 ${n1(cx + bw)},${bz} v${n1(bh)} A${n1(bw)},${n1(bw / 2)} 0 0 1 ${n1(cx - bw)},${n1(cy - h * 0.8 + bh)} Z" fill="#e0564f" stroke="${INK}" stroke-width="0.7"/>`)
+  for (let i = 0; i < 7; i++) { const a = (-24 + i * 8) * k; g.add(`<line x1="${n1(cx + a)}" y1="${n1(cy + Math.sqrt(1 - (a / rb) ** 2) * rb / 2)}" x2="${n1(cx + a * 0.96)}" y2="${n1(cy - 8 * k + Math.sqrt(1 - (a / rb) ** 2) * rb / 2)}" stroke="#8f98a5" stroke-width="1"/>`) }
+  g.add(`<ellipse cx="${cx}" cy="${cy - h}" rx="${rt}" ry="${rt / 2}" fill="#59606b" stroke="${INK}" stroke-width="${STROKE}"/><path d="M${n1(cx - rt + 3)},${cy - h + 1} A${n1(rt - 3)},${n1((rt - 3) / 2)} 0 0 1 ${n1(cx + rt - 3)},${cy - h + 1}" fill="none" stroke="#878f9c" stroke-width="1"/>`)
+  for (const [a, b, r] of [[-5, 10, 11], [8, 19, 13], [-3, 33, 15], [12, 45, 11]] as const) g.add(`<circle cx="${n1(cx + a * k)}" cy="${n1(cy - h - b * k)}" r="${n1(r * k)}" fill="#ffffff" stroke="#aeb6c2" stroke-width="1"/>`)
+  for (const [a, b, r] of [[-5, 10, 9], [8, 19, 11], [-3, 33, 13]] as const) g.add(`<circle cx="${n1(cx + a * k)}" cy="${n1(cy - h - b * k)}" r="${n1(r * k)}" fill="#ffffff"/>`)
 }
 
 export function powerStation(label = '', name = ''): Sprite {
@@ -641,6 +643,119 @@ export function powerStation(label = '', name = ''): Sprite {
   g.line([3.2, 3.05, 18], [3.6, 3.45, 18], INK, 0.8)
   for (let k = 0; k <= 8; k++) { const a = 2.9 + k * 0.119; g.line([a, 3.85, 0], [a, 3.85, 8], '#7f8794', 0.8); const b = 2.75 + k * 0.1375; g.line([3.85, b, 0], [3.85, b, 8], '#7f8794', 0.8) }
   g.line([2.9, 3.85, 8], [3.85, 3.85, 8], '#7f8794', 0.9); g.line([3.85, 2.75, 8], [3.85, 3.85, 8], '#7f8794', 0.9)
+  return g.done()
+}
+
+/* ------------------------------------------------------------------ */
+/* The nuclear plant (Utilities seen from the town).                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The Utilities district as the town sees it (the Owner, 2026-11-20: a typical nuclear power plant, a works
+ * one knows at a glance, not science fiction): the cooling tower with its steam, the reactor's concrete
+ * containment dome, the turbine hall, the substation the power leaves by, and in front the control house
+ * whose dark screen will carry the district's few readings (empty until it has them). A low wall on the two
+ * front sides with a gate at each port (a quarter, a half, three quarters).
+ */
+export function nuclearPlant(): Sprite {
+  const n = 4
+  const g = new Draw(n, n, 230)
+  lot(g, n, '#e4e2db')
+  // Service lanes from the gates in.
+  for (const k of [1, 2, 3]) {
+    top(g, k - 0.09, 3.1, k + 0.09, n - 0.05, 0, '#d2cfc6', 0)
+    top(g, 3.1, k - 0.09, n - 0.05, k + 0.09, 0, '#d2cfc6', 0)
+  }
+
+  // The containment: a concrete drum on a plinth, its dome, a ring of buttresses, the equipment hatch.
+  { const DX = 1.15, DY = 1.15
+    const [cx, cy0] = g.p(DX, DY, 0)
+    const r = 42, H = 58
+    g.shadow(DX - 0.9, DY - 0.9, 1.8, 1.8, 0.5)
+    g.cylinder(DX, DY, r + 5, 0, 8, '#cfcbc0', '#a29d90', '#dedad0')
+    g.cylinder(DX, DY, r, 8, H, '#f3f1ec', '#bdb8ad', '#e8e5de')
+    const zy = (z: number) => cy0 - z
+    for (const a of [-1.1, -0.55, 0, 0.55, 1.1]) {
+      const x = cx + r * Math.sin(a), dy = (r / 2) * Math.cos(a)
+      g.add(`<rect x="${n1(x - 2)}" y="${n1(zy(H) + dy)}" width="4" height="${H - 8}" fill="#e2ded5" stroke="#a9a397" stroke-width="0.7"/>`)
+    }
+    g.add(`<path d="M${cx - r},${zy(H - 8)} A${r},${r / 2} 0 0 0 ${cx + r},${zy(H - 8)}" fill="none" stroke="#c9c3b7" stroke-width="1"/>`)
+    g.add(`<path d="M${cx - r},${zy(24)} A${r},${r / 2} 0 0 0 ${cx + r},${zy(24)}" fill="none" stroke="#c9c3b7" stroke-width="1"/>`)
+    const dome = 'np-dome'
+    g.add(`<defs><radialGradient id="${dome}" cx="0.38" cy="0.32" r="0.85"><stop offset="0" stop-color="#ffffff"/><stop offset="0.55" stop-color="#eeebe4"/><stop offset="1" stop-color="#b9b3a7"/></radialGradient></defs>`)
+    const dh = 34
+    g.add(`<path d="M${cx - r},${zy(H)} C${cx - r},${zy(H + dh * 1.3)} ${cx + r},${zy(H + dh * 1.3)} ${cx + r},${zy(H)} A${r},${r / 2} 0 0 1 ${cx - r},${zy(H)} Z" fill="url(#${dome})" stroke="${INK}" stroke-width="${STROKE}"/>`)
+    g.add(`<path d="M${cx - r * 0.8},${n1(zy(H + dh * 0.5))} A${r * 0.8},${r * 0.28} 0 0 0 ${cx + r * 0.8},${n1(zy(H + dh * 0.5))}" fill="none" stroke="#cdc7bb" stroke-width="0.9"/>`)
+    g.add(`<rect x="${cx - 6}" y="${n1(zy(H + dh * 0.98) - 4)}" width="12" height="5" rx="1" fill="#d8d3c8" stroke="${INK}" stroke-width="0.9"/><circle cx="${cx}" cy="${n1(zy(H + dh * 0.98) - 7)}" r="2.2" fill="#ff5a5f" stroke="${INK}" stroke-width="0.7"/>`)
+    // The equipment hatch and the airlock on the plinth, facing the yard.
+    g.add(`<rect x="${cx + 8}" y="${n1(zy(8) + r / 2 - 26)}" width="16" height="18" fill="#9aa3ae" stroke="${INK}" stroke-width="1"/><path d="M${cx + 8},${n1(zy(8) + r / 2 - 20)} h16 M${cx + 8},${n1(zy(8) + r / 2 - 14)} h16" stroke="#6f7884" stroke-width="0.7"/><rect x="${cx + 8}" y="${n1(zy(8) + r / 2 - 28)}" width="16" height="3" fill="#f2b234" stroke="${INK}" stroke-width="0.7"/>`) }
+
+  // The cooling tower, back right, its steam rising.
+  coolingTower(g, 3.05, 0.8, 118, 'np-ct', 1.35)
+
+  // The turbine hall, front left: long, its pitched roof, tall windows, the name on its band.
+  { const x0 = 0.22, x1 = 1.85, y0 = 2.2, y1 = 3.05, h = 40
+    g.shadow(x0, y0, x1 - x0, y1 - y0, 0.3)
+    g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#f7f8fa', '#e4e9ef', '#cdd5df'))
+    const W = (x1 - x0) * U, D = (y1 - y0) * U
+    let f = `<rect x="0" y="${-h + 4}" width="${n1(W)}" height="8" fill="#4f86d6" stroke="${INK}" stroke-width="0.9"/>`
+    f += `<text x="5" y="${-h + 10.2}" font-family="'JetBrains Mono',ui-monospace,Menlo,monospace" font-size="5.6" font-weight="700" fill="#ffffff" letter-spacing="1.6">TURBINE</text>`
+    for (let u = 5; u < W - 8; u += 9.4) f += `<rect x="${n1(u)}" y="${-h + 16}" width="6" height="16" fill="#cfe3f7" stroke="${INK}" stroke-width="0.7"/><line x1="${n1(u)}" y1="${-h + 24}" x2="${n1(u + 6)}" y2="${-h + 24}" stroke="${INK}" stroke-width="0.4"/>`
+    f += `<rect x="${n1(W - 18)}" y="-15" width="13" height="15" fill="#aab4c3" stroke="${INK}" stroke-width="0.9"/>`
+    for (let v = -12; v < 0; v += 3) f += `<line x1="${n1(W - 18)}" y1="${v}" x2="${n1(W - 5)}" y2="${v}" stroke="#7f8a9c" stroke-width="0.5"/>`
+    g.face('left', x0, y1, 0, f)
+    let r = `<rect x="0" y="${-h + 4}" width="${n1(D)}" height="8" fill="#4577c4" stroke="${INK}" stroke-width="0.9"/>`
+    for (let u = 4; u < D - 5; u += 9) r += `<rect x="${n1(u)}" y="${-h + 16}" width="5.5" height="16" fill="#cfe3f7" stroke="${INK}" stroke-width="0.7"/>`
+    g.face('right', x1, y1, 0, r)
+    // The pitched roof along its length.
+    const ym = (y0 + y1) / 2
+    g.poly('#dfe5ee', [[x0, y0, h], [x1, y0, h], [x1, ym, h + 12], [x0, ym, h + 12]], 1)
+    g.poly('#c8d1dc', [[x0, ym, h + 12], [x1, ym, h + 12], [x1, y1, h], [x0, y1, h]], 1)
+    g.poly('#b3bdc9', [[x1, y0, h], [x1, y1, h], [x1, ym, h + 12]], 1)
+    for (let i = 1; i < 6; i++) { const x = x0 + (x1 - x0) * i / 6; g.line([x, ym, h + 12], [x, y1, h], '#a7b1be', 0.6) } }
+
+  // The steam line from the containment to the hall.
+  g.box(1.75, 1.55, 0.12, 0.7, 6, faces('#c9cfd8', '#aab3bf', '#97a1ae'), 14, 0.8)
+
+  // The control house, front middle: its long dark screen faces the town.
+  { const x0 = 2.0, x1 = 2.8, y0 = 2.45, y1 = 3.2, h = 32
+    g.shadow(x0, y0, x1 - x0, y1 - y0, 0.3)
+    g.box(x0, y0, x1 - x0, y1 - y0, h, faces('#fdf3e3', '#f5e3c6', '#e7d1ae'))
+    const W = (x1 - x0) * U, D = (y1 - y0) * U
+    g.face('left', x0, y1, 0, `<rect x="3" y="-27" width="${n1(W - 6)}" height="16" fill="#1d2433" stroke="${INK}" stroke-width="1.1"/><rect x="${n1(W / 2 - 3.5)}" y="-9" width="7" height="9" fill="#3fa7a0" stroke="${INK}" stroke-width="0.8"/>`)
+    let r = ''
+    for (let i = 0; i < 3; i++) r += `<rect x="${n1(4 + i * (D - 8) / 3)}" y="-24" width="${n1((D - 8) / 3 - 3)}" height="9" fill="${i === 1 ? '#ffd76a' : '#cfe3f7'}" stroke="${INK}" stroke-width="0.8"/>`
+    g.face('right', x1, y1, 0, r)
+    g.unit(2.45, 2.6, h, 0.28) }
+
+  // The substation, front right: a fenced yard, transformers, insulators, a gantry.
+  { const xa = 2.98, xb = 3.82, ya = 2.0, yb = 3.62
+    top(g, xa, ya, xb, yb, 0, '#d4d2ca', 0.9, '#9f9a8e')
+    for (const [tx, ty] of [[3.1, 2.15], [3.48, 2.15], [3.1, 2.75], [3.48, 2.75]] as const) {
+      g.box(tx, ty, 0.26, 0.3, 12, faces('#9fb0bf', '#7d8f9e', '#687a89'), 0, 1)
+      for (let k = 0; k < 4; k++) g.line([tx + 0.26, ty + 0.05 + k * 0.065, 3], [tx + 0.26, ty + 0.05 + k * 0.065, 10], '#55636f', 0.6)
+      for (const q of [0.06, 0.13, 0.2]) g.line([tx + q, ty + 0.1, 12], [tx + q, ty + 0.1, 20], '#8b6a4a', 1.4)
+    }
+    for (const gy of [2.08, 3.3]) { g.line([3.02, gy, 0], [3.02, gy, 32], '#6f7b88', 1.4); g.line([3.78, gy, 0], [3.78, gy, 32], '#6f7b88', 1.4); g.line([3.02, gy, 32], [3.78, gy, 32], '#6f7b88', 1.6) }
+    g.line([3.22, 2.08, 32], [3.22, 3.3, 32], INK, 0.7); g.line([3.58, 2.08, 32], [3.58, 3.3, 32], INK, 0.7)
+    for (let k = 0; k <= 8; k++) { const a = xa + (xb - xa) * k / 8; g.line([a, yb, 0], [a, yb, 7], '#7f8794', 0.7); const b = ya + (yb - ya) * k / 8; g.line([xb, b, 0], [xb, b, 7], '#7f8794', 0.7) }
+    g.line([xa, yb, 7], [xb, yb, 7], '#7f8794', 0.9); g.line([xb, ya, 7], [xb, yb, 7], '#7f8794', 0.9) }
+
+  // The low wall on the two front sides, a gate at each port.
+  const WALL = faces('#e9e6de', '#d6d1c5', '#c2bcae'), POST = faces('#f2b234', '#d6d1c5', '#c2bcae')
+  const gap = 0.15
+  for (const side of ['y', 'x'] as const) {
+    const stops = [0.06, ...[1, 2, 3].flatMap(k => [k - gap, k + gap]), n - 0.06]
+    for (let i = 0; i < stops.length; i += 2) {
+      const a = stops[i], b = stops[i + 1]
+      if (side === 'y') g.box(a, n - 0.12, b - a, 0.06, 4, WALL, 0, 0.7)
+      else g.box(n - 0.12, a, 0.06, b - a, 4, WALL, 0, 0.7)
+    }
+    for (const k of [1, 2, 3]) for (const e of [k - gap - 0.04, k + gap]) {
+      if (side === 'y') g.box(e, n - 0.13, 0.04, 0.08, 9, POST, 0, 0.7)
+      else g.box(n - 0.13, e, 0.08, 0.04, 9, POST, 0, 0.7)
+    }
+  }
   return g.done()
 }
 

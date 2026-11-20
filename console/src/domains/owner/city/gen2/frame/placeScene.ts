@@ -8,8 +8,11 @@ import { hash } from './kit'
 import { buildingWings, setback, spriteFor, spriteKey, spriteUrl, type Wing } from './sprites'
 import { deviceKey, deviceSprite, formOfPlace, levelsOf } from './devices'
 import { frameOf, type Frame } from './viewport'
-import { LANDMARKS } from './library/landmarkLooks'
+import { LANDMARKS, type LandmarkId } from './library/landmarkLooks'
 import { edgeSlots, linksAt, portAt, portsFor, slotsFor, type LevelLinks, type Link, type Slot } from './links'
+
+/** The district styles drawn as a landmark town of their own; the rest use the campus. */
+const TOWN_SPRITE: Partial<Record<string, LandmarkId>> = { power: 'nuclearPlant' }
 
 /**
  * One scene draws one place (a page): its 16×16 ground and the things on it,
@@ -429,6 +432,9 @@ export class PlaceScene extends Phaser.Scene {
       const k = place.children.find(c => c.id === p.id)
       const lay = k?.kind === 'district' ? this.shown?.layoutAt([...at, p.id]) : null
       if (k && lay) out.push(...this.looks(k, lay.placed, [...at, p.id]))
+      // A district that stands as a drawn town of its own (style), seen from the town.
+      const town = k?.style ? TOWN_SPRITE[k.style] : undefined
+      if (town) { const lm = LANDMARKS[town]; this.cells.set(`g2:lm:${town}`, lm.n); out.push({ id: p.id, key: `g2:lm:${town}`, make: lm.make }) }
     }
     return out
   }
@@ -1082,7 +1088,14 @@ export class PlaceScene extends Phaser.Scene {
       // one): a ring of low buildings round a courtyard, a gate in the ring wherever a street comes in (the
       // same places as its ports), and in the courtyard one tower whose face will carry the district's few
       // readings. Its colour is the district's.
-      parts.push(this.campus(plate, P, hueOf(this.shown.tree, path), !isWired(k), k.style ?? 'campus'))
+      const town = k.style ? TOWN_SPRITE[k.style] : undefined, tkey = town ? `g2:lm:${town}` : ''
+      const ta = tkey ? this.anchors.get(tkey) : undefined
+      if (town && ta && this.textures.exists(tkey)) {
+        // Drawn as a landmark, in the kit, at the first generation's detail (the Owner, 2026-11-20: the
+        // runtime shapes looked like a child's drawing), filling the plot.
+        const base = P(plate.x, plate.y)
+        parts.push(this.add.image(base.x, base.y, tkey).setOrigin(ta.ax, ta.ay).setScale(this.spriteFit(tkey, Math.min(plate.w, plate.h)) / RS))
+      } else parts.push(this.campus(plate, P, hueOf(this.shown.tree, path), !isWired(k), k.style ?? 'campus'))
     } else if (lay && this.shown) {
       // A district with nothing in it yet: its empty block in its terrain, no stand-in buildings.
       const ter = TERRAIN.meadow[this.light]
@@ -1239,19 +1252,16 @@ export class PlaceScene extends Phaser.Scene {
    * low wall with a gate wherever a street comes in (a quarter, a half and three quarters along); in the open
    * yard between, the building whose screen will carry the district's few readings, facing the viewer.
    *   campus      an office slab and a wing in the district's colour, glass bands, a hedge for a wall, a tower
-   *   power       a fusion works (the Owner, 2026-11-20: sci-fi, not smoking chimneys): a white reactor hall with a
-   *               glowing seam, a substation wing, a tokamak in the yard, its plasma ring alight, a field of solar
-   *               panels, a control pod, a pale wall
+   *   (a style with a drawn town of its own, TOWN_SPRITE, wears that instead: power is nuclearPlant)
    */
-  private campus(sq: Rect, P: Proj, hue: string, _ghost: boolean, style: 'campus' | 'power') {
+  private campus(sq: Rect, P: Proj, hue: string, _ghost: boolean, _style: string) {
     const g = this.add.graphics()
-    const works = style === 'power'
     const n = Math.min(sq.w, sq.h), x0 = sq.x + (sq.w - n) / 2, y0 = sq.y + (sq.h - n) / 2
     const m = n * 0.05, lo = m, hi = n - m, gates = [0.25, 0.5, 0.75].map(f => f * n), GATE = n * 0.13
     const C = (hex: string) => Phaser.Display.Color.HexStringToColor(hex)
-    const tone = works ? C('#e9eef3') : C(hue)
-    const main = works ? { top: 0xf6f8fa, left: 0xe4e9ef, right: 0xc9d1db } : { top: tone.clone().lighten(26).color, left: tone.clone().lighten(10).color, right: tone.clone().darken(8).color }
-    const wing = works ? { top: 0xdfe5ec, left: 0xc9d2dd, right: 0xaeb9c7 } : { top: tone.clone().lighten(30).color, left: 0xf4f1ea, right: 0xdcd7cc }
+    const tone = C(hue)
+    const main = { top: tone.clone().lighten(26).color, left: tone.clone().lighten(10).color, right: tone.clone().darken(8).color }
+    const wing = { top: tone.clone().lighten(30).color, left: 0xf4f1ea, right: 0xdcd7cc }
     const box = (x: number, y: number, w: number, d: number, z: number, h: number, c: { top: number; left: number; right: number }) => {
       const left = [P(x, y + d, z), P(x + w, y + d, z), P(x + w, y + d, z + h), P(x, y + d, z + h)]
       const right = [P(x + w, y, z), P(x + w, y + d, z), P(x + w, y + d, z + h), P(x + w, y, z + h)]
@@ -1263,7 +1273,7 @@ export class PlaceScene extends Phaser.Scene {
     }
     // Rows of windows (offices) or a high strip of factory glazing on a visible face.
     const glaze = (x: number, y: number, w: number, d: number, z0: number, h: number, rows: number) => {
-      g.lineStyle(works ? 2.4 : 1.8, works ? 0x3fd6ff : 0xbfdff4, 1)
+      g.lineStyle(1.8, 0xbfdff4, 1)
       for (let r = 0; r < rows; r++) {
         const z = z0 + h * (rows === 1 ? 0.72 : (r + 0.6) / rows)
         const l0 = P(x + 0.08, y + d, z), l1 = P(x + w - 0.08, y + d, z), r0 = P(x + w, y + 0.08, z), r1 = P(x + w, y + d - 0.08, z)
@@ -1272,54 +1282,25 @@ export class PlaceScene extends Phaser.Scene {
     }
     // The yard.
     const yard = [P(x0 + lo, y0 + lo), P(x0 + hi, y0 + lo), P(x0 + hi, y0 + hi), P(x0 + lo, y0 + hi)]
-    g.fillStyle(works ? 0xe6eaee : this.tone.kerb, 1).fillPoints(yard, true)
+    g.fillStyle(this.tone.kerb, 1).fillPoints(yard, true)
     const D = n * 0.26
     // Back right: the main building, the whole width.
-    const mainH = works ? 30 : 46
+    const mainH = 46
     box(x0 + lo, y0 + lo, hi - lo, D, 0, mainH, main)
-    if (works) {
-      // Roof plant on the reactor hall: a row of white heat exchangers, a cyan seam along its ridge.
-      for (let t = lo + 0.3; t < hi - 0.3; t += 0.55) box(x0 + t, y0 + lo + D * 0.3, 0.3, D * 0.4, mainH, 5, { top: 0xffffff, left: 0xe3e8ee, right: 0xc7cfd9 })
-      const r0 = P(x0 + lo + 0.05, y0 + lo + D * 0.15, mainH + 0.5), r1 = P(x0 + hi - 0.05, y0 + lo + D * 0.15, mainH + 0.5)
-      g.lineStyle(2, 0x3fd6ff, 1).lineBetween(r0.x, r0.y, r1.x, r1.y)
-    }
-    glaze(x0 + lo, y0 + lo, hi - lo, D, 0, mainH, works ? 1 : 3)
+    glaze(x0 + lo, y0 + lo, hi - lo, D, 0, mainH, 3)
     // Back left: the wing (a warehouse), from the main building to the front wall.
-    const wingH = works ? 22 : 30
+    const wingH = 30
     box(x0 + lo, y0 + lo + D, D * 0.8, hi - lo - D - m, 0, wingH, wing)
-    glaze(x0 + lo, y0 + lo + D, D * 0.8, hi - lo - D - m, 0, wingH, works ? 1 : 2)
-    if (works) {
-      // A field of solar panels in the yard's front-left, tilted rows of blue cells.
-      for (let r = 0; r < 3; r++) for (let c = 0; c < 2; c++) {
-        const px = x0 + lo + D * 0.8 + 0.2 + c * 0.55, py = y0 + n * 0.62 + r * 0.32
-        const q = [P(px, py, 4), P(px + 0.45, py, 4), P(px + 0.45, py + 0.18, 0.5), P(px, py + 0.18, 0.5)]
-        g.fillStyle(0x2c5aa0, 1).fillPoints(q, true).lineStyle(1, this.tone.ink, 1).strokePoints(q, true)
-        g.lineStyle(0.6, 0x8fc3ff, 1)
-        for (let k2 = 1; k2 < 3; k2++) { const a2 = P(px + 0.45 * k2 / 3, py, 4), b2 = P(px + 0.45 * k2 / 3, py + 0.18, 0.5); g.lineBetween(a2.x, a2.y, b2.x, b2.y) }
-      }
-      // The tokamak: a torus on a plinth in the yard, its plasma ring glowing through the top.
-      const tc = P(x0 + n * 0.62, y0 + n * 0.42), R = n * 7.6, ry = R / 2, h = 20, hole = 0.48
-      g.fillStyle(0xc9d1db, 1).fillEllipse(tc.x, tc.y, 2 * R * 1.12, 2 * ry * 1.12).lineStyle(1.2, this.tone.ink, 1).strokeEllipse(tc.x, tc.y, 2 * R * 1.12, 2 * ry * 1.12)
-      g.fillStyle(0xdfe5ec, 1).fillRect(tc.x - R, tc.y - h, 2 * R, h).fillEllipse(tc.x, tc.y, 2 * R, 2 * ry)
-      g.lineStyle(1.2, this.tone.ink, 1).strokeEllipse(tc.x, tc.y, 2 * R, 2 * ry).lineBetween(tc.x - R, tc.y, tc.x - R, tc.y - h).lineBetween(tc.x + R, tc.y, tc.x + R, tc.y - h)
-      // Field coils round its side.
-      g.lineStyle(2, 0x8a96a8, 1)
-      for (let k2 = -4; k2 <= 4; k2++) { const xx = tc.x + (R * k2) / 5, yy = tc.y + ry * Math.sqrt(Math.max(0, 1 - (k2 / 5) ** 2)); g.lineBetween(xx, yy - 1, xx, yy - h + 1) }
-      g.fillStyle(0xf6f8fa, 1).fillEllipse(tc.x, tc.y - h, 2 * R, 2 * ry).lineStyle(1.2, this.tone.ink, 1).strokeEllipse(tc.x, tc.y - h, 2 * R, 2 * ry)
-      g.fillStyle(0x1b2340, 1).fillEllipse(tc.x, tc.y - h, 2 * R * hole, 2 * ry * hole)
-      g.lineStyle(9, 0xc86bff, 0.25).strokeEllipse(tc.x, tc.y - h, 2 * R * 0.72, 2 * ry * 0.72)
-      g.lineStyle(4, 0xc86bff, 0.9).strokeEllipse(tc.x, tc.y - h, 2 * R * 0.72, 2 * ry * 0.72)
-      g.lineStyle(1.6, 0x7ff3ff, 1).strokeEllipse(tc.x, tc.y - h, 2 * R * 0.72, 2 * ry * 0.72)
-    }
+    glaze(x0 + lo, y0 + lo + D, D * 0.8, hi - lo - D - m, 0, wingH, 2)
     // The middle: the building whose screen carries the district's readings, its screen to the front.
-    const tw = n * 0.2, tx = works ? x0 + n * 0.58 : x0 + n * 0.5, ty = works ? y0 + n * 0.66 : y0 + n * 0.5
-    const midH = works ? 22 : 58
-    box(tx, ty, tw, tw, 0, midH, works ? { top: 0xf6f8fa, left: 0xe4e9ef, right: 0xc9d1db } : { top: main.top, left: 0xf7f5f0, right: 0xe0dcd3 })
+    const tw = n * 0.2, tx = x0 + n * 0.5, ty = y0 + n * 0.5
+    const midH = 58
+    box(tx, ty, tw, tw, 0, midH, { top: main.top, left: 0xf7f5f0, right: 0xe0dcd3 })
     const s0 = midH * 0.3, s1 = midH * 0.85
     const sc = [P(tx + tw * 0.15, ty + tw, s0), P(tx + tw * 0.85, ty + tw, s0), P(tx + tw * 0.85, ty + tw, s1), P(tx + tw * 0.15, ty + tw, s1)]
     g.fillStyle(0x2f3a4f, 1).fillPoints(sc, true).lineStyle(1, this.tone.ink, 1).strokePoints(sc, true)
     // The front wall, low, with a gate wherever a street comes in.
-    const wallC = works ? { top: 0xf1f4f7, left: 0xd5dce4, right: 0xbcc6d1 } : { top: 0x9fcb8a, left: 0x86b672, right: 0x74a362 }
+    const wallC = { top: 0x9fcb8a, left: 0x86b672, right: 0x74a362 }
     const runs = (a: number, b: number) => {
       const out: [number, number][] = []
       let s1_ = a
@@ -1327,7 +1308,7 @@ export class PlaceScene extends Phaser.Scene {
       if (b > s1_) out.push([s1_, b])
       return out
     }
-    const WT = 0.1, WH = works ? 7 : 6
+    const WT = 0.1, WH = 6
     for (const [a, b] of runs(lo, hi)) box(x0 + hi - WT, y0 + a, WT, b - a, 0, WH, wallC)
     for (const [a, b] of runs(lo, hi)) box(x0 + a, y0 + hi - WT, b - a, WT, 0, WH, wallC)
     return g
