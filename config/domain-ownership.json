@@ -1117,7 +1117,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-17 added as the home of test-only fixtures that tests of several packages use to set up agentrt state (CreateMission, MoveMission, moved out of store, where no binary called them); it writes through eventlog and canon only and does not import store; kept apart from agentrttest, which is database infrastructure with no business state machine"
+      "basis": "2026-11-21 Foundation review: only the plan domain uses it, so it belongs to plan; the plan seat is a read-only placeholder that cannot take a row, so Foundation maintains it until plan is staffed (shared notes biz-align/foundation-handover-2026-11-21.md). 2026-11-17 added as the home of test-only fixtures that tests of several packages use to set up agentrt state (CreateMission, MoveMission, moved out of store, where no binary called them); it writes through eventlog and canon only and does not import store; kept apart from agentrttest, which is database infrastructure with no business state machine"
     },
     "api/internal/agentrt/artifact": {
       "domains": [
@@ -1516,7 +1516,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 Owner-approved domain split. Complete Build/Live projection extracted: generic node/edge aggregation, datastore host matching and discovered-machine ordering; tenant display rules supplied through an adapter."
+      "basis": "2026-11-21 Foundation review: only the payload domain uses it, so it belongs to payload; the payload seat is a read-only placeholder, so Foundation maintains it until payload is staffed (shared notes biz-align/foundation-handover-2026-11-21.md). 2026-11-16 Owner-approved domain split. Complete Build/Live projection extracted: generic node/edge aggregation, datastore host matching and discovered-machine ordering; tenant display rules supplied through an adapter."
     },
     "api/internal/tenant/husbandry/checklistview": {
       "domains": [
@@ -1863,7 +1863,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-18, moved out of api/internal/server unchanged (metrics.go; decoupling item 5): the plugins' reachability and gauges on /metrics. Imports foundation only (probe, telemetry, telemetry/probecollect). 2026-11-20: telemetry/probecollect folded in (it had no other user; collect.go, Collect unexported as collectProbes), so the imports are now probe, telemetry and safego."
+      "basis": "2026-11-21 Foundation review: it exports the plugins' health, which is payload's concept, so it belongs to payload; the payload seat is a read-only placeholder, so Foundation maintains it until payload is staffed. 2026-11-18, moved out of api/internal/server unchanged (metrics.go; decoupling item 5): the plugins' reachability and gauges on /metrics. Imports foundation only (probe, telemetry, telemetry/probecollect). 2026-11-20: telemetry/probecollect folded in (it had no other user; collect.go, Collect unexported as collectProbes), so the imports are now probe, telemetry and safego."
     },
     "api/internal/agentrt/runtimedb": {
       "domains": [
