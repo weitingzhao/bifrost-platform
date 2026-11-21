@@ -740,3 +740,35 @@ channels:
         - {name: blocked_at, kind: str, optional: true, pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$'}
         - {name: ref, kind: str}
         - {name: change, kind: str, pattern: '^recorded$'}
+  catalog.users.changed:
+    address: ev.rocket.{env}.catalog.users.changed
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "<package>"
+      publisher: gate-db
+      domain: foundation
+      ref: "/api/v1/catalog/users"
+      reconcile: "GET /api/v1/catalog/users is the truth; each package's stream holds its users' counts over time"
+      on_unread: stale
+      retention: 30d
+      # 2026-11-21 (Foundation's ask, the topic as the communication line set
+      # it): after each scan round the map writes one event for each package
+      # whose users changed since that package's last event (bus/catalogusers).
+      # prod, test and event count the packages that use it by production
+      # imports, test imports and the bus; digest tells two lists with the same
+      # counts apart. The lists themselves are served by the ref, never carried.
+      # Who acts on it is the readers' to say (Owner 11-21); the Bus page shows it.
+      consumers: [console]
+      exports: []
+      replaces: []
+      body:
+        - {name: subject, kind: str}
+        - {name: package, kind: str, pattern: '^[A-Za-z0-9_./-]{1,256}$'}
+        - {name: prod, kind: int}
+        - {name: test, kind: int}
+        - {name: event, kind: int}
+        - {name: digest, kind: str, pattern: '^[0-9a-f]{16}$'}
+        - {name: ref, kind: str}
+        - {name: change, kind: str, pattern: '^changed$'}

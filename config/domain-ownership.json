@@ -1716,6 +1716,13 @@
       "status": "assigned",
       "basis": "2026-11-21 bus sub-domain, written by the Foundation seat: records each agent guard refusal, rule and session only, on the bus (guard.block.recorded, POST /api/v1/bus/guard-blocks, action record_guard_block). Imports only foundation packages (actor, eventlog); the server wires it."
     },
+    "api/internal/bus/catalogusers": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-21 map line (0.2): writes catalog.users.changed, one event per package whose users (prod, test, event) changed since its last event, after each scan round; asked by Foundation, the topic as the communication line set it. Imports only foundation packages (actor, eventlog); the server wires it."
+    },
     "api/internal/bus/privilege": {
       "domains": [
         "foundation"

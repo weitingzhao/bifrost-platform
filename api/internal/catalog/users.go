@@ -127,8 +127,10 @@ func domainsOf(users []string, domainOf map[string]string) []string {
 	return out
 }
 
-// keepUsers keeps the users of the table's repository.
-func (s *Scanner) keepUsers(repo string, u Uses, measured bool, err error) {
+// keepUsers keeps the users of the table's repository, and hands a measured
+// answer to UsersChanged (the bus's catalog.users.changed writes only the
+// packages whose users differ from their last event).
+func (s *Scanner) keepUsers(ctx context.Context, repo string, u Uses, measured bool, err error) {
 	doc := UsersDoc{Version: Version, At: s.now(), Repo: repo, Commit: u.Commit, Measured: measured && err == nil, Packages: []PackageUsers{}}
 	switch {
 	case err != nil:
@@ -144,6 +146,9 @@ func (s *Scanner) keepUsers(repo string, u Uses, measured bool, err error) {
 	}
 	if wErr := s.kept().Write(keptUsers, raw); wErr != nil {
 		slog.Warn("catalog: keep users", "err", wErr)
+	}
+	if doc.Measured && s.UsersChanged != nil {
+		s.UsersChanged(ctx, doc)
 	}
 }
 

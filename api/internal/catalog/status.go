@@ -616,7 +616,7 @@ func (s *Scanner) KeepStatus(ctx context.Context, in StatusInputs) {
 		if k, ok := s.keptSections(); ok {
 			in.Uses = onceUses(ctx, in.Uses, k.Repo)
 			u, measured, err := in.Uses(ctx, k.Repo)
-			s.keepUsers(k.Repo, u, measured, err)
+			s.keepUsers(ctx, k.Repo, u, measured, err)
 		}
 	}
 	st := s.ComputeStatus(ctx, in)

@@ -20,6 +20,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/catalogusers"
 	"github.com/weitingzhao/bifrost-platform/api/internal/catalog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ciscore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile/k8sstate"
@@ -34,6 +36,7 @@ func (s *Server) catalogScanner() *catalog.Scanner {
 	s.catalogOnce.Do(func() {
 		s.catalog = &catalog.Scanner{Source: s.catalogSource}
 		s.catalog.AfterRound = func(ctx context.Context) { s.catalog.KeepStatus(ctx, s.catalogStatusInputs()) }
+		s.catalog.UsersChanged = catalogusers.Writer{DB: func() eventlog.DB { return s.bus.db() }}.Kept
 	})
 	return s.catalog
 }

@@ -148,6 +148,9 @@ type Scanner struct {
 	// AfterRound runs after each round of Run (the status, kept from what
 	// the round scanned).
 	AfterRound func(context.Context)
+	// UsersChanged is handed each round's measured package users (nil: no
+	// one is told).
+	UsersChanged func(context.Context, UsersDoc)
 
 	mu sync.Mutex // one scan at a time
 }
