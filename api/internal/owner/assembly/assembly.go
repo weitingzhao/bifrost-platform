@@ -110,6 +110,12 @@ func Questions(dataDir string, audit *actuation.AuditLog, workers bool, sweep ti
 
 // MountQuestions registers the Owner's questions' routes; with no runtime
 // it registers nothing.
+// BindQuestionInbox binds the questions' thread inbox port; the server passes
+// the coordination domain's threadinbox (server/thread_inbox.go).
+func BindQuestionInbox(recipient func(string) string, text func(string, int) string, newRunner func() questions.InboxRunner) {
+	questions.SetInboxPorts(questions.InboxPorts{Recipient: recipient, Text: text, NewRunner: newRunner})
+}
+
 func MountQuestions(r chi.Router, auth *actuation.AuthService, rt *questionbridge.Runtime) {
 	if rt == nil {
 		return

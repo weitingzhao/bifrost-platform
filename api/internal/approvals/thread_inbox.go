@@ -3,18 +3,77 @@ package approvals
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
-	"github.com/weitingzhao/bifrost-platform/api/internal/threadinbox"
 )
 
+// The thread inbox (telling a requesting thread how its card ended) is the
+// coordination domain's (package threadinbox). approvals declares the port
+// and the server binds it (server/thread_inbox.go), so this package does not
+// import another domain (the foundation line's wall debt, 2026-11-21).
+
+// InboxSender commits a message and its receipt together (threadinbox.Sender).
+type InboxSender func(ctx context.Context, key, to, body string) error
+
+// InboxItem is one conclusion for one thread (threadinbox.Conclusion).
+type InboxItem struct{ Key, To, Body string }
+
+// InboxRunner runs one delivery pass over what load returns (threadinbox.Scan.Run).
+type InboxRunner func(ctx context.Context, load func(context.Context) ([]InboxItem, error), send InboxSender) error
+
+// InboxPorts is the thread inbox as approvals uses it. NewRunner makes one
+// runner per Service: a runner keeps its own scan cursor.
+type InboxPorts struct {
+	Recipient func(label string) string
+	Text      func(s string, limit int) string
+	NewRunner func() InboxRunner
+}
+
+var (
+	inboxPortsMu sync.RWMutex
+	inboxPorts   InboxPorts
+)
+
+// SetInboxPorts binds the thread inbox. Unbound, no conclusion is delivered.
+func SetInboxPorts(p InboxPorts) {
+	inboxPortsMu.Lock()
+	inboxPorts = p
+	inboxPortsMu.Unlock()
+}
+
+func boundInboxPorts() (InboxPorts, bool) {
+	inboxPortsMu.RLock()
+	defer inboxPortsMu.RUnlock()
+	p := inboxPorts
+	return p, p.Recipient != nil && p.Text != nil && p.NewRunner != nil
+}
+
+func inboxText(s string, limit int) string {
+	if p, ok := boundInboxPorts(); ok {
+		return p.Text(s, limit)
+	}
+	return ""
+}
+
+// inboxRunner is this Service's runner, made on first use.
+func (s *Service) inboxRunner(p InboxPorts) InboxRunner {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.inboxRun == nil {
+		s.inboxRun = p.NewRunner()
+	}
+	return s.inboxRun
+}
+
 // SetThreadInbox installs the runtime sender; no HTTP/MCP contract changes.
-func (s *Service) SetThreadInbox(send threadinbox.Sender) {
+func (s *Service) SetThreadInbox(send InboxSender) {
 	s.mu.Lock()
 	s.threadInbox = send
 	s.mu.Unlock()
@@ -34,20 +93,24 @@ func (s *Service) RetryThreadInbox(ctx context.Context) {
 	}
 }
 
-func (s *Service) retryThreadInbox(ctx context.Context, send threadinbox.Sender) error {
-	return s.inboxScan.Run(ctx, func(ctx context.Context) ([]threadinbox.Conclusion, error) {
+func (s *Service) retryThreadInbox(ctx context.Context, send InboxSender) error {
+	p, ok := boundInboxPorts()
+	if !ok {
+		return errors.New("the thread inbox is not bound")
+	}
+	return s.inboxRunner(p)(ctx, func(ctx context.Context) ([]InboxItem, error) {
 		doc, err := s.store.readContext(ctx)
 		if err != nil {
 			return nil, err
 		}
-		var items []threadinbox.Conclusion
+		var items []InboxItem
 		for _, a := range doc.Approvals {
 			switch a.Status {
 			case StatusExecuted, StatusFailed, StatusRejected, StatusExpired, StatusUnknown:
 			default:
 				continue
 			}
-			to := threadinbox.Recipient(a.RequesterThread)
+			to := p.Recipient(a.RequesterThread)
 			if to == "" {
 				continue
 			}
@@ -57,9 +120,9 @@ func (s *Service) retryThreadInbox(ctx context.Context, send threadinbox.Sender)
 				// earlier unknown state. Never attach the later result/exit code.
 				unknown := a
 				unknown.Status, unknown.Result, unknown.Execution = StatusUnknown, nil, nil
-				items = append(items, threadinbox.Conclusion{Key: "approval:" + a.ID + ":unknown", To: to, Body: approvalConclusion(unknown)})
+				items = append(items, InboxItem{Key: "approval:" + a.ID + ":unknown", To: to, Body: approvalConclusion(unknown)})
 			}
-			items = append(items, threadinbox.Conclusion{Key: "approval:" + a.ID + ":" + a.Status, To: to, Body: approvalConclusion(a)})
+			items = append(items, InboxItem{Key: "approval:" + a.ID + ":" + a.Status, To: to, Body: approvalConclusion(a)})
 		}
 		return items, nil
 	}, send)
@@ -67,7 +130,7 @@ func (s *Service) retryThreadInbox(ctx context.Context, send threadinbox.Sender)
 
 func approvalConclusion(a Approval) string {
 	lines := []string{fmt.Sprintf("Approval #%d (%s)", a.Number, a.ID),
-		"Action: " + threadinbox.Text(a.Action, 120), "Environment: " + threadinbox.Text(a.Env, 80),
+		"Action: " + inboxText(a.Action, 120), "Environment: " + inboxText(a.Env, 80),
 		"Conclusion: " + a.Status}
 	if a.Execution != nil && a.Execution.ExitCode != nil {
 		lines = append(lines, fmt.Sprintf("Exit code: %d", *a.Execution.ExitCode))

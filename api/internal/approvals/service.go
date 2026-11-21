@@ -19,7 +19,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
-	"github.com/weitingzhao/bifrost-platform/api/internal/threadinbox"
 )
 
 // Service stores approvals, runs platform actions on approve, and hands the
@@ -47,8 +46,8 @@ type Service struct {
 	store       *store
 	audit       *actuation.AuditLog
 	now         func() time.Time
-	threadInbox threadinbox.Sender
-	inboxScan   threadinbox.Scan
+	threadInbox InboxSender
+	inboxRun    InboxRunner // thread_inbox.go: made from the bound ports on first use
 	auto        AutoApprover
 	check       CreateCheck
 	// openKey names what at most one open request may be for (landing

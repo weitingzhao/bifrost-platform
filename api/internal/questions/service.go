@@ -12,7 +12,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
-	"github.com/weitingzhao/bifrost-platform/api/internal/threadinbox"
 )
 
 // Service is the question record: one document, one write path.
@@ -30,8 +29,8 @@ type Service struct {
 	post         func(context.Context, notice.Message) ([]notice.Delivery, error)
 	beforeNotify func() error
 	newID        func() (string, error)
-	threadInbox  threadinbox.Sender
-	inboxScan    threadinbox.Scan
+	threadInbox  InboxSender
+	inboxRun     InboxRunner // thread_inbox.go: made from the bound ports on first use
 }
 
 // Result is an HTTP status and a JSON body.

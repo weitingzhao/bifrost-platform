@@ -18,7 +18,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
-	"github.com/weitingzhao/bifrost-platform/api/internal/threadinbox"
 )
 
 var errOrderReceipt = errors.New("conclusion receipt unavailable")
@@ -78,7 +77,7 @@ func lateConclusionOrderPG(t *testing.T, state, fault string, replicas int) {
 	if replicas == 2 {
 		services = append(services, New(s.store.path, nil))
 	}
-	senders := make([]threadinbox.Sender, len(services))
+	senders := make([]InboxSender, len(services))
 	for i, service := range services {
 		conn := db.Pool(t, db.Runtime)
 		first := true

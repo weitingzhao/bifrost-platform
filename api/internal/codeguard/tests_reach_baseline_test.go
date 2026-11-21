@@ -29,7 +29,7 @@ var testsReachingAcross = map[string][]string{
 	"api/internal/approvals/http_test.go":                                {"api/internal/server"},
 	"api/internal/approvals/outside_inputs_test.go":                      {"api/internal/outsideinput"},
 	"api/internal/approvals/thread_inbox_legacy_test.go":                 {"api/internal/threadinbox"},
-	"api/internal/approvals/thread_inbox_order_pg_test.go":               {"api/internal/agentrt/coord", "api/internal/threadinbox"},
+	"api/internal/approvals/thread_inbox_order_pg_test.go":               {"api/internal/agentrt/coord"},
 	"api/internal/approvals/thread_inbox_sources_pg_test.go":             {"api/internal/agentrt/coord"},
 	"api/internal/approvals/thread_inbox_test.go":                        {"api/internal/agentrt/coord"},
 	"api/internal/assessmentreadings/assessment_readings_parity_test.go": {"api/internal/agentrt/planstore"},
