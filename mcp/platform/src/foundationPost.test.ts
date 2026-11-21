@@ -1,0 +1,31 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { acceptanceBody, blocksSince, machineName } from './foundationPost.js'
+
+// Origin: 2026-11-21, the Owner wanted Foundation's state on the bus; the guard's
+// refusals were only in one Mac's local log. Each whole line after the offset is
+// one block, posted once: the offset moves past whole lines only, so a line the
+// guard is still writing waits for the next run (the control: a half line).
+test('blocks since the offset are the whole lines after it', () => {
+  const log = '2026-11-21T00:00:00.000Z\towner\ts1\n2026-11-21T00:01:00.000Z\tgitea-primary\ts2\n'
+  const first = blocksSince(log, 0, 'mac')
+  assert.deepEqual(first.blocks.map((b) => b.rule), ['owner', 'gitea-primary'])
+  assert.equal(first.next, Buffer.byteLength(log))
+  assert.deepEqual(blocksSince(log, first.next, 'mac').blocks, [])
+  const half = blocksSince(log + '2026-11-21T00:02:00.000Z\tD10', first.next, 'mac')
+  assert.deepEqual(half.blocks, [])
+  assert.equal(half.next, first.next)
+})
+
+test('a machine name the platform accepts', () => {
+  assert.equal(machineName('Vision Mac.local'), 'Vision-Mac')
+})
+
+// Origin: same day; the acceptance script's --json output is the route's body,
+// items in item order.
+test('the acceptance output becomes the route body', () => {
+  const b = acceptanceBody({ ruler: 3, score: '1/10', head: 'a'.repeat(40), read_at: 't',
+    items: [{ item: 2, status: 'fail' }, { item: 1, status: 'pass' }] })
+  assert.deepEqual(b.items, ['pass', 'fail'])
+  assert.equal(b.platform_commit, 'a'.repeat(40))
+})
