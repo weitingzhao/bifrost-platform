@@ -11,9 +11,13 @@ import (
 )
 
 // across lists, sorted, every direct import by a package of one domain (not
-// the base, not an assembly root under api/cmd) of a package that is neither
-// its own domain's nor the base's: another domain's, or one several domains
-// share. base is the default domain, which every domain stands on.
+// the base) of a package that is neither its own domain's nor the base's:
+// another domain's, or one several domains share. base is the default domain,
+// which every domain stands on. A command under api/cmd is checked like any
+// other package: the ones that assemble the platform belong to the base, and
+// a command a domain owns imports what that domain may (the Owner, C2,
+// 2026-11-21: until then every api/cmd package was skipped, which the map
+// line found was a gap in the wall).
 func across(o ownership, imports map[string][]string) []string {
 	base := "mixed"
 	if len(o.Default.Domains) == 1 {
@@ -22,7 +26,7 @@ func across(o ownership, imports map[string][]string) []string {
 	var out []string
 	for pkg, deps := range imports {
 		from := o.domainOf(pkg)
-		if strings.HasPrefix(pkg, "api/cmd/") || from == base || from == "mixed" {
+		if from == base || from == "mixed" {
 			continue
 		}
 		for _, dep := range deps {
@@ -49,7 +53,11 @@ func across(o ownership, imports map[string][]string) []string {
 // direction for the one reason that nothing held their imports of each other
 // (config/quality-ruler.json), and the coordinator ruled the wall be extended
 // to every domain.
+//
+// 2026-11-21, the Owner in the decoupling thread (C2 "C2做"): api/cmd stopped
+// being skipped, and one command's import came onto the list.
 var domainsAcross = []string{
+	"api/cmd/agentrt-plan-import -> api/internal/agentrt/recorderimport (plan -> lineage)",
 	"api/internal/approvals -> api/internal/threadinbox (owner -> coordination)",
 	"api/internal/questions -> api/internal/threadinbox (owner -> coordination)",
 	"api/internal/releasepolicy -> api/internal/actions (delivery -> owner)",
@@ -114,9 +122,12 @@ func TestADomainImportsOnlyItselfAndTheBase(t *testing.T) {
 // the import of another domain and the import of a shared package, and
 // nothing else (the base's own imports, an import of the base, an import
 // inside the domain, an assembly root, a shared package's imports).
+// Origin of api/cmd/plancmd: 2026-11-21, C2 — a command a domain owns is no
+// longer skipped; this is the control that the wall now sees its import.
 func TestDomainWallSeesAnImportAcross(t *testing.T) {
 	var o ownership
 	if err := json.Unmarshal([]byte(`{"default":{"domains":["foundation"]},"packages":{
+		"api/cmd/plancmd":{"domains":["plan"]},
 		"api/internal/base":{"domains":["foundation"]},
 		"api/internal/plan":{"domains":["plan"]},
 		"api/internal/plan/view":{"domains":["plan"]},
@@ -131,8 +142,9 @@ func TestDomainWallSeesAnImportAcross(t *testing.T) {
 		"api/internal/plan/view": {"api/internal/base"},
 		"api/internal/both":      {"api/internal/owner", "api/internal/plan"},
 		"api/cmd/root":           {"api/internal/plan", "api/internal/owner"},
+		"api/cmd/plancmd":        {"api/internal/plan", "api/internal/owner"},
 	})
-	want := []string{"api/internal/plan -> api/internal/both (plan -> mixed)", "api/internal/plan -> api/internal/owner (plan -> owner)"}
+	want := []string{"api/cmd/plancmd -> api/internal/owner (plan -> owner)", "api/internal/plan -> api/internal/both (plan -> mixed)", "api/internal/plan -> api/internal/owner (plan -> owner)"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("across = %q, want %q", got, want)
 	}
