@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuationpolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	ownerassembly "github.com/weitingzhao/bifrost-platform/api/internal/owner/assembly"
@@ -44,7 +45,7 @@ func (srv *Server) wireWorkActions(cfg *config.Config, clusterH *cluster.Handler
 		ConfigDir:      cfg.ConfigDir(),
 		DaemonReplicas: srv.lookupDaemonReplicas,
 		D10Paths:       srv.d10Paths,
-		OnPolicy:       srv.delivery.SetPolicy,
+		OnPolicy:       srv.deliveryMirrorPolicy,
 		Sync: func(ctx context.Context, repo, commit string) error {
 			res, err := srv.delivery.SyncOne(ctx, repo, commit)
 			if err != nil {
@@ -61,4 +62,16 @@ func (srv *Server) wireWorkActions(cfg *config.Config, clusterH *cluster.Handler
 		Cluster: clusterH.Service(),
 		Audit:   srv.audit,
 	})
+}
+
+// deliveryMirrorPolicy hands delivery's mirror sync the owner's loaded policy
+// through delivery.MirrorPolicy. A nil policy stays a nil interface, so
+// delivery still refuses every sync with its own words rather than calling
+// the policy's method on a nil pointer.
+func (srv *Server) deliveryMirrorPolicy(p *actuationpolicy.Policy) {
+	if p == nil {
+		srv.delivery.SetPolicy(nil)
+		return
+	}
+	srv.delivery.SetPolicy(p)
 }

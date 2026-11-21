@@ -24,7 +24,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
-	"github.com/weitingzhao/bifrost-platform/api/internal/actuationpolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -72,7 +71,7 @@ type Service struct {
 	cluster        *cluster.Service
 	dynamicFactory func() (dynamic.Interface, error)
 	httpClient     *http.Client
-	policy         *actuationpolicy.Policy
+	policy         MirrorPolicy
 	mirrorSettled  func(ctx context.Context, repo, commit string, present bool)
 	// giteaBase is a test hook; production leaves it empty.
 	giteaBase string

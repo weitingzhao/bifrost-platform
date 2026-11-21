@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/actuationpolicy"
 )
 
 const mirrorSyncWait = 90 * time.Second
@@ -33,8 +31,16 @@ type MirrorSyncResult struct {
 	Repos []MirrorRepoResult `json:"repos"`
 }
 
+// MirrorPolicy is what mirror sync asks of the owner's actuation policy:
+// whether the platform may sync a repository. The server hands delivery the
+// loaded policy (owner/assembly's OnPolicy). Until 2026-11-21 this package
+// imported actuationpolicy for the type alone.
+type MirrorPolicy interface {
+	MirrorAllowed(repo string) error
+}
+
 // SetPolicy installs the allow-list. A nil policy rejects every sync.
-func (s *Service) SetPolicy(p *actuationpolicy.Policy) { s.policy = p }
+func (s *Service) SetPolicy(p MirrorPolicy) { s.policy = p }
 
 // OnMirrorSettled is told where each named commit stands after a sync.
 func (s *Service) OnMirrorSettled(fn func(ctx context.Context, repo, commit string, present bool)) {
@@ -42,7 +48,7 @@ func (s *Service) OnMirrorSettled(fn func(ctx context.Context, repo, commit stri
 }
 
 // SetPolicy installs the allow-list used by mirror sync.
-func (h *Handler) SetPolicy(p *actuationpolicy.Policy) { h.svc.SetPolicy(p) }
+func (h *Handler) SetPolicy(p MirrorPolicy) { h.svc.SetPolicy(p) }
 
 // OnMirrorSettled is Service.OnMirrorSettled, for wiring.
 func (h *Handler) OnMirrorSettled(fn func(ctx context.Context, repo, commit string, present bool)) {

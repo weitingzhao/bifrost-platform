@@ -5,6 +5,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -16,6 +17,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
+	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
 
@@ -207,5 +210,38 @@ func TestBoundaryProjectionFrozenParity(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// Origin: 2026-11-21 decoupling line: delivery reaches owner through a port instead of importing approvals
+// and questions. What the store's words mean moved here: a rejected status is
+// Rejected, an answer on the rule's channel is ByRule, an unanswered question
+// is no answer; a read that fails stays an error.
+func TestReleaseContextReadsOwnerRecordsThroughThePort(t *testing.T) {
+	at := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
+	seen, err := approvalsSeen(func() ([]approvals.Approval, error) {
+		return []approvals.Approval{
+			{ID: "r", Number: 7, Action: "start_pipeline_run", Status: approvals.StatusRejected, RejectReason: "no", DecidedAt: at, Params: map[string]any{"name": "x"}, KeyParams: map[string]string{"repo": "y"}},
+			{ID: "e", Status: approvals.StatusExpired, DecidedAt: at},
+			{ID: "a", Status: approvals.StatusExecuted, Channel: "phone"},
+		}, nil
+	})()
+	if err != nil || len(seen) != 3 || !seen[0].Rejected || seen[0].RejectReason != "no" || seen[0].Number != 7 || seen[0].Params["name"] != "x" || seen[0].KeyParams["repo"] != "y" ||
+		seen[1].Rejected || seen[2].Rejected || seen[2].Channel != "phone" {
+		t.Fatalf("approvals: %+v, %v", seen, err)
+	}
+	if _, err = approvalsSeen(func() ([]approvals.Approval, error) { return nil, errors.New("disk") })(); err == nil {
+		t.Fatal("an unreadable approval store read as empty")
+	}
+	var open, owner, rule questions.Question
+	_ = json.Unmarshal([]byte(`{"id":"q0"}`), &open)
+	_ = json.Unmarshal([]byte(`{"id":"q1","answer":{"by":"owner","at":"2026-11-21T12:00:00Z","channel":"phone"}}`), &owner)
+	_ = json.Unmarshal([]byte(`{"id":"q2","answer":{"by":"rule","at":"2026-11-21T12:00:00Z","channel":"`+questions.RuleChannel+`"}}`), &rule)
+	answers, err := answersSeen(func() ([]questions.Question, error) { return []questions.Question{open, owner, rule}, nil })()
+	if err != nil || len(answers) != 2 || answers[0].ByRule || !answers[0].At.Equal(at) || !answers[1].ByRule {
+		t.Fatalf("answers: %+v, %v", answers, err)
+	}
+	if _, err = answersSeen(func() ([]questions.Question, error) { return nil, errors.New("disk") })(); err == nil {
+		t.Fatal("an unreadable question store read as empty")
 	}
 }

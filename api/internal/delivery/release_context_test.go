@@ -21,9 +21,7 @@ import (
 	dynfake "k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
-	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 )
 
@@ -90,17 +88,18 @@ func fineSources() ReleaseContextSources {
 			return windowRecord{Who: "duty", What: "bifrost-platform", Reason: "release", ExpiresAt: ctxNow.Add(3 * time.Minute).Format(time.RFC3339),
 				Queue: []queueEntry{{Who: "lane-b", What: "bifrost-platform", Since: "2026-11-15T11:58:00Z", Until: "2026-11-15T12:20:00Z"}}}, true, nil
 		},
-		Waiting: func() ([]approvals.Approval, error) {
-			return []approvals.Approval{
+		Waiting: func() ([]ApprovalSeen, error) {
+			return []ApprovalSeen{
 				{ID: "appr_1", Number: 570, Action: "start_pipeline_run", Params: map[string]any{"name": "bifrost-deliver-platform-prod"}, CreatedAt: ctxNow.Add(-10 * time.Minute), Requester: "s1", Summary: "bifrost-deliver-platform-prod @ 22222222"},
 				{ID: "appr_2", Number: 571, Action: "start_pipeline_run", Params: map[string]any{"name": "bifrost-deliver-prod"}, CreatedAt: ctxNow, Requester: "s2"},
 			}, nil
 		},
-		ApprovalHistory: func() ([]approvals.Approval, error) {
-			return []approvals.Approval{
-				{ID: "a", Status: approvals.StatusExecuted, Channel: "phone", DecidedAt: ctxNow.Add(-30 * time.Minute)},
-				// An expiry is not a decision of the Owner.
-				{ID: "b", Status: approvals.StatusExpired, DecidedAt: ctxNow.Add(-time.Minute)},
+		ApprovalHistory: func() ([]ApprovalSeen, error) {
+			return []ApprovalSeen{
+				{ID: "a", Channel: "phone", DecidedAt: ctxNow.Add(-30 * time.Minute)},
+				// An expiry is not a decision of the Owner (no channel, not
+				// rejected: server/release_context_wire.go reads the status).
+				{ID: "b", DecidedAt: ctxNow.Add(-time.Minute)},
 			}, nil
 		},
 		OpenRegressions: func(_ context.Context, repo string) ([]KnownRegression, error) {
@@ -109,26 +108,14 @@ func fineSources() ReleaseContextSources {
 			}
 			return []KnownRegression{{Introduced: ctxMain, Impact: "module activity is empty", By: "thread:local_x", KnownAt: "2026-11-15T11:50:00Z"}}, nil
 		},
-		Questions: func() ([]questions.Question, error) {
-			return []questions.Question{
-				answeredQuestion("q1", "owner", "phone", ctxNow.Add(-20*time.Minute)),
+		Questions: func() ([]AnswerSeen, error) {
+			return []AnswerSeen{
+				{At: ctxNow.Add(-20 * time.Minute)},
 				// A rule's answer is not the Owner's.
-				answeredQuestion("q2", "rule", questions.RuleChannel, ctxNow.Add(-2*time.Minute)),
+				{At: ctxNow.Add(-2 * time.Minute), ByRule: true},
 			}, nil
 		},
 	}
-}
-
-// answeredQuestion is a question the given party answered, built through JSON
-// so the test names the card and not its answer type (the decoupling A5 move
-// left no production code outside questions naming that type).
-func answeredQuestion(id, by, channel string, at time.Time) questions.Question {
-	raw, _ := json.Marshal(map[string]any{"id": id, "answer": map[string]any{"by": by, "at": at, "channel": channel}})
-	var q questions.Question
-	if err := json.Unmarshal(raw, &q); err != nil {
-		panic(err)
-	}
-	return q
 }
 
 // 2026-11-15: duty asked for one read of the release situation; cards
@@ -183,7 +170,7 @@ func TestReleaseContextOneSourceFailsOthersStay(t *testing.T) {
 	t.Parallel()
 	src := fineSources()
 	src.MainHead = func(context.Context, string) (string, error) { return "", errors.New("gitea: status 502") }
-	src.Waiting = func() ([]approvals.Approval, error) { return nil, errors.New("store unreadable") }
+	src.Waiting = func() ([]ApprovalSeen, error) { return nil, errors.New("store unreadable") }
 	got := AssembleReleaseContext(context.Background(), src, "bifrost-platform", ctxSTG)
 	f := got.Facts
 	if f.Main.Value != nil || f.Main.Error != "gitea: status 502" || f.Main.ReadAt == "" {
@@ -322,7 +309,7 @@ func TestReleaseContextVerdicts(t *testing.T) {
 		t.Fatalf("at main: %+v", atMain)
 	}
 	// Nothing else in flight: the CI run of the same commit is not someone else.
-	src.Waiting = func() ([]approvals.Approval, error) { return nil, nil }
+	src.Waiting = func() ([]ApprovalSeen, error) { return nil, nil }
 	quiet := AssembleReleaseContext(context.Background(), src, "bifrost-platform", ctxMain).Verdicts
 	if quiet.OthersInFlight.Value == nil || *quiet.OthersInFlight.Value {
 		t.Fatalf("quiet: %+v", quiet.OthersInFlight)
@@ -341,8 +328,8 @@ func TestReleaseContextRepoFilters(t *testing.T) {
 			ctxRun("ci-platform-1", "bifrost-ci-platform", map[string]string{"bifrost.io/repo": "bifrost-platform"}, nil, false),
 		}, "", nil
 	}
-	src.Waiting = func() ([]approvals.Approval, error) {
-		return []approvals.Approval{
+	src.Waiting = func() ([]ApprovalSeen, error) {
+		return []ApprovalSeen{
 			{ID: "p1", Action: "start_pipeline_run", Params: map[string]any{"name": "bifrost-deliver-prod"}},
 			{ID: "p2", Action: "release_window_release", Params: map[string]any{"what": "bifrost-ui,bifrost-trade-api"}},
 			{ID: "p3", Action: "start_pipeline_run", Params: map[string]any{"name": "bifrost-deliver-platform-prod"}},
@@ -453,17 +440,34 @@ func TestReleaseContextWindowEnded(t *testing.T) {
 func TestReleaseContextOwnerLastActionNeedsBothStores(t *testing.T) {
 	t.Parallel()
 	src := fineSources()
-	src.Questions = func() ([]questions.Question, error) { return nil, errors.New("disk") }
+	src.Questions = func() ([]AnswerSeen, error) { return nil, errors.New("disk") }
 	got := AssembleReleaseContext(context.Background(), src, "bifrost-platform", "").Facts.OwnerLastAction
 	if got.Value != nil || !strings.Contains(got.Error, "question records unreadable") {
 		t.Fatalf("owner: %+v", got)
 	}
 	src = fineSources()
-	src.ApprovalHistory = func() ([]approvals.Approval, error) {
-		return []approvals.Approval{{ID: "r", Status: approvals.StatusRejected, RejectReason: "no", DecidedAt: ctxNow.Add(-time.Minute)}}, nil
+	src.ApprovalHistory = func() ([]ApprovalSeen, error) {
+		return []ApprovalSeen{{ID: "r", Rejected: true, RejectReason: "no", DecidedAt: ctxNow.Add(-time.Minute)}}, nil
 	}
 	got = AssembleReleaseContext(context.Background(), src, "bifrost-platform", "").Facts.OwnerLastAction
 	if got.Value == nil || got.Value.Kind != "approval" || got.Value.At != "2026-11-15T11:59:00Z" {
 		t.Fatalf("reject: %+v", got)
+	}
+}
+
+// Origin: 2026-11-21 decoupling line: delivery reaches owner through a port instead of importing approvals
+// and questions. Unbound (no approval or question reader handed over), the
+// two facts that read them say so as errors; nothing panics and nothing reads
+// as an empty store.
+func TestReleaseContextOwnerReadersUnbound(t *testing.T) {
+	t.Parallel()
+	src := fineSources()
+	src.Waiting, src.ApprovalHistory, src.Questions = nil, nil, nil
+	f := AssembleReleaseContext(context.Background(), src, "bifrost-platform", "").Facts
+	if f.PendingApprovals.Value != nil || f.PendingApprovals.Error != "this platform has no approval store wired" {
+		t.Fatalf("pending: %+v", f.PendingApprovals)
+	}
+	if f.OwnerLastAction.Value != nil || !strings.Contains(f.OwnerLastAction.Error, "does not have both the approval and the question store wired") {
+		t.Fatalf("owner: %+v", f.OwnerLastAction)
 	}
 }

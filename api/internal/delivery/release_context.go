@@ -16,8 +16,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
-	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -176,17 +174,50 @@ type ReleaseContextSources struct {
 	// there is none.
 	Window func(ctx context.Context) (rec windowRecord, found bool, err error)
 	// Waiting is the approvals pending and not expired, read without a sweep.
-	Waiting func() ([]approvals.Approval, error)
+	Waiting func() ([]ApprovalSeen, error)
 	// ApprovalHistory is every retained approval, read without a sweep.
-	ApprovalHistory func() ([]approvals.Approval, error)
-	// Questions is every retained question, read without a sweep.
-	Questions func() ([]questions.Question, error)
+	ApprovalHistory func() ([]ApprovalSeen, error)
+	// Questions is the answer of every retained question that has one, read
+	// without a sweep.
+	Questions func() ([]AnswerSeen, error)
 	// OpenRegressions is the repository's known regressions on main with no
 	// fix recorded, newest first.
 	OpenRegressions func(ctx context.Context, repo string) ([]KnownRegression, error)
 	// Now and Timeout default to time.Now and releaseContextTimeout.
 	Now     func() time.Time
 	Timeout time.Duration
+}
+
+// ApprovalSeen is what the release context reads of one approval record. The
+// records are the owner domain's (its approval store); the server hands them
+// over in this shape (server/release_context_wire.go), deciding there what
+// the store's status words mean. Until 2026-11-21 this package imported
+// approvals for the record type and its rejected status.
+type ApprovalSeen struct {
+	ID        string
+	Number    int
+	Action    string
+	Requester string
+	Summary   string
+	CreatedAt time.Time
+	Params    map[string]any
+	KeyParams map[string]string
+	// Channel is where the Owner approved it, "" when he did not.
+	Channel string
+	// Rejected is a record whose status is rejected.
+	Rejected     bool
+	RejectReason string
+	DecidedAt    time.Time
+}
+
+// AnswerSeen is the answer of one question as the release context reads it.
+// The questions are the owner domain's; the server says which answers a rule
+// gave. Until 2026-11-21 this package imported questions for the record type
+// and the rule's channel.
+type AnswerSeen struct {
+	At time.Time
+	// ByRule is an answer a rule gave, not the Owner.
+	ByRule bool
 }
 
 // knownRepos are the repositories the release window can name.
@@ -560,7 +591,7 @@ func urlNames(raw, repo string) bool {
 
 // pendingFor keeps the approvals that concern repo: a pipeline run of a
 // pipeline that ships it, or any parameter naming it.
-func pendingFor(list []approvals.Approval, repo string) []PendingApproval {
+func pendingFor(list []ApprovalSeen, repo string) []PendingApproval {
 	out := []PendingApproval{}
 	for _, a := range list {
 		if !approvalConcerns(a, repo) {
@@ -575,7 +606,7 @@ func pendingFor(list []approvals.Approval, repo string) []PendingApproval {
 	return out
 }
 
-func approvalConcerns(a approvals.Approval, repo string) bool {
+func approvalConcerns(a ApprovalSeen, repo string) bool {
 	if name, _ := a.Params["name"].(string); a.Action == "start_pipeline_run" && windowPipelines[name].repos[repo] {
 		return true
 	}
@@ -651,14 +682,14 @@ func ownerLastAction(src ReleaseContextSources) (OwnerAction, error) {
 	var best OwnerAction
 	var bestAt time.Time
 	for _, a := range list {
-		human := a.Channel != "" || (a.Status == approvals.StatusRejected && a.RejectReason != "")
+		human := a.Channel != "" || (a.Rejected && a.RejectReason != "")
 		if human && !a.DecidedAt.IsZero() && a.DecidedAt.After(bestAt) {
 			bestAt, best.Kind = a.DecidedAt, "approval"
 		}
 	}
-	for _, q := range qs {
-		if q.Answer != nil && q.Answer.Channel != questions.RuleChannel && !q.Answer.At.IsZero() && q.Answer.At.After(bestAt) {
-			bestAt, best.Kind = q.Answer.At, "question"
+	for _, a := range qs {
+		if !a.ByRule && !a.At.IsZero() && a.At.After(bestAt) {
+			bestAt, best.Kind = a.At, "question"
 		}
 	}
 	if bestAt.IsZero() {

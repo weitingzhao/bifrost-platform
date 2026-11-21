@@ -112,3 +112,14 @@ func TestSyncMirrorsPrimaryRepository(t *testing.T) {
 		}
 	}
 }
+
+// Origin: 2026-11-21 decoupling line: delivery reaches owner through a port instead of importing actuationpolicy.
+// Unbound (no MirrorPolicy handed over), every sync is refused with the
+// allow-list's words, before Gitea is asked anything.
+func TestSyncMirrorsWithoutPolicyRefuses(t *testing.T) {
+	s := &Service{}
+	s.SetPolicy(nil)
+	if _, err := s.SyncMirrors(context.Background(), []string{"allowed-repo"}, nil); err == nil || err.Error() != "repo is not in the mirror allow-list" {
+		t.Fatalf("unbound policy: %v", err)
+	}
+}
