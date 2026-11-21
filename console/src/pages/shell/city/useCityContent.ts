@@ -30,7 +30,7 @@ export function useCityContent(): CityContent {
     void rulers
     const d = reads.data
     const hw = d?.hardware.topology
-      ? hardwareDistrict(d.hardware, 'system', `Live, read every 30 s (last ${new Date(d.at).toLocaleTimeString()}).`, d.units)
+      ? hardwareDistrict(d.hardware, 'system', `Read every 30 s, the last at ${new Date(d.at).toLocaleTimeString()}.`, d.units)
       : null
     return consoleContent(hw ? [hw] : [])
   }, [reads.data, rulers])

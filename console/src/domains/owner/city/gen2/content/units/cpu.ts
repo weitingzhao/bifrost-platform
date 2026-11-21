@@ -1,4 +1,5 @@
 import type { UnitSpec } from '@bifrost/ui/city/units/process'
+import CONFIRMED from './confirmed.json'
 import { MEMORY_UNIT } from './memory'
 import { DISK_UNIT } from './disk'
 
@@ -22,7 +23,7 @@ export const CPU_UNIT: UnitSpec = {
     { id: 'load5', label: 'Load, 5 minutes', meaning: 'The same, over 5 minutes.', query: 'node_load5', unit: 'load', per: 'unit', known: 'system' },
     { id: 'load15', label: 'Load, 15 minutes', meaning: 'The same, over 15 minutes.', query: 'node_load15', unit: 'load', per: 'unit', known: 'system' },
     { id: 'running', label: 'Running now', meaning: 'Tasks running at this moment.', query: 'node_procs_running', unit: 'count', per: 'unit', known: 'system' },
-    { id: 'blocked', label: 'Blocked now', meaning: 'Tasks stuck waiting on input or output at this moment.', query: 'node_procs_blocked', unit: 'count', per: 'unit', known: 'system' },
+    { id: 'blocked', label: 'Waiting on I/O', meaning: 'Tasks stuck waiting on input or output at this moment.', query: 'node_procs_blocked', unit: 'count', per: 'unit', known: 'system' },
     { id: 'pressure', label: 'Waiting for a core', meaning: 'How much of the time some task was ready but had to wait for a core (pressure).', query: 'rate(node_pressure_cpu_waiting_seconds_total[5m])', unit: 'share', per: 'unit', known: 'system' },
     { id: 'freq', label: 'Clock, each core', meaning: 'How fast each core runs now.', query: 'node_cpu_scaling_frequency_hertz', unit: 'Hz', per: 'core', known: 'hardware' },
     { id: 'freq.max', label: 'Clock, top', meaning: 'The fastest each core can run.', query: 'node_cpu_scaling_frequency_max_hertz', unit: 'Hz', per: 'core', known: 'hardware' },
@@ -64,10 +65,8 @@ export const CPU_UNIT: UnitSpec = {
     { id: 'clock', label: 'Clock, against its top', from: ['freq', 'freq.max'], how: 'average', row: 'core.freq' },
     { id: 'temp', label: 'Chip temperature', from: ['temp'], how: 'maximum', row: 'sensor.temp' },
   ],
-  confirmed: {
-    details: { on: '2026-11-19', words: '更多看到的是硬件层面相关的东西…这里面的每一个东西都要有它真实的含义…它是 CPU only' },
-    inside: { on: '2026-11-19', words: '挺好，我觉得这个就这么设计吧' },
-  },
+  // When the Owner confirmed each stage, in his words: a record, kept as data (confirmed.json), not in the source.
+  confirmed: CONFIRMED.cpu,
 }
 
 export const UNITS: UnitSpec[] = [CPU_UNIT, MEMORY_UNIT, DISK_UNIT]

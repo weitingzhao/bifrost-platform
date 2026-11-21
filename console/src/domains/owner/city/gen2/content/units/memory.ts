@@ -1,4 +1,5 @@
 import type { UnitSpec } from '@bifrost/ui/city/units/process'
+import CONFIRMED from './confirmed.json'
 
 /**
  * The memory unit (the second through the unit process, 2026-11-19). City metaphor: the factory's cold store, a row of
@@ -26,7 +27,7 @@ export const MEMORY_UNIT: UnitSpec = {
     { id: 'cache', label: 'Cache (can be cleared)', meaning: 'Holding copies of what is on disk, kept while there is room and cleared when the room is needed. Linux: page cache, buffers and reclaimable kernel caches; macOS: inactive and purgeable.', query: '(node_memory_Cached_bytes + node_memory_Buffers_bytes + node_memory_SReclaimable_bytes) or (node_memory_inactive_bytes + node_memory_purgeable_bytes)', unit: 'bytes', per: 'unit', known: 'hardware' },
     { id: 'compressed', label: 'Compressed', meaning: 'Packed tighter to make room (macOS compressor, Linux zswap).', query: 'node_memory_compressed_bytes or node_memory_Zswap_bytes', unit: 'bytes', per: 'unit', known: 'hardware' },
     { id: 'kernel', label: 'Kept by the system', meaning: 'Held by the operating system itself and never cleared. Linux: unreclaimable slab, kernel stacks, page tables; macOS: wired.', query: '(node_memory_SUnreclaim_bytes + node_memory_KernelStack_bytes + node_memory_PageTables_bytes) or node_memory_wired_bytes', unit: 'bytes', per: 'unit', known: 'hardware' },
-    { id: 'dirty', label: 'Waiting to be written', meaning: 'Changed in memory, not yet written back to disk.', query: 'node_memory_Dirty_bytes + node_memory_Writeback_bytes', unit: 'bytes', per: 'unit', known: 'hardware' },
+    { id: 'dirty', label: 'Waiting to be written', meaning: 'Bytes changed in memory that the disk has yet to take.', query: 'node_memory_Dirty_bytes + node_memory_Writeback_bytes', unit: 'bytes', per: 'unit', known: 'hardware' },
     { id: 'swap.total', label: 'Overflow room', meaning: 'Disk set aside for what does not fit in memory (swap).', query: 'node_memory_SwapTotal_bytes or node_memory_swap_total_bytes', unit: 'bytes', per: 'unit', known: 'hardware' },
     { id: 'swap.used', label: 'Overflowed', meaning: 'How much of it is pushed out to disk now.', query: '(node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes) or node_memory_swap_used_bytes', unit: 'bytes', per: 'unit', known: 'hardware' },
     { id: 'swap.io', label: 'Overflow traffic', meaning: 'How fast it is moved to and from the overflow on disk, in and out together.', query: '(rate(node_vmstat_pswpin[5m]) + rate(node_vmstat_pswpout[5m])) * 4096 or (rate(node_memory_swapped_in_bytes_total[5m]) + rate(node_memory_swapped_out_bytes_total[5m]))', unit: 'bytes per second', per: 'unit', known: 'hardware' },
@@ -60,10 +61,8 @@ export const MEMORY_UNIT: UnitSpec = {
     { detail: 'compressed', thing: 'IN USE BY KIND on the console: compressed', shows: 'The middle amber: packed tighter to make room. The lightest is programs and the rest of what is in use.', where: 'memory console' },
     { detail: 'available', thing: 'IN USE on the console desk', shows: 'How full the freezers are with goods in use, as a share: the same lit folds as the CPU console, the percent on its plate.', where: 'memory console' },
   ],
-  confirmed: {
-    details: { on: '2026-11-19', words: '这里有个图例…不然的话，你这光显示这东西，你这不知道什么玩意儿，什么是空的，什么用到的都不知道啊…就噪音' },
-    inside: { on: '2026-11-19', words: '可以，做硬盘' },
-  },
+  // When the Owner confirmed each stage, in his words: a record, kept as data (confirmed.json), not in the source.
+  confirmed: CONFIRMED.memory,
 }
 
 /** One machine's memory readings, from the details read across the district; nothing read is null. */

@@ -1,4 +1,5 @@
 import type { UnitSpec } from '@bifrost/ui/city/units/process'
+import CONFIRMED from './confirmed.json'
 import type { ArrayReading, DiskRoomReadings, DriveReading, VolumeReading } from '@bifrost/ui/city/units/diskRoom'
 
 /**
@@ -66,9 +67,8 @@ export const DISK_UNIT: UnitSpec = {
     { detail: 'used', thing: 'USED on the console desk', shows: 'How full all the volumes are together, as a share: the same lit folds, the percent on its plate.', where: 'disk console' },
     { detail: 'busy', thing: 'BUSY on the console', shows: 'The drives’ average busy, on the standard instrument.', where: 'disk console' },
   ],
-  confirmed: {
-    details: { on: '2026-11-19', words: '推荐的 15 项' },
-  },
+  // When the Owner confirmed each stage, in his words: a record, kept as data (confirmed.json), not in the source.
+  confirmed: CONFIRMED.disk,
 }
 
 type Point = { labels: Record<string, string>; value: number }
