@@ -3,6 +3,7 @@ package gatecluster
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 
@@ -32,6 +33,9 @@ type Ledger interface {
 	// Append writes the event decide returns; cause is the ledger event it
 	// answers (0: none), set on the event so a loop can be followed.
 	Append(ctx context.Context, stream, typ string, cause int64, decide Decide) (bool, error)
+	// Latest is, for each stream named prefix+..., its latest event of one
+	// type since a time.
+	Latest(ctx context.Context, typ, prefix string, since time.Time) ([]eventlog.Row, error)
 }
 
 // PGLedger appends to agentrt's event log. DB is nil while the ledger is not
@@ -85,6 +89,24 @@ func (l *PGLedger) Append(ctx context.Context, stream, typ string, cause int64, 
 		return nil
 	})
 	return appended, err
+}
+
+// Latest reads, for each stream named prefix+..., its latest event of typ.
+func (l *PGLedger) Latest(ctx context.Context, typ, prefix string, since time.Time) ([]eventlog.Row, error) {
+	var db eventlog.DB
+	if l.DB != nil {
+		db = l.DB()
+	}
+	if db == nil {
+		return nil, errNoLedger
+	}
+	var rows []eventlog.Row
+	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+		var err error
+		rows, err = eventlog.LatestOfStreams(ctx, tx, typ, prefix, since)
+		return err
+	})
+	return rows, err
 }
 
 // ensureActor registers service:gate-cluster once, as gate-git registers

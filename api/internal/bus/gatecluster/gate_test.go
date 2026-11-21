@@ -69,6 +69,28 @@ func (l *memLedger) Append(_ context.Context, stream, typ string, cause int64, d
 	return true, nil
 }
 
+// Latest is each stream's last event of typ, for streams named prefix+...
+func (l *memLedger) Latest(_ context.Context, typ, prefix string, _ time.Time) ([]eventlog.Row, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []eventlog.Row
+	for stream, evs := range l.streams {
+		if !strings.HasPrefix(stream, prefix) {
+			continue
+		}
+		for i := len(evs) - 1; i >= 0; i-- {
+			if evs[i].typ == typ {
+				var body map[string]any
+				raw, _ := json.Marshal(evs[i].body)
+				_ = json.Unmarshal(raw, &body)
+				out = append(out, eventlog.Row{Stream: stream, Type: typ, Body: body})
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
 func (l *memLedger) events(stream string) []memEvent {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -401,6 +423,10 @@ type failingLedger struct{}
 
 func (failingLedger) Append(context.Context, string, string, int64, Decide) (bool, error) {
 	return false, errors.New("ledger away")
+}
+
+func (failingLedger) Latest(context.Context, string, string, time.Time) ([]eventlog.Row, error) {
+	return nil, errors.New("ledger away")
 }
 
 // Origin: 2026-11-17, the coordinator: of a day's 2,464 bus events none named

@@ -469,7 +469,8 @@ func watchSpecs(tenant string) []gatecluster.WatchSpec {
 	}
 	out := make([]gatecluster.WatchSpec, 0, len(rows[tenant]))
 	for _, w := range rows[tenant] {
-		out = append(out, gatecluster.WatchSpec{Watch: w, Ref: tenants[tenant].Channels[w.Type].Ref})
+		ch := tenants[tenant].Channels[w.Type]
+		out = append(out, gatecluster.WatchSpec{Watch: w, Ref: ch.Ref, Window: states.Window(ch.Retention)})
 	}
 	return out
 }

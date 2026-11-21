@@ -190,3 +190,97 @@ func TestAWorkloadIsReadyWhenItsReplicasAreReady(t *testing.T) {
 		t.Fatalf("%d events, want 2", n)
 	}
 }
+
+func watchRow(t *testing.T, id string) WatchSpec {
+	t.Helper()
+	rows, err := registry.Watches()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenants, err := registry.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range rows["rocket"] {
+		if w.ID == id {
+			return WatchSpec{Watch: w, Ref: tenants["rocket"].Channels[w.Type].Ref}
+		}
+	}
+	t.Fatalf("no %s row in watches/rocket.yaml", id)
+	return WatchSpec{}
+}
+
+func stsObj(namespace, name string, ready, replicas int64) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"metadata": map[string]any{"namespace": namespace, "name": name},
+		"spec":     map[string]any{"replicas": replicas},
+		"status":   map[string]any{"readyReplicas": ready},
+	}}
+}
+
+// Origin: 2026-11-21, the metrics line counted GET /api/v1/bus/states for
+// cluster.workload.changed against the cluster: 392 workloads for 82 real
+// Deployments and StatefulSets. The watch dropped deletions, so each Tekton
+// affinity-assistant StatefulSet (one per run, deleted when it ends) stayed
+// in the readout. A deleted object is now said gone, once; one the ledger
+// never held is not written at all.
+func TestADeletedObjectIsSaidGoneOnce(t *testing.T) {
+	w := watchRow(t, "statefulsets")
+	l := &memLedger{}
+	g := &Gate{Ledger: l, Logf: func(string, ...any) {}}
+	g.init()
+	ctx := context.Background()
+	g.observeWatched(ctx, w, stsObj("cicd", "affinity-assistant-1", 1, 1))
+	g.sayGone(ctx, w, "cicd/affinity-assistant-1")
+	g.sayGone(ctx, w, "cicd/affinity-assistant-1")
+	evs := l.events("sts:cicd/affinity-assistant-1")
+	if len(evs) != 2 || evs[1].body["ready"] != registry.Gone || evs[1].body["change"] != registry.Gone {
+		t.Fatalf("events %+v, want ready then gone", evs)
+	}
+	g.sayGone(ctx, w, "cicd/never-seen")
+	if n := len(l.events("sts:cicd/never-seen")); n != 0 {
+		t.Fatalf("an object the ledger never held was written gone (%d events)", n)
+	}
+	if len(l.errs) != 0 {
+		t.Fatalf("bodies refused by the register: %v", l.errs)
+	}
+}
+
+// Same origin: deletions made while no watch ran (the 310 affinity
+// assistants already in the ledger) are taken back by the next full list,
+// in the listed namespace only and for the row's own stream only.
+func TestAFullListTakesBackWhatItNoLongerHolds(t *testing.T) {
+	sts, deploy := watchRow(t, "statefulsets"), watchRow(t, "deployments")
+	l := &memLedger{}
+	g := &Gate{Ledger: l, Logf: func(string, ...any) {}}
+	g.init()
+	ctx := context.Background()
+	g.observeWatched(ctx, sts, stsObj("cicd", "affinity-assistant-1", 1, 1))
+	g.observeWatched(ctx, sts, stsObj("cicd", "nats", 1, 1))
+	g.observeWatched(ctx, sts, stsObj("data", "pg", 1, 1))
+	g.observeWatched(ctx, deploy, stsObj("cicd", "affinity-assistant-1", 1, 1))
+	g2 := &Gate{Ledger: l, Logf: func(string, ...any) {}} // a restart: nothing in memory
+	g2.init()
+	g2.sweepGone(ctx, sts, "cicd", map[string]bool{"cicd/nats": true})
+	last := func(stream string) any {
+		evs := l.events(stream)
+		return evs[len(evs)-1].body["ready"]
+	}
+	if got := last("sts:cicd/affinity-assistant-1"); got != registry.Gone {
+		t.Errorf("unlisted sts ready=%v, want gone", got)
+	}
+	if got := last("sts:cicd/nats"); got != "ready" {
+		t.Errorf("listed sts ready=%v, want ready", got)
+	}
+	if got := last("sts:data/pg"); got != "ready" {
+		t.Errorf("sts outside the listed namespace ready=%v, want ready", got)
+	}
+	if got := last("deploy:cicd/affinity-assistant-1"); got != "ready" {
+		t.Errorf("another row's stream ready=%v, want ready", got)
+	}
+	n := len(l.events("sts:cicd/affinity-assistant-1"))
+	g2.sweepGone(ctx, sts, "cicd", map[string]bool{"cicd/nats": true})
+	if len(l.events("sts:cicd/affinity-assistant-1")) != n {
+		t.Error("a second sweep wrote gone again")
+	}
+}

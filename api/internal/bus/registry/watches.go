@@ -24,6 +24,17 @@ import (
 var watchFiles embed.FS
 
 // Watch is one row.
+// Gone is the value of every state field of an object that left the cluster:
+// the watch writes it when the object is deleted, or when a full list no
+// longer holds an object the ledger still says is there, and the state
+// readout (GET /api/v1/bus/states) leaves such subjects out. Origin:
+// 2026-11-21, the metrics line counted the readout's workloads against the
+// cluster: 392 objects for 82 real Deployments and StatefulSets. The watch
+// dropped deletions, so every Tekton affinity-assistant StatefulSet (one per
+// run, deleted when the run ends) stayed "there" for the 30 days the readout
+// looks back.
+const Gone = "gone"
+
 type Watch struct {
 	ID       string `yaml:"id"`
 	Group    string `yaml:"group"`

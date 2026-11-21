@@ -171,6 +171,16 @@ func LatestByKey(ctx context.Context, tx pgx.Tx, eventType, key string, since ti
 	  ORDER BY body_json->>$2, event_id DESC`, eventType, key, since))
 }
 
+// LatestOfStreams is, for each stream whose name starts with prefix, its
+// latest event of one type written since a time. Asked by the cluster gate
+// (2026-11-21): after a full list it takes back the objects the list no
+// longer holds, one stream per object.
+func LatestOfStreams(ctx context.Context, tx pgx.Tx, eventType, prefix string, since time.Time) ([]Row, error) {
+	return scanRows(tx.Query(ctx, `SELECT DISTINCT ON (event_stream_id) event_stream_id, event_id, seq, event_type, actor_id, at, body_json
+	  FROM agentrt.event WHERE event_type = $1 AND starts_with(event_stream_id, $2) AND at >= $3
+	  ORDER BY event_stream_id, event_id DESC`, eventType, prefix, since))
+}
+
 // OfType is every event of one type written in [from, to), oldest first.
 func OfType(ctx context.Context, tx pgx.Tx, eventType string, from, to time.Time) ([]Row, error) {
 	return scanRows(tx.Query(ctx, `SELECT event_stream_id, event_id, seq, event_type, actor_id, at, body_json

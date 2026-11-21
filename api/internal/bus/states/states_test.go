@@ -71,3 +71,17 @@ func TestHandleRefusesWhatIsNotAStateType(t *testing.T) {
 		}
 	}
 }
+
+// Origin: 2026-11-21, 392 workloads in the readout for 82 in the cluster:
+// an object said gone (registry.Gone) is not a state and is left out.
+func TestFromRowsLeavesOutWhatIsGone(t *testing.T) {
+	c := registry.Channel{SubjectFrom: "workload", ChangeFrom: []string{"ready"}}
+	rows := []eventlog.Row{
+		{Body: map[string]any{"workload": "cicd/affinity-assistant-1", "ready": registry.Gone}},
+		{Body: map[string]any{"workload": "cicd/nats", "ready": "ready"}},
+	}
+	got := FromRows(c, rows)
+	if len(got) != 1 || got[0].Subject != "cicd/nats" {
+		t.Fatalf("states %+v, want only cicd/nats", got)
+	}
+}

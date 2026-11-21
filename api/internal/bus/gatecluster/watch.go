@@ -28,6 +28,10 @@ import (
 type WatchSpec struct {
 	registry.Watch
 	Ref string
+	// Window is how far back a full list looks in the ledger for objects it
+	// no longer holds (the topic's retention, as the state readout reads it);
+	// 0 is 30 days.
+	Window time.Duration
 }
 
 var braceField = regexp.MustCompile(`\{([^}]*)\}`)
@@ -121,10 +125,84 @@ func watchBody(w WatchSpec, subject string, values []string) map[string]any {
 
 func watchKey(w WatchSpec, subject string) string { return w.Stream + ":" + subject }
 
+// validSubject is false for a subject a field of the object left empty.
+func validSubject(subject string) bool {
+	return subject != "" && !strings.Contains(subject, "//") && !strings.HasSuffix(subject, "/") && !strings.HasPrefix(subject, "/")
+}
+
+// allGone is true when every state field of a body says registry.Gone.
+func allGone(w WatchSpec, body map[string]any) bool {
+	if body == nil || len(w.State) == 0 {
+		return false
+	}
+	for _, s := range w.State {
+		if body[s.Name] != registry.Gone {
+			return false
+		}
+	}
+	return true
+}
+
+// sayGone writes that the object left the cluster: every state field
+// registry.Gone. A subject the ledger never held, or holds as gone already,
+// is not written.
+func (g *Gate) sayGone(ctx context.Context, w WatchSpec, subject string) {
+	values := make([]string, len(w.State))
+	for i := range values {
+		values[i] = registry.Gone
+	}
+	key := watchKey(w, subject)
+	said := strings.Join(values, "\x00")
+	g.watchMu.Lock()
+	same := g.watched[key] == said
+	g.watchMu.Unlock()
+	if same {
+		return
+	}
+	if g.append(ctx, key, w.Type, 0, func(_ string, last map[string]any) (map[string]any, bool) {
+		if last == nil || allGone(w, last) {
+			return nil, false
+		}
+		return watchBody(w, subject, values), true
+	}) {
+		g.watchMu.Lock()
+		g.watched[key] = said
+		g.watchMu.Unlock()
+	}
+}
+
+// sweepGone follows a full list: each object of the row the ledger still
+// holds as there, in the listed namespace, that the list did not return,
+// left while no watch was running (a restart, a lost watch) and is said
+// gone now.
+func (g *Gate) sweepGone(ctx context.Context, w WatchSpec, namespace string, listed map[string]bool) {
+	window := w.Window
+	if window <= 0 {
+		window = 30 * 24 * time.Hour
+	}
+	prefix := watchKey(w, "")
+	rows, err := g.Ledger.Latest(ctx, w.Type, prefix, g.now().Add(-window))
+	if err != nil {
+		metricErrors.Add(1)
+		g.logf("bus gate-cluster: watch %s: the ledger's objects not read: %v", w.ID, err)
+		return
+	}
+	for _, r := range rows {
+		subject := strings.TrimPrefix(r.Stream, prefix)
+		if listed[subject] || allGone(w, r.Body) {
+			continue
+		}
+		if namespace != "" && !strings.HasPrefix(subject, namespace+"/") {
+			continue
+		}
+		g.sayGone(ctx, w, subject)
+	}
+}
+
 func (g *Gate) observeWatched(ctx context.Context, w WatchSpec, obj *unstructured.Unstructured) {
 	readerseen.Saw("watch-" + w.ID)
 	subject, values := stateOf(w.Watch, obj.Object)
-	if subject == "" || strings.Contains(subject, "//") || strings.HasSuffix(subject, "/") || strings.HasPrefix(subject, "/") {
+	if !validSubject(subject) {
 		return
 	}
 	key := watchKey(w, subject)
@@ -175,9 +253,14 @@ func (g *Gate) runWatch(ctx context.Context, w WatchSpec, namespace string) {
 		if err == nil && list {
 			var page *unstructured.UnstructuredList
 			if page, err = dyn.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{}); err == nil {
+				present := make(map[string]bool, len(page.Items))
 				for i := range page.Items {
 					g.observeWatched(ctx, w, &page.Items[i])
+					if subject, _ := stateOf(w.Watch, page.Items[i].Object); validSubject(subject) {
+						present[subject] = true
+					}
 				}
+				g.sweepGone(ctx, w, namespace, present)
 				rv, list, listed = page.GetResourceVersion(), false, g.now()
 			}
 		}
@@ -198,6 +281,10 @@ func (g *Gate) runWatch(ctx context.Context, w WatchSpec, namespace string) {
 		rv, err = consume(ctx, wi, rv, func(t watch.EventType, obj *unstructured.Unstructured) {
 			if t != watch.Deleted {
 				g.observeWatched(ctx, w, obj)
+				return
+			}
+			if subject, _ := stateOf(w.Watch, obj.Object); validSubject(subject) {
+				g.sayGone(ctx, w, subject)
 			}
 		})
 		if ctx.Err() != nil {

@@ -109,10 +109,16 @@ func FromRows(c registry.Channel, rows []eventlog.Row) []State {
 			continue
 		}
 		st := map[string]string{}
+		gone := len(c.ChangeFrom) > 0
 		for _, f := range c.ChangeFrom {
 			if v, ok := r.Body[f]; ok && v != nil {
 				st[f] = text(v)
 			}
+			gone = gone && st[f] == registry.Gone
+		}
+		// An object that left the cluster is not a state (registry.Gone).
+		if gone {
+			continue
 		}
 		out = append(out, State{Subject: subject, State: st, At: r.At.UTC(), Event: relay.EventID(r.ID)})
 	}

@@ -428,8 +428,8 @@ channels:
       replaces: []
       body:
         - {name: node, kind: str, pattern: '^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$'}
-        - {name: ready, kind: str, pattern: '^(ready|notready|unknown)$'}
-        - {name: schedule, kind: str, pattern: '^(schedulable|cordoned)$'}
+        - {name: ready, kind: str, pattern: '^(ready|notready|unknown|gone)$'}  # gone: left the cluster (2026-11-21, registry.Gone)
+        - {name: schedule, kind: str, pattern: '^(schedulable|cordoned|gone)$'}
         - {name: subject, kind: str}
         - {name: ref, kind: str}
         - {name: change, kind: str}
@@ -459,7 +459,7 @@ channels:
       replaces: []
       body:
         - {name: workload, kind: str, pattern: '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?/[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$'}
-        - {name: ready, kind: str, pattern: '^(ready|notready)$'}
+        - {name: ready, kind: str, pattern: '^(ready|notready|gone)$'}  # gone: left the cluster (2026-11-21, registry.Gone)
         - {name: subject, kind: str}
         - {name: ref, kind: str}
         - {name: change, kind: str}
@@ -489,7 +489,7 @@ channels:
       replaces: []
       body:
         - {name: database, kind: str, pattern: '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?/[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$'}
-        - {name: ready, kind: str, pattern: '^(ready|notready)$'}
+        - {name: ready, kind: str, pattern: '^(ready|notready|gone)$'}  # gone: left the cluster (2026-11-21, registry.Gone)
         - {name: primary, kind: str, pattern: '^([a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?)?$'}
         - {name: subject, kind: str}
         - {name: ref, kind: str}
