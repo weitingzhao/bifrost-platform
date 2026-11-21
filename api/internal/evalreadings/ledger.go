@@ -260,10 +260,10 @@ func (s ledgerSource) interruptionReading(w Window) (Reading, error) {
 }
 
 // privilegeSince is when the ledger began keeping the Owner's privilege uses
-// (owner.privilege.used). Zero until a producer writes the type: every window
-// is then unmeasured, never a zero nobody counted. When the producer reaches
-// PROD, set this to that release's time.
-var privilegeSince time.Time
+// (owner.privilege.used): the PROD release of its producer (bus/privilege),
+// as the communication line reported it. Windows that start earlier are
+// unmeasured, never a zero nobody counted. Zero would mean no producer.
+var privilegeSince = time.Date(2026, 11, 21, 21, 6, 32, 0, time.UTC)
 
 // privilegeReading: owner_privilege_uses, the times in the window the Owner
 // stepped in to move something that was stuck (lines waiting on each other, or
