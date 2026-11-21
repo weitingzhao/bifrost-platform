@@ -174,7 +174,7 @@ func Compute(ctx context.Context, db eventlog.DB, prom Prom, tasks FailedTasks, 
 		}
 		out = append(out, agentActionReadings(ctx, list, w)...)
 	} else {
-		for _, name := range []string{"ci_run_p50_seconds", "delivery_success_ratio", "owner_actions", "owner_wait_p50_seconds", "prod_deploys", "main_to_prod_p50_seconds", "agent_actions", "action_rollback_declared_ratio", "ci_failures"} {
+		for _, name := range []string{"ci_run_p50_seconds", "delivery_success_ratio", "owner_actions", "owner_wait_p50_seconds", "prod_deploys", "main_to_prod_p50_seconds", "agent_actions", "action_rollback_declared_ratio", "ci_failures", "guard_blocks"} {
 			out = append(out, finish(Reading{Name: name, Window: w, Note: "the event ledger is not connected on this platform"}, false))
 		}
 	}
@@ -213,6 +213,8 @@ func unmeasured(w Window) []Reading {
 	return []Reading{
 		finish(Reading{Name: "post_release_fixes", Unit: "count", Window: w, Definition: def("none", "no record says that a release was fixed afterwards"),
 			Note: "no raw record yet; main.regression.* is regressions on main, not fixes after a release"}, false),
+		finish(Reading{Name: "auto_mode_denials", Unit: "count", Window: w, Definition: def("none", "the auto-mode classifier has no hook that records a refusal"),
+			Note: "no record: the classifier's refusals reach no hook"}, false),
 		finish(Reading{Name: "plan_nodes_done", Unit: "count", Window: w, Definition: def("none", "plan.tree.changed is registered but has no events"),
 			Note: "no events of plan.tree.changed yet"}, false),
 	}

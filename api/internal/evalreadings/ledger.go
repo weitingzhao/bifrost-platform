@@ -58,6 +58,11 @@ func (s ledgerSource) readings(w Window) ([]Reading, error) {
 		return nil, err
 	}
 	out = append(out, owner...)
+	blocks, err := s.guardBlockReading(w)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, blocks)
 	deploys, err := s.deployReadings(w)
 	if err != nil {
 		return nil, err
