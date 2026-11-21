@@ -473,6 +473,8 @@ City 是用游戏做的监控和互动窗口：别人用报表和仪表盘，我
 
 **三、顺序**：固定零件的规矩进框架（级别、类别、检查）→ 找图 → 九个领域按角色放楼 → 活的东西一种一种接（先公交，数据最全）。
 
-## 跨领域引用「谁→谁」的口径（2026-11-21，箭10 定，默认，Owner 可否决）
+## 跨领域引用「谁→谁」和领域读口（2026-11-21，地图线牵头，City 读出来、画出来）
 
-地图线出 `GET /api/v1/catalog/references`：每行一对领域、一种引用 `{from, to, kind, count, declared, undeclared, wrong_way, sample[]}`，from 用 to 的东西，两个方向各一行。kind 先出 import（Go 包 import，count = 包对数，和 `/ci/domains` 同数）和 event（总线事件，发→收，count = 事件种类数）；call、storage 后出。declared / undeclared 是走 to 的对外合约的有几个、伸手进内部的有几个（法「领域之间只通过合约说话」的量）。整体带 `measured`，没量的种类写原因，不给空数组装作没有引用。City 用法：import → 科技树的边（替换现在读的 `/ci/domains`），wrong_way → 工地牌，event → 街区之间的公交，undeclared > 0 → 那条连接标「越过合约」。读口出来之前继续读 `/ci/domains`。
+- **引用**：地图线放在 `GET /api/v1/catalog/status` 的 `references` 里（同一份存档）：每条 `{from, to, imports, registered, unregistered, wrong_way}`。一条 = 一对（引用方的包，被引用方的包），来自 platform 仓库的领域引用图（和 `/ci/domains` 同一份）；被引用方的合约 go_surface 登记了这个包、users 写了引用方，才算 registered，否则 unregistered（越过合约）。按包数，不按名字数，地图照实标。底座 foundation 被谁引用都算正当，单列不数。
+- **City 现在**：城市一层的面板列出谁→谁、imports、越过合约几个，环排最前；地图还没出时写「还没出」。**下一步**画到科技树上：越过合约的边标出来（要框架给边加一种标记，随下次框架改动做），环挂工地牌。
+- **领域读口**：走进一个街区时读 `GET /api/v1/catalog/domain?id=`（只读这一个，不一次读九个），卡片「Owns · from the map」列出：跑着的、表、Go 包、Console 分组、其他路径（共享的行标出来），合约按种类计数；读不到写原因。
