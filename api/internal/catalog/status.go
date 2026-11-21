@@ -67,10 +67,20 @@ type Edge struct {
 // is registered when the imported domain's go_surface names an item of that
 // package with the importing package among its users. Counting by name
 // takes the type checker, which only the CI tool runs.
+//
+// Kind "import" counts Go imports (2026-11-21, Foundation's ask: production
+// and test apart). Imports is ProdImports, kept for the readers that read it;
+// registered, unregistered and wrong_way judge the production imports only.
+// Kind "event" counts the event types the From domain publishes that the To
+// domain consumes (Events), from the bus registry.
 type Reference struct {
+	Kind         string `json:"kind"`
 	From         string `json:"from"`
 	To           string `json:"to"`
 	Imports      int    `json:"imports"`
+	ProdImports  int    `json:"prod_imports"`
+	TestImports  int    `json:"test_imports"`
+	Events       int    `json:"events"`
 	Registered   int    `json:"registered"`
 	Unregistered int    `json:"unregistered"`
 	WrongWay     bool   `json:"wrong_way"`
@@ -95,6 +105,9 @@ type StatusInputs struct {
 	// Boundary is the domain graph of the repository whose table names the
 	// domains: its edges, and false when it was not measured.
 	Boundary func(ctx context.Context, repo string) ([]Edge, bool, error)
+	// Uses is the packages of the same repository with their imports and
+	// test imports, and the bus's events: false when not measured.
+	Uses func(ctx context.Context, repo string) (Uses, bool, error)
 }
 
 // Light is one light of one domain.
@@ -231,7 +244,13 @@ func (s *Scanner) ComputeStatus(ctx context.Context, in StatusInputs) Status {
 		edges, measured, err := in.Boundary(ctx, k.Repo)
 		in.Boundary = func(context.Context, string) ([]Edge, bool, error) { return edges, measured, err }
 		if measured {
-			st.References, st.ToBase = references(edges, domains)
+			var uses *Uses
+			if in.Uses != nil {
+				if u, ok, err := in.Uses(ctx, k.Repo); ok && err == nil {
+					uses = &u
+				}
+			}
+			st.References, st.ToBase = references(edges, domains, uses)
 		}
 	}
 	alive := s.aliveLights(k.Repo, domains, in)
@@ -490,8 +509,9 @@ func boundaryLights(ctx context.Context, repo string, domains []contractDomain, 
 	return out
 }
 
-// references judges every edge above the base against the contracts.
-func references(edges []Edge, domains []contractDomain) ([]Reference, int) {
+// references judges every edge above the base against the contracts, and
+// with uses adds the test imports and the events between domains.
+func references(edges []Edge, domains []contractDomain, uses *Uses) ([]Reference, int) {
 	registered := map[[2]string]bool{} // (user package, offered package)
 	for _, d := range domains {
 		for _, item := range d.Contracts.GoSurface {
@@ -501,22 +521,56 @@ func references(edges []Edge, domains []contractDomain) ([]Reference, int) {
 			}
 		}
 	}
-	out, toBase := []Reference{}, 0
+	rows, toBase := map[[3]string]*Reference{}, 0
+	row := func(kind, from, to string) *Reference {
+		k := [3]string{kind, from, to}
+		if rows[k] == nil {
+			rows[k] = &Reference{Kind: kind, From: from, To: to}
+		}
+		return rows[k]
+	}
 	for _, e := range edges {
 		if e.ToBase {
 			toBase += e.Imports
 			continue
 		}
-		r := Reference{From: e.From, To: e.To, Imports: e.Imports, WrongWay: e.WrongWay}
+		r := row("import", e.From, e.To)
+		r.Imports, r.ProdImports, r.WrongWay = e.Imports, e.Imports, e.WrongWay
 		for _, p := range e.Pairs {
 			if registered[p] {
 				r.Registered++
 			}
 		}
 		r.Unregistered = r.Imports - r.Registered
-		out = append(out, r)
+	}
+	if uses != nil {
+		domainOf := map[string]string{}
+		for _, p := range uses.Packages {
+			domainOf[p.Dir] = p.Domain
+		}
+		for _, p := range uses.Packages {
+			for _, q := range p.TestImports {
+				from, to := p.Domain, domainOf[q]
+				if q == p.Dir || from == "" || to == "" || from == to || to == uses.Base || from == mixedDomain || to == mixedDomain {
+					continue
+				}
+				row("import", from, to).TestImports++
+			}
+		}
+		for _, ev := range uses.Events {
+			if ev.From != "" && ev.To != "" && ev.From != ev.To {
+				row("event", ev.From, ev.To).Events++
+			}
+		}
+	}
+	out := make([]Reference, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, *r)
 	}
 	sort.Slice(out, func(i, j int) bool {
+		if out[i].Kind != out[j].Kind {
+			return out[i].Kind < out[j].Kind
+		}
 		if out[i].From != out[j].From {
 			return out[i].From < out[j].From
 		}
@@ -548,6 +602,13 @@ func joinWhy(parts []string) string {
 
 // KeepStatus computes and keeps the status.
 func (s *Scanner) KeepStatus(ctx context.Context, in StatusInputs) {
+	if in.Uses != nil {
+		if k, ok := s.keptSections(); ok {
+			in.Uses = onceUses(ctx, in.Uses, k.Repo)
+			u, measured, err := in.Uses(ctx, k.Repo)
+			s.keepUsers(k.Repo, u, measured, err)
+		}
+	}
 	st := s.ComputeStatus(ctx, in)
 	if len(st.Domains) == 0 {
 		return // nothing scanned yet: the route says so without a kept file

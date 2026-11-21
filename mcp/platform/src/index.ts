@@ -44,7 +44,7 @@ import { registerMessageTools } from './registerMessages.js'
 import { getReleaseWindow, holdReleaseWindow, releaseReleaseWindow } from './windowTools.js'
 import { presenceSkip, registerPresence } from './presence.js'
 import { registerPlanImportTools } from './registerPlanImport.js'
-import { CATALOG_INDEX_PATH, GET_CATALOG_INDEX_DESCRIPTION, GET_OWNER_DESCRIPTION, GET_UNPERCEIVED_DESCRIPTION, ownerPath, unperceivedPath, CATALOG_STATUS_PATH, GET_DOMAIN_STATUS_DESCRIPTION, domainPath, GET_DOMAIN_DESCRIPTION } from './catalogTools.js'
+import { CATALOG_INDEX_PATH, GET_CATALOG_INDEX_DESCRIPTION, GET_OWNER_DESCRIPTION, GET_UNPERCEIVED_DESCRIPTION, ownerPath, unperceivedPath, CATALOG_STATUS_PATH, GET_DOMAIN_STATUS_DESCRIPTION, domainPath, GET_DOMAIN_DESCRIPTION, packageUsersPath, GET_PACKAGE_USERS_DESCRIPTION } from './catalogTools.js'
 import { FULL_CI_PATH, fullCICheckPath, unitConfigPath, unitRunsPath, unitScopePath } from './unitsTools.js'
 import { BUS_WAIT_MAX_SECONDS, GET_BUS_STATES_DESCRIPTION, LIST_REGRESSIONS_DESCRIPTION, MARK_REGRESSION_FIXED_DESCRIPTION, RECORD_PRIVILEGE_USE_DESCRIPTION, REPORT_REGRESSION_DESCRIPTION, WAIT_FOR_EVENT_DESCRIPTION, busEventsPath, busStatesPath, regressionsPath } from './busTools.js'
 
@@ -600,6 +600,14 @@ reg(
   { id: z.string().min(1).max(64).describe('A domain id, e.g. plan (get_domain_status lists them)') },
   async ({ id }) =>
     jsonResult(await platformGet(domainPath(id))),
+)
+
+reg(
+  'get_package_users',
+  GET_PACKAGE_USERS_DESCRIPTION,
+  { package: z.string().min(1).max(256).optional().describe('A package directory, e.g. api/internal/catalog; leave out for every package') },
+  async ({ package: pkg }) =>
+    jsonResult(await platformGet(packageUsersPath(pkg))),
 )
 
 reg(

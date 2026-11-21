@@ -59,6 +59,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_catalog_index',
   'get_domain_status',
   'get_domain',
+  'get_package_users',
   'wait_for_event',
   'report_regression',
   'record_privilege_use',

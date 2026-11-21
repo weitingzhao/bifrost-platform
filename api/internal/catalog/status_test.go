@@ -202,7 +202,7 @@ func TestReferencesCountWhoToWhomAndWhatTheContractRegisters(t *testing.T) {
 			{"api/internal/approvals", "api/internal/threadinbox"}, {"api/internal/questions", "api/internal/threadinbox"}}},
 		{From: "owner", To: "foundation", Imports: 5, ToBase: true},
 	}
-	refs, toBase := references(edges, domains)
+	refs, toBase := references(edges, domains, nil)
 	if toBase != 5 || len(refs) != 1 {
 		t.Fatalf("refs %+v, to base %d", refs, toBase)
 	}
@@ -210,7 +210,7 @@ func TestReferencesCountWhoToWhomAndWhatTheContractRegisters(t *testing.T) {
 		t.Errorf("%+v", r)
 	}
 	// Positive control: with no contract, both pairs are unregistered.
-	if refs, _ := references(edges, nil); refs[0].Unregistered != 2 {
+	if refs, _ := references(edges, nil, nil); refs[0].Unregistered != 2 {
 		t.Errorf("no contract: %+v", refs)
 	}
 	if got := packageOf("api/internal/threadinbox.Inbox.Post"); got != "api/internal/threadinbox" {
