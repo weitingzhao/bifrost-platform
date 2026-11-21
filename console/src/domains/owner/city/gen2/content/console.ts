@@ -4,13 +4,16 @@ import { consoleFunctions } from './consolePlaces'
 import { domainTree } from './domainPlaces'
 import { domainPanel, domainsPanel, type DomainsRead } from './domainsPanel'
 import { panelsOf, pickedPanel } from './panels'
+import { domainTechTree, type GraphRead } from './techTree'
 
 /**
  * Today's content, a plug-in of the frame: the districts are the domains the map reads (domainPlaces.ts),
  * the hardware stands in compute's, and the menu along the bottom is the Console's functions (the other
- * dimension, the Owner 2026-11-20). The town carries every domain's lights; a district its own.
+ * dimension, the Owner 2026-11-20). Who stands on whom is the tech tree (techTree.ts), opened from the
+ * levels, each node with its domain's light; the town's panel keeps what the map counts off it, a district
+ * its own lights.
  */
-export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null = null): CityContent => {
+export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null = null, graph: GraphRead = {}): CityContent => {
   const why = domains.error instanceof Error ? domains.error.message : domains.error ? String(domains.error) : ''
   const tree = domainTree(domains.data, hardware, why)
   const ids = new Set((domains.data?.domains ?? []).map(d => d.id))
@@ -18,5 +21,5 @@ export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null
     place.id === tree.id ? [...panelsOf(place, open), domainsPanel(domains)]
       : place.kind === 'district' && ids.has(place.id) ? [...panelsOf(place, open), domainPanel(domains, place.id)]
         : panelsOf(place, open)
-  return { tree, panels, picked: pickedPanel, functions: consoleFunctions() }
+  return { tree, panels, picked: pickedPanel, functions: consoleFunctions(), techTree: domainTechTree(domains.data, graph) }
 }

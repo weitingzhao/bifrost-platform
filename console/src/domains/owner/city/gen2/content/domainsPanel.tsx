@@ -47,33 +47,27 @@ function DomainsTable({ read }: { read: DomainsRead }) {
   const d = read.data
   if (!d) {
     const why = read.error instanceof Error ? read.error.message : read.error ? String(read.error) : 'reading'
-    return <p className="g2-unknown">The map's lights are not known: {why}</p>
+    return <p className="g2-unknown">What the map counts is not known: {why}</p>
   }
+  // The lights went onto the tech tree's nodes (2026-11-20, the tree opens from the levels); here, what the map counts off it.
   return <>
     <table className="g2-table">
-      <thead><tr><th>Domain</th><th>Overall</th>{LIGHTS.map(([k, label]) => <th key={k}>{label}</th>)}<th className="num">Off map</th></tr></thead>
+      <thead><tr><th>Domain</th><th className="num">Off map</th></tr></thead>
       <tbody>
-        {d.domains.map(row => (
-          <tr key={row.id}>
-            <td>{row.id}</td>
-            <td className={toneOf(row.overall || 'unknown')}>{row.overall || 'unknown'}</td>
-            {LIGHTS.map(([k]) => <Light key={k} light={row[k]} />)}
-            <td className="num">{offMapOf(d, row.id)}</td>
-          </tr>
-        ))}
-        {d.off_map_by_domain && <tr><td className="g2-unknown">{UNCLAIMED}</td><td colSpan={LIGHTS.length + 1} /><td className="num">{offMapOf(d, UNCLAIMED)}</td></tr>}
+        {d.domains.map(row => <tr key={row.id}><td>{(row as typeof row & { name?: string }).name || row.id}</td><td className="num">{offMapOf(d, row.id)}</td></tr>)}
+        {d.off_map_by_domain && <tr><td className="g2-unknown">{UNCLAIMED}</td><td className="num">{offMapOf(d, UNCLAIMED)}</td></tr>}
       </tbody>
     </table>
     {d.inventory && d.inventory.length > 0 && <InventoryTable rows={d.inventory} />}
     <p className="g2-unknown" title={d.note || undefined}>
-      From the map's scan{d.at ? ` at ${new Date(d.at).toLocaleString()}` : ''}{d.commit ? ` (${d.commit.slice(0, 8)})` : ''}. Hover a light for what it was read from.
+      From the map's scan{d.at ? ` at ${new Date(d.at).toLocaleString()}` : ''}{d.commit ? ` (${d.commit.slice(0, 8)})` : ''}. Each domain's lights: on its node in the tech tree (the levels' ⑂), and inside its district.
     </p>
   </>
 }
 
-/** The city level's panel of domains; it rides with the town's own panels. */
+/** The city level's panel: what the map counts off it, by domain and by repository; it rides with the town's own panels. */
 export const domainsPanel = (read: DomainsRead): Panel => ({
-  id: 'domains', title: 'Domains · from the map', dock: 'right', body: <DomainsTable read={read} />,
+  id: 'domains', title: 'Off the map · by domain', dock: 'right', body: <DomainsTable read={read} />,
 })
 
 /** One domain's lights, each with what it was read from, and its count off the map. */

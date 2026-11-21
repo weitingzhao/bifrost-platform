@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { authedFetch } from '@/api/client'
+import { fetchCiDomains } from '@/api/ciDomains'
 import { fetchDomainStatus } from '@/domains/foundation/catalog/api/domainStatus'
 import { consoleContent } from '@/domains/owner/city/gen2/content/console'
 import { hardwareDistrict, readHardware } from '@/domains/owner/city/gen2/content/hardware'
 import { readUnits } from '@/domains/owner/city/gen2/content/unitRooms'
+import { GRAPH_REPO } from '@/domains/owner/city/gen2/content/techTree'
 import type { CityContent } from '@bifrost/ui/city/content'
 import { useRulersTick } from '@bifrost/ui/city/rulers'
 
@@ -27,6 +29,8 @@ export function useCityContent(): CityContent {
   })
   // The map line's lights per domain, read from what its scan stored (never a live scan per request).
   const domains = useQuery({ queryKey: ['city', 'gen2', 'domains'], queryFn: fetchDomainStatus, refetchInterval: EVERY })
+  // Who stands on whom (the tech tree): the domains' imports at main, as the CI page reads them; it moves only with main.
+  const graph = useQuery({ queryKey: ['city', 'gen2', 'domain-graph', GRAPH_REPO], queryFn: ({ signal }) => fetchCiDomains(GRAPH_REPO, signal), refetchInterval: 5 * 60_000 })
   // A viewer's new ruler redraws the rooms that count that part (frame/rulers.tsx).
   const rulers = useRulersTick()
   return useMemo(() => {
@@ -35,6 +39,6 @@ export function useCityContent(): CityContent {
     const hw = d?.hardware.topology
       ? hardwareDistrict(d.hardware, 'system', `Read every 30 s, the last at ${new Date(d.at).toLocaleTimeString()}.`, d.units)
       : null
-    return consoleContent({ data: domains.data, error: domains.error }, hw)
-  }, [reads.data, rulers, domains.data, domains.error])
+    return consoleContent({ data: domains.data, error: domains.error }, hw, { data: graph.data, error: graph.error })
+  }, [reads.data, rulers, domains.data, domains.error, graph.data, graph.error])
 }

@@ -1,6 +1,6 @@
 // 2026-11-20: City became the map line's first reader (perceive-first brief, item 4). These cases pin
-// that the city level carries the map's lights, that a failed read says "not known" rather than an empty
-// table, and that each domain district carries its own row.
+// that the city level carries what the map counts, that a failed read says "not known" rather than an
+// empty table, and that each domain district carries its own lights.
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it } from 'vitest'
@@ -15,11 +15,11 @@ const status = {
 const bodyOf = (p: ReturnType<typeof domainsPanel>) => (typeof p.body === 'function' ? p.body({ size: 'card' } as never) : p.body) as ReactNode
 
 describe('domains panel', () => {
-  it('lists each domain with its overall light and the four lights, with why on hover', () => {
+  // 2026-11-20: the lights moved onto the tech tree's nodes (techTree.test.ts); the town's panel keeps the counts.
+  it('lists each domain by name without its lights', () => {
     render(<>{bodyOf(domainsPanel({ data: status }))}</>)
     expect(screen.getByText('ops')).toBeTruthy()
-    expect(screen.getByTitle('problem because').textContent).toBe('problem')
-    expect(screen.getAllByText('bad').length).toBe(2)
+    expect(screen.queryByTitle('problem because')).toBeNull()
   })
 
   it('shows the off-map pool by domain and the equation per repository, a gap marked', () => {

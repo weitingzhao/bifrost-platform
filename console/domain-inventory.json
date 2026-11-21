@@ -2164,6 +2164,7 @@
         "console/src/domains/owner/city/gen2/__tests__/world/sheets.test.ts",
         "console/src/domains/owner/city/gen2/__tests__/world/sizes.test.ts",
         "console/src/domains/owner/city/gen2/__tests__/world/standards.test.ts",
+        "console/src/domains/owner/city/gen2/__tests__/world/techTree.test.ts",
         "console/src/domains/owner/city/gen2/__tests__/world/theme.test.ts",
         "console/src/domains/owner/city/gen2/__tests__/world/towns.test.ts",
         "console/src/domains/owner/city/gen2/__tests__/world/units.test.ts",
@@ -2175,6 +2176,7 @@
         "console/src/domains/owner/city/gen2/content/__tests__/hardware.test.ts",
         "console/src/domains/owner/city/gen2/content/__tests__/key.test.ts",
         "console/src/domains/owner/city/gen2/content/__tests__/looks.test.ts",
+        "console/src/domains/owner/city/gen2/content/__tests__/techTree.test.ts",
         "console/src/domains/owner/city/gen2/content/binding.ts",
         "console/src/domains/owner/city/gen2/content/console.ts",
         "console/src/domains/owner/city/gen2/content/consolePlaces.ts",
@@ -2185,6 +2187,7 @@
         "console/src/domains/owner/city/gen2/content/looks.ts",
         "console/src/domains/owner/city/gen2/content/panels.tsx",
         "console/src/domains/owner/city/gen2/content/partners.draft.json",
+        "console/src/domains/owner/city/gen2/content/techTree.ts",
         "console/src/domains/owner/city/gen2/content/unitRooms.ts",
         "console/src/domains/owner/city/gen2/content/units/confirmed.json",
         "console/src/domains/owner/city/gen2/content/units/cpu.ts",
@@ -2193,9 +2196,12 @@
       ],
       "imports": [
         "console/src",
+        "console/src/api",
         "console/src/lib/shell"
       ],
-      "test_imports": [],
+      "test_imports": [
+        "console/src/api"
+      ],
       "external_imports": [
         "@bifrost/ui/city/content",
         "@bifrost/ui/city/devices",
@@ -2215,6 +2221,7 @@
         "@bifrost/ui/city/rulers",
         "@bifrost/ui/city/rules",
         "@bifrost/ui/city/sprites",
+        "@bifrost/ui/city/techTree",
         "@bifrost/ui/city/theme",
         "@bifrost/ui/city/units/cpuRoom",
         "@bifrost/ui/city/units/diskRoom",
@@ -4186,6 +4193,7 @@
       ],
       "imports": [
         "console/src",
+        "console/src/api",
         "console/src/api/client.ts",
         "console/src/domains/owner/city",
         "console/src/pages/shell/data",

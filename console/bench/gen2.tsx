@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import CityGen2 from '@bifrost/ui/city/CityGen2'
+import type { CiDomainGraph } from '../src/api/ciDomains'
+import { GRAPH_REPO, type GraphRead } from '../src/domains/owner/city/gen2/content/techTree'
+import GRAPH_SNAPSHOT from './domain-graph.snapshot.json'
 import { consoleContent } from '../src/domains/owner/city/gen2/content/console'
 import { formatPath, parsePath, type Path, type Place } from '@bifrost/ui/city/places'
 import { hardwareDistrict, readHardware } from '../src/domains/owner/city/gen2/content/hardware'
@@ -82,6 +85,14 @@ function Bench() {
     const t = setInterval(tick, 30_000)
     return () => { on = false; clearInterval(t) }
   }, [])
+  // Who stands on whom: read through the proxy; without a token, bench only, the graph measured on platform main
+  // 9d9fd3e2 (2026-11-20) from a snapshot, said so in its note.
+  const [graph, setGraph] = useState<GraphRead>({})
+  useEffect(() => {
+    let on = true
+    getJson(`/api/v1/ci/domains?repo=${GRAPH_REPO}`).then(g => { if (on) setGraph({ data: g as CiDomainGraph }) }, () => { if (on) setGraph({ data: GRAPH_SNAPSHOT as CiDomainGraph }) })
+    return () => { on = false }
+  }, [])
   const rulers = useRulersTick()
   const CONTENT = useMemo(() => {
     void rulers
@@ -90,9 +101,9 @@ function Bench() {
     // Bench only, ?util=4x8 or 8x8: Utilities at another size, to look at how a district's town grows (2026-11-20).
     const util = new URLSearchParams(location.search).get('util')
     if (hw && util && ['4x4', '4x8', '8x8'].includes(util)) hw.shape = util as Place['shape']
-    const c = consoleContent(domains, hw)
+    const c = consoleContent(domains, hw, graph)
     return new URLSearchParams(location.search).has('links') ? { ...c, tree: withPartners(c.tree), links: SAMPLE_LINKS } : c
-  }, [reads, rulers, domains])
+  }, [reads, rulers, domains, graph])
   const [path, setPath] = useState<Path>(() => parsePath(location.hash))
   useEffect(() => {
     const on = () => setPath(parsePath(location.hash))
