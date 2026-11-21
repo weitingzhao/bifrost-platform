@@ -32,7 +32,8 @@ func TestComputeQueriesAreNamedOnceAndSayWhatTheyAnswer(t *testing.T) {
 		if !strings.HasPrefix(q.ID, "compute_") || q.Title == "" || q.Unit == "" || q.Target == "" || q.Note == "" {
 			t.Errorf("%s: id prefix, title, unit, target and note are all required: %+v", q.ID, q)
 		}
-		if expr := q.Build("ignored"); !strings.Contains(expr, computeWindow) && q.ID != "compute_pods_evicted" {
+		// Readings that answer "now" (suffix _now, law 43 rows added 2026-11-20) do not look back.
+		if expr := q.Build("ignored"); !strings.Contains(expr, computeWindow) && q.ID != "compute_pods_evicted" && !strings.HasSuffix(q.ID, "_now") {
 			t.Errorf("%s does not look back %s: %s", q.ID, computeWindow, expr)
 		}
 	}

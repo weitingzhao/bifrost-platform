@@ -356,10 +356,12 @@ channels:
   alert.rule.fired:
     address: ev.rocket.{env}.alert.rule.fired
     x-bifrost:
-      version: 1
+      # v2 (2026-11-20): an alert about one machine carries host and ends its
+      # subject with /<host>; match=@<namespace> still matches it.
+      version: 2
       lane: event
       guarantee: durable
-      subject: "<alertname>@<namespace>"
+      subject: "<alertname>@<namespace>[/<host>]"
       publisher: gate-db
       domain: compute
       ref: "/api/v1/telemetry/alerts"

@@ -56,6 +56,30 @@ describe('compute readings', () => {
     expect(readingValues(broken)).toBe('Could not be read: prometheus: timeout')
     expect(readingValues(empty)).toBe('No series')
   })
+  // 2026-11-20 law 43 rows: the home register, crossed pain lines and guests on the database homes
+  // were only in the compute seat's notes, not on Ops (ledger step 6). Shapes read from PROD Prometheus 11-21 00:26Z.
+  it('shows the home register as a list and the law 43 counts with their node or alert', () => {
+    const home: TelemetryMetricResult = {
+      id: 'compute_node_home_now', title: 'Whose home each node is', unit: 'home', target: 'every cluster node listed', note: '', status: 'ok',
+      points: [
+        { labels: { nodename: 'ubt-k3s-04', home: 'database-standby' }, value: 1 },
+        { labels: { nodename: 'ubt-k3s-02', home: 'database-primary' }, value: 1 },
+      ],
+    }
+    const guests: TelemetryMetricResult = {
+      id: 'compute_guests_on_protected_now', title: 'CI guests running on the database homes', unit: 'guests', target: '', note: '', status: 'ok',
+      points: [{ labels: { node: 'ubt-k3s-02' }, value: 2 }, { labels: { node: 'ubt-k3s-04' }, value: 5 }],
+    }
+    const pain: TelemetryMetricResult = {
+      id: 'compute_pain_lines_now', title: 'Pain lines crossed now', unit: 'alerts', target: '0', note: '', status: 'ok',
+      points: [{ labels: { alertname: 'ComputePainDbGuestLoad' }, value: 1 }],
+    }
+    const calm: TelemetryMetricResult = { ...pain, points: [{ labels: {}, value: 0 }] }
+    expect(readingValues(home)).toBe('ubt-k3s-02 → database-primary · ubt-k3s-04 → database-standby')
+    expect(readingValues(guests)).toBe('ubt-k3s-04 5 · ubt-k3s-02 2')
+    expect(readingValues(pain)).toBe('ComputePainDbGuestLoad 1')
+    expect(readingValues(calm)).toBe('0')
+  })
   // 2026-11-17 OWNER_LAW #30: the hand-written "not measured" list is gone; a reading without a series is
   // known only from the API's own status (audit row #31).
   it('shows each reading with its target and note, a failed one as failed, and an empty one as no series', async () => {

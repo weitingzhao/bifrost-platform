@@ -1,8 +1,8 @@
 {
   "rocket": {
     "alert.rule.fired": {
-      "version": 1,
-      "hash": "4d683a5e3d4a2fcd"
+      "version": 2,
+      "hash": "3ad950d6b43139c4"
     },
     "approval.card.created": {
       "version": 1,
