@@ -22,6 +22,18 @@ describe('domains panel', () => {
     expect(screen.getAllByText('bad').length).toBe(2)
   })
 
+  it('shows the off-map pool by domain and the equation per repository, a gap marked', () => {
+    const data = { ...status, off_map_by_domain: { ops: 4, unclaimed: 7 }, inventory: [
+      { repo: 'bifrost-platform', measured: true, total: 10, on_map: 8, off_map: 1, gap: 1 },
+      { repo: 'bifrost-research', measured: true, whole: true, total: 1, on_map: 1, off_map: 0, gap: 0 },
+    ] }
+    render(<>{bodyOf(domainsPanel({ data }))}</>)
+    expect(screen.getByText('4')).toBeTruthy()
+    expect(screen.getByText('7')).toBeTruthy()
+    expect(screen.getAllByText('1').some(td => td.className.includes('g2-warn'))).toBe(true)
+    expect(screen.getByText(/inside not seen/)).toBeTruthy()
+  })
+
   it('says the lights are not known when the read fails', () => {
     render(<>{bodyOf(domainsPanel({ error: new Error('401') }))}</>)
     expect(screen.getByText(/not known: 401/)).toBeTruthy()
