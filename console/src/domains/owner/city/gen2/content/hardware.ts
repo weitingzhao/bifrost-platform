@@ -1,3 +1,4 @@
+import QUERIES from './hardwareQueries.json'
 import { facilityFor, HARDWARE_TOWN } from './binding'
 import { cityRulers, unitRoomsOf, type UnitReads } from './unitRooms'
 import { DISTRICT, encodePlan, fitsIn, plotsOf, shapeArea, splitPlot, type Plan, type Shape } from '@bifrost/ui/city/grid'
@@ -13,26 +14,11 @@ import type { Look, Meter, Place, State } from '@bifrost/ui/city/places'
 export type TopoNode = { id: string; label?: string; group?: string; host?: string; in_k3s_cluster?: boolean; compose_roles?: string[]; k3s_roles?: string[] }
 export type PromPoint = { labels?: Record<string, string>; value: number }
 
-/** What is read, and how (the PromQL is the reading's source, shown with every number). */
-export const HARDWARE_QUERIES = {
-  nodeIp: 'max by (node, internal_ip) (kube_node_info)',
-  ready: 'max by (node) (kube_node_status_condition{condition="Ready",status="true"})',
-  cordoned: 'max by (node) (kube_node_spec_unschedulable)',
-  wakeable: 'max by (node) (kube_node_labels{label_bifrost_io_wol="enabled"})',
-  capacity: 'sum by (node, resource) (kube_node_status_capacity{resource=~"cpu|memory|ephemeral_storage"})',
-  up: 'max by (instance) (up{job="node-exporter"})',
-  cores: 'count by (instance) (node_cpu_seconds_total{mode="idle"})',
-  busy: 'sum by (instance) (rate(node_cpu_seconds_total{mode!="idle"}[5m]))',
-  memTotal: 'max by (instance) (node_memory_MemTotal_bytes or node_memory_total_bytes)',
-  memUsed: 'max by (instance) ((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) or (node_memory_active_bytes + node_memory_wired_bytes + node_memory_compressed_bytes))',
-  diskSize: 'max by (instance, mountpoint) (node_filesystem_size_bytes{mountpoint=~"/|/volume[0-9]+",fstype!~"tmpfs|overlay"})',
-  diskUsed: 'max by (instance, mountpoint) (node_filesystem_size_bytes{mountpoint=~"/|/volume[0-9]+",fstype!~"tmpfs|overlay"} - node_filesystem_avail_bytes{mountpoint=~"/|/volume[0-9]+",fstype!~"tmpfs|overlay"})',
-  arraySize: 'max by (instance, device) (node_md_blocks)',
-  pool: 'max by (node, label_bifrost_io_workload_pool) (kube_node_labels)',
-  role: 'max by (node, role) (kube_node_role)',
-  pods: 'count by (node) (kube_pod_info{node!=""} * on (namespace, pod) group_left () (max by (namespace, pod) (kube_pod_status_phase{phase="Running"}) == 1))',
-  arrayDisks: 'max by (instance, device, state) (node_md_disks)',
-} as const
+/**
+ * What is read, and how (the PromQL is the reading's source, shown with every number). The queries are
+ * configuration, kept as data in hardwareQueries.json, not written into the source (code-health law 30).
+ */
+export const HARDWARE_QUERIES = QUERIES
 export type HardwareReads = { topology: TopoNode[] | null; prom: { [K in keyof typeof HARDWARE_QUERIES]: PromPoint[] | null } }
 
 /** Read everything the district needs, through the platform: a failed read is null, and what it fed shows unread. */
