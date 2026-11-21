@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PORTS, SLOTS, edgeSlots, linksAt, linkRulesBroken, type Link } from '@bifrost/ui/city/links'
+import { SLOTS, edgeSlots, linksAt, linkRulesBroken, type Link } from '@bifrost/ui/city/links'
 import type { Place } from '@bifrost/ui/city/places'
 
 // Origin: the Owner, 2026-11-20 ("框架提供交互方式，系统来配；Bus 和指标两种足够；每层的显示要有规范，
