@@ -27,6 +27,12 @@ func ComputeQueries() []QuerySpec {
 	// the hosts outside the cluster do not.
 	clusterBusy := `sum(rate(node_cpu_seconds_total{mode!="idle",mode!="iowait",pod!=""}[5m]))`
 	clusterThreads := `count(node_cpu_seconds_total{mode="idle",pod!=""})`
+	// The database homes as a node set, and the CI guests running on them now.
+	databaseHomes := `max by (node) (label_replace(bifrost_node:home_info{home=~"database-.*"}` +
+		` * on (instance) group_left (nodename) node_uname_info, "node", "$1", "nodename", "(.*)"))`
+	guestsOnDatabaseHomes := `(kube_pod_status_phase{namespace="cicd",phase="Running"} == 1)` +
+		` * on (namespace, pod) group_left (node) kube_pod_info{namespace="cicd",created_by_kind="TaskRun"}` +
+		` * on (node) group_left () ` + databaseHomes
 	return []QuerySpec{
 		{
 			ID:     "compute_cluster_cpu_used_p50",
@@ -58,7 +64,8 @@ func ComputeQueries() []QuerySpec {
 			Unit:   "pods",
 			Target: "0",
 			Note:   "Work waiting at the scheduler. It does not see Agent sessions queueing on the Agent host or CI tasks run one after another on one node.",
-			Build:  fixed(`avg_over_time(sum(kube_pod_status_phase{phase="Pending"})[` + w + `:5m])`),
+			// 15m steps: at 5m this ran past the 10s client timeout on PROD (2026-11-21, "context deadline exceeded").
+			Build: fixed(`avg_over_time(sum(kube_pod_status_phase{phase="Pending"})[` + w + `:15m])`),
 		},
 		{
 			ID:     "compute_schedule_p99",
@@ -144,10 +151,44 @@ func ComputeQueries() []QuerySpec {
 			Unit:   "guests",
 			Target: "a signal, no target",
 			Note:   "Running TaskRun pods on nodes whose home is the database. Borrowing is allowed; these are the pods taken back when a pain line is crossed.",
-			Build: fixed(`count by (node) ((kube_pod_status_phase{namespace="cicd",phase="Running"} == 1)` +
-				` * on (namespace, pod) group_left (node) kube_pod_info{namespace="cicd",created_by_kind="TaskRun"}` +
-				` * on (node) group_left () max by (node) (label_replace(bifrost_node:home_info{home=~"database-.*"}` +
-				` * on (instance) group_left (nodename) node_uname_info, "node", "$1", "nodename", "(.*)"))) or on () vector(0)`),
+			Build:  fixed(`count by (node) (` + guestsOnDatabaseHomes + `) or on () vector(0)`),
+		},
+		// Main line "seen and felt" (2026-11-21): what Prometheus already keeps
+		// but the page did not show. History of the pain lines and of the
+		// guests, the guests by name, and the nodes that are down (a down node
+		// drops out of the home register instead of showing as down).
+		{
+			ID:     "compute_guests_on_protected_list_now",
+			Title:  "Which CI guests run on the database homes now",
+			Unit:   "list",
+			Target: "a signal, no target",
+			Note:   "The pods counted in the row above, by node. A reclaim deletes the newest of them.",
+			Build:  fixed(`max by (node, pod) (` + guestsOnDatabaseHomes + `)`),
+		},
+		{
+			ID:     "compute_pain_minutes",
+			Title:  "Minutes each pain line fired",
+			Unit:   "min",
+			Target: "0 for DiskFlush, Replication and ProdThrottle",
+			Note:   "Firing minutes per ComputePain alert over the window. Replication spikes last about 30 s and are harmless (asynchronous replication, the database owner's line is 5 s sustained); GuestLoad is information only.",
+			Build:  fixed(`sum by (alertname) (count_over_time(ALERTS{alertname=~"ComputePain.*",alertstate="firing"}[` + w + `:1m]))`),
+		},
+		{
+			ID:     "compute_guests_on_protected_max",
+			Title:  "Most CI guests at once on each database home",
+			Unit:   "guests",
+			Target: "a signal, no target",
+			Note:   "Highest number of running CI guests on a database home, sampled every 15 minutes (at 5-minute steps the read passed the 10 s timeout), so a short burst can be missed.",
+			Build:  fixed(`max_over_time((count by (node) (` + guestsOnDatabaseHomes + `))[` + w + `:15m])`),
+		},
+		{
+			ID:     "compute_nodes_without_home_now",
+			Title:  "Cluster nodes missing from the home register",
+			Unit:   "list",
+			Target: "only nodes powered off on purpose",
+			Note:   "Nodes Kubernetes knows that have no home reading: powered off, their node exporter gone, or never registered. The elastic GPU node stays here until it is woken.",
+			Build: fixed(`max by (node) (kube_node_info) unless on (node) max by (node) (label_replace(bifrost_node:home_info` +
+				` * on (instance) group_left (nodename) node_uname_info, "node", "$1", "nodename", "(.*)"))`),
 		},
 		{
 			ID:     "compute_requests_honest_share",

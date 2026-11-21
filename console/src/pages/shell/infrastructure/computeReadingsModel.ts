@@ -5,13 +5,14 @@ export function formatReading(value: number, unit?: string): string {
   if (unit === 'ratio') return `${(value * 100).toFixed(1)}%`
   if (unit === 'x') return `${value.toFixed(2)}×`
   if (unit === 's') return `${value.toFixed(1)} s`
-  if (unit === 'kills' || unit === 'guests' || unit === 'alerts') return value.toFixed(0)
+  if (unit === 'kills' || unit === 'guests' || unit === 'alerts' || unit === 'min') return value.toFixed(0)
   return value >= 100 ? value.toFixed(0) : value.toFixed(2)
 }
 
 function pointLabel(p: TelemetrySamplePoint): string {
   const l = p.labels
   if (l.nodename != null && l.nodename !== '' && l.home != null && l.home !== '') return `${l.nodename} → ${l.home}`
+  if (l.node != null && l.node !== '' && l.pod != null && l.pod !== '') return `${l.node}/${l.pod}`
   if (l.nodename != null && l.nodename !== '') return l.nodename
   if (l.node != null && l.node !== '') return l.node
   if (l.alertname != null && l.alertname !== '') return l.alertname
@@ -23,8 +24,8 @@ function pointLabel(p: TelemetrySamplePoint): string {
 export function readingValues(m: TelemetryMetricResult): string {
   if (m.status === 'error') return `Could not be read: ${m.detail ?? 'no detail'}`
   if (m.points.length === 0) return 'No series'
-  // A register row (unit "home") is a list, not a quantity: show who, not the 1.
-  if (m.unit === 'home') return m.points.map(pointLabel).filter(s => s !== '').sort().join(' · ')
+  // A register or list row (unit "home" or "list") is a list, not a quantity: show who, not the value.
+  if (m.unit === 'home' || m.unit === 'list') return m.points.map(pointLabel).filter(s => s !== '').sort().join(' · ')
   return [...m.points]
     .sort((a, b) => b.value - a.value)
     .map(p => {

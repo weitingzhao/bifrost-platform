@@ -80,6 +80,25 @@ describe('compute readings', () => {
     expect(readingValues(pain)).toBe('ComputePainDbGuestLoad 1')
     expect(readingValues(calm)).toBe('0')
   })
+  // 2026-11-21 main line "seen and felt": guest names, pain-line minutes and down nodes were kept by Prometheus
+  // but read by hand (compute ledger, "看不到的" rows 2, 3, 6). Shapes read from PROD Prometheus 11-21 21:xxZ.
+  it('shows guests and down nodes as lists and pain-line minutes as whole numbers', () => {
+    const names: TelemetryMetricResult = {
+      id: 'compute_guests_on_protected_list_now', title: 'Which CI guests run on the database homes now', unit: 'list', target: '', note: '', status: 'ok',
+      points: [{ labels: { node: 'ubt-k3s-04', pod: 'ci-platform-x-test-api-pod' }, value: 1 }, { labels: { node: 'ubt-k3s-02', pod: 'ci-platform-y-lint-pod' }, value: 1 }],
+    }
+    const down: TelemetryMetricResult = {
+      id: 'compute_nodes_without_home_now', title: 'Cluster nodes missing from the home register', unit: 'list', target: '', note: '', status: 'ok',
+      points: [{ labels: { node: 'ubt-k3s-05' }, value: 1 }, { labels: { node: 'gpu-server' }, value: 1 }],
+    }
+    const minutes: TelemetryMetricResult = {
+      id: 'compute_pain_minutes', title: 'Minutes each pain line fired', unit: 'min', target: '', note: '', status: 'ok',
+      points: [{ labels: { alertname: 'ComputePainDbReplication' }, value: 60 }, { labels: { alertname: 'ComputePainDbGuestLoad' }, value: 2062 }],
+    }
+    expect(readingValues(names)).toBe('ubt-k3s-02/ci-platform-y-lint-pod · ubt-k3s-04/ci-platform-x-test-api-pod')
+    expect(readingValues(down)).toBe('gpu-server · ubt-k3s-05')
+    expect(readingValues(minutes)).toBe('ComputePainDbGuestLoad 2062 · ComputePainDbReplication 60')
+  })
   // 2026-11-17 OWNER_LAW #30: the hand-written "not measured" list is gone; a reading without a series is
   // known only from the API's own status (audit row #31).
   it('shows each reading with its target and note, a failed one as failed, and an empty one as no series', async () => {
