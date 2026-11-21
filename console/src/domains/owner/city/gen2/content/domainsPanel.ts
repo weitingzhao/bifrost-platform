@@ -19,14 +19,16 @@ type RepoCount = { repo: string; measured: boolean; whole?: boolean; total: numb
  * lists the user, else unregistered (reaching past the contract). Counted by package, not by name: the map says so.
  */
 export type MapReference = { from: string; to: string; imports: number; registered: number; unregistered: number; wrong_way: boolean }
-export type MapStatus = DomainStatusResponse & { off_map_by_domain?: Record<string, number>; inventory?: RepoCount[]; references?: MapReference[] }
+/** A domain row as the map serves it; name and tier come from the ownership table (empty / 0 when not written). */
+export type MapDomain = DomainStatusResponse['domains'][number] & { name?: string; tier?: number }
+export type MapStatus = Omit<DomainStatusResponse, 'domains'> & { domains: MapDomain[]; off_map_by_domain?: Record<string, number>; inventory?: RepoCount[]; references?: MapReference[] }
 export type DomainsRead = { data?: MapStatus; error?: unknown }
 
 const UNCLAIMED = 'unclaimed'
 const whyOf = (e: unknown) => e instanceof Error ? e.message : e ? String(e) : 'reading'
 /** The pool's count for a domain; unknown when the map does not serve the pool yet. */
 const offMapOf = (d: MapStatus, id: string) => d.off_map_by_domain ? String(d.off_map_by_domain[id] ?? 0) : { text: 'unknown', tone: 'unknown' as Tone }
-const nameOf = (d: MapStatus, id: string) => (d.domains.find(r => r.id === id) as { name?: string } | undefined)?.name || id
+const nameOf = (d: MapStatus, id: string) => d.domains.find(r => r.id === id)?.name || id
 export const toneOf = (value: string): Tone => value === 'good' ? 'good' : value === 'bad' || value === 'problem' ? 'warn' : 'unknown'
 
 function inventory(rows: RepoCount[]): Block {
@@ -93,6 +95,7 @@ export function lightBlocks(read: DomainsRead, id: string): Block[] {
       { label: 'Overall', value: { text: row.overall || 'unknown', tone: toneOf(row.overall || 'unknown') }, note: '' },
       ...LIGHTS.map(([k, label]) => ({ label, value: light(row[k]), note: row[k]?.why ?? '' })),
       { label: 'Off map', value: offMapOf(d, id), note: '' },
+      { label: 'Tier', value: row.tier ? `L${row.tier}` : { text: 'not written', tone: 'unknown' as Tone }, note: 'as the ownership table declares it' },
     ],
   }]
 }

@@ -34,14 +34,13 @@ const whyOf = (e: unknown) => e instanceof Error ? e.message : e ? String(e) : '
 export function domainTechTree(status: MapStatus | undefined, graph: GraphRead): TechTree | undefined {
   if (!status || status.domains.length === 0) return undefined
   const nodes = status.domains.map(d => {
-    const named = d as typeof d & { name?: string }
     const lights = [['alive', d.alive], ['interfaces', d.interfaces], ['boundary', d.boundary], ['fresh', d.fresh]] as const
     return {
       id: d.id,
-      label: named.name || d.id,
+      label: d.name || d.id,
       icon: GLYPH[d.id],
       tone: toneOf(d.overall),
-      why: lights.map(([k, l]) => `${k} ${l?.value || 'unknown'}`).join(' · '),
+      why: [...lights.map(([k, l]) => `${k} ${l?.value || 'unknown'}`), ...(d.tier ? [`declared tier ${d.tier}`] : [])].join(' · '),
     }
   })
   const g = graph.data
