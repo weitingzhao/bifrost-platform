@@ -5,7 +5,7 @@ import (
 	"errors"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore" // declares the plan event vocabulary
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/legacyvocab" // declares the dispatch lane's types the tests write
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +18,14 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
+
+// Origin: 2026-11-21, these tests linked agentrt/store and agentrt/planstore
+// (verification's and the plan's) only for what their init declares: the
+// dispatch lane's event bodies, now in legacyvocab (foundation), and the check
+// of view artifacts. coord stores message bodies, never plan views, so the
+// tests register a check that passes every body; the check of real views is
+// the plan's, and its own tests hold it (codeguard tests_reach: 3 crossings).
+func init() { artifact.RegisterCheck(func(string, []byte) error { return nil }) }
 
 var ctx = context.Background()
 

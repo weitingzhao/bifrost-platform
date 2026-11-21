@@ -15,12 +15,15 @@ import (
 // Review 145 B7: the acceptance paths its table found without a test of
 // their own.
 
-// notes writes n notes on stream, one transaction each.
+// notes writes n events on stream, one transaction each. They are
+// mission_proposed (legacyvocab, foundation), any type with a body would do:
+// until 2026-11-21 they were plan notes, which linked the plan's planstore
+// into coord's tests for its vocabulary alone (codeguard tests_reach).
 func notes(t *testing.T, w *world, stream string, n int) {
 	t.Helper()
 	for i := range n {
 		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: stream, Type: "note", Actor: "controller", Body: map[string]any{"text": string(rune('a' + i))}})
+			_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: stream, Type: "mission_proposed", Actor: "controller", Body: map[string]any{"title": string(rune('a' + i))}})
 			return err
 		}))
 	}
@@ -65,8 +68,8 @@ func TestTamperOnACleanStream(t *testing.T) {
 		if name == "set to null" {
 			for i := range 3 {
 				ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-					_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: name, Type: "note", Actor: "controller", MissionID: "M-1",
-						Body: map[string]any{"text": string(rune('a' + i))}})
+					_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: name, Type: "mission_proposed", Actor: "controller", MissionID: "M-1",
+						Body: map[string]any{"title": string(rune('a' + i))}})
 					return err
 				}))
 			}
@@ -94,7 +97,7 @@ func TestKilledInsideATransaction(t *testing.T) {
 	ok(t, conn.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pid))
 	tx, err := conn.Begin(ctx)
 	ok(t, err)
-	if _, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: "mid", Type: "note", Actor: "controller", Body: map[string]any{"text": "lost"}}); err != nil {
+	if _, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: "mid", Type: "mission_proposed", Actor: "controller", Body: map[string]any{"title": "lost"}}); err != nil {
 		t.Fatal(err)
 	}
 	var killed bool
@@ -126,7 +129,7 @@ func TestKilledInsideATransaction(t *testing.T) {
 		bctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		hooked := hookedDB{db: pool, before: func() {
 			ok(t, eventlog.InTx(bctx, pool, func(tx pgx.Tx) error {
-				_, aerr := eventlog.Append(bctx, tx, eventlog.Event{Stream: "busy", Type: "note", Actor: "controller", Body: map[string]any{"text": "between"}})
+				_, aerr := eventlog.Append(bctx, tx, eventlog.Event{Stream: "busy", Type: "mission_proposed", Actor: "controller", Body: map[string]any{"title": "between"}})
 				return aerr
 			}))
 		}}

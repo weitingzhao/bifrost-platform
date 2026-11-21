@@ -13,9 +13,6 @@ package codeguard
 var testsReachingAcross = map[string][]string{
 	"api/internal/actions/coverage_test.go":                              {"api/internal/server"},
 	"api/internal/actions/ownerrun_d10_test.go":                          {"api/internal/releasepolicy"},
-	"api/internal/agentrt/coord/conclusion_recipient_test.go":            {"api/internal/agentrt/store"},
-	"api/internal/agentrt/coord/conclusion_test.go":                      {"api/internal/agentrt/planstore"},
-	"api/internal/agentrt/coord/seatstatus_test.go":                      {"api/internal/agentrt/store"},
 	"api/internal/agentrt/migrate/helpers0022_test.go":                   {"api/internal/releasepolicy"},
 	"api/internal/agentrt/planstore/planobservations_ledger_test.go":     {"api/internal/agentrt/planwiring"},
 	"api/internal/agentrt/planstore/planobservations_regression_test.go": {"api/internal/agentrt/landing"},

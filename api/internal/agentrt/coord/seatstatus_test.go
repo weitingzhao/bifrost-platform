@@ -2,7 +2,7 @@ package coord_test
 
 import (
 	"encoding/json"
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // registers the vocabulary and the artifact checks
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/legacyvocab" // declares the dispatch lane's types the tests write
 	"strings"
 	"testing"
 	"time"
