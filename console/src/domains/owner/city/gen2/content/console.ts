@@ -4,7 +4,7 @@ import { consoleFunctions } from './consolePlaces'
 import { domainTree } from './domainPlaces'
 import { domainPanel, domainsPanel, type DomainsRead } from './domainsPanel'
 import { ownsPanel, type ReadDomain } from './domainOwns'
-import { domainTechTree, type GraphRead } from './techTree'
+import { districtTechTree, domainTechTree, type GraphRead } from './techTree'
 import { trafficPanel, type TrafficRead } from './traffic'
 import { alertsRead, type DeviceKey, type PromAlert } from './alerts'
 
@@ -24,5 +24,5 @@ export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null
     place.id === tree.id ? [domainsPanel(domains), ...(traffic ? [trafficPanel(traffic)] : [])]
       : place.kind === 'district' && ids.has(place.id) ? [domainPanel(domains, place.id), ...(readDomain ? [ownsPanel(readDomain, place.id)] : [])]
         : []
-  return { version: 2, tree, panels, functions: consoleFunctions(), techTree: domainTechTree(domains.data, graph), trips: traffic?.trips, ...(alerts ? { alerts: alertsRead(alerts.raw, alerts.error, alerts.devices, tree) } : {}) }
+  return { version: 2, tree, panels, functions: consoleFunctions(), techTree: domainTechTree(domains.data, graph), techTreeIn: (d: Place) => districtTechTree(d, ids), trips: traffic?.trips, ...(alerts ? { alerts: alertsRead(alerts.raw, alerts.error, alerts.devices, tree) } : {}) }
 }

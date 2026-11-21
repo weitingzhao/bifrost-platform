@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { CiDomainGraph } from '@/api/ciDomains'
 import { consoleContent } from '../console'
 import type { MapStatus } from '../domainsPanel'
-import { domainTechTree } from '../techTree'
+import { districtTechTree, domainTechTree } from '../techTree'
 
 // 2026-11-20, the Owner: the domains' tech tree is configured from the real graph. These pin that its
 // nodes are the districts with their map lights, its edges the imports GET /api/v1/ci/domains serves
@@ -50,5 +50,28 @@ describe('the domains tech tree', () => {
   })
   it('the content hands the frame its tree', () => {
     expect(consoleContent({ data: status }, null, { data: graph }).techTree?.nodes).toHaveLength(3)
+  })
+})
+
+// 2026-11-21, the Owner: the tree follows the level; inside a district it is who among its buildings stands on
+// whom. That day the map's groups were empty and /ci/domains served no imports inside a domain: the district's
+// tree says so rather than guess, and the hardware district (machines do not stand on one another) has none.
+describe('a district’s own tech tree', () => {
+  const district = (id: string, children: string[] = []) => ({ id, kind: 'district' as const, shape: '4x4' as const, label: id, question: '', dashboard: null, children: children.map(c => ({ id: c, kind: 'building' as const, shape: '4x4' as const, label: c, question: '', dashboard: null, children: [] })) })
+  const ids = new Set(['delivery', 'compute'])
+  it('no buildings yet: an empty tree that says why, no edge', () => {
+    const t = districtTechTree(district('delivery'), ids)!
+    expect(t.nodes).toEqual([])
+    expect(t.edges).toBeUndefined()
+    expect(t.note).toContain('groups are empty')
+  })
+  it('its buildings as nodes, the edges still not measured', () => {
+    const t = districtTechTree(district('delivery', ['release', 'window']), ids)!
+    expect(t.nodes.map(n => n.id)).toEqual(['release', 'window'])
+    expect(t.note).toContain('not measured')
+  })
+  it('the hardware district and anything not a domain have no tree', () => {
+    expect(districtTechTree(district('compute', ['gpu-server']), ids)).toBeUndefined()
+    expect(districtTechTree(district('elsewhere'), ids)).toBeUndefined()
   })
 })

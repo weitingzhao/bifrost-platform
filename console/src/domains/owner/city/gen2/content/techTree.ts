@@ -1,6 +1,8 @@
 import type { TechTree, TreeTone } from '@bifrost/ui/city/techTree'
 import type { CiDomainGraph } from '@/api/ciDomains'
 import type { MapStatus } from './domainsPanel'
+import type { Place } from '@bifrost/ui/city/places'
+import { COMPUTE } from './domainPlaces'
 
 /**
  * The districts' tech tree (the Owner, 2026-11-20): who stands on whom among the domains, from the real
@@ -55,4 +57,21 @@ export function domainTechTree(status: MapStatus | undefined, graph: GraphRead):
     note: `Imports between the domains' Go packages in ${g.repo} at ${g.commit.slice(0, 8)}${g.refreshing ? ' (main moved on; reading it)' : ''}. `
       + `Not seen here: the Console's calls, the bus, shared storage, other repositories${shared ? `; ${shared} shared package${shared === 1 ? '' : 's'} not drawn` : ''}.`,
   }
+}
+
+/**
+ * A district's own tech tree (the Owner, 2026-11-21: the tree follows the level): who among its buildings stands
+ * on whom. A domain's buildings are the map's groups of its packages, and the edges between them would be the
+ * imports inside the domain; on 2026-11-21 neither is served (the ownership table's groups are empty, and
+ * /ci/domains gives only the imports between domains; both asked for). So the tree lists the buildings the district
+ * has, and says plainly what is not there yet, never a guessed grouping or edge. The hardware district's machines
+ * do not stand on one another: it has no tree.
+ */
+export function districtTechTree(district: Place, domainIds: ReadonlySet<string>): TechTree | undefined {
+  if (!domainIds.has(district.id) || district.id === COMPUTE) return undefined
+  const nodes = district.children.map(c => ({ id: c.id, label: c.label }))
+  const missing = nodes.length === 0
+    ? `No buildings yet: the map has not grouped ${district.label}'s packages into buildings (its groups are empty).`
+    : `${nodes.length} building${nodes.length === 1 ? '' : 's'}.`
+  return { nodes, note: `${missing} Who stands on whom inside a domain is not measured yet (/ci/domains serves the imports between domains only).` }
 }
