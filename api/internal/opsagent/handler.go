@@ -22,8 +22,8 @@ type Handler struct {
 // AlertFact is what the bus takes of one alert.
 type AlertFact struct {
 	Name, Namespace, Severity, Status string
-	// Host, Node and Instance are the labels that may name the machine.
-	Host, Node, Instance string
+	// Host and Node are the labels that may name the machine.
+	Host, Node string
 }
 
 func NewHandler(audit *actuation.AuditLog) *Handler {
@@ -107,7 +107,7 @@ func (h *Handler) HandleAlertmanager(w http.ResponseWriter, r *http.Request) {
 			}
 			facts = append(facts, AlertFact{Name: labelVal(a.Labels, "alertname"), Namespace: labelVal(a.Labels, "namespace"),
 				Severity: labelVal(a.Labels, "severity"), Status: status,
-				Host: labelVal(a.Labels, "host"), Node: labelVal(a.Labels, "node"), Instance: labelVal(a.Labels, "instance")})
+				Host: labelVal(a.Labels, "host"), Node: labelVal(a.Labels, "node")})
 		}
 		if err := h.Announce(r.Context(), facts); err != nil {
 			slog.Warn("alerts not announced on the bus", "err", err, "count", len(facts))

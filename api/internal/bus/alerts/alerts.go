@@ -46,9 +46,9 @@ var (
 //
 // 2026-11-20 (comm line): a hardware alert has no namespace, so it was written
 // as <alertname>@cluster and its machine was lost. In the week to 11-21 00:18Z
-// three firing alerts named one (BifrostClusterNodeDown node=ubt-k3s-05,
-// BifrostElasticStandbyMarker node=gpu-server, ComputePainDbGuestLoad
-// instance=192.168.10.75:9100; Prometheus ALERTS, ad-hoc reading). The duty
+// firing alerts named one (BifrostClusterNodeDown node=ubt-k3s-05,
+// BifrostElasticStandbyMarker node=gpu-server; Prometheus ALERTS, ad-hoc
+// reading). The duty
 // seat's letter said only "@cluster", and the same alert on a second machine
 // within 6 hours shared the first one's letter and was not told.
 type Alert struct {
@@ -56,17 +56,17 @@ type Alert struct {
 }
 
 // HostOf is the machine an alert's labels name: host (the external hosts'
-// scrape label), else node (Kubernetes rules), else instance without its port.
-// "" when none is a host name or address.
-func HostOf(host, node, instance string) string {
-	for _, h := range []string{host, node, instance} {
+// scrape label), else node (Kubernetes rules). "" when neither is a host name
+// or address.
+//
+// The instance label is not read. 2026-11-21 (comm line, the first PROD
+// events with a host): KubeJobFailed@cicd/10.42.6.28 named the
+// kube-state-metrics pod that exports the series, not a machine the alert
+// is about. instance is the scrape target, which is a machine only for
+// node-level exporters.
+func HostOf(host, node string) string {
+	for _, h := range []string{host, node} {
 		h = strings.TrimSpace(h)
-		if strings.Contains(h, "/") {
-			continue // a probe's URL, not a machine
-		}
-		if i := strings.LastIndex(h, ":"); i > 0 && !strings.Contains(h[:i], ":") {
-			h = h[:i]
-		}
 		if h != "" && hostRE.MatchString(h) {
 			return h
 		}

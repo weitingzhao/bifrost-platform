@@ -114,7 +114,7 @@ func (s *Server) announceAlerts(ctx context.Context, facts []opsagent.AlertFact)
 	list := make([]busalerts.Alert, 0, len(facts))
 	for _, f := range facts {
 		if a, ok := busalerts.Normalize(f.Name, f.Namespace, f.Severity, f.Status); ok {
-			a.Host = busalerts.HostOf(f.Host, f.Node, f.Instance)
+			a.Host = busalerts.HostOf(f.Host, f.Node)
 			list = append(list, a)
 		}
 	}
