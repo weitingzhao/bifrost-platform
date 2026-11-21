@@ -99,6 +99,8 @@ func PipelineRun(run unstructured.Unstructured) (seenfacts.PipelineRun, bool) {
 				f.ChangeIDs = notice.Redact(v)
 			case "outcome":
 				f.Outcome = notice.Redact(v)
+			case "refusal":
+				f.Refusal = notice.Redact(v)
 			}
 		}
 		switch name {

@@ -127,6 +127,32 @@ func TestLandResultsOptionalAndScoped(t *testing.T) {
 	}
 }
 
+// Origin: 2026-11-21. Land refusals lived only in the land TaskRun, kept one
+// day (7 days: 107 refused, 61 of them with a green CI), so nobody could count
+// why. A refused bifrost-land run now carries its refusal as a run result
+// (infra pipeline-land.yaml's finally task) and pipeline_seen records it.
+func TestARefusedLandRecordsItsRefusal(t *testing.T) {
+	const why = "refused: the branch is behind main and Gitea could not rebase it (409 rebase failed because of conflict). Rebase it onto main and push it to a ready/ branch again"
+	for _, pipeline := range []string{"bifrost-land", "bifrost-ci-platform"} {
+		run := headRun("land-two", pipeline, time.Now().UTC(), "False", map[string]string{"revision": commitForExternalRecord})
+		run.SetUID("uid-two")
+		_ = unstructured.SetNestedField(run.Object, time.Now().UTC().Format(time.RFC3339), "status", "startTime")
+		_ = unstructured.SetNestedField(run.Object, time.Now().UTC().Format(time.RFC3339), "status", "completionTime")
+		_ = unstructured.SetNestedSlice(run.Object, []any{map[string]any{"name": "refusal", "value": why}}, "status", "results")
+		got, ok := PipelineRun(run)
+		if !ok || got.Result != "Failed" {
+			t.Fatalf("%s: %+v", pipeline, got)
+		}
+		b := got.Body()
+		if err := seenfacts.CheckExternal("pipeline_seen", b); err != nil {
+			t.Fatalf("%s: %v", pipeline, err)
+		}
+		if want := map[bool]string{true: why}[pipeline == "bifrost-land"]; got.Refusal != want || (want == "") != (b["refusal"] == nil) {
+			t.Fatalf("%s: refusal %q, body %v", pipeline, got.Refusal, b["refusal"])
+		}
+	}
+}
+
 const commitForExternalRecord = "2333e00753f91c74c8b2f4d693a803f8e89e7892"
 
 func TestPipelineRunFactReadsWhatACIRunTested(t *testing.T) {

@@ -34,7 +34,7 @@ var seenBodies = map[string][]eventlog.Field{
 		field("completed_at", eventlog.Str, false), field("result", eventlog.Str, false), field("repo", eventlog.Str, true),
 		field("revision", eventlog.Str, true), field("reason", eventlog.Str, true), field("tree", eventlog.Str, true),
 		field("tested_by", eventlog.Str, true), field("landed_commit", eventlog.Str, true), field("change_ids", eventlog.Str, true),
-		field("outcome", eventlog.Str, true)},
+		field("outcome", eventlog.Str, true), field("refusal", eventlog.Str, true)},
 	"ci_seen":     {field("repo", eventlog.Str, false), field("commit", eventlog.Str, false), field("status", eventlog.Str, false), field("run", eventlog.Str, true)},
 	"deploy_seen": {field("env", eventlog.Str, false), field("commit", eventlog.Str, false), field("deploy_ref", eventlog.Any, false)},
 }
