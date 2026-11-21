@@ -105,3 +105,40 @@ func TestLedgerReadingsFromRows(t *testing.T) {
 		t.Errorf("per-repo label: %+v", got["prod_deploys"].Labels)
 	}
 }
+
+// 2026-11-20, the metrics line: how often the Owner's phone was pushed about a
+// card had no system record across "relax cards into records" (law 46); the
+// comm line put each push on the ledger as approval.card.notified from the
+// PROD release of 16:20:43Z. Shape from PROD: kind created, one kind failed
+// (#662, 17:22:42Z). A window starting before the ledger kept them is
+// unmeasured; a later window with no push is a measured 0.
+func TestOwnerInterruptions(t *testing.T) {
+	src := func(rows []eventlog.Row) ledgerSource {
+		return ledgerSource{ofType: func(typ string, _, _ time.Time) ([]eventlog.Row, error) {
+			if typ != "approval.card.notified" {
+				t.Fatalf("read %s", typ)
+			}
+			return rows, nil
+		}}
+	}
+	day := ClosedWindow(time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC), 1)
+	at := day.From.Add(time.Hour)
+	rows := []eventlog.Row{
+		row("approval.card.notified", at, map[string]any{"kind": "created", "channel": "ntfy"}),
+		row("approval.card.notified", at, map[string]any{"kind": "failed", "channel": "ntfy"}),
+		row("approval.card.notified", at, map[string]any{"kind": "created", "channel": "ntfy"}),
+		row("approval.card.notified", at, map[string]any{"kind": "reminder_waiting", "channel": "ntfy"}),
+	}
+	r, err := src(rows).interruptionReading(day)
+	if err != nil || r.Status != StatusOK || *r.Value != 3 || r.Labels["failed"] != "1" {
+		t.Fatalf("three pushes and one failure: %+v %v", r, err)
+	}
+	r, _ = src(nil).interruptionReading(day)
+	if r.Status != StatusOK || *r.Value != 0 {
+		t.Fatalf("no push is a measured 0: %+v", r)
+	}
+	r, _ = src(rows).interruptionReading(ClosedWindow(time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC), 1))
+	if r.Status != StatusUnmeasured || r.Value != nil {
+		t.Fatalf("11-20 starts before the ledger kept pushes: %+v", r)
+	}
+}

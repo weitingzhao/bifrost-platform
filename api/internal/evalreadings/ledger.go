@@ -205,11 +205,53 @@ func (s ledgerSource) ownerReadings(w Window) ([]Reading, error) {
 		Labels:     map[string]string{"approvals_decided": fmt.Sprint(decided), "questions_answered": fmt.Sprint(answered)},
 		Definition: def("event ledger approval_seen and question_seen, latest fact per approval / question", "approvals decided in window + questions answered in window")}, false)
 	measuredZero(&actions)
+	interruptions, err := s.interruptionReading(w)
+	if err != nil {
+		return nil, err
+	}
 	return []Reading{
 		actions,
+		interruptions,
 		finish(Reading{Name: "owner_wait_p50_seconds", Value: median(waits), Unit: "seconds", Samples: decided, Window: w,
 			Definition: def("event ledger approval_seen, latest fact per approval", "median of decided_at - created_at over approvals decided in window")}, true),
 	}, nil
+}
+
+// notifiedSince is when the ledger began keeping the pushes to the Owner's
+// phone: the first PROD release with approval.card.notified (2026-11-20
+// 16:20:43Z, bifrost-deliver-platform-prod-1795191637, 7c4db486). A window
+// that starts earlier would count only part of it.
+var notifiedSince = time.Date(2026, 11, 20, 16, 20, 43, 0, time.UTC)
+
+// interruptionReading: owner_interruptions, the pushes about a card that
+// reached the Owner's phone in the window (approval.card.notified, any kind
+// but failed). Origin: the metrics line, 2026-11-20 ("relax cards into
+// records", law 46): how often he is interrupted had no system record across
+// the change; the comm line put the pushes on the ledger.
+func (s ledgerSource) interruptionReading(w Window) (Reading, error) {
+	const name = "owner_interruptions"
+	d := def("event ledger approval.card.notified (one per push about a card: created, reminder, result)",
+		"pushes in the window whose kind is not failed; failed ones are in the label")
+	if w.From.Before(notifiedSince) {
+		return finish(Reading{Name: name, Unit: "count", Window: w, Definition: d,
+			Note: "the ledger keeps the pushes only since " + notifiedSince.Format(time.RFC3339) + "; this window starts earlier"}, false), nil
+	}
+	rows, err := s.ofType("approval.card.notified", w.From, w.To)
+	if err != nil {
+		return Reading{}, fmt.Errorf("approval.card.notified: %w", err)
+	}
+	sent, failed := 0, 0
+	for _, r := range rows {
+		if str(r.Body, "kind") == "failed" {
+			failed++
+		} else {
+			sent++
+		}
+	}
+	r := finish(Reading{Name: name, Value: count(sent), Unit: "count", Samples: sent, Window: w, Definition: d,
+		Labels: map[string]string{"failed": fmt.Sprint(failed)}}, false)
+	measuredZero(&r)
+	return r, nil
 }
 
 // mainLookback is how far before the window a commit's arrival on main is

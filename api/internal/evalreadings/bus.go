@@ -6,7 +6,12 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 )
+
+// BusEventsDefinitionVersion is bus_events' own version: 2 counts a type at
+// least once when its last publish falls in the window (2026-11-21).
+const BusEventsDefinitionVersion = "2"
 
 // The bus readings (the metrics line's week-one list, 2026-11-20): how many
 // events of each type the relay published, and how many minutes the bus was
@@ -18,10 +23,18 @@ import (
 // bifrost_bus_relay_published_by_type_total, rounded). Types starting with
 // "drill:" are test events and are left out. A type with no events in the
 // window is a measured zero.
+//
+// Version 2 (2026-11-21, the comm line's finding): the relay counts from 0 at
+// every start, so events published after a start and before Prometheus' first
+// scrape are not in the increase. Types published at start (schema.migration.
+// applied, cluster.node.changed, cluster.database.changed) read 0 over 7 days
+// while bifrost_bus_relay_last_published_timestamp_seconds says they were
+// published in the window. Such a type now counts at least 1, with a note.
 func busEventReadings(ctx context.Context, prom Prom, w Window) []Reading {
 	const name = "bus_events"
-	d := def("Prometheus bifrost_bus_relay_published_by_type_total (platform workers' relay), namespaces bifrost-platform-prod and -stg",
-		"increase over the window, by environment and event type, rounded; drill:* types left out")
+	d := def("Prometheus bifrost_bus_relay_published_by_type_total and bifrost_bus_relay_last_published_timestamp_seconds (platform workers' relay), namespaces bifrost-platform-prod and -stg",
+		"increase over the window, by environment and event type, rounded; at least 1 when the type's last publish falls in the window; drill:* types left out")
+	d.Version = BusEventsDefinitionVersion
 	if prom == nil {
 		return []Reading{finish(Reading{Name: name, Unit: "count", Window: w, Definition: d, Note: "Prometheus is not reachable from this platform"}, false)}
 	}
@@ -34,14 +47,39 @@ func busEventReadings(ctx context.Context, prom Prom, w Window) []Reading {
 	if err != nil {
 		return []Reading{finish(Reading{Name: name, Unit: "count", Window: w, Definition: d, Note: "Prometheus query failed: " + err.Error()}, false)}
 	}
-	var out []Reading
+	// The last publish per type, at the window's end: a type whose last
+	// publish falls in the window was published in it, whatever the counter
+	// missed. A failed query leaves the counts as they are.
+	lastExpr := fmt.Sprintf(`max by (namespace, type) (max_over_time(bifrost_bus_relay_last_published_timestamp_seconds{namespace=~"bifrost-platform-(prod|stg)"}[%ds] @ %d))`, span, w.To.Unix())
+	seen := map[[2]string]bool{}
+	if last, err := prom(ctx, lastExpr); err == nil {
+		for _, s := range last {
+			t := time.Unix(int64(s.Value), 0)
+			if in(t, w) {
+				seen[[2]string{s.Labels["namespace"], s.Labels["type"]}] = true
+			}
+		}
+	}
+	counts := map[[2]string]int{}
 	for _, s := range vals {
-		typ := s.Labels["type"]
+		counts[[2]string{s.Labels["namespace"], s.Labels["type"]}] = int(math.Round(s.Value))
+	}
+	for k := range seen {
+		if _, ok := counts[k]; !ok {
+			counts[k] = 0
+		}
+	}
+	var out []Reading
+	for k, n := range counts {
+		typ := k[1]
 		if typ == "" || strings.HasPrefix(typ, "drill:") {
 			continue
 		}
-		n := int(math.Round(s.Value))
-		r := Reading{Name: name, Labels: map[string]string{"env": envOf(s.Labels["namespace"]), "type": typ}, Value: count(n), Unit: "count", Samples: n, Window: w, Definition: d}
+		note := ""
+		if n < 1 && seen[k] {
+			n, note = 1, "at least 1: published in the window before the relay's first scrape after a start (the counter missed it)"
+		}
+		r := Reading{Name: name, Labels: map[string]string{"env": envOf(k[0]), "type": typ}, Value: count(n), Unit: "count", Samples: n, Window: w, Definition: d, Note: note}
 		r = finish(r, false)
 		measuredZero(&r)
 		out = append(out, r)

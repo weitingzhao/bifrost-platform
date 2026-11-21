@@ -74,3 +74,52 @@ func TestBusOutageMinutes(t *testing.T) {
 		t.Fatalf("no gauge: %+v", r)
 	}
 }
+
+// 2026-11-21, the comm line's finding (Prometheus, 00:26Z): over 7 days the
+// relay's counter gave 0 for schema.migration.applied, cluster.node.changed,
+// cluster.database.changed and seat.session.changed, while their last publish
+// fell inside the window: the counter restarts at 0 with the relay and misses
+// what is published before the first scrape. The Bus page drew four false
+// yellow boxes. A type published in the window now counts at least 1; a type
+// last published before the window stays a measured 0 (the control).
+func TestBusEventsCountAPublishTheCounterMissed(t *testing.T) {
+	w := ClosedWindow(time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC), 7)
+	inside := float64(w.To.Add(-26 * time.Hour).Unix())
+	before := float64(w.From.Add(-time.Hour).Unix())
+	prom := func(_ context.Context, expr string) ([]Sample, error) {
+		lbl := func(ns, typ string) map[string]string { return map[string]string{"namespace": ns, "type": typ} }
+		if strings.Contains(expr, "last_published_timestamp") {
+			return []Sample{
+				{Labels: lbl("bifrost-platform-prod", "schema.migration.applied"), Value: inside},
+				{Labels: lbl("bifrost-platform-prod", "seat.session.changed"), Value: before},
+				{Labels: lbl("bifrost-platform-prod", "cluster.database.changed"), Value: inside},
+				{Labels: lbl("bifrost-platform-prod", "ci.run.finished"), Value: inside},
+				{Labels: lbl("bifrost-platform-prod", "drill:Y-5"), Value: inside},
+			}, nil
+		}
+		return []Sample{
+			{Labels: lbl("bifrost-platform-prod", "schema.migration.applied"), Value: 0},
+			{Labels: lbl("bifrost-platform-prod", "seat.session.changed"), Value: 0},
+			{Labels: lbl("bifrost-platform-prod", "ci.run.finished"), Value: 410.4},
+		}, nil
+	}
+	got := map[string]Reading{}
+	for _, r := range busEventReadings(context.Background(), prom, w) {
+		got[r.Labels["type"]] = r
+	}
+	if len(got) != 4 {
+		t.Fatalf("want 4 types (drill left out), got %+v", got)
+	}
+	if r := got["schema.migration.applied"]; *r.Value != 1 || r.Note == "" || r.Definition.Version != "2" {
+		t.Fatalf("published in the window, counter 0: %+v", r)
+	}
+	if r := got["cluster.database.changed"]; *r.Value != 1 {
+		t.Fatalf("published in the window, no counter series: %+v", r)
+	}
+	if r := got["seat.session.changed"]; *r.Value != 0 || r.Status != StatusOK || r.Note != "" {
+		t.Fatalf("last published before the window stays a measured 0: %+v", r)
+	}
+	if r := got["ci.run.finished"]; *r.Value != 410 || r.Note != "" {
+		t.Fatalf("a counted type keeps its count: %+v", r)
+	}
+}
