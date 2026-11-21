@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -51,6 +52,28 @@ type Edge struct {
 	To       string
 	Imports  int
 	WrongWay bool
+	// ToBase is an edge into the domain every other stands on (the table's
+	// default): that way is the right way, and no contract is asked of it.
+	ToBase bool
+	// Pairs are the imports, importing package then imported package.
+	Pairs [][2]string
+}
+
+// Reference is the imports of one domain's packages from another's, and how
+// many of them the imported domain's contract registers (2026-11-21, the
+// chief of staff's acceptance of "perceive first", item 4: City shows the
+// cross-domain references that happen without being registered, who to
+// whom). It counts by package: a pair (importing package, imported package)
+// is registered when the imported domain's go_surface names an item of that
+// package with the importing package among its users. Counting by name
+// takes the type checker, which only the CI tool runs.
+type Reference struct {
+	From         string `json:"from"`
+	To           string `json:"to"`
+	Imports      int    `json:"imports"`
+	Registered   int    `json:"registered"`
+	Unregistered int    `json:"unregistered"`
+	WrongWay     bool   `json:"wrong_way"`
 }
 
 // StatusInputs are what the status reads besides the scan's own keeping. A
@@ -104,7 +127,13 @@ type Status struct {
 	// OffMapByDomain counts the pool's entries by the domain a review claims
 	// them for; "unclaimed" have none (no review, or delete or unknown).
 	OffMapByDomain map[string]int `json:"off_map_by_domain"`
-	Note           string         `json:"note,omitempty"`
+	// References are the imports between the domains above the base, who to
+	// whom, registered or not (Reference); nil when the domain graph was
+	// not measured. ToBase counts the imports of the base, which ask no
+	// contract.
+	References []Reference `json:"references"`
+	ToBase     int         `json:"references_to_base"`
+	Note       string      `json:"note,omitempty"`
 }
 
 // RepoCount is one repository's (or the cluster's) equation.
@@ -162,6 +191,10 @@ type contractDomain struct {
 			Method string `json:"method"`
 			Path   string `json:"path"`
 		} `json:"request_response"`
+		GoSurface []struct {
+			Name  string   `json:"name"`
+			Users []string `json:"users"`
+		} `json:"go_surface"`
 	} `json:"contracts"`
 }
 
@@ -185,6 +218,14 @@ func (s *Scanner) ComputeStatus(ctx context.Context, in StatusInputs) Status {
 		if c.Measured && c.Gap != 0 {
 			fresh.Value = Bad
 			fresh.Why = joinWhy([]string{fresh.Why, fmt.Sprintf("%s: the equation is off by %d (total %d, on map %d, off map %d): the scan misses or double-counts", c.Repo, c.Gap, c.Total, c.OnMap, c.OffMap)})
+		}
+	}
+	if in.Boundary != nil {
+		// one read of the graph for the boundary lights and the references
+		edges, measured, err := in.Boundary(ctx, k.Repo)
+		in.Boundary = func(context.Context, string) ([]Edge, bool, error) { return edges, measured, err }
+		if measured {
+			st.References, st.ToBase = references(edges, domains)
 		}
 	}
 	alive := s.aliveLights(k.Repo, domains, in)
@@ -441,6 +482,51 @@ func boundaryLights(ctx context.Context, repo string, domains []contractDomain, 
 		out[d.ID] = Light{Value: Problem, Why: fmt.Sprintf("%d imports against the tiers: %s", n, joinWhy(parts))}
 	}
 	return out
+}
+
+// references judges every edge above the base against the contracts.
+func references(edges []Edge, domains []contractDomain) ([]Reference, int) {
+	registered := map[[2]string]bool{} // (user package, offered package)
+	for _, d := range domains {
+		for _, item := range d.Contracts.GoSurface {
+			pkg := packageOf(item.Name)
+			for _, u := range item.Users {
+				registered[[2]string{u, pkg}] = true
+			}
+		}
+	}
+	out, toBase := []Reference{}, 0
+	for _, e := range edges {
+		if e.ToBase {
+			toBase += e.Imports
+			continue
+		}
+		r := Reference{From: e.From, To: e.To, Imports: e.Imports, WrongWay: e.WrongWay}
+		for _, p := range e.Pairs {
+			if registered[p] {
+				r.Registered++
+			}
+		}
+		r.Unregistered = r.Imports - r.Registered
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].From != out[j].From {
+			return out[i].From < out[j].From
+		}
+		return out[i].To < out[j].To
+	})
+	return out, toBase
+}
+
+// packageOf is the package of a go_surface name: "api/internal/x.Name" and
+// "api/internal/x.Type.Method" are both of "api/internal/x".
+func packageOf(name string) string {
+	slash := strings.LastIndex(name, "/")
+	if dot := strings.Index(name[slash+1:], "."); dot >= 0 {
+		return name[:slash+1+dot]
+	}
+	return name
 }
 
 func joinWhy(parts []string) string {

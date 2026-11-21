@@ -186,3 +186,45 @@ func TestTheStatusCarriesEachEquationAndAGapTurnsFreshBad(t *testing.T) {
 		t.Errorf("gap: %+v", f)
 	}
 }
+
+// Origin: 2026-11-21, the chief of staff's acceptance of "perceive first",
+// item 4: City had each domain's lights and off-map count but not the
+// cross-domain references that happen without being registered, who to whom.
+func TestReferencesCountWhoToWhomAndWhatTheContractRegisters(t *testing.T) {
+	var domains []contractDomain
+	if err := json.Unmarshal([]byte(`[
+  {"id":"coordination","contracts":{"go_surface":[{"name":"api/internal/threadinbox.Inbox.Post","users":["api/internal/approvals"]}]}},
+  {"id":"owner","contracts":{}}]`), &domains); err != nil {
+		t.Fatal(err)
+	}
+	edges := []Edge{
+		{From: "owner", To: "coordination", Imports: 2, Pairs: [][2]string{
+			{"api/internal/approvals", "api/internal/threadinbox"}, {"api/internal/questions", "api/internal/threadinbox"}}},
+		{From: "owner", To: "foundation", Imports: 5, ToBase: true},
+	}
+	refs, toBase := references(edges, domains)
+	if toBase != 5 || len(refs) != 1 {
+		t.Fatalf("refs %+v, to base %d", refs, toBase)
+	}
+	if r := refs[0]; r.From != "owner" || r.To != "coordination" || r.Imports != 2 || r.Registered != 1 || r.Unregistered != 1 {
+		t.Errorf("%+v", r)
+	}
+	// Positive control: with no contract, both pairs are unregistered.
+	if refs, _ := references(edges, nil); refs[0].Unregistered != 2 {
+		t.Errorf("no contract: %+v", refs)
+	}
+	if got := packageOf("api/internal/threadinbox.Inbox.Post"); got != "api/internal/threadinbox" {
+		t.Errorf("packageOf %q", got)
+	}
+
+	s := statusScanner(t, time.Date(2026, 11, 21, 7, 0, 0, 0, time.UTC))
+	if st := s.ComputeStatus(context.Background(), StatusInputs{}); st.References != nil {
+		t.Errorf("no graph read: %+v", st.References)
+	}
+	calls := 0
+	in := StatusInputs{Boundary: func(context.Context, string) ([]Edge, bool, error) { calls++; return edges, true, nil }}
+	st := s.ComputeStatus(context.Background(), in)
+	if len(st.References) != 1 || st.References[0].Unregistered != 2 || st.ToBase != 5 || calls != 1 {
+		t.Errorf("status refs %+v, to base %d, graph read %d times", st.References, st.ToBase, calls)
+	}
+}

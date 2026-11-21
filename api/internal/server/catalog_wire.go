@@ -332,7 +332,12 @@ func (s *Server) catalogStatusInputs() catalog.StatusInputs {
 			}
 			edges := make([]catalog.Edge, 0, len(g.Edges))
 			for _, e := range g.Edges {
-				edges = append(edges, catalog.Edge{From: e.From, To: e.To, Imports: e.Imports, WrongWay: e.WrongWay})
+				pairs := make([][2]string, 0, len(e.Pairs))
+				for _, p := range e.Pairs {
+					pairs = append(pairs, [2]string{p.From, p.To})
+				}
+				edges = append(edges, catalog.Edge{From: e.From, To: e.To, Imports: e.Imports, WrongWay: e.WrongWay,
+					ToBase: g.Base != "" && e.To == g.Base, Pairs: pairs})
 			}
 			return edges, g.Measured, nil
 		}
