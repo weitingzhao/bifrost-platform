@@ -43,17 +43,17 @@ func statusOf(firing bool) string {
 
 // ApprovalClaim is a text that claims the Owner's approval.
 func ApprovalClaim() Alert {
-	return Alert{NameApprovalClaim, platformNamespace, "warning", "firing"}
+	return Alert{Name: NameApprovalClaim, Namespace: platformNamespace, Severity: "warning", Status: "firing"}
 }
 
 // ArtifactRefused is a report the platform refused to store.
 func ArtifactRefused() Alert {
-	return Alert{NameArtifactRefused, platformNamespace, "warning", "firing"}
+	return Alert{Name: NameArtifactRefused, Namespace: platformNamespace, Severity: "warning", Status: "firing"}
 }
 
 // LoopFailing is a controller loop failing the same way, or passing again.
 func LoopFailing(firing bool) Alert {
-	return Alert{NameLoopFailing, platformNamespace, "critical", statusOf(firing)}
+	return Alert{Name: NameLoopFailing, Namespace: platformNamespace, Severity: "critical", Status: statusOf(firing)}
 }
 
 // Fire appends one alert in the caller's transaction, so it stands or falls
@@ -118,5 +118,5 @@ func (w *RelayWatch) Step(r RelayReading) []Alert {
 }
 
 func relayAlert(name string, firing bool) Alert {
-	return Alert{name, monitoringNamespace, "critical", statusOf(firing)}
+	return Alert{Name: name, Namespace: monitoringNamespace, Severity: "critical", Status: statusOf(firing)}
 }

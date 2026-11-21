@@ -231,3 +231,39 @@ func TestRelayWatchSaysMissingRuleGroups(t *testing.T) {
 		t.Fatalf("rules back: %v", got)
 	}
 }
+
+// 2026-11-20 (comm line): hardware alerts have no namespace and were written
+// as <alertname>@cluster, so the letter did not say which machine. In the week
+// to 11-21 00:18Z, BifrostClusterNodeDown (node=ubt-k3s-05),
+// BifrostElasticStandbyMarker (node=gpu-server) and ComputePainDbGuestLoad
+// (instance=192.168.10.75:9100) fired so (Prometheus ALERTS, ad-hoc reading).
+func TestAnAlertAboutAMachineNamesIt(t *testing.T) {
+	for _, c := range []struct{ host, node, instance, want string }{
+		{"nas", "ubt-k3s-05", "1.2.3.4:9100", "nas"},
+		{"", "ubt-k3s-05", "", "ubt-k3s-05"},
+		{"", "", "192.168.10.75:9100", "192.168.10.75"},
+		{"", "", "http://gitea/healthz", ""},
+		{"", "", "", ""},
+	} {
+		if got := alerts.HostOf(c.host, c.node, c.instance); got != c.want {
+			t.Errorf("HostOf(%q, %q, %q) = %q, want %q", c.host, c.node, c.instance, got, c.want)
+		}
+	}
+	a, _ := alerts.Normalize("BifrostClusterNodeDown", "", "critical", "firing")
+	a.Host = "ubt-k3s-05"
+	b := alerts.Body(a)
+	if b["subject"] != "BifrostClusterNodeDown@cluster/ubt-k3s-05" || b["host"] != "ubt-k3s-05" {
+		t.Fatalf("body = %v", b)
+	}
+	if err := eventlog.CheckBody(alerts.Type, b); err != nil {
+		t.Fatalf("a body with a host is refused: %v", err)
+	}
+	b["subject"] = "BifrostClusterNodeDown@cluster"
+	if eventlog.CheckBody(alerts.Type, b) == nil {
+		t.Fatal("a subject without the body's host is accepted")
+	}
+	// A seat that follows match=@cluster still hears it.
+	if !strings.Contains(alerts.SubjectOf(a), "@cluster") {
+		t.Fatal("the namespace match no longer matches")
+	}
+}

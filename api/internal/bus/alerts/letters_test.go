@@ -66,3 +66,17 @@ func TestAnInfoAlertWritesOneLetterADay(t *testing.T) {
 		t.Fatal("an always-letter namespace lost its letter each time")
 	}
 }
+
+// Positive control for TestRepeatsShareALetterAndUrgentOnesDoNot: the same
+// warning on two machines in one period is two letters (2026-11-20, comm line:
+// a second machine's alert used to share the first one's letter, untold).
+func TestTheSameAlertOnTwoMachinesIsTwoLetters(t *testing.T) {
+	r := RuleOf("alert-firing-to-duty", "")
+	at := time.Date(2026, 11, 20, 1, 0, 0, 0, time.UTC)
+	a, _ := Normalize("BifrostHostDiskSpaceLow", "", "warning", "firing")
+	b := a
+	a.Host, b.Host = "nas", "mini-50"
+	if r.LetterKey("ev-1", a, at, 0) == r.LetterKey("ev-2", b, at.Add(time.Minute), 0) {
+		t.Fatal("two machines share a letter")
+	}
+}

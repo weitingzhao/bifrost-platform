@@ -75,7 +75,7 @@ func (r Rule) LetterKey(eventID string, a Alert, at time.Time, days int) string 
 	if days >= chronicDays || a.Severity == "info" {
 		window = chronicLetterWindow
 	}
-	return fmt.Sprintf("sub:%s:%s:%d", r.Row, Subject(a.Name, a.Namespace), at.Unix()/int64(window/time.Second))
+	return fmt.Sprintf("sub:%s:%s:%d", r.Row, SubjectOf(a), at.Unix()/int64(window/time.Second))
 }
 
 // LetterKeyOf reads the event from the ledger and answers LetterKey.
@@ -90,8 +90,8 @@ func (r Rule) LetterKeyOf(ctx context.Context, db eventlog.DB, eventID string, n
 			return fmt.Errorf("alerts: event %d is %s", n, typ)
 		}
 		str := func(k string) string { v, _ := b[k].(string); return v }
-		a := Alert{Name: str("alertname"), Namespace: str("namespace"), Severity: str("severity"), Status: str("status")}
-		days, err := eventlog.DaysWithSubject(ctx, tx, Type, Subject(a.Name, a.Namespace), at.Add(-chronicLookback))
+		a := Alert{Name: str("alertname"), Namespace: str("namespace"), Severity: str("severity"), Status: str("status"), Host: str("host")}
+		days, err := eventlog.DaysWithSubject(ctx, tx, Type, SubjectOf(a), at.Add(-chronicLookback))
 		if err != nil {
 			return err
 		}

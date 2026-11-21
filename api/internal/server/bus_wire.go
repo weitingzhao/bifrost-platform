@@ -114,6 +114,7 @@ func (s *Server) announceAlerts(ctx context.Context, facts []opsagent.AlertFact)
 	list := make([]busalerts.Alert, 0, len(facts))
 	for _, f := range facts {
 		if a, ok := busalerts.Normalize(f.Name, f.Namespace, f.Severity, f.Status); ok {
+			a.Host = busalerts.HostOf(f.Host, f.Node, f.Instance)
 			list = append(list, a)
 		}
 	}
@@ -132,7 +133,7 @@ func (s *Server) announceAlerts(ctx context.Context, facts []opsagent.AlertFact)
 		return coord.PostConclusionCaused(ctx, db, key, to, body, cause)
 	}}
 	for _, f := range fired {
-		ev := subscribe.Event{ID: relay.EventID(f.EventID), Type: busalerts.Type, Subject: busalerts.Subject(f.Name, f.Namespace),
+		ev := subscribe.Event{ID: relay.EventID(f.EventID), Type: busalerts.Type, Subject: busalerts.SubjectOf(f.Alert),
 			Ref: busalerts.Ref, Change: f.Status}
 		d.DeliverDirect(ctx, subs, relay.Tenant, ev)
 	}
