@@ -12,8 +12,10 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/acceptance"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/drill"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/effect"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/guardblock"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/observe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/privilege"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/regressions"
@@ -33,6 +35,14 @@ func (s *Server) busRegressions() regressions.API {
 
 func (s *Server) busPrivilege() privilege.API {
 	return privilege.API{DB: s.bus.db, Who: writerOf}
+}
+
+func (s *Server) busAcceptance() acceptance.API {
+	return acceptance.API{DB: s.bus.db, Who: writerOf}
+}
+
+func (s *Server) busGuardBlocks() guardblock.API {
+	return guardblock.API{DB: s.bus.db, Who: writerOf}
 }
 
 func (s *Server) busObserve() observe.Handler {

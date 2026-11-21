@@ -34,6 +34,8 @@ deny	GET /api/v1/bus/regressions
 deny	POST /api/v1/bus/regressions
 deny	POST /api/v1/bus/regressions/fixed
 deny	POST /api/v1/bus/privilege
+deny	POST /api/v1/bus/acceptance
+deny	POST /api/v1/bus/guard-blocks
 deny	GET /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages/ack

@@ -673,3 +673,61 @@ channels:
         - {name: cause, kind: str, optional: true, pattern: '^(contract|owner_undecided|tool)$'}
         - {name: ref, kind: str}
         - {name: change, kind: str, pattern: '^used$'}
+  foundation.acceptance.measured:
+    address: ev.rocket.{env}.foundation.acceptance.measured
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "ruler-<n>@<sha40>"
+      publisher: gate-db
+      domain: foundation
+      ref: "/api/v1/bus/events?type=foundation.acceptance.measured"
+      reconcile: "the ledger is the truth; the producer re-reads the platform and posts again"
+      on_unread: stale
+      retention: 400d
+      # 2026-11-21 (the Owner, in the Foundation thread): Foundation's state goes
+      # on the coordination bus, whoever consumes it. One reading of the
+      # decoupling acceptance (benchmark/decoupling_acceptance.py) per post, with
+      # the ruler's version: the ruler is Foundation's own script and changed
+      # three times that day (POST /api/v1/bus/acceptance, bus/acceptance).
+      consumers: [console]
+      exports: []
+      replaces: []
+      body:
+        - {name: subject, kind: str}
+        - {name: ruler, kind: int}
+        - {name: score, kind: str, pattern: '^(10|[0-9])/10$'}
+        - {name: items, kind: str, pattern: '^(pass|fail|unmeasured)(,(pass|fail|unmeasured)){9}$'}
+        - {name: platform_commit, kind: str, pattern: '^[0-9a-f]{40}$'}
+        - {name: read_at, kind: str}
+        - {name: ref, kind: str}
+        - {name: change, kind: str, pattern: '^measured$'}
+  guard.block.recorded:
+    address: ev.rocket.{env}.guard.block.recorded
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "<rule>"
+      publisher: gate-db
+      domain: foundation
+      ref: "/api/v1/bus/events?type=guard.block.recorded"
+      reconcile: "the ledger is the truth; each machine's local block log (~/.bifrost-dev/logs/agent-guard-blocks.log) is the source a reporter replays"
+      on_unread: stale
+      retention: 400d
+      # 2026-11-21 (the Owner, in the Foundation thread): how often each agent
+      # guard rule (preflight.js) refuses whom goes on the bus; it was read only
+      # from one Mac's transcripts. One refusal per post: the rule and the
+      # session, never the command, which can hold paths and names that must not
+      # leave the machine (POST /api/v1/bus/guard-blocks, bus/guardblock).
+      consumers: [console]
+      exports: []
+      replaces: []
+      body:
+        - {name: subject, kind: str}
+        - {name: rule, kind: str, pattern: '^(D10|nas|owner|approval|dev-services|shared-worktree|push-main|gitea-primary)$'}
+        - {name: session, kind: str, pattern: '^([A-Za-z0-9_.:-]{1,80}|-)$'}
+        - {name: host, kind: str, optional: true, pattern: '^[A-Za-z0-9_.-]{1,63}$'}
+        - {name: ref, kind: str}
+        - {name: change, kind: str, pattern: '^recorded$'}

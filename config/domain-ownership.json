@@ -1700,6 +1700,20 @@
       "status": "assigned",
       "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, writes the Owner's questions to the bus, asked and answered. Imports only foundation packages or none; the server wires it."
     },
+    "api/internal/bus/acceptance": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-21 bus sub-domain, written by the Foundation seat: records each decoupling acceptance reading with its ruler version on the bus (foundation.acceptance.measured, POST /api/v1/bus/acceptance, action record_acceptance_reading); the Owner wanted Foundation's state on the bus. Imports only foundation packages (actor, eventlog); the server wires it."
+    },
+    "api/internal/bus/guardblock": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-21 bus sub-domain, written by the Foundation seat: records each agent guard refusal, rule and session only, on the bus (guard.block.recorded, POST /api/v1/bus/guard-blocks, action record_guard_block). Imports only foundation packages (actor, eventlog); the server wires it."
+    },
     "api/internal/bus/privilege": {
       "domains": [
         "foundation"

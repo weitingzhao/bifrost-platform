@@ -195,6 +195,9 @@ func (s *Server) mountBus(r chi.Router) {
 	r.With(writers).Post("/bus/regressions/fixed", s.guard("mark_regression_fixed", s.handleRegressionWrite(true)))
 	// The Owner's uses of privilege (bus/privilege): the coordinator records each as itself.
 	r.With(writers).Post("/bus/privilege", s.guard("record_privilege_use", s.busPrivilege().HandleRecord))
+	// Foundation's readings (2026-11-21): the decoupling acceptance and the agent guard's refusals.
+	r.With(writers).Post("/bus/acceptance", s.guard("record_acceptance_reading", s.busAcceptance().HandleRecord))
+	r.With(writers).Post("/bus/guard-blocks", s.guard("record_guard_block", s.busGuardBlocks().HandleRecord))
 	// The change of generation, from its registers (bus/effect).
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/nextgen", s.handleBusNextgen)
 	// What the bus promises and to whom, from its registers (bus/registry).

@@ -24,6 +24,8 @@
     "owner_run_command",
     "plan_manifest",
     "poweroff_compute_node",
+    "record_acceptance_reading",
+    "record_guard_block",
     "record_privilege_use",
     "release_freeze",
     "release_policy_install",

@@ -75,6 +75,8 @@ var intendedRouteAdditions = map[string][]string{
 	"POST /api/v1/bus/regressions":       {"reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/bus/regressions/fixed": {"reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/bus/privilege":         {"reporter", "operator", "admin", "trade-satellite"}, // 2026-11-21: the Owner's uses of privilege, recorded by the coordinator (bus/privilege)
+	"POST /api/v1/bus/acceptance":        {"reporter", "operator", "admin", "trade-satellite"}, // 2026-11-21: Foundation's decoupling acceptance readings (bus/acceptance)
+	"POST /api/v1/bus/guard-blocks":      {"reporter", "operator", "admin", "trade-satellite"}, // 2026-11-21: the agent guard's refusals, rule and session only (bus/guardblock)
 	// 2026-11-15 relay F: retained run/step timings, read-only like /units/runs.
 	"GET /api/v1/delivery/pipelines/{name}/timings": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// Wave 2b (2026-11-12): a trial of the release policy on one run request,
