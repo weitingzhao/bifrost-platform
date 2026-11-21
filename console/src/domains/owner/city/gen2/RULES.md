@@ -517,3 +517,12 @@ City 是一种监控程序，用游戏来呈现。做法和 Prometheus 一样反
 - **楼上亮灯**：有告警的楼，头顶一个最严重颜色的「!」，名牌上写几条；城里按街区汇总（下面所有的）。
 - 下一步：命名空间里的告警按地图的 workloads 对到领域街区（地图线的口径）；读数口径改成指标线的命名记录规则（已发信问，2026-11-21，m_01M7ZS3Z…），回信前口径仍在 `hardwareQueries.json`。
 - 默认，Owner 可否决：pending 不显示；info 也显示（蓝色）。撤法：去掉 `content.alerts`，角回到「not wired」。
+
+## 每个街区站成它是什么的那栋楼，各线认领（Owner 2026-11-21）
+
+- Owner：「给其他的每个图都画一个……不然空空的，好丑」「一定要遵守引擎……抽象图做完以后，让各个线去认领」。
+- **图库在引擎**（`@bifrost/ui/city/library/towns` 的 `TOWN_LANDMARKS`）：15 种，按设施种类命名：nuclear、launch-pad、assembly-building、mission-control、court、archive、payload-hangar、dormitory、supplier-dock，加新画的 planning-office、ground-support、comms-tower、workshop、measuring-office、dispatch。一种画一种意思：它是一类地方，不是哪个领域的名字。2×2 的老地标站在 4×4 格子中间，不放大。看图台 `bench/towns.html` 列出每一种和谁认领了。
+- **认领在 Console 的归属表**（`console/domain-ownership.json` 的 `facilities`，每条线改自己那一行的 `kind`）。City 只照读：认领了、图库里有的，街区站成那栋楼；没认领或图库里没有的，留空地，不猜。
+- **实和虚**：地图读得到这个领域的灯（不是 unknown），街区是实的；读不到是半透明（没接线）。楼说的是「它是谁」，里面的读数仍由它的模块画。
+- 现状（2026-11-21）：9 个已认领；compute 认领的是 server-hall，图库没有，City 按 11-20 Owner 定的核电站画（HARDWARE_TOWN）；crew、station、audit、triage 还没认领。
+- 默认，Owner 可否决：六种新楼的样子。撤法：删 `facilities` 的某一行，那个街区回到空地。

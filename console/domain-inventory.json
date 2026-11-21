@@ -2247,7 +2247,9 @@
         "react",
         "vitest"
       ],
-      "source_inputs": [],
+      "source_inputs": [
+        "console/domain-ownership.json"
+      ],
       "test_inputs": [],
       "unresolved_imports": []
     },
