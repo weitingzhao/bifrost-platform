@@ -25,7 +25,7 @@ import { pathToFileURL } from 'node:url'
 import { settingsFromMcpConfig } from './doorbell.js'
 import { defaultRuntimeDeps, type RuntimeDeps } from './runtimeTools.js'
 
-export interface Block { rule: string; session: string; host: string }
+export interface Block { rule: string; session: string; host: string; blocked_at?: string }
 
 /** A block and the log offset just after its line. */
 export interface Line { block: Block; end: number }
@@ -43,9 +43,10 @@ export function blocksSince(text: string, offset: number, host: string): { block
     const line = rest.slice(pos, nl)
     pos = nl + 1
     next = offset + Buffer.byteLength(rest.slice(0, pos))
-    const [, rule, session] = line.split('\t')
+    const [at, rule, session] = line.split('\t')
     if (rule) {
-      const block = { rule, session: session || '-', host }
+      const block: Block = { rule, session: session || '-', host }
+      if (/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(at ?? '')) block.blocked_at = at
       blocks.push(block)
       lines.push({ block, end: next })
     }

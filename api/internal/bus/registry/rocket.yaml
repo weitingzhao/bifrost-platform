@@ -730,5 +730,7 @@ channels:
         - {name: rule, kind: str, pattern: '^(D10|nas|owner|approval|dev-services|shared-worktree|push-main|gitea-primary)$'}
         - {name: session, kind: str, pattern: '^([A-Za-z0-9_.:-]{1,80}|-)$'}
         - {name: host, kind: str, optional: true, pattern: '^[A-Za-z0-9_.-]{1,63}$'}
+        # when the guard refused (the block log's first column); a reporter replays the log, so the event's time is the post's
+        - {name: blocked_at, kind: str, optional: true, pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$'}
         - {name: ref, kind: str}
         - {name: change, kind: str, pattern: '^recorded$'}

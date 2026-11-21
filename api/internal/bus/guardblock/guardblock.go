@@ -6,7 +6,12 @@
 // needs it. A block carries the rule and the session, never the command:
 // a command can hold paths and names that must not leave the machine.
 //
-//	POST /api/v1/bus/guard-blocks   {rule, session, host?}: one refusal
+//	POST /api/v1/bus/guard-blocks   {rule, session, host?, blocked_at?}: one refusal
+//
+// blocked_at is when the guard refused (the block log's first column): a
+// reporter replays the log later, so the event's own time is when it was
+// posted, and a reading by day needs the refusal's (2026-11-21, the metrics
+// line).
 package guardblock
 
 import (
@@ -16,6 +21,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -40,9 +46,10 @@ var (
 
 // Block is one refusal as the reporter states it.
 type Block struct {
-	Rule    string `json:"rule"`
-	Session string `json:"session"`
-	Host    string `json:"host"`
+	Rule      string `json:"rule"`
+	Session   string `json:"session"`
+	Host      string `json:"host"`
+	BlockedAt string `json:"blocked_at"`
 }
 
 // Body is the event body of a block, or why it is refused.
@@ -68,6 +75,13 @@ func Body(b Block) (map[string]any, error) {
 			return nil, fmt.Errorf("host is a machine name, letters, digits and _.- only")
 		}
 		out["host"] = h
+	}
+	if at := strings.TrimSpace(b.BlockedAt); at != "" {
+		t, err := time.Parse(time.RFC3339Nano, at)
+		if err != nil {
+			return nil, fmt.Errorf("blocked_at is an RFC 3339 time")
+		}
+		out["blocked_at"] = t.UTC().Format(time.RFC3339Nano)
 	}
 	return out, nil
 }
@@ -114,7 +128,7 @@ func (a API) HandleRecord(w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&b); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body is {rule, session, host?}: " + err.Error()})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body is {rule, session, host?, blocked_at?}: " + err.Error()})
 		return
 	}
 	who, err := a.Who(r)

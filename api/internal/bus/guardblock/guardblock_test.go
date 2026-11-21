@@ -18,6 +18,8 @@ func TestABlockIsABodyTheRegisterAccepts(t *testing.T) {
 		{Rule: "owner", Session: "4558a214-eeec-4214-8403-73520d03de28"},
 		{Rule: "gitea-primary", Session: "local_c00f7b95", Host: "vision-mac-trader"},
 		{Rule: "D10"},
+		// Origin: 2026-11-21, the metrics line counts refusals by the day they happened.
+		{Rule: "owner", Session: "s", BlockedAt: "2026-11-21T17:05:01.123Z"},
 	} {
 		body, err := Body(b)
 		if err != nil {
@@ -31,6 +33,7 @@ func TestABlockIsABodyTheRegisterAccepts(t *testing.T) {
 		"unknown rule": {Rule: "cat-secret", Session: "s"},
 		"space":        {Rule: "owner", Session: "a b"},
 		"host with /":  {Rule: "owner", Session: "s", Host: "a/b"},
+		"not a time":   {Rule: "owner", Session: "s", BlockedAt: "yesterday"},
 	} {
 		if _, err := Body(b); err == nil {
 			t.Errorf("%s: accepted, want refused", name)
