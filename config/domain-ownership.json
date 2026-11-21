@@ -606,7 +606,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "foundation charter and verified extraction"
+      "basis": "2026-11-21 Foundation function review: request observations across every route, cross-cutting; stays. foundation charter and verified extraction"
     },
     "api/internal/agentrt/plan": {
       "domains": [
@@ -1117,7 +1117,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-15 source and caller audit: k8sstate.go implements the generic statefile backend with ConfigMaps"
+      "basis": "2026-11-21 Foundation function review: the ConfigMap backend of statefile, which eight domains use; stays. 2026-11-15 source and caller audit: k8sstate.go implements the generic statefile backend with ConfigMaps"
     },
     "api/internal/statefile/k8sstate/k8sstatetest": {
       "domains": [
@@ -1411,14 +1411,14 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: infrastructure network monitoring and configuration adapters; implementation, authorization, refusal and dispatch behavior unchanged"
+      "basis": "2026-11-21 Foundation function review (shared notes biz-align/foundation-handover-2026-11-21.md): platform infrastructure; no domain owns network equipment (compute owns CPU, memory, GPU and scheduling), so it stays here on purpose. 2026-11-16 source and caller audit: infrastructure network monitoring and configuration adapters; implementation, authorization, refusal and dispatch behavior unchanged"
     },
     "api/internal/network/unifi": {
       "domains": [
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: infrastructure network provider HTTP client; implementation, authorization, refusal and dispatch behavior unchanged"
+      "basis": "2026-11-21 Foundation function review: the UniFi client of api/internal/network, which stays in Foundation; used by it alone. 2026-11-16 source and caller audit: infrastructure network provider HTTP client; implementation, authorization, refusal and dispatch behavior unchanged"
     },
     "api/internal/opsagent": {
       "domains": [
@@ -1523,7 +1523,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 safe extraction from probe and checklist, which remain mixed. HTTP drain/status, TCP dial-close, streaming JSON observation and non-draining close transport; callers retain identity, signal classification, request targets, client/timeout and retry policy."
+      "basis": "2026-11-21 Foundation function review: its two users, probe and checklist, are bases several domains share, so it stays. 2026-11-16 safe extraction from probe and checklist, which remain mixed. HTTP drain/status, TCP dial-close, streaming JSON observation and non-draining close transport; callers retain identity, signal classification, request targets, client/timeout and retry policy."
     },
     "api/internal/tenant/appreadings": {
       "domains": [
