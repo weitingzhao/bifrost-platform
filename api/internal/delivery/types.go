@@ -2,7 +2,6 @@ package delivery
 
 import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryreadings"
-	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -193,8 +192,3 @@ type RefPreflightResponse struct {
 	Detail       string             `json:"detail"`
 	GeneratedAt  time.Time          `json:"generated_at"`
 }
-
-type PipelinePhaseView = cirunview.PipelinePhaseView
-
-// The steps route's answer is cirunview's observation.
-type PipelineRunStepsResponse = cirunview.RunSteps

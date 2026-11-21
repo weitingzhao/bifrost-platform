@@ -3,7 +3,6 @@ package delivery
 import (
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
-	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"log/slog"
 	"os"
 	"sort"
@@ -127,9 +126,12 @@ func taskKeys(items []unstructured.Unstructured) []string {
 	sorted := append([]unstructured.Unstructured(nil), items...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].GetName() < sorted[j].GetName() })
 	for i := range sorted {
-		t := cirunview.TaskTiming(sorted[i], sorted[i].GetLabels()["tekton.dev/pipelineRun"])
+		t := TaskRunFacts{Name: sorted[i].GetName(), Status: "unread"}
+		if f := ciRuns().TaskRunFacts; f != nil {
+			t = f(sorted[i], sorted[i].GetLabels()["tekton.dev/pipelineRun"])
+		}
 		start, _, _ := unstructured.NestedString(sorted[i].Object, "status", "startTime")
-		out = append(out, strings.Join([]string{t.Name, t.Task, t.Status, start, t.Finished, fmt.Sprint(t.Results), fmt.Sprint(len(t.Steps))}, "\x00"))
+		out = append(out, strings.Join([]string{t.Name, t.Task, t.Status, start, t.Finished, t.Results, fmt.Sprint(t.Steps)}, "\x00"))
 	}
 	return out
 }

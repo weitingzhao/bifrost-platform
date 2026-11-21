@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"io"
 	"net/http"
 	"os"
@@ -1066,12 +1065,21 @@ func isCRDMissing(err error) bool {
 		strings.Contains(msg, "could not find the requested resource")
 }
 
+// pipelineRunFromUnstructured is verification's reading of a PipelineRun.
+// Unbound, a run shows its name, namespace and pipeline, status Unknown.
 func pipelineRunFromUnstructured(obj unstructured.Unstructured, pipelineName string) PipelineRunView {
-	return PipelineRunView(cirunview.PipelineRunObservation(obj, pipelineName))
+	if f := ciRuns().RunObservation; f != nil {
+		return f(obj, pipelineName)
+	}
+	return PipelineRunView{Name: obj.GetName(), Namespace: obj.GetNamespace(), Pipeline: pipelineName, Status: "Unknown"}
 }
 
+// pipelineRunStartedAt orders runs newest first; 0 when unbound.
 func pipelineRunStartedAt(view PipelineRunView) int64 {
-	return cirunview.PipelineRunStartedAt(cirunview.PipelineObservation(view))
+	if f := ciRuns().RunStartedAt; f != nil {
+		return f(view)
+	}
+	return 0
 }
 
 // SetDynamicFactoryForTest injects a fake dynamic client in unit tests.

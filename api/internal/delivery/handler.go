@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 	"k8s.io/client-go/dynamic"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	noticetext "github.com/weitingzhao/bifrost-platform/api/internal/notice"
 )
@@ -25,8 +25,9 @@ type Handler struct {
 	svc               *Service
 	audit             *actuation.AuditLog
 	onPipelineStarted PipelineStartedHook
-	notices           windowNotifier // window_notify.go
-	timings           cirunview.TimingsCache
+	notices           windowNotifier                      // window_notify.go
+	timingsMu         sync.Mutex                          // pipeline_timings.go
+	timings           TimingsReader                       // made on first use
 	configMain        func(MainHeadReader) MainHeadReader // configuration_boundaries.go
 }
 
@@ -163,7 +164,12 @@ func (h *Handler) HandleRunSteps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ns := strings.TrimSpace(r.URL.Query().Get("ns"))
-	writeJSON(w, http.StatusOK, h.svc.PipelineRunSteps(r.Context(), ns, id))
+	steps := h.svc.PipelineRunSteps(r.Context(), ns, id)
+	if steps == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": errRunStepsUnbound})
+		return
+	}
+	writeJSON(w, http.StatusOK, steps)
 }
 
 func (h *Handler) HandleDeletePipelineRun(w http.ResponseWriter, r *http.Request) {

@@ -2,14 +2,12 @@ package delivery
 
 import (
 	"context"
+	"errors"
 	"sort"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
-	"github.com/weitingzhao/bifrost-platform/api/internal/unitexec"
 )
 
 // UnitTaskRuns lists the TaskRuns of unit tasks in the delivery namespace:
@@ -18,18 +16,28 @@ import (
 //
 // The unit plan's reads go through the unit cache once it has earned it
 // (readThrough, 2026-11-18, agreed with the CI line): side by side with the
-// list until the comparisons are clean, a sample after that.
+// list until the comparisons are clean, a sample after that. The list and
+// the plans are verification's readings (CIRunReadings, UnitTaskReadings):
+// unbound, the list is an error and every read goes to the cluster.
 func (s *Service) UnitTaskRuns(ctx context.Context, label, selector string) ([]unstructured.Unstructured, error) {
+	listRuns := ciRuns().UnitTaskRuns
 	list := func() ([]unstructured.Unstructured, error) {
+		if listRuns == nil {
+			return nil, errors.New(errUnitTaskRunUnbound)
+		}
 		lctx, cancel := stgContext(ctx)
 		defer cancel()
 		dyn, err := s.buildDynamicClient()
 		if err != nil {
 			return nil, err
 		}
-		return cirunview.UnitTaskRuns(lctx, dyn, s.PipelinesNamespace(), label, selector)
+		return listRuns(lctx, dyn, s.PipelinesNamespace(), label, selector)
 	}
-	plan, ok := unitexec.PlanOfSelector(label, selector)
+	units := unitTasks()
+	if units.PlanOfSelector == nil || units.CompareKey == nil {
+		return list()
+	}
+	plan, ok := units.PlanOfSelector(label, selector)
 	r := s.syncedCache()
 	if !ok || r == nil {
 		return list()
@@ -40,7 +48,7 @@ func (s *Service) UnitTaskRuns(ctx context.Context, label, selector string) ([]u
 	}
 	return readThrough(s, routeUnitTasks, func(RunCache) []unstructured.Unstructured {
 		return uc.UnitTaskObjects(plan)
-	}, list, unitTaskKeys)
+	}, list, func(items []unstructured.Unstructured) []string { return unitTaskKeys(units.CompareKey, items) })
 }
 
 // UnitTaskCache is the part of the gate's cache that holds the unit TaskRuns.
@@ -51,10 +59,10 @@ type UnitTaskCache interface {
 }
 
 // unitTaskKeys is what the side-by-side compares, sorted by name.
-func unitTaskKeys(items []unstructured.Unstructured) []string {
+func unitTaskKeys(compareKey func(name string, obj map[string]any) string, items []unstructured.Unstructured) []string {
 	out := make([]string, 0, len(items))
 	for i := range items {
-		out = append(out, unitexec.CompareKey(items[i].GetName(), items[i].Object))
+		out = append(out, compareKey(items[i].GetName(), items[i].Object))
 	}
 	sort.Strings(out)
 	return out
