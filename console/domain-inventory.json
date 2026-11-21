@@ -2169,7 +2169,7 @@
         "console/src/domains/owner/city/gen2/__tests__/world/units.test.ts",
         "console/src/domains/owner/city/gen2/__tests__/world/viewport.test.ts",
         "console/src/domains/owner/city/gen2/content/__tests__/boundary.test.ts",
-        "console/src/domains/owner/city/gen2/content/__tests__/consolePlaces.test.ts",
+        "console/src/domains/owner/city/gen2/content/__tests__/domainPlaces.test.ts",
         "console/src/domains/owner/city/gen2/content/__tests__/domainsPanel.test.tsx",
         "console/src/domains/owner/city/gen2/content/__tests__/hardware.fixture.json",
         "console/src/domains/owner/city/gen2/content/__tests__/hardware.test.ts",
@@ -2178,6 +2178,7 @@
         "console/src/domains/owner/city/gen2/content/binding.ts",
         "console/src/domains/owner/city/gen2/content/console.ts",
         "console/src/domains/owner/city/gen2/content/consolePlaces.ts",
+        "console/src/domains/owner/city/gen2/content/domainPlaces.ts",
         "console/src/domains/owner/city/gen2/content/domainsPanel.tsx",
         "console/src/domains/owner/city/gen2/content/hardware.ts",
         "console/src/domains/owner/city/gen2/content/hardwareQueries.json",
@@ -2194,9 +2195,7 @@
         "console/src",
         "console/src/lib/shell"
       ],
-      "test_imports": [
-        "console/src/lib/shell"
-      ],
+      "test_imports": [],
       "external_imports": [
         "@bifrost/ui/city/content",
         "@bifrost/ui/city/devices",
@@ -2206,7 +2205,6 @@
         "@bifrost/ui/city/library/dictionary",
         "@bifrost/ui/city/library/key",
         "@bifrost/ui/city/library/keyIcons",
-        "@bifrost/ui/city/library/landmarkLooks",
         "@bifrost/ui/city/library/landmarks",
         "@bifrost/ui/city/library/towns",
         "@bifrost/ui/city/light",

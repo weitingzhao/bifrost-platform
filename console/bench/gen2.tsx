@@ -5,13 +5,16 @@ import { consoleContent } from '../src/domains/owner/city/gen2/content/console'
 import { formatPath, parsePath, type Path, type Place } from '@bifrost/ui/city/places'
 import { hardwareDistrict, readHardware } from '../src/domains/owner/city/gen2/content/hardware'
 import { readUnits } from '../src/domains/owner/city/gen2/content/unitRooms'
-import { domainsPanel, type DomainsRead } from '../src/domains/owner/city/gen2/content/domainsPanel'
+import { type DomainsRead } from '../src/domains/owner/city/gen2/content/domainsPanel'
 import type { DomainStatusResponse } from '../src/domains/foundation/catalog/api/domainStatus'
+import OWNERSHIP from '../../config/domain-ownership.json'
+
+const NO_LIGHT = { value: '', why: 'bench: not read' }
 import { portsFor, type Link, type Partners } from '@bifrost/ui/city/links'
 import { useRulersTick } from '@bifrost/ui/city/rulers'
 
 // The gen2 frame on its own: the address is the place (#/system/infrastructure), so Back works.
-// The content plug-in: the Console's menu, and the hardware district read live through the platform
+// The content plug-in: the domains the map reads, and the hardware district read live through the platform
 // (the bench's /api proxy: PLATFORM_API_TARGET), every 30 s.
 const getJson = (p: string) => fetch(p).then(r => (r.ok ? r.json() : Promise.reject(new Error(`${p}: HTTP ${r.status}`))))
 
@@ -72,7 +75,9 @@ function Bench() {
   const [domains, setDomains] = useState<DomainsRead>({})
   useEffect(() => {
     let on = true
-    const tick = () => getJson('/api/v1/catalog/status').then(d => { if (on) setDomains({ data: d as DomainStatusResponse }) }, error => { if (on) setDomains({ error }) })
+    // Bench only: without a token the domains come from the ownership table itself, every light unknown.
+    const offline = (): DomainsRead => ({ data: { version: 0, note: 'bench: from config/domain-ownership.json; no light read', domains: OWNERSHIP.domains.map(d => ({ id: d.id, name: d.name, overall: '', alive: NO_LIGHT, interfaces: NO_LIGHT, boundary: NO_LIGHT, fresh: NO_LIGHT })) } as DomainsRead['data'] })
+    const tick = () => getJson('/api/v1/catalog/status').then(d => { if (on) setDomains({ data: d as DomainStatusResponse }) }, () => { if (on) setDomains(offline()) })
     tick()
     const t = setInterval(tick, 30_000)
     return () => { on = false; clearInterval(t) }
@@ -85,7 +90,7 @@ function Bench() {
     // Bench only, ?util=4x8 or 8x8: Utilities at another size, to look at how a district's town grows (2026-11-20).
     const util = new URLSearchParams(location.search).get('util')
     if (hw && util && ['4x4', '4x8', '8x8'].includes(util)) hw.shape = util as Place['shape']
-    const c = consoleContent(hw ? [hw] : [], [domainsPanel(domains)])
+    const c = consoleContent(domains, hw)
     return new URLSearchParams(location.search).has('links') ? { ...c, tree: withPartners(c.tree), links: SAMPLE_LINKS } : c
   }, [reads, rulers, domains])
   const [path, setPath] = useState<Path>(() => parsePath(location.hash))

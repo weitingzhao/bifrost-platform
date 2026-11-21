@@ -1,6 +1,6 @@
 // 2026-11-20: City became the map line's first reader (perceive-first brief, item 4). These cases pin
 // that the city level carries the map's lights, that a failed read says "not known" rather than an empty
-// table, and that districts keep their own panels (the Owner has not said how districts meet domains).
+// table, and that each domain district carries its own row.
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it } from 'vitest'
@@ -40,11 +40,11 @@ describe('domains panel', () => {
     expect(screen.queryByRole('table')).toBeNull()
   })
 
-  it('rides with the city level only; a district keeps its own panels', () => {
-    const c = consoleContent([], [domainsPanel({ data: status })])
+  it('rides with the city level; a domain district carries its own lights', () => {
+    const c = consoleContent({ data: status })
     const open = () => {}
     expect(c.panels(c.tree, open).some(p => p.id === 'domains')).toBe(true)
     const district = c.tree.children[0]
-    expect(c.panels(district, open).some(p => p.id === 'domains')).toBe(false)
+    expect(c.panels(district, open).map(p => p.id)).toEqual(['domain-ops'])
   })
 })

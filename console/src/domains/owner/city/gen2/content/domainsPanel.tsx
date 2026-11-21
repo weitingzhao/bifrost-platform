@@ -75,3 +75,22 @@ function DomainsTable({ read }: { read: DomainsRead }) {
 export const domainsPanel = (read: DomainsRead): Panel => ({
   id: 'domains', title: 'Domains · from the map', dock: 'right', body: <DomainsTable read={read} />,
 })
+
+/** One domain's lights, each with what it was read from, and its count off the map. */
+function DomainLights({ read, id }: { read: DomainsRead; id: string }) {
+  const d = read.data
+  const row = d?.domains.find(r => r.id === id)
+  if (!d || !row) return <p className="g2-unknown">This domain's lights are not known.</p>
+  return <table className="g2-table">
+    <tbody>
+      <tr><th>Overall</th><td className={toneOf(row.overall || 'unknown')}>{row.overall || 'unknown'}</td><td /></tr>
+      {LIGHTS.map(([k, label]) => <tr key={k}><th>{label}</th><Light light={row[k]} /><td className="g2-unknown">{row[k]?.why}</td></tr>)}
+      <tr><th>Off map</th><td className="num">{offMapOf(d, id)}</td><td /></tr>
+    </tbody>
+  </table>
+}
+
+/** A domain district's panel: its own row of the map. */
+export const domainPanel = (read: DomainsRead, id: string): Panel => ({
+  id: `domain-${id}`, title: 'Lights · from the map', dock: 'right', body: <DomainLights read={read} id={id} />,
+})
