@@ -161,7 +161,13 @@ func LedgerCIWith(db func() eventlog.DB, tree func(context.Context, string, stri
 
 // maxVerdictChain bounds how many incremental landings in a row a verdict may
 // rest on before a full pass is needed (the daily full CI is one every day).
-const maxVerdictChain = 20
+// 2026-11-21: 20 -> 100. The push to main now stands on its landing's
+// incremental run instead of running every test again (58 such full runs on
+// 2026-11-20 found 0 failures), so the daily full run is the only full pass
+// between days; bifrost-platform landed 47 commits on 2026-11-20 and a bound
+// of 20 would stop STG at the 21st. 100 is about two such days. Revert: put 20
+// back together with the reuse change in infra task-ci-platform-reuse.yaml.
+const maxVerdictChain = 100
 
 // CISources is what one request of the CI route reads.
 type CISources struct {
