@@ -5,6 +5,8 @@ import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it } from 'vitest'
 import { consoleContent } from '../console'
+import { CardView } from '@bifrost/ui/city/CardView'
+import type { CardBody } from '@bifrost/ui/city/cards'
 import { domainsPanel } from '../domainsPanel'
 
 const light = (value: string, why = `${value} because`) => ({ value, why })
@@ -12,7 +14,8 @@ const status = {
   version: 1, at: '2026-11-20T12:00:00Z', commit: 'abcdef0123',
   domains: [{ id: 'ops', overall: 'bad', alive: light('good'), interfaces: light('problem'), boundary: light('bad'), fresh: light('unknown') }],
 }
-const bodyOf = (p: ReturnType<typeof domainsPanel>) => (typeof p.body === 'function' ? p.body({ size: 'card' } as never) : p.body) as ReactNode
+// The content hands data; the engine draws it (2026-11-21). The tests draw it the way the engine does.
+const bodyOf = (p: ReturnType<typeof domainsPanel>): ReactNode => <CardView body={(typeof p.cards === 'function' ? p.cards({ size: 'card' }) : p.cards) as CardBody} />
 
 describe('domains panel', () => {
   // 2026-11-20: the lights moved onto the tech tree's nodes (techTree.test.ts); the town's panel keeps the counts.
@@ -59,8 +62,8 @@ describe('domains panel', () => {
   it('rides with the city level; a domain district carries its own lights', () => {
     const c = consoleContent({ data: status })
     const open = () => {}
-    expect(c.panels(c.tree, open).some(p => p.id === 'domains')).toBe(true)
+    expect(c.panels!(c.tree, open).some(p => p.id === 'domains')).toBe(true)
     const district = c.tree.children[0]
-    expect(c.panels(district, open).map(p => p.id)).toEqual(['domain-ops'])
+    expect(c.panels!(district, open).map(p => p.id)).toEqual(['domain-ops'])
   })
 })

@@ -3,9 +3,7 @@ import type { Place } from '@bifrost/ui/city/places'
 import { consoleFunctions } from './consolePlaces'
 import { domainTree } from './domainPlaces'
 import { domainPanel, domainsPanel, type DomainsRead } from './domainsPanel'
-import { ownsPanel } from './ownsPanel'
-import type { ReadDomain } from './domainOwns'
-import { panelsOf, pickedPanel } from './panels'
+import { ownsPanel, type ReadDomain } from './domainOwns'
 import { domainTechTree, type GraphRead } from './techTree'
 
 /**
@@ -19,9 +17,10 @@ export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null
   const why = domains.error instanceof Error ? domains.error.message : domains.error ? String(domains.error) : ''
   const tree = domainTree(domains.data, hardware, why)
   const ids = new Set((domains.data?.domains ?? []).map(d => d.id))
-  const panels = (place: Place, open: (child: Place) => void) =>
-    place.id === tree.id ? [...panelsOf(place, open), domainsPanel(domains)]
-      : place.kind === 'district' && ids.has(place.id) ? [...panelsOf(place, open), domainPanel(domains, place.id), ...(readDomain ? [ownsPanel(readDomain, place.id)] : [])]
-        : panelsOf(place, open)
-  return { tree, panels, picked: pickedPanel, functions: consoleFunctions(), techTree: domainTechTree(domains.data, graph) }
+  // Only this content's own data; the engine adds its own cards (a facility's key and rulers, what a place holds, the picked card).
+  const panels = (place: Place) =>
+    place.id === tree.id ? [domainsPanel(domains)]
+      : place.kind === 'district' && ids.has(place.id) ? [domainPanel(domains, place.id), ...(readDomain ? [ownsPanel(readDomain, place.id)] : [])]
+        : []
+  return { version: 2, tree, panels, functions: consoleFunctions(), techTree: domainTechTree(domains.data, graph) }
 }
