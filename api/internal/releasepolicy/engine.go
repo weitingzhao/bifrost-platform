@@ -254,6 +254,10 @@ type Decision struct {
 	// SelfCheckedAnchors names each trust-anchor change that passed on the
 	// author's own machine facts (trust_anchor_self_checked): "repo@commit".
 	SelfCheckedAnchors []string `json:",omitempty"`
+	// AppliedDDL names each migration file in the diff that the environment
+	// this pipeline delivers has already applied with the same bytes
+	// (migrations_applied): "repo:path". The release runs nothing of it.
+	AppliedDDL []string `json:",omitempty"`
 }
 
 // ClauseText is the audit's clauses= value.
@@ -424,7 +428,10 @@ func (e *Engine) Evaluate(ctx context.Context, actionID string, params map[strin
 			if !pol.Enforced(rule) {
 				continue
 			}
-			if rule == "no_ddl" && len(d.ReversibleDDL)+len(d.AdditiveDDL) > 0 {
+			if rule == "no_ddl" && len(d.ReversibleDDL)+len(d.AdditiveDDL)+len(d.AppliedDDL) > 0 {
+				if len(d.AppliedDDL) > 0 {
+					d.Clauses = append(d.Clauses, "migrations_applied")
+				}
 				if len(d.ReversibleDDL) > 0 {
 					d.Clauses = append(d.Clauses, "ddl_reversible")
 				}
@@ -739,12 +746,20 @@ func (e *Engine) repoReasons(ctx context.Context, pol *Policy, d *Decision, repo
 			// and by being new, and by nothing else: the additive check
 			// below would pass a changed file and what it does not know.
 			if mine := pol.reversiblePaths(repo, hits); len(mine) > 0 {
-				if why := e.reversibleDDL(ctx, repo, old, next, mine); why != "" {
-					reasons = append(reasons, fmt.Sprintf("%s %s..%s carries a migration that is not a new file that cannot destroy rows (ask the Owner): %s",
-						repo, short(old), short(next), why))
-				} else {
-					for _, path := range mine {
-						d.ReversibleDDL = append(d.ReversibleDDL, repo+":"+path)
+				applied := e.appliedHere(ctx, d.Pipeline, repo, next, mine)
+				for _, path := range applied {
+					d.AppliedDDL = append(d.AppliedDDL, repo+":"+path)
+				}
+				// A migration this environment already ran with the same
+				// bytes runs nothing on release; the rest are judged here.
+				if rest := without(mine, applied); len(rest) > 0 {
+					if why := e.reversibleDDL(ctx, repo, old, next, rest); why != "" {
+						reasons = append(reasons, fmt.Sprintf("%s %s..%s carries a migration that is not a new file that cannot destroy rows (ask the Owner): %s",
+							repo, short(old), short(next), why))
+					} else {
+						for _, path := range rest {
+							d.ReversibleDDL = append(d.ReversibleDDL, repo+":"+path)
+						}
 					}
 				}
 				if hits = without(hits, mine); len(hits) == 0 {

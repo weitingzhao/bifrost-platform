@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // A signed policy may cover run_agentrt_migration (its ddl_reversible
@@ -218,4 +219,48 @@ func (e *Engine) evaluateMigration(ctx context.Context, params map[string]any) D
 	d.Reasons = reasons
 	d.Auto = len(reasons) == 0
 	return d
+}
+
+// appliedHere is the part of files (migration paths in repo's diff) that the
+// environment this platform runs has already applied with the bytes next
+// carries, when pipeline is the one that delivers this environment. Such a
+// file runs nothing on release: the PROD pipeline's schema task finds it
+// applied. Origin: 2026-11-21, card #674 — the release of 3c335db2..cc59bf9f
+// needed the Owner only because 0042 (a DROP) was in the diff, though card
+// #671 had already run 0042 on PROD (applied=[42]): one deletion approved
+// twice. Any read that fails, or any other pipeline, gives nothing, and the
+// files are judged as before.
+func (e *Engine) appliedHere(ctx context.Context, pipeline, repo, next string, files []string) []string {
+	if e.d.Migrations == nil || e.d.Git == nil || pipeline == "" {
+		return nil
+	}
+	own, err := e.d.Migrations.Own(ctx)
+	if err != nil || own.Pipeline != pipeline || own.Repo != repo || own.Dir == "" || own.Applied == nil {
+		return nil
+	}
+	var out []string
+	for _, path := range files {
+		dir, name := path, ""
+		if i := strings.LastIndex(path, "/"); i >= 0 {
+			dir, name = path[:i], path[i+1:]
+		}
+		m := migrationFile.FindStringSubmatch(name)
+		if dir != own.Dir || m == nil {
+			continue
+		}
+		id, _ := strconv.Atoi(m[1])
+		ran, ok := own.Applied[id]
+		if !ok {
+			continue
+		}
+		text, found, err := e.d.Git.FileAt(ctx, repo, next, path)
+		if err != nil || !found {
+			continue
+		}
+		h := sha256.Sum256([]byte(text))
+		if hex.EncodeToString(h[:]) == ran {
+			out = append(out, path)
+		}
+	}
+	return out
 }

@@ -73,6 +73,57 @@ func TestReleaseWithAReversibleMigrationIsCovered(t *testing.T) {
 	}
 }
 
+// Origin: 2026-11-21, card #674. The release 3c335db2..cc59bf9f needed the
+// Owner only because migration 0042 (a DROP) was in its diff, though card #671
+// had already run 0042 on PROD: one deletion approved twice. A migration the
+// environment this pipeline delivers has applied with the same bytes runs
+// nothing on release, so it does not hold the release; anything else about
+// it (other bytes, another pipeline's environment, not applied, unread) is
+// judged as before.
+func TestReleaseCarryingAMigrationAlreadyAppliedHere(t *testing.T) {
+	const dropSQL = "DROP TABLE orders;\n"
+	for name, c := range map[string]struct {
+		world   func(f *applyFixture)
+		covered bool
+	}{
+		"applied here with the same bytes": {world: func(f *applyFixture) {
+			f.migs.State.Pipeline = pipeline
+			f.migs.State.Applied[2] = sum(dropSQL)
+		}, covered: true},
+		"applied here with other bytes": {world: func(f *applyFixture) {
+			f.migs.State.Pipeline = pipeline
+			f.migs.State.Applied[2] = sum("DROP TABLE notes;\n")
+		}},
+		"applied on another pipeline's environment": {world: func(f *applyFixture) {
+			f.migs.State.Applied[2] = sum(dropSQL)
+		}},
+		"not applied": {world: func(f *applyFixture) {
+			f.migs.State.Pipeline = pipeline
+		}},
+		"this environment's migrations cannot be read": {world: func(f *applyFixture) {
+			f.migs.Err = errors.New("database down")
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newApplyFixture(t, reversible)
+			migrationWorld(f, dropSQL)
+			c.world(f)
+			d := f.decide(nil)
+			if c.covered {
+				wantAuto(t, d)
+				if strings.Join(d.AppliedDDL, ",") != "repo-app:"+secondFile || !strings.Contains(d.ClauseText(), ",migrations_applied,") ||
+					len(d.ReversibleDDL) != 0 || strings.Contains(d.ClauseText(), ",no_ddl") {
+					t.Fatalf("applied = %q reversible = %q clauses = %s", d.AppliedDDL, d.ReversibleDDL, d.ClauseText())
+				}
+				return
+			}
+			if d.Auto || !strings.Contains(strings.Join(d.Reasons, "\n"), reversibleWhy+secondFile) || len(d.AppliedDDL) != 0 {
+				t.Fatalf("auto = %v applied = %q reasons = %q", d.Auto, d.AppliedDDL, d.Reasons)
+			}
+		})
+	}
+}
+
 // Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
 // a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
 // Each case is the covered release above with one thing wrong; the fixture's
