@@ -1,6 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { acceptanceBody, blocksSince, machineName } from './foundationPost.js'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { acceptanceBody, blocksSince, machineName, shipBlocks } from './foundationPost.js'
+import type { RuntimeDeps } from './runtimeTools.js'
 
 // Origin: 2026-11-21, the Owner wanted Foundation's state on the bus; the guard's
 // refusals were only in one Mac's local log. Each whole line after the offset is
@@ -28,4 +32,26 @@ test('the acceptance output becomes the route body', () => {
     items: [{ item: 2, status: 'fail' }, { item: 1, status: 'pass' }] })
   assert.deepEqual(b.items, ['pass', 'fail'])
   assert.equal(b.platform_commit, 'a'.repeat(40))
+})
+
+// Origin: 2026-11-21, the communication line's review: a refusal moved the
+// offset on and the block was lost. Now a failure that is not a 400 stops at
+// its line (posted on the next run); a 400 skips the line (the control).
+test('a failure stops at its line, a 400 skips it', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fpost-'))
+  const log = join(dir, 'blocks.log')
+  writeFileSync(log, 't\towner\ts1\nt\tgitea-primary\ts2\nt\tD10\ts3\n')
+  const posted: string[] = []
+  const deps = (fail: (rule: string) => string | undefined) =>
+    ({ send: async (_m: string, _p: string, b: { rule: string }) => {
+      const why = fail(b.rule)
+      if (why) throw new Error(`POST /x: HTTP ${why}`)
+      posted.push(b.rule)
+      return {}
+    } }) as unknown as RuntimeDeps
+  assert.equal(await shipBlocks(log, deps((r) => (r === 'gitea-primary' ? '503 busy' : undefined)), () => {}), 1)
+  assert.deepEqual(posted, ['owner'])
+  assert.equal(readFileSync(`${log}.shipped`, 'utf8'), String('t\towner\ts1\n'.length))
+  assert.equal(await shipBlocks(log, deps((r) => (r === 'gitea-primary' ? '400 bad' : undefined)), () => {}), 1)
+  assert.deepEqual(posted, ['owner', 'D10'])
 })

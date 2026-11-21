@@ -27,9 +27,13 @@ import { defaultRuntimeDeps, type RuntimeDeps } from './runtimeTools.js'
 
 export interface Block { rule: string; session: string; host: string }
 
+/** A block and the log offset just after its line. */
+export interface Line { block: Block; end: number }
+
 /** The blocks in the log's text after offset, and the offset after the last whole line. */
-export function blocksSince(text: string, offset: number, host: string): { blocks: Block[]; next: number } {
+export function blocksSince(text: string, offset: number, host: string): { blocks: Block[]; next: number; lines: Line[] } {
   const blocks: Block[] = []
+  const lines: Line[] = []
   let next = offset
   const rest = text.slice(offset)
   let pos = 0
@@ -40,9 +44,13 @@ export function blocksSince(text: string, offset: number, host: string): { block
     pos = nl + 1
     next = offset + Buffer.byteLength(rest.slice(0, pos))
     const [, rule, session] = line.split('\t')
-    if (rule) blocks.push({ rule, session: session || '-', host })
+    if (rule) {
+      const block = { rule, session: session || '-', host }
+      blocks.push(block)
+      lines.push({ block, end: next })
+    }
   }
-  return { blocks, next }
+  return { blocks, next, lines }
 }
 
 /** A machine name the platform accepts (letters, digits, _.-). */
@@ -57,12 +65,26 @@ export async function shipBlocks(logPath: string, deps: RuntimeDeps, err: (l: st
   let offset = existsSync(mark) ? Number(readFileSync(mark, 'utf8').trim()) || 0 : 0
   if (offset > Buffer.byteLength(text)) offset = 0 // the log was rotated
   // The log is ASCII (an ISO time, a rule id, a session id), so bytes and characters agree.
-  const { blocks, next } = blocksSince(text, offset, machineName(hostname()))
+  const { lines, next } = blocksSince(text, offset, machineName(hostname()))
   let sent = 0
-  for (const b of blocks) {
-    const res = (await deps.send('POST', '/api/v1/bus/guard-blocks', b)) as { error?: unknown } | undefined
-    if (res && res.error) err(`guard-blocks: refused ${b.rule}: ${JSON.stringify(res.error).slice(0, 200)}`)
-    else sent++
+  let done = offset
+  for (const { block, end } of lines) {
+    try {
+      await deps.send('POST', '/api/v1/bus/guard-blocks', block)
+      sent++
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      // 400: the platform will never take this line; skip it. Anything else
+      // (the platform away, a 5xx, a token refused) stops here, so the line is
+      // posted on the next run and none after it is posted out of order.
+      if (!/HTTP 400\b/.test(msg)) {
+        writeFileSync(mark, String(done))
+        err(`guard-blocks: stopped at ${block.rule} (${msg.slice(0, 160)}); it is posted on the next run`)
+        return sent
+      }
+      err(`guard-blocks: refused ${block.rule}: ${msg.slice(0, 200)}`)
+    }
+    done = end
   }
   writeFileSync(mark, String(next))
   return sent
