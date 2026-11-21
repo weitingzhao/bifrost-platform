@@ -1,5 +1,5 @@
 import type { Place } from '../places'
-import { deviceSprite, formOfPlace, levelsOf, osOfPlace, type Form } from '../devices'
+import { deviceSprite, facilityOf, formOfPlace, levelsOf, type Form } from '../devices'
 import { DICTIONARY, encode, metaphor, rowsDrawn } from './dictionary'
 
 /**
@@ -24,7 +24,7 @@ const bytes = (v: number | null | undefined) => v == null ? 'not read' : v >= 1e
 export function partsOf(k: Place): string[] {
   const lv = levelsOf(k), some = (f: number | null) => f ?? 0.5
   const running = { ...lv, state: 'online' as const, cpu: some(lv.cpu), mem: some(lv.mem), disks: lv.disks.map(some), vols: lv.vols?.map(v => ({ ...v, f: some(v.f) })) }
-  return rowsDrawn(() => deviceSprite(formOfPlace(k), 4, 4, '#cccccc', 'day', running, k.id, k.face, osOfPlace(k))).ids
+  return rowsDrawn(() => deviceSprite(formOfPlace(k), 4, 4, '#cccccc', 'day', running, k.id, k.face, facilityOf(k))).ids
 }
 
 export function keyOf(k: Place): { form: Form; rows: KeyRow[] } {

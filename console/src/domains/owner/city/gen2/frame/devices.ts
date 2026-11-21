@@ -6,7 +6,7 @@ const U = 35.8
 /** Each system's colour, for the band under a facility's eaves: Ubuntu's orange, a Mac's aluminium silver, Windows' blue, anything else (the NAS) slate. */
 const OS_BAND: Record<MachineOs, string> = { linux: '#e95420', mac: '#a9b1bc', win: '#0078d4', unknown: '#7d8796' }
 import type { Light } from './light'
-import type { Look, Place, State } from './places'
+import type { ComputerFacility, ComputerLook, Place, State } from './places'
 import { beacon, lit, plaque, shade, smoke, toneOf, UNIT, type Tone } from './library/parts'
 import { coolingTower, type MachineOs } from './library/landmarks'
 import { encode, metaphor } from './library/dictionary'
@@ -45,20 +45,14 @@ export function levelsOf(k: Place): Levels {
     cap: { cores: room('cpu')?.meter?.of ?? null, mem: room('memory')?.meter?.of ?? null, disk: room('disk')?.meter?.of ?? null } }
 }
 
-/**
- * A device's facility form, from its look and rooms (the Owner, 2026-11-20: every computer is a compute
- * node, one kind of thing, so one kind of building: Linux, Mac, Windows, a laptop, the NAS all stand as the
- * same power plant; only their system's style differs, and a GPU box adds its cooling tower).
- */
-export const formOfPlace = (k: Place): Form => formOf(k.look ?? 'network', k.children.some(c => c.id === 'gpu'))
-export function formOf(look: Look, gpu: boolean): Form {
-  if (look === 'network') return 'tower'
-  return gpu ? 'station' : 'plant'
-}
-/** A device's system, for its style (the band's colour and the mark on its side). */
-export const osOfPlace = (k: Place): MachineOs => k.look === 'linux' ? 'linux' : k.look === 'mac' ? 'mac' : k.look === 'windows' ? 'win' : 'unknown'
+/** What a device without a facility shows as: a computer of no known kind (shown, not guessed). */
+export const UNKNOWN_COMPUTER: ComputerFacility = { kind: 'computer', look: 'factory', system: 'unknown' }
+/** A device's facility, as its content picked it from the catalogue (places.ts Facility). */
+export const facilityOf = (k: Place): ComputerFacility => k.facility?.kind === 'computer' ? k.facility : UNKNOWN_COMPUTER
+/** The form a facility is drawn in: the servers look is the power station (with its cooling tower), a mast the tower. */
+export const formOfPlace = (k: Place): Form => k.facility?.kind === 'mast' ? 'tower' : facilityOf(k).look === 'servers' ? 'station' : 'plant'
 
-export function deviceSprite(form: Form, fw: number, fd: number, hue: string, light: Light, lv: Levels, name = '', face: Place['face'] = {}, os: MachineOs = 'linux'): Sprite {
+export function deviceSprite(form: Form, fw: number, fd: number, hue: string, light: Light, lv: Levels, name = '', face: Place['face'] = {}, fac: ComputerFacility = UNKNOWN_COMPUTER): Sprite {
   const T0 = toneOf(hue, light, lv.state)
   // Every facility here stands in off-white with a grey roof (2026-11-20, the drawing floor: the hue tinted
   // whole buildings); colour is kept for bands and marks.
@@ -69,12 +63,12 @@ export function deviceSprite(form: Form, fw: number, fd: number, hue: string, li
   const i = 0.24, x0 = i, y0 = i, w = fw - 2 * i, d = fd - 2 * i
   g.shadow(x0, y0, w, d, 0.4)
   if (form === 'plant') {
-    powerPlant(g, x0, y0, w, d, T, lv, hue, light, name, os, face)
+    powerPlant(g, x0, y0, w, d, T, lv, hue, light, name, fac, face)
     return g.done()
   }
 
   if (form === 'station') {
-    powerPlant(g, x0, y0, w, d, T, lv, hue, light, name, os, face, 'station')
+    powerPlant(g, x0, y0, w, d, T, lv, hue, light, name, { ...fac, look: 'servers' }, face, 'station')
     return g.done()
   }
 
@@ -102,7 +96,8 @@ export function deviceSprite(form: Form, fw: number, fd: number, hue: string, li
  * Owner, 2026-11-20: the readings go outside the picture). Standby: dark windows, no smoke. Unread: grey,
  * every gauge empty.
  */
-function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: Tone, lv: Levels, hue: string, light: Light, _name: string, os: MachineOs, face: Place['face'] = {}, kind: 'plant' | 'station' = 'plant') {
+function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: Tone, lv: Levels, hue: string, light: Light, _name: string, fac: ComputerFacility, face: Place['face'] = {}, kind: 'plant' | 'station' = 'plant') {
+  const os: MachineOs = fac.system
   const run = lv.state === 'online', night = light === 'night', unread = lv.state === 'unread'
   const S = (c: string, k: number) => night ? shade(c, k) : c
   const n1 = (v: number) => v.toFixed(1)
@@ -125,7 +120,8 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: T
   //   Windows   the trading desk: a blue glass office tower, a ticker strip round its foot
   //   storage   the warehouse: a gabled shed, a roller door per disk with its lamp, crates by how full
   //   GPU       the server hall: windowless, louvred, a field of fans on the roof, a cooling tower beside
-  const style = kind === 'station' ? 'servers' : os === 'linux' ? 'factory' : os === 'mac' ? 'studio' : os === 'win' ? 'tower' : 'warehouse'
+  // Its building is the look its content picked from the catalogue (places.ts Facility); a station is always the servers.
+  const style: ComputerLook = kind === 'station' ? 'servers' : fac.look
   const n = (metaphor('cpu.busy').encoding as { n: number }).n, on = run ? lit(lv.cpu, n) : 0
   const pane = (i: number, off = night ? '#3a4158' : '#cfe3f7') => i < on ? '#ffd76a' : unread ? '#dcdbe3' : off
   const greyed = (c: ReturnType<typeof faces>) => unread ? faces('#eeedf2', '#d9d7e0', '#c6c3cf') : faces(S(c.top, -0.45), S(c.left, -0.5), S(c.right, -0.55))
@@ -324,8 +320,8 @@ function powerPlant(g: Draw, x0: number, y0: number, w: number, d: number, _T: T
   }
 }
 
-export const deviceKey = (form: Form, fw: number, fd: number, hue: string, light: Light, lv: Levels, name = '', face: Place['face'] = {}, os: MachineOs = 'linux') => {
+export const deviceKey = (form: Form, fw: number, fd: number, hue: string, light: Light, lv: Levels, name = '', face: Place['face'] = {}, fac: ComputerFacility = UNKNOWN_COMPUTER) => {
   const q = (f: number | null) => f == null ? 'n' : String(Math.round(f * 10))
   const c = (v: number | null | undefined) => v == null ? 'n' : String(Math.round(Math.log2(v) * 4))
-  return `g2:fac:${form}:${os}:${name}:${c(lv.cap?.cores)}.${c(lv.cap?.mem)}.${c(lv.cap?.disk)}:${face?.roof ?? ''}:${face?.sign ?? ''}:${face?.tally?.n ?? ''}:${fw}x${fd}:${hue}:${light}:${lv.state}:${q(lv.cpu)}:${q(lv.mem)}:${lv.disks.map(q).join('.')}:${(lv.vols ?? []).map(v => `${q(v.f)}${v.units.join('')}`).join('|')}`
+  return `g2:fac:${form}:${fac.look}:${fac.system}:${name}:${c(lv.cap?.cores)}.${c(lv.cap?.mem)}.${c(lv.cap?.disk)}:${face?.roof ?? ''}:${face?.sign ?? ''}:${face?.tally?.n ?? ''}:${fw}x${fd}:${hue}:${light}:${lv.state}:${q(lv.cpu)}:${q(lv.mem)}:${lv.disks.map(q).join('.')}:${(lv.vols ?? []).map(v => `${q(v.f)}${v.units.join('')}`).join('|')}`
 }

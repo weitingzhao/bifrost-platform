@@ -29,6 +29,15 @@ export type Meter = { used: number | null; of: number | null; unit: 'cores' | 'b
 export const LOOKS = ['linux', 'windows', 'mac', 'storage', 'network'] as const
 export type Look = (typeof LOOKS)[number]
 
+/** The computer looks in the catalogue (devices.ts draws each); one family, each its own building. */
+export const COMPUTER_LOOKS = ['factory', 'studio', 'tower', 'warehouse', 'servers'] as const
+export type ComputerLook = (typeof COMPUTER_LOOKS)[number]
+/** A system's style on a computer: the colour of its band and the mark on its side. */
+export const SYSTEMS = ['linux', 'mac', 'win', 'unknown'] as const
+export type System = (typeof SYSTEMS)[number]
+export type ComputerFacility = { kind: 'computer'; look: ComputerLook; system: System }
+export type Facility = ComputerFacility | { kind: 'mast' }
+
 export type Place = {
   /** The path segment: unique among its siblings. */
   id: string
@@ -59,11 +68,17 @@ export type Place = {
   units?: State[]
   look?: Look
   /**
+   * What it stands as, picked by the content from the frame's catalogue (the Owner, 2026-11-20: the world offers
+   * the things, the system picks which of them shows its state): a computer of one of the five looks and its
+   * system, or a mast. The frame draws a place by this alone; a device without one shows as an unknown computer.
+   */
+  facility?: Facility
+  /**
    * A district's character on the town (the Owner, 2026-11-20: each district its own kind of city; the hardware
    * is the town's power, drawn as a fusion works, not a tech park): campus (offices round a courtyard, the
    * default) or power (a tokamak in its hall, a solar field, white halls with glowing seams).
    */
-  style?: 'campus' | 'power'
+  style?: string
   /** Whom it deals with on purpose, up to three a side (links.ts Partners); the rest is undeclared and goes to Other. */
   partners?: Partners
   /** A first-generation landmark it stands as (library/landmarkLooks.ts); content says which, and why. */

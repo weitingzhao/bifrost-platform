@@ -2,8 +2,15 @@ import { Draw, faces, hash, type Sprite } from '../kit'
 import { sheetsOf, type Place } from '../places'
 import type { Light } from '../light'
 import { portsFor } from '../links'
-import { deviceKey, deviceSprite, formOfPlace, levelsOf, osOfPlace, type Levels } from '../devices'
-import { frontLanes, frontWall, inset } from './landmarks'
+import { deviceKey, deviceSprite, facilityOf, formOfPlace, levelsOf, type Levels } from '../devices'
+import { frontLanes, frontWall, inset, nuclearCore } from './landmarks'
+
+/**
+ * The towns in the catalogue a district may stand as on the city (its content picks one by name, Place.style;
+ * a district that picks none is the plain campus). Each is a landmark drawn once at 4×4; towns.ts builds the
+ * rest round it by the district's size.
+ */
+export const TOWN_LANDMARKS: Record<string, () => Sprite> = { nuclear: nuclearCore }
 
 /**
  * A district's town at any size (the Owner, 2026-11-20: a district may be 4×4, 4×8 or 8×8 on the city; one
@@ -32,12 +39,13 @@ export function modulesOf(k: Place, hue: string, light: Light): Module[] {
     return tot ? ok.reduce((a, [f, w]) => a + f * w, 0) / tot : null
   }
   return sheetsOf(k).slice(1).map((sheet, i) => {
-    const kids = sheet.filter(c => c.look)
+    const kids = sheet.filter(c => c.facility)
     if (!kids.length) return null
     const count = new Map<string, number>()
-    for (const c of kids) { const id = `${formOfPlace(c)}:${osOfPlace(c)}`; count.set(id, (count.get(id) ?? 0) + 1) }
+    const kindOf = (c: Place) => { const f = facilityOf(c); return `${f.look}:${f.system}` }
+    for (const c of kids) { const id = kindOf(c); count.set(id, (count.get(id) ?? 0) + 1) }
     const top = [...count.entries()].sort((a, b) => b[1] - a[1])[0][0]
-    const first = kids.find(c => `${formOfPlace(c)}:${osOfPlace(c)}` === top)!
+    const first = kids.find(c => kindOf(c) === top)!
     const ls = kids.map(levelsOf), on = ls.filter(l => l.state === 'online')
     const lv: Levels = {
       state: on.length ? 'online' : ls.some(l => l.state === 'down') ? 'down' : ls.some(l => l.state === 'standby') ? 'standby' : 'unread',
@@ -46,7 +54,7 @@ export function modulesOf(k: Place, hue: string, light: Light): Module[] {
       disks: [weighted(on.map(l => [l.disks[0] ?? null, l.cap?.disk]))],
       cap: { cores: sum(ls.map(l => l.cap?.cores)), mem: sum(ls.map(l => l.cap?.mem)), disk: sum(ls.map(l => l.cap?.disk)) },
     }
-    const form = formOfPlace(first), os = osOfPlace(first), name = `${k.id}:sheet${i + 1}`
+    const form = formOfPlace(first), os = facilityOf(first), name = `${k.id}:sheet${i + 1}`
     return { key: deviceKey(form, 4, 4, hue, light, lv, name, {}, os), make: () => deviceSprite(form, 4, 4, hue, light, lv, name, {}, os) }
   })
 }

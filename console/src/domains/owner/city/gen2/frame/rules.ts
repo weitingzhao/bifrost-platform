@@ -1,5 +1,6 @@
 import { area, assign, CLASSES, decodePlan, GRID, MAX_THINGS, plotsOf, sidesOf, SHAPES, TAPPABLE, UNIT, type Shape } from './grid'
-import { LOOKS, STATES, type Place, type PlaceKind } from './places'
+import { COMPUTER_LOOKS, LOOKS, STATES, SYSTEMS, type Place, type PlaceKind } from './places'
+import { TOWN_LANDMARKS } from './library/towns'
 import { linkRulesBroken, type Link } from './links'
 
 /**
@@ -41,6 +42,11 @@ export function rulesBroken(content: { tree: Place; functions?: { id: string }[]
     if (p.function && fns && !fns.has(p.function)) out.push(`${where}: function ${p.function} is not one of the content's functions`)
     if (p.state && !(STATES as readonly string[]).includes(p.state)) out.push(`${where}: state ${p.state} is not one of ${STATES.join(', ')}`)
     if (p.look && !(LOOKS as readonly string[]).includes(p.look)) out.push(`${where}: look ${p.look} is not one of ${LOOKS.join(', ')}`)
+    // What it stands as must be in the catalogue (the world offers the things; the content only picks).
+    const f = p.facility
+    if (f && f.kind === 'computer' && !(COMPUTER_LOOKS as readonly string[]).includes(f.look)) out.push(`${where}: a computer's look ${f.look} is not one of ${COMPUTER_LOOKS.join(', ')}`)
+    if (f && f.kind === 'computer' && !(SYSTEMS as readonly string[]).includes(f.system)) out.push(`${where}: a computer's system ${f.system} is not one of ${SYSTEMS.join(', ')}`)
+    if (p.style && p.style !== 'campus' && !(p.style in TOWN_LANDMARKS)) out.push(`${where}: town ${p.style} is not in the catalogue (${Object.keys(TOWN_LANDMARKS).join(', ')})`)
     const t = p.face?.tally
     if (t && t.n != null && (t.n < 0 || !READ_SOURCE.test(t.source))) out.push(`${where}: a tally is a count read from a query or an API path, not "${t.source}"`)
     for (const u of p.units ?? []) if (!(STATES as readonly string[]).includes(u)) out.push(`${where}: a unit's state ${u} is not one of ${STATES.join(', ')}`)

@@ -1,3 +1,4 @@
+import { facilityFor, HARDWARE_TOWN } from './binding'
 import { cityRulers, unitRoomsOf, type UnitReads } from './unitRooms'
 import { DISTRICT, encodePlan, fitsIn, plotsOf, shapeArea, splitPlot, type Plan, type Shape } from '../frame/grid'
 import type { Look, Meter, Place, State } from '../frame/places'
@@ -205,7 +206,7 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', uni
     const building: Place = {
       face,
       // The topology names the box, the cluster its node: show both where they differ (mini-pc-a · ubt-k3s-02).
-      id: n.id, kind: 'building', shape: shapeOf(look, cores, gpu), label: node && !(n.label ?? n.id).includes(node) ? `${n.label ?? n.id} · ${node}` : n.label ?? n.id, look, state,
+      id: n.id, kind: 'building', facility: facilityFor(look, gpu), shape: shapeOf(look, cores, gpu), label: node && !(n.label ?? n.id).includes(node) ? `${n.label ?? n.id} · ${node}` : n.label ?? n.id, look, state,
       question: `${n.label ?? n.id}${ip ? ` (${ip})` : ''}: is it up, and how full is it?`, dashboard: null, children: rooms,
     }
     return building
@@ -216,7 +217,7 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', uni
   for (const b of devices) { const z = zones.get(b.id); if (z) b.sheet = ZONE_SHEET[z] }
   const arrangement = zonedArrangement(devices.map(b => ({ id: b.id, shape: b.shape, zone: zones.get(b.id)! })))
   // The hardware is the town's power on the map: a nuclear plant (the Owner, 2026-11-20).
-  return { id: 'utilities', kind: 'district', shape: DISTRICT, style: 'power', function: fn, arrangement, label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: devices }
+  return { id: 'utilities', kind: 'district', shape: DISTRICT, style: HARDWARE_TOWN, function: fn, arrangement, label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: devices }
 }
 
 /**

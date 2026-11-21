@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DICTIONARY, rowsDrawn } from '../../frame/library/dictionary'
 import { keyOf, partsOf } from '../../frame/library/key'
-import { deviceSprite, formOfPlace, levelsOf, osOfPlace } from '../../frame/devices'
+import { deviceSprite, facilityOf, formOfPlace, levelsOf } from '../../frame/devices'
 import { hardwareDistrict, type HardwareReads } from '../hardware'
 import fixture from './hardware.fixture.json'
 
@@ -16,7 +16,7 @@ describe('a facility’s key', () => {
     for (const k of d.children) {
       const ids = partsOf(k), rows = keyOf(k).rows.map(r => r.id)
       expect(rows).toEqual(DICTIONARY.map(m => m.id).filter(id => ids.includes(id)))
-      const now = rowsDrawn(() => deviceSprite(formOfPlace(k), 4, 4, '#cccccc', 'day', levelsOf(k), k.id, k.face, osOfPlace(k))).ids
+      const now = rowsDrawn(() => deviceSprite(formOfPlace(k), 4, 4, '#cccccc', 'day', levelsOf(k), k.id, k.face, facilityOf(k))).ids
       for (const id of now) expect(rows).toContain(id)
     }
   })

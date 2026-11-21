@@ -6,16 +6,15 @@ import { hueOf, tintOf } from './theme'
 import { PALETTE, TERRAIN, type Light, type Palette } from './light'
 import { hash } from './kit'
 import { buildingWings, setback, spriteFor, spriteKey, spriteUrl, type Wing } from './sprites'
-import { deviceKey, deviceSprite, formOfPlace, levelsOf, osOfPlace } from './devices'
+import { deviceKey, deviceSprite, facilityOf, formOfPlace, levelsOf } from './devices'
 import { frameOf, type Frame } from './viewport'
 import { LANDMARKS } from './library/landmarkLooks'
-import { nuclearCore } from './library/landmarks'
-import { cellsOf, modulesOf, townKey, townSprite } from './library/towns'
+import { cellsOf, modulesOf, TOWN_LANDMARKS, townKey, townSprite } from './library/towns'
 import { clampLabel, placeLabels, type Box, type LabelMode } from './labels'
 import { edgeSlots, linksAt, portAt, portsFor, slotsFor, type LevelLinks, type Link, type Slot } from './links'
 
-/** The district styles drawn as a town of their own: the landmark in its back corner (towns.ts builds the rest by its size); the rest use the campus. */
-const TOWN_CORE: Partial<Record<string, () => import('./kit').Sprite>> = { power: nuclearCore }
+/** The towns a district may stand as are the catalogue's (towns.ts TOWN_LANDMARKS), picked by its content. */
+const TOWN_CORE: Partial<Record<string, () => import('./kit').Sprite>> = TOWN_LANDMARKS
 
 /**
  * One scene draws one place (a page): its 16×16 ground and the things on it,
@@ -394,8 +393,8 @@ export class PlaceScene extends Phaser.Scene {
         return { id: p.id, key, make: lm.make }
       }
       // A device (a building with a look) is drawn as itself, its rooms' readings on it (devices.ts).
-      if (kind === 'building' && k?.look) {
-        const lv = levelsOf(k), form = formOfPlace(k), os = osOfPlace(k)
+      if (kind === 'building' && k?.facility) {
+        const lv = levelsOf(k), form = formOfPlace(k), os = facilityOf(k)
         return { id: p.id, key: deviceKey(form, p.w, p.h, hue, this.light, lv, k.id, k.face, os), make: () => deviceSprite(form, p.w, p.h, hue, this.light, lv, k.id, k.face, os) }
       }
       // A room its content draws (its own module), where it stands as the module drew it; else the plain room.
@@ -405,8 +404,8 @@ export class PlaceScene extends Phaser.Scene {
       }
       const wings = kind === 'building' ? this.wingsOf(path, p.w, p.h) : []
       const sig = wings.map(w => `${w.x.toFixed(2)},${w.y.toFixed(2)},${w.w.toFixed(2)},${w.h.toFixed(2)},${w.hue}`).join(';')
-      const key = spriteKey(kind, p.w, p.h, hue, this.light, seed, count) + (sig ? `:w${hash(sig)}` : '') + (k?.look ? `:${k.look}` : '')
-      const make = () => kind === 'building' ? buildingWings(p.w, p.h, hue, this.light, seed, wings, k?.look) : spriteFor(kind, p.w, p.h, hue, this.light, seed, count)
+      const key = spriteKey(kind, p.w, p.h, hue, this.light, seed, count) + (sig ? `:w${hash(sig)}` : '')
+      const make = () => kind === 'building' ? buildingWings(p.w, p.h, hue, this.light, seed, wings) : spriteFor(kind, p.w, p.h, hue, this.light, seed, count)
       return { id: p.id, key, make }
     })
   }

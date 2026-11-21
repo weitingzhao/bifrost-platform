@@ -1,5 +1,4 @@
 import type { Light } from './light'
-import type { Look } from './places'
 import { Draw, faces, hash, INK, type Sprite } from './kit'
 
 /**
@@ -193,7 +192,7 @@ export type Wing = { x: number; y: number; w: number; h: number; hue: string }
  * the room's hue; the gaps between wings are where the corridors run inside. A building with no
  * rooms is a plain workshop.
  */
-export function buildingWings(fw: number, fd: number, hue: string, light: Light, seed: number, wings: readonly Wing[], look?: Look): Sprite {
+export function buildingWings(fw: number, fd: number, hue: string, light: Light, seed: number, wings: readonly Wing[]): Sprite {
   if (wings.length === 0) return workshop(fw, fd, hue, light, seed)
   const W = WALLS[light]
   const n = Math.min(fw, fd)
@@ -219,26 +218,10 @@ export function buildingWings(fw: number, fd: number, hue: string, light: Light,
     }
   }
   // The kind of device, on the roof of its tallest wing (RULES.md §2.4): one glance says what it is.
-  if (look) {
-    const top = order.reduce((a, w) => (w.w * w.h > a.w * a.h ? w : a), order[0])
-    const h = POD + Math.round(8 + n * 3 + Math.sqrt(top.w * top.h) * (n >= 4 ? 4 : 6))
-    emblem(g, top.x + top.w / 2, top.y + top.h / 2, h, look, light)
-  }
+
   return g.done()
 }
 
-/** A device's kind as a rooftop mark: a mast (Linux), a four-pane sign (Windows), a dome (Mac), stacked platters (storage), a radio tower (network). */
-function emblem(g: Draw, x: number, y: number, z: number, look: Look, light: Light) {
-  const metal = light === 'night' ? faces('#5a5f7a', '#4a4f6a', '#3c4058') : faces('#e4e2dc', '#c9c6be', '#b3afa6')
-  if (look === 'linux') { g.line([x, y, z], [x, y, z + 22], INK, 2.2); g.box(x - 0.1, y - 0.1, 0.2, 0.2, 4, faces('#f2d27a', '#d9b45a', '#c09a40'), z + 20, 1) }
-  if (look === 'windows') {
-    g.line([x, y, z], [x, y, z + 10], INK, 1.6)
-    for (const [a, b] of [[0, 0], [0.18, 0], [0, 0.18], [0.18, 0.18]]) g.onLeft(x - 0.2 + a, y, 0, 0.16, z + 10 + b * 40, z + 16 + b * 40, '#8fb6f2', 0.8)
-  }
-  if (look === 'mac') g.cylinder(x, y, 9, z, z + 6, metal.left, metal.right, metal.top)
-  if (look === 'storage') for (let k = 0; k < 3; k++) g.cylinder(x, y, 8, z + k * 5, z + k * 5 + 3, '#c3a6f2', '#a084d8')
-  if (look === 'network') { g.line([x - 0.15, y, z], [x, y, z + 30], INK, 1.6); g.line([x + 0.15, y, z], [x, y, z + 30], INK, 1.6); g.line([x, y, z + 30], [x, y, z + 36], '#d9534f', 2.4) }
-}
 
 export type SpriteKey = string
 export const spriteKey = (kind: string, w: number, d: number, hue: string, light: Light, seed: number, count = 0): SpriteKey => `g2:${kind}:${w}x${d}:${hue}:${light}:${seed}:${count}`
