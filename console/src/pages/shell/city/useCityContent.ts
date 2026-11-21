@@ -4,8 +4,8 @@ import { authedFetch } from '@/api/client'
 import { consoleContent } from '@/domains/owner/city/gen2/content/console'
 import { hardwareDistrict, readHardware } from '@/domains/owner/city/gen2/content/hardware'
 import { readUnits } from '@/domains/owner/city/gen2/content/unitRooms'
-import type { CityContent } from '@/domains/owner/city/gen2/frame/content'
-import { useRulersTick } from '@/domains/owner/city/gen2/frame/rulers'
+import type { CityContent } from '@bifrost/ui/city/content'
+import { useRulersTick } from '@bifrost/ui/city/rulers'
 
 const EVERY = 30_000
 const getJson = async (path: string): Promise<unknown> => (await authedFetch('city', path)).json()

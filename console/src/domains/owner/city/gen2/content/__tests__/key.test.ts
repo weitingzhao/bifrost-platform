@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { DICTIONARY, rowsDrawn } from '../../frame/library/dictionary'
-import { keyOf, partsOf } from '../../frame/library/key'
-import { deviceSprite, facilityOf, formOfPlace, levelsOf } from '../../frame/devices'
+import { DICTIONARY, rowsDrawn } from '@bifrost/ui/city/library/dictionary'
+import { keyOf, partsOf } from '@bifrost/ui/city/library/key'
+import { deviceSprite, facilityOf, formOfPlace, levelsOf } from '@bifrost/ui/city/devices'
 import { hardwareDistrict, type HardwareReads } from '../hardware'
 import fixture from './hardware.fixture.json'
 

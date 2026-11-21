@@ -1,7 +1,7 @@
 /** The catalogue's landmarks one by one, large, to judge each drawing against the reference. Bench only. */
 import { createRoot } from 'react-dom/client'
-import type { Sprite } from '../src/domains/owner/city/gen2/frame/kit'
-import * as L from '../src/domains/owner/city/gen2/frame/library/landmarks'
+import type { Sprite } from '@bifrost/ui/city/kit'
+import * as L from '@bifrost/ui/city/library/landmarks'
 
 const url = (s: Sprite) => `data:image/svg+xml;utf8,${encodeURIComponent(s.svg)}`
 const scale = Number(new URLSearchParams(location.search).get('scale') ?? 2)

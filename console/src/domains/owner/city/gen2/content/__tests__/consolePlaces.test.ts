@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ENTRY_ROUTE_IDS } from '@/lib/shell/consoleRoutes'
-import { DISTRICT, fitsBudget, sidesOf, TAPPABLE } from '../../frame/grid'
-import { formatPath, functionAt, here, parsePath, resolve, trail, type Place } from '../../frame/places'
+import { DISTRICT, fitsBudget, sidesOf, TAPPABLE } from '@bifrost/ui/city/grid'
+import { formatPath, functionAt, here, parsePath, resolve, trail, type Place } from '@bifrost/ui/city/places'
 import { consoleFunctions, placeTree } from '../consolePlaces'
 
 // 2026-11-19, the Owner: the game look and the dashboard look are two styles of one Console,

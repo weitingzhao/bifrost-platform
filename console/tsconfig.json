@@ -20,6 +20,8 @@
       "@/*": ["src/*"],
       "@bifrost/ui": ["../../bifrost-ui/dist/index.d.ts"],
       "@bifrost/ui/styles": ["../../bifrost-ui/dist/styles/bifrost-ui.css"],
+      "@bifrost/ui/city": ["../../bifrost-ui/dist/city/index.d.ts"],
+      "@bifrost/ui/city/*": ["../../bifrost-ui/dist/city/*"],
       "react": ["./node_modules/@types/react"],
       "react-dom": ["./node_modules/@types/react-dom"],
       "radix-ui": ["./node_modules/radix-ui"],

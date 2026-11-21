@@ -1,4 +1,4 @@
-import type { UnitSpec } from '../../frame/units/process'
+import type { UnitSpec } from '@bifrost/ui/city/units/process'
 
 /**
  * The memory unit (the second through the unit process, 2026-11-19). City metaphor: the factory's cold store, a row of

@@ -7,7 +7,7 @@ import { expect, it } from 'vitest'
 // them, the way a player picks a character, and never draws. So the content may use the frame's catalogue and
 // its types, never its drawing stock (the kit, the parts, the landmarks' strokes).
 const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const DRAWING = /frame\/(kit|library\/parts|library\/landmarks)$/
+const DRAWING = /(frame|@bifrost\/ui\/city)\/(kit|library\/parts|library\/landmarks)$/
 const files = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap(e =>
   e.isDirectory() ? (e.name === '__tests__' ? [] : files(path.join(d, e.name))) : /\.(ts|tsx)$/.test(e.name) ? [path.join(d, e.name)] : [])
 
@@ -23,6 +23,6 @@ it('the content binds to the catalogue and never draws', () => {
 
 // Positive control: a content line that reaches for the kit is caught.
 it('the check catches the content reaching for the drawing kit', () => {
-  expect(DRAWING.test('../frame/kit')).toBe(true)
-  expect(DRAWING.test('../frame/places')).toBe(false)
+  expect(DRAWING.test('@bifrost/ui/city/kit')).toBe(true)
+  expect(DRAWING.test('@bifrost/ui/city/places')).toBe(false)
 })

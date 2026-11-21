@@ -2,12 +2,12 @@
 // done well once serves everywhere). Three shelves: the parts, the facilities put together from them,
 // and the landmarks brought over from the first generation. Levels here are examples to show what a
 // part does, said so; on the map every level comes from a reading.
-import { Draw, type Sprite } from '../src/domains/owner/city/gen2/frame/kit'
-import { spriteUrl } from '../src/domains/owner/city/gen2/frame/sprites'
-import { beacon, dock, doorRow, gatehouse, grille, hall, plaque, roofNumber, signBand, smoke, tallyBoard, tank, toneOf, windowStrip } from '../src/domains/owner/city/gen2/frame/library/parts'
-import { deviceSprite, type Form, type Levels } from '../src/domains/owner/city/gen2/frame/devices'
-import * as L from '../src/domains/owner/city/gen2/frame/library/landmarks'
-import { DICTIONARY } from '../src/domains/owner/city/gen2/frame/library/dictionary'
+import { Draw, type Sprite } from '@bifrost/ui/city/kit'
+import { spriteUrl } from '@bifrost/ui/city/sprites'
+import { beacon, dock, doorRow, gatehouse, grille, hall, plaque, roofNumber, signBand, smoke, tallyBoard, tank, toneOf, windowStrip } from '@bifrost/ui/city/library/parts'
+import { deviceSprite, type Form, type Levels } from '@bifrost/ui/city/devices'
+import * as L from '@bifrost/ui/city/library/landmarks'
+import { DICTIONARY } from '@bifrost/ui/city/library/dictionary'
 
 const HUE = '#f2d27a'
 type Item = { name: string; note: string; sprite: Sprite }

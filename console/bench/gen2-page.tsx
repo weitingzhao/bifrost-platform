@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import CityGen2 from '../src/domains/owner/city/gen2/frame/CityGen2'
+import CityGen2 from '@bifrost/ui/city/CityGen2'
 import { consoleContent } from '../src/domains/owner/city/gen2/content/console'
-import type { Path } from '../src/domains/owner/city/gen2/frame/places'
+import type { Path } from '@bifrost/ui/city/places'
 import { hardwareDistrict, type HardwareReads } from '../src/domains/owner/city/gen2/content/hardware'
 
 // The gen2 frame as one self-contained page, to open on a phone (published as an Artifact).

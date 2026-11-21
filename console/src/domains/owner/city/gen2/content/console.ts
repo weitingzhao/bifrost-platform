@@ -1,5 +1,5 @@
-import type { CityContent } from '../frame/content'
-import type { Place } from '../frame/places'
+import type { CityContent } from '@bifrost/ui/city/content'
+import type { Place } from '@bifrost/ui/city/places'
 import { consoleFunctions, placeTree } from './consolePlaces'
 import { panelsOf, pickedPanel } from './panels'
 

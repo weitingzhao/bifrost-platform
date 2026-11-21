@@ -1,7 +1,7 @@
 import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, cn } from '@bifrost/ui'
 import { useEffect, useState } from 'react'
 import { ledgerHref, readCityQuery } from '@/domains/owner/city/gen2/content/looks'
-import { isWired, meterText, resolve, trail, type Path, type Place } from '@/domains/owner/city/gen2/frame/places'
+import { isWired, meterText, resolve, trail, type Path, type Place } from '@bifrost/ui/city/places'
 import { useCityContent } from './useCityContent'
 
 const KIND: Record<Place['kind'], string> = { town: 'City', district: 'District', building: 'Building', room: 'Room' }

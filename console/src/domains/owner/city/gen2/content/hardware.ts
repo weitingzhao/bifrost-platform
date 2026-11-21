@@ -1,7 +1,7 @@
 import { facilityFor, HARDWARE_TOWN } from './binding'
 import { cityRulers, unitRoomsOf, type UnitReads } from './unitRooms'
-import { DISTRICT, encodePlan, fitsIn, plotsOf, shapeArea, splitPlot, type Plan, type Shape } from '../frame/grid'
-import type { Look, Meter, Place, State } from '../frame/places'
+import { DISTRICT, encodePlan, fitsIn, plotsOf, shapeArea, splitPlot, type Plan, type Shape } from '@bifrost/ui/city/grid'
+import type { Look, Meter, Place, State } from '@bifrost/ui/city/places'
 
 /**
  * The hardware district (RULES.md §2, the Owner 2026-11-19): the city's utilities, every physical

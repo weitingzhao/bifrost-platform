@@ -4,17 +4,17 @@
 // Owner's words in the thread, recorded in the spec, never a button here.
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { STAGES, stagesOf, unitRulesBroken, type Detail, type StageId, type UnitSpec } from '../src/domains/owner/city/gen2/frame/units/process'
-import { ROOM_STANDARDS } from '../src/domains/owner/city/gen2/frame/units/standards'
+import { STAGES, stagesOf, unitRulesBroken, type Detail, type StageId, type UnitSpec } from '@bifrost/ui/city/units/process'
+import { ROOM_STANDARDS } from '@bifrost/ui/city/units/standards'
 import { UNITS, UNIT_PLAN, cpuRoomReadings } from '../src/domains/owner/city/gen2/content/units/cpu'
 import { memoryRoomReadings } from '../src/domains/owner/city/gen2/content/units/memory'
 import { diskRoomReadings } from '../src/domains/owner/city/gen2/content/units/disk'
-import { baysOf, diskRoom, diskRoomShape } from '../src/domains/owner/city/gen2/frame/units/diskRoom'
-import { freezersOf, memoryRoom, memoryRoomShape, sectionsOf } from '../src/domains/owner/city/gen2/frame/units/memoryRoom'
-import { cpuRoom, cpuRoomShape, cpuSummaryOf, machinesOf } from '../src/domains/owner/city/gen2/frame/units/cpuRoom'
-import { readingText } from '../src/domains/owner/city/gen2/frame/library/parts'
-import { DICTIONARY, encode, rowsDrawn, rulerOf, setRuler, STANDARD_PARTS } from '../src/domains/owner/city/gen2/frame/library/dictionary'
-import { spriteUrl } from '../src/domains/owner/city/gen2/frame/sprites'
+import { baysOf, diskRoom, diskRoomShape } from '@bifrost/ui/city/units/diskRoom'
+import { freezersOf, memoryRoom, memoryRoomShape, sectionsOf } from '@bifrost/ui/city/units/memoryRoom'
+import { cpuRoom, cpuRoomShape, cpuSummaryOf, machinesOf } from '@bifrost/ui/city/units/cpuRoom'
+import { readingText } from '@bifrost/ui/city/library/parts'
+import { DICTIONARY, encode, rowsDrawn, rulerOf, setRuler, STANDARD_PARTS } from '@bifrost/ui/city/library/dictionary'
+import { spriteUrl } from '@bifrost/ui/city/sprites'
 
 type Point = { labels: Record<string, string>; value: number }
 type Node = { id: string; label: string; host?: string }

@@ -21,7 +21,11 @@
 - **观看**（人）：管边界（给多大地、怎么摆、名牌开到哪一档），在自己能认知的边界内看 agent 怎么做。
 机器上的守法：`frame/__tests__/boundary.test.ts`（世界不引用世界以外的任何东西，含子目录）、`content/__tests__/boundary.test.ts`（平台不碰绘图原料：kit、零件、地标笔画）；图鉴里的词由 `rules.ts` 检查（楼型、系统、城的地标必须在图鉴里）。
 
-界面里的「?」卡片（`frame/principle.ts`）说的就是这一节的道和主要几条法，数字取自框架常量。
+**图鉴要够多，领域才能不画（Owner 2026-11-20）**：世界里要画的是现实里已经存在的体系：CPU、内存、硬盘、agent，CI/CD 里的 Gitea、流水线、镜像仓库……每样都是图鉴里一个实打实、有形象的东西；把这些服务拼在一起就是一个领域。领域只从图鉴里挑、拼，不准自己画；前提是框架备足地标和零件。所以框架的长期工作就是不断补全图鉴，每补一样都守画法下限。
+
+**框架已搬进 bifrost-ui（Owner 2026-11-20 定方案 A）**：世界的代码在 `bifrost-ui/src/city/`，以 `@bifrost/ui/city`（入口）和 `@bifrost/ui/city/<模块>` 引用，phaser 是可选依赖；平台侧（这里的 `content/`、`pages/shell/city/`、看台）只引用包。世界的测试暂放在这里的 `__tests__/world/`（边界测试经 `node_modules/@bifrost/ui` 读包的源码）。改世界：在 bifrost-ui 改、`npm run build`，Console 即用新的 `dist/`。上线顺序：先推 bifrost-ui 的 main，再推 Console（集群里的前端 CI 按 bifrost-ui 的 main 编译）。
+
+界面里的「?」卡片（`principle.ts`）说的就是这一节的道和主要几条法，数字取自框架常量。
 
 ## 价值：衡量这套系统好坏的两把尺子（Owner 2026-11-19）
 

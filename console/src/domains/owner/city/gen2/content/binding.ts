@@ -1,4 +1,4 @@
-import type { Facility, Look } from '../frame/places'
+import type { Facility, Look } from '@bifrost/ui/city/places'
 
 /**
  * The platform's binding (the Owner, 2026-11-20: the world offers the things; the platform only says which of

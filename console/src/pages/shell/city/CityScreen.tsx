@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import CityGen2 from '@/domains/owner/city/gen2/frame/CityGen2'
+import CityGen2 from '@bifrost/ui/city/CityGen2'
 import { cityHref, consoleHrefOf, readCityQuery } from '@/domains/owner/city/gen2/content/looks'
 import { useCityContent } from './useCityContent'
 

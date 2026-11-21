@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { rulesBroken } from '../../frame/rules'
-import type { Place } from '../../frame/places'
+import { rulesBroken } from '@bifrost/ui/city/rules'
+import type { Place } from '@bifrost/ui/city/places'
 import { hardwareDistrict, hardwareRulesBroken, type HardwareReads } from '../hardware'
 import fixture from './hardware.fixture.json'
 

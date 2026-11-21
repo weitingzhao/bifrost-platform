@@ -1,5 +1,5 @@
-import type { UnitSpec } from '../../frame/units/process'
-import type { ArrayReading, DiskRoomReadings, DriveReading, VolumeReading } from '../../frame/units/diskRoom'
+import type { UnitSpec } from '@bifrost/ui/city/units/process'
+import type { ArrayReading, DiskRoomReadings, DriveReading, VolumeReading } from '@bifrost/ui/city/units/diskRoom'
 
 /**
  * The disk unit (the third through the unit process, 2026-11-19). City metaphor: the factory's warehouse, a rack

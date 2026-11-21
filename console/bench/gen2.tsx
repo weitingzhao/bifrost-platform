@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import CityGen2 from '../src/domains/owner/city/gen2/frame/CityGen2'
+import CityGen2 from '@bifrost/ui/city/CityGen2'
 import { consoleContent } from '../src/domains/owner/city/gen2/content/console'
-import { formatPath, parsePath, type Path, type Place } from '../src/domains/owner/city/gen2/frame/places'
+import { formatPath, parsePath, type Path, type Place } from '@bifrost/ui/city/places'
 import { hardwareDistrict, readHardware } from '../src/domains/owner/city/gen2/content/hardware'
 import { readUnits } from '../src/domains/owner/city/gen2/content/unitRooms'
-import { portsFor, type Link, type Partners } from '../src/domains/owner/city/gen2/frame/links'
-import { useRulersTick } from '../src/domains/owner/city/gen2/frame/rulers'
+import { portsFor, type Link, type Partners } from '@bifrost/ui/city/links'
+import { useRulersTick } from '@bifrost/ui/city/rulers'
 
 // The gen2 frame on its own: the address is the place (#/system/infrastructure), so Back works.
 // The content plug-in: the Console's menu, and the hardware district read live through the platform

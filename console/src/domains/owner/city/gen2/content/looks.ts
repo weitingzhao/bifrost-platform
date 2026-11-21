@@ -1,4 +1,4 @@
-import type { Path, Place } from '../frame/places'
+import type { Path, Place } from '@bifrost/ui/city/places'
 
 /**
  * The two looks of one system, side by side (the Owner, 2026-11-19: "游戏的展现形式和传统的 dashboard

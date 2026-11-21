@@ -1,4 +1,4 @@
-import type { UnitSpec } from '../../frame/units/process'
+import type { UnitSpec } from '@bifrost/ui/city/units/process'
 import { MEMORY_UNIT } from './memory'
 import { DISK_UNIT } from './disk'
 

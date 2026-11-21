@@ -1,9 +1,9 @@
-import { RulersPanel } from '../frame/rulers'
-import type { Panel } from '../frame/content'
-import { isWired, meterText, type Place } from '../frame/places'
-import { FORM_NAME, keyOf } from '../frame/library/key'
-import { KeyIcon } from '../frame/library/keyIcons'
-import { spriteUrl } from '../frame/sprites'
+import { RulersPanel } from '@bifrost/ui/city/rulers'
+import type { Panel } from '@bifrost/ui/city/content'
+import { isWired, meterText, type Place } from '@bifrost/ui/city/places'
+import { FORM_NAME, keyOf } from '@bifrost/ui/city/library/key'
+import { KeyIcon } from '@bifrost/ui/city/library/keyIcons'
+import { spriteUrl } from '@bifrost/ui/city/sprites'
 
 /**
  * The panels beside the 2.5D middle (the Owner, 2026-11-19): the middle shows where things stand,

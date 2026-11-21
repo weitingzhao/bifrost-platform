@@ -1,6 +1,6 @@
-import { DISTRICT, type Shape } from '../frame/grid'
-import { TOWN_ID, type Place } from '../frame/places'
-import type { LandmarkId } from '../frame/library/landmarkLooks'
+import { DISTRICT, type Shape } from '@bifrost/ui/city/grid'
+import { TOWN_ID, type Place } from '@bifrost/ui/city/places'
+import type { LandmarkId } from '@bifrost/ui/city/library/landmarkLooks'
 import { ENTRY_ROUTE_IDS, SHELL_NAV, entryOf, formatShellHash, type ShellRouteId } from '@/lib/shell/consoleRoutes'
 
 /**
