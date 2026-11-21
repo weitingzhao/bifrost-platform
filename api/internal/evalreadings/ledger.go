@@ -209,9 +209,14 @@ func (s ledgerSource) ownerReadings(w Window) ([]Reading, error) {
 	if err != nil {
 		return nil, err
 	}
+	privilege, err := s.privilegeReading(w)
+	if err != nil {
+		return nil, err
+	}
 	return []Reading{
 		actions,
 		interruptions,
+		privilege,
 		finish(Reading{Name: "owner_wait_p50_seconds", Value: median(waits), Unit: "seconds", Samples: decided, Window: w,
 			Definition: def("event ledger approval_seen, latest fact per approval", "median of decided_at - created_at over approvals decided in window")}, true),
 	}, nil
@@ -250,6 +255,39 @@ func (s ledgerSource) interruptionReading(w Window) (Reading, error) {
 	}
 	r := finish(Reading{Name: name, Value: count(sent), Unit: "count", Samples: sent, Window: w, Definition: d,
 		Labels: map[string]string{"failed": fmt.Sprint(failed)}}, false)
+	measuredZero(&r)
+	return r, nil
+}
+
+// privilegeSince is when the ledger began keeping the Owner's privilege uses
+// (owner.privilege.used). Zero until a producer writes the type: every window
+// is then unmeasured, never a zero nobody counted. When the producer reaches
+// PROD, set this to that release's time.
+var privilegeSince time.Time
+
+// privilegeReading: owner_privilege_uses, the times in the window the Owner
+// stepped in to move something that was stuck (lines waiting on each other, or
+// nothing saying whose it is). Origin: law 68 (the Owner, 2026-11-21, relayed):
+// the privilege must exist, its uses should fall, and the count is the fixed
+// reference for every before-and-after. The facts are the coordinator's, the
+// definition Audit's; this only counts what the ledger holds.
+func (s ledgerSource) privilegeReading(w Window) (Reading, error) {
+	const name = "owner_privilege_uses"
+	d := def("event ledger owner.privilege.used (one per time the Owner stepped in)",
+		"events in the window")
+	if privilegeSince.IsZero() {
+		return finish(Reading{Name: name, Unit: "count", Window: w, Definition: d,
+			Note: "no producer of owner.privilege.used yet; the uses are only in a hand-kept note, which is not a system record (law 47)"}, false), nil
+	}
+	if w.From.Before(privilegeSince) {
+		return finish(Reading{Name: name, Unit: "count", Window: w, Definition: d,
+			Note: "the ledger keeps privilege uses only since " + privilegeSince.Format(time.RFC3339) + "; this window starts earlier"}, false), nil
+	}
+	rows, err := s.ofType("owner.privilege.used", w.From, w.To)
+	if err != nil {
+		return Reading{}, fmt.Errorf("owner.privilege.used: %w", err)
+	}
+	r := finish(Reading{Name: name, Value: count(len(rows)), Unit: "count", Samples: len(rows), Window: w, Definition: d}, false)
 	measuredZero(&r)
 	return r, nil
 }

@@ -142,3 +142,39 @@ func TestOwnerInterruptions(t *testing.T) {
 		t.Fatalf("11-20 starts before the ledger kept pushes: %+v", r)
 	}
 }
+
+// Law 68 (the Owner, 2026-11-21, relayed by the coordinator): privilege uses
+// are the fixed before-and-after reference. Until something writes
+// owner.privilege.used to the ledger every window is unmeasured, not 0: a
+// zero nobody counted would read as "he never had to step in". Once the start
+// is set, a window after it counts the events and an empty one is a measured 0.
+func TestOwnerPrivilegeUses(t *testing.T) {
+	day := ClosedWindow(time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC), 1)
+	at := day.From.Add(2 * time.Hour)
+	src := func(rows []eventlog.Row) ledgerSource {
+		return ledgerSource{ofType: func(typ string, _, _ time.Time) ([]eventlog.Row, error) {
+			if typ != "owner.privilege.used" {
+				t.Fatalf("read %s", typ)
+			}
+			return rows, nil
+		}}
+	}
+	used := []eventlog.Row{row("owner.privilege.used", at, map[string]any{"what": "storekit owner"})}
+	defer func(v time.Time) { privilegeSince = v }(privilegeSince)
+
+	privilegeSince = time.Time{}
+	if r, _ := src(used).privilegeReading(day); r.Status != StatusUnmeasured || r.Value != nil {
+		t.Fatalf("no producer yet must be unmeasured: %+v", r)
+	}
+	privilegeSince = day.From.Add(-24 * time.Hour)
+	if r, _ := src(used).privilegeReading(day); r.Status != StatusOK || *r.Value != 1 {
+		t.Fatalf("one use: %+v", r)
+	}
+	if r, _ := src(nil).privilegeReading(day); r.Status != StatusOK || *r.Value != 0 {
+		t.Fatalf("no use after the start is a measured 0: %+v", r)
+	}
+	privilegeSince = day.From.Add(time.Hour)
+	if r, _ := src(used).privilegeReading(day); r.Status != StatusUnmeasured {
+		t.Fatalf("a window starting before the start: %+v", r)
+	}
+}
