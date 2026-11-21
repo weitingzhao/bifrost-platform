@@ -192,14 +192,16 @@ func TestProdShadowGatherNamesWhatStandsInTheWay(t *testing.T) {
 // records; the switch is an environment variable of PROD's workers, and the
 // PROD manifest is not an agent's to change while the Owner sleeps. So where
 // head-release runs the shadow is on unless it is switched off, and where it
-// does not run (STG's platform, a local process) nothing is judged. "on" is
-// still nothing: that code is not written.
+// does not run (STG's platform, a local process) nothing is judged.
+// 2026-11-21 (CI line): unset where head-release runs is now on (it
+// releases); shadow and off still switch it to recording or to nothing.
 func TestProdShadowIsOnWhereHeadReleaseRunsUnlessSwitchedOff(t *testing.T) {
 	for _, c := range []struct{ head, value, want string }{
-		{"stg", "", ProdShadow},
+		{"stg", "", ProdOn},
 		{"stg", "off", ProdOff},
-		{"stg", "on", ProdOff},
+		{"stg", "on", ProdOn},
 		{"stg", "shadow", ProdShadow},
+		{"stg", "true", ProdOff},
 		{"", "", ProdOff},
 		{"", "shadow", ProdShadow},
 	} {

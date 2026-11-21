@@ -149,6 +149,7 @@ func TestEachProdConditionCanFailAlone(t *testing.T) {
 		CondWindowFree:  func(f *ProdFacts) { f.WindowHeld = "someone" },
 		CondSpaced:      func(f *ProdFacts) { f.Prod.Since = f.Now },
 		CondNotFrozen:   func(f *ProdFacts) { f.Frozen = true },
+		CondInHours:     func(f *ProdFacts) { f.HourNow, f.HoursFrom, f.HoursTo = 7, 8, 22 },
 	}
 	if len(alone) != len(ProdConditions) {
 		t.Fatalf("%d conditions, %d cases", len(ProdConditions), len(alone))
@@ -251,7 +252,7 @@ func TestProdShadowRecordsAnUnreadableFactOnceAsUnknown(t *testing.T) {
 // records, so the silence above is the switch and not a harness that cannot
 // record.
 func TestProdShadowOffReadsAndRecordsNothing(t *testing.T) {
-	for _, value := range []string{"", "off", "on", "ON", "true", "stg", "shadow-ish", "prod"} {
+	for _, value := range []string{"", "off", "true", "stg", "shadow-ish", "prod"} {
 		h := newShadowHarness(value)
 		if _, recorded := h.loop.Pass(context.Background()); recorded || h.gathered != 0 || h.batches != 0 || len(h.records) != 0 {
 			t.Errorf("PROD_HEAD_RELEASE=%q: gathered %d, batch reads %d, records %v", value, h.gathered, h.batches, h.records)
@@ -324,7 +325,9 @@ func TestProdShadowCannotAct(t *testing.T) {
 			funcs = append(funcs, loop.Field(i).Name)
 		}
 	}
-	if strings.Join(funcs, ",") != "Gather,Batch,Record" {
+	// Release (2026-11-21) is mode on's one act; TestProdModeOnReleases holds
+	// that only mode on calls it.
+	if strings.Join(funcs, ",") != "Gather,Batch,Record,Release" {
 		t.Errorf("ProdShadowLoop's functions are %v; a new one needs a reason it cannot act", funcs)
 	}
 

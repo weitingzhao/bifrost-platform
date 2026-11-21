@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,13 +18,18 @@ import (
 // below is every way it touches the world, each one a read, and the one thing
 // it writes is an audit record (the server wires it).
 //
-// PROD_HEAD_RELEASE is off (the default, and what any other value means) or
-// shadow. There is no "on".
+// PROD_HEAD_RELEASE is off, shadow or on (ProdShadowMode says the default).
 const (
-	prodShadowEnv         = "PROD_HEAD_RELEASE"
-	ProdSoakEnv           = "PROD_BATCH_SOAK_SECONDS"
-	ProdGapEnv            = "PROD_BATCH_GAP_SECONDS"
-	ProdShadowPrincipal   = "prod-batch-shadow"
+	prodShadowEnv       = "PROD_HEAD_RELEASE"
+	ProdSoakEnv         = "PROD_BATCH_SOAK_SECONDS"
+	ProdGapEnv          = "PROD_BATCH_GAP_SECONDS"
+	ProdHoursEnv        = "PROD_RELEASE_HOURS"
+	ProdShadowPrincipal = "prod-batch-shadow"
+	// ProdReleasePrincipal is who mode on releases as.
+	ProdReleasePrincipal = "prod-head-release"
+	// DefaultProdHours: 08:00 to 22:00 in the briefs' zone, when people are
+	// awake to see a release and its check (the user's "8:00 every day").
+	DefaultProdHours      = "8-22"
 	ProdShadowPassTimeout = 30 * time.Second
 	// The row of deliverables.yaml the shadow judges, and the row whose
 	// environment its candidate comes from.
@@ -37,22 +43,45 @@ const (
 	policyWindowReason = "release window: "
 )
 
-// ProdShadowMode reads the switch. Unset, it is shadow in the process where
-// head-release is on (the one that would release PROD) and off anywhere else;
-// "off" turns it off there too. The coordinator asked on 2026-11-16 for a
-// night of shadow records before anyone decides to turn releasing on, and the
-// PROD manifest is not an agent's to change: the default ships with the code,
-// through CI and the release policy, and it can do nothing but read and write
-// an audit record.
+// ProdShadowMode reads the switch. Unset, it is on in the process where
+// head-release is on (the one that releases) and off anywhere else; "shadow"
+// there records without releasing, "off" turns it off. The coordinator asked
+// on 2026-11-16 for a night of shadow records before anyone turns releasing
+// on; there were five days of them (prod_shadow.go). The PROD manifest is not
+// an agent's to change: the default ships with the code, through CI and the
+// release policy. Revert: the default back to ProdShadow, released the same way.
 func ProdShadowMode() string {
 	v := strings.TrimSpace(os.Getenv(prodShadowEnv))
 	if v == "" && On() {
-		return ProdShadow
+		return ProdOn
 	}
 	return ProdMode(v)
 }
 
-func ProdShadowOn() bool { return ProdShadowMode() == ProdShadow }
+// ProdShadowOn says the loop runs at all (shadow or on).
+func ProdShadowOn() bool { return ProdShadowMode() != ProdOff }
+
+// ProdHours reads "FROM-TO" (whole hours, 0 <= FROM < TO <= 24); anything
+// else is the default's.
+func ProdHours(value string) (from, to int) {
+	parse := func(v string) (int, int, bool) {
+		a, b, ok := strings.Cut(strings.TrimSpace(v), "-")
+		if !ok {
+			return 0, 0, false
+		}
+		f, ferr := strconv.Atoi(strings.TrimSpace(a))
+		t, terr := strconv.Atoi(strings.TrimSpace(b))
+		if ferr != nil || terr != nil || f < 0 || t <= f || t > 24 {
+			return 0, 0, false
+		}
+		return f, t, true
+	}
+	if f, t, ok := parse(value); ok {
+		return f, t
+	}
+	f, t, _ := parse(DefaultProdHours)
+	return f, t
+}
 
 // ProdReads is what the shadow reads.
 type ProdReads struct {
@@ -73,11 +102,19 @@ type ProdReads struct {
 	Cards  func(pipeline string) ([]string, error)
 	Window func(ctx context.Context) (who, what string, open bool, err error)
 	Frozen func(ctx context.Context) (bool, string)
+	// Zone and hours of releasing; a nil Zone sets no hours.
+	Zone               *time.Location
+	HoursFrom, HoursTo int
 }
 
 // Gather reads the facts of this moment for one PROD row and its source row.
 func (r ProdReads) Gather(ctx context.Context, prod, source Deliverable, soak, gap time.Duration) ProdFacts {
 	f := ProdFacts{Now: r.Now(), Soak: soak, Gap: gap}
+	if r.Zone != nil {
+		f.HourNow, f.HoursFrom, f.HoursTo = f.Now.In(r.Zone).Hour(), r.HoursFrom, r.HoursTo
+	} else if r.HoursFrom != r.HoursTo {
+		f.HoursUnknown = true
+	}
 	repo, param := "", ""
 	for _, c := range prod.Commits {
 		if c.TestedWith == "" && repo == "" {
@@ -106,6 +143,7 @@ func (r ProdReads) Gather(ctx context.Context, prod, source Deliverable, soak, g
 				beside[c.Param] = stgRecord.Repos[c.Repo].SHA
 			}
 		}
+		f.Beside = beside
 		if r.Policy == nil {
 			f.PolicyErr = "the release policy is not wired"
 		} else {

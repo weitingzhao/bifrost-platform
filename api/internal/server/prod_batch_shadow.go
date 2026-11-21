@@ -35,6 +35,9 @@ func (s *Server) prodShadowOf(table headrelease.Table) *headrelease.ProdShadowLo
 		Audit: func(target, result, detail string) {
 			s.audit.RecordDirect(headrelease.ProdShadowPrincipal, actuation.RoleOperator, headrelease.ProdRecordAction, target, result, detail)
 		},
+		// Mode on's one act and its hours (prod_batch_release.go).
+		Release: s.prodRelease,
+		Zone:    prodReleaseZone(),
 	})
 }
 

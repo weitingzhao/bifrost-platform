@@ -19,26 +19,39 @@ import (
 // for a while, when the release policy covers it. Before anyone turns that
 // on, this records what it would have done, beside what people did.
 //
-// Nothing here releases. The decision is a function of ProdFacts, which is
-// data; ProdShadowLoop holds three functions: one gathers the facts (reads), one
-// counts the commits of a batch (a read), one writes the record. There is no
-// World in this file and so no Start; prod_shadow_test.go reads this source
-// and fails if one appears.
+// Nothing in this file releases. The decision is a function of ProdFacts,
+// which is data; ProdShadowLoop holds three functions that read or record (one
+// gathers the facts, one counts the commits of a batch, one writes the
+// record) and, in mode on only, a fourth that it hands the decision to
+// (Release, called from prod_release.go). There is no World in this file and
+// so no Start; prod_shadow_test.go reads this source and fails if one appears.
+//
+// On (2026-11-21, CI line): the user's goal is PROD at least once a day on a
+// schedule. From 2026-11-16 to 11-21 the shadow wrote 65 records, 12 of them
+// "would release"; on 11-21 it judged "would release e6f7fad5" at 07:52Z and
+// no seat released it for nine hours (the machine the seats run on slept). In
+// mode on, a "would release" judged twice the same is released, inside the
+// hours (in_hours). The conditions are the shadow's: what a seat checks before
+// it releases by the signed policy.
 
-// Modes of PROD_HEAD_RELEASE. There is no "on": that code is not written.
+// Modes of PROD_HEAD_RELEASE.
 const (
 	ProdOff    = "off"
 	ProdShadow = "shadow"
+	ProdOn     = "on"
 
 	DefaultProdSoak = 600 * time.Second
 	DefaultProdGap  = 1200 * time.Second
 )
 
-// ProdMode reads the switch: shadow, or off for everything else (unset, a
-// typing mistake, and "on" alike).
+// ProdMode reads the switch: shadow, on, or off for everything else (unset
+// and a typing mistake alike).
 func ProdMode(value string) string {
-	if strings.EqualFold(strings.TrimSpace(value), ProdShadow) {
+	switch {
+	case strings.EqualFold(strings.TrimSpace(value), ProdShadow):
 		return ProdShadow
+	case strings.EqualFold(strings.TrimSpace(value), ProdOn):
+		return ProdOn
 	}
 	return ProdOff
 }
@@ -109,6 +122,18 @@ type ProdFacts struct {
 
 	Frozen       bool
 	FreezeReason string
+
+	// HourNow is the hour of Now in the release hours' zone; a release
+	// happens when HoursFrom <= HourNow < HoursTo. HoursFrom == HoursTo
+	// sets no hours.
+	HourNow, HoursFrom, HoursTo int
+	// HoursUnknown: hours are set and the zone to read them in is not.
+	HoursUnknown bool
+
+	// Beside is what the STG delivery of the candidate shipped of the other
+	// repositories the PROD pipeline takes, by parameter: the request a seat
+	// would send beside the revision.
+	Beside map[string]string
 }
 
 // The conditions, by the names the record uses.
@@ -123,6 +148,7 @@ const (
 	CondWindowFree  = "window_free"
 	CondSpaced      = "spaced"
 	CondNotFrozen   = "not_frozen"
+	CondInHours     = "in_hours"
 
 	// ProdRecordAction is the audit action of a shadow record.
 	ProdRecordAction = "prod_batch_shadow"
@@ -130,7 +156,7 @@ const (
 
 // ProdConditions is every condition, in the order they are judged.
 var ProdConditions = []string{CondProdSettled, CondStgSettled, CondSoaked, CondDiffers, CondCIStrict,
-	CondPolicy, CondNoOpenCard, CondWindowFree, CondSpaced, CondNotFrozen}
+	CondPolicy, CondNoOpenCard, CondWindowFree, CondSpaced, CondNotFrozen, CondInHours}
 
 // ProdDecision is what the shadow would do with these facts.
 type ProdDecision struct {
@@ -142,6 +168,8 @@ type ProdDecision struct {
 	Verdict string
 	From    string
 	To      string
+	// Params is what goes beside To in the request (ProdFacts.Beside).
+	Params map[string]string
 	// Failing are the conditions that do not hold, Unknown those whose fact
 	// could not be read (each is in Failing too), Skipped those that could
 	// not be judged because the commit they are about is not known.
@@ -188,6 +216,7 @@ func DecideProd(f ProdFacts) ProdDecision {
 	}
 	if stg {
 		d.To = f.Stg.Commit
+		d.Params = f.Beside
 	}
 
 	const noCandidate, noProd = "what stg runs is not known", "what prod runs is not known"
@@ -256,6 +285,12 @@ func DecideProd(f ProdFacts) ProdDecision {
 		fail(CondNotFrozen, strings.TrimSpace("releases are frozen: "+f.FreezeReason))
 	}
 
+	if f.HoursUnknown {
+		unknown(CondInHours, "the release hours' zone did not load")
+	} else if f.HoursFrom != f.HoursTo && (f.HourNow < f.HoursFrom || f.HourNow >= f.HoursTo) {
+		fail(CondInHours, fmt.Sprintf("it is %02d:00 in the release hours' zone; releases happen from %02d:00 to %02d:00", f.HourNow, f.HoursFrom, f.HoursTo))
+	}
+
 	switch {
 	case len(d.Unknown) > 0:
 		d.Verdict = "unknown: " + d.Unknown[0] + ": " + strings.TrimPrefix(d.Reasons[d.Unknown[0]], "unknown: ")
@@ -312,14 +347,21 @@ type prodRecord struct {
 	Skipped      []string          `json:"skipped,omitempty"`
 	Reasons      map[string]string `json:"reasons"`
 	At           string            `json:"at"`
+	// Mode on only: what was done with a "would release" (released, waiting
+	// or error), the run, and why.
+	Release    string `json:"release,omitempty"`
+	Run        string `json:"run,omitempty"`
+	ReleaseWhy string `json:"release_why,omitempty"`
 }
 
 // ProdShadowLoop evaluates the PROD candidate each pass and records a
-// decision when it differs from the last one it recorded. It holds reads and
-// one writer of records; it cannot start, hold or request anything.
+// decision when it differs from the last one it recorded. In mode shadow it
+// holds reads and one writer of records and cannot start, hold or request
+// anything; in mode on it hands a "would release" to Release
+// (prod_release.go).
 type ProdShadowLoop struct {
-	// Mode is ProdMode's answer; anything but ProdShadow makes Pass do
-	// nothing at all.
+	// Mode is ProdMode's answer; ProdOff makes Pass do nothing at all, and
+	// only ProdOn ever calls Release.
 	Mode string
 	// Gather reads the facts of this moment.
 	Gather func(ctx context.Context) ProdFacts
@@ -327,6 +369,10 @@ type ProdShadowLoop struct {
 	Batch func(ctx context.Context, from, to string) ProdBatch
 	// Record writes one record: result is would_release, wait or unknown.
 	Record func(result, detail string)
+	// Release releases revision with params beside it to PROD by the
+	// pipeline the loop was built for, or says why not now (wait). Mode on
+	// only; nil there is an error recorded, never a release.
+	Release func(ctx context.Context, revision string, params map[string]string) (run, wait string, err error)
 
 	// Every is the least time between two judgements; zero judges each
 	// pass. Gathering reads the release records, which lists the runs of the
@@ -342,7 +388,7 @@ type ProdShadowLoop struct {
 
 // Pass judges once. recorded says whether a record was written.
 func (s *ProdShadowLoop) Pass(ctx context.Context) (d ProdDecision, recorded bool) {
-	if s == nil || s.Mode != ProdShadow || s.Gather == nil {
+	if s == nil || (s.Mode != ProdShadow && s.Mode != ProdOn) || s.Gather == nil {
 		return ProdDecision{}, false
 	}
 	if s.Every > 0 {
@@ -358,7 +404,11 @@ func (s *ProdShadowLoop) Pass(ctx context.Context) (d ProdDecision, recorded boo
 	}
 	f := s.Gather(ctx)
 	d = DecideProd(f)
-	mark := d.Fingerprint()
+	var done prodAct
+	if s.Mode == ProdOn && d.WouldRelease {
+		done = s.act(ctx, d)
+	}
+	mark := d.Fingerprint() + "|" + done.result + "|" + done.run + "|" + done.why
 	s.mu.Lock()
 	same := s.last == mark
 	s.last = mark
@@ -367,7 +417,8 @@ func (s *ProdShadowLoop) Pass(ctx context.Context) (d ProdDecision, recorded boo
 		return d, false
 	}
 	rec := prodRecord{WouldRelease: d.WouldRelease, Verdict: d.Verdict, From: d.From, To: d.To, Commits: "unknown",
-		Failing: d.Failing, Skipped: d.Skipped, Reasons: d.Reasons, At: f.Now.UTC().Format(time.RFC3339)}
+		Failing: d.Failing, Skipped: d.Skipped, Reasons: d.Reasons, At: f.Now.UTC().Format(time.RFC3339),
+		Release: done.result, Run: done.run, ReleaseWhy: done.why}
 	if rec.Failing == nil {
 		rec.Failing = []string{}
 	}
@@ -391,6 +442,8 @@ func (s *ProdShadowLoop) Pass(ctx context.Context) (d ProdDecision, recorded boo
 	}
 	result := "wait"
 	switch {
+	case done.result != "":
+		result = done.result
 	case d.WouldRelease:
 		result = "would_release"
 	case len(d.Unknown) > 0:

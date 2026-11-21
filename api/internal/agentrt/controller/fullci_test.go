@@ -107,12 +107,12 @@ func pass(t *testing.T, c *controller.Controller) int {
 
 func TestFullCIOneRunPerCommitPerDay(t *testing.T) {
 	pool := setup(t)
-	f := &fullCI{main: fullMain, now: at(t, "2026-11-06", "02:59")}
+	f := &fullCI{main: fullMain, now: at(t, "2026-11-06", "07:29")}
 	c := f.controller(pool)
 	if pass(t, c); len(f.ensured) != 0 {
 		t.Fatal("a run started before its time", f.ensured)
 	}
-	f.now = at(t, "2026-11-06", "03:00")
+	f.now = at(t, "2026-11-06", "07:30")
 	if n := pass(t, c); n != 1 || len(f.ensured) != 1 || f.ensured[0] != "ci-full-111111111111-20261106" {
 		t.Fatal(n, f.ensured)
 	}
@@ -127,7 +127,7 @@ func TestFullCIOneRunPerCommitPerDay(t *testing.T) {
 	if pass(t, f.controller(pool)); len(f.ensured) != 1 {
 		t.Fatal("a restart started another run", f.ensured)
 	}
-	f.now = at(t, "2026-11-07", "03:01")
+	f.now = at(t, "2026-11-07", "07:31")
 	if pass(t, c); len(f.ensured) != 2 || f.ensured[1] != "ci-full-222222222222-20261107" {
 		t.Fatal("the next day", f.ensured)
 	}
@@ -135,13 +135,13 @@ func TestFullCIOneRunPerCommitPerDay(t *testing.T) {
 
 func TestFullCIRunsSTGCommitWhenItDiffers(t *testing.T) {
 	pool := setup(t)
-	f := &fullCI{main: fullMain, stg: fullSTG, now: at(t, "2026-11-06", "03:00")}
+	f := &fullCI{main: fullMain, stg: fullSTG, now: at(t, "2026-11-06", "07:30")}
 	c := f.controller(pool)
 	if n := pass(t, c); n != 2 || len(f.ensured) != 2 || f.ensured[1] != "ci-full-333333333333-20261106" {
 		t.Fatal(n, f.ensured)
 	}
 	// STG runs main's head: one run of that commit.
-	f.stg, f.now = fullMain, at(t, "2026-11-07", "03:00")
+	f.stg, f.now = fullMain, at(t, "2026-11-07", "07:30")
 	if pass(t, c); len(f.ensured) != 3 || f.ensured[2] != "ci-full-111111111111-20261107" {
 		t.Fatal(f.ensured)
 	}
@@ -155,7 +155,7 @@ func TestFullCIRunsSTGCommitWhenItDiffers(t *testing.T) {
 func TestFullCISwitchOffAndParam(t *testing.T) {
 	env := func(vars map[string]string) func(string) string { return func(k string) string { return vars[k] } }
 	on, at, param, err := fullci.FullCISettings(env(nil))
-	if !on || at != "03:00" || param || err != nil {
+	if !on || at != "07:30" || param || err != nil {
 		t.Fatal("defaults", on, at, param, err)
 	}
 	if on, _, _, _ = fullci.FullCISettings(env(map[string]string{"AGENTRT_FULL_CI": "off"})); on {

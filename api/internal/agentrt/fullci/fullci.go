@@ -26,7 +26,7 @@ import (
 // binds the FullCIZone the server gave it, planpace.BriefZone, the zone of
 // the briefs), a full run of main's head starts, and one of the commit STG
 // runs now when that differs, so a PROD promotion of STG's commit
-// usually has a full green by morning. A commit runs at most once a day (the
+// has a full green before releasing starts at 08:00. A commit runs at most once a day (the
 // run's name is its commit and the day). A red run is noted once, with the
 // pipeline tasks that failed and the commits landed since the last green
 // full run whose own CI run left a module out: the full run is the net under
@@ -42,7 +42,11 @@ const FullCIEvery = time.Minute
 // many landings a red run's reconciliation looks at; fullCITestsMax how many
 // failed Go tests its note's text names.
 const (
-	FullCIAt          = "03:00"
+	// 07:30 since 2026-11-21 (CI line): PROD is released from 08:00 in the
+	// same zone on a full pass of the commit STG runs (headrelease mode on);
+	// at 03:00 a landing between 03:00 and 08:00 left STG's commit without
+	// one. The run takes about 3 minutes. Revert: "03:00".
+	FullCIAt          = "07:30"
 	fullCIWindow      = 14 * 24 * time.Hour
 	FullCILandingsMax = 30
 	fullCITestsMax    = 10
@@ -118,7 +122,7 @@ func (f *FullCI) setLatest(runs []landingci.FullRun) {
 }
 
 // FullCISettings reads the loop's switches: AGENTRT_FULL_CI=off stops it
-// (default on), AGENTRT_FULL_CI_AT is its time (HH:MM, default 03:00) and
+// (default on), AGENTRT_FULL_CI_AT is its time (HH:MM, default 07:30) and
 // AGENTRT_FULL_CI_PARAM=on has a run ask for api-scope-request=full, which
 // stays off until the pipeline declares that param. A time that does not
 // parse is an error, and the loop does not run.

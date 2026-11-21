@@ -186,7 +186,8 @@ func TestProdShadowSwitchDefaultsOff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, value := range []string{"", "off", "on", "prod", "1"} {
+	// 2026-11-21: "on" builds the loop too (it releases); see headrelease.
+	for _, value := range []string{"", "off", "prod", "1"} {
 		t.Setenv(prodShadowEnv, value)
 		if headrelease.ProdShadowOn() || (&Server{}).prodShadowOf(table) != nil {
 			t.Errorf("%s=%q built a shadow", prodShadowEnv, value)
