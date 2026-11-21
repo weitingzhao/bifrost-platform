@@ -21,7 +21,7 @@ func statusScanner(t *testing.T, now time.Time) *Scanner {
 		if p == OwnershipPath {
 			return []byte(`{"domains":[
   {"id":"plan","contracts":{"request_response":[{"method":"GET","path":"/api/v1/p"},{"method":"POST","path":"/api/v1/p"}]}},
-  {"id":"tenant","contracts":{"request_response":[{"method":"GET","path":"/api/v1/t"}]}},
+  {"id":"tenant","name":"Tenants","tier":3,"contracts":{"request_response":[{"method":"GET","path":"/api/v1/t"}]}},
   {"id":"owner","contracts":{}}],
  "packages":{"api/internal/a":{"domains":["plan"]}},
  "workloads":{"ns-plan":{"domains":["plan"]},"ns-tenant":{"domains":["tenant"]}}}`), true, nil
@@ -226,5 +226,19 @@ func TestReferencesCountWhoToWhomAndWhatTheContractRegisters(t *testing.T) {
 	st := s.ComputeStatus(context.Background(), in)
 	if len(st.References) != 1 || st.References[0].Unregistered != 2 || st.ToBase != 5 || calls != 1 {
 		t.Errorf("status refs %+v, to base %d, graph read %d times", st.References, st.ToBase, calls)
+	}
+}
+
+// 2026-11-21, City ask (m_01M7XYBJ): City names and orders its nine districts
+// by the table's name and tier; before this they were not in the status JSON,
+// so City showed bare ids. owner is the control: no name in the table, none out.
+func TestDomainStatusCarriesTheTablesNameAndTier(t *testing.T) {
+	s := statusScanner(t, time.Date(2026, 11, 21, 8, 0, 0, 0, time.UTC))
+	got := byID(s.ComputeStatus(context.Background(), StatusInputs{}))
+	if d := got["tenant"]; d.Name != "Tenants" || d.Tier != 3 {
+		t.Fatalf("tenant = %q tier %d, want Tenants tier 3", d.Name, d.Tier)
+	}
+	if d := got["owner"]; d.Name != "" || d.Tier != 0 {
+		t.Fatalf("owner = %q tier %d, want empty", d.Name, d.Tier)
 	}
 }

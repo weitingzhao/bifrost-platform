@@ -106,7 +106,11 @@ type Light struct {
 
 // DomainStatus is one domain's lights.
 type DomainStatus struct {
-	ID         string `json:"id"`
+	ID string `json:"id"`
+	// Name and Tier are the ownership table's (domains[].name, .tier): City
+	// names and orders its districts by them (2026-11-21, City ask).
+	Name       string `json:"name"`
+	Tier       int    `json:"tier"`
 	Overall    string `json:"overall"`
 	Alive      Light  `json:"alive"`
 	Interfaces Light  `json:"interfaces"`
@@ -186,6 +190,8 @@ const keptStatus = "status"
 
 type contractDomain struct {
 	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Tier      int    `json:"tier"`
 	Contracts struct {
 		RequestResponse []struct {
 			Method string `json:"method"`
@@ -232,7 +238,7 @@ func (s *Scanner) ComputeStatus(ctx context.Context, in StatusInputs) Status {
 	ifaces := interfaceLights(ctx, domains, in)
 	bound := boundaryLights(ctx, k.Repo, domains, in)
 	for _, d := range domains {
-		ds := DomainStatus{ID: d.ID, Alive: alive[d.ID], Interfaces: ifaces[d.ID], Boundary: bound[d.ID], Fresh: fresh}
+		ds := DomainStatus{ID: d.ID, Name: d.Name, Tier: d.Tier, Alive: alive[d.ID], Interfaces: ifaces[d.ID], Boundary: bound[d.ID], Fresh: fresh}
 		ds.Overall = worst(ds.Alive.Value, ds.Interfaces.Value, ds.Boundary.Value, ds.Fresh.Value)
 		st.Domains = append(st.Domains, ds)
 	}
