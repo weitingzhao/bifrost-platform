@@ -9,6 +9,8 @@ import { hardwareDistrict, readHardware } from '@/domains/owner/city/gen2/conten
 import { readUnits } from '@/domains/owner/city/gen2/content/unitRooms'
 import { GRAPH_REPO } from '@/domains/owner/city/gen2/content/techTree'
 import { tripsOf } from '@/domains/owner/city/gen2/content/traffic'
+import { deviceKeys, type PromAlert } from '@/domains/owner/city/gen2/content/alerts'
+import { fetchTelemetryAlerts } from '@/api/telemetry'
 import { fetchBusContract } from '@/domains/foundation/bus/busNextgen'
 import { useBusStream } from '@/domains/foundation/bus/useBusStream'
 import type { CityContent } from '@bifrost/ui/city/content'
@@ -42,6 +44,8 @@ export function useCityContent(): CityContent {
   const bus = useBusStream()
   const places = useMemo(() => new Set((domains.data?.domains ?? []).map(x => x.id)), [domains.data])
   const traffic = useMemo(() => ({ ...tripsOf(contract.data, bus.events, bus.receipts, places), connection: bus.connection, detail: bus.detail }), [contract.data, bus.events, bus.receipts, bus.connection, bus.detail, places])
+  // The monitoring's own judgment (the metrics line's alert rules), on the hardware's beat.
+  const firing = useQuery({ queryKey: ['city', 'gen2', 'alerts'], queryFn: fetchTelemetryAlerts, refetchInterval: EVERY })
   // A viewer's new ruler redraws the rooms that count that part (frame/rulers.tsx).
   const rulers = useRulersTick()
   return useMemo(() => {
@@ -50,6 +54,7 @@ export function useCityContent(): CityContent {
     const hw = d?.hardware.topology
       ? hardwareDistrict(d.hardware, 'system', `Read every 30 s, the last at ${new Date(d.at).toLocaleTimeString()}.`, d.units)
       : null
-    return consoleContent({ data: domains.data, error: domains.error }, hw, { data: graph.data, error: graph.error }, readDomain, traffic)
-  }, [reads.data, rulers, domains.data, domains.error, graph.data, graph.error, traffic])
+    return consoleContent({ data: domains.data, error: domains.error }, hw, { data: graph.data, error: graph.error }, readDomain, traffic,
+      { raw: firing.data?.alerts as PromAlert[] | undefined, error: firing.error, devices: d ? deviceKeys(d.hardware) : [] })
+  }, [reads.data, rulers, domains.data, domains.error, graph.data, graph.error, traffic, firing.data, firing.error])
 }

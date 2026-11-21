@@ -16,6 +16,7 @@ import OWNERSHIP from '../../config/domain-ownership.json'
 const NO_LIGHT = { value: '', why: 'bench: not read' }
 import { portsFor, type Link, type Partners } from '@bifrost/ui/city/links'
 import { useRulersTick } from '@bifrost/ui/city/rulers'
+import { deviceKeys, type PromAlert } from '../src/domains/owner/city/gen2/content/alerts'
 import { tripsOf, type TrafficContract, type TrafficEvent, type TrafficReceipt } from '../src/domains/owner/city/gen2/content/traffic'
 
 // The gen2 frame on its own: the address is the place (#/system/infrastructure), so Back works.
@@ -145,6 +146,15 @@ function Bench() {
     getJson(`/api/v1/ci/domains?repo=${GRAPH_REPO}`).then(g => { if (on) setGraph({ data: g as CiDomainGraph }) }, () => { if (on) setGraph({ data: GRAPH_SNAPSHOT as CiDomainGraph }) })
     return () => { on = false }
   }, [])
+  // The monitoring's firing alerts, through the proxy (no token needed for this read), every 30 s.
+  const [firing, setFiring] = useState<{ raw?: PromAlert[]; error?: unknown }>({})
+  useEffect(() => {
+    let on = true
+    const tick = () => getJson('/api/v1/telemetry/alerts').then(d => { if (on) setFiring({ raw: (d as { alerts: PromAlert[] }).alerts }) }, e => { if (on) setFiring({ error: e }) })
+    tick()
+    const t = setInterval(tick, 30_000)
+    return () => { on = false; clearInterval(t) }
+  }, [])
   const places = useMemo(() => new Set((domains.data?.domains ?? []).map(d => d.id)), [domains])
   const traffic = useDemoTraffic(new URLSearchParams(location.search).has('traffic'), places)
   const rulers = useRulersTick()
@@ -155,9 +165,9 @@ function Bench() {
     // Bench only, ?util=4x8 or 8x8: Utilities at another size, to look at how a district's town grows (2026-11-20).
     const util = new URLSearchParams(location.search).get('util')
     if (hw && util && ['4x4', '4x8', '8x8'].includes(util)) hw.shape = util as Place['shape']
-    const c = consoleContent(domains, hw, graph, readDomain, traffic)
+    const c = consoleContent(domains, hw, graph, readDomain, traffic, { ...firing, devices: reads ? deviceKeys(reads.r) : [] })
     return new URLSearchParams(location.search).has('links') ? { ...c, tree: withPartners(c.tree), links: SAMPLE_LINKS } : c
-  }, [reads, rulers, domains, graph, traffic])
+  }, [reads, rulers, domains, graph, traffic, firing])
   const [path, setPath] = useState<Path>(() => parsePath(location.hash))
   useEffect(() => {
     const on = () => setPath(parsePath(location.hash))
