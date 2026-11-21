@@ -766,10 +766,10 @@
     },
     "api/internal/outsideinput": {
       "domains": [
-        "verification"
+        "foundation"
       ],
       "status": "assigned",
-      "basis": "CI charter; configuration is read-only"
+      "basis": "2026-11-21 to foundation: the shared test kit every package uses to declare the files outside api/ its tests read; no production user, test users in seven domains (go list on main 9371c6b8, test imports counted), so it belongs where packages two or more domains share go. Kept by the CI line and its meaning is the CI line's: the variable names are the contract with scripts/ci/outside_inputs.sh. Before: CI charter; configuration is read-only"
     },
     "api/internal/unitscript": {
       "domains": [
