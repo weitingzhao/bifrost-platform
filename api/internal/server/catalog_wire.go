@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"sort"
@@ -145,6 +146,23 @@ func (s *Server) catalogClusterTree(ctx context.Context) (catalog.Tree, error) {
 		add(o.Namespace, o.Name, "cronjob")
 		if _, ok := health[o.Namespace+"/"+o.Name]; !ok {
 			health[o.Namespace+"/"+o.Name] = catalog.Health{}
+		}
+	}
+	// The database: CNPG makes its pods directly, so none of the lists above
+	// has it. Read with the platform's get/list on postgresql.cnpg.io; a
+	// cluster without the operator (no such API) simply has none.
+	if rc := kube.Discovery().RESTClient(); rc != nil {
+		raw, err := rc.Get().AbsPath("/apis/postgresql.cnpg.io/v1/clusters").DoRaw(ctx)
+		if err == nil {
+			dbs, perr := catalog.ParseDatabaseClusters(raw)
+			err = perr
+			for _, d := range dbs {
+				add(d.Namespace, d.Name, "postgres")
+				judge(d.Namespace, d.Name, d.Instances, d.Ready)
+			}
+		}
+		if err != nil {
+			slog.Warn("catalog: list database clusters", "err", err)
 		}
 	}
 	s.catalogHealth.Store(health)

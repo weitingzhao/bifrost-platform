@@ -1993,6 +1993,7 @@
     "cicd/el-bifrost-ci": {"domains": ["verification"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the Tekton trigger listener that starts CI runs (api/internal/ciscore reads CI)"},
     "cicd/renovate": {"domains": ["verification"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: dependency update runs that open changes for CI"},
     "cnpg-system": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the CloudNativePG operator; Postgres status is read by api/internal/cluster (foundation)"},
+    "data/bifrost-postgres": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-21 0.2 map line: the shared Postgres cluster (CNPG; agentrt, the Trade databases and Golden Source live in it). The data layer is foundation like its backups and cnpg-system; the scan reads CNPG clusters since this commit"},
     "data/backup-retry": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Postgres backup retry (the data layer; api/internal/cluster reads Postgres and backups)"},
     "data/db-role-matrix": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the database role matrix check"},
     "data/finance-backup": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Finance STG backup (owned by bifrost-finance ops/backup, MAINTAINERS.yaml)"},

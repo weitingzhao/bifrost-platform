@@ -84,3 +84,44 @@ func (s *Scanner) WorkloadRows() ([]byte, string) {
 	}
 	return k.Rows, k.Commit
 }
+
+// DatabaseCluster is one CloudNativePG Cluster: the database runs as pods the
+// operator makes directly, not as a Deployment or StatefulSet, so the
+// workload list would not see it (2026-11-21: data/bifrost-postgres was in no
+// row and in no pool entry when the compute line asked who owns it).
+type DatabaseCluster struct {
+	Namespace string
+	Name      string
+	Instances int
+	Ready     int
+}
+
+// ParseDatabaseClusters reads a postgresql.cnpg.io/v1 clusters list.
+func ParseDatabaseClusters(raw []byte) ([]DatabaseCluster, error) {
+	var l struct {
+		Items []struct {
+			Metadata struct {
+				Namespace string `json:"namespace"`
+				Name      string `json:"name"`
+			} `json:"metadata"`
+			Spec struct {
+				Instances int `json:"instances"`
+			} `json:"spec"`
+			Status struct {
+				ReadyInstances int `json:"readyInstances"`
+			} `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(raw, &l); err != nil {
+		return nil, fmt.Errorf("the database clusters list does not parse: %w", err)
+	}
+	out := make([]DatabaseCluster, 0, len(l.Items))
+	for _, it := range l.Items {
+		if it.Metadata.Namespace == "" || it.Metadata.Name == "" {
+			continue
+		}
+		out = append(out, DatabaseCluster{Namespace: it.Metadata.Namespace, Name: it.Metadata.Name,
+			Instances: it.Spec.Instances, Ready: it.Status.ReadyInstances})
+	}
+	return out, nil
+}
