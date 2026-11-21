@@ -4,9 +4,13 @@ import {
   fetchCatalogIndex,
   fetchDomainPage,
   fetchDomainStatus,
+  fetchPackageUsers,
+  fetchPool,
   LIGHTS,
   type DomainStatusResponse,
+  type DomainReference,
   type DomainStatusRow,
+  type RepoCount,
 } from '@/domains/foundation/catalog/api/domainStatus'
 
 /*
@@ -70,6 +74,126 @@ function Row({ d }: { d: DomainStatusRow }) {
   )
 }
 
+/** One place's equation; opened, its off-map entries and, for the cluster and the database, what a whole namespace row covers. */
+function PlaceRow({ c }: { c: RepoCount }) {
+  const [open, setOpen] = useState(false)
+  const canOpen = c.entries > 0 || c.repo === 'cluster' || c.repo === 'platform-db'
+  return (
+    <>
+      <tr data-repo={c.repo} className="border-t border-[var(--table-rule)]">
+        <td className="break-all">
+          {canOpen ? (
+            <button type="button" className="min-h-11 cursor-pointer text-left underline decoration-dotted" aria-expanded={open} onClick={() => setOpen(!open)}>{c.repo}</button>
+          ) : c.repo}
+          {c.whole ? ' (tenant: inside not looked at)' : ''}{c.measured ? '' : ' (not measured)'}
+        </td>
+        <td className="text-right">{c.total}</td>
+        <td className="text-right">{c.on_map}</td>
+        <td className="text-right">{c.off_map}</td>
+        <td className={`text-right ${c.gap !== 0 ? 'text-red-600' : ''}`} data-gap={c.gap}>{c.gap}</td>
+      </tr>
+      {open ? <tr><td colSpan={5}><PoolEntries repo={c.repo} /></td></tr> : null}
+    </>
+  )
+}
+
+function PoolEntries({ repo }: { repo: string }) {
+  const q = useQuery({ queryKey: ['status', 'pool', repo], queryFn: () => fetchPool(repo), retry: false, staleTime: 60_000 })
+  if (q.isLoading) return <p className="m-0 py-1 text-muted-foreground">Reading the off-map entries…</p>
+  if (q.isError || q.data == null) return <p className="m-0 py-1 text-muted-foreground">The off-map entries could not be read: unknown.</p>
+  const p = q.data
+  const byNs = (p.covered ?? []).filter(x => x.by_namespace).length
+  return (
+    <div className="py-1" data-pool={repo}>
+      {p.covered ? <p className="m-0" data-by-namespace={byNs}>On the map only by a whole namespace&apos;s row: {byNs} of {p.covered.length}</p> : null}
+      {p.entries.length === 0 ? <p className="m-0 text-muted-foreground">No off-map entry.</p> : (
+        <table className="w-full tabular-nums">
+          <thead><tr className="text-left text-muted-foreground"><th className="font-normal">Entry</th><th className="font-normal">Kind</th><th className="text-right font-normal">Files</th><th className="font-normal">First seen</th><th className="font-normal">Review</th></tr></thead>
+          <tbody>
+            {p.entries.map(e => (
+              <tr key={e.path} data-entry={e.path} className="border-t border-[var(--table-rule)]">
+                <td className="break-all">{e.path}</td>
+                <td>{e.kind}</td>
+                <td className="text-right">{e.files}</td>
+                <td>{e.first_seen ? new Date(e.first_seen).toLocaleDateString() : ''}</td>
+                <td>{e.review ? `${e.review.verdict}${e.review.domain ? ` ${e.review.domain}` : ''}` : 'not reviewed'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
+/** Who uses whom across domains: Go imports (production, test) and events, from the status the workers kept. */
+function References({ s }: { s: DomainStatusResponse }) {
+  const raw = s.references as DomainReference[] | null | undefined
+  if (raw === undefined) return null
+  const refs = raw ?? []
+  return (
+    <div className="flex flex-col gap-1 pt-2" aria-label="Cross-domain uses">
+      <h3 className="m-0 text-xs font-medium text-foreground">Cross-domain uses</h3>
+      {raw === null ? <p className="m-0 text-xs text-muted-foreground">The domain graph was not measured: unknown.</p> : (
+        <table className="w-full text-xs tabular-nums">
+          <thead>
+            <tr className="text-left text-muted-foreground"><th className="font-normal">Kind</th><th className="font-normal">From → to</th><th className="text-right font-normal">Prod imports</th><th className="text-right font-normal">Test imports</th><th className="text-right font-normal">Events</th><th className="text-right font-normal">Unregistered</th><th className="font-normal">Wrong way</th></tr>
+          </thead>
+          <tbody>
+            {refs.map(r => (
+              <tr key={`${r.kind ?? 'import'} ${r.from} ${r.to}`} data-reference={`${r.kind ?? 'import'}:${r.from}>${r.to}`} className="border-t border-[var(--table-rule)]">
+                <td>{r.kind ?? 'import'}</td>
+                <td>{r.from} → {r.to}</td>
+                <td className="text-right">{r.prod_imports ?? r.imports}</td>
+                <td className="text-right">{r.test_imports ?? ''}</td>
+                <td className="text-right">{r.events ?? ''}</td>
+                <td className="text-right">{(r.kind ?? 'import') === 'import' ? r.unregistered : ''}</td>
+                <td>{r.wrong_way ? 'yes' : ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {s.references_to_base != null ? <p className="m-0 text-xs text-muted-foreground">Production imports of the base: {s.references_to_base}</p> : null}
+    </div>
+  )
+}
+
+/** Who uses each Go package (GET /catalog/users), read when opened; packages used by most other domains first. */
+function PackageUsersBlock() {
+  const [open, setOpen] = useState(false)
+  const q = useQuery({ queryKey: ['status', 'package-users'], queryFn: fetchPackageUsers, retry: false, staleTime: 300_000, enabled: open })
+  const rows = (q.data?.packages ?? []).map(p => {
+    const others = new Set([...p.user_domains.prod, ...p.user_domains.test, ...p.user_domains.event].filter(d => d !== p.domain))
+    return { p, others: [...others].sort() }
+  }).sort((a, b) => b.others.length - a.others.length || a.p.package.localeCompare(b.p.package))
+  return (
+    <details className="pt-2 text-xs" onToggle={e => setOpen((e.currentTarget as HTMLDetailsElement).open)} aria-label="Package users">
+      <summary className="min-h-11 cursor-pointer py-2 font-medium text-foreground">Package users</summary>
+      {!open ? null : q.isLoading ? <p className="m-0 text-muted-foreground">Reading who uses each package…</p>
+        : q.isError || q.data == null ? <p className="m-0 text-muted-foreground">Package users could not be read: unknown.</p>
+        : !q.data.measured ? <p className="m-0 text-muted-foreground">{q.data.note ?? 'Not measured: unknown.'}</p>
+        : (
+          <table className="w-full tabular-nums">
+            <thead><tr className="text-left text-muted-foreground"><th className="font-normal">Package</th><th className="font-normal">Domain</th><th className="text-right font-normal">Prod</th><th className="text-right font-normal">Test</th><th className="text-right font-normal">Event</th><th className="font-normal">Other domains using it</th></tr></thead>
+            <tbody>
+              {rows.map(({ p, others }) => (
+                <tr key={p.package} data-package={p.package} className="border-t border-[var(--table-rule)]">
+                  <td className="break-all">{p.package}</td>
+                  <td>{p.domain}</td>
+                  <td className="text-right">{p.users.prod.length}</td>
+                  <td className="text-right">{p.users.test.length}</td>
+                  <td className="text-right">{p.users.event.length}</td>
+                  <td>{others.join(', ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+    </details>
+  )
+}
+
 /** Total = on map + off map for every repository, the platform database and the cluster (perceive first, 2026-11-20). */
 function Coverage({ s }: { s: DomainStatusResponse }) {
   const inv = s.inventory ?? []
@@ -85,15 +209,7 @@ function Coverage({ s }: { s: DomainStatusResponse }) {
           <tr className="text-left text-muted-foreground"><th className="font-normal">Place</th><th className="text-right font-normal">Total</th><th className="text-right font-normal">On map</th><th className="text-right font-normal">Off map</th><th className="text-right font-normal">Gap</th></tr>
         </thead>
         <tbody>
-          {inv.map(c => (
-            <tr key={c.repo} data-repo={c.repo} className="border-t border-[var(--table-rule)]">
-              <td className="break-all">{c.repo}{c.whole ? ' (tenant: inside not looked at)' : ''}{c.measured ? '' : ' (not measured)'}</td>
-              <td className="text-right">{c.total}</td>
-              <td className="text-right">{c.on_map}</td>
-              <td className="text-right">{c.off_map}</td>
-              <td className={`text-right ${c.gap !== 0 ? 'text-red-600' : ''}`} data-gap={c.gap}>{c.gap}</td>
-            </tr>
-          ))}
+          {inv.map(c => <PlaceRow key={c.repo} c={c} />)}
         </tbody>
       </table>
       {by.length > 0 ? <p className="m-0 text-xs text-muted-foreground">Off-map entries by claimed domain: {by.map(([d, n]) => `${d} ${n}`).join(' · ')}</p> : null}
@@ -139,11 +255,13 @@ export function DomainStatusSummary() {
           </p>
           <ul className="m-0 p-0">{rows.map(d => <Row key={d.id} d={d} />)}</ul>
           <Coverage s={s} />
+          <References s={s} />
+          <PackageUsersBlock />
         </>
       )}
       <details className="text-xs text-muted-foreground">
         <summary className="min-h-11 cursor-pointer py-3">?</summary>
-        <p className="m-0">Four lights per domain, dots in this order: alive (ready replicas of its workloads on the map), interfaces (requests and 5xx to its contract routes in the last hour, or the last day when the hour has under 20; under 20 in a day is too few to judge), boundary (imports against the tiers in or out of it), fresh (the table and the cluster were scanned in the last three rounds). Overall is the worst light. Hollow is unknown: not measured, never counted as good. Map coverage: for every repository, the platform database and the cluster, total (counted from the tree) = on map (a row covers it) + off map (in the pool of what the map cannot perceive); a gap that is not 0 means the scan missed something and turns every fresh light bad. A tenant&apos;s repository is one entry: its inside is not looked at this round.</p>
+        <p className="m-0">Four lights per domain, dots in this order: alive (ready replicas of its workloads on the map), interfaces (requests and 5xx to its contract routes in the last hour, or the last day when the hour has under 20; under 20 in a day is too few to judge), boundary (imports against the tiers in or out of it), fresh (the table and the cluster were scanned in the last three rounds). Overall is the worst light. Hollow is unknown: not measured, never counted as good. Map coverage: for every repository, the platform database and the cluster, total (counted from the tree) = on map (a row covers it) + off map (in the pool of what the map cannot perceive); a gap that is not 0 means the scan missed something and turns every fresh light bad. A tenant&apos;s repository is one entry: its inside is not looked at this round. A place opens to its off-map entries (and, for the cluster and the database, how many are on the map only by a whole namespace&apos;s row). Cross-domain uses: who uses whom above the base; import rows count pairs of packages by production and by test code, unregistered the production pairs the used domain&apos;s contract does not name; event rows count the event types one domain publishes that the other consumes. Package users: for each Go package, the packages that use it by production imports, test imports and events (event stays empty while the bus registry names components, not packages).</p>
       </details>
     </section>
   )

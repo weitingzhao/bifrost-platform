@@ -53,6 +53,9 @@ export type RepoCount = {
 export type DomainStatusInventory = {
   inventory?: RepoCount[]
   off_map_by_domain?: Record<string, number>
+  /** The JSON says null when the domain graph was not measured (read it as DomainReference[] | null); absent from an older platform. */
+  references?: DomainReference[]
+  references_to_base?: number
 }
 
 /** GET /api/v1/catalog/index: each class of thing and whether the machine reconciles it with the real system. */
@@ -82,4 +85,49 @@ export async function fetchDomainPage(id: string): Promise<DomainPage> {
   const r = await serverFetch(`/api/v1/catalog/domain?id=${encodeURIComponent(id)}`)
   if (!r.ok) throw await parseError('domain page', r)
   return (await r.json()) as DomainPage
+}
+
+/** One use of a domain by another (GET /catalog/status references): Go imports (production and test) or events. */
+export type DomainReference = {
+  kind?: string
+  from: string
+  to: string
+  imports: number
+  prod_imports?: number
+  test_imports?: number
+  events?: number
+  registered: number
+  unregistered: number
+  wrong_way: boolean
+}
+
+/** One thing the map cannot perceive in a place (GET /catalog/unperceived). */
+export type PoolEntry = { path: string; kind: string; files: number; first_seen: string; review?: { verdict: string; domain?: string; reason?: string } }
+export type PoolResponse = {
+  repo: string
+  measured: boolean
+  note?: string
+  entries: PoolEntry[]
+  covered?: { path: string; by: string; by_namespace?: boolean }[]
+}
+
+export async function fetchPool(repo: string): Promise<PoolResponse> {
+  const r = await serverFetch(`/api/v1/catalog/unperceived?repo=${encodeURIComponent(repo)}`)
+  if (!r.ok) throw await parseError('off-map entries', r)
+  const v = (await r.json()) as PoolResponse
+  if (v == null || !Array.isArray(v.entries)) throw new Error('off-map entries: incomplete answer')
+  return v
+}
+
+/** Who uses one package, by kind (GET /catalog/users). */
+export type UseLists = { prod: string[]; test: string[]; event: string[] }
+export type PackageUsers = { package: string; domain: string; users: UseLists; user_domains: UseLists }
+export type PackageUsersResponse = { commit?: string; measured: boolean; note?: string; packages: PackageUsers[] }
+
+export async function fetchPackageUsers(): Promise<PackageUsersResponse> {
+  const r = await serverFetch('/api/v1/catalog/users')
+  if (!r.ok) throw await parseError('package users', r)
+  const v = (await r.json()) as PackageUsersResponse
+  if (v == null || !Array.isArray(v.packages)) throw new Error('package users: incomplete answer')
+  return v
 }

@@ -71,4 +71,51 @@ describe('DomainStatusSummary', () => {
     fireEvent(details, new Event('toggle'))
     await waitFor(() => expect(container.querySelector('[data-owns="plan"]')!.textContent).toBe('Owns: 2 Go packages · 0 console groups · 1 paths · 0 workloads · 3 tables'))
   })
+
+  // Origin: 2026-11-21, the main line "看得见、感知得到" (law 69): the map's off-map entries, the cluster workloads on the
+  // map only by a namespace row, the cross-domain uses and who uses each package were kept but shown on no page. The
+  // control: a place with no entries and not the cluster or the database does not open.
+  it('opens a place to its entries, and shows cross-domain uses and package users from what was kept', async () => {
+    const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => {
+      const u = String(url)
+      if (u.includes('/catalog/index')) return json({ classes: [] })
+      if (u.includes('/catalog/unperceived?repo=cluster')) return json({ repo: 'cluster', measured: true, entries: [], covered: [{ path: 'a/x', by: 'path a', by_namespace: true }, { path: 'b/y', by: 'path b/y' }] })
+      if (u.includes('/catalog/unperceived')) return json({ repo: 'bifrost-platform', measured: true, entries: [{ path: 'scripts/x', kind: 'scripts', files: 2, first_seen: '2026-11-20T00:00:00Z' }] })
+      if (u.includes('/catalog/users')) return json({ measured: true, packages: [
+        { package: 'api/internal/a', domain: 'plan', users: { prod: [], test: [], event: [] }, user_domains: { prod: [], test: [], event: [] } },
+        { package: 'api/internal/b', domain: 'foundation', users: { prod: ['api/internal/a'], test: ['api/internal/c'], event: [] }, user_domains: { prod: ['plan'], test: ['lineage'], event: [] } },
+      ] })
+      return json({
+        version: 1, domains: [row('plan', 'good')],
+        inventory: [
+          { repo: 'bifrost-platform', commit: 'c', measured: true, total: 10, on_map: 8, off_map: 2, gap: 0, entries: 1 },
+          { repo: 'cluster', commit: 'c', measured: true, total: 2, on_map: 2, off_map: 0, gap: 0, entries: 0 },
+          { repo: 'bifrost-ui', commit: 'c', measured: true, total: 4, on_map: 4, off_map: 0, gap: 0, entries: 0 },
+        ],
+        references: [
+          { kind: 'import', from: 'delivery', to: 'approvals', imports: 3, prod_imports: 3, test_imports: 1, events: 0, registered: 0, unregistered: 3, wrong_way: false },
+          { kind: 'event', from: 'plan', to: 'coordination', imports: 0, prod_imports: 0, test_imports: 0, events: 2, registered: 0, unregistered: 0, wrong_way: false },
+        ],
+        references_to_base: 229,
+      })
+    }))
+    const { container } = mount()
+    await waitFor(() => expect(container.querySelector('[data-reference="import:delivery>approvals"]')).toBeTruthy())
+    expect(container.querySelector('[data-reference="event:plan>coordination"]')!.textContent).toContain('2')
+    expect(screen.getByText(/Production imports of the base: 229/)).toBeTruthy()
+    expect(container.querySelector('[data-repo="bifrost-ui"] button')).toBeNull()
+    fireEvent.click(container.querySelector('[data-repo="bifrost-platform"] button')!)
+    await waitFor(() => expect(container.querySelector('[data-entry="scripts/x"]')).toBeTruthy())
+    expect(container.querySelector('[data-entry="scripts/x"]')!.textContent).toContain('not reviewed')
+    fireEvent.click(container.querySelector('[data-repo="cluster"] button')!)
+    await waitFor(() => expect(container.querySelector('[data-by-namespace="1"]')).toBeTruthy())
+    const block = container.querySelector('[aria-label="Package users"]') as HTMLDetailsElement
+    block.open = true
+    fireEvent(block, new Event('toggle'))
+    await waitFor(() => expect(container.querySelector('[data-package="api/internal/b"]')).toBeTruthy())
+    const rows = [...container.querySelectorAll('[data-package]')].map(e => e.getAttribute('data-package'))
+    expect(rows).toEqual(['api/internal/b', 'api/internal/a'])
+    expect(container.querySelector('[data-package="api/internal/b"]')!.textContent).toContain('lineage, plan')
+  })
 })
