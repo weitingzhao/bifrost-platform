@@ -9,7 +9,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	busreleases "github.com/weitingzhao/bifrost-platform/api/internal/bus/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 )
 
@@ -61,7 +60,7 @@ func TestReleaseTableWritesTheRowWithItsAnnouncement(t *testing.T) {
 		t.Fatalf("a record naming no repository was announced or not written: %v %v", none, err)
 	}
 	var n int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = $1`, busreleases.Type).Scan(&n); err != nil || n != 1 {
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = $1`, deployFinishedType).Scan(&n); err != nil || n != 1 {
 		t.Fatalf("announcements=%d err=%v", n, err)
 	}
 
@@ -80,7 +79,7 @@ func TestReleaseTableWritesTheRowWithItsAnnouncement(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*), array_agg(event_id) FROM agentrt.release_record WHERE run = $1`, rec.Run).Scan(&rows, &named); err != nil {
 		t.Fatal(err)
 	}
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = $1`, busreleases.Type).Scan(&n); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = $1`, deployFinishedType).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	if rows != 2 || n != 1 || len(named) != 2 || named[0] != *eventID || named[1] != *eventID {
@@ -120,7 +119,7 @@ func TestReleaseRowsBackfillWithoutAnnouncingAndReadBack(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*), count(event_id) FROM agentrt.release_record WHERE run = $1`, old.Run).Scan(&n, &announced); err != nil || n != 1 || announced != 0 {
 		t.Fatalf("rows=%d announced=%d err=%v", n, announced, err)
 	}
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = $1`, busreleases.Type).Scan(&n); err != nil || n != 0 {
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = $1`, deployFinishedType).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("a backfilled record was announced: %d %v", n, err)
 	}
 	got, err := rows.Records(ctx)
@@ -139,7 +138,7 @@ func TestReleaseRowsBackfillWithoutAnnouncingAndReadBack(t *testing.T) {
 // git.main.advanced that woke head-release), so the chain can be followed on
 // the bus. A label naming an event this ledger does not have is left out,
 // and the row is still written. Positive control: with Cause dropped from
-// busreleases.Append the first announcement's cause_event_id is NULL.
+// appendAnnouncement the first announcement's cause_event_id is NULL.
 func TestReleaseTableNamesTheCauseOfTheRun(t *testing.T) {
 	ctx := context.Background()
 	db := agentrttest.Migrated(t)

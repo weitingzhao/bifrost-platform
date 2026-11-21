@@ -6,7 +6,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/ownernotice"
 	"path/filepath"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
@@ -39,7 +38,7 @@ func (s *Server) wireSessionBindings() {
 			return nil, errors.New("the agent runtime database is not configured")
 		}
 		db := s.agentRuntime.api.DB
-		if late, ok := db.(agentrtapi.Ready); ok && !late.Ready() {
+		if late, ok := db.(agentrtReady); ok && !late.Ready() {
 			return nil, errors.New("the agent runtime database is not connected yet")
 		}
 		ids, err := workregistration.Identities(ctx, db)

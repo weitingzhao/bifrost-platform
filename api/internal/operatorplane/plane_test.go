@@ -1,5 +1,3 @@
-//bifrost:owner foundation
-
 package operatorplane_test
 
 import (
@@ -13,7 +11,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/launchd"
 	"github.com/weitingzhao/bifrost-platform/api/internal/operatorplane"
 )
 
@@ -196,8 +193,8 @@ func TestLaunchdRequiresViewerToken(t *testing.T) {
 		Audit:     actuation.NewAuditLog(""),
 		ConfigDir: filepath.Join(dir, "config"),
 		// CI runs on Linux, where launchctl does not exist.
-		ListLaunchd: func() ([]launchd.Service, error) {
-			return []launchd.Service{{Label: "com.bifrost.operator-plane", PID: 42, Running: true, Plist: true}}, nil
+		ListLaunchd: func() ([]operatorplane.LaunchdService, error) {
+			return []operatorplane.LaunchdService{{Label: "com.bifrost.operator-plane", PID: 42, Running: true, Plist: true}}, nil
 		},
 	})
 	if err != nil {

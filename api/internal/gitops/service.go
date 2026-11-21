@@ -15,7 +15,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubeapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
@@ -28,14 +28,14 @@ var applicationGVR = schema.GroupVersionResource{
 
 type Service struct {
 	entry          *config.ClusterEntry
-	cluster        *cluster.Service
+	cluster        Kube
 	dynamicFactory func() (dynamic.Interface, error)
 }
 
-func NewService(entry *config.ClusterEntry) *Service {
+func NewService(entry *config.ClusterEntry, kube Kube) *Service {
 	return &Service{
 		entry:   entry,
-		cluster: cluster.NewService(entry),
+		cluster: kube,
 	}
 }
 
@@ -111,7 +111,7 @@ func (s *Service) baseMeta(now time.Time) baseMeta {
 func (s *Service) failApps(base baseMeta, err error, now time.Time) AppsResponse {
 	reach := probe.ReachFail
 	detail := err.Error()
-	if ce, ok := err.(*cluster.ClientError); ok {
+	if ce, ok := err.(*kubeapi.ClientError); ok {
 		reach = ce.Reachability
 		detail = ce.Detail
 	}
@@ -430,11 +430,11 @@ func aggregateArgoStatus(
 	return "installed", probe.ReachOK, fmt.Sprintf("%s ready; %s", server.Name, appsDetail)
 }
 
-func (s *Service) SyncApplication(ctx context.Context, name string) (cluster.ActuationResponse, error) {
+func (s *Service) SyncApplication(ctx context.Context, name string) (kubeapi.ActuationResponse, error) {
 	now := time.Now().UTC()
 	ns := s.entry.ResolvedApplicationsNamespace()
 	target := fmt.Sprintf("Application/%s/%s", ns, name)
-	resp := cluster.ActuationResponse{
+	resp := kubeapi.ActuationResponse{
 		OK:          false,
 		Action:      "gitops.sync",
 		Target:      target,
@@ -488,11 +488,11 @@ func (s *Service) SyncApplication(ctx context.Context, name string) (cluster.Act
 	return resp, nil
 }
 
-func (s *Service) RollbackApplication(ctx context.Context, name, revision string) (cluster.ActuationResponse, error) {
+func (s *Service) RollbackApplication(ctx context.Context, name, revision string) (kubeapi.ActuationResponse, error) {
 	now := time.Now().UTC()
 	ns := s.entry.ResolvedApplicationsNamespace()
 	target := fmt.Sprintf("Application/%s/%s", ns, name)
-	resp := cluster.ActuationResponse{
+	resp := kubeapi.ActuationResponse{
 		OK:          false,
 		Action:      "gitops.rollback",
 		Target:      target,

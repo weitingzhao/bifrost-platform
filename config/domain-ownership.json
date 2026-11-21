@@ -9,6 +9,47 @@
       "source": "domains/0-foundation-decouple/charter.md",
       "contracts": {
         "measured_at": "2e93ae09",
+        "go_surface": [
+          {"name": "api/internal/bus/alerts.ApprovalClaim", "users": ["api/internal/agentrt/coord"], "why": "raise a bus alert (approval claim) from the coordination desk"},
+          {"name": "api/internal/bus/alerts.Fire", "users": ["api/internal/agentrt/coord"], "why": "raise a bus alert (approval claim) from the coordination desk"},
+          {"name": "api/internal/bus/drift.Announce", "users": ["api/internal/cirunview"], "why": "CI announces a full-vs-incremental drift as a bus event"},
+          {"name": "api/internal/bus/drift.Found", "users": ["api/internal/cirunview"], "why": "CI announces a full-vs-incremental drift as a bus event"},
+          {"name": "api/internal/bus/drift.FullVsIncremental", "users": ["api/internal/cirunview"], "why": "CI announces a full-vs-incremental drift as a bus event"},
+          {"name": "api/internal/bus/gatecluster.TypeRunFinished", "users": ["api/internal/headrelease"], "why": "event type names a durable consumer subscribes to"},
+          {"name": "api/internal/bus/gatecluster.TypeWindowChanged", "users": ["api/internal/headrelease"], "why": "event type names a durable consumer subscribes to"},
+          {"name": "api/internal/bus/hook.Type", "users": ["api/internal/headrelease"], "why": "event type name of a Gitea push a durable consumer subscribes to"},
+          {"name": "api/internal/bus/observe.Letter", "users": ["api/internal/agentrt/coord"], "why": "the letters board reads seat letters through the bus observer"},
+          {"name": "api/internal/bus/observe.Querier", "users": ["api/internal/agentrt/coord"], "why": "the letters board reads seat letters through the bus observer"},
+          {"name": "api/internal/bus/observe.Querier.Query", "users": ["api/internal/agentrt/coord"], "why": "the letters board reads seat letters through the bus observer"},
+          {"name": "api/internal/bus/observe.StatusBoard", "users": ["api/internal/agentrt/coord"], "why": "the letters board reads seat letters through the bus observer"},
+          {"name": "api/internal/bus/ownerq.Announce", "users": ["api/internal/agentrt/questionbridge"], "why": "owner questions are announced on the bus"},
+          {"name": "api/internal/bus/ownerq.Question", "users": ["api/internal/agentrt/questionbridge"], "why": "owner questions are announced on the bus"},
+          {"name": "api/internal/bus/ownerq.TypeOf", "users": ["api/internal/agentrt/questionbridge"], "why": "owner questions are announced on the bus"},
+          {"name": "api/internal/bus/ownerq.Valid", "users": ["api/internal/agentrt/questionbridge"], "why": "owner questions are announced on the bus"},
+          {"name": "api/internal/bus/problemloop.KnownKind", "users": ["api/internal/agentrt/coord"], "why": "problem-loop verdict and outcome vocabulary shared with the coordination desk"},
+          {"name": "api/internal/bus/problemloop.OutcomeHandled", "users": ["api/internal/agentrt/coord"], "why": "problem-loop verdict and outcome vocabulary shared with the coordination desk"},
+          {"name": "api/internal/bus/problemloop.OutcomeOpen", "users": ["api/internal/agentrt/coord"], "why": "problem-loop verdict and outcome vocabulary shared with the coordination desk"},
+          {"name": "api/internal/bus/problemloop.OutcomeSourceFixed", "users": ["api/internal/agentrt/coord"], "why": "problem-loop verdict and outcome vocabulary shared with the coordination desk"},
+          {"name": "api/internal/bus/problemloop.ParamAskVerdict", "users": ["api/internal/agentrt/coord"], "why": "problem-loop verdict and outcome vocabulary shared with the coordination desk"},
+          {"name": "api/internal/bus/problemloop.VerdictFalse", "users": ["api/internal/agentrt/coord"], "why": "problem-loop verdict and outcome vocabulary shared with the coordination desk"},
+          {"name": "api/internal/bus/problemloop.VerdictReal", "users": ["api/internal/agentrt/coord"], "why": "problem-loop verdict and outcome vocabulary shared with the coordination desk"},
+          {"name": "api/internal/bus/problemloop.VerdictType", "users": ["api/internal/agentrt/coord"], "why": "problem-loop verdict and outcome vocabulary shared with the coordination desk"},
+          {"name": "api/internal/bus/readerseen.Saw", "users": ["api/internal/agentrt/coordapi", "api/internal/delivery"], "why": "a read route marks that its reader saw a bus event (new-source metric)"},
+          {"name": "api/internal/bus/registry.LoadSubscriptions", "users": ["api/internal/agentrt/coord"], "why": "reads the subscription table of the register"},
+          {"name": "api/internal/bus/regressions.Fixed", "users": ["api/internal/unitwatch"], "why": "unit watch reads and writes the known-regressions list"},
+          {"name": "api/internal/bus/regressions.Known", "users": ["api/internal/unitwatch"], "why": "unit watch reads and writes the known-regressions list"},
+          {"name": "api/internal/bus/regressions.List", "users": ["api/internal/unitwatch"], "why": "unit watch reads and writes the known-regressions list"},
+          {"name": "api/internal/bus/regressions.MaxImpact", "users": ["api/internal/unitwatch"], "why": "unit watch reads and writes the known-regressions list"},
+          {"name": "api/internal/bus/regressions.Regression", "users": ["api/internal/unitwatch"], "why": "unit watch reads and writes the known-regressions list"},
+          {"name": "api/internal/bus/relay.ConsumeDurable", "users": ["api/internal/headrelease"], "why": "durable consumer API of the bus (consume, envelope, receipts) and the tenant name"},
+          {"name": "api/internal/bus/relay.Envelope", "users": ["api/internal/headrelease"], "why": "durable consumer API of the bus (consume, envelope, receipts) and the tenant name"},
+          {"name": "api/internal/bus/relay.Receipts", "users": ["api/internal/headrelease"], "why": "durable consumer API of the bus (consume, envelope, receipts) and the tenant name"},
+          {"name": "api/internal/bus/relay.Receipts.Publish", "users": ["api/internal/headrelease"], "why": "durable consumer API of the bus (consume, envelope, receipts) and the tenant name"},
+          {"name": "api/internal/bus/relay.Tenant", "users": ["api/internal/agentrt/coord", "api/internal/headrelease"], "why": "durable consumer API of the bus (consume, envelope, receipts) and the tenant name"},
+          {"name": "api/internal/bus/runhooks.Hook", "users": ["api/internal/cirunview"], "why": "CI registers a hook run when a pipeline run finishes"},
+          {"name": "api/internal/bus/runhooks.Registry", "users": ["api/internal/cirunview"], "why": "CI registers a hook run when a pipeline run finishes"},
+          {"name": "api/internal/bus/runhooks.Registry.Register", "users": ["api/internal/cirunview"], "why": "CI registers a hook run when a pipeline run finishes"}
+        ],
         "request_response": [
           {"method": "POST", "path": "/api/v1/alerts/alertmanager", "handler": "api/internal/alertrelay.handleAlerts", "consumers": ["trade-infra"]},
           {"method": "POST", "path": "/api/v1/alerts/heartbeat", "handler": "api/internal/alertrelay.handleHeartbeat", "consumers": ["trade-infra"]},
@@ -24,6 +65,11 @@
           {"method": "GET", "path": "/api/v1/bus/regressions", "handler": "api/internal/bus/regressions.HandleList", "consumers": ["console", "mcp", "trade-infra"]},
           {"method": "GET", "path": "/api/v1/bus/stream", "handler": "api/internal/bus/gate.HandleStream", "consumers": ["console", "trade-infra"]},
           {"method": "GET", "path": "/api/v1/bus/trace", "handler": "api/internal/bus/gate.HandleTrace", "consumers": ["console", "trade-infra"]},
+          {"method": "GET", "path": "/api/v1/catalog/index", "handler": "api/internal/catalog.IndexRoute.ServeHTTP", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/catalog/status", "handler": "api/internal/catalog.StatusRoute.ServeHTTP", "consumers": ["mcp", "console"]},
+          {"method": "GET", "path": "/api/v1/catalog/domain", "handler": "api/internal/catalog.DomainRoute.ServeHTTP", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/catalog/owner", "handler": "api/internal/catalog.OwnerRoute.ServeHTTP", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/catalog/unperceived", "handler": "api/internal/catalog.Route.ServeHTTP", "consumers": ["mcp"]},
           {"method": "GET", "path": "/api/v1/checklist/signals", "handler": "api/internal/checklist.HandleGetSignals", "consumers": ["agent-scripts", "console", "mcp"]},
           {"method": "GET", "path": "/api/v1/context", "handler": "api/internal/server.handleContext", "consumers": ["agent-scripts", "console", "mcp", "trade-infra"]},
           {"method": "GET", "path": "/api/v1/environments", "handler": "api/internal/server.handleEnvironments", "consumers": ["agent-scripts", "mcp"]},
@@ -60,11 +106,17 @@
         "event_streams": [],
         "commands": [
           {"kind": "action", "id": "unifi_firewall_apply", "tier": "D", "route": "POST /api/v1/network/firewall/apply"},
+          {"kind": "mcp_tool", "name": "get_bus_states", "routes": ["/api/v1/bus/states"]},
           {"kind": "mcp_tool", "name": "get_audit_log", "routes": ["/api/v1/audit"]},
           {"kind": "mcp_tool", "name": "get_auth_capabilities", "routes": ["/api/v1/auth/capabilities"]},
           {"kind": "mcp_tool", "name": "get_checklist_signals", "routes": ["/api/v1/checklist/signals"]},
           {"kind": "mcp_tool", "name": "get_connectivity_matrix", "routes": ["/api/v1/matrix"]},
           {"kind": "mcp_tool", "name": "get_ops_context", "routes": ["/api/v1/context"]},
+          {"kind": "mcp_tool", "name": "get_unperceived", "routes": ["/api/v1/catalog/unperceived"]},
+          {"kind": "mcp_tool", "name": "get_owner", "routes": ["/api/v1/catalog/owner"]},
+          {"kind": "mcp_tool", "name": "get_catalog_index", "routes": ["/api/v1/catalog/index"]},
+          {"kind": "mcp_tool", "name": "get_domain_status", "routes": ["/api/v1/catalog/status"]},
+          {"kind": "mcp_tool", "name": "get_domain", "routes": ["/api/v1/catalog/domain"]},
           {"kind": "mcp_tool", "name": "get_telemetry_alerts", "routes": ["/api/v1/telemetry/alerts"]},
           {"kind": "mcp_tool", "name": "get_telemetry_overview", "routes": ["/api/v1/telemetry/overview"]},
           {"kind": "mcp_tool", "name": "get_telemetry_targets", "routes": ["/api/v1/telemetry/targets"]},
@@ -82,7 +134,7 @@
             "table": "agentrt.event",
             "owner": "api/internal/agentrt/eventlog",
             "write": "eventlog.Append only; codeguard TestLedgerTablesAreWrittenByTheirPackagesOnly",
-            "read": "functions eventlog.Last, Has, HasBody; projections may name the columns of eventlog.ReadShape and no others",
+            "read": "functions eventlog.Last, Exists, Has, HasBody, LatestByActor, LatestWithField, EventBody, DaysWithSubject, LatestByKey, OfType (api/internal/agentrt/eventlog/read.go; the last two added 2026-11-20 for the evaluation readout); projections may name the columns of eventlog.ReadShape and no others",
             "read_shape": "eventlog.ReadShape",
             "read_shape_version": 1,
             "held_by": "eventlog TestReadShapeIsTheTable (declaration equals the table), TestReadShapeChangesOnlyWithItsVersion (fingerprint lock); codeguard ledgerSQL lists the readers"
@@ -100,7 +152,29 @@
       "id": "plan",
       "name": "Demand & planning",
       "tier": 3,
-      "source": "domains/1-plan/charter.md"
+      "source": "domains/1-plan/charter.md",
+      "contracts": {
+        "measured_at": "d8dc802c",
+        "request_response": [
+          {"method": "GET", "path": "/api/v1/agentrt/plan", "handler": "api/internal/agentrt/planapi.HandleGetPlan", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/agentrt/plan-pace", "handler": "api/internal/agentrt/planapi.HandleGetPlanPace", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/agentrt/plan-view", "handler": "api/internal/agentrt/planapi.HandleGetPlanView", "consumers": ["console", "mcp"]},
+          {"method": "POST", "path": "/api/v1/agentrt/plan/proposals", "handler": "api/internal/agentrt/planapi.HandleProposePlanChange", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/agentrt/plan/{id}", "handler": "api/internal/agentrt/planapi.HandleGetPlanNode", "consumers": ["console", "mcp"]},
+          {"method": "POST", "path": "/api/v1/agentrt/plan/{id}/notes", "handler": "api/internal/agentrt/planapi.HandlePostPlanNote", "consumers": ["mcp"]},
+          {"method": "POST", "path": "/api/v1/agentrt/plan/{id}/signoff", "handler": "api/internal/agentrt/planapi.HandleSignOffStep", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/agentrt/progress", "handler": "api/internal/agentrt/planapi.HandleProgress", "consumers": ["console", "trade-infra"]}
+        ],
+        "events": [],
+        "event_streams": [],
+        "commands": [
+          {"kind": "mcp_tool", "name": "get_plan", "routes": ["/api/v1/agentrt/plan", "/api/v1/agentrt/plan/{id}"]},
+          {"kind": "mcp_tool", "name": "get_plan_view", "routes": ["/api/v1/agentrt/plan-view"]},
+          {"kind": "mcp_tool", "name": "post_plan_note", "routes": ["/api/v1/agentrt/plan/{id}/notes"]},
+          {"kind": "mcp_tool", "name": "propose_plan_change", "routes": ["/api/v1/agentrt/plan/proposals"]}
+        ],
+        "shared_storage": []
+      }
     },
     {
       "id": "lineage",
@@ -185,7 +259,6 @@
           {"method": "POST", "path": "/api/v1/delivery/mirrors/sync", "handler": "api/internal/delivery.HandleSyncMirrors", "consumers": ["trade-infra"]},
           {"method": "GET", "path": "/api/v1/delivery/pipelines", "handler": "api/internal/delivery.HandlePipelines", "consumers": ["console", "mcp"]},
           {"method": "GET", "path": "/api/v1/delivery/pipelines/{name}/policy-check", "handler": "api/internal/server.handleReleasePolicyCheck", "consumers": ["mcp"]},
-          {"method": "GET", "path": "/api/v1/delivery/pipelines/{name}/preflight", "handler": "api/internal/delivery.HandlePipelinePreflight", "consumers": ["trade-infra"]},
           {"method": "GET", "path": "/api/v1/delivery/pipelines/{name}/runs", "handler": "api/internal/delivery.HandlePipelineRuns", "consumers": ["console", "mcp", "trade-infra"]},
           {"method": "POST", "path": "/api/v1/delivery/pipelines/{name}/runs", "handler": "api/internal/delivery.HandleStartPipelineRun", "consumers": ["console", "mcp", "trade-infra"]},
           {"method": "GET", "path": "/api/v1/delivery/pipelines/{name}/timings", "handler": "api/internal/delivery.HandlePipelineTimings", "consumers": ["console"]},
@@ -287,6 +360,7 @@
         "events": [
           {"type": "approval.card.created", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.approval.card.created", "consumers": ["console", "card-created-notice"]},
           {"type": "approval.card.executed", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.approval.card.executed", "consumers": ["console", "card-conclusions"]},
+          {"type": "approval.card.notified", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.approval.card.notified", "consumers": ["console"]},
           {"type": "owner.question.answered", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.owner.question.answered", "consumers": ["console", "question-conclusions"]},
           {"type": "owner.question.asked", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.owner.question.asked", "consumers": ["console"]}
         ],
@@ -330,7 +404,10 @@
         ],
         "events": [
           {"type": "alert.rule.fired", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.alert.rule.fired", "consumers": ["console", "alert-letters"]},
-          {"type": "env.health.changed", "version": 2, "guarantee": "best-effort", "address": "ev.rocket.{env}.env.health.changed", "consumers": ["console"]}
+          {"type": "env.health.changed", "version": 2, "guarantee": "best-effort", "address": "ev.rocket.{env}.env.health.changed", "consumers": ["console"]},
+          {"type": "cluster.node.changed", "version": 1, "guarantee": "best-effort", "address": "ev.rocket.{env}.cluster.node.changed", "consumers": ["console"]},
+          {"type": "cluster.workload.changed", "version": 1, "guarantee": "best-effort", "address": "ev.rocket.{env}.cluster.workload.changed", "consumers": ["console"]},
+          {"type": "cluster.database.changed", "version": 1, "guarantee": "best-effort", "address": "ev.rocket.{env}.cluster.database.changed", "consumers": ["console"]}
         ],
         "event_streams": [],
         "commands": [
@@ -356,7 +433,6 @@
           {"method": "GET", "path": "/api/v1/cluster/data-clone/{id}", "handler": "api/internal/dataclone.HandleDataCloneStatus", "consumers": ["console", "mcp"]},
           {"method": "GET", "path": "/api/v1/cluster/data-freshness", "handler": "api/internal/dataclone.HandleDataFreshness", "consumers": ["console", "mcp"]},
           {"method": "GET", "path": "/api/v1/data-husbandry", "handler": "api/internal/tenant/husbandry.HandleSnapshot", "consumers": ["console"]},
-          {"method": "GET", "path": "/api/v1/plugins/analytics/status", "handler": "api/internal/research.HandleLegacyAnalyticsRedirect", "consumers": ["trade-frontend", "trade-infra"]},
           {"method": "GET", "path": "/api/v1/plugins/flex-query/api/*", "handler": "api/internal/flexquery.HandleAPIProxy", "consumers": ["console", "trade-frontend"]},
           {"method": "POST", "path": "/api/v1/plugins/flex-query/api/*", "handler": "api/internal/flexquery.HandleAPIProxy", "consumers": ["console", "trade-frontend"]},
           {"method": "GET", "path": "/api/v1/plugins/flex-query/status", "handler": "api/internal/flexquery.HandleStatus", "consumers": ["console", "trade-frontend", "trade-infra"]},
@@ -368,7 +444,6 @@
           {"method": "POST", "path": "/api/v1/plugins/market-data/api/*", "handler": "api/internal/marketdata.HandleAPIProxy", "consumers": ["console", "mcp", "trade-frontend"]},
           {"method": "GET", "path": "/api/v1/plugins/market-data/status", "handler": "api/internal/marketdata.HandleStatus", "consumers": ["console", "platform-plugin-market-data", "trade-frontend", "trade-infra"]},
           {"method": "GET", "path": "/api/v1/plugins/research/api/*", "handler": "api/internal/research.HandleAPIProxy", "consumers": ["trade-frontend"]},
-          {"method": "GET", "path": "/api/v1/plugins/research/status", "handler": "api/internal/research.HandleStatus", "consumers": ["trade-frontend", "trade-infra"]},
           {"method": "GET", "path": "/api/v1/research/*", "handler": "api/internal/research.HandleAPIProxy", "consumers": ["console", "trade-frontend"]},
           {"method": "GET", "path": "/api/v1/research/status", "handler": "api/internal/research.HandleStatus", "consumers": ["console"]},
           {"method": "GET", "path": "/api/v1/satellite/bus-deep", "handler": "api/internal/satellite.HandleBusDeep", "consumers": ["console"]},
@@ -402,7 +477,36 @@
       "id": "coordination",
       "name": "Seats & communication",
       "tier": 1,
-      "source": "domains/8-2-comm-desk/charter.md"
+      "source": "domains/8-2-comm-desk/charter.md",
+      "contracts": {
+        "measured_at": "d8dc802c",
+        "request_response": [
+          {"method": "POST", "path": "/api/v1/agentrt/controls", "handler": "api/internal/agentrt/coordapi.HandleSetControl", "consumers": ["console", "mcp"]},
+          {"method": "DELETE", "path": "/api/v1/agentrt/controls/{id}", "handler": "api/internal/agentrt/coordapi.HandleLiftControl", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/agentrt/messages", "handler": "api/internal/agentrt/coordapi.HandleReadMessages", "consumers": ["mcp"]},
+          {"method": "POST", "path": "/api/v1/agentrt/messages", "handler": "api/internal/agentrt/coordapi.HandleSendMessage", "consumers": ["mcp"]},
+          {"method": "POST", "path": "/api/v1/agentrt/messages/ack", "handler": "api/internal/agentrt/coordapi.HandleAckMessages", "consumers": ["mcp"]},
+          {"method": "GET", "path": "/api/v1/agentrt/messages/thread", "handler": "api/internal/agentrt/coordapi.HandleThreadMessages", "consumers": ["console"]},
+          {"method": "GET", "path": "/api/v1/agentrt/seats", "handler": "api/internal/agentrt/coordapi.HandleSeatStatuses", "consumers": ["console"]}
+        ],
+        "events": [
+          {"type": "seat.liveness.changed", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.seat.liveness.changed", "consumers": ["console"]},
+          {"type": "seat.session.changed", "version": 2, "guarantee": "best-effort", "address": "ev.rocket.{env}.seat.session.changed", "consumers": ["console"]}
+        ],
+        "event_streams": [
+          {"type": "seat.mail.arrived", "version": 1, "guarantee": "ordered", "key": "seat", "retention": "30d", "address": "ev.rocket.{env}.seat.mail.arrived", "consumers": ["console", "inbox-waiters"]},
+          {"type": "seat.status.changed", "version": 2, "guarantee": "ordered", "key": "seat", "retention": "30d", "address": "ev.rocket.{env}.seat.status.changed", "consumers": ["console"]}
+        ],
+        "commands": [
+          {"kind": "mcp_tool", "name": "ack_messages", "routes": ["/api/v1/agentrt/messages/ack"]},
+          {"kind": "mcp_tool", "name": "read_message", "routes": ["/api/v1/agentrt/messages"]},
+          {"kind": "mcp_tool", "name": "report_status", "routes": ["/api/v1/agentrt/messages"]},
+          {"kind": "mcp_tool", "name": "request_stop", "routes": ["/api/v1/agentrt/controls"]},
+          {"kind": "mcp_tool", "name": "send_message", "routes": ["/api/v1/agentrt/messages"]},
+          {"kind": "mcp_tool", "name": "wait_for_messages", "routes": ["/api/v1/agentrt/messages"]}
+        ],
+        "shared_storage": []
+      }
     }
   ],
   "default": {
@@ -413,6 +517,34 @@
     "basis": "2026-11-15 overlap ruling: unclaimed platform code maintained by foundation; business responsibility not yet reviewed"
   },
   "packages": {
+    "api/internal/bus/drill": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: a bus drill (sub-domain 0.2 of foundation); it had no row and was held by the default"
+    },
+    "api/internal/bus/states": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-20 0.2 map line: the map's pool found it the scan after it landed (357cca37, LANE-C, GET /api/v1/bus/states, already in foundation's contract with get_bus_states); every bus package is foundation's"
+    },
+    "api/internal/versionedread": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the versioned-read middleware the platform's assemblies lend to read routes; it had no row and was held by the default"
+    },
+    "api/internal/catalog": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-20 Owner opened the 0.2 map line (foundation): the map's pool of what it cannot perceive, a reading; it imports only foundation's statefile and safego"
+    },
     "api/internal/agentrt/eventlog": {
       "domains": [
         "foundation"
@@ -503,6 +635,48 @@
       ],
       "status": "assigned",
       "basis": "planning charter and verified extraction; 2026-11-16 import/architecture proposal card text extracted, validation and import writes unchanged"
+    },
+    "api/internal/agentrt/lineageapi": {
+      "domains": [
+        "lineage"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the lineage's HTTP for registered work, moved out of agentrtapi unchanged (externalwork.go): POST /agentrt/external-work, /agentrt/external-work/{id}/events and GET /agentrt/external-work/{id}, with the same paths, bodies, answers and error texts. agentrtapi still mounts them behind the same abilities and lends them identity, the canonical body reader, the answers and the error mapping through the Host interface the package declares. Imports lineage (externalwork) and foundation (actor, eventlog, actuation) only."
+    },
+    "api/internal/agentrt/rulesapi": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the signed rules' HTTP, moved out of agentrtapi unchanged (rules.go): GET /agentrt/rules/{rule_id} and POST /agentrt/rules/{rule_id}/check, /proposals, /sign, /tighten, with the same paths, bodies, answers and error texts. Verification's because it is the rule store's (agentrt/store) interface. agentrtapi still mounts them behind the same abilities (read, propose, stop) and lends them identity, the strict body reader, the answers, the error mapping and the Owner key's anchor through the Host interface the package declares; the signature check is the release gate's (releasepolicy.VerifyAnchored, delivery), which agentrtapi binds as Routes.Verify, so the package imports verification (store) and foundation (actor, eventlog) only."
+    },
+    "api/internal/agentrt/deliveryapi": {
+      "domains": [
+        "delivery"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): GET /agentrt/delivery (a handed-in commit's delivery stages, view=boundaries, view=configuration), moved out of agentrtapi unchanged (getDelivery of timeline.go), with the same queries, answers, status codes and log line. agentrtapi still mounts it behind the read ability and lends it the database, the configuration and PROD readers, the disk floor, the answers and the error mapping through the Host interface the package declares; the boundaries view's source reads the rule store, the rule registry and the landing waits (verification), so agentrtapi keeps that binding (boundarysource.go) and passes it as Routes.Boundaries. Imports delivery (deliveryview, deliveryreadings) and foundation (eventlog) only."
+    },
+    "api/internal/agentrt/recordsapi": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the agent runtime's record routes, moved out of agentrtapi unchanged (putArtifact of api.go, reads.go, artifacts.go, events.go): PUT /agentrt/artifacts/{id}, GET /agentrt/artifacts, /artifacts/{id} and GET /agentrt/events, with the same SQL, answers, status codes, refusal records and log line. Foundation's because what they serve is the artifact store (agentrt/artifact) and the event ledger (agentrt/eventlog), both foundation, with the shared visibility rules (an Agent host reads no exam artifact or record, no role reads issue: or intake: streams here). Not lineage's: of lineage they use only two checks, a reporter's external work description and a collector's record ownership error, which agentrtapi binds through the Host interface the package declares (ExternalDescription, NotOwnRecord) with identity, the answers and the error mapping. Imports foundation (actuation, actor, artifact, eventlog) only."
+    },
+    "api/internal/agentrt/planapi": {
+      "domains": [
+        "plan"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the plan's HTTP handlers, moved out of agentrtapi unchanged (plan.go, planview.go, planpace.go): GET /agentrt/plan, /plan/{id}, /plan-view, /plan-pace, /progress and POST /agentrt/plan/proposals, /plan/{id}/notes, /plan/{id}/signoff, with the same paths, bodies, answers and error texts. agentrtapi still mounts them behind the same abilities and lends them identity, the strict body readers, the answers and the error mapping through the Host interface the package declares. Imports plan (planstore, planreadings) and foundation (actor, eventlog) only; the plan import route stayed in agentrtapi because it reads a recorder log (lineage). 2026-11-19 later: POST /agentrt/plan/imports came too, unchanged (planimport.go of agentrtapi, behind propose); the plan import (planimport) is the plan's, and the recorder log it may read is the lineage's, reached through the RecorderLogs port the package declares (Format, Request, Prepare) that agentrtapi binds to recorderimport and externalwork.PrepareRecorderImport, so the package still imports plan and foundation only."
+    },
+    "api/internal/lineage/assembly": {
+      "domains": [
+        "lineage"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the lineage's assembly, moved out of server unchanged: building the lineage handler around the thread titles and mounting the lineage's /api/v1 routes (was mount_lineage.go) with the same paths, gates, handlers and order. server lends it Gitea access and the release records (delivery's; the binding stays in server's lineage_wire.go) and the gates. Imports lineage (lineage, threadtitles) only."
     },
     "api/internal/lineage": {
       "domains": [
@@ -609,6 +783,13 @@
       "status": "assigned",
       "basis": "CI charter; configuration is read-only"
     },
+    "api/internal/verification/assembly": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the verification's assembly, moved out of server unchanged: mounting the verification's /api/v1 routes (was mount_verification.go: evidence, units, CI scorecard and domains, unit evidence requests) with the same paths, gates, handlers and order. The handlers stay in server (ci_read_wire.go, units_*.go), bound to other domains' reads, and are lent with the gates (verification_wire.go). Imports foundation (versionedread) only."
+    },
     "api/internal/ciscore": {
       "domains": [
         "verification"
@@ -628,14 +809,14 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-18, moved out of api/internal/server unchanged (agentrt_schema.go; decoupling item 5, A4): what platform-api reads of the agentrt schema (which migrations the database applied), said in /health, the log and on the bus. Imports foundation only (migrate, eventlog, bus/readerseen, bus/schemaevents)."
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (agentrt_schema.go; decoupling item 5, A4): what platform-api reads of the agentrt schema (which migrations the database applied), said in /health, the log and on the bus. Imports foundation only (migrate, eventlog, bus/readerseen, bus/schemaevents). 2026-11-20: bus/schemaevents folded in (it had no other user; schemaevents.go): the schema.migration.applied announcement, so the imports are now migrate, eventlog, actor and bus/readerseen."
     },
     "api/internal/agentrt/readslot": {
       "domains": [
-        "foundation"
+        "owner"
       ],
       "status": "assigned",
-      "basis": "2026-11-18, moved out of api/internal/server unchanged (agentrt_sources.go; decoupling item 5, A4): the cap on reads of one store that take no context, so a stuck store holds a bounded number of goroutines. Imports safego only."
+      "basis": "2026-11-20 decoupling line: moved from foundation to owner; its only users are agentrt/approvalfacts and agentrt/questionbridge (owner), besides the assembly root api/internal/server (go list on main 2737a064). A module that serves one domain is part of it. Before: 2026-11-18, moved out of api/internal/server unchanged (agentrt_sources.go; decoupling item 5, A4): the cap on reads of one store that take no context, so a stuck store holds a bounded number of goroutines. Imports safego only."
     },
     "api/internal/agentrt/gitread": {
       "domains": [
@@ -714,6 +895,13 @@
       "status": "assigned",
       "basis": "Owner-domain charter and read-model extraction"
     },
+    "api/internal/owner/assembly": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the owner's assembly, moved out of server unchanged: mounting the owner's /api/v1 routes (was mount_owner.go), building the question runtime and mounting the questions (was questions_wire.go), and wiring the action catalog and the generic write actions (was wireWorkActions), with the same paths, gates, handlers, order and log lines. server lends it the gates, the handlers it still answers with (actions_wire.go, trust-anchored, among them), the action record's database, the cluster's clients, and delivery's copy of the policy and mirror sync (that glue stays in server's owner_wire.go). Imports owner (actions, actuationpolicy, workactions, agentgovernance, questions, questionbridge) and foundation (actuation, actionrecord, eventlog) only."
+    },
     "api/internal/questions": {
       "domains": [
         "owner"
@@ -762,6 +950,13 @@
       ],
       "status": "assigned",
       "basis": "adopted coordination domain; foundation remains interim maintainer"
+    },
+    "api/internal/agentrt/coordapi": {
+      "domains": [
+        "coordination"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the coordination's HTTP handlers under /agentrt, moved out of agentrtapi unchanged (messages.go, seats.go and the controls of controls.go): POST and GET /agentrt/messages, GET /messages/thread, POST /messages/ack, GET /seats, GET and POST /controls, DELETE /controls/{id}, with the same paths, bodies, answers and error texts. agentrtapi still mounts them behind the same abilities (stop, lift, propose, read) and lends them identity, the strict body reader, the answers and the error mapping through the Host interface the package declares; the stop-control calls (coord.RequestControl, coord.LiftControl) are as they were. A package apart from coord: in coord, six names coord exports (SendMessage, Unread, Thread, AckMessages, Message, RequestControl) would be used by no other package's production code, only by other packages' tests (codeguard exportedForOtherTests). Imports coordination (coord) and foundation (actor, eventlog, bus/readerseen) only."
     },
     "api/internal/threadinbox": {
       "domains": [
@@ -825,36 +1020,46 @@
         "coordination"
       ],
       "status": "mixed",
-      "basis": "2026-11-16 Complete file/reader audit: ordinary observations and scope-shadow report projection are in owning domains. Retain HTTP/lifecycle wiring, original identity/evidence/integrity/refusal and release decisions, plus communication-lane Bus wiring. Source dependencies remain explicit; shared protected scope is not claimed as isolated."
-    },
-    "api/internal/agentrt/agentrtapi": {
-      "domains": [
-        "plan",
-        "lineage",
-        "verification",
-        "delivery",
-        "owner",
-        "coordination"
-      ],
-      "status": "mixed",
-      "basis": "2026-11-16 Complete file/reader audit: retained shared HTTP adapters and domain service calls; identity, exam visibility, strict parsing, signed-rule and stop-control boundaries remain unchanged. Shared scope is explicit, not an unreviewed implementation backlog."
+      "basis": "2026-11-16 Complete file/reader audit: ordinary observations and scope-shadow report projection are in owning domains. Retain HTTP/lifecycle wiring, original identity/evidence/integrity/refusal and release decisions, plus communication-lane Bus wiring. Source dependencies remain explicit; shared protected scope is not claimed as isolated. 2026-11-20: agentrt/agentrtapi folded in (its only user was server); mixed 5 -> 4."
     },
     "api/internal/agentrt/controller": {
       "domains": [
-        "foundation",
-        "verification",
-        "coordination"
+        "verification"
       ],
-      "status": "mixed",
-      "basis": "2026-11-16 Complete file/reader audit: retain lifecycle composition, existing evidence/acknowledgment/automatic-CI decisions and communication-lane run-event wiring. Observation text is delegated and three unused historical presence constants were removed. The assessment source file is retained for the existing safety ratchet. Shared scope remains explicit. 2026-11-17: the automatic-CI decisions moved to api/internal/agentrt/fullci (verification); the controller keeps their loop and binds what a pass reads of it (fullci_loop.go). The external records (external_records.go) stay: their pipeline-run memo is shared field by field with the communication-lane run-event wiring (pipeline_events.go), and none of the file is lineage code (the card records are seenfacts', the run records and their evidence rows verification's). 2026-11-17: lineage removed from the list: after the full CI left, no file here holds lineage code or imports a lineage package (external_records.go records seen cards, pipeline records and evidence rows: foundation and verification). ackanswers.go (clearing a thread's inbox after the Owner's card is answered) may be the owner domain's; not ruled here."
+      "status": "assigned",
+      "basis": "2026-11-19 split to one domain: the plan passes (facts, plan decisions, done rules, plan observations) moved unchanged to api/internal/agentrt/planloop (plan) and the acknowledging of used answers to api/internal/agentrt/answerack (owner); the controller keeps the loop runner, its alerts and tuning, the external records, the pipeline records, events and evidence and the full CI's loop, runs the moved passes as the Steps and Loops the server binds (same names, intervals and order), takes the full CI's zone from the server (FullCIZone, planpace.BriefZone) and now imports only verification and foundation packages."
+    },
+    "api/internal/agentrt/planloop": {
+      "domains": [
+        "plan"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 moved out of api/internal/agentrt/controller unchanged: the plan tree's passes of the controller's loops (Facts, PlanDecisions, Rules, PlanObservations) over planstore and plan with their own source reads and per-read timeout; it imports only plan and foundation packages, and the server binds its passes as the controller's steps and loop."
+    },
+    "api/internal/agentrt/answerack": {
+      "domains": [
+        "owner"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 moved out of api/internal/agentrt/controller unchanged (its ackanswers.go, which the controller's row left to the owner domain): acknowledging the Owner's answered cards the runtime no longer waits on, over questioncards (owner) and ownercard (foundation); the server binds it as the controller's used-answers step."
+    },
+    "api/internal/delivery/assembly": {
+      "domains": [
+        "delivery"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the delivery's assembly, moved out of server unchanged: mounting the delivery's /api/v1 routes (was mount_delivery.go: release policy, Argo CD, pipelines and runs, release window, release records, supply chain, agentrt migrations) with the same paths, gates, handlers and order. It names what it uses of the pipelines' handler (package delivery, shared with coordination) as an interface; the release policy's handlers (release_policy_wire.go, trust-anchored) and the other answers server holds are lent with the gates (delivery_wire.go). Imports delivery (gitops, releases, migraterun) only."
     },
     "api/internal/delivery": {
       "domains": [
         "delivery",
-        "coordination"
+        "coordination",
+        "owner",
+        "verification",
+        "compute"
       ],
       "status": "mixed",
-      "basis": "2026-11-16 Complete file/reader audit: CI phases/run observations and Delivery configuration/supply projections are in their domains. Retain Delivery resource/context composition, strict policy/health/ref/success checks, execution, window queue transitions and communication contracts. Existing CI and coordination ownership ruling is unchanged. 2026-11-17 the tests of the phase and task-timing decoders and the read of a run's steps followed that code to cirunview; so did the timings read and its cache; the parameter exposure allowlist, its test and the route wiring stay. The paged list of unit TaskRuns went too; creating one stays. One test file is left that verification answers for and this row cannot name: outside_inputs_test.go, which must sit in the package whose tests it declares inputs for."
+      "basis": "2026-11-16 Complete file/reader audit: CI phases/run observations and Delivery configuration/supply projections are in their domains. Retain Delivery resource/context composition, strict policy/health/ref/success checks, execution, window queue transitions and communication contracts. Existing CI and coordination ownership ruling is unchanged. 2026-11-17 the tests of the phase and task-timing decoders and the read of a run's steps followed that code to cirunview; so did the timings read and its cache; the parameter exposure allowlist, its test and the route wiring stay. The paged list of unit TaskRuns went too; creating one stays. One test file is left that verification answers for and this row cannot name: outside_inputs_test.go, which must sit in the package whose tests it declares inputs for. 2026-11-19 (decoupling) the row names every domain the package imports: owner (actions, approvals, approvalnotify, actuationpolicy, questions), verification (cirunview, unitexec) and compute (placement) were imported but not listed. It stays mixed: its owner imports are trust-anchored packages that may not be edited or moved, and putting a port in front of release judgment buys neither stability nor speed."
     },
     "api/internal/agentrt/canon": {
       "domains": [
@@ -948,10 +1153,10 @@
     },
     "api/internal/assessmentview": {
       "domains": [
-        "foundation"
+        "owner"
       ],
       "status": "assigned",
-      "basis": "2026-11-15 source and caller audit: list.go bounded generic optional-advice read scheduling via injected reader"
+      "basis": "2026-11-20 decoupling line: moved from foundation to owner; its only users are approvals and questions (owner), besides the assembly root api/internal/server (go list on main 2737a064). A module that serves one domain is part of it. Before: 2026-11-15 source and caller audit: list.go bounded generic optional-advice read scheduling via injected reader"
     },
     "api/internal/threadtitles": {
       "domains": [
@@ -1135,26 +1340,19 @@
       "status": "assigned",
       "basis": "2026-11-16 source and caller audit: managed local and cluster service lifecycle, logs and deployment provider; compute charter owns host-resident services, lifecycle and allowlists unchanged"
     },
-    "api/internal/launchd": {
+    "api/internal/selfhealth": {
       "domains": [
         "compute"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: Mac host-resident service inventory consumed by operatorplane and maintainer; compute charter owns host-resident services, no process operation changed"
-    },
-    "api/internal/selfhealth": {
-      "domains": [
-        "foundation"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: shared platform API/Console/Argo health observations and viewer-environment resolution; no tenant business logic or runtime behavior changed"
+      "basis": "2026-11-20 decoupling line: moved from foundation to compute; its only user is devsession (compute), besides the assembly root api/internal/server (go list on main 2737a064). A module that serves one domain is part of it. Before: 2026-11-16 source and caller audit: shared platform API/Console/Argo health observations and viewer-environment resolution; no tenant business logic or runtime behavior changed"
     },
     "api/internal/placement": {
       "domains": [
         "compute"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: node-capability pools and workload placement observations consumed by cluster/delivery; compute charter owns placement, preflight decisions unchanged"
+      "basis": "2026-11-19: the choice of a node for a task moved in from delivery at the CI line's ask, semantics unchanged: TaskProfile (a task's needs: CPU, memory, disk tier, spread, and the node labels it excludes, since that day by label instead of node name), the node measurements and their Prometheus reader (PromNodeMetrics, JoinNodeMetrics, WorseLatency; delivery's node_metrics_read.go), and the choice itself (Placer.Place: node profiles, disk tiers, full nodes, spread); delivery keeps its task values (CITask, CIRunTask, UnitTask) and writes the chosen node into its runs, handing Placer the Kubernetes client and the metrics reader. Imports only foundation (kubemetrics, telemetry, probe, kubeapi). Earlier, 2026-11-16 source and caller audit: node-capability pools and workload placement observations consumed by cluster/delivery; compute charter owns placement, preflight decisions unchanged"
     },
     "api/cmd/platform-api": {
       "domains": [
@@ -1172,11 +1370,10 @@
     },
     "api/internal/operatorplane": {
       "domains": [
-        "foundation",
         "compute"
       ],
-      "status": "mixed",
-      "basis": "2026-11-16 foundation wall: an assembly root inside internal/ (the out-of-band process and the server both mount it); it wires compute's agentbridge, agentdeploy and launchd beside foundation services, as the server wires every domain. Implementation, authorization, refusal and dispatch unchanged."
+      "status": "assigned",
+      "basis": "2026-11-16 foundation wall: an assembly root inside internal/ (the out-of-band process and the server both mount it). 2026-11-19, by its imports (decoupling milestone 1: one domain per package): it is the out-of-band operator plane on the Mac minis, and what it serves is compute's (agentbridge, agentdeploy, launchd) beside foundation's patrol and auth, which every domain may use; it imports no other domain, so it is compute's, as the compute seat was told on 2026-11-19. Implementation, authorization, refusal and dispatch unchanged."
     },
     "api/internal/maintainer": {
       "domains": [
@@ -1201,10 +1398,10 @@
     },
     "api/internal/mcp": {
       "domains": [
-        "foundation"
+        "compute"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: Go cross-domain discovery catalog and HTTP transport; distinct from communication-owned TypeScript message tools; implementation, authorization, refusal and dispatch behavior unchanged"
+      "basis": "2026-11-20 decoupling line: moved from foundation to compute; its only users are operatorplane and patrol (compute), besides the assembly root api/internal/server (go list on main 2737a064). A module that serves one domain is part of it. Before: 2026-11-16 source and caller audit: Go cross-domain discovery catalog and HTTP transport; distinct from communication-owned TypeScript message tools; implementation, authorization, refusal and dispatch behavior unchanged"
     },
     "api/internal/agentrt/actionrecord": {
       "domains": [
@@ -1240,20 +1437,6 @@
       ],
       "status": "assigned",
       "basis": "2026-11-16 source and caller audit: shared Prometheus observation client used across compute and system views; implementation, authorization, refusal and dispatch behavior unchanged; 2026-11-16 generic log timestamp projection and elapsed-log formatting extracted with original output and threshold behavior"
-    },
-    "api/internal/agentbridge": {
-      "domains": [
-        "compute"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: host and bridge service inventory; implementation, authorization, refusal and dispatch behavior unchanged"
-    },
-    "api/internal/agentdeploy": {
-      "domains": [
-        "compute"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: agent host deployment inventory and HTTP adapter; implementation, authorization, refusal and dispatch behavior unchanged"
     },
     "api/internal/agentrt/mainhistory": {
       "domains": [
@@ -1295,21 +1478,14 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-17: the controller loops' failure alerts and recovery notes, moved out of agentrt/store unchanged; the reads of those records are loopreadings' (foundation)"
-    },
-    "api/internal/agentrt/loopreadings": {
-      "domains": [
-        "foundation"
-      ],
-      "status": "assigned",
-      "basis": "foundation charter; recorded controller-loop observations and error display, not alert writers or loop policy; 2026-11-16 complete failure/recovery text projection extracted with caller-owned size bound and write transaction"
+      "basis": "2026-11-17: the controller loops' failure alerts and recovery notes, moved out of agentrt/store unchanged; the reads of those records are loopreadings' (foundation). 2026-11-20: agentrt/loopreadings folded in (it had no other user); the reads of those records are now here (loops.go, alert_text.go)."
     },
     "api/internal/topology": {
       "domains": [
         "tenant"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 foundation wall: this package only plugs the tenant adapter (tenanttopology) into the generic projection (topologyview), so it is the tenant's composition; the generic projection stays foundation's. No code moved."
+      "basis": "2026-11-16 foundation wall: this package only plugs the tenant adapter (tenanttopology) into the generic projection (topologyview), so it is the tenant's composition; the generic projection stays foundation's. No code moved. 2026-11-20: tenanttopology folded in (its only user): the tenant display adapter is tenant_adapter.go here, unchanged."
     },
     "api/internal/topologyview": {
       "domains": [
@@ -1318,20 +1494,6 @@
       "status": "assigned",
       "basis": "2026-11-16 Owner-approved domain split. Complete Build/Live projection extracted: generic node/edge aggregation, datastore host matching and discovered-machine ordering; tenant display rules supplied through an adapter."
     },
-    "api/internal/tenanttopology": {
-      "domains": [
-        "tenant"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 Owner-approved domain split. Read-only tenant/deployment target-to-node and IB edge-display mapping physically extracted from topology, with pre-extraction JSON parity evidence. No probes or execution."
-    },
-    "api/internal/telemetry/probecollect": {
-      "domains": [
-        "foundation"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 extracted generic concurrent observation collection from server metrics; independent deadlines, input order and panic containment preserved. Server retains plugin selection and all role/auth/release policy wiring."
-    },
     "api/internal/tenant/husbandry/checklistview": {
       "domains": [
         "tenant"
@@ -1339,26 +1501,19 @@
       "status": "assigned",
       "basis": "2026-11-16 complete Tenant husbandry-to-checklist observation projection extracted. Old overlay, dispatch catalog, persistence and execution remain unchanged; no whole-checklist closure claimed."
     },
-    "api/internal/tenant/ingestview": {
+    "api/internal/tenant/assembly": {
       "domains": [
         "tenant"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 complete Tenant ingest observation interpretation and DTOs extracted. Satellite retains original request, identity, shared aggregate and all monitor/auto fields; no execution or whole-satellite closure."
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the tenant's assembly, moved out of server unchanged: building the tenant's handlers (plugins, research, data clone, data husbandry, satellite, trade agent catalog) and mounting the tenant's /api/v1 routes (was mount_tenant.go) with the same paths, gates, handlers and order. server lends it the cluster's adapters (Kube), the gates and the topology answer. Imports tenant and foundation only."
     },
     "api/internal/tenant/husbandry": {
       "domains": [
         "tenant"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 Owner-confirmed split: Complete Market/Flex/Research read-only husbandry interpretation; original thresholds, paths, failure explanations and ordering preserved."
-    },
-    "api/internal/proxyjson": {
-      "domains": [
-        "foundation"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 Owner-confirmed split: Generic GET proxy transport, bounded response reading and JSON decoding; caller owns status-error representation and proxy policy."
+      "basis": "2026-11-16 Owner-confirmed split: Complete Market/Flex/Research read-only husbandry interpretation; original thresholds, paths, failure explanations and ordering preserved. 2026-11-20: proxyjson (foundation) moved here (its only user): the bounded GET-and-decode through the caller's proxy is proxy_get.go (proxyGet), unchanged; the caller still owns the status-error representation and proxy policy."
     },
     "api/internal/resourceview": {
       "domains": [
@@ -1373,13 +1528,6 @@
       ],
       "status": "assigned",
       "basis": "2026-11-16 safe extraction from probe and checklist, which remain mixed. HTTP drain/status, TCP dial-close, streaming JSON observation and non-draining close transport; callers retain identity, signal classification, request targets, client/timeout and retry policy."
-    },
-    "api/internal/datastoreobservations": {
-      "domains": [
-        "foundation"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-16 safe extraction from probe, which remains mixed. Read-only cluster-health projection and original ordered LAN/config TCP fallbacks, through observation callbacks without identity/database access."
     },
     "api/internal/tenant/appreadings": {
       "domains": [
@@ -1404,19 +1552,24 @@
     },
     "api/internal/cluster": {
       "domains": [
-        "foundation",
-        "tenant",
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19: foundation's alone, the Kubernetes adapter (client, nodes, workloads, pods, capabilities, actuation, the node rollup and service readiness gathering). The last compute block left that day for api/internal/computenodes (compute): the node power read, Wake-on-LAN wake and drain-and-power-off over SSH, which nodes are compute-managed, the elastic node classification and the host reachability probes (node_power.go and most of elastic_node_health.go). cluster declares the port (ComputeNodes, bound by the server) and keeps NodePower, WakeNode, PowerOffNode and their handlers as forwarders, since the trust-anchored action wiring names HandleWakeNode and HandlePowerOffNode; it keeps the Kubernetes-generic node helpers computenodes runs through (NodeReadyStatus, NodePodCounts, kubectl drain and uncordon). The GPU, data warehouse and workers readiness are compute's readings (elasticreadings) bound through ComputeReadings; cluster only gathers their inputs. What stays of the tenant holds no tenant logic: data_clone_forward.go forwards the two data clone write handlers the action wiring names (bound to api/internal/dataclone), app_readings.go declares the port the tenant's application reading is bound through, and placement.go the port compute's pool evaluator is bound through; ports and forwarders are the adapter's, so foundation's. Earlier: the PostgreSQL and Redis status reads left on 2026-11-18 for api/internal/datastore (foundation; PostgresStatus, RedisStatus and DatastoreSnapshot stay here as forwarders, the backup and WAL repair actions stay); the data clone, data freshness and data probe left on 2026-11-17 for api/internal/dataclone (tenant). 2026-11-20: datastore folded back in (it had no other user): the PostgreSQL and Redis status reads are cluster's again (postgres_status.go, redis_status.go, matrix_datastore.go, datastore_source.go, datastore_doc.go), unchanged; Source and Snapshot remain the line between them and the rest of cluster."
+    },
+    "api/internal/computenodes": {
+      "domains": [
         "compute"
       ],
-      "status": "mixed",
-      "basis": "2026-11-16, corrected the same day after the CI line's audit of the ownership changes (duty/from-ci-w1-2026-11-16-ownership-changes-audit.md): the package is not one domain's. Foundation's on review: the Kubernetes adapter (client, nodes, workloads, pods, capabilities, actuation). Named by the review of that day and not ruled: the service readiness of GPU, warehouse and workers and the elastic node health, which compute reads. The PostgreSQL and Redis status reads left on 2026-11-18 for api/internal/datastore (foundation); PostgresStatus, RedisStatus and DatastoreSnapshot stay here as forwarders, and the PostgreSQL backup and WAL repair actions, which write, stay here. The data clone, data freshness and data probe (data_clone.go 1,093 lines and three more files), which served the tenant's databases, left on 2026-11-17 for api/internal/dataclone (tenant); what stays of it here is the adapter it runs its commands through (ResolveCNPGPrimary, ExecOnPrimary) and two forwarders that the trust-anchored action wiring names (HandleDataClone, HandleDataCloneSchedulePut, bound by the server). The node pools and the tenant's readings of applications are bound, not imported, since 2026-11-16. It stays mixed until the remaining blocks are split out or ruled."
+      "status": "assigned",
+      "basis": "2026-11-19 cluster split, last compute block: the compute charter's on-demand nodes (which nodes compute powers, their power read, Wake-on-LAN wake and drain-and-power-off over SSH, the elastic node classification through elasticreadings.NodeMode and the host reachability probes), moved from cluster unchanged in behaviour. It imports cluster (foundation) and elasticreadings (compute) and depends on Kubernetes through cluster without taking it over; the server binds it to cluster (cluster.BindComputeNodes)."
     },
-    "api/internal/datastore": {
+    "api/internal/kubeapi": {
       "domains": [
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-18, moved out of api/internal/cluster (postgres_status.go, redis_status.go, matrix_datastore.go and their tests): read-only status of the platform's PostgreSQL and Redis. It offers ReadPostgres, ReadRedis and MatrixSnapshot over a Source the caller fills, the MinIO, Redis target and embedded Redis dependency readings service readiness uses, and the CNPG names cluster's backup, WAL repair and pod exec code acts on. It writes nothing and does not import cluster. Imports: config, probe and resourceview, all foundation."
+      "basis": "2026-11-19: the shapes of foundation's Kubernetes adapter that other domains pass through it (actuation request and answer, pod logs, client error, node pool shapes), moved from cluster unchanged; cluster aliases them. devsession, ibgateway and placement declare the interface they need with these types instead of importing cluster. Types only; imports only probe."
     },
     "api/internal/dataclone": {
       "domains": [
@@ -1430,14 +1583,14 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): reachability probing and the connectivity matrix, read by eighteen packages of every domain. Its trade_routes file names Trade routes from configuration and is counted by the Trade vocabulary budget. Was default-maintainer."
+      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): reachability probing and the connectivity matrix, read by eighteen packages of every domain. Its trade_routes file names Trade routes from configuration and is counted by the Trade vocabulary budget. Was default-maintainer. 2026-11-20: datastoreobservations folded in (it had no other user; datastore_projection.go, its names unexported): the datastore health projection and its ordered TCP fallbacks."
     },
     "api/internal/satellite": {
       "domains": [
         "tenant"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 foundation wall and review of unclaimed packages: this package reads the Trade satellite's bus, monitor and ingest (Trade routes, IB and auto_status contracts), which is the tenant's integration, not the base; only the server imports it. It was foundation's by default (overlap ruling), never by review. Bus and communication contracts inside it stay with the communication line. No code moved."
+      "basis": "2026-11-16 foundation wall and review of unclaimed packages: this package reads the Trade satellite's bus, monitor and ingest (Trade routes, IB and auto_status contracts), which is the tenant's integration, not the base; only the server imports it. It was foundation's by default (overlap ruling), never by review. Bus and communication contracts inside it stay with the communication line. No code moved. 2026-11-20: tenant/ingestview folded in (its only user): the ingest observation interpretation and its DTOs (IngestDeep, IngestServiceDeep) are ingest_projection.go here, unchanged."
     },
     "api/internal/releasepolicy/rptest": {
       "domains": [
@@ -1488,12 +1641,12 @@
       "status": "assigned",
       "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, wakes a waiting inbox read when the bus says mail reached its address; imports only bus/relay. Imports only foundation packages or none; the server wires it."
     },
-    "api/internal/bus/nextgen": {
+    "api/internal/bus/effect": {
       "domains": [
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, the channel table of the bus migration and what it summarizes; imports nothing of the platform. Imports only foundation packages or none; the server wires it."
+      "basis": "2026-11-20: bus/nextgen folded in (it had no other user): the Bus page's computed readings (GET /api/v1/bus/effect, /bus/nextgen) and the communication layer's registers of its change of generation (channels, readers, baselines and problems yaml, embedded). It was held by the default row until then. Imports only foundation packages; the server wires it."
     },
     "api/internal/bus/observe": {
       "domains": [
@@ -1537,26 +1690,12 @@
       "status": "assigned",
       "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, the known regressions on main as bus records. Imports only foundation packages or none; the server wires it."
     },
-    "api/internal/bus/releases": {
-      "domains": [
-        "foundation"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, announces a finished release on the bus. Imports only foundation packages or none; the server wires it."
-    },
     "api/internal/bus/runhooks": {
       "domains": [
         "foundation"
       ],
       "status": "assigned",
       "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, lets a reader of pipeline runs be woken by the bus. Imports only foundation packages or none; the server wires it."
-    },
-    "api/internal/bus/schemaevents": {
-      "domains": [
-        "foundation"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, says on the bus that a migration reached the database. Imports only foundation packages or none; the server wires it."
     },
     "api/internal/releases": {
       "domains": [
@@ -1623,10 +1762,17 @@
     },
     "api/internal/patrol": {
       "domains": [
-        "foundation"
+        "compute"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the platform's own patrol: it reads the checklist signals and repairs the platform and the cluster through platform routes. It serves no one domain; its tenant items are read through signals a tenant binds. It had no row."
+      "basis": "2026-11-20 decoupling line: moved from foundation to compute; its only user is operatorplane (compute), besides the assembly root api/internal/server (go list on main 2737a064). A module that serves one domain is part of it. Before: 2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): the platform's own patrol: it reads the checklist signals and repairs the platform and the cluster through platform routes. It serves no one domain; its tenant items are read through signals a tenant binds. It had no row."
+    },
+    "api/internal/evalreadings": {
+      "domains": [
+        "coordination"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-20: the evaluation readout (law 47), GET /api/v1/readings/evaluation; the coordinator gave it to the metrics line (coordination). Reads the event ledger only through eventlog.LatestByKey and OfType, Prometheus through a query lent by server, and a failed CI run's failed tasks through a lookup lent by server (evidence.EvidenceByCommit, verification); writes nothing."
     },
     "api/internal/elasticreadings": {
       "domains": [
@@ -1667,13 +1813,19 @@
       "status": "mixed",
       "basis": "2026-11-18 moved out of store (decoupling item 5, S4; store's portsbind.go, 79 lines, unchanged in effect): the binding of the plan code's ports to their providers (the external work checks and activity reads, the plan tree, the delivery read's lineage naming, the loop alerts, the recorder import decision, the coordination alert claim, the Owner's question limits); it is wiring only, holds no rule and no query, and is mixed because it names the plan on one side and lineage, delivery, coordination and the Owner's questions on the other, as the assembly of the plan code; it is linked by server and by the tests that run the plan code, and nothing but wiring may be added to it"
     },
+    "api/internal/agentrt/ownercard": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-19 moved out of planstore unchanged (Card, RuntimeCard, Ask, Withdraw, the plan change card's options and keys, ErrAsked, ErrQuestionGone; planstore names them by alias): the contract between the plan code and the Owner's questions, a foundation package by the ruling of the foundation domain's seat (0.1 decoupling) on 2026-11-19, as seenfacts is; it holds types, constants and sentinel errors only, judges nothing and imports nothing of this module; its importers are planstore (plan) and questionbridge (owner), so neither imports the other"
+    },
     "api/internal/agentrt/questionbridge": {
       "domains": [
-        "owner",
-        "plan"
+        "owner"
       ],
-      "status": "mixed",
-      "basis": "2026-11-18 moved out of server (decoupling item 5, A5; the server's questions_wire.go, about 330 lines, unchanged in effect): how the agent runtime asks, reads, answers, withdraws and acknowledges the Owner's questions: the translation of a plan's card (planstore.Card) into a question with its idempotency and recommendation rules, the runtime's own session, the bounded reads, the card-auto-answer reads, and the announcement of the questions' transitions to the bus; it is mixed because it names the plan's ports on one side and the questions service on the other, the same shape as planwiring; the server only constructs it, mounts the routes and closes it"
+      "status": "assigned",
+      "basis": "2026-11-18 moved out of server (decoupling item 5, A5; the server's questions_wire.go, about 330 lines, unchanged in effect): how the agent runtime asks, reads, answers, withdraws and acknowledges the Owner's questions: the translation of a runtime card (ownercard.Card) into a question with its idempotency and recommendation rules, the runtime's own session, the bounded reads, the card-auto-answer reads, and the announcement of the questions' transitions to the bus. Mixed (owner and plan) until 2026-11-19, when the plan's card types moved into the contract ownercard: it now imports the questions service, questioncards and foundation only, and implements the plan's ports without naming the plan; the server only constructs it, mounts the routes and closes it"
     },
     "api/internal/bus/alertletters": {
       "domains": [
@@ -1687,7 +1839,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-18, moved out of api/internal/server unchanged (metrics.go; decoupling item 5): the plugins' reachability and gauges on /metrics. Imports foundation only (probe, telemetry, telemetry/probecollect)."
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (metrics.go; decoupling item 5): the plugins' reachability and gauges on /metrics. Imports foundation only (probe, telemetry, telemetry/probecollect). 2026-11-20: telemetry/probecollect folded in (it had no other user; collect.go, Collect unexported as collectProbes), so the imports are now probe, telemetry and safego."
     },
     "api/internal/agentrt/runtimedb": {
       "domains": [
@@ -1701,7 +1853,7 @@
         "delivery"
       ],
       "status": "assigned",
-      "basis": "2026-11-18, moved out of api/internal/server unchanged (release_table_wire.go; decoupling item 5): the release records' table, the row and its release.deploy.finished announcement in one transaction, and the reads the recorder takes. Imports releases (delivery) and foundation only (eventlog, bus/releases). releases itself is unchanged."
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (release_table_wire.go; decoupling item 5): the release records' table, the row and its release.deploy.finished announcement in one transaction, and the reads the recorder takes. Imports releases (delivery) and foundation only (eventlog). releases itself is unchanged. 2026-11-20: bus/releases (foundation) moved here (its only user): the release.deploy.finished announcement (its body, checks and vocabulary, appended in the record's transaction) is announce.go, unchanged; the event was already delivery's in the register."
     },
     "api/internal/ruleapprove": {
       "domains": [
@@ -1724,5 +1876,146 @@
       "status": "assigned",
       "basis": "2026-11-18, moved out of api/internal/server unchanged (window_notify.go; decoupling item 5): the release window's queue notice into a thread's inbox, through coord's public message path. Imports coordination (coord, threadinbox) and foundation (actor, eventlog) only."
     }
+  },
+  "paths": {
+    "api/internal/bus/DISPOSITIONS.md": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the bus's own rules and dispositions (sub-domain 0.2 of foundation); api/internal/bus holds no Go files itself"},
+    "api/internal/bus/RULES.md": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the bus's own rules and dispositions (sub-domain 0.2 of foundation); api/internal/bus holds no Go files itself"},
+    "config/catalog-review.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the map line's reviews of the unperceived pool"},
+    ".env.example": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: repository root file (build, docs, editor and CI settings of the platform repository)"},
+    ".gitignore": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: repository root file (build, docs, editor and CI settings of the platform repository)"},
+    ".nvmrc": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: repository root file (build, docs, editor and CI settings of the platform repository)"},
+    "CLAUDE.md": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: repository root file (build, docs, editor and CI settings of the platform repository)"},
+    "LICENSE": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: repository root file (build, docs, editor and CI settings of the platform repository)"},
+    "Makefile": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: repository root file (build, docs, editor and CI settings of the platform repository)"},
+    "README.md": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: repository root file (build, docs, editor and CI settings of the platform repository)"},
+    "agent/.gitignore": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the agent directory's own files"},
+    "agent/README.md": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the agent directory's own files"},
+    "agent/code-health": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: runtime output directory (.gitkeep) written by the platform"},
+    "agent/drift": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: drift scans (reconcile.drift.found is a foundation contract event)"},
+    "agent/drift-proposals": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: runtime output directory (.gitkeep) written by the platform"},
+    "agent/remediation-jobs": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: runtime output directory (.gitkeep) written by the platform"},
+    "api/.golangci.yml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the Go module's own files (module, lint, build)"},
+    "api/Makefile": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the Go module's own files (module, lint, build)"},
+    "api/go.mod": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the Go module's own files (module, lint, build)"},
+    "api/go.sum": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the Go module's own files (module, lint, build)"},
+    "bifrost.units.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: repository root file (build, docs, editor and CI settings of the platform repository)"},
+    "config/actions-catalog.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/actuation-policy.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/agent-tasks.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/business-agent-brief-schedule.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/catalog-index.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/clusters.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/convergence-feedback-loop.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/cursor-mcp-trade.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/cursor-unified-mcp.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/domain-ownership.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/environments.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/migrate-waves": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: migration wave definitions (generated into the console by scripts/generate_migrate_waves_ts.py)"},
+    "config/ollama-agent.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/ops-agent-alertmanager.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/ops-context.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/patrol-skills": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: patrol skill definitions the ops agent reads"},
+    "config/platform-auth.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/quality-ruler.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/release-rules.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/running-images.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/sessions-catalog.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/topology.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/trade-api-domains.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "config/trust-overrides.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
+    "console/.design-sync": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's design-sync configuration (design brief for the console)"},
+    "console/domain-inventory.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
+    "console/domain-ownership.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
+    "console/eslint.config.js": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
+    "console/index.html": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
+    "console/nginx.conf": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
+    "console/package-lock.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
+    "console/package.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
+    "console/public": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: static assets the console serves"},
+    "console/scripts": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: console scripts; frontend-domain-map.mjs is the map line's front-end inventory"},
+    "console/tsconfig.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
+    "console/tsconfig.node.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
+    "console/vite.config.ts": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
+    "console/vitest.config.ts": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
+    "mcp/README.md": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the MCP servers' index"},
+    "mcp/platform": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the platform's MCP server: tools over every domain's routes; the server itself is shared composition, each tool's route is listed in its domain's contract"},
+    "mcp/unifi": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the UniFi network MCP server (network is foundation's, api/internal/network)"},
+    "scripts/generate_migrate_waves_ts.py": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/install_mount_nas_launchagent.sh": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/mount_nas.sh": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/push-platform-api.sh": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/restore_server_vlan10_ips.sh": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/run_agent.py": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/run_platform.py": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/run_platform_api.sh": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/run_prometheus_pf.sh": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/test-db.sh": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/unifi_check_ports.py": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/unifi_dhcp_vlan10_restore.py": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/unifi_firewall_policy_test.py": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/unifi_firewall_setup.py": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/unifi_moca_vlan_test.sh": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/unifi_network_audit.sh": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/unifi_owner_env.py": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/unifi_owner_env.sh": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/unifi_owner_env_test.py": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/unifi_probe.sh": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/unifi_vlan10_cut_batch.sh": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/unifi_vlan_setup.py": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/unifi_wlan_precreate.py": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    "scripts/wifiman_baseline.sh": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform operation scripts (local run, network setup, test database)"},
+    ".husky": {"domains": ["verification"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: claimed in the map's review of the unperceived pool and entered by the table's keeper; the domain moves or narrows it with a row change: git hooks that run the commit checks and trailers"},
+    "scripts/ci": {"domains": ["verification"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: claimed in the map's review of the unperceived pool and entered by the table's keeper; the domain moves or narrows it with a row change: the CI scripts the pipelines run"},
+    "config/build_gates": {"domains": ["verification"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: claimed in the map's review of the unperceived pool and entered by the table's keeper; the domain moves or narrows it with a row change: P6 build gate and sign-off records"},
+    "agent/deploy": {"domains": ["compute"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: claimed in the map's review of the unperceived pool and entered by the table's keeper; the domain moves or narrows it with a row change: launchd plists and installers for agentd, operator-plane and the peer watchdog on the Mac mini"},
+    "agent/git-bridge": {"domains": ["compute"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: claimed in the map's review of the unperceived pool and entered by the table's keeper; the domain moves or narrows it with a row change: the local git-bridge dev session (:8785); dev sessions are compute's"},
+    "scripts/agent": {"domains": ["compute"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: claimed in the map's review of the unperceived pool and entered by the table's keeper; the domain moves or narrows it with a row change: host bootstrap and Mac mini deploy scripts"},
+    "mcp/trade": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: claimed in the map's review of the unperceived pool and entered by the table's keeper; the domain moves or narrows it with a row change: the Trade MCP server: tenant integration"},
+    "agent/satellite-probe-bridge": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: claimed in the map's review of the unperceived pool and entered by the table's keeper; the domain moves or narrows it with a row change: the probe bridge to the Trade satellite (:8786): tenant integration"},
+    "console/bench/builder.html": {"domains": ["owner"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: claimed in the map's review of the unperceived pool and entered by the table's keeper; the domain moves or narrows it with a row change: bench of the City builder (console/src/domains/owner/city); dev server only, never built into the Console"},
+    "console/bench/builder.tsx": {"domains": ["owner"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: claimed in the map's review of the unperceived pool and entered by the table's keeper; the domain moves or narrows it with a row change: bench of the City builder (console/src/domains/owner/city); dev server only"},
+    "console/bench/landmarks.html": {"domains": ["owner"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: claimed in the map's review of the unperceived pool and entered by the table's keeper; the domain moves or narrows it with a row change: bench of the City landmarks (console/src/domains/owner/city/landmarks); dev server only"},
+    "console/bench/landmarks.tsx": {"domains": ["owner"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: claimed in the map's review of the unperceived pool and entered by the table's keeper; the domain moves or narrows it with a row change: bench of the City landmarks; dev server only"},
+    "console/bench/nerve.html": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: claimed in the map's review of the unperceived pool and entered by the table's keeper; the domain moves or narrows it with a row change: bench of the bus nerve map (console/src/domains/foundation/bus); dev server only"},
+    "console/bench/nerve.tsx": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: claimed in the map's review of the unperceived pool and entered by the table's keeper; the domain moves or narrows it with a row change: bench of the bus nerve map; dev server only"},
+    "console/bench/export-snapshot.py": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: claimed in the map's review of the unperceived pool and entered by the table's keeper; the domain moves or narrows it with a row change: read-only snapshot export for the nerve map bench"},
+    "console/bench/.gitignore": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: the bench's ignore file (snapshots stay out of the repository), like the Console's own top files"},
+    "console/bench/vite.bench.config.ts": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 2: claimed in the map's review of the unperceived pool and entered by the table's keeper; the domain moves or narrows it with a row change: the bench's dev server config, like the Console's own top files"}
+  },
+  "workloads": {
+    "bifrost-dev": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Trade DEV (OLTP): the tenant application the platform serves"},
+    "bifrost-owner-exec": {"domains": ["owner"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: owner-exec (api/cmd/owner-exec is owner's)"},
+    "bifrost-platform-prod": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the platform's own runtime, PROD"},
+    "bifrost-platform-stg": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the platform's own runtime (api, workers, console, mcp), STG: the base every domain runs on"},
+    "bifrost-prod": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Trade PROD"},
+    "bifrost-stg": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Trade STG"},
+    "cicd": {"domains": ["delivery"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Gitea, Argo CD, the registry and the delivery CronJobs (api/internal/gitops and delivery read them); CI's own workloads have their rows"},
+    "cicd/el-bifrost-ci": {"domains": ["verification"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the Tekton trigger listener that starts CI runs (api/internal/ciscore reads CI)"},
+    "cicd/renovate": {"domains": ["verification"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: dependency update runs that open changes for CI"},
+    "cnpg-system": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the CloudNativePG operator; Postgres status is read by api/internal/cluster (foundation)"},
+    "data/backup-retry": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Postgres backup retry (the data layer; api/internal/cluster reads Postgres and backups)"},
+    "data/db-role-matrix": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the database role matrix check"},
+    "data/finance-backup": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Finance STG backup (owned by bifrost-finance ops/backup, MAINTAINERS.yaml)"},
+    "data/finance-prod-validation-backup": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Finance prod-validation backup"},
+    "data/finance-prod-validation-restore-drill": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Finance prod-validation restore drill"},
+    "data/finance-restore-drill": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Finance restore drill"},
+    "data/ib-gateway": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the IB Gateway: IB is business the platform must not know (api/internal/ibgateway is tenant's)"},
+    "data/logical-backup": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Postgres logical backup"},
+    "data/logical-backup-drill": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the logical backup's restore drill"},
+    "data/minio": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: object storage the backups write to"},
+    "data/nats": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the bus's NATS"},
+    "data/redis-dev": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Trade DEV's Redis"},
+    "data/redis-ib": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: redis-ib, the IB bus of the Trade environments"},
+    "data/redis-live-prod": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Trade PROD's live Redis"},
+    "data/redis-live-stg": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Trade STG's live Redis"},
+    "finance-prod": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the Finance application, PROD"},
+    "finance-stg": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the Finance application, STG"},
+    "kube-system": {"domains": ["compute"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the cluster's own system workloads (DNS, ingress, storage provisioners, kube-vip, the cluster state backup)"},
+    "monitoring": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Prometheus, Loki, Grafana, exporters and the maintainer reconcile (api/internal/telemetry and maintainer are foundation's)"},
+    "plugin-flex-query": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the IB Flex Query plugin; its reader api/internal/flexquery is tenant's"},
+    "plugin-market-data": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the market data plugin; its reader api/internal/marketdata is tenant's"},
+    "research": {"domains": ["tenant"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Research (OLAP, Golden Source)"},
+    "tekton-pipelines": {"domains": ["delivery"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: the Tekton engine both CI and delivery run on; delivery reads its runs"},
+    "tekton-pipelines-resolvers": {"domains": ["delivery"], "status": "assigned", "basis": "2026-11-20 0.2 map line, segment 3: Tekton's resolvers"}
   }
 }

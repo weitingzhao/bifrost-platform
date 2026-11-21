@@ -15,12 +15,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/answerack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planloop"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -30,7 +32,7 @@ import (
 
 // agentRuntime is the agent runtime as this process runs it.
 type agentRuntime struct {
-	api  *agentrtapi.API
+	api  *agentrtAPI
 	stop func()
 	// env is AGENTRT_ENV: whose runtime this platform runs.
 	env string
@@ -62,7 +64,7 @@ type agentRuntime struct {
 // the rule atoms on it unknown, so nothing is judged done on facts it cannot
 // see.
 func (s *Server) wireAgentRuntime(role config.Role) {
-	rt := &agentRuntime{api: &agentrtapi.API{Logf: func(format string, args ...any) {
+	rt := &agentRuntime{api: &agentrtAPI{Logf: func(format string, args ...any) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
 	}, Ask: s.questionRuntime.Ask(), Anchor: releasepolicy.OwnerKeyFingerprint,
 		DiskFloor: deliveryview.DiskFloorFromEnv(), MailWake: s.mailWake}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
@@ -139,7 +141,8 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			pool.Close()
 			return
 		}
-		c := agentRuntimeController(env, pool, s.agentRuntimeSources())
+		c := agentRuntimeController(env, pool, s.agentRuntimeSources(), s.questionRuntime.Unacked())
+		s.wireExternalRecords(&c.Sources)
 		// The old landing lane is retired (the Owner 2026-11-13): its loops
 		// (drill, live claims, cards, grant requests, reconcile, the reading
 		// of main for landed results) are not wired any more. Changes reach
@@ -159,18 +162,43 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 }
 
 // agentRuntimeController is the platform-workers' controller. Every
-// environment runs the same passes.
-func agentRuntimeController(env string, db eventlog.DB, src controller.Sources) *controller.Controller {
-	return &controller.Controller{DB: db, Sources: src, Env: env, Logf: func(format string, args ...any) {
+// environment runs the same passes. The facts-and-rules pass runs, after the
+// tuning rule, the plan's facts, its decisions, the acknowledging of the
+// answers the runtime used (agentrt/answerack, the owner domain's) and the
+// plan's done rules, in that order; the plan's observations are a loop of
+// their own (agentrt/planloop, the plan domain's). The controller's own
+// sources are the plan's deployment read and the external records'
+// (wireExternalRecords).
+func agentRuntimeController(env string, db eventlog.DB, plans planloop.Sources, unacked func(context.Context) ([]questioncards.AnsweredCard, error)) *controller.Controller {
+	c := &controller.Controller{DB: db, Sources: controller.Sources{Deployed: plans.Deployed}, Env: env, Logf: func(format string, args ...any) {
 		slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
 	}, Infof: func(format string, args ...any) {
 		slog.Info("agentrt controller", "detail", fmt.Sprintf(format, args...))
 	}}
+	p := &planloop.Loop{DB: db, Sources: plans}
+	a := &answerack.Acker{DB: db, Unacked: unacked, Ack: plans.Ack, Logf: c.Logf, Infof: c.Infof}
+	c.Steps = []controller.Step{
+		{Name: "facts", Run: passOf(p.Facts)},
+		{Name: "plan decisions", Run: passOf(p.PlanDecisions)},
+		{Name: "used answers", Run: passOf(a.AckUsedAnswersDue)},
+		{Name: "rules", Run: passOf(p.Rules)},
+	}
+	c.Loops = []controller.Loop{{Name: "agentrt-plan-observations", Every: planloop.PlanObserveEvery, Run: passOf(p.PlanObservations)}}
+	return c
 }
 
-// agentRuntimeSources are the server's stores as the controller's sources.
+// passOf is a pass that counts what it did as a step or loop of the
+// controller, which keeps only its error.
+func passOf(pass func(context.Context) (int, error)) func(context.Context) error {
+	return func(ctx context.Context) error {
+		_, err := pass(ctx)
+		return err
+	}
+}
+
+// agentRuntimeSources are the server's stores as the plan loop's sources.
 // A nil store is passed as a nil reader, never as a typed nil.
-func (s *Server) agentRuntimeSources() controller.Sources {
+func (s *Server) agentRuntimeSources() planloop.Sources {
 	var (
 		ap  approvalReader
 		ci  delivery.CIReader
@@ -186,11 +214,7 @@ func (s *Server) agentRuntimeSources() controller.Sources {
 		rel = s.releases.Service()
 	}
 	src := agentRuntimeSources(ap, s.questionRuntime.Question(), ci, rel)
-	s.wireExternalRecords(&src)
 	src.Ack = s.questionRuntime.Ack()
-	src.Unacked = s.questionRuntime.Unacked()
-	src.Ask = s.questionRuntime.Ask()
-	src.Withdraw = s.questionRuntime.Withdraw()
 	src.Plan = s.agentRuntimePlanSources()
 	return src
 }
@@ -199,7 +223,7 @@ func (s *Server) mountAgentRuntime(r chi.Router) {
 	if s.agentRuntime == nil {
 		return
 	}
-	agentrtapi.Mount(r, s.auth, s.agentRuntime.api)
+	mountAgentrt(r, s.auth, s.agentRuntime.api)
 }
 
 func (s *Server) closeAgentRuntime() {

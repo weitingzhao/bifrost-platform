@@ -1,25 +1,23 @@
 // Package controller runs the agent runtime's loops (design v5 §5.2
-// 控制器): leases, external facts and done rules. Each loop is a method that
-// runs one pass, so tests drive passes directly; Start runs them on timers.
-// The loops change state only through the store, so every change is an event.
+// 控制器): external records, pipeline records and their evidence, the full
+// CI, and the facts-and-rules pass. Each loop is a method that runs one pass,
+// so tests drive passes directly; Start runs them on timers. The plan tree's
+// passes (agentrt/planloop) and the acknowledging of used answers
+// (agentrt/answerack) are other domains': the assembly binds them as Steps
+// and Loops, which Start runs as its own. The loops change state only
+// through the store, so every change is an event.
 package controller
 
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
@@ -62,23 +60,25 @@ type Sources struct {
 	// HeadRelease takes each deliverable the platform releases by itself
 	// one step (server/head_release.go); nil when that is switched off.
 	HeadRelease func(ctx context.Context) error
-	Plan        planstore.PlanSources
-	Approval    func(ctx context.Context, number int64) (seenfacts.ApprovalFact, bool)
-	Question    func(ctx context.Context, id string) (q seenfacts.Question, ok bool)
-	// Ack tells the question store the runtime used the answer of a card it
-	// asked (a plan change's); nil acknowledges nothing.
-	Ack func(ctx context.Context, id string) error
-	// Unacked lists the runtime's answered cards it has not acknowledged
-	// (AckUsedAnswers); nil acknowledges none of them.
-	Unacked func(ctx context.Context) ([]questioncards.AnsweredCard, error)
-	// Ask puts a plan's decision cards to the Owner (store.AcceptPlan); nil
-	// leaves a plan with questions submitted until there is one. Withdraw
-	// takes back the cards of a plan's round that was refused; nil leaves
-	// them open.
-	Ask      planstore.Ask
-	Withdraw planstore.Withdraw
-	CI       func(ctx context.Context, repo, commit string) (status, run string, ok bool)
+	// Deployed reads what an environment runs: the full CI's STG commit
+	// (fullci_loop.go); nil: the full CI reads none.
 	Deployed seenfacts.Deployed
+}
+
+// Step is one step of the facts-and-rules pass (Controller.Steps): Run is
+// timed and logged as "agentrt-facts-rules: <Name>" when it is slow, and its
+// error joins the pass's.
+type Step struct {
+	Name string
+	Run  func(ctx context.Context) error
+}
+
+// Loop is a loop of its own the controller runs on a timer (Controller.Loops),
+// named and alerted as the controller's other loops are.
+type Loop struct {
+	Name  string
+	Every time.Duration
+	Run   func(ctx context.Context) error
 }
 
 // Controller holds what the loops need. Zero intervals take the design's
@@ -89,19 +89,28 @@ type Controller struct {
 	DB      eventlog.DB
 	Sources Sources
 	Logf    func(format string, args ...any)
-	// Infof logs what the controller did that needs no one's attention (an
-	// answer it acknowledged); nil uses Logf.
-	Infof          func(format string, args ...any)
-	answersAckedAt time.Time // the last AckUsedAnswers pass of the facts loop
-	LeaseEvery     time.Duration
-	FactsEvery     time.Duration
-	ReadTimeout    time.Duration // per source read; zero means 10 seconds
+	// Infof logs what the controller did that needs no one's attention (a
+	// reconciliation that recorded what events missed); nil uses Logf.
+	Infof       func(format string, args ...any)
+	LeaseEvery  time.Duration
+	FactsEvery  time.Duration
+	ReadTimeout time.Duration // per source read; zero means 10 seconds
+	// Steps are the steps of the facts-and-rules pass, run in order after
+	// the tuning rule is read (the assembly binds them: the plan's facts,
+	// plan decisions, the used answers, the done rules).
+	Steps []Step
+	// Loops are loops of their own, started in order after the key purge
+	// and before the facts-and-rules loop (the plan's observations).
+	Loops []Loop
 	// Now is the clock the passes read, time.Now when nil.
 	Now func() time.Time
 	// Env is the platform's own environment (AGENTRT_ENV).
 	Env     string
 	Started time.Time
 	FullCI  *fullci.FullCI // the daily full CI (agentrt/fullci, fullci_loop.go); nil runs none
+	// FullCIZone is the zone of the full CI's day (fullci.Host.Zone): the
+	// assembly binds the zone of the briefs; "" starts no run.
+	FullCIZone string
 	// PipelineEvery is how often the retained pipeline runs are listed for
 	// the ones that completed (PipelineRecords); zero means
 	// DefaultPipelineEvery. PipelineFullEvery is how often a pass compares
@@ -122,32 +131,8 @@ type Controller struct {
 	pipelines pipelineMemo
 }
 
-// PlanObserveEvery is how often the plan completion atoms' sources are read
-// (store.CollectPlanObservations), in a loop of its own so a slow Gitea never
-// holds up facts and rules; PlanReadTimeout bounds each remote read, longer
-// than ReadTimeout because the first read of a repo's history is a full one
-// (PV2 review 2026-10-26).
-const (
-	PlanObserveEvery = time.Minute
-	PlanReadTimeout  = 2 * time.Minute
-)
-
-// PlanObservations is one pass of the plan completion atoms' sources.
-func (c *Controller) PlanObservations(ctx context.Context) (int, error) {
-	src := c.Sources.Plan
-	if src.History != nil {
-		original := src.History
-		src.History = func(ctx context.Context, repo, task, result, snapshot string) (landing.MainHistory, error) {
-			rctx, cancel := context.WithTimeout(ctx, PlanReadTimeout)
-			defer cancel()
-			return original(rctx, repo, task, result, snapshot)
-		}
-	}
-	return planstore.CollectPlanObservations(ctx, c.DB, src)
-}
-
-// boundedDeployed reads a deployment with the per-read timeout, for the done
-// rules, which read it while they hold the step (review 153 B1).
+// boundedDeployed reads a deployment with the per-read timeout, for the full
+// CI's STG commit (review 153 B1).
 func (c *Controller) boundedDeployed(ctx context.Context, env string) (string, map[string]any, bool) {
 	type r struct {
 		commit string
@@ -178,138 +163,12 @@ func (c *Controller) logf(format string, args ...any) {
 	}
 }
 
-// Facts is one pass of the external facts loop: each outside record a rule
-// of a live step or of an architecture row depends on is read, and a change
-// is recorded. One record that cannot be read or recorded does not stop the
-// others; the errors come back joined. It returns how many it recorded.
-func (c *Controller) Facts(ctx context.Context) (int, error) {
-	nodes, err := planstore.RuledNodes(ctx, c.DB)
-	if err != nil {
-		return 0, err
+func (c *Controller) infof(format string, args ...any) {
+	if c.Infof != nil {
+		c.Infof(format, args...)
+		return
 	}
-	watches := map[plan.Watch]bool{}
-	for _, n := range nodes {
-		for _, w := range n.Rule.Watches() {
-			watches[w] = true
-		}
-	}
-	recorded := 0
-	var errs []error
-	for w := range watches {
-		did, err := c.see(ctx, w)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("%s %s: %w", w.Kind, w.ID, err))
-		}
-		if did {
-			recorded++
-		}
-	}
-	return recorded, errors.Join(errs...)
-}
-
-func (c *Controller) see(ctx context.Context, w plan.Watch) (bool, error) {
-	// Each source is read under the record's lock in the store, so reads from
-	// two controllers are recorded in the order they were made.
-	switch w.Kind {
-	case plan.WatchApproval:
-		n, err := strconv.ParseInt(w.ID, 10, 64)
-		if err != nil {
-			return false, err
-		}
-		return seenfacts.SeeApproval(ctx, c.DB, n, func(ctx context.Context) (seenfacts.ApprovalFact, bool) {
-			type r struct {
-				s  seenfacts.ApprovalFact
-				ok bool
-			}
-			x := bounded(c, ctx, func(ctx context.Context) r { s, ok := c.Sources.Approval(ctx, n); return r{s, ok} })
-			return x.s, x.ok
-		})
-	case plan.WatchQuestion:
-		return seenfacts.SeeQuestion(ctx, c.DB, w.ID, func(ctx context.Context) (seenfacts.Question, bool) {
-			type r struct {
-				q  seenfacts.Question
-				ok bool
-			}
-			x := bounded(c, ctx, func(ctx context.Context) r { q, ok := c.Sources.Question(ctx, w.ID); return r{q, ok} })
-			return x.q, x.ok
-		})
-	case plan.WatchCI:
-		repo, commit, _ := strings.Cut(w.ID, "@")
-		return seenfacts.SeeCI(ctx, c.DB, repo, commit, func(ctx context.Context) (string, string, bool) {
-			type r struct {
-				s, run string
-				ok     bool
-			}
-			x := bounded(c, ctx, func(ctx context.Context) r { s, run, ok := c.Sources.CI(ctx, repo, commit); return r{s, run, ok} })
-			return x.s, x.run, x.ok
-		})
-	case plan.WatchDeploy:
-		return seenfacts.SeeDeploy(ctx, c.DB, w.ID, c.boundedDeployed)
-	}
-	return false, nil
-}
-
-// PlanDecisions is one pass of the plan decisions: proposals outside the
-// standing authorization whose decision card is answered are applied or
-// refused (store.DecidePlanChanges). Each question is read with the
-// per-read timeout.
-func (c *Controller) PlanDecisions(ctx context.Context) (int, error) {
-	if c.Sources.Question == nil {
-		return 0, nil
-	}
-	return planstore.DecidePlanChanges(ctx, c.DB, c.question, c.ack())
-}
-
-// question reads a question with the per-read timeout.
-func (c *Controller) question(ctx context.Context, id string) (seenfacts.Question, bool) {
-	type r struct {
-		q  seenfacts.Question
-		ok bool
-	}
-	x := bounded(c, ctx, func(ctx context.Context) r { q, ok := c.Sources.Question(ctx, id); return r{q, ok} })
-	return x.q, x.ok
-}
-
-// ack acknowledges an answer with the per-read timeout; nil without a
-// source.
-func (c *Controller) ack() func(context.Context, string) error {
-	if c.Sources.Ack == nil {
-		return nil
-	}
-	return func(ctx context.Context, id string) error {
-		return bounded(c, ctx, func(ctx context.Context) error { return c.Sources.Ack(ctx, id) })
-	}
-}
-
-// Rules is one pass of the done-rule loop: every live step with a rule is
-// evaluated, standing conditions against what is deployed now. One step that
-// fails does not stop the others. It returns how many steps moved.
-func (c *Controller) Rules(ctx context.Context) (int, error) {
-	nodes, err := planstore.RuledNodes(ctx, c.DB)
-	if err != nil {
-		return 0, err
-	}
-	moved := 0
-	var errs []error
-	for _, n := range nodes {
-		if n.Kind != "step" {
-			continue
-		}
-		// A done step moves again only when a standing condition lapses. It
-		// is skipped here, before EvaluateStep locks its row: 131 of the 248
-		// ruled steps on PROD were locked each pass to do nothing (2026-11-19).
-		if n.State == "done" && !n.Rule.Standing() {
-			continue
-		}
-		to, err := planstore.EvaluateStep(ctx, c.DB, n.ID, c.boundedDeployed)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("step %s: %w", n.ID, err))
-		}
-		if to != "" {
-			moved++
-		}
-	}
-	return moved, errors.Join(errs...)
+	c.logf(format, args...)
 }
 
 // Start runs the loops until ctx ends and returns a function that waits for
@@ -372,16 +231,29 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		// from the source; events are only hints"). No event hints it yet.
 		c.every(ctx, &wg, "head-release", 30*time.Second, func() error { return c.Sources.HeadRelease(ctx) })
 	}
-	// Always: an Owner signoff's observation needs no Git reader.
-	c.every(ctx, &wg, "agentrt-plan-observations", PlanObserveEvery, func() error {
-		_, err := c.PlanObservations(ctx)
+	// Expired idempotency keys go, a thousand at a time and at most two
+	// thousand a pass (actor.PurgeExpiredKeys; OWNER_LAW 42, 2026-11-19).
+	// Ten minutes, not an hour: a loop's first pass comes one interval after
+	// the process starts, and STG restarts with every delivery, about every
+	// twenty minutes; an hourly pass never ran there.
+	c.every(ctx, &wg, "agentrt-key-purge", 10*time.Minute, func() error {
+		n, err := actor.PurgeExpiredKeys(ctx, c.DB, 1000, 2)
+		if n > 0 {
+			c.logf("agentrt-key-purge: %d expired idempotency keys deleted", n)
+		}
 		return err
 	})
+	// The loops of their own the assembly binds (the plan's observations,
+	// which always run: an Owner signoff's observation needs no Git reader).
+	for _, l := range c.Loops {
+		c.every(ctx, &wg, l.Name, l.Every, func() error { return l.Run(ctx) })
+	}
 	// The old dispatch lane is retired (the Owner 2026-11-13): nothing is
 	// leased, routed, dispatched, accepted, closed or timed any more, hosts
 	// are not watched and no assessment is asked for. What stays in this
-	// pass is what the plan tree and the rules need: the facts their rules
-	// read, plan decisions, the acknowledging of used answers, and the rules themselves.
+	// pass is what the plan tree and the rules need (Steps, which the
+	// assembly binds: the facts their rules read, plan decisions, the
+	// acknowledging of used answers, and the rules themselves).
 	// Each step that takes slowStepLog or more is logged on its own: PROD and
 	// STG passes took a steady 10 seconds on 2026-11-19 and the pass's one
 	// total did not say which step (the ten-second per-read timeout is the
@@ -390,19 +262,13 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		step := time.Now()
 		c.readTuning(ctx)
 		c.slow(slowStepLog, step, "agentrt-facts-rules: tuning")
-		step = time.Now()
-		_, ferr := c.Facts(ctx)
-		c.slow(slowStepLog, step, "agentrt-facts-rules: facts")
-		step = time.Now()
-		_, perr := c.PlanDecisions(ctx)
-		c.slow(slowStepLog, step, "agentrt-facts-rules: plan decisions")
-		step = time.Now()
-		_, qerr := c.ackUsedAnswersDue(ctx)
-		c.slow(slowStepLog, step, "agentrt-facts-rules: used answers")
-		step = time.Now()
-		_, rerr := c.Rules(ctx)
-		c.slow(slowStepLog, step, "agentrt-facts-rules: rules")
-		return errors.Join(ferr, perr, qerr, rerr)
+		errs := make([]error, 0, len(c.Steps))
+		for _, s := range c.Steps {
+			step = time.Now()
+			errs = append(errs, s.Run(ctx))
+			c.slow(slowStepLog, step, "agentrt-facts-rules: %s", s.Name)
+		}
+		return errors.Join(errs...)
 	})
 	c.startFullCI(ctx, &wg)
 	return wg.Wait

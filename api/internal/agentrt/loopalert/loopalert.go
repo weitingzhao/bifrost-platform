@@ -1,6 +1,7 @@
 // Package loopalert records a controller loop that keeps failing the same
 // way, and the note that it passes again, on the controller stream; the reads
-// of those records are loopreadings'. Moved from the store 2026-11-17.
+// of those records are here too (loops.go, folded in from loopreadings
+// 2026-11-20). Moved from the store 2026-11-17.
 package loopalert
 
 import (
@@ -13,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/loopreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/alerts"
 )
 
@@ -45,7 +45,7 @@ const errorKept = 4096
 
 // AlertFailingLoop records that loop failed n times in a row with errText.
 func AlertFailingLoop(ctx context.Context, db eventlog.DB, loop string, n int, errText string) error {
-	text := loopreadings.FailureText(loop, n, errText, errorKept)
+	text := FailureText(loop, n, errText, errorKept)
 	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		art, err := artifact.PutArtifact(ctx, tx, "controller", "log_tail", "text/plain; charset=utf-8", []byte(text))
 		if err != nil {
@@ -63,7 +63,7 @@ func AlertFailingLoop(ctx context.Context, db eventlog.DB, loop string, n int, e
 // NoteLoopPasses records that loop passed again after n failures in a row
 // (n 0: the count is not known, as after a restart).
 func NoteLoopPasses(ctx context.Context, db eventlog.DB, loop string, n int) error {
-	text := loopreadings.RecoveryText(loop, n, passesAgain)
+	text := RecoveryText(loop, n, passesAgain)
 	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		rec, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: ControllerStream, Type: recoveredType, Actor: "controller",
 			Body: map[string]any{"loop": loop, "failures": n, "line_digest": lineDigest(loop), "text": text}})
@@ -86,7 +86,7 @@ type loopRecord struct {
 func latestLoopRecord(ctx context.Context, q interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }, loop string) (loopRecord, error) {
-	r, err := loopreadings.Latest(ctx, q, ControllerStream, lineDigest(loop), loop+passesAgain)
+	r, err := Latest(ctx, q, ControllerStream, lineDigest(loop), loop+passesAgain)
 	return loopRecord{found: r.Found, alert: r.Alert, at: r.At, artifact: r.Artifact}, err
 }
 
@@ -107,8 +107,8 @@ func LoopAlertOpen(ctx context.Context, db eventlog.DB, loop string) (bool, erro
 // code's Progress reads them through its port (planstore, planports.go); the
 // store's wiring (portsbind.go) binds it to this.
 func FailingLoops(ctx context.Context, tx pgx.Tx) ([]map[string]any, error) {
-	return loopreadings.Failing(ctx, tx, ControllerLoops, func(ctx context.Context, tx pgx.Tx, loop string) (loopreadings.Record, error) {
-		return loopreadings.Latest(ctx, tx, ControllerStream, lineDigest(loop), loop+passesAgain)
+	return Failing(ctx, tx, ControllerLoops, func(ctx context.Context, tx pgx.Tx, loop string) (Record, error) {
+		return Latest(ctx, tx, ControllerStream, lineDigest(loop), loop+passesAgain)
 	})
 }
 
@@ -122,7 +122,7 @@ func lineDigest(line string) string {
 // event type has one owning domain, and these two are the foundation's
 // (registered under foundation in bus/registry/ledger/types.yaml). Before,
 // an alert was a policy_alert of rule controller_failing and a recovery a
-// free-text note; those rows stay and loopreadings still reads them.
+// free-text note; those rows stay and Latest and Failing still read them.
 const (
 	// failingType: loop failed failures times in a row the same way; its
 	// error is kept as a log_tail artifact; line_digest names the loop.

@@ -28,7 +28,7 @@ func str(m map[string]any, k string) string { v, _ := m[k].(string); return v }
 // problems.yaml must have exactly that drill, and a drill with no row would be
 // evidence nobody reads.
 func TestEveryDrillKeyOfTheRegisterHasADrillAndBack(t *testing.T) {
-	raw, err := os.ReadFile("../nextgen/problems.yaml")
+	raw, err := os.ReadFile("../effect/problems.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,8 +62,8 @@ func TestEveryDrillKeyOfTheRegisterHasADrillAndBack(t *testing.T) {
 			t.Errorf("%s: names a drill key but nothing is drilled", id)
 		}
 	}
-	if len(have) != 18 {
-		t.Errorf("%d drills, the register has 18 channels without a safe natural trigger", len(have))
+	if len(have) != 19 {
+		t.Errorf("%d drills, the register has 19 channels without a safe natural trigger", len(have))
 	}
 }
 

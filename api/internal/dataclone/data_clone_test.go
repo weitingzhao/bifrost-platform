@@ -141,7 +141,18 @@ func TestRunDataCloneFullSuccess(t *testing.T) {
 		Mode:    "full",
 		Trigger: "manual",
 	})
+	// 2026-11-19, the problem channels (L13): a clone's end is said on the bus
+	// through this hook; until now no test saw it called.
+	var told []bool
+	svc.OnCloneFinished(func(_ context.Context, id string, ok bool) {
+		if id == job.ID {
+			told = append(told, ok)
+		}
+	})
 	svc.runDataClone(context.Background(), job.ID)
+	if len(told) != 1 || !told[0] {
+		t.Fatalf("the clone's end was told %v, want one success", told)
+	}
 	got, ok := store.Get(job.ID)
 	if !ok {
 		t.Fatal("job missing")

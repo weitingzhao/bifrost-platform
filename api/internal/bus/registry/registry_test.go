@@ -16,11 +16,11 @@ func TestRegisteredTenantsPass(t *testing.T) {
 	if !ok {
 		t.Fatal("no rocket tenant registered")
 	}
-	// 36 = the 38 types proposed in the 2026-11-16 disposition table less the
-	// two with no source to publish them (RULES.md §4 item 1); and 2026-11-17
-	// main.regression.known and .fixed (known regressions on main): 38.
-	if n := len(rocket.Channels); n != 28 {
-		t.Fatalf("rocket registers %d types, want 28", n)
+	// The count was pinned here until 2026-11-20 (29, then 30); a new topic
+	// is now configuration only (the Owner: a module that joins must not mean
+	// a code change), so only a loss is caught: 30 on 2026-11-20.
+	if n := len(rocket.Channels); n < 30 {
+		t.Fatalf("rocket registers %d types: some were lost (30 on 2026-11-20)", n)
 	}
 	for _, typ := range []string{"git.main.advanced", "release.window.changed", "seat.mail.arrived"} {
 		if _, ok := rocket.Channels[typ]; !ok {
@@ -74,6 +74,9 @@ func TestParseRefuses(t *testing.T) {
 		"no consumers":         {"consumers: [platform-workers]", "consumers: []"},
 		"bad retention":        {"retention: 30d", "retention: forever"},
 		"wrong file name":      {"x-bifrost-tenant: rocket", "x-bifrost-tenant: trade"},
+		// 2026-11-19: a ref the relay does not take as a platform read made
+		// every schema.migration.applied be passed over.
+		"ref not a platform read": {"ref: \"/api/v1/delivery/context?repo={repo}\"", "ref: \"/metrics\""},
 	}
 	for name, c := range cases {
 		doc := strings.Replace(good, c[0], c[1], 1)

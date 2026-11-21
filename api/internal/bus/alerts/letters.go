@@ -66,14 +66,13 @@ func (r Rule) LetterKey(eventID string, a Alert, at time.Time, days int) string 
 	if r.alwaysLetter(a) {
 		return "sub:" + r.Row + ":" + eventID
 	}
-	// An info alert says nothing is wrong yet: it stays on the bus and the Bus
-	// page and wakes nobody (2026-11-19, the duty seat judged CPUThrottlingHigh
-	// false; 83 of the week's 243 firings were info).
-	if a.Severity == "info" {
-		return ""
-	}
+	// An info alert gets one letter a day (2026-11-19). It had none for a few
+	// hours after the duty seat first judged CPUThrottlingHigh false; it then
+	// found the alert real (gitea held at its CPU limit for about 23.8 hours of
+	// 7 days), and a real problem must reach someone. 83 of the week's 243
+	// firings were info, so a day per alert keeps them from crowding the inbox.
 	window := letterWindow
-	if days >= chronicDays {
+	if days >= chronicDays || a.Severity == "info" {
 		window = chronicLetterWindow
 	}
 	return fmt.Sprintf("sub:%s:%s:%d", r.Row, Subject(a.Name, a.Namespace), at.Unix()/int64(window/time.Second))

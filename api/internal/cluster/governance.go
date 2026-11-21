@@ -51,7 +51,7 @@ func (s *Service) Governance(ctx context.Context) GovernanceResponse {
 	now := time.Now().UTC()
 	base := s.baseMeta(now)
 
-	nodesResp := s.Nodes(ctx)
+	nodesResp := s.NodesForDisplay(ctx) // a page; nothing acts on it
 	catalog := NodeCapabilityCatalog()
 	nodeCoverage := buildNodeCoverage(nodesResp.Nodes, catalog)
 	clusterCaps, clusterReach, clusterDetail := s.probeClusterCapabilities(ctx)

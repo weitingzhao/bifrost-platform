@@ -1,5 +1,3 @@
-//bifrost:owner foundation
-
 package cluster
 
 import "testing"
@@ -15,9 +13,9 @@ func TestNodeCapabilitiesNFSSClient(t *testing.T) {
 
 func TestNodeCapabilitiesGPU(t *testing.T) {
 	caps := nodeCapabilities(map[string]string{
-		"workload":                  "gpu",
-		"nvidia.com/gpu.present":    "true",
-		"accelerator":               "nvidia",
+		"workload":               "gpu",
+		"nvidia.com/gpu.present": "true",
+		"accelerator":            "nvidia",
 	})
 	if len(caps) != 2 {
 		t.Fatalf("got %d capabilities want 2 (gpu-pool + gpu-nvidia): %+v", len(caps), caps)

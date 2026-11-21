@@ -1,7 +1,6 @@
 package satellite
 
 import (
-	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/ingestview"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -76,7 +75,3 @@ type OpsDeep struct {
 	Detail       string             `json:"detail"`
 	Raw          map[string]any     `json:"raw,omitempty"`
 }
-
-// Compatibility names preserve the satellite observation response.
-type IngestDeep = ingestview.IngestDeep
-type IngestServiceDeep = ingestview.IngestServiceDeep

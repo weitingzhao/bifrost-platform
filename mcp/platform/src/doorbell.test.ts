@@ -32,7 +32,7 @@ function fake(replies: unknown[], opts: { fellBack?: boolean } = {}) {
 }
 
 test('a waiting message ends the wait with exit 0 and a summary without the body', async () => {
-  const f = fake([{ actor: 'thread:local_test', messages: [{ message_id: 'm_1', from: 'thread:x', kind: 'note', body: 'secret-ish body' }] }])
+  const f = fake([{ messages: [] }, { actor: 'thread:local_test', messages: [{ message_id: 'm_1', from: 'thread:x', kind: 'note', body: 'secret-ish body' }] }])
   assert.equal(await ring({ minutes: 1, register: true }, f.io), 0)
   assert.match(f.lines[0], /1 message\(s\) for thread:local_test/)
   assert.match(f.lines[1], /m_1 from=thread:x kind=note bytes=15/)
@@ -40,13 +40,13 @@ test('a waiting message ends the wait with exit 0 and a summary without the body
 })
 
 test('the thread registers itself before waiting, with the same body for one thread', async () => {
-  const f = fake([{ messages: [{ message_id: 'm_1' }] }])
+  const f = fake([{ messages: [] }, { messages: [{ message_id: 'm_1' }] }])
   await ring({ minutes: 1, register: true }, f.io)
   assert.equal(f.calls.upload.length, 1)
   assert.equal(f.calls.upload[0].body, presenceBody('local_test'))
   assert.equal(f.calls.upload[0].kind, 'report')
   assert.ok(!/\/Users\/|\/home\//.test(f.calls.upload[0].body), 'no local path: the platform refuses one')
-  const g = fake([{ messages: [{ message_id: 'm_1' }] }])
+  const g = fake([{ messages: [] }, { messages: [{ message_id: 'm_1' }] }])
   await ring({ minutes: 1, register: false }, g.io)
   assert.equal(g.calls.upload.length, 0)
 })
@@ -93,6 +93,7 @@ test('a platform restart is waited out; a refusal is not', async () => {
   f.io.deps.get = async () => {
     calls++
     if (calls <= 2) throw new TypeError('fetch failed')
+    if (calls === 3) return { messages: [] }
     return { actor: 'thread:local_test', messages: [{ message_id: 'm_9', from: 'controller', kind: 'note', body: '{}' }] }
   }
   const slept: number[] = []
@@ -104,4 +105,22 @@ test('a platform restart is waited out; a refusal is not', async () => {
   g.io.deps.get = async () => { throw new Error('GET /api/v1/agentrt/messages: HTTP 401 unauthorized') }
   g.io.sleep = async () => {}
   await assert.rejects(ring({ minutes: 1, register: false }, g.io), /401/)
+})
+
+test('letters already waiting do not ring; a new one does', async () => {
+  // Origin: 2026-11-19, the coordinator: a backlog made the doorbell exit at
+  // once every time it started, so it woke nobody for anything new.
+  const old = { message_id: 'm_old', from: 'controller', kind: 'note', body: 'x' }
+  const f = fake([
+    { actor: 'thread:local_test', messages: [old] },
+    { actor: 'thread:local_test', messages: [old] },
+    { actor: 'thread:local_test', messages: [old, { message_id: 'm_new', from: 'thread:y', kind: 'ask', body: 'yy' }] },
+  ])
+  const slept: number[] = []
+  f.io.sleep = async (ms) => { slept.push(ms); f.advance(ms) }
+  assert.equal(await ring({ minutes: 10, register: false }, f.io), 0)
+  assert.equal(slept.length, 1, 'it waits between looks while only the old letter is there')
+  assert.match(f.lines.join('\n'), /1 letter\(s\) already waiting/)
+  assert.ok(f.lines.some((l) => /m_new from=thread:y/.test(l)))
+  assert.ok(!f.lines.some((l) => /m_old from=/.test(l)), 'the old letter is not rung for')
 })

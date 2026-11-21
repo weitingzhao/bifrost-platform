@@ -1,5 +1,3 @@
-//bifrost:owner foundation
-
 package cluster
 
 import (
@@ -14,8 +12,8 @@ func int32ptr(v int32) *int32 { return &v }
 func TestDeploymentWorkloadRolloutCounters(t *testing.T) {
 	d := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "bifrost-prod",
-			Name:      "daemon",
+			Namespace:  "bifrost-prod",
+			Name:       "daemon",
 			Generation: 7,
 		},
 		Spec: appsv1.DeploymentSpec{Replicas: int32ptr(2)},

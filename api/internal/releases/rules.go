@@ -31,6 +31,18 @@ type Rule struct {
 	// Deploys: the run puts what it built into a running environment. False for
 	// image builds that something else (a pin, a GitOps sync) deploys later.
 	Deploys bool `yaml:"deploys" json:"deploys"`
+	// Images are digests a run that builds nothing takes from a task's result
+	// (2026-11-19: a PROD platform delivery promotes the digests STG built, and
+	// 313 of its 344 records had no image, so nothing could read what PROD runs).
+	Images []PromotedImage `yaml:"images" json:"images,omitempty"`
+}
+
+// PromotedImage is one image of a run that promotes rather than builds: the
+// result of a pipeline task that holds its digest.
+type PromotedImage struct {
+	Task   string `yaml:"task" json:"task"`
+	Result string `yaml:"result" json:"result"`
+	Image  string `yaml:"image" json:"image"`
 }
 
 // Rules is release-rules.yaml.

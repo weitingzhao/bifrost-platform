@@ -82,5 +82,4 @@ Cursor config: `config/cursor-mcp-trade.json`
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /api/v1/trade-agent/domains` | Nine Trade API domains |
 | `GET /api/v1/trade-agent/catalog` | Read-only MCP tool catalog |

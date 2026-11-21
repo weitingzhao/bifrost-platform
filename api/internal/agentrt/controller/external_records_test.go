@@ -1,5 +1,3 @@
-//bifrost:owner verification
-
 package controller_test
 
 import (

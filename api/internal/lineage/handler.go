@@ -1,15 +1,28 @@
 package lineage
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
-const cacheTTL = 5 * time.Minute
+// cacheTTL is how long a build is fresh. Past it and up to staleMax a
+// request is answered from the old build while one rebuild runs in the
+// background; past staleMax (or with no build yet, or ?refresh=true) the
+// request waits for the build. A cold build reads every repository
+// (13.9 s, 884 KB measured 2026-11-19) and is shared by concurrent callers.
+const (
+	cacheTTL = 5 * time.Minute
+	staleMax = time.Hour
+)
 
 type cached struct {
 	resp Response
@@ -25,6 +38,7 @@ type Handler struct {
 	setTitle    SetTitleFunc
 	reportTitle ReportTitleFunc
 	branches    branchesCache
+	builds      singleflight.Group
 }
 
 func NewHandler(svc *Service) *Handler {
@@ -62,16 +76,35 @@ func (h *Handler) get(r *http.Request, days int, refresh bool) Response {
 	h.mu.Lock()
 	c, ok := h.cache[days]
 	h.mu.Unlock()
-	if ok && !refresh && time.Since(c.at) < cacheTTL {
+	age := time.Since(c.at)
+	switch {
+	case ok && !refresh && age < cacheTTL:
+		return c.resp
+	case ok && !refresh && age < staleMax:
+		// stale-while-revalidate: answer now, rebuild once in the background
+		go func() {
+			defer safego.Recover("lineage.rebuild")
+			_, _, _ = h.build(days)
+		}()
 		return c.resp
 	}
-	resp := h.svc.Build(r.Context(), days)
-	if len(resp.Errors) == 0 || len(resp.Threads) > 0 {
-		h.mu.Lock()
-		h.cache[days] = cached{resp: resp, at: time.Now()}
-		h.mu.Unlock()
-	}
-	return resp
+	resp, _, _ := h.build(days)
+	return resp.(Response)
+}
+
+// build runs one Build per window at a time; callers that arrive while it
+// runs share its result. It is detached from the request so that a caller
+// who gives up does not cancel the build the others are waiting for.
+func (h *Handler) build(days int) (interface{}, error, bool) {
+	return h.builds.Do(strconv.Itoa(days), func() (interface{}, error) {
+		resp := h.svc.Build(context.Background(), days) // Build bounds itself (buildTimeout)
+		if len(resp.Errors) == 0 || len(resp.Threads) > 0 {
+			h.mu.Lock()
+			h.cache[days] = cached{resp: resp, at: time.Now()}
+			h.mu.Unlock()
+		}
+		return resp, nil
+	})
 }
 
 // filter narrows a cached response without mutating it.

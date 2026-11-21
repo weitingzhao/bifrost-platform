@@ -108,6 +108,28 @@ func TestADirectActionIsRecordedAndReadBackBySeat(t *testing.T) {
 	if len(out.Records) != 1 || out.Records[0]["outcome"] != "failed" {
 		t.Fatalf("records of seat b = %v", out.Records)
 	}
+	// 2026-11-19 (LANE-ci-w1): the caller's reason, rollback and unchecked are
+	// not params of the action, and the catalog dropped them before the record
+	// was written: all 823 PROD records said "(the caller gave no reason)" and
+	// undeclared. Positive control: recordDirect without callerWords fails here.
+	words := `{"repo":"bifrost-platform","commit":"` + sha + `","reason":"why it runs","rollback":"run it again on the old commit","unchecked":"none"}`
+	do(http.MethodPost, "/api/v1/units/evidence", words, "operator-test-token", "local_seat_c")
+	for time.Now().Before(deadline.Add(5 * time.Second)) {
+		rec := do(http.MethodGet, "/api/v1/records?seat=local_seat_c", "", "viewer-test-token", "")
+		out.Records = nil
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		if len(out.Records) == 1 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if len(out.Records) != 1 {
+		t.Fatalf("records of seat c = %v", out.Records)
+	}
+	if c := out.Records[0]; c["reason"] != "why it runs" || c["regret"] != "run it again on the old commit" ||
+		c["regret_state"] != "declared" || c["not_verified"] != "none" {
+		t.Fatalf("the caller's words did not reach the record: %v", c)
+	}
 	// The read refuses a bad filter instead of ignoring it.
 	if rec := do(http.MethodGet, "/api/v1/records?since=yesterday", "", "viewer-test-token", ""); rec.Code != http.StatusBadRequest {
 		t.Fatalf("a bad since = %d", rec.Code)

@@ -42,16 +42,31 @@ export const TONE_COLOR: Record<Tone, string> = {
 }
 
 /** Alerts only the Owner can clear (Owner 2026-10-16: the TWS login is his alone). */
-const OWNER_ALERTS: Record<string, (labels: Record<string, string>) => { title: string; detail: string }> = {
-  BifrostIBGatewayDisconnected: labels => ({
+const OWNER_ALERTS: Record<string, (labels: Record<string, string>) => { title: string; detail: string } | null> = {
+  // The primary (host) slot: only the Owner holds the TWS login, so it is his (Owner 2026-10-16). The secondary slot is not:
+  // he set it aside on 2026-11-12, so it is told as a notice instead (Owner 2026-11-19).
+  BifrostIBGatewayDisconnected: labels => labels.slot === 'secondary' ? null : ({
     title: `Log in to TWS for the IB ${labels.slot || 'gateway'} slot`,
-    detail: 'The gateway has no TWS session; positions, account values and live streams stop behind it. Only you hold the TWS login.',
+    detail: 'Outside the system: on the Windows machine that runs TWS for this slot, log in to TWS. Positions, account values and live streams stop behind it until then; only you hold the login.',
   }),
 }
 
-/** A plugin alert that is the same event as an Owner alert, told once. */
+/**
+ * Alerts that are notices for the Owner, not work waiting on him (the Owner, 2026-11-19, via the
+ * coordinator: the secondary IB slot without a TWS session is a warning to see, not an item of
+ * Yours). Shown in For your information, with no goal draft: only he can log in.
+ */
+const SECONDARY_NOTICE = { title: 'IB secondary slot has no TWS session', detail: 'Positions, account values and live streams stop behind this slot until TWS is logged in; only you hold the TWS login, when you want it.' }
+const NOTICE_ALERTS: Record<string, (labels: Record<string, string>) => { title: string; detail: string } | null> = {
+  BifrostIBGatewayDisconnected: labels => labels.slot !== 'secondary' ? null : SECONDARY_NOTICE,
+  // The compute line's own alert for the secondary slot (warning, no phone push), 2026-11-19.
+  BifrostIBGatewaySecondaryDisconnected: () => SECONDARY_NOTICE,
+}
+
+/** A plugin alert that is the same event as an Owner alert or a notice, told once. */
 const SAME_EVENT: Record<string, (alert: MappedAlert) => boolean> = {
   BifrostIBGatewayDisconnected: alert => alert.name === 'BifrostPluginDegraded' && alert.labels.plugin === 'ib-gateway',
+  BifrostIBGatewaySecondaryDisconnected: alert => alert.name === 'BifrostPluginDegraded' && alert.labels.plugin === 'ib-gateway',
 }
 
 /** A waiting item from Needs you, as a row of Yours. */
@@ -64,7 +79,7 @@ export type AlertSplit = {
   worth: OwnerRow[]
   /** Planned standby (proven), catalog noise, info and the watchdog: counted, not listed. */
   noise: number
-  /** Told once with an Owner alert (the IB plugin degraded with the TWS login). */
+  /** Told once with an Owner alert or a notice (the IB plugin degraded with the slot without TWS). */
   merged: number
   critical: number
   warning: number
@@ -103,20 +118,25 @@ export function splitAlerts(alerts: readonly TelemetryAlertEntry[], evidence: St
     else if (standby === 'likely') likely.push(alert)
     else real.push(alert)
   }
-  const ownerNames = new Set(real.filter(a => OWNER_ALERTS[a.name]).map(a => a.name))
+  const toldNames = new Set(real.filter(a => OWNER_ALERTS[a.name]?.(a.labels) || NOTICE_ALERTS[a.name]?.(a.labels)).map(a => a.name))
   for (const alert of real) {
-    if ([...ownerNames].some(name => SAME_EVENT[name]?.(alert))) {
+    if ([...toldNames].some(name => SAME_EVENT[name]?.(alert))) {
       out.merged += 1
       continue
     }
     if (alert.severity === 'critical') out.critical += 1
     else out.warning += 1
     const tone: Tone = alert.severity === 'critical' ? 'fail' : 'warn'
-    const owner = OWNER_ALERTS[alert.name]
+    const owner = OWNER_ALERTS[alert.name]?.(alert.labels)
     if (owner) {
-      const said = owner(alert.labels)
-      out.yours.push({ id: alert.id, title: said.title, detail: `${said.detail} Since ${ago(alert.activeAt, now)}.`, tone,
+      out.yours.push({ id: alert.id, title: owner.title, detail: `${owner.detail} Since ${ago(alert.activeAt, now)}.`, tone,
         since: alert.activeAt, href: '#ib', action: 'IB page' })
+      continue
+    }
+    const said = NOTICE_ALERTS[alert.name]?.(alert.labels)
+    if (said) {
+      out.worth.push({ id: alert.id, title: said.title, detail: `${said.detail} Since ${ago(alert.activeAt, now)}.`, tone: 'warn',
+        since: alert.activeAt, href: '#ib', action: 'IB page', whose: 'A notice: nothing waits on you' })
       continue
     }
     const title = alertTitle(alert)
@@ -151,8 +171,8 @@ export function plural(n: number, one: string, many = `${one}s`): string {
 /** The one sentence at the top: is anything mine, then the four facts behind "no". */
 /**
  * Yours = Needs you's decision items (no silent threads) plus the alerts only the Owner can
- * clear. Either source loading or unread makes the whole count so (review 221 A1): an alert
- * list that could not be read may hold the TWS login, so it never adds up to "nothing".
+ * clear (the primary IB slot's TWS login). Either source loading or unread makes the whole count
+ * so (review 221 A1): an alert list that could not be read may hold that login.
  */
 export function yoursCount(decisions: NeedsYouCount, ownerAlerts: NeedsYouCount): NeedsYouCount {
   return mergedWaitingCount([decisions, ownerAlerts])
@@ -160,6 +180,8 @@ export function yoursCount(decisions: NeedsYouCount, ownerAlerts: NeedsYouCount)
 
 export function ownerVerdict(input: {
   yours: NeedsYouCount
+  /** The two kinds that are his, told apart in the headline (the Owner, 2026-11-19); absent while either is unread. */
+  kinds?: { approve: number; hands: number }
   approvals: number | null
   lane: string
   nodes: { ready: number; total: number } | null
@@ -176,6 +198,11 @@ export function ownerVerdict(input: {
   }
   const n = input.yours.count
   if (n === 0) return { tone: 'ok', headline: 'Nothing needs you', line }
+  const k = input.kinds
+  if (k && k.approve + k.hands === n) {
+    const parts = [k.approve > 0 ? `${k.approve} to approve` : '', k.hands > 0 ? `${k.hands} ${k.hands === 1 ? 'needs' : 'need'} your hands` : ''].filter(Boolean)
+    return { tone: 'attention', headline: parts.join(' · '), line }
+  }
   return { tone: 'attention', headline: `${plural(n, 'thing')} ${n === 1 ? 'is' : 'are'} yours`, line }
 }
 

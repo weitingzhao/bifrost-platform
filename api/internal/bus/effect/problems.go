@@ -9,7 +9,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	busalerts "github.com/weitingzhao/bifrost-platform/api/internal/bus/alerts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/bus/nextgen"
 )
 
 // ProblemEvidence is evidence for the problem channels. Some topics are shared,
@@ -19,9 +18,9 @@ import (
 // channel's drill key, "drill:<id>", is the last event of its drill stream
 // (bus/drill): shown apart, never counted as a run.
 // Anything else goes to base. drillStream names a drill's stream.
-func ProblemEvidence(ledger func() eventlog.DB, drillStream func(string) string) func(ctx context.Context, now time.Time, base func(string) nextgen.Evidence) func(string) nextgen.Evidence {
-	return func(ctx context.Context, now time.Time, base func(string) nextgen.Evidence) func(string) nextgen.Evidence {
-		return func(id string) nextgen.Evidence {
+func ProblemEvidence(ledger func() eventlog.DB, drillStream func(string) string) func(ctx context.Context, now time.Time, base func(string) Evidence) func(string) Evidence {
+	return func(ctx context.Context, now time.Time, base func(string) Evidence) func(string) Evidence {
+		return func(id string) Evidence {
 			kind, rest, _ := strings.Cut(id, ":")
 			var read func(tx pgx.Tx) (eventlog.Row, bool, error)
 			switch kind {
@@ -37,14 +36,14 @@ func ProblemEvidence(ledger func() eventlog.DB, drillStream func(string) string)
 			case "source":
 				typ, source, _ := strings.Cut(rest, ":")
 				read = func(tx pgx.Tx) (eventlog.Row, bool, error) {
-					return eventlog.LatestWithField(ctx, tx, typ, "source", source, now.Add(-nextgen.EvidenceWindow))
+					return eventlog.LatestWithField(ctx, tx, typ, "source", source, now.Add(-EvidenceWindow))
 				}
 			default:
 				return base(id)
 			}
 			db := ledger()
 			if db == nil {
-				return nextgen.Evidence{State: nextgen.EvidenceUnmeasured}
+				return Evidence{State: EvidenceUnmeasured}
 			}
 			var last float64
 			err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
@@ -55,9 +54,9 @@ func ProblemEvidence(ledger func() eventlog.DB, drillStream func(string) string)
 				return err
 			})
 			if err != nil {
-				return nextgen.Evidence{State: nextgen.EvidenceUnmeasured}
+				return Evidence{State: EvidenceUnmeasured}
 			}
-			return nextgen.JudgeEvidence(now, last, 1)
+			return JudgeEvidence(now, last, 1)
 		}
 	}
 }

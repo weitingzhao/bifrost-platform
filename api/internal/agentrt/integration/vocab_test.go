@@ -16,6 +16,10 @@ import (
 	// link it for the same reason.
 	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actionrecord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	// full_ci_noted is declared by evidence (fullci.go); this binary linked it
+	// through the controller until planverification_test.go called the plan
+	// passes in agentrt/planloop instead (2026-11-19): the same.
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	// home_layout_saved is declared by homelayout (2026-11-18, migration 0034): the same.
 	_ "github.com/weitingzhao/bifrost-platform/api/internal/homelayout"
 )

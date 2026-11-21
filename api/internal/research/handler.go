@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 )
 
 // Handler is read-only: research status reads and the GET proxy. Platform no
@@ -17,7 +15,7 @@ type Handler struct {
 	svc *Service
 }
 
-func NewHandler(clusterSvc *cluster.Service) *Handler {
+func NewHandler(clusterSvc Kube) *Handler {
 	return &Handler{svc: NewService(clusterSvc)}
 }
 
@@ -25,34 +23,6 @@ func (h *Handler) Service() *Service { return h.svc }
 
 func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.Status(r.Context()))
-}
-
-// HandleLegacyAnalyticsRedirect sends retired Plugin → Analytics URLs to Research API.
-//
-//	GET /plugins/analytics/status     → /api/v1/research/analytics/elementary
-//	GET /plugins/analytics/api/{path} → /api/v1/research/analytics/elementary/files/{path}
-func (h *Handler) HandleLegacyAnalyticsRedirect(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, legacyAnalyticsRedirectTarget(r.URL.Path), http.StatusPermanentRedirect)
-}
-
-func legacyAnalyticsRedirectTarget(requestPath string) string {
-	const filesPrefix = "/api/v1/research/analytics/elementary/files/"
-	path := strings.TrimSpace(requestPath)
-	if strings.HasSuffix(path, "/plugins/analytics/status") {
-		return "/api/v1/research/analytics/elementary"
-	}
-	_, rest, ok := strings.Cut(path, "/plugins/analytics/api/")
-	if !ok {
-		if strings.HasSuffix(path, "/plugins/analytics/api") {
-			return filesPrefix + "elementary_report.html"
-		}
-		return "/api/v1/research/analytics/elementary"
-	}
-	rest = strings.TrimPrefix(rest, "/")
-	if rest == "" {
-		rest = "elementary_report.html"
-	}
-	return filesPrefix + rest
 }
 
 // HandleAPIProxy proxies:

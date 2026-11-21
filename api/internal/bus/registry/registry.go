@@ -10,6 +10,7 @@ package registry
 import (
 	"embed"
 	"fmt"
+	"io/fs"
 	"path"
 	"regexp"
 	"sort"
@@ -54,6 +55,32 @@ type Channel struct {
 	// reading leaves it out of "heard" and does not call it deaf. Not a
 	// contract field.
 	DisplayOnly bool `yaml:"display_only"`
+	// Body is the closed body the ledger keeps for this type (2026-11-20,
+	// the Owner: a module that joins must not mean a code change). A type
+	// whose body is written here is declared to the ledger from this file
+	// (vocab.go) and needs no Go; a type declared in Go has no body here.
+	// SubjectFrom and ChangeFrom tie the body's subject and change to its
+	// fields: subject = that field, change = those fields joined by "-".
+	// Not contract fields: the envelope carries no body.
+	Body        []BodyField `yaml:"body"`
+	SubjectFrom string      `yaml:"subject_from"`
+	ChangeFrom  []string    `yaml:"change_from"`
+	// ConsoleKeys are the Console query key prefixes an event of this type
+	// makes stale (its live refresh reads them from /bus/contract). Not a
+	// contract field.
+	ConsoleKeys [][]string `yaml:"console_keys"`
+	// ConsoleSettleMs is how long the Console lets a burst of this type
+	// settle before it refreshes (0: its default second).
+	ConsoleSettleMs int `yaml:"console_settle_ms"`
+}
+
+// BodyField is one field of a registered body: kind is str, id, int, bool
+// or any; pattern, when set, is a regular expression a string must match.
+type BodyField struct {
+	Name     string `yaml:"name"`
+	Kind     string `yaml:"kind"`
+	Optional bool   `yaml:"optional"`
+	Pattern  string `yaml:"pattern"`
 }
 
 // Tenant is one tenant's register.
@@ -126,6 +153,11 @@ func Parse(name string, data []byte) (Tenant, error) {
 				where("%s is empty", name)
 			}
 		}
+		// The relay passes over an event whose ref is not a platform read, so the
+		// register refuses one (relay.PlatformRead; the relay imports this package).
+		if ref := strings.TrimSpace(c.Ref); ref != "" && !strings.HasPrefix(ref, "/api/v1/") && ref != "/health" {
+			where("ref %q is not a platform read (/api/v1/... or /health)", ref)
+		}
 		if r := strings.TrimSpace(c.Reconcile); r == "none" || (strings.HasPrefix(r, "none") && !strings.HasPrefix(r, "none: ")) {
 			where("reconcile none needs its reason: \"none: <why>\"")
 		}
@@ -140,6 +172,7 @@ func Parse(name string, data []byte) (Tenant, error) {
 		if len(c.Consumers) == 0 {
 			where("no consumers: a channel nobody may read is a dead road")
 		}
+		checkBody(c, where)
 		t.Channels[typ] = c
 	}
 	if len(errs) > 0 {
@@ -151,14 +184,18 @@ func Parse(name string, data []byte) (Tenant, error) {
 
 // Load reads and checks every tenant file compiled into the binary.
 func Load() (map[string]Tenant, error) {
-	entries, err := files.ReadDir(".")
+	src := source(files, ".")
+	entries, err := fs.ReadDir(src, ".")
 	if err != nil {
 		return nil, err
 	}
 	out := map[string]Tenant{}
 	var errs []string
 	for _, e := range entries {
-		data, err := files.ReadFile(e.Name())
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
+			continue
+		}
+		data, err := fs.ReadFile(src, e.Name())
 		if err != nil {
 			return nil, err
 		}

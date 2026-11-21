@@ -7,17 +7,15 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 )
 
 type Service struct {
 	cfg     Config
-	cluster *cluster.Service
+	cluster Kube
 	client  *http.Client
 }
 
-func NewService(clusterSvc *cluster.Service) *Service {
+func NewService(clusterSvc Kube) *Service {
 	return &Service{
 		cfg:     ConfigFromEnv(),
 		cluster: clusterSvc,

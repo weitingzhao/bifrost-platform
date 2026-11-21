@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
-	"github.com/weitingzhao/bifrost-platform/api/internal/datastoreobservations"
 )
 
 // DatastoreEnvReach carries per-environment datastore health from cluster APIs.
@@ -32,23 +31,23 @@ func (ds *DatastoreSnapshot) envReach(envID string) (DatastoreEnvReach, bool) {
 }
 
 func (p *Prober) probePostgres(ctx context.Context, envID string, cfgAddr string, ds *DatastoreSnapshot) Target {
-	return p.datastoreObservation(ctx, envID, cfgAddr, "postgres", func() (datastoreobservations.Row, bool) {
+	return p.datastoreObservation(ctx, envID, cfgAddr, "postgres", func() (datastoreRow, bool) {
 		row, ok := ds.envReach(envID)
-		return datastoreobservations.Row{Reach: string(row.Postgres), Detail: row.PostgresDetail, LAN: row.PostgresLAN}, ok
+		return datastoreRow{Reach: string(row.Postgres), Detail: row.PostgresDetail, LAN: row.PostgresLAN}, ok
 	})
 }
 
 func (p *Prober) probeRedis(ctx context.Context, envID string, cfgAddr string, ds *DatastoreSnapshot) Target {
-	return p.datastoreObservation(ctx, envID, cfgAddr, "redis", func() (datastoreobservations.Row, bool) {
+	return p.datastoreObservation(ctx, envID, cfgAddr, "redis", func() (datastoreRow, bool) {
 		row, ok := ds.envReach(envID)
-		return datastoreobservations.Row{Reach: string(row.Redis), Detail: row.RedisDetail, LAN: row.RedisLAN}, ok
+		return datastoreRow{Reach: string(row.Redis), Detail: row.RedisDetail, LAN: row.RedisLAN}, ok
 	})
 }
 
-func (p *Prober) datastoreObservation(ctx context.Context, envID, cfgAddr, id string, read func() (datastoreobservations.Row, bool)) Target {
-	observation := datastoreobservations.Project(ctx, envID, cfgAddr, id, read, func(ctx context.Context, id, category, addr string) datastoreobservations.Observation {
+func (p *Prober) datastoreObservation(ctx context.Context, envID, cfgAddr, id string, read func() (datastoreRow, bool)) Target {
+	observation := projectDatastore(ctx, envID, cfgAddr, id, read, func(ctx context.Context, id, category, addr string) datastoreReading {
 		target := p.probeTCP(ctx, id, category, addr)
-		return datastoreobservations.Observation{Reach: string(target.Reachability), Detail: target.Detail, URL: target.URL}
+		return datastoreReading{Reach: string(target.Reachability), Detail: target.Detail, URL: target.URL}
 	})
 	return Target{ID: id, Category: "datastore", Reachability: Reachability(observation.Reach), Auth: AuthSkipped, AuthorizationLevel: "L0", Detail: observation.Detail, URL: observation.URL}
 }

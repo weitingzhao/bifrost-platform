@@ -22,6 +22,10 @@ type contractTopic struct {
 	Guarantee string   `json:"guarantee"`
 	Consumers []string `json:"consumers"`
 	Exports   []string `json:"exports,omitempty"`
+	// ConsoleKeys are the Console query key prefixes an event of this type
+	// makes stale (the register's console_keys): the live refresh reads them.
+	ConsoleKeys     [][]string `json:"console_keys,omitempty"`
+	ConsoleSettleMs int        `json:"console_settle_ms,omitempty"`
 }
 
 type contractRow struct {
@@ -67,7 +71,7 @@ func HandleContract(w http.ResponseWriter, _ *http.Request) {
 	for name, t := range tenants {
 		for typ, ch := range t.Channels {
 			out.Topics = append(out.Topics, contractTopic{Tenant: name, Type: typ, Version: ch.Version, Publisher: ch.Publisher, Domain: ch.Domain,
-				Guarantee: ch.Guarantee, Consumers: ch.Consumers, Exports: ch.Exports})
+				Guarantee: ch.Guarantee, Consumers: ch.Consumers, Exports: ch.Exports, ConsoleKeys: ch.ConsoleKeys, ConsoleSettleMs: ch.ConsoleSettleMs})
 		}
 	}
 	for name, st := range subs {

@@ -16,6 +16,10 @@
       "version": 1,
       "hash": "37d0e0709e81b7a1"
     },
+    "approval.card.notified": {
+      "version": 1,
+      "hash": "87a07e47b6c9bb10"
+    },
     "audit.action.recorded": {
       "version": 1,
       "hash": "ba76373feab91722"
@@ -31,6 +35,18 @@
     "ci.verdict.changed": {
       "version": 1,
       "hash": "32da46ba12d63395"
+    },
+    "cluster.database.changed": {
+      "version": 1,
+      "hash": "68e7dfa1475b4912"
+    },
+    "cluster.node.changed": {
+      "version": 1,
+      "hash": "f0f0c1256da07945"
+    },
+    "cluster.workload.changed": {
+      "version": 1,
+      "hash": "3896228c84053aa7"
     },
     "data.job.finished": {
       "version": 1,
@@ -67,6 +83,10 @@
     "owner.question.asked": {
       "version": 1,
       "hash": "67fb6c5e061f30b0"
+    },
+    "plan.tree.changed": {
+      "version": 1,
+      "hash": "8d99a5014fac872e"
     },
     "plugin.status.changed": {
       "version": 2,

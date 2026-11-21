@@ -136,18 +136,6 @@ func (s *Service) giteaCommitExists(ctx context.Context, repo, sha, user, pass s
 	return "", false, fmt.Errorf("commit lookup status %d", resp.StatusCode)
 }
 
-// RefPreflight checks whether the chosen revision exists in every repo the
-// pipeline clones. It is the gate that prevents multi-repo deploys from failing
-// halfway at a clone-* task.
-func (s *Service) RefPreflight(ctx context.Context, pipelineName, revision string) RefPreflightResponse {
-	if pipelineName == "bifrost-ci-python" {
-		return RefPreflightResponse{ClusterID: s.clusterID(), Pipeline: pipelineName, Revision: revision,
-			Repos: []RepoRefStatus{}, Missing: []string{}, GeneratedAt: time.Now().UTC(),
-			Reachability: probe.ReachFail, Detail: "python-ci requires param repo to select its repository"}
-	}
-	return s.refPreflightForRepos(ctx, pipelineName, revision, reposForPipeline(pipelineName))
-}
-
 func (s *Service) refPreflightForRepos(ctx context.Context, pipelineName, revision string, repos []string) RefPreflightResponse {
 	refs := map[string]string{}
 	for _, repo := range repos {

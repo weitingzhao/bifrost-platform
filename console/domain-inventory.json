@@ -6,11 +6,15 @@
       "path": "console/src",
       "files": [
         "console/src/App.tsx",
+        "console/src/domains/foundation/catalog/api/domainStatus.ts",
         "console/src/index.css",
         "console/src/main.tsx",
         "console/src/vite-env.d.ts"
       ],
       "imports": [
+        "console/src/api/client.ts",
+        "console/src/api/serverContact.ts",
+        "console/src/domains/foundation/bus",
         "console/src/hooks/PlatformAuthProvider.tsx",
         "console/src/pages/ConsolePage.tsx",
         "console/src/pwa",
@@ -86,6 +90,7 @@
         "console/src/api/__tests__/recoveryConfirmation.test.ts",
         "console/src/api/__tests__/seatStatus.test.ts",
         "console/src/api/__tests__/serverContactCoverage.test.ts",
+        "console/src/api/actionRecords.ts",
         "console/src/api/agentRuntime.ts",
         "console/src/api/agentTypes.ts",
         "console/src/api/ciDomains.ts",
@@ -1683,6 +1688,9 @@
         "console/src/domains/foundation/bus/__tests__/busNextgen.test.ts",
         "console/src/domains/foundation/bus/__tests__/busProblems.test.ts",
         "console/src/domains/foundation/bus/__tests__/busStatus.test.tsx",
+        "console/src/domains/foundation/bus/__tests__/busStreamWatchdog.test.tsx",
+        "console/src/domains/foundation/bus/__tests__/liveRefresh.test.ts",
+        "console/src/domains/foundation/bus/__tests__/liveRefreshWatchdog.test.tsx",
         "console/src/domains/foundation/bus/busEffect.ts",
         "console/src/domains/foundation/bus/busNerve.ts",
         "console/src/domains/foundation/bus/busNerveBody.ts",
@@ -1692,6 +1700,7 @@
         "console/src/domains/foundation/bus/busProblems.ts",
         "console/src/domains/foundation/bus/busStatus.ts",
         "console/src/domains/foundation/bus/busTrace.ts",
+        "console/src/domains/foundation/bus/liveRefresh.ts",
         "console/src/domains/foundation/bus/sseParser.ts",
         "console/src/domains/foundation/bus/useBusStream.ts"
       ],
@@ -1712,6 +1721,9 @@
         "@xyflow/react",
         "@xyflow/react/dist/style.css",
         "force-graph",
+        "node:fs",
+        "node:path",
+        "node:url",
         "react",
         "three",
         "three/examples/jsm/renderers/CSS2DRenderer.js",
@@ -2118,6 +2130,7 @@
         "console/src/api/checklist.ts",
         "console/src/api/core.ts",
         "console/src/api/telemetry.ts",
+        "console/src/domains/foundation/bus",
         "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/shell"
       ],
@@ -2553,7 +2566,8 @@
         "console/src/hooks/useAgentThreads.ts"
       ],
       "imports": [
-        "console/src/api/agentThreads.ts"
+        "console/src/api/agentThreads.ts",
+        "console/src/domains/foundation/bus"
       ],
       "test_imports": [],
       "external_imports": [
@@ -4270,6 +4284,7 @@
         "console/src/api/planSnapshotSchema.ts",
         "console/src/components/layout",
         "console/src/domains/delivery/display",
+        "console/src/domains/foundation/bus",
         "console/src/domains/plan/display",
         "console/src/domains/plan/observations",
         "console/src/domains/plan/readings",
@@ -4649,6 +4664,7 @@
         "console/src/api/questions.ts",
         "console/src/components/layout",
         "console/src/components/shell",
+        "console/src/domains/foundation/bus",
         "console/src/hooks/useAgentThreads.ts",
         "console/src/lib/shell",
         "console/src/pages/approvalDecision.ts",
@@ -4704,6 +4720,7 @@
         "console/src/pages/shell/owner/RuntimeHealthNotice.tsx",
         "console/src/pages/shell/owner/__tests__/OwnerConsolePage.test.tsx",
         "console/src/pages/shell/owner/__tests__/crewInstruments.test.tsx",
+        "console/src/pages/shell/owner/__tests__/doneForYou.test.ts",
         "console/src/pages/shell/owner/__tests__/fixtures/pools-utc.json",
         "console/src/pages/shell/owner/__tests__/fixtures/standby-evidence.prod.json",
         "console/src/pages/shell/owner/__tests__/fixtures/telemetry-alerts.prod.json",
@@ -4714,6 +4731,7 @@
         "console/src/pages/shell/owner/__tests__/useOwnerConsole.test.tsx",
         "console/src/pages/shell/owner/__tests__/yoursFromSources.test.tsx",
         "console/src/pages/shell/owner/dataTiles.ts",
+        "console/src/pages/shell/owner/doneForYou.ts",
         "console/src/pages/shell/owner/ownerModel.ts",
         "console/src/pages/shell/owner/standbyEvidence.ts",
         "console/src/pages/shell/owner/useOwnerConsole.ts",
@@ -4735,6 +4753,7 @@
         "console/src/components/market-data",
         "console/src/components/shell",
         "console/src/domains/foundation/backup",
+        "console/src/domains/foundation/bus",
         "console/src/domains/foundation/shell",
         "console/src/hooks/useFlexQueryLiveProbe.ts",
         "console/src/hooks/useIbGatewayLiveProbe.ts",
@@ -4802,6 +4821,7 @@
         "console/src/api/governanceMcp.ts",
         "console/src/api/releases.ts",
         "console/src/components/layout",
+        "console/src/domains/foundation/bus",
         "console/src/lib/shell",
         "console/src/pages/CommitLineagePage.tsx",
         "console/src/pages/shell/owner",
@@ -4938,12 +4958,15 @@
       "files": [
         "console/src/pages/shell/status/AgentThreadsInProgress.tsx",
         "console/src/pages/shell/status/ChecklistSignalsSummary.tsx",
+        "console/src/pages/shell/status/DomainStatusSummary.tsx",
         "console/src/pages/shell/status/LinesNow.tsx",
         "console/src/pages/shell/status/StatusPage.tsx",
         "console/src/pages/shell/status/__tests__/AgentThreadsInProgress.test.tsx",
+        "console/src/pages/shell/status/__tests__/DomainStatusSummary.test.tsx",
         "console/src/pages/shell/status/__tests__/StatusPage.test.tsx"
       ],
       "imports": [
+        "console/src",
         "console/src/api",
         "console/src/api/agentThreads.ts",
         "console/src/api/approvals.ts",

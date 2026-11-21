@@ -1,27 +1,21 @@
 package server
 
 import (
-	"path/filepath"
-
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
-	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
+	ownerassembly "github.com/weitingzhao/bifrost-platform/api/internal/owner/assembly"
 )
 
 // The Owner's questions: what the agent runtime asks and reads of them is
-// questionbridge; the server constructs the runtime, mounts the routes and
-// closes it.
+// questionbridge; the owner's assembly (owner/assembly, since 2026-11-19)
+// constructs the runtime and mounts the routes; the server keeps it, binds
+// it to the assessments and the bus, and closes it.
 
 func (s *Server) wireQuestions(dataDir string, workers bool) {
-	rt := questionbridge.New(filepath.Join(dataDir, "questions"), s.audit)
-	s.questionRuntime = rt
-	if !workers || rt.Svc == nil {
-		return
-	}
-	rt.StartSweep(approvalRetryInterval)
+	s.questionRuntime = ownerassembly.Questions(dataDir, s.audit, workers, approvalRetryInterval)
 }
 
 // Close cancels approval result flushing without waiting on storage I/O,
@@ -41,10 +35,7 @@ func (s *Server) Close() {
 }
 
 func (s *Server) mountQuestions(r chi.Router) {
-	if s.questionRuntime == nil {
-		return
-	}
-	questions.Mount(r, s.auth, s.questionRuntime.Svc)
+	ownerassembly.MountQuestions(r, s.auth, s.questionRuntime)
 }
 
 func (s *Server) wireQuestionAssessments() {

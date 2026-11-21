@@ -3,12 +3,12 @@ package planstore
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
 
@@ -50,18 +50,9 @@ import (
 // each in a transaction that reads the rule and holds what the card is about
 // (answerOne).
 
-// RuntimeCard is a card the runtime asked, as the question store holds it:
-// open, or answered by a rule (By) and not acknowledged yet (Answered).
-type RuntimeCard struct {
-	ID, TaskID, Recommended string
-	CreatedAt               time.Time
-	// Options is the keys of the card's options in order, as the question
-	// store gave them (a, b, …): a rule under assessment: veto answers only
-	// with one of them.
-	Options    []string
-	Answered   bool
-	By, Option string // a rule's answer: the rule and the option it took
-}
+// RuntimeCard is a card the runtime asked, as the question store holds it
+// (ownercard.RuntimeCard).
+type RuntimeCard = ownercard.RuntimeCard
 
 // noteRuleAnswer is the one way a rule's answer is noted: where the card is
 // (the mission it was asked in, or its proposal's stream), that stream held

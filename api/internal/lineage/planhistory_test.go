@@ -3,6 +3,7 @@ package lineage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/mainhistory"
 )
 
 // planGitea serves one repo's main in the delivery org "bifrost" and the
@@ -94,6 +95,55 @@ func (f *planGitea) count(kind string) int {
 	return f.requests[kind]
 }
 
+// fakeRules stands in for verification's landing rules, which the assembly
+// binds (server's planHistoryRules; the real rules are exercised through that
+// binding in server's TestPlanHistoryReadsThroughLandingRules). It is just
+// enough for the reader's own behaviour: provenance is one exact
+// "(cherry picked from commit X)" line, a task trailer one exact line, and the
+// result is Effective where a commit names it, Reverted where a later one
+// reverts that commit.
+func fakeRules() HistoryRules {
+	lines := func(msg, prefix string) []string {
+		var out []string
+		for _, l := range strings.Split(msg, "\n") {
+			if strings.HasPrefix(l, prefix) {
+				out = append(out, l)
+			}
+		}
+		return out
+	}
+	source := func(msg string) string {
+		picked := lines(msg, "(cherry picked from commit ")
+		if len(picked) != 1 {
+			return ""
+		}
+		return strings.TrimSuffix(strings.TrimPrefix(picked[0], "(cherry picked from commit "), ")")
+	}
+	return HistoryRules{
+		CherryPickSource: source,
+		HasTaskTrailer: func(msg, task string) bool {
+			tasks := lines(msg, "Agentrt-Task:")
+			return task != "" && len(tasks) == 1 && tasks[0] == "Agentrt-Task: "+task
+		},
+		Evaluate: func(task, result, message string, commits []HistoryCommit, complete bool) (mainhistory.MainHistory, error) {
+			if !complete {
+				return mainhistory.MainHistory{State: mainhistory.Unknown}, errors.New("incomplete history")
+			}
+			for i := len(commits) - 1; i >= 0; i-- { // oldest first
+				if c := commits[i]; c.SHA == result || source(c.Message) == result {
+					for _, later := range commits[:i] {
+						if strings.Contains(later.Message, "This reverts commit "+c.SHA+".") {
+							return mainhistory.MainHistory{State: mainhistory.Reverted, Commit: c.SHA}, nil
+						}
+					}
+					return mainhistory.MainHistory{State: mainhistory.Effective, Commit: c.SHA}, nil
+				}
+			}
+			return mainhistory.MainHistory{State: mainhistory.Never}, nil
+		},
+	}
+}
+
 func TestPlanHistoryReader(t *testing.T) {
 	const task = "t_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	a, base := sha40("a"), sha40("0")
@@ -119,12 +169,13 @@ func TestPlanHistoryReader(t *testing.T) {
 		Client:   srv.Client(),
 		MaxPages: 10,
 		Now:      func() time.Time { return now },
+		Rules:    fakeRules(),
 	}
 	ctx := context.Background()
 
 	// PV2 review blocker: the replayed result exists only in the agent org.
 	h, err := r.History(ctx, "repo", task, a, "")
-	if err != nil || h.State != landing.Effective || h.Commit != landed || h.Snapshot != landed {
+	if err != nil || h.State != mainhistory.Effective || h.Commit != landed || h.Snapshot != landed {
 		t.Fatalf("first read: %+v %v", h, err)
 	}
 	if f.count("result-delivery") != 0 {
@@ -133,7 +184,7 @@ func TestPlanHistoryReader(t *testing.T) {
 	pages := f.count("page")
 
 	// The same pass, another binding: no Gitea request at all.
-	if h, err = r.History(ctx, "repo", task, a, ""); err != nil || h.State != landing.Effective {
+	if h, err = r.History(ctx, "repo", task, a, ""); err != nil || h.State != mainhistory.Effective {
 		t.Fatalf("second read: %+v %v", h, err)
 	}
 	if f.count("page") != pages || f.count("head") != 1 || f.count("result") != 1 {
@@ -144,7 +195,7 @@ func TestPlanHistoryReader(t *testing.T) {
 	revert := sha40("c")
 	f.add(revert, "Revert \"result\"\n\nThis reverts commit "+landed+".", landed)
 	now = now.Add(time.Minute)
-	if h, err = r.History(ctx, "repo", task, a, ""); err != nil || h.State != landing.Reverted {
+	if h, err = r.History(ctx, "repo", task, a, ""); err != nil || h.State != mainhistory.Reverted {
 		t.Fatalf("after revert: %+v %v", h, err)
 	}
 	if got := f.count("page") - pages; got != 1 {
@@ -152,11 +203,11 @@ func TestPlanHistoryReader(t *testing.T) {
 	}
 
 	// A history Gitea gives with a hole is Unknown, never Never or Effective.
-	fresh := &PlanHistoryReader{Access: r.Access, Client: r.Client, MaxPages: 10, Now: r.Now}
+	fresh := &PlanHistoryReader{Access: r.Access, Client: r.Client, MaxPages: 10, Now: r.Now, Rules: r.Rules}
 	f.mu.Lock()
 	f.dropped = base
 	f.mu.Unlock()
-	if h, err = fresh.History(ctx, "repo", task, a, ""); err == nil || h.State != landing.Unknown {
+	if h, err = fresh.History(ctx, "repo", task, a, ""); err == nil || h.State != mainhistory.Unknown {
 		t.Fatalf("truncated history became truth: %+v %v", h, err)
 	}
 
@@ -166,13 +217,13 @@ func TestPlanHistoryReader(t *testing.T) {
 	f.dropped = ""
 	delete(f.results, a)
 	f.mu.Unlock()
-	gone := &PlanHistoryReader{Access: r.Access, Client: r.Client, MaxPages: 10, Now: r.Now}
-	if h, err = gone.History(ctx, "repo", task, a, ""); err != nil || h.State != landing.Reverted {
+	gone := &PlanHistoryReader{Access: r.Access, Client: r.Client, MaxPages: 10, Now: r.Now, Rules: r.Rules}
+	if h, err = gone.History(ctx, "repo", task, a, ""); err != nil || h.State != mainhistory.Reverted {
 		t.Fatalf("result gone from Gitea: %+v %v", h, err)
 	}
 
 	// No result anywhere: Unknown.
-	if h, err = fresh.History(ctx, "repo", task, sha40("e"), ""); err == nil || h.State != landing.Unknown {
+	if h, err = fresh.History(ctx, "repo", task, sha40("e"), ""); err == nil || h.State != mainhistory.Unknown {
 		t.Fatalf("missing result: %+v %v", h, err)
 	}
 }

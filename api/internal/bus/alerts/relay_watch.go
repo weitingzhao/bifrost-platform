@@ -31,11 +31,16 @@ func RelayStatusURL() string {
 // platform failing.
 const WebhookQuery = `ALERTS{alertname="` + NameWebhookFailing + `",alertstate="firing"}`
 
+// RulesQuery answers a value only while Prometheus has fewer rule groups loaded
+// than at any time of the last day.
+const RulesQuery = `count(prometheus_rule_group_rules) < max_over_time(count(prometheus_rule_group_rules)[1d:5m])`
+
 // StartRelayWatch says on the bus what the phone relay knows: the Watchdog
 // stopped arriving, or the relay cannot be reached (RelayWatch). db is the
 // ledger, nil while it is not connected; webhook says what Prometheus says of
-// Alertmanager's webhook, known false when it does not answer.
-func StartRelayWatch(ctx context.Context, db func() eventlog.DB, webhook func(context.Context) (failing, known bool)) {
+// Alertmanager's webhook, known false when it does not answer; prom answers
+// whether a query has a value, known false when Prometheus does not answer.
+func StartRelayWatch(ctx context.Context, db func() eventlog.DB, prom func(context.Context, string) (present, known bool)) {
 	url := RelayStatusURL()
 	if url == "" {
 		return
@@ -67,7 +72,10 @@ func StartRelayWatch(ctx context.Context, db func() eventlog.DB, webhook func(co
 					if w.Unreachable, err = firing(ctx, tx, NameRelayUnreachable); err != nil {
 						return err
 					}
-					w.Webhook, err = firing(ctx, tx, NameWebhookFailing)
+					if w.Webhook, err = firing(ctx, tx, NameWebhookFailing); err != nil {
+						return err
+					}
+					w.Rules, err = firing(ctx, tx, NameRuleGroupsMissing)
 					return err
 				}); err != nil {
 					slog.Warn("bus: alert relay watch not seeded", "error", err)
@@ -77,9 +85,10 @@ func StartRelayWatch(ctx context.Context, db func() eventlog.DB, webhook func(co
 			}
 			prev := w
 			reading := readRelay(ctx, client, url)
-			reading.WebhookFailing, reading.WebhookKnown = webhook(ctx)
+			reading.WebhookFailing, reading.WebhookKnown = prom(ctx, WebhookQuery)
+			reading.RulesMissing, reading.RulesKnown = prom(ctx, RulesQuery)
 			if list := w.Step(reading); len(list) > 0 {
-				if err := Announce(ctx, d, list); err != nil {
+				if _, err := Announce(ctx, d, list); err != nil {
 					slog.Warn("bus: alert relay change not said", "error", err)
 					w = prev // said on the next look
 				}

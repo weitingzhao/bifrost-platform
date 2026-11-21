@@ -16,7 +16,9 @@
 tenant: rocket
 # A wake whose recipient is not a registered thread here goes to the duty
 # seat, naming the address (2026-11-16, the tenant drill).
-undeliverable_to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+undeliverable_to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a
+# 2026-11-19, the Owner: the coordinator also keeps the duty; the duty seat's
+# session is no longer used, so its rows and the undeliverable notices go there.
 subscriptions:
   - id: card-concluded-to-requester
     on: [approval.card.executed, approval.card.decided]
@@ -119,7 +121,7 @@ subscriptions:
     match: "bifrost-deliver-"
     change: "!succeeded"
     deliver: wake
-    to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a
     params:
       ask_verdict: delivery
     guarantee: durable
@@ -129,7 +131,7 @@ subscriptions:
     match: "bifrost-build-"
     change: "!succeeded"
     deliver: wake
-    to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a
     params:
       ask_verdict: delivery
     guarantee: durable
@@ -141,14 +143,57 @@ subscriptions:
   # (bus/alerts/letters.go).
   - id: alert-firing-to-duty
     on: [alert.rule.fired]
+    # Law 43's pain crossings wake the compute line alone (row below); the
+    # duty seat sees them on the Bus page's stream (compute, 2026-11-19).
+    except: ComputePain
     change: firing
     deliver: wake
-    to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a
     params:
       always_namespaces: "bifrost-platform-prod,bifrost-prod"
       ask_verdict: alert
     guarantee: durable
     by: alert-letters
+  # 2026-11-19, law 43 (compute's choice): a pain reading crossing its line
+  # (ComputePain* alerts, warning) wakes the compute seat alone, asked for a
+  # verdict; going back under stays on the bus. ComputePainDbGuestLoad is an
+  # info reading for the guest audit and wakes no one.
+  - id: alert-pain-to-compute
+    on: [alert.rule.fired]
+    match: ComputePain
+    except: ComputePainDbGuestLoad
+    change: firing
+    deliver: wake
+    to: thread:local_7dd39a39-1e0e-4878-b829-2e3f44d5589e
+    params:
+      ask_verdict: alert
+    guarantee: durable
+    by: dispatcher
+  # The bus itself stopped (2026-11-20 02:55-04:10Z: NATS stuck with its node
+  # drained, no alert fired; TD-588). The metrics line writes the two rules;
+  # the communication line, which owns the bus, is woken by them and judges.
+  # by: webhook: the alert webhook writes the letter itself, in the request
+  # that wrote the alert, without NATS, so it arrives while the bus is down.
+  - id: alert-bus-relay-to-comm
+    on: [alert.rule.fired]
+    match: BifrostBusRelayErrors
+    change: firing
+    deliver: wake
+    to: thread:local_ab850773-fe26-40fa-ac01-b3b590b73164
+    params:
+      ask_verdict: alert
+    guarantee: durable
+    by: webhook
+  - id: alert-nats-to-comm
+    on: [alert.rule.fired]
+    match: BifrostNatsUnavailable
+    change: firing
+    deliver: wake
+    to: thread:local_ab850773-fe26-40fa-ac01-b3b590b73164
+    params:
+      ask_verdict: alert
+    guarantee: durable
+    by: webhook
   # 2026-11-18 (the communication line's list of problem channels, L10, R01, R09,
   # R11, R12): a probed service or plugin that turns to fail wakes the duty seat
   # once; degraded and recovery stay on the bus.
@@ -156,14 +201,14 @@ subscriptions:
     on: [env.health.changed]
     change: fail
     deliver: wake
-    to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a
     guarantee: durable
     by: dispatcher
   - id: plugin-status-fail-to-duty
     on: [plugin.status.changed]
     change: fail
     deliver: wake
-    to: thread:local_98ab5bcb-6d1b-40e5-aa73-c2c27b3038a0
+    to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a
     guarantee: durable
     by: dispatcher
   # A new approval card pages the Owner's phone from this event (2026-11-18,

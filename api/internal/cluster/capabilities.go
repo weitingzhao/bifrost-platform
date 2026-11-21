@@ -31,7 +31,7 @@ type capabilityDef struct {
 var capabilityDefs = []capabilityDef{
 	{
 		id: "nfs-client", label: "NFS client", category: "storage",
-		labelHint: "storage.nfs/client=true",
+		labelHint:   "storage.nfs/client=true",
 		requiredFor: "NFS PVC mounts (postgres · gitea · cold archive)",
 		match: func(labels map[string]string) (bool, string) {
 			if labels["storage.nfs/client"] == "true" {
@@ -42,7 +42,7 @@ var capabilityDefs = []capabilityDef{
 	},
 	{
 		id: "control-plane", label: "Control plane", category: "infra",
-		labelHint: "node-role.kubernetes.io/control-plane",
+		labelHint:   "node-role.kubernetes.io/control-plane",
 		requiredFor: "K3s server · etcd · control-plane pinned workloads",
 		match: func(labels map[string]string) (bool, string) {
 			if _, ok := labels["node-role.kubernetes.io/control-plane"]; ok {
@@ -53,7 +53,7 @@ var capabilityDefs = []capabilityDef{
 	},
 	{
 		id: "gpu-nvidia", label: "NVIDIA GPU", category: "compute",
-		labelHint: "accelerator=nvidia or nvidia.com/gpu.present=true",
+		labelHint:   "accelerator=nvidia or nvidia.com/gpu.present=true",
 		requiredFor: "ai namespace GPU workloads (Ollama)",
 		match: func(labels map[string]string) (bool, string) {
 			if labels["accelerator"] == "nvidia" {
@@ -67,7 +67,7 @@ var capabilityDefs = []capabilityDef{
 	},
 	{
 		id: "gpu-pool", label: "GPU pool", category: "compute",
-		labelHint: "workload=gpu",
+		labelHint:   "workload=gpu",
 		requiredFor: "workload=gpu nodeSelector (ai · MinIO warehouse host)",
 		match: func(labels map[string]string) (bool, string) {
 			if labels["workload"] == "gpu" {
@@ -78,7 +78,7 @@ var capabilityDefs = []capabilityDef{
 	},
 	{
 		id: "warehouse", label: "Data warehouse", category: "storage",
-		labelHint: "node-role=warehouse",
+		labelHint:   "node-role=warehouse",
 		requiredFor: "MinIO local object store on gpu-server",
 		match: func(labels map[string]string) (bool, string) {
 			if labels["node-role"] == "warehouse" {
@@ -89,7 +89,7 @@ var capabilityDefs = []capabilityDef{
 	},
 	{
 		id: "elastic-compute", label: "Elastic compute", category: "placement",
-		labelHint: "bifrost.io/workload-pool=compute",
+		labelHint:   "bifrost.io/workload-pool=compute",
 		requiredFor: "On-demand WOL compute pool (gpu-server)",
 		match: func(labels map[string]string) (bool, string) {
 			if labels["bifrost.io/workload-pool"] == "compute" {
@@ -100,7 +100,7 @@ var capabilityDefs = []capabilityDef{
 	},
 	{
 		id: "general-pool", label: "General runtime pool", category: "placement",
-		labelHint: "bifrost.io/workload-pool=general",
+		labelHint:   "bifrost.io/workload-pool=general",
 		requiredFor: "amd64 general runtime — stg · dev · platform · CI offload",
 		match: func(labels map[string]string) (bool, string) {
 			if labels["bifrost.io/workload-pool"] == "general" {
@@ -111,7 +111,7 @@ var capabilityDefs = []capabilityDef{
 	},
 	{
 		id: "prod-pool", label: "Prod pool", category: "placement",
-		labelHint: "bifrost.io/workload-pool=prod|prod-pool",
+		labelHint:   "bifrost.io/workload-pool=prod|prod-pool",
 		requiredFor: "Production runtime binding (mini-pc-a / ubt-k3s-02)",
 		match: func(labels map[string]string) (bool, string) {
 			pool := labels["bifrost.io/workload-pool"]
@@ -123,7 +123,7 @@ var capabilityDefs = []capabilityDef{
 	},
 	{
 		id: "wol", label: "Wake-on-LAN", category: "infra",
-		labelHint: "bifrost.io/wol=enabled",
+		labelHint:   "bifrost.io/wol=enabled",
 		requiredFor: "Ops Console power-off / wake for elastic nodes",
 		match: func(labels map[string]string) (bool, string) {
 			if labels["bifrost.io/wol"] == "enabled" {
@@ -134,7 +134,7 @@ var capabilityDefs = []capabilityDef{
 	},
 	{
 		id: "bootstrap-server", label: "Bootstrap server", category: "infra",
-		labelHint: "bifrost.io/bootstrap=first-server",
+		labelHint:   "bifrost.io/bootstrap=first-server",
 		requiredFor: "First K3s control-plane (cluster bootstrap anchor)",
 		match: func(labels map[string]string) (bool, string) {
 			if labels["bifrost.io/bootstrap"] == "first-server" {
@@ -145,7 +145,7 @@ var capabilityDefs = []capabilityDef{
 	},
 	{
 		id: "postgres-role", label: "PostgreSQL host", category: "storage",
-		labelHint: "node-role=postgres",
+		labelHint:   "node-role=postgres",
 		requiredFor: "Dedicated data namespace PostgreSQL",
 		match: func(labels map[string]string) (bool, string) {
 			if labels["node-role"] == "postgres" {

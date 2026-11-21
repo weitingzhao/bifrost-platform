@@ -60,7 +60,7 @@ func TestAnnounceWritesTheCardTransitions(t *testing.T) {
 func TestTypeOfAndBody(t *testing.T) {
 	for a, want := range map[string]string{
 		"approval.reject": cards.TypeDecided, "approval.expire": cards.TypeDecided, "approval.unknown": cards.TypeExecuted,
-		"approval.queue": "", "approval.claim": "", "approval.notify": "",
+		"approval.queue": "", "approval.claim": "", "approval.notify": cards.TypeNotified, // a push, since 2026-11-20
 	} {
 		if got := cards.TypeOf(a); got != want {
 			t.Errorf("TypeOf(%s) = %q, want %q", a, got, want)
@@ -86,5 +86,37 @@ func TestCardsAgreeWithTheRegister(t *testing.T) {
 		if err := registry.Agree(typ); err != nil {
 			t.Error(err)
 		}
+	}
+}
+
+// 2026-11-20, the metrics line: the Owner's interruptions by card pushes
+// could not be counted past the last 500 audit records. A push is an
+// approval.notify audit event; it reaches the ledger as approval.card.notified
+// with its kind and channel.
+func TestNotifyBecomesNotifiedWithKindAndChannel(t *testing.T) {
+	if cards.TypeOf("approval.notify") != cards.TypeNotified {
+		t.Fatalf("approval.notify maps to %q", cards.TypeOf("approval.notify"))
+	}
+	k, ch := cards.ParseNotice("kind=reminder_waiting channel=ntfy target=relay")
+	if k != "reminder_waiting" || ch != "ntfy" {
+		t.Fatalf("parsed %q %q", k, ch)
+	}
+	if k, ch := cards.ParseNotice("store deliveries: disk full"); k != "" || ch != "" {
+		t.Fatalf("a failure without a push names none, got %q %q", k, ch)
+	}
+	c := cards.Card{Type: cards.TypeNotified, ID: "appr_f5d45a50b38672f8", Action: "apply_manifest", Status: "accepted", Number: 660, Kind: k, Channel: ch}
+	c.Kind, c.Channel = "created", "ntfy"
+	if !cards.Valid(c) {
+		t.Fatal("a push card is valid")
+	}
+	b := cards.Body(c)
+	if b["kind"] != "created" || b["channel"] != "ntfy" || b["subject"] != "#660" {
+		t.Fatalf("body %v", b)
+	}
+	if err := eventlog.CheckBody(cards.TypeNotified, b); err != nil {
+		t.Fatalf("the declared body refuses a push: %v", err)
+	}
+	if _, ok := cards.Body(cards.Card{Type: cards.TypeCreated, ID: c.ID, Action: c.Action, Status: "pending", Number: 660, Kind: "created"})["kind"]; ok {
+		t.Fatal("only a push carries kind")
 	}
 }

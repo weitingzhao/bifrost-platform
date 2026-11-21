@@ -146,21 +146,47 @@ func TestLedgerTypesAndTopicsAreTheClosedVocabulary(t *testing.T) {
 	}
 	clause := latest[strings.LastIndex(latest, "event_type_closed CHECK"):]
 	clause = clause[:strings.Index(clause, ";")]
+	// Since 0041 the ledger's own types are listed one by one and the bus
+	// topics are allowed by their shape (event_type ~ '...'): the register is
+	// their closed set, so a new topic needs no migration (the Owner,
+	// 2026-11-20: a module that joins must not mean a code change).
+	shapeAt := strings.Index(clause, "event_type ~ '")
+	if shapeAt < 0 {
+		t.Fatal("event_type_closed has no shape for the bus topics")
+	}
+	listed := clause[:shapeAt]
+	shape := clause[shapeAt+len("event_type ~ '"):]
+	shape = shape[:strings.Index(shape, "'")]
+	topic, err := regexp.Compile(shape)
+	if err != nil {
+		t.Fatalf("the topics' shape %q: %v", shape, err)
+	}
 	allowed := map[string]bool{}
-	for _, m := range regexp.MustCompile(`'([a-z_.]+)'`).FindAllStringSubmatch(clause, -1) {
+	for _, m := range regexp.MustCompile(`'([a-z_.]+)'`).FindAllStringSubmatch(listed, -1) {
 		allowed[m[1]] = true
 	}
 	if len(allowed) < 50 {
 		t.Fatalf("read %d types from event_type_closed: the parse is wrong", len(allowed))
 	}
-	for typ := range allowed {
-		if !registered[typ] {
-			t.Errorf("%s is allowed by the database but not registered", typ)
+	ledgerTypes := map[string]bool{}
+	for _, l := range ledger {
+		ledgerTypes[l.Type] = true
+		if !allowed[l.Type] {
+			t.Errorf("ledger type %s is refused by the database", l.Type)
 		}
 	}
-	for typ := range registered {
-		if !allowed[typ] {
-			t.Errorf("%s is registered but the database refuses it", typ)
+	for typ := range allowed {
+		if !ledgerTypes[typ] {
+			t.Errorf("%s is listed by the database but is not a ledger type", typ)
 		}
+	}
+	for typ := range all["rocket"].Channels {
+		if !topic.MatchString(typ) {
+			t.Errorf("bus topic %s does not have the shape the database allows (%s)", typ, shape)
+		}
+	}
+	// Positive control: a ledger type does not pass as a topic.
+	if topic.MatchString("plan_observation") {
+		t.Errorf("the topics' shape %s also takes ledger types", shape)
 	}
 }

@@ -71,12 +71,7 @@ func (s *Server) pluginProbeFns() []func(context.Context) probe.PluginHealth {
 	if s.pluginProbes != nil {
 		return s.pluginProbes
 	}
-	return []func(context.Context) probe.PluginHealth{
-		s.marketdata.PluginHealth,
-		s.flexquery.PluginHealth,
-		s.ibgateway.PluginHealth,
-		s.research.PluginHealth,
-	}
+	return s.tenant.PluginProbes()
 }
 
 func (s *Server) writePluginMetrics(b *strings.Builder, r *http.Request) {

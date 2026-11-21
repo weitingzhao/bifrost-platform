@@ -90,6 +90,13 @@ type ApplyRules struct {
 	// anything: the way back from an apply is the same path at an earlier
 	// commit, and that exists only for an object the applier applied before.
 	RequirePreviousGeneration bool `yaml:"require_previous_generation"`
+	// FirstCreationKinds are kinds whose object the section also covers when
+	// it does not exist yet (OWNER_LAW 46, 2026-11-19: what can be undone is
+	// done and recorded, not approved). The way back from a first creation is
+	// deleting the object. An object that exists still needs the applier's
+	// Apply entry: the section never takes over an object another manager
+	// wrote. Absent (every policy signed before), no first creation is covered.
+	FirstCreationKinds []string `yaml:"first_creation_kinds"`
 }
 
 // Pinned covers pipelines that ship the commits named in their params rather

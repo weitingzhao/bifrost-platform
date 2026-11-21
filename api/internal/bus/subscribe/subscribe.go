@@ -48,6 +48,9 @@ func Matches(row registry.Subscription, ev Event) bool {
 	if row.Change != "" && !changeMatches(row.Change, ev.Change) {
 		return false
 	}
+	if row.Except != "" && strings.Contains(ev.Subject, row.Except) {
+		return false
+	}
 	return row.Match == "" || strings.Contains(ev.Subject, row.Match)
 }
 

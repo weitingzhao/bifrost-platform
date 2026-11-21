@@ -19,6 +19,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
@@ -473,12 +474,12 @@ type cardStore struct {
 }
 
 type storedCard struct {
-	card                     planstore.RuntimeCard
+	card                     ownercard.RuntimeCard
 	status, option, by, text string
 	read                     bool
 }
 
-func (s *cardStore) put(c planstore.RuntimeCard) {
+func (s *cardStore) put(c ownercard.RuntimeCard) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.cards == nil {
@@ -489,7 +490,7 @@ func (s *cardStore) put(c planstore.RuntimeCard) {
 }
 
 // ask makes a card asked now; created moves it back.
-func (s *cardStore) ask(_ context.Context, c planstore.Card) (string, error) {
+func (s *cardStore) ask(_ context.Context, c ownercard.Card) (string, error) {
 	id := "q_" + c.Key[:16]
 	s.mu.Lock()
 	_, have := s.cards[id]
@@ -504,7 +505,7 @@ func (s *cardStore) ask(_ context.Context, c planstore.Card) (string, error) {
 		for i := range c.Options {
 			keys = append(keys, string(rune('a'+i)))
 		}
-		s.put(planstore.RuntimeCard{ID: id, TaskID: c.TaskID, Recommended: rec, CreatedAt: time.Now(), Options: keys})
+		s.put(ownercard.RuntimeCard{ID: id, TaskID: c.TaskID, Recommended: rec, CreatedAt: time.Now(), Options: keys})
 	}
 	return id, nil
 }
@@ -513,7 +514,7 @@ func (s *cardStore) ask(_ context.Context, c planstore.Card) (string, error) {
 // later, as the Owner would.
 type asker struct {
 	mu      sync.Mutex
-	cards   []planstore.Card
+	cards   []ownercard.Card
 	answers map[string]seenfacts.Question
 	acked   map[string]int
 }
@@ -528,7 +529,7 @@ func (a *asker) ack(_ context.Context, id string) error {
 	return nil
 }
 
-func (a *asker) ask(_ context.Context, c planstore.Card) (string, error) {
+func (a *asker) ask(_ context.Context, c ownercard.Card) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for i, prev := range a.cards {
@@ -677,15 +678,15 @@ func (w *world) arch(t *testing.T, rows ...[2]string) {
 // it, so a test can read it as the Owner sees it.
 type seenCards struct {
 	cardStore
-	asked map[string]planstore.Card
+	asked map[string]ownercard.Card
 }
 
-func (s *seenCards) ask(ctx context.Context, c planstore.Card) (string, error) {
+func (s *seenCards) ask(ctx context.Context, c ownercard.Card) (string, error) {
 	id, err := s.cardStore.ask(ctx, c)
 	if err == nil {
 		s.mu.Lock()
 		if s.asked == nil {
-			s.asked = map[string]planstore.Card{}
+			s.asked = map[string]ownercard.Card{}
 		}
 		s.asked[id] = c
 		s.mu.Unlock()

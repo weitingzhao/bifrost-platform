@@ -71,7 +71,7 @@ var cacheRoutes = []string{routePipelineRuns, routeReleaseContext, routeSupplyCh
 // taskRoutes read the TaskRun cache (tasksOf), under the same trust rules.
 var taskRoutes = []string{routeRunSteps, routeTimings, routeUnitTasks}
 
-// routeReader is each route's reader in the source switch (bus/nextgen
+// routeReader is each route's reader in the source switch (bus/effect
 // readers.yaml): a read answered from the cache is its run evidence.
 var routeReader = map[string]string{
 	routePipelineRuns:     "pipeline-runs-page",

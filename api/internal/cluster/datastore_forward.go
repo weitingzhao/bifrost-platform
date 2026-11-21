@@ -7,41 +7,41 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/datastore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
-// The PostgreSQL and Redis status reads live in internal/datastore. This file
-// is cluster's side of them: the connection and readiness snapshot they read
+// The PostgreSQL and Redis status reads (postgres_status.go, redis_status.go,
+// matrix_datastore.go; package datastore until 2026-11-20). This file is the
+// rest of cluster's side of them: the connection and readiness snapshot they read
 // through, and the names the backup, WAL repair and pod exec code here shares
 // with them.
 
 const (
-	cnpgClusterName    = datastore.CNPGClusterName
-	cnpgNamespace      = datastore.CNPGNamespace
-	cnpgOperatorNS     = datastore.CNPGOperatorNamespace
-	cnpgOperatorDeploy = datastore.CNPGOperatorDeployment
+	cnpgClusterName    = CNPGClusterName
+	cnpgNamespace      = CNPGNamespace
+	cnpgOperatorNS     = CNPGOperatorNamespace
+	cnpgOperatorDeploy = CNPGOperatorDeployment
 )
 
-var cnpgClusterGVR = datastore.CNPGClusterGVR
+var cnpgClusterGVR = CNPGClusterGVR
 
 // PostgresStatus answers GET /cluster/postgres.
-func (s *Service) PostgresStatus(ctx context.Context) datastore.PostgresStatusResponse {
-	return datastore.ReadPostgres(ctx, s.datastoreSource())
+func (s *Service) PostgresStatus(ctx context.Context) PostgresStatusResponse {
+	return ReadPostgres(ctx, s.datastoreSource())
 }
 
 // RedisStatus answers GET /cluster/redis.
-func (s *Service) RedisStatus(ctx context.Context) datastore.RedisStatusResponse {
-	return datastore.ReadRedis(ctx, s.datastoreSource())
+func (s *Service) RedisStatus(ctx context.Context) RedisStatusResponse {
+	return ReadRedis(ctx, s.datastoreSource())
 }
 
 // DatastoreSnapshot is the connectivity matrix's reading of the datastores.
 func (s *Service) DatastoreSnapshot(ctx context.Context) probe.DatastoreSnapshot {
-	return datastore.MatrixSnapshot(ctx, s.datastoreSource())
+	return MatrixSnapshot(ctx, s.datastoreSource())
 }
 
-func (s *Service) datastoreSource() datastore.Source {
-	return datastore.Source{
+func (s *Service) datastoreSource() Source {
+	return Source{
 		ClusterID:    s.baseMeta(time.Now().UTC()).ClusterID,
 		Environments: s.appEnvs,
 		Client: func() (kubernetes.Interface, error) {
@@ -49,18 +49,18 @@ func (s *Service) datastoreSource() datastore.Source {
 			return clientset, err
 		},
 		Dynamic: s.buildDynamicClient,
-		Snapshot: func(ctx context.Context) datastore.Snapshot {
+		Snapshot: func(ctx context.Context) Snapshot {
 			snap, _ := s.buildReadinessSnapshot(ctx)
 			return snap.datastoreSnapshot()
 		},
 	}
 }
 
-func (snap readinessSnapshot) datastoreSnapshot() datastore.Snapshot {
-	return datastore.Snapshot{
+func (snap readinessSnapshot) datastoreSnapshot() Snapshot {
+	return Snapshot{
 		Environments:    snap.appEnvs,
 		Deployments:     snap.deployments,
-		MinIO:           datastore.MinIOReading{External: snap.minio.External, Reach: snap.minio.Reach, Detail: snap.minio.Detail},
+		MinIO:           MinIOReading{External: snap.minio.External, Reach: snap.minio.Reach, Detail: snap.minio.Detail},
 		NFSHot:          clusterCapDep(snap, "storage-class-nfs-hot", "nfs-hot"),
 		PostgresRole:    nodeCovDep(snap, "postgres-role", "PostgreSQL host nodes"),
 		DeploymentReach: deploymentReach,
@@ -71,7 +71,7 @@ func (snap readinessSnapshot) datastoreSnapshot() datastore.Snapshot {
 }
 
 func minioDepLabeled(snap readinessSnapshot, label string) ServiceDependencyView {
-	return datastore.MinIODependency(snap.datastoreSnapshot(), label)
+	return MinIODependency(snap.datastoreSnapshot(), label)
 }
 
 func stringFromUnstructured(obj *unstructured.Unstructured, fields ...string) string {

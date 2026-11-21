@@ -61,6 +61,9 @@ const (
 	liveReadTimeout = 5 * time.Second
 )
 
+// whyFirstCreation is previousGeneration's answer for an object that does not exist.
+const whyFirstCreation = "does not exist in the cluster: a first creation"
+
 // previousGeneration is "" when the cluster's copy of o exists and carries
 // an Apply entry of the applier's field manager; otherwise why not.
 func (e *Engine) previousGeneration(ctx context.Context, o ApplyObject, manager string) string {
@@ -71,7 +74,7 @@ func (e *Engine) previousGeneration(ctx context.Context, o ApplyObject, manager 
 	case err != nil:
 		return "cannot be read from the cluster: " + err.Error()
 	case !found:
-		return "does not exist in the cluster: a first creation"
+		return whyFirstCreation
 	}
 	for _, m := range managers {
 		if m.Manager == manager && m.Operation == "Apply" {
@@ -146,6 +149,7 @@ func (e *Engine) evaluateApply(ctx context.Context, params map[string]any) Decis
 	}
 
 	var place, excluded, previous []string
+	created := false
 	for _, o := range plan.Objects {
 		name := o.Namespace + "/" + o.Kind + "/" + o.Name
 		if contains(rules.ExcludeObjects, o.Kind+"/"+o.Name) {
@@ -161,6 +165,10 @@ func (e *Engine) evaluateApply(ctx context.Context, params map[string]any) Decis
 			continue
 		}
 		if why := e.previousGeneration(ctx, o, manager); why != "" {
+			if why == whyFirstCreation && contains(rules.FirstCreationKinds, o.Kind) {
+				created = true
+				continue
+			}
 			previous = append(previous, name+" ("+why+")")
 		}
 	}
@@ -184,6 +192,9 @@ func (e *Engine) evaluateApply(ctx context.Context, params map[string]any) Decis
 		reasons = append(reasons, "no previous generation to go back to: "+listed(previous))
 	} else {
 		d.Clauses = append(d.Clauses, "previous_generation")
+		if created {
+			d.Clauses = append(d.Clauses, "first_creation")
+		}
 	}
 	d.Reasons = reasons
 	d.Auto = len(reasons) == 0

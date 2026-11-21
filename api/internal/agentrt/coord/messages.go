@@ -74,7 +74,8 @@ func SendMessage(ctx context.Context, db eventlog.DB, w writer.Writer, to, kind 
 	return id, err
 }
 
-// Unread is the reader's messages not yet acknowledged, oldest first;
+// Unread is the reader's newest messages not yet acknowledged, at most limit,
+// oldest of them first;
 // PostgreSQL is the record, whatever the mailbox stream in Redis holds. A
 // thread reads only with the token its session is held to (TD-370), under
 // its writer's lock (writer.HoldsSessionTx).
@@ -89,11 +90,14 @@ func Unread(ctx context.Context, db eventlog.DB, w writer.Writer, limit int) ([]
 		if err := writer.HoldsSessionTx(ctx, tx, w); err != nil {
 			return err
 		}
-		rows, err := tx.Query(ctx, `SELECT m.message_id, m.from_actor_id, m.to_actor_id, m.message_kind,
-		    COALESCE(m.mission_id, ''), COALESCE(m.task_id, ''), b.body, m.created_at
+		// The newest limit of them, in the order they came: a backlog no
+		// longer hides what just arrived (2026-11-19, the coordinator found 33
+		// of its 38 unread letters were receipts from ten days before).
+		rows, err := tx.Query(ctx, `SELECT * FROM (SELECT m.message_id, m.from_actor_id, m.to_actor_id, m.message_kind,
+		    COALESCE(m.mission_id, '') AS mission_id, COALESCE(m.task_id, '') AS task_id, b.body, m.created_at
 		  FROM agentrt.message m JOIN agentrt.artifact_blob b ON b.artifact_id = m.body_artifact_id
 		  WHERE m.to_actor_id = $1 AND m.acked_at IS NULL
-		  ORDER BY m.created_at, m.message_id LIMIT $2`, actor, limit)
+		  ORDER BY m.created_at DESC, m.message_id DESC LIMIT $2) x ORDER BY created_at, message_id`, actor, limit)
 		if err != nil {
 			return err
 		}

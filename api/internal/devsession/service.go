@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/selfhealth"
 )
@@ -19,7 +18,7 @@ type Service struct {
 // NewService chooses BdevProvider for local/dev seats and K8sProvider for stg/prod.
 // Local make start stays on bdev even when clusters.yaml pins viewer_env: prod
 // (ResolveViewerEnv already ignores that pin outside the cluster).
-func NewService(cfg *config.Config, clusterSvc *cluster.Service) *Service {
+func NewService(cfg *config.Config, clusterSvc Kube) *Service {
 	env := selfhealth.ResolveViewerEnv(cfg)
 	switch env {
 	case "stg", "prod":

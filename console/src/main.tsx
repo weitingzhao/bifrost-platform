@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
+import { LiveRefresh } from '@/domains/foundation/bus/liveRefresh'
 import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
 import { registerServiceWorker } from '@/pwa/serviceWorker'
 import './index.css'
@@ -25,6 +26,7 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
+      <LiveRefresh queryClient={queryClient} />
       <PlatformAuthProvider>
         <App />
       </PlatformAuthProvider>

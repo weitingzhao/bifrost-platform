@@ -6,7 +6,7 @@
 #owner-console[data-entry='you'] [data-owner-verdict] > span { margin-top: 10px; }
 #owner-console[data-entry='you'] [data-owner-verdict] strong { font-size: 28px; letter-spacing: -.035em; }
 .ops-you-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 24px; align-items: start; }
-.ops-you-primary { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.ops-you-primary, .ops-you-side { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
 .ops-you-grid > * { min-width: 0; }
 #owner-console[data-entry='you'] [data-owner-card], .ops-waiting-detail {
   padding: 24px; border: 1px solid var(--ops-edge); border-radius: 20px;
@@ -23,7 +23,7 @@
   justify-content: center; padding-inline: 18px;
 }
 #owner-console[data-entry='you'] [data-owner-action='secondary'] { background: var(--ops-control); box-shadow: var(--ops-raised); }
-#owner-console[data-entry='you'] [aria-label='Worth a look'] .ops-owner-row { background: transparent; border-bottom: 1px solid var(--table-rule); border-radius: 0; padding-inline: 0; }
+#owner-console[data-entry='you'] [aria-label='For your information'] .ops-owner-row { background: transparent; border-bottom: 1px solid var(--table-rule); border-radius: 0; padding-inline: 0; }
 #owner-console[data-entry='you'] [data-signoff-link] { color: var(--primary); }
 #owner-console[data-entry='you'] [aria-label='Stop all work'] button { align-self: flex-start; }
 .ops-waiting-detail { padding: 0; }

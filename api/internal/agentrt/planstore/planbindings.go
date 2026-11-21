@@ -94,7 +94,7 @@ func installPlanBindings(ctx context.Context, tx pgx.Tx, d *planview.Document, m
 		}
 		records = append(records, record)
 	}
-	if _, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(d.Root), Type: "plan_changed", Actor: actor, Cause: decision, Body: map[string]any{"change": "adopt_plan_bindings", "decided_event_id": decision, "bindings": records}}); err != nil {
+	if _, err = appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(d.Root), Type: "plan_changed", Actor: actor, Cause: decision, Body: map[string]any{"change": "adopt_plan_bindings", "decided_event_id": decision, "bindings": records}}); err != nil {
 		return err
 	}
 	for _, step := range order {

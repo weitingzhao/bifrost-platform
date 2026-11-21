@@ -11,15 +11,6 @@ func NewHandler() *Handler {
 	return &Handler{}
 }
 
-func (h *Handler) HandleDomains(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"domains":          Domains(),
-		"domain_count":     len(Domains()),
-		"retired_prefixes": RetiredPrefixes(),
-		"mode":             "read_only",
-	})
-}
-
 func (h *Handler) HandleCatalog(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, CatalogResponseNow())
 }

@@ -2,7 +2,6 @@ package datahusbandry
 
 import (
 	"context"
-	"github.com/weitingzhao/bifrost-platform/api/internal/proxyjson"
 	"net/http"
 	"time"
 )
@@ -89,7 +88,7 @@ func (s *Service) getJSON(ctx context.Context, p proxyer, path string, dest any)
 	if p == nil {
 		return errUnavailable("proxy nil")
 	}
-	return proxyjson.Get(ctx, p.Proxy, path, dest, errUnavailable)
+	return proxyGet(ctx, p.Proxy, path, dest, errUnavailable)
 }
 
 type simpleError string

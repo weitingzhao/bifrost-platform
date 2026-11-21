@@ -14,7 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubeapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
@@ -23,7 +23,7 @@ var ibAccountID = regexp.MustCompile(`^U[0-9]{6,}$`)
 
 type Service struct {
 	cfg     Config
-	cluster *cluster.Service
+	cluster Kube
 
 	redisOnce sync.Once
 	redis     *redis.Client
@@ -34,7 +34,7 @@ type Service struct {
 
 type autoRepairListener func(ctx context.Context, ok bool, message string)
 
-func NewService(clusterSvc *cluster.Service) *Service {
+func NewService(clusterSvc Kube) *Service {
 	cfg, err := ConfigFromEnv()
 	if err != nil {
 		cfg = Config{}
@@ -218,7 +218,7 @@ func (s *Service) Reconnect(ctx context.Context) (ControlResponse, error) {
 			Autonomy: "L1", ActionTaken: "rollout_restart", Message: msg, GeneratedAt: now,
 		}, fmt.Errorf("cluster service unavailable")
 	}
-	resp, err := s.cluster.RolloutRestart(ctx, cluster.RolloutRestartRequest{
+	resp, err := s.cluster.RolloutRestart(ctx, kubeapi.RolloutRestartRequest{
 		Namespace: dataNamespace,
 		Kind:      "Deployment",
 		Name:      gatewayDeployName,

@@ -4,6 +4,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubeapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
@@ -179,11 +180,5 @@ type FailingPodView struct {
 	Age       string `json:"age,omitempty"`
 }
 
-type ClientError struct {
-	Reachability probe.Reachability
-	Detail       string
-}
-
-func (e *ClientError) Error() string {
-	return e.Detail
-}
+// ClientError lives in kubeapi (2026-11-19).
+type ClientError = kubeapi.ClientError

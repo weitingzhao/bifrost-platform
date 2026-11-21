@@ -19,7 +19,7 @@ import (
 // The older prefixes /api/docs, /api/ops (api-monitor) and /api/trading, /api/strategy,
 // /api/portfolio (api-account) were aliases of the same processes. B1 moved every platform caller
 // off them; B2 (Owner 2026-10-04) removed their routes and Services, so they now fall through to
-// the SPA (RetiredTradeGatewayPrefixes; nothing may probe them).
+// the SPA (TestNoProbeUsesARetiredPrefix; nothing may probe them).
 //
 // ProbePath is the path under the prefix that the route's own router answers, and Service is the
 // `service` its JSON names (measured on DEV/STG/PROD 2026-10-04). An unrouted `/api/<x>/…` falls
@@ -43,23 +43,11 @@ var tradeGatewayRoutes = []TradeGatewayRoute{
 	{ID: "research", Prefix: "research", Process: "api-research", Port: 8773, ProbePath: "/health", Service: "bifrost-research"},
 }
 
-// retiredTradeGatewayPrefixes are the alias prefixes TD-55 B2 removed from the gateway.
-var retiredTradeGatewayPrefixes = []string{"docs", "ops", "trading", "strategy", "portfolio"}
-
 // TradeGatewayRoutes returns the probed routes in probe order: four processes, plus the ops and
 // docs routers inside api-monitor.
 func TradeGatewayRoutes() []TradeGatewayRoute {
 	out := make([]TradeGatewayRoute, len(tradeGatewayRoutes))
 	copy(out, tradeGatewayRoutes)
-	return out
-}
-
-// RetiredTradeGatewayPrefixes returns the gateway prefixes TD-55 B2 removed (without /api/).
-// "docs" and "ops" stay route IDs (routers inside api-monitor, at /api/monitor/...); only their
-// own prefixes are gone.
-func RetiredTradeGatewayPrefixes() []string {
-	out := make([]string, len(retiredTradeGatewayPrefixes))
-	copy(out, retiredTradeGatewayPrefixes)
 	return out
 }
 

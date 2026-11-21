@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { contractGraph, generationSegments, problemProofText, shortAddress } from '../busNextgen'
+import { contractGraph, generationSegments, problemProofText, shortAddress, topicState, weekCounts } from '../busNextgen'
 
 // 2026-11-17 (the Owner: the Bus page must show the layer as it is, with
 // pictures; nothing kept by hand). The bar's segments come from the
@@ -52,5 +52,29 @@ describe('problem channel proof', () => {
   it('counts real runs and drill-only channels apart', () => {
     expect(problemProofText({ proven: 29, drilled: 12 })).toBe('29 proven by a real run · 12 by a drill only')
     expect(problemProofText({ proven: 29 })).toBe('29 proven by a real run · 0 by a drill only')
+  })
+})
+
+// Origin: 2026-11-20, the Bus page's "registered but no events in 7 days"
+// state (comm line ledger item 5). Counts come from the metrics line's
+// bus_events readings; a missing reading must not read as flowing.
+describe('weekCounts and topicState', () => {
+  const readings = [
+    { name: 'bus_events', labels: { env: 'prod', type: 'ci.run.finished' }, value: 508, status: 'ok' },
+    { name: 'bus_events', labels: { env: 'stg', type: 'ci.run.finished' }, value: 478, status: 'ok' },
+    { name: 'bus_events', labels: { env: 'prod', type: 'cluster.node.changed' }, value: 0, status: 'ok' },
+    { name: 'bus_events', labels: { env: 'prod', type: 'plan.tree.changed' }, value: null, status: 'unmeasured' },
+    { name: 'bus_outage_minutes', labels: { env: 'prod', type: 'x' }, value: 3, status: 'ok' },
+  ]
+  it('keeps one environment and only readings with a value', () => {
+    const m = weekCounts(readings, 'prod')
+    expect([...m.entries()]).toEqual([['ci.run.finished', 508], ['cluster.node.changed', 0]])
+  })
+  it('flowing above zero, silent at zero or with no reading, unknown without the readout', () => {
+    const m = weekCounts(readings, 'prod')
+    expect(topicState('ci.run.finished', m)).toBe('flowing')
+    expect(topicState('cluster.node.changed', m)).toBe('silent')
+    expect(topicState('plan.tree.changed', m)).toBe('silent')
+    expect(topicState('ci.run.finished', undefined)).toBe('unknown')
   })
 })

@@ -22,8 +22,8 @@ import { fromPlanWithRequest, importHead, requestOf, type PlanView } from '../ag
 // (from api/) rewrites the outputs, and then red here until the port is brought along. A case added or
 // lost on either side fails "holds every case" below.
 //
-// The inputs are captured once from the handlers: a temporary _test.go in api/internal/agentrt/agentrtapi
-// (package agentrtapi_test, so it has seeded, server, get, ledger and importHead) run with AGENTRT_TEST_PG
+// The inputs are captured once from the handlers: a temporary _test.go in api/internal/server
+// (package server, so it has seeded, server, get, ledger and importHead) run with AGENTRT_TEST_PG
 // set, then deleted. It (1) reads GET plan?root=R2 before anything is imported (the 404, "absent");
 // (2) store.ImportPlan of ledger(t, fixtureLedger), then writes plan?root=R2, events?stream=plan:R2&
 // after_seq=0, artifacts/<importHead> and progress ("imported"); (3) ProposePlanChange add_node of a step

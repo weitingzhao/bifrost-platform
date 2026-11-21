@@ -18,7 +18,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 
-	datahusbandry "github.com/weitingzhao/bifrost-platform/api/internal/tenant/husbandry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/husbandry/checklistview"
 
 	"github.com/go-chi/chi/v5"
@@ -33,6 +32,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalrules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
+	"github.com/weitingzhao/bifrost-platform/api/internal/catalog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cidomains"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ciscore"
@@ -41,7 +41,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/dataclone"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/devsession"
-	"github.com/weitingzhao/bifrost-platform/api/internal/flexquery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ibgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/instruments"
@@ -51,20 +50,19 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/network"
 	"github.com/weitingzhao/bifrost-platform/api/internal/operatorplane"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
+	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
-	"github.com/weitingzhao/bifrost-platform/api/internal/research"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
-	"github.com/weitingzhao/bifrost-platform/api/internal/satellite"
 	"github.com/weitingzhao/bifrost-platform/api/internal/selfhealth"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile/k8sstate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
+	tenantassembly "github.com/weitingzhao/bifrost-platform/api/internal/tenant/assembly"
 	"github.com/weitingzhao/bifrost-platform/api/internal/threadtitles"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
-	"github.com/weitingzhao/bifrost-platform/api/internal/tradeagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/workactions"
 )
 
@@ -89,11 +87,15 @@ type Server struct {
 	// changed (ci_read_wire.go).
 	ciDomainsKept cidomains.Cache
 	unitTreesOnce sync.Once
+	// catalog is the map's pool scanner (catalog_wire.go).
+	catalog     *catalog.Scanner
+	catalogOnce sync.Once
+	// catalogHealth is the cluster scan's last replicas (map[string]catalog.Health).
+	catalogHealth atomic.Value
 	// instruments answers /governance/instruments (governance_instruments.go).
 	instruments     *instruments.Service
 	instrumentsOnce sync.Once
 	promote         *promote.Handler
-	tradeagent      *tradeagent.Handler
 	checklist       *checklist.Handler
 	opsagent        *opsagent.Handler
 	agentgovernance *agentgovernance.Handler
@@ -105,22 +107,20 @@ type Server struct {
 	// platform-api release cannot reach it. plane is nil when OPERATOR_PLANE_URL
 	// points at such a process — then mountPlane forwards instead of serving, and
 	// nothing here constructs a second patrol autopilot.
-	plane         *operatorplane.Plane
-	planeURL      string
-	mountPlane    func(chi.Router)
-	satellite     *satellite.Handler
-	selfhealth    *selfhealth.Handler
-	network       *network.Handler
-	ibgateway     *ibgateway.Handler
-	marketdata    *marketdata.Handler
-	flexquery     *flexquery.Handler
-	research      *research.Handler
-	datahusbandry *datahusbandry.Handler
-	telemetry     *telemetry.Handler
-	nodeLatency   delivery.PromNodeMetrics
-	devSession    *devsession.Handler
-	auth          *actuation.AuthService
-	approvals     *approvals.Service
+	plane      *operatorplane.Plane
+	planeURL   string
+	mountPlane func(chi.Router)
+	selfhealth *selfhealth.Handler
+	network    *network.Handler
+	ibgateway  *ibgateway.Handler
+	marketdata *marketdata.Handler
+	// tenant is the tenant domain's assembly (tenant/assembly): its handlers and routes.
+	tenant      *tenantassembly.Tenant
+	telemetry   *telemetry.Handler
+	nodeLatency placement.PromNodeMetrics
+	devSession  *devsession.Handler
+	auth        *actuation.AuthService
+	approvals   *approvals.Service
 	// approvalsCancel stops this process's sole approval result loop.
 	approvalsCancel context.CancelFunc
 	// questionRuntime is the Owner-question record; the type lives in
@@ -135,7 +135,6 @@ type Server struct {
 	landingHealth atomic.Value // map[string]any
 	authLoaded    bool
 	audit         *actuation.AuditLog
-	jobs          *actuation.JobStore
 	httpMetrics   *httpMetrics
 	// pluginProbes, when set, replaces the four plugin health calls on /metrics.
 	// Tests inject counters. Production leaves it nil.
@@ -174,16 +173,15 @@ func New(cfg *config.Config) (*Server, error) {
 		// GET /audit is served here; the workers pod records the loops' actions
 		audit.AlsoList(filepath.Join(dataDir, "audit", "audit-workers.json"))
 	}
-	jobs := actuation.NewJobStore()
-	gitopsH := gitops.NewHandler(cfg, audit)
 	role := config.CurrentRole()
 	clusterH := cluster.NewHandler(cfg, audit)
+	gitopsH := gitops.NewHandler(cfg, audit, clusterH.Service())
 	bindClusterReadings(clusterH)
-	// The tenant's data clone runs its commands through cluster's PostgreSQL adapter.
-	dataH := dataclone.NewHandler(clusterH.Service().Entry(), audit, clusterH.Service())
-	marketdataH := marketdata.NewHandler(clusterH.Service())
+	// The tenant's handlers (tenant/assembly); its data clone runs its
+	// commands through cluster's PostgreSQL adapter.
+	tenantA := tenantassembly.New(cfg, clusterH.Service().Entry(), audit, clusterH.Service())
+	dataH, marketdataH, ibgatewayH := tenantA.DataClone, tenantA.MarketData, tenantA.IBGateway
 	bindDataClone(clusterH, dataH, marketdataH)
-	ibgatewayH := ibgateway.NewHandler(clusterH.Service(), audit)
 	if role.RunsWorkers() {
 		ibgatewayH.StartBackground(context.Background(), audit)
 	}
@@ -211,33 +209,25 @@ func New(cfg *config.Config) (*Server, error) {
 		mcp:             mcp.NewHandler(),
 		delivery:        delivery.NewHandler(cfg, audit),
 		promote:         promoteH,
-		tradeagent:      tradeagent.NewHandler(),
 		checklist:       checklistH,
 		opsagent:        opsagent.NewHandler(audit),
 		plane:           plane,
 		planeURL:        planeURL,
 		mountPlane:      mountPlane,
 		agentgovernance: agentgovernance.NewHandler(),
-		satellite:       satellite.NewHandler(cfg),
 		selfhealth:      selfhealth.NewHandler(cfg, selfHealthArgoApps(gitopsH.Service())),
 		network:         network.NewHandler(audit),
 		ibgateway:       ibgatewayH,
+		tenant:          tenantA,
 		marketdata:      marketdataH,
-		flexquery:       flexquery.NewHandler(clusterH.Service()),
-		research:        research.NewHandler(clusterH.Service()),
 		telemetry:       telemetry.NewHandler(cfg, audit),
 		devSession:      devsession.NewHandler(devsession.NewService(cfg, clusterH.Service())),
 		auth:            auth,
 		authLoaded:      authLoaded,
 		audit:           audit,
-		jobs:            jobs,
 		httpMetrics:     newHTTPMetrics(),
 	}
-	mdH := srv.marketdata
-	fqH := srv.flexquery
-	rsH := srv.research
-	srv.datahusbandry = datahusbandry.NewHandler(datahusbandry.NewService(mdH.Service(), fqH.Service(), rsH.Service()))
-	srv.checklist.BindHusbandry(checklistview.Source(srv.datahusbandry.Service()))
+	srv.checklist.BindHusbandry(checklistview.Source(tenantA.Husbandry.Service()))
 	// One producer of maintenance signals: only the PROD workers overlay sets
 	// CHECKLIST_PROBER=on (TD-253).
 	if role.RunsWorkers() && checklist.ProberWanted() {
@@ -291,6 +281,8 @@ func New(cfg *config.Config) (*Server, error) {
 	if role.RunsWorkers() {
 		// The CI page's domain graph is read ahead of any request (ci_domains.go).
 		srv.ciDomainsAhead(context.Background())
+		// The map's pool of what it cannot perceive (catalog_wire.go).
+		srv.catalogScanAhead(context.Background())
 	}
 	if role.RunsAPI() || role.RunsWorkers() {
 		srv.delivery.StartRunWindowRecovery()
@@ -354,7 +346,8 @@ func (s *Server) Router() http.Handler {
 		s.mountHomeLayout(r)
 		// Each domain registers its own routes (mount_<domain>.go).
 		s.mountFoundation(r)
-		s.mountTenant(r)
+		s.mountCatalog(r)
+		s.tenant.Mount(r, tenantassembly.Gates{Operator: s.auth.Require(actuation.RoleOperator), Guard: s.guard, GuardIB: s.guardIB, Topology: s.handleTopology})
 		s.mountVerification(r)
 		s.mountDelivery(r)
 		s.mountLineage(r)

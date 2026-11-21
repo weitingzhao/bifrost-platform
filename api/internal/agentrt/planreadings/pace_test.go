@@ -2,6 +2,7 @@ package planreadings
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"reflect"
@@ -80,6 +81,46 @@ func (tx *paceTx) Query(_ context.Context, _ string, args ...any) (pgx.Rows, err
 	}
 	return tx.spans, tx.queryErrors[i]
 }
+
+// spansFromTx stands in for lineage's reader of registered work
+// (workregistration.WorkSpans), which the assembly binds: like it, it runs one
+// query on the caller's tx and reads each row's started_at and ended_at, so
+// the fixture's rows and errors reach Pace as they did when Pace called it.
+func spansFromTx(ctx context.Context, tx pgx.Tx, _, _ time.Time) ([][2]time.Time, error) {
+	rows, err := tx.Query(ctx, "work spans")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out [][2]time.Time
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		var b struct {
+			Started time.Time `json:"started_at"`
+			Ended   time.Time `json:"ended_at"`
+		}
+		if err := json.Unmarshal(raw, &b); err != nil {
+			return nil, err
+		}
+		out = append(out, [2]time.Time{b.Started, b.Ended})
+	}
+	return out, rows.Err()
+}
+
+// Origin: 2026-11-19, planreadings stopped importing lineage's workregistration
+// (domain wall, law 28) and takes the reader as an argument; an unbound
+// reader must refuse, not read the pace as if no work was registered.
+func TestPaceRefusesWithoutAReaderOfRegisteredWork(t *testing.T) {
+	t.Parallel()
+	tx, now, loc := paceFixture(t)
+	if _, err := Pace(context.Background(), tx, tx.root, tx.stream, now, loc, nil); err == nil {
+		t.Fatal("pace read without a reader of registered work")
+	}
+}
+
 func paceFixture(t *testing.T) (*paceTx, time.Time, *time.Location) {
 	t.Helper()
 	loc, err := time.LoadLocation("America/Chicago")
@@ -92,7 +133,7 @@ func paceFixture(t *testing.T) (*paceTx, time.Time, *time.Location) {
 func TestPaceSnapshotAndLocalDays(t *testing.T) {
 	t.Parallel()
 	tx, now, loc := paceFixture(t)
-	got, err := Pace(context.Background(), tx, tx.root, tx.stream, now, loc)
+	got, err := Pace(context.Background(), tx, tx.root, tx.stream, now, loc, spansFromTx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +168,7 @@ func TestPaceReadErrorsRemainVisible(t *testing.T) {
 			case "activity iteration":
 				tx.spans.endErr = failure
 			}
-			_, err := Pace(context.Background(), tx, tx.root, tx.stream, now, loc)
+			_, err := Pace(context.Background(), tx, tx.root, tx.stream, now, loc, spansFromTx)
 			if !errors.Is(err, want) {
 				t.Fatalf("lost error: %v", err)
 			}

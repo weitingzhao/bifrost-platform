@@ -127,7 +127,7 @@ type InvalidVerdict struct {
 
 // ProblemCounts are computed from the cases: raised is the letters, seen the
 // acknowledged ones, judged those with a verdict, closed a real problem
-// handled or a false one fixed at the source, open the rest.
+// handled or fixed at the source, or a false one fixed at the source, open the rest.
 type ProblemCounts struct {
 	Raised               int      `json:"raised"`
 	Seen                 int      `json:"seen"`
@@ -138,6 +138,10 @@ type ProblemCounts struct {
 	Open                 int      `json:"open"`
 	AckMedianMinutes     *float64 `json:"ack_median_minutes"`
 	VerdictMedianMinutes *float64 `json:"verdict_median_minutes"`
+	// ClosedMedianMinutes is letter to the verdict that closed it, over the
+	// closed cases; nil when none is closed (2026-11-19, the coordinator: the
+	// loop showed time to verdict but not time to handled).
+	ClosedMedianMinutes *float64 `json:"closed_median_minutes"`
 }
 
 // ProblemReport is what GET /api/v1/bus/problems answers.
@@ -256,7 +260,7 @@ func ProblemLoop(ctx context.Context, db eventlog.DB, since time.Time, kinds map
 // countProblems fills each case's Closed and State and counts the cases.
 func countProblems(cases []ProblemCase) ProblemCounts {
 	var n ProblemCounts
-	var acks, verdicts []float64
+	var acks, verdicts, closes []float64
 	for i := range cases {
 		c := &cases[i]
 		n.Raised++
@@ -276,12 +280,18 @@ func countProblems(cases []ProblemCase) ProblemCounts {
 		case problemloop.VerdictFalse:
 			n.False++
 		}
-		c.Closed = c.Verdict == problemloop.VerdictReal && c.Outcome == problemloop.OutcomeHandled ||
+		// A real problem is closed when handled or fixed at its source; a false
+		// one only when its source is fixed (2026-11-19: real+source_fixed was
+		// counted open, though fixing the source is the better end).
+		c.Closed = c.Verdict == problemloop.VerdictReal && (c.Outcome == problemloop.OutcomeHandled || c.Outcome == problemloop.OutcomeSourceFixed) ||
 			c.Verdict == problemloop.VerdictFalse && c.Outcome == problemloop.OutcomeSourceFixed
 		switch {
 		case c.Closed:
 			n.Closed++
 			c.State = "closed"
+			if c.VerdictAt != nil {
+				closes = append(closes, c.VerdictAt.Sub(c.Letter).Minutes())
+			}
 		case c.Verdict != "":
 			c.State = "judged"
 		case c.Acked != nil:
@@ -298,6 +308,10 @@ func countProblems(cases []ProblemCase) ProblemCounts {
 	if len(verdicts) > 0 {
 		m := median(verdicts)
 		n.VerdictMedianMinutes = &m
+	}
+	if len(closes) > 0 {
+		m := median(closes)
+		n.ClosedMedianMinutes = &m
 	}
 	return n
 }

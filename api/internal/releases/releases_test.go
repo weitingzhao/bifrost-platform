@@ -309,6 +309,37 @@ func buildTaskRun(run, task, digest string, declared bool) *unstructured.Unstruc
 	}}
 }
 
+// 2026-11-19: a PROD platform delivery builds nothing and promotes the digests STG built,
+// so 313 of its 344 records had no image and nothing could read what PROD runs. A rule's
+// images take the digests from the promoting task's results. Positive control: without
+// the rule's images the record has none; a missing result is listed as missing.
+func TestPromotedImagesAreRecorded(t *testing.T) {
+	done := time.Date(2026, 11, 19, 6, 0, 0, 0, time.UTC)
+	api, console := "sha256:"+strings.Repeat("a", 64), "sha256:"+strings.Repeat("c", 64)
+	run := pipelineRun("deliver-prod-1", "deliver-platform-prod", true, done, nil, nil)
+	check := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "tekton.dev/v1", "kind": "TaskRun",
+		"metadata": map[string]any{"name": "deliver-prod-1-check-source", "namespace": "cicd", "labels": map[string]any{
+			"tekton.dev/pipelineRun": "deliver-prod-1", "tekton.dev/pipelineTask": "check-source"}},
+		"spec": map[string]any{},
+		"status": map[string]any{"results": []any{
+			map[string]any{"name": "api-digest", "value": api + "\n"}, map[string]any{"name": "console-digest", "value": console}}},
+	}}
+	rule := Rule{Lane: "platform", Env: "prod", Deploys: true, Images: []PromotedImage{
+		{Task: "check-source", Result: "api-digest", Image: "platform-api"},
+		{Task: "check-source", Result: "console-digest", Image: "platform-console"},
+		{Task: "check-source", Result: "absent", Image: "other"}}}
+	rec := buildRecord(run, rule, []unstructured.Unstructured{*check}, done)
+	if rec.Images["platform-api"] != api || rec.Images["platform-console"] != console || len(rec.Images) != 2 ||
+		strings.Join(rec.Missing, ",") != "check-source (absent)" {
+		t.Fatalf("record = %+v", rec)
+	}
+	rule.Images = nil
+	if rec := buildRecord(run, rule, []unstructured.Unstructured{*check}, done); len(rec.Images) != 0 {
+		t.Fatalf("without the rule: %+v", rec.Images)
+	}
+}
+
 // TD-343: a record carries the digests its build tasks pushed; a record of
 // an older version is built again while its run exists, so it gains them.
 func TestRecordImages(t *testing.T) {

@@ -1,0 +1,74 @@
+# What gate-cluster watches in the cluster and says on the bus when its state
+# changes (2026-11-20, the Owner: a module that joins or leaves must not mean
+# a code change). A row here plus its topic's entry (with body) in
+# ../rocket.yaml is all a new kind of object needs. Checked by watches_test.go.
+tenant: rocket
+watches:
+  # A node turned ready or not ready, or was cordoned or uncordoned. Origin:
+  # 2026-11-20 02:50Z ubt-k3s-05 was drained and the bus's NATS on it sat
+  # Pending an hour while nothing on the bus said so.
+  - id: nodes
+    group: ""
+    version: v1
+    resource: nodes
+    type: cluster.node.changed
+    stream: node
+    subject: "{metadata.name}"
+    subject_field: node
+    state:
+      - name: ready
+        path: status.conditions[type=Ready].status
+        map: {"True": ready, "False": notready, "*": unknown}
+      - name: schedule
+        path: spec.unschedulable
+        map: {"true": cordoned, "*": schedulable}
+  # A Deployment or StatefulSet came up or went down, in every namespace:
+  # ready when its ready replicas equal its replicas (a workload scaled to 0
+  # is ready with none). Origin: 2026-11-20 NATS (a StatefulSet) sat Pending
+  # an hour and nothing on the bus said so.
+  - id: deployments
+    group: apps
+    version: v1
+    resource: deployments
+    type: cluster.workload.changed
+    stream: deploy
+    subject: "{metadata.namespace}/{metadata.name}"
+    subject_field: workload
+    state:
+      - name: ready
+        path: status.readyReplicas
+        compare_to: spec.replicas
+        map: {"true": ready, "*": notready}
+  - id: statefulsets
+    group: apps
+    version: v1
+    resource: statefulsets
+    type: cluster.workload.changed
+    stream: sts
+    subject: "{metadata.namespace}/{metadata.name}"
+    subject_field: workload
+    state:
+      - name: ready
+        path: status.readyReplicas
+        compare_to: spec.replicas
+        map: {"true": ready, "*": notready}
+  # A CloudNativePG cluster: ready when its ready instances equal its
+  # instances; primary is the pod that is primary now, so a failover is a
+  # change. The platform's observer role already lists and watches
+  # clusters.postgresql.cnpg.io. Origin: 2026-11-20, the database's state
+  # was not on the bus.
+  - id: postgres
+    group: postgresql.cnpg.io
+    version: v1
+    resource: clusters
+    type: cluster.database.changed
+    stream: pg
+    subject: "{metadata.namespace}/{metadata.name}"
+    subject_field: database
+    state:
+      - name: ready
+        path: status.readyInstances
+        compare_to: spec.instances
+        map: {"true": ready, "*": notready}
+      - name: primary
+        path: status.currentPrimary

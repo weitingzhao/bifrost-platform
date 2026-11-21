@@ -2,24 +2,20 @@ package controller_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planwiring"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
 
 var ctx = context.Background()
@@ -31,8 +27,9 @@ func must(t *testing.T, err error) {
 	}
 }
 
-// setup is a migrated, seeded database with mission M-1, round R2, item
-// R2:1 and steps R2:1-1 and R2:1-2 of M-1.
+// setup is a migrated, seeded database with the dispatch rules. The mission
+// and plan tree the plan passes read are agentrt/planloop's tests'
+// (2026-11-19: those passes moved there).
 func setup(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	db := agentrttest.Migrated(t)
@@ -41,61 +38,16 @@ func setup(t *testing.T) *pgxpool.Pool {
 	pool := db.Pool(t, db.Runtime)
 	_, err = pool.Exec(ctx, agentrttest.DispatchRules)
 	must(t, err)
-	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
-		_, err := storekit.CreateMission(ctx, tx, "controller", storekit.Mission{ID: "M-1", Title: "m", Goal: "g", Deadline: time.Now().Add(time.Hour)})
-		return err
-	}))
-	for _, n := range []planstore.PlanNode{
-		{ID: "R2", Kind: "round", Label: "2", Title: "round", Root: "R2"},
-		{ID: "R2:1", Parent: "R2", Kind: "item", Label: "1", Title: "item", Root: "R2"},
-		{ID: "R2:1-1", Parent: "R2:1", Kind: "step", Label: "1-1", Title: "one", MissionID: "M-1", StepKind: "agent", Root: "R2"},
-		{ID: "R2:1-2", Parent: "R2:1", Kind: "step", Label: "1-2", Title: "two", MissionID: "M-1", StepKind: "agent", Ordinal: 1, Root: "R2"},
-	} {
-		must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
-			_, err := planstore.CreatePlanNode(ctx, tx, "controller", n)
-			return err
-		}))
-	}
 	return pool
 }
 
-func setRule(t *testing.T, pool *pgxpool.Pool, step, rule string, binds ...[2]string) {
-	t.Helper()
-	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
-		if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.PlanStream("R2"), Type: "plan_changed", Actor: "controller",
-			Body: map[string]any{"change": "test"}}); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, `UPDATE agentrt.plan_node SET done_rule_json = $2::jsonb WHERE plan_node_id = $1`, step, rule); err != nil {
-			return err
-		}
-		for _, b := range binds {
-			if _, err := tx.Exec(ctx, `INSERT INTO agentrt.plan_node_binding (plan_node_id, bound_kind, bound_ref, event_id)
-			  VALUES ($1, $2, $3, current_setting('agentrt.event_id')::bigint)`, step, b[0], b[1]); err != nil {
-				return err
-			}
-		}
-		return nil
-	}))
-}
-
-func stepState(t *testing.T, pool *pgxpool.Pool, step string) string {
-	t.Helper()
-	var s string
-	must(t, pool.QueryRow(ctx, `SELECT state FROM agentrt.plan_node WHERE plan_node_id = $1`, step).Scan(&s))
-	return s
-}
-
-// world is the outside the controller reads: approvals, questions, CI runs
-// and deployments. A key that is absent cannot be read.
+// world is the outside a step reads. Its next reads panic while panics is
+// above zero.
 type world struct {
-	mu        sync.Mutex
-	approvals map[int64]string
-	questions map[string]seenfacts.Question
-	ci        map[string]string
-	deploys   map[string]string
-	reads     int
-	panics    int // the next reads that panic
+	mu     sync.Mutex
+	reads  int
+	panics int // the next reads that panic
+	done   bool
 }
 
 func (w *world) read() {
@@ -111,51 +63,31 @@ func (w *world) read() {
 	}
 }
 
-func (w *world) sources() controller.Sources {
-	return controller.Sources{
-		Approval: func(_ context.Context, n int64) (seenfacts.ApprovalFact, bool) {
-			w.read()
-			w.mu.Lock()
-			defer w.mu.Unlock()
-			s, ok := w.approvals[n]
-			return seenfacts.ApprovalFact{Number: n, Status: s, Action: "test", Tier: "test"}, ok
-		},
-		Question: func(_ context.Context, id string) (seenfacts.Question, bool) {
-			w.read()
-			w.mu.Lock()
-			defer w.mu.Unlock()
-			q, ok := w.questions[id]
-			return q, ok
-		},
-		CI: func(_ context.Context, repo, commit string) (string, string, bool) {
-			w.read()
-			w.mu.Lock()
-			defer w.mu.Unlock()
-			s, ok := w.ci[repo+"@"+commit]
-			return s, "ci-1", ok
-		},
-		Deployed: func(_ context.Context, env string) (string, map[string]any, bool) {
-			w.read()
-			w.mu.Lock()
-			defer w.mu.Unlock()
-			c, ok := w.deploys[env]
-			if !ok {
-				return "", nil, false
-			}
-			return c, map[string]any{"run": "deliver-" + c[:7]}, true
-		},
-	}
-}
-
 // Start runs the loops on timers; a pass that panics costs that pass only;
-// cancelling the context stops them.
+// cancelling the context stops them. Since 2026-11-19 the steps of the
+// facts-and-rules pass and the loops of their own are the assembly's
+// (Steps, Loops): here a step reads the world and settles once a read did
+// not panic, and a loop of its own runs beside it.
 func TestStart(t *testing.T) {
 	pool := setup(t)
-	setRule(t, pool, "R2:1-2", `{"approval_executed":20}`, [2]string{"approval", "20"})
-	w := &world{approvals: map[int64]string{20: seenfacts.ApprovalExecuted}, panics: 1}
+	w := &world{panics: 1}
 	var mu sync.Mutex
 	var logs []string
-	c := &controller.Controller{DB: pool, Sources: w.sources(), LeaseEvery: 20 * time.Millisecond, FactsEvery: 20 * time.Millisecond,
+	looped := 0
+	c := &controller.Controller{DB: pool, LeaseEvery: 20 * time.Millisecond, FactsEvery: 20 * time.Millisecond,
+		Steps: []controller.Step{{Name: "facts", Run: func(context.Context) error {
+			w.read()
+			w.mu.Lock()
+			w.done = true
+			w.mu.Unlock()
+			return nil
+		}}},
+		Loops: []controller.Loop{{Name: "agentrt-test-loop", Every: 20 * time.Millisecond, Run: func(context.Context) error {
+			mu.Lock()
+			looped++
+			mu.Unlock()
+			return nil
+		}}},
 		Logf: func(format string, args ...any) {
 			mu.Lock()
 			defer mu.Unlock()
@@ -164,10 +96,19 @@ func TestStart(t *testing.T) {
 	run, cancel := context.WithCancel(ctx)
 	wait := c.Start(run)
 	deadline := time.Now().Add(10 * time.Second)
-	for stepState(t, pool, "R2:1-2") != "done" {
+	for {
+		w.mu.Lock()
+		done := w.done
+		w.mu.Unlock()
+		mu.Lock()
+		ran := looped > 0
+		mu.Unlock()
+		if done && ran {
+			break
+		}
 		if time.Now().After(deadline) {
 			cancel()
-			t.Fatal("the loops did not move the step")
+			t.Fatal("the loops did not run the step and the loop")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -201,79 +142,72 @@ func TestStart(t *testing.T) {
 	}
 }
 
-// Review 152 B2: a source that does not answer is cut off after the read
-// timeout; the pass goes on and records nothing for it.
-func TestSlowSourceIsCutOff(t *testing.T) {
+// The steps of a pass run in their order, each once a pass, a failing one
+// does not stop the next, and the pass's error joins theirs in that order.
+//
+// Origin: 2026-11-19, the controller split: the plan's facts, plan
+// decisions, used answers and rules used to be four fixed calls in the
+// facts-and-rules pass and are now steps the assembly binds; this holds the
+// order and the joined error the four calls had.
+func TestStepsRunInOrderAndJoinTheirErrors(t *testing.T) {
 	pool := setup(t)
-	setRule(t, pool, "R2:1-1", `{"approval_executed":16}`, [2]string{"approval", "16"})
-	c := &controller.Controller{DB: pool, ReadTimeout: 100 * time.Millisecond, Sources: controller.Sources{
-		Approval: func(ctx context.Context, _ int64) (seenfacts.ApprovalFact, bool) {
-			<-ctx.Done()
-			return seenfacts.ApprovalFact{}, false
-		},
-	}}
-	start := time.Now()
-	n, err := c.Facts(ctx)
-	must(t, err)
-	if n != 0 || time.Since(start) > 5*time.Second {
-		t.Fatalf("recorded %d after %v", n, time.Since(start))
+	var mu sync.Mutex
+	var order []string
+	var logs []string
+	step := func(name string, err error) controller.Step {
+		return controller.Step{Name: name, Run: func(context.Context) error {
+			mu.Lock()
+			defer mu.Unlock()
+			order = append(order, name)
+			return err
+		}}
 	}
-}
-
-// Review 153 B1: a done rule's read of what is deployed, made while the step
-// is held, is cut off after the read timeout too; the gate is unknown and
-// nothing moves.
-func TestSlowDeploymentReadInRulesIsCutOff(t *testing.T) {
-	pool := setup(t)
-	setRule(t, pool, "R2:1-1", `{"gates_passed":[{"test":"T19","spec_sha256":"`+strings.Repeat("ab", 32)+`"}],"env":"stg"}`)
-	c := &controller.Controller{DB: pool, ReadTimeout: 100 * time.Millisecond, Sources: controller.Sources{
-		Deployed: func(ctx context.Context, _ string) (string, map[string]any, bool) {
-			<-ctx.Done()
-			return "", nil, false
-		},
-	}}
-	start := time.Now()
-	moved, err := c.Rules(ctx)
-	must(t, err)
-	if moved != 0 || time.Since(start) > 5*time.Second {
-		t.Fatalf("moved %d after %v", moved, time.Since(start))
-	}
-}
-
-// The loops decide plan changes: once the Owner answers a card with the
-// first option, the change lands.
-func TestStartDecidesPlanChanges(t *testing.T) {
-	pool := setup(t)
-	out, err := planstore.ProposePlanChange(ctx, pool, actor.Writer{Actor: "thread:s1", Token: "operator"}, "k1", "R2", "a new item",
-		[]planstore.PlanChange{{Op: "add_node", Parent: "R2", Kind: "item", Title: "second"}},
-		func(context.Context, planstore.Card) (string, error) { return "q_9", nil })
-	must(t, err)
-	if out["question_id"] != "q_9" {
-		t.Fatalf("proposal: %v", out)
-	}
-	w := &world{questions: map[string]seenfacts.Question{"q_9": {ID: "q_9", Status: seenfacts.QuestionAnswered, Option: planstore.CardApplyKey,
-		AnsweredBy: "owner", AnsweredAt: "2026-10-14T20:00:00Z"}}}
-	c := &controller.Controller{DB: pool, Sources: w.sources(), LeaseEvery: time.Hour, FactsEvery: 20 * time.Millisecond}
+	errFacts, errRules := errors.New("facts failed"), errors.New("rules failed")
+	c := &controller.Controller{DB: pool, LeaseEvery: time.Hour, FactsEvery: 20 * time.Millisecond,
+		Steps: []controller.Step{step("facts", errFacts), step("plan decisions", nil), step("used answers", nil), step("rules", errRules)},
+		Logf: func(format string, args ...any) {
+			mu.Lock()
+			defer mu.Unlock()
+			logs = append(logs, fmt.Sprintf(format, args...))
+		}}
 	run, cancel := context.WithCancel(ctx)
 	wait := c.Start(run)
-	defer wait()
-	defer cancel()
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-		var n int
-		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.plan_node WHERE plan_node_id = 'R2:2.1'`).Scan(&n))
-		if n == 1 {
-			return
+		mu.Lock()
+		n := len(order)
+		mu.Unlock()
+		if n >= 8 {
+			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("the loops did not apply the answered change")
+			cancel()
+			wait()
+			t.Fatal("the pass did not run its steps twice")
 		}
+	}
+	cancel()
+	wait()
+	mu.Lock()
+	defer mu.Unlock()
+	if got := strings.Join(order[:8], ","); got != "facts,plan decisions,used answers,rules,facts,plan decisions,used answers,rules" {
+		t.Fatalf("steps ran %s", got)
+	}
+	want := "agentrt-facts-rules: " + errors.Join(errFacts, errRules).Error()
+	found := false
+	for _, l := range logs {
+		found = found || l == want
+	}
+	if !found {
+		t.Fatalf("the pass did not log %q: %q", want, logs)
 	}
 }
 
-// TestMain binds the plan code's ports by name: linking planwiring binds
-// nothing (decoupling item 5, 2026-11-18; the tests used to be bound only
-// because they linked it).
+// TestMain registers the artifact store's check of view artifacts: the plan
+// code's (planstore registers it at start), which the controller does not
+// link since its plan passes moved to agentrt/planloop (2026-11-19). The
+// controller stores log tails only (a loop's alert), never a view artifact,
+// so the check here passes every body.
 func TestMain(m *testing.M) {
-	planwiring.Bind()
+	artifact.RegisterCheck(func(string, []byte) error { return nil })
 	os.Exit(m.Run())
 }

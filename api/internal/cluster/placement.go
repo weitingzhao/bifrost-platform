@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubeapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
@@ -14,41 +15,19 @@ import (
 // (placement.ClusterPools). Until 2026-11-16 this file imported placement
 // and called it, which made the base depend on a domain above it.
 
-// PoolNode is a node as a pool evaluator reads it.
-type PoolNode struct {
-	Name          string
-	Architecture  string
-	WorkloadLabel string
-	CapabilityIDs []string
-	Reachability  probe.Reachability
-}
-
-// The pool statuses service readiness tells apart; any other is live.
-const (
-	PoolPlanned  = "planned"
-	PoolDegraded = "degraded"
+// The pool shapes live in kubeapi (2026-11-19), where placement names them
+// without importing this package.
+type (
+	PoolNode       = kubeapi.PoolNode
+	PoolReading    = kubeapi.PoolReading
+	PoolEvaluation = kubeapi.PoolEvaluation
+	PoolEvaluator  = kubeapi.PoolEvaluator
 )
 
-// PoolReading is one pool as service readiness reads it.
-type PoolReading struct {
-	ID         string
-	Status     string
-	NodesTotal int
-	NodesReady int
-}
-
-// PoolEvaluation is an evaluator's answer: Body is the document of
-// GET /cluster/placement, as the evaluator writes it; Pools is what service
-// readiness reads.
-type PoolEvaluation struct {
-	Body  any
-	Pools []PoolReading
-}
-
-// PoolEvaluator evaluates the pools of a cluster's nodes. reach and detail
-// are how the node list itself was read; an evaluator carries a reading that
-// is not ok into its document.
-type PoolEvaluator func(clusterID string, nodes []PoolNode, reach probe.Reachability, detail string) PoolEvaluation
+const (
+	PoolPlanned  = kubeapi.PoolPlanned
+	PoolDegraded = kubeapi.PoolDegraded
+)
 
 // BindPools sets the evaluator. Without one, placement answers unknown and
 // readiness finds no pool.
@@ -79,8 +58,14 @@ func capabilityIDsFromView(n NodeView) []string {
 	return ids
 }
 
+// Placement is the pool evaluation, a read for pages and readiness: nodes come
+// from NodesForDisplay, so a powered-off elastic host does not cost every read
+// an SSH timeout.
 func (s *Service) Placement(ctx context.Context) PoolEvaluation {
-	nodesResp := s.Nodes(ctx)
+	return s.placementFrom(s.NodesForDisplay(ctx))
+}
+
+func (s *Service) placementFrom(nodesResp NodesResponse) PoolEvaluation {
 	if s.pools == nil {
 		return PoolEvaluation{Body: map[string]any{"cluster_id": nodesResp.ClusterID, "reachability": probe.ReachUnknown,
 			"detail": "no pool evaluator is bound", "pools": []any{}, "rules": []any{}, "violations": []any{}}}

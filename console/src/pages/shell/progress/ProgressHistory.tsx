@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useRef } from 'react'
 import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress } from '@/api/agentRuntime'
+import { useLiveInterval } from '@/domains/foundation/bus/liveRefresh'
 import { NowClock, Tick, relative } from './progressClock'
 import { ProgressTimeline } from './ProgressTimeline'
 import { runtimeUnreadLine } from '../owner/ownerModel'
@@ -11,7 +12,8 @@ import { runtimeUnreadLine } from '../owner/ownerModel'
  */
 export function ProgressHistory() {
   const openedAt = useRef(Date.now())
-  const runtimeQ = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal), refetchInterval: AGENT_RUNTIME_POLL_MS, retry: false })
+  const progressInterval = useLiveInterval(AGENT_RUNTIME_POLL_MS)
+  const runtimeQ = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal), refetchInterval: progressInterval, retry: false })
   const runtime = runtimeQ.data
   // History stays as last read when a read fails or is paused offline, and says so with when (review 488 A1, B1).
   const unreadable = runtimeQ.isError || runtimeQ.isPaused

@@ -4,17 +4,17 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubeapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
 // Origin: 2026-11-16, cluster stopped importing this package (the foundation
-// wall) and reads the pools through cluster.PoolEvaluator. This holds that
+// wall) and reads the pools through kubeapi.PoolEvaluator. This holds that
 // the adapter answers what cluster.Service.Placement answered before: the
 // same document as Evaluate, a node list that was not read ok carried into
 // it, and each pool's count and status for service readiness.
 func TestClusterPoolsIsEvaluateInTheClustersShape(t *testing.T) {
-	nodes := []cluster.PoolNode{
+	nodes := []kubeapi.PoolNode{
 		{Name: "a", Architecture: "amd64", Reachability: probe.ReachOK},
 		{Name: "b", Architecture: "arm64", Reachability: probe.ReachFail},
 	}
@@ -42,7 +42,7 @@ func TestClusterPoolsIsEvaluateInTheClustersShape(t *testing.T) {
 		}
 	}
 	// The statuses readiness tells apart are this package's words.
-	if cluster.PoolPlanned != string(PoolStatusPlanned) || cluster.PoolDegraded != string(PoolStatusDegraded) {
+	if kubeapi.PoolPlanned != string(PoolStatusPlanned) || kubeapi.PoolDegraded != string(PoolStatusDegraded) {
 		t.Fatal("cluster's pool statuses are not placement's")
 	}
 	down := ClusterPools("c1", nodes, probe.ReachFail, "api unreachable").Body.(Response)

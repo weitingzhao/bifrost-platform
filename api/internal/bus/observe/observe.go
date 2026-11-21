@@ -3,10 +3,10 @@
 // map is for watching how the seats work together, where they wait and
 // where they stall; cards and approvals are decided elsewhere, in words).
 // Everything is computed from the platform's own records when asked: the
-// letters between seats (agentrt.message, written with their
-// message_posted event), the seats' status reports, and the approval cards'
-// bus events. What the platform does not record is named as unmeasured,
-// not guessed.
+// letters between seats and the seats' status reports (coordination's
+// messages, read through coord.ReadLetters, which the server hands the
+// route), and the approval cards' bus events. What the platform does not
+// record is named as unmeasured, not guessed.
 package observe
 
 import (
@@ -216,36 +216,10 @@ func Build(now time.Time, hours int, letters []Letter, status map[string]time.Ti
 	return p
 }
 
-// Querier is a pool, a connection or a transaction.
+// Querier is a pool, a connection or a transaction: what the letters are
+// read over (Handler.Letters).
 type Querier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-}
-
-// ReadLetters reads the letters and the latest status report of each actor
-// since the given time.
-func ReadLetters(ctx context.Context, db Querier, since time.Time) ([]Letter, map[string]time.Time, error) {
-	rows, err := db.Query(ctx, `SELECT from_actor_id, to_actor_id, created_at, acked_at FROM agentrt.message
-	  WHERE created_at >= $1 ORDER BY created_at LIMIT 20000`, since)
-	if err != nil {
-		return nil, nil, fmt.Errorf("observe: letters: %w", err)
-	}
-	defer rows.Close()
-	var letters []Letter
-	status := map[string]time.Time{}
-	for rows.Next() {
-		var l Letter
-		if err := rows.Scan(&l.From, &l.To, &l.At, &l.Acked); err != nil {
-			return nil, nil, err
-		}
-		if l.To == StatusBoard {
-			if l.At.After(status[l.From]) {
-				status[l.From] = l.At
-			}
-			continue
-		}
-		letters = append(letters, l)
-	}
-	return letters, status, rows.Err()
 }
 
 // TopicListen is whether anyone listens to a topic: what it published over

@@ -158,3 +158,41 @@ func DaysWithSubject(ctx context.Context, tx pgx.Tx, eventType, subject string, 
 	  WHERE event_type = $1 AND at >= $2 AND body_json->>'subject' = $3`, eventType, since, subject).Scan(&n)
 	return n, err
 }
+
+// LatestByKey is, for each value of the body's top-level key, the latest event
+// of one type written since a time: a fact recorded again on every
+// reconciliation pass (pipeline_seen by uid, approval_seen by approval) read
+// once, as it stands. Events without the key are left out. Asked by the
+// evaluation readout (2026-11-20, law 47), which reads the ledger only through
+// this package.
+func LatestByKey(ctx context.Context, tx pgx.Tx, eventType, key string, since time.Time) ([]Row, error) {
+	return scanRows(tx.Query(ctx, `SELECT DISTINCT ON (body_json->>$2) event_stream_id, event_id, seq, event_type, actor_id, at, body_json
+	  FROM agentrt.event WHERE event_type = $1 AND at >= $3 AND body_json ? $2
+	  ORDER BY body_json->>$2, event_id DESC`, eventType, key, since))
+}
+
+// OfType is every event of one type written in [from, to), oldest first.
+func OfType(ctx context.Context, tx pgx.Tx, eventType string, from, to time.Time) ([]Row, error) {
+	return scanRows(tx.Query(ctx, `SELECT event_stream_id, event_id, seq, event_type, actor_id, at, body_json
+	  FROM agentrt.event WHERE event_type = $1 AND at >= $2 AND at < $3 ORDER BY event_id`, eventType, from, to))
+}
+
+func scanRows(rows pgx.Rows, err error) ([]Row, error) {
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Row
+	for rows.Next() {
+		var r Row
+		var raw []byte
+		if err := rows.Scan(&r.Stream, &r.ID, &r.Seq, &r.Type, &r.Actor, &r.At, &raw); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(raw, &r.Body); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}

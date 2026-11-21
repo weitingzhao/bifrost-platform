@@ -22,10 +22,10 @@ var homeDerived = regexp.MustCompile(`os\.Getenv\("HOME"\)|os\.UserHomeDir\(\)`)
 // removed from it.
 var homePathFiles = map[string]string{
 	// stores still resolving under $HOME when no env is set — TD-196 backlog
-	"agentdeploy/store.go":       "store; TD-196 moves it to a ConfigMap",
-	"dataclone/data_clone.go":    "store; TD-196 moves it to a ConfigMap",
-	"patrol/store.go":            "store; TD-196 moves it to a ConfigMap",
-	"agentgovernance/outcome.go": "skill-outcome archive; same $HOME fallback the retired runner job store used",
+	"operatorplane/agentdeploy_store.go": "store; TD-196 moves it to a ConfigMap",
+	"dataclone/data_clone.go":            "store; TD-196 moves it to a ConfigMap",
+	"patrol/store.go":                    "store; TD-196 moves it to a ConfigMap",
+	"agentgovernance/outcome.go":         "skill-outcome archive; same $HOME fallback the retired runner job store used",
 	// operator credentials and workstation files, not platform state
 	"cluster/metrics_server.go":        "default kubeconfig path",
 	"cluster/observability_install.go": "default kubeconfig path",
@@ -34,7 +34,7 @@ var homePathFiles = map[string]string{
 	"config/clusters.go":               "default kubeconfig path",
 	"devsession/provider_bdev.go":      "~/.bifrost-dev of the bdev workstation",
 	"ibgateway/config.go":              "default kubeconfig path",
-	"launchd/list.go":                  "reads the operator-plane host LaunchAgents directory; not platform state",
+	"operatorplane/launchd_list.go":    "reads the operator-plane host LaunchAgents directory; not platform state",
 }
 
 func TestNoNewStoreUnderHome(t *testing.T) {

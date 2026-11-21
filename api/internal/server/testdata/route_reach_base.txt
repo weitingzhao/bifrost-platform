@@ -3,7 +3,6 @@
 -	GET /api/v1/agent/bridge
 -	GET /api/v1/agent/deploy
 -	GET /api/v1/agent/governance/trust-matrix
--	GET /api/v1/agent/governance/trust-overrides
 -	GET /api/v1/audit
 -	GET /api/v1/auth/capabilities
 -	GET /api/v1/checklist/signals
@@ -29,8 +28,6 @@
 -	GET /api/v1/data-husbandry
 -	GET /api/v1/delivery/compare
 -	GET /api/v1/delivery/pipelines
--	GET /api/v1/delivery/pipelines/{name}/preflight
--	GET /api/v1/delivery/pipelines/{name}/ref-preflight
 -	GET /api/v1/delivery/pipelines/{name}/runs
 -	GET /api/v1/delivery/revisions
 -	GET /api/v1/delivery/runs/{id}/logs
@@ -41,7 +38,6 @@
 -	GET /api/v1/dev-sessions/{name}/logs
 -	GET /api/v1/environments
 -	GET /api/v1/gitops/apps
--	GET /api/v1/jobs
 -	GET /api/v1/lineage
 -	GET /api/v1/lineage/branches
 -	GET /api/v1/matrix
@@ -61,9 +57,6 @@
 -	GET /api/v1/network/zones
 -	GET /api/v1/patrol/runs
 -	GET /api/v1/patrol/skills
--	GET /api/v1/patrol/skills/{id}
--	GET /api/v1/plugins/analytics/api/*
--	GET /api/v1/plugins/analytics/status
 -	GET /api/v1/plugins/flex-query/api/*
 -	GET /api/v1/plugins/flex-query/status
 -	GET /api/v1/plugins/ib-gateway/self-heal
@@ -71,7 +64,6 @@
 -	GET /api/v1/plugins/market-data/api/*
 -	GET /api/v1/plugins/market-data/status
 -	GET /api/v1/plugins/research/api/*
--	GET /api/v1/plugins/research/status
 -	GET /api/v1/releases
 -	GET /api/v1/releases/running-images
 -	GET /api/v1/research/*
@@ -84,7 +76,6 @@
 -	GET /api/v1/telemetry/targets
 -	GET /api/v1/topology
 -	GET /api/v1/trade-agent/catalog
--	GET /api/v1/trade-agent/domains
 -	GET /api/v1/watchlist/union
 -	GET /health
 -	GET /metrics
@@ -93,7 +84,6 @@ viewer	GET /api/v1/actuation/manifests/plans/{id}
 viewer	GET /api/v1/agent/bridge
 viewer	GET /api/v1/agent/deploy
 viewer	GET /api/v1/agent/governance/trust-matrix
-viewer	GET /api/v1/agent/governance/trust-overrides
 viewer	GET /api/v1/agent/launchd
 viewer	GET /api/v1/agent/threads
 viewer	GET /api/v1/agentrt/artifacts
@@ -136,8 +126,6 @@ viewer	GET /api/v1/data-husbandry
 viewer	GET /api/v1/delivery/compare
 viewer	GET /api/v1/delivery/context
 viewer	GET /api/v1/delivery/pipelines
-viewer	GET /api/v1/delivery/pipelines/{name}/preflight
-viewer	GET /api/v1/delivery/pipelines/{name}/ref-preflight
 viewer	GET /api/v1/delivery/pipelines/{name}/runs
 viewer	GET /api/v1/delivery/release-window
 viewer	GET /api/v1/delivery/revisions
@@ -149,7 +137,6 @@ viewer	GET /api/v1/dev-sessions
 viewer	GET /api/v1/dev-sessions/{name}/logs
 viewer	GET /api/v1/environments
 viewer	GET /api/v1/gitops/apps
-viewer	GET /api/v1/jobs
 viewer	GET /api/v1/lineage
 viewer	GET /api/v1/lineage/branches
 viewer	GET /api/v1/matrix
@@ -169,9 +156,6 @@ viewer	GET /api/v1/network/status
 viewer	GET /api/v1/network/zones
 viewer	GET /api/v1/patrol/runs
 viewer	GET /api/v1/patrol/skills
-viewer	GET /api/v1/patrol/skills/{id}
-viewer	GET /api/v1/plugins/analytics/api/*
-viewer	GET /api/v1/plugins/analytics/status
 viewer	GET /api/v1/plugins/flex-query/api/*
 viewer	GET /api/v1/plugins/flex-query/status
 viewer	GET /api/v1/plugins/ib-gateway/self-heal
@@ -179,7 +163,6 @@ viewer	GET /api/v1/plugins/ib-gateway/status
 viewer	GET /api/v1/plugins/market-data/api/*
 viewer	GET /api/v1/plugins/market-data/status
 viewer	GET /api/v1/plugins/research/api/*
-viewer	GET /api/v1/plugins/research/status
 viewer	GET /api/v1/questions
 viewer	GET /api/v1/questions/{id}
 viewer	GET /api/v1/release-policy
@@ -195,7 +178,6 @@ viewer	GET /api/v1/telemetry/promql
 viewer	GET /api/v1/telemetry/targets
 viewer	GET /api/v1/topology
 viewer	GET /api/v1/trade-agent/catalog
-viewer	GET /api/v1/trade-agent/domains
 viewer	GET /api/v1/watchlist/union
 viewer	GET /health
 viewer	GET /metrics
@@ -207,7 +189,6 @@ reporter	GET /api/v1/actuation/manifests/plans/{id}
 reporter	GET /api/v1/agent/bridge
 reporter	GET /api/v1/agent/deploy
 reporter	GET /api/v1/agent/governance/trust-matrix
-reporter	GET /api/v1/agent/governance/trust-overrides
 reporter	GET /api/v1/agent/launchd
 reporter	GET /api/v1/agent/threads
 reporter	GET /api/v1/agentrt/artifacts
@@ -250,8 +231,6 @@ reporter	GET /api/v1/data-husbandry
 reporter	GET /api/v1/delivery/compare
 reporter	GET /api/v1/delivery/context
 reporter	GET /api/v1/delivery/pipelines
-reporter	GET /api/v1/delivery/pipelines/{name}/preflight
-reporter	GET /api/v1/delivery/pipelines/{name}/ref-preflight
 reporter	GET /api/v1/delivery/pipelines/{name}/runs
 reporter	GET /api/v1/delivery/release-window
 reporter	GET /api/v1/delivery/revisions
@@ -263,7 +242,6 @@ reporter	GET /api/v1/dev-sessions
 reporter	GET /api/v1/dev-sessions/{name}/logs
 reporter	GET /api/v1/environments
 reporter	GET /api/v1/gitops/apps
-reporter	GET /api/v1/jobs
 reporter	GET /api/v1/lineage
 reporter	GET /api/v1/lineage/branches
 reporter	GET /api/v1/matrix
@@ -283,9 +261,6 @@ reporter	GET /api/v1/network/status
 reporter	GET /api/v1/network/zones
 reporter	GET /api/v1/patrol/runs
 reporter	GET /api/v1/patrol/skills
-reporter	GET /api/v1/patrol/skills/{id}
-reporter	GET /api/v1/plugins/analytics/api/*
-reporter	GET /api/v1/plugins/analytics/status
 reporter	GET /api/v1/plugins/flex-query/api/*
 reporter	GET /api/v1/plugins/flex-query/status
 reporter	GET /api/v1/plugins/ib-gateway/self-heal
@@ -293,7 +268,6 @@ reporter	GET /api/v1/plugins/ib-gateway/status
 reporter	GET /api/v1/plugins/market-data/api/*
 reporter	GET /api/v1/plugins/market-data/status
 reporter	GET /api/v1/plugins/research/api/*
-reporter	GET /api/v1/plugins/research/status
 reporter	GET /api/v1/questions
 reporter	GET /api/v1/questions/{id}
 reporter	GET /api/v1/release-policy
@@ -309,7 +283,6 @@ reporter	GET /api/v1/telemetry/promql
 reporter	GET /api/v1/telemetry/targets
 reporter	GET /api/v1/topology
 reporter	GET /api/v1/trade-agent/catalog
-reporter	GET /api/v1/trade-agent/domains
 reporter	GET /api/v1/watchlist/union
 reporter	GET /health
 reporter	GET /metrics
@@ -341,7 +314,6 @@ operator	GET /api/v1/actuation/manifests/plans/{id}
 operator	GET /api/v1/agent/bridge
 operator	GET /api/v1/agent/deploy
 operator	GET /api/v1/agent/governance/trust-matrix
-operator	GET /api/v1/agent/governance/trust-overrides
 operator	GET /api/v1/agent/launchd
 operator	GET /api/v1/agent/threads
 operator	GET /api/v1/agentrt/artifacts
@@ -384,8 +356,6 @@ operator	GET /api/v1/data-husbandry
 operator	GET /api/v1/delivery/compare
 operator	GET /api/v1/delivery/context
 operator	GET /api/v1/delivery/pipelines
-operator	GET /api/v1/delivery/pipelines/{name}/preflight
-operator	GET /api/v1/delivery/pipelines/{name}/ref-preflight
 operator	GET /api/v1/delivery/pipelines/{name}/runs
 operator	GET /api/v1/delivery/release-window
 operator	GET /api/v1/delivery/revisions
@@ -397,7 +367,6 @@ operator	GET /api/v1/dev-sessions
 operator	GET /api/v1/dev-sessions/{name}/logs
 operator	GET /api/v1/environments
 operator	GET /api/v1/gitops/apps
-operator	GET /api/v1/jobs
 operator	GET /api/v1/lineage
 operator	GET /api/v1/lineage/branches
 operator	GET /api/v1/matrix
@@ -417,9 +386,6 @@ operator	GET /api/v1/network/status
 operator	GET /api/v1/network/zones
 operator	GET /api/v1/patrol/runs
 operator	GET /api/v1/patrol/skills
-operator	GET /api/v1/patrol/skills/{id}
-operator	GET /api/v1/plugins/analytics/api/*
-operator	GET /api/v1/plugins/analytics/status
 operator	GET /api/v1/plugins/flex-query/api/*
 operator	GET /api/v1/plugins/flex-query/status
 operator	GET /api/v1/plugins/ib-gateway/self-heal
@@ -427,7 +393,6 @@ operator	GET /api/v1/plugins/ib-gateway/status
 operator	GET /api/v1/plugins/market-data/api/*
 operator	GET /api/v1/plugins/market-data/status
 operator	GET /api/v1/plugins/research/api/*
-operator	GET /api/v1/plugins/research/status
 operator	GET /api/v1/questions
 operator	GET /api/v1/questions/{id}
 operator	GET /api/v1/release-policy
@@ -443,7 +408,6 @@ operator	GET /api/v1/telemetry/promql
 operator	GET /api/v1/telemetry/targets
 operator	GET /api/v1/topology
 operator	GET /api/v1/trade-agent/catalog
-operator	GET /api/v1/trade-agent/domains
 operator	GET /api/v1/watchlist/union
 operator	GET /health
 operator	GET /metrics
@@ -513,7 +477,6 @@ admin	GET /api/v1/actuation/manifests/plans/{id}
 admin	GET /api/v1/agent/bridge
 admin	GET /api/v1/agent/deploy
 admin	GET /api/v1/agent/governance/trust-matrix
-admin	GET /api/v1/agent/governance/trust-overrides
 admin	GET /api/v1/agent/launchd
 admin	GET /api/v1/agent/threads
 admin	GET /api/v1/agentrt/artifacts
@@ -556,8 +519,6 @@ admin	GET /api/v1/data-husbandry
 admin	GET /api/v1/delivery/compare
 admin	GET /api/v1/delivery/context
 admin	GET /api/v1/delivery/pipelines
-admin	GET /api/v1/delivery/pipelines/{name}/preflight
-admin	GET /api/v1/delivery/pipelines/{name}/ref-preflight
 admin	GET /api/v1/delivery/pipelines/{name}/runs
 admin	GET /api/v1/delivery/release-window
 admin	GET /api/v1/delivery/revisions
@@ -569,7 +530,6 @@ admin	GET /api/v1/dev-sessions
 admin	GET /api/v1/dev-sessions/{name}/logs
 admin	GET /api/v1/environments
 admin	GET /api/v1/gitops/apps
-admin	GET /api/v1/jobs
 admin	GET /api/v1/lineage
 admin	GET /api/v1/lineage/branches
 admin	GET /api/v1/matrix
@@ -589,9 +549,6 @@ admin	GET /api/v1/network/status
 admin	GET /api/v1/network/zones
 admin	GET /api/v1/patrol/runs
 admin	GET /api/v1/patrol/skills
-admin	GET /api/v1/patrol/skills/{id}
-admin	GET /api/v1/plugins/analytics/api/*
-admin	GET /api/v1/plugins/analytics/status
 admin	GET /api/v1/plugins/flex-query/api/*
 admin	GET /api/v1/plugins/flex-query/status
 admin	GET /api/v1/plugins/ib-gateway/self-heal
@@ -599,7 +556,6 @@ admin	GET /api/v1/plugins/ib-gateway/status
 admin	GET /api/v1/plugins/market-data/api/*
 admin	GET /api/v1/plugins/market-data/status
 admin	GET /api/v1/plugins/research/api/*
-admin	GET /api/v1/plugins/research/status
 admin	GET /api/v1/questions
 admin	GET /api/v1/questions/{id}
 admin	GET /api/v1/release-policy
@@ -615,7 +571,6 @@ admin	GET /api/v1/telemetry/promql
 admin	GET /api/v1/telemetry/targets
 admin	GET /api/v1/topology
 admin	GET /api/v1/trade-agent/catalog
-admin	GET /api/v1/trade-agent/domains
 admin	GET /api/v1/watchlist/union
 admin	GET /health
 admin	GET /metrics
@@ -700,7 +655,6 @@ trade-satellite	GET /api/v1/actuation/manifests/plans/{id}
 trade-satellite	GET /api/v1/agent/bridge
 trade-satellite	GET /api/v1/agent/deploy
 trade-satellite	GET /api/v1/agent/governance/trust-matrix
-trade-satellite	GET /api/v1/agent/governance/trust-overrides
 trade-satellite	GET /api/v1/agent/launchd
 trade-satellite	GET /api/v1/agent/threads
 trade-satellite	GET /api/v1/agentrt/artifacts
@@ -743,8 +697,6 @@ trade-satellite	GET /api/v1/data-husbandry
 trade-satellite	GET /api/v1/delivery/compare
 trade-satellite	GET /api/v1/delivery/context
 trade-satellite	GET /api/v1/delivery/pipelines
-trade-satellite	GET /api/v1/delivery/pipelines/{name}/preflight
-trade-satellite	GET /api/v1/delivery/pipelines/{name}/ref-preflight
 trade-satellite	GET /api/v1/delivery/pipelines/{name}/runs
 trade-satellite	GET /api/v1/delivery/release-window
 trade-satellite	GET /api/v1/delivery/revisions
@@ -756,7 +708,6 @@ trade-satellite	GET /api/v1/dev-sessions
 trade-satellite	GET /api/v1/dev-sessions/{name}/logs
 trade-satellite	GET /api/v1/environments
 trade-satellite	GET /api/v1/gitops/apps
-trade-satellite	GET /api/v1/jobs
 trade-satellite	GET /api/v1/lineage
 trade-satellite	GET /api/v1/lineage/branches
 trade-satellite	GET /api/v1/matrix
@@ -776,9 +727,6 @@ trade-satellite	GET /api/v1/network/status
 trade-satellite	GET /api/v1/network/zones
 trade-satellite	GET /api/v1/patrol/runs
 trade-satellite	GET /api/v1/patrol/skills
-trade-satellite	GET /api/v1/patrol/skills/{id}
-trade-satellite	GET /api/v1/plugins/analytics/api/*
-trade-satellite	GET /api/v1/plugins/analytics/status
 trade-satellite	GET /api/v1/plugins/flex-query/api/*
 trade-satellite	GET /api/v1/plugins/flex-query/status
 trade-satellite	GET /api/v1/plugins/ib-gateway/self-heal
@@ -786,7 +734,6 @@ trade-satellite	GET /api/v1/plugins/ib-gateway/status
 trade-satellite	GET /api/v1/plugins/market-data/api/*
 trade-satellite	GET /api/v1/plugins/market-data/status
 trade-satellite	GET /api/v1/plugins/research/api/*
-trade-satellite	GET /api/v1/plugins/research/status
 trade-satellite	GET /api/v1/questions
 trade-satellite	GET /api/v1/questions/{id}
 trade-satellite	GET /api/v1/release-policy
@@ -802,7 +749,6 @@ trade-satellite	GET /api/v1/telemetry/promql
 trade-satellite	GET /api/v1/telemetry/targets
 trade-satellite	GET /api/v1/topology
 trade-satellite	GET /api/v1/trade-agent/catalog
-trade-satellite	GET /api/v1/trade-agent/domains
 trade-satellite	GET /api/v1/watchlist/union
 trade-satellite	GET /health
 trade-satellite	GET /metrics
@@ -867,7 +813,6 @@ agentd:h1	GET /api/v1/actuation/manifests/plans/{id}
 agentd:h1	GET /api/v1/agent/bridge
 agentd:h1	GET /api/v1/agent/deploy
 agentd:h1	GET /api/v1/agent/governance/trust-matrix
-agentd:h1	GET /api/v1/agent/governance/trust-overrides
 agentd:h1	GET /api/v1/agentrt/artifacts
 agentd:h1	GET /api/v1/agentrt/artifacts/{id}
 agentd:h1	GET /api/v1/agentrt/controls
@@ -904,8 +849,6 @@ agentd:h1	GET /api/v1/context
 agentd:h1	GET /api/v1/data-husbandry
 agentd:h1	GET /api/v1/delivery/compare
 agentd:h1	GET /api/v1/delivery/pipelines
-agentd:h1	GET /api/v1/delivery/pipelines/{name}/preflight
-agentd:h1	GET /api/v1/delivery/pipelines/{name}/ref-preflight
 agentd:h1	GET /api/v1/delivery/pipelines/{name}/runs
 agentd:h1	GET /api/v1/delivery/revisions
 agentd:h1	GET /api/v1/delivery/runs/{id}/logs
@@ -916,7 +859,6 @@ agentd:h1	GET /api/v1/dev-sessions
 agentd:h1	GET /api/v1/dev-sessions/{name}/logs
 agentd:h1	GET /api/v1/environments
 agentd:h1	GET /api/v1/gitops/apps
-agentd:h1	GET /api/v1/jobs
 agentd:h1	GET /api/v1/lineage
 agentd:h1	GET /api/v1/lineage/branches
 agentd:h1	GET /api/v1/matrix
@@ -936,9 +878,6 @@ agentd:h1	GET /api/v1/network/status
 agentd:h1	GET /api/v1/network/zones
 agentd:h1	GET /api/v1/patrol/runs
 agentd:h1	GET /api/v1/patrol/skills
-agentd:h1	GET /api/v1/patrol/skills/{id}
-agentd:h1	GET /api/v1/plugins/analytics/api/*
-agentd:h1	GET /api/v1/plugins/analytics/status
 agentd:h1	GET /api/v1/plugins/flex-query/api/*
 agentd:h1	GET /api/v1/plugins/flex-query/status
 agentd:h1	GET /api/v1/plugins/ib-gateway/self-heal
@@ -946,7 +885,6 @@ agentd:h1	GET /api/v1/plugins/ib-gateway/status
 agentd:h1	GET /api/v1/plugins/market-data/api/*
 agentd:h1	GET /api/v1/plugins/market-data/status
 agentd:h1	GET /api/v1/plugins/research/api/*
-agentd:h1	GET /api/v1/plugins/research/status
 agentd:h1	GET /api/v1/releases
 agentd:h1	GET /api/v1/releases/running-images
 agentd:h1	GET /api/v1/research/*
@@ -959,7 +897,6 @@ agentd:h1	GET /api/v1/telemetry/promql
 agentd:h1	GET /api/v1/telemetry/targets
 agentd:h1	GET /api/v1/topology
 agentd:h1	GET /api/v1/trade-agent/catalog
-agentd:h1	GET /api/v1/trade-agent/domains
 agentd:h1	GET /api/v1/watchlist/union
 agentd:h1	GET /health
 agentd:h1	GET /metrics
@@ -972,7 +909,6 @@ executor	GET /api/v1/actuation/manifests/plans/{id}
 executor	GET /api/v1/agent/bridge
 executor	GET /api/v1/agent/deploy
 executor	GET /api/v1/agent/governance/trust-matrix
-executor	GET /api/v1/agent/governance/trust-overrides
 executor	GET /api/v1/audit
 executor	GET /api/v1/auth/capabilities
 executor	GET /api/v1/checklist/signals
@@ -998,8 +934,6 @@ executor	GET /api/v1/context
 executor	GET /api/v1/data-husbandry
 executor	GET /api/v1/delivery/compare
 executor	GET /api/v1/delivery/pipelines
-executor	GET /api/v1/delivery/pipelines/{name}/preflight
-executor	GET /api/v1/delivery/pipelines/{name}/ref-preflight
 executor	GET /api/v1/delivery/pipelines/{name}/runs
 executor	GET /api/v1/delivery/revisions
 executor	GET /api/v1/delivery/runs/{id}/logs
@@ -1010,7 +944,6 @@ executor	GET /api/v1/dev-sessions
 executor	GET /api/v1/dev-sessions/{name}/logs
 executor	GET /api/v1/environments
 executor	GET /api/v1/gitops/apps
-executor	GET /api/v1/jobs
 executor	GET /api/v1/lineage
 executor	GET /api/v1/lineage/branches
 executor	GET /api/v1/matrix
@@ -1030,9 +963,6 @@ executor	GET /api/v1/network/status
 executor	GET /api/v1/network/zones
 executor	GET /api/v1/patrol/runs
 executor	GET /api/v1/patrol/skills
-executor	GET /api/v1/patrol/skills/{id}
-executor	GET /api/v1/plugins/analytics/api/*
-executor	GET /api/v1/plugins/analytics/status
 executor	GET /api/v1/plugins/flex-query/api/*
 executor	GET /api/v1/plugins/flex-query/status
 executor	GET /api/v1/plugins/ib-gateway/self-heal
@@ -1040,7 +970,6 @@ executor	GET /api/v1/plugins/ib-gateway/status
 executor	GET /api/v1/plugins/market-data/api/*
 executor	GET /api/v1/plugins/market-data/status
 executor	GET /api/v1/plugins/research/api/*
-executor	GET /api/v1/plugins/research/status
 executor	GET /api/v1/releases
 executor	GET /api/v1/releases/running-images
 executor	GET /api/v1/research/*
@@ -1053,7 +982,6 @@ executor	GET /api/v1/telemetry/promql
 executor	GET /api/v1/telemetry/targets
 executor	GET /api/v1/topology
 executor	GET /api/v1/trade-agent/catalog
-executor	GET /api/v1/trade-agent/domains
 executor	GET /api/v1/watchlist/union
 executor	GET /health
 executor	GET /metrics

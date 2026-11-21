@@ -12,7 +12,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
-	"github.com/weitingzhao/bifrost-platform/api/internal/bus/schemaevents"
 )
 
 // What platform-api reads of the agentrt schema (TD-411: STG ran a platform
@@ -173,14 +172,15 @@ func (w *Watch) Applied() (map[int]string, bool) {
 	return out, true
 }
 
-// AnnounceMigrations says the applied migrations through db (bus/schemaevents).
+// AnnounceMigrations says the applied migrations through db (Announce,
+// schemaevents.go).
 func AnnounceMigrations(db eventlog.DB) func(context.Context, []migrate.Applied) error {
 	return func(ctx context.Context, applied []migrate.Applied) error {
-		ms := make([]schemaevents.Migration, 0, len(applied))
+		ms := make([]Migration, 0, len(applied))
 		for _, a := range applied {
-			ms = append(ms, schemaevents.Migration{ID: a.ID, SHA256: a.SHA256})
+			ms = append(ms, Migration{ID: a.ID, SHA256: a.SHA256})
 		}
-		_, err := schemaevents.Announce(ctx, db, ms)
+		_, err := Announce(ctx, db, ms)
 		return err
 	}
 }

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
@@ -47,7 +46,7 @@ func TestFullCIGaugeAndNotesRoute(t *testing.T) {
 		{Name: green, Revision: strings.Repeat("4", 40), Status: "Succeeded", CreatedAt: now.Add(-50 * time.Hour)},
 		{Name: red, Revision: strings.Repeat("1", 40), Status: "Failed", CreatedAt: now.Add(-26 * time.Hour)},
 	}
-	c := &controller.Controller{DB: pool, Now: func() time.Time { return now }}
+	c := &controller.Controller{DB: pool, Now: func() time.Time { return now }, FullCIZone: planpace.BriefZone}
 	c.FullCI = &fullci.FullCI{
 		Runs:   func(context.Context, time.Time) ([]landingci.FullRun, error) { return runs, nil },
 		Ensure: func(context.Context, string, time.Time) (string, error) { return "", nil },
@@ -91,7 +90,7 @@ func TestFullCIGaugeAndNotesRoute(t *testing.T) {
 		t.Fatal("without the database:", code)
 	}
 	// A controller whose loop has not passed yet, or is off: still none.
-	srv.agentRuntime = &agentRuntime{api: &agentrtapi.API{DB: pool}}
+	srv.agentRuntime = &agentRuntime{api: &agentrtAPI{DB: pool}}
 	if body := scrape(); strings.Contains(body, "bifrost_full_ci_red") {
 		t.Fatalf("the gauge before any pass:\n%s", body)
 	}

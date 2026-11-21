@@ -174,7 +174,6 @@ func TestRouterRegistersExpectedPublicRoutes(t *testing.T) {
 		"/api/v1/environments",
 		"/api/v1/context",
 		"/api/v1/audit",
-		"/api/v1/jobs",
 		"/api/v1/patrol/skills",
 		"/api/v1/patrol/runs",
 	}
@@ -284,7 +283,6 @@ func TestTrustMatrixMissingFileIs200(t *testing.T) {
 	router := srv.Router()
 	for _, path := range []string{
 		"/api/v1/agent/governance/trust-matrix",
-		"/api/v1/agent/governance/trust-overrides",
 	} {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
@@ -464,7 +462,6 @@ func TestReadOnlyRequestsCreateNoDataFiles(t *testing.T) {
 		want int
 	}{
 		{"/api/v1/agent/governance/trust-matrix", http.StatusOK},
-		{"/api/v1/agent/governance/trust-overrides", http.StatusOK},
 		{"/api/v1/questions", http.StatusOK},
 		{"/api/v1/questions?status=all", http.StatusOK},
 		{"/api/v1/questions/q_0123456789abcdef", http.StatusNotFound},

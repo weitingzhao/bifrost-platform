@@ -23,9 +23,9 @@ import (
 // The daily full CI (R5:5.7-9): with incremental Go tests per landing
 // (R5:5.7-1), the whole suite runs on a schedule and a red run is fixed
 // forward. Once a day at At, in the Owner's zone (Host.Zone: the controller
-// binds planpace.BriefZone, the zone of the briefs), a full run of main's
-// head starts, and one of the commit
-// STG runs now when that differs, so a PROD promotion of STG's commit
+// binds the FullCIZone the server gave it, planpace.BriefZone, the zone of
+// the briefs), a full run of main's head starts, and one of the commit STG
+// runs now when that differs, so a PROD promotion of STG's commit
 // usually has a full green by morning. A commit runs at most once a day (the
 // run's name is its commit and the day). A red run is noted once, with the
 // pipeline tasks that failed and the commits landed since the last green

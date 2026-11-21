@@ -3,8 +3,6 @@ package operatorplane
 import (
 	"encoding/json"
 	"net/http"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/launchd"
 )
 
 // HandleLaunchd lists this machine's com.bifrost.* launchd agents.
@@ -18,7 +16,7 @@ func (p *Plane) HandleLaunchd(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	if services == nil {
-		services = []launchd.Service{}
+		services = []LaunchdService{}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

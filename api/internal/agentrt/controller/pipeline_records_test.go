@@ -1,5 +1,3 @@
-//bifrost:owner verification
-
 package controller_test
 
 import (
@@ -14,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
 
@@ -173,31 +170,5 @@ func TestPipelineRecordsLoopRecordsACompletedRunAtItsReconciliation(t *testing.T
 	time.Sleep(100 * time.Millisecond) // further passes record and tell nothing more
 	if pipelineSeenCount(t, pool, "deliver-late") != 1 || told.Load() != 1 {
 		t.Fatalf("recorded or told again: events %d, told %d", pipelineSeenCount(t, pool, "deliver-late"), told.Load())
-	}
-}
-
-// A done step with no standing condition cannot move again, so a pass leaves
-// its row alone: a pass that locked it would wait here for the holder.
-//
-// Origin: 2026-11-19, PROD's agentrt-facts-rules locked 131 such rows each pass.
-func TestRulesLeavesASettledStepUnlocked(t *testing.T) {
-	pool := setup(t)
-	setRule(t, pool, "R2:1-1", `{"owner_signoff":"settled"}`)
-	must(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
-		_, err := planstore.SetStepState(ctx, tx, "controller", "R2", "R2:1-1", "done", "test")
-		return err
-	}))
-	held, err := pool.Begin(ctx)
-	must(t, err)
-	defer func() { _ = held.Rollback(ctx) }()
-	_, err = held.Exec(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = 'R2:1-1' FOR UPDATE`)
-	must(t, err)
-	short, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	c := &controller.Controller{DB: pool}
-	moved, err := c.Rules(short)
-	must(t, err)
-	if moved != 0 {
-		t.Fatalf("moved %d steps", moved)
 	}
 }

@@ -1,0 +1,123 @@
+{
+  "version": 1,
+  "about": "Reviews of the map's unperceived pool for this repository (0.2 map line). claim: the domain that should own it; the entry leaves the pool when that domain adds its row. delete: to be deleted (who uses it was measured first). unknown: cannot be measured. Every review has a reason. repositories: reviews of other repositories' entries (repository, then entry path), for repositories that have no review file of their own.",
+  "reviews": {},
+  "repositories": {
+    "bifrost-finance": {
+      ".": {
+        "verdict": "claim",
+        "reason": "the Finance application (its STG backups and restore drills run in data, MAINTAINERS.yaml): a repository of the tenant application the platform serves (two flywheels: the platform does not know its business); its own table (segment 5) puts its internal domains on the map; until then the whole repository is one entry",
+        "by": "seat:catalog",
+        "on": "2026-11-20",
+        "domain": "tenant"
+      }
+    },
+    "bifrost-platform-plugin": {
+      ".": {
+        "verdict": "claim",
+        "reason": "the IB Gateway plugin: IB protocol is business the platform must not know; a repository of the tenant application the platform serves (two flywheels: the platform does not know its business); its own table (segment 5) puts its internal domains on the map; until then the whole repository is one entry",
+        "by": "seat:catalog",
+        "on": "2026-11-20",
+        "domain": "tenant"
+      }
+    },
+    "bifrost-platform-plugin-flex-query": {
+      ".": {
+        "verdict": "claim",
+        "reason": "the IB Flex Query plugin: a repository of the tenant application the platform serves (two flywheels: the platform does not know its business); its own table (segment 5) puts its internal domains on the map; until then the whole repository is one entry",
+        "by": "seat:catalog",
+        "on": "2026-11-20",
+        "domain": "tenant"
+      }
+    },
+    "bifrost-platform-plugin-market-data": {
+      ".": {
+        "verdict": "claim",
+        "reason": "the market data (Massive) plugin: a repository of the tenant application the platform serves (two flywheels: the platform does not know its business); its own table (segment 5) puts its internal domains on the map; until then the whole repository is one entry",
+        "by": "seat:catalog",
+        "on": "2026-11-20",
+        "domain": "tenant"
+      }
+    },
+    "bifrost-research": {
+      ".": {
+        "verdict": "claim",
+        "reason": "Research (OLAP, Golden Source): a repository of the tenant application the platform serves (two flywheels: the platform does not know its business); its own table (segment 5) puts its internal domains on the map; until then the whole repository is one entry",
+        "by": "seat:catalog",
+        "on": "2026-11-20",
+        "domain": "tenant"
+      }
+    },
+    "bifrost-trade-api": {
+      ".": {
+        "verdict": "claim",
+        "reason": "Trade API (OLTP): a repository of the tenant application the platform serves (two flywheels: the platform does not know its business); its own table (segment 5) puts its internal domains on the map; until then the whole repository is one entry",
+        "by": "seat:catalog",
+        "on": "2026-11-20",
+        "domain": "tenant"
+      }
+    },
+    "bifrost-trade-core": {
+      ".": {
+        "verdict": "claim",
+        "reason": "Trade core library: a repository of the tenant application the platform serves (two flywheels: the platform does not know its business); its own table (segment 5) puts its internal domains on the map; until then the whole repository is one entry",
+        "by": "seat:catalog",
+        "on": "2026-11-20",
+        "domain": "tenant"
+      }
+    },
+    "bifrost-trade-frontend": {
+      ".": {
+        "verdict": "claim",
+        "reason": "Trade UI: a repository of the tenant application the platform serves (two flywheels: the platform does not know its business); its own table (segment 5) puts its internal domains on the map; until then the whole repository is one entry",
+        "by": "seat:catalog",
+        "on": "2026-11-20",
+        "domain": "tenant"
+      }
+    },
+    "bifrost-trade-worker": {
+      ".": {
+        "verdict": "claim",
+        "reason": "Trade worker: a repository of the tenant application the platform serves (two flywheels: the platform does not know its business); its own table (segment 5) puts its internal domains on the map; until then the whole repository is one entry",
+        "by": "seat:catalog",
+        "on": "2026-11-20",
+        "domain": "tenant"
+      }
+    },
+    "bifrost-ui": {
+      ".": {
+        "verdict": "claim",
+        "reason": "@bifrost/ui, the shared monitoring shell; the platform console builds against it (console/package.json file:../../bifrost-ui) as the Trade UI does, so it is a shared base, not tenant business; its own table (segment 5) puts its internal domains on the map; until then the whole repository is one entry",
+        "by": "seat:catalog",
+        "on": "2026-11-20",
+        "domain": "foundation"
+      }
+    },
+    "bifrost-trade-infra": {
+      ".": {
+        "verdict": "unknown",
+        "reason": "measured mixed at repository grain: governance (agent-config: coordination and owner), platform overlays (k8s/overlays/platform-*: delivery and compute) and Trade manifests (tenant) in one repository; one domain for the whole repository would be wrong. Known, not one owner: its own table (segment 5) splits it",
+        "by": "seat:catalog",
+        "on": "2026-11-20"
+      }
+    },
+    "primary-probe": {
+      ".": {
+        "verdict": "claim",
+        "reason": "the Gitea probe repository on which branch protection and push rights are checked (infra scripts/agent-host/probe-gitea-protection.sh, scripts/gitea); Gitea access and landing are delivery's",
+        "by": "seat:catalog",
+        "on": "2026-11-20",
+        "domain": "delivery"
+      }
+    },
+    "repo-template": {
+      ".": {
+        "verdict": "claim",
+        "reason": "the Gitea template new repositories are made from (main branch rule and CI hooks; infra docs/RELEASE.md, new repository); the repository lifecycle is delivery's",
+        "by": "seat:catalog",
+        "on": "2026-11-20",
+        "domain": "delivery"
+      }
+    }
+  }
+}

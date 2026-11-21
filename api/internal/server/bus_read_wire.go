@@ -11,7 +11,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/drill"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/effect"
@@ -28,12 +27,13 @@ import (
 // them what they stand on.
 
 func (s *Server) busRegressions() regressions.API {
-	return regressions.API{DB: s.bus.db, Who: agentrtapi.WriterOf}
+	return regressions.API{DB: s.bus.db, Who: writerOf}
 }
 
 func (s *Server) busObserve() observe.Handler {
 	return observe.Handler{
-		Pool: s.bus.pool.Load,
+		Pool:    s.bus.pool.Load,
+		Letters: coord.ReadLetters,
 		Ledger: func(pool *pgxpool.Pool) relay.Ledger {
 			return &relay.PGLedger{DB: func() relay.TxBeginner { return pool }, EventsAfter: busEventsAfter}
 		},

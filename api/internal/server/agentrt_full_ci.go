@@ -10,6 +10,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 )
 
@@ -28,6 +29,8 @@ func (s *Server) wireFullCI(c *controller.Controller) {
 	ci := s.landingCIClient()
 	ci.FullScopeParam = param
 	git := func() (*landinggit.Git, error) { return landinggit.ReaderFromEnv("bifrost-platform") }
+	// The full CI's day is the Owner's, in the zone of the briefs.
+	c.FullCIZone = planpace.BriefZone
 	c.FullCI = &fullci.FullCI{At: at, Runs: func(ctx context.Context, since time.Time) ([]landingci.FullRun, error) {
 		// A name for the platform's count of its own Kubernetes requests: these
 		// loops were the 1,077 unnamed LISTs of ten minutes on PROD, 2026-11-17.

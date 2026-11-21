@@ -209,7 +209,7 @@ func adoptPlanView(ctx context.Context, tx pgx.Tx, who, root string, decision in
 	if err != nil {
 		return err
 	}
-	_, err = eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_view_adopted", Actor: who, Cause: decision, Body: map[string]any{"text": "Plan view adopted", "plan_view": body}})
+	_, err = appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_view_adopted", Actor: who, Cause: decision, Body: map[string]any{"text": "Plan view adopted", "plan_view": body}})
 	return err
 }
 

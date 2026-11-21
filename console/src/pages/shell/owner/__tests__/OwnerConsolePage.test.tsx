@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TelemetryAlertEntry } from '@/api/clusterTypes'
 import { splitAlerts } from '../ownerModel'
+import { doneForYou } from '../doneForYou'
 import type { ArchRead } from '../../agents/useRuntimePlan'
 import type { OwnerConsoleData } from '../useOwnerConsole'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
@@ -66,6 +67,14 @@ function fake(): OwnerConsoleData {
     inFlight: [], records: [{ run: 'r1', pipeline: 'bifrost-deliver-platform-prod', lane: 'platform', env: 'prod', deploys: true, started_at: '', completed_at: '2026-10-16T05:29:00Z', repos: {}, recorded_at: '' }],
     runsLoading: false,
     tiles: [{ name: 'Test copies', tone: 'warn', state: 'Stale', figure: '13 days', detail: 'dev and stg copies of PROD, oldest', href: '#infrastructure' }],
+    // Done for you (law 46): two rows as PROD's action record had them on 2026-11-19 (ids 818, 823).
+    done: doneForYou([
+      { id: 823, at: new Date(NOW - 30 * 60_000).toISOString(), seat: 'local_7de640c4-4b19-4a71-a0ac-ced2ce5fc7ff', action: 'apply_manifest', target: 'k8s/cicd/tekton/task-ci-cache-trim.yaml · 1 objects',
+        reason: '(the caller gave no reason)', regret: '', regret_state: 'undeclared', law: 'signed release policy', outcome: 'done', check_result: '', not_verified: '', params_hash: 'a' },
+      { id: 818, at: new Date(NOW - 50 * 60_000).toISOString(), seat: 'ci-w1.673a36', action: 'release_window_hold', target: 'release_window_hold',
+        reason: 'hold', regret: 'release_window_release', regret_state: 'declared', law: 'action catalog: tier B', outcome: 'done', check_result: 'window held by ci-w1', not_verified: '', params_hash: 'b' },
+    ], NOW),
+    doneError: null,
     updatedAt: NOW,
   } as unknown as OwnerConsoleData
 }
@@ -132,7 +141,7 @@ describe('Owner Console entries', () => {
   it('keeps sign-offs separate from Yours and full waiting information available in Detail', async () => {
     stubRuntimeReads()
     show('#you')
-    const yours = screen.getByRole('region', { name: 'Yours' })
+    const yours = screen.getByRole('region', { name: 'To approve' })
     expect(yours.querySelector('[data-signoff-link]')).toBeNull()
     const signoffs = screen.getByRole('region', { name: 'Plan sign-offs' })
     expect(signoffs).toHaveTextContent('separate from Needs you')
@@ -180,7 +189,9 @@ describe('Owner Console entries', () => {
     show('#system')
     expect(headings()).toEqual(['System', 'Storage and copies'])
     expect(screen.queryByRole('region', { name: 'Release lane' })).toBeNull()
-    expect(screen.getByRole('region', { name: 'Health' })).toHaveTextContent('critical · yours')
+    // 2026-11-19: the IB slot without TWS is a notice, so its critical alert is no longer counted as his.
+    expect(screen.getByRole('region', { name: 'Health' })).toHaveTextContent('critical')
+    expect(screen.getByRole('region', { name: 'Health' })).not.toHaveTextContent('critical · yours')
     expect(screen.queryByRole('region', { name: 'Data' })).toBeNull()
   })
 
@@ -194,7 +205,7 @@ describe('Owner Console entries', () => {
     expect(waiting).toHaveAttribute('id', 'waiting')
     expect(within(waiting).getByTestId('needs-you-page')).toBeInTheDocument()
     expect(within(waiting).getByRole('region', { name: 'Sign off' })).toBeInTheDocument()
-    expect(within(screen.getByRole('region', { name: 'Yours' })).getByRole('link', { name: /All waiting/ })).toHaveAttribute('href', '#command?section=waiting')
+    expect(within(screen.getByRole('region', { name: 'To approve' })).getByRole('link', { name: /All waiting/ })).toHaveAttribute('href', '#command?section=waiting')
     await waitFor(() => expect(scroll).toHaveBeenCalled())
     expect(scroll.mock.contexts.some(el => el === waiting)).toBe(true)
   })
@@ -207,26 +218,46 @@ describe('Owner Console entries', () => {
     expect(screen.queryByTestId('merged-progress')).toBeNull()
   })
 
-  it('lists what is his, then what is worth a look with whose it is', () => {
+  it('lists what he approves, what needs his hands, then what is for his information with whose it is', () => {
     show('#you')
-    const yours = screen.getByRole('region', { name: 'Yours' })
+    const yours = screen.getByRole('region', { name: 'To approve' })
     expect(within(yours).getAllByRole('listitem').map(li => li.querySelector('.font-semibold')?.textContent)).toEqual([
-      'Log in to TWS for the IB secondary slot', 'Look at the goal cards'])
+      'Look at the goal cards'])
     expect(yours).not.toHaveTextContent('✎')
     expect(yours).toHaveTextContent('No approvals, questions or agent cards waiting')
-    const worth = screen.getByRole('region', { name: 'Worth a look' })
+    // 2026-11-19, the Owner: what needs his hands outside the system is its own kind; the secondary slot is only a notice.
+    expect(screen.getByRole('region', { name: 'Needs your hands' })).toHaveTextContent('Nothing needs your hands right now.')
+    const worth = screen.getByRole('region', { name: 'For your information' })
     expect(within(worth).getAllByText('No goal yet')).toHaveLength(4)
     expect(worth).toHaveTextContent('6 DaemonSet alerts that fit gpu-server being on standby')
     expect(worth).toHaveTextContent('Likely the planned standby; not proven')
+    expect(worth).toHaveTextContent('IB secondary slot has no TWS session')
+    expect(worth).toHaveTextContent('A notice: nothing waits on you')
+    fireEvent.click(within(worth).getByRole('button', { name: /Show \d+ more/ }))
     expect(worth).toHaveTextContent('1 Claude thread went quiet mid-turn')
     expect(worth).toHaveTextContent('The coordinator checks them')
   })
 
-  it('shows six rows worth a look, and the rest on request', () => {
+  // 2026-11-19, law 46: what was done for him without a card is its own kind, read from the action record,
+  // each row with how to undo it and what was checked after; not counted as his.
+  it('lists what was done for him, with its undo and its check', () => {
+    show('#you')
+    const done = screen.getByRole('region', { name: 'Done for you' })
+    expect(done).toHaveTextContent('Done for you · 2')
+    expect(done).toHaveTextContent('2 actions in the last 24 h · undo written for 1 · checked after for 1')
+    const rows = within(done).getAllByRole('listitem')
+    expect(rows[0]).toHaveTextContent('apply_manifest · k8s/cicd/tekton/task-ci-cache-trim.yaml')
+    expect(rows[0]).toHaveTextContent('No undo written')
+    expect(rows[0]).toHaveTextContent('Not checked after')
+    expect(rows[1]).toHaveTextContent('Undo written, not checked: release_window_release')
+    expect(rows[1]).toHaveTextContent('Checked after: window held by ci-w1')
+  })
+
+  it('shows six rows for his information, and the rest on request', () => {
     standbyKnown.value = false
     show('#you')
-    const worth = screen.getByRole('region', { name: 'Worth a look' })
-    const total = Number(/Worth a look · (\d+)/.exec(worth.textContent ?? '')?.[1])
+    const worth = screen.getByRole('region', { name: 'For your information' })
+    const total = Number(/For your information · (\d+)/.exec(worth.textContent ?? '')?.[1])
     expect(total).toBeGreaterThan(6)
     expect(within(worth).getAllByRole('listitem')).toHaveLength(6)
     fireEvent.click(within(worth).getByRole('button', { name: `Show ${total - 6} more` }))

@@ -73,11 +73,11 @@ describe('Yours from the sources', () => {
     expect(items.map(i => i.title)).not.toContain('Same as the open question')
     client.clear()
   })
-  it.each(['ok', 'down'] as const)('renders the five as links in Yours and counts them, nothing from the board (board %s)', async board => {
+  it.each(['ok', 'down'] as const)('renders the five as links in To approve and counts them, nothing from the board (board %s)', async board => {
     mockSources(board)
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(<QueryClientProvider client={client}><ForYou /></QueryClientProvider>)
-    const yours = await screen.findByRole('region', { name: 'Yours' })
+    const yours = await screen.findByRole('region', { name: 'To approve' })
     await waitFor(() => expect(within(yours).getAllByRole('listitem')).toHaveLength(5))
     const links = within(yours).getAllByRole('listitem').flatMap(li => within(li).getAllByRole('link')).map(a => a.getAttribute('href')).sort()
     expect(links).toEqual([approvalHref('appr_aaaaaaaaaaaaaaaa'), approvalHref('appr_bbbbbbbbbbbbbbbb'), approvalHref('appr_cccccccccccccccc'),

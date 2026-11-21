@@ -25,6 +25,8 @@ export type ProblemCase = {
 export type ProblemCounts = {
   raised: number; seen: number; judged: number; real: number; false: number; closed: number; open: number
   ack_median_minutes: number | null; verdict_median_minutes: number | null
+  /** Letter to the verdict that closed it, over the closed cases; absent from an older API. */
+  closed_median_minutes?: number | null
 }
 export type ProblemInvalid = { message_id: string; sender: string; at: string; summary?: string; problem: string }
 export type BusProblems = { since: string; counts: ProblemCounts; cases: ProblemCase[]; invalid: ProblemInvalid[] }
@@ -37,7 +39,7 @@ export async function fetchBusProblems(): Promise<BusProblems> {
 
 /** Minutes as the reader counts them: under an hour in minutes, then hours, then days. */
 export function minutesText(m: number | null): string {
-  if (m == null) return 'n/a'
+  if (m == null) return 'unknown'
   if (m < 60) return `${Math.round(m)}m`
   if (m < 60 * 48) return `${Math.round(m / 60)}h`
   return `${Math.round(m / 1440)}d`
@@ -47,6 +49,7 @@ export function minutesText(m: number | null): string {
 export function countsLine(c: ProblemCounts): string {
   return `raised ${c.raised} · seen ${c.seen} · judged ${c.judged} · real ${c.real} · false ${c.false} · closed ${c.closed} · open ${c.open}`
     + ` · median to seen ${minutesText(c.ack_median_minutes)} · to verdict ${minutesText(c.verdict_median_minutes)}`
+    + ` · to closed ${minutesText(c.closed_median_minutes ?? null)} (${c.closed} case${c.closed === 1 ? '' : 's'})`
 }
 
 /** The cases not closed, oldest letter first: the ones that wait longest are on top. */

@@ -145,7 +145,8 @@ func TestHookAppendsOncePerCommit(t *testing.T) {
 }
 
 // 2026-11-16: bus step 1 (RULES.md §7): the database's closed vocabulary
-// takes the bus type (migration 0025): the dotted name is in the constraint.
+// takes the bus type (migration 0025). Since 0041 (2026-11-20) it takes bus
+// topics by their shape, so each is written to a copy of the constraint.
 func TestTheDatabaseTakesTheBusType(t *testing.T) {
 	db := agentrttest.Migrated(t)
 	conn := db.Connect(t, db.Admin)
@@ -153,9 +154,12 @@ func TestTheDatabaseTakesTheBusType(t *testing.T) {
 	if err := conn.QueryRow(ctx, `SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'event_type_closed'`).Scan(&def); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := conn.Exec(ctx, `CREATE TEMP TABLE vocab (event_type text, CONSTRAINT event_type_closed `+def+`)`); err != nil {
+		t.Fatal(err)
+	}
 	for _, typ := range busTypes() {
-		if !strings.Contains(def, "'"+typ+"'") {
-			t.Errorf("event_type_closed does not take %s", typ)
+		if _, err := conn.Exec(ctx, `INSERT INTO vocab VALUES ($1)`, typ); err != nil {
+			t.Errorf("event_type_closed does not take %s: %v", typ, err)
 		}
 	}
 }

@@ -44,8 +44,9 @@ import { registerMessageTools } from './registerMessages.js'
 import { getReleaseWindow, holdReleaseWindow, releaseReleaseWindow } from './windowTools.js'
 import { presenceSkip, registerPresence } from './presence.js'
 import { registerPlanImportTools } from './registerPlanImport.js'
+import { CATALOG_INDEX_PATH, GET_CATALOG_INDEX_DESCRIPTION, GET_OWNER_DESCRIPTION, GET_UNPERCEIVED_DESCRIPTION, ownerPath, unperceivedPath, CATALOG_STATUS_PATH, GET_DOMAIN_STATUS_DESCRIPTION, domainPath, GET_DOMAIN_DESCRIPTION } from './catalogTools.js'
 import { FULL_CI_PATH, fullCICheckPath, unitConfigPath, unitRunsPath, unitScopePath } from './unitsTools.js'
-import { BUS_WAIT_MAX_SECONDS, LIST_REGRESSIONS_DESCRIPTION, MARK_REGRESSION_FIXED_DESCRIPTION, REPORT_REGRESSION_DESCRIPTION, WAIT_FOR_EVENT_DESCRIPTION, busEventsPath, regressionsPath } from './busTools.js'
+import { BUS_WAIT_MAX_SECONDS, GET_BUS_STATES_DESCRIPTION, LIST_REGRESSIONS_DESCRIPTION, MARK_REGRESSION_FIXED_DESCRIPTION, REPORT_REGRESSION_DESCRIPTION, WAIT_FOR_EVENT_DESCRIPTION, busEventsPath, busStatesPath, regressionsPath } from './busTools.js'
 
 const SERVER_NAME = 'mcp-server-platform'
 const SERVER_VERSION = '0.1.0'
@@ -562,6 +563,46 @@ reg(
 )
 
 reg(
+  'get_unperceived',
+  GET_UNPERCEIVED_DESCRIPTION,
+  { repo: REPO },
+  async ({ repo }) =>
+    jsonResult(await platformGet(unperceivedPath(repo))),
+)
+
+reg(
+  'get_owner',
+  GET_OWNER_DESCRIPTION,
+  { repo: REPO, path: z.string().min(1).max(1024).describe('A path from the repository root, e.g. api/internal/catalog/scan.go') },
+  async ({ repo, path }) =>
+    jsonResult(await platformGet(ownerPath(repo, path))),
+)
+
+reg(
+  'get_catalog_index',
+  GET_CATALOG_INDEX_DESCRIPTION,
+  {},
+  async () =>
+    jsonResult(await platformGet(CATALOG_INDEX_PATH)),
+)
+
+reg(
+  'get_domain_status',
+  GET_DOMAIN_STATUS_DESCRIPTION,
+  {},
+  async () =>
+    jsonResult(await platformGet(CATALOG_STATUS_PATH)),
+)
+
+reg(
+  'get_domain',
+  GET_DOMAIN_DESCRIPTION,
+  { id: z.string().min(1).max(64).describe('A domain id, e.g. plan (get_domain_status lists them)') },
+  async ({ id }) =>
+    jsonResult(await platformGet(domainPath(id))),
+)
+
+reg(
   'list_records',
   'The action record, newest first (read-only): every direct call of a catalogued action is recorded when it ends, for the Owner\'s review by seat, law and day. Returns {records: [{id, at, seat, action, target, reason, regret, regret_state, law, outcome, check_result, not_verified, params_hash}], returned, more}. seat is the calling session or principal; law names what the action rested on ("action catalog: tier B", "signed release policy"); outcome is done, refused (403) or failed. regret_state: ready (machine-verified), declared (the caller wrote what undoes it, unverified), undeclared (the caller wrote nothing), not_ready. reason "(the caller gave no reason)" means the call carried no reason. more true: the filter matched more than limit (default 100, max 1000), so the page is not the whole. since and until are RFC 3339 times. An answer of 503 means the record is not available on this platform; an empty list means no matching call was recorded since the record began.',
   {
@@ -583,16 +624,44 @@ reg(
 )
 
 reg(
+  'get_evaluation_readings',
+  'The evaluation readout (law 47, read-only): the numbers an evaluation uses, computed by the system from kept records over a closed window (the last `days` whole days in America/Chicago that have ended; default 7, max 31), the same value whoever reads it and whenever. Returns {window, definition_version, readings: [{name, labels, value, unit, status, samples, min_samples, window, definition: {version, source, rule, code}, provenance, note}]}. status ok has a value; too_few means fewer samples than min_samples (no percentile is given) or a record that covers too little of the window; unmeasured means no records (value null; say "unmeasured", never compute it yourself). Names include ci_run_p50_seconds, ci_queue_p50_seconds, ci_success_ratio (per pipeline), ci_failures (failed CI runs per pipeline and failed task, e.g. test-api or code-health; unrecorded when the evidence ledger names none), delivery_success_ratio, owner_actions, owner_wait_p50_seconds, prod_deploys, main_to_prod_p50_seconds, metric_coverage_ratio (per scope), bus_events (per env and event type), bus_outage_minutes, alert_activations (per alertname and severity), agent_actions (per law and outcome), action_rollback_declared_ratio (per law), post_release_fixes, plan_nodes_done. name keeps only that reading.',
+  {
+    days: z.number().int().min(1).max(31).optional().describe('Default 7'),
+    name: z.string().regex(/^[a-z0-9_]{1,64}$/).optional(),
+  },
+  async ({ days, name }) => {
+    const q = new URLSearchParams()
+    if (days !== undefined) q.set('days', String(days))
+    if (name) q.set('name', name)
+    const qs = q.toString()
+    return jsonResult(await platformGet('/api/v1/readings/evaluation' + (qs ? '?' + qs : '')))
+  },
+)
+
+reg(
   'wait_for_event',
   WAIT_FOR_EVENT_DESCRIPTION,
   {
     types: z.string().min(1).max(400).describe('Comma list of registered event types, e.g. git.main.advanced'),
     match: z.string().max(200).optional().describe("A substring of the event's subject, e.g. bifrost-platform@"),
     after: z.string().regex(/^[0-9]+\.[0-9]+$/).optional().describe('The next cursor of the previous call; left out: from now'),
+    since: z.string().refine(isRFC3339, 'an RFC 3339 date and time, as 2026-11-20T00:00:00Z').optional().describe('Read back from this RFC 3339 time (at most 24 hours); not with after'),
+    limit: z.number().int().min(1).max(100).optional().describe('At most this many events per call (1 to 100)'),
     wait_seconds: z.number().int().min(0).max(BUS_WAIT_MAX_SECONDS).optional().describe('Default 25'),
     client: z.string().regex(/^[\x21-\x7e]{1,40}$/).optional().describe('Who waits, for the receipts; default mcp'),
   },
   async (args) => jsonResult(await platformGet(busEventsPath(args))),
+)
+
+reg(
+  'get_bus_states',
+  GET_BUS_STATES_DESCRIPTION,
+  {
+    type: z.string().regex(/^[a-z]+\.[a-z]+\.[a-z]+$/).describe('A registered state type, e.g. cluster.workload.changed'),
+    tenant: z.string().regex(/^[a-z][a-z0-9-]{0,39}$/).optional().describe('Default rocket'),
+  },
+  async (args) => jsonResult(await platformGet(busStatesPath(args))),
 )
 
 const sha40 = z.string().regex(/^[0-9a-f]{40}$/)

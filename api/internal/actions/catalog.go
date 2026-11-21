@@ -21,7 +21,22 @@ type Action struct {
 	Passthrough bool
 	// Runner is who executes after approval (RunnerPlatform when empty).
 	Runner string
+	// Effect is EffectNone for an action that changes nothing (a trial such as
+	// plan_manifest); EffectChanges when empty.
+	Effect string
 }
+
+// NotRecordedHeader is set by a handler on a call that only keeps going what
+// was already recorded (a release window renewal, every minute while a
+// release runs); the action record leaves that call out.
+const NotRecordedHeader = "Bifrost-Not-Recorded"
+
+// Effect values on GET /api/v1/actions. A page that lists what was done for
+// the Owner leaves out effect "none"; the audit still records every call.
+const (
+	EffectNone    = "none"
+	EffectChanges = "changes"
+)
 
 // TierOf returns the level for these params.
 func (a Action) TierOf(ctx context.Context, params map[string]any) Tier {
@@ -40,6 +55,7 @@ type View struct {
 	Description string  `json:"description"`
 	Params      []Param `json:"params"`
 	Runner      string  `json:"runner"`
+	Effect      string  `json:"effect"`
 }
 
 func (a Action) View() View {
@@ -51,7 +67,11 @@ func (a Action) View() View {
 	if runner == "" {
 		runner = RunnerPlatform
 	}
-	return View{ID: a.ID, Tier: a.Tier, Description: a.Description, Params: params, Runner: runner}
+	effect := a.Effect
+	if effect == "" {
+		effect = EffectChanges
+	}
+	return View{ID: a.ID, Tier: a.Tier, Description: a.Description, Params: params, Runner: runner, Effect: effect}
 }
 
 // Catalog is the action directory in stable id order.
@@ -453,7 +473,7 @@ var catalog = []Action{
 		Params:      []Param{},
 	},
 	{
-		ID: "plan_manifest", Tier: TierB,
+		ID: "plan_manifest", Tier: TierB, Effect: EffectNone,
 		Description: "Render a git path and return a plan id. Tier B. The plan runs as the fixed apply pipeline in plan mode.",
 		Method:      "POST", Pattern: "/api/v1/actuation/manifests/plan",
 		Params: []Param{

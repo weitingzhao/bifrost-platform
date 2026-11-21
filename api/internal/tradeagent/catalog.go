@@ -45,11 +45,6 @@ func Domains() []DomainView {
 	return out
 }
 
-// RetiredPrefixes lists the gateway prefixes TD-55 B2 removed (probe.RetiredTradeGatewayPrefixes).
-func RetiredPrefixes() []string {
-	return probe.RetiredTradeGatewayPrefixes()
-}
-
 func tool(name, desc, domain, route string) ToolView {
 	return ToolView{
 		Name:        name,
@@ -66,7 +61,7 @@ func Catalog() []ToolView {
 	tools := []ToolView{
 		{Name: "trade_mcp_health", Description: "MCP server health + read-only mode", Level: "read", Implemented: true},
 		{Name: "trade_mcp_capabilities", Description: "List read-only Trade API tools", Level: "read", Method: "GET", Route: "/api/v1/trade-agent/catalog", Implemented: true},
-		{Name: "list_trade_domains", Description: "Trade API routes: one gateway prefix per process (TD-55); the alias prefixes went in B2", Level: "read", Method: "GET", Route: "/api/v1/trade-agent/domains", Implemented: true},
+		{Name: "list_trade_domains", Description: "Trade API routes: one gateway prefix per process (TD-55); the alias prefixes went in B2", Level: "read", Implemented: true},
 	}
 	for _, d := range Domains() {
 		tools = append(tools, tool("get_"+d.ID+"_health", "Probe "+d.ID+" health ("+d.Process+")", d.ID, d.Route))

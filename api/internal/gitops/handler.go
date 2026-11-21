@@ -16,9 +16,9 @@ type Handler struct {
 	audit *actuation.AuditLog
 }
 
-func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {
+func NewHandler(cfg *config.Config, audit *actuation.AuditLog, kube Kube) *Handler {
 	entry := cfg.DefaultCluster()
-	return &Handler{svc: NewService(entry), audit: audit}
+	return &Handler{svc: NewService(entry, kube), audit: audit}
 }
 
 // Service returns the underlying gitops service for reuse by other packages.

@@ -38,6 +38,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/ownerq"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/states"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitexec"
@@ -93,7 +94,11 @@ func (s *Server) announceCards(ts []approvals.Transition) {
 	}
 	list := make([]buscards.Card, 0, len(ts))
 	for _, t := range ts {
-		list = append(list, buscards.Card{Type: buscards.TypeOf(t.AuditAction), ID: t.ID, Action: t.Action, Status: t.Status, Number: t.Number})
+		c := buscards.Card{Type: buscards.TypeOf(t.AuditAction), ID: t.ID, Action: t.Action, Status: t.Status, Number: t.Number}
+		if c.Type == buscards.TypeNotified {
+			c.Kind, c.Channel = buscards.ParseNotice(t.Detail)
+		}
+		list = append(list, c)
 	}
 	buscards.AnnounceInBackground(db, list)
 }
@@ -112,7 +117,26 @@ func (s *Server) announceAlerts(ctx context.Context, facts []opsagent.AlertFact)
 			list = append(list, a)
 		}
 	}
-	return busalerts.Announce(ctx, db, list)
+	fired, err := busalerts.Announce(ctx, db, list)
+	if err != nil || len(fired) == 0 {
+		return err
+	}
+	// Rows marked by: webhook are delivered here, without the bus (TD-588):
+	// an alarm about the bus must reach its seat while the bus is down.
+	subs, serr := registry.LoadSubscriptions()
+	if serr != nil {
+		slog.Warn("bus: direct alert delivery: the subscription table does not load", "error", serr)
+		return nil
+	}
+	d := subscribe.Dispatcher{DB: db, Send: func(ctx context.Context, key, to, body string, cause int64) error {
+		return coord.PostConclusionCaused(ctx, db, key, to, body, cause)
+	}}
+	for _, f := range fired {
+		ev := subscribe.Event{ID: relay.EventID(f.EventID), Type: busalerts.Type, Subject: busalerts.Subject(f.Name, f.Namespace),
+			Ref: busalerts.Ref, Change: f.Status}
+		d.DeliverDirect(ctx, subs, relay.Tenant, ev)
+	}
+	return nil
 }
 
 func busLogf(format string, args ...any) { slog.Info(fmt.Sprintf(format, args...)) }
@@ -159,6 +183,8 @@ func (s *Server) mountBus(r chi.Router) {
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/clients", route((*gate.Gate).HandleClients))
 	// The problem loop, computed when asked (agentrt/coord, OWNER_LAW #36).
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/problems", s.handleBusProblems)
+	// Each subject's latest state for a registered state type (2026-11-20).
+	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/states", states.Deps{DB: s.bus.db}.Handle)
 	// What the bus's work does, computed when asked (bus/effect).
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/effect", s.handleBusEffect)
 	// The known regressions on main (bus/regressions): a seat records one or its fix as itself.
@@ -213,7 +239,9 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 				if js, jerr := jetstream.New(nc); jerr == nil {
 					receipts := &relay.Receipts{JS: js, Tenant: relay.Tenant, Env: env}
 					g.Receipts = receipts
-					g.Journey = &gate.JSJourney{JS: js, Tenant: relay.Tenant, Env: env}
+					journey := &gate.JSJourney{JS: js, Tenant: relay.Tenant, Env: env}
+					g.Journey = journey
+					safego.Go("bus-receipts-warm", func() { journey.Warm(ctx) })
 					g.ReceiptFeed = &gate.ReceiptFeed{}
 					safego.Go("bus-gate-follow-receipts", func() { gate.FollowReceipts(ctx, js, relay.Tenant, env, g.ReceiptFeed, busLogf) })
 					s.followSeatMail(ctx, nc, receipts, env)
@@ -221,6 +249,9 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 				context.AfterFunc(ctx, nc.Close)
 			}
 		}
+		// One follower per process wakes every waiter; waiters no longer
+		// re-read on their own timers (bus step 4, 2026-11-19).
+		safego.Go("bus-gate-follower", func() { g.Follow(ctx) })
 		s.bus.gate.Store(g)
 		slog.Info("bus gate: on", "env", env, "nats", natsOn)
 		if natsOn && !role.RunsWorkers() {
@@ -231,7 +262,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 	if !role.RunsWorkers() {
 		return
 	}
-	busalerts.StartRelayWatch(ctx, s.bus.db, s.webhookFailing)
+	busalerts.StartRelayWatch(ctx, s.bus.db, s.promPresent)
 	s.startBusDrill(ctx)
 	if (hookOn || natsOn) && s.delivery != nil {
 		rec := &bushook.Reconciler{DB: s.bus.db, Repos: bushook.ReposFromEnv(), Head: s.agentRuntimeMains(), Logf: busLogf}
@@ -258,6 +289,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 		if !relay.EnsureEventStreamUntil(ctx, js, relay.Tenant, env) {
 			return
 		}
+		safego.Go("bus-stream-sizes", func() { relay.WatchStreamSizes(ctx, js, relay.Tenant, env) })
 		if headrelease.On() || headrelease.ProdShadowOn() {
 			s.bus.head.Consume(ctx, js, env)
 		}
@@ -287,7 +319,7 @@ func (s *Server) startGateCluster(ctx context.Context, env string) {
 		ns = s.delivery.PipelinesNamespace()
 	}
 	g := &gatecluster.Gate{Ledger: &gatecluster.PGLedger{DB: s.bus.db}, Namespace: ns, Env: env, Logf: busLogf, OnFinished: s.bus.finished.Add,
-		UnitTaskLabel: unitexec.LabelPlan, Dynamic: s.clusterDynamic}
+		UnitTaskLabel: unitexec.LabelPlan, Dynamic: s.clusterDynamic, Watches: watchSpecs("rocket")}
 	if s.delivery != nil {
 		s.delivery.SetRunCache(g, s.earnedReadRoutes(ctx))
 	}
@@ -330,7 +362,7 @@ func (s *Server) followSeatMail(ctx context.Context, nc *nats.Conn, receipts *re
 	slog.Info("bus: inbox waiters woken by seat.mail.arrived", "env", env)
 }
 
-// mailWake is the inbox read's wake (agentrtapi.API.MailWake): none until this
+// mailWake is the inbox read's wake (agentrtAPI.MailWake): none until this
 // process follows seat.mail.arrived.
 func (s *Server) mailWake(addr string) (<-chan struct{}, func()) {
 	if !s.bus.mailLive.Load() {
@@ -417,4 +449,26 @@ func (s *Server) questionConclusionsPass(ctx context.Context) {
 	if s.questionRuntime != nil && s.questionRuntime.Svc != nil {
 		s.questionRuntime.Svc.RetryThreadInbox(ctx)
 	}
+}
+
+// watchSpecs are a tenant's watch rows (bus/registry/watches) with the ref
+// of each row's topic: what gate-cluster says of the cluster's objects. A
+// row that does not parse leaves the gate without watches and says so; the
+// register's tests refuse such a file before it ships.
+func watchSpecs(tenant string) []gatecluster.WatchSpec {
+	rows, err := registry.Watches()
+	if err != nil {
+		busLogf("bus gate-cluster: no watches: %v", err)
+		return nil
+	}
+	tenants, err := registry.Load()
+	if err != nil {
+		busLogf("bus gate-cluster: no watches: %v", err)
+		return nil
+	}
+	out := make([]gatecluster.WatchSpec, 0, len(rows[tenant]))
+	for _, w := range rows[tenant] {
+		out = append(out, gatecluster.WatchSpec{Watch: w, Ref: tenants[tenant].Channels[w.Type].Ref})
+	}
+	return out
 }

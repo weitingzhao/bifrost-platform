@@ -92,7 +92,6 @@ func testHandler(t *testing.T) *Handler {
 func testRouter(h *Handler) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/patrol/skills", h.HandleListSkills)
-	r.Get("/patrol/skills/{id}", h.HandleGetSkill)
 	r.Put("/patrol/skills/{id}/enable", h.HandleEnable)
 	r.Get("/patrol/runs", h.HandleListRuns)
 	r.Post("/patrol/trigger/{id}", h.HandleTrigger)
@@ -117,25 +116,7 @@ func TestHandlerListGetEnableTrigger(t *testing.T) {
 		t.Fatalf("skills=%d", len(listed.Skills))
 	}
 
-	rec = httptest.NewRecorder()
-	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/patrol/skills/fleet-drift-scan", nil))
-	if rec.Code != 200 {
-		t.Fatalf("get status %d", rec.Code)
-	}
 	var one PatrolSkill
-	if err := json.Unmarshal(rec.Body.Bytes(), &one); err != nil {
-		t.Fatal(err)
-	}
-	if one.ID != "fleet-drift-scan" || one.TrustLevel != TrustL0 {
-		t.Fatalf("%+v", one)
-	}
-
-	rec = httptest.NewRecorder()
-	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/patrol/skills/does-not-exist", nil))
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("unknown get status %d", rec.Code)
-	}
-
 	body := bytes.NewBufferString(`{"enabled":false}`)
 	req := httptest.NewRequest(http.MethodPut, "/patrol/skills/fleet-drift-scan/enable", body)
 	rec = httptest.NewRecorder()
@@ -304,12 +285,7 @@ func TestHandlerAsyncTriggerShowsRunningThenCompletes(t *testing.T) {
 		t.Fatalf("trigger %+v", trig)
 	}
 
-	rec = httptest.NewRecorder()
-	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/patrol/skills/fleet-drift-scan", nil))
-	var skill PatrolSkill
-	if err := json.Unmarshal(rec.Body.Bytes(), &skill); err != nil {
-		t.Fatal(err)
-	}
+	skill, _ := h.publicSkill("fleet-drift-scan")
 	if skill.LastResult != ResultRunning {
 		t.Fatalf("last_result=%s want running", skill.LastResult)
 	}

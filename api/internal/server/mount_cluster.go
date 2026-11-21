@@ -5,6 +5,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
+	"github.com/weitingzhao/bifrost-platform/api/internal/computenodes"
 	"github.com/weitingzhao/bifrost-platform/api/internal/dataclone"
 	"github.com/weitingzhao/bifrost-platform/api/internal/elasticreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/marketdata"
@@ -12,9 +13,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/tenant/appreadings"
 )
 
-// mountCluster registers the cluster package's routes (the package is
-// recorded as mixed: foundation's Kubernetes adapter with blocks not yet
-// ruled). Moved from Router on 2026-11-16, unchanged.
+// mountCluster registers the cluster package's routes (foundation's
+// Kubernetes adapter; the node power routes forward to compute's
+// computenodes since 2026-11-19). Moved from Router on 2026-11-16, unchanged.
 func (s *Server) mountCluster(r chi.Router) {
 	r.Route("/cluster", func(r chi.Router) {
 		r.Get("/", s.cluster.HandleSummary)
@@ -87,7 +88,9 @@ func bindClusterReadings(clusterH *cluster.Handler) {
 	// The tenant domain reads its applications from what cluster gathers.
 	cluster.BindAppReadings(cluster.AppReadings{ApplicationsDomain: appreadings.EvalApplicationsDomain})
 	// The compute domain reads its domains (GPU, data warehouse, general workers) of service readiness.
-	cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain, WorkersDomain: elasticreadings.WorkersDomain, NodeMode: elasticreadings.NodeMode, DisplayedHost: (&elasticreadings.HostReadings{}).Read})
+	cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain, WorkersDomain: elasticreadings.WorkersDomain})
+	// The compute domain's nodes: which are on demand, their mode, their power (moved out of cluster on 2026-11-19).
+	cluster.BindComputeNodes(computenodes.New().ClusterPort())
 }
 
 // bindDataClone wires the tenant's data clone (package dataclone, moved out of

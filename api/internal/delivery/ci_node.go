@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"slices"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 )
 
 // Where CI runs go (the Owner, 2026-11-18: move the CI on ubt-k3s-05 to 07, the
@@ -30,14 +31,19 @@ const (
 var triggerBindingGVR = schema.GroupVersionResource{Group: "triggers.tekton.dev", Version: "v1beta1", Resource: "triggerbindings"}
 
 // CITask is a CI run: the least loaded node off the slow disk, the slow disk
-// rather than waiting, and never ubt-k3s-01, whose etcd slowed under CI.
-var CITask = TaskProfile{DiskHeavy: true, MaxDiskTier: 2, CPUCores: 4, MemoryBytes: 4 << 30, Spread: true, Exclude: []string{"ubt-k3s-01"}}
+// rather than waiting, and never the etcd node (ubt-k3s-01 today), whose etcd
+// slowed under CI. By label since 2026-11-19, so a renamed or replaced node keeps
+// the rule.
+var CITask = TaskProfile{DiskHeavy: true, MaxDiskTier: 2, CPUCores: 4, MemoryBytes: 4 << 30, Spread: true, ExcludeLabels: []placement.LabelRule{placement.EtcdNode}}
 
-// ciRunExcludedNodes are never given a platform CI run, chosen or not: ubt-k3s-01
-// (see CITask), and ubt-k3s-02, the database primary with 15 GiB, which has no memory
-// for the test database a run keeps in memory since 2026-11-19 (7.46 GiB available
-// at its lowest in seven days, against the 6 GiB floor).
-var ciRunExcludedNodes = []string{"ubt-k3s-01", "ubt-k3s-02"}
+// ciRunExcludedNodes are never given a platform CI run, chosen or not: the etcd
+// node (see CITask), and the database primary (ubt-k3s-02 today, 15 GiB), which
+// has no memory for the test database a run keeps in memory since 2026-11-19
+// (7.46 GiB available at its lowest in seven days, against the 6 GiB floor). By
+// label since 2026-11-19: a renamed or replaced node keeps the rule, and a
+// failover moves the primary's exclusion with the primary, which is the reason
+// it exists.
+var ciRunExcludedNodes = []placement.LabelRule{placement.EtcdNode, placement.PostgresPrimary}
 
 // ciRunMemoryFloor is the compute line's room for memory volumes turned into a
 // reading: a volume takes what it holds from the available memory, so a node stays
@@ -48,18 +54,24 @@ const ciRunMemoryFloor = 7 << 30
 // database and stay CITask.
 var CIRunTask = func() TaskProfile {
 	t := CITask
-	t.Exclude = ciRunExcludedNodes
+	t.ExcludeLabels = ciRunExcludedNodes
 	t.MinAvailableMemory = ciRunMemoryFloor
 	return t
 }()
 
 // ciRunTaskRunTemplate is the pod template of a platform CI run the platform starts
-// itself: kept off the same nodes as one the trigger starts.
+// itself: kept off the same nodes as one the trigger starts. One term whose
+// expressions all hold: no rule of ciRunExcludedNodes names the node (NotIn also
+// passes a node without the label).
 func ciRunTaskRunTemplate() map[string]any {
 	t := amd64CITaskRunTemplate()
+	expressions := make([]any, 0, len(ciRunExcludedNodes))
+	for _, r := range ciRunExcludedNodes {
+		expressions = append(expressions, r.NotInExpression())
+	}
 	t["podTemplate"].(map[string]any)["affinity"] = map[string]any{"nodeAffinity": map[string]any{
 		"requiredDuringSchedulingIgnoredDuringExecution": map[string]any{"nodeSelectorTerms": []any{map[string]any{
-			"matchExpressions": []any{map[string]any{"key": "kubernetes.io/hostname", "operator": "NotIn", "values": slices.Clone(ciRunExcludedNodes)}},
+			"matchExpressions": expressions,
 		}}},
 	}}
 	return t

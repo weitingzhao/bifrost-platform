@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
 
@@ -50,9 +51,9 @@ func DecidePlanChanges(ctx context.Context, db eventlog.DB, question func(contex
 	return n, errors.Join(err, ackDecided(ctx, db, ack))
 }
 
-// ErrQuestionGone: the question store no longer has the question (it trims
-// read and expired ones); there is nothing left to acknowledge.
-var ErrQuestionGone = errors.New("store: the question is gone from the question store")
+// ErrQuestionGone: the question store no longer has the question
+// (ownercard.ErrQuestionGone).
+var ErrQuestionGone = ownercard.ErrQuestionGone
 
 // ackDecided tells the question store the runtime has used the answer of
 // each card it decided and has not yet acknowledged (review 180 B3): an

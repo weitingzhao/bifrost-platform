@@ -1,9 +1,10 @@
 // Package questionbridge is how the agent runtime asks, reads and answers the
 // Owner's questions (decoupling item 5, A5, 2026-11-18; it was the server's
 // questions_wire.go). The runtime's controller and plan code declare what they
-// need as ports (planstore.Ask, Withdraw, RuntimeCard, seenfacts.Question);
-// this package binds them to the question service, so it names the plan on one
-// side and the questions on the other. It holds the translation of a plan's
+// need as ports in contracts (ownercard.Ask, Withdraw, RuntimeCard;
+// seenfacts.Question); this package implements them over the question
+// service. Since 2026-11-19 it imports no plan code: it is the owner's side
+// of that contract (OWNER_LAW #28). It holds the translation of a plan's
 // card into a question and back, the runtime's own session, and the bounded
 // reads; the server only constructs it, mounts it and closes it.
 package questionbridge
@@ -21,7 +22,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/readslot"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
@@ -106,15 +107,15 @@ func (rt *Runtime) Question() func(context.Context, string) (seenfacts.Question,
 // proposal so a retry finds the same card. A planner's card and a mission's
 // card name their own options; only a planner's has a default and a task.
 // nil without a question store.
-func (rt *Runtime) Ask() planstore.Ask {
+func (rt *Runtime) Ask() ownercard.Ask {
 	if rt == nil || rt.Svc == nil {
 		return nil
 	}
-	return func(ctx context.Context, card planstore.Card) (string, error) {
+	return func(ctx context.Context, card ownercard.Card) (string, error) {
 		req := map[string]any{
 			"title":           questions.ClipTitle(card.Title),
 			"body":            card.Body,
-			"options":         []map[string]string{{"label": planstore.CardApply}, {"label": planstore.CardRefuse}},
+			"options":         []map[string]string{{"label": ownercard.CardApply}, {"label": ownercard.CardRefuse}},
 			"urgency":         "when you can: only this change waits for you",
 			"meanwhile":       "the plan stays as it is",
 			"owner_duty":      "goal",
@@ -124,7 +125,7 @@ func (rt *Runtime) Ask() planstore.Ask {
 		// (TD-397 F-T33-rec: the catalog's first gates, gatesRecommend), with
 		// why beside that option; STG's rule takes it, PROD's Owner reads it.
 		if card.Recommended > 0 && len(card.Options) == 0 {
-			options := []map[string]string{{"label": planstore.CardApply}, {"label": planstore.CardRefuse}}
+			options := []map[string]string{{"label": ownercard.CardApply}, {"label": ownercard.CardRefuse}}
 			if card.Recommended <= len(options) && card.RecommendedWhy != "" {
 				options[card.Recommended-1]["detail"] = card.RecommendedWhy
 			}
@@ -179,7 +180,7 @@ func (rt *Runtime) Ask() planstore.Ask {
 			(strings.HasPrefix(msg, "already answered: ") || strings.HasPrefix(msg, "duplicate of ")):
 			// A planner's question the store holds under another key, open or
 			// answered (review 217 B2): the Owner has it; the plan goes on.
-			return "", fmt.Errorf("%w: %s", planstore.ErrAsked, msg)
+			return "", fmt.Errorf("%w: %s", ownercard.ErrAsked, msg)
 		case card.SameByKey && res.Code == http.StatusConflict && msg == questions.KeyReused:
 			// A blocked card made by an earlier try whose transaction then
 			// failed, in words that have changed since (it says how long ago
@@ -213,11 +214,11 @@ func (rt *Runtime) Ask() planstore.Ask {
 // (TD-390): the open ones and those its rule answered that it has not
 // acknowledged, by RuleCards, which writes nothing; nil without a question
 // store.
-func (rt *Runtime) Cards() func(context.Context) ([]planstore.RuntimeCard, error) {
+func (rt *Runtime) Cards() func(context.Context) ([]ownercard.RuntimeCard, error) {
 	if rt == nil || rt.Svc == nil || rt.reads == nil {
 		return nil
 	}
-	return func(ctx context.Context) ([]planstore.RuntimeCard, error) {
+	return func(ctx context.Context) ([]ownercard.RuntimeCard, error) {
 		type r struct {
 			qs  []questions.Question
 			err error
@@ -232,9 +233,9 @@ func (rt *Runtime) Cards() func(context.Context) ([]planstore.RuntimeCard, error
 		if x.err != nil {
 			return nil, x.err
 		}
-		cards := make([]planstore.RuntimeCard, 0, len(x.qs))
+		cards := make([]ownercard.RuntimeCard, 0, len(x.qs))
 		for _, q := range x.qs {
-			c := planstore.RuntimeCard{ID: q.ID, TaskID: q.TaskID, Recommended: q.Recommended, CreatedAt: q.CreatedAt}
+			c := ownercard.RuntimeCard{ID: q.ID, TaskID: q.TaskID, Recommended: q.Recommended, CreatedAt: q.CreatedAt}
 			for _, o := range q.Options {
 				c.Options = append(c.Options, o.Key)
 			}
@@ -267,7 +268,7 @@ func (rt *Runtime) RuleAnswer() func(ctx context.Context, id, option, rule strin
 // sameCard says whether a question the store holds is the card c: the same
 // task and option labels (a blocked card's third names its mission). The
 // title is not compared: the store cleans it, and it is the task's anyway.
-func sameCard(q questions.Question, c planstore.Card) bool {
+func sameCard(q questions.Question, c ownercard.Card) bool {
 	if q.TaskID != c.TaskID || len(q.Options) != len(c.Options) {
 		return false
 	}
@@ -305,7 +306,7 @@ const requester = questions.RuntimeSession
 // round was refused (W-31 2.2b, review 216 B2). A card that is no longer
 // open (answered, withdrawn) or gone needs nothing. nil without a question
 // store.
-func (rt *Runtime) Withdraw() planstore.Withdraw {
+func (rt *Runtime) Withdraw() ownercard.Withdraw {
 	if rt == nil || rt.Svc == nil {
 		return nil
 	}
@@ -336,7 +337,7 @@ func (rt *Runtime) Ack() func(context.Context, string) error {
 		case http.StatusOK:
 			return nil
 		case http.StatusNotFound:
-			return fmt.Errorf("%w: %s", planstore.ErrQuestionGone, id)
+			return fmt.Errorf("%w: %s", ownercard.ErrQuestionGone, id)
 		}
 		return fmt.Errorf("the question store answered %d: %v", res.Code, res.Body)
 	}

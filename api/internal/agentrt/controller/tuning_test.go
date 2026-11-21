@@ -8,12 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
-	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
-	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
 
 // TestTuningFailuresToAlert: a loop alerts after FailuresToAlert failures in
@@ -50,10 +46,17 @@ func TestTuningFailuresToAlert(t *testing.T) {
 	if n := alerts(); n != 0 {
 		t.Fatalf("%d alerts after two failures with no tuning rule", n)
 	}
-	key := rptest.NewKey(t)
+	// The rule is recorded as agentrttest's rules are, row and text: what a
+	// pass reads of it is the store's (the signing is the release policy's,
+	// another domain's, and its own tests').
 	text := "rule_id: tuning\nrule_version: 1\ndirection: initial\neffective_at: 2026-10-01T00:00:00Z\nexpires_at: 2099-01-01T00:00:00Z\nvalues: {failures_to_alert: 2}\n"
-	_, err := store.SignRule(ctx, pool, actor.Writer{Actor: "owner", Token: "admin"}, rules.KindTuning, []byte(text),
-		key.Sign(t, []byte(text), rules.Namespace), key.Fingerprint, releasepolicy.VerifyAnchored)
+	r, err := rules.Parse([]byte(text))
+	must(t, err)
+	body, err := r.BodyJSON()
+	must(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, signed_by, signature,
+	    effective_at, expires_at) VALUES ($1, 1, $2, $3, 'initial', 'test', 'test', '2026-10-01T00:00:00Z', '2099-01-01T00:00:00Z')`,
+		rules.KindTuning, string(body), text)
 	must(t, err)
 	c.ReadTuningForTest(ctx)
 	fail("agentrt-landings", 2)

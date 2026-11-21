@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	busreleases "github.com/weitingzhao/bifrost-platform/api/internal/bus/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 )
 
@@ -83,7 +82,7 @@ func Writer(pool *pgxpool.Pool) releases.TableWriter {
 				if err != nil {
 					return err
 				}
-				id, err := busreleases.Append(ctx, tx, busreleases.Release{
+				id, err := appendAnnouncement(ctx, tx, announcement{
 					Env: rec.Env, Lane: rec.Lane, Repo: repo, SHA: sha, Run: rec.Run, Succeeded: succeeded, Cause: cause,
 				})
 				if err != nil {

@@ -3,6 +3,7 @@ package registry
 import (
 	"embed"
 	"fmt"
+	"io/fs"
 	"regexp"
 	"slices"
 	"sort"
@@ -28,11 +29,21 @@ const (
 // names hand-written code that delivers it until it is switched.
 const ByDispatcher = "dispatcher"
 
+// ByWebhook marks a row the alert webhook delivers itself, in the request
+// that wrote the alert, without the bus (2026-11-20, TD-588): an alarm about
+// the bus must not ride the bus, or it is lost exactly when it matters. Only
+// alert.rule.fired rows may say it.
+const ByWebhook = "webhook"
+
 // Subscription is one row: which events, who is told, how.
 type Subscription struct {
-	ID        string            `yaml:"id"`
-	On        []string          `yaml:"on"`
-	Match     string            `yaml:"match"`
+	ID    string   `yaml:"id"`
+	On    []string `yaml:"on"`
+	Match string   `yaml:"match"`
+	// Except: an event whose subject holds it is not this row's, though it
+	// matches the rest (2026-11-19, law 43: a line's own alerts wake that
+	// line, not the duty row that hears every alert).
+	Except    string            `yaml:"except"`
 	Change    string            `yaml:"change"`
 	Deliver   string            `yaml:"deliver"`
 	To        string            `yaml:"to"`
@@ -126,13 +137,14 @@ var (
 
 // LoadSubscriptions reads every tenant's table compiled into the binary.
 func LoadSubscriptions() (map[string]Subscriptions, error) {
-	entries, err := subFiles.ReadDir("subscriptions")
+	subSrc := source(subFiles, "subscriptions")
+	entries, err := fs.ReadDir(subSrc, "subscriptions")
 	if err != nil {
 		return nil, err
 	}
 	out := map[string]Subscriptions{}
 	for _, e := range entries {
-		data, err := subFiles.ReadFile("subscriptions/" + e.Name())
+		data, err := fs.ReadFile(subSrc, "subscriptions/"+e.Name())
 		if err != nil {
 			return nil, err
 		}
@@ -216,6 +228,9 @@ func CheckSubscriptions(tenants map[string]Tenant, subs map[string]Subscriptions
 			}
 			if r.By == "" {
 				bad("%s: by names who delivers it (dispatcher, or the hand-written code that still does)", at)
+			}
+			if r.By == ByWebhook && (len(r.On) != 1 || r.On[0] != "alert.rule.fired" || r.Deliver != DeliverWake) {
+				bad("%s: by webhook is only for a wake on alert.rule.fired (the alert webhook delivers it)", at)
 			}
 			if d := r.Params[ParamDetail]; d != "" {
 				names, ok := DetailNames(d)

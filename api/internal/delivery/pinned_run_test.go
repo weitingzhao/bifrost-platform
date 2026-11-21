@@ -224,7 +224,7 @@ func TestCommitProbeErrorsAreUnknown(t *testing.T) {
 			}
 			return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body))}, nil
 		})}
-		pf := s.RefPreflight(context.Background(), "bifrost-deliver-platform", factSHA1)
+		pf := s.refPreflightForRepos(context.Background(), "bifrost-deliver-platform", factSHA1, reposForPipeline("bifrost-deliver-platform"))
 		if pf.Reachability != probe.ReachFail || len(pf.Missing) != 0 {
 			t.Fatal(pf)
 		}

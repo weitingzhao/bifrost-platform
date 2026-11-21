@@ -17,8 +17,9 @@ function Help() {
       <ul className="m-0 flex list-disc flex-col gap-1 pl-5">
         <li>A case is one letter of an alert, a failed delivery or a failed build, read from the mailbox of the last 7 days. A repeat alert that shares a letter is one case. Drills are left out.</li>
         <li>State: sent (not acknowledged), seen (acknowledged, no verdict), judged (a verdict, not closed), closed.</li>
-        <li>A verdict is a note to the controller in the form the letter ends with. The latest valid one on an event wins. Closed is real and handled, or false and fixed at the source.</li>
+        <li>A verdict is a note to the controller in the form the letter ends with. The latest valid one on an event wins. Closed is a real problem handled or fixed at its source, or a false one fixed at its source.</li>
         <li>A verdict that does not parse is not counted.</li>
+        <li>Medians, from the letter: to seen (acknowledged), to verdict (the latest verdict), to closed (the verdict that closed it, over the closed cases only; the count after it says how many). unknown when there is no case to measure.</li>
       </ul>
     </div>
   )

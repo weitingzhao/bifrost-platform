@@ -173,3 +173,18 @@ func TestUniFiFixedIPCatalogAndCard(t *testing.T) {
 		t.Fatalf("card=%+v", d)
 	}
 }
+
+// 2026-11-19: the Command page's "done for you" list showed plan_manifest
+// trials as work done; the page filters on effect instead of a hand-kept list.
+func TestEffectMarksOnlyTrialsAsNone(t *testing.T) {
+	for _, a := range Catalog() {
+		v := a.View()
+		want := EffectChanges
+		if a.ID == "plan_manifest" {
+			want = EffectNone
+		}
+		if v.Effect != want {
+			t.Fatalf("%s effect = %q, want %q", a.ID, v.Effect, want)
+		}
+	}
+}

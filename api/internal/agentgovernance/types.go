@@ -29,12 +29,3 @@ type TrustMatrixResponse struct {
 	// is still returned, without overrides.
 	StoreError string `json:"store_error,omitempty"`
 }
-
-type TrustOverridesResponse struct {
-	GeneratedAt time.Time                `json:"generated_at"`
-	Overrides   map[string]TrustOverride `json:"overrides"`
-	// Store is the trust-overrides file path.
-	Store string `json:"store"`
-	// StoreError is set when that file is missing or unreadable.
-	StoreError string `json:"store_error,omitempty"`
-}

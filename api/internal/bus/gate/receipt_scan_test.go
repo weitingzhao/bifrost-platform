@@ -20,7 +20,7 @@ func TestReceiptReadsShareOneScan(t *testing.T) {
 			return fail
 		}
 		for _, r := range []receiptRow{
-			{"ev-1", "a", now.Add(-30 * time.Hour)}, {"ev-2", "a", now.Add(-2 * time.Hour)}, {"ev-2", "b", now.Add(-time.Minute)},
+			{"ev-1", "a", now.Add(-30 * time.Hour), 1}, {"ev-2", "a", now.Add(-2 * time.Hour), 2}, {"ev-2", "b", now.Add(-time.Minute), 3},
 		} {
 			if !r.at.Before(from) {
 				row(r)
@@ -51,5 +51,35 @@ func TestReceiptReadsShareOneScan(t *testing.T) {
 	fail = nil
 	if counts, err = j.ReceiptsSince(ctx, now.Add(-time.Hour), 100); err != nil || counts["b"].Count != 1 {
 		t.Fatalf("after a failure: %v, %v", counts, err)
+	}
+}
+
+// Same origin: once a day is read, a refresh reads only what came after it, and
+// what fell out of the day is dropped.
+func TestAReceiptRefreshReadsOnlyWhatIsNew(t *testing.T) {
+	now := time.Now()
+	stream := []receiptRow{{"ev-1", "a", now.Add(-23 * time.Hour), 1}, {"ev-2", "a", now.Add(-time.Hour), 2}}
+	var froms []time.Time
+	j := &JSJourney{scan: func(_ context.Context, from time.Time, _ int, row func(receiptRow)) error {
+		froms = append(froms, from)
+		for _, r := range stream {
+			if !r.at.Before(from) {
+				row(r)
+			}
+		}
+		return nil
+	}}
+	ctx := context.Background()
+	if _, err := j.ReceiptsSince(ctx, now.Add(-24*time.Hour), 100); err != nil {
+		t.Fatal(err)
+	}
+	stream = append(stream, receiptRow{"ev-3", "b", now.Add(-time.Second), 3})
+	j.receipts.at = now.Add(-2 * receiptScanFor)
+	counts, err := j.ReceiptsSince(ctx, now.Add(-24*time.Hour), 100)
+	if err != nil || len(froms) != 2 || !froms[1].Equal(now.Add(-time.Hour)) {
+		t.Fatalf("second scan from %v (want the last receipt's time), %v", froms, err)
+	}
+	if counts["a"].Count != 2 || counts["b"].Count != 1 {
+		t.Fatalf("the refresh lost or doubled receipts: %v", counts)
 	}
 }

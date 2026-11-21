@@ -273,6 +273,14 @@ func TestCIRunTriggerEquivalence(t *testing.T) {
 				for _, spec := range []map[string]any{gotSpec, wantSpec} {
 					deleteAffinity(spec)
 				}
+				// 2026-11-19: the infra trigger passes the pushed ref, so the infra
+				// check can leave its release suite to the push to main. A run the
+				// platform starts names no ref and runs the suite (the pipeline's
+				// default). Positive control: without this the infra case fails on
+				// the one param.
+				if name == "bifrost-ci-infra" {
+					wantSpec["params"] = withoutParam(wantSpec["params"].([]any), "ref")
+				}
 				// Only param order is irrelevant. Sort lists without collapsing
 				// duplicate names, then compare every field of the complete spec.
 				for _, spec := range []map[string]any{gotSpec, wantSpec} {
@@ -365,4 +373,16 @@ func deleteAffinity(spec map[string]any) {
 	if pod, _ := template["podTemplate"].(map[string]any); pod != nil {
 		delete(pod, "affinity")
 	}
+}
+
+// withoutParam is params without the one named name.
+func withoutParam(params []any, name string) []any {
+	out := make([]any, 0, len(params))
+	for _, p := range params {
+		if m, ok := p.(map[string]any); ok && m["name"] == name {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }

@@ -60,8 +60,8 @@ func TestParseProblemVerdict(t *testing.T) {
 // controller sent for the rows that ask) and the verdicts (notes to the
 // board). Guards: a letter matches its verdict by the event id in its body;
 // the latest valid verdict wins and keeps who and when; an invalid one is
-// listed with its sender and counts for nothing; closed is only real+handled
-// or false+source_fixed; a drill's letter, an undeliverable notice and a row
+// listed with its sender and counts for nothing; closed is real+handled,
+// real+source_fixed or false+source_fixed; a drill's letter, an undeliverable notice and a row
 // that does not ask are not cases; the counts are computed from the cases.
 func TestProblemLoopPG(t *testing.T) {
 	t.Parallel()
@@ -128,7 +128,7 @@ func TestProblemLoopPG(t *testing.T) {
 		t.Errorf("ev-4: %+v", c)
 	}
 	n := got.Counts
-	if n.Raised != 3 || n.Seen != 1 || n.Judged != 2 || n.Real != 1 || n.False != 1 || n.Closed != 1 || n.Open != 2 || n.AckMedianMinutes == nil || n.VerdictMedianMinutes == nil {
+	if n.Raised != 3 || n.Seen != 1 || n.Judged != 2 || n.Real != 1 || n.False != 1 || n.Closed != 1 || n.Open != 2 || n.AckMedianMinutes == nil || n.VerdictMedianMinutes == nil || n.ClosedMedianMinutes == nil {
 		t.Errorf("counts = %+v", n)
 	}
 	if len(got.Invalid) != 1 || got.Invalid[0].Sender != b.Actor || !strings.Contains(got.Invalid[0].Problem, "verdict") {

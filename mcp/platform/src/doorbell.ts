@@ -79,6 +79,13 @@ export function transient(err: unknown): boolean {
 
 const RETRY_MS = 5000
 
+/**
+ * How long to wait between looks while only letters that were already waiting
+ * at the start are unread (2026-11-19: a backlog made the doorbell exit at
+ * once, every time it was started, so it woke nobody for anything new).
+ */
+const BACKLOG_MS = 30_000
+
 /** One run: register, then wait until a message or the deadline. Returns the exit code. */
 export async function ring(opts: { minutes: number; register: boolean }, io: DoorbellIO): Promise<number> {
   const { deps, out, now } = io
@@ -88,6 +95,8 @@ export async function ring(opts: { minutes: number; register: boolean }, io: Doo
   const sleep = io.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
   const end = now() + opts.minutes * 60_000
   let registered = !opts.register
+  // The letters unread when the run began: the doorbell rings only for others.
+  let known: Set<string> | undefined
   for (;;) {
     const left = Math.floor((end - now()) / 1000)
     if (left <= 0) {
@@ -103,7 +112,8 @@ export async function ring(opts: { minutes: number; register: boolean }, io: Doo
         if (put?.error) throw new Error(`register: ${JSON.stringify(put).slice(0, 300)}`)
         registered = true
       }
-      got = (await waitForMessages({ timeout_seconds: Math.min(600, left) }, deps)) as typeof got
+      // First a single read, so what is already waiting is known and does not ring.
+      got = (await waitForMessages({ timeout_seconds: known === undefined ? 0 : Math.min(600, left) }, deps)) as typeof got
     } catch (err) {
       if (!transient(err)) throw err
       out(`doorbell: platform unreachable (${err instanceof Error ? err.message.slice(0, 120) : String(err)}); retrying`)
@@ -111,7 +121,17 @@ export async function ring(opts: { minutes: number; register: boolean }, io: Doo
       continue
     }
     if (got.error) throw new Error(JSON.stringify(got).slice(0, 300))
-    const msgs = got.messages ?? []
+    const all = got.messages ?? []
+    if (known === undefined) {
+      known = new Set(all.map((m) => m.message_id ?? ''))
+      if (all.length > 0) out(`doorbell: ${all.length} letter(s) already waiting; ringing only for new ones`)
+      continue
+    }
+    const msgs = all.filter((m) => !known!.has(m.message_id ?? ""))
+    if (msgs.length === 0 && all.length > 0) {
+      await sleep(Math.min(BACKLOG_MS, Math.max(0, end - now())))
+      continue
+    }
     if (msgs.length > 0) {
       out(`doorbell: ${msgs.length} message(s) for ${got.actor ?? 'this thread'} (${new Date(now()).toISOString()})`)
       for (const m of msgs) out(`  ${m.message_id} from=${m.from} kind=${m.kind} bytes=${Buffer.byteLength(m.body ?? '')}`)

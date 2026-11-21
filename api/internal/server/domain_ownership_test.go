@@ -72,13 +72,20 @@ func TestDomainOwnershipCatalog(t *testing.T) {
 // line of wiring.
 func TestServerBindsThePoolEvaluator(t *testing.T) {
 	t.Parallel()
-	// New calls bindClusterReadings, and that function holds the three lines.
+	// New calls bindClusterReadings, and that function holds the lines.
 	root, err := os.ReadFile("server.go")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(root), "\tbindClusterReadings(clusterH)\n") {
 		t.Fatal("New does not call bindClusterReadings")
+	}
+	built, err := os.ReadFile("../tenant/assembly/assembly.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(built), "DataClone:  dataclone.NewHandler(entry, audit, kube),") {
+		t.Fatal("the tenant's assembly does not build the data clone with the cluster's entry, the audit log and its PostgreSQL adapter")
 	}
 	src, err := os.ReadFile("mount_cluster.go")
 	if err != nil {
@@ -93,8 +100,13 @@ func TestServerBindsThePoolEvaluator(t *testing.T) {
 		t.Fatal("bindClusterReadings does not bind tenant/appreadings to the cluster package")
 	}
 	// And for compute's readings of the elastic domains (cluster.BindComputeReadings).
-	if !strings.Contains(string(src), "cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain, WorkersDomain: elasticreadings.WorkersDomain, NodeMode: elasticreadings.NodeMode, DisplayedHost: (&elasticreadings.HostReadings{}).Read})") {
+	if !strings.Contains(string(src), "cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain, WorkersDomain: elasticreadings.WorkersDomain})") {
 		t.Fatal("bindClusterReadings does not bind elasticreadings to the cluster package")
+	}
+	// And for compute's nodes (cluster.BindComputeNodes, 2026-11-19): unbound,
+	// every node counts as a core node and the power actions refuse.
+	if !strings.Contains(string(src), "cluster.BindComputeNodes(computenodes.New().ClusterPort())") {
+		t.Fatal("bindClusterReadings does not bind computenodes to the cluster package")
 	}
 }
 
@@ -114,7 +126,9 @@ func TestServerBindsTheDataClone(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, line := range []string{
-		"\tdataH := dataclone.NewHandler(clusterH.Service().Entry(), audit, clusterH.Service())\n",
+		// Built in the tenant's assembly since 2026-11-19 (tenant/assembly).
+		"\ttenantA := tenantassembly.New(cfg, clusterH.Service().Entry(), audit, clusterH.Service())\n",
+		"\tdataH, marketdataH, ibgatewayH := tenantA.DataClone, tenantA.MarketData, tenantA.IBGateway\n",
 		"\tbindDataClone(clusterH, dataH, marketdataH)\n",
 		"\t\tdataH.Service().StartDataCloneScheduler(context.Background())\n",
 		"\t\tdataclone:       dataH,\n",

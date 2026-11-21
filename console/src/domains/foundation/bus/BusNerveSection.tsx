@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } 
 import { useQuery } from '@tanstack/react-query'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { AGENT_THREADS_REFRESH_MS, fetchAgentThreads, type AgentThread } from '@/api/agentThreads'
+import { useLiveInterval } from './liveRefresh'
 import { fetchLineage } from '@/api/lineage'
 import { fetchCiDomains } from '@/api/ciDomains'
 import { fetchBusContract, fetchBusNextgen } from './busNextgen'
@@ -43,7 +44,8 @@ const LINEAGE_DAYS = 2
  * the heartbeat has none, so the lineage title is what names them.
  */
 function useSeatNames(): Map<string, string> {
-  const threads = useQuery({ queryKey: ['agent-threads'], queryFn: fetchAgentThreads, refetchInterval: AGENT_THREADS_REFRESH_MS, retry: false })
+  const threadsInterval = useLiveInterval(AGENT_THREADS_REFRESH_MS)
+  const threads = useQuery({ queryKey: ['agent-threads'], queryFn: fetchAgentThreads, refetchInterval: threadsInterval, retry: false })
   const lineage = useQuery({ queryKey: ['lineage-lines', LINEAGE_DAYS], queryFn: () => fetchLineage(LINEAGE_DAYS), staleTime: 60_000, retry: false })
   return useMemo(() => {
     const m = new Map<string, string>()
@@ -89,7 +91,8 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
   const clients = useQuery({ queryKey: ['bus', 'clients'], queryFn: fetchBusClients, refetchInterval: 60_000 })
   const nextgen = useQuery({ queryKey: ['bus-nextgen'], queryFn: fetchBusNextgen, refetchInterval: 60_000, retry: false })
   const team = useQuery({ queryKey: ['bus-observe'], queryFn: fetchBusObserve, refetchInterval: 60_000, retry: false })
-  const threads = useQuery({ queryKey: ['agent-threads'], queryFn: fetchAgentThreads, refetchInterval: AGENT_THREADS_REFRESH_MS, retry: false })
+  const threadsInterval = useLiveInterval(AGENT_THREADS_REFRESH_MS)
+  const threads = useQuery({ queryKey: ['agent-threads'], queryFn: fetchAgentThreads, refetchInterval: threadsInterval, retry: false })
   const names = useSeatNames()
   const model = useMemo(
     () => (contract.data ? nerveModel(contract.data, clients.data?.clients ?? [], nextgen.data) : null),

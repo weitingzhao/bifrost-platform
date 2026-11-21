@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -87,6 +88,10 @@ func (h *Handler) HandlePutReleaseWindow(w http.ResponseWriter, r *http.Request)
 	}
 	if h.audit != nil {
 		h.audit.Record(r, "delivery.release_window.hold", rec.Who, "ok", rec.What)
+	}
+	if rec.Renewals > 0 {
+		// The holder's minute renewal: the hold was recorded when it was taken.
+		w.Header().Set(actions.NotRecordedHeader, "renewal")
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"open": true, "window": rec})
 }

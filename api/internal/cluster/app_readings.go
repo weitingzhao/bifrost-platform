@@ -1,8 +1,6 @@
 package cluster
 
 import (
-	"context"
-
 	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 )
 
@@ -31,17 +29,13 @@ func BindAppReadings(r AppReadings) { appReadings = r }
 // warehouse, general workers) are read from what this package gathers: when a pool
 // that is powered off is standby and when it is missing compute is the
 // compute domain's reading. The server binds elasticreadings. Until
-// 2026-11-16 those functions were this package's.
+// 2026-11-16 those functions were this package's. The reading of an
+// on-demand node (active, standby, degraded) and of its host went with the
+// node power to package computenodes on 2026-11-19 (ComputeNodes).
 type ComputeReadings struct {
 	GPUDomain       func(resourceview.ElasticSnapshot) ServiceDomainView
 	WarehouseDomain func(resourceview.ElasticSnapshot) ServiceDomainView
 	WorkersDomain   func(resourceview.ElasticSnapshot) ServiceDomainView
-	// NodeMode says whether an on-demand node is active, standby or
-	// degraded, with why (resourceview.ElasticNode* modes).
-	NodeMode func(resourceview.ElasticNodeObservation) (mode, detail string)
-	// DisplayedHost answers whether a host is up for a page that polls, from
-	// a kept reading or else from probe. Unbound, pages probe live.
-	DisplayedHost func(ctx context.Context, host string, probe func(context.Context, string) bool) bool
 }
 
 // computeReadings is bound once, at start-up, as appReadings is.

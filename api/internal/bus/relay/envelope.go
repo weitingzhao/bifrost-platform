@@ -146,7 +146,7 @@ func Build(row Row, ch registry.Channel, tenant, env string) (Envelope, []byte, 
 		return e, nil, fmt.Errorf("bus: environment %q is not a subject segment", env)
 	case e.Subject == "":
 		return e, nil, fmt.Errorf("bus: event %d (%s) has no subject", row.EventID, row.Type)
-	case !strings.HasPrefix(e.Ref, "/api/v1/"):
+	case !PlatformRead(e.Ref):
 		return e, nil, fmt.Errorf("bus: event %d (%s) has no ref to a platform read", row.EventID, row.Type)
 	case ch.Key != "" && e.Key == "":
 		return e, nil, fmt.Errorf("bus: event %d (%s) has no key", row.EventID, row.Type)
@@ -161,6 +161,13 @@ func Build(row Row, ch registry.Channel, tenant, env string) (Envelope, []byte, 
 		return e, nil, fmt.Errorf("bus: the envelope of event %d is %d bytes, over %d", row.EventID, len(data), MaxEnvelope)
 	}
 	return e, data, nil
+}
+
+// PlatformRead says whether ref is a read of the platform: a route under
+// /api/v1/, or /health (2026-11-19: schema.migration.applied names /health,
+// where the applied migrations are read, and every one of them was passed over).
+func PlatformRead(ref string) bool {
+	return strings.HasPrefix(ref, "/api/v1/") || ref == "/health"
 }
 
 // EventSubject is the NATS subject of an event type in env (RULES.md §3).

@@ -36,18 +36,24 @@ func TestTheDatabaseTakesEveryRegisteredType(t *testing.T) {
 		types = append(types, typ)
 	}
 	sort.Strings(types)
-	// 36, and 2026-11-17 main.regression.known and .fixed (migration 0033): 38.
-	if len(types) != 28 {
-		t.Fatalf("the register has %d types, the migration was written for 28", len(types))
+	// Since 0041 (2026-11-20) the database allows bus topics by their shape and
+	// the register is their closed set: no count of types is written here.
+	if len(types) < 29 {
+		t.Fatalf("the register has %d types: it lost some", len(types))
 	}
 	for _, typ := range types {
 		if _, err := conn.Exec(ctx, `INSERT INTO vocab VALUES ($1)`, typ); err != nil {
 			t.Errorf("%s is refused: %v", typ, err)
 		}
 	}
-	// The negative control: the constraint still refuses what is not registered.
-	if _, err := conn.Exec(ctx, `INSERT INTO vocab VALUES ('decision.entry.recorded')`); err == nil {
-		t.Error("an unregistered type is taken")
+	// The negative controls: the database refuses a name of neither shape, and
+	// an unregistered topic of the right shape is refused by the ledger's
+	// vocabulary (Append asks it before the database), not by the database.
+	if _, err := conn.Exec(ctx, `INSERT INTO vocab VALUES ('Decision Recorded')`); err == nil {
+		t.Error("a name of no allowed shape is taken")
+	}
+	if eventlog.IsEventType("decision.entry.recorded") {
+		t.Error("an unregistered topic is in the ledger's vocabulary")
 	}
 }
 

@@ -3,23 +3,20 @@
 package delivery
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -31,7 +28,9 @@ import (
 	dynfake "k8s.io/client-go/dynamic/fake"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 )
 
 type contractTransport func(*http.Request) (*http.Response, error)
@@ -427,34 +426,6 @@ func TestCIContradictoryInputsRefused(t *testing.T) {
 	}
 }
 
-func TestPythonCIRefPreflightResponse(t *testing.T) {
-	s := NewService(&config.ClusterEntry{ID: "test"})
-	before := time.Now().UTC()
-	resp := s.RefPreflight(context.Background(), "bifrost-ci-python", factSHA1)
-	if resp.Ready || resp.Reachability != probe.ReachFail || !strings.Contains(resp.Detail, "param repo") || resp.ClusterID != "test" {
-		t.Fatal(resp)
-	}
-	if resp.GeneratedAt.Before(before) || resp.GeneratedAt.After(time.Now().UTC()) {
-		t.Fatal("invalid timestamp", resp.GeneratedAt)
-	}
-	b, err := json.Marshal(resp)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var fields map[string]any
-	if err := json.Unmarshal(b, &fields); err != nil {
-		t.Fatal(err)
-	}
-	for _, key := range []string{"repos", "missing"} {
-		if list, ok := fields[key].([]any); !ok || len(list) != 0 {
-			t.Fatalf("%s must be an empty list: %s", key, b)
-		}
-	}
-	if fields["generated_at"] == "0001-01-01T00:00:00Z" {
-		t.Fatal(string(b))
-	}
-}
-
 // mainKanikoNames is the hand-kept list main 2726c47 and 26a10b5 knew. The
 // frozen baselines (non_ci_runs_main.json, the ref-check parity) enumerate the
 // pipelines it named and were recorded with the amd64 template on each; they
@@ -591,11 +562,14 @@ func TestAnUnreadDefinitionIsCheckedAndNamed(t *testing.T) {
 		"apiVersion": "tekton.dev/v1", "kind": "Pipeline",
 		"metadata": map[string]any{"name": "other", "namespace": "cicd"}, "spec": map[string]any{}}}, "present")
 	s.SetClientsetForTest(k8sfake.NewSimpleClientset())
-	pf := s.PipelinePreflight(context.Background(), "bifrost-not-installed")
-	if pf.BuildReady || !strings.Contains(pf.Reason, "definition was not read") {
+	// The check a run start makes (StartPipelineRun): the route that ran it on
+	// its own went on 2026-11-19 (no traffic, no caller).
+	pf := s.buildPreflight(context.Background(), "bifrost-unread", kaniko, unread)
+	if pf.BuildReady || !strings.Contains(pf.Reason, "not read") {
 		t.Fatalf("with no amd64 node an unread pipeline must be refused and say why: %+v", pf)
 	}
-	pf = s.PipelinePreflight(context.Background(), "other")
+	other, why := kanikoOf(map[string]any{"spec": map[string]any{}}, missing)
+	pf = s.buildPreflight(context.Background(), "other", other, why)
 	if !pf.BuildReady {
 		t.Fatalf("a pipeline that runs no kaniko is not held by the amd64 check: %+v", pf)
 	}
@@ -671,74 +645,6 @@ func placementNode(host string, ready, cordoned bool, cpu string) *corev1.Node {
 	}
 }
 
-func placementPod(name, node, cpu string, phase corev1.PodPhase) *corev1.Pod {
-	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "cicd"},
-		Spec: corev1.PodSpec{NodeName: node, Containers: []corev1.Container{{Name: "c", Resources: corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse(cpu)}}}}},
-		Status: corev1.PodStatus{Phase: phase},
-	}
-}
-
-// 2026-11-18, the Owner: builds go to the fast node, and to the slower one when
-// it is full. #598's soft preference sent 11 of 13 deliveries to 05, where the
-// same build takes twice as long. The latencies are the 7-day readings of that
-// day. Whatever the nodes say, a release must not wait for one of them.
-// Positive control: without the tier in the sort, "today" picks ubt-k3s-05 (the
-// first by name); the "requests" case fails if finished pods are not skipped.
-func TestBuildPlacementFollowsTheProfiles(t *testing.T) {
-	const fast, slow, added, batch = "ubt-k3s-07", "ubt-k3s-05", "ubt-k3s-08", "ubt-k3s-01"
-	quiet := func(latency float64) NodeMetrics {
-		return NodeMetrics{WriteLatencySeconds: latency, CPUBusy: 0.2, DiskBusy: 0.1, MemoryAvailable: 0.6}
-	}
-	today := func() map[string]NodeMetrics {
-		return map[string]NodeMetrics{"ip-" + fast: quiet(0.0068), "ip-" + slow: quiet(0.161), "ip-" + added: quiet(0.001), "ip-" + batch: quiet(0.0009)}
-	}
-	with := func(change func(m map[string]NodeMetrics)) map[string]NodeMetrics {
-		m := today()
-		change(m)
-		return m
-	}
-	set := func(host string, change func(*NodeMetrics)) map[string]NodeMetrics {
-		return with(func(m map[string]NodeMetrics) { n := m["ip-"+host]; change(&n); m["ip-"+host] = n })
-	}
-	denied := placementNode(batch, true, false, "16")
-	denied.Labels[batchLabel] = "deny"
-	two := []runtime.Object{placementNode(fast, true, false, "16"), placementNode(slow, true, false, "16"), denied}
-	for _, c := range []struct {
-		name    string
-		objects []runtime.Object
-		metrics map[string]NodeMetrics
-		want    string
-		why     string
-	}{
-		{"today: 07 first, the batch-deny node never", append(two[:3:3], placementPod("done", fast, "15", corev1.PodSucceeded)), today(), fast, "disk tier 1"},
-		// Positive control: ordering by tier then name picks ubt-k3s-05 here.
-		{"two slow disks: the less slow one", two, set(fast, func(n *NodeMetrics) { n.WriteLatencySeconds = 0.03 }), fast, "disk tier 2 (30.0 ms"},
-		{"a new node that measures well is chosen", append(two[:3:3], placementNode(added, true, false, "16")), today(), added, "disk tier 0"},
-		{"CPU busy", two, set(fast, func(n *NodeMetrics) { n.CPUBusy = 0.9 }), slow, "CPU 90% busy"},
-		{"disk busy", two, set(fast, func(n *NodeMetrics) { n.DiskBusy = 0.9 }), slow, "disk 90% busy"},
-		{"memory short", two, set(fast, func(n *NodeMetrics) { n.MemoryAvailable = 0.1 }), slow, "memory 10% available"},
-		// The fake client ignores the pod list's node filter, so 05 is made big enough to hold 07's pod too.
-		{"requests leave no room", []runtime.Object{placementNode(fast, true, false, "16"), placementNode(slow, true, false, "32"), placementPod("busy", fast, "13", corev1.PodRunning)}, today(), slow, "CPU unrequested"},
-		{"cordoned", []runtime.Object{placementNode(fast, true, true, "16"), placementNode(slow, true, false, "16")}, today(), slow, "cordoned"},
-		{"not ready", []runtime.Object{placementNode(fast, false, false, "16"), placementNode(slow, true, false, "16")}, today(), slow, "not ready"},
-		{"not measured", two, with(func(m map[string]NodeMetrics) { delete(m, "ip-"+fast) }), slow, "not measured"},
-		{"nothing fits: left to the scheduler", two, map[string]NodeMetrics{}, "", "no node fits"},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			s := NewService(&config.ClusterEntry{ID: "test"})
-			s.SetClientsetForTest(k8sfake.NewSimpleClientset(c.objects...))
-			s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) { return c.metrics, nil })
-			task := TaskProfile{DiskHeavy: true, MaxDiskTier: 2, CPUCores: 4, MemoryBytes: 4 << 30}
-			got, placed := s.PlaceTask(context.Background(), task)
-			if !placed || got.Node != c.want || !strings.Contains(got.Why, c.why) {
-				t.Fatalf("got %+v placed=%v, want node %q and a reason with %q", got, placed, c.want, c.why)
-			}
-		})
-	}
-}
-
 // 2026-11-18, the coordinator: the daily unit run does not land on 05, where two
 // tasks timed out. Unlike a release it can wait, so the slow disk is refused.
 // Positive control: MaxDiskTier 2 in UnitTask picks 05 here.
@@ -791,21 +697,6 @@ func TestAStartPinsOnlyThePlacedPipeline(t *testing.T) {
 	other := map[string]any{}
 	if _, placed := s.placeBuild(context.Background(), "bifrost-ci-platform", other); placed || len(other) != 0 {
 		t.Fatalf("another pipeline was placed: %v", other)
-	}
-}
-
-// Same origin: a node missing one reading is "not measured", never judged on
-// zeros, which would read as an idle node with a perfect disk.
-// Positive control: dropping the presence checks makes 10.0.0.2 appear.
-func TestJoinNodeMetricsKeepsOnlyCompleteNodes(t *testing.T) {
-	got := JoinNodeMetrics(
-		map[string]float64{"10.0.0.1": 0.007, "10.0.0.2": 0.001, "10.0.0.3": math.NaN()},
-		map[string]float64{"10.0.0.1": 0.5, "10.0.0.3": 0.1},
-		map[string]float64{"10.0.0.1": 0.2, "10.0.0.2": 0.1, "10.0.0.3": 0.1},
-		map[string]float64{"10.0.0.1": 0.6, "10.0.0.2": 0.9, "10.0.0.3": 0.9},
-	)
-	if len(got) != 1 || got["10.0.0.1"].WriteLatencySeconds != 0.007 || got["10.0.0.1"].MemoryAvailable != 0.6 {
-		t.Fatalf("got %+v", got)
 	}
 }
 
@@ -870,7 +761,7 @@ func TestPublishCINodeWritesTheChoiceWhenItChanges(t *testing.T) {
 // under CITask choose 02.
 func TestACIRunStaysOffTheNodeWithoutMemoryToSpare(t *testing.T) {
 	s := NewService(&config.ClusterEntry{ID: "test"})
-	s.SetClientsetForTest(k8sfake.NewSimpleClientset(placementNode("ubt-k3s-02", true, false, "16"), placementNode("ubt-k3s-04", true, false, "16")))
+	s.SetClientsetForTest(k8sfake.NewSimpleClientset(labelled(placementNode("ubt-k3s-02", true, false, "16"), placement.PostgresPrimary), placementNode("ubt-k3s-04", true, false, "16")))
 	s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) {
 		return map[string]NodeMetrics{
 			"ip-ubt-k3s-02": {WriteLatencySeconds: 0.001, CPUBusy: 0.05, DiskBusy: 0.05, MemoryAvailable: 0.6},
@@ -887,26 +778,6 @@ func TestACIRunStaysOffTheNodeWithoutMemoryToSpare(t *testing.T) {
 	}
 }
 
-// Same origin: memory volumes take from the available memory, so a CI run needs
-// 7 GiB of it on any node, which is what bounds ubt-k3s-07's 3.3 GiB of room when
-// several runs share it. Positive control: at 7 GiB the quieter node is chosen.
-func TestACIRunNeedsAvailableMemoryOnEveryNode(t *testing.T) {
-	m := func(cpu float64) NodeMetrics {
-		return NodeMetrics{WriteLatencySeconds: 0.001, CPUBusy: cpu, DiskBusy: 0.1, MemoryAvailable: 0.4}
-	}
-	nodes := []NodeProfile{
-		{Host: "quiet", Name: "quiet", FreeCPU: 8, FreeMemory: 8 << 30, AvailableMemory: 7<<30 - 1, Metrics: m(0.1)},
-		{Host: "other", Name: "other", FreeCPU: 8, FreeMemory: 8 << 30, AvailableMemory: 12 << 30, Metrics: m(0.5)},
-	}
-	if p := spreadNode(CIRunTask, nodes, "", BuildPlacement{}); p.Node != "other" {
-		t.Fatalf("low memory: %+v", p)
-	}
-	nodes[0].AvailableMemory = 7 << 30
-	if p := spreadNode(CIRunTask, nodes, "", BuildPlacement{}); p.Node != "quiet" {
-		t.Fatalf("at the floor: %+v", p)
-	}
-}
-
 // Same origin: with no node chosen a run is left to the scheduler, so the nodes it
 // must avoid are a hard rule in the pod template too. Positive control: the plain
 // template has no affinity.
@@ -914,105 +785,63 @@ func TestAPlatformCIRunIsKeptOffTheExcludedNodes(t *testing.T) {
 	if _, ok := amd64CITaskRunTemplate()["podTemplate"].(map[string]any)["affinity"]; ok {
 		t.Fatal("the plain template has an affinity")
 	}
-	got := fmt.Sprint(ciRunTaskRunTemplate()["podTemplate"].(map[string]any)["affinity"])
-	for _, want := range []string{"NotIn", "ubt-k3s-01", "ubt-k3s-02"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("%s not in %s", want, got)
+	// 2026-11-19: by label, not node name (the etcd node and the database primary,
+	// today ubt-k3s-01 and ubt-k3s-02): one term, both expressions must hold.
+	got, err := json.Marshal(ciRunTaskRunTemplate()["podTemplate"].(map[string]any)["affinity"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[` +
+		`{"key":"node-role.kubernetes.io/etcd","operator":"NotIn","values":["true"]},` +
+		`{"key":"bifrost.io/postgres-role","operator":"NotIn","values":["primary"]}]}]}}}`
+	if string(got) != want {
+		t.Fatalf("affinity %s, want %s", got, want)
+	}
+}
+
+// labelled gives the node the rules' labels.
+func labelled(n *corev1.Node, rules ...placement.LabelRule) *corev1.Node {
+	for _, r := range rules {
+		n.Labels[r.Key] = r.Value
+	}
+	return n
+}
+
+// Origin: 2026-11-19, node names became labels (CI line ask). The etcd node and the
+// database primary are excluded by their labels, so a node renamed or replaced keeps
+// the rule, and a node that only has the old name is no longer excluded.
+// Positive control: excluding by the name ubt-k3s-01 instead makes the first check
+// choose cp-renamed (the quieter node) and the second refuse ubt-k3s-01.
+func TestCINeverGoesToTheEtcdNodeWhateverItIsCalled(t *testing.T) {
+	place := func(task TaskProfile, nodes ...runtime.Object) BuildPlacement {
+		s := NewService(&config.ClusterEntry{ID: "test"})
+		s.SetClientsetForTest(k8sfake.NewSimpleClientset(nodes...))
+		s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) {
+			return map[string]NodeMetrics{
+				"ip-cp-renamed": {WriteLatencySeconds: 0.001, CPUBusy: 0.05, DiskBusy: 0.05, MemoryAvailable: 0.6},
+				"ip-db-renamed": {WriteLatencySeconds: 0.001, CPUBusy: 0.05, DiskBusy: 0.05, MemoryAvailable: 0.6},
+				"ip-ubt-k3s-01": {WriteLatencySeconds: 0.001, CPUBusy: 0.5, DiskBusy: 0.1, MemoryAvailable: 0.6},
+				"ip-ubt-k3s-02": {WriteLatencySeconds: 0.001, CPUBusy: 0.5, DiskBusy: 0.1, MemoryAvailable: 0.6},
+			}, nil
+		})
+		p, _ := s.placeTask(context.Background(), task, "")
+		return p
+	}
+	cp := func() *corev1.Node {
+		return labelled(placementNode("cp-renamed", true, false, "16"), placement.EtcdNode)
+	}
+	old := func() *corev1.Node { return placementNode("ubt-k3s-01", true, false, "16") }
+	for name, task := range map[string]TaskProfile{"CITask": CITask, "CIRunTask": CIRunTask, "UnitTask": UnitTask} {
+		task.MinAvailableMemory = 0 // the fake nodes report little memory
+		if p := place(task, cp(), old()); p.Node != "ubt-k3s-01" {
+			t.Fatalf("%s: %+v, want the etcd-labelled node excluded and ubt-k3s-01 chosen", name, p)
 		}
 	}
-}
-
-// 2026-11-18, the compute line's reading after CI moved: one preferred node sent
-// 52% of CI pods to the slow disk while 02 and 04 idled. CI takes the least loaded
-// node off the slow disk, stays put within the margin, and never takes ubt-k3s-01.
-// Positive control: without the margin the third check moves to the quieter node;
-// without Exclude the first picks ubt-k3s-01.
-func TestCISpreadsOffTheSlowDiskAndKeepsOffTheExcludedNode(t *testing.T) {
-	node := func(host string, latency, cpu, disk float64) NodeProfile {
-		return NodeProfile{Host: host, Name: host, FreeCPU: 8, FreeMemory: 8 << 30, Metrics: NodeMetrics{WriteLatencySeconds: latency, CPUBusy: cpu, DiskBusy: disk, MemoryAvailable: 0.6}}
-	}
-	nodes := []NodeProfile{node("ubt-k3s-07", 0.007, 0.6, 0.5), node("ubt-k3s-05", 0.16, 0.1, 0.1), node("ubt-k3s-04", 0.001, 0.2, 0.1), node("ubt-k3s-02", 0.001, 0.3, 0.1)}
-	fallback := BuildPlacement{Node: "ubt-k3s-05"}
-	if p := spreadNode(CITask, nodes, "", fallback); p.Node != "ubt-k3s-04" {
-		t.Fatalf("least loaded off the slow disk: %+v", p)
-	}
-	if p := spreadNode(CITask, nodes, "ubt-k3s-07", fallback); p.Node != "ubt-k3s-04" {
-		t.Fatalf("far above the best it moves: %+v", p)
-	}
-	if p := spreadNode(CITask, nodes, "ubt-k3s-02", fallback); p.Node != "ubt-k3s-02" {
-		t.Fatalf("within the margin it stays: %+v", p)
-	}
-	if p := spreadNode(CITask, nodes[1:2], "", fallback); p.Node != "ubt-k3s-05" {
-		t.Fatalf("only the slow disk left: %+v", p)
-	}
-	if !slices.Contains(CITask.Exclude, "ubt-k3s-01") {
-		t.Fatal("ubt-k3s-01 is excluded")
-	}
-}
-
-// 2026-11-18: ubt-k3s-07's disk answered in 799 ms while its 7-day average said
-// 15, and builds pinned there took twice as long. The worse figure counts; a quiet
-// slow disk keeps its long one. Positive control: returning recent alone fails the
-// second check, long alone the first.
-func TestWorseLatencyTakesTheHigherAverage(t *testing.T) {
-	got := WorseLatency(map[string]float64{"a": 0.015, "b": 0.16, "c": 0.002}, map[string]float64{"a": 0.8, "b": 0.006, "c": math.NaN()})
-	if got["a"] != 0.8 {
-		t.Fatalf("just gone slow: %v", got)
-	}
-	if got["b"] != 0.16 || got["c"] != 0.002 {
-		t.Fatalf("quiet: %v", got)
-	}
-}
-
-// Same origin, the compute line's rollback line: a database node takes this work
-// only while its disk is under 60% busy. Positive control: without the check the
-// busy node, the least loaded by CPU, is chosen.
-func TestABusyProtectedNodeTakesNoSpreadWork(t *testing.T) {
-	m := func(cpu, disk float64) NodeMetrics {
-		return NodeMetrics{WriteLatencySeconds: 0.001, CPUBusy: cpu, DiskBusy: disk, MemoryAvailable: 0.6}
-	}
-	nodes := []NodeProfile{
-		{Host: "db", Name: "db", Protected: true, FreeCPU: 8, FreeMemory: 8 << 30, AvailableMemory: 8 << 30, Metrics: m(0.61, 0.61)},
-		{Host: "other", Name: "other", Protected: true, FreeCPU: 8, FreeMemory: 8 << 30, AvailableMemory: 8 << 30, Metrics: m(0.7, 0.2)},
-	}
-	if p := spreadNode(CITask, nodes, "", BuildPlacement{}); p.Node != "other" {
-		t.Fatalf("placement = %+v", p)
-	}
-}
-
-// 2026-11-19, the compute line: 02 and 04 wrote about 70 GB an hour, and ubt-k3s-07's
-// disk slowed after 36 GB an hour for six hours. A database node over 75 GB in two
-// hours takes no more of this work, not even as the fallback when nothing else fits.
-// Positive control: at the limit it is chosen again.
-func TestADatabaseNodeThatWroteTooMuchTakesNoWork(t *testing.T) {
-	node := NodeProfile{Host: "db", Name: "db", Protected: true, FreeCPU: 8, FreeMemory: 8 << 30, AvailableMemory: 12 << 30,
-		Metrics: NodeMetrics{WriteLatencySeconds: 0.001, CPUBusy: 0.1, DiskBusy: 0.1, MemoryAvailable: 0.6, WrittenBytes2h: 75e9 + 1}}
-	if p := spreadNode(UnitTask, []NodeProfile{node}, "", chooseNode(UnitTask, []NodeProfile{node})); p.Node != "" {
-		t.Fatalf("over the limit: %+v", p)
-	}
-	node.Metrics.WrittenBytes2h = 75e9
-	if p := spreadNode(UnitTask, []NodeProfile{node}, "", BuildPlacement{}); p.Node != "db" {
-		t.Fatalf("at the limit: %+v", p)
-	}
-}
-
-// 2026-11-19, the compute line: ubt-k3s-02 (15 GiB) fell to 7.5 GiB available as CI
-// moved there, towards its 5 GiB rollback line. Under 6 GiB a database node takes no
-// spread work. Positive control: at 6 GiB the quieter node is chosen again.
-func TestAProtectedNodeLowOnMemoryTakesNoSpreadWork(t *testing.T) {
-	m := func(cpu float64) NodeMetrics {
-		return NodeMetrics{WriteLatencySeconds: 0.001, CPUBusy: cpu, DiskBusy: 0.1, MemoryAvailable: 0.4}
-	}
-	nodes := []NodeProfile{
-		{Host: "small", Name: "small", Protected: true, FreeCPU: 8, FreeMemory: 8 << 30, AvailableMemory: 6<<30 - 1, Metrics: m(0.1)},
-		{Host: "other", Name: "other", Protected: true, FreeCPU: 8, FreeMemory: 8 << 30, AvailableMemory: 12 << 30, Metrics: m(0.5)},
-	}
-	if p := spreadNode(CITask, nodes, "", BuildPlacement{}); p.Node != "other" {
-		t.Fatalf("low memory: %+v", p)
-	}
-	nodes[0].AvailableMemory = 6 << 30
-	if p := spreadNode(CITask, nodes, "", BuildPlacement{}); p.Node != "small" {
-		t.Fatalf("at the floor: %+v", p)
+	db := labelled(placementNode("db-renamed", true, false, "16"), placement.PostgresPrimary)
+	run := CIRunTask
+	run.MinAvailableMemory = 0
+	if p := place(run, db, placementNode("ubt-k3s-02", true, false, "16")); p.Node != "ubt-k3s-02" {
+		t.Fatalf("CIRunTask: %+v, want the primary-labelled node excluded and ubt-k3s-02 chosen", p)
 	}
 }
 
@@ -1030,5 +859,97 @@ func TestOnlyAPlatformProdStartPrepares(t *testing.T) {
 	_, _, _ = s.StartPipelineRun(context.Background(), "bifrost-ci-platform", factSHA1, "", "", nil)
 	if len(got) != 1 || got[0] != factSHA1 {
 		t.Fatalf("prepared %v", got)
+	}
+}
+
+// 2026-11-20: GET /api/v1/delivery/pipelines took 19–22 s on PROD (BifrostAPIHighLatency
+// on platform-workers): every kaniko pipeline in the list read the nodes live,
+// each waiting out the SSH probe to the powered-off gpu-server. The list reads
+// the nodes once, from the kept reading; a pipeline that runs no kaniko reads none.
+func TestThePipelineListReadsTheNodesOnce(t *testing.T) {
+	s, _, _ := contractService(t, &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "tekton.dev/v1", "kind": "Pipeline",
+		"metadata": map[string]any{"name": "other", "namespace": "cicd"}, "spec": map[string]any{}}}, "present")
+	cs := k8sfake.NewSimpleClientset()
+	s.SetClientsetForTest(cs)
+	missing := func(string) (map[string]any, error) { return nil, fmt.Errorf("forbidden") }
+	unreadPipe := map[string]any{"spec": map[string]any{"tasks": []any{map[string]any{"name": "b", "taskRef": map[string]any{"name": "x"}}}}}
+	nodes := s.displayNodeInputs(context.Background())
+	for _, name := range []string{"a", "b", "c"} {
+		if v := s.enrichPipelineView(name, "cicd", unreadPipe, missing, nodes); v.BuildReady == nil {
+			t.Fatalf("%s: a kaniko pipeline must carry a build badge", name)
+		}
+	}
+	lists := 0
+	for _, a := range cs.Actions() {
+		if a.GetVerb() == "list" && a.GetResource().Resource == "nodes" {
+			lists++
+		}
+	}
+	if lists != 1 {
+		t.Fatalf("three kaniko pipelines listed the nodes %d times, want 1", lists)
+	}
+	calls := 0
+	count := func() []placement.NodeInput { calls++; return nil }
+	if v := s.enrichPipelineView("plain", "cicd", map[string]any{"spec": map[string]any{}}, missing, count); v.BuildReady != nil || calls != 0 {
+		t.Fatalf("a pipeline that runs no kaniko read the nodes %d times: %+v", calls, v)
+	}
+}
+
+// 2026-11-20: after the nodes fix the pipeline list still took 2.8 s on PROD,
+// every request: one Get per Task, through the client's rate limit. The Tasks
+// are listed once; a name the list lacks is still read alone.
+func TestTheTaskReaderListsOnce(t *testing.T) {
+	task := func(name string) *unstructured.Unstructured {
+		return &unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "tekton.dev/v1", "kind": "Task",
+			"metadata": map[string]any{"name": name, "namespace": "cicd"}, "spec": map[string]any{}}}
+	}
+	dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{taskGVR: "TaskList"}, task("a"), task("b"), task("c"))
+	s, _, _ := contractService(t, &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "tekton.dev/v1", "kind": "Pipeline",
+		"metadata": map[string]any{"name": "p", "namespace": "cicd"}, "spec": map[string]any{}}}, "present")
+	get := s.clusterTasks(context.Background(), dyn)
+	for _, n := range []string{"a", "b", "c", "a"} {
+		if obj, err := get(n); err != nil || obj == nil {
+			t.Fatalf("%s: %v", n, err)
+		}
+	}
+	if _, err := get("missing"); err == nil {
+		t.Fatal("a Task that does not exist must still fail")
+	}
+	lists, gets := 0, 0
+	for _, a := range dyn.Actions() {
+		switch a.GetVerb() {
+		case "list":
+			lists++
+		case "get":
+			gets++
+		}
+	}
+	if lists != 1 || gets != 1 {
+		t.Fatalf("lists=%d gets=%d, want 1 list and 1 get (the missing name)", lists, gets)
+	}
+}
+
+// 2026-11-20: the Command page's "Done for you" showed 46 window holds in a day,
+// one per minute's renewal, each "no reason given / No undo written". The hold
+// is recorded when it is taken; the renewals say so, and the record skips them.
+func TestARenewalIsMarkedNotRecorded(t *testing.T) {
+	h, _ := queueHandler(t)
+	put := func() *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.HandlePutReleaseWindow(rec, httptest.NewRequest(http.MethodPut, "/delivery/release-window",
+			bytes.NewBufferString(`{"what":"bifrost-platform","who":"ci-w1.abc","reason":"ship x","env":"hold"}`)))
+		return rec
+	}
+	first := put()
+	if first.Code != http.StatusOK || first.Header().Get(actions.NotRecordedHeader) != "" {
+		t.Fatalf("taking the window must be recorded: %d %q", first.Code, first.Header().Get(actions.NotRecordedHeader))
+	}
+	again := put()
+	if again.Code != http.StatusOK || again.Header().Get(actions.NotRecordedHeader) != "renewal" {
+		t.Fatalf("a renewal must be marked: %d %q %s", again.Code, again.Header().Get(actions.NotRecordedHeader), again.Body)
 	}
 }

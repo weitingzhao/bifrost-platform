@@ -375,3 +375,145 @@ func TestWithAskOnlyOnRowsThatAsk(t *testing.T) {
 		t.Errorf("the letter is %d bytes", len(got))
 	}
 }
+
+// 2026-11-19, law 43 (compute chose): a pain crossing wakes the compute seat
+// alone. The duty row hears every alert, so without except it would wake the
+// coordinator too; the guest-load reading is info and wakes no one.
+func TestPainAlertsWakeComputeAloneAndGuestLoadNoOne(t *testing.T) {
+	all, err := registry.LoadSubscriptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := map[string]registry.Subscription{}
+	for _, r := range all["rocket"].Rows {
+		rows[r.ID] = r
+	}
+	duty, pain := rows["alert-firing-to-duty"], rows["alert-pain-to-compute"]
+	if pain.ID == "" || duty.ID == "" {
+		t.Fatalf("rows missing: duty %q, pain %q", duty.ID, pain.ID)
+	}
+	fired := func(name string) Event {
+		return Event{Type: "alert.rule.fired", Subject: name + "@cluster", Change: "firing"}
+	}
+	for _, c := range []struct {
+		alert      string
+		duty, pain bool
+	}{
+		{"ComputePainDbDiskFlush", false, true},
+		{"ComputePainProdThrottle", false, true},
+		{"ComputePainDbGuestLoad", false, false},
+		{"KubePodNotReady", true, false}, // positive control: other alerts still reach duty
+	} {
+		if got := Matches(duty, fired(c.alert)); got != c.duty {
+			t.Errorf("%s to duty: %v, want %v", c.alert, got, c.duty)
+		}
+		if got := Matches(pain, fired(c.alert)); got != c.pain {
+			t.Errorf("%s to compute: %v, want %v", c.alert, got, c.pain)
+		}
+	}
+	if Matches(pain, Event{Type: "alert.rule.fired", Subject: "ComputePainDbDiskFlush@cluster", Change: "resolved"}) {
+		t.Error("going back under woke compute; it stays on the bus")
+	}
+}
+
+// 2026-11-20, TD-588: the bus stopped for about 75 minutes (NATS stuck on a
+// drained node) and no alert fired. The metrics line's two rules wake the
+// communication line, which owns the bus; duty still hears them.
+func TestBusAlertsWakeTheCommunicationLine(t *testing.T) {
+	all, err := registry.LoadSubscriptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := map[string]registry.Subscription{}
+	for _, r := range all["rocket"].Rows {
+		rows[r.ID] = r
+	}
+	relay, nats := rows["alert-bus-relay-to-comm"], rows["alert-nats-to-comm"]
+	if relay.ID == "" || nats.ID == "" {
+		t.Fatalf("rows missing: relay %q, nats %q", relay.ID, nats.ID)
+	}
+	const comm = "thread:local_ab850773-fe26-40fa-ac01-b3b590b73164"
+	if relay.To != comm || nats.To != comm {
+		t.Fatalf("the bus alerts go to %q and %q, not the communication line", relay.To, nats.To)
+	}
+	fired := func(name, ns string) Event {
+		return Event{Type: "alert.rule.fired", Subject: name + "@" + ns, Change: "firing"}
+	}
+	if !Matches(relay, fired("BifrostBusRelayErrors", "bifrost-platform-prod")) {
+		t.Error("relay errors did not wake the communication line")
+	}
+	if !Matches(nats, fired("BifrostNatsUnavailable", "data")) {
+		t.Error("NATS unavailable did not wake the communication line")
+	}
+	// Positive control: another alert does not.
+	if Matches(relay, fired("KubePodNotReady", "data")) || Matches(nats, fired("KubePodNotReady", "data")) {
+		t.Error("an unrelated alert woke the communication line")
+	}
+	if Matches(relay, Event{Type: "alert.rule.fired", Subject: "BifrostBusRelayErrors@bifrost-platform-prod", Change: "resolved"}) {
+		t.Error("a resolved alert woke the communication line")
+	}
+}
+
+// 2026-11-20, TD-588: an alarm about the bus must not ride the bus. The two
+// bus alerts are delivered by the alert webhook itself (by: webhook), so the
+// dispatcher runs no durable consumer for them (no second letter), and
+// DeliverDirect writes the wake with no NATS at all.
+func TestBusAlertsAreDeliveredWithoutTheBus(t *testing.T) {
+	all, err := registry.LoadSubscriptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range Rows(all, "rocket") {
+		if r.ID == "alert-bus-relay-to-comm" || r.ID == "alert-nats-to-comm" {
+			t.Errorf("%s has a bus consumer: it would be delivered twice, and not while the bus is down", r.ID)
+		}
+	}
+	var sent []string
+	d := Dispatcher{
+		Send: func(_ context.Context, key, to, body string, _ int64) error {
+			sent = append(sent, to+" "+key)
+			return nil
+		},
+		Known: func(context.Context, string) (bool, error) { return true, nil },
+	}
+	ev := Event{ID: "ev-77", Type: "alert.rule.fired", Subject: "BifrostBusRelayErrors@bifrost-platform-prod", Change: "firing"}
+	if errs := d.DeliverDirect(context.Background(), all, "rocket", ev); len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	want := "thread:local_ab850773-fe26-40fa-ac01-b3b590b73164 sub:alert-bus-relay-to-comm:ev-77"
+	if len(sent) != 1 || sent[0] != want {
+		t.Fatalf("sent %v, want [%s]", sent, want)
+	}
+	// Positive control: an alert no webhook row takes sends nothing.
+	sent = nil
+	d.DeliverDirect(context.Background(), all, "rocket", Event{ID: "ev-78", Type: "alert.rule.fired", Subject: "KubePodNotReady@data", Change: "firing"})
+	if len(sent) != 0 {
+		t.Fatalf("an unrelated alert was delivered directly: %v", sent)
+	}
+}
+
+// 2026-11-20: the compute seat's pain row (law 43, 11-19) said by:
+// alert-letters, whose consumer delivers the duty row only, so no pain alert
+// ever woke compute. Every alert row other than duty's must be delivered by
+// someone: the dispatcher, or the webhook.
+func TestEveryAlertRowHasADeliverer(t *testing.T) {
+	all, err := registry.LoadSubscriptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range all["rocket"].Rows {
+		if len(r.On) != 1 || r.On[0] != "alert.rule.fired" || r.ID == "alert-firing-to-duty" {
+			continue
+		}
+		if r.By != registry.ByDispatcher && r.By != registry.ByWebhook {
+			t.Errorf("%s says by: %s, and no code delivers that row", r.ID, r.By)
+		}
+	}
+	pain := false
+	for _, r := range Rows(all, "rocket") {
+		pain = pain || r.ID == "alert-pain-to-compute"
+	}
+	if !pain {
+		t.Error("the pain row is not dispatched")
+	}
+}

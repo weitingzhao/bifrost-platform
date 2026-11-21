@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubeapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/resourceview"
 	"io"
 	"strings"
@@ -15,36 +16,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type ActuationResponse struct {
-	OK          bool      `json:"ok"`
-	Action      string    `json:"action"`
-	Target      string    `json:"target"`
-	Changed     bool      `json:"changed"`
-	Message     string    `json:"message"`
-	Namespaces  []string  `json:"namespaces,omitempty"`
-	GeneratedAt time.Time `json:"generated_at"`
-}
-
-type RolloutRestartRequest struct {
-	Namespace string `json:"namespace"`
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-}
-
-type ScaleRequest struct {
-	Namespace string `json:"namespace"`
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Replicas  int32  `json:"replicas"`
-}
-
-type LogsResponse struct {
-	Namespace string `json:"namespace"`
-	Pod       string `json:"pod"`
-	Container string `json:"container,omitempty"`
-	TailLines int64  `json:"tail_lines"`
-	Logs      string `json:"logs"`
-}
+// The actuation shapes live in kubeapi (2026-11-19) so that other domains can
+// name them without importing this package.
+type (
+	ActuationResponse     = kubeapi.ActuationResponse
+	RolloutRestartRequest = kubeapi.RolloutRestartRequest
+	ScaleRequest          = kubeapi.ScaleRequest
+	LogsResponse          = kubeapi.LogsResponse
+)
 
 // EnsureBifrostNamespaces creates the named namespaces that do not exist yet.
 // Every name must be listed under bifrost_namespaces in this platform's config,
@@ -252,12 +231,4 @@ func validateDeploymentTarget(namespace, kind, name string) error {
 		return fmt.Errorf("only Deployment is supported in P1")
 	}
 	return nil
-}
-
-func (r RolloutRestartRequest) Target() string {
-	return r.Namespace + "/" + r.Kind + "/" + r.Name
-}
-
-func (r ScaleRequest) Target() string {
-	return r.Namespace + "/" + r.Kind + "/" + r.Name
 }

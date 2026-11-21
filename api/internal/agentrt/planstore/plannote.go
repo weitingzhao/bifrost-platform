@@ -74,7 +74,7 @@ func PostPlanNote(ctx context.Context, db eventlog.DB, w actor.Writer, key, node
 		case kind != "arch_row" || parent == nil:
 			return nil, eventlog.Invalid("%s is a %s: only an architecture row takes a note", nodeID, kind)
 		}
-		ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: PlanStream(*parent), Type: "note", Actor: w.Actor, PlanNode: nodeID,
+		ev, err := appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(*parent), Type: "note", Actor: w.Actor, PlanNode: nodeID,
 			Body: map[string]any{"text": text}})
 		if err != nil {
 			return nil, err

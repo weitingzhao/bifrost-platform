@@ -6,7 +6,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/homelayout"
 )
 
@@ -15,7 +14,7 @@ import (
 // The handlers live in homelayout; this mounts and gates them.
 
 func (s *Server) homeLayout() homelayout.Handlers {
-	return homelayout.Handlers{DB: s.recordDB, Who: agentrtapi.WriterOf}
+	return homelayout.Handlers{DB: s.recordDB, Who: writerOf}
 }
 
 func (s *Server) mountHomeLayout(r chi.Router) {

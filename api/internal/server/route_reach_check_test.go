@@ -41,6 +41,12 @@ var oldPrincipals = []string{"", "viewer", "reporter", "operator", "admin", "tra
 // this walk reaches the guarded handler, not the controller operation; the
 // handler-level approval refusal is checked by TestFixedIPWriteMatchesFirewallApprovalBoundary.
 var intendedRouteAdditions = map[string][]string{
+	// 2026-11-20 (the Owner: every module's state on the bus): each subject's
+	// latest state for a registered state type, read-only, like the other bus reads.
+	"GET /api/v1/bus/states": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// 2026-11-20 (law 47; the coordinator gave the evaluation readout to the
+	// metrics line): the evaluation numbers, read-only, for the console's readers.
+	"GET /api/v1/readings/evaluation": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-18 (the coordinator chose it from the cockpit line's proposal):
 	// the Owner's arrangement of the home's city; everyone reads, he alone saves.
 	"GET /api/v1/home/layout": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
@@ -105,6 +111,15 @@ var intendedRouteAdditions = map[string][]string{
 	// changed by domain, like /ci/scorecard (read-only; contracts v1).
 	"GET /api/v1/ci/domains": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/ci/changes": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// 2026-11-20 (0.2 map line): the map's pool of what it cannot perceive,
+	// as kept by the workers' scan (read-only; contract v1).
+	"GET /api/v1/catalog/unperceived": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// 2026-11-20 (0.2 map line): who owns a path, and the map's table of
+	// contents, from what the scan kept (read-only; contract v1).
+	"GET /api/v1/catalog/owner":  {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"GET /api/v1/catalog/index":  {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"GET /api/v1/catalog/status": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	"GET /api/v1/catalog/domain": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-14: the approval records counted, for the Ops page (read-only).
 	"GET /api/v1/readings/approvals": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/units/evidence":    {"operator", "admin", "trade-satellite"},
