@@ -86,14 +86,14 @@ const readDomain: ReadDomain = id => getJson(`/api/v1/catalog/domain?id=${encode
 const DEMO_CONTRACT: TrafficContract = {
   topics: [
     { type: 'git.main.advanced', domain: 'lineage' }, { type: 'ci.run.finished', domain: 'verification' },
-    { type: 'release.window.changed', domain: 'delivery' }, { type: 'approval.card.created', domain: 'owner' },
-    { type: 'approval.card.decided', domain: 'owner' }, { type: 'owner.question.answered', domain: 'owner' },
+    { type: 'release.window.changed', domain: 'delivery' }, { type: 'approval.card.created', domain: 'approvals' },
+    { type: 'approval.card.decided', domain: 'approvals' }, { type: 'owner.question.answered', domain: 'approvals' },
     { type: 'seat.mail.arrived', domain: 'coordination' }, { type: 'alert.rule.fired', domain: 'compute' },
   ],
   clients: [
     { name: 'headrelease', domain: 'delivery' }, { name: 'unit-watch', domain: 'verification' }, { name: 'release-recorder', domain: 'delivery' },
-    { name: 'window-queue', domain: 'delivery' }, { name: 'card-created-notice', domain: 'owner' }, { name: 'card-conclusions', domain: 'owner' },
-    { name: 'question-conclusions', domain: 'owner' }, { name: 'inbox-waiters', domain: 'coordination' }, { name: 'alert-letters', domain: 'coordination' },
+    { name: 'window-queue', domain: 'delivery' }, { name: 'card-created-notice', domain: 'approvals' }, { name: 'card-conclusions', domain: 'approvals' },
+    { name: 'question-conclusions', domain: 'approvals' }, { name: 'inbox-waiters', domain: 'coordination' }, { name: 'alert-letters', domain: 'coordination' },
   ],
 }
 const DEMO_PAIRS: [string, string][] = [

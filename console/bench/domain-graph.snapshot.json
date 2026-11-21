@@ -3,20 +3,75 @@
   "repo": "bifrost-platform",
   "commit": "9d9fd3e2 bench snapshot",
   "measured": true,
-  "note": "bench only: measured on platform main 9d9fd3e2 (2026-11-20) with cidomains.GraphOf; the page reads GET /api/v1/ci/domains",
+  "note": "bench only: measured on platform main 9d9fd3e2 (2026-11-20) with cidomains.GraphOf; the page reads GET /api/v1/ci/domains (ids renamed per law 66, 2026-11-21: owner->approvals, tenant->payload; the graph is still as measured at 9d9fd3e2)",
   "base": "foundation",
   "domains": [],
   "edges": [
-    { "from": "plan", "to": "foundation", "imports": 20, "wrong_way": false },
-    { "from": "lineage", "to": "foundation", "imports": 18, "wrong_way": false },
-    { "from": "verification", "to": "foundation", "imports": 44, "wrong_way": false },
-    { "from": "delivery", "to": "foundation", "imports": 28, "wrong_way": false },
-    { "from": "delivery", "to": "owner", "imports": 1, "wrong_way": false },
-    { "from": "owner", "to": "foundation", "imports": 36, "wrong_way": false },
-    { "from": "owner", "to": "coordination", "imports": 2, "wrong_way": false },
-    { "from": "compute", "to": "foundation", "imports": 22, "wrong_way": false },
-    { "from": "tenant", "to": "foundation", "imports": 28, "wrong_way": false },
-    { "from": "coordination", "to": "foundation", "imports": 19, "wrong_way": false }
+    {
+      "from": "plan",
+      "to": "foundation",
+      "imports": 20,
+      "wrong_way": false
+    },
+    {
+      "from": "lineage",
+      "to": "foundation",
+      "imports": 18,
+      "wrong_way": false
+    },
+    {
+      "from": "verification",
+      "to": "foundation",
+      "imports": 44,
+      "wrong_way": false
+    },
+    {
+      "from": "delivery",
+      "to": "foundation",
+      "imports": 28,
+      "wrong_way": false
+    },
+    {
+      "from": "delivery",
+      "to": "approvals",
+      "imports": 1,
+      "wrong_way": false
+    },
+    {
+      "from": "approvals",
+      "to": "foundation",
+      "imports": 36,
+      "wrong_way": false
+    },
+    {
+      "from": "approvals",
+      "to": "coordination",
+      "imports": 2,
+      "wrong_way": false
+    },
+    {
+      "from": "compute",
+      "to": "foundation",
+      "imports": 22,
+      "wrong_way": false
+    },
+    {
+      "from": "payload",
+      "to": "foundation",
+      "imports": 28,
+      "wrong_way": false
+    },
+    {
+      "from": "coordination",
+      "to": "foundation",
+      "imports": 19,
+      "wrong_way": false
+    }
   ],
-  "shared_packages": ["api/internal/server", "api/internal/delivery", "api/internal/agentrt/integration", "api/internal/agentrt/planwiring"]
+  "shared_packages": [
+    "api/internal/server",
+    "api/internal/delivery",
+    "api/internal/agentrt/integration",
+    "api/internal/agentrt/planwiring"
+  ]
 }

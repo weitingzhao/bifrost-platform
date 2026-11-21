@@ -8,15 +8,16 @@ import { domainTechTree } from '../techTree'
 // nodes are the districts with their map lights, its edges the imports GET /api/v1/ci/domains serves
 // (a wrong-way edge kept as a loop), that it says what it does not see, and that an unread graph leaves
 // the nodes alone with why rather than a guessed edge.
+// The approvals domain was owner until law 66 (2026-11-21): the ids follow the map.
 const light = (value: string) => ({ value, why: '' })
 const row = (id: string, overall = 'good') => ({ id, overall, alive: light('good'), interfaces: light('problem'), boundary: light('good'), fresh: light('unknown') })
-const status = { version: 1, domains: [row('foundation'), row('owner', 'problem'), row('coordination')] } as MapStatus
+const status = { version: 1, domains: [row('foundation'), row('approvals', 'problem'), row('coordination')] } as MapStatus
 const graph: CiDomainGraph = {
   version: 1, repo: 'bifrost-platform', commit: '9d9fd3e2aaaa', measured: true, note: '', base: 'foundation', domains: [],
   edges: [
-    { from: 'owner', to: 'foundation', imports: 36, wrong_way: false },
-    { from: 'owner', to: 'coordination', imports: 2, wrong_way: false },
-    { from: 'coordination', to: 'owner', imports: 1, wrong_way: true },
+    { from: 'approvals', to: 'foundation', imports: 36, wrong_way: false },
+    { from: 'approvals', to: 'coordination', imports: 2, wrong_way: false },
+    { from: 'coordination', to: 'approvals', imports: 1, wrong_way: true },
     { from: 'shared', to: 'foundation', imports: 9, wrong_way: false },
   ],
   shared_packages: ['a-shared-package'],
@@ -25,16 +26,16 @@ const graph: CiDomainGraph = {
 describe('the domains tech tree', () => {
   it('nodes are the districts, each with its overall light and its four lights said', () => {
     const t = domainTechTree(status, { data: graph })!
-    expect(t.nodes.map(n => [n.id, n.tone])).toEqual([['foundation', 'good'], ['owner', 'problem'], ['coordination', 'good']])
+    expect(t.nodes.map(n => [n.id, n.tone])).toEqual([['foundation', 'good'], ['approvals', 'problem'], ['coordination', 'good']])
     expect(t.nodes[0].why).toBe('alive good · interfaces problem · boundary good · fresh unknown')
     expect(t.nodes.map(n => n.icon)).toEqual(['layers', 'gavel', 'signal'])
   })
   it('edges are the served imports between districts; a wrong-way one is a loop; others dropped', () => {
     const t = domainTechTree(status, { data: graph })!
     expect(t.edges).toEqual([
-      { from: 'owner', to: 'foundation', weight: 36, wrong: false },
-      { from: 'owner', to: 'coordination', weight: 2, wrong: false },
-      { from: 'coordination', to: 'owner', weight: 1, wrong: true },
+      { from: 'approvals', to: 'foundation', weight: 36, wrong: false },
+      { from: 'approvals', to: 'coordination', weight: 2, wrong: false },
+      { from: 'coordination', to: 'approvals', weight: 1, wrong: true },
     ])
     expect(t.note).toMatch(/bifrost-platform at 9d9fd3e2.*Not seen here.*1 shared package not drawn/)
   })

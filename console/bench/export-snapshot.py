@@ -38,7 +38,7 @@ for typ, ch in (reg.get('channels') or {}).items():
                    'consumers': xb.get('consumers') or [], 'display_only': bool(xb.get('display_only'))})
 subs = yaml.safe_load(open(os.path.join(repo, 'api/internal/bus/registry/subscriptions/rocket.yaml')))
 # A row's target domain, as registry.Subscription.TargetDomain says (a wake reaches a seat, a notify the owner).
-target = {'wake': 'coordination', 'notify': 'owner'}
+target = {'wake': 'coordination', 'notify': 'approvals'}
 rows = [{'id': r['id'], 'on': r.get('on', r.get(True)),  # YAML 1.1 reads the key on: as true
          'deliver': r['deliver'], 'domain': target.get(r['deliver'], '')}
         for r in subs.get('subscriptions') or [] if r.get('by') == 'dispatcher']

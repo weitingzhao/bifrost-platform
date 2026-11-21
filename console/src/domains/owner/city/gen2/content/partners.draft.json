@@ -11,26 +11,26 @@
   "domains": {
     "foundation": {
       "in": [
-        "owner",
+        "approvals",
         "coordination",
-        "tenant"
+        "payload"
       ],
       "out": [],
       "note": "Used by every kind of caller; its 65 contracts are mostly the unclaimed default bucket (network, telemetry, alerts, bus, MCP), not the foundation itself."
     },
     "plan": {
       "in": [
-        "owner",
+        "approvals",
         "coordination",
-        "tenant"
+        "payload"
       ],
       "out": []
     },
     "lineage": {
       "in": [
-        "owner",
+        "approvals",
         "coordination",
-        "tenant"
+        "payload"
       ],
       "out": [
         "delivery",
@@ -41,7 +41,7 @@
     "verification": {
       "in": [
         "lineage",
-        "owner",
+        "approvals",
         "coordination"
       ],
       "out": [
@@ -53,15 +53,15 @@
       "in": [
         "lineage",
         "verification",
-        "owner"
+        "approvals"
       ],
       "out": [],
       "note": "Five want in (lineage, verification, owner, coordination, tenant): two go to Other. The most connected domain."
     },
-    "owner": {
+    "approvals": {
       "in": [
         "coordination",
-        "tenant"
+        "payload"
       ],
       "out": [],
       "note": "The console is itself. Research (tenant) asks it questions."
@@ -75,9 +75,9 @@
       ],
       "note": "Its alerts go to coordination's alert letters; MCP reads it."
     },
-    "tenant": {
+    "payload": {
       "in": [
-        "owner",
+        "approvals",
         "coordination"
       ],
       "out": [],
@@ -86,7 +86,7 @@
     "coordination": {
       "in": [
         "compute",
-        "owner"
+        "approvals"
       ],
       "out": [],
       "note": "Receives compute's alerts and the seats' mail; the console reads it."

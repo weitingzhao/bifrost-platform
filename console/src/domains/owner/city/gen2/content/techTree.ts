@@ -24,7 +24,7 @@ export type GraphRead = { data?: CiDomainGraph; error?: unknown }
  */
 const GLYPH: Record<string, string> = {
   foundation: 'layers', plan: 'blueprint', lineage: 'branch', verification: 'shield', delivery: 'rocket',
-  owner: 'gavel', compute: 'chip', tenant: 'plug', coordination: 'signal',
+  approvals: 'gavel', compute: 'chip', payload: 'plug', coordination: 'signal',
 }
 
 const TONES: readonly string[] = ['good', 'problem', 'bad']
