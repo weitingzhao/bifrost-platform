@@ -1,9 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { acceptanceBody, blocksSince, machineName, shipBlocks } from './foundationPost.js'
+import { acceptanceBody, blocksSince, machineName, shipBlocks, shipBlocksLocked } from './foundationPost.js'
 import type { RuntimeDeps } from './runtimeTools.js'
 
 // Origin: 2026-11-21, the Owner wanted Foundation's state on the bus; the guard's
@@ -54,4 +54,24 @@ test('a failure stops at its line, a 400 skips it', async () => {
   assert.equal(readFileSync(`${log}.shipped`, 'utf8'), String('t\towner\ts1\n'.length))
   assert.equal(await shipBlocks(log, deps((r) => (r === 'gitea-primary' ? '400 bad' : undefined)), () => {}), 1)
   assert.deepEqual(posted, ['owner', 'D10'])
+})
+
+// Origin: 2026-11-21, every session's doorbell now ships the machine's block
+// log; two at once must not post a line twice. A fresh lock means another
+// process is shipping (-1, nothing posted); a lock older than two minutes is
+// taken as left behind and the run goes ahead (the control).
+test('a fresh lock skips the run, a stale one is taken', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fpost-lock-'))
+  const log = join(dir, 'blocks.log')
+  writeFileSync(log, 't\towner\ts1\n')
+  const posted: string[] = []
+  const deps = { send: async (_m: string, _p: string, b: { rule: string }) => { posted.push(b.rule); return {} } } as unknown as RuntimeDeps
+  writeFileSync(`${log}.lock`, '')
+  assert.equal(await shipBlocksLocked(log, deps, () => {}), -1)
+  assert.deepEqual(posted, [])
+  const old = new Date(Date.now() - 3 * 60_000)
+  utimesSync(`${log}.lock`, old, old)
+  assert.equal(await shipBlocksLocked(log, deps, () => {}), 1)
+  assert.deepEqual(posted, ['owner'])
+  assert.equal(existsSync(`${log}.lock`), false)
 })

@@ -153,10 +153,39 @@ export async function main(argv: string[]): Promise<number> {
     const settings = settingsFromMcpConfig(readFileSync(path, 'utf8'), flag(argv, 'server') ?? 'bifrost-platform', process.env)
     for (const [k, v] of Object.entries(settings)) if (v) process.env[k] = v
   }
+  const deps = defaultRuntimeDeps()
+  if (!argv.includes('--no-guard-ship')) shipGuardBlocksEvery(deps, GUARD_SHIP_MS)
   return ring(
     { minutes, register: !argv.includes('--no-register') },
-    { deps: defaultRuntimeDeps(), out: (l) => console.log(l), now: Date.now },
+    { deps, out: (l) => console.log(l), now: Date.now },
   )
+}
+
+/** How often a waiting doorbell sends the machine's new guard refusals. */
+const GUARD_SHIP_MS = 5 * 60_000
+
+/**
+ * While it waits, the doorbell also sends the lines the agent guard
+ * (preflight.js) appended to this machine's block log to the bus
+ * (guard.block.recorded), once at start and then every GUARD_SHIP_MS: a
+ * doorbell runs in every session on every machine, so no other process has to
+ * be kept running for it (2026-11-21, the Foundation seat: who a rule stopped
+ * is to be a system record). Several doorbells share the work through a lock
+ * beside the log (foundationPost.shipBlocksLocked). It never prints to stdout,
+ * which carries the doorbell's own result; a failure is left for the next
+ * round. --no-guard-ship turns it off.
+ */
+function shipGuardBlocksEvery(deps: RuntimeDeps, ms: number): void {
+  const ship = async () => {
+    try {
+      const m = await import('./foundationPost.js')
+      await m.shipBlocksLocked(m.defaultBlockLog(), deps, () => {})
+    } catch {
+      // the next round tries again
+    }
+  }
+  void ship()
+  setInterval(() => void ship(), ms).unref()
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

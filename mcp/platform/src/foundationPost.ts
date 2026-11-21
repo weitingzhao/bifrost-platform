@@ -18,7 +18,7 @@
  * The target and token are resolved the way the MCP server resolves them
  * (as doorbell.ts does); this command never prints the token.
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir, hostname } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -90,6 +90,47 @@ export async function shipBlocks(logPath: string, deps: RuntimeDeps, err: (l: st
   return sent
 }
 
+/** The machine's block log, where preflight.js appends one line per refusal. */
+export function defaultBlockLog(): string {
+  return join(homedir(), '.bifrost-dev', 'logs', 'agent-guard-blocks.log')
+}
+
+/** How old a lock may be before it is taken as left by a process that died. */
+const STALE_LOCK_MS = 2 * 60_000
+
+/**
+ * shipBlocks under a lock beside the log, so the doorbells of several
+ * sessions on one machine do not post the same lines twice. A lock younger
+ * than STALE_LOCK_MS means another process is shipping: this run posts
+ * nothing. Returns the number posted, or -1 when it did not run.
+ */
+export async function shipBlocksLocked(logPath: string, deps: RuntimeDeps, err: (l: string) => void): Promise<number> {
+  if (!existsSync(logPath)) return 0
+  const lock = `${logPath}.lock`
+  let fd: number
+  try {
+    fd = openSync(lock, 'wx')
+  } catch {
+    try {
+      if (Date.now() - statSync(lock).mtimeMs < STALE_LOCK_MS) return -1
+      unlinkSync(lock)
+      fd = openSync(lock, 'wx')
+    } catch {
+      return -1
+    }
+  }
+  try {
+    return await shipBlocks(logPath, deps, err)
+  } finally {
+    closeSync(fd)
+    try {
+      unlinkSync(lock)
+    } catch {
+      // another process took a stale lock meanwhile; nothing to undo
+    }
+  }
+}
+
 /** The acceptance script's --json output as the route's body. */
 export function acceptanceBody(raw: { ruler?: number; score?: string; head?: string; read_at?: string; items?: Array<{ item: number; status: string }> }): Record<string, unknown> {
   const items = [...(raw.items ?? [])].sort((a, b) => a.item - b.item).map((i) => i.status)
@@ -104,8 +145,8 @@ export async function main(argv: string[], deps: RuntimeDeps = defaultRuntimeDep
   const [mode, arg] = argv
   if (mode === 'guard-blocks') {
     const i = argv.indexOf('--log')
-    const log = i >= 0 ? argv[i + 1] : join(homedir(), '.bifrost-dev', 'logs', 'agent-guard-blocks.log')
-    const n = await shipBlocks(log, deps, (l) => console.error(l))
+    const log = i >= 0 ? argv[i + 1] : defaultBlockLog()
+    const n = await shipBlocksLocked(log, deps, (l) => console.error(l))
     console.log(`guard-blocks: ${n} posted`)
     return 0
   }
