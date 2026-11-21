@@ -10,7 +10,8 @@
     "compute": {"kind": "server-hall", "page": "#infrastructure?section=cluster"},
     "payload": {"kind": "payload-hangar", "page": "#services?section=applications"},
     "coordination": {"kind": "comms-tower", "page": "#bus"},
-    "triage": {"kind": "court"}
+    "triage": {"kind": "court"},
+    "station": {"kind": "workshop", "page": "#work?section=activity"}
   },
   "frontend": {
     "root": "console/src",
