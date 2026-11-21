@@ -90,7 +90,7 @@ const BACKLOG_MS = 30_000
 export async function ring(opts: { minutes: number; register: boolean }, io: DoorbellIO): Promise<number> {
   const { deps, out, now } = io
   if (deps.fellBack()) {
-    throw new Error('no session id: set CLAUDE_CODE_HOST_SESSION_ID (or run inside a harness session)')
+    throw new Error('no session id: run inside a harness session (Claude CLAUDE_CODE_HOST_SESSION_ID, Codex CODEX_THREAD_ID, or a Cursor conversation)')
   }
   const sleep = io.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
   const end = now() + opts.minutes * 60_000
