@@ -9,7 +9,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore" // declares the plan event vocabulary
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/bus/registry" // declares owner.privilege.used, a body the register writes
 )
 
 // Origin: 2026-11-16, the ledger got reads of its own (Last, Has, HasBody)
@@ -25,18 +25,21 @@ func TestLedgerReads(t *testing.T) {
 	}
 	pool := db.Pool(t, db.Runtime)
 	const stream = "contract:reads"
+	// A foundation type the register declares (2026-11-21: this test used a
+	// plan type, and so linked the plan domain's vocabulary).
+	const typ = "owner.privilege.used"
 	err := eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
 		if _, ok, err := eventlog.Last(ctx, tx, stream); err != nil || ok {
 			t.Fatalf("Last of an empty stream: ok=%v err=%v", ok, err)
 		}
 		for _, text := range []string{"first", "second"} {
-			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: stream, Type: "plan_step_marked_done", Actor: "controller",
-				Body: map[string]any{"text": text, "manual": "m"}}); err != nil {
+			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: stream, Type: typ, Actor: "controller",
+				Body: map[string]any{"who": "owner", "subject": "owner", "what": text, "stuck_because": "m", "ref": "/api/v1/readings/evaluation", "change": "used"}}); err != nil {
 				return err
 			}
 		}
 		last, ok, err := eventlog.Last(ctx, tx, stream)
-		if err != nil || !ok || last.Type != "plan_step_marked_done" || last.Body["text"] != "second" || last.Seq != 2 || last.Actor != "controller" || last.ID == 0 {
+		if err != nil || !ok || last.Type != typ || last.Body["what"] != "second" || last.Seq != 2 || last.Actor != "controller" || last.ID == 0 {
 			t.Fatalf("Last = %+v ok=%v err=%v", last, ok, err)
 		}
 		for _, c := range []struct {
@@ -44,14 +47,14 @@ func TestLedgerReads(t *testing.T) {
 			text              map[string]string
 			want              bool
 		}{
-			{"the text of an event of the stream", stream, "plan_step_marked_done", map[string]string{"text": "first"}, true},
-			{"any type", stream, "", map[string]string{"text": "second"}, true},
-			{"no keys asked", stream, "plan_step_marked_done", nil, true},
-			{"another text", stream, "plan_step_marked_done", map[string]string{"text": "third"}, false},
-			{"one key apart", stream, "plan_step_marked_done", map[string]string{"text": "first", "manual": "x"}, false},
-			{"a key the body does not have", stream, "plan_step_marked_done", map[string]string{"missing": ""}, false},
-			{"another type", stream, "policy_alert", map[string]string{"text": "first"}, false},
-			{"another stream", "contract:other", "plan_step_marked_done", map[string]string{"text": "first"}, false},
+			{"the text of an event of the stream", stream, typ, map[string]string{"what": "first"}, true},
+			{"any type", stream, "", map[string]string{"what": "second"}, true},
+			{"no keys asked", stream, typ, nil, true},
+			{"another text", stream, typ, map[string]string{"what": "third"}, false},
+			{"one key apart", stream, typ, map[string]string{"what": "first", "stuck_because": "x"}, false},
+			{"a key the body does not have", stream, typ, map[string]string{"missing": ""}, false},
+			{"another type", stream, "policy_alert", map[string]string{"what": "first"}, false},
+			{"another stream", "contract:other", typ, map[string]string{"what": "first"}, false},
 		} {
 			got, err := eventlog.Has(ctx, tx, c.stream, c.typ, c.text)
 			if err != nil || got != c.want {
@@ -63,11 +66,11 @@ func TestLedgerReads(t *testing.T) {
 			doc             map[string]any
 			want            bool
 		}{
-			{"a body that contains the document", "plan_step_marked_done", "", map[string]any{"text": "first", "manual": "m"}, true},
-			{"one key apart", "plan_step_marked_done", "", map[string]any{"text": "first", "manual": "x"}, false},
-			{"another value", "plan_step_marked_done", "", map[string]any{"text": "third"}, false},
-			{"a plan node the events are not of", "plan_step_marked_done", "R1", map[string]any{"text": "first"}, false},
-			{"another type", "policy_alert", "", map[string]any{"text": "first"}, false},
+			{"a body that contains the document", typ, "", map[string]any{"what": "first", "stuck_because": "m"}, true},
+			{"one key apart", typ, "", map[string]any{"what": "first", "stuck_because": "x"}, false},
+			{"another value", typ, "", map[string]any{"what": "third"}, false},
+			{"a plan node the events are not of", typ, "R1", map[string]any{"what": "first"}, false},
+			{"another type", "policy_alert", "", map[string]any{"what": "first"}, false},
 		} {
 			got, err := eventlog.HasBody(ctx, tx, c.typ, c.node, c.doc)
 			if err != nil || got != c.want {

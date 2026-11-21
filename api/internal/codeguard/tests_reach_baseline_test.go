@@ -20,7 +20,6 @@ var testsReachingAcross = map[string][]string{
 	"api/internal/agentrt/coord/conclusion_recipient_test.go":            {"api/internal/agentrt/store"},
 	"api/internal/agentrt/coord/conclusion_test.go":                      {"api/internal/agentrt/planstore"},
 	"api/internal/agentrt/coord/seatstatus_test.go":                      {"api/internal/agentrt/store"},
-	"api/internal/agentrt/eventlog/read_db_test.go":                      {"api/internal/agentrt/planstore"},
 	"api/internal/agentrt/migrate/helpers0022_test.go":                   {"api/internal/releasepolicy"},
 	"api/internal/agentrt/migrate/runtime0010_test.go":                   {"api/internal/agentrt/store"},
 	"api/internal/agentrt/migrate/seed_hosts_test.go":                    {"api/internal/agentrt/store"},
@@ -60,7 +59,6 @@ var testsReachingAcross = map[string][]string{
 	"api/internal/releasepolicy/releasepolicy_test.go":                   {"api/internal/actions"},
 	"api/internal/releasepolicy/snapshot_test.go":                        {"api/internal/actions"},
 	"api/internal/selfhealth/outside_inputs_test.go":                     {"api/internal/outsideinput"},
-	"api/internal/statefile/k8sstate/k8sstate_test.go":                   {"api/internal/dataclone"},
 }
 
 var testFilesInShared = []string{

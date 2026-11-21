@@ -114,7 +114,6 @@ var exportedForOtherTests = []string{
 	"api/internal/config.RoleEnv",
 	"api/internal/config.StgSmokeConfig",
 	"api/internal/config.TopologyNode",
-	"api/internal/dataclone.NewDataCloneScheduleStore",
 	"api/internal/delivery.NewHandlerForTest",
 	"api/internal/domainscore.Ruler",
 	"api/internal/domainscore.RulerItem",

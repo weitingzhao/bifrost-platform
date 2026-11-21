@@ -21,7 +21,6 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/dataclone"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile/k8sstate"
 )
@@ -73,15 +72,19 @@ func withBackend(t *testing.T) string {
 	return dataDir
 }
 
-func TestDataCloneScheduleSetOnAPIReachesWorkers(t *testing.T) {
-	withBackend(t)
-	api := dataclone.NewDataCloneScheduleStore()
-	workers := dataclone.NewDataCloneScheduleStore() // built first, then the api pod writes
-	cfg := api.Get()
-	cfg.Enabled, cfg.Interval = true, "daily"
-	api.Put(cfg)
-	if got := workers.Get(); !got.Enabled || got.Interval != "daily" {
-		t.Fatalf("workers see %+v, want the schedule the api pod stored", got)
+// Origin: 2026-11-21, this test used the data clone schedule store (the
+// verification domain's dataclone) as its example client, so Foundation's
+// statefile tests linked another domain. A value one pod writes under the data
+// directory is what the other pod reads, through the shared backend.
+func TestAValueOnePodWritesReachesTheOther(t *testing.T) {
+	dataDir := withBackend(t)
+	path := filepath.Join(dataDir, "data-clone-schedule.json")
+	if err := statefile.WriteFile(path, []byte(`{"enabled":true,"interval":"daily"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := statefile.ReadFile(path)
+	if err != nil || string(got) != `{"enabled":true,"interval":"daily"}` {
+		t.Fatalf("the other pod reads %q (%v), want what the first stored", got, err)
 	}
 }
 
