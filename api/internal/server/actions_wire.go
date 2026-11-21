@@ -339,6 +339,14 @@ func (s *Server) bindActionExecutors() {
 		func(map[string]any) string { return "/api/v1/bus/privilege" },
 		nil, fields("what", "stuck_because", "who", "cause"), s.busPrivilege().HandleRecord)
 
+	// Foundation's readings (bus/acceptance, bus/guardblock): tier B, called directly.
+	reg("record_acceptance_reading", http.MethodPost,
+		func(map[string]any) string { return "/api/v1/bus/acceptance" },
+		nil, fields("ruler", "score", "items", "platform_commit", "read_at"), s.busAcceptance().HandleRecord)
+	reg("record_guard_block", http.MethodPost,
+		func(map[string]any) string { return "/api/v1/bus/guard-blocks" },
+		nil, fields("rule", "session", "host"), s.busGuardBlocks().HandleRecord)
+
 	// The Owner's arrangement of the home's city (home_layout.go).
 	reg("save_home_layout", http.MethodPut,
 		func(map[string]any) string { return "/api/v1/home/layout" },

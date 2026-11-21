@@ -226,6 +226,28 @@ var catalog = []Action{
 		},
 	},
 	{
+		ID: "record_acceptance_reading", Tier: TierB,
+		Description: "Record one reading of the decoupling acceptance (Foundation): ruler is the acceptance script's version, score n/10, items the status of items 1 to 10 in order (pass, fail or unmeasured), platform_commit the 40-character main commit read, read_at when. Appends foundation.acceptance.measured to the event log as the caller; starts, stops or refuses nothing. Tier B; call the endpoint directly.",
+		Method:      "POST", Pattern: "/api/v1/bus/acceptance",
+		Params: []Param{
+			{Name: "ruler", Type: "integer", Required: true, In: "body"},
+			{Name: "score", Type: "string", Required: true, In: "body"},
+			{Name: "items", Type: "string[]", Required: true, In: "body"},
+			{Name: "platform_commit", Type: "string", Required: true, In: "body"},
+			{Name: "read_at", Type: "string", In: "body"},
+		},
+	},
+	{
+		ID: "record_guard_block", Tier: TierB,
+		Description: "Record one refusal by the agent guard (preflight.js): rule is the guard's kind (D10, nas, owner, approval, dev-services, shared-worktree, push-main, gitea-primary), session the session id, host the machine name. Never the command. Appends guard.block.recorded to the event log as the caller; starts, stops or refuses nothing. Tier B; call the endpoint directly.",
+		Method:      "POST", Pattern: "/api/v1/bus/guard-blocks",
+		Params: []Param{
+			{Name: "rule", Type: "string", Required: true, In: "body"},
+			{Name: "session", Type: "string", In: "body"},
+			{Name: "host", Type: "string", In: "body"},
+		},
+	},
+	{
 		ID: "record_privilege_use", Tier: TierB,
 		Description: "Record one use of the Owner's privilege: the Owner stepped in to push work that lines waited on, or that no contract gave to anyone. what was pushed and why it was stuck (one line each, at most 300 characters); who defaults to owner; cause, when judged, is contract, owner_undecided or tool. Appends owner.privilege.used to the event log as the caller, which the evaluation readout counts per day (owner_privilege_uses); starts, stops or refuses nothing. Tier B; call the endpoint directly.",
 		Method:      "POST", Pattern: "/api/v1/bus/privilege",
