@@ -20,7 +20,6 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
-	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 )
 
@@ -107,26 +106,12 @@ func fineSources() ReleaseContextSources {
 			}
 			return []KnownRegression{{Introduced: ctxMain, Impact: "module activity is empty", By: "thread:local_x", KnownAt: "2026-11-15T11:50:00Z"}}, nil
 		},
-		Questions: func() ([]questions.Question, error) {
-			return []questions.Question{
-				answeredQuestion("q1", "owner", "phone", ctxNow.Add(-20*time.Minute)),
-				// A rule's answer is not the Owner's.
-				answeredQuestion("q2", "rule", questions.RuleChannel, ctxNow.Add(-2*time.Minute)),
-			}, nil
+		// The times people answered (a rule's answer is not among them: the
+		// questions domain leaves it out, Service.HumanAnswerTimes).
+		HumanAnswers: func() ([]time.Time, error) {
+			return []time.Time{ctxNow.Add(-20 * time.Minute)}, nil
 		},
 	}
-}
-
-// answeredQuestion is a question the given party answered, built through JSON
-// so the test names the card and not its answer type (the decoupling A5 move
-// left no production code outside questions naming that type).
-func answeredQuestion(id, by, channel string, at time.Time) questions.Question {
-	raw, _ := json.Marshal(map[string]any{"id": id, "answer": map[string]any{"by": by, "at": at, "channel": channel}})
-	var q questions.Question
-	if err := json.Unmarshal(raw, &q); err != nil {
-		panic(err)
-	}
-	return q
 }
 
 // 2026-11-15: duty asked for one read of the release situation; cards
@@ -451,7 +436,7 @@ func TestReleaseContextWindowEnded(t *testing.T) {
 func TestReleaseContextOwnerLastActionNeedsBothStores(t *testing.T) {
 	t.Parallel()
 	src := fineSources()
-	src.Questions = func() ([]questions.Question, error) { return nil, errors.New("disk") }
+	src.HumanAnswers = func() ([]time.Time, error) { return nil, errors.New("disk") }
 	got := AssembleReleaseContext(context.Background(), src, "bifrost-platform", "").Facts.OwnerLastAction
 	if got.Value != nil || !strings.Contains(got.Error, "question records unreadable") {
 		t.Fatalf("owner: %+v", got)
@@ -473,7 +458,7 @@ func TestReleaseContextOwnerLastActionNeedsBothStores(t *testing.T) {
 func TestReleaseContextOwnerReadersUnbound(t *testing.T) {
 	t.Parallel()
 	src := fineSources()
-	src.Waiting, src.ApprovalHistory, src.Questions = nil, nil, nil
+	src.Waiting, src.ApprovalHistory, src.HumanAnswers = nil, nil, nil
 	f := AssembleReleaseContext(context.Background(), src, "bifrost-platform", "").Facts
 	if f.PendingApprovals.Value != nil || f.PendingApprovals.Error != "this platform has no approval store wired" {
 		t.Fatalf("pending: %+v", f.PendingApprovals)

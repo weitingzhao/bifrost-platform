@@ -16,7 +16,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -178,8 +177,11 @@ type ReleaseContextSources struct {
 	Waiting func() ([]ApprovalSeen, error)
 	// ApprovalHistory is every retained approval, read without a sweep.
 	ApprovalHistory func() ([]ApprovalSeen, error)
-	// Questions is every retained question, read without a sweep.
-	Questions func() ([]questions.Question, error)
+	// HumanAnswers is when people (not a rule) answered the retained
+	// questions, newest first, read without a sweep: a port the server binds
+	// to the approvals domain's questions (Service.HumanAnswerTimes), which
+	// delivery does not import (2026-11-21, the domain wall's baseline).
+	HumanAnswers func() ([]time.Time, error)
 	// OpenRegressions is the repository's known regressions on main with no
 	// fix recorded, newest first.
 	OpenRegressions func(ctx context.Context, repo string) ([]KnownRegression, error)
@@ -658,14 +660,14 @@ func windowView(rec windowRecord, found bool, now time.Time) WindowView {
 // route rejects), or a question answered other than by a rule (only an admin
 // answers). Both stores must read; one alone could be older than the other.
 func ownerLastAction(src ReleaseContextSources) (OwnerAction, error) {
-	if src.ApprovalHistory == nil || src.Questions == nil {
+	if src.ApprovalHistory == nil || src.HumanAnswers == nil {
 		return OwnerAction{}, errors.New("this platform does not have both the approval and the question store wired")
 	}
 	list, err := src.ApprovalHistory()
 	if err != nil {
 		return OwnerAction{}, fmt.Errorf("approval records unreadable: %w", err)
 	}
-	qs, err := src.Questions()
+	answers, err := src.HumanAnswers()
 	if err != nil {
 		return OwnerAction{}, fmt.Errorf("question records unreadable: %w", err)
 	}
@@ -677,9 +679,9 @@ func ownerLastAction(src ReleaseContextSources) (OwnerAction, error) {
 			bestAt, best.Kind = a.DecidedAt, "approval"
 		}
 	}
-	for _, q := range qs {
-		if q.Answer != nil && q.Answer.Channel != questions.RuleChannel && !q.Answer.At.IsZero() && q.Answer.At.After(bestAt) {
-			bestAt, best.Kind = q.Answer.At, "question"
+	for _, at := range answers {
+		if !at.IsZero() && at.After(bestAt) {
+			bestAt, best.Kind = at, "question"
 		}
 	}
 	if bestAt.IsZero() {

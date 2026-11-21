@@ -43,7 +43,6 @@ var testsReachingAcross = map[string][]string{
 	"api/internal/delivery/approved_waits_test.go":                       {"api/internal/actions"},
 	"api/internal/delivery/ci_reader_test.go":                            {"api/internal/actions"},
 	"api/internal/delivery/pipeline_steps_results_test.go":               {"api/internal/cirunview", "api/internal/unitexec"},
-	"api/internal/delivery/release_context_test.go":                      {"api/internal/questions"},
 	"api/internal/delivery/run_refusal_test.go":                          {"api/internal/actions", "api/internal/placement"},
 	"api/internal/delivery/run_window_test.go":                           {"api/internal/actions"},
 	"api/internal/delivery/run_window_workers_test.go":                   {"api/internal/actions"},

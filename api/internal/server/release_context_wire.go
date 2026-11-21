@@ -23,7 +23,7 @@ func (s *Server) handleReleaseContext(w http.ResponseWriter, r *http.Request) {
 		src.ApprovalHistory = approvalsSeen(s.approvals.Observations)
 	}
 	if s.questionRuntime != nil && s.questionRuntime.Svc != nil {
-		src.Questions = s.questionRuntime.Svc.Observations
+		src.HumanAnswers = s.questionRuntime.Svc.HumanAnswerTimes
 	}
 	src.OpenRegressions = s.openRegressions
 	// main is shown, not gated on: read it where the ledger has it.
