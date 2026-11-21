@@ -61,6 +61,7 @@ modules:
       # agentrt/rules still walks the whole repository and stays "."; so does
       # repoguard, which is one test made for that.
       api/cmd/agentrt-plan-import: ["api/cmd/agentrt-plan-import", "api/internal/agentrt/planimport/testdata"]
+      api/cmd/agentrt-recorder-import: ["api/cmd/agentrt-recorder-import"]
       api/cmd/infracheck: ["api/cmd/infracheck", "api/internal/agentrt/infracheck/testdata"]
       api/cmd/platform-api: ["api/cmd/platform-api"]
       api/internal/actions:

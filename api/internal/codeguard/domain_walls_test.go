@@ -63,7 +63,6 @@ func across(o ownership, imports map[string][]string) []string {
 // questions' records. api/cmd stopped being skipped, and one command's import
 // came onto it.
 var domainsAcross = []string{
-	"api/cmd/agentrt-plan-import -> api/internal/agentrt/recorderimport (plan -> lineage)",
 	"api/internal/approvals -> api/internal/threadinbox (approvals -> coordination)",
 	"api/internal/delivery -> api/internal/actions (delivery -> approvals)",
 	"api/internal/delivery -> api/internal/questions (delivery -> approvals)",

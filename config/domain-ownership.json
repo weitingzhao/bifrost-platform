@@ -1191,6 +1191,13 @@
       "status": "assigned",
       "basis": "2026-11-16 source and caller audit: transcript/manual title storage and lineage title projection; key spaces remain separate and loading errors remain visible"
     },
+    "api/cmd/agentrt-recorder-import": {
+      "domains": [
+        "lineage"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-21 split out of agentrt-plan-import by the Foundation seat: the recorder log's import request (agentrt.recorder_import/v1) is lineage's, like agentrt/recorderimport, and the plan command importing it was a line on the domain wall's baseline. Reads and writes files only."
+    },
     "api/cmd/agentrt-plan-import": {
       "domains": [
         "plan"
