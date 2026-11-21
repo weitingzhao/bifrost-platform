@@ -2170,6 +2170,7 @@
         "console/src/domains/owner/city/gen2/__tests__/world/viewport.test.ts",
         "console/src/domains/owner/city/gen2/content/__tests__/boundary.test.ts",
         "console/src/domains/owner/city/gen2/content/__tests__/consolePlaces.test.ts",
+        "console/src/domains/owner/city/gen2/content/__tests__/domainsPanel.test.tsx",
         "console/src/domains/owner/city/gen2/content/__tests__/hardware.fixture.json",
         "console/src/domains/owner/city/gen2/content/__tests__/hardware.test.ts",
         "console/src/domains/owner/city/gen2/content/__tests__/key.test.ts",
@@ -2177,6 +2178,7 @@
         "console/src/domains/owner/city/gen2/content/binding.ts",
         "console/src/domains/owner/city/gen2/content/console.ts",
         "console/src/domains/owner/city/gen2/content/consolePlaces.ts",
+        "console/src/domains/owner/city/gen2/content/domainsPanel.tsx",
         "console/src/domains/owner/city/gen2/content/hardware.ts",
         "console/src/domains/owner/city/gen2/content/hardwareQueries.json",
         "console/src/domains/owner/city/gen2/content/looks.ts",
@@ -2189,6 +2191,7 @@
         "console/src/domains/owner/city/gen2/content/units/memory.ts"
       ],
       "imports": [
+        "console/src",
         "console/src/lib/shell"
       ],
       "test_imports": [
@@ -2226,6 +2229,7 @@
         "node:fs",
         "node:path",
         "node:url",
+        "react",
         "vitest"
       ],
       "source_inputs": [],
@@ -4183,6 +4187,7 @@
         "console/src/pages/shell/shellPages.tsx"
       ],
       "imports": [
+        "console/src",
         "console/src/api/client.ts",
         "console/src/domains/owner/city",
         "console/src/pages/shell/data",

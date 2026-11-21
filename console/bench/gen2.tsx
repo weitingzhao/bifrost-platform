@@ -5,6 +5,8 @@ import { consoleContent } from '../src/domains/owner/city/gen2/content/console'
 import { formatPath, parsePath, type Path, type Place } from '@bifrost/ui/city/places'
 import { hardwareDistrict, readHardware } from '../src/domains/owner/city/gen2/content/hardware'
 import { readUnits } from '../src/domains/owner/city/gen2/content/unitRooms'
+import { domainsPanel, type DomainsRead } from '../src/domains/owner/city/gen2/content/domainsPanel'
+import type { DomainStatusResponse } from '../src/domains/foundation/catalog/api/domainStatus'
 import { portsFor, type Link, type Partners } from '@bifrost/ui/city/links'
 import { useRulersTick } from '@bifrost/ui/city/rulers'
 
@@ -66,6 +68,15 @@ function Bench() {
     const t = setInterval(tick, 30_000)
     return () => { on = false; clearInterval(t) }
   }, [])
+  // The map line's lights; the bench proxy carries no viewer token, so here it shows the not-known path.
+  const [domains, setDomains] = useState<DomainsRead>({})
+  useEffect(() => {
+    let on = true
+    const tick = () => getJson('/api/v1/catalog/status').then(d => { if (on) setDomains({ data: d as DomainStatusResponse }) }, error => { if (on) setDomains({ error }) })
+    tick()
+    const t = setInterval(tick, 30_000)
+    return () => { on = false; clearInterval(t) }
+  }, [])
   const rulers = useRulersTick()
   const CONTENT = useMemo(() => {
     void rulers
@@ -74,9 +85,9 @@ function Bench() {
     // Bench only, ?util=4x8 or 8x8: Utilities at another size, to look at how a district's town grows (2026-11-20).
     const util = new URLSearchParams(location.search).get('util')
     if (hw && util && ['4x4', '4x8', '8x8'].includes(util)) hw.shape = util as Place['shape']
-    const c = consoleContent(hw ? [hw] : [])
+    const c = consoleContent(hw ? [hw] : [], [domainsPanel(domains)])
     return new URLSearchParams(location.search).has('links') ? { ...c, tree: withPartners(c.tree), links: SAMPLE_LINKS } : c
-  }, [reads, rulers])
+  }, [reads, rulers, domains])
   const [path, setPath] = useState<Path>(() => parsePath(location.hash))
   useEffect(() => {
     const on = () => setPath(parsePath(location.hash))

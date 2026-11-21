@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { authedFetch } from '@/api/client'
+import { fetchDomainStatus } from '@/domains/foundation/catalog/api/domainStatus'
 import { consoleContent } from '@/domains/owner/city/gen2/content/console'
+import { domainsPanel } from '@/domains/owner/city/gen2/content/domainsPanel'
 import { hardwareDistrict, readHardware } from '@/domains/owner/city/gen2/content/hardware'
 import { readUnits } from '@/domains/owner/city/gen2/content/unitRooms'
 import type { CityContent } from '@bifrost/ui/city/content'
@@ -13,7 +15,7 @@ const getJson = async (path: string): Promise<unknown> => (await authedFetch('ci
 /**
  * The places, for both looks (the city and the Console's ledger): the Console's menu, and the hardware
  * read live through the platform every 30 s, with each computer's CPU, memory and disk rooms. One query,
- * so switching looks shows the same reading.
+ * so switching looks shows the same reading. The map line's domain lights ride beside, on the same beat.
  */
 export function useCityContent(): CityContent {
   const reads = useQuery({
@@ -24,6 +26,8 @@ export function useCityContent(): CityContent {
     },
     refetchInterval: EVERY,
   })
+  // The map line's lights per domain, read from what its scan stored (never a live scan per request).
+  const domains = useQuery({ queryKey: ['city', 'gen2', 'domains'], queryFn: fetchDomainStatus, refetchInterval: EVERY })
   // A viewer's new ruler redraws the rooms that count that part (frame/rulers.tsx).
   const rulers = useRulersTick()
   return useMemo(() => {
@@ -32,6 +36,6 @@ export function useCityContent(): CityContent {
     const hw = d?.hardware.topology
       ? hardwareDistrict(d.hardware, 'system', `Read every 30 s, the last at ${new Date(d.at).toLocaleTimeString()}.`, d.units)
       : null
-    return consoleContent(hw ? [hw] : [])
-  }, [reads.data, rulers])
+    return consoleContent(hw ? [hw] : [], [domainsPanel({ data: domains.data, error: domains.error })])
+  }, [reads.data, rulers, domains.data, domains.error])
 }
