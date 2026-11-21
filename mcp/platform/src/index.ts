@@ -46,7 +46,7 @@ import { presenceSkip, registerPresence } from './presence.js'
 import { registerPlanImportTools } from './registerPlanImport.js'
 import { CATALOG_INDEX_PATH, GET_CATALOG_INDEX_DESCRIPTION, GET_OWNER_DESCRIPTION, GET_UNPERCEIVED_DESCRIPTION, ownerPath, unperceivedPath, CATALOG_STATUS_PATH, GET_DOMAIN_STATUS_DESCRIPTION, domainPath, GET_DOMAIN_DESCRIPTION } from './catalogTools.js'
 import { FULL_CI_PATH, fullCICheckPath, unitConfigPath, unitRunsPath, unitScopePath } from './unitsTools.js'
-import { BUS_WAIT_MAX_SECONDS, GET_BUS_STATES_DESCRIPTION, LIST_REGRESSIONS_DESCRIPTION, MARK_REGRESSION_FIXED_DESCRIPTION, REPORT_REGRESSION_DESCRIPTION, WAIT_FOR_EVENT_DESCRIPTION, busEventsPath, busStatesPath, regressionsPath } from './busTools.js'
+import { BUS_WAIT_MAX_SECONDS, GET_BUS_STATES_DESCRIPTION, LIST_REGRESSIONS_DESCRIPTION, MARK_REGRESSION_FIXED_DESCRIPTION, RECORD_PRIVILEGE_USE_DESCRIPTION, REPORT_REGRESSION_DESCRIPTION, WAIT_FOR_EVENT_DESCRIPTION, busEventsPath, busStatesPath, regressionsPath } from './busTools.js'
 
 const SERVER_NAME = 'mcp-server-platform'
 const SERVER_VERSION = '0.1.0'
@@ -662,6 +662,18 @@ reg(
     tenant: z.string().regex(/^[a-z][a-z0-9-]{0,39}$/).optional().describe('Default rocket'),
   },
   async (args) => jsonResult(await platformGet(busStatesPath(args))),
+)
+
+reg(
+  'record_privilege_use',
+  RECORD_PRIVILEGE_USE_DESCRIPTION,
+  {
+    what: z.string().min(1).max(300).regex(/^[^\n]+$/).describe('In a line, what the Owner pushed'),
+    stuck_because: z.string().min(1).max(300).regex(/^[^\n]+$/).describe('In a line, why it was stuck'),
+    who: z.string().regex(/^[a-z][a-z0-9_.:-]{0,63}$/).optional().describe('Whose privilege; default owner'),
+    cause: z.enum(['contract', 'owner_undecided', 'tool']).optional().describe("Triage's judgement, when known"),
+  },
+  async (args) => jsonResult(await platformPost('/api/v1/bus/privilege', args)),
 )
 
 const sha40 = z.string().regex(/^[0-9a-f]{40}$/)

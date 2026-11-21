@@ -172,6 +172,12 @@ export const WRITE_SPECS: readonly WriteMapping[] = [
     paramsFrom: (m, body) => ({ name: dec(m[1]), ...asRecord(body) }),
   },
   {
+    action: 'record_privilege_use',
+    method: 'POST',
+    pattern: /^\/api\/v1\/bus\/privilege$/,
+    paramsFrom: (_m, body) => asRecord(body),
+  },
+  {
     action: 'report_regression',
     method: 'POST',
     pattern: /^\/api\/v1\/bus\/regressions$/,

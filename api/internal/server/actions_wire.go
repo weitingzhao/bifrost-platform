@@ -334,6 +334,11 @@ func (s *Server) bindActionExecutors() {
 		func(map[string]any) string { return "/api/v1/bus/regressions/fixed" },
 		nil, fields("repo", "introduced", "fixed"), s.handleRegressionWrite(true))
 
+	// The Owner's uses of privilege (bus/privilege): tier B, called directly.
+	reg("record_privilege_use", http.MethodPost,
+		func(map[string]any) string { return "/api/v1/bus/privilege" },
+		nil, fields("what", "stuck_because", "who", "cause"), s.busPrivilege().HandleRecord)
+
 	// The Owner's arrangement of the home's city (home_layout.go).
 	reg("save_home_layout", http.MethodPut,
 		func(map[string]any) string { return "/api/v1/home/layout" },

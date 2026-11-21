@@ -15,6 +15,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/drill"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/effect"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/observe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/privilege"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/regressions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/subscribe"
@@ -28,6 +29,10 @@ import (
 
 func (s *Server) busRegressions() regressions.API {
 	return regressions.API{DB: s.bus.db, Who: writerOf}
+}
+
+func (s *Server) busPrivilege() privilege.API {
+	return privilege.API{DB: s.bus.db, Who: writerOf}
 }
 
 func (s *Server) busObserve() observe.Handler {

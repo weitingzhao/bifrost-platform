@@ -33,6 +33,7 @@ deny	GET /api/v1/bus/observe
 deny	GET /api/v1/bus/regressions
 deny	POST /api/v1/bus/regressions
 deny	POST /api/v1/bus/regressions/fixed
+deny	POST /api/v1/bus/privilege
 deny	GET /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages
 deny	POST /api/v1/agentrt/messages/ack

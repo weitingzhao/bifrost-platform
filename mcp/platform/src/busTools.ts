@@ -43,6 +43,12 @@ export const MARK_REGRESSION_FIXED_DESCRIPTION =
 export const LIST_REGRESSIONS_DESCRIPTION =
   'Lists the known regressions on main (read-only), newest first: {regressions: [{repo, introduced, impact, by, known_at, fixed, fixed_by, fixed_at}]}. repo narrows to one repository; open (default true) keeps those with no fix recorded.'
 
+export const RECORD_PRIVILEGE_USE_DESCRIPTION =
+  "Record one use of the Owner's privilege (2026-11-21): the Owner stepped in to push work that lines waited on, or that no contract gave to anyone. " +
+  'what: what was pushed; stuck_because: why it was stuck (one line each, at most 300 characters); who defaults to owner; ' +
+  'cause, when judged: contract, owner_undecided or tool. Appends owner.privilege.used to the event log as you; ' +
+  'the evaluation readout counts it per day (owner_privilege_uses). Starts, stops or refuses nothing. Tier B.'
+
 export interface RegressionArgs { repo: string; introduced: string; impact?: string; fixed?: string }
 
 export const regressionsPath = (a: { repo?: string; open?: boolean }): string => {

@@ -193,6 +193,8 @@ func (s *Server) mountBus(r chi.Router) {
 	writers := s.auth.RequireAny(actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin)
 	r.With(writers).Post("/bus/regressions", s.guard("report_regression", s.handleRegressionWrite(false)))
 	r.With(writers).Post("/bus/regressions/fixed", s.guard("mark_regression_fixed", s.handleRegressionWrite(true)))
+	// The Owner's uses of privilege (bus/privilege): the coordinator records each as itself.
+	r.With(writers).Post("/bus/privilege", s.guard("record_privilege_use", s.busPrivilege().HandleRecord))
 	// The change of generation, from its registers (bus/effect).
 	r.With(s.auth.Require(actuation.RoleViewer)).Get("/bus/nextgen", s.handleBusNextgen)
 	// What the bus promises and to whom, from its registers (bus/registry).

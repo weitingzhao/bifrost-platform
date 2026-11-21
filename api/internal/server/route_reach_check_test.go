@@ -74,6 +74,7 @@ var intendedRouteAdditions = map[string][]string{
 	"GET /api/v1/bus/regressions":        {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/bus/regressions":       {"reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/bus/regressions/fixed": {"reporter", "operator", "admin", "trade-satellite"},
+	"POST /api/v1/bus/privilege":         {"reporter", "operator", "admin", "trade-satellite"}, // 2026-11-21: the Owner's uses of privilege, recorded by the coordinator (bus/privilege)
 	// 2026-11-15 relay F: retained run/step timings, read-only like /units/runs.
 	"GET /api/v1/delivery/pipelines/{name}/timings": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// Wave 2b (2026-11-12): a trial of the release policy on one run request,

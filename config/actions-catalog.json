@@ -24,6 +24,7 @@
     "owner_run_command",
     "plan_manifest",
     "poweroff_compute_node",
+    "record_privilege_use",
     "release_freeze",
     "release_policy_install",
     "release_policy_stage",

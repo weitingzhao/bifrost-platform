@@ -1700,6 +1700,13 @@
       "status": "assigned",
       "basis": "2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, writes the Owner's questions to the bus, asked and answered. Imports only foundation packages or none; the server wires it."
     },
+    "api/internal/bus/privilege": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-21 bus sub-domain 0.2, kept by the communication line (seat 8.2): records the Owner's uses of privilege on the bus (owner.privilege.used, POST /api/v1/bus/privilege, action record_privilege_use), which the evaluation readout counts per day; asked by the metrics line. Imports only foundation packages (actor, eventlog); the server wires it."
+    },
     "api/internal/bus/readerseen": {
       "domains": [
         "foundation"

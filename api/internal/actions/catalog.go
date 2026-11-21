@@ -226,6 +226,17 @@ var catalog = []Action{
 		},
 	},
 	{
+		ID: "record_privilege_use", Tier: TierB,
+		Description: "Record one use of the Owner's privilege: the Owner stepped in to push work that lines waited on, or that no contract gave to anyone. what was pushed and why it was stuck (one line each, at most 300 characters); who defaults to owner; cause, when judged, is contract, owner_undecided or tool. Appends owner.privilege.used to the event log as the caller, which the evaluation readout counts per day (owner_privilege_uses); starts, stops or refuses nothing. Tier B; call the endpoint directly.",
+		Method:      "POST", Pattern: "/api/v1/bus/privilege",
+		Params: []Param{
+			{Name: "what", Type: "string", Required: true, In: "body"},
+			{Name: "stuck_because", Type: "string", Required: true, In: "body"},
+			{Name: "who", Type: "string", In: "body"},
+			{Name: "cause", Type: "string", In: "body"},
+		},
+	},
+	{
 		ID: "save_home_layout", Tier: TierB,
 		Description: "Save the Owner's arrangement of the Ops home's city as the next version (a preference: nothing acts on it). base_version is the version it started from; 409 when another save came first. Owner only.",
 		Method:      "PUT", Pattern: "/api/v1/home/layout",
