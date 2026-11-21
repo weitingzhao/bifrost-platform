@@ -15,7 +15,13 @@ import { LIGHTS, type DomainLight, type DomainStatusResponse } from '@/domains/f
 /** One repository's (or the cluster's) equation: total = on map + off map, gap 0 when the scan missed nothing. */
 type RepoCount = { repo: string; measured: boolean; whole?: boolean; total: number; on_map: number; off_map: number; gap: number }
 /** The read as the map serves it since 389d1768: the lights, the off-map pool by domain, the equation per repository. */
-export type MapStatus = DomainStatusResponse & { off_map_by_domain?: Record<string, number>; inventory?: RepoCount[] }
+/**
+ * One cross-domain reference as the map serves it (2026-11-21, the map line leads it): pairs (user's package, used
+ * package) from the platform's domain graph; registered when the used domain's go_surface names the package and
+ * lists the user, else unregistered (reaching past the contract). Counted by package, not by name: the map says so.
+ */
+export type MapReference = { from: string; to: string; imports: number; registered: number; unregistered: number; wrong_way: boolean }
+export type MapStatus = DomainStatusResponse & { off_map_by_domain?: Record<string, number>; inventory?: RepoCount[]; references?: MapReference[] }
 export type DomainsRead = { data?: MapStatus; error?: unknown }
 
 const UNCLAIMED = 'unclaimed'
@@ -32,6 +38,25 @@ function InventoryTable({ rows }: { rows: RepoCount[] }) {
           <td>{r.repo}</td><td className="num">{r.total}</td><td className="num">{r.on_map}</td><td className="num">{r.off_map}</td>
           <td className={`num${r.gap !== 0 ? ' g2-warn' : ''}`}>{r.gap}</td>
         </tr>)}
+    </tbody>
+  </table>
+}
+
+/** Who uses whom across domains, worst first: a wrong way, then most reaching past the contract. */
+function ReferencesTable({ status }: { status: MapStatus }) {
+  const refs = status.references
+  if (!refs) return <p className="g2-unknown">Who uses whom across domains: not served by the map yet.</p>
+  const name = (id: string) => (status.domains.find(r => r.id === id) as { name?: string } | undefined)?.name || id
+  const rows = [...refs].sort((a, b) => Number(b.wrong_way) - Number(a.wrong_way) || b.unregistered - a.unregistered || b.imports - a.imports)
+  return <table className="g2-table">
+    <thead><tr><th>Uses → used</th><th className="num">Imports</th><th className="num">Past the contract</th></tr></thead>
+    <tbody>
+      {rows.length === 0 && <tr><td className="g2-unknown" colSpan={3}>No reference between domains</td></tr>}
+      {rows.map(r => <tr key={`${r.from}>${r.to}`}>
+        <td className={r.wrong_way ? 'g2-warn' : ''} title={r.wrong_way ? 'a loop: the two use each other' : undefined}>{name(r.from)} → {name(r.to)}{r.wrong_way ? ' · loop' : ''}</td>
+        <td className="num">{r.imports}</td>
+        <td className={`num${r.unregistered > 0 ? ' g2-warn' : ''}`} title={`${r.registered} through its contract, ${r.unregistered} not (by package)`}>{r.unregistered}</td>
+      </tr>)}
     </tbody>
   </table>
 }
@@ -59,13 +84,14 @@ function DomainsTable({ read }: { read: DomainsRead }) {
       </tbody>
     </table>
     {d.inventory && d.inventory.length > 0 && <InventoryTable rows={d.inventory} />}
+    <ReferencesTable status={d} />
     <p className="g2-unknown" title={d.note || undefined}>
       From the map's scan{d.at ? ` at ${new Date(d.at).toLocaleString()}` : ''}{d.commit ? ` (${d.commit.slice(0, 8)})` : ''}. Each domain's lights: on its node in the tech tree (the levels' ⑂), and inside its district.
     </p>
   </>
 }
 
-/** The city level's panel: what the map counts off it, by domain and by repository; it rides with the town's own panels. */
+/** The city level's panel: what the map counts off it, by domain and by repository, and who uses whom across domains; it rides with the town's own panels. */
 export const domainsPanel = (read: DomainsRead): Panel => ({
   id: 'domains', title: 'Off the map · by domain', dock: 'right', body: <DomainsTable read={read} />,
 })

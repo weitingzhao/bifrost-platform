@@ -2,7 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { authedFetch } from '@/api/client'
 import { fetchCiDomains } from '@/api/ciDomains'
-import { fetchDomainStatus } from '@/domains/foundation/catalog/api/domainStatus'
+import { fetchDomainPage, fetchDomainStatus } from '@/domains/foundation/catalog/api/domainStatus'
+import type { ReadDomain } from '@/domains/owner/city/gen2/content/domainOwns'
 import { consoleContent } from '@/domains/owner/city/gen2/content/console'
 import { hardwareDistrict, readHardware } from '@/domains/owner/city/gen2/content/hardware'
 import { readUnits } from '@/domains/owner/city/gen2/content/unitRooms'
@@ -11,6 +12,8 @@ import type { CityContent } from '@bifrost/ui/city/content'
 import { useRulersTick } from '@bifrost/ui/city/rulers'
 
 const EVERY = 30_000
+// What a domain owns, read only when its district is entered (the map's domain read).
+const readDomain = fetchDomainPage as unknown as ReadDomain
 const getJson = async (path: string): Promise<unknown> => (await authedFetch('city', path)).json()
 
 /**
@@ -39,6 +42,6 @@ export function useCityContent(): CityContent {
     const hw = d?.hardware.topology
       ? hardwareDistrict(d.hardware, 'system', `Read every 30 s, the last at ${new Date(d.at).toLocaleTimeString()}.`, d.units)
       : null
-    return consoleContent({ data: domains.data, error: domains.error }, hw, { data: graph.data, error: graph.error })
+    return consoleContent({ data: domains.data, error: domains.error }, hw, { data: graph.data, error: graph.error }, readDomain)
   }, [reads.data, rulers, domains.data, domains.error, graph.data, graph.error])
 }

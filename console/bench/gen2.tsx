@@ -4,6 +4,7 @@ import CityGen2 from '@bifrost/ui/city/CityGen2'
 import type { CiDomainGraph } from '../src/api/ciDomains'
 import { GRAPH_REPO, type GraphRead } from '../src/domains/owner/city/gen2/content/techTree'
 import GRAPH_SNAPSHOT from './domain-graph.snapshot.json'
+import type { DomainHoldings, ReadDomain } from '../src/domains/owner/city/gen2/content/domainOwns'
 import { consoleContent } from '../src/domains/owner/city/gen2/content/console'
 import { formatPath, parsePath, type Path, type Place } from '@bifrost/ui/city/places'
 import { hardwareDistrict, readHardware } from '../src/domains/owner/city/gen2/content/hardware'
@@ -64,6 +65,17 @@ const withPartners = (p: Place): Place => {
   return { ...p, partners: d ? { in: d.in.slice(0, n), out: d.out.slice(0, n) } : p.partners, children: p.kind === 'town' ? p.children.map(withPartners) : p.children }
 }
 
+// What a domain owns: through the proxy; without a token, bench only, from config/domain-ownership.json (the
+// table the map scans), cluster workloads from its workloads rows, no tables, said so in the note.
+type OwnRows = Record<string, { domains: string[] }>
+const rowsFor = (m: OwnRows | undefined, id: string) => Object.entries(m ?? {}).filter(([, v]) => v.domains.includes(id))
+  .map(([path, v]) => ({ path, ...(v.domains.length > 1 ? { shared: v.domains.filter(d => d !== id) } : {}) })).sort((a, b) => a.path.localeCompare(b.path))
+const readDomain: ReadDomain = id => getJson(`/api/v1/catalog/domain?id=${encodeURIComponent(id)}`).then(d => d as DomainHoldings, () => {
+  const own = OWNERSHIP as unknown as { domains: { id: string; contracts?: Record<string, unknown> }[]; packages?: OwnRows; paths?: OwnRows; workloads?: OwnRows }
+  return { id, repo: 'bifrost-platform', packages: rowsFor(own.packages, id), groups: [], paths: rowsFor(own.paths, id), workloads: rowsFor(own.workloads, id),
+    contract: own.domains.find(d => d.id === id)?.contracts ?? null, note: 'bench: from config/domain-ownership.json, not the map’s scan; tables not read' }
+})
+
 function Bench() {
   const [reads, setReads] = useState<{ r: Awaited<ReturnType<typeof readHardware>>; u: Awaited<ReturnType<typeof readUnits>>; at: string } | null>(null)
   useEffect(() => {
@@ -101,7 +113,7 @@ function Bench() {
     // Bench only, ?util=4x8 or 8x8: Utilities at another size, to look at how a district's town grows (2026-11-20).
     const util = new URLSearchParams(location.search).get('util')
     if (hw && util && ['4x4', '4x8', '8x8'].includes(util)) hw.shape = util as Place['shape']
-    const c = consoleContent(domains, hw, graph)
+    const c = consoleContent(domains, hw, graph, readDomain)
     return new URLSearchParams(location.search).has('links') ? { ...c, tree: withPartners(c.tree), links: SAMPLE_LINKS } : c
   }, [reads, rulers, domains, graph])
   const [path, setPath] = useState<Path>(() => parsePath(location.hash))

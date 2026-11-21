@@ -34,6 +34,22 @@ describe('domains panel', () => {
     expect(screen.getByText(/inside not seen/)).toBeTruthy()
   })
 
+  // 2026-11-21: the map line serves who uses whom (status.references); City reads it out, a loop and reaching past the contract marked.
+  it('lists who uses whom, a loop first, reaching past the contract marked', () => {
+    const data = { ...status, domains: [...status.domains, { ...status.domains[0], id: 'plan' }], references: [
+      { from: 'plan', to: 'ops', imports: 5, registered: 5, unregistered: 0, wrong_way: false },
+      { from: 'ops', to: 'plan', imports: 2, registered: 0, unregistered: 2, wrong_way: true },
+    ] }
+    render(<>{bodyOf(domainsPanel({ data }))}</>)
+    const cells = screen.getAllByText(/→/).map(td => td.textContent).filter(t => t !== 'Uses → used')
+    expect(cells).toEqual(['ops → plan · loop', 'plan → ops'])
+    expect(screen.getByTitle('0 through its contract, 2 not (by package)').className).toContain('g2-warn')
+  })
+  it('says when the map does not serve references yet', () => {
+    render(<>{bodyOf(domainsPanel({ data: status }))}</>)
+    expect(screen.getByText(/not served by the map yet/)).toBeTruthy()
+  })
+
   it('says the lights are not known when the read fails', () => {
     render(<>{bodyOf(domainsPanel({ error: new Error('401') }))}</>)
     expect(screen.getByText(/not known: 401/)).toBeTruthy()
