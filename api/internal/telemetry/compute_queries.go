@@ -117,6 +117,38 @@ func ComputeQueries() []QuerySpec {
 			Note:   "Share of time some process waited for memory (PSI), worst 5 minutes.",
 			Build:  fixed(perHost(`max_over_time(rate(node_pressure_memory_waiting_seconds_total[5m])[` + w + `:5m])`)),
 		},
+		// Law 43 (home / borrow / reclaim), read now rather than over the
+		// window: which node is whose home, which pain lines are crossed, and
+		// how many CI guests run on the database homes. The home register is
+		// the recording rule bifrost_node:home_info, kept in infra
+		// k8s/monitoring/bifrost-compute-module-readout.yaml.
+		{
+			ID:     "compute_node_home_now",
+			Title:  "Whose home each node is",
+			Unit:   "home",
+			Target: "every cluster node listed",
+			Note:   "The home register. A node missing here is either down or not registered, and its pain and borrowing are not read.",
+			Build:  fixed(`max by (nodename, home) (bifrost_node:home_info * on (instance) group_left (nodename) node_uname_info)`),
+		},
+		{
+			ID:     "compute_pain_lines_now",
+			Title:  "Pain lines crossed now",
+			Unit:   "alerts",
+			Target: "0",
+			Note:   "ComputePain alerts firing. DiskFlush, Replication and ProdThrottle wake the compute seat to take guests back; GuestLoad is information only.",
+			Build:  fixed(`sum by (alertname) (ALERTS{alertname=~"ComputePain.*",alertstate="firing"}) or on () vector(0)`),
+		},
+		{
+			ID:     "compute_guests_on_protected_now",
+			Title:  "CI guests running on the database homes",
+			Unit:   "guests",
+			Target: "a signal, no target",
+			Note:   "Running TaskRun pods on nodes whose home is the database. Borrowing is allowed; these are the pods taken back when a pain line is crossed.",
+			Build: fixed(`count by (node) ((kube_pod_status_phase{namespace="cicd",phase="Running"} == 1)` +
+				` * on (namespace, pod) group_left (node) kube_pod_info{namespace="cicd",created_by_kind="TaskRun"}` +
+				` * on (node) group_left () max by (node) (label_replace(bifrost_node:home_info{home=~"database-.*"}` +
+				` * on (instance) group_left (nodename) node_uname_info, "node", "$1", "nodename", "(.*)"))) or on () vector(0)`),
+		},
 		{
 			ID:     "compute_requests_honest_share",
 			Title:  "Containers whose CPU request fits their use",
