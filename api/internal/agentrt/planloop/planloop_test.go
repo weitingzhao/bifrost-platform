@@ -14,6 +14,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/legacyvocab" // missions storekit writes (moved from planstore, 2026-11-21)
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planloop"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"

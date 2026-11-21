@@ -1844,10 +1844,10 @@
     },
     "api/internal/agentrt/legacyvocab": {
       "domains": [
-        "verification"
+        "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-21 to verification: its only user outside the assembly roots is agentrt/store, and foundation does not import it (Foundation handover, shared notes biz-align/foundation-handover-2026-11-21.md table A; go list on main). 2026-11-18 moved out of store (decoupling item 5, S4), a foundation package by the business-alignment lane: store's vocab.go declared the closed event vocabulary's types that no domain declares (the attempt, host, budget, pool, capability and CI types, 28 names the database's event_type_closed constraint still lists) and registered eventlog.RetiredRecord, the check that refuses a write to a retired stream; it imports eventlog only, holds no body and no value, and is linked by the API binary (through server) and by the tests that read or write those types; the rule types, bodies and values stayed in store with the rules; the foundation domain's owner has not ruled on the placement or the name"
+      "basis": "2026-11-21 back to foundation (the Foundation seat, moving the dispatch lane's types here from planstore): the package says it is no one domain's, and the tests of foundation and coordination rely on it; counting production imports alone had sent it to verification. 2026-11-21 to verification: its only user outside the assembly roots is agentrt/store, and foundation does not import it (Foundation handover, shared notes biz-align/foundation-handover-2026-11-21.md table A; go list on main). 2026-11-18 moved out of store (decoupling item 5, S4), a foundation package by the business-alignment lane: store's vocab.go declared the closed event vocabulary's types that no domain declares (the attempt, host, budget, pool, capability and CI types, 28 names the database's event_type_closed constraint still lists) and registered eventlog.RetiredRecord, the check that refuses a write to a retired stream; it imports eventlog only, holds no body and no value, and is linked by the API binary (through server) and by the tests that read or write those types; the rule types, bodies and values stayed in store with the rules; the foundation domain's owner has not ruled on the placement or the name"
     },
     "api/internal/agentrt/planstore": {
       "domains": [

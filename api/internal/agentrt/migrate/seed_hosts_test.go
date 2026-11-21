@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // declares the event vocabulary
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/legacyvocab" // declares the legacy and dispatch types these probes write
 )
 
 // Rows of the retired dispatch lane, written as it wrote them (store cut

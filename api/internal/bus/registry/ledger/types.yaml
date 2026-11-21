@@ -40,7 +40,7 @@ types:
   - {type: control_set, domain: coordination}
   - {type: controller_loop_failing, domain: foundation, note: "a controller loop failed the same way several times in a row; loopalert (migration 0029, was policy_alert controller_failing)"}
   - {type: controller_loop_recovered, domain: foundation, note: "a controller loop passes again; loopalert (migration 0029, was a note)"}
-  - {type: decision_recorded, domain: plan}
+  - {type: decision_recorded, domain: foundation}
   - {type: deploy_seen, domain: foundation}
   - {type: external_work_noted, domain: lineage, note: "an external work's record on its stream; externalwork (migration 0032, was a note with external_work)"}
   - {type: full_ci_noted, domain: verification, note: "the daily full CI's runs started and each red run; evidence (migration 0031, was a note with full_ci)"}
@@ -54,9 +54,9 @@ types:
   - {type: message_posted, domain: coordination}
   - {type: metric_label_set, domain: delivery}
   - {type: metrics_computed, domain: delivery}
-  - {type: mission_amended, domain: plan}
-  - {type: mission_proposed, domain: plan}
-  - {type: mission_state_changed, domain: plan}
+  - {type: mission_amended, domain: foundation}
+  - {type: mission_proposed, domain: foundation}
+  - {type: mission_state_changed, domain: foundation}
   - {type: note, domain: plan, note: "a free note on a plan node or an architecture row; planstore (2026-11-17, TD-583: every other record that was a note has its own type)"}
   - {type: owner_signoff, domain: plan}
   - {type: owner_wait_closed, domain: approvals}
@@ -78,18 +78,18 @@ types:
   - {type: pool_cooldown_set, domain: compute}
   - {type: pool_measured, domain: compute}
   - {type: question_seen, domain: foundation}
-  - {type: route_decided, domain: plan}
+  - {type: route_decided, domain: foundation}
   - {type: rule_approved, domain: verification}
   - {type: rule_expired, domain: verification}
   - {type: rule_proposed, domain: verification}
   - {type: rule_signed, domain: verification}
   - {type: rule_tightened, domain: verification}
-  - {type: task_cancelled, domain: plan}
-  - {type: task_dependency_added, domain: plan}
-  - {type: task_proposed, domain: plan}
-  - {type: task_state_changed, domain: plan}
+  - {type: task_cancelled, domain: foundation}
+  - {type: task_dependency_added, domain: foundation}
+  - {type: task_proposed, domain: foundation}
+  - {type: task_state_changed, domain: foundation}
   - {type: verification_recorded, domain: verification}
   - {type: wait_limit_passed, domain: approvals}
-  - {type: wave_abandoned, domain: plan}
-  - {type: wave_closed, domain: plan}
-  - {type: wave_opened, domain: plan}
+  - {type: wave_abandoned, domain: foundation}
+  - {type: wave_closed, domain: foundation}
+  - {type: wave_opened, domain: foundation}

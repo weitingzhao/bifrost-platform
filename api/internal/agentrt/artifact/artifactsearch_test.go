@@ -10,8 +10,14 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/artifact"
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore" // declares the plan event vocabulary
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/legacyvocab" // declares the dispatch lane's types storekit writes
 )
+
+// Origin: 2026-11-21, these tests linked the plan's planstore, whose init
+// registers the check of view artifacts (artifact.RegisterCheck); they store
+// artifacts that are not views, so they register a check that passes every
+// body. The check of real views is the plan's, and its own tests hold it.
+func init() { artifact.RegisterCheck(func(string, []byte) error { return nil }) }
 
 func search(t *testing.T, w *world, q artifact.ArtifactQuery) ([]string, string) {
 	t.Helper()

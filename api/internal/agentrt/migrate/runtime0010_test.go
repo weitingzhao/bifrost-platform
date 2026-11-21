@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store" // declares the event vocabulary
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/legacyvocab" // declares the legacy and dispatch types these probes write
 )
 
 // Check actual DML as the runtime role on the upgraded (not fresh) schema.

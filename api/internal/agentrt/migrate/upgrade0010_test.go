@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore" // declares the plan event vocabulary
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/legacyvocab" // declares the dispatch lane's types storekit writes
 	"reflect"
 	"slices"
 	"testing"
@@ -18,6 +18,12 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
 )
+
+// Origin: 2026-11-21, these tests linked the plan's planstore, whose init
+// registers the check of view artifacts (artifact.RegisterCheck); they store
+// artifacts that are not views, so they register a check that passes every
+// body. The check of real views is the plan's, and its own tests hold it.
+func init() { artifact.RegisterCheck(func(string, []byte) error { return nil }) }
 
 func must0010(t *testing.T, err error) {
 	t.Helper()
