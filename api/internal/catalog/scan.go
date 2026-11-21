@@ -89,21 +89,32 @@ const keptIndex = "index"
 // PoolOf scans one tree: a repository with no ownership table is one entry,
 // the whole repository.
 func PoolOf(repo string, t Tree) Pool {
-	p, _ := poolAndTable(repo, t)
+	p, _ := poolAndTable(repo, t, false)
 	return p
 }
 
-// poolAndTable is PoolOf and the table it read (nil: none read).
-func poolAndTable(repo string, t Tree) (Pool, *Table) {
+// poolAndTable is PoolOf and the table it read (nil: none read). A
+// repository with no table is listed by directory like one whose table has
+// no row (2026-11-20, perceive first: unclaimed is the real state, shown as
+// it is), unless whole: a tenant's, kept as one entry.
+func poolAndTable(repo string, t Tree, whole bool) (Pool, *Table) {
 	p := Pool{Version: Version, Repo: repo, Commit: t.Commit, Measured: true, Entries: []Entry{}}
 	own, ok, err := t.Read(OwnershipPath)
 	if err != nil {
 		p.Measured, p.Note = false, err.Error()
 		return p, nil
 	}
-	if !ok {
-		p.Note = "this repository has no " + OwnershipPath + ": the map perceives none of it"
+	if !ok && whole {
+		p.Note = "this repository has no " + OwnershipPath + " and is a tenant's: kept as one entry, its inside is not looked at this round"
+		p.Whole = true
 		p.Entries = []Entry{{Path: ".", Kind: "repository", Files: len(t.Files)}}
+		p.equation(t.Files, nil)
+		return p, nil
+	}
+	if !ok {
+		p.Note = "this repository has no " + OwnershipPath + ": the map perceives none of it; its files are listed by directory"
+		p.Entries = Scan(Table{Packages: map[string]bool{}, Domains: map[string][]string{}}, t.Files, nil)
+		p.equation(t.Files, nil)
 		return p, nil
 	}
 	console, _, err := t.Read(ConsolePath)
@@ -123,6 +134,8 @@ func poolAndTable(repo string, t Tree) (Pool, *Table) {
 		}
 	}
 	p.Entries = Scan(table, t.Files, func(dir string) bool { return goDirs[dir] })
+	o := ownersOf(repo, t.Commit, table, time.Time{})
+	p.equation(t.Files, &o)
 	return p, &table
 }
 
@@ -182,7 +195,7 @@ func (s *Scanner) ScanOnce(ctx context.Context, repo string) (Pool, error) {
 		}
 	} else {
 		var table *Table
-		p, table = poolAndTable(repo, t)
+		p, table = poolAndTable(repo, t, s.tenantWhole(repo))
 		if !p.Measured && before != nil {
 			p.Entries = before.Entries
 		}
@@ -226,6 +239,14 @@ func (s *Scanner) ScanOnce(ctx context.Context, repo string) (Pool, error) {
 	return p, s.kept().Write(keptName(repo), raw)
 }
 
+// tenantWhole: the map reviewed repo's whole-repository entry as a claim for
+// tenant, so it is kept whole (Owner 2026-11-20: tenants' repositories and
+// databases are not looked into this round).
+func (s *Scanner) tenantWhole(repo string) bool {
+	r, ok := s.reviewsFromElsewhere(repo)["."]
+	return ok && r.Verdict == VerdictClaim && r.Domain == "tenant"
+}
+
 // reviewsFromElsewhere are repo's reviews written in another repository's
 // review file (kept by that repository's last scan).
 func (s *Scanner) reviewsFromElsewhere(repo string) map[string]Review {
@@ -257,7 +278,7 @@ func (s *Scanner) keepOthers(from string, others map[string]map[string]Review) {
 // keepTables keeps what "who owns X" and the index are answered from. A
 // failure to keep them is logged; the pool is kept either way.
 func (s *Scanner) keepTables(repo string, t Tree, table *Table, now time.Time) {
-	if own, ok, err := t.Read(OwnershipPath); err == nil && ok && repo != ClusterRepo {
+	if own, ok, err := t.Read(OwnershipPath); err == nil && ok && repo != ClusterRepo && repo != DatabaseRepo {
 		s.keepWorkloads(repo, t.Commit, own)
 	}
 	o := Owners{Repo: repo, Commit: t.Commit, ScannedAt: now, Packages: map[string][]string{}, Groups: map[string][]string{}}
@@ -324,13 +345,14 @@ func (s *Scanner) Run(ctx context.Context, repos Repos, fallback []string) {
 		tick := time.NewTicker(Every)
 		defer tick.Stop()
 		last := fallback
+		listed := false
 		for {
 			if repos != nil {
 				c, cancel := context.WithTimeout(ctx, 30*time.Second)
 				if got, err := repos(c); err != nil {
 					slog.Warn("catalog: list repositories", "err", err)
 				} else if len(got) > 0 {
-					last = got
+					last, listed = got, true
 				}
 				cancel()
 			}
@@ -340,6 +362,14 @@ func (s *Scanner) Run(ctx context.Context, repos Repos, fallback []string) {
 					slog.Warn("catalog: scan", "repo", repo, "err", err)
 				}
 				cancel()
+			}
+			// Only a real listing is kept as the round's repositories (the
+			// fallback is a guess, and keeping it would write on a platform
+			// that reads nothing).
+			if raw, err := json.Marshal(last); err == nil && listed {
+				if err := s.kept().Write(keptRepos, raw); err != nil {
+					slog.Warn("catalog: keep the round's repositories", "err", err)
+				}
 			}
 			if s.AfterRound != nil {
 				c, cancel := context.WithTimeout(ctx, 2*time.Minute)

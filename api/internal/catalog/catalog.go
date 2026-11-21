@@ -316,6 +316,65 @@ type Pool struct {
 	Files      int  `json:"files"`
 	Unreviewed int  `json:"unreviewed"`
 	OldestDays *int `json:"oldest_days,omitempty"`
+	// The equation (2026-11-20, perceive first: "everything is on the map or
+	// in the pool, no third place"). Total is every file of the tree (every
+	// workload of the cluster); OnMap those a row covers, counted with
+	// OwnerOf, a reader other than the scan's own placing; OffMap the files
+	// in the entries. Gap is Total - OnMap - OffMap: not 0 means the scan
+	// misses or double-counts something, and the fresh lights go bad.
+	Total  int `json:"total"`
+	OnMap  int `json:"on_map"`
+	OffMap int `json:"off_map"`
+	Gap    int `json:"gap"`
+	// Whole is true for a repository kept as one entry on purpose: a
+	// tenant's, whose inside the map does not look at this round (Owner
+	// 2026-11-20: the platform's own first).
+	Whole bool `json:"whole,omitempty"`
+	// Covered lists, for the cluster and the platform database only, every
+	// workload or table on the map and the row covering it; ByNamespace marks
+	// one covered only by a whole namespace's (schema's) row (2026-11-20: 90
+	// of 107 workloads were).
+	Covered []Covered `json:"covered,omitempty"`
+}
+
+// Covered is one workload on the map.
+type Covered struct {
+	Path        string   `json:"path"`
+	Kind        string   `json:"kind"`
+	Domains     []string `json:"domains"`
+	By          string   `json:"by"`
+	ByNamespace bool     `json:"by_namespace,omitempty"`
+}
+
+// equation fills Total, OnMap, OffMap and Gap (and Covered for the cluster)
+// from files and the owners o (nil: nothing is on the map).
+func (p *Pool) equation(files []string, o *Owners) {
+	p.Total, p.OnMap, p.OffMap, p.Covered = 0, 0, 0, nil
+	pool := &Pool{Entries: p.Entries}
+	for _, f := range files {
+		f = strings.Trim(path.Clean(f), "/")
+		if f == "" || f == "." {
+			continue
+		}
+		p.Total++
+		if o == nil {
+			continue
+		}
+		w := OwnerOf(o, pool, f)
+		if !w.Perceived {
+			continue
+		}
+		p.OnMap++
+		if p.Repo == ClusterRepo || p.Repo == DatabaseRepo {
+			row := strings.TrimPrefix(strings.TrimPrefix(w.By, "path "), "package ")
+			p.Covered = append(p.Covered, Covered{Path: path.Dir(f), Kind: path.Base(f), Domains: w.Domains,
+				By: w.By, ByNamespace: !strings.Contains(row, "/")})
+		}
+	}
+	for _, e := range p.Entries {
+		p.OffMap += e.Files
+	}
+	p.Gap = p.Total - p.OnMap - p.OffMap
 }
 
 // Summarize fills the counts of p at now: first seen from before (the last

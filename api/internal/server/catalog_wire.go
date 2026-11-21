@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
@@ -40,6 +41,9 @@ func (s *Server) catalogScanner() *catalog.Scanner {
 func (s *Server) catalogSource(ctx context.Context, repo string) (catalog.Tree, error) {
 	if repo == catalog.ClusterRepo {
 		return s.catalogClusterTree(ctx)
+	}
+	if repo == catalog.DatabaseRepo {
+		return s.catalogDatabaseTree(ctx)
 	}
 	if s.delivery == nil {
 		return catalog.Tree{}, errors.New("this platform does not read Gitea")
@@ -79,16 +83,56 @@ func (s *Server) catalogScanAhead(ctx context.Context) {
 	for _, r := range ciscore.Repos {
 		fallback = append(fallback, r.Repo)
 	}
-	fallback = append(fallback, catalog.ClusterRepo)
+	fallback = append(fallback, catalog.DatabaseRepo, catalog.ClusterRepo)
 	s.catalogScanner().Run(ctx, func(ctx context.Context) ([]string, error) {
 		repos, err := s.catalogRepos(ctx)
 		if err != nil {
 			return nil, err
 		}
-		// The cluster is scanned last: its rows are the platform table's,
-		// kept by that repository's scan earlier in the same round.
-		return append(repos, catalog.ClusterRepo), nil
+		// The database and the cluster are scanned last: their rows are the
+		// platform table's, kept by that repository's scan earlier in the
+		// same round.
+		return append(repos, catalog.DatabaseRepo, catalog.ClusterRepo), nil
 	}, fallback)
+}
+
+// catalogDatabaseTree lists the platform's own database's tables (every
+// schema but the system ones, from pg_tables: it lists tables whatever the
+// role may read) as "<schema>/<table>/table" files, against the kept
+// "tables" rows. The tenants' databases are not read (Owner 2026-11-20).
+func (s *Server) catalogDatabaseTree(ctx context.Context) (catalog.Tree, error) {
+	if s.agentRuntime == nil || s.agentRuntime.late == nil || !s.agentRuntime.late.Ready() {
+		return catalog.Tree{}, errors.New("the platform's database is not connected on this process")
+	}
+	rows, commit, ok := s.catalogScanner().TableRows()
+	if !ok {
+		return catalog.Tree{}, errors.New("no repository scanned yet has the ownership table's sections")
+	}
+	tx, err := s.agentRuntime.late.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return catalog.Tree{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rs, err := tx.Query(ctx, `SELECT schemaname, tablename FROM pg_catalog.pg_tables
+		WHERE schemaname NOT IN ('pg_catalog', 'information_schema') AND schemaname NOT LIKE 'pg_toast%'`)
+	if err != nil {
+		return catalog.Tree{}, err
+	}
+	var files []string
+	for rs.Next() {
+		var schema, table string
+		if err := rs.Scan(&schema, &table); err != nil {
+			rs.Close()
+			return catalog.Tree{}, err
+		}
+		files = append(files, schema+"/"+table+"/table")
+	}
+	rs.Close()
+	if err := rs.Err(); err != nil {
+		return catalog.Tree{}, err
+	}
+	sort.Strings(files)
+	return catalog.WorkloadTree(commit, files, rows)
 }
 
 // catalogClusterTree lists what runs in the cluster (Deployments,

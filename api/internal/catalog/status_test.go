@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -151,5 +152,37 @@ func TestADomainWithNoWorkloadReadsTheProcessesItRunsIn(t *testing.T) {
 	delete(health, "pf/platform-workers")
 	if a := byID(s.ComputeStatus(context.Background(), in))["plan"].Alive; a.Value != Unknown {
 		t.Errorf("hosts not read: %+v, want unknown (positive control of the good case above)", a)
+	}
+}
+
+// Origin: 2026-11-20, perceive-first brief: "total = on map + off map, for
+// every repository and the cluster, counted by the machine; a gap is a
+// scan that missed, and the light goes bad". And 90 of 107 workloads were
+// on the map only through a whole namespace's row, not listed one by one.
+func TestTheStatusCarriesEachEquationAndAGapTurnsFreshBad(t *testing.T) {
+	now := time.Date(2026, 11, 20, 17, 0, 0, 0, time.UTC)
+	s := statusScanner(t, now)
+	st := s.ComputeStatus(context.Background(), StatusInputs{})
+	if len(st.Inventory) != 2 {
+		t.Fatalf("inventory %+v", st.Inventory)
+	}
+	for _, c := range st.Inventory {
+		if !c.Measured || c.Gap != 0 || c.Total != c.OnMap+c.OffMap || c.Total == 0 {
+			t.Errorf("%+v", c)
+		}
+	}
+	if byID(st)["plan"].Fresh.Value != Good {
+		t.Errorf("fresh %+v", byID(st)["plan"].Fresh)
+	}
+	cl, _ := s.Last(ClusterRepo)
+	if len(cl.Covered) != 3 || !cl.Covered[0].ByNamespace || cl.Covered[0].Path != "ns-plan/web" || cl.Covered[0].Kind != "deployment" {
+		t.Errorf("covered %+v", cl.Covered)
+	}
+	// Positive control: a kept pool whose numbers do not add up.
+	cl.Gap = 1
+	raw, _ := json.Marshal(cl)
+	_ = s.kept().Write(keptName(ClusterRepo), raw)
+	if f := byID(s.ComputeStatus(context.Background(), StatusInputs{}))["plan"].Fresh; f.Value != Bad || !strings.Contains(f.Why, "off by 1") {
+		t.Errorf("gap: %+v", f)
 	}
 }

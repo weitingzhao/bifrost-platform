@@ -79,10 +79,52 @@ func TestPoolIsEmptyWhenEverythingIsOnTheMap(t *testing.T) {
 	}
 }
 
-func TestARepositoryWithNoTableIsOneEntry(t *testing.T) {
-	p := PoolOf("other", Tree{Commit: "c", Files: []string{"a", "b/c"}, Read: func(string) ([]byte, bool, error) { return nil, false, nil }})
-	if !p.Measured || len(p.Entries) != 1 || p.Entries[0].Kind != "repository" || p.Entries[0].Files != 2 {
-		t.Fatalf("pool = %+v", p)
+// Origin: 2026-11-20, chief of staff's acceptance and the perceive-first
+// brief: 13 repositories with no table were one entry each, so what is in
+// them was not seen. The platform's own are now listed by directory; a
+// tenant's (the map reviewed it as tenant's) stays one entry, whole.
+func TestARepositoryWithNoTableIsListedByDirectoryUnlessATenants(t *testing.T) {
+	none := func(string) ([]byte, bool, error) { return nil, false, nil }
+	tr := Tree{Commit: "c", Files: []string{"a", "b/c", "b/d/e"}, Read: none}
+	p, _ := poolAndTable("other", tr, false)
+	if !p.Measured || len(p.Entries) != 3 || p.Entries[0].Path != "." || p.Entries[1].Path != "b" || p.Entries[2].Path != "b/d" {
+		t.Fatalf("by directory: %+v", p.Entries)
+	}
+	if p.Total != 3 || p.OnMap != 0 || p.OffMap != 3 || p.Gap != 0 || p.Whole {
+		t.Errorf("equation %d = %d + %d, gap %d", p.Total, p.OnMap, p.OffMap, p.Gap)
+	}
+	w, _ := poolAndTable("other", tr, true)
+	if !w.Whole || len(w.Entries) != 1 || w.Entries[0].Kind != "repository" || w.Entries[0].Files != 3 || w.Gap != 0 {
+		t.Fatalf("whole: %+v", w)
+	}
+	// Through the scanner: the review that claims the whole repository for
+	// tenant keeps it whole; a claim for another domain does not.
+	k := memKept{keptOthers: []byte(`{"t":{".":{"verdict":"claim","domain":"tenant","reason":"r"}},"u":{".":{"verdict":"claim","domain":"delivery","reason":"r"}}}`)}
+	s := &Scanner{Kept: k, Source: func(context.Context, string) (Tree, error) { return tr, nil }}
+	if !s.tenantWhole("t") || s.tenantWhole("u") || s.tenantWhole("v") {
+		t.Error("tenantWhole")
+	}
+}
+
+func TestTheEquationHoldsAndCountsWhatTheRowsCover(t *testing.T) {
+	own := []byte(`{"packages":{"api/a":{"domains":["plan"]}},"paths":{"docs":{"domains":["plan"]}}}`)
+	tr := Tree{Commit: "c", Files: []string{"api/a/x.go", "api/b/y.go", "docs/r.md", "mcp/z.ts", "README.md"},
+		Read: func(p string) ([]byte, bool, error) {
+			if p == OwnershipPath {
+				return own, true, nil
+			}
+			return nil, false, nil
+		}}
+	p := PoolOf("r", tr)
+	if p.Total != 5 || p.OnMap != 2 || p.OffMap != 3 || p.Gap != 0 {
+		t.Fatalf("equation %d = %d + %d, gap %d; entries %+v", p.Total, p.OnMap, p.OffMap, p.Gap, p.Entries)
+	}
+	// Positive control: a pool that lost an entry no longer adds up.
+	p.Entries = p.Entries[1:]
+	o := Owners{HasTable: true, GoRoots: []string{"api"}, Packages: map[string][]string{"api/a": {"plan"}}, Paths: map[string][]string{"docs": {"plan"}}}
+	p.equation(tr.Files, &o)
+	if p.Gap == 0 {
+		t.Error("a missing entry left the gap at 0")
 	}
 }
 

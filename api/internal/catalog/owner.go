@@ -150,7 +150,20 @@ type Class struct {
 	Live string   `json:"live,omitempty"`
 	Also []string `json:"also,omitempty"`
 	Note string   `json:"note,omitempty"`
+	// Check says how the map knows this class (2026-11-20, perceive first):
+	// "scanned" the machine reconciles it against the real system each round;
+	// "registry" there is only the registration, nothing compares it with
+	// what is there, so the map cannot see what is missing from it; "unseen"
+	// the map does not read it at all yet.
+	Check string `json:"check"`
 }
+
+// The values of Class.Check.
+const (
+	CheckScanned  = "scanned"
+	CheckRegistry = "registry"
+	CheckUnseen   = "unseen"
+)
 
 // Index is IndexPath, and what the scan found about it.
 type Index struct {
@@ -169,6 +182,10 @@ type Index struct {
 	Measured   int `json:"measured"`
 	Unmeasured int `json:"unmeasured"`
 	Duplicated int `json:"duplicated"`
+	// Scanned, RegistryOnly and Unseen count the classes by Check.
+	Scanned      int `json:"scanned"`
+	RegistryOnly int `json:"registry_only"`
+	Unseen       int `json:"unseen"`
 }
 
 // ParseIndex reads IndexPath and checks it against the tree: every class
@@ -200,6 +217,16 @@ func ParseIndex(raw []byte, commit string, has func(string) bool, t Table) (Inde
 		}
 		if len(c.Also) > 0 {
 			ix.Duplicated++
+		}
+		switch c.Check {
+		case CheckScanned:
+			ix.Scanned++
+		case CheckRegistry:
+			ix.RegistryOnly++
+		case CheckUnseen:
+			ix.Unseen++
+		default:
+			return ix, fmt.Errorf("%s: class %q has check %q; a check is %q, %q or %q", IndexPath, c.Class, c.Check, CheckScanned, CheckRegistry, CheckUnseen)
 		}
 	}
 	return ix, nil

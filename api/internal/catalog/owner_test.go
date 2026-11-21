@@ -19,9 +19,9 @@ func scanned(t *testing.T, files ...string) *Scanner {
 	tr.Read = func(p string) ([]byte, bool, error) {
 		if p == IndexPath {
 			return []byte(`{"version":1,"classes":[
- {"class":"go-package","sources":["config/domain-ownership.json"],"reader":"api/internal/a"},
- {"class":"node","sources":["config/topology.yaml"],"also":["elsewhere"]},
- {"class":"seat","sources":[]}]}`), true, nil
+ {"class":"go-package","sources":["config/domain-ownership.json"],"reader":"api/internal/a","check":"scanned"},
+ {"class":"node","sources":["config/topology.yaml"],"also":["elsewhere"],"check":"registry"},
+ {"class":"seat","sources":[],"check":"unseen"}]}`), true, nil
 		}
 		return read(p)
 	}
@@ -77,6 +77,14 @@ func TestIndexIsKeptWithMissingSourcesAndCounts(t *testing.T) {
 	var ix Index
 	if err := json.Unmarshal(w.Body.Bytes(), &ix); err != nil {
 		t.Fatal(err, w.Body.String())
+	}
+	// Origin: 2026-11-20 perceive first: each class says whether the machine
+	// reconciles it with the real system or only has the registration.
+	if ix.Scanned != 1 || ix.RegistryOnly != 1 || ix.Unseen != 1 {
+		t.Errorf("checks %d/%d/%d, want 1/1/1", ix.Scanned, ix.RegistryOnly, ix.Unseen)
+	}
+	if _, err := ParseIndex([]byte(`{"classes":[{"class":"a","check":"maybe"}]}`), "c", nil, Table{}); err == nil {
+		t.Error("a class with no valid check was accepted")
 	}
 	if ix.Measured != 2 || ix.Unmeasured != 1 || ix.Duplicated != 1 {
 		t.Errorf("counts %+v", ix)

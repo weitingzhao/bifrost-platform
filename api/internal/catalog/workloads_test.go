@@ -50,9 +50,9 @@ func TestTheClusterIsScannedAgainstTheWorkloadRows(t *testing.T) {
 
 func TestALiveListOrAnotherRepositorysFileIsASource(t *testing.T) {
 	ix, err := ParseIndex([]byte(`{"classes":[
- {"class":"repository","sources":[],"live":"the organization's listing"},
- {"class":"seat","sources":["infra:agent-config/charters/"]},
- {"class":"x","sources":[]}]}`), "c", func(string) bool { return false }, Table{})
+ {"class":"repository","sources":[],"live":"the organization's listing","check":"scanned"},
+ {"class":"seat","sources":["infra:agent-config/charters/"],"check":"registry"},
+ {"class":"x","sources":[],"check":"unseen"}]}`), "c", func(string) bool { return false }, Table{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,5 +87,26 @@ func TestDatabaseClustersAreReadFromTheOperatorsList(t *testing.T) {
 	}
 	if _, err := ParseDatabaseClusters([]byte("x")); err == nil {
 		t.Error("garbage parsed")
+	}
+}
+
+// Origin: 2026-11-20 chief of staff's acceptance: "data tables: no table is
+// owned one by one". The platform database's tables are scanned like the
+// cluster's workloads: one entry per table with no row.
+func TestThePlatformDatabasesTablesAreListedOneByOne(t *testing.T) {
+	files := []string{"agentrt/plan_node/table", "agentrt/outbox/table", "public/schema_migrations/table"}
+	tree, err := WorkloadTree("c", files, []byte(`{"agentrt/plan_node":{"domains":["plan"]}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, table := poolAndTable(DatabaseRepo, tree, false)
+	if table == nil || p.Total != 3 || p.OnMap != 1 || p.OffMap != 2 || p.Gap != 0 || len(p.Entries) != 2 {
+		t.Fatalf("%+v", p)
+	}
+	if p.Entries[0].Path != "agentrt/outbox" || p.Entries[1].Path != "public/schema_migrations" {
+		t.Errorf("entries %+v", p.Entries)
+	}
+	if len(p.Covered) != 1 || p.Covered[0].Path != "agentrt/plan_node" || p.Covered[0].ByNamespace || p.Covered[0].Kind != "table" {
+		t.Errorf("covered %+v", p.Covered)
 	}
 }

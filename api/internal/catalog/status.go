@@ -97,7 +97,60 @@ type Status struct {
 	At      time.Time      `json:"at"`
 	Commit  string         `json:"commit"`
 	Domains []DomainStatus `json:"domains"`
-	Note    string         `json:"note,omitempty"`
+	// Inventory is the equation of every repository the last round scanned
+	// and of the cluster: total = on map + off map, gap 0 (2026-11-20,
+	// perceive first). A gap that is not 0 turns every fresh light bad.
+	Inventory []RepoCount `json:"inventory"`
+	// OffMapByDomain counts the pool's entries by the domain a review claims
+	// them for; "unclaimed" have none (no review, or delete or unknown).
+	OffMapByDomain map[string]int `json:"off_map_by_domain"`
+	Note           string         `json:"note,omitempty"`
+}
+
+// RepoCount is one repository's (or the cluster's) equation.
+type RepoCount struct {
+	Repo     string `json:"repo"`
+	Commit   string `json:"commit"`
+	Measured bool   `json:"measured"`
+	Whole    bool   `json:"whole,omitempty"`
+	Total    int    `json:"total"`
+	OnMap    int    `json:"on_map"`
+	OffMap   int    `json:"off_map"`
+	Gap      int    `json:"gap"`
+	Entries  int    `json:"entries"`
+}
+
+// keptRepos is the repositories the last round scanned.
+const keptRepos = "repos"
+
+// inventory reads the kept pools of the last round's repositories (the
+// table's repository and the cluster when no round was kept).
+func (s *Scanner) inventory(tableRepo string) ([]RepoCount, map[string]int) {
+	var repos []string
+	if raw, err := s.kept().Read(keptRepos); err == nil && raw != nil {
+		_ = json.Unmarshal(raw, &repos)
+	}
+	if len(repos) == 0 {
+		repos = []string{tableRepo, ClusterRepo}
+	}
+	out, by := []RepoCount{}, map[string]int{}
+	for _, r := range repos {
+		p, _ := s.Last(r)
+		if p == nil {
+			out = append(out, RepoCount{Repo: r})
+			continue
+		}
+		out = append(out, RepoCount{Repo: r, Commit: p.Commit, Measured: p.Measured, Whole: p.Whole,
+			Total: p.Total, OnMap: p.OnMap, OffMap: p.OffMap, Gap: p.Gap, Entries: len(p.Entries)})
+		for _, e := range p.Entries {
+			d := "unclaimed"
+			if e.Review != nil && e.Review.Verdict == VerdictClaim && e.Review.Domain != "" {
+				d = e.Review.Domain
+			}
+			by[d]++
+		}
+	}
+	return out, by
 }
 
 const keptStatus = "status"
@@ -127,6 +180,13 @@ func (s *Scanner) ComputeStatus(ctx context.Context, in StatusInputs) Status {
 	}
 	st.Commit = k.Commit
 	fresh := s.freshLight(k.Repo, now)
+	st.Inventory, st.OffMapByDomain = s.inventory(k.Repo)
+	for _, c := range st.Inventory {
+		if c.Measured && c.Gap != 0 {
+			fresh.Value = Bad
+			fresh.Why = joinWhy([]string{fresh.Why, fmt.Sprintf("%s: the equation is off by %d (total %d, on map %d, off map %d): the scan misses or double-counts", c.Repo, c.Gap, c.Total, c.OnMap, c.OffMap)})
+		}
+	}
 	alive := s.aliveLights(k.Repo, domains, in)
 	ifaces := interfaceLights(ctx, domains, in)
 	bound := boundaryLights(ctx, k.Repo, domains, in)

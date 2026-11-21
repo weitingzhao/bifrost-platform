@@ -13,6 +13,13 @@ import (
 // pool, reviewed like any entry.
 const ClusterRepo = "cluster"
 
+// DatabaseRepo names the pool of the platform's own database (2026-11-20,
+// perceive first; Owner: the platform's own first, the tenants' databases
+// are not read this round): each table "<schema>/<table>" is scanned like a
+// file, against the ownership table's "tables" rows (a schema row covers its
+// tables, a "<schema>/<table>" row one table).
+const DatabaseRepo = "platform-db"
+
 // keptWorkloads is the "workloads" section of the ownership table, as the last
 // scan of a repository whose table has one read it.
 const keptWorkloads = "workloads-table"
@@ -45,6 +52,7 @@ type keptRows struct {
 	Commit  string          `json:"commit"`
 	Rows    json.RawMessage `json:"rows"`
 	Domains json.RawMessage `json:"domains,omitempty"`
+	Tables  json.RawMessage `json:"tables,omitempty"`
 }
 
 // keepWorkloads keeps the "workloads" section of own (a no-op without one),
@@ -53,11 +61,12 @@ func (s *Scanner) keepWorkloads(repo, commit string, own []byte) {
 	var o struct {
 		Workloads json.RawMessage `json:"workloads"`
 		Domains   json.RawMessage `json:"domains"`
+		Tables    json.RawMessage `json:"tables"`
 	}
 	if json.Unmarshal(own, &o) != nil || len(o.Workloads) == 0 {
 		return
 	}
-	if raw, err := json.Marshal(keptRows{Repo: repo, Commit: commit, Rows: o.Workloads, Domains: o.Domains}); err == nil {
+	if raw, err := json.Marshal(keptRows{Repo: repo, Commit: commit, Rows: o.Workloads, Domains: o.Domains, Tables: o.Tables}); err == nil {
 		_ = s.kept().Write(keptWorkloads, raw)
 	}
 }
@@ -83,6 +92,16 @@ func (s *Scanner) WorkloadRows() ([]byte, string) {
 		return nil, ""
 	}
 	return k.Rows, k.Commit
+}
+
+// TableRows is the kept "tables" section (nil with none) and the commit it was
+// read at; ok false before any scan kept the table's sections.
+func (s *Scanner) TableRows() ([]byte, string, bool) {
+	k, ok := s.keptSections()
+	if !ok {
+		return nil, "", false
+	}
+	return k.Tables, k.Commit, true
 }
 
 // DatabaseCluster is one CloudNativePG Cluster: the database runs as pods the

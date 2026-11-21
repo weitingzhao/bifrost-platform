@@ -26,6 +26,7 @@ type Domain struct {
 	Groups    []Row `json:"groups"`
 	Paths     []Row `json:"paths"`
 	Workloads []Row `json:"workloads"`
+	Tables    []Row `json:"tables"`
 	// Contract is the domain's contracts block in the table, as written.
 	Contract json.RawMessage `json:"contract"`
 	Status   *DomainStatus   `json:"status,omitempty"`
@@ -65,7 +66,7 @@ func rowsOf(id string, m map[string][]string) []Row {
 
 // DomainOf assembles one domain from the kept table, owners and status.
 func (s *Scanner) DomainOf(id string) (Domain, bool) {
-	out := Domain{Version: Version, ID: id, Packages: []Row{}, Groups: []Row{}, Paths: []Row{}, Workloads: []Row{}}
+	out := Domain{Version: Version, ID: id, Packages: []Row{}, Groups: []Row{}, Paths: []Row{}, Workloads: []Row{}, Tables: []Row{}}
 	k, ok := s.keptSections()
 	if !ok {
 		out.Note = "no scanned table names its domains yet"
@@ -92,6 +93,9 @@ func (s *Scanner) DomainOf(id string) (Domain, bool) {
 	}
 	if o, _ := s.lastOwners(ClusterRepo); o != nil {
 		out.Workloads = rowsOf(id, o.Paths)
+	}
+	if o, _ := s.lastOwners(DatabaseRepo); o != nil {
+		out.Tables = rowsOf(id, o.Paths)
 	}
 	if raw, err := s.kept().Read(keptStatus); err == nil && raw != nil {
 		var st Status
