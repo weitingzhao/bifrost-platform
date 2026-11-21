@@ -8,6 +8,9 @@ import { consoleContent } from '@/domains/owner/city/gen2/content/console'
 import { hardwareDistrict, readHardware } from '@/domains/owner/city/gen2/content/hardware'
 import { readUnits } from '@/domains/owner/city/gen2/content/unitRooms'
 import { GRAPH_REPO } from '@/domains/owner/city/gen2/content/techTree'
+import { tripsOf } from '@/domains/owner/city/gen2/content/traffic'
+import { fetchBusContract } from '@/domains/foundation/bus/busNextgen'
+import { useBusStream } from '@/domains/foundation/bus/useBusStream'
 import type { CityContent } from '@bifrost/ui/city/content'
 import { useRulersTick } from '@bifrost/ui/city/rulers'
 
@@ -34,6 +37,11 @@ export function useCityContent(): CityContent {
   const domains = useQuery({ queryKey: ['city', 'gen2', 'domains'], queryFn: fetchDomainStatus, refetchInterval: EVERY })
   // Who stands on whom (the tech tree): the domains' imports at main, as the CI page reads them; it moves only with main.
   const graph = useQuery({ queryKey: ['city', 'gen2', 'domain-graph', GRAPH_REPO], queryFn: ({ signal }) => fetchCiDomains(GRAPH_REPO, signal), refetchInterval: 5 * 60_000 })
+  // The traffic (the comm line's contract and stream): who said it, who took it, the moment a receipt comes.
+  const contract = useQuery({ queryKey: ['city', 'gen2', 'bus-contract'], queryFn: fetchBusContract, refetchInterval: 5 * 60_000 })
+  const bus = useBusStream()
+  const places = useMemo(() => new Set((domains.data?.domains ?? []).map(x => x.id)), [domains.data])
+  const traffic = useMemo(() => ({ ...tripsOf(contract.data, bus.events, bus.receipts, places), connection: bus.connection, detail: bus.detail }), [contract.data, bus.events, bus.receipts, bus.connection, bus.detail, places])
   // A viewer's new ruler redraws the rooms that count that part (frame/rulers.tsx).
   const rulers = useRulersTick()
   return useMemo(() => {
@@ -42,6 +50,6 @@ export function useCityContent(): CityContent {
     const hw = d?.hardware.topology
       ? hardwareDistrict(d.hardware, 'system', `Read every 30 s, the last at ${new Date(d.at).toLocaleTimeString()}.`, d.units)
       : null
-    return consoleContent({ data: domains.data, error: domains.error }, hw, { data: graph.data, error: graph.error }, readDomain)
-  }, [reads.data, rulers, domains.data, domains.error, graph.data, graph.error])
+    return consoleContent({ data: domains.data, error: domains.error }, hw, { data: graph.data, error: graph.error }, readDomain, traffic)
+  }, [reads.data, rulers, domains.data, domains.error, graph.data, graph.error, traffic])
 }

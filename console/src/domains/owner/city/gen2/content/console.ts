@@ -5,6 +5,7 @@ import { domainTree } from './domainPlaces'
 import { domainPanel, domainsPanel, type DomainsRead } from './domainsPanel'
 import { ownsPanel, type ReadDomain } from './domainOwns'
 import { domainTechTree, type GraphRead } from './techTree'
+import { trafficPanel, type TrafficRead } from './traffic'
 
 /**
  * Today's content, a plug-in of the frame: the districts are the domains the map reads (domainPlaces.ts),
@@ -13,14 +14,14 @@ import { domainTechTree, type GraphRead } from './techTree'
  * levels, each node with its domain's light; the town's panel keeps what the map counts off it, a district
  * its own lights and, read when it is entered, what it owns (the map's domain read).
  */
-export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null = null, graph: GraphRead = {}, readDomain?: ReadDomain): CityContent => {
+export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null = null, graph: GraphRead = {}, readDomain?: ReadDomain, traffic?: TrafficRead): CityContent => {
   const why = domains.error instanceof Error ? domains.error.message : domains.error ? String(domains.error) : ''
   const tree = domainTree(domains.data, hardware, why)
   const ids = new Set((domains.data?.domains ?? []).map(d => d.id))
   // Only this content's own data; the engine adds its own cards (a facility's key and rulers, what a place holds, the picked card).
   const panels = (place: Place) =>
-    place.id === tree.id ? [domainsPanel(domains)]
+    place.id === tree.id ? [domainsPanel(domains), ...(traffic ? [trafficPanel(traffic)] : [])]
       : place.kind === 'district' && ids.has(place.id) ? [domainPanel(domains, place.id), ...(readDomain ? [ownsPanel(readDomain, place.id)] : [])]
         : []
-  return { version: 2, tree, panels, functions: consoleFunctions(), techTree: domainTechTree(domains.data, graph) }
+  return { version: 2, tree, panels, functions: consoleFunctions(), techTree: domainTechTree(domains.data, graph), trips: traffic?.trips }
 }

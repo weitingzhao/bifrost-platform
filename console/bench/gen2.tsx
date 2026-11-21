@@ -16,6 +16,7 @@ import OWNERSHIP from '../../config/domain-ownership.json'
 const NO_LIGHT = { value: '', why: 'bench: not read' }
 import { portsFor, type Link, type Partners } from '@bifrost/ui/city/links'
 import { useRulersTick } from '@bifrost/ui/city/rulers'
+import { tripsOf, type TrafficContract, type TrafficEvent, type TrafficReceipt } from '../src/domains/owner/city/gen2/content/traffic'
 
 // The gen2 frame on its own: the address is the place (#/system/infrastructure), so Back works.
 // The content plug-in: the domains the map reads, and the hardware district read live through the platform
@@ -76,6 +77,45 @@ const readDomain: ReadDomain = id => getJson(`/api/v1/catalog/domain?id=${encode
     contract: own.domains.find(d => d.id === id)?.contracts ?? null, note: 'bench: from config/domain-ownership.json, not the map’s scan; tables not read' }
 })
 
+
+/**
+ * Bench only, ?traffic=1: the bus's readers as the registry declares them (api/internal/bus/registry, 2026-11-21:
+ * each topic's domain, each reader's domain), with made-up timing: one delivery every second or so, picked from
+ * the real topic → reader pairs. The bench has no viewer token for /bus/stream; the Console reads the real one.
+ */
+const DEMO_CONTRACT: TrafficContract = {
+  topics: [
+    { type: 'git.main.advanced', domain: 'lineage' }, { type: 'ci.run.finished', domain: 'verification' },
+    { type: 'release.window.changed', domain: 'delivery' }, { type: 'approval.card.created', domain: 'owner' },
+    { type: 'approval.card.decided', domain: 'owner' }, { type: 'owner.question.answered', domain: 'owner' },
+    { type: 'seat.mail.arrived', domain: 'coordination' }, { type: 'alert.rule.fired', domain: 'compute' },
+  ],
+  clients: [
+    { name: 'headrelease', domain: 'delivery' }, { name: 'unit-watch', domain: 'verification' }, { name: 'release-recorder', domain: 'delivery' },
+    { name: 'window-queue', domain: 'delivery' }, { name: 'card-created-notice', domain: 'owner' }, { name: 'card-conclusions', domain: 'owner' },
+    { name: 'question-conclusions', domain: 'owner' }, { name: 'inbox-waiters', domain: 'coordination' }, { name: 'alert-letters', domain: 'coordination' },
+  ],
+}
+const DEMO_PAIRS: [string, string][] = [
+  ['git.main.advanced', 'headrelease'], ['git.main.advanced', 'unit-watch'], ['ci.run.finished', 'headrelease'], ['ci.run.finished', 'release-recorder'],
+  ['release.window.changed', 'window-queue'], ['approval.card.created', 'card-created-notice'], ['approval.card.decided', 'card-conclusions'],
+  ['owner.question.answered', 'question-conclusions'], ['seat.mail.arrived', 'inbox-waiters'], ['alert.rule.fired', 'alert-letters'],
+]
+function useDemoTraffic(on: boolean, places: Set<string>) {
+  const [log, setLog] = useState<{ events: TrafficEvent[]; receipts: TrafficReceipt[] }>({ events: [], receipts: [] })
+  useEffect(() => {
+    if (!on) return
+    let n = 0
+    const t = setInterval(() => {
+      const [type, consumer] = DEMO_PAIRS[Math.floor(Math.random() * DEMO_PAIRS.length)]
+      const id = `demo-${++n}`
+      setLog(l => ({ events: [{ id, type }, ...l.events].slice(0, 200), receipts: [{ id, consumer, at: new Date().toISOString() }, ...l.receipts].slice(0, 200) }))
+    }, 700)
+    return () => clearInterval(t)
+  }, [on])
+  return useMemo(() => on ? { ...tripsOf(DEMO_CONTRACT, log.events, log.receipts, places), connection: 'live', detail: 'bench demo: real topic → reader pairs, made-up timing' } : undefined, [on, log, places])
+}
+
 function Bench() {
   const [reads, setReads] = useState<{ r: Awaited<ReturnType<typeof readHardware>>; u: Awaited<ReturnType<typeof readUnits>>; at: string } | null>(null)
   useEffect(() => {
@@ -105,6 +145,8 @@ function Bench() {
     getJson(`/api/v1/ci/domains?repo=${GRAPH_REPO}`).then(g => { if (on) setGraph({ data: g as CiDomainGraph }) }, () => { if (on) setGraph({ data: GRAPH_SNAPSHOT as CiDomainGraph }) })
     return () => { on = false }
   }, [])
+  const places = useMemo(() => new Set((domains.data?.domains ?? []).map(d => d.id)), [domains])
+  const traffic = useDemoTraffic(new URLSearchParams(location.search).has('traffic'), places)
   const rulers = useRulersTick()
   const CONTENT = useMemo(() => {
     void rulers
@@ -113,9 +155,9 @@ function Bench() {
     // Bench only, ?util=4x8 or 8x8: Utilities at another size, to look at how a district's town grows (2026-11-20).
     const util = new URLSearchParams(location.search).get('util')
     if (hw && util && ['4x4', '4x8', '8x8'].includes(util)) hw.shape = util as Place['shape']
-    const c = consoleContent(domains, hw, graph, readDomain)
+    const c = consoleContent(domains, hw, graph, readDomain, traffic)
     return new URLSearchParams(location.search).has('links') ? { ...c, tree: withPartners(c.tree), links: SAMPLE_LINKS } : c
-  }, [reads, rulers, domains, graph])
+  }, [reads, rulers, domains, graph, traffic])
   const [path, setPath] = useState<Path>(() => parsePath(location.hash))
   useEffect(() => {
     const on = () => setPath(parsePath(location.hash))
