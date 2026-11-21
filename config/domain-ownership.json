@@ -424,7 +424,7 @@
       "id": "payload",
       "name": "Payload",
       "tier": 2,
-      "source": "domains/7-payload/charter.md",
+      "source": "domains/7-tenant/charter.md",
       "contracts": {
         "measured_at": "2e93ae09",
         "request_response": [
@@ -521,7 +521,7 @@
       "id": "station",
       "name": "Station",
       "tier": 2,
-      "source": "domains/11-station/charter.md",
+      "source": "domains/win2-workshop/charter.md",
       "contracts": {}
     },
     {
