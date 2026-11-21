@@ -43,6 +43,7 @@ type Service struct {
 	// List reads are concurrent and must honor the shared context deadline.
 	Assessment  func(context.Context, string) map[string]any
 	mu          sync.Mutex
+	ticketKey   []byte // see ticket.go; empty: no ticket is accepted
 	store       *store
 	audit       *actuation.AuditLog
 	now         func() time.Time

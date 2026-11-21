@@ -65,6 +65,7 @@ deny	POST /api/v1/approvals/{id}/heartbeat
 deny	POST /api/v1/approvals/{id}/reject
 deny	POST /api/v1/approvals/{id}/resolve
 deny	POST /api/v1/approvals/{id}/result
+deny	POST /api/v1/approvals/{id}/ticket
 deny	POST /api/v1/approvals/{id}/withdraw
 deny	GET /api/v1/audit
 deny	POST /api/v1/audit/append

@@ -3,8 +3,11 @@ package actions
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 )
+
+var hostName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 
 // Runner values: who executes an approved action.
 const (
@@ -38,6 +41,20 @@ func (a Action) RunnerOf(params map[string]any) string {
 // uses for the host executor.
 func NormalizeRunner(id string, params map[string]any) error {
 	if id != "owner_run_command" {
+		return nil
+	}
+	// host names the machine a host card runs on; it implies runner host and
+	// is part of the params the Owner approves.
+	if rawHost, has := params["host"]; has {
+		host := strings.ToLower(strings.TrimSpace(str(rawHost)))
+		if !hostName.MatchString(host) {
+			return errors.New("host is a machine name: lower case letters, digits and hyphens, starting with a letter")
+		}
+		if r := strings.ToLower(str(params["runner"])); r != "" && r != RunnerHost && r != "system" {
+			return errors.New("host needs runner host")
+		}
+		params["host"] = host
+		params["runner"] = RunnerHost
 		return nil
 	}
 	raw, ok := params["runner"]

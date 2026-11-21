@@ -279,6 +279,11 @@ func New(cfg *config.Config) (*Server, error) {
 	// One open landing grant request per operation (review 694 R-02), one
 	// open rule approval per rule and agentd deployment per host.
 	srv.approvals.SetOpenKey(approvalrules.OpenKey)
+	// Host cards are claimed only with a ticket owner-exec makes with this key
+	// (approvals/ticket.go); unset, none is ever accepted and the feature is off.
+	if key := os.Getenv("APPROVAL_TICKET_KEY"); key != "" {
+		srv.approvals.SetTicketKey([]byte(key))
+	}
 	actions.SetRuleChangeLookup(srv.ruleApproveChanges)
 	srv.wireQuestions(dataDir, role.RunsWorkers())
 	srv.wireReleasePolicy(releasesSvc, dataDir, role.RunsWorkers())

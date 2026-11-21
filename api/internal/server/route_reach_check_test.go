@@ -139,6 +139,9 @@ var intendedRouteAdditions = map[string][]string{
 	"GET /api/v1/records": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-15: a requester takes back its own card before it runs (narrows only).
 	"POST /api/v1/approvals/{id}/withdraw": {"operator", "admin", "trade-satellite"},
+	// 2026-11-21: owner-exec tells the platform a host card's ticket (admin; the
+	// mac must verify with the ticket key, so a bare admin sign-in earns nothing).
+	"POST /api/v1/approvals/{id}/ticket": {"admin"},
 	// TD-463: only the Owner may opt in to an assessment. The assess
 	// ability requires RoleAdmin; readers, agents and intake clients cannot
 	// request one. This records a request for advice, not an answer or approval.
