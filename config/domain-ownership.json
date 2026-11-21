@@ -1387,10 +1387,10 @@
     },
     "api/internal/alertrelay": {
       "domains": [
-        "foundation"
+        "owner"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 source and caller audit: out-of-cluster alert and notification transport shared by monitoring and approval callers, not approval decisions; implementation, authorization, refusal and dispatch behavior unchanged"
+      "basis": "2026-11-21 owner domain (Owner-facing) claims it, on the foundation line's handover (biz-align/foundation-handover-2026-11-21.md, table B): it is the channel that reaches the Owner (ntfy pages from outside the cluster, with the dead-man's switch on Alertmanager), the same job as approvalnotify by another transport; it decides nothing. Its only importer is api/cmd/operator-plane (go grep on main). Before: 2026-11-16 source and caller audit: out-of-cluster alert and notification transport shared by monitoring and approval callers, not approval decisions; implementation, authorization, refusal and dispatch behavior unchanged"
     },
     "api/internal/mcp": {
       "domains": [
