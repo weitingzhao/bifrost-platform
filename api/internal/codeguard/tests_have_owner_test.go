@@ -70,6 +70,12 @@ func ownerRefusal(o ownership, f testFile) string {
 	name := strings.TrimSpace(strings.TrimPrefix(f.Owner, ownerMark))
 	row, listed := o.Packages[f.Pkg]
 	switch {
+	case o.domainOf(f.Pkg) != "mixed" && name == o.domainOf(f.Pkg):
+		// The line repeats what the table says. Allowed since 2026-11-21 (the
+		// Owner, law 52, option 1): when delivery became one domain, three of
+		// its test files with this line were trust-anchored and may not be
+		// edited; the line says nothing false, so it is not refused.
+		return ""
 	case o.domainOf(f.Pkg) != "mixed":
 		return fmt.Sprintf("%s is declared for a file of %s, which config/domain-ownership.json already gives to %s: take the line out", ownerMark, f.Pkg, o.domainOf(f.Pkg))
 	case name == "" || strings.ContainsAny(name, " \t"):
@@ -201,7 +207,6 @@ var testsWithoutOwner = map[string]int{
 	// 2026-11-18: 40 of the store's 47 went with their files to the integration
 	// package; the store's others left this list when it became verification's.
 	"api/internal/agentrt/integration": 40,
-	"api/internal/delivery":            12,
 	// 2026-11-20: agentrt/agentrtapi's 26 came with it when it folded into server.
 	"api/internal/server": 80,
 }
@@ -471,7 +476,11 @@ func TestATestInASharedPackageMayNameItsDomain(t *testing.T) {
 		file("mine_test.go", "api/internal/both", "//bifrost:owner plan"),
 		file("other_test.go", "api/internal/both", "//bifrost:owner tenant"),
 		file("empty_test.go", "api/internal/both", "//bifrost:owner"),
-		file("single_test.go", "api/internal/plan", "//bifrost:owner plan"),
+		// Origin: 2026-11-21, law 52 option 1: in a package of one domain, a
+		// line naming that domain holds (same_test.go); one naming another
+		// domain is still refused (single_test.go, the control).
+		file("same_test.go", "api/internal/plan", "//bifrost:owner plan"),
+		file("single_test.go", "api/internal/plan", "//bifrost:owner owner"),
 	})
 	if len(without) != 1 || without["api/internal/both"] != 2 {
 		t.Fatalf("without an owner: %v, want the two tests of none_test.go only", without)

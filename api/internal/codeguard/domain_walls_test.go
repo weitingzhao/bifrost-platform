@@ -54,11 +54,20 @@ func across(o ownership, imports map[string][]string) []string {
 // (config/quality-ruler.json), and the coordinator ruled the wall be extended
 // to every domain.
 //
-// 2026-11-21, the Owner in the decoupling thread (C2 "C2做"): api/cmd stopped
-// being skipped, and one command's import came onto the list.
+// 2026-11-21, the Owner in the decoupling thread (C1 "c1 做", C2 "C2做"): the
+// wall grew on purpose, to check two places it skipped. delivery stopped being
+// mixed (a mixed package is skipped), and its three imports of other domains
+// came onto the list: actions is imported by the trust-anchored
+// window_handler.go and run_window.go; threadinbox.Recipient is called on the
+// path from the trust-anchored window_store.go; the release context reads
+// questions' records. api/cmd stopped being skipped, and one command's import
+// came onto it.
 var domainsAcross = []string{
 	"api/cmd/agentrt-plan-import -> api/internal/agentrt/recorderimport (plan -> lineage)",
 	"api/internal/approvals -> api/internal/threadinbox (owner -> coordination)",
+	"api/internal/delivery -> api/internal/actions (delivery -> owner)",
+	"api/internal/delivery -> api/internal/questions (delivery -> owner)",
+	"api/internal/delivery -> api/internal/threadinbox (delivery -> coordination)",
 	"api/internal/questions -> api/internal/threadinbox (owner -> coordination)",
 	"api/internal/releasepolicy -> api/internal/actions (delivery -> owner)",
 }
