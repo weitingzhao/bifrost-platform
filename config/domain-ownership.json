@@ -582,10 +582,10 @@
     },
     "api/internal/bus/gatecluster": {
       "domains": [
-        "delivery"
+        "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-21 to delivery: its only user outside the assembly roots is headrelease, and foundation does not import it (Foundation handover, shared notes biz-align/foundation-handover-2026-11-21.md table A; go list on main). 2026-11-16 placement answer: bus sub-domain 0.2"
+      "basis": "2026-11-21 back to foundation: a bus package is used through events, not imports, and the bus stays whole with foundation (11-16 placement; Foundation withdrew its handover). 2026-11-16 placement answer: bus sub-domain 0.2"
     },
     "api/cmd/bifrost-bus": {
       "domains": [
@@ -1618,10 +1618,10 @@
     },
     "api/internal/bus/drift": {
       "domains": [
-        "verification"
+        "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-21 to verification: its only user outside the assembly roots is cirunview, and foundation does not import it (Foundation handover, shared notes biz-align/foundation-handover-2026-11-21.md table A; go list on main). 2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): an entry or dispatcher of the bus (sub-domain 0.2 of foundation, built by the communication line); it imports only the ledger and the bus registry. It had no row."
+      "basis": "2026-11-21 back to foundation: a bus package is used through events, not imports, and the bus stays whole with foundation (11-16 placement; Foundation withdrew its handover). 2026-11-16 review of the packages foundation held by default (shared notes brain/foundation-code-quality-review-2026-11-16.md, issue: 55% of foundation unclaimed): an entry or dispatcher of the bus (sub-domain 0.2 of foundation, built by the communication line); it imports only the ledger and the bus registry. It had no row."
     },
     "api/internal/bus/subscribe": {
       "domains": [
@@ -1688,10 +1688,10 @@
     },
     "api/internal/bus/runhooks": {
       "domains": [
-        "verification"
+        "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-21 to verification: its only user outside the assembly roots is cirunview, and foundation does not import it (Foundation handover, shared notes biz-align/foundation-handover-2026-11-21.md table A; go list on main). 2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, lets a reader of pipeline runs be woken by the bus. Imports only foundation packages or none; the server wires it."
+      "basis": "2026-11-21 back to foundation: a bus package is used through events, not imports, and the bus stays whole with foundation (11-16 placement; Foundation withdrew its handover). 2026-11-18 registered after the daily comparison found it held only by the default row: bus sub-domain 0.2, lets a reader of pipeline runs be woken by the bus. Imports only foundation packages or none; the server wires it."
     },
     "api/internal/releases": {
       "domains": [
