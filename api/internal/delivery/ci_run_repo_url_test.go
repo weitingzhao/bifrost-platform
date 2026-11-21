@@ -1,20 +1,22 @@
 package delivery
 
-import (
-	"testing"
+import "testing"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
-)
+// releaseReaderRepoURL is the repo-url the release reader (verification's
+// landingci) accepts for platform CI: the value is the contract, pinned the
+// same way in landingci's own test, so the two sides cannot drift apart without
+// one of them failing (2026-11-21, tests reaching across domains go to zero).
+const releaseReaderRepoURL = "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-platform.git"
 
 // W-31 B5: a Console/MCP-started platform CI names repo-url once, with the
 // value the release reader accepts; other CI pipelines are unchanged.
 func TestCIRunSpecRepoURL(t *testing.T) {
 	t.Parallel()
-	if platformCIRepoURL != landingci.PlatformRepoURL {
-		t.Fatalf("delivery %q != landingci %q", platformCIRepoURL, landingci.PlatformRepoURL)
+	if platformCIRepoURL != releaseReaderRepoURL {
+		t.Fatalf("delivery %q != the release reader's %q", platformCIRepoURL, releaseReaderRepoURL)
 	}
 	for _, tc := range []struct{ pipeline, repo, want string }{
-		{"bifrost-ci-platform", "bifrost-platform", landingci.PlatformRepoURL},
+		{"bifrost-ci-platform", "bifrost-platform", releaseReaderRepoURL},
 		{"bifrost-ci-frontend", "bifrost-trade-frontend", ""},
 		{"bifrost-ci-python", "bifrost-trade-core", ""},
 	} {

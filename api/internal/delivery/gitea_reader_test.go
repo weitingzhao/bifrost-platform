@@ -18,7 +18,6 @@ import (
 	"k8s.io/client-go/dynamic"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actuationpolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
@@ -148,7 +147,7 @@ func serverService(t *testing.T) (*Service, *k8sfake.Clientset, *fakeGitea) {
 	s.SetClientsetForTest(cs)
 	s.readerCreds = giteaReaderFromEnv
 	s.giteaBase = g.srv.URL
-	s.policy = &actuationpolicy.Policy{Mirrors: actuationpolicy.Mirrors{Repos: []string{"bifrost-platform"}}}
+	s.policy = allowRepos([]string{"bifrost-platform"})
 	s.httpClient = &http.Client{Timeout: 2 * time.Second}
 	return s, cs, g
 }

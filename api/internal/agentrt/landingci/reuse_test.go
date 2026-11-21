@@ -26,7 +26,7 @@ func releaseCI(t *testing.T, name string, at time.Time) *unstructured.Unstructur
 	t.Helper()
 	o := greenRun(t, name, at)
 	params, _, _ := unstructured.NestedSlice(o.Object, "spec", "params")
-	setField(t, o, append(params, map[string]any{"name": "repo-url", "value": PlatformRepoURL}), "spec", "params")
+	setField(t, o, append(params, map[string]any{"name": "repo-url", "value": platformRepoURL}), "spec", "params")
 	return o
 }
 

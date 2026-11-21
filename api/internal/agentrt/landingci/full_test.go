@@ -43,7 +43,12 @@ func TestFullCIEnsureOneRunPerCommitPerDay(t *testing.T) {
 		t.Fatal("the next day is another run", next, err)
 	}
 	params, labels := fullParams(t, c, name)
-	want := map[string]string{"revision": factSHA1, "uiRevision": "main", "repo-url": PlatformRepoURL}
+	// The repo-url is the contract delivery's platform CI runs send too
+	// (delivery/ci_run_repo_url_test.go pins the same value; 2026-11-21).
+	if platformRepoURL != "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-platform.git" {
+		t.Fatal("the platform repo-url changed: change delivery's platformCIRepoURL with it", platformRepoURL)
+	}
+	want := map[string]string{"revision": factSHA1, "uiRevision": "main", "repo-url": platformRepoURL}
 	if !reflect.DeepEqual(params, want) {
 		t.Fatal(params)
 	}

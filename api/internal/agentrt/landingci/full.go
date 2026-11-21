@@ -72,7 +72,7 @@ func (c *Client) EnsureFullRun(ctx context.Context, revision string, day time.Ti
 		return "", fmt.Errorf("invalid full CI revision")
 	}
 	name := FullRunName(revision, day)
-	params := map[string]string{"revision": revision, "uiRevision": "main", "repo-url": PlatformRepoURL}
+	params := map[string]string{"revision": revision, "uiRevision": "main", "repo-url": platformRepoURL}
 	if c.FullScopeParam {
 		params[APIScopeRequestParam] = APIScopeFull
 	}

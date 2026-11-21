@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actuationpolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -43,7 +42,7 @@ func pinnedService(t *testing.T, name string, refs map[string]string, missing []
 	}
 	s, dyn, _ := contractService(t, pipe, "present")
 	repos := reposForPipeline(name)
-	s.SetPolicy(&actuationpolicy.Policy{Mirrors: actuationpolicy.Mirrors{Repos: repos}})
+	s.SetPolicy(allowRepos(repos))
 	window, _ := json.Marshal(map[string]any{"who": "tester", "what": sortedKeys(requiredRepoSet(name))})
 	objects := []runtime.Object{&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "ci", Labels: map[string]string{"kubernetes.io/arch": "amd64"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}}
 	if _, known := requiredRepos(name); known {

@@ -2,16 +2,30 @@ package delivery
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/actuationpolicy"
 )
 
+// allowRepos is a MirrorPolicy that allows the named repositories, with the
+// refusal the owner's allow-list gives. The tests take it instead of the
+// owner's actuationpolicy (2026-11-21: tests reach other domains only through
+// delivery's own port; the real policy is bound by the server).
+type allowRepos []string
+
+func (a allowRepos) MirrorAllowed(repo string) error {
+	for _, r := range a {
+		if r == repo {
+			return nil
+		}
+	}
+	return errors.New("repo is not in the mirror allow-list")
+}
+
 func TestSyncMirrorsRejectsRepoOutsideAllowList(t *testing.T) {
-	s := &Service{policy: &actuationpolicy.Policy{Mirrors: actuationpolicy.Mirrors{Repos: []string{"allowed-repo"}}}}
+	s := &Service{policy: allowRepos([]string{"allowed-repo"})}
 	if _, err := s.SyncMirrors(context.Background(), []string{"other-repo"}, nil); err == nil {
 		t.Fatal("repo outside the allow-list was synced")
 	}
@@ -40,7 +54,7 @@ func TestSyncMirrorsPollsFakeGitea(t *testing.T) {
 	}))
 	defer srv.Close()
 	s := &Service{
-		policy:    &actuationpolicy.Policy{Mirrors: actuationpolicy.Mirrors{Repos: []string{"allowed-repo"}}},
+		policy:    allowRepos([]string{"allowed-repo"}),
 		giteaBase: srv.URL,
 		readerCreds: func(context.Context) (string, string, error) {
 			return "user", "secret", nil
@@ -86,7 +100,7 @@ func TestSyncMirrorsPrimaryRepository(t *testing.T) {
 	}))
 	defer srv.Close()
 	s := &Service{
-		policy:    &actuationpolicy.Policy{Mirrors: actuationpolicy.Mirrors{Repos: []string{"primary", "silent", "gone"}}},
+		policy:    allowRepos([]string{"primary", "silent", "gone"}),
 		giteaBase: srv.URL,
 		readerCreds: func(context.Context) (string, string, error) {
 			return "user", "secret", nil
