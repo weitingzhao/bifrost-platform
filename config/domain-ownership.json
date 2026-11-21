@@ -1117,7 +1117,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-21 Foundation review: only the plan domain uses it, so it belongs to plan; the plan seat is a read-only placeholder that cannot take a row, so Foundation maintains it until plan is staffed (shared notes biz-align/foundation-handover-2026-11-21.md). 2026-11-17 added as the home of test-only fixtures that tests of several packages use to set up agentrt state (CreateMission, MoveMission, moved out of store, where no binary called them); it writes through eventlog and canon only and does not import store; kept apart from agentrttest, which is database infrastructure with no business state machine"
+      "basis": "2026-11-21 Foundation review, corrected the same evening by the plan seat: it is a test kit several domains' tests use (artifact, migrate and integration in foundation, coord in coordination, planloop and planstore in plan), so it is a foundation base and stays here; counting production imports alone had shown plan as its only user. 2026-11-17 added as the home of test-only fixtures that tests of several packages use to set up agentrt state (CreateMission, MoveMission, moved out of store, where no binary called them); it writes through eventlog and canon only and does not import store; kept apart from agentrttest, which is database infrastructure with no business state machine"
     },
     "api/internal/agentrt/artifact": {
       "domains": [
