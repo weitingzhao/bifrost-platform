@@ -12,6 +12,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
+	"github.com/weitingzhao/bifrost-platform/api/internal/threadinbox"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitexec"
 )
 
@@ -26,6 +27,9 @@ import (
 func init() {
 	bindDeliveryVerification()
 	bindDeliveryPlacement()
+	// The release window queue's thread addresses are the coordination
+	// domain's (threadinbox); delivery declares the port (window_queue.go).
+	delivery.SetThreadRecipient(threadinbox.Recipient)
 }
 
 func bindDeliveryVerification() {

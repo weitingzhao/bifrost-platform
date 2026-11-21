@@ -67,7 +67,6 @@ var domainsAcross = []string{
 	"api/internal/approvals -> api/internal/threadinbox (approvals -> coordination)",
 	"api/internal/delivery -> api/internal/actions (delivery -> approvals)",
 	"api/internal/delivery -> api/internal/questions (delivery -> approvals)",
-	"api/internal/delivery -> api/internal/threadinbox (delivery -> coordination)",
 	"api/internal/questions -> api/internal/threadinbox (approvals -> coordination)",
 	"api/internal/releasepolicy -> api/internal/actions (delivery -> approvals)",
 }

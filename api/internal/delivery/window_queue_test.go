@@ -23,6 +23,19 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
 
+// Origin: 2026-11-21, delivery stopped importing the coordination domain's
+// threadinbox (SetThreadRecipient, a port the server binds). The tests bind a
+// stand-in that keeps a "thread:" address as it is and refuses anything else,
+// which is all these cases write.
+func init() {
+	SetThreadRecipient(func(s string) string {
+		if strings.HasPrefix(s, "thread:") && len(s) > len("thread:") {
+			return s
+		}
+		return ""
+	})
+}
+
 var queueNow = time.Date(2026, 11, 14, 22, 0, 0, 0, time.UTC)
 
 // casConfigMaps gives the fake the API server's optimistic concurrency.

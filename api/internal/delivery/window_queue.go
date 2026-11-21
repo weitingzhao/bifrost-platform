@@ -13,8 +13,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/threadinbox"
 )
 
 // Release-window queue (LANE-agent-tool-comm, locks-queue-design-v1 §2, §8).
@@ -68,11 +66,24 @@ func loadWindowQueueConfig() windowQueueConfig {
 	}
 }
 
+// threadRecipient turns a thread address as a seat writes it into the
+// mailbox recipient, or "" when it is not one; the server sets it to the
+// coordination domain's threadinbox.Recipient (SetThreadRecipient). It is a
+// port: delivery does not import the coordination domain's package
+// (2026-11-21, the Foundation seat clearing the domain wall's baseline).
+var threadRecipient func(string) string
+
+// SetThreadRecipient is the port's binding, called once by the server.
+func SetThreadRecipient(f func(string) string) { threadRecipient = f }
+
 func validateQueueInput(in windowInput) (windowInput, error) {
 	in.Thread = strings.TrimSpace(in.Thread)
 	in.Resume = strings.TrimSpace(in.Resume)
 	if in.Thread != "" {
-		to := threadinbox.Recipient(in.Thread)
+		if threadRecipient == nil {
+			return in, fmt.Errorf("thread addresses are not wired on this platform")
+		}
+		to := threadRecipient(in.Thread)
 		if to == "" {
 			return in, fmt.Errorf("thread must be a thread address such as thread:<id>")
 		}
