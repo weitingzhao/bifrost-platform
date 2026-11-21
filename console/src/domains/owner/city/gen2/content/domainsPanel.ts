@@ -1,6 +1,6 @@
 import type { Panel } from '@bifrost/ui/city/content'
 import type { Block, Tone } from '@bifrost/ui/city/cards'
-import { LIGHTS, type DomainLight, type DomainStatusResponse } from '@/domains/foundation/catalog/api/domainStatus'
+import { LIGHTS, type DomainLight, type DomainReference, type DomainStatusResponse } from '@/domains/foundation/catalog/api/domainStatus'
 
 /**
  * The domains as the map line sees them (GET /api/v1/catalog/status, 2026-11-20), handed to the engine as
@@ -18,7 +18,8 @@ type RepoCount = { repo: string; measured: boolean; whole?: boolean; total: numb
  * package) from the platform's domain graph; registered when the used domain's go_surface names the package and
  * lists the user, else unregistered (reaching past the contract). Counted by package, not by name: the map says so.
  */
-export type MapReference = { from: string; to: string; imports: number; registered: number; unregistered: number; wrong_way: boolean }
+/** The map's own row (kind import or event, 814702e4; an event row has imports 0 and events = kinds of event): read as served, not copied. */
+export type MapReference = DomainReference
 /** A domain row as the map serves it; name and tier come from the ownership table (empty / 0 when not written). */
 export type MapDomain = DomainStatusResponse['domains'][number] & { name?: string; tier?: number }
 export type MapStatus = Omit<DomainStatusResponse, 'domains'> & { domains: MapDomain[]; off_map_by_domain?: Record<string, number>; inventory?: RepoCount[]; references?: MapReference[] }
@@ -42,10 +43,10 @@ function inventory(rows: RepoCount[]): Block {
 }
 
 /** Who uses whom across domains, worst first: a loop, then most reaching past the contract. */
-function references(d: MapStatus): Block {
-  if (!d.references) return { kind: 'note', text: 'Who uses whom across domains: not served by the map yet.' }
-  const rows = [...d.references].sort((a, b) => Number(b.wrong_way) - Number(a.wrong_way) || b.unregistered - a.unregistered || b.imports - a.imports)
-  return {
+function references(d: MapStatus): Block[] {
+  if (!d.references) return [{ kind: 'note', text: 'Who uses whom across domains: not measured by the map yet.' }]
+  const rows = d.references.filter(r => r.kind !== 'event').sort((a, b) => Number(b.wrong_way) - Number(a.wrong_way) || b.unregistered - a.unregistered || b.imports - a.imports)
+  return [{
     kind: 'table',
     head: [{ label: 'Uses → used' }, { label: 'Imports', num: true }, { label: 'Past the contract', num: true }],
     empty: 'No reference between domains',
@@ -57,6 +58,16 @@ function references(d: MapStatus): Block {
         { text: r.unregistered, tone: r.unregistered > 0 ? 'warn' : undefined, title: `${r.registered} through its contract, ${r.unregistered} not (by package)` },
       ],
     })),
+  }, events(d, d.references.filter(r => r.kind === 'event'))]
+}
+
+/** Who tells whom across domains on the bus, as the map counts it: kinds of event a pair carries (the roads' buses). */
+function events(d: MapStatus, rows: MapReference[]): Block {
+  return {
+    kind: 'table',
+    head: [{ label: 'Tells → told' }, { label: 'Kinds of event', num: true }],
+    empty: 'No event between domains',
+    rows: [...rows].sort((a, b) => (b.events ?? 0) - (a.events ?? 0)).map(r => ({ key: `ev:${r.from}>${r.to}`, cells: [`${nameOf(d, r.from)} → ${nameOf(d, r.to)}`, r.events ?? 0] })),
   }
 }
 
@@ -73,10 +84,10 @@ export function townBlocks(read: DomainsRead): Block[] {
       ],
     },
     ...(d.inventory && d.inventory.length > 0 ? [inventory(d.inventory)] : []),
-    references(d),
+    ...references(d),
     {
       kind: 'note', title: d.note || undefined,
-      text: `From the map's scan${d.at ? ` at ${new Date(d.at).toLocaleString()}` : ''}${d.commit ? ` (${d.commit.slice(0, 8)})` : ''}. Each domain's lights: on its node in the tech tree (the levels' ⑂), and inside its district.`,
+      text: `From the map's scan${d.at ? ` at ${new Date(d.at).toLocaleString()}` : ''}${d.commit ? ` (${d.commit.slice(0, 8)})` : ''}. Each domain's lights: on its node in the tech tree (the levels' Tech tree), and inside its district.`,
     },
   ]
 }

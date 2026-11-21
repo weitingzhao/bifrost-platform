@@ -44,13 +44,27 @@ describe('domains panel', () => {
       { from: 'ops', to: 'plan', imports: 2, registered: 0, unregistered: 2, wrong_way: true },
     ] }
     render(<>{bodyOf(domainsPanel({ data }))}</>)
-    const cells = screen.getAllByText(/→/).map(td => td.textContent).filter(t => t !== 'Uses → used')
+    const cells = screen.getAllByText(/→/).map(td => td.textContent).filter(t => t !== 'Uses → used' && t !== 'Tells → told')
     expect(cells).toEqual(['ops → plan · loop', 'plan → ops'])
     expect(screen.getByTitle('0 through its contract, 2 not (by package)').className).toContain('g2-warn')
   })
+  // 2026-11-21: the map's references carry kind (814702e4); an event row (imports 0) is the bus, not code: it goes in
+  // its own table, never counted as an import.
+  it('keeps the bus’s events out of the imports, in a table of their own', () => {
+    const data = { ...status, domains: [...status.domains, { ...status.domains[0], id: 'plan' }], references: [
+      { from: 'plan', to: 'ops', imports: 5, registered: 5, unregistered: 0, wrong_way: false, kind: 'import' },
+      { from: 'ops', to: 'plan', imports: 0, registered: 0, unregistered: 0, wrong_way: false, kind: 'event', events: 3 },
+    ] }
+    render(<>{bodyOf(domainsPanel({ data }))}</>)
+    expect(screen.getByText('Tells → told')).toBeTruthy()
+    const rows = screen.getAllByText(/→/).map(td => td.textContent)
+    expect(rows).toContain('ops → plan')
+    expect(screen.getByText('3')).toBeTruthy()
+    expect(rows.filter(t => t === 'ops → plan').length).toBe(1)
+  })
   it('says when the map does not serve references yet', () => {
     render(<>{bodyOf(domainsPanel({ data: status }))}</>)
-    expect(screen.getByText(/not served by the map yet/)).toBeTruthy()
+    expect(screen.getByText(/not measured by the map yet/)).toBeTruthy()
   })
 
   it('says the lights are not known when the read fails', () => {
