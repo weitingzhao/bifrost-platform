@@ -24,7 +24,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
-	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
 
@@ -219,10 +218,9 @@ func TestBoundaryProjectionFrozenParity(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-21 decoupling line: delivery reaches owner through a port instead of importing approvals
-// and questions. What the store's words mean moved here: a rejected status is
-// Rejected, an answer on the rule's channel is ByRule, an unanswered question
-// is no answer; a read that fails stays an error.
+// Origin: 2026-11-21 decoupling line: delivery reaches owner through a port instead of importing approvals.
+// What the store's words mean moved here: a rejected status is Rejected; a
+// read that fails stays an error.
 func TestReleaseContextReadsOwnerRecordsThroughThePort(t *testing.T) {
 	at := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
 	seen, err := approvalsSeen(func() ([]approvals.Approval, error) {
@@ -238,17 +236,6 @@ func TestReleaseContextReadsOwnerRecordsThroughThePort(t *testing.T) {
 	}
 	if _, err = approvalsSeen(func() ([]approvals.Approval, error) { return nil, errors.New("disk") })(); err == nil {
 		t.Fatal("an unreadable approval store read as empty")
-	}
-	var open, owner, rule questions.Question
-	_ = json.Unmarshal([]byte(`{"id":"q0"}`), &open)
-	_ = json.Unmarshal([]byte(`{"id":"q1","answer":{"by":"owner","at":"2026-11-21T12:00:00Z","channel":"phone"}}`), &owner)
-	_ = json.Unmarshal([]byte(`{"id":"q2","answer":{"by":"rule","at":"2026-11-21T12:00:00Z","channel":"`+questions.RuleChannel+`"}}`), &rule)
-	answers, err := answersSeen(func() ([]questions.Question, error) { return []questions.Question{open, owner, rule}, nil })()
-	if err != nil || len(answers) != 2 || answers[0].ByRule || !answers[0].At.Equal(at) || !answers[1].ByRule {
-		t.Fatalf("answers: %+v, %v", answers, err)
-	}
-	if _, err = answersSeen(func() ([]questions.Question, error) { return nil, errors.New("disk") })(); err == nil {
-		t.Fatal("an unreadable question store read as empty")
 	}
 }
 

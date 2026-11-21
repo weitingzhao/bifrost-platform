@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -177,9 +178,8 @@ type ReleaseContextSources struct {
 	Waiting func() ([]ApprovalSeen, error)
 	// ApprovalHistory is every retained approval, read without a sweep.
 	ApprovalHistory func() ([]ApprovalSeen, error)
-	// Questions is the answer of every retained question that has one, read
-	// without a sweep.
-	Questions func() ([]AnswerSeen, error)
+	// Questions is every retained question, read without a sweep.
+	Questions func() ([]questions.Question, error)
 	// OpenRegressions is the repository's known regressions on main with no
 	// fix recorded, newest first.
 	OpenRegressions func(ctx context.Context, repo string) ([]KnownRegression, error)
@@ -208,16 +208,6 @@ type ApprovalSeen struct {
 	Rejected     bool
 	RejectReason string
 	DecidedAt    time.Time
-}
-
-// AnswerSeen is the answer of one question as the release context reads it.
-// The questions are the owner domain's; the server says which answers a rule
-// gave. Until 2026-11-21 this package imported questions for the record type
-// and the rule's channel.
-type AnswerSeen struct {
-	At time.Time
-	// ByRule is an answer a rule gave, not the Owner.
-	ByRule bool
 }
 
 // knownRepos are the repositories the release window can name.
@@ -687,9 +677,9 @@ func ownerLastAction(src ReleaseContextSources) (OwnerAction, error) {
 			bestAt, best.Kind = a.DecidedAt, "approval"
 		}
 	}
-	for _, a := range qs {
-		if !a.ByRule && !a.At.IsZero() && a.At.After(bestAt) {
-			bestAt, best.Kind = a.At, "question"
+	for _, q := range qs {
+		if q.Answer != nil && q.Answer.Channel != questions.RuleChannel && !q.Answer.At.IsZero() && q.Answer.At.After(bestAt) {
+			bestAt, best.Kind = q.Answer.At, "question"
 		}
 	}
 	if bestAt.IsZero() {

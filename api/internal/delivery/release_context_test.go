@@ -22,6 +22,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 )
 
@@ -108,14 +109,26 @@ func fineSources() ReleaseContextSources {
 			}
 			return []KnownRegression{{Introduced: ctxMain, Impact: "module activity is empty", By: "thread:local_x", KnownAt: "2026-11-15T11:50:00Z"}}, nil
 		},
-		Questions: func() ([]AnswerSeen, error) {
-			return []AnswerSeen{
-				{At: ctxNow.Add(-20 * time.Minute)},
+		Questions: func() ([]questions.Question, error) {
+			return []questions.Question{
+				answeredQuestion("q1", "owner", "phone", ctxNow.Add(-20*time.Minute)),
 				// A rule's answer is not the Owner's.
-				{At: ctxNow.Add(-2 * time.Minute), ByRule: true},
+				answeredQuestion("q2", "rule", questions.RuleChannel, ctxNow.Add(-2*time.Minute)),
 			}, nil
 		},
 	}
+}
+
+// answeredQuestion is a question the given party answered, built through JSON
+// so the test names the card and not its answer type (the decoupling A5 move
+// left no production code outside questions naming that type).
+func answeredQuestion(id, by, channel string, at time.Time) questions.Question {
+	raw, _ := json.Marshal(map[string]any{"id": id, "answer": map[string]any{"by": by, "at": at, "channel": channel}})
+	var q questions.Question
+	if err := json.Unmarshal(raw, &q); err != nil {
+		panic(err)
+	}
+	return q
 }
 
 // 2026-11-15: duty asked for one read of the release situation; cards
@@ -440,7 +453,7 @@ func TestReleaseContextWindowEnded(t *testing.T) {
 func TestReleaseContextOwnerLastActionNeedsBothStores(t *testing.T) {
 	t.Parallel()
 	src := fineSources()
-	src.Questions = func() ([]AnswerSeen, error) { return nil, errors.New("disk") }
+	src.Questions = func() ([]questions.Question, error) { return nil, errors.New("disk") }
 	got := AssembleReleaseContext(context.Background(), src, "bifrost-platform", "").Facts.OwnerLastAction
 	if got.Value != nil || !strings.Contains(got.Error, "question records unreadable") {
 		t.Fatalf("owner: %+v", got)
@@ -455,8 +468,8 @@ func TestReleaseContextOwnerLastActionNeedsBothStores(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-21 decoupling line: delivery reaches owner through a port instead of importing approvals
-// and questions. Unbound (no approval or question reader handed over), the
+// Origin: 2026-11-21 decoupling line: delivery reaches owner through a port instead of importing approvals.
+// Unbound (no approval or question reader handed over), the
 // two facts that read them say so as errors; nothing panics and nothing reads
 // as an empty store.
 func TestReleaseContextOwnerReadersUnbound(t *testing.T) {
