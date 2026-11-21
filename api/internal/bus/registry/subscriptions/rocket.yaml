@@ -276,17 +276,17 @@ clients:
   - name: card-created-notice
     kind: durable
     lost_after: 168h
-    domain: owner
+    domain: approvals
     note: sends the Owner the first notice of a new approval card; the approvals loop covers a missed event after 30 seconds
   - name: card-conclusions
     kind: durable
     lost_after: 168h
-    domain: owner
+    domain: approvals
     note: tells the seat that asked how its approval card ended, on each decision and result; the approvals' 15-second loop reconciles
   - name: question-conclusions
     kind: durable
     lost_after: 168h
-    domain: owner
+    domain: approvals
     note: tells the seat that asked the Owner's answer, on each answer; the questions' sweep reconciles
   - name: inbox-waiters
     kind: reader

@@ -154,9 +154,9 @@ func TestTheEventTypeIsRegisteredUnderOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, lt := range doc.Types {
-		if lt.Type == EventType && lt.Domain == "owner" {
+		if lt.Type == EventType && lt.Domain == "approvals" {
 			return
 		}
 	}
-	t.Fatalf("%s is not registered under owner", EventType)
+	t.Fatalf("%s is not registered under approvals", EventType)
 }

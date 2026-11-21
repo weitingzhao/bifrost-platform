@@ -178,7 +178,7 @@ channels:
       guarantee: durable
       subject: "#<number>"
       publisher: gate-db
-      domain: owner
+      domain: approvals
       ref: "/api/v1/approvals/{id}"
       reconcile: "approval store is the truth"
       on_unread: stale
@@ -196,7 +196,7 @@ channels:
       key: card
       subject: "#<number>"
       publisher: gate-db
-      domain: owner
+      domain: approvals
       ref: "/api/v1/approvals/{id}"
       reconcile: "approval store is the truth"
       on_unread: closed
@@ -213,7 +213,7 @@ channels:
       guarantee: durable
       subject: "#<number>"
       publisher: gate-db
-      domain: owner
+      domain: approvals
       ref: "/api/v1/approvals/{id}"
       reconcile: "approval store is the truth"
       on_unread: stale
@@ -230,7 +230,7 @@ channels:
       guarantee: durable
       subject: "#<number>"
       publisher: gate-db
-      domain: owner
+      domain: approvals
       ref: "/api/v1/approvals/{id}"
       reconcile: "approval store is the truth"
       on_unread: stale
@@ -247,7 +247,7 @@ channels:
       guarantee: durable
       subject: "<question-id>"
       publisher: gate-db
-      domain: owner
+      domain: approvals
       ref: "/api/v1/questions/{id}"
       reconcile: "question store is the truth"
       on_unread: stale
@@ -266,7 +266,7 @@ channels:
       guarantee: durable
       subject: "<question-id>"
       publisher: gate-db
-      domain: owner
+      domain: approvals
       ref: "/api/v1/questions/{id}"
       reconcile: "question store is the truth"
       on_unread: stale
@@ -505,7 +505,7 @@ channels:
       guarantee: best-effort
       subject: "<plugin>"
       publisher: gate-db
-      domain: tenant
+      domain: payload
       ref: "/api/v1/plugins/<plugin>/status"
       reconcile: "checklist prober, every 10 minutes"
       on_unread: stale
@@ -539,7 +539,7 @@ channels:
       guarantee: best-effort
       subject: "<job>"
       publisher: gate-cluster
-      domain: tenant
+      domain: payload
       ref: "/api/v1/data/clone"
       reconcile: "Job list"
       on_unread: stale

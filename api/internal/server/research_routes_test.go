@@ -1,4 +1,4 @@
-//bifrost:owner tenant
+//bifrost:owner payload
 
 package server
 

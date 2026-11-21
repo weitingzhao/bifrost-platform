@@ -1,4 +1,4 @@
-//bifrost:owner owner
+//bifrost:owner approvals
 
 package server
 

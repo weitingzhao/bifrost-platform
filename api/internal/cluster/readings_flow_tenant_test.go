@@ -1,4 +1,4 @@
-//bifrost:flow owner=tenant contracts=cluster.BindAppReadings
+//bifrost:flow owner=payload contracts=cluster.BindAppReadings
 
 package cluster_test
 

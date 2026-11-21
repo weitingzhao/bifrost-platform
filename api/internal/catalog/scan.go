@@ -244,7 +244,7 @@ func (s *Scanner) ScanOnce(ctx context.Context, repo string) (Pool, error) {
 // databases are not looked into this round).
 func (s *Scanner) tenantWhole(repo string) bool {
 	r, ok := s.reviewsFromElsewhere(repo)["."]
-	return ok && r.Verdict == VerdictClaim && r.Domain == "tenant"
+	return ok && r.Verdict == VerdictClaim && r.Domain == "payload"
 }
 
 // reviewsFromElsewhere are repo's reviews written in another repository's

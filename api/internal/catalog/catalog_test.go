@@ -99,7 +99,7 @@ func TestARepositoryWithNoTableIsListedByDirectoryUnlessATenants(t *testing.T) {
 	}
 	// Through the scanner: the review that claims the whole repository for
 	// tenant keeps it whole; a claim for another domain does not.
-	k := memKept{keptOthers: []byte(`{"t":{".":{"verdict":"claim","domain":"tenant","reason":"r"}},"u":{".":{"verdict":"claim","domain":"delivery","reason":"r"}}}`)}
+	k := memKept{keptOthers: []byte(`{"t":{".":{"verdict":"claim","domain":"payload","reason":"r"}},"u":{".":{"verdict":"claim","domain":"delivery","reason":"r"}}}`)}
 	s := &Scanner{Kept: k, Source: func(context.Context, string) (Tree, error) { return tr, nil }}
 	if !s.tenantWhole("t") || s.tenantWhole("u") || s.tenantWhole("v") {
 		t.Error("tenantWhole")
@@ -206,7 +206,7 @@ func TestARepositoryWithNoTableIsReviewedFromWhereTheMapLives(t *testing.T) {
 	read := home.Read
 	home.Read = func(p string) ([]byte, bool, error) {
 		if p == ReviewPath {
-			return []byte(`{"reviews":{},"repositories":{"other":{".":{"verdict":"claim","domain":"tenant","reason":"r","by":"seat","on":"2026-11-20"}}}}`), true, nil
+			return []byte(`{"reviews":{},"repositories":{"other":{".":{"verdict":"claim","domain":"payload","reason":"r","by":"seat","on":"2026-11-20"}}}}`), true, nil
 		}
 		return read(p)
 	}
@@ -224,7 +224,7 @@ func TestARepositoryWithNoTableIsReviewedFromWhereTheMapLives(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Count != 1 || p.Unreviewed != 0 || p.Entries[0].Review == nil || p.Entries[0].Review.Domain != "tenant" {
+	if p.Count != 1 || p.Unreviewed != 0 || p.Entries[0].Review == nil || p.Entries[0].Review.Domain != "payload" {
 		t.Fatalf("other = %+v", p)
 	}
 	if _, _, err := ParseReviewFile([]byte(`{"repositories":{"a/b":{}}}`)); err == nil {

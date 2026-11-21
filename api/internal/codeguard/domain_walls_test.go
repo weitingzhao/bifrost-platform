@@ -64,12 +64,12 @@ func across(o ownership, imports map[string][]string) []string {
 // came onto it.
 var domainsAcross = []string{
 	"api/cmd/agentrt-plan-import -> api/internal/agentrt/recorderimport (plan -> lineage)",
-	"api/internal/approvals -> api/internal/threadinbox (owner -> coordination)",
-	"api/internal/delivery -> api/internal/actions (delivery -> owner)",
-	"api/internal/delivery -> api/internal/questions (delivery -> owner)",
+	"api/internal/approvals -> api/internal/threadinbox (approvals -> coordination)",
+	"api/internal/delivery -> api/internal/actions (delivery -> approvals)",
+	"api/internal/delivery -> api/internal/questions (delivery -> approvals)",
 	"api/internal/delivery -> api/internal/threadinbox (delivery -> coordination)",
-	"api/internal/questions -> api/internal/threadinbox (owner -> coordination)",
-	"api/internal/releasepolicy -> api/internal/actions (delivery -> owner)",
+	"api/internal/questions -> api/internal/threadinbox (approvals -> coordination)",
+	"api/internal/releasepolicy -> api/internal/actions (delivery -> approvals)",
 }
 
 func moduleImports(t *testing.T) map[string][]string {

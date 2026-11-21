@@ -61,14 +61,14 @@ type Subscription struct {
 
 // TargetDomain is the domain a row's delivery reaches, for the Bus page's
 // map: a wake reaches a seat (coordination, the seats' domain), a notify the
-// Owner's phone (owner); an action is run by the platform for whoever asked,
+// Owner's phone (approvals); an action is run by the platform for whoever asked,
 // and names none.
 func (r Subscription) TargetDomain() string {
 	switch r.Deliver {
 	case DeliverWake:
 		return "coordination"
 	case DeliverNotify:
-		return "owner"
+		return "approvals"
 	}
 	return ""
 }

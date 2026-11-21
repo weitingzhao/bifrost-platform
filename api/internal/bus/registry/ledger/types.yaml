@@ -44,7 +44,7 @@ types:
   - {type: deploy_seen, domain: foundation}
   - {type: external_work_noted, domain: lineage, note: "an external work's record on its stream; externalwork (migration 0032, was a note with external_work)"}
   - {type: full_ci_noted, domain: verification, note: "the daily full CI's runs started and each red run; evidence (migration 0031, was a note with full_ci)"}
-  - {type: home_layout_saved, domain: owner, note: "the Owner saved his arrangement of the Ops home; the artifact holds it, the seq is its version"}
+  - {type: home_layout_saved, domain: approvals, note: "the Owner saved his arrangement of the Ops home; the artifact holds it, the seq is its version"}
   - {type: host_registered, domain: compute}
   - {type: host_retired, domain: compute}
   - {type: host_slots_set, domain: compute}
@@ -59,8 +59,8 @@ types:
   - {type: mission_state_changed, domain: plan}
   - {type: note, domain: plan, note: "a free note on a plan node or an architecture row; planstore (2026-11-17, TD-583: every other record that was a note has its own type)"}
   - {type: owner_signoff, domain: plan}
-  - {type: owner_wait_closed, domain: owner}
-  - {type: owner_wait_opened, domain: owner}
+  - {type: owner_wait_closed, domain: approvals}
+  - {type: owner_wait_opened, domain: approvals}
   - {type: pipeline_seen, domain: foundation}
   - {type: plan_card_answered_by_rule, domain: plan, note: "a card the plan rule answered; planstore (migration 0032, was a note; writer moves later)"}
   - {type: plan_card_settled, domain: plan, note: "a card acknowledged or gone from the question store; planstore (migration 0032, was a note; writer moves later)"}
@@ -89,7 +89,7 @@ types:
   - {type: task_proposed, domain: plan}
   - {type: task_state_changed, domain: plan}
   - {type: verification_recorded, domain: verification}
-  - {type: wait_limit_passed, domain: owner}
+  - {type: wait_limit_passed, domain: approvals}
   - {type: wave_abandoned, domain: plan}
   - {type: wave_closed, domain: plan}
   - {type: wave_opened, domain: plan}

@@ -6,9 +6,9 @@
     "lineage": {"kind": "archive", "page": "#work?section=commit-lineage"},
     "verification": {"kind": "assembly-building", "page": "#work?section=ci"},
     "delivery": {"kind": "launch-pad", "page": "#releases"},
-    "owner": {"kind": "mission-control", "page": "#command"},
+    "approvals": {"kind": "mission-control", "page": "#command"},
     "compute": {"kind": "server-hall", "page": "#infrastructure?section=cluster"},
-    "tenant": {"kind": "payload-hangar", "page": "#services?section=applications"},
+    "payload": {"kind": "payload-hangar", "page": "#services?section=applications"},
     "coordination": {"kind": "comms-tower", "page": "#bus"}
   },
   "frontend": {
@@ -29,9 +29,9 @@
           "lineage",
           "verification",
           "delivery",
-          "owner",
+          "approvals",
           "compute",
-          "tenant",
+          "payload",
           "coordination"
         ],
         "status": "mixed",
@@ -44,9 +44,9 @@
           "lineage",
           "verification",
           "delivery",
-          "owner",
+          "approvals",
           "compute",
-          "tenant",
+          "payload",
           "coordination"
         ],
         "status": "mixed",
@@ -59,9 +59,9 @@
           "lineage",
           "verification",
           "delivery",
-          "owner",
+          "approvals",
           "compute",
-          "tenant",
+          "payload",
           "coordination"
         ],
         "status": "mixed",
@@ -74,9 +74,9 @@
           "lineage",
           "verification",
           "delivery",
-          "owner",
+          "approvals",
           "compute",
-          "tenant",
+          "payload",
           "coordination"
         ],
         "status": "mixed",
@@ -245,161 +245,161 @@
       },
       "console/src/pages/shell/needs-you": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/pages/shell/owner": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/pages/question": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/pages/QuestionPage.tsx": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/pages/ApprovalsPage.tsx": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/pages/ApprovalReviewButton.tsx": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/pages/CloseUnknownForm.tsx": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/pages/OwnerExecRun.tsx": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/pages/DecisionEnvironment.tsx": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/pages/approvalDecision.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/pages/approvalSiblings.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/pages/approvalWaitingNotice.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/pages/approvalsReadNotice.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/pages/decisionContact.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/pages/decisionSignIn.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/pages/useDecisionEnvironment.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/pages/useDecisionPageResume.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/api/approvals.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/api/questions.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/api/ownerExec.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/api/approvalGoStructParse.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/api/approvalsApiFixture.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
       },
       "console/src/api/approvalsServerContract.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: Owner question/approval/execution-card UI; no permission change"
@@ -511,224 +511,224 @@
       },
       "console/src/components/market-data": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/components/flex-query": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/components/research": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/lib/market-data": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/lib/flex-query": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/lib/research": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/MarketDataManagePage.tsx": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/FlexQueryManagePage.tsx": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/IbGatewayManagePage.tsx": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/ResearchEnginePage.tsx": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/PluginGalleryPage.tsx": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/satellite-bus": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/shell/ib": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/SatelliteApiHealthPage.tsx": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/SatelliteHealthPage.tsx": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/SatelliteTelemetryPage.tsx": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/lib/satellite": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/lib/satellite-bus": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/flexQueryPlugin.ts": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/marketDataCapabilities.ts": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/marketDataDimensions.ts": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/marketDataDocs.ts": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/marketDataDoctor.ts": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/marketDataPlugin.ts": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/marketDataQueueHistory.ts": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/researchEngine.ts": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/satelliteBusTypes.ts": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/hooks/useFlexQueryLiveProbe.ts": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/hooks/useIbGatewayLiveProbe.ts": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/hooks/useMarketDataLiveProbe.ts": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/components/TradeMonitoringPeerLinks.tsx": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
       },
       "console/src/lib/tradeFrontendUrls.ts": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
@@ -1031,14 +1031,14 @@
       },
       "console/src/pages/shell/data": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 Owner confirmed Tenant integration: DataPage only composes plugin, market-data, flex and research application views. Backup implementation and client physically moved to Foundation; storage navigation link remains an explicit cross-domain link."
       },
       "console/src/api/dataHusbandry.ts": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 verified against api/internal/tenant/husbandry: complete GET/DTO contract contains market_batch, flex_batch and research_olap only; no backup lane. Pure Tenant client moved with unchanged HTTP/error/JSON behavior. Corrected prior mixed attribution; not a mixed-business closure."
@@ -1075,7 +1075,7 @@
       },
       "console/src/components/TradeNsSegmentControl.tsx": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
@@ -1096,7 +1096,7 @@
       },
       "console/src/domains/owner/city": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-18 cockpit line: the Owner's city page, presentation over the platform's reads and /api/v1/home/layout"
@@ -1152,7 +1152,7 @@
       },
       "console/src/domains/tenant/orchestration": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
@@ -1173,7 +1173,7 @@
       },
       "console/src/domains/tenant/activity": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 Owner-confirmed activity split: generic feed, target parsing and read-only rollout observation belong to Foundation; tenant namespace/workload display mapping belongs to Tenant. Existing behavior retained."
@@ -1187,7 +1187,7 @@
       },
       "console/src/domains/tenant/runtime-map": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 Owner-confirmed split: generic read-only runtime projection and page composition in Foundation explicitly consume Tenant display adapters. Tenant role, scope, icon, navigation and question mappings physically extracted; no execution or gate changes. Baseline output parity verified."
@@ -1208,7 +1208,7 @@
       },
       "console/src/domains/tenant/observability": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 Owner-confirmed Tenant integration: namespace/signal/dashboard/alert mappings, bus and IB observation adapters and tenant environment selector; no execution or permission changes"
@@ -1236,7 +1236,7 @@
       },
       "console/src/domains/tenant/market-observation/api": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 complete read-only HTTP client and response DTO slice relocated; compatibility exports preserve protected callers; auth, mutation, strict contract parsers and gate/preflight DTOs unchanged"
@@ -1292,7 +1292,7 @@
       },
       "console/src/domains/tenant/husbandry/api": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 verified against api/internal/tenant/husbandry: complete GET/DTO contract contains market_batch, flex_batch and research_olap only; no backup lane. Pure Tenant client moved with unchanged HTTP/error/JSON behavior. Corrected prior mixed attribution; not a mixed-business closure."
@@ -1306,7 +1306,7 @@
       },
       "console/src/domains/tenant/environment": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 Owner-authorized extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
@@ -1320,7 +1320,7 @@
       },
       "console/src/domains/tenant/readiness": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 Owner-authorized extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
@@ -1348,7 +1348,7 @@
       },
       "console/src/api/actions.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "mixed",
         "basis": "2026-11-16 exhaustive file audit: Action catalog shape validation and rejection remain unchanged; no unrelated business implementation remains."
@@ -1369,7 +1369,7 @@
       },
       "console/src/api/assessment.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "assigned",
         "basis": "2026-11-16 exhaustive file audit: Existing assessment contract and mutation adapter retained; this is not a new extraction."
@@ -1390,7 +1390,7 @@
       },
       "console/src/api/readings.ts": {
         "domains": [
-          "owner"
+          "approvals"
         ],
         "status": "mixed",
         "basis": "2026-11-16 exhaustive file audit: Approval reading shape validation remains unchanged; shared DTOs are not counted as an extraction."
@@ -1439,7 +1439,7 @@
       },
       "console/src/lib/task-mode/readinessChipActions.ts": {
         "domains": [
-          "tenant"
+          "payload"
         ],
         "status": "assigned",
         "basis": "2026-11-16 exhaustive file audit: Existing Tenant navigation export and action/permission DTOs retained. ReadinessActuation and requiresOperate remain unchanged."
@@ -1510,7 +1510,7 @@
       "console/src/pages/shell/agents/moduleDetailModel.tsx": {
         "domains": [
           "plan",
-          "owner"
+          "approvals"
         ],
         "status": "mixed",
         "basis": "2026-11-16 complete activity and read-panel projections extracted; remaining Plan detail/Owner request composition and shared freshness checks retained unchanged."

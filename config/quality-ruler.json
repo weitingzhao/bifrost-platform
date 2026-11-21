@@ -146,7 +146,7 @@
       "file": "api/internal/codeguard/domain_walls_test.go",
       "test": "TestADomainImportsOnlyItselfAndTheBase"
     },
-    "owner": {
+    "approvals": {
       "file": "api/internal/codeguard/domain_walls_test.go",
       "test": "TestADomainImportsOnlyItselfAndTheBase"
     },
@@ -154,7 +154,7 @@
       "file": "api/internal/codeguard/domain_walls_test.go",
       "test": "TestADomainImportsOnlyItselfAndTheBase"
     },
-    "tenant": {
+    "payload": {
       "file": "api/internal/codeguard/domain_walls_test.go",
       "test": "TestADomainImportsOnlyItselfAndTheBase"
     },

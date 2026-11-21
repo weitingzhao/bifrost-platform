@@ -15,7 +15,7 @@ it('keeps source files and static imports in the published frontend inventory cu
   expect(actual.groups.find(g => g.path === 'console/src/pages/shell/agents')?.imports.length).toBeGreaterThan(0)
   const data = actual.groups.find(g => g.path === 'console/src/pages/shell/data')!
   expect(data.files).toEqual(['console/src/pages/shell/data/DataPage.tsx'])
-  expect(declaration.groups[data.path].domains).toEqual(['tenant'])
+  expect(declaration.groups[data.path].domains).toEqual(['payload'])
   const backup = actual.groups.find(g => g.path === 'console/src/domains/foundation/backup')!
   expect(declaration.groups[backup.path].domains).toEqual(['foundation'])
   expect(backup.imports).not.toContain('console/src/api/cluster.ts')
