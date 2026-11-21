@@ -251,7 +251,7 @@ func New(cfg *config.Config) (*Server, error) {
 	srv.releases = releases.NewHandler(releasesSvc)
 	if srv.delivery != nil {
 		releasesSvc.SetRunReader(srv.delivery.GateRuns)
-		srv.delivery.SetNodeMetricsReader(srv.buildNodeMetrics)
+		srv.delivery.SetNodeMetricsReader(deliveryNodeMetrics(srv.buildNodeMetrics))
 		srv.delivery.SetProdPrepare(srv.migrateBeforeProd)
 	}
 	titleStore := threadtitles.NewStore(releasesSvc.Status().Namespace, func() (kubernetes.Interface, error) {

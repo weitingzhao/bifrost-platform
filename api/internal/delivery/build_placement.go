@@ -5,28 +5,13 @@ import (
 	"log/slog"
 
 	"k8s.io/client-go/kubernetes"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 )
 
 // Where a delivery's image builds run (the Owner, 2026-11-18: builds go to the
 // fast node, and to the slower one when it is full). The choice is compute's
 // (api/internal/placement, moved there 2026-11-19 at the CI line's ask); delivery
-// only says what its tasks need and writes the chosen node into the run.
-
-const (
-	// HostIDLabel names a node's host in selectors.
-	HostIDLabel = placement.HostIDLabel
-	hostIDLabel = placement.HostIDLabel
-)
-
-// Names delivery's callers and tests use for placement's types.
-type (
-	TaskProfile       = placement.TaskProfile
-	NodeMetrics       = placement.NodeMetrics
-	NodeMetricsReader = placement.NodeMetricsReader
-	BuildPlacement    = placement.BuildPlacement
-)
+// only says what its tasks need and writes the chosen node into the run. It
+// reaches compute through PlacementReadings (placement_ports.go).
 
 // placedBuildPipelines are the pipelines whose builds are placed. They choose as
 // CI does (2026-11-18: pinned to the fastest disk by its 7-day figure, builds on
@@ -38,7 +23,7 @@ var placedBuildPipelines = map[string]TaskProfile{
 // UnitTask is the unit runs: never on the slow disk, where two tasks timed out
 // on 2026-11-18; they wait for a node instead, nothing depends on them. Never on
 // the etcd node either (see CITask).
-var UnitTask = TaskProfile{DiskHeavy: true, MaxDiskTier: 1, CPUCores: 4, MemoryBytes: 4 << 30, Spread: true, ExcludeLabels: []placement.LabelRule{placement.EtcdNode}}
+var UnitTask = TaskProfile{DiskHeavy: true, MaxDiskTier: 1, CPUCores: 4, MemoryBytes: 4 << 30, Spread: true, ExcludeNodes: []NodeRole{NodeEtcd}}
 
 const prodPlatformPipeline = "bifrost-deliver-platform-prod"
 
@@ -80,8 +65,14 @@ func (s *Service) PlaceTask(ctx context.Context, task TaskProfile) (BuildPlaceme
 	return s.placeTask(ctx, task, "")
 }
 
+// placeTask is compute's choice; unbound, nothing is placed (as without
+// node metrics).
 func (s *Service) placeTask(ctx context.Context, task TaskProfile, current string) (BuildPlacement, bool) {
-	return placement.Placer{Clientset: s.kubernetesClient, Metrics: s.nodeMetrics}.Place(ctx, task, current)
+	place := placements().Place
+	if place == nil {
+		return BuildPlacement{}, false
+	}
+	return place(ctx, s.kubernetesClient, s.nodeMetrics, task, current)
 }
 
 func (s *Service) kubernetesClient() (kubernetes.Interface, error) {
@@ -112,5 +103,5 @@ func pinBuildNode(spec map[string]any, host string) {
 		selector = map[string]any{}
 		pod["nodeSelector"] = selector
 	}
-	selector[hostIDLabel] = host
+	selector[placements().HostIDLabel] = host
 }

@@ -7,9 +7,11 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
+	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitexec"
 )
 
@@ -21,7 +23,10 @@ import (
 // The binding is an init of this package and not a line of New: it holds
 // functions only, the same for every server, and the server's tests build
 // delivery services of their own (delivery.NewHandlerForTest).
-func init() { bindDeliveryVerification() }
+func init() {
+	bindDeliveryVerification()
+	bindDeliveryPlacement()
+}
 
 func bindDeliveryVerification() {
 	delivery.BindCIRunReadings(delivery.CIRunReadings{
@@ -54,4 +59,92 @@ type deliveryTimings struct{ cache cirunview.TimingsCache }
 
 func (t *deliveryTimings) Serve(w http.ResponseWriter, r *http.Request, pipeline string, src delivery.TimingsSource) {
 	t.cache.Serve(w, r, pipeline, cirunview.TimingsSource(src))
+}
+
+// bindDeliveryPlacement binds compute's node placement (placement) to the
+// port delivery declares (delivery/placement_ports.go): the label of each
+// node role delivery names, the choice, and the build pool check. Until
+// 2026-11-21 delivery imported placement and named its label rules.
+func bindDeliveryPlacement() {
+	delivery.BindPlacementReadings(delivery.PlacementReadings{
+		HostIDLabel: placement.HostIDLabel,
+		RoleLabel: func(role delivery.NodeRole) (string, string, bool) {
+			r, ok := deliveryNodeRoles[role]
+			return r.Key, r.Value, ok
+		},
+		Place: func(ctx context.Context, clientset func() (kubernetes.Interface, error), metrics delivery.NodeMetricsReader, task delivery.TaskProfile, current string) (delivery.BuildPlacement, bool) {
+			t, err := placementTask(task)
+			if err != nil {
+				if metrics == nil {
+					return delivery.BuildPlacement{}, false
+				}
+				return delivery.BuildPlacement{Why: "not placed: " + err.Error()}, true
+			}
+			var read placement.NodeMetricsReader
+			if metrics != nil {
+				read = placementNodeMetrics(metrics)
+			}
+			p, placed := placement.Placer{Clientset: clientset, Metrics: read}.Place(ctx, t, current)
+			return delivery.BuildPlacement(p), placed
+		},
+		CIPreflightReason: func(nodes []delivery.NodeInput) string {
+			in := make([]placement.NodeInput, len(nodes))
+			for i, n := range nodes {
+				in[i] = placement.NodeInput{Name: n.Name, Architecture: n.Architecture, WorkloadLabel: n.WorkloadLabel, Reachability: n.Reachability}
+			}
+			return placement.CIPreflightReason(in)
+		},
+	})
+}
+
+// deliveryNodeRoles are the labels of the node roles delivery names.
+var deliveryNodeRoles = map[delivery.NodeRole]placement.LabelRule{
+	delivery.NodeEtcd:            placement.EtcdNode,
+	delivery.NodeDatabasePrimary: placement.PostgresPrimary,
+}
+
+// placementTask is delivery's task in placement's words; a role with no
+// label is an error, never a rule dropped.
+func placementTask(t delivery.TaskProfile) (placement.TaskProfile, error) {
+	out := placement.TaskProfile{DiskHeavy: t.DiskHeavy, MaxDiskTier: t.MaxDiskTier, CPUCores: t.CPUCores, MemoryBytes: t.MemoryBytes,
+		MinAvailableMemory: t.MinAvailableMemory, Spread: t.Spread}
+	for _, role := range t.ExcludeNodes {
+		r, ok := deliveryNodeRoles[role]
+		if !ok {
+			return out, fmt.Errorf("node role %q has no label", role)
+		}
+		out.ExcludeLabels = append(out.ExcludeLabels, r)
+	}
+	return out, nil
+}
+
+// placementNodeMetrics reads delivery's metrics reader as placement's.
+func placementNodeMetrics(read delivery.NodeMetricsReader) placement.NodeMetricsReader {
+	return func(ctx context.Context) (map[string]placement.NodeMetrics, error) {
+		m, err := read(ctx)
+		if m == nil {
+			return nil, err
+		}
+		out := make(map[string]placement.NodeMetrics, len(m))
+		for k, v := range m {
+			out[k] = placement.NodeMetrics(v)
+		}
+		return out, err
+	}
+}
+
+// deliveryNodeMetrics reads placement's metrics reader (the server's
+// Prometheus reading) as delivery's.
+func deliveryNodeMetrics(read placement.NodeMetricsReader) delivery.NodeMetricsReader {
+	return func(ctx context.Context) (map[string]delivery.NodeMetrics, error) {
+		m, err := read(ctx)
+		if m == nil {
+			return nil, err
+		}
+		out := make(map[string]delivery.NodeMetrics, len(m))
+		for k, v := range m {
+			out[k] = delivery.NodeMetrics(v)
+		}
+		return out, err
+	}
 }

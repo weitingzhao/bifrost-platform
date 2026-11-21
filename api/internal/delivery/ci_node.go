@@ -10,8 +10,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 )
 
 // Where CI runs go (the Owner, 2026-11-18: move the CI on ubt-k3s-05 to 07, the
@@ -34,7 +32,7 @@ var triggerBindingGVR = schema.GroupVersionResource{Group: "triggers.tekton.dev"
 // rather than waiting, and never the etcd node (ubt-k3s-01 today), whose etcd
 // slowed under CI. By label since 2026-11-19, so a renamed or replaced node keeps
 // the rule.
-var CITask = TaskProfile{DiskHeavy: true, MaxDiskTier: 2, CPUCores: 4, MemoryBytes: 4 << 30, Spread: true, ExcludeLabels: []placement.LabelRule{placement.EtcdNode}}
+var CITask = TaskProfile{DiskHeavy: true, MaxDiskTier: 2, CPUCores: 4, MemoryBytes: 4 << 30, Spread: true, ExcludeNodes: []NodeRole{NodeEtcd}}
 
 // ciRunExcludedNodes are never given a platform CI run, chosen or not: the etcd
 // node (see CITask), and the database primary (ubt-k3s-02 today, 15 GiB), which
@@ -43,7 +41,7 @@ var CITask = TaskProfile{DiskHeavy: true, MaxDiskTier: 2, CPUCores: 4, MemoryByt
 // label since 2026-11-19: a renamed or replaced node keeps the rule, and a
 // failover moves the primary's exclusion with the primary, which is the reason
 // it exists.
-var ciRunExcludedNodes = []placement.LabelRule{placement.EtcdNode, placement.PostgresPrimary}
+var ciRunExcludedNodes = []NodeRole{NodeEtcd, NodeDatabasePrimary}
 
 // ciRunMemoryFloor is the compute line's room for memory volumes turned into a
 // reading: a volume takes what it holds from the available memory, so a node stays
@@ -54,7 +52,7 @@ const ciRunMemoryFloor = 7 << 30
 // database and stay CITask.
 var CIRunTask = func() TaskProfile {
 	t := CITask
-	t.ExcludeLabels = ciRunExcludedNodes
+	t.ExcludeNodes = ciRunExcludedNodes
 	t.MinAvailableMemory = ciRunMemoryFloor
 	return t
 }()
@@ -67,7 +65,7 @@ func ciRunTaskRunTemplate() map[string]any {
 	t := amd64CITaskRunTemplate()
 	expressions := make([]any, 0, len(ciRunExcludedNodes))
 	for _, r := range ciRunExcludedNodes {
-		expressions = append(expressions, r.NotInExpression())
+		expressions = append(expressions, notInExpression(r))
 	}
 	t["podTemplate"].(map[string]any)["affinity"] = map[string]any{"nodeAffinity": map[string]any{
 		"requiredDuringSchedulingIgnoredDuringExecution": map[string]any{"nodeSelectorTerms": []any{map[string]any{
@@ -78,7 +76,7 @@ func ciRunTaskRunTemplate() map[string]any {
 }
 
 func ciNodeParams(p BuildPlacement) map[string]string {
-	out := map[string]string{"ciNodeKey": hostIDLabel, "ciNodeValue": p.Node, "ciNode": p.Node, "ciNodeWhy": p.Why}
+	out := map[string]string{"ciNodeKey": placements().HostIDLabel, "ciNodeValue": p.Node, "ciNode": p.Node, "ciNodeWhy": p.Why}
 	if p.Node == "" {
 		out["ciNodeKey"], out["ciNodeValue"], out["ciNode"] = ciAnyNodeKey, ciAnyNodeValue, ciNoNode
 	}

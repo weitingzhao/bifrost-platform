@@ -8,6 +8,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
+	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitexec"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitwatch"
 )
@@ -45,7 +46,7 @@ func (s *Server) unitTreesOf() unitTreesFunc {
 // placedUnitConfig is the dispatch configuration with the node the units go to
 // now, read from the node profiles.
 func (s *Server) placedUnitConfig(ctx context.Context) (unitexec.Config, error) {
-	return unitexec.PlacedConfig(ctx, s.delivery.PipelinesNamespace(), delivery.HostIDLabel,
+	return unitexec.PlacedConfig(ctx, s.delivery.PipelinesNamespace(), placement.HostIDLabel,
 		func(ctx context.Context) (string, string, bool) {
 			p, measured := s.delivery.PlaceTask(ctx, delivery.UnitTask)
 			return p.Node, p.Why, measured

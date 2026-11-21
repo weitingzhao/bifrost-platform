@@ -4,6 +4,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,11 +14,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"k8s.io/client-go/dynamic"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
+	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
+	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
@@ -243,5 +249,48 @@ func TestReleaseContextReadsOwnerRecordsThroughThePort(t *testing.T) {
 	}
 	if _, err = answersSeen(func() ([]questions.Question, error) { return nil, errors.New("disk") })(); err == nil {
 		t.Fatal("an unreadable question store read as empty")
+	}
+}
+
+// Origin: 2026-11-21 decoupling line: delivery reaches compute through a port instead of importing placement.
+// The roles delivery names are compute's labels (the same rules as before
+// the move); a role with no label is refused, never dropped from the
+// exclusions; the metrics pass through unchanged both ways.
+func TestDeliveryPlacementBinding(t *testing.T) {
+	task := delivery.UnitTask
+	task.ExcludeNodes = []delivery.NodeRole{delivery.NodeEtcd, delivery.NodeDatabasePrimary}
+	task.MinAvailableMemory = 7 << 30
+	got, err := placementTask(task)
+	if err != nil || !reflect.DeepEqual(got.ExcludeLabels, []placement.LabelRule{placement.EtcdNode, placement.PostgresPrimary}) ||
+		got.MinAvailableMemory != 7<<30 || !got.DiskHeavy || got.MaxDiskTier != 1 || got.CPUCores != 4 || got.MemoryBytes != 4<<30 || !got.Spread {
+		t.Fatalf("task: %+v, %v", got, err)
+	}
+	if _, err = placementTask(delivery.TaskProfile{ExcludeNodes: []delivery.NodeRole{"gpu"}}); err == nil || !strings.Contains(err.Error(), `"gpu"`) {
+		t.Fatalf("unknown role: %v", err)
+	}
+	m := map[string]placement.NodeMetrics{"10.0.0.7": {WriteLatencySeconds: 0.007, CPUBusy: 0.1, DiskBusy: 0.2, MemoryAvailable: 0.6, WrittenBytes2h: 9}}
+	back, err := placementNodeMetrics(deliveryNodeMetrics(func(context.Context) (map[string]placement.NodeMetrics, error) { return m, nil }))(context.Background())
+	if err != nil || !reflect.DeepEqual(back, m) {
+		t.Fatalf("metrics: %+v, %v", back, err)
+	}
+}
+
+// Origin: 2026-11-21 decoupling line: delivery reaches verification through a port instead of importing cirunview.
+// The server binds the readings for every delivery service, its tests' too:
+// the steps and timings routes answer from cirunview (a cluster that cannot
+// be reached is an answer), not the 503 of an unbound port.
+func TestDeliveryVerificationIsBound(t *testing.T) {
+	h := delivery.NewHandlerForTest(nil, nil)
+	h.SetDynamicFactoryForTest(func() (dynamic.Interface, error) { return nil, errors.New("no cluster") })
+	for name, serve := range map[string]func(http.ResponseWriter, *http.Request){"steps": h.HandleRunSteps, "timings": h.HandlePipelineTimings} {
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "r1")
+		rctx.URLParams.Add("name", "p")
+		req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+		rec := httptest.NewRecorder()
+		serve(rec, req)
+		if rec.Code == http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "no cluster") {
+			t.Fatalf("%s: %d %s", name, rec.Code, rec.Body.String())
+		}
 	}
 }

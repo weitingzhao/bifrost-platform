@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	dynfake "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/kubernetes"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
@@ -34,6 +35,53 @@ import (
 )
 
 type contractTransport func(*http.Request) (*http.Response, error)
+
+// The package's tests place tasks as the server wires them: with compute's
+// placement bound (server/delivery_ports.go, bindDeliveryPlacement). This init
+// runs before any test; TestPlacementUnbound unbinds it for a moment.
+func init() { bindPlacementForTest() }
+
+var testNodeRoles = map[NodeRole]placement.LabelRule{NodeEtcd: placement.EtcdNode, NodeDatabasePrimary: placement.PostgresPrimary}
+
+func bindPlacementForTest() {
+	BindPlacementReadings(PlacementReadings{
+		HostIDLabel: placement.HostIDLabel,
+		RoleLabel: func(role NodeRole) (string, string, bool) {
+			r, ok := testNodeRoles[role]
+			return r.Key, r.Value, ok
+		},
+		Place: func(ctx context.Context, clientset func() (kubernetes.Interface, error), metrics NodeMetricsReader, task TaskProfile, current string) (BuildPlacement, bool) {
+			t := placement.TaskProfile{DiskHeavy: task.DiskHeavy, MaxDiskTier: task.MaxDiskTier, CPUCores: task.CPUCores, MemoryBytes: task.MemoryBytes,
+				MinAvailableMemory: task.MinAvailableMemory, Spread: task.Spread}
+			for _, role := range task.ExcludeNodes {
+				t.ExcludeLabels = append(t.ExcludeLabels, testNodeRoles[role])
+			}
+			var read placement.NodeMetricsReader
+			if metrics != nil {
+				read = func(ctx context.Context) (map[string]placement.NodeMetrics, error) {
+					m, err := metrics(ctx)
+					if m == nil {
+						return nil, err
+					}
+					out := make(map[string]placement.NodeMetrics, len(m))
+					for k, v := range m {
+						out[k] = placement.NodeMetrics(v)
+					}
+					return out, err
+				}
+			}
+			p, placed := placement.Placer{Clientset: clientset, Metrics: read}.Place(ctx, t, current)
+			return BuildPlacement(p), placed
+		},
+		CIPreflightReason: func(nodes []NodeInput) string {
+			in := make([]placement.NodeInput, len(nodes))
+			for i, n := range nodes {
+				in[i] = placement.NodeInput{Name: n.Name, Architecture: n.Architecture, WorkloadLabel: n.WorkloadLabel, Reachability: n.Reachability}
+			}
+			return placement.CIPreflightReason(in)
+		},
+	})
+}
 
 func (f contractTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
@@ -635,7 +683,7 @@ func placementNode(host string, ready, cordoned bool, cpu string) *corev1.Node {
 		status = corev1.ConditionFalse
 	}
 	return &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: host, Labels: map[string]string{hostIDLabel: host, "kubernetes.io/arch": "amd64"}},
+		ObjectMeta: metav1.ObjectMeta{Name: host, Labels: map[string]string{placement.HostIDLabel: host, "kubernetes.io/arch": "amd64"}},
 		Spec:       corev1.NodeSpec{Unschedulable: cordoned},
 		Status: corev1.NodeStatus{
 			Addresses:   []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "ip-" + host}},
@@ -691,7 +739,7 @@ func TestAStartPinsOnlyThePlacedPipeline(t *testing.T) {
 		t.Fatalf("placement = %+v %v", p, placed)
 	}
 	selector := spec["taskRunTemplate"].(map[string]any)["podTemplate"].(map[string]any)["nodeSelector"].(map[string]any)
-	if selector[hostIDLabel] != "ubt-k3s-07" || selector["kubernetes.io/arch"] != "amd64" {
+	if selector[placement.HostIDLabel] != "ubt-k3s-07" || selector["kubernetes.io/arch"] != "amd64" {
 		t.Fatalf("selector = %v", selector)
 	}
 	other := map[string]any{}
@@ -740,7 +788,7 @@ func TestPublishCINodeWritesTheChoiceWhenItChanges(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if read("ciNode") != "ubt-k3s-07" || read("ciNodeKey") != hostIDLabel || read("ciNodeValue") != "ubt-k3s-07" || patches() != 1 {
+	if read("ciNode") != "ubt-k3s-07" || read("ciNodeKey") != placement.HostIDLabel || read("ciNodeValue") != "ubt-k3s-07" || patches() != 1 {
 		t.Fatalf("node %q key %q value %q patches %d", read("ciNode"), read("ciNodeKey"), read("ciNodeValue"), patches())
 	}
 	m := metrics["ip-ubt-k3s-07"]
@@ -890,7 +938,7 @@ func TestThePipelineListReadsTheNodesOnce(t *testing.T) {
 		t.Fatalf("three kaniko pipelines listed the nodes %d times, want 1", lists)
 	}
 	calls := 0
-	count := func() []placement.NodeInput { calls++; return nil }
+	count := func() []NodeInput { calls++; return nil }
 	if v := s.enrichPipelineView("plain", "cicd", map[string]any{"spec": map[string]any{}}, missing, count); v.BuildReady != nil || calls != 0 {
 		t.Fatalf("a pipeline that runs no kaniko read the nodes %d times: %+v", calls, v)
 	}
@@ -951,5 +999,35 @@ func TestARenewalIsMarkedNotRecorded(t *testing.T) {
 	again := put()
 	if again.Code != http.StatusOK || again.Header().Get(actions.NotRecordedHeader) != "renewal" {
 		t.Fatalf("a renewal must be marked: %d %q %s", again.Code, again.Header().Get(actions.NotRecordedHeader), again.Body)
+	}
+}
+
+// Origin: 2026-11-21 decoupling line: delivery reaches compute through a port instead of importing placement.
+// Unbound, nothing panics and nothing lands where it must not: a task is
+// not placed (as without node metrics), a kaniko pipeline is not build-ready
+// and says why, and a CI run the platform starts carries an affinity no node
+// passes instead of losing its exclusions. Bound again (the other tests of
+// this package, TestAPlatformCIRunIsKeptOffTheExcludedNodes among them) they
+// read as before.
+func TestPlacementUnbound(t *testing.T) {
+	BindPlacementReadings(PlacementReadings{})
+	t.Cleanup(bindPlacementForTest)
+	s := NewService(&config.ClusterEntry{ID: "test"})
+	s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) { return map[string]NodeMetrics{}, nil })
+	if p, placed := s.PlaceTask(context.Background(), CITask); placed || p != (BuildPlacement{}) {
+		t.Fatalf("placed unbound: %+v %v", p, placed)
+	}
+	pf := s.preflightOn("p", true, "", func() []NodeInput { return nil })
+	if pf.BuildReady || pf.Reason != errPlacementUnbound {
+		t.Fatalf("preflight unbound: %+v", pf)
+	}
+	got, err := json.Marshal(ciRunTaskRunTemplate()["podTemplate"].(map[string]any)["affinity"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[` +
+		`{"key":"bifrost.io/placement-not-wired","operator":"Exists"},{"key":"bifrost.io/placement-not-wired","operator":"Exists"}]}]}}}`
+	if string(got) != want {
+		t.Fatalf("affinity unbound %s", got)
 	}
 }
