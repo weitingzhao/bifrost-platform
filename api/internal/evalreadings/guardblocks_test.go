@@ -11,7 +11,9 @@ import (
 // first 550 rows were posted in 2 seconds from a local log, about 530 of them
 // with session "-" (preflight's own tests). So: "-" is left out, a row is
 // placed by its blocked_at, not by when it was posted, and before the producer
-// carries blocked_at every window is unmeasured.
+// carries blocked_at every window is unmeasured. Foundation, same day: lines
+// are posted every 5 minutes and the whole log is replayed once with
+// blocked_at, so a refusal posted twice counts once.
 func TestGuardBlocks(t *testing.T) {
 	day := ClosedWindow(time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC), 1)
 	posted := day.To.Add(time.Hour) // posted after the window closed
@@ -22,6 +24,7 @@ func TestGuardBlocks(t *testing.T) {
 		b("D10", "s1", day.From.Add(time.Hour)),
 		b("nas", "s2", day.From.Add(2*time.Hour)),
 		b("nas", "s2", day.From.Add(3*time.Hour)),
+		b("nas", "s2", day.From.Add(3*time.Hour)), // the replay posts it again
 		b("nas", "-", day.From.Add(3*time.Hour)),
 		b("D10", "s1", day.From.Add(-time.Hour)),
 		row("guard.block.recorded", day.From.Add(time.Hour), map[string]any{"rule": "D10", "session": "s3"}),
