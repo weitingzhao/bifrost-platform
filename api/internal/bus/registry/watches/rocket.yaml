@@ -52,6 +52,24 @@ watches:
         path: status.readyReplicas
         compare_to: spec.replicas
         map: {"true": ready, "*": notready}
+  # A DaemonSet: ready when the pods ready on the nodes equal the nodes it
+  # should run on. Origin: 2026-11-21, the metrics line counted the ledger's
+  # workloads against the cluster and found the 5 DaemonSets (kube-vip,
+  # svclb-traefik, node-exporter, node-reboot-required, promtail) never on
+  # the bus; the platform's observer role already lists and watches them.
+  - id: daemonsets
+    group: apps
+    version: v1
+    resource: daemonsets
+    type: cluster.workload.changed
+    stream: ds
+    subject: "{metadata.namespace}/{metadata.name}"
+    subject_field: workload
+    state:
+      - name: ready
+        path: status.numberReady
+        compare_to: status.desiredNumberScheduled
+        map: {"true": ready, "*": notready}
   # A CloudNativePG cluster: ready when its ready instances equal its
   # instances; primary is the pod that is primary now, so a failover is a
   # change. The platform's observer role already lists and watches

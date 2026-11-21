@@ -451,7 +451,8 @@ channels:
       retention: 30d
       # A Deployment or StatefulSet came up (ready replicas equal replicas) or
       # went down (2026-11-20: NATS sat Pending an hour and nothing on the bus
-      # said so). Written by the watch rows "deployments" and "statefulsets"
+      # said so). Written by the watch rows "deployments", "statefulsets" and
+      # (2026-11-21) "daemonsets"
       # (watches/rocket.yaml); its body is declared from here. Every namespace:
       # the Owner asked that every module's state reach the bus.
       consumers: [console]

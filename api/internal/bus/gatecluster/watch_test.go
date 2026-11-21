@@ -284,3 +284,29 @@ func TestAFullListTakesBackWhatItNoLongerHolds(t *testing.T) {
 		t.Error("a second sweep wrote gone again")
 	}
 }
+
+// Origin: 2026-11-21, the metrics line found the cluster's 5 DaemonSets never
+// on the bus. A DaemonSet is ready when its ready pods equal the nodes it
+// should run on, and not ready while one is missing.
+func TestADaemonSetIsReadyWhenEveryNodeRunsIt(t *testing.T) {
+	w := watchRow(t, "daemonsets")
+	ds := func(ready, desired int64) *unstructured.Unstructured {
+		return &unstructured.Unstructured{Object: map[string]any{
+			"metadata": map[string]any{"namespace": "monitoring", "name": "node-exporter"},
+			"status":   map[string]any{"numberReady": ready, "desiredNumberScheduled": desired},
+		}}
+	}
+	l := &memLedger{}
+	g := &Gate{Ledger: l, Logf: func(string, ...any) {}}
+	g.init()
+	ctx := context.Background()
+	g.observeWatched(ctx, w, ds(7, 7))
+	g.observeWatched(ctx, w, ds(6, 7))
+	evs := l.events("ds:monitoring/node-exporter")
+	if len(evs) != 2 || evs[0].body["ready"] != "ready" || evs[1].body["ready"] != "notready" || evs[1].body["workload"] != "monitoring/node-exporter" {
+		t.Fatalf("events %+v, want ready then notready", evs)
+	}
+	if len(l.errs) != 0 {
+		t.Fatalf("bodies refused by the register: %v", l.errs)
+	}
+}
