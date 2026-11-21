@@ -1,5 +1,5 @@
 import type { AgentThreadStatus } from '@/api/agentThreads'
-import { QUIET_AFTER_H, isDeaf, STUCK_AFTER_MIN, seatLabel, seatState, shortSeconds, warmColor, type BusListening, type NerveModel, type ObserveLink, type ObserveSeat, type OrganTone } from './busNerve'
+import { ASK_STUCK_AFTER_MIN, QUIET_AFTER_H, isDeaf, STUCK_AFTER_MIN, seatLabel, seatState, shortSeconds, warmColor, type BusListening, type NerveModel, type ObserveLink, type ObserveSeat, type OrganTone } from './busNerve'
 import { CORE, domainOf } from './busNerveLayout'
 import type { GLink, GNode } from './BusNerveGraph'
 import { arcCurve, arcsOf, cubicAt, funnelOf, halosOf, layerPositions, median, type DomainTier, type Funnel, type Route, type Vec } from './busNerveDirect'
@@ -141,6 +141,8 @@ export function buildBody({ model, domainOfType, expanded, seats, beat, observed
         o && o.letters_in > 0 ? `in ${o.letters_in}` : '',
         o?.ack_p50_s != null ? `ack ${shortSeconds(o.ack_p50_s)}` : '',
         o && o.unacked > 0 ? `${o.unacked} open` : '',
+        o?.asks_waiting ? `waits on ${o.asks_waiting} answer${o.asks_waiting === 1 ? '' : 's'}` : '',
+        o?.asks_owed ? `owes ${o.asks_owed} answer${o.asks_owed === 1 ? '' : 's'}` : '',
         o?.cards_open ? `${o.cards_open} cards open` : '',
         o?.card_wait_p50_s != null ? `cards wait ${shortSeconds(o.card_wait_p50_s)}` : '',
         t && t.status !== 'in_turn' && t.quiet_seconds > 0 ? `quiet ${shortSeconds(t.quiet_seconds)}` : '',
@@ -152,7 +154,7 @@ export function buildBody({ model, domainOfType, expanded, seats, beat, observed
       nodes.push({
         id: `s:${id}`, kind: 'seat', label: name.length > 28 ? `${name.slice(0, 27)}…` : name, color: owner ? '#ff8fc7' : br.color, size: owner ? 2.4 : 1.6,
         breath: owner ? null : br.dur, ring: st === 'stuck' ? C.red : undefined,
-        note: `${name} (${id}) · ${owner ? 'the owner' : br.label}${unnamed}${read ? ` · ${read}` : ''}${st === 'quiet' ? ` · no report for ${QUIET_AFTER_H}h` : ''}${st === 'stuck' ? ` · something waits over ${STUCK_AFTER_MIN}m` : ''}`,
+        note: `${name} (${id}) · ${owner ? 'the owner' : br.label}${unnamed}${read ? ` · ${read}` : ''}${st === 'quiet' ? ` · no report for ${QUIET_AFTER_H}h` : ''}${st === 'stuck' ? ` · something waits over ${STUCK_AFTER_MIN}m, or an ask over ${ASK_STUCK_AFTER_MIN}m` : ''}`,
       })
       links.push({ source: `s:${id}`, target: `d:${seatDomain(id)}`, color: C.link, width: 0.5 })
     }
@@ -162,11 +164,12 @@ export function buildBody({ model, domainOfType, expanded, seats, beat, observed
       const b = `s:${l.to}`
       if (!ids.has(a) || !ids.has(b) || a === b) continue
       const openMin = l.oldest_open ? (wall - Date.parse(l.oldest_open)) / 60_000 : 0
-      const stuck = l.unacked > 0 && openMin > STUCK_AFTER_MIN
+      const askMin = l.oldest_ask ? (wall - Date.parse(l.oldest_ask)) / 60_000 : 0
+      const stuck = (l.unacked > 0 && openMin > STUCK_AFTER_MIN) || ((l.open_asks ?? 0) > 0 && askMin > ASK_STUCK_AFTER_MIN)
       links.push({
         source: a, target: b, color: stuck ? C.red : l.kind === 'card' ? C.amber : PULSE.letter, dashed: l.kind === 'card',
         width: stuck ? 0.6 : Math.min(2.5, 0.6 + Math.log2(1 + l.count) * 0.5),
-        label: `${nameOf(l.from, names)} → ${nameOf(l.to, names)}: ${l.count} ${l.kind === 'card' ? 'cards' : 'letters'}${l.ack_p50_s != null ? ` · ${l.kind === 'card' ? 'wait' : 'ack'} ${shortSeconds(l.ack_p50_s)}` : ''}${l.unacked > 0 ? ` · ${l.unacked} open${stuck ? ` ${Math.round(openMin)}m` : ''}` : ''}`,
+        label: `${nameOf(l.from, names)} → ${nameOf(l.to, names)}: ${l.count} ${l.kind === 'card' ? 'cards' : 'letters'}${l.ack_p50_s != null ? ` · ${l.kind === 'card' ? 'wait' : 'ack'} ${shortSeconds(l.ack_p50_s)}` : ''}${l.unacked > 0 ? ` · ${l.unacked} open${stuck && openMin > STUCK_AFTER_MIN ? ` ${Math.round(openMin)}m` : ''}` : ''}${l.open_asks ? ` · ${l.open_asks} unanswered ask${l.open_asks === 1 ? '' : 's'} ${Math.round(askMin)}m` : ''}`,
       })
     }
     return { nodes, links }

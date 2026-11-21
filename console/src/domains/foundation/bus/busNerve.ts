@@ -93,9 +93,10 @@ export function seatMail(events: readonly BusEnvelope[]): BusEnvelope[] {
 }
 
 /** GET /api/v1/bus/observe: the team at work (bus/observe). */
-export type ObserveLink = { from: string; to: string; kind: 'letter' | 'card'; count: number; ack_p50_s?: number; unacked: number; oldest_open?: string }
+export type ObserveLink = { from: string; to: string; kind: 'letter' | 'card'; count: number; ack_p50_s?: number; unacked: number; oldest_open?: string; open_asks?: number; oldest_ask?: string }
 export type ObserveSeat = {
   id: string; letters_out: number; letters_in: number; ack_p50_s?: number; unacked: number
+  asks_waiting?: number; asks_owed?: number
   last_status?: string; cards_open?: number; card_wait_p50_s?: number
 }
 export type BusRate = { minutes: number; events: number; per_minute: number; by_type: Record<string, number> }
@@ -113,15 +114,26 @@ export type BusObserve = {
 
 /** Minutes an unacked letter or open card may wait before it is drawn as stuck. */
 export const STUCK_AFTER_MIN = 10
+/**
+ * Minutes an ask may go unanswered (read or not) before the seat it waits on
+ * is drawn as stuck. 2026-11-21, the main line "seen and felt" (law 69): who
+ * waits on whose answer was not on the page; an unread letter was, a read
+ * one left unanswered was not.
+ */
+export const ASK_STUCK_AFTER_MIN = 60
 /** Hours without a status report before a seat is drawn as quiet. */
 export const QUIET_AFTER_H = 2
 
 export type SeatState = 'ok' | 'stuck' | 'quiet'
 
-/** A seat is stuck while a letter to it, or a card on it, waits past STUCK_AFTER_MIN; quiet when its last report is old. */
+/**
+ * A seat is stuck while a letter to it, or a card on it, waits past STUCK_AFTER_MIN, or an ask to it waits for
+ * an answer past ASK_STUCK_AFTER_MIN; quiet when its last report is old.
+ */
 export function seatState(s: ObserveSeat, links: readonly ObserveLink[], now: number): SeatState {
   const waiting = links.some(l => l.to === s.id && l.oldest_open != null && now - Date.parse(l.oldest_open) > STUCK_AFTER_MIN * 60_000)
-  if (waiting) return 'stuck'
+  const owes = links.some(l => l.to === s.id && l.oldest_ask != null && now - Date.parse(l.oldest_ask) > ASK_STUCK_AFTER_MIN * 60_000)
+  if (waiting || owes) return 'stuck'
   if (s.last_status != null && now - Date.parse(s.last_status) > QUIET_AFTER_H * 3600_000) return 'quiet'
   return 'ok'
 }

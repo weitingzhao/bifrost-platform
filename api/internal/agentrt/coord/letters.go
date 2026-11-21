@@ -14,7 +14,7 @@ import (
 // picture is foundation's and reads them through this, not by SQL of its own
 // (2026-11-19, OWNER_LAW 28: moved here unchanged from bus/observe).
 func ReadLetters(ctx context.Context, db observe.Querier, since time.Time) ([]observe.Letter, map[string]time.Time, error) {
-	rows, err := db.Query(ctx, `SELECT from_actor_id, to_actor_id, created_at, acked_at FROM agentrt.message
+	rows, err := db.Query(ctx, `SELECT from_actor_id, to_actor_id, created_at, acked_at, message_kind FROM agentrt.message
 	  WHERE created_at >= $1 ORDER BY created_at LIMIT 20000`, since)
 	if err != nil {
 		return nil, nil, fmt.Errorf("observe: letters: %w", err)
@@ -24,7 +24,7 @@ func ReadLetters(ctx context.Context, db observe.Querier, since time.Time) ([]ob
 	status := map[string]time.Time{}
 	for rows.Next() {
 		var l observe.Letter
-		if err := rows.Scan(&l.From, &l.To, &l.At, &l.Acked); err != nil {
+		if err := rows.Scan(&l.From, &l.To, &l.At, &l.Acked, &l.Kind); err != nil {
 			return nil, nil, err
 		}
 		if l.To == observe.StatusBoard {

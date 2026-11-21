@@ -22,12 +22,17 @@ import (
 // a letter to it is a report, not a conversation.
 const StatusBoard = "controller"
 
-// Letter is one message between actors.
+// Letter is one message between actors; Kind is the message's kind (ask,
+// answer, help, handover, note, wake).
 type Letter struct {
 	From, To string
 	At       time.Time
 	Acked    *time.Time
+	Kind     string
 }
+
+// KindAsk is the kind of a letter that waits for an answer.
+const KindAsk = "ask"
 
 // Card is one approval card's bus events: when it was created and decided.
 type Card struct {
@@ -44,15 +49,26 @@ type Link struct {
 	AckP50S    *float64 `json:"ack_p50_s,omitempty"`
 	Unacked    int      `json:"unacked"`
 	OldestOpen string   `json:"oldest_open,omitempty"`
+	// OpenAsks are the asks on this link that nobody answered: no letter
+	// came back from To to From after them (read or not). OldestAsk is when
+	// the oldest of them was sent. 2026-11-21 (the main line "seen and
+	// felt", law 69): which line waits on whose answer was not discoverable;
+	// an unread letter (Unacked) said nothing of a read one left unanswered.
+	OpenAsks  int    `json:"open_asks,omitempty"`
+	OldestAsk string `json:"oldest_ask,omitempty"`
 }
 
 // Seat is one actor's readings.
 type Seat struct {
-	ID          string   `json:"id"`
-	LettersOut  int      `json:"letters_out"`
-	LettersIn   int      `json:"letters_in"`
-	AckP50S     *float64 `json:"ack_p50_s,omitempty"`
-	Unacked     int      `json:"unacked"`
+	ID         string   `json:"id"`
+	LettersOut int      `json:"letters_out"`
+	LettersIn  int      `json:"letters_in"`
+	AckP50S    *float64 `json:"ack_p50_s,omitempty"`
+	Unacked    int      `json:"unacked"`
+	// AsksWaiting are this seat's asks nobody answered yet; AsksOwed the
+	// asks to it it has not answered (Link.OpenAsks).
+	AsksWaiting int      `json:"asks_waiting,omitempty"`
+	AsksOwed    int      `json:"asks_owed,omitempty"`
 	LastStatus  string   `json:"last_status,omitempty"`
 	CardsOpen   int      `json:"cards_open,omitempty"`
 	CardWaitP50 *float64 `json:"card_wait_p50_s,omitempty"`
@@ -122,9 +138,10 @@ func p50(xs []float64) *float64 {
 // Build computes the picture from the records.
 func Build(now time.Time, hours int, letters []Letter, status map[string]time.Time, cards []Card) Picture {
 	type acc struct {
-		link Link
-		ack  []float64
-		open time.Time
+		link      Link
+		ack       []float64
+		open      time.Time
+		oldestAsk time.Time
 	}
 	links := map[[2]string]*acc{}
 	seats := map[string]*Seat{}
@@ -163,6 +180,30 @@ func Build(now time.Time, hours int, letters []Letter, status map[string]time.Ti
 			}
 		}
 	}
+	// An ask is answered by any later letter back from its recipient to its
+	// sender (the reply_to in a body is not read: bodies are artifacts).
+	for i, l := range letters {
+		if l.Kind != KindAsk || l.To == StatusBoard {
+			continue
+		}
+		answered := false
+		for _, r := range letters[i+1:] {
+			if r.From == l.To && r.To == l.From && r.At.After(l.At) {
+				answered = true
+				break
+			}
+		}
+		if answered {
+			continue
+		}
+		a := links[[2]string{l.From, l.To}]
+		a.link.OpenAsks++
+		if a.oldestAsk.IsZero() || l.At.Before(a.oldestAsk) {
+			a.oldestAsk = l.At
+		}
+		seat(l.From).AsksWaiting++
+		seat(l.To).AsksOwed++
+	}
 	for id, at := range status {
 		seat(id).LastStatus = at.UTC().Format(time.RFC3339)
 	}
@@ -196,6 +237,9 @@ func Build(now time.Time, hours int, letters []Letter, status map[string]time.Ti
 			a.link.AckP50S = p50(a.ack)
 			if !a.open.IsZero() {
 				a.link.OldestOpen = a.open.UTC().Format(time.RFC3339)
+			}
+			if !a.oldestAsk.IsZero() {
+				a.link.OldestAsk = a.oldestAsk.UTC().Format(time.RFC3339)
 			}
 		}
 		p.Links = append(p.Links, a.link)

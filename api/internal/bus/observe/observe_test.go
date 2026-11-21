@@ -115,3 +115,42 @@ func TestBuildListeningCountsHeardAndFollowed(t *testing.T) {
 		}
 	}
 }
+
+// Origin: 2026-11-21, the main line "seen and felt" (law 69): which line
+// waits on whose answer was not discoverable. An ask read but not answered
+// left Unacked at 0. An ask is open until any letter comes back from its
+// recipient to its sender after it; a note is never waited on.
+func TestAnAskNobodyAnsweredIsOpen(t *testing.T) {
+	t0 := time.Date(2026, 11, 21, 20, 0, 0, 0, time.UTC)
+	read := t0.Add(time.Minute)
+	letters := []Letter{
+		{From: "thread:a", To: "thread:b", At: t0, Acked: &read, Kind: KindAsk},                     // read, never answered
+		{From: "thread:a", To: "thread:c", At: t0, Kind: KindAsk},                                   // answered below
+		{From: "thread:c", To: "thread:a", At: t0.Add(2 * time.Minute), Kind: "note"},               // the answer
+		{From: "thread:b", To: "thread:a", At: t0.Add(-time.Minute), Kind: "note"},                  // before the ask: no answer
+		{From: "thread:a", To: "thread:b", At: t0.Add(3 * time.Minute), Acked: &read, Kind: "note"}, // a note waits for nothing
+	}
+	p := Build(t0.Add(time.Hour), 24, letters, nil, nil)
+	var ab, ac *Link
+	for i := range p.Links {
+		switch p.Links[i].From + ">" + p.Links[i].To {
+		case "thread:a>thread:b":
+			ab = &p.Links[i]
+		case "thread:a>thread:c":
+			ac = &p.Links[i]
+		}
+	}
+	if ab == nil || ab.OpenAsks != 1 || ab.OldestAsk != t0.Format(time.RFC3339) || ab.Unacked != 0 {
+		t.Fatalf("a>b %+v, want one open ask from %s and nothing unread", ab, t0.Format(time.RFC3339))
+	}
+	if ac == nil || ac.OpenAsks != 0 {
+		t.Fatalf("a>c %+v, want its ask answered", ac)
+	}
+	seats := map[string]Seat{}
+	for _, s := range p.Seats {
+		seats[s.ID] = s
+	}
+	if seats["thread:a"].AsksWaiting != 1 || seats["thread:b"].AsksOwed != 1 || seats["thread:c"].AsksOwed != 0 {
+		t.Fatalf("seats %+v", seats)
+	}
+}
