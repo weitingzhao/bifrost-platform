@@ -121,6 +121,23 @@ export const STUCK_AFTER_MIN = 10
  * one left unanswered was not.
  */
 export const ASK_STUCK_AFTER_MIN = 60
+/** One link's unanswered asks, for the "waiting for an answer" panel: who waits, on whom, how many, since when. */
+export type WaitingAsk = { from: string; to: string; asks: number; since: string; minutes: number; stuck: boolean }
+
+/**
+ * The links with an unanswered ask, oldest first (2026-11-21: on the map they were only in hover notes,
+ * so who waits on whom could not be read at a glance; the main line "seen and felt", law 69).
+ */
+export function waitingAsks(links: readonly ObserveLink[], now: number): WaitingAsk[] {
+  return links
+    .filter(l => (l.open_asks ?? 0) > 0 && l.oldest_ask != null)
+    .map(l => {
+      const minutes = Math.max(0, Math.round((now - Date.parse(l.oldest_ask as string)) / 60_000))
+      return { from: l.from, to: l.to, asks: l.open_asks as number, since: l.oldest_ask as string, minutes, stuck: minutes > ASK_STUCK_AFTER_MIN }
+    })
+    .sort((a, b) => a.since.localeCompare(b.since))
+}
+
 /** Hours without a status report before a seat is drawn as quiet. */
 export const QUIET_AFTER_H = 2
 

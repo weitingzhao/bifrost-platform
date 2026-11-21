@@ -9,7 +9,7 @@ import { fetchBusContract, fetchBusNextgen } from './busNextgen'
 import { BUS_LIST_CAP, fetchBusClients, fetchBusReplay, type BusStreamState } from './useBusStream'
 import { clockTime, type BusEnvelope } from './busTrace'
 import {
-  LATE_AFTER_S, OWN_CONSUMER, QUIET_AFTER_H, SPEEDS, STUCK_AFTER_MIN, fetchBusObserve, nerveModel, readerOf, replaySchedule,
+  LATE_AFTER_S, OWN_CONSUMER, QUIET_AFTER_H, SPEEDS, STUCK_AFTER_MIN, fetchBusObserve, waitingAsks, nerveModel, readerOf, replaySchedule,
   isDeaf, seatMail,
 } from './busNerve'
 import { C, PULSE, buildBody, buildDirectBody, nameOf, type GArc } from './busNerveBody'
@@ -503,7 +503,7 @@ function TermPanel({ title, children }: { title: string; children: ReactNode }) 
   )
 }
 
-/** The panels under the map: seats' letters, the newest events (each opens its journey), and what is not wired yet. */
+/** The panels under the map: who waits for an answer, seats' letters, the newest events (each opens its journey), and what is not wired yet. */
 export function BusNervePanels({ stream, onSelect }: { stream: BusStreamState; onSelect: (id: string) => void }) {
   const names = useSeatNames()
   // The topics that published and nobody took, most first: what the change of generation must decide (drop the publisher, or add a reader).
@@ -511,6 +511,7 @@ export function BusNervePanels({ stream, onSelect }: { stream: BusStreamState; o
   const contract = useQuery({ queryKey: ['bus-contract'], queryFn: fetchBusContract, staleTime: 300_000, retry: false })
   const publisherOf = new Map((contract.data?.topics ?? []).map(t => [t.type, t.publisher]))
   const deaf = (team.data?.listening?.topics ?? []).filter(t => isDeaf(t)).sort((a, b) => b.published - a.published)
+  const waiting = waitingAsks(team.data?.links ?? [], Date.now())
   const mail = seatMail(stream.events).slice(0, 8)
   const recent = stream.events.slice(0, 8)
   const row = (e: BusEnvelope) => (
@@ -521,7 +522,21 @@ export function BusNervePanels({ stream, onSelect }: { stream: BusStreamState; o
     </li>
   )
   return (
-    <div className="grid min-w-0 gap-2 md:grid-cols-3">
+    <div className="grid min-w-0 gap-2 md:grid-cols-2 xl:grid-cols-4">
+      <TermPanel title={`waiting for an answer · ${team.data?.hours ?? 24}h`}>
+        {waiting.length === 0
+          ? <p className="m-0" style={{ color: C.muted }}>no ask left unanswered</p>
+          : (
+            <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+              {waiting.map(w => (
+                <li key={`${w.from}>${w.to}`} className="flex min-w-0 justify-between gap-2" title={`${w.from} asked ${w.to}; no letter back since ${w.since} (an answer is any later letter back)`}>
+                  <span className="min-w-0 truncate">{`${nameOf(w.from, names)} → ${nameOf(w.to, names)}`}</span>
+                  <span className="shrink-0" style={{ color: w.stuck ? C.red : C.muted }}>{`${w.asks} · ${w.minutes}m`}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+      </TermPanel>
       <TermPanel title="seat mail">
         {mail.length === 0 ? <p className="m-0" style={{ color: C.muted }}>no letter since this page opened</p> : <ul className="m-0 flex list-none flex-col gap-0.5 p-0">{mail.map(row)}</ul>}
       </TermPanel>

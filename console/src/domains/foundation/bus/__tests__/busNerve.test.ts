@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { OWN_CONSUMER, dustBrightness, isDeaf, nerveModel, warmColor, readerOf, replaySchedule, seatLabel, seatMail, seatState, shortSeconds, type ObserveSeat } from '../busNerve'
+import { OWN_CONSUMER, dustBrightness, isDeaf, nerveModel, warmColor, readerOf, replaySchedule, seatLabel, seatMail, seatState, shortSeconds, waitingAsks, type ObserveSeat } from '../busNerve'
 import type { BusContract, BusNextgen } from '../busNextgen'
 import type { BusEnvelope } from '../busTrace'
 import type { BusClient } from '../useBusStream'
@@ -135,5 +135,21 @@ describe('isDeaf', () => {
     expect(isDeaf({ ...t, heard: 1 })).toBe(false)
     expect(isDeaf({ ...t, published: 0 })).toBe(false)
     expect(isDeaf(undefined)).toBe(false)
+  })
+})
+
+// 2026-11-21, the main line "seen and felt" (law 69): the unanswered asks were only in the map's hover notes.
+describe('waitingAsks', () => {
+  it('lists the links with an unanswered ask, oldest first, stuck past the ask limit', () => {
+    const now = Date.parse('2026-11-21T22:00:00Z')
+    const got = waitingAsks([
+      { from: 'thread:a', to: 'thread:b', kind: 'letter', count: 3, unacked: 0, open_asks: 1, oldest_ask: '2026-11-21T21:30:00Z' },
+      { from: 'thread:c', to: 'thread:b', kind: 'letter', count: 2, unacked: 1, open_asks: 2, oldest_ask: '2026-11-21T19:49:00Z' },
+      { from: 'thread:a', to: 'thread:c', kind: 'letter', count: 5, unacked: 0 },
+    ], now)
+    expect(got.map(w => `${w.from}>${w.to} ${w.asks} ${w.minutes} ${w.stuck}`)).toEqual([
+      'thread:c>thread:b 2 131 true',
+      'thread:a>thread:b 1 30 false',
+    ])
   })
 })
