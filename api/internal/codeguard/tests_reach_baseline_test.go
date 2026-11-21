@@ -20,7 +20,6 @@ var testsReachingAcross = map[string][]string{
 	"api/internal/agentrt/planstore/planobservations_ledger_test.go":     {"api/internal/agentrt/planwiring"},
 	"api/internal/agentrt/planstore/planobservations_regression_test.go": {"api/internal/agentrt/landing"},
 	"api/internal/agentrt/planstore/planviewcollector_fixture_test.go":   {"api/internal/agentrt/externalwork"},
-	"api/internal/agentthreads/door_test.go":                             {"api/internal/approvalnotify"},
 	"api/internal/approvals/http_test.go":                                {"api/internal/server"},
 	"api/internal/approvals/thread_inbox_legacy_test.go":                 {"api/internal/threadinbox"},
 	"api/internal/approvals/thread_inbox_order_pg_test.go":               {"api/internal/agentrt/coord"},

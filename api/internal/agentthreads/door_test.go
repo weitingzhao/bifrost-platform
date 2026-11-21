@@ -11,7 +11,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 )
 
@@ -67,11 +66,15 @@ func place(sample, pos string) string {
 	}
 }
 
-func lookMessage(title, body, kind, id string) approvalnotify.Message {
-	return approvalnotify.Message{
+// lookMessage is the door's notice. Origin of the notice package here
+// (2026-11-21): the test reached the relay through the approvals domain's
+// approvalnotify, whose Message and Send are foundation's notice underneath;
+// it now uses notice directly, the relay the door's text actually goes through.
+func lookMessage(title, body, kind, id string) notice.Message {
+	return notice.Message{
 		Title: title, Message: body,
 		ClickURL: "http://ops.bifrost.lan/#needs-you",
-		Fallback: "Look · thread", Kind: kind, ID: id,
+		Fallback: "Look · thread", Kind: kind, ID: id, Priority: 4,
 	}
 }
 
@@ -103,7 +106,7 @@ func TestPinLookTextIsPostedUnchanged(t *testing.T) {
 	t.Cleanup(srv.Close)
 	t.Setenv("APPROVAL_NOTIFY_URL", srv.URL)
 	t.Setenv("APPROVAL_NOTIFY_TOKEN", "tok")
-	if err := approvalnotify.Notify(context.Background(), lookMessage(title, body, "thread", "claude/7e939cd5abcd")); err != nil {
+	if _, err := notice.Send(context.Background(), lookMessage(title, body, "thread", "claude/7e939cd5abcd")); err != nil {
 		t.Fatal(err)
 	}
 	var posted struct {
@@ -142,7 +145,7 @@ func TestCleanCorpusIsPostedUnchanged(t *testing.T) {
 		th.Thread = sample
 		title, body := cfg.Message(th, now)
 		msg := lookMessage(title, body, "thread", "k")
-		got := notice.Posted(approvalnotify.Message(msg))
+		got := notice.Posted(notice.Message(msg))
 		if got.Title != title || got.Message != body {
 			t.Fatalf("thread changed\n%q", got.Title)
 		}
@@ -173,7 +176,7 @@ func TestHiddenFieldsAreWithheldAtTheRelay(t *testing.T) {
 	check := func(title, body, kind, id, sample string, hidden bool) {
 		t.Helper()
 		cases++
-		if err := approvalnotify.Notify(context.Background(), lookMessage(title, body, kind, id)); err != nil {
+		if _, err := notice.Send(context.Background(), lookMessage(title, body, kind, id)); err != nil {
 			t.Fatal(err)
 		}
 		var posted struct {
