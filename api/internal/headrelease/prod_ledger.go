@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
@@ -45,12 +46,18 @@ func init() {
 // detail (prodRecord, JSON). A detail that is not a JSON object is kept as
 // its text, so nothing the loop says is dropped.
 func NoteProdJudged(ctx context.Context, db eventlog.DB, result, detail string) error {
-	var record any
-	var obj map[string]any
-	if err := json.Unmarshal([]byte(detail), &obj); err == nil && obj != nil {
-		record = obj
-	} else {
-		record = map[string]any{"text": detail}
+	// canon.Parse keeps numbers as json.Number, which the ledger's canonical
+	// form takes as integers (2026-11-22: json.Unmarshal made "commits": 15 a
+	// float64 and every judgement with a number in it failed to be written).
+	// A detail that is not a JSON object, or holds a number that is not an
+	// integer, is kept as its text.
+	record := any(map[string]any{"text": detail})
+	if v, err := canon.Parse([]byte(detail)); err == nil {
+		if obj, ok := v.(map[string]any); ok {
+			if _, err := canon.Encode(obj); err == nil {
+				record = obj
+			}
+		}
 	}
 	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: ProdLedgerStream, Type: ProdJudgedType, Actor: prodLedgerActor,
