@@ -86,7 +86,7 @@ func TestPinsInNestedParamsReachTheEngineOnEveryPath(t *testing.T) {
 	if err != nil || act.Missing(params) != "" {
 		t.Fatalf("extract = %v %v missing=%q", params, err, act.Missing(params))
 	}
-	d := h.srv.releasePolicy.Decide(req.Context(), "start_pipeline_run", act.TierOf(req.Context(), params), params)
+	d := h.srv.releasePolicy.Decide(req.Context(), "start_pipeline_run", releasepolicy.Tier(act.TierOf(req.Context(), params)), params)
 	if !d.Auto || d.SHAs["bifrost-ui"] != ui || d.SHAs["bifrost-platform"] != plat || !strings.Contains(d.ClauseText(), "pinned_to:"+platformStg) {
 		t.Fatalf("extracted params: auto = %v sha = %s clauses = %s reasons = %v", d.Auto, d.SHAText(), d.ClauseText(), d.Reasons)
 	}

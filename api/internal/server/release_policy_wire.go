@@ -123,7 +123,7 @@ func (s *Server) releasePolicyApprover() approvals.AutoApprover {
 		if s.releasePolicy == nil {
 			return ""
 		}
-		if d := s.releasePolicy.Decide(ctx, action, tier, params); d.Auto {
+		if d := s.releasePolicy.Decide(ctx, action, releasepolicy.Tier(tier), params); d.Auto {
 			return d.PolicyID
 		}
 		return ""
@@ -146,7 +146,7 @@ func (s *Server) autoApprove(r *http.Request, id string, tier actions.Tier, para
 	if s.releasePolicy == nil || (id != "start_pipeline_run" && id != "apply_manifest" && id != migrationActionID) {
 		return false, nil
 	}
-	d := s.releasePolicy.Decide(r.Context(), id, tier, params)
+	d := s.releasePolicy.Decide(r.Context(), id, releasepolicy.Tier(tier), params)
 	if id != "start_pipeline_run" && d.PolicyID == "" {
 		// No signed policy judges applies or migrations (the engine names a
 		// policy id only when one has an apply section, or ddl_reversible):
@@ -310,7 +310,7 @@ func (s *Server) handleReleasePolicyCheck(w http.ResponseWriter, r *http.Request
 	name := strings.TrimSpace(fmt.Sprint(params["name"]))
 	var d releasepolicy.Decision
 	if tier.NeedsApproval() {
-		d = s.releasePolicy.Decide(ctx, id, tier, params)
+		d = s.releasePolicy.Decide(ctx, id, releasepolicy.Tier(tier), params)
 	} else {
 		d = s.releasePolicy.Evaluate(ctx, id, params)
 	}
