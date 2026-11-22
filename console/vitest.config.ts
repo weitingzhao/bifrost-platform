@@ -1,11 +1,14 @@
 import path from 'node:path'
+import { createRequire } from 'node:module'
+const resolveDependency = createRequire(import.meta.url).resolve
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: [{ find: '@', replacement: path.resolve(__dirname, './src') }],
+    dedupe: ['react', 'react-dom'],
+    alias: [{ find: 'lucide-react', replacement: resolveDependency('lucide-react') }, { find: '@', replacement: path.resolve(__dirname, './src') }, { find: '@bifrost/ui/communication', replacement: path.resolve(__dirname, '../../bifrost-ui/dist/communication/index.js') }],
   },
   test: {
     // Bound jsdom concurrency so loaded CI workers do not time out healthy tests.

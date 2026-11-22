@@ -1,3 +1,4 @@
+import { busFacts, OBSERVER } from '@/domains/foundation/bus/communication'
 import type { Block } from '@bifrost/ui/city/cards'
 import type { Panel } from '@bifrost/ui/city/content'
 import type { Trip } from '@bifrost/ui/city/traffic'
@@ -22,25 +23,20 @@ export type TrafficEvent = { id: string; type: string }
 export type TrafficReceipt = { id: string; consumer: string; at: string }
 
 /** The Console's own stream reader (busNerve.ts OWN_CONSUMER): never a trip. */
-export const PICTURE_READER = 'gate:stream:console'
+export const PICTURE_READER = OBSERVER
 
 export type Traffic = { trips: Trip[]; unplaced: number }
 
 export function tripsOf(contract: TrafficContract | undefined, events: readonly TrafficEvent[], receipts: readonly TrafficReceipt[], places: ReadonlySet<string>): Traffic {
-  if (!contract) return { trips: [], unplaced: 0 }
-  const topicDomain = new Map(contract.topics.map(t => [t.type, t.domain ?? '']))
-  const clientDomain = new Map(contract.clients.map(c => [c.name, c.domain ?? '']))
-  const typeOf = new Map(events.map(e => [e.id, e.type]))
   const trips: Trip[] = []
   let unplaced = 0
-  for (const r of receipts) {
-    if (r.consumer === PICTURE_READER) continue
-    const type = typeOf.get(r.id)
-    // A receipt for an event the stream has not passed on (it came before the City opened): not drawn.
-    if (!type) continue
-    const from = topicDomain.get(type) ?? '', to = clientDomain.get(r.consumer) ?? ''
+  const seen = new Set<string>()
+  for (const fact of busFacts(contract, events, receipts)) {
+    if (seen.has(fact.communication)) continue
+    seen.add(fact.communication)
+    const from = fact.from ?? '', to = fact.to ?? ''
     if (!places.has(from) || !places.has(to)) { unplaced++; continue }
-    trips.push({ id: `${r.id}>${r.consumer}`, kind: 'event', from: [from], to: [to], what: `${type} → ${r.consumer}` })
+    trips.push({ id: fact.communication, kind: 'event', from: [from], to: [to], what: fact.label ?? fact.communication })
   }
   return { trips, unplaced }
 }

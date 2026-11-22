@@ -29,6 +29,7 @@ const ICONS: Record<ShellRouteId, ShellNavItem['icon']> = {
   infrastructure: Server,
   bus: Cable,
   city: Building2,
+  collaboration: Users,
   records: Archive,
 }
 

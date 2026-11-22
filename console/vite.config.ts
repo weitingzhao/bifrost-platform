@@ -22,6 +22,7 @@ export default defineConfig({
       // The City world (2026-11-20, moved into @bifrost/ui): its entry and its modules, before the bare name.
       { find: /^@bifrost\/ui\/city$/, replacement: path.join(uiRoot, 'dist/city/index.js') },
       { find: /^@bifrost\/ui\/city\/(.*)$/, replacement: path.join(uiRoot, 'dist/city/$1') },
+      { find: '@bifrost/ui/communication', replacement: path.join(uiRoot, 'dist/communication/index.js') },
       { find: '@bifrost/ui', replacement: path.join(uiRoot, 'dist/index.js') },
     ],
   },
