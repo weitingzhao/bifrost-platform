@@ -276,8 +276,8 @@ exports[`environment and observation extraction parity > preserves full catalog 
     {
       "host": "192.168.10.60",
       "id": "gpu-server",
-      "roleCompose": "Data warehouse · Ollama — no Prod Redis",
-      "roleK3s": "Agent compute · warehouse · GPU/AI · Tekton heavy (WOL eno1)",
+      "roleCompose": "Ollama — no Prod Redis",
+      "roleK3s": "Agent compute · GPU/AI · Tekton heavy (WOL eno1)",
     },
     {
       "host": "192.168.10.75",
