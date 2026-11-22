@@ -97,6 +97,7 @@
         "console/src/api/ciScorecard.ts",
         "console/src/api/governanceInstruments.ts",
         "console/src/api/matrixTypes.ts",
+        "console/src/api/prodJudgements.ts",
         "console/src/api/regressions.ts",
         "console/src/api/seatStatus.ts"
       ],
@@ -4505,6 +4506,7 @@
         "console/src/pages/shell/ci/ModuleExplorer.tsx",
         "console/src/pages/shell/ci/OpenRegressions.tsx",
         "console/src/pages/shell/ci/PlatformTimings.tsx",
+        "console/src/pages/shell/ci/ProdJudgement.tsx",
         "console/src/pages/shell/ci/RunTimingDetail.tsx",
         "console/src/pages/shell/ci/TimingTrends.tsx",
         "console/src/pages/shell/ci/__tests__/ApprovalReadingsBlock.test.tsx",
@@ -4515,6 +4517,7 @@
         "console/src/pages/shell/ci/__tests__/DomainMapView.test.tsx",
         "console/src/pages/shell/ci/__tests__/OpenRegressions.test.tsx",
         "console/src/pages/shell/ci/__tests__/PlatformTimings.test.tsx",
+        "console/src/pages/shell/ci/__tests__/ProdJudgement.test.tsx",
         "console/src/pages/shell/ci/__tests__/approvalReadingsModel.test.ts",
         "console/src/pages/shell/ci/__tests__/ciPageFixture.ts",
         "console/src/pages/shell/ci/__tests__/ciPageModel.test.ts",
