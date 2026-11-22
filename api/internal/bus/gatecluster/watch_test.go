@@ -310,3 +310,40 @@ func TestADaemonSetIsReadyWhenEveryNodeRunsIt(t *testing.T) {
 		t.Fatalf("bodies refused by the register: %v", l.errs)
 	}
 }
+
+// Origin: 2026-11-21, the communication line's list of what the system cannot
+// see: a backup's success or failure was only pulled (get_postgres_backup_status),
+// never said. The CNPG cluster's own status says it: each successful backup
+// moves last_backup, a failed one flips backup to failed.
+func TestABackupIsSaidFromTheClustersStatus(t *testing.T) {
+	w := watchRow(t, "postgres")
+	pg := func(lastOK, backup string) *unstructured.Unstructured {
+		return &unstructured.Unstructured{Object: map[string]any{
+			"metadata": map[string]any{"namespace": "data", "name": "bifrost-postgres"},
+			"spec":     map[string]any{"instances": int64(2)},
+			"status": map[string]any{"readyInstances": int64(2), "currentPrimary": "bifrost-postgres-1", "lastSuccessfulBackup": lastOK,
+				"conditions": []any{
+					map[string]any{"type": "ContinuousArchiving", "status": "True"},
+					map[string]any{"type": "LastBackupSucceeded", "status": backup},
+				}},
+		}}
+	}
+	l := &memLedger{}
+	g := &Gate{Ledger: l, Logf: func(string, ...any) {}}
+	g.init()
+	ctx := context.Background()
+	g.observeWatched(ctx, w, pg("2026-11-21T04:42:40Z", "True"))
+	g.observeWatched(ctx, w, pg("2026-11-21T04:42:40Z", "True")) // nothing new
+	g.observeWatched(ctx, w, pg("2026-11-22T04:40:00Z", "True")) // the next night's backup
+	g.observeWatched(ctx, w, pg("2026-11-22T04:40:00Z", "False")) // the one after failed
+	evs := l.events("pg:data/bifrost-postgres")
+	if len(evs) != 3 {
+		t.Fatalf("%d events, want 3: %+v", len(evs), evs)
+	}
+	if evs[0].body["backup"] != "ok" || evs[0].body["archiving"] != "ok" || evs[1].body["last_backup"] != "2026-11-22T04:40:00Z" || evs[2].body["backup"] != "failed" {
+		t.Fatalf("events %+v", evs)
+	}
+	if len(l.errs) != 0 {
+		t.Fatalf("bodies refused by the register: %v", l.errs)
+	}
+}

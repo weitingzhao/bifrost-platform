@@ -37,7 +37,7 @@
       "hash": "32da46ba12d63395"
     },
     "cluster.database.changed": {
-      "version": 1,
+      "version": 2,
       "hash": "68e7dfa1475b4912"
     },
     "cluster.node.changed": {
@@ -56,6 +56,10 @@
       "version": 2,
       "hash": "1fdf5a74a5e9639d"
     },
+    "foundation.acceptance.measured": {
+      "version": 1,
+      "hash": "cc22e61cb1f2ea64"
+    },
     "git.main.advanced": {
       "version": 1,
       "hash": "bd14194edeac095f"
@@ -63,6 +67,10 @@
     "git.mirror.settled": {
       "version": 1,
       "hash": "6b3b015e3c29c7d1"
+    },
+    "guard.block.recorded": {
+      "version": 1,
+      "hash": "a5e2aec8d6a1bd18"
     },
     "loop.health.changed": {
       "version": 1,
@@ -75,6 +83,10 @@
     "main.regression.known": {
       "version": 1,
       "hash": "f2eb4162ec9e6968"
+    },
+    "owner.privilege.used": {
+      "version": 1,
+      "hash": "9e4322dc3ad16180"
     },
     "owner.question.answered": {
       "version": 1,

@@ -470,7 +470,7 @@ channels:
   cluster.database.changed:
     address: ev.rocket.{env}.cluster.database.changed
     x-bifrost:
-      version: 1
+      version: 2
       lane: event
       guarantee: best-effort
       subject: "<namespace>/<name>"
@@ -492,11 +492,15 @@ channels:
         - {name: database, kind: str, pattern: '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?/[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$'}
         - {name: ready, kind: str, pattern: '^(ready|notready|gone)$'}  # gone: left the cluster (2026-11-21, registry.Gone)
         - {name: primary, kind: str, pattern: '^([a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?)?$'}
+        # v2 (2026-11-21): the backups, from the cluster's own status.
+        - {name: backup, kind: str, pattern: '^(ok|failed|unknown|gone)$'}
+        - {name: archiving, kind: str, pattern: '^(ok|failed|unknown|gone)$'}
+        - {name: last_backup, kind: str, pattern: '^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z|gone)?$'}
         - {name: subject, kind: str}
         - {name: ref, kind: str}
         - {name: change, kind: str}
       subject_from: database
-      change_from: [ready, primary]
+      change_from: [ready, primary, backup, archiving, last_backup]
       console_keys: [[cluster, postgres]]
   plugin.status.changed:
     address: ev.rocket.{env}.plugin.status.changed

@@ -90,3 +90,17 @@ watches:
         map: {"true": ready, "*": notready}
       - name: primary
         path: status.currentPrimary
+      # The backups (2026-11-21, the communication line's list of what the
+      # system cannot see: backup success or failure was only pulled through
+      # get_postgres_backup_status). backup is CNPG's LastBackupSucceeded
+      # condition, archiving its ContinuousArchiving condition, last_backup
+      # the time of the last successful backup, so each backup that succeeds
+      # is one change and one that fails flips backup.
+      - name: backup
+        path: status.conditions[type=LastBackupSucceeded].status
+        map: {"True": ok, "False": failed, "*": unknown}
+      - name: archiving
+        path: status.conditions[type=ContinuousArchiving].status
+        map: {"True": ok, "False": failed, "*": unknown}
+      - name: last_backup
+        path: status.lastSuccessfulBackup
