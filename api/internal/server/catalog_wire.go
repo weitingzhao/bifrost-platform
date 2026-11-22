@@ -347,6 +347,20 @@ func (s *Server) catalogStatusInputs() catalog.StatusInputs {
 		}
 		in.Uses = s.catalogUses
 	}
+	if s.agentRuntime != nil {
+		in.EventTypes = func(ctx context.Context) (map[string]int, bool) {
+			if s.agentRuntime.late == nil || !s.agentRuntime.late.Ready() {
+				return nil, false
+			}
+			tx, err := s.agentRuntime.late.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+			if err != nil {
+				return nil, false
+			}
+			defer func() { _ = tx.Rollback(ctx) }()
+			counts, err := eventlog.TypeCounts(ctx, tx, time.Now().Add(-7*24*time.Hour))
+			return counts, err == nil
+		}
+	}
 	if s.telemetry != nil {
 		in.RuleGroups = func(ctx context.Context) ([]catalog.RuleGroup, bool) {
 			groups, ok := s.telemetry.RuleGroups(ctx)

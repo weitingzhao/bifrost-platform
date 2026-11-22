@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 )
 
 // Classes the map reconciles against the running system besides the trees
@@ -558,4 +560,53 @@ func nonEmpty(v ...string) []string {
 		}
 	}
 	return out
+}
+
+// eventCheck compares the event types the register declares (the bus's
+// topics and the ledger's own types, as this binary carries them) with the
+// types the ledger holds events of in the last seven days: types written
+// that the register lacks, and declared types with no event in the window
+// (silent, which may be rare rather than dead: shown, not judged).
+func eventCheck(ctx context.Context, seen func(context.Context) (map[string]int, bool)) ClassCheck {
+	c := ClassCheck{Class: "event", NotRegistered: []string{}, NotLive: []string{}}
+	declared := map[string]bool{}
+	tenants, err := registry.Load()
+	if err != nil {
+		c.Note = "the bus register does not read: " + err.Error()
+		return c
+	}
+	for _, tn := range tenants {
+		for typ := range tn.Channels {
+			declared[typ] = true
+		}
+	}
+	if lts, err := registry.LedgerTypes(); err == nil {
+		for _, lt := range lts {
+			declared[lt.Type] = true
+		}
+	}
+	if seen == nil {
+		c.Note = "this platform does not read the ledger"
+		return c
+	}
+	counts, ok := seen(ctx)
+	if !ok {
+		c.Note = "the ledger's event types could not be read"
+		return c
+	}
+	for typ, n := range counts {
+		if !declared[typ] {
+			c.NotRegistered = append(c.NotRegistered, typ+" ("+strconv.Itoa(n)+" in 7 days)")
+		}
+	}
+	for typ := range declared {
+		if counts[typ] == 0 {
+			c.NotLive = append(c.NotLive, typ)
+		}
+	}
+	sort.Strings(c.NotRegistered)
+	sort.Strings(c.NotLive)
+	c.Measured, c.Registered, c.Live = true, len(declared), len(counts)
+	c.Note = "live: types with an event in the ledger in the last 7 days; registered, not live means silent in that window"
+	return c
 }

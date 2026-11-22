@@ -489,3 +489,26 @@ func TestAnUnownedPathGetsTheRowThatClaimsIt(t *testing.T) {
 		t.Errorf("say: %q", g.Claim.Say)
 	}
 }
+
+// 2026-11-22: event was a registry-only class; the map compares the declared
+// types with what the ledger wrote in seven days. The control: a declared
+// type that was written is in neither list.
+func TestEventTypesAreComparedWithWhatTheLedgerWrote(t *testing.T) {
+	c := eventCheck(context.Background(), func(context.Context) (map[string]int, bool) {
+		return map[string]int{"approval.card.created": 3, "made.up.type": 1}, true
+	})
+	if !c.Measured || len(c.NotRegistered) != 1 || c.NotRegistered[0] != "made.up.type (1 in 7 days)" {
+		t.Fatalf("%+v", c.NotRegistered)
+	}
+	for _, s := range c.NotLive {
+		if s == "approval.card.created" {
+			t.Errorf("a written type listed as silent")
+		}
+	}
+	if len(c.NotLive) == 0 || c.Registered < 2 {
+		t.Errorf("%+v", c)
+	}
+	if c := eventCheck(context.Background(), nil); c.Measured {
+		t.Errorf("no ledger is not measured")
+	}
+}
