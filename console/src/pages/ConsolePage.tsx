@@ -43,6 +43,8 @@ import {
 } from '@/lib/shell/consoleRoutes'
 import { useShellLayout } from '@/lib/shell/useShellLayout'
 
+import { readCommunicationLook } from '@/domains/coordination/communication/looks'
+
 type DetailRouteId = Exclude<ShellRouteId, EntryRouteId>
 
 // Its own chunk, with Phaser behind it: nothing of the city loads until this page opens.
@@ -51,6 +53,7 @@ const CityScreen = lazy(() => import('@/pages/shell/city/CityScreen'))
 const CityLedger = lazy(() => import('@/pages/shell/city/CityLedger'))
 const CityRoute = () => <Suspense fallback={null}><CityLedger /></Suspense>
 
+const AgentScreen = lazy(() => import('@/domains/coordination/communication/AgentScreen'))
 const Collaboration = lazy(() => import('@/domains/coordination/communication/CommunicationPage'))
 const CollaborationRoute = () => <Suspense fallback={null}><Collaboration /></Suspense>
 
@@ -105,7 +108,8 @@ function backFor(location: ConsoleLocation): HeaderBack | undefined {
  * entry's district. On the `#city` route the Console shows the ledger of the place in the address.
  */
 function looksFor(location: ConsoleLocation): HeaderLooks | undefined {
-  if (location.kind !== 'shell' || location.id === 'collaboration') return undefined
+  if (location.kind !== 'shell') return undefined
+  if (location.id === 'collaboration') return { on: 'ledger', city: '#city', ledger: window.location.hash, page: null }
   const query = window.location.hash.split('?')[1] ?? ''
   if (location.id === 'city') {
     const { path, sel } = readCityQuery(query)
@@ -178,6 +182,8 @@ function ConsolePageInner() {
     systemLine: status.statusLine,
   }
 
+  const agentsLook = location.kind === 'shell' && location.id === 'collaboration' && readCommunicationLook(window.location.hash.split('?')[1] ?? '').look === 'agents'
+  if (agentsLook) return <Suspense fallback={null}><AgentScreen /></Suspense>
   if (cityLook) return <Suspense fallback={null}><CityScreen /></Suspense>
   return (
     <TooltipProvider>

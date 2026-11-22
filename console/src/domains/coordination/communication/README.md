@@ -67,3 +67,13 @@ reviewable implementation removed that wait. No governance/CI gate was changed.
 The real remaining credential step protects the Owner's secrets; the agent can
 prepare and test the feature but cannot take over that credential under repository
 rules. Visual and unit testing therefore continued independently of login.
+
+## Peer modes
+
+The default #collaboration route is now an independent AgentScreen outside the
+Console frame. #collaboration?look=console uses WorkingStudio in ledgerOnly mode.
+The optional exchange query parameter carries the selected communication identity
+between them. AgentWorld consumes the same useCommunication snapshot and opens
+member/record evidence on demand. City and Console navigation include Agents;
+City's optional otherLooks prop is the sole renderer overlap for this revision.
+No second mailbox, parser, identity resolver or transport is introduced.

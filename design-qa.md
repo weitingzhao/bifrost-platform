@@ -50,3 +50,27 @@ https://softwareinc.coredumping.com/ and RimWorld autonomous members
 https://rimworldgame.com/ . Reuse Phaser for browser scene/camera/input rather than
 adding a second renderer: https://www.phaser.io/oss/docs . Borrow the observation
 grammar, not either game's simulation, management authority, or artwork.
+
+## Peer-mode revision — 2026-11-22
+
+Owner rejected a scene embedded in Dashboard chrome. Agents now renders outside
+ConsolePage's SidebarProvider/PageShell, as City does. AgentWorld fills the viewport;
+the actor dock, focused relationship and source-reported issues orient the observer.
+Evidence opens on selection, not by default. Selecting an actor changes the camera
+and shows ownership, activity provenance and that actor's exchanges.
+
+Mode addresses: #collaboration (Agents), #collaboration?look=console (Console).
+Both preserve the optional exchange query parameter, including event-channel IDs.
+City retains its existing routes. Its only renderer change is an optional host-fed
+otherLooks navigation item; buildings, layout, technology tree and animation are
+unchanged. Existing compact City navigation stays inside its expandable summary.
+
+Browser checks: selected Atlas -> member detail + camera focus; selected exchange
+-> evidence; Console -> the same demo-m-014 record; Agents -> world. Real unauthenticated
+routes were traversed Agents -> Console -> City -> Agents. Authentication coverage
+remains explicit; this routing verification does not claim authenticated mail E2E.
+Screenshot: /private/tmp/agent-mode-fullscreen.png (illustrative data).
+
+34 selected tests passed across communication, shell routes and City looks. UI build,
+Console typecheck and Console production build passed. Phaser remains tested in the
+browser; jsdom's lack of canvas is not treated as GPU coverage.

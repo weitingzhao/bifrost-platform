@@ -21,7 +21,7 @@ export default function CityScreen() {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 40 }}>
       <CityGen2 content={content} path={q.path} picked={q.sel ?? undefined}
-        go={p => { window.location.hash = cityHref(p) }} consoleHref={consoleHrefOf} />
+        go={p => { window.location.hash = cityHref(p) }} consoleHref={consoleHrefOf} otherLooks={[{ label: 'Agents', href: '#collaboration' }]} />
     </div>
   )
 }

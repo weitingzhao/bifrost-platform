@@ -1,3 +1,4 @@
+import { communicationHref } from '@/domains/coordination/communication/looks'
 import {
   DenseTag,
   SidebarTrigger,
@@ -172,6 +173,7 @@ export function ConsoleHeader({
       {looks != null && (
         <LookSwitch label="Look" items={[
           { text: 'City', href: looks.city, on: false },
+          { text: 'Agents', href: communicationHref('agents', new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('exchange')), on: false },
           { text: 'Console', href: looks.on === 'page' ? looks.page : looks.ledger, on: true },
         ]} />
       )}
