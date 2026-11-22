@@ -2,7 +2,6 @@ package codeguard
 
 import (
 	"encoding/json"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -101,12 +100,9 @@ func moduleImports(t *testing.T) map[string][]string {
 }
 
 func TestADomainImportsOnlyItselfAndTheBase(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "config", "domain-ownership.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := ownershipRaw(t)
 	var o ownership
-	if err = json.Unmarshal(raw, &o); err != nil {
+	if err := json.Unmarshal(raw, &o); err != nil {
 		t.Fatal(err)
 	}
 	if o.domainOf("api/internal/agentrt/eventlog") != "foundation" || o.domainOf("api/internal/ciscore") != "verification" || len(o.Packages) < 50 {

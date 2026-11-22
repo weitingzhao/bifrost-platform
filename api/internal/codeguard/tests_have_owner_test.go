@@ -322,12 +322,9 @@ func readTestFiles(t *testing.T) []testFile {
 }
 
 func TestEveryTestHasAnOwner(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "config", "domain-ownership.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := ownershipRaw(t)
 	var o ownership
-	if err = json.Unmarshal(raw, &o); err != nil {
+	if err := json.Unmarshal(raw, &o); err != nil {
 		t.Fatal(err)
 	}
 	if o.domainOf("api/internal/agentrt/eventlog") != "foundation" || len(o.Packages) < 50 || len(o.Domains) < 5 {

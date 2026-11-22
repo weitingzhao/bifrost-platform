@@ -6,7 +6,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -21,12 +20,9 @@ import (
 
 func loadOwnership(t *testing.T) ownership {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "config", "domain-ownership.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := ownershipRaw(t)
 	var o ownership
-	if err = json.Unmarshal(raw, &o); err != nil {
+	if err := json.Unmarshal(raw, &o); err != nil {
 		t.Fatal(err)
 	}
 	return o

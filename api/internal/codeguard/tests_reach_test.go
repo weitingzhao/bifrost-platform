@@ -117,12 +117,9 @@ func reachErrors(o ownership, across map[string][]string, shared []string, baseA
 }
 
 func TestTestsReachIntoOtherDomainsOnlyAsMuchAsTheyDid(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "config", "domain-ownership.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := ownershipRaw(t)
 	var o ownership
-	if err = json.Unmarshal(raw, &o); err != nil {
+	if err := json.Unmarshal(raw, &o); err != nil {
 		t.Fatal(err)
 	}
 	files := readTestFiles(t)

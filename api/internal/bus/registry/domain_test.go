@@ -15,10 +15,7 @@ import (
 // config/domain-ownership.json (a name not there would be a domain the map
 // invents).
 func TestEveryChannelNamesAnOwnedDomain(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "config", "domain-ownership.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	b := ownershipRaw(t)
 	var own struct {
 		Domains []struct {
 			ID   string `json:"id"`
@@ -85,10 +82,7 @@ func TestEveryChannelNamesAnOwnedDomain(t *testing.T) {
 // database allows but nobody registered, or one registered that it refuses,
 // fails here.
 func TestLedgerTypesAndTopicsAreTheClosedVocabulary(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "config", "domain-ownership.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	b := ownershipRaw(t)
 	var own struct {
 		Domains []struct {
 			ID string `json:"id"`
