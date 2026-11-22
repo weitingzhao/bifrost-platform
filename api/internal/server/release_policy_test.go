@@ -353,3 +353,22 @@ func TestPolicyCheckTierBAndBadRequests(t *testing.T) {
 		t.Fatalf("unwired = %d", code)
 	}
 }
+
+// policyCheck reads GET /delivery/pipelines/{name}/policy-check as a client
+// would: the JSON fields, not releasepolicy's type. Origin: 2026-11-22, the
+// judgment moved into releasepolicy (Check); the reply's shape is the route's
+// contract, so the test spells it out.
+type policyCheck struct {
+	Action        string            `json:"action"`
+	Pipeline      string            `json:"pipeline"`
+	Tier          string            `json:"tier"`
+	NeedsApproval bool              `json:"needs_approval"`
+	Covered       bool              `json:"covered"`
+	PolicyID      string            `json:"policy_id,omitempty"`
+	Reasons       []string          `json:"reasons"`
+	Clauses       []string          `json:"clauses"`
+	SHAs          map[string]string `json:"shas"`
+	AdditiveDDL   []string          `json:"additive_ddl,omitempty"`
+	ReversibleDDL []string          `json:"ddl_reversible,omitempty"`
+	Outcome       string            `json:"outcome"`
+}
