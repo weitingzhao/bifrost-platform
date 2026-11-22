@@ -72,10 +72,15 @@ type TaskMatch struct {
 
 // domainRow is what this file reads of a domain's row.
 type domainRow struct {
-	ID        string          `json:"id"`
-	About     string          `json:"about"`
-	Tasks     []Task          `json:"tasks"`
-	Contracts json.RawMessage `json:"contracts"`
+	ID string `json:"id"`
+	// Buildings, when the domain writes them, group its packages its own
+	// way: each a name and the path prefixes it holds (2026-11-22, law 79:
+	// a domain merges buildings without moving code). Packages none names
+	// are grouped by directory as before.
+	Buildings []declaredBuilding `json:"buildings"`
+	About     string             `json:"about"`
+	Tasks     []Task             `json:"tasks"`
+	Contracts json.RawMessage    `json:"contracts"`
 }
 
 // TasksFor finds the tasks whose words, or whose domain's about, hold every
@@ -126,6 +131,8 @@ type Building struct {
 	ID       string   `json:"id"`
 	Packages []string `json:"packages"`
 	Other    bool     `json:"other,omitempty"`
+	// Declared marks a building the domain wrote in its row.
+	Declared bool `json:"declared,omitempty"`
 }
 
 // MaxPerLayer is how many things one layer of the map holds (law 79).
@@ -194,6 +201,55 @@ func buildingsOf(rows []Row, roots []string) []Building {
 	return out
 }
 
+// declaredBuilding is a building a domain names in its row.
+type declaredBuilding struct {
+	ID    string   `json:"id"`
+	Paths []string `json:"paths"`
+}
+
+// declaredBuildings puts each package in the first declared building whose
+// path prefix holds it; the rest are grouped by directory (buildingsOf).
+func declaredBuildings(rows []Row, roots []string, declared []declaredBuilding) []Building {
+	if len(declared) == 0 {
+		return buildingsOf(rows, roots)
+	}
+	by := map[string][]string{}
+	var rest []Row
+	for _, r := range rows {
+		placed := false
+		for _, b := range declared {
+			for _, p := range b.Paths {
+				p = strings.Trim(p, "/")
+				if r.Path == p || strings.HasPrefix(r.Path, p+"/") {
+					by[b.ID] = append(by[b.ID], r.Path)
+					placed = true
+					break
+				}
+			}
+			if placed {
+				break
+			}
+		}
+		if !placed {
+			rest = append(rest, r)
+		}
+	}
+	out := buildingsOf(rest, roots)
+	for _, b := range declared {
+		if pkgs := by[b.ID]; len(pkgs) > 0 {
+			sort.Strings(pkgs)
+			out = append(out, Building{ID: b.ID, Packages: pkgs, Declared: true})
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if len(out[i].Packages) != len(out[j].Packages) {
+			return len(out[i].Packages) > len(out[j].Packages)
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
 // Row is one row that names the domain.
 type Row struct {
 	Path   string   `json:"path"`
@@ -236,10 +292,12 @@ func (s *Scanner) DomainOf(id string) (Domain, bool) {
 	var domains []json.RawMessage
 	_ = json.Unmarshal(k.Domains, &domains)
 	found := false
+	var declared []declaredBuilding
 	for _, raw := range domains {
 		var d domainRow
 		if json.Unmarshal(raw, &d) == nil && d.ID == id {
 			found, out.Contract, out.About = true, d.Contracts, d.About
+			declared = d.Buildings
 			if d.Tasks != nil {
 				out.Tasks = d.Tasks
 			}
@@ -254,7 +312,7 @@ func (s *Scanner) DomainOf(id string) (Domain, bool) {
 	out.Repo, out.Commit = k.Repo, k.Commit
 	if o, _ := s.lastOwners(k.Repo); o != nil {
 		out.Packages, out.Groups, out.Paths = rowsOf(id, o.Packages), rowsOf(id, o.Groups), rowsOf(id, o.Paths)
-		out.Buildings, out.BuildingsOver = capBuildings(buildingsOf(out.Packages, o.GoRoots))
+		out.Buildings, out.BuildingsOver = capBuildings(declaredBuildings(out.Packages, o.GoRoots, declared))
 	}
 	if o, _ := s.lastOwners(ClusterRepo); o != nil {
 		out.Workloads = rowsOf(id, o.Paths)

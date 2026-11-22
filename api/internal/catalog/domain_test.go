@@ -172,3 +172,14 @@ func TestSelfDescriptionIsReadFromTheFileTheRowNames(t *testing.T) {
 		t.Errorf("control: %+v", p.Self)
 	}
 }
+
+// 2026-11-22, law 79, Approvals: a domain merges buildings its own way
+// without moving code, by naming path prefixes in its row. The control: a
+// package no declared building names is grouped by directory as before.
+func TestADomainCanDeclareItsBuildings(t *testing.T) {
+	rows := []Row{{Path: "api/internal/agentrt/questionbridge"}, {Path: "api/internal/agentrt/answerack"}, {Path: "api/internal/approvals"}}
+	got := declaredBuildings(rows, []string{"api"}, []declaredBuilding{{ID: "question-bridge", Paths: []string{"api/internal/agentrt/questionbridge", "api/internal/agentrt/answerack/"}}})
+	if len(got) != 2 || got[0].ID != "question-bridge" || !got[0].Declared || len(got[0].Packages) != 2 || got[1].ID != "approvals" {
+		t.Fatalf("%+v", got)
+	}
+}
