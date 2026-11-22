@@ -18,6 +18,13 @@ describe('communication evidence', () => {
     expect(evidenceThrough(rows, '2026-11-22T12:01:00Z')[0].stages.acknowledged).toBeUndefined()
     expect(evidenceThrough(rows, '')[0].stages.acknowledged).toHaveLength(1)
   })
+  // 2026-11-22 Owner: issues need explicit evidence; historical views must not reveal later problems.
+  it('does not expose a source-reported issue before its evidence timestamp', () => {
+    const [exchange] = exchangesOf([fact('sent', '1')])
+    exchange.issue = {label:'Worker unavailable', evidence:{id:'issue-1',source:'test',at:'2026-11-22T12:02:00Z'}}
+    expect(evidenceThrough([exchange], '2026-11-22T12:01:00Z')[0].issue).toBeUndefined()
+    expect(evidenceThrough([exchange], '2026-11-22T12:03:00Z')[0].issue?.label).toBe('Worker unavailable')
+  })
   it('keeps both memberships and unknown participants', () => {
     const memberships = [{ seat: 'one', domain: 'crew', organization: 'platform', role: 'owner' as const }, { seat: 'two', domain: 'audit', organization: 'platform', role: 'owner' as const }]
     const xs = exchangesOf([{ ...fact('sent', '1'), from: 'a', to: 'b' }])
