@@ -6,6 +6,17 @@
       "id": "foundation",
       "name": "Foundation",
       "tier": 0,
+      "buildings": [
+        {"id": "bus", "paths": ["api/internal/bus"]},
+        {"id": "runtime", "paths": ["api/internal/agentrt"]},
+        {"id": "cluster", "paths": ["api/internal/cluster", "api/internal/kubeapi", "api/internal/kubemetrics", "api/internal/statefile", "api/internal/resourceview"]},
+        {"id": "network", "paths": ["api/internal/network", "api/internal/netobservations", "api/internal/probe"]},
+        {"id": "observe", "paths": ["api/internal/telemetry", "api/internal/httpmetrics", "api/internal/checklist", "api/internal/opsagent"]},
+        {"id": "config", "paths": ["api/internal/config", "api/internal/opscontext", "api/internal/versionedread", "api/internal/storedurability", "api/internal/outsideinput"]},
+        {"id": "identity", "paths": ["api/internal/actuation", "api/internal/notice", "api/internal/maintainer"]},
+        {"id": "guards", "paths": ["api/internal/codeguard", "api/internal/repoguard", "api/internal/modtidy", "api/internal/localpath", "api/internal/safego", "api/internal/tradevocab"]},
+        {"id": "map", "paths": ["api/internal/catalog", "api/internal/ownershiptable"]}
+      ],
       "source": "domains/0-foundation-decouple/charter.md",
       "contracts": {
         "measured_at": "2e93ae09",
