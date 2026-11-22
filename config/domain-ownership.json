@@ -205,6 +205,14 @@
     },
     {
       "id": "verification",
+      "about": "Merge and verification: whether a change may enter main (CI, landing) and what the evidence says it was tested with.",
+      "tasks": [
+        {"task": "why is my commit red / which test failed", "use": ["get_unit_runs", "get_commit_evidence", "GET /api/v1/evidence/commit"]},
+        {"task": "what will CI run for my change", "use": ["get_unit_scope", "get_unit_plan"]},
+        {"task": "did the daily full CI pass, which landings it covers", "use": ["get_full_ci", "check_full_ci_landings"]},
+        {"task": "who depends on whom between domains and packages", "use": ["GET /api/v1/ci/domains"], "note": "inner lists each domain's own package imports (production imports only)"},
+        {"task": "how do I get my change into main / why was it refused", "use": ["GET /api/v1/units/runs"], "note": "what landing takes is in self (scripts/landing/admission.yaml); each refusal is in the ledger as pipeline_seen.refusal"}
+      ],
       "self": "bifrost-trade-infra:scripts/landing/admission.yaml",
       "name": "Merge & verification",
       "tier": 2,
@@ -250,6 +258,14 @@
     },
     {
       "id": "delivery",
+      "about": "Delivery: releasing to STG and PROD, the release window, the signed release policy's verdicts and the release records.",
+      "tasks": [
+        {"task": "may this commit go to PROD, and why not", "use": ["check_release_policy", "GET /api/v1/delivery/pipelines/{name}/policy-check"]},
+        {"task": "release platform to STG or PROD", "use": ["hold_release_window", "start_pipeline_run", "get_delivery_run_logs"]},
+        {"task": "who holds the release window", "use": ["get_release_window", "GET /api/v1/delivery/release-window"]},
+        {"task": "what runs in each environment, what is on main but not on PROD", "use": ["get_delivery_revisions", "get_release_context", "GET /api/v1/releases/running-images"]},
+        {"task": "run the platform's pending database migrations", "use": ["run_agentrt_migration"], "note": "migrations that cannot destroy rows run when the signed policy covers them"}
+      ],
       "name": "Delivery",
       "tier": 2,
       "source": "domains/3-4-verify-release-ci/charter.md",
