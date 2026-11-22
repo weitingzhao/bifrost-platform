@@ -401,28 +401,12 @@ func (s *Server) probeRoutes() probe.Routes {
 	return probe.Routes{Cfg: s.cfg, Prober: s.prober, Snapshot: s.datastoreSnapshot}
 }
 
-func (s *Server) handleEnvironments(w http.ResponseWriter, r *http.Request) {
-	s.probeRoutes().HandleEnvironments(w, r)
-}
-
-func (s *Server) handleMatrix(w http.ResponseWriter, r *http.Request) {
-	s.probeRoutes().HandleMatrix(w, r)
-}
-
 func (s *Server) datastoreSnapshot(ctx context.Context) *probe.DatastoreSnapshot {
 	if s.cluster == nil {
 		return nil
 	}
 	snap := s.cluster.DatastoreSnapshot(ctx)
 	return &snap
-}
-
-func (s *Server) handleVerifyPayload(w http.ResponseWriter, r *http.Request) {
-	s.probeRoutes().HandleVerifyPayload(w, r)
-}
-
-func (s *Server) handleVerifyMissionSnapshot(w http.ResponseWriter, r *http.Request) {
-	s.probeRoutes().HandleVerifyMissionSnapshot(w, r)
 }
 
 func (s *Server) handleTopology(w http.ResponseWriter, r *http.Request) {
@@ -452,10 +436,6 @@ func (s *Server) liveHosts(ctx context.Context) topology.Live {
 		live.Scraped = s.telemetry.ScrapedHosts(ctx)
 	}
 	return live
-}
-
-func (s *Server) handleContext(w http.ResponseWriter, r *http.Request) {
-	s.promote.HandleOpsContext(s.cfg.OpsContext)(w, r)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

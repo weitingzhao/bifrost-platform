@@ -19,8 +19,11 @@ import (
 // of Router until 2026-11-16, in one list ordered by who may call them; each
 // route keeps its path, its handler and the same gate.
 func (s *Server) mountFoundation(r chi.Router) {
-	r.Get("/environments", s.handleEnvironments)
-	r.Get("/matrix", s.handleMatrix)
+	// The probe's reads and the ops context are foundation's handlers;
+	// assembly only registers them (law 72: assembly only wires).
+	pr := s.probeRoutes()
+	r.Get("/environments", pr.HandleEnvironments)
+	r.Get("/matrix", pr.HandleMatrix)
 	r.Get("/telemetry/overview", s.telemetry.HandleOverview)
 	r.Get("/telemetry/promql", s.telemetry.HandlePromQL)
 	r.Get("/telemetry/alerts", s.telemetry.HandleAlerts)
@@ -29,10 +32,10 @@ func (s *Server) mountFoundation(r chi.Router) {
 		r.Use(s.auth.Require(actuation.RoleOperator))
 		r.Post("/telemetry/attention-mute", s.telemetry.HandleAttentionMute)
 	})
-	r.Get("/mission/verify-payload", s.handleVerifyPayload)
-	r.Get("/mission/verify-snapshot", s.handleVerifyMissionSnapshot)
+	r.Get("/mission/verify-payload", pr.HandleVerifyPayload)
+	r.Get("/mission/verify-snapshot", pr.HandleVerifyMissionSnapshot)
 	r.Get("/self-health", s.selfhealth.HandleSelfHealth)
-	r.Get("/context", s.handleContext)
+	r.Get("/context", s.promote.HandleOpsContext(s.cfg.OpsContext))
 	r.Get("/auth/capabilities", s.auth.Capabilities)
 	r.Get("/audit", s.audit.HandleList)
 	r.Get("/mcp/tools", s.mcp.HandleTools)
