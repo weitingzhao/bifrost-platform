@@ -12,7 +12,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 )
 
 // The plan view of a collector's external work (R5:5.5-12 P-c1, §7 mixed
@@ -88,8 +87,8 @@ func newCollectorWorkViewFixture(t *testing.T) *collectorWorkViewDB {
 	digest := "sha256:" + strings.Repeat("d", 64)
 	// A collector's run key is <vendor>:<session>:<epoch>, as externalwork's
 	// registration writes it (identityRunKey, externalwork.go).
-	collector := func(id, session string, epoch int64, node string) externalwork.ExternalNote {
-		return externalwork.ExternalNote{ID: "ew_" + strings.Repeat(id, 64), Actor: actuation.CollectorActorPrefix + "h1", Host: "h1", Vendor: "claude",
+	collector := func(id, session string, epoch int64, node string) collectorNote {
+		return collectorNote{ID: "ew_" + strings.Repeat(id, 64), Actor: actuation.CollectorActorPrefix + "h1", Host: "h1", Vendor: "claude",
 			Session: session, Epoch: epoch, Node: node, RunKey: fmt.Sprintf("claude:%s:%d", session, epoch)}
 	}
 	running := collector("1", "0b8e2f4a-1111-2222-3333-444455556666", 1, "R4:4.1-1")
@@ -98,14 +97,14 @@ func newCollectorWorkViewFixture(t *testing.T) *collectorWorkViewDB {
 	submitted.Seq, submitted.Type, submitted.State, submitted.EndedAt = 2, "submitted", "Submitted", timeText(f.now.Add(-5*time.Second))
 	linked := collector("4", "9e5f0a1c-1111-2222-3333-444455556666", 1, "R4:4.3-1")
 	linked.Mission, linked.Task, linked.Seq, linked.Type, linked.State = "M-fixture", fixtureLiveTask, 1, "started", "Running"
-	for i, n := range []externalwork.ExternalNote{
+	for i, n := range []collectorNote{
 		running,
 		{ID: "ew_" + strings.Repeat("2", 64), Actor: "thread:local_mcp", Node: "R4:4.2-1", RunKey: "mcp-run", Type: "registered", State: "Registered"},
 		submitted,
 		linked,
 	} {
 		task := []string{"collector hook work", "an MCP registration", "collector work submitted today", "collector work beside a live attempt"}[i]
-		desc, _ := json.Marshal(externalwork.ExternalDescription{V: 1, Kind: "agentrt.external_work/v1", Task: task, Executor: "claude", Provider: "anthropic",
+		desc, _ := json.Marshal(collectorDescription{V: 1, Kind: "agentrt.external_work/v1", Task: task, Executor: "claude", Provider: "anthropic",
 			Repo: "platform", Branch: "test", Acceptance: []string{"PV1"}, Estimate: []int{1, 2}})
 		n.V, n.Kind, n.Root, n.Artifact, n.RequestDigest, n.RegistrationDigest = 1, "agentrt.external_work/v1", "R4", "sha256:"+strings.Repeat(string(rune('a'+i)), 64), digest, digest
 		n.RegisteredAt, n.HeartbeatAt = timeText(at), timeText(at)
@@ -177,4 +176,54 @@ func TestPlanViewCollectorWorkFixture(t *testing.T) {
 	if !bytes.Equal(raw, want) {
 		t.Fatal("Go plan-view response drifted; regenerate and review the Console fixture")
 	}
+}
+
+// collectorNote and collectorDescription mirror, by JSON name, the records
+// external work registration persists (workregistration.Note and
+// externalwork.ExternalDescription). They are copied here so this fixture
+// does not import the lineage domain's packages (OWNER_LAW #28); the bytes the
+// fixture writes are what those types would write.
+type collectorNote struct {
+	V                  int      `json:"v"`
+	Kind               string   `json:"kind"`
+	ID                 string   `json:"external_work_id"`
+	Actor              string   `json:"registrant"`
+	Host               string   `json:"host,omitempty"`
+	Vendor             string   `json:"vendor,omitempty"`
+	Session            string   `json:"session,omitempty"`
+	Epoch              int64    `json:"epoch,omitempty"`
+	Sidebar            string   `json:"sidebar,omitempty"`
+	Root               string   `json:"root"`
+	Node               string   `json:"plan_node_id"`
+	RunKey             string   `json:"source_run_key"`
+	Artifact           string   `json:"artifact_id"`
+	Mission            string   `json:"mission_id,omitempty"`
+	Task               string   `json:"task_id,omitempty"`
+	Seq                int64    `json:"seq"`
+	Type               string   `json:"type"`
+	State              string   `json:"state"`
+	RequestDigest      string   `json:"request_digest"`
+	RegistrationDigest string   `json:"registration_digest"`
+	ObservedAt         string   `json:"observed_at,omitempty"`
+	RegisteredAt       string   `json:"registered_at"`
+	SourceStartedAt    string   `json:"source_started_at,omitempty"`
+	StartedAt          string   `json:"started_at,omitempty"`
+	HeartbeatAt        string   `json:"heartbeat_at"`
+	EndedAt            string   `json:"ended_at,omitempty"`
+	ReportPathDigest   string   `json:"report_path_digest,omitempty"`
+	ReportDigest       string   `json:"report_digest,omitempty"`
+	Commits            []string `json:"commit_shas,omitempty"`
+	ExitCode           *int     `json:"exit_code,omitempty"`
+}
+
+type collectorDescription struct {
+	V          int      `json:"v"`
+	Kind       string   `json:"kind"`
+	Task       string   `json:"task"`
+	Executor   string   `json:"executor"`
+	Provider   string   `json:"provider"`
+	Repo       string   `json:"repo"`
+	Branch     string   `json:"branch"`
+	Acceptance []string `json:"acceptance_refs"`
+	Estimate   []int    `json:"estimate_minutes"`
 }

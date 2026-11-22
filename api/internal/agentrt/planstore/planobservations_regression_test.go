@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/mainhistory"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planview"
 )
 
@@ -152,9 +152,9 @@ func collectorTestFixture(t *testing.T) (*collectorTestDB, planview.Binding) {
 	}
 	return &collectorTestDB{now: time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC), doc: d, obs: map[string]planObservation{}, streams: map[string]int64{}}, b
 }
-func collectorTestSource(state landing.History) PlanSources {
-	return PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
-		return landing.MainHistory{State: state, Commit: strings.Repeat("a", 40)}, nil
+func collectorTestSource(state mainhistory.History) PlanSources {
+	return PlanSources{History: func(context.Context, string, string, string, string) (mainhistory.MainHistory, error) {
+		return mainhistory.MainHistory{State: state, Commit: strings.Repeat("a", 40)}, nil
 	}}
 }
 
@@ -163,21 +163,21 @@ func TestPV2CollectorOutOfOrder(t *testing.T) {
 	for _, mode := range []string{"new streams", "observation only", "pass only"} {
 		t.Run(mode, func(t *testing.T) {
 			d, b := collectorTestFixture(t)
-			oldState, newState, want := landing.Effective, landing.Reverted, "false"
+			oldState, newState, want := mainhistory.Effective, mainhistory.Reverted, "false"
 			if mode != "new streams" {
-				collectorTestPoll(t, d, collectorTestSource(landing.Effective), false)
+				collectorTestPoll(t, d, collectorTestSource(mainhistory.Effective), false)
 				d.now = d.now.Add(time.Minute)
 			}
 			if mode == "pass only" {
 				d.now = d.now.Add(9 * time.Minute)
-				oldState, newState, want = landing.Reverted, landing.Effective, "true"
+				oldState, newState, want = mainhistory.Reverted, mainhistory.Effective, "true"
 			}
 			started, release := make(chan struct{}), make(chan struct{})
 			done := make(chan error, 1)
-			old := PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
+			old := PlanSources{History: func(context.Context, string, string, string, string) (mainhistory.MainHistory, error) {
 				close(started)
 				<-release
-				return landing.MainHistory{State: oldState, Commit: b.Result}, nil
+				return mainhistory.MainHistory{State: oldState, Commit: b.Result}, nil
 			}}
 			go func() { _, e := CollectPlanObservations(context.Background(), d, old); done <- e }()
 			<-started
@@ -234,13 +234,13 @@ func TestPV2CollectorStampsBeforeRemoteRead(t *testing.T) {
 	b2 := collectorTestAddBinding(t, d, b, "second")
 	start := d.now
 	calls := 0
-	src := PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
+	src := PlanSources{History: func(context.Context, string, string, string, string) (mainhistory.MainHistory, error) {
 		if d.active != 0 {
 			t.Fatal("remote read ran inside a transaction")
 		}
 		calls++
 		d.now = d.now.Add(time.Minute)
-		return landing.MainHistory{State: landing.Effective, Commit: b.Result}, nil
+		return mainhistory.MainHistory{State: mainhistory.Effective, Commit: b.Result}, nil
 	}}
 	collectorTestPoll(t, d, src, false)
 	for i, binding := range []planview.Binding{b, b2} {
@@ -264,17 +264,17 @@ func TestPV2CollectorBoundsRootReads(t *testing.T) {
 		collectorTestAddBinding(t, d, b, fmt.Sprintf("slow-%d", i))
 	}
 	start, calls := d.now, 0
-	src := PlanSources{History: func(ctx context.Context, _, _, _, _ string) (landing.MainHistory, error) {
+	src := PlanSources{History: func(ctx context.Context, _, _, _, _ string) (mainhistory.MainHistory, error) {
 		deadline, ok := ctx.Deadline()
 		if !ok || time.Until(deadline) > 5*time.Minute {
 			t.Error("missing root deadline")
 		}
 		calls++
 		if calls == 1 {
-			return landing.MainHistory{State: landing.Effective, Commit: b.Result}, nil
+			return mainhistory.MainHistory{State: mainhistory.Effective, Commit: b.Result}, nil
 		}
 		d.now = d.now.Add(2 * time.Minute)
-		return landing.MainHistory{}, errors.New("timeout")
+		return mainhistory.MainHistory{}, errors.New("timeout")
 	}}
 	collectorTestPoll(t, d, src, true)
 	if calls != 4 {
@@ -292,17 +292,17 @@ func TestPV2CollectorPersistedFreshness(t *testing.T) {
 	t.Parallel()
 	d, b := collectorTestFixture(t)
 	start := d.now
-	offline := PlanSources{History: func(context.Context, string, string, string, string) (landing.MainHistory, error) {
-		return landing.MainHistory{}, errors.New("offline")
+	offline := PlanSources{History: func(context.Context, string, string, string, string) (mainhistory.MainHistory, error) {
+		return mainhistory.MainHistory{}, errors.New("offline")
 	}}
 	collectorTestPoll(t, d, offline, true)
 	if d.events != 0 {
 		t.Error("first all-failed round wrote a pass")
 	}
-	collectorTestPoll(t, d, collectorTestSource(landing.Effective), false)
+	collectorTestPoll(t, d, collectorTestSource(mainhistory.Effective), false)
 	before := d.events
 	d.now = start.Add(9 * time.Minute)
-	collectorTestPoll(t, d, collectorTestSource(landing.Effective), false)
+	collectorTestPoll(t, d, collectorTestSource(mainhistory.Effective), false)
 	if d.events != before {
 		t.Fatal("unchanged +9m success was not coalesced")
 	}
@@ -320,7 +320,7 @@ func TestPV2CollectorPersistedFreshness(t *testing.T) {
 	if _, status, o := s.reading(b); status != "Stale" || o.LastSuccess != timeText(start) {
 		t.Fatalf("persisted freshness: %s %+v", status, o)
 	}
-	collectorTestPoll(t, d, collectorTestSource(landing.Effective), false)
+	collectorTestPoll(t, d, collectorTestSource(mainhistory.Effective), false)
 	if d.events != before+1 || d.pass.Fresh[b.Digest()] != timeText(d.now) {
 		t.Fatal("recovery failed to refresh immediately")
 	}
@@ -332,11 +332,11 @@ func TestPV2CollectorRefreshesEachPersistedSuccess(t *testing.T) {
 	b2 := collectorTestAddBinding(t, d, b, "second")
 	start := d.now
 	src := func(failedRepo string) PlanSources {
-		return PlanSources{History: func(_ context.Context, repo, _, _, _ string) (landing.MainHistory, error) {
+		return PlanSources{History: func(_ context.Context, repo, _, _, _ string) (mainhistory.MainHistory, error) {
 			if repo == failedRepo {
-				return landing.MainHistory{}, errors.New("offline")
+				return mainhistory.MainHistory{}, errors.New("offline")
 			}
-			return landing.MainHistory{State: landing.Effective, Commit: b.Result}, nil
+			return mainhistory.MainHistory{State: mainhistory.Effective, Commit: b.Result}, nil
 		}}
 	}
 	collectorTestPoll(t, d, src(b2.Repo), true)
