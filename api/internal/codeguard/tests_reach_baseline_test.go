@@ -10,35 +10,19 @@ package codeguard
 // 2026-11-20: agentrt/agentrtapi folded into server, its paths with it
 // (its outside_inputs_test.go merged into server's).
 
-var testsReachingAcross = map[string][]string{
-	"api/internal/actions/coverage_test.go":                              {"api/internal/server"},
-	"api/internal/actions/ownerrun_d10_test.go":                          {"api/internal/releasepolicy"},
-	"api/internal/agentrt/migrate/helpers0022_test.go":                   {"api/internal/releasepolicy"},
-	"api/internal/agentrt/planstore/planobservations_ledger_test.go":     {"api/internal/agentrt/planwiring"},
-	"api/internal/agentrt/planstore/planobservations_regression_test.go": {"api/internal/agentrt/landing"},
-	"api/internal/agentrt/planstore/planviewcollector_fixture_test.go":   {"api/internal/agentrt/externalwork"},
-	"api/internal/approvals/http_test.go":                                {"api/internal/server"},
-	"api/internal/approvals/thread_inbox_legacy_test.go":                 {"api/internal/threadinbox"},
-	"api/internal/approvals/thread_inbox_order_pg_test.go":               {"api/internal/agentrt/coord"},
-	"api/internal/approvals/thread_inbox_sources_pg_test.go":             {"api/internal/agentrt/coord"},
-	"api/internal/approvals/thread_inbox_test.go":                        {"api/internal/agentrt/coord"},
-	"api/internal/assessmentreadings/assessment_readings_parity_test.go": {"api/internal/agentrt/planstore"},
-	"api/internal/codeguard/anchored_scope_test.go":                      {"api/internal/releasepolicy"},
-	"api/internal/delivery/approved_waits_test.go":                       {"api/internal/actions"},
-	"api/internal/delivery/ci_reader_test.go":                            {"api/internal/actions"},
-	"api/internal/delivery/pipeline_steps_results_test.go":               {"api/internal/cirunview", "api/internal/unitexec"},
-	"api/internal/delivery/run_refusal_test.go":                          {"api/internal/actions", "api/internal/placement"},
-	"api/internal/delivery/run_window_test.go":                           {"api/internal/actions"},
-	"api/internal/delivery/run_window_workers_test.go":                   {"api/internal/actions"},
-	"api/internal/questions/thread_inbox_legacy_test.go":                 {"api/internal/threadinbox"},
-	"api/internal/questions/thread_inbox_pg_test.go":                     {"api/internal/agentrt/coord"},
-	"api/internal/releasepolicy/apply_test.go":                           {"api/internal/actions"},
-	"api/internal/releasepolicy/ddl_test.go":                             {"api/internal/actions"},
-	"api/internal/releasepolicy/migration_test.go":                       {"api/internal/actions"},
-	"api/internal/releasepolicy/mustrefuse/cases_test.go":                {"api/internal/actions"},
-	"api/internal/releasepolicy/mustrefuse/world_test.go":                {"api/internal/actions"},
-	"api/internal/releasepolicy/releasepolicy_test.go":                   {"api/internal/actions"},
-	"api/internal/releasepolicy/snapshot_test.go":                        {"api/internal/actions"},
+// testsReachingAcross is filled per domain, one file each
+// (tests_reach_baseline_<domain>_test.go), so two lines cutting their own
+// entries do not edit the same lines. Origin: 2026-11-22, the CI line
+// replayed the landings refused that day: 4 of 10 merge conflicts were in
+// this file, every one between entries of different domains.
+var testsReachingAcross = map[string][]string{}
+
+// heldAcross adds one domain's entries to testsReachingAcross.
+func heldAcross(entries map[string][]string) bool {
+	for f, deps := range entries {
+		testsReachingAcross[f] = deps
+	}
+	return true
 }
 
 // 2026-11-21, law 71: all 115 were in server and integration, which became
