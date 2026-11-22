@@ -75,8 +75,8 @@ func ComputeQueries() []QuerySpec {
 			Unit:   "pods",
 			Target: "0",
 			Note:   "Work waiting at the scheduler. It does not see Agent sessions queueing on the Agent host or CI tasks run one after another on one node.",
-			// 15m steps: at 5m this ran past the 10s client timeout on PROD (2026-11-21, "context deadline exceeded").
-			Build: fixed(`avg_over_time(sum(kube_pod_status_phase{phase="Pending"})[` + w + `:15m])`),
+			// 1h steps: at 5m (2026-11-21) and 15m (2026-11-22) the readings, all queried at once, ran past the 10s client timeout on PROD ("context deadline exceeded").
+			Build: fixed(`avg_over_time(sum(kube_pod_status_phase{phase="Pending"})[` + w + `:1h])`),
 		},
 		{
 			ID:     "compute_schedule_p99",
@@ -189,8 +189,8 @@ func ComputeQueries() []QuerySpec {
 			Title:  "Most CI guests at once on each database home",
 			Unit:   "guests",
 			Target: "a signal, no target",
-			Note:   "Highest number of running CI guests on a database home, sampled every 15 minutes (at 5-minute steps the read passed the 10 s timeout), so a short burst can be missed.",
-			Build:  fixed(`max_over_time((count by (node) (` + guestsOnDatabaseHomes + `))[` + w + `:15m])`),
+			Note:   "Highest number of running CI guests on a database home, sampled every hour (finer steps passed the 10 s timeout), so a burst shorter than an hour can be missed.",
+			Build:  fixed(`max_over_time((count by (node) (` + guestsOnDatabaseHomes + `))[` + w + `:1h])`),
 		},
 		{
 			ID:     "compute_nodes_without_home_now",
@@ -238,16 +238,16 @@ func ComputeQueries() []QuerySpec {
 			Title:  "CPU headroom per node, cores",
 			Unit:   "cores",
 			Target: "a signal, no target",
-			Note:   "Allocatable CPU minus the highest 15-minute-sampled container use over the window. Peaks on different nodes need not coincide; this is not a budget.",
-			Build:  fixed(`max by (node) (kube_node_status_allocatable{resource="cpu"}) - max_over_time((sum by (node) (rate(container_cpu_usage_seconds_total{container!=""}[5m])))[` + w + `:15m])`),
+			Note:   "Allocatable CPU minus the highest hourly-sampled container use over the window. Peaks on different nodes need not coincide; this is not a budget.",
+			Build:  fixed(`max by (node) (kube_node_status_allocatable{resource="cpu"}) - max_over_time((sum by (node) (rate(container_cpu_usage_seconds_total{container!=""}[5m])))[` + w + `:1h])`),
 		},
 		{
 			ID:     "compute_memory_headroom_gib",
 			Title:  "Memory headroom per node, GiB",
 			Unit:   "GiB",
 			Target: "a signal, no target",
-			Note:   "Allocatable memory minus the highest 15-minute-sampled container working set over the window.",
-			Build:  fixed(`(max by (node) (kube_node_status_allocatable{resource="memory"}) - max_over_time((sum by (node) (container_memory_working_set_bytes{container!=""}))[` + w + `:15m])) / 2^30`),
+			Note:   "Allocatable memory minus the highest hourly-sampled container working set over the window.",
+			Build:  fixed(`(max by (node) (kube_node_status_allocatable{resource="memory"}) - max_over_time((sum by (node) (container_memory_working_set_bytes{container!=""}))[` + w + `:1h])) / 2^30`),
 		},
 		{
 			ID:     "compute_root_disk_growth_gb_per_day",
