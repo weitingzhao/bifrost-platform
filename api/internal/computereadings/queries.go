@@ -1,7 +1,14 @@
-package telemetry
+// Package computereadings is the compute domain's readings of "is the
+// compute fully used", as Prometheus queries. They were written in
+// foundation's telemetry package until 2026-11-22; the compute line asked for
+// them back (its contract, law 28), and telemetry now serves any group a
+// domain registers (telemetry.Handler.SetGroup, bound in assembly).
+package computereadings
 
-// GroupCompute selects the compute readings on /telemetry/overview?group=compute.
-const GroupCompute = "compute"
+import "github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
+
+// Group selects the compute readings on /telemetry/overview?group=compute.
+const Group = "compute"
 
 // computeWindow is the look-back of every compute reading.
 const computeWindow = "7d"
@@ -24,14 +31,14 @@ func diskWriteMs(q, window string) string {
 		` / rate(node_disk_writes_completed_total` + disks + `[5m]) > 0)[` + window + `:5m]) * on (instance) group_left (nodename) node_uname_info) * 1000`
 }
 
-// ComputeQueries are the readings of "is the compute fully used" that
+// Queries are the readings of "is the compute fully used" that
 // Prometheus can answer today: work waiting while capacity is idle, the
 // protected tiers being squeezed, the Agent host queueing, and how honest the
 // requests are. Utilisation is deliberately not one of them: high can mean
 // well used or crowded. The readings that cannot be measured yet (wall time
 // per kind of work, the GPU node, the Owner's interventions) are named on the
 // page, not faked here.
-func ComputeQueries() []QuerySpec {
+func Queries() []telemetry.QuerySpec {
 	w := computeWindow
 	fixed := func(q string) func(string) string { return func(string) string { return q } }
 	// Cluster nodes only: their node exporter runs as a pod, the exporters on
@@ -44,7 +51,7 @@ func ComputeQueries() []QuerySpec {
 	guestsOnDatabaseHomes := `(kube_pod_status_phase{namespace="cicd",phase="Running"} == 1)` +
 		` * on (namespace, pod) group_left (node) kube_pod_info{namespace="cicd",created_by_kind="TaskRun"}` +
 		` * on (node) group_left () ` + databaseHomes
-	return []QuerySpec{
+	return []telemetry.QuerySpec{
 		{
 			ID:     "compute_cluster_cpu_used_p50",
 			Title:  "Cluster CPU in use, half of the time at most",

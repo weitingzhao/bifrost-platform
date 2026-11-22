@@ -19,26 +19,6 @@ func testConfigWithCluster(t *testing.T) *config.Config {
 	return &config.Config{Clusters: &config.ClustersFile{Clusters: []config.ClusterEntry{{ID: "test"}}}}
 }
 
-func TestComputeQueriesAreNamedOnceAndSayWhatTheyAnswer(t *testing.T) {
-	seen := map[string]bool{}
-	for _, q := range PresetQueries() {
-		seen[q.ID] = true
-	}
-	for _, q := range ComputeQueries() {
-		if seen[q.ID] {
-			t.Errorf("%s is defined twice", q.ID)
-		}
-		seen[q.ID] = true
-		if !strings.HasPrefix(q.ID, "compute_") || q.Title == "" || q.Unit == "" || q.Target == "" || q.Note == "" {
-			t.Errorf("%s: id prefix, title, unit, target and note are all required: %+v", q.ID, q)
-		}
-		// Readings that answer "now" (suffix _now, law 43 rows added 2026-11-20) do not look back.
-		if expr := q.Build("ignored"); !strings.Contains(expr, computeWindow) && q.ID != "compute_pods_evicted" && !strings.HasSuffix(q.ID, "_now") {
-			t.Errorf("%s does not look back %s: %s", q.ID, computeWindow, expr)
-		}
-	}
-}
-
 // promStub answers every instant query with one sample and records the
 // expressions it was asked. The queries of one overview arrive at once, so the
 // record is guarded.
@@ -59,22 +39,36 @@ func promStub(t *testing.T, asked *[]string) *httptest.Server {
 	}))
 }
 
-func TestOverviewGroupComputeRunsOnlyTheComputeReadings(t *testing.T) {
+// groupQueries is a registered group of the shape the compute domain
+// registers (2026-11-22: the compute readings moved to computereadings; the
+// service serves whatever group a domain registered).
+func groupQueries() []QuerySpec {
+	return []QuerySpec{
+		{ID: "g_one", Title: "one", Unit: "n", Target: "t1", Note: "n1", Build: func(string) string { return "node_pressure_one" }},
+		{ID: "g_two", Title: "two", Unit: "n", Target: "t2", Note: "n2", Build: func(string) string { return "node_load1" }},
+	}
+}
+
+// Origin: 2026-11-20 the compute group (law 43); 2026-11-22 the group moved to
+// the compute domain and telemetry serves what is registered: a registered
+// group runs only its readings (control: TestOverviewWithoutAGroupIsUnchanged).
+func TestOverviewARegisteredGroupRunsOnlyItsReadings(t *testing.T) {
 	var asked []string
 	srv := promStub(t, &asked)
 	defer srv.Close()
 	t.Setenv("PLATFORM_PROMETHEUS_URL", srv.URL)
 	svc := NewService(testConfigWithCluster(t))
+	svc.SetGroup("g", groupQueries)
 
-	resp, err := svc.Overview(context.Background(), "", GroupCompute)
+	resp, err := svc.Overview(context.Background(), "", "g")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Group != GroupCompute || len(resp.Metrics) != len(ComputeQueries()) || len(asked) != len(ComputeQueries()) {
-		t.Fatalf("group %q, %d metrics, %d queries asked; want %d", resp.Group, len(resp.Metrics), len(asked), len(ComputeQueries()))
+	if resp.Group != "g" || len(resp.Metrics) != len(groupQueries()) || len(asked) != len(groupQueries()) {
+		t.Fatalf("group %q, %d metrics, %d queries asked; want %d", resp.Group, len(resp.Metrics), len(asked), len(groupQueries()))
 	}
 	for i, m := range resp.Metrics {
-		want := ComputeQueries()[i]
+		want := groupQueries()[i]
 		if m.ID != want.ID || m.Target != want.Target || m.Note != want.Note || m.Status != "ok" || m.Points[0].Value != 5.5 {
 			t.Errorf("metric %d = %+v, want id %s with its target and note", i, m, want.ID)
 		}
@@ -87,6 +81,7 @@ func TestOverviewWithoutAGroupIsUnchanged(t *testing.T) {
 	defer srv.Close()
 	t.Setenv("PLATFORM_PROMETHEUS_URL", srv.URL)
 	svc := NewService(testConfigWithCluster(t))
+	svc.SetGroup("g", groupQueries)
 
 	for _, group := range []string{"", "nonsense"} {
 		asked = nil

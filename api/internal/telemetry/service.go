@@ -12,6 +12,20 @@ import (
 
 type Service struct {
 	cfg *config.Config
+	// groups are the readings other domains registered for
+	// /telemetry/overview?group=<name> (SetGroup). Since 2026-11-22 the
+	// compute readings live in the compute domain and are bound here by
+	// assembly; telemetry no longer writes another domain's queries.
+	groups map[string]func() []QuerySpec
+}
+
+// SetGroup registers a named group of readings; an empty or unknown group
+// asked for is the default presets. Called once at assembly, before serving.
+func (s *Service) SetGroup(name string, queries func() []QuerySpec) {
+	if s.groups == nil {
+		s.groups = map[string]func() []QuerySpec{}
+	}
+	s.groups[name] = queries
 }
 
 func NewService(cfg *config.Config) *Service {
@@ -29,8 +43,8 @@ func (s *Service) prometheusURL() string {
 	return entry.PrometheusURL()
 }
 
-// Overview runs one group of preset queries: the default presets, or the
-// compute readings when group is "compute". An unknown group is the default.
+// Overview runs one group of preset queries: the default presets, or a group
+// a domain registered (SetGroup). An unknown group is the default.
 func (s *Service) Overview(ctx context.Context, namespace, group string) (OverviewResponse, error) {
 	ns := ResolveNamespace(namespace)
 	promURL := s.prometheusURL()
@@ -40,8 +54,8 @@ func (s *Service) Overview(ctx context.Context, namespace, group string) (Overvi
 
 	client := NewClient(promURL)
 	queries := PresetQueries()
-	if group == GroupCompute {
-		queries = ComputeQueries()
+	if q, ok := s.groups[group]; ok && group != "" {
+		queries = q()
 	} else {
 		group = ""
 	}

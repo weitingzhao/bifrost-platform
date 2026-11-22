@@ -37,6 +37,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/cidomains"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ciscore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
+	"github.com/weitingzhao/bifrost-platform/api/internal/computereadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/dataclone"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -227,6 +228,8 @@ func New(cfg *config.Config) (*Server, error) {
 		audit:           audit,
 		httpMetrics:     newHTTPMetrics(),
 	}
+	// The compute domain's readings, served on /telemetry/overview?group=compute.
+	srv.telemetry.SetGroup(computereadings.Group, computereadings.Queries)
 	srv.checklist.BindHusbandry(checklistview.Source(tenantA.Husbandry.Service()))
 	// One producer of maintenance signals: only the PROD workers overlay sets
 	// CHECKLIST_PROBER=on (TD-253).

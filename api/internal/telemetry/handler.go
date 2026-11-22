@@ -26,6 +26,9 @@ func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {
 	}
 }
 
+// SetGroup registers a domain's group of readings (Service.SetGroup).
+func (h *Handler) SetGroup(name string, queries func() []QuerySpec) { h.svc.SetGroup(name, queries) }
+
 func (h *Handler) HandleOverview(w http.ResponseWriter, r *http.Request) {
 	ns := r.URL.Query().Get("ns")
 	resp, err := h.svc.Overview(r.Context(), ns, r.URL.Query().Get("group"))

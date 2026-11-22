@@ -1480,6 +1480,13 @@
       "status": "assigned",
       "basis": "2026-11-21 claimed by the communication line (seat 8.2) as bus sub-domain 0.2, after the metrics line declined it (Foundation hand-over, shared notes biz-align/foundation-handover-2026-11-21.md): the Alertmanager webhook's entry to the bus. Its one live use is HandleAlertmanager, which the server wires to announce every alert as alert.rule.fired (server/bus_wire.go announceAlerts) and records one audit line whose detail is Diagnose's summary; the suggested actions in the reply are read by no one (Alertmanager ignores the body). It stays foundation like every other bus package. Before: 2026-11-16 source and caller audit: generic infrastructure alert diagnosis and suggestions, not domain execution"
     },
+    "api/internal/computereadings": {
+      "domains": [
+        "compute"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-22 moved out of foundation's telemetry (compute line's letter of 11-22: its readings were written in foundation): the compute domain's Prometheus readings of whether the compute is fully used (law 43). telemetry serves them as the group it registers (telemetry.Handler.SetGroup), bound in assembly; it imports telemetry only for QuerySpec."
+    },
     "api/internal/telemetry": {
       "domains": [
         "foundation"
