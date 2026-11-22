@@ -6,6 +6,9 @@ const GroupCompute = "compute"
 // computeWindow is the look-back of every compute reading.
 const computeWindow = "7d"
 
+// computeWindowDays is computeWindow in days, for per-day rates.
+const computeWindowDays = "7"
+
 // perHost joins a node-exporter series to its host name, so the readings
 // carry "ubt-k3s-06" and not an address. Hosts outside the cluster (the Agent
 // host, the two Mac minis, the NAS) are scraped by the same job.
@@ -226,6 +229,33 @@ func ComputeQueries() []QuerySpec {
 			Target: "a signal, no target",
 			Note:   "99th percentile of the same 5-minute means: the tail a database or a build writing under load meets. A cache-less disk shows here when a long write fills its fast area.",
 			Build:  fixed(diskWriteMs("0.99", w)),
+		},
+		// Headroom and root-disk growth, the charter's R2 table and the CI
+		// line's one-off disk reading (2026-11-15, 2026-11-20), computed by
+		// the system instead of copied by hand (main line "seen and felt").
+		{
+			ID:     "compute_cpu_headroom_cores",
+			Title:  "CPU headroom per node, cores",
+			Unit:   "cores",
+			Target: "a signal, no target",
+			Note:   "Allocatable CPU minus the highest 15-minute-sampled container use over the window. Peaks on different nodes need not coincide; this is not a budget.",
+			Build:  fixed(`max by (node) (kube_node_status_allocatable{resource="cpu"}) - max_over_time((sum by (node) (rate(container_cpu_usage_seconds_total{container!=""}[5m])))[` + w + `:15m])`),
+		},
+		{
+			ID:     "compute_memory_headroom_gib",
+			Title:  "Memory headroom per node, GiB",
+			Unit:   "GiB",
+			Target: "a signal, no target",
+			Note:   "Allocatable memory minus the highest 15-minute-sampled container working set over the window.",
+			Build:  fixed(`(max by (node) (kube_node_status_allocatable{resource="memory"}) - max_over_time((sum by (node) (container_memory_working_set_bytes{container!=""}))[` + w + `:15m])) / 2^30`),
+		},
+		{
+			ID:     "compute_root_disk_growth_gb_per_day",
+			Title:  "Root disk growth per node, GB a day",
+			Unit:   "GB/day",
+			Target: "a signal; look when a node fills within a month",
+			Note:   "Free space lost on / over the window, divided by its days. A node younger than the window has no value.",
+			Build:  fixed(`max by (nodename) (((node_filesystem_avail_bytes{mountpoint="/",pod!=""} offset ` + w + `) - node_filesystem_avail_bytes{mountpoint="/",pod!=""}) / ` + computeWindowDays + ` / 1e9 * on (instance) group_left (nodename) node_uname_info)`),
 		},
 		{
 			ID:     "compute_requests_honest_share",

@@ -47,6 +47,10 @@ describe('compute readings', () => {
     expect(formatReading(5.1, 's')).toBe('5.1 s')
     expect(formatReading(7.00007, 'kills')).toBe('7')
     expect(formatReading(0.037698, 'pods')).toBe('0.04')
+    // 2026-11-22 headroom and root-disk growth rows (charter R2 table and the CI line's one-off reading, now computed).
+    expect(formatReading(5.137, 'cores')).toBe('5.1 cores')
+    expect(formatReading(6.7, 'GiB')).toBe('6.7 GiB')
+    expect(formatReading(10.82, 'GB/day')).toBe('10.8 GB/day')
     expect(formatReading(Number.NaN, 'x')).toBe('—')
   })
   it('lists a reading highest first with the host or container it belongs to', () => {

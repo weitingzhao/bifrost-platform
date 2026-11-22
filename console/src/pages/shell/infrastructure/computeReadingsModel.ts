@@ -5,6 +5,7 @@ export function formatReading(value: number, unit?: string): string {
   if (unit === 'ratio') return `${(value * 100).toFixed(1)}%`
   if (unit === 'x') return `${value.toFixed(2)}×`
   if (unit === 's') return `${value.toFixed(1)} s`
+  if (unit === 'cores' || unit === 'GiB' || unit === 'GB/day') return `${value.toFixed(1)} ${unit}`
   if (unit === 'ms') return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)} ms`
   if (unit === 'kills' || unit === 'guests' || unit === 'alerts' || unit === 'min') return value.toFixed(0)
   return value >= 100 ? value.toFixed(0) : value.toFixed(2)
