@@ -81,7 +81,7 @@ describe('DomainStatusSummary', () => {
       const u = String(url)
       if (u.includes('/catalog/index')) return json({ classes: [] })
       if (u.includes('/catalog/unperceived?repo=cluster')) return json({ repo: 'cluster', measured: true, entries: [], covered: [{ path: 'a/x', by: 'path a', by_namespace: true }, { path: 'b/y', by: 'path b/y' }] })
-      if (u.includes('/catalog/unperceived')) return json({ repo: 'bifrost-platform', measured: true, entries: [{ path: 'scripts/x', kind: 'scripts', files: 2, first_seen: '2026-11-20T00:00:00Z' }] })
+      if (u.includes('/catalog/unperceived')) return json({ repo: 'bifrost-platform', measured: true, entries: [{ path: 'scripts/x', kind: 'scripts', files: 2, first_seen: '2026-11-20T00:00:00Z' }], stale_rows: ['console/bench/gone.tsx'] })
       if (u.includes('/catalog/users')) return json({ measured: true, packages: [
         { package: 'api/internal/a', domain: 'plan', users: { prod: [], test: [], event: [] }, user_domains: { prod: [], test: [], event: [] } },
         { package: 'api/internal/b', domain: 'foundation', users: { prod: ['api/internal/a'], test: ['api/internal/c'], event: [] }, user_domains: { prod: ['plan'], test: ['lineage'], event: [] } },
@@ -89,7 +89,7 @@ describe('DomainStatusSummary', () => {
       return json({
         version: 1, domains: [row('plan', 'good')],
         inventory: [
-          { repo: 'bifrost-platform', commit: 'c', measured: true, total: 10, on_map: 8, off_map: 2, gap: 0, entries: 1 },
+          { repo: 'bifrost-platform', commit: 'c', measured: true, total: 10, on_map: 8, off_map: 2, gap: 0, entries: 1, stale_rows: 1 },
           { repo: 'cluster', commit: 'c', measured: true, total: 2, on_map: 2, off_map: 0, gap: 0, entries: 0 },
           { repo: 'bifrost-ui', commit: 'c', measured: true, total: 4, on_map: 4, off_map: 0, gap: 0, entries: 0 },
         ],
@@ -108,6 +108,9 @@ describe('DomainStatusSummary', () => {
     fireEvent.click(container.querySelector('[data-repo="bifrost-platform"] button')!)
     await waitFor(() => expect(container.querySelector('[data-entry="scripts/x"]')).toBeTruthy())
     expect(container.querySelector('[data-entry="scripts/x"]')!.textContent).toContain('not reviewed')
+    // 2026-11-21: a row whose thing was removed shows, counted on the place and named when it opens.
+    expect(container.querySelector('[data-repo="bifrost-platform"] [data-stale="1"]')).toBeTruthy()
+    expect(container.querySelector('[data-stale-rows="1"]')!.textContent).toContain('console/bench/gone.tsx')
     fireEvent.click(container.querySelector('[data-repo="cluster"] button')!)
     await waitFor(() => expect(container.querySelector('[data-by-namespace="1"]')).toBeTruthy())
     const block = container.querySelector('[aria-label="Package users"]') as HTMLDetailsElement

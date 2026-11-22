@@ -77,7 +77,7 @@ function Row({ d }: { d: DomainStatusRow }) {
 /** One place's equation; opened, its off-map entries and, for the cluster and the database, what a whole namespace row covers. */
 function PlaceRow({ c }: { c: RepoCount }) {
   const [open, setOpen] = useState(false)
-  const canOpen = c.entries > 0 || c.repo === 'cluster' || c.repo === 'platform-db'
+  const canOpen = c.entries > 0 || (c.stale_rows ?? 0) > 0 || c.repo === 'cluster' || c.repo === 'platform-db'
   return (
     <>
       <tr data-repo={c.repo} className="border-t border-[var(--table-rule)]">
@@ -91,8 +91,9 @@ function PlaceRow({ c }: { c: RepoCount }) {
         <td className="text-right">{c.on_map}</td>
         <td className="text-right">{c.off_map}</td>
         <td className={`text-right ${c.gap !== 0 ? 'text-red-600' : ''}`} data-gap={c.gap}>{c.gap}</td>
+        <td className="text-right" data-stale={c.stale_rows ?? ''}>{c.stale_rows ?? ''}</td>
       </tr>
-      {open ? <tr><td colSpan={5}><PoolEntries repo={c.repo} /></td></tr> : null}
+      {open ? <tr><td colSpan={6}><PoolEntries repo={c.repo} /></td></tr> : null}
     </>
   )
 }
@@ -105,6 +106,7 @@ function PoolEntries({ repo }: { repo: string }) {
   const byNs = (p.covered ?? []).filter(x => x.by_namespace).length
   return (
     <div className="py-1" data-pool={repo}>
+      {(p.stale_rows ?? []).length > 0 ? <p className="m-0 break-all" data-stale-rows={p.stale_rows!.length}>Rows covering nothing: {p.stale_rows!.join(', ')}</p> : null}
       {p.covered ? <p className="m-0" data-by-namespace={byNs}>On the map only by a whole namespace&apos;s row: {byNs} of {p.covered.length}</p> : null}
       {p.entries.length === 0 ? <p className="m-0 text-muted-foreground">No off-map entry.</p> : (
         <table className="w-full tabular-nums">
@@ -206,7 +208,7 @@ function Coverage({ s }: { s: DomainStatusResponse }) {
       <h3 className="m-0 text-xs font-medium text-foreground">Map coverage</h3>
       <table className="w-full text-xs tabular-nums">
         <thead>
-          <tr className="text-left text-muted-foreground"><th className="font-normal">Place</th><th className="text-right font-normal">Total</th><th className="text-right font-normal">On map</th><th className="text-right font-normal">Off map</th><th className="text-right font-normal">Gap</th></tr>
+          <tr className="text-left text-muted-foreground"><th className="font-normal">Place</th><th className="text-right font-normal">Total</th><th className="text-right font-normal">On map</th><th className="text-right font-normal">Off map</th><th className="text-right font-normal">Gap</th><th className="text-right font-normal">Rows covering nothing</th></tr>
         </thead>
         <tbody>
           {inv.map(c => <PlaceRow key={c.repo} c={c} />)}
@@ -261,7 +263,7 @@ export function DomainStatusSummary() {
       )}
       <details className="text-xs text-muted-foreground">
         <summary className="min-h-11 cursor-pointer py-3">?</summary>
-        <p className="m-0">Four lights per domain, dots in this order: alive (ready replicas of its workloads on the map), interfaces (requests and 5xx to its contract routes in the last hour, or the last day when the hour has under 20; under 20 in a day is too few to judge), boundary (imports against the tiers in or out of it), fresh (the table and the cluster were scanned in the last three rounds). Overall is the worst light. Hollow is unknown: not measured, never counted as good. Map coverage: for every repository, the platform database and the cluster, total (counted from the tree) = on map (a row covers it) + off map (in the pool of what the map cannot perceive); a gap that is not 0 means the scan missed something and turns every fresh light bad. A tenant&apos;s repository is one entry: its inside is not looked at this round. A place opens to its off-map entries (and, for the cluster and the database, how many are on the map only by a whole namespace&apos;s row). Cross-domain uses: who uses whom above the base; import rows count pairs of packages by production and by test code, unregistered the production pairs the used domain&apos;s contract does not name; event rows count the event types one domain publishes that the other consumes. Package users: for each Go package, the packages that use it by production imports, test imports and events (event stays empty while the bus registry names components, not packages).</p>
+        <p className="m-0">Four lights per domain, dots in this order: alive (ready replicas of its workloads on the map), interfaces (requests and 5xx to its contract routes in the last hour, or the last day when the hour has under 20; under 20 in a day is too few to judge), boundary (imports against the tiers in or out of it), fresh (the table and the cluster were scanned in the last three rounds). Overall is the worst light. Hollow is unknown: not measured, never counted as good. Map coverage: for every repository, the platform database and the cluster, total (counted from the tree) = on map (a row covers it) + off map (in the pool of what the map cannot perceive); a gap that is not 0 means the scan missed something and turns every fresh light bad. A tenant&apos;s repository is one entry: its inside is not looked at this round. Rows covering nothing: rows of the place&apos;s table whose directory, file, workload or table is no longer there (removed but still registered). A place opens to its off-map entries (and, for the cluster and the database, how many are on the map only by a whole namespace&apos;s row). Cross-domain uses: who uses whom above the base; import rows count pairs of packages by production and by test code, unregistered the production pairs the used domain&apos;s contract does not name; event rows count the event types one domain publishes that the other consumes. Package users: for each Go package, the packages that use it by production imports, test imports and events (event stays empty while the bus registry names components, not packages).</p>
       </details>
     </section>
   )

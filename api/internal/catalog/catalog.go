@@ -335,6 +335,51 @@ type Pool struct {
 	// one covered only by a whole namespace's (schema's) row (2026-11-20: 90
 	// of 107 workloads were).
 	Covered []Covered `json:"covered,omitempty"`
+	// StaleRows are the table's rows that cover nothing in the tree: a
+	// package row whose directory has no file, a group or path row no file
+	// sits under, a workload or table row with nothing in it (2026-11-21:
+	// what was removed but is still registered; the map saw what was added
+	// and not what was taken away). Empty for a repository with no table.
+	StaleRows []string `json:"stale_rows"`
+}
+
+// staleRows is every row of t that covers no file.
+func staleRows(t Table, files []string) []string {
+	dirs, prefixes := map[string]bool{}, map[string]bool{}
+	for _, f := range files {
+		f = strings.Trim(path.Clean(f), "/")
+		dirs[path.Dir(f)] = true
+		for d := f; ; {
+			prefixes[d] = true
+			i := strings.LastIndex(d, "/")
+			if i < 0 {
+				break
+			}
+			d = d[:i]
+		}
+	}
+	rootFile := false
+	for _, f := range files {
+		if !strings.Contains(strings.Trim(f, "/"), "/") {
+			rootFile = true
+			break
+		}
+	}
+	out := []string{}
+	for p := range t.Packages {
+		if !dirs[p] {
+			out = append(out, p)
+		}
+	}
+	for _, rows := range [][]string{t.Groups, t.Paths} {
+		for _, r := range rows {
+			if (r == "." && !rootFile) || (r != "." && !prefixes[r]) {
+				out = append(out, r)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Covered is one workload on the map.

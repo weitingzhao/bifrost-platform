@@ -164,6 +164,8 @@ type RepoCount struct {
 	OffMap   int    `json:"off_map"`
 	Gap      int    `json:"gap"`
 	Entries  int    `json:"entries"`
+	// StaleRows counts the rows that cover nothing (Pool.StaleRows).
+	StaleRows int `json:"stale_rows"`
 }
 
 // keptRepos is the repositories the last round scanned.
@@ -187,7 +189,7 @@ func (s *Scanner) inventory(tableRepo string) ([]RepoCount, map[string]int) {
 			continue
 		}
 		out = append(out, RepoCount{Repo: r, Commit: p.Commit, Measured: p.Measured, Whole: p.Whole,
-			Total: p.Total, OnMap: p.OnMap, OffMap: p.OffMap, Gap: p.Gap, Entries: len(p.Entries)})
+			Total: p.Total, OnMap: p.OnMap, OffMap: p.OffMap, Gap: p.Gap, Entries: len(p.Entries), StaleRows: len(p.StaleRows)})
 		for _, e := range p.Entries {
 			d := "unclaimed"
 			if e.Review != nil && e.Review.Verdict == VerdictClaim && e.Review.Domain != "" {

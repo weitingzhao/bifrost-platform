@@ -292,3 +292,25 @@ func TestRunScansWhatTheListingNames(t *testing.T) {
 		t.Fatalf("scanned %v, want a and b from the listing", got)
 	}
 }
+
+// 2026-11-21, the Owner asked how the map knows a thing was removed: it saw
+// additions (the pool) but a row whose thing was deleted stayed registered,
+// unseen. The control: a row that covers a file is not stale.
+func TestARowThatCoversNothingIsStale(t *testing.T) {
+	table := Table{Packages: map[string]bool{"api/internal/a": true, "api/internal/gone": true},
+		Groups: []string{"console/src/live", "console/src/old"}, Paths: []string{"scripts", "docs", "."}, Domains: map[string][]string{}}
+	files := []string{"api/internal/a/a.go", "api/internal/gone/sub/x.go", "console/src/live/p.tsx", "scripts/s.sh", "go.mod"}
+	got := staleRows(table, files)
+	want := []string{"api/internal/gone", "console/src/old", "docs"}
+	if len(got) != len(want) {
+		t.Fatalf("stale %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("stale %v, want %v", got, want)
+		}
+	}
+	if s := staleRows(table, []string{"api/internal/a/a.go"}); len(s) != 6 {
+		t.Errorf("with no root file the root row is stale too: %v", s)
+	}
+}

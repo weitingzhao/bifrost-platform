@@ -48,6 +48,8 @@ export type RepoCount = {
   off_map: number
   gap: number
   entries: number
+  /** Rows of the table that cover nothing (absent from an older platform). */
+  stale_rows?: number
 }
 
 export type DomainStatusInventory = {
@@ -109,6 +111,7 @@ export type PoolResponse = {
   note?: string
   entries: PoolEntry[]
   covered?: { path: string; by: string; by_namespace?: boolean }[]
+  stale_rows?: string[]
 }
 
 export async function fetchPool(repo: string): Promise<PoolResponse> {
