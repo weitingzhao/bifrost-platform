@@ -2,8 +2,6 @@ package approvalrules
 
 import (
 	"testing"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/ruleapprove"
 )
 
 // Origin: cards #575 and #576 (2026-11-15): one session asked the same
@@ -37,12 +35,12 @@ func TestApprovalOpenKeyNamesTheSubjectOfAnExecutionOrReleaseCard(t *testing.T) 
 // One open agentrt_rule_approve request per rule, whatever version it
 // names; landing grants keep their own key.
 func TestRuleApproveOpenKey(t *testing.T) {
-	a := OpenKey(ruleapprove.Action, map[string]any{"rule_id": "concurrency", "rule_version": 2})
-	b := OpenKey(ruleapprove.Action, map[string]any{"rule_id": "concurrency", "rule_version": 3})
+	a := OpenKey(RuleApproveAction, map[string]any{"rule_id": "concurrency", "rule_version": 2})
+	b := OpenKey(RuleApproveAction, map[string]any{"rule_id": "concurrency", "rule_version": 3})
 	if a == "" || a != b {
 		t.Fatalf("keys %q and %q", a, b)
 	}
-	if c := OpenKey(ruleapprove.Action, map[string]any{"rule_id": "budget:dev"}); c == a {
+	if c := OpenKey(RuleApproveAction, map[string]any{"rule_id": "budget:dev"}); c == a {
 		t.Fatal("two rules share a key")
 	}
 	if k := OpenKey("mark_missions_no_merge", map[string]any{"rule_id": "concurrency"}); k != "" {

@@ -1928,19 +1928,12 @@
       "status": "assigned",
       "basis": "2026-11-18, moved out of api/internal/server unchanged (release_table_wire.go; decoupling item 5): the release records' table, the row and its release.deploy.finished announcement in one transaction, and the reads the recorder takes. Imports releases (delivery) and foundation only (eventlog). releases itself is unchanged. 2026-11-20: bus/releases (foundation) moved here (its only user): the release.deploy.finished announcement (its body, checks and vocabulary, appended in the record's transaction) is announce.go, unchanged; the event was already delivery's in the register."
     },
-    "api/internal/ruleapprove": {
-      "domains": [
-        "approvals"
-      ],
-      "status": "assigned",
-      "basis": "2026-11-18, moved out of api/internal/server unchanged (agentrt_ruleapprove.go; decoupling item 5): the action agentrt_rule_approve: the request bound to PROD, the create check, the card's view of a draft, the executor and the one-open-card key. Imports owner (actions, approvalhome) and foundation (canon) only; the runtime's store and the approval's read-back are handed in by the server, which keeps grantApproval."
-    },
     "api/internal/approvalrules": {
       "domains": [
         "approvals"
       ],
       "status": "assigned",
-      "basis": "2026-11-18, moved out of api/internal/server unchanged (approval_record.go, covered_request.go; decoupling item 5): the read-back of the approval an execution claims, the one-open-request key, and running a request the signed release policy covers. Imports owner (actions, approvals, approvalhome, ruleapprove) only; the server hands it the approval service and the body reader."
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (approval_record.go, covered_request.go; decoupling item 5): the read-back of the approval an execution claims, the one-open-request key, and running a request the signed release policy covers. Imports owner (actions, approvals, approvalhome, ruleapprove) only; the server hands it the approval service and the body reader. 2026-11-22 law 79 (Approvals at most 16 buildings): ruleapprove merged in (ruleapprove.go), its names prefixed RuleApprove; same owner domain."
     },
     "api/internal/agentrt/windownotice": {
       "domains": [
