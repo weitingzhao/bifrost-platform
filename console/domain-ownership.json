@@ -12,7 +12,8 @@
     "coordination": {"kind": "comms-tower", "page": "#bus"},
     "crew": {"kind": "dormitory", "page": "#work?section=activity"},
     "triage": {"kind": "court"},
-    "station": {"kind": "workshop", "page": "#work?section=activity"}
+    "station": {"kind": "workshop", "page": "#work?section=activity"},
+    "audit": {"kind": "measuring-office"}
   },
   "frontend": {
     "root": "console/src",

@@ -50,12 +50,13 @@ describe('the districts are the domains', () => {
 // the lines claim theirs (the Console's ownership table, facilities). These pin that a claimed kind becomes
 // the district's style, an unclaimed one stays plain, and a district is solid only when the map serves its lights.
 describe('a district stands as the building its line claimed', () => {
+  // 2026-11-21: audit claimed measuring-office, so the unclaimed case uses an id no line can claim.
   it('the claimed kind is its style; none claimed, no style', () => {
-    const t = domainTree({ version: 1, domains: [{ id: 'delivery', overall: 'good' }, { id: 'audit', overall: '' }] } as unknown as MapStatus, null)
-    const [delivery, audit] = t.children
+    const t = domainTree({ version: 1, domains: [{ id: 'delivery', overall: 'good' }, { id: 'no-such-domain', overall: '' }] } as unknown as MapStatus, null)
+    const [delivery, unclaimed] = t.children
     expect(delivery.style).toBe(styleOf('delivery'))
     expect(delivery.style).toBeTruthy()
-    expect(audit.style).toBeUndefined()
+    expect(unclaimed.style).toBeUndefined()
   })
   it('read when the map serves a light, a ghost when it does not', () => {
     const t = domainTree({ version: 1, domains: [{ id: 'delivery', overall: 'problem' }, { id: 'plan', overall: 'unknown' }] } as unknown as MapStatus, null)
