@@ -1,10 +1,11 @@
-package actions_test
+//bifrost:owner approvals
+
+package server_test
 
 import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -23,54 +24,21 @@ func TestWriteRoutesAreCataloguedOrExempt(t *testing.T) {
 	if !ok {
 		t.Fatal("Router() is not a chi.Routes")
 	}
-	seen := map[string]bool{}
-	var walked int
+	var mounted []actions.MountedRoute
 	err := chi.Walk(routes, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
-		if !mutating(method) {
-			return nil
-		}
-		walked++
-		key := routeKey(method, route)
-		seen[key] = true
-		if actions.Covers(method, route) || actions.ExemptionReason(method, route) != "" {
-			return nil
-		}
-		t.Errorf("write route %s is neither in the action catalog nor on the exemption list", key)
+		mounted = append(mounted, actions.MountedRoute{Method: method, Pattern: route})
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if walked < 40 {
-		t.Fatalf("walked only %d mutating routes — the walk is not seeing the router", walked)
+	problems, writes := actions.CheckCovered(mounted)
+	if writes < 40 {
+		t.Fatalf("walked only %d mutating routes: the walk is not seeing the router", writes)
 	}
-	for key := range actions.Exemptions() {
-		if !seen[key] {
-			t.Errorf("exemption %s is not a live route — delete it or fix the pattern", key)
-		}
+	for _, p := range problems {
+		t.Error(p)
 	}
-	for _, a := range actions.Catalog() {
-		if a.Method == "" || a.Pattern == "" {
-			continue
-		}
-		if !seen[routeKey(a.Method, a.Pattern)] {
-			t.Errorf("catalog action %s route %s %s is not mounted", a.ID, a.Method, a.Pattern)
-		}
-	}
-}
-
-func mutating(method string) bool {
-	switch method {
-	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-		return true
-	}
-	return false
-}
-
-func routeKey(method, route string) string {
-	route = strings.TrimSuffix(route, "/")
-	route = strings.ReplaceAll(route, "{*}", "*")
-	return strings.ToUpper(method) + " " + route
 }
 
 func newRouteServer(t *testing.T) *server.Server {

@@ -11,8 +11,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/server"
@@ -37,7 +39,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	defer srv.Close()
-	httpServer := &http.Server{Addr: cfg.Listen, Handler: srv.Router()}
+	handler := srv.Router()
+	logRouteCoverage(handler)
+	httpServer := &http.Server{Addr: cfg.Listen, Handler: handler}
 	done := make(chan struct{})
 	safego.Go("server.shutdown", func() {
 		defer close(done)
@@ -71,5 +75,24 @@ func loadDotEnv() {
 		if err := godotenv.Load(p); err == nil {
 			return
 		}
+	}
+}
+
+// logRouteCoverage logs each write route the action catalog and the exemption
+// list do not account for (actions.CheckCovered). The route ratchet test fails
+// on the same lines; this makes a drift visible in the running process too.
+func logRouteCoverage(h http.Handler) {
+	routes, ok := h.(chi.Routes)
+	if !ok {
+		return
+	}
+	var mounted []actions.MountedRoute
+	_ = chi.Walk(routes, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		mounted = append(mounted, actions.MountedRoute{Method: method, Pattern: route})
+		return nil
+	})
+	problems, _ := actions.CheckCovered(mounted)
+	for _, p := range problems {
+		log.Printf("route coverage: %s", p)
 	}
 }
