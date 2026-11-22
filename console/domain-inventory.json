@@ -1190,6 +1190,7 @@
       "files": [
         "console/src/components/lineage/BranchesPanel.tsx",
         "console/src/components/lineage/LineageGraph.tsx",
+        "console/src/components/lineage/__tests__/LineageGraph.kinds.test.tsx",
         "console/src/components/lineage/__tests__/threadFilter.test.ts",
         "console/src/components/lineage/threadFilter.ts"
       ],
@@ -1201,6 +1202,7 @@
       ],
       "external_imports": [
         "@bifrost/ui",
+        "@testing-library/react",
         "react",
         "vitest"
       ],

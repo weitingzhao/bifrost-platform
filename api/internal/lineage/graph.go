@@ -27,7 +27,21 @@ type GraphBranch struct {
 	// ForkSHA is the parent of the branch's oldest commit in the window: the
 	// default-branch commit it forked from when that is in the window too.
 	ForkSHA string `json:"fork_sha,omitempty"`
+	// Status: "open" (a change on it reached the default branch in no form) or
+	// "superseded" (every such change is an agentd attempt for a task that
+	// another attempt landed on the default branch: an orphan, not pending work).
+	Status string `json:"status"`
 }
+
+// Branch kinds counted per repo (GraphBranchCounts). Origin: 2026-11-22, the
+// Owner (relayed by the CI line): the graph must show what is true, with work
+// merged correctly in one class and orphans or unmerged work in another.
+const (
+	BranchOpen       = "open"
+	BranchSuperseded = "superseded"
+	BranchLanded     = "landed" // every change on the default branch in another form (not drawn)
+	BranchEven       = "even"   // nothing the default branch lacks: the name is all that is left (not drawn)
+)
 
 // GraphMarker is a recorded release that built a default-branch commit inside the window.
 type GraphMarker struct {
@@ -46,6 +60,9 @@ type RepoGraph struct {
 	Main     []GraphCommit `json:"main"`
 	Branches []GraphBranch `json:"branches"`
 	Markers  []GraphMarker `json:"markers"`
+	// BranchCounts: the branches read in the window by kind (open, superseded,
+	// landed, even). Only open and superseded ones are lanes in Branches.
+	BranchCounts map[string]int `json:"branch_counts"`
 }
 
 // buildGraph lays out every scanned repo: the whole default branch in the window
@@ -55,11 +72,15 @@ func buildGraph(scans []repoScan, rels []Release) []RepoGraph {
 	out := make([]RepoGraph, 0, len(scans))
 	for _, sc := range scans {
 		g := RepoGraph{Repo: sc.repo, Default: sc.def, Main: make([]GraphCommit, 0, len(sc.main)),
-			Branches: []GraphBranch{}, Markers: []GraphMarker{}}
+			Branches: []GraphBranch{}, Markers: []GraphMarker{}, BranchCounts: map[string]int{}}
 		onMain := make(map[string]bool, len(sc.main))
+		mainTasks := map[string]bool{}
 		for _, gc := range sc.main {
 			onMain[gc.SHA] = true
 			subject, t := parseMessage(gc.Msg)
+			if t.task != "" {
+				mainTasks[t.task] = true
+			}
 			g.Main = append(g.Main, GraphCommit{SHA: gc.SHA, Subject: subject, At: gc.At, Session: t.session,
 				ChangeID: t.changeID, Task: t.task, Agent: t.session == "" && t.agent})
 		}
@@ -71,21 +92,34 @@ func buildGraph(scans []repoScan, rels []Release) []RepoGraph {
 		sort.Strings(names)
 		for _, b := range names {
 			var cs []GraphCommit
-			open := false
+			open, superseded := false, true
 			for _, gc := range sc.branches[b] {
 				subject, t := parseMessage(gc.Msg)
 				dup, landedSHA, landedBy := mi.branchLanding(subject, t.changeID)
 				if dup {
 					landedBy = "change_id" // same Change-Id trailer on the default branch
 				}
-				if landedBy == "" {
+				if landedBy == "" && !dup {
 					open = true
+					// an attempt whose task another attempt landed is an orphan
+					superseded = superseded && t.task != "" && mainTasks[t.task]
 				}
 				cs = append(cs, GraphCommit{SHA: gc.SHA, Subject: subject, At: gc.At, Session: t.session,
 					ChangeID: t.changeID, Task: t.task, Agent: t.session == "" && t.agent, LandedSHA: landedSHA, LandedBy: landedBy})
 			}
-			if open { // a branch whose every change landed is a leftover, not a lane
-				gb := GraphBranch{Name: b, Commits: cs}
+			switch {
+			case len(cs) == 0:
+				g.BranchCounts[BranchEven]++
+			case !open: // a branch whose every change landed is a leftover, not a lane
+				g.BranchCounts[BranchLanded]++
+			}
+			if open {
+				status := BranchOpen
+				if superseded {
+					status = BranchSuperseded
+				}
+				g.BranchCounts[status]++
+				gb := GraphBranch{Name: b, Commits: cs, Status: status}
 				if raw := sc.branches[b]; len(raw) > 0 && len(raw[len(raw)-1].Parents) > 0 {
 					gb.ForkSHA = raw[len(raw)-1].Parents[0]
 				}

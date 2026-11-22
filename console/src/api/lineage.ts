@@ -112,10 +112,16 @@ export type LineageRepoGraph = {
   main: LineageGraphCommit[]
   /** branches with at least one change not on the default branch */
   /** fork_sha: parent of the branch's oldest commit in the window (where it left the default branch) */
-  branches: { name: string; commits: LineageGraphCommit[]; fork_sha?: string }[]
+  /** status: open = a change on it is on the default branch in no form; superseded = every such change is an agentd
+   *  attempt for a task another attempt landed (an orphan). Absent from an older server: treat as open. */
+  branches: { name: string; commits: LineageGraphCommit[]; fork_sha?: string; status?: LineageBranchKind }[]
   /** releases that built a default-branch commit in the window, newest first */
   markers: LineageGraphMarker[]
+  /** branches read in the window by kind; landed (on main in another form) and even (nothing ahead) are not lanes */
+  branch_counts?: Partial<Record<LineageBranchKind | 'landed' | 'even', number>>
 }
+
+export type LineageBranchKind = 'open' | 'superseded'
 
 export type LineageResponse = {
   generated_at: string

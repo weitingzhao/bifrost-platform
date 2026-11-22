@@ -108,7 +108,31 @@ function releaseFrontier(g: LineageRepoGraph) {
 }
 
 export function LineageGraph({ graph, threads, showHelp }: LineageGraphProps) {
-  const active = useMemo(() => graph.filter(g => g.main.length > 0 || g.branches.length > 0), [graph])
+  // superseded attempts (an agentd attempt whose task another attempt landed) are orphans, not pending work:
+  // folded out of the lanes unless asked for (Owner 2026-11-22: merged work and orphans in separate classes)
+  const [showSuperseded, setShowSuperseded] = useState(false)
+  const kinds = useMemo(() => {
+    const c = { open: 0, superseded: 0, landed: 0, even: 0 }
+    for (const g of graph) {
+      const bc = g.branch_counts
+      if (bc == null) {
+        c.open += g.branches.length
+        continue
+      }
+      c.open += bc.open ?? 0
+      c.superseded += bc.superseded ?? 0
+      c.landed += bc.landed ?? 0
+      c.even += bc.even ?? 0
+    }
+    return c
+  }, [graph])
+  const active = useMemo(
+    () =>
+      graph
+        .map(g => (showSuperseded ? g : { ...g, branches: g.branches.filter(b => b.status !== 'superseded') }))
+        .filter(g => g.main.length > 0 || g.branches.length > 0),
+    [graph, showSuperseded],
+  )
   const [repoSel, setRepoSel] = useState<Set<string> | null>(null)
   const [threadSel, setThreadSel] = useState<Set<string> | null>(null)
   const [view, setView] = useState<LineageView>('time')
@@ -343,6 +367,27 @@ export function LineageGraph({ graph, threads, showHelp }: LineageGraphProps) {
           <input type="checkbox" checked={allReleases} onChange={e => setAllReleases(e.target.checked)} />
           Every release
         </label>
+      </div>
+
+      {/* branch kinds: what is drawn as a lane and what is not */}
+      <div className="flex flex-wrap items-center gap-2 text-[var(--text-dense-caption)] text-muted-foreground" aria-label="Branch kinds">
+        <span className="w-[52px] text-[var(--text-dense-meta)]">Branches</span>
+        <span title="A change on it is on main in no form: drawn as a lane">
+          Unlanded <span className="font-mono-tabular text-warning">{kinds.open}</span>
+        </span>
+        <label
+          className="inline-flex items-center gap-1"
+          title="Agent attempts whose task another attempt already landed on main: orphans, not pending work"
+        >
+          <input type="checkbox" checked={showSuperseded} onChange={e => setShowSuperseded(e.target.checked)} />
+          Superseded attempts <span className="font-mono-tabular">{kinds.superseded}</span>
+        </label>
+        <span title="Every change already on main in another form (rebased, re-versioned, squashed): not drawn">
+          Leftovers <span className="font-mono-tabular">{kinds.landed}</span>
+        </span>
+        <span title="Nothing ahead of main, only the name is left: not drawn">
+          Merged <span className="font-mono-tabular">{kinds.even}</span>
+        </span>
       </div>
 
       {/* repo filter */}
