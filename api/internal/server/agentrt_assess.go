@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/assessmentreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentview"
 )
 

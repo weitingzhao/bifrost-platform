@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
+	"github.com/weitingzhao/bifrost-platform/api/internal/owner/approvalhome"
 )
 
 func (s *Service) Create(ctx context.Context, session, principal, role string, raw []byte) Result {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
-	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/assessmentreadings"
 	ownerassembly "github.com/weitingzhao/bifrost-platform/api/internal/owner/assembly"
 )
 

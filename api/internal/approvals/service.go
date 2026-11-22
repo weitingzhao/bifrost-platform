@@ -17,7 +17,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
+	"github.com/weitingzhao/bifrost-platform/api/internal/owner/approvalhome"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 )
 

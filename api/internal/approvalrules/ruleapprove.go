@@ -19,7 +19,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
-	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
+	"github.com/weitingzhao/bifrost-platform/api/internal/owner/approvalhome"
 )
 
 // RuleApproveAction is the action's catalog id.

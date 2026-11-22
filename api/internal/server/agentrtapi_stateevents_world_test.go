@@ -26,7 +26,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/storekit"
-	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/assessmentreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
 

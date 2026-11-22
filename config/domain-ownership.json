@@ -995,12 +995,12 @@
       "status": "assigned",
       "basis": "2026-11-18 cockpit line: the Owner's own arrangement of the Ops home; the page itself is presentation"
     },
-    "api/internal/approvalhome": {
+    "api/internal/owner/approvalhome": {
       "domains": [
         "approvals"
       ],
       "status": "assigned",
-      "basis": "Owner-domain charter and read-model extraction"
+      "basis": "Owner-domain charter and read-model extraction 2026-11-22 law 79: moved from api/internal/approvalhome unchanged."
     },
     "api/internal/approvalreadings": {
       "domains": [
@@ -1191,12 +1191,12 @@
       "status": "assigned",
       "basis": "2026-11-15 source and caller audit: localpath.go and workspace.go shared path masking and workspace reference parsing; protections unchanged"
     },
-    "api/internal/assessmentreadings": {
+    "api/internal/agentrt/assessmentreadings": {
       "domains": [
         "approvals"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 Owner charter card and approval read scope: complete recorded advice stream query; no assessment execution, validity judgment, authorization or writes."
+      "basis": "2026-11-16 Owner charter card and approval read scope: complete recorded advice stream query; no assessment execution, validity judgment, authorization or writes. 2026-11-22 law 79: moved from api/internal/assessmentreadings unchanged."
     },
     "api/internal/assessmentview": {
       "domains": [

@@ -10,7 +10,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore" // declares the plan event vocabulary
-	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/assessmentreadings"
 	"testing"
 )
 
