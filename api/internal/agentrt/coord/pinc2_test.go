@@ -34,3 +34,25 @@ func TestEnsureSeats(t *testing.T) {
 		t.Fatal("a seat outside RegisterableSeats was registered")
 	}
 }
+
+// The 2026-11-22 resident pilot needs independent mailboxes. Installing a
+// platform image without the STG seat tokens must not register those seats.
+func TestEnsure4090Seats(t *testing.T) {
+	t.Parallel()
+	w := newWorld(t)
+	station := "seat:stg-4090-station"
+	pi := "seat:stg-4090-pi"
+	audit := "seat:stg-4090-audit"
+	want := []string{station, pi, audit}
+	done, err := coord.EnsureSeats(ctx, w.rt, []string{coordinatorSeat})
+	ok(t, err)
+	if !slices.Equal(done, []string{coordinatorSeat}) || w.count(t,
+		`SELECT count(*) FROM agentrt.actor WHERE actor_id LIKE 'seat:stg-4090-%'`) != 0 {
+		t.Fatalf("pilot seats must not register without their own tokens: %v", done)
+	}
+	done, err = coord.EnsureSeats(ctx, w.rt, append([]string{"seat:stg-4090-unused"}, want...))
+	ok(t, err)
+	if !slices.Equal(done, want) {
+		t.Fatalf("registered %v, want %v", done, want)
+	}
+}

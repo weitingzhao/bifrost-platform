@@ -21,7 +21,14 @@ import (
 // the Owner adds it, as he adds a host's token): no route writes a seat, and
 // a seat no token names stays unregistered. Registering it grants nothing by
 // itself: a pin needs the Owner's signed envelope naming the seat (pin.go).
-var RegisterableSeats = []string{"seat:coordinator"}
+// The 4090 pilot seats are configured only in STG. They use separate
+// reporter credentials for dispatch, execution receipts, and audit replies.
+var RegisterableSeats = []string{
+	"seat:coordinator",
+	"seat:stg-4090-station",
+	"seat:stg-4090-pi",
+	"seat:stg-4090-audit",
+}
 
 // EnsureSeats registers each seat of RegisterableSeats that configured
 // names (the seat tokens the platform loaded) and that is not registered
