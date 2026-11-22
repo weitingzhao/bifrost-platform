@@ -448,3 +448,114 @@ func (s *Scanner) ruleCheck(ctx context.Context, loaded func(context.Context) ([
 	c.Measured, c.Registered, c.Live = true, len(k.Groups), len(live)
 	return c
 }
+
+// A domain's self-description (law 77, 2026-11-22; format the map line's
+// default with Station): a YAML file beside the code it describes, named
+// by the domain row's "self" ("<repo>:<path>"), checked against that code
+// by the domain's own test. Top level: about (one line), bring (what to
+// bring to use it), refusals (what it says when it refuses, and what to
+// do), must_answer (what it must answer when asked); other sections are
+// kept as written. "What I am, what I open, how I am" come from the map.
+
+// keptSelf is "self-<domain>".
+func keptSelf(domain string) string { return "self-" + domain }
+
+// SelfDescription is one domain's self-description as kept.
+type SelfDescription struct {
+	Source string         `json:"source"`
+	Commit string         `json:"commit"`
+	Doc    map[string]any `json:"doc"`
+	Note   string         `json:"note,omitempty"`
+}
+
+// keepSelf keeps the self-descriptions whose source is in repo.
+func (s *Scanner) keepSelf(repo string, t Tree) {
+	k, ok := s.keptSections()
+	if !ok {
+		return
+	}
+	var rows []struct {
+		ID   string `json:"id"`
+		Self string `json:"self"`
+	}
+	if json.Unmarshal(k.Domains, &rows) != nil {
+		return
+	}
+	for _, r := range rows {
+		srcRepo, file, ok := strings.Cut(r.Self, ":")
+		if !ok || srcRepo != repo || file == "" {
+			continue
+		}
+		d := SelfDescription{Source: r.Self, Commit: t.Commit}
+		raw, found, err := t.Read(file)
+		switch {
+		case err != nil || !found:
+			d.Note = "the file the row names is not in " + repo + " at " + t.Commit
+		default:
+			if err := yaml.Unmarshal(raw, &d.Doc); err != nil {
+				d.Note = "the file does not parse: " + err.Error()
+				d.Doc = nil
+			}
+		}
+		if out, err := json.Marshal(d); err == nil {
+			if err := s.kept().Write(keptSelf(r.ID), out); err != nil {
+				slog.Warn("catalog: keep self-description", "domain", r.ID, "err", err)
+			}
+		}
+	}
+}
+
+// selfOf is the kept self-description of a domain (nil for none).
+func (s *Scanner) selfOf(domain string) *SelfDescription {
+	raw, err := s.kept().Read(keptSelf(domain))
+	if err != nil || raw == nil {
+		return nil
+	}
+	var d SelfDescription
+	if json.Unmarshal(raw, &d) != nil {
+		return nil
+	}
+	return &d
+}
+
+// selfTasks turns a self-description's bring, refusals and must_answer
+// into tasks someone can find by words.
+func selfTasks(d *SelfDescription) []Task {
+	if d == nil || d.Doc == nil {
+		return nil
+	}
+	var out []Task
+	str := func(v any) string { s, _ := v.(string); return s }
+	if items, ok := d.Doc["bring"].([]any); ok {
+		for _, it := range items {
+			if m, ok := it.(map[string]any); ok {
+				out = append(out, Task{Task: str(m["what"]), Use: nonEmpty(str(m["command"]), str(m["get_from"])), Note: "bring " + str(m["id"])})
+			}
+		}
+	}
+	if items, ok := d.Doc["refusals"].([]any); ok {
+		for _, it := range items {
+			if m, ok := it.(map[string]any); ok {
+				out = append(out, Task{Task: str(m["match"]), Use: nonEmpty(str(m["do"])), Note: "refusal, " + str(m["kind"])})
+			}
+		}
+	}
+	if items, ok := d.Doc["must_answer"].([]any); ok {
+		for _, it := range items {
+			if q := str(it); q != "" {
+				out = append(out, Task{Task: q, Use: []string{}, Note: "must answer"})
+			}
+		}
+	}
+	return out
+}
+
+func nonEmpty(v ...string) []string {
+	out := []string{}
+	for _, s := range v {
+		if strings.TrimSpace(s) != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}

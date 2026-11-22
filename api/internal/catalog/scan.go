@@ -215,6 +215,7 @@ func (s *Scanner) ScanOnce(ctx context.Context, repo string) (Pool, error) {
 			if repo != ClusterRepo && repo != DatabaseRepo {
 				s.keepSeats(repo, t)
 				s.keepRules(repo, t)
+				s.keepSelf(repo, t)
 			}
 		}
 	}

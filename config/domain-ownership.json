@@ -205,6 +205,7 @@
     },
     {
       "id": "verification",
+      "self": "bifrost-trade-infra:scripts/landing/admission.yaml",
       "name": "Merge & verification",
       "tier": 2,
       "source": "domains/3-4-verify-release-ci/charter.md",

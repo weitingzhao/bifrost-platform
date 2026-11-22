@@ -46,6 +46,9 @@ type Domain struct {
 	// an MCP tool, an action). Written by the domain in its table row.
 	About string `json:"about,omitempty"`
 	Tasks []Task `json:"tasks"`
+	// Self is the domain's self-description file as the scan kept it (nil
+	// when its row names none).
+	Self *SelfDescription `json:"self,omitempty"`
 	// Contract is the domain's contracts block in the table, as written.
 	Contract json.RawMessage `json:"contract"`
 	Status   *DomainStatus   `json:"status,omitempty"`
@@ -88,6 +91,11 @@ func (s *Scanner) TasksFor(q string) (matches []TaskMatch, silent []string) {
 	_ = json.Unmarshal(k.Domains, &rows)
 	words := strings.Fields(strings.ToLower(q))
 	for _, d := range rows {
+		self := s.selfOf(d.ID)
+		if d.About == "" && self != nil && self.Doc != nil {
+			d.About, _ = self.Doc["about"].(string)
+		}
+		d.Tasks = append(d.Tasks, selfTasks(self)...)
 		if len(d.Tasks) == 0 {
 			silent = append(silent, d.ID)
 		}
@@ -234,6 +242,9 @@ func (s *Scanner) DomainOf(id string) (Domain, bool) {
 			found, out.Contract, out.About = true, d.Contracts, d.About
 			if d.Tasks != nil {
 				out.Tasks = d.Tasks
+			}
+			if out.Self = s.selfOf(id); out.Self != nil && out.About == "" && out.Self.Doc != nil {
+				out.About, _ = out.Self.Doc["about"].(string)
 			}
 		}
 	}

@@ -139,3 +139,36 @@ func TestACommandJoinsTheBuildingOfItsPackage(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+// 2026-11-22, law 77, CI first: CI wrote its self-description beside the
+// landing script (bring, refusals, must_answer) and the map reads the file
+// the domain row names each round; its lines are found by task. The
+// control: a row naming a file that is not there keeps a note, not a
+// silent empty description.
+func TestSelfDescriptionIsReadFromTheFileTheRowNames(t *testing.T) {
+	s := &Scanner{Kept: memKept{}}
+	rows, _ := json.Marshal(keptRows{Repo: "platform", Commit: "c", Domains: []byte(`[
+  {"id":"verification","self":"infra:scripts/landing/admission.yaml"},
+  {"id":"plan","self":"infra:nowhere.yaml"}]`)})
+	_ = s.kept().Write(keptWorkloads, rows)
+	doc := "about: merge and verification\nbring:\n  - {id: trailers, what: every commit carries four trailers, command: git commit -F msg}\nrefusals:\n  - {match: \"refused: no CI run of\", kind: you, do: see why CI is red}\nmust_answer:\n  - why a commit did not land\n"
+	s.keepSelf("infra", Tree{Commit: "i1", Read: func(p string) ([]byte, bool, error) {
+		if p == "scripts/landing/admission.yaml" {
+			return []byte(doc), true, nil
+		}
+		return nil, false, nil
+	}})
+	d, ok := s.DomainOf("verification")
+	if !ok || d.Self == nil || d.About != "merge and verification" || d.Self.Commit != "i1" {
+		t.Fatalf("%+v", d.Self)
+	}
+	if m, _ := s.TasksFor("did not land"); len(m) != 1 || m[0].Note != "must answer" {
+		t.Errorf("must_answer: %+v", m)
+	}
+	if m, _ := s.TasksFor("trailers"); len(m) != 1 || m[0].Use[0] != "git commit -F msg" {
+		t.Errorf("bring: %+v", m)
+	}
+	if p, _ := s.DomainOf("plan"); p.Self == nil || p.Self.Note == "" {
+		t.Errorf("control: %+v", p.Self)
+	}
+}
