@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,7 +38,9 @@ type WatchSpec struct {
 var braceField = regexp.MustCompile(`\{([^}]*)\}`)
 
 // fieldAt reads a dot path from an object; a segment may pick a list item by
-// [key=value]. A bool or a number is read as its text; a missing field is "".
+// [key=value] or by its position, [0] (2026-11-21: a workload's version is
+// its first container's image, spec.template.spec.containers[0].image). A
+// bool or a number is read as its text; a missing field is "".
 func fieldAt(obj map[string]any, path string) (string, bool) {
 	var cur any = obj
 	for _, seg := range strings.Split(path, ".") {
@@ -54,11 +57,18 @@ func fieldAt(obj map[string]any, path string) (string, bool) {
 			return "", false
 		}
 		if sel != "" {
-			k, v, _ := strings.Cut(sel, "=")
 			list, ok := cur.([]any)
 			if !ok {
 				return "", false
 			}
+			if n, err := strconv.Atoi(sel); err == nil {
+				if n < 0 || n >= len(list) {
+					return "", false
+				}
+				cur = list[n]
+				continue
+			}
+			k, v, _ := strings.Cut(sel, "=")
 			cur = nil
 			for _, it := range list {
 				if im, ok := it.(map[string]any); ok && fmt.Sprint(im[k]) == v {
@@ -81,6 +91,9 @@ func fieldAt(obj map[string]any, path string) (string, bool) {
 	}
 }
 
+// None is a state field's value when the object leaves the field out or empty.
+const None = "none"
+
 // stateOf reads an object's subject and state values by the row.
 func stateOf(w registry.Watch, obj map[string]any) (subject string, values []string) {
 	subject = braceField.ReplaceAllStringFunc(w.Subject, func(m string) string {
@@ -101,6 +114,13 @@ func stateOf(w registry.Watch, obj map[string]any) (subject string, values []str
 			raw, ok = fmt.Sprint(ok2 && raw == other), true
 		}
 		v := raw
+		if v == "" && s.Map == nil {
+			// A field the object leaves out or empty (a cluster with no primary
+			// yet, no successful backup yet, a pod template with no image) is
+			// said as none: the ledger refuses an empty string, and the state
+			// would otherwise never be written (2026-11-21).
+			v = None
+		}
 		if s.Map != nil {
 			mapped, hit := s.Map[raw]
 			if !ok || !hit {

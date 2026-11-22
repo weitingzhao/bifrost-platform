@@ -39,6 +39,11 @@ watches:
         path: status.readyReplicas
         compare_to: spec.replicas
         map: {"true": ready, "*": notready}
+      # The version: the first container's image (2026-11-21, the communication
+      # line's list of what the system cannot see: a workload that changed
+      # version said nothing). A rollout is one change.
+      - name: version
+        path: spec.template.spec.containers[0].image
   - id: statefulsets
     group: apps
     version: v1
@@ -52,6 +57,8 @@ watches:
         path: status.readyReplicas
         compare_to: spec.replicas
         map: {"true": ready, "*": notready}
+      - name: version
+        path: spec.template.spec.containers[0].image
   # A DaemonSet: ready when the pods ready on the nodes equal the nodes it
   # should run on. Origin: 2026-11-21, the metrics line counted the ledger's
   # workloads against the cluster and found the 5 DaemonSets (kube-vip,
@@ -70,6 +77,8 @@ watches:
         path: status.numberReady
         compare_to: status.desiredNumberScheduled
         map: {"true": ready, "*": notready}
+      - name: version
+        path: spec.template.spec.containers[0].image
   # A CloudNativePG cluster: ready when its ready instances equal its
   # instances; primary is the pod that is primary now, so a failover is a
   # change. The platform's observer role already lists and watches

@@ -79,8 +79,10 @@ type watchFile struct {
 
 var (
 	watchIDRE = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
-	pathRE    = regexp.MustCompile(`^[a-zA-Z0-9_]+(\[[a-zA-Z0-9_]+=[^\]]+\])?(\.[a-zA-Z0-9_]+(\[[a-zA-Z0-9_]+=[^\]]+\])?)*$`)
-	braceRE   = regexp.MustCompile(`\{([^}]*)\}`)
+	// A segment may pick a list item by [key=value] or by position, [0]
+	// (2026-11-21: a workload's version is its first container's image).
+	pathRE  = regexp.MustCompile(`^[a-zA-Z0-9_]+(\[([a-zA-Z0-9_]+=[^\]]+|[0-9]+)\])?(\.[a-zA-Z0-9_]+(\[([a-zA-Z0-9_]+=[^\]]+|[0-9]+)\])?)*$`)
+	braceRE = regexp.MustCompile(`\{([^}]*)\}`)
 )
 
 // Watches reads every tenant's watch rows and checks each against that

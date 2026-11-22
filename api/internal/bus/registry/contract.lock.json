@@ -45,7 +45,7 @@
       "hash": "f0f0c1256da07945"
     },
     "cluster.workload.changed": {
-      "version": 1,
+      "version": 2,
       "hash": "3896228c84053aa7"
     },
     "data.job.finished": {

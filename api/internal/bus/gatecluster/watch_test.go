@@ -234,7 +234,7 @@ func TestADeletedObjectIsSaidGoneOnce(t *testing.T) {
 	g.sayGone(ctx, w, "cicd/affinity-assistant-1")
 	g.sayGone(ctx, w, "cicd/affinity-assistant-1")
 	evs := l.events("sts:cicd/affinity-assistant-1")
-	if len(evs) != 2 || evs[1].body["ready"] != registry.Gone || evs[1].body["change"] != registry.Gone {
+	if len(evs) != 2 || !allGone(w, evs[1].body) {
 		t.Fatalf("events %+v, want ready then gone", evs)
 	}
 	g.sayGone(ctx, w, "cicd/never-seen")
@@ -333,8 +333,8 @@ func TestABackupIsSaidFromTheClustersStatus(t *testing.T) {
 	g.init()
 	ctx := context.Background()
 	g.observeWatched(ctx, w, pg("2026-11-21T04:42:40Z", "True"))
-	g.observeWatched(ctx, w, pg("2026-11-21T04:42:40Z", "True")) // nothing new
-	g.observeWatched(ctx, w, pg("2026-11-22T04:40:00Z", "True")) // the next night's backup
+	g.observeWatched(ctx, w, pg("2026-11-21T04:42:40Z", "True"))  // nothing new
+	g.observeWatched(ctx, w, pg("2026-11-22T04:40:00Z", "True"))  // the next night's backup
 	g.observeWatched(ctx, w, pg("2026-11-22T04:40:00Z", "False")) // the one after failed
 	evs := l.events("pg:data/bifrost-postgres")
 	if len(evs) != 3 {
@@ -342,6 +342,41 @@ func TestABackupIsSaidFromTheClustersStatus(t *testing.T) {
 	}
 	if evs[0].body["backup"] != "ok" || evs[0].body["archiving"] != "ok" || evs[1].body["last_backup"] != "2026-11-22T04:40:00Z" || evs[2].body["backup"] != "failed" {
 		t.Fatalf("events %+v", evs)
+	}
+	if len(l.errs) != 0 {
+		t.Fatalf("bodies refused by the register: %v", l.errs)
+	}
+}
+
+// Origin: 2026-11-21, the communication line's list of what the system cannot
+// see: a workload that changed version said nothing (only ready and notready).
+// The version is the first container's image: a rollout is one change; a
+// field the object leaves out is said as none, never empty (the ledger refuses
+// an empty string, which would lose the whole state).
+func TestARolloutIsAVersionChange(t *testing.T) {
+	w := watchRow(t, "deployments")
+	dep := func(image string) *unstructured.Unstructured {
+		containers := []any{map[string]any{"name": "api", "image": image}, map[string]any{"name": "sidecar", "image": "envoy:1"}}
+		if image == "" {
+			containers = []any{}
+		}
+		return &unstructured.Unstructured{Object: map[string]any{
+			"metadata": map[string]any{"namespace": "bifrost-platform-prod", "name": "platform-api"},
+			"spec":     map[string]any{"replicas": int64(1), "template": map[string]any{"spec": map[string]any{"containers": containers}}},
+			"status":   map[string]any{"readyReplicas": int64(1)},
+		}}
+	}
+	l := &memLedger{}
+	g := &Gate{Ledger: l, Logf: func(string, ...any) {}}
+	g.init()
+	ctx := context.Background()
+	g.observeWatched(ctx, w, dep("registry/platform-api@sha256:aaa"))
+	g.observeWatched(ctx, w, dep("registry/platform-api@sha256:aaa"))
+	g.observeWatched(ctx, w, dep("registry/platform-api@sha256:bbb"))
+	g.observeWatched(ctx, w, dep(""))
+	evs := l.events("deploy:bifrost-platform-prod/platform-api")
+	if len(evs) != 3 || evs[0].body["version"] != "registry/platform-api@sha256:aaa" || evs[1].body["version"] != "registry/platform-api@sha256:bbb" || evs[2].body["version"] != None {
+		t.Fatalf("events %+v, want aaa, bbb, none", evs)
 	}
 	if len(l.errs) != 0 {
 		t.Fatalf("bodies refused by the register: %v", l.errs)
