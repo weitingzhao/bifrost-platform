@@ -55,6 +55,9 @@ const (
 	// hours, and 02 and 04 were at 70 GB an hour. Better a run waits or goes to a
 	// slower disk than a database's disk slows.
 	protectedWrittenBytes2h = 75e9
+	// 2026-11-22, compute: 02's root disk was about 53% used and growing
+	// about 10.8 GB/day. Stop lending database nodes at 70% root disk usage.
+	protectedRootDiskUsed = 0.70
 )
 
 // LabelRule names nodes by one label: a node carrying Key with Value.
@@ -109,8 +112,8 @@ func (t TaskProfile) Excludes(labels map[string]string) bool {
 	return false
 }
 
-// NodeMetrics is one node's measurements. All four are present or the node is
-// absent from the reader's answer.
+// NodeMetrics is one node's measurements. The four core readings are present
+// or the node is absent from the reader's answer; supplemental readings may be absent.
 type NodeMetrics struct {
 	// WriteLatencySeconds is the worse of the 7-day and the last 15 minutes'
 	// averages: a quiet slow disk looks fast in a short window, and a disk that
@@ -120,6 +123,7 @@ type NodeMetrics struct {
 	DiskBusy            float64 // 0 to 1, last 5 minutes
 	MemoryAvailable     float64 // 0 to 1
 	WrittenBytes2h      float64 // written to the node's disks in the last two hours
+	RootDiskUsed        float64 // 0 to 1; missing reads leave zero and do not stop work
 }
 
 // NodeMetricsReader answers by node InternalIP.
@@ -212,6 +216,8 @@ func nodeFull(task TaskProfile, n NodeProfile) string {
 		return fmt.Sprintf("database node, %.1fGi available", n.AvailableMemory/(1<<30))
 	case n.Protected && m.WrittenBytes2h > protectedWrittenBytes2h:
 		return fmt.Sprintf("database node, %.0f GB written in 2 h", m.WrittenBytes2h/1e9)
+	case n.Protected && m.RootDiskUsed >= protectedRootDiskUsed:
+		return fmt.Sprintf("database node, root disk %.0f%% used", m.RootDiskUsed*100)
 	case m.CPUBusy >= busyLimit:
 		return fmt.Sprintf("CPU %.0f%% busy", m.CPUBusy*100)
 	case task.DiskHeavy && m.DiskBusy >= busyLimit:

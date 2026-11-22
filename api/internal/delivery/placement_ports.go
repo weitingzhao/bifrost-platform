@@ -50,6 +50,7 @@ type NodeMetrics struct {
 	DiskBusy            float64 // 0 to 1, last 5 minutes
 	MemoryAvailable     float64 // 0 to 1
 	WrittenBytes2h      float64 // written to the node's disks in the last two hours
+	RootDiskUsed        float64 // 0 to 1; missing reads leave zero and do not stop work
 }
 
 // NodeMetricsReader answers by node InternalIP.

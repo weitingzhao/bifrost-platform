@@ -19,7 +19,8 @@ const (
 	nodeDisk = `device=~"nvme[0-9]+n[0-9]+|sd[a-z]+"`
 	// A seven-day average moves slowly and is the dear query; CI placement asks
 	// every minute.
-	nodeLatencyKeep = time.Hour
+	nodeLatencyKeep       = time.Hour
+	nodeRootDiskUsedQuery = `max by (instance) (1 - node_filesystem_avail_bytes{mountpoint="/",pod!=""} / node_filesystem_size_bytes{mountpoint="/",pod!=""})`
 )
 
 func nodeLatencyOver(window string) string {
@@ -81,9 +82,14 @@ func (c *PromNodeMetrics) Read(ctx context.Context, promql func(context.Context,
 	if err != nil {
 		return nil, err
 	}
+	// Missing root filesystem readings must not discard the existing metrics.
+	rootUsed, _ := read(nodeRootDiskUsedQuery)
 	out := JoinNodeMetrics(values[0], values[1], values[2], values[3])
 	for address, m := range out {
 		m.WrittenBytes2h = written[address]
+		if used := rootUsed[address]; used >= 0 && used <= 1 {
+			m.RootDiskUsed = used
+		}
 		out[address] = m
 	}
 	return out, nil
