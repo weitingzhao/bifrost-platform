@@ -108,5 +108,24 @@
         }
       ]
     }
-  ]
+  ],
+  "open": [
+    {
+      "number": 5,
+      "action": "",
+      "requester": "line-a",
+      "holder": "owner",
+      "since": "2026-11-14T20:00:00Z",
+      "minutes": 540
+    },
+    {
+      "number": 7,
+      "action": "",
+      "requester": "line-a",
+      "holder": "running",
+      "since": "2026-11-14T22:00:30Z",
+      "minutes": 419
+    }
+  ],
+  "wait_timeouts": []
 }

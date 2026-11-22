@@ -3,9 +3,11 @@
 package approvalreadings
 
 import (
-	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"sort"
+	"strings"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 )
 
 // GET /api/v1/readings/approvals is what the approval records say, counted:
@@ -60,10 +62,89 @@ type Readings struct {
 	Retained int    `json:"retained"`
 	Oldest   string `json:"oldest,omitempty"`
 	Days     []Day  `json:"days"` // newest first
+	// Open is every card not finished, with whose move it is and since when
+	// (the Owner, 2026-11-21: what the system cannot see; Approvals list #4,
+	// #6, #7). Oldest first. Drills are left out.
+	Open []OpenCard `json:"open"`
+	// WaitTimeouts are cards that were approved and failed waiting for a free
+	// slot (exit 75 past its 30 minutes, "等空档超时"): approvals that bought
+	// nothing because something else held the way (list #13).
+	WaitTimeouts []int `json:"wait_timeouts"`
+}
+
+// OpenCard is one unfinished card. Holder is whose move it is: "owner" (to
+// decide), "executor" (approved, an executor is to claim it), "waiting" (an
+// executor tried and was told "not now": Refusal says why, NextAttempt when
+// it tries again), "running" (an executor holds it). Since is when it came to
+// that holder; Minutes is how long ago that was.
+type OpenCard struct {
+	Number      int    `json:"number"`
+	Action      string `json:"action"`
+	Requester   string `json:"requester"`
+	Runner      string `json:"runner,omitempty"`
+	Holder      string `json:"holder"`
+	Since       string `json:"since"`
+	Minutes     int    `json:"minutes"`
+	Refusal     string `json:"refusal,omitempty"`
+	NextAttempt string `json:"next_attempt,omitempty"`
+	Executor    string `json:"executor,omitempty"`
+}
+
+// openCard is the holder of an unfinished card, or false for a finished one.
+func openCard(a approvals.Approval, now time.Time) (OpenCard, bool) {
+	c := OpenCard{Number: a.Number, Action: a.Action, Requester: a.Requester, Runner: a.Runner}
+	var since time.Time
+	switch a.Status {
+	case approvals.StatusPending:
+		c.Holder, since = "owner", a.CreatedAt
+	case approvals.StatusApproved:
+		c.Holder, since = "executor", a.DecidedAt
+		if e := a.Execution; e != nil && e.LastRefusal != "" && e.NextAttemptAt.After(now) {
+			c.Holder, c.Refusal = "waiting", e.LastRefusal
+			c.NextAttempt = e.NextAttemptAt.UTC().Format(time.RFC3339)
+		}
+	case approvals.StatusRunning:
+		c.Holder, since = "running", a.DecidedAt
+		if e := a.Execution; e != nil {
+			c.Executor = e.ExecutorID
+			if !e.StartedAt.IsZero() {
+				since = e.StartedAt
+			}
+		}
+	default:
+		return OpenCard{}, false
+	}
+	if since.IsZero() {
+		since = a.CreatedAt
+	}
+	c.Since = since.UTC().Format(time.RFC3339)
+	if d := now.Sub(since); d > 0 {
+		c.Minutes = int(d / time.Minute)
+	}
+	return c, true
 }
 
 func Compute(items []approvals.Approval, loc *time.Location, now time.Time) Readings {
-	out := Readings{AsOf: now.UTC().Format(time.RFC3339), Zone: loc.String(), Retained: len(items), Days: []Day{}}
+	out := Readings{AsOf: now.UTC().Format(time.RFC3339), Zone: loc.String(), Retained: len(items), Days: []Day{},
+		Open: []OpenCard{}, WaitTimeouts: []int{}}
+	for _, a := range items {
+		if a.Drill {
+			continue
+		}
+		if c, ok := openCard(a, now); ok {
+			out.Open = append(out.Open, c)
+		}
+		if a.Status == approvals.StatusFailed && strings.Contains(a.Error, "等空档超时") {
+			out.WaitTimeouts = append(out.WaitTimeouts, a.Number)
+		}
+	}
+	sort.Slice(out.Open, func(i, j int) bool {
+		if out.Open[i].Since != out.Open[j].Since {
+			return out.Open[i].Since < out.Open[j].Since
+		}
+		return out.Open[i].Number < out.Open[j].Number
+	})
+	sort.Ints(out.WaitTimeouts)
 	type key struct{ day, requester string }
 	groups := map[key]*Group{}
 	seconds := map[key][]int{}
