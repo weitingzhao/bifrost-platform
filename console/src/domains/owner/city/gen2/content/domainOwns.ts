@@ -20,6 +20,8 @@ export type DomainHoldings = {
   paths: OwnRow[]
   workloads: OwnRow[]
   tables?: OwnRow[]
+  /** Its Go packages grouped into buildings by the map (first directory under a Go root, f2c674e8), the biggest first. */
+  buildings?: { id: string; packages: string[] }[]
   contract?: Record<string, unknown> | null
   note?: string
 }

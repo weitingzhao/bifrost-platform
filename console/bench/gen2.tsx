@@ -72,10 +72,16 @@ const withPartners = (p: Place): Place => {
 type OwnRows = Record<string, { domains: string[] }>
 const rowsFor = (m: OwnRows | undefined, id: string) => Object.entries(m ?? {}).filter(([, v]) => v.domains.includes(id))
   .map(([path, v]) => ({ path, ...(v.domains.length > 1 ? { shared: v.domains.filter(d => d !== id) } : {}) })).sort((a, b) => a.path.localeCompare(b.path))
+/** Bench only: the map's building rule (first directory under api/internal, else under api/), for the offline read. */
+const benchBuildings = (pkgs: string[]) => {
+  const by = new Map<string, string[]>()
+  for (const p of pkgs) { const m = /^api\/(?:internal\/)?([^/]+)/.exec(p); const k = m ? m[1] : p.split('/')[0]; by.set(k, [...(by.get(k) ?? []), p]) }
+  return [...by.entries()].map(([id, packages]) => ({ id, packages })).sort((a, b) => b.packages.length - a.packages.length || a.id.localeCompare(b.id))
+}
 const readDomain: ReadDomain = id => getJson(`/api/v1/catalog/domain?id=${encodeURIComponent(id)}`).then(d => d as DomainHoldings, () => {
   const own = OWNERSHIP as unknown as { domains: { id: string; contracts?: Record<string, unknown> }[]; packages?: OwnRows; paths?: OwnRows; workloads?: OwnRows }
   return { id, repo: 'bifrost-platform', packages: rowsFor(own.packages, id), groups: [], paths: rowsFor(own.paths, id), workloads: rowsFor(own.workloads, id),
-    contract: own.domains.find(d => d.id === id)?.contracts ?? null, note: 'bench: from config/domain-ownership.json, not the map’s scan; tables not read' }
+    contract: own.domains.find(d => d.id === id)?.contracts ?? null, buildings: benchBuildings(rowsFor(own.packages, id).map(r => r.path)), note: 'bench: from config/domain-ownership.json, not the map’s scan; tables not read; buildings grouped here by the map’s rule' }
 })
 
 
@@ -155,6 +161,14 @@ function Bench() {
     const t = setInterval(tick, 30_000)
     return () => { on = false; clearInterval(t) }
   }, [])
+  const [holdings, setHoldings] = useState<Record<string, DomainHoldings>>({})
+  useEffect(() => {
+    const ids = (domains.data?.domains ?? []).map(d => d.id)
+    if (!ids.length) return
+    let on = true
+    Promise.all(ids.map(id => readDomain(id).then(h => [id, h] as const))).then(xs => { if (on) setHoldings(Object.fromEntries(xs)) })
+    return () => { on = false }
+  }, [domains])
   const places = useMemo(() => new Set((domains.data?.domains ?? []).map(d => d.id)), [domains])
   const traffic = useDemoTraffic(new URLSearchParams(location.search).has('traffic'), places)
   const rulers = useRulersTick()
@@ -165,9 +179,9 @@ function Bench() {
     // Bench only, ?util=4x8 or 8x8: Utilities at another size, to look at how a district's town grows (2026-11-20).
     const util = new URLSearchParams(location.search).get('util')
     if (hw && util && ['4x4', '4x8', '8x8'].includes(util)) hw.shape = util as Place['shape']
-    const c = consoleContent(domains, hw, graph, readDomain, traffic, { ...firing, devices: reads ? deviceKeys(reads.r) : [] })
+    const c = consoleContent(domains, hw, graph, readDomain, traffic, { ...firing, devices: reads ? deviceKeys(reads.r) : [] }, holdings)
     return new URLSearchParams(location.search).has('links') ? { ...c, tree: withPartners(c.tree), links: SAMPLE_LINKS } : c
-  }, [reads, rulers, domains, graph, traffic, firing])
+  }, [reads, rulers, domains, graph, traffic, firing, holdings])
   const [path, setPath] = useState<Path>(() => parsePath(location.hash))
   useEffect(() => {
     const on = () => setPath(parsePath(location.hash))

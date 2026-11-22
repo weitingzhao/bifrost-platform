@@ -3,7 +3,7 @@ import type { Place } from '@bifrost/ui/city/places'
 import { consoleFunctions } from './consolePlaces'
 import { domainTree } from './domainPlaces'
 import { domainPanel, domainsPanel, type DomainsRead } from './domainsPanel'
-import { ownsPanel, type ReadDomain } from './domainOwns'
+import { ownsPanel, type DomainHoldings, type ReadDomain } from './domainOwns'
 import { districtTechTree, domainTechTree, type GraphRead } from './techTree'
 import { trafficPanel, type TrafficRead } from './traffic'
 import { alertsRead, type DeviceKey, type PromAlert } from './alerts'
@@ -15,9 +15,9 @@ import { alertsRead, type DeviceKey, type PromAlert } from './alerts'
  * levels, each node with its domain's light; the town's panel keeps what the map counts off it, a district
  * its own lights and, read when it is entered, what it owns (the map's domain read).
  */
-export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null = null, graph: GraphRead = {}, readDomain?: ReadDomain, traffic?: TrafficRead, alerts?: { raw?: PromAlert[]; error?: unknown; devices: DeviceKey[] }): CityContent => {
+export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null = null, graph: GraphRead = {}, readDomain?: ReadDomain, traffic?: TrafficRead, alerts?: { raw?: PromAlert[]; error?: unknown; devices: DeviceKey[] }, holdings: Record<string, DomainHoldings> = {}): CityContent => {
   const why = domains.error instanceof Error ? domains.error.message : domains.error ? String(domains.error) : ''
-  const tree = domainTree(domains.data, hardware, why)
+  const tree = domainTree(domains.data, hardware, why, holdings)
   const ids = new Set((domains.data?.domains ?? []).map(d => d.id))
   // Only this content's own data; the engine adds its own cards (a facility's key and rulers, what a place holds, the picked card).
   const panels = (place: Place) =>

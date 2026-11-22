@@ -3,7 +3,7 @@ import { useMemo } from 'react'
 import { authedFetch } from '@/api/client'
 import { fetchCiDomains } from '@/api/ciDomains'
 import { fetchDomainPage, fetchDomainStatus } from '@/domains/foundation/catalog/api/domainStatus'
-import type { ReadDomain } from '@/domains/owner/city/gen2/content/domainOwns'
+import type { DomainHoldings, ReadDomain } from '@/domains/owner/city/gen2/content/domainOwns'
 import { consoleContent } from '@/domains/owner/city/gen2/content/console'
 import { hardwareDistrict, readHardware } from '@/domains/owner/city/gen2/content/hardware'
 import { readUnits } from '@/domains/owner/city/gen2/content/unitRooms'
@@ -46,6 +46,13 @@ export function useCityContent(): CityContent {
   const traffic = useMemo(() => ({ ...tripsOf(contract.data, bus.events, bus.receipts, places), connection: bus.connection, detail: bus.detail }), [contract.data, bus.events, bus.receipts, bus.connection, bus.detail, places])
   // The monitoring's own judgment (the metrics line's alert rules), on the hardware's beat.
   const firing = useQuery({ queryKey: ['city', 'gen2', 'alerts'], queryFn: fetchTelemetryAlerts, refetchInterval: EVERY })
+  // Each domain's buildings (the map's read of what it owns), every 5 minutes: the districts' insides.
+  const ids = (domains.data?.domains ?? []).map(x => x.id).join(',')
+  const holdings = useQuery({
+    queryKey: ['city', 'gen2', 'holdings', ids],
+    queryFn: async () => Object.fromEntries((await Promise.all(ids.split(',').filter(Boolean).map(id => readDomain(id).then(h => [id, h] as const, () => null)))).filter((x): x is readonly [string, DomainHoldings] => x !== null)),
+    enabled: ids !== '', refetchInterval: 5 * 60_000,
+  })
   // A viewer's new ruler redraws the rooms that count that part (frame/rulers.tsx).
   const rulers = useRulersTick()
   return useMemo(() => {
@@ -55,6 +62,6 @@ export function useCityContent(): CityContent {
       ? hardwareDistrict(d.hardware, 'system', `Read every 30 s, the last at ${new Date(d.at).toLocaleTimeString()}.`, d.units)
       : null
     return consoleContent({ data: domains.data, error: domains.error }, hw, { data: graph.data, error: graph.error }, readDomain, traffic,
-      { raw: firing.data?.alerts as PromAlert[] | undefined, error: firing.error, devices: d ? deviceKeys(d.hardware) : [] })
-  }, [reads.data, rulers, domains.data, domains.error, graph.data, graph.error, traffic, firing.data, firing.error])
+      { raw: firing.data?.alerts as PromAlert[] | undefined, error: firing.error, devices: d ? deviceKeys(d.hardware) : [] }, holdings.data ?? {})
+  }, [reads.data, rulers, domains.data, domains.error, graph.data, graph.error, traffic, firing.data, firing.error, holdings.data])
 }

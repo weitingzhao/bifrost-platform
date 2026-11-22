@@ -1,6 +1,8 @@
 import OWNERSHIP from '../../../../../../domain-ownership.json'
 import { DISTRICT } from '@bifrost/ui/city/grid'
 import { TOWN_ID, type Place } from '@bifrost/ui/city/places'
+import type { DomainHoldings } from './domainOwns'
+import { buildingsOf } from './districtBuildings'
 import { formatShellHash } from '@/lib/shell/consoleRoutes'
 import type { MapStatus } from './domainsPanel'
 
@@ -31,11 +33,11 @@ type Named = { id: string; name?: string; overall?: string }
 const stateOf = (d: Named) => (d.overall && d.overall !== 'unknown' ? 'online' as const : 'unread' as const)
 const nameOf = (d: Named) => d.name || d.id
 
-export function domainTree(status: MapStatus | undefined, hardware: Place | null, why = ''): Place {
+export function domainTree(status: MapStatus | undefined, hardware: Place | null, why = '', holdings: Record<string, DomainHoldings> = {}): Place {
   const domains = (status?.domains ?? []) as Named[]
   const children: Place[] = domains.map(d => d.id === COMPUTE && hardware
     ? { ...hardware, id: d.id, label: nameOf(d) }
-    : { id: d.id, kind: 'district', shape: DISTRICT, label: nameOf(d), question: `The ${nameOf(d)} domain: what it holds and how it stands, as the map sees it.`, dashboard: null, children: [], state: stateOf(d), ...(styleOf(d.id) ? { style: styleOf(d.id) } : {}) })
+    : { id: d.id, kind: 'district', shape: DISTRICT, label: nameOf(d), question: `The ${nameOf(d)} domain: what it holds and how it stands, as the map sees it.`, dashboard: null, children: buildingsOf(holdings[d.id], stateOf(d)), state: stateOf(d), ...(styleOf(d.id) ? { style: styleOf(d.id) } : {}) })
   // The hardware was read even when the map was not: it stands on its own rather than vanish.
   if (hardware && !domains.some(d => d.id === COMPUTE)) children.unshift(hardware)
   return {
