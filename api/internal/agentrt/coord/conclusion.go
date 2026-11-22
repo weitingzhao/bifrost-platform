@@ -52,7 +52,7 @@ func PostConclusionCaused(ctx context.Context, db eventlog.DB, key, to, body str
 		if err != nil {
 			return err
 		}
-		msg, err := postMessageAs(ctx, tx, "controller", to, "note", []byte(body), "", "", true, cause)
+		msg, err := postMessageAs(ctx, tx, "controller", to, "note", []byte(body), "", "", true, cause, "")
 		if err != nil {
 			return err
 		}

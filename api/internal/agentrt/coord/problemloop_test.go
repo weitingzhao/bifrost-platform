@@ -87,7 +87,7 @@ func TestProblemLoopPG(t *testing.T) {
 
 	send := func(w actor.Writer, body []byte) {
 		t.Helper()
-		_, err := coord.SendMessage(ctx, pool, w, coord.StatusBoard, "note", body)
+		_, err := coord.SendMessage(ctx, pool, w, coord.StatusBoard, "note", body, "")
 		ok2(t, err)
 	}
 	// ev-1: first "real/open", then "real/handled" by the other seat: the latest wins, closed.

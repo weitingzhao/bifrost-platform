@@ -26,6 +26,8 @@ export function registerMessageTools(reg: McpServer['tool']): void {
       refs: z.array(z.string().max(512)).max(20).optional(),
       about: z.array(z.string().max(200)).max(20).optional(),
       reply_to: z.string().optional(),
+      matter: z.string().regex(/^[a-z][a-z0-9-]{1,31}$/).optional()
+        .describe('Whose domain the matter is: a domain id from config/domain-ownership.json (plan, coordination, audit…) or unknown; it goes on the ledger so Audit can count asks about your own domain and hand-overs of the receiver\'s own'),
     },
     async (input) => compact(await send(input)),
   )

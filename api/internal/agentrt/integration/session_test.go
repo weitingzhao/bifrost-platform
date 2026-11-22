@@ -58,7 +58,7 @@ func TestSessionHeldToItsToken(t *testing.T) {
 			return e
 		},
 		"a message": func() error {
-			_, e := coord.SendMessage(ctx, w.rt, second, "owner", "note", []byte("hi"))
+			_, e := coord.SendMessage(ctx, w.rt, second, "owner", "note", []byte("hi"), "")
 			return e
 		},
 		"an acknowledgement": func() error { _, e := coord.AckMessages(ctx, w.rt, second, []string{msg}); return e },

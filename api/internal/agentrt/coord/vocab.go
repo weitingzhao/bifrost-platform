@@ -18,8 +18,9 @@ func init() {
 	slices.Sort(scopes)
 	eventlog.Declare(eventlog.Vocabulary{
 		Bodies: map[string][]eventlog.Field{
-			"message_posted": {{Name: "message_id", Kind: eventlog.ID}, {Name: "to", Kind: eventlog.ID}, {Name: "kind", Kind: eventlog.Str}},
-			"message_acked":  {{Name: "message_id", Kind: eventlog.ID}},
+			"message_posted": {{Name: "message_id", Kind: eventlog.ID}, {Name: "to", Kind: eventlog.ID}, {Name: "kind", Kind: eventlog.Str},
+				{Name: "matter", Kind: eventlog.Str, Optional: true}},
+			"message_acked": {{Name: "message_id", Kind: eventlog.ID}},
 			"control_set": {{Name: "control_id", Kind: eventlog.ID}, {Name: "scope", Kind: eventlog.Str}, {Name: "kind", Kind: eventlog.Str},
 				{Name: "reason", Kind: eventlog.Str}, {Name: "scope_ref", Kind: eventlog.ID, Optional: true}, {Name: "token", Kind: eventlog.Str, Optional: true}},
 			"control_cleared": {{Name: "control_id", Kind: eventlog.ID}},
@@ -34,9 +35,10 @@ func init() {
 				{Name: "artifact_id", Kind: eventlog.ID, Optional: true}, {Name: "message_id", Kind: eventlog.ID, Optional: true}},
 		},
 		Values: map[string]map[string]eventlog.Value{
-			"message_posted": {"message_id": messageID, "kind": eventlog.OneOf("ask", "answer", "help", "handover", "note", "wake")},
-			"message_acked":  {"message_id": messageID},
-			"control_set":    {"scope": eventlog.OneOf(scopes...), "kind": eventlog.OneOf("stop", "pause", "drain")},
+			"message_posted": {"message_id": messageID, "kind": eventlog.OneOf("ask", "answer", "help", "handover", "note", "wake"),
+				"matter": eventlog.Shaped("a domain id or unknown", matterRE)},
+			"message_acked": {"message_id": messageID},
+			"control_set":   {"scope": eventlog.OneOf(scopes...), "kind": eventlog.OneOf("stop", "pause", "drain")},
 			"policy_alert": {"rule": eventlog.OneOf("approval_claim"), "source": eventlog.OneOf("message", "plan_note"),
 				"phrase": eventlog.OneOf(ApprovalClaims...), "message_id": messageID},
 		},

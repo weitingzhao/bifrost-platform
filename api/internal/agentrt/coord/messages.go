@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"regexp"
 	"time"
 	"unicode/utf8"
 
@@ -35,14 +36,26 @@ type Message struct {
 	AckedAt   *time.Time `json:"acked_at,omitempty"`
 }
 
+// matterRE is a domain id (config/domain-ownership.json) or unknown: what a
+// letter says its matter belongs to.
+var matterRE = regexp.MustCompile(`^[a-z][a-z0-9-]{1,31}$`)
+
 // SendMessage records a writer's message to another actor (POST /messages,
 // W-31 2.3): the writer is registered as for proposals (a thread on its first
 // write); the receiver must be a registered actor, not retired; the kind one
 // of sendKinds; the body UTF-8 text of at most maxMessageBody bytes. The body
 // is stored as a message artifact, the event and the mailbox signal go in the
 // same transaction (PostMessage).
-func SendMessage(ctx context.Context, db eventlog.DB, w writer.Writer, to, kind string, body []byte) (string, error) {
+//
+// matter is the domain the letter's matter belongs to, as the sender says
+// ("" for none): it goes on message_posted, so the
+// ledger can count, per day, asks about a matter of the sender's own domain
+// and hand-overs of the receiver's own (2026-11-21, Audit's privilege
+// readings, law 68 in the coordinator's notes). It grants and checks nothing.
+func SendMessage(ctx context.Context, db eventlog.DB, w writer.Writer, to, kind string, body []byte, matter string) (string, error) {
 	switch {
+	case matter != "" && !matterRE.MatchString(matter):
+		return "", eventlog.Invalid("a message's matter is a domain id or unknown, not %q", matter)
 	case !sendKinds[kind]:
 		return "", eventlog.Invalid("a message's kind is ask, answer, help, handover or note, not %q", kind)
 	case len(body) == 0 || len(body) > maxMessageBody || !utf8.Valid(body) || bytes.IndexByte(body, 0) >= 0:
@@ -68,7 +81,7 @@ func SendMessage(ctx context.Context, db eventlog.DB, w writer.Writer, to, kind 
 			return err
 		}
 		var err error
-		id, err = PostMessage(ctx, tx, w.Actor, to, kind, body)
+		id, err = postMessageAs(ctx, tx, w.Actor, to, kind, body, "", "", true, 0, matter)
 		return err
 	})
 	return id, err
@@ -204,7 +217,7 @@ func PostMessage(ctx context.Context, tx pgx.Tx, from, to, kind string, body []b
 // of staff's answer to the mail its brief took): the event names them, as the
 // state guard requires of a row that does.
 func postMessage(ctx context.Context, tx pgx.Tx, from, to, kind string, body []byte, mission, task string) (string, error) {
-	return postMessageAs(ctx, tx, from, to, kind, body, mission, task, true, 0)
+	return postMessageAs(ctx, tx, from, to, kind, body, mission, task, true, 0, "")
 }
 
 // postMessageAs is postMessage; checkClaims false is for a note that repeats
@@ -215,7 +228,10 @@ func postMessage(ctx context.Context, tx pgx.Tx, from, to, kind string, body []b
 // dispatcher sends for an event names it, on message_posted and on
 // seat.mail.arrived, so the loop event → woken seat can be followed. An event
 // this ledger does not hold is left out; the message is still sent.
-func postMessageAs(ctx context.Context, tx pgx.Tx, from, to, kind string, body []byte, mission, task string, checkClaims bool, cause int64) (string, error) {
+//
+// matter is the domain the letter's matter belongs to as the sender said
+// ("" for none), on message_posted (SendMessage).
+func postMessageAs(ctx context.Context, tx pgx.Tx, from, to, kind string, body []byte, mission, task string, checkClaims bool, cause int64, matter string) (string, error) {
 	if cause != 0 {
 		ok, err := eventlog.Exists(ctx, tx, cause)
 		if err != nil {
@@ -230,8 +246,12 @@ func postMessageAs(ctx context.Context, tx pgx.Tx, from, to, kind string, body [
 		return "", err
 	}
 	id := NewMessageID()
+	posted := map[string]any{"message_id": id, "to": to, "kind": kind}
+	if matter != "" {
+		posted["matter"] = matter
+	}
 	ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "mbox:" + to, Type: "message_posted", Actor: from, MissionID: mission, TaskID: task,
-		Body: map[string]any{"message_id": id, "to": to, "kind": kind}, Cause: cause})
+		Body: posted, Cause: cause})
 	if err != nil {
 		return "", err
 	}

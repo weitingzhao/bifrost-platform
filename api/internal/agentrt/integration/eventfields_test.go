@@ -44,6 +44,7 @@ func TestEventFieldValues(t *testing.T) {
 		{"artifact_put", "artifact_kind", "checkpoint_patch", "patch"},
 		{"message_posted", "message_id", "m_" + ulid, "m_" + ulid + "0"},
 		{"message_posted", "kind", "wake", "ping"},
+		{"message_posted", "matter", "coordination", "Coordination!"},
 		{"message_acked", "message_id", "m_" + ulid, "message"},
 		{"legacy_imported", "digest", sha, "ace660f699888d88caf667e3eef6cedec535df23003c0d1aea5466bc68ff9ba4"},
 		{"control_set", "scope", "host", "region"},

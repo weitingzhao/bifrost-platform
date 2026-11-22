@@ -36,6 +36,8 @@ export interface SendInput {
   refs?: string[]
   about?: string[]
   reply_to?: string
+  /** The domain the letter's matter belongs to (a domain id or unknown), on message_posted. */
+  matter?: string
 }
 
 /**
@@ -64,13 +66,13 @@ export async function send(input: SendInput, d: RuntimeDeps = defaultRuntimeDeps
     if (input.kind && input.kind !== built.kind) {
       return { error: `type ${input.type} is sent as kind ${built.kind}, not ${input.kind}: leave kind out` }
     }
-    return sendMessage({ to: input.to, kind: built.kind, body: built.body }, d)
+    return sendMessage({ to: input.to, kind: built.kind, body: built.body, matter: input.matter }, d)
   }
   if (input.summary != null || input.refs?.length || input.about?.length || input.reply_to) {
     return { error: 'summary, refs, about and reply_to go with a type' }
   }
   if (!input.kind || !input.body) return { error: 'a message without a type needs kind and body' }
-  return sendMessage({ to: input.to, kind: input.kind, body: input.body }, d)
+  return sendMessage({ to: input.to, kind: input.kind, body: input.body, matter: input.matter }, d)
 }
 
 export async function waitDetailed(

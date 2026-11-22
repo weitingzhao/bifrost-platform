@@ -44,7 +44,7 @@ func TestSeatStatusesFromMessagesPG(t *testing.T) {
 	s := coord.SeatStatus{Goal: "bus", Doing: "mainOf", Percent: 40, PercentBasis: "2 of 5 steps", Next: "release"}
 	send := func(w actor.Writer, body []byte) {
 		t.Helper()
-		_, err := coord.SendMessage(ctx, pool, w, coord.StatusBoard, "note", body)
+		_, err := coord.SendMessage(ctx, pool, w, coord.StatusBoard, "note", body, "")
 		ok2(t, err)
 	}
 	send(a, statusBody(t, "first", s))

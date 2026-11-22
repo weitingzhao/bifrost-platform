@@ -14,6 +14,9 @@ type messageBody struct {
 	To   string `json:"to"`
 	Kind string `json:"kind"`
 	Body string `json:"body"`
+	// Matter is the domain the letter's matter belongs to, as the sender
+	// says (a domain id or unknown; optional): coord.SendMessage.
+	Matter string `json:"matter"`
 }
 
 // HandleSendMessage records a message from the caller (as for proposals: the
@@ -28,7 +31,7 @@ func (rt Routes) HandleSendMessage(w http.ResponseWriter, r *http.Request) {
 		rt.Host.Fail(w, err)
 		return
 	}
-	id, err := coord.SendMessage(r.Context(), rt.Host.DB(), who, b.To, b.Kind, []byte(b.Body))
+	id, err := coord.SendMessage(r.Context(), rt.Host.DB(), who, b.To, b.Kind, []byte(b.Body), b.Matter)
 	if err != nil {
 		rt.Host.Fail(w, err)
 		return

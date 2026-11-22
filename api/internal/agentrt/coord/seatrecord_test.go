@@ -22,7 +22,7 @@ func TestTheSeatRecordFollowsTheStatusMessagesPG(t *testing.T) {
 	s := coord.SeatStatus{Goal: "bus", Doing: "records", Percent: 40, PercentBasis: "2 of 5", Next: "release", Charter: "8-2-comm-desk"}
 	send := func(w actor.Writer, body []byte) {
 		t.Helper()
-		_, err := coord.SendMessage(ctx, pool, w, coord.StatusBoard, "note", body)
+		_, err := coord.SendMessage(ctx, pool, w, coord.StatusBoard, "note", body, "")
 		ok2(t, err)
 	}
 	send(a, statusBody(t, "first", s))
@@ -79,5 +79,37 @@ func TestTheSeatEventsKeepTheirContract(t *testing.T) {
 	}
 	if p := coord.CheckSeatStatus(coord.SeatStatus{Goal: "g", Doing: "d", PercentBasis: "b", Next: "n", Charter: "Not A Name"}); p == "" {
 		t.Error("a charter that is no charter's name was taken")
+	}
+}
+
+// Origin: 2026-11-21, Audit's privilege readings (law 68 in the coordinator's
+// notes): asks about a matter of the sender's own domain, and hand-overs of
+// the receiver's own, could not be counted, since no letter said whose its
+// matter was. The sender may say it (a domain id or unknown); it goes on
+// message_posted. A letter that says nothing is as before; a matter that is
+// not a domain id's shape is refused.
+func TestALetterSaysWhoseItsMatterIsPG(t *testing.T) {
+	t.Parallel()
+	_, pool, a := conclusionDB(t)
+	matterOf := func(id string) string {
+		t.Helper()
+		var m *string
+		ok2(t, eventlog.InTx(ctx, pool, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, `SELECT body_json->>'matter' FROM agentrt.event WHERE event_type = 'message_posted' AND body_json->>'message_id' = $1`, id).Scan(&m)
+		}))
+		if m == nil {
+			return "-"
+		}
+		return *m
+	}
+	id, err := coord.SendMessage(ctx, pool, a, "owner", "ask", []byte("may I"), "plan")
+	ok2(t, err)
+	plain, err := coord.SendMessage(ctx, pool, a, "owner", "note", []byte("fyi"), "")
+	ok2(t, err)
+	if got := matterOf(id) + " " + matterOf(plain); got != "plan -" {
+		t.Fatalf("matters %q, want \"plan -\"", got)
+	}
+	if _, err := coord.SendMessage(ctx, pool, a, "owner", "ask", []byte("x"), "Plan!"); err == nil {
+		t.Fatal("a matter that is no domain id was taken")
 	}
 }

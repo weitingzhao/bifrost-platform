@@ -369,12 +369,14 @@ export const MESSAGE_DATA_NOTE =
  * records it as this thread.
  */
 export async function sendMessage(
-  input: { to: string; kind: string; body: string },
+  input: { to: string; kind: string; body: string; matter?: string },
   d: RuntimeDeps = defaultRuntimeDeps(),
 ): Promise<unknown> {
   const refused = refuseWrite(d)
   if (refused) return refused
-  return d.send('POST', `${BASE}/messages`, { to: input.to, kind: input.kind, body: input.body })
+  const payload: Record<string, string> = { to: input.to, kind: input.kind, body: input.body }
+  if (input.matter) payload.matter = input.matter
+  return d.send('POST', `${BASE}/messages`, payload)
 }
 
 /**
