@@ -81,3 +81,20 @@ func TestBuildingsGroupPackagesByTheirFirstDirectory(t *testing.T) {
 		t.Errorf("%+v", got)
 	}
 }
+
+// 2026-11-22, law 79: more than 16 in one layer is split too fine; City
+// draws 16. The largest 15 keep their own building and the rest is one
+// "other", counted. The control: 16 buildings are not folded.
+func TestBuildingsPastSixteenFoldIntoOther(t *testing.T) {
+	var b []Building
+	for i := 0; i < 20; i++ {
+		b = append(b, Building{ID: string(rune('a' + i)), Packages: []string{string(rune('a' + i))}})
+	}
+	got, over := capBuildings(b)
+	if len(got) != MaxPerLayer || over != 5 || !got[15].Other || len(got[15].Packages) != 5 {
+		t.Fatalf("%d buildings, over %d: %+v", len(got), over, got[15])
+	}
+	if got, over := capBuildings(b[:16]); len(got) != 16 || over != 0 {
+		t.Errorf("16 folded: %d %d", len(got), over)
+	}
+}

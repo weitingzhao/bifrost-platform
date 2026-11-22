@@ -34,16 +34,40 @@ type Domain struct {
 	// hand). A domain that wants other buildings can declare them later; this
 	// is the default.
 	Buildings []Building `json:"buildings"`
+	// BuildingsOver is how many buildings did not fit in MaxPerLayer and
+	// were drawn as one "other" (law 79, 2026-11-22: more than 16 in a layer
+	// is split too fine; it is shown, not merged for the domain).
+	BuildingsOver int `json:"buildings_over"`
 	// Contract is the domain's contracts block in the table, as written.
 	Contract json.RawMessage `json:"contract"`
 	Status   *DomainStatus   `json:"status,omitempty"`
 	Note     string          `json:"note,omitempty"`
 }
 
-// Building is a group of a domain's packages.
+// Building is a group of a domain's packages. Other marks the one that
+// holds the buildings past MaxPerLayer.
 type Building struct {
 	ID       string   `json:"id"`
 	Packages []string `json:"packages"`
+	Other    bool     `json:"other,omitempty"`
+}
+
+// MaxPerLayer is how many things one layer of the map holds (law 79).
+const MaxPerLayer = 16
+
+// capBuildings keeps the largest MaxPerLayer-1 buildings and folds the rest
+// into one "other"; it returns how many were folded.
+func capBuildings(b []Building) ([]Building, int) {
+	if len(b) <= MaxPerLayer {
+		return b, 0
+	}
+	keep, rest := b[:MaxPerLayer-1], b[MaxPerLayer-1:]
+	other := Building{ID: "other", Packages: []string{}, Other: true}
+	for _, r := range rest {
+		other.Packages = append(other.Packages, r.Packages...)
+	}
+	sort.Strings(other.Packages)
+	return append(append([]Building{}, keep...), other), len(rest)
 }
 
 // buildingsOf groups packages by their first directory under a Go root and
@@ -135,7 +159,7 @@ func (s *Scanner) DomainOf(id string) (Domain, bool) {
 	out.Repo, out.Commit = k.Repo, k.Commit
 	if o, _ := s.lastOwners(k.Repo); o != nil {
 		out.Packages, out.Groups, out.Paths = rowsOf(id, o.Packages), rowsOf(id, o.Groups), rowsOf(id, o.Paths)
-		out.Buildings = buildingsOf(out.Packages, o.GoRoots)
+		out.Buildings, out.BuildingsOver = capBuildings(buildingsOf(out.Packages, o.GoRoots))
 	}
 	if o, _ := s.lastOwners(ClusterRepo); o != nil {
 		out.Workloads = rowsOf(id, o.Paths)
