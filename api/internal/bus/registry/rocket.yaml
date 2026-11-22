@@ -772,3 +772,33 @@ channels:
         - {name: digest, kind: str, pattern: '^[0-9a-f]{16}$'}
         - {name: ref, kind: str}
         - {name: change, kind: str, pattern: '^changed$'}
+  seat.ask.overdue:
+    address: ev.rocket.{env}.seat.ask.overdue
+    x-bifrost:
+      version: 1
+      lane: event
+      guarantee: durable
+      subject: "<message_id>"
+      publisher: gate-db
+      domain: coordination
+      ref: "/api/v1/bus/observe"
+      reconcile: "the messages table is the truth; the workers read the open asks every 10 minutes and say each once"
+      on_unread: stale
+      retention: 30d
+      # 2026-11-21 (the main line "seen and felt", law 69): an ask nobody
+      # answered for 4 hours (coord.AskOverdueAfter), or two seats waiting on
+      # each other (at once), was only on the Bus page's panel. Said once per
+      # ask by coord.FlagOverdueAsks; the subscription table wakes the
+      # coordinator, whose job is chasing.
+      consumers: [console]
+      exports: []
+      replaces: []
+      body:
+        - {name: message_id, kind: str, pattern: '^m_[0-9A-HJKMNP-TV-Z]{26}$'}
+        - {name: asker, kind: str, pattern: '^[a-z]+:[A-Za-z0-9._:@-]{1,128}$|^(owner|controller)$'}
+        - {name: asked, kind: str, pattern: '^[a-z]+:[A-Za-z0-9._:@-]{1,128}$|^(owner|controller)$'}
+        - {name: asked_at, kind: str, pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+Z$'}
+        - {name: reason, kind: str, pattern: '^(overdue|cycle)$'}
+        - {name: subject, kind: str}
+        - {name: ref, kind: str}
+        - {name: change, kind: str, pattern: '^(overdue|cycle)$'}

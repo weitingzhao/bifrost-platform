@@ -81,6 +81,15 @@ subscriptions:
     params: {detail: "task-result:land/tripwire,commit,change-ids,branch", require: tripwire}
     guarantee: durable
     by: dispatcher
+  # 2026-11-21 (the main line "seen and felt", law 69): an ask nobody answered
+  # for 4 hours, or two seats waiting on each other, wakes the coordinator,
+  # whose job is chasing. Remove this row to stop it; the event is still kept.
+  - id: ask-overdue-to-coordinator
+    on: [seat.ask.overdue]
+    deliver: wake
+    to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a
+    guarantee: durable
+    by: dispatcher
   - id: mail-to-recipient
     on: [seat.mail.arrived]
     deliver: wake
