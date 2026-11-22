@@ -10,7 +10,7 @@ import "github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
 // Group selects the compute readings on /telemetry/overview?group=compute.
 const Group = "compute"
 
-// computeWindow is the look-back of every compute reading.
+// computeWindow is the look-back of historical compute readings.
 const computeWindow = "7d"
 
 // computeWindowDays is computeWindow in days, for per-day rates.
@@ -255,6 +255,14 @@ func Queries() []telemetry.QuerySpec {
 			Target: "a signal, no target",
 			Note:   "Allocatable memory minus the highest hourly-sampled container working set over the window.",
 			Build:  fixed(`(max by (node) (kube_node_status_allocatable{resource="memory"}) - max_over_time((sum by (node) (container_memory_working_set_bytes{container!=""}))[` + w + `:1h])) / 2^30`),
+		},
+		{
+			ID:     "compute_root_disk_used_now",
+			Title:  "Root disk in use per cluster node, now",
+			Unit:   "ratio",
+			Target: "a signal, no target",
+			Note:   "Current share of / unavailable to applications (1 - available bytes / total bytes). Read with the growth row to spot nodes running out of root-disk space.",
+			Build:  fixed(perHost(`1 - node_filesystem_avail_bytes{mountpoint="/",pod!=""} / node_filesystem_size_bytes{mountpoint="/",pod!=""}`)),
 		},
 		{
 			ID:     "compute_root_disk_growth_gb_per_day",
