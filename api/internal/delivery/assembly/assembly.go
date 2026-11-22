@@ -70,6 +70,8 @@ type Handlers struct {
 	Released             http.HandlerFunc
 	ReleaseContext       http.HandlerFunc
 	AgentrtMigration     http.HandlerFunc
+	// ProdJudgements is the PROD head-release loop's judgements (headrelease.ProdJudgementsRoute).
+	ProdJudgements http.Handler
 }
 
 // Mount registers the delivery domain's routes under /api/v1. They were lines
@@ -98,6 +100,9 @@ func Mount(r chi.Router, g Gates, h Handlers) {
 	// One read of a repository's release situation (release_context_wire.go):
 	// read-only, viewer and above.
 	r.With(g.Viewer).Get("/delivery/context", h.ReleaseContext)
+	// Why PROD was or was not released (headrelease.ProdJudgementsRoute, 2026-11-22):
+	// read-only, viewer and above.
+	r.With(g.Viewer).Method(http.MethodGet, "/delivery/prod-judgements", h.ProdJudgements)
 	r.Get("/delivery/runs/{id}/logs", d.HandleRunLogs)
 	r.Get("/delivery/runs/{id}/steps", d.HandleRunSteps)
 	r.Group(func(r chi.Router) {

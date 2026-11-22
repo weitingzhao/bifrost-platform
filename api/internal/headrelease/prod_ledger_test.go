@@ -3,11 +3,14 @@ package headrelease
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
 // Origin: 2026-11-21, CI line. The PROD head-release loop's reasons for
@@ -56,5 +59,22 @@ func TestProdJudgementsGoToTheLedgerWithTheirReasons(t *testing.T) {
 	}
 	if got[2].Result != "wait" || json.Unmarshal(got[2].Record, &rec) != nil || rec.Commits != 15 || len(rec.Failing) != 1 || rec.Reasons["soaked"] == "" {
 		t.Fatalf("oldest %+v", got[2])
+	}
+}
+
+// Origin: 2026-11-22, law 69 (seen and felt): the judgements were in the ledger
+// and nothing showed them; the route is the read. A limit out of range is a
+// 400, and with no database it says so (503), never an empty list.
+func TestProdJudgementsRouteRefusesWhatItCannotAnswer(t *testing.T) {
+	rt := ProdJudgementsRoute{DB: func() eventlog.DB { return nil }}
+	for _, c := range []struct {
+		query string
+		code  int
+	}{{"?limit=0", http.StatusBadRequest}, {"?limit=201", http.StatusBadRequest}, {"?limit=x", http.StatusBadRequest}, {"", http.StatusServiceUnavailable}} {
+		w := httptest.NewRecorder()
+		rt.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/delivery/prod-judgements"+c.query, nil))
+		if w.Code != c.code {
+			t.Fatalf("%q: %d %s", c.query, w.Code, w.Body.String())
+		}
 	}
 }

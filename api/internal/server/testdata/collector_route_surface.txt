@@ -119,6 +119,7 @@ deny	GET /api/v1/context
 deny	GET /api/v1/data-husbandry
 deny	GET /api/v1/delivery/compare
 deny	GET /api/v1/delivery/context
+deny	GET /api/v1/delivery/prod-judgements
 deny	POST /api/v1/delivery/mirrors/sync
 deny	GET /api/v1/delivery/pipelines
 deny	GET /api/v1/delivery/pipelines/{name}/policy-check

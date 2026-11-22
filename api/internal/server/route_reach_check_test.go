@@ -41,6 +41,9 @@ var oldPrincipals = []string{"", "viewer", "reporter", "operator", "admin", "tra
 // this walk reaches the guarded handler, not the controller operation; the
 // handler-level approval refusal is checked by TestFixedIPWriteMatchesFirewallApprovalBoundary.
 var intendedRouteAdditions = map[string][]string{
+	// 2026-11-22 (law 69, seen and felt; the CI line): why the PROD head-release
+	// loop released or held PROD, from the ledger, read-only, like the delivery reads.
+	"GET /api/v1/delivery/prod-judgements": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-20 (the Owner: every module's state on the bus): each subject's
 	// latest state for a registered state type, read-only, like the other bus reads.
 	"GET /api/v1/bus/states": {"viewer", "reporter", "operator", "admin", "trade-satellite"},

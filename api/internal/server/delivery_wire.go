@@ -5,6 +5,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	deliveryassembly "github.com/weitingzhao/bifrost-platform/api/internal/delivery/assembly"
+	"github.com/weitingzhao/bifrost-platform/api/internal/headrelease"
 )
 
 // mountDelivery hands the delivery domain's routes (delivery/assembly, since
@@ -30,5 +31,6 @@ func (s *Server) mountDelivery(r chi.Router) {
 		Released:             s.handleReleased,
 		ReleaseContext:       s.handleReleaseContext,
 		AgentrtMigration:     s.handleAgentrtMigration,
+		ProdJudgements:       headrelease.ProdJudgementsRoute{DB: s.recordDB},
 	})
 }
