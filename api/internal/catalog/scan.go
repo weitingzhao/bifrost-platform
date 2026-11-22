@@ -205,8 +205,11 @@ func (s *Scanner) ScanOnce(ctx context.Context, repo string) (Pool, error) {
 		}
 		if p.Measured {
 			s.keepTables(repo, t, table, now)
-			if table != nil && repo != ClusterRepo && repo != DatabaseRepo {
+			// Only the repository whose table names the domains: another
+			// repository's topology or mcp/ is not the platform's.
+			if k, ok := s.keptSections(); ok && k.Repo == repo && table != nil {
 				s.keepTopology(t)
+				s.keepMCPTools(t)
 			}
 			if repo != ClusterRepo && repo != DatabaseRepo {
 				s.keepSeats(repo, t)

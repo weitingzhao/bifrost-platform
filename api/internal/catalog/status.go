@@ -223,6 +223,10 @@ type contractDomain struct {
 			Name  string   `json:"name"`
 			Users []string `json:"users"`
 		} `json:"go_surface"`
+		Commands []struct {
+			Kind string `json:"kind"`
+			Name string `json:"name"`
+		} `json:"commands"`
 	} `json:"contracts"`
 }
 
@@ -262,7 +266,7 @@ func (s *Scanner) ComputeStatus(ctx context.Context, in StatusInputs) Status {
 			st.References, st.ToBase = references(edges, domains, uses)
 		}
 	}
-	st.Checks = []ClassCheck{s.nodeCheck(ctx, in.ClusterNodes), s.seatCheck(domains)}
+	st.Checks = []ClassCheck{s.nodeCheck(ctx, in.ClusterNodes), s.seatCheck(domains), s.mcpToolCheck(domains)}
 	alive := s.aliveLights(k.Repo, domains, in)
 	ifaces := interfaceLights(ctx, domains, in)
 	bound := boundaryLights(ctx, k.Repo, domains, in)

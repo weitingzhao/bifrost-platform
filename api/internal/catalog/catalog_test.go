@@ -379,3 +379,32 @@ temporary:
 		t.Errorf("want the unknown domain and the uninvited temporary: %+v", c.Problems)
 	}
 }
+
+// 2026-11-22, the compute line and Foundation: MCP tools were in no class
+// of the map; 55 of 132 registered tools were in no domain's contract
+// (temporary reading, main 73eec5d0). The control: a tool both registered
+// and in a contract is in neither list, and a test file's reg() is no tool.
+func TestMCPToolsAreComparedWithTheContracts(t *testing.T) {
+	s := &Scanner{Kept: memKept{}}
+	src := map[string]string{
+		"mcp/platform/src/index.ts":      "reg(\n  'get_domain', 'd', {}, f)\nreg('get_new', 'n', {}, f)",
+		"mcp/unifi/src/tools.ts":         "server.tool('apply_firewall', 'x')",
+		"mcp/platform/src/index.test.ts": "reg('only_in_test', 'x')",
+	}
+	files := []string{}
+	for f := range src {
+		files = append(files, f)
+	}
+	s.keepMCPTools(Tree{Commit: "c", Files: files, Read: func(p string) ([]byte, bool, error) { return []byte(src[p]), true, nil }})
+	var domains []contractDomain
+	if err := json.Unmarshal([]byte(`[{"id":"foundation","contracts":{"commands":[{"kind":"mcp_tool","name":"get_domain"},{"kind":"mcp_tool","name":"get_gone"},{"kind":"action","name":"x"}]}}]`), &domains); err != nil {
+		t.Fatal(err)
+	}
+	c := s.mcpToolCheck(domains)
+	if !c.Measured || c.Live != 3 || c.Registered != 2 {
+		t.Fatalf("%+v", c)
+	}
+	if len(c.NotRegistered) != 2 || c.NotRegistered[0] != "apply_firewall (unifi)" || len(c.NotLive) != 1 || c.NotLive[0] != "get_gone" {
+		t.Errorf("%+v", c)
+	}
+}

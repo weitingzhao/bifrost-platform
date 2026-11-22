@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"path"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -245,5 +246,81 @@ func (s *Scanner) seatCheck(domains []contractDomain) ClassCheck {
 	sort.Strings(c.NotLive)
 	sort.Strings(c.Problems)
 	c.Measured, c.Registered, c.Live = true, len(k.Rows), len(k.Charters)
+	return c
+}
+
+const keptMCPTools = "mcp-tools"
+
+// mcpToolCall finds a tool's registration in the MCP servers' TypeScript:
+// reg('name', …), registerTool('name', …) or server.tool('name', …).
+var mcpToolCall = regexp.MustCompile(`(?:\breg|registerTool|server\.tool)\(\s*'([a-z][a-z0-9_]*)'`)
+
+type keptTools struct {
+	Commit string            `json:"commit"`
+	Tools  map[string]string `json:"tools"` // name -> server (mcp/<server>)
+}
+
+// keepMCPTools keeps the MCP tools the table repository's servers register
+// (mcp/<server>/src, tests left out).
+func (s *Scanner) keepMCPTools(t Tree) {
+	k := keptTools{Commit: t.Commit, Tools: map[string]string{}}
+	for _, f := range t.Files {
+		parts := strings.Split(f, "/")
+		if len(parts) < 4 || parts[0] != "mcp" || parts[2] != "src" || !strings.HasSuffix(f, ".ts") || strings.Contains(f, ".test.") {
+			continue
+		}
+		raw, ok, err := t.Read(f)
+		if err != nil || !ok {
+			continue
+		}
+		for _, m := range mcpToolCall.FindAllSubmatch(raw, -1) {
+			k.Tools[string(m[1])] = parts[1]
+		}
+	}
+	if len(k.Tools) == 0 {
+		return
+	}
+	if out, err := json.Marshal(k); err == nil {
+		if err := s.kept().Write(keptMCPTools, out); err != nil {
+			slog.Warn("catalog: keep mcp tools", "err", err)
+		}
+	}
+}
+
+// mcpToolCheck compares the registered tools with the domains' contracts
+// (commands of kind mcp_tool).
+func (s *Scanner) mcpToolCheck(domains []contractDomain) ClassCheck {
+	c := ClassCheck{Class: "mcp-tool", NotRegistered: []string{}, NotLive: []string{}}
+	raw, err := s.kept().Read(keptMCPTools)
+	if err != nil || raw == nil {
+		c.Note = "no scan has kept the MCP servers' tools yet"
+		return c
+	}
+	var k keptTools
+	if json.Unmarshal(raw, &k) != nil {
+		c.Note = "the kept MCP tools do not read"
+		return c
+	}
+	contract := map[string]bool{}
+	for _, d := range domains {
+		for _, cmd := range d.Contracts.Commands {
+			if cmd.Kind == "mcp_tool" && cmd.Name != "" {
+				contract[cmd.Name] = true
+			}
+		}
+	}
+	for name, server := range k.Tools {
+		if !contract[name] {
+			c.NotRegistered = append(c.NotRegistered, name+" ("+server+")")
+		}
+	}
+	for name := range contract {
+		if _, ok := k.Tools[name]; !ok {
+			c.NotLive = append(c.NotLive, name)
+		}
+	}
+	sort.Strings(c.NotRegistered)
+	sort.Strings(c.NotLive)
+	c.Measured, c.Registered, c.Live = true, len(contract), len(k.Tools)
 	return c
 }
