@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
@@ -35,6 +36,8 @@ const (
 type Server struct {
 	Platform Platform
 	Verifier *Verifier
+	// Kept in the trusted code verifier, never shipped to host executors.
+	TicketKey []byte
 	// ExecutorID is recorded on the claim, e.g. "owner-exec:<pod>".
 	ExecutorID string
 	Timeout    time.Duration
@@ -53,6 +56,8 @@ type Server struct {
 type runRequest struct {
 	ID            string          `json:"id"`
 	CommandSHA256 string          `json:"command_sha256"`
+	Host          string          `json:"host"`
+	ParamsHash    string          `json:"params_hash"`
 	Code          string          `json:"code"`
 	Approve       json.RawMessage `json:"approve"`
 }
@@ -76,7 +81,11 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "egress policy is not enforced"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	out := map[string]any{"ok": true}
+	if len(s.TicketKey) > 0 {
+		out["host_tickets"] = true
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // handleRun is the whole protocol. Order matters:
@@ -84,7 +93,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 //  1. admin bearer, checked with platform-api. A caller without one learns
 //     nothing and cannot spend wrong-code attempts, so it can neither guess
 //     the code nor lock the Owner out.
-//  2. the card: an owner_run_command for runner owner, pending or approved,
+//  2. the card: an owner_run_command for the cluster or one machine, pending or approved,
 //     whose command hashes to the fingerprint the page showed. Checked before
 //     the code so a stale page does not burn one.
 //  3. the one-time code. A wrong code stops here: nothing is approved.
@@ -132,7 +141,24 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		s.relay(w, id, "read card", err)
 		return
 	}
-	if msg := cardRefusal(card, want); msg != "" {
+	check, refusal := card, ""
+	host := card.Host()
+	if host != "" {
+		switch {
+		case len(s.TicketKey) == 0:
+			refusal = "machine execution tickets are disabled"
+		case card.Runner != "host" || req.Host != host || card.ParamsHash == "" || req.ParamsHash != card.ParamsHash:
+			refusal = "the machine or parameters differ from this card; reload and review it"
+		default:
+			check.Runner = "owner" // common action, status and command checks below
+		}
+	} else if req.Host != "" {
+		refusal = "this card does not name a machine"
+	}
+	if refusal == "" {
+		refusal = cardRefusal(check, want)
+	}
+	if msg := refusal; msg != "" {
 		s.Logf("run %s: refused: %s", id, msg)
 		writeJSON(w, http.StatusConflict, map[string]any{"error": msg, "status": card.Status})
 		return
@@ -161,6 +187,25 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.Logf("run %s: approved", id)
+	}
+
+	if host != "" {
+		issuer, ok := s.Platform.(interface {
+			AuthorizeHost(context.Context, string, string, string, time.Time, string) error
+		})
+		if !ok {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "machine ticket transport is unavailable"})
+			return
+		}
+		const hostTicketLifetime = 5 * time.Minute
+		until := s.now().Add(hostTicketLifetime).Truncate(time.Second)
+		mac := approvals.TicketMAC(s.TicketKey, card.ID, card.ParamsHash, host, until)
+		if err := issuer.AuthorizeHost(ctx, bearer, card.ID, host, until, mac); err != nil {
+			s.relay(w, id, "authorize machine", err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]any{"status": "queued", "id": id, "host": host, "ticket_until": until})
+		return
 	}
 
 	// The claim must not follow the caller's request. #677 (2026-11-22): the

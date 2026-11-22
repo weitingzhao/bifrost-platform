@@ -6,10 +6,16 @@ import { fetchOwnerExecAvailable, postOwnerExecRun, sha256Hex } from '@/api/owne
 import { commandText } from '@/pages/approvalDecision'
 import { scrubSecret } from '@/pages/decisionSignIn'
 
-/** An owner_run_command the cluster runner can take: runner owner, not yet run. */
+function targetMachine(item: ApprovalItem): string | null {
+  const host = item.params?.host
+  return item.runner === 'host' && typeof host === 'string' && host !== '' ? host : null
+}
+
+/** An owner_run_command that can use the one-time code flow. */
 export function ownerExecCandidate(item: ApprovalItem): boolean {
   return item.action === 'owner_run_command' && item.drill !== true
-    && (item.runner == null || item.runner === '' || item.runner === 'owner')
+    && ((targetMachine(item) != null && Boolean(item.params_hash))
+      || item.runner == null || item.runner === '' || item.runner === 'owner')
     && (item.status === 'pending' || item.status === 'approved')
     && commandText(item.params) != null
 }
@@ -31,12 +37,13 @@ export function OwnerExecRun({ item, blocked, onStarted }: {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [started, setStarted] = useState(false)
+  const host = targetMachine(item)
 
   useEffect(() => {
     const controller = new AbortController()
-    void fetchOwnerExecAvailable(controller.signal).then(ok => { if (!controller.signal.aborted) setAvailable(ok) })
+    void fetchOwnerExecAvailable(controller.signal, host != null).then(ok => { if (!controller.signal.aborted) setAvailable(ok) })
     return () => controller.abort()
-  }, [])
+  }, [host])
 
   const command = commandText(item.params)
   if (!available || command == null || !ownerExecCandidate(item)) return null
@@ -56,6 +63,7 @@ export function OwnerExecRun({ item, blocked, onStarted }: {
         id: item.id,
         command_sha256: await sha256Hex(command),
         code: sent,
+        ...(host ? { host, params_hash: item.params_hash ?? '' } : {}),
         ...(pending ? { approve: { channel: 'console' as const, approval_line: item.approval_line ?? '', params_hash: item.params_hash ?? '' } } : {}),
       })
       setStarted(true)
@@ -71,7 +79,9 @@ export function OwnerExecRun({ item, blocked, onStarted }: {
   return (
     <section aria-label="Run with a one-time code" data-owner-exec className="flex w-full min-w-0 flex-col gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-3">
       <h3 className="m-0 text-sm font-medium">{pending ? 'Approve and run here' : 'Run here'}</h3>
-      <p className="m-0 text-sm">This exact command runs in the cluster as soon as the code is accepted:</p>
+      <p className="m-0 text-sm">{host
+        ? <>This exact command is sent to <strong>{host}</strong> after the code is accepted.</>
+        : 'This exact command runs in the cluster as soon as the code is accepted:'}</p>
       <pre data-owner-exec-command className="m-0 max-h-48 w-full min-w-0 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[var(--control-radius)] bg-[var(--field-fill)] p-2 font-mono text-xs">{command}</pre>
       {blocked != null ? <p role="status" className="m-0 text-sm">{blocked}</p> : null}
       <label className="flex min-w-0 flex-col gap-1 text-sm" htmlFor={`owner-exec-code-${item.id}`}>
@@ -90,7 +100,9 @@ export function OwnerExecRun({ item, blocked, onStarted }: {
         />
       </label>
       {error != null ? <p role="alert" className="m-0 break-words text-sm text-destructive">{error}</p> : null}
-      {started ? <p role="status" className="m-0 text-sm">Started. The result appears on this card when the command ends.</p> : null}
+      {started ? <p role="status" className="m-0 text-sm">{host
+        ? 'Authorized. Waiting for the selected machine to claim the ticket.'
+        : 'Started. The result appears on this card when the command ends.'}</p> : null}
       <Button type="button" className="h-11 w-full sm:w-auto sm:self-start" disabled={!ready} onClick={() => void run()}>
         {sending ? 'Sending…' : pending ? 'Approve and run' : 'Run'}
       </Button>

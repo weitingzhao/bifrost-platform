@@ -64,6 +64,21 @@ func RunCommand(ctx context.Context, command string, timeout time.Duration, secr
 // The shell must return complete output: exact request secrets are only known
 // to the runner. Neither hop may clip before that last redaction pass.
 func runCommand(ctx context.Context, command string, timeout time.Duration, clip bool, secrets ...string) Outcome {
+	return runInEnvironment(ctx, command, timeout, clip, childEnv, secrets...)
+}
+
+func runMachineCommand(ctx context.Context, command, home string, timeout time.Duration, secrets ...string) Outcome {
+	return runInEnvironment(ctx, command, timeout, true, func(dir string) []string {
+		return []string{
+			"PATH=/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+			"HOME=" + home,
+			"TMPDIR=" + dir,
+			"LANG=C.UTF-8",
+		}
+	}, secrets...)
+}
+
+func runInEnvironment(ctx context.Context, command string, timeout time.Duration, clip bool, env func(string) []string, secrets ...string) Outcome {
 	started := time.Now()
 	dir, err := os.MkdirTemp("", "owner-exec-")
 	if err != nil {
@@ -75,7 +90,7 @@ func runCommand(ctx context.Context, command string, timeout time.Duration, clip
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "bash", "-c", command)
 	cmd.Dir = dir
-	cmd.Env = childEnv(dir)
+	cmd.Env = env(dir)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = 5 * time.Second

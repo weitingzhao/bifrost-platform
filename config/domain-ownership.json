@@ -379,6 +379,7 @@
           {"method": "POST", "path": "/api/v1/approvals/{id}/reject", "handler": "api/internal/approvals.HandleReject", "consumers": ["console", "mcp"]},
           {"method": "POST", "path": "/api/v1/approvals/{id}/resolve", "handler": "api/internal/approvals.HandleResolve", "consumers": ["console"]},
           {"method": "POST", "path": "/api/v1/approvals/{id}/result", "handler": "api/internal/approvals.HandleResult", "consumers": ["console", "trade-infra"]},
+          {"method": "POST", "path": "/api/v1/approvals/{id}/ticket", "handler": "api/internal/approvals.HandleTicket", "consumers": ["api/internal/ownerexec"]},
           {"method": "POST", "path": "/api/v1/approvals/{id}/withdraw", "handler": "api/internal/approvals.HandleWithdraw", "consumers": ["console", "mcp"]},
           {"method": "GET", "path": "/api/v1/governance/instruments", "handler": "api/internal/server.handleInstruments", "consumers": ["console"]},
           {"method": "GET", "path": "/api/v1/questions", "handler": "api/internal/questions.HandleList", "consumers": ["console", "mcp"]},
