@@ -3,11 +3,13 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
@@ -102,5 +104,49 @@ func TestOverviewWithoutAGroupIsUnchanged(t *testing.T) {
 				t.Errorf("preset %s gained a target or note", m.ID)
 			}
 		}
+	}
+}
+
+// Origin: 2026-11-22 17:5xZ, the compute line measured 7 of the 26 compute
+// readings timing out on PROD because all 26 went to Prometheus at once and
+// queued behind its 20 concurrent queries; alone each took 1-2.2 s. An
+// overview sends at most maxInFlight queries at a time and still answers all
+// of them; the control is that it does run them in parallel (more than one
+// at once), so the bound is not a serial loop.
+func TestOverviewSendsAtMostMaxInFlightQueriesAtOnce(t *testing.T) {
+	var mu sync.Mutex
+	inFlight, peak, asked := 0, 0, 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		inFlight++
+		asked++
+		if inFlight > peak {
+			peak = inFlight
+		}
+		mu.Unlock()
+		time.Sleep(20 * time.Millisecond)
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": map[string]any{"resultType": "vector", "result": []any{}}})
+	}))
+	defer srv.Close()
+	t.Setenv("PLATFORM_PROMETHEUS_URL", srv.URL)
+	svc := NewService(testConfigWithCluster(t))
+	var many []QuerySpec
+	for i := 0; i < 20; i++ {
+		id := fmt.Sprintf("q%d", i)
+		many = append(many, QuerySpec{ID: id, Title: id, Unit: "n", Build: func(string) string { return "up" }})
+	}
+	svc.SetGroup("many", func() []QuerySpec { return many })
+	resp, err := svc.Overview(context.Background(), "", "many")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Metrics) != 20 || asked != 20 {
+		t.Fatalf("%d metrics, %d asked; want 20", len(resp.Metrics), asked)
+	}
+	if peak > maxInFlight || peak < 2 {
+		t.Fatalf("peak %d queries at once; want between 2 and %d", peak, maxInFlight)
 	}
 }

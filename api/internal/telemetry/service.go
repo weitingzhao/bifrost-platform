@@ -28,6 +28,14 @@ func (s *Service) SetGroup(name string, queries func() []QuerySpec) {
 	s.groups[name] = queries
 }
 
+// maxInFlight is how many of one overview's queries are at Prometheus at
+// once. A query's 10-second client timeout starts when it is sent, and
+// Prometheus answers 20 at a time by default: the 26 compute readings sent
+// together queued past the timeout (7 read "Could not be read" on PROD,
+// 2026-11-22 17:5xZ, each 1-2.2 s alone; the compute line measured it).
+// Waiting for a slot is not counted against a query's timeout.
+const maxInFlight = 6
+
 func NewService(cfg *config.Config) *Service {
 	return &Service{cfg: cfg}
 }
@@ -61,11 +69,14 @@ func (s *Service) Overview(ctx context.Context, namespace, group string) (Overvi
 	}
 	metrics := make([]MetricResult, len(queries))
 	var wg sync.WaitGroup
+	slots := make(chan struct{}, maxInFlight)
 	for i, spec := range queries {
 		wg.Add(1)
 		go func(idx int, q QuerySpec) {
 			defer safego.Recover("telemetry.runQuery")
 			defer wg.Done()
+			slots <- struct{}{}
+			defer func() { <-slots }()
 			metrics[idx] = s.runQuery(ctx, client, q, ns)
 		}(i, spec)
 	}
