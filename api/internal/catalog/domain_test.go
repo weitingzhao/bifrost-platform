@@ -125,3 +125,17 @@ func TestTasksAreFoundByWhatSomeoneWantsDone(t *testing.T) {
 		t.Errorf("%d %s", w.Code, w.Body)
 	}
 }
+
+// 2026-11-22, Approvals: api/cmd/owner-exec is the command of ownerexec and
+// belongs in its building. The control: a command with no such building
+// stays in cmd.
+func TestACommandJoinsTheBuildingOfItsPackage(t *testing.T) {
+	got := buildingsOf([]Row{{Path: "api/internal/ownerexec"}, {Path: "api/cmd/owner-exec"}, {Path: "api/cmd/lonely"}}, []string{"api"})
+	by := map[string][]string{}
+	for _, b := range got {
+		by[b.ID] = b.Packages
+	}
+	if len(by["ownerexec"]) != 2 || len(by["cmd"]) != 1 || by["cmd"][0] != "api/cmd/lonely" {
+		t.Fatalf("%+v", got)
+	}
+}

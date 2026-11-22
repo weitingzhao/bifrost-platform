@@ -3,6 +3,7 @@ package catalog
 import (
 	"encoding/json"
 	"net/http"
+	"path"
 	"sort"
 	"strings"
 )
@@ -145,6 +146,7 @@ func buildingsOf(rows []Row, roots []string) []Building {
 		isRoot[r] = true
 	}
 	by := map[string][]string{}
+	var cmds []string
 	for _, r := range rows {
 		segs := strings.Split(r.Path, "/")
 		if len(segs) > 1 && isRoot[segs[0]] {
@@ -153,7 +155,22 @@ func buildingsOf(rows []Row, roots []string) []Building {
 		if len(segs) > 1 && segs[0] == "internal" {
 			segs = segs[1:]
 		}
+		if len(segs) > 1 && segs[0] == "cmd" {
+			cmds = append(cmds, r.Path)
+			continue
+		}
 		by[segs[0]] = append(by[segs[0]], r.Path)
+	}
+	// A command goes in the building of the package it is the command of
+	// (api/cmd/owner-exec with ownerexec, 2026-11-22 Approvals), when the
+	// domain has that building; otherwise in cmd.
+	for _, c := range cmds {
+		name := strings.ReplaceAll(path.Base(c), "-", "")
+		if _, ok := by[name]; ok {
+			by[name] = append(by[name], c)
+		} else {
+			by["cmd"] = append(by["cmd"], c)
+		}
 	}
 	out := make([]Building, 0, len(by))
 	for id, pkgs := range by {
