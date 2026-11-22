@@ -99,6 +99,20 @@ describe('compute readings', () => {
     expect(readingValues(down)).toBe('gpu-server · ubt-k3s-05')
     expect(readingValues(minutes)).toBe('ComputePainDbGuestLoad 2062 · ComputePainDbReplication 60')
   })
+  // 2026-11-22 Owner (relayed by the hardware line): know what each disk is and how fast it really is, so a
+  // fast-disk job is not placed on a slow disk. Same model, 07 vs 08: write p99 689 ms vs 4.4 ms (PROD 11-22 00:3xZ).
+  it('shows each disk with its model and firmware, and write latency in milliseconds per node and disk', () => {
+    const disks: TelemetryMetricResult = {
+      id: 'compute_disks_now', title: 'Disks in each cluster node', unit: 'list', target: '', note: '', status: 'ok',
+      points: [{ labels: { nodename: 'ubt-k3s-05', device: 'nvme1', model: 'NVME SSD 512GB', firmware_revision: 'VC400618' }, value: 1 }],
+    }
+    const tail: TelemetryMetricResult = {
+      id: 'compute_disk_write_ms_p99', title: 'Disk write latency per node, worst 1% of the time', unit: 'ms', target: '', note: '', status: 'ok',
+      points: [{ labels: { nodename: 'ubt-k3s-08', device: 'nvme0n1' }, value: 4.4 }, { labels: { nodename: 'ubt-k3s-07', device: 'nvme0n1' }, value: 689.41 }],
+    }
+    expect(readingValues(disks)).toBe('ubt-k3s-05 nvme1: NVME SSD 512GB (VC400618)')
+    expect(readingValues(tail)).toBe('ubt-k3s-07 nvme0n1 689 ms · ubt-k3s-08 nvme0n1 4.4 ms')
+  })
   // 2026-11-17 OWNER_LAW #30: the hand-written "not measured" list is gone; a reading without a series is
   // known only from the API's own status (audit row #31).
   it('shows each reading with its target and note, a failed one as failed, and an empty one as no series', async () => {

@@ -13,6 +13,14 @@ func perHost(expr string) string {
 	return `max by (nodename) ((` + expr + `) * on (instance) group_left (nodename) node_uname_info)`
 }
 
+// diskWriteMs is the q-quantile over the window of each cluster node NVMe
+// disk's 5-minute mean write time, in milliseconds.
+func diskWriteMs(q, window string) string {
+	disks := `{device=~"nvme[0-9]n1",pod!=""}`
+	return `max by (nodename, device) (quantile_over_time(` + q + `, (rate(node_disk_write_time_seconds_total` + disks + `[5m])` +
+		` / rate(node_disk_writes_completed_total` + disks + `[5m]) > 0)[` + window + `:5m]) * on (instance) group_left (nodename) node_uname_info) * 1000`
+}
+
 // ComputeQueries are the readings of "is the compute fully used" that
 // Prometheus can answer today: work waiting while capacity is idle, the
 // protected tiers being squeezed, the Agent host queueing, and how honest the
@@ -189,6 +197,35 @@ func ComputeQueries() []QuerySpec {
 			Note:   "Nodes Kubernetes knows that have no home reading: powered off, their node exporter gone, or never registered. The elastic GPU node stays here until it is woken.",
 			Build: fixed(`max by (node) (kube_node_info) unless on (node) max by (node) (label_replace(bifrost_node:home_info` +
 				` * on (instance) group_left (nodename) node_uname_info, "node", "$1", "nodename", "(.*)"))`),
+		},
+		// What each node's disks are and how they behave under the real load
+		// (Owner 2026-11-22, relayed by the hardware line: placing a fast-disk
+		// job on a slow disk is the mistake to avoid). The brand does not tell:
+		// two nodes with the same model differ by two orders of magnitude in
+		// write tail, so the readings are the model and the measured latency.
+		{
+			ID:     "compute_disks_now",
+			Title:  "Disks in each cluster node",
+			Unit:   "list",
+			Target: "a register, no target",
+			Note:   "NVMe model and firmware as each node reports them (node exporter). The model alone does not say how fast a disk is: read the write latency rows below.",
+			Build:  fixed(`max by (nodename, device, model, firmware_revision) (node_nvme_info{pod!=""} * on (instance) group_left (nodename) node_uname_info)`),
+		},
+		{
+			ID:     "compute_disk_write_ms_p50",
+			Title:  "Disk write latency per node, typical",
+			Unit:   "ms",
+			Target: "a signal, no target",
+			Note:   "Median over the window of the 5-minute mean time per completed write, NVMe disks of cluster nodes. A disk replaced in the window mixes the old disk's history in.",
+			Build:  fixed(diskWriteMs("0.5", w)),
+		},
+		{
+			ID:     "compute_disk_write_ms_p99",
+			Title:  "Disk write latency per node, worst 1% of the time",
+			Unit:   "ms",
+			Target: "a signal, no target",
+			Note:   "99th percentile of the same 5-minute means: the tail a database or a build writing under load meets. A cache-less disk shows here when a long write fills its fast area.",
+			Build:  fixed(diskWriteMs("0.99", w)),
 		},
 		{
 			ID:     "compute_requests_honest_share",
