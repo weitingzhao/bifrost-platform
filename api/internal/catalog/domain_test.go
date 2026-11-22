@@ -98,3 +98,30 @@ func TestBuildingsPastSixteenFoldIntoOther(t *testing.T) {
 		t.Errorf("16 folded: %d %d", len(got), over)
 	}
 }
+
+// 2026-11-22, law 77: each domain explains itself in content, read on demand
+// through the domain route; someone who wants a thing done asks by the task.
+// The control: a word no task holds finds nothing, and a domain that wrote
+// no tasks is named as silent rather than skipped.
+func TestTasksAreFoundByWhatSomeoneWantsDone(t *testing.T) {
+	s := &Scanner{Kept: memKept{}}
+	rows, _ := json.Marshal(keptRows{Repo: "r", Commit: "c", Domains: []byte(`[
+  {"id":"verification","about":"merge and CI","tasks":[{"task":"why is my commit red","use":["get_unit_runs","GET /api/v1/units/plan"]},{"task":"rerun CI","use":["start_pipeline_run"]}]},
+  {"id":"plan"}]`)})
+	_ = s.kept().Write(keptWorkloads, rows)
+	m, silent := s.TasksFor("Commit RED")
+	if len(m) != 1 || m[0].Domain != "verification" || m[0].Use[0] != "get_unit_runs" {
+		t.Fatalf("%+v", m)
+	}
+	if len(silent) != 1 || silent[0] != "plan" {
+		t.Errorf("silent %v", silent)
+	}
+	if m, _ := s.TasksFor("payroll"); len(m) != 0 {
+		t.Errorf("control: %+v", m)
+	}
+	w := httptest.NewRecorder()
+	DomainRoute{Scanner: s}.ServeHTTP(w, httptest.NewRequest("GET", "/catalog/domain?task=rerun", nil))
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "start_pipeline_run") {
+		t.Errorf("%d %s", w.Code, w.Body)
+	}
+}
