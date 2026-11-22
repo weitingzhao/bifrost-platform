@@ -3,6 +3,8 @@ import type { CiDomainGraph } from '@/api/ciDomains'
 import type { MapStatus } from './domainsPanel'
 import type { Place } from '@bifrost/ui/city/places'
 import { COMPUTE } from './domainPlaces'
+import { OTHER } from './districtBuildings'
+import type { DomainHoldings } from './domainOwns'
 
 /**
  * The districts' tech tree (the Owner, 2026-11-20): who stands on whom among the domains, from the real
@@ -61,17 +63,30 @@ export function domainTechTree(status: MapStatus | undefined, graph: GraphRead):
 
 /**
  * A district's own tech tree (the Owner, 2026-11-21: the tree follows the level): who among its buildings stands
- * on whom. A domain's buildings are the map's groups of its packages, and the edges between them would be the
- * imports inside the domain; on 2026-11-21 neither is served (the ownership table's groups are empty, and
- * /ci/domains gives only the imports between domains; both asked for). So the tree lists the buildings the district
- * has, and says plainly what is not there yet, never a guessed grouping or edge. The hardware district's machines
- * do not stand on one another: it has no tree.
+ * on whom. The buildings are the map's (each domain's packages grouped by directory, catalog/domain buildings);
+ * the edges are the imports inside the domain (/ci/domains inner, production code only), each package put in the
+ * building the map gives it, a package of a building that did not fit in Other. Two buildings that use each
+ * other: the lighter way is marked a loop. Nothing guessed: no inner read, no edges, and the note says why. The
+ * hardware district's machines do not stand on one another: it has no tree.
  */
-export function districtTechTree(district: Place, domainIds: ReadonlySet<string>): TechTree | undefined {
+export function districtTechTree(district: Place, domainIds: ReadonlySet<string>, graph?: CiDomainGraph, holdings?: DomainHoldings): TechTree | undefined {
   if (!domainIds.has(district.id) || district.id === COMPUTE) return undefined
   const nodes = district.children.map(c => ({ id: c.id, label: c.label }))
-  const missing = nodes.length === 0
-    ? `No buildings yet: the map has not grouped ${district.label}'s packages into buildings (its groups are empty).`
-    : `${nodes.length} building${nodes.length === 1 ? '' : 's'}.`
-  return { nodes, note: `${missing} Who stands on whom inside a domain is not measured yet (/ci/domains serves the imports between domains only).` }
+  if (nodes.length === 0) return { nodes, note: `No buildings yet: the map serves none for ${district.label}.` }
+  const shown = new Set(nodes.map(n => n.id))
+  const buildingOf = new Map<string, string>()
+  for (const b of holdings?.buildings ?? []) for (const p of b.packages) buildingOf.set(p, shown.has(b.id) ? b.id : OTHER)
+  const inner = graph?.inner?.find(i => i.domain === district.id)
+  if (!graph?.inner) return { nodes, note: 'Who stands on whom inside a domain is not read yet (/ci/domains has no inner here).' }
+  const w = new Map<string, number>()
+  for (const p of inner?.pairs ?? []) {
+    const a = buildingOf.get(p.from), b = buildingOf.get(p.to)
+    if (!a || !b || a === b || !shown.has(a) || !shown.has(b)) continue
+    w.set(`${a}>${b}`, (w.get(`${a}>${b}`) ?? 0) + 1)
+  }
+  const edges = [...w.entries()].map(([k, weight]) => {
+    const [from, to] = k.split('>'), back = w.get(`${to}>${from}`) ?? 0
+    return { from, to, weight, wrong: back > weight || (back === weight && from > to) }
+  })
+  return { nodes, edges, note: `Imports between ${district.label}'s buildings (production code at ${graph.commit.slice(0, 8)}; test imports not measured).` }
 }

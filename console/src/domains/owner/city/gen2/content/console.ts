@@ -30,5 +30,5 @@ export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null
     place.id === tree.id ? [domainsPanel(domains), ...(traffic ? [trafficPanel(traffic)] : [])]
       : place.kind === 'district' && ids.has(place.id) ? [domainPanel(domains, place.id), ...overflowPanel(place.id), ...(readDomain ? [ownsPanel(readDomain, place.id)] : [])]
         : []
-  return { version: 2, tree, panels, functions: consoleFunctions(), techTree: domainTechTree(domains.data, graph), techTreeIn: (d: Place) => districtTechTree(d, ids), trips: traffic?.trips, ...(alerts ? { alerts: alertsRead(alerts.raw, alerts.error, alerts.devices, tree) } : {}) }
+  return { version: 2, tree, panels, functions: consoleFunctions(), techTree: domainTechTree(domains.data, graph), techTreeIn: (d: Place) => districtTechTree(d, ids, graph.data, holdings[d.id]), trips: traffic?.trips, ...(alerts ? { alerts: alertsRead(alerts.raw, alerts.error, alerts.devices, tree) } : {}) }
 }

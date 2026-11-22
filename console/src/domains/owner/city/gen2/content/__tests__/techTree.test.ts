@@ -53,22 +53,43 @@ describe('the domains tech tree', () => {
   })
 })
 
-// 2026-11-21, the Owner: the tree follows the level; inside a district it is who among its buildings stands on
-// whom. That day the map's groups were empty and /ci/domains served no imports inside a domain: the district's
-// tree says so rather than guess, and the hardware district (machines do not stand on one another) has none.
+// 2026-11-21/22, the Owner: the tree follows the level; inside a district it is who among its buildings stands on
+// whom. The buildings are the map's (catalog/domain buildings), the edges /ci/domains inner (production imports,
+// aa0ca3cf). These pin the merge: packages to the map's buildings, a package of a building that did not fit to
+// Other, two-way pairs one marked a loop, and no inner read: nodes alone with why. The hardware district has none.
 describe('a district’s own tech tree', () => {
   const district = (id: string, children: string[] = []) => ({ id, kind: 'district' as const, shape: '4x4' as const, label: id, question: '', dashboard: null, children: children.map(c => ({ id: c, kind: 'building' as const, shape: '4x4' as const, label: c, question: '', dashboard: null, children: [] })) })
   const ids = new Set(['delivery', 'compute'])
-  it('no buildings yet: an empty tree that says why, no edge', () => {
-    const t = districtTechTree(district('delivery'), ids)!
-    expect(t.nodes).toEqual([])
-    expect(t.edges).toBeUndefined()
-    expect(t.note).toContain('groups are empty')
+  const holdings = { id: 'delivery', packages: [], groups: [], paths: [], workloads: [], buildings: [
+    { id: 'releases', packages: ['pkg/releases', 'pkg/releases/x'] },
+    { id: 'gitops', packages: ['pkg/gitops'] },
+    { id: 'promote', packages: ['pkg/promote'] },
+  ] }
+  const graph = (pairs: { from: string; to: string }[]) => ({ version: 1, repo: 'r', commit: 'abcdef123456', measured: true, note: '', domains: [], edges: [], shared_packages: [], inner: [{ domain: 'delivery', imports: pairs.length, pairs }] })
+  it('the imports inside the domain merged by building, counted', () => {
+    const t = districtTechTree(district('delivery', ['releases', 'gitops']), ids, graph([
+      { from: 'pkg/releases', to: 'pkg/gitops' }, { from: 'pkg/releases/x', to: 'pkg/gitops' },
+      { from: 'pkg/releases/x', to: 'pkg/releases' },
+    ]), holdings)!
+    expect(t.edges).toEqual([{ from: 'releases', to: 'gitops', weight: 2, wrong: false }])
   })
-  it('its buildings as nodes, the edges still not measured', () => {
-    const t = districtTechTree(district('delivery', ['release', 'window']), ids)!
-    expect(t.nodes.map(n => n.id)).toEqual(['release', 'window'])
-    expect(t.note).toContain('not measured')
+  it('a package of a building that did not fit goes to Other', () => {
+    const t = districtTechTree(district('delivery', ['releases', 'other']), ids, graph([{ from: 'pkg/promote', to: 'pkg/releases' }]), holdings)!
+    expect(t.edges).toEqual([{ from: 'other', to: 'releases', weight: 1, wrong: false }])
+  })
+  it('two buildings that use each other: the lighter way is the loop', () => {
+    const t = districtTechTree(district('delivery', ['releases', 'gitops']), ids, graph([
+      { from: 'pkg/releases', to: 'pkg/gitops' }, { from: 'pkg/releases/x', to: 'pkg/gitops' },
+      { from: 'pkg/gitops', to: 'pkg/releases' },
+    ]), holdings)!
+    expect(t.edges!.find(e => e.from === 'gitops')!.wrong).toBe(true)
+    expect(t.edges!.find(e => e.from === 'releases')!.wrong).toBe(false)
+  })
+  it('no inner read: the buildings alone, saying why; no buildings: says so', () => {
+    const t = districtTechTree(district('delivery', ['releases']), ids, undefined, holdings)!
+    expect(t.edges).toBeUndefined()
+    expect(t.note).toContain('not read')
+    expect(districtTechTree(district('delivery'), ids)!.note).toContain('serves none')
   })
   it('the hardware district and anything not a domain have no tree', () => {
     expect(districtTechTree(district('compute', ['gpu-server']), ids)).toBeUndefined()

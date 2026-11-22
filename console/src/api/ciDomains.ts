@@ -19,6 +19,8 @@ export type CiDomainGraph = {
   /** The domain every other stands on; '' or absent when the table names none. */
   base?: string
   domains: CiDomainNode[]; edges: CiDomainEdge[]; shared_packages: string[]
+  /** Each domain's own imports between its packages (production only; 2026-11-22, aa0ca3cf); a domain with none is not listed. */
+  inner?: { domain: string; imports: number; pairs: CiPackagePair[] }[]
 }
 export type CiChange = { commit: string; read: boolean; domains: Record<string, number> }
 export type CiChanges = { version: number; repo: string; measured: boolean; note: string; changes: CiChange[] }
