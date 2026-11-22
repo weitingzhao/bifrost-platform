@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -95,7 +94,7 @@ func TestApprovedDeliverStartOwnsWindowAndRefusesForeignHolder(t *testing.T) {
 	s, dyn, _ := contractService(t, pipe, "unknown")
 	cs := fake.NewSimpleClientset(readyAmd64Node())
 	s.SetClientsetForTest(cs)
-	ctx := actions.WithCreateAttempt(context.Background(), "approval-window", 1)
+	ctx := withTestAttempt(context.Background(), "approval-window", 1)
 	resp, _, err := s.StartPipelineRun(ctx, name, factSHA1, "", "", nil)
 	if err != nil || !resp.OK {
 		t.Fatalf("start: %+v %v", resp, err)
@@ -105,7 +104,7 @@ func TestApprovedDeliverStartOwnsWindowAndRefusesForeignHolder(t *testing.T) {
 	if err != nil || !live || held.Who != run.GetName() {
 		t.Fatalf("run holder: %+v %v", held, err)
 	}
-	other := actions.WithCreateAttempt(context.Background(), "approval-other", 1)
+	other := withTestAttempt(context.Background(), "approval-other", 1)
 	resp, _, err = s.StartPipelineRun(other, name, factSHA1, "", "", nil)
 	if err == nil || !strings.Contains(resp.Message, run.GetName()) || !strings.Contains(resp.Message, held.StartedAt) || !strings.Contains(resp.Message, held.ExpiresAt) {
 		t.Fatalf("foreign start: %+v %v", resp, err)
@@ -172,7 +171,7 @@ func TestApprovedRequesterWindow514(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx = actions.WithCreateAttempt(ctx, "approval-514", 1)
+	ctx = withTestAttempt(ctx, "approval-514", 1)
 	resp, _, err := s.StartPipelineRun(ctx, name, factSHA1, "", "biz-align", nil)
 	if err != nil || !resp.OK {
 		t.Fatalf("approved requester: %+v %v", resp, err)

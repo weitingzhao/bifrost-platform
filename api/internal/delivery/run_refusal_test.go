@@ -27,7 +27,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 )
@@ -991,12 +990,12 @@ func TestARenewalIsMarkedNotRecorded(t *testing.T) {
 		return rec
 	}
 	first := put()
-	if first.Code != http.StatusOK || first.Header().Get(actions.NotRecordedHeader) != "" {
-		t.Fatalf("taking the window must be recorded: %d %q", first.Code, first.Header().Get(actions.NotRecordedHeader))
+	if first.Code != http.StatusOK || first.Header().Get(testNotRecordedHeader) != "" {
+		t.Fatalf("taking the window must be recorded: %d %q", first.Code, first.Header().Get(testNotRecordedHeader))
 	}
 	again := put()
-	if again.Code != http.StatusOK || again.Header().Get(actions.NotRecordedHeader) != "renewal" {
-		t.Fatalf("a renewal must be marked: %d %q %s", again.Code, again.Header().Get(actions.NotRecordedHeader), again.Body)
+	if again.Code != http.StatusOK || again.Header().Get(testNotRecordedHeader) != "renewal" {
+		t.Fatalf("a renewal must be marked: %d %q %s", again.Code, again.Header().Get(testNotRecordedHeader), again.Body)
 	}
 }
 
