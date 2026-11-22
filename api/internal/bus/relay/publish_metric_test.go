@@ -69,3 +69,17 @@ func TestStreamSizesAreWritten(t *testing.T) {
 		}
 	}
 }
+
+// Origin: 2026-11-21, the Bus page listed "backlog per subscription" as not
+// measured. Each durable consumer's backlog is written: what the stream holds
+// for it not handed yet, and what it was handed and has not acknowledged.
+func TestConsumerBacklogsAreWritten(t *testing.T) {
+	recordConsumerBacklogs(map[string]uint64{"alert-letters": 3, "headrelease": 0}, map[string]uint64{"alert-letters": 1, "headrelease": 0})
+	var b strings.Builder
+	writeConsumerBacklogs(&b)
+	for _, want := range []string{`bifrost_bus_consumer_pending{consumer="alert-letters"} 3`, `bifrost_bus_consumer_ack_pending{consumer="alert-letters"} 1`, `bifrost_bus_consumer_pending{consumer="headrelease"} 0`} {
+		if !strings.Contains(b.String(), want) {
+			t.Fatalf("no %q in %s", want, b.String())
+		}
+	}
+}

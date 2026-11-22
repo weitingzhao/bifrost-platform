@@ -310,6 +310,7 @@ func writePublishHistogram(b *strings.Builder) {
 func WriteMetrics(b *strings.Builder) {
 	writePublishHistogram(b)
 	writeStreamSizes(b)
+	writeConsumerBacklogs(b)
 	for _, m := range []struct {
 		name, help string
 		v          int64
