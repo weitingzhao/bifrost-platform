@@ -98,7 +98,8 @@ describe('DomainStatusSummary', () => {
           { kind: 'event', from: 'plan', to: 'coordination', imports: 0, prod_imports: 0, test_imports: 0, events: 2, registered: 0, unregistered: 0, wrong_way: false },
         ],
         references_to_base: 229,
-        checks: [{ class: 'node', registered: 5, live: 6, not_registered: ['ubt-k3s-07 (192.168.10.80)'], not_live: [], measured: true }],
+        checks: [{ class: 'node', registered: 5, live: 6, not_registered: ['ubt-k3s-07 (192.168.10.80)'], not_live: [], measured: true },
+          { class: 'seat', registered: 2, live: 2, not_registered: [], not_live: [], problems: ['visit: temporary with no invited_by'], measured: true }],
       })
     }))
     const { container } = mount()
@@ -106,6 +107,7 @@ describe('DomainStatusSummary', () => {
     expect(container.querySelector('[data-reference="event:plan>coordination"]')!.textContent).toContain('2')
     expect(screen.getByText(/Production imports of the base: 229/)).toBeTruthy()
     expect(container.querySelector('[data-check="node"]')!.textContent).toContain('not registered: ubt-k3s-07 (192.168.10.80)')
+    expect(container.querySelector('[data-check="seat"]')!.textContent).toContain('breaks its own rules: visit: temporary with no invited_by')
     expect(container.querySelector('[data-repo="bifrost-ui"] button')).toBeNull()
     fireEvent.click(container.querySelector('[data-repo="bifrost-platform"] button')!)
     await waitFor(() => expect(container.querySelector('[data-entry="scripts/x"]')).toBeTruthy())

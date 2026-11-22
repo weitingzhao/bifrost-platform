@@ -208,6 +208,9 @@ func (s *Scanner) ScanOnce(ctx context.Context, repo string) (Pool, error) {
 			if table != nil && repo != ClusterRepo && repo != DatabaseRepo {
 				s.keepTopology(t)
 			}
+			if repo != ClusterRepo && repo != DatabaseRepo {
+				s.keepSeats(repo, t)
+			}
 		}
 	}
 	p.ScannedAt = now

@@ -63,7 +63,7 @@ export type DomainStatusInventory = {
 }
 
 /** One class compared with the running system: what its registry misses and what it holds that is not there. */
-export type ClassCheck = { class: string; registered: number; live: number; not_registered: string[]; not_live: string[]; measured: boolean; note?: string }
+export type ClassCheck = { class: string; registered: number; live: number; not_registered: string[]; not_live: string[]; problems?: string[]; measured: boolean; note?: string }
 
 /** GET /api/v1/catalog/index: each class of thing and whether the machine reconciles it with the real system. */
 export type CatalogClass = { class: string; what: string; check: 'scanned' | 'registry' | 'unseen' | string; note?: string }

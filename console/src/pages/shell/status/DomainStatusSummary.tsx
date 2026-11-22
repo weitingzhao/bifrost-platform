@@ -219,7 +219,7 @@ function Coverage({ s }: { s: DomainStatusResponse }) {
       {(s.checks ?? []).map(c => (
         <p key={c.class} className="m-0 break-words text-xs" data-check={c.class}>
           {c.measured
-            ? `${c.class}: ${c.registered} registered, ${c.live} live · not registered: ${c.not_registered.length ? c.not_registered.join(', ') : 'none'} · registered, not live: ${c.not_live.length ? c.not_live.join(', ') : 'none'}`
+            ? `${c.class}: ${c.registered} registered, ${c.live} live · not registered: ${c.not_registered.length ? c.not_registered.join(', ') : 'none'} · registered, not live: ${c.not_live.length ? c.not_live.join(', ') : 'none'}${(c.problems ?? []).length ? ` · breaks its own rules: ${c.problems!.join('; ')}` : ''}`
             : `${c.class}: not compared (${c.note ?? 'unknown'})`}
         </p>
       ))}

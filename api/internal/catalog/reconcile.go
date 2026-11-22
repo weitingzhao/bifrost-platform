@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net"
+	"path"
 	"sort"
+	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -29,8 +32,10 @@ type ClassCheck struct {
 	Live          int      `json:"live"`
 	NotRegistered []string `json:"not_registered"`
 	NotLive       []string `json:"not_live"`
-	Measured      bool     `json:"measured"`
-	Note          string   `json:"note,omitempty"`
+	// Problems are rows the registry holds that break its own rules.
+	Problems []string `json:"problems,omitempty"`
+	Measured bool     `json:"measured"`
+	Note     string   `json:"note,omitempty"`
 }
 
 const keptTopology = "topology"
@@ -108,5 +113,137 @@ func (s *Scanner) nodeCheck(ctx context.Context, nodes func(context.Context) (ma
 	}
 	sort.Strings(c.NotRegistered)
 	sort.Strings(c.NotLive)
+	return c
+}
+
+const keptSeats = "seats"
+
+// keptSeatRoster is the seat roster and the charter pages beside it, as the
+// scan of the repository the index names for class seat read them.
+type keptSeatRoster struct {
+	Repo     string    `json:"repo"`
+	Commit   string    `json:"commit"`
+	Path     string    `json:"path"`
+	Charters []string  `json:"charters"`
+	Rows     []seatRow `json:"rows"`
+}
+
+// seatSource is where the index says the seat roster is ("<repo>:<path>").
+func (s *Scanner) seatSource() (repo, file string, ok bool) {
+	raw, err := s.kept().Read(keptIndex)
+	if err != nil || raw == nil {
+		return "", "", false
+	}
+	var ix Index
+	if json.Unmarshal(raw, &ix) != nil {
+		return "", "", false
+	}
+	for _, c := range ix.Classes {
+		if c.Class != "seat" || len(c.Sources) == 0 {
+			continue
+		}
+		repo, file, ok = strings.Cut(c.Sources[0], ":")
+		return repo, file, ok && repo != "" && file != ""
+	}
+	return "", "", false
+}
+
+// keepSeats keeps the roster and its charter pages when repo is the one the
+// index names for class seat. The platform names no repository: the index
+// does.
+func (s *Scanner) keepSeats(repo string, t Tree) {
+	srcRepo, file, ok := s.seatSource()
+	if !ok || srcRepo != repo {
+		return
+	}
+	raw, found, err := t.Read(file)
+	if err != nil || !found {
+		return
+	}
+	var doc struct {
+		SeatRows  []seatRow `yaml:"seats"`
+		Temporary []seatRow `yaml:"temporary"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		slog.Warn("catalog: seats", "err", err)
+		return
+	}
+	k := keptSeatRoster{Repo: repo, Commit: t.Commit, Path: file, Charters: []string{}}
+	dir := path.Dir(file)
+	for _, f := range t.Files {
+		if path.Dir(f) == dir && strings.HasSuffix(f, ".md") && !strings.EqualFold(path.Base(f), "README.md") {
+			k.Charters = append(k.Charters, path.Base(f))
+		}
+	}
+	sort.Strings(k.Charters)
+	k.Rows = append(append([]seatRow{}, doc.SeatRows...), doc.Temporary...)
+	if out, err := json.Marshal(k); err == nil {
+		if err := s.kept().Write(keptSeats, out); err != nil {
+			slog.Warn("catalog: keep seats", "err", err)
+		}
+	}
+}
+
+// seatRow is one row of the roster as far as the check reads it.
+type seatRow struct {
+	ID        string  `json:"id" yaml:"id"`
+	Charter   string  `json:"charter" yaml:"charter"`
+	DomainID  *string `json:"domain_id" yaml:"domain_id"`
+	Kind      string  `json:"kind" yaml:"kind"`
+	InvitedBy string  `json:"invited_by,omitempty" yaml:"invited_by"`
+}
+
+// seatCheck compares the roster with its charter pages and the domains
+// (Crew's measure, 2026-11-21): every page has exactly one row naming it,
+// every row's page is there; problems are a domain id the table does not
+// have and a temporary seat with no invited_by.
+func (s *Scanner) seatCheck(domains []contractDomain) ClassCheck {
+	c := ClassCheck{Class: "seat", NotRegistered: []string{}, NotLive: []string{}, Problems: []string{}}
+	raw, err := s.kept().Read(keptSeats)
+	if err != nil || raw == nil {
+		c.Note = "no scan has kept the seat roster yet"
+		return c
+	}
+	var k keptSeatRoster
+	if json.Unmarshal(raw, &k) != nil {
+		c.Note = "the kept seat roster does not read"
+		return c
+	}
+	known := map[string]bool{}
+	for _, d := range domains {
+		known[d.ID] = true
+	}
+	pages := map[string]bool{}
+	for _, p := range k.Charters {
+		pages[p] = true
+	}
+	rows := map[string]int{}
+	for _, r := range k.Rows {
+		if r.Charter != "" {
+			rows[r.Charter]++
+		}
+		if r.Charter != "" && !pages[r.Charter] {
+			c.NotLive = append(c.NotLive, r.ID+" ("+r.Charter+")")
+		}
+		if r.DomainID != nil && !known[*r.DomainID] {
+			c.Problems = append(c.Problems, r.ID+": domain_id "+*r.DomainID+" is not a domain of the table")
+		}
+		if r.Kind == "temporary" && r.InvitedBy == "" {
+			c.Problems = append(c.Problems, r.ID+": temporary with no invited_by")
+		}
+	}
+	for _, p := range k.Charters {
+		switch rows[p] {
+		case 0:
+			c.NotRegistered = append(c.NotRegistered, p)
+		case 1:
+		default:
+			c.Problems = append(c.Problems, p+": named by "+strconv.Itoa(rows[p])+" rows")
+		}
+	}
+	sort.Strings(c.NotRegistered)
+	sort.Strings(c.NotLive)
+	sort.Strings(c.Problems)
+	c.Measured, c.Registered, c.Live = true, len(k.Rows), len(k.Charters)
 	return c
 }

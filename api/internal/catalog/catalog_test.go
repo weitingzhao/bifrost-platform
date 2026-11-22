@@ -343,3 +343,39 @@ func TestNodesAreComparedWithWhatTopologyClaims(t *testing.T) {
 		t.Errorf("an unread node list is not measured: %+v", c)
 	}
 }
+
+// 2026-11-21, Crew's measure for class seat (charters/seats.yaml): it was
+// run by hand (check-seats.py), so the map could not show a page with no
+// row, a row with no page, a domain id the table lacks, or a temporary seat
+// nobody invited. The repository comes from the index, never from code. The
+// control: a page named by one row with a known domain raises nothing.
+func TestSeatsAreComparedWithTheirCharterPages(t *testing.T) {
+	s := &Scanner{Kept: memKept{}}
+	ix, _ := json.Marshal(Index{Classes: []Class{{Class: "seat", Sources: []string{"infra:c/seats.yaml"}, Check: CheckScanned}}})
+	_ = s.kept().Write(keptIndex, ix)
+	tree := Tree{Commit: "c", Files: []string{"c/seats.yaml", "c/README.md", "c/a.md", "c/b.md", "c/new.md"},
+		Read: func(p string) ([]byte, bool, error) {
+			return []byte(`seats:
+  - {id: a, charter: a.md, domain_id: plan, kind: owner}
+  - {id: b, charter: b.md, domain_id: nowhere, kind: owner}
+  - {id: gone, charter: gone.md, domain_id: null, kind: owner}
+temporary:
+  - {id: visit, kind: temporary}
+`), true, nil
+		}}
+	s.keepSeats("other", tree)
+	if c := s.seatCheck(nil); c.Measured {
+		t.Fatalf("a repository the index does not name is not read: %+v", c)
+	}
+	s.keepSeats("infra", tree)
+	c := s.seatCheck([]contractDomain{{ID: "plan"}})
+	if !c.Measured || c.Registered != 4 || c.Live != 3 {
+		t.Fatalf("%+v", c)
+	}
+	if len(c.NotRegistered) != 1 || c.NotRegistered[0] != "new.md" || len(c.NotLive) != 1 || c.NotLive[0] != "gone (gone.md)" {
+		t.Errorf("%+v", c)
+	}
+	if len(c.Problems) != 2 {
+		t.Errorf("want the unknown domain and the uninvited temporary: %+v", c.Problems)
+	}
+}

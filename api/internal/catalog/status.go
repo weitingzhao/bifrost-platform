@@ -262,7 +262,7 @@ func (s *Scanner) ComputeStatus(ctx context.Context, in StatusInputs) Status {
 			st.References, st.ToBase = references(edges, domains, uses)
 		}
 	}
-	st.Checks = []ClassCheck{s.nodeCheck(ctx, in.ClusterNodes)}
+	st.Checks = []ClassCheck{s.nodeCheck(ctx, in.ClusterNodes), s.seatCheck(domains)}
 	alive := s.aliveLights(k.Repo, domains, in)
 	ifaces := interfaceLights(ctx, domains, in)
 	bound := boundaryLights(ctx, k.Repo, domains, in)
