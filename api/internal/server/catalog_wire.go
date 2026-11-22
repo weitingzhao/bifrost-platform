@@ -372,6 +372,21 @@ func (s *Server) catalogStatusInputs() catalog.StatusInputs {
 		}
 	}
 	if s.cluster != nil {
+		in.Namespaces = func(ctx context.Context) ([]string, bool) {
+			kube, _, err := s.cluster.Service().KubernetesClient()
+			if err != nil {
+				return nil, false
+			}
+			list, err := kube.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+			if err != nil {
+				return nil, false
+			}
+			out := make([]string, 0, len(list.Items))
+			for _, n := range list.Items {
+				out = append(out, n.Name)
+			}
+			return out, true
+		}
 		in.ClusterNodes = func(ctx context.Context) (map[string]string, bool) {
 			live := s.liveHosts(ctx)
 			return live.ClusterNodes, live.ClusterKnown

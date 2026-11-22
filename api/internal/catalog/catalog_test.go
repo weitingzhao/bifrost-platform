@@ -512,3 +512,26 @@ func TestEventTypesAreComparedWithWhatTheLedgerWrote(t *testing.T) {
 		t.Errorf("no ledger is not measured")
 	}
 }
+
+// 2026-11-22: cluster and environment were registry-only classes; the map
+// compares the namespaces they name with the cluster's. The control: a
+// registered namespace that is there is in neither list, and an environment
+// with no namespace is not compared.
+func TestNamespacesAreComparedWithTheClusterAndEnvironmentRegistries(t *testing.T) {
+	s := &Scanner{Kept: memKept{}}
+	files := map[string]string{
+		"config/clusters.yaml":     "clusters:\n  - id: boot\n    bifrost_namespaces: [cicd, gone]\n",
+		"config/environments.yaml": "environments:\n  - {id: stg, namespace: bifrost-stg}\n  - {id: prod, namespace: bifrost-prod}\n  - {id: local}\n",
+	}
+	s.keepPlaces(Tree{Commit: "c", Read: func(p string) ([]byte, bool, error) { v, ok := files[p]; return []byte(v), ok, nil }})
+	cs := s.placeChecks(context.Background(), func(context.Context) ([]string, bool) {
+		return []string{"cicd", "kube-system", "bifrost-stg"}, true
+	})
+	cl, env := cs[0], cs[1]
+	if !cl.Measured || len(cl.NotRegistered) != 2 || len(cl.NotLive) != 1 || cl.NotLive[0] != "gone (boot)" {
+		t.Errorf("cluster %+v", cl)
+	}
+	if !env.Measured || env.Registered != 2 || env.Live != 1 || len(env.NotLive) != 1 || env.NotLive[0] != "prod (bifrost-prod)" {
+		t.Errorf("environment %+v", env)
+	}
+}

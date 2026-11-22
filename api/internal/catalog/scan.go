@@ -211,6 +211,7 @@ func (s *Scanner) ScanOnce(ctx context.Context, repo string) (Pool, error) {
 			if k, ok := s.keptSections(); ok && k.Repo == repo && table != nil {
 				s.keepTopology(t)
 				s.keepMCPTools(t)
+				s.keepPlaces(t)
 			}
 			if repo != ClusterRepo && repo != DatabaseRepo {
 				s.keepSeats(repo, t)
