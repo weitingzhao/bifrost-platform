@@ -10,9 +10,17 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/assessmentreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore" // declares the plan event vocabulary
 	"testing"
 )
+
+// The parity check appends "note" events. Their body is the plan domain's
+// (planstore); importing planstore for it reached across domains (tests-reach
+// baseline, 2026-11-22), so this test binary declares the same body itself.
+func init() {
+	eventlog.Declare(eventlog.Vocabulary{Bodies: map[string][]eventlog.Field{
+		"note": {{Name: "text", Kind: eventlog.Str}, {Name: "evidence", Kind: eventlog.IDs, Optional: true}},
+	}})
+}
 
 func TestAssessmentRecordedQueryParityPG(t *testing.T) {
 	t.Parallel()
