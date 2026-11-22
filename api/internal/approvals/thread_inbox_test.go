@@ -18,6 +18,11 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
+// The runtime stores an artifact only through a registered view check; the
+// server registered one for this package while http_test.go imported it
+// (moved to server 2026-11-22, law 71).
+func init() { artifact.RegisterCheck(func(string, []byte) error { return nil }) }
+
 func TestThreadInboxEveryTerminalStateRetriesInExistingLoops(t *testing.T) {
 	t.Parallel()
 	for _, status := range []string{StatusExecuted, StatusFailed, StatusRejected, StatusExpired, StatusUnknown} {

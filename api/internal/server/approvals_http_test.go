@@ -1,4 +1,6 @@
-package approvals_test
+//bifrost:owner approvals
+
+package server_test
 
 import (
 	"context"

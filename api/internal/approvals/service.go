@@ -17,8 +17,8 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/owner/approvalhome"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
+	"github.com/weitingzhao/bifrost-platform/api/internal/owner/approvalhome"
 )
 
 // Service stores approvals, runs platform actions on approve, and hands the
