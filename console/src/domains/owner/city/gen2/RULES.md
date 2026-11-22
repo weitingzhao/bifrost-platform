@@ -539,3 +539,7 @@ City 是一种监控程序，用游戏来呈现。做法和 Prometheus 一样反
 - 放不下（一层最多 16 样、16 个单元）：最大的先放，留一格给 Other，其余并进「Other · N」，它的说明里点名每一栋；不丢。Other 画成**工地**（引擎地标 site），街区卡片「Too fine to fit」写明超了多少。Owner 2026-11-22：「每一层超过十六个，就是分得太碎……写不进去就应该让他们去解耦，或者聚合合并起来」。16 是 City 的尺子；把它变成合入检查是改裁判规则，按法 29 另提，City 不自己加。2026-11-22 Foundation 30 栋、Approvals 20 栋会进 Other。
 - 楼的样子先用通用楼；楼这一层的图库（服务、后台任务、存储、工具库……）下一步做，同样由引擎出、各线认领。楼之间的线等 CI 线的 `inner`。
 - 默认，Owner 可否决：尺寸分档、Other 的做法。
+
+## 硬件读数按名字读（2026-11-22）
+
+- 指标线的记录规则在 PROD 生效（卡 #678，13:49Z）：`hardwareQueries.json` 的 busy、memUsed、diskUsed、pods 换成 `bifrost_node:cpu_busy_cores_5m`、`memory_used_bytes`、`filesystem_used_bytes`、`pods_running`，口径归指标线（法 47）。外面包一层 `max by (原标签)`：值不变，也满足引擎「数从查询来」的规则（它认函数或选择器）。标签与原查询相同（instance / instance+mountpoint / node），读数不变。其余 13 条是原始序列的 max/count，照读原始。13:49Z 以前没有这四条的数，回看历史仍要用旧查询。
