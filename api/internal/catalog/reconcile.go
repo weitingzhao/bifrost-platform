@@ -130,7 +130,10 @@ type keptSeatRoster struct {
 }
 
 // seatSource is where the index says the seat roster is ("<repo>:<path>").
-func (s *Scanner) seatSource() (repo, file string, ok bool) {
+func (s *Scanner) seatSource() (repo, file string, ok bool) { return s.classSource("seat") }
+
+// classSource is a class's first source in the kept index, "<repo>:<path>".
+func (s *Scanner) classSource(class string) (repo, file string, ok bool) {
 	raw, err := s.kept().Read(keptIndex)
 	if err != nil || raw == nil {
 		return "", "", false
@@ -140,7 +143,7 @@ func (s *Scanner) seatSource() (repo, file string, ok bool) {
 		return "", "", false
 	}
 	for _, c := range ix.Classes {
-		if c.Class != "seat" || len(c.Sources) == 0 {
+		if c.Class != class || len(c.Sources) == 0 {
 			continue
 		}
 		repo, file, ok = strings.Cut(c.Sources[0], ":")
@@ -322,5 +325,126 @@ func (s *Scanner) mcpToolCheck(domains []contractDomain) ClassCheck {
 	sort.Strings(c.NotRegistered)
 	sort.Strings(c.NotLive)
 	c.Measured, c.Registered, c.Live = true, len(contract), len(k.Tools)
+	return c
+}
+
+const keptRules = "prometheus-rules"
+
+// keptRuleGroups are the rule groups the PrometheusRule manifests under the
+// index's directory for class prometheus-rule declare.
+type keptRuleGroups struct {
+	Repo   string              `json:"repo"`
+	Commit string              `json:"commit"`
+	Dir    string              `json:"dir"`
+	Groups map[string]ruleFile `json:"groups"`
+}
+
+type ruleFile struct {
+	File  string   `json:"file"`
+	Rules []string `json:"rules"`
+}
+
+// keepRules keeps the manifests' rule groups when repo is the one the index
+// names for class prometheus-rule.
+func (s *Scanner) keepRules(repo string, t Tree) {
+	srcRepo, dir, ok := s.classSource("prometheus-rule")
+	if !ok || srcRepo != repo {
+		return
+	}
+	dir = strings.TrimSuffix(dir, "/")
+	k := keptRuleGroups{Repo: repo, Commit: t.Commit, Dir: dir, Groups: map[string]ruleFile{}}
+	for _, f := range t.Files {
+		if !strings.HasPrefix(f, dir+"/") || !(strings.HasSuffix(f, ".yaml") || strings.HasSuffix(f, ".yml")) {
+			continue
+		}
+		raw, found, err := t.Read(f)
+		if err != nil || !found || !strings.Contains(string(raw), "PrometheusRule") {
+			continue
+		}
+		dec := yaml.NewDecoder(strings.NewReader(string(raw)))
+		for {
+			var doc struct {
+				Kind string `yaml:"kind"`
+				Spec struct {
+					Groups []struct {
+						Name  string `yaml:"name"`
+						Rules []struct {
+							Alert  string `yaml:"alert"`
+							Record string `yaml:"record"`
+						} `yaml:"rules"`
+					} `yaml:"groups"`
+				} `yaml:"spec"`
+			}
+			if err := dec.Decode(&doc); err != nil {
+				break
+			}
+			if doc.Kind != "PrometheusRule" {
+				continue
+			}
+			for _, g := range doc.Spec.Groups {
+				rf := ruleFile{File: f, Rules: []string{}}
+				for _, r := range g.Rules {
+					if r.Alert != "" {
+						rf.Rules = append(rf.Rules, r.Alert)
+					} else if r.Record != "" {
+						rf.Rules = append(rf.Rules, r.Record)
+					}
+				}
+				k.Groups[g.Name] = rf
+			}
+		}
+	}
+	if out, err := json.Marshal(k); err == nil {
+		if err := s.kept().Write(keptRules, out); err != nil {
+			slog.Warn("catalog: keep rules", "err", err)
+		}
+	}
+}
+
+// RuleGroup is one rule group Prometheus has loaded.
+type RuleGroup struct {
+	Name  string
+	Rules []string
+}
+
+// ruleCheck compares the manifests' rule groups with the groups Prometheus
+// has loaded: groups loaded but declared by no manifest here (a chart's
+// defaults, a rule applied by hand), groups declared but not loaded.
+func (s *Scanner) ruleCheck(ctx context.Context, loaded func(context.Context) ([]RuleGroup, bool)) ClassCheck {
+	c := ClassCheck{Class: "prometheus-rule", NotRegistered: []string{}, NotLive: []string{}}
+	raw, err := s.kept().Read(keptRules)
+	if err != nil || raw == nil {
+		c.Note = "no scan has kept the rule manifests yet"
+		return c
+	}
+	var k keptRuleGroups
+	if json.Unmarshal(raw, &k) != nil {
+		c.Note = "the kept rule manifests do not read"
+		return c
+	}
+	if loaded == nil {
+		c.Note = "this platform does not read Prometheus"
+		return c
+	}
+	groups, ok := loaded(ctx)
+	if !ok {
+		c.Note = "Prometheus's rules could not be read"
+		return c
+	}
+	live := map[string]bool{}
+	for _, g := range groups {
+		live[g.Name] = true
+		if _, declared := k.Groups[g.Name]; !declared {
+			c.NotRegistered = append(c.NotRegistered, g.Name+" ("+strconv.Itoa(len(g.Rules))+" rules)")
+		}
+	}
+	for name, rf := range k.Groups {
+		if !live[name] {
+			c.NotLive = append(c.NotLive, name+" ("+rf.File+")")
+		}
+	}
+	sort.Strings(c.NotRegistered)
+	sort.Strings(c.NotLive)
+	c.Measured, c.Registered, c.Live = true, len(k.Groups), len(live)
 	return c
 }

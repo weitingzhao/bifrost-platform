@@ -122,6 +122,19 @@ func (h *Handler) ScrapedHosts(ctx context.Context) map[string]string {
 	return h.svc.ScrapedHosts(ctx)
 }
 
+// RuleGroups is the rule groups Prometheus has loaded, for the map; false
+// when Prometheus is not configured or did not answer.
+func (h *Handler) RuleGroups(ctx context.Context) ([]RuleGroup, bool) {
+	promURL := h.svc.prometheusURL()
+	if promURL == "" {
+		return nil, false
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	groups, err := NewClient(promURL).QueryRuleGroups(ctx)
+	return groups, err == nil
+}
+
 // PromQL runs one instant query for another package (the bus's effect
 // readings); an empty result is no points, not an error.
 func (h *Handler) PromQL(ctx context.Context, promQL string) ([]SamplePoint, error) {

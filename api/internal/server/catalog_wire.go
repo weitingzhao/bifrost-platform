@@ -347,6 +347,16 @@ func (s *Server) catalogStatusInputs() catalog.StatusInputs {
 		}
 		in.Uses = s.catalogUses
 	}
+	if s.telemetry != nil {
+		in.RuleGroups = func(ctx context.Context) ([]catalog.RuleGroup, bool) {
+			groups, ok := s.telemetry.RuleGroups(ctx)
+			out := make([]catalog.RuleGroup, 0, len(groups))
+			for _, g := range groups {
+				out = append(out, catalog.RuleGroup{Name: g.Name, Rules: g.Rules})
+			}
+			return out, ok
+		}
+	}
 	if s.cluster != nil {
 		in.ClusterNodes = func(ctx context.Context) (map[string]string, bool) {
 			live := s.liveHosts(ctx)

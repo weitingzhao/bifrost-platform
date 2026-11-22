@@ -111,6 +111,9 @@ type StatusInputs struct {
 	// ClusterNodes is the cluster's nodes, internal IP to name; false when
 	// the list could not be read.
 	ClusterNodes func(ctx context.Context) (map[string]string, bool)
+	// RuleGroups is the rule groups Prometheus has loaded; false when not
+	// read.
+	RuleGroups func(ctx context.Context) ([]RuleGroup, bool)
 }
 
 // Light is one light of one domain.
@@ -266,7 +269,7 @@ func (s *Scanner) ComputeStatus(ctx context.Context, in StatusInputs) Status {
 			st.References, st.ToBase = references(edges, domains, uses)
 		}
 	}
-	st.Checks = []ClassCheck{s.nodeCheck(ctx, in.ClusterNodes), s.seatCheck(domains), s.mcpToolCheck(domains)}
+	st.Checks = []ClassCheck{s.nodeCheck(ctx, in.ClusterNodes), s.seatCheck(domains), s.mcpToolCheck(domains), s.ruleCheck(ctx, in.RuleGroups)}
 	alive := s.aliveLights(k.Repo, domains, in)
 	ifaces := interfaceLights(ctx, domains, in)
 	bound := boundaryLights(ctx, k.Repo, domains, in)

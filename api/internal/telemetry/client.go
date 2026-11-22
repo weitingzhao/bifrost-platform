@@ -264,3 +264,44 @@ func truncate(s string, max int) string {
 	}
 	return s[:max] + "…"
 }
+
+// RuleGroup is one rule group Prometheus has loaded and its rules' names
+// (an alert's name, a recording rule's record).
+type RuleGroup struct {
+	Name  string
+	File  string
+	Rules []string
+}
+
+// QueryRuleGroups reads the rule groups Prometheus has loaded
+// (/api/v1/rules; 2026-11-22, the map compares them with the manifests).
+func (c *Client) QueryRuleGroups(ctx context.Context) ([]RuleGroup, error) {
+	var parsed struct {
+		Status string `json:"status"`
+		Error  string `json:"error"`
+		Data   struct {
+			Groups []struct {
+				Name  string `json:"name"`
+				File  string `json:"file"`
+				Rules []struct {
+					Name string `json:"name"`
+				} `json:"rules"`
+			} `json:"groups"`
+		} `json:"data"`
+	}
+	if err := c.getJSON(ctx, "/api/v1/rules", &parsed); err != nil {
+		return nil, err
+	}
+	if parsed.Status != "success" {
+		return nil, fmt.Errorf("prometheus rules query failed: %s", parsed.Error)
+	}
+	out := make([]RuleGroup, 0, len(parsed.Data.Groups))
+	for _, g := range parsed.Data.Groups {
+		rg := RuleGroup{Name: g.Name, File: g.File, Rules: []string{}}
+		for _, r := range g.Rules {
+			rg.Rules = append(rg.Rules, r.Name)
+		}
+		out = append(out, rg)
+	}
+	return out, nil
+}

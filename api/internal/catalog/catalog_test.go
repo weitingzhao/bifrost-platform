@@ -408,3 +408,31 @@ func TestMCPToolsAreComparedWithTheContracts(t *testing.T) {
 		t.Errorf("%+v", c)
 	}
 }
+
+// 2026-11-22, the compute line: bifrost_node:home_info and the ComputePain
+// alerts were in no class of the map. The control: a group declared and
+// loaded is in neither list; a non-PrometheusRule document is no group.
+func TestRuleGroupsAreComparedWithWhatPrometheusLoaded(t *testing.T) {
+	s := &Scanner{Kept: memKept{}}
+	ix, _ := json.Marshal(Index{Classes: []Class{{Class: "prometheus-rule", Sources: []string{"infra:k8s/monitoring/"}, Check: CheckScanned}}})
+	_ = s.kept().Write(keptIndex, ix)
+	src := map[string]string{
+		"k8s/monitoring/compute.yaml": "kind: PrometheusRule\nspec:\n  groups:\n    - name: compute\n      rules:\n        - record: bifrost_node:home_info\n        - alert: ComputePainDbDiskFlush\n---\nkind: ConfigMap\nspec:\n  groups:\n    - name: not-a-rule\n",
+		"k8s/monitoring/gone.yaml":    "kind: PrometheusRule\nspec:\n  groups:\n    - name: gone\n      rules:\n        - alert: X\n",
+		"k8s/other/x.yaml":            "kind: PrometheusRule\nspec:\n  groups:\n    - name: elsewhere\n",
+	}
+	files := []string{}
+	for f := range src {
+		files = append(files, f)
+	}
+	s.keepRules("infra", Tree{Commit: "c", Files: files, Read: func(p string) ([]byte, bool, error) { return []byte(src[p]), true, nil }})
+	c := s.ruleCheck(context.Background(), func(context.Context) ([]RuleGroup, bool) {
+		return []RuleGroup{{Name: "compute", Rules: []string{"a", "b"}}, {Name: "kubernetes-apps", Rules: []string{"x"}}}, true
+	})
+	if !c.Measured || c.Registered != 2 || c.Live != 2 {
+		t.Fatalf("%+v", c)
+	}
+	if len(c.NotRegistered) != 1 || c.NotRegistered[0] != "kubernetes-apps (1 rules)" || len(c.NotLive) != 1 || c.NotLive[0] != "gone (k8s/monitoring/gone.yaml)" {
+		t.Errorf("%+v", c)
+	}
+}
