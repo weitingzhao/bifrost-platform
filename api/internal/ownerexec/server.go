@@ -23,6 +23,9 @@ const Action = "owner_run_command"
 
 // RunPath is the one route the Console calls. The code and the bearer travel
 // in the body and a header, never in the path: every proxy in front logs paths.
+// claimBudget bounds the claim call once it no longer follows the request.
+const claimBudget = 30 * time.Second
+
 const (
 	RunPath    = "/api/owner-exec/run"
 	HealthPath = "/api/owner-exec/health"
@@ -160,7 +163,14 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		s.Logf("run %s: approved", id)
 	}
 
-	claim, err := s.Platform.Claim(ctx, bearer, id, s.ExecutorID)
+	// The claim must not follow the caller's request. #677 (2026-11-22): the
+	// phone's request was cancelled while the claim was in flight; the platform
+	// had already stored the lease, this process never saw the reply, so the
+	// command never ran and the card sat in running until the lease lapsed.
+	// Once Approve has gone through, finish the claim on our own clock.
+	claimCtx, cancelClaim := context.WithTimeout(context.WithoutCancel(ctx), claimBudget)
+	defer cancelClaim()
+	claim, err := s.Platform.Claim(claimCtx, bearer, id, s.ExecutorID)
 	if err != nil {
 		s.relay(w, id, "claim", err)
 		return

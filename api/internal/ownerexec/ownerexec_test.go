@@ -179,6 +179,8 @@ type fakePlatform struct {
 	calls       []string
 	result      *Result
 	approveBody string
+	onApprove   func() // runs after a successful approve
+	claimCtxErr error  // the claim context's error when claim was called
 }
 
 func (f *fakePlatform) note(s string) { f.mu.Lock(); f.calls = append(f.calls, s); f.mu.Unlock() }
@@ -201,13 +203,21 @@ func (f *fakePlatform) Approve(_ context.Context, _, _ string, body json.RawMess
 	f.mu.Lock()
 	f.card.Status = "approved"
 	f.approveBody = string(body)
+	hook := f.onApprove
 	f.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
 	return nil
 }
-func (f *fakePlatform) Claim(context.Context, string, string, string) (Claim, error) {
+func (f *fakePlatform) Claim(ctx context.Context, _, _, _ string) (Claim, error) {
 	f.note("claim")
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.claimCtxErr = ctx.Err()
+	if f.claimCtxErr != nil {
+		return Claim{}, f.claimCtxErr
+	}
 	if f.card.Status != "approved" {
 		return Claim{}, &StatusError{Status: 409, Body: map[string]any{"error": "not claimable"}}
 	}
@@ -321,6 +331,27 @@ func TestRunApprovesClaimsRunsAndStoresTheResult(t *testing.T) {
 	}
 	if h.fake.result == nil || h.fake.result.ExitCode == nil || *h.fake.result.ExitCode != 0 || h.fake.result.LeaseID != "lease_1" {
 		t.Fatalf("result: %+v", h.fake.result)
+	}
+}
+
+// 2026-11-22, card #677: the phone's request was cancelled between approve and
+// claim; the platform stored the lease but owner-exec never ran the command and
+// the card sat in running. The claim must outlive the caller's request.
+func TestClaimOutlivesACancelledRequest(t *testing.T) {
+	h := newHarness(t, "pending")
+	raw, _ := json.Marshal(h.body(h.code()))
+	ctx, cancel := context.WithCancel(context.Background())
+	h.fake.onApprove = cancel
+	req := httptest.NewRequest(http.MethodPost, RunPath, bytes.NewReader(raw)).WithContext(ctx)
+	req.Header.Set("Authorization", "Bearer "+testBearer)
+	rec := httptest.NewRecorder()
+	h.srv.Handler().ServeHTTP(rec, req)
+	h.srv.Wait()
+	if h.fake.claimCtxErr != nil {
+		t.Fatalf("claim ran on the cancelled request context: %v", h.fake.claimCtxErr)
+	}
+	if h.commandsRun() != 1 || h.fake.result == nil {
+		t.Fatalf("command not run after the request was cancelled: ran %q, result %+v", h.ran, h.fake.result)
 	}
 }
 
