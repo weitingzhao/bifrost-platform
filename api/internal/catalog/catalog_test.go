@@ -535,3 +535,31 @@ func TestNamespacesAreComparedWithTheClusterAndEnvironmentRegistries(t *testing.
 		t.Errorf("environment %+v", env)
 	}
 }
+
+// 2026-11-22: the scan reads the table through the per-domain files too, so a
+// row moved to config/domains/<domain>.json still covers its path. The
+// control: without the part the path is off the map.
+func TestTheScanReadsRowsFromTheDomainFiles(t *testing.T) {
+	src := map[string]string{
+		OwnershipPath:                 `{"domains":[{"id":"plan"}],"packages":{"api/internal/a":{"domains":["plan"]}}}`,
+		"config/domains/lineage.json": `{"domain":{"id":"lineage"},"paths":{"tools":{"domains":["lineage"]}}}`,
+		"api/internal/a/a.go":         "package a",
+		"tools/run.sh":                "",
+	}
+	files := []string{OwnershipPath, "config/domains/lineage.json", "api/internal/a/a.go", "tools/run.sh"}
+	read := func(p string) ([]byte, bool, error) { v, ok := src[p]; return []byte(v), ok, nil }
+	inPool := func(p Pool) bool {
+		for _, e := range p.Entries {
+			if e.Path == "tools" {
+				return true
+			}
+		}
+		return false
+	}
+	if p := PoolOf("r", Tree{Commit: "c", Files: files, Read: read}); inPool(p) || p.Gap != 0 {
+		t.Fatalf("with the part: %+v", p.Entries)
+	}
+	if p := PoolOf("r", Tree{Commit: "c", Files: []string{OwnershipPath, "api/internal/a/a.go", "tools/run.sh"}, Read: read}); !inPool(p) {
+		t.Errorf("control: tools should be off the map without the part: %+v", p.Entries)
+	}
+}

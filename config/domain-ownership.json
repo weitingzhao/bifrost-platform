@@ -1732,6 +1732,13 @@
       "status": "assigned",
       "basis": "2026-11-21 bus sub-domain, written by the Foundation seat: records each agent guard refusal, rule and session only, on the bus (guard.block.recorded, POST /api/v1/bus/guard-blocks, action record_guard_block). Imports only foundation packages (actor, eventlog); the server wires it."
     },
+    "api/internal/ownershiptable": {
+      "domains": [
+        "foundation"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-22 map line (0.2): reads the ownership table as one document from config/domain-ownership.json and the per-domain files config/domains/*.json (law 75 proposal section 3: the table collides; it is split per domain while every reader reads through one merge). Imports nothing of the platform."
+    },
     "api/internal/bus/catalogusers": {
       "domains": [
         "foundation"

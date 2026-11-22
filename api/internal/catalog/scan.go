@@ -17,6 +17,8 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/ownershiptable"
 )
 
 // Every is how often the scanner reads each repository's main again.
@@ -99,7 +101,7 @@ func PoolOf(repo string, t Tree) Pool {
 // it is), unless whole: a tenant's, kept as one entry.
 func poolAndTable(repo string, t Tree, whole bool) (Pool, *Table) {
 	p := Pool{Version: Version, Repo: repo, Commit: t.Commit, Measured: true, Entries: []Entry{}, StaleRows: []string{}, RootGroupOnly: []string{}}
-	own, ok, err := t.Read(OwnershipPath)
+	own, ok, err := readOwnership(t)
 	if err != nil {
 		p.Measured, p.Note = false, err.Error()
 		return p, nil
@@ -295,7 +297,7 @@ func (s *Scanner) keepOthers(from string, others map[string]map[string]Review) {
 // keepTables keeps what "who owns X" and the index are answered from. A
 // failure to keep them is logged; the pool is kept either way.
 func (s *Scanner) keepTables(repo string, t Tree, table *Table, now time.Time) {
-	if own, ok, err := t.Read(OwnershipPath); err == nil && ok && repo != ClusterRepo && repo != DatabaseRepo {
+	if own, ok, err := readOwnership(t); err == nil && ok && repo != ClusterRepo && repo != DatabaseRepo {
 		s.keepWorkloads(repo, t.Commit, own)
 	}
 	o := Owners{Repo: repo, Commit: t.Commit, ScannedAt: now, Packages: map[string][]string{}, Groups: map[string][]string{}}
@@ -426,4 +428,29 @@ func (rt Route) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p = &Pool{Version: Version, Repo: repo, Note: "not scanned yet: the scanner runs in the workers every " + Every.String(), Entries: []Entry{}}
 	}
 	_ = json.NewEncoder(w).Encode(p)
+}
+
+// readOwnership reads the ownership table of t as one document: the main
+// file with config/domains/*.json merged in (ownershiptable.Merge).
+func readOwnership(t Tree) ([]byte, bool, error) {
+	own, ok, err := t.Read(OwnershipPath)
+	if err != nil || !ok {
+		return own, ok, err
+	}
+	paths := ownershiptable.PartPaths(t.Files)
+	if len(paths) == 0 {
+		return own, true, nil
+	}
+	parts := map[string][]byte{}
+	for _, p := range paths {
+		raw, found, err := t.Read(p)
+		if err != nil {
+			return nil, false, err
+		}
+		if found {
+			parts[p] = raw
+		}
+	}
+	merged, err := ownershiptable.Merge(own, parts)
+	return merged, err == nil, err
 }
