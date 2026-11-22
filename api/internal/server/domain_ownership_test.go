@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,8 +61,29 @@ func TestDomainOwnershipCatalog(t *testing.T) {
 	if len(got.Domains.Packages) != len(packages) || !got.Domains.InventoryComplete {
 		t.Fatalf("inventory: %d packages, want %d", len(got.Domains.Packages), len(packages))
 	}
-	if got.Domains.Unresolved == 0 {
-		t.Fatal("mixed and default-maintainer responsibilities must remain visible")
+	// Every package the table does not give to one domain stays visible as
+	// unresolved, and no more. Origin: 2026-11-21, law 71 — the last three
+	// mixed packages became the assembly domain and the count reached 0; the
+	// check used to be "is not 0", which that would have failed for a truth.
+	var table struct {
+		Default  struct{ Status string }
+		Packages map[string]struct{ Status string }
+	}
+	if err := json.Unmarshal(raw, &table); err != nil {
+		t.Fatal(err)
+	}
+	want := 0
+	for dir := range packages {
+		row, ok := table.Packages[dir]
+		if !ok {
+			row = table.Default
+		}
+		if row.Status != "assigned" {
+			want++
+		}
+	}
+	if got.Domains.Unresolved != want {
+		t.Fatalf("unresolved = %d, want %d (packages whose row is not assigned)", got.Domains.Unresolved, want)
 	}
 }
 

@@ -69,6 +69,19 @@ const ownerMark = "//bifrost:owner"
 func ownerRefusal(o ownership, f testFile) string {
 	name := strings.TrimSpace(strings.TrimPrefix(f.Owner, ownerMark))
 	row, listed := o.Packages[f.Pkg]
+	if o.domainOf(f.Pkg) == assembly {
+		// A test of the assembly domain checks the wiring of some domain's
+		// behaviour; its owner line keeps saying which one, so the test can
+		// move there with that domain's code (law 71, 2026-11-21: server and
+		// integration were shared packages, and 67 of their test files carry
+		// the line). It holds when it names a domain of the table.
+		for _, d := range o.Domains {
+			if d.ID == name && name != assembly {
+				return ""
+			}
+		}
+		return fmt.Sprintf("%s names %q, which is not a domain of config/domain-ownership.json", ownerMark, name)
+	}
 	switch {
 	case o.domainOf(f.Pkg) != "mixed" && name == o.domainOf(f.Pkg):
 		// The line repeats what the table says. Allowed since 2026-11-21 (the
@@ -204,11 +217,8 @@ func ownerBaselineErrors(without, baseline map[string]int, pkgs map[string]bool)
 // by moving to a package of one domain (usually with the code it checks,
 // when the package is split), or by its file becoming a declared flow test.
 var testsWithoutOwner = map[string]int{
-	// 2026-11-18: 40 of the store's 47 went with their files to the integration
-	// package; the store's others left this list when it became verification's.
-	"api/internal/agentrt/integration": 40,
-	// 2026-11-20: agentrt/agentrtapi's 26 came with it when it folded into server.
-	"api/internal/server": 80,
+	// 2026-11-21, law 71: integration (40) and server (80) became the assembly
+	// domain, a package of one domain; nothing shared with tests is left.
 }
 
 // isTestFunc reports whether a top-level declaration is a function "go test"

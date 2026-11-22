@@ -39,12 +39,14 @@ import (
 
 // reaching sorts the test files: across is, by file, the packages of other
 // domains (or shared) it imports; shared the files in shared packages. The
-// assembly roots under api/cmd wire every domain and are left out.
+// assembly roots under api/cmd wire every domain and are left out, and so are
+// the tests of the assembly domain (law 71, 2026-11-21): integration is its
+// system test, and its tests reach every domain as its code does.
 func reaching(o ownership, files []testFile) (across map[string][]string, shared []string) {
 	base := baseOf(o)
 	across = map[string][]string{}
 	for _, f := range files {
-		if strings.HasPrefix(f.Pkg, "api/cmd/") {
+		if strings.HasPrefix(f.Pkg, "api/cmd/") || o.domainOf(f.Pkg) == assembly {
 			continue
 		}
 		from := o.domainOf(f.Pkg)

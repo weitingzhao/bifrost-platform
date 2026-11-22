@@ -26,7 +26,7 @@ func across(o ownership, imports map[string][]string) []string {
 	var out []string
 	for pkg, deps := range imports {
 		from := o.domainOf(pkg)
-		if from == base || from == "mixed" {
+		if from == base || from == "mixed" || from == assembly {
 			continue
 		}
 		for _, dep := range deps {
@@ -62,6 +62,15 @@ func across(o ownership, imports map[string][]string) []string {
 // path from the trust-anchored window_store.go; the release context reads
 // questions' records. api/cmd stopped being skipped, and one command's import
 // came onto it.
+// assembly is the domain of the packages that wire every domain together
+// (server, planwiring, and integration, its system test). It stands on top:
+// it imports every domain, so its own imports are not checked here, and an
+// import of it by a domain is (only api/cmd imports it; foundation's wall
+// holds the base). Origin: 2026-11-21, the Owner in the Foundation thread,
+// law 71 — the three packages were "mixed", which the wall skipped both ways,
+// and the milestone "each package one domain" could never reach 9/9.
+const assembly = "assembly"
+
 var domainsAcross = []string{
 	"api/internal/delivery -> api/internal/actions (delivery -> approvals)",
 	"api/internal/releasepolicy -> api/internal/actions (delivery -> approvals)",
@@ -126,6 +135,8 @@ func TestADomainImportsOnlyItselfAndTheBase(t *testing.T) {
 // the import of another domain and the import of a shared package, and
 // nothing else (the base's own imports, an import of the base, an import
 // inside the domain, an assembly root, a shared package's imports).
+// Origin of api/internal/wire: 2026-11-21, law 71 — the assembly domain's
+// imports of every domain are not named, a domain's import of it is.
 // Origin of api/cmd/plancmd: 2026-11-21, C2 — a command a domain owns is no
 // longer skipped; this is the control that the wall now sees its import.
 func TestDomainWallSeesAnImportAcross(t *testing.T) {
@@ -136,19 +147,21 @@ func TestDomainWallSeesAnImportAcross(t *testing.T) {
 		"api/internal/plan":{"domains":["plan"]},
 		"api/internal/plan/view":{"domains":["plan"]},
 		"api/internal/owner":{"domains":["owner"]},
-		"api/internal/both":{"domains":["plan","owner"]}}}`), &o); err != nil {
+		"api/internal/both":{"domains":["plan","owner"]},
+		"api/internal/wire":{"domains":["assembly"]}}}`), &o); err != nil {
 		t.Fatal(err)
 	}
 	got := across(o, map[string][]string{
 		"api/internal/base":      {"api/internal/plan"},
 		"api/internal/unlisted":  {"api/internal/owner"},
-		"api/internal/plan":      {"api/internal/base", "api/internal/plan/view", "api/internal/unlisted", "api/internal/owner", "api/internal/both"},
+		"api/internal/plan":      {"api/internal/base", "api/internal/plan/view", "api/internal/unlisted", "api/internal/owner", "api/internal/both", "api/internal/wire"},
 		"api/internal/plan/view": {"api/internal/base"},
 		"api/internal/both":      {"api/internal/owner", "api/internal/plan"},
+		"api/internal/wire":      {"api/internal/plan", "api/internal/owner", "api/internal/both"},
 		"api/cmd/root":           {"api/internal/plan", "api/internal/owner"},
 		"api/cmd/plancmd":        {"api/internal/plan", "api/internal/owner"},
 	})
-	want := []string{"api/cmd/plancmd -> api/internal/owner (plan -> owner)", "api/internal/plan -> api/internal/both (plan -> mixed)", "api/internal/plan -> api/internal/owner (plan -> owner)"}
+	want := []string{"api/cmd/plancmd -> api/internal/owner (plan -> owner)", "api/internal/plan -> api/internal/both (plan -> mixed)", "api/internal/plan -> api/internal/owner (plan -> owner)", "api/internal/plan -> api/internal/wire (plan -> assembly)"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("across = %q, want %q", got, want)
 	}
