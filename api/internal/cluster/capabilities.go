@@ -77,17 +77,6 @@ var capabilityDefs = []capabilityDef{
 		},
 	},
 	{
-		id: "warehouse", label: "Data warehouse", category: "storage",
-		labelHint:   "node-role=warehouse",
-		requiredFor: "MinIO local object store on gpu-server",
-		match: func(labels map[string]string) (bool, string) {
-			if labels["node-role"] == "warehouse" {
-				return true, "node-role=warehouse"
-			}
-			return false, ""
-		},
-	},
-	{
 		id: "elastic-compute", label: "Elastic compute", category: "placement",
 		labelHint:   "bifrost.io/workload-pool=compute",
 		requiredFor: "On-demand WOL compute pool (gpu-server)",

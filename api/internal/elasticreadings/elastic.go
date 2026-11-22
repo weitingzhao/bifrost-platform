@@ -89,25 +89,6 @@ func WorkersDomain(snap resourceview.ElasticSnapshot) resourceview.ServiceDomain
 	return domain
 }
 
-// WarehouseDomain is the data warehouse domain of service readiness.
-func WarehouseDomain(snap resourceview.ElasticSnapshot) resourceview.ServiceDomainView {
-	whNodes := filterNodes(snap.Nodes, func(n resourceview.ElasticNode) bool {
-		return hasCapabilityID(n, "warehouse") || hasCapabilityID(n, "gpu-pool")
-	})
-	demand := snap.DesiredReplicas("data-warehouse", "minio") > 0
-	deps := []resourceview.ServiceDependencyView{
-		elasticNodeCovDep(snap, "warehouse", "Warehouse nodes", demand),
-		elasticPoolDep(snap, "gpu", "GPU / warehouse host", whNodes, demand),
-	}
-	wl := snap.DeploymentDep("data-warehouse", "minio", "MinIO (data-warehouse)")
-	if wl.Reachability == probe.ReachDegraded && (strings.Contains(wl.Detail, "standby") || strings.Contains(wl.Detail, "scaled to zero")) {
-		wl.Detail = "scaled to zero — make gpu-warehouse-up to start"
-	}
-	deps = append(deps, wl)
-	domain := snap.Finalize("warehouse", "Data warehouse", deps, "MinIO object store on gpu-server")
-	return applyElasticDomainVerdict(domain, whNodes, demand, "Standby — no demand", "Compute needed but warehouse node offline")
-}
-
 func gpuNodesDep(nodes []resourceview.ElasticNode, demand bool) resourceview.ServiceDependencyView {
 	ready := 0
 	names := make([]string, 0, len(nodes))

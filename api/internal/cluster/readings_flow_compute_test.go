@@ -15,5 +15,5 @@ import (
 // compute's contract. This init runs after the package's own and before any
 // test.
 func init() {
-	cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WarehouseDomain: elasticreadings.WarehouseDomain, WorkersDomain: elasticreadings.WorkersDomain})
+	cluster.BindComputeReadings(cluster.ComputeReadings{GPUDomain: elasticreadings.GPUDomain, WorkersDomain: elasticreadings.WorkersDomain})
 }

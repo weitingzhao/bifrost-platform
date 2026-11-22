@@ -45,9 +45,6 @@ clusters:
           - namespace: ai
             deployment: ollama
             label: Ollama
-          - namespace: data-warehouse
-            deployment: minio
-            label: MinIO
     monitoring_namespace: monitoring
     # Optional deep links for Rocket -> Observability (browser must reach these URLs).
     # Leave empty until NodePort/ingress is confirmed post-install, or override via:

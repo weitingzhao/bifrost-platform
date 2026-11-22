@@ -121,7 +121,7 @@ func (s *Service) loadReadinessDeployments(ctx context.Context) (map[string]apps
 		return nil, err
 	}
 	namespaces := append(s.AppNamespaces(),
-		"cicd", "cnpg-system", "data", "data-warehouse", "ai", "tekton-pipelines",
+		"cicd", "cnpg-system", "data", "ai", "tekton-pipelines",
 		"kube-system", // Traefik ingress controller
 	)
 	out := make(map[string]appsv1.Deployment)
@@ -173,7 +173,6 @@ func evaluateServiceDomains(snap readinessSnapshot) []ServiceDomainView {
 		evalDatabaseDomain(snap),
 		evalRedisDomain(snap),
 		evalGPUDomain(snap),
-		evalWarehouseDomain(snap),
 		evalWorkersDomain(snap),
 		evalApplicationsDomain(snap),
 		evalCICDDomain(snap),
@@ -302,13 +301,6 @@ func evalGPUDomain(snap readinessSnapshot) ServiceDomainView {
 		return unboundDomain("gpu", "GPU / AI", "compute-readings", "Compute readings")
 	}
 	return computeReadings.GPUDomain(elasticInput(snap))
-}
-
-func evalWarehouseDomain(snap readinessSnapshot) ServiceDomainView {
-	if computeReadings.WarehouseDomain == nil {
-		return unboundDomain("warehouse", "Data warehouse", "compute-readings", "Compute readings")
-	}
-	return computeReadings.WarehouseDomain(elasticInput(snap))
 }
 
 // unboundDomain is a domain whose reader was not bound: not ready rather
