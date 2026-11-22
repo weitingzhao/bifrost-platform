@@ -32,7 +32,7 @@ func TestPromGroupsOverlapAndKeepOrder(t *testing.T) {
 		t.Fatalf("queries did not overlap: max in flight %d", maxInFlight)
 	}
 	var want []Reading
-	for _, g := range []func(context.Context, Prom, Window) []Reading{promReadings, coverageByNamespaceReadings, catalogDomainReadings, ciQueueReadings, busEventReadings, busOutageReadings, alertActivationReadings} {
+	for _, g := range []func(context.Context, Prom, Window) []Reading{promReadings, promGapReadings, coverageByNamespaceReadings, catalogDomainReadings, ciQueueReadings, busEventReadings, busOutageReadings, alertActivationReadings} {
 		want = append(want, g(context.Background(), func(context.Context, string) ([]Sample, error) { return nil, nil }, w)...)
 	}
 	if len(got) != len(want) {
