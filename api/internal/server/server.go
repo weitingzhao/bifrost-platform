@@ -68,9 +68,12 @@ import (
 )
 
 type Server struct {
-	cfg     *config.Config
-	prober  *probe.Prober
-	cluster *cluster.Handler
+	// fullCIRun starts the full CI of a revision with the daily full CI's runner
+	// (wireFullCI, PROD only); nil elsewhere.
+	fullCIRun func(ctx context.Context, revision string) (string, error)
+	cfg       *config.Config
+	prober    *probe.Prober
+	cluster   *cluster.Handler
 	// dataclone is the tenant's data clone, freshness and data probe
 	// (moved out of cluster on 2026-11-17).
 	dataclone *dataclone.Handler

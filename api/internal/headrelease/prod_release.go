@@ -1,6 +1,9 @@
 package headrelease
 
-import "context"
+import (
+	"context"
+	"strings"
+)
 
 // What mode on does with a "would release" (prod_shadow.go says why it
 // exists). This file is the loop's one act, kept apart so that
@@ -13,9 +16,12 @@ type prodAct struct {
 }
 
 const (
-	ProdReleased = "released"
-	ProdWaiting  = "waiting"
-	ProdError    = "error"
+	// ProdFullCIStarted: the candidate waited only on its full CI, and the
+	// loop started that run (fullCIFor).
+	ProdFullCIStarted = "full_ci_started"
+	ProdReleased      = "released"
+	ProdWaiting       = "waiting"
+	ProdError         = "error"
 )
 
 // act judges the moment again and, when the second reading says the same
@@ -40,4 +46,52 @@ func (s *ProdShadowLoop) act(ctx context.Context, d ProdDecision) prodAct {
 		return prodAct{result: ProdError, why: "the release gave no run"}
 	}
 	return prodAct{result: ProdReleased, run: run, why: "would release " + short(d.To) + ", judged twice"}
+}
+
+// fullCIWaits are the conditions a candidate may still fail and have the loop
+// start its full CI: the full CI itself, the policy (whose ci_succeeded wants
+// a Succeeded run of the commit) and the soak, which passes with time.
+var fullCIWaits = map[string]bool{CondCIStrict: true, CondPolicy: true, CondSoaked: true}
+
+// fullCIWanted says the loop should start the candidate's full CI: in hours,
+// with a candidate, its full CI has no run at all ("no verdict yet" and no
+// run named), and nothing else holds the release but the conditions a full
+// CI can settle. Origin: 2026-11-22, the loop had been on for a day and never
+// released: the daily full CI tests one commit at 07:30, main moved after
+// it, and every candidate since waited on ci_strict until a seat started its
+// full CI by hand.
+func fullCIWanted(d ProdDecision) bool {
+	if d.WouldRelease || d.To == "" || len(d.Unknown) > 0 {
+		return false
+	}
+	ci := false
+	for _, c := range d.Failing {
+		if !fullCIWaits[c] {
+			return false
+		}
+		ci = ci || c == CondCIStrict
+	}
+	return ci && strings.HasSuffix(strings.TrimSpace(d.Reasons[CondCIStrict]), "no verdict yet")
+}
+
+// fullCIFor starts the candidate's full CI once per candidate, in mode on.
+func (s *ProdShadowLoop) fullCIFor(ctx context.Context, d ProdDecision) prodAct {
+	if s.Mode != ProdOn || s.FullCI == nil || !fullCIWanted(d) {
+		return prodAct{}
+	}
+	s.mu.Lock()
+	asked := s.fullCIAsked == d.To
+	s.fullCIAsked = d.To
+	s.mu.Unlock()
+	if asked {
+		return prodAct{}
+	}
+	run, err := s.FullCI(ctx, d.To)
+	if err != nil {
+		s.mu.Lock()
+		s.fullCIAsked = "" // try again next pass
+		s.mu.Unlock()
+		return prodAct{result: ProdError, why: "starting the full CI of " + short(d.To) + ": " + err.Error()}
+	}
+	return prodAct{result: ProdFullCIStarted, run: run, why: "the candidate waited only on its full CI"}
 }

@@ -143,3 +143,64 @@ func TestProdHours(t *testing.T) {
 		t.Errorf("13:30Z in Chicago (CST): hour %d unknown %v", f.HourNow, f.HoursUnknown)
 	}
 }
+
+// Origin: 2026-11-22, CI line. The loop was on a day and never released: the
+// daily full CI tests one commit at 07:30, main moved after it, and every
+// candidate waited on ci_strict ("no verdict yet") until a seat started its
+// full CI by hand (bifrost-ci-platform-1795356674 for 1935f395). In mode on
+// the loop now starts it, once per candidate, when nothing else holds the
+// release but what a full CI settles; the cases below are the conditions.
+func TestFullCIWantedOnlyWhenTheFullCIIsAllThatIsMissing(t *testing.T) {
+	no := "the full CI of 1935f395: no verdict yet"
+	d := func(failing []string, ci string) ProdDecision {
+		return ProdDecision{To: strings.Repeat("a", 40), Failing: failing, Reasons: map[string]string{CondCIStrict: ci}}
+	}
+	for name, c := range map[string]struct {
+		d    ProdDecision
+		want bool
+	}{
+		"only the full CI":                      {d([]string{CondCIStrict}, no), true},
+		"full CI, policy and soak":              {d([]string{CondSoaked, CondCIStrict, CondPolicy}, no), true},
+		"a run is going (not 'no verdict yet')": {d([]string{CondCIStrict}, "the full CI of 1935f395: running ci-full-x"), false},
+		"the full CI failed":                    {d([]string{CondCIStrict}, "the full CI of 1935f395: red ci-full-x"), false},
+		"out of hours":                          {d([]string{CondCIStrict, CondInHours}, no), false},
+		"the window is held":                    {d([]string{CondCIStrict, CondWindowFree}, no), false},
+		"the full CI is not what fails":         {d([]string{CondSoaked}, ""), false},
+		"no candidate":                          {ProdDecision{Failing: []string{CondCIStrict}, Reasons: map[string]string{CondCIStrict: no}}, false},
+		"would release":                         {ProdDecision{WouldRelease: true, To: "x"}, false},
+	} {
+		if got := fullCIWanted(c.d); got != c.want {
+			t.Errorf("%s: %v", name, got)
+		}
+	}
+}
+
+// Origin: as above. One start per candidate, a failed start tried again, and
+// nothing in mode shadow or without the hand.
+func TestFullCIForStartsOncePerCandidate(t *testing.T) {
+	cand := ProdDecision{To: strings.Repeat("b", 40), Failing: []string{CondCIStrict}, Reasons: map[string]string{CondCIStrict: "the full CI of bbbbbbbb: no verdict yet"}}
+	var asked []string
+	fail := true
+	s := &ProdShadowLoop{Mode: ProdOn, FullCI: func(_ context.Context, rev string) (string, error) {
+		asked = append(asked, rev)
+		if fail {
+			fail = false
+			return "", errors.New("api down")
+		}
+		return "ci-full-" + rev[:8], nil
+	}}
+	if got := s.fullCIFor(context.Background(), cand); got.result != ProdError {
+		t.Fatalf("first, failing: %+v", got)
+	}
+	if got := s.fullCIFor(context.Background(), cand); got.result != ProdFullCIStarted || got.run != "ci-full-bbbbbbbb" {
+		t.Fatalf("tried again: %+v", got)
+	}
+	if got := s.fullCIFor(context.Background(), cand); got.result != "" || len(asked) != 2 {
+		t.Fatalf("once per candidate: %+v, asked %v", got, asked)
+	}
+	for _, other := range []*ProdShadowLoop{{Mode: ProdShadow, FullCI: s.FullCI}, {Mode: ProdOn}} {
+		if got := other.fullCIFor(context.Background(), cand); got.result != "" {
+			t.Fatalf("mode %s, hand %v: %+v", other.Mode, other.FullCI != nil, got)
+		}
+	}
+}

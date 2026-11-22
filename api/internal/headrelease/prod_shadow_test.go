@@ -326,8 +326,10 @@ func TestProdShadowCannotAct(t *testing.T) {
 		}
 	}
 	// Release (2026-11-21) is mode on's one act; TestProdModeOnReleases holds
-	// that only mode on calls it.
-	if strings.Join(funcs, ",") != "Gather,Batch,Record,Release" {
+	// that only mode on calls it. FullCI (2026-11-22) starts a candidate's full
+	// CI and nothing else, in mode on only (TestFullCIForStartsOncePerCandidate):
+	// it runs tests, it releases nothing.
+	if strings.Join(funcs, ",") != "Gather,Batch,Record,Release,FullCI" {
 		t.Errorf("ProdShadowLoop's functions are %v; a new one needs a reason it cannot act", funcs)
 	}
 
