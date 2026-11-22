@@ -88,6 +88,21 @@ func TestGraphNodesEdgesAndSharedPackages(t *testing.T) {
 	}
 }
 
+// Origin: 2026-11-22, City asked for each domain's own package imports (the
+// tech tree's second floor): edges carry only what crosses domains. Inner
+// lists the imports inside one domain, in the domains' order, and none
+// through the shared packages; a domain with none is absent.
+func TestGraphInnerIsEachDomainsOwnImports(t *testing.T) {
+	got := GraphOf("r", "c", parsed(t).Ownership, packages())
+	want := []Inner{{Domain: "plan", Imports: 1, Pairs: []Pair{{"api/internal/plan", "api/internal/plan/view"}}}}
+	if !reflect.DeepEqual(got.Inner, want) {
+		t.Fatalf("inner: %+v", got.Inner)
+	}
+	if u := Unmeasured("r", "c", "n"); u.Inner == nil || len(u.Inner) != 0 {
+		t.Fatalf("unmeasured inner: %#v", u.Inner)
+	}
+}
+
 // Origin: as above — guards "the same rule as the domain score": an edge is
 // red on the page exactly when domainscore.Score counts it a cycle edge of
 // the importing domain. 2026-11-16: ruler v1 called

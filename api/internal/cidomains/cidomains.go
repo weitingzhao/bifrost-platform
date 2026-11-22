@@ -180,6 +180,17 @@ type Edge struct {
 	Pairs []Pair `json:"pairs"`
 }
 
+// Inner is the imports between the packages of one domain (2026-11-22, City
+// asked for the second floor of the tech tree: the edges said only what
+// crosses domains). Production imports only (domainscore.Package carries no
+// test imports). Grouping by building is City's: a building is the map
+// line's grouping, which this answer does not know.
+type Inner struct {
+	Domain  string `json:"domain"`
+	Imports int    `json:"imports"`
+	Pairs   []Pair `json:"pairs"`
+}
+
 // Graph is the answer of GET /api/v1/ci/domains.
 // Pair is one import: the package that uses and the package it uses.
 type Pair struct {
@@ -206,6 +217,9 @@ type Graph struct {
 	Base    string   `json:"base"`
 	Domains []Domain `json:"domains"`
 	Edges   []Edge   `json:"edges"`
+	// Inner is each domain's own imports, in the domains' order; a domain
+	// whose packages import none of each other is absent.
+	Inner []Inner `json:"inner"`
 	// SharedPackages are the packages several domains share. They are not a
 	// node: they import every domain, and an edge through them joins any two.
 	SharedPackages []string `json:"shared_packages"`
@@ -213,7 +227,7 @@ type Graph struct {
 
 // Unmeasured is the answer for a repository whose domains cannot be read.
 func Unmeasured(repo, commit, note string) Graph {
-	return Graph{Version: Version, Repo: repo, Commit: commit, Note: note, Domains: []Domain{}, Edges: []Edge{}, SharedPackages: []string{}}
+	return Graph{Version: Version, Repo: repo, Commit: commit, Note: note, Domains: []Domain{}, Edges: []Edge{}, Inner: []Inner{}, SharedPackages: []string{}}
 }
 
 // GraphOf is the domain graph of the packages: a node a declared domain, an
@@ -224,6 +238,7 @@ func GraphOf(repo, commit string, own domainscore.Ownership, packages []domainsc
 	out.Measured = true
 	count := map[string]int{}
 	edges := map[[2]string][]Pair{}
+	inner := map[string][]Pair{}
 	for _, p := range g.Packages() {
 		from, _ := g.DomainOf(p)
 		if from == domainscore.Mixed {
@@ -232,8 +247,13 @@ func GraphOf(repo, commit string, own domainscore.Ownership, packages []domainsc
 		}
 		count[from]++
 		for _, dep := range g.Imports(p) {
-			if to, _ := g.DomainOf(dep); to != from && to != domainscore.Mixed {
+			to, _ := g.DomainOf(dep)
+			switch {
+			case to == domainscore.Mixed:
+			case to != from:
 				edges[[2]string{from, to}] = append(edges[[2]string{from, to}], Pair{From: p, To: dep})
+			default:
+				inner[from] = append(inner[from], Pair{From: p, To: dep})
 			}
 		}
 	}
@@ -241,14 +261,13 @@ func GraphOf(repo, commit string, own domainscore.Ownership, packages []domainsc
 	for i, d := range g.Order {
 		at[d] = i
 		out.Domains = append(out.Domains, Domain{ID: d, Packages: count[d]})
+		if pairs := inner[d]; len(pairs) > 0 {
+			sortPairs(pairs)
+			out.Inner = append(out.Inner, Inner{Domain: d, Imports: len(pairs), Pairs: pairs})
+		}
 	}
 	for k, pairs := range edges {
-		sort.Slice(pairs, func(i, j int) bool {
-			if pairs[i].From != pairs[j].From {
-				return pairs[i].From < pairs[j].From
-			}
-			return pairs[i].To < pairs[j].To
-		})
+		sortPairs(pairs)
 		out.Edges = append(out.Edges, Edge{From: k[0], To: k[1], Imports: len(pairs), WrongWay: g.WrongWay(k[0], k[1]), Pairs: pairs})
 	}
 	out.Base = g.Base()
@@ -260,6 +279,16 @@ func GraphOf(repo, commit string, own domainscore.Ownership, packages []domainsc
 		return at[a.To] < at[b.To]
 	})
 	return out
+}
+
+// sortPairs orders pairs by importer, then imported.
+func sortPairs(pairs []Pair) {
+	sort.Slice(pairs, func(i, j int) bool {
+		if pairs[i].From != pairs[j].From {
+			return pairs[i].From < pairs[j].From
+		}
+		return pairs[i].To < pairs[j].To
+	})
 }
 
 // Places says which domain a changed file is in, by the ownership table and
