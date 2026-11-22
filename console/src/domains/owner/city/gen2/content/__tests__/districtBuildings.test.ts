@@ -24,6 +24,8 @@ describe('a domain’s buildings in its district', () => {
     const other = out.find(b => b.id === OTHER)!
     expect(other.label).toMatch(/^Other · \d+$/)
     expect(other.question).toContain('b28')
+    // 2026-11-22, the Owner: past 16 a level is cut too fine, to decouple or merge: Other stands as a construction site.
+    expect(other.landmark).toBe('site')
   })
   it('no buildings served: none drawn', () => {
     expect(buildingsOf(undefined, 'unread')).toEqual([])

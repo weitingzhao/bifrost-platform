@@ -35,6 +35,15 @@ export function buildingsOf(h: DomainHoldings | undefined, state: State): Place[
   for (const b of all) if (fits([...kept, b], 1)) kept.push(b)
   const rest = all.filter(b => !kept.includes(b))
   const pkgs = rest.reduce((n, b) => n + b.packages.length, 0)
-  return [...kept.map(one), make(OTHER, `Other · ${rest.length}`, pkgs,
-    `${rest.length} more buildings of ${h!.id} (${pkgs} packages) that do not fit its ground: ${rest.map(b => b.id).join(', ')}.`, '4x4')]
+  // Drawn as a construction site: more than a level holds is cut too fine, work to do (the Owner, 2026-11-22:
+  // what does not fit should be decoupled or merged), never hidden.
+  const other = make(OTHER, `Other · ${rest.length}`, pkgs,
+    `${rest.length} more buildings of ${h!.id} (${pkgs} packages) do not fit its ground: cut too fine, to decouple or merge: ${rest.map(b => b.id).join(', ')}.`, '4x4')
+  return [...kept.map(one), { ...other, landmark: 'site' as const }]
+}
+
+/** How far a domain's buildings go past its ground (0 when they fit): the district card says it. */
+export function overflowOf(h: DomainHoldings | undefined): { buildings: number; over: number } {
+  const n = h?.buildings?.length ?? 0
+  return { buildings: n, over: Math.max(0, n - MOST) }
 }
