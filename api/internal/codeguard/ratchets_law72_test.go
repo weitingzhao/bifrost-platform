@@ -69,7 +69,7 @@ func TestEveryPackageHasARow(t *testing.T) {
 		t.Fatalf("go list named %d packages", len(pkgs))
 	}
 	for _, p := range unlisted(o, pkgs) {
-		t.Errorf("%s has no row in config/domain-ownership.json: add one that names its one domain and the reason (law 72)", p)
+		t.Errorf("%s has no row in config/domain-ownership.json: add one that names its one domain and the reason (laws 72, 75). The map line (0.2) owns that table: ask it which domain, or read the domains through GET /api/v1/catalog/domain", p)
 	}
 }
 
