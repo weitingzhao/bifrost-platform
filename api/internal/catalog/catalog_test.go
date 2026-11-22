@@ -314,3 +314,32 @@ func TestARowThatCoversNothingIsStale(t *testing.T) {
 		t.Errorf("with no root file the root row is stale too: %v", s)
 	}
 }
+
+// 2026-11-21, main line: node was a registry-only class. topology.yaml had
+// said ubt-k3s-06 was in the cluster for weeks after it left (topologyview);
+// the map now compares the claims with the node list each round. The
+// control: a machine claimed and live is in neither list; one not claimed as
+// a cluster node (in_k3s_cluster false) is not a claim.
+func TestNodesAreComparedWithWhatTopologyClaims(t *testing.T) {
+	s := &Scanner{Kept: memKept{}}
+	s.keepTopology(Tree{Commit: "c", Read: func(p string) ([]byte, bool, error) {
+		return []byte(`nodes:
+  - {id: a, host: 10.0.0.1, in_k3s_cluster: true}
+  - {id: gone, host: 10.0.0.2, in_k3s_cluster: true}
+  - {id: mac, host: 10.0.0.9, in_k3s_cluster: false}
+  - {id: edge, host: "", in_k3s_cluster: true}
+`), true, nil
+	}})
+	c := s.nodeCheck(context.Background(), func(context.Context) (map[string]string, bool) {
+		return map[string]string{"10.0.0.1": "node-a", "10.0.0.3": "node-new"}, true
+	})
+	if !c.Measured || c.Registered != 2 || c.Live != 2 {
+		t.Fatalf("%+v", c)
+	}
+	if len(c.NotRegistered) != 1 || c.NotRegistered[0] != "node-new (10.0.0.3)" || len(c.NotLive) != 1 || c.NotLive[0] != "gone (10.0.0.2)" {
+		t.Errorf("%+v", c)
+	}
+	if c := s.nodeCheck(context.Background(), func(context.Context) (map[string]string, bool) { return nil, false }); c.Measured {
+		t.Errorf("an unread node list is not measured: %+v", c)
+	}
+}

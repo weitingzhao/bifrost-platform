@@ -58,7 +58,12 @@ export type DomainStatusInventory = {
   /** The JSON says null when the domain graph was not measured (read it as DomainReference[] | null); absent from an older platform. */
   references?: DomainReference[]
   references_to_base?: number
+  /** Classes compared with the running system beyond the trees (absent from an older platform). */
+  checks?: ClassCheck[]
 }
+
+/** One class compared with the running system: what its registry misses and what it holds that is not there. */
+export type ClassCheck = { class: string; registered: number; live: number; not_registered: string[]; not_live: string[]; measured: boolean; note?: string }
 
 /** GET /api/v1/catalog/index: each class of thing and whether the machine reconciles it with the real system. */
 export type CatalogClass = { class: string; what: string; check: 'scanned' | 'registry' | 'unseen' | string; note?: string }

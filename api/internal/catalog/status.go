@@ -108,6 +108,9 @@ type StatusInputs struct {
 	// Uses is the packages of the same repository with their imports and
 	// test imports, and the bus's events: false when not measured.
 	Uses func(ctx context.Context, repo string) (Uses, bool, error)
+	// ClusterNodes is the cluster's nodes, internal IP to name; false when
+	// the list could not be read.
+	ClusterNodes func(ctx context.Context) (map[string]string, bool)
 }
 
 // Light is one light of one domain.
@@ -150,7 +153,11 @@ type Status struct {
 	// contract.
 	References []Reference `json:"references"`
 	ToBase     int         `json:"references_to_base"`
-	Note       string      `json:"note,omitempty"`
+	// Checks are the classes compared with the running system beyond the
+	// trees (ClassCheck): what each registry misses and what it holds that
+	// is not there.
+	Checks []ClassCheck `json:"checks"`
+	Note   string       `json:"note,omitempty"`
 }
 
 // RepoCount is one repository's (or the cluster's) equation.
@@ -255,6 +262,7 @@ func (s *Scanner) ComputeStatus(ctx context.Context, in StatusInputs) Status {
 			st.References, st.ToBase = references(edges, domains, uses)
 		}
 	}
+	st.Checks = []ClassCheck{s.nodeCheck(ctx, in.ClusterNodes)}
 	alive := s.aliveLights(k.Repo, domains, in)
 	ifaces := interfaceLights(ctx, domains, in)
 	bound := boundaryLights(ctx, k.Repo, domains, in)

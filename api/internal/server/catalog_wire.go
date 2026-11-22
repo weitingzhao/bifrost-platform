@@ -344,5 +344,11 @@ func (s *Server) catalogStatusInputs() catalog.StatusInputs {
 		}
 		in.Uses = s.catalogUses
 	}
+	if s.cluster != nil {
+		in.ClusterNodes = func(ctx context.Context) (map[string]string, bool) {
+			live := s.liveHosts(ctx)
+			return live.ClusterNodes, live.ClusterKnown
+		}
+	}
 	return in
 }
