@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// 2026-11-20: the Prometheus groups (five then, six since metric_coverage_by_namespace) ran one after another under a
+// 2026-11-20: the Prometheus groups (five then; metric_coverage_by_namespace and catalog_domain_reads since) ran one after another under a
 // 15-second handler timeout; a 7-day window has eight subqueries. This checks
 // they now overlap and that the readings keep the same order as before.
 func TestPromGroupsOverlapAndKeepOrder(t *testing.T) {
@@ -32,7 +32,7 @@ func TestPromGroupsOverlapAndKeepOrder(t *testing.T) {
 		t.Fatalf("queries did not overlap: max in flight %d", maxInFlight)
 	}
 	var want []Reading
-	for _, g := range []func(context.Context, Prom, Window) []Reading{promReadings, coverageByNamespaceReadings, ciQueueReadings, busEventReadings, busOutageReadings, alertActivationReadings} {
+	for _, g := range []func(context.Context, Prom, Window) []Reading{promReadings, coverageByNamespaceReadings, catalogDomainReadings, ciQueueReadings, busEventReadings, busOutageReadings, alertActivationReadings} {
 		want = append(want, g(context.Background(), func(context.Context, string) ([]Sample, error) { return nil, nil }, w)...)
 	}
 	if len(got) != len(want) {
