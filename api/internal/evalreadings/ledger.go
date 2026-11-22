@@ -29,6 +29,7 @@ func ledgerReadings(ctx context.Context, db eventlog.DB, tasks FailedTasks, w Wi
 			return eventlog.OfType(ctx, tx, typ, from, to)
 		},
 	}
+	src.asks = func(from, to time.Time) ([]askRow, error) { return readAsks(ctx, tx, from, to) }
 	if tasks != nil {
 		src.tasks = func(repo, commit, run string) ([]string, error) { return tasks(ctx, repo, commit, run) }
 	}
@@ -42,6 +43,9 @@ type ledgerSource struct {
 	// tasks reads a failed run's tasks for the CI failure reading; nil leaves
 	// every failed run's task unrecorded.
 	tasks func(repo, commit, run string) ([]string, error)
+	// asks reads the asks between seats and their answers; nil leaves the
+	// ask readings unmeasured.
+	asks func(from, to time.Time) ([]askRow, error)
 }
 
 func (s ledgerSource) readings(w Window) ([]Reading, error) {
@@ -63,6 +67,11 @@ func (s ledgerSource) readings(w Window) ([]Reading, error) {
 		return nil, err
 	}
 	out = append(out, blocks)
+	asks, err := s.askWaitReadings(w)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, asks...)
 	deploys, err := s.deployReadings(w)
 	if err != nil {
 		return nil, err

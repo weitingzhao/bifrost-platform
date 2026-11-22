@@ -174,7 +174,7 @@ func Compute(ctx context.Context, db eventlog.DB, prom Prom, tasks FailedTasks, 
 		}
 		out = append(out, agentActionReadings(ctx, list, w)...)
 	} else {
-		for _, name := range []string{"ci_run_p50_seconds", "delivery_success_ratio", "owner_actions", "owner_wait_p50_seconds", "prod_deploys", "main_to_prod_p50_seconds", "agent_actions", "action_rollback_declared_ratio", "ci_failures", "guard_blocks"} {
+		for _, name := range []string{"ci_run_p50_seconds", "delivery_success_ratio", "owner_actions", "owner_wait_p50_seconds", "prod_deploys", "main_to_prod_p50_seconds", "agent_actions", "action_rollback_declared_ratio", "ci_failures", "guard_blocks", "ask_answer_p50_seconds", "ask_answer_max_seconds", "ask_open_over_4h"} {
 			out = append(out, finish(Reading{Name: name, Window: w, Note: "the event ledger is not connected on this platform"}, false))
 		}
 	}
