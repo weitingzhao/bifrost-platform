@@ -1,4 +1,8 @@
-package delivery
+package cirunview
+
+// Moved from delivery on 2026-11-22: the parsing is cirunview's since
+// 2026-11-17, so its tests live with it (delivery's tests no longer import
+// cirunview; tests-reach row pipeline_steps_results_test.go).
 
 import (
 	"encoding/json"
@@ -10,8 +14,8 @@ import (
 	"time"
 )
 
-func baselinePipelineRunFromUnstructured(obj unstructured.Unstructured, pipelineName string) PipelineRunView {
-	view := PipelineRunView{
+func baselinePipelineRunFromUnstructured(obj unstructured.Unstructured, pipelineName string) PipelineObservation {
+	view := PipelineObservation{
 		Name:      obj.GetName(),
 		Namespace: obj.GetNamespace(),
 		Pipeline:  pipelineName,
@@ -58,7 +62,7 @@ func baselinePipelineRunFromUnstructured(obj unstructured.Unstructured, pipeline
 	return view
 }
 
-func baselinePipelineRunStartedAt(view PipelineRunView) int64 {
+func baselinePipelineRunStartedAt(view PipelineObservation) int64 {
 	if view.StartTime != "" {
 		if t, err := time.Parse(time.RFC3339, view.StartTime); err == nil {
 			return t.UnixMilli()
@@ -86,7 +90,7 @@ func TestPipelineObservationOriginalParity(t *testing.T) {
 			t.Fatal(err)
 		}
 		obj := unstructured.Unstructured{Object: raw}
-		got, want := pipelineRunFromUnstructured(obj, "ci"), baselinePipelineRunFromUnstructured(obj, "ci")
+		got, want := PipelineRunObservation(obj, "ci"), baselinePipelineRunFromUnstructured(obj, "ci")
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("%s: %#v != %#v", fixture, got, want)
 		}
@@ -96,8 +100,8 @@ func TestPipelineObservationOriginalParity(t *testing.T) {
 			t.Fatal("JSON mismatch")
 		}
 	}
-	for _, view := range []PipelineRunView{{}, {Name: "ci-123", Pipeline: "ci"}, {Name: "ci--1", Pipeline: "ci"}, {Name: "other-123", Pipeline: "ci"}, {Name: "ci-no", Pipeline: "ci"}, {Name: "ci-123", Pipeline: "ci", StartTime: "bad"}, {Name: "ci-123", Pipeline: "ci", StartTime: "2026-11-16T01:02:03.123Z"}} {
-		if got, want := pipelineRunStartedAt(view), baselinePipelineRunStartedAt(view); got != want {
+	for _, view := range []PipelineObservation{{}, {Name: "ci-123", Pipeline: "ci"}, {Name: "ci--1", Pipeline: "ci"}, {Name: "other-123", Pipeline: "ci"}, {Name: "ci-no", Pipeline: "ci"}, {Name: "ci-123", Pipeline: "ci", StartTime: "bad"}, {Name: "ci-123", Pipeline: "ci", StartTime: "2026-11-16T01:02:03.123Z"}} {
+		if got, want := PipelineRunStartedAt(view), baselinePipelineRunStartedAt(view); got != want {
 			t.Fatalf("%#v: %d != %d", view, got, want)
 		}
 	}

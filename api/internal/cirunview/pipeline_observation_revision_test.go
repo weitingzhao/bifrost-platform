@@ -1,4 +1,8 @@
-package delivery
+package cirunview
+
+// Moved from delivery on 2026-11-22: the parsing is cirunview's since
+// 2026-11-17, so its tests live with it (delivery's tests no longer import
+// cirunview; tests-reach row pipeline_steps_results_test.go).
 
 import (
 	"testing"
@@ -27,7 +31,7 @@ func TestPipelineRunFromUnstructured_RevisionFromLabel(t *testing.T) {
 			},
 		},
 	}
-	view := pipelineRunFromUnstructured(obj, "bifrost-deliver-platform")
+	view := PipelineRunObservation(obj, "bifrost-deliver-platform")
 	if view.Revision != "platform-v0.4.0" {
 		t.Fatalf("expected revision platform-v0.4.0, got %q", view.Revision)
 	}
@@ -50,7 +54,7 @@ func TestPipelineRunFromUnstructured_RevisionFromParams(t *testing.T) {
 			},
 		},
 	}
-	view := pipelineRunFromUnstructured(obj, "bifrost-deliver-platform")
+	view := PipelineRunObservation(obj, "bifrost-deliver-platform")
 	if view.Revision != "main" {
 		t.Fatalf("expected revision main from params fallback, got %q", view.Revision)
 	}
@@ -70,7 +74,7 @@ func TestPipelineRunFromUnstructured_NoRevision(t *testing.T) {
 			},
 		},
 	}
-	view := pipelineRunFromUnstructured(obj, "bifrost-ci-python")
+	view := PipelineRunObservation(obj, "bifrost-ci-python")
 	if view.Revision != "" {
 		t.Fatalf("expected empty revision for CI run, got %q", view.Revision)
 	}

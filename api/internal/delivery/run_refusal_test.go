@@ -24,61 +24,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	dynfake "k8s.io/client-go/dynamic/fake"
-	"k8s.io/client-go/kubernetes"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
-	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 )
 
 type contractTransport func(*http.Request) (*http.Response, error)
-
-// The package's tests place tasks as the server wires them: with compute's
-// placement bound (server/delivery_ports.go, bindDeliveryPlacement). This init
-// runs before any test; TestPlacementUnbound unbinds it for a moment.
-func init() { bindPlacementForTest() }
-
-var testNodeRoles = map[NodeRole]placement.LabelRule{NodeEtcd: placement.EtcdNode, NodeDatabasePrimary: placement.PostgresPrimary}
-
-func bindPlacementForTest() {
-	BindPlacementReadings(PlacementReadings{
-		HostIDLabel: placement.HostIDLabel,
-		RoleLabel: func(role NodeRole) (string, string, bool) {
-			r, ok := testNodeRoles[role]
-			return r.Key, r.Value, ok
-		},
-		Place: func(ctx context.Context, clientset func() (kubernetes.Interface, error), metrics NodeMetricsReader, task TaskProfile, current string) (BuildPlacement, bool) {
-			t := placement.TaskProfile{DiskHeavy: task.DiskHeavy, MaxDiskTier: task.MaxDiskTier, CPUCores: task.CPUCores, MemoryBytes: task.MemoryBytes,
-				MinAvailableMemory: task.MinAvailableMemory, Spread: task.Spread}
-			for _, role := range task.ExcludeNodes {
-				t.ExcludeLabels = append(t.ExcludeLabels, testNodeRoles[role])
-			}
-			var read placement.NodeMetricsReader
-			if metrics != nil {
-				read = func(ctx context.Context) (map[string]placement.NodeMetrics, error) {
-					m, err := metrics(ctx)
-					if m == nil {
-						return nil, err
-					}
-					out := make(map[string]placement.NodeMetrics, len(m))
-					for k, v := range m {
-						out[k] = placement.NodeMetrics(v)
-					}
-					return out, err
-				}
-			}
-			p, placed := placement.Placer{Clientset: clientset, Metrics: read}.Place(ctx, t, current)
-			return BuildPlacement(p), placed
-		},
-		CIPreflightReason: func(nodes []NodeInput) string {
-			in := make([]placement.NodeInput, len(nodes))
-			for i, n := range nodes {
-				in[i] = placement.NodeInput{Name: n.Name, Architecture: n.Architecture, WorkloadLabel: n.WorkloadLabel, Reachability: n.Reachability}
-			}
-			return placement.CIPreflightReason(in)
-		},
-	})
-}
 
 func (f contractTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
@@ -680,28 +631,13 @@ func placementNode(host string, ready, cordoned bool, cpu string) *corev1.Node {
 		status = corev1.ConditionFalse
 	}
 	return &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: host, Labels: map[string]string{placement.HostIDLabel: host, "kubernetes.io/arch": "amd64"}},
+		ObjectMeta: metav1.ObjectMeta{Name: host, Labels: map[string]string{testHostIDLabel: host, "kubernetes.io/arch": "amd64"}},
 		Spec:       corev1.NodeSpec{Unschedulable: cordoned},
 		Status: corev1.NodeStatus{
 			Addresses:   []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "ip-" + host}},
 			Allocatable: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse(cpu), corev1.ResourceMemory: resource.MustParse("16Gi")},
 			Conditions:  []corev1.NodeCondition{{Type: corev1.NodeReady, Status: status}},
 		},
-	}
-}
-
-// 2026-11-18, the coordinator: the daily unit run does not land on 05, where two
-// tasks timed out. Unlike a release it can wait, so the slow disk is refused.
-// Positive control: MaxDiskTier 2 in UnitTask picks 05 here.
-func TestUnitsAreNeverPlacedOnTheSlowDisk(t *testing.T) {
-	s := NewService(&config.ClusterEntry{ID: "test"})
-	s.SetClientsetForTest(k8sfake.NewSimpleClientset(placementNode("ubt-k3s-05", true, false, "16")))
-	s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) {
-		return map[string]NodeMetrics{"ip-ubt-k3s-05": {WriteLatencySeconds: 0.161, MemoryAvailable: 0.6}}, nil
-	})
-	p, measured := s.PlaceTask(context.Background(), UnitTask)
-	if !measured || p.Node != "" || !strings.Contains(p.Why, "too slow") {
-		t.Fatalf("placement = %+v %v", p, measured)
 	}
 }
 
@@ -736,7 +672,7 @@ func TestAStartPinsOnlyThePlacedPipeline(t *testing.T) {
 		t.Fatalf("placement = %+v %v", p, placed)
 	}
 	selector := spec["taskRunTemplate"].(map[string]any)["podTemplate"].(map[string]any)["nodeSelector"].(map[string]any)
-	if selector[placement.HostIDLabel] != "ubt-k3s-07" || selector["kubernetes.io/arch"] != "amd64" {
+	if selector[testHostIDLabel] != "ubt-k3s-07" || selector["kubernetes.io/arch"] != "amd64" {
 		t.Fatalf("selector = %v", selector)
 	}
 	other := map[string]any{}
@@ -750,6 +686,9 @@ func TestAStartPinsOnlyThePlacedPipeline(t *testing.T) {
 // into the binding it reads; only a change is written, and a binding that is not
 // there is no error. Positive control: writing on every pass fails the count of
 // patches; a choice left out of the patch fails the value checks.
+// 2026-11-22: the choice is the test placer's (placement_ports_test.go): 07 is the
+// less busy of the two, then 05 once 07 is 90% busy; compute's own reasons are
+// tested in placement.
 func TestPublishCINodeWritesTheChoiceWhenItChanges(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
@@ -762,7 +701,7 @@ func TestPublishCINodeWritesTheChoiceWhenItChanges(t *testing.T) {
 	s.SetDynamicFactoryForTest(func() (dynamic.Interface, error) { return dyn, nil })
 	metrics := map[string]NodeMetrics{
 		"ip-ubt-k3s-07": {WriteLatencySeconds: 0.007, CPUBusy: 0.2, DiskBusy: 0.1, MemoryAvailable: 0.6},
-		"ip-ubt-k3s-05": {WriteLatencySeconds: 0.16, CPUBusy: 0.2, DiskBusy: 0.1, MemoryAvailable: 0.6},
+		"ip-ubt-k3s-05": {WriteLatencySeconds: 0.16, CPUBusy: 0.3, DiskBusy: 0.1, MemoryAvailable: 0.6},
 	}
 	s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) { return metrics, nil })
 	read := func(name string) string {
@@ -785,41 +724,18 @@ func TestPublishCINodeWritesTheChoiceWhenItChanges(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if read("ciNode") != "ubt-k3s-07" || read("ciNodeKey") != placement.HostIDLabel || read("ciNodeValue") != "ubt-k3s-07" || patches() != 1 {
+	if read("ciNode") != "ubt-k3s-07" || read("ciNodeKey") != testHostIDLabel || read("ciNodeValue") != "ubt-k3s-07" || patches() != 1 {
 		t.Fatalf("node %q key %q value %q patches %d", read("ciNode"), read("ciNodeKey"), read("ciNodeValue"), patches())
 	}
 	m := metrics["ip-ubt-k3s-07"]
 	m.CPUBusy = 0.9
 	metrics["ip-ubt-k3s-07"] = m
-	if err := s.PublishCINode(ctx); err != nil || read("ciNode") != "ubt-k3s-05" || !strings.Contains(read("ciNodeWhy"), "CPU 90% busy") {
+	if err := s.PublishCINode(ctx); err != nil || read("ciNode") != "ubt-k3s-05" || !strings.Contains(read("ciNodeWhy"), "chose ubt-k3s-05") {
 		t.Fatalf("%v node %q why %q", err, read("ciNode"), read("ciNodeWhy"))
 	}
 	metrics = map[string]NodeMetrics{}
 	if err := s.PublishCINode(ctx); err != nil || read("ciNode") != ciNoNode || read("ciNodeKey") != ciAnyNodeKey || read("ciNodeValue") != ciAnyNodeValue {
 		t.Fatalf("nothing fits leaves the run to the scheduler: %v %q", err, read("ciNode"))
-	}
-}
-
-// 2026-11-19, the compute line: ubt-k3s-02 has no memory for the test database a CI
-// run now keeps in memory, so runs leave it even when it is the quietest. A build
-// holds no such database and may still go there. Positive control: the same nodes
-// under CITask choose 02.
-func TestACIRunStaysOffTheNodeWithoutMemoryToSpare(t *testing.T) {
-	s := NewService(&config.ClusterEntry{ID: "test"})
-	s.SetClientsetForTest(k8sfake.NewSimpleClientset(labelled(placementNode("ubt-k3s-02", true, false, "16"), placement.PostgresPrimary), placementNode("ubt-k3s-04", true, false, "16")))
-	s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) {
-		return map[string]NodeMetrics{
-			"ip-ubt-k3s-02": {WriteLatencySeconds: 0.001, CPUBusy: 0.05, DiskBusy: 0.05, MemoryAvailable: 0.6},
-			"ip-ubt-k3s-04": {WriteLatencySeconds: 0.001, CPUBusy: 0.5, DiskBusy: 0.1, MemoryAvailable: 0.6},
-		}, nil
-	})
-	ciRun := CIRunTask
-	ciRun.MinAvailableMemory = 0 // the fake nodes report little memory; the floor has its own test
-	if p, _ := s.placeTask(context.Background(), ciRun, ""); p.Node != "ubt-k3s-04" {
-		t.Fatalf("run: %+v", p)
-	}
-	if p, _ := s.placeTask(context.Background(), CITask, ""); p.Node != "ubt-k3s-02" {
-		t.Fatalf("build: %+v", p)
 	}
 }
 
@@ -841,52 +757,6 @@ func TestAPlatformCIRunIsKeptOffTheExcludedNodes(t *testing.T) {
 		`{"key":"bifrost.io/postgres-role","operator":"NotIn","values":["primary"]}]}]}}}`
 	if string(got) != want {
 		t.Fatalf("affinity %s, want %s", got, want)
-	}
-}
-
-// labelled gives the node the rules' labels.
-func labelled(n *corev1.Node, rules ...placement.LabelRule) *corev1.Node {
-	for _, r := range rules {
-		n.Labels[r.Key] = r.Value
-	}
-	return n
-}
-
-// Origin: 2026-11-19, node names became labels (CI line ask). The etcd node and the
-// database primary are excluded by their labels, so a node renamed or replaced keeps
-// the rule, and a node that only has the old name is no longer excluded.
-// Positive control: excluding by the name ubt-k3s-01 instead makes the first check
-// choose cp-renamed (the quieter node) and the second refuse ubt-k3s-01.
-func TestCINeverGoesToTheEtcdNodeWhateverItIsCalled(t *testing.T) {
-	place := func(task TaskProfile, nodes ...runtime.Object) BuildPlacement {
-		s := NewService(&config.ClusterEntry{ID: "test"})
-		s.SetClientsetForTest(k8sfake.NewSimpleClientset(nodes...))
-		s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) {
-			return map[string]NodeMetrics{
-				"ip-cp-renamed": {WriteLatencySeconds: 0.001, CPUBusy: 0.05, DiskBusy: 0.05, MemoryAvailable: 0.6},
-				"ip-db-renamed": {WriteLatencySeconds: 0.001, CPUBusy: 0.05, DiskBusy: 0.05, MemoryAvailable: 0.6},
-				"ip-ubt-k3s-01": {WriteLatencySeconds: 0.001, CPUBusy: 0.5, DiskBusy: 0.1, MemoryAvailable: 0.6},
-				"ip-ubt-k3s-02": {WriteLatencySeconds: 0.001, CPUBusy: 0.5, DiskBusy: 0.1, MemoryAvailable: 0.6},
-			}, nil
-		})
-		p, _ := s.placeTask(context.Background(), task, "")
-		return p
-	}
-	cp := func() *corev1.Node {
-		return labelled(placementNode("cp-renamed", true, false, "16"), placement.EtcdNode)
-	}
-	old := func() *corev1.Node { return placementNode("ubt-k3s-01", true, false, "16") }
-	for name, task := range map[string]TaskProfile{"CITask": CITask, "CIRunTask": CIRunTask, "UnitTask": UnitTask} {
-		task.MinAvailableMemory = 0 // the fake nodes report little memory
-		if p := place(task, cp(), old()); p.Node != "ubt-k3s-01" {
-			t.Fatalf("%s: %+v, want the etcd-labelled node excluded and ubt-k3s-01 chosen", name, p)
-		}
-	}
-	db := labelled(placementNode("db-renamed", true, false, "16"), placement.PostgresPrimary)
-	run := CIRunTask
-	run.MinAvailableMemory = 0
-	if p := place(run, db, placementNode("ubt-k3s-02", true, false, "16")); p.Node != "ubt-k3s-02" {
-		t.Fatalf("CIRunTask: %+v, want the primary-labelled node excluded and ubt-k3s-02 chosen", p)
 	}
 }
 
@@ -1008,7 +878,7 @@ func TestARenewalIsMarkedNotRecorded(t *testing.T) {
 // read as before.
 func TestPlacementUnbound(t *testing.T) {
 	BindPlacementReadings(PlacementReadings{})
-	t.Cleanup(bindPlacementForTest)
+	t.Cleanup(bindTestPlacement)
 	s := NewService(&config.ClusterEntry{ID: "test"})
 	s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) { return map[string]NodeMetrics{}, nil })
 	if p, placed := s.PlaceTask(context.Background(), CITask); placed || p != (BuildPlacement{}) {
@@ -1026,5 +896,87 @@ func TestPlacementUnbound(t *testing.T) {
 		`{"key":"bifrost.io/placement-not-wired","operator":"Exists"},{"key":"bifrost.io/placement-not-wired","operator":"Exists"}]}]}}}`
 	if string(got) != want {
 		t.Fatalf("affinity unbound %s", got)
+	}
+}
+
+// withRoles gives the node the roles' labels (the test placer's, placement_ports_test.go).
+func withRoles(n *corev1.Node, roles ...NodeRole) *corev1.Node {
+	for _, role := range roles {
+		r := testRoleLabels[role]
+		n.Labels[r[0]] = r[1]
+	}
+	return n
+}
+
+// 2026-11-18, the coordinator: the daily unit run does not land on 05, where two
+// tasks timed out; unlike a release it can wait. Delivery's part is to ask for
+// the fast disks only (tier 1); that a tier 1 task refuses the slow disk is
+// compute's (placement TestATierOneTaskRefusesTheSlowDisk). Moved apart on
+// 2026-11-22. Positive control: CITask asks for tier 2.
+func TestUnitsAskForTheFastDisksOnly(t *testing.T) {
+	s := NewService(&config.ClusterEntry{ID: "test"})
+	s.SetClientsetForTest(k8sfake.NewSimpleClientset(placementNode("ubt-k3s-05", true, false, "16")))
+	s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) {
+		return map[string]NodeMetrics{"ip-ubt-k3s-05": {WriteLatencySeconds: 0.161, MemoryAvailable: 0.6}}, nil
+	})
+	if _, measured := s.PlaceTask(context.Background(), UnitTask); !measured || !testAsked.DiskHeavy || testAsked.MaxDiskTier != 1 {
+		t.Fatalf("asked %+v (measured %v)", testAsked, measured)
+	}
+	if s.PlaceTask(context.Background(), CITask); testAsked.MaxDiskTier != 2 {
+		t.Fatalf("CITask asked %+v", testAsked)
+	}
+}
+
+// 2026-11-19, the compute line: ubt-k3s-02 has no memory for the test database a CI
+// run keeps in memory, so runs leave the database primary even when it is the
+// quietest, and ask for memory really available. A build holds no such database
+// and may still go there. Positive control: the same nodes under CITask choose 02.
+func TestACIRunStaysOffTheNodeWithoutMemoryToSpare(t *testing.T) {
+	if CIRunTask.MinAvailableMemory <= 0 {
+		t.Fatalf("a CI run asks no available memory: %+v", CIRunTask)
+	}
+	s := NewService(&config.ClusterEntry{ID: "test"})
+	s.SetClientsetForTest(k8sfake.NewSimpleClientset(withRoles(placementNode("ubt-k3s-02", true, false, "16"), NodeDatabasePrimary), placementNode("ubt-k3s-04", true, false, "16")))
+	s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) {
+		return map[string]NodeMetrics{
+			"ip-ubt-k3s-02": {WriteLatencySeconds: 0.001, CPUBusy: 0.05, DiskBusy: 0.05, MemoryAvailable: 0.6},
+			"ip-ubt-k3s-04": {WriteLatencySeconds: 0.001, CPUBusy: 0.5, DiskBusy: 0.1, MemoryAvailable: 0.6},
+		}, nil
+	})
+	if p, _ := s.placeTask(context.Background(), CIRunTask, ""); p.Node != "ubt-k3s-04" {
+		t.Fatalf("run: %+v", p)
+	}
+	if p, _ := s.placeTask(context.Background(), CITask, ""); p.Node != "ubt-k3s-02" {
+		t.Fatalf("build: %+v", p)
+	}
+}
+
+// Origin: 2026-11-19, node names became labels (CI line ask). Delivery names the
+// roles a task must never be given, not node names, so a node renamed or replaced
+// keeps the rule and a node that only has the old name is no longer excluded.
+// Positive control: excluding by the name ubt-k3s-01 instead makes the first check
+// choose cp-renamed (the quieter node) and the second refuse ubt-k3s-01.
+func TestCINeverGoesToTheEtcdNodeWhateverItIsCalled(t *testing.T) {
+	place := func(task TaskProfile, nodes ...runtime.Object) BuildPlacement {
+		s := NewService(&config.ClusterEntry{ID: "test"})
+		s.SetClientsetForTest(k8sfake.NewSimpleClientset(nodes...))
+		s.SetNodeMetricsReader(func(context.Context) (map[string]NodeMetrics, error) {
+			return map[string]NodeMetrics{
+				"ip-cp-renamed": {CPUBusy: 0.05},
+				"ip-db-renamed": {CPUBusy: 0.05},
+				"ip-ubt-k3s-01": {CPUBusy: 0.5},
+				"ip-ubt-k3s-02": {CPUBusy: 0.5},
+			}, nil
+		})
+		p, _ := s.placeTask(context.Background(), task, "")
+		return p
+	}
+	for name, task := range map[string]TaskProfile{"CITask": CITask, "CIRunTask": CIRunTask, "UnitTask": UnitTask} {
+		if p := place(task, withRoles(placementNode("cp-renamed", true, false, "16"), NodeEtcd), placementNode("ubt-k3s-01", true, false, "16")); p.Node != "ubt-k3s-01" {
+			t.Fatalf("%s: %+v, want the etcd node excluded and ubt-k3s-01 chosen", name, p)
+		}
+	}
+	if p := place(CIRunTask, withRoles(placementNode("db-renamed", true, false, "16"), NodeDatabasePrimary), placementNode("ubt-k3s-02", true, false, "16")); p.Node != "ubt-k3s-02" {
+		t.Fatalf("CIRunTask: %+v, want the database primary excluded and ubt-k3s-02 chosen", p)
 	}
 }

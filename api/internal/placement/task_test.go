@@ -236,3 +236,21 @@ func placementPod(name, node, cpu string, phase corev1.PodPhase) *corev1.Pod {
 		Status: corev1.PodStatus{Phase: phase},
 	}
 }
+
+// 2026-11-18, the coordinator: the daily unit run does not land on 05, where two
+// tasks timed out. Unlike a release it can wait, so a task allowed only disk tier 1
+// refuses the slow disk. Moved here from delivery/run_refusal_test.go on
+// 2026-11-22 (delivery tests what it asks, compute how it answers). Positive
+// control: ciTask (tier 2) picks 05 here.
+func TestATierOneTaskRefusesTheSlowDisk(t *testing.T) {
+	metrics := func(context.Context) (map[string]NodeMetrics, error) {
+		return map[string]NodeMetrics{"ip-ubt-k3s-05": {WriteLatencySeconds: 0.161, MemoryAvailable: 0.6}}, nil
+	}
+	nodes := []runtime.Object{placementNode("ubt-k3s-05", true, false, "16")}
+	if p, placed := fakePlacer(nodes, metrics).Place(context.Background(), unitTask, ""); !placed || p.Node != "" || !strings.Contains(p.Why, "too slow") {
+		t.Fatalf("tier 1: %+v %v", p, placed)
+	}
+	if p, _ := fakePlacer(nodes, metrics).Place(context.Background(), ciTask, ""); p.Node != "ubt-k3s-05" {
+		t.Fatalf("tier 2: %+v", p)
+	}
+}
