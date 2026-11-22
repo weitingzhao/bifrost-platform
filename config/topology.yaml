@@ -102,6 +102,26 @@ nodes:
     in_k3s_cluster: true   # ubt-k3s-05 · K3s node Ready · general pool
     grid: { row: 3, col: 1 }
 
+  - id: ubt-k3s-07
+    label: ubt-k3s-07
+    host: 192.168.10.80
+    ssh_port: 22
+    group: linux
+    compose_roles: []
+    k3s_roles: [k3s_agent, cicd_build]
+    in_k3s_cluster: true   # ubt-k3s-07 · K3s node Ready · ci home (bifrost_node:home_info)
+    grid: { row: 3, col: 2 }
+
+  - id: ubt-k3s-08
+    label: ubt-k3s-08
+    host: 192.168.10.81
+    ssh_port: 22
+    group: linux
+    compose_roles: []
+    k3s_roles: [k3s_agent, cicd_build]
+    in_k3s_cluster: true   # ubt-k3s-08 · K3s node Ready since 2026-11-20 · ci home
+    grid: { row: 3, col: 3 }
+
   - id: macbook
     label: MacBook Dev
     host: 127.0.0.1
