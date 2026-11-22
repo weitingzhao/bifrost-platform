@@ -563,3 +563,19 @@ func TestTheScanReadsRowsFromTheDomainFiles(t *testing.T) {
 		t.Errorf("control: tools should be off the map without the part: %+v", p.Entries)
 	}
 }
+
+// 2026-11-22: running-image was a registry-only class kept by hand; the map
+// compares the deployments each lane lists with what the cluster scan saw.
+// The control: a listed deployment that runs is not listed as missing.
+func TestReleaseLaneDeploymentsAreComparedWithTheCluster(t *testing.T) {
+	s := &Scanner{Kept: memKept{}}
+	s.keepReleaseTargets(Tree{Commit: "c", Read: func(p string) ([]byte, bool, error) {
+		return []byte("lanes:\n  - lane: research\n    envs:\n      - env: prod\n        deployments:\n          - {namespace: research, name: research-api}\n          - {namespace: research, name: gone}\n"), true, nil
+	}})
+	pool, _ := json.Marshal(Pool{Repo: ClusterRepo, Measured: true, Entries: []Entry{}, Covered: []Covered{{Path: "research/research-api", Kind: "deployment"}}})
+	_ = s.kept().Write(keptName(ClusterRepo), pool)
+	c := s.releaseTargetCheck()
+	if !c.Measured || c.Registered != 2 || c.Live != 1 || len(c.NotLive) != 1 || c.NotLive[0] != "research/gone (research prod)" {
+		t.Fatalf("%+v", c)
+	}
+}

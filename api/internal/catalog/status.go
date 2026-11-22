@@ -279,6 +279,7 @@ func (s *Scanner) ComputeStatus(ctx context.Context, in StatusInputs) Status {
 	}
 	st.Checks = []ClassCheck{s.nodeCheck(ctx, in.ClusterNodes), s.seatCheck(domains), s.mcpToolCheck(domains), s.ruleCheck(ctx, in.RuleGroups), eventCheck(ctx, in.EventTypes)}
 	st.Checks = append(st.Checks, s.placeChecks(ctx, in.Namespaces)...)
+	st.Checks = append(st.Checks, s.releaseTargetCheck())
 	alive := s.aliveLights(k.Repo, domains, in)
 	ifaces := interfaceLights(ctx, domains, in)
 	bound := boundaryLights(ctx, k.Repo, domains, in)

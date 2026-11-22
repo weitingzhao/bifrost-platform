@@ -717,3 +717,77 @@ func (s *Scanner) placeChecks(ctx context.Context, namespaces func(context.Conte
 	}
 	return []ClassCheck{cl, env}
 }
+
+const keptReleaseTargets = "running-images"
+
+// keepReleaseTargets keeps the deployments config/running-images.yaml lists
+// per lane and environment ("<namespace>/<name>" -> "<lane> <env>").
+func (s *Scanner) keepReleaseTargets(t Tree) {
+	raw, ok, err := t.Read("config/running-images.yaml")
+	if err != nil || !ok {
+		return
+	}
+	var doc struct {
+		Lanes []struct {
+			Lane string `yaml:"lane"`
+			Envs []struct {
+				Env         string `yaml:"env"`
+				Deployments []struct {
+					Namespace string `yaml:"namespace"`
+					Name      string `yaml:"name"`
+				} `yaml:"deployments"`
+			} `yaml:"envs"`
+		} `yaml:"lanes"`
+	}
+	if yaml.Unmarshal(raw, &doc) != nil {
+		return
+	}
+	k := map[string]string{}
+	for _, l := range doc.Lanes {
+		for _, e := range l.Envs {
+			for _, d := range e.Deployments {
+				k[d.Namespace+"/"+d.Name] = l.Lane + " " + e.Env
+			}
+		}
+	}
+	if out, err := json.Marshal(k); err == nil {
+		if err := s.kept().Write(keptReleaseTargets, out); err != nil {
+			slog.Warn("catalog: keep running images", "err", err)
+		}
+	}
+}
+
+// releaseTargetCheck compares the listed deployments with the deployments
+// the cluster scan saw (its pool's covered workloads).
+func (s *Scanner) releaseTargetCheck() ClassCheck {
+	c := ClassCheck{Class: "running-image", NotRegistered: []string{}, NotLive: []string{}}
+	raw, err := s.kept().Read(keptReleaseTargets)
+	var listed map[string]string
+	if err != nil || raw == nil || json.Unmarshal(raw, &listed) != nil {
+		c.Note = "no scan has kept config/running-images.yaml yet"
+		return c
+	}
+	p, _ := s.Last(ClusterRepo)
+	if p == nil || !p.Measured {
+		c.Note = "the cluster has not been scanned"
+		return c
+	}
+	seen := map[string]bool{}
+	for _, w := range p.Covered {
+		if w.Kind == "deployment" {
+			seen[w.Path] = true
+		}
+	}
+	for _, e := range p.Entries { // off-map workloads are workloads too
+		seen[e.Path] = true
+	}
+	for d, where := range listed {
+		if !seen[d] {
+			c.NotLive = append(c.NotLive, d+" ("+where+")")
+		}
+	}
+	sort.Strings(c.NotLive)
+	c.Measured, c.Registered, c.Live = true, len(listed), len(listed)-len(c.NotLive)
+	c.Note = "the deployments each release lane lists, against the deployments the cluster scan saw; the file lists no images, so which image runs is not compared"
+	return c
+}
