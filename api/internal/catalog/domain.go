@@ -27,10 +27,55 @@ type Domain struct {
 	Paths     []Row `json:"paths"`
 	Workloads []Row `json:"workloads"`
 	Tables    []Row `json:"tables"`
+	// Buildings group its Go packages by the first directory under the Go
+	// root and its internal directory (api/internal/bus/... is building bus,
+	// api/cmd/x is cmd): computed from the paths, typed by nobody (2026-11-21,
+	// City draws a district's buildings; law 30: nothing in Ops is kept by
+	// hand). A domain that wants other buildings can declare them later; this
+	// is the default.
+	Buildings []Building `json:"buildings"`
 	// Contract is the domain's contracts block in the table, as written.
 	Contract json.RawMessage `json:"contract"`
 	Status   *DomainStatus   `json:"status,omitempty"`
 	Note     string          `json:"note,omitempty"`
+}
+
+// Building is a group of a domain's packages.
+type Building struct {
+	ID       string   `json:"id"`
+	Packages []string `json:"packages"`
+}
+
+// buildingsOf groups packages by their first directory under a Go root and
+// its "internal".
+func buildingsOf(rows []Row, roots []string) []Building {
+	isRoot := map[string]bool{}
+	for _, r := range roots {
+		isRoot[r] = true
+	}
+	by := map[string][]string{}
+	for _, r := range rows {
+		segs := strings.Split(r.Path, "/")
+		if len(segs) > 1 && isRoot[segs[0]] {
+			segs = segs[1:]
+		}
+		if len(segs) > 1 && segs[0] == "internal" {
+			segs = segs[1:]
+		}
+		by[segs[0]] = append(by[segs[0]], r.Path)
+	}
+	out := make([]Building, 0, len(by))
+	for id, pkgs := range by {
+		sort.Strings(pkgs)
+		out = append(out, Building{ID: id, Packages: pkgs})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if len(out[i].Packages) != len(out[j].Packages) {
+			return len(out[i].Packages) > len(out[j].Packages)
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
 }
 
 // Row is one row that names the domain.
@@ -66,7 +111,7 @@ func rowsOf(id string, m map[string][]string) []Row {
 
 // DomainOf assembles one domain from the kept table, owners and status.
 func (s *Scanner) DomainOf(id string) (Domain, bool) {
-	out := Domain{Version: Version, ID: id, Packages: []Row{}, Groups: []Row{}, Paths: []Row{}, Workloads: []Row{}, Tables: []Row{}}
+	out := Domain{Version: Version, ID: id, Packages: []Row{}, Groups: []Row{}, Paths: []Row{}, Workloads: []Row{}, Tables: []Row{}, Buildings: []Building{}}
 	k, ok := s.keptSections()
 	if !ok {
 		out.Note = "no scanned table names its domains yet"
@@ -90,6 +135,7 @@ func (s *Scanner) DomainOf(id string) (Domain, bool) {
 	out.Repo, out.Commit = k.Repo, k.Commit
 	if o, _ := s.lastOwners(k.Repo); o != nil {
 		out.Packages, out.Groups, out.Paths = rowsOf(id, o.Packages), rowsOf(id, o.Groups), rowsOf(id, o.Paths)
+		out.Buildings = buildingsOf(out.Packages, o.GoRoots)
 	}
 	if o, _ := s.lastOwners(ClusterRepo); o != nil {
 		out.Workloads = rowsOf(id, o.Paths)

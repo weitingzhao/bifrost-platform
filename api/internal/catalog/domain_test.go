@@ -60,3 +60,24 @@ func TestARowNamingTwoDomainsIsMarkedShared(t *testing.T) {
 		t.Errorf("%+v", rows)
 	}
 }
+
+// 2026-11-21, City (箭10): a district's second layer had no buildings, only a
+// list of packages (foundation 73), and asked the map line to lead the
+// grouping. The default is computed from the paths, never typed: the first
+// directory under the Go root and "internal". The control: a package
+// directly under the root is its own building, not dropped.
+func TestBuildingsGroupPackagesByTheirFirstDirectory(t *testing.T) {
+	rows := []Row{{Path: "api/internal/bus/relay"}, {Path: "api/internal/bus/gate"}, {Path: "api/internal/catalog"},
+		{Path: "api/cmd/domainscore"}, {Path: "api/internal/bus"}, {Path: "tools"}}
+	got := buildingsOf(rows, []string{"api"})
+	if len(got) != 4 || got[0].ID != "bus" || len(got[0].Packages) != 3 {
+		t.Fatalf("%+v", got)
+	}
+	ids := map[string]bool{}
+	for _, b := range got {
+		ids[b.ID] = true
+	}
+	if !ids["cmd"] || !ids["catalog"] || !ids["tools"] {
+		t.Errorf("%+v", got)
+	}
+}
