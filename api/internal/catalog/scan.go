@@ -98,7 +98,7 @@ func PoolOf(repo string, t Tree) Pool {
 // no row (2026-11-20, perceive first: unclaimed is the real state, shown as
 // it is), unless whole: a tenant's, kept as one entry.
 func poolAndTable(repo string, t Tree, whole bool) (Pool, *Table) {
-	p := Pool{Version: Version, Repo: repo, Commit: t.Commit, Measured: true, Entries: []Entry{}, StaleRows: []string{}}
+	p := Pool{Version: Version, Repo: repo, Commit: t.Commit, Measured: true, Entries: []Entry{}, StaleRows: []string{}, RootGroupOnly: []string{}}
 	own, ok, err := t.Read(OwnershipPath)
 	if err != nil {
 		p.Measured, p.Note = false, err.Error()
@@ -135,6 +135,7 @@ func poolAndTable(repo string, t Tree, whole bool) (Pool, *Table) {
 	}
 	p.Entries = Scan(table, t.Files, func(dir string) bool { return goDirs[dir] })
 	p.StaleRows = staleRows(table, t.Files)
+	p.RootGroupOnly = rootGroupOnly(table, t.Files)
 	o := ownersOf(repo, t.Commit, table, time.Time{})
 	p.equation(t.Files, &o)
 	return p, &table

@@ -50,6 +50,8 @@ export type RepoCount = {
   entries: number
   /** Rows of the table that cover nothing (absent from an older platform). */
   stale_rows?: number
+  /** Front-end directories only the root group covers (absent from an older platform). */
+  root_group_only?: number
 }
 
 export type DomainStatusInventory = {
@@ -117,6 +119,7 @@ export type PoolResponse = {
   entries: PoolEntry[]
   covered?: { path: string; by: string; by_namespace?: boolean }[]
   stale_rows?: string[]
+  root_group_only?: string[]
 }
 
 export async function fetchPool(repo: string): Promise<PoolResponse> {

@@ -436,3 +436,19 @@ func TestRuleGroupsAreComparedWithWhatPrometheusLoaded(t *testing.T) {
 		t.Errorf("%+v", c)
 	}
 }
+
+// 2026-11-22, Foundation: the front end's root group (console/src) catches
+// every file no narrower group names, so a new directory nobody declared
+// reads as owned. The map counts what only the root group covers. The
+// control: a file under a narrower group is not counted.
+func TestFilesOnlyTheRootGroupCoversAreCounted(t *testing.T) {
+	table := Table{ConsoleRoot: "console/src", Groups: []string{"console/src/pages", "console/src"}}
+	files := []string{"console/src/main.tsx", "console/src/hooks/a.ts", "console/src/hooks/b.ts", "console/src/pages/p.tsx", "api/x.go"}
+	got := rootGroupOnly(table, files)
+	if len(got) != 2 || got[0] != "console/src/(files) (1)" || got[1] != "console/src/hooks (2)" {
+		t.Fatalf("%v", got)
+	}
+	if got := rootGroupOnly(Table{ConsoleRoot: "console/src", Groups: []string{"console/src/pages"}}, files); len(got) != 0 {
+		t.Errorf("with no root group nothing is caught by it: %v", got)
+	}
+}

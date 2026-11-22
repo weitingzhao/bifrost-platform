@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -49,6 +50,9 @@ type Table struct {
 	Groups   []string        // front-end group prefixes, longest first
 	GoRoots  []string        // top directories of the package rows
 	Console  string          // top directory of the front end, "" for none
+	// ConsoleRoot is the front end's root ("console/src"): a group of that
+	// path catches every file no narrower group names.
+	ConsoleRoot string
 	// Paths are the table's path rows (paths): directories or files outside
 	// the Go packages and the front end's groups, longest first; "." is the
 	// files at the repository's root.
@@ -102,7 +106,8 @@ func ParseTable(own, console []byte) (Table, error) {
 		if err := json.Unmarshal(console, &c); err != nil {
 			return Table{}, fmt.Errorf("%s does not parse: %w", ConsolePath, err)
 		}
-		t.Console, _, _ = strings.Cut(strings.Trim(c.Frontend.Root, "/"), "/")
+		t.ConsoleRoot = strings.Trim(c.Frontend.Root, "/")
+		t.Console, _, _ = strings.Cut(t.ConsoleRoot, "/")
 		for g, r := range c.Frontend.Groups {
 			g = strings.Trim(g, "/")
 			t.Groups = append(t.Groups, g)
@@ -341,6 +346,54 @@ type Pool struct {
 	// what was removed but is still registered; the map saw what was added
 	// and not what was taken away). Empty for a repository with no table.
 	StaleRows []string `json:"stale_rows"`
+	// RootGroupOnly are the front end's directories (and "<root>/(files)")
+	// whose files only the root group covers, with how many: a new
+	// directory nobody declared lands there and reads as owned (2026-11-22,
+	// Foundation). Empty with no front end.
+	RootGroupOnly []string `json:"root_group_only"`
+}
+
+// rootGroupOnly lists, by first directory under the front end's root, the
+// files whose covering group is the root's own group.
+func rootGroupOnly(t Table, files []string) []string {
+	root := t.ConsoleRoot
+	hasRoot := false
+	for _, g := range t.Groups {
+		if g == root {
+			hasRoot = true
+		}
+	}
+	out := []string{}
+	if root == "" || !hasRoot {
+		return out
+	}
+	by := map[string]int{}
+	for _, f := range files {
+		if !strings.HasPrefix(f, root+"/") {
+			continue
+		}
+		covering := ""
+		for _, g := range t.Groups { // longest first
+			if strings.HasPrefix(f, g+"/") {
+				covering = g
+				break
+			}
+		}
+		if covering != root {
+			continue
+		}
+		rest := strings.TrimPrefix(f, root+"/")
+		if d, _, ok := strings.Cut(rest, "/"); ok {
+			by[root+"/"+d]++
+		} else {
+			by[root+"/(files)"]++
+		}
+	}
+	for d, n := range by {
+		out = append(out, d+" ("+strconv.Itoa(n)+")")
+	}
+	sort.Strings(out)
+	return out
 }
 
 // staleRows is every row of t that covers no file.
