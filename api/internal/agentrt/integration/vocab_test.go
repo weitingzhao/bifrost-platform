@@ -22,6 +22,8 @@ import (
 	_ "github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	// home_layout_saved is declared by homelayout (2026-11-18, migration 0034): the same.
 	_ "github.com/weitingzhao/bifrost-platform/api/internal/homelayout"
+	// prod_release_judged is declared by headrelease (2026-11-21, migration 0043): the same.
+	_ "github.com/weitingzhao/bifrost-platform/api/internal/headrelease"
 )
 
 // The vocabulary a reader may filter by is the database's, not only the

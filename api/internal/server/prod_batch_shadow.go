@@ -34,6 +34,10 @@ func (s *Server) prodShadowOf(table headrelease.Table) *headrelease.ProdShadowLo
 		Batch: s.prodShadowBatch,
 		Audit: func(target, result, detail string) {
 			s.audit.RecordDirect(headrelease.ProdShadowPrincipal, actuation.RoleOperator, headrelease.ProdRecordAction, target, result, detail)
+			// The ledger keeps the reasons the audit event does not (migration 0043).
+			if s.agentRuntime != nil && s.agentRuntime.api != nil && s.agentRuntime.api.DB != nil {
+				headrelease.RecordProdJudged(s.agentRuntime.api.DB, result, detail)
+			}
 		},
 		// Mode on's one act and its hours (prod_batch_release.go).
 		Release: s.prodRelease,

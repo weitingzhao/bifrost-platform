@@ -77,6 +77,7 @@ types:
   - {type: policy_alert, domain: coordination, note: "a text that claims the Owner's approval (a letter, a plan note); coord (2026-11-17, TD-583: the other rules have their own types or are retired)"}
   - {type: pool_cooldown_set, domain: compute}
   - {type: pool_measured, domain: compute}
+  - {type: prod_release_judged, domain: delivery, note: "each change of the PROD head-release judgement, with its reasons; headrelease (migration 0043)"}
   - {type: question_seen, domain: foundation}
   - {type: route_decided, domain: foundation}
   - {type: rule_approved, domain: verification}
