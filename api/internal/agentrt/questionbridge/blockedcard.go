@@ -1,4 +1,4 @@
-package questioncards
+package questionbridge
 
 import (
 	"context"

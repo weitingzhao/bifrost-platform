@@ -1,4 +1,4 @@
-package answerack_test
+package questionbridge_test
 
 import (
 	"context"
@@ -10,9 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/answerack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
 
@@ -55,7 +54,7 @@ func newAckStore(t *testing.T) *ackStore {
 	t.Setenv("OPS_VIEWER_ENV", "prod") // where the question store takes questions
 	s := &ackStore{t: t, svc: questions.New(filepath.Join(t.TempDir(), "questions"), nil), now: ackAsked, tasks: map[string]ackTaskState{}}
 	s.svc.SetClock(func() time.Time { return s.now })
-	t.Cleanup(answerack.SetTaskWaitForTest(func(_ context.Context, _ eventlog.DB, task string) (string, bool, bool, error) {
+	t.Cleanup(questionbridge.SetTaskWaitForTest(func(_ context.Context, _ eventlog.DB, task string) (string, bool, bool, error) {
 		st, ok := s.tasks[task]
 		return st.state, st.stopped, ok, nil
 	}))
@@ -102,10 +101,10 @@ func (s *ackStore) read(id string) (bool, string) {
 func (s *ackStore) pass(at time.Time) int {
 	s.t.Helper()
 	s.now = at
-	c := &answerack.Acker{Now: func() time.Time { return at }, Infof: func(format string, args ...any) {
+	c := &questionbridge.Acker{Now: func() time.Time { return at }, Infof: func(format string, args ...any) {
 		s.logs = append(s.logs, fmt.Sprintf(format, args...))
 	}}
-	c.Unacked = questioncards.Unacked(s.svc)
+	c.Unacked = questionbridge.Unacked(s.svc)
 	c.Ack = func(ctx context.Context, id string) error {
 		res := s.svc.Ack(ctx, questions.RuntimeSession, questions.RuntimeSession, "operator", id, nil)
 		if res.Code != http.StatusOK {

@@ -3,7 +3,7 @@
 // CI, and the facts-and-rules pass. Each loop is a method that runs one pass,
 // so tests drive passes directly; Start runs them on timers. The plan tree's
 // passes (agentrt/planloop) and the acknowledging of used answers
-// (agentrt/answerack) are other domains': the assembly binds them as Steps
+// (agentrt/questionbridge) are other domains': the assembly binds them as Steps
 // and Loops, which Start runs as its own. The loops change state only
 // through the store, so every change is an event.
 package controller

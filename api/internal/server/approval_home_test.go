@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
 
@@ -58,7 +57,7 @@ func TestSTGRuleCardKeepsWorkingWithoutOwnerRequests(t *testing.T) {
 	t.Setenv("OPS_VIEWER_ENV", "stg")
 	rt := questionbridge.New(filepath.Join(t.TempDir(), "questions"), nil)
 	rt.TakeCardsByRule(true)
-	card := ownercard.Card{Key: strings.Repeat("cd", 16), Title: "Blocked in M-3", Body: "test", Options: []string{questioncards.BlockedRetry, questioncards.BlockedDrop}, Recommended: 2, RecommendedWhy: "test", Meanwhile: "wait", OwnerDuty: "goal", ByRule: true}
+	card := ownercard.Card{Key: strings.Repeat("cd", 16), Title: "Blocked in M-3", Body: "test", Options: []string{questionbridge.BlockedRetry, questionbridge.BlockedDrop}, Recommended: 2, RecommendedWhy: "test", Meanwhile: "wait", OwnerDuty: "goal", ByRule: true}
 	ctx := context.Background()
 	id, err := rt.Ask()(ctx, card)
 	if err != nil {

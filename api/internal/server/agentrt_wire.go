@@ -15,14 +15,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/answerack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planloop"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -164,19 +163,19 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 // agentRuntimeController is the platform-workers' controller. Every
 // environment runs the same passes. The facts-and-rules pass runs, after the
 // tuning rule, the plan's facts, its decisions, the acknowledging of the
-// answers the runtime used (agentrt/answerack, the owner domain's) and the
+// answers the runtime used (agentrt/questionbridge, the owner domain's) and the
 // plan's done rules, in that order; the plan's observations are a loop of
 // their own (agentrt/planloop, the plan domain's). The controller's own
 // sources are the plan's deployment read and the external records'
 // (wireExternalRecords).
-func agentRuntimeController(env string, db eventlog.DB, plans planloop.Sources, unacked func(context.Context) ([]questioncards.AnsweredCard, error)) *controller.Controller {
+func agentRuntimeController(env string, db eventlog.DB, plans planloop.Sources, unacked func(context.Context) ([]questionbridge.AnsweredCard, error)) *controller.Controller {
 	c := &controller.Controller{DB: db, Sources: controller.Sources{Deployed: plans.Deployed}, Env: env, Logf: func(format string, args ...any) {
 		slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
 	}, Infof: func(format string, args ...any) {
 		slog.Info("agentrt controller", "detail", fmt.Sprintf(format, args...))
 	}}
 	p := &planloop.Loop{DB: db, Sources: plans}
-	a := &answerack.Acker{DB: db, Unacked: unacked, Ack: plans.Ack, Logf: c.Logf, Infof: c.Infof}
+	a := &questionbridge.Acker{DB: db, Unacked: unacked, Ack: plans.Ack, Logf: c.Logf, Infof: c.Infof}
 	c.Steps = []controller.Step{
 		{Name: "facts", Run: passOf(p.Facts)},
 		{Name: "plan decisions", Run: passOf(p.PlanDecisions)},

@@ -6,7 +6,7 @@
 // which put the owner domain's question cards inside a package of other
 // domains; it moved here unchanged so that each package belongs to one
 // domain (OWNER_LAW #28).
-package answerack
+package questionbridge
 
 import (
 	"context"
@@ -16,7 +16,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 )
 
 // An answered card the runtime had not acknowledged counted against its
@@ -33,15 +32,15 @@ const (
 	AnswerWaitLimit = 24 * time.Hour
 )
 
-// taskWait reads an answered card's task (questioncards.TaskWait); tests replace it.
-var taskWait = questioncards.TaskWait
+// taskWait reads an answered card's task (TaskWait); tests replace it.
+var taskWait = TaskWait
 
 // Acker holds what the pass needs.
 type Acker struct {
 	DB eventlog.DB
 	// Unacked lists the runtime's answered cards it has not acknowledged
 	// (AckUsedAnswers); nil acknowledges none of them.
-	Unacked func(ctx context.Context) ([]questioncards.AnsweredCard, error)
+	Unacked func(ctx context.Context) ([]AnsweredCard, error)
 	// Ack tells the question store the runtime used the answer of a card it
 	// asked; nil acknowledges nothing.
 	Ack func(ctx context.Context, id string) error
@@ -69,7 +68,7 @@ func (a *Acker) AckUsedAnswers(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 	type list struct {
-		cards []questioncards.AnsweredCard
+		cards []AnsweredCard
 		err   error
 	}
 	x := bounded(a, ctx, func(ctx context.Context) list { cs, err := a.Unacked(ctx); return list{cs, err} })
@@ -106,7 +105,7 @@ func (a *Acker) AckUsedAnswers(ctx context.Context) (int, error) {
 
 // answerUsed says why the runtime no longer waits on the answer of q, or ""
 // when its task may still.
-func (a *Acker) answerUsed(ctx context.Context, q questioncards.AnsweredCard, now time.Time) (string, error) {
+func (a *Acker) answerUsed(ctx context.Context, q AnsweredCard, now time.Time) (string, error) {
 	if !q.AnsweredAt.IsZero() && now.Sub(q.AnsweredAt) > AnswerWaitLimit {
 		return fmt.Sprintf("answered %s ago, more than %s", now.Sub(q.AnsweredAt).Round(time.Minute), AnswerWaitLimit), nil
 	}

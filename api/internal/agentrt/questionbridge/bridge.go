@@ -23,7 +23,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/readslot"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/ownerq"
@@ -96,7 +95,7 @@ func (rt *Runtime) Question() func(context.Context, string) (seenfacts.Question,
 		if err != nil || !ok {
 			return seenfacts.Question{}, false
 		}
-		return questioncards.Fact(q)
+		return Fact(q)
 	}
 }
 
@@ -344,13 +343,13 @@ func (rt *Runtime) Ack() func(context.Context, string) error {
 }
 
 // Unacked lists the runtime's answered cards it has not
-// acknowledged (questioncards.Unacked), for the controller to acknowledge
+// acknowledged (Unacked), for the controller to acknowledge
 // those no task waits on; nil without a question store.
-func (rt *Runtime) Unacked() func(context.Context) ([]questioncards.AnsweredCard, error) {
+func (rt *Runtime) Unacked() func(context.Context) ([]AnsweredCard, error) {
 	if rt == nil {
 		return nil
 	}
-	return questioncards.Unacked(rt.Svc)
+	return Unacked(rt.Svc)
 }
 
 // Observations lists retained cards without sweeping.
@@ -372,7 +371,7 @@ func (rt *Runtime) Observations() func(context.Context) ([]seenfacts.Question, e
 		now := time.Now()
 		var out []seenfacts.Question
 		for _, q := range items {
-			if f, ok := questioncards.Observation(q, now); ok {
+			if f, ok := Observation(q, now); ok {
 				out = append(out, f)
 			}
 		}

@@ -1,6 +1,6 @@
 // Package questioncards adapts the trusted question service to landing and
 // STG cards. The server and database integration tests use this same source.
-package questioncards
+package questionbridge
 
 import (
 	"context"

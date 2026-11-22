@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questioncards"
 )
 
 // Review 439 A3: only a card that says so (a blocked card) is taken for the
@@ -32,7 +30,7 @@ func TestOnlyTheSameCardIsTakenByItsKey(t *testing.T) {
 	}
 	task := "t_01M5192P0JPMJAP63ZKRPXJ2VV"
 	blocked := ownercard.Card{Key: strings.Repeat("cd", 16), Title: "Blocked in M-3: t", Body: "started 30 hours ago",
-		Options: []string{questioncards.BlockedRetry, questioncards.BlockedDrop, "Close mission M-3"}, Recommended: 3, RecommendedWhy: "why",
+		Options: []string{questionbridge.BlockedRetry, questionbridge.BlockedDrop, "Close mission M-3"}, Recommended: 3, RecommendedWhy: "why",
 		Meanwhile: "the task stays blocked", OwnerDuty: "goal", TaskID: task, Urgency: "when you can", SameByKey: true}
 	card, err := ask(ctx, blocked)
 	if err != nil || card == first {
@@ -46,7 +44,7 @@ func TestOnlyTheSameCardIsTakenByItsKey(t *testing.T) {
 	for name, edit := range map[string]func(*ownercard.Card){
 		"another task": func(c *ownercard.Card) { c.TaskID = "t_01M5192P0JPMJAP63ZKRPXJ2VW" },
 		"another mission": func(c *ownercard.Card) {
-			c.Options = []string{questioncards.BlockedRetry, questioncards.BlockedDrop, "Close mission M-4"}
+			c.Options = []string{questionbridge.BlockedRetry, questionbridge.BlockedDrop, "Close mission M-4"}
 		},
 		"not asked so": func(c *ownercard.Card) { c.SameByKey = false },
 	} {
