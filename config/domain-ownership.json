@@ -415,9 +415,14 @@
         "commands": [
           {"kind": "mcp_tool", "name": "get_dev_session_logs", "routes": ["/api/v1/dev-sessions/{name}/logs"]},
           {"kind": "mcp_tool", "name": "list_dev_sessions", "routes": ["/api/v1/dev-sessions/"]},
-          {"kind": "mcp_tool", "name": "restart_dev_session", "routes": ["/api/v1/dev-sessions/{name}/control"]}
+          {"kind": "mcp_tool", "name": "restart_dev_session", "routes": ["/api/v1/dev-sessions/{name}/control"]},
+          {"kind": "action", "id": "wake_compute_node", "tier": "B", "route": "POST /api/v1/cluster/nodes/{name}/wake"},
+          {"kind": "action", "id": "poweroff_compute_node", "tier": "D", "route": "POST /api/v1/cluster/nodes/{name}/poweroff"}
         ],
-        "shared_storage": []
+        "shared_storage": [
+          {"table": "prometheus:bifrost_node:home_info", "owner": "infra k8s/monitoring/bifrost-compute-module-readout.yaml (the metrics line keeps the rule file; compute defines what it means)", "write": "the recording rule only; a node's home changes by a rule change", "read": "anyone through Prometheus: placement, the reclaim runbook (compute/reclaim-runbook.md), the compute readings; labels instance and home (control-plane, database-primary, database-standby, general, ci)", "held_by": "none yet in code; the map's prometheus-rule class compares the declared groups with what Prometheus loaded (catalog TestRuleGroupsAreComparedWithWhatPrometheusLoaded)"},
+          {"table": "prometheus:ALERTS{alertname=~\"ComputePain.*\"}", "owner": "same rule file as above", "write": "Prometheus alerting only", "read": "the compute seat's wake (alert.rule.fired to the compute thread), the compute readings; DiskFlush, Replication and ProdThrottle mean reclaim, GuestLoad is information only", "held_by": "as above"}
+        ]
       }
     },
     {
