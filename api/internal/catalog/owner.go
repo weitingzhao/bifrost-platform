@@ -59,7 +59,60 @@ type Owner struct {
 	By        string   `json:"by"`
 	// Entry is the pool entry the path falls in when nothing covers it.
 	Entry *Entry `json:"entry,omitempty"`
-	Note  string `json:"note"`
+	// Nearest and Claim answer "I am adding this, where does it go" (law 75,
+	// 2026-11-22: the map is the counter to register at): for a path no row
+	// covers, the nearest covered directory above it and the row to put in
+	// the same commit to claim it. The map writes nothing: the row in git
+	// is the registration (law 50, one source).
+	Nearest *Owner `json:"nearest,omitempty"`
+	Claim   *Claim `json:"claim,omitempty"`
+	Note    string `json:"note"`
+}
+
+// Claim is the row that claims a path: the file and section to put it in,
+// the key, and the row itself, ready to paste.
+type Claim struct {
+	File    string          `json:"file"`
+	Section string          `json:"section"`
+	Key     string          `json:"key"`
+	Row     json.RawMessage `json:"row"`
+	Say     string          `json:"say"`
+}
+
+// claimFor is the row claiming p for domain ("" leaves the domain to fill;
+// the nearest owner's single domain is the default).
+func claimFor(o *Owners, p, domain string, nearest *Owner) *Claim {
+	if domain == "" && nearest != nil && len(nearest.Domains) == 1 {
+		domain = nearest.Domains[0]
+	}
+	file, section, key := OwnershipPath, "paths", p
+	top, _, _ := strings.Cut(p, "/")
+	switch {
+	case o.Console != "" && top == o.Console:
+		file, section = ConsolePath, "frontend.groups"
+	default:
+		for _, r := range o.GoRoots {
+			if r == top && strings.HasSuffix(p, ".go") {
+				key = path.Dir(p)
+				section = "packages"
+			} else if r == top && !strings.Contains(path.Base(p), ".") {
+				section = "packages"
+			}
+		}
+	}
+	d := domain
+	if d == "" {
+		d = "{domain}"
+	}
+	row, _ := json.Marshal(map[string]any{"domains": []string{d}, "status": "assigned", "basis": "{date} {seat}: what it is and why it is this domain's"})
+	say := key + " has no owner. "
+	if nearest != nil {
+		say += "The nearest owned directory above it is " + nearest.Path + " (" + strings.Join(nearest.Domains, ", ") + "). "
+	} else {
+		say += "No directory above it has an owner. "
+	}
+	say += "To claim it, put this row in " + file + " under " + section + " in the same commit."
+	return &Claim{File: file, Section: section, Key: key, Row: row, Say: say}
 }
 
 // OwnerOf answers who owns p from what the scan kept (pool may be nil).
@@ -248,7 +301,17 @@ func (rt OwnerRoute) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pool, _ := rt.Scanner.Last(repo)
-	writeJSON(w, http.StatusOK, OwnerOf(o, pool, p))
+	out := OwnerOf(o, pool, p)
+	if !out.Perceived && o != nil && o.HasTable {
+		for dir := path.Dir(out.Path); dir != "." && dir != "/"; dir = path.Dir(dir) {
+			if up := OwnerOf(o, nil, dir); up.Perceived {
+				out.Nearest = &up
+				break
+			}
+		}
+		out.Claim = claimFor(o, out.Path, strings.TrimSpace(r.URL.Query().Get("domain")), out.Nearest)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // IndexRoute is GET /catalog/index: the index as the last scan of the

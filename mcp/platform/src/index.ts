@@ -573,9 +573,13 @@ reg(
 reg(
   'get_owner',
   GET_OWNER_DESCRIPTION,
-  { repo: REPO, path: z.string().min(1).max(1024).describe('A path from the repository root, e.g. api/internal/catalog/scan.go') },
-  async ({ repo, path }) =>
-    jsonResult(await platformGet(ownerPath(repo, path))),
+  {
+    repo: REPO,
+    path: z.string().min(1).max(1024).describe('A path from the repository root, e.g. api/internal/catalog/scan.go'),
+    domain: z.string().min(1).max(64).optional().describe('For a path no row covers: the domain to fill in the claim row'),
+  },
+  async ({ repo, path, domain }) =>
+    jsonResult(await platformGet(ownerPath(repo, path, domain))),
 )
 
 reg(

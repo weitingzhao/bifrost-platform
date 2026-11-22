@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -450,5 +451,41 @@ func TestFilesOnlyTheRootGroupCoversAreCounted(t *testing.T) {
 	}
 	if got := rootGroupOnly(Table{ConsoleRoot: "console/src", Groups: []string{"console/src/pages"}}, files); len(got) != 0 {
 		t.Errorf("with no root group nothing is caught by it: %v", got)
+	}
+}
+
+// 2026-11-22, law 75 (the map is the counter: "I am adding this, the map adds
+// it"): a path no row covers gets the nearest owned directory above it and
+// the row to put in the same commit, its domain the nearest's by default or
+// the one asked for. The control: a covered path gets no claim.
+func TestAnUnownedPathGetsTheRowThatClaimsIt(t *testing.T) {
+	s := &Scanner{Kept: memKept{}}
+	o := Owners{Repo: "r", Commit: "c", HasTable: true, GoRoots: []string{"api"}, Console: "console",
+		Packages: map[string][]string{"api/internal/a": {"plan"}}, Groups: map[string][]string{},
+		Paths: map[string][]string{"scripts": {"foundation"}}}
+	raw, _ := json.Marshal(o)
+	_ = s.kept().Write(keptOwners("r"), raw)
+	get := func(q string) Owner {
+		w := httptest.NewRecorder()
+		OwnerRoute{Scanner: s}.ServeHTTP(w, httptest.NewRequest("GET", "/catalog/owner?repo=r&"+q, nil))
+		var out Owner
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &out) != nil {
+			t.Fatalf("%d %s", w.Code, w.Body)
+		}
+		return out
+	}
+	if c := get("path=scripts/x.sh"); c.Claim != nil || !c.Perceived {
+		t.Fatalf("covered path: %+v", c)
+	}
+	u := get("path=tools/new/run.py")
+	if u.Perceived || u.Claim == nil || u.Claim.Section != "paths" || u.Claim.Key != "tools/new/run.py" || !strings.Contains(string(u.Claim.Row), "{domain}") || u.Nearest != nil {
+		t.Fatalf("no owner above: %+v %s", u.Claim, u.Claim.Row)
+	}
+	g := get("path=api/cmd/tool/main.go&domain=lineage")
+	if g.Claim == nil || g.Claim.Section != "packages" || g.Claim.Key != "api/cmd/tool" || !strings.Contains(string(g.Claim.Row), `"lineage"`) {
+		t.Fatalf("new package: %+v", g.Claim)
+	}
+	if !strings.Contains(g.Claim.Say, "same commit") {
+		t.Errorf("say: %q", g.Claim.Say)
 	}
 }
