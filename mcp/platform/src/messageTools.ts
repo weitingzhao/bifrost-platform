@@ -8,6 +8,7 @@
  */
 import { MESSAGE_DATA_NOTE, ackMessages, defaultRuntimeDeps, sendMessage, waitForMessages, type RuntimeDeps } from './runtimeTools.js'
 import { SUMMARY_MAX, buildEnvelope, present, type Detail, type EnvelopeInput, type InboxMessage } from './messageEnvelope.js'
+import { ROSTER_PREFIX, loadRoster, resolveRoster, type RosterSeat } from './roster.js'
 
 const KEEP = 500
 const kept = new Map<string, InboxMessage>()
@@ -37,8 +38,23 @@ export interface SendInput {
   reply_to?: string
 }
 
-/** An envelope when type is given (body becomes its text), a plain message otherwise. */
-export async function send(input: SendInput, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
+/**
+ * An envelope when type is given (body becomes its text), a plain message otherwise. A roster:<seat>
+ * address is resolved to the thread that sits the seat now (roster.ts), and the answer names it.
+ */
+export async function send(input: SendInput, d: RuntimeDeps = defaultRuntimeDeps(), roster: () => RosterSeat[] = () => loadRoster()): Promise<unknown> {
+  if (input.to.startsWith(ROSTER_PREFIX)) {
+    let seats: RosterSeat[]
+    try {
+      seats = roster()
+    } catch (e) {
+      return { error: `${input.to}: the roster cannot be read: ${e instanceof Error ? e.message : String(e)}` }
+    }
+    const r = resolveRoster(input.to, seats)
+    if ('error' in r) return r
+    const sent = await send({ ...input, to: r.to }, d, roster)
+    return sent && typeof sent === 'object' ? { ...(sent as Record<string, unknown>), resolved_to: r.to } : sent
+  }
   if (input.type) {
     if (input.summary == null) return { error: 'a message with a type needs a summary (one line)' }
     const built = buildEnvelope({

@@ -16,7 +16,7 @@ function compact(data: unknown) {
 export function registerMessageTools(reg: McpServer['tool']): void {
   reg(
     'send_message',
-    `Agent runtime: send a message to another actor — owner, seat:<name> (seat:chief_of_staff is the chief of staff) or thread:<session>. Prefer a typed message: type (ask, decide = a question for a ruling, deliver = handing work over, status, note) with a one-line summary (≤${SUMMARY_MAX} chars) the receiver sees first, body as the optional full text, refs for artifact ids (sha256:…) or links instead of long text; kind is then left out. Untyped: kind (ask, answer, help, handover or note) and body. At most 8 KiB in all. Recorded as this thread. ${MESSAGE_DATA_NOTE}`,
+    `Agent runtime: send a message to another actor — owner, seat:<name> (seat:chief_of_staff is the chief of staff), thread:<session>, or roster:<seat id or name> (the thread that sits that seat now, per the roster seats.yaml; the answer names it as resolved_to). Prefer a typed message: type (ask, decide = a question for a ruling, deliver = handing work over, status, note) with a one-line summary (≤${SUMMARY_MAX} chars) the receiver sees first, body as the optional full text, refs for artifact ids (sha256:…) or links instead of long text; kind is then left out. Untyped: kind (ask, answer, help, handover or note) and body. At most 8 KiB in all. Recorded as this thread. ${MESSAGE_DATA_NOTE}`,
     {
       to: z.string(),
       type: z.enum(ENVELOPE_TYPES).optional(),
