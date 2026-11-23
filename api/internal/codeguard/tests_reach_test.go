@@ -42,7 +42,15 @@ import (
 // assembly roots under api/cmd wire every domain and are left out, and so are
 // the tests of the assembly domain (law 71, 2026-11-21): integration is its
 // system test, and its tests reach every domain as its code does.
-func reaching(o ownership, files []testFile) (across map[string][]string, shared []string) {
+//
+// A package another domain made public (contracts.public_packages, the E5
+// gate's list) is its contract: a test that imports it is the black box
+// test of what that domain offers, the kind OWNER_LAW #28 asks for, and is
+// not counted (2026-11-23, Foundation, law 80: once coordination and
+// delivery named their public packages, 9 of the 13 held lines were tests
+// using exactly those, and counting them as debt asked the testing domain
+// to work around a contract the provider had just committed to).
+func reaching(o ownership, public map[string]map[string]bool, files []testFile) (across map[string][]string, shared []string) {
 	base := baseOf(o)
 	across = map[string][]string{}
 	for _, f := range files {
@@ -61,7 +69,7 @@ func reaching(o ownership, files []testFile) (across map[string][]string, shared
 			if dep == f.Pkg {
 				continue
 			}
-			if to := o.domainOf(dep); to != from && to != base {
+			if to := o.domainOf(dep); to != from && to != base && !public[to][dep] {
 				across[f.Path] = append(across[f.Path], dep)
 			}
 		}
@@ -122,8 +130,12 @@ func TestTestsReachIntoOtherDomainsOnlyAsMuchAsTheyDid(t *testing.T) {
 	if err := json.Unmarshal(raw, &o); err != nil {
 		t.Fatal(err)
 	}
+	public, err := publicOf(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
 	files := readTestFiles(t)
-	across, shared := reaching(o, files)
+	across, shared := reaching(o, public, files)
 	if os.Getenv("CODEGUARD_PRINT_REACH") != "" {
 		printReachBaselines(t, across, shared)
 	}
@@ -173,6 +185,7 @@ func printReachBaselines(t *testing.T, across map[string][]string, shared []stri
 // take off is named.
 func TestReachingTestsAreHeldToTheBaselines(t *testing.T) {
 	o := controlOwnership(t)
+	o.Packages["api/internal/owner/api"] = struct{ Domains []string }{Domains: []string{"owner"}}
 	files := []testFile{
 		{Path: "api/internal/plan/a_test.go", Pkg: "api/internal/plan", Imports: []string{"api/internal/owner", "api/internal/unlisted"}},
 		{Path: "api/internal/plan/b_test.go", Pkg: "api/internal/plan", Imports: []string{"api/internal/both", "api/internal/plan"}},
@@ -181,8 +194,9 @@ func TestReachingTestsAreHeldToTheBaselines(t *testing.T) {
 		{Path: "api/internal/both/x_test.go", Pkg: "api/internal/both"},
 		{Path: "api/internal/both/y_test.go", Pkg: "api/internal/both", Owner: "//bifrost:owner plan"},
 		{Path: "api/cmd/root/z_test.go", Pkg: "api/cmd/root", Imports: []string{"api/internal/owner"}},
+		{Path: "api/internal/plan/contract_test.go", Pkg: "api/internal/plan", Imports: []string{"api/internal/owner/api"}},
 	}
-	across, shared := reaching(o, files)
+	across, shared := reaching(o, map[string]map[string]bool{"owner": {"api/internal/owner/api": true}}, files)
 	if fmt.Sprint(across) != "map[api/internal/plan/a_test.go:[api/internal/owner] api/internal/plan/b_test.go:[api/internal/both]]" ||
 		strings.Join(shared, ",") != "api/internal/both/x_test.go,api/internal/both/y_test.go" {
 		t.Fatalf("across = %v, shared = %v", across, shared)
