@@ -30,9 +30,10 @@ export function WorldJourney() {
     : address.startsWith('#collaboration')
       ? [{ label: 'Agents', href: peerAddress(address, '') }, { label: 'Communication ledger', href: peerAddress(address, 'console') }]
       : []
-  return <details className="fixed bottom-24 right-3 z-50 max-w-[calc(100vw-1.5rem)] rounded-lg border border-[var(--table-rule)] bg-card text-foreground shadow-lg" aria-label="Places and return">
+  return <div className="relative z-10 w-full min-w-0 px-3 pt-3 pb-[calc(6rem+env(safe-area-inset-bottom))]">
+    <details className="mx-auto w-full max-w-xl rounded-lg border border-[var(--table-rule)] bg-card text-foreground" aria-label="Places and return">
     <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Places · {current.place}</summary>
-    <nav aria-label="World journey" className="flex w-80 max-w-full flex-col gap-3 border-t border-[var(--table-rule)] p-3 text-sm">
+    <nav aria-label="World journey" className="flex min-w-0 flex-col gap-3 border-t border-[var(--table-rule)] p-3 text-sm">
       <p className="m-0" aria-current="location">You are in {current.place}.</p>
       {current.object && <p className="m-0 break-all text-xs text-muted-foreground">Address selection: {current.object}</p>}
       {previous && <a className="font-medium underline" href={previous}>Return to {worldLocation(previous).place}</a>}
@@ -47,5 +48,6 @@ export function WorldJourney() {
       </div>
       <p className="m-0 text-xs text-muted-foreground">Other places open independently; no object mapping is applied. Return restores the address selection, not a historical snapshot. Views may read current data.</p>
     </nav>
-  </details>
+    </details>
+  </div>
 }
