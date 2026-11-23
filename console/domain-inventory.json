@@ -1550,12 +1550,15 @@
         "console/src/domains/coordination/communication/CommunicationPage.tsx",
         "console/src/domains/coordination/communication/README.md",
         "console/src/domains/coordination/communication/__tests__/communication.test.ts",
+        "console/src/domains/coordination/communication/__tests__/frame.test.ts",
         "console/src/domains/coordination/communication/__tests__/history.test.tsx",
         "console/src/domains/coordination/communication/__tests__/looks.test.ts",
         "console/src/domains/coordination/communication/__tests__/observer.test.tsx",
         "console/src/domains/coordination/communication/__tests__/scope.test.tsx",
         "console/src/domains/coordination/communication/__tests__/work.test.tsx",
         "console/src/domains/coordination/communication/adapter.ts",
+        "console/src/domains/coordination/communication/agentScreen.css",
+        "console/src/domains/coordination/communication/frame.ts",
         "console/src/domains/coordination/communication/looks.ts",
         "console/src/domains/coordination/communication/roster.generated.json",
         "console/src/domains/coordination/communication/useCommunication.ts"
@@ -1565,8 +1568,12 @@
         "console/src/api/agentRuntimeEvents.ts",
         "console/src/api/agentThreads.ts",
         "console/src/api/client.ts",
+        "console/src/api/clusterTypes.ts",
         "console/src/api/lineage.ts",
-        "console/src/domains/foundation/bus"
+        "console/src/api/telemetry.ts",
+        "console/src/domains/foundation/bus",
+        "console/src/domains/foundation/observation-display",
+        "console/src/domains/foundation/shell"
       ],
       "test_imports": [
         "console/src/api",
@@ -1576,6 +1583,8 @@
         "console/src/lib/shell"
       ],
       "external_imports": [
+        "@bifrost/ui/city/WorldFrame",
+        "@bifrost/ui/city/world",
         "@bifrost/ui/communication",
         "@tanstack/react-query",
         "@testing-library/react",

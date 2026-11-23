@@ -32,7 +32,8 @@ describe('the metaphor dictionary', () => {
     expect(encode('mem.sections', 16 * 2 ** 30)).toBe(4)
     expect(encode('disk.bays', 512e9)).toBe(2)
     expect(encode('mem.sections', null)).toBeNull()
-    expect(STANDARD_PARTS().map(m => m.id).sort()).toEqual(['core.machines', 'disk.bays', 'mem.sections'])
+    // counter.windows: the counter room's drive-through windows (bifrost-ui 6b42cd0, Engine 0.41.0), one per package.
+    expect(STANDARD_PARTS().map(m => m.id).sort()).toEqual(['core.machines', 'counter.windows', 'disk.bays', 'mem.sections'])
   })
   // The Owner, the same day: with a standard, the ruler can be adjusted — the picture changes, the
   // reading does not; that is what keeps the city maintainable and elastic.
