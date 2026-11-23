@@ -6,7 +6,6 @@ var _ = heldAssemblyReach(
 	"api/internal/agentrt/planwiring -> api/internal/agentrt/rules (verification)",
 	"api/internal/agentrt/planwiring -> api/internal/agentrt/store (verification)",
 	"api/internal/server -> api/internal/agentrt/controller (verification)",
-	"api/internal/server -> api/internal/agentrt/evidence (verification)",
 	"api/internal/server -> api/internal/agentrt/fullci (verification)",
 	"api/internal/server -> api/internal/agentrt/landing (verification)",
 	"api/internal/server -> api/internal/agentrt/landingci (verification)",
