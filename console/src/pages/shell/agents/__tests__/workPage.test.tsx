@@ -301,7 +301,8 @@ describe('with an acceptance root beside the newest round (PROD 2026-11-01: R4)'
 describe('Work verdict', () => {
   it.each([
     // 2026-11-23 (箭10): the tag is the engine's seven words; what exactly stays in the sentence.
-    ['stuck', 'fail', '1 possibly stuck', 'fail'],
+    // 2026-11-23 (箭10): "possibly stuck" is an unconfirmed heartbeat, a guess: warn, not fail.
+    ['stuck', 'warn', '1 possibly stuck', 'degraded'],
     ['owner', 'warn', '1 waiting', 'degraded'],
     [null, 'ok', '0 waiting', 'ok'],
   ] as const)('shows the %s verdict from the body reads', async (scenario, label, words, lamp) => {

@@ -1,6 +1,9 @@
 import { Dot } from './OwnerParts'
-import { TONE_COLOR } from './ownerModel'
+import { TONE_COLOR, type Tone } from './ownerModel'
 import type { OwnerConsoleData } from './useOwnerConsole'
+
+/** A tile's tone as the engine's seven words (箭10 2026-11-23); the tile's own word (Partly in, Too old…) is the hover. */
+const TONE_WORD: Record<Tone, string> = { ok: 'ok', attention: 'warn', warn: 'warn', fail: 'fail', info: 'info', muted: '…', unknown: 'unknown' }
 
 /** Data: five tiles, each with its state, one figure, one line, and its detail page. */
 export function OwnerData({ data, infrastructure = false }: { data: OwnerConsoleData; infrastructure?: boolean }) {
@@ -11,7 +14,7 @@ export function OwnerData({ data, infrastructure = false }: { data: OwnerConsole
     <ul className="m-0 grid list-none gap-3 p-0 @xl:grid-cols-2 @5xl:grid-cols-3">{tiles.map(tile => <li key={tile.name}>
       <a href={tile.href} aria-label={`${tile.name}: ${tile.state}`} className="flex h-full min-w-0 flex-col gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-4 text-foreground no-underline">
         <span className="flex items-center justify-between gap-2"><span className="font-semibold">{tile.name}</span>
-          <span className="flex items-center gap-1.5 text-xs font-bold" style={{ color: TONE_COLOR[tile.tone] }}><Dot tone={tile.tone} size="size-2" />{tile.state}</span></span>
+          <span className="flex items-center gap-1.5 text-xs font-bold" style={{ color: TONE_COLOR[tile.tone] }} title={tile.state}><Dot tone={tile.tone} size="size-2" />{TONE_WORD[tile.tone]}</span></span>
         <span className="break-words text-xl font-bold">{tile.figure}</span>
         <span className="break-words text-xs text-muted-foreground">{tile.detail}</span>
       </a>

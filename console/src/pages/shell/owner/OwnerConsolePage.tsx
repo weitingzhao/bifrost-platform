@@ -1,3 +1,4 @@
+import { DomainVerdictStrip } from '@/components/shell/DomainVerdictStrip'
 import { DomainSection } from '@/components/shell/DomainSection'
 import { CapabilityEvidence } from '../agents/CapabilityEvidence'
 import { ServiceVersions } from '../services/ServiceVersions'
@@ -70,8 +71,10 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
     {(blocks.work || blocks.system) && <RuntimeHealthNotice progress={data.runtime} now={data.now} />}
     {blocks.work && <OwnerWork data={data} />}
     {blocks.system && <><OwnerSystem data={data} /><OwnerData data={data} infrastructure /></>}
-    {blocks.services && <><OwnerData data={data} /><DomainSection id="versions" label="Running versions"><ServiceVersions /></DomainSection><DomainSection id="applications" label="Applications"><SatelliteHealthPage lockToViewer /></DomainSection></>}
+    {/* Each entry leads with its own verdict (箭10 2026-11-23): Services and Crew from their domain's lights. */}
+    {blocks.services && <><DomainVerdictStrip title="Services" domain="payload" /><OwnerData data={data} /><DomainSection id="versions" label="Running versions"><ServiceVersions /></DomainSection><DomainSection id="applications" label="Applications"><SatelliteHealthPage lockToViewer /></DomainSection></>}
     {blocks.crew && <>
+      <DomainVerdictStrip title="Crew" domain="crew" />
       <DomainSection id="capability-evidence" label="Capability evidence"><CapabilityEvidence /></DomainSection>
       <DomainSection id="instruments" label="Laws, skills & tools"><CrewInstruments /></DomainSection>
       <GovernanceReferences />

@@ -1413,6 +1413,7 @@
         "console/src/components/shell/DomainName.tsx",
         "console/src/components/shell/DomainNav.tsx",
         "console/src/components/shell/DomainSection.tsx",
+        "console/src/components/shell/DomainVerdictStrip.tsx",
         "console/src/components/shell/EntryNav.tsx",
         "console/src/components/shell/HostHeartbeatRow.tsx",
         "console/src/components/shell/MorePage.tsx",
@@ -1422,7 +1423,9 @@
         "console/src/components/shell/__tests__/EntryNav.test.tsx",
         "console/src/components/shell/__tests__/MorePage.test.tsx",
         "console/src/components/shell/__tests__/RequestActionButton.test.tsx",
+        "console/src/components/shell/__tests__/domainVerdict.test.ts",
         "console/src/components/shell/clusterActionRequests.tsx",
+        "console/src/components/shell/domainVerdict.ts",
         "console/src/components/shell/world-journey/SignalsPinNote.tsx",
         "console/src/components/shell/world-journey/WorldJourney.tsx",
         "console/src/components/shell/world-journey/__tests__/SignalsPinNote.test.tsx",
@@ -1433,12 +1436,15 @@
         "console/src/components/shell/world-journey/location.ts"
       ],
       "imports": [
+        "console/src",
         "console/src/api/actions.ts",
         "console/src/api/agentThreads.ts",
         "console/src/api/approvals.ts",
         "console/src/api/client.ts",
         "console/src/components/ToolsMenu.tsx",
+        "console/src/components/layout",
         "console/src/components/ui",
+        "console/src/domains/foundation/observation-access",
         "console/src/domains/foundation/runtime-observation",
         "console/src/domains/foundation/shell",
         "console/src/domains/owner/city",
@@ -1447,6 +1453,7 @@
         "console/src/lib/tradeFrontendUrls.ts"
       ],
       "test_imports": [
+        "console/src",
         "console/src/api/approvals.ts",
         "console/src/domains/foundation/runtime-observation",
         "console/src/domains/owner/city",
@@ -1454,6 +1461,7 @@
       ],
       "external_imports": [
         "@bifrost/ui",
+        "@bifrost/ui/city/world",
         "@bifrost/ui/city/worldGlyphs",
         "@tanstack/react-query",
         "@testing-library/jest-dom/vitest",

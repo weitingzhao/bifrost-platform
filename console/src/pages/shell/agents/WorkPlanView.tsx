@@ -141,12 +141,14 @@ function WorkVerdict({ plan, query }: { plan: ReturnType<typeof usePlanAddress>;
   const total = rows.reduce((n, r) => n + r.total, 0)
   const done = rows.reduce((n, r) => n + r.done, 0)
   const percent = total ? Math.round(done * 100 / total) : 0
-  const lamp = unknown ? 'unknown' : stuck ? 'fail' : waiting ? 'degraded' : 'ok'
+  // "Possibly stuck" is a heartbeat not confirmed: a guess, not a failure past a declared deadline, so warn like
+  // "waiting on you" (箭10 2026-11-23); the sentence says which.
+  const lamp = unknown ? 'unknown' : stuck || waiting ? 'degraded' : 'ok'
   const live = workTabHref('live', plan.root, plan.from === 'address')
   return <OpsVerdictStrip title="WORK" ariaLabel="Work verdict" lamp={lamp}
     // The engine's seven words (箭10 2026-11-23); what exactly (possibly stuck, waiting on you) is in the sentence.
-    tagLabel={unknown ? 'unknown' : stuck ? 'fail' : waiting ? 'warn' : 'ok'}
-    tagVariant={unknown ? TAG_VARIANT.unknown : stuck ? TAG_VARIANT.fail : waiting ? TAG_VARIANT.warn : TAG_VARIANT.ok}
+    tagLabel={unknown ? 'unknown' : stuck || waiting ? 'warn' : 'ok'}
+    tagVariant={unknown ? TAG_VARIANT.unknown : stuck || waiting ? TAG_VARIANT.warn : TAG_VARIANT.ok}
     summary={unknown ? 'Work unknown · plan view or actions could not be read.' : <>
       {running} running · <a href={live} aria-label={`Possibly stuck · ${stuck}`}>{stuck} possibly stuck</a> · <a href={live} aria-label={`Waiting on you · ${waiting}`}>{waiting} waiting</a> · plan {percent}%
     </>} />
