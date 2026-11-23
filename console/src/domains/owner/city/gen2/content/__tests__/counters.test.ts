@@ -5,7 +5,9 @@
 // readings matched exactly, and nothing read as zero that was not measured.
 import { describe, expect, it } from 'vitest'
 import type { DomainHoldings } from '../domainOwns'
-import { buildingFlow, COUNTER_QUERIES, counterRooms, offContractOf, readingsOf, routesByPackage } from '../counters'
+import { buildingFlow, COUNTER_QUERIES, counterRooms, offContractOf, readingsOf, roomIdOf, routesByPackage } from '../counters'
+import { rulesBroken } from '@bifrost/ui/city/rules'
+import { domainTree } from '../domainPlaces'
 
 const holding = (id: string, buildings: { id: string; packages: string[] }[], routes: { method: string; path: string; handler: string }[] = []): DomainHoldings =>
   ({ id, packages: [], groups: [], paths: [], workloads: [], buildings, contract: { request_response: routes } })
@@ -42,7 +44,7 @@ describe('counter rooms', () => {
   it('gives every package a room, and folds what does not fit a level into Other', () => {
     const routes = routesByPackage(holdings, readingsOf([], []))
     expect(counterRooms(['pkg/lineage', 'pkg/empty'], routes, 'online').map(r => [r.id, r.kind, !!r.picture])).toEqual([
-      ['pkg/lineage', 'room', true], ['pkg/empty', 'room', true],
+      ['pkg.lineage', 'room', true], ['pkg.empty', 'room', true],
     ])
     const many = Array.from({ length: 20 }, (_, i) => `pkg/p${i}`)
     const rooms = counterRooms(many, routes, 'online')
@@ -69,5 +71,22 @@ describe('off-contract requests', () => {
   it('says why instead of none: readings not read, or no contract read', () => {
     expect(offContractOf(holdings, readingsOf(null, null))).toMatchObject({ why: expect.stringContaining('not read') })
     expect(offContractOf({}, readingsOf([pt('GET', '/health', 40)], []))).toMatchObject({ why: expect.stringContaining('contract') })
+  })
+})
+
+// 2026-11-23 23:16Z, PROD: once the map's buildings were read, the engine refused the whole City ("an id must be
+// non-empty, without / # ? or spaces"): a room's id was its package path. The counters' tests never ran the engine's
+// own rules over a tree. This case builds the City from package paths as the map serves them and runs those rules.
+describe('the City with counters passes the engine\'s rules', () => {
+  it('turns a package path into a room id the engine takes', () => {
+    expect(roomIdOf('internal/lineage/assembly')).toBe('internal.lineage.assembly')
+    const h = { lineage: { id: 'lineage', packages: [], groups: [], paths: [], workloads: [],
+      buildings: [{ id: 'lineage', packages: ['internal/lineage', 'internal/lineage/assembly'] }],
+      contract: { request_response: [{ method: 'GET', path: '/api/v1/lineage', handler: 'internal/lineage.HandleGet' }] } } }
+    const routes = routesByPackage(h, readingsOf([], []))
+    const status = { version: 1, at: '', commit: '', domains: [{ id: 'lineage', overall: 'good' }] } as never
+    const tree = domainTree(status, null, '', h, routes)
+    expect(tree.children[0].children[0].children.map(r => r.id)).toEqual(['internal.lineage', 'internal.lineage.assembly'])
+    expect(rulesBroken({ tree })).toEqual([])
   })
 })

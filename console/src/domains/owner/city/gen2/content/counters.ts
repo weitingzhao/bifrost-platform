@@ -64,12 +64,19 @@ export function routesByPackage(holdings: Record<string, DomainHoldings>, reads:
 const shapeOf = ([w, d]: [number, number]) => (w <= d ? `${w}x${d}` : `${d}x${w}`) as Shape
 
 /** A package's room: its counter, drawn by the engine from its routes. */
+/**
+ * A room's id: the package path with its slashes turned to dots. The engine refuses an id with / # ? or spaces
+ * (rules.ts: an id is one step of an address); a package path is a path, so taken as is it refused the whole City
+ * on PROD once the buildings were read (2026-11-23 23:16Z).
+ */
+export const roomIdOf = (pkg: string) => pkg.replace(/[/#?\s]/g, '.')
+
 export function counterPlace(pkg: string, routes: CounterRoute[], state: Place['state']): Place {
   const r: CounterRoomReadings = { routes }
   const [w, d] = counterRoomShape(routes.length)
   const name = pkg.split('/').at(-1) ?? pkg
   return {
-    id: pkg, kind: 'room', shape: shapeOf([w, d]), label: name, dashboard: null, state, children: [],
+    id: roomIdOf(pkg), kind: 'room', shape: shapeOf([w, d]), label: name, dashboard: null, state, children: [],
     question: `The ${pkg} package: ${routes.length} route${routes.length === 1 ? '' : 's'} it serves, how often each is asked, and its 5xx.`,
     picture: { key: `counter:${pkg}:${counterRoomKey(r)}`, w, d, make: () => counterRoom(r) },
   }
@@ -85,15 +92,16 @@ const MOST = 16
  */
 export function counterRooms(packages: string[], routes: Map<string, CounterRoute[]>, state: Place['state']): Place[] {
   const rooms = packages.map(p => counterPlace(p, routes.get(p) ?? [], state))
+  const routesOf = new Map(packages.map(p => [roomIdOf(p), routes.get(p)?.length ?? 0]))
   const units = (xs: Place[]) => xs.reduce((u, r) => u + (UNITS[r.shape] ?? 1), 0)
   if (rooms.length <= MOST && units(rooms) <= MOST) return rooms
-  const order = [...rooms].sort((a, b) => (routes.get(b.id)?.length ?? 0) - (routes.get(a.id)?.length ?? 0))
+  const order = [...rooms].sort((a, b) => (routesOf.get(b.id) ?? 0) - (routesOf.get(a.id) ?? 0))
   const kept: Place[] = []
   for (const r of order) if (kept.length + 2 <= MOST && units([...kept, r]) + 1 <= MOST) kept.push(r)
   const rest = rooms.filter(r => !kept.includes(r))
   return [...kept, {
     id: 'other', kind: 'room', shape: '4x4', label: `Other · ${rest.length}`, dashboard: null, state, children: [],
-    question: `${rest.length} more packages do not fit this building's level: ${rest.map(r => r.id).join(', ')}.`,
+    question: `${rest.length} more packages do not fit this building's level: ${packages.filter(p => rest.some(r => r.id === roomIdOf(p))).join(', ')}.`,
   }]
 }
 
