@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { readQuality } from '@bifrost/ui/city/observation'
 import { useDomainStatusObservation } from '@/domains/foundation/observation-access'
 import { useNowMs } from '@/hooks/useNowMs'
+import { DomainName } from '@/components/shell/DomainName'
 import {
   fetchCatalogIndex,
   fetchDomainPage,
@@ -56,7 +57,7 @@ function Row({ d }: { d: DomainStatusRow }) {
       <details onToggle={e => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
         <summary className="flex min-h-11 cursor-pointer flex-wrap items-center gap-2 py-2 text-sm">
           <Dot value={d.overall} label="Overall" />
-          <span className="font-medium">{d.id}</span>
+          <DomainName id={d.id} className="font-medium" />
           <span className="text-muted-foreground">{d.overall}</span>
           <span className="ml-auto flex items-center gap-1.5">
             {LIGHTS.map(([k, label]) => <Dot key={k} value={d[k].value} label={label} />)}
@@ -148,7 +149,7 @@ function References({ s }: { s: DomainStatusResponse }) {
             {refs.map(r => (
               <tr key={`${r.kind ?? 'import'} ${r.from} ${r.to}`} data-reference={`${r.kind ?? 'import'}:${r.from}>${r.to}`} className="border-t border-[var(--table-rule)]">
                 <td>{r.kind ?? 'import'}</td>
-                <td>{r.from} → {r.to}</td>
+                <td><span className="inline-flex flex-wrap items-center gap-1"><DomainName id={r.from} /> → <DomainName id={r.to} /></span></td>
                 <td className="text-right">{r.prod_imports ?? r.imports}</td>
                 <td className="text-right">{r.test_imports ?? ''}</td>
                 <td className="text-right">{r.events ?? ''}</td>
@@ -185,7 +186,7 @@ function PackageUsersBlock() {
               {rows.map(({ p, others }) => (
                 <tr key={p.package} data-package={p.package} className="border-t border-[var(--table-rule)]">
                   <td className="break-all">{p.package}</td>
-                  <td>{p.domain}</td>
+                  <td><DomainName id={p.domain} /></td>
                   <td className="text-right">{p.users.prod.length}</td>
                   <td className="text-right">{p.users.test.length}</td>
                   <td className="text-right">{p.users.event.length}</td>

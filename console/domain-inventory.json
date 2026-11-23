@@ -1411,6 +1411,7 @@
         "console/src/components/shell/AppearanceMenu.tsx",
         "console/src/components/shell/ConsoleNavSlotItem.tsx",
         "console/src/components/shell/DetailPageLinks.tsx",
+        "console/src/components/shell/DomainName.tsx",
         "console/src/components/shell/DomainNav.tsx",
         "console/src/components/shell/DomainSection.tsx",
         "console/src/components/shell/EntryNav.tsx",
@@ -1418,6 +1419,7 @@
         "console/src/components/shell/MorePage.tsx",
         "console/src/components/shell/RequestActionButton.tsx",
         "console/src/components/shell/SystemVerdictLine.tsx",
+        "console/src/components/shell/__tests__/DomainName.test.tsx",
         "console/src/components/shell/__tests__/EntryNav.test.tsx",
         "console/src/components/shell/__tests__/MorePage.test.tsx",
         "console/src/components/shell/__tests__/RequestActionButton.test.tsx",
@@ -1440,6 +1442,7 @@
         "console/src/components/ui",
         "console/src/domains/foundation/runtime-observation",
         "console/src/domains/foundation/shell",
+        "console/src/domains/owner/city",
         "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/shell",
         "console/src/lib/tradeFrontendUrls.ts"
@@ -1447,10 +1450,12 @@
       "test_imports": [
         "console/src/api/approvals.ts",
         "console/src/domains/foundation/runtime-observation",
+        "console/src/domains/owner/city",
         "console/src/lib/tradeFrontendUrls.ts"
       ],
       "external_imports": [
         "@bifrost/ui",
+        "@bifrost/ui/city/worldGlyphs",
         "@tanstack/react-query",
         "@testing-library/jest-dom/vitest",
         "@testing-library/react",
