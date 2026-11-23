@@ -2,7 +2,7 @@
 // make anything up: an alerts read that failed is "not read", never 0; a request not in the window is named so.
 import { expect, it } from 'vitest'
 import { exchangesOf, projectCommunication } from '@bifrost/ui/communication'
-import { crumbsOf, frameAlerts, frameTime, signalsPin } from '../frame'
+import { cityLanding, crumbsOf, frameAlerts, frameTime, signalsPin } from '../frame'
 const at='2026-11-22T12:00:00Z'
 const snapshot={version:1 as const,coverage:{state:'ready' as const,note:'',truncated:false,updatedAt:at},
  members:[{id:'a',label:'Alice',memberships:[]},{id:'b',label:'Bob',memberships:[]}],
@@ -34,4 +34,18 @@ it('says the Signals pin only when the shared context is ready and pinned', () =
  expect(signalsPin({state:'ready',observation:observation(false)})).toBeNull()
  expect(signalsPin({state:'off'})).toBeNull()
  expect(signalsPin({state:'reading'})).toBeNull()
+})
+
+// 2026-11-23 World's gap table item 8: going to City from Agents always landed on the whole city (#city).
+it('lands City on the domain of the person in focus, else the sender, and says nothing it does not know', () => {
+ const seat=(domain:string|null)=>({seat:'s',organization:'Platform',domain,role:'owner' as const})
+ const s={...snapshot,members:[{id:'a',label:'Alice',memberships:[seat(null),seat('coordination')]},{id:'thread:local_x',label:'X',memberships:[]},{id:'b',label:'Bob',memberships:[]}]}
+ const p=(member:string,req?:string)=>projectCommunication(s.exchanges,'',{channel:'message',member},req)
+ expect(cityLanding(s,null)).toBe('#city')
+ expect(cityLanding(s,p('a'))).toBe('#city?at=coordination')
+ // The selected letter's sender when nobody is in focus.
+ expect(cityLanding(s,p('','message:m1'))).toBe('#city?at=coordination')
+ // No domain known: a thread lands with its line picked; anyone else on the whole city, never a guessed district.
+ expect(cityLanding(s,p('thread:local_x'))).toBe('#city?sel=local_x')
+ expect(cityLanding(s,p('b'))).toBe('#city')
 })

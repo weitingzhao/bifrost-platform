@@ -8,8 +8,12 @@ import { viewerEnvBadgeLabel } from '@/domains/foundation/observation-display/fl
 import { useCommunicationObservation } from './useCommunication'
 import { communicationHref, readCommunicationLook } from './looks'
 import { useSharedObservation } from '@/domains/foundation/runtime-observation/sharedObservationStore'
-import { crumbsOf, frameAlerts, frameTime, signalsPin } from './frame'
+import { cityLanding, crumbsOf, frameAlerts, frameTime, signalsPin } from './frame'
+import { useJourneyBack } from '@/components/shell/world-journey/journeyTrail'
+import { DOMAIN_GLYPH } from '@/domains/owner/city/gen2/content/domainGlyphs'
 import './agentScreen.css'
+
+const glyphOf = (domain: string): string | undefined => DOMAIN_GLYPH[domain]
 
 const hhmm = (iso: string) => Number.isFinite(Date.parse(iso)) ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : iso
 
@@ -29,16 +33,19 @@ export default function AgentScreen() {
   const [through, setThrough] = useState('')
   const [projection, setProjection] = useState<CommunicationProjection | null>(null)
   const status = useShellStatusLine()
+  // Return: the place this journey came from (the trail every view's frame reads).
+  const back = useJourneyBack()
+  const city = cityLanding(snapshot, projection)
   // The same query the shell's status line reads: one alerts read for the page.
   const alerts = useQuery({ queryKey: ['telemetry', 'alerts'], queryFn: fetchTelemetryAlerts, refetchInterval: 30_000, retry: false })
   useEffect(()=>{const on=()=>setSelected(readCommunicationLook(window.location.hash.split('?')[1]??'').exchange);window.addEventListener('hashchange',on);return()=>window.removeEventListener('hashchange',on)},[])
   return <div className="agent-screen">
-    <AgentFrame here="agents" crumbs={crumbsOf(snapshot, projection)}
-      hrefs={{ city: '#city', signals: '#observation', agents: communicationHref('agents', selected), console: communicationHref('console', selected) }}
+    <AgentFrame here="agents" crumbs={crumbsOf(snapshot, projection)} back={back}
+      hrefs={{ city, signals: '#observation', agents: communicationHref('agents', selected), console: communicationHref('console', selected) }}
       env={status.viewerEnvLoading ? undefined : viewerEnvBadgeLabel(status.viewerEnv)}
       time={frameTime(snapshot, through)} alerts={frameAlerts(alerts.data, alerts.error)} />
     <div className="agent-screen-body">
-      <AgentWorld framed snapshot={snapshot} history={history} stationImage="/communication/station.png" cityHref="#city" consoleHref={communicationHref('console', selected)} selectedId={selected}
+      <AgentWorld framed snapshot={snapshot} history={history} stationImage="/communication/station.png" cityHref={city} glyphOf={glyphOf} consoleHref={communicationHref('console', selected)} selectedId={selected}
         through={through} onThrough={setThrough} onProjection={setProjection}
         onSelected={id=>{setSelected(id);window.history.replaceState(null,'',communicationHref('agents',id))}} />
     </div>

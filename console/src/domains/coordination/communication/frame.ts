@@ -3,6 +3,7 @@ import type { CommunicationProjection, CommunicationSnapshot } from '@bifrost/ui
 import type { TelemetryAlertsResponse } from '@/api/clusterTypes'
 import { alertCount } from '@/api/alertCount'
 import type { SharedObservation } from '@/domains/foundation/runtime-observation/sharedObservationStore'
+import { cityHref } from '@/domains/owner/city/gen2/content/looks'
 
 /**
  * What Agents hands the world frame (箭10 2026-11-23, cockpit/ui-world/frame): where you are, the time the view
@@ -39,4 +40,19 @@ export function frameAlerts(data: TelemetryAlertsResponse | undefined, error: un
  */
 export function signalsPin(shared: SharedObservation): string | null {
   return shared.state === 'ready' && shared.observation.pinned ? shared.observation.snapshot.capturedAt : null
+}
+
+/**
+ * Where "City" lands from Agents (brand layer item 8): the district of the domain the person in focus sits (else the
+ * selected letter's sender), by their first membership with a domain. A thread with no domain known lands on the
+ * whole city with that line picked on the Lines card (City reads sel=<session> there); anyone else, the whole city.
+ * Memberships come from the frozen roster copy until the seat roster is served (then from that read).
+ */
+export function cityLanding(snapshot: CommunicationSnapshot, projection: CommunicationProjection | null): string {
+  const x = projection?.resolved ? projection.exchanges.find(e => e.channel + ':' + e.id === projection.resolved) : undefined
+  const who = projection?.scope.member || x?.from
+  if (!who) return '#city'
+  const domain = snapshot.members.find(m => m.id === who)?.memberships.find(m => m.domain)?.domain
+  if (domain) return cityHref([domain])
+  return who.startsWith('thread:') ? cityHref([], who.slice('thread:'.length)) : '#city'
 }

@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import { DOMAIN_GLYPH } from '../src/domains/owner/city/gen2/content/domainGlyphs'
 import { AgentWorld, WorkingStudio, exchangesOf, type Member, type CommunicationFact, type Stage } from '@bifrost/ui/communication'
 import '@fontsource-variable/geist'
 // The host's appearance tokens (light and dark), as the Console sets them; ?theme=dark previews the night.
 import '../src/styles/opsAppearance.css'
 document.documentElement.dataset.opsTheme = new URLSearchParams(window.location.search).get('theme') === 'dark' ? 'dark' : 'light'
-const members: Member[] = [
-  ['orion','Orion','Coordination','owner'],['lyra','Lyra','Coordination','temporary'],
-  ['atlas','Atlas','Compute','owner'],['vega','Vega','Compute','temporary'],
-  ['nova','Nova','Audit','owner'],['vale','Vale','Audit','temporary'],
-].map(([id,label,domain,role])=>({id,label,memberships:[{seat:id,organization:'Platform',domain,role:role as 'owner'|'temporary'}]}))
+const members: Member[] = ([
+  ['orion','Orion','coordination','owner'],['lyra','Lyra','coordination','temporary'],
+  ['atlas','Atlas','compute','owner'],['vega','Vega','compute','temporary'],
+  ['nova','Nova','audit','owner'],['vale','Vale','audit','temporary'],['juno','Juno',null,'temporary'],
+] as [string,string,string|null,string][]).map(([id,label,domain,role])=>({id,label,memberships:[{seat:id,organization:'Platform',domain,role:role as 'owner'|'temporary'}]}))
 const times=['22:42:00','22:42:04','22:42:08','22:42:12','22:42:16']
 function Demo(){
   const [look,setLook]=useState(()=>window.location.hash.includes('console')?'console':'agents')
@@ -26,7 +27,7 @@ function Demo(){
   const snapshot={version:1 as const,members:active,exchanges,coverage:{state:'ready' as const,updatedAt:`2026-11-22T${times[step]}Z`,note:'Illustrative scenario only. No platform requests. Work status, delivery and issue evidence are demonstration data.',truncated:false}}
   const controls=<><button onClick={()=>{setStep(0);setRun(r=>r+1);setPlaying(true)}}>{playing?'Restart':'Play sequence'}</button><button onClick={()=>setPlaying(p=>!p)} disabled={step>=3}>{playing?'Pause':'Resume'}</button><button onClick={()=>{setPlaying(false);setStep(4)}}>Show recovery</button><small>{['Request recorded · delivery unknown','Delivery recorded','ACK recorded','Request blocked · other work continues','Completion recorded'][step]}</small></>
   if(look==='console')return <main style={{fontFamily:'Arial,sans-serif',maxWidth:1400,margin:'0 auto',padding:24}}><header style={{display:'flex',justifyContent:'space-between'}}><h2>Communication records</h2><nav aria-label="Observation mode"><a href="#agents" style={button}>Agents</a> <a href="/#city" style={button}>City</a> <span>Console</span></nav></header><p>Illustrative scenario · same data, record view</p><WorkingStudio snapshot={snapshot} stationImage="/communication/station.png" ledgerOnly selectedId={selected} onSelected={setSelected}/></main>
-  return <AgentWorld snapshot={snapshot} stationImage="/communication/station.png" cityHref="/#city" consoleHref="#console" selectedId={selected} onSelected={setSelected} notice="Design preview · illustrative data" controls={controls}/>
+  return <AgentWorld snapshot={snapshot} stationImage="/communication/station.png" cityHref="/#city" glyphOf={d=>DOMAIN_GLYPH[d]} consoleHref="#console" selectedId={selected} onSelected={setSelected} notice="Design preview · illustrative data" controls={controls}/>
 
 }
 const button={background:'#31464c',color:'#e2e9e5',border:'1px solid #496067',borderRadius:8,padding:'10px 14px',cursor:'pointer'}
