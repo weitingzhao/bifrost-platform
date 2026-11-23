@@ -76,7 +76,7 @@ export function MarketDataOverviewTab({
           qualitySummary != null ? (
             <button
               type="button"
-              className="inline-flex border-0 bg-transparent p-0"
+              className="inline-flex items-center border-0 bg-transparent p-0"
               title="Coverage → Quality Score"
               onClick={() => onOpenCoverage?.('quality')}
             >

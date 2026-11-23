@@ -586,17 +586,7 @@ export function ResearchEnginePage({
                     className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5"
                   >
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <DenseTag
-                        variant={
-                          f.severity === 'danger'
-                            ? 'danger'
-                            : f.severity === 'warning'
-                              ? 'warning'
-                              : 'neutral'
-                        }
-                      >
-                        {f.severity}
-                      </DenseTag>
+                      <DenseTag variant={TAG_VARIANT[f.severity]}>{f.severity}</DenseTag>
                       <span className="text-dense-meta font-medium">{f.title}</span>
                     </div>
                     <p className="m-0 mt-1 text-dense-caption text-muted-foreground">{f.detail}</p>
@@ -719,7 +709,11 @@ export function ResearchEnginePage({
               />
               <Metric
                 label="Last trading-day run"
-                value={orchestration?.last_run_status ?? '—'}
+                value={
+                  orchestration?.last_run_status != null ? (
+                    <span title={orchestration.last_run_status}>{statusOfWord(orchestration.last_run_status)}</span>
+                  ) : '—'
+                }
                 detail={formatWhen(orchestration?.last_run_ended_at)}
               />
             </div>

@@ -120,3 +120,15 @@ describe('analyzeResearchEngine', () => {
     expect(a.primaryCause).not.toMatch(/Elementary/i)
   })
 })
+
+// 2026-11-23 箭10 (Diagnose on the Data page): "canonical_pnl stale" and its siblings were tagged warning, but stale is
+// older than the table's declared freshness, which the state vocabulary counts as fail. The tag is the Console's own.
+describe('stale tables in Diagnose', () => {
+  it('tags every stale or missing signal table fail, in the engine words', () => {
+    const a = analyzeResearchEngine(baseSnap())
+    const stale = a.findings.filter(f => f.id.startsWith('stale-'))
+    expect(stale.length).toBeGreaterThan(0)
+    expect(stale.every(f => f.severity === 'fail')).toBe(true)
+    expect(a.findings.every(f => ['info', 'warn', 'fail'].includes(f.severity))).toBe(true)
+  })
+})

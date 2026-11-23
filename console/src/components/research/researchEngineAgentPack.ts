@@ -16,7 +16,8 @@ import { SIGNAL_HEALTH_FRESH_SLA_HOURS } from '@/lib/research/signalHealthAgeMet
 
 export type ResearchEngineFinding = {
   id: string
-  severity: 'info' | 'warning' | 'danger'
+  /** The engine's words (2026-11-23): a stale or missing table is older than its declared freshness, so fail. */
+  severity: 'info' | 'warn' | 'fail'
   title: string
   detail: string
 }
@@ -121,7 +122,7 @@ export function analyzeResearchEngine(snap: ResearchEngineAgentPackSnapshot): Re
   if (snap.status?.reachable === false || snap.statusError) {
     findings.push({
       id: 'api-unreachable',
-      severity: 'danger',
+      severity: 'fail',
       title: 'Research API unreachable',
       detail: snap.statusError || snap.status?.error || snap.status?.hint || 'GET /api/v1/research/status failed',
     })
@@ -132,7 +133,7 @@ export function analyzeResearchEngine(snap: ResearchEngineAgentPackSnapshot): Re
   if (market && market !== 'healthy' && market !== 'ok') {
     findings.push({
       id: 'feedstock-market',
-      severity: market === 'missed' || market === 'degraded' ? 'danger' : 'warning',
+      severity: market === 'missed' || market === 'degraded' ? 'fail' : 'warn',
       title: `Market batch ${market}`,
       detail: snap.husbandry?.lanes.find(l => l.id === 'market_batch')?.detail ?? market,
     })
@@ -140,7 +141,7 @@ export function analyzeResearchEngine(snap: ResearchEngineAgentPackSnapshot): Re
   if (flex && flex !== 'healthy' && flex !== 'ok') {
     findings.push({
       id: 'feedstock-flex',
-      severity: flex === 'missed' || flex === 'degraded' ? 'danger' : 'warning',
+      severity: flex === 'missed' || flex === 'degraded' ? 'fail' : 'warn',
       title: `IB Flex ${flex}`,
       detail: snap.husbandry?.lanes.find(l => l.id === 'flex_batch')?.detail ?? flex,
     })
@@ -150,7 +151,7 @@ export function analyzeResearchEngine(snap: ResearchEngineAgentPackSnapshot): Re
   if (batch && batch !== 'healthy' && batch !== 'ok') {
     findings.push({
       id: 'batch-sla',
-      severity: batch === 'missed' || batch === 'degraded' ? 'danger' : 'warning',
+      severity: batch === 'missed' || batch === 'degraded' ? 'fail' : 'warn',
       title: `Batch ${batch}`,
       detail: snap.orchestration?.detail ?? snap.orchestrationError ?? batch,
     })
@@ -162,7 +163,7 @@ export function analyzeResearchEngine(snap: ResearchEngineAgentPackSnapshot): Re
       ageHours(row) != null ? `${ageHours(row)!.toFixed(1)}h` : 'unknown age'
     findings.push({
       id: `stale-${row.label}`,
-      severity: row.status === 'missing' ? 'danger' : 'warning',
+      severity: 'fail',
       title: `${row.label} ${row.status}`,
       detail: [
         `age=${age} vs ${SIGNAL_HEALTH_FRESH_SLA_HOURS}h SLA`,
@@ -202,7 +203,7 @@ export function analyzeResearchEngine(snap: ResearchEngineAgentPackSnapshot): Re
   for (const f of fails.slice(0, 3)) {
     findings.push({
       id: `sched-fail-${f.name}`,
-      severity: 'danger',
+      severity: 'fail',
       title: `Schedule last run failed: ${f.name}`,
       detail: `${f.job_name} · ${f.last_run_status ?? 'FAIL'} · ${f.last_run_ended_at ?? '—'}`,
     })
