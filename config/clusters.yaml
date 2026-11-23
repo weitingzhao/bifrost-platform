@@ -35,6 +35,21 @@ clusters:
       - plugin-flex-query
       - plugin-market-data
       - research
+    # The cluster's other namespaces: there and known, not Bifrost's
+    # (2026-11-23, the map line: registered too, so its reconcile names only
+    # what nobody listed). Platform add-ons, the system's own, and the
+    # finance tenant's.
+    other_namespaces:
+      - cnpg-system
+      - default
+      - finance-prod
+      - finance-stg
+      - gitea-admin
+      - kube-node-lease
+      - kube-public
+      - kube-system
+      - tekton-pipelines
+      - tekton-pipelines-resolvers
     compute_nodes:
       - name: gpu-server
         ssh_host: vision@192.168.10.60
