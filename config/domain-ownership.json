@@ -169,6 +169,7 @@
       "tier": 3,
       "source": "domains/1-plan/charter.md",
       "contracts": {
+        "public_packages": ["api/internal/agentrt/planapi", "api/internal/agentrt/planloop", "api/internal/agentrt/planpace", "api/internal/agentrt/planreadings", "api/internal/agentrt/planstore"],
         "measured_at": "d8dc802c",
         "request_response": [
           {"method": "GET", "path": "/api/v1/agentrt/plan", "handler": "api/internal/agentrt/planapi.HandleGetPlan", "consumers": ["console", "mcp"]},
