@@ -2,12 +2,17 @@ package server
 
 import (
 	"context"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 )
 
 // approvalCreateCheck runs before an approval row is written: a pipeline run
 // whose signed commits Gitea does not have is refused then, not after the
 // Owner approved it (TD-420, approval #80).
 func (s *Server) approvalCreateCheck(ctx context.Context, action string, params map[string]any) error {
+	if action == actions.LawAmendAction {
+		return actions.CheckLawAmend(ctx, params)
+	}
 	if action == RuleApproveAction {
 		return s.ruleApproveCreateCheck(ctx, params)
 	}

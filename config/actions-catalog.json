@@ -18,6 +18,7 @@
     "ib_mode",
     "ib_reconnect",
     "ib_self_heal",
+    "law_amend",
     "mark_regression_fixed",
     "market_data_delete",
     "market_data_heal",

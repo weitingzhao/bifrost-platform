@@ -573,6 +573,21 @@ var catalog = []Action{
 		},
 	},
 	{
+		ID: LawAmendAction, Tier: TierD,
+		Description: "Change one law: add, amend or repeal it, with the measurable standards it is judged by. Tier D: only the Owner approves. " +
+			"The platform runs nothing; the approved card is that version of the law and is never edited (a new version is a new card). approval.card.executed announces it; read the card at its ref. " +
+			"op is add, amend or repeal; law is the law's number (empty for add: the plan domain numbers it); before and after are the text before and after (before empty for add, after empty for repeal); " +
+			"standards is a list of {id, standard, measure}, at least one for add and amend; revert says how to undo it.",
+		Params: []Param{
+			{Name: "op", Type: "string", Required: true, In: "body"},
+			{Name: "law", Type: "string", In: "body"},
+			{Name: "before", Type: "string", In: "body"},
+			{Name: "after", Type: "string", In: "body"},
+			{Name: "standards", Type: "array", In: "body"},
+			{Name: "revert", Type: "string", Required: true, In: "body"},
+		},
+	},
+	{
 		ID: "owner_run_command", Tier: TierD, Runner: RunnerOwner,
 		Classify:    classifyOwnerRun,
 		Description: "Approve an exact shell command. Tier D. The platform does not execute it. While D10 is locked, a command that names a no_d10_paths file is tier X and refused. runner owner (default): the approval stays approved until scripts/owner/owner-run.sh <id> claims it and posts the result. runner host: the out-of-band executor claims it. host (a machine name such as mac-pro or mini-1, only with runner host): the card runs on that machine's own executor, and only with a ticket, which the Owner's one-time code earns; without a ticket nobody claims it. Commands applying paths covered by policy are refused; request plan_manifest then apply_manifest instead. Exit code 75 means \"not now, wrote nothing\": the card goes back to the queue and reruns on backoff for up to 30 minutes after the decision (never past its deadline), then fails with a wait-timeout error. Exit 75 only if this run has written nothing; after any write, exit with another code. Any other non-zero exit fails the card (see OWNER_RUN_CARDS.md in the approvals package).",
