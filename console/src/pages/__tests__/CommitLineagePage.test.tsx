@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { LineageCommit, LineageResponse, LineageThread } from '@/api/lineage'
 import { CommitLineagePage } from '@/pages/CommitLineagePage'
+import { CONSOLE_ADDRESS_EVENT, lineagePick } from '@/lib/shell/consoleRoutes'
 
 const X = 't_01M4XW5Z7AC7CTA9P0YDGACGPG'
 const Y = 't_01M4XW5Z7SC6YN6KEN3JXF8CFV'
@@ -156,8 +157,14 @@ describe('commit lineage page, lines at a glance', () => {
     const card = await screen.findByRole('button', { name: /local_s1/ })
     expect(card.textContent).toContain('merged 1 · STG 0 · PROD 0')
     expect(card.textContent).toMatch(/quiet, last \d+ d ago/)
+    const told = vi.fn()
+    window.addEventListener(CONSOLE_ADDRESS_EVENT, told)
     fireEvent.click(card)
+    window.removeEventListener(CONSOLE_ADDRESS_EVENT, told)
     expect(window.location.hash).toBe('#work?section=commit-lineage&thread=local_s1')
+    // the header re-reads the address, so its City link carries the line
+    expect(told).toHaveBeenCalledTimes(1)
+    expect(lineagePick(window.location.hash.split('?')[1] ?? '')).toBe('local_s1')
     expect(document.getElementById('lineage-thread-local_s1')?.getAttribute('aria-expanded')).toBe('true')
   })
 

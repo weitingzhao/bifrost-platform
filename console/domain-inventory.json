@@ -3495,6 +3495,7 @@
     {
       "path": "console/src/lib/shell",
       "files": [
+        "console/src/lib/shell/__tests__/consoleRoutes.lineagePick.test.ts",
         "console/src/lib/shell/__tests__/consoleRoutes.test.tsx",
         "console/src/lib/shell/__tests__/domainMigration.test.tsx",
         "console/src/lib/shell/__tests__/fiveDomains.test.tsx",
@@ -3522,6 +3523,7 @@
         "console/src/api/checklist.ts",
         "console/src/api/clusterTypes.ts",
         "console/src/components/shell",
+        "console/src/domains/owner/city",
         "console/src/pages/shell/data",
         "console/src/pages/shell/infrastructure"
       ],
@@ -3622,6 +3624,7 @@
         "console/src/hooks/PlatformAuthProvider.tsx",
         "console/src/hooks/usePlatformAuth.ts",
         "console/src/lib/platformAuth.ts",
+        "console/src/lib/shell",
         "console/src/pages/ApprovalReviewButton.tsx",
         "console/src/pages/ApprovalsPage.tsx",
         "console/src/pages/CommitLineagePage.tsx",

@@ -32,6 +32,7 @@ import { LineageGraph } from '@/components/lineage/LineageGraph'
 import { matches, onlyTask } from '@/components/lineage/threadFilter'
 import { LinesAtAGlance } from '@/components/lineage/LinesAtAGlance'
 import { scrollAfterShell } from '@/lib/shell/useHashSection'
+import { CONSOLE_ADDRESS_EVENT } from '@/lib/shell/consoleRoutes'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
 const WINDOWS = [7, 14, 30, 90] as const
@@ -56,6 +57,8 @@ function writeThreadParam(session: string) {
   params.set('thread', session)
   // Replace, not push: picking a line is not a page of its own in the history.
   window.history.replaceState(null, '', `${tab}?${params.toString()}`)
+  // The header's City link carries the line (sel=<session>); this is not a hash change.
+  window.dispatchEvent(new Event(CONSOLE_ADDRESS_EVENT))
 }
 
 function readHelp(): boolean {

@@ -315,6 +315,17 @@ export function hashQueryWithoutTaskMode(rawHash: string): string {
   return params.toString()
 }
 
+/**
+ * Raised on window by a page that rewrote its own query with replaceState (no hashchange), so the
+ * shell's header re-reads the address for its City and ledger links.
+ */
+export const CONSOLE_ADDRESS_EVENT = 'console:address'
+
+/** The line picked on Commit lineage (`thread=`), which the header's City link carries as sel=<session>. */
+export function lineagePick(query: string): string | null {
+  return hashQueryParam(query, 'section') === 'commit-lineage' ? hashQueryParam(query, 'thread') : null
+}
+
 export function formatShellHash(id: string, query = ''): string {
   if (query === '') return `#${id}`
   return `#${id}?${query}`

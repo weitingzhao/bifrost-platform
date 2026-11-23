@@ -27,6 +27,7 @@ import { ConsoleBuildBanner } from '@/pwa/ConsoleBuildBanner'
 import { RouteLoading } from '@/pwa/ConsoleCrashScreen'
 import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
 import {
+  CONSOLE_ADDRESS_EVENT,
   HOME_ROUTE,
   MORE_ROUTE,
   NEEDS_YOU_HREF,
@@ -34,6 +35,7 @@ import {
   entryOf,
   formatShellHash,
   isEntryRoute,
+  lineagePick,
   isShellRouteId,
   locationId,
   resolveConsoleHash,
@@ -123,6 +125,10 @@ function looksFor(location: ConsoleLocation): HeaderLooks | undefined {
     return { on: 'ledger', city: cityHref(path, sel), ledger: ledgerHref(path, sel), page: last != null && isShellRouteId(last) && last !== 'city' ? formatShellHash(last) : null }
   }
   const path = isEntryRoute(location.id) ? [location.id] : [entryOf({ kind: 'shell', id: location.id }) ?? 'system', location.id]
+  // A line picked on Commit lineage goes to the City as sel=<session>: the City level's Lines card
+  // puts that line first (brief 2026-11-22, item 3). The page link keeps the whole address.
+  const thread = lineagePick(query)
+  if (thread != null) return { on: 'page', city: cityHref([], thread), ledger: ledgerHref(path), page: formatShellHash(location.id, query) }
   return { on: 'page', city: cityHref(path), ledger: ledgerHref(path), page: formatShellHash(location.id) }
 }
 
@@ -151,6 +157,14 @@ function ConsolePageInner() {
     window.addEventListener('hashchange', applyHash)
     return () => window.removeEventListener('hashchange', applyHash)
   }, [applyHash])
+
+  // A page that rewrites its own query (replaceState, no hash change) asks the header to re-read it.
+  const [, setAddressTick] = useState(0)
+  useEffect(() => {
+    const reread = () => setAddressTick(n => n + 1)
+    window.addEventListener(CONSOLE_ADDRESS_EVENT, reread)
+    return () => window.removeEventListener(CONSOLE_ADDRESS_EVENT, reread)
+  }, [])
 
   // Another place starts at its top: the entries share one scroll, so the old position would carry over.
   const here = locationId(location)
