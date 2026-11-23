@@ -8,14 +8,14 @@ import { alertCount } from '@/api/alertCount'
  * shows and the alerts corner, all from reads the page already makes. The frame is the engine's (WorldFrame).
  */
 
-/** Agents › the selected letter, named by its two parties; a request not in the loaded window says so. */
+/** Agents › the person in focus › the selected letter, by name; a request not in the loaded window says so. */
 export function crumbsOf(snapshot: CommunicationSnapshot, projection: CommunicationProjection | null): { label: string; href?: string }[] {
   const out: { label: string; href?: string }[] = [{ label: 'Agents', href: '#collaboration' }]
+  const name = (id?: string) => snapshot.members.find(m => m.id === id)?.label ?? id ?? 'Unknown member'
+  if (projection?.scope.member) out.push({ label: name(projection.scope.member) })
   if (!projection?.requested) return out
   const x = projection.resolved ? projection.exchanges.find(e => e.channel + ':' + e.id === projection.resolved) : undefined
-  if (!x) return [...out, { label: 'Not in loaded evidence' }]
-  const name = (id?: string) => snapshot.members.find(m => m.id === id)?.label ?? id ?? 'Unknown member'
-  return [...out, { label: name(x.from) + ' → ' + name(x.to) }]
+  return [...out, { label: x ? name(x.from) + ' → ' + name(x.to) : 'Not in loaded evidence' }]
 }
 
 /** Live is the newest ledger read; a fixed cutoff is pinned at that cutoff. */

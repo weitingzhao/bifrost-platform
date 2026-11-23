@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AgentWorld, WorkingStudio, exchangesOf, type Member, type CommunicationFact, type Stage } from '@bifrost/ui/communication'
 import '@fontsource-variable/geist'
+// The host's appearance tokens (light and dark), as the Console sets them; ?theme=dark previews the night.
+import '../src/styles/opsAppearance.css'
+document.documentElement.dataset.opsTheme = new URLSearchParams(window.location.search).get('theme') === 'dark' ? 'dark' : 'light'
 const members: Member[] = [
   ['orion','Orion','Coordination','owner'],['lyra','Lyra','Coordination','temporary'],
   ['atlas','Atlas','Compute','owner'],['vega','Vega','Compute','temporary'],
