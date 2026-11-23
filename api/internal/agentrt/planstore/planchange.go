@@ -299,6 +299,12 @@ func RootOf(ctx context.Context, tx pgx.Tx, id string) (string, error) {
 // review where its subject is, a rule naming only what its step binds
 // (some at commit).
 func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided int64, changes []PlanChange) ([]string, error) {
+	return applyChangesNoted(ctx, tx, actor, root, decided, "", changes)
+}
+
+// applyChangesNoted is applyChanges with a note on its plan_changed event
+// (law.go marks the events that record a law card).
+func applyChangesNoted(ctx context.Context, tx pgx.Tx, actor, root string, decided int64, note string, changes []PlanChange) ([]string, error) {
 	if len(changes) == 1 && changes[0].Op == "adopt_plan_view" {
 		return nil, adoptPlanView(ctx, tx, actor, root, decided, changes[0])
 	}
@@ -418,6 +424,9 @@ func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided in
 	}
 	if len(bindings) > 0 {
 		body["bindings"] = bindings
+	}
+	if note != "" {
+		body["note"] = note
 	}
 	changed, err := appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_changed", Actor: actor, Body: body})
 	if err != nil {

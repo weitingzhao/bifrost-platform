@@ -39,6 +39,9 @@ type Sources struct {
 	Ack      func(ctx context.Context, id string) error
 	CI       func(ctx context.Context, repo, commit string) (status, run string, ok bool)
 	Deployed seenfacts.Deployed
+	// Laws lists the executed law_amend cards the approval store still
+	// holds; nil, or ok false, records nothing.
+	Laws func(ctx context.Context) (cards []planstore.LawCard, ok bool)
 }
 
 // Loop holds what the plan passes need.
@@ -242,4 +245,26 @@ func (l *Loop) Rules(ctx context.Context) (int, error) {
 		}
 	}
 	return moved, errors.Join(errs...)
+}
+
+// Laws is one pass of the changes of law: each executed law_amend card not
+// yet in the plan becomes an item of the newest round, a step per standard
+// (planstore.RecordLaws).
+func (l *Loop) Laws(ctx context.Context) (int, error) {
+	if l.Sources.Laws == nil {
+		return 0, nil
+	}
+	type read struct {
+		cards []planstore.LawCard
+		ok    bool
+	}
+	r := bounded(l, ctx, func(rctx context.Context) read {
+		cards, ok := l.Sources.Laws(rctx)
+		return read{cards, ok}
+	})
+	cards, ok := r.cards, r.ok
+	if !ok || len(cards) == 0 {
+		return 0, nil
+	}
+	return planstore.RecordLaws(ctx, l.DB, cards)
 }

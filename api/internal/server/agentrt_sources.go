@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/approvalfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deploysource"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planloop"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -56,6 +58,7 @@ func (s *Server) agentRuntimeMains() mainHead {
 type (
 	approvalReader interface {
 		Lookup(ref string) (approvals.Approval, bool, error)
+		Observations() ([]approvals.Approval, error)
 	}
 	currentDeployment = deploysource.Deployments
 )
@@ -76,6 +79,32 @@ func agentRuntimeSources(ap approvalReader, question func(context.Context, strin
 	}
 	if ap != nil {
 		src.Approval = approvalfacts.ByNumber(ap.Lookup)
+		// The executed law_amend cards the store holds, as the plan's law
+		// cards, their params read by the approvals' own reader
+		// (actions.ReadLawAmend); a card that does not read is skipped, since
+		// the store refused it at creation.
+		src.Laws = func(context.Context) ([]planstore.LawCard, bool) {
+			all, err := ap.Observations()
+			if err != nil {
+				return nil, false
+			}
+			var out []planstore.LawCard
+			for _, a := range all {
+				if a.Action != actions.LawAmendAction || a.Status != approvals.StatusExecuted {
+					continue
+				}
+				la, err := actions.ReadLawAmend(a.Params)
+				if err != nil {
+					continue
+				}
+				c := planstore.LawCard{ApprovalID: a.ID, Number: a.Number, Op: la.Op, Law: la.Law, After: la.After, Before: la.Before}
+				for _, st := range la.Standards {
+					c.Standards = append(c.Standards, planstore.LawStandard{ID: st.ID, Standard: st.Standard, Measure: st.Measure})
+				}
+				out = append(out, c)
+			}
+			return out, true
+		}
 	}
 	if question != nil {
 		src.Question = question

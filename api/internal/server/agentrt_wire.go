@@ -184,6 +184,7 @@ func agentRuntimeController(env string, db eventlog.DB, plans planloop.Sources, 
 		{Name: "plan decisions", Run: passOf(p.PlanDecisions)},
 		{Name: "used answers", Run: passOf(a.AckUsedAnswersDue)},
 		{Name: "rules", Run: passOf(p.Rules)},
+		{Name: "laws", Run: passOf(p.Laws)},
 	}
 	c.Loops = []verificationassembly.Pass{{Name: "agentrt-plan-observations", Every: planloop.PlanObserveEvery, Run: passOf(p.PlanObservations)}}
 	return c

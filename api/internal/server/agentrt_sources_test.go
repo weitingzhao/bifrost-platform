@@ -28,6 +28,45 @@ func (f fakeApprovals) Lookup(ref string) (approvals.Approval, bool, error) {
 	return a, ok, nil
 }
 
+func (f fakeApprovals) Observations() ([]approvals.Approval, error) {
+	out := make([]approvals.Approval, 0, len(f))
+	for _, a := range f {
+		out = append(out, a)
+	}
+	return out, nil
+}
+
+type downApprovals struct{ fakeApprovals }
+
+func (downApprovals) Observations() ([]approvals.Approval, error) { return nil, errors.New("down") }
+
+// 2026-11-23, the closed loop (Owner: only a change of law opens a ticket):
+// the plan reads only executed law_amend cards that read, with their
+// standards; a pending one, another action and an unreadable one are not
+// laws.
+func TestLawCardsReadsOnlyExecutedLawAmendCards(t *testing.T) {
+	std := []any{map[string]any{"id": "s1", "standard": "0 segments by hand", "measure": "Audit counts"}}
+	f := fakeApprovals{
+		"1": {ID: "appr_1", Number: 1, Action: "law_amend", Status: approvals.StatusExecuted,
+			Params: map[string]any{"op": "add", "after": "A new law", "revert": "repeal it", "standards": std}},
+		"2": {ID: "appr_2", Number: 2, Action: "law_amend", Status: approvals.StatusPending,
+			Params: map[string]any{"op": "add", "after": "Pending", "revert": "r", "standards": std}},
+		"3": {ID: "appr_3", Number: 3, Action: "scale_deployment", Status: approvals.StatusExecuted},
+		"4": {ID: "appr_4", Number: 4, Action: "law_amend", Status: approvals.StatusExecuted, Params: map[string]any{"op": "bogus"}},
+	}
+	cards, ok := agentRuntimeSources(f, nil, nil, nil).Laws(context.Background())
+	if !ok || len(cards) != 1 {
+		t.Fatalf("cards = %+v, ok %v; want only appr_1", cards, ok)
+	}
+	c := cards[0]
+	if c.ApprovalID != "appr_1" || c.Op != "add" || c.After != "A new law" || len(c.Standards) != 1 || c.Standards[0].Measure != "Audit counts" {
+		t.Fatalf("card = %+v", c)
+	}
+	if _, ok := agentRuntimeSources(downApprovals{}, nil, nil, nil).Laws(context.Background()); ok {
+		t.Fatal("an unreadable store reads as ok")
+	}
+}
+
 // question answers as the questionbridge reader does's reader does, from plain fields.
 func question(_ context.Context, id string) (seenfacts.Question, bool) {
 	// What questioncards.Fact makes of each card (observation_test.go there
