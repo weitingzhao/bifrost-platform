@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import type { LineageResponse, LineageThread } from '@/api/lineage'
 import { consoleContent } from '../console'
-import { countsOf, districtLines, domainsOf, pace, townLines, type RosterSeat } from '../lines'
+import { districtLines, domainsOf, townLines, type RosterSeat } from '../lines'
 
 const now = new Date('2026-11-23T12:00:00Z')
 const commit = (sha: string, landed: boolean, envs: [string, boolean][] = []) => ({
@@ -19,18 +19,24 @@ const thread = (session: string, last_at: string, commits: ReturnType<typeof com
 const lineage = (threads: LineageThread[]): LineageResponse => ({ threads } as unknown as LineageResponse)
 
 describe('lines on the City', () => {
-  it('counts merged, STG and PROD as the Commit lineage page does (only deploying releases count)', () => {
-    const c = countsOf(thread('s1', '2026-11-23T10:00:00Z', [
+  // 2026-11-23: UI / Console counts the same lines on Commit lineage (lineageActivity.ts); one function, one number.
+  it('counts by the furthest stage, as Commit lineage does: PROD also counts as STG and merged', () => {
+    const blocks = townLines({ data: lineage([thread('s1', '2026-11-23T10:00:00Z', [
       commit('a', true, [['stg', true], ['prod', true]]),
-      commit('b', true, [['stg', true], ['prod', false]]),
+      commit('b', true, [['stg', true]]),
       commit('c', false),
-    ], 'map'))
-    expect(c).toMatchObject({ title: 'map', merged: 2, stg: 2, prod: 1, commits: 3 })
+    ], 'map')]) }, {}, now)
+    const t = blocks[1]
+    expect(t.kind === 'table' && t.rows[0].cells.slice(2)).toEqual([2, 2, 1])
+    expect(t.kind === 'table' && t.rows[0].cells[1]).toEqual({ text: '2 h ago', tone: 'good' })
   })
 
-  it('reads a line moving within 24 h as good, an older one as quiet for so many days', () => {
-    expect(pace('2026-11-23T09:00:00Z', now)).toEqual({ text: '3 h ago', tone: 'good' })
-    expect(pace('2026-11-20T09:00:00Z', now)).toEqual({ text: 'quiet 3 d', tone: 'unknown' })
+  it('puts the line picked in the Console first, marked', () => {
+    const read = { data: lineage([thread('new', '2026-11-23T11:00:00Z', [commit('y', true)]), thread('old', '2026-11-18T00:00:00Z', [commit('x', true)])]) }
+    const t = townLines(read, {}, now, 'old')[1]
+    expect(t.kind === 'table' && t.rows.map(r => r.key)).toEqual(['old', 'new'])
+    expect(t.kind === 'table' && t.rows[0].cells[0]).toMatchObject({ mark: { text: 'picked' } })
+    expect(t.kind === 'table' && t.rows[0].ghost).toBe(true)
   })
 
   it('lists the newest line first and counts the moving ones', () => {

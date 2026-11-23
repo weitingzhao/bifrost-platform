@@ -29,7 +29,7 @@ const getJson = async (path: string): Promise<unknown> => (await authedFetch('ci
  * read live through the platform every 30 s, with each computer's CPU, memory and disk rooms. One query,
  * so switching looks shows the same reading. The districts are the domains the map line reads, on the same beat.
  */
-export function useCityContent(): CityContent {
+export function useCityContent(focus?: string | null): CityContent {
   const reads = useQuery({
     queryKey: ['city', 'gen2', 'hardware'],
     queryFn: async () => {
@@ -70,6 +70,6 @@ export function useCityContent(): CityContent {
       : null
     return consoleContent({ data: domains.data, error: domains.error }, hw, { data: graph.data, error: graph.error }, readDomain, traffic,
       { raw: firing.data?.alerts as PromAlert[] | undefined, error: firing.error, devices: d ? deviceKeys(d.hardware) : [] }, holdings.data ?? {},
-      { read: { data: lineage.data, error: lineage.error }, roster, now: new Date(lineage.dataUpdatedAt || Date.now()) })
-  }, [lineage.data, lineage.error, lineage.dataUpdatedAt, reads.data, rulers, domains.data, domains.error, graph.data, graph.error, traffic, firing.data, firing.error, holdings.data])
+      { read: { data: lineage.data, error: lineage.error }, roster, now: new Date(lineage.dataUpdatedAt || Date.now()), focus: focus ?? undefined })
+  }, [focus, lineage.data, lineage.error, lineage.dataUpdatedAt, reads.data, rulers, domains.data, domains.error, graph.data, graph.error, traffic, firing.data, firing.error, holdings.data])
 }

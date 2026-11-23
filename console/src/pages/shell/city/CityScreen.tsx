@@ -11,8 +11,9 @@ const queryOf = () => window.location.hash.split('?')[1] ?? ''
  * opens the same place in the Console, and the Console's switch brings it back here.
  */
 export default function CityScreen() {
-  const content = useCityContent()
   const [q, setQ] = useState(() => readCityQuery(queryOf()))
+  // A line picked in the Console (sel=<session>) comes first on the Lines card; a room id is not a session and matches no row.
+  const content = useCityContent(q.sel)
   useEffect(() => {
     const on = () => setQ(readCityQuery(queryOf()))
     window.addEventListener('hashchange', on)
