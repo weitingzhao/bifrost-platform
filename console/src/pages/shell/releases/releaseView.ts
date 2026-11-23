@@ -312,3 +312,40 @@ export function approvalHref(id: string): string {
 export function releaseWindowWord(state: string): 'info' | 'ok' | 'unknown' {
   return state === 'held' ? 'info' : state === 'free' ? 'ok' : 'unknown'
 }
+
+function agoText(iso: string, now: number): string {
+  const t = Date.parse(iso)
+  if (!Number.isFinite(t)) return 'at an unknown time'
+  const min = Math.max(0, Math.round((now - t) / 60_000))
+  if (min < 60) return `${min}m ago`
+  const h = Math.round(min / 60)
+  return h < 48 ? `${h}h ago` : `${Math.round(h / 24)}d ago`
+}
+
+export type ReleasesVerdict = { word: 'ok' | 'warn' | 'fail' | 'info' | 'unknown'; sentence: string }
+
+/**
+ * Releases' one-line verdict (箭10 2026-11-23: every page leads with its verdict, one sentence with its numbers, from
+ * the same reads the page shows): a failed delivery is fail, a release waiting for approval warn, the window held
+ * info (a release under way), otherwise ok; the window or the records not read make it unknown, saying which.
+ */
+export function releasesVerdict(input: {
+  window: ReleaseWindowView
+  records: readonly ReleaseRecord[] | undefined
+  recordsError: string | null
+  runs: readonly AttentionRun[]
+  pending: number
+  now: number
+}): ReleasesVerdict {
+  const failed = input.runs.filter(r => r.kind === 'failed').length
+  const prod = input.records?.find(r => r.env === 'prod' && r.deploys)
+  const windowPart = input.window.state === 'free' ? 'window free' : input.window.state === 'held' ? `window held · ${input.window.text}` : input.window.state === 'loading' ? 'window …' : 'window not read'
+  const prodPart = input.recordsError != null || input.records == null ? 'last PROD not read' : prod ? `last PROD ${agoText(prod.completed_at, input.now)}` : `no PROD in the newest ${RELEASE_RECORD_LIMIT} records`
+  const extra = [failed > 0 ? `${failed} failed` : '', input.pending > 0 ? `${input.pending} waiting for approval` : ''].filter(Boolean)
+  const word: ReleasesVerdict['word'] = failed > 0 ? 'fail'
+    : input.pending > 0 ? 'warn'
+    : input.window.state === 'no-token' || input.window.state === 'error' || input.recordsError != null ? 'unknown'
+    : input.window.state === 'held' ? 'info'
+    : input.window.state === 'free' ? 'ok' : 'unknown'
+  return { word, sentence: [`Releases ${word}`, windowPart, prodPart, ...extra].join(' · ') }
+}

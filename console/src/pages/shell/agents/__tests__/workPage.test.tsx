@@ -300,9 +300,10 @@ describe('with an acceptance root beside the newest round (PROD 2026-11-01: R4)'
 
 describe('Work verdict', () => {
   it.each([
-    ['stuck', 'Possibly stuck', '1 possibly stuck', 'fail'],
-    ['owner', 'Waiting on you', '1 waiting', 'degraded'],
-    [null, 'Running', '0 waiting', 'ok'],
+    // 2026-11-23 (箭10): the tag is the engine's seven words; what exactly stays in the sentence.
+    ['stuck', 'fail', '1 possibly stuck', 'fail'],
+    ['owner', 'warn', '1 waiting', 'degraded'],
+    [null, 'ok', '0 waiting', 'ok'],
   ] as const)('shows the %s verdict from the body reads', async (scenario, label, words, lamp) => {
     verdictCase = scenario
     client.setQueryData(['questions', 'all'], [])
@@ -322,7 +323,7 @@ describe('Work verdict', () => {
     page('#work')
     const strip = await screen.findByRole('region', { name: 'Work verdict' })
     await waitFor(() => expect(client.getQueryCache().getAll().some(q => q.state.status === 'error' && q.queryKey[0] === (failure.source === 'plan-view' ? 'agent-runtime-plan-view' : 'questions'))).toBe(true))
-    await waitFor(() => expect(strip).toHaveTextContent('Unknown'))
+    await waitFor(() => expect(strip).toHaveTextContent('unknown'))
     expect(strip.querySelector('.lamp-unknown')).toBeInTheDocument()
     expect(strip).not.toHaveTextContent('0 running')
   })

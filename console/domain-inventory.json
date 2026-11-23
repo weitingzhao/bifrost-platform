@@ -5079,6 +5079,7 @@
         "console/src/pages/shell/owner/__tests__/probeReadFailed.test.tsx",
         "console/src/pages/shell/owner/__tests__/runtimeBusUI.test.tsx",
         "console/src/pages/shell/owner/__tests__/runtimeHealthNotice.test.tsx",
+        "console/src/pages/shell/owner/__tests__/systemVerdictStrip.test.tsx",
         "console/src/pages/shell/owner/__tests__/useOwnerConsole.test.tsx",
         "console/src/pages/shell/owner/__tests__/yoursFromSources.test.tsx",
         "console/src/pages/shell/owner/dataTiles.ts",
@@ -5261,6 +5262,7 @@
         "console/src/pages/shell/releases/__tests__/policyDecisions.test.tsx",
         "console/src/pages/shell/releases/__tests__/releaseView.test.ts",
         "console/src/pages/shell/releases/__tests__/releaseWindowWord.test.ts",
+        "console/src/pages/shell/releases/__tests__/releasesVerdict.test.ts",
         "console/src/pages/shell/releases/policyDecisions.ts",
         "console/src/pages/shell/releases/releaseView.ts"
       ],

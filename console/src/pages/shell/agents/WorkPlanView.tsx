@@ -1,3 +1,4 @@
+import { TAG_VARIANT } from '@/lib/shell/stateWords'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { heartbeatUnconfirmed } from './needsCleanupModel'
 import { stepRows } from './stepStateModel'
@@ -143,9 +144,10 @@ function WorkVerdict({ plan, query }: { plan: ReturnType<typeof usePlanAddress>;
   const lamp = unknown ? 'unknown' : stuck ? 'fail' : waiting ? 'degraded' : 'ok'
   const live = workTabHref('live', plan.root, plan.from === 'address')
   return <OpsVerdictStrip title="WORK" ariaLabel="Work verdict" lamp={lamp}
-    tagLabel={unknown ? 'Unknown' : stuck ? 'Possibly stuck' : waiting ? 'Waiting on you' : 'Running'}
-    tagVariant={unknown ? 'neutral' : stuck ? 'danger' : waiting ? 'warning' : 'success'}
-    summary={unknown ? 'Work status Unknown · plan view or actions could not be read.' : <>
+    // The engine's seven words (箭10 2026-11-23); what exactly (possibly stuck, waiting on you) is in the sentence.
+    tagLabel={unknown ? 'unknown' : stuck ? 'fail' : waiting ? 'warn' : 'ok'}
+    tagVariant={unknown ? TAG_VARIANT.unknown : stuck ? TAG_VARIANT.fail : waiting ? TAG_VARIANT.warn : TAG_VARIANT.ok}
+    summary={unknown ? 'Work unknown · plan view or actions could not be read.' : <>
       {running} running · <a href={live} aria-label={`Possibly stuck · ${stuck}`}>{stuck} possibly stuck</a> · <a href={live} aria-label={`Waiting on you · ${waiting}`}>{waiting} waiting</a> · plan {percent}%
     </>} />
 }

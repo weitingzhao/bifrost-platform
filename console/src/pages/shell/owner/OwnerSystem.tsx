@@ -1,5 +1,8 @@
 import { Bar, Card, Stat } from './OwnerParts'
 import type { Tone } from './ownerModel'
+import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
+import { useSystemVerdict } from '@/domains/foundation/shell/useShellStatusLine'
+import { TAG_VARIANT } from '@/lib/shell/stateWords'
 import type { OwnerConsoleData } from './useOwnerConsole'
 
 function nodeTone(status: string, mode: string | undefined): Tone {
@@ -13,6 +16,7 @@ export function OwnerSystem({ data }: { data: OwnerConsoleData }) {
   const yoursCritical = alerts?.yours.filter(r => r.tone === 'fail').length ?? 0
   return <section aria-label="System" className="flex flex-col gap-3">
     <h2 className="m-0 text-lg font-semibold">System</h2>
+    <SystemVerdictStrip />
     <div className="grid gap-4 @3xl:grid-cols-2">
       <Card label="Health" title="Health" more={{ href: '#status', text: 'Status' }}>
         {data.alertsError && <p role="alert" className="m-0 text-sm">Alerts could not be read: {data.alertsError}</p>}
@@ -42,4 +46,28 @@ export function OwnerSystem({ data }: { data: OwnerConsoleData }) {
       })}</ul>
     </Card>
   </section>
+}
+
+const WORD = { ok: 'ok', degraded: 'warn', failing: 'fail', unknown: 'unknown', loading: 'pending' } as const
+const LAMP = { ok: 'ok', degraded: 'degraded', failing: 'fail', unknown: 'unknown', loading: 'unknown' } as const
+
+/**
+ * System's verdict first (箭10 2026-11-23: every page leads with one sentence and its numbers, from the source the
+ * frame uses): the same useSystemVerdict as the frame's status line, so the two never disagree.
+ */
+function SystemVerdictStrip() {
+  const { verdict } = useSystemVerdict()
+  const word = WORD[verdict.tone]
+  const rest = verdict.sentence.replace(/^(All clear|Degraded|Failing|Unknown)\s*—?\s*/, '')
+  return (
+    <OpsVerdictStrip
+      title="SYSTEM"
+      ariaLabel="System verdict"
+      compact
+      lamp={LAMP[verdict.tone]}
+      tagLabel={word === 'pending' ? '…' : word}
+      tagVariant={TAG_VARIANT[word]}
+      summary={[`System ${word === 'pending' ? '…' : word}`, rest].filter(Boolean).join(' · ')}
+    />
+  )
 }

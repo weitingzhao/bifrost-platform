@@ -12,6 +12,12 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { shellNavEntry } from '@/lib/shell/consoleRoutes'
 import { ReleaseHistorySection } from '@/pages/shell/releases/ReleaseHistorySection'
 import { ReleaseInProgressSection } from '@/pages/shell/releases/ReleaseInProgressSection'
+import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
+import { TAG_VARIANT } from '@/lib/shell/stateWords'
+import { releasesVerdict } from '@/pages/shell/releases/releaseView'
+
+/** The seven words onto the strip's lamp. */
+const VERDICT_LAMP = { ok: 'ok', warn: 'degraded', fail: 'fail', info: 'unknown', unknown: 'unknown' } as const
 import { ReleaseLanesSection } from '@/pages/shell/releases/ReleaseLanesSection'
 import { ReleaseNeedsYouSection } from '@/pages/shell/releases/ReleaseNeedsYouSection'
 import { ReleasePolicyDecisionsSection } from '@/pages/shell/releases/ReleasePolicyDecisionsSection'
@@ -157,6 +163,14 @@ export function ReleasesPage() {
   // The release lines come from release-rules.yaml as loaded; a rules error or a platform-api older than rule_list leaves them unknown.
   const rulesError = errorText(releases.error) ?? (releases.data?.status?.rules_error || null)
     ?? (releases.data != null && releases.data.status?.rule_list == null ? 'this platform-api sends no rule_list' : null)
+  const verdict = releasesVerdict({
+    window: windowView,
+    records: releases.data?.error ? undefined : releases.data?.records,
+    recordsError: errorText(releases.error) ?? (releases.data?.error || null),
+    runs: inProgress,
+    pending: pending.length,
+    now,
+  })
   const laneRuns = Object.fromEntries(pipelineNames.map((name, index) => {
     const q = runQueries[index]
     const unreached = q?.data != null && q.data.reachability !== 'ok' ? q.data.detail || q.data.reachability : null
@@ -165,6 +179,16 @@ export function ReleasesPage() {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Verdict first (the design system; 箭10 2026-11-23): one sentence from the same reads as the sections below. */}
+      <OpsVerdictStrip
+        title="RELEASES"
+        ariaLabel="Releases verdict"
+        compact
+        lamp={VERDICT_LAMP[verdict.word]}
+        tagLabel={verdict.word}
+        tagVariant={TAG_VARIANT[verdict.word]}
+        summary={verdict.sentence}
+      />
       <p className="m-0 max-w-3xl text-sm text-muted-foreground">{shellNavEntry('releases').question}</p>
 
       <a href="#services?section=versions">Running versions · Services</a>
