@@ -18,6 +18,8 @@ describe('existing operations contracts', () => {
     expect(text).toContain('0 waiting')
     expect(result.panels.ci).toHaveLength(1)
     expect(result.evidence['domain:compute'][0].evaluatedAt).toBe(at)
+    // Re-reading an old worker snapshot must not make its measurement fresh.
+    expect(result.evidence['domain:compute'][0].expiresAt).toBe('2026-11-22T12:01:30.000Z')
   })
   it('preserves an explicit denied source while independent CI and data finish', async () => {
     const result = await readOperations(async path => {

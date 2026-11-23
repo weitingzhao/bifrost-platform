@@ -18,7 +18,10 @@ export async function readOperations(get: Get) {
     try {
       const value = await get(path) as T & { at?: string; generated_at?: string }
       receivedAt = new Date().toISOString()
-      evidence[id] = [{ source: path, outcome: 'read', receivedAt, evaluatedAt: value.at ?? value.generated_at, expiresAt: new Date(Date.now() + 90000).toISOString() }]
+      const evaluatedAt = value.at ?? value.generated_at
+      const sourceTime = Date.parse(evaluatedAt ?? '')
+      const freshnessBase = Number.isFinite(sourceTime) ? Math.min(Date.parse(receivedAt), sourceTime) : Date.parse(receivedAt)
+      evidence[id] = [{ source: path, outcome: 'read', receivedAt, evaluatedAt, expiresAt: new Date(freshnessBase + 90000).toISOString(), detail: 'Display freshness uses source generation time and receipt; source health is unchanged' }]
       return value
     } catch (e) {
       evidence[id] = [{ source: path, outcome: 'error', receivedAt, detail: String(e) }]
