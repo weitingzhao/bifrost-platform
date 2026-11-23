@@ -5,6 +5,7 @@ import type { Place } from '@bifrost/ui/city/places'
 import { COMPUTE } from './domainPlaces'
 import { OTHER } from './districtBuildings'
 import type { DomainHoldings } from './domainOwns'
+import { DOMAIN_GLYPH } from './domainGlyphs'
 
 /**
  * The districts' tech tree (the Owner, 2026-11-20): who stands on whom among the domains, from the real
@@ -24,12 +25,10 @@ export type GraphRead = { data?: CiDomainGraph; error?: unknown }
 /**
  * Each domain's glyph on its node, from the world's dictionary (charter 10, §4–§5): the court where the
  * Owner rules, the rocket that ships, the inspection that checks, the messenger's signal. A domain the map
- * adds and this list does not know shows its initial, never a guessed picture.
+ * adds and this list does not know shows its initial, never a guessed picture. The list is the one every view
+ * reads (domainGlyphs.ts).
  */
-const GLYPH: Record<string, string> = {
-  foundation: 'layers', plan: 'blueprint', lineage: 'branch', verification: 'shield', delivery: 'rocket',
-  approvals: 'gavel', compute: 'chip', payload: 'plug', coordination: 'signal',
-}
+const GLYPH = DOMAIN_GLYPH
 
 const TONES: readonly string[] = ['good', 'problem', 'bad']
 const toneOf = (v: string | undefined): TreeTone => (v && TONES.includes(v) ? v : 'unknown') as TreeTone
