@@ -77,7 +77,9 @@ interface RawReply {
 }
 
 async function rawFetch(method: string, path: string, body?: unknown): Promise<RawReply> {
-  const withBody = sendsJsonBody(method)
+  // A DELETE carries a body only when the caller gives one (2026-11-23: the
+  // server's action gate reads release_window_release's who from the body).
+  const withBody = sendsJsonBody(method) || (method === 'DELETE' && body != null)
   const headers = requestHeaders(withBody)
   const init: RequestInit = { method, headers }
   if (withBody) init.body = body == null ? '{}' : JSON.stringify(body)
@@ -217,8 +219,8 @@ export async function platformPatch(path: string, body?: unknown): Promise<unkno
   return rawSend('PATCH', path, body)
 }
 
-export async function platformDelete(path: string): Promise<unknown> {
-  return sendWrite('DELETE', path)
+export async function platformDelete(path: string, body?: unknown): Promise<unknown> {
+  return sendWrite('DELETE', path, body)
 }
 
 /**

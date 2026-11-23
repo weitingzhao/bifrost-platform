@@ -12,7 +12,7 @@ function deps(over: Partial<WindowDeps> = {}) {
   const d: WindowDeps = {
     get: async (path) => { calls.push({ kind: 'get', path }); return { open: false, queue: [] } },
     put: async (path, body) => { calls.push({ kind: 'put', path, body }); return { position: 1 } },
-    del: async (path) => { calls.push({ kind: 'del', path }); return {} },
+    del: async (path, body) => { calls.push({ kind: 'del', path, body }); return {} },
     session: () => 'local_w',
     fellBack: () => false,
     ...over,
@@ -37,11 +37,13 @@ describe('release window tools', () => {
     assert.deepEqual(calls[0].body, { who: 'local_w', what: 'bifrost-platform', ttl_minutes: 10 })
   })
 
-  it('release names this session; read goes to the window route', async () => {
+  // 2026-11-23: cockpit's release got 400 "missing param: who" because who
+  // went in the query and the server's action gate reads it from the body.
+  it('release names this session in the body; read goes to the window route', async () => {
     const { d, calls } = deps()
     await releaseReleaseWindow(d)
     await getReleaseWindow(d)
-    assert.deepEqual(calls, [{ kind: 'del', path: `${WINDOW_PATH}?who=local_w` }, { kind: 'get', path: WINDOW_PATH }])
+    assert.deepEqual(calls, [{ kind: 'del', path: WINDOW_PATH, body: { who: 'local_w' } }, { kind: 'get', path: WINDOW_PATH }])
   })
 
   it('without a session id nothing is held or released', async () => {

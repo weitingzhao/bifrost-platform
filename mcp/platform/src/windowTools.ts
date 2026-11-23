@@ -14,7 +14,7 @@ export const WINDOW_PATH = '/api/v1/delivery/release-window'
 export interface WindowDeps {
   get: (path: string) => Promise<unknown>
   put: (path: string, body: unknown) => Promise<unknown>
-  del: (path: string) => Promise<unknown>
+  del: (path: string, body?: unknown) => Promise<unknown>
   session: () => string
   fellBack: () => boolean
 }
@@ -64,5 +64,8 @@ export async function holdReleaseWindow(input: HoldInput, d: WindowDeps = defaul
 
 export async function releaseReleaseWindow(d: WindowDeps = defaultWindowDeps()): Promise<unknown> {
   if (d.fellBack()) return NO_SESSION
-  return d.del(`${WINDOW_PATH}?who=${encodeURIComponent(d.session())}`)
+  // who goes in the body: the action catalog declares it there and the
+  // server's gate refuses a who in the query with "missing param: who"
+  // (2026-11-23, cockpit could not give its window back).
+  return d.del(WINDOW_PATH, { who: d.session() })
 }
