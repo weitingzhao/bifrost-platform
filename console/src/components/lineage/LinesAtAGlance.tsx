@@ -47,7 +47,8 @@ export function LinesAtAGlance({
             >
               <span className="flex min-w-0 items-center gap-2">
                 <span
-                  className={`inline-block h-2 w-2 shrink-0 rounded-full ${l.movingToday ? 'bg-emerald-500' : 'bg-muted-foreground'}`}
+                  // Moving is activity, not health: ink and faint ink, never the severity green (design system §2).
+                  className={`inline-block h-2 w-2 shrink-0 rounded-full ${l.movingToday ? 'bg-foreground' : 'border border-muted-foreground bg-transparent'}`}
                   aria-hidden
                 />
                 <span className="min-w-0 truncate text-sm font-medium" title={l.session}>{l.title}</span>
