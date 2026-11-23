@@ -1,4 +1,8 @@
 import { createRoot } from 'react-dom/client'
+// The Console's own stylesheet and appearance tokens, so the preview shows what the host gives (2026-11-23,
+// Signals takes the host's tokens). ?theme=light|dark (default dark), as the Console's appearance menu sets it.
+import '../../src/index.css'
+import '../../src/styles/opsAppearance.css'
 import { useEffect, useState } from 'react'
 import { ObservationSurface, RuntimeWorld, anomalyLayer, type ObservationSnapshot } from '@bifrost/ui/city/observation'
 import { useObservationContext } from '@bifrost/ui/city/observationContext'
@@ -7,6 +11,11 @@ import { qualityFixture } from './qualityFixture'
 import { readOperations } from '../../src/domains/foundation/runtime-observation/operations'
 import { COVERAGE, DATABASES, GITOPS, WORKLOADS, databasePanels, gitopsPanel, readCoverage, readStates, workloadPanels } from '../../src/domains/foundation/runtime-observation/states'
 
+{
+  const theme = new URLSearchParams(location.search).get('theme') === 'light' ? 'light' : 'dark'
+  document.documentElement.dataset.opsTheme = theme
+  document.documentElement.classList.toggle('dark', theme === 'dark')
+}
 /** Standalone read-only entry. No Console route or other team's transport is modified. */
 export function Preview() {
   const [snapshot, setSnapshot] = useState<ObservationSnapshot>()

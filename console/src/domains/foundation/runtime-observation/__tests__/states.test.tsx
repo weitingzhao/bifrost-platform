@@ -57,7 +57,8 @@ describe('Argo CD station', () => {
   it('lists each app as Argo reports it and keeps a failed read unknown', async () => {
     const ok = await readStates(async p => p === GITOPS ? { argocd_status: 'installed', reachability: 'ok', detail: '', apps: [{ name: 'bifrost-prod', namespace: 'cicd', sync_status: 'OutOfSync', health_status: 'Healthy', automated_sync: false }], generated_at: '2026-11-23T15:00:00Z' } : { states: [] })
     const text = JSON.stringify(gitopsPanel(ok.gitops, ok.evidence))
-    expect(text).toContain('"label":"bifrost-prod","value":{"text":"ok","tone":"ok"')
+    // 箭10 2026-11-23: OutOfSync is warn (look at it); Argo's words stay in the sentence.
+    expect(text).toContain('"label":"bifrost-prod","value":{"text":"warn","tone":"warn"')
     expect(text).toContain('Argo says: bifrost-prod OutOfSync · Healthy')
     expect(text).toContain('automated sync off')
     expect(ok.evidence['@gitops'][0].evaluatedAt).toBe('2026-11-23T15:00:00Z')
@@ -77,5 +78,18 @@ describe('plain failure reasons', () => {
     const s = await readStates(async () => { throw new Error('viewer token required') })
     expect(JSON.stringify(databasePanels(s.databases, s.evidence))).not.toContain('viewer token required')
     expect(s.evidence['@databases'][0].detail).toBe('Error: viewer token required')
+  })
+})
+
+describe('Argo words the engine table does not hold', () => {
+  // 箭10 2026-11-23: Progressing is info (activity, not a judgement), OutOfSync warn; nothing else guessed.
+  it('maps Progressing to info and keeps Healthy ok', async () => {
+    const r = await readStates(async p => p === GITOPS ? { argocd_status: 'installed', reachability: 'ok', detail: '', generated_at: '2026-11-23T15:00:00Z', apps: [
+      { name: 'research', namespace: 'cicd', sync_status: 'Synced', health_status: 'Progressing' },
+      { name: 'stg-platform', namespace: 'cicd', sync_status: 'Synced', health_status: 'Healthy' },
+    ] } : { states: [] })
+    const text = JSON.stringify(gitopsPanel(r.gitops, r.evidence))
+    expect(text).toContain('"label":"research","value":{"text":"info","tone":"info"')
+    expect(text).toContain('"label":"stg-platform","value":{"text":"ok","tone":"ok"')
   })
 })

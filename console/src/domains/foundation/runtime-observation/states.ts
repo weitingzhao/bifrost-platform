@@ -119,6 +119,18 @@ export function workloadPanels(workloads: BusStates | undefined, readout: Readou
   })
 }
 
+/**
+ * Argo's two words the engine's table does not hold, decided by 箭10 (2026-11-23, default, the Owner may veto):
+ * OutOfSync is warn (look at it), Progressing is info (a deploy under way is activity, not a judgement; the
+ * Console counts running as info too). Everything else goes through the engine's statusOfWord. The engine's
+ * table gets no new word; Argo's own words stay in the sentence and the tooltip.
+ */
+function argoTag(sync: string, health: string, why: string) {
+  const tag = statusTag(health, why)
+  const word = sync === 'OutOfSync' ? 'warn' as const : health === 'Progressing' ? 'info' as const : tag.tone
+  return { ...tag, text: word, tone: word }
+}
+
 type GitOpsApp = GitOpsAppsResponse['apps'][number] & { resources?: { kind: string; name: string; status?: string }[] }
 
 /** One station for Argo CD: each application's sync and health as Argo reports them. */
@@ -127,7 +139,7 @@ export function gitopsPanel(gitops: GitOpsAppsResponse | undefined, evidence: Re
   if (!Array.isArray(gitops?.apps)) return { id, label, blocks: [unknownNote(evidence[id]?.[0]?.detail ?? 'Incomplete source response')] }
   return { id, label, blocks: [
     // The tag is Argo's health in the Ops words; sync and health in Argo's own words go into the sentence.
-    { kind: 'facts' as const, rows: gitops.apps.map(a => ({ label: a.name, value: statusTag(a.health_status, [a.sync_status, a.primary_condition, a.operation_message, a.automated_sync === false ? 'automated sync off' : ''].filter(Boolean).join(' · ')) })) },
+    { kind: 'facts' as const, rows: gitops.apps.map(a => ({ label: a.name, value: argoTag(a.sync_status, a.health_status, [a.sync_status + ' · ' + a.health_status, a.primary_condition, a.operation_message, a.automated_sync === false ? 'automated sync off' : ''].filter(Boolean).join(' · ')) })) },
     note('Argo says: ' + gitops.apps.map(a => a.name + ' ' + a.sync_status + ' · ' + a.health_status).join(' | ')),
     // Resources Argo itself marks other than Synced; absent status is shown as such, not as a problem.
     ...gitops.apps.flatMap(a => { const off = ((a as GitOpsApp).resources ?? []).filter(r => r.status && r.status !== 'Synced'); return off.length ? [note(a.name + ': ' + off.map(r => r.kind + ' ' + r.name + ' ' + r.status).join(', '))] : [] }),

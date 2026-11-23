@@ -2,7 +2,7 @@ import { Profiler, useState } from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { RuntimeWorld, type ObservationSnapshot } from '@bifrost/ui/city/observation'
-import RuntimeObservation from '../RuntimeObservation'
+import RuntimeObservation, { consolePageOf } from '../RuntimeObservation'
 import { useObservationContext } from '@bifrost/ui/city/observationContext'
 
 const makeSnapshot = (id: string): ObservationSnapshot => ({
@@ -85,4 +85,19 @@ it('wears the world frame: Signals current, pinned time in the chip, alerts not 
   expect(screen.getByRole('banner', { name: 'Where you are' }).textContent).toMatch(/Alerts.not read/)
   fireEvent.click(screen.getByRole('button', { name: 'Pin snapshot' }))
   expect(screen.getByRole('banner', { name: 'Where you are' }).textContent).toContain('Pinned')
+})
+
+// 2026-11-23 (箭10, brand layer item 8): Console in the frame goes back to the Console page the journey came from.
+it('names the last Console page of the journey, or none', () => {
+  expect(consolePageOf(['#status', '#city', '#releases?section=prod', '#collaboration'])).toBe('#releases?section=prod')
+  expect(consolePageOf(['#city', '#collaboration'])).toBeUndefined()
+})
+it('shows Return to the previous stop in the frame', () => {
+  function Host() {
+    const observation = useObservationContext(makeSnapshot('snapshot-A'))
+    return <RuntimeObservation observation={observation} frame={{ hrefs: { city: '#city', console: '#status' }, back: { label: 'Console · Status', href: '#status' } }}/>
+  }
+  render(<Host/>)
+  expect(screen.getByRole('link', { name: /Return to/ }).getAttribute('href')).toBe('#status')
+  expect(screen.getByRole('link', { name: 'Console' }).getAttribute('href')).toBe('#status')
 })

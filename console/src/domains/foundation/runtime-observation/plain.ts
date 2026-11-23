@@ -1,6 +1,5 @@
 import type { ObservationPanel } from '@bifrost/ui/city/observation'
-import type { Word } from '@bifrost/ui/city/cards'
-import { statusOfWord } from '@bifrost/ui/city/world'
+import { statusOfWord, type StatusWord } from '@bifrost/ui/city/world'
 
 /**
  * A failed read in words the Owner reads (2026-11-23, 箭10: every domain card showed
@@ -31,7 +30,7 @@ export function unknownNote(raw: string | undefined): ObservationPanel['blocks']
  * the engine's one table (statusOfWord; a word it does not know is unknown, never ok); the source's own word goes into
  * the sentence beside it and the tooltip. Colour is severity only.
  */
-export function statusTag(source: string | undefined | null, why?: string): Word {
+export function statusTag(source: string | undefined | null, why?: string): { text: StatusWord; tone: StatusWord; title: string } {
   const w = statusOfWord(source)
   return { text: w, tone: w, title: (source ? 'Source says ' + source : 'Source said nothing') + (why ? ': ' + why : '') }
 }

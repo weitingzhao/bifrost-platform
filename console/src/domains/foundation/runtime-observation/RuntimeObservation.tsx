@@ -3,6 +3,8 @@ import { useShellStatusLine } from '@/domains/foundation/shell/useShellStatusLin
 import { viewerEnvBadgeLabel } from '@/domains/foundation/observation-display/fleetNavigation'
 import { useRuntimeObservationSnapshot } from './useRuntimeObservationSnapshot'
 import { useSharedObservation } from './sharedObservationStore'
+import { useJourneyBack, useJourneyTrail } from '@/components/shell/world-journey/journeyTrail'
+import { worldLocation } from '@/components/shell/world-journey/location'
 
 const links = [{label: 'Agents', href: '#collaboration'}, {label: 'City', href: '#city'}, {label: 'Console', href: '#system'}]
 /** Controlled mode does not mount readers or own observation state. Keep the host above routing.
@@ -23,7 +25,15 @@ const WORLD_HREFS = { city: '#city', agents: '#collaboration', console: '#system
 /** The one world frame (箭10 2026-11-23, cockpit/ui-world/frame): the other places and the environment, as City gives them. */
 function useWorldFrame(): RuntimeWorldFrame {
   const status = useShellStatusLine()
-  return { hrefs: WORLD_HREFS, env: status.viewerEnvLoading ? undefined : viewerEnvBadgeLabel(status.viewerEnv) }
+  const trail = useJourneyTrail()
+  const back = useJourneyBack()
+  // Console is the Console page this journey came from (箭10 2026-11-23, item 8), else its overview.
+  const console = consolePageOf(trail) ?? WORLD_HREFS.console
+  return { hrefs: { ...WORLD_HREFS, console }, back, env: status.viewerEnvLoading ? undefined : viewerEnvBadgeLabel(status.viewerEnv) }
+}
+/** The last Console address in the journey's trail, or undefined when the journey did not pass through the Console. */
+export function consolePageOf(trail: readonly string[]): string | undefined {
+  return [...trail].reverse().find(h => worldLocation(h).place === 'Console')
 }
 function IndependentObservation() {
   const frame = useWorldFrame()

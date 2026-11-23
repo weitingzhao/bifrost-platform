@@ -2337,6 +2337,7 @@
       "imports": [
         "console/src",
         "console/src/api/client.ts",
+        "console/src/components/shell",
         "console/src/domains/coordination/communication",
         "console/src/domains/delivery/api",
         "console/src/domains/foundation/observation-access",
@@ -2348,7 +2349,6 @@
       ],
       "test_imports": [],
       "external_imports": [
-        "@bifrost/ui/city/cards",
         "@bifrost/ui/city/observation",
         "@bifrost/ui/city/observationContext",
         "@bifrost/ui/city/world",
