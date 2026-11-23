@@ -163,4 +163,13 @@ describe('system verdict', () => {
     expect(verdict.tone).toBe('loading')
     expect(verdict.sentence).toBe('Checking health…')
   })
+
+  // Origin (2026-11-23, UI / World): at 16:10Z the City said 6 firing and Status 5 warning alerts.
+  // Both now count with alertCount: a drill does not count, info does not make the line Degraded.
+  it('counts alerts with the shared rule: drills left out, info not a fault', () => {
+    const body = alerts([['KubeJobFailed', 'warning', 'firing'], ['Drill', 'warning', 'firing'], ['Note', 'info', 'firing']])
+    body.alerts[1].labels.drill = 'true'
+    expect(systemVerdict(input({ alerts: { data: body, loading: false, error: null } })).sentence).toBe('Degraded — 1 warning alert')
+    expect(systemVerdict(input({ alerts: { data: alerts([['Note', 'info', 'firing']]), loading: false, error: null } })).tone).not.toBe('degraded')
+  })
 })

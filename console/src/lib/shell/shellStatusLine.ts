@@ -1,3 +1,4 @@
+import { alertCount } from '@/api/alertCount'
 import type { ChecklistSignalsResponse } from '@/api/checklist'
 import type { TelemetryAlertsResponse } from '@/api/clusterTypes'
 import type { SelfHealthProbe, SelfHealthProbeStatus, SelfHealthResponse } from '@/api/matrixTypes'
@@ -80,18 +81,16 @@ function checklistCauses(body: ChecklistSignalsResponse): VerdictCause[] {
   return out
 }
 
+/**
+ * Counted with alertCount, the one rule every view uses (the City's alerts corner too): firing only,
+ * drills and severity none left out. Critical makes the line Failing, warning Degraded; info is a
+ * hint, not a fault, so it does not move the verdict.
+ */
 function alertCauses(body: TelemetryAlertsResponse): VerdictCause[] {
-  let critical = 0
-  let warning = 0
-  for (const alert of body.alerts) {
-    if (alert.state !== 'firing') continue
-    const severity = (alert.labels.severity ?? '').toLowerCase()
-    if (severity === 'critical') critical += 1
-    else if (severity === 'warning') warning += 1
-  }
+  const { by_severity: n } = alertCount(body.alerts)
   const out: VerdictCause[] = []
-  if (critical > 0) out.push({ level: 'fail', source: 'alerts', label: plural(critical, 'critical alert') })
-  if (warning > 0) out.push({ level: 'degraded', source: 'alerts', label: plural(warning, 'warning alert') })
+  if (n.critical > 0) out.push({ level: 'fail', source: 'alerts', label: plural(n.critical, 'critical alert') })
+  if (n.warning > 0) out.push({ level: 'degraded', source: 'alerts', label: plural(n.warning, 'warning alert') })
   return out
 }
 
