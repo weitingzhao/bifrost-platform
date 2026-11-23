@@ -87,6 +87,8 @@ modules:
       api/internal/ciconfig: ["api/internal/ciconfig"]
       api/internal/unitwatch: ["api/internal/unitwatch"]
       api/internal/cirunview: ["api/internal/cirunview", "api/internal/server/testdata/contract/units"]
+      # Power rollback tests use only SSH and kubectl stubs they write to t.TempDir.
+      api/internal/computenodes: ["api/internal/computenodes"]
       api/internal/resourceview: ["api/internal/resourceview"]
       api/internal/tenant/appreadings: ["api/internal/tenant/appreadings"]
       # Foundation: HTTP observations, moved out of server; no domain inputs.

@@ -131,8 +131,8 @@ func NodePower(ctx context.Context, c *cluster.Service, nodeName string) (NodePo
 	}, nil
 }
 
-// PowerOffNode drains a managed compute node and powers it off over SSH; it
-// uncordons the node again when the power off fails.
+// PowerOffNode drains a managed compute node and powers it off over SSH. On
+// SSH failure it restores scheduling only if the node started schedulable.
 func PowerOffNode(ctx context.Context, c *cluster.Service, nodeName string) (cluster.ActuationResponse, error) {
 	spec := computeNodeSpec(c, nodeName)
 	if spec == nil {
@@ -168,6 +168,9 @@ func PowerOffNode(ctx context.Context, c *cluster.Service, nodeName string) (clu
 	}
 
 	if err := sshPowerOff(ctx, spec); err != nil {
+		if node.Spec.Unschedulable {
+			return powerOffFail(nodeName, fmt.Errorf("%w (node was already cordoned and remains cordoned)", err))
+		}
 		if uncErr := c.UncordonNodeKubectl(ctx, nodeName); uncErr != nil {
 			err = fmt.Errorf("%w (uncordon failed: %v)", err, uncErr)
 		} else {
