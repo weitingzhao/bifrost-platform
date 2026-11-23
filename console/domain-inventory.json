@@ -4698,6 +4698,7 @@
         "console/src/pages/shell/ci/OpenRegressions.tsx",
         "console/src/pages/shell/ci/PlatformTimings.tsx",
         "console/src/pages/shell/ci/ProdJudgement.tsx",
+        "console/src/pages/shell/ci/RunSourceReport.tsx",
         "console/src/pages/shell/ci/RunTimingDetail.tsx",
         "console/src/pages/shell/ci/TimingTrends.tsx",
         "console/src/pages/shell/ci/__tests__/ApprovalReadingsBlock.test.tsx",
@@ -4733,6 +4734,7 @@
         "console/src/api/releasePolicy.ts",
         "console/src/api/units.ts",
         "console/src/components/layout",
+        "console/src/domains/delivery/observation-report",
         "console/src/lib/shell",
         "console/src/pages/shell/releases"
       ],
@@ -4748,6 +4750,7 @@
       ],
       "external_imports": [
         "@bifrost/ui",
+        "@bifrost/ui/city/observationReport",
         "@tanstack/react-query",
         "@testing-library/jest-dom/vitest",
         "@testing-library/react",
