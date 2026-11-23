@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TelemetryAlertEntry } from '@/api/clusterTypes'
 import { splitAlerts } from '../ownerModel'
@@ -17,6 +17,8 @@ import type { TelemetryTargetEntry } from '@/api/clusterTypes'
 import { parseDaemonSetGaps, parseDownTargets, parseStandbyPods } from '../standbyEvidence'
 import { PlatformAuthContext } from '@/hooks/platformAuthContext'
 import type { ConfirmDialogProps } from '@/components/ConfirmDialog'
+import { shellSelfHealthQuery } from '@/domains/foundation/shell/useShellStatusLine'
+import type { PlatformAuthContextValue } from '@/hooks/platformAuthContext'
 
 vi.mock('../../agents/WorkPlanView', () => ({ WorkPlanView: () => <section data-testid="plan-view" /> }))
 // Exercise Command's confirmation contract without loading Radix's separate React instance in CI.
@@ -27,6 +29,14 @@ vi.mock('@/components/ConfirmDialog', () => ({
       <button type="button" onClick={onConfirm}>{confirmLabel}</button>
     </div>
   ),
+}))
+vi.mock('@bifrost/ui', async importOriginal => ({
+  ...(await importOriginal<typeof import('@bifrost/ui')>()),
+  Dialog: ({ open, children }: { open: boolean; children: ReactNode }) => open && children,
+  DialogContent: ({ children }: { children: ReactNode }) => <section role="dialog">{children}</section>,
+  DialogHeader: ({ children }: { children: ReactNode }) => <header>{children}</header>,
+  DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+  DialogDescription: ({ children }: { children: ReactNode }) => <p>{children}</p>,
 }))
 
 const NOW = Date.parse('2026-10-16T20:10:43Z')
@@ -114,10 +124,13 @@ function Shell() {
   return <OwnerConsolePage entry={entry} />
 }
 
-const viewer = { token: '', caps: undefined, capsLoading: false, capsError: false, canAdmin: false, canOperate: false, setToken: () => {}, signOut: () => {}, refreshCapabilities: () => {} }
+const viewer: PlatformAuthContextValue = { token: '', caps: undefined, capsLoading: false, capsError: false, canAdmin: false, canOperate: false, setToken: () => {}, signOut: () => {}, refreshCapabilities: () => {} }
+const admin: PlatformAuthContextValue = { ...viewer, token: 'test-sign-in', canOperate: true, canAdmin: true,
+  caps: { authenticated: true, role: 'admin', can_operate: true, can_admin: true } }
 function show(hash = '#you', auth = viewer) {
   window.history.replaceState(null, '', hash)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  client.setQueryData(shellSelfHealthQuery.queryKey, { viewer_env: 'prod' })
   const view = () => <QueryClientProvider client={client}><PlatformAuthContext.Provider value={auth}><Shell /></PlatformAuthContext.Provider></QueryClientProvider>
   const page = render(view())
   return { client, refresh: () => page.rerender(view()) }
@@ -141,6 +154,11 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); nowValue.value = undefined; missionsValue.value = []; archValue.value = undefined; runtimeValue.value = undefined; workValue.value = undefined })
 
 function json(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }) }
+function gpuApproval(status: string) {
+  return { id: 'appr_gpu', number: 695, action: 'poweroff_compute_node', runner: 'platform', tier: 'D',
+    params: { name: 'gpu-server' }, params_hash: 'fixture-params-hash', approval_line: '#695 · Shut down gpu-server',
+    status, created_at: new Date().toISOString() }
+}
 /** GET /agentrt/pools as the platform answers it; anything else is not this page's. */
 function stubRuntimeReads() {
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
@@ -199,7 +217,7 @@ describe('Owner Console entries', () => {
   it('confirms wake, then waits for Kubernetes before reporting Online', async () => {
     const fetcher = vi.fn(async () => json({ ok: true, message: 'Wake packet sent' }))
     vi.stubGlobal('fetch', fetcher)
-    const page = show('#command', { ...viewer, canOperate: true, canAdmin: true })
+    const page = show('#command', admin)
     const power = within(screen.getByRole('region', { name: '4090 power' }))
     expect(power.getByRole('button', { name: 'Shut down' })).toBeDisabled()
     fireEvent.click(power.getByRole('button', { name: 'Wake' }))
@@ -216,7 +234,7 @@ describe('Owner Console entries', () => {
   })
 
   // 2026-11-22 owner feedback: clicking the power button did not show what was still waiting.
-  it('tracks shutdown approval and execution before confirming the node is offline', async () => {
+  it('confirms shutdown in the same dialog and tracks execution before reporting offline', async () => {
     gpuReady.value = true
     let status = 'pending'
     const fetcher = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
@@ -224,30 +242,68 @@ describe('Owner Console entries', () => {
         return new Response(JSON.stringify({ id: 'appr_gpu', tier: 'D' }), { status: 201 })
       }
       if (String(input) === '/api/v1/approvals/appr_gpu') {
-        return json({ id: 'appr_gpu', number: 695, status, created_at: new Date().toISOString() })
+        return json(gpuApproval(status))
+      }
+      if (String(input) === '/api/v1/approvals/appr_gpu/approve') {
+        status = 'approved'
+        return json({ id: 'appr_gpu', status })
       }
       return json({ actions: [] })
     })
     vi.stubGlobal('fetch', fetcher)
-    const page = show('#command', { ...viewer, canOperate: true, canAdmin: true })
+    const page = show('#command', admin)
     const power = within(screen.getByRole('region', { name: '4090 power' }))
     expect(power.getByRole('button', { name: 'Wake' })).toBeDisabled()
     fireEvent.click(power.getByRole('button', { name: 'Shut down' }))
-    expect(await power.findByRole('link', { name: 'Request #695' })).toHaveAttribute('href', '#approvals?id=appr_gpu')
-    expect(power.getByRole('status')).toHaveTextContent('Awaiting approval')
-    expect(power.getByRole('button', { name: 'Shut down' })).toBeDisabled()
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(dialog.getByRole('heading', { name: 'Shut down 4090?' })).toBeInTheDocument()
+    expect(await dialog.findByText('#695 · Shut down gpu-server')).toBeInTheDocument()
     const request = fetcher.mock.calls.find(([url, options]) => url === '/api/v1/approvals' && options?.method === 'POST')
     expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({ action: 'poweroff_compute_node', params: { name: 'gpu-server' } })
+    expect(fetcher).not.toHaveBeenCalledWith('/api/v1/approvals/appr_gpu/approve', expect.anything())
     expect(fetcher).not.toHaveBeenCalledWith('/api/v1/cluster/nodes/gpu-server/poweroff', expect.anything())
-    for (const [next, label] of [['approved', 'Approved'], ['running', 'Shutting down'], ['executed', 'Waiting for offline']]) {
+    fireEvent.click(dialog.getByRole('button', { name: 'Confirm shutdown' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(window.location.hash).toBe('#command')
+    const approval = fetcher.mock.calls.find(([url]) => url === '/api/v1/approvals/appr_gpu/approve')
+    expect(JSON.parse(String(approval?.[1]?.body))).toEqual({ channel: 'console', params_hash: 'fixture-params-hash', approval_line: '#695 · Shut down gpu-server', confirm_number: 695 })
+    expect(power.getByRole('status')).toHaveTextContent('Approved')
+    for (const [next, label] of [['running', 'Shutting down'], ['executed', 'Waiting for offline']]) {
       status = next
-      await act(async () => { await page.client.refetchQueries({ queryKey: ['approvals', 'gpu-power', 'appr_gpu'] }) })
+      await act(async () => { await page.client.refetchQueries({ queryKey: ['approvals', 'item', 'appr_gpu'] }) })
       expect(await power.findByText(label)).toBeInTheDocument()
     }
     gpuReady.value = false
     page.refresh()
     expect(power.getByRole('status')).toHaveTextContent('Kubernetes reports the node on standby.')
     expect(power.getByRole('button', { name: 'Wake' })).toBeEnabled()
+  })
+
+  // 2026-11-22 owner feedback: abandoning the inline confirmation must not leave a pending shutdown to approve elsewhere.
+  it('cancels the prepared shutdown without sending an approval', async () => {
+    gpuReady.value = true
+    let status = 'pending'
+    const fetcher = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/v1/approvals' && options?.method === 'POST') {
+        return new Response(JSON.stringify({ id: 'appr_gpu', tier: 'D' }), { status: 201 })
+      }
+      if (url === '/api/v1/approvals/appr_gpu') return json({ ...gpuApproval(status), reject_reason: status === 'rejected' ? 'Canceled from Command.' : '' })
+      if (url === '/api/v1/approvals/appr_gpu/reject') {
+        status = 'rejected'
+        return json({ id: 'appr_gpu', status })
+      }
+      return json({})
+    })
+    vi.stubGlobal('fetch', fetcher)
+    show('#command', admin)
+    const power = within(screen.getByRole('region', { name: '4090 power' }))
+    fireEvent.click(power.getByRole('button', { name: 'Shut down' }))
+    const dialog = within(await screen.findByRole('dialog'))
+    fireEvent.click(await dialog.findByRole('button', { name: 'Cancel' }))
+    expect(await power.findByText('Shutdown canceled')).toBeInTheDocument()
+    expect(fetcher).toHaveBeenCalledWith('/api/v1/approvals/appr_gpu/reject', expect.objectContaining({ method: 'POST' }))
+    expect(fetcher).not.toHaveBeenCalledWith('/api/v1/approvals/appr_gpu/approve', expect.anything())
   })
 
   it('each other entry shows its own block, and the verdict is one line that goes to For you', () => {

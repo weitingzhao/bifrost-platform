@@ -4921,14 +4921,18 @@
         "console/src/hooks/usePlatformAuth.ts",
         "console/src/lib/observability",
         "console/src/lib/shell",
+        "console/src/pages/ApprovalsPage.tsx",
         "console/src/pages/SatelliteHealthPage.tsx",
+        "console/src/pages/approvalDecision.ts",
+        "console/src/pages/decisionSignIn.ts",
         "console/src/pages/shell/agents",
         "console/src/pages/shell/agents/WorkPlanView.tsx",
         "console/src/pages/shell/ci",
         "console/src/pages/shell/needs-you",
         "console/src/pages/shell/progress",
         "console/src/pages/shell/releases",
-        "console/src/pages/shell/services"
+        "console/src/pages/shell/services",
+        "console/src/pages/useDecisionEnvironment.ts"
       ],
       "test_imports": [
         "console/src/api",
@@ -4937,6 +4941,7 @@
         "console/src/api/questions.ts",
         "console/src/components",
         "console/src/components/shell",
+        "console/src/domains/foundation/shell",
         "console/src/hooks/platformAuthContext.ts",
         "console/src/hooks/useFlexQueryLiveProbe.ts",
         "console/src/hooks/useIbGatewayLiveProbe.ts",

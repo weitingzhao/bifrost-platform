@@ -6,6 +6,20 @@ import {
   type ApprovalResolution,
 } from '@/api/approvals'
 
+export function isFinishedApproval(item: ApprovalItem): boolean {
+  return ['executed', 'failed', 'rejected', 'expired'].includes(item.status) || item.resolution != null
+}
+
+export function keepApprovalDecision(old: unknown, fresh: unknown): ApprovalItem {
+  const previous = old as ApprovalItem | undefined
+  const next = fresh as ApprovalItem
+  if (previous != null && (
+    (isFinishedApproval(previous) && (next.status !== previous.status || (previous.resolution != null && next.resolution == null))) ||
+    (previous.status !== 'pending' && next.status === 'pending')
+  )) return previous
+  return next
+}
+
 /** A drill says so first in every title (v4 §20.3 rule 8: the title says it; review 480 B2). */
 function drillTitle(drill: boolean | undefined, title: string): string {
   return drill === true ? `Drill · ${title}` : title
