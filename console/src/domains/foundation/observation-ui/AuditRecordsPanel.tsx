@@ -25,25 +25,14 @@ import {
   actuationOriginLabel,
   actuationOriginTagClass,
   filterAuditRecords,
-  formatMigrateWaveAuditLabel,
-  isMigrateWaveAudit,
   type ActuationCategory,
   type ActuationOrigin,
 } from '@/lib/audit/actuationCatalog'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
-
-function relativeTime(isoDate: string): string {
-  const diff = Date.now() - new Date(isoDate).getTime()
-  const mins = Math.floor(diff / 60_000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  const days = Math.floor(hrs / 24)
-  return `${days}d ago`
-}
+import { LedgerGrid } from '@bifrost/ui/city/ledger'
+import { actionLabel, auditLedgerTable, relativeTime } from './auditLedger'
 
 const STATUS_VARIANT: Record<string, DenseTagVariant> = {
   ok: 'neutral',
@@ -55,11 +44,6 @@ const STATUS_VARIANT: Record<string, DenseTagVariant> = {
 
 function statusVariant(status: string): DenseTagVariant {
   return STATUS_VARIANT[status.toLowerCase()] ?? 'category'
-}
-
-function actionLabel(record: AuditRecord): string {
-  if (isMigrateWaveAudit(record)) return formatMigrateWaveAuditLabel(record)
-  return record.action
 }
 
 function categoryFilterVariant(id: ActuationCategory): DenseTagVariant {
@@ -86,6 +70,12 @@ interface AuditRecordsPanelProps {
   initialCategory?: ActuationCategory
   /** Show category filter chips. */
   showCategoryFilter?: boolean
+  /**
+   * Every kept record in the shared Ledger (filter, sort, 50 a page) instead of the first `limit` rows;
+   * the selected record's detail shows under the table. Records → Audit (Ledger line, 2026-11-23: the
+   * platform keeps 500 and the page showed the first 100, so 101–500 could not be seen).
+   */
+  ledger?: boolean
 }
 
 export function AuditRecordsPanel({
@@ -97,7 +87,9 @@ export function AuditRecordsPanel({
   showRefresh = true,
   initialCategory = 'all',
   showCategoryFilter = true,
+  ledger = false,
 }: AuditRecordsPanelProps) {
+  const [selected, setSelected] = useState('')
   const [category, setCategory] = useState<ActuationCategory>(initialCategory)
   const [origin, setOrigin] = useState<ActuationOrigin | 'all'>('all')
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
@@ -114,6 +106,8 @@ export function AuditRecordsPanel({
   )
   const filtersActive = category !== 'all' || origin !== 'all'
   const visible = filtered.slice(0, limit)
+  const ledgerTable = useMemo(() => (ledger ? auditLedgerTable(filtered) : null), [ledger, filtered])
+  const selectedRecord = ledger && selected ? records.find(r => r.id === selected) : undefined
   const qc = useQueryClient()
   const auditFetching = useIsFetching({ queryKey: ['platform', 'audit'] }) > 0
   const hasTitle = title != null && title !== ''
@@ -207,6 +201,32 @@ export function AuditRecordsPanel({
           </div>
         </div>
       )}
+      {ledgerTable != null ? (
+        // Table spacing, and fail in the destructive colour as the old dense tag had it, are the host's until the
+        // Ledger carries its own (Ledger line follow-up; spacing as in CI's RunSourceReport).
+        <div className="min-w-0 px-3 py-2 text-xs [&_table]:w-full [&_th]:p-2 [&_th]:text-left [&_td]:p-2 [&_td]:align-top [&_td]:whitespace-nowrap [&_button]:whitespace-nowrap! [&_button]:text-left [&_td:last-child]:whitespace-normal [&_td:last-child]:min-w-[18rem] [&_td:last-child]:[overflow-wrap:anywhere] [&_tr]:border-b [&_tr]:border-[var(--table-rule)] [&_.ledger-controls]:flex [&_.ledger-controls]:flex-wrap [&_.ledger-controls]:items-center [&_.ledger-controls]:gap-3 [&_.ledger-grid_p]:my-1 [&_.ledger-grid_p]:text-[var(--muted-foreground)] [&_nav]:flex [&_nav]:gap-2 [&_.g2-fail]:text-[var(--destructive)]">
+          {isLoading ? (
+            <p className="m-0 text-[var(--muted-foreground)]">Loading...</p>
+          ) : (
+            <LedgerGrid
+              table={ledgerTable}
+              selected={selected}
+              onSelect={key => setSelected(key === selected ? '' : key)}
+              scope={`Platform audit · the newest ${records.length} records the platform keeps${filtersActive ? ' · category/origin filter on' : ''}`}
+            />
+          )}
+          {selectedRecord != null && (
+            <section aria-label="Selected audit record" className="mt-2 border-t border-[var(--table-rule)] pt-2">
+              <p className="m-0 font-mono-tabular text-[var(--text-dense-meta)]">
+                {new Date(selectedRecord.at).toLocaleString()} · {selectedRecord.actor} · {actionLabel(selectedRecord)} · {selectedRecord.target} · {selectedRecord.status}
+              </p>
+              <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words font-mono text-[var(--text-dense-meta)] leading-relaxed text-[var(--foreground)]">
+                {(selectedRecord.detail ?? '').trim() || 'No detail recorded.'}
+              </pre>
+            </section>
+          )}
+        </div>
+      ) : (
       <DenseDataTable>
         <DenseTableHeader>
           <DenseTableHeadRow>
@@ -300,6 +320,7 @@ export function AuditRecordsPanel({
           )}
         </DenseTableBody>
       </DenseDataTable>
+      )}
     </OpsSection>
   )
 }

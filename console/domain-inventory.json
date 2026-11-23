@@ -2120,8 +2120,10 @@
         "console/src/domains/foundation/observation-ui/AuditRecordsPanel.tsx",
         "console/src/domains/foundation/observation-ui/ConsoleHostIpLabel.tsx",
         "console/src/domains/foundation/observation-ui/MatrixTable.tsx",
+        "console/src/domains/foundation/observation-ui/__tests__/auditLedger.test.tsx",
         "console/src/domains/foundation/observation-ui/__tests__/observation.test.tsx",
         "console/src/domains/foundation/observation-ui/architecture/SelfHealthPanel.tsx",
+        "console/src/domains/foundation/observation-ui/auditLedger.ts",
         "console/src/domains/foundation/observation-ui/feedback/OpsFeedback.tsx",
         "console/src/domains/foundation/observation-ui/log/StaticLogConsole.tsx",
         "console/src/domains/foundation/observation-ui/log/staticLogView.ts"
@@ -2137,10 +2139,13 @@
         "console/src/lib/shell"
       ],
       "test_imports": [
+        "console/src/api/auditTypes.ts",
         "console/src/domains/foundation/patrol-view"
       ],
       "external_imports": [
         "@bifrost/ui",
+        "@bifrost/ui/city/cards",
+        "@bifrost/ui/city/ledger",
         "@tanstack/react-query",
         "@testing-library/react",
         "lucide-react",

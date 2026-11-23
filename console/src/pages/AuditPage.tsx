@@ -106,7 +106,7 @@ export function AuditPage({ records, isLoading }: AuditPageProps) {
         meta={!isLoading && records.length > 0 ? <span>{breakdown}</span> : undefined}
       />
 
-      <AuditRecordsPanel records={records} isLoading={isLoading} limit={100} />
+      <AuditRecordsPanel records={records} isLoading={isLoading} ledger />
     </div>
   )
 }
