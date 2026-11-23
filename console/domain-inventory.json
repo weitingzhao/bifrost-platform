@@ -4928,6 +4928,7 @@
       "path": "console/src/pages/shell/owner",
       "files": [
         "console/src/pages/shell/owner/CrewInstruments.tsx",
+        "console/src/pages/shell/owner/HarnessPreview.tsx",
         "console/src/pages/shell/owner/LastRead.tsx",
         "console/src/pages/shell/owner/OwnerConsolePage.tsx",
         "console/src/pages/shell/owner/OwnerData.tsx",
@@ -4940,6 +4941,7 @@
         "console/src/pages/shell/owner/OwnerWork.tsx",
         "console/src/pages/shell/owner/OwnerYou.tsx",
         "console/src/pages/shell/owner/RuntimeHealthNotice.tsx",
+        "console/src/pages/shell/owner/__tests__/HarnessPreview.test.tsx",
         "console/src/pages/shell/owner/__tests__/OwnerConsolePage.test.tsx",
         "console/src/pages/shell/owner/__tests__/crewInstruments.test.tsx",
         "console/src/pages/shell/owner/__tests__/doneForYou.test.ts",
@@ -4972,6 +4974,7 @@
         "console/src/api/marketDataPlugin.ts",
         "console/src/api/releases.ts",
         "console/src/api/researchEngine.ts",
+        "console/src/api/serverContact.ts",
         "console/src/api/telemetry.ts",
         "console/src/components",
         "console/src/components/layout",

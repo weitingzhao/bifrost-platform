@@ -9,6 +9,7 @@ import { formatShellHash, type EntryRouteId } from '@/lib/shell/consoleRoutes'
 import { useWorkView } from '@/pages/shell/agents/workViewModel'
 import { CrewInstruments } from './CrewInstruments'
 import { OwnerData } from './OwnerData'
+import { HarnessPreview } from './HarnessPreview'
 import { OwnerGpuPower } from './OwnerGpuPower'
 import { Dot } from './OwnerParts'
 import { OwnerSystem } from './OwnerSystem'
@@ -62,6 +63,7 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
   const data = useOwnerConsole({ system: blocks.system, services: blocks.services, work: activity })
   return <div id="owner-console" data-testid="owner-console" data-entry={entry} className="@container flex w-full min-w-0 flex-col gap-5 pb-8">
     <VerdictBanner verdict={data.verdict} compact={entry !== 'command'} updatedAt={data.updatedAt} now={data.now} />
+    {blocks.you && <HarnessPreview />}
     {blocks.you && <OwnerGpuPower nodes={data.nodes} openApprovals={current(data.needsYou.query)} recentApprovals={current(data.needsYou.handledQuery)} now={data.now} />}
     {blocks.you && <OwnerYou data={data} />}
     {blocks.you && <OwnerWaiting />}
