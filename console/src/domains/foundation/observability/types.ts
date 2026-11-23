@@ -114,7 +114,10 @@ export type DomainHealth = {
    * Reference domains stay in taxonomy but are demoted from the main health grid.
    */
   probeability: DomainProbeability
+  /** Firing alerts mapped to this domain, counted with alertCount (the frame's rule). */
   alertCount: number
+  /** Pending alerts mapped to this domain (not yet held their `for`). */
+  pendingAlertCount: number
   envScope: 'env' | 'shared' | 'mixed' | 'none'
   signals: EvaluatedSignal[]
   sharedDependencyIds: string[]
@@ -209,7 +212,11 @@ export type SystemVerdict = {
   domainCounts: Record<ObservabilityVerdict, number>
   /** Apollo reference domains demoted from the health grid (MC / Governance). */
   referenceDomainCount: number
+  /** Firing, counted with alertCount (the frame's number). */
   firingAlerts: number
+  /** Pending: has not held its `for` yet; same rule otherwise. */
+  pendingAlerts: number
+  /** Firing or pending alerts mapped to a domain at warning or worse: these move the verdict. */
   mappedFiringAlerts: number
   primaryCause: string
   env: ObservabilityEnvId

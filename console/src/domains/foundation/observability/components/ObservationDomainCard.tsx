@@ -85,14 +85,19 @@ export function ObservationDomainCard({
           <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
           <span className="text-[var(--text-dense-caption)] font-medium">{domain.label}</span>
         </span>
-        <span className="flex items-center gap-1.5">
+        <span className="flex flex-wrap items-center gap-1.5 [&>*]:shrink-0 [&>*]:whitespace-nowrap">
           <StatusLamp value={verdictLamp(domain.verdict)} kind="reach" />
           <DenseTag variant={verdictTag(domain.verdict)} className="text-[9px]">
             {VERDICT_LABELS[domain.verdict]}
           </DenseTag>
           {domain.alertCount > 0 && (
             <DenseTag variant="warning" className="text-[9px]">
-              {domain.alertCount} alert{domain.alertCount === 1 ? '' : 's'}
+              {domain.alertCount} firing
+            </DenseTag>
+          )}
+          {domain.pendingAlertCount > 0 && (
+            <DenseTag variant="neutral" className="text-[9px]">
+              {domain.pendingAlertCount} pending
             </DenseTag>
           )}
         </span>

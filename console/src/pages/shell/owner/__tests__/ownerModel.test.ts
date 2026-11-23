@@ -1,3 +1,4 @@
+import { alertCount } from '@/api/alertCount'
 import { describe, expect, it } from 'vitest'
 import type { TelemetryAlertEntry, TelemetryTargetEntry } from '@/api/clusterTypes'
 import { backupTile, copiesTile, marketTile, pluginsTile, researchTile } from '../dataTiles'
@@ -65,17 +66,20 @@ describe('alerts on the Owner Console (PROD, 2026-10-16 15:10 CDT)', () => {
     expect(split.worth[4].detail).toBe('warning · bifrost-platform-prod · since 15 h ago')
   })
 
-  it('puts the 13 proven standby, info and watchdog alerts in noise; the DaemonSet ones stay counted', () => {
-    expect(split.noise).toBe(13)
+  // 2026-11-23 (箭10, one fact one number): the split counts with alertCount's rule, so the watchdog
+  // (severity none) is no longer in it and the parts add up to the frame's "Alerts n firing".
+  it('puts the 12 proven standby and info alerts in noise; the DaemonSet ones stay counted', () => {
+    expect(split.noise).toBe(12)
     expect(split.critical).toBe(1)
     expect(split.warning).toBe(10)
     // Every firing alert is counted once: noise, told with another, or critical / warning (the DaemonSet row stands for six).
-    expect(split.noise + split.merged + split.critical + split.warning).toBe(alerts.filter(a => a.state === 'firing').length)
+    expect(split.noise + split.merged + split.critical + split.warning).toBe(alertCount(alerts).count)
+    expect(split.total).toBe(alertCount(alerts).count)
   })
 
   it('without the evidence, every standby alert stays real', () => {
     const none = splitAlerts(alerts, null, NOW)
-    expect(none.noise).toBe(2) // the watchdog and the standby marker (info)
+    expect(none.noise).toBe(1) // the standby marker (info); the watchdog is not counted (alertCount)
     expect(none.worth.map(r => r.title)).toContain('Node is unreachable.')
     expect(none.worth.map(r => r.title)).toContain('Pod promtail-7fxmt not ready')
   })

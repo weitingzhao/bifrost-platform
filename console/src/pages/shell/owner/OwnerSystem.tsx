@@ -1,5 +1,5 @@
 import { Bar, Card, Stat } from './OwnerParts'
-import { plural, type Tone } from './ownerModel'
+import type { Tone } from './ownerModel'
 import type { OwnerConsoleData } from './useOwnerConsole'
 
 function nodeTone(status: string, mode: string | undefined): Tone {
@@ -17,10 +17,10 @@ export function OwnerSystem({ data }: { data: OwnerConsoleData }) {
       <Card label="Health" title="Health" more={{ href: '#status', text: 'Status' }}>
         {data.alertsError && <p role="alert" className="m-0 text-sm">Alerts could not be read: {data.alertsError}</p>}
         <div className="grid grid-cols-2 gap-2">
-          <Stat value={alerts?.critical ?? (data.alertsError ? '?' : '…')} label={yoursCritical > 0 && yoursCritical === alerts?.critical ? 'critical · yours' : 'critical'} tone={alerts && alerts.critical > 0 ? 'fail' : undefined} />
-          <Stat value={alerts?.warning ?? (data.alertsError ? '?' : '…')} label="warnings firing" tone={alerts && alerts.warning > 0 ? 'warn' : undefined} />
+          <Stat value={alerts?.critical ?? (data.alertsError ? '?' : '…')} label={yoursCritical > 0 && yoursCritical === alerts?.critical ? 'critical · yours' : 'critical to look at'} tone={alerts && alerts.critical > 0 ? 'fail' : undefined} />
+          <Stat value={alerts?.warning ?? (data.alertsError ? '?' : '…')} label="warnings to look at" tone={alerts && alerts.warning > 0 ? 'warn' : undefined} />
         </div>
-        {alerts && <p className="m-0 text-sm text-muted-foreground">Plus {plural(alerts.noise, 'alert')} from planned standby, info and the watchdog{alerts.merged > 0 ? `, and ${alerts.merged} told with another` : ''}.</p>}
+        {alerts && <p className="m-0 text-sm text-muted-foreground">{alerts.total} firing in all, as the frame counts: {alerts.critical + alerts.warning} to look at, {alerts.noise} from planned standby or info{alerts.merged > 0 ? `, ${alerts.merged} told with another` : ''}.</p>}
       </Card>
     </div>
     <Card label="Nodes" title={nodeCount ? `Nodes · ${nodeCount.ready} of ${nodeCount.total} ready${nodeCount.standby ? `, ${nodeCount.standby} on standby` : ''}` : 'Nodes'} more={{ href: '#infrastructure', text: 'Infrastructure' }}>

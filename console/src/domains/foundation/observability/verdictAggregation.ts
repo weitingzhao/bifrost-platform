@@ -21,6 +21,7 @@ import {
   classifyAttentionAlert,
   classifyAttentionSignal,
 } from './attentionRemediationCatalog'
+import { alertCount, counted } from '@/api/alertCount'
 import { verdictAffectingAlerts } from './alertMapping'
 import { SIGNAL_STALE_MS } from './signalRegistry'
 import type {
@@ -290,7 +291,9 @@ export function buildDomainHealth(
     },
     gapSummary: gapSummaryFromSignals(signals),
     probeability: domainProbeability(domain, signals),
-    alertCount: domainAlerts.filter(a => a.state === 'firing' || a.state === 'pending').length,
+    // Firing per domain, counted like the frame (alertCount); pending apart (箭10 2026-11-23).
+    alertCount: alertCount(domainAlerts).count,
+    pendingAlertCount: domainAlerts.filter(a => a.state === 'pending' && counted({ ...a, state: 'firing' })).length,
     envScope,
     signals,
     sharedDependencyIds,
@@ -345,7 +348,10 @@ export function buildSystemVerdict(
   }
 
   const affecting = verdictAffectingAlerts(alerts)
-  const firing = alerts.filter(a => a.state === 'firing' || a.state === 'pending')
+  // Firing is counted with alertCount like the frame's corner (箭10 2026-11-23: one fact, one number);
+  // pending has not held its `for` yet, so it is its own number, not part of "firing".
+  const firingCount = alertCount(alerts).count
+  const pendingCount = alerts.filter(a => a.state === 'pending' && counted({ ...a, state: 'firing' })).length
 
   const stale =
     opts.freshnessMs == null ? true : opts.freshnessMs > SIGNAL_STALE_MS
@@ -355,7 +361,8 @@ export function buildSystemVerdict(
     label: VERDICT_LABELS[overall],
     domainCounts,
     referenceDomainCount,
-    firingAlerts: firing.length,
+    firingAlerts: firingCount,
+    pendingAlerts: pendingCount,
     mappedFiringAlerts: affecting.length,
     primaryCause,
     env: opts.env,

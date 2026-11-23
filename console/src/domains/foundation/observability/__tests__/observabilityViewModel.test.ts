@@ -1,3 +1,4 @@
+import { alertCount } from '@/api/alertCount'
 /**
  * Observability hub — deterministic unit tests.
  * Ported from scripts/observability-viewmodel-test.ts.
@@ -1327,5 +1328,31 @@ describe('selected domain soloEmbed', () => {
       selectedDomain: 'rocket',
     })
     expect(rocket.selected.soloEmbed).toBeNull()
+  })
+})
+
+// 2026-11-23 (箭10): one screen said "Alerts 7 firing" in the frame and "alerts 25 firing" in this strip — the
+// strip counted pending, the watchdog and drills too. Firing now counts with alertCount; pending is its own number.
+describe('System verdict alert numbers', () => {
+  it('counts firing like the frame, and pending apart', () => {
+    const a = (alertname: string, severity: string, state: string, extra: Record<string, string> = {}) =>
+      ({ labels: { alertname, severity, namespace: 'data', ...extra }, annotations: {}, state })
+    const alerts = mapAlerts([
+      a('RedisDown', 'critical', 'firing'),
+      a('Note', 'info', 'firing'),
+      a('Watchdog', 'none', 'firing'),
+      a('Drill', 'warning', 'firing', { drill: 'true' }),
+      a('Slow', 'warning', 'pending'),
+    ])
+    const system = buildSystemVerdict([], alerts, { env: 'stg', generatedAt: '2026-11-23T00:00:00Z', freshnessMs: 1_000 })
+    expect(system.firingAlerts).toBe(2)
+    expect(system.pendingAlerts).toBe(1)
+    // The domain cards count the same way (they said "13 alerts" with pending folded in).
+    const domain = alerts.find(x => x.name === 'RedisDown')?.domain
+    expect(domain).not.toBeNull()
+    const mine = alerts.filter(x => x.domain === domain)
+    const health = buildDomainHealth(domain!, [], mine)
+    expect(health.alertCount).toBe(alertCount(mine).count)
+    expect(health.pendingAlertCount).toBe(mine.filter(x => x.state === 'pending' && x.labels.severity !== 'none').length)
   })
 })

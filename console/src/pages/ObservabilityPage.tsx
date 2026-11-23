@@ -42,6 +42,11 @@ import {
   type AttentionScopeFilter,
 } from '@/pages/observability/observabilityFormat'
 
+function alertsMetaLabel(s: { firingAlerts: number; pendingAlerts: number; mappedFiringAlerts: number }): string {
+  // Same firing number as the frame's corner; pending and the verdict's share are named, not added in.
+  return [`alerts ${s.firingAlerts} firing`, s.pendingAlerts > 0 ? `${s.pendingAlerts} pending` : null, `${s.mappedFiringAlerts} move the verdict`].filter(Boolean).join(' · ')
+}
+
 export function ObservabilityPage({
   onNavigate,
   lockToViewer = false,
@@ -191,7 +196,7 @@ export function ObservabilityPage({
             ) : null}
             {attentionQuiet ? (
               <span className="font-mono-tabular">
-                alerts {system.firingAlerts} firing · {system.mappedFiringAlerts} mapped
+                {alertsMetaLabel(system)}
               </span>
             ) : (
               <button
@@ -200,7 +205,7 @@ export function ObservabilityPage({
                 title="Scroll to Attention"
                 onClick={scrollToAttention}
               >
-                alerts {system.firingAlerts} firing · {system.mappedFiringAlerts} mapped
+                {alertsMetaLabel(system)}
               </button>
             )}
             <span className="font-mono-tabular">freshness {formatFreshness(system.freshnessMs)}</span>

@@ -1,5 +1,6 @@
 import { ago } from '../progress/attemptActionWords'
 export { ago } from '../progress/attemptActionWords'
+import { counted } from '@/api/alertCount'
 import type { TelemetryAlertEntry } from '@/api/clusterTypes'
 import { annotateExpectedNeutralAlerts, mapAlerts } from '@/lib/observability/alertMapping'
 import type { MappedAlert } from '@/lib/observability/types'
@@ -77,12 +78,14 @@ export function waitingRow(item: WaitingItem): OwnerRow {
 export type AlertSplit = {
   yours: OwnerRow[]
   worth: OwnerRow[]
-  /** Planned standby (proven), catalog noise, info and the watchdog: counted, not listed. */
+  /** Planned standby (proven), catalog noise and info: counted, not listed. */
   noise: number
   /** Told once with an Owner alert or a notice (the IB plugin degraded with the slot without TWS). */
   merged: number
   critical: number
   warning: number
+  /** Every firing alert, counted with alertCount like the frame's corner: noise + merged + critical + warning. */
+  total: number
 }
 
 function alertTitle(alert: MappedAlert): string {
@@ -102,13 +105,14 @@ function alertDetail(alert: MappedAlert, now: number): string {
 }
 
 /**
- * Firing alerts only, like the shell's verdict; a pending alert has not fired yet. Standby noise
+ * The alerts the shared rule counts (alertCount's `counted`: firing, no watchdog, no drill), so the
+ * parts add up to the frame's "Alerts n firing" (箭10 2026-11-23: one fact, one number). Standby noise
  * needs the cluster's evidence (`standbyEvidence.ts`); without it every alert stays real.
  */
 export function splitAlerts(alerts: readonly TelemetryAlertEntry[], evidence: StandbyEvidence | null, now: number): AlertSplit {
-  const firing = alerts.filter(a => a.state === 'firing')
+  const firing = alerts.filter(counted)
   const mapped = annotateExpectedNeutralAlerts(mapAlerts([...firing]))
-  const out: AlertSplit = { yours: [], worth: [], noise: 0, merged: 0, critical: 0, warning: 0 }
+  const out: AlertSplit = { yours: [], worth: [], noise: 0, merged: 0, critical: 0, warning: 0, total: firing.length }
   const real: MappedAlert[] = []
   const likely: MappedAlert[] = []
   for (const alert of mapped) {
