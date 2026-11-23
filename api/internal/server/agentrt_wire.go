@@ -6,7 +6,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deploysource"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/runtimedb"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/schemawatch"
-	"github.com/weitingzhao/bifrost-platform/api/internal/releasetable"
+	deliveryassembly "github.com/weitingzhao/bifrost-platform/api/internal/delivery/assembly"
 	"log/slog"
 	"os"
 	"strings"
@@ -131,8 +131,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		rt.schema.Announce = schemawatch.AnnounceMigrations(pool)
 		safego.Go("agentrt-schema", func() { rt.schema.Run(ctx, pool) })
 		if s.releases != nil {
-			s.releases.Service().SetTable(releasetable.Writer(pool))
-			s.releases.Service().SetTableReader(releasetable.Rows{Pool: pool})
+			deliveryassembly.BindReleaseTable(s.releases.Service(), pool)
 		}
 		s.startBus(ctx, pool, env, role)
 		if !role.RunsWorkers() {

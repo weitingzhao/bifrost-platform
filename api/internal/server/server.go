@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
+	deliveryassembly "github.com/weitingzhao/bifrost-platform/api/internal/delivery/assembly"
 	"log/slog"
 	"net/http"
 	"os"
@@ -42,7 +43,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/dataclone"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/devsession"
-	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ibgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/instruments"
 	lineageassembly "github.com/weitingzhao/bifrost-platform/api/internal/lineage/assembly"
@@ -53,7 +53,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
-	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
@@ -77,7 +76,7 @@ type Server struct {
 	// dataclone is the tenant's data clone, freshness and data probe
 	// (moved out of cluster on 2026-11-17).
 	dataclone *dataclone.Handler
-	gitops    *gitops.Handler
+	deliveryA *deliveryassembly.Built
 	mcp       *mcp.Handler
 	delivery  *delivery.Handler
 	// unitTrees reads commits' trees from Gitea for the unit plan
@@ -99,7 +98,6 @@ type Server struct {
 	// instruments answers /governance/instruments (governance_instruments.go).
 	instruments     *instruments.Service
 	instrumentsOnce sync.Once
-	promote         *promote.Handler
 	checklist       *checklist.Handler
 	opsagent        *opsagent.Handler
 	agentgovernance *agentgovernance.Handler
@@ -179,7 +177,7 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 	role := config.CurrentRole()
 	clusterH := cluster.NewHandler(cfg, audit)
-	gitopsH := gitops.NewHandler(cfg, audit, clusterH.Service())
+	deliveryA := deliveryassembly.Build(cfg, audit, clusterH.Service())
 	bindClusterReadings(clusterH)
 	// The tenant's handlers (tenant/assembly); its data clone runs its
 	// commands through cluster's PostgreSQL adapter.
@@ -197,7 +195,6 @@ func New(cfg *config.Config) (*Server, error) {
 		dataH.Service().StartDataCloneScheduler(context.Background())
 		clusterH.Service().StartFailedBackupSweep(context.Background())
 	}
-	promoteH := promote.NewHandler(cfg)
 	prober := probe.NewProber()
 	checklistH := checklist.NewHandler(cfg.ConfigDir(), audit)
 	plane, planeURL, mountPlane, err := newOperatorPlane(cfg, auth, audit, role)
@@ -209,17 +206,16 @@ func New(cfg *config.Config) (*Server, error) {
 		prober:          prober,
 		cluster:         clusterH,
 		dataclone:       dataH,
-		gitops:          gitopsH,
+		deliveryA:       deliveryA,
 		mcp:             mcp.NewHandler(),
 		delivery:        delivery.NewHandler(cfg, audit),
-		promote:         promoteH,
 		checklist:       checklistH,
 		opsagent:        opsagent.NewHandler(audit),
 		plane:           plane,
 		planeURL:        planeURL,
 		mountPlane:      mountPlane,
 		agentgovernance: agentgovernance.NewHandler(),
-		selfhealth:      selfhealth.NewHandler(cfg, selfHealthArgoApps(gitopsH.Service())),
+		selfhealth:      selfhealth.NewHandler(cfg, selfHealthArgoApps(deliveryA)),
 		network:         network.NewHandler(audit),
 		ibgateway:       ibgatewayH,
 		tenant:          tenantA,
@@ -457,14 +453,15 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 // selfHealthArgoApps is the delivery domain's Argo CD reader in the shape
 // self-health declares (selfhealth.ArgoApps); nil without a gitops service.
-func selfHealthArgoApps(svc *gitops.Service) selfhealth.ArgoApps {
-	if svc == nil {
+func selfHealthArgoApps(d *deliveryassembly.Built) selfhealth.ArgoApps {
+	apps := d.ArgoApps()
+	if apps == nil {
 		return nil
 	}
 	return func(ctx context.Context) []selfhealth.ArgoApp {
-		resp := svc.Apps(ctx)
-		out := make([]selfhealth.ArgoApp, 0, len(resp.Apps))
-		for _, app := range resp.Apps {
+		list := apps(ctx)
+		out := make([]selfhealth.ArgoApp, 0, len(list))
+		for _, app := range list {
 			out = append(out, selfhealth.ArgoApp{Name: app.Name, SyncStatus: app.SyncStatus, HealthStatus: app.HealthStatus})
 		}
 		return out

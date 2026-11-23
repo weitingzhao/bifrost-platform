@@ -293,7 +293,7 @@
       "tier": 2,
       "source": "domains/3-4-verify-release-ci/charter.md",
       "contracts": {
-        "public_packages": ["api/internal/delivery/assembly", "api/internal/delivery", "api/internal/releasepolicy", "api/internal/releases"],
+        "public_packages": ["api/internal/delivery/assembly", "api/internal/delivery", "api/internal/releasepolicy", "api/internal/releases", "api/internal/agentrt/deliveryapi", "api/internal/agentrt/deliveryview", "api/internal/agentrt/deliveryreadings", "api/internal/agentrt/deliverymetrics", "api/internal/agentrt/deploysource", "api/internal/agentrt/migraterun"],
         "measured_at": "2e93ae09",
         "request_response": [
           {"method": "GET", "path": "/api/v1/context", "handler": "api/internal/promote.HandleOpsContext", "consumers": ["agent-scripts", "console", "mcp", "trade-infra"]},

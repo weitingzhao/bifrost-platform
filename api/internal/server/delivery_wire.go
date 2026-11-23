@@ -20,7 +20,7 @@ func (s *Server) mountDelivery(r chi.Router) {
 		Guard:    s.guard,
 	}, deliveryassembly.Handlers{
 		Pipelines:            s.delivery,
-		GitOps:               s.gitops,
+		GitOps:               s.deliveryA.GitOps,
 		Releases:             s.releases,
 		ReleasePolicy:        s.handleReleasePolicy,
 		ReleasePolicyCheck:   s.handleReleasePolicyCheck,

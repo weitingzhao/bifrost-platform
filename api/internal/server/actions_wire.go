@@ -388,13 +388,13 @@ func (s *Server) bindActionExecutors() {
 		func(p map[string]any) string {
 			return "/api/v1/gitops/apps/" + url.PathEscape(text(p["name"])) + "/sync"
 		},
-		path("name"), nil, s.gitops.HandleSyncApp)
+		path("name"), nil, s.deliveryA.HandleSyncApp)
 
 	reg("gitops_rollback_app", http.MethodPost,
 		func(p map[string]any) string {
 			return "/api/v1/gitops/apps/" + url.PathEscape(text(p["name"])) + "/rollback"
 		},
-		path("name"), fields("revision"), s.gitops.HandleRollbackApp)
+		path("name"), fields("revision"), s.deliveryA.HandleRollbackApp)
 
 	reg("rollout_restart_deployment", http.MethodPost,
 		func(map[string]any) string { return "/api/v1/cluster/workloads/rollout-restart" },
