@@ -2,12 +2,22 @@ import { RuntimeWorld, type RuntimeWorldControl, type RuntimeWorldFrame } from '
 import { useShellStatusLine } from '@/domains/foundation/shell/useShellStatusLine'
 import { viewerEnvBadgeLabel } from '@/domains/foundation/observation-display/fleetNavigation'
 import { useRuntimeObservationSnapshot } from './useRuntimeObservationSnapshot'
+import { useSharedObservation } from './sharedObservationStore'
 
 const links = [{label: 'Agents', href: '#collaboration'}, {label: 'City', href: '#city'}, {label: 'Console', href: '#system'}]
 /** Controlled mode does not mount readers or own observation state. Keep the host above routing.
  * A controlled host owns its readers, so it passes the frame (its environment) too; standalone reads it here. */
-export default function RuntimeObservation({observation, frame}: {observation?: RuntimeWorldControl; frame?: RuntimeWorldFrame} = {}) {
-  return observation ? <RuntimeWorld observation={observation} links={links} frame={frame}/> : <IndependentObservation/>
+export default function RuntimeObservation({observation, frame, hosted = false}: {observation?: RuntimeWorldControl; frame?: RuntimeWorldFrame; hosted?: boolean} = {}) {
+  if (observation) return <RuntimeWorld observation={observation} links={links} frame={frame}/>
+  return hosted ? <HostedObservation/> : <IndependentObservation/>
+}
+/** hosted: the Console keeps one context above its routes (sharedObservationHost), so a pin survives a change of place. */
+function HostedObservation() {
+  const frame = useWorldFrame()
+  const shared = useSharedObservation()
+  if (shared.state === 'ready') return <RuntimeWorld observation={shared.observation} links={links} frame={frame}/>
+  const error = shared.state === 'reading' ? shared.error : undefined
+  return <p role="status">{error ? 'Read failed: ' + String(error) : 'Reading platform telemetry…'}</p>
 }
 const WORLD_HREFS = { city: '#city', agents: '#collaboration', console: '#system' }
 /** The one world frame (箭10 2026-11-23, cockpit/ui-world/frame): the other places and the environment, as City gives them. */

@@ -1086,6 +1086,7 @@
         "console/src/components/UserMenu.tsx",
         "console/src/components/shell",
         "console/src/domains/coordination/communication",
+        "console/src/domains/foundation/runtime-observation",
         "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/shell"
       ],
@@ -2296,12 +2297,15 @@
         "console/src/domains/foundation/runtime-observation/__tests__/lifecycle.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/operations.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/projection.test.tsx",
+        "console/src/domains/foundation/runtime-observation/__tests__/sharedObservation.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/states.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/surface.test.tsx",
         "console/src/domains/foundation/runtime-observation/communication.ts",
         "console/src/domains/foundation/runtime-observation/operations.ts",
         "console/src/domains/foundation/runtime-observation/plain.ts",
         "console/src/domains/foundation/runtime-observation/read.ts",
+        "console/src/domains/foundation/runtime-observation/sharedObservationHost.tsx",
+        "console/src/domains/foundation/runtime-observation/sharedObservationStore.ts",
         "console/src/domains/foundation/runtime-observation/states.ts",
         "console/src/domains/foundation/runtime-observation/useRuntimeObservationSnapshot.ts"
       ],

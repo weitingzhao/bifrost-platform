@@ -62,6 +62,7 @@ const Collaboration = lazy(() => import('@/domains/coordination/communication/Co
 const CollaborationRoute = () => <Suspense fallback={<RouteLoading place="Agents" />}><Collaboration /></Suspense>
 
 const Observation = lazy(() => import('@/domains/foundation/runtime-observation/RuntimeObservation'))
+const SharedObservationHost = lazy(() => import('@/domains/foundation/runtime-observation/sharedObservationHost'))
 const ObservationRoute = () => <Suspense fallback={<RouteLoading place="Signals" />}><Observation /></Suspense>
 
 const DETAIL_PAGES: Record<DetailRouteId, ComponentType> = {
@@ -204,8 +205,9 @@ function ConsolePageInner() {
   }
 
   const agentsLook = location.kind === 'shell' && location.id === 'collaboration' && readCommunicationLook(window.location.hash.split('?')[1] ?? '').look === 'agents'
-  if (location.kind === 'shell' && location.id === 'observation') return <Suspense fallback={<RouteLoading full place="Signals" />}><Observation /></Suspense>
-  if (agentsLook) return <><Suspense fallback={<RouteLoading full place="Agents" />}><AgentScreen /></Suspense><SignalModeLink /></>
+  if (location.kind === 'shell' && location.id === 'observation') return <Suspense fallback={<RouteLoading full place="Signals" />}><Observation hosted /></Suspense>
+  // Agents wears the world frame, whose four places include Signals: no floating link over it (gap table item 2).
+  if (agentsLook) return <Suspense fallback={<RouteLoading full place="Agents" />}><AgentScreen /></Suspense>
   // The City wears the world frame, whose four places include Signals: no floating link over it.
   if (cityLook) return <Suspense fallback={<RouteLoading full place="the City" />}><CityScreen /></Suspense>
   return (
@@ -265,11 +267,30 @@ function ConsolePageInner() {
   )
 }
 
-export function ConsolePage() {
-  return <><ConsolePageInner /><WorldJourney /></>
+const isSignalsAddress = () => window.location.hash.replace(/^#/, '').split('?')[0] === 'observation'
+
+/** True from the first time Signals is opened in this tab: the readers start then and stay (a pin must survive). */
+function useSignalsOpened(): boolean {
+  const [opened, setOpened] = useState(isSignalsAddress)
+  useEffect(() => {
+    if (opened) return
+    const check = () => { if (isSignalsAddress()) setOpened(true) }
+    window.addEventListener('hashchange', check)
+    return () => window.removeEventListener('hashchange', check)
+  }, [opened])
+  return opened
 }
 
-/** Shell-owned peer entry over Agents until Agents wears the world frame too. */
-function SignalModeLink() {
-  return <a href="#observation" aria-label="Open Signals view" style={{position:'fixed',right:28,top:78,zIndex:45,padding:'6px 14px',border:'1px solid #496575',borderRadius:16,background:'#102330',color:'#9ae6d1',font:'12px system-ui',textDecoration:'none'}}>Signals ↗</a>
+export function ConsolePage() {
+  // The shared observation context sits here, above every route (World's gap table item 9, 2026-11-23): a Signals
+  // pin, selection and time carry over to the City, Agents and the Console. Started by the first visit to Signals,
+  // so the Console does not run the composite reads for someone who never opens it.
+  const signalsOpened = useSignalsOpened()
+  return (
+    <>
+      <ConsolePageInner />
+      <WorldJourney />
+      {signalsOpened ? <Suspense fallback={null}><SharedObservationHost /></Suspense> : null}
+    </>
+  )
 }
