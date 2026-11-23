@@ -1,7 +1,7 @@
 # Collaboration design QA — 2026-11-22
 
 Direction: Working Studio, selected autonomously under Owner's instruction.
-Source image: /Users/vision-mac-trader/.codex/generated_images/01a2057b-ccf6-70d2-aab2-0cd1af1d0b1c/exec-0e705d0f-fb64-497c-a864-602f9fd0c45b.png
+Source image: `~/.codex/generated_images/01a2057b-ccf6-70d2-aab2-0cd1af1d0b1c/exec-0e705d0f-fb64-497c-a864-602f9fd0c45b.png`
 
 Implementation: http://127.0.0.1:5293/communication-preview.html
 Evidence captures: /private/tmp/communication-studio-desktop.jpg and
