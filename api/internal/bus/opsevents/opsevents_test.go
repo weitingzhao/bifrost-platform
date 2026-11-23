@@ -57,3 +57,38 @@ func TestStateEventsCarrySourceSeverityAndCause(t *testing.T) {
 		t.Error("an event without its environment or source was taken")
 	}
 }
+
+// Origin: 2026-11-23, UI/Signals asked to read each plugin's latest state from
+// GET /api/v1/bus/states; plugin.status.changed and env.health.changed are now
+// state types. Their body is declared here, not in the register, so this test
+// holds the register's subject_from and change_from to fields the body always
+// carries, and a real event's body to the state the readout will show.
+func TestTheStateTypesNameFieldsOfTheirBody(t *testing.T) {
+	all, err := registry.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, typ := range []string{TypePlugin, TypeEnv} {
+		c := all["rocket"].Channels[typ]
+		if c.SubjectFrom == "" || len(c.ChangeFrom) == 0 {
+			t.Fatalf("%s: not a state type in the register", typ)
+		}
+		fields, ok := eventlog.BodyOf(typ)
+		if !ok {
+			t.Fatalf("%s: no body declared", typ)
+		}
+		required := map[string]bool{}
+		for _, f := range fields {
+			required[f.Name] = !f.Optional
+		}
+		for _, n := range append([]string{c.SubjectFrom, "subject", "change"}, c.ChangeFrom...) {
+			if !required[n] {
+				t.Errorf("%s: %q is not a required field of the declared body", typ, n)
+			}
+		}
+	}
+	b := Body(PluginStatus("market-data", "ok", "checklist", ""))
+	if b["subject"] != "market-data" || b["change"] != "ok" {
+		t.Fatalf("plugin body %v", b)
+	}
+}

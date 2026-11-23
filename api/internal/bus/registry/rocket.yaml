@@ -406,6 +406,11 @@ channels:
       consumers: [console]
       exports: []
       replaces: [R12, C01]
+      # 2026-11-23 (UI/Signals asked): a state type, so GET /api/v1/bus/states
+      # gives each subject's latest state. The body is declared in Go
+      # (bus/opsevents): subject is the plugin or check, change its state.
+      subject_from: subject
+      change_from: [change]
   cluster.node.changed:
     address: ev.rocket.{env}.cluster.node.changed
     x-bifrost:
@@ -520,6 +525,11 @@ channels:
       consumers: [console]
       exports: []
       replaces: [C01]
+      # 2026-11-23 (UI/Signals asked): a state type, so GET /api/v1/bus/states
+      # gives each subject's latest state. The body is declared in Go
+      # (bus/opsevents): subject is the plugin or check, change its state.
+      subject_from: subject
+      change_from: [change]
   schema.migration.applied:
     address: ev.rocket.{env}.schema.migration.applied
     x-bifrost:

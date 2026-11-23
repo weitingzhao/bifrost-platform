@@ -12,12 +12,15 @@ var fieldRE = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
 // checkBody holds a channel's registered body to its own rules: known kinds,
 // patterns that compile, no field twice, and subject_from and change_from
-// naming fields of the body (which then carries subject and change).
+// naming fields of the body (which then carries subject and change). A
+// channel with no body here has its body declared in Go; its publisher's
+// tests check subject_from and change_from against it.
 func checkBody(c Channel, where func(string, ...any)) {
 	if len(c.Body) == 0 {
-		if c.SubjectFrom != "" || len(c.ChangeFrom) > 0 {
-			where("subject_from or change_from without a body")
-		}
+		// A body declared in Go (eventlog.Declare in the publisher's package)
+		// may still be a state type: the publisher's tests hold its fields to
+		// subject_from and change_from (2026-11-23: bus/opsevents'
+		// TestTheStateTypesNameFieldsOfTheirBody).
 		return
 	}
 	seen := map[string]bool{}
