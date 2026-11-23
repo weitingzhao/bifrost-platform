@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
@@ -95,7 +94,7 @@ func TestCIRunWithNoReaderIsNoVerdict(t *testing.T) {
 			ConfigMaps: cms, Writer: rptest.Writer{CMs: cms}, Git: world, CI: facts, Window: world, Deployed: world,
 			Anchor: key.Fingerprint, Now: func() time.Time { return now },
 		})
-		return eng.Decide(ctx, "start_pipeline_run", actions.TierC, map[string]any{"name": pipeline, "revision": "main", "who": "agent@mac"})
+		return eng.Decide(ctx, "start_pipeline_run", releasepolicy.Tier("C"), map[string]any{"name": pipeline, "revision": "main", "who": "agent@mac"})
 	}
 	d := decide()
 	if reasons := strings.Join(d.Reasons, "\n"); d.Auto || !strings.Contains(reasons, "repo-app: cannot read CI") || !strings.Contains(reasons, ErrNoCIReader.Error()) {

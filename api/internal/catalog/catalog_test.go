@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -450,5 +451,131 @@ func TestFilesOnlyTheRootGroupCoversAreCounted(t *testing.T) {
 	}
 	if got := rootGroupOnly(Table{ConsoleRoot: "console/src", Groups: []string{"console/src/pages"}}, files); len(got) != 0 {
 		t.Errorf("with no root group nothing is caught by it: %v", got)
+	}
+}
+
+// 2026-11-22, law 75 (the map is the counter: "I am adding this, the map adds
+// it"): a path no row covers gets the nearest owned directory above it and
+// the row to put in the same commit, its domain the nearest's by default or
+// the one asked for. The control: a covered path gets no claim.
+func TestAnUnownedPathGetsTheRowThatClaimsIt(t *testing.T) {
+	s := &Scanner{Kept: memKept{}}
+	o := Owners{Repo: "r", Commit: "c", HasTable: true, GoRoots: []string{"api"}, Console: "console",
+		Packages: map[string][]string{"api/internal/a": {"plan"}}, Groups: map[string][]string{},
+		Paths: map[string][]string{"scripts": {"foundation"}}}
+	raw, _ := json.Marshal(o)
+	_ = s.kept().Write(keptOwners("r"), raw)
+	get := func(q string) Owner {
+		w := httptest.NewRecorder()
+		OwnerRoute{Scanner: s}.ServeHTTP(w, httptest.NewRequest("GET", "/catalog/owner?repo=r&"+q, nil))
+		var out Owner
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &out) != nil {
+			t.Fatalf("%d %s", w.Code, w.Body)
+		}
+		return out
+	}
+	if c := get("path=scripts/x.sh"); c.Claim != nil || !c.Perceived {
+		t.Fatalf("covered path: %+v", c)
+	}
+	u := get("path=tools/new/run.py")
+	if u.Perceived || u.Claim == nil || u.Claim.Section != "paths" || u.Claim.Key != "tools/new/run.py" || !strings.Contains(string(u.Claim.Row), "{domain}") || u.Nearest != nil {
+		t.Fatalf("no owner above: %+v %s", u.Claim, u.Claim.Row)
+	}
+	g := get("path=api/cmd/tool/main.go&domain=lineage")
+	if g.Claim == nil || g.Claim.Section != "packages" || g.Claim.Key != "api/cmd/tool" || !strings.Contains(string(g.Claim.Row), `"lineage"`) {
+		t.Fatalf("new package: %+v", g.Claim)
+	}
+	if !strings.Contains(g.Claim.Say, "same commit") {
+		t.Errorf("say: %q", g.Claim.Say)
+	}
+}
+
+// 2026-11-22: event was a registry-only class; the map compares the declared
+// types with what the ledger wrote in seven days. The control: a declared
+// type that was written is in neither list.
+func TestEventTypesAreComparedWithWhatTheLedgerWrote(t *testing.T) {
+	c := eventCheck(context.Background(), func(context.Context) (map[string]int, bool) {
+		return map[string]int{"approval.card.created": 3, "made.up.type": 1}, true
+	})
+	if !c.Measured || len(c.NotRegistered) != 1 || c.NotRegistered[0] != "made.up.type (1 in 7 days)" {
+		t.Fatalf("%+v", c.NotRegistered)
+	}
+	for _, s := range c.NotLive {
+		if s == "approval.card.created" {
+			t.Errorf("a written type listed as silent")
+		}
+	}
+	if len(c.NotLive) == 0 || c.Registered < 2 {
+		t.Errorf("%+v", c)
+	}
+	if c := eventCheck(context.Background(), nil); c.Measured {
+		t.Errorf("no ledger is not measured")
+	}
+}
+
+// 2026-11-22: cluster and environment were registry-only classes; the map
+// compares the namespaces they name with the cluster's. The control: a
+// registered namespace that is there is in neither list, and an environment
+// with no namespace is not compared.
+func TestNamespacesAreComparedWithTheClusterAndEnvironmentRegistries(t *testing.T) {
+	s := &Scanner{Kept: memKept{}}
+	files := map[string]string{
+		"config/clusters.yaml":     "clusters:\n  - id: boot\n    bifrost_namespaces: [cicd, gone]\n",
+		"config/environments.yaml": "environments:\n  - {id: stg, namespace: bifrost-stg}\n  - {id: prod, namespace: bifrost-prod}\n  - {id: local}\n",
+	}
+	s.keepPlaces(Tree{Commit: "c", Read: func(p string) ([]byte, bool, error) { v, ok := files[p]; return []byte(v), ok, nil }})
+	cs := s.placeChecks(context.Background(), func(context.Context) ([]string, bool) {
+		return []string{"cicd", "kube-system", "bifrost-stg"}, true
+	})
+	cl, env := cs[0], cs[1]
+	if !cl.Measured || len(cl.NotRegistered) != 2 || len(cl.NotLive) != 1 || cl.NotLive[0] != "gone (boot)" {
+		t.Errorf("cluster %+v", cl)
+	}
+	if !env.Measured || env.Registered != 2 || env.Live != 1 || len(env.NotLive) != 1 || env.NotLive[0] != "prod (bifrost-prod)" {
+		t.Errorf("environment %+v", env)
+	}
+}
+
+// 2026-11-22: the scan reads the table through the per-domain files too, so a
+// row moved to config/domains/<domain>.json still covers its path. The
+// control: without the part the path is off the map.
+func TestTheScanReadsRowsFromTheDomainFiles(t *testing.T) {
+	src := map[string]string{
+		OwnershipPath:                 `{"domains":[{"id":"plan"}],"packages":{"api/internal/a":{"domains":["plan"]}}}`,
+		"config/domains/lineage.json": `{"domain":{"id":"lineage"},"paths":{"tools":{"domains":["lineage"]}}}`,
+		"api/internal/a/a.go":         "package a",
+		"tools/run.sh":                "",
+	}
+	files := []string{OwnershipPath, "config/domains/lineage.json", "api/internal/a/a.go", "tools/run.sh"}
+	read := func(p string) ([]byte, bool, error) { v, ok := src[p]; return []byte(v), ok, nil }
+	inPool := func(p Pool) bool {
+		for _, e := range p.Entries {
+			if e.Path == "tools" {
+				return true
+			}
+		}
+		return false
+	}
+	if p := PoolOf("r", Tree{Commit: "c", Files: files, Read: read}); inPool(p) || p.Gap != 0 {
+		t.Fatalf("with the part: %+v", p.Entries)
+	}
+	if p := PoolOf("r", Tree{Commit: "c", Files: []string{OwnershipPath, "api/internal/a/a.go", "tools/run.sh"}, Read: read}); !inPool(p) {
+		t.Errorf("control: tools should be off the map without the part: %+v", p.Entries)
+	}
+}
+
+// 2026-11-22: running-image was a registry-only class kept by hand; the map
+// compares the deployments each lane lists with what the cluster scan saw.
+// The control: a listed deployment that runs is not listed as missing.
+func TestReleaseLaneDeploymentsAreComparedWithTheCluster(t *testing.T) {
+	s := &Scanner{Kept: memKept{}}
+	s.keepReleaseTargets(Tree{Commit: "c", Read: func(p string) ([]byte, bool, error) {
+		return []byte("lanes:\n  - lane: research\n    envs:\n      - env: prod\n        deployments:\n          - {namespace: research, name: research-api}\n          - {namespace: research, name: gone}\n"), true, nil
+	}})
+	pool, _ := json.Marshal(Pool{Repo: ClusterRepo, Measured: true, Entries: []Entry{}, Covered: []Covered{{Path: "research/research-api", Kind: "deployment"}}})
+	_ = s.kept().Write(keptName(ClusterRepo), pool)
+	c := s.releaseTargetCheck()
+	if !c.Measured || c.Registered != 2 || c.Live != 1 || len(c.NotLive) != 1 || c.NotLive[0] != "research/gone (research prod)" {
+		t.Fatalf("%+v", c)
 	}
 }

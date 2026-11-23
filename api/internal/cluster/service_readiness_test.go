@@ -42,7 +42,7 @@ func TestEvalGPUDomainStandbyNoDemand(t *testing.T) {
 			{
 				Name: "gpu-server", Status: "NotReady", Reachability: probe.ReachUnknown,
 				ElasticMode:  "standby",
-				Capabilities: []NodeCapabilityView{{ID: "gpu-pool"}, {ID: "warehouse"}},
+				Capabilities: []NodeCapabilityView{{ID: "gpu-pool"}},
 			},
 		},
 		pools: map[string]PoolReading{
@@ -95,40 +95,6 @@ func TestEvalGPUDomainStandbyWithDemand(t *testing.T) {
 	}
 	if d.Reachability != probe.ReachFail {
 		t.Fatalf("expected fail reachability, got %s", d.Reachability)
-	}
-}
-
-func TestEvalWarehouseDomainStandbyNoDemand(t *testing.T) {
-	zero := int32(0)
-	snap := readinessSnapshot{
-		nodes: []NodeView{
-			{
-				Name: "gpu-server", Status: "NotReady", Reachability: probe.ReachUnknown,
-				ElasticMode:  "standby",
-				Capabilities: []NodeCapabilityView{{ID: "gpu-pool"}, {ID: "warehouse"}},
-			},
-		},
-		nodeCoverage: map[string]CapabilityCoverageView{
-			"warehouse": {
-				ID: "warehouse", NodesReady: 0, NodesTotal: 1,
-				NodeNames: []string{"gpu-server"}, Reachability: probe.ReachDegraded,
-				GapReason: "warehouse: 1 node(s) labeled but none Ready",
-			},
-		},
-		pools: map[string]PoolReading{
-			"gpu": {ID: "gpu", NodesReady: 0, NodesTotal: 1, Status: PoolDegraded},
-		},
-		deployments: map[string]appsv1.Deployment{
-			"data-warehouse/minio": {
-				ObjectMeta: metav1.ObjectMeta{Name: "minio", Namespace: "data-warehouse"},
-				Status:     appsv1.DeploymentStatus{Replicas: 0, ReadyReplicas: 0},
-				Spec:       appsv1.DeploymentSpec{Replicas: &zero},
-			},
-		},
-	}
-	d := evalWarehouseDomain(snap)
-	if d.Status != "standby" || d.Reachability != probe.ReachOK {
-		t.Fatalf("expected standby+ok, got %s %s (%s)", d.Status, d.Reachability, d.Summary)
 	}
 }
 
@@ -274,7 +240,6 @@ func TestAggregateServiceReadinessStandbyOnly(t *testing.T) {
 	domains := []ServiceDomainView{
 		{ID: "database", Status: "ready", Reachability: probe.ReachOK},
 		{ID: "workers", Status: "standby", Reachability: probe.ReachOK},
-		{ID: "warehouse", Status: "standby", Reachability: probe.ReachOK},
 	}
 	reach, detail := aggregateServiceReadiness(domains)
 	if reach != probe.ReachOK {
@@ -325,7 +290,7 @@ func TestServiceReadinessMissingKubeconfig(t *testing.T) {
 	t.Setenv("PLATFORM_KUBECONFIG", t.TempDir()+"/missing.yaml")
 	svc := NewService(nil)
 	resp := svc.ServiceReadiness(t.Context())
-	if len(resp.Domains) != 7 {
+	if len(resp.Domains) != 6 { // 7 until 2026-11-22: the data warehouse domain went (compute line)
 		t.Fatalf("domains: %d", len(resp.Domains))
 	}
 }

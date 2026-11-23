@@ -7,21 +7,20 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalrules"
-	"github.com/weitingzhao/bifrost-platform/api/internal/ruleapprove"
 )
 
 // agentrt_rule_approve lives in package ruleapprove; this file hands it the
 // runtime's store and the approval's read-back.
 
 // RuleApproveAction is the action's catalog id.
-const RuleApproveAction = ruleapprove.Action
+const RuleApproveAction = approvalrules.RuleApproveAction
 
-func storeRuleApproval(r ruleapprove.Request) store.RuleApproval {
+func storeRuleApproval(r approvalrules.RuleApproval) store.RuleApproval {
 	return store.RuleApproval{RuleID: r.RuleID, Version: r.Version, TextArtifactID: r.TextArtifactID, ID: r.ID}
 }
 
-func (s *Server) ruleApproveRuntime() ruleapprove.Runtime {
-	return ruleapprove.Runtime{
+func (s *Server) ruleApproveRuntime() approvalrules.RuleApproveRuntime {
+	return approvalrules.RuleApproveRuntime{
 		Env: func() (string, bool) {
 			rt := s.agentRuntime
 			if rt == nil || rt.api == nil || rt.api.DB == nil {
@@ -29,14 +28,14 @@ func (s *Server) ruleApproveRuntime() ruleapprove.Runtime {
 			}
 			return rt.env, true
 		},
-		Check: func(ctx context.Context, r ruleapprove.Request) ([]ruleapprove.Change, error) {
+		Check: func(ctx context.Context, r approvalrules.RuleApproval) ([]approvalrules.RuleChange, error) {
 			check, err := store.CheckRuleApproval(ctx, s.agentRuntime.api.DB, storeRuleApproval(r))
 			if err != nil {
 				return nil, err
 			}
-			out := make([]ruleapprove.Change, 0, len(check.Changes))
+			out := make([]approvalrules.RuleChange, 0, len(check.Changes))
 			for _, c := range check.Changes {
-				out = append(out, ruleapprove.Change{Field: c.Field, Old: c.Old, New: c.New})
+				out = append(out, approvalrules.RuleChange{Field: c.Field, Old: c.Old, New: c.New})
 			}
 			return out, nil
 		},
@@ -44,7 +43,7 @@ func (s *Server) ruleApproveRuntime() ruleapprove.Runtime {
 			rec, err := approvalrules.GrantApproval(ctx, s.approvals, RuleApproveAction, params)
 			return rec.ID, err
 		},
-		Approve: func(ctx context.Context, r ruleapprove.Request) (any, error) {
+		Approve: func(ctx context.Context, r approvalrules.RuleApproval) (any, error) {
 			return store.ApproveRule(ctx, s.agentRuntime.api.DB, actor.Writer{Actor: "owner"}, storeRuleApproval(r))
 		},
 	}

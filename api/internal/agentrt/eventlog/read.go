@@ -187,6 +187,26 @@ func OfType(ctx context.Context, tx pgx.Tx, eventType string, from, to time.Time
 	  FROM agentrt.event WHERE event_type = $1 AND at >= $2 AND at < $3 ORDER BY event_id`, eventType, from, to))
 }
 
+// TypeCounts is how many events of each type the ledger holds since a time
+// (2026-11-22: the map compares the written types with the register).
+func TypeCounts(ctx context.Context, tx pgx.Tx, since time.Time) (map[string]int, error) {
+	rows, err := tx.Query(ctx, `SELECT event_type, count(*) FROM agentrt.event WHERE at >= $1 GROUP BY event_type`, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var typ string
+		var n int
+		if err := rows.Scan(&typ, &n); err != nil {
+			return nil, err
+		}
+		out[typ] = n
+	}
+	return out, rows.Err()
+}
+
 func scanRows(rows pgx.Rows, err error) ([]Row, error) {
 	if err != nil {
 		return nil, err

@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
-	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
+	"github.com/weitingzhao/bifrost-platform/api/internal/owner/approvalhome"
 )
 
 // ApprovedRecord is the approval an action executes under, as read back.

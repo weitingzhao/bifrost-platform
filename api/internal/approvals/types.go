@@ -99,6 +99,14 @@ type Execution struct {
 	LastRefusal   string    `json:"last_refusal,omitempty"`
 	NextAttemptAt time.Time `json:"next_attempt_at,omitempty"`
 
+	// TicketHost and TicketUntil: a host card (params.host) is claimed only
+	// with a ticket, which the one-time code earned (ticket.go). The claim uses
+	// the ticket up.
+	// A pointer: stored records of every other card keep their bytes (the
+	// stored format is pinned by a golden test), which a zero time would change.
+	TicketHost  string     `json:"ticket_host,omitempty"`
+	TicketUntil *time.Time `json:"ticket_until,omitempty"`
+
 	ExecutorID     string    `json:"executor_id,omitempty"`
 	LeaseID        string    `json:"lease_id,omitempty"`
 	LeaseExpiresAt time.Time `json:"lease_expires_at,omitempty"`

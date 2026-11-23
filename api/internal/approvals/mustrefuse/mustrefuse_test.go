@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -19,7 +20,7 @@ import (
 
 // caseCount is how many cases the set has. Cases are added, with this number;
 // a case is never dropped to make a change pass.
-const caseCount = 11
+const caseCount = 15
 
 const goodReason = "x\n改了什么：一个对象\n批了以后谁因此能做什么新事：没有新能力"
 
@@ -40,6 +41,8 @@ tokens:
   - {name: operator, role: operator, token: operator-tok}
   - {name: admin, role: admin, token: admin-tok}
   - {name: exec, role: executor, token: executor-tok}
+  - {name: host-mini-1, role: executor, token: host-mini-1-tok}
+  - {name: host-mini-2, role: executor, token: host-mini-2-tok}
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -48,6 +51,7 @@ tokens:
 		t.Fatal(err)
 	}
 	svc := approvals.New(filepath.Join(dir, "approvals"), nil)
+	svc.SetTicketKey([]byte("test-ticket-key-0123456789abcdef"))
 	r := chi.NewRouter()
 	approvals.Mount(r, auth, svc)
 	return &world{t: t, h: r, svc: svc}
@@ -121,7 +125,101 @@ func code(rec *httptest.ResponseRecorder, want ...int) string {
 	return rec.Result().Status + " " + rec.Body.String()
 }
 
+// hostCard builds and approves a card for the machine mini-1 and returns its id,
+// its params hash and the claim attempt the executor of a given token makes.
+func hostCard(w *world) (id, paramsHash string) {
+	w.t.Helper()
+	body, _ := json.Marshal(map[string]any{"action": "owner_run_command", "reason": goodReason,
+		"params": map[string]any{"command": "true", "reason": "r", "host": "mini-1"}})
+	res := w.call(http.MethodPost, "/approvals", string(body), "operator-tok", "s1")
+	var out struct {
+		ID         string `json:"id"`
+		ParamsHash string `json:"params_hash"`
+	}
+	_ = json.Unmarshal(res.Body.Bytes(), &out)
+	if res.Code != http.StatusCreated || out.ID == "" {
+		w.t.Fatalf("host card = %d %s", res.Code, res.Body.String())
+	}
+	if rec := w.approve(out.ID); rec.Code != http.StatusAccepted {
+		w.t.Fatalf("approve host card = %d %s", rec.Code, rec.Body.String())
+	}
+	return out.ID, out.ParamsHash
+}
+
+func (w *world) claimWith(token string) *httptest.ResponseRecorder {
+	return w.call(http.MethodPost, "/approvals/claim", `{"executor_id":"x"}`, token, "")
+}
+
+func (w *world) tickets(id, host string, until time.Time, mac string) *httptest.ResponseRecorder {
+	body, _ := json.Marshal(map[string]any{"host": host, "until": until.Unix(), "mac": mac})
+	return w.call(http.MethodPost, "/approvals/"+id+"/ticket", string(body), "admin-tok", "")
+}
+
 var cases = []mustRefuse{
+	{"a host card is claimed by nobody without a ticket", "law 53 (2026-11-21): a Console click must not let a machine run a command; the one-time code is the lock", func(w *world) string {
+		hostCard(w)
+		for _, token := range []string{"host-mini-1-tok", "host-mini-2-tok", "executor-tok", "admin-tok"} {
+			if rec := w.claimWith(token); rec.Code == http.StatusOK {
+				return "the claim with " + token + " took a host card with no ticket"
+			}
+		}
+		return ""
+	}},
+	{"a ticket that does not verify is refused", "only owner-exec, which checks the code, can make a ticket; the admin sign-in alone cannot", func(w *world) string {
+		id, hash := hostCard(w)
+		until := time.Now().Add(5 * time.Minute)
+		good := approvals.TicketMAC([]byte("test-ticket-key-0123456789abcdef"), id, hash, "mini-1", until)
+		forged := approvals.TicketMAC([]byte("another key"), id, hash, "mini-1", until)
+		for name, rec := range map[string]*httptest.ResponseRecorder{
+			"a mac of another key": w.tickets(id, "mini-1", until, forged),
+			"another host":         w.tickets(id, "mini-2", until, good),
+			"no mac":               w.tickets(id, "mini-1", until, ""),
+		} {
+			if rec.Code == http.StatusOK {
+				return name + " was accepted as a ticket"
+			}
+		}
+		if rec := w.claimWith("host-mini-1-tok"); rec.Code == http.StatusOK {
+			return "the card was claimed after only bad tickets"
+		}
+		return ""
+	}},
+	{"a ticket opens the card only to its own machine and only once", "a ticket is for one host and one claim", func(w *world) string {
+		id, hash := hostCard(w)
+		until := time.Now().Add(5 * time.Minute)
+		mac := approvals.TicketMAC([]byte("test-ticket-key-0123456789abcdef"), id, hash, "mini-1", until)
+		if rec := w.tickets(id, "mini-1", until, mac); rec.Code != http.StatusOK { // positive control
+			return "the good ticket = " + rec.Result().Status + " " + rec.Body.String()
+		}
+		for _, token := range []string{"host-mini-2-tok", "executor-tok", "admin-tok"} {
+			if rec := w.claimWith(token); rec.Code == http.StatusOK {
+				return "the claim with " + token + " used mini-1's ticket"
+			}
+		}
+		if rec := w.claimWith("host-mini-1-tok"); rec.Code != http.StatusOK {
+			return "mini-1 could not claim its own card: " + rec.Result().Status
+		}
+		if rec := w.tickets(id, "mini-1", until, mac); rec.Code == http.StatusOK {
+			return "the ticket was taken again after the claim used it up"
+		}
+		return ""
+	}},
+	{"a machine's executor token claims nothing but cards for its machine", "the host- token of a Mac must never run an unticketed or older card", func(w *world) string {
+		body, _ := json.Marshal(map[string]any{"action": "owner_run_command", "reason": goodReason,
+			"params": map[string]any{"command": "true", "reason": "r", "runner": "host"}})
+		res := w.call(http.MethodPost, "/approvals", string(body), "operator-tok", "s1")
+		var out struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(res.Body.Bytes(), &out)
+		if res.Code != http.StatusCreated || w.approve(out.ID).Code != http.StatusAccepted {
+			return "could not build the old-style host card"
+		}
+		if rec := w.claimWith("host-mini-1-tok"); rec.Code == http.StatusOK {
+			return "a machine's token took a host card that names no machine"
+		}
+		return ""
+	}},
 	{"an agent cannot approve a card", "ADR section 5; Owner 2026-10-07: approval is the Owner's", func(w *world) string {
 		id, _ := w.card("s1", goodReason)
 		rec := w.call(http.MethodPost, "/approvals/"+id+"/approve", `{"channel":"chat"}`, "operator-tok", "s1")

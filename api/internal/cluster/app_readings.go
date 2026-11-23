@@ -33,14 +33,13 @@ func BindAppReadings(r AppReadings) { appReadings = r }
 // on-demand node (active, standby, degraded) and of its host went with the
 // node power to package computenodes on 2026-11-19 (ComputeNodes).
 type ComputeReadings struct {
-	GPUDomain       func(resourceview.ElasticSnapshot) ServiceDomainView
-	WarehouseDomain func(resourceview.ElasticSnapshot) ServiceDomainView
-	WorkersDomain   func(resourceview.ElasticSnapshot) ServiceDomainView
+	GPUDomain     func(resourceview.ElasticSnapshot) ServiceDomainView
+	WorkersDomain func(resourceview.ElasticSnapshot) ServiceDomainView
 }
 
 // computeReadings is bound once, at start-up, as appReadings is.
 var computeReadings ComputeReadings
 
-// BindComputeReadings sets the reader. Without one the three domains are
+// BindComputeReadings sets the reader. Without one the two domains are
 // unavailable.
 func BindComputeReadings(r ComputeReadings) { computeReadings = r }

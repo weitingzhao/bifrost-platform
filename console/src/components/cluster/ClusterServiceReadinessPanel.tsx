@@ -154,7 +154,7 @@ export function ClusterServiceReadinessPanel({
           ? filteredDomain?.summary ?? 'Domain dependencies and reachability.'
           : compact
             ? 'Stack domains — PostgreSQL, Redis, workers, apps, CI/CD.'
-            : 'Workload-domain view — PostgreSQL, Redis, GPU, warehouse, workers, applications, and CI/CD. Aggregates governance, placement, and live deployments.'
+            : 'Workload-domain view — PostgreSQL, Redis, GPU, workers, applications, and CI/CD. Aggregates governance, placement, and live deployments.'
       }
       actions={
         <div className="flex flex-wrap items-center gap-2">

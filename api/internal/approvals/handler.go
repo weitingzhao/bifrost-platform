@@ -38,6 +38,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, svc *Service) {
 		r.Post("/approvals/{id}/approve", svc.HandleApprove)
 		r.Post("/approvals/{id}/reject", svc.HandleReject)
 		r.Post("/approvals/{id}/resolve", svc.HandleResolve)
+		r.Post("/approvals/{id}/ticket", svc.HandleTicket)
 	})
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireAny(actuation.RoleExecutor, actuation.RoleAdmin))
@@ -245,7 +246,9 @@ func (s *Service) HandleClaim(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	role := actuation.PrincipalFromContext(r.Context()).Role
+	principal := actuation.PrincipalFromContext(r.Context())
+	role := principal.Role
+	body.Host = hostOfPrincipal(principal.Name)
 	out := s.claim(r.Context(), role, body)
 	s.record(r, out.events)
 	if out.Status == http.StatusNoContent {

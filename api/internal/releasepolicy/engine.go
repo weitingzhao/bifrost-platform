@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
@@ -334,13 +333,13 @@ func (e *Engine) SignedPaths(ctx context.Context, rule string) (patterns []strin
 
 // Decide reports whether this call may run without a manual approval. Any
 // failure to establish a fact is a reason, so the answer defaults to no.
-func (e *Engine) Decide(ctx context.Context, actionID string, tier actions.Tier, params map[string]any) Decision {
+func (e *Engine) Decide(ctx context.Context, actionID string, tier Tier, params map[string]any) Decision {
 	d := Decision{SHAs: map[string]string{}}
 	switch tier {
-	case actions.TierD:
+	case tierD:
 		d.Reasons = []string{"tier D is never auto-approved"}
 		return d
-	case actions.TierC:
+	case tierC:
 	default:
 		d.Reasons = []string{"only tier C actions can be auto-approved"}
 		return d

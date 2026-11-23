@@ -74,7 +74,7 @@ function standbyDomainHeadline(domain: ServiceDomain): { headline: string; detai
   if (summary !== '' && /demand|needed|offline|unavailable/i.test(summary)) {
     return { headline: summary }
   }
-  if (domain.id === 'gpu' || domain.id === 'warehouse') {
+  if (domain.id === 'gpu') {
     return {
       headline: 'Standby — no demand',
       detail: summary !== '' && !/standby/i.test(summary) ? summary : undefined,

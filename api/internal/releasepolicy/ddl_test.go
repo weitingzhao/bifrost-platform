@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
@@ -169,7 +168,7 @@ func TestEvaluateCoversTierBWithoutTheTierRule(t *testing.T) {
 	f := newFixture(t)
 	params := map[string]any{"name": pipeline, "revision": "main", "who": "agent@mac"}
 	ctx := context.Background()
-	wantWait(t, f.eng.Decide(ctx, "start_pipeline_run", actions.TierB, params), "only tier C")
+	wantWait(t, f.eng.Decide(ctx, "start_pipeline_run", releasepolicy.Tier("B"), params), "only tier C")
 	wantAuto(t, f.eng.Evaluate(ctx, "start_pipeline_run", params))
 	f.facts.Window = "no release window is open"
 	wantWait(t, f.eng.Evaluate(ctx, "start_pipeline_run", params), "release window")

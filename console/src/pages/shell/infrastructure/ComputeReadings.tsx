@@ -1,7 +1,7 @@
 /**
  * Compute readings, under the cluster panels: is work waiting while capacity
  * is idle, are the protected tiers squeezed, is the Agent host queueing, and
- * do the requests match the use. Seven-day Prometheus readings from
+ * do the requests match the use. Current and seven-day Prometheus readings from
  * /telemetry/overview?group=compute. A reading the API returns without a
  * series shows "No series"; nothing here is listed by hand.
  */
@@ -31,7 +31,7 @@ export function ComputeReadings() {
   return (
     <OpsSection
       title="Compute readings"
-      description="Last 7 days, from Prometheus. Whether work waits while capacity is idle, and whether what must be protected is squeezed. Utilisation is not a target here."
+      description="Current values and last-7-day statistics, from Prometheus. Whether work waits while capacity is idle, and whether what must be protected is squeezed. Utilisation is not a target here."
       bodyPadding="none"
       overflow="hidden"
     >

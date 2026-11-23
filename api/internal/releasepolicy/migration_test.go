@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
@@ -54,7 +53,7 @@ func migrationWorld(f *applyFixture, second string) {
 }
 
 func (f *applyFixture) migrate() releasepolicy.Decision {
-	return f.eng.Decide(context.Background(), "run_agentrt_migration", actions.TierC, map[string]any{"commit": rptest.SHA("new")})
+	return f.eng.Decide(context.Background(), "run_agentrt_migration", releasepolicy.Tier("C"), map[string]any{"commit": rptest.SHA("new")})
 }
 
 // Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
@@ -233,7 +232,7 @@ func TestRunMigrationNotCovered(t *testing.T) {
 		edit   func(doc map[string]any)
 		world  func(f *applyFixture)
 		params map[string]any
-		tier   actions.Tier
+		tier   releasepolicy.Tier
 		want   string
 	}{
 		"a pending file out of the class": {world: func(f *applyFixture) {
@@ -283,7 +282,7 @@ func TestRunMigrationNotCovered(t *testing.T) {
 		"not a full commit id": {params: map[string]any{"commit": "main"}, want: "the request names no full commit id"},
 		"frozen":               {world: func(f *applyFixture) { f.cms.Set(releasepolicy.FreezeConfigMap, frozen) }, want: "releases are frozen"},
 		"expired":              {world: func(f *applyFixture) { f.clock = now.AddDate(0, 0, 91) }, want: "expired at"},
-		"tier D":               {tier: actions.TierD, want: "tier D is never auto-approved"},
+		"tier D":               {tier: releasepolicy.Tier("D"), want: "tier D is never auto-approved"},
 		// A policy signed before 2026-11-15 has neither field: the action
 		// always needs a card, and says so in the words every non-release gets.
 		"a policy without ddl_reversible": {edit: func(doc map[string]any) {}, want: "run_agentrt_migration is not a release"},
@@ -307,7 +306,7 @@ func TestRunMigrationNotCovered(t *testing.T) {
 				params = map[string]any{"commit": newSHA}
 			}
 			if tier == "" {
-				tier = actions.TierC
+				tier = releasepolicy.Tier("C")
 			}
 			d := f.eng.Decide(context.Background(), "run_agentrt_migration", tier, params)
 			if d.Auto || !strings.Contains(strings.Join(d.Reasons, "\n"), c.want) {

@@ -18,7 +18,7 @@ func TestGuardBlocks(t *testing.T) {
 	day := ClosedWindow(time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC), 1)
 	posted := day.To.Add(time.Hour) // posted after the window closed
 	b := func(rule, session string, at time.Time) eventlog.Row {
-		return row("guard.block.recorded", posted, map[string]any{"rule": rule, "session": session, "blocked_at": ts(at)})
+		return row("guard.block.recorded", posted, map[string]any{"rule": rule, "session": session, "host": "mbp", "blocked_at": ts(at)})
 	}
 	rows := []eventlog.Row{
 		b("D10", "s1", day.From.Add(time.Hour)),
@@ -43,7 +43,7 @@ func TestGuardBlocks(t *testing.T) {
 	}
 	guardBlockedSince = day.From.Add(-24 * time.Hour)
 	r, _ := src.guardBlockReading(day)
-	if r.Status != StatusOK || *r.Value != 3 || r.Labels["by_rule"] != "D10 1, nas 2" {
+	if r.Status != StatusOK || *r.Value != 3 || r.Labels["by_rule"] != "D10 1, nas 2" || r.Labels["hosts"] != "mbp" {
 		t.Fatalf("three real refusals in the day: %+v", r)
 	}
 	empty := ledgerSource{ofType: func(string, time.Time, time.Time) ([]eventlog.Row, error) { return nil, nil }}

@@ -6,7 +6,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -21,12 +20,9 @@ import (
 
 func loadOwnership(t *testing.T) ownership {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "config", "domain-ownership.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := ownershipRaw(t)
 	var o ownership
-	if err = json.Unmarshal(raw, &o); err != nil {
+	if err := json.Unmarshal(raw, &o); err != nil {
 		t.Fatal(err)
 	}
 	return o
@@ -69,7 +65,7 @@ func TestEveryPackageHasARow(t *testing.T) {
 		t.Fatalf("go list named %d packages", len(pkgs))
 	}
 	for _, p := range unlisted(o, pkgs) {
-		t.Errorf("%s has no row in config/domain-ownership.json: add one that names its one domain and the reason (law 72)", p)
+		t.Errorf("%s has no row in config/domain-ownership.json: add one that names its one domain and the reason (laws 72, 75). The map line (0.2) owns that table: ask it which domain, or read the domains through GET /api/v1/catalog/domain", p)
 	}
 }
 
@@ -100,7 +96,7 @@ func TestUnlistedNamesAPackageWithoutARow(t *testing.T) {
 var assemblyFuncs = map[string]int{
 	"api/internal/agentrt/integration": 0,
 	"api/internal/agentrt/planwiring":  3,
-	"api/internal/server":              285,
+	"api/internal/server":              284,
 }
 
 // funcsIn counts the top-level func declarations in a directory's non-test

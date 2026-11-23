@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -113,4 +115,39 @@ func RecordProdJudged(db eventlog.DB, result, detail string) {
 	if err := NoteProdJudged(ctx, db, result, detail); err != nil {
 		slog.Warn("prod batch shadow: judgement not written to the ledger", "result", result, "err", err)
 	}
+}
+
+// ProdJudgementsRoute is GET /api/v1/delivery/prod-judgements?limit=…: the
+// newest PROD judgements in the ledger (at most limit, default 20, max 200),
+// newest first, of the last 7 days. 2026-11-22: the reasons the loop holds a
+// PROD release were in the ledger but nothing showed them; this is the read
+// the Console and agents use. Read-only; viewer and above.
+type ProdJudgementsRoute struct {
+	// DB is the agent runtime's database, nil when it is not connected.
+	DB func() eventlog.DB
+}
+
+func (rt ProdJudgementsRoute) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	limit := 20
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 200 {
+			writeRouteJSON(w, http.StatusBadRequest, map[string]string{"error": "limit is a whole number from 1 to 200"})
+			return
+		}
+		limit = n
+	}
+	db := rt.DB()
+	if db == nil {
+		writeRouteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "the agent runtime's database is not connected"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	got, err := ProdJudgements(ctx, db, time.Now().Add(-7*24*time.Hour), limit)
+	if err != nil {
+		writeRouteJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeRouteJSON(w, http.StatusOK, map[string]any{"mode": ProdShadowMode(), "judgements": got})
 }

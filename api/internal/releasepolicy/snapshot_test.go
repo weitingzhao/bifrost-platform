@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
@@ -37,23 +36,23 @@ type snapshotCase struct {
 	name   string
 	world  func(f *applyFixture)
 	action string
-	tier   actions.Tier
+	tier   releasepolicy.Tier
 	params map[string]any
 }
 
 func snapshotCases() []snapshotCase {
 	release := func(name string, world func(f *applyFixture)) snapshotCase {
-		return snapshotCase{name: name, world: world, action: "start_pipeline_run", tier: actions.TierC}
+		return snapshotCase{name: name, world: world, action: "start_pipeline_run", tier: releasepolicy.Tier("C")}
 	}
 	apply := func(name string, world func(f *applyFixture)) snapshotCase {
-		return snapshotCase{name: name, world: world, action: "apply_manifest", tier: actions.TierC, params: map[string]any{"plan_id": "plan-1"}}
+		return snapshotCase{name: name, world: world, action: "apply_manifest", tier: releasepolicy.Tier("C"), params: map[string]any{"plan_id": "plan-1"}}
 	}
 	files := func(list ...string) func(f *applyFixture) {
 		return func(f *applyFixture) { f.facts.Files["repo-app"] = list }
 	}
 	oldLib, newLib := rptest.SHA("old-lib"), rptest.SHA("new-lib")
 	pinned := func(name string, world func(f *applyFixture)) snapshotCase {
-		return snapshotCase{name: name, action: "start_pipeline_run", tier: actions.TierC,
+		return snapshotCase{name: name, action: "start_pipeline_run", tier: releasepolicy.Tier("C"),
 			params: map[string]any{"name": "deliver-pinned", "revision": newLib, "who": "agent@mac", "params": map[string]any{"appRevision": rptest.SHA("new")}},
 			world: func(f *applyFixture) {
 				f.facts.Records["deliver-pinned"] = map[string]string{"repo-app": rptest.SHA("old"), "repo-lib": oldLib}
@@ -64,7 +63,7 @@ func snapshotCases() []snapshotCase {
 			}}
 	}
 	migration := func(name string, world func(f *applyFixture)) snapshotCase {
-		return snapshotCase{name: name, world: world, action: "run_agentrt_migration", tier: actions.TierC, params: map[string]any{"commit": rptest.SHA("new")}}
+		return snapshotCase{name: name, world: world, action: "run_agentrt_migration", tier: releasepolicy.Tier("C"), params: map[string]any{"commit": rptest.SHA("new")}}
 	}
 	return []snapshotCase{
 		release("release-covered", nil),
@@ -98,9 +97,9 @@ func snapshotCases() []snapshotCase {
 			f.cms.Set(releasepolicy.FreezeConfigMap, map[string]string{"frozen": "true", "frozen_at": "2026-10-08T11:30:00Z", "who": "owner", "reason": "incident"})
 		}),
 		release("refused-expired", func(f *applyFixture) { f.clock = now.Add(91 * 24 * time.Hour) }),
-		{name: "refused-pipeline-not-allowed", action: "start_pipeline_run", tier: actions.TierC,
+		{name: "refused-pipeline-not-allowed", action: "start_pipeline_run", tier: releasepolicy.Tier("C"),
 			params: map[string]any{"name": "deliver-elsewhere", "revision": "main", "who": "agent@mac"}},
-		{name: "refused-tier-d", action: "start_pipeline_run", tier: actions.TierD,
+		{name: "refused-tier-d", action: "start_pipeline_run", tier: releasepolicy.Tier("D"),
 			params: map[string]any{"name": pipeline, "revision": "main", "who": "agent@mac"}},
 		release("refused-window", func(f *applyFixture) { f.facts.Window = "held by another session" }),
 		release("refused-ci", func(f *applyFixture) { f.facts.Green = nil }),

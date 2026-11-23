@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -133,7 +132,7 @@ func TestWorkersRecoveryRefusesManualStart(t *testing.T) {
 	if err != nil || !live || held.Who != run.Name {
 		t.Fatalf("renewal lost: %+v %v", held, err)
 	}
-	resp, _, err := s.StartPipelineRun(actions.WithCreateAttempt(ctx, "review-manual", 1), pipeline, factSHA1, "", "", map[string]string{"uiRevision": strings.Repeat("b", 40)})
+	resp, _, err := s.StartPipelineRun(withTestAttempt(ctx, "review-manual", 1), pipeline, factSHA1, "", "", map[string]string{"uiRevision": strings.Repeat("b", 40)})
 	if err == nil || !strings.Contains(resp.Message, run.Name) {
 		t.Fatalf("second run permitted: %+v %v", resp, err)
 	}

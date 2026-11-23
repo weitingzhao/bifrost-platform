@@ -26,6 +26,6 @@ api/internal/approvals/handler.go
 # mcpFocusBridges.test.ts reads each tool's level from the Go catalog.
 api/internal/mcp/catalog.go
 # consoleRoutes.test.tsx reads the link a push notification opens.
-api/internal/approvalhome/console_notification_contract.go
+api/internal/owner/approvalhome/console_notification_contract.go
 # liveRefresh.test.ts reads the bus registry so its table names only registered types.
 api/internal/bus/registry/rocket.yaml

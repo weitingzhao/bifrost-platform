@@ -4,8 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/ruleapprove"
 )
 
 // OpenKey is the one-open-request rule of every action that has one.
@@ -32,5 +30,5 @@ func OpenKey(action string, params map[string]any) string {
 		}
 		return "pipeline:" + strings.TrimSpace(name)
 	}
-	return ruleapprove.OpenKey(action, params)
+	return ruleApproveOpenKey(action, params)
 }

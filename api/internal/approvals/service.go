@@ -17,8 +17,8 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
+	"github.com/weitingzhao/bifrost-platform/api/internal/owner/approvalhome"
 )
 
 // Service stores approvals, runs platform actions on approve, and hands the
@@ -43,6 +43,7 @@ type Service struct {
 	// List reads are concurrent and must honor the shared context deadline.
 	Assessment  func(context.Context, string) map[string]any
 	mu          sync.Mutex
+	ticketKey   []byte // see ticket.go; empty: no ticket is accepted
 	store       *store
 	audit       *actuation.AuditLog
 	now         func() time.Time

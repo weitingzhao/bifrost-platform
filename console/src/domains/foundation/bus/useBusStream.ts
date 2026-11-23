@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { authedFetch, authHeaders } from '@/api/client'
+import { useEffect, useSyncExternalStore } from 'react'
+import { authedFetch, authHeaders, operatorToken } from '@/api/client'
 import { serverFetch } from '@/api/serverContact'
 import type { BusEnvelope, BusTraceResponse } from './busTrace'
 import { SseParser } from './sseParser'
@@ -61,13 +61,39 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
  * GET /api/v1/bus/stream read with fetch streaming (the route keeps the viewer bearer). It starts from
  * now — the gate has no "latest N" read — and resumes from the last cursor with Last-Event-ID.
  */
+const initialStream = (): BusStreamState => ({ events: [], receipts: [], receiptsOff: false, connection: 'connecting', detail: null, cursor: null })
+let sharedState = initialStream()
+const subscribers = new Set<() => void>()
+let users = 0
+let stopStream: (() => void) | undefined
+let scope = ''
+const getStream = () => sharedState
+const subscribeStream = (listener: () => void) => { subscribers.add(listener); return () => { subscribers.delete(listener) } }
+function setState(update: (state: BusStreamState) => BusStreamState) {
+  sharedState = update(sharedState)
+  subscribers.forEach(listener => listener())
+}
+/** One reader per authenticated Console, shared by City, Bus and collaboration. */
 export function useBusStream(): BusStreamState {
-  const [state, setState] = useState<BusStreamState>({ events: [], receipts: [], receiptsOff: false, connection: 'connecting', detail: null, cursor: null })
-
+  const state = useSyncExternalStore(subscribeStream, getStream, getStream)
+  const identity = operatorToken()
   useEffect(() => {
+    if (scope !== identity) {
+      stopStream?.()
+      stopStream = undefined
+      scope = identity
+      setState(initialStream)
+    }
+    users++
+    if (!stopStream) stopStream = startStream()
+    return () => { if (--users === 0) { stopStream?.(); stopStream = undefined } }
+  }, [identity])
+  return state
+}
+function startStream(): () => void {
     const abort = new AbortController()
     const { signal } = abort
-    let cursor: string | undefined
+    let cursor: string | undefined = sharedState.cursor ?? undefined
     let retry = RETRY_MS
 
     const run = async () => {
@@ -84,6 +110,7 @@ export function useBusStream(): BusStreamState {
           headers.set('Accept', 'text/event-stream')
           if (cursor) headers.set('Last-Event-ID', cursor)
           const r = await serverFetch(`/api/v1/bus/stream?client=${CLIENT}&receipts=1`, { headers, signal: attempt.signal, cache: 'no-store' })
+          if (signal.aborted) return
           if (r.status === 503 || r.status === 404 || r.status === 502) {
             const detail = r.status === 404 ? 'this platform-api has no bus routes' : await errorText(r)
             setState(s => ({ ...s, connection: 'off', detail }))
@@ -96,12 +123,13 @@ export function useBusStream(): BusStreamState {
             const detail = await errorText(r)
             setState(s => ({ ...s, connection: 'reconnecting', detail }))
           } else {
-            setState(s => ({ ...s, connection: 'live', detail: null }))
+            setState(s => ({ ...s, connection: 'live', detail: null, receiptsOff: false }))
             const parser = new SseParser()
             const reader = r.body.getReader()
             const decoder = new TextDecoder()
             for (;;) {
               const { value, done } = await reader.read()
+              if (signal.aborted) return
               if (done) break
               idle.poke()
               const batch = parser.push(decoder.decode(value, { stream: true }))
@@ -123,7 +151,7 @@ export function useBusStream(): BusStreamState {
                 setState(s => ({
                   ...s,
                   events: mergeEvents(s.events, arrived),
-                  receipts: receipts.length > 0 ? [...receipts.reverse(), ...s.receipts].slice(0, BUS_RECEIPT_CAP) : s.receipts,
+                  receipts: receipts.length > 0 ? [...new Map([...receipts.reverse(), ...s.receipts].map(r => [r.id + ':' + r.consumer + ':' + r.at, r])).values()].slice(0, BUS_RECEIPT_CAP) : s.receipts,
                   receiptsOff: s.receiptsOff || off,
                   cursor: cursor ?? s.cursor,
                   detail: error ? error.slice('error '.length) : s.detail,
@@ -147,9 +175,6 @@ export function useBusStream(): BusStreamState {
     }
     void run()
     return () => abort.abort()
-  }, [])
-
-  return state
 }
 
 /** GET /api/v1/bus/trace?id=ev-<n>: one event's journey. */

@@ -41,6 +41,9 @@ var oldPrincipals = []string{"", "viewer", "reporter", "operator", "admin", "tra
 // this walk reaches the guarded handler, not the controller operation; the
 // handler-level approval refusal is checked by TestFixedIPWriteMatchesFirewallApprovalBoundary.
 var intendedRouteAdditions = map[string][]string{
+	// 2026-11-22 (law 69, seen and felt; the CI line): why the PROD head-release
+	// loop released or held PROD, from the ledger, read-only, like the delivery reads.
+	"GET /api/v1/delivery/prod-judgements": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-20 (the Owner: every module's state on the bus): each subject's
 	// latest state for a registered state type, read-only, like the other bus reads.
 	"GET /api/v1/bus/states": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
@@ -136,6 +139,9 @@ var intendedRouteAdditions = map[string][]string{
 	"GET /api/v1/records": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-15: a requester takes back its own card before it runs (narrows only).
 	"POST /api/v1/approvals/{id}/withdraw": {"operator", "admin", "trade-satellite"},
+	// 2026-11-21: owner-exec tells the platform a host card's ticket (admin; the
+	// mac must verify with the ticket key, so a bare admin sign-in earns nothing).
+	"POST /api/v1/approvals/{id}/ticket": {"admin"},
 	// TD-463: only the Owner may opt in to an assessment. The assess
 	// ability requires RoleAdmin; readers, agents and intake clients cannot
 	// request one. This records a request for advice, not an answer or approval.

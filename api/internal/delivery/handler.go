@@ -11,7 +11,6 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	noticetext "github.com/weitingzhao/bifrost-platform/api/internal/notice"
@@ -109,7 +108,7 @@ func (h *Handler) HandleStartPipelineRun(w http.ResponseWriter, r *http.Request)
 	}
 	if err != nil {
 		code := http.StatusBadGateway
-		if actions.IsUncertain(err) {
+		if actionRuns().IsUncertain(err) {
 			code = http.StatusGatewayTimeout
 		}
 		writeJSON(w, code, map[string]any{

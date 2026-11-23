@@ -13,16 +13,28 @@ clusters:
     kubeconfig_env: PLATFORM_KUBECONFIG
     ssh_host: vision@192.168.10.73
     node_ip: 192.168.10.73
+    # Bifrost's own namespaces, as the cluster has them (2026-11-22; the map
+    # compares this list with the cluster each round). Three readers: the
+    # "bifrost" pod filter, ensure_bifrost_namespaces (it creates only from
+    # this list), and the map. Names the cluster does not have are not kept
+    # (card #585, 2026-11-16, would have created two such). Namespaces that
+    # exist but are not Bifrost's (cnpg-system, tekton-*, gitea-admin, the
+    # finance tenant's) are not listed here.
     bifrost_namespaces:
+      - ai
+      - bifrost-access
+      - bifrost-dev
+      - bifrost-owner-exec
+      - bifrost-platform-prod
+      - bifrost-platform-stg
+      - bifrost-prod
+      - bifrost-stg
       - cicd
       - data
-      - bifrost-dev
-      - bifrost-stg
-      - bifrost-prod
-      - bifrost-platform-stg
       - monitoring
-      - ai
-      - data-warehouse
+      - plugin-flex-query
+      - plugin-market-data
+      - research
     compute_nodes:
       - name: gpu-server
         ssh_host: vision@192.168.10.60
@@ -33,9 +45,6 @@ clusters:
           - namespace: ai
             deployment: ollama
             label: Ollama
-          - namespace: data-warehouse
-            deployment: minio
-            label: MinIO
     monitoring_namespace: monitoring
     # Optional deep links for Rocket -> Observability (browser must reach these URLs).
     # Leave empty until NodePort/ingress is confirmed post-install, or override via:

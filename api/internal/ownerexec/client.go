@@ -29,6 +29,11 @@ func (c Card) Command() string {
 	return s
 }
 
+func (c Card) Host() string {
+	host, _ := c.Params["host"].(string)
+	return host
+}
+
 // Claim is a successful POST /approvals/claim.
 type Claim struct {
 	Approval         Card   `json:"approval"`
@@ -148,10 +153,23 @@ func (p *HTTPPlatform) Approve(ctx context.Context, bearer, id string, body json
 }
 
 func (p *HTTPPlatform) Claim(ctx context.Context, bearer, id, executor string) (Claim, error) {
+	return p.claim(ctx, bearer, id, executor, "owner")
+}
+
+func (p *HTTPPlatform) claimHost(ctx context.Context, bearer, executor string) (Claim, error) {
+	return p.claim(ctx, bearer, "", executor, "host")
+}
+
+func (p *HTTPPlatform) claim(ctx context.Context, bearer, id, executor, runner string) (Claim, error) {
 	var c Claim
-	in := map[string]any{"executor_id": executor, "id": id, "runners": []string{"owner"}, "actions": []string{Action}}
+	in := map[string]any{"executor_id": executor, "id": id, "runners": []string{runner}, "actions": []string{Action}}
 	err := p.do(ctx, bearer, http.MethodPost, "/api/v1/approvals/claim", in, &c)
 	return c, err
+}
+
+func (p *HTTPPlatform) AuthorizeHost(ctx context.Context, bearer, id, host string, until time.Time, mac string) error {
+	body := map[string]any{"host": host, "until": until.Unix(), "mac": mac}
+	return p.do(ctx, bearer, http.MethodPost, "/api/v1/approvals/"+url.PathEscape(id)+"/ticket", body, nil)
 }
 
 func (p *HTTPPlatform) Heartbeat(ctx context.Context, bearer, id, lease string) error {

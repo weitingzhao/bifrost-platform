@@ -188,7 +188,7 @@ func Compute(ctx context.Context, db eventlog.DB, prom Prom, tasks FailedTasks, 
 // the handler's 15 seconds (2026-11-20: eight subqueries over 7 days each).
 func promGroups(ctx context.Context, prom Prom, w Window) []Reading {
 	groups := []func(context.Context, Prom, Window) []Reading{
-		promReadings, coverageByNamespaceReadings, catalogDomainReadings, ciQueueReadings, busEventReadings, busOutageReadings, alertActivationReadings,
+		promReadings, promGapReadings, coverageByNamespaceReadings, catalogDomainReadings, ciQueueReadings, busEventReadings, busOutageReadings, alertActivationReadings,
 	}
 	res := make([][]Reading, len(groups))
 	var wg sync.WaitGroup

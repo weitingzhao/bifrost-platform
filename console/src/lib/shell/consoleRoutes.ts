@@ -29,6 +29,7 @@ export const SHELL_NAV = [
     question: 'What is moving on the event bus, and where did one event go?',
     group: 'detail',
   },
+  { id: 'collaboration', label: 'Collaboration', question: 'Who is exchanging messages, and what evidence followed?', group: 'detail' },
   { id: 'city', label: 'City', question: 'The system as a city the Owner builds.', group: 'detail' },
   {
     id: 'records',
@@ -283,6 +284,7 @@ export function entryOf(location: ConsoleLocation, query = ''): EntryRouteId | n
   if (location.kind === 'approval' || location.kind === 'question') return 'command'
   if (isEntryRoute(location.id)) return location.id
   if (location.id === 'data' || location.id === 'ib') return 'services'
+  if (location.id === 'collaboration') return 'crew'
   if (location.id === 'releases') return 'work'
   if (location.id === 'records') {
     const tab = hashQueryParam(query, 'tab')

@@ -18,7 +18,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
-	"github.com/weitingzhao/bifrost-platform/api/internal/assessmentreadings"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/assessmentreadings"
 )
 
 type unresponsiveAssessmentDB struct{ calls atomic.Int32 }

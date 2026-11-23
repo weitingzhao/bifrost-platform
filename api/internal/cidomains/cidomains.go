@@ -191,13 +191,13 @@ type Inner struct {
 	Pairs   []Pair `json:"pairs"`
 }
 
-// Graph is the answer of GET /api/v1/ci/domains.
 // Pair is one import: the package that uses and the package it uses.
 type Pair struct {
 	From string `json:"from"`
 	To   string `json:"to"`
 }
 
+// Graph is the answer of GET /api/v1/ci/domains.
 type Graph struct {
 	Version int    `json:"version"`
 	Repo    string `json:"repo"`

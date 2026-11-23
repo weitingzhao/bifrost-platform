@@ -123,7 +123,7 @@ func (s *Server) releasePolicyApprover() approvals.AutoApprover {
 		if s.releasePolicy == nil {
 			return ""
 		}
-		if d := s.releasePolicy.Decide(ctx, action, tier, params); d.Auto {
+		if d := s.releasePolicy.Decide(ctx, action, releasepolicy.Tier(tier), params); d.Auto {
 			return d.PolicyID
 		}
 		return ""
@@ -146,7 +146,7 @@ func (s *Server) autoApprove(r *http.Request, id string, tier actions.Tier, para
 	if s.releasePolicy == nil || (id != "start_pipeline_run" && id != "apply_manifest" && id != migrationActionID) {
 		return false, nil
 	}
-	d := s.releasePolicy.Decide(r.Context(), id, tier, params)
+	d := s.releasePolicy.Decide(r.Context(), id, releasepolicy.Tier(tier), params)
 	if id != "start_pipeline_run" && d.PolicyID == "" {
 		// No signed policy judges applies or migrations (the engine names a
 		// policy id only when one has an apply section, or ddl_reversible):
@@ -193,12 +193,6 @@ func decisionDetail(r *http.Request, d releasepolicy.Decision) string {
 	return out
 }
 
-// releasePipeline is a pipeline that ships something: deliver and image
-// builds. CI and smoke pipelines are not releases.
-func releasePipeline(name string) bool {
-	return strings.HasPrefix(name, "bifrost-deliver-") || strings.HasPrefix(name, "bifrost-build-")
-}
-
 const tierBPolicyTimeout = 20 * time.Second
 
 // checkTierBRelease runs before a tier B start_pipeline_run. A freeze that
@@ -208,7 +202,7 @@ const tierBPolicyTimeout = 20 * time.Second
 // is where the policy's facts are first exercised before PROD relies on them.
 func (s *Server) checkTierBRelease(w http.ResponseWriter, r *http.Request, id string, params map[string]any) bool {
 	name := strings.TrimSpace(fmt.Sprint(params["name"]))
-	if s.releasePolicy == nil || id != "start_pipeline_run" || !releasePipeline(name) {
+	if s.releasePolicy == nil || id != "start_pipeline_run" || !releasepolicy.ReleasePipeline(name) {
 		return false
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), tierBPolicyTimeout)
@@ -239,31 +233,14 @@ func (s *Server) checkTierBRelease(w http.ResponseWriter, r *http.Request, id st
 	return false
 }
 
-// policyCheck is the answer of GET /delivery/pipelines/{name}/policy-check.
-type policyCheck struct {
-	Action        string            `json:"action"`
-	Pipeline      string            `json:"pipeline"`
-	Tier          actions.Tier      `json:"tier"`
-	NeedsApproval bool              `json:"needs_approval"`
-	Covered       bool              `json:"covered"`
-	PolicyID      string            `json:"policy_id,omitempty"`
-	Reasons       []string          `json:"reasons"`
-	Clauses       []string          `json:"clauses"`
-	SHAs          map[string]string `json:"shas"`
-	AdditiveDDL   []string          `json:"additive_ddl,omitempty"`
-	ReversibleDDL []string          `json:"ddl_reversible,omitempty"`
-	Outcome       string            `json:"outcome"`
-}
-
-// handleReleasePolicyCheck judges one start_pipeline_run request against the
-// signed policy and answers what the direct route would decide, with every
-// reason. It starts nothing, creates no approval and writes no audit record.
-// The query carries what the run request's body would: revision, tag, who,
-// and params as a JSON object. The parameters go through the action's own
-// Extract and the decision through the calls guard makes (Decide for a tier
-// that needs approval, Evaluate for tier B), so the answer is the direct
-// route's answer for the same request at this moment; the window, the newest
-// records and CI can all change before the real call.
+// handleReleasePolicyCheck answers what the direct start_pipeline_run route
+// would decide for one request, with every reason (releasepolicy's Check
+// judges; this reads the request). It starts nothing, creates no approval and
+// writes no audit record. The query carries what the run request's body
+// would: revision, tag, who, and params as a JSON object. The parameters go
+// through the action's own Extract, so the answer is the direct route's for
+// the same request at this moment; the window, the newest records and CI can
+// all change before the real call.
 func (s *Server) handleReleasePolicyCheck(w http.ResponseWriter, r *http.Request) {
 	const id = "start_pipeline_run"
 	if s.releasePolicy == nil {
@@ -308,37 +285,7 @@ func (s *Server) handleReleasePolicyCheck(w http.ResponseWriter, r *http.Request
 	defer cancel()
 	tier := act.TierOf(ctx, params)
 	name := strings.TrimSpace(fmt.Sprint(params["name"]))
-	var d releasepolicy.Decision
-	if tier.NeedsApproval() {
-		d = s.releasePolicy.Decide(ctx, id, tier, params)
-	} else {
-		d = s.releasePolicy.Evaluate(ctx, id, params)
-	}
-	out := policyCheck{
-		Action: id, Pipeline: name, Tier: tier, NeedsApproval: tier.NeedsApproval(), Covered: d.Auto,
-		PolicyID: d.PolicyID, Reasons: d.Reasons, Clauses: d.Clauses, SHAs: d.SHAs, AdditiveDDL: d.AdditiveDDL, ReversibleDDL: d.ReversibleDDL,
-	}
-	if out.Reasons == nil {
-		out.Reasons = []string{}
-	}
-	if out.Clauses == nil {
-		out.Clauses = []string{}
-	}
-	if out.SHAs == nil {
-		out.SHAs = map[string]string{}
-	}
-	switch {
-	case tier.NeedsApproval() && d.Auto:
-		out.Outcome = "the direct call would start the run: the signed policy covers it"
-	case tier.NeedsApproval():
-		out.Outcome = "the direct call would answer 403 approval required with these reasons and create nothing; the run then needs an approval request"
-	default:
-		out.Outcome = "tier " + string(tier) + " runs without an approval either way; covered says what the policy would have decided"
-		if frozen, reason := s.releasePolicy.FreezeSet(ctx); frozen && releasePipeline(name) {
-			out.Outcome = "the direct call would be refused: releases are frozen (" + reason + ")"
-		}
-	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, s.releasePolicy.Check(ctx, id, releasepolicy.Tier(tier), tier.NeedsApproval(), name, params))
 }
 
 func (s *Server) auditRecorder() releasepolicy.Audit {

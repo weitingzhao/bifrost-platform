@@ -22,6 +22,9 @@ type ProdShadowHands struct {
 	// Release releases to PROD by pipeline (mode on only; the server wires
 	// it to the delivery service, as head-release's own runs).
 	Release func(ctx context.Context, pipeline, revision string, params map[string]string) (run, wait string, err error)
+	// FullCI starts the full CI of revision (mode on only; the server wires it
+	// to the daily full CI's own starter, one run per commit and day).
+	FullCI func(ctx context.Context, revision string) (run string, err error)
 	// Zone is the release hours' zone; nil sets no hours.
 	Zone *time.Location
 }
@@ -55,8 +58,13 @@ func NewProdShadow(table Table, hands ProdShadowHands) *ProdShadowLoop {
 			return hands.Release(ctx, pipeline, revision, params)
 		}
 	}
+	var fullCI func(ctx context.Context, revision string) (string, error)
+	if mode == ProdOn {
+		fullCI = hands.FullCI
+	}
 	return &ProdShadowLoop{
 		Release: release,
+		FullCI:  fullCI,
 		Mode:    mode,
 		// Five minutes. Each judgement asks the release records what STG and
 		// what PROD run, and each of those answers lists every run of the

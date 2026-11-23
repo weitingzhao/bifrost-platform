@@ -23,7 +23,7 @@ func TestElasticDomainsAreUnavailableWithoutAReader(t *testing.T) {
 	}
 	BindComputeReadings(ComputeReadings{})
 	t.Cleanup(func() { BindComputeReadings(bound) })
-	for _, d := range []ServiceDomainView{evalGPUDomain(readinessSnapshot{}), evalWarehouseDomain(readinessSnapshot{}), evalWorkersDomain(readinessSnapshot{})} {
+	for _, d := range []ServiceDomainView{evalGPUDomain(readinessSnapshot{}), evalWorkersDomain(readinessSnapshot{})} {
 		if d.Reachability != probe.ReachFail || d.Status != "unavailable" {
 			t.Fatalf("unbound: %+v", d)
 		}

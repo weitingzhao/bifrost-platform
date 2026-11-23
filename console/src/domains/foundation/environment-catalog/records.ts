@@ -70,8 +70,8 @@ export const foundationHardware: Record<string, HardwareRow> = {
   'gpu-server': {
     id: 'gpu-server',
     host: '192.168.10.60',
-    roleCompose: 'Data warehouse · Ollama — no Prod Redis',
-    roleK3s: 'Agent compute · warehouse · GPU/AI · Tekton heavy (WOL eno1)',
+    roleCompose: 'Ollama — no Prod Redis',
+    roleK3s: 'Agent compute · GPU/AI · Tekton heavy (WOL eno1)',
   },
   'ubt-k3s-04': {
     id: 'ubt-k3s-04',

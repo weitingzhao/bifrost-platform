@@ -37,6 +37,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/cidomains"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ciscore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
+	"github.com/weitingzhao/bifrost-platform/api/internal/computereadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/dataclone"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -67,9 +68,12 @@ import (
 )
 
 type Server struct {
-	cfg     *config.Config
-	prober  *probe.Prober
-	cluster *cluster.Handler
+	// fullCIRun starts the full CI of a revision with the daily full CI's runner
+	// (wireFullCI, PROD only); nil elsewhere.
+	fullCIRun func(ctx context.Context, revision string) (string, error)
+	cfg       *config.Config
+	prober    *probe.Prober
+	cluster   *cluster.Handler
 	// dataclone is the tenant's data clone, freshness and data probe
 	// (moved out of cluster on 2026-11-17).
 	dataclone *dataclone.Handler
@@ -227,6 +231,8 @@ func New(cfg *config.Config) (*Server, error) {
 		audit:           audit,
 		httpMetrics:     newHTTPMetrics(),
 	}
+	// The compute domain's readings, served on /telemetry/overview?group=compute.
+	srv.telemetry.SetGroup(computereadings.Group, computereadings.Queries)
 	srv.checklist.BindHusbandry(checklistview.Source(tenantA.Husbandry.Service()))
 	// One producer of maintenance signals: only the PROD workers overlay sets
 	// CHECKLIST_PROBER=on (TD-253).
@@ -273,6 +279,11 @@ func New(cfg *config.Config) (*Server, error) {
 	// One open landing grant request per operation (review 694 R-02), one
 	// open rule approval per rule and agentd deployment per host.
 	srv.approvals.SetOpenKey(approvalrules.OpenKey)
+	// Host cards are claimed only with a ticket owner-exec makes with this key
+	// (approvals/ticket.go); unset, none is ever accepted and the feature is off.
+	if key := os.Getenv("APPROVAL_TICKET_KEY"); key != "" {
+		srv.approvals.SetTicketKey([]byte(key))
+	}
 	actions.SetRuleChangeLookup(srv.ruleApproveChanges)
 	srv.wireQuestions(dataDir, role.RunsWorkers())
 	srv.wireReleasePolicy(releasesSvc, dataDir, role.RunsWorkers())

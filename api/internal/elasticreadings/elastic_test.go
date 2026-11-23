@@ -68,7 +68,7 @@ func TestStandbyIsOkUntilSomethingNeedsTheCompute(t *testing.T) {
 	for _, domain := range []struct {
 		name string
 		read func(resourceview.ElasticSnapshot) resourceview.ServiceDomainView
-	}{{"gpu", elasticreadings.GPUDomain}, {"warehouse", elasticreadings.WarehouseDomain}} {
+	}{{"gpu", elasticreadings.GPUDomain}} {
 		idle := domain.read(snapshot("standby", "NotReady", 0))
 		if idle.ID != domain.name || idle.Status != "standby" || idle.Reachability != probe.ReachOK {
 			t.Errorf("%s, powered off and not needed: %+v", domain.name, idle)

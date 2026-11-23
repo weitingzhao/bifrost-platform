@@ -13,7 +13,6 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
@@ -71,7 +70,7 @@ func (f *fixture) decide(params map[string]any) releasepolicy.Decision {
 	if params == nil {
 		params = map[string]any{"name": pipeline, "revision": "main", "who": "agent@mac"}
 	}
-	return f.eng.Decide(context.Background(), "start_pipeline_run", actions.TierC, params)
+	return f.eng.Decide(context.Background(), "start_pipeline_run", releasepolicy.Tier("C"), params)
 }
 
 func wantAuto(t *testing.T, d releasepolicy.Decision) {
@@ -229,9 +228,9 @@ func TestTierAndActionScope(t *testing.T) {
 	f := newFixture(t)
 	params := map[string]any{"name": pipeline, "revision": "main", "who": "agent@mac"}
 	ctx := context.Background()
-	wantWait(t, f.eng.Decide(ctx, "start_pipeline_run", actions.TierD, params), "tier D is never auto-approved")
-	wantWait(t, f.eng.Decide(ctx, "start_pipeline_run", actions.TierB, params), "only tier C")
-	wantWait(t, f.eng.Decide(ctx, "cordon_node", actions.TierC, map[string]any{"name": "node-a"}), "not a release")
+	wantWait(t, f.eng.Decide(ctx, "start_pipeline_run", releasepolicy.Tier("D"), params), "tier D is never auto-approved")
+	wantWait(t, f.eng.Decide(ctx, "start_pipeline_run", releasepolicy.Tier("B"), params), "only tier C")
+	wantWait(t, f.eng.Decide(ctx, "cordon_node", releasepolicy.Tier("C"), map[string]any{"name": "node-a"}), "not a release")
 }
 
 func TestFreeze(t *testing.T) {

@@ -97,6 +97,7 @@
         "console/src/api/ciScorecard.ts",
         "console/src/api/governanceInstruments.ts",
         "console/src/api/matrixTypes.ts",
+        "console/src/api/prodJudgements.ts",
         "console/src/api/regressions.ts",
         "console/src/api/seatStatus.ts"
       ],
@@ -1070,6 +1071,7 @@
         "console/src/components/ToolsMenu.tsx",
         "console/src/components/UserMenu.tsx",
         "console/src/components/shell",
+        "console/src/domains/coordination/communication",
         "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/shell"
       ],
@@ -1189,6 +1191,7 @@
       "files": [
         "console/src/components/lineage/BranchesPanel.tsx",
         "console/src/components/lineage/LineageGraph.tsx",
+        "console/src/components/lineage/__tests__/LineageGraph.kinds.test.tsx",
         "console/src/components/lineage/__tests__/threadFilter.test.ts",
         "console/src/components/lineage/threadFilter.ts"
       ],
@@ -1200,6 +1203,7 @@
       ],
       "external_imports": [
         "@bifrost/ui",
+        "@testing-library/react",
         "react",
         "vitest"
       ],
@@ -1520,6 +1524,40 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/coordination/communication",
+      "files": [
+        "console/src/domains/coordination/communication/AgentScreen.tsx",
+        "console/src/domains/coordination/communication/CommunicationPage.tsx",
+        "console/src/domains/coordination/communication/README.md",
+        "console/src/domains/coordination/communication/__tests__/communication.test.ts",
+        "console/src/domains/coordination/communication/__tests__/looks.test.ts",
+        "console/src/domains/coordination/communication/__tests__/observer.test.tsx",
+        "console/src/domains/coordination/communication/adapter.ts",
+        "console/src/domains/coordination/communication/looks.ts",
+        "console/src/domains/coordination/communication/roster.generated.json",
+        "console/src/domains/coordination/communication/useCommunication.ts"
+      ],
+      "imports": [
+        "console/src/api/agentRuntimeEvents.ts",
+        "console/src/api/agentThreads.ts",
+        "console/src/api/client.ts",
+        "console/src/domains/foundation/bus"
+      ],
+      "test_imports": [
+        "console/src/lib/shell"
+      ],
+      "external_imports": [
+        "@bifrost/ui/communication",
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/delivery/api",
       "files": [
         "console/src/domains/delivery/api/delivery.ts",
@@ -1700,6 +1738,7 @@
         "console/src/domains/foundation/bus/busProblems.ts",
         "console/src/domains/foundation/bus/busStatus.ts",
         "console/src/domains/foundation/bus/busTrace.ts",
+        "console/src/domains/foundation/bus/communication.ts",
         "console/src/domains/foundation/bus/liveRefresh.ts",
         "console/src/domains/foundation/bus/sseParser.ts",
         "console/src/domains/foundation/bus/useBusStream.ts"
@@ -1716,6 +1755,7 @@
       "external_imports": [
         "3d-force-graph",
         "@bifrost/ui",
+        "@bifrost/ui/communication",
         "@tanstack/react-query",
         "@testing-library/react",
         "@xyflow/react",
@@ -2207,6 +2247,7 @@
       "imports": [
         "console/src",
         "console/src/api",
+        "console/src/domains/foundation/bus",
         "console/src/lib/shell"
       ],
       "test_imports": [
@@ -3704,6 +3745,7 @@
         "console/src/components/ConsoleHeader.tsx",
         "console/src/components/ConsoleSidebar.tsx",
         "console/src/components/shell",
+        "console/src/domains/coordination/communication",
         "console/src/domains/foundation/bus",
         "console/src/domains/foundation/shell",
         "console/src/domains/owner/city",
@@ -4505,6 +4547,7 @@
         "console/src/pages/shell/ci/ModuleExplorer.tsx",
         "console/src/pages/shell/ci/OpenRegressions.tsx",
         "console/src/pages/shell/ci/PlatformTimings.tsx",
+        "console/src/pages/shell/ci/ProdJudgement.tsx",
         "console/src/pages/shell/ci/RunTimingDetail.tsx",
         "console/src/pages/shell/ci/TimingTrends.tsx",
         "console/src/pages/shell/ci/__tests__/ApprovalReadingsBlock.test.tsx",
@@ -4515,6 +4558,7 @@
         "console/src/pages/shell/ci/__tests__/DomainMapView.test.tsx",
         "console/src/pages/shell/ci/__tests__/OpenRegressions.test.tsx",
         "console/src/pages/shell/ci/__tests__/PlatformTimings.test.tsx",
+        "console/src/pages/shell/ci/__tests__/ProdJudgement.test.tsx",
         "console/src/pages/shell/ci/__tests__/approvalReadingsModel.test.ts",
         "console/src/pages/shell/ci/__tests__/ciPageFixture.ts",
         "console/src/pages/shell/ci/__tests__/ciPageModel.test.ts",

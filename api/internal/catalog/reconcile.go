@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 )
 
 // Classes the map reconciles against the running system besides the trees
@@ -558,4 +560,234 @@ func nonEmpty(v ...string) []string {
 		}
 	}
 	return out
+}
+
+// eventCheck compares the event types the register declares (the bus's
+// topics and the ledger's own types, as this binary carries them) with the
+// types the ledger holds events of in the last seven days: types written
+// that the register lacks, and declared types with no event in the window
+// (silent, which may be rare rather than dead: shown, not judged).
+func eventCheck(ctx context.Context, seen func(context.Context) (map[string]int, bool)) ClassCheck {
+	c := ClassCheck{Class: "event", NotRegistered: []string{}, NotLive: []string{}}
+	declared := map[string]bool{}
+	tenants, err := registry.Load()
+	if err != nil {
+		c.Note = "the bus register does not read: " + err.Error()
+		return c
+	}
+	for _, tn := range tenants {
+		for typ := range tn.Channels {
+			declared[typ] = true
+		}
+	}
+	if lts, err := registry.LedgerTypes(); err == nil {
+		for _, lt := range lts {
+			declared[lt.Type] = true
+		}
+	}
+	if seen == nil {
+		c.Note = "this platform does not read the ledger"
+		return c
+	}
+	counts, ok := seen(ctx)
+	if !ok {
+		c.Note = "the ledger's event types could not be read"
+		return c
+	}
+	for typ, n := range counts {
+		if !declared[typ] {
+			c.NotRegistered = append(c.NotRegistered, typ+" ("+strconv.Itoa(n)+" in 7 days)")
+		}
+	}
+	for typ := range declared {
+		if counts[typ] == 0 {
+			c.NotLive = append(c.NotLive, typ)
+		}
+	}
+	sort.Strings(c.NotRegistered)
+	sort.Strings(c.NotLive)
+	c.Measured, c.Registered, c.Live = true, len(declared), len(counts)
+	c.Note = "live: types with an event in the ledger in the last 7 days; registered, not live means silent in that window"
+	return c
+}
+
+const keptPlaces = "places"
+
+// keptPlaceRegistries are the namespaces the table repository's cluster and
+// environment registries name.
+type keptPlaceRegistries struct {
+	Commit       string            `json:"commit"`
+	Clusters     []string          `json:"clusters"`
+	ClusterNS    map[string]string `json:"cluster_namespaces"`     // namespace -> cluster id
+	Environments map[string]string `json:"environment_namespaces"` // environment id -> namespace ("" for none)
+}
+
+// keepPlaces keeps the namespaces config/clusters.yaml and
+// config/environments.yaml name.
+func (s *Scanner) keepPlaces(t Tree) {
+	k := keptPlaceRegistries{Commit: t.Commit, ClusterNS: map[string]string{}, Environments: map[string]string{}}
+	if raw, ok, err := t.Read("config/clusters.yaml"); err == nil && ok {
+		var doc struct {
+			Clusters []struct {
+				ID         string   `yaml:"id"`
+				Namespaces []string `yaml:"bifrost_namespaces"`
+			} `yaml:"clusters"`
+		}
+		if yaml.Unmarshal(raw, &doc) == nil {
+			for _, c := range doc.Clusters {
+				k.Clusters = append(k.Clusters, c.ID)
+				for _, ns := range c.Namespaces {
+					k.ClusterNS[ns] = c.ID
+				}
+			}
+		}
+	}
+	if raw, ok, err := t.Read("config/environments.yaml"); err == nil && ok {
+		var doc struct {
+			Environments []struct {
+				ID        string `yaml:"id"`
+				Namespace string `yaml:"namespace"`
+			} `yaml:"environments"`
+		}
+		if yaml.Unmarshal(raw, &doc) == nil {
+			for _, e := range doc.Environments {
+				k.Environments[e.ID] = e.Namespace
+			}
+		}
+	}
+	if len(k.Clusters) == 0 && len(k.Environments) == 0 {
+		return
+	}
+	if out, err := json.Marshal(k); err == nil {
+		if err := s.kept().Write(keptPlaces, out); err != nil {
+			slog.Warn("catalog: keep places", "err", err)
+		}
+	}
+}
+
+// placeChecks compares the cluster registry's namespaces and the
+// environments' namespaces with the namespaces the cluster has.
+func (s *Scanner) placeChecks(ctx context.Context, namespaces func(context.Context) ([]string, bool)) []ClassCheck {
+	cl := ClassCheck{Class: "cluster", NotRegistered: []string{}, NotLive: []string{}}
+	env := ClassCheck{Class: "environment", NotRegistered: []string{}, NotLive: []string{}}
+	raw, err := s.kept().Read(keptPlaces)
+	var k keptPlaceRegistries
+	if err != nil || raw == nil || json.Unmarshal(raw, &k) != nil {
+		cl.Note, env.Note = "no scan has kept the cluster and environment registries yet", "no scan has kept the cluster and environment registries yet"
+		return []ClassCheck{cl, env}
+	}
+	if namespaces == nil {
+		cl.Note, env.Note = "this platform does not read a cluster", "this platform does not read a cluster"
+		return []ClassCheck{cl, env}
+	}
+	live, ok := namespaces(ctx)
+	if !ok {
+		cl.Note, env.Note = "the cluster's namespaces could not be read", "the cluster's namespaces could not be read"
+		return []ClassCheck{cl, env}
+	}
+	has := map[string]bool{}
+	for _, ns := range live {
+		has[ns] = true
+		if _, in := k.ClusterNS[ns]; !in {
+			cl.NotRegistered = append(cl.NotRegistered, ns)
+		}
+	}
+	for ns, id := range k.ClusterNS {
+		if !has[ns] {
+			cl.NotLive = append(cl.NotLive, ns+" ("+id+")")
+		}
+	}
+	cl.Measured, cl.Registered, cl.Live = true, len(k.ClusterNS), len(live)
+	cl.Note = "namespaces: registered are the clusters' bifrost_namespaces; not registered includes the system's own (kube-system and the like)"
+	envWithNS := 0
+	for id, ns := range k.Environments {
+		if ns == "" {
+			continue
+		}
+		envWithNS++
+		if !has[ns] {
+			env.NotLive = append(env.NotLive, id+" ("+ns+")")
+		}
+	}
+	env.Measured, env.Registered, env.Live = true, envWithNS, envWithNS-len(env.NotLive)
+	env.Note = "environments that name a namespace, against the cluster's namespaces; an environment with no namespace (a thin client) is not compared"
+	for _, c := range []*ClassCheck{&cl, &env} {
+		sort.Strings(c.NotRegistered)
+		sort.Strings(c.NotLive)
+	}
+	return []ClassCheck{cl, env}
+}
+
+const keptReleaseTargets = "running-images"
+
+// keepReleaseTargets keeps the deployments config/running-images.yaml lists
+// per lane and environment ("<namespace>/<name>" -> "<lane> <env>").
+func (s *Scanner) keepReleaseTargets(t Tree) {
+	raw, ok, err := t.Read("config/running-images.yaml")
+	if err != nil || !ok {
+		return
+	}
+	var doc struct {
+		Lanes []struct {
+			Lane string `yaml:"lane"`
+			Envs []struct {
+				Env         string `yaml:"env"`
+				Deployments []struct {
+					Namespace string `yaml:"namespace"`
+					Name      string `yaml:"name"`
+				} `yaml:"deployments"`
+			} `yaml:"envs"`
+		} `yaml:"lanes"`
+	}
+	if yaml.Unmarshal(raw, &doc) != nil {
+		return
+	}
+	k := map[string]string{}
+	for _, l := range doc.Lanes {
+		for _, e := range l.Envs {
+			for _, d := range e.Deployments {
+				k[d.Namespace+"/"+d.Name] = l.Lane + " " + e.Env
+			}
+		}
+	}
+	if out, err := json.Marshal(k); err == nil {
+		if err := s.kept().Write(keptReleaseTargets, out); err != nil {
+			slog.Warn("catalog: keep running images", "err", err)
+		}
+	}
+}
+
+// releaseTargetCheck compares the listed deployments with the deployments
+// the cluster scan saw (its pool's covered workloads).
+func (s *Scanner) releaseTargetCheck() ClassCheck {
+	c := ClassCheck{Class: "running-image", NotRegistered: []string{}, NotLive: []string{}}
+	raw, err := s.kept().Read(keptReleaseTargets)
+	var listed map[string]string
+	if err != nil || raw == nil || json.Unmarshal(raw, &listed) != nil {
+		c.Note = "no scan has kept config/running-images.yaml yet"
+		return c
+	}
+	p, _ := s.Last(ClusterRepo)
+	if p == nil || !p.Measured {
+		c.Note = "the cluster has not been scanned"
+		return c
+	}
+	seen := map[string]bool{}
+	for _, w := range p.Covered {
+		if w.Kind == "deployment" {
+			seen[w.Path] = true
+		}
+	}
+	for _, e := range p.Entries { // off-map workloads are workloads too
+		seen[e.Path] = true
+	}
+	for d, where := range listed {
+		if !seen[d] {
+			c.NotLive = append(c.NotLive, d+" ("+where+")")
+		}
+	}
+	sort.Strings(c.NotLive)
+	c.Measured, c.Registered, c.Live = true, len(listed), len(listed)-len(c.NotLive)
+	c.Note = "the deployments each release lane lists, against the deployments the cluster scan saw; the file lists no images, so which image runs is not compared"
+	return c
 }

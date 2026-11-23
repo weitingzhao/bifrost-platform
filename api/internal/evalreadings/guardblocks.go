@@ -14,7 +14,12 @@ import (
 // every 5 minutes, so counting by it would misplace refusals. Zero until the
 // producer writes blocked_at; set it to the earliest time the producer's
 // replay of the local logs covers. Before it, every window is unmeasured.
-var guardBlockedSince time.Time
+var guardBlockedSince = time.Date(2026, 11, 21, 17, 53, 7, 0, time.UTC)
+
+// The producer's replay (Foundation, 11-22 14:3xZ) posted one machine's whole
+// log with blocked_at; its first line is guardBlockedSince. Other machines
+// post only once their own sender runs, so the hosts a window counted are
+// named in the labels: a day that counted one machine is not every refusal.
 
 // guardBlockReading: guard_blocks, the times in the window the agent guard
 // (preflight.js) really refused an agent. Origin: the coordinator, 2026-11-21:
@@ -46,6 +51,7 @@ func (s ledgerSource) guardBlockReading(w Window) (Reading, error) {
 		return Reading{}, fmt.Errorf("guard.block.recorded: %w", err)
 	}
 	byRule := map[string]int{}
+	hosts := map[string]bool{}
 	seen := map[string]bool{}
 	n := 0
 	for _, r := range rows {
@@ -61,6 +67,7 @@ func (s ledgerSource) guardBlockReading(w Window) (Reading, error) {
 			continue
 		}
 		seen[key] = true
+		hosts[str(r.Body, "host")] = true
 		byRule[str(r.Body, "rule")]++
 		n++
 	}
@@ -77,6 +84,12 @@ func (s ledgerSource) guardBlockReading(w Window) (Reading, error) {
 			parts = append(parts, fmt.Sprintf("%s %d", k, byRule[k]))
 		}
 		labels["by_rule"] = strings.Join(parts, ", ")
+		hs := make([]string, 0, len(hosts))
+		for h := range hosts {
+			hs = append(hs, h)
+		}
+		sort.Strings(hs)
+		labels["hosts"] = strings.Join(hs, ", ")
 	}
 	r := finish(Reading{Name: name, Labels: labels, Value: count(n), Unit: "count", Samples: n, Window: w, Definition: d}, false)
 	measuredZero(&r)

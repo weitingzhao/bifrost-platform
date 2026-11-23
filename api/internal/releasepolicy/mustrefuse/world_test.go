@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
@@ -80,13 +79,13 @@ type world struct {
 	live   *rptest.Live
 	migs   *rptest.Migrations
 	clock  time.Time
-	tier   actions.Tier
+	tier   releasepolicy.Tier
 	params map[string]any // set by a case to ask something else than its starting request
 }
 
 func newWorld(t *testing.T) *world {
 	t.Helper()
-	w := &world{t: t, key: rptest.NewKey(t), cms: rptest.NewConfigMaps(), clock: now, tier: actions.TierC}
+	w := &world{t: t, key: rptest.NewKey(t), cms: rptest.NewConfigMaps(), clock: now, tier: releasepolicy.Tier("C")}
 	w.sign(w.key, w.policyText())
 	w.cms.Set(releasepolicy.FreezeConfigMap, map[string]string{"frozen": "false"})
 	w.facts = &rptest.Facts{

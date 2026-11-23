@@ -8,7 +8,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
-	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
+	"github.com/weitingzhao/bifrost-platform/api/internal/owner/approvalhome"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/threadtitles"

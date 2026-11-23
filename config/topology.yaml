@@ -57,8 +57,8 @@ nodes:
     label: gpu-server (4090)
     host: 192.168.10.60
     group: compute
-    compose_roles: [data_warehouse, ollama_dev]
-    k3s_roles: [k3s_agent_compute, data_warehouse, ai_gpu, tekton_heavy]
+    compose_roles: [ollama_dev]
+    k3s_roles: [k3s_agent_compute, ai_gpu, tekton_heavy]
     in_k3s_cluster: true
     grid: { row: 2, col: 1 }
 

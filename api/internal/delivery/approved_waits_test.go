@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -31,7 +30,7 @@ func TestApprovedRunWaitsForAWindowAnotherRunHolds524(t *testing.T) {
 		t.Fatal(err)
 	}
 	extra := map[string]string{"uiRevision": strings.Repeat("b", 40)}
-	approved := actions.WithCreateAttempt(ctx, "approval-524", 1)
+	approved := withTestAttempt(ctx, "approval-524", 1)
 	resp, _, err := s.StartPipelineRun(approved, name, factSHA1, "", "", extra)
 	if err == nil || !strings.HasPrefix(resp.Message, "REFUSED: release window held by ") || !strings.Contains(resp.Message, "who="+holder) || strings.Contains(resp.Message, "missing who") {
 		t.Fatalf("approved start under a run's window: %+v %v", resp, err)
@@ -49,7 +48,7 @@ func TestApprovedRunWaitsForAWindowAnotherRunHolds524(t *testing.T) {
 	if _, err := putReleaseWindow(ctx, cs, "cicd", windowInput{Who: holder, What: "bifrost-platform,bifrost-ui", Reason: "PipelineRun/" + holder}, time.Now().UTC().Add(-2*windowLifetime)); err != nil {
 		t.Fatal(err)
 	}
-	resp, _, err = s.StartPipelineRun(actions.WithCreateAttempt(ctx, "approval-524", 2), name, factSHA1, "", "", extra)
+	resp, _, err = s.StartPipelineRun(withTestAttempt(ctx, "approval-524", 2), name, factSHA1, "", "", extra)
 	if err != nil || !resp.OK {
 		t.Fatalf("the retry after the window is free: %+v %v", resp, err)
 	}

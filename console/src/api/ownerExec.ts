@@ -18,12 +18,14 @@ class OwnerExecError extends Error {
 }
 
 /** True when a runner answers on this Console's host. Without one the card keeps its terminal instructions. */
-export async function fetchOwnerExecAvailable(signal?: AbortSignal): Promise<boolean> {
+export async function fetchOwnerExecAvailable(signal?: AbortSignal, needsHost = false): Promise<boolean> {
   try {
     const r = await serverFetch(HEALTH_PATH, { signal, cache: 'no-store' })
     if (!r.ok) return false
     const body: unknown = await r.json()
-    return typeof body === 'object' && body !== null && (body as { ok?: unknown }).ok === true
+    if (typeof body !== 'object' || body === null) return false
+    const status = body as { ok?: unknown; host_tickets?: unknown }
+    return status.ok === true && (!needsHost || status.host_tickets === true)
   } catch {
     return false
   }
@@ -39,11 +41,13 @@ export type OwnerExecRunBody = {
   id: string
   command_sha256: string
   code: string
+  host?: string
+  params_hash?: string
   /** The body an approve would carry; the runner passes it on once the code is good. */
   approve?: { channel: 'console'; approval_line: string; params_hash: string }
 }
 
-/** Approve (when pending) and run. Resolves once the command has started. */
+/** Approve and start a cluster command, or queue a ticket for a machine. */
 export async function postOwnerExecRun(token: string, body: OwnerExecRunBody): Promise<void> {
   const headers = new Headers()
   headers.set('Content-Type', 'application/json')
@@ -53,8 +57,9 @@ export async function postOwnerExecRun(token: string, body: OwnerExecRunBody): P
     let acknowledgement: unknown
     try { acknowledgement = await r.json() } catch { /* handled as unconfirmed below */ }
     if (r.status === 202 && typeof acknowledgement === 'object' && acknowledgement !== null) {
-      const confirmed = acknowledgement as { status?: unknown; id?: unknown }
-      if (confirmed.status === 'running' && confirmed.id === body.id) return
+      const confirmed = acknowledgement as { status?: unknown; id?: unknown; host?: unknown }
+      if (confirmed.id === body.id &&
+          (body.host ? confirmed.status === 'queued' && confirmed.host === body.host : confirmed.status === 'running')) return
     }
     throw new OwnerExecError('Command start could not be confirmed. Check the card before trying again.', r.status)
   }

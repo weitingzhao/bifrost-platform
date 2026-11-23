@@ -31,6 +31,15 @@ func (s *Server) wireFullCI(c *controller.Controller) {
 	git := func() (*landinggit.Git, error) { return landinggit.ReaderFromEnv("bifrost-platform") }
 	// The full CI's day is the Owner's, in the zone of the briefs.
 	c.FullCIZone = planpace.BriefZone
+	// The PROD head-release loop starts a candidate's full CI with the same
+	// runner when that is all the candidate waits on (headrelease fullCIFor).
+	s.fullCIRun = func(ctx context.Context, revision string) (string, error) {
+		day := time.Now().UTC()
+		if loc, err := time.LoadLocation(planpace.BriefZone); err == nil {
+			day = time.Now().In(loc)
+		}
+		return ci.EnsureFullRun(kubemetrics.WithSite(ctx, "landingci.full"), revision, day)
+	}
 	c.FullCI = &fullci.FullCI{At: at, Runs: func(ctx context.Context, since time.Time) ([]landingci.FullRun, error) {
 		// A name for the platform's count of its own Kubernetes requests: these
 		// loops were the 1,077 unnamed LISTs of ten minutes on PROD, 2026-11-17.

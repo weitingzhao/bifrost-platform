@@ -24,7 +24,7 @@ import {
 } from '@/lib/shell/consoleRoutes'
 
 const ENTRIES = ['Command', 'Crew', 'Work', 'Services', 'System']
-const DETAILS = ['Status', 'Data', 'IB', 'Releases', 'Infrastructure', 'Bus', 'City', 'Records']
+const DETAILS = ['Status', 'Data', 'IB', 'Releases', 'Infrastructure', 'Bus', 'Collaboration', 'City', 'Records']
 
 describe('shell navigation', () => {
   it('has four entries, For you first, then the detail pages with Records last', () => {
@@ -128,8 +128,8 @@ describe('Needs you and Progress, now part of For you and Work (W-31 2.2b)', () 
     expect(isShellRouteId('progress')).toBe(false)
   })
 
-  it('a silent-thread push opens For you at everything waiting (api/internal/approvalhome ConsoleNeedsYou)', () => {
-    const wire = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../../api/internal/approvalhome/console_notification_contract.go'), 'utf8')
+  it('a silent-thread push opens For you at everything waiting (api/internal/owner/approvalhome ConsoleNeedsYou)', () => {
+    const wire = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../../api/internal/owner/approvalhome/console_notification_contract.go'), 'utf8')
     const url = /const ConsoleNeedsYou = "([^"]+)"/.exec(wire)?.[1] ?? ''
     expect(url).toBe('http://ops.bifrost.lan/#you?section=waiting')
     expect(resolveConsoleHash(url.split('#')[1] ?? '')).toEqual({ location: { kind: 'shell', id: 'command' }, canonical: NEEDS_YOU_HREF })

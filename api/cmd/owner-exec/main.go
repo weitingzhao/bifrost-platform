@@ -17,10 +17,15 @@
 //	OWNER_EXEC_EGRESS_PROBE  host:port the NetworkPolicy must block; reachable = refuse to run
 //	OWNER_EXEC_SHELL_URL     send commands to the shell container at this URL instead of
 //	                         running them here (PROD: http://127.0.0.1:8788)
+//	OWNER_EXEC_TICKET_KEY_FILE  optional key for authorizing named-machine tickets
 //
 // `owner-exec shell` is the other container of the PROD Pod: it runs the
 // commands, with the Pod's cluster identity, and holds no seed
 // (OWNER_EXEC_SHELL_LISTEN, default 127.0.0.1:8788).
+//
+// `owner-exec host` polls using OWNER_EXEC_HOST_TOKEN_FILE, in the account that
+// will execute the commands. OWNER_EXEC_HOST is the registered machine ID and
+// PLATFORM_API_URL is its verified HTTPS origin.
 package main
 
 import (
@@ -48,6 +53,10 @@ func env(key, fallback string) string {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "host" {
+		serveMachine()
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "shell" {
 		addr := env("OWNER_EXEC_SHELL_LISTEN", "127.0.0.1:8788")
 		log.Printf("owner-exec shell %s listening on %s", version, addr)
@@ -76,6 +85,16 @@ func main() {
 		ExecutorID: "owner-exec:" + host,
 		Timeout:    timeout,
 		Logf:       log.Printf,
+	}
+	if path := env("OWNER_EXEC_TICKET_KEY_FILE", ""); path != "" {
+		key, err := os.ReadFile(path)
+		if err != nil && !os.IsNotExist(err) {
+			log.Fatal("could not load owner-exec ticket key")
+		}
+		srv.TicketKey = []byte(strings.TrimSpace(string(key)))
+		if err == nil && len(srv.TicketKey) < 32 {
+			log.Fatal("owner-exec ticket key is too short")
+		}
 	}
 	if shell := env("OWNER_EXEC_SHELL_URL", ""); shell != "" {
 		srv.Run = ownerexec.RemoteRun(shell)
@@ -109,4 +128,24 @@ func main() {
 	// pending). A lost shell reply instead stops renewal so the card goes
 	// unknown. Forced Pod termination can interrupt this in-memory drain.
 	srv.Wait()
+}
+
+func serveMachine() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatal("cannot resolve the registered account home")
+	}
+	bearer, err := ownerexec.ReadMachineToken(env("OWNER_EXEC_HOST_TOKEN_FILE", ""))
+	if err != nil {
+		log.Fatal(err)
+	}
+	timeout, err := time.ParseDuration(env("OWNER_EXEC_TIMEOUT", "30m"))
+	if err != nil {
+		log.Fatal("OWNER_EXEC_TIMEOUT must be a duration")
+	}
+	if err := ownerexec.ServeHost(ctx, env("PLATFORM_API_URL", ""), env("OWNER_EXEC_HOST", ""), bearer, home, timeout, log.Printf); err != nil {
+		log.Fatal(err)
+	}
 }

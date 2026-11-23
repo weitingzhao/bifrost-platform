@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -41,7 +42,15 @@ func (s *Server) prodShadowOf(table headrelease.Table) *headrelease.ProdShadowLo
 		},
 		// Mode on's one act and its hours (prod_batch_release.go).
 		Release: s.prodRelease,
-		Zone:    prodReleaseZone(),
+		// A candidate that waits only on its full CI gets one, from the daily
+		// full CI's own runner (wireFullCI sets fullCIRun on PROD's controller).
+		FullCI: func(ctx context.Context, revision string) (string, error) {
+			if s.fullCIRun == nil {
+				return "", errors.New("the daily full CI is not wired in this process")
+			}
+			return s.fullCIRun(ctx, revision)
+		},
+		Zone: prodReleaseZone(),
 	})
 }
 

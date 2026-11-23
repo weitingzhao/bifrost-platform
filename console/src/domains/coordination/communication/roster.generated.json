@@ -1,0 +1,243 @@
+{
+  "version": 1,
+  "source": "bifrost-trade-infra:agent-config/charters/seats.yaml",
+  "sha256": "dc5f9f7c4d2d2f0e54a578669064010b1991e3a01abf82c170698e6d980fb907",
+  "importedAt": "2026-11-22T23:24:41Z",
+  "members": [
+    {
+      "id": "thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a",
+      "label": "company-coordinator",
+      "memberships": [
+        {
+          "seat": "company-coordinator",
+          "organization": "Platform",
+          "domain": null,
+          "role": "owner"
+        },
+        {
+          "seat": "8-1-duty",
+          "organization": "Platform",
+          "domain": "coordination",
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "thread:local_c00f7b95-4c6d-4324-a833-cc9b6f389b9a",
+      "label": "0-foundation-decouple",
+      "memberships": [
+        {
+          "seat": "0-foundation-decouple",
+          "organization": "Platform",
+          "domain": "foundation",
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "thread:local_76b564a0-a591-4091-859b-6166a3b37d7f",
+      "label": "0-2-catalog",
+      "memberships": [
+        {
+          "seat": "0-2-catalog",
+          "organization": "Platform",
+          "domain": "foundation",
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "thread:local_6ab1ad67-09a8-4522-9b4a-a03125b10b2c",
+      "label": "1-plan",
+      "memberships": [
+        {
+          "seat": "1-plan",
+          "organization": "Platform",
+          "domain": "plan",
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "thread:local_7666e574-cf39-40a9-96bb-aa32d8a22b27",
+      "label": "2-lineage",
+      "memberships": [
+        {
+          "seat": "2-lineage",
+          "organization": "Platform",
+          "domain": "lineage",
+          "role": "owner"
+        },
+        {
+          "seat": "12-audit",
+          "organization": "Platform",
+          "domain": "audit",
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "thread:local_7de640c4-4b19-4a71-a0ac-ced2ce5fc7ff",
+      "label": "3-4-verify-release-ci",
+      "memberships": [
+        {
+          "seat": "3-4-verify-release-ci",
+          "organization": "Platform",
+          "domain": "verification",
+          "role": "owner"
+        },
+        {
+          "seat": "3-4-verify-release-ci",
+          "organization": "Platform",
+          "domain": "delivery",
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "thread:local_360734e0-481d-48e1-86c9-1866b3707707",
+      "label": "approvals",
+      "memberships": [
+        {
+          "seat": "5-approvals",
+          "organization": "Platform",
+          "domain": "approvals",
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "thread:local_7dd39a39-1e0e-4878-b829-2e3f44d5589e",
+      "label": "6-compute",
+      "memberships": [
+        {
+          "seat": "6-compute",
+          "organization": "Platform",
+          "domain": "compute",
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "thread:local_04484692-66ee-4517-b162-9c1440be14b1",
+      "label": "payload",
+      "memberships": [
+        {
+          "seat": "7-payload",
+          "organization": "Platform",
+          "domain": "payload",
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "thread:local_ab850773-fe26-40fa-ac01-b3b590b73164",
+      "label": "8-2-comm-desk",
+      "memberships": [
+        {
+          "seat": "8-2-comm-desk",
+          "organization": "Platform",
+          "domain": "coordination",
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "thread:local_3361afbd-43fb-4539-a934-406b9a00b09f",
+      "label": "8-3-metrics",
+      "memberships": [
+        {
+          "seat": "8-3-metrics",
+          "organization": "Platform",
+          "domain": "coordination",
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "thread:local_2c3fa7a5-f04c-41a0-8528-ce1b5a07eb86",
+      "label": "crew",
+      "memberships": [
+        {
+          "seat": "9-crew",
+          "organization": "Platform",
+          "domain": "crew",
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "thread:local_dd4f492f-ffe9-4c22-a166-ab4d0fd855c0",
+      "label": "triage",
+      "memberships": [
+        {
+          "seat": "13-triage",
+          "organization": "Platform",
+          "domain": "triage",
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "thread:local_d303ae46-113a-4d47-90e4-c8942f5fbbe5",
+      "label": "10-cockpit",
+      "memberships": [
+        {
+          "seat": "10-cockpit",
+          "organization": "Platform",
+          "domain": null,
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "thread:local_f6f0f02b-092c-4c76-b68d-57f5b4c1a7f0",
+      "label": "station",
+      "memberships": [
+        {
+          "seat": "win2-workshop",
+          "organization": "Platform",
+          "domain": "station",
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "thread:local_6b7c1be6-8e08-4903-9681-422059395f5d",
+      "label": "hw-upgrade",
+      "memberships": [
+        {
+          "seat": "6-hw-upgrade",
+          "organization": "Platform",
+          "domain": "compute",
+          "role": "temporary",
+          "invitedBy": "company-coordinator"
+        }
+      ]
+    },
+    {
+      "id": "owner",
+      "label": "owner",
+      "memberships": [
+        {
+          "seat": "owner",
+          "organization": "Platform",
+          "domain": null,
+          "role": "human"
+        }
+      ]
+    },
+    {
+      "id": "thread:local_3172e958-47d7-4138-9de2-2eb474e4d49c",
+      "label": "参谋长",
+      "memberships": [
+        {
+          "seat": "chief-of-staff",
+          "organization": "Platform",
+          "domain": null,
+          "role": "outside"
+        }
+      ]
+    }
+  ]
+}

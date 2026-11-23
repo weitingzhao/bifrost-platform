@@ -43,6 +43,18 @@ describe('Bus page stream watchdog', () => {
   })
   afterEach(() => vi.useRealTimers())
 
+  // 2026-11-22: City and collaboration must observe one transport, not open one stream per look.
+  it('shares one reader across simultaneous observers and stops only after the last leaves', async () => {
+    respond = hang
+    const first = renderHook(() => useBusStream())
+    const second = renderHook(() => useBusStream())
+    expect(calls).toHaveLength(1)
+    first.unmount()
+    expect(calls[0].aborted).toBe(false)
+    second.unmount()
+    expect(calls[0].aborted).toBe(true)
+  })
+
   it('drops a hung stream and opens a new one', async () => {
     respond = hang
     const { unmount } = renderHook(() => useBusStream())

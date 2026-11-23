@@ -12,7 +12,29 @@ import (
 
 type Service struct {
 	cfg *config.Config
+	// groups are the readings other domains registered for
+	// /telemetry/overview?group=<name> (SetGroup). Since 2026-11-22 the
+	// compute readings live in the compute domain and are bound here by
+	// assembly; telemetry no longer writes another domain's queries.
+	groups map[string]func() []QuerySpec
 }
+
+// SetGroup registers a named group of readings; an empty or unknown group
+// asked for is the default presets. Called once at assembly, before serving.
+func (s *Service) SetGroup(name string, queries func() []QuerySpec) {
+	if s.groups == nil {
+		s.groups = map[string]func() []QuerySpec{}
+	}
+	s.groups[name] = queries
+}
+
+// maxInFlight is how many of one overview's queries are at Prometheus at
+// once. A query's 10-second client timeout starts when it is sent, and
+// Prometheus answers 20 at a time by default: the 26 compute readings sent
+// together queued past the timeout (7 read "Could not be read" on PROD,
+// 2026-11-22 17:5xZ, each 1-2.2 s alone; the compute line measured it).
+// Waiting for a slot is not counted against a query's timeout.
+const maxInFlight = 6
 
 func NewService(cfg *config.Config) *Service {
 	return &Service{cfg: cfg}
@@ -29,8 +51,8 @@ func (s *Service) prometheusURL() string {
 	return entry.PrometheusURL()
 }
 
-// Overview runs one group of preset queries: the default presets, or the
-// compute readings when group is "compute". An unknown group is the default.
+// Overview runs one group of preset queries: the default presets, or a group
+// a domain registered (SetGroup). An unknown group is the default.
 func (s *Service) Overview(ctx context.Context, namespace, group string) (OverviewResponse, error) {
 	ns := ResolveNamespace(namespace)
 	promURL := s.prometheusURL()
@@ -40,18 +62,21 @@ func (s *Service) Overview(ctx context.Context, namespace, group string) (Overvi
 
 	client := NewClient(promURL)
 	queries := PresetQueries()
-	if group == GroupCompute {
-		queries = ComputeQueries()
+	if q, ok := s.groups[group]; ok && group != "" {
+		queries = q()
 	} else {
 		group = ""
 	}
 	metrics := make([]MetricResult, len(queries))
 	var wg sync.WaitGroup
+	slots := make(chan struct{}, maxInFlight)
 	for i, spec := range queries {
 		wg.Add(1)
 		go func(idx int, q QuerySpec) {
 			defer safego.Recover("telemetry.runQuery")
 			defer wg.Done()
+			slots <- struct{}{}
+			defer func() { <-slots }()
 			metrics[idx] = s.runQuery(ctx, client, q, ns)
 		}(i, spec)
 	}

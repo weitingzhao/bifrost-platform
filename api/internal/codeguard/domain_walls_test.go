@@ -2,7 +2,6 @@ package codeguard
 
 import (
 	"encoding/json"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -61,7 +60,11 @@ func across(o ownership, imports map[string][]string) []string {
 // window_handler.go and run_window.go; threadinbox.Recipient is called on the
 // path from the trust-anchored window_store.go; the release context reads
 // questions' records. api/cmd stopped being skipped, and one command's import
-// came onto it.
+// came onto it. 2026-11-22, the CI seat: delivery reaches the action runner
+// through a port of its own (delivery/approvals_ports.go, bound in
+// server/delivery_ports.go), and the delivery row came off.
+// The same day releasepolicy took a Tier of its own (releasepolicy/tier.go;
+// the server passes the approvals grade over), and the last row came off.
 // assembly is the domain of the packages that wire every domain together
 // (server, planwiring, and integration, its system test). It stands on top:
 // it imports every domain, so its own imports are not checked here, and an
@@ -71,10 +74,7 @@ func across(o ownership, imports map[string][]string) []string {
 // and the milestone "each package one domain" could never reach 9/9.
 const assembly = "assembly"
 
-var domainsAcross = []string{
-	"api/internal/delivery -> api/internal/actions (delivery -> approvals)",
-	"api/internal/releasepolicy -> api/internal/actions (delivery -> approvals)",
-}
+var domainsAcross = []string{}
 
 func moduleImports(t *testing.T) map[string][]string {
 	t.Helper()
@@ -101,12 +101,9 @@ func moduleImports(t *testing.T) map[string][]string {
 }
 
 func TestADomainImportsOnlyItselfAndTheBase(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "config", "domain-ownership.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := ownershipRaw(t)
 	var o ownership
-	if err = json.Unmarshal(raw, &o); err != nil {
+	if err := json.Unmarshal(raw, &o); err != nil {
 		t.Fatal(err)
 	}
 	if o.domainOf("api/internal/agentrt/eventlog") != "foundation" || o.domainOf("api/internal/ciscore") != "verification" || len(o.Packages) < 50 {

@@ -1,25 +1,18 @@
 package actions
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
-// ExemptionReason is why a write route is intentionally outside the catalog.
-// An empty reason means the route is not exempt. The route ratchet fails when
-// a new write route is neither catalogued nor listed here.
-func ExemptionReason(method, route string) string {
+// exemptionReason is why a write route is intentionally outside the catalog.
+// An empty reason means the route is not exempt.
+func exemptionReason(method, route string) string {
 	return exemptions[routeKey(method, route)]
 }
 
-// Exemptions is the explicit list, keyed "METHOD /api/v1/...".
-func Exemptions() map[string]string {
-	out := make(map[string]string, len(exemptions))
-	for k, v := range exemptions {
-		out[k] = v
-	}
-	return out
-}
-
-// Covers reports whether a write route is the direct endpoint of a catalog action.
-func Covers(method, route string) bool {
+// covers reports whether a write route is the direct endpoint of a catalog action.
+func covers(method, route string) bool {
 	key := routeKey(method, route)
 	for _, a := range catalog {
 		if a.Method == "" || a.Pattern == "" {
@@ -30,6 +23,52 @@ func Covers(method, route string) bool {
 		}
 	}
 	return false
+}
+
+// MountedRoute is one route the router serves.
+type MountedRoute struct{ Method, Pattern string }
+
+// CheckCovered compares the mounted routes with the action catalog and the
+// exemption list: a write route in neither, an exemption that is not mounted,
+// a catalogued action whose route is not mounted. It returns one line per
+// problem and the number of write routes it saw; platform-api logs the lines
+// at start, and the route ratchet test fails on any (moved here 2026-11-22 so
+// the assembly calls it instead of a test reaching these names).
+func CheckCovered(routes []MountedRoute) (problems []string, writes int) {
+	seen := map[string]bool{}
+	for _, r := range routes {
+		switch strings.ToUpper(r.Method) {
+		case "POST", "PUT", "PATCH", "DELETE":
+		default:
+			continue
+		}
+		writes++
+		key := routeKey(r.Method, r.Pattern)
+		seen[key] = true
+		if covers(r.Method, r.Pattern) || exemptionReason(r.Method, r.Pattern) != "" {
+			continue
+		}
+		problems = append(problems, "write route "+key+" is neither in the action catalog nor on the exemption list")
+	}
+	keys := make([]string, 0, len(exemptions))
+	for k := range exemptions {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if !seen[k] {
+			problems = append(problems, "exemption "+k+" is not a live route: delete it or fix the pattern")
+		}
+	}
+	for _, a := range catalog {
+		if a.Method == "" || a.Pattern == "" {
+			continue
+		}
+		if !seen[routeKey(a.Method, a.Pattern)] {
+			problems = append(problems, "catalog action "+a.ID+" route "+a.Method+" "+a.Pattern+" is not mounted")
+		}
+	}
+	return problems, writes
 }
 
 func routeKey(method, route string) string {
@@ -59,6 +98,7 @@ func init() {
 		"POST /api/v1/approvals/{id}/reject",
 		"POST /api/v1/approvals/{id}/resolve",
 		"POST /api/v1/approvals/{id}/withdraw",
+		"POST /api/v1/approvals/{id}/ticket",
 		"POST /api/v1/approvals/claim",
 		"POST /api/v1/approvals/{id}/heartbeat",
 		"POST /api/v1/approvals/{id}/result",

@@ -255,7 +255,9 @@ func TestDeliveryPlacementBinding(t *testing.T) {
 	if _, err = placementTask(delivery.TaskProfile{ExcludeNodes: []delivery.NodeRole{"gpu"}}); err == nil || !strings.Contains(err.Error(), `"gpu"`) {
 		t.Fatalf("unknown role: %v", err)
 	}
-	m := map[string]placement.NodeMetrics{"10.0.0.7": {WriteLatencySeconds: 0.007, CPUBusy: 0.1, DiskBusy: 0.2, MemoryAvailable: 0.6, WrittenBytes2h: 9}}
+	// 2026-11-22: 02 root disk ~53%, growing ~10.8 GB/day; compute set a 70% stop line.
+	// CI agreed on 11-22 to add only the delivery port field; it must survive both conversions.
+	m := map[string]placement.NodeMetrics{"10.0.0.7": {WriteLatencySeconds: 0.007, CPUBusy: 0.1, DiskBusy: 0.2, MemoryAvailable: 0.6, WrittenBytes2h: 9, RootDiskUsed: 0.70}}
 	back, err := placementNodeMetrics(deliveryNodeMetrics(func(context.Context) (map[string]placement.NodeMetrics, error) { return m, nil }))(context.Background())
 	if err != nil || !reflect.DeepEqual(back, m) {
 		t.Fatalf("metrics: %+v, %v", back, err)

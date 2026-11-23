@@ -131,53 +131,6 @@ func NodePower(ctx context.Context, c *cluster.Service, nodeName string) (NodePo
 	}, nil
 }
 
-// WakeNode sends a managed compute node a Wake-on-LAN packet over SSH.
-func WakeNode(ctx context.Context, c *cluster.Service, nodeName string) (cluster.ActuationResponse, error) {
-	spec := computeNodeSpec(c, nodeName)
-	if spec == nil {
-		return cluster.ActuationResponse{}, fmt.Errorf("node %q is not a managed compute node", nodeName)
-	}
-
-	mac := strings.TrimSpace(spec.WolMAC)
-	if mac == "" {
-		clientset, _, err := c.KubernetesClient()
-		if err != nil {
-			return cluster.ActuationResponse{}, err
-		}
-		node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-		if err != nil {
-			return cluster.ActuationResponse{}, fmt.Errorf("get node: %w", err)
-		}
-		mac = strings.TrimSpace(node.Annotations[annoWolMAC])
-	}
-	if mac == "" {
-		return cluster.ActuationResponse{}, fmt.Errorf("no WOL MAC configured for node %q", nodeName)
-	}
-
-	host := strings.TrimSpace(spec.WolSSHHost)
-	if host == "" && c.Entry() != nil {
-		host = strings.TrimSpace(c.Entry().SSHHost)
-	}
-	if host == "" {
-		return cluster.ActuationResponse{}, fmt.Errorf("no wol_ssh_host configured")
-	}
-
-	out, err := runSSHCommand(ctx, host, "wakeonlan", mac)
-	if err != nil {
-		return cluster.ActuationResponse{}, fmt.Errorf("wakeonlan via %s: %w (%s)", host, err, strings.TrimSpace(out))
-	}
-
-	now := time.Now().UTC()
-	return cluster.ActuationResponse{
-		OK:          true,
-		Action:      "cluster.node.wake",
-		Target:      nodeName,
-		Changed:     true,
-		Message:     fmt.Sprintf("WOL packet sent to %s via %s", mac, host),
-		GeneratedAt: now,
-	}, nil
-}
-
 // PowerOffNode drains a managed compute node and powers it off over SSH; it
 // uncordons the node again when the power off fails.
 func PowerOffNode(ctx context.Context, c *cluster.Service, nodeName string) (cluster.ActuationResponse, error) {

@@ -20,6 +20,7 @@
       "@/*": ["src/*"],
       "@bifrost/ui": ["../../bifrost-ui/dist/index.d.ts"],
       "@bifrost/ui/styles": ["../../bifrost-ui/dist/styles/bifrost-ui.css"],
+      "@bifrost/ui/communication": ["../../bifrost-ui/dist/communication/index.d.ts"],
       "@bifrost/ui/city": ["../../bifrost-ui/dist/city/index.d.ts"],
       "@bifrost/ui/city/*": ["../../bifrost-ui/dist/city/*"],
       "react": ["./node_modules/@types/react"],
@@ -29,6 +30,6 @@
       "lucide-react": ["./node_modules/lucide-react"]
     }
   },
-  "include": ["src"],
+  "include": ["src", "fixtures"],
   "exclude": ["src/**/__tests__/**", "src/**/*.test.ts", "src/**/*.test.tsx"]
 }

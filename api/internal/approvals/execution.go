@@ -509,6 +509,9 @@ func (s *Service) claimInternal(id string) (Approval, bool) {
 
 // claimInput is POST /approvals/claim.
 type claimInput struct {
+	// Host is set by the route from the caller's token name (host-<name>), never
+	// from the body: a machine's executor claims only its own host cards.
+	Host       string   `json:"-"`
 	ExecutorID string   `json:"executor_id"`
 	ID         string   `json:"id"`
 	Runners    []string `json:"runners"`
@@ -551,10 +554,10 @@ func (s *Service) claim(ctx context.Context, role actuation.Role, in claimInput)
 	for _, a := range in.Actions {
 		wantActions[strings.TrimSpace(a)] = true
 	}
-	return s.claimOnce(ctx, executor, strings.TrimSpace(in.ID), runners, wantActions)
+	return s.claimOnce(ctx, executor, in.Host, strings.TrimSpace(in.ID), runners, wantActions)
 }
 
-func (s *Service) claimOnce(ctx context.Context, executor, ref string, runners, wantActions map[string]bool) decided {
+func (s *Service) claimOnce(ctx context.Context, executor, host, ref string, runners, wantActions map[string]bool) decided {
 	now := s.clock()
 	var rec Approval
 	var refusal *decided
@@ -566,7 +569,8 @@ func (s *Service) claimOnce(ctx context.Context, executor, ref string, runners, 
 		candidate := func(a Approval) bool {
 			return a.Status == StatusApproved && runners[a.Runner] &&
 				(len(wantActions) == 0 || wantActions[a.Action]) &&
-				a.Execution != nil && !now.Before(a.Execution.NextAttemptAt)
+				a.Execution != nil && !now.Before(a.Execution.NextAttemptAt) &&
+				hostClaimable(a, host, now)
 		}
 		var pick *Approval
 		if ref != "" {
@@ -614,6 +618,8 @@ func (s *Service) claimOnce(ctx context.Context, executor, ref string, runners, 
 			return nil
 		}
 		s.claimLocked(pick, executor, now)
+		// A ticket opens one claim.
+		pick.Execution.TicketHost, pick.Execution.TicketUntil = "", nil
 		doc.put(*pick)
 		rec = *pick
 		evs = append(evs, event{"approval.claim", rec.ID, StatusRunning,

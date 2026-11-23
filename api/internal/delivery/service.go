@@ -22,7 +22,6 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -319,7 +318,8 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 		resp.Message = fmt.Sprintf("revision %q must be a 40-character lowercase git SHA", rev)
 		return resp, empty, fmt.Errorf("%s", resp.Message)
 	}
-	_, approvedAttempt := actions.CreateAttemptFrom(ctx)
+	ar := actionRuns()
+	_, approvedAttempt := ar.AttemptName(ctx, pipelineName)
 	runOwnsWindow := approvedAttempt && strings.HasPrefix(pipelineName, "bifrost-deliver-")
 	// Approval authorizes the action, not replacement of its requester's
 	// session window. Optional-window deliveries use the same path either way.
@@ -374,8 +374,8 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	}
 
 	runName := fmt.Sprintf("%s-%d", pipelineName, now.Unix())
-	if att, ok := actions.CreateAttemptFrom(ctx); ok {
-		runName = actions.ObjectName(pipelineName, att)
+	if name, ok := ar.AttemptName(ctx, pipelineName); ok {
+		runName = name
 	}
 	spec, rev, buildErr := buildPipelineRunSpec(pipelineName, rev, tag, extra, pipe, kaniko)
 	if buildErr != nil {
@@ -399,7 +399,7 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	if ciRepo != "" {
 		meta["labels"].(map[string]any)["bifrost.io/repo"] = ciRepo
 	}
-	if ann := actions.IdentityAnnotations(ctx); len(ann) > 0 || requesterOf(ctx) != "" || placed {
+	if ann := ar.IdentityAnnotations(ctx); len(ann) > 0 || requesterOf(ctx) != "" || placed {
 		raw := make(map[string]any, len(ann)+3)
 		for k, v := range ann {
 			raw[k] = v
@@ -437,14 +437,14 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	}
 	res := dyn.Resource(pipelineRunGVR).Namespace(ns)
 	if _, gerr := res.Get(ctx, runName, metav1.GetOptions{}); gerr == nil {
-		uerr := actions.ObjectExists(ctx, ns, runName)
+		uerr := ar.ObjectExists(ctx, ns, runName)
 		resp.Message = uerr.Error()
 		return resp, empty, uerr
 	} else if !apierrors.IsNotFound(gerr) {
 		// The create has not been sent. A lost read still must not be followed
 		// by a second create, so anything but a proven absence is unknown.
-		classified := actions.ClassifyCreate(gerr)
-		if actions.IsUncertain(classified) {
+		classified := ar.ClassifyCreate(gerr)
+		if ar.IsUncertain(classified) {
 			resp.Message = classified.Error()
 			return resp, empty, classified
 		}
@@ -462,7 +462,7 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	}
 	created, err := res.Create(ctx, obj, metav1.CreateOptions{})
 	if lease != nil {
-		if err == nil || actions.IsUncertain(actions.ClassifyCreate(err)) || apierrors.IsAlreadyExists(err) {
+		if err == nil || ar.IsUncertain(ar.ClassifyCreate(err)) || apierrors.IsAlreadyExists(err) {
 			lease.follow(res, runName, err == nil)
 		} else {
 			releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
@@ -471,13 +471,13 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 		}
 	}
 	if apierrors.IsAlreadyExists(err) {
-		uerr := actions.ObjectExists(ctx, ns, runName)
+		uerr := ar.ObjectExists(ctx, ns, runName)
 		resp.Message = uerr.Error()
 		return resp, empty, uerr
 	}
 	if err != nil {
-		classified := actions.ClassifyCreate(err)
-		if actions.IsUncertain(classified) {
+		classified := ar.ClassifyCreate(err)
+		if ar.IsUncertain(classified) {
 			resp.Message = classified.Error()
 			return resp, empty, classified
 		}

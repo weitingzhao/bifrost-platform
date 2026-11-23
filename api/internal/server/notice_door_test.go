@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/approvalhome"
+	"github.com/weitingzhao/bifrost-platform/api/internal/owner/approvalhome"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 )

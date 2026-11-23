@@ -120,7 +120,7 @@ const Owner = "owner"
 
 // unmeasured are the readings asked for (the coordinator, 14:5x) that no record holds.
 var unmeasured = []Unmeasured{
-	{What: "blocked by a permission", Why: "the guards (preflight, auto mode) refuse on the seat's own machine and write nothing to the platform"},
+	{What: "blocked by auto mode", Why: "auto mode refuses on the seat's own machine and writes nothing to the platform; preflight's refusals are on the bus as guard.block.recorded, sent by each machine's doorbell"},
 	{What: "backlog per subscription", Why: "measured in Prometheus (bifrost_bus_consumer_pending and _ack_pending, by consumer, every minute) but not drawn on this page yet"},
 	{What: "letters between sessions", Why: "Claude Desktop's session messages do not pass through the platform; only platform letters are counted"},
 }

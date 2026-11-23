@@ -373,6 +373,9 @@ type ProdShadowLoop struct {
 	// pipeline the loop was built for, or says why not now (wait). Mode on
 	// only; nil there is an error recorded, never a release.
 	Release func(ctx context.Context, revision string, params map[string]string) (run, wait string, err error)
+	// FullCI starts the full CI of revision (mode on only; fullCIFor in
+	// prod_release.go). nil starts none.
+	FullCI func(ctx context.Context, revision string) (run string, err error)
 
 	// Every is the least time between two judgements; zero judges each
 	// pass. Gathering reads the release records, which lists the runs of the
@@ -381,9 +384,10 @@ type ProdShadowLoop struct {
 	// down (2026-11-16: 1,838 in ten minutes on PROD).
 	Every time.Duration
 
-	mu     sync.Mutex
-	last   string
-	judged time.Time
+	mu          sync.Mutex
+	last        string
+	judged      time.Time
+	fullCIAsked string
 }
 
 // Pass judges once. recorded says whether a record was written.
@@ -407,6 +411,8 @@ func (s *ProdShadowLoop) Pass(ctx context.Context) (d ProdDecision, recorded boo
 	var done prodAct
 	if s.Mode == ProdOn && d.WouldRelease {
 		done = s.act(ctx, d)
+	} else {
+		done = s.fullCIFor(ctx, d)
 	}
 	mark := d.Fingerprint() + "|" + done.result + "|" + done.run + "|" + done.why
 	s.mu.Lock()

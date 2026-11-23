@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
@@ -90,7 +89,7 @@ func newApplyFixture(t *testing.T, edit func(doc map[string]any)) *applyFixture 
 }
 
 func (f *applyFixture) apply() releasepolicy.Decision {
-	return f.eng.Decide(context.Background(), "apply_manifest", actions.TierC, map[string]any{"plan_id": "plan-1"})
+	return f.eng.Decide(context.Background(), "apply_manifest", releasepolicy.Tier("C"), map[string]any{"plan_id": "plan-1"})
 }
 
 func (f *applyFixture) editPlan(edit func(p *releasepolicy.ApplyPlan)) {
@@ -213,7 +212,7 @@ func TestApplyWithOneThingWrongWaits(t *testing.T) {
 	}
 	t.Run("tier D", func(t *testing.T) {
 		f := newApplyFixture(t, nil)
-		wantWait(t, f.eng.Decide(context.Background(), "apply_manifest", actions.TierD, map[string]any{"plan_id": "plan-1"}), "tier D is never auto-approved")
+		wantWait(t, f.eng.Decide(context.Background(), "apply_manifest", releasepolicy.Tier("D"), map[string]any{"plan_id": "plan-1"}), "tier D is never auto-approved")
 	})
 	t.Run("no plan reader", func(t *testing.T) {
 		f := newApplyFixture(t, nil)
@@ -253,7 +252,7 @@ func TestAPolicyWithoutAnApplySectionCoversNoApply(t *testing.T) {
 		t.Fatalf("decision = %+v\nwant      %+v", got, want)
 	}
 	// The same words every other action gets, today as before.
-	other := f.eng.Decide(context.Background(), "cordon_node", actions.TierC, map[string]any{"name": "n"})
+	other := f.eng.Decide(context.Background(), "cordon_node", releasepolicy.Tier("C"), map[string]any{"name": "n"})
 	if len(other.Reasons) != 1 || other.Reasons[0] != "cordon_node is not a release; the policy covers start_pipeline_run only" {
 		t.Fatalf("another action: %+v", other)
 	}

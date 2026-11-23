@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
@@ -102,7 +101,7 @@ var cases = []mustRefuse{
 			w.params = map[string]any{"name": "bifrost-deliver-elsewhere", "revision": "main", "who": requester}
 		}, "is not in the policy's allow list"},
 	{"tier D is never covered", "ADR section 5: tier D always waits for the Owner", releasePlatform,
-		func(w *world) { w.tier = actions.TierD }, "tier D is never auto-approved"},
+		func(w *world) { w.tier = releasepolicy.Tier("D") }, "tier D is never auto-approved"},
 
 	// The rules themselves, in a repo no self-check covers.
 	{"rules: infra's release-policy template and paths", rules, releaseStg,

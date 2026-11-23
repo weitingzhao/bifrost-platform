@@ -8,8 +8,8 @@
 //
 // Contract:
 //
-//   - GPUDomain, WarehouseDomain and WorkersDomain take a
-//     resourceview.ElasticSnapshot and return the GPU / AI, data warehouse and
+//   - GPUDomain and WorkersDomain take a
+//     resourceview.ElasticSnapshot and return the GPU / AI and
 //     general workers lines of GET /cluster/service-readiness.
 //   - NodeMode takes a resourceview.ElasticNodeObservation and says whether an
 //     on-demand node is active, standby or degraded, with why. It calls the

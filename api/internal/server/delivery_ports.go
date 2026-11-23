@@ -9,6 +9,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
@@ -30,6 +31,22 @@ func init() {
 	// The release window queue's thread addresses are the coordination
 	// domain's (threadinbox); delivery declares the port (window_queue.go).
 	delivery.SetThreadRecipient(threadinbox.Recipient)
+	// The approvals domain's action runner; delivery declares the port
+	// (approvals_ports.go). Until 2026-11-22 delivery imported actions.
+	delivery.BindActionRuns(delivery.ActionRuns{
+		AttemptName: func(ctx context.Context, base string) (string, bool) {
+			att, ok := actions.CreateAttemptFrom(ctx)
+			if !ok {
+				return "", false
+			}
+			return actions.ObjectName(base, att), true
+		},
+		IdentityAnnotations: actions.IdentityAnnotations,
+		ObjectExists:        actions.ObjectExists,
+		ClassifyCreate:      actions.ClassifyCreate,
+		IsUncertain:         actions.IsUncertain,
+		NotRecordedHeader:   actions.NotRecordedHeader,
+	})
 }
 
 func bindDeliveryVerification() {

@@ -56,6 +56,26 @@ describe('approve and run with a one-time code', () => {
     expect(screen.queryByLabelText('Code from your authenticator app')).not.toBeInTheDocument()
   })
 
+  // TD-578: 2026-11-22 the Station bootstrap needs a Mac target visible
+  // on the card; a queued ticket must not be presented as a command start.
+  it('shows the named machine and queues the exact card with a code', async () => {
+    health = { ok: true, host_tickets: true }
+    runResponse = () => new Response(
+      JSON.stringify({ status: 'queued', id: 'fixture-run', host: 'work-mac' }), { status: 202 })
+    const refreshed = vi.fn()
+    render(<OwnerExecRun item={card({ runner: 'host', params: { command: COMMAND, host: 'work-mac' } })}
+      blocked={null} onStarted={refreshed} />)
+    const field = await codeField()
+    expect(screen.getByText('work-mac')).toBeInTheDocument()
+    fireEvent.change(field, { target: { value: '123456' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and run' }))
+    await waitFor(() => expect(refreshed).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(String(runCalls()[0].init?.body))).toMatchObject({
+      host: 'work-mac', params_hash: 'fixture-hash', command_sha256: COMMAND_SHA,
+    })
+    expect(screen.getByRole('status')).toHaveTextContent('Waiting for the selected machine')
+  })
+
   it('keeps the button off until six digits are typed, and shows the command', async () => {
     render(<OwnerExecRun item={card()} blocked={null} onStarted={() => {}} />)
     const field = await codeField()

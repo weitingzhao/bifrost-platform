@@ -161,7 +161,7 @@ modules:
         - "api/internal/agentrt/migrations"
         - "api/internal/agentrt/planimport/testdata"
         - "api/internal/agentrt/planview/testdata"
-        - "api/internal/assessmentreadings/assess.go"
+        - "api/internal/agentrt/assessmentreadings/assess.go"
         - "api/internal/server/agentrt_assess.go"
       api/internal/agentthreads:
         - "api/internal/agentthreads"
@@ -255,7 +255,7 @@ modules:
       - api/internal/approvals/types.go
       - api/internal/approvals/handler.go
       - api/internal/mcp/catalog.go
-      - api/internal/approvalhome/console_notification_contract.go
+      - api/internal/owner/approvalhome/console_notification_contract.go
       - api/internal/bus/registry/rocket.yaml
       # Measured 2026-11-14 by running the console's tests with every file
       # access recorded: beside the five above they read these. A replay of
