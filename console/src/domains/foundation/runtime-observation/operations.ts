@@ -4,6 +4,7 @@ import type { DeliveryPipelinesResponse, DeliveryPipelineRunsResponse } from '@/
 import type { DataHusbandrySnapshot } from '@/domains/tenant/husbandry/api/dataHusbandry'
 
 import { formatPipelineRunStatus } from '@/lib/delivery/pipelineRunAskPack'
+import { unknownNote } from './plain'
 
 type Get = (path: string) => Promise<unknown>
 const DOMAINS = 'foundation plan lineage verification delivery approvals compute payload coordination crew station audit triage assembly'.split(' ')
@@ -31,7 +32,7 @@ export async function readOperations(get: Get) {
   const failure = (id: string) => {
     const e = evidence[id]?.[0]
     if (e?.outcome === 'read') { e.outcome = 'missing'; e.detail = 'Incomplete or unavailable source response' }
-    return note('Unknown · ' + (e?.detail ?? 'Incomplete source response'))
+    return unknownNote(e?.detail ?? 'Incomplete source response')
   }
   await Promise.all([
     (async () => {

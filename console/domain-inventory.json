@@ -2280,6 +2280,7 @@
         "console/src/domains/foundation/runtime-observation/__tests__/surface.test.tsx",
         "console/src/domains/foundation/runtime-observation/communication.ts",
         "console/src/domains/foundation/runtime-observation/operations.ts",
+        "console/src/domains/foundation/runtime-observation/plain.ts",
         "console/src/domains/foundation/runtime-observation/read.ts",
         "console/src/domains/foundation/runtime-observation/states.ts",
         "console/src/domains/foundation/runtime-observation/useRuntimeObservationSnapshot.ts"

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { COVERAGE, DATABASES, GITOPS, WORKLOADS, databasePanels, gitopsPanel, readCoverage, readStates, workloadPanels } from '../states'
+import { plainReason } from '../plain'
 
 // 2026-11-23 UI / Signals: the bus's v2 workload version and database backup fields, and the metrics
 // line's metric_coverage_by_namespace, were in the system but not on the Signals page. Shapes below are
@@ -42,9 +43,9 @@ describe('bus states and coverage on Signals', () => {
     const c = await readCoverage(async () => readout)
     const evidence = { ...s.evidence, ...c.evidence }
     const panels = workloadPanels(s.workloads, c.readout, evidence)
-    expect(JSON.stringify(panels)).toContain('Workload states unknown · Error: ledger read failed')
+    expect(JSON.stringify(panels)).toContain('Workload states unknown — the read failed.')
     expect(JSON.stringify(panels)).toContain('20%')
-    expect(JSON.stringify(databasePanels(s.databases, evidence))).toContain('Unknown · Error: ledger read failed')
+    expect(JSON.stringify(databasePanels(s.databases, evidence))).toContain('Unknown — the read failed.')
     expect(evidence['@workloads'][0].outcome).toBe('error')
   })
 })
@@ -58,6 +59,20 @@ describe('Argo CD station', () => {
     expect(text).toContain('automated sync off')
     expect(ok.evidence['@gitops'][0].evaluatedAt).toBe('2026-11-23T15:00:00Z')
     const bad = await readStates(async () => { throw new Error('forbidden') })
-    expect(JSON.stringify(gitopsPanel(bad.gitops, bad.evidence))).toContain('Unknown · Error: forbidden')
+    expect(JSON.stringify(gitopsPanel(bad.gitops, bad.evidence))).toContain('Unknown — this viewer may not read it.')
+  })
+})
+
+describe('plain failure reasons', () => {
+  // 2026-11-23 (箭10): every domain card showed "SyntaxError: Unexpected token '<'". The card now says why in
+  // plain words; the source's text stays in the evidence.
+  it('classifies the failure and keeps the raw text in evidence', async () => {
+    expect(plainReason("SyntaxError: Unexpected token '<', \"<!doctype \"... is not valid JSON")).toBe('the source did not answer with data')
+    expect(plainReason('Error: Signal source: viewer token required (401)')).toBe('needs a signed-in viewer')
+    expect(plainReason('TypeError: Failed to fetch')).toBe('the source could not be reached')
+    expect(plainReason('something new')).toBe('the read failed')
+    const s = await readStates(async () => { throw new Error('viewer token required') })
+    expect(JSON.stringify(databasePanels(s.databases, s.evidence))).not.toContain('viewer token required')
+    expect(s.evidence['@databases'][0].detail).toBe('Error: viewer token required')
   })
 })

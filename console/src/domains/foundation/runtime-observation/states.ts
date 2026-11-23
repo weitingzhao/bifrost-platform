@@ -1,5 +1,6 @@
 import type { ObservationPanel, ReadEvidence } from '@bifrost/ui/city/observation'
 import type { GitOpsAppsResponse } from '@/domains/delivery/api/deliveryTypes'
+import { plainReason, unknownNote } from './plain'
 
 /**
  * Signals' projection of two other lines' public reads (2026-11-23, UI / Signals):
@@ -60,7 +61,7 @@ export async function readCoverage(get: Get) {
 export function databasePanels(databases: BusStates | undefined, evidence: Record<string, readonly ReadEvidence[]>): ObservationPanel[] {
   if (!Array.isArray(databases?.states)) {
     const why = evidence['@databases']?.[0]?.detail ?? 'Incomplete source response'
-    return [{ id: '@databases', label: 'Databases', blocks: [note('Unknown · ' + why)] }]
+    return [{ id: '@databases', label: 'Databases', blocks: [unknownNote(why)] }]
   }
   if (!databases.states.length) return [{ id: '@databases', label: 'Databases', blocks: [note('No database changed state within the bus retention. Full list: ' + (databases.ref ?? 'the ref route'))] }]
   return databases.states.map(d => {
@@ -93,7 +94,7 @@ export function workloadPanels(workloads: BusStates | undefined, readout: Readou
   const coverageWhy = readout ? undefined : evidence['@coverage']?.[0]?.detail ?? 'Not read yet'
   const window = readout?.window ? readout.window.from + ' → ' + readout.window.to : undefined
   const names = [...new Set([...byNs.keys(), ...coverage.keys()])].sort()
-  if (!names.length) return [{ id: '@workloads', label: 'Workloads', blocks: [note('Unknown · ' + (statesWhy ?? coverageWhy ?? 'No namespaces returned'))] }]
+  if (!names.length) return [{ id: '@workloads', label: 'Workloads', blocks: [statesWhy || coverageWhy ? unknownNote(statesWhy ?? coverageWhy) : note('No namespaces returned by either source.')] }]
   return names.map(ns => {
     const id = 'workloads:' + ns
     evidence[id] = [...(evidence['@workloads'] ?? []), ...(evidence['@coverage'] ?? [])]
@@ -110,8 +111,8 @@ export function workloadPanels(workloads: BusStates | undefined, readout: Readou
     return { id, label: ns, blocks: [
       { kind: 'facts' as const, rows },
       ...(c?.note ? [note(c.note)] : []),
-      ...(statesWhy ? [note('Workload states unknown · ' + statesWhy)] : listed.length ? [] : [note('No workload of this namespace changed state within the bus retention.')]),
-      ...(coverageWhy ? [note('Coverage unknown · ' + coverageWhy)] : [note('Coverage: metrics line readout, closed day ' + (window ?? 'window not given') + '; a down target still counts as covered.')]),
+      ...(statesWhy ? [note('Workload states unknown — ' + plainReason(statesWhy) + '.')] : listed.length ? [] : [note('No workload of this namespace changed state within the bus retention.')]),
+      ...(coverageWhy ? [note('Coverage unknown — ' + plainReason(coverageWhy) + '.')] : [note('Coverage: metrics line readout, closed day ' + (window ?? 'window not given') + '; a down target still counts as covered.')]),
       // One compact sign on the card; the evidence drawer shows the whole list.
       ...(listed.length ? [note('Workloads: ' + listed.map(s => s.subject.slice(ns.length + 1) + ' · ' + (s.state.ready ?? 'not reported') + ' · ' + (s.state.version || 'no version') + ' · changed ' + s.at).join(' | ') + '. ' + LISTED)] : []),
     ] }
@@ -123,7 +124,7 @@ type GitOpsApp = GitOpsAppsResponse['apps'][number] & { resources?: { kind: stri
 /** One station for Argo CD: each application's sync and health as Argo reports them. */
 export function gitopsPanel(gitops: GitOpsAppsResponse | undefined, evidence: Record<string, readonly ReadEvidence[]>): ObservationPanel {
   const id = '@gitops', label = 'GitOps (Argo CD)'
-  if (!Array.isArray(gitops?.apps)) return { id, label, blocks: [note('Unknown · ' + (evidence[id]?.[0]?.detail ?? 'Incomplete source response'))] }
+  if (!Array.isArray(gitops?.apps)) return { id, label, blocks: [unknownNote(evidence[id]?.[0]?.detail ?? 'Incomplete source response')] }
   return { id, label, blocks: [
     { kind: 'facts' as const, rows: gitops.apps.map(a => ({ label: a.name, value: { text: a.sync_status + ' · ' + a.health_status, title: [a.primary_condition, a.operation_message, a.automated_sync === false ? 'automated sync off' : ''].filter(Boolean).join(' · ') || undefined } })) },
     // Resources Argo itself marks other than Synced; absent status is shown as such, not as a problem.
