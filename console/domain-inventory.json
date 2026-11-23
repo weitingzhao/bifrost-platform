@@ -2170,10 +2170,12 @@
         "console/src/domains/foundation/patrol-view/__tests__/cronSchedule.test.ts",
         "console/src/domains/foundation/patrol-view/__tests__/logLanguage.test.ts",
         "console/src/domains/foundation/patrol-view/__tests__/panels.test.tsx",
+        "console/src/domains/foundation/patrol-view/__tests__/patrolVerdict.test.ts",
         "console/src/domains/foundation/patrol-view/__tests__/readings.test.ts",
         "console/src/domains/foundation/patrol-view/__tests__/runLog.test.ts",
         "console/src/domains/foundation/patrol-view/cronSchedule.ts",
         "console/src/domains/foundation/patrol-view/logLanguage.ts",
+        "console/src/domains/foundation/patrol-view/patrolVerdict.ts",
         "console/src/domains/foundation/patrol-view/presentation.tsx",
         "console/src/domains/foundation/patrol-view/readings.ts",
         "console/src/domains/foundation/patrol-view/runLog.ts",
@@ -2183,7 +2185,8 @@
         "console/src/api/patrol.ts",
         "console/src/api/serverContact.ts",
         "console/src/lib/agent",
-        "console/src/lib/patrol/askAiPack.ts"
+        "console/src/lib/patrol/askAiPack.ts",
+        "console/src/lib/shell"
       ],
       "test_imports": [
         "console/src/api/patrol.ts",
@@ -3845,7 +3848,8 @@
         "console/src/domains/foundation/patrol-view",
         "console/src/hooks/usePlatformAuth.ts",
         "console/src/lib",
-        "console/src/lib/agent"
+        "console/src/lib/agent",
+        "console/src/lib/shell"
       ],
       "test_imports": [],
       "external_imports": [

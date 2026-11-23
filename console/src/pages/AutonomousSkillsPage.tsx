@@ -24,6 +24,13 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { enablePatrolSkill, fetchPatrolRuns, fetchPatrolSkills, triggerPatrolSkill } from '@/api/patrol'
 import type { PatrolRun, PatrolSkill } from '@/api/patrol'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { patrolVerdict } from '@/domains/foundation/patrol-view/patrolVerdict'
+import { TAG_VARIANT, type StatusWord } from '@/lib/shell/stateWords'
+
+/** The seven words onto the reach lamp's four values. */
+const LAMP: Record<StatusWord, 'ok' | 'degraded' | 'fail' | 'unknown'> = {
+  ok: 'ok', warn: 'degraded', fail: 'fail', boundary: 'unknown', unknown: 'unknown', pending: 'unknown', info: 'unknown',
+}
 
 function useNow(intervalMs = 1000): number {
   const [now, setNow] = useState(() => Date.now())
@@ -88,6 +95,7 @@ export function AutonomousSkillsPage() {
   const isLoading = skillsQuery.isLoading
   const hasError = skillsQuery.error != null
   const actionError = (enableMut.error ?? triggerMut.error) as Error | null
+  const verdict = patrolVerdict(skillsQuery.data?.skills, isLoading, hasError ? (skillsQuery.error as Error).message : null)
 
   const toggleSkill = (id: string) => {
     if (expandedId === id) {
@@ -114,11 +122,12 @@ export function AutonomousSkillsPage() {
         overflow="visible"
       >
         <div className="flex flex-wrap items-center gap-2 pt-1">
-          <StatusLamp value="ok" kind="reach" />
+          {/* The lamp says what the skills' last runs say, not a fixed ok (patrolVerdict). */}
+          <StatusLamp value={LAMP[verdict.word]} kind="reach" />
           <span className="text-[var(--text-dense-meta)] font-medium">Cursor SDK Patrol</span>
-          <DenseTag variant="info">platform-api</DenseTag>
+          <DenseTag variant={TAG_VARIANT[verdict.word]}>{verdict.word}</DenseTag>
           <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            {skills.length} skill{skills.length !== 1 ? 's' : ''} loaded
+            {verdict.sentence} · platform-api
           </span>
           <div
             className="ml-auto inline-flex items-center gap-1 rounded-md px-1 py-0.5"
