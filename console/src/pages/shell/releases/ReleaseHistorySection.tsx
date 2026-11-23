@@ -1,8 +1,13 @@
 import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag } from '@bifrost/ui'
-import type { ReleaseRecord } from '@/api/releases'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import type { ReleaseListResponse, ReleaseRecord } from '@/api/releases'
+import { serverFetch } from '@/api/serverContact'
 import { LedgerGrid } from '@bifrost/ui/city/ledger'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import {
+  historyScope,
+  HISTORY_LIMIT,
   releaseLedgerTable,
   shortSha,
   type SupersededRun,
@@ -26,13 +31,32 @@ function messageRow(colSpan: number, text: string) {
 }
 
 export function ReleaseHistorySection({ records, recordsLoading, recordsError, superseded }: ReleaseHistoryProps) {
-  const count = recordsLoading ? '…' : String(records.length + superseded.length)
+  // The page reads the newest 40 for its lanes; History reads every record the platform keeps (the list takes any
+  // ?limit=, no cursor), and only once the section is opened (箭10 2026-11-23: PROD keeps 1673, the table showed 40).
+  const [open, setOpen] = useState(false)
+  const history = useQuery({
+    queryKey: ['releases', 'records', 'history', HISTORY_LIMIT],
+    queryFn: async ({ signal }) => {
+      const r = await serverFetch(`/api/v1/releases?limit=${HISTORY_LIMIT}`, { signal })
+      if (!r.ok) throw new Error(`releases: HTTP ${r.status}`)
+      return (await r.json()) as ReleaseListResponse
+    },
+    enabled: open,
+    // PROD keeps 1673 records (1.1 MB on 2026-11-23); the list has no cursor or total yet (asked of delivery), so it is
+    // read up to HISTORY_LIMIT on opening and refreshed slowly, not every minute.
+    refetchInterval: 5 * 60_000,
+  })
+  const all = history.data && !history.data.error ? history.data.records : null
+  const shown = all ?? records
+  const historyError = history.error instanceof Error ? history.error.message : history.data?.error || null
+  const count = recordsLoading && all == null ? '…' : String(shown.length + superseded.length)
   return (
     <OpsSection
       title={`History · ${count}`}
       description="Finished releases, and failed runs a later success of the same pipeline superseded."
       collapsible
       defaultCollapsed
+      onOpenChange={setOpen}
       bodyPadding="none"
       overflow="visible"
       bodyClassName="ops-section-body--table"
@@ -49,10 +73,10 @@ export function ReleaseHistorySection({ records, recordsLoading, recordsError, s
           <p className="m-0 text-[var(--muted-foreground)]">…</p>
         ) : (
           <LedgerGrid
-            table={releaseLedgerTable(records)}
+            table={releaseLedgerTable(shown)}
             selected=""
             onSelect={() => {}}
-            scope={`Release records the platform returns: the newest ${records.length}`}
+            scope={historyScope({ shown: shown.length, full: all != null, reading: open && history.isLoading, error: historyError })}
           />
         )}
       </div>

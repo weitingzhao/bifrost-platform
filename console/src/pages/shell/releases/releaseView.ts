@@ -375,3 +375,19 @@ export function releaseLedgerTable(records: ReleaseRecord[]): Extract<Block, { k
     empty: 'No release records.',
   }
 }
+
+/** History reads up to this many records (PROD keeps 1673, 1.1 MB, 2026-11-23; the table says when the read stops here). */
+export const HISTORY_LIMIT = 1000
+
+/**
+ * What the History table holds, said plainly so nobody takes a cut list for the whole: all the platform keeps, or the
+ * newest HISTORY_LIMIT when the read filled it (there may be more), or the page's newest 40 while the full read is
+ * on its way or failed (and why).
+ */
+export function historyScope(p: { shown: number; full: boolean; reading: boolean; error: string | null }): string {
+  if (p.full) return p.shown >= HISTORY_LIMIT
+    ? `The newest ${HISTORY_LIMIT} release records; the platform may keep more (the read stops at ${HISTORY_LIMIT})`
+    : `All ${p.shown} release records the platform keeps`
+  if (p.error) return `Showing the newest ${p.shown} only: the full history could not be read (${p.error})`
+  return p.reading ? `Showing the newest ${p.shown} · reading the full history…` : `Showing the newest ${p.shown} · open History to read all`
+}
