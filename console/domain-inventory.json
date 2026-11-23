@@ -1552,6 +1552,7 @@
         "console/src/domains/coordination/communication/__tests__/history.test.tsx",
         "console/src/domains/coordination/communication/__tests__/looks.test.ts",
         "console/src/domains/coordination/communication/__tests__/observer.test.tsx",
+        "console/src/domains/coordination/communication/__tests__/scope.test.tsx",
         "console/src/domains/coordination/communication/__tests__/work.test.tsx",
         "console/src/domains/coordination/communication/adapter.ts",
         "console/src/domains/coordination/communication/looks.ts",
