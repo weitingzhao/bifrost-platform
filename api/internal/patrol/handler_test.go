@@ -216,8 +216,8 @@ prompt_template: ping
 		return dispatchOutcome{Result: ResultSuccess, Status: StatusCompleted, Evidence: "due " + skill.ID}
 	})
 	h, err := NewHandlerWithOptions(HandlerOptions{
-		SkillsDir: skills,
-		StateDir:  t.TempDir(),
+		SkillsDir:  skills,
+		StateDir:   t.TempDir(),
 		Dispatcher: disp,
 		Now: func() time.Time {
 			return time.Unix(now.Load(), 0).UTC()
@@ -448,5 +448,56 @@ func TestStoreRingBufferCap(t *testing.T) {
 	runs, total := s.ListRuns(500)
 	if total != MaxRuns || len(runs) != MaxRuns {
 		t.Fatalf("total=%d len=%d", total, len(runs))
+	}
+}
+
+// 2026-11-23, 箭10 via UI/Console: on PROD Ops Autopilot ran at 14:15 while
+// next_run_at still read 14:00. The api process lists skills but never scans,
+// so its in-memory next slot froze at startup. next_run_at must count from the
+// last run in the shared store, not from the process's own scanner.
+func TestNextRunAtFollowsLastRunWithoutScanning(t *testing.T) {
+	t.Setenv("PATROL_DISPATCH", "stub")
+	skills := t.TempDir()
+	if err := os.WriteFile(filepath.Join(skills, "q.yaml"), []byte(`
+id: quarter
+name: Quarter
+description: every 15 minutes
+schedule: "*/15 * * * *"
+trust_level: L0
+scope: test
+timeout: 15
+mcp_tools: [get_ops_context]
+prompt_template: ping
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var now atomic.Int64
+	now.Store(time.Date(2026, 11, 23, 13, 50, 0, 0, time.UTC).Unix())
+	h, err := NewHandlerWithOptions(HandlerOptions{
+		SkillsDir:  skills,
+		StateDir:   t.TempDir(),
+		Dispatcher: stubDispatcher{},
+		Now:        func() time.Time { return time.Unix(now.Load(), 0).UTC() },
+		SyncScan:   true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Another process ran it at 14:15; this one never scanned.
+	if err := h.store.AppendRun(PatrolRun{ID: "r1", SkillID: "quarter", StartedAt: "2026-11-23T14:15:02Z", Result: ResultSuccess}); err != nil {
+		t.Fatal(err)
+	}
+	now.Store(time.Date(2026, 11, 23, 14, 16, 0, 0, time.UTC).Unix())
+	got, ok := h.publicSkill("quarter")
+	if !ok {
+		t.Fatal("skill missing")
+	}
+	if got.NextRunAt != "2026-11-23T14:30:00Z" {
+		t.Fatalf("next_run_at = %q, want 2026-11-23T14:30:00Z (the slot after the 14:15 run)", got.NextRunAt)
+	}
+	// A slot really missed still reads as past, so Console can call it overdue.
+	now.Store(time.Date(2026, 11, 23, 15, 0, 0, 0, time.UTC).Unix())
+	if got, _ := h.publicSkill("quarter"); got.NextRunAt != "2026-11-23T14:30:00Z" {
+		t.Fatalf("missed slot next_run_at = %q, want the past 14:30 slot", got.NextRunAt)
 	}
 }

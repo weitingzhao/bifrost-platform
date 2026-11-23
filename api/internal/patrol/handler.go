@@ -469,9 +469,11 @@ func (h *Handler) publicSkill(id string) (PatrolSkill, bool) {
 
 func (h *Handler) decorate(s PatrolSkill, now time.Time) PatrolSkill {
 	s.Enabled = h.store.Enabled(s.ID, s.Enabled)
+	var lastStarted time.Time
 	if last := h.store.LastRun(s.ID); last != nil {
 		s.LastRunAt = last.StartedAt
 		s.LastResult = last.Result
+		lastStarted, _ = time.Parse(time.RFC3339, last.StartedAt)
 	}
 	h.mu.Lock()
 	_, flying := h.inflight[s.ID]
@@ -479,6 +481,17 @@ func (h *Handler) decorate(s PatrolSkill, now time.Time) PatrolSkill {
 	h.mu.Unlock()
 	if flying {
 		s.LastResult = ResultRunning
+	}
+	// nextDue only advances in the process that runs the loop (workers). The
+	// api process serves this listing and never scans, so its nextDue stays at
+	// the first slot after it started: a skill that ran at 14:15 showed "next
+	// 14:00" and Console read it as overdue (箭10 via UI/Console, 2026-11-23).
+	// Count from the last run in the shared store instead: both processes then
+	// agree, and a slot really missed still shows as a time in the past.
+	if !lastStarted.IsZero() {
+		if next, err := NextAfter(s.Schedule, lastStarted); err == nil {
+			due = next
+		}
 	}
 	if due.IsZero() {
 		if next, err := NextAfter(s.Schedule, now); err == nil {
