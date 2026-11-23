@@ -196,6 +196,14 @@
       "tier": 2,
       "source": "domains/2-lineage/charter.md",
       "contracts": {
+        "public_packages": [
+          "api/internal/lineage/assembly",
+          "api/internal/agentrt/lineageapi",
+          "api/internal/agentrt/externalwork",
+          "api/internal/agentrt/workregistration",
+          "api/internal/agentthreads",
+          "api/internal/threadtitles"
+        ],
         "measured_at": "2e93ae09",
         "request_response": [
           {"method": "GET", "path": "/api/v1/lineage", "handler": "api/internal/lineage.HandleGet", "consumers": ["console", "mcp"]},
