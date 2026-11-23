@@ -1,4 +1,5 @@
 {
-  "perMin": "bifrost_http:requests_per_minute_1h{namespace=\"bifrost-platform-prod\"}",
-  "failPerMin": "bifrost_http:errors_5xx_per_minute_1h{namespace=\"bifrost-platform-prod\"}"
+  "perMin": "bifrost_http:requests_per_minute_1h{namespace=\"{namespace}\"}",
+  "failPerMin": "bifrost_http:errors_5xx_per_minute_1h{namespace=\"{namespace}\"}",
+  "namespaces": { "prod": "bifrost-platform-prod", "stg": "bifrost-platform-stg" }
 }

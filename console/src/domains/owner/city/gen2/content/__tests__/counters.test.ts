@@ -5,7 +5,7 @@
 // readings matched exactly, and nothing read as zero that was not measured.
 import { describe, expect, it } from 'vitest'
 import type { DomainHoldings } from '../domainOwns'
-import { buildingFlow, COUNTER_QUERIES, counterRooms, offContractOf, readingsOf, roomIdOf, routesByPackage } from '../counters'
+import { buildingFlow, counterQueriesFor, counterRooms, offContractOf, readingsOf, roomIdOf, routesByPackage } from '../counters'
 import { rulesBroken } from '@bifrost/ui/city/rules'
 import { domainTree } from '../domainPlaces'
 
@@ -55,8 +55,8 @@ describe('counter rooms', () => {
   // 2026-11-23, bifrost-ui 0.48.0 (fc7cf4f): outside, a building shows one reading, the cars at its door.
   it('gives a building its requests a minute, summed by the engine, read from the requests rule; not read is null', () => {
     const routes = routesByPackage(holdings, readingsOf([pt('GET', '/api/v1/lineage', 0.6), pt('GET', '/api/v1/ci/domains', 3)], []))
-    expect(buildingFlow(['pkg/lineage', 'pkg/server'], routes)).toEqual({ perMin: 3.6, source: COUNTER_QUERIES.perMin })
-    expect(buildingFlow(['pkg/lineage'], routesByPackage(holdings, readingsOf(null, null))).perMin).toBeNull()
+    expect(buildingFlow(['pkg/lineage', 'pkg/server'], routes, 'rule')).toEqual({ perMin: 3.6, source: 'rule' })
+    expect(buildingFlow(['pkg/lineage'], routesByPackage(holdings, readingsOf(null, null)), 'rule').perMin).toBeNull()
   })
 })
 
@@ -88,5 +88,16 @@ describe('the City with counters passes the engine\'s rules', () => {
     const tree = domainTree(status, null, '', h, routes)
     expect(tree.children[0].children[0].children.map(r => r.id)).toEqual(['internal.lineage', 'internal.lineage.assembly'])
     expect(rulesBroken({ tree })).toEqual([])
+  })
+})
+
+// 2026-11-23, 箭10: on STG the counters, the cars at the doors and the off-contract card showed PROD's traffic: the
+// queries named namespace="bifrost-platform-prod" for every environment.
+describe('the counters read the platform of their own environment', () => {
+  it('names the environment\'s platform namespace, and reads none where there is no platform', () => {
+    expect(counterQueriesFor('stg')).toMatchObject({ namespace: 'bifrost-platform-stg', perMin: expect.stringContaining('namespace="bifrost-platform-stg"') })
+    expect(counterQueriesFor('prod')?.failPerMin).toContain('namespace="bifrost-platform-prod"')
+    expect(counterQueriesFor('dev')).toBeNull()
+    expect(counterQueriesFor(null)).toBeNull()
   })
 })

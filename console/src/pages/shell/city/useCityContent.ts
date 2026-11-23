@@ -12,13 +12,14 @@ import { tripsOf } from '@/domains/owner/city/gen2/content/traffic'
 import { deviceKeys, type PromAlert } from '@/domains/owner/city/gen2/content/alerts'
 import { fetchTelemetryAlerts } from '@/api/telemetry'
 import { fetchLineage } from '@/api/lineage'
-import { COUNTER_QUERIES, offContractOf, readingsOf, routesByPackage } from '@/domains/owner/city/gen2/content/counters'
+import { counterQueriesFor, offContractOf, readingsNotRead, readingsOf, routesByPackage } from '@/domains/owner/city/gen2/content/counters'
 import type { PromPoint } from '@/domains/owner/city/gen2/content/hardware'
 import { LINES_DAYS, type RosterRead } from '@/domains/owner/city/gen2/content/lines'
 import { fetchBusContract } from '@/domains/foundation/bus/busNextgen'
 import { useBusStream } from '@/domains/foundation/bus/useBusStream'
 import type { CityContent } from '@bifrost/ui/city/content'
 import { useRulersTick } from '@bifrost/ui/city/rulers'
+import { useShellStatusLine } from '@/domains/foundation/shell/useShellStatusLine'
 
 const EVERY = 30_000
 // What a domain owns, read only when its district is entered (the map's domain read).
@@ -62,14 +63,20 @@ export function useCityContent(focus?: string | null): CityContent {
   const lineage = useQuery({ queryKey: ['city', 'gen2', 'lineage', LINES_DAYS], queryFn: () => fetchLineage(LINES_DAYS), refetchInterval: 5 * 60_000, retry: false })
   // Which domain each line sits: the seat roster, not served by the platform yet (asked 2026-11-23; the map line serves it).
   const roster: RosterRead = NO_ROSTER
-  // The counters' readings: requests and 5xx a minute per route over the last hour (counterQueries.json), every minute.
+  // The counters' readings for this environment's platform (counterQueriesFor): requests and 5xx a minute per route over
+  // the last hour, every minute; an environment with no platform namespace reads none and says so.
+  const viewer = useShellStatusLine()
+  const env = viewer.viewerEnvLoading ? null : viewer.viewerEnv
+  const counterQ = counterQueriesFor(env)
   const counterReads = useQuery({
-    queryKey: ['city', 'gen2', 'counters'],
+    queryKey: ['city', 'gen2', 'counters', counterQ?.namespace ?? 'none'],
     queryFn: async () => {
+      if (!counterQ) return readingsNotRead(`no platform namespace for the ${env ?? 'unknown'} environment`)
       const q = (query: string) => getJson(`/api/v1/telemetry/promql?q=${encodeURIComponent(query)}`).then(v => (v as { points?: PromPoint[] }).points ?? null, () => null)
-      const [perMin, failPerMin] = await Promise.all([q(COUNTER_QUERIES.perMin), q(COUNTER_QUERIES.failPerMin)])
-      return readingsOf(perMin, failPerMin)
+      const [perMin, failPerMin] = await Promise.all([q(counterQ.perMin), q(counterQ.failPerMin)])
+      return readingsOf(perMin, failPerMin, counterQ.perMin)
     },
+    enabled: env != null,
     refetchInterval: 60_000,
   })
   const routes = useMemo(() => routesByPackage(holdings.data ?? {}, counterReads.data ?? { perMin: null, failPerMin: null }), [holdings.data, counterReads.data])
@@ -85,6 +92,6 @@ export function useCityContent(focus?: string | null): CityContent {
       : null
     return consoleContent({ data: domains.data, error: domains.error }, hw, { data: graph.data, error: graph.error }, readDomain, traffic,
       { raw: firing.data?.alerts as PromAlert[] | undefined, error: firing.error, devices: d ? deviceKeys(d.hardware) : [] }, holdings.data ?? {},
-      { read: { data: lineage.data, error: lineage.error }, roster, now: new Date(lineage.dataUpdatedAt || Date.now()), focus: focus ?? undefined }, routes, offContract)
-  }, [offContract, routes, focus, lineage.data, lineage.error, lineage.dataUpdatedAt, reads.data, rulers, domains.data, domains.error, graph.data, graph.error, traffic, firing.data, firing.error, holdings.data])
+      { read: { data: lineage.data, error: lineage.error }, roster, now: new Date(lineage.dataUpdatedAt || Date.now()), focus: focus ?? undefined }, routes, offContract, counterQ?.perMin ?? '')
+  }, [counterQ?.perMin, offContract, routes, focus, lineage.data, lineage.error, lineage.dataUpdatedAt, reads.data, rulers, domains.data, domains.error, graph.data, graph.error, traffic, firing.data, firing.error, holdings.data])
 }

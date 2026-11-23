@@ -19,9 +19,9 @@ import { districtLinesPanel, linesPanel, type LinesRead, type RosterRead } from 
  * levels, each node with its domain's light; the town's panel keeps what the map counts off it, a district
  * its own lights and, read when it is entered, what it owns (the map's domain read).
  */
-export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null = null, graph: GraphRead = {}, readDomain?: ReadDomain, traffic?: TrafficRead, alerts?: { raw?: PromAlert[]; error?: unknown; devices: DeviceKey[] }, holdings: Record<string, DomainHoldings> = {}, lines?: { read: LinesRead; roster: RosterRead; now: Date; focus?: string }, routes?: Map<string, CounterRoute[]>, offContract?: OffContractRead): CityContent => {
+export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null = null, graph: GraphRead = {}, readDomain?: ReadDomain, traffic?: TrafficRead, alerts?: { raw?: PromAlert[]; error?: unknown; devices: DeviceKey[] }, holdings: Record<string, DomainHoldings> = {}, lines?: { read: LinesRead; roster: RosterRead; now: Date; focus?: string }, routes?: Map<string, CounterRoute[]>, offContract?: OffContractRead, flowSource = ''): CityContent => {
   const why = domains.error instanceof Error ? domains.error.message : domains.error ? String(domains.error) : ''
-  const tree = domainTree(domains.data, hardware, why, holdings, routes)
+  const tree = domainTree(domains.data, hardware, why, holdings, routes, flowSource)
   const ids = new Set((domains.data?.domains ?? []).map(d => d.id))
   // A district whose buildings go past its ground (16 things): cut too fine, to decouple or merge (the Owner, 2026-11-22).
   const overflowPanel = (id: string) => {

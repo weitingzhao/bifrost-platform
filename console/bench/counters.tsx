@@ -6,7 +6,7 @@ import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { counterRoom, counterSummaryOf, queueStep } from '@bifrost/ui/city/units/counterRoom'
 import { spriteUrl } from '@bifrost/ui/city/sprites'
-import { buildingFlow, COUNTER_QUERIES, counterRooms, readingsOf, routesByPackage, type CounterReads } from '../src/domains/owner/city/gen2/content/counters'
+import { buildingFlow, counterQueriesFor, counterRooms, readingsOf, routesByPackage, type CounterReads } from '../src/domains/owner/city/gen2/content/counters'
 import type { DomainHoldings } from '../src/domains/owner/city/gen2/content/domainOwns'
 
 type Snap = { read_at: string; holdings: Record<string, DomainHoldings> }
@@ -14,8 +14,10 @@ const snap = Object.values(import.meta.glob('./counters.local.json', { eager: tr
 
 async function readLive(): Promise<CounterReads & { at: string }> {
   const q = (query: string) => fetch(`/api/v1/telemetry/promql?q=${encodeURIComponent(query)}`).then(r => r.ok ? r.json() : null).then(v => v?.points ?? null, () => null)
-  const [a, b] = await Promise.all([q(COUNTER_QUERIES.perMin), q(COUNTER_QUERIES.failPerMin)])
-  return { ...readingsOf(a, b), at: new Date().toISOString() }
+  // The bench reads PROD's platform (its proxy points at the PROD API).
+  const cq = counterQueriesFor('prod')!
+  const [a, b] = await Promise.all([q(cq.perMin), q(cq.failPerMin)])
+  return { ...readingsOf(a, b, cq.perMin), at: new Date().toISOString() }
 }
 
 /** What the caption says, nothing it did not read: no routes, not read, or the readings. */
@@ -25,7 +27,7 @@ function captionOf(routes: number, sum: ReturnType<typeof counterSummaryOf>): st
   return `${routes} routes · ${sum.perMin.toFixed(2)} req/min · ${sum.failing} with 5xx (${sum.measured} of ${routes} read)`
 }
 
-function App() {
+export function App() {
   const [reads, setReads] = useState<(CounterReads & { at: string }) | null>(null)
   useEffect(() => { readLive().then(setReads) }, [])
   if (!snap) return <p>No counters.local.json: read the domains first (MCP get_domain).</p>
@@ -36,7 +38,7 @@ function App() {
     {Object.values(snap.holdings).map(h => <section key={h.id}>
       <h2>{h.id}</h2>
       {(h.buildings ?? []).map(b => <div key={b.id} className="bldg">
-        <h3>{b.id} · door: {(() => { const f = buildingFlow(b.packages, routes); return !b.packages.some(p => (routes.get(p) ?? []).length) ? 'no routes (no cars)' : f.perMin == null ? 'not read (no cars)' : `${f.perMin.toFixed(2)} req/min, ${queueStep(f.perMin)} car${queueStep(f.perMin) === 1 ? '' : 's'}` })()}</h3>
+        <h3>{b.id} · door: {(() => { const f = buildingFlow(b.packages, routes, counterQueriesFor('prod')!.perMin); return !b.packages.some(p => (routes.get(p) ?? []).length) ? 'no routes (no cars)' : f.perMin == null ? 'not read (no cars)' : `${f.perMin.toFixed(2)} req/min, ${queueStep(f.perMin)} car${queueStep(f.perMin) === 1 ? '' : 's'}` })()}</h3>
         <div className="rooms">{counterRooms(b.packages, routes, 'online').map(r => {
           const rs = routes.get(r.id) ?? []
           const sum = counterSummaryOf({ routes: rs })

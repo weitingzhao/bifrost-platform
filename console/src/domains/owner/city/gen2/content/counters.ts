@@ -21,16 +21,32 @@ import type { OffContractRead } from '@bifrost/ui/city/offContract'
  * A route with no series is shuttered (not asked since its process started: not measured, not zero); a route the
  * metric cannot name (a wildcard proxy) is shuttered with why. A package with no route is a room that says so.
  */
-export const COUNTER_QUERIES = QUERIES as { perMin: string; failPerMin: string }
+export type CounterQueries = { perMin: string; failPerMin: string; namespace: string }
+const Q = QUERIES as { perMin: string; failPerMin: string; namespaces: Record<string, string> }
+
+/**
+ * The two readings for the platform of the environment this Console runs in (箭10 2026-11-23: STG showed PROD's
+ * traffic, the namespace was written as bifrost-platform-prod). null for an environment with no platform namespace
+ * (dev, dev-local): the counters then say they were not read, never another environment's numbers.
+ */
+export function counterQueriesFor(env: string | null | undefined): CounterQueries | null {
+  const namespace = env ? Q.namespaces[env] : undefined
+  if (!namespace) return null
+  const at = (q: string) => q.replace('{namespace}', namespace)
+  return { perMin: at(Q.perMin), failPerMin: at(Q.failPerMin), namespace }
+}
 
 /** Per "METHOD path": the reading, from the two queries; null when a query was not read. */
-export type CounterReads = { perMin: Map<string, number> | null; failPerMin: Map<string, number> | null }
+export type CounterReads = { perMin: Map<string, number> | null; failPerMin: Map<string, number> | null; source?: string; why?: string }
 const keyOf = (method: string, path: string) => `${method.toUpperCase()} ${path}`
 
-export function readingsOf(perMin: PromPoint[] | null, failPerMin: PromPoint[] | null): CounterReads {
+export function readingsOf(perMin: PromPoint[] | null, failPerMin: PromPoint[] | null, source?: string): CounterReads {
   const map = (pts: PromPoint[] | null) => pts ? new Map(pts.filter(p => p.labels?.handler && p.labels?.method).map(p => [keyOf(p.labels!.method, p.labels!.handler), p.value] as const)) : null
-  return { perMin: map(perMin), failPerMin: map(failPerMin) }
+  return { perMin: map(perMin), failPerMin: map(failPerMin), ...(source ? { source } : {}) }
 }
+
+/** Not read, and why (an environment with no platform namespace). */
+export const readingsNotRead = (why: string): CounterReads => ({ perMin: null, failPerMin: null, why })
 
 type ContractRoute = { method?: string; path?: string; handler?: string }
 const packageOfHandler = (handler: string) => handler.includes('.') ? handler.slice(0, handler.lastIndexOf('.')) : handler
@@ -53,7 +69,7 @@ export function routesByPackage(holdings: Record<string, DomainHoldings>, reads:
       const route: CounterRoute = {
         method: r.method.toUpperCase(), path: r.path, perMin, failPerMin,
         ...(owner.get(pkg) && owner.get(pkg) !== h.id ? { promisedBy: h.id } : {}),
-        ...(wildcard ? { unreadable: 'a wildcard proxy route: the metric does not name it' } : !reads.perMin ? { unreadable: 'the request readings were not read' } : {}),
+        ...(wildcard ? { unreadable: 'a wildcard proxy route: the metric does not name it' } : !reads.perMin ? { unreadable: reads.why ?? 'the request readings were not read' } : {}),
       }
       out.set(pkg, [...(out.get(pkg) ?? []), route])
     }
@@ -110,9 +126,9 @@ export function counterRooms(packages: string[], routes: Map<string, CounterRout
  * counters by the engine's own counterBuildingSummaryOf (never a second sum here), read from the requests rule.
  * Not read: perMin null, no cars at the door.
  */
-export function buildingFlow(packages: string[], routes: Map<string, CounterRoute[]>): NonNullable<Place['flow']> {
+export function buildingFlow(packages: string[], routes: Map<string, CounterRoute[]>, source: string): NonNullable<Place['flow']> {
   const s = counterBuildingSummaryOf(packages.map(p => ({ routes: routes.get(p) ?? [] })))
-  return { perMin: s.perMin, source: COUNTER_QUERIES.perMin }
+  return { perMin: s.perMin, source }
 }
 
 /**
@@ -123,8 +139,8 @@ export function buildingFlow(packages: string[], routes: Map<string, CounterRout
  * The readings not read: not "none", the card says why.
  */
 export function offContractOf(holdings: Record<string, DomainHoldings>, reads: CounterReads): OffContractRead {
-  const source = COUNTER_QUERIES.perMin
-  if (!reads.perMin) return { source, why: 'the request readings were not read' }
+  const source = reads.source ?? 'bifrost_http:requests_per_minute_1h{namespace=?}'
+  if (!reads.perMin) return { source, why: reads.why ?? 'the request readings were not read' }
   const promised = new Set<string>()
   for (const h of Object.values(holdings)) for (const r of (h.contract?.request_response ?? []) as ContractRoute[]) if (r.method && r.path) promised.add(keyOf(r.method, r.path))
   if (promised.size === 0) return { source, why: 'no domain\'s contract was read (the map\'s domains)' }
