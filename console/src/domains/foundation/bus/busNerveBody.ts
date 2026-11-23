@@ -1,3 +1,4 @@
+import { STATUS } from '@bifrost/ui/city/world'
 import type { AgentThreadStatus } from '@/api/agentThreads'
 import { ASK_STUCK_AFTER_MIN, QUIET_AFTER_H, isDeaf, STUCK_AFTER_MIN, seatLabel, seatState, shortSeconds, warmColor, type BusListening, type NerveModel, type ObserveLink, type ObserveSeat, type OrganTone } from './busNerve'
 import { CORE, domainOf } from './busNerveLayout'
@@ -14,11 +15,14 @@ export const C = {
   rule: '#14232c',
   text: '#c7f9d6',
   muted: '#5f7f72',
-  blue: '#4cc3ff',
-  green: '#39ff8f',
-  red: '#ff4d5e',
-  amber: '#ffb347',
-  grey: '#3b4a52',
+  // The colours that mean a state are the engine's (箭10 2026-11-23, the Console's Bus slice): no receipt reads as
+  // fail everywhere, nobody listening or late as warn, a lost reader as unknown, information as info, on as ok.
+  // The ground, text and the scene's own hues stay the observatory's.
+  blue: STATUS.info.ink,
+  green: STATUS.ok.ink,
+  red: STATUS.fail.ink,
+  amber: STATUS.warn.ink,
+  grey: STATUS.unknown.fill,
   violet: '#b48cff',
   link: '#2a4a5a',
 } as const

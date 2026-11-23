@@ -1,3 +1,4 @@
+import { STATUS } from '@bifrost/ui/city/world'
 import { useEffect, useRef } from 'react'
 import type { GArc } from './busNerveBody'
 import { AXIS, funnelRadius, type Funnel } from './busNerveDirect'
@@ -78,9 +79,10 @@ const HALF_MS = 650
 const FAIL_MS = 1600
 /** How long an arc's far half stays red after a receipt did not come. */
 const RED_MS = 10_000
-const ARC_RED = '#ff4d5e'
-const ARC_GREY = '#3b4a52'
-const HALO_COLOR = '#ffb347'
+// State colours are the engine's, the same the legend and every other view use (Bus slice, 2026-11-23).
+const ARC_RED = STATUS.fail.ink
+const ARC_GREY = STATUS.unknown.fill
+const HALO_COLOR = STATUS.warn.ink
 const FUNNEL_COLOR = '#c9a38a'
 /** The direction home looks from: behind the core and to one side, a little above, so the core and the front show together. */
 const HOME_DIR = (() => { const v = [-0.6, 0.35, 0.72]; const l = Math.hypot(...v); return [v[0] / l, v[1] / l, v[2] / l] as const })()

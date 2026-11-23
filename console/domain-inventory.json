@@ -1814,6 +1814,7 @@
         "console/src/domains/foundation/bus/__tests__/busStreamWatchdog.test.tsx",
         "console/src/domains/foundation/bus/__tests__/liveRefresh.test.ts",
         "console/src/domains/foundation/bus/__tests__/liveRefreshWatchdog.test.tsx",
+        "console/src/domains/foundation/bus/__tests__/stateColours.test.ts",
         "console/src/domains/foundation/bus/busEffect.ts",
         "console/src/domains/foundation/bus/busNerve.ts",
         "console/src/domains/foundation/bus/busNerveBody.ts",
@@ -1840,6 +1841,7 @@
       "external_imports": [
         "3d-force-graph",
         "@bifrost/ui",
+        "@bifrost/ui/city/world",
         "@bifrost/ui/communication",
         "@tanstack/react-query",
         "@testing-library/react",

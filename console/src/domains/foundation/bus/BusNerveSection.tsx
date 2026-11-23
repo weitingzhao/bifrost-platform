@@ -352,7 +352,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
     : 0
 
   let content
-  if (contract.isError) content = <p className="m-0 font-mono text-xs" style={{ color: C.red }}>{`contract unreadable: ${contract.error instanceof Error ? contract.error.message : 'request failed'}`}</p>
+  if (contract.isError) content = <p className="m-0 font-mono text-xs" style={{ color: C.muted }}>{`unknown · contract unreadable: ${contract.error instanceof Error ? contract.error.message : 'request failed'}`}</p>
   else if (!model || !graph || !contract.data) content = <p className="m-0 font-mono text-xs" style={{ color: C.muted }}>loading…</p>
   else content = (
     <div className="flex w-full min-w-0 flex-col gap-2">
@@ -419,7 +419,8 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
           </Suspense>
         )}
       </div>
-      {team.isError && <p className="m-0 font-mono text-[11px]" style={{ color: C.red }}>team readings unreadable: {team.error instanceof Error ? team.error.message : 'request failed'}</p>}
+      {/* A read that failed cannot be judged: unknown, not the fail red (state vocabulary). */}
+      {team.isError && <p className="m-0 font-mono text-[11px]" style={{ color: C.muted }}>unknown · team readings unreadable: {team.error instanceof Error ? team.error.message : 'request failed'}</p>}
     </div>
   )
   return (
