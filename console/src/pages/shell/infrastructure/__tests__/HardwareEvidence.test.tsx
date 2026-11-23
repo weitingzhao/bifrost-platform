@@ -1,0 +1,60 @@
+import '@testing-library/jest-dom/vitest'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { afterEach, expect, it, vi } from 'vitest'
+import { readingView, type ObservationSnapshot } from '@bifrost/ui/city/observation'
+import { HardwareEvidence, HardwareSnapshot } from '../HardwareEvidence'
+
+const access = vi.hoisted(() => vi.fn())
+vi.mock('@/domains/foundation/observation-access', () => ({ useHardwareObservation: access }))
+afterEach(() => { cleanup(); access.mockReset() })
+const at = '2026-11-22T20:00:00Z'
+const snapshot: ObservationSnapshot = {
+  version: 1, id: 'same-source-snapshot', capturedAt: at, provenance: 'fixture',
+  content: { version: 2, tree: { id: 'town', kind: 'town', shape: '8x8', label: 'Hardware', question: '', dashboard: null,
+    children: [{ id: 'host/one', kind: 'building', shape: '2x2', label: 'Host one', question: '', dashboard: null, state: 'online', children: [
+      { id: 'cpu', kind: 'room', shape: '1x1', label: 'CPU', question: '', dashboard: null, meter: { used: 0, of: 8, unit: 'cores', source: 'source-query' }, children: [] },
+    ] }],
+  } },
+  evidence: { 'host%2Fone/cpu': [{ source: '/api/v1/telemetry/promql?q=source-query', outcome: 'read', receivedAt: at, evaluatedAt: at, expiresAt: '2026-11-22T20:01:00Z' }] },
+}
+
+// Owner 2026-11-22: Console and Signals must preserve identity/value/unit/time/source from the same snapshot.
+it('renders the shared projection verbatim and preserves zero and full object evidence', () => {
+  render(<HardwareSnapshot snapshot={snapshot} at={at} />)
+  const block = readingView.present(snapshot, { selected: [], metrics: true, at })[0].blocks[0]
+  if (block.kind !== 'table') throw new Error('Expected shared readings table')
+  const rows = within(screen.getAllByRole('table')[0]).getAllByRole('row').slice(1)
+  expect(rows).toHaveLength(block.rows.length)
+  block.rows.forEach((row, i) => row.cells.forEach((cell, j) => expect(within(rows[i]).getAllByRole('cell')[j].textContent).toBe(String(cell))))
+  fireEvent.click(screen.getByRole('button', { name: 'CPU' }))
+  expect(screen.getByText('host%2Fone/cpu')).toBeInTheDocument()
+  expect(screen.getByText('0 / 8 cores')).toBeInTheDocument()
+  expect(screen.getByText('/api/v1/telemetry/promql?q=source-query')).toBeInTheDocument()
+  expect(screen.getAllByText(at).length).toBeGreaterThan(0)
+  expect(screen.getByText(/Simulated fixture/)).toBeInTheDocument()
+})
+
+// Same acceptance: stale, failed, absent and unknown-time readings cannot become healthy zeroes.
+it.each([
+  ['Stale', { ...snapshot.evidence['host%2Fone/cpu'][0], expiresAt: '2026-11-22T19:59:00Z' }],
+  ['Read failed', { ...snapshot.evidence['host%2Fone/cpu'][0], outcome: 'error' as const }],
+  ['Missing', { ...snapshot.evidence['host%2Fone/cpu'][0], outcome: 'missing' as const }],
+  ['Unknown measurement time', { ...snapshot.evidence['host%2Fone/cpu'][0], evaluatedAt: undefined }],
+])('retains shared quality %s', (quality, read) => {
+  render(<HardwareSnapshot snapshot={{ ...snapshot, evidence: { 'host%2Fone/cpu': [read] } }} at={at} />)
+  expect(screen.getByText(quality)).toBeInTheDocument()
+})
+
+// Owner 2026-11-22: opt-in observations must not add an always-on mailbox or workflow action.
+it('mounts only the public hardware reader when opened, and preserves retained data on failure', () => {
+  access.mockReturnValue({ data: snapshot, isPending: false, isError: true, error: new Error('offline') })
+  render(<HardwareEvidence />)
+  expect(access).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Show hardware evidence' }))
+  expect(access).toHaveBeenCalledTimes(1)
+  expect(screen.getByRole('status')).toHaveTextContent('offline')
+  expect(screen.getByText(/same-source-snapshot/)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /ACK|Approve|Accept/ })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Hide hardware evidence' }))
+  expect(screen.queryByText(/same-source-snapshot/)).not.toBeInTheDocument()
+})
