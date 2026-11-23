@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { LedgerGrid } from '@bifrost/ui/city/ledger'
 import { readingView, type ObservationSnapshot } from '@bifrost/ui/city/observation'
 import { HardwareEvidence, HardwareSnapshot } from '../HardwareEvidence'
 
@@ -52,9 +53,30 @@ it('mounts only the public hardware reader when opened, and preserves retained d
   expect(access).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Show hardware evidence' }))
   expect(access).toHaveBeenCalledTimes(1)
-  expect(screen.getByRole('status')).toHaveTextContent('offline')
+  expect(screen.getByText(/Hardware refresh failed:/)).toHaveTextContent('offline')
   expect(screen.getByText(/same-source-snapshot/)).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /ACK|Approve|Accept/ })).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Hide hardware evidence' }))
   expect(screen.queryByText(/same-source-snapshot/)).not.toBeInTheDocument()
+})
+
+// Console migration: filtering is local navigation and must retain the original snapshot evidence.
+it('retains selected evidence when the shared grid filter hides its row without reading again', () => {
+  render(<HardwareSnapshot snapshot={snapshot} at={at} />)
+  fireEvent.click(screen.getByRole('button', { name: 'CPU' }))
+  fireEvent.change(screen.getByLabelText('Filter supplied rows'), { target: { value: 'no matching object' } })
+  expect(screen.getByText(/Selected object is outside/)).toHaveTextContent('host%2Fone/cpu')
+  expect(screen.getByText('0 / 8 cores')).toBeInTheDocument()
+  expect(screen.getByText('/api/v1/telemetry/promql?q=source-query')).toBeInTheDocument()
+  expect(access).not.toHaveBeenCalled()
+})
+
+// Same snapshot/context must give identical standalone and Console table values, including uncertainty.
+it.each(['read', 'missing', 'error'] as const)('matches independent Ledger cells for %s evidence', outcome => {
+  const input = { ...snapshot, evidence: { 'host%2Fone/cpu': [{ ...snapshot.evidence['host%2Fone/cpu'][0], outcome }] } }
+  const block = readingView.present(input, { selected: [], metrics: true, at })[0].blocks[0]
+  if (block.kind !== 'table') throw new Error('Expected shared readings table')
+  render(<><div data-testid="independent"><LedgerGrid table={block} selected="" onSelect={() => {}} scope="Same fixture" /></div><div data-testid="console"><HardwareSnapshot snapshot={input} at={at} /></div></>)
+  const cells = (id: string) => within(screen.getByTestId(id)).getAllByRole('table')[0].textContent
+  expect(cells('console')).toBe(cells('independent'))
 })

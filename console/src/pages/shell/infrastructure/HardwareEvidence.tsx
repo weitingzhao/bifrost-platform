@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CardView } from '@bifrost/ui/city/CardView'
+import { LedgerGrid } from '@bifrost/ui/city/ledger'
 import { objectsIn, pathKey, readingView, readQuality, type ObservationSnapshot } from '@bifrost/ui/city/observation'
 import { useHardwareObservation } from '@/domains/foundation/observation-access'
 import { useNowMs } from '@/hooks/useNowMs'
@@ -13,7 +14,9 @@ export function HardwareSnapshot({ snapshot, at }: { snapshot: ObservationSnapsh
   const panels = readingView.present(snapshot, { selected: object?.path ?? [], metrics: true, at })
   return <div className="overflow-x-auto [&_table]:w-full [&_th]:text-left [&_td]:p-2 [&_th]:p-2 [&_tr]:border-b [&_button]:underline">
     <p className="text-xs text-muted-foreground">Source mode: {snapshot.provenance === 'fixture' ? 'Simulated fixture' : snapshot.provenance === 'recorded' ? 'Recorded response — not live' : snapshot.provenance} · Snapshot {snapshot.id} · Captured {snapshot.capturedAt}</p>
-    {panels.map(panel => <CardView key={panel.id} body={panel.blocks} open={select} />)}
+    {panels.map(panel => <div key={panel.id}>{panel.blocks.map((block, index) => block.kind === 'table'
+      ? <LedgerGrid key={index} table={block} selected={selected} onSelect={select} scope="Prod topology hardware · current supplied snapshot" />
+      : <CardView key={index} body={[block]} open={select} />)}</div>)}
     <details open={selected !== ''}>
       <summary>Object evidence {selected || '(select an object)'}</summary>
       {selected !== '' && !object && <p>Object is not represented in this snapshot. Selection retained.</p>}
