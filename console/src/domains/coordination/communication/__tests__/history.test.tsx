@@ -67,3 +67,18 @@ it('keeps one host-controlled evidence cutoff across scene and ledger without in
  view.rerender(<WorkingStudio snapshot={snapshot} stationImage="" ledgerOnly through="" onThrough={onThrough}/>)
  expect(screen.getAllByText('Not observed')).toHaveLength(6)
 })
+it.each(['scene','ledger'])('does not replace a missing requested message in the %s renderer',kind=>{
+ const snapshot={version:1 as const,members:[],coverage:{state:'ready' as const,note:'test',truncated:false,updatedAt:'2026-11-22T12:05:00Z'},exchanges:exchangesOf([{id:'s',communication:'existing',channel:'message',stage:'sent',label:'Existing letter',evidence:{id:'s',source:'ledger',at:'2026-11-22T12:00:00Z'}}])}
+ const onSelected=vi.fn()
+ const props={snapshot,stationImage:'',selectedId:'message:missing',onSelected}
+ const view=render(kind==='scene'?<AgentWorld {...props} cityHref="#city" consoleHref="#console"/>:<WorkingStudio {...props} ledgerOnly/>)
+ const root=kind==='scene'?screen.getByRole('main'):screen.getByRole('region',{name:'Agent collaboration'})
+ expect(root.getAttribute('data-selection-state')).toBe('missing')
+ expect(root.getAttribute('data-requested-exchange')).toBe('message:missing')
+ expect(root.getAttribute('data-resolved-exchange')).toBeNull()
+ expect(screen.getByText(/Requested communication message:missing/)).toBeTruthy()
+ expect(onSelected).not.toHaveBeenCalled()
+ view.rerender(kind==='scene'?<AgentWorld {...props} selectedId="message:existing" cityHref="#city" consoleHref="#console"/>:<WorkingStudio {...props} selectedId="message:existing" ledgerOnly/>)
+ expect(root.getAttribute('data-resolved-exchange')).toBe('message:existing')
+ expect(root.getAttribute('data-selection-state')).toBe('resolved')
+})
