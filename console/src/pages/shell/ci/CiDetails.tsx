@@ -1,15 +1,16 @@
-import { Fragment, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag } from '@bifrost/ui'
+import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow } from '@bifrost/ui'
 import { fetchFullCi, fetchUnitsRuns, type UnitsConfig } from '@/api/units'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { formatInstant, shortSha } from '@/pages/shell/releases/releaseView'
+import { formatInstant } from '@/pages/shell/releases/releaseView'
 import { PlatformTimings } from './PlatformTimings'
 import { ModuleExplorer } from './ModuleExplorer'
 import { DomainMapView } from './DomainMapView'
 import { CommitJourney } from './CommitJourney'
 import { ApprovalReadingsBlock } from './ApprovalReadingsBlock'
-import { NO_FULL_RUN_TEXT, NO_RUNS_TEXT, fullCiView, runRow, matchesModule } from './ciViewModel'
+import { NO_FULL_RUN_TEXT, NO_RUNS_TEXT, fullCiView, runRow, matchesModule, runsLedgerTable } from './ciViewModel'
+import { LedgerGrid } from '@bifrost/ui/city/ledger'
 
 /*
  * Work > CI > the details, in tables, each folded: the run list, the configuration, the commit's journey, the phase
@@ -55,37 +56,13 @@ function RunsBlock({ repos, module, selectedRun, onSelectRun, keep }: { repos: s
     )
   }
   return (
-    <OpsSection title="Runs" description={description}  bodyPadding="none" overflow="visible" bodyClassName="ops-section-body--table">
-      <DenseDataTable>
-        <DenseTableHeader>
-          <DenseTableHeadRow>
-            {['When', 'Run', 'Commit', 'Kind', 'Status', 'Modules run', 'Why', 'Took', 'Tasks'].map(column => <DenseTableHead key={column}>{column}</DenseTableHead>)}
-          </DenseTableHeadRow>
-        </DenseTableHeader>
-        <DenseTableBody>
-          {rows.map(row => (
-            <DenseTableRow key={row.name} data-testid={`ci-run-${row.name}`}>
-              <DenseTableCell className="whitespace-nowrap align-top font-mono-tabular">{formatInstant(row.createdAt)}</DenseTableCell>
-              <DenseTableCell className="align-top font-mono-tabular"><button type="button" aria-pressed={selectedRun === row.name} className="min-h-11 text-left underline underline-offset-4" onClick={() => onSelectRun(selectedRun === row.name ? "" : row.name)}>{row.name}{selectedRun === row.name ? " · selected" : ""}</button></DenseTableCell>
-              <DenseTableCell className="align-top font-mono-tabular" title={row.revision}>{shortSha(row.revision)}</DenseTableCell>
-              <DenseTableCell className="align-top">{row.kind}</DenseTableCell>
-              <DenseTableCell className="whitespace-nowrap align-top"><DenseTag variant={row.statusVariant}>{row.status}</DenseTag></DenseTableCell>
-              <DenseTableCell className={`align-top ${row.modules === 'not reported' ? MUTED : ''}`}>{row.modules}</DenseTableCell>
-              <DenseTableCell className="whitespace-normal align-top [overflow-wrap:anywhere]">{row.why}</DenseTableCell>
-              <DenseTableCell className="whitespace-nowrap align-top font-mono-tabular">{row.took}</DenseTableCell>
-              <DenseTableCell className="whitespace-normal align-top">
-                {row.tasks.tasks.map((task, index) => (
-                  <Fragment key={task.text}>
-                    {index > 0 && ', '}
-                    <span className={task.failed ? 'font-medium text-[var(--destructive)]' : undefined}>{task.text}</span>
-                  </Fragment>
-                ))}
-                {row.tasks.waited != null && <span className={MUTED}>{`${row.tasks.tasks.length > 0 ? ' · ' : ''}${row.tasks.waited}`}</span>}
-              </DenseTableCell>
-            </DenseTableRow>
-          ))}
-        </DenseTableBody>
-      </DenseDataTable>
+    <OpsSection title="Runs" description={description} bodyPadding="compact" overflow="visible">
+      <LedgerGrid
+        table={runsLedgerTable(rows)}
+        selected={selectedRun}
+        onSelect={name => onSelectRun(selectedRun === name ? '' : name)}
+        scope={`${repo}: the newest ${runs.data?.runs.length ?? 0} runs the cluster retains (read up to ${CI_RUNS_LIMIT})${rows.length !== (runs.data?.runs.length ?? 0) ? `, ${rows.length} after the module / commit filter` : ''}`}
+      />
     </OpsSection>
   )
 }

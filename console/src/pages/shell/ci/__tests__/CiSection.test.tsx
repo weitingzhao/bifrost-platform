@@ -14,6 +14,23 @@ import { CiSection } from '../CiSection'
 import { AS_OF, graph, running, sha, unitsRun } from './ciPageFixture'
 import { contract } from './contract'
 
+// CI → Runs is a Ledger table (2026-11-23, Ledger line): a run's row is found by its run-name button in the grid,
+// not by a per-row test id the shared table does not draw.
+const runsGrid = () => screen.queryByRole('region', { name: 'Ledger grid' })
+const queryRunRow = (name: string): HTMLElement | null => {
+  const grid = runsGrid()
+  return grid ? (within(grid).queryByRole('button', { name })?.closest('tr') ?? null) : null
+}
+const runRowOf = (name: string): HTMLElement => {
+  const row = queryRunRow(name)
+  if (!row) throw new Error(`no run row ${name}`)
+  return row
+}
+const findRunRow = async (name: string): Promise<HTMLElement> => {
+  const grid = await screen.findByRole('region', { name: 'Ledger grid' })
+  return (await within(grid).findByRole('button', { name })).closest('tr')!
+}
+
 /*
  * Origin of the cases marked "contract" — 2026-11-13/14, the Owner: he accepts CI's configuration and runs only when
  * the Ops page shows them, computed from the source CI itself reads; and CI's own front end is tested against the
@@ -131,13 +148,19 @@ it('draws the first project\'s runs: what each ran, its kind, and its failed tas
   setup()
   await screen.findByTestId('ci-verdict')
   open('ci-fold-runs')
-  const partial = await screen.findByTestId('ci-run-ci-2')
+  const partial = await findRunRow('ci-2')
   expect(partial).toHaveTextContent('svc, repo')
   expect(partial).toHaveTextContent("not run, their keys are the base's: web")
-  expect(screen.getByTestId('ci-run-ci-3')).toHaveTextContent('reused ci-2')
-  expect(screen.getByTestId('ci-run-ci-1')).toHaveTextContent('not reported')
-  expect(screen.getByTestId('ci-run-ci-5')).toHaveTextContent('running')
-  expect(screen.getByTestId('ci-run-ci-full-444444444444-20261114')).toHaveTextContent('test-web 199s (failed)')
+  expect(runRowOf('ci-3')).toHaveTextContent('reused ci-2')
+  expect(runRowOf('ci-1')).toHaveTextContent('not reported')
+  expect(runRowOf('ci-5')).toHaveTextContent('running')
+  expect(runRowOf('ci-full-444444444444-20261114')).toHaveTextContent('test-web 199s (failed)')
+  // 2026-11-23, Ledger line PROD reading: 100 retained platform runs (about 3 hours) with 4 failed among 96 green,
+  // and no way to find them but reading every row. The Ledger's filter leaves the failed run alone.
+  expect(runRowOf('ci-full-444444444444-20261114')).toHaveTextContent('fail · Failed')
+  fireEvent.change(screen.getByLabelText('Filter supplied rows'), { target: { value: 'fail · Failed' } })
+  expect(runRowOf('ci-full-444444444444-20261114')).toBeInTheDocument()
+  expect(queryRunRow('ci-2')).toBeNull()
   expect(screen.getByText(/Read 2026-11-14 16:45Z; kept up to 30 s\./)).toBeInTheDocument()
   expect(vi.mocked(fetchUnitsRuns).mock.calls[0][0]).toBe('r')
   expect(vi.mocked(fetchUnitsRuns).mock.calls[0][2]).toBe(100)
@@ -240,13 +263,13 @@ it('links module cards and runs, preserves unknown evidence, and resets on proje
   open('ci-fold-config')
   open('ci-fold-runs')
   await screen.findByTestId('ci-config-module-r-web')
-  await screen.findByTestId('ci-run-ci-2')
+  await findRunRow('ci-2')
   fireEvent.click(within(screen.getByRole('group', { name: 'Module' })).getByRole('button', { name: 'web' }))
   expect(screen.queryByTestId('ci-config-module-r-svc')).toBeNull()
   expect(screen.getByTestId('ci-config-module-r-web')).toBeInTheDocument()
-  expect(screen.queryByTestId('ci-run-ci-2')).toBeNull()
-  expect(screen.getByTestId('ci-run-ci-3')).toHaveTextContent('reused ci-2')
-  expect(screen.getByTestId('ci-run-ci-1')).toHaveTextContent('not reported')
+  expect(queryRunRow('ci-2')).toBeNull()
+  expect(runRowOf('ci-3')).toHaveTextContent('reused ci-2')
+  expect(runRowOf('ci-1')).toHaveTextContent('not reported')
   open('ci-fold-full')
   expect(screen.getByText(/Daily full run is a whole-repository check/)).toBeInTheDocument()
   pickProject('plain')
@@ -291,9 +314,9 @@ it('selects a run from the run list as the page\'s one selection and resets it w
   await screen.findByTestId('ci-verdict')
   expect(screen.getByTestId('ci-selection')).toHaveTextContent('All domains')
   open('ci-fold-runs')
-  fireEvent.click(within(await screen.findByTestId('ci-run-ci-2')).getByRole('button'))
+  fireEvent.click(within(await findRunRow('ci-2')).getByRole('button'))
   expect(screen.getByTestId('ci-selection')).toHaveTextContent('All domains · run 33333333clear')
-  expect(within(screen.getByTestId('ci-run-ci-2')).getByRole('button')).toHaveAttribute('aria-pressed', 'true')
+  expect(within(runRowOf('ci-2')).getByRole('button')).toHaveAttribute('aria-pressed', 'true')
   expect(screen.getByRole('region', { name: 'Selected run' })).toHaveTextContent('Run of 33333333')
   expect(screen.getByRole('button', { name: /Run of 33333333/ })).toHaveAttribute('aria-pressed', 'true')
   expect(screen.getByRole('region', { name: 'Details' })).toHaveTextContent('follows the same selection: r · ci-2.')
@@ -420,12 +443,12 @@ it('shares one selection (domain, run) across By time, By domain and By dependen
   expect(screen.getByRole('region', { name: 'Selected run' })).toBeInTheDocument()
   // The folded run list follows the same selection: only the runs that changed the domain.
   open('ci-fold-runs')
-  expect(await screen.findByTestId('ci-run-ci-2')).toBeInTheDocument()
-  expect(screen.queryByTestId('ci-run-ci-4')).toBeNull()
+  expect(await findRunRow('ci-2')).toBeInTheDocument()
+  expect(queryRunRow('ci-4')).toBeNull()
   fireEvent.click(within(screen.getByTestId('ci-selection')).getByRole('button', { name: 'clear' }))
   expect(screen.getByTestId('ci-selection')).toHaveTextContent('All domains')
   expect(screen.queryByRole('region', { name: 'Selected run' })).toBeNull()
-  expect(screen.getByTestId('ci-run-ci-4')).toBeInTheDocument()
+  expect(runRowOf('ci-4')).toBeInTheDocument()
 })
 
 // Origin: page — with nothing selected every arrow of the graph is plainly visible (2026-11-16: in the first sketch

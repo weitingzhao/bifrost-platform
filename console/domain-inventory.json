@@ -4847,7 +4847,10 @@
       ],
       "external_imports": [
         "@bifrost/ui",
+        "@bifrost/ui/city/cards",
+        "@bifrost/ui/city/ledger",
         "@bifrost/ui/city/observationReport",
+        "@bifrost/ui/city/world",
         "@tanstack/react-query",
         "@testing-library/jest-dom/vitest",
         "@testing-library/react",

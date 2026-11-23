@@ -1,4 +1,7 @@
 import type { FullCiNote, FullCiNotes, UnitsConfig, UnitsModule, UnitsPin, UnitsRun } from '@/api/units'
+import type { Block, Word } from '@bifrost/ui/city/cards'
+import { statusOfWord } from '@bifrost/ui/city/world'
+import { formatInstant, shortSha } from '@/pages/shell/releases/releaseView'
 
 /*
  * Work > CI, as rows and strings. Everything here is computed from what the units routes answer; no project, module
@@ -161,6 +164,44 @@ export function runRow(run: UnitsRun): RunRow {
     why: reused ? '' : (run.scope_why ?? ''),
     took: tookText(run),
     tasks: tasksView(run),
+  }
+}
+
+/**
+ * CI → Runs as one Ledger table (Ledger line, 2026-11-23: up to 100 retained runs, a few hours of platform, drawn
+ * whole with no way to find the failed ones; now filtered, sorted and 50 a page). The run name opens the run as the
+ * page's one selection. Status says the engine's seven words with the run's own word beside it ("fail · Failed");
+ * a failed task carries fail; a scope the pipeline does not report stays unknown.
+ */
+export function runsLedgerTable(rows: RunRow[]): Extract<Block, { kind: 'table' }> {
+  return {
+    kind: 'table',
+    head: ['Run', 'When', 'Commit', 'Kind', 'Status', 'Modules run', 'Why', 'Took', 'Tasks'].map(label => ({ label })),
+    rows: rows.map(row => {
+      const word = statusOfWord(row.status)
+      // Failed tasks first, each on its own line in fail; the passing ones on one line, as the dense table listed them.
+      const failed = row.tasks.tasks.filter(task => task.failed)
+      const passing = row.tasks.tasks.filter(task => !task.failed).map(task => task.text)
+      const tasks: Word[] = failed.map(task => ({ text: task.text, tone: 'fail' as const }))
+      if (passing.length > 0) tasks.push(passing.join(', '))
+      if (row.tasks.waited != null) tasks.push({ text: row.tasks.waited, tone: 'pending' })
+      return {
+        key: row.name,
+        open: row.name,
+        cells: [
+          row.name,
+          formatInstant(row.createdAt),
+          { text: shortSha(row.revision), title: row.revision },
+          row.kind,
+          { text: word === row.status.toLowerCase() ? word : `${word} · ${row.status}`, tone: word, title: row.status },
+          row.modules === 'not reported' ? { text: row.modules, tone: 'unknown' } : row.modules,
+          row.why,
+          row.took,
+          { lines: tasks, empty: 'none reported' },
+        ],
+      }
+    }),
+    empty: NO_RUNS_TEXT,
   }
 }
 
