@@ -39,6 +39,12 @@ describe('lines on the City', () => {
     expect(t.kind === 'table' && t.rows[0].ghost).toBe(true)
   })
 
+  // 2026-11-23, UI / Console: from the City's card the Owner lands on the same line in Commit lineage.
+  it('links each line to the same line on Commit lineage', () => {
+    const t = townLines({ data: lineage([thread('local_a b', '2026-11-23T11:00:00Z', [commit('y', true)])]) }, {}, now)[1]
+    expect(t.kind === 'table' && t.rows[0].href).toBe('#work?section=commit-lineage&thread=local_a%20b')
+  })
+
   it('lists the newest line first and counts the moving ones', () => {
     const blocks = townLines({ data: lineage([thread('old', '2026-11-18T00:00:00Z', [commit('x', true)], 'old line'), thread('new', '2026-11-23T11:00:00Z', [commit('y', true)], 'new line')]) }, {}, now)
     const facts = blocks[0]

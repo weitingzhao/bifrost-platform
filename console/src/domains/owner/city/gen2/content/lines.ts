@@ -9,12 +9,16 @@ import { linesActivity, quietLabel, type LineActivity } from '@/api/lineageActiv
  * (GET /api/v1/lineage) and counted by `linesActivity`, the one function the Console's Commit lineage counts with,
  * over the same window it opens with (14 days): one number on both sides.
  *
- * Coming from the Console with a line picked (`sel=<session>` in the address), that line's row comes first, marked.
+ * Coming from the Console with a line picked (`sel=<session>` in the address), that line's row comes first, marked;
+ * each row's name opens the same line on Commit lineage (`thread=<session>`), so the two look at one line.
  *
  * Which domain a line sits is the seat roster's (Crew's seats.yaml). The platform does not serve it yet: until it
  * does, the lines stand on the city level only and a district says so; nothing is matched here by hand.
  */
 export const LINES_DAYS = 14
+
+/** The same line on the Console's Commit lineage (it reads `thread=` from its address). */
+export const lineageHref = (session: string): string => `#work?section=commit-lineage&thread=${encodeURIComponent(session)}`
 
 /** One row of the seat roster, in the shape Crew fixed (2026-11-23, m_01M84GG2…); served by the map's scan. */
 export type RosterSeat = {
@@ -58,6 +62,7 @@ function table(rows: LineActivity[], focus?: string, domainCol?: (r: LineActivit
     rows: ordered.map(r => ({
       key: r.session,
       title: r.session,
+      href: lineageHref(r.session),
       ghost: !r.movingToday,
       cells: [
         { text: r.title, title: r.session, ...(r.session === focus ? { mark: { text: 'picked' } } : {}) },
