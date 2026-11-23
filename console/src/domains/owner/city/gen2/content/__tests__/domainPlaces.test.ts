@@ -4,7 +4,8 @@ import { rulesBroken } from '@bifrost/ui/city/rules'
 import type { Place } from '@bifrost/ui/city/places'
 import { consoleContent } from '../console'
 import { consoleFunctions } from '../consolePlaces'
-import { COMPUTE, domainTree, styleOf } from '../domainPlaces'
+import { COMPUTE, domainConsoleHref, domainTree, styleOf } from '../domainPlaces'
+import { consoleHrefOf } from '../looks'
 import type { MapStatus } from '../domainsPanel'
 
 // 2026-11-20, the Owner: "the 2.5D is there to show the system's domain design; the menu is another
@@ -61,5 +62,17 @@ describe('a district stands as the building its line claimed', () => {
   it('read when the map serves a light, a ghost when it does not', () => {
     const t = domainTree({ version: 1, domains: [{ id: 'delivery', overall: 'problem' }, { id: 'plan', overall: 'unknown' }] } as unknown as MapStatus, null)
     expect(t.children.map(c => c.state)).toEqual(['online', 'unread'])
+  })
+})
+
+// 2026-11-23, gap table item 8 (cockpit/ui-world/consistency-gaps-2026-11-23.md): from a district the frame's Console
+// cell opened the City's own table, not the domain in the Console. It now opens the domain's row in Status → Domains.
+describe('a district opens its domain in the Console', () => {
+  it('links the district to its row in Status → Domains', () => {
+    const t = domainTree({ version: 1, at: '', commit: '', domains: [{ id: 'lineage', overall: 'good' }] } as never, null)
+    const d = t.children.find(c => c.id === 'lineage')!
+    expect(d.dashboard).toBe('#status?domain=lineage')
+    expect(consoleHrefOf(d, ['lineage'], null)).toBe('#status?domain=lineage')
+    expect(domainConsoleHref('a b')).toBe('#status?domain=a%20b')
   })
 })

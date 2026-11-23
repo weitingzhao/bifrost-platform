@@ -22,6 +22,13 @@ import type { MapStatus } from './domainsPanel'
 export const COMPUTE = 'compute'
 
 /**
+ * The same domain in the Console: its row in Status → Domains (箭10 2026-11-23, gap table item 8: the frame's Console
+ * cell from a district opened the City's own table, not the domain; Console's half scrolls to and marks the row, and
+ * the row's "Open in City" comes back to #city?at=<id>).
+ */
+export const domainConsoleHref = (id: string) => `#status?domain=${encodeURIComponent(id)}`
+
+/**
  * The building a domain's district stands as: the facility kind its line claimed in the Console's ownership table
  * (facilities, the Owner 2026-11-21: the engine draws the catalogue, each line claims its own). Unclaimed, or a
  * kind the catalogue does not draw: the plain district, never a guessed picture.
@@ -39,7 +46,7 @@ export function domainTree(status: MapStatus | undefined, hardware: Place | null
   const domains = (status?.domains ?? []) as Named[]
   const children: Place[] = domains.map(d => d.id === COMPUTE && hardware
     ? { ...hardware, id: d.id, label: nameOf(d) }
-    : { id: d.id, kind: 'district', shape: DISTRICT, label: nameOf(d), question: `The ${nameOf(d)} domain: what it holds and how it stands, as the map sees it.`, dashboard: null, children: buildingsOf(holdings[d.id], stateOf(d), routes ? pkgs => counterRooms(pkgs, routes, stateOf(d)) : undefined, routes && flowSource ? pkgs => buildingFlow(pkgs, routes, flowSource) : undefined), state: stateOf(d), ...(styleOf(d.id) ? { style: styleOf(d.id) } : {}) })
+    : { id: d.id, kind: 'district', shape: DISTRICT, label: nameOf(d), question: `The ${nameOf(d)} domain: what it holds and how it stands, as the map sees it.`, dashboard: domainConsoleHref(d.id), children: buildingsOf(holdings[d.id], stateOf(d), routes ? pkgs => counterRooms(pkgs, routes, stateOf(d)) : undefined, routes && flowSource ? pkgs => buildingFlow(pkgs, routes, flowSource) : undefined), state: stateOf(d), ...(styleOf(d.id) ? { style: styleOf(d.id) } : {}) })
   // The hardware was read even when the map was not: it stands on its own rather than vanish.
   if (hardware && !domains.some(d => d.id === COMPUTE)) children.unshift(hardware)
   return {
