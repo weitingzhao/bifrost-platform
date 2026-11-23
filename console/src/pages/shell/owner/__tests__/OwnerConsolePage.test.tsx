@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useEffect, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TelemetryAlertEntry } from '@/api/clusterTypes'
@@ -118,7 +118,9 @@ const viewer = { token: '', caps: undefined, capsLoading: false, capsError: fals
 function show(hash = '#you', auth = viewer) {
   window.history.replaceState(null, '', hash)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={client}><PlatformAuthContext.Provider value={auth}><Shell /></PlatformAuthContext.Provider></QueryClientProvider>)
+  const view = () => <QueryClientProvider client={client}><PlatformAuthContext.Provider value={auth}><Shell /></PlatformAuthContext.Provider></QueryClientProvider>
+  const page = render(view())
+  return { client, refresh: () => page.rerender(view()) }
 }
 const headings = () => screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)
 async function go(hash: string, heading: string) {
@@ -188,42 +190,64 @@ describe('Owner Console entries', () => {
     expect(screen.getByRole('region', { name: 'Verdict' })).toHaveTextContent('2 things are yours')
     expect(headings()).toEqual(['4090 power', 'For you'])
     const power = within(screen.getByRole('region', { name: '4090 power' }))
-    expect(power.getByRole('button', { name: 'Wake (WOL)' })).toBeDisabled()
-    expect(power.getByRole('button', { name: 'Request power off' })).toBeDisabled()
+    expect(power.getByRole('button', { name: 'Wake' })).toBeDisabled()
+    expect(power.getByRole('button', { name: 'Shut down' })).toBeDisabled()
   })
 
   // 2026-11-22 owner walkthrough: the five-click GPU path obscured the controls.
   // The Command shortcut must keep WOL confirmation and shutdown approval tied to the same node.
-  it('confirms the 4090 wake from Command before posting to the existing endpoint', async () => {
+  it('confirms wake, then waits for Kubernetes before reporting Online', async () => {
     const fetcher = vi.fn(async () => json({ ok: true, message: 'Wake packet sent' }))
     vi.stubGlobal('fetch', fetcher)
-    show('#command', { ...viewer, canOperate: true, canAdmin: true })
+    const page = show('#command', { ...viewer, canOperate: true, canAdmin: true })
     const power = within(screen.getByRole('region', { name: '4090 power' }))
-    expect(power.getByRole('button', { name: 'Request power off' })).toBeDisabled()
-    fireEvent.click(power.getByRole('button', { name: 'Wake (WOL)' }))
+    expect(power.getByRole('button', { name: 'Shut down' })).toBeDisabled()
+    fireEvent.click(power.getByRole('button', { name: 'Wake' }))
     expect(fetcher).not.toHaveBeenCalledWith('/api/v1/cluster/nodes/gpu-server/wake', expect.anything())
     fireEvent.click(screen.getByRole('button', { name: 'Wake 4090' }))
     await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/v1/cluster/nodes/gpu-server/wake', expect.objectContaining({ method: 'POST' })))
-    expect(await power.findByText('Wake packet sent')).toBeInTheDocument()
+    expect(await power.findByText('Starting up')).toBeInTheDocument()
+    expect(power.getByRole('button', { name: 'Wake' })).toBeDisabled()
+    expect(power.getByRole('status')).not.toHaveTextContent('Kubernetes reports the 4090 ready.')
+    gpuReady.value = true
+    page.refresh()
+    expect(power.getByRole('status')).toHaveTextContent('Kubernetes reports the 4090 ready.')
+    expect(power.getByRole('button', { name: 'Shut down' })).toBeEnabled()
   })
 
-  it('requests a 4090 shutdown approval from Command without calling the poweroff endpoint', async () => {
+  // 2026-11-22 owner feedback: clicking the power button did not show what was still waiting.
+  it('tracks shutdown approval and execution before confirming the node is offline', async () => {
     gpuReady.value = true
+    let status = 'pending'
     const fetcher = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
       if (String(input) === '/api/v1/approvals' && options?.method === 'POST') {
         return new Response(JSON.stringify({ id: 'appr_gpu', tier: 'D' }), { status: 201 })
       }
+      if (String(input) === '/api/v1/approvals/appr_gpu') {
+        return json({ id: 'appr_gpu', number: 695, status, created_at: new Date().toISOString() })
+      }
       return json({ actions: [] })
     })
     vi.stubGlobal('fetch', fetcher)
-    show('#command', { ...viewer, canOperate: true, canAdmin: true })
+    const page = show('#command', { ...viewer, canOperate: true, canAdmin: true })
     const power = within(screen.getByRole('region', { name: '4090 power' }))
-    expect(power.getByRole('button', { name: 'Wake (WOL)' })).toBeDisabled()
-    fireEvent.click(power.getByRole('button', { name: 'Request power off' }))
-    expect(await power.findByRole('link', { name: 'Open request' })).toHaveAttribute('href', '#approvals?id=appr_gpu')
+    expect(power.getByRole('button', { name: 'Wake' })).toBeDisabled()
+    fireEvent.click(power.getByRole('button', { name: 'Shut down' }))
+    expect(await power.findByRole('link', { name: 'Request #695' })).toHaveAttribute('href', '#approvals?id=appr_gpu')
+    expect(power.getByRole('status')).toHaveTextContent('Awaiting approval')
+    expect(power.getByRole('button', { name: 'Shut down' })).toBeDisabled()
     const request = fetcher.mock.calls.find(([url, options]) => url === '/api/v1/approvals' && options?.method === 'POST')
     expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({ action: 'poweroff_compute_node', params: { name: 'gpu-server' } })
     expect(fetcher).not.toHaveBeenCalledWith('/api/v1/cluster/nodes/gpu-server/poweroff', expect.anything())
+    for (const [next, label] of [['approved', 'Approved'], ['running', 'Shutting down'], ['executed', 'Waiting for offline']]) {
+      status = next
+      await act(async () => { await page.client.refetchQueries({ queryKey: ['approvals', 'gpu-power', 'appr_gpu'] }) })
+      expect(await power.findByText(label)).toBeInTheDocument()
+    }
+    gpuReady.value = false
+    page.refresh()
+    expect(power.getByRole('status')).toHaveTextContent('Kubernetes reports the node on standby.')
+    expect(power.getByRole('button', { name: 'Wake' })).toBeEnabled()
   })
 
   it('each other entry shows its own block, and the verdict is one line that goes to For you', () => {

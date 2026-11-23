@@ -4893,6 +4893,7 @@
       "imports": [
         "console/src/api",
         "console/src/api/agentRuntimeBus.ts",
+        "console/src/api/approvals.ts",
         "console/src/api/client.ts",
         "console/src/api/cluster.ts",
         "console/src/api/clusterActuation.ts",
@@ -4944,6 +4945,7 @@
         "@tanstack/react-query",
         "@testing-library/jest-dom/vitest",
         "@testing-library/react",
+        "lucide-react",
         "react",
         "vitest"
       ],

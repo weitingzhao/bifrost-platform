@@ -18,6 +18,7 @@ import { OwnerWork } from './OwnerWork'
 import { OwnerYou } from './OwnerYou'
 import { TONE_COLOR, ago, type Verdict } from './ownerModel'
 import { useOwnerConsole } from './useOwnerConsole'
+import { current } from './useOwnerYours'
 
 /** Each entry mounts its own facts; shared Command drafts remain mounted across routes. */
 function entryBlocks(entry: EntryRouteId | null) {
@@ -61,7 +62,7 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
   const data = useOwnerConsole({ system: blocks.system, services: blocks.services, work: activity })
   return <div id="owner-console" data-testid="owner-console" data-entry={entry} className="@container flex w-full min-w-0 flex-col gap-5 pb-8">
     <VerdictBanner verdict={data.verdict} compact={entry !== 'command'} updatedAt={data.updatedAt} now={data.now} />
-    {blocks.you && <OwnerGpuPower nodes={data.nodes} />}
+    {blocks.you && <OwnerGpuPower nodes={data.nodes} openApprovals={current(data.needsYou.query)} recentApprovals={current(data.needsYou.handledQuery)} now={data.now} />}
     {blocks.you && <OwnerYou data={data} />}
     {blocks.you && <OwnerWaiting />}
     {(blocks.work || blocks.system) && <RuntimeHealthNotice progress={data.runtime} now={data.now} />}
