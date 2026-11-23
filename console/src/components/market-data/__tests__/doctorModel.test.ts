@@ -116,6 +116,17 @@ describe('describeFix — a targeted refetch', () => {
   })
 })
 
+// 2026-11-23 箭10: the doctor's crit read as unknown in the engine table (only critical was there) and the Console
+// kept its own crit → danger table; the engine table reads crit now (bifrost-ui 0.59.2) and the Console asks it.
+describe('doctor words through the engine', () => {
+  it('reads crit and critical as fail, degraded as warn', () => {
+    expect(severityVariant('crit')).toBe('danger')
+    expect(severityVariant('warn')).toBe('warning')
+    expect(verdictVariant('critical')).toBe('danger')
+    expect(verdictVariant('degraded')).toBe('warning')
+  })
+})
+
 describe('boundary severity', () => {
   it('renders slate, not green — a derived level is not a vendor close', () => {
     expect(severityVariant('boundary')).toBe('neutral')

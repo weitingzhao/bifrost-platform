@@ -43,3 +43,16 @@ describe('flexQueryRemediation', () => {
     expect(analysis.needsAttention).toBe(false)
   })
 })
+
+// 2026-11-23 箭10: the IB Flex remediation tags printed the Console's own danger / warning beside the engine words,
+// and a stale ingest was a warning. Stale is older than its declared freshness (fail); a probe not answered is pending.
+describe('flex remediation in the engine words', () => {
+  it('tags a stale ingest fail and a probe not yet loaded pending', () => {
+    const stale = analyzeFlexProbe({
+      reachability: 'degraded',
+      freshness: [{ dimension: 'flex-trades', verdict: 'stale', age_hours: 80, rows_written: 58 }],
+    } as MarketDataStatusResponse)
+    expect(stale.findings.find(f => f.id === 'fresh-stale-flex-trades')?.severity).toBe('fail')
+    expect(analyzeFlexProbe(undefined).findings[0].severity).toBe('pending')
+  })
+})

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { statusOfWord } from '@bifrost/ui/city/world'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
@@ -98,7 +99,7 @@ export function DoctorPanel() {
 
   const verdictTag =
     report != null ? (
-      <DenseTag variant={verdictVariant(report.verdict)}>{report.verdict}</DenseTag>
+      <DenseTag variant={verdictVariant(report.verdict)} title={report.verdict}>{statusOfWord(report.verdict)}</DenseTag>
     ) : computing ? (
       <DenseTag variant="neutral">computing</DenseTag>
     ) : q.isError ? (
@@ -119,8 +120,8 @@ export function DoctorPanel() {
         <div className="flex flex-wrap items-center gap-2">
           {verdictTag}
           {report?.eod_critical != null ? (
-            <DenseTag variant={verdictVariant(report.eod_critical.verdict)}>
-              EOD {report.eod_critical.verdict}
+            <DenseTag variant={verdictVariant(report.eod_critical.verdict)} title={report.eod_critical.verdict}>
+              EOD {statusOfWord(report.eod_critical.verdict)}
             </DenseTag>
           ) : null}
           {report != null ? (
@@ -234,7 +235,7 @@ function FindingRow({
   return (
     <DenseTableRow>
       <DenseTableCell>
-        <DenseTag variant={severityVariant(f.severity)}>{f.severity}</DenseTag>
+        <DenseTag variant={severityVariant(f.severity)} title={f.severity}>{statusOfWord(f.severity)}</DenseTag>
       </DenseTableCell>
       <DenseTableCell className={muted ? 'text-[var(--muted-foreground)]' : undefined}>{f.title}</DenseTableCell>
       <DenseTableCell className="font-mono text-[var(--text-dense-caption)]">{f.slot}</DenseTableCell>

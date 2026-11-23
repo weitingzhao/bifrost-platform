@@ -2,7 +2,12 @@ import type { MarketDataStatusResponse } from '@/api/satelliteBusTypes'
 
 export type FlexRemediationFinding = {
   id: string
-  severity: 'info' | 'warning' | 'danger'
+  /**
+   * The engine's words (箭10 2026-11-23): pending while the probe has not answered, unknown when there is nothing to
+   * judge, fail when the plugin is unreachable, a deployment is not ready, a worker failed, or an ingest is stale
+   * (older than its declared freshness).
+   */
+  severity: 'info' | 'pending' | 'unknown' | 'warn' | 'fail'
   title: string
   detail: string
   /** Suggested ingest kind for enqueue remediation */
@@ -36,7 +41,7 @@ export function analyzeFlexProbe(status: MarketDataStatusResponse | undefined): 
       findings: [
         {
           id: 'probe-missing',
-          severity: 'warning',
+          severity: 'pending',
           title: 'Probe unavailable',
           detail: 'platform-api flex-query status not loaded yet.',
         },
@@ -50,7 +55,7 @@ export function analyzeFlexProbe(status: MarketDataStatusResponse | undefined): 
   if (status.error) {
     findings.push({
       id: 'probe-error',
-      severity: 'danger',
+      severity: 'fail',
       title: 'Plugin probe error',
       detail: status.hint ? `${status.error} — ${status.hint}` : status.error,
     })
@@ -61,7 +66,7 @@ export function analyzeFlexProbe(status: MarketDataStatusResponse | undefined): 
   if (notReady.length > 0) {
     findings.push({
       id: 'deploy-not-ready',
-      severity: 'danger',
+      severity: 'fail',
       title: 'Deployment not ready',
       detail: notReady.map(d => `${d.name} ${d.ready}`).join(', '),
     })
@@ -74,7 +79,7 @@ export function analyzeFlexProbe(status: MarketDataStatusResponse | undefined): 
     staleKinds.push(kind)
     findings.push({
       id: `fresh-stale-${kind}`,
-      severity: row.verdict === 'unknown' ? 'warning' : 'warning',
+      severity: row.verdict === 'unknown' ? 'unknown' : 'fail',
       title: `${kind} ingest stale`,
       detail: `Last run ${formatAgeHours(row.age_hours)} · ${row.rows_written ?? 0} rows (threshold ${FRESHNESS_MAX_AGE_H}h).`,
       enqueueKind: kind,
@@ -84,7 +89,7 @@ export function analyzeFlexProbe(status: MarketDataStatusResponse | undefined): 
   if (freshness.length === 0 && status.freshness_reachability === 'unknown') {
     findings.push({
       id: 'fresh-empty',
-      severity: 'warning',
+      severity: 'unknown',
       title: 'No ingest_freshness rows',
       detail: 'Run a flex-trades / flex-transactions job once to seed freshness markers.',
       enqueueKind: 'flex-trades',
@@ -100,7 +105,7 @@ export function analyzeFlexProbe(status: MarketDataStatusResponse | undefined): 
     if (!freshnessAllOk || status.reachability !== 'ok') {
       findings.push({
         id: 'worker-failed',
-        severity: 'danger',
+        severity: 'fail',
         title: 'Worker reported failures',
         detail: `${worker.jobs_failed} failed job(s) on pool ${worker.pool}.`,
       })

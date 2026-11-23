@@ -12,7 +12,7 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { flexEnqueueBlockReason } from '@/lib/flex-query/flexEnqueueGuards'
 import { analyzeFlexProbe } from '@/lib/flex-query/flexQueryRemediation'
-import { reachTag } from '@/lib/shell/stateWords'
+import { reachTag, TAG_VARIANT } from '@/lib/shell/stateWords'
 
 type FlexRemediationPanelProps = {
   status: MarketDataStatusResponse | undefined
@@ -128,17 +128,7 @@ export function FlexRemediationPanel({
             className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-1.5"
           >
             <div className="flex flex-wrap items-center gap-2">
-              <DenseTag
-                variant={
-                  f.severity === 'danger'
-                    ? 'danger'
-                    : f.severity === 'warning'
-                      ? 'warning'
-                      : 'neutral'
-                }
-              >
-                {f.severity}
-              </DenseTag>
+              <DenseTag variant={TAG_VARIANT[f.severity]}>{f.severity}</DenseTag>
               <span className="text-[var(--text-dense-meta)] font-medium">{f.title}</span>
             </div>
             <p className="m-0 mt-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">

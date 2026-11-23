@@ -1,3 +1,5 @@
+import { statusOfWord } from '@bifrost/ui/city/world'
+import { TAG_VARIANT, type TagVariant } from '@/lib/shell/stateWords'
 import type {
   DoctorFinding,
   DoctorFix,
@@ -16,20 +18,17 @@ export function sortFindings(findings: readonly DoctorFinding[]): DoctorFinding[
   return [...findings].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
 }
 
-export function severityVariant(sev: DoctorSeverity): 'danger' | 'warning' | 'success' | 'neutral' {
-  if (sev === 'crit') return 'danger'
-  if (sev === 'warn') return 'warning'
-  // Slate, not green: a derived index level is not a vendor close, and painting
-  // it as a pass is the claim this severity exists to stop.
-  if (sev === 'boundary') return 'neutral'
-  return 'success'
+/**
+ * The doctor's own words (crit / warn / boundary / ok; critical / degraded / healthy) read through the engine's
+ * statusOfWord (箭10 2026-11-23): the Console keeps no table of its own. boundary stays slate, not green: a derived
+ * index level is not a vendor close, and painting it as a pass is the claim that severity exists to stop.
+ */
+export function severityVariant(sev: DoctorSeverity): TagVariant {
+  return TAG_VARIANT[statusOfWord(sev)]
 }
 
-export function verdictVariant(verdict: DoctorVerdict | null | undefined): 'danger' | 'warning' | 'success' | 'neutral' {
-  if (verdict === 'critical') return 'danger'
-  if (verdict === 'degraded') return 'warning'
-  if (verdict === 'healthy') return 'success'
-  return 'neutral'
+export function verdictVariant(verdict: DoctorVerdict | null | undefined): TagVariant {
+  return TAG_VARIANT[statusOfWord(verdict)]
 }
 
 /** Human line for a prescription: what the button will do. */
