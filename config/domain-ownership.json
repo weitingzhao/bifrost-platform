@@ -239,7 +239,7 @@
       "tier": 2,
       "source": "domains/3-4-verify-release-ci/charter.md",
       "contracts": {
-        "public_packages": ["api/internal/verification/assembly", "api/internal/cirunview", "api/internal/evidenceread"],
+        "public_packages": ["api/internal/verification/assembly", "api/internal/cirunview", "api/internal/evidenceread", "api/internal/agentrt/rulesapi", "api/internal/ciconfig", "api/internal/cidomains", "api/internal/ciscore", "api/internal/agentrt/fullci", "api/internal/unitwatch", "api/internal/unitexec", "api/internal/agentrt/runfacts"],
         "measured_at": "2e93ae09",
         "request_response": [
           {"method": "GET", "path": "/api/v1/ci/changes", "handler": "api/internal/server.handleCIChanges", "consumers": ["console"]},
