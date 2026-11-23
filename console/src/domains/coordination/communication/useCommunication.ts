@@ -20,7 +20,8 @@ function readIdentityVersion() { const token = operatorToken(); if (token !== la
 export function useCommunication() { return useCommunicationObservation().snapshot }
 export function useCommunicationObservation() {
   const client = useQueryClient()
-  const queryKey = ['communication', 'messages', readIdentityVersion()] as const
+  const generation = readIdentityVersion()
+  const queryKey = ['communication', 'messages', generation] as const
   const bus = useBusStream()
   const contract = useQuery({ queryKey: ['city', 'gen2', 'bus-contract'], queryFn: fetchBusContract, staleTime: 300000 })
   const events = useQuery<EventWindow>({
@@ -36,24 +37,31 @@ export function useCommunicationObservation() {
     }, refetchInterval: 15000,
   })
   const older = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({key}: {key: typeof queryKey}) => {
       // Stop the forward refresh before reading its state; history never overwrites the forward cursor.
-      await client.cancelQueries({ queryKey, exact: true })
-      const prior=client.getQueryData<EventWindow>(queryKey)
+      await client.cancelQueries({ queryKey: key, exact: true })
+      if (key[2] !== readIdentityVersion()) return null
+      const prior=client.getQueryData<EventWindow>(key)
       if(!prior?.rows.length) throw new Error('No history cursor available yet.')
       const before=Math.min(...prior.rows.map(e=>e.event_id))
       const page=await fetchLatestEvents({types:TYPES,limit:500,before})
-      return {page,key:queryKey}
+      return {page,key}
     },
-    onSuccess: ({page,key}) => client.setQueryData<EventWindow>(key, prior => {
+    onSuccess: result => {
+      // Query cancellation does not cancel mutations. Reject a late old-generation page.
+      if (!result || result.key[2] !== readIdentityVersion()) return
+      const {page,key}=result
+      client.setQueryData<EventWindow>(key, prior => {
       if(!prior)return prior
       const unique=new Map(prior.rows.map(e=>[e.event_id,e]))
       for(const event of page.events) unique.set(event.event_id,event)
       const rows=[...unique.values()].sort((a,b)=>b.event_id-a.event_id)
       const hasOlder=page.events.length===500
       return {...prior,rows:rows.slice(0,CAP),hasOlder,truncated:hasOlder||rows.length>=CAP}
-    }),
+      })
+    },
   })
+  const historyIsCurrent = older.variables?.key[2] === generation
   const threads = useQuery({ queryKey: ['agent-threads'], queryFn: fetchAgentThreads, refetchInterval: 30000 })
   const statuses=useQuery({queryKey:['seat-statuses'],queryFn:fetchSeatStatuses,refetchInterval:30000,retry:false})
   const lineage=useQuery({queryKey:['lineage-lines',2],queryFn:()=>fetchLineage(2),staleTime:60000,retry:false})
@@ -64,9 +72,9 @@ export function useCommunicationObservation() {
     note: (events.error ? String(events.error) + '. ' : '') + 'Event stream: ' + bus.connection + (bus.receiptsOff ? ' (receipts unavailable)' : '') + '. Messages, inbox arrivals and ACK evidence from the platform ledger. Replies require explicit sender links and matching participants; older letters may lack links. Opening and acceptance are not recorded by this source. Absence of a reply is not agent inactivity. Crew membership is a source snapshot imported ' + roster.importedAt + '; it is not live presence. ' + (threads.error ? 'Member titles could not be refreshed.' : 'Work activity is independent of message activity.') + (statuses.error?' Work reports unavailable: '+String(statuses.error):' Work reports are self-reported, timestamped.') + (lineage.error?' Work records unavailable: '+String(lineage.error):' Commit records cover the last two days.'),
   }, roster.members as Member[], busFacts(contract.data, bus.events, bus.receipts), statuses.data??[],lineage.data?.threads??[])
   return { snapshot, history: {
-    loadOlder: () => older.mutate(), loading: older.isPending,
+    loadOlder: () => older.mutate({key:queryKey}), loading: historyIsCurrent && older.isPending,
     hasOlder: Boolean(events.data?.hasOlder && events.data.rows.length<CAP),
-    error: older.error ? String(older.error) : undefined,
+    error: historyIsCurrent && older.error ? String(older.error) : undefined,
     note: !events.data ? 'Reading the ledger; history coverage is not known yet.' : events.data.rows.length===CAP ? 'Loaded 10,000 records; earlier records remain outside this view.' : events.data?.hasOlder ? 'Earlier ledger records are available. Load earlier history to extend this range.' : 'Beginning of the available filtered ledger reached; retention may limit older records.',
   } }
 }

@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { AgentWorld, WorkingStudio, exchangesOf } from '@bifrost/ui/communication'
 import { useCommunicationObservation } from '../useCommunication'
 import type { RuntimeEventRow } from '@/api/agentRuntimeEvents'
-const api=vi.hoisted(()=>({latest:vi.fn(),after:vi.fn()}))
+const api=vi.hoisted(()=>({latest:vi.fn(),after:vi.fn(),identity:'test-A'}))
 vi.mock('@/api/agentRuntimeEvents',()=>({fetchLatestEvents:api.latest,fetchEventsAfter:api.after}))
 vi.mock('@/domains/foundation/bus/useBusStream',()=>({useBusStream:()=>({connection:'connected',events:[],receipts:[]})}))
 vi.mock('@/domains/foundation/bus/busNextgen',()=>({fetchBusContract:async()=>({})}))
@@ -13,7 +13,7 @@ vi.mock('@/domains/foundation/bus/communication',()=>({busFacts:()=>[]}))
 vi.mock('@/api/seatStatus',()=>({fetchSeatStatuses:async()=>[]}))
 vi.mock('@/api/lineage',()=>({fetchLineage:async()=>({threads:[]})}))
 vi.mock('@/api/agentThreads',()=>({fetchAgentThreads:async()=>({threads:[]})}))
-vi.mock('@/api/client',()=>({operatorToken:()=>''}))
+vi.mock('@/api/client',()=>({operatorToken:()=>api.identity}))
 afterEach(()=>{cleanup();vi.unstubAllGlobals();vi.clearAllMocks()})
 it('pauses before ACK, preserves history on a live update, selects evidence and returns to live without writes',()=>{
  const fetch=vi.fn();vi.stubGlobal('fetch',fetch)
@@ -106,4 +106,28 @@ it.each(['message:m','message:missing'])('retains controlled time and request %s
  expect(screen.getByText('History · fixed time')).toBeTruthy()
  expect(within(screen.getByRole('region',{name:'Communication history'})).queryByText('ACK')).toBeNull()
  expect(fetch).not.toHaveBeenCalled()
+})
+
+it.each(['success','failure'])('discards old-identity history %s after switching identity',async outcome=>{
+ api.identity='history-A-'+outcome
+ const row=(id:number):RuntimeEventRow=>({event_id:id,event_stream_id:'mbox:b',seq:id,event_type:'message_posted',actor_id:'a',mission_id:'',plan_node_id:'',task_id:'',attempt_id:'',body:{message_id:'m'+id,to:'b',kind:'note'},at:'2026-11-22T12:00:00Z'})
+ let resolve!:(value:unknown)=>void, reject!:(reason:Error)=>void
+ const pending=new Promise((yes,no)=>{resolve=yes;reject=no})
+ api.latest.mockReset();api.latest.mockResolvedValueOnce({events:[row(100)],next:'1.100'}).mockReturnValueOnce(pending).mockResolvedValueOnce({events:[row(200)],next:'2.200'})
+ const client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}})
+ const wrapper=({children}:{children:React.ReactNode})=><QueryClientProvider client={client}>{children}</QueryClientProvider>
+ const {result,rerender,unmount}=renderHook(()=>useCommunicationObservation(),{wrapper})
+ await waitFor(()=>expect(result.current.snapshot.exchanges.some(x=>x.id==='m100')).toBe(true))
+ const oldKey=client.getQueryCache().findAll({queryKey:['communication','messages']})[0].queryKey
+ act(()=>result.current.history.loadOlder())
+ await waitFor(()=>expect(api.latest).toHaveBeenCalledTimes(2))
+ api.identity='history-B-'+outcome;rerender()
+ await waitFor(()=>expect(result.current.snapshot.exchanges.some(x=>x.id==='m200')).toBe(true))
+ expect(result.current.history.loading).toBe(false)
+ await act(async()=>{if(outcome==='success')resolve({events:[row(50)],next:'0.50'});else reject(new Error('old identity failure'))})
+ await waitFor(()=>expect(client.getMutationCache().getAll().at(-1)?.state.status).toBe(outcome==='success'?'success':'error'))
+ expect(result.current.history.error).toBeUndefined()
+ expect(result.current.snapshot.exchanges.some(x=>x.id==='m50')).toBe(false)
+ expect((client.getQueryData(oldKey) as {rows:RuntimeEventRow[]}).rows.some(x=>x.event_id===50)).toBe(false)
+ unmount();client.clear()
 })
