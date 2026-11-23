@@ -5275,6 +5275,7 @@
         "console/src/pages/shell/releases/__tests__/ReleaseLanesSection.test.tsx",
         "console/src/pages/shell/releases/__tests__/ReleasesPage.test.tsx",
         "console/src/pages/shell/releases/__tests__/policyDecisions.test.tsx",
+        "console/src/pages/shell/releases/__tests__/releaseHistoryLedger.test.tsx",
         "console/src/pages/shell/releases/__tests__/releaseView.test.ts",
         "console/src/pages/shell/releases/__tests__/releaseWindowWord.test.ts",
         "console/src/pages/shell/releases/__tests__/releasesVerdict.test.ts",
@@ -5308,6 +5309,8 @@
       ],
       "external_imports": [
         "@bifrost/ui",
+        "@bifrost/ui/city/cards",
+        "@bifrost/ui/city/ledger",
         "@tanstack/react-query",
         "@testing-library/react",
         "react",

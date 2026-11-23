@@ -1,10 +1,9 @@
 import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag } from '@bifrost/ui'
 import type { ReleaseRecord } from '@/api/releases'
+import { LedgerGrid } from '@bifrost/ui/city/ledger'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import {
-  formatBuiltFrom,
-  formatBuiltFromTitle,
-  formatInstant,
+  releaseLedgerTable,
   shortSha,
   type SupersededRun,
 } from '@/pages/shell/releases/releaseView'
@@ -45,51 +44,18 @@ export function ReleaseHistorySection({ records, recordsLoading, recordsError, s
       {recordsError != null && recordsError !== '' && (
         <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">{recordsError}</p>
       )}
-      <DenseDataTable>
-        <DenseTableHeader>
-          <DenseTableHeadRow>
-            <DenseTableHead>Lane</DenseTableHead>
-            <DenseTableHead>Env</DenseTableHead>
-            <DenseTableHead>Kind</DenseTableHead>
-            <DenseTableHead>Finished</DenseTableHead>
-            <DenseTableHead>Run</DenseTableHead>
-            <DenseTableHead>Tag</DenseTableHead>
-            <DenseTableHead>Built from</DenseTableHead>
-          </DenseTableHeadRow>
-        </DenseTableHeader>
-        <DenseTableBody>
-          {recordsLoading
-            ? messageRow(7, 'Loading…')
-            : records.length === 0
-              ? messageRow(7, 'No release records.')
-              : records.map(record => (
-                  <DenseTableRow key={record.run}>
-                    <DenseTableCell>{record.lane}</DenseTableCell>
-                    <DenseTableCell className="font-semibold">
-                      {record.deploys ? record.env.toUpperCase() : record.env}
-                    </DenseTableCell>
-                    <DenseTableCell>
-                      <DenseTag variant={record.deploys ? 'info' : 'neutral'}>
-                        {record.deploys ? 'deploy' : 'build'}
-                      </DenseTag>
-                    </DenseTableCell>
-                    <DenseTableCell className="whitespace-nowrap font-mono-tabular">
-                      {formatInstant(record.completed_at)}
-                    </DenseTableCell>
-                    <DenseTableCell className="max-w-[260px] truncate font-mono-tabular" title={record.run}>
-                      {record.run}
-                    </DenseTableCell>
-                    <DenseTableCell className="font-mono-tabular">{record.tag?.trim() || '—'}</DenseTableCell>
-                    <DenseTableCell
-                      className="max-w-[320px] truncate font-mono-tabular"
-                      title={formatBuiltFromTitle(record)}
-                    >
-                      {formatBuiltFrom(record)}
-                    </DenseTableCell>
-                  </DenseTableRow>
-                ))}
-        </DenseTableBody>
-      </DenseDataTable>
+      <div className="min-w-0 px-3 py-2">
+        {recordsLoading ? (
+          <p className="m-0 text-[var(--muted-foreground)]">…</p>
+        ) : (
+          <LedgerGrid
+            table={releaseLedgerTable(records)}
+            selected=""
+            onSelect={() => {}}
+            scope={`Release records the platform returns: the newest ${records.length}`}
+          />
+        )}
+      </div>
 
       <OpsSubsectionTitle className="px-3 pt-3">Superseded failures</OpsSubsectionTitle>
       <DenseDataTable>

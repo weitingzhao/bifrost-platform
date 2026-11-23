@@ -331,7 +331,9 @@ describe('ReleasesPage', () => {
     expect(screen.queryByRole('button', { name: /Install/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /Escape/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /Update primary/i })).toBeNull()
-    expect(screen.queryByRole('combobox')).toBeNull()
+    // 2026-11-23, Ledger line: History's Recent releases is a Ledger table; its Sort column select only orders the
+    // rows on screen. No other select (no control that picks what to act on) may appear.
+    expect(screen.queryAllByRole('combobox').filter(el => !el.closest('.ledger-grid'))).toHaveLength(0)
 
     const urls = vi.mocked(fetch).mock.calls.map(call => String(call[0]))
     expect(urls.some(url => url.includes('/release-window'))).toBe(false)

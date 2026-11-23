@@ -1,3 +1,4 @@
+import type { Block } from '@bifrost/ui/city/cards'
 import { formatTimeRemaining, type ApprovalItem } from '@/api/approvals'
 import type { DeliveryPipelineRunView, GitOpsApplicationView, ReleaseWindowResponse } from '@/api/deliveryTypes'
 import type { ReleaseRecord, RunningImageCell } from '@/api/releases'
@@ -348,4 +349,29 @@ export function releasesVerdict(input: {
     : input.window.state === 'held' ? 'info'
     : input.window.state === 'free' ? 'ok' : 'unknown'
   return { word, sentence: [`Releases ${word}`, windowPart, prodPart, ...extra].join(' · ') }
+}
+
+/**
+ * Recent releases as one Ledger table (Ledger line, 2026-11-23: the newest RELEASE_RECORD_LIMIT records were drawn
+ * whole with no filter; now filtered and sorted, 50 a page). Same columns as the dense table; a deploying run's kind is
+ * info, a build plain.
+ */
+export function releaseLedgerTable(records: ReleaseRecord[]): Extract<Block, { kind: 'table' }> {
+  return {
+    kind: 'table',
+    head: ['Lane', 'Env', 'Kind', 'Finished', 'Run', 'Tag', 'Built from'].map(label => ({ label })),
+    rows: records.map(record => ({
+      key: record.run,
+      cells: [
+        record.lane,
+        record.deploys ? record.env.toUpperCase() : record.env,
+        record.deploys ? { text: 'deploy', tone: 'info' as const } : 'build',
+        formatInstant(record.completed_at),
+        record.run,
+        record.tag?.trim() || '—',
+        { text: formatBuiltFrom(record), title: formatBuiltFromTitle(record) },
+      ],
+    })),
+    empty: 'No release records.',
+  }
 }
