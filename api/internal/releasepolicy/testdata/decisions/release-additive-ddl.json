@@ -22,5 +22,14 @@
   ],
   "AdditiveDDL": [
     "repo-app:db/ddl_orders.py"
-  ]
+  ],
+  "Reversal": {
+    "ways": [
+      "revert the commits and land them through ready/; the revert is released like any change",
+      "release again the commit the environment ran before (within a day of its STG run; after that, release it to STG first)"
+    ],
+    "stays": [
+      "repo-app:db/ddl_orders.py: additive DDL; what it added stays after a rollback"
+    ]
+  }
 }

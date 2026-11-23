@@ -187,6 +187,15 @@ func decisionDetail(r *http.Request, d releasepolicy.Decision) string {
 	if d.Path != "" {
 		out += " path=" + d.Path
 	}
+	// Law 73's first step (2026-11-23): what a rollback of this release
+	// leaves in place, counted from these records; "none" when nothing.
+	if d.Reversal != nil {
+		stays := "none"
+		if len(d.Reversal.Stays) > 0 {
+			stays = strings.Join(d.Reversal.Stays, "; ")
+		}
+		out += " reversal_stays=" + stays
+	}
 	if len(d.Reasons) > 0 {
 		out += " reasons=" + strings.Join(d.Reasons, "; ")
 	}

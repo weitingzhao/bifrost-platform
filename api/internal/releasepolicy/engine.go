@@ -257,6 +257,9 @@ type Decision struct {
 	// this pipeline delivers has already applied with the same bytes
 	// (migrations_applied): "repo:path". The release runs nothing of it.
 	AppliedDDL []string `json:",omitempty"`
+	// Reversal is how this release is undone and what that leaves behind
+	// (law 73, information only); nil for what is not a release.
+	Reversal *Reversal `json:",omitempty"`
 }
 
 // ClauseText is the audit's clauses= value.
@@ -451,6 +454,7 @@ func (e *Engine) Evaluate(ctx context.Context, actionID string, params map[strin
 	}
 	d.Reasons = reasons
 	d.Auto = len(reasons) == 0
+	d.Reversal = reversalOf(d)
 	return d
 }
 

@@ -23,5 +23,11 @@
   "AdditiveDDL": null,
   "SelfCheckedAnchors": [
     "repo-app@6e6577000000"
-  ]
+  ],
+  "Reversal": {
+    "ways": [
+      "revert the commits and land them through ready/; the revert is released like any change",
+      "release again the commit the environment ran before (within a day of its STG run; after that, release it to STG first)"
+    ]
+  }
 }

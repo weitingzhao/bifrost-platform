@@ -17,5 +17,11 @@
     "allow:deliver-pinned",
     "window_held_by_requester"
   ],
-  "AdditiveDDL": null
+  "AdditiveDDL": null,
+  "Reversal": {
+    "ways": [
+      "revert the commits and land them through ready/; the revert is released like any change",
+      "release again the commit the environment ran before (within a day of its STG run; after that, release it to STG first)"
+    ]
+  }
 }

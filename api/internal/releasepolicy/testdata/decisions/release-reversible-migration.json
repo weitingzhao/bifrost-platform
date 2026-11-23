@@ -23,5 +23,14 @@
   "AdditiveDDL": null,
   "ReversibleDDL": [
     "repo-app:db/migrations/0002_notes.sql"
-  ]
+  ],
+  "Reversal": {
+    "ways": [
+      "revert the commits and land them through ready/; the revert is released like any change",
+      "release again the commit the environment ran before (within a day of its STG run; after that, release it to STG first)"
+    ],
+    "stays": [
+      "repo-app:db/migrations/0002_notes.sql: a migration that cannot destroy rows; it stays applied after a rollback"
+    ]
+  }
 }

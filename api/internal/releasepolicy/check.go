@@ -22,6 +22,7 @@ type CheckAnswer struct {
 	SHAs          map[string]string `json:"shas"`
 	AdditiveDDL   []string          `json:"additive_ddl,omitempty"`
 	ReversibleDDL []string          `json:"ddl_reversible,omitempty"`
+	Reversal      *Reversal         `json:"reversal,omitempty"`
 	Outcome       string            `json:"outcome"`
 }
 
@@ -44,7 +45,7 @@ func (e *Engine) Check(ctx context.Context, actionID string, tier Tier, needsApp
 	}
 	out := CheckAnswer{
 		Action: actionID, Pipeline: pipeline, Tier: tier, NeedsApproval: needsApproval, Covered: d.Auto,
-		PolicyID: d.PolicyID, Reasons: d.Reasons, Clauses: d.Clauses, SHAs: d.SHAs, AdditiveDDL: d.AdditiveDDL, ReversibleDDL: d.ReversibleDDL,
+		PolicyID: d.PolicyID, Reasons: d.Reasons, Clauses: d.Clauses, SHAs: d.SHAs, AdditiveDDL: d.AdditiveDDL, ReversibleDDL: d.ReversibleDDL, Reversal: d.Reversal,
 	}
 	if out.Reasons == nil {
 		out.Reasons = []string{}
