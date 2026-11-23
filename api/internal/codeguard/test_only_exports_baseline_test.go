@@ -13,7 +13,6 @@ var exportedForOtherTests = []string{
 	"api/internal/actions.AnnApprovalID",
 	"api/internal/actions.AnnAttempt",
 	"api/internal/actions.AnnParamsHash",
-	"api/internal/actions.Catalog",
 	"api/internal/actions.HasExecutor",
 	"api/internal/actuation.WithPrincipal",
 	"api/internal/actuationpolicy.Apply",

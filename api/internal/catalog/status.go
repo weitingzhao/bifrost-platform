@@ -119,6 +119,8 @@ type StatusInputs struct {
 	EventTypes func(ctx context.Context) (map[string]int, bool)
 	// Namespaces is the cluster's namespaces; false when not read.
 	Namespaces func(ctx context.Context) ([]string, bool)
+	// Actions is the ids of the actions this platform serves.
+	Actions func() []string
 }
 
 // Light is one light of one domain.
@@ -279,7 +281,7 @@ func (s *Scanner) ComputeStatus(ctx context.Context, in StatusInputs) Status {
 	}
 	st.Checks = []ClassCheck{s.nodeCheck(ctx, in.ClusterNodes), s.seatCheck(domains), s.mcpToolCheck(domains), s.ruleCheck(ctx, in.RuleGroups), eventCheck(ctx, in.EventTypes)}
 	st.Checks = append(st.Checks, s.placeChecks(ctx, in.Namespaces)...)
-	st.Checks = append(st.Checks, s.releaseTargetCheck())
+	st.Checks = append(st.Checks, s.releaseTargetCheck(), s.actionCheck(in.Actions), s.domainCheck(domains))
 	alive := s.aliveLights(k.Repo, domains, in)
 	ifaces := interfaceLights(ctx, domains, in)
 	bound := boundaryLights(ctx, k.Repo, domains, in)

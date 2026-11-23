@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/catalogusers"
@@ -370,6 +371,13 @@ func (s *Server) catalogStatusInputs() catalog.StatusInputs {
 			}
 			return out, ok
 		}
+	}
+	in.Actions = func() []string {
+		ids := []string{}
+		for _, a := range actions.Catalog() {
+			ids = append(ids, a.ID)
+		}
+		return ids
 	}
 	if s.cluster != nil {
 		in.Namespaces = func(ctx context.Context) ([]string, bool) {

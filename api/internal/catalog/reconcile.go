@@ -197,6 +197,8 @@ type seatRow struct {
 	DomainID  *string `json:"domain_id" yaml:"domain_id"`
 	Kind      string  `json:"kind" yaml:"kind"`
 	InvitedBy string  `json:"invited_by,omitempty" yaml:"invited_by"`
+	// AlsoDomainIDs are the other domains the seat sits.
+	AlsoDomainIDs []string `json:"also_domain_ids,omitempty" yaml:"also_domain_ids"`
 }
 
 // seatCheck compares the roster with its charter pages and the domains
@@ -811,5 +813,97 @@ func (s *Scanner) releaseTargetCheck() ClassCheck {
 	sort.Strings(c.NotLive)
 	c.Measured, c.Registered, c.Live = true, len(listed), len(listed)-len(c.NotLive)
 	c.Note = "the deployments each release lane lists, against the deployments the cluster scan saw; the file lists no images, so which image runs is not compared"
+	return c
+}
+
+const keptActions = "actions"
+
+// keepActions keeps the action ids config/actions-catalog.json lists.
+func (s *Scanner) keepActions(t Tree) {
+	raw, ok, err := t.Read("config/actions-catalog.json")
+	if err != nil || !ok {
+		return
+	}
+	var doc struct {
+		Actions []string `json:"actions"`
+	}
+	if json.Unmarshal(raw, &doc) != nil {
+		return
+	}
+	if out, err := json.Marshal(doc.Actions); err == nil {
+		if err := s.kept().Write(keptActions, out); err != nil {
+			slog.Warn("catalog: keep actions", "err", err)
+		}
+	}
+}
+
+// actionCheck compares the catalog file on main with the actions the
+// running platform serves: listed but not served (main ahead of what is
+// deployed, or a file that drifted), served but not listed.
+func (s *Scanner) actionCheck(running func() []string) ClassCheck {
+	c := ClassCheck{Class: "action", NotRegistered: []string{}, NotLive: []string{}}
+	raw, err := s.kept().Read(keptActions)
+	var listed []string
+	if err != nil || raw == nil || json.Unmarshal(raw, &listed) != nil {
+		c.Note = "no scan has kept config/actions-catalog.json yet"
+		return c
+	}
+	if running == nil {
+		c.Note = "this process does not know the platform's actions"
+		return c
+	}
+	live := map[string]bool{}
+	for _, id := range running() {
+		live[id] = true
+	}
+	inFile := map[string]bool{}
+	for _, id := range listed {
+		inFile[id] = true
+		if !live[id] {
+			c.NotLive = append(c.NotLive, id)
+		}
+	}
+	for id := range live {
+		if !inFile[id] {
+			c.NotRegistered = append(c.NotRegistered, id)
+		}
+	}
+	sort.Strings(c.NotRegistered)
+	sort.Strings(c.NotLive)
+	c.Measured, c.Registered, c.Live = true, len(listed), len(live)
+	c.Note = "the actions the catalog file on main lists, against the actions this running platform serves"
+	return c
+}
+
+// domainCheck compares the table's domains with the seats that sit them
+// (the seat roster's domain ids): a domain no seat sits.
+func (s *Scanner) domainCheck(domains []contractDomain) ClassCheck {
+	c := ClassCheck{Class: "domain", NotRegistered: []string{}, NotLive: []string{}}
+	raw, err := s.kept().Read(keptSeats)
+	var k keptSeatRoster
+	if err != nil || raw == nil || json.Unmarshal(raw, &k) != nil {
+		c.Note = "no scan has kept the seat roster yet"
+		return c
+	}
+	sat := map[string]bool{}
+	for _, r := range k.Rows {
+		if r.Kind == "temporary" {
+			continue
+		}
+		if r.DomainID != nil {
+			sat[*r.DomainID] = true
+		}
+		for _, d := range r.AlsoDomainIDs {
+			sat[d] = true
+		}
+	}
+	for _, d := range domains {
+		if !sat[d.ID] {
+			c.NotLive = append(c.NotLive, d.ID)
+		}
+	}
+	sort.Strings(c.NotLive)
+	c.Measured, c.Registered, c.Live = true, len(domains), len(domains)-len(c.NotLive)
+	c.Note = "the table's domains, against the seats the roster says sit them; not live is a domain no owner seat sits (domain_id or also_domain_ids)"
 	return c
 }

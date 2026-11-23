@@ -599,3 +599,28 @@ func TestOnlyRuleFilesTheKustomizationListsAreDeclared(t *testing.T) {
 		t.Fatalf("%+v", c)
 	}
 }
+
+// 2026-11-23: action and domain were registry-only classes. The map compares
+// the catalog file with the actions the running platform serves, and the
+// domains with the seats that sit them. Controls: an action in both lists and
+// a domain sat only through also_domain_ids are in neither list.
+func TestActionsAndDomainsAreCompared(t *testing.T) {
+	s := &Scanner{Kept: memKept{}}
+	s.keepActions(Tree{Read: func(string) ([]byte, bool, error) {
+		return []byte(`{"actions":["delete_pod","gone_action"]}`), true, nil
+	}})
+	a := s.actionCheck(func() []string { return []string{"delete_pod", "new_action"} })
+	if !a.Measured || len(a.NotLive) != 1 || a.NotLive[0] != "gone_action" || len(a.NotRegistered) != 1 || a.NotRegistered[0] != "new_action" {
+		t.Fatalf("%+v", a)
+	}
+	plan, verification := "plan", "verification"
+	roster, _ := json.Marshal(keptSeatRoster{Rows: []seatRow{
+		{ID: "1-plan", DomainID: &plan, Kind: "owner"},
+		{ID: "3-4", DomainID: &verification, Kind: "owner", AlsoDomainIDs: []string{"delivery"}},
+	}})
+	_ = s.kept().Write(keptSeats, roster)
+	d := s.domainCheck([]contractDomain{{ID: "plan"}, {ID: "verification"}, {ID: "delivery"}, {ID: "audit"}})
+	if !d.Measured || d.Live != 3 || len(d.NotLive) != 1 || d.NotLive[0] != "audit" {
+		t.Fatalf("%+v", d)
+	}
+}

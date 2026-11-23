@@ -215,6 +215,7 @@ func (s *Scanner) ScanOnce(ctx context.Context, repo string) (Pool, error) {
 				s.keepMCPTools(t)
 				s.keepPlaces(t)
 				s.keepReleaseTargets(t)
+				s.keepActions(t)
 			}
 			if repo != ClusterRepo && repo != DatabaseRepo {
 				s.keepSeats(repo, t)
