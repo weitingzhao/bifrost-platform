@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { ObservationSurface, readQuality, type ObservationSnapshot, type ReadEvidence } from '@bifrost/ui/city/observation'
+import { ObservationSurface, RuntimeWorld, readQuality, type ObservationSnapshot, type ReadEvidence } from '@bifrost/ui/city/observation'
 import { snapshotOf } from '../read'
 
 afterEach(cleanup)
@@ -59,5 +59,29 @@ describe('observation contract', () => {
     const s = await snapshotOf({ '/api/v1/topology?env=prod': { error: 'HTTP 503', receivedAt: at } }, 'fixture')
     expect(s.content.tree.children[0].children).toEqual([])
     expect(s.content.alerts?.alerts).toBeUndefined()
+  })
+})
+
+// 2026-11-22 Runtime scene: test the public renderer contract, without a GPU dependency.
+vi.mock('phaser', () => ({ default: { Scene: class {}, Game: class { loop = { wake() {}, sleep() {} }; destroy() {} }, AUTO: 0, Scale: { RESIZE: 0 } } }))
+describe('runtime world', () => {
+  it('retains real object evidence while layers change and a newer snapshot arrives', () => {
+    const { rerender } = render(<RuntimeWorld snapshot={fixture} links={[{label:'City',href:'#city'}]} />)
+    fireEvent.change(screen.getByLabelText('Inspect device'), { target: { value: 'node-a' } })
+    fireEvent.click(screen.getByRole('button', { name: /CPU/ }))
+    fireEvent.click(screen.getByText('Pin snapshot'))
+    const next = structuredClone(fixture)
+    next.id = 'fixture-2'; next.capturedAt = '2026-11-22T12:00:30.000Z'
+    next.content.tree.children[0].children[0].meter!.used = 4
+    rerender(<RuntimeWorld snapshot={next} />)
+    fireEvent.click(screen.getByLabelText('Measurements'))
+    fireEvent.click(screen.getByLabelText('Alert markers'))
+    const evidence = screen.getByLabelText('Runtime evidence')
+    expect(within(evidence).getByText(/raw 0 \/ 8/)).toBeTruthy()
+    expect(within(evidence).getByText('node-a/cpu')).toBeTruthy()
+    expect(screen.getByText(/Latest incoming: 2026-11-22T12:00:30/)).toBeTruthy()
+    fireEvent.click(screen.getByText('Return to live'))
+    expect(within(evidence).getByText(/raw 4 \/ 8/)).toBeTruthy()
+    expect(fixture.content.tree.children[0].children[0].meter!.used).toBe(0)
   })
 })

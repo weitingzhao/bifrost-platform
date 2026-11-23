@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   resolve: { dedupe: ['react', 'react-dom'], alias: [
+    { find: 'phaser', replacement: path.resolve(__dirname, '../../bifrost-ui/node_modules/phaser/src/phaser.js') },
     { find: '@', replacement: path.resolve(__dirname, './src') },
     { find: '@bifrost/ui/communication', replacement: path.resolve(__dirname, '../../bifrost-ui/src/communication/model.ts') },
     { find: /^@bifrost\/ui\/city\/(.*)$/, replacement: path.resolve(__dirname, '../../bifrost-ui/src/city') + '/$1' },

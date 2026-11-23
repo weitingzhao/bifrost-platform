@@ -187,8 +187,9 @@ function ConsolePageInner() {
   }
 
   const agentsLook = location.kind === 'shell' && location.id === 'collaboration' && readCommunicationLook(window.location.hash.split('?')[1] ?? '').look === 'agents'
-  if (agentsLook) return <Suspense fallback={null}><AgentScreen /></Suspense>
-  if (cityLook) return <Suspense fallback={null}><CityScreen /></Suspense>
+  if (location.kind === 'shell' && location.id === 'observation') return <Suspense fallback={null}><Observation /></Suspense>
+  if (agentsLook) return <><Suspense fallback={null}><AgentScreen /></Suspense><SignalModeLink /></>
+  if (cityLook) return <><Suspense fallback={null}><CityScreen /></Suspense><SignalModeLink /></>
   return (
     <TooltipProvider>
       <SidebarProvider>
@@ -246,4 +247,9 @@ function ConsolePageInner() {
 
 export function ConsolePage() {
   return <ConsolePageInner />
+}
+
+/** Shell-owned peer entry; leaves the City and communication renderers untouched. */
+function SignalModeLink() {
+  return <a href="#observation" aria-label="Open Signals view" style={{position:'fixed',right:28,top:78,zIndex:45,padding:'6px 14px',border:'1px solid #496575',borderRadius:16,background:'#102330',color:'#9ae6d1',font:'12px system-ui',textDecoration:'none'}}>Signals ↗</a>
 }

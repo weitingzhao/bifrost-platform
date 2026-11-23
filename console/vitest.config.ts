@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     dedupe: ['react', 'react-dom'],
-    alias: [{ find: /^@bifrost\/ui\/city\/(.*)$/, replacement: path.resolve(__dirname, '../../bifrost-ui/dist/city') + '/$1' }, { find: 'lucide-react', replacement: resolveDependency('lucide-react') }, { find: '@', replacement: path.resolve(__dirname, './src') }, { find: '@bifrost/ui/communication', replacement: path.resolve(__dirname, '../../bifrost-ui/dist/communication/index.js') }],
+    alias: [{ find: 'phaser', replacement: resolveDependency('phaser') }, { find: /^@bifrost\/ui\/city\/(.*)$/, replacement: path.resolve(__dirname, '../../bifrost-ui/dist/city') + '/$1' }, { find: 'lucide-react', replacement: resolveDependency('lucide-react') }, { find: '@', replacement: path.resolve(__dirname, './src') }, { find: '@bifrost/ui/communication', replacement: path.resolve(__dirname, '../../bifrost-ui/dist/communication/index.js') }],
   },
   test: {
     // Bound jsdom concurrency so loaded CI workers do not time out healthy tests.
