@@ -9,13 +9,15 @@ import { statusTag, unknownNote } from './plain'
 import { DOMAIN_GLYPH } from '@/domains/owner/city/gen2/content/domainGlyphs'
 
 type Get = (path: string) => Promise<unknown>
+/** The domain status's own freshness: three catalog scan rounds of 10 minutes (catalog.Every; status.go 3*Every). */
+export const DOMAIN_STATUS_FRESH = 3 * 10 * 60000
 const DOMAINS = 'foundation plan lineage verification delivery approvals compute payload coordination crew station audit triage assembly'.split(' ')
 const note = (text: string): ObservationPanel['blocks'][number] => ({ kind: 'note', text, title: text })
 /** Projection of existing public reads only. No health judgments, ingestion or workflow actions. */
 export async function readOperations(get: Get) {
   const panels: Record<string, ObservationPanel[]> = { domains: [], ci: [], data: [] }
   const evidence: Record<string, ReadEvidence[]> = {}
-  async function read<T>(id: string, path: string): Promise<T | undefined> {
+  async function read<T>(id: string, path: string, ttl = 90000, why = 'Display freshness uses source generation time and receipt; source health is unchanged'): Promise<T | undefined> {
     let receivedAt = new Date().toISOString()
     try {
       const value = await get(path) as T & { at?: string; generated_at?: string }
@@ -23,7 +25,7 @@ export async function readOperations(get: Get) {
       const evaluatedAt = value.at ?? value.generated_at
       const sourceTime = Date.parse(evaluatedAt ?? '')
       const freshnessBase = Number.isFinite(sourceTime) ? Math.min(Date.parse(receivedAt), sourceTime) : Date.parse(receivedAt)
-      evidence[id] = [{ source: path, outcome: 'read', receivedAt, evaluatedAt, expiresAt: new Date(freshnessBase + 90000).toISOString(), detail: 'Display freshness uses source generation time and receipt; source health is unchanged' }]
+      evidence[id] = [{ source: path, outcome: 'read', receivedAt, evaluatedAt, expiresAt: new Date(freshnessBase + ttl).toISOString(), detail: why }]
       return value
     } catch (e) {
       evidence[id] = [{ source: path, outcome: 'error', receivedAt, detail: String(e) }]
@@ -38,7 +40,10 @@ export async function readOperations(get: Get) {
   await Promise.all([
     (async () => {
       const id = '@domains'
-      const data = await read<DomainStatusResponse>(id, '/api/v1/catalog/status')
+      // 2026-11-23 (PROD readback): the domain status is computed once per catalog scan round (api/internal/catalog
+      // scan.go Every = 10 min) and the source itself calls a scan older than three rounds not fresh (status.go). A
+      // 90-second display deadline marked every domain Stale between rounds: a deadline the source never declared.
+      const data = await read<DomainStatusResponse>(id, '/api/v1/catalog/status', DOMAIN_STATUS_FRESH, 'Computed once per catalog scan round (10 min); the source calls a scan older than three rounds not fresh, and so does this display')
       if (!Array.isArray(data?.domains)) {
         panels.domains = DOMAINS.map(name => ({ id: 'domain:' + name, label: name, glyph: DOMAIN_GLYPH[name], blocks: [failure(id)] }))
         for (const p of panels.domains) evidence[p.id] = evidence[id]

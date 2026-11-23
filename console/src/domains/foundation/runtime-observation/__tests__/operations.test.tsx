@@ -25,8 +25,9 @@ describe('existing operations contracts', () => {
     // 2026-11-23 (箭10, brand layer item 6): the domain wears the World table's glyph.
     expect(result.panels.domains[0].glyph).toBe('chip')
     expect(result.evidence['domain:compute'][0].evaluatedAt).toBe(at)
-    // Re-reading an old worker snapshot must not make its measurement fresh.
-    expect(result.evidence['domain:compute'][0].expiresAt).toBe('2026-11-22T12:01:30.000Z')
+    // Re-reading an old worker snapshot must not make its measurement fresh; the deadline is the source's own
+    // (2026-11-23 PROD readback: a 90 s deadline marked all 14 domains Stale between 10-minute scan rounds).
+    expect(result.evidence['domain:compute'][0].expiresAt).toBe('2026-11-22T12:30:00.000Z')
   })
   it('preserves an explicit denied source while independent CI and data finish', async () => {
     const result = await readOperations(async path => {
