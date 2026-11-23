@@ -371,6 +371,25 @@
       "tier": 3,
       "source": "domains/5-approvals/charter.md",
       "contracts": {
+        "public_packages": [
+          "api/internal/actions",
+          "api/internal/actuationpolicy",
+          "api/internal/agentgovernance",
+          "api/internal/agentrt/approvalfacts",
+          "api/internal/agentrt/assessmentreadings",
+          "api/internal/agentrt/questionbridge",
+          "api/internal/approvalnotify",
+          "api/internal/approvalreadings",
+          "api/internal/approvalrules",
+          "api/internal/approvals",
+          "api/internal/assessmentview",
+          "api/internal/homelayout",
+          "api/internal/instruments",
+          "api/internal/owner/approvalhome",
+          "api/internal/owner/assembly",
+          "api/internal/questions",
+          "api/internal/workactions"
+        ],
         "measured_at": "2e93ae09",
         "request_response": [
           {"method": "GET", "path": "/api/v1/actions", "handler": "api/internal/actions.HandleList", "consumers": ["console"]},
