@@ -4740,10 +4740,12 @@
       "path": "console/src/pages/shell/infrastructure",
       "files": [
         "console/src/pages/shell/infrastructure/ComputeReadings.tsx",
+        "console/src/pages/shell/infrastructure/HardwareEvidence.tsx",
         "console/src/pages/shell/infrastructure/InfrastructurePage.tsx",
         "console/src/pages/shell/infrastructure/MiniCards.tsx",
         "console/src/pages/shell/infrastructure/RuntimeMapSection.tsx",
         "console/src/pages/shell/infrastructure/__tests__/ComputeReadings.test.tsx",
+        "console/src/pages/shell/infrastructure/__tests__/HardwareEvidence.test.tsx",
         "console/src/pages/shell/infrastructure/computeReadingsModel.ts"
       ],
       "imports": [
@@ -4757,7 +4759,9 @@
         "console/src/components/layout",
         "console/src/components/shell",
         "console/src/domains/foundation/backup",
+        "console/src/domains/foundation/observation-access",
         "console/src/domains/foundation/runtime-map",
+        "console/src/hooks/useNowMs.ts",
         "console/src/lib/agent",
         "console/src/lib/shell",
         "console/src/pages/ClusterPage.tsx",
@@ -4768,9 +4772,12 @@
       ],
       "external_imports": [
         "@bifrost/ui",
+        "@bifrost/ui/city/CardView",
+        "@bifrost/ui/city/observation",
         "@tanstack/react-query",
         "@testing-library/jest-dom/vitest",
         "@testing-library/react",
+        "react",
         "vitest"
       ],
       "source_inputs": [],
