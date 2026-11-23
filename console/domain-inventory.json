@@ -1987,9 +1987,12 @@
       "files": [
         "console/src/domains/foundation/observation-access/README.md",
         "console/src/domains/foundation/observation-access/access.test.tsx",
+        "console/src/domains/foundation/observation-access/domainStatus.test.tsx",
+        "console/src/domains/foundation/observation-access/domainStatus.ts",
         "console/src/domains/foundation/observation-access/index.ts"
       ],
       "imports": [
+        "console/src",
         "console/src/api/client.ts",
         "console/src/domains/foundation/runtime-observation"
       ],

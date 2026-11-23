@@ -22,3 +22,5 @@ export function hardwareObservationOptions() {
 export function useHardwareObservation() {
   return useQuery(hardwareObservationOptions())
 }
+
+export { domainStatusObservationOptions, useDomainStatusObservation } from './domainStatus'

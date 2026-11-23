@@ -58,3 +58,31 @@ retained capture `2026-11-23T03:07:00.216Z` while incoming advanced to
 Mocked transport tests cover one concurrent capture, remount cache reuse,
 GET-only scope, failure recovery, unchanged pinned data, true zero, stale/unknown
 time and cancellation. Browser testing uses real telemetry, not mocked messages.
+
+## Independent domain status
+
+`domainStatusObservationOptions()` and `useDomainStatusObservation()` opt in to
+only GET `/api/v1/catalog/status`, using the existing catalog client and cache
+key `['status','domain-status']`. The response is unchanged (including unknown
+fields); backend overall, four lights, coverage and references remain authoritative.
+No CI/data/mailbox reads occur. Concurrent observers deduplicate; fresh data is
+reused for 60 seconds and active observers poll every 60 seconds, retry=false.
+The old Console query shares the same raw cache shape; migrate consumers to the
+factory to also share cancellation and the freshness policy. AbortSignal reaches
+serverFetch and cancelled responses cannot publish.
+
+The hook adds `evidence` separately from `data`: absent while initially pending,
+error on failed reads even if old data remains, original source `at` retained.
+The 90-second evidence expiry matches the existing Signals display window and
+never changes domain health. Missing/invalid source time stays unknown; an old
+source is not made fresh by a later HTTP response. Use existing `readQuality` at
+the observation time. Both data and evidence must be retained together if pinned.
+Scope/session cleanup remains the host's responsibility. This is not the Signals
+operations projection and does not claim its existing reader has migrated.
+
+The catalog status client now uses the existing host authedFetch so a configured
+viewer/operator login is forwarded without engine credential handling. Real local
+acceptance without a viewer login returned 401: both consumers displayed the
+same error evidence and receipt time, never zero domains or a healthy state.
+Successful domain payload and recovery assertions use mocked transport; a real
+authenticated domain success remains for the host consumer acceptance.
