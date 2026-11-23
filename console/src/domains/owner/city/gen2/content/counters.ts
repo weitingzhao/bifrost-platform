@@ -13,8 +13,10 @@ import QUERIES from './counterQueries.json'
  *   routes     every domain's contract request_response, put in the package its handler lives in (the part
  *              before the last dot); a route another domain promises carries that domain (promisedBy): the
  *              mismatch shows where the work is done (verification's routes served in assembly/server, as it is)
- *   readings   requests a minute and 5xx a minute over the last hour, per (handler, method), from the platform's
- *              own http_requests_total (counterQueries.json), matched exactly to the route's method and path
+ *   readings   requests a minute and 5xx a minute over the last hour, per (handler, method): the metrics line's
+ *              recording rules bifrost_http:requests_per_minute_1h and bifrost_http:errors_5xx_per_minute_1h
+ *              (in PROD 2026-11-23, card #709; counterQueries.json names them), matched exactly to the route's
+ *              method and path. A route with traffic but no 5xx series had no 5xx: 0 (the rule's own reading)
  * A route with no series is shuttered (not asked since its process started: not measured, not zero); a route the
  * metric cannot name (a wildcard proxy) is shuttered with why. A package with no route is a room that says so.
  */
