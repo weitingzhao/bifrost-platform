@@ -7,6 +7,7 @@ import { cityHref, consoleHrefOf, ledgerHref, readCityQuery } from '@/domains/ow
 import { crumbsOf, frameAlerts } from '@/domains/owner/city/gen2/content/frame'
 import { useShellStatusLine } from '@/domains/foundation/shell/useShellStatusLine'
 import { viewerEnvBadgeLabel } from '@/domains/foundation/observation-display/fleetNavigation'
+import { useJourneyBack } from '@/components/shell/world-journey/journeyTrail'
 import { useCityContent } from './useCityContent'
 import './cityScreen.css'
 
@@ -36,6 +37,8 @@ export default function CityScreen() {
   const content = useCityContent(q.sel)
   const [alertsOpen, setAlertsOpen] = useState(false)
   const status = useShellStatusLine()
+  // Return: the place this journey came from (the trail every view's frame reads), not the level above.
+  const back = useJourneyBack()
   // The hardware's last reading (the query useCityContent runs): the frame's live time.
   const hardware = useQuery<{ at: number }>({ queryKey: ['city', 'gen2', 'hardware'], enabled: false })
   useEffect(() => {
@@ -49,6 +52,7 @@ export default function CityScreen() {
     <div className="city-screen">
       <WorldFrame
         here="city"
+        back={back}
         crumbs={crumbsOf(content.tree, q.path)}
         hrefs={{ city: cityHref(q.path, q.sel), signals: '#observation', agents: '#collaboration', console: consoleHrefOf(place, q.path, null) }}
         env={status.viewerEnvLoading ? undefined : viewerEnvBadgeLabel(status.viewerEnv)}

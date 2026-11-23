@@ -1419,7 +1419,9 @@
         "console/src/components/shell/clusterActionRequests.tsx",
         "console/src/components/shell/world-journey/WorldJourney.tsx",
         "console/src/components/shell/world-journey/__tests__/WorldJourney.test.tsx",
+        "console/src/components/shell/world-journey/__tests__/journeyTrail.test.ts",
         "console/src/components/shell/world-journey/__tests__/location.test.ts",
+        "console/src/components/shell/world-journey/journeyTrail.ts",
         "console/src/components/shell/world-journey/location.ts"
       ],
       "imports": [
@@ -4447,6 +4449,7 @@
         "console/src/api/client.ts",
         "console/src/api/lineage.ts",
         "console/src/api/telemetry.ts",
+        "console/src/components/shell",
         "console/src/domains/foundation/bus",
         "console/src/domains/foundation/observation-display",
         "console/src/domains/foundation/shell",

@@ -1,17 +1,14 @@
 import { useEffect, useState } from 'react'
-import { peerAddress, visit, worldLocation } from './location'
+import { peerAddress, worldLocation } from './location'
+import { stopLabel, useJourneyTrail } from './journeyTrail'
 
 /** Shell-owned read-only travel aid. No reader, snapshot cache, action or identity substitution. */
 export function WorldJourney() {
   const [address, setAddress] = useState(() => window.location.hash)
-  const [trail, setTrail] = useState<string[]>([])
+  // The trail is the one every view's frame reads (journeyTrail.ts), not this panel's own.
+  const trail = useJourneyTrail()
   useEffect(() => {
-    const changed = (event: HashChangeEvent) => {
-      const from = new URL(event.oldURL).hash
-      const to = new URL(event.newURL).hash
-      setTrail(old => visit(old, from, to))
-      setAddress(to)
-    }
+    const changed = (event: HashChangeEvent) => setAddress(new URL(event.newURL).hash)
     // Renderers may replaceState when selecting an object. Read after their click handler.
     const selected = () => queueMicrotask(() => setAddress(window.location.hash))
     window.addEventListener('hashchange', changed)
@@ -36,7 +33,7 @@ export function WorldJourney() {
     <nav aria-label="World journey" className="flex min-w-0 flex-col gap-3 border-t border-[var(--table-rule)] p-3 text-sm">
       <p className="m-0" aria-current="location">You are in {current.place}.</p>
       {current.object && <p className="m-0 break-all text-xs text-muted-foreground">Address selection: {current.object}</p>}
-      {previous && <a className="font-medium underline" href={previous}>Return to {worldLocation(previous).place}</a>}
+      {previous && <a className="font-medium underline" href={previous}>Return to {stopLabel(previous)}</a>}
       {peers.length > 0 && <div className="flex flex-wrap gap-3" aria-label="Same address, another view">
         {peers.map(peer => <a key={peer.label} href={peer.href} aria-current={peer.label === current.place ? 'page' : undefined} className="underline">{peer.label}</a>)}
       </div>}
