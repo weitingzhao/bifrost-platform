@@ -3,6 +3,7 @@ package gitops
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -15,8 +16,8 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/kubeapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/kubeapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
@@ -488,6 +489,10 @@ func (s *Service) SyncApplication(ctx context.Context, name string) (kubeapi.Act
 	return resp, nil
 }
 
+// ErrAutoSynced is RollbackApplication's refusal of an application that
+// syncs itself.
+var ErrAutoSynced = errors.New("gitops: the application syncs automatically")
+
 func (s *Service) RollbackApplication(ctx context.Context, name, revision string) (kubeapi.ActuationResponse, error) {
 	now := time.Now().UTC()
 	ns := s.entry.ResolvedApplicationsNamespace()
@@ -510,6 +515,15 @@ func (s *Service) RollbackApplication(ctx context.Context, name, revision string
 	if err != nil {
 		resp.Message = fmt.Sprintf("application %s not found in %s: %v", name, ns, err)
 		return resp, fmt.Errorf("%s", resp.Message)
+	}
+
+	// 2026-11-23 (the regret inventory, Foundation): an application that
+	// syncs itself (syncPolicy.automated) goes back to its target as soon as a
+	// one-off sync to an older revision ends, so a rollback here undoes
+	// nothing and still reads as done. Refused, saying the way that works.
+	if automated, found, _ := unstructured.NestedMap(obj.Object, "spec", "syncPolicy", "automated"); found && automated != nil {
+		resp.Message = fmt.Sprintf("application %s syncs automatically (syncPolicy.automated): Argo CD would sync it back to its target at once, so a rollback here undoes nothing. Revert the commit and land it through ready/, or start the delivery pipeline at the earlier commit", name)
+		return resp, ErrAutoSynced
 	}
 
 	targetRevision := strings.TrimSpace(revision)

@@ -2,6 +2,7 @@ package gitops
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -69,6 +70,10 @@ func (h *Handler) HandleRollbackApp(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.audit != nil {
 		h.audit.Record(r, resp.Action, resp.Target, status, resp.Message)
+	}
+	if errors.Is(err, ErrAutoSynced) {
+		writeJSON(w, http.StatusConflict, resp)
+		return
 	}
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, resp)

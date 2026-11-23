@@ -1,6 +1,7 @@
 package gitops
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -296,5 +297,32 @@ func TestRollbackApplicationExplicitRevision(t *testing.T) {
 	}
 	if !strings.Contains(resp.Message, "rev-explicit") {
 		t.Fatalf("message: %q", resp.Message)
+	}
+}
+
+// Origin: 2026-11-23, the regret inventory (Foundation): bifrost-platform-stg
+// and -prod sync themselves (automated, selfHeal), so a rollback's one-off
+// sync to an older revision is undone by Argo CD at once while the action
+// reads as done. Guards that such an application is refused with the way
+// that works and nothing is patched. Positive control: the same application
+// without syncPolicy.automated rolls back (TestRollbackApplicationUsesPreviousHistory).
+func TestRollbackRefusesAnApplicationThatSyncsItself(t *testing.T) {
+	app := testApplicationWithHistory("rev-old", "rev-current")
+	if err := unstructured.SetNestedMap(app.Object, map[string]any{"prune": true, "selfHeal": true}, "spec", "syncPolicy", "automated"); err != nil {
+		t.Fatal(err)
+	}
+	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		applicationGVR: "ApplicationList",
+	}, app)
+	entry := &config.ClusterEntry{ID: "test", GitOps: config.GitOpsConfig{ApplicationsNamespace: "cicd"}}
+	svc := newTestService(entry, k8sfake.NewSimpleClientset(), dyn)
+	resp, err := svc.RollbackApplication(t.Context(), "bifrost-stg", "")
+	if !errors.Is(err, ErrAutoSynced) || resp.OK || !strings.Contains(resp.Message, "ready/") {
+		t.Fatalf("err %v resp %+v", err, resp)
+	}
+	for _, a := range dyn.Actions() {
+		if a.GetVerb() == "patch" {
+			t.Fatalf("patched an application that syncs itself: %v", a)
+		}
 	}
 }
