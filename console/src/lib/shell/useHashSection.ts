@@ -70,3 +70,15 @@ export function useDomainSection(): string | null {
   }, [])
   return section
 }
+
+/** One query parameter of the address (`#status?domain=plan` → 'plan'), kept current on every hash change. */
+export function useHashParam(key: string): string | null {
+  const read = () => hashQueryParam(canonicalQuery(window.location.hash), key)
+  const [value, setValue] = useState(read)
+  useEffect(() => {
+    const sync = () => setValue(hashQueryParam(canonicalQuery(window.location.hash), key))
+    sync(); window.addEventListener('hashchange', sync)
+    return () => window.removeEventListener('hashchange', sync)
+  }, [key])
+  return value
+}

@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { readQuality } from '@bifrost/ui/city/observation'
 import { STATUS, statusOfWord, type StatusWord } from '@bifrost/ui/city/world'
 import { useDomainStatusObservation } from '@/domains/foundation/observation-access'
 import { useNowMs } from '@/hooks/useNowMs'
 import { DomainName } from '@/components/shell/DomainName'
+import { scrollAfterShell, useHashParam } from '@/lib/shell/useHashSection'
 import {
   fetchCatalogIndex,
   fetchDomainPage,
@@ -61,10 +62,18 @@ function Owns({ id }: { id: string }) {
   return <p className="m-0 pb-2 text-xs" data-owns={id}>Owns: {parts.map(([k, n]) => `${n} ${k}`).join(' · ')}</p>
 }
 
-function Row({ d }: { d: DomainStatusRow }) {
+/** The domain's district in City: the address World reads (`#city?at=<id>`, World ↔ Console 2026-11-23). */
+const cityDistrictHref = (id: string) => `#city?at=${encodeURIComponent(id)}`
+
+function Row({ d, picked }: { d: DomainStatusRow; picked: boolean }) {
   const [open, setOpen] = useState(false)
   return (
-    <li className="list-none border-t border-[var(--table-rule)] first:border-t-0" data-domain={d.id}>
+    <li
+      className={`list-none border-t border-[var(--table-rule)] first:border-t-0 ${picked ? 'bg-muted pl-2 shadow-[inset_3px_0_0_var(--primary)]' : ''}`}
+      data-domain={d.id}
+      data-picked={picked || undefined}
+      aria-current={picked ? 'true' : undefined}
+    >
       <details onToggle={e => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
         <summary className="flex min-h-11 cursor-pointer flex-wrap items-center gap-2 py-2 text-sm">
           <Dot value={d.overall} label="Overall" />
@@ -73,6 +82,9 @@ function Row({ d }: { d: DomainStatusRow }) {
           <span className="ml-auto flex items-center gap-1.5">
             {LIGHTS.map(([k, label]) => <Dot key={k} value={d[k].value} label={label} />)}
           </span>
+          <a href={cityDistrictHref(d.id)} className="inline-flex min-h-11 items-center text-xs underline" onClick={e => e.stopPropagation()}>
+            Open in City
+          </a>
         </summary>
         <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 pb-2 text-xs">
           {LIGHTS.map(([k, label]) => (
@@ -280,11 +292,27 @@ export function DomainStatusContent({ query: q }: { query: {
     return <section aria-label="Domain status" className="flex flex-col gap-1">{head}<p role="alert" className="m-0 text-sm text-muted-foreground">{`Domain status could not be read: ${message}. Each domain's state is unknown.`}</p></section>
   }
   const s = q.data
+  return <DomainRows s={s} head={head} />
+}
+
+/**
+ * The rows, with the address's domain picked (`#status?domain=<id>`, World ↔ Console 2026-11-23): the page scrolls to
+ * that row and marks it selected (the selection mark, not a state colour). An id the table does not hold is said, and
+ * nothing is scrolled or marked.
+ */
+function DomainRows({ s, head }: { s: DomainStatusResponse; head: ReactNode }) {
+  const asked = useHashParam('domain')
+  const picked = asked != null && s.domains.some(d => d.id === asked) ? asked : null
+  useEffect(() => {
+    if (picked == null) return
+    return scrollAfterShell(() => [...document.querySelectorAll('li[data-domain]')].find(e => e.getAttribute('data-domain') === picked), { block: 'center' })
+  }, [picked])
   const rows = [...s.domains].sort((a, b) => (RANK[b.overall] ?? 1) - (RANK[a.overall] ?? 1) || a.id.localeCompare(b.id))
   const counts = ['bad', 'problem', 'unknown', 'good'].map(v => [v, rows.filter(r => r.overall === v).length] as const).filter(([, n]) => n > 0)
   return (
     <section aria-label="Domain status" className="flex flex-col gap-1">
       {head}
+      {asked != null && picked == null ? <p className="m-0 text-sm" data-domain-missing={asked}>domain {asked} is not on the map</p> : null}
       {rows.length === 0 ? (
         <p className="m-0 text-sm text-muted-foreground">{s.note ?? 'No domain status kept yet.'}</p>
       ) : (
@@ -294,7 +322,7 @@ export function DomainStatusContent({ query: q }: { query: {
             {s.at ? ` · computed ${new Date(s.at).toLocaleString()}` : ''}
             {s.commit ? ` · table ${s.commit.slice(0, 8)}` : ''}
           </p>
-          <ul className="m-0 p-0">{rows.map(d => <Row key={d.id} d={d} />)}</ul>
+          <ul className="m-0 p-0">{rows.map(d => <Row key={d.id} d={d} picked={d.id === picked} />)}</ul>
           <Coverage s={s} />
           <References s={s} />
           <PackageUsersBlock />

@@ -186,3 +186,36 @@ it('reuses public domain data and exposes stale, failed and unknown-time reads w
   expect(screen.getByLabelText('Overall: ok')).toBeTruthy()
   client.clear()
 })
+
+// 2026-11-23 World ↔ Console (箭10 ruled the shape): City's district and Console's domain row could not reach each
+// other. `#status?domain=<id>` picks the row (selection mark, scrolled to); every row links back to `#city?at=<id>`;
+// an id the table does not hold is said and nothing is picked.
+describe('domain row address', () => {
+  const data = { version: 1, at: '2026-11-23T18:21:42Z', domains: [row('tenant', 'good'), row('plan', 'problem')] }
+  const content = () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 502 })))
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    return render(<QueryClientProvider client={qc}><DomainStatusContent query={{ data, isLoading: false, isError: false, error: null }} /></QueryClientProvider>)
+  }
+  afterEach(() => { window.location.hash = '' })
+
+  it('picks the row the address names and links every row to its City district', async () => {
+    window.location.hash = '#status?domain=tenant'
+    const scrolled = vi.fn()
+    Element.prototype.scrollIntoView = scrolled
+    const { container } = content()
+    const tenant = container.querySelector('[data-domain="tenant"]')!
+    expect(tenant.getAttribute('aria-current')).toBe('true')
+    expect(tenant.hasAttribute('data-picked')).toBe(true)
+    expect(container.querySelector('[data-domain="plan"]')!.hasAttribute('aria-current')).toBe(false)
+    await waitFor(() => expect(scrolled).toHaveBeenCalled())
+    expect(screen.getAllByText('Open in City').map(a => a.getAttribute('href'))).toEqual(['#city?at=plan', '#city?at=tenant'])
+  })
+
+  it('says an unknown id is not on the map and picks nothing', () => {
+    window.location.hash = '#status?domain=nowhere'
+    const { container } = content()
+    expect(screen.getByText('domain nowhere is not on the map')).toBeTruthy()
+    expect(container.querySelector('[aria-current]')).toBeNull()
+  })
+})
