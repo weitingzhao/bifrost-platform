@@ -4710,6 +4710,7 @@
         "console/src/pages/shell/ci/__tests__/OpenRegressions.test.tsx",
         "console/src/pages/shell/ci/__tests__/PlatformTimings.test.tsx",
         "console/src/pages/shell/ci/__tests__/ProdJudgement.test.tsx",
+        "console/src/pages/shell/ci/__tests__/RunSourceReport.test.tsx",
         "console/src/pages/shell/ci/__tests__/approvalReadingsModel.test.ts",
         "console/src/pages/shell/ci/__tests__/ciPageFixture.ts",
         "console/src/pages/shell/ci/__tests__/ciPageModel.test.ts",
