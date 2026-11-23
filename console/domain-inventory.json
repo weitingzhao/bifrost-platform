@@ -1400,7 +1400,11 @@
         "console/src/components/shell/__tests__/EntryNav.test.tsx",
         "console/src/components/shell/__tests__/MorePage.test.tsx",
         "console/src/components/shell/__tests__/RequestActionButton.test.tsx",
-        "console/src/components/shell/clusterActionRequests.tsx"
+        "console/src/components/shell/clusterActionRequests.tsx",
+        "console/src/components/shell/world-journey/WorldJourney.tsx",
+        "console/src/components/shell/world-journey/__tests__/WorldJourney.test.tsx",
+        "console/src/components/shell/world-journey/__tests__/location.test.ts",
+        "console/src/components/shell/world-journey/location.ts"
       ],
       "imports": [
         "console/src/api/actions.ts",

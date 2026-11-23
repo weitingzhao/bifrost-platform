@@ -1,3 +1,4 @@
+import { WorldJourney } from '@/components/shell/world-journey/WorldJourney'
 import { PageShell, SidebarInset, SidebarProvider, TooltipProvider, cn } from '@bifrost/ui'
 import { Suspense, lazy, useCallback, useEffect, useState, type ComponentType } from 'react'
 import { ConsoleHeader, type HeaderBack, type HeaderLooks } from '@/components/ConsoleHeader'
@@ -246,7 +247,7 @@ function ConsolePageInner() {
 }
 
 export function ConsolePage() {
-  return <ConsolePageInner />
+  return <><ConsolePageInner /><WorldJourney /></>
 }
 
 /** Shell-owned peer entry; leaves the City and communication renderers untouched. */
