@@ -4,6 +4,7 @@ import { counterBuildingSummaryOf, counterRoom, counterRoomKey, counterRoomShape
 import type { DomainHoldings } from './domainOwns'
 import type { PromPoint } from './hardware'
 import QUERIES from './counterQueries.json'
+import type { OffContractRead } from '@bifrost/ui/city/offContract'
 
 /**
  * The counter rooms (箭10 2026-11-23; the engine's counter room, bifrost-ui 0.41.0): a software building's rooms
@@ -104,4 +105,27 @@ export function counterRooms(packages: string[], routes: Map<string, CounterRout
 export function buildingFlow(packages: string[], routes: Map<string, CounterRoute[]>): NonNullable<Place['flow']> {
   const s = counterBuildingSummaryOf(packages.map(p => ({ routes: routes.get(p) ?? [] })))
   return { perMin: s.perMin, source: COUNTER_QUERIES.perMin }
+}
+
+/**
+ * Requests to routes no domain's contract names (the engine's off-contract card, bifrost-ui 0.52.0): from the same
+ * requests reading the counters use (never a second read), the (method, handler) pairs that match no contract's
+ * (method, path). A wildcard proxy route in a contract matches no label, so its traffic lands here, as it is (the
+ * card says the map cannot tell which package serves it). contractPerMin is the matched part, the counters' own sum.
+ * The readings not read: not "none", the card says why.
+ */
+export function offContractOf(holdings: Record<string, DomainHoldings>, reads: CounterReads): OffContractRead {
+  const source = COUNTER_QUERIES.perMin
+  if (!reads.perMin) return { source, why: 'the request readings were not read' }
+  const promised = new Set<string>()
+  for (const h of Object.values(holdings)) for (const r of (h.contract?.request_response ?? []) as ContractRoute[]) if (r.method && r.path) promised.add(keyOf(r.method, r.path))
+  if (promised.size === 0) return { source, why: 'no domain\'s contract was read (the map\'s domains)' }
+  const routes: { method: string; path: string; perMin: number }[] = []
+  let contractPerMin = 0
+  for (const [k, perMin] of reads.perMin) {
+    if (promised.has(k)) { contractPerMin += perMin; continue }
+    const i = k.indexOf(' ')
+    routes.push({ method: k.slice(0, i), path: k.slice(i + 1), perMin })
+  }
+  return { routes: routes.sort((a, b) => b.perMin - a.perMin), contractPerMin, source }
 }

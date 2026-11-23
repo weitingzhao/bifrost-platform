@@ -12,7 +12,7 @@ import { tripsOf } from '@/domains/owner/city/gen2/content/traffic'
 import { deviceKeys, type PromAlert } from '@/domains/owner/city/gen2/content/alerts'
 import { fetchTelemetryAlerts } from '@/api/telemetry'
 import { fetchLineage } from '@/api/lineage'
-import { COUNTER_QUERIES, readingsOf, routesByPackage } from '@/domains/owner/city/gen2/content/counters'
+import { COUNTER_QUERIES, offContractOf, readingsOf, routesByPackage } from '@/domains/owner/city/gen2/content/counters'
 import type { PromPoint } from '@/domains/owner/city/gen2/content/hardware'
 import { LINES_DAYS, type RosterRead } from '@/domains/owner/city/gen2/content/lines'
 import { fetchBusContract } from '@/domains/foundation/bus/busNextgen'
@@ -73,6 +73,8 @@ export function useCityContent(focus?: string | null): CityContent {
     refetchInterval: 60_000,
   })
   const routes = useMemo(() => routesByPackage(holdings.data ?? {}, counterReads.data ?? { perMin: null, failPerMin: null }), [holdings.data, counterReads.data])
+  // Requests no contract names, from the same reading (listed on the city's level by the engine).
+  const offContract = useMemo(() => offContractOf(holdings.data ?? {}, counterReads.data ?? { perMin: null, failPerMin: null }), [holdings.data, counterReads.data])
   // A viewer's new ruler redraws the rooms that count that part (frame/rulers.tsx).
   const rulers = useRulersTick()
   return useMemo(() => {
@@ -83,6 +85,6 @@ export function useCityContent(focus?: string | null): CityContent {
       : null
     return consoleContent({ data: domains.data, error: domains.error }, hw, { data: graph.data, error: graph.error }, readDomain, traffic,
       { raw: firing.data?.alerts as PromAlert[] | undefined, error: firing.error, devices: d ? deviceKeys(d.hardware) : [] }, holdings.data ?? {},
-      { read: { data: lineage.data, error: lineage.error }, roster, now: new Date(lineage.dataUpdatedAt || Date.now()), focus: focus ?? undefined }, routes)
-  }, [routes, focus, lineage.data, lineage.error, lineage.dataUpdatedAt, reads.data, rulers, domains.data, domains.error, graph.data, graph.error, traffic, firing.data, firing.error, holdings.data])
+      { read: { data: lineage.data, error: lineage.error }, roster, now: new Date(lineage.dataUpdatedAt || Date.now()), focus: focus ?? undefined }, routes, offContract)
+  }, [offContract, routes, focus, lineage.data, lineage.error, lineage.dataUpdatedAt, reads.data, rulers, domains.data, domains.error, graph.data, graph.error, traffic, firing.data, firing.error, holdings.data])
 }

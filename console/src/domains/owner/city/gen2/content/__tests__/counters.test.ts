@@ -5,7 +5,7 @@
 // readings matched exactly, and nothing read as zero that was not measured.
 import { describe, expect, it } from 'vitest'
 import type { DomainHoldings } from '../domainOwns'
-import { buildingFlow, COUNTER_QUERIES, counterRooms, readingsOf, routesByPackage } from '../counters'
+import { buildingFlow, COUNTER_QUERIES, counterRooms, offContractOf, readingsOf, routesByPackage } from '../counters'
 
 const holding = (id: string, buildings: { id: string; packages: string[] }[], routes: { method: string; path: string; handler: string }[] = []): DomainHoldings =>
   ({ id, packages: [], groups: [], paths: [], workloads: [], buildings, contract: { request_response: routes } })
@@ -55,5 +55,19 @@ describe('counter rooms', () => {
     const routes = routesByPackage(holdings, readingsOf([pt('GET', '/api/v1/lineage', 0.6), pt('GET', '/api/v1/ci/domains', 3)], []))
     expect(buildingFlow(['pkg/lineage', 'pkg/server'], routes)).toEqual({ perMin: 3.6, source: COUNTER_QUERIES.perMin })
     expect(buildingFlow(['pkg/lineage'], routesByPackage(holdings, readingsOf(null, null))).perMin).toBeNull()
+  })
+})
+
+// 2026-11-23, bifrost-ui 0.52.0 (4c79092): a fifth of the platform's requests (16:23Z, /health first) hit no contract
+// route, so no building can hold them; the engine lists them on the city's level. City reads them from the same
+// requests reading the counters use, never a second one, and says why when they cannot be told apart.
+describe('off-contract requests', () => {
+  it('lists the pairs no contract names, busiest first, and sums the matched part as the counters do', () => {
+    const r = offContractOf(holdings, readingsOf([pt('GET', '/api/v1/lineage', 0.6), pt('GET', '/health', 40), pt('POST', '/api/v1/x', 2)], []))
+    expect(r).toMatchObject({ contractPerMin: 0.6, routes: [{ method: 'GET', path: '/health', perMin: 40 }, { method: 'POST', path: '/api/v1/x', perMin: 2 }] })
+  })
+  it('says why instead of none: readings not read, or no contract read', () => {
+    expect(offContractOf(holdings, readingsOf(null, null))).toMatchObject({ why: expect.stringContaining('not read') })
+    expect(offContractOf({}, readingsOf([pt('GET', '/health', 40)], []))).toMatchObject({ why: expect.stringContaining('contract') })
   })
 })

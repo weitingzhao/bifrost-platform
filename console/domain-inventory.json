@@ -2449,6 +2449,7 @@
         "@bifrost/ui/city/library/towns",
         "@bifrost/ui/city/light",
         "@bifrost/ui/city/links",
+        "@bifrost/ui/city/offContract",
         "@bifrost/ui/city/parts",
         "@bifrost/ui/city/places",
         "@bifrost/ui/city/principle",
