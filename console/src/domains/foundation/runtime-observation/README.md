@@ -66,9 +66,10 @@ these filters or source-panel IDs are restored by the Path context.
 Scope/identity changes must remount/reset the host. Refresh cannot restore a
 lost snapshot; show that limitation instead of treating current reads as history.
 
-## Workload yard and database station (2026-11-23, UI / Signals)
+## Workload yard, database and GitOps stations (2026-11-23, UI / Signals)
 
-`states.ts` adds two other lines' public reads to the same composite snapshot:
+`states.ts` adds other lines' public reads to the same composite snapshot:
+`GET /api/v1/gitops/apps` (Argo CD sync and health, one CI-workshop station, with the resources Argo marks out of sync),
 `GET /api/v1/bus/states?type=cluster.workload.changed|cluster.database.changed`
 (communication line's bus ledger, v2: workload ready and version; database ready,
 primary, backup, WAL archiving, last backup), polled every 60 seconds; and

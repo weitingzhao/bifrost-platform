@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { COVERAGE, DATABASES, WORKLOADS, databasePanels, readCoverage, readStates, workloadPanels } from '../states'
+import { COVERAGE, DATABASES, GITOPS, WORKLOADS, databasePanels, gitopsPanel, readCoverage, readStates, workloadPanels } from '../states'
 
 // 2026-11-23 UI / Signals: the bus's v2 workload version and database backup fields, and the metrics
 // line's metric_coverage_by_namespace, were in the system but not on the Signals page. Shapes below are
@@ -46,5 +46,18 @@ describe('bus states and coverage on Signals', () => {
     expect(JSON.stringify(panels)).toContain('20%')
     expect(JSON.stringify(databasePanels(s.databases, evidence))).toContain('Unknown · Error: ledger read failed')
     expect(evidence['@workloads'][0].outcome).toBe('error')
+  })
+})
+
+describe('Argo CD station', () => {
+  // 2026-11-23: Argo sync state was on the Releases page only; Signals had no GitOps reading.
+  it('lists each app as Argo reports it and keeps a failed read unknown', async () => {
+    const ok = await readStates(async p => p === GITOPS ? { argocd_status: 'installed', reachability: 'ok', detail: '', apps: [{ name: 'bifrost-prod', namespace: 'cicd', sync_status: 'OutOfSync', health_status: 'Healthy', automated_sync: false }], generated_at: '2026-11-23T15:00:00Z' } : { states: [] })
+    const text = JSON.stringify(gitopsPanel(ok.gitops, ok.evidence))
+    expect(text).toContain('"text":"OutOfSync · Healthy"')
+    expect(text).toContain('automated sync off')
+    expect(ok.evidence['@gitops'][0].evaluatedAt).toBe('2026-11-23T15:00:00Z')
+    const bad = await readStates(async () => { throw new Error('forbidden') })
+    expect(JSON.stringify(gitopsPanel(bad.gitops, bad.evidence))).toContain('Unknown · Error: forbidden')
   })
 })

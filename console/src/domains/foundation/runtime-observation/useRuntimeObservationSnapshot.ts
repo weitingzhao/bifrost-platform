@@ -5,7 +5,7 @@ import { useCommunication } from '@/domains/coordination/communication/useCommun
 import { useHardwareObservation } from '@/domains/foundation/observation-access'
 import { communicationPanels } from './communication'
 import { readOperations } from './operations'
-import { databasePanels, readCoverage, readStates, workloadPanels } from './states'
+import { databasePanels, gitopsPanel, readCoverage, readStates, workloadPanels } from './states'
 
 /** Both readers remain mounted when a display layer, animation, skin or view is switched. */
 export function useRuntimeObservationSnapshot() {
@@ -22,6 +22,7 @@ export function useRuntimeObservationSnapshot() {
   const panels = operations.data?.panels
   const layerPanels: Record<string, ObservationPanel[]> = { ...panels, communication: communicationPanels(communication, capturedAt) }
   if (panels?.data && states.data) layerPanels.data = [...panels.data, ...databasePanels(states.data.databases, evidence)]
+  if (panels?.ci && states.data) layerPanels.ci = [...panels.ci, gitopsPanel(states.data.gitops, evidence)]
   // Workload yard appears once either source has answered; the other stays explicitly unknown until it does.
   if (states.data || coverage.data) layerPanels.workloads = workloadPanels(states.data?.workloads, coverage.data?.readout, evidence)
   const snapshot = { ...readings.data, id: readings.data.id + ':' + capturedAt, capturedAt, evidence, layerPanels }

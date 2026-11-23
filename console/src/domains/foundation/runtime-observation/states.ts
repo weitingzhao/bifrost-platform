@@ -1,9 +1,11 @@
 import type { ObservationPanel, ReadEvidence } from '@bifrost/ui/city/observation'
+import type { GitOpsAppsResponse } from '@/domains/delivery/api/deliveryTypes'
 
 /**
  * Signals' projection of two other lines' public reads (2026-11-23, UI / Signals):
  * - the bus's state read GET /api/v1/bus/states (communication line): cluster.workload.changed v2
  *   (ready, version) and cluster.database.changed v2 (ready, primary, backup, archiving, last_backup);
+ * - GET /api/v1/gitops/apps (delivery line): each Argo CD application's sync and health, as Argo reports them;
  * - the evaluation readout GET /api/v1/readings/evaluation (metrics line): metric_coverage_by_namespace.
  * Nothing is judged here: states are shown as the bus carries them, the coverage as the readout gives it,
  * and a read that failed stays unknown with its reason. A namespace is a namespace; no domain is inferred.
@@ -16,6 +18,7 @@ type Readout = { readings?: Coverage[]; window?: { from: string; to: string } }
 
 export const WORKLOADS = '/api/v1/bus/states?type=cluster.workload.changed'
 export const DATABASES = '/api/v1/bus/states?type=cluster.database.changed'
+export const GITOPS = '/api/v1/gitops/apps'
 export const COVERAGE = '/api/v1/readings/evaluation?days=1&name=metric_coverage_by_namespace'
 
 const note = (text: string): ObservationPanel['blocks'][number] => ({ kind: 'note', text, title: text })
@@ -38,11 +41,12 @@ async function read<T>(get: Get, path: string, evidence: Record<string, ReadEvid
 /** Bus states: workloads by namespace and the databases. Polled with the other operations reads. */
 export async function readStates(get: Get) {
   const evidence: Record<string, ReadEvidence[]> = {}
-  const [workloads, databases] = await Promise.all([
+  const [workloads, databases, gitops] = await Promise.all([
     read<BusStates>(get, WORKLOADS, evidence, '@workloads', 150000, (_, at) => at, BUS),
     read<BusStates>(get, DATABASES, evidence, '@databases', 150000, (_, at) => at, BUS),
+    read<GitOpsAppsResponse>(get, GITOPS, evidence, '@gitops', 150000, v => v.generated_at, 'Argo CD applications as the platform lists them; Argo owns sync and health'),
   ])
-  return { workloads, databases, evidence }
+  return { workloads, databases, gitops, evidence }
 }
 
 /** The day's closed coverage readout; it changes once a day, so it is read rarely. */
@@ -112,4 +116,20 @@ export function workloadPanels(workloads: BusStates | undefined, readout: Readou
       ...(listed.length ? [note('Workloads: ' + listed.map(s => s.subject.slice(ns.length + 1) + ' · ' + (s.state.ready ?? 'not reported') + ' · ' + (s.state.version || 'no version') + ' · changed ' + s.at).join(' | ') + '. ' + LISTED)] : []),
     ] }
   })
+}
+
+type GitOpsApp = GitOpsAppsResponse['apps'][number] & { resources?: { kind: string; name: string; status?: string }[] }
+
+/** One station for Argo CD: each application's sync and health as Argo reports them. */
+export function gitopsPanel(gitops: GitOpsAppsResponse | undefined, evidence: Record<string, readonly ReadEvidence[]>): ObservationPanel {
+  const id = '@gitops', label = 'GitOps (Argo CD)'
+  if (!Array.isArray(gitops?.apps)) return { id, label, blocks: [note('Unknown · ' + (evidence[id]?.[0]?.detail ?? 'Incomplete source response'))] }
+  return { id, label, blocks: [
+    { kind: 'facts' as const, rows: gitops.apps.map(a => ({ label: a.name, value: { text: a.sync_status + ' · ' + a.health_status, title: [a.primary_condition, a.operation_message, a.automated_sync === false ? 'automated sync off' : ''].filter(Boolean).join(' · ') || undefined } })) },
+    // Resources Argo itself marks other than Synced; absent status is shown as such, not as a problem.
+    ...gitops.apps.flatMap(a => { const off = ((a as GitOpsApp).resources ?? []).filter(r => r.status && r.status !== 'Synced'); return off.length ? [note(a.name + ': ' + off.map(r => r.kind + ' ' + r.name + ' ' + r.status).join(', '))] : [] }),
+    ...(gitops.reachability !== 'ok' && gitops.detail ? [note(gitops.detail)] : []),
+    ...(gitops.apps.length ? [] : [note('No Argo CD applications returned.')]),
+    note('Argo CD status ' + gitops.argocd_status + '. Sync and health are Argo\'s own words, not colored here.'),
+  ] }
 }
