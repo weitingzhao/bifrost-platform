@@ -279,6 +279,7 @@
     },
     {
       "id": "delivery",
+      "self": "bifrost-trade-infra:scripts/landing/admission.yaml",
       "about": "Delivery: releasing to STG and PROD, the release window, the signed release policy's verdicts and the release records.",
       "tasks": [
         {"task": "may this commit go to PROD, and why not", "use": ["check_release_policy", "GET /api/v1/delivery/pipelines/{name}/policy-check"]},

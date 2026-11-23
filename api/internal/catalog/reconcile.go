@@ -355,8 +355,25 @@ func (s *Scanner) keepRules(repo string, t Tree) {
 	}
 	dir = strings.TrimSuffix(dir, "/")
 	k := keptRuleGroups{Repo: repo, Commit: t.Commit, Dir: dir, Groups: map[string]ruleFile{}}
+	// Only what the directory's kustomization lists is declared to run
+	// (2026-11-22, the metrics line: a file kept out of it on purpose, as
+	// td-d2-postgres-rules.yaml waits on TD-134, is not a missing group).
+	listed := map[string]bool{}
+	if raw, ok, err := t.Read(dir + "/kustomization.yaml"); err == nil && ok {
+		var kz struct {
+			Resources []string `yaml:"resources"`
+		}
+		if yaml.Unmarshal(raw, &kz) == nil {
+			for _, r := range kz.Resources {
+				listed[path.Clean(dir+"/"+r)] = true
+			}
+		}
+	}
 	for _, f := range t.Files {
 		if !strings.HasPrefix(f, dir+"/") || !(strings.HasSuffix(f, ".yaml") || strings.HasSuffix(f, ".yml")) {
+			continue
+		}
+		if len(listed) > 0 && !listed[f] {
 			continue
 		}
 		raw, found, err := t.Read(f)
@@ -631,12 +648,17 @@ func (s *Scanner) keepPlaces(t Tree) {
 			Clusters []struct {
 				ID         string   `yaml:"id"`
 				Namespaces []string `yaml:"bifrost_namespaces"`
+				// Others are namespaces the cluster has that are not
+				// Bifrost's (the system's, an operator's, a tenant's):
+				// registered so the map knows them, kept apart so the
+				// Bifrost list stays what it filters (Foundation 11-22).
+				Others []string `yaml:"other_namespaces"`
 			} `yaml:"clusters"`
 		}
 		if yaml.Unmarshal(raw, &doc) == nil {
 			for _, c := range doc.Clusters {
 				k.Clusters = append(k.Clusters, c.ID)
-				for _, ns := range c.Namespaces {
+				for _, ns := range append(append([]string{}, c.Namespaces...), c.Others...) {
 					k.ClusterNS[ns] = c.ID
 				}
 			}
@@ -698,7 +720,7 @@ func (s *Scanner) placeChecks(ctx context.Context, namespaces func(context.Conte
 		}
 	}
 	cl.Measured, cl.Registered, cl.Live = true, len(k.ClusterNS), len(live)
-	cl.Note = "namespaces: registered are the clusters' bifrost_namespaces; not registered includes the system's own (kube-system and the like)"
+	cl.Note = "namespaces: registered are the clusters' bifrost_namespaces and other_namespaces"
 	envWithNS := 0
 	for id, ns := range k.Environments {
 		if ns == "" {

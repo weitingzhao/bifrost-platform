@@ -520,12 +520,12 @@ func TestEventTypesAreComparedWithWhatTheLedgerWrote(t *testing.T) {
 func TestNamespacesAreComparedWithTheClusterAndEnvironmentRegistries(t *testing.T) {
 	s := &Scanner{Kept: memKept{}}
 	files := map[string]string{
-		"config/clusters.yaml":     "clusters:\n  - id: boot\n    bifrost_namespaces: [cicd, gone]\n",
+		"config/clusters.yaml":     "clusters:\n  - id: boot\n    bifrost_namespaces: [cicd, gone]\n    other_namespaces: [default]\n",
 		"config/environments.yaml": "environments:\n  - {id: stg, namespace: bifrost-stg}\n  - {id: prod, namespace: bifrost-prod}\n  - {id: local}\n",
 	}
 	s.keepPlaces(Tree{Commit: "c", Read: func(p string) ([]byte, bool, error) { v, ok := files[p]; return []byte(v), ok, nil }})
 	cs := s.placeChecks(context.Background(), func(context.Context) ([]string, bool) {
-		return []string{"cicd", "kube-system", "bifrost-stg"}, true
+		return []string{"cicd", "kube-system", "bifrost-stg", "default"}, true
 	})
 	cl, env := cs[0], cs[1]
 	if !cl.Measured || len(cl.NotRegistered) != 2 || len(cl.NotLive) != 1 || cl.NotLive[0] != "gone (boot)" {
@@ -576,6 +576,26 @@ func TestReleaseLaneDeploymentsAreComparedWithTheCluster(t *testing.T) {
 	_ = s.kept().Write(keptName(ClusterRepo), pool)
 	c := s.releaseTargetCheck()
 	if !c.Measured || c.Registered != 2 || c.Live != 1 || len(c.NotLive) != 1 || c.NotLive[0] != "research/gone (research prod)" {
+		t.Fatalf("%+v", c)
+	}
+}
+
+// 2026-11-22, the metrics line: td-d2-postgres-rules.yaml is kept out of the
+// monitoring kustomization on purpose, so its group is not declared and must
+// not read as missing. The control: a listed file's group still counts.
+func TestOnlyRuleFilesTheKustomizationListsAreDeclared(t *testing.T) {
+	s := &Scanner{Kept: memKept{}}
+	ix, _ := json.Marshal(Index{Classes: []Class{{Class: "prometheus-rule", Sources: []string{"infra:k8s/monitoring/"}, Check: CheckScanned}}})
+	_ = s.kept().Write(keptIndex, ix)
+	src := map[string]string{
+		"k8s/monitoring/kustomization.yaml": "resources:\n  - listed.yaml\n",
+		"k8s/monitoring/listed.yaml":        "kind: PrometheusRule\nspec:\n  groups:\n    - name: on\n",
+		"k8s/monitoring/waiting.yaml":       "kind: PrometheusRule\nspec:\n  groups:\n    - name: later\n",
+	}
+	files := []string{"k8s/monitoring/kustomization.yaml", "k8s/monitoring/listed.yaml", "k8s/monitoring/waiting.yaml"}
+	s.keepRules("infra", Tree{Commit: "c", Files: files, Read: func(p string) ([]byte, bool, error) { v, ok := src[p]; return []byte(v), ok, nil }})
+	c := s.ruleCheck(context.Background(), func(context.Context) ([]RuleGroup, bool) { return []RuleGroup{{Name: "on"}}, true })
+	if c.Registered != 1 || len(c.NotLive) != 0 {
 		t.Fatalf("%+v", c)
 	}
 }
