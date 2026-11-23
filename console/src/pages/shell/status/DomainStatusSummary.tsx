@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { readQuality } from '@bifrost/ui/city/observation'
+import { useDomainStatusObservation } from '@/domains/foundation/observation-access'
+import { useNowMs } from '@/hooks/useNowMs'
 import {
   fetchCatalogIndex,
   fetchDomainPage,
-  fetchDomainStatus,
   fetchPackageUsers,
   fetchPool,
   LIGHTS,
@@ -234,12 +236,26 @@ function Coverage({ s }: { s: DomainStatusResponse }) {
 }
 
 export function DomainStatusSummary() {
-  const q = useQuery({
-    queryKey: ['status', 'domain-status'],
-    queryFn: fetchDomainStatus,
-    refetchInterval: 60_000,
-    retry: false,
-  })
+  const q = useDomainStatusObservation()
+  const at = new Date(useNowMs()).toISOString()
+  return <>
+    {q.evidence && <p className="text-xs text-muted-foreground" aria-label="Domain read evidence">
+      Read quality: {readQuality([q.evidence], at)} · Source: {q.evidence.source}
+      {' · Source time: '}{q.evidence.evaluatedAt ?? 'Unknown'}
+      {' · Received: '}{q.evidence.receivedAt}
+      {' · Refresh deadline: '}{q.evidence.expiresAt ?? 'Unknown'}
+    </p>}
+    <DomainStatusContent query={q} />
+  </>
+}
+
+/** Preserve the backend response and state; shared reads can replace the caller independently. */
+export function DomainStatusContent({ query: q }: { query: {
+  data?: DomainStatusResponse
+  isLoading: boolean
+  isError: boolean
+  error: unknown
+} }) {
   const head = <h2 className="m-0 text-sm font-medium text-foreground">Domains</h2>
   if (q.isLoading) {
     return <section aria-label="Domain status" className="flex flex-col gap-1">{head}<p className="m-0 text-sm text-muted-foreground">Loading domain status…</p></section>

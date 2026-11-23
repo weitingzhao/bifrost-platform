@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DomainStatusSummary } from '@/pages/shell/status/DomainStatusSummary'
+import { domainStatusObservationOptions } from '@/domains/foundation/observation-access'
+import { DomainStatusContent, DomainStatusSummary } from '@/pages/shell/status/DomainStatusSummary'
 
 // Origin: map line, 2026-11-20, segment 4: the four lights were kept and readable by route and MCP but not on any
 // Ops page. Worst first, unknown is not drawn as good, and a failed read says unknown rather than an empty list.
@@ -126,4 +127,61 @@ describe('DomainStatusSummary', () => {
     expect(rows).toEqual(['api/internal/b', 'api/internal/a'])
     expect(container.querySelector('[data-package="api/internal/b"]')!.textContent).toContain('lineage, plan')
   })
+})
+
+
+describe('domain consumer contract', () => {
+  it('preserves backend overall and limits initial reads to status/index', async () => {
+    const fetchMock = vi.fn(async (url: RequestInfo | URL) => new Response(JSON.stringify(
+      String(url).includes('/catalog/index') ? { classes: [] } : {
+        version: 1, domains: [row('authority', 'good', 'bad')], references: null,
+      }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { container } = mount()
+    await waitFor(() => expect(container.querySelector('[data-domain="authority"]')).toBeTruthy())
+    expect(container.querySelector('[aria-label="Overall: good"]')).toBeTruthy()
+    expect(container.querySelector('[aria-label="Alive: bad"]')).toBeTruthy()
+    expect(screen.getByText('The domain graph was not measured: unknown.')).toBeTruthy()
+    expect(fetchMock.mock.calls.map(([url]) => new URL(String(url), 'http://local').pathname).sort()).toEqual([
+      '/api/v1/catalog/index', '/api/v1/catalog/status',
+    ])
+  })
+
+  it('distinguishes loading, empty and failed retained data without requests', () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const { rerender, container } = render(<DomainStatusContent query={{ isLoading: true, isError: false, error: null }} />)
+    expect(screen.getByText('Loading domain status…')).toBeTruthy()
+    rerender(<DomainStatusContent query={{ data: { version: 1, domains: [], note: 'No scan kept' }, isLoading: false, isError: false, error: null }} />)
+    expect(screen.getByText('No scan kept')).toBeTruthy()
+    rerender(<DomainStatusContent query={{ data: { version: 1, domains: [row('old', 'good')] }, isLoading: false, isError: true, error: new Error('offline') }} />)
+    expect(screen.getByRole('alert').textContent).toContain('offline')
+    expect(container.querySelector('[data-domain]')).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+
+it('reuses public domain data and exposes stale, failed and unknown-time reads without changing lights', async () => {
+  const client = new QueryClient()
+  const payload = { version: 1, at: '2020-01-01T00:00:00Z', domains: [row('shared', 'good')] }
+  const fetchMock = vi.fn(async (url: RequestInfo | URL) => new Response(JSON.stringify(
+    String(url).includes('/catalog/index') ? { classes: [] } : payload), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  await client.fetchQuery(domainStatusObservationOptions())
+  render(<QueryClientProvider client={client}><DomainStatusSummary /></QueryClientProvider>)
+  await waitFor(() => expect(screen.getByLabelText('Domain read evidence').textContent).toContain('Stale'))
+  expect(screen.getByLabelText('Overall: good')).toBeTruthy()
+  expect(screen.getByLabelText('Domain read evidence').textContent).toContain(payload.at)
+  expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/catalog/status'))).toHaveLength(1)
+  fetchMock.mockRejectedValue(new Error('offline'))
+  await act(async () => { await client.invalidateQueries({ queryKey: domainStatusObservationOptions().queryKey }) })
+  await waitFor(() => expect(screen.getByLabelText('Domain read evidence').textContent).toContain('Read failed'))
+  expect(screen.queryByLabelText('Overall: good')).toBeNull()
+  fetchMock.mockImplementation(async (url: RequestInfo | URL) => new Response(JSON.stringify(
+    String(url).includes('/catalog/index') ? { classes: [] } : { ...payload, at: undefined }), { status: 200 }))
+  await act(async () => { await client.invalidateQueries({ queryKey: domainStatusObservationOptions().queryKey }) })
+  await waitFor(() => expect(screen.getByLabelText('Domain read evidence').textContent).toContain('Unknown measurement time'))
+  expect(screen.getByLabelText('Overall: good')).toBeTruthy()
+  client.clear()
 })

@@ -5149,7 +5149,9 @@
         "console/src/api/lineage.ts",
         "console/src/components/layout",
         "console/src/components/shell",
+        "console/src/domains/foundation/observation-access",
         "console/src/hooks/useAgentThreads.ts",
+        "console/src/hooks/useNowMs.ts",
         "console/src/lib/shell",
         "console/src/pages/ControlRoomPage.tsx",
         "console/src/pages/ObservabilityPage.tsx",
@@ -5158,12 +5160,14 @@
       "test_imports": [
         "console/src/api/agentThreads.ts",
         "console/src/domains/foundation/observability",
+        "console/src/domains/foundation/observation-access",
         "console/src/hooks/platformAuthContext.ts",
         "console/src/hooks/useObservabilitySnapshot.ts",
         "console/src/lib/platformAuth.ts",
         "console/src/pages/SatelliteHealthPage.tsx"
       ],
       "external_imports": [
+        "@bifrost/ui/city/observation",
         "@tanstack/react-query",
         "@testing-library/react",
         "react",
