@@ -7,6 +7,11 @@ import { HardwareLedger } from '../../../../../fixtures/ledger/HardwareLedger'
 import { qualityFixture } from '../../../../../fixtures/observation/qualityFixture'
 
 afterEach(() => { cleanup(); vi.useRealTimers() })
+// A cell as it reads on screen: a word, or a word with a tone (2026-11-23: readingView cells say the seven words,
+// "ok · online", as objects; comparing String(cell) would read "[object Object]").
+const shown = (cell: unknown): string => typeof cell === 'object' && cell !== null
+  ? ('lines' in cell ? (cell as { lines: unknown[] }).lines.map(shown).join('') : String((cell as { text: unknown }).text))
+  : String(cell)
 const tableOf = (snapshot: ObservationSnapshot) => readingView.present(snapshot, { selected: [], at: snapshot.capturedAt, metrics: true })[0].blocks[0] as Extract<Block, {kind:'table'}>
 // 2026-11-22 Ledger task: separate surfaces must preserve original evidence, zero and uncertainty.
 describe('Ledger public snapshot consumption', () => {
@@ -17,9 +22,9 @@ describe('Ledger public snapshot consumption', () => {
     const detail = within(screen.getByRole('region', {name:'Ledger object evidence'}))
     const grid = within(screen.getByRole('region', {name:'Ledger grid'}))
     const actual = grid.getAllByRole('row').find(element => element.getAttribute('title') === key)!
-    expect(within(actual).getAllByRole('cell').map(cell => cell.textContent)).toEqual(row.cells.map(String))
-    for (const value of row.cells) expect(detail.getAllByRole('cell').some(cell => cell.textContent === String(value))).toBe(true)
-    expect(detail.getByText(quality)).toBeTruthy()
+    expect(within(actual).getAllByRole('cell').map(cell => cell.textContent)).toEqual(row.cells.map(shown))
+    for (const value of row.cells) expect(detail.getAllByRole('cell').some(cell => cell.textContent === shown(value))).toBe(true)
+    expect(detail.getAllByText(quality, { exact: false }).length).toBeGreaterThan(0)
     expect(detail.getByText(snapshot.id)).toBeTruthy()
     if(id==='zero') expect(detail.getByText('0 / 8 cores')).toBeTruthy()
     expect(detail.getAllByText(snapshot.evidence[key][0].receivedAt).length).toBeGreaterThan(0)

@@ -8,6 +8,11 @@ import { HardwareEvidence, HardwareSnapshot } from '../HardwareEvidence'
 const access = vi.hoisted(() => vi.fn())
 vi.mock('@/domains/foundation/observation-access', () => ({ useHardwareObservation: access }))
 afterEach(() => { cleanup(); access.mockReset() })
+// A cell as it reads on screen: a word, or a word with a tone (2026-11-23: readingView cells say the seven words,
+// "ok · online", as objects; comparing String(cell) would read "[object Object]").
+const shown = (cell: unknown): string => typeof cell === 'object' && cell !== null
+  ? ('lines' in cell ? (cell as { lines: unknown[] }).lines.map(shown).join('') : String((cell as { text: unknown }).text))
+  : String(cell)
 const at = '2026-11-22T20:00:00Z'
 const snapshot: ObservationSnapshot = {
   version: 1, id: 'same-source-snapshot', capturedAt: at, provenance: 'fixture',
@@ -26,7 +31,7 @@ it('renders the shared projection verbatim and preserves zero and full object ev
   if (block.kind !== 'table') throw new Error('Expected shared readings table')
   const rows = within(screen.getAllByRole('table')[0]).getAllByRole('row').slice(1)
   expect(rows).toHaveLength(block.rows.length)
-  block.rows.forEach((row, i) => row.cells.forEach((cell, j) => expect(within(rows[i]).getAllByRole('cell')[j].textContent).toBe(String(cell))))
+  block.rows.forEach((row, i) => row.cells.forEach((cell, j) => expect(within(rows[i]).getAllByRole('cell')[j].textContent).toBe(shown(cell))))
   fireEvent.click(screen.getByRole('button', { name: 'CPU' }))
   expect(screen.getByText('host%2Fone/cpu')).toBeInTheDocument()
   expect(screen.getByText('0 / 8 cores')).toBeInTheDocument()
@@ -43,7 +48,7 @@ it.each([
   ['Unknown measurement time', { ...snapshot.evidence['host%2Fone/cpu'][0], evaluatedAt: undefined }],
 ])('retains shared quality %s', (quality, read) => {
   render(<HardwareSnapshot snapshot={{ ...snapshot, evidence: { 'host%2Fone/cpu': [read] } }} at={at} />)
-  expect(screen.getByText(quality)).toBeInTheDocument()
+  expect(screen.getAllByText(quality, { exact: false }).length).toBeGreaterThan(0)
 })
 
 // Owner 2026-11-22: opt-in observations must not add an always-on mailbox or workflow action.
