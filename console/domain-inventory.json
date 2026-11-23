@@ -1580,6 +1580,7 @@
         "console/src/api/telemetry.ts",
         "console/src/domains/foundation/bus",
         "console/src/domains/foundation/observation-display",
+        "console/src/domains/foundation/runtime-observation",
         "console/src/domains/foundation/shell"
       ],
       "test_imports": [

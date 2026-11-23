@@ -2,7 +2,7 @@
 // make anything up: an alerts read that failed is "not read", never 0; a request not in the window is named so.
 import { expect, it } from 'vitest'
 import { exchangesOf, projectCommunication } from '@bifrost/ui/communication'
-import { crumbsOf, frameAlerts, frameTime } from '../frame'
+import { crumbsOf, frameAlerts, frameTime, signalsPin } from '../frame'
 const at='2026-11-22T12:00:00Z'
 const snapshot={version:1 as const,coverage:{state:'ready' as const,note:'',truncated:false,updatedAt:at},
  members:[{id:'a',label:'Alice',memberships:[]},{id:'b',label:'Bob',memberships:[]}],
@@ -24,4 +24,14 @@ it('pins the time at the cutoff, follows the last read live, and never turns an 
  const firing=(severity:string)=>({labels:{severity},state:'firing'})
  // Control: a read with alerts counts them by the shared rule (severity none is the chain's heartbeat, not counted).
  expect(frameAlerts({alerts:[firing('warning'),firing('critical'),firing('none')],generated_at:at} as never, null)).toEqual(expect.objectContaining({count:2,worst:'fail'}))
+})
+
+// 2026-11-23 World's gap table item 9: Agents had its own time only; a Signals pin was invisible from here.
+it('says the Signals pin only when the shared context is ready and pinned', () => {
+ const observation=(pinned:boolean)=>({pinned,snapshot:{capturedAt:'2026-11-23T21:02:00Z'}}) as never
+ expect(signalsPin({state:'ready',observation:observation(true)})).toBe('2026-11-23T21:02:00Z')
+ // Controls: live Signals, Signals not opened in this tab, and a context still reading say nothing.
+ expect(signalsPin({state:'ready',observation:observation(false)})).toBeNull()
+ expect(signalsPin({state:'off'})).toBeNull()
+ expect(signalsPin({state:'reading'})).toBeNull()
 })

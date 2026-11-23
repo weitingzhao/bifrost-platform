@@ -2,6 +2,7 @@ import type { StatusWord, WorldTime } from '@bifrost/ui/city/world'
 import type { CommunicationProjection, CommunicationSnapshot } from '@bifrost/ui/communication'
 import type { TelemetryAlertsResponse } from '@/api/clusterTypes'
 import { alertCount } from '@/api/alertCount'
+import type { SharedObservation } from '@/domains/foundation/runtime-observation/sharedObservationStore'
 
 /**
  * What Agents hands the world frame (箭10 2026-11-23, cockpit/ui-world/frame): where you are, the time the view
@@ -30,4 +31,12 @@ export function frameAlerts(data: TelemetryAlertsResponse | undefined, error: un
   if (!data) return { count: null, why: 'Reading alerts' }
   const c = alertCount(data.alerts)
   return { count: c.count, ...(c.worst ? { worst: WORD[c.worst] } : {}), why: 'From /api/v1/telemetry/alerts' }
+}
+
+/**
+ * When Signals holds a pinned snapshot (the shared context above the routes, World's gap table item 9), the time it
+ * was captured; else null. Agents' own reads stay live: the frame's second row only says Signals kept its pin.
+ */
+export function signalsPin(shared: SharedObservation): string | null {
+  return shared.state === 'ready' && shared.observation.pinned ? shared.observation.snapshot.capturedAt : null
 }
