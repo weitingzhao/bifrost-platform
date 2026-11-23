@@ -102,11 +102,26 @@ func TestPowerOffRestoresOriginalSchedulingOnSSHFailure(t *testing.T) {
 			calls := filepath.Join(dir, "calls")
 			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 			t.Setenv("POWER_TEST_CALLS", calls)
+			t.Setenv("GPU_POWEROFF_SSH_DIR", dir)
+			for _, name := range []string{"id_ed25519", "known_hosts"} {
+				if err := os.WriteFile(filepath.Join(dir, name), []byte("test fixture"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
 			kubectl := "#!/bin/sh\nif [ \"$1\" = --kubeconfig ]; then shift 2; fi\nprintf '%s\\n' \"$1\" >> \"$POWER_TEST_CALLS\"\n"
 			if err := os.WriteFile(filepath.Join(dir, "kubectl"), []byte(kubectl), 0o700); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(filepath.Join(dir, "ssh"), []byte("#!/bin/sh\nprintf '%s\\n' 'test transport refused' >&2\nexit 1\n"), 0o700); err != nil {
+			ssh := `#!/bin/sh
+for arg do last=$arg; done
+if [ "$last" = check ]; then
+  printf '%s\n' 'gpu-server: idle'
+  exit 0
+fi
+printf '%s\n' 'test transport refused' >&2
+exit 1
+`
+			if err := os.WriteFile(filepath.Join(dir, "ssh"), []byte(ssh), 0o700); err != nil {
 				t.Fatal(err)
 			}
 			node := &corev1.Node{
@@ -117,7 +132,7 @@ func TestPowerOffRestoresOriginalSchedulingOnSSHFailure(t *testing.T) {
 				}}},
 			}
 			svc := fakeService(&config.ClusterEntry{ComputeNodes: []config.ComputeNodeSpec{{
-				Name: node.Name, SSHHost: "test-gpu",
+				Name: node.Name, SSHHost: "vision@192.0.2.4",
 			}}}, node)
 			resp, err := PowerOffNode(t.Context(), svc, node.Name)
 			if err == nil || resp.OK || !strings.Contains(err.Error(), "test transport refused") {
@@ -131,5 +146,22 @@ func TestPowerOffRestoresOriginalSchedulingOnSSHFailure(t *testing.T) {
 				t.Fatalf("kubectl calls = %q, want %q", log, tc.wantCommands)
 			}
 		})
+	}
+}
+
+func TestGpuPowerOffRefusesWorkloadsBeforeUsingSSH(t *testing.T) {
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: wakeGPUNode},
+		Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{
+			Type: corev1.NodeReady, Status: corev1.ConditionTrue,
+		}}},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "inference", Namespace: "tests"},
+		Spec:       corev1.PodSpec{NodeName: node.Name},
+	}
+	svc := fakeService(&config.ClusterEntry{ComputeNodes: []config.ComputeNodeSpec{{Name: node.Name}}}, node, pod)
+	if _, err := PowerOffNode(t.Context(), svc, node.Name); err == nil || !strings.Contains(err.Error(), "non-DaemonSet pods") {
+		t.Fatalf("expected refusal before trying SSH, got %v", err)
 	}
 }

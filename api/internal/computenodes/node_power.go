@@ -160,6 +160,19 @@ func PowerOffNode(ctx context.Context, c *cluster.Service, nodeName string) (clu
 		}, nil
 	}
 
+	if nodeName == wakeGPUNode {
+		_, userPods, err := cluster.NodePodCounts(ctx, clientset, nodeName)
+		if err != nil {
+			return powerOffFail(nodeName, fmt.Errorf("check GPU workloads: %w", err))
+		}
+		if userPods > 0 {
+			return powerOffFail(nodeName, fmt.Errorf("GPU poweroff refused: %d non-DaemonSet pods are still assigned", userPods))
+		}
+		if err := gpuPowerOffCommand(ctx, spec, "check", "gpu-server: idle"); err != nil {
+			return powerOffFail(nodeName, err)
+		}
+	}
+
 	if err := c.DrainNodeKubectl(ctx, nodeName, cluster.DrainNodeRequest{
 		Force:       true,
 		GracePeriod: 60,
@@ -200,6 +213,9 @@ func powerOffFail(nodeName string, err error) (cluster.ActuationResponse, error)
 }
 
 func sshPowerOff(ctx context.Context, spec *config.ComputeNodeSpec) error {
+	if spec.Name == wakeGPUNode {
+		return gpuPowerOffCommand(ctx, spec, "poweroff", "gpu-server: shutdown accepted")
+	}
 	gpuHost := strings.TrimSpace(spec.SSHHost)
 	if gpuHost == "" {
 		return fmt.Errorf("no ssh_host configured for node %q", spec.Name)
