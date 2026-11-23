@@ -34,7 +34,9 @@ describe('bus states and coverage on Signals', () => {
     expect(JSON.stringify(panels[0])).toContain('No workload of this namespace changed state')
     expect(evidence['workloads:research'].map(e => e.source)).toEqual([WORKLOADS, COVERAGE])
     const db = JSON.stringify(databasePanels(s.databases, evidence))
-    expect(db).toContain('"label":"Backup","value":"ok"')
+    // 2026-11-23 (箭10, brand layer item 5): the tag is the Ops word, the bus's own word is in the sentence.
+    expect(db).toContain('"label":"Backup","value":{"text":"ok","tone":"ok"')
+    expect(db).toContain('Bus says ready ready, backup ok, archiving ok')
     expect(db).toContain('2026-11-23T04:48:34Z')
     expect(db).toContain('not a fresh probe')
   })
@@ -55,7 +57,8 @@ describe('Argo CD station', () => {
   it('lists each app as Argo reports it and keeps a failed read unknown', async () => {
     const ok = await readStates(async p => p === GITOPS ? { argocd_status: 'installed', reachability: 'ok', detail: '', apps: [{ name: 'bifrost-prod', namespace: 'cicd', sync_status: 'OutOfSync', health_status: 'Healthy', automated_sync: false }], generated_at: '2026-11-23T15:00:00Z' } : { states: [] })
     const text = JSON.stringify(gitopsPanel(ok.gitops, ok.evidence))
-    expect(text).toContain('"text":"OutOfSync · Healthy"')
+    expect(text).toContain('"label":"bifrost-prod","value":{"text":"ok","tone":"ok"')
+    expect(text).toContain('Argo says: bifrost-prod OutOfSync · Healthy')
     expect(text).toContain('automated sync off')
     expect(ok.evidence['@gitops'][0].evaluatedAt).toBe('2026-11-23T15:00:00Z')
     const bad = await readStates(async () => { throw new Error('forbidden') })

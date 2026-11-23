@@ -4,13 +4,12 @@ import type { DeliveryPipelinesResponse, DeliveryPipelineRunsResponse } from '@/
 import type { DataHusbandrySnapshot } from '@/domains/tenant/husbandry/api/dataHusbandry'
 
 import { formatPipelineRunStatus } from '@/lib/delivery/pipelineRunAskPack'
-import { unknownNote } from './plain'
+import { statusTag, unknownNote } from './plain'
 // The one domain → glyph table (World line, brand layer item 6); read, never copied.
 import { DOMAIN_GLYPH } from '@/domains/owner/city/gen2/content/domainGlyphs'
 
 type Get = (path: string) => Promise<unknown>
 const DOMAINS = 'foundation plan lineage verification delivery approvals compute payload coordination crew station audit triage assembly'.split(' ')
-const tone = (v: string) => v === 'good' ? 'good' as const : ['bad', 'problem'].includes(v) ? 'warn' as const : 'unknown' as const
 const note = (text: string): ObservationPanel['blocks'][number] => ({ kind: 'note', text, title: text })
 /** Projection of existing public reads only. No health judgments, ingestion or workflow actions. */
 export async function readOperations(get: Get) {
@@ -49,9 +48,10 @@ export async function readOperations(get: Get) {
         const key = 'domain:' + d.id
         evidence[key] = evidence[id]
         return { id: key, label: d.id, glyph: DOMAIN_GLYPH[d.id], blocks: [
-          { kind: 'facts', rows: (['alive', 'interfaces', 'boundary', 'fresh'] as const).map(k => ({ label: k === 'alive' ? 'Services' : k, value: { text: d[k]?.value ?? 'unknown', tone: tone(d[k]?.value ?? 'unknown'), title: d[k]?.why } })) },
-          note(d.alive?.why ?? 'Service coverage unknown'),
-          ...(['interfaces', 'boundary', 'fresh'] as const).filter(k => d[k]?.value !== 'good').map(k => note(k + ': ' + (d[k]?.why ?? 'Not measured'))),
+          { kind: 'facts', rows: (['alive', 'interfaces', 'boundary', 'fresh'] as const).map(k => ({ label: k === 'alive' ? 'Services' : k, value: statusTag(d[k]?.value, d[k]?.why) })) },
+          // The tag is the Ops word; the light's own word stays in the sentence.
+          note('Services ' + (d.alive?.value ?? 'unknown') + ': ' + (d.alive?.why ?? 'Service coverage unknown')),
+          ...(['interfaces', 'boundary', 'fresh'] as const).filter(k => d[k]?.value !== 'good').map(k => note(k + ' ' + (d[k]?.value ?? 'unknown') + ': ' + (d[k]?.why ?? 'Not measured'))),
         ] }
       })
     })(),
@@ -86,9 +86,9 @@ export async function readOperations(get: Get) {
       panels.data = data.lanes.map(l => {
         const key = 'data:' + l.id
         evidence[key] = evidence[id]
-        return {id:key,label:l.label,blocks:[{kind:'facts',rows:[{label:'Reported',value:l.verdict}]},note(l.detail),...(l.source ? [note('Source: ' + l.source)] : [])]}
+        return {id:key,label:l.label,blocks:[{kind:'facts',rows:[{label:'Reported',value:statusTag(l.verdict,l.detail)}]},note('Reported ' + l.verdict + ': ' + l.detail),...(l.source ? [note('Source: ' + l.source)] : [])]}
       })
-      panels.data.unshift({id,label:'Data warehouse',blocks:[{kind:'facts',rows:[{label:'Reported',value:data.overall}]},note(data.detail),...(data.note ? [note(data.note)] : [])]})
+      panels.data.unshift({id,label:'Data warehouse',blocks:[{kind:'facts',rows:[{label:'Reported',value:statusTag(data.overall,data.detail)}]},note('Reported ' + data.overall + ': ' + data.detail),...(data.note ? [note(data.note)] : [])]})
     })(),
   ])
   return {panels,evidence}

@@ -1,6 +1,6 @@
 import type { ObservationPanel, ReadEvidence } from '@bifrost/ui/city/observation'
 import type { GitOpsAppsResponse } from '@/domains/delivery/api/deliveryTypes'
-import { plainReason, unknownNote } from './plain'
+import { plainReason, statusTag, unknownNote } from './plain'
 
 /**
  * Signals' projection of two other lines' public reads (2026-11-23, UI / Signals):
@@ -70,11 +70,11 @@ export function databasePanels(databases: BusStates | undefined, evidence: Recor
     const v = (k: string) => d.state[k] ?? 'Not reported'
     return { id, label: d.subject, blocks: [
       { kind: 'facts' as const, rows: [
-        { label: 'Ready', value: v('ready') }, { label: 'Primary', value: v('primary') || 'None' },
-        { label: 'Backup', value: v('backup') }, { label: 'WAL archiving', value: v('archiving') },
+        { label: 'Ready', value: statusTag(d.state.ready) }, { label: 'Primary', value: v('primary') || 'None' },
+        { label: 'Backup', value: statusTag(d.state.backup) }, { label: 'WAL archiving', value: statusTag(d.state.archiving) },
         { label: 'Last backup', value: v('last_backup') },
       ] },
-      note('Bus state as of its last change ' + d.at + ' (' + d.event + '); not a fresh probe.'),
+      note('Bus says ready ' + v('ready') + ', backup ' + v('backup') + ', archiving ' + v('archiving') + ', as of its last change ' + d.at + ' (' + d.event + '); not a fresh probe.'),
     ] }
   })
 }
@@ -126,11 +126,13 @@ export function gitopsPanel(gitops: GitOpsAppsResponse | undefined, evidence: Re
   const id = '@gitops', label = 'GitOps (Argo CD)'
   if (!Array.isArray(gitops?.apps)) return { id, label, blocks: [unknownNote(evidence[id]?.[0]?.detail ?? 'Incomplete source response')] }
   return { id, label, blocks: [
-    { kind: 'facts' as const, rows: gitops.apps.map(a => ({ label: a.name, value: { text: a.sync_status + ' · ' + a.health_status, title: [a.primary_condition, a.operation_message, a.automated_sync === false ? 'automated sync off' : ''].filter(Boolean).join(' · ') || undefined } })) },
+    // The tag is Argo's health in the Ops words; sync and health in Argo's own words go into the sentence.
+    { kind: 'facts' as const, rows: gitops.apps.map(a => ({ label: a.name, value: statusTag(a.health_status, [a.sync_status, a.primary_condition, a.operation_message, a.automated_sync === false ? 'automated sync off' : ''].filter(Boolean).join(' · ')) })) },
+    note('Argo says: ' + gitops.apps.map(a => a.name + ' ' + a.sync_status + ' · ' + a.health_status).join(' | ')),
     // Resources Argo itself marks other than Synced; absent status is shown as such, not as a problem.
     ...gitops.apps.flatMap(a => { const off = ((a as GitOpsApp).resources ?? []).filter(r => r.status && r.status !== 'Synced'); return off.length ? [note(a.name + ': ' + off.map(r => r.kind + ' ' + r.name + ' ' + r.status).join(', '))] : [] }),
     ...(gitops.reachability !== 'ok' && gitops.detail ? [note(gitops.detail)] : []),
     ...(gitops.apps.length ? [] : [note('No Argo CD applications returned.')]),
-    note('Argo CD status ' + gitops.argocd_status + '. Sync and health are Argo\'s own words, not colored here.'),
+    note('Argo CD status ' + gitops.argocd_status + '.'),
   ] }
 }

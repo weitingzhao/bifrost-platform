@@ -16,6 +16,11 @@ describe('existing operations contracts', () => {
     expect(text).toContain('"label":"Observed / 24h","value":1')
     expect(text).toContain('Succeeded')
     expect(text).toContain('0 waiting')
+    // 2026-11-23 (箭10, brand layer item 5): source verdicts are tagged in the Ops words; their own words stay in the sentence.
+    expect(text).toContain('"label":"Reported","value":{"text":"ok","tone":"ok"')
+    expect(text).toContain('Reported healthy: 0 waiting')
+    expect(text).toContain('"label":"interfaces","value":{"text":"unknown","tone":"unknown"')
+    expect(text).toContain('interfaces unknown: No traffic samples')
     expect(result.panels.ci).toHaveLength(1)
     // 2026-11-23 (箭10, brand layer item 6): the domain wears the World table's glyph.
     expect(result.panels.domains[0].glyph).toBe('chip')

@@ -2311,8 +2311,10 @@
       ],
       "test_imports": [],
       "external_imports": [
+        "@bifrost/ui/city/cards",
         "@bifrost/ui/city/observation",
         "@bifrost/ui/city/observationContext",
+        "@bifrost/ui/city/world",
         "@bifrost/ui/communication",
         "@tanstack/react-query",
         "@testing-library/react",
