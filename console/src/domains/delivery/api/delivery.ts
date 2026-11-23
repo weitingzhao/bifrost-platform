@@ -16,7 +16,7 @@ export async function fetchDeliveryPipelines(): Promise<DeliveryPipelinesRespons
 }
 
 export async function fetchPipelineRuns(name: string, options?: { signal?: AbortSignal }): Promise<DeliveryPipelineRunsResponse> {
-  const r = await serverFetch(`/api/v1/delivery/pipelines/${encodeURIComponent(name)}/runs`, { signal: options?.signal })
+  const r = await serverFetch(`/api/v1/delivery/pipelines/${encodeURIComponent(name)}/runs`, options?.signal ? { signal: options.signal } : undefined)
   if (!r.ok) throw new Error(`pipeline runs: HTTP ${r.status}`)
   return r.json() as Promise<DeliveryPipelineRunsResponse>
 }

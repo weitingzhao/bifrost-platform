@@ -37,7 +37,7 @@ export async function fetchQueueHistory(
   if (kind) q.set("kind", kind);
   const r = await serverFetch(
     `/api/v1/plugins/market-data/api/market/ingest/queue-history?${q}`,
-    { signal: options?.signal },
+    options?.signal ? { signal: options.signal } : undefined,
   );
   if (!r.ok) throw new Error(`queue history: HTTP ${r.status}`);
   const body = (await r.json()) as { ok: boolean; data: QueueHistory };
