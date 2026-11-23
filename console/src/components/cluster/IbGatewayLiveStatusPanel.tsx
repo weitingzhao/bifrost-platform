@@ -36,7 +36,8 @@ function probeTag(reach: string, loading = false) {
 
 /** A slot: the word from its connection (stale feed is warn); the slot's own status goes beside it in words. */
 function slotTag(slot: IbGatewaySlotStatus, feedStale: boolean) {
-  return reachTag(slot.connected ? (feedStale ? 'degraded' : 'ok') : 'unknown')
+  // Not connected is known, not unknown: the slot's own reach says how bad (the secondary without TWS reads warn).
+  return slot.connected ? reachTag(feedStale ? 'degraded' : 'ok') : probeTag(slot.reachability)
 }
 
 function parseSnapshotAgeSec(accountSnapshot?: string): number | null {
@@ -94,14 +95,15 @@ function SlotCard({
   const tone = slotTone(slot, feedStale)
   const connectedLabel =
     slot.connected && feedStale ? 'connected · feed stale' : slot.connected ? 'connected' : 'down'
-  const captionParts = [`${slot.account_id} · reach ${slot.reachability}`]
+  // The tag is the seven words; the slot's own status (connected, reconnecting…) goes in the caption.
+  const captionParts = [`${slot.account_id} · ${slot.status} · reach ${probeTag(slot.reachability).tagLabel}`]
   if (selfHealCaption) captionParts.push(selfHealCaption)
 
   return (
     <DashCard
       title={slot.slot}
-      tag={slot.status}
-      tagVariant={slot.connected && !feedStale ? 'success' : slot.connected ? 'warning' : 'neutral'}
+      tag={slotTag(slot, feedStale).tagLabel}
+      tagVariant={slotTag(slot, feedStale).tagVariant}
       value={connectedLabel}
       caption={captionParts.join(' · ')}
       captionTitle={slot.detail}
