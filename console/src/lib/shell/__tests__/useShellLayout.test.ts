@@ -36,8 +36,10 @@ afterEach(() => {
 })
 
 describe('shell layout', () => {
-  it('tabs on an iPhone and a Fire HD 10 held upright, the rail held sideways, the side nav on a desktop', () => {
-    const cases: [number, string][] = [[390, 'tabs'], [800, 'tabs'], [1023, 'tabs'], [1024, 'rail'], [1280, 'rail'], [1439, 'rail'], [1440, 'side'], [1920, 'side']]
+  // Origin (2026-11-23): the Owner's Fire HD 10 upright (800 wide) drew the phone's tab bar; the
+  // UI line moved the rail from 1024 down to 768 so a tablet either way up gets the rail.
+  it('tabs on an iPhone, the rail on a Fire HD 10 either way up, the side nav on a desktop', () => {
+    const cases: [number, string][] = [[390, 'tabs'], [767, 'tabs'], [768, 'rail'], [800, 'rail'], [1023, 'rail'], [1024, 'rail'], [1280, 'rail'], [1439, 'rail'], [1440, 'side'], [1920, 'side']]
     for (const [width, layout] of cases) {
       screenOf(width)
       expect(readShellLayout(), String(width)).toBe(layout)
@@ -49,13 +51,13 @@ describe('shell layout', () => {
     expect(readShellLayout()).toBe('side')
   })
 
-  it('follows the screen when a tablet turns', () => {
-    const screen = screenOf(800)
+  it('follows the screen when it crosses a breakpoint', () => {
+    const screen = screenOf(390)
     const { result } = renderHook(() => useShellLayout())
     expect(result.current).toBe('tabs')
-    act(() => screen.resize(1280))
-    expect(result.current).toBe('rail')
     act(() => screen.resize(800))
+    expect(result.current).toBe('rail')
+    act(() => screen.resize(390))
     expect(result.current).toBe('tabs')
   })
 })
