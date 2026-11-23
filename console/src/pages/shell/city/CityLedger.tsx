@@ -2,10 +2,15 @@ import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTa
 import { useEffect, useState } from 'react'
 import { ledgerHref, readCityQuery } from '@/domains/owner/city/gen2/content/looks'
 import { isWired, meterText, resolve, trail, type Path, type Place } from '@bifrost/ui/city/places'
+import { Glyph } from '@bifrost/ui/city/worldGlyphs'
+import { DOMAIN_GLYPH } from '@/domains/owner/city/gen2/content/domainGlyphs'
 import { useCityContent } from './useCityContent'
 
 const KIND: Record<Place['kind'], string> = { town: 'City', district: 'District', building: 'Building', room: 'Room' }
 const queryOf = () => window.location.hash.split('?')[1] ?? ''
+
+/** A district is a domain: it wears the domain's glyph from the one table every view reads (gap table item 6). */
+const glyphOf = (p: Place) => (p.kind === 'district' ? DOMAIN_GLYPH[p.id] : undefined)
 
 /** What a place reads now: its meter, its state, or that it is read inside or not wired (nothing made up). */
 const nowOf = (p: Place) => (p.meter ? meterText(p.meter) : p.state ?? (isWired(p) ? 'read inside' : 'not wired'))
@@ -70,7 +75,8 @@ export default function CityLedger() {
               <DenseTableRow key={r.path.join('/')} data-picked={picked || undefined}
                 className={cn(!wired && 'opacity-45', picked && 'bg-muted shadow-[inset_3px_0_0_var(--primary)]')}>
                 <DenseTableCell>
-                  <span style={{ paddingLeft: `${r.depth * 1.25}rem` }} className="font-mono-tabular">
+                  <span style={{ paddingLeft: `${r.depth * 1.25}rem` }} className="inline-flex items-center gap-1 font-mono-tabular" data-domain-name={glyphOf(r.place) ? r.place.id : undefined}>
+                    {glyphOf(r.place) ? <span className="shrink-0 text-muted-foreground" aria-hidden><Glyph name={glyphOf(r.place)!} size={14} /></span> : null}
                     {r.depth === 0 ? <b className="font-semibold">{r.place.label}</b> : <a href={href} className="text-inherit hover:text-foreground">{r.place.label}</a>}
                   </span>
                 </DenseTableCell>
