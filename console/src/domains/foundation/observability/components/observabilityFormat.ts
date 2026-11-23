@@ -111,11 +111,11 @@ export const scrapeCell =
 
 export const SIGNAL_STATE_LABELS: Record<SignalState, string> = {
   healthy: STATE_WORD.ok,
-  degraded: STATE_WORD.degraded,
+  degraded: STATE_WORD.warn,
   critical: STATE_WORD.fail,
   unknown: STATE_WORD.unknown,
-  not_observed: STATE_WORD.notObserved,
-  expected_off: STATE_WORD.expectedOff,
+  not_observed: STATE_WORD.boundary,
+  expected_off: STATE_WORD.boundary,
 }
 
 export const GAP_TAG_VARIANT: Record<SignalGap, 'success' | 'danger' | 'warning' | 'neutral'> = {
@@ -171,5 +171,5 @@ export function primaryGrafanaForDomain(
 }
 
 export function checkpointExpect(s: EvaluatedSignal): string {
-  return s.def.optionalContract === true ? `${STATE_WORD.notObserved} (by design)` : STATE_WORD.ok
+  return s.def.optionalContract === true ? `${STATE_WORD.boundary} · not observed by design` : STATE_WORD.ok
 }

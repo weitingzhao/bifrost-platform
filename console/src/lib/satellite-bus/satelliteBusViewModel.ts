@@ -30,7 +30,7 @@ export type BusHealth = 'healthy' | 'degraded' | 'unavailable' | 'unknown'
 
 const BUS_HEALTH_LABELS: Record<BusHealth, string> = {
   healthy: STATE_WORD.ok,
-  degraded: STATE_WORD.degraded,
+  degraded: STATE_WORD.warn,
   unavailable: STATE_WORD.fail,
   unknown: STATE_WORD.unknown,
 }

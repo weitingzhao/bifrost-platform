@@ -1,3 +1,4 @@
+import { TAG_VARIANT, WORD_OF_REACH, type StatusWord, type TagVariant } from '@/lib/shell/stateWords'
 import type { Signal } from '@/lib/control-room/missionSignals'
 import {
   collectMissionDegradationItems,
@@ -308,26 +309,17 @@ export function collapseOpenBayIdsForSingleMode(
 }
 
 /**
- * The Ops design system's closed words (guidelines/state-vocabulary.md), not the old room words
- * (NOMINAL / CAUTION / CRITICAL / PROBING, 箭10 2026-11-23 frame rule 5 and 13). Pending is the read
- * not answered yet; Unknown is a check that cannot be judged — neither is a finding.
+ * The engine's seven words (lib/shell/stateWords), not the old room words NOMINAL / CAUTION / CRITICAL / PROBING
+ * (箭10 2026-11-23, frame rules 5 and 13). pending is the read not answered yet; unknown cannot be judged.
  */
-export type ControlRoomVerdictLabel = 'Healthy' | 'Degraded' | 'Failed' | 'Unknown' | 'Pending'
+export type ControlRoomVerdictLabel = StatusWord
 
 export function controlRoomVerdictLabel(signal: Signal): ControlRoomVerdictLabel {
-  if (signal === 'ok') return 'Healthy'
-  if (signal === 'degraded') return 'Degraded'
-  if (signal === 'fail') return 'Failed'
-  return 'Unknown'
+  return signal === 'ok' || signal === 'degraded' || signal === 'fail' ? WORD_OF_REACH[signal] : 'unknown'
 }
 
-export function controlRoomVerdictTagVariant(
-  label: ControlRoomVerdictLabel,
-): 'success' | 'warning' | 'danger' | 'neutral' {
-  if (label === 'Healthy') return 'success'
-  if (label === 'Degraded') return 'warning'
-  if (label === 'Failed') return 'danger'
-  return 'neutral'
+export function controlRoomVerdictTagVariant(label: ControlRoomVerdictLabel): TagVariant {
+  return TAG_VARIANT[label]
 }
 
 /**
@@ -395,10 +387,10 @@ export function controlRoomBayCountsLabel(bays: ControlRoomBaySignal[]): string 
     else unknown += 1
   }
   return [
-    failed > 0 ? `${failed} failed` : null,
-    degraded > 0 ? `${degraded} degraded` : null,
+    failed > 0 ? `${failed} fail` : null,
+    degraded > 0 ? `${degraded} warn` : null,
     unknown > 0 ? `${unknown} unknown` : null,
-    ok > 0 ? `${ok} healthy` : null,
+    ok > 0 ? `${ok} ok` : null,
   ]
     .filter(Boolean)
     .join(' · ')

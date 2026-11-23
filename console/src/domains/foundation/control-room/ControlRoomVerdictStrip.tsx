@@ -40,7 +40,7 @@ export function ControlRoomVerdictStrip({
   actions,
   onSelectBay,
 }: ControlRoomVerdictStripProps) {
-  const label = isLoading ? 'Pending' : controlRoomVerdictLabel(missionSignal)
+  const label = isLoading ? 'pending' : controlRoomVerdictLabel(missionSignal)
   const counts = controlRoomBayCountsLabel(bays)
   const attentionBays = bays.filter(b => b.signal !== 'ok' && b.signal !== 'unknown')
   const staleLabel = isLoading ? '' : controlRoomStaleSourcesLabel(staleSources, dataUpdatedAt)

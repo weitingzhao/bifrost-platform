@@ -1,3 +1,4 @@
+import { VERDICT_LABELS } from '@/domains/foundation/observability/types'
 import { useMemo } from 'react'
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
 import { filterMutedAttention, listActiveAttentionMutes, signalToGap, sumGapSummaries, type ObservabilityViewModel } from '@/domains/foundation/observability'
@@ -53,12 +54,13 @@ export function useObservabilityPageProjection(viewModel: ObservabilityViewModel
 
   const domainCountsLabel = useMemo(() => {
     const c = system.domainCounts
+    // Domains counted under the same words their tags show (VERDICT_LABELS: the engine's seven).
     const parts = [
-      c.critical > 0 ? `${c.critical} critical` : null,
-      c.degraded > 0 ? `${c.degraded} degraded` : null,
-      c.unknown > 0 ? `${c.unknown} unknown` : null,
-      c.not_observed > 0 ? `${c.not_observed} not observed` : null,
-      c.healthy > 0 ? `${c.healthy} healthy` : null,
+      c.critical > 0 ? `${c.critical} ${VERDICT_LABELS.critical}` : null,
+      c.degraded > 0 ? `${c.degraded} ${VERDICT_LABELS.degraded}` : null,
+      c.unknown > 0 ? `${c.unknown} ${VERDICT_LABELS.unknown}` : null,
+      c.not_observed > 0 ? `${c.not_observed} ${VERDICT_LABELS.not_observed}` : null,
+      c.healthy > 0 ? `${c.healthy} ${VERDICT_LABELS.healthy}` : null,
     ]
       .filter(Boolean)
       .join(' · ')

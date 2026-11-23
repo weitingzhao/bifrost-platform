@@ -39,7 +39,7 @@ function verdictFromOverall(overall: SelfHealthProbeStatus): {
     case 'ok':
       return { lamp: 'ok', tag: STATE_WORD.ok, tagVariant: 'success' }
     case 'degraded':
-      return { lamp: 'degraded', tag: STATE_WORD.degraded, tagVariant: 'warning' }
+      return { lamp: 'degraded', tag: STATE_WORD.warn, tagVariant: 'warning' }
     case 'fail':
       return { lamp: 'fail', tag: STATE_WORD.fail, tagVariant: 'danger' }
     default:

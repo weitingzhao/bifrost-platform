@@ -170,7 +170,7 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
       failing > 0 ? ` · ${failing} failing pod${failing === 1 ? '' : 's'}` : ''
     return {
       lamp: 'degraded',
-      tagLabel: STATE_WORD.degraded,
+      tagLabel: STATE_WORD.warn,
       tagVariant: tagVariantFor('degraded'),
       summaryLine: `One-time bootstrap required (metrics-server or Bifrost namespaces).${failingNote}`,
       evidenceLine,
@@ -208,7 +208,7 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
             : (summary.detail !== '' ? summary.detail : 'Cluster degraded')
     return {
       lamp: 'degraded',
-      tagLabel: STATE_WORD.degraded,
+      tagLabel: STATE_WORD.warn,
       tagVariant: tagVariantFor('degraded'),
       summaryLine,
       evidenceLine,
@@ -241,7 +241,7 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
   if (opsReach === 'degraded' || opsReach === 'unknown') {
     return {
       lamp: 'degraded',
-      tagLabel: STATE_WORD.degraded,
+      tagLabel: STATE_WORD.warn,
       tagVariant: tagVariantFor('degraded'),
       summaryLine:
         opsSummaryLine != null && opsSummaryLine !== ''
@@ -253,7 +253,7 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
 
   return {
     lamp: 'ok',
-    tagLabel: STATE_WORD.ready,
+    tagLabel: STATE_WORD.ok,
     tagVariant: tagVariantFor('ok'),
     summaryLine: healthySummaryLine(summary),
     evidenceLine,

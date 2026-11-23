@@ -1879,7 +1879,8 @@
         "console/src/domains/foundation/mission",
         "console/src/domains/foundation/network",
         "console/src/hooks/useNetworkLiveProbe.ts",
-        "console/src/lib/control-room"
+        "console/src/lib/control-room",
+        "console/src/lib/shell"
       ],
       "test_imports": [
         "console/src/pages/ControlRoomPage.tsx"

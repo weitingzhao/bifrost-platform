@@ -104,7 +104,7 @@ describe('controlRoomBays', () => {
     const release = bays.find(b => b.id === 'release')
     expect(release?.signal).toBe('ok')
     expect(release?.reason).toBe('Narrative ready · awaiting live cutover')
-    expect(controlRoomVerdictLabel(release!.signal)).toBe('Healthy')
+    expect(controlRoomVerdictLabel(release!.signal)).toBe('ok')
     expect(controlRoomBayCountsLabel(bays)).not.toMatch(/unknown/)
   })
 
@@ -202,12 +202,12 @@ describe('controlRoomBays', () => {
   })
 
   // 2026-11-23 (World's brand-layer score, items 5 and 13): the room words NOMINAL/CAUTION/CRITICAL were not the
-  // design system's closed vocabulary; the labels are now its words.
+  // design system's closed vocabulary; the labels are now the engine's seven words (ok / warn / fail / unknown …).
   it('formats freshness and verdict labels', () => {
-    expect(controlRoomVerdictLabel('unknown')).toBe('Unknown')
-    expect(controlRoomVerdictLabel('ok')).toBe('Healthy')
-    expect(controlRoomVerdictLabel('degraded')).toBe('Degraded')
-    expect(controlRoomVerdictLabel('fail')).toBe('Failed')
+    expect(controlRoomVerdictLabel('unknown')).toBe('unknown')
+    expect(controlRoomVerdictLabel('ok')).toBe('ok')
+    expect(controlRoomVerdictLabel('degraded')).toBe('warn')
+    expect(controlRoomVerdictLabel('fail')).toBe('fail')
     expect(formatControlRoomFreshness(Date.now() - 5_000, Date.now())).toBe('5s ago')
     expect(formatControlRoomFreshness(Date.now() - 120_000, Date.now())).toBe('2m ago')
   })
@@ -226,7 +226,7 @@ describe('controlRoomBays', () => {
     const attention = buildControlRoomAttentionItems(bays)
     expect(attention.some(a => a.bayId === 'mission')).toBe(true)
     expect(attention[0]?.severity).toBe('critical')
-    expect(controlRoomBayCountsLabel(bays)).toMatch(/failed|degraded|healthy/)
+    expect(controlRoomBayCountsLabel(bays)).toMatch(/fail|warn|ok/)
   })
 })
 

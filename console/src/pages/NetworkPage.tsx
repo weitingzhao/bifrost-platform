@@ -71,7 +71,7 @@ function networkVerdict(
     return {
       lamp: 'degraded',
       // The tag is the design system's word; what kind of trouble it is goes in the sentence.
-      tagLabel: STATE_WORD.degraded,
+      tagLabel: STATE_WORD.warn,
       tagVariant: 'warning',
       summary: `${classification === 'POLICY_DRIFT' ? 'Policy drift · ' : ''}${liveProbe.summary} · ${inventoryCtx}${anomalyNote}`,
     }

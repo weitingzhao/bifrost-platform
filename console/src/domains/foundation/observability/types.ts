@@ -19,10 +19,10 @@ export type ObservabilityVerdict =
 
 export const VERDICT_LABELS: Record<ObservabilityVerdict, string> = {
   healthy: STATE_WORD.ok,
-  degraded: STATE_WORD.degraded,
+  degraded: STATE_WORD.warn,
   critical: STATE_WORD.fail,
   unknown: STATE_WORD.unknown,
-  not_observed: STATE_WORD.notObserved,
+  not_observed: STATE_WORD.boundary,
 }
 
 /** Per-signal state. EXPECTED OFF is neutral (never fails a required rollup). */

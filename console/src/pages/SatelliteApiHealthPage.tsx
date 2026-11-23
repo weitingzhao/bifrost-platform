@@ -199,7 +199,7 @@ export function SatelliteApiHealthPage({
     verdictSummary = `${probeStats.reachable}/${probeStats.total} targets reachable · auth ${probeStats.authOk} ok / ${probeStats.authFail} fail / ${probeStats.authSkipped} skipped`
   } else if (probeStats.degraded > 0) {
     verdictLamp = 'degraded'
-    verdictTag = STATE_WORD.degraded
+    verdictTag = STATE_WORD.warn
     verdictTagVariant = 'warning'
     verdictSummary = `${probeStats.reachable}/${probeStats.total} targets reachable · auth ${probeStats.authOk} ok / ${probeStats.authFail} fail / ${probeStats.authSkipped} skipped`
   } else {
