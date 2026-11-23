@@ -498,3 +498,12 @@ export function buildAttentionItems(
   const rank = { critical: 0, warning: 1, info: 2, unknown: 3 }
   return items.sort((a, b) => rank[a.severity] - rank[b.severity])
 }
+
+/**
+ * Firing alerts (alertCount's rule) that no runtime domain card shows: on no domain, or on a reference plane.
+ * The cards' firing chips plus these make the frame's total, so nobody has to work out the difference
+ * (箭10 2026-11-23, "the mess is not hidden").
+ */
+export function firingOffCards(alerts: readonly MappedAlert[], cardDomains: ReadonlySet<string>): MappedAlert[] {
+  return alerts.filter(a => counted(a) && (a.domain == null || !cardDomains.has(a.domain)))
+}

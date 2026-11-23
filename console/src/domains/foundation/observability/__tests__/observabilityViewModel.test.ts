@@ -26,6 +26,7 @@ import {
   buildAttentionItems,
   buildDomainHealth,
   buildSystemVerdict,
+  firingOffCards,
   domainProbeability,
   domainVerdictFromSignals,
   gapSummaryFromSignals,
@@ -1354,5 +1355,28 @@ describe('System verdict alert numbers', () => {
     const health = buildDomainHealth(domain!, [], mine)
     expect(health.alertCount).toBe(alertCount(mine).count)
     expect(health.pendingAlertCount).toBe(mine.filter(x => x.state === 'pending' && x.labels.severity !== 'none').length)
+  })
+})
+
+// 2026-11-23 (箭10, "the mess is not hidden"): the domain cards said 2 + 3 firing while the frame said 6; the one
+// left over was on no domain. It is listed, so the cards plus this line make the frame's total.
+describe('firingOffCards', () => {
+  it('lists the firing alerts no runtime card shows, counted with alertCount', () => {
+    const a = (alertname: string, severity: string, state: string, namespace: string) =>
+      ({ labels: { alertname, severity, namespace }, annotations: {}, state })
+    const alerts = mapAlerts([
+      a('RedisDown', 'critical', 'firing', 'data'),
+      a('Orphan', 'warning', 'firing', 'nowhere-known'),
+      a('Watchdog', 'none', 'firing', 'monitoring'),
+      a('Slow', 'warning', 'pending', 'nowhere-known'),
+    ])
+    const cards = new Set(alerts.map(x => x.domain).filter((d): d is NonNullable<typeof d> => d != null))
+    const off = firingOffCards(alerts, cards)
+    expect(off.map(x => x.name)).toEqual(['Orphan'])
+    expect(off.every(x => x.domain == null)).toBe(true)
+    expect(off.map(x => x.name)).not.toContain('Watchdog')
+    expect(off.map(x => x.name)).not.toContain('Slow')
+    const onCards = alerts.filter(x => x.domain != null && cards.has(x.domain))
+    expect(alertCount(onCards).count + off.length).toBe(alertCount(alerts).count)
   })
 })

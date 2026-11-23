@@ -119,7 +119,7 @@ describe('buildSatelliteBusViewModel', () => {
       input('stg', { stg: bus('stg', { daemonPolicyOff: true }), dev: bus('dev'), prod: bus('prod') }),
     )
     expect(vm.health).toBe('healthy')
-    expect(vm.healthLabel).toBe('HEALTHY')
+    expect(vm.healthLabel).toBe('Healthy')
     expect(vm.topReason).toMatch(/expected off/i)
     expect(vm.attention).toHaveLength(0)
     const daemonRow = vm.runtimeConsumers.find(r => r.id === 'trading_engine')
@@ -182,7 +182,7 @@ describe('buildSatelliteBusViewModel', () => {
   it('e) stale/missing required probe => UNKNOWN (health) with UNPROBED label', () => {
     const missing = buildSatelliteBusViewModel(input('stg', { dev: bus('dev') }))
     expect(missing.health).toBe('unknown')
-    expect(missing.healthLabel).toBe('UNPROBED')
+    expect(missing.healthLabel).toBe('Unknown')
     expect(missing.topReason).toMatch(/No bus probe/i)
 
     const stale = buildSatelliteBusViewModel(
@@ -191,7 +191,7 @@ describe('buildSatelliteBusViewModel', () => {
       }),
     )
     expect(stale.health).toBe('unknown')
-    expect(stale.healthLabel).toBe('UNPROBED')
+    expect(stale.healthLabel).toBe('Unknown')
     expect(stale.topReason).toMatch(/missing\/stale/i)
   })
 
@@ -321,7 +321,7 @@ describe('satelliteBusNavSignal', () => {
     }
     const rollup = rollupSatelliteBusNav(buses, [])
     expect(rollup.signal).toBe('fail')
-    expect(rollup.title).toContain('STG UNAVAILABLE')
-    expect(rollup.title).toContain('DEV HEALTHY')
+    expect(rollup.title).toContain('STG Failed') // unavailable reads fail, so its word is Failed (state words, 2026-11-23)
+    expect(rollup.title).toContain('DEV Healthy')
   })
 })

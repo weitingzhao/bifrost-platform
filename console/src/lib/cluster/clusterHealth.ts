@@ -1,3 +1,4 @@
+import { STATE_WORD } from '@/lib/shell/stateWords'
 import type { ClusterSummary } from '@/api/clusterTypes'
 import type { Reachability } from '@/api/matrixTypes'
 import { clusterHealthHint } from '@/lib/cluster/clusterHealthHint'
@@ -130,7 +131,7 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
   if (isProbing) {
     return {
       lamp: 'unknown',
-      tagLabel: '…',
+      tagLabel: STATE_WORD.pending,
       tagVariant: tagVariantFor('unknown'),
       summaryLine: 'Loading cluster snapshot…',
       evidenceLine,
@@ -140,7 +141,7 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
   if (unreachable || summaryFailed) {
     return {
       lamp: 'fail',
-      tagLabel: 'UNREACHABLE',
+      tagLabel: STATE_WORD.fail,
       tagVariant: tagVariantFor('fail'),
       summaryLine:
         summary?.detail != null && summary.detail !== ''
@@ -153,7 +154,7 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
   if (summary != null && summary.reachability === 'fail') {
     return {
       lamp: 'fail',
-      tagLabel: 'FAIL',
+      tagLabel: STATE_WORD.fail,
       tagVariant: tagVariantFor('fail'),
       summaryLine:
         summary.detail !== ''
@@ -169,7 +170,7 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
       failing > 0 ? ` · ${failing} failing pod${failing === 1 ? '' : 's'}` : ''
     return {
       lamp: 'degraded',
-      tagLabel: 'BOOTSTRAP',
+      tagLabel: STATE_WORD.degraded,
       tagVariant: tagVariantFor('degraded'),
       summaryLine: `One-time bootstrap required (metrics-server or Bifrost namespaces).${failingNote}`,
       evidenceLine,
@@ -180,7 +181,7 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
     const n = summary.failing_pods
     return {
       lamp: 'fail',
-      tagLabel: `${n} FAILING`,
+      tagLabel: STATE_WORD.fail,
       tagVariant: tagVariantFor('fail'),
       summaryLine: `${n} failing pod${n === 1 ? '' : 's'}`,
       evidenceLine,
@@ -207,7 +208,7 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
             : (summary.detail !== '' ? summary.detail : 'Cluster degraded')
     return {
       lamp: 'degraded',
-      tagLabel: 'DEGRADED',
+      tagLabel: STATE_WORD.degraded,
       tagVariant: tagVariantFor('degraded'),
       summaryLine,
       evidenceLine,
@@ -217,7 +218,7 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
   if (summary == null) {
     return {
       lamp: 'unknown',
-      tagLabel: 'NO DATA',
+      tagLabel: STATE_WORD.unknown,
       tagVariant: tagVariantFor('unknown'),
       summaryLine: 'Cluster summary unavailable.',
       evidenceLine,
@@ -228,7 +229,7 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
   if (opsReach === 'fail') {
     return {
       lamp: 'fail',
-      tagLabel: 'NEEDS FIX',
+      tagLabel: STATE_WORD.fail,
       tagVariant: tagVariantFor('fail'),
       summaryLine:
         opsSummaryLine != null && opsSummaryLine !== ''
@@ -240,7 +241,7 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
   if (opsReach === 'degraded' || opsReach === 'unknown') {
     return {
       lamp: 'degraded',
-      tagLabel: 'DEGRADED',
+      tagLabel: STATE_WORD.degraded,
       tagVariant: tagVariantFor('degraded'),
       summaryLine:
         opsSummaryLine != null && opsSummaryLine !== ''
@@ -252,7 +253,7 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
 
   return {
     lamp: 'ok',
-    tagLabel: 'READY',
+    tagLabel: STATE_WORD.ready,
     tagVariant: tagVariantFor('ok'),
     summaryLine: healthySummaryLine(summary),
     evidenceLine,

@@ -1,3 +1,4 @@
+import { STATE_WORD } from '@/lib/shell/stateWords'
 /**
  * Satellite Bus — pure derived view model.
  *
@@ -28,10 +29,10 @@ import {
 export type BusHealth = 'healthy' | 'degraded' | 'unavailable' | 'unknown'
 
 const BUS_HEALTH_LABELS: Record<BusHealth, string> = {
-  healthy: 'HEALTHY',
-  degraded: 'DEGRADED',
-  unavailable: 'UNAVAILABLE',
-  unknown: 'UNPROBED',
+  healthy: STATE_WORD.ok,
+  degraded: STATE_WORD.degraded,
+  unavailable: STATE_WORD.fail,
+  unknown: STATE_WORD.unknown,
 }
 
 /** Node/consumer health — status colors express health only (scope is text). */

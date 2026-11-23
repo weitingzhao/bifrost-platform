@@ -1,3 +1,4 @@
+import { reachTag } from '@/lib/shell/stateWords'
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button, DenseTag } from '@bifrost/ui'
@@ -18,21 +19,9 @@ function poolOf(workers: MarketDataWorkerInfo[], pool: string): MarketDataWorker
   return workers.find(w => (w.pool ?? '').toLowerCase() === pool)
 }
 
-function reachToVerdict(reach: MarketDataLiveProbeState['probeReach']): {
-  lamp: 'ok' | 'degraded' | 'fail' | 'unknown'
-  tagLabel: string
-  tagVariant: 'success' | 'warning' | 'danger' | 'neutral'
-} {
-  switch (reach) {
-    case 'ok':
-      return { lamp: 'ok', tagLabel: 'OK', tagVariant: 'success' }
-    case 'degraded':
-      return { lamp: 'degraded', tagLabel: 'DEGRADED', tagVariant: 'warning' }
-    case 'fail':
-      return { lamp: 'fail', tagLabel: 'FAIL', tagVariant: 'danger' }
-    default:
-      return { lamp: 'unknown', tagLabel: 'UNKNOWN', tagVariant: 'neutral' }
-  }
+/** One word table for every page (lib/shell/stateWords, 2026-11-23). */
+function reachToVerdict(reach: MarketDataLiveProbeState['probeReach']) {
+  return reachTag(reach === 'ok' || reach === 'degraded' || reach === 'fail' ? reach : 'unknown')
 }
 
 export function MarketDataOverviewTab({

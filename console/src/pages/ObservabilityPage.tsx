@@ -114,6 +114,7 @@ export function ObservabilityPage({
 
   const {
     runtimeDomainCards,
+    firingOffDomainCards,
     referenceDomains,
     tradeEnvRollup,
     sharedRollup,
@@ -257,6 +258,25 @@ export function ObservabilityPage({
                 />
               ))}
             </div>
+          ) : null}
+
+          {firingOffDomainCards.length > 0 ? (
+            // The cards' firing chips plus this line make the frame's total (箭10 2026-11-23).
+            <details className="text-[var(--text-dense-meta)]" data-firing-off-cards>
+              <summary className="cursor-pointer text-muted-foreground">
+                {firingOffDomainCards.length} firing not on any domain card
+              </summary>
+              <ul className="m-0 mt-1 flex list-none flex-col gap-0.5 p-0">
+                {firingOffDomainCards.map(a => (
+                  <li key={a.id} className="min-w-0 truncate" title={a.summary}>
+                    <span className="font-medium">{a.name}</span>
+                    <span className="text-muted-foreground">
+                      {` · ${[a.labels.severity, a.domain ?? 'no domain', a.labels.namespace, a.summary].filter(Boolean).join(' · ')}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
           ) : null}
 
           {referenceDomains.length > 0 ? (

@@ -49,7 +49,7 @@ describe('deriveClusterVerdict', () => {
       summary: fixture({ detail: 'kubeconfig missing' }),
     })
     expect(v.lamp).toBe('fail')
-    expect(v.tagLabel).toBe('UNREACHABLE')
+    expect(v.tagLabel).toBe('Failed')
     expect(v.tagVariant).toBe('danger')
     expect(v.summaryLine).toBe('kubeconfig missing')
   })
@@ -61,7 +61,7 @@ describe('deriveClusterVerdict', () => {
       summaryFailed: true,
     })
     expect(v.lamp).toBe('fail')
-    expect(v.tagLabel).toBe('UNREACHABLE')
+    expect(v.tagLabel).toBe('Failed')
     expect(v.summaryLine).toBe('Cluster unreachable')
   })
 
@@ -71,7 +71,7 @@ describe('deriveClusterVerdict', () => {
       summary: fixture({ reachability: 'fail', detail: 'API server down' }),
     })
     expect(v.lamp).toBe('fail')
-    expect(v.tagLabel).toBe('FAIL')
+    expect(v.tagLabel).toBe('Failed')
     expect(v.summaryLine).toBe('API server down')
   })
 
@@ -82,7 +82,7 @@ describe('deriveClusterVerdict', () => {
       summary: fixture({ failing_pods: 2 }),
     })
     expect(v.lamp).toBe('degraded')
-    expect(v.tagLabel).toBe('BOOTSTRAP')
+    expect(v.tagLabel).toBe('Degraded')
     expect(v.tagVariant).toBe('warning')
     expect(v.summaryLine).toContain('One-time bootstrap required')
     expect(v.summaryLine).toContain('2 failing pods')
@@ -94,7 +94,7 @@ describe('deriveClusterVerdict', () => {
       showBootstrapActions: true,
       summary: fixture({ failing_pods: 0 }),
     })
-    expect(v.tagLabel).toBe('BOOTSTRAP')
+    expect(v.tagLabel).toBe('Degraded')
     expect(v.summaryLine).not.toContain('failing')
   })
 
@@ -104,7 +104,7 @@ describe('deriveClusterVerdict', () => {
       summary: fixture({ failing_pods: 2 }),
     })
     expect(v.lamp).toBe('fail')
-    expect(v.tagLabel).toBe('2 FAILING')
+    expect(v.tagLabel).toBe('Failed')
     expect(v.tagVariant).toBe('danger')
     expect(v.summaryLine).toBe('2 failing pods')
     expect(v.evidenceLine).toContain('3/3 nodes')
@@ -122,7 +122,7 @@ describe('deriveClusterVerdict', () => {
       }),
     })
     expect(v.lamp).toBe('degraded')
-    expect(v.tagLabel).toBe('DEGRADED')
+    expect(v.tagLabel).toBe('Degraded')
     expect(v.tagVariant).toBe('warning')
     expect(v.summaryLine).toBe('2/3 core nodes ready')
     expect(v.evidenceLine).toBe('2/3 nodes')
@@ -138,7 +138,7 @@ describe('deriveClusterVerdict', () => {
       }),
     })
     expect(v.lamp).toBe('degraded')
-    expect(v.tagLabel).toBe('DEGRADED')
+    expect(v.tagLabel).toBe('Degraded')
   })
 
   it('elastic_degraded alone → degraded / DEGRADED (not false READY)', () => {
@@ -153,7 +153,7 @@ describe('deriveClusterVerdict', () => {
       }),
     })
     expect(v.lamp).toBe('degraded')
-    expect(v.tagLabel).toBe('DEGRADED')
+    expect(v.tagLabel).toBe('Degraded')
     expect(v.tagVariant).toBe('warning')
     expect(v.summaryLine).toBe('2 elastic degraded')
     expect(v.evidenceLine).toContain('3/3 nodes')
@@ -168,7 +168,7 @@ describe('deriveClusterVerdict', () => {
         elastic_degraded: 2,
       }),
     })
-    expect(v.tagLabel).toBe('1 FAILING')
+    expect(v.tagLabel).toBe('Failed')
     expect(v.lamp).toBe('fail')
     expect(v.evidenceLine).toContain('1 failing pod')
     expect(v.evidenceLine).toContain('2 elastic degraded')
@@ -177,7 +177,7 @@ describe('deriveClusterVerdict', () => {
   it('healthy → ok / READY', () => {
     const v = deriveClusterVerdict(baseInput)
     expect(v.lamp).toBe('ok')
-    expect(v.tagLabel).toBe('READY')
+    expect(v.tagLabel).toBe('Ready')
     expect(v.tagVariant).toBe('success')
     expect(v.summaryLine).toBe('All checks pass')
     expect(v.evidenceLine).toBe('3/3 nodes')
@@ -190,7 +190,7 @@ describe('deriveClusterVerdict', () => {
       opsSummaryLine: 'Agent (degraded) — Operator Plane repair recommended',
     })
     expect(v.lamp).toBe('degraded')
-    expect(v.tagLabel).toBe('DEGRADED')
+    expect(v.tagLabel).toBe('Degraded')
     expect(v.summaryLine).toContain('Agent')
   })
 
@@ -201,7 +201,7 @@ describe('deriveClusterVerdict', () => {
       opsSummaryLine: 'Control plane failing',
     })
     expect(v.lamp).toBe('fail')
-    expect(v.tagLabel).toBe('NEEDS FIX')
+    expect(v.tagLabel).toBe('Failed')
   })
 
   it('unreachable wins over bootstrap', () => {
@@ -210,6 +210,6 @@ describe('deriveClusterVerdict', () => {
       unreachable: true,
       showBootstrapActions: true,
     })
-    expect(v.tagLabel).toBe('UNREACHABLE')
+    expect(v.tagLabel).toBe('Failed')
   })
 })

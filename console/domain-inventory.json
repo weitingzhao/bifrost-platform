@@ -1167,7 +1167,8 @@
         "console/src/hooks/useFlexQueryLiveProbe.ts",
         "console/src/hooks/usePlatformAuth.ts",
         "console/src/lib",
-        "console/src/lib/flex-query"
+        "console/src/lib/flex-query",
+        "console/src/lib/shell"
       ],
       "test_imports": [],
       "external_imports": [
@@ -1332,7 +1333,8 @@
         "console/src/hooks/usePlatformAuth.ts",
         "console/src/lib",
         "console/src/lib/architecture",
-        "console/src/lib/market-data"
+        "console/src/lib/market-data",
+        "console/src/lib/shell"
       ],
       "test_imports": [
         "console/src/api/marketDataDimensions.ts",
@@ -2023,7 +2025,8 @@
         "console/src/lib/architecture",
         "console/src/lib/cluster",
         "console/src/lib/control-room/fleetSnapshot.ts",
-        "console/src/lib/observability"
+        "console/src/lib/observability",
+        "console/src/lib/shell"
       ],
       "test_imports": [
         "console/src/api",
@@ -3162,7 +3165,8 @@
         "console/src/api/opsContextTypes.ts",
         "console/src/lib/architecture",
         "console/src/lib/control-room",
-        "console/src/lib/delivery"
+        "console/src/lib/delivery",
+        "console/src/lib/shell"
       ],
       "test_imports": [
         "console/src/api/clusterTypes.ts"
@@ -3460,7 +3464,8 @@
       ],
       "imports": [
         "console/src/api/satelliteBusTypes.ts",
-        "console/src/components/market-data"
+        "console/src/components/market-data",
+        "console/src/lib/shell"
       ],
       "test_imports": [],
       "external_imports": [
@@ -3505,7 +3510,8 @@
         "console/src/api/core.ts",
         "console/src/api/satelliteBusTypes.ts",
         "console/src/lib/control-room",
-        "console/src/lib/satellite"
+        "console/src/lib/satellite",
+        "console/src/lib/shell"
       ],
       "test_imports": [
         "console/src/api",
@@ -3528,6 +3534,7 @@
         "console/src/lib/shell/__tests__/domainMigration.test.tsx",
         "console/src/lib/shell/__tests__/fiveDomains.test.tsx",
         "console/src/lib/shell/__tests__/shellStatusLine.test.ts",
+        "console/src/lib/shell/__tests__/stateWords.test.ts",
         "console/src/lib/shell/__tests__/useConsoleAppearance.test.tsx",
         "console/src/lib/shell/__tests__/useHashSection.test.tsx",
         "console/src/lib/shell/__tests__/useShellLayout.test.ts",
@@ -3536,6 +3543,7 @@
         "console/src/lib/shell/governanceReferences.ts",
         "console/src/lib/shell/shellNavItems.ts",
         "console/src/lib/shell/shellStatusLine.ts",
+        "console/src/lib/shell/stateWords.ts",
         "console/src/lib/shell/useConsoleAppearance.ts",
         "console/src/lib/shell/useHashSection.ts",
         "console/src/lib/shell/useShellLayout.ts"
@@ -4053,7 +4061,8 @@
         "console/src/components/cluster",
         "console/src/components/layout",
         "console/src/hooks/useIbGatewayLiveProbe.ts",
-        "console/src/hooks/usePlatformAuth.ts"
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib/shell"
       ],
       "test_imports": [],
       "external_imports": [
@@ -4093,7 +4102,8 @@
         "console/src/components/layout",
         "console/src/components/network",
         "console/src/domains/foundation/network",
-        "console/src/hooks/useNetworkLiveProbe.ts"
+        "console/src/hooks/useNetworkLiveProbe.ts",
+        "console/src/lib/shell"
       ],
       "test_imports": [],
       "external_imports": [
@@ -4179,7 +4189,8 @@
         "console/src/components/layout",
         "console/src/hooks/useFlexQueryLiveProbe.ts",
         "console/src/hooks/useIbGatewayLiveProbe.ts",
-        "console/src/hooks/useMarketDataLiveProbe.ts"
+        "console/src/hooks/useMarketDataLiveProbe.ts",
+        "console/src/lib/shell"
       ],
       "test_imports": [],
       "external_imports": [
@@ -4351,6 +4362,7 @@
         "console/src/api",
         "console/src/api/core.ts",
         "console/src/components/layout",
+        "console/src/lib/shell",
         "console/src/lib/task-mode/readinessChipActions.ts"
       ],
       "test_imports": [],

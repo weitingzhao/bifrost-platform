@@ -35,7 +35,7 @@ describe('buildResearchVerdictCopy', () => {
     expect(copy.summary).toContain('Batch unprobed')
     expect(copy.summary).toMatch(/Flex DEGRADED/i)
     expect(copy.summary).not.toMatch(/ops_dagster\.runs/)
-    expect(copy.tagLabel).toBe('DEGRADED')
+    expect(copy.tagLabel).toBe('Degraded')
     expect(copy.layers).toHaveLength(3)
     expect(copy.layers.find(l => l.id === 'product')?.verdict).toBe('healthy')
     expect(copy.layers.find(l => l.id === 'batch')?.meta).toBe('orchestration unprobed')
@@ -62,7 +62,7 @@ describe('buildResearchVerdictCopy', () => {
       batchVerdict: 'healthy',
       productOverall: 'ok',
     })
-    expect(copy.tagLabel).toBe('HEALTHY')
+    expect(copy.tagLabel).toBe('Healthy')
     expect(copy.summary).toContain('Product OK')
     expect(copy.summary).toContain('Batch OK')
     expect(copy.summary).toMatch(/Flex DEGRADED|Market MISSED/i)
@@ -73,7 +73,7 @@ describe('buildResearchVerdictCopy', () => {
       reachable: false,
       statusError: 'down',
     })
-    expect(copy.tagLabel).toBe('UNREACHABLE')
+    expect(copy.tagLabel).toBe('Failed')
     expect(copy.lamp).toBe('fail')
   })
 })

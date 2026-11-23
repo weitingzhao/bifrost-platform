@@ -1,11 +1,8 @@
+import { reachTag } from '@/lib/shell/stateWords'
 import { useCallback } from 'react'
 import { Button, StatusLamp } from '@bifrost/ui'
 import { OpsSection } from '@/components/layout/OpsSection'
-import {
-  OpsVerdictStrip,
-  type OpsVerdictLamp,
-  type OpsVerdictTagVariant,
-} from '@/components/layout/OpsVerdictStrip'
+import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { useIbGatewayLiveProbe } from '@/hooks/useIbGatewayLiveProbe'
 import { useMarketDataLiveProbe } from '@/hooks/useMarketDataLiveProbe'
 import { useFlexQueryLiveProbe } from '@/hooks/useFlexQueryLiveProbe'
@@ -47,17 +44,7 @@ const PLUGIN_REGISTRY: PluginRegistryEntry[] = [
 ]
 
 function reachLabel(reach: 'ok' | 'degraded' | 'fail' | 'unknown', loading: boolean): string {
-  if (loading) return '…'
-  switch (reach) {
-    case 'ok':
-      return 'OK'
-    case 'degraded':
-      return 'DEGRADED'
-    case 'fail':
-      return 'FAIL'
-    default:
-      return 'UNKNOWN'
-  }
+  return reachTag(reach, loading).tagLabel
 }
 
 function worseReach(
@@ -68,21 +55,9 @@ function worseReach(
   return order[b] > order[a] ? b : a
 }
 
-function reachToVerdict(reach: 'ok' | 'degraded' | 'fail' | 'unknown'): {
-  lamp: OpsVerdictLamp
-  tagLabel: string
-  tagVariant: OpsVerdictTagVariant
-} {
-  switch (reach) {
-    case 'ok':
-      return { lamp: 'ok', tagLabel: 'OK', tagVariant: 'success' }
-    case 'degraded':
-      return { lamp: 'degraded', tagLabel: 'DEGRADED', tagVariant: 'warning' }
-    case 'fail':
-      return { lamp: 'fail', tagLabel: 'FAIL', tagVariant: 'danger' }
-    default:
-      return { lamp: 'unknown', tagLabel: 'UNKNOWN', tagVariant: 'neutral' }
-  }
+/** One word table for every page (lib/shell/stateWords, 2026-11-23). */
+function reachToVerdict(reach: 'ok' | 'degraded' | 'fail' | 'unknown') {
+  return reachTag(reach === 'ok' || reach === 'degraded' || reach === 'fail' ? reach : 'unknown')
 }
 
 /**

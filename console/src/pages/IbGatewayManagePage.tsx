@@ -1,3 +1,4 @@
+import { reachTag } from '@/lib/shell/stateWords'
 import { useCallback, useState } from 'react'
 import { Button, ConfirmDialog, DenseTag } from '@bifrost/ui'
 import { postIbGatewayControl } from '@/api/network'
@@ -8,29 +9,13 @@ import {
   ibGatewayExtraTags,
 } from '@/components/cluster/ibGatewaySummaryModel'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
-import {
-  OpsVerdictStrip,
-  type OpsVerdictLamp,
-  type OpsVerdictTagVariant,
-} from '@/components/layout/OpsVerdictStrip'
+import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { useIbGatewayLiveProbe } from '@/hooks/useIbGatewayLiveProbe'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
-function reachToVerdict(reach: 'ok' | 'degraded' | 'fail' | 'unknown'): {
-  lamp: OpsVerdictLamp
-  tagLabel: string
-  tagVariant: OpsVerdictTagVariant
-} {
-  switch (reach) {
-    case 'ok':
-      return { lamp: 'ok', tagLabel: 'OK', tagVariant: 'success' }
-    case 'degraded':
-      return { lamp: 'degraded', tagLabel: 'DEGRADED', tagVariant: 'warning' }
-    case 'fail':
-      return { lamp: 'fail', tagLabel: 'FAIL', tagVariant: 'danger' }
-    default:
-      return { lamp: 'unknown', tagLabel: 'UNKNOWN', tagVariant: 'neutral' }
-  }
+/** One word table for every page (lib/shell/stateWords, 2026-11-23). */
+function reachToVerdict(reach: 'ok' | 'degraded' | 'fail' | 'unknown') {
+  return reachTag(reach === 'ok' || reach === 'degraded' || reach === 'fail' ? reach : 'unknown')
 }
 
 /**

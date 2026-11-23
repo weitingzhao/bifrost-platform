@@ -1,3 +1,4 @@
+import { reachTag } from '@/lib/shell/stateWords'
 export function flexStatusVariant(
   status: string,
 ): 'success' | 'warning' | 'danger' | 'neutral' | 'info' {
@@ -9,21 +10,9 @@ export function flexStatusVariant(
   return 'neutral'
 }
 
-export function flexReachToVerdict(reach: 'ok' | 'degraded' | 'fail' | 'unknown'): {
-  lamp: 'ok' | 'degraded' | 'fail' | 'unknown'
-  tagLabel: string
-  tagVariant: 'success' | 'warning' | 'danger' | 'neutral'
-} {
-  switch (reach) {
-    case 'ok':
-      return { lamp: 'ok', tagLabel: 'OK', tagVariant: 'success' }
-    case 'degraded':
-      return { lamp: 'degraded', tagLabel: 'DEGRADED', tagVariant: 'warning' }
-    case 'fail':
-      return { lamp: 'fail', tagLabel: 'FAIL', tagVariant: 'danger' }
-    default:
-      return { lamp: 'unknown', tagLabel: 'UNKNOWN', tagVariant: 'neutral' }
-  }
+/** One word table for every page (lib/shell/stateWords, 2026-11-23). */
+export function flexReachToVerdict(reach: 'ok' | 'degraded' | 'fail' | 'unknown') {
+  return reachTag(reach === 'ok' || reach === 'degraded' || reach === 'fail' ? reach : 'unknown')
 }
 
 export function slotAdherenceKind(adherence: string | undefined): 'ok' | 'scheduled' | 'missing' | 'unknown' {

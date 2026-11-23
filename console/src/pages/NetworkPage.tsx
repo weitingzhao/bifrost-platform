@@ -1,3 +1,4 @@
+import { STATE_WORD } from '@/lib/shell/stateWords'
 import { useQuery } from '@tanstack/react-query'
 import { DenseTag } from '@bifrost/ui'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
@@ -51,7 +52,7 @@ function networkVerdict(
   if (liveProbe.probeReach === 'fail') {
     return {
       lamp: 'fail',
-      tagLabel: 'FAIL',
+      tagLabel: STATE_WORD.fail,
       tagVariant: 'danger',
       summary: `${liveProbe.summary} · ${inventoryCtx}${anomalyNote}`,
     }
@@ -60,7 +61,7 @@ function networkVerdict(
   if (liveProbe.probeReach === 'unknown') {
     return {
       lamp: 'unknown',
-      tagLabel: 'UNKNOWN',
+      tagLabel: STATE_WORD.unknown,
       tagVariant: 'neutral',
       summary: `${liveProbe.summary} · ${inventoryCtx}${anomalyNote}`,
     }
@@ -69,20 +70,16 @@ function networkVerdict(
   if (classification === 'POLICY_DRIFT' || liveProbe.probeReach === 'degraded' || anomalyCount > 0) {
     return {
       lamp: 'degraded',
-      tagLabel:
-        anomalyCount > 0
-          ? 'ANOMALY'
-          : classification === 'POLICY_DRIFT'
-            ? 'POLICY DRIFT'
-            : 'DEGRADED',
+      // The tag is the design system's word; what kind of trouble it is goes in the sentence.
+      tagLabel: STATE_WORD.degraded,
       tagVariant: 'warning',
-      summary: `${liveProbe.summary} · ${inventoryCtx}${anomalyNote}`,
+      summary: `${classification === 'POLICY_DRIFT' ? 'Policy drift · ' : ''}${liveProbe.summary} · ${inventoryCtx}${anomalyNote}`,
     }
   }
 
   return {
     lamp: 'ok',
-    tagLabel: 'OK',
+    tagLabel: STATE_WORD.ok,
     tagVariant: 'success',
     summary: `${liveProbe.summary} · ${inventoryCtx}${anomalyNote}`,
   }

@@ -1,3 +1,4 @@
+import { STATE_WORD } from '@/lib/shell/stateWords'
 /**
  * Satellite Health → Probes panel (also used standalone for legacy embeds).
  *
@@ -170,17 +171,17 @@ export function SatelliteApiHealthPage({
   }, [probeTargets])
 
   let verdictLamp: OpsVerdictLamp = 'ok'
-  let verdictTag = 'ALL OK'
+  let verdictTag: string = STATE_WORD.ok
   let verdictTagVariant: OpsVerdictTagVariant = 'success'
   let verdictSummary: string
   if (matrixQuery.isLoading) {
     verdictLamp = 'unknown'
-    verdictTag = 'LOADING'
+    verdictTag = STATE_WORD.pending
     verdictTagVariant = 'neutral'
     verdictSummary = 'Loading probe matrix…'
   } else if (matrixQuery.isError) {
     verdictLamp = 'fail'
-    verdictTag = 'ERROR'
+    verdictTag = STATE_WORD.unknown
     verdictTagVariant = 'danger'
     verdictSummary =
       matrixQuery.error instanceof Error
@@ -188,17 +189,17 @@ export function SatelliteApiHealthPage({
         : 'Matrix probe request failed.'
   } else if (probeStats.total === 0) {
     verdictLamp = 'degraded'
-    verdictTag = 'NO DATA'
+    verdictTag = STATE_WORD.unknown
     verdictTagVariant = 'warning'
     verdictSummary = `No probe targets for ${env}`
   } else if (probeStats.fail > 0) {
     verdictLamp = 'fail'
-    verdictTag = `${probeStats.fail} ISSUE${probeStats.fail === 1 ? '' : 'S'}`
+    verdictTag = STATE_WORD.fail
     verdictTagVariant = 'danger'
     verdictSummary = `${probeStats.reachable}/${probeStats.total} targets reachable · auth ${probeStats.authOk} ok / ${probeStats.authFail} fail / ${probeStats.authSkipped} skipped`
   } else if (probeStats.degraded > 0) {
     verdictLamp = 'degraded'
-    verdictTag = `${probeStats.degraded} ISSUE${probeStats.degraded === 1 ? '' : 'S'}`
+    verdictTag = STATE_WORD.degraded
     verdictTagVariant = 'warning'
     verdictSummary = `${probeStats.reachable}/${probeStats.total} targets reachable · auth ${probeStats.authOk} ok / ${probeStats.authFail} fail / ${probeStats.authSkipped} skipped`
   } else {

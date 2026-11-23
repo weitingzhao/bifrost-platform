@@ -1,3 +1,4 @@
+import { STATE_WORD } from '@/lib/shell/stateWords'
 /**
  * Rocket → Rocket Health (tab id: rocket-health).
  *
@@ -36,13 +37,13 @@ function verdictFromOverall(overall: SelfHealthProbeStatus): {
 } {
   switch (overall) {
     case 'ok':
-      return { lamp: 'ok', tag: 'ALL OK', tagVariant: 'success' }
+      return { lamp: 'ok', tag: STATE_WORD.ok, tagVariant: 'success' }
     case 'degraded':
-      return { lamp: 'degraded', tag: 'DEGRADED', tagVariant: 'warning' }
+      return { lamp: 'degraded', tag: STATE_WORD.degraded, tagVariant: 'warning' }
     case 'fail':
-      return { lamp: 'fail', tag: 'FAILING', tagVariant: 'danger' }
+      return { lamp: 'fail', tag: STATE_WORD.fail, tagVariant: 'danger' }
     default:
-      return { lamp: 'unknown', tag: 'UNKNOWN', tagVariant: 'neutral' }
+      return { lamp: 'unknown', tag: STATE_WORD.unknown, tagVariant: 'neutral' }
   }
 }
 

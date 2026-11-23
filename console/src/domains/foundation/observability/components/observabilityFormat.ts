@@ -1,3 +1,4 @@
+import { STATE_WORD } from '@/lib/shell/stateWords'
 /**
  * Pure helpers / constants for ObservabilityPage chrome.
  * No signal evaluation — display mapping only.
@@ -109,12 +110,12 @@ export const scrapeCell =
   '!py-0.5 px-1.5 text-[var(--text-dense-caption)] leading-tight align-middle'
 
 export const SIGNAL_STATE_LABELS: Record<SignalState, string> = {
-  healthy: 'HEALTHY',
-  degraded: 'DEGRADED',
-  critical: 'CRITICAL',
-  unknown: 'UNKNOWN',
-  not_observed: 'NOT OBSERVED',
-  expected_off: 'EXPECTED OFF',
+  healthy: STATE_WORD.ok,
+  degraded: STATE_WORD.degraded,
+  critical: STATE_WORD.fail,
+  unknown: STATE_WORD.unknown,
+  not_observed: STATE_WORD.notObserved,
+  expected_off: STATE_WORD.expectedOff,
 }
 
 export const GAP_TAG_VARIANT: Record<SignalGap, 'success' | 'danger' | 'warning' | 'neutral'> = {
@@ -170,5 +171,5 @@ export function primaryGrafanaForDomain(
 }
 
 export function checkpointExpect(s: EvaluatedSignal): string {
-  return s.def.optionalContract === true ? 'NOT OBSERVED (by design)' : 'HEALTHY'
+  return s.def.optionalContract === true ? `${STATE_WORD.notObserved} (by design)` : STATE_WORD.ok
 }

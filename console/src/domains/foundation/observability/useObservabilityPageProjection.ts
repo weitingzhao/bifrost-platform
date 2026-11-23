@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
 import { filterMutedAttention, listActiveAttentionMutes, signalToGap, sumGapSummaries, type ObservabilityViewModel } from '@/domains/foundation/observability'
+import { firingOffCards } from '@/domains/foundation/observability/verdictAggregation'
 import { attentionMatchesScope, rollupDomainVerdict, type AttentionScopeFilter } from '@/domains/foundation/observability/components/observabilityFormat'
 
 /** Complete page observation projection; no mute writes or operation authorization. */
@@ -25,6 +26,10 @@ export function useObservabilityPageProjection(viewModel: ObservabilityViewModel
   const runtimeDomainCards = useMemo(
     () => [...tradeEnvDomains, ...sharedPlatformDomains],
     [tradeEnvDomains, sharedPlatformDomains],
+  )
+  const firingOffDomainCards = useMemo(
+    () => firingOffCards(viewModel.alerts, new Set(runtimeDomainCards.map(d => d.domain))),
+    [viewModel.alerts, runtimeDomainCards],
   )
   const referenceDomains = useMemo(
     () => viewModel.domains.filter(d => d.probeability === 'reference'),
@@ -103,5 +108,5 @@ export function useObservabilityPageProjection(viewModel: ObservabilityViewModel
   const attentionQuiet =
     !isLoading && viewModel.attention.length === 0 && system.firingAlerts === 0
 
-  return { runtimeDomainCards, referenceDomains, tradeEnvRollup, sharedRollup, filteredAttention, activeMuteCount, domainCountsLabel, systemGapSummary, selectedRequiredSignals, selectedDomainHealthy, checkpointsQuiet, dependencyQuiet, goldenQuiet, scrapeQuiet, systemHealthy, selectedPrimaryGrafana, attentionQuiet }
+  return { runtimeDomainCards, firingOffDomainCards, referenceDomains, tradeEnvRollup, sharedRollup, filteredAttention, activeMuteCount, domainCountsLabel, systemGapSummary, selectedRequiredSignals, selectedDomainHealthy, checkpointsQuiet, dependencyQuiet, goldenQuiet, scrapeQuiet, systemHealthy, selectedPrimaryGrafana, attentionQuiet }
 }

@@ -1,3 +1,4 @@
+import { STATE_WORD } from '@/lib/shell/stateWords'
 /**
  * Observability hub — shared verdict / signal types.
  *
@@ -17,11 +18,11 @@ export type ObservabilityVerdict =
   | 'not_observed'
 
 export const VERDICT_LABELS: Record<ObservabilityVerdict, string> = {
-  healthy: 'HEALTHY',
-  degraded: 'DEGRADED',
-  critical: 'CRITICAL',
-  unknown: 'UNKNOWN',
-  not_observed: 'NOT OBSERVED',
+  healthy: STATE_WORD.ok,
+  degraded: STATE_WORD.degraded,
+  critical: STATE_WORD.fail,
+  unknown: STATE_WORD.unknown,
+  not_observed: STATE_WORD.notObserved,
 }
 
 /** Per-signal state. EXPECTED OFF is neutral (never fails a required rollup). */

@@ -1,3 +1,4 @@
+import { STATE_WORD } from '@/lib/shell/stateWords'
 /**
  * Human-readable Research Engine health copy — shared by page strip + sidebar tooltip.
  * Never put SQL / table names in the OpsVerdictStrip summary.
@@ -157,12 +158,13 @@ function toTag(v: HealthLayerVerdict): {
   tagLabel: string
   tagVariant: ResearchVerdictCopy['tagVariant']
 } {
-  if (v === 'healthy') return { tagLabel: 'HEALTHY', tagVariant: 'success' }
+  // The design system's words (state-vocabulary, 箭10 2026-11-23): due is the boundary word Due, the
+  // draining / caution layers are Degraded, a missed run is Missing.
+  if (v === 'healthy') return { tagLabel: STATE_WORD.ok, tagVariant: 'success' }
   if (v === 'due' || v === 'draining' || v === 'caution' || v === 'unknown') {
-    // caution is the old word for the design system's Degraded (state-vocabulary, 箭10 2026-11-23).
-    return { tagLabel: v === 'unknown' ? 'UNKNOWN' : v === 'caution' ? 'DEGRADED' : v.toUpperCase(), tagVariant: 'warning' }
+    return { tagLabel: v === 'unknown' ? STATE_WORD.unknown : v === 'due' ? 'Due' : STATE_WORD.degraded, tagVariant: 'warning' }
   }
-  return { tagLabel: v.toUpperCase(), tagVariant: 'danger' }
+  return { tagLabel: v === 'missed' ? 'Missing' : v === 'degraded' ? STATE_WORD.degraded : STATE_WORD.fail, tagVariant: 'danger' }
 }
 
 /** Rollup for OpsVerdictStrip / nav — Product + Batch only (not Market/Flex alone). */
@@ -216,7 +218,7 @@ export function buildResearchVerdictCopy(input: ResearchHealthCopyInput): Resear
   if (input.loading) {
     return {
       lamp: 'unknown',
-      tagLabel: '…',
+      tagLabel: STATE_WORD.pending,
       tagVariant: 'neutral',
       summary: 'Probing Research API and husbandry layers…',
       navSummary: 'Probing…',
@@ -226,7 +228,7 @@ export function buildResearchVerdictCopy(input: ResearchHealthCopyInput): Resear
   if (input.reachable === false) {
     return {
       lamp: 'fail',
-      tagLabel: 'UNREACHABLE',
+      tagLabel: STATE_WORD.fail,
       tagVariant: 'danger',
       summary: input.statusError || 'Research API unreachable',
       navSummary: 'API unreachable',
