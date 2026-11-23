@@ -16,7 +16,7 @@ function Reading({ snapshot }: { snapshot: ObservationSnapshot }) {
   const context = { selected, metrics: true, at }
   const tables = readingView.present(snapshot, context).flatMap(panel => panel.blocks).filter(block => block.kind === 'table')
   return <main><h1>Hardware Ledger</h1><p>Read-only · Source mode: {snapshot.provenance} · Snapshot {snapshot.id} · Captured {snapshot.capturedAt}</p>
-    <p>Instantaneous supplied snapshot; no statistical window or historical report. Reload reads a new snapshot; this snapshot cannot be restored from the address.</p>
+    <p>Current supplied snapshot. Metric windows belong to the displayed sources; no aggregate reporting window or historical reconstruction. Reload reads a new snapshot; this snapshot cannot be restored from the address.</p>
     <button aria-pressed={embedded} onClick={() => embed(!embedded)}>{embedded ? 'Use standalone grid' : 'Embed beside details'}</button>
     <div className={embedded ? 'ledger-layout' : ''}>
       <div>{tables.map((table, i) => <LedgerGrid key={i} table={table} selected={pathKey(selected)} onSelect={key => select(key.split('/').map(decodeURIComponent))} scope="Hardware from prod topology and monitoring" />)}</div>
