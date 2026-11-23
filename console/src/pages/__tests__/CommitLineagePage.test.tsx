@@ -143,3 +143,29 @@ describe('commit lineage page, primary repositories (CUT-gitea-primary 0d)', () 
 })
 
 
+
+// Origin (2026-11-22 chief of staff brief, items 2–3): the first screen answered "what was
+// done" with branch names, not "which line moved, which stopped"; and the picked line was not
+// in the address, so going to the City and back, or reloading, lost it.
+describe('commit lineage page, lines at a glance', () => {
+  afterEach(() => window.history.replaceState(null, '', '/'))
+
+  it('shows each named line with its counts, and picking one opens its row and writes it to the address', async () => {
+    window.history.replaceState(null, '', '#work?section=commit-lineage')
+    page()
+    const card = await screen.findByRole('button', { name: /local_s1/ })
+    expect(card.textContent).toContain('merged 1 · STG 0 · PROD 0')
+    expect(card.textContent).toMatch(/quiet, last \d+ d ago/)
+    fireEvent.click(card)
+    expect(window.location.hash).toBe('#work?section=commit-lineage&thread=local_s1')
+    expect(document.getElementById('lineage-thread-local_s1')?.getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('opens the line the address names on arrival', async () => {
+    window.history.replaceState(null, '', '#work?section=commit-lineage&thread=local_s1')
+    page()
+    await screen.findByRole('button', { name: /local_s1/ })
+    expect(document.getElementById('lineage-thread-local_s1')?.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('button', { name: /local_s1/ }).getAttribute('aria-pressed')).toBe('true')
+  })
+})

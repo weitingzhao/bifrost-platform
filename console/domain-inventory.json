@@ -92,6 +92,7 @@
         "console/src/api/__tests__/approvalGoStructParse.test.ts",
         "console/src/api/__tests__/approvals.test.ts",
         "console/src/api/__tests__/deliveryStages.test.ts",
+        "console/src/api/__tests__/lineageActivity.test.ts",
         "console/src/api/__tests__/pc2MixedVersions.test.ts",
         "console/src/api/__tests__/planSnapshot.test.ts",
         "console/src/api/__tests__/planSnapshotMixedVersions.test.ts",
@@ -105,6 +106,7 @@
         "console/src/api/ciDomains.ts",
         "console/src/api/ciScorecard.ts",
         "console/src/api/governanceInstruments.ts",
+        "console/src/api/lineageActivity.ts",
         "console/src/api/matrixTypes.ts",
         "console/src/api/prodJudgements.ts",
         "console/src/api/regressions.ts",
@@ -1200,11 +1202,13 @@
       "files": [
         "console/src/components/lineage/BranchesPanel.tsx",
         "console/src/components/lineage/LineageGraph.tsx",
+        "console/src/components/lineage/LinesAtAGlance.tsx",
         "console/src/components/lineage/__tests__/LineageGraph.kinds.test.tsx",
         "console/src/components/lineage/__tests__/threadFilter.test.ts",
         "console/src/components/lineage/threadFilter.ts"
       ],
       "imports": [
+        "console/src/api",
         "console/src/api/lineage.ts"
       ],
       "test_imports": [
@@ -3873,7 +3877,8 @@
         "console/src/api/lineage.ts",
         "console/src/components/layout",
         "console/src/components/lineage",
-        "console/src/hooks/usePlatformAuth.ts"
+        "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib/shell"
       ],
       "test_imports": [],
       "external_imports": [
@@ -5291,11 +5296,14 @@
       "path": "console/src/pwa",
       "files": [
         "console/src/pwa/ConsoleBuildBanner.tsx",
+        "console/src/pwa/ConsoleCrashScreen.tsx",
         "console/src/pwa/__tests__/consoleBuildDrift.test.tsx",
+        "console/src/pwa/__tests__/consoleCrashScreen.test.tsx",
         "console/src/pwa/__tests__/nginxConf.test.ts",
         "console/src/pwa/__tests__/pwa.test.ts",
         "console/src/pwa/appBadge.ts",
         "console/src/pwa/consoleBuild.ts",
+        "console/src/pwa/consoleCrash.ts",
         "console/src/pwa/serviceWorker.ts",
         "console/src/pwa/useConsoleBuildDrift.ts"
       ],

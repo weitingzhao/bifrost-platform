@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
@@ -30,10 +30,30 @@ import { PageToolbar } from '@/components/layout/PageToolbar'
 import { BranchesPanel } from '@/components/lineage/BranchesPanel'
 import { LineageGraph } from '@/components/lineage/LineageGraph'
 import { matches, onlyTask } from '@/components/lineage/threadFilter'
+import { LinesAtAGlance } from '@/components/lineage/LinesAtAGlance'
+import { scrollAfterShell } from '@/lib/shell/useHashSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
 const WINDOWS = [7, 14, 30, 90] as const
 const HELP_KEY = 'lineage.help'
+
+/**
+ * The picked line lives in the address (`thread=`), so a reload, the browser's back
+ * from the City, or a shared link lands on the same line (brief 2026-11-22, item 3).
+ */
+function readThreadParam(): string | null {
+  const q = window.location.hash.split('?')[1] ?? ''
+  const v = new URLSearchParams(q).get('thread')?.trim() ?? ''
+  return v === '' ? null : v
+}
+
+function writeThreadParam(session: string) {
+  const [tab, q = ''] = window.location.hash.split('?')
+  const params = new URLSearchParams(q)
+  params.set('thread', session)
+  // Replace, not push: picking a line is not a page of its own in the history.
+  window.history.replaceState(null, '', `${tab}?${params.toString()}`)
+}
 
 function readHelp(): boolean {
   try {
@@ -297,7 +317,8 @@ export function CommitLineagePage() {
   const [days, setDays] = useState<number>(14)
   const [needle, setNeedle] = useState('')
   const [task, setTask] = useState<string | null>(null)
-  const [open, setOpen] = useState<Set<string>>(new Set())
+  const [selected, setSelected] = useState<string | null>(readThreadParam)
+  const [open, setOpen] = useState<Set<string>>(() => new Set(selected != null ? [selected] : []))
   const qc = useQueryClient()
   const { canOperate } = usePlatformAuth()
   const [renaming, setRenaming] = useState<string | null>(null)
@@ -369,6 +390,19 @@ export function CommitLineagePage() {
           : '') +
         mirrorSummary(data)
 
+  const pick = (session: string) => {
+    setSelected(session)
+    setOpen(prev => new Set(prev).add(session))
+    writeThreadParam(session)
+  }
+  // Bring the picked line's row into view once it is drawn (also after a reload).
+  const pickedDrawn = selected != null && threads.some(t => t.session === selected)
+  useEffect(() => {
+    if (!pickedDrawn || selected == null) return
+    // After the shell's own scroll to the section, which would undo one made here.
+    return scrollAfterShell(() => document.getElementById(`lineage-thread-${selected}`), { block: 'center' })
+  }, [pickedDrawn, selected])
+
   const toggle = (id: string) =>
     setOpen(prev => {
       const next = new Set(prev)
@@ -423,6 +457,12 @@ export function CommitLineagePage() {
           </Button>
         </div>
       </PageToolbar>
+
+      {data != null && needle.trim() === '' && task == null && data.threads.some(t => t.session !== '') && (
+        <OpsSection title="Lines" overflow="visible">
+          <LinesAtAGlance threads={data.threads} days={data.days} now={new Date()} selected={selected} onSelect={pick} />
+        </OpsSection>
+      )}
 
       {data?.graph != null && data.graph.length > 0 && (
         <OpsSection
@@ -488,7 +528,9 @@ export function CommitLineagePage() {
                 return (
                   <Fragment key={id}>
                     <DenseTableRow
-                      className="cursor-pointer"
+                      id={`lineage-thread-${id}`}
+                      data-thread={id}
+                      className={selected === t.session ? 'cursor-pointer outline outline-1 outline-primary' : 'cursor-pointer'}
                       aria-expanded={isOpen}
                       onClick={() => toggle(id)}
                     >
