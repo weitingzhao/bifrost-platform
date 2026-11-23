@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { cleanup, fireEvent, render, screen, within, renderHook, act, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -81,4 +82,28 @@ it.each(['scene','ledger'])('does not replace a missing requested message in the
  view.rerender(kind==='scene'?<AgentWorld {...props} selectedId="message:existing" cityHref="#city" consoleHref="#console"/>:<WorkingStudio {...props} selectedId="message:existing" ledgerOnly/>)
  expect(root.getAttribute('data-resolved-exchange')).toBe('message:existing')
  expect(root.getAttribute('data-selection-state')).toBe('resolved')
+})
+
+it.each(['message:m','message:missing'])('retains controlled time and request %s after leaving and returning',request=>{
+ const fetch=vi.fn();vi.stubGlobal('fetch',fetch)
+ const at='2026-11-22T12:00:00Z', later='2026-11-22T12:05:00Z'
+ const snapshot={version:1 as const,members:[],coverage:{state:'ready' as const,note:'test',truncated:false,updatedAt:later},exchanges:exchangesOf([{id:'s',communication:'m',channel:'message',stage:'sent',evidence:{id:'s',source:'ledger',at}},{id:'a',communication:'m',channel:'message',stage:'acknowledged',evidence:{id:'a',source:'ledger',at:later}}])}
+ function Host(){
+  const [place,go]=useState('agents'),[through,setThrough]=useState(at),[selected,setSelected]=useState(request)
+  const props={snapshot,stationImage:'',through,onThrough:setThrough,selectedId:selected,onSelected:setSelected}
+  return <><button onClick={()=>go('elsewhere')}>Leave scene</button><button onClick={()=>go('ledger')}>Open records</button><button onClick={()=>go('agents')}>Return scene</button>{place==='agents'?<AgentWorld {...props} cityHref="#city" consoleHref="#console"/>:place==='ledger'?<WorkingStudio {...props} ledgerOnly/>:<p>Another place</p>}</>
+ }
+ render(<Host/>)
+ const check=(root:HTMLElement)=>{expect(root.getAttribute('data-requested-exchange')).toBe(request);expect(root.getAttribute('data-resolved-exchange')).toBe(request==='message:m'?request:null)}
+ check(screen.getByRole('main'))
+ fireEvent.click(screen.getByRole('button',{name:'Leave scene'}))
+ expect(screen.queryByRole('main')).toBeNull()
+ fireEvent.click(screen.getByRole('button',{name:'Open records'}))
+ check(screen.getByRole('region',{name:'Agent collaboration'}))
+ if(request==='message:m')expect(screen.getAllByText('Not observed')).toHaveLength(7)
+ fireEvent.click(screen.getByRole('button',{name:'Return scene'}))
+ check(screen.getByRole('main'))
+ expect(screen.getByText('History · fixed time')).toBeTruthy()
+ expect(within(screen.getByRole('region',{name:'Communication history'})).queryByText('ACK')).toBeNull()
+ expect(fetch).not.toHaveBeenCalled()
 })
