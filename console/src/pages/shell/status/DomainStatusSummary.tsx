@@ -209,7 +209,9 @@ function Coverage({ s }: { s: DomainStatusResponse }) {
   return (
     <div className="flex flex-col gap-1 pt-2" aria-label="Map coverage">
       <h3 className="m-0 text-xs font-medium text-foreground">Map coverage</h3>
-      <table className="w-full text-xs tabular-nums">
+      <p className="m-0 text-xs text-muted-foreground sm:hidden">Scroll the coverage table horizontally to read every column.</p>
+      <div className="overflow-x-auto" role="region" aria-label="Coverage table" tabIndex={0}>
+      <table className="w-full min-w-[36rem] text-xs tabular-nums [&_th]:px-2 [&_td]:px-2 [&_th]:py-2 [&_td]:py-2">
         <thead>
           <tr className="text-left text-muted-foreground"><th className="font-normal">Place</th><th className="text-right font-normal">Total</th><th className="text-right font-normal">On map</th><th className="text-right font-normal">Off map</th><th className="text-right font-normal">Gap</th><th className="text-right font-normal">Rows covering nothing</th></tr>
         </thead>
@@ -217,6 +219,7 @@ function Coverage({ s }: { s: DomainStatusResponse }) {
           {inv.map(c => <PlaceRow key={c.repo} c={c} />)}
         </tbody>
       </table>
+      </div>
       {by.length > 0 ? <p className="m-0 text-xs text-muted-foreground">Off-map entries by claimed domain: {by.map(([d, n]) => `${d} ${n}`).join(' · ')}</p> : null}
       {ix.isError ? <p className="m-0 text-xs text-muted-foreground">Which classes are reconciled could not be read: unknown.</p> : null}
       {(s.checks ?? []).map(c => (
