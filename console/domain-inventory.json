@@ -5303,7 +5303,9 @@
         "console/src/pages/shell/status/StatusPage.tsx",
         "console/src/pages/shell/status/__tests__/AgentThreadsInProgress.test.tsx",
         "console/src/pages/shell/status/__tests__/DomainStatusSummary.test.tsx",
-        "console/src/pages/shell/status/__tests__/StatusPage.test.tsx"
+        "console/src/pages/shell/status/__tests__/StatusPage.test.tsx",
+        "console/src/pages/shell/status/__tests__/lineDot.test.ts",
+        "console/src/pages/shell/status/linesNowModel.ts"
       ],
       "imports": [
         "console/src",
@@ -5324,6 +5326,7 @@
         "console/src/pages/RocketHealthPage.tsx"
       ],
       "test_imports": [
+        "console/src/api",
         "console/src/api/agentThreads.ts",
         "console/src/domains/foundation/observability",
         "console/src/domains/foundation/observation-access",
@@ -5334,6 +5337,7 @@
       ],
       "external_imports": [
         "@bifrost/ui/city/observation",
+        "@bifrost/ui/city/world",
         "@tanstack/react-query",
         "@testing-library/react",
         "react",

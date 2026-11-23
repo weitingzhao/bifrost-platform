@@ -1,3 +1,5 @@
+import { STATUS } from '@bifrost/ui/city/world'
+import { lineDot, linesTitle } from './linesNowModel'
 import { useQuery } from '@tanstack/react-query'
 import { fetchAgentThreads, formatSeconds } from '@/api/agentThreads'
 import { fetchApprovalList } from '@/api/approvals'
@@ -9,12 +11,18 @@ const REFRESH_MS = 30_000
 /** The lineage window the commit stages are counted over. */
 const LINEAGE_DAYS = 2
 
-/** The dot: running, waiting on someone, idle or not heard from. */
-function dot(r: LineRow): { cls: string; label: string } {
-  if (r.ownerCards > 0 || r.status?.waiting_on) return { cls: 'bg-amber-500', label: 'waiting' }
-  if (r.thread?.status === 'in_turn') return { cls: 'bg-emerald-500', label: 'running' }
-  if (r.thread == null) return { cls: 'bg-muted-foreground', label: 'no heartbeat' }
-  return { cls: 'bg-sky-500', label: r.thread.status }
+function Dot({ r }: { r: LineRow }) {
+  const d = lineDot(r)
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground" title={`${d.word} · ${d.note}`}>
+      <span
+        className={`inline-block h-2 w-2 rounded-full ${d.word === 'unknown' ? 'border border-dashed border-muted-foreground' : ''}`}
+        style={d.word === 'unknown' ? undefined : { background: STATUS[d.word].fill }}
+        aria-hidden
+      />
+      {d.word} · {d.note}
+    </span>
+  )
 }
 
 function age(minutes: number): string {
@@ -22,15 +30,14 @@ function age(minutes: number): string {
 }
 
 function NotYetItem({ r }: { r: LineRow }) {
-  const d = dot(r)
   const c = r.commits
   return (
     <li className="flex w-full min-w-0 list-none flex-col gap-1 rounded-[var(--card-radius)] border border-dashed border-[var(--card-border)] px-3 py-2" data-line={r.session} data-not-reporting>
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${d.cls}`} aria-label={d.label} title={d.label} />
+        <Dot r={r} />
         <span className="min-w-0 truncate text-sm font-medium">{r.title}</span>
         <span className="text-xs font-medium text-muted-foreground">No status yet</span>
-        {r.ownerCards > 0 ? <span className="text-xs font-medium text-amber-600">{r.ownerCards} for you</span> : null}
+        {r.ownerCards > 0 ? <span className="text-xs font-medium text-warning">{r.ownerCards} for you</span> : null}
         <span className="ml-auto text-xs text-muted-foreground">
           {r.thread ? `session ${r.thread.status}, last beat ${formatSeconds(r.thread.quiet_seconds)} ago` : 'no heartbeat known'}
         </span>
@@ -45,26 +52,26 @@ function NotYetItem({ r }: { r: LineRow }) {
 function LineItem({ r }: { r: LineRow }) {
   const st = r.status
   if (!st) return <NotYetItem r={r} />
-  const d = dot(r)
   const minutes = r.statusAgeMinutes ?? 0
   const stale = minutes > SEAT_STATUS_STALE_MINUTES
   const c = r.commits
   return (
     <li className="flex w-full min-w-0 list-none flex-col gap-1 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5" data-line={r.session}>
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${d.cls}`} aria-label={d.label} title={d.label} />
+        <Dot r={r} />
         <span className="min-w-0 truncate text-sm font-medium">{r.title}</span>
         <span className="text-xs text-muted-foreground">{st.percent}% · {st.percent_basis}</span>
         <span className="text-xs text-muted-foreground" title="Written by the session itself; the platform does not verify it">
           {st.charter ? `${st.charter} · self-reported` : 'self-reported'}
         </span>
-        {r.ownerCards > 0 ? <span className="text-xs font-medium text-amber-600">{r.ownerCards} for you</span> : null}
-        <span className={`ml-auto text-xs ${stale ? 'font-medium text-red-600' : 'text-muted-foreground'}`}>
-          status {age(minutes)}{stale ? ' · stale' : ''}
+        {r.ownerCards > 0 ? <span className="text-xs font-medium text-warning">{r.ownerCards} for you</span> : null}
+        {/* Older than the declared freshness is the vocabulary's Stale: fail. */}
+        <span className={`ml-auto text-xs ${stale ? 'font-medium text-destructive' : 'text-muted-foreground'}`}>
+          status {age(minutes)}{stale ? ' · fail · stale' : ''}
         </span>
       </div>
       {st.problem ? (
-        <p className="m-0 text-sm font-medium text-red-600">Format wrong ({st.seat}): {st.problem}{st.summary ? ` · it said: ${st.summary}` : ''}</p>
+        <p className="m-0 text-sm font-medium text-destructive">Format wrong ({st.seat}): {st.problem}{st.summary ? ` · it said: ${st.summary}` : ''}</p>
       ) : null}
       <p className="m-0 text-sm"><span className="text-muted-foreground">Doing </span>{st.doing}</p>
       {st.waiting_on ? <p className="m-0 text-sm"><span className="text-muted-foreground">Waiting on </span>{st.waiting_on}</p> : null}
@@ -117,7 +124,7 @@ export function LinesNow() {
   }
   return (
     <section aria-label="Lines" className="flex w-full min-w-0 flex-col">
-      <OpsSection title={`Lines · ${reporting} reporting · ${notYet} not yet · ${forOwner} for you`} bodyPadding="compact">
+      <OpsSection title={linesTitle({ statusesRead: statuses.data != null, cardsRead: approvals.data != null, reporting, notYet, forOwner })} bodyPadding="compact">
         <div className="flex w-full min-w-0 flex-col gap-2">
           <p className="m-0 text-xs text-muted-foreground">
             Read {readAt}. A status older than {SEAT_STATUS_STALE_MINUTES / 60} h is marked stale. Percent is the line's own count; its basis is beside it.
