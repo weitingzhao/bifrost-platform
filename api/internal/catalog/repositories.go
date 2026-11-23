@@ -104,6 +104,15 @@ func (s *Scanner) repositoryCheck(domains []contractDomain) ClassCheck {
 	for _, d := range domains {
 		known[d.ID] = true
 	}
+	// The round also scans the cluster and the platform database as
+	// repositories of the pool; they are not in the organization.
+	orgs := live[:0:0]
+	for _, r := range live {
+		if r != ClusterRepo && r != DatabaseRepo {
+			orgs = append(orgs, r)
+		}
+	}
+	live = orgs
 	listed := map[string]bool{}
 	for _, r := range live {
 		listed[r] = true

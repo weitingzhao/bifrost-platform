@@ -11,12 +11,14 @@ import (
 // class repository had no source, so a repository could appear or vanish
 // with nothing to compare. The registry the index names is compared with the
 // organization each round. The control: a registered, listed repository whose
-// domain matches the map's claim raises nothing.
+// domain matches the map's claim raises nothing. STG 11-23 19:44Z the first
+// reading listed cluster and platform-db as not registered: the round's list
+// carries the pool's two non-Gitea repositories, which are left out.
 func TestRepositoriesAreComparedWithTheOrganization(t *testing.T) {
 	s := &Scanner{Kept: memKept{}}
 	ix, _ := json.Marshal(Index{Classes: []Class{{Class: "repository", Sources: []string{"infra:k/repositories.yaml"}, Check: CheckScanned}}})
 	_ = s.kept().Write(keptIndex, ix)
-	live, _ := json.Marshal([]string{"ok", "new", "old", "wrong", "twice"})
+	live, _ := json.Marshal([]string{"ok", "new", "old", "wrong", "twice", ClusterRepo, DatabaseRepo})
 	_ = s.kept().Write(keptRepos, live)
 	_ = s.kept().Write(keptOthers, []byte(`{"ok":{".":{"verdict":"claim","domain":"payload","reason":"r"}},"wrong":{".":{"verdict":"claim","domain":"payload","reason":"r"}}}`))
 	tree := Tree{Commit: "c", Files: []string{"k/repositories.yaml"}, Read: func(string) ([]byte, bool, error) {
