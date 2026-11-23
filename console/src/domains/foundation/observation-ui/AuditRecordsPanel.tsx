@@ -202,9 +202,7 @@ export function AuditRecordsPanel({
         </div>
       )}
       {ledgerTable != null ? (
-        // Table spacing, and fail in the destructive colour as the old dense tag had it, are the host's until the
-        // Ledger carries its own (Ledger line follow-up; spacing as in CI's RunSourceReport).
-        <div className="min-w-0 px-3 py-2 text-xs [&_table]:w-full [&_th]:p-2 [&_th]:text-left [&_td]:p-2 [&_td]:align-top [&_td]:whitespace-nowrap [&_button]:whitespace-nowrap! [&_button]:text-left [&_td:last-child]:whitespace-normal [&_td:last-child]:min-w-[18rem] [&_td:last-child]:[overflow-wrap:anywhere] [&_tr]:border-b [&_tr]:border-[var(--table-rule)] [&_.ledger-controls]:flex [&_.ledger-controls]:flex-wrap [&_.ledger-controls]:items-center [&_.ledger-controls]:gap-3 [&_.ledger-grid_p]:my-1 [&_.ledger-grid_p]:text-[var(--muted-foreground)] [&_nav]:flex [&_nav]:gap-2 [&_.g2-fail]:text-[var(--destructive)]">
+        <div className="min-w-0 px-3 py-2">
           {isLoading ? (
             <p className="m-0 text-[var(--muted-foreground)]">…</p>
           ) : (
