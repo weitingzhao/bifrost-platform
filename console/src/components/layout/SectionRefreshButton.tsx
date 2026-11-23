@@ -17,13 +17,15 @@ export function SectionRefreshButton({
       variant="outline"
       size="sm"
       disabled={disabled || isFetching}
+      aria-busy={isFetching || undefined}
       onClick={e => {
         e.preventDefault()
         e.stopPropagation()
         onClick()
       }}
     >
-      {isFetching ? 'Refreshing…' : 'Refresh'}
+      {/* The label stays put; a read in flight is the design system's pending mark, "…" (箭10 2026-11-23). */}
+      Refresh{isFetching ? <span className="text-muted-foreground" aria-label="pending"> …</span> : null}
     </Button>
   )
 }

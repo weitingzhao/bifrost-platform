@@ -127,7 +127,7 @@ export function ClusterPageChrome({
                   : 'Copy for LLM'}
             </Button>
             <Button variant="outline" size="sm" disabled={clusterFetching} onClick={onRefresh}>
-              {clusterFetching ? 'Refreshing…' : 'Refresh'}
+              Refresh{clusterFetching ? <span className="text-muted-foreground" aria-label="pending"> …</span> : null}
             </Button>
           </>
         }
@@ -146,7 +146,7 @@ export function ClusterPageChrome({
             ) : null}
             <span>
               {clusterFetching
-                ? 'Refreshing…'
+                ? 'Updating …'
                 : clusterUpdatedAt != null
                   ? `Updated ${clusterUpdatedAt}`
                   : '30s refresh'}

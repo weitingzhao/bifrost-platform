@@ -124,7 +124,7 @@ describe('buildSatelliteBusViewModel', () => {
     expect(vm.attention).toHaveLength(0)
     const daemonRow = vm.runtimeConsumers.find(r => r.id === 'trading_engine')
     expect(daemonRow).toBeTruthy()
-    expect(daemonRow!.stateLabel).toBe('EXPECTED OFF')
+    expect(daemonRow!.stateLabel).toBe('boundary')
     expect(daemonRow!.health).toBe('expected-off')
     expect(vm.dataPathConsumers.map(r => r.id)).toEqual(['ib_ingestor', 'ib_account_agent', 'ib_operator'])
     // D10: no visible copy suggests enabling live trading / starting the daemon.
@@ -249,7 +249,9 @@ describe('buildSatelliteBusViewModel', () => {
     expect(vm.health).toBe('degraded')
     const daemonRow = vm.runtimeConsumers.find(r => r.id === 'trading_engine')
     expect(daemonRow).toBeTruthy()
-    expect(daemonRow!.stateLabel).toBe('UNEXPECTED DOWN')
+    expect(daemonRow!.stateLabel).toBe('fail')
+    // 2026-11-23 (箭10): the tag is the seven words; that a required consumer is down is said in the sentence.
+    expect(daemonRow!.detail).toMatch(/^required and down/)
     expect(vm.attention.some(i => i.id === 'dev:runtime:trading_engine')).toBe(true)
   })
 
@@ -261,7 +263,8 @@ describe('buildSatelliteBusViewModel', () => {
     expect(vm.topReason).toMatch(/account sync|Account sync/i)
     const syncRow = vm.runtimeConsumers.find(r => r.id === 'account-sync')
     expect(syncRow).toBeTruthy()
-    expect(syncRow!.stateLabel).toBe('PAIR ASYMMETRIC')
+    expect(syncRow!.stateLabel).toBe('warn')
+    expect(syncRow!.detail).toMatch(/^pair asymmetric/)
     expect(syncRow!.health).toBe('degraded')
     expect(syncRow!.detail).toMatch(/daemon up · account-sync down \(co-scale pair\)/)
   })
@@ -272,16 +275,16 @@ describe('buildSatelliteBusViewModel', () => {
     )
     expect(vm.health).toBe('healthy')
     const syncRow = vm.runtimeConsumers.find(r => r.id === 'account-sync')
-    expect(syncRow!.stateLabel).toBe('EXPECTED OFF')
+    expect(syncRow!.stateLabel).toBe('boundary')
     expect(syncRow!.health).toBe('expected-off')
   })
 
   it('data path node order: gateway → redis-ib → consumers → selected namespace', () => {
     const vm = buildSatelliteBusViewModel(input('prod', { prod: bus('prod') }))
     expect(vm.path.map(n => n.id)).toEqual(['gateway', 'redis-ib', 'consumers', 'namespace'])
-    expect(vm.path[0]!.scopeLabel).toBe('SHARED')
-    expect(vm.path[2]!.scopeLabel).toBe('ALL ENVS')
-    expect(vm.path[3]!.scopeLabel).toBe('SELECTED')
+    expect(vm.path[0]!.scopeLabel).toBe('Shared') // a range, not a state: plain words (箭10 2026-11-23)
+    expect(vm.path[2]!.scopeLabel).toBe('All envs')
+    expect(vm.path[3]!.scopeLabel).toBe('Selected')
     expect(vm.namespace).toBe('bifrost-prod')
   })
 

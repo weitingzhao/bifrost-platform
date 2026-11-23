@@ -19,7 +19,7 @@ function McpDirectory() {
   const doc = q.data
   return <section aria-label="Current MCP directory" className="flex min-w-0 flex-col gap-3">
     <div className="text-sm"><strong>{doc.server_name}</strong> · {doc.server_version} · Contract {doc.contract_version}
-      <p>Generated: {doc.generated_at} · Read: {new Date(q.dataUpdatedAt).toISOString()}{q.isFetching ? ' · Refreshing…' : ''}</p>
+      <p>Generated: {doc.generated_at} · Read: {new Date(q.dataUpdatedAt).toISOString()}{q.isFetching ? ' · …' : ''}</p>
       <p>{doc.tools.length} declared tools · {doc.implemented_count} declared implemented. These flags do not confirm health or permission.</p>
     </div>
     {doc.tools.length === 0 ? <p>The server returned an empty directory.</p> : <ul className="m-0 flex list-none flex-col gap-2 p-0">

@@ -1,4 +1,4 @@
-import { STATE_WORD } from '@/lib/shell/stateWords'
+import { STATE_WORD, type StatusWord } from '@/lib/shell/stateWords'
 /**
  * Satellite Bus — pure derived view model.
  *
@@ -53,7 +53,8 @@ export function busHealthToReach(health: BusHealth): Reachability {
 
 export type BusPathNodeId = 'gateway' | 'redis-ib' | 'consumers' | 'namespace'
 
-export type BusScopeLabel = 'SHARED' | 'ALL ENVS' | 'SELECTED'
+/** Where a node sits: a range, not a state, so plain words (箭10 2026-11-23), never a tag. */
+export type BusScopeLabel = 'Shared' | 'All envs' | 'Selected'
 
 export type BusPathNode = {
   id: BusPathNodeId
@@ -77,7 +78,7 @@ export type BusConsumerRow = {
   kind: BusConsumerKind
   requirement: BusConsumerRequirement
   health: BusNodeHealth
-  /** OK | DEGRADED | UNEXPECTED DOWN | EXPECTED OFF | UNKNOWN | observe/paused/stopped… */
+  /** The engine's seven words (lib/shell/stateWords); what exactly (required and down, paused…) is in `detail`. */
   stateLabel: string
   detail: string
   probePath: string
@@ -156,13 +157,16 @@ function consumerHealth(row: SocketHealthRow): BusNodeHealth {
   }
 }
 
-function consumerStateLabel(row: SocketHealthRow): string {
-  if (row.required === 'policy-off') return 'EXPECTED OFF'
-  if (row.reach === 'fail') return row.required === 'required' ? 'UNEXPECTED DOWN' : 'DOWN'
-  if (row.reach === 'degraded') return 'DEGRADED'
-  if (row.reach === 'unknown') return 'UNPROBED'
-  // ok — surface operator-intent labels (observe / paused / stopped) verbatim.
-  return row.reachLabel === 'ok' ? 'OK' : row.reachLabel.toUpperCase()
+/** A node's health in the engine's seven words: off by policy is boundary (not a fault), unprobed is unknown. */
+export function busWord(health: BusNodeHealth): StatusWord {
+  return health === 'expected-off' ? 'boundary' : health === 'degraded' ? 'warn' : health === 'ok' || health === 'fail' ? health : 'unknown'
+}
+
+/** What the word does not say, for the sentence: a required consumer down, or the operator's intent (paused…). */
+function consumerStateNote(row: SocketHealthRow): string | null {
+  if (row.reach === 'fail') return row.required === 'required' ? 'required and down' : 'down'
+  if (row.required !== 'policy-off' && row.reach === 'ok' && row.reachLabel !== 'ok') return row.reachLabel
+  return null
 }
 
 function consumerRequirement(row: SocketHealthRow): BusConsumerRequirement {
@@ -188,8 +192,10 @@ function socketRowToConsumer(
     kind,
     requirement: consumerRequirement(row),
     health,
-    stateLabel: consumerStateLabel(row),
-    detail: health === 'expected-off' ? expectedOffDetail(row) : row.detail,
+    stateLabel: busWord(health),
+    detail: health === 'expected-off'
+      ? expectedOffDetail(row)
+      : [consumerStateNote(row), row.detail].filter(Boolean).join(' · '),
     probePath: `bus-deep[${env}].monitor.socket.${row.id === 'trading_engine' ? 'daemon' : row.id}`,
     raw,
   }
@@ -233,18 +239,7 @@ function rollupNodeHealth(rows: BusConsumerRow[]): BusNodeHealth {
 }
 
 function nodeStateLabel(health: BusNodeHealth): string {
-  switch (health) {
-    case 'ok':
-      return 'OK'
-    case 'degraded':
-      return 'DEGRADED'
-    case 'fail':
-      return 'FAIL'
-    case 'expected-off':
-      return 'EXPECTED OFF'
-    default:
-      return 'UNPROBED'
-  }
+  return busWord(health)
 }
 
 /* ── runtime consumer classification (selected env only) ── */
@@ -267,7 +262,7 @@ function buildRuntimeConsumers(
       kind: 'runtime',
       requirement: 'required',
       health: 'unknown',
-      stateLabel: 'UNPROBED',
+      stateLabel: busWord('unknown'),
       detail: 'No daemon probe for this environment',
       probePath: `bus-deep[${env}].monitor.daemon`,
     })
@@ -287,8 +282,7 @@ function buildRuntimeConsumers(
     kind: 'runtime',
     requirement: 'required',
     health: apiHealth,
-    stateLabel:
-      apiHealth === 'ok' ? 'OK' : apiHealth === 'fail' ? 'DOWN' : apiHealth === 'degraded' ? 'PARTIAL' : 'UNPROBED',
+    stateLabel: busWord(apiHealth),
     detail: tradeApi.total === 0 ? 'No matrix probes yet' : `${tradeApi.ok}/${tradeApi.total} matrix targets reachable`,
     probePath: `matrix[${env}].targets(trade_api)`,
   })
@@ -304,17 +298,17 @@ function buildRuntimeConsumers(
   if (sync == null) {
     if (daemonTradingSideUp) {
       syncHealth = 'degraded'
-      syncState = 'PAIR ASYMMETRIC'
-      syncDetail = 'daemon up · account-sync down (co-scale pair)'
+      syncState = busWord('degraded')
+      syncDetail = 'pair asymmetric: daemon up · account-sync down (co-scale pair)'
     } else {
       syncHealth = 'unknown'
-      syncState = 'UNPROBED'
+      syncState = busWord('unknown')
       syncDetail = 'No account-sync probe'
     }
   } else if (daemonExpectedOff && sync.daemon_alive !== true) {
     // Daemon is intentionally scaled to zero — a quiet account sync is expected.
     syncHealth = 'expected-off'
-    syncState = 'EXPECTED OFF'
+    syncState = busWord('expected-off')
     syncDetail = 'Account sync idle while daemon is scaled to 0 by env policy — not a fault'
   } else if (
     daemonTradingSideUp &&
@@ -325,19 +319,19 @@ function buildRuntimeConsumers(
   ) {
     // Prod Sync Offline / co-scale pair break — trading side up, sync side down.
     syncHealth = 'degraded'
-    syncState = 'PAIR ASYMMETRIC'
-    syncDetail = 'daemon up · account-sync down (co-scale pair)'
+    syncState = busWord('degraded')
+    syncDetail = 'pair asymmetric: daemon up · account-sync down (co-scale pair)'
   } else if (sync.reachability === 'ok') {
     syncHealth = 'ok'
-    syncState = 'OK'
+    syncState = busWord('ok')
     syncDetail = `daemon_alive=${String(sync.daemon_alive)}`
   } else if (sync.reachability === 'fail') {
     syncHealth = 'fail'
-    syncState = 'UNEXPECTED DOWN'
-    syncDetail = `account sync unreachable (daemon_alive=${String(sync.daemon_alive)})`
+    syncState = busWord('fail')
+    syncDetail = `required and down: account sync unreachable (daemon_alive=${String(sync.daemon_alive)})`
   } else {
     syncHealth = sync.reachability === 'degraded' ? 'degraded' : 'unknown'
-    syncState = syncHealth === 'degraded' ? 'DEGRADED' : 'UNPROBED'
+    syncState = busWord(syncHealth)
     syncDetail = `reachability=${sync.reachability}`
   }
   rows.push({
@@ -477,7 +471,7 @@ export function buildSatelliteBusViewModel(
     {
       id: 'gateway',
       label: 'Platform IB Gateway',
-      scopeLabel: 'SHARED',
+      scopeLabel: 'Shared',
       health: gatewayHealth,
       stateLabel: nodeStateLabel(gatewayHealth),
       headline: gatewayRow.detail,
@@ -488,7 +482,7 @@ export function buildSatelliteBusViewModel(
     {
       id: 'redis-ib',
       label: 'redis-ib',
-      scopeLabel: 'SHARED',
+      scopeLabel: 'Shared',
       health: redisHealth,
       stateLabel: nodeStateLabel(redisHealth),
       headline: redisHeadline,
@@ -498,7 +492,7 @@ export function buildSatelliteBusViewModel(
     {
       id: 'consumers',
       label: 'Socket consumers',
-      scopeLabel: 'ALL ENVS',
+      scopeLabel: 'All envs',
       health: consumersNodeHealth,
       stateLabel: nodeStateLabel(consumersNodeHealth),
       headline:
@@ -513,7 +507,7 @@ export function buildSatelliteBusViewModel(
     {
       id: 'namespace',
       label: namespace,
-      scopeLabel: 'SELECTED',
+      scopeLabel: 'Selected',
       health: namespaceNodeHealth,
       stateLabel: nodeStateLabel(namespaceNodeHealth),
       headline: `${runtimeOk}/${scoredRuntime.length} monitor consumers ok${expectedOff > 0 ? ` · expected-off neutral` : ''}`,
@@ -579,7 +573,7 @@ export function buildSatelliteBusViewModel(
       id: 'shared:gateway',
       scope: 'shared',
       env: 'shared',
-      envLabel: 'SHARED',
+      envLabel: 'Shared',
       severity: gatewayHealth === 'fail' ? 'critical' : 'warning',
       title: `Platform IB Gateway ${gatewayHealth === 'fail' ? 'down' : 'partial'} (affects all envs)`,
       detail: gatewayRow.detail,
