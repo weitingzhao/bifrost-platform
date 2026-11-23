@@ -12,7 +12,7 @@ export function HardwareSnapshot({ snapshot, at }: { snapshot: ObservationSnapsh
   const reads = snapshot.evidence[selected] ?? []
   const panels = readingView.present(snapshot, { selected: object?.path ?? [], metrics: true, at })
   return <div className="overflow-x-auto [&_table]:w-full [&_th]:text-left [&_td]:p-2 [&_th]:p-2 [&_tr]:border-b [&_button]:underline">
-    <p className="text-xs text-muted-foreground">{snapshot.provenance === 'live' ? 'Live reads' : snapshot.provenance === 'recorded' ? 'Recorded response — not live' : 'Simulated fixture'} · Snapshot {snapshot.id} · Captured {snapshot.capturedAt}</p>
+    <p className="text-xs text-muted-foreground">Source mode: {snapshot.provenance === 'fixture' ? 'Simulated fixture' : snapshot.provenance === 'recorded' ? 'Recorded response — not live' : snapshot.provenance} · Snapshot {snapshot.id} · Captured {snapshot.capturedAt}</p>
     {panels.map(panel => <CardView key={panel.id} body={panel.blocks} open={select} />)}
     <details open={selected !== ''}>
       <summary>Object evidence {selected || '(select an object)'}</summary>
