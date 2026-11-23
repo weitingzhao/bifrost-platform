@@ -24,6 +24,7 @@ import { yoursNavBadge } from '@/pages/shell/owner/ownerModel'
 import { useOwnerYours } from '@/pages/shell/owner/useOwnerYours'
 import { syncAppBadge } from '@/pwa/appBadge'
 import { ConsoleBuildBanner } from '@/pwa/ConsoleBuildBanner'
+import { RouteLoading } from '@/pwa/ConsoleCrashScreen'
 import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
 import {
   HOME_ROUTE,
@@ -52,14 +53,14 @@ type DetailRouteId = Exclude<ShellRouteId, EntryRouteId>
 const CityScreen = lazy(() => import('@/pages/shell/city/CityScreen'))
 // The Console's ledger of the same places: rows, no Phaser.
 const CityLedger = lazy(() => import('@/pages/shell/city/CityLedger'))
-const CityRoute = () => <Suspense fallback={null}><CityLedger /></Suspense>
+const CityRoute = () => <Suspense fallback={<RouteLoading place="the ledger" />}><CityLedger /></Suspense>
 
 const AgentScreen = lazy(() => import('@/domains/coordination/communication/AgentScreen'))
 const Collaboration = lazy(() => import('@/domains/coordination/communication/CommunicationPage'))
-const CollaborationRoute = () => <Suspense fallback={null}><Collaboration /></Suspense>
+const CollaborationRoute = () => <Suspense fallback={<RouteLoading place="Agents" />}><Collaboration /></Suspense>
 
 const Observation = lazy(() => import('@/domains/foundation/runtime-observation/RuntimeObservation'))
-const ObservationRoute = () => <Suspense fallback={null}><Observation /></Suspense>
+const ObservationRoute = () => <Suspense fallback={<RouteLoading place="Signals" />}><Observation /></Suspense>
 
 const DETAIL_PAGES: Record<DetailRouteId, ComponentType> = {
   observation: ObservationRoute,
@@ -188,9 +189,9 @@ function ConsolePageInner() {
   }
 
   const agentsLook = location.kind === 'shell' && location.id === 'collaboration' && readCommunicationLook(window.location.hash.split('?')[1] ?? '').look === 'agents'
-  if (location.kind === 'shell' && location.id === 'observation') return <Suspense fallback={null}><Observation /></Suspense>
-  if (agentsLook) return <><Suspense fallback={null}><AgentScreen /></Suspense><SignalModeLink /></>
-  if (cityLook) return <><Suspense fallback={null}><CityScreen /></Suspense><SignalModeLink /></>
+  if (location.kind === 'shell' && location.id === 'observation') return <Suspense fallback={<RouteLoading full place="Signals" />}><Observation /></Suspense>
+  if (agentsLook) return <><Suspense fallback={<RouteLoading full place="Agents" />}><AgentScreen /></Suspense><SignalModeLink /></>
+  if (cityLook) return <><Suspense fallback={<RouteLoading full place="the City" />}><CityScreen /></Suspense><SignalModeLink /></>
   return (
     <TooltipProvider>
       <SidebarProvider>

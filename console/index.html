@@ -19,6 +19,43 @@
         document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
       })();
     </script>
+    <script>
+      // Before React: if the app never draws (its script failed to load or threw at
+      // start), say so on the page with what a diagnosis needs, instead of white.
+      // It never writes into #root, which React owns.
+      (() => {
+        const seen = [];
+        addEventListener('error', e => {
+          const t = e.target;
+          if (t && t !== window && (t.src || t.href)) seen.push('failed to load ' + (t.src || t.href));
+          else if (e.message) seen.push(e.message);
+        }, true);
+        addEventListener('unhandledrejection', e => seen.push(String((e.reason && e.reason.message) || e.reason)));
+        const started = Date.now();
+        const timer = setInterval(() => {
+          const root = document.getElementById('root');
+          const report = document.getElementById('console-boot-report');
+          if (root && root.childElementCount > 0) { if (report) report.remove(); clearInterval(timer); return; }
+          if (Date.now() - started > 120000) clearInterval(timer);
+          if (report || document.hidden || innerWidth === 0 || Date.now() - started < 12000) return;
+          const s = document.querySelector('script[type="module"][src]');
+          const box = document.createElement('pre');
+          box.id = 'console-boot-report';
+          box.setAttribute('role', 'alert');
+          box.style.cssText = 'margin:16px;padding:12px;white-space:pre-wrap;word-break:break-word;font:12px/1.5 ui-monospace,monospace;border:1px solid #888;border-radius:6px';
+          box.textContent = [
+            'The Console did not start on this page (nothing drawn after ' + Math.round((Date.now() - started) / 1000) + ' s).',
+            'Take a screenshot before reloading.',
+            'build: ' + (s ? s.getAttribute('src') : 'unknown'),
+            'at: ' + (location.hash || '/'),
+            'viewport: ' + innerWidth + '×' + innerHeight + ' @' + devicePixelRatio + 'x',
+            'when: ' + new Date().toISOString(),
+            'errors: ' + (seen.length ? seen.slice(0, 5).join(' | ') : 'none seen'),
+          ].join('\n');
+          document.body.appendChild(box);
+        }, 3000);
+      })();
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Bifrost Ops" />
