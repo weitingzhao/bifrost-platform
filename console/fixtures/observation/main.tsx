@@ -5,6 +5,7 @@ import { useObservationContext } from '@bifrost/ui/city/observationContext'
 import { captureReads, snapshotOf } from './read'
 import { qualityFixture } from './qualityFixture'
 import { readOperations } from '../../src/domains/foundation/runtime-observation/operations'
+import { COVERAGE, DATABASES, WORKLOADS, databasePanels, readCoverage, readStates, workloadPanels } from '../../src/domains/foundation/runtime-observation/states'
 
 /** Standalone read-only entry. No Console route or other team's transport is modified. */
 export function Preview() {
@@ -13,8 +14,13 @@ export function Preview() {
   useEffect(() => {
     if (new URLSearchParams(location.search).get('scenario') === 'village') {
       let active = true
-      const get = async (path: string) => { const r = await fetch(path === '/api/v1/catalog/status' ? '/.observation-cache/domain-status-recorded.json' : path); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() }
-      void Promise.all([captureReads(get).then(r=>snapshotOf(r,'recorded')),readOperations(get)]).then(([base,ops])=>{if(active)setSnapshot({...base,capturedAt:new Date().toISOString(),evidence:{...base.evidence,...ops.evidence},layerPanels:ops.panels})}).catch(e=>{if(active)setError(String(e))})
+      // Recorded captures of real platform reads (untracked, .observation-cache); a missing one reads as its error.
+      const recorded: Record<string, string> = { '/api/v1/catalog/status': 'domain-status-recorded.json', [WORKLOADS]: 'bus-workloads-recorded.json', [DATABASES]: 'bus-databases-recorded.json', [COVERAGE]: 'coverage-recorded.json' }
+      const get = async (path: string) => { const r = await fetch(recorded[path] ? '/observation-recorded/' + recorded[path] : path); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() }
+      void Promise.all([captureReads(get).then(r=>snapshotOf(r,'recorded')),readOperations(get),readStates(get),readCoverage(get)]).then(([base,ops,states,coverage])=>{
+        const evidence={...base.evidence,...ops.evidence,...states.evidence,...coverage.evidence}
+        const layerPanels={...ops.panels,data:[...ops.panels.data,...databasePanels(states.databases,evidence)],workloads:workloadPanels(states.workloads,coverage.readout,evidence)}
+        if(active)setSnapshot({...base,capturedAt:new Date().toISOString(),evidence,layerPanels})}).catch(e=>{if(active)setError(String(e))})
       return ()=>{active=false}
     }
     if (new URLSearchParams(location.search).get('scenario') === 'quality') { setSnapshot(qualityFixture()); return }

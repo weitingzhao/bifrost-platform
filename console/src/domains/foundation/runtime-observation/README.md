@@ -65,3 +65,18 @@ Drawer/source-panel selection and alert visibility remain local; do not claim
 these filters or source-panel IDs are restored by the Path context.
 Scope/identity changes must remount/reset the host. Refresh cannot restore a
 lost snapshot; show that limitation instead of treating current reads as history.
+
+## Workload yard and database station (2026-11-23, UI / Signals)
+
+`states.ts` adds two other lines' public reads to the same composite snapshot:
+`GET /api/v1/bus/states?type=cluster.workload.changed|cluster.database.changed`
+(communication line's bus ledger, v2: workload ready and version; database ready,
+primary, backup, WAL archiving, last backup), polled every 60 seconds; and
+`GET /api/v1/readings/evaluation?days=1&name=metric_coverage_by_namespace`
+(metrics line readout, a closed day computed with every other reading on request),
+read every 30 minutes. Workloads are grouped by namespace only; no domain mapping
+is inferred. The bus lists only subjects that changed within its retention, and
+the page says so. A failed read stays unknown with its reason. The database joins
+the Data warehouse region; namespaces render as the UI's optional Workload yard
+(@bifrost/ui 0.36.0); an older UI pin simply does not draw that region.
+Rollback: revert this commit; no backend or stored state changes.
