@@ -190,7 +190,8 @@ function ConsolePageInner() {
       ? NEEDS_YOU_ROUTE
       : locationId(location)
   const yoursBadge = yoursNavBadge(yours)
-  const back = layout === 'side' ? undefined : backFor(location)
+  // The entry this page sits under: the frame's crumb on every layout (on a phone, the way back).
+  const back = backFor(location)
   const domain = entryOf(location, window.location.hash.split('?')[1])
   // The city look takes the whole screen, outside this frame: the Console does not hold it.
   const cityLook = location.kind === 'shell' && location.id === 'city' && readCityQuery(window.location.hash.split('?')[1] ?? '').look === 'city'
@@ -243,6 +244,7 @@ function ConsolePageInner() {
               back={back}
               moreHref={undefined}
               looks={looksFor(location)}
+              alerts={status.frameAlerts}
             />
             {layout !== 'side' && domain && <DomainNav entry={domain} />}
           </div>

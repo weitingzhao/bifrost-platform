@@ -1091,6 +1091,7 @@
       "test_imports": [],
       "external_imports": [
         "@bifrost/ui",
+        "@bifrost/ui/city/WorldFrame",
         "lucide-react"
       ],
       "source_inputs": [],
@@ -3502,6 +3503,7 @@
     {
       "path": "console/src/lib/shell",
       "files": [
+        "console/src/lib/shell/__tests__/consoleFrame.test.ts",
         "console/src/lib/shell/__tests__/consoleRoutes.lineagePick.test.ts",
         "console/src/lib/shell/__tests__/consoleRoutes.test.tsx",
         "console/src/lib/shell/__tests__/domainMigration.test.tsx",
@@ -3510,6 +3512,7 @@
         "console/src/lib/shell/__tests__/useConsoleAppearance.test.tsx",
         "console/src/lib/shell/__tests__/useHashSection.test.tsx",
         "console/src/lib/shell/__tests__/useShellLayout.test.ts",
+        "console/src/lib/shell/consoleFrame.ts",
         "console/src/lib/shell/consoleRoutes.ts",
         "console/src/lib/shell/governanceReferences.ts",
         "console/src/lib/shell/shellNavItems.ts",
@@ -3536,6 +3539,7 @@
       ],
       "external_imports": [
         "@bifrost/ui",
+        "@bifrost/ui/city/world",
         "@tanstack/react-query",
         "@testing-library/jest-dom/vitest",
         "@testing-library/react",

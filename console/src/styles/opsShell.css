@@ -1,19 +1,16 @@
 /* The shell shares its canvas; surfaces do not introduce unrelated color planes. */
 html[data-ops-theme] .ops-console-main { background: transparent; }
 html[data-ops-theme] .console-shell-chrome { background: var(--background); }
-html[data-ops-theme] .ops-console-header {
-  height: auto; min-height: 76px; padding: 12px 24px;
-  background: transparent; border: 0;
+/* The shell top is the world frame (WorldFrame, the engine's). Row 2's context is the Console's own strip:
+   it takes the row, the verdict sentence gives way first, the tools stay at the right. */
+.ops-console-frame .wf-context { flex: 1 1 auto; display: flex; align-items: center; gap: 8px; }
+.ops-console-frame [data-shell-status-line] { font: 11px var(--w-mono); color: var(--w-ink-mute); }
+.ops-console-frame [data-console-tools] .ops-appearance-trigger { width: 32px; height: 32px; border-radius: 8px; }
+.ops-console-frame [data-console-tools] :is(button, a) { min-width: 32px; min-height: 32px; }
+@media (pointer: coarse) {
+  .ops-console-frame :is(.wf-places > *, .wf-looks > *, [data-console-tools] :is(button, a)) { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+  .ops-console-frame [data-console-tools] .ops-appearance-trigger { width: 44px; height: 44px; }
 }
-.ops-console-header h1 { font-size: 22px; line-height: 1.3; }
-.ops-console-header [data-shell-status-line] { font-size: 12px; }
-.ops-console-header [data-viewer-env] {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-height: 44px; padding: 0 10px; border: 1px solid var(--ops-edge); border-radius: 12px;
-  font-weight: 700; letter-spacing: .07em; background: var(--ops-control);
-}
-.ops-console-header :is(button, a[aria-label='More pages']) { min-width: 44px; min-height: 44px; }
-.ops-console-header [data-viewer-env] span { background: transparent; color: var(--foreground); border: 0; }
 html[data-ops-theme] .ops-page-content { padding: 8px 24px 32px; }
 html[data-ops-theme] [data-shell-chrome='floating'] { padding: 0; }
 html[data-ops-theme] [data-shell-chrome='floating'] > [data-slot='sidebar-inner'] {
@@ -44,27 +41,16 @@ html[data-ops-theme] .ops-appearance-menu { width: 224px; padding: 10px; backgro
 }
 .ops-appearance-menu [data-state='checked'] { background: var(--ops-selection); box-shadow: var(--ops-inset); }
 .ops-appearance-menu [data-highlighted] { outline: 2px solid var(--ring); outline-offset: -2px; }
-.ops-console-header :focus-visible, [data-entry-nav] :focus-visible,
+[data-entry-nav] :focus-visible,
 [data-shell-chrome] :focus-visible, #owner-console[data-entry='you'] :focus-visible {
   outline: 2px solid var(--ring); outline-offset: 3px;
 }
 @media (max-width: 1023px) {
-  html[data-ops-theme] .ops-console-header { min-height: 72px; padding: 12px 20px; gap: 8px; flex-wrap: wrap; }
-  .ops-console-header h1 { font-size: 20px; }
-  .ops-console-header [data-shell-status-line] { display: none; }
   html[data-ops-theme] .ops-page-content { padding: 8px 20px 24px; }
 }
 @media (max-width: 420px) {
-  html[data-ops-theme] .ops-console-header { padding-inline: 14px; gap: 6px; }
-  .ops-console-header h1 { font-size: 18px; }
-  .ops-console-header [data-viewer-env] { padding-inline: 6px; }
   html[data-ops-theme] .ops-page-content { padding-inline: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   html[data-ops-theme] [data-shell-chrome] { transition: none; }
-}
-
-/* Five domains leave the page identity on its own line on narrow phones. */
-@media (max-width: 479px) {
-  .ops-console-header nav[aria-label='Breadcrumb'] { order: -1; flex: 1 0 100%; max-width: none; }
 }
