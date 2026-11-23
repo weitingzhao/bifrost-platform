@@ -4488,7 +4488,9 @@
       "path": "console/src/pages/shell",
       "files": [
         "console/src/pages/shell/city/CityLedger.tsx",
+        "console/src/pages/shell/city/CityLedgerHeader.tsx",
         "console/src/pages/shell/city/CityScreen.tsx",
+        "console/src/pages/shell/city/__tests__/CityLedgerHeader.test.tsx",
         "console/src/pages/shell/city/cityScreen.css",
         "console/src/pages/shell/city/useCityContent.ts",
         "console/src/pages/shell/shellPages.tsx"
@@ -4499,6 +4501,7 @@
         "console/src/api/client.ts",
         "console/src/api/lineage.ts",
         "console/src/api/telemetry.ts",
+        "console/src/components/ConsoleHeader.tsx",
         "console/src/components/shell",
         "console/src/domains/foundation/bus",
         "console/src/domains/foundation/observation-display",
@@ -4523,7 +4526,9 @@
         "@bifrost/ui/city/places",
         "@bifrost/ui/city/rulers",
         "@tanstack/react-query",
-        "react"
+        "@testing-library/react",
+        "react",
+        "vitest"
       ],
       "source_inputs": [],
       "test_inputs": [],

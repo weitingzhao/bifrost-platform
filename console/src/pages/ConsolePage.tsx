@@ -62,6 +62,7 @@ const Collaboration = lazy(() => import('@/domains/coordination/communication/Co
 const CollaborationRoute = () => <Suspense fallback={<RouteLoading place="Agents" />}><Collaboration /></Suspense>
 
 const Observation = lazy(() => import('@/domains/foundation/runtime-observation/RuntimeObservation'))
+const CityLedgerHeader = lazy(() => import('@/pages/shell/city/CityLedgerHeader'))
 const SharedObservationHost = lazy(() => import('@/domains/foundation/runtime-observation/sharedObservationHost'))
 const ObservationRoute = () => <Suspense fallback={<RouteLoading place="Signals" />}><Observation /></Suspense>
 
@@ -204,6 +205,26 @@ function ConsolePageInner() {
     systemLine: status.statusLine,
   }
 
+  const headerProps = {
+    pageTitle: title,
+    pageDescription: description,
+    statusLine: status.statusLine,
+    statusTone: status.statusTone,
+    healthy: status.healthy,
+    onRefresh: () => {
+      void status.refetch()
+    },
+    viewerEnv: status.viewerEnv,
+    viewerEnvLoading: status.viewerEnvLoading,
+    layout,
+    back,
+    moreHref: undefined,
+    looks: looksFor(location),
+    alerts: status.frameAlerts,
+    time: status.frameTime,
+  }
+  // The City's table inside the Console: the frame names it as the City's (World's gap table item 3).
+  const cityLedger = location.kind === 'shell' && location.id === 'city' && readCityQuery(window.location.hash.split('?')[1] ?? '').look === 'ledger'
   const agentsLook = location.kind === 'shell' && location.id === 'collaboration' && readCommunicationLook(window.location.hash.split('?')[1] ?? '').look === 'agents'
   if (location.kind === 'shell' && location.id === 'observation') return <Suspense fallback={<RouteLoading full place="Signals" />}><Observation hosted /></Suspense>
   // Agents wears the world frame, whose four places include Signals: no floating link over it (gap table item 2).
@@ -231,24 +252,13 @@ function ConsolePageInner() {
           )}
         >
           <div className="console-shell-chrome sticky top-0 z-20 shrink-0 bg-card">
-            <ConsoleHeader
-              pageTitle={title}
-              pageDescription={description}
-              statusLine={status.statusLine}
-              statusTone={status.statusTone}
-              healthy={status.healthy}
-              onRefresh={() => {
-                void status.refetch()
-              }}
-              viewerEnv={status.viewerEnv}
-              viewerEnvLoading={status.viewerEnvLoading}
-              layout={layout}
-              back={back}
-              moreHref={undefined}
-              looks={looksFor(location)}
-              alerts={status.frameAlerts}
-              time={status.frameTime}
-            />
+            {cityLedger ? (
+              <Suspense fallback={<ConsoleHeader {...headerProps} />}>
+                <CityLedgerHeader {...headerProps} />
+              </Suspense>
+            ) : (
+              <ConsoleHeader {...headerProps} />
+            )}
             {layout !== 'side' && domain && <DomainNav entry={domain} />}
           </div>
           <PageShell padding="compact" className={cn('ops-page-content flex w-full min-w-0 flex-col gap-4', entry !== 'command' && location.kind !== 'approval' && location.kind !== 'question' && 'ops-workspace')}>

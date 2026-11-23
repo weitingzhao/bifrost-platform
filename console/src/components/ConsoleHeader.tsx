@@ -14,7 +14,7 @@ import { AppearanceMenu } from '@/components/shell/AppearanceMenu'
 import { ToolsMenu } from '@/components/ToolsMenu'
 import type { ShellLayout } from '@/lib/shell/useShellLayout'
 import { VERDICT_DOT_COLOR, type VerdictTone } from '@/lib/shell/shellStatusLine'
-import { consoleCrumbs, consoleFramePlaces, type ConsoleLooks, type FrameAlerts } from '@/lib/shell/consoleFrame'
+import { consoleCrumbs, consoleFramePlaces, type ConsoleLooks, type FrameAlerts, type FrameCrumb } from '@/lib/shell/consoleFrame'
 
 /**
  * The looks of the place on screen (the Owner, 2026-11-19): City | Console, peers, at the same spot as
@@ -47,6 +47,7 @@ export function ConsoleHeader({
   looks,
   alerts,
   time,
+  crumbs,
 }: {
   pageTitle: string
   pageDescription?: string
@@ -64,6 +65,8 @@ export function ConsoleHeader({
   alerts?: FrameAlerts
   /** The time chip: live and when the shown reading was made (frameTimeOf). */
   time?: WorldTime
+  /** Crumbs a place gives itself (the City's table: City › street › … › Table); otherwise Console › entry › page. */
+  crumbs?: FrameCrumb[]
 }) {
   const side = layout === 'side'
   // The frame's Return: the journey's previous stop (gap table item 8), as the City's frame has it.
@@ -77,7 +80,7 @@ export function ConsoleHeader({
     <div className="ops-console-header ops-console-frame">
       <WorldFrame
         here="console"
-        crumbs={consoleCrumbs(back ?? null, pageTitle)}
+        crumbs={crumbs ?? consoleCrumbs(back ?? null, pageTitle)}
         hrefs={places.hrefs}
         env={viewerEnvLoading ? undefined : viewerEnvBadgeLabel(viewerEnv)}
         alerts={alerts}
