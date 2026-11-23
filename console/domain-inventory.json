@@ -2162,6 +2162,36 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/foundation/runtime-observation",
+      "files": [
+        "console/src/domains/foundation/runtime-observation/README.md",
+        "console/src/domains/foundation/runtime-observation/RuntimeObservation.tsx",
+        "console/src/domains/foundation/runtime-observation/__tests__/communication-contract.test.tsx",
+        "console/src/domains/foundation/runtime-observation/__tests__/projection.test.tsx",
+        "console/src/domains/foundation/runtime-observation/__tests__/surface.test.tsx",
+        "console/src/domains/foundation/runtime-observation/communication.ts",
+        "console/src/domains/foundation/runtime-observation/read.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/domains/coordination/communication",
+        "console/src/domains/owner/city"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui/city/observation",
+        "@bifrost/ui/communication",
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "node:fs",
+        "node:path",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/foundation/shell",
       "files": [
         "console/src/domains/foundation/shell/useShellStatusLine.ts"
@@ -3747,6 +3777,7 @@
         "console/src/components/shell",
         "console/src/domains/coordination/communication",
         "console/src/domains/foundation/bus",
+        "console/src/domains/foundation/runtime-observation",
         "console/src/domains/foundation/shell",
         "console/src/domains/owner/city",
         "console/src/lib/shell",

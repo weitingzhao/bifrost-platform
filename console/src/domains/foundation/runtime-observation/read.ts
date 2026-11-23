@@ -1,5 +1,5 @@
-import { hardwareDistrict, readHardware, HARDWARE_QUERIES, type HardwareReads } from '../domains/owner/city/gen2/content/hardware'
-import { alertsRead, deviceKeys, type PromAlert } from '../domains/owner/city/gen2/content/alerts'
+import { hardwareDistrict, readHardware, HARDWARE_QUERIES, type HardwareReads } from '@/domains/owner/city/gen2/content/hardware'
+import { alertsRead, deviceKeys, type PromAlert } from '@/domains/owner/city/gen2/content/alerts'
 import { objectsIn, pathKey, type ObservationSnapshot, type ReadEvidence } from '@bifrost/ui/city/observation'
 
 type Envelope = { body?: unknown; error?: string; receivedAt: string }

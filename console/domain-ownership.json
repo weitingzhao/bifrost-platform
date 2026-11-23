@@ -19,6 +19,7 @@
     "root": "console/src",
     "inventory": "console/domain-inventory.json",
     "groups": {
+      "console/src/domains/foundation/runtime-observation": {"domains": ["foundation"], "status": "assigned", "basis": "Owner-authorized generic observation composition; consumes existing City hardware and coordination communication contracts, no ingestion or health rules."},
       "console/src/domains/coordination/communication": {
         "domains": ["coordination"],
         "status": "assigned",

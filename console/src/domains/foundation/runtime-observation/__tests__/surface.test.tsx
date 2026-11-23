@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { ObservationSurface, readQuality, type ObservationSnapshot, type ReadEvidence } from '@bifrost/ui/city/observation'
-import { snapshotOf } from './read'
+import { snapshotOf } from '../read'
 
 afterEach(cleanup)
 const at = '2026-11-22T12:00:00.000Z'

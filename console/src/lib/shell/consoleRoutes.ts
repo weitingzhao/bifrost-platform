@@ -30,6 +30,7 @@ export const SHELL_NAV = [
     group: 'detail',
   },
   { id: 'collaboration', label: 'Collaboration', question: 'Who is exchanging messages, and what evidence followed?', group: 'detail' },
+  { id: 'observation', label: 'Observation', question: 'What does the same runtime evidence show across views?', group: 'detail' },
   { id: 'city', label: 'City', question: 'The system as a city the Owner builds.', group: 'detail' },
   {
     id: 'records',
@@ -284,6 +285,7 @@ export function entryOf(location: ConsoleLocation, query = ''): EntryRouteId | n
   if (location.kind === 'approval' || location.kind === 'question') return 'command'
   if (isEntryRoute(location.id)) return location.id
   if (location.id === 'data' || location.id === 'ib') return 'services'
+  if (location.id === 'observation') return 'system'
   if (location.id === 'collaboration') return 'crew'
   if (location.id === 'releases') return 'work'
   if (location.id === 'records') {

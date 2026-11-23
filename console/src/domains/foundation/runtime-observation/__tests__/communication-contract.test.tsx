@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { render, fireEvent, screen, cleanup } from '@testing-library/react'
 // Read-only integration probe; points to the communication owner's model via COMMUNICATION_MODEL.
-import { exchangesOf, evidenceThrough, STAGES, STAGE_LABEL } from '@communication-contract'
+import { exchangesOf, evidenceThrough, STAGES, STAGE_LABEL } from '@bifrost/ui/communication'
 import { ObservationSurface, type ObservationSnapshot } from '@bifrost/ui/city/observation'
 
 // 2026-11-22 Owner acceptance: shared communication semantics survive layer switches, duplicates and ACK-before-send.

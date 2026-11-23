@@ -22,6 +22,7 @@ const ICONS: Record<ShellRouteId, ShellNavItem['icon']> = {
   services: Boxes,
   work: ListChecks,
   system: Activity,
+  observation: Activity,
   status: Gauge,
   data: Database,
   ib: Plug,

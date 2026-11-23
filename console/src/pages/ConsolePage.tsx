@@ -57,7 +57,11 @@ const AgentScreen = lazy(() => import('@/domains/coordination/communication/Agen
 const Collaboration = lazy(() => import('@/domains/coordination/communication/CommunicationPage'))
 const CollaborationRoute = () => <Suspense fallback={null}><Collaboration /></Suspense>
 
+const Observation = lazy(() => import('@/domains/foundation/runtime-observation/RuntimeObservation'))
+const ObservationRoute = () => <Suspense fallback={null}><Observation /></Suspense>
+
 const DETAIL_PAGES: Record<DetailRouteId, ComponentType> = {
+  observation: ObservationRoute,
   status: StatusPage,
   data: DataPage,
   ib: IbPage,
@@ -108,7 +112,7 @@ function backFor(location: ConsoleLocation): HeaderBack | undefined {
  * entry's district. On the `#city` route the Console shows the ledger of the place in the address.
  */
 function looksFor(location: ConsoleLocation): HeaderLooks | undefined {
-  if (location.kind !== 'shell') return undefined
+  if (location.kind !== 'shell' || location.id === 'observation') return undefined
   if (location.id === 'collaboration') return { on: 'ledger', city: '#city', ledger: window.location.hash, page: null }
   const query = window.location.hash.split('?')[1] ?? ''
   if (location.id === 'city') {
