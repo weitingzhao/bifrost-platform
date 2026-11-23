@@ -1,7 +1,7 @@
 import { communicationHref } from '@/domains/coordination/communication/looks'
 import { SidebarTrigger, Tooltip, TooltipContent, TooltipTrigger } from '@bifrost/ui'
 import { WorldFrame } from '@bifrost/ui/city/WorldFrame'
-import { useSharedObservation } from '@/domains/foundation/runtime-observation/sharedObservationStore'
+import { SignalsPinNote } from '@/components/shell/world-journey/SignalsPinNote'
 import { useJourneyBack } from '@/components/shell/world-journey/journeyTrail'
 import type { WorldTime } from '@bifrost/ui/city/world'
 import { CircleHelp, Ellipsis } from 'lucide-react'
@@ -118,7 +118,8 @@ export function ConsoleHeader({
                 {statusLine}
               </a>
             </p>
-            <SignalsPinNote />
+            {/* One implementation for every frame (World's, 2026-11-23). */}
+            <SignalsPinNote className="shrink-0 text-[11px] text-muted-foreground no-underline hover:text-foreground" />
             <span className="ml-auto inline-flex shrink-0 items-center gap-1" data-console-tools>
               {!side && moreHref != null ? (
                 <a href={moreHref} aria-label="More pages" className="inline-flex size-9 items-center justify-center rounded-md text-foreground no-underline">
@@ -136,20 +137,3 @@ export function ConsoleHeader({
   )
 }
 
-/**
- * Says so when Signals holds a pinned snapshot (the shared context above the routes, World's gap table item 9): the
- * Console's own reads stay live, Signals keeps what was pinned. Subscribes on its own so only this note follows the
- * context's clock.
- */
-function SignalsPinNote() {
-  const shared = useSharedObservation()
-  if (shared.state !== 'ready' || !shared.observation.pinned) return null
-  const at = shared.observation.snapshot.capturedAt
-  const hhmm = Number.isFinite(Date.parse(at)) ? new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : at
-  return (
-    <a href="#observation" className="shrink-0 text-[11px] text-muted-foreground no-underline hover:text-foreground" data-signals-pin title={`Signals snapshot captured ${at}, pinned`}>
-      {/* A phone's second row has no room for the sentence (390: the user menu was pushed off). */}
-      <span className="hidden sm:inline">Signals snapshot retained · </span><span className="sm:hidden">Pinned · </span>{hhmm}
-    </a>
-  )
-}

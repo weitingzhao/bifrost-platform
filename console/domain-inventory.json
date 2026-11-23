@@ -1086,7 +1086,6 @@
         "console/src/components/UserMenu.tsx",
         "console/src/components/shell",
         "console/src/domains/coordination/communication",
-        "console/src/domains/foundation/runtime-observation",
         "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/shell"
       ],
