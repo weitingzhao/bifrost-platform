@@ -3,7 +3,7 @@ import { DISTRICT } from '@bifrost/ui/city/grid'
 import { TOWN_ID, type Place } from '@bifrost/ui/city/places'
 import type { DomainHoldings } from './domainOwns'
 import { buildingsOf } from './districtBuildings'
-import { counterRooms } from './counters'
+import { buildingFlow, counterRooms } from './counters'
 import type { CounterRoute } from '@bifrost/ui/city/units/counterRoom'
 import { formatShellHash } from '@/lib/shell/consoleRoutes'
 import type { MapStatus } from './domainsPanel'
@@ -39,7 +39,7 @@ export function domainTree(status: MapStatus | undefined, hardware: Place | null
   const domains = (status?.domains ?? []) as Named[]
   const children: Place[] = domains.map(d => d.id === COMPUTE && hardware
     ? { ...hardware, id: d.id, label: nameOf(d) }
-    : { id: d.id, kind: 'district', shape: DISTRICT, label: nameOf(d), question: `The ${nameOf(d)} domain: what it holds and how it stands, as the map sees it.`, dashboard: null, children: buildingsOf(holdings[d.id], stateOf(d), routes ? pkgs => counterRooms(pkgs, routes, stateOf(d)) : undefined), state: stateOf(d), ...(styleOf(d.id) ? { style: styleOf(d.id) } : {}) })
+    : { id: d.id, kind: 'district', shape: DISTRICT, label: nameOf(d), question: `The ${nameOf(d)} domain: what it holds and how it stands, as the map sees it.`, dashboard: null, children: buildingsOf(holdings[d.id], stateOf(d), routes ? pkgs => counterRooms(pkgs, routes, stateOf(d)) : undefined, routes ? pkgs => buildingFlow(pkgs, routes) : undefined), state: stateOf(d), ...(styleOf(d.id) ? { style: styleOf(d.id) } : {}) })
   // The hardware was read even when the map was not: it stands on its own rather than vanish.
   if (hardware && !domains.some(d => d.id === COMPUTE)) children.unshift(hardware)
   return {

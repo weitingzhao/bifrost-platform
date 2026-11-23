@@ -4,9 +4,9 @@
 // made-up numbers: a route with no reading is shuttered.
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { counterRoom, counterSummaryOf } from '@bifrost/ui/city/units/counterRoom'
+import { counterRoom, counterSummaryOf, queueStep } from '@bifrost/ui/city/units/counterRoom'
 import { spriteUrl } from '@bifrost/ui/city/sprites'
-import { COUNTER_QUERIES, counterRooms, readingsOf, routesByPackage, type CounterReads } from '../src/domains/owner/city/gen2/content/counters'
+import { buildingFlow, COUNTER_QUERIES, counterRooms, readingsOf, routesByPackage, type CounterReads } from '../src/domains/owner/city/gen2/content/counters'
 import type { DomainHoldings } from '../src/domains/owner/city/gen2/content/domainOwns'
 
 type Snap = { read_at: string; holdings: Record<string, DomainHoldings> }
@@ -36,7 +36,7 @@ function App() {
     {Object.values(snap.holdings).map(h => <section key={h.id}>
       <h2>{h.id}</h2>
       {(h.buildings ?? []).map(b => <div key={b.id} className="bldg">
-        <h3>{b.id}</h3>
+        <h3>{b.id} · door: {(() => { const f = buildingFlow(b.packages, routes); return !b.packages.some(p => (routes.get(p) ?? []).length) ? 'no routes (no cars)' : f.perMin == null ? 'not read (no cars)' : `${f.perMin.toFixed(2)} req/min, ${queueStep(f.perMin)} car${queueStep(f.perMin) === 1 ? '' : 's'}` })()}</h3>
         <div className="rooms">{counterRooms(b.packages, routes, 'online').map(r => {
           const rs = routes.get(r.id) ?? []
           const sum = counterSummaryOf({ routes: rs })

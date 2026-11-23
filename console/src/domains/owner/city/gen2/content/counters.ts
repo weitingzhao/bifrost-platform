@@ -1,6 +1,6 @@
 import type { Place } from '@bifrost/ui/city/places'
 import type { Shape } from '@bifrost/ui/city/grid'
-import { counterRoom, counterRoomKey, counterRoomShape, type CounterRoomReadings, type CounterRoute } from '@bifrost/ui/city/units/counterRoom'
+import { counterBuildingSummaryOf, counterRoom, counterRoomKey, counterRoomShape, type CounterRoomReadings, type CounterRoute } from '@bifrost/ui/city/units/counterRoom'
 import type { DomainHoldings } from './domainOwns'
 import type { PromPoint } from './hardware'
 import QUERIES from './counterQueries.json'
@@ -94,4 +94,14 @@ export function counterRooms(packages: string[], routes: Map<string, CounterRout
     id: 'other', kind: 'room', shape: '4x4', label: `Other · ${rest.length}`, dashboard: null, state, children: [],
     question: `${rest.length} more packages do not fit this building's level: ${rest.map(r => r.id).join(', ')}.`,
   }]
+}
+
+/**
+ * A building's one reading outside (the engine's stage 4, 0.48.0): its requests a minute, summed over its packages'
+ * counters by the engine's own counterBuildingSummaryOf (never a second sum here), read from the requests rule.
+ * Not read: perMin null, no cars at the door.
+ */
+export function buildingFlow(packages: string[], routes: Map<string, CounterRoute[]>): NonNullable<Place['flow']> {
+  const s = counterBuildingSummaryOf(packages.map(p => ({ routes: routes.get(p) ?? [] })))
+  return { perMin: s.perMin, source: COUNTER_QUERIES.perMin }
 }

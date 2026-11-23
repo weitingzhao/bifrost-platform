@@ -23,13 +23,17 @@ export const OTHER = 'other'
  * first while they fit the ground, one slot kept for Other; the rest go into one Other building that says how
  * many it holds. Nothing is dropped: Other's card lists them.
  */
-export function buildingsOf(h: DomainHoldings | undefined, state: State, roomsOf?: (packages: string[]) => Place[]): Place[] {
+export function buildingsOf(h: DomainHoldings | undefined, state: State, roomsOf?: (packages: string[]) => Place[], flowOf?: (packages: string[]) => Place['flow']): Place[] {
   const all = h?.buildings ?? []
   const make = (id: string, label: string, n: number, question: string, shape = sizeOf(n), children: Place[] = []): Place =>
     ({ id, kind: 'building', shape, label, question, dashboard: null, state, children })
   // Its rooms, when the content gives them (the counters: one room per package, counters.ts).
-  const one = (b: { id: string; packages: string[] }) => make(b.id, b.id, b.packages.length,
-    `The ${b.id} building of ${h!.id}: ${b.packages.length} Go package${b.packages.length === 1 ? '' : 's'}.`, sizeOf(b.packages.length), roomsOf?.(b.packages) ?? [])
+  // Outside, one reading only (the engine's stage 4): the cars at its door, the building's requests a minute.
+  const one = (b: { id: string; packages: string[] }) => {
+    const flow = flowOf?.(b.packages)
+    return { ...make(b.id, b.id, b.packages.length,
+      `The ${b.id} building of ${h!.id}: ${b.packages.length} Go package${b.packages.length === 1 ? '' : 's'}.`, sizeOf(b.packages.length), roomsOf?.(b.packages) ?? []), ...(flow ? { flow } : {}) }
+  }
   const fits = (xs: { packages: string[] }[], extra: number) => xs.length + extra <= MOST && xs.reduce((u, b) => u + UNITS[sizeOf(b.packages.length)], 0) + extra <= MOST
   if (fits(all, 0)) return all.map(one)
   const kept: typeof all = []

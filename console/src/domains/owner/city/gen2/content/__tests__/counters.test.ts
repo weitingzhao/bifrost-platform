@@ -5,7 +5,7 @@
 // readings matched exactly, and nothing read as zero that was not measured.
 import { describe, expect, it } from 'vitest'
 import type { DomainHoldings } from '../domainOwns'
-import { counterRooms, readingsOf, routesByPackage } from '../counters'
+import { buildingFlow, COUNTER_QUERIES, counterRooms, readingsOf, routesByPackage } from '../counters'
 
 const holding = (id: string, buildings: { id: string; packages: string[] }[], routes: { method: string; path: string; handler: string }[] = []): DomainHoldings =>
   ({ id, packages: [], groups: [], paths: [], workloads: [], buildings, contract: { request_response: routes } })
@@ -48,5 +48,12 @@ describe('counter rooms', () => {
     const rooms = counterRooms(many, routes, 'online')
     expect(rooms.length).toBeLessThanOrEqual(16)
     expect(rooms.at(-1)).toMatchObject({ id: 'other', label: `Other · ${20 - (rooms.length - 1)}` })
+  })
+
+  // 2026-11-23, bifrost-ui 0.48.0 (fc7cf4f): outside, a building shows one reading, the cars at its door.
+  it('gives a building its requests a minute, summed by the engine, read from the requests rule; not read is null', () => {
+    const routes = routesByPackage(holdings, readingsOf([pt('GET', '/api/v1/lineage', 0.6), pt('GET', '/api/v1/ci/domains', 3)], []))
+    expect(buildingFlow(['pkg/lineage', 'pkg/server'], routes)).toEqual({ perMin: 3.6, source: COUNTER_QUERIES.perMin })
+    expect(buildingFlow(['pkg/lineage'], routesByPackage(holdings, readingsOf(null, null))).perMin).toBeNull()
   })
 })
