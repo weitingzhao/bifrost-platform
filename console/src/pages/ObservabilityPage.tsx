@@ -214,13 +214,14 @@ export function ObservabilityPage({
               {namespace}
             </span>
             <span className="ml-auto">
-              Layer B {viewModel.layerBStatus}
+              {/* Plain words (brand item 13, 2026-11-23): "Layer B" is the monitoring stack (Prometheus, Grafana). */}
+              <span title="Layer B: the cluster's monitoring stack">Monitoring stack {viewModel.layerBStatus}</span>
               {!viewModel.prometheusConfigured ? ' · Prometheus not configured' : ''}
             </span>
             {!viewModel.prometheusConfigured && !isLoading ? (
               <p className="m-0 w-full text-[var(--text-dense-caption)] text-muted-foreground">
-                Missing scrape data is shown as UNKNOWN / NOT OBSERVED — never as HEALTHY. Install Layer B
-                via Rocket → Cluster, then return here for system verdict.
+                Missing scrape data is shown as unknown or boundary — never as ok. Install the monitoring stack
+                via Rocket → Cluster, then come back here for the system verdict.
               </p>
             ) : null}
           </>

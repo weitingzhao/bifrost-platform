@@ -164,7 +164,7 @@ export function RocketHealthPage({
               className="focus-strip-link text-[var(--text-dense-caption)]"
               onClick={onOpenCluster}
             >
-              Cluster / Layer B
+              Cluster / monitoring stack
             </button>
           )}
           {onOpenObservability != null && (
