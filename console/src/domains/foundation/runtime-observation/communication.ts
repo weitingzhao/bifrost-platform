@@ -1,4 +1,4 @@
-import { evidenceThrough, STAGES, STAGE_LABEL, type CommunicationSnapshot } from '@bifrost/ui/communication'
+import { evidenceThrough, replyObservation, STAGES, STAGE_LABEL, type CommunicationSnapshot } from '@bifrost/ui/communication'
 import type { ObservationPanel } from '@bifrost/ui/city/observation'
 
 /** A projection of the shared ledger, not another collector or state machine. No hardware association is inferred. */
@@ -12,6 +12,9 @@ export function communicationPanels(snapshot: CommunicationSnapshot, at: string)
   ] }] }, ...evidenceThrough(snapshot.exchanges, at).map(exchange => ({
     id: exchange.channel + ':' + exchange.id, label: exchange.label,
     blocks: [{ kind: 'facts' as const, rows: [
+      { label: 'Reply observation', value: replyObservation(exchange, snapshot.coverage.updatedAt) },
+      { label: 'Reply to', value: exchange.replyTo ?? 'No explicit reference' },
+      { label: 'Linked replies', value: exchange.replies?.map(reply => `${reply.id} · ${reply.evidence.source} · ${reply.evidence.at}`).join('\n') || 'No evidence' },
       { label: 'Identity', value: exchange.channel + ':' + exchange.id },
       { label: 'From / to', value: `${exchange.from ?? 'Unknown'} / ${exchange.to ?? 'Unknown'}` },
       ...STAGES.map(stage => ({ label: STAGE_LABEL[stage], value: exchange.stages[stage]?.map(e => `${e.id} · ${e.source} · ${e.at}`).join('\n') || 'No evidence' })),
