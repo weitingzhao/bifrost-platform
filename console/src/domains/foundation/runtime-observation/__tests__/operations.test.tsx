@@ -17,6 +17,8 @@ describe('existing operations contracts', () => {
     expect(text).toContain('Succeeded')
     expect(text).toContain('0 waiting')
     expect(result.panels.ci).toHaveLength(1)
+    // 2026-11-23 (箭10, brand layer item 6): the domain wears the World table's glyph.
+    expect(result.panels.domains[0].glyph).toBe('chip')
     expect(result.evidence['domain:compute'][0].evaluatedAt).toBe(at)
     // Re-reading an old worker snapshot must not make its measurement fresh.
     expect(result.evidence['domain:compute'][0].expiresAt).toBe('2026-11-22T12:01:30.000Z')
@@ -28,6 +30,7 @@ describe('existing operations contracts', () => {
       return {generated_at:at,overall:'unknown',detail:'Source did not measure',lanes:[]}
     })
     expect(result.panels.domains).toHaveLength(14)
+    expect(result.panels.domains.every(p => p.glyph)).toBe(true)
     expect(result.evidence['domain:foundation'][0].outcome).toBe('error')
     expect(JSON.stringify(result.panels.data)).toContain('Source did not measure')
     expect(JSON.stringify(result.panels.ci)).toContain('No CI pipelines returned')

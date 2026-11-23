@@ -15,7 +15,7 @@ version: 1
 # means whoever needs a newer one changes this line (and, for infra, the copy
 # of its pipelines in api/internal/delivery/testdata in the same commit).
 pins:
-  bifrost-ui: {commit: 465784d493c92728774513a06da66f6ef1e251b7, advance: manual}
+  bifrost-ui: {commit: 45bfcf145ed43434c0e8033994f0ae428ca2feec, advance: manual}
   bifrost-trade-infra: {commit: 05fcba3821b4b85688ccefe5c1a3ef81d61e7b51, advance: manual}
 
 modules:

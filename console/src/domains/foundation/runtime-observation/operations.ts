@@ -5,6 +5,8 @@ import type { DataHusbandrySnapshot } from '@/domains/tenant/husbandry/api/dataH
 
 import { formatPipelineRunStatus } from '@/lib/delivery/pipelineRunAskPack'
 import { unknownNote } from './plain'
+// The one domain → glyph table (World line, brand layer item 6); read, never copied.
+import { DOMAIN_GLYPH } from '@/domains/owner/city/gen2/content/domainGlyphs'
 
 type Get = (path: string) => Promise<unknown>
 const DOMAINS = 'foundation plan lineage verification delivery approvals compute payload coordination crew station audit triage assembly'.split(' ')
@@ -39,14 +41,14 @@ export async function readOperations(get: Get) {
       const id = '@domains'
       const data = await read<DomainStatusResponse>(id, '/api/v1/catalog/status')
       if (!Array.isArray(data?.domains)) {
-        panels.domains = DOMAINS.map(name => ({ id: 'domain:' + name, label: name, blocks: [failure(id)] }))
+        panels.domains = DOMAINS.map(name => ({ id: 'domain:' + name, label: name, glyph: DOMAIN_GLYPH[name], blocks: [failure(id)] }))
         for (const p of panels.domains) evidence[p.id] = evidence[id]
         return
       }
       panels.domains = data.domains.map(d => {
         const key = 'domain:' + d.id
         evidence[key] = evidence[id]
-        return { id: key, label: d.id, blocks: [
+        return { id: key, label: d.id, glyph: DOMAIN_GLYPH[d.id], blocks: [
           { kind: 'facts', rows: (['alive', 'interfaces', 'boundary', 'fresh'] as const).map(k => ({ label: k === 'alive' ? 'Services' : k, value: { text: d[k]?.value ?? 'unknown', tone: tone(d[k]?.value ?? 'unknown'), title: d[k]?.why } })) },
           note(d.alive?.why ?? 'Service coverage unknown'),
           ...(['interfaces', 'boundary', 'fresh'] as const).filter(k => d[k]?.value !== 'good').map(k => note(k + ': ' + (d[k]?.why ?? 'Not measured'))),
