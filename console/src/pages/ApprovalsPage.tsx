@@ -527,20 +527,13 @@ function ApprovalCard({
   )
 }
 
-type InlineGpuShutdown = {
-  requestId: string
-  onDecision: (record: ApprovalItem) => void
-  onClose: () => void
-}
-
-/** The same decision writer serves the request page and the Command shutdown dialog. */
-export function ApprovalsPage({ inlineGpuShutdown }: { inlineGpuShutdown?: InlineGpuShutdown } = {}) {
+/** The request page, `#approvals?id=<id>`: the only place to approve or reject. */
+export function ApprovalsPage() {
   useDecisionPageResume()
   const qc = useQueryClient()
   const auth = usePlatformAuth()
   const blocked = decisionBlockReason(auth)
-  const routeId = useDeepLinkId()
-  const id = inlineGpuShutdown?.requestId ?? routeId
+  const id = useDeepLinkId()
   const recordId = qc.getQueryData<ApprovalItem>(['approvals', 'item', id])?.id ?? id
   const [busy, setBusy] = useRecordState(recordId, false)
   const [sending, setSending] = useRecordState<'approve' | 'reject' | null>(recordId, null)
@@ -551,8 +544,8 @@ export function ApprovalsPage({ inlineGpuShutdown }: { inlineGpuShutdown?: Inlin
   const [closeError, setCloseError] = useRecordState<string | null>(recordId, null)
   const [closeNotice, setCloseNotice] = useRecordState<string | null>(recordId, null)
   const staleBuild = useConsoleBuildDrift()
-  const latest = useRef({ auth, staleBuild, inlineGpuShutdown })
-  latest.current = { auth, staleBuild, inlineGpuShutdown }
+  const latest = useRef({ auth, staleBuild })
+  latest.current = { auth, staleBuild }
   const postsInFlight = useRef(0)
   const [reloadHeld, setReloadHeld] = useState(false)
 
@@ -574,14 +567,10 @@ export function ApprovalsPage({ inlineGpuShutdown }: { inlineGpuShutdown?: Inlin
     },
   })
   const opened = id == null ? null : (itemQ.data ?? null)
-  const reviewedGpuShutdown = inlineGpuShutdown != null && opened?.id === inlineGpuShutdown.requestId &&
-    opened.action === 'poweroff_compute_node' && opened.params?.name === 'gpu-server' &&
-    opened.tier === 'D' && opened.runner === 'platform' && !opened.drill &&
-    !!opened.approval_line && !!opened.params_hash
   const allQ = useQuery({
     queryKey: ['approvals', 'all'],
     queryFn: () => fetchApprovalList('all'),
-    enabled: id != null && inlineGpuShutdown == null,
+    enabled: id != null,
     retry: false,
   })
 
@@ -609,7 +598,6 @@ export function ApprovalsPage({ inlineGpuShutdown }: { inlineGpuShutdown?: Inlin
         setCheckingId(null)
         locks.current.set(recordId, false)
         setBusy(false)
-        if (confirmed != null && confirmed.status !== 'pending') latest.current.inlineGpuShutdown?.onDecision(confirmed)
       } catch {
         if (!cancelled) {
           setNotice(`Could not read this request. Last attempt: ${new Date().toLocaleString()}. Refresh this page to check again.`)
@@ -629,7 +617,6 @@ export function ApprovalsPage({ inlineGpuShutdown }: { inlineGpuShutdown?: Inlin
   }
   async function decide(requestId: string, path: 'approve' | 'reject', reason?: string) {
     if (decisionBlockReason(auth) != null || locks.current.get(recordId)) return
-    if (inlineGpuShutdown && (!reviewedGpuShutdown || opened.id !== requestId || opened.status !== 'pending' || itemQ.isError || itemQ.isPaused)) return
     if (latest.current.staleBuild) {
       // Say what the banner says: with no decision in flight the page can be reloaded now.
       setNotice(postsInFlight.current > 0 ? DECISION_AFTER_RELOAD : NEWER_CONSOLE_BANNER)
@@ -654,15 +641,13 @@ export function ApprovalsPage({ inlineGpuShutdown }: { inlineGpuShutdown?: Inlin
               channel: 'console',
               approval_line: opened?.approval_line ?? '',
               params_hash: opened?.params_hash ?? '',
-              ...((inlineGpuShutdown || confirmsNumber(opened?.action) || opened?.action === 'supersede_agent_tasks') ? { confirm_number: opened?.number } : {}),
+              ...((confirmsNumber(opened?.action) || opened?.action === 'supersede_agent_tasks') ? { confirm_number: opened?.number } : {}),
             }
           : { reason: reason ?? '' },
       )), setNotice)
       if (decision.status != null && decision.status !== 'pending' && opened != null) {
-        const updated = { ...opened, ...decision, ...(inlineGpuShutdown && path === 'reject' ? { reject_reason: reason } : {}) }
-        storeRecord(id, updated)
+        storeRecord(id, { ...opened, ...decision })
         void qc.invalidateQueries({ queryKey: ['approvals'] })
-        inlineGpuShutdown?.onDecision(updated)
       } else {
         needsCheck = true
         setNotice('Checking the decision result.')
@@ -719,31 +704,6 @@ export function ApprovalsPage({ inlineGpuShutdown }: { inlineGpuShutdown?: Inlin
       locks.current.set(recordId, false)
       setBusy(false)
     }
-  }
-
-  if (inlineGpuShutdown) {
-    const pending = reviewedGpuShutdown && opened.status === 'pending'
-    const canDecide = pending && blocked == null && !busy && !staleBuild && !itemQ.isError && !itemQ.isPaused
-    return <div className="flex min-w-0 flex-col gap-3">
-      <ConsoleBuildBanner stale={staleBuild} holdReload={reloadHeld} />
-      {itemQ.isLoading && <p role="status" className="m-0 text-sm">Preparing shutdown…</p>}
-      {(itemQ.isError || itemQ.isPaused) && <p role="alert" className="m-0 text-sm">Could not read the shutdown request.</p>}
-      {reviewedGpuShutdown && pending && <p className="m-0 break-words text-xs text-muted-foreground">{opened.approval_line}</p>}
-      {reviewedGpuShutdown && !pending && <p role="status" className="m-0 text-sm">{statusInPlainWords(opened.status)}</p>}
-      {opened != null && !reviewedGpuShutdown && <p role="alert" className="m-0 text-sm">Could not verify this 4090 shutdown.</p>}
-      {blocked && <p role="status" className="m-0 text-sm">{blocked}</p>}
-      {notice && <p role="status" className="m-0 text-sm">{notice}</p>}
-      {actionError && <p role="alert" className="m-0 text-sm text-destructive">{actionError}</p>}
-      <div className="flex flex-wrap justify-end gap-2 [&_button]:min-h-11">
-        <Button type="button" variant="outline" disabled={busy || itemQ.isLoading} onClick={() => {
-          if (canDecide) void decide(opened.id, 'reject', 'Canceled from Command.')
-          else inlineGpuShutdown.onClose()
-        }}>{canDecide ? 'Cancel' : 'Close'}</Button>
-        <Button type="button" variant="destructive" disabled={!canDecide} onClick={() => void decide(inlineGpuShutdown.requestId, 'approve')}>
-          {sending === 'approve' ? 'Confirming…' : 'Confirm shutdown'}
-        </Button>
-      </div>
-    </div>
   }
 
   return (

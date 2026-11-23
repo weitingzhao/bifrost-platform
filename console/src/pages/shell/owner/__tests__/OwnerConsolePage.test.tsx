@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TelemetryAlertEntry } from '@/api/clusterTypes'
 import { splitAlerts } from '../ownerModel'
@@ -29,14 +29,6 @@ vi.mock('@/components/ConfirmDialog', () => ({
       <button type="button" onClick={onConfirm}>{confirmLabel}</button>
     </div>
   ),
-}))
-vi.mock('@bifrost/ui', async importOriginal => ({
-  ...(await importOriginal<typeof import('@bifrost/ui')>()),
-  Dialog: ({ open, children }: { open: boolean; children: ReactNode }) => open && children,
-  DialogContent: ({ children }: { children: ReactNode }) => <section role="dialog">{children}</section>,
-  DialogHeader: ({ children }: { children: ReactNode }) => <header>{children}</header>,
-  DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
-  DialogDescription: ({ children }: { children: ReactNode }) => <p>{children}</p>,
 }))
 
 const NOW = Date.parse('2026-10-16T20:10:43Z')
@@ -234,7 +226,8 @@ describe('Owner Console entries', () => {
   })
 
   // 2026-11-22 owner feedback: clicking the power button did not show what was still waiting.
-  it('confirms shutdown in the same dialog and tracks execution before reporting offline', async () => {
+  // #697 still notified the Owner before consent. Confirm must be the only click that creates and approves the card.
+  it('starts and approves the exact shutdown from one confirmation, then tracks the node', async () => {
     gpuReady.value = true
     let status = 'pending'
     const fetcher = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
@@ -255,19 +248,18 @@ describe('Owner Console entries', () => {
     const power = within(screen.getByRole('region', { name: '4090 power' }))
     expect(power.getByRole('button', { name: 'Wake' })).toBeDisabled()
     fireEvent.click(power.getByRole('button', { name: 'Shut down' }))
-    const dialog = within(await screen.findByRole('dialog'))
-    expect(dialog.getByRole('heading', { name: 'Shut down 4090?' })).toBeInTheDocument()
-    expect(await dialog.findByText('#695 · Shut down gpu-server')).toBeInTheDocument()
-    const request = fetcher.mock.calls.find(([url, options]) => url === '/api/v1/approvals' && options?.method === 'POST')
-    expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({ action: 'poweroff_compute_node', params: { name: 'gpu-server' } })
+    const dialog = within(await screen.findByRole('dialog', { name: 'Shut down 4090?' }))
+    expect(fetcher).not.toHaveBeenCalledWith('/api/v1/approvals', expect.objectContaining({ method: 'POST' }))
     expect(fetcher).not.toHaveBeenCalledWith('/api/v1/approvals/appr_gpu/approve', expect.anything())
-    expect(fetcher).not.toHaveBeenCalledWith('/api/v1/cluster/nodes/gpu-server/poweroff', expect.anything())
     fireEvent.click(dialog.getByRole('button', { name: 'Confirm shutdown' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(await power.findByText('Approved')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(window.location.hash).toBe('#command')
+    const request = fetcher.mock.calls.find(([url, options]) => url === '/api/v1/approvals' && options?.method === 'POST')
+    expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({ action: 'poweroff_compute_node', params: { name: 'gpu-server' }, inline_gpu_shutdown: true })
     const approval = fetcher.mock.calls.find(([url]) => url === '/api/v1/approvals/appr_gpu/approve')
     expect(JSON.parse(String(approval?.[1]?.body))).toEqual({ channel: 'console', params_hash: 'fixture-params-hash', approval_line: '#695 · Shut down gpu-server', confirm_number: 695 })
-    expect(power.getByRole('status')).toHaveTextContent('Approved')
+    expect(fetcher).not.toHaveBeenCalledWith('/api/v1/cluster/nodes/gpu-server/poweroff', expect.anything())
     for (const [next, label] of [['running', 'Shutting down'], ['executed', 'Waiting for offline']]) {
       status = next
       await act(async () => { await page.client.refetchQueries({ queryKey: ['approvals', 'item', 'appr_gpu'] }) })
@@ -279,30 +271,35 @@ describe('Owner Console entries', () => {
     expect(power.getByRole('button', { name: 'Wake' })).toBeEnabled()
   })
 
-  // 2026-11-22 owner feedback: abandoning the inline confirmation must not leave a pending shutdown to approve elsewhere.
-  it('cancels the prepared shutdown without sending an approval', async () => {
+  // #697: canceling the dialog must not create a waiting ticket or a notification.
+  it('cancels locally before creating a shutdown request', () => {
     gpuReady.value = true
-    let status = 'pending'
-    const fetcher = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
-      const url = String(input)
-      if (url === '/api/v1/approvals' && options?.method === 'POST') {
-        return new Response(JSON.stringify({ id: 'appr_gpu', tier: 'D' }), { status: 201 })
-      }
-      if (url === '/api/v1/approvals/appr_gpu') return json({ ...gpuApproval(status), reject_reason: status === 'rejected' ? 'Canceled from Command.' : '' })
-      if (url === '/api/v1/approvals/appr_gpu/reject') {
-        status = 'rejected'
-        return json({ id: 'appr_gpu', status })
-      }
-      return json({})
+    const fetcher = vi.fn(async () => json({}))
+    vi.stubGlobal('fetch', fetcher)
+    show('#command', admin)
+    const power = within(screen.getByRole('region', { name: '4090 power' }))
+    fireEvent.click(power.getByRole('button', { name: 'Shut down' }))
+    const dialog = within(screen.getByRole('dialog', { name: 'Shut down 4090?' }))
+    fireEvent.click(dialog.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(fetcher).not.toHaveBeenCalledWith('/api/v1/approvals', expect.objectContaining({ method: 'POST' }))
+    expect(fetcher).not.toHaveBeenCalledWith('/api/v1/approvals/appr_gpu/approve', expect.anything())
+  })
+
+  // The same-click decision must apply only to the node named in the confirmation.
+  it('stops if the server returns a different shutdown target', async () => {
+    gpuReady.value = true
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/v1/approvals') return new Response(JSON.stringify({ id: 'appr_gpu', tier: 'D' }), { status: 201 })
+      return json({ ...gpuApproval('pending'), params: { name: 'another-node' } })
     })
     vi.stubGlobal('fetch', fetcher)
     show('#command', admin)
     const power = within(screen.getByRole('region', { name: '4090 power' }))
     fireEvent.click(power.getByRole('button', { name: 'Shut down' }))
-    const dialog = within(await screen.findByRole('dialog'))
-    fireEvent.click(await dialog.findByRole('button', { name: 'Cancel' }))
-    expect(await power.findByText('Shutdown canceled')).toBeInTheDocument()
-    expect(fetcher).toHaveBeenCalledWith('/api/v1/approvals/appr_gpu/reject', expect.objectContaining({ method: 'POST' }))
+    const dialog = within(screen.getByRole('dialog', { name: 'Shut down 4090?' }))
+    fireEvent.click(dialog.getByRole('button', { name: 'Confirm shutdown' }))
+    expect(await power.findByText('Could not confirm shutdown')).toBeInTheDocument()
     expect(fetcher).not.toHaveBeenCalledWith('/api/v1/approvals/appr_gpu/approve', expect.anything())
   })
 

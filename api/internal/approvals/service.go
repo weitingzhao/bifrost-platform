@@ -164,7 +164,8 @@ type createInput struct {
 	Thread    string
 	WorkID    string
 	// Drill: a request that is never approved (Approval.Drill).
-	Drill bool
+	Drill             bool
+	InlineGPUShutdown bool
 }
 
 var workIDPattern = regexp.MustCompile(`^(W-[0-9]+|TD-[0-9]+|LANE-[A-Za-z0-9-]+)$`)
@@ -277,24 +278,25 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 	desc := act.Describe(ctx, norm, reason)
 	now := s.clock()
 	rec := Approval{
-		ID:              newID(),
-		Action:          act.ID,
-		Tier:            string(tier),
-		Params:          norm,
-		ParamsHash:      hash,
-		Status:          StatusPending,
-		Reason:          reason,
-		Rollback:        rollback,
-		Requester:       requester,
-		CreatedAt:       now,
-		ExpiresAt:       now.Add(ttl),
-		Env:             desc.Env,
-		Summary:         desc.Summary,
-		KeyParams:       desc.KeyParams,
-		Runner:          act.RunnerOf(norm),
-		RequesterThread: thread,
-		WorkID:          work,
-		Drill:           in.Drill,
+		ID:                newID(),
+		Action:            act.ID,
+		Tier:              string(tier),
+		Params:            norm,
+		ParamsHash:        hash,
+		Status:            StatusPending,
+		Reason:            reason,
+		Rollback:          rollback,
+		Requester:         requester,
+		CreatedAt:         now,
+		ExpiresAt:         now.Add(ttl),
+		Env:               desc.Env,
+		Summary:           desc.Summary,
+		KeyParams:         desc.KeyParams,
+		Runner:            act.RunnerOf(norm),
+		RequesterThread:   thread,
+		WorkID:            work,
+		Drill:             in.Drill,
+		InlineGPUShutdown: in.InlineGPUShutdown,
 	}
 	s.mu.Lock()
 	openKey := s.openKey

@@ -3,11 +3,49 @@ package approvals
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 )
+
+// #697 reached the Owner as a second prompt while the Console confirmation was
+// still in flight. Give the one GPU confirmation a short window to settle.
+func TestInlineGPUShutdownDefersOnlyThePendingNotice(t *testing.T) {
+	f := relay(t)
+	svc, _, _ := twoPods(t)
+	base := time.Date(2026, 11, 22, 20, 0, 0, 0, time.UTC)
+	at := base
+	svc.SetClock(func() time.Time { return at })
+	create := func(role actuation.Role, name string) int {
+		body := `{"inline_gpu_shutdown":true,"action":"poweroff_compute_node","reason":"Confirm shutdown","params":{"name":"` + name + `"}}`
+		req := httptest.NewRequest(http.MethodPost, "/approvals", strings.NewReader(body))
+		w := httptest.NewRecorder()
+		svc.HandleCreate(w, req.WithContext(actuation.WithPrincipal(req.Context(), actuation.Principal{Role: role})))
+		return w.Code
+	}
+	if got := create(actuation.RoleOperator, "gpu-server"); got != http.StatusForbidden {
+		t.Fatalf("operator inline create = %d", got)
+	}
+	if got := create(actuation.RoleAdmin, "another-node"); got != http.StatusForbidden {
+		t.Fatalf("other node inline create = %d", got)
+	}
+	if got := create(actuation.RoleAdmin, "gpu-server"); got != http.StatusCreated {
+		t.Fatalf("GPU inline create = %d", got)
+	}
+	svc.NotifyCreated(context.Background())
+	if n := len(f.got()); n != 0 {
+		t.Fatalf("the confirmation still in flight notified %d time(s)", n)
+	}
+	at = base.Add(createdFallbackAfter)
+	svc.notifyCreated(context.Background(), createdFallbackAfter)
+	if n := len(f.got()); n != 1 {
+		t.Fatalf("the unfinished approval should still notify, got %d", n)
+	}
+}
 
 // Origin: 2026-11-18, the first notice of a card moves to the bus: the Owner's
 // phone rang twice for each card while both paths ran. Whoever gets there, the

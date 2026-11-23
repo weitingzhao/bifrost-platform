@@ -82,6 +82,9 @@ func (s *Service) deliverReminder(ctx context.Context, kind string, rec Approval
 const createdFallbackAfter = 30 * time.Second
 
 func createdDue(a Approval, now time.Time) bool {
+	if a.InlineGPUShutdown && now.Sub(a.CreatedAt) < createdFallbackAfter {
+		return false
+	}
 	return a.Status == StatusPending && now.Before(a.ExpiresAt) && !reminderHeld(a, approvalnotify.KindCreated, now)
 }
 

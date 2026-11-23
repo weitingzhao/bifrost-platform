@@ -74,9 +74,12 @@ type Approval struct {
 	// §20.3 rule 8, §20.5 scenario 9; W-31 2.5 gap 2, Owner 2026-10-21): it
 	// is never approved (approve answers 409), so it never runs; it says so
 	// in its notice and is sent no reminder. It can be rejected to close it.
-	Drill      bool       `json:"drill,omitempty"`
-	Execution  *Execution `json:"execution,omitempty"`
-	Deliveries []Delivery `json:"deliveries,omitempty"`
+	Drill bool `json:"drill,omitempty"`
+	// A Console admin is sending the exact GPU approval in the same interaction.
+	// Only the first notice is delayed, and only while the card is pending.
+	InlineGPUShutdown bool       `json:"inline_gpu_shutdown,omitempty"`
+	Execution         *Execution `json:"execution,omitempty"`
+	Deliveries        []Delivery `json:"deliveries,omitempty"`
 	// extra is the JSON object keys this binary does not know. The store
 	// writes them back. They are not part of the API.
 	extra map[string]json.RawMessage

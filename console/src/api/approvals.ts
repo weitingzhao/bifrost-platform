@@ -258,6 +258,7 @@ export type ApprovalCreateBody = {
   params?: Record<string, unknown>
   reason: string
   rollback?: string
+  inlineGpuShutdown?: boolean
 }
 
 /** Classified outcome of POST /api/v1/approvals. Tier B is `direct` (call the route). */
@@ -287,6 +288,7 @@ export async function createApprovalRequest(body: ApprovalCreateBody): Promise<A
       params: body.params ?? {},
       reason: body.reason,
       rollback: body.rollback ?? '',
+      ...(body.inlineGpuShutdown ? { inline_gpu_shutdown: true } : {}),
     }),
   })
   let parsed: Record<string, unknown>

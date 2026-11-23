@@ -1,17 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@bifrost/ui'
+import { Button } from '@bifrost/ui'
 import { LoaderCircle, Power, Zap } from 'lucide-react'
-import { createApprovalRequest, fetchApproval, type ApprovalItem } from '@/api/approvals'
+import { approvalFailureStatus, createApprovalRequest, fetchApproval, postApprovalDecision, type ApprovalItem } from '@/api/approvals'
 import { wakeComputeNode } from '@/api/clusterActuation'
 import type { ClusterNode } from '@/api/clusterTypes'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { approvalHref } from '@/lib/shell/consoleRoutes'
-import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { keepApprovalDecision } from '@/pages/approvalDecision'
-import { decisionBlockReason } from '@/pages/decisionSignIn'
+import { withDecisionContact } from '@/pages/decisionContact'
+import { DECISION_REJECTED, decisionBlockReason, scrubSecret } from '@/pages/decisionSignIn'
 import { useDecisionEnvironment } from '@/pages/useDecisionEnvironment'
+import { NEWER_CONSOLE_BANNER } from '@/pwa/consoleBuild'
+import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
 import { Dot } from './OwnerParts'
 import { current, errorText } from './useOwnerYours'
 
@@ -22,7 +24,7 @@ const RECENT_SHUTDOWN_MS = 15 * 60_000
 const REFRESH_MS = 5_000
 
 function isGpuShutdown(card: ApprovalItem) {
-  return card.action === SHUTDOWN_ACTION && card.params?.name === GPU_NODE && !card.drill
+  return card.action === SHUTDOWN_ACTION && card.params?.name === GPU_NODE && Object.keys(card.params).length === 1 && !card.drill
 }
 
 function activeShutdown(status?: string) {
@@ -43,7 +45,7 @@ type Progress = { title: string; detail?: string; tone: 'busy' | 'waiting' | 'ok
 
 function describeShutdown(card: ApprovalItem, offline: boolean, overdue: boolean): Progress {
   switch (card.status) {
-    case 'pending': return { title: 'Awaiting confirmation', tone: 'waiting' }
+    case 'pending': return { title: 'Awaiting confirmation', detail: 'Confirm from Shut down on this page.', tone: 'waiting' }
     case 'approved': return { title: 'Approved', detail: 'Waiting for the platform to start shutdown.', tone: 'busy' }
     case 'running': return { title: 'Shutting down', detail: 'The platform is checking for active work before powering off.', tone: 'busy' }
     case 'executed':
@@ -67,10 +69,14 @@ export function OwnerGpuPower({ nodes, openApprovals, recentApprovals, now }: {
 }) {
   const auth = usePlatformAuth()
   const environment = useDecisionEnvironment()
+  const staleBuild = useConsoleBuildDrift()
   const queryClient = useQueryClient()
+  const latest = useRef({ auth, environment, staleBuild })
+  latest.current = { auth, environment, staleBuild }
+  const shutdownLocked = useRef(false)
   const [confirmWake, setConfirmWake] = useState(false)
   const [confirmShutdown, setConfirmShutdown] = useState(false)
-  const [reviewId, setReviewId] = useState<string>()
+  const [shutdownNotice, setShutdownNotice] = useState<string | null>(null)
   const [requestedId, setRequestedId] = useState<string>()
   const [expiredDeadline, setExpiredDeadline] = useState(0)
   const node = nodes.find(candidate => candidate.name === GPU_NODE && candidate.compute_managed)
@@ -86,21 +92,52 @@ export function OwnerGpuPower({ nodes, openApprovals, recentApprovals, now }: {
     },
   })
   const shutdown = useMutation({
-    mutationFn: async () => {
-      const response = await createApprovalRequest({
-        action: SHUTDOWN_ACTION,
-        params: { name: GPU_NODE },
-        reason: `Power off ${GPU_NODE}`,
-        rollback: 'Wake the 4090 from Command.',
-      })
-      if (response.kind !== 'pending') {
-        throw new Error(response.kind === 'error' ? response.error : 'The platform did not return a shutdown approval.')
+    mutationFn: ({ session, pendingId }: { session: string; pendingId?: string }) => withDecisionContact(async () => {
+      const assertConfirmedSession = () => {
+        const current = latest.current
+        if (current.staleBuild) throw new Error(NEWER_CONSOLE_BANNER)
+        if (current.environment !== 'PROD' || current.auth.token !== session || decisionBlockReason(current.auth) != null) {
+          throw new Error('Your sign-in changed. Confirm shutdown again.')
+        }
       }
-      return response.id
-    },
-    onSuccess: id => {
+      assertConfirmedSession()
+      let id = pendingId
+      if (id == null) {
+        const response = await createApprovalRequest({
+          action: SHUTDOWN_ACTION,
+          params: { name: GPU_NODE },
+          reason: 'Confirmed 4090 shutdown in the Ops Console.',
+          rollback: 'Wake the 4090 from Command.',
+          inlineGpuShutdown: true,
+        })
+        if (response.kind !== 'pending') {
+          throw new Error(response.kind === 'error' ? response.error : 'The platform could not prepare the shutdown.')
+        }
+        id = response.id
+      }
       setRequestedId(id)
+      const requestId = id
+      const record = await queryClient.fetchQuery({ queryKey: ['approvals', 'item', requestId], queryFn: () => fetchApproval(requestId), retry: false })
+      if (record.id !== id || !isGpuShutdown(record) || record.tier !== 'D' || record.runner !== 'platform' ||
+          !record.approval_line || !record.params_hash || !record.number) {
+        throw new Error('The platform did not return the confirmed 4090 shutdown.')
+      }
+      if (record.status !== 'pending') return record
+      assertConfirmedSession()
+      const decision = await postApprovalDecision(id, session, 'approve', {
+        channel: 'console', approval_line: record.approval_line, params_hash: record.params_hash, confirm_number: record.number,
+      })
+      return { ...record, ...decision }
+    }, setShutdownNotice),
+    onSuccess: record => {
+      queryClient.setQueryData(['approvals', 'item', record.id], previous => keepApprovalDecision(previous, record))
+    },
+    onError: failure => {
+      if ([401, 403].includes(approvalFailureStatus(failure) ?? 0)) auth.refreshCapabilities()
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ['approvals'] })
+      shutdownLocked.current = false
     },
   })
   const wakeInView = wake.isPending || wake.isSuccess || wake.isError
@@ -138,27 +175,22 @@ export function OwnerGpuPower({ nodes, openApprovals, recentApprovals, now }: {
 
   const changingPower = shutdown.isPending || approvalPending || wake.isPending || ((awaitWake || awaitShutdown) && !overdue)
   const canWake = auth.canOperate && node != null && !online && !changingPower
-  const canShutdown = environment === 'PROD' && decisionBlockReason(auth) == null &&
+  const canShutdown = !shutdown.isPending && !staleBuild && environment === 'PROD' && decisionBlockReason(auth) == null &&
     (card?.status === 'pending' || (online && !changingPower))
-  const dialogId = reviewId ?? shutdown.data
-  function openShutdown() {
-    if (!canShutdown) return
-    setConfirmShutdown(true)
-    if (card?.status === 'pending') {
-      setReviewId(card.id)
-    } else {
-      setReviewId(undefined)
-      wake.reset()
-      shutdown.mutate()
-    }
-  }
-  function finishShutdown(record: ApprovalItem) {
-    setRequestedId(record.id)
+  function submitShutdown() {
     setConfirmShutdown(false)
+    if (!canShutdown || shutdownLocked.current) return
+    shutdownLocked.current = true
+    wake.reset()
+    shutdown.mutate({ session: auth.token, pendingId: card?.status === 'pending' ? card.id : undefined })
   }
   let progress: Progress | undefined
-  if (shutdown.isPending) progress = { title: 'Requesting shutdown', tone: 'busy' }
-  else if (shutdown.isError) progress = { title: 'Request failed', detail: errorText(shutdown.error) ?? undefined, tone: 'fail' }
+  if (shutdown.isPending) progress = { title: 'Starting shutdown', detail: shutdownNotice ?? undefined, tone: 'busy' }
+  else if (shutdown.isError && (card == null || card.status === 'pending')) {
+    const status = approvalFailureStatus(shutdown.error)
+    const detail = status === 401 || status === 403 ? DECISION_REJECTED : scrubSecret(errorText(shutdown.error) ?? 'Please try again.', auth.token)
+    progress = { title: 'Could not confirm shutdown', detail, tone: 'fail' }
+  }
   else if (approvalId && (approval.isError || approval.isPaused)) progress = { title: 'Approval status unavailable', detail: 'Open the request to check its status.', tone: 'waiting' }
   else if (card) progress = describeShutdown(card, offline, overdue)
   else if (approvalId) progress = { title: 'Preparing confirmation', tone: 'waiting' }
@@ -179,7 +211,7 @@ export function OwnerGpuPower({ nodes, openApprovals, recentApprovals, now }: {
       <Button type="button" variant="outline" size="sm" disabled={!canWake} onClick={() => setConfirmWake(true)}>
         <Zap size={16} aria-hidden="true" /> Wake
       </Button>
-      <Button type="button" variant="outline" size="sm" disabled={!canShutdown} onClick={openShutdown}>
+      <Button type="button" variant="outline" size="sm" disabled={!canShutdown} onClick={() => setConfirmShutdown(true)}>
         <Power size={16} aria-hidden="true" /> Shut down
       </Button>
     </div>
@@ -205,18 +237,13 @@ export function OwnerGpuPower({ nodes, openApprovals, recentApprovals, now }: {
       }}
       onCancel={() => setConfirmWake(false)}
     />}
-    {confirmShutdown && <Dialog open>
-      <DialogContent showCloseButton={false} onEscapeKeyDown={event => event.preventDefault()} onInteractOutside={event => event.preventDefault()}>
-        <DialogHeader>
-          <DialogTitle>Shut down 4090?</DialogTitle>
-          <DialogDescription>The platform checks for active work before shutting down the 4090.</DialogDescription>
-        </DialogHeader>
-        {dialogId ? <ApprovalsPage inlineGpuShutdown={{ requestId: dialogId, onDecision: finishShutdown, onClose: () => setConfirmShutdown(false) }} />
-          : shutdown.isError ? <div className="flex flex-col items-start gap-2">
-            <p role="alert" className="m-0 text-sm text-destructive">{errorText(shutdown.error)}</p>
-            <Button type="button" variant="outline" onClick={() => setConfirmShutdown(false)}>Close</Button>
-          </div> : <p role="status" className="m-0 text-sm">Preparing shutdown…</p>}
-      </DialogContent>
-    </Dialog>}
+    {confirmShutdown && <ConfirmDialog
+      open
+      title="Shut down 4090?"
+      message="Confirm to shut down gpu-server if the platform finds no active work."
+      confirmLabel="Confirm shutdown"
+      onConfirm={submitShutdown}
+      onCancel={() => setConfirmShutdown(false)}
+    />}
   </section>
 }

@@ -4936,9 +4936,9 @@
         "console/src/hooks/usePlatformAuth.ts",
         "console/src/lib/observability",
         "console/src/lib/shell",
-        "console/src/pages/ApprovalsPage.tsx",
         "console/src/pages/SatelliteHealthPage.tsx",
         "console/src/pages/approvalDecision.ts",
+        "console/src/pages/decisionContact.ts",
         "console/src/pages/decisionSignIn.ts",
         "console/src/pages/shell/agents",
         "console/src/pages/shell/agents/WorkPlanView.tsx",
@@ -4947,7 +4947,8 @@
         "console/src/pages/shell/progress",
         "console/src/pages/shell/releases",
         "console/src/pages/shell/services",
-        "console/src/pages/useDecisionEnvironment.ts"
+        "console/src/pages/useDecisionEnvironment.ts",
+        "console/src/pwa"
       ],
       "test_imports": [
         "console/src/api",

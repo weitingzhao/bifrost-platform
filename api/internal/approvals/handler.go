@@ -50,27 +50,34 @@ func Mount(r chi.Router, auth *actuation.AuthService, svc *Service) {
 
 func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Action          string         `json:"action"`
-		Params          map[string]any `json:"params"`
-		Reason          string         `json:"reason"`
-		Rollback        string         `json:"rollback"`
-		RequesterThread string         `json:"requester_thread"`
-		WorkID          string         `json:"work_id"`
-		Drill           bool           `json:"drill"`
+		Action            string         `json:"action"`
+		Params            map[string]any `json:"params"`
+		Reason            string         `json:"reason"`
+		Rollback          string         `json:"rollback"`
+		RequesterThread   string         `json:"requester_thread"`
+		WorkID            string         `json:"work_id"`
+		Drill             bool           `json:"drill"`
+		InlineGPUShutdown bool           `json:"inline_gpu_shutdown"`
 	}
 	if err := decode(r, &body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	if body.InlineGPUShutdown && (actuation.PrincipalFromContext(r.Context()).Role != actuation.RoleAdmin ||
+		body.Action != "poweroff_compute_node" || len(body.Params) != 1 || body.Params["name"] != "gpu-server" || body.Drill) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "inline confirmation is only available to an admin shutting down gpu-server"})
+		return
+	}
 	res := s.createWith(r.Context(), createInput{
-		Requester: requester(r),
-		Action:    body.Action,
-		Reason:    body.Reason,
-		Rollback:  body.Rollback,
-		Params:    body.Params,
-		Thread:    body.RequesterThread,
-		WorkID:    body.WorkID,
-		Drill:     body.Drill,
+		Requester:         requester(r),
+		Action:            body.Action,
+		Reason:            body.Reason,
+		Rollback:          body.Rollback,
+		Params:            body.Params,
+		Thread:            body.RequesterThread,
+		WorkID:            body.WorkID,
+		Drill:             body.Drill,
+		InlineGPUShutdown: body.InlineGPUShutdown,
 	})
 	if res.Status == http.StatusCreated {
 		a := res.Approval
