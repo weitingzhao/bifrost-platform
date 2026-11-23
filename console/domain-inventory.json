@@ -6,6 +6,7 @@
       "path": "console/src",
       "files": [
         "console/src/App.tsx",
+        "console/src/domains/foundation/catalog/api/domainStatus.test.ts",
         "console/src/domains/foundation/catalog/api/domainStatus.ts",
         "console/src/domains/foundation/ledger/__tests__/ledger.test.tsx",
         "console/src/index.css",
@@ -14,7 +15,6 @@
       ],
       "imports": [
         "console/src/api/client.ts",
-        "console/src/api/serverContact.ts",
         "console/src/domains/foundation/bus",
         "console/src/hooks/PlatformAuthProvider.tsx",
         "console/src/pages/ConsolePage.tsx",

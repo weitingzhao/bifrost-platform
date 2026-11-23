@@ -1,4 +1,3 @@
-import { serverFetch } from '@/api/serverContact'
 import { authedFetch, parseError } from '@/api/client'
 
 /** One light: good, problem, bad or unknown, and the numbers it was read from. */
@@ -72,7 +71,7 @@ export type CatalogClass = { class: string; what: string; check: 'scanned' | 're
 export type CatalogIndexResponse = { classes: CatalogClass[]; scanned?: number; registry_only?: number; unseen?: number }
 
 export async function fetchCatalogIndex(): Promise<CatalogIndexResponse> {
-  const r = await serverFetch('/api/v1/catalog/index')
+  const r = await authedFetch('catalog index', '/api/v1/catalog/index')
   if (!r.ok) throw await parseError('catalog index', r)
   const v = (await r.json()) as CatalogIndexResponse
   if (v == null || !Array.isArray(v.classes)) throw new Error('catalog index: incomplete answer')
@@ -91,7 +90,7 @@ export type DomainPage = {
 }
 
 export async function fetchDomainPage(id: string): Promise<DomainPage> {
-  const r = await serverFetch(`/api/v1/catalog/domain?id=${encodeURIComponent(id)}`)
+  const r = await authedFetch('domain page', `/api/v1/catalog/domain?id=${encodeURIComponent(id)}`)
   if (!r.ok) throw await parseError('domain page', r)
   return (await r.json()) as DomainPage
 }
@@ -123,7 +122,7 @@ export type PoolResponse = {
 }
 
 export async function fetchPool(repo: string): Promise<PoolResponse> {
-  const r = await serverFetch(`/api/v1/catalog/unperceived?repo=${encodeURIComponent(repo)}`)
+  const r = await authedFetch('off-map entries', `/api/v1/catalog/unperceived?repo=${encodeURIComponent(repo)}`)
   if (!r.ok) throw await parseError('off-map entries', r)
   const v = (await r.json()) as PoolResponse
   if (v == null || !Array.isArray(v.entries)) throw new Error('off-map entries: incomplete answer')
@@ -136,7 +135,7 @@ export type PackageUsers = { package: string; domain: string; users: UseLists; u
 export type PackageUsersResponse = { commit?: string; measured: boolean; note?: string; packages: PackageUsers[] }
 
 export async function fetchPackageUsers(): Promise<PackageUsersResponse> {
-  const r = await serverFetch('/api/v1/catalog/users')
+  const r = await authedFetch('package users', '/api/v1/catalog/users')
   if (!r.ok) throw await parseError('package users', r)
   const v = (await r.json()) as PackageUsersResponse
   if (v == null || !Array.isArray(v.packages)) throw new Error('package users: incomplete answer')
