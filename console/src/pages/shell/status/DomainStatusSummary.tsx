@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { readQuality } from '@bifrost/ui/city/observation'
+import { STATUS, statusOfWord, type StatusWord } from '@bifrost/ui/city/world'
 import { useDomainStatusObservation } from '@/domains/foundation/observation-access'
 import { useNowMs } from '@/hooks/useNowMs'
 import { DomainName } from '@/components/shell/DomainName'
@@ -23,15 +24,25 @@ import {
  */
 
 const RANK: Record<string, number> = { bad: 3, problem: 2, unknown: 1, good: 0 }
-const DOT: Record<string, string> = {
-  good: 'bg-emerald-500',
-  problem: 'bg-amber-500',
-  bad: 'bg-red-500',
-}
+/**
+ * A light in the engine's seven words (箭10 2026-11-23, the inventory: raw emerald / amber / red and the map's own
+ * good / problem / bad): statusOfWord is the engine's one mapping (good ok, problem warn, bad fail, anything else
+ * unknown, never guessed into ok). The colour is the engine's; unknown stays a hollow dot.
+ */
+const word = (value: string): StatusWord => statusOfWord(value)
 
 function Dot({ value, label }: { value: string; label: string }) {
-  const cls = DOT[value] ?? 'border border-muted-foreground bg-transparent'
-  return <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${cls}`} aria-label={`${label}: ${value}`} title={`${label}: ${value}`} data-light={value} />
+  const w = word(value)
+  const hollow = w === 'unknown' || w === 'pending'
+  return (
+    <span
+      className={`inline-block h-2 w-2 shrink-0 rounded-full ${hollow ? 'border border-muted-foreground bg-transparent' : ''}`}
+      style={hollow ? undefined : { background: STATUS[w].fill }}
+      aria-label={`${label}: ${w}`}
+      title={`${label}: ${w} (${value})`}
+      data-light={value}
+    />
+  )
 }
 
 /** What the domain owns, read from GET /catalog/domain once the row is opened. */
@@ -58,7 +69,7 @@ function Row({ d }: { d: DomainStatusRow }) {
         <summary className="flex min-h-11 cursor-pointer flex-wrap items-center gap-2 py-2 text-sm">
           <Dot value={d.overall} label="Overall" />
           <DomainName id={d.id} className="font-medium" />
-          <span className="text-muted-foreground">{d.overall}</span>
+          <span className="text-muted-foreground">{word(d.overall)}</span>
           <span className="ml-auto flex items-center gap-1.5">
             {LIGHTS.map(([k, label]) => <Dot key={k} value={d[k].value} label={label} />)}
           </span>
@@ -66,7 +77,7 @@ function Row({ d }: { d: DomainStatusRow }) {
         <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 pb-2 text-xs">
           {LIGHTS.map(([k, label]) => (
             <div key={k} className="contents">
-              <dt className="text-muted-foreground">{label} · {d[k].value}</dt>
+              <dt className="text-muted-foreground">{label} · {word(d[k].value)}</dt>
               <dd className="m-0 break-words">{d[k].why}</dd>
             </div>
           ))}
@@ -93,7 +104,7 @@ function PlaceRow({ c }: { c: RepoCount }) {
         <td className="text-right">{c.total}</td>
         <td className="text-right">{c.on_map}</td>
         <td className="text-right">{c.off_map}</td>
-        <td className={`text-right ${c.gap !== 0 ? 'text-red-600' : ''}`} data-gap={c.gap}>{c.gap}</td>
+        <td className={`text-right ${c.gap !== 0 ? 'text-destructive' : ''}`} data-gap={c.gap}>{c.gap}</td>
         <td className="text-right" data-stale={c.stale_rows ?? ''}>{c.stale_rows ?? ''}</td>
       </tr>
       {open ? <tr><td colSpan={6}><PoolEntries repo={c.repo} /></td></tr> : null}
@@ -279,7 +290,7 @@ export function DomainStatusContent({ query: q }: { query: {
       ) : (
         <>
           <p className="m-0 text-sm text-muted-foreground">
-            {rows.length} domains · {counts.map(([v, n]) => `${n} ${v}`).join(' · ')}
+            {rows.length} domains · {counts.map(([v, n]) => `${n} ${word(v)}`).join(' · ')}
             {s.at ? ` · computed ${new Date(s.at).toLocaleString()}` : ''}
             {s.commit ? ` · table ${s.commit.slice(0, 8)}` : ''}
           </p>
