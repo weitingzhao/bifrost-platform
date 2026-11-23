@@ -17,11 +17,8 @@ var _ = heldAssemblyReach(
 	"api/internal/server -> api/internal/agentrt/store (verification)",
 	"api/internal/server -> api/internal/ciconfig (verification)",
 	"api/internal/server -> api/internal/cidomains (verification)",
-	"api/internal/server -> api/internal/cirunview (verification)",
 	"api/internal/server -> api/internal/ciscore (verification)",
-	"api/internal/server -> api/internal/evidenceread (verification)",
 	"api/internal/server -> api/internal/unitexec (verification)",
 	"api/internal/server -> api/internal/unitplan (verification)",
 	"api/internal/server -> api/internal/unitwatch (verification)",
-	"api/internal/server -> api/internal/verification/assembly (verification)",
 )

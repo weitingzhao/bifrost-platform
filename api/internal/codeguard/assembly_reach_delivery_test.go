@@ -9,12 +9,8 @@ var _ = heldAssemblyReach(
 	"api/internal/server -> api/internal/agentrt/deliveryview (delivery)",
 	"api/internal/server -> api/internal/agentrt/deploysource (delivery)",
 	"api/internal/server -> api/internal/agentrt/migraterun (delivery)",
-	"api/internal/server -> api/internal/delivery (delivery)",
-	"api/internal/server -> api/internal/delivery/assembly (delivery)",
 	"api/internal/server -> api/internal/gitops (delivery)",
 	"api/internal/server -> api/internal/headrelease (delivery)",
 	"api/internal/server -> api/internal/promote (delivery)",
-	"api/internal/server -> api/internal/releasepolicy (delivery)",
-	"api/internal/server -> api/internal/releases (delivery)",
 	"api/internal/server -> api/internal/releasetable (delivery)",
 )

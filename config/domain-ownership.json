@@ -238,6 +238,7 @@
       "tier": 2,
       "source": "domains/3-4-verify-release-ci/charter.md",
       "contracts": {
+        "public_packages": ["api/internal/verification/assembly", "api/internal/cirunview", "api/internal/evidenceread"],
         "measured_at": "2e93ae09",
         "request_response": [
           {"method": "GET", "path": "/api/v1/ci/changes", "handler": "api/internal/server.handleCIChanges", "consumers": ["console"]},
@@ -290,6 +291,7 @@
       "tier": 2,
       "source": "domains/3-4-verify-release-ci/charter.md",
       "contracts": {
+        "public_packages": ["api/internal/delivery/assembly", "api/internal/delivery", "api/internal/releasepolicy", "api/internal/releases"],
         "measured_at": "2e93ae09",
         "request_response": [
           {"method": "GET", "path": "/api/v1/context", "handler": "api/internal/promote.HandleOpsContext", "consumers": ["agent-scripts", "console", "mcp", "trade-infra"]},
