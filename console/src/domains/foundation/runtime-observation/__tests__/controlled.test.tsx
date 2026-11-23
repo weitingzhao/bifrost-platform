@@ -69,3 +69,20 @@ it('controlled platform entry renders without a QueryClient or mounting its read
   expect(screen.getByRole('heading', {name:'Signal village.'})).toBeTruthy()
   expect(screen.getByText('host-supplied')).toBeTruthy()
 })
+
+// 2026-11-23 (箭10, cockpit/ui-world/frame): Signals wears the one world frame. Its own kicker and place links give
+// way; live/pinned sits in the frame's time chip; alerts not read say so, never 0.
+it('wears the world frame: Signals current, pinned time in the chip, alerts not read', () => {
+  function Host() {
+    const observation = useObservationContext(makeSnapshot('snapshot-A'))
+    return <RuntimeObservation observation={observation} frame={{ hrefs: { city: '#city', agents: '#collaboration', console: '#system' }, env: 'PROD' }}/>
+  }
+  render(<Host/>)
+  expect(screen.getByRole('navigation', { name: 'Places' }).textContent).toBe('CitySignalsAgentsConsole')
+  expect(screen.getByText('Signals', { selector: '[aria-current="page"]' })).toBeTruthy()
+  expect(screen.queryByText('BIFROST / SIGNALS')).toBeNull()
+  expect(screen.getByText('PROD')).toBeTruthy()
+  expect(screen.getByRole('banner', { name: 'Where you are' }).textContent).toMatch(/Alerts.not read/)
+  fireEvent.click(screen.getByRole('button', { name: 'Pin snapshot' }))
+  expect(screen.getByRole('banner', { name: 'Where you are' }).textContent).toContain('Pinned')
+})

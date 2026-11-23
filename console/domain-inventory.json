@@ -2290,6 +2290,8 @@
         "console/src/domains/coordination/communication",
         "console/src/domains/delivery/api",
         "console/src/domains/foundation/observation-access",
+        "console/src/domains/foundation/observation-display",
+        "console/src/domains/foundation/shell",
         "console/src/domains/owner/city",
         "console/src/domains/tenant/husbandry/api",
         "console/src/lib/delivery"

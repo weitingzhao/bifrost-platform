@@ -48,7 +48,7 @@ export function Preview() {
     return () => { cancelled = true; controller.abort(); clearTimeout(timer) }
   }, [])
   if(snapshot&&new URLSearchParams(location.search).get('scenario') === 'controlled') return <ControlledPreview snapshot={snapshot}/>
-  if(snapshot&&new URLSearchParams(location.search).get('scenario') === 'village') return <RuntimeWorld snapshot={snapshot}/>
+  if(snapshot&&new URLSearchParams(location.search).get('scenario') === 'village') return <RuntimeWorld snapshot={snapshot} frame={{hrefs:{city:'#city',agents:'#collaboration',console:'#system'},env:'PROD'}}/>
   return <>{error && <p role="alert">Read failed: {error}</p>}{snapshot ? <ObservationSurface snapshot={snapshot} initialSelection={snapshot.provenance === 'fixture' ? [] : ['utilities']} layers={[anomalyLayer, { id: 'communication', label: 'Communication', unavailable: snapshot.layerPanels?.communication ? undefined : 'Live communication is not connected in this slice.', present: s => s.layerPanels?.communication ?? [] }]} /> : <p>Reading the existing platform telemetry contract…</p>}</>
 }
 function ControlledPreview({snapshot}: {snapshot: ObservationSnapshot}) {
