@@ -429,6 +429,7 @@
       "tier": 0,
       "source": "domains/6-compute/charter.md",
       "contracts": {
+        "public_packages": ["api/internal/computenodes", "api/internal/computereadings", "api/internal/devsession", "api/internal/elasticreadings", "api/internal/mcp", "api/internal/operatorplane", "api/internal/patrol", "api/internal/placement", "api/internal/selfhealth"],
         "measured_at": "2e93ae09",
         "request_response": [
           {"method": "GET", "path": "/api/v1/dev-sessions/", "handler": "api/internal/devsession.HandleList", "consumers": ["mcp"]},
